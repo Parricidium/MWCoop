@@ -60,6 +60,7 @@ namespace MWCoop.Net
         SaveBegin = 6,    // hote -> invite : debut d'envoi de la sauvegarde
         SaveChunk = 7,
         SaveEnd = 8,
-        StartGame = 9,    // hote -> invite : la partie de l'hote est lancee, charger la sauvegarde recue
+        StartGame = 9,    // (reserve)
+        Profile = 10,     // un joueur change de pseudo ou d'apparence
     }
 }

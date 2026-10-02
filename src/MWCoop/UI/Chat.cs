@@ -2,14 +2,23 @@ using MWCoop.Net;
 
 namespace MWCoop
 {
-    // Messages entre joueurs ; l'hote relaie. La saisie au clavier viendra avec le menu F10.
+    // Messages entre joueurs ; l'hote relaie. Saisie : T (ligne en bas) ou onglet TCHAT du menu F10.
     public static class Chat
     {
+        public static readonly System.Collections.Generic.List<string> History = new System.Collections.Generic.List<string>();
+
+        static void Add(string line)
+        {
+            Hud.Toast(line);
+            History.Add(line);
+            if (History.Count > 30) History.RemoveAt(0);
+        }
+
         public static void Send(string text)
         {
             text = Session.Clean(text, 200);
             if (text.Length == 0 || !Session.Active) return;
-            Hud.Toast(Session.Me.Name + " : " + text);
+            Add(Session.Me.Name + " : " + text);
             Session.SendAll(new NetWriter(Msg.Chat).U8(Session.LocalId).Str(text), true);
         }
 
@@ -20,7 +29,7 @@ namespace MWCoop
             string text = Session.Clean(r.Str(), 200);
             PlayerInfo pi;
             string name = Session.Players.TryGetValue(id, out pi) ? pi.Name : "?";
-            Hud.Toast(name + " : " + text);
+            Add(name + " : " + text);
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Chat).U8(id).Str(text), true, id);
         }
     }
