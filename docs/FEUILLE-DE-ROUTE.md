@@ -4,8 +4,10 @@ Liste de JD (02/10/2026). Le principe : tout ce qu'un joueur peut faire en solo,
 pouvoir le faire, et les autres doivent le voir.
 
 ## Monde
-- [ ] Monde synchronisé : météo, PNJ, circulation, interactions avec les PNJ, voix des PNJ.
-- [ ] Portes, lumières, interrupteurs : ce qu'un joueur ouvre ou allume, les autres le voient.
+- [~] Monde synchronisé : météo, PNJ, circulation, interactions avec les PNJ, voix des PNJ.
+      Fait (0.1) : heure, jour, météo (nuages, pluie, température) de l'hôte.
+- [~] Portes, lumières, interrupteurs : ce qu'un joueur ouvre ou allume, les autres le voient.
+      Fait (0.1) : portes des bâtiments, interrupteurs, télé, lecteur CD. Reste : état à l'arrivée d'un invité.
 - [ ] Toutes les actions du solo possibles pour les invités : gratter le pare-brise, boutons,
       pénalités, utilisation des objets…
 
@@ -24,11 +26,12 @@ pouvoir le faire, et les autres doivent le voir.
 - [ ] Objets visibles dans les mains des joueurs (sac de courses, etc.).
 
 ## Personnages
-- [ ] Apparence : chaque joueur (hôte et invités) choisit un modèle de PNJ existant.
+- [x] Apparence : chaque joueur (hôte et invités) choisit un modèle de PNJ existant (F10, 0.1).
 - [ ] Animations : celles des PNJ (accroupi…) ou faites maison, pour que les joueurs se voient bouger.
 - [ ] Actions visibles : un joueur qui fume, boit, mange… est vu par les autres.
 
 ## Lanceur
-- [ ] Mise à jour automatique depuis les releases GitHub, options, salon (comme VCCoop/SACoop).
+- [~] Mise à jour automatique depuis les releases GitHub, options, salon (comme VCCoop/SACoop).
+      Fait (0.1) : mise à jour, options, journaux. Reste : salon.
 - [ ] Nouvelle partie : quand l'hôte lance, un onglet pour choisir la couleur de la voiture,
       avec aperçu 3D.

@@ -44,6 +44,7 @@ namespace MWCoop
             Step("menu", Menu.Update);
             Step("joueurs", PlayerSync.Update);
             Step("monde", World.Update);
+            Step("interactions", Interactions.Update);
             Step("deroule", Flow.Update);
             Step("autotest", Autotest.Update);
         }
@@ -58,6 +59,7 @@ namespace MWCoop
             Log.Info("niveau charge : " + level + " " + Application.loadedLevelName);
             PlayerSync.OnLevelLoaded();
             World.OnLevelLoaded();
+            Interactions.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? 25f : 5f);
         }
 
