@@ -17,6 +17,7 @@ namespace MWCoop
             dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0;
             Log.Info("Core pret, profil '" + System.Environment.GetEnvironmentVariable("MWCOOP_PROFIL") + "'");
             Log.Info("sauvegardes : " + Application.persistentDataPath);
+            SaveTransfer.CopyPlayerOptions();
             Session.Start();
         }
 

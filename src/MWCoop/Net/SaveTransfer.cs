@@ -28,6 +28,24 @@ namespace MWCoop.Net
             get { return SaveDir.Replace('\\', '/').Contains("/MWCoop/profils/"); }
         }
 
+        // Profil isole tout neuf : reprend les options du joueur (graphismes, sensibilite...) depuis
+        // son vrai dossier de sauvegardes, en lecture seule.
+        public static void CopyPlayerOptions()
+        {
+            if (!IsolatedProfile) return;
+            string mine = Path.Combine(SaveDir, "options.txt");
+            string real = Path.Combine(Path.Combine(Path.Combine(Environment.GetEnvironmentVariable("USERPROFILE") ?? "",
+                @"AppData\LocalLow"), "Amistech"), @"My Winter Car\options.txt");
+            try
+            {
+                if (File.Exists(mine) || !File.Exists(real)) return;
+                Directory.CreateDirectory(SaveDir);
+                File.Copy(real, mine);
+                Log.Info("options du joueur reprises dans le profil");
+            }
+            catch (Exception e) { Log.Warn("options du joueur : " + e.Message); }
+        }
+
         static List<string> SaveFiles()
         {
             var list = new List<string>();

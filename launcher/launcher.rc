@@ -1,0 +1,30 @@
+// MWCoop.exe : icone, manifeste (styles Windows, PPP), fonds de la fenetre (make-art.ps1), informations de version
+1 ICON "mwcoop.ico"
+1 24 "launcher.manifest"
+2 RCDATA "launcher.png"
+3 RCDATA "launcher-sombre.png"
+
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEOS 0x40004
+FILETYPE 0x1
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040C04B0"
+    BEGIN
+      VALUE "CompanyName", "MWCoop"
+      VALUE "FileDescription", "MWCoop - lanceur"
+      VALUE "FileVersion", "1.0"
+      VALUE "InternalName", "MWCoop"
+      VALUE "OriginalFilename", "MWCoop.exe"
+      VALUE "ProductName", "MWCoop"
+      VALUE "ProductVersion", "1.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x040C, 1200
+  END
+END
