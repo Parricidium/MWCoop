@@ -12,7 +12,8 @@
 
 > [!WARNING]
 > **PRE-ALPHA, rebuilt from scratch.** Players see each other, share the host's time and weather, doors and
-> switches, and see each other's vehicles move; car parts, items and quests are not synced yet. Expect bugs and send your logs (round LOGS button of `MWCoop.exe`).
+> switches, see each other's vehicles move, and rebuild the car together part by part and bolt by bolt;
+> paint, items, NPCs and quests are not synced yet. Expect bugs and send your logs (round LOGS button of `MWCoop.exe`).
 
 <p align="center">
   <img src="docs/img/avatar.jpg" width="100%" alt="The host seen by a guest">
@@ -54,12 +55,13 @@ No other loader is needed (MWCoop does not use MSCLoader).
 
 | Done | Next |
 |---|---|
-| Own loader (`version.dll`), auto-updating launcher | Car parts: every part, bolt and paint job |
+| Own loader (`version.dll`), auto-updating launcher | Paint, adjustments (carburettor...), fluids, wear |
 | Players visible (NPC outfits), walking, crouching | Items, shopping bags, things in hands |
 | Host's save sent to guests (isolated profile) | Engine sound, lights and wheels of driven vehicles |
 | Host's time, day and weather (clouds, rain, temperature) | NPCs, traffic, quests completed for everyone |
 | Doors, light switches, TV and CD player | Shared income, separate wallets; action animations |
 | Vehicles: the driver's car moves for everyone, parked ones stay in place | |
+| Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped | |
 | Chat, F10 menu | |
 
 The full list is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
@@ -116,9 +118,9 @@ Aucun autre chargeur n'est nécessaire (MWCoop n'utilise pas MSCLoader).
 ## Avancement
 
 Fait : chargeur maison, lanceur à mise à jour automatique, joueurs visibles (tenues des PNJ), sauvegarde de l'hôte
-envoyée aux invités, heure/jour/météo de l'hôte, portes et interrupteurs, véhicules conduits vus par tous, tchat,
-menu F10.
-À venir : mécanique de la voiture pièce par pièce, son du moteur et phares des véhicules conduits, objets et achats, portes et lumières, PNJ et circulation, quêtes
+envoyée aux invités, heure/jour/météo de l'hôte, portes et interrupteurs, véhicules conduits vus par tous,
+mécanique (pièces montées/démontées, chaque cran de vis, pièces portées et lâchées), tchat, menu F10.
+À venir : peinture et réglages, son du moteur et phares des véhicules conduits, objets et achats, portes et lumières, PNJ et circulation, quêtes
 validées pour tous, revenus partagés avec porte-monnaie séparés, animations des actions.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

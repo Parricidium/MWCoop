@@ -262,6 +262,27 @@ namespace MWCoop
             return inst != null && inst.Value && point.FsmVariables.GetFsmGameObject("ActivePart").Value == part;
         }
 
+        // ID -> objet, reconstruit au besoin (FindById parcourt tous les automates : couteux).
+        static readonly Dictionary<string, GameObject> idMap = new Dictionary<string, GameObject>();
+        static float idMapAt = -100;
+
+        public static GameObject FindByIdCached(string id)
+        {
+            GameObject go;
+            if (idMap.TryGetValue(id, out go) && go != null) return go;
+            if (Time.realtimeSinceStartup - idMapAt < 2f) return null;
+            idMapAt = Time.realtimeSinceStartup;
+            idMap.Clear();
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = (PlayMakerFSM)o;
+                if (f.hideFlags != HideFlags.None || f.FsmName != "Data") continue;
+                FsmString s = f.FsmVariables.FindFsmString("ID");
+                if (s != null && s.Value.Length > 0) idMap[s.Value] = f.gameObject;
+            }
+            return idMap.TryGetValue(id, out go) ? go : null;
+        }
+
         public static GameObject FindById(string id)
         {
             foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))

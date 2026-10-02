@@ -22,11 +22,12 @@ Deja synchronise
 - L'heure, le jour et la meteo (nuages, pluie, temperature) de l'hote.
 - Les portes, interrupteurs, la tele et le lecteur CD.
 - Les vehicules : celui que conduit un joueur bouge chez tous ; les vehicules gares restent en place.
+- La mecanique : pieces montees/demontees, chaque cran de vis, pieces portees et lachees.
 - Le tchat.
 
 Pas encore (feuille de route)
 -----------------------------
-Mecanique de la voiture piece par piece, son du moteur et phares des vehicules conduits, objets et achats, PNJ et circulation, quetes,
+Peinture et reglages de la voiture, son du moteur et phares des vehicules conduits, objets et achats, PNJ et circulation, quetes,
 argent partage avec porte-monnaie separes, animations des actions (fumer, boire...).
 
 En cas de probleme
