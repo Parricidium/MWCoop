@@ -4,7 +4,7 @@ param([int]$Players = 1, [int]$Seconds = 60, [switch]$KeepOpen, [switch]$NoBuild
       [string]$Racine = 'D:\Games\COOPTEST\My Winter Car', [int]$Lignes = 25)
 $root = Split-Path $PSScriptRoot
 if (-not $NoBuild) {
-    $o = cmd /c "`"$root\build.cmd`"" 2>&1
+    $o = cmd /c "`"$root\run\build-mod.cmd`"" 2>&1
     if ($LASTEXITCODE -ne 0) { $o | Select-String 'error|erreur'; throw 'echec de compilation' }
 }
 Get-Process mywintercar -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$Racine\*" } | Stop-Process -Force

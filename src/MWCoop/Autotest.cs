@@ -24,7 +24,18 @@ namespace MWCoop
                 cc.SimpleMove(p.transform.forward * 1.5f);
             }
             if (mode == "regarde" && t > 3f) LookAtNearestAvatar();
+            if (mode == "heure" && t > 15f && !done)
+            {
+                // L'hote saute a 18 h : les invites doivent suivre (World).
+                done = true;
+                PlayMakerFSM c = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
+                c.FsmVariables.GetFsmInt("Time").Value = 18;
+                c.SendEvent("TIMESKIP");
+                Log.Info("autotest : l'hote passe a 18 h");
+            }
         }
+
+        static bool done;
 
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).
         static void LookAtNearestAvatar()
