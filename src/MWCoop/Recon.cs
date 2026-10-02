@@ -214,6 +214,23 @@ namespace MWCoop
             return path;
         }
 
+        // Tous les clips d'animation charges : nom, duree, boucle. Pour choisir ceux des avatars.
+        public static string DumpClips()
+        {
+            var names = new List<string>();
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(AnimationClip)))
+            {
+                var c = (AnimationClip)o;
+                names.Add(c.name + " (" + c.length.ToString("F1") + " s, " + c.wrapMode + (c.legacy ? "" : ", mecanim") + ")");
+            }
+            names.Sort();
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            Directory.CreateDirectory(dir);
+            string path = System.IO.Path.Combine(dir, "clips.txt");
+            File.WriteAllText(path, string.Join("\n", names.ToArray()));
+            return path + " (" + names.Count + ")";
+        }
+
         public static string DumpGlobals()
         {
             string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
