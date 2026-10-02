@@ -195,6 +195,7 @@ namespace MWCoop.Net
                     case Msg.Part: Parts.OnMessage(from, r); break;
                     case Msg.Bolt: Parts.OnBolt(from, r); break;
                     case Msg.Prop: Props.OnMessage(from, r); break;
+                    case Msg.Income: Wallet.OnMessage(from, r); break;
                     case Msg.Roster: OnRoster(r); break;
                     case Msg.PlayerState: PlayerSync.OnState(from, r, data, off, len); break;
                     case Msg.Chat: Chat.OnMessage(from, r); break;

@@ -67,5 +67,6 @@ namespace MWCoop.Net
         Part = 13,        // piece montee ou demontee
         Bolt = 14,        // vis serree ou desserree d'un cran
         Prop = 15,        // non fiable : piece libre deplacee (tenue, lachee, au repos)
+        Income = 16,      // argent gagne par un joueur, recu par tous
     }
 }
