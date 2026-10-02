@@ -26,7 +26,7 @@ Already synced
 
 Not yet (roadmap)
 -----------------
-Part-by-part car mechanics, engine sound and lights of driven vehicles, items and shopping, doors/lights, NPCs and traffic, quests,
+Part-by-part car mechanics, engine sound and lights of driven vehicles, items and shopping, NPCs and traffic, quests,
 shared income with separate wallets, action animations (smoking, drinking...).
 
 Problems?
