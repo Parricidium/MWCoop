@@ -34,9 +34,10 @@ namespace MWCoop
                 // L'hote saute a 18 h : les invites doivent suivre (World).
                 done = true;
                 PlayMakerFSM c = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
-                c.FsmVariables.GetFsmInt("Time").Value = 18;
+                int h = Config.GetInt("Test", "TestHeure", 18);
+                c.FsmVariables.GetFsmInt("Time").Value = h;
                 c.SendEvent("TIMESKIP");
-                Log.Info("autotest : l'hote passe a 18 h");
+                Log.Info("autotest : l'hote passe a " + h + " h");
             }
         }
 

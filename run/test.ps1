@@ -1,7 +1,7 @@
 # Copie build\ dans les instances, lance -Players instances hors ecran, attend -Seconds, les ferme
 # (sauf -KeepOpen) et affiche la fin des journaux. Chaque instance : profil isole + arriere-plan.
 param([int]$Players = 1, [int]$Seconds = 60, [switch]$KeepOpen, [switch]$NoBuild,
-      [string]$Racine = 'D:\Games\COOPTEST\My Winter Car', [int]$Lignes = 25)
+      [string]$Racine = 'D:\Games\COOPTEST\My Winter Car', [int]$Lignes = 25, [string]$Taille = '960x540')
 $root = Split-Path $PSScriptRoot
 if (-not $NoBuild) {
     $o = cmd /c "`"$root\run\build-mod.cmd`"" 2>&1
@@ -16,7 +16,8 @@ for ($i = 1; $i -le $Players; $i++) {
     Copy-Item "$root\build\MWCoop.dll" "$d\MWCoop" -Force
     $p = "$d\MWCoop\profils\Joueur$i"
     Remove-Item "$p\logs\*" -ErrorAction SilentlyContinue
-    $args = "-screen-fullscreen 0 -screen-width 960 -screen-height 540 -logFile `"$d\output_log.txt`""
+    $w, $h = $Taille.Split('x')
+    $args = "-screen-fullscreen 0 -screen-width $w -screen-height $h"
     $procs += Start-Process "$d\mywintercar.exe" -ArgumentList $args -WorkingDirectory $d -PassThru
     if ($i -lt $Players) { Start-Sleep 4 }
 }
