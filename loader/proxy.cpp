@@ -300,6 +300,19 @@ static void ReadConfig() {
     if (g_profil[0]) {
         swprintf(g_profilDir, MAX_PATH, L"%s\\profils\\%s", g_modDir, g_profil);
         SHCreateDirectoryExW(NULL, g_profilDir, NULL);
+        // Premier usage du profil : il part des reglages du joueur (touches cInput, resolution...),
+        // copies depuis sa vraie cle, qui n'est que lue.
+        wchar_t dst[256]; swprintf(dst, 256, L"Software\\MWCoop-Profils\\%s\\Amistech\\My Winter Car", g_profil);
+        HKEY k;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, dst, 0, KEY_READ, &k) == ERROR_SUCCESS) RegCloseKey(k);
+        else if (RegCreateKeyExW(HKEY_CURRENT_USER, dst, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &k, NULL) == ERROR_SUCCESS) {
+            HKEY src;
+            if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Amistech\\My Winter Car", 0, KEY_READ, &src) == ERROR_SUCCESS) {
+                RegCopyTreeW(src, NULL, k);
+                RegCloseKey(src);
+            }
+            RegCloseKey(k);
+        }
     }
 }
 

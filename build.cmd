@@ -20,6 +20,12 @@ dotnet "%ProgramFiles%\dotnet\sdk\8.0.424\Roslyn\bincore\csc.dll" -nologo -nocon
    -r:"%MANAGED%\UnityEngine.dll" -r:"%MANAGED%\PlayMaker.dll" -r:"%MANAGED%\Assembly-CSharp.dll" ^
    -recurse:src\MWCoop\*.cs || exit /b 1
 echo OK build\MWCoop.dll
+
+rem Lanceur (MWCoop.exe, x64) : fenetre PNG (fonds et icone : launcher\make-art.ps1), mises a jour depuis GitHub
+rc /nologo /fo build\launcher.res launcher\launcher.rc || exit /b 1
+cl /nologo /O2 /MT /W3 /EHsc /utf-8 /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /Fobuild\ launcher\launcher.cpp build\launcher.res ^
+   /Febuild\MWCoop.exe /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib gdiplus.lib winhttp.lib comdlg32.lib shell32.lib ole32.lib advapi32.lib shlwapi.lib || exit /b 1
+echo OK build\MWCoop.exe
 exit /b 0
 
 :pasdejeu
