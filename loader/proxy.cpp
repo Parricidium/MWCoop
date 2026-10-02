@@ -270,9 +270,22 @@ static INT_PTR WINAPI h_DialogBoxParamA(HINSTANCE i, LPCSTR t, HWND p, DLGPROC f
 }
 
 // ---------------------------------------------------------------- configuration
+// MWCoop\lancement.ini, ecrit par MWCoop.exe juste avant de lancer le jeu : valable 3 minutes
+// (Steam peut relancer le jeu et perdre la ligne de commande). Le mod le lit puis le renomme.
+static bool FreshLaunchFile(const wchar_t* path) {
+    wchar_t ts[32];
+    GetPrivateProfileStringW(L"Lancement", L"Horodatage", L"0", ts, 32, path);
+    FILETIME ft; GetSystemTimeAsFileTime(&ft);
+    ULONGLONG now = ((((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime) - 116444736000000000ULL) / 10000000ULL;
+    long long t = _wtoi64(ts);
+    return t > 0 && (long long)now - t < 180 && t - (long long)now < 60;
+}
+
 static void ReadConfig() {
     wchar_t ini[MAX_PATH]; swprintf(ini, MAX_PATH, L"%s\\mwcoop.ini", g_modDir);
-    GetPrivateProfileStringW(L"Test", L"Profil", L"", g_profil, 64, ini);
+    wchar_t launch[MAX_PATH]; swprintf(launch, MAX_PATH, L"%s\\lancement.ini", g_modDir);
+    if (FreshLaunchFile(launch)) GetPrivateProfileStringW(L"Lancement", L"Profil", L"", g_profil, 64, launch);
+    if (!g_profil[0]) GetPrivateProfileStringW(L"Test", L"Profil", L"", g_profil, 64, ini);
     g_arrierePlan = GetPrivateProfileIntW(L"Test", L"ArrierePlan", 0, ini);
     g_fenX = GetPrivateProfileIntW(L"Test", L"FenetreX", g_fenX, ini);
     g_fenY = GetPrivateProfileIntW(L"Test", L"FenetreY", g_fenY, ini);

@@ -10,6 +10,7 @@ namespace MWCoop
     {
         static readonly Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public static string IniPath;
+        public static string LaunchedBy = "";
 
         public static void Load()
         {
@@ -27,6 +28,27 @@ namespace MWCoop
                     int eq = l.IndexOf('=');
                     if (eq > 0) values[section + "." + l.Substring(0, eq).Trim()] = l.Substring(eq + 1).Trim();
                 }
+            }
+            // MWCoop\lancement.ini (MWCoop.exe, juste avant de lancer le jeu) : passe devant [Coop],
+            // valable 3 minutes, puis renomme pour qu'un lancement par Steam ne le reprenne pas.
+            string launch = Path.Combine(dir, "lancement.ini");
+            if (File.Exists(launch))
+            {
+                var l = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string raw in File.ReadAllLines(launch))
+                {
+                    int eq = raw.IndexOf('=');
+                    if (eq > 0) l[raw.Substring(0, eq).Trim()] = raw.Substring(eq + 1).Trim();
+                }
+                long ts, now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds;
+                string s;
+                if (l.TryGetValue("Horodatage", out s) && long.TryParse(s, out ts) && now - ts < 180 && ts - now < 60)
+                {
+                    foreach (KeyValuePair<string, string> kv in l)
+                        if (kv.Key != "Horodatage") values["Coop." + kv.Key] = kv.Value;
+                    LaunchedBy = "MWCoop.exe";
+                }
+                try { File.Copy(launch, Path.Combine(dir, "lancement.lu"), true); File.Delete(launch); } catch { }
             }
             string[] args = Environment.GetCommandLineArgs();
             for (int i = 0; i + 1 < args.Length; i++)
