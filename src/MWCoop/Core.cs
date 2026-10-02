@@ -52,6 +52,7 @@ namespace MWCoop
             Step("pieces", Parts.Update);
             Step("objets", Props.Update);
             Step("argent", Wallet.Update);
+            Step("magasin", Shop.Update);
             Step("trace", Trace.Update);
             Step("deroule", Flow.Update);
             Step("autotest", Autotest.Update);
@@ -72,6 +73,7 @@ namespace MWCoop
             Parts.OnLevelLoaded();
             Props.OnLevelLoaded();
             Wallet.OnLevelLoaded();
+            Shop.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
 
