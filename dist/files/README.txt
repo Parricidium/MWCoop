@@ -23,12 +23,14 @@ Already synced
 - Doors, light switches, TV and CD player.
 - Vehicles: the one a player drives moves for everyone; parked ones stay in place.
 - Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped.
+- Money: income goes to everyone, each player has their own wallet for purchases.
+- Shopping: everyone pays for themselves, everyone sees the bags and items bought.
 - Chat.
 
 Not yet (roadmap)
 -----------------
-Paint and car adjustments, engine sound and lights of driven vehicles, items and shopping, NPCs and traffic, quests,
-shared income with separate wallets, action animations (smoking, drinking...).
+Paint and car adjustments, engine sound and lights of driven vehicles, items in hands, NPCs and traffic, quests,
+action animations (smoking, drinking...).
 
 Problems?
 ---------

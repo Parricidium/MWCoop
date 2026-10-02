@@ -14,8 +14,9 @@ pouvoir le faire, et les autres doivent le voir.
 ## Quêtes et argent
 - [ ] Quêtes communes : si l'invité entame une quête et que l'hôte en remplit les conditions,
       elle se termine et est validée pour les deux.
-- [ ] Revenus partagés (quêtes ou autre source) : chaque joueur reçoit l'argent qui arrive.
-- [ ] Porte-monnaie séparés : chacun gère ses achats avec son propre argent.
+- [x] Revenus partagés (quêtes ou autre source) : chaque joueur reçoit l'argent qui arrive (0.3).
+- [x] Porte-monnaie séparés : chacun gère ses achats avec son propre argent (0.3, celui de
+      l'invité est gardé d'une session à l'autre).
 
 ## Voiture
 - [~] Mécanique synchronisée en temps réel : chaque pièce posée/retirée, chaque vis (serrage,
@@ -24,7 +25,7 @@ pouvoir le faire, et les autres doivent le voir.
       et lâchées. Reste : peinture, réglages (carburateur...), liquides, usure.
 
 ## Achats et objets
-- [ ] Chaque joueur achète de son côté ; tous voient les achats des autres (sac de courses…).
+- [x] Chaque joueur achète de son côté ; tous voient les achats des autres (sac de courses…) (0.3).
 - [ ] Objets visibles dans les mains des joueurs (sac de courses, etc.).
 
 ## Personnages
