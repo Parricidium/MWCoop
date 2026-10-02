@@ -40,6 +40,28 @@ namespace MWCoop
                 GameObject pl = GameObject.Find("PLAYER");
                 Log.Info("autotest : porte " + Interactions.TestNearestDoor(pl.transform.position));
             }
+            if (mode == "monter")
+            {
+                // [Test] TestPiece monte a 30 s, demontee a 45 s (comme les clics du jeu).
+                string id = Config.Get("Test", "TestPiece", "VIN413C1");
+                if (t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Parts.TestToggle(id)); }
+                if (Config.GetInt("Test", "TestVis", 0) != 0)
+                {
+                    // Vis : 3 crans serres (36-38 s), 1 desserre (40 s), etat a 44 s ; pas de demontage.
+                    if (t > 35f + step && step >= 1 && step <= 3) { step++; Log.Info("autotest : vis " + Parts.TestBolt(id, true)); }
+                    if (t > 40f && step == 4) { step = 5; Log.Info("autotest : vis " + Parts.TestBolt(id, false)); }
+                    if (t > 44f && step == 5) { step = 6; Log.Info("autotest : vis " + Parts.BoltState(id)); }
+                }
+                else if (t > 45f && step == 1) { step = 2; Log.Info("autotest : " + Parts.TestToggle(id)); }
+            }
+            if (mode == "etatvis" && t > 40f && !done) { done = true; Log.Info("autotest : vis " + Parts.BoltState(Config.Get("Test", "TestPiece", ""))); }
+            if (mode == "sauver" && t > 60f && !done)
+            {
+                // Sauvegarde complete comme le jeu (1482 automates ecoutent SAVEGAME).
+                done = true;
+                PlayMakerFSM.BroadcastEvent("SAVEGAME");
+                Log.Info("autotest : SAVEGAME envoye");
+            }
             if (mode == "tchat" && t > 12f && !done)
             {
                 done = true;

@@ -14,7 +14,7 @@ namespace MWCoop
         {
             I = this;
             Config.Load();
-            dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0;
+            dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0 || Config.Get("Test", "VidageCibles", "").Length > 0;
             Log.Info("Core pret, profil '" + System.Environment.GetEnvironmentVariable("MWCOOP_PROFIL") + "'");
             Log.Info("sauvegardes : " + Application.persistentDataPath);
             SaveTransfer.CopyPlayerOptions();
@@ -35,7 +35,9 @@ namespace MWCoop
                 dumpAt = -1;
                 try
                 {
-                    Recon.DumpLevel("auto", Application.loadedLevelName != "GAME");
+                    string targets = Config.Get("Test", "VidageCibles", "");
+                    if (targets.Length > 0 && Application.loadedLevelName == "GAME") Log.Info("cibles : " + Recon.DumpTargets(targets) + ", pieces : " + Parts.DumpIds());
+                    if (Config.GetInt("Test", "Vidage", 0) == 1) Recon.DumpLevel("auto", Application.loadedLevelName != "GAME");
                     Log.Info("globales : " + Recon.DumpGlobals());
                     Log.Info("personnages : " + Recon.DumpCharacters());
                 }
@@ -47,6 +49,8 @@ namespace MWCoop
             Step("monde", World.Update);
             Step("interactions", Interactions.Update);
             Step("voitures", VehicleSync.Update);
+            Step("pieces", Parts.Update);
+            Step("trace", Trace.Update);
             Step("deroule", Flow.Update);
             Step("autotest", Autotest.Update);
         }
@@ -63,7 +67,8 @@ namespace MWCoop
             World.OnLevelLoaded();
             Interactions.OnLevelLoaded();
             VehicleSync.OnLevelLoaded();
-            if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? 25f : 5f);
+            Parts.OnLevelLoaded();
+            if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
 
         void OnGUI()

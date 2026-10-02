@@ -192,6 +192,8 @@ namespace MWCoop.Net
                     case Msg.Profile: OnProfile(from, r); break;
                     case Msg.Interact: Interactions.OnMessage(from, r); break;
                     case Msg.Vehicle: VehicleSync.OnMessage(from, r); break;
+                    case Msg.Part: Parts.OnMessage(from, r); break;
+                    case Msg.Bolt: Parts.OnBolt(from, r); break;
                     case Msg.Roster: OnRoster(r); break;
                     case Msg.PlayerState: PlayerSync.OnState(from, r, data, off, len); break;
                     case Msg.Chat: Chat.OnMessage(from, r); break;
