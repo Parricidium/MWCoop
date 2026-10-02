@@ -1,0 +1,59 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace MWCoop
+{
+    // MWCoop\mwcoop.ini (ecrit par le lanceur) : [Coop] pour le joueur, [Test] pour les essais.
+    // Les arguments -mwcoop-<cle> <valeur> de la ligne de commande passent devant.
+    public static class Config
+    {
+        static readonly Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public static string IniPath;
+
+        public static void Load()
+        {
+            string dir = Environment.GetEnvironmentVariable("MWCOOP_DIR");
+            if (string.IsNullOrEmpty(dir)) dir = Path.Combine(Environment.CurrentDirectory, "MWCoop");
+            IniPath = Path.Combine(dir, "mwcoop.ini");
+            if (File.Exists(IniPath))
+            {
+                string section = "";
+                foreach (string raw in File.ReadAllLines(IniPath))
+                {
+                    string l = raw.Trim();
+                    if (l.Length == 0 || l[0] == ';' || l[0] == '#') continue;
+                    if (l[0] == '[') { section = l.Trim('[', ']'); continue; }
+                    int eq = l.IndexOf('=');
+                    if (eq > 0) values[section + "." + l.Substring(0, eq).Trim()] = l.Substring(eq + 1).Trim();
+                }
+            }
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i].StartsWith("-mwcoop-", StringComparison.OrdinalIgnoreCase) && !args[i + 1].StartsWith("-"))
+                    values["Arg." + args[i].Substring(8)] = args[i + 1];
+        }
+
+        // Cherche "Section.Cle", puis l'argument -mwcoop-cle (en tete).
+        public static string Get(string section, string key, string def)
+        {
+            string v;
+            if (values.TryGetValue("Arg." + key, out v)) return v;
+            if (values.TryGetValue(section + "." + key, out v)) return v;
+            return def;
+        }
+
+        public static int GetInt(string section, string key, int def)
+        {
+            int v;
+            return int.TryParse(Get(section, key, null), out v) ? v : def;
+        }
+
+        public static bool HasArg(string name)
+        {
+            foreach (string a in Environment.GetCommandLineArgs())
+                if (string.Equals(a, "-mwcoop-" + name, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+    }
+}

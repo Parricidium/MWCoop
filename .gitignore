@@ -1,0 +1,10 @@
+# Produits de compilation et paquets
+build/
+dist/out/
+
+# Captures des instances de test
+run/*.png
+
+# Jamais de fichiers du jeu dans le depot (propriete d'Amistech)
+*.assets
+*.resource
