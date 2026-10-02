@@ -71,6 +71,42 @@ namespace MWCoop
             return int.TryParse(Get(section, key, null), out v) ? v : def;
         }
 
+        // Ecrit Section/Cle dans mwcoop.ini (en gardant le reste du fichier).
+        public static void Save(string section, string key, string value)
+        {
+            values[section + "." + key] = value;
+            values.Remove("Arg." + key);
+            var lines = new List<string>(File.Exists(IniPath) ? File.ReadAllLines(IniPath) : new string[0]);
+            int sec = -1, end = lines.Count;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                string l = lines[i].Trim();
+                if (l.StartsWith("["))
+                {
+                    if (sec >= 0) { end = i; break; }
+                    if (string.Equals(l.Trim('[', ']'), section, StringComparison.OrdinalIgnoreCase)) sec = i;
+                }
+            }
+            if (sec < 0) { lines.Add(""); lines.Add("[" + section + "]"); lines.Add(key + "=" + value); }
+            else
+            {
+                bool done = false;
+                for (int i = sec + 1; i < end && !done; i++)
+                {
+                    int eq = lines[i].IndexOf('=');
+                    if (eq > 0 && string.Equals(lines[i].Substring(0, eq).Trim(), key, StringComparison.OrdinalIgnoreCase))
+                    { lines[i] = key + "=" + value; done = true; }
+                }
+                if (!done)
+                {
+                    int at = end;
+                    while (at > sec + 1 && lines[at - 1].Trim().Length == 0) at--;
+                    lines.Insert(at, key + "=" + value);
+                }
+            }
+            try { File.WriteAllLines(IniPath, lines.ToArray()); } catch (Exception e) { Log.Warn("ecriture de mwcoop.ini : " + e.Message); }
+        }
+
         public static bool HasArg(string name)
         {
             foreach (string a in Environment.GetCommandLineArgs())

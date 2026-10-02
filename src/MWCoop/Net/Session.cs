@@ -189,6 +189,7 @@ namespace MWCoop.Net
                 switch (type)
                 {
                     case Msg.Hello: OnHello(from, r); break;
+                    case Msg.Profile: OnProfile(from, r); break;
                     case Msg.Roster: OnRoster(r); break;
                     case Msg.PlayerState: PlayerSync.OnState(from, r, data, off, len); break;
                     case Msg.Chat: Chat.OnMessage(from, r); break;
@@ -217,6 +218,23 @@ namespace MWCoop.Net
             Hud.Toast(pi.Name + " a rejoint la partie");
             SendRoster();
             SaveTransfer.SendTo(from);
+        }
+
+        // Pseudo/apparence changes en cours de partie : l'invite previent l'hote, qui renvoie la liste.
+        public static void SendProfile()
+        {
+            if (!Active) return;
+            if (IsHost) SendRoster();
+            else SendToHost(new NetWriter(Msg.Profile).Str(Me.Name).Str(Me.Skin), true);
+        }
+
+        static void OnProfile(Peer from, NetReader r)
+        {
+            PlayerInfo pi;
+            if (!IsHost || !Players.TryGetValue(from.Id, out pi)) return;
+            pi.Name = Clean(r.Str(), 24);
+            pi.Skin = Clean(r.Str(), 40);
+            SendRoster();
         }
 
         static void OnRoster(NetReader r)

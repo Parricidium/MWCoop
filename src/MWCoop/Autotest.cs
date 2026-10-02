@@ -24,6 +24,11 @@ namespace MWCoop
                 cc.SimpleMove(p.transform.forward * 1.5f);
             }
             if (mode == "regarde" && t > 3f) LookAtNearestAvatar();
+            if (mode == "tchat" && t > 12f && !done)
+            {
+                done = true;
+                Chat.Send("Salut, c'est " + Net.Session.Me.Name + " !");
+            }
             if (mode == "heure" && t > 15f && !done)
             {
                 // L'hote saute a 18 h : les invites doivent suivre (World).

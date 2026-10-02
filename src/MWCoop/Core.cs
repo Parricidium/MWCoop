@@ -41,6 +41,7 @@ namespace MWCoop
                 catch (System.Exception e) { Log.Error("vidage : " + e); }
             }
             Step("session", Session.Update);
+            Step("menu", Menu.Update);
             Step("joueurs", PlayerSync.Update);
             Step("monde", World.Update);
             Step("deroule", Flow.Update);
@@ -62,7 +63,7 @@ namespace MWCoop
 
         void OnGUI()
         {
-            try { Hud.Draw(); } catch (System.Exception e) { Log.Error("hud : " + e); }
+            try { Hud.Draw(); Menu.Draw(); } catch (System.Exception e) { Log.Error("hud : " + e); }
         }
 
         void OnApplicationQuit()
