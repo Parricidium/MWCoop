@@ -22,11 +22,12 @@ Already synced
 - The host's time, day and weather (clouds, rain, temperature).
 - Doors, light switches, TV and CD player.
 - Vehicles: the one a player drives moves for everyone; parked ones stay in place.
+- Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped.
 - Chat.
 
 Not yet (roadmap)
 -----------------
-Part-by-part car mechanics, engine sound and lights of driven vehicles, items and shopping, NPCs and traffic, quests,
+Paint and car adjustments, engine sound and lights of driven vehicles, items and shopping, NPCs and traffic, quests,
 shared income with separate wallets, action animations (smoking, drinking...).
 
 Problems?

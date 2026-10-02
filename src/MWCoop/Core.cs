@@ -50,6 +50,7 @@ namespace MWCoop
             Step("interactions", Interactions.Update);
             Step("voitures", VehicleSync.Update);
             Step("pieces", Parts.Update);
+            Step("objets", Props.Update);
             Step("trace", Trace.Update);
             Step("deroule", Flow.Update);
             Step("autotest", Autotest.Update);
@@ -68,6 +69,7 @@ namespace MWCoop
             Interactions.OnLevelLoaded();
             VehicleSync.OnLevelLoaded();
             Parts.OnLevelLoaded();
+            Props.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
 

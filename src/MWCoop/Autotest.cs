@@ -54,6 +54,14 @@ namespace MWCoop
                 }
                 else if (t > 45f && step == 1) { step = 2; Log.Info("autotest : " + Parts.TestToggle(id)); }
             }
+            if (mode == "porter")
+            {
+                // [Test] TestPiece promenee de 30 a 36 s (comme tenue en main), position a 45 s.
+                string id = Config.Get("Test", "TestPiece", "VIN2121");
+                if (t > 30f && t < 36f) { string w = Props.TestCarry(id, t); if (Time.frameCount % 60 == 0) Log.Info("autotest : " + w); }
+                if (t > 45f && !done) { done = true; Log.Info("autotest : " + id + " finit en " + Props.Where(id)); }
+            }
+            if (mode == "ou" && t > 40f && !done) { done = true; string id = Config.Get("Test", "TestPiece", "VIN2121"); Log.Info("autotest : " + id + " finit en " + Props.Where(id)); }
             if (mode == "etatvis" && t > 40f && !done) { done = true; Log.Info("autotest : vis " + Parts.BoltState(Config.Get("Test", "TestPiece", ""))); }
             if (mode == "sauver" && t > 60f && !done)
             {

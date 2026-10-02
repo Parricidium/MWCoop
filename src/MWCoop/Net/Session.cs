@@ -25,7 +25,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 1;
+        public const int NetVersion = 2;
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;
@@ -194,6 +194,7 @@ namespace MWCoop.Net
                     case Msg.Vehicle: VehicleSync.OnMessage(from, r); break;
                     case Msg.Part: Parts.OnMessage(from, r); break;
                     case Msg.Bolt: Parts.OnBolt(from, r); break;
+                    case Msg.Prop: Props.OnMessage(from, r); break;
                     case Msg.Roster: OnRoster(r); break;
                     case Msg.PlayerState: PlayerSync.OnState(from, r, data, off, len); break;
                     case Msg.Chat: Chat.OnMessage(from, r); break;
