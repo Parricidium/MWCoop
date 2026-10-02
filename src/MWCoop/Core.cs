@@ -45,6 +45,7 @@ namespace MWCoop
             Step("joueurs", PlayerSync.Update);
             Step("monde", World.Update);
             Step("interactions", Interactions.Update);
+            Step("voitures", VehicleSync.Update);
             Step("deroule", Flow.Update);
             Step("autotest", Autotest.Update);
         }
@@ -60,6 +61,7 @@ namespace MWCoop
             PlayerSync.OnLevelLoaded();
             World.OnLevelLoaded();
             Interactions.OnLevelLoaded();
+            VehicleSync.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? 25f : 5f);
         }
 

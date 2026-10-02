@@ -24,6 +24,16 @@ namespace MWCoop
                 cc.SimpleMove(p.transform.forward * 1.5f);
             }
             if (mode == "regarde" && t > 3f) LookAtNearestAvatar();
+            if (mode == "conduite")
+            {
+                // Au volant de [Test] TestVoiture a 15 s, puis le vehicule est pousse en avant (8 m/s) 12 s.
+                string car = Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)");
+                if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                Rigidbody b = VehicleSync.Body(car);
+                if (b != null && t > 25f && t < 37f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + ", cinematique " + b.isKinematic);
+            }
             if (mode == "porte" && t > 15f && !done)
             {
                 done = true;
@@ -48,6 +58,7 @@ namespace MWCoop
         }
 
         static bool done;
+        static int step;
 
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).
         static void LookAtNearestAvatar()

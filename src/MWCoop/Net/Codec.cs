@@ -63,5 +63,6 @@ namespace MWCoop.Net
         StartGame = 9,    // (reserve)
         Profile = 10,     // un joueur change de pseudo ou d'apparence
         Interact = 11,    // porte, interrupteur... actionne par un joueur
+        Vehicle = 12,     // non fiable : position et vitesses d'une voiture
     }
 }
