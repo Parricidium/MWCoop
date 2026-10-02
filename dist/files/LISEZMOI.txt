@@ -1,0 +1,35 @@
+MWCoop - My Winter Car en cooperation (PRE-ALPHA)
+=================================================
+
+Installation
+------------
+1. Ouvrez le dossier du jeu (Steam : clic droit sur My Winter Car > Gerer > Parcourir les fichiers locaux).
+2. Copiez-y TOUT le contenu de ce zip (version.dll, MWCoop.exe et le dossier MWCoop) a cote de mywintercar.exe.
+3. Lancez MWCoop.exe. Il se met a jour tout seul a chaque demarrage.
+
+Jouer
+-----
+- HEBERGER : vous lancez votre partie, vos amis la rejoignent. Ouvrez le port UDP 7870 sur votre box
+  (ou utilisez un VPN comme Radmin VPN / ZeroTier et donnez votre adresse VPN).
+- REJOINDRE : entrez l'adresse de l'hote. Votre jeu recoit la sauvegarde de l'hote et entre dans sa
+  partie tout seul quand l'hote est en jeu. VOTRE PROPRE SAUVEGARDE N'EST JAMAIS TOUCHEE : l'invite joue
+  dans un profil a part (MWCoop\profils\invite).
+- En jeu : F10 = menu coop (joueurs, apparence, tchat, aller vers un joueur), T = tchat.
+
+Deja synchronise
+----------------
+- Les joueurs se voient (apparence au choix parmi les PNJ du jeu), marchent, s'accroupissent.
+- L'heure, le jour et la meteo (nuages, pluie, temperature) de l'hote.
+- Le tchat.
+
+Pas encore (feuille de route)
+-----------------------------
+Voitures et mecanique piece par piece, objets et achats, portes/lumieres, PNJ et circulation, quetes,
+argent partage avec porte-monnaie separes, animations des actions (fumer, boire...).
+
+En cas de probleme
+------------------
+Envoyez les journaux : bouton rond JOURNAUX de MWCoop.exe, ou les fichiers
+MWCoop\logs\*.log et MWCoop\profils\invite\logs\*.log.
+
+Ce mod ne contient aucune donnee du jeu. My Winter Car appartient a Amistech Games.

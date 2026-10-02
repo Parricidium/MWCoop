@@ -56,12 +56,12 @@ namespace MWCoop
                     values["Arg." + args[i].Substring(8)] = args[i + 1];
         }
 
-        // Cherche "Section.Cle", puis l'argument -mwcoop-cle (en tete).
+        // L'argument -mwcoop-cle passe devant "Section.Cle" ; une valeur vide vaut 'def'.
         public static string Get(string section, string key, string def)
         {
             string v;
-            if (values.TryGetValue("Arg." + key, out v)) return v;
-            if (values.TryGetValue(section + "." + key, out v)) return v;
+            if (values.TryGetValue("Arg." + key, out v) && v.Length > 0) return v;
+            if (values.TryGetValue(section + "." + key, out v) && v.Length > 0) return v;
             return def;
         }
 
