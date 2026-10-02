@@ -27,6 +27,24 @@ namespace MWCoop
             return path;
         }
 
+        // Sous-arbres choisis ([Test] VidageCibles=chemin1;chemin2), avec les parametres des actions.
+        public static string DumpTargets(string list)
+        {
+            var sb = new StringBuilder();
+            foreach (string path in list.Split(';'))
+            {
+                if (path.Trim().Length == 0) continue;
+                GameObject go = path.StartsWith("id:") ? Parts.FindById(path.Substring(3).Trim()) : Game.FindAny(path.Trim());
+                sb.Append("===== ").Append(path).Append(go == null ? " : introuvable\n" : "\n");
+                if (go != null) Walk(sb, go.transform, 0, true);
+            }
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            Directory.CreateDirectory(dir);
+            string p = System.IO.Path.Combine(dir, "cibles.txt");
+            File.WriteAllText(p, sb.ToString());
+            return p;
+        }
+
         // Racines de la scene, inactives comprises (FindObjectsOfType ne voit que les actives).
         // Unity 5.0 n'a pas GameObject.scene : les modeles (prefabs) charges en memoire sortent aussi.
         public static List<GameObject> SceneRoots()

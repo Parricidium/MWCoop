@@ -64,5 +64,7 @@ namespace MWCoop.Net
         Profile = 10,     // un joueur change de pseudo ou d'apparence
         Interact = 11,    // porte, interrupteur... actionne par un joueur
         Vehicle = 12,     // non fiable : position et vitesses d'une voiture
+        Part = 13,        // piece montee ou demontee
+        Bolt = 14,        // vis serree ou desserree d'un cran
     }
 }
