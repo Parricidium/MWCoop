@@ -23,12 +23,14 @@ Deja synchronise
 - Les portes, interrupteurs, la tele et le lecteur CD.
 - Les vehicules : celui que conduit un joueur bouge chez tous ; les vehicules gares restent en place.
 - La mecanique : pieces montees/demontees, chaque cran de vis, pieces portees et lachees.
+- L'argent : les revenus vont a tous, chacun a son porte-monnaie pour ses achats.
+- Les achats : chacun paie de son cote, tous voient le sac et les articles achetes.
 - Le tchat.
 
 Pas encore (feuille de route)
 -----------------------------
-Peinture et reglages de la voiture, son du moteur et phares des vehicules conduits, objets et achats, PNJ et circulation, quetes,
-argent partage avec porte-monnaie separes, animations des actions (fumer, boire...).
+Peinture et reglages de la voiture, son du moteur et phares des vehicules conduits, objets dans les mains, PNJ et circulation, quetes,
+animations des actions (fumer, boire...).
 
 En cas de probleme
 ------------------

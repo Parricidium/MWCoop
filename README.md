@@ -13,7 +13,7 @@
 > [!WARNING]
 > **PRE-ALPHA, rebuilt from scratch.** Players see each other, share the host's time and weather, doors and
 > switches, see each other's vehicles move, and rebuild the car together part by part and bolt by bolt;
-> paint, items, NPCs and quests are not synced yet. Expect bugs and send your logs (round LOGS button of `MWCoop.exe`).
+> shop together with separate wallets; paint, NPCs and quests are not synced yet. Expect bugs and send your logs (round LOGS button of `MWCoop.exe`).
 
 <p align="center">
   <img src="docs/img/avatar.jpg" width="100%" alt="The host seen by a guest">
@@ -62,6 +62,7 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Doors, light switches, TV and CD player | Shared income, separate wallets; action animations |
 | Vehicles: the driver's car moves for everyone, parked ones stay in place | |
 | Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped | |
+| Money: income shared by everyone, separate wallets; shopping seen by all (bags, items) | |
 | Chat, F10 menu | |
 
 The full list is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
@@ -119,7 +120,8 @@ Aucun autre chargeur n'est nécessaire (MWCoop n'utilise pas MSCLoader).
 
 Fait : chargeur maison, lanceur à mise à jour automatique, joueurs visibles (tenues des PNJ), sauvegarde de l'hôte
 envoyée aux invités, heure/jour/météo de l'hôte, portes et interrupteurs, véhicules conduits vus par tous,
-mécanique (pièces montées/démontées, chaque cran de vis, pièces portées et lâchées), tchat, menu F10.
+mécanique (pièces montées/démontées, chaque cran de vis, pièces portées et lâchées), revenus partagés avec
+porte-monnaie séparés, achats vus par tous (sacs, articles), tchat, menu F10.
 À venir : peinture et réglages, son du moteur et phares des véhicules conduits, objets et achats, portes et lumières, PNJ et circulation, quêtes
 validées pour tous, revenus partagés avec porte-monnaie séparés, animations des actions.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
