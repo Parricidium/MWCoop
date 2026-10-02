@@ -68,5 +68,6 @@ namespace MWCoop.Net
         Bolt = 14,        // vis serree ou desserree d'un cran
         Prop = 15,        // non fiable : piece libre deplacee (tenue, lachee, au repos)
         Income = 16,      // argent gagne par un joueur, recu par tous
+        Purchase = 17,    // achat paye a une caisse (contenu du panier)
     }
 }

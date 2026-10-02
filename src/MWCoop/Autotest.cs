@@ -12,7 +12,7 @@ namespace MWCoop
         public static void Update()
         {
             string mode = Config.Get("Test", "Autotest", "");
-            if (mode.Length == 0 || Application.loadedLevelName != "GAME") { t0 = -1; return; }
+            if (Application.loadedLevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
             if (mode == "marche" && t > 5f)
@@ -61,6 +61,39 @@ namespace MWCoop
                 if (t > 30f && t < 36f) { string w = Props.TestCarry(id, t); if (Time.frameCount % 60 == 0) Log.Info("autotest : " + w); }
                 if (t > 45f && !done) { done = true; Log.Info("autotest : " + id + " finit en " + Props.Where(id)); }
             }
+            // [Test] TestPos=x,y,z : le joueur y est teleporte a 8 s (recos, scenes a cote d'un lieu).
+            string tp = Config.Get("Test", "TestPos", "");
+            if (tp.Length > 0 && t > 8f && !teleported)
+            {
+                teleported = true;
+                string[] c = tp.Split(',');
+                GameObject pl = GameObject.Find("PLAYER");
+                var cc = pl.GetComponent<CharacterController>();
+                cc.enabled = false;
+                pl.transform.position = new Vector3(float.Parse(c[0], System.Globalization.CultureInfo.InvariantCulture),
+                    float.Parse(c[1], System.Globalization.CultureInfo.InvariantCulture), float.Parse(c[2], System.Globalization.CultureInfo.InvariantCulture));
+                cc.enabled = true;
+                Log.Info("autotest : teleporte en " + tp);
+            }
+            if (mode == "courses" && t > 30f && !done)
+            {
+                done = true;
+                Log.Info("autotest : " + Shop.TestBuy(Config.Get("Test", "TestProduit", "Beer"), 2));
+            }
+            if (mode == "courses")
+            {
+                // Apres l'achat (30 s) : le sac est promene de 36 a 42 s (comme porte), objets a 50 s.
+                if (t > 36f && t < 42f)
+                {
+                    if (bagId == null) { bagId = Props.NearestId("shoppingbag", GameObject.Find("PLAYER").transform.position); Log.Info("autotest : sac " + bagId); }
+                    if (bagId != null) Props.TestCarry(bagId, t);
+                }
+            }
+            if ((mode == "courses" || mode == "") && t > 50f && step == 0 && Config.Get("Test", "TestPos", "").Length > 0)
+            {
+                step = 1;
+                Log.Info("autotest : objets autour : " + Props.Near(GameObject.Find("PLAYER").transform.position, 8f));
+            }
             if (mode == "argent")
             {
                 // Paie de 500 a 25 s (partagee), achat de 120 a 30 s (local), etat a 40 s.
@@ -95,7 +128,8 @@ namespace MWCoop
             }
         }
 
-        static bool done;
+        static bool done, teleported;
+        static string bagId;
         static int step;
 
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).

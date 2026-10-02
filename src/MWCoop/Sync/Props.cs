@@ -5,7 +5,8 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Pieces libres (non montees) deplacees par les joueurs. La main du joueur garde l'objet tenu
+    // Pieces libres (non montees) et objets crees en jeu (sacs de courses, articles), suivis par leur
+    // ID (ItemId) et deplaces par les joueurs. La main du joueur garde l'objet tenu
     // dans PLAYER/.../1Hand_Assemble/Hand :: PickUp, variable PickedObject.
     //  - celui qui tient une piece envoie sa position 15 fois/s, puis encore apres l'avoir lachee
     //    jusqu'a ce qu'elle s'immobilise (5 s au plus) ;
@@ -30,7 +31,7 @@ namespace MWCoop
         static PlayMakerFSM hand;
         static Prop held;
         static readonly List<Prop> settling = new List<Prop>();
-        static float nextScan = -1, nextSend, nextHost;
+        static float nextScan = -1, nextSend, nextHost, lastForced;
 
         public static void OnLevelLoaded()
         {
@@ -39,24 +40,34 @@ namespace MWCoop
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
         }
 
+        // Identifiant d'un objet : la variable texte 'ID' d'un de ses automates (Data pour les pieces :
+        // VIN514B1 ; Use pour les articles : beercase1, shoppingbag1). Fixee a la creation de l'objet
+        // (nom a compteur sauvegarde), elle reste la meme quand le jeu le renomme ensuite.
+        public static string ItemId(GameObject go)
+        {
+            foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
+            {
+                FsmString s = f.FsmVariables.FindFsmString("ID");
+                if (s != null && s.Value.Length > 0) return s.Value;
+            }
+            return "";
+        }
+
         static void Scan()
         {
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
-            {
-                var f = (PlayMakerFSM)o;
-                if (f.hideFlags != HideFlags.None || f.FsmName != "Data") continue;
-                FsmString s = f.FsmVariables.FindFsmString("ID");
-                if (s == null || s.Value.Length == 0 || props.ContainsKey(s.Value)) continue;
-                var p = new Prop { Id = s.Value };
-                props[p.Id] = p;
-            }
-            // Le Rigidbody d'une piece disparait quand elle est montee et revient au demontage.
+            // Le Rigidbody d'une piece disparait quand elle est montee et revient au demontage :
+            // la table est refaite a chaque passage, seuls les objets physiques actifs y sont.
             byBody.Clear();
-            foreach (Prop p in props.Values)
+            foreach (Prop p in props.Values) p.Body = null;
+            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
-                GameObject go = Parts.FindByIdCached(p.Id);
-                p.Body = go != null ? go.GetComponent<Rigidbody>() : null;
-                if (p.Body != null) byBody[p.Body] = p;
+                if (rb.transform.root.name == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
+                string id = ItemId(rb.gameObject);
+                if (id.Length == 0) continue;
+                Prop p;
+                if (!props.TryGetValue(id, out p)) { p = new Prop { Id = id }; props[id] = p; }
+                p.Body = rb;
+                byBody[rb] = p;
             }
             if (hand == null)
             {
@@ -77,7 +88,12 @@ namespace MWCoop
             {
                 GameObject go = hand.FsmVariables.GetFsmGameObject("PickedObject").Value;
                 Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
-                if (rb != null) byBody.TryGetValue(rb, out h);
+                if (rb != null && !byBody.TryGetValue(rb, out h) && Time.realtimeSinceStartup - lastForced > 1f)
+                {
+                    lastForced = Time.realtimeSinceStartup;
+                    Scan();
+                    byBody.TryGetValue(rb, out h);
+                }
             }
             if (h != held)
             {
@@ -155,7 +171,13 @@ namespace MWCoop
             if (Session.IsHost)
                 Session.Broadcast(new NetWriter(Msg.Prop).U8(who).Str(id).U8(state).Vec(pos).Quat(rot).Vec(vel), false, who);
             Prop p;
-            if (!props.TryGetValue(id, out p) || p.Body == null || p == held) return;
+            if ((!props.TryGetValue(id, out p) || p.Body == null) && Time.realtimeSinceStartup - lastForced > 1f)
+            {
+                lastForced = Time.realtimeSinceStartup;   // objet tout neuf (achat...) : nouveau passage
+                Scan();
+                props.TryGetValue(id, out p);
+            }
+            if (p == null || p.Body == null || p == held) return;
             p.Pos = pos; p.Rot = rot; p.Vel = vel;
             if (state != 0)
             {
@@ -187,6 +209,31 @@ namespace MWCoop
             p.Body.position = p.Body.position + new Vector3(Mathf.Cos(t) * 0.05f, 0.02f, Mathf.Sin(t) * 0.05f);
             p.Body.isKinematic = false;
             return p.Id + " en " + p.Body.position.ToString("F2");
+        }
+
+        // Essais : objets physiques a moins de 'radius' m de 'pos' (nom et position).
+        public static string Near(Vector3 pos, float radius)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                if ((rb.position - pos).sqrMagnitude < radius * radius && rb.transform.root.name != "PLAYER")
+                    sb.Append(rb.name).Append('[').Append(ItemId(rb.gameObject)).Append(']').Append(rb.position.ToString("F2")).Append("  ");
+            return sb.ToString();
+        }
+
+        // Essais : ID du plus proche objet suivi dont l'ID commence par 'prefix'.
+        public static string NearestId(string prefix, Vector3 pos)
+        {
+            Scan();
+            string best = null;
+            float bd = float.MaxValue;
+            foreach (Prop p in props.Values)
+            {
+                if (p.Body == null || !p.Id.StartsWith(prefix)) continue;
+                float d = (p.Body.position - pos).sqrMagnitude;
+                if (d < bd) { bd = d; best = p.Id; }
+            }
+            return best;
         }
 
         public static string Where(string id)
