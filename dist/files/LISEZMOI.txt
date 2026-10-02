@@ -20,11 +20,13 @@ Deja synchronise
 ----------------
 - Les joueurs se voient (apparence au choix parmi les PNJ du jeu), marchent, s'accroupissent.
 - L'heure, le jour et la meteo (nuages, pluie, temperature) de l'hote.
+- Les portes, interrupteurs, la tele et le lecteur CD.
+- Les vehicules : celui que conduit un joueur bouge chez tous ; les vehicules gares restent en place.
 - Le tchat.
 
 Pas encore (feuille de route)
 -----------------------------
-Voitures et mecanique piece par piece, objets et achats, portes/lumieres, PNJ et circulation, quetes,
+Mecanique de la voiture piece par piece, son du moteur et phares des vehicules conduits, objets et achats, portes/lumieres, PNJ et circulation, quetes,
 argent partage avec porte-monnaie separes, animations des actions (fumer, boire...).
 
 En cas de probleme

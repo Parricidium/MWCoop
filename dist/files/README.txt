@@ -20,11 +20,13 @@ Already synced
 --------------
 - Players see each other (outfit picked among the game's NPCs), walking, crouching.
 - The host's time, day and weather (clouds, rain, temperature).
+- Doors, light switches, TV and CD player.
+- Vehicles: the one a player drives moves for everyone; parked ones stay in place.
 - Chat.
 
 Not yet (roadmap)
 -----------------
-Cars and part-by-part mechanics, items and shopping, doors/lights, NPCs and traffic, quests,
+Part-by-part car mechanics, engine sound and lights of driven vehicles, items and shopping, doors/lights, NPCs and traffic, quests,
 shared income with separate wallets, action animations (smoking, drinking...).
 
 Problems?
