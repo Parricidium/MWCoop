@@ -24,6 +24,12 @@ namespace MWCoop
                 cc.SimpleMove(p.transform.forward * 1.5f);
             }
             if (mode == "regarde" && t > 3f) LookAtNearestAvatar();
+            if (mode == "porte" && t > 15f && !done)
+            {
+                done = true;
+                GameObject pl = GameObject.Find("PLAYER");
+                Log.Info("autotest : porte " + Interactions.TestNearestDoor(pl.transform.position));
+            }
             if (mode == "tchat" && t > 12f && !done)
             {
                 done = true;
