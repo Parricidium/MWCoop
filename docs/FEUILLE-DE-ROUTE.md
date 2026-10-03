@@ -20,6 +20,13 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.12) : tout le reste du monde par un module générique (WorldFsms) : toute action d'un joueur
       sur un automate du monde est rejouée chez les autres (factures, courrier, maison, garage, commandes
       de pièces...), l'hôte fait référence pour les états sauvegardés de la maison et des systèmes.
+      Fait (0.13) : téléphone (appels tirés par l'hôte, sonnerie chez tous, décroché partagé : conséquences
+      chez tous, voix chez celui qui décroche), commandes par téléphone, petites annonces identiques, colis
+      de la poste suivis ; relecture : pas d'écho des rejeux, pas de double événement du monde, argent du
+      receveur protégé, crochets protégés, clés stables.
+      Reste : marché aux puces (articles tirés au hasard de chaque côté), facture de téléphone des appels
+      passés par un invité, appels quand l'hôte est loin de la maison (la logique du téléphone ne tourne
+      que près de la maison, chez l'hôte).
 
 ## Quêtes et argent
 - [x] Quêtes communes : si l'invité entame une quête et que l'hôte en remplit les conditions,

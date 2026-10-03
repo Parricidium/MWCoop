@@ -167,6 +167,14 @@ rejoué chez le conducteur ; tableau de bord, voyants, vitres, frein à main, ce
 Fait aussi (0.12) : le reste du monde -- factures (payées par l'un, le courant revient pour tous, seul le payeur
 paie), boîte aux lettres, compteur électrique, fusibles, cuisinière, thermostats, sauna, commandes de pièces par
 catalogue et colis, numéros du loto... ; plus d'objets physiques suivis (plaques de puits, mobilier du pub...).
+Fait aussi (0.13) : téléphone (les appels sont tirés par l'hôte : il sonne chez tous ; celui qui décroche entend
+l'appel, les autres en ont les conséquences -- boulot de bois accepté, repère sur la carte, commande prise --, puis
+le téléphone raccroche chez eux) ; commandes de pièces par téléphone (annuaire) ; petites annonces de pièces
+identiques chez tous ; colis de la poste suivis ; et une relecture complète de la synchronisation : un rejeu n'est
+jamais renvoyé, un événement du monde (horloge, hockey, radio) n'est plus joué deux fois, l'argent et le corps de
+celui qui rejoue ne bougent jamais (même après un minuteur), un message trop gros ne bloque plus l'automate du jeu.
+Option de secours : `SynchroMonde=0` dans la section `[Coop]` de `MWCoop\mwcoop.ini` coupe la synchronisation
+générique du monde si elle gêne.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
