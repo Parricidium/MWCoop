@@ -75,7 +75,7 @@ namespace MWCoop
                 VehicleSync.TestEngine(t > 25f && t < 37f ? 2000f : -1f, 0.6f);
                 if (t > 24f && step == 2) { step = 3; Log.Info("autotest : moteur " + VehicleSync.TestSounds(car, true)); }
                 if (b != null && t > 25f && t < 37f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
-                if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + ", cinematique " + b.isKinematic);
+                if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + " rot " + b.rotation.eulerAngles.ToString("F0") + ", cinematique " + b.isKinematic);
             }
             if (mode == "peindre")
             {
@@ -231,6 +231,14 @@ namespace MWCoop
                         Log.Info("autotest : produit cree " + (made != null ? made.name + " " + Props.ItemId(made) : "?"));
                     }
             }
+            if (mode == "tableau" && t > 35f && !done)
+            {
+                done = true;
+                Log.Info("autotest : " + CarVisuals.Test(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), Config.Get("Test", "TestElement", "pivot_brake")));
+            }
+            string visWatch = Config.Get("Test", "SuivreElement", "");
+            if (visWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f)
+                Log.Info("autotest : " + CarVisuals.State(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), visWatch));
             if (mode == "portiere" && t > 38f && step == 0) { step = 1; Log.Info("autotest : " + CarDoors.TestPush(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), -35f)); }
             if (mode == "portiere" && t > 30f && !done)
             {
