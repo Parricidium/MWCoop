@@ -231,6 +231,17 @@ namespace MWCoop
                         Log.Info("autotest : produit cree " + (made != null ? made.name + " " + Props.ItemId(made) : "?"));
                     }
             }
+            if (mode == "molette" && t > 30f && step < 3 && t > 30f + step * 2f)
+            {
+                step++;
+                Log.Info("autotest : " + Jobs.TestSend(Config.Get("Test", "TestQuete", "ButtonHeaterTemp"), "Get scroll", "INCREASE", "Decrease"));
+            }
+            string varWatch = Config.Get("Test", "SuivreVar", "");
+            if (varWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f)
+            {
+                string[] pv = varWatch.Split(':');
+                Log.Info("autotest : " + Jobs.Var(pv[0], pv.Length > 1 ? pv[1] : "Angle"));
+            }
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "TestPlace", 0))); }
             if (mode == "passager" && t > 60f && step == 1 && Config.GetInt("Test", "TestSortie", 1) != 0) { step = 2; Log.Info("autotest : " + Seats.TestLeave()); }
             if (mode == "tableau" && t > 35f && !done)
