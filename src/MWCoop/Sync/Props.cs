@@ -164,6 +164,9 @@ namespace MWCoop
                 {
                     if (p.Body == null || p == held || p.RemoteBy >= 0 || settling.Contains(p)) continue;
                     if ((p.Body.position - p.LastSentPos).sqrMagnitude < 0.04f) continue;
+                    // Piece montee sur un vehicule (portiere, capot...) : elle suit la voiture, pas de recalage.
+                    Transform root = p.Body.transform.root;
+                    if (root != p.Body.transform && root.GetComponent("CarDynamics") != null) continue;
                     Send(p, 0);
                 }
             }
