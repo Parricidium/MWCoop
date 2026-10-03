@@ -52,6 +52,8 @@ namespace MWCoop
             }
         }
 
+        public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
+
         public static void OnLevelLoaded()
         {
             jobs.Clear(); hooked.Clear();
