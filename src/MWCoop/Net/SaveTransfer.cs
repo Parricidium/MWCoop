@@ -48,13 +48,13 @@ namespace MWCoop.Net
                 {
                     mustSave = false;
                     Log.Info("sauvegarde : nouvelle partie pas encore sauvegardee, l'hote sauvegarde avant d'envoyer");
-                    PlayMakerFSM.BroadcastEvent("SAVEGAME");
+                    Game.SaveInPlace();
                     sendAt = now + 3f;
                     return;
                 }
                 sendAt = now;
             }
-            if (now < sendAt) return;
+            if (now < sendAt || Game.Saving) return;
             // Le jeu ecrit ses fichiers sur plusieurs images (jusqu'a 5 s) : on attend qu'ils ne bougent plus.
             DateTime newest = DateTime.MinValue;
             foreach (string f in SaveFiles()) { DateTime m = File.GetLastWriteTime(f); if (m > newest) newest = m; }

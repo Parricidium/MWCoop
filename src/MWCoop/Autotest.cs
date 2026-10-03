@@ -175,11 +175,21 @@ namespace MWCoop
             if (mode == "etatargent" && t > 35f && !done) { done = true; Log.Info("autotest : " + Wallet.State()); }
             if (mode == "ou" && t > 40f && !done) { done = true; string id = Config.Get("Test", "TestPiece", "VIN2121"); Log.Info("autotest : " + id + " finit en " + Props.Where(id)); }
             if (mode == "etatvis" && t > 40f && !done) { done = true; Log.Info("autotest : vis " + Parts.BoltState(Config.Get("Test", "TestPiece", ""))); }
+            if (mode == "sauver" && (t > 55f && step == 0 || t > 75f && step == 1 || t > 95f && step == 2 && Config.Get("Test", "Autotest2", "") == "porte"))
+            {
+                // Etat des automates Use (articles) avant et apres SAVEGAME : le jeu ne sauve qu'en quittant.
+                step++;
+                var sb = new System.Text.StringBuilder("autotest : automates Use " + (step == 1 ? "avant" : "apres") + " SAVEGAME :");
+                foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+                    if (f.FsmName == "Use" || f.FsmName == "Data" && f.gameObject.name.Contains("(itemx)"))
+                        sb.Append(' ').Append(f.gameObject.name).Append('=').Append(f.ActiveStateName).Append(';');
+                Log.Info(sb.ToString());
+            }
             if (mode == "sauver" && t > 60f && !done)
             {
                 // Sauvegarde complete comme le jeu (1482 automates ecoutent SAVEGAME).
                 done = true;
-                PlayMakerFSM.BroadcastEvent("SAVEGAME");
+                Game.SaveInPlace();
                 Log.Info("autotest : SAVEGAME envoye");
             }
             if (mode == "tchat" && t > 12f && !done)

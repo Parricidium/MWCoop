@@ -31,6 +31,7 @@ namespace MWCoop
         static readonly Dictionary<string, Watch> byKey = new Dictionary<string, Watch>();
         static readonly List<Watch> watches = new List<Watch>();
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
+        static readonly HashSet<string> ambiguous = new HashSet<string>();
         static float nextScan = -1, nextPoll, nextWarn;
         static int sent, applied;
 
@@ -38,7 +39,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); watches.Clear(); seen.Clear();
+            byKey.Clear(); watches.Clear(); seen.Clear(); ambiguous.Clear();
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -59,7 +60,15 @@ namespace MWCoop
                 {
                     if (!Names.Contains(v.Name)) continue;
                     string key = owner + ":" + f.FsmName + "." + v.Name;
-                    if (byKey.ContainsKey(key)) continue;   // homonymes : on garde le premier
+                    // Homonymes : l'ordre de decouverte differe d'une machine a l'autre, la cle est abandonnee.
+                    if (ambiguous.Contains(key)) continue;
+                    Watch old;
+                    if (byKey.TryGetValue(key, out old))
+                    {
+                        if (old.Fsm == f) continue;
+                        byKey.Remove(key); watches.Remove(old); ambiguous.Add(key);
+                        continue;
+                    }
                     var w = new Watch { Key = key, Fsm = f, Var = v, Last = v.Value };
                     byKey[key] = w;
                     watches.Add(w);
@@ -90,15 +99,17 @@ namespace MWCoop
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = now + 20f; Scan(); }
-            if (now < nextPoll || Session.RemoteCount == 0) return;
+            if (now < nextPoll) return;
             nextPoll = now + 1f;
+            bool alone = Session.RemoteCount == 0;
             NetWriter w = null;
-            int n = 0;
             foreach (Watch x in watches)
             {
                 if (x.Fsm == null) continue;
                 float v = x.Var.Value;
+                if (x.Contested && now - x.WindowStart > 30f) x.Contested = false;   // plus de conflit depuis 30 s
                 if (Mathf.Abs(v - x.Last) <= 0.005f + 0.001f * Mathf.Abs(v)) continue;
+                if (alone) { x.Last = v; continue; }   // personne a prevenir : l'arrivant recevra l'instantane
                 if (VehicleSync.RemotelyDriven(x.Fsm.transform) || (x.Contested && !Session.IsHost) || now < x.NextSend)
                 {
                     if (now >= x.NextSend) x.Last = v;   // derive locale ignoree
@@ -107,9 +118,10 @@ namespace MWCoop
                 x.Last = v;
                 x.NextSend = now + 1f;
                 Tally(x, true, now);
+                // Lots limites en octets (un message fiable tient dans un paquet de 1150 octets).
+                if (w != null && w.Length + 6 + System.Text.Encoding.UTF8.GetByteCount(x.Key) > 1000) { Session.SendAll(w, true); w = null; }
                 if (w == null) w = new NetWriter(Msg.Fluid).U8(Session.LocalId);
                 w.Str(x.Key).F32(v);
-                if (++n >= 60) { Session.SendAll(w, true); w = null; n = 0; }
             }
             if (w != null) Session.SendAll(w, true);
         }
