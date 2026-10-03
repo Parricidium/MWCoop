@@ -7,7 +7,7 @@ if (-not $NoBuild) {
     $o = cmd /c "`"$root\run\build-mod.cmd`"" 2>&1
     if ($LASTEXITCODE -ne 0) { $o | Select-String 'error|erreur'; throw 'echec de compilation' }
 }
-Get-Process mywintercar -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$Racine\*" } | Stop-Process -Force
+Get-Process mywintercar -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$Racine\MWCoop-Joueur*" } | Stop-Process -Force   # jamais les copies de JD (MWCoop-JD-*)
 Start-Sleep -Milliseconds 500
 $procs = @()
 for ($i = 1; $i -le $Players; $i++) {
