@@ -14,7 +14,10 @@ namespace MWCoop
     //    autres. Les transitions de la logique propre (horloge, comparaisons) ne le sont pas : chacun les
     //    calcule, les rejouer les doublerait (facture ajoutee deux fois).
     //  - Jamais ce qui agit sur le joueur lui-meme ou son interface (objets sous PLAYER, GUI, feuilles
-    //    Sheets, ordinateur) ni les options et la sauvegarde.
+    //    Sheets, ordinateur) ni les options et la sauvegarde. Decide etat par etat : une transition n'est
+    //    rejouee que si son etat d'arrivee ET tout ce qui peut s'enchainer automatiquement apres
+    //    (minuteurs, comparaisons -- pas ce qui attend le joueur) ne touchent pas au joueur. Ainsi le pont
+    //    elevateur ou les fusibles passent, le lit (qui finit par deplacer le joueur) non.
     //  - Chez celui qui rejoue, son argent et son corps (globales Player*) sont remis comme avant :
     //    seul celui qui paie paie, seul celui qui mange mange.
     //  - ETATS : l'hote fait reference pour les variables des automates sauvegardes (UT/UniqueTag :
@@ -41,6 +44,9 @@ namespace MWCoop
             public HashSet<string> GlobalEvents = new HashSet<string>();
             public float WindowStart, NoisySince; public int Count; public bool Noisy;
             public HashSet<string> Entered = new HashSet<string>();   // etats traverses pendant un rejeu
+            public HashSet<string> PersonalStates = new HashSet<string>();
+            public Dictionary<string, HashSet<string>> InputEvents = new Dictionary<string, HashSet<string>>();
+            public Dictionary<string, bool> SafeCache = new Dictionary<string, bool>();
             public Dictionary<string, float> Sent = new Dictionary<string, float>();   // miroir (hote)
         }
 
@@ -94,6 +100,8 @@ namespace MWCoop
         }
 
         // Lit les actions : commandes du joueur, references au joueur / a son interface, SAVEGAME.
+        // 'personal' en sortie : l'automate touche a la sauvegarde (jamais rejoue du tout). Les etats qui
+        // touchent au joueur sont notes un par un (PersonalStates).
         static bool Classify(PlayMakerFSM f, W w, out bool personal)
         {
             personal = false;
@@ -101,22 +109,57 @@ namespace MWCoop
                 if (s.Name.StartsWith("UniqueTag") || s.Name.StartsWith("UT")) w.Persistent = true;
             foreach (FsmTransition t in f.Fsm.GlobalTransitions) if (!Ignore.Contains(t.EventName)) w.GlobalEvents.Add(t.EventName);
             foreach (FsmState st in f.Fsm.States)
+            {
+                var inEv = new HashSet<string>();
                 foreach (FsmStateAction a in st.Actions)
                 {
                     if (a == null) continue;
-                    if (InputActions.Contains(a.GetType().Name)) w.InputStates.Add(st.Name);
+                    bool input = InputActions.Contains(a.GetType().Name);
+                    if (input) w.InputStates.Add(st.Name);
                     foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
                     {
                         object v = fi.GetValue(a);
                         GameObject go = null;
                         if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
                         else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
-                        if (go != null && PersonalRoots.Contains(go.transform.root.name)) personal = true;
+                        if (go != null && PersonalRoots.Contains(go.transform.root.name)) w.PersonalStates.Add(st.Name);
+                        var nv = v as NamedVariable;
+                        if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && f.FsmVariables.GetVariable(nv.Name) == null
+                            && (v is FsmGameObject || nv.Name == "PlayerStop" || nv.Name == "PlayerInMenu" || nv.Name == "PlayerSeated" || nv.Name == "PlayerSleeps"))
+                            w.PersonalStates.Add(st.Name);
                         if (v is FsmEvent && ((FsmEvent)v).Name == "SAVEGAME") personal = true;
                         if (v is FsmString && ((FsmString)v).Value == "SAVEGAME") personal = true;
+                        if (input && v is FsmEvent && v != null) inEv.Add(((FsmEvent)v).Name);
                     }
                 }
+                w.InputEvents[st.Name] = inEv;
+            }
             return w.Persistent || w.InputStates.Count > 0 || w.GlobalEvents.Count > 0;
+        }
+
+        // L'etat 'state' et tout ce qui s'enchaine automatiquement apres lui laissent-ils le joueur tranquille ?
+        static bool Safe(W w, string state)
+        {
+            bool r;
+            if (w.SafeCache.TryGetValue(state, out r)) return r;
+            var seen = new HashSet<string>();
+            var todo = new Stack<string>();
+            todo.Push(state);
+            r = true;
+            while (todo.Count > 0 && r)
+            {
+                string s = todo.Pop();
+                if (!seen.Add(s)) continue;
+                if (w.PersonalStates.Contains(s)) { r = false; break; }
+                FsmState st = w.F.Fsm.GetState(s);
+                if (st == null) continue;
+                HashSet<string> inEv;
+                w.InputEvents.TryGetValue(s, out inEv);
+                foreach (FsmTransition t in st.Transitions)
+                    if (inEv == null || !inEv.Contains(t.EventName)) todo.Push(t.ToState);   // automatique
+            }
+            w.SafeCache[state] = r;
+            return r;
         }
 
         static void Scan()
@@ -177,6 +220,7 @@ namespace MWCoop
             // etat qui l'ecoute, ou c'est un evenement global (paiement...). Le reste (horloge, radio,
             // reveil...) tourne pareil chez chacun : le rejouer le doublerait.
             if ((!global && !byPlayer) || Time.realtimeSinceStartup - lastInput > 1f) return;
+            if (!Safe(j, state)) return;   // finirait par agir sur ce joueur-ci chez l'autre
             float now = Time.realtimeSinceStartup;
             if (j.Noisy && now - j.NoisySince > 30f) { j.Noisy = false; j.WindowStart = now; j.Count = 0; }
             if (now - j.WindowStart > 10f) { j.WindowStart = now; j.Count = 0; }
