@@ -238,6 +238,15 @@ namespace MWCoop
                 string[] ps = Config.Get("Test", "TestEnvoi", "OpenMailBox|State 2|CLICK|Open").Split('|');
                 Log.Info("autotest : " + WorldFsms.TestSend(ps[0], ps[1], ps[2], ps[3]));
             }
+            if (mode == "telephone" && MWCoop.Net.Session.IsHost)
+            {
+                // L'hote fait sonner le telephone (etat [Test] TestEtat), puis decroche.
+                string logic = Config.Get("Test", "TestQuete", "PhoneLogicNEW::Ring");
+                if (t > 35f && step == 0) { step = 1; Log.Info("autotest : " + WorldFsms.TestState(logic, Config.Get("Test", "TestEtat", "Joke"))); }
+                if (t > 50f && step == 1) { step = 2; Log.Info("autotest : " + WorldFsms.Var(logic, "Wait") + " ; " + WorldFsms.TestState(logic, "Ring")); }
+                if (t > 56f && step == 2 && Config.Get("Test", "VidageSonnerie", "").Length > 0) { Log.Info("autotest : vidage " + Recon.DumpTargets(Config.Get("Test", "VidageSonnerie", ""))); step = 21; }
+                if (t > 62f && (step == 2 || step == 21)) { step = 3; Log.Info("autotest : " + WorldFsms.TestEvent(Config.Get("Test", "TestSonnerie", "RingingNEW::Ring"), "ANSWER")); }
+            }
             if (mode == "monde_evt" && t > 35f && !done)
             {
                 done = true;
@@ -253,6 +262,12 @@ namespace MWCoop
                     if (g.hideFlags == HideFlags.None && g.name.StartsWith(countWatch) && g.transform.root.gameObject.activeInHierarchy) { cnt++; if (names.Length < 200) names += g.name + " "; }
                 }
                 Log.Info("autotest : " + cnt + " objets " + countWatch + "* : " + names);
+            }
+            string activeWatch = Config.Get("Test", "SuivreActif", "");
+            if (activeWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f)
+            {
+                GameObject g = Game.FindAny(activeWatch);
+                Log.Info("autotest : " + activeWatch + (g == null ? " introuvable" : g.activeSelf ? " actif" : " inactif"));
             }
             string worldWatch = Config.Get("Test", "SuivreMonde", "");
             if (worldWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f)
