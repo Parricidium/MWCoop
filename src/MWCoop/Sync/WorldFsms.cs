@@ -48,6 +48,7 @@ namespace MWCoop
             public Dictionary<string, HashSet<string>> InputEvents = new Dictionary<string, HashSet<string>>();
             public Dictionary<string, bool> SafeCache = new Dictionary<string, bool>();
             public Dictionary<string, float> Sent = new Dictionary<string, float>();   // miroir (hote)
+            public Dictionary<string, string> SentLists = new Dictionary<string, string>();
         }
 
         static readonly Dictionary<string, W> byKey = new Dictionary<string, W>();
@@ -182,7 +183,9 @@ namespace MWCoop
             {
                 int k; seen.TryGetValue(kv.Key, out k); seen[kv.Key] = k + 1;
                 PlayMakerFSM f = kv.Value;
-                var w = new W { Key = kv.Key + "#" + k, F = f, Mirror = MirrorRoots.Contains(f.transform.root.name) || f.FsmName == "Fuelprices" };
+                // Miroir aussi des petites annonces de pieces (PhoneNumbers, tirees au hasard chaque semaine).
+                bool mirror = MirrorRoots.Contains(f.transform.root.name) || f.FsmName == "Fuelprices" || kv.Key.Contains("/PhoneNumbers/");
+                var w = new W { Key = kv.Key + "#" + k, F = f, Mirror = mirror };
                 known.Add(f);
                 // Objet inactif : ses actions ne sont pas chargees ; on le reprend quand il s'active.
                 if (!f.gameObject.activeInHierarchy || !TryHook(w)) pending.Add(w);
@@ -439,7 +442,8 @@ namespace MWCoop
         // ---------------------------------------------------------------- miroir des etats (hote)
         public static void Update()
         {
-            if (!Session.Active || nextScan < 0) return;
+            // [Coop] SynchroMonde=0 coupe ce module (au cas ou il generait en partie).
+            if (!Session.Active || nextScan < 0 || Config.GetInt("Coop", "SynchroMonde", 1) == 0) return;
             float now = Time.realtimeSinceStartup;
             // Releve complet toutes les 60 s (objets crees en jeu) ; les objets qui s'activent, toutes les 2 s.
             if (now >= nextScan) { nextScan = now + 60f; Scan(); }
@@ -480,6 +484,20 @@ namespace MWCoop
                 foreach (FsmFloat x in j.F.FsmVariables.FloatVariables) if (!SkipVar(x.Name) && (all || Changed(j.Sent, x.Name, x.Value))) entries.Add(new KeyValuePair<string, object>(x.Name, x.Value));
                 foreach (FsmInt x in j.F.FsmVariables.IntVariables) if (!SkipVar(x.Name) && (all || Changed(j.Sent, "i:" + x.Name, x.Value))) entries.Add(new KeyValuePair<string, object>(x.Name, x.Value));
                 foreach (FsmBool x in j.F.FsmVariables.BoolVariables) if (!SkipVar(x.Name) && (all || Changed(j.Sent, "b:" + x.Name, x.Value ? 1 : 0))) entries.Add(new KeyValuePair<string, object>(x.Name, x.Value));
+                // Listes de l'objet (annonces, numeros tires...) : envoyees quand leur contenu change.
+                foreach (PlayMakerArrayListProxy pr in j.F.GetComponents<PlayMakerArrayListProxy>())
+                {
+                    System.Collections.ArrayList a = pr._arrayList;
+                    if (a == null || a.Count > 60) continue;
+                    var items = new List<object>(a.Count);
+                    var sig = new System.Text.StringBuilder();
+                    foreach (object o in a) { items.Add(o); sig.Append(o).Append('|'); }
+                    string name = pr.referenceName ?? "", old;
+                    if (!all && j.SentLists.TryGetValue(name, out old) && old == sig.ToString()) continue;
+                    j.SentLists[name] = sig.ToString();
+                    if (Config.GetInt("Test", "JournalListes", 0) != 0) Log.Info("liste envoyee " + j.Key + " / " + name + " : " + Short(sig.ToString()));
+                    entries.Add(new KeyValuePair<string, object>(name, items));
+                }
                 if (entries.Count == 0) continue;
                 AddEntries(ref w, ref n, j.Key, entries, flush);
             }
@@ -491,21 +509,57 @@ namespace MWCoop
             if (all) Log.Info("monde : etat de " + byKey.Count + " automates envoye a " + only);
         }
 
+        // Chaque entree est encodee a part pour connaitre sa taille exacte ; un automate trop gros
+        // est coupe en plusieurs blocs (meme cle), une liste seule trop grosse est laissee de cote.
         static void AddEntries(ref NetWriter w, ref int n, string key, List<KeyValuePair<string, object>> entries, System.Action flush)
         {
-            int size = 4 + System.Text.Encoding.UTF8.GetByteCount(key);
-            foreach (var e in entries) size += 8 + e.Key.Length;
-            if (w != null && w.Length + size > 1000) { var tmp = w; flush(); }
-            if (w == null) w = new NetWriter(Msg.WorldVars);
-            w.Str(key).U8(System.Math.Min(entries.Count, 255));
-            for (int i = 0; i < entries.Count && i < 255; i++)
+            int head = 3 + System.Text.Encoding.UTF8.GetByteCount(key);
+            var block = new List<byte[]>();
+            int blockLen = head;
+            for (int i = 0; i <= entries.Count; i++)
             {
-                object v = entries[i].Value;
-                if (v is float) w.U8(0).Str(entries[i].Key).F32((float)v);
-                else if (v is int) w.U8(1).Str(entries[i].Key).I32((int)v);
-                else w.U8(2).Str(entries[i].Key).Bool((bool)v);
+                byte[] e = i < entries.Count ? Encode(entries[i]) : null;
+                if (e != null && e.Length + head > 900) { Log.Warn("monde : " + entries[i].Key + " de " + key + " trop gros (" + e.Length + " o), pas envoye"); continue; }
+                if (block.Count > 0 && (e == null || blockLen + e.Length > 900 || block.Count == 255))
+                {
+                    if (w != null && w.Length + blockLen > 1000) flush();
+                    if (w == null) w = new NetWriter(Msg.WorldVars);
+                    w.Str(key).U8(block.Count);
+                    foreach (byte[] x in block) w.Raw(x);
+                    n++;
+                    block.Clear(); blockLen = head;
+                }
+                if (e != null) { block.Add(e); blockLen += e.Length; }
             }
-            n++;
+        }
+
+        static string Short(string s) { return s.Length > 120 ? s.Substring(0, 120) + "..." : s; }
+
+        static byte[] Encode(KeyValuePair<string, object> entry)
+        {
+            var w = new NetWriter(Msg.WorldVars);
+            object v = entry.Value;
+            if (v is float) w.U8(0).Str(entry.Key).F32((float)v);
+            else if (v is int) w.U8(1).Str(entry.Key).I32((int)v);
+            else if (v is bool) w.U8(2).Str(entry.Key).Bool((bool)v);
+            else
+            {
+                var items = (List<object>)v;
+                w.U8(3).Str(entry.Key).U16(items.Count);
+                foreach (object o in items)
+                {
+                    if (o is int) w.U8(0).I32((int)o);
+                    else if (o is float) w.U8(1).F32((float)o);
+                    else if (o is string) w.U8(2).Str((string)o);
+                    else if (o is bool) w.U8(3).Bool((bool)o);
+                    else if (o is GameObject && (GameObject)o != null) w.U8(4).Str(Recon.Path(((GameObject)o).transform));
+                    else w.U8(5);
+                }
+            }
+            byte[] all = w.ToArray();
+            var r = new byte[all.Length - 1];
+            System.Buffer.BlockCopy(all, 1, r, 0, r.Length);   // sans l'octet de type du message
+            return r;
         }
 
         public static void OnVars(Peer from, NetReader r)
@@ -533,11 +587,39 @@ namespace MWCoop
                         FsmInt x = key.Length == 0 ? FsmVariables.GlobalVariables.FindFsmInt(name) : j != null && j.F != null ? j.F.FsmVariables.FindFsmInt(name) : null;
                         if (x != null) x.Value = v;
                     }
-                    else
+                    else if (t == 2)
                     {
                         bool v = r.Bool();
                         FsmBool x = key.Length == 0 ? FsmVariables.GlobalVariables.FindFsmBool(name) : j != null && j.F != null ? j.F.FsmVariables.FindFsmBool(name) : null;
                         if (x != null) x.Value = v;
+                    }
+                    else
+                    {
+                        // Liste : contenu remplace par celui de l'hote.
+                        int c = r.U16();
+                        var items = new List<object>(c);
+                        for (int q = 0; q < c; q++)
+                        {
+                            int it = r.U8();
+                            if (it == 0) items.Add(r.I32());
+                            else if (it == 1) items.Add(r.F32());
+                            else if (it == 2) items.Add(r.Str());
+                            else if (it == 3) items.Add(r.Bool());
+                            else if (it == 4) items.Add(Game.FindAny(r.Str()));
+                            else items.Add(null);
+                        }
+                        if (j != null && j.F != null)
+                            foreach (PlayMakerArrayListProxy pr in j.F.GetComponents<PlayMakerArrayListProxy>())
+                                if ((pr.referenceName ?? "") == name && pr._arrayList != null)
+                                {
+                                    pr._arrayList.Clear(); foreach (object o in items) pr._arrayList.Add(o);
+                                    if (Config.GetInt("Test", "JournalListes", 0) != 0)
+                                    {
+                                        var sb = new System.Text.StringBuilder(); foreach (object o in pr._arrayList) sb.Append(o).Append('|');
+                                        Log.Info("liste recue " + key + " / " + name + " : " + Short(sb.ToString()));
+                                    }
+                                    break;
+                                }
                     }
                 }
             }
