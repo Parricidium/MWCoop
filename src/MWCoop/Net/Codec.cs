@@ -25,6 +25,7 @@ namespace MWCoop.Net
             w.Write((ushort)b.Length); w.Write(b); return this;
         }
         public NetWriter Bytes(byte[] b, int off, int n) { w.Write((ushort)n); w.Write(b, off, n); return this; }
+        public NetWriter Raw(byte[] b) { w.Write(b); return this; }
         public byte[] ToArray() { w.Flush(); return ms.ToArray(); }
         public int Length { get { return (int)ms.Length; } }
     }
