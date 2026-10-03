@@ -105,7 +105,7 @@ namespace MWCoop
                 if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
                 if (Game.GlobalBool("PlayerSleeps") && World.LocalScale <= 0.51f) st.Flags |= F_SleepFast;
                 if (smoking != null && smoking.gameObject.activeInHierarchy) st.Flags |= F_Smoke;
-                if (AnyChildActive(drinking) || Game.GlobalBool("PlayerDrinkOn")) st.Flags |= F_Drink;
+                if (AnyChildActive(drinking) || Game.GlobalBool("PlayerDrinkOn") || Time.realtimeSinceStartup < Consume.EatUntil) st.Flags |= F_Drink;
                 if (hello != null && hello.gameObject.activeInHierarchy) st.Flags |= F_Hello;
                 if (Props.Holding) st.Flags |= F_Carry;
                 st.Flags |= Config.GetInt("Test", "TestFlags", 0) | Autotest.PoseFlags;   // essais : postures forcees

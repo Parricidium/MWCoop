@@ -178,6 +178,24 @@ namespace MWCoop
                 done = true;
                 Chat.Send("Salut, c'est " + Net.Session.Me.Name + " !");
             }
+            // [Test] TestNourriture=Sausages : le jeu cree ce produit a 25 s (meme compteur, meme ID des deux cotes).
+            string food = Config.Get("Test", "TestNourriture", "");
+            if (food.Length > 0 && t > 25f && !foodMade)
+            {
+                foodMade = true;
+                foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+                    if (f.FsmName == food && f.gameObject.name == "CreateItems")
+                    {
+                        f.SendEvent("SPAWNITEM");
+                        GameObject made = f.FsmVariables.GetFsmGameObject("New").Value;
+                        Log.Info("autotest : produit cree " + (made != null ? made.name + " " + Props.ItemId(made) : "?"));
+                    }
+            }
+            if (mode == "manger" && t > 40f && !done)
+            {
+                done = true;
+                Log.Info("autotest : manger " + Consume.TestNearest());
+            }
             if (mode == "liquide" && t > 40f && !done)
             {
                 done = true;
@@ -223,7 +241,7 @@ namespace MWCoop
             }
         }
 
-        static bool done, teleported, sleepWatch;
+        static bool done, teleported, sleepWatch, foodMade;
         static float nextSleepLog;
         public static int PoseFlags;
         static int seenFlags = -1;

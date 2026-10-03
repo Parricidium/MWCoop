@@ -74,5 +74,6 @@ namespace MWCoop.Net
         Traffic = 20,     // non fiable : lot de vehicules de la circulation et de passants (hote)
         Job = 21,         // boulot : changement d'etat d'un automate de progression
         Fluid = 22,       // liquides et usure : lot de (cle, valeur) changees
+        Consume = 23,     // objet mange, bu ou jete (ID) : il disparait chez tous
     }
 }
