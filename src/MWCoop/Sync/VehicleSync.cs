@@ -9,6 +9,13 @@ namespace MWCoop
     // la voiture devient cinematique et suit. Sans conducteur, l'hote recale toutes les 2 s les
     // voitures qui ont derive (arrivee d'un invite, voiture poussee...).
     // Conduite : automate 'PlayerTrigger' d'un objet DriveTrigger* de la voiture, etat 'Player in car'.
+    // Le conducteur envoie aussi regime, accelerateur et braquage : chez les autres, la copie
+    // cinematique a son Drivetrain, ses Wheel et son AxisCarController coupes ; le regime et
+    // l'accelerateur recus nourrissent le son, et les roues sont tournees et braquees ici
+    // (Wheel.CalcWheelMovement du jeu, sans sa physique). Le bruit du moteur est fait par des objets
+    // a AudioSource sous un conteneur 'Sounds' (KEKMET/LOD/Sounds/SoundKekmet...), allumes par le
+    // contact quand le moteur tourne : le conducteur envoie lesquels sont actifs, avec leur hauteur
+    // et leur volume (leur automate les calcule d'apres le vehicule conduit LOCALEMENT : coupe ici).
     public static class VehicleSync
     {
         class Car
@@ -24,6 +31,17 @@ namespace MWCoop
             public bool Kinematic;
             public bool WasKinematic;
             public float NextLog;
+            public Drivetrain Dt;
+            public Wheel[] Wheels;
+            public AxisCarController Axis;
+            public SoundController Sound;     // coupe par le jeu quand le joueur local n'est pas au volant
+            public bool SoundWasOn;
+            public GameObject[] SoundObjs;
+            public bool[] SoundObjsWas;
+            public int SoundMask;
+            public float[] SoundPitch, SoundVol;
+            public float Rpm, Throttle, Steer;
+            public float[] WheelRot;
         }
 
         static readonly List<Car> cars = new List<Car>();
@@ -51,7 +69,18 @@ namespace MWCoop
             roots.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
             foreach (GameObject go in roots)
             {
-                var car = new Car { Index = cars.Count, Name = go.name, Body = go.GetComponent<Rigidbody>() };
+                var car = new Car { Index = cars.Count, Name = go.name, Body = go.GetComponent<Rigidbody>(),
+                                    Dt = go.GetComponent<Drivetrain>(), Wheels = go.GetComponentsInChildren<Wheel>(true),
+                                    Axis = go.GetComponent<AxisCarController>(), Sound = go.GetComponent<SoundController>() };
+                car.WheelRot = new float[car.Wheels.Length];
+                var snd = new List<GameObject>();
+                foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
+                    if (t.name == "Sounds")
+                        foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 16) snd.Add(s.gameObject);
+                car.SoundObjs = snd.ToArray();
+                car.SoundObjsWas = new bool[snd.Count];
+                car.SoundPitch = new float[snd.Count];
+                car.SoundVol = new float[snd.Count];
                 foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { car.Drive = f; break; }
                 cars.Add(car);
@@ -97,7 +126,8 @@ namespace MWCoop
                 if (remote)
                 {
                     Follow(c);
-                    if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Name + " conduite par #" + c.RemoteDriver + " : " + c.Body.position.ToString("F1")); }
+                    Animate(c);
+                    if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Name + " conduite par #" + c.RemoteDriver + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
                 }
             }
         }
@@ -106,6 +136,21 @@ namespace MWCoop
         {
             if (c.Body == null || c.Kinematic == on) return;
             c.Kinematic = on;
+            if (c.Dt != null) { c.Dt.enabled = !on; if (on) c.Dt.startEngine = false; else { c.Dt.rpm = 0; c.Dt.throttle = 0; } }
+            if (c.Axis != null) c.Axis.enabled = !on;
+            if (c.Sound != null)
+            {
+                if (on) { c.SoundWasOn = c.Sound.enabled; c.Sound.enabled = true; }
+                else c.Sound.enabled = c.SoundWasOn;
+            }
+            for (int i = 0; i < c.SoundObjs.Length; i++)
+            {
+                if (c.SoundObjs[i] == null) continue;
+                if (on) c.SoundObjsWas[i] = c.SoundObjs[i].activeSelf;
+                else c.SoundObjs[i].SetActive(c.SoundObjsWas[i]);
+                foreach (PlayMakerFSM f in c.SoundObjs[i].GetComponents<PlayMakerFSM>()) f.enabled = !on;
+            }
+            foreach (Wheel w in c.Wheels) if (w != null) w.enabled = !on;
             if (on)
             {
                 c.WasKinematic = c.Body.isKinematic;
@@ -136,12 +181,123 @@ namespace MWCoop
             }
         }
 
+        // Son du moteur et roues de la copie conduite ailleurs.
+        static void Animate(Car c)
+        {
+            if (c.Dt != null) { c.Dt.rpm = c.Rpm; c.Dt.throttle = c.Throttle; }
+            for (int i = 0; i < c.SoundObjs.Length; i++)
+            {
+                bool want = (c.SoundMask & (1 << i)) != 0;
+                GameObject g = c.SoundObjs[i];
+                if (g == null) continue;
+                if (g.activeSelf != want) g.SetActive(want);
+                if (!want) continue;
+                AudioSource a = g.GetComponent<AudioSource>();
+                a.pitch = c.SoundPitch[i];
+                a.volume = c.SoundVol[i];
+                if (!a.isPlaying && a.loop) a.Play();
+            }
+            float fwd = Vector3.Dot(c.Vel, c.Body.transform.forward);
+            for (int i = 0; i < c.Wheels.Length; i++)
+            {
+                Wheel w = c.Wheels[i];
+                if (w == null || w.model == null || w.radius <= 0f) continue;
+                c.WheelRot[i] += fwd / w.radius * Time.deltaTime;
+                float steer = w.maxSteeringAngle * c.Steer;
+                w.model.transform.localRotation = Quaternion.Euler(0f, steer, 0f) * Quaternion.AngleAxis(57.29578f * c.WheelRot[i], Vector3.right);
+            }
+        }
+
+        static string SoundDiag(Car c)
+        {
+            SoundController sc = c.Sound;
+            if (sc == null) return "pas de SoundController";
+            var sb = new System.Text.StringBuilder("sons moteur :");
+            foreach (GameObject g in c.SoundObjs)
+                if (g != null) { AudioSource a = g.GetComponent<AudioSource>(); sb.Append(' ').Append(g.name).Append(g.activeInHierarchy ? "/on" : "/off").Append('/').Append(a.isPlaying ? "joue" : "-").Append('/').Append(a.pitch.ToString("F2")); }
+            if (sb.Length > 0) return sb.ToString();
+            sb.Append("SoundController " + (sc.enabled ? "actif" : "coupe") + ", throttle=" + (sc.engineThrottle != null ? sc.engineThrottle.name : "null") + " :");
+            foreach (AudioSource a in c.Body.GetComponentsInChildren<AudioSource>(true))
+                sb.Append(' ').Append(a.clip != null ? a.clip.name : "-").Append('/').Append(a.isPlaying ? "joue" : "arret").Append('/').Append(a.volume.ToString("F2")).Append(a.enabled && a.gameObject.activeInHierarchy ? "" : "(off)");
+            return sb.ToString();
+        }
+
+        static float EngineVolume(Car c)
+        {
+            SoundController sc = c.Body.GetComponent<SoundController>();
+            float v = 0f;
+            if (sc == null) return -1f;
+            foreach (AudioSource a in c.Body.GetComponentsInChildren<AudioSource>())
+                if (a.clip != null && (a.clip == sc.engineThrottle || a.clip == sc.engineNoThrottle) && a.isPlaying) v = Mathf.Max(v, a.volume);
+            return v;
+        }
+
+        // Essais : regime et accelerateur envoyes a la place de ceux du moteur local (< 0 : les vrais).
+        static float testRpm = -1f, testThr;
+
+        // Essais : allume les sons moteur de la voiture locale (comme le contact quand le moteur tourne).
+        public static string TestSounds(string name, bool on)
+        {
+            foreach (Car c in cars)
+                if (c.Name == name)
+                {
+                    foreach (GameObject g in c.SoundObjs)
+                        if (g != null && g.name.StartsWith("Sound"))
+                        {
+                            g.SetActive(on);
+                            // Moteur pas vraiment demarre : on fige une hauteur de son pour verifier l'envoi.
+                            foreach (PlayMakerFSM f in g.GetComponents<PlayMakerFSM>()) f.enabled = false;
+                            g.GetComponent<AudioSource>().pitch = 0.9f;
+                        }
+                    return SoundDiag(c);
+                }
+            return "?";
+        }
+        public static void TestEngine(float rpm, float thr) { testRpm = rpm; testThr = thr; }
+
+        static float SteerOf(Car c)
+        {
+            float s = 0f;
+            foreach (Wheel w in c.Wheels) if (w != null && Mathf.Abs(w.steering) > Mathf.Abs(s)) s = w.steering;
+            return s;
+        }
+
         static void Send(Car c, bool driven)
         {
             if (c.Body == null) return;
             var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(c.Index).Bool(driven)
                 .Vec(c.Body.position).Quat(c.Body.rotation).Vec(c.Body.velocity).Vec(c.Body.angularVelocity);
+            if (driven)
+            {
+                float rpm = testRpm >= 0f ? testRpm : c.Dt != null ? c.Dt.rpm : 0f;
+                float thr = testRpm >= 0f ? testThr : c.Dt != null ? c.Dt.throttle : 0f;
+                int mask = 0;
+                for (int i = 0; i < c.SoundObjs.Length; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;
+                w.F32(rpm).F32(thr).F32(SteerOf(c)).U16(mask);
+                for (int i = 0; i < c.SoundObjs.Length; i++)
+                    if ((mask & (1 << i)) != 0)
+                    {
+                        AudioSource a = c.SoundObjs[i].GetComponent<AudioSource>();
+                        w.F32(a.pitch).F32(a.volume);
+                    }
+            }
             Session.SendAll(w, false);
+        }
+
+        // Avatar d'un joueur qui conduit chez lui : position et rotation dans la copie locale de la
+        // voiture (calculees par rapport a l'etat de la voiture envoye en meme temps : pas de tremblement).
+        public static bool SeatPose(int player, Vector3 feet, out Vector3 pos, out Quaternion rot)
+        {
+            foreach (Car c in cars)
+            {
+                if (c.RemoteDriver != player || c.Body == null) continue;
+                Vector3 local = Quaternion.Inverse(c.Rot) * (feet - c.Pos);
+                pos = c.Body.transform.TransformPoint(local);
+                rot = c.Body.transform.rotation;
+                return true;
+            }
+            pos = feet; rot = Quaternion.identity;
+            return false;
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -153,8 +309,20 @@ namespace MWCoop
             Vector3 pos = r.Vec();
             Quaternion rot = r.Quat();
             Vector3 vel = r.Vec(), ang = r.Vec();
+            float rpm = 0f, thr = 0f, steer = 0f;
+            int smask = 0;
+            var spitch = new List<float>();
+            if (driven)
+            {
+                rpm = r.F32(); thr = r.F32(); steer = r.F32(); smask = r.U16();
+                for (int i = 0; i < 16; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
+            }
             if (Session.IsHost)
-                Session.Broadcast(new NetWriter(Msg.Vehicle).U8(who).U8(idx).Bool(driven).Vec(pos).Quat(rot).Vec(vel).Vec(ang), false, who);
+            {
+                var fw = new NetWriter(Msg.Vehicle).U8(who).U8(idx).Bool(driven).Vec(pos).Quat(rot).Vec(vel).Vec(ang);
+                if (driven) { fw.F32(rpm).F32(thr).F32(steer).U16(smask); foreach (float v in spitch) fw.F32(v); }
+                Session.Broadcast(fw, false, who);
+            }
             if (!scanned || idx >= cars.Count) return;
             Car c = cars[idx];
             if (c.Index == LocalDriving) return;              // je la conduis : je garde la main
@@ -163,6 +331,9 @@ namespace MWCoop
                 c.RemoteDriver = who;
                 c.LastRemote = Time.realtimeSinceStartup;
                 c.Pos = pos; c.Rot = rot; c.Vel = vel; c.AngVel = ang;
+                c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask;
+                for (int i = 0, k = 0; i < c.SoundObjs.Length && i < 16; i++)
+                    if ((smask & (1 << i)) != 0 && k + 1 < spitch.Count) { c.SoundPitch[i] = spitch[k]; c.SoundVol[i] = spitch[k + 1]; k += 2; }
                 return;
             }
             // Sans conducteur : recalage si la voiture locale a derive (> 1 m ou > 10 degres).

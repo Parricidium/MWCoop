@@ -18,6 +18,7 @@ namespace MWCoop.Net
     public struct PlayerState
     {
         public Vector3 Feet;           // bas du personnage (sol)
+        public Vector3 Head;           // camera (yeux) : place l'avatar assis dans un vehicule
         public float Yaw, Pitch, Height, Speed;
         public int Flags;              // PlayerSync.F_* : accroupi, assis, fume, boit, porte, salue, dort
     }
@@ -25,7 +26,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 3;
+        public const int NetVersion = 4;
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;
