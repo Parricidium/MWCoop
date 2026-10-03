@@ -83,7 +83,8 @@ namespace MWCoop
             if (n.Contains("(itemx)") || n.Contains("(item")) return true;              // objets portes : Props, Consume
             foreach (string s in SkipObjects) if (n.Contains(s) || root.name.Contains(s)) return true;
             if (f.FsmName == "Data" && Parts.IdOf(f.gameObject).Length > 0) return true;  // pieces : Parts
-            if (Interactions.Tracks(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) return true;
+            if (n.StartsWith("VINP")) return true;                                       // points de montage : Parts
+            if (Interactions.Tracks(f) || Interactions.Wants(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) return true;
             if (n == "CashRegisterLogic") return true;                                    // magasin : Shop
             // Createurs d'objets (pieces, articles) : jamais rejoues directement -- c'est l'action qui les
             // declenche (ouvrir un colis, passer une commande) qui l'est, sinon l'objet apparaitrait en

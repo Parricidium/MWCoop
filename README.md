@@ -74,6 +74,7 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Host back to the main menu: guests follow and rejoin the next game with a fresh save | |
 | Car doors, hoods, boot lids synced in real time; house light switches; dashboard, lights, windows, handbrake... seen by all | |
 | Passenger seats (ENTER near the front passenger seat or the back seat); passengers can use the key, handbrake, windows, heater... while someone drives | |
+| The rest of the world: bills (paid by one, electricity back for everyone, only the payer pays), mailbox, electricity meter, fuses, stove, thermostats, sauna, parts catalog orders and parcels, lottery numbers... | |
 | Players: NPC driving pose at the wheel (car or truck), head following the camera even 360 degrees; on foot, upper body follows the gaze; real crouch; arms down when idle | |
 | NPC lines and players' swearing heard by everyone; fluids (fuel, oil, coolant, brake fluid) and wear | |
 | Food eaten, drinks drunk, trash thrown away disappear for everyone | |
@@ -163,7 +164,10 @@ vrai accroupi, bras le long du corps au repos.
 Fait aussi (0.11) : places passagers (ENTRÉE près de la place avant droite ou de la banquette) ; un passager peut
 tourner la clé, tirer le frein à main, ouvrir les vitres, régler le chauffage... pendant qu'un autre conduit, c'est
 rejoué chez le conducteur ; tableau de bord, voyants, vitres, frein à main, ceintures vus par tous.
-À venir : toutes les actions du solo pour les invités, essais réels entre amis.
+Fait aussi (0.12) : le reste du monde -- factures (payées par l'un, le courant revient pour tous, seul le payeur
+paie), boîte aux lettres, compteur électrique, fusibles, cuisinière, thermostats, sauna, commandes de pièces par
+catalogue et colis, numéros du loto... ; plus d'objets physiques suivis (plaques de puits, mobilier du pub...).
+À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
 Développé avec l'aide d'une IA (Claude), dirigé et testé par un humain. My Winter Car appartient à Amistech Games ;

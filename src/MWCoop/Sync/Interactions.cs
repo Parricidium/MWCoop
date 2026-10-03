@@ -229,6 +229,13 @@ namespace MWCoop
             Log.Info("interactions : " + e.Id + " remis comme chez l'hote (" + decisive + ")");
         }
 
+        // Automate que ce module prend (ou prendra des qu'il sera actif) : portes, interrupteurs...
+        public static bool Wants(PlayMakerFSM f)
+        {
+            if (f.FsmName != "Use") return false;
+            try { return AllowedTarget(f) != null; } catch { return false; }
+        }
+
         public static bool Tracks(PlayMakerFSM f)
         {
             foreach (Entry e in byId.Values) if (e.Fsm == f) return true;
