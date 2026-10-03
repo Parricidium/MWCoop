@@ -26,6 +26,27 @@ namespace MWCoop
             }
             if (mode == "regarde" && t > 3f)
             {
+                // [Test] TestClips=clip@t;clip@t... : a partir de 20 s, un clip toutes les 4 s, capture a +2,5 s.
+                string list = Config.Get("Test", "TestClips", "");
+                if (list.Length > 0 && t > 20f)
+                {
+                    string[] items = list.Split(';');
+                    int k = (int)((t - 20f) / 4f);
+                    if (k < items.Length)
+                    {
+                        string[] ct = items[k].Split('@');
+                        string want = ct[0];
+                        float at = ct.Length > 1 ? float.Parse(ct[1], System.Globalization.CultureInfo.InvariantCulture) : 1f;
+                        if (Avatar.ForceClip != want || Avatar.ForceTime != at)
+                        {
+                            Avatar.ForceClip = want; Avatar.ForceTime = at;
+                            shotAt = Time.realtimeSinceStartup + 2.5f;
+                            seenFlags = -2;
+                            clipShot = want + "@" + at;
+                        }
+                    }
+                    else Avatar.ForceClip = null;
+                }
                 LookAtNearestAvatar();
                 // Capture 2,5 s apres chaque changement de posture de l'avatar regarde : dumps\pose-<drapeaux>.png
                 foreach (Avatar a in PlayerSync.Avatars)
@@ -39,7 +60,7 @@ namespace MWCoop
                     shotAt = -1;
                     string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
                     System.IO.Directory.CreateDirectory(dir);
-                    string png = System.IO.Path.Combine(dir, "pose-" + seenFlags + ".png");
+                    string png = System.IO.Path.Combine(dir, Avatar.ForceClip != null && clipShot != null ? "clip-" + clipShot.Replace("@", "-") + ".png" : "pose-" + seenFlags + ".png");
                     Application.CaptureScreenshot(png);
                     Log.Info("autotest : capture " + png);
                 }
@@ -274,6 +295,7 @@ namespace MWCoop
         }
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
+        static string clipShot;
         static float nextSleepLog;
         public static int PoseFlags;
         static int seenFlags = -1;

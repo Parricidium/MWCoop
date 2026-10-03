@@ -77,6 +77,13 @@ namespace MWCoop
             }
         }
 
+        // Apres les animations : poses calculees (conduite, buste et tete qui suivent le regard, bras).
+        public static void LateUpdate()
+        {
+            if (!InGame) return;
+            foreach (Avatar a in avatars.Values) a.LatePose();
+        }
+
         static bool AnyChildActive(Transform t)
         {
             if (t == null || !t.gameObject.activeInHierarchy) return false;
@@ -93,14 +100,21 @@ namespace MWCoop
                 Vector3 center = controller != null ? player.TransformPoint(controller.center) : player.position;
                 st.Feet = center - Vector3.up * h * 0.5f;
                 st.Head = cam.position;
-                st.Yaw = player.eulerAngles.y;
-                float pitch = cam.localEulerAngles.x;
-                st.Pitch = pitch > 180f ? pitch - 360f : pitch;
+                // Regard : direction de la camera (le corps du joueur ne tourne pas toujours avec elle).
+                Vector3 fw = cam.forward;
+                Vector3 flat = new Vector3(fw.x, 0f, fw.z);
+                st.Yaw = flat.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(flat).eulerAngles.y : player.eulerAngles.y;
+                st.Pitch = -Mathf.Asin(Mathf.Clamp(fw.y, -1f, 1f)) * Mathf.Rad2Deg;
+                string forced = Config.Get("Test", "TestRegard", "");
+                if (forced.Length > 0) st.Pitch = float.Parse(forced, System.Globalization.CultureInfo.InvariantCulture);
                 st.Height = h;
                 st.Speed = controller != null ? new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude : 0f;
                 // Accroupi : hauteur nettement sous la hauteur debout (la plus grande vue).
-                if (h > standHeight) standHeight = h;
-                if (h < standHeight * 0.8f) st.Flags |= F_Crouch;
+                // Accroupi : la camera descend nettement sous sa hauteur debout (la plus grande vue a pied).
+                bool seatedNow = Game.GlobalBool("PlayerSeated") || VehicleSync.LocalDriving >= 0;
+                float camH = cam.position.y - st.Feet.y;
+                if (!seatedNow && camH > standHeight) standHeight = camH;
+                if (!seatedNow && standHeight > 1f && camH < standHeight - 0.3f) st.Flags |= F_Crouch;
                 if (Game.GlobalBool("PlayerSeated") || VehicleSync.LocalDriving >= 0) st.Flags |= F_Seated;
                 if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
                 if (Game.GlobalBool("PlayerSleeps") && World.BedCounting()) st.Flags |= F_SleepFast;
