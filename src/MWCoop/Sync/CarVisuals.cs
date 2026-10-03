@@ -16,7 +16,7 @@ namespace MWCoop
         static readonly string[] PoseWords = { "needle", "glasspivot", "windowpivot", "lever", "pivot_brake", "handbrake", "belt", "steering",
             "pedal", "wiper", "knob", "switch", "sunvisor", "mirror", "sled", "gear", "key", "hand_brake", "button", "heater", "dial", "slider" };
         static readonly string[] ShowWords = { "light", "beam", "indicator", "lamp", "frost", "frozen", "heater", "belt", "lock", "key",
-            "sunvisors", "marker", "brakes", "blinker", "turnsignal" };
+            "sunvisors", "marker", "brakes", "blinker", "turnsignal", "reverse" };   // reverse : feux de recul
         static readonly string[] SkipWords = { "wheel", "tire", "rim", "hubcap", "spindle", "driver", "passenger", "headpivot" };
 
         class Item
@@ -54,7 +54,7 @@ namespace MWCoop
                     if (t == rb.transform || t.GetComponent<Rigidbody>() != null) continue;
                     string n = t.name.ToLowerInvariant();
                     if (Has(n, SkipWords)) continue;
-                    bool pose = Has(n, PoseWords), show = Has(n, ShowWords);
+                    bool pose = Has(n, PoseWords), show = Has(n, ShowWords) || t.GetComponent<Light>() != null;   // toute lampe
                     if (!pose && !show) continue;
                     string rel = Recon.Path(t).Substring(rb.name.Length);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;

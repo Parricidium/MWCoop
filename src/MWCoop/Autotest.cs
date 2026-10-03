@@ -74,6 +74,9 @@ namespace MWCoop
                 Rigidbody b = VehicleSync.Body(car);
                 VehicleSync.TestEngine(t > 25f && t < 37f ? 2000f : -1f, 0.6f);
                 if (t > 24f && step == 2) { step = 3; Log.Info("autotest : moteur " + VehicleSync.TestSounds(car, true)); }
+                if (t > 23f && Time.frameCount % 120 == 0 && t < 30f) Log.Info("autotest : yeux " + Seats.DriverEyes(car.Split('(')[0]));
+                if (t > 55f && step == 3 && Config.GetInt("Test", "TestSortie", 0) != 0) { step = 4; Log.Info("autotest : sortie -> " + VehicleSync.TestExit(car)); }
+                if (t > 56f && step == 4) { step = 5; Log.Info("autotest : apres sortie -> " + VehicleSync.TestExit(car)); }
                 if (b != null && t > 25f && t < 37f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
                 if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + " rot " + b.rotation.eulerAngles.ToString("F0") + ", cinematique " + b.isKinematic);
             }
@@ -107,6 +110,9 @@ namespace MWCoop
                 if (t > 45f && !done) { done = true; Log.Info("autotest : quete " + st + ", " + Wallet.State()); }
             }
             if (mode == "desynchro" && t > 6f && !done) { done = true; Log.Info("autotest : porte locale seulement " + Interactions.TestLocalDoor(GameObject.Find("PLAYER").transform.position)); }
+            // [Test] Autotest2=etat : apres l'essai principal, l'hote met TestQuete dans TestEtat a 45 s.
+            if (Config.Get("Test", "Autotest2", "") == "etat" && MWCoop.Net.Session.IsHost && t > 45f && step2 == 0)
+            { step2 = 1; Log.Info("autotest : " + WorldFsms.TestState(Config.Get("Test", "TestQuete", "TVPrograms::Schedule"), Config.Get("Test", "TestEtat", "News"))); }
             if (mode == "phares" && t > 20f && !done) { done = true; Log.Info("autotest : " + Interactions.TestNamed(Config.Get("Test", "TestObjet", "KEKMET(350-400psi)/LOD/Dashboard/ButtonLightModes"))); }
             if (mode == "porte" && t > 15f && !done)
             {
@@ -297,6 +303,9 @@ namespace MWCoop
                 }
                 Log.Info("autotest : " + cnt + " objets " + countWatch + "* : " + names);
             }
+            string soundWatch = Config.Get("Test", "SuivreSons", "");
+            if (soundWatch.Length > 0 && Time.frameCount % 90 == 0 && t > 20f) Log.Info("autotest : sons " + VehicleSync.AudioState(soundWatch));
+            if (soundWatch.Length > 0 && Time.frameCount % 900 == 0 && t > 20f) Log.Info("autotest : " + VehicleSync.DtState(soundWatch));
             string activeWatch = Config.Get("Test", "SuivreActif", "");
             if (activeWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f)
             {
@@ -319,6 +328,12 @@ namespace MWCoop
             {
                 string[] pv = varWatch.Split(':');
                 Log.Info("autotest : " + Jobs.Var(pv[0], pv.Length > 1 ? pv[1] : "Angle"));
+            }
+            if (mode == "visee" && t > 30f && !done)
+            {
+                done = true;
+                string vc = Config.Get("Test", "TestVoiture", "SORBET");
+                for (int i = 0; i < 3; i++) Log.Info("autotest : visee " + Seats.TestAim(vc, i));
             }
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "TestPlace", 0))); }
             if (mode == "passager" && t > 60f && step == 1 && Config.GetInt("Test", "TestSortie", 1) != 0) { step = 2; Log.Info("autotest : " + Seats.TestLeave()); }
@@ -409,7 +424,7 @@ namespace MWCoop
         static int seenFlags = -1;
         static float shotAt = -1;
         static string bagId;
-        static int step;
+        static int step, step2;
 
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).
         static void LookAtNearestAvatar()
