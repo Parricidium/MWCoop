@@ -52,6 +52,7 @@ namespace MWCoop
             public Dictionary<string, string> SentLists = new Dictionary<string, string>();
             public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();   // transitions prises ici
             public List<FsmStateAction> Writes, Muted; public float MutedUntil;               // ecritures Player*
+            public HashSet<string> Creates = new HashSet<string>();                           // etats qui creent un objet
         }
 
         static readonly Dictionary<string, W> byKey = new Dictionary<string, W>();
@@ -73,6 +74,7 @@ namespace MWCoop
             {
                 try
                 {
+                    if (J.Creates.Contains(State)) SoonScan();
                     if (Replay.Depth == 0)
                     {
                         if (J.Muted != null && J.InputStates.Contains(State)) Unmute(J);   // la chaine rejouee est finie
@@ -86,6 +88,14 @@ namespace MWCoop
         }
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
+
+        // Un automate suivi vient de creer un objet (commande, colis...) : releve dans 1,5 s, pour que
+        // l'objet soit suivi avant qu'un joueur s'en serve.
+        static void SoonScan()
+        {
+            float t = Time.realtimeSinceStartup + 1.5f;
+            if (nextScan > t) nextScan = t;
+        }
 
         // Logique tiree au hasard qui doit etre la meme pour tous : seul l'hote la fait tourner, les
         // invites la suivent etat par etat (leur copie est arretee). Telephone : qui appelle et quand.
@@ -156,6 +166,7 @@ namespace MWCoop
                 {
                     if (a == null) continue;
                     bool input = InputActions.Contains(a.GetType().Name);
+                    if (a.GetType().Name == "CreateObject") w.Creates.Add(st.Name);
                     if (input) w.InputStates.Add(st.Name);
                     foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
                     {
@@ -616,6 +627,10 @@ namespace MWCoop
             FsmVariables v = j.F.FsmVariables;
             Personal mine = SavePersonal();
             if (global < 2) MuteWrites(j);
+            // Celui qui a agi a deja verifie qu'il pouvait payer : ici, la meme verification (argent du
+            // joueur local) passe toujours ; l'argent est remis juste apres (RestorePersonal).
+            FsmFloat money = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
+            if (money != null && global < 2) money.Value = 1e7f;
             applying = true; Replay.Depth++;
             try
             {
