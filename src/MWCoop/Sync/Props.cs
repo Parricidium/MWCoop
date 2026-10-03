@@ -13,6 +13,10 @@ namespace MWCoop
     //  - chez les autres, la piece devient cinematique et suit, puis retombe sous la physique locale ;
     //  - l'hote recale toutes les 2 s les pieces au repos qui ont bouge chez lui (arrivee d'un invite,
     //    piece poussee...).
+    // Les objets uniques du monde n'ont pas d'ID (bidons, cric, palan, hache, seaux, lanterne,
+    // boitiers de CD, buches...) : cle "w:<chemin>#<rang>" prise au premier passage, quand tout est
+    // encore a sa place de chargement (meme sauvegarde -> meme cle des deux cotes), puis gardee
+    // pour cet objet meme s'il change de parent (tenu, lache).
     public static class Props
     {
         class Prop
@@ -35,7 +39,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            props.Clear(); byBody.Clear(); settling.Clear();
+            props.Clear(); byBody.Clear(); settling.Clear(); worldKeys.Clear(); worldLogged = false;
             hand = null; held = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
         }
@@ -53,21 +57,59 @@ namespace MWCoop
             return "";
         }
 
+        static bool censusDone, worldLogged;
+        static readonly Dictionary<Rigidbody, string> worldKeys = new Dictionary<Rigidbody, string>();
+        static readonly HashSet<string> WorldRoots = new HashSet<string> { "EQUIPMENTS", "Systems", "YARD", "COTTAGE", "CABIN", "MISC" };
+
+        static string WorldKey(Rigidbody rb)
+        {
+            string k;
+            if (worldKeys.TryGetValue(rb, out k)) return k;
+            Transform t = rb.transform;
+            if (!WorldRoots.Contains(t.root.name) || rb.GetComponent("CarDynamics") != null) return null;
+            k = "w:" + Recon.Path(t) + "#" + t.GetSiblingIndex();
+            worldKeys[rb] = k;
+            return k;
+        }
+
         static void Scan()
         {
             // Le Rigidbody d'une piece disparait quand elle est montee et revient au demontage :
             // la table est refaite a chaque passage, seuls les objets physiques actifs y sont.
             byBody.Clear();
             foreach (Prop p in props.Values) p.Body = null;
+            bool census = Config.GetInt("Test", "JournalSansId", 0) != 0 && !censusDone;
+            var noId = census ? new Dictionary<string, int>() : null;
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
                 if (rb.transform.root.name == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
                 string id = ItemId(rb.gameObject);
-                if (id.Length == 0) continue;
+                if (id.Length == 0) id = WorldKey(rb) ?? "";
+                if (id.Length == 0)
+                {
+                    if (census && !rb.isKinematic && rb.GetComponent("CarDynamics") == null)
+                    {
+                        string k = rb.transform.root == rb.transform ? rb.name : rb.transform.root.name + "/.../" + rb.name;
+                        int c; noId.TryGetValue(k, out c); noId[k] = c + 1;
+                    }
+                    continue;
+                }
                 Prop p;
                 if (!props.TryGetValue(id, out p)) { p = new Prop { Id = id }; props[id] = p; }
                 p.Body = rb;
                 byBody[rb] = p;
+            }
+            if (census)
+            {
+                censusDone = true;
+                var sb = new System.Text.StringBuilder("objets physiques sans ID (non synchronises) :");
+                foreach (KeyValuePair<string, int> kv in noId) sb.Append("\n  ").Append(kv.Value).Append(" x ").Append(kv.Key);
+                Log.Info(sb.ToString());
+            }
+            if (!worldLogged && worldKeys.Count > 0)
+            {
+                worldLogged = true;
+                Log.Info("objets : " + worldKeys.Count + " objets du monde sans ID suivis par leur chemin");
             }
             if (hand == null)
             {
@@ -234,6 +276,13 @@ namespace MWCoop
                 if (d < bd) { bd = d; best = p.Id; }
             }
             return best;
+        }
+
+        // Essais : premiere cle suivie qui contient 'part' (objets du monde : "~gasoline").
+        public static string FindKey(string part)
+        {
+            foreach (string k in props.Keys) if (k.Contains(part)) return k;
+            return part;
         }
 
         public static bool Holding { get { return held != null; } }
