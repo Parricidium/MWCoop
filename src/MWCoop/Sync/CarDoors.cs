@@ -11,13 +11,26 @@ namespace MWCoop
     // Une action ajoutee en tete de ces etats previent les autres, qui menent la meme portiere au
     // meme etat : le jeu l'ouvre ou la ferme lui-meme, animation et son compris. Rien n'est deplace
     // de force (une portiere teleportee pousse la voiture, qui s'envole).
+    // Position en temps reel : tant qu'elle est ouverte, celui qui l'a ouverte envoie sa pose (par
+    // rapport a la voiture) 15 fois par seconde. Chez les autres, seule la partie VISIBLE (les enfants
+    // du corps physique : tole, vitre, poignee) est placee a cette pose ; le corps physique reste ou le
+    // jeu le met, la voiture n'est jamais poussee. Rendue a sa place a la fermeture.
     public static class CarDoors
     {
-        class Door { public string Key; public PlayMakerFSM Fsm; public string Open, Close; }
+        class Door
+        {
+            public string Key; public PlayMakerFSM Fsm; public string Open, Close;
+            public Rigidbody Body; public HingeJoint Hinge;
+            public bool IsOpen, Mine;          // ouverte ; ouverte par nous (on envoie son angle)
+            public Quaternion LastRot; public bool Sent;
+            public bool Showing; public Quaternion TargetRot; public Vector3 TargetPos; public float LastRemote;
+            public Transform[] Kids; public Vector3[] KidPos; public Quaternion[] KidRot;
+            public Quaternion TestOffset = Quaternion.identity;   // essais : pousse la pose envoyee
+        }
 
         static readonly Dictionary<string, Door> byKey = new Dictionary<string, Door>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
-        static float nextScan = -1;
+        static float nextScan = -1, nextAngle;
         static bool applying;
 
         class Hook : FsmStateAction
@@ -55,6 +68,9 @@ namespace MWCoop
                     string rel = Recon.Path(f.transform).Substring(car.name.Length);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
                     var d = new Door { Key = car.name + rel + "#" + k, Fsm = f, Open = open, Close = close };
+                    d.Body = f.GetComponentInParent<Rigidbody>();
+                    if (d.Body != null && d.Body.transform == car.transform) d.Body = null;
+                    d.Hinge = d.Body != null ? d.Body.GetComponent<HingeJoint>() : null;
                     if (!Inject(d, open, true) || !Inject(d, close, false)) continue;
                     hooked.Add(f);
                     byKey[d.Key] = d;
@@ -79,16 +95,73 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (!Session.Active || nextScan < 0 || Time.realtimeSinceStartup < nextScan) return;
-            nextScan = Time.realtimeSinceStartup + 30f;
-            Scan();
+            if (!Session.Active || nextScan < 0) return;
+            float now = Time.realtimeSinceStartup;
+            if (now >= nextScan) { nextScan = now + 30f; Scan(); }
+            // Chez nous, pour un autre : la partie visible suit sa pose, chaque image.
+            foreach (Door d in byKey.Values)
+            {
+                if (!d.Showing) continue;
+                if (d.Body == null || !d.IsOpen || now - d.LastRemote > 5f) { StopFollow(d); continue; }
+                Show(d);
+            }
+            if (now < nextAngle || Session.RemoteCount == 0) return;
+            nextAngle = now + 1f / 15f;
+            foreach (Door d in byKey.Values)
+            {
+                if (!d.Mine || !d.IsOpen || d.Body == null || d.Fsm == null) continue;
+                Transform car = CarOf(d);
+                Quaternion rel = Quaternion.Inverse(car.rotation) * d.Body.rotation * d.TestOffset;
+                if (d.Sent && Quaternion.Angle(rel, d.LastRot) < 0.4f) continue;
+                d.Sent = true;
+                d.LastRot = rel;
+                Session.SendAll(new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(2)
+                    .Quat(rel).Vec(car.InverseTransformPoint(d.Body.position)), false);
+            }
+        }
+
+        static Transform CarOf(Door d) { return d.Fsm.transform.root; }
+
+        // Place les enfants du corps (la partie visible) comme si le corps etait a la pose recue.
+        static void Show(Door d)
+        {
+            Transform b = d.Body.transform, car = CarOf(d);
+            if (d.Kids == null)
+            {
+                d.Kids = new Transform[b.childCount];
+                d.KidPos = new Vector3[b.childCount];
+                d.KidRot = new Quaternion[b.childCount];
+                for (int i = 0; i < b.childCount; i++) { d.Kids[i] = b.GetChild(i); d.KidPos[i] = d.Kids[i].localPosition; d.KidRot[i] = d.Kids[i].localRotation; }
+            }
+            Quaternion R = car.rotation * d.TargetRot;
+            Vector3 P = car.TransformPoint(d.TargetPos);
+            Vector3 sc = b.lossyScale;
+            for (int i = 0; i < d.Kids.Length; i++)
+            {
+                if (d.Kids[i] == null) continue;
+                d.Kids[i].position = P + R * Vector3.Scale(sc, d.KidPos[i]);
+                d.Kids[i].rotation = R * d.KidRot[i];
+            }
+        }
+
+        // Fin du suivi : la partie visible reprend sa place sur le corps.
+        static void StopFollow(Door d)
+        {
+            if (d.Kids != null)
+                for (int i = 0; i < d.Kids.Length; i++)
+                    if (d.Kids[i] != null) { d.Kids[i].localPosition = d.KidPos[i]; d.Kids[i].localRotation = d.KidRot[i]; }
+            d.Showing = false;
         }
 
         static void Send(Door d, bool opening)
         {
+            d.IsOpen = opening;
+            d.Mine = opening;          // celui qui ouvre envoie l'angle ensuite
+            d.Sent = false;
+            StopFollow(d);
             if (!Session.Active) return;
             Log.Info("portiere " + d.Key + (opening ? " ouverte" : " fermee") + " ici");
-            Session.SendAll(new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).Bool(opening), true);
+            Session.SendAll(new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(opening ? 1 : 0), true);
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -96,10 +169,33 @@ namespace MWCoop
             int who = r.U8();
             if (Session.IsHost) who = from.Id;
             string key = r.Str();
-            bool opening = r.Bool();
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.CarDoor).U8(who).Str(key).Bool(opening), true, who);
+            int kind = r.U8();
+            Quaternion rot = Quaternion.identity;
+            Vector3 pos = Vector3.zero;
+            if (kind == 2) { rot = r.Quat(); pos = r.Vec(); }
+            if (Session.IsHost)
+            {
+                var w = new NetWriter(Msg.CarDoor).U8(who).Str(key).U8(kind);
+                if (kind == 2) w.Quat(rot).Vec(pos);
+                Session.Broadcast(w, kind != 2, who);
+            }
             Door d;
-            if (!byKey.TryGetValue(key, out d) || d.Fsm == null) { Scan(); if (!byKey.TryGetValue(key, out d) || d.Fsm == null) { Log.Warn("portiere " + key + " introuvable ici"); return; } }
+            if (!byKey.TryGetValue(key, out d) || d.Fsm == null)
+            {
+                if (kind == 2) return;
+                Scan();
+                if (!byKey.TryGetValue(key, out d) || d.Fsm == null) { Log.Warn("portiere " + key + " introuvable ici"); return; }
+            }
+            if (kind == 2)
+            {
+                if (!d.IsOpen || d.Mine || d.Body == null) return;
+                d.TargetRot = rot; d.TargetPos = pos; d.LastRemote = Time.realtimeSinceStartup; d.Showing = true;
+                return;
+            }
+            bool opening = kind == 1;
+            d.IsOpen = opening;
+            d.Mine = false;
+            StopFollow(d);
             applying = true;
             try { Game.SetState(d.Fsm, opening ? d.Open : d.Close); }
             finally { applying = false; }
@@ -119,13 +215,26 @@ namespace MWCoop
             return "aucune portiere sur " + car + " (" + byKey.Count + ")";
         }
 
+        // Essais : pousse la portiere ouverte de 'car' de 'deg' degres (ressort local, comme une main).
+        public static string TestPush(string car, float deg)
+        {
+            foreach (Door d in byKey.Values)
+            {
+                if (d.Body == null || !d.Key.StartsWith(car)) continue;
+                d.TestOffset = Quaternion.AngleAxis(deg, Vector3.up);
+                return d.Key + " poussee de " + deg + " deg (pose envoyee)";
+            }
+            return "rien a pousser";
+        }
+
         public static string State(string key)
         {
             foreach (Door d in byKey.Values)
                 if (d.Key.StartsWith(key) && d.Fsm != null)
                 {
-                    Rigidbody rb = d.Fsm.GetComponentInParent<Rigidbody>();
-                    return d.Key + " etat " + d.Fsm.ActiveStateName + (rb != null ? ", corps " + rb.name + " rot " + rb.transform.localEulerAngles.ToString("F0") : "");
+                    return d.Key + " etat " + d.Fsm.ActiveStateName
+                           + (d.Body != null ? ", visible " + Quaternion.Angle(Quaternion.identity, Quaternion.Inverse(CarOf(d).rotation) * (d.Kids != null && d.Kids.Length > 0 && d.Kids[0] != null ? d.Kids[0].rotation : d.Body.rotation)).ToString("F1") + " deg" : "")
+                           + (d.IsOpen ? (d.Mine ? ", ouverte par nous" : ", ouverte par un autre") : ", fermee");
                 }
             return "?";
         }
