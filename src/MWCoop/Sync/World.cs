@@ -13,9 +13,12 @@ namespace MWCoop
     //    sont coupes et l'etat de l'hote est applique tel quel.
     //  - sommeil : une heure dure GlobalTimeScale secondes (300 eveille ; le lit la met a 0,5 et
     //    l'heure en cours finit aussitot, l'EaseColor du soleil relit la duree a chaque image).
-    //    Un joueur qui dort accelere l'horloge commune : l'hote passe a 0,5 tant qu'un invite dort,
-    //    l'invite prend l'echelle de l'hote et n'est pas ramene en arriere pendant l'acceleration
-    //    (son lit compte les heures qui passent pour retirer la fatigue).
+    //    En coop le temps ne passe vite que quand TOUS les joueurs dorment (chacun doit recuperer sa
+    //    fatigue) : le lit met GlobalTimeScale a sa variable TimeScaleSleep, que le mod regle sur tous
+    //    les lits (300 tant que quelqu'un est eveille, 0,5 pendant la phase commune). La phase commence
+    //    quand le lit de chaque joueur compte les heures, et dure tant qu'un lit les compte encore
+    //    (les gros dormeurs finissent leur nuit). L'invite prend l'echelle de l'hote et n'est pas
+    //    ramene en arriere pendant l'acceleration.
     public static class World
     {
         static float nextSend;
@@ -23,13 +26,63 @@ namespace MWCoop
         static Transform clouds, cloudObjects;
         static PlayMakerFSM sunColor, sunRotation, weather, forecast, temperature;
         static bool found;
-        const float SleepScale = 0.5f;
-        static bool forced;           // hote : horloge acceleree pour un invite qui dort
-        static float normalScale = 300f;
+        const float SleepScale = 0.5f, NormalScale = 300f;
+        static bool phase;            // hote : tout le monde dort, le temps file
+        static bool hostFast;         // invite : l'hote dit que le temps file
+        static float waitToastAt, nextBedScan;
+        static readonly System.Collections.Generic.List<PlayMakerFSM> beds = new System.Collections.Generic.List<PlayMakerFSM>();
 
         public static void OnLevelLoaded()
         {
-            found = muted = false;
+            found = muted = phase = hostFast = false;
+            beds.Clear();
+            nextBedScan = 0;
+        }
+
+        // Lits (et canape) : SleepTrigger :: Activate. Rescannes toutes les 20 s.
+        static void ScanBeds()
+        {
+            if (Time.realtimeSinceStartup < nextBedScan) return;
+            nextBedScan = Time.realtimeSinceStartup + 20f;
+            beds.Clear();
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = (PlayMakerFSM)o;
+                if (f.hideFlags == HideFlags.None && f.FsmName == "Activate" && f.gameObject.name == "SleepTrigger"
+                    && f.FsmVariables.FindFsmFloat("TimeScaleSleep") != null) beds.Add(f);
+            }
+        }
+
+        // Le lit du joueur local compte-t-il les heures (il dort vraiment, animation finie) ?
+        public static bool BedCounting()
+        {
+            ScanBeds();
+            foreach (PlayMakerFSM f in beds)
+            {
+                if (f == null) continue;
+                string s = f.ActiveStateName;
+                if (s == "Alarm clock?" || s == "Day change" || s == "Sleep time") return true;
+            }
+            return false;
+        }
+
+        static void SetBeds(float v)
+        {
+            ScanBeds();
+            foreach (PlayMakerFSM f in beds)
+            {
+                if (f == null) continue;
+                FsmFloat x = f.FsmVariables.FindFsmFloat("TimeScaleSleep");
+                if (x != null && x.Value != v) x.Value = v;
+            }
+        }
+
+        // Le joueur local dort mais pas les autres : on le lui dit (toutes les 30 s).
+        static void WaitToast(bool fast)
+        {
+            if (fast || Session.RemoteCount == 0 || !Game.GlobalBool("PlayerSleeps") || Time.realtimeSinceStartup < waitToastAt) return;
+            waitToastAt = Time.realtimeSinceStartup + 30f;
+            Hud.Toast("Le temps passera quand tout le monde dormira");
         }
 
         static bool Find()
@@ -59,6 +112,14 @@ namespace MWCoop
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame || !Find()) return;
+            if (!Session.IsHost)
+            {
+                // Chaque image : le lit ne doit pas accelerer le temps tout seul.
+                SetBeds(hostFast ? SleepScale : NormalScale);
+                FsmFloat sc = FsmVariables.GlobalVariables.FindFsmFloat("GlobalTimeScale");
+                if (sc != null && !hostFast && sc.Value < 1f) sc.Value = NormalScale;
+                WaitToast(hostFast);
+            }
             if (Session.IsHost)
             {
                 bool fast = HostSleep();
@@ -79,29 +140,27 @@ namespace MWCoop
             }
         }
 
-        // Hote : un invite en jeu dort -> horloge acceleree ; rendue quand plus personne ne dort
-        // (si l'hote dort lui-meme, son lit gere l'echelle). Rend vrai si l'horloge va vite.
+        // Hote : phase commune de sommeil (tous les lits comptent les heures) -> horloge acceleree,
+        // jusqu'a ce qu'aucun lit ne compte plus. Rend vrai si l'horloge va vite.
         static bool HostSleep()
         {
             FsmFloat scale = FsmVariables.GlobalVariables.FindFsmFloat("GlobalTimeScale");
             if (scale == null) return false;
-            bool remote = false;
+            int players = 1, counting = BedCounting() ? 1 : 0, sleeping = Game.GlobalBool("PlayerSleeps") ? 1 : 0;
             foreach (PlayerInfo p in Session.Players.Values)
-                if (!p.Local && p.Level == 1 && (p.State.Flags & PlayerSync.F_SleepFast) != 0
-                    && Time.realtimeSinceStartup - p.StateTime < 3f) remote = true;
-            bool self = Game.GlobalBool("PlayerSleeps");
-            if (remote && !self && scale.Value > SleepScale)
             {
-                if (!forced) { forced = true; normalScale = scale.Value; Log.Info("monde : un invite dort, horloge acceleree"); }
-                scale.Value = SleepScale;
+                if (p.Local || p.Level != 1 || Time.realtimeSinceStartup - p.StateTime > 3f) continue;
+                players++;
+                if ((p.State.Flags & PlayerSync.F_SleepFast) != 0) counting++;
+                if ((p.State.Flags & PlayerSync.F_Sleep) != 0) sleeping++;
             }
-            else if (forced && !remote)
-            {
-                forced = false;
-                if (!self) scale.Value = normalScale;
-                Log.Info("monde : plus personne ne dort, horloge normale");
-            }
-            return scale.Value <= SleepScale + 0.01f;
+            if (!phase && counting == players) { phase = true; Log.Info("monde : tout le monde dort (" + players + "), le temps passe vite"); }
+            else if (phase && counting == 0) { phase = false; Log.Info("monde : plus personne ne dort, horloge normale"); }
+            SetBeds(phase ? SleepScale : NormalScale);
+            if (phase) scale.Value = SleepScale;
+            else if (scale.Value < 1f) scale.Value = NormalScale;   // un lit l'avait mise a 0,5
+            WaitToast(phase);
+            return phase;
         }
 
         public static void OnMessage(Msg type, Peer from, NetReader r)
@@ -115,10 +174,11 @@ namespace MWCoop
             float temp = r.F32();
             bool snowing = r.Bool();
             float hostScale = r.F32();
-            bool selfSleeps = Game.GlobalBool("PlayerSleeps");
-            bool fast = hostScale <= SleepScale + 0.01f || selfSleeps;
+            bool fast = hostScale <= SleepScale + 0.01f;
+            hostFast = fast;
+            SetBeds(fast ? SleepScale : NormalScale);
             FsmFloat scale = FsmVariables.GlobalVariables.FindFsmFloat("GlobalTimeScale");
-            if (scale != null && !selfSleeps && Mathf.Abs(scale.Value - hostScale) > 0.01f)
+            if (scale != null && Mathf.Abs(scale.Value - hostScale) > 0.01f)
             {
                 Log.Info("monde : echelle du temps " + scale.Value + " -> " + hostScale + " (hote)");
                 scale.Value = hostScale;
