@@ -247,6 +247,40 @@ namespace MWCoop
                 if (t > 56f && step == 2 && Config.Get("Test", "VidageSonnerie", "").Length > 0) { Log.Info("autotest : vidage " + Recon.DumpTargets(Config.Get("Test", "VidageSonnerie", ""))); step = 21; }
                 if (t > 62f && (step == 2 || step == 21)) { step = 3; Log.Info("autotest : " + WorldFsms.TestEvent(Config.Get("Test", "TestSonnerie", "RingingNEW::Ring"), "ANSWER")); }
             }
+            if (mode == "colis")
+            {
+                // Commande AMIS (hote), commande prete des deux cotes, guichet de la poste actif, puis
+                // l'hote paie au guichet : le colis doit apparaitre chez les deux.
+                bool host = MWCoop.Net.Session.IsHost;
+                if (host && t > 35f && step == 0) { step = 1; Log.Info("autotest : " + WorldFsms.TestEvent("OrdersSpawnerAMIS", "SPAWNITEM")); }
+                if (!host && t > 35f && step == 0) step = 1;
+                if (t > 50f && step == 1)
+                {
+                    step = 2;
+                    GameObject pile = Game.FindAny("PERAPORTTI/ActiveFunctions/Store/PostOffice/NotificationsPile");
+                    if (pile != null) pile.SetActive(true);
+                    string orders = "";
+                    foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(GameObject)))
+                    {
+                        var g = (GameObject)o;
+                        if (g.hideFlags == HideFlags.None && g.name.StartsWith("OrderAMIS") && g.name != "OrderAMIS" && g.transform.root.gameObject.activeInHierarchy)
+                        { orders += Recon.Path(g.transform) + (g.activeInHierarchy ? "" : " (inactif)") + " "; if (orders.Length < 300) Log.Info("autotest : " + WorldFsms.TestState(Recon.Path(g.transform) + "::Data", "Idle")); }
+                    }
+                    Log.Info("autotest : guichet " + (pile != null) + (pile != null ? " actif " + pile.activeInHierarchy : "") + " ; commandes " + orders);
+                }
+                if (host && t > 62f && step == 2)
+                {
+                    step = 3;
+                    GameObject pile = Game.FindAny("PERAPORTTI/ActiveFunctions/Store/PostOffice/NotificationsPile");
+                    PlayMakerFSM pf = pile != null ? Game.FsmOn(pile, "Use") : null;
+                    if (pf != null)
+                    {
+                        Log.Info("autotest : guichet enabled " + pf.enabled + ", demarre " + pf.Fsm.Started + ", fini " + pf.Fsm.Finished + ", etat '" + pf.ActiveStateName + "'");
+                        pf.enabled = true;
+                    }
+                    Log.Info("autotest : " + WorldFsms.TestState("NotificationsPile::Use", "Wait button") + " ; " + WorldFsms.TestEvent("NotificationsPile::Use", "PAY"));
+                }
+            }
             if (mode == "monde_evt" && t > 35f && !done)
             {
                 done = true;

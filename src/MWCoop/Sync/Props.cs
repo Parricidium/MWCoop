@@ -57,6 +57,18 @@ namespace MWCoop
             return "";
         }
 
+        // Colis de la poste : pas d'ID, mais il porte sa commande (OrderAMIS3, OrderYP1...), au nom unique
+        // et identique chez chacun (compteur sauvegarde, commandes rejouees dans le meme ordre).
+        static string PackageKey(GameObject go)
+        {
+            foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
+            {
+                FsmGameObject o = f.FsmVariables.FindFsmGameObject("ThisOrder");
+                if (o != null && o.Value != null) return "colis:" + o.Value.name;
+            }
+            return "";
+        }
+
         static bool censusDone, worldLogged;
         static readonly Dictionary<GameObject, string> worldKeys = new Dictionary<GameObject, string>();
         static readonly HashSet<string> WorldRoots = new HashSet<string> { "EQUIPMENTS", "Systems", "YARD", "COTTAGE", "CABIN", "MISC",
@@ -87,6 +99,7 @@ namespace MWCoop
             {
                 if (rb.transform.root.name == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
                 string id = ItemId(rb.gameObject);
+                if (id.Length == 0) id = PackageKey(rb.gameObject);
                 if (id.Length == 0) id = WorldKey(rb) ?? "";
                 if (id.Length == 0)
                 {
