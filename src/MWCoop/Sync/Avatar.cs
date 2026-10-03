@@ -57,6 +57,7 @@ namespace MWCoop
         // l'autre. On garde la valeur de base et celle posee ; si l'os n'a pas bouge depuis, on le remet.
         Quaternion headRest;                 // tete par rapport a l'avatar, debout (pour viser en voiture)
         bool headRestSet;
+        float nextPoseLog;
         Transform[] boneList;
         Quaternion[] baseRot, setRot;
         Vector3[] basePos, setPos;
@@ -329,6 +330,14 @@ namespace MWCoop
                 basePos[i] = b.localPosition;
             }
             Pose();
+            if (Config.GetInt("Test", "JournalPose", 0) != 0 && Time.realtimeSinceStartup >= nextPoseLog && headBone != null && Bone("pelvis") != null)
+            {
+                nextPoseLog = Time.realtimeSinceStartup + 5f;
+                Transform r = Root.transform;
+                Vector3 h = r.InverseTransformPoint(headBone.position) - r.InverseTransformPoint(Bone("pelvis").position);
+                Vector3 fwd = r.InverseTransformDirection(headBone.forward);
+                Log.Info("pose " + Player.Name + " : regard " + Player.State.Pitch.ToString("F0") + ", tete/bassin " + h.ToString("F2") + ", axe tete " + fwd.ToString("F2"));
+            }
             for (int i = 0; i < boneList.Length; i++)
             {
                 Transform b = boneList[i];

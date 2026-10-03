@@ -72,6 +72,8 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Host's time, day and weather (clouds, rain, temperature); time only fast-forwards when every player sleeps | |
 | World items without an ID (jerry cans, car jack, engine hoist, axe, buckets...) carried and seen by all | |
 | Host back to the main menu: guests follow and rejoin the next game with a fresh save | |
+| Car doors, hoods, boot lids synced; house light switches | |
+| Players: NPC driving pose at the wheel (car or truck), head following the camera even 360 degrees; on foot, upper body follows the gaze; real crouch; arms down when idle | |
 | NPC lines and players' swearing heard by everyone; fluids (fuel, oil, coolant, brake fluid) and wear | |
 | Food eaten, drinks drunk, trash thrown away disappear for everyone | |
 | Doors, light switches, TV and CD player, sent to a guest who joins mid-game | |
@@ -154,6 +156,9 @@ Fait aussi (0.8) : liquides et usure, nourriture et boissons consommées chez to
 partie partagée (l'hôte sauvegarde avant d'envoyer).
 Fait aussi (0.9) : le temps ne passe vite que quand tout le monde dort, objets du monde sans ID (bidons, cric,
 palan...), aperçu de la voiture complet, retour de l'hôte au menu suivi par les invités.
+Fait aussi (0.10) : portières, capots et coffres des véhicules, interrupteurs de la maison ; avatars : pose de
+conduite d'un PNJ (voiture ou camion), tête qui suit la caméra au volant (même à 360°), buste qui suit le regard,
+vrai accroupi, bras le long du corps au repos.
 À venir : toutes les actions du solo pour les invités, essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
