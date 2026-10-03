@@ -26,15 +26,14 @@ namespace MWCoop.Net
         static int expected, got;
         static readonly List<Peer> waiting = new List<Peer>();
         static float inGameSince = -1, sendAt = -1;
-        static bool mustSave;            // sauvegarder avant d'envoyer (etat courant du monde)
+        static bool newGame;             // hote : nouvelle partie lancee, pas encore de vraie sauvegarde
         static int lastHostLevel = -1;   // invite : niveau de l'hote vu au dernier passage
-        static float backToMenuAt = -1;
+        static float backToMenuAt = -1, nextWaitToast;
 
         // Hote : un invite vient d'arriver ; sa sauvegarde partira des que possible.
         public static void Queue(Peer p)
         {
             if (!waiting.Contains(p)) waiting.Add(p);
-            mustSave = true;   // l'invite doit avoir le monde tel qu'il est, pas la derniere sauvegarde
             if (!PlayerSync.InGame) Log.Info("sauvegarde : " + p + " attend que l'hote soit en jeu");
         }
 
@@ -43,20 +42,23 @@ namespace MWCoop.Net
             if (!Session.Active) return;
             float now = Time.realtimeSinceStartup;
             if (!Session.IsHost) { GuestFollow(now); return; }
-            if (!PlayerSync.InGame) { inGameSince = sendAt = -1; if (CarColor.NewGame) mustSave = true; return; }
+            if (!PlayerSync.InGame) { inGameSince = sendAt = -1; if (CarColor.NewGame) newGame = true; return; }
             if (inGameSince < 0)
             {
                 // L'hote (re)entre en jeu : chaque invite deja la recevra cette partie.
                 inGameSince = now;
                 foreach (Peer p in Session.T.Peers) if (p.Accepted && !waiting.Contains(p)) waiting.Add(p);
-                if (waiting.Count > 0) mustSave = true;
             }
-            if (waiting.Count == 0 || now - inGameSince < 15f) return;
+            // Nouvelle partie : 13 s pour que les pieces se posent et que la couleur choisie soit appliquee.
+            if (waiting.Count == 0 || newGame && now - inGameSince < 13f) return;
             if (sendAt < 0)
             {
-                if (mustSave || !File.Exists(Path.Combine(SaveDir, "savefile.txt")))
+                // Partie qui vient d'etre chargee (Continuer) : la sauvegarde du disque EST le monde, envoi
+                // tout de suite. Sinon (nouvelle partie, invite arrive en cours de route) : on sauve d'abord.
+                bool fresh = !newGame && now - inGameSince < 60f && File.Exists(Path.Combine(SaveDir, "savefile.txt"));
+                if (!fresh)
                 {
-                    mustSave = false;
+                    newGame = false;
                     Log.Info("sauvegarde : l'hote sauvegarde le monde actuel avant d'envoyer");
                     Game.SaveInPlace();
                     sendAt = now + 3f;
@@ -80,6 +82,12 @@ namespace MWCoop.Net
         {
             PlayerInfo host = Session.Host;
             int lv = host != null ? host.Level : -1;
+            // Au menu en attendant : dire ce qui se passe plutot que rien.
+            if (!PlayerSync.InGame && !Done && Session.T != null && Session.T.Peers.Count > 0 && now >= nextWaitToast)
+            {
+                nextWaitToast = now + 8f;
+                Hud.Toast(lv == 1 ? "L'hote prepare sa sauvegarde, vous entrez en jeu dans un instant..." : "En attente : l'hote n'est pas encore en jeu");
+            }
             if (lastHostLevel == 1 && lv == 0)
             {
                 Done = Received = HostHasSave = false;
