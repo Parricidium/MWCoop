@@ -39,7 +39,7 @@ namespace MWCoop
             list.Sort((a, b) => string.CompareOrdinal(a.Key.name, b.Key.name));
             return list;
         }
-        class Job { public string Key; public PlayMakerFSM F; public float WindowStart; public int Count; public bool Noisy, Control; }
+        class Job { public string Key; public PlayMakerFSM F; public float WindowStart, NoisySince; public int Count; public bool Noisy, Control; }
         static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach" };
 
         // Commande de vehicule sans sauvegarde : automate d'interaction, pas la logique de conduite.
@@ -98,7 +98,7 @@ namespace MWCoop
                     seen[path] = k + 1;
                     string key = path + "#" + k;
                     if (hooked.Contains(f)) continue;
-                    var j = new Job { Key = key, F = f, Control = control };
+                    var j = new Job { Key = key, F = f, Control = control || vehicle };   // vehicules : molettes, boutons
                     if (!InjectAll(j)) continue;   // automate pas encore charge : au prochain passage
                     hooked.Add(f);
                     jobs[key] = j;
@@ -140,13 +140,18 @@ namespace MWCoop
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 25f) return;
             FsmTransition tr = j.F.Fsm.LastTransition;
             if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
-            // Garde-fou : un automate qui boucle (plus de 5 changements en 10 s) n'est plus envoye.
+            // Retour a l'attente (souris partie, fin de survol) : de la tenue de survol, pas une action.
+            if (state == "Wait player" || state == "Mouse off" || state == "Mouse off 2" || state == "Wait button") return;
+            // Garde-fou : un automate qui boucle (plus de 5 changements en 10 s ; 40 pour les commandes des
+            // vehicules, une molette tourne vite) n'est plus envoye -- jusqu'a 30 s de calme.
             float now = Time.realtimeSinceStartup;
+            if (j.Noisy && now - j.NoisySince > 30f) { j.Noisy = false; j.WindowStart = now; j.Count = 0; Log.Info("quete : " + j.Key + " de nouveau envoye"); }
             if (now - j.WindowStart > 10f) { j.WindowStart = now; j.Count = 0; }
             if (++j.Count > (j.Control ? 40 : 5) || j.Noisy)
             {
-                if (!j.Noisy) Log.Warn("quete : " + j.Key + " change trop souvent, plus envoye");
+                if (!j.Noisy) Log.Warn("quete : " + j.Key + " change trop souvent, en pause 30 s");
                 j.Noisy = true;
+                j.NoisySince = now;
                 return;
             }
             FsmState prev = j.F.Fsm.PreviousActiveState;
@@ -207,6 +212,34 @@ namespace MWCoop
             Log.Info("quete de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
         }
 
+        // Essais : comme un joueur qui actionne la commande : l'automate passe de 'prev' a 'state' par
+        // 'ev' ici (actions jouees), et le message part comme en vrai.
+        public static string TestSend(string part, string prev, string ev, string state)
+        {
+            foreach (Job j in jobs.Values)
+                if (j.F != null && j.Key.Contains(part))
+                {
+                    var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(prev).Str(ev).Str(state);
+                    WriteVars(j.F, w);
+                    applying = true;
+                    try { Game.SetState(j.F, state); } finally { applying = false; }
+                    Session.SendAll(w, true);
+                    return j.Key + " " + prev + " -" + ev + "-> " + state + " envoye";
+                }
+            return "rien pour " + part;
+        }
+
+        public static string Var(string part, string name)
+        {
+            foreach (Job j in jobs.Values)
+                if (j.F != null && j.Key.Contains(part))
+                {
+                    FsmFloat f = j.F.FsmVariables.FindFsmFloat(name);
+                    return j.Key + " " + name + " = " + (f != null ? f.Value.ToString("F1") : "?") + " (etat " + j.F.ActiveStateName + ")";
+                }
+            return "?";
+        }
+
         // Essais : envoie l'evenement 'ev' a l'automate de boulot dont la cle contient 'part'.
         public static string TestEvent(string part, string ev)
         {
@@ -214,6 +247,16 @@ namespace MWCoop
                 if (j.F != null && j.Key.Contains(part))
                 {
                     string before = j.F.ActiveStateName;
+                    // L'etat courant n'attend pas cet evenement : on passe d'abord par un etat qui l'attend
+                    // (une molette n'ecoute qu'en survol, "Get scroll").
+                    bool ok = false;
+                    FsmState cur = j.F.Fsm.GetState(before);
+                    if (cur != null) foreach (FsmTransition t in cur.Transitions) if (t.EventName == ev) ok = true;
+                    if (!ok)
+                        foreach (FsmState st in j.F.Fsm.States)
+                            foreach (FsmTransition t in st.Transitions)
+                                if (!ok && t.EventName == ev) { Game.SetState(j.F, st.Name); ok = true; }
+                    before = j.F.ActiveStateName;
                     j.F.SendEvent(ev);
                     return j.Key + " : " + before + " -" + ev + "-> " + j.F.ActiveStateName;
                 }

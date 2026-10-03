@@ -14,7 +14,7 @@ namespace MWCoop
     public static class CarVisuals
     {
         static readonly string[] PoseWords = { "needle", "glasspivot", "windowpivot", "lever", "pivot_brake", "handbrake", "belt", "steering",
-            "pedal", "wiper", "knob", "switch", "sunvisor", "mirror", "sled", "gear", "key", "hand_brake" };
+            "pedal", "wiper", "knob", "switch", "sunvisor", "mirror", "sled", "gear", "key", "hand_brake", "button", "heater", "dial", "slider" };
         static readonly string[] ShowWords = { "light", "beam", "indicator", "lamp", "frost", "frozen", "heater", "belt", "lock", "key",
             "sunvisors", "marker", "brakes", "blinker", "turnsignal" };
         static readonly string[] SkipWords = { "wheel", "tire", "rim", "hubcap", "spindle", "driver", "passenger", "headpivot" };
