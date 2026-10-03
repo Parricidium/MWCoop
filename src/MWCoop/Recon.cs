@@ -96,7 +96,13 @@ namespace MWCoop
                 foreach (FsmTransition tr in s.Transitions)
                     sb.Append(' ').Append(tr.EventName).Append("->").Append(tr.ToState);
                 FsmStateAction[] actions = null;
-                try { actions = s.Actions; } catch (Exception e) { sb.Append("  {actions illisibles : ").Append(e.GetType().Name).Append('}'); }
+                try { actions = s.Actions; }
+                catch (Exception)
+                {
+                    // Automate jamais demarre (objet inactif) : ses donnees n'ont pas ete chargees.
+                    try { fsm.InitData(); actions = s.Actions; }
+                    catch (Exception e) { sb.Append("  {actions illisibles : ").Append(e.GetType().Name).Append('}'); }
+                }
                 if (actions == null) { sb.Append('\n'); continue; }
                 if (!actionParams)
                 {

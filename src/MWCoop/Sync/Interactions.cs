@@ -69,8 +69,10 @@ namespace MWCoop
                 Log.Info("interaction " + c.Id + " : etat " + c.Fsm.ActiveStateName + (open != null ? ", DoorOpen " + open.Value : "")
                          + ", angle " + c.Fsm.transform.parent.localEulerAngles.ToString("F0"));
             }
-            if (scanned || scanAt < 0 || Time.realtimeSinceStartup < scanAt) return;
-            scanned = true;
+            // Nouveau passage toutes les 20 s : les objets lointains (inactifs) ne peuvent etre suivis
+            // qu'une fois actives (leur automate n'est pas charge avant).
+            if (scanAt < 0 || Time.realtimeSinceStartup < scanAt) return;
+            scanAt = Time.realtimeSinceStartup + 20f;
             Scan();
         }
 
@@ -99,9 +101,10 @@ namespace MWCoop
                 string target = AllowedTarget(kv.Value);
                 if (target == null) continue;
                 var e = new Entry { Id = kv.Key + "#" + k, Fsm = kv.Value };
+                if (byId.ContainsKey(e.Id)) continue;
                 if (Inject(e, target)) { byId[e.Id] = e; hooked++; }
             }
-            Log.Info("interactions : " + hooked + " objets suivis (portes, interrupteurs...) sur " + all.Count + " automates Use");
+            if (hooked > 0) Log.Info("interactions : " + hooked + " objets de plus suivis (portes, interrupteurs...), " + byId.Count + " en tout");
         }
 
         static string AllowedTarget(PlayMakerFSM f)
@@ -128,7 +131,7 @@ namespace MWCoop
                 s.Actions = list.ToArray();
                 return true;
             }
-            catch (Exception ex) { Log.Warn("injection " + e.Id + " : " + ex.Message); return false; }
+            catch (Exception) { return false; }   // automate pas encore charge (objet inactif) : au prochain passage
         }
 
         static void Send(Entry e, string state)
