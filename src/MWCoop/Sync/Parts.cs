@@ -27,7 +27,7 @@ namespace MWCoop
             public bool Install;
             public override void OnEnter()
             {
-                if (!applying) OnLocal(P, Install);
+                try { if (!applying && Replay.Depth == 0) OnLocal(P, Install); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -43,7 +43,7 @@ namespace MWCoop
             public PlayMakerFSM F;
             public override void OnEnter()
             {
-                if (!applying) OnLocalBolt(F);
+                try { if (!applying && Replay.Depth == 0) OnLocalBolt(F); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -76,13 +76,13 @@ namespace MWCoop
                 if (s != null && s.FsmVariables.GetFsmGameObject("ThisPart").Value == part && BoltName(s) == bolt) { f = s; break; }
             if (part == null || f == null) { Log.Warn("vis " + id + "/" + bolt + " introuvable ici"); return; }
             FsmInt t = f.FsmVariables.GetFsmInt("BoltTightness");
-            applying = true;
+            applying = true; Replay.Depth++;
             try
             {
                 for (int guard = 0; t.Value != target && guard < 10; guard++)
                     f.SendEvent(t.Value < target ? "TIGHTEN" : "UNTIGHTEN");
             }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             if (t.Value != target) Log.Warn("vis " + id + "/" + bolt + " : " + t.Value + " au lieu de " + target);
             else Log.Info("vis " + id + "/" + bolt + " = " + target + " (joueur #" + who + ")");
         }
@@ -234,7 +234,7 @@ namespace MWCoop
             p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value = part;
             Trace.Watch(p.Fsm, "point " + key, 8f);
             Trace.Watch(data, "piece " + id, 8f);
-            applying = true;
+            applying = true; Replay.Depth++;
             try
             {
                 if (install)
@@ -249,7 +249,7 @@ namespace MWCoop
                 }
                 else Game.SetState(p.Fsm, "Remove part");
             }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1f);
             Log.Info("piece " + id + (install ? " montee sur " : " demontee de ") + key + " (joueur #" + who + ")");
         }

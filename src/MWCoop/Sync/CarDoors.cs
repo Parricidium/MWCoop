@@ -24,13 +24,14 @@ namespace MWCoop
             public bool IsOpen, Mine;          // ouverte ; ouverte par nous (on envoie son angle)
             public Quaternion LastRot; public bool Sent;
             public bool Showing; public Quaternion TargetRot; public Vector3 TargetPos; public float LastRemote;
-            public Transform[] Kids; public Vector3[] KidPos; public Quaternion[] KidRot;
+            public Transform[] Kids; public Vector3[] KidPos, RelPos; public Quaternion[] KidRot, RelRot;
             public Quaternion TestOffset = Quaternion.identity;   // essais : pousse la pose envoyee
         }
 
         static readonly Dictionary<string, Door> byKey = new Dictionary<string, Door>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
-        static float nextScan = -1, nextAngle;
+        static float nextScan = -1, nextAngle, lastUnknownScan = -100;
+        static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static bool applying;
 
         class Hook : FsmStateAction
@@ -39,7 +40,7 @@ namespace MWCoop
             public bool Opening;
             public override void OnEnter()
             {
-                if (!applying) Send(D, Opening);
+                try { if (!applying && Replay.Depth == 0) Send(D, Opening); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -48,7 +49,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); hooked.Clear();
+            byKey.Clear(); hooked.Clear(); snapshots.Clear();
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 12f : -1;
         }
 
@@ -61,14 +62,15 @@ namespace MWCoop
                 var seen = new Dictionary<string, int>();
                 foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
-                    if (f.FsmName != "Use" || hooked.Contains(f)) continue;
+                    if (f.FsmName != "Use") continue;
                     string open = null, close = null;
                     if (f.Fsm.GetState("Open door") != null && f.Fsm.GetState("Open door 2") != null) { open = "Open door"; close = "Open door 2"; }
                     else if (f.Fsm.GetState("Open hood") != null && f.Fsm.GetState("Close hood") != null)
                     { open = "Open hood"; close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close hood"; }
                     if (open == null) continue;
                     string rel = Recon.Path(f.transform).Substring(car.name.Length);
-                    int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
+                    int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;   // compte aussi les portieres deja suivies
+                    if (hooked.Contains(f) || !Replay.Claim(f, "portieres")) continue;
                     var d = new Door { Key = car.name + rel + "#" + k, Fsm = f, Open = open, Close = close };
                     d.Body = f.GetComponentInParent<Rigidbody>();
                     if (d.Body != null && d.Body.transform == car.transform) d.Body = null;
@@ -84,7 +86,7 @@ namespace MWCoop
             foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
             {
                 if (f.FsmName != "Data" || hooked.Contains(f) || !f.gameObject.name.StartsWith("cable plug")) continue;
-                if (f.Fsm.GetState("Heater on") == null || f.Fsm.GetState("Heater off") == null) continue;
+                if (f.Fsm.GetState("Heater on") == null || f.Fsm.GetState("Heater off") == null || !Replay.Claim(f, "portieres")) continue;
                 FsmGameObject sock = f.FsmVariables.FindFsmGameObject("Socket");
                 if (sock == null || sock.Value == null) continue;
                 var d = new Door { Key = "prise:" + Recon.Path(sock.Value.transform), Fsm = f, Open = "Heater on", Close = "Heater off" };
@@ -114,6 +116,18 @@ namespace MWCoop
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = now + 30f; Scan(); }
+            // Arrivee d'un joueur : les portieres, capots et prises deja ouverts/branches chez l'hote.
+            for (int i = snapshots.Count - 1; i >= 0; i--)
+            {
+                if (now < snapshots[i].Key) continue;
+                Peer p = snapshots[i].Value;
+                snapshots.RemoveAt(i);
+                if (!p.Accepted || !Session.T.Peers.Contains(p)) continue;
+                int n = 0;
+                foreach (Door d in byKey.Values)
+                    if (d.IsOpen && d.Fsm != null) { Session.T.SendReliable(p, new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(1).ToArray()); n++; }
+                Log.Info("portieres : " + n + " ouvertes envoyees a " + p);
+            }
             // Chez nous, pour un autre : la partie visible suit sa pose, chaque image.
             foreach (Door d in byKey.Values)
             {
@@ -138,16 +152,36 @@ namespace MWCoop
 
         static Transform CarOf(Door d) { return d.Fsm.transform.root; }
 
+        public static void ScheduleSnapshot(Peer p) { if (Session.IsHost) snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
+
+        // La partie visible a deplacer : les sous-objets qui ont un rendu et AUCUN collider (en eux ou
+        // dessous) -- deplacer un collider changerait la forme physique de la portiere et pousserait la voiture.
+        static void CollectVisual(Transform t, List<Transform> outList)
+        {
+            foreach (Transform c in t)
+            {
+                if (c.GetComponentsInChildren<Collider>(true).Length == 0) { if (c.GetComponentsInChildren<Renderer>(true).Length > 0) outList.Add(c); }
+                else CollectVisual(c, outList);
+            }
+        }
+
         // Place les enfants du corps (la partie visible) comme si le corps etait a la pose recue.
         static void Show(Door d)
         {
             Transform b = d.Body.transform, car = CarOf(d);
             if (d.Kids == null)
             {
-                d.Kids = new Transform[b.childCount];
-                d.KidPos = new Vector3[b.childCount];
-                d.KidRot = new Quaternion[b.childCount];
-                for (int i = 0; i < b.childCount; i++) { d.Kids[i] = b.GetChild(i); d.KidPos[i] = d.Kids[i].localPosition; d.KidRot[i] = d.Kids[i].localRotation; }
+                var l = new List<Transform>();
+                CollectVisual(b, l);
+                d.Kids = l.ToArray();
+                d.KidPos = new Vector3[d.Kids.Length]; d.KidRot = new Quaternion[d.Kids.Length];      // pose locale (a rendre)
+                d.RelPos = new Vector3[d.Kids.Length]; d.RelRot = new Quaternion[d.Kids.Length];      // pose dans le repere du corps
+                for (int i = 0; i < d.Kids.Length; i++)
+                {
+                    d.KidPos[i] = d.Kids[i].localPosition; d.KidRot[i] = d.Kids[i].localRotation;
+                    d.RelPos[i] = b.InverseTransformPoint(d.Kids[i].position);
+                    d.RelRot[i] = Quaternion.Inverse(b.rotation) * d.Kids[i].rotation;
+                }
             }
             Quaternion R = car.rotation * d.TargetRot;
             Vector3 P = car.TransformPoint(d.TargetPos);
@@ -155,8 +189,8 @@ namespace MWCoop
             for (int i = 0; i < d.Kids.Length; i++)
             {
                 if (d.Kids[i] == null) continue;
-                d.Kids[i].position = P + R * Vector3.Scale(sc, d.KidPos[i]);
-                d.Kids[i].rotation = R * d.KidRot[i];
+                d.Kids[i].position = P + R * Vector3.Scale(sc, d.RelPos[i]);
+                d.Kids[i].rotation = R * d.RelRot[i];
             }
         }
 
@@ -199,6 +233,8 @@ namespace MWCoop
             if (!byKey.TryGetValue(key, out d) || d.Fsm == null)
             {
                 if (kind == 2) return;
+                if (Time.realtimeSinceStartup - lastUnknownScan < 10f) return;   // pas un releve complet a chaque message
+                lastUnknownScan = Time.realtimeSinceStartup;
                 Scan();
                 if (!byKey.TryGetValue(key, out d) || d.Fsm == null) { Log.Warn("portiere " + key + " introuvable ici"); return; }
             }
@@ -212,9 +248,9 @@ namespace MWCoop
             d.IsOpen = opening;
             d.Mine = false;
             StopFollow(d);
-            applying = true;
+            applying = true; Replay.Depth++;
             try { Game.SetState(d.Fsm, opening ? d.Open : d.Close); }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             Log.Info("portiere " + key + (opening ? " ouverte" : " fermee") + " par #" + who);
         }
 
@@ -249,7 +285,7 @@ namespace MWCoop
                 if (d.Key.StartsWith(key) && d.Fsm != null)
                 {
                     return d.Key + " etat " + d.Fsm.ActiveStateName
-                           + (d.Body != null ? ", visible " + Quaternion.Angle(Quaternion.identity, Quaternion.Inverse(CarOf(d).rotation) * (d.Kids != null && d.Kids.Length > 0 && d.Kids[0] != null ? d.Kids[0].rotation : d.Body.rotation)).ToString("F1") + " deg" : "")
+                           + (d.Body != null ? ", visible " + Quaternion.Angle(Quaternion.identity, Quaternion.Inverse(CarOf(d).rotation) * (d.Kids != null && d.Kids.Length > 0 && d.Kids[0] != null && d.RelRot != null ? d.Kids[0].rotation * Quaternion.Inverse(d.RelRot[0]) : d.Body.rotation)).ToString("F1") + " deg" : "")
                            + (d.IsOpen ? (d.Mine ? ", ouverte par nous" : ", ouverte par un autre") : ", fermee");
                 }
             return "?";

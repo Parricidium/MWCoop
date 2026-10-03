@@ -25,7 +25,8 @@ namespace MWCoop
     public static class Jobs
     {
         static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE",
-                                                                        "TERRAIN", "DEEPSNOW", "RIM" };
+                                                                        "TERRAIN", "DEEPSNOW", "RIM", "LOOP" };
+        static readonly HashSet<string> RandomActions = new HashSet<string> { "SendRandomEvent", "RandomEvent" };
 
         // Racines suivies : JOBS (sans les automates Use des objets) et chaque vehicule (avec ses boutons).
         static List<KeyValuePair<GameObject, bool>> RootsNow()
@@ -39,7 +40,13 @@ namespace MWCoop
             list.Sort((a, b) => string.CompareOrdinal(a.Key.name, b.Key.name));
             return list;
         }
-        class Job { public string Key; public PlayMakerFSM F; public float WindowStart, NoisySince; public int Count; public bool Noisy, Control; public HashSet<string> Entered = new HashSet<string>(); }
+        class Job
+        {
+            public string Key; public PlayMakerFSM F; public float WindowStart, NoisySince; public int Count; public bool Noisy, Control;
+            public HashSet<string> Entered = new HashSet<string>();
+            public HashSet<string> RandomStates = new HashSet<string>();                     // etats qui tirent au sort
+            public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();  // transitions prises ici
+        }
         static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach" };
 
         // Commande de vehicule sans sauvegarde : automate d'interaction, pas la logique de conduite.
@@ -52,7 +59,7 @@ namespace MWCoop
         }
         static readonly Dictionary<string, Job> jobs = new Dictionary<string, Job>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
-        static float nextScan = -1, loadedAt;
+        static float nextScan = -1, loadedAt, nextWarn;
         static bool applying;
 
         class Hook : FsmStateAction
@@ -61,7 +68,7 @@ namespace MWCoop
             public string State;
             public override void OnEnter()
             {
-                if (!applying) OnLocal(J, State); else J.Entered.Add(State);
+                try { if (Replay.Depth == 0) OnLocal(J, State); else J.Entered.Add(State); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -97,7 +104,7 @@ namespace MWCoop
                     seen.TryGetValue(path, out k);
                     seen[path] = k + 1;
                     string key = path + "#" + k;
-                    if (hooked.Contains(f)) continue;
+                    if (hooked.Contains(f) || !Replay.Claim(f, "quetes")) continue;
                     var j = new Job { Key = key, F = f, Control = control || vehicle };   // vehicules : molettes, boutons
                     if (!InjectAll(j)) continue;   // automate pas encore charge : au prochain passage
                     hooked.Add(f);
@@ -126,6 +133,7 @@ namespace MWCoop
             {
                 foreach (FsmState s in j.F.Fsm.States)
                 {
+                    foreach (FsmStateAction a in s.Actions) if (a != null && RandomActions.Contains(a.GetType().Name)) j.RandomStates.Add(s.Name);
                     var list = new List<FsmStateAction>(s.Actions);
                     list.Insert(0, new Hook { J = j, State = s.Name });
                     s.Actions = list.ToArray();
@@ -140,6 +148,10 @@ namespace MWCoop
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 25f) return;
             FsmTransition tr = j.F.Fsm.LastTransition;
             if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
+            FsmState from = j.F.Fsm.PreviousActiveState;
+            j.LocalRecent[(from != null ? from.Name : "") + "|" + tr.EventName + "|" + state] = Time.realtimeSinceStartup;
+            // Tirage au sort : seul celui de l'hote compte (les invites s'y recalent a son message).
+            if (from != null && j.RandomStates.Contains(from.Name) && !Session.IsHost) return;
             // Retour a l'attente (souris partie, fin de survol) : de la tenue de survol, pas une action.
             if (state == "Wait player" || state == "Mouse off" || state == "Mouse off 2" || state == "Wait button") return;
             // Garde-fou : un automate qui boucle (plus de 5 changements en 10 s ; 40 pour les commandes des
@@ -194,13 +206,24 @@ namespace MWCoop
                 Session.Broadcast(w, true, who);
             }
             Job j;
-            if (!jobs.TryGetValue(key, out j) || j.F == null) { Log.Warn("quete " + key + " introuvable ici"); return; }
+            if (!jobs.TryGetValue(key, out j) || j.F == null)
+            {
+                if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("quete " + key + " introuvable ici"); }
+                return;
+            }
+            // Deja fait ici a l'instant (la meme logique a tourne chez les deux, ex. le jour de paie) : pas une 2e fois.
+            float done;
+            if (j.LocalRecent.TryGetValue(prev + "|" + ev + "|" + state, out done) && Time.realtimeSinceStartup - done < 10f)
+            {
+                Log.Info("quete de #" + who + " : " + key + " -" + ev + "-> deja fait ici");
+                return;
+            }
             FsmVariables v = j.F.FsmVariables;
             foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
             foreach (var x in floats) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
             foreach (var x in bools) { FsmBool t = v.FindFsmBool(x.Key); if (t != null) t.Value = x.Value; }
-            Wallet.Suppress(8f);   // la paie que le boulot rejoue ici n'est pas renvoyee aux autres
-            applying = true;
+            if (!j.Control) Wallet.Suppress(8f);   // la paie que le boulot rejoue ici n'est pas renvoyee aux autres
+            applying = true; Replay.Depth++;
             try
             {
                 // Meme etat de depart : meme evenement (memes actions). Sinon, ou si l'automate n'a
@@ -209,7 +232,7 @@ namespace MWCoop
                 if (j.F.ActiveStateName == prev) j.F.SendEvent(ev);
                 if (!j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
             }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             Log.Info("quete de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
         }
 
@@ -222,8 +245,8 @@ namespace MWCoop
                 {
                     var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(prev).Str(ev).Str(state);
                     WriteVars(j.F, w);
-                    applying = true;
-                    try { Game.SetState(j.F, state); } finally { applying = false; }
+                    applying = true; Replay.Depth++;
+                    try { Game.SetState(j.F, state); } finally { applying = false; Replay.Depth--; }
                     Session.SendAll(w, true);
                     return j.Key + " " + prev + " -" + ev + "-> " + state + " envoye";
                 }

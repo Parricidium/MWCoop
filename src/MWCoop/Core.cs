@@ -102,6 +102,7 @@ namespace MWCoop
         void OnLevelWasLoaded(int level)
         {
             Log.Info("niveau charge : " + level + " " + Application.loadedLevelName);
+            Replay.OnLevelLoaded();
             PlayerSync.OnLevelLoaded();
             World.OnLevelLoaded();
             Interactions.OnLevelLoaded();

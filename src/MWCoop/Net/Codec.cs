@@ -26,6 +26,7 @@ namespace MWCoop.Net
         }
         public NetWriter Bytes(byte[] b, int off, int n) { w.Write((ushort)n); w.Write(b, off, n); return this; }
         public NetWriter Raw(byte[] b) { w.Write(b); return this; }
+        public NetWriter Raw(byte[] b, int off, int n) { w.Write(b, off, n); return this; }
         public byte[] ToArray() { w.Flush(); return ms.ToArray(); }
         public int Length { get { return (int)ms.Length; } }
     }
@@ -37,6 +38,8 @@ namespace MWCoop.Net
         readonly int end;
         public NetReader(byte[] data, int start, int len) { b = data; p = start; end = start + len; }
         public bool More { get { return p < end; } }
+        // Copie de ce qui reste a lire (sans avancer).
+        public byte[] Rest() { var r = new byte[end - p]; Buffer.BlockCopy(b, p, r, 0, r.Length); return r; }
         void Need(int n) { if (p + n > end) throw new EndOfStreamException("message tronque"); }
         public int U8() { Need(1); return b[p++]; }
         public int U16() { Need(2); int v = b[p] | b[p + 1] << 8; p += 2; return v; }

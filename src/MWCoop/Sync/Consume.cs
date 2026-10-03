@@ -24,7 +24,7 @@ namespace MWCoop
             public string Id;
             public override void OnEnter()
             {
-                if (!applying) OnLocal(Id, Fsm.PreviousActiveState != null ? Fsm.PreviousActiveState.Name : "");
+                try { if (!applying && Replay.Depth == 0) OnLocal(Id, Fsm.PreviousActiveState != null ? Fsm.PreviousActiveState.Name : ""); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -117,9 +117,9 @@ namespace MWCoop
                 if (!snapshot && now >= nextWarn) { nextWarn = now + 10f; Log.Warn("consommables : " + id + " introuvable ici"); }
                 return;
             }
-            applying = true;
+            applying = true; Replay.Depth++;
             try { Game.SetState(f, "Destroy"); }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             byId.Remove(id);
             Log.Info("consommables : " + id + " consomme par le joueur #" + who);
         }
