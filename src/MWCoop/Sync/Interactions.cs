@@ -178,6 +178,12 @@ namespace MWCoop
             Log.Info("interaction de #" + who + " : " + id + " -> " + state + (e.Fsm.gameObject.activeInHierarchy ? "" : " (objet inactif)"));
         }
 
+        public static bool Tracks(PlayMakerFSM f)
+        {
+            foreach (Entry e in byId.Values) if (e.Fsm == f) return true;
+            return false;
+        }
+
         // Essais : actionne l'objet suivi dont l'identifiant contient 'part' (comme un clic).
         public static string TestNamed(string part)
         {

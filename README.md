@@ -25,6 +25,11 @@
 </p>
 <p align="center"><i>The launcher: host, join or play solo; it keeps the mod up to date by itself.</i></p>
 
+<p align="center">
+  <img src="docs/img/lanceur-voiture.png" width="80%" alt="Picking the car color with a 3D preview">
+</p>
+<p align="center"><i>CAR tab: the CORRIS color for a new game, previewed in 3D (the model is read from your own game).</i></p>
+
 # MWCoop — My Winter Car in co-op
 
 A co-op mod for **My Winter Car** (Steam), by the authors of [VCCoop](https://github.com/Parricidium/VCCoop),
@@ -64,6 +69,10 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Animated players (NPC animations): walking, sitting, crouching, smoking, drinking, carrying, waving | |
 | Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped, paint (parts and body), hand adjustments | |
 | Money: income shared by everyone, separate wallets; shopping seen by all (bags, items) | |
+| Traffic and passers-by driven by the host (roads, bus, train) | |
+| Shared jobs: a job started by one and finished by another counts for both, no double pay | |
+| Wiring, windshield and dashboard buttons of every vehicle | |
+| Launcher CAR tab: pick the CORRIS color for a new game, with a 3D preview | |
 | Chat, F10 menu | |
 
 The full list is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
@@ -125,6 +134,8 @@ mécanique (pièces montées/démontées, chaque cran de vis, pièces portées e
 porte-monnaie séparés, achats vus par tous (sacs, articles), joueurs animés (marcher, s'asseoir, fumer, boire,
 porter, saluer), conducteur assis au volant avec le bruit du moteur, les roues et les phares, tchat, menu F10.
 Fait aussi : peinture (pièces et carrosserie) et réglages à la main (carburateur, molettes).
+Fait aussi (0.6) : circulation et passants de l'hôte, boulots communs (validés pour tous, sans double paie),
+câblage et tableaux de bord, couleur de la voiture choisie dans le lanceur avec aperçu 3D.
 À venir : liquides et usure, objets et achats, portes et lumières, PNJ et circulation, quêtes
 validées pour tous, revenus partagés avec porte-monnaie séparés, animations des actions.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).

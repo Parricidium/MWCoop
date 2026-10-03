@@ -28,11 +28,15 @@ Deja synchronise
 - Les achats : chacun paie de son cote, tous voient le sac et les articles achetes.
 - Les animations : marcher (bras qui balancent), s'asseoir, s'accroupir, fumer, boire, porter, saluer.
 - Au volant : le conducteur est assis dans le vehicule, on entend son moteur, les roues tournent, les phares suivent.
+- La circulation (routes, bus, train) et les passants de l'hote.
+- Les boulots : commences par l'un, termines par l'autre, valides pour tous, sans double paie.
+- Le cablage electrique, le pare-brise et les boutons du tableau de bord.
+- Onglet VOITURE du lanceur : couleur de la CORRIS pour une nouvelle partie, avec apercu 3D.
 - Le tchat.
 
 Pas encore (feuille de route)
 -----------------------------
-Liquides et usure, objets dans les mains, PNJ et circulation, quetes,
+Liquides et usure, objets dans les mains, discussions et voix des PNJ,
 manger et dormir.
 
 En cas de probleme

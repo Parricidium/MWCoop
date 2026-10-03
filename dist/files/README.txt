@@ -28,11 +28,15 @@ Already synced
 - Shopping: everyone pays for themselves, everyone sees the bags and items bought.
 - Animations: walking (arms swinging), sitting, crouching, smoking, drinking, carrying, waving.
 - Driving: the driver sits in the vehicle, you hear its engine, wheels turn, lights follow.
+- The host's traffic (roads, bus, train) and passers-by.
+- Jobs: started by one, finished by another, count for everyone, no double pay.
+- Wiring, windshield and dashboard buttons.
+- Launcher CAR tab: CORRIS color for a new game, with a 3D preview.
 - Chat.
 
 Not yet (roadmap)
 -----------------
-Fluids and wear, items in hands, NPCs and traffic, quests,
+Fluids and wear, items in hands, NPC conversations and voices,
 eating and sleeping.
 
 Problems?
