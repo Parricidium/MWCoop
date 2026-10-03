@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MWCoop
@@ -5,6 +6,43 @@ namespace MWCoop
     // Acces aux objets du jeu.
     public static class Game
     {
+        // Sauvegarde en pleine partie. Le jeu ne sauve qu'en quittant : SAVEGAME envoie des centaines
+        // d'automates (interrupteurs, objets, boutons...) dans un etat "Save" sans sortie. On note
+        // l'etat de chaque automate qui ecoute SAVEGAME, on sauve, et 2,5 s plus tard (le temps que
+        // les fichiers soient ecrits) on remet chacun dans son etat d'avant.
+        static List<KeyValuePair<PlayMakerFSM, string>> restore;
+        static float restoreAt;
+        public static bool Saving { get { return restore != null; } }
+
+        public static void SaveInPlace()
+        {
+            if (restore != null) return;
+            restore = new List<KeyValuePair<PlayMakerFSM, string>>();
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            {
+                string s = f.ActiveStateName;
+                if (string.IsNullOrEmpty(s)) continue;
+                foreach (HutongGames.PlayMaker.FsmTransition t in f.Fsm.GlobalTransitions)
+                    if (t.EventName == "SAVEGAME") { restore.Add(new KeyValuePair<PlayMakerFSM, string>(f, s)); break; }
+            }
+            PlayMakerFSM.BroadcastEvent("SAVEGAME");
+            restoreAt = Time.realtimeSinceStartup + 2.5f;
+            Log.Info("sauvegarde en jeu : " + restore.Count + " automates notes avant SAVEGAME");
+        }
+
+        public static void Update()
+        {
+            if (restore == null || Time.realtimeSinceStartup < restoreAt) return;
+            int n = 0;
+            foreach (KeyValuePair<PlayMakerFSM, string> kv in restore)
+            {
+                if (kv.Key == null || kv.Key.ActiveStateName == kv.Value) continue;
+                try { SetState(kv.Key, kv.Value); n++; }
+                catch (System.Exception e) { Log.Warn("sauvegarde en jeu : " + kv.Key.name + " -> " + kv.Value + " : " + e.Message); }
+            }
+            restore = null;
+            Log.Info("sauvegarde en jeu : " + n + " automates remis dans leur etat d'avant");
+        }
         // Premier automate 'fsmName' porte par un objet actif nomme 'objectName'.
         public static PlayMakerFSM FindFsm(string objectName, string fsmName)
         {
