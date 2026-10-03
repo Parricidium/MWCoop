@@ -79,9 +79,24 @@ namespace MWCoop
             Step("autotest", Autotest.Update);
         }
 
+        // Chaque module, chronometre : un passage de plus de 30 ms (a-coup visible) est note, 1 fois / 10 s par module.
+        static readonly System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
+        static readonly System.Collections.Generic.Dictionary<string, float> slowLogged = new System.Collections.Generic.Dictionary<string, float>();
+
         static void Step(string what, System.Action a)
         {
+            watch.Reset(); watch.Start();
             try { a(); } catch (System.Exception e) { Log.Error(what + " : " + e); }
+            watch.Stop();
+            if (watch.ElapsedMilliseconds > 30)
+            {
+                float last;
+                if (!slowLogged.TryGetValue(what, out last) || Time.realtimeSinceStartup - last > 10f)
+                {
+                    slowLogged[what] = Time.realtimeSinceStartup;
+                    Log.Warn("lent : " + what + " " + watch.ElapsedMilliseconds + " ms");
+                }
+            }
         }
 
         void OnLevelWasLoaded(int level)
