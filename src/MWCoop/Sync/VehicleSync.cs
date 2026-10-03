@@ -236,6 +236,16 @@ namespace MWCoop
         static float testRpm = -1f, testThr;
 
         // Essais : allume les sons moteur de la voiture locale (comme le contact quand le moteur tourne).
+        // L'objet appartient-il a une voiture qu'un autre joueur conduit en ce moment ?
+        public static bool RemotelyDriven(Transform t)
+        {
+            string root = t.root.name;
+            float now = Time.realtimeSinceStartup;
+            foreach (Car c in cars)
+                if (c.Name == root) return c.RemoteDriver >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving;
+            return false;
+        }
+
         public static string TestSounds(string name, bool on)
         {
             foreach (Car c in cars)

@@ -178,6 +178,11 @@ namespace MWCoop
                 done = true;
                 Chat.Send("Salut, c'est " + Net.Session.Me.Name + " !");
             }
+            if (mode == "liquide" && t > 40f && !done)
+            {
+                done = true;
+                Log.Info("autotest : liquide " + Fluids.TestNearest(Config.Get("Test", "TestLiquide", "Fluid")));
+            }
             if (mode == "dormir" && t > 20f && !done)
             {
                 // Le joueur se couche dans le lit le plus proche (fatigue montee pour qu'il dorme

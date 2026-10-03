@@ -200,6 +200,7 @@ namespace MWCoop.Net
                     case Msg.Purchase: Shop.OnMessage(from, r); break;
                     case Msg.Paint: Paint.OnMessage(from, r); break;
                     case Msg.Setting: Settings.OnMessage(from, r); break;
+                    case Msg.Fluid: Fluids.OnMessage(from, r); break;
                     case Msg.Traffic: Traffic.OnMessage(from, r); break;
                     case Msg.Job: Jobs.OnMessage(from, r); break;
                     case Msg.Roster: OnRoster(r); break;
