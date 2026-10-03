@@ -26,6 +26,9 @@ namespace MWCoop
             { "TVSwitch",     "Switch" },
             { "CDSwitch",     "Switch" },
             { "Eject",        "Switch" },
+            { "ButtonLightModes", "Mode add" },     // phares des vehicules (CORRIS...)
+            { "ButtonLightModes", "Test" },         // phares (tracteur...)
+            { "ButtonWipers", "Test" },             // essuie-glaces
         };
 
         class Entry { public string Id; public PlayMakerFSM Fsm; }
@@ -170,6 +173,20 @@ namespace MWCoop
             finally { applying = false; }
             checks.Add(new KeyValuePair<float, Entry>(Time.realtimeSinceStartup + 2f, e));
             Log.Info("interaction de #" + who + " : " + id + " -> " + state + (e.Fsm.gameObject.activeInHierarchy ? "" : " (objet inactif)"));
+        }
+
+        // Essais : actionne l'objet suivi dont l'identifiant contient 'part' (comme un clic).
+        public static string TestNamed(string part)
+        {
+            foreach (Entry e in byId.Values)
+            {
+                if (e.Fsm == null || !e.Id.Contains(part)) continue;
+                string target = AllowedTarget(e.Fsm);
+                Game.SetState(e.Fsm, target);
+                checks.Add(new KeyValuePair<float, Entry>(Time.realtimeSinceStartup + 2f, e));
+                return e.Id + " -> " + target;
+            }
+            return "rien pour " + part;
         }
 
         // Essais : declenche la premiere porte proche du joueur (comme un clic).

@@ -26,12 +26,15 @@ pouvoir le faire, et les autres doivent le voir.
 
 ## Achats et objets
 - [x] Chaque joueur achète de son côté ; tous voient les achats des autres (sac de courses…) (0.3).
-- [ ] Objets visibles dans les mains des joueurs (sac de courses, etc.).
+- [~] Objets visibles dans les mains des joueurs (sac de courses, etc.).
+      Fait (0.4) : l'objet porté se voit à sa vraie place et l'avatar a le bras qui porte.
 
 ## Personnages
 - [x] Apparence : chaque joueur (hôte et invités) choisit un modèle de PNJ existant (F10, 0.1).
-- [ ] Animations : celles des PNJ (accroupi…) ou faites maison, pour que les joueurs se voient bouger.
-- [ ] Actions visibles : un joueur qui fume, boit, mange… est vu par les autres.
+- [x] Animations : celles des PNJ (accroupi…) ou faites maison, pour que les joueurs se voient bouger.
+      Fait (0.4) : marche avec les bras qui balancent, assis, accroupi, assis au volant.
+- [~] Actions visibles : un joueur qui fume, boit, mange… est vu par les autres.
+      Fait (0.4) : fumer, boire, porter, saluer. Reste : manger, dormir.
 
 ## Lanceur
 - [~] Mise à jour automatique depuis les releases GitHub, options, salon (comme VCCoop/SACoop).

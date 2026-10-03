@@ -45,7 +45,14 @@ namespace MWCoop
         string body0;
         Animation armR, armL;
 
-        public Vector3 HeadPosition { get { return Root.transform.position + Vector3.up * 1.95f; } }
+        // Yeux par rapport a l'os 'head' (devant et au-dessus), pour caler la tete sur la camera.
+        static readonly Vector3 EyeOffset = new Vector3(0f, 0.08f, 0.1f);
+        Transform headBone;
+
+        public Vector3 HeadPosition
+        {
+            get { return headBone != null ? headBone.position + Vector3.up * 0.35f : Root.transform.position + Vector3.up * 1.95f; }
+        }
 
         public static void ResetTemplate()
         {
@@ -127,7 +134,7 @@ namespace MWCoop
             ch.transform.localScale = charScale;
             ch.SetActive(true);
             a.anim = ch.GetComponentInChildren<Animation>();
-            if (a.anim != null) { a.anim.cullingType = AnimationCullingType.AlwaysAnimate; a.AddClips(); }
+            if (a.anim != null) { a.anim.cullingType = AnimationCullingType.AlwaysAnimate; a.AddClips(); a.headBone = FindBone(a.anim.transform, "head"); }
             a.body = ch.GetComponentInChildren<SkinnedMeshRenderer>();
             if (a.body != null) { a.body.updateWhenOffscreen = true; a.body.enabled = true; }
             Log.Info("avatar cree pour " + pi.Name + " (#" + pi.Id + ")");
@@ -204,14 +211,33 @@ namespace MWCoop
                 if (m != null) body.sharedMaterial = m;
             }
             PlayerState st = pi.State;
-            if (!placed) { pos = st.Feet; yaw = st.Yaw; placed = true; }
-            // Lissage : rattrape l'etat recu (20/s) sans a-coups ; teleportation au-dela de 8 m.
-            float k = 1f - Mathf.Exp(-12f * Time.deltaTime);
-            if ((st.Feet - pos).sqrMagnitude > 64f) pos = st.Feet; else pos = Vector3.Lerp(pos, st.Feet, k);
-            yaw = Mathf.LerpAngle(yaw, st.Yaw, k);
-            Root.transform.position = pos;
-            Root.transform.rotation = Quaternion.Euler(0, yaw, 0);
             int f = st.Flags;
+            Vector3 seatPos;
+            Quaternion seatRot;
+            if (VehicleSync.SeatPose(pi.Id, st.Head, out seatPos, out seatRot))
+            {
+                // Au volant : oriente comme la voiture locale, la tete (yeux) calee sur la camera du
+                // joueur, mesuree par rapport a la voiture : il reste assis sur son siege.
+                Root.transform.rotation = seatRot;
+                Vector3 eyes = headBone != null
+                    ? Quaternion.Inverse(Root.transform.rotation) * (headBone.position - Root.transform.position) + EyeOffset
+                    : new Vector3(0f, 1.2f, 0.1f);
+                pos = seatPos - seatRot * eyes;
+                yaw = seatRot.eulerAngles.y;
+                placed = true;
+                Root.transform.position = pos;
+                f |= PlayerSync.F_Seated;
+            }
+            else
+            {
+                if (!placed) { pos = st.Feet; yaw = st.Yaw; placed = true; }
+                // Lissage : rattrape l'etat recu (20/s) sans a-coups ; teleportation au-dela de 8 m.
+                float k = 1f - Mathf.Exp(-12f * Time.deltaTime);
+                if ((st.Feet - pos).sqrMagnitude > 64f) pos = st.Feet; else pos = Vector3.Lerp(pos, st.Feet, k);
+                yaw = Mathf.LerpAngle(yaw, st.Yaw, k);
+                Root.transform.position = pos;
+                Root.transform.rotation = Quaternion.Euler(0, yaw, 0);
+            }
             // Accroupi : pose assise sans siege, un peu plus bas ; assis (vehicule, chaise) : pose assise.
             bool sit = (f & (PlayerSync.F_Seated | PlayerSync.F_Crouch | PlayerSync.F_Sleep)) != 0;
             Root.transform.localScale = Vector3.one;

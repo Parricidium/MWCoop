@@ -91,6 +91,7 @@ namespace MWCoop
                 float h = controller != null ? controller.height : 1.8f;
                 Vector3 center = controller != null ? player.TransformPoint(controller.center) : player.position;
                 st.Feet = center - Vector3.up * h * 0.5f;
+                st.Head = cam.position;
                 st.Yaw = player.eulerAngles.y;
                 float pitch = cam.localEulerAngles.x;
                 st.Pitch = pitch > 180f ? pitch - 360f : pitch;
@@ -109,7 +110,7 @@ namespace MWCoop
             }
             Session.Me.State = st;
             var w = new NetWriter(Msg.PlayerState).U8(Session.LocalId).U8(Session.Me.Level)
-                .Vec(st.Feet).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U8(st.Flags);
+                .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U8(st.Flags);
             Session.SendAll(w, false);
         }
 
@@ -120,7 +121,7 @@ namespace MWCoop
             PlayerInfo pi;
             if (!Session.Players.TryGetValue(id, out pi) || pi.Local) return;
             int level = r.U8();
-            var st = new PlayerState { Feet = r.Vec(), Yaw = r.F32(), Pitch = r.F32(), Height = r.F32(), Speed = r.F32(), Flags = r.U8() };
+            var st = new PlayerState { Feet = r.Vec(), Head = r.Vec(), Yaw = r.F32(), Pitch = r.F32(), Height = r.F32(), Speed = r.F32(), Flags = r.U8() };
             bool levelChanged = pi.Level != level;
             pi.Level = level;
             pi.State = st;
@@ -129,7 +130,7 @@ namespace MWCoop
             {
                 // Relais aux autres invites, avec le bon numero de joueur.
                 var w = new NetWriter(Msg.PlayerState).U8(id).U8(level)
-                    .Vec(st.Feet).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U8(st.Flags);
+                    .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U8(st.Flags);
                 Session.Broadcast(w, false, id);
                 if (levelChanged) Session.SendRoster();
             }

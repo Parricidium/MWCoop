@@ -25,12 +25,14 @@ Already synced
 - Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped.
 - Money: income goes to everyone, each player has their own wallet for purchases.
 - Shopping: everyone pays for themselves, everyone sees the bags and items bought.
+- Animations: walking (arms swinging), sitting, crouching, smoking, drinking, carrying, waving.
+- Driving: the driver sits in the vehicle, you hear its engine, wheels turn, lights follow.
 - Chat.
 
 Not yet (roadmap)
 -----------------
-Paint and car adjustments, engine sound and lights of driven vehicles, items in hands, NPCs and traffic, quests,
-action animations (smoking, drinking...).
+Paint and car adjustments, items in hands, NPCs and traffic, quests,
+eating and sleeping.
 
 Problems?
 ---------
