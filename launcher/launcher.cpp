@@ -2282,14 +2282,24 @@ static bool IsGamePid(DWORD pid)
     CloseHandle(p);
     return ok;
 }
+// Le jeu de CE dossier tourne-t-il deja ? Les jeux d'autres dossiers (copies pour jouer a deux sur
+// un PC, instances de test) ont leur propre profil MWCoop, donc leur propre verrou d'instance unique.
 static bool GameProcessRunning()
 {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe = { sizeof(pe) };
+    std::wstring mine = g_gameDir + L"mywintercar.exe";
     bool found = false;
-    for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe))
-        found = !_wcsicmp(pe.szExeFile, L"mywintercar.exe");
+    for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
+        if (_wcsicmp(pe.szExeFile, L"mywintercar.exe")) continue;
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+        if (!h) { found = true; break; }   // inconnu : prudence
+        wchar_t path[MAX_PATH];
+        DWORD n = MAX_PATH;
+        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str())) found = true;
+        CloseHandle(h);
+    }
     CloseHandle(snap);
     return found;
 }

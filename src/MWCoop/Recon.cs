@@ -27,6 +27,54 @@ namespace MWCoop
             return path;
         }
 
+        // Releve des objets cliquables (MousePickEvent / bouton Use) et de qui les suit deja :
+        // dumps/interactifs.txt, les non suivis d'abord, regroupes par nom d'objet et d'automate.
+        public static string DumpInteractive()
+        {
+            var untracked = new SortedDictionary<string, List<string>>();
+            var tracked = new SortedDictionary<string, int>();
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            {
+                string root = f.transform.root.name;
+                if (root == "PLAYER" || root == "GUI") continue;
+                bool clicky = false;
+                try
+                {
+                    foreach (FsmState s in f.Fsm.States)
+                    {
+                        foreach (FsmStateAction a in s.Actions)
+                        {
+                            string n = a.GetType().Name;
+                            if (n == "MousePickEvent" || n == "GetButtonDown" || n == "GetButtonUp" || n == "GetMouseButtonDown") { clicky = true; break; }
+                        }
+                        if (clicky) break;
+                    }
+                }
+                catch { }
+                if (!clicky) continue;
+                string who = Interactions.Tracks(f) ? "interactions" : Jobs.Tracks(f) ? "progression" : Consume.Tracks(f) ? "consommables" : null;
+                string key = f.gameObject.name + " :: " + f.FsmName;
+                if (who != null) { int c; tracked.TryGetValue(who + " : " + key, out c); tracked[who + " : " + key] = c + 1; continue; }
+                List<string> l;
+                if (!untracked.TryGetValue(key, out l)) untracked[key] = l = new List<string>();
+                if (l.Count < 3) l.Add(Path(f.transform) + " [" + f.ActiveStateName + "]");
+                else if (l.Count == 3) l.Add("...");
+            }
+            var sb = new StringBuilder("NON SUIVIS (" + untracked.Count + ")\n");
+            foreach (KeyValuePair<string, List<string>> kv in untracked)
+            {
+                sb.Append(kv.Key).Append('\n');
+                foreach (string p in kv.Value) sb.Append("    ").Append(p).Append('\n');
+            }
+            sb.Append("\nDEJA SUIVIS\n");
+            foreach (KeyValuePair<string, int> kv in tracked) sb.Append(kv.Value).Append(" x ").Append(kv.Key).Append('\n');
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            Directory.CreateDirectory(dir);
+            string file = System.IO.Path.Combine(dir, "interactifs.txt");
+            File.WriteAllText(file, sb.ToString());
+            return file + " (" + untracked.Count + " non suivis)";
+        }
+
         // Sous-arbres choisis ([Test] VidageCibles=chemin1;chemin2), avec les parametres des actions.
         public static string DumpTargets(string list)
         {

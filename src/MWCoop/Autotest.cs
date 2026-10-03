@@ -225,6 +225,7 @@ namespace MWCoop
                 done = true;
                 Log.Info("autotest : liquide " + Fluids.TestNearest(Config.Get("Test", "TestLiquide", "Fluid")));
             }
+            if (mode == "interactifs" && t > 40f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpInteractive()); }
             if (mode == "menu" && t > 70f && !done)
             {
                 // L'hote revient au menu (puis Continuer=1 le relance) : les invites doivent suivre.
