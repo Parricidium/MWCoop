@@ -6,6 +6,8 @@ namespace MWCoop
     // Deroule des ecrans du jeu pilote par le mod : passer l'ouverture et l'introduction,
     // continuer ou commencer une partie depuis le menu (boutons du jeu, par leurs automates).
     // L'invite suit l'hote : des que l'hote est en partie et la sauvegarde recue, il entre en jeu.
+    // Lancement groupe depuis le salon du lanceur : lancement.ini porte Partie=continuer|nouvelle ;
+    // le jeu de l'hote (ou solo) passe alors l'ouverture et entre en partie tout seul, une fois.
     public static class Flow
     {
         static float next, menuSince = -1;
@@ -13,9 +15,22 @@ namespace MWCoop
         static string pending;       // "continuer" | "nouvelle"
         static bool guestStarted;
 
+        static bool launchUsed;
+
+        // Partie demandee par le salon du lanceur (une seule fois par lancement du jeu).
+        static string LaunchChoice
+        {
+            get
+            {
+                if (launchUsed) return null;
+                string p = Config.Get("Coop", "Partie", "").ToLowerInvariant();
+                return p == "continuer" || p == "nouvelle" ? p : null;
+            }
+        }
+
         static bool AutoSkip
         {
-            get { return Config.GetInt("Test", "PasserIntro", 0) != 0 || Config.HasArg("auto") || (Session.Active && !Session.IsHost); }
+            get { return Config.GetInt("Test", "PasserIntro", 0) != 0 || Config.HasArg("auto") || (Session.Active && !Session.IsHost) || LaunchChoice != null; }
         }
 
         public static void Update()
@@ -66,6 +81,14 @@ namespace MWCoop
                 guestStarted = true;
                 Log.Info("l'hote est en partie : on le rejoint");
                 return SaveTransfer.Received ? "continuer" : "nouvelle";
+            }
+            string choice = LaunchChoice;
+            if (choice != null)
+            {
+                launchUsed = true;
+                if (choice == "continuer" && !HasSave()) choice = "nouvelle";
+                Log.Info("salon : partie demandee par le lanceur : " + choice);
+                return choice;
             }
             if (!SaveTransfer.IsolatedProfile) return null;   // les tests ne touchent qu'aux profils isoles
             if (Config.GetInt("Test", "Continuer", 0) != 0 && HasSave()) return "continuer";
