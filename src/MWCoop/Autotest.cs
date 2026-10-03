@@ -107,10 +107,19 @@ namespace MWCoop
                 }
                 else if (t > 45f && step == 1) { step = 2; Log.Info("autotest : " + Parts.TestToggle(id)); }
             }
+            // [Test] SuivrePiece=~gasoline : position de cet objet a 46 s (l'autre joueur le promene).
+            string watchKey = Config.Get("Test", "SuivrePiece", "");
+            if (watchKey.Length > 0 && t > Config.GetInt("Test", "SuivreDelai", 46) && !watchLogged)
+            {
+                watchLogged = true;
+                string k = watchKey.StartsWith("~") ? Props.FindKey(watchKey.Substring(1)) : watchKey;
+                Log.Info("autotest : " + k + " est en " + Props.Where(k));
+            }
             if (mode == "porter")
             {
                 // [Test] TestPiece promenee de 30 a 36 s (comme tenue en main), position a 45 s.
                 string id = Config.Get("Test", "TestPiece", "VIN2121");
+                if (id.StartsWith("~")) id = Props.FindKey(id.Substring(1));
                 if (t > 30f && t < 36f) { string w = Props.TestCarry(id, t); if (Time.frameCount % 60 == 0) Log.Info("autotest : " + w); }
                 if (t > 45f && !done) { done = true; Log.Info("autotest : " + id + " finit en " + Props.Where(id)); }
             }
@@ -246,7 +255,7 @@ namespace MWCoop
             }
         }
 
-        static bool done, teleported, sleepWatch, foodMade;
+        static bool done, teleported, sleepWatch, foodMade, watchLogged;
         static float nextSleepLog;
         public static int PoseFlags;
         static int seenFlags = -1;
