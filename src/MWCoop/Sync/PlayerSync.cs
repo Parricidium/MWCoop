@@ -9,7 +9,7 @@ namespace MWCoop
     {
         // Posture et actions du joueur, montrees par son avatar (Avatar).
         public const int F_Crouch = 1, F_Seated = 2, F_Smoke = 4, F_Drink = 8, F_Carry = 16, F_Hello = 32, F_Sleep = 64,
-            F_SleepFast = 128;   // le lit compte les heures (son echelle du temps est a 0,5) : l'hote accelere
+            F_SleepFast = 128;   // le lit compte les heures : quand tous l'ont, l'hote accelere
         const float SendRate = 1f / 20f;
         static float nextSend;
         static Transform player, cam, smoking, drinking, hello;
@@ -103,7 +103,7 @@ namespace MWCoop
                 if (h < standHeight * 0.8f) st.Flags |= F_Crouch;
                 if (Game.GlobalBool("PlayerSeated") || VehicleSync.LocalDriving >= 0) st.Flags |= F_Seated;
                 if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
-                if (Game.GlobalBool("PlayerSleeps") && World.LocalScale <= 0.51f) st.Flags |= F_SleepFast;
+                if (Game.GlobalBool("PlayerSleeps") && World.BedCounting()) st.Flags |= F_SleepFast;
                 if (smoking != null && smoking.gameObject.activeInHierarchy) st.Flags |= F_Smoke;
                 if (AnyChildActive(drinking) || Game.GlobalBool("PlayerDrinkOn") || Time.realtimeSinceStartup < Consume.EatUntil) st.Flags |= F_Drink;
                 if (hello != null && hello.gameObject.activeInHierarchy) st.Flags |= F_Hello;
