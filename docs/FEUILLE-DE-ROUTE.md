@@ -34,14 +34,16 @@ pouvoir le faire, et les autres doivent le voir.
 - [x] Chaque joueur achète de son côté ; tous voient les achats des autres (sac de courses…) (0.3).
 - [~] Objets visibles dans les mains des joueurs (sac de courses, etc.).
       Fait (0.4) : l'objet porté se voit à sa vraie place et l'avatar a le bras qui porte.
+      Fait (0.9) : les objets uniques du monde sans ID (bidons, cric, palan, hache, seaux, lanterne,
+      boîtiers de CD, bûches...) sont suivis aussi.
 
 ## Personnages
 - [x] Apparence : chaque joueur (hôte et invités) choisit un modèle de PNJ existant (F10, 0.1).
 - [x] Animations : celles des PNJ (accroupi…) ou faites maison, pour que les joueurs se voient bouger.
       Fait (0.4) : marche avec les bras qui balancent, assis, accroupi, assis au volant.
 - [x] Actions visibles : un joueur qui fume, boit, mange… est vu par les autres.
-      Fait (0.4) : fumer, boire, porter, saluer. Fait (0.7) : dormir (l'horloge commune accélère
-      tant qu'un joueur dort ; l'autre voit le temps filer). Fait (0.8) : manger (main à la bouche ;
+      Fait (0.4) : fumer, boire, porter, saluer. Fait (0.7) : dormir ; (0.9) le temps ne passe vite
+      que quand tous les joueurs dorment (chacun récupère sa fatigue), message d'attente sinon. Fait (0.8) : manger (main à la bouche ;
       ce qui est mangé, bu ou jeté disparaît chez tous).
 
 ## Lanceur

@@ -33,7 +33,7 @@
 <p align="center">
   <img src="docs/img/lanceur-voiture.png" width="80%" alt="Picking the car color with a 3D preview">
 </p>
-<p align="center"><i>CAR tab: the CORRIS color for a new game, previewed in 3D (the model is read from your own game).</i></p>
+<p align="center"><i>CAR tab: the CORRIS color for a new game, previewed in 3D (the model is read from your own game, missing parts and wheels included).</i></p>
 
 # MWCoop — My Winter Car in co-op
 
@@ -69,7 +69,9 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Own loader (`version.dll`), auto-updating launcher with a lobby | Every solo action for guests (windshield scraping, penalties...) |
 | Players visible (NPC outfits), walking, crouching | Items held in the hand (now carried at their real place) |
 | Host's save sent to guests (isolated profile), also right after a new game | Real-world testing with friends |
-| Host's time, day and weather (clouds, rain, temperature); sleeping fast-forwards the shared clock | |
+| Host's time, day and weather (clouds, rain, temperature); time only fast-forwards when every player sleeps | |
+| World items without an ID (jerry cans, car jack, engine hoist, axe, buckets...) carried and seen by all | |
+| Host back to the main menu: guests follow and rejoin the next game with a fresh save | |
 | NPC lines and players' swearing heard by everyone; fluids (fuel, oil, coolant, brake fluid) and wear | |
 | Food eaten, drinks drunk, trash thrown away disappear for everyone | |
 | Doors, light switches, TV and CD player, sent to a guest who joins mid-game | |
@@ -150,7 +152,9 @@ câblage et tableaux de bord, couleur de la voiture choisie dans le lanceur avec
 Fait aussi (0.7) : salon du lanceur, sommeil (l'horloge commune accélère), état des portes pour l'invité qui arrive.
 Fait aussi (0.8) : liquides et usure, nourriture et boissons consommées chez tous, voix des PNJ et jurons, nouvelle
 partie partagée (l'hôte sauvegarde avant d'envoyer).
-À venir : toutes les actions du solo pour les invités, objets tenus dans la main, essais réels entre amis.
+Fait aussi (0.9) : le temps ne passe vite que quand tout le monde dort, objets du monde sans ID (bidons, cric,
+palan...), aperçu de la voiture complet, retour de l'hôte au menu suivi par les invités.
+À venir : toutes les actions du solo pour les invités, essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
 Développé avec l'aide d'une IA (Claude), dirigé et testé par un humain. My Winter Car appartient à Amistech Games ;
