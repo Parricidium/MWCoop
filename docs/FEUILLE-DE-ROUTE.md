@@ -17,6 +17,9 @@ pouvoir le faire, et les autres doivent le voir.
       pénalités, utilisation des objets…
       Fait (0.10-0.11) : commandes des véhicules (clé, frein à main, vitres, boîte, boutons) rejouées
       chez tous, places passagers, tableau de bord et équipements visibles, prise du chauffage moteur.
+      Fait (0.12) : tout le reste du monde par un module générique (WorldFsms) : toute action d'un joueur
+      sur un automate du monde est rejouée chez les autres (factures, courrier, maison, garage, commandes
+      de pièces...), l'hôte fait référence pour les états sauvegardés de la maison et des systèmes.
 
 ## Quêtes et argent
 - [x] Quêtes communes : si l'invité entame une quête et que l'hôte en remplit les conditions,
