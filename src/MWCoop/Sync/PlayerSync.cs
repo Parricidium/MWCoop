@@ -158,6 +158,7 @@ namespace MWCoop
                     Interactions.ScheduleSnapshot(from);
                     Fluids.ScheduleSnapshot(from);
                     Consume.ScheduleSnapshot(from);
+                    WorldFsms.ScheduleSnapshot(from);
                 }
             }
         }

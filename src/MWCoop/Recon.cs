@@ -27,6 +27,65 @@ namespace MWCoop
             return path;
         }
 
+        // Releve de TOUS les automates du monde que personne ne suit encore : persistant (cle de
+        // sauvegarde UT/UniqueTag), commande du joueur (clic, touche, molette), personnel (agit sur le
+        // joueur : objets sous PLAYER, globales Player*), argent (PlayerMoney). dumps/monde.txt.
+        public static string DumpWorldFsms()
+        {
+            var lines = new List<string>();
+            var perRoot = new SortedDictionary<string, int[]>();
+            foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = (PlayMakerFSM)o;
+                if (f.hideFlags != HideFlags.None) continue;
+                string root = f.transform.root.name;
+                if (root == "PLAYER" || root == "GUI" || root.StartsWith("MWCoop")) continue;
+                if (Interactions.Tracks(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) continue;
+                bool persist = false, input = false, personal = false, money = false, playerGlobal = false;
+                foreach (FsmString s in f.FsmVariables.StringVariables)
+                    if (s.Name.StartsWith("UniqueTag") || s.Name.StartsWith("UT")) persist = true;
+                try
+                {
+                    foreach (FsmState st in f.Fsm.States)
+                        foreach (FsmStateAction a in st.Actions)
+                        {
+                            string tn = a.GetType().Name;
+                            if (tn == "MousePickEvent" || tn == "GetButtonDown" || tn == "GetButtonUp" || tn == "GetMouseButtonDown" || tn == "GetAxis" || tn == "GetKeyDown") input = true;
+                            foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                            {
+                                object v = fi.GetValue(a);
+                                GameObject go = null;
+                                if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
+                                else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; go = od.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : od.GameObject.Value; }
+                                if (go != null && go.transform.root.name == "PLAYER") personal = true;
+                                var nv = v as NamedVariable;
+                                if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && f.FsmVariables.GetVariable(nv.Name) == null)
+                                {
+                                    playerGlobal = true;
+                                    if (nv.Name == "PlayerMoney") money = true;
+                                }
+                            }
+                        }
+                }
+                catch { }
+                string flags = (persist ? "P" : "-") + (input ? "I" : "-") + (personal ? "J" : "-") + (playerGlobal ? "G" : "-") + (money ? "$" : "-");
+                int[] c;
+                if (!perRoot.TryGetValue(root, out c)) perRoot[root] = c = new int[4];
+                c[0]++; if (persist) c[1]++; if (input) c[2]++; if (personal || playerGlobal) c[3]++;
+                if (persist || input) lines.Add(root + " | " + flags + " | " + Path(f.transform) + " :: " + f.FsmName + " [" + f.ActiveStateName + "]");
+            }
+            lines.Sort(string.CompareOrdinal);
+            var sb = new StringBuilder("P=persistant I=commande J=agit sur le joueur G=globales Player* $=argent\n\nPAR RACINE (total, persistants, commandes, personnels)\n");
+            foreach (KeyValuePair<string, int[]> kv in perRoot) sb.Append(kv.Key).Append(" : ").Append(kv.Value[0]).Append(", ").Append(kv.Value[1]).Append(", ").Append(kv.Value[2]).Append(", ").Append(kv.Value[3]).Append('\n');
+            sb.Append("\nAUTOMATES PERSISTANTS OU COMMANDES NON SUIVIS (").Append(lines.Count).Append(")\n");
+            foreach (string l in lines) sb.Append(l).Append('\n');
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            Directory.CreateDirectory(dir);
+            string file = System.IO.Path.Combine(dir, "monde.txt");
+            File.WriteAllText(file, sb.ToString());
+            return file + " (" + lines.Count + " a regarder)";
+        }
+
         // Releve des objets cliquables (MousePickEvent / bouton Use) et de qui les suit deja :
         // dumps/interactifs.txt, les non suivis d'abord, regroupes par nom d'objet et d'automate.
         public static string DumpInteractive()
