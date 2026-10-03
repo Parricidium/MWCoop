@@ -13,8 +13,10 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.1) : portes des bâtiments, interrupteurs, télé, lecteur CD. Fait (0.7) : l'invité qui arrive en
       cours de partie reçoit l'état de tout ce qui est suivi. Fait (0.10) : interrupteurs de la maison,
       portières, capots et coffres des véhicules.
-- [ ] Toutes les actions du solo possibles pour les invités : gratter le pare-brise, boutons,
+- [~] Toutes les actions du solo possibles pour les invités : gratter le pare-brise, boutons,
       pénalités, utilisation des objets…
+      Fait (0.10-0.11) : commandes des véhicules (clé, frein à main, vitres, boîte, boutons) rejouées
+      chez tous, places passagers, tableau de bord et équipements visibles, prise du chauffage moteur.
 
 ## Quêtes et argent
 - [x] Quêtes communes : si l'invité entame une quête et que l'hôte en remplit les conditions,

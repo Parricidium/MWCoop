@@ -76,6 +76,7 @@ namespace MWCoop.Net
         Fluid = 22,       // liquides et usure : lot de (cle, valeur) changees
         Consume = 23,     // objet mange, bu ou jete (ID) : il disparait chez tous
         Voice = 24,       // replique d'un PNJ ou juron d'un joueur (groupe/variante MasterAudio)
+        Seat = 27,        // joueur assis a une place passager (voiture, place) ou sorti
         CarVisual = 26,   // tableau de bord, voyants, vitres, leviers... : lot de (cle, drapeaux, pose)
         CarDoor = 25,     // portiere / capot / coffre : ouverte (1), fermee (0), angle en temps reel (2)
     }
