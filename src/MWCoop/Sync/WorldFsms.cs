@@ -53,6 +53,9 @@ namespace MWCoop
         static readonly Dictionary<string, W> byKey = new Dictionary<string, W>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
         static readonly HashSet<PlayMakerFSM> rejected = new HashSet<PlayMakerFSM>();
+        static readonly HashSet<PlayMakerFSM> known = new HashSet<PlayMakerFSM>();   // suivis ou en attente
+        static readonly List<W> pending = new List<W>();
+        static float nextPending;
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static readonly Dictionary<string, float> houseSent = new Dictionary<string, float>();
         static float nextScan = -1, nextMirror, loadedAt, nextWarn, lastInput = -100;
@@ -70,7 +73,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear();
+            byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
@@ -170,7 +173,7 @@ namespace MWCoop
             foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
             {
                 var f = (PlayMakerFSM)o;
-                if (f.hideFlags != HideFlags.None || hooked.Contains(f) || rejected.Contains(f)) continue;
+                if (f.hideFlags != HideFlags.None || known.Contains(f) || rejected.Contains(f)) continue;
                 if (Skip(f)) { if (f.transform.root.gameObject.activeInHierarchy) rejected.Add(f); continue; }
                 all.Add(new KeyValuePair<string, PlayMakerFSM>(Recon.Path(f.transform) + "::" + f.FsmName, f));
             }
@@ -180,30 +183,58 @@ namespace MWCoop
                 int k; seen.TryGetValue(kv.Key, out k); seen[kv.Key] = k + 1;
                 PlayMakerFSM f = kv.Value;
                 var w = new W { Key = kv.Key + "#" + k, F = f, Mirror = MirrorRoots.Contains(f.transform.root.name) || f.FsmName == "Fuelprices" };
-                bool personal;
-                try { if (!Classify(f, w, out personal)) { rejected.Add(f); continue; } }
-                catch { continue; }   // automate pas encore charge (objet inactif) : au prochain passage
-                if (personal) { rejected.Add(f); continue; }
-                if (byKey.ContainsKey(w.Key)) continue;
-                try
-                {
-                    foreach (FsmState s in f.Fsm.States)
-                    {
-                        var list = new List<FsmStateAction>(s.Actions);
-                        list.Insert(0, new Hook { J = w, State = s.Name });
-                        s.Actions = list.ToArray();
-                    }
-                }
-                catch { continue; }
-                hooked.Add(f);
-                byKey[w.Key] = w;
-                added++;
+                known.Add(f);
+                // Objet inactif : ses actions ne sont pas chargees ; on le reprend quand il s'active.
+                if (!f.gameObject.activeInHierarchy || !TryHook(w)) pending.Add(w);
             }
-            if (added > 0)
+            LogAdded();
+        }
+
+        static int addedSinceLog;
+        static void LogAdded()
+        {
+            if (addedSinceLog == 0) return;
+            int p = 0; foreach (W x in byKey.Values) if (x.Persistent) p++;
+            Log.Info("monde : " + addedSinceLog + " automates de plus suivis (" + byKey.Count + " en tout, dont " + p + " sauvegardes, " + pending.Count + " en attente)");
+            addedSinceLog = 0;
+        }
+
+        // Vrai : traite (suivi ou ecarte pour de bon) ; faux : a reprendre plus tard.
+        static bool TryHook(W w)
+        {
+            PlayMakerFSM f = w.F;
+            if (f == null) return true;
+            bool personal;
+            try { if (!Classify(f, w, out personal)) { rejected.Add(f); return true; } }
+            catch { return false; }
+            if (personal) { rejected.Add(f); return true; }
+            if (byKey.ContainsKey(w.Key)) return true;
+            try
             {
-                int p = 0; foreach (W x in byKey.Values) if (x.Persistent) p++;
-                Log.Info("monde : " + added + " automates de plus suivis (" + byKey.Count + " en tout, dont " + p + " sauvegardes)");
+                foreach (FsmState st in f.Fsm.States)
+                {
+                    var list = new List<FsmStateAction>(st.Actions);
+                    list.Insert(0, new Hook { J = w, State = st.Name });
+                    st.Actions = list.ToArray();
+                }
             }
+            catch { return false; }
+            hooked.Add(f);
+            byKey[w.Key] = w;
+            addedSinceLog++;
+            return true;
+        }
+
+        // Toutes les 2 s : les automates en attente dont l'objet vient de s'activer.
+        static void CheckPending()
+        {
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                W w = pending[i];
+                if (w.F == null) { pending.RemoveAt(i); continue; }
+                if (w.F.gameObject.activeInHierarchy && TryHook(w)) pending.RemoveAt(i);
+            }
+            LogAdded();
         }
 
         // ---------------------------------------------------------------- actions des joueurs
@@ -410,7 +441,9 @@ namespace MWCoop
         {
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 20f; Scan(); }
+            // Releve complet toutes les 60 s (objets crees en jeu) ; les objets qui s'activent, toutes les 2 s.
+            if (now >= nextScan) { nextScan = now + 60f; Scan(); }
+            else if (now >= nextPending) { nextPending = now + 2f; CheckPending(); }
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetAxis("Mouse ScrollWheel") != 0f) lastInput = now;
             if (!Session.IsHost || Session.RemoteCount == 0) return;
             for (int i = snapshots.Count - 1; i >= 0; i--)
