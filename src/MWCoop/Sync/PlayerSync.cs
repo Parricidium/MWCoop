@@ -13,6 +13,7 @@ namespace MWCoop
         const float SendRate = 1f / 20f;
         static float nextSend;
         static Transform player, cam, smoking, drinking, hello;
+        public static Transform LocalCamera { get { return cam; } }
         static CharacterController controller;
         static float standHeight;
         static readonly Dictionary<int, Avatar> avatars = new Dictionary<int, Avatar>();
@@ -40,7 +41,9 @@ namespace MWCoop
             if (go == null) return false;
             player = go.transform;
             controller = go.GetComponent<CharacterController>();
-            Transform c = player.Find("Pivot/AnimPivot/Camera/FPSCamera");
+            // La vraie camera (composant Camera) est FPSCamera/FPSCamera ; l'FPSCamera exterieure porte le
+            // MouseLook et n'a pas forcement la meme orientation.
+            Transform c = player.Find("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera") ?? player.Find("Pivot/AnimPivot/Camera/FPSCamera");
             cam = c != null ? c : player;
             // Mains a la premiere personne : actives seulement pendant l'action.
             Transform fps = player.Find("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");

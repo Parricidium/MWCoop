@@ -57,6 +57,8 @@ namespace MWCoop
         // l'autre. On garde la valeur de base et celle posee ; si l'os n'a pas bouge depuis, on le remet.
         Quaternion headRest;                 // tete par rapport a l'avatar, debout (pour viser en voiture)
         bool headRestSet;
+        Transform charT;
+        int facingFrames;            // images animees vues avant de mesurer le sens du modele
         float nextPoseLog;
         Transform[] boneList;
         Quaternion[] baseRot, setRot;
@@ -167,6 +169,7 @@ namespace MWCoop
                 foreach (Transform b in a.anim.GetComponentsInChildren<Transform>(true)) if (!a.bones.ContainsKey(b.name)) a.bones[b.name] = b;
                 a.AddClips();
             }
+            a.charT = ch.transform;
             a.body = ch.GetComponentInChildren<SkinnedMeshRenderer>();
             if (a.body != null) { a.body.updateWhenOffscreen = true; a.body.enabled = true; }
             Log.Info("avatar cree pour " + pi.Name + " (#" + pi.Id + ")");
@@ -329,6 +332,15 @@ namespace MWCoop
                 baseRot[i] = b.localRotation;
                 basePos[i] = b.localPosition;
             }
+            // Os racine (skeleton) : certains clips le tournent (assis : worker1_sitdown) et les autres ne
+            // le remettent jamais droit -> apres s'etre assis une fois, l'avatar restait tourne. Toujours
+            // a sa pose de repos.
+            if (ForceClip == null || Config.GetInt("Test", "RacineRepos", 1) != 0)
+            {
+                anim.transform.localRotation = skelRot;
+                anim.transform.localPosition = skelPos;
+            }
+            FixFacing();
             Pose();
             if (Config.GetInt("Test", "JournalPose", 0) != 0 && Time.realtimeSinceStartup >= nextPoseLog && headBone != null && Bone("pelvis") != null)
             {
@@ -337,6 +349,14 @@ namespace MWCoop
                 Vector3 h = r.InverseTransformPoint(headBone.position) - r.InverseTransformPoint(Bone("pelvis").position);
                 Vector3 fwd = r.InverseTransformDirection(headBone.forward);
                 Log.Info("pose " + Player.Name + " : regard " + Player.State.Pitch.ToString("F0") + ", tete/bassin " + h.ToString("F2") + ", axe tete " + fwd.ToString("F2"));
+                var sb = new System.Text.StringBuilder("os de " + Player.Name + " (repere avatar, yaw " + r.eulerAngles.y.ToString("F0") + ") :");
+                foreach (string n in new[] { "pelvis", "shoulder_left", "shoulder_right", "hand_left", "hand_right", "knee_left", "knee_right", "ankle_left", "ankle_right", "head" })
+                {
+                    Transform bt = Bone(n);
+                    if (bt != null) sb.Append(' ').Append(n).Append(r.InverseTransformPoint(bt.position).ToString("F2"));
+                }
+                if (charT != null) sb.Append(" Char yaw local ").Append(charT.localEulerAngles.ToString("F0")).Append(" skeleton ").Append(anim.transform.localEulerAngles.ToString("F0"));
+                Log.Info(sb.ToString());
             }
             for (int i = 0; i < boneList.Length; i++)
             {
@@ -345,6 +365,26 @@ namespace MWCoop
                 setRot[i] = b.localRotation;
                 setPos[i] = b.localPosition;
             }
+        }
+
+        // Les clips des PNJ tournent l'os racine : le modele anime ne regarde pas l'avant de sa racine.
+        // Apres quelques images animees, debout, on mesure son sens (epaule gauche -> epaule droite) et
+        // on tourne le modele pour qu'il regarde la ou regarde le joueur (une fois).
+        void FixFacing()
+        {
+            if (facingFrames < 0 || charT == null || sitting || inCar) return;
+            if (++facingFrames < 10) return;
+            facingFrames = -1;
+            Transform sr = Bone("shoulder_right"), sl = Bone("shoulder_left");
+            if (sr == null || sl == null) return;
+            Vector3 right = Root.transform.InverseTransformDirection(sr.position - sl.position);
+            right.y = 0f;
+            if (right.sqrMagnitude < 1e-4f) return;
+            Vector3 fwd = Vector3.Cross(right.normalized, Vector3.up);
+            float ang = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+            charT.localRotation = Quaternion.Euler(0f, -ang, 0f) * charT.localRotation;
+            headRestSet = false;   // la tete au repos se reprend dans le bon sens
+            Log.Info("avatar " + Player.Name + " : modele tourne de " + (-ang).ToString("F0") + " deg pour regarder devant");
         }
 
         void Pose()
@@ -369,12 +409,6 @@ namespace MWCoop
                 if (hp != null && headRestSet)
                     hp.rotation = Root.transform.rotation * Quaternion.Euler(pitch, Mathf.DeltaAngle(Root.transform.eulerAngles.y, st.Yaw), 0f) * headRest;
                 return;
-            }
-            if (ForceClip != null && Config.GetInt("Test", "RacineRepos", 1) != 0)
-            {
-                // Clips d'autres PNJ : ils tournent l'os racine (skeleton) selon leur propre modele.
-                anim.transform.localRotation = skelRot;
-                anim.transform.localPosition = skelPos;
             }
             if ((f & PlayerSync.F_Sleep) != 0 || ForceClip != null) return;
             // Accroupi : bassin abaisse, jambes pliees par IK (pieds restes au sol), buste penche.
@@ -442,6 +476,9 @@ namespace MWCoop
                 float k = 1f - Mathf.Exp(-12f * Time.deltaTime);
                 if ((st.Feet - pos).sqrMagnitude > 64f) pos = st.Feet; else pos = Vector3.Lerp(pos, st.Feet, k);
                 yaw = Mathf.LerpAngle(yaw, st.Yaw, k);
+                // Essais : avatar de profil face a la camera locale (TestProfil=angle).
+                string prof = Config.Get("Test", "TestProfil", "");
+                if (prof.Length > 0 && PlayerSync.LocalCamera != null) yaw = PlayerSync.LocalCamera.eulerAngles.y + float.Parse(prof, System.Globalization.CultureInfo.InvariantCulture);
                 Root.transform.position = pos;
                 Root.transform.rotation = Quaternion.Euler(0, yaw, 0);
             }
