@@ -231,6 +231,35 @@ namespace MWCoop
                         Log.Info("autotest : produit cree " + (made != null ? made.name + " " + Props.ItemId(made) : "?"));
                     }
             }
+            if (mode == "monde_send" && t > 35f && !done)
+            {
+                // [Test] TestEnvoi=partie|etat avant|evenement|etat apres
+                done = true;
+                string[] ps = Config.Get("Test", "TestEnvoi", "OpenMailBox|State 2|CLICK|Open").Split('|');
+                Log.Info("autotest : " + WorldFsms.TestSend(ps[0], ps[1], ps[2], ps[3]));
+            }
+            if (mode == "monde_evt" && t > 35f && !done)
+            {
+                done = true;
+                Log.Info("autotest : " + WorldFsms.TestEvent(Config.Get("Test", "TestQuete", "ElectricityBills1"), Config.Get("Test", "TestEvenement", "GLOBALEVENT")));
+            }
+            string countWatch = Config.Get("Test", "CompterObjets", "");
+            if (countWatch.Length > 0 && Time.frameCount % 600 == 0 && t > 20f)
+            {
+                int cnt = 0; string names = "";
+                foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(GameObject)))
+                {
+                    var g = (GameObject)o;
+                    if (g.hideFlags == HideFlags.None && g.name.StartsWith(countWatch) && g.transform.root.gameObject.activeInHierarchy) { cnt++; if (names.Length < 200) names += g.name + " "; }
+                }
+                Log.Info("autotest : " + cnt + " objets " + countWatch + "* : " + names);
+            }
+            string worldWatch = Config.Get("Test", "SuivreMonde", "");
+            if (worldWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f)
+            {
+                string[] pv = worldWatch.Split(':');
+                Log.Info("autotest : " + WorldFsms.Var(pv[0], pv.Length > 1 ? pv[1] : "Cutoff"));
+            }
             if (mode == "molette" && t > 30f && step < 3 && t > 30f + step * 2f)
             {
                 step++;
@@ -276,6 +305,7 @@ namespace MWCoop
                 Log.Info("autotest : liquide " + Fluids.TestNearest(Config.Get("Test", "TestLiquide", "Fluid")));
             }
             if (mode == "interactifs" && t > 40f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpInteractive()); }
+            if (mode == "monde" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpWorldFsms()); }
             if (mode == "menu" && t > 70f && !done)
             {
                 // L'hote revient au menu (puis Continuer=1 le relance) : les invites doivent suivre.

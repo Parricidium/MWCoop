@@ -70,6 +70,7 @@ namespace MWCoop
             Step("portieres", CarDoors.Update);
             Step("tableaux de bord", CarVisuals.Update);
             Step("passagers", Seats.Update);
+            Step("monde (automates)", WorldFsms.Update);
             Step("trafic", Traffic.Update);
             Step("couleur", CarColor.Update);
             Step("quetes", Jobs.Update);
@@ -102,6 +103,7 @@ namespace MWCoop
             CarDoors.OnLevelLoaded();
             CarVisuals.OnLevelLoaded();
             Seats.OnLevelLoaded();
+            WorldFsms.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             CarColor.OnLevelLoaded();
             Jobs.OnLevelLoaded();

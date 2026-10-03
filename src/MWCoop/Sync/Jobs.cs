@@ -39,7 +39,7 @@ namespace MWCoop
             list.Sort((a, b) => string.CompareOrdinal(a.Key.name, b.Key.name));
             return list;
         }
-        class Job { public string Key; public PlayMakerFSM F; public float WindowStart, NoisySince; public int Count; public bool Noisy, Control; }
+        class Job { public string Key; public PlayMakerFSM F; public float WindowStart, NoisySince; public int Count; public bool Noisy, Control; public HashSet<string> Entered = new HashSet<string>(); }
         static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach" };
 
         // Commande de vehicule sans sauvegarde : automate d'interaction, pas la logique de conduite.
@@ -61,7 +61,7 @@ namespace MWCoop
             public string State;
             public override void OnEnter()
             {
-                if (!applying) OnLocal(J, State);
+                if (!applying) OnLocal(J, State); else J.Entered.Add(State);
                 Finish();
             }
         }
@@ -205,8 +205,9 @@ namespace MWCoop
             {
                 // Meme etat de depart : meme evenement (memes actions). Sinon, ou si l'automate n'a
                 // pas suivi (condition locale differente), recalage direct sur l'etat d'arrivee.
+                j.Entered.Clear();
                 if (j.F.ActiveStateName == prev) j.F.SendEvent(ev);
-                if (j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
+                if (!j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
             }
             finally { applying = false; }
             Log.Info("quete de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
