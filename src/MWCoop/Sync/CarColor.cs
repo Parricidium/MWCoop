@@ -85,7 +85,10 @@ namespace MWCoop
             foreach (SkinnedMeshRenderer s in car.GetComponentsInChildren<SkinnedMeshRenderer>())
                 if (s.enabled && s.sharedMesh != null)
                     parts.Add(new Piece { R = s, M = s.sharedMesh, ToCar = root.worldToLocalMatrix * s.transform.localToWorldMatrix, Paint = IsPaintable(s.transform, root) });
-            AddLooseParts(root, parts);
+            var points = AddLooseParts(root, parts);
+            var extra = new List<Piece>();
+            AddPointMeshes(root, points, extra);
+            AddWheels(car, root, extra);
 
             Directory.CreateDirectory(Path.GetDirectoryName(MeshPath));
             int written = 0, tris = 0;
@@ -95,24 +98,40 @@ namespace MWCoop
                 w.Write(1);
                 long countPos = w.BaseStream.Position;
                 w.Write(0);
+                parts.AddRange(extra);
                 foreach (Piece pc in parts)
                 {
                     Renderer r = pc.R;
-                    Mesh m = pc.M;
-                    Material mat = r.sharedMaterial;
-                    string mn = mat != null ? mat.name.ToLowerInvariant() : "";
-                    if (mn.Contains("glass") || mn.Contains("window") || mn.Contains("shadow") || mn.Contains("alpha")) continue;
-                    if (!m.isReadable) continue;
-                    Vector3[] v = m.vertices;
-                    int[] idx = m.triangles;
+                    Vector3[] v;
+                    int[] idx;
+                    Color c;
+                    string pieceName;
+                    if (r == null)
+                    {
+                        // Piece fabriquee (roue) : sommets deja dans le repere de la voiture.
+                        v = pc.V; idx = pc.T; c = pc.C; pieceName = pc.Name;
+                    }
+                    else
+                    {
+                        Mesh m = pc.M;
+                        Material mat = r.sharedMaterial;
+                        string mn = mat != null ? mat.name.ToLowerInvariant() : "";
+                        if (mn.Contains("shadow") || mn.Contains("alpha")) continue;
+                        bool glass = mn.Contains("glass") || mn.Contains("window");
+                        if (!m.isReadable) continue;
+                        v = m.vertices;
+                        idx = m.triangles;
+                        c = glass ? new Color(0.13f, 0.17f, 0.21f) : mat != null && mat.HasProperty("_Color") ? mat.color : Color.gray;
+                        pieceName = r.name;
+                        if (glass) pc.Paint = false;
+                    }
                     if (v.Length == 0 || idx.Length == 0 || v.Length > 60000) continue;
-                    byte[] name = System.Text.Encoding.UTF8.GetBytes(r.name);
+                    byte[] name = System.Text.Encoding.UTF8.GetBytes(pieceName);
                     w.Write((ushort)name.Length); w.Write(name);
                     w.Write((byte)(pc.Paint ? 1 : 0));
-                    Color c = mat != null && mat.HasProperty("_Color") ? mat.color : Color.gray;
                     w.Write(c.r); w.Write(c.g); w.Write(c.b);
                     w.Write(v.Length);
-                    Matrix4x4 toCar = pc.ToCar;
+                    Matrix4x4 toCar = r == null ? Matrix4x4.identity : pc.ToCar;
                     foreach (Vector3 p in v)
                     {
                         Vector3 q = toCar.MultiplyPoint3x4(p);
@@ -129,20 +148,84 @@ namespace MWCoop
             return written + " morceaux, " + tris + " triangles, " + MeshPath;
         }
 
-        class Piece { public Renderer R; public Mesh M; public Matrix4x4 ToCar; public bool Paint; }
+        class Piece
+        {
+            public Renderer R; public Mesh M; public Matrix4x4 ToCar; public bool Paint;
+            public string Name; public Vector3[] V; public int[] T; public Color C;   // piece fabriquee
+        }
+
+        // Roues : une partie neuve n'en a pas encore de montees. A chaque roue physique (Wheel) sans
+        // modele visible, un pneu et une jante simples a sa place, de son rayon et de sa largeur.
+        static void AddWheels(GameObject car, Transform root, List<Piece> parts)
+        {
+            foreach (Wheel wh in car.GetComponentsInChildren<Wheel>(true))
+            {
+                bool shown = false;
+                if (wh.model != null)
+                    foreach (Renderer r in wh.model.GetComponentsInChildren<Renderer>())
+                        if (r.enabled) { shown = true; break; }
+                if (shown) continue;
+                Transform t = wh.transform;
+                Vector3 c = root.InverseTransformPoint(t.position);
+                Vector3 axis = root.InverseTransformDirection(t.right).normalized;
+                float rad = wh.radius > 0.1f ? wh.radius : 0.3f, width = wh.width > 0.05f ? wh.width : 0.18f;
+                parts.Add(Ring(wh.name + " pneu", c, axis, rad, rad * 0.64f, width, new Color(0.07f, 0.07f, 0.075f)));
+                parts.Add(Ring(wh.name + " jante", c, axis, rad * 0.64f, 0.02f, width * 0.8f, new Color(0.62f, 0.63f, 0.65f)));
+            }
+        }
+
+        // Anneau epais (cylindre creux ferme) : 'outer' / 'inner' rayons, 'width' le long de 'axis'.
+        static Piece Ring(string name, Vector3 c, Vector3 axis, float outer, float inner, float width, Color col)
+        {
+            const int N = 28;
+            Vector3 u = Vector3.Cross(axis, Vector3.up);
+            if (u.sqrMagnitude < 1e-4f) u = Vector3.Cross(axis, Vector3.forward);
+            u.Normalize();
+            Vector3 vv = Vector3.Cross(axis, u).normalized;
+            Vector3 h = axis * (width * 0.5f);
+            var verts = new List<Vector3>();
+            for (int i = 0; i < N; i++)
+            {
+                float a = i * Mathf.PI * 2f / N;
+                Vector3 d = u * Mathf.Cos(a) + vv * Mathf.Sin(a);
+                verts.Add(c + d * outer + h); verts.Add(c + d * outer - h);
+                verts.Add(c + d * inner + h); verts.Add(c + d * inner - h);
+            }
+            var tris = new List<int>();
+            for (int i = 0; i < N; i++)
+            {
+                int a = i * 4, b = ((i + 1) % N) * 4;
+                // exterieur, interieur, flanc +, flanc - (les deux faces : le rendu ne trie pas l'orientation)
+                Quad(tris, a, b, b + 1, a + 1);
+                Quad(tris, a + 2, a + 3, b + 3, b + 2);
+                Quad(tris, a, a + 2, b + 2, b);
+                Quad(tris, a + 1, b + 1, b + 3, a + 3);
+            }
+            return new Piece { Name = name, V = verts.ToArray(), T = tris.ToArray(), C = col };
+        }
+
+        static void Quad(List<int> t, int a, int b, int c, int d)
+        {
+            t.Add(a); t.Add(b); t.Add(c); t.Add(a); t.Add(c); t.Add(d);
+            t.Add(a); t.Add(c); t.Add(b); t.Add(a); t.Add(d); t.Add(c);
+        }
 
         // Pieces pas encore montees dont le point de montage est sur la CORRIS (portes, capot, ailes,
         // pare-chocs, roues...) : posees la ou le jeu les fixerait (SetParent sur le point, position
         // locale nulle). Une seule par point de montage.
-        static void AddLooseParts(Transform root, List<Piece> parts)
+        static HashSet<Transform> AddLooseParts(Transform root, List<Piece> parts)
         {
             var points = new HashSet<Transform>();
+            var diag = new System.Text.StringBuilder();
             foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
             {
                 var f = (PlayMakerFSM)o;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Data") continue;
                 FsmGameObject ip = f.FsmVariables.FindFsmGameObject("InstallPoint");
                 FsmString id = f.FsmVariables.FindFsmString("ID");
+                if (Config.GetInt("Test", "JournalApercu", 0) != 0 && f.name.Contains("(VIN"))
+                    diag.Append(f.name).Append(ip == null ? "[pas de var]" : ip.Value == null ? "[point nul]" : "[" + Recon.Path(ip.Value.transform) + "]")
+                        .Append(id == null ? "" : " id=" + id.Value).Append(f.transform.IsChildOf(root) ? " monte" : "").Append("; ");
                 if (ip == null || ip.Value == null || id == null || id.Value.Length == 0) continue;
                 Transform point = ip.Value.transform, part = f.transform;
                 if (!point.IsChildOf(root) || part.IsChildOf(root) || points.Contains(point)) continue;
@@ -156,6 +239,45 @@ namespace MWCoop
                     parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = place * r.transform.localToWorldMatrix, Paint = IsPaintable(r.transform, part) });
                 }
             }
+            if (diag.Length > 0) Log.Info("voiture : pieces " + diag);
+            return points;
+        }
+
+        // Pieces qui n'existent pas encore dans une partie neuve (capot, pare-chocs, phares...) : chaque
+        // point de montage VINP_* vide de la CORRIS garde le maillage de sa piece (Data, OriginalMesh),
+        // pose a la place du point. Les variantes de tuning (AssembliesTuning) sont laissees de cote.
+        static void AddPointMeshes(Transform root, HashSet<Transform> taken, List<Piece> parts)
+        {
+            int n = 0;
+            foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (f.FsmName != "Data" || !f.name.StartsWith("VINP_") || taken.Contains(f.transform)) continue;
+                if (Recon.Path(f.transform).Contains("/AssembliesTuning/")) continue;
+                FsmBool inst = f.FsmVariables.FindFsmBool("Installed");
+                FsmGameObject active = f.FsmVariables.FindFsmGameObject("ActivePart");
+                if (inst != null && inst.Value || active != null && active.Value != null) continue;
+                FsmObject om = f.FsmVariables.FindFsmObject("OriginalMesh");
+                var mesh = om != null ? om.Value as Mesh : null;
+                if (mesh == null || !mesh.isReadable) continue;
+                string mn = mesh.name.ToLowerInvariant();
+                bool paint = mn.StartsWith("body_") || mn.Contains("hood") || mn.Contains("fender") || mn.Contains("door") || mn.Contains("bootlid");
+                bool glass = mn.Contains("glass") || mn.Contains("window");
+                parts.Add(new Piece
+                {
+                    Name = f.name + " " + mesh.name, Paint = paint && !glass,
+                    V = Transformed(mesh.vertices, root.worldToLocalMatrix * f.transform.localToWorldMatrix), T = mesh.triangles,
+                    C = glass ? new Color(0.13f, 0.17f, 0.21f) : new Color(0.32f, 0.32f, 0.34f)
+                });
+                n++;
+            }
+            Log.Info("voiture : " + n + " pieces absentes posees sur leur point de montage");
+        }
+
+        static Vector3[] Transformed(Vector3[] v, Matrix4x4 m)
+        {
+            var r = new Vector3[v.Length];
+            for (int i = 0; i < v.Length; i++) r[i] = m.MultiplyPoint3x4(v[i]);
+            return r;
         }
 
         static void ApplyChosen()
