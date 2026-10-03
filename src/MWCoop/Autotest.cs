@@ -1,3 +1,4 @@
+using HutongGames.PlayMaker;
 using UnityEngine;
 
 namespace MWCoop
@@ -177,6 +178,34 @@ namespace MWCoop
                 done = true;
                 Chat.Send("Salut, c'est " + Net.Session.Me.Name + " !");
             }
+            if (mode == "dormir" && t > 20f && !done)
+            {
+                // Le joueur se couche dans le lit le plus proche (fatigue montee pour qu'il dorme
+                // plusieurs heures) ; on suit l'heure et la fatigue chaque seconde.
+                done = true;
+                Vector3 me = GameObject.Find("PLAYER").transform.position;
+                PlayMakerFSM bed = null;
+                foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+                    if (f.gameObject.name == "SleepTrigger" && f.FsmName == "Activate"
+                        && (bed == null || (f.transform.position - me).sqrMagnitude < (bed.transform.position - me).sqrMagnitude)) bed = f;
+                if (bed == null) { Log.Warn("autotest : aucun lit"); return; }
+                FsmFloat fat = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFatigue");
+                if (fat != null) fat.Value = 60f;
+                Log.Info("autotest : au lit " + Recon.Path(bed.transform) + " a " + (bed.transform.position - me).magnitude.ToString("F0") + " m");
+                Game.SetState(bed, "Get positions");
+                sleepWatch = true;
+            }
+            if (sleepWatch && Time.realtimeSinceStartup >= nextSleepLog)
+            {
+                nextSleepLog = Time.realtimeSinceStartup + 1f;
+                FsmFloat fat = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFatigue");
+                PlayMakerFSM c = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
+                bool sl = Game.GlobalBool("PlayerSleeps");
+                Log.Info("autotest : dort " + sl + ", heure " + c.FsmVariables.GetFsmInt("Time").Value
+                         + ", fatigue " + (fat != null ? fat.Value.ToString("F1") : "?")
+                         + ", echelle " + FsmVariables.GlobalVariables.FindFsmFloat("GlobalTimeScale").Value);
+                if (!sl && fat != null && fat.Value < 50f) sleepWatch = false;
+            }
             if (mode == "heure" && t > 15f && !done)
             {
                 // L'hote saute a 18 h : les invites doivent suivre (World).
@@ -189,7 +218,8 @@ namespace MWCoop
             }
         }
 
-        static bool done, teleported;
+        static bool done, teleported, sleepWatch;
+        static float nextSleepLog;
         public static int PoseFlags;
         static int seenFlags = -1;
         static float shotAt = -1;
