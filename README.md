@@ -72,7 +72,8 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Host's time, day and weather (clouds, rain, temperature); time only fast-forwards when every player sleeps | |
 | World items without an ID (jerry cans, car jack, engine hoist, axe, buckets...) carried and seen by all | |
 | Host back to the main menu: guests follow and rejoin the next game with a fresh save | |
-| Car doors, hoods, boot lids synced; house light switches | |
+| Car doors, hoods, boot lids synced in real time; house light switches; dashboard, lights, windows, handbrake... seen by all | |
+| Passenger seats (ENTER near the front passenger seat or the back seat); passengers can use the key, handbrake, windows, heater... while someone drives | |
 | Players: NPC driving pose at the wheel (car or truck), head following the camera even 360 degrees; on foot, upper body follows the gaze; real crouch; arms down when idle | |
 | NPC lines and players' swearing heard by everyone; fluids (fuel, oil, coolant, brake fluid) and wear | |
 | Food eaten, drinks drunk, trash thrown away disappear for everyone | |
@@ -159,6 +160,9 @@ palan...), aperçu de la voiture complet, retour de l'hôte au menu suivi par le
 Fait aussi (0.10) : portières, capots et coffres des véhicules, interrupteurs de la maison ; avatars : pose de
 conduite d'un PNJ (voiture ou camion), tête qui suit la caméra au volant (même à 360°), buste qui suit le regard,
 vrai accroupi, bras le long du corps au repos.
+Fait aussi (0.11) : places passagers (ENTRÉE près de la place avant droite ou de la banquette) ; un passager peut
+tourner la clé, tirer le frein à main, ouvrir les vitres, régler le chauffage... pendant qu'un autre conduit, c'est
+rejoué chez le conducteur ; tableau de bord, voyants, vitres, frein à main, ceintures vus par tous.
 À venir : toutes les actions du solo pour les invités, essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

@@ -18,6 +18,10 @@ namespace MWCoop
     // Meme mecanisme pour les automates a sauvegarde des vehicules (cablage electrique de la
     // CORRIS, pare-brise, boutons du tableau de bord : starter, warnings, chauffage, frein a main...),
     // hors peinture (Paint), boutons deja suivis par Interactions et degats de roues (terrain).
+    // Et les commandes des vehicules sans sauvegarde (cle de contact, frein a main, manivelles de
+    // vitres, levier de vitesse, molettes, interrupteurs...) : n'importe quel joueur, passager compris,
+    // les actionne, et c'est rejoue chez les autres -- chez le conducteur, ou tournent le moteur et la
+    // physique. Hors portieres (CarDoors) ; garde-fou plus large (une manivelle tourne vite).
     public static class Jobs
     {
         static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE",
@@ -35,7 +39,17 @@ namespace MWCoop
             list.Sort((a, b) => string.CompareOrdinal(a.Key.name, b.Key.name));
             return list;
         }
-        class Job { public string Key; public PlayMakerFSM F; public float WindowStart; public int Count; public bool Noisy; }
+        class Job { public string Key; public PlayMakerFSM F; public float WindowStart; public int Count; public bool Noisy, Control; }
+        static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach" };
+
+        // Commande de vehicule sans sauvegarde : automate d'interaction, pas la logique de conduite.
+        static bool IsControl(PlayMakerFSM f)
+        {
+            if (!ControlFsms.Contains(f.FsmName) || CarDoors.Tracks(f)) return false;
+            if (f.Fsm.GetState("Open door") != null || f.Fsm.GetState("Open hood") != null) return false;   // portieres : CarDoors
+            string n = f.gameObject.name;
+            return !n.StartsWith("PlayerTrigger") && !n.StartsWith("DriveTrigger") && !n.StartsWith("CameraPivot");
+        }
         static readonly Dictionary<string, Job> jobs = new Dictionary<string, Job>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
         static float nextScan = -1, loadedAt;
@@ -73,7 +87,8 @@ namespace MWCoop
                 bool vehicle = root.Value;
                 foreach (PlayMakerFSM f in r.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
-                    if ((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || !Persistent(f)) continue;
+                    bool control = vehicle && !Persistent(f) && IsControl(f);
+                    if ((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || (!Persistent(f) && !control)) continue;
                     if (Interactions.Tracks(f)) continue;
                     string on = f.gameObject.name;
                     if (on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r)) continue;   // objets : Props/Interactions
@@ -83,14 +98,19 @@ namespace MWCoop
                     seen[path] = k + 1;
                     string key = path + "#" + k;
                     if (hooked.Contains(f)) continue;
-                    var j = new Job { Key = key, F = f };
+                    var j = new Job { Key = key, F = f, Control = control };
                     if (!InjectAll(j)) continue;   // automate pas encore charge : au prochain passage
                     hooked.Add(f);
                     jobs[key] = j;
                     added++;
                 }
             }
-            if (added > 0) Log.Info("progression : " + added + " automates de plus suivis (boulots, cablage, tableaux de bord : " + jobs.Count + " en tout)");
+            if (added > 0)
+            {
+                int controls = 0;
+                foreach (Job x in jobs.Values) if (x.Control) controls++;
+                Log.Info("progression : " + added + " automates de plus suivis (boulots, cablage, tableaux de bord : " + jobs.Count + " en tout, dont " + controls + " commandes de vehicules)");
+            }
         }
 
         static bool Persistent(PlayMakerFSM f)
@@ -123,7 +143,7 @@ namespace MWCoop
             // Garde-fou : un automate qui boucle (plus de 5 changements en 10 s) n'est plus envoye.
             float now = Time.realtimeSinceStartup;
             if (now - j.WindowStart > 10f) { j.WindowStart = now; j.Count = 0; }
-            if (++j.Count > 5 || j.Noisy)
+            if (++j.Count > (j.Control ? 40 : 5) || j.Noisy)
             {
                 if (!j.Noisy) Log.Warn("quete : " + j.Key + " change trop souvent, plus envoye");
                 j.Noisy = true;

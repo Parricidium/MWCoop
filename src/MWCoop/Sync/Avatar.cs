@@ -55,6 +55,7 @@ namespace MWCoop
         Vector3 leanOff;                     // ecart camera - ancre (repere voiture) : se pencher
         Vector3 eyesRest = new Vector3(0f, 1.2f, 0.1f);   // yeux / avatar, pose de conduite sans penche
         string anchorCar;
+        bool passenger;                      // assis a une place passager (pose assise, pas de volant)
         string carName;
         float armWR, armWL, crouchW;
         bool crouching;
@@ -405,9 +406,20 @@ namespace MWCoop
             }
             if (inCar || Config.GetInt("Test", "TestPoseConduite", 0) != 0)
             {
-                Dictionary<string, Quaternion> pose = DriverPose(carName);
+                // Passager : jambes allongees et buste du conducteur, mais pas ses bras (pas de volant).
+                Dictionary<string, Quaternion> pose = DriverPose(passenger ? "voiture" : carName);
                 if (pose != null)
-                    foreach (KeyValuePair<string, Quaternion> kv in pose) { Transform b = Bone(kv.Key); if (b != null) b.localRotation = kv.Value; }
+                    foreach (KeyValuePair<string, Quaternion> kv in pose)
+                    {
+                        if (passenger && (kv.Key.Contains("collar") || kv.Key.Contains("shoulder") || kv.Key.Contains("arm") || kv.Key.Contains("hand") || kv.Key.Contains("finger"))) continue;
+                        Transform b = Bone(kv.Key); if (b != null) b.localRotation = kv.Value;
+                    }
+                if (passenger)
+                {
+                    // Bras poses sur les cuisses.
+                    ArmDown("shoulder_right", "hand_right", 1f, 1f);
+                    ArmDown("shoulder_left", "hand_left", -1f, 1f);
+                }
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
                 if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - Root.transform.position) + EyeOffset;
                 // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite).
@@ -469,7 +481,22 @@ namespace MWCoop
             Vector3 seatPos;
             Quaternion seatRot;
             inCar = VehicleSync.SeatPose(pi.Id, st.Head, out seatPos, out seatRot);
-            if (inCar)
+            Transform pCar = null; Vector3 pHead = Vector3.zero; string pName = null;
+            passenger = !inCar && Seats.RemoteSeat(pi.Id, out pCar, out pHead, out pName);
+            if (passenger)
+            {
+                // Passager : la place fixe de la voiture locale, assis, la tete suit son regard.
+                inCar = true;
+                carName = pName;
+                Root.transform.rotation = pCar.rotation;
+                leanOff = Vector3.zero;
+                pos = pCar.TransformPoint(pHead) - pCar.rotation * eyesRest;
+                yaw = pCar.eulerAngles.y;
+                placed = true;
+                Root.transform.position = pos;
+                f |= PlayerSync.F_Seated;
+            }
+            else if (inCar)
             {
                 carName = VehicleSync.RemoteCarName(pi.Id);
                 // Au volant : oriente comme la voiture locale. Le corps est ancre sur le siege (la tete au
