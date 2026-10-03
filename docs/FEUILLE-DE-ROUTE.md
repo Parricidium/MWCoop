@@ -11,7 +11,8 @@ pouvoir le faire, et les autres doivent le voir.
       (au même endroit ; ceux qui bavardent seuls ne sont pas doublés).
 - [x] Portes, lumières, interrupteurs : ce qu'un joueur ouvre ou allume, les autres le voient.
       Fait (0.1) : portes des bâtiments, interrupteurs, télé, lecteur CD. Fait (0.7) : l'invité qui arrive en
-      cours de partie reçoit l'état de tout ce qui est suivi.
+      cours de partie reçoit l'état de tout ce qui est suivi. Fait (0.10) : interrupteurs de la maison,
+      portières, capots et coffres des véhicules.
 - [ ] Toutes les actions du solo possibles pour les invités : gratter le pare-brise, boutons,
       pénalités, utilisation des objets…
 
@@ -41,6 +42,8 @@ pouvoir le faire, et les autres doivent le voir.
 - [x] Apparence : chaque joueur (hôte et invités) choisit un modèle de PNJ existant (F10, 0.1).
 - [x] Animations : celles des PNJ (accroupi…) ou faites maison, pour que les joueurs se voient bouger.
       Fait (0.4) : marche avec les bras qui balancent, assis, accroupi, assis au volant.
+      Fait (0.10, retours de JD) : pose de conduite des PNJ de la circulation (voiture / camion), tête qui
+      suit la caméra au volant, buste qui suit le regard, accroupi procédural, bras au repos.
 - [x] Actions visibles : un joueur qui fume, boit, mange… est vu par les autres.
       Fait (0.4) : fumer, boire, porter, saluer. Fait (0.7) : dormir ; (0.9) le temps ne passe vite
       que quand tous les joueurs dorment (chacun récupère sa fatigue), message d'attente sinon. Fait (0.8) : manger (main à la bouche ;
