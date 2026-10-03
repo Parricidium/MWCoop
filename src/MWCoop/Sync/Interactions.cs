@@ -59,6 +59,7 @@ namespace MWCoop
 
         public static void Update()
         {
+            if (snapshots.Count > 0) SendSnapshots();
             for (int i = checks.Count - 1; i >= 0; i--)
             {
                 if (Time.realtimeSinceStartup < checks[i].Key) continue;
@@ -165,7 +166,8 @@ namespace MWCoop
                 Session.Broadcast(w, true, who);
             }
             Entry e;
-            if (!byId.TryGetValue(id, out e) || e.Fsm == null) { Log.Warn("interaction inconnue : " + id); return; }
+            if (!byId.TryGetValue(id, out e) || e.Fsm == null) { if (state != "=etat") Log.Warn("interaction inconnue : " + id); return; }
+            if (state == "=etat") { if (!Session.IsHost) ApplySnapshot(e, names, vals); return; }
             for (int i = 0; i < n; i++)
             {
                 FsmBool b = e.Fsm.FsmVariables.GetFsmBool(names[i]);
@@ -176,6 +178,53 @@ namespace MWCoop
             finally { applying = false; }
             checks.Add(new KeyValuePair<float, Entry>(Time.realtimeSinceStartup + 2f, e));
             Log.Info("interaction de #" + who + " : " + id + " -> " + state + (e.Fsm.gameObject.activeInHierarchy ? "" : " (objet inactif)"));
+        }
+
+        // Arrivee d'un invite en cours de partie : l'hote lui envoie l'etat de tout ce qui est suivi.
+        static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
+        public static void ScheduleSnapshot(Peer p) { snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 12f, p)); }
+
+        static void SendSnapshots()
+        {
+            for (int i = snapshots.Count - 1; i >= 0; i--)
+            {
+                if (Time.realtimeSinceStartup < snapshots[i].Key) continue;
+                Peer p = snapshots[i].Value;
+                snapshots.RemoveAt(i);
+                if (!p.Accepted) continue;
+                int n = 0;
+                foreach (Entry e in byId.Values)
+                {
+                    if (e.Fsm == null || e.Fsm.FsmVariables.BoolVariables.Length == 0) continue;
+                    var w = new NetWriter(Msg.Interact).U8(0).Str(e.Id).Str("=etat");
+                    Bools(e.Fsm, w);
+                    Session.T.SendReliable(p, w.ToArray());
+                    n++;
+                }
+                Log.Info("interactions : etat de " + n + " objets envoye a " + p);
+            }
+        }
+
+        // Invite : objet dans un autre etat que chez l'hote -> on remet la variable decisive a
+        // l'oppose de celle de l'hote puis on rejoue l'action : le jeu bascule (porte, interrupteur)
+        // avec son animation et son son, et retombe sur l'etat de l'hote.
+        static void ApplySnapshot(Entry e, string[] names, bool[] vals)
+        {
+            string decisive = null;
+            for (int i = 0; i < names.Length; i++)
+            {
+                FsmBool b = e.Fsm.FsmVariables.GetFsmBool(names[i]);
+                if (b == null || b.Value == vals[i]) continue;
+                if (decisive == null) decisive = names[i];
+                b.Value = vals[i];
+            }
+            if (decisive == null) return;
+            FsmBool d = e.Fsm.FsmVariables.GetFsmBool(decisive);
+            d.Value = !d.Value;
+            applying = true;
+            try { Game.SetState(e.Fsm, AllowedTarget(e.Fsm)); }
+            finally { applying = false; }
+            Log.Info("interactions : " + e.Id + " remis comme chez l'hote (" + decisive + ")");
         }
 
         public static bool Tracks(PlayMakerFSM f)
@@ -196,6 +245,14 @@ namespace MWCoop
                 return e.Id + " -> " + target;
             }
             return "rien pour " + part;
+        }
+
+        // Essais : ouvre/ferme la porte la plus proche SANS rien envoyer (desynchronisation voulue).
+        public static string TestLocalDoor(Vector3 pos)
+        {
+            applying = true;
+            try { return TestNearestDoor(pos); }
+            finally { applying = false; }
         }
 
         // Essais : declenche la premiere porte proche du joueur (comme un clic).

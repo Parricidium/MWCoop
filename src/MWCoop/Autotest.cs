@@ -84,6 +84,7 @@ namespace MWCoop
                 if (Config.GetInt("Test", "TestPaie", 0) != 0 && step == 0 && st.EndsWith("Activate order")) { step = 1; Log.Info("autotest : le boulot rejoue paie, " + Wallet.Test(300)); }
                 if (t > 45f && !done) { done = true; Log.Info("autotest : quete " + st + ", " + Wallet.State()); }
             }
+            if (mode == "desynchro" && t > 6f && !done) { done = true; Log.Info("autotest : porte locale seulement " + Interactions.TestLocalDoor(GameObject.Find("PLAYER").transform.position)); }
             if (mode == "phares" && t > 20f && !done) { done = true; Log.Info("autotest : " + Interactions.TestNamed("KEKMET(350-400psi)/LOD/Dashboard/ButtonLightModes")); }
             if (mode == "porte" && t > 15f && !done)
             {
