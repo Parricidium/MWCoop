@@ -25,7 +25,7 @@ namespace MWCoop
     //    change chaque seconde, et un instantane complet a l'arrivee d'un invite.
     public static class WorldFsms
     {
-        static readonly HashSet<string> SkipRoots = new HashSet<string> { "PLAYER", "GUI", "Sheets", "COMPUTER", "TRAFFIC", "NPC_CARS", "Spawner", "Radio" };
+        static readonly HashSet<string> SkipRoots = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase) { "PLAYER", "GUI", "Sheets", "COMPUTER", "TRAFFIC", "NPC_CARS", "Spawner", "Radio" };
         static readonly HashSet<string> PersonalRoots = new HashSet<string> { "PLAYER", "GUI", "Sheets", "COMPUTER" };
         static readonly string[] SkipObjects = { "OptionsDB", "InitializeControls", "Photomode", "Statistics", "Setup Game", "SAVEGAME", "BankAccount", "Expenses", "PlayerWanted",
                                                  "Cashier", "CashRegister", "INVENTORY" };
@@ -50,6 +50,8 @@ namespace MWCoop
             public Dictionary<string, bool> SafeCache = new Dictionary<string, bool>();
             public Dictionary<string, float> Sent = new Dictionary<string, float>();   // miroir (hote)
             public Dictionary<string, string> SentLists = new Dictionary<string, string>();
+            public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();   // transitions prises ici
+            public List<FsmStateAction> Writes, Muted; public float MutedUntil;               // ecritures Player*
         }
 
         static readonly Dictionary<string, W> byKey = new Dictionary<string, W>();
@@ -67,7 +69,20 @@ namespace MWCoop
         class Hook : FsmStateAction
         {
             public W J; public string State;
-            public override void OnEnter() { if (!applying) OnLocal(J, State); else J.Entered.Add(State); Finish(); }
+            public override void OnEnter()
+            {
+                try
+                {
+                    if (Replay.Depth == 0)
+                    {
+                        if (J.Muted != null && J.InputStates.Contains(State)) Unmute(J);   // la chaine rejouee est finie
+                        OnLocal(J, State);
+                    }
+                    else J.Entered.Add(State);
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
         }
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
@@ -89,7 +104,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear();
+            byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear(); pathOf.Clear(); mutedList.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
@@ -110,11 +125,18 @@ namespace MWCoop
             if (f.FsmName == "Data" && Parts.IdOf(f.gameObject).Length > 0) return true;  // pieces : Parts
             if (n.StartsWith("VINP")) return true;                                       // points de montage : Parts
             if (Interactions.Tracks(f) || Interactions.Wants(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) return true;
+            if (root.name == "JOBS" && f.FsmName != "Use" && HasSave(f)) return true;   // boulots : Jobs (meme s'il ne les a pas encore vus)
             if (n == "CashRegisterLogic") return true;                                    // magasin : Shop
             // Createurs d'objets (pieces, articles) : jamais rejoues directement -- c'est l'action qui les
             // declenche (ouvrir un colis, passer une commande) qui l'est, sinon l'objet apparaitrait en
             // double. Sauf les createurs de COMMANDES (OrdersSpawner*), seul chemin de la commande.
             try { if (f.Fsm.GetState("Create product") != null && !n.StartsWith("OrdersSpawner")) return true; } catch { }
+            return false;
+        }
+
+        static bool HasSave(PlayMakerFSM f)
+        {
+            foreach (FsmString x in f.FsmVariables.StringVariables) if (x.Name.StartsWith("UniqueTag") || x.Name.StartsWith("UT")) return true;
             return false;
         }
 
@@ -183,30 +205,31 @@ namespace MWCoop
             return r;
         }
 
+        // Cle = chemin::automate#k, k compte sur tous les automates du meme chemin (suivis ou non, actifs
+        // ou non) dans l'ordre de la hierarchie : la meme cle designe le meme automate chez chacun.
+        static readonly Dictionary<PlayMakerFSM, string> pathOf = new Dictionary<PlayMakerFSM, string>();
+
         static void Scan()
         {
-            int added = 0;
             var seen = new Dictionary<string, int>();
-            var all = new List<KeyValuePair<string, PlayMakerFSM>>();
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
-            {
-                var f = (PlayMakerFSM)o;
-                if (f.hideFlags != HideFlags.None || known.Contains(f) || rejected.Contains(f)) continue;
-                if (Skip(f)) { if (f.transform.root.gameObject.activeInHierarchy) rejected.Add(f); continue; }
-                all.Add(new KeyValuePair<string, PlayMakerFSM>(Recon.Path(f.transform) + "::" + f.FsmName, f));
-            }
-            all.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
-            foreach (KeyValuePair<string, PlayMakerFSM> kv in all)
-            {
-                int k; seen.TryGetValue(kv.Key, out k); seen[kv.Key] = k + 1;
-                PlayMakerFSM f = kv.Value;
-                // Miroir aussi des petites annonces de pieces (PhoneNumbers, tirees au hasard chaque semaine).
-                bool mirror = MirrorRoots.Contains(f.transform.root.name) || f.FsmName == "Fuelprices" || kv.Key.Contains("/PhoneNumbers/");
-                var w = new W { Key = kv.Key + "#" + k, F = f, Mirror = mirror };
-                known.Add(f);
-                // Objet inactif : ses actions ne sont pas chargees ; on le reprend quand il s'active.
-                if (!f.gameObject.activeInHierarchy || !TryHook(w)) pending.Add(w);
-            }
+            List<GameObject> roots = Recon.SceneRoots();
+            roots.Sort((x, y) => { int c = string.CompareOrdinal(x.name, y.name); return c != 0 ? c : x.transform.GetSiblingIndex().CompareTo(y.transform.GetSiblingIndex()); });
+            foreach (GameObject root in roots)
+                foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
+                {
+                    if (f.hideFlags != HideFlags.None) continue;
+                    string path;
+                    if (!pathOf.TryGetValue(f, out path)) { path = Recon.Path(f.transform) + "::" + f.FsmName; pathOf[f] = path; }
+                    int k; seen.TryGetValue(path, out k); seen[path] = k + 1;
+                    if (known.Contains(f) || rejected.Contains(f)) continue;
+                    if (Skip(f)) { if (root.activeInHierarchy) rejected.Add(f); continue; }
+                    // Miroir aussi des petites annonces de pieces (PhoneNumbers, tirees au hasard chaque semaine).
+                    bool mirror = MirrorRoots.Contains(root.name) || f.FsmName == "Fuelprices" || path.Contains("/PhoneNumbers/");
+                    var w = new W { Key = path + "#" + k, F = f, Mirror = mirror };
+                    known.Add(f);
+                    // Objet inactif : ses actions ne sont pas chargees ; on le reprend quand il s'active.
+                    if (!f.gameObject.activeInHierarchy || !TryHook(w)) pending.Add(w);
+                }
             LogAdded();
         }
 
@@ -229,6 +252,7 @@ namespace MWCoop
             catch { return false; }
             if (personal) { rejected.Add(f); return true; }
             if (byKey.ContainsKey(w.Key)) return true;
+            if (!Replay.Claim(f, "monde")) { rejected.Add(f); return true; }   // deja a un autre module
             try
             {
                 foreach (FsmState st in f.Fsm.States)
@@ -271,6 +295,8 @@ namespace MWCoop
                 return;
             }
             if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
+            j.LocalRecent[(prev != null ? prev.Name : "") + "|" + tr.EventName + "|" + state] = now;
+            if (j.GlobalEvents.Contains(tr.EventName)) j.LocalRecent["g|" + tr.EventName] = now;
             if (j.External)
             {
                 // Decroche (ANSWER), ou autre evenement juste apres une action du joueur : chez les autres,
@@ -287,6 +313,10 @@ namespace MWCoop
             // Les commandes (OrdersSpawner*) arrivent apres l'appel ou le courrier, longtemps apres le
             // dernier clic : seul celui qui commande les declenche, elles passent toujours.
             bool order = global && j.Key.Contains("OrdersSpawner");
+            // Global diffuse par la logique du monde (horloge, hockey, radio : un automate sans aucune
+            // commande du joueur) : chacun le recoit de son propre jeu, le rejouer le doublerait.
+            if (global && !byPlayer && !order && !forceNext && SenderIsWorldLogic(j)) return;
+            forceNext = false;
             if ((!global && !byPlayer) || (now - lastInput > 1f && !order)) return;
             if (!Safe(j, state)) return;   // finirait par agir sur ce joueur-ci chez l'autre
             if (j.Noisy && now - j.NoisySince > 30f) { j.Noisy = false; j.WindowStart = now; j.Count = 0; }
@@ -299,17 +329,83 @@ namespace MWCoop
             Send(j, prev, tr.EventName, global ? 1 : 0, state);
         }
 
+        static bool forceNext;   // essais : le prochain global part comme s'il venait du joueur
+        static readonly Dictionary<Fsm, bool> worldLogic = new Dictionary<Fsm, bool>();
+
+        // L'expediteur de l'evenement en cours est-il un automate de pure logique (aucune action de saisie,
+        // hors interface du joueur) ? Inconnu (envoye par le code, ou par l'automate lui-meme) : non.
+        static bool SenderIsWorldLogic(W j)
+        {
+            FsmEventData ed = Fsm.EventData;
+            Fsm from = ed != null ? ed.SentByFsm : null;
+            if (from == null || from == j.F.Fsm || from.Owner == null) return false;
+            if (PersonalRoots.Contains(from.Owner.transform.root.name)) return false;   // feuille, ecran, main du joueur
+            bool r;
+            if (worldLogic.TryGetValue(from, out r)) return r;
+            r = true;
+            foreach (FsmState st in from.States)
+                foreach (FsmStateAction a in st.Actions)
+                    if (a != null && InputActions.Contains(a.GetType().Name)) r = false;
+            worldLogic[from] = r;
+            return r;
+        }
+
         // mode : 0 meme etat de depart -> meme evenement ; 1 evenement global ; 2 recalage direct (hote) ;
         // 3 rejeu muet (actions qui touchent au joueur coupees) puis repos.
         static void Send(W j, FsmState prev, string ev, int mode, string state)
         {
-            var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(j.Key).Str(prev != null ? prev.Name : "").Str(ev).U8(mode).Str(state);
-            WriteVars(j.F, w);
+            NetWriter w = null;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(j.Key).Str(prev != null ? prev.Name : "").Str(ev).U8(mode).Str(state);
+                WriteVars(j.F, w, pass == 0);
+                if (w.Length <= MaxMsg) break;
+                if (pass == 1) { Log.Warn("monde : " + j.Key + " trop gros a envoyer (" + w.Length + " o)"); return; }
+            }
             if (++sentEvents <= 30 || sentEvents % 50 == 0) Log.Info("monde : " + j.Key + " " + (prev != null ? prev.Name : "?") + " -" + ev + "-> " + state);
             Session.SendAll(w, true);
         }
 
         static bool SkipVar(string n) { return n.StartsWith("UT") || n.StartsWith("UniqueTag"); }
+
+        // Argent et corps du joueur (globales Player* nombres) : un rejeu ne les touche pas, ni sur le
+        // moment (RestorePersonal) ni plus tard dans la chaine automatique (paie apres un minuteur...).
+        // Les actions qui les ecrivent sont coupees jusqu'a ce que l'automate attende de nouveau le
+        // joueur (ou 60 s).
+        static readonly HashSet<string> WriteFields = new HashSet<string> { "floatVariable", "intVariable", "storeResult", "storeValue", "variable", "store" };
+        static readonly List<W> mutedList = new List<W>();
+
+        static void MuteWrites(W j)
+        {
+            if (j.Writes == null)
+            {
+                j.Writes = new List<FsmStateAction>();
+                foreach (FsmState st in j.F.Fsm.States)
+                    foreach (FsmStateAction a in st.Actions)
+                    {
+                        if (a == null || a is Hook) continue;
+                        foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                        {
+                            if (!WriteFields.Contains(fi.Name)) continue;
+                            var nv = fi.GetValue(a) as NamedVariable;
+                            if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && (nv is FsmFloat || nv is FsmInt) && j.F.FsmVariables.GetVariable(nv.Name) == null)
+                            { j.Writes.Add(a); break; }
+                        }
+                    }
+            }
+            if (j.Writes.Count == 0) return;
+            if (j.Muted == null) { j.Muted = new List<FsmStateAction>(); mutedList.Add(j); }
+            foreach (FsmStateAction a in j.Writes) if (a.Enabled) { a.Enabled = false; j.Muted.Add(a); }
+            j.MutedUntil = Time.realtimeSinceStartup + 60f;
+        }
+
+        static void Unmute(W j)
+        {
+            if (j.Muted == null) return;
+            foreach (FsmStateAction a in j.Muted) a.Enabled = true;
+            j.Muted = null;
+            mutedList.Remove(j);
+        }
 
         // Actions qui touchent au joueur local : son, camera, interface (sous-titres), globales Player*.
         static List<FsmStateAction> Mute(W j)
@@ -336,7 +432,9 @@ namespace MWCoop
             return r;
         }
 
-        static void WriteVars(PlayMakerFSM f, NetWriter w)
+        const int MaxMsg = 1100;
+
+        static void WriteVars(PlayMakerFSM f, NetWriter w, bool lists)
         {
             FsmVariables v = f.FsmVariables;
             var ints = new List<FsmInt>(); foreach (FsmInt x in v.IntVariables) if (!SkipVar(x.Name)) ints.Add(x);
@@ -349,18 +447,39 @@ namespace MWCoop
             w.U8(System.Math.Min(strs.Count, 255)); for (int i = 0; i < strs.Count && i < 255; i++) w.Str(strs[i].Name).Str(strs[i].Value);
             var gos = new List<FsmGameObject>(); foreach (FsmGameObject x in v.GameObjectVariables) if (GoVar(x.Name)) gos.Add(x);
             w.U8(gos.Count); foreach (FsmGameObject x in gos) w.Str(x.Name).Str(x.Value != null ? Recon.Path(x.Value.transform) : "");
-            WriteLists(f, w);
+            if (lists) WriteLists(f, w); else w.U8(0);
         }
 
         // Listes du jeu (ArrayMaker) : celles de l'objet, et celle de la commande en cours (CurrentListing).
         static List<KeyValuePair<string, PlayMakerArrayListProxy>> Lists(PlayMakerFSM f)
         {
             var l = new List<KeyValuePair<string, PlayMakerArrayListProxy>>();
-            foreach (PlayMakerArrayListProxy p in f.GetComponents<PlayMakerArrayListProxy>()) l.Add(new KeyValuePair<string, PlayMakerArrayListProxy>("", p));
+            AddLists(l, "", f.gameObject);
             FsmGameObject cl = f.FsmVariables.FindFsmGameObject("CurrentListing");
-            if (cl != null && cl.Value != null)
-                foreach (PlayMakerArrayListProxy p in cl.Value.GetComponents<PlayMakerArrayListProxy>()) l.Add(new KeyValuePair<string, PlayMakerArrayListProxy>("CurrentListing", p));
+            if (cl != null && cl.Value != null) AddLists(l, "CurrentListing", cl.Value);
             return l;
+        }
+
+        // Une liste n'est transmise que si on sait la recopier exactement : 120 elements au plus, rien
+        // que des nombres, textes, booleens ou objets de la scene, et un nom unique sur l'objet (sinon
+        // le receveur la viderait ou la remplirait de vides).
+        static void AddLists(List<KeyValuePair<string, PlayMakerArrayListProxy>> l, string owner, GameObject go)
+        {
+            PlayMakerArrayListProxy[] all = go.GetComponents<PlayMakerArrayListProxy>();
+            foreach (PlayMakerArrayListProxy p in all)
+            {
+                if (!Sendable(p._arrayList, 120)) continue;
+                int same = 0; foreach (PlayMakerArrayListProxy q in all) if ((q.referenceName ?? "") == (p.referenceName ?? "")) same++;
+                if (same == 1) l.Add(new KeyValuePair<string, PlayMakerArrayListProxy>(owner, p));
+            }
+        }
+
+        static bool Sendable(System.Collections.ArrayList a, int max)
+        {
+            if (a == null || a.Count > max) return false;
+            foreach (object o in a)
+                if (!(o is int || o is float || o is string || o is bool || (o is GameObject && (GameObject)o != null))) return false;
+            return true;
         }
 
         static void WriteLists(PlayMakerFSM f, NetWriter w)
@@ -461,6 +580,7 @@ namespace MWCoop
 
         public static void OnMessage(Peer from, NetReader r)
         {
+            byte[] raw = Session.IsHost ? r.Rest() : null;
             int who = r.U8();
             if (Session.IsHost) who = from.Id;
             string key = r.Str(), prev = r.Str(), ev = r.Str();
@@ -477,26 +597,26 @@ namespace MWCoop
             for (int i = 0, n = r.U8(); i < n; i++) strs.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
             for (int i = 0, n = r.U8(); i < n; i++) gos.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
             List<ListData> lists = ReadLists(r);
-            if (Session.IsHost)
-            {
-                var w = new NetWriter(Msg.WorldFsm).U8(who).Str(key).Str(prev).Str(ev).U8(global).Str(state);
-                w.U8(ints.Count); foreach (var x in ints) w.Str(x.Key).I32(x.Value);
-                w.U8(floats.Count); foreach (var x in floats) w.Str(x.Key).F32(x.Value);
-                w.U8(bools.Count); foreach (var x in bools) w.Str(x.Key).Bool(x.Value);
-                w.U8(strs.Count); foreach (var x in strs) w.Str(x.Key).Str(x.Value);
-                w.U8(gos.Count); foreach (var x in gos) w.Str(x.Key).Str(x.Value);
-                WriteListData(w, lists);
-                Session.Broadcast(w, true, who);
-            }
+            // Relais aux autres invites : le message tel quel, seul le numero du joueur est fixe par l'hote.
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.WorldFsm).U8(who).Raw(raw, 1, raw.Length - 1), true, who);
             W j;
             if (!byKey.TryGetValue(key, out j) || j.F == null)
             {
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("monde : " + key + " introuvable ici"); }
                 return;
             }
+            // Deja fait ici a l'instant (la meme logique a tourne chez les deux) : pas une 2e fois.
+            float done, now = Time.realtimeSinceStartup;
+            if (global < 2 && (j.LocalRecent.TryGetValue(prev + "|" + ev + "|" + state, out done) && now - done < 10f
+                               || global == 1 && j.LocalRecent.TryGetValue("g|" + ev, out done) && now - done < 10f))
+            {
+                Log.Info("monde de #" + who + " : " + key + " -" + ev + "-> deja fait ici");
+                return;
+            }
             FsmVariables v = j.F.FsmVariables;
             Personal mine = SavePersonal();
-            applying = true;
+            if (global < 2) MuteWrites(j);
+            applying = true; Replay.Depth++;
             try
             {
                 foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
@@ -528,7 +648,11 @@ namespace MWCoop
                 else if (global == 1 || j.F.ActiveStateName == prev) j.F.SendEvent(ev);
                 if (global < 2 && !j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
             }
-            finally { applying = false; RestorePersonal(mine); }
+            finally
+            {
+                applying = false; Replay.Depth--; RestorePersonal(mine);
+                if (j.Muted != null && (j.InputStates.Contains(j.F.ActiveStateName) || string.IsNullOrEmpty(j.F.ActiveStateName))) Unmute(j);
+            }
             if (++recvEvents <= 30 || recvEvents % 50 == 0) Log.Info("monde de #" + who + " : " + key + " -" + ev + "-> " + j.F.ActiveStateName + " (voulu " + state + ")");
         }
 
@@ -542,6 +666,7 @@ namespace MWCoop
             if (now >= nextScan) { nextScan = now + 60f; Scan(); }
             else if (now >= nextPending) { nextPending = now + 2f; CheckPending(); }
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetAxis("Mouse ScrollWheel") != 0f) lastInput = now;
+            for (int i = mutedList.Count - 1; i >= 0; i--) if (now > mutedList[i].MutedUntil) Unmute(mutedList[i]);
             if (!Session.IsHost && now >= nextStopCheck)
             {
                 nextStopCheck = now + 2f;
@@ -587,13 +712,13 @@ namespace MWCoop
                 foreach (PlayMakerArrayListProxy pr in j.F.GetComponents<PlayMakerArrayListProxy>())
                 {
                     System.Collections.ArrayList a = pr._arrayList;
-                    if (a == null || a.Count > 60) continue;
+                    if (!Sendable(a, 60)) continue;
                     var items = new List<object>(a.Count);
                     var sig = new System.Text.StringBuilder();
                     foreach (object o in a) { items.Add(o); sig.Append(o).Append('|'); }
                     string name = pr.referenceName ?? "", old;
                     if (!all && j.SentLists.TryGetValue(name, out old) && old == sig.ToString()) continue;
-                    j.SentLists[name] = sig.ToString();
+                    if (!all) j.SentLists[name] = sig.ToString();   // instantane d'un arrivant : les autres ne l'ont pas recu
                     if (Config.GetInt("Test", "JournalListes", 0) != 0) Log.Info("liste envoyee " + j.Key + " / " + name + " : " + Short(sig.ToString()));
                     entries.Add(new KeyValuePair<string, object>(name, items));
                 }
@@ -733,9 +858,9 @@ namespace MWCoop
                 if (j.F != null && j.Key.Contains(part))
                 {
                     var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(j.Key).Str(prev).Str(ev).U8(0).Str(state);
-                    WriteVars(j.F, w);
-                    applying = true;
-                    try { Game.SetState(j.F, state); } finally { applying = false; }
+                    WriteVars(j.F, w, true);
+                    applying = true; Replay.Depth++;
+                    try { Game.SetState(j.F, state); } finally { applying = false; Replay.Depth--; }
                     Session.SendAll(w, true);
                     return j.Key + " " + prev + " -" + ev + "-> " + state + " envoye";
                 }
@@ -749,7 +874,9 @@ namespace MWCoop
                 {
                     string before = j.F.ActiveStateName;
                     lastInput = Time.realtimeSinceStartup;   // comme si le joueur venait d'agir
+                    forceNext = true;
                     j.F.SendEvent(ev);
+                    forceNext = false;
                     return j.Key + " : " + before + " -" + ev + "-> " + j.F.ActiveStateName;
                 }
             return "rien pour " + part;

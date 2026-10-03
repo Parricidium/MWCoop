@@ -27,7 +27,7 @@ namespace MWCoop
             public PlayMakerFSM F;
             public override void OnEnter()
             {
-                if (!applying) OnLocal(F);
+                try { if (!applying && Replay.Depth == 0) OnLocal(F); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -137,9 +137,9 @@ namespace MWCoop
             foreach (var x in floats) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
             foreach (var x in colors) { FsmColor t = v.FindFsmColor(x.Key); if (t != null) t.Value = x.Value; }
             foreach (var x in strs) { FsmString t = v.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
-            applying = true;
+            applying = true; Replay.Depth++;
             try { f.SendEvent("REPAINT"); }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             Log.Info("peinture : " + id + " repeinte (joueur #" + who + ")");
         }
 

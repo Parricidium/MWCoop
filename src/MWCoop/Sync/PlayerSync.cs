@@ -20,7 +20,7 @@ namespace MWCoop
 
         static PlayerSync()
         {
-            Session.PlayerLeft += pi => RemoveAvatar(pi.Id);
+            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); };
         }
 
         public static bool InGame { get { return Application.loadedLevelName == "GAME"; } }
@@ -159,6 +159,7 @@ namespace MWCoop
                     Fluids.ScheduleSnapshot(from);
                     Consume.ScheduleSnapshot(from);
                     WorldFsms.ScheduleSnapshot(from);
+                    CarDoors.ScheduleSnapshot(from);
                 }
             }
         }

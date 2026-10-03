@@ -32,7 +32,7 @@ namespace MWCoop
             public Register R;
             public override void OnEnter()
             {
-                if (!applying) OnLocal(R);
+                try { if (!applying && Replay.Depth == 0) OnLocal(R); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -150,9 +150,9 @@ namespace MWCoop
             carried.Clear();
             foreach (DictionaryEntry e in items) carried[e.Key] = e.Value;
             reg.Fsm.FsmVariables.GetFsmInt("BagStuff").Value = bagStuff;
-            applying = true;
+            applying = true; Replay.Depth++;
             try { Game.SetState(reg.Fsm, "Spawn bag"); }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             pending.Add(keep);
             Log.Info("magasin : achat de " + name + " rejoue (" + desc + ")");
         }

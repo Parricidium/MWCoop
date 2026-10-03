@@ -34,6 +34,7 @@ namespace MWCoop
 
         class Entry { public string Id; public PlayMakerFSM Fsm; }
         static readonly Dictionary<string, Entry> byId = new Dictionary<string, Entry>();
+        static readonly HashSet<PlayMakerFSM> tracked = new HashSet<PlayMakerFSM>();
         static bool applying, scanned;
         static float scanAt = -1;
 
@@ -44,14 +45,14 @@ namespace MWCoop
             public string StateName;
             public override void OnEnter()
             {
-                if (!applying) Send(Target, StateName);
+                try { if (!applying && Replay.Depth == 0) Send(Target, StateName); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
 
         public static void OnLevelLoaded()
         {
-            byId.Clear();
+            byId.Clear(); tracked.Clear();
             scanned = false;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
         }
@@ -104,7 +105,7 @@ namespace MWCoop
                 if (target == null) continue;
                 var e = new Entry { Id = kv.Key + "#" + k, Fsm = kv.Value };
                 if (byId.ContainsKey(e.Id)) continue;
-                if (Inject(e, target)) { byId[e.Id] = e; hooked++; }
+                if (Inject(e, target)) { byId[e.Id] = e; tracked.Add(e.Fsm); hooked++; }
             }
             if (hooked > 0) Log.Info("interactions : " + hooked + " objets de plus suivis (portes, interrupteurs...), " + byId.Count + " en tout");
         }
@@ -175,9 +176,9 @@ namespace MWCoop
                 FsmBool b = e.Fsm.FsmVariables.GetFsmBool(names[i]);
                 if (b != null) b.Value = vals[i];
             }
-            applying = true;
+            applying = true; Replay.Depth++;
             try { Game.SetState(e.Fsm, state); }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             checks.Add(new KeyValuePair<float, Entry>(Time.realtimeSinceStartup + 2f, e));
             Log.Info("interaction de #" + who + " : " + id + " -> " + state + (e.Fsm.gameObject.activeInHierarchy ? "" : " (objet inactif)"));
         }
@@ -223,9 +224,9 @@ namespace MWCoop
             if (decisive == null) return;
             FsmBool d = e.Fsm.FsmVariables.GetFsmBool(decisive);
             d.Value = !d.Value;
-            applying = true;
+            applying = true; Replay.Depth++;
             try { Game.SetState(e.Fsm, AllowedTarget(e.Fsm)); }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
             Log.Info("interactions : " + e.Id + " remis comme chez l'hote (" + decisive + ")");
         }
 
@@ -238,8 +239,7 @@ namespace MWCoop
 
         public static bool Tracks(PlayMakerFSM f)
         {
-            foreach (Entry e in byId.Values) if (e.Fsm == f) return true;
-            return false;
+            return tracked.Contains(f);
         }
 
         // Essais : actionne l'objet suivi dont l'identifiant contient 'part' (comme un clic).
@@ -259,9 +259,9 @@ namespace MWCoop
         // Essais : ouvre/ferme la porte la plus proche SANS rien envoyer (desynchronisation voulue).
         public static string TestLocalDoor(Vector3 pos)
         {
-            applying = true;
+            applying = true; Replay.Depth++;
             try { return TestNearestDoor(pos); }
-            finally { applying = false; }
+            finally { applying = false; Replay.Depth--; }
         }
 
         // Essais : declenche la premiere porte proche du joueur (comme un clic).

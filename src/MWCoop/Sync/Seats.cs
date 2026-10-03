@@ -31,7 +31,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            seats.Clear(); current = null; pivot = null; player = cam = null; controller = null;
+            seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; remote.Clear();
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
