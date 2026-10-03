@@ -23,7 +23,26 @@ namespace MWCoop
                 p.transform.Rotate(0, 40f * Time.deltaTime, 0);
                 cc.SimpleMove(p.transform.forward * 1.5f);
             }
-            if (mode == "regarde" && t > 3f) LookAtNearestAvatar();
+            if (mode == "regarde" && t > 3f)
+            {
+                LookAtNearestAvatar();
+                // Capture 2,5 s apres chaque changement de posture de l'avatar regarde : dumps\pose-<drapeaux>.png
+                foreach (Avatar a in PlayerSync.Avatars)
+                {
+                    int fl = a.Player.State.Flags;
+                    if (fl != seenFlags) { seenFlags = fl; shotAt = Time.realtimeSinceStartup + 2.5f; }
+                    break;
+                }
+                if (shotAt > 0 && Time.realtimeSinceStartup >= shotAt)
+                {
+                    shotAt = -1;
+                    string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+                    System.IO.Directory.CreateDirectory(dir);
+                    string png = System.IO.Path.Combine(dir, "pose-" + seenFlags + ".png");
+                    Application.CaptureScreenshot(png);
+                    Log.Info("autotest : capture " + png);
+                }
+            }
             if (mode == "conduite")
             {
                 // Au volant de [Test] TestVoiture a 15 s, puis le vehicule est pousse en avant (8 m/s) 12 s.
@@ -80,6 +99,15 @@ namespace MWCoop
                 done = true;
                 Log.Info("autotest : " + Shop.TestBuy(Config.Get("Test", "TestProduit", "Beer"), 2));
             }
+            if (mode == "poses")
+            {
+                // Une posture toutes les 8 s a partir de 20 s : accroupi, assis, porte, boit, fume, salue, debout.
+                int[] seq = { PlayerSync.F_Crouch, PlayerSync.F_Seated, PlayerSync.F_Carry, PlayerSync.F_Drink,
+                              PlayerSync.F_Smoke, PlayerSync.F_Hello, 0 };
+                int i = t < 20f ? -1 : (int)((t - 20f) / 8f);
+                int fl = i >= 0 && i < seq.Length ? seq[i] : 0;
+                if (fl != PoseFlags) { PoseFlags = fl; Log.Info("autotest : posture " + fl); }
+            }
             if (mode == "courses")
             {
                 // Apres l'achat (30 s) : le sac est promene de 36 a 42 s (comme porte), objets a 50 s.
@@ -129,6 +157,9 @@ namespace MWCoop
         }
 
         static bool done, teleported;
+        public static int PoseFlags;
+        static int seenFlags = -1;
+        static float shotAt = -1;
         static string bagId;
         static int step;
 

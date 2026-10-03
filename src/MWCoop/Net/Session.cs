@@ -19,7 +19,7 @@ namespace MWCoop.Net
     {
         public Vector3 Feet;           // bas du personnage (sol)
         public float Yaw, Pitch, Height, Speed;
-        public int Flags;              // 1 accroupi, 2 en vehicule
+        public int Flags;              // PlayerSync.F_* : accroupi, assis, fume, boit, porte, salue, dort
     }
 
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
