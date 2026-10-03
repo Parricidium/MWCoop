@@ -71,5 +71,6 @@ namespace MWCoop.Net
         Purchase = 17,    // achat paye a une caisse (contenu du panier)
         Paint = 18,       // piece repeinte (bombe) ou couleur tiree au hasard chez l'hote
         Setting = 19,     // reglage d'une piece (carburateur, repartiteur...)
+        Traffic = 20,     // non fiable : lot de vehicules de la circulation et de passants (hote)
     }
 }

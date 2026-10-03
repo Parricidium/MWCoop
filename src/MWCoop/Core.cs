@@ -56,6 +56,7 @@ namespace MWCoop
             Step("magasin", Shop.Update);
             Step("peinture", Paint.Update);
             Step("reglages", Settings.Update);
+            Step("trafic", Traffic.Update);
             Step("trace", Trace.Update);
             Step("deroule", Flow.Update);
             Step("autotest", Autotest.Update);
@@ -79,6 +80,7 @@ namespace MWCoop
             Shop.OnLevelLoaded();
             Paint.OnLevelLoaded();
             Settings.OnLevelLoaded();
+            Traffic.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
 
