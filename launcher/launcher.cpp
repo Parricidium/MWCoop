@@ -11,22 +11,33 @@
 //    dans le dossier du jeu. MWCoop\mwcoop.ini garde les valeurs du joueur (seules les cles nouvelles sont ajoutees) ;
 //    version.txt est copie en dernier. Le lanceur se remplace lui-meme (renomme en .old) puis se relance. Depot sans
 //    release (ou pas encore public) : rien a installer, pas d'erreur.
-//  - Heberger / Rejoindre / Jouer en solo : ecrit MWCoop\lancement.ini (lu par le chargeur et le mod, valable
-//    3 minutes : Steam peut relancer le jeu sans sa ligne de commande), lance mywintercar.exe avec les memes reglages
-//    en arguments (-mwcoop-mode ...), puis reste en ecran d'attente jusqu'a la fenetre du jeu (UnityWndClass).
+//  - Heberger ouvre un SALON (TCP sur le port de la partie ; le jeu, lui, est en UDP) : liste des joueurs, choix de
+//    la partie (continuer / nouvelle), puis LANCER : chaque lanceur demarre son jeu. Rejoindre entre dans le salon
+//    de l'adresse saisie (sinon, si l'hote joue deja, propose de rejoindre directement en jeu). Jouer en solo :
+//    lancement immediat.
+//  - Lancement : ecrit MWCoop\lancement.ini (lu par le chargeur et le mod, valable 3 minutes : Steam peut relancer
+//    le jeu sans sa ligne de commande), lance mywintercar.exe avec les memes reglages en arguments
+//    (-mwcoop-mode ...), puis reste en ecran d'attente jusqu'a la fenetre du jeu (UnityWndClass).
 //  - Options du joueur : MWCoop\mwcoop.ini, section [Coop] (Pseudo, Adresse, Port, Apparence, CouleurVoiture).
 //  - Onglet VOITURE : couleur de la CORRIS pour une nouvelle partie, apercu 3D (MWCoop\cache\corris.mesh, rendu
 //    logiciel).
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
-//   /capture <png> <menu|coop|voiture|notes|notesvide|journaux|attente|maj|sansjeu> [/theme clair|sombre] [/lang fr|en]
-//            [/echelle k] : rendu d'un etat dans un PNG ;
+//   /capture <png> <menu|coop|voiture|notes|notesvide|journaux|attente|maj|sansjeu|salon|salon-invite>
+//            [/theme clair|sombre] [/lang fr|en] [/echelle k] : rendu d'un etat dans un PNG ;
+//   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] : salon sans fenetre visible (fenetre "message
+//            only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon et
+//            lance des que l'invite est pret ; l'invite rejoint et se met pret. Chacun ecrit son lancement.ini et le
+//            recopie dans le journal, SANS lancer le jeu. Pas de mise a jour ; salon sur 127.0.0.1 seulement.
 //   /maj <dossier du jeu> <journal> [/depot proprietaire/depot] : mise a jour sans fenetre, journal = etat final ;
 //   /jeu <journal> : jeu trouve (dossier, version).
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+#include <mmsystem.h>
 #include <shlwapi.h>
 #include <tlhelp32.h>
 #include <algorithm>
@@ -85,7 +96,25 @@ static std::vector<HWND> g_preWnds;                 // fenetres Unity deja la au
 static std::wstring g_launchInfo;
 
 #define WM_APP_RELAUNCH (WM_APP + 1)
+#define WM_APP_GO (WM_APP + 2)          // invite : l'hote a lance la partie
+#define WM_APP_LOBBYEND (WM_APP + 3)    // invite : salon ferme (0), refuse (1) ou injoignable (2)
 
+// Salon : etat partage entre la fenetre et les fils reseau (sous g_lcs)
+enum { LB_NONE, LB_HOST, LB_CONNECTING, LB_GUEST };
+enum { PARTIE_CONTINUER, PARTIE_NOUVELLE };
+static const int kLobbyMax = 8;                     // joueurs dans un salon (hote compris)
+struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; };
+static std::atomic<int> g_lobby(LB_NONE);
+static CRITICAL_SECTION g_lcs;
+static std::vector<LobbyPeer> g_peers;
+static int g_myId;
+static std::atomic<int> g_partie(PARTIE_CONTINUER); // choix de l'hote (recopie chez les invites)
+static std::atomic<bool> g_meReady(false);          // invite : pret
+static bool g_goWait;                               // invite : GO recu, lancement dans un instant
+static bool g_joinFallback;                         // invite : pas de salon chez l'hote -> rejoindre directement en jeu
+static std::string g_rejectWhy;                     // invite : raison du refus (sous g_lcs)
+static std::wstring g_testSalon, g_testSalonLog;    // /testsalon hote|invite <journal>
+static std::wstring g_testPartie = L"continuer";    // /testsalon : choix de l'hote
 static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return g_fr ? fr : en; }
 
 static void SetStatus(int kind, const wchar_t *fmt, ...)
@@ -99,6 +128,19 @@ static void SetStatus(int kind, const wchar_t *fmt, ...)
     g_status = buf;
     g_statusKind = kind;
     LeaveCriticalSection(&g_cs);
+}
+
+// Journal du mode /testsalon (UTF-8, heure en ms) ; rien hors de ce mode.
+static void TestLog(const char *fmt, ...)
+{
+    if (g_testSalonLog.empty()) return;
+    char b[2048];
+    va_list ap;
+    va_start(ap, fmt);
+    _vsnprintf_s(b, _countof(b), _TRUNCATE, fmt, ap);
+    va_end(ap);
+    FILE *f = _wfopen(g_testSalonLog.c_str(), L"ab");
+    if (f) { fprintf(f, "[%lu] %s\r\n", GetTickCount(), b); fclose(f); }
 }
 
 // ---------------------------------------------------------------- utilitaires
@@ -661,7 +703,7 @@ static DWORD WINAPI UpdateThread(void *)
     }
     if (!FileExists(ext + L"\\MWCoop\\version.txt")) {   // pas un paquet de MWCoop (ou zip range dans un sous-dossier)
         g_progress = -1;
-        SetStatus(K_ERR, T(L"Mise à jour impossible (paquet incomplet : MWCoop\\version.txt manquant)", L"Update failed (incomplete package: MWCoop\\version.txt missing)"));
+        SetStatus(K_ERR, T(L"Mise \u00E0 jour impossible (paquet incomplet : MWCoop\\version.txt manquant)", L"Update failed (incomplete package: MWCoop\\version.txt missing)"));
         DeleteTree(work);
         g_busy = false;
         return 0;
@@ -722,8 +764,8 @@ static void StartUpdate()
 }
 
 // ---------------------------------------------------------------- boutons
-// Onglets du panneau de droite (TAB_LOGS : page du bouton journaux, pas d'onglet)
-enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_COUNT };
+// Onglets du panneau de droite (TAB_LOGS : page du bouton journaux, pas d'onglet ; TAB_LOBBY : pendant un salon)
+enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_COUNT };
 static int g_tab = -1;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_COUNT };
@@ -750,9 +792,14 @@ static void Layout()
 static void UpdateButtons()
 {
     bool menu = g_state == ST_IDLE, game = !g_gameDir.empty(), busy = g_busy;
+    int lobby = g_lobby;
     for (int i = 0; i < B_COUNT; i++) g_btn[i].visible = true;
     g_btn[B_HOST].visible = g_btn[B_JOIN].visible = g_btn[B_SOLO].visible = g_btn[B_EXE].visible = menu;
-    g_btn[B_HOST].enabled = g_btn[B_JOIN].enabled = g_btn[B_SOLO].enabled = menu && game && !busy && g_modOk;
+    g_btn[B_SOLO].visible = g_btn[B_EXE].visible = menu && lobby == LB_NONE && !g_goWait;   // (pendant un salon : caches)
+    bool can = menu && game && !busy && g_modOk && !g_goWait;
+    g_btn[B_HOST].enabled = can && lobby != LB_CONNECTING;   // HEBERGER, LANCER (hote) ou PRET (invite)
+    g_btn[B_JOIN].enabled = can;                             // REJOINDRE, FERMER LE SALON, QUITTER ou ANNULER
+    g_btn[B_SOLO].enabled = can;
     g_btn[B_EXE].enabled = menu && !busy;
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = true;
     g_btn[B_LOGS].visible = menu && game;
@@ -862,14 +909,15 @@ static void DrawButton(Graphics &g, int id, const wchar_t *label, bool primary)
         g.FillPath(&lg, &p);
         SolidBrush hi(Color((BYTE)(60 * b.hover * a), 255, 255, 255));
         g.FillPath(&hi, &p);
-        Text(g, label, r, 15, FontStyleBold, WithA(kOnAcc, a));
     } else {
         SolidBrush fill(Mix(WithA(TH(btn2), a), WithA(TH(btn2Hot), a), b.hover));
         g.FillPath(&fill, &p);
         Pen pen(WithA(kAcc, a), 1.6f);
         g.DrawPath(&pen, &p);
-        Text(g, label, r, 15, FontStyleBold, WithA(kAcc, a));
     }
+    float px = 15;   // libelles longs (FERMER LE SALON, REJOINDRE EN JEU) : un peu plus petits
+    while (px > 11 && MeasureW(g, label, px, FontStyleBold) > r.Width - 14) px -= 0.5f;
+    Text(g, label, r, px, FontStyleBold, WithA(primary ? kOnAcc : kAcc, a));
 }
 
 // Petit bouton (Jouer en solo) : pilule discrete, accent au survol.
@@ -963,8 +1011,8 @@ static void BuildOptions()
         Opt o = {};
         o.tab = TAB_COOP; o.key = "Port"; o.def = 7870; o.kind = O_CHOICE; o.vals = { 7870, 7871, 7872, 7873, 7874, 7875 };
         o.fr = L"Port"; o.en = L"Port"; o.suffix = L"";
-        o.dFr = L"Port UDP de la partie (7870 par d\u00E9faut). L'h\u00F4te l'ouvre sur sa box (redirection UDP) ; les invit\u00E9s prennent le m\u00EAme.";
-        o.dEn = L"UDP port of the session (7870 by default). The host opens it on their router (UDP forwarding); guests use the same one.";
+        o.dFr = L"Port de la partie (7870 par d\u00E9faut) : UDP pour le jeu, TCP pour le salon. L'h\u00F4te l'ouvre sur sa box (UDP et TCP) ; les invit\u00E9s prennent le m\u00EAme.";
+        o.dEn = L"Session port (7870 by default): UDP for the game, TCP for the lobby. The host opens it on their router (UDP and TCP); guests use the same one.";
         g_opts.push_back(o);
     }
     {   // Apparence : materiaux des corps des PNJ du jeu (Sync\Avatar.cs)
@@ -983,8 +1031,8 @@ static void BuildOptions()
         for (int i = 0; i < (int)o.svals.size(); i++) o.vals.push_back(i);
         o.def = 20;   // char_shirt21 (defaut du mod)
         o.fr = L"Apparence"; o.en = L"Appearance"; o.suffix = L"";
-        o.dFr = L"Le personnage que les autres joueurs voient : la tenue d'un habitant, ou celle du policier, du pilote de rallye…";
-        o.dEn = L"The character the other players see: a local's outfit, or the police officer's, the rally driver's…";
+        o.dFr = L"Le personnage que les autres joueurs voient : la tenue d'un habitant, ou celle du policier, du pilote de rallye\u2026";
+        o.dEn = L"The character the other players see: a local's outfit, or the police officer's, the rally driver's\u2026";
         g_opts.push_back(o);
     }
 }
@@ -1013,18 +1061,19 @@ static const Opt *OptByKey(const char *key) { for (auto &o : g_opts) if (!strcmp
 
 static const wchar_t *TabName(int t)
 {
-    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR" };
+    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE", L"SALON" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR", L"LOBBY" };
     return g_fr ? fr[t] : en[t];
 }
-static bool TabVisible(int t) { return t != TAB_LOGS; }
+static bool TabVisible(int t) { return t == TAB_LOBBY ? g_lobby != LB_NONE : t != TAB_LOGS; }
 static void LayoutTabs()
 {
-    static const int order[] = { TAB_COOP, TAB_CAR, TAB_NOTES };
+    static const int order[] = { TAB_LOBBY, TAB_COOP, TAB_CAR, TAB_NOTES };
     float x = 440, pad = 12, gap = 6;
     Bitmap bm(1, 1);
     Graphics mg(&bm);
     for (int t = 0; t < TAB_COUNT; t++) g_tabR[t] = RectF(0, 0, 0, 0);
     for (int t : order) {
+        if (!TabVisible(t)) continue;
         float w = pad + MeasureW(mg, TabName(t), 11.5f, FontStyleBold);
         g_tabR[t] = RectF(x, 78, w, 26);
         x += w + gap;
@@ -1038,7 +1087,8 @@ static std::vector<int> TabRows(int t)
 }
 static float NotesMaxScroll();
 static float LogsMaxScroll();
-static float MaxScroll(int t) { return t == TAB_LOGS ? LogsMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : max(0.0f, TabRows(t).size() * kRowH - kOptList.Height); }
+static float LobbyMaxScroll();
+static float MaxScroll(int t) { return t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : max(0.0f, TabRows(t).size() * kRowH - kOptList.Height); }
 
 static int ValueIndex(const Opt &o, int v)
 {
@@ -1100,10 +1150,12 @@ static void DrawPanel(Graphics &g)
 static void DrawNotes(Graphics &g);
 static void DrawLogs(Graphics &g);
 static void DrawCar(Graphics &g);
+static void DrawLobby(Graphics &g);
 
 static void DrawOptions(Graphics &g)
 {
     if (g_tab < 0 || g_gameDir.empty()) return;
+    if (g_tab == TAB_LOBBY) { DrawLobby(g); return; }
     if (g_tab == TAB_CAR) { DrawCar(g); return; }
     if (g_tab == TAB_NOTES) { DrawNotes(g); return; }
     if (g_tab == TAB_LOGS) { DrawLogs(g); return; }
@@ -1143,14 +1195,14 @@ static void DrawOptions(Graphics &g)
         Pen sep(TH(sep), 1);
         g.DrawLine(&sep, kOptPanel.X + 18, y, kOptPanel.X + kOptPanel.Width - 18, y);
         Text(g, T(L"JOUER ENSEMBLE", L"PLAYING TOGETHER"), RectF(kOptList.X + 12, y + 12, 300, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
-        Para(g, T(L"\u2022 H\u00C9BERGER : tu lances ta partie, les autres te rejoignent. Ouvre le port ci-dessus sur ta box "
-                  L"(redirection UDP) et donne-leur ton adresse IP publique.\n\n"
+        Para(g, T(L"\u2022 H\u00C9BERGER : ouvre un salon ; quand tout le monde est pr\u00EAt, LANCER d\u00E9marre le jeu de chacun. "
+                  L"Ouvre le port ci-dessus sur ta box (UDP et TCP) et donne ton adresse IP publique.\n\n"
                   L"\u2022 REJOINDRE : entre l'adresse IP de l'h\u00F4te \u00E0 gauche (adresse:port si l'h\u00F4te a chang\u00E9 de port).\n\n"
                   L"\u2022 L'invit\u00E9 joue dans un profil \u00E0 part qui re\u00E7oit la sauvegarde de l'h\u00F4te : sa propre sauvegarde "
                   L"n'est pas touch\u00E9e.\n\n"
                   L"\u2022 JOUER EN SOLO : le jeu normal, avec MWCoop charg\u00E9 mais sans r\u00E9seau.",
-                  L"\u2022 HOST: you start your game, the others join you. Open the port above on your router (UDP forwarding) "
-                  L"and give them your public IP address.\n\n"
+                  L"\u2022 HOST: opens a lobby; once everyone is ready, START launches everyone's game. "
+                  L"Open the port above on your router (UDP and TCP) and share your public IP address.\n\n"
                   L"\u2022 JOIN: enter the host's IP address on the left (address:port if the host changed the port).\n\n"
                   L"\u2022 The guest plays in a separate profile that receives the host's save: their own save is left untouched.\n\n"
                   L"\u2022 PLAY SOLO: the normal game, with MWCoop loaded but no network."),
@@ -1168,7 +1220,7 @@ static void DrawOptions(Graphics &g)
 static void HitOption(float x, float y, int *row, int *part)
 {
     *row = -1; *part = 0;
-    if (g_tab < 0 || g_tab == TAB_NOTES || g_tab == TAB_LOGS || g_tab == TAB_CAR || !kOptList.Contains(x, y)) return;
+    if (g_tab < 0 || g_tab == TAB_NOTES || g_tab == TAB_LOGS || g_tab == TAB_CAR || g_tab == TAB_LOBBY || !kOptList.Contains(x, y)) return;
     std::vector<int> rows = TabRows(g_tab);
     int k = (int)((y - kOptList.Y + g_scroll[g_tab]) / kRowH);
     if (k < 0 || k >= (int)rows.size()) return;
@@ -2108,8 +2160,13 @@ static void DrawUI(Graphics &g)
         if (prog != -1.0f) DrawBar(g, RectF(96, 238, 264, 5), prog);
         DrawField(g, 0, T(L"PSEUDO", L"NICKNAME"));
         DrawField(g, 1, T(L"ADRESSE DE L'H\u00D4TE", L"HOST ADDRESS"));
-        DrawButton(g, B_HOST, T(L"H\u00C9BERGER", L"HOST"), true);
-        DrawButton(g, B_JOIN, T(L"REJOINDRE", L"JOIN"), false);
+        const wchar_t *hostLabel = T(L"H\u00C9BERGER", L"HOST"), *joinLabel = g_joinFallback ? T(L"REJOINDRE EN JEU", L"JOIN IN GAME") : T(L"REJOINDRE", L"JOIN");
+        int lobby = g_lobby;
+        if (lobby == LB_HOST) { hostLabel = T(L"LANCER", L"START"); joinLabel = T(L"FERMER LE SALON", L"CLOSE LOBBY"); }
+        else if (lobby == LB_GUEST) { hostLabel = g_meReady ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PR\u00CAT ?", L"READY?"); joinLabel = T(L"QUITTER", L"LEAVE"); }
+        else if (lobby == LB_CONNECTING) { hostLabel = T(L"CONNEXION\u2026", L"CONNECTING\u2026"); joinLabel = T(L"ANNULER", L"CANCEL"); }
+        DrawButton(g, B_HOST, hostLabel, true);
+        DrawButton(g, B_JOIN, joinLabel, false);
         DrawSmallButton(g, B_SOLO, T(L"JOUER EN SOLO", L"PLAY SOLO"));
         std::wstring exeLine;
         Color ec = kGrey;
@@ -2120,7 +2177,7 @@ static void DrawUI(Graphics &g)
         bool ok = !g_gameDir.empty();
         const wchar_t *el = ok ? T(L"Changer de dossier", L"Change folder") : T(L"Choisir l'exe\u2026", L"Choose exe\u2026");
         Color lc = Mix(ok ? kGrey : kAcc, kAcc, eb.hover);
-        Text(g, el, eb.r, 11.5f, ok ?FontStyleUnderline : FontStyleBold | FontStyleUnderline, WithA(lc, eb.enabled ? 1.0f : 0.4f), StringAlignmentFar);
+        if (eb.visible) Text(g, el, eb.r, 11.5f, ok ?FontStyleUnderline : FontStyleBold | FontStyleUnderline, WithA(lc, eb.enabled ? 1.0f : 0.4f), StringAlignmentFar);
     }
     const Color lg = WithA(kGrey, 0.8f);
     Text(g, T(L"Mod non officiel et non commercial.", L"Unofficial, non-commercial mod."), RectF(56, 506, 344, 14), 10, FontStyleRegular, lg);
@@ -2258,7 +2315,8 @@ static bool GameWindowShown()
 }
 
 // MWCoop\lancement.ini (contrat avec le chargeur et le mod), ecrit d'un coup (fichier temporaire puis renomme).
-static bool WriteLaunchFile(int mode, const std::wstring &addr, int port)
+// partie (hote lance depuis le salon) : "continuer" | "nouvelle" -> Partie=..., le jeu entre en partie tout seul.
+static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const char *partie)
 {
     const Opt *ap = OptByKey("Apparence");
     std::string skin = ap ? ap->svals[OptGet(*ap)] : "char_shirt21";
@@ -2270,6 +2328,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port)
     t += "Pseudo=" + Narrow(PlayerName(), CP_UTF8) + "\r\n";
     t += "Apparence=" + skin + "\r\n";
     t += std::string("Profil=") + (mode == MODE_GUEST ? "invite" : "") + "\r\n";
+    if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
     t += "Horodatage=" + std::to_string((long long)_time64(NULL)) + "\r\n";
     EnsureModDir();
     std::wstring path = g_gameDir + L"MWCoop\\lancement.ini", tmp = path + L".tmp";
@@ -2283,9 +2342,9 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port)
     return ok;
 }
 
-static void Launch(int mode)
+static void Launch(int mode, const char *partie = NULL)
 {
-    if (g_gameDir.empty() || g_busy || !g_modOk) return;
+    if (g_gameDir.empty() || g_busy || !g_modOk) { TestLog("lancement impossible (jeu=%d occupe=%d mod=%d)", (int)!g_gameDir.empty(), (int)g_busy, (int)g_modOk); return; }
     std::wstring addr = Trim(g_fields[1].text);
     const Opt *po = OptByKey("Port");
     int port = po ? OptGet(*po) : 7870;
@@ -2301,13 +2360,23 @@ static void Launch(int mode)
             if (p > 0 && p < 65536) port = p;
             addr = addr.substr(0, colon);
         }
-    } else if (GameProcessRunning()) {   // (instance unique : un 2e jeu hors profil se fermerait aussitot)
+    } else if (g_testSalon.empty() && GameProcessRunning()) {   // (instance unique : un 2e jeu hors profil se fermerait aussitot)
         SetStatus(K_ERR, T(L"My Winter Car est d\u00E9j\u00E0 lanc\u00E9 : ferme-le d'abord", L"My Winter Car is already running: close it first"));
         return;
     }
     SavePlayer();
-    if (!WriteLaunchFile(mode, addr, port)) {
+    if (!WriteLaunchFile(mode, addr, port, partie)) {
         SetStatus(K_ERR, T(L"Impossible d'\u00E9crire MWCoop\\lancement.ini (erreur %lu)", L"Could not write MWCoop\\lancement.ini (error %lu)"), GetLastError());
+        TestLog("lancement.ini : ecriture impossible");
+        return;
+    }
+    if (!g_testSalon.empty()) {   // mode d'essai : le lancement.ini dans le journal, et JAMAIS le jeu
+        std::vector<unsigned char> d;
+        ReadAll(g_gameDir + L"MWCoop\\lancement.ini", d);
+        std::string text(d.begin(), d.end());
+        TestLog("lancement.ini ecrit (%s) :\n%s", Narrow(g_gameDir + L"MWCoop\\lancement.ini", CP_UTF8).c_str(), text.c_str());
+        TestLog("test : fin (jeu NON lance, mode d'essai)");
+        DestroyWindow(g_wnd);
         return;
     }
     static const wchar_t *modes[] = { L"solo", L"hote", L"invite" };
@@ -2347,14 +2416,781 @@ static void Launch(int mode)
     g_state = ST_LAUNCH;
 }
 
+// ---------------------------------------------------------------- salon
+// Le lanceur de l'hote ouvre un salon en TCP sur le port de la partie (le jeu, lui, est en UDP sur ce meme numero :
+// pas de conflit). Chaque connexion commence par "MWS1" (pas compatible avec le salon de SACoop), puis des messages
+// [u16 longueur][u8 type][...] :
+//   HELLO (proto, version, pseudo, apparence) -> WELCOME (numero) ou REJECT (raison : "version X", "full",
+//   "started", "closed", "proto") ; STATE (joueurs : numero, pseudo, apparence, version, pret, ping ; puis le choix
+//   de partie) ; READY (u8) ; SKIN (apparence changee dans l'onglet COOP) ; PING / PONG (u32, heure de l'hote) ;
+//   GO (u8 partie).
+// GO : l'hote lance son jeu (lancement.ini : Partie=continuer|nouvelle, il entre en partie tout seul) ; chaque invite
+// attend ~4 s (deux jeux sur le meme PC ne demarrent pas ensemble) puis lance le sien en invite : il suit l'hote.
+enum { LB_PROTO = 1, M_HELLO = 1, M_WELCOME, M_REJECT, M_STATE, M_READY, M_GO, M_PING, M_PONG, M_SKIN };
+static SOCKET g_listen = INVALID_SOCKET, g_guestSock = INVALID_SOCKET;
+struct Conn { SOCKET s; int id; };
+static std::vector<Conn> g_conns;                   // hote : invites du salon (sous g_lcs)
+static std::atomic<bool> g_goSent(false);
+static std::atomic<int> g_lobbyGen(0);              // change a chaque ouverture/fermeture : messages perimes ignores
+static std::wstring g_lobbyAddr, g_myAddresses;
+static int g_lobbyPort = 7870;
+static int g_lobbyHot = -1;                         // choix de partie survole (0 continuer, 1 nouvelle)
+static std::string g_mySkinSent;                    // derniere apparence annoncee au salon
+static const RectF kLobbyList(452, 172, 488, 250), kChoiceR[2] = { RectF(456, 450, 236, 32), RectF(700, 450, 236, 32) };
+static const float kLobbyRowH = 50;
+
+// Sons du salon (repris de SACoop) : arrivee, depart, pret, plus pret. Petites notes synthetisees (WAV en memoire).
+enum { SND_JOIN, SND_LEAVE, SND_READY, SND_UNREADY, SND_COUNT };
+static std::vector<uint8_t> g_snd[SND_COUNT];
+static void MakeSound(std::vector<uint8_t> &w, std::initializer_list<float> notes, float noteMs, float vol)
+{
+    const int rate = 22050, per = (int)(rate * noteMs / 1000.0f), tail = rate / 5;
+    int total = per * (int)notes.size() + tail;
+    std::vector<float> buf(total, 0.0f);
+    int k = 0;
+    for (float f : notes) {
+        int start = k++ * per;
+        for (int i = 0; i < per + tail && start + i < total; i++) {
+            float t = i / (float)rate;
+            float env = (i < rate / 200 ? i / (rate / 200.0f) : 1.0f) * expf(-t * 9.0f);
+            buf[start + i] += env * (sinf(6.2831853f * f * t) + 0.25f * sinf(6.2831853f * f * 2 * t));
+        }
+    }
+    uint32_t data = total * 2;
+    w.resize(44 + data);
+    uint8_t *p = w.data();
+    auto u32 = [&](int at, uint32_t v) { memcpy(p + at, &v, 4); };
+    auto u16 = [&](int at, uint16_t v) { memcpy(p + at, &v, 2); };
+    memcpy(p, "RIFF", 4); u32(4, 36 + data); memcpy(p + 8, "WAVEfmt ", 8); u32(16, 16); u16(20, 1); u16(22, 1);
+    u32(24, rate); u32(28, rate * 2); u16(32, 2); u16(34, 16); memcpy(p + 36, "data", 4); u32(40, data);
+    for (int i = 0; i < total; i++) {
+        float v = max(-1.0f, min(1.0f, buf[i] * vol));
+        int16_t sv = (int16_t)(v * 32767);
+        memcpy(p + 44 + i * 2, &sv, 2);
+    }
+}
+static void LobbySound(int which)
+{
+    if (g_snd[0].empty()) {
+        MakeSound(g_snd[SND_JOIN], { 523.3f, 659.3f, 784.0f }, 90, 0.30f);     // do mi sol : quelqu'un arrive
+        MakeSound(g_snd[SND_LEAVE], { 784.0f, 659.3f, 523.3f }, 90, 0.26f);    // sol mi do : il part
+        MakeSound(g_snd[SND_READY], { 987.8f, 1318.5f }, 70, 0.24f);           // si mi aigus : pret
+        MakeSound(g_snd[SND_UNREADY], { 659.3f, 493.9f }, 80, 0.22f);          // mi si graves : plus pret
+    }
+    PlaySoundW((LPCWSTR)g_snd[which].data(), NULL, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+}
+
+struct Wr {
+    std::string d;
+    void u8(int v) { d += (char)(uint8_t)v; }
+    void u16(int v) { uint16_t x = (uint16_t)v; d.append((const char *)&x, 2); }
+    void u32(uint32_t v) { d.append((const char *)&v, 4); }
+    void str(const std::string &s) { size_t n = min<size_t>(s.size(), 255); u8((int)n); d.append(s.data(), n); }
+};
+struct Rd {
+    const std::string &d; size_t p = 0; bool ok = true;
+    Rd(const std::string &x) : d(x) {}
+    int u8() { if (p + 1 > d.size()) { ok = false; return 0; } return (uint8_t)d[p++]; }
+    int u16() { if (p + 2 > d.size()) { ok = false; return 0; } uint16_t x; memcpy(&x, d.data() + p, 2); p += 2; return x; }
+    uint32_t u32() { if (p + 4 > d.size()) { ok = false; return 0; } uint32_t x; memcpy(&x, d.data() + p, 4); p += 4; return x; }
+    std::string str() { int n = u8(); if (!ok || p + n > d.size()) { ok = false; return ""; } std::string s = d.substr(p, n); p += n; return s; }
+};
+static bool SendAllS(SOCKET s, const void *d, int n)
+{
+    const char *p = (const char *)d;
+    while (n > 0) { int r = send(s, p, n, 0); if (r <= 0) return false; p += r; n -= r; }
+    return true;
+}
+static bool RecvAllS(SOCKET s, void *d, int n)
+{
+    char *p = (char *)d;
+    while (n > 0) { int r = recv(s, p, n, 0); if (r <= 0) return false; p += r; n -= r; }
+    return true;
+}
+static bool SendMsg(SOCKET s, const Wr &w)
+{
+    uint16_t n = (uint16_t)w.d.size();
+    return SendAllS(s, &n, 2) && SendAllS(s, w.d.data(), n);
+}
+static bool RecvMsg(SOCKET s, std::string &out)
+{
+    uint16_t n;
+    if (!RecvAllS(s, &n, 2)) return false;
+    out.resize(n);
+    return n == 0 || RecvAllS(s, &out[0], n);
+}
+
+static int LobbyPort() { const Opt *po = OptByKey("Port"); return po ? OptGet(*po) : 7870; }
+static std::string MySkin() { const Opt *ap = OptByKey("Apparence"); return ap ? ap->svals[OptGet(*ap)] : "char_shirt21"; }
+static std::string MyName() { return Narrow(PlayerName(), CP_UTF8); }
+static std::string MyVersion() { return g_localVer.empty() ? "dev" : Narrow(g_localVer, CP_UTF8); }   // MWCoop\version.txt
+// Apparence lisible ("Tenue 21", "Policier") : libelle de l'onglet COOP, sinon le nom brut.
+static std::wstring SkinLabel(const std::string &skin)
+{
+    if (const Opt *ap = OptByKey("Apparence"))
+        for (size_t i = 0; i < ap->svals.size(); i++)
+            if (!_stricmp(ap->svals[i].c_str(), skin.c_str())) return (g_fr ? ap->labFr : ap->labEn)[i];
+    return skin.empty() ? L"?" : Widen(skin, CP_UTF8);
+}
+static const char *PartieName(int p) { return p == PARTIE_NOUVELLE ? "nouvelle" : "continuer"; }
+// Couleur de la CORRIS choisie dans l'onglet VOITURE (pour la note "nouvelle partie").
+static std::wstring CarColorName()
+{
+    int sel = CarSwatchSel();
+    if (sel == 0) return T(L"au hasard", L"random");
+    if (sel > 0) return g_fr ? kSwatches[sel - 1].fr : kSwatches[sel - 1].en;
+    wchar_t b[48];
+    swprintf_s(b, T(L"personnalis\u00E9e #%06X", L"custom #%06X"), g_carColor & 0xFFFFFF);
+    return b;
+}
+
+// --- hote
+static void BroadcastState()
+{
+    Wr w;
+    w.u8(M_STATE);
+    EnterCriticalSection(&g_lcs);
+    w.u8((int)g_peers.size());
+    for (auto &p : g_peers) { w.u8(p.id); w.str(p.name); w.str(p.skin); w.str(p.ver); w.u8(p.ready); w.u16(min(p.ping, 9999)); }
+    w.u8(g_partie);
+    for (auto &c : g_conns) SendMsg(c.s, w);
+    LeaveCriticalSection(&g_lcs);
+}
+static LobbyPeer *PeerById(int id) { for (auto &p : g_peers) if (p.id == id) return &p; return NULL; }
+static void DropConn(SOCKET s)
+{
+    EnterCriticalSection(&g_lcs);
+    for (size_t i = 0; i < g_conns.size(); i++)
+        if (g_conns[i].s == s) {
+            int id = g_conns[i].id;
+            g_conns.erase(g_conns.begin() + i);
+            for (size_t k = 0; k < g_peers.size(); k++) if (g_peers[k].id == id) { TestLog("salon : %s part (joueur %d)", g_peers[k].name.c_str(), id); g_peers.erase(g_peers.begin() + k); break; }
+            break;
+        }
+    LeaveCriticalSection(&g_lcs);
+    closesocket(s);
+}
+static void LobbySession(SOCKET s)
+{
+    std::string m;
+    if (!RecvMsg(s, m)) { closesocket(s); return; }
+    Rd r(m);
+    int type = r.u8(), proto = r.u8();
+    std::string ver = r.str(), name = r.str(), skin = r.str();
+    auto reject = [&](const std::string &why) { Wr w; w.u8(M_REJECT); w.str(why); SendMsg(s, w); shutdown(s, SD_SEND); closesocket(s); };
+    if (!r.ok || type != M_HELLO || proto != LB_PROTO) { TestLog("salon : connexion refusee (protocole)"); reject("proto"); return; }
+    std::string mine = MyVersion();
+    if (ver != mine) {
+        TestLog("salon : %s refuse (sa version %s, celle de l'hote %s)", name.c_str(), ver.c_str(), mine.c_str());
+        SetStatus(K_WARN, T(L"%S refus\u00E9 : version %S (la tienne : %S)", L"%S refused: version %S (yours: %S)"), name.c_str(), ver.c_str(), mine.c_str());
+        reject("version " + mine);
+        return;
+    }
+    if (g_goSent) { reject("started"); return; }
+    if (g_lobby != LB_HOST) { reject("closed"); return; }
+    int id = -1;
+    EnterCriticalSection(&g_lcs);   // (WELCOME envoye sous le verrou : pas de STATE glisse avant lui)
+    for (int k = 1; k < kLobbyMax && id < 0; k++) if (!PeerById(k)) id = k;
+    if (id > 0) {
+        g_peers.push_back({ id, name, skin, ver, false, 0 });
+        g_conns.push_back({ s, id });
+        Wr w; w.u8(M_WELCOME); w.u8(id); SendMsg(s, w);
+    }
+    LeaveCriticalSection(&g_lcs);
+    if (id < 0) { reject("full"); return; }
+    TestLog("salon : %s arrive (joueur %d, version %s, apparence %s)", name.c_str(), id, ver.c_str(), skin.c_str());
+    BroadcastState();
+    DWORD to = 60000;   // (l'invite repond aux pings toutes les 2 s)
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
+    while (RecvMsg(s, m)) {
+        Rd q(m);
+        int t = q.u8();
+        EnterCriticalSection(&g_lcs);
+        LobbyPeer *p = PeerById(id);
+        if (p && t == M_READY) { p->ready = q.u8() != 0; TestLog("salon : %s (joueur %d) pret=%d", p->name.c_str(), id, (int)p->ready); }
+        else if (p && t == M_PONG) { uint32_t sent = q.u32(); if (q.ok) p->ping = (int)(GetTickCount() - sent); }
+        else if (p && t == M_SKIN) { std::string sk = q.str(); if (q.ok) { p->skin = sk; TestLog("salon : joueur %d apparence %s", id, sk.c_str()); } }
+        LeaveCriticalSection(&g_lcs);
+        if (t == M_READY || t == M_SKIN) BroadcastState();
+    }
+    DropConn(s);
+    BroadcastState();
+}
+static DWORD WINAPI ConnThread(void *param)
+{
+    SOCKET s = (SOCKET)param;
+    DWORD to = 15000;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
+    DWORD sto = 3000;   // un invite bloque ne fige pas la fenetre (envois sous g_lcs)
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char *)&sto, sizeof(sto));
+    char magic[4];
+    if (RecvAllS(s, magic, 4) && !memcmp(magic, "MWS1", 4)) LobbySession(s);   // (ferme la socket)
+    else closesocket(s);
+    return 0;
+}
+static DWORD WINAPI AcceptThread(void *param)
+{
+    SOCKET ls = (SOCKET)param;
+    for (;;) {
+        SOCKET c = accept(ls, NULL, NULL);
+        if (c == INVALID_SOCKET) break;   // (salon ferme : socket d'ecoute fermee)
+        HANDLE t = CreateThread(NULL, 0, ConnThread, (void *)c, 0, NULL);
+        if (t) CloseHandle(t); else closesocket(c);
+    }
+    return 0;
+}
+static std::wstring LocalAddresses()
+{
+    char host[256];
+    std::wstring out;
+    if (gethostname(host, sizeof(host)) != 0) return out;
+    addrinfo hints = {}, *res = NULL;
+    hints.ai_family = AF_INET;
+    if (getaddrinfo(host, NULL, &hints, &res) != 0) return out;
+    int n = 0;
+    for (addrinfo *a = res; a && n < 2; a = a->ai_next) {
+        char ip[64];
+        inet_ntop(AF_INET, &((sockaddr_in *)a->ai_addr)->sin_addr, ip, sizeof(ip));
+        if (!strncmp(ip, "127.", 4)) continue;
+        if (!out.empty()) out += L" \u00B7 ";
+        out += Widen(ip);
+        n++;
+    }
+    freeaddrinfo(res);
+    return out;
+}
+
+static void LobbyHost()
+{
+    SavePlayer();
+    g_lobbyPort = LobbyPort();
+    SOCKET ls = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockaddr_in a = {};
+    a.sin_family = AF_INET;
+    // mode d'essai : 127.0.0.1 seulement (pas de demande du pare-feu de Windows a l'ecran)
+    a.sin_addr.s_addr = htonl(g_testSalon.empty() ? INADDR_ANY : INADDR_LOOPBACK);
+    a.sin_port = htons((u_short)g_lobbyPort);
+    BOOL excl = TRUE;
+    if (ls != INVALID_SOCKET) setsockopt(ls, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char *)&excl, sizeof(excl));
+    if (ls == INVALID_SOCKET || bind(ls, (sockaddr *)&a, sizeof(a)) != 0 || listen(ls, 8) != 0) {
+        int e = WSAGetLastError();
+        if (ls != INVALID_SOCKET) closesocket(ls);
+        SetStatus(K_ERR, T(L"Salon impossible : port TCP %d occup\u00E9 (erreur %d)", L"Cannot open the lobby: TCP port %d in use (error %d)"), g_lobbyPort, e);
+        TestLog("salon : ouverture impossible sur le port %d (erreur %d)", g_lobbyPort, e);
+        return;
+    }
+    g_lobbyGen++;
+    g_listen = ls;
+    EnterCriticalSection(&g_lcs);
+    g_peers.clear();
+    g_conns.clear();
+    g_peers.push_back({ 0, MyName(), MySkin(), MyVersion(), true, 0 });
+    LeaveCriticalSection(&g_lcs);
+    g_mySkinSent = MySkin();
+    g_partie = PARTIE_CONTINUER;
+    g_goSent = false;
+    g_myId = 0;
+    g_joinFallback = false;
+    g_myAddresses = LocalAddresses();
+    g_lobby = LB_HOST;
+    g_tab = TAB_LOBBY;
+    g_scroll[TAB_LOBBY] = 0;
+    g_focus = -1;
+    LayoutTabs();
+    HANDLE t = CreateThread(NULL, 0, AcceptThread, (void *)ls, 0, NULL);
+    if (t) CloseHandle(t);
+    SetStatus(K_OK, T(L"Salon ouvert \u00B7 port %d", L"Lobby open \u00B7 port %d"), g_lobbyPort);
+    TestLog("salon : ouvert sur le port TCP %d (version %s, %s, %s)", g_lobbyPort, MyVersion().c_str(), MyName().c_str(), MySkin().c_str());
+}
+
+// Invites : combien, et combien pas encore prets.
+static void GuestCounts(int *guests, int *notReady)
+{
+    *guests = *notReady = 0;
+    EnterCriticalSection(&g_lcs);
+    for (auto &p : g_peers) if (p.id != 0) { (*guests)++; if (!p.ready) (*notReady)++; }
+    LeaveCriticalSection(&g_lcs);
+}
+static bool LobbyCanStart()
+{
+    if (g_lobby != LB_HOST || g_goSent) return false;
+    int guests, notReady;
+    GuestCounts(&guests, &notReady);
+    return notReady == 0;
+}
+
+static void LobbyClose()
+{
+    g_lobbyGen++;
+    g_lobby = LB_NONE;
+    if (g_listen != INVALID_SOCKET) { closesocket(g_listen); g_listen = INVALID_SOCKET; }
+    EnterCriticalSection(&g_lcs);
+    for (auto &c : g_conns) shutdown(c.s, SD_BOTH);   // les fils des sessions ferment leurs sockets
+    g_conns.clear();
+    g_peers.clear();
+    if (g_guestSock != INVALID_SOCKET) shutdown(g_guestSock, SD_BOTH);   // GuestThread la ferme
+    LeaveCriticalSection(&g_lcs);
+    g_meReady = false;
+    g_lobbyHot = -1;
+    if (g_tab == TAB_LOBBY) g_tab = -1;
+    LayoutTabs();
+}
+
+// LANCER : actif quand tous les invites sont prets ; sinon, une question permet de forcer.
+static void HostStart()
+{
+    if (g_lobby != LB_HOST || g_goSent) return;
+    if (g_testSalon.empty() && GameProcessRunning()) {
+        SetStatus(K_ERR, T(L"My Winter Car est d\u00E9j\u00E0 lanc\u00E9 : ferme-le d'abord", L"My Winter Car is already running: close it first"));
+        return;
+    }
+    int guests, notReady;
+    GuestCounts(&guests, &notReady);
+    if (notReady && g_testSalon.empty()) {
+        wchar_t q[400];
+        swprintf_s(q, T(L"%d invit\u00E9(s) sur %d pas encore pr\u00EAt(s).\n\nLancer quand m\u00EAme ? Leur jeu d\u00E9marrera aussi.",
+                        L"%d of %d guest(s) not ready yet.\n\nStart anyway? Their game will start too."), notReady, guests);
+        if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
+        if (g_lobby != LB_HOST || g_goSent) return;   // (le salon a pu changer pendant la question)
+    }
+    int partie = g_partie;
+    g_goSent = true;
+    Wr w;
+    w.u8(M_GO);
+    w.u8(partie);
+    EnterCriticalSection(&g_lcs);
+    for (auto &c : g_conns) SendMsg(c.s, w);
+    LeaveCriticalSection(&g_lcs);
+    TestLog("salon : GO envoye a %d invite(s) (%d pas prets), partie=%s", guests, notReady, PartieName(partie));
+    for (int i = 0; i < 30; i++) {   // les invites ferment les premiers en recevant GO
+        EnterCriticalSection(&g_lcs);
+        bool empty = g_conns.empty();
+        LeaveCriticalSection(&g_lcs);
+        if (empty) break;
+        Sleep(50);
+    }
+    LobbyClose();
+    Launch(MODE_HOST, PartieName(partie));
+}
+
+// Choix de partie (hote). Nouvelle partie : confirmation (elle remplace la sauvegarde de l'hote).
+static void LobbySetPartie(int p)
+{
+    if (g_lobby != LB_HOST || g_goSent || p == g_partie) return;
+    if (p == PARTIE_NOUVELLE && g_testSalon.empty()) {
+        std::wstring q = std::wstring(T(L"Commencer une NOUVELLE partie ?\n\nElle remplace ta sauvegarde actuelle de My Winter Car "
+                                        L"(la partie en cours sera perdue).\n\nCouleur de la CORRIS (onglet VOITURE) : ",
+                                        L"Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\n"
+                                        L"CORRIS color (CAR tab): ")) + CarColorName() + L".";
+        if (MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
+        if (g_lobby != LB_HOST || g_goSent) return;
+    }
+    g_partie = p;
+    TestLog("salon : partie = %s", PartieName(p));
+    BroadcastState();
+}
+
+// --- invite
+static void GuestSend(const Wr &w)
+{
+    EnterCriticalSection(&g_lcs);
+    if (g_guestSock != INVALID_SOCKET) SendMsg(g_guestSock, w);
+    LeaveCriticalSection(&g_lcs);
+}
+static SOCKET ConnectTo(const std::wstring &addr, int port, int timeoutMs)
+{
+    addrinfo hints = {}, *res = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(Narrow(addr).c_str(), NULL, &hints, &res) != 0 || !res) return INVALID_SOCKET;
+    sockaddr_in a = *(sockaddr_in *)res->ai_addr;
+    freeaddrinfo(res);
+    a.sin_port = htons((u_short)port);
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) return s;
+    u_long nb = 1;
+    ioctlsocket(s, FIONBIO, &nb);
+    connect(s, (sockaddr *)&a, sizeof(a));
+    fd_set wr, ex;
+    FD_ZERO(&wr); FD_SET(s, &wr);
+    FD_ZERO(&ex); FD_SET(s, &ex);
+    timeval tv = { timeoutMs / 1000, (timeoutMs % 1000) * 1000 };
+    int err = 0, len = sizeof(err);
+    if (select(0, NULL, &wr, &ex, &tv) <= 0 || !FD_ISSET(s, &wr) || getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&err, &len) != 0 || err) { closesocket(s); return INVALID_SOCKET; }
+    nb = 0;
+    ioctlsocket(s, FIONBIO, &nb);
+    DWORD to = 3000;
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char *)&to, sizeof(to));
+    return s;
+}
+static DWORD WINAPI GuestThread(void *param)
+{
+    int gen = (int)(intptr_t)param;
+    SOCKET s = ConnectTo(g_lobbyAddr, g_lobbyPort, 5000);
+    if (s == INVALID_SOCKET) { TestLog("salon : pas de salon chez l'hote (%s:%d)", Narrow(g_lobbyAddr).c_str(), g_lobbyPort); PostMessageW(g_wnd, WM_APP_LOBBYEND, 2, gen); return 0; }
+    DWORD to = 10000;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
+    Wr hello;
+    hello.u8(M_HELLO); hello.u8(LB_PROTO); hello.str(MyVersion()); hello.str(MyName()); hello.str(g_mySkinSent);
+    std::string m;
+    if (!SendAllS(s, "MWS1", 4) || !SendMsg(s, hello) || !RecvMsg(s, m)) {   // (ancien lanceur, autre programme sur ce port...)
+        closesocket(s);
+        TestLog("salon : pas de reponse du salon");
+        PostMessageW(g_wnd, WM_APP_LOBBYEND, 2, gen);
+        return 0;
+    }
+    Rd r(m);
+    int t = r.u8();
+    if (t == M_REJECT) {
+        std::string why = r.str();
+        EnterCriticalSection(&g_lcs);
+        g_rejectWhy = why;
+        LeaveCriticalSection(&g_lcs);
+        closesocket(s);
+        TestLog("salon : refuse par l'hote (%s)", why.c_str());
+        PostMessageW(g_wnd, WM_APP_LOBBYEND, 1, gen);
+        return 0;
+    }
+    if (t != M_WELCOME) { closesocket(s); PostMessageW(g_wnd, WM_APP_LOBBYEND, 2, gen); return 0; }
+    int myId = r.u8();
+    EnterCriticalSection(&g_lcs);
+    bool stale = gen != g_lobbyGen;   // annule pendant la connexion
+    if (!stale) g_guestSock = s;
+    LeaveCriticalSection(&g_lcs);
+    if (stale) { closesocket(s); return 0; }
+    g_myId = myId;
+    g_lobby = LB_GUEST;
+    SetStatus(K_OK, T(L"Dans le salon de %s", L"In %s's lobby"), g_lobbyAddr.c_str());
+    TestLog("salon : entre (joueur %d)", myId);
+    to = 60000;   // (l'hote envoie un ping toutes les 2 s)
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
+    bool go = false;
+    std::string lastList;
+    while (!go && RecvMsg(s, m)) {
+        Rd q(m);
+        int type = q.u8();
+        if (type == M_STATE) {
+            int n = q.u8();
+            std::vector<LobbyPeer> peers;
+            std::string list;
+            for (int i = 0; i < n && i < kLobbyMax; i++) {
+                LobbyPeer p;
+                p.id = q.u8(); p.name = q.str(); p.skin = q.str(); p.ver = q.str(); p.ready = q.u8() != 0; p.ping = q.u16();
+                peers.push_back(p);
+                list += (list.empty() ? "" : ", ") + p.name + " (" + (p.id == 0 ? "hote" : p.ready ? "pret" : "pas pret") + ", " + p.skin + ", " + p.ver + ")";
+            }
+            int partie = q.u8();
+            if (q.ok) {
+                EnterCriticalSection(&g_lcs);
+                g_peers = peers;
+                LeaveCriticalSection(&g_lcs);
+                g_partie = partie == PARTIE_NOUVELLE ? PARTIE_NOUVELLE : PARTIE_CONTINUER;
+                list += std::string(" ; partie=") + PartieName(g_partie);
+                if (list != lastList) { TestLog("salon : liste %s", list.c_str()); lastList = list; }
+            }
+        } else if (type == M_PING) {
+            Wr w; w.u8(M_PONG); w.u32(q.u32());
+            GuestSend(w);
+        } else if (type == M_GO) {
+            go = true;
+            int partie = q.u8();
+            TestLog("salon : GO recu (partie=%s)", PartieName(partie));
+            PostMessageW(g_wnd, WM_APP_GO, partie, gen);
+        }
+    }
+    EnterCriticalSection(&g_lcs);
+    g_guestSock = INVALID_SOCKET;
+    LeaveCriticalSection(&g_lcs);
+    closesocket(s);
+    if (!go) PostMessageW(g_wnd, WM_APP_LOBBYEND, 0, gen);
+    return 0;
+}
+static void LobbyJoin()
+{
+    std::wstring addr = Trim(g_fields[1].text);
+    if (addr.empty()) { SetStatus(K_ERR, T(L"Entre l'adresse de l'h\u00F4te", L"Enter the host address")); g_focus = 1; return; }
+    g_lobbyPort = LobbyPort();
+    g_lobbyAddr = addr;
+    size_t colon = addr.find(L':');   // adresse:port accepte
+    if (colon != std::wstring::npos) {
+        g_lobbyAddr = addr.substr(0, colon);
+        int p = _wtoi(addr.c_str() + colon + 1);
+        if (p > 0 && p < 65536) g_lobbyPort = p;
+    }
+    SavePlayer();
+    g_meReady = false;
+    g_joinFallback = false;
+    g_myId = -1;
+    EnterCriticalSection(&g_lcs);
+    g_peers.clear();
+    g_rejectWhy.clear();
+    LeaveCriticalSection(&g_lcs);
+    g_partie = PARTIE_CONTINUER;
+    g_mySkinSent = MySkin();
+    int gen = ++g_lobbyGen;
+    g_lobby = LB_CONNECTING;
+    g_tab = TAB_LOBBY;
+    g_scroll[TAB_LOBBY] = 0;
+    g_focus = -1;
+    LayoutTabs();
+    SetStatus(K_NORMAL, T(L"Connexion au salon de %s\u2026", L"Connecting to %s's lobby\u2026"), g_lobbyAddr.c_str());
+    TestLog("salon : connexion a %s:%d (version %s, %s, %s)", Narrow(g_lobbyAddr).c_str(), g_lobbyPort, MyVersion().c_str(), MyName().c_str(), g_mySkinSent.c_str());
+    HANDLE t = CreateThread(NULL, 0, GuestThread, (void *)(intptr_t)gen, 0, NULL);
+    if (t) CloseHandle(t);
+}
+static void GuestToggleReady()
+{
+    if (g_lobby != LB_GUEST) return;
+    g_meReady = !g_meReady;
+    Wr w; w.u8(M_READY); w.u8(g_meReady ? 1 : 0);
+    GuestSend(w);
+    TestLog("salon : moi pret=%d", (int)g_meReady);
+}
+
+// Toutes les 2 s, l'hote mesure le ping de chacun ; chaque seconde, l'apparence choisie dans l'onglet COOP est
+// annoncee si elle a change.
+static void LobbyTick()
+{
+    static DWORD lastPing, lastSkin;
+    DWORD now = GetTickCount();
+    int lobby = g_lobby;
+    if ((lobby == LB_HOST || lobby == LB_GUEST) && now - lastSkin >= 1000) {
+        lastSkin = now;
+        std::string sk = MySkin();
+        if (sk != g_mySkinSent) {
+            g_mySkinSent = sk;
+            if (lobby == LB_HOST) {
+                EnterCriticalSection(&g_lcs);
+                if (LobbyPeer *p = PeerById(0)) p->skin = sk;
+                LeaveCriticalSection(&g_lcs);
+                BroadcastState();
+            } else { Wr w; w.u8(M_SKIN); w.str(sk); GuestSend(w); }
+        }
+    }
+    if (lobby != LB_HOST || now - lastPing < 2000) return;
+    lastPing = now;
+    Wr w; w.u8(M_PING); w.u32(now);
+    EnterCriticalSection(&g_lcs);
+    for (auto &c : g_conns) SendMsg(c.s, w);
+    LeaveCriticalSection(&g_lcs);
+    BroadcastState();
+}
+
+static void LobbySoundsTick()
+{
+    static std::vector<std::pair<int, bool>> prev;
+    static bool had;
+    std::vector<std::pair<int, bool>> now;
+    bool in = g_lobby == LB_HOST || g_lobby == LB_GUEST;
+    if (in) {
+        EnterCriticalSection(&g_lcs);
+        for (auto &p : g_peers) now.push_back({ p.id, p.ready });
+        LeaveCriticalSection(&g_lcs);
+    }
+    if (!had || !in || now.empty()) { prev = now; had = in && !now.empty(); return; }
+    int sound = -1;
+    for (auto &n : now) {
+        bool found = false;
+        for (auto &o : prev) if (o.first == n.first) { found = true; if (o.second != n.second && sound < 0) sound = n.second ? SND_READY : SND_UNREADY; }
+        if (!found) sound = SND_JOIN;
+    }
+    for (auto &o : prev) {
+        bool still = false;
+        for (auto &n : now) still |= n.first == o.first;
+        if (!still && sound != SND_JOIN) sound = SND_LEAVE;
+    }
+    prev = now;
+    if (sound >= 0 && g_testSalon.empty()) LobbySound(sound);   // (mode d'essai : silencieux)
+}
+
+// --- dessin du salon (panneau de droite)
+static float LobbyMaxScroll()
+{
+    EnterCriticalSection(&g_lcs);
+    int n = (int)g_peers.size();
+    LeaveCriticalSection(&g_lcs);
+    int rows = n + (n < kLobbyMax ? 1 : 0);
+    return max(0.0f, rows * kLobbyRowH - kLobbyList.Height);
+}
+static int LobbyChoiceAt(float x, float y)
+{
+    if (g_lobby != LB_HOST || g_goSent) return -1;
+    for (int i = 0; i < 2; i++) if (kChoiceR[i].Contains(x, y)) return i;
+    return -1;
+}
+
+static void DrawLobby(Graphics &g)
+{
+    std::vector<LobbyPeer> peers;
+    EnterCriticalSection(&g_lcs);
+    peers = g_peers;
+    LeaveCriticalSection(&g_lcs);
+    int lobby = g_lobby, partie = g_partie;
+    bool host = lobby == LB_HOST;
+    DrawPanel(g);
+
+    wchar_t head[64];
+    swprintf_s(head, T(L"%d / %d joueurs", L"%d / %d players"), (int)peers.size(), kLobbyMax);
+    Text(g, T(L"SALON", L"LOBBY"), RectF(460, 124, 200, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
+    if (lobby != LB_CONNECTING) Text(g, head, RectF(700, 124, 232, 26), 12.5f, FontStyleBold, kGrey, StringAlignmentFar);
+    std::wstring sub;
+    if (host) sub = std::wstring(T(L"Port ", L"Port ")) + std::to_wstring(g_lobbyPort) + T(L" (UDP et TCP) \u00B7 adresse locale : ", L" (UDP and TCP) \u00B7 local address: ") + (g_myAddresses.empty() ? L"?" : g_myAddresses);
+    else sub = std::wstring(T(L"H\u00F4te : ", L"Host: ")) + g_lobbyAddr + L":" + std::to_wstring(g_lobbyPort);
+    Text(g, sub, RectF(460, 148, 476, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+
+    if (lobby == LB_CONNECTING) {
+        Text(g, T(L"Connexion au salon\u2026", L"Connecting to the lobby\u2026"), RectF(460, 260, 476, 30), 16, FontStyleBold, kInk);
+        DrawBar(g, RectF(560, 300, 276, 5), -2);
+        Para(g, T(L"Si l'h\u00F4te joue d\u00E9j\u00E0 ou n'a pas de salon, tu pourras rejoindre directement en jeu.",
+                  L"If the host is already playing or has no lobby, you can join directly in game."),
+             RectF(480, 320, 436, 40), 12, kGrey, StringAlignmentCenter);
+    } else {
+        static const int pal[kLobbyMax] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89 };
+        float sc = g_scroll[TAB_LOBBY], ms = LobbyMaxScroll();
+        int rows = (int)peers.size() + ((int)peers.size() < kLobbyMax ? 1 : 0);
+        g.SetClip(kLobbyList);
+        for (int i = 0; i < rows; i++) {
+            RectF r(kLobbyList.X + 4, kLobbyList.Y + i * kLobbyRowH - sc, kLobbyList.Width - (ms > 0 ? 16 : 8), kLobbyRowH - 6);
+            if (r.Y + r.Height < kLobbyList.Y || r.Y > kLobbyList.Y + kLobbyList.Height) continue;
+            GraphicsPath rp;
+            RoundRect(rp, r, 11);
+            if (i >= (int)peers.size()) {   // place libre
+                Pen dash(WithA(kGrey, 0.55f), 1.3f);
+                dash.SetDashStyle(DashStyleDash);
+                g.DrawPath(&dash, &rp);
+                Text(g, T(L"En attente d'un joueur\u2026", L"Waiting for a player\u2026"), r, 12.5f, FontStyleRegular, WithA(kGrey, 0.85f));
+                continue;
+            }
+            const LobbyPeer &p = peers[i];
+            bool me = p.id == g_myId;
+            SolidBrush rb(me ? TH(cardSel) : TH(card));
+            g.FillPath(&rb, &rp);
+            Pen rpen(me ? kAcc : TH(choiceBorder), me ? 1.6f : 1.1f);
+            g.DrawPath(&rpen, &rp);
+            // pastille du joueur : initiale sur sa couleur
+            std::wstring nm = Widen(p.name, CP_UTF8);
+            RectF av(r.X + 9, r.Y + 6, 32, 32);
+            SolidBrush ab(CarRgb(pal[p.id % kLobbyMax]));
+            g.FillEllipse(&ab, av);
+            Text(g, nm.empty() ? L"?" : nm.substr(0, 1), RectF(av.X, av.Y + 0.5f, av.Width, av.Height), 15, FontStyleBold, Color(255, 255, 255, 255));
+            if (me) nm += T(L"  (toi)", L"  (you)");
+            Text(g, nm, RectF(r.X + 50, r.Y + 3, 250, 20), 14, FontStyleBold, kInk, StringAlignmentNear);
+            std::wstring line = SkinLabel(p.skin) + L" \u00B7 " + (p.ver == "dev" ? std::wstring(L"dev") : L"v" + Widen(p.ver, CP_UTF8));
+            Text(g, line, RectF(r.X + 50, r.Y + 22, 250, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            // etat : HOTE, PRET, PAS PRET
+            const wchar_t *st = p.id == 0 ? T(L"H\u00D4TE", L"HOST") : p.ready ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PAS PR\u00CAT", L"NOT READY");
+            RectF pr(r.X + r.Width - 172, r.Y + (r.Height - 22) / 2, 96, 22);
+            GraphicsPath pp;
+            RoundRect(pp, pr, 11);
+            if (p.id != 0 && p.ready) { LinearGradientBrush lg(pr, kAcc, kAcc2, LinearGradientModeHorizontal); g.FillPath(&lg, &pp); }
+            else if (p.id == 0) { SolidBrush hb(WithA(kAcc, 0.22f)); g.FillPath(&hb, &pp); }
+            else { Pen np(WithA(kGrey, 0.8f), 1.2f); g.DrawPath(&np, &pp); }
+            Text(g, st, pr, 10.5f, FontStyleBold, p.id != 0 && p.ready ? kOnAcc : p.id == 0 ? kInk : kGrey);
+            if (p.id != 0) {
+                wchar_t pb[32];
+                swprintf_s(pb, L"%d ms", p.ping);
+                Text(g, pb, RectF(r.X + r.Width - 70, r.Y, 60, r.Height), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+            }
+        }
+        g.ResetClip();
+        if (ms > 0) {
+            float h = kLobbyList.Height * kLobbyList.Height / (kLobbyList.Height + ms), y = kLobbyList.Y + (kLobbyList.Height - h) * sc / ms;
+            GraphicsPath sp; RoundRect(sp, RectF(kLobbyList.X + kLobbyList.Width - 6, y, 4, h), 2);
+            SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
+        }
+    }
+
+    // partie : continuer / nouvelle (choix de l'hote, montre aux invites)
+    Text(g, host ? T(L"PARTIE", L"GAME") : T(L"PARTIE (CHOISIE PAR L'H\u00D4TE)", L"GAME (CHOSEN BY THE HOST)"), RectF(460, 428, 400, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+    const wchar_t *lab[2] = { T(L"Continuer ma partie", L"Continue my game"), T(L"Nouvelle partie", L"New game") };
+    if (!host) lab[0] = T(L"Continuer la partie", L"Continue the game");
+    for (int i = 0; i < 2; i++) {
+        RectF r = kChoiceR[i];
+        GraphicsPath cp;
+        RoundRect(cp, r, r.Height / 2);
+        bool on = partie == i, hot = g_lobbyHot == i && host;
+        float a = lobby == LB_CONNECTING ? 0.45f : 1.0f;
+        if (on) { LinearGradientBrush lg(r, WithA(kAcc, a), WithA(kAcc2, a), LinearGradientModeHorizontal); g.FillPath(&lg, &cp); }
+        else {
+            SolidBrush cb(hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &cp);
+            Pen cpen(hot ? kAcc : TH(choiceBorder), 1.2f); g.DrawPath(&cpen, &cp);
+        }
+        Text(g, lab[i], r, 13, FontStyleBold, on ? WithA(kOnAcc, a) : WithA(host ? kInk : kGrey, a));
+    }
+    std::wstring note;
+    if (partie == PARTIE_NOUVELLE)
+        note = host ? std::wstring(T(L"Remplace ta sauvegarde. Couleur de la CORRIS (onglet VOITURE) : ", L"Replaces your save. CORRIS color (CAR tab): ")) + CarColorName() + L"."
+                    : T(L"L'h\u00F4te commence une nouvelle partie ; tu la rejoins d\u00E8s qu'il est en jeu.", L"The host starts a new game; you join as soon as they are in game.");
+    else
+        note = host ? T(L"Tu reprends ta sauvegarde ; les invit\u00E9s la re\u00E7oivent en arrivant.", L"You resume your save; guests receive it when they arrive.")
+                    : T(L"L'h\u00F4te reprend sa sauvegarde ; tu la re\u00E7ois en arrivant (la tienne n'est pas touch\u00E9e).", L"The host resumes their save; you receive it on arrival (yours is left untouched).");
+    if (lobby != LB_CONNECTING) Para(g, note, RectF(460, 488, 476, 40), 11.5f, partie == PARTIE_NOUVELLE && host ? Color(255, 205, 120, 30) : kGrey);
+
+    Pen sep(TH(sep), 1);
+    g.DrawLine(&sep, kOptPanel.X + 18, 532.0f, kOptPanel.X + kOptPanel.Width - 18, 532.0f);
+    const wchar_t *hint = host ? T(L"Quand tout le monde est pr\u00EAt, LANCER d\u00E9marre le jeu de chacun ; les invit\u00E9s suivent ta partie.",
+                                   L"Once everyone is ready, START launches everyone's game; the guests follow your game.")
+                               : T(L"Clique sur PR\u00CAT. Ton jeu d\u00E9marre tout seul quand l'h\u00F4te lance la partie.",
+                                   L"Click READY. Your game starts by itself when the host starts the session.");
+    Para(g, hint, RectF(kOptPanel.X + 20, 536, kOptPanel.Width - 40, 44), 12, kGrey, StringAlignmentCenter);
+}
+
+static bool LobbyClick(float x, float y)
+{
+    int c = LobbyChoiceAt(x, y);
+    if (c >= 0) { LobbySetPartie(c); return true; }
+    return kOptPanel.Contains(x, y);
+}
+
+// /testsalon hote|invite : l'hote ouvre le salon et lance des que l'invite est pret ; l'invite rejoint et se met
+// pret. Abandon au bout de 60 s.
+static void TestSalonStep()
+{
+    static DWORD start = GetTickCount(), allReadySince;
+    static bool tried, readied;
+    DWORD t = GetTickCount() - start;
+    if (g_state != ST_IDLE || g_goWait) return;
+    if (t > 60000) { TestLog("test : abandon (60 s)"); DestroyWindow(g_wnd); return; }
+    if (g_testSalon == L"hote") {
+        if (!tried && t > 500) {
+            tried = true;
+            LobbyHost();
+            if (g_lobby != LB_HOST) { TestLog("test : fin (salon impossible)"); DestroyWindow(g_wnd); return; }
+            if (g_testPartie == L"nouvelle") LobbySetPartie(PARTIE_NOUVELLE);
+        }
+        if (g_lobby != LB_HOST) return;
+        int guests, notReady;
+        GuestCounts(&guests, &notReady);
+        bool can = guests >= 1 && LobbyCanStart();
+        if (!can) allReadySince = 0;
+        else if (!allReadySince) { allReadySince = GetTickCount(); TestLog("test : tous les invites sont prets"); }
+        else if (GetTickCount() - allReadySince > 1500) { TestLog("test : LANCER"); HostStart(); }
+    } else {
+        if (!tried && t > 2000) { tried = true; LobbyJoin(); }
+        if (g_lobby == LB_GUEST && !readied && t > 4500) { readied = true; TestLog("test : clic sur PRET"); GuestToggleReady(); }
+    }
+}
+
 static void OnButton(int id)
 {
     switch (id) {
-    case B_HOST: Launch(MODE_HOST); break;
-    case B_JOIN: Launch(MODE_GUEST); break;
+    case B_HOST:
+        if (g_lobby == LB_HOST) HostStart();
+        else if (g_lobby == LB_GUEST) GuestToggleReady();
+        else if (g_lobby == LB_NONE) LobbyHost();
+        break;
+    case B_JOIN:
+        if (g_lobby != LB_NONE) {
+            bool host = g_lobby == LB_HOST;
+            LobbyClose();
+            SetStatus(K_NORMAL, host ? T(L"Salon ferm\u00E9 \u00B7 %s", L"Lobby closed \u00B7 %s") : T(L"Salon quitt\u00E9 \u00B7 %s", L"Left the lobby \u00B7 %s"), ModLabel().c_str());
+        }
+        else if (g_joinFallback) { g_joinFallback = false; Launch(MODE_GUEST); }
+        else LobbyJoin();
+        break;
     case B_SOLO: Launch(MODE_SOLO); break;
     case B_EXE: ChooseExe(); break;
-    case B_CLOSE: g_state = ST_CLOSING; break;
+    case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
     case B_LOGS: g_tab = g_tab == TAB_LOGS ? -1 : TAB_LOGS; g_optHot = -1; if (g_tab == TAB_LOGS) LogsScan(); break;
     case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
@@ -2370,6 +3206,9 @@ static void Tick()
     float dt = min((now - last) / 1000.0f, 0.1f);
     last = now;
     g_time += dt;
+    LobbyTick();
+    LobbySoundsTick();
+    if (!g_testSalon.empty()) { TestSalonStep(); return; }   // (mode d'essai : rien a dessiner)
     for (int i = 0; i < B_COUNT; i++) {
         float want = (g_hot == i && g_btn[i].enabled) ? 1.0f : 0.0f;
         g_btn[i].hover += (want - g_btn[i].hover) * min(dt * 12, 1.0f);
@@ -2408,7 +3247,7 @@ static int HitButton(float x, float y)
 }
 static int HitField(float x, float y)
 {
-    if (g_state != ST_IDLE) return -1;
+    if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait) return -1;   // (pendant un salon : pseudo et adresse figes)
     for (int i = 0; i < 2; i++) if (g_fields[i].r.Contains(x, y)) return i;
     return -1;
 }
@@ -2427,8 +3266,54 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
 {
     switch (m) {
     case WM_TIMER:
+        if (wp == 4) {   // invite : GO recu il y a ~4 s, au tour de son jeu
+            KillTimer(h, 4);
+            g_goWait = false;
+            TestLog("test : lancement de l'invite (%d s apres GO)", 4 + 3 * max(0, g_myId - 1));
+            Launch(MODE_GUEST);
+            return 0;
+        }
         Tick();
         return 0;
+    case WM_APP_GO:   // l'invite demarre un peu apres l'hote : deux jeux sur le meme PC ne peuvent pas demarrer ensemble
+        if ((int)lp != g_lobbyGen) return 0;
+        LobbyClose();
+        g_goWait = true;
+        SetStatus(K_OK, T(L"L'h\u00F4te lance la partie\u2026 ton jeu d\u00E9marre dans un instant", L"The host is starting the game\u2026 yours starts in a moment"));
+        SetTimer(h, 4, 4000 + 3000 * max(0, g_myId - 1), NULL);   // (invites sur le meme PC, en test : l'un apres l'autre)
+        return 0;
+    case WM_APP_LOBBYEND: {
+        if ((int)lp != g_lobbyGen || g_lobby == LB_NONE) return 0;   // (salon deja quitte, ou message d'une tentative annulee)
+        LobbyClose();
+        std::string why;
+        EnterCriticalSection(&g_lcs);
+        why = g_rejectWhy;
+        LeaveCriticalSection(&g_lcs);
+        bool fallback = false;
+        if (wp == 1) {
+            if (!why.compare(0, 8, "version ")) {
+                std::wstring mine = Widen(MyVersion()), his = Widen(why.substr(8));
+                SetStatus(K_ERR, T(L"Version diff\u00E9rente (toi %s, h\u00F4te %s) : mettez \u00E0 jour, relancez MWCoop.exe", L"Different version (you %s, host %s): update, restart MWCoop.exe"), mine.c_str(), his.c_str());
+            }
+            else if (why == "full") SetStatus(K_ERR, T(L"Salon complet (%d joueurs)", L"Lobby is full (%d players)"), kLobbyMax);
+            else if (why == "started") { SetStatus(K_WARN, T(L"Partie d\u00E9j\u00E0 lanc\u00E9e : \u00AB Rejoindre en jeu \u00BB", L"Session already started: \"Join in game\"")); fallback = true; }
+            else if (why == "closed") SetStatus(K_WARN, T(L"L'h\u00F4te a ferm\u00E9 le salon", L"The host closed the lobby"));
+            else SetStatus(K_ERR, T(L"Refus\u00E9 par l'h\u00F4te", L"Refused by the host"));
+        } else if (wp == 2) {
+            SetStatus(K_WARN, T(L"Pas de salon chez l'h\u00F4te : \u00AB Rejoindre en jeu \u00BB s'il joue d\u00E9j\u00E0", L"No lobby at the host: \"Join in game\" if they are already playing"));
+            fallback = true;
+        } else SetStatus(K_WARN, T(L"L'h\u00F4te a ferm\u00E9 le salon", L"The host closed the lobby"));
+        g_joinFallback = fallback;
+        if (!g_testSalon.empty()) {   // essai : l'etat dans le journal ; sans salon, on "clique" sur Rejoindre en jeu
+            EnterCriticalSection(&g_cs);
+            std::string st = Narrow(g_status, CP_UTF8);
+            LeaveCriticalSection(&g_cs);
+            TestLog("salon : fin cote invite -> \"%s\" (rejoindre en jeu propose=%d)", st.c_str(), (int)fallback);
+            if (fallback) { TestLog("test : clic sur REJOINDRE EN JEU"); OnButton(B_JOIN); }
+            else { TestLog("test : fin"); DestroyWindow(h); }
+        }
+        return 0;
+    }
     case WM_MOUSEMOVE: {
         float x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
         if (g_carDrag) { CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
@@ -2437,15 +3322,16 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         HitOption(x, y, &g_optHot, &g_optPart);
         g_logRowHot = g_tab == TAB_LOGS ? LogRowAt(x, y, &g_logPart) : -1;
         g_carHot = g_tab == TAB_CAR && g_state == ST_IDLE ? CarSwatchAt(x, y) : -1;
+        g_lobbyHot = g_tab == TAB_LOBBY && g_state == ST_IDLE ? LobbyChoiceAt(x, y) : -1;
         TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, h, 0 };
         TrackMouseEvent(&tme);
         bool link = g_tab == TAB_LOGS && kLogsFolderR.Contains(x, y);
         bool carView = g_tab == TAB_CAR && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(x, y);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || link) ? IDC_HAND
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || link) ? IDC_HAND
                                    : carView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
-    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; return 0;
+    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; return 0;
     case WM_MOUSEWHEEL:
         if (g_tab >= 0) {
             float step = -(short)HIWORD(wp) / 120.0f * kRowH * 1.5f;
@@ -2464,6 +3350,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         g_focus = -1;
         int t = HitTab(x, y);
         if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); return 0; }   // un 2e clic referme
+        if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
         if (g_tab == TAB_LOGS && LogsMouseDown(x, y)) return 0;
         if (g_tab == TAB_CAR && CarMouseDown(x, y)) return 0;
         int row, part;
@@ -2487,7 +3374,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_CHAR:
-        if (g_state != ST_IDLE) return 0;
+        if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait) return 0;
+        if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
         if (wp == 8) { if (g_focus >= 0 && !g_fields[g_focus].text.empty()) g_fields[g_focus].text.pop_back(); }
         else if (wp == 127) { if (g_focus >= 0) g_fields[g_focus].text.clear(); }   // Ctrl+Retour arriere
         else if (wp == 22 && g_focus >= 0 && OpenClipboard(h)) {   // Ctrl+V
@@ -2496,7 +3384,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             if (s) { for (; *s && *s != L'\r' && *s != L'\n'; s++) TypeChar(*s); GlobalUnlock(d); }
             CloseClipboard();
         } else if (wp == 9) { g_focus = g_focus == 0 ? 1 : 0; g_time = 0; }
-        else if (wp == 13) { if (g_focus == 1) { if (g_btn[B_JOIN].enabled) Launch(MODE_GUEST); } else if (g_focus == 0) { g_focus = 1; g_time = 0; } }
+        else if (wp == 13) { if (g_focus == 1) { UpdateButtons(); if (g_btn[B_JOIN].enabled) OnButton(B_JOIN); } else if (g_focus == 0) { g_focus = 1; g_time = 0; } }
         else if (wp == 27) g_focus = -1;
         else if (wp >= 32) TypeChar((wchar_t)wp);
         g_time = 0.2f;
@@ -2513,8 +3401,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
-    case WM_CLOSE: g_state = ST_CLOSING; return 0;
+    case WM_CLOSE: LobbyClose(); g_state = ST_CLOSING; return 0;
     case WM_DESTROY:
+        LobbyClose();
         PostQuitMessage(0);
         return 0;
     }
@@ -2558,6 +3447,9 @@ static Bitmap *LoadPngRes(int id)
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 {
     InitializeCriticalSection(&g_cs);
+    InitializeCriticalSection(&g_lcs);
+    WSADATA wsa;
+    WSAStartup(MAKEWORD(2, 2), &wsa);
     g_fr = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_FRENCH;
     wchar_t self[MAX_PATH];
     GetModuleFileNameW(NULL, self, MAX_PATH);
@@ -2588,6 +3480,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/theme")) g_dark = !_wcsicmp(argv[i + 1], L"sombre");
         if (!_wcsicmp(argv[i], L"/echelle")) g_scale = (float)_wtof(argv[i + 1]);   // captures : rendu agrandi
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];
+        if (!_wcsicmp(argv[i], L"/testsalon") && i + 2 < argc) { g_testSalon = argv[i + 1]; g_testSalonLog = argv[i + 2]; }
+        if (!_wcsicmp(argv[i], L"/partie")) g_testPartie = argv[i + 1];
+    }
+    if (!g_testSalonLog.empty()) {   // journal neuf ; role inconnu : rien
+        FILE *f = _wfopen(g_testSalonLog.c_str(), L"wb");
+        if (f) fclose(f);
+        if (g_testSalon != L"hote" && g_testSalon != L"invite") { TestLog("test : role inconnu (hote|invite)"); return 2; }
     }
 
     GdiplusStartupInput gin;
@@ -2645,6 +3544,22 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; g_btn[B_LOGS].hover = 1; }
+        else if (st == L"salon" || st == L"salon-invite") {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
+            bool host = st == L"salon";
+            std::string v = MyVersion();
+            g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0 },
+                        { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38 },
+                        { 2, "Kalle", "char_shirt07", v, false, 71 } };
+            g_myId = host ? 0 : 1;
+            g_lobby = host ? LB_HOST : LB_GUEST;
+            g_partie = host ? PARTIE_CONTINUER : PARTIE_NOUVELLE;
+            g_meReady = !host;
+            g_lobbyAddr = L"192.168.1.20"; g_lobbyPort = 7870; g_myAddresses = L"192.168.1.20";
+            g_tab = TAB_LOBBY;
+            LayoutTabs();
+            if (host) { SetStatus(K_OK, T(L"Salon ouvert \u00B7 port %d", L"Lobby open \u00B7 port %d"), 7870); g_lobbyHot = 1; }
+            else SetStatus(K_OK, T(L"Dans le salon de %s", L"In %s's lobby"), L"192.168.1.20");
+        }
         else if (st == L"maj") { g_busy = true; g_progress = 0.42f; SetStatus(K_NORMAL, T(L"T\u00E9l\u00E9chargement de MWCoop %s\u2026", L"Downloading MWCoop %s\u2026"), L"0.1.1-prealpha"); g_focus = 0; g_time = 0.2f; }
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }
         int rc = 1;
@@ -2659,6 +3574,31 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         return rc;
     }
     LocalFree(argv);
+
+    // /testsalon : fenetre "message only" (jamais affichee, ni souris ni clavier), dans un dossier de jeu jetable :
+    // le lanceur doit etre dans le dossier du jeu (jamais celui de Steam trouve ailleurs). Pas de mise a jour.
+    if (!g_testSalon.empty()) {
+        int rc = 0;
+        if (g_gameDir.empty() || _wcsicmp(g_gameDir.c_str(), g_dir.c_str())) {
+            TestLog("test : refuse, le lanceur doit etre dans un dossier de jeu jetable (jeu trouve : %s)", Narrow(g_gameDir, CP_UTF8).c_str());
+            rc = 3;
+        } else {
+            TestLog("test : %s, dossier %s, version %s, mod=%d", Narrow(g_testSalon).c_str(), Narrow(g_gameDir, CP_UTF8).c_str(), MyVersion().c_str(), (int)g_modOk);
+            WNDCLASSEXW wc = { sizeof(wc) };
+            wc.lpfnWndProc = WndProc;
+            wc.hInstance = inst;
+            wc.lpszClassName = L"MWCoopLauncherTest";
+            RegisterClassExW(&wc);
+            g_wnd = CreateWindowExW(0, wc.lpszClassName, L"MWCoop", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, inst, NULL);
+            SetTimer(g_wnd, 1, 16, NULL);
+            MSG msg;
+            while (GetMessageW(&msg, NULL, 0, 0) > 0) DispatchMessageW(&msg);
+        }
+        delete g_bg; delete g_bgDark;
+        GdiplusShutdown(gtok);
+        WSACleanup();
+        return rc;
+    }
 
     // Taille : l'image a l'echelle de l'ecran (PPP), sans depasser 90 % de la zone de travail.
     HDC sdc = GetDC(NULL);

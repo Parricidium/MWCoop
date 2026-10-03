@@ -8,8 +8,9 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.1) : heure, jour, météo (nuages, pluie, température) de l'hôte.
       Fait (0.6) : circulation (routes, bus, train...) et passants dictés par l'hôte.
       Reste : discussions et voix des PNJ.
-- [~] Portes, lumières, interrupteurs : ce qu'un joueur ouvre ou allume, les autres le voient.
-      Fait (0.1) : portes des bâtiments, interrupteurs, télé, lecteur CD. Reste : état à l'arrivée d'un invité.
+- [x] Portes, lumières, interrupteurs : ce qu'un joueur ouvre ou allume, les autres le voient.
+      Fait (0.1) : portes des bâtiments, interrupteurs, télé, lecteur CD. Fait (0.7) : l'invité qui arrive en
+      cours de partie reçoit l'état de tout ce qui est suivi.
 - [ ] Toutes les actions du solo possibles pour les invités : gratter le pare-brise, boutons,
       pénalités, utilisation des objets…
 
@@ -38,10 +39,12 @@ pouvoir le faire, et les autres doivent le voir.
 - [x] Animations : celles des PNJ (accroupi…) ou faites maison, pour que les joueurs se voient bouger.
       Fait (0.4) : marche avec les bras qui balancent, assis, accroupi, assis au volant.
 - [~] Actions visibles : un joueur qui fume, boit, mange… est vu par les autres.
-      Fait (0.4) : fumer, boire, porter, saluer. Reste : manger, dormir.
+      Fait (0.4) : fumer, boire, porter, saluer. Fait (0.7) : dormir (l'horloge commune accélère
+      tant qu'un joueur dort ; l'autre voit le temps filer). Reste : manger.
 
 ## Lanceur
-- [~] Mise à jour automatique depuis les releases GitHub, options, salon (comme VCCoop/SACoop).
-      Fait (0.1) : mise à jour, options, journaux. Reste : salon.
+- [x] Mise à jour automatique depuis les releases GitHub, options, salon (comme VCCoop/SACoop).
+      Fait (0.1) : mise à jour, options, journaux. Fait (0.7) : salon (joueurs, tenues, versions, ping,
+      PRÊT, choix continuer/nouvelle partie, LANCER démarre le jeu de chacun ; port TCP en plus de l'UDP).
 - [x] Nouvelle partie : quand l'hôte lance, un onglet pour choisir la couleur de la voiture,
       avec aperçu 3D (0.6 : onglet VOITURE du lanceur, maillage exporté depuis le jeu du joueur).
