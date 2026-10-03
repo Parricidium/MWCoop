@@ -70,5 +70,6 @@ namespace MWCoop.Net
         Income = 16,      // argent gagne par un joueur, recu par tous
         Purchase = 17,    // achat paye a une caisse (contenu du panier)
         Paint = 18,       // piece repeinte (bombe) ou couleur tiree au hasard chez l'hote
+        Setting = 19,     // reglage d'une piece (carburateur, repartiteur...)
     }
 }

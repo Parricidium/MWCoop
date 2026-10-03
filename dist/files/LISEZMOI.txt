@@ -22,7 +22,8 @@ Deja synchronise
 - L'heure, le jour et la meteo (nuages, pluie, temperature) de l'hote.
 - Les portes, interrupteurs, la tele et le lecteur CD.
 - Les vehicules : celui que conduit un joueur bouge chez tous ; les vehicules gares restent en place.
-- La mecanique : pieces montees/demontees, chaque cran de vis, pieces portees et lachees.
+- La mecanique : pieces montees/demontees, chaque cran de vis, pieces portees et lachees,
+  peinture (pieces et carrosserie), reglages a la main (carburateur, molettes).
 - L'argent : les revenus vont a tous, chacun a son porte-monnaie pour ses achats.
 - Les achats : chacun paie de son cote, tous voient le sac et les articles achetes.
 - Les animations : marcher (bras qui balancent), s'asseoir, s'accroupir, fumer, boire, porter, saluer.
@@ -31,7 +32,7 @@ Deja synchronise
 
 Pas encore (feuille de route)
 -----------------------------
-Peinture et reglages de la voiture, objets dans les mains, PNJ et circulation, quetes,
+Liquides et usure, objets dans les mains, PNJ et circulation, quetes,
 manger et dormir.
 
 En cas de probleme

@@ -57,12 +57,12 @@ No other loader is needed (MWCoop does not use MSCLoader).
 |---|---|
 | Own loader (`version.dll`), auto-updating launcher | Paint, adjustments (carburettor...), fluids, wear |
 | Players visible (NPC outfits), walking, crouching | Items, shopping bags, things in hands |
-| Host's save sent to guests (isolated profile) | Eating and sleeping animations |
+| Host's save sent to guests (isolated profile) | Fluids and wear; eating and sleeping animations |
 | Host's time, day and weather (clouds, rain, temperature) | NPCs, traffic, quests completed for everyone |
 | Doors, light switches, TV and CD player | Shared income, separate wallets; action animations |
 | Vehicles: the driver sits at the wheel for everyone, with engine sound, turning wheels and lights; parked ones stay in place | |
 | Animated players (NPC animations): walking, sitting, crouching, smoking, drinking, carrying, waving | |
-| Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped | |
+| Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped, paint (parts and body), hand adjustments | |
 | Money: income shared by everyone, separate wallets; shopping seen by all (bags, items) | |
 | Chat, F10 menu | |
 
@@ -124,7 +124,8 @@ envoyée aux invités, heure/jour/météo de l'hôte, portes et interrupteurs, v
 mécanique (pièces montées/démontées, chaque cran de vis, pièces portées et lâchées), revenus partagés avec
 porte-monnaie séparés, achats vus par tous (sacs, articles), joueurs animés (marcher, s'asseoir, fumer, boire,
 porter, saluer), conducteur assis au volant avec le bruit du moteur, les roues et les phares, tchat, menu F10.
-À venir : peinture et réglages, objets et achats, portes et lumières, PNJ et circulation, quêtes
+Fait aussi : peinture (pièces et carrosserie) et réglages à la main (carburateur, molettes).
+À venir : liquides et usure, objets et achats, portes et lumières, PNJ et circulation, quêtes
 validées pour tous, revenus partagés avec porte-monnaie séparés, animations des actions.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

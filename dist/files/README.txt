@@ -22,7 +22,8 @@ Already synced
 - The host's time, day and weather (clouds, rain, temperature).
 - Doors, light switches, TV and CD player.
 - Vehicles: the one a player drives moves for everyone; parked ones stay in place.
-- Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped.
+- Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped,
+  paint (parts and body), hand adjustments (carburettor, knobs).
 - Money: income goes to everyone, each player has their own wallet for purchases.
 - Shopping: everyone pays for themselves, everyone sees the bags and items bought.
 - Animations: walking (arms swinging), sitting, crouching, smoking, drinking, carrying, waving.
@@ -31,7 +32,7 @@ Already synced
 
 Not yet (roadmap)
 -----------------
-Paint and car adjustments, items in hands, NPCs and traffic, quests,
+Fluids and wear, items in hands, NPCs and traffic, quests,
 eating and sleeping.
 
 Problems?

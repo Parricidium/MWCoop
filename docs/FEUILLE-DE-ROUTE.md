@@ -22,7 +22,8 @@ pouvoir le faire, et les autres doivent le voir.
 - [~] Mécanique synchronisée en temps réel : chaque pièce posée/retirée, chaque vis (serrage,
       état, rotation, mal vissée), peinture… tout ce qui sert à refaire la voiture.
       Fait (0.2) : pièces montées/démontées, vis serrées/desserrées cran par cran, pièces portées
-      et lâchées. Reste : peinture, réglages (carburateur...), liquides, usure.
+      et lâchées. Fait (0.5) : peinture (pièces et carrosserie), réglages à la main (carburateur,
+      molettes...). Reste : liquides, usure.
 
 ## Achats et objets
 - [x] Chaque joueur achète de son côté ; tous voient les achats des autres (sac de courses…) (0.3).
