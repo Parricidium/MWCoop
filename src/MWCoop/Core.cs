@@ -23,7 +23,7 @@ namespace MWCoop
 
         void LateUpdate()
         {
-            try { PlayerSync.LateUpdate(); }
+            try { PlayerSync.LateUpdate(); CarVisuals.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
         }
 
@@ -68,6 +68,7 @@ namespace MWCoop
             Step("consommables", Consume.Update);
             Step("voix", Voices.Update);
             Step("portieres", CarDoors.Update);
+            Step("tableaux de bord", CarVisuals.Update);
             Step("trafic", Traffic.Update);
             Step("couleur", CarColor.Update);
             Step("quetes", Jobs.Update);
@@ -98,6 +99,7 @@ namespace MWCoop
             Consume.OnLevelLoaded();
             Voices.OnLevelLoaded();
             CarDoors.OnLevelLoaded();
+            CarVisuals.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             CarColor.OnLevelLoaded();
             Jobs.OnLevelLoaded();

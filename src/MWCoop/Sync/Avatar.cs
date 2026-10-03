@@ -50,6 +50,11 @@ namespace MWCoop
         Animation armR, armL;
         Dictionary<string, Transform> bones;
         bool inCar, moving, sitting;
+        Vector3 seatAnchor;                  // tete au repos sur le siege (repere voiture)
+        bool anchorSet;
+        Vector3 leanOff;                     // ecart camera - ancre (repere voiture) : se pencher
+        Vector3 eyesRest = new Vector3(0f, 1.2f, 0.1f);   // yeux / avatar, pose de conduite sans penche
+        string anchorCar;
         string carName;
         float armWR, armWL, crouchW;
         bool crouching;
@@ -403,6 +408,16 @@ namespace MWCoop
                 Dictionary<string, Quaternion> pose = DriverPose(carName);
                 if (pose != null)
                     foreach (KeyValuePair<string, Quaternion> kv in pose) { Transform b = Bone(kv.Key); if (b != null) b.localRotation = kv.Value; }
+                // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
+                if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - Root.transform.position) + EyeOffset;
+                // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite).
+                float side = Mathf.Atan2(leanOff.x, 0.55f) * Mathf.Rad2Deg, fwdLean = Mathf.Atan2(leanOff.z, 0.55f) * Mathf.Rad2Deg;
+                foreach (string sp in new[] { "spine_middle", "spine_upper" })
+                {
+                    Transform b = Bone(sp);
+                    if (b == null) continue;
+                    b.rotation = Quaternion.AngleAxis(-side * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdLean * 0.5f, Root.transform.right) * b.rotation;
+                }
                 // Tete : regard relatif a la voiture, sans limite (tour complet accepte), quelle que soit
                 // l'inclinaison du dossier.
                 Transform hp = Bone("HeadPivot") ?? headBone;
@@ -457,13 +472,18 @@ namespace MWCoop
             if (inCar)
             {
                 carName = VehicleSync.RemoteCarName(pi.Id);
-                // Au volant : oriente comme la voiture locale, la tete (yeux) calee sur la camera du
-                // joueur, mesuree par rapport a la voiture : il reste assis sur son siege.
+                // Au volant : oriente comme la voiture locale. Le corps est ancre sur le siege (la tete au
+                // repos, apprise quand elle bouge peu) ; quand la camera s'en ecarte (se pencher avec E,
+                // tourner la tete), c'est le buste qui se penche, pas tout le corps qui glisse.
                 Root.transform.rotation = seatRot;
-                Vector3 eyes = headBone != null
-                    ? Quaternion.Inverse(Root.transform.rotation) * (headBone.position - Root.transform.position) + EyeOffset
-                    : new Vector3(0f, 1.2f, 0.1f);
-                pos = seatPos - seatRot * eyes;
+                Transform carT = VehicleSync.RemoteCarTransform(pi.Id);
+                Vector3 headLocal = carT != null ? carT.InverseTransformPoint(seatPos) : Vector3.zero;
+                if (!anchorSet || anchorCar != carName) { seatAnchor = headLocal; anchorSet = true; anchorCar = carName; }
+                Vector3 off = headLocal - seatAnchor;
+                if (off.sqrMagnitude < 0.05f * 0.05f) seatAnchor = Vector3.Lerp(seatAnchor, headLocal, Time.deltaTime * 0.5f);
+                leanOff = Vector3.ClampMagnitude(headLocal - seatAnchor, 0.6f);
+                Vector3 anchorWorld = carT != null ? carT.TransformPoint(seatAnchor) : seatPos;
+                pos = anchorWorld - seatRot * eyesRest;
                 yaw = seatRot.eulerAngles.y;
                 placed = true;
                 Root.transform.position = pos;
@@ -471,6 +491,7 @@ namespace MWCoop
             }
             else
             {
+                anchorSet = false;
                 if (!placed) { pos = st.Feet; yaw = st.Yaw; placed = true; }
                 // Lissage : rattrape l'etat recu (20/s) sans a-coups ; teleportation au-dela de 8 m.
                 float k = 1f - Mathf.Exp(-12f * Time.deltaTime);

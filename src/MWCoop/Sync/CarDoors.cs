@@ -76,7 +76,21 @@ namespace MWCoop
                     byKey[d.Key] = d;
                 }
             }
-            if (byKey.Count != before) Log.Info("portieres : " + byKey.Count + " suivies (portes, coffres, hayons)");
+            // Prises du chauffage moteur (cable plug) : "Heater on" = branchee sur la voiture, "Heater off"
+            // = debranchee. Partout dans la scene (debranchee, elle pend au poteau de la maison) ; cle :
+            // la prise de la voiture (Socket).
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            {
+                if (f.FsmName != "Data" || hooked.Contains(f) || !f.gameObject.name.StartsWith("cable plug")) continue;
+                if (f.Fsm.GetState("Heater on") == null || f.Fsm.GetState("Heater off") == null) continue;
+                FsmGameObject sock = f.FsmVariables.FindFsmGameObject("Socket");
+                if (sock == null || sock.Value == null) continue;
+                var d = new Door { Key = "prise:" + Recon.Path(sock.Value.transform), Fsm = f, Open = "Heater on", Close = "Heater off" };
+                if (!Inject(d, d.Open, true) || !Inject(d, d.Close, false)) continue;
+                hooked.Add(f);
+                byKey[d.Key] = d;
+            }
+            if (byKey.Count != before) Log.Info("portieres : " + byKey.Count + " suivies (portes, coffres, hayons, prises)");
         }
 
         static bool Inject(Door d, string state, bool opening)

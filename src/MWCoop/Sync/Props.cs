@@ -58,17 +58,19 @@ namespace MWCoop
         }
 
         static bool censusDone, worldLogged;
-        static readonly Dictionary<Rigidbody, string> worldKeys = new Dictionary<Rigidbody, string>();
+        static readonly Dictionary<GameObject, string> worldKeys = new Dictionary<GameObject, string>();
         static readonly HashSet<string> WorldRoots = new HashSet<string> { "EQUIPMENTS", "Systems", "YARD", "COTTAGE", "CABIN", "MISC" };
 
         static string WorldKey(Rigidbody rb)
         {
             string k;
-            if (worldKeys.TryGetValue(rb, out k)) return k;
+            if (worldKeys.TryGetValue(rb.gameObject, out k)) return k;
             Transform t = rb.transform;
-            if (!WorldRoots.Contains(t.root.name) || rb.GetComponent("CarDynamics") != null) return null;
-            k = "w:" + Recon.Path(t) + "#" + t.GetSiblingIndex();
-            worldKeys[rb] = k;
+            // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement.
+            bool plug = t.name.StartsWith("cable plug");
+            if ((!WorldRoots.Contains(t.root.name) && !plug) || rb.GetComponent("CarDynamics") != null) return null;
+            k = plug ? "w:prise:" + t.root.name + "/" + (t.parent != null ? t.parent.name : "") : "w:" + Recon.Path(t) + "#" + t.GetSiblingIndex();
+            worldKeys[rb.gameObject] = k;
             return k;
         }
 
