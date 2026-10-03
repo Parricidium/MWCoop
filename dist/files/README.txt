@@ -9,9 +9,11 @@ Install
 
 Playing
 -------
-- HOST: you start your game, friends join it. Open UDP port 7870 on your router
+- HOST: the launcher opens a LOBBY where friends show up. Pick "Continue my game" or "New game",
+  then LAUNCH: everyone's game starts. Open port 7870 in UDP AND TCP on your router
   (or use a VPN such as Radmin VPN / ZeroTier and share your VPN address).
-- JOIN: enter the host's address. Your game receives the host's save and enters their game by itself
+- JOIN: enter the host's address, click READY in the lobby (or JOIN IN GAME if the host is
+  already playing). Your game receives the host's save and enters their game by itself
   once the host is playing. YOUR OWN SAVE IS NEVER TOUCHED: guests play in a separate profile
   (MWCoop\profils\invite).
 - In game: F10 = co-op menu (players, outfit, chat, go to a player), T = chat.
@@ -36,8 +38,7 @@ Already synced
 
 Not yet (roadmap)
 -----------------
-Fluids and wear, items in hands, NPC conversations and voices,
-eating and sleeping.
+Fluids and wear, NPC conversations and voices, eating animation.
 
 Problems?
 ---------

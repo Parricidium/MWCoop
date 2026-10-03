@@ -9,9 +9,11 @@ Installation
 
 Jouer
 -----
-- HEBERGER : vous lancez votre partie, vos amis la rejoignent. Ouvrez le port UDP 7870 sur votre box
-  (ou utilisez un VPN comme Radmin VPN / ZeroTier et donnez votre adresse VPN).
-- REJOINDRE : entrez l'adresse de l'hote. Votre jeu recoit la sauvegarde de l'hote et entre dans sa
+- HEBERGER : le lanceur ouvre un SALON ; vos amis y apparaissent. Choisissez "Continuer ma partie"
+  ou "Nouvelle partie", puis LANCER : le jeu de chacun demarre. Ouvrez le port 7870 en UDP ET TCP sur
+  votre box (ou utilisez un VPN comme Radmin VPN / ZeroTier et donnez votre adresse VPN).
+- REJOINDRE : entrez l'adresse de l'hote, cliquez sur PRET dans le salon (ou REJOINDRE EN JEU si
+  l'hote joue deja). Votre jeu recoit la sauvegarde de l'hote et entre dans sa
   partie tout seul quand l'hote est en jeu. VOTRE PROPRE SAUVEGARDE N'EST JAMAIS TOUCHEE : l'invite joue
   dans un profil a part (MWCoop\profils\invite).
 - En jeu : F10 = menu coop (joueurs, apparence, tchat, aller vers un joueur), T = tchat.
@@ -36,8 +38,7 @@ Deja synchronise
 
 Pas encore (feuille de route)
 -----------------------------
-Liquides et usure, objets dans les mains, discussions et voix des PNJ,
-manger et dormir.
+Liquides et usure, discussions et voix des PNJ, animation pour manger.
 
 En cas de probleme
 ------------------

@@ -26,6 +26,11 @@
 <p align="center"><i>The launcher: host, join or play solo; it keeps the mod up to date by itself.</i></p>
 
 <p align="center">
+  <img src="docs/img/lanceur-salon.png" width="80%" alt="The launcher lobby">
+</p>
+<p align="center"><i>The lobby: players, outfits, versions and ping; the host picks the game and launches everyone.</i></p>
+
+<p align="center">
   <img src="docs/img/lanceur-voiture.png" width="80%" alt="Picking the car color with a 3D preview">
 </p>
 <p align="center"><i>CAR tab: the CORRIS color for a new game, previewed in 3D (the model is read from your own game).</i></p>
@@ -50,9 +55,10 @@ No other loader is needed (MWCoop does not use MSCLoader).
 
 ## Playing
 
-- **Host**: start your game; friends join it. Open UDP port **7870** on your router, or use a VPN
-  (Radmin VPN, ZeroTier…) and share your VPN address.
-- **Join**: enter the host's address. Your game receives the host's save and enters their game by itself as soon as
+- **Host**: click HOST: the launcher opens a **lobby** where friends show up with their outfit, version and ping.
+  Pick *Continue my game* or *New game*, then LAUNCH: everyone's game starts. Open port **7870** in **UDP and TCP** on
+  your router, or use a VPN (Radmin VPN, ZeroTier…) and share your VPN address.
+- **Join**: enter the host's address, click READY in the lobby (or JOIN IN GAME if the host is already playing). Your game receives the host's save and enters their game by itself as soon as
   the host is playing. **Your own save is never touched**: guests play in a separate profile (`MWCoop\profils\invite`).
 - In game: **F10** opens the co-op menu (players and ping, outfit, chat, *go to a player*), **T** opens the chat.
 
@@ -60,11 +66,11 @@ No other loader is needed (MWCoop does not use MSCLoader).
 
 | Done | Next |
 |---|---|
-| Own loader (`version.dll`), auto-updating launcher | Paint, adjustments (carburettor...), fluids, wear |
-| Players visible (NPC outfits), walking, crouching | Items, shopping bags, things in hands |
-| Host's save sent to guests (isolated profile) | Fluids and wear; eating and sleeping animations |
-| Host's time, day and weather (clouds, rain, temperature) | NPCs, traffic, quests completed for everyone |
-| Doors, light switches, TV and CD player | Shared income, separate wallets; action animations |
+| Own loader (`version.dll`), auto-updating launcher with a lobby | Fluids and wear |
+| Players visible (NPC outfits), walking, crouching | Eating animation |
+| Host's save sent to guests (isolated profile) | NPC conversations and voices |
+| Host's time, day and weather (clouds, rain, temperature); sleeping fast-forwards the shared clock | Shared new game without saving first |
+| Doors, light switches, TV and CD player, sent to a guest who joins mid-game | |
 | Vehicles: the driver sits at the wheel for everyone, with engine sound, turning wheels and lights; parked ones stay in place | |
 | Animated players (NPC animations): walking, sitting, crouching, smoking, drinking, carrying, waving | |
 | Car mechanics: parts installed/removed, every bolt turn, parts carried and dropped, paint (parts and body), hand adjustments | |
@@ -119,9 +125,12 @@ Aucun autre chargeur n'est nécessaire (MWCoop n'utilise pas MSCLoader).
 
 ## Jouer
 
-- **Héberger** : lancez votre partie, vos amis la rejoignent. Ouvrez le port UDP **7870** sur votre box, ou utilisez un
-  VPN (Radmin VPN, ZeroTier…) et donnez votre adresse VPN.
-- **Rejoindre** : entrez l'adresse de l'hôte. Votre jeu reçoit la sauvegarde de l'hôte et entre dans sa partie tout seul
+- **Héberger** : cliquez sur HÉBERGER : le lanceur ouvre un **salon** où vos amis apparaissent avec leur tenue, leur
+  version et leur ping. Choisissez *Continuer ma partie* ou *Nouvelle partie*, puis LANCER : le jeu de chacun démarre.
+  Ouvrez le port **7870** en **UDP et TCP** sur votre box, ou utilisez un VPN (Radmin VPN, ZeroTier…) et donnez votre
+  adresse VPN.
+- **Rejoindre** : entrez l'adresse de l'hôte, cliquez sur PRÊT dans le salon (ou REJOINDRE EN JEU si l'hôte joue
+  déjà). Votre jeu reçoit la sauvegarde de l'hôte et entre dans sa partie tout seul
   dès que l'hôte joue. **Votre propre sauvegarde n'est jamais touchée** : l'invité joue dans un profil à part
   (`MWCoop\profils\invite`).
 - En jeu : **F10** ouvre le menu coop (joueurs et ping, apparence, tchat, *aller vers un joueur*), **T** le tchat.
@@ -132,7 +141,7 @@ Fait : chargeur maison, lanceur à mise à jour automatique, joueurs visibles (t
 envoyée aux invités, heure/jour/météo de l'hôte, portes et interrupteurs, véhicules conduits vus par tous,
 mécanique (pièces montées/démontées, chaque cran de vis, pièces portées et lâchées), revenus partagés avec
 porte-monnaie séparés, achats vus par tous (sacs, articles), joueurs animés (marcher, s'asseoir, fumer, boire,
-porter, saluer), conducteur assis au volant avec le bruit du moteur, les roues et les phares, tchat, menu F10.
+porter, saluer, dormir : l'horloge commune accélère), salon du lanceur, conducteur assis au volant avec le bruit du moteur, les roues et les phares, tchat, menu F10.
 Fait aussi : peinture (pièces et carrosserie) et réglages à la main (carburateur, molettes).
 Fait aussi (0.6) : circulation et passants de l'hôte, boulots communs (validés pour tous, sans double paie),
 câblage et tableaux de bord, couleur de la voiture choisie dans le lanceur avec aperçu 3D.
