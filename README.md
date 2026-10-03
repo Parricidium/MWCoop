@@ -66,10 +66,12 @@ No other loader is needed (MWCoop does not use MSCLoader).
 
 | Done | Next |
 |---|---|
-| Own loader (`version.dll`), auto-updating launcher with a lobby | Fluids and wear |
-| Players visible (NPC outfits), walking, crouching | Eating animation |
-| Host's save sent to guests (isolated profile) | NPC conversations and voices |
-| Host's time, day and weather (clouds, rain, temperature); sleeping fast-forwards the shared clock | Shared new game without saving first |
+| Own loader (`version.dll`), auto-updating launcher with a lobby | Every solo action for guests (windshield scraping, penalties...) |
+| Players visible (NPC outfits), walking, crouching | Items held in the hand (now carried at their real place) |
+| Host's save sent to guests (isolated profile), also right after a new game | Real-world testing with friends |
+| Host's time, day and weather (clouds, rain, temperature); sleeping fast-forwards the shared clock | |
+| NPC lines and players' swearing heard by everyone; fluids (fuel, oil, coolant, brake fluid) and wear | |
+| Food eaten, drinks drunk, trash thrown away disappear for everyone | |
 | Doors, light switches, TV and CD player, sent to a guest who joins mid-game | |
 | Vehicles: the driver sits at the wheel for everyone, with engine sound, turning wheels and lights; parked ones stay in place | |
 | Animated players (NPC animations): walking, sitting, crouching, smoking, drinking, carrying, waving | |
@@ -145,8 +147,10 @@ porter, saluer, dormir : l'horloge commune accélère), salon du lanceur, conduc
 Fait aussi : peinture (pièces et carrosserie) et réglages à la main (carburateur, molettes).
 Fait aussi (0.6) : circulation et passants de l'hôte, boulots communs (validés pour tous, sans double paie),
 câblage et tableaux de bord, couleur de la voiture choisie dans le lanceur avec aperçu 3D.
-À venir : liquides et usure, objets et achats, portes et lumières, PNJ et circulation, quêtes
-validées pour tous, revenus partagés avec porte-monnaie séparés, animations des actions.
+Fait aussi (0.7) : salon du lanceur, sommeil (l'horloge commune accélère), état des portes pour l'invité qui arrive.
+Fait aussi (0.8) : liquides et usure, nourriture et boissons consommées chez tous, voix des PNJ et jurons, nouvelle
+partie partagée (l'hôte sauvegarde avant d'envoyer).
+À venir : toutes les actions du solo pour les invités, objets tenus dans la main, essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
 Développé avec l'aide d'une IA (Claude), dirigé et testé par un humain. My Winter Car appartient à Amistech Games ;

@@ -5,7 +5,11 @@ using UnityEngine;
 
 namespace MWCoop.Net
 {
-    // L'hote envoie sa sauvegarde (fichiers .txt du dossier du jeu) a chaque invite qui arrive.
+    // L'hote envoie sa sauvegarde (fichiers .txt du dossier du jeu) a chaque invite qui arrive,
+    // une fois en jeu depuis 15 s (lancement groupe : pieces posees, couleur de voiture appliquee).
+    // Nouvelle partie : le jeu n'ecrit en la commencant qu'une sauvegarde partielle (700 octets,
+    // sans les pieces) ; l'hote sauvegarde alors pour de bon (SAVEGAME, comme en quittant) avant
+    // le premier envoi, pour que l'invite ait le meme monde.
     // L'invite ne l'ecrit QUE dans un profil isole (MWCoop\profils\<profil>, cf. le chargeur) :
     // sa propre sauvegarde n'est jamais touchee.
     public static class SaveTransfer
@@ -20,6 +24,45 @@ namespace MWCoop.Net
         static List<string> names;
         static byte[][] files;
         static int expected, got;
+        static readonly List<Peer> waiting = new List<Peer>();
+        static float inGameSince = -1, sendAt = -1;
+        static bool mustSave;            // nouvelle partie lancee : pas encore de vraie sauvegarde
+
+        // Hote : un invite vient d'arriver ; sa sauvegarde partira des que possible.
+        public static void Queue(Peer p)
+        {
+            if (!waiting.Contains(p)) waiting.Add(p);
+            if (!PlayerSync.InGame) Log.Info("sauvegarde : " + p + " attend que l'hote soit en jeu");
+        }
+
+        public static void Update()
+        {
+            if (!Session.Active || !Session.IsHost) return;
+            float now = Time.realtimeSinceStartup;
+            if (!PlayerSync.InGame) { inGameSince = sendAt = -1; if (CarColor.NewGame) mustSave = true; return; }
+            if (inGameSince < 0) inGameSince = now;
+            if (waiting.Count == 0 || now - inGameSince < 15f) return;
+            if (sendAt < 0)
+            {
+                if (mustSave || !File.Exists(Path.Combine(SaveDir, "savefile.txt")))
+                {
+                    mustSave = false;
+                    Log.Info("sauvegarde : nouvelle partie pas encore sauvegardee, l'hote sauvegarde avant d'envoyer");
+                    PlayMakerFSM.BroadcastEvent("SAVEGAME");
+                    sendAt = now + 3f;
+                    return;
+                }
+                sendAt = now;
+            }
+            if (now < sendAt) return;
+            // Le jeu ecrit ses fichiers sur plusieurs images (jusqu'a 5 s) : on attend qu'ils ne bougent plus.
+            DateTime newest = DateTime.MinValue;
+            foreach (string f in SaveFiles()) { DateTime m = File.GetLastWriteTime(f); if (m > newest) newest = m; }
+            if ((DateTime.Now - newest).TotalSeconds < 2) { sendAt = now + 0.5f; return; }
+            sendAt = -1;
+            foreach (Peer p in waiting) if (p.Accepted) SendTo(p);
+            waiting.Clear();
+        }
 
         public static string SaveDir { get { return Application.persistentDataPath; } }
 

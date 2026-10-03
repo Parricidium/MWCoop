@@ -26,7 +26,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 7;
+        public const int NetVersion = 8;
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;
@@ -232,7 +232,7 @@ namespace MWCoop.Net
             }
             Hud.Toast(pi.Name + " a rejoint la partie");
             SendRoster();
-            SaveTransfer.SendTo(from);
+            SaveTransfer.Queue(from);
         }
 
         // Pseudo/apparence changes en cours de partie : l'invite previent l'hote, qui renvoie la liste.
