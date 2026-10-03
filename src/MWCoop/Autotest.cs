@@ -55,6 +55,14 @@ namespace MWCoop
                 if (b != null && t > 25f && t < 37f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
                 if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + ", cinematique " + b.isKinematic);
             }
+            if (mode == "peindre")
+            {
+                // [Test] TestPiece peinte en rouge a 30 s ; etat a 40 s.
+                string id = Config.Get("Test", "TestPiece", "VIN4111");
+                if (t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Paint.TestSpray(id, new Color(0.8f, 0.1f, 0.1f, 1f))); }
+                if (t > 40f && step == 1) { step = 2; Log.Info("autotest : peinture " + id + " : " + Paint.State(id)); }
+            }
+            if (mode == "etatpeinture" && t > 36f && !done) { done = true; string id = Config.Get("Test", "TestPiece", "VIN4111"); Log.Info("autotest : peinture " + id + " : " + Paint.State(id)); }
             if (mode == "phares" && t > 20f && !done) { done = true; Log.Info("autotest : " + Interactions.TestNamed("KEKMET(350-400psi)/LOD/Dashboard/ButtonLightModes")); }
             if (mode == "porte" && t > 15f && !done)
             {

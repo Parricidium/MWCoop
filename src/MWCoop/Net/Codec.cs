@@ -69,5 +69,6 @@ namespace MWCoop.Net
         Prop = 15,        // non fiable : piece libre deplacee (tenue, lachee, au repos)
         Income = 16,      // argent gagne par un joueur, recu par tous
         Purchase = 17,    // achat paye a une caisse (contenu du panier)
+        Paint = 18,       // piece repeinte (bombe) ou couleur tiree au hasard chez l'hote
     }
 }
