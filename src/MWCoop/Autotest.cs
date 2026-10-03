@@ -234,7 +234,7 @@ namespace MWCoop
             if (mode == "portiere" && t > 30f && !done)
             {
                 done = true;
-                Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), 60f));
+                Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), true));
             }
             string doorWatch = Config.Get("Test", "SuivrePortiere", "");
             if (doorWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : " + CarDoors.State(doorWatch));
