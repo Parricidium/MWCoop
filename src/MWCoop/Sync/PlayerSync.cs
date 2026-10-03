@@ -135,7 +135,13 @@ namespace MWCoop
                     .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U8(st.Flags);
                 Session.Broadcast(w, false, id);
                 if (levelChanged) Session.SendRoster();
-                if (levelChanged && level == 1) Interactions.ScheduleSnapshot(from);   // arrive en jeu : etat des portes...
+                if (levelChanged && level == 1)
+                {
+                    // Arrive en jeu : etat des portes, liquides et objets consommes pendant son chargement.
+                    Interactions.ScheduleSnapshot(from);
+                    Fluids.ScheduleSnapshot(from);
+                    Consume.ScheduleSnapshot(from);
+                }
             }
         }
 

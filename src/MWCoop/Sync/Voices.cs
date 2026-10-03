@@ -24,6 +24,11 @@ namespace MWCoop
             "Worker1", "Worker2", "Worker3Jani", "Boss", "Serkku", "MusicCritic", "TaxiCustomers", "MakkaraUkko",
             "WoodPeople", "KeijoPSK", "JouniPSK", "Livaloinen", "TaxiOwner", "Kirpparimummo", "TeppoSarkain" };
 
+        // PNJ qui parlent seuls : si le joueur local est lui aussi pres d'eux, il les entend deja.
+        static readonly HashSet<string> Chatty = new HashSet<string> {
+            "Worker1", "Worker2", "Worker3Jani", "Drunks", "DrunkLifter", "Kirpparimummo", "MakkaraUkko", "WoodPeople", "TaxiCustomers", "Fighter" };
+        static float nextWarn;
+
         class Var { public string Group, Name; public AudioSource Src; public bool Was; public float LastTime; public AudioClip LastClip; }
         static readonly List<Var> vars = new List<Var>();
         static readonly Dictionary<string, Var> byKey = new Dictionary<string, Var>();
@@ -91,7 +96,12 @@ namespace MWCoop
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Voice).U8(who).Str(group).Str(name).Vec(pos).F32(vol).F32(pitch), true, who);
             if (vars.Count == 0 && PlayerSync.InGame) Scan();
             Var x;
-            if (!byKey.TryGetValue(group + "/" + name, out x) || x.Src == null || x.Src.clip == null) { Log.Warn("voix : " + group + "/" + name + " introuvable ici"); return; }
+            if (!byKey.TryGetValue(group + "/" + name, out x) || x.Src == null || x.Src.clip == null)
+            {
+                if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("voix : " + group + "/" + name + " introuvable ici"); }
+                return;
+            }
+            if (Chatty.Contains(group) && player != null && (player.position - pos).sqrMagnitude < 225f) return;
             if (PlayerGroups.Contains(group))
             {
                 // Voix d'un joueur : depuis sa tete (sinon la variante est collee a la camera de l'autre).
