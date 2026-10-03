@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -6,14 +7,18 @@ namespace MWCoop
 {
     // Places passagers (le jeu n'a qu'une place, celle du conducteur). Pour chaque voiture, d'apres la
     // tete du conducteur (DriverHeadPivot) : la place avant droite en symetrique, et pour les voitures
-    // a banquette (SORBET, CORRIS) deux places a l'arriere. Pres d'une place (tete a moins de 1,1 m),
-    // ENTREE assoit le joueur : il est accroche a la voiture (il suit sa copie quand un autre conduit),
+    // a banquette (SORBET, CORRIS) deux places a l'arriere. En REGARDANT une place libre (a moins de
+    // 1,6 m, a moins de 30 degres du regard), l'icone passager du jeu s'affiche (GUIpassenger, comme le
+    // volant pour le conducteur) et ENTREE assoit le joueur -- jamais quand le jeu s'apprete deja a le
+    // faire conduire (zone du conducteur en attente d'ENTREE) : il est accroche a la voiture (il suit sa copie quand un autre conduit),
     // ne marche plus, garde la vue libre ; ENTREE le fait ressortir cote portiere. Les autres voient son
     // avatar assis a cette place, la tete qui suit son regard. Les commandes du vehicule (cle, frein a
     // main, vitres...) restent accessibles et sont rejouees chez tous (Jobs).
     public static class Seats
     {
         class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; }
+        static readonly List<PlayMakerFSM> driveTriggers = new List<PlayMakerFSM>();
+        static bool iconOn;
 
         static readonly List<Seat> seats = new List<Seat>();
         static readonly Dictionary<int, KeyValuePair<string, int>> remote = new Dictionary<int, KeyValuePair<string, int>>();
@@ -33,11 +38,14 @@ namespace MWCoop
         static void Scan()
         {
             seats.Clear();
+            driveTriggers.Clear();
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
                 if (rb.transform.parent != null || rb.GetComponent("CarDynamics") == null) continue;
                 string n = rb.name;
                 if (n.StartsWith("KEKMET") || n.StartsWith("JONNEZ") || n.StartsWith("FLATBED")) continue;   // une seule place
+                foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true))
+                    if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) driveTriggers.Add(f);
                 Transform dhp = Find(rb.transform, "DriverHeadPivot");
                 if (dhp == null) continue;
                 Vector3 d = rb.transform.InverseTransformPoint(dhp.position);
@@ -82,18 +90,37 @@ namespace MWCoop
                 if (now >= nextResend) { nextResend = now + 5f; SendSeat(current.Car, current.Index); }
                 return;
             }
-            if (VehicleSync.LocalDriving >= 0 || Game.GlobalBool("PlayerSeated")) return;
             Seat best = null;
-            float bd = 1.1f * 1.1f;
-            foreach (Seat s in seats)
+            if (VehicleSync.LocalDriving < 0 && !Game.GlobalBool("PlayerSeated") && !InDriverZone())
             {
-                if (s.CarT == null || SeatTaken(s)) continue;
-                float dist = (s.CarT.TransformPoint(s.Head) - cam.position).sqrMagnitude;
-                if (dist < bd) { bd = dist; best = s; }
+                // La place regardee : la plus proche de l'axe du regard, a moins de 1,6 m et 30 degres.
+                float bestAng = 30f;
+                foreach (Seat s in seats)
+                {
+                    if (s.CarT == null || SeatTaken(s)) continue;
+                    Vector3 to = s.CarT.TransformPoint(s.Head) - cam.position;
+                    if (to.sqrMagnitude > 1.6f * 1.6f) continue;
+                    float ang = Vector3.Angle(cam.forward, to);
+                    if (ang < bestAng) { bestAng = ang; best = s; }
+                }
             }
-            if (best == null) return;
-            if (now >= nextHint) { nextHint = now + 8f; Hud.Toast("ENTREE : s'asseoir en passager"); }
-            if (Input.GetKeyDown(KeyCode.Return)) Sit(best);
+            Icon(best != null);
+            if (best != null && Input.GetKeyDown(KeyCode.Return)) Sit(best);
+        }
+
+        // Le jeu s'apprete a faire conduire le joueur (zone du conducteur, attente d'ENTREE) ?
+        static bool InDriverZone()
+        {
+            foreach (PlayMakerFSM f in driveTriggers)
+                if (f != null && (f.ActiveStateName == "Press return" || f.ActiveStateName == "Player in car")) return true;
+            return false;
+        }
+
+        // Icone passager du jeu (comme le volant pour le conducteur) ; on ne l'eteint que si on l'a allumee.
+        static void Icon(bool on)
+        {
+            if (on) { Game.SetGlobalBool("GUIpassenger", true); iconOn = true; }
+            else if (iconOn) { Game.SetGlobalBool("GUIpassenger", false); iconOn = false; }
         }
 
         static bool SeatTaken(Seat s)
@@ -104,6 +131,7 @@ namespace MWCoop
 
         static void Sit(Seat s)
         {
+            Icon(false);
             pivot = new GameObject("MWCoop-SiegePassager").transform;
             pivot.parent = s.CarT;
             pivot.localPosition = s.Head;
