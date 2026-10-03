@@ -175,6 +175,10 @@ jamais renvoyé, un événement du monde (horloge, hockey, radio) n'est plus jou
 celui qui rejoue ne bougent jamais (même après un minuteur), un message trop gros ne bloque plus l'automate du jeu.
 Option de secours : `SynchroMonde=0` dans la section `[Coop]` de `MWCoop\mwcoop.ini` coupe la synchronisation
 générique du monde si elle gêne.
+Fait aussi (0.13.1, retours de JD) : places passagers à la bonne place (yeux comme le conducteur, plus haut à
+l'arrière), icône passager seulement en visant le siège ; feux de recul et toute lampe des voitures vus par tous ;
+plus de son moteur superposé en sortant d'une voiture (le moteur de la copie restait relancé) ; moteur laissé
+tournant entendu par tous ; programme de la télé identique chez tous (grille de l'hôte).
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

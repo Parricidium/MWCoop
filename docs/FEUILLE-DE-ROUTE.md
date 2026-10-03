@@ -24,6 +24,7 @@ pouvoir le faire, et les autres doivent le voir.
       chez tous, voix chez celui qui décroche), commandes par téléphone, petites annonces identiques, colis
       de la poste suivis ; relecture : pas d'écho des rejeux, pas de double événement du monde, argent du
       receveur protégé, crochets protégés, clés stables.
+      Fait (0.13.1) : programme de la télé suivi chez tous ; feux de recul ; places passagers corrigées.
       Reste : marché aux puces (articles tirés au hasard de chaque côté), facture de téléphone des appels
       passés par un invité, appels quand l'hôte est loin de la maison (la logique du téléphone ne tourne
       que près de la maison, chez l'hôte).
