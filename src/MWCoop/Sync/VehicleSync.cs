@@ -48,6 +48,7 @@ namespace MWCoop
         static bool scanned;
         static float scanAt = -1, nextFast, nextSlow;
         public static int LocalDriving = -1;    // index de la voiture conduite localement
+        public static string LocalDrivingName { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].Name : null; } }
 
         public static void OnLevelLoaded()
         {

@@ -67,6 +67,7 @@ namespace MWCoop
             Step("sauvegarde", SaveTransfer.Update);
             Step("consommables", Consume.Update);
             Step("voix", Voices.Update);
+            Step("portieres", CarDoors.Update);
             Step("trafic", Traffic.Update);
             Step("couleur", CarColor.Update);
             Step("quetes", Jobs.Update);
@@ -96,6 +97,7 @@ namespace MWCoop
             Fluids.OnLevelLoaded();
             Consume.OnLevelLoaded();
             Voices.OnLevelLoaded();
+            CarDoors.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             CarColor.OnLevelLoaded();
             Jobs.OnLevelLoaded();
