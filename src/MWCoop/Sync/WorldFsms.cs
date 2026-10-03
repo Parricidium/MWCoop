@@ -40,7 +40,7 @@ namespace MWCoop
         class W
         {
             public string Key; public PlayMakerFSM F; public bool Persistent, Mirror;
-            public bool HostDriven, External;   // voir HostDrivenFsm / ExternalFsm
+            public bool HostDriven, External, Tv;   // voir HostDrivenFsm / ExternalFsm
             public HashSet<string> InputStates = new HashSet<string>();
             public HashSet<string> GlobalEvents = new HashSet<string>();
             public float WindowStart, NoisySince; public int Count; public bool Noisy;
@@ -89,6 +89,23 @@ namespace MWCoop
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
 
+        // Cle de l'autre introuvable ici : l'objet a pu changer de parent entre les deux releves (la tele
+        // allumee prend Systems/TV/TVPrograms sous elle). On cherche alors par le nom de l'objet et de
+        // l'automate, s'il est unique.
+        static readonly Dictionary<string, W> alias = new Dictionary<string, W>();
+        static bool Lookup(string key, out W j)
+        {
+            if (byKey.TryGetValue(key, out j)) return true;
+            if (alias.TryGetValue(key, out j) && j.F != null) return true;
+            string tail = key.Substring(key.LastIndexOf('/') + 1);
+            W found = null;
+            foreach (W x in byKey.Values)
+                if (x.Key == tail || x.Key.EndsWith("/" + tail)) { if (found != null) { j = null; return false; } found = x; }
+            j = found;
+            if (found != null) { alias[key] = found; Log.Info("monde : " + key + " = " + found.Key + " ici"); }
+            return found != null;
+        }
+
         // Un automate suivi vient de creer un objet (commande, colis...) : releve dans 1,5 s, pour que
         // l'objet soit suivi avant qu'un joueur s'en serve.
         static void SoonScan()
@@ -99,10 +116,15 @@ namespace MWCoop
 
         // Logique tiree au hasard qui doit etre la meme pour tous : seul l'hote la fait tourner, les
         // invites la suivent etat par etat (leur copie est arretee). Telephone : qui appelle et quand.
+        // Tele (Systems/TV/TVPrograms : grille, episodes tires au sort, pubs) : suivie seulement tant que
+        // la tele de l'hote est allumee (TVOn) ; sinon chacun garde la sienne (un invite seul devant une
+        // autre tele).
         static bool HostDrivenFsm(PlayMakerFSM f)
         {
-            return (f.FsmName == "Ring" || f.FsmName == "Jokes") && f.gameObject.name.StartsWith("PhoneLogic");
+            return (f.FsmName == "Ring" || f.FsmName == "Jokes") && f.gameObject.name.StartsWith("PhoneLogic") || IsTv(f);
         }
+        static bool IsTv(PlayMakerFSM f) { return f.gameObject.name == "TVPrograms" && (f.FsmName == "Schedule" || f.FsmName == "ADs"); }
+        static bool hostTvOn;   // tele de l'hote allumee (dernier etat recu de sa grille)
 
         // Automates commandes par un AUTRE automate apres une action du joueur (decrocher le telephone
         // envoie ANSWER a la sonnerie) : ces evenements-la comptent comme une action du joueur.
@@ -114,7 +136,8 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear(); pathOf.Clear(); mutedList.Clear();
+            byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear(); pathOf.Clear(); mutedList.Clear(); alias.Clear();
+            hostTvOn = false;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
@@ -187,6 +210,7 @@ namespace MWCoop
                 w.InputEvents[st.Name] = inEv;
             }
             w.HostDriven = HostDrivenFsm(f);
+            w.Tv = IsTv(f);
             w.External = ExternalFsm(f);
             return w.Persistent || w.InputStates.Count > 0 || w.GlobalEvents.Count > 0 || w.HostDriven || w.External;
         }
@@ -611,7 +635,7 @@ namespace MWCoop
             // Relais aux autres invites : le message tel quel, seul le numero du joueur est fixe par l'hote.
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.WorldFsm).U8(who).Raw(raw, 1, raw.Length - 1), true, who);
             W j;
-            if (!byKey.TryGetValue(key, out j) || j.F == null)
+            if (!Lookup(key, out j) || j.F == null)
             {
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("monde : " + key + " introuvable ici"); }
                 return;
@@ -650,7 +674,12 @@ namespace MWCoop
                 // evenement, et a defaut recalage direct sur l'etat d'arrivee (ses actions sont jouees).
                 // (Un etat de passage deja traverse par l'evenement n'est pas rejoue une 2e fois.)
                 j.Entered.Clear();
-                if (global == 2) { if (j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state); }   // logique de l'hote
+                if (global == 2)
+                {
+                    // Logique de l'hote (tele : seulement si la sienne est allumee).
+                    if (j.Tv && j.F.FsmName == "Schedule") { FsmBool on = j.F.FsmVariables.FindFsmBool("TVOn"); hostTvOn = on != null && on.Value; }
+                    if ((!j.Tv || hostTvOn) && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
+                }
                 else if (global == 3)
                 {
                     // Les consequences de l'appel (boulot accepte, repere sur la carte, drapeaux) ont lieu
@@ -686,7 +715,11 @@ namespace MWCoop
             {
                 nextStopCheck = now + 2f;
                 foreach (W x in byKey.Values)
-                    if (x.HostDriven && x.F != null && x.F.enabled) { x.F.enabled = false; Log.Info("monde : " + x.Key + " suit l'hote"); }
+                {
+                    if (!x.HostDriven || x.F == null) continue;
+                    bool follow = !x.Tv || hostTvOn;
+                    if (x.F.enabled == follow) { x.F.enabled = !follow; Log.Info("monde : " + x.Key + (follow ? " suit l'hote" : " tourne ici")); }
+                }
             }
             if (!Session.IsHost || Session.RemoteCount == 0) return;
             for (int i = snapshots.Count - 1; i >= 0; i--)
@@ -694,7 +727,17 @@ namespace MWCoop
                 if (now < snapshots[i].Key) continue;
                 Peer p = snapshots[i].Value;
                 snapshots.RemoveAt(i);
-                if (p.Accepted && Session.T.Peers.Contains(p)) Mirror(p, true);
+                if (p.Accepted && Session.T.Peers.Contains(p))
+                {
+                    Mirror(p, true);
+                    foreach (W x in byKey.Values)
+                        if (x.HostDriven && x.F != null && !string.IsNullOrEmpty(x.F.ActiveStateName))
+                        {
+                            var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(x.Key).Str("").Str("").U8(2).Str(x.F.ActiveStateName);
+                            WriteVars(x.F, w, false);
+                            if (w.Length <= MaxMsg) Session.T.SendReliable(p, w.ToArray());
+                        }
+                }
             }
             if (now < nextMirror) return;
             nextMirror = now + 1f;
@@ -809,7 +852,7 @@ namespace MWCoop
                 string key = r.Str();
                 int n = r.U8();
                 W j = null;
-                if (key.Length > 0) byKey.TryGetValue(key, out j);
+                if (key.Length > 0) Lookup(key, out j);
                 for (int i = 0; i < n; i++)
                 {
                     int t = r.U8();
