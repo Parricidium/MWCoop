@@ -40,6 +40,7 @@ namespace MWCoop
         class W
         {
             public string Key; public PlayMakerFSM F; public bool Persistent, Mirror;
+            public bool HostDriven, External;   // voir HostDrivenFsm / ExternalFsm
             public HashSet<string> InputStates = new HashSet<string>();
             public HashSet<string> GlobalEvents = new HashSet<string>();
             public float WindowStart, NoisySince; public int Count; public bool Noisy;
@@ -59,7 +60,7 @@ namespace MWCoop
         static float nextPending;
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static readonly Dictionary<string, float> houseSent = new Dictionary<string, float>();
-        static float nextScan = -1, nextMirror, loadedAt, nextWarn, lastInput = -100;
+        static float nextScan = -1, nextMirror, loadedAt, nextWarn, lastInput = -100, nextStopCheck;
         static bool applying;
         static int sentEvents, recvEvents;
 
@@ -70,6 +71,20 @@ namespace MWCoop
         }
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
+
+        // Logique tiree au hasard qui doit etre la meme pour tous : seul l'hote la fait tourner, les
+        // invites la suivent etat par etat (leur copie est arretee). Telephone : qui appelle et quand.
+        static bool HostDrivenFsm(PlayMakerFSM f)
+        {
+            return (f.FsmName == "Ring" || f.FsmName == "Jokes") && f.gameObject.name.StartsWith("PhoneLogic");
+        }
+
+        // Automates commandes par un AUTRE automate apres une action du joueur (decrocher le telephone
+        // envoie ANSWER a la sonnerie) : ces evenements-la comptent comme une action du joueur.
+        static bool ExternalFsm(PlayMakerFSM f) { return f.gameObject.name.StartsWith("Ringing"); }
+
+        // Variables objet envoyees par leur chemin (la fiche de la commande en cours).
+        static bool GoVar(string n) { return n == "CurrentListing" || n == "FoundListing"; }
         public static int Count { get { return byKey.Count; } }
 
         public static void OnLevelLoaded()
@@ -138,7 +153,9 @@ namespace MWCoop
                 }
                 w.InputEvents[st.Name] = inEv;
             }
-            return w.Persistent || w.InputStates.Count > 0 || w.GlobalEvents.Count > 0;
+            w.HostDriven = HostDrivenFsm(f);
+            w.External = ExternalFsm(f);
+            return w.Persistent || w.InputStates.Count > 0 || w.GlobalEvents.Count > 0 || w.HostDriven || w.External;
         }
 
         // L'etat 'state' et tout ce qui s'enchaine automatiquement apres lui laissent-ils le joueur tranquille ?
@@ -245,17 +262,33 @@ namespace MWCoop
         {
             if (!Session.Active || Session.RemoteCount == 0 || Time.realtimeSinceStartup - loadedAt < 25f) return;
             FsmTransition tr = j.F.Fsm.LastTransition;
-            if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
-            if (state == "Wait player" || state == "Mouse off" || state == "Mouse off 2" || state == "Wait button") return;
             FsmState prev = j.F.Fsm.PreviousActiveState;
+            float now = Time.realtimeSinceStartup;
+            if (j.HostDriven)
+            {
+                // Logique de l'hote : chaque etat est envoye (FINISHED compris), les invites s'y recalent.
+                if (Session.IsHost) Send(j, prev, tr != null ? tr.EventName : "", 2, state);
+                return;
+            }
+            if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
+            if (j.External)
+            {
+                // Decroche (ANSWER), ou autre evenement juste apres une action du joueur : chez les autres,
+                // l'appel est rejoue sans voix ni sous-titres, puis le telephone raccroche.
+                if (now - lastInput <= 1f) Send(j, prev, tr.EventName, 3, state);
+                return;
+            }
+            if (state == "Wait player" || state == "Mouse off" || state == "Mouse off 2" || state == "Wait button") return;
             bool global = j.GlobalEvents.Contains(tr.EventName);
             bool byPlayer = prev != null && j.InputStates.Contains(prev.Name);
             // Provoquee par le joueur : il vient d'agir (clic, touche, molette) ET la transition sort d'un
             // etat qui l'ecoute, ou c'est un evenement global (paiement...). Le reste (horloge, radio,
             // reveil...) tourne pareil chez chacun : le rejouer le doublerait.
-            if ((!global && !byPlayer) || Time.realtimeSinceStartup - lastInput > 1f) return;
+            // Les commandes (OrdersSpawner*) arrivent apres l'appel ou le courrier, longtemps apres le
+            // dernier clic : seul celui qui commande les declenche, elles passent toujours.
+            bool order = global && j.Key.Contains("OrdersSpawner");
+            if ((!global && !byPlayer) || (now - lastInput > 1f && !order)) return;
             if (!Safe(j, state)) return;   // finirait par agir sur ce joueur-ci chez l'autre
-            float now = Time.realtimeSinceStartup;
             if (j.Noisy && now - j.NoisySince > 30f) { j.Noisy = false; j.WindowStart = now; j.Count = 0; }
             if (now - j.WindowStart > 10f) { j.WindowStart = now; j.Count = 0; }
             if (++j.Count > 40 || j.Noisy)
@@ -263,13 +296,45 @@ namespace MWCoop
                 if (!j.Noisy) { Log.Warn("monde : " + j.Key + " change trop souvent, en pause 30 s"); j.Noisy = true; j.NoisySince = now; }
                 return;
             }
-            var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(j.Key).Str(prev != null ? prev.Name : "").Str(global ? tr.EventName : tr.EventName).U8(global ? 1 : 0).Str(state);
+            Send(j, prev, tr.EventName, global ? 1 : 0, state);
+        }
+
+        // mode : 0 meme etat de depart -> meme evenement ; 1 evenement global ; 2 recalage direct (hote) ;
+        // 3 rejeu muet (actions qui touchent au joueur coupees) puis repos.
+        static void Send(W j, FsmState prev, string ev, int mode, string state)
+        {
+            var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(j.Key).Str(prev != null ? prev.Name : "").Str(ev).U8(mode).Str(state);
             WriteVars(j.F, w);
-            if (++sentEvents <= 30 || sentEvents % 50 == 0) Log.Info("monde : " + j.Key + " " + (prev != null ? prev.Name : "?") + " -" + tr.EventName + "-> " + state);
+            if (++sentEvents <= 30 || sentEvents % 50 == 0) Log.Info("monde : " + j.Key + " " + (prev != null ? prev.Name : "?") + " -" + ev + "-> " + state);
             Session.SendAll(w, true);
         }
 
         static bool SkipVar(string n) { return n.StartsWith("UT") || n.StartsWith("UniqueTag"); }
+
+        // Actions qui touchent au joueur local : son, camera, interface (sous-titres), globales Player*.
+        static List<FsmStateAction> Mute(W j)
+        {
+            var r = new List<FsmStateAction>();
+            foreach (FsmState st in j.F.Fsm.States)
+                foreach (FsmStateAction a in st.Actions)
+                {
+                    if (a == null || a is Hook || !a.Enabled) continue;
+                    bool personal = false;
+                    foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        object v = fi.GetValue(a);
+                        GameObject go = null;
+                        if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
+                        else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
+                        if (go != null && PersonalRoots.Contains(go.transform.root.name)) personal = true;
+                        var nv = v as NamedVariable;
+                        if (nv != null && nv.UseVariable && (nv.Name.StartsWith("GUI") || nv.Name.StartsWith("Player")) && j.F.FsmVariables.GetVariable(nv.Name) == null) personal = true;
+                    }
+                    if (a.GetType().Name.StartsWith("MasterAudio")) personal = true;   // la voix de l'appel, la tonalite
+                    if (personal) { a.Enabled = false; r.Add(a); }
+                }
+            return r;
+        }
 
         static void WriteVars(PlayMakerFSM f, NetWriter w)
         {
@@ -280,6 +345,10 @@ namespace MWCoop
             w.U8(System.Math.Min(ints.Count, 255)); for (int i = 0; i < ints.Count && i < 255; i++) w.Str(ints[i].Name).I32(ints[i].Value);
             w.U8(System.Math.Min(floats.Count, 255)); for (int i = 0; i < floats.Count && i < 255; i++) w.Str(floats[i].Name).F32(floats[i].Value);
             w.U8(System.Math.Min(bools.Count, 255)); for (int i = 0; i < bools.Count && i < 255; i++) w.Str(bools[i].Name).Bool(bools[i].Value);
+            var strs = new List<FsmString>(); foreach (FsmString x in v.StringVariables) if (!SkipVar(x.Name) && (x.Value ?? "").Length < 200) strs.Add(x);
+            w.U8(System.Math.Min(strs.Count, 255)); for (int i = 0; i < strs.Count && i < 255; i++) w.Str(strs[i].Name).Str(strs[i].Value);
+            var gos = new List<FsmGameObject>(); foreach (FsmGameObject x in v.GameObjectVariables) if (GoVar(x.Name)) gos.Add(x);
+            w.U8(gos.Count); foreach (FsmGameObject x in gos) w.Str(x.Name).Str(x.Value != null ? Recon.Path(x.Value.transform) : "");
             WriteLists(f, w);
         }
 
@@ -403,6 +472,10 @@ namespace MWCoop
             for (int i = 0, n = r.U8(); i < n; i++) ints.Add(new KeyValuePair<string, int>(r.Str(), r.I32()));
             for (int i = 0, n = r.U8(); i < n; i++) floats.Add(new KeyValuePair<string, float>(r.Str(), r.F32()));
             for (int i = 0, n = r.U8(); i < n; i++) bools.Add(new KeyValuePair<string, bool>(r.Str(), r.Bool()));
+            var strs = new List<KeyValuePair<string, string>>();
+            var gos = new List<KeyValuePair<string, string>>();
+            for (int i = 0, n = r.U8(); i < n; i++) strs.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
+            for (int i = 0, n = r.U8(); i < n; i++) gos.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
             List<ListData> lists = ReadLists(r);
             if (Session.IsHost)
             {
@@ -410,6 +483,8 @@ namespace MWCoop
                 w.U8(ints.Count); foreach (var x in ints) w.Str(x.Key).I32(x.Value);
                 w.U8(floats.Count); foreach (var x in floats) w.Str(x.Key).F32(x.Value);
                 w.U8(bools.Count); foreach (var x in bools) w.Str(x.Key).Bool(x.Value);
+                w.U8(strs.Count); foreach (var x in strs) w.Str(x.Key).Str(x.Value);
+                w.U8(gos.Count); foreach (var x in gos) w.Str(x.Key).Str(x.Value);
                 WriteListData(w, lists);
                 Session.Broadcast(w, true, who);
             }
@@ -427,13 +502,31 @@ namespace MWCoop
                 foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
                 foreach (var x in floats) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
                 foreach (var x in bools) { FsmBool t = v.FindFsmBool(x.Key); if (t != null) t.Value = x.Value; }
+                foreach (var x in strs) { FsmString t = v.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
+                foreach (var x in gos)
+                {
+                    FsmGameObject t = v.FindFsmGameObject(x.Key);
+                    if (t == null) continue;
+                    GameObject go = x.Value.Length > 0 ? Game.FindAny(x.Value) : null;
+                    if (go != null || x.Value.Length == 0) t.Value = go;
+                }
                 ApplyLists(j.F, lists);
                 // Evenement global (paiement...) : renvoye tel quel ; sinon meme etat de depart -> meme
                 // evenement, et a defaut recalage direct sur l'etat d'arrivee (ses actions sont jouees).
                 // (Un etat de passage deja traverse par l'evenement n'est pas rejoue une 2e fois.)
                 j.Entered.Clear();
-                if (global == 1 || j.F.ActiveStateName == prev) j.F.SendEvent(ev);
-                if (!j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
+                if (global == 2) { if (j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state); }   // logique de l'hote
+                else if (global == 3)
+                {
+                    // Les consequences de l'appel (boulot accepte, repere sur la carte, drapeaux) ont lieu
+                    // ici aussi, mais la voix et les sous-titres restent chez celui qui a decroche.
+                    List<FsmStateAction> muted = Mute(j);
+                    try { if (j.F.ActiveStateName == prev) j.F.SendEvent(ev); }
+                    finally { foreach (FsmStateAction a in muted) a.Enabled = true; }
+                    if (j.F.Fsm.GetState("Disable phone") != null) Game.SetState(j.F, "Disable phone");
+                }
+                else if (global == 1 || j.F.ActiveStateName == prev) j.F.SendEvent(ev);
+                if (global < 2 && !j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
             }
             finally { applying = false; RestorePersonal(mine); }
             if (++recvEvents <= 30 || recvEvents % 50 == 0) Log.Info("monde de #" + who + " : " + key + " -" + ev + "-> " + j.F.ActiveStateName + " (voulu " + state + ")");
@@ -449,6 +542,12 @@ namespace MWCoop
             if (now >= nextScan) { nextScan = now + 60f; Scan(); }
             else if (now >= nextPending) { nextPending = now + 2f; CheckPending(); }
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetAxis("Mouse ScrollWheel") != 0f) lastInput = now;
+            if (!Session.IsHost && now >= nextStopCheck)
+            {
+                nextStopCheck = now + 2f;
+                foreach (W x in byKey.Values)
+                    if (x.HostDriven && x.F != null && x.F.enabled) { x.F.enabled = false; Log.Info("monde : " + x.Key + " suit l'hote"); }
+            }
             if (!Session.IsHost || Session.RemoteCount == 0) return;
             for (int i = snapshots.Count - 1; i >= 0; i--)
             {
@@ -652,6 +751,19 @@ namespace MWCoop
                     lastInput = Time.realtimeSinceStartup;   // comme si le joueur venait d'agir
                     j.F.SendEvent(ev);
                     return j.Key + " : " + before + " -" + ev + "-> " + j.F.ActiveStateName;
+                }
+            return "rien pour " + part;
+        }
+
+        // Comme si la logique passait d'elle-meme a 'state' (le crochet envoie comme en vrai).
+        public static string TestState(string part, string state)
+        {
+            foreach (W j in byKey.Values)
+                if (j.F != null && j.Key.Contains(part))
+                {
+                    string before = j.F.ActiveStateName;
+                    Game.SetState(j.F, state);
+                    return j.Key + " : " + before + " => " + j.F.ActiveStateName;
                 }
             return "rien pour " + part;
         }
