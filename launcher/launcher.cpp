@@ -14,10 +14,12 @@
 //  - Heberger / Rejoindre / Jouer en solo : ecrit MWCoop\lancement.ini (lu par le chargeur et le mod, valable
 //    3 minutes : Steam peut relancer le jeu sans sa ligne de commande), lance mywintercar.exe avec les memes reglages
 //    en arguments (-mwcoop-mode ...), puis reste en ecran d'attente jusqu'a la fenetre du jeu (UnityWndClass).
-//  - Options du joueur : MWCoop\mwcoop.ini, section [Coop] (Pseudo, Adresse, Port, Apparence).
+//  - Options du joueur : MWCoop\mwcoop.ini, section [Coop] (Pseudo, Adresse, Port, Apparence, CouleurVoiture).
+//  - Onglet VOITURE : couleur de la CORRIS pour une nouvelle partie, apercu 3D (MWCoop\cache\corris.mesh, rendu
+//    logiciel).
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
-//   /capture <png> <menu|coop|notes|notesvide|journaux|attente|maj|sansjeu> [/theme clair|sombre] [/lang fr|en]
+//   /capture <png> <menu|coop|voiture|notes|notesvide|journaux|attente|maj|sansjeu> [/theme clair|sombre] [/lang fr|en]
 //            [/echelle k] : rendu d'un etat dans un PNG ;
 //   /maj <dossier du jeu> <journal> [/depot proprietaire/depot] : mise a jour sans fenetre, journal = etat final ;
 //   /jeu <journal> : jeu trouve (dossier, version).
@@ -214,6 +216,7 @@ static std::wstring ReadGameVersion()
 struct Field { std::wstring text; RectF r; size_t maxLen; bool address; };
 static Field g_fields[2];   // 0 = pseudo, 1 = adresse
 static int g_focus = -1;
+static int g_carColor = -1;   // [Coop] CouleurVoiture : 0xRRGGBB, -1 = au hasard (comme le jeu)
 
 static std::wstring ModIni() { return g_gameDir + L"MWCoop\\mwcoop.ini"; }
 static std::string ModIniA() { return Narrow(ModIni()); }
@@ -238,6 +241,12 @@ static void LoadPlayer()
     g_fields[0].text = v[0] ? Widen(v, CP_ACP) : DefaultName();
     GetPrivateProfileStringA("Coop", "Adresse", "", v, sizeof(v), ini.c_str());
     g_fields[1].text = Widen(v, CP_ACP);
+    // CouleurVoiture=RRGGBB ("#" accepte) ; vide ou illisible : au hasard
+    GetPrivateProfileStringA("Coop", "CouleurVoiture", "", v, sizeof(v), ini.c_str());
+    const char *h = v[0] == '#' ? v + 1 : v;
+    char *end = NULL;
+    long c = strlen(h) == 6 ? strtol(h, &end, 16) : -1;
+    g_carColor = (c >= 0 && end && !*end) ? (int)c : -1;
 }
 
 static std::wstring PlayerName() { std::wstring n = Trim(g_fields[0].text); return n.empty() ? DefaultName() : n; }
@@ -713,7 +722,11 @@ static void StartUpdate()
 }
 
 // ---------------------------------------------------------------- boutons
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COUNT };
+// Onglets du panneau de droite (TAB_LOGS : page du bouton journaux, pas d'onglet)
+enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_COUNT };
+static int g_tab = -1;
+
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_COUNT };
 struct Button { RectF r; float hover; bool visible, enabled; };
 static Button g_btn[B_COUNT];
 static int g_hot = -1, g_pressed = -1;
@@ -731,6 +744,7 @@ static void Layout()
     g_btn[B_MIN].r = RectF(904, 76, 28, 28);
     g_btn[B_THEME].r = RectF(62, 100, 26, 26);   // coin du panneau, a gauche du logo
     g_btn[B_LOGS].r = RectF(368, 100, 26, 26);   // coin oppose : page des journaux
+    g_btn[B_COLOR].r = RectF(756, 439, 180, 30);  // onglet VOITURE : "Autre couleur..."
 }
 
 static void UpdateButtons()
@@ -743,6 +757,8 @@ static void UpdateButtons()
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = true;
     g_btn[B_LOGS].visible = menu && game;
     g_btn[B_LOGS].enabled = true;
+    g_btn[B_COLOR].visible = menu && game && g_tab == TAB_CAR;
+    g_btn[B_COLOR].enabled = true;
 }
 
 // ---------------------------------------------------------------- dessin
@@ -925,7 +941,6 @@ static void DrawBar(Graphics &g, RectF r, float p)
 
 // ---------------------------------------------------------------- options (MWCoop\mwcoop.ini, [Coop])
 // Memes cles et valeurs par defaut que le mod (Net\Session.cs) ; ecrites tout de suite, prises au prochain lancement.
-enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_COUNT };   // (TAB_LOGS : page du bouton journaux, pas d'onglet)
 enum { O_TOGGLE, O_CHOICE };
 struct Opt {
     int tab; const char *key; int def; int kind; std::vector<int> vals;
@@ -936,7 +951,7 @@ struct Opt {
     const wchar_t *dFr, *dEn;
 };
 static std::vector<Opt> g_opts;
-static int g_tab = -1, g_optHot = -1, g_optPart = 0, g_tabHot = -1;
+static int g_optHot = -1, g_optPart = 0, g_tabHot = -1;
 static float g_scroll[TAB_COUNT];
 static RectF g_tabR[TAB_COUNT];
 static const RectF kOptPanel(440, 116, 512, 472), kOptList(452, 128, 488, 396);
@@ -998,13 +1013,13 @@ static const Opt *OptByKey(const char *key) { for (auto &o : g_opts) if (!strcmp
 
 static const wchar_t *TabName(int t)
 {
-    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS" };
+    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR" };
     return g_fr ? fr[t] : en[t];
 }
 static bool TabVisible(int t) { return t != TAB_LOGS; }
 static void LayoutTabs()
 {
-    static const int order[] = { TAB_COOP, TAB_NOTES };
+    static const int order[] = { TAB_COOP, TAB_CAR, TAB_NOTES };
     float x = 440, pad = 12, gap = 6;
     Bitmap bm(1, 1);
     Graphics mg(&bm);
@@ -1084,10 +1099,12 @@ static void DrawPanel(Graphics &g)
 
 static void DrawNotes(Graphics &g);
 static void DrawLogs(Graphics &g);
+static void DrawCar(Graphics &g);
 
 static void DrawOptions(Graphics &g)
 {
     if (g_tab < 0 || g_gameDir.empty()) return;
+    if (g_tab == TAB_CAR) { DrawCar(g); return; }
     if (g_tab == TAB_NOTES) { DrawNotes(g); return; }
     if (g_tab == TAB_LOGS) { DrawLogs(g); return; }
     DrawPanel(g);
@@ -1151,7 +1168,7 @@ static void DrawOptions(Graphics &g)
 static void HitOption(float x, float y, int *row, int *part)
 {
     *row = -1; *part = 0;
-    if (g_tab < 0 || g_tab == TAB_NOTES || g_tab == TAB_LOGS || !kOptList.Contains(x, y)) return;
+    if (g_tab < 0 || g_tab == TAB_NOTES || g_tab == TAB_LOGS || g_tab == TAB_CAR || !kOptList.Contains(x, y)) return;
     std::vector<int> rows = TabRows(g_tab);
     int k = (int)((y - kOptList.Y + g_scroll[g_tab]) / kRowH);
     if (k < 0 || k >= (int)rows.size()) return;
@@ -1436,6 +1453,572 @@ static bool LogsMouseDown(float x, float y)
         ShellExecuteW(g_wnd, L"open", L"notepad.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
     }
     return true;
+}
+
+// ---------------------------------------------------------------- onglet VOITURE (couleur de la CORRIS, apercu 3D)
+// [Coop] CouleurVoiture=RRGGBB (vide : au hasard, comme le jeu). Le mod la pose sur la carrosserie a une NOUVELLE
+// partie ; l'hote la donne aux invites.
+// Apercu : <jeu>\MWCoop\cache\corris.mesh, exporte par le mod depuis le jeu du joueur (jamais livre avec le mod).
+// Format petit-boutiste : "MWCM", u32 version (1), u32 n, puis n morceaux : u16 longueur + nom UTF-8, u8 peignable
+// (1 = prend la couleur choisie), 3 x f32 couleur de base (0..1), u32 nb sommets + nb x (3 x f32) (repere de la
+// voiture : x droite, y haut, z avant, metres, repere gauche d'Unity), u32 nb indices + nb x u32 (triangles).
+// Rendu logiciel : perspective, tampon de profondeur, normales lissees par sommet (Gouraud), lumiere directionnelle
+// + lumiere d'appoint + ambiante + reflet ; rendu en 2x puis reduit (antialiasing), vitres en transparence. Au plus
+// ~30 images/s, et seulement quand l'onglet est ouvert.
+struct CarSwatch { int rgb; const wchar_t *fr, *en; };
+static const CarSwatch kSwatches[] = {   // teintes des annees 70-80
+    { 0xD9C49C, L"Beige Sahara", L"Sahara beige" },
+    { 0x8DB33A, L"Vert pomme", L"Apple green" },
+    { 0xE0702A, L"Orange", L"Orange" },
+    { 0x86B8E2, L"Bleu ciel", L"Sky blue" },
+    { 0x1E2C52, L"Bleu marine", L"Navy blue" },
+    { 0xB3221E, L"Rouge", L"Red" },
+    { 0xEEECE4, L"Blanc", L"White" },
+    { 0x161616, L"Noir", L"Black" },
+    { 0x8E949B, L"Gris m\u00E9tal", L"Metallic grey" },
+    { 0x5B3B22, L"Brun", L"Brown" },
+    { 0xD3A21C, L"Jaune moutarde", L"Mustard yellow" },
+    { 0x23452D, L"Vert fonc\u00E9", L"Dark green" },
+    { 0x6C1B28, L"Bordeaux", L"Burgundy" },
+    { 0x2A9C9A, L"Turquoise", L"Turquoise" },
+    { 0x707A2C, L"Vert avocat", L"Avocado green" },
+};
+static const int kSwatchN = 1 + _countof(kSwatches);   // pastille 0 : au hasard
+static const RectF kCarView(452, 128, 488, 270);
+static const float kPitchMin = 0.04f, kPitchMax = 0.55f;
+static int g_carHot = -1;                // pastille survolee
+
+struct CarPart { bool paint, glass; float r, g, b; };
+struct CarModel {
+    int state = 0;                       // 0 pas lu, 1 pret, -1 absent, -2 illisible
+    std::wstring path;
+    FILETIME mt = {};
+    DWORD checkT = 0;
+    std::vector<float> pos, nrm;         // 3 par sommet (nrm : normale lissee)
+    std::vector<uint32_t> tri;           // 3 par triangle
+    std::vector<uint16_t> triPart;
+    std::vector<CarPart> parts;
+    float mn[3], mx[3], c[3], dist;      // boite de cadrage (carrosserie), son centre, distance de la camera
+    float fx;                            // cadrage : max |x/z| sur tous les angles
+};
+static CarModel g_car;
+static float g_carYaw = 3.75f, g_carPitch = 0.28f;
+static bool g_carDrag, g_carDirty = true;
+static float g_carDragX, g_carDragY;
+static DWORD g_carIdleT, g_carDrawT;     // fin du dernier glisser (la rotation reprend 2,5 s apres), dernier rendu
+static std::vector<uint32_t> g_carBig, g_carPix;   // rendu 2x et image reduite (PARGB)
+static std::vector<float> g_carZ;
+static int g_carW, g_carH, g_carDrawnColor = -2;
+
+struct CarRot { float cy, sy, cp, sp; };
+static inline void CarXf(const CarRot &R, float x, float y, float z, float &X, float &Y, float &Z)
+{
+    float x1 = x * R.cy + z * R.sy, z1 = -x * R.sy + z * R.cy;   // lacet (autour de y)
+    X = x1;
+    Y = y * R.cp + z1 * R.sp;                                     // tangage : le dessus vient vers la camera
+    Z = -y * R.sp + z1 * R.cp;
+}
+
+static bool CarParse(const std::vector<unsigned char> &d, CarModel &m)
+{
+    struct Raw { std::string name; bool paint; float col[3]; std::vector<float> v; std::vector<uint32_t> idx; float mn[3], mx[3]; };
+    std::vector<Raw> raw;
+    size_t p = 0;
+    auto get = [&](void *out, size_t n) { if (n > d.size() - p) return false; memcpy(out, d.data() + p, n); p += n; return true; };
+    char magic[4];
+    uint32_t ver = 0, n = 0;
+    if (!get(magic, 4) || memcmp(magic, "MWCM", 4) || !get(&ver, 4) || ver != 1 || !get(&n, 4) || n > 4096) return false;
+    for (uint32_t i = 0; i < n; i++) {
+        Raw r;
+        uint16_t len = 0;
+        uint8_t pe = 0;
+        uint32_t nv = 0, ni = 0;
+        if (!get(&len, 2) || len > d.size() - p) return false;
+        r.name.assign((const char *)d.data() + p, len);
+        p += len;
+        if (!get(&pe, 1) || !get(r.col, 12) || !get(&nv, 4) || nv > (d.size() - p) / 12) return false;
+        r.v.resize((size_t)nv * 3);
+        if (nv && !get(r.v.data(), (size_t)nv * 12)) return false;
+        if (!get(&ni, 4) || ni > (d.size() - p) / 4 || ni % 3) return false;
+        r.idx.resize(ni);
+        if (ni && !get(r.idx.data(), (size_t)ni * 4)) return false;
+        bool ok = nv && ni;
+        for (uint32_t k : r.idx) if (k >= nv) ok = false;
+        for (int a = 0; a < 3; a++) { r.mn[a] = 1e9f; r.mx[a] = -1e9f; }
+        for (size_t k = 0; ok && k < r.v.size(); k++) {
+            float x = r.v[k];
+            if (!(fabsf(x) < 100)) ok = false;   // NaN ou valeur absurde : morceau ignore
+            r.mn[k % 3] = min(r.mn[k % 3], x);
+            r.mx[k % 3] = max(r.mx[k % 3], x);
+        }
+        r.paint = pe != 0;
+        if (ok) raw.push_back(std::move(r));
+    }
+    // Boite de cadrage : les morceaux peignables (la carrosserie), sinon tout.
+    bool anyPaint = false;
+    for (const Raw &r : raw) anyPaint |= r.paint;
+    float mn[3] = { 1e9f, 1e9f, 1e9f }, mx[3] = { -1e9f, -1e9f, -1e9f };
+    for (const Raw &r : raw)
+        if (r.paint || !anyPaint) for (int a = 0; a < 3; a++) { mn[a] = min(mn[a], r.mn[a]); mx[a] = max(mx[a], r.mx[a]); }
+    if (raw.empty() || mn[0] > mx[0]) return false;
+
+    m.pos.clear(); m.nrm.clear(); m.tri.clear(); m.triPart.clear(); m.parts.clear();
+    for (const Raw &r : raw) {
+        // Morceau qui depasse nettement de la carrosserie (ceinture pendante, cable du frein a main sous la voiture) :
+        // laisse de cote, il deformerait l'apercu.
+        bool out = false;
+        for (int a = 0; a < 3; a++) if (r.mn[a] < mn[a] - 0.15f || r.mx[a] > mx[a] + 0.15f) out = true;
+        if (out || m.parts.size() >= 65535) continue;
+        std::string low = r.name;
+        for (char &ch : low) ch = (char)tolower((unsigned char)ch);
+        CarPart cp;
+        cp.paint = r.paint;
+        cp.glass = !r.paint && (low.find("window") != std::string::npos || low.find("windshield") != std::string::npos || low.find("glass") != std::string::npos);
+        cp.r = min(max(r.col[0], 0.0f), 1.0f); cp.g = min(max(r.col[1], 0.0f), 1.0f); cp.b = min(max(r.col[2], 0.0f), 1.0f);
+        // Blanc pur hors carrosserie : matiere texturee dans le jeu (habitacle, pieces) ; gris fonce dans l'apercu.
+        if (!cp.paint && !cp.glass && cp.r > 0.95f && cp.g > 0.95f && cp.b > 0.95f) { cp.r = 0.24f; cp.g = 0.24f; cp.b = 0.25f; }
+        if (cp.glass) { cp.r = 0.45f; cp.g = 0.56f; cp.b = 0.66f; }   // vitres (givre du jeu en blanc) : verre bleute
+        uint16_t pi = (uint16_t)m.parts.size();
+        m.parts.push_back(cp);
+        uint32_t base = (uint32_t)(m.pos.size() / 3);
+        m.pos.insert(m.pos.end(), r.v.begin(), r.v.end());
+        m.nrm.resize(m.pos.size(), 0.0f);
+        for (size_t t = 0; t + 2 < r.idx.size(); t += 3) {
+            uint32_t ia = base + r.idx[t], ib = base + r.idx[t + 1], ic = base + r.idx[t + 2];
+            const float *a = &m.pos[ia * 3], *b = &m.pos[ib * 3], *c = &m.pos[ic * 3];
+            float e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, e2[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+            float fn[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+            for (uint32_t v : { ia, ib, ic }) for (int k = 0; k < 3; k++) m.nrm[v * 3 + k] += fn[k];   // ponderee par l'aire
+            m.tri.push_back(ia); m.tri.push_back(ib); m.tri.push_back(ic);
+            m.triPart.push_back(pi);
+        }
+    }
+    if (m.tri.empty()) return false;
+    for (size_t v = 0; v + 2 < m.nrm.size(); v += 3) {
+        float *nv = &m.nrm[v], l = sqrtf(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+        if (l > 1e-12f) { nv[0] /= l; nv[1] /= l; nv[2] /= l; } else { nv[0] = 0; nv[1] = 1; nv[2] = 0; }
+    }
+    float rad = 0;
+    for (int a = 0; a < 3; a++) {
+        m.mn[a] = mn[a]; m.mx[a] = mx[a]; m.c[a] = (mn[a] + mx[a]) / 2;
+        rad += (mx[a] - mn[a]) * (mx[a] - mn[a]) / 4;
+    }
+    m.dist = 3.2f * sqrtf(rad);
+    // Largeur du cadrage : la boite tient dans l'image sous tous les angles (lacet complet, tangage permis) ; la
+    // hauteur se cale au tangage actuel (CarCamera).
+    m.fx = 1e-3f;
+    for (int ia = 0; ia < 72; ia++)
+        for (int ip = 0; ip <= 4; ip++) {
+            float yaw = ia * 6.2831853f / 72, pitch = kPitchMin + (kPitchMax - kPitchMin) * ip / 4;
+            CarRot R = { cosf(yaw), sinf(yaw), cosf(pitch), sinf(pitch) };
+            for (int k = 0; k < 8; k++) {
+                float X, Y, Z;
+                CarXf(R, ((k & 1) ? mx[0] : mn[0]) - m.c[0], ((k & 2) ? mx[1] : mn[1]) - m.c[1], ((k & 4) ? mx[2] : mn[2]) - m.c[2], X, Y, Z);
+                Z += m.dist;
+                m.fx = max(m.fx, fabsf(X / Z));
+            }
+        }
+    return true;
+}
+
+// Relit corris.mesh s'il a change (le mod le reecrit a chaque partie) ; au plus toutes les 2 s.
+static void CarCheckFile()
+{
+    DWORD now = GetTickCount();
+    std::wstring path = g_gameDir + L"MWCoop\\cache\\corris.mesh";
+    if (g_car.state != 0 && path == g_car.path && now - g_car.checkT < 2000) return;
+    g_car.checkT = now;
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    bool exists = !g_gameDir.empty() && GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a) && !(a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    if (!exists) {
+        if (g_car.state != -1) { g_car = CarModel(); g_car.state = -1; g_car.checkT = now; g_carDirty = true; }
+        g_car.path = path;
+        return;
+    }
+    if (g_car.state != 0 && g_car.state != -1 && path == g_car.path && CompareFileTime(&a.ftLastWriteTime, &g_car.mt) == 0) return;
+    CarModel m;
+    std::vector<unsigned char> d;
+    m.state = ReadAll(path, d) && CarParse(d, m) ? 1 : -2;
+    m.path = path;
+    m.mt = a.ftLastWriteTime;
+    m.checkT = now;
+    g_car = std::move(m);
+    g_carDirty = true;
+}
+
+struct CarSV { float x, y, iz, r, g, b; };
+
+// Triangle en pixels (rendu 2x), profondeur en 1/z ; alpha < 0 : opaque (ecrit la profondeur), sinon vitre melangee.
+static void CarTri(const CarSV &v0, const CarSV &v1, const CarSV &v2, int W, int H, uint32_t *pix, float *zb, float alpha)
+{
+    float area = (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x);
+    if (fabsf(area) < 1e-4f) return;
+    int x0 = max(0, (int)floorf(min(v0.x, min(v1.x, v2.x)))), x1 = min(W - 1, (int)ceilf(max(v0.x, max(v1.x, v2.x))));
+    int y0 = max(0, (int)floorf(min(v0.y, min(v1.y, v2.y)))), y1 = min(H - 1, (int)ceilf(max(v0.y, max(v1.y, v2.y))));
+    if (x0 > x1 || y0 > y1) return;
+    float inv = 1.0f / area;
+    // poids barycentriques au centre des pixels : w0 (arete v1-v2), w1 (arete v2-v0), w2 = 1 - w0 - w1 ; pas en x (a)
+    // et en y (b), valeur au pixel (x0, y0) (r)
+    float a0 = -(v2.y - v1.y) * inv, b0 = (v2.x - v1.x) * inv;
+    float a1 = -(v0.y - v2.y) * inv, b1 = (v0.x - v2.x) * inv;
+    float a2 = -(a0 + a1), b2 = -(b0 + b1);
+    float px = x0 + 0.5f, py = y0 + 0.5f;
+    float r0 = ((v2.x - v1.x) * (py - v1.y) - (v2.y - v1.y) * (px - v1.x)) * inv;
+    float r1 = ((v0.x - v2.x) * (py - v2.y) - (v0.y - v2.y) * (px - v2.x)) * inv;
+    float r2 = 1.0f - r0 - r1;
+    // attributs lineaires a l'ecran (1/z, couleur) : meme forme que les poids
+    struct Pl { float at, dx, dy; };
+    auto plane = [&](float q0, float q1, float q2) { return Pl{ q0 * r0 + q1 * r1 + q2 * r2, q0 * a0 + q1 * a1 + q2 * a2, q0 * b0 + q1 * b1 + q2 * b2 }; };
+    Pl pz = plane(v0.iz, v1.iz, v2.iz), pr = plane(v0.r, v1.r, v2.r), pg = plane(v0.g, v1.g, v2.g), pb = plane(v0.b, v1.b, v2.b);
+    const float eps = -1e-5f;
+    for (int y = y0; y <= y1; y++) {
+        int dy = y - y0;
+        // portion de la ligne dans le triangle : w + a * k >= eps pour les trois aretes
+        float lo = 0, hi = (float)(x1 - x0);
+        bool empty = false;
+        auto clip = [&](float w, float a) {
+            if (a > 1e-12f) lo = max(lo, (eps - w) / a);
+            else if (a < -1e-12f) hi = min(hi, (eps - w) / a);
+            else if (w < eps) empty = true;
+        };
+        clip(r0 + b0 * dy, a0);
+        clip(r1 + b1 * dy, a1);
+        clip(r2 + b2 * dy, a2);
+        if (empty || lo > hi) continue;
+        int ks = (int)ceilf(lo), ke = (int)floorf(hi);
+        float iz = pz.at + pz.dy * dy + pz.dx * ks, r = pr.at + pr.dy * dy + pr.dx * ks;
+        float g = pg.at + pg.dy * dy + pg.dx * ks, b = pb.at + pb.dy * dy + pb.dx * ks;
+        uint32_t *prow = pix + (size_t)y * W;
+        float *zrow = zb + (size_t)y * W;
+        for (int x = x0 + ks; x <= x0 + ke; x++, iz += pz.dx, r += pr.dx, g += pg.dx, b += pb.dx) {
+            if (iz <= zrow[x]) continue;
+            // (bords : l'extrapolation peut sortir de 0..255 d'un rien)
+            float cr = min(max(r, 0.0f), 255.0f), cg = min(max(g, 0.0f), 255.0f), cb = min(max(b, 0.0f), 255.0f);
+            if (alpha < 0) {
+                zrow[x] = iz;
+                prow[x] = 0xFF000000u | ((uint32_t)cr << 16) | ((uint32_t)cg << 8) | (uint32_t)cb;
+            } else {   // premultiplie : dst = src * a + dst * (1 - a)
+                uint32_t d = prow[x];
+                float k = 1.0f - alpha;
+                uint32_t A = (uint32_t)(alpha * 255 + (d >> 24) * k);
+                uint32_t R = (uint32_t)min(255.0f, cr * alpha + ((d >> 16) & 255) * k);
+                uint32_t G = (uint32_t)min(255.0f, cg * alpha + ((d >> 8) & 255) * k);
+                uint32_t B = (uint32_t)min(255.0f, cb * alpha + (d & 255) * k);
+                prow[x] = (A << 24) | (R << 16) | (G << 8) | B;
+            }
+        }
+    }
+}
+
+// Projection (pixels du rendu 2x de taille BW x BH) d'un point de la voiture.
+struct CarCam { CarRot R; float f, cx, cy, mid; };
+static CarCam CarCamera(int BW, int BH)
+{
+    CarCam c;
+    c.R = { cosf(g_carYaw), sinf(g_carYaw), cosf(g_carPitch), sinf(g_carPitch) };
+    // hauteur : boite sous tous les lacets, au tangage actuel (largeur : g_car.fx, tous angles) ; les coins de la
+    // boite debordent de la voiture (formes arrondies), d'ou des marges un peu plus serrees que 1
+    float fy0 = 1e9f, fy1 = -1e9f;
+    for (int ia = 0; ia < 72; ia++) {
+        float yaw = ia * 6.2831853f / 72;
+        CarRot R = { cosf(yaw), sinf(yaw), c.R.cp, c.R.sp };
+        for (int k = 0; k < 8; k++) {
+            float X, Y, Z;
+            CarXf(R, ((k & 1) ? g_car.mx[0] : g_car.mn[0]) - g_car.c[0], ((k & 2) ? g_car.mx[1] : g_car.mn[1]) - g_car.c[1],
+                  ((k & 4) ? g_car.mx[2] : g_car.mn[2]) - g_car.c[2], X, Y, Z);
+            Z += g_car.dist;
+            fy0 = min(fy0, Y / Z);
+            fy1 = max(fy1, Y / Z);
+        }
+    }
+    c.f = min(BW * 0.53f / g_car.fx, BH * 0.98f / (fy1 - fy0));
+    c.mid = (fy0 + fy1) / 2;
+    c.cx = BW * 0.5f;
+    c.cy = BH * 0.5f;
+    return c;
+}
+static void CarProject(const CarCam &c, float x, float y, float z, float &sx, float &sy, float &iz)
+{
+    float X, Y, Z;
+    CarXf(c.R, x - g_car.c[0], y - g_car.c[1], z - g_car.c[2], X, Y, Z);
+    Z += g_car.dist;
+    iz = 1.0f / max(Z, 0.05f);
+    sx = c.cx + c.f * X * iz;
+    sy = c.cy - c.f * (Y * iz - c.mid);
+}
+
+static void CarRender(int W, int H)
+{
+    const int S = 2, BW = W * S, BH = H * S;
+    g_carBig.assign((size_t)BW * BH, 0);
+    g_carZ.assign((size_t)BW * BH, 0.0f);
+    g_carPix.assign((size_t)W * H, 0);
+    if (g_car.state != 1) return;
+    CarCam cam = CarCamera(BW, BH);
+    size_t nv = g_car.pos.size() / 3;
+    static std::vector<float> vp, sv, lit;   // position vue, ecran (x, y, 1/z), eclairage (diffus, reflet ; face, dos)
+    vp.resize(nv * 3); sv.resize(nv * 3); lit.resize(nv * 4);
+    // Lumieres (repere de la camera, vers la lumiere) : principale en haut a gauche devant, appoint a droite.
+    auto norm = [](float x, float y, float z, float *o) { float l = sqrtf(x * x + y * y + z * z); o[0] = x / l; o[1] = y / l; o[2] = z / l; };
+    float L1[3], L2[3], Hh[3];
+    norm(-0.5f, 0.8f, -0.45f, L1);
+    norm(0.75f, 0.2f, -0.3f, L2);
+    norm(L1[0], L1[1], L1[2] - 1.0f, Hh);   // demi-vecteur avec la direction de la camera (0, 0, -1)
+    for (size_t v = 0; v < nv; v++) {
+        const float *p = &g_car.pos[v * 3], *n = &g_car.nrm[v * 3];
+        float X, Y, Z;
+        CarXf(cam.R, p[0] - g_car.c[0], p[1] - g_car.c[1], p[2] - g_car.c[2], X, Y, Z);
+        Z += g_car.dist;
+        vp[v * 3] = X; vp[v * 3 + 1] = Y; vp[v * 3 + 2] = Z;
+        float iz = 1.0f / max(Z, 0.05f);
+        sv[v * 3] = cam.cx + cam.f * X * iz;
+        sv[v * 3 + 1] = cam.cy - cam.f * (Y * iz - cam.mid);
+        sv[v * 3 + 2] = iz;
+        float nx, ny, nz;
+        CarXf(cam.R, n[0], n[1], n[2], nx, ny, nz);
+        for (int side = 0; side < 2; side++) {
+            float s = side ? -1.0f : 1.0f;
+            float d1 = s * (nx * L1[0] + ny * L1[1] + nz * L1[2]), d2 = s * (nx * L2[0] + ny * L2[1] + nz * L2[2]);
+            float h = s * (nx * Hh[0] + ny * Hh[1] + nz * Hh[2]), sky = s * ny;
+            lit[v * 4 + side * 2] = 0.30f + 0.10f * sky + 0.78f * max(d1, 0.0f) + 0.22f * max(d2, 0.0f);
+            float hs = max(h, 0.0f), h2 = hs * hs, h4 = h2 * h2, h8 = h4 * h4, h16 = h8 * h8;
+            lit[v * 4 + side * 2 + 1] = h16 * h8 * h4;   // h^28
+        }
+    }
+    float paint[3];
+    if (g_carColor >= 0) { paint[0] = ((g_carColor >> 16) & 255) / 255.0f; paint[1] = ((g_carColor >> 8) & 255) / 255.0f; paint[2] = (g_carColor & 255) / 255.0f; }
+    else paint[0] = paint[1] = paint[2] = 0.80f;   // au hasard : gris clair
+    uint32_t *pix = g_carBig.data();
+    float *zb = g_carZ.data();
+    size_t nt = g_car.tri.size() / 3;
+    for (int pass = 0; pass < 2; pass++) {   // 0 : opaque ; 1 : vitres (apres, sans ecrire la profondeur)
+        for (size_t t = 0; t < nt; t++) {
+            const CarPart &part = g_car.parts[g_car.triPart[t]];
+            if (part.glass != (pass == 1)) continue;
+            uint32_t i[3] = { g_car.tri[t * 3], g_car.tri[t * 3 + 1], g_car.tri[t * 3 + 2] };
+            const float *a = &vp[i[0] * 3], *b = &vp[i[1] * 3], *c = &vp[i[2] * 3];
+            if (a[2] < 0.1f || b[2] < 0.1f || c[2] < 0.1f) continue;
+            // face tournee vers la camera ? (normale d'Unity : cross(b - a, c - a)) ; sinon eclairee comme le dos
+            float e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, e2[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+            float fn[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+            int side = fn[0] * a[0] + fn[1] * a[1] + fn[2] * a[2] < 0 ? 0 : 1;
+            const float *base = part.paint ? paint : &part.r;
+            float ks = part.glass ? 0.9f : part.paint ? 0.55f : 0.12f;
+            CarSV s[3];
+            for (int k = 0; k < 3; k++) {
+                float df = lit[i[k] * 4 + side * 2], sp = lit[i[k] * 4 + side * 2 + 1] * ks;
+                s[k].x = sv[i[k] * 3]; s[k].y = sv[i[k] * 3 + 1]; s[k].iz = sv[i[k] * 3 + 2];
+                s[k].r = min(255.0f, (base[0] * df + sp) * 255);
+                s[k].g = min(255.0f, (base[1] * df + sp) * 255);
+                s[k].b = min(255.0f, (base[2] * df + sp) * 255);
+            }
+            CarTri(s[0], s[1], s[2], BW, BH, pix, zb, pass ? 0.4f : -1.0f);
+        }
+    }
+    // Reduction 2x2 (antialiasing) ; moyenne des quatre canaux premultiplies
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            const uint32_t *q = pix + (size_t)(y * 2) * BW + x * 2;
+            uint32_t c4[4] = { q[0], q[1], q[BW], q[BW + 1] }, out = 0;
+            for (int sh = 0; sh < 32; sh += 8) {
+                uint32_t sum = 0;
+                for (uint32_t c : c4) sum += (c >> sh) & 255;
+                out |= ((sum + 2) / 4) << sh;
+            }
+            g_carPix[(size_t)y * W + x] = out;
+        }
+}
+
+static int CarSwatchColor(int i) { return i <= 0 ? -1 : kSwatches[i - 1].rgb; }
+// Pastille du choix actuel : 0 au hasard, 1.. une teinte, -1 couleur personnalisee
+static int CarSwatchSel()
+{
+    if (g_carColor < 0) return 0;
+    for (int i = 1; i < kSwatchN; i++) if (kSwatches[i - 1].rgb == g_carColor) return i;
+    return -1;
+}
+static RectF CarSwatchRect(int i) { return RectF(458 + (i % 8) * 36.0f, 422 + (i / 8) * 36.0f, 28, 28); }
+static int CarSwatchAt(float x, float y)
+{
+    for (int i = 0; i < kSwatchN; i++) {
+        RectF r = CarSwatchRect(i);
+        r.Inflate(3, 3);
+        if (r.Contains(x, y)) return i;
+    }
+    return -1;
+}
+static Color CarRgb(int rgb, BYTE a = 255) { return Color(a, (BYTE)(rgb >> 16), (BYTE)(rgb >> 8), (BYTE)rgb); }
+
+static void CarSetColor(int rgb)
+{
+    g_carColor = rgb;
+    g_carDirty = true;
+    if (g_gameDir.empty()) return;
+    EnsureModDir();
+    char v[16] = "";
+    if (rgb >= 0) sprintf_s(v, "%06X", rgb & 0xFFFFFF);
+    WritePrivateProfileStringA("Coop", "CouleurVoiture", v, ModIniA().c_str());
+}
+
+// Selecteur de couleur de Windows (couleurs perso : les teintes de la palette).
+static void CarPickColor()
+{
+    static COLORREF custom[16];
+    static bool init;
+    if (!init) {
+        for (int i = 0; i < 16 && i < (int)_countof(kSwatches); i++) { int c = kSwatches[i].rgb; custom[i] = RGB(c >> 16, (c >> 8) & 255, c & 255); }
+        init = true;
+    }
+    int cur = g_carColor >= 0 ? g_carColor : 0xC8C8C8;
+    CHOOSECOLORW cc = { sizeof(cc) };
+    cc.hwndOwner = g_wnd;
+    cc.lpCustColors = custom;
+    cc.rgbResult = RGB(cur >> 16, (cur >> 8) & 255, cur & 255);
+    cc.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ANYCOLOR;
+    if (ChooseColorW(&cc)) CarSetColor((GetRValue(cc.rgbResult) << 16) | (GetGValue(cc.rgbResult) << 8) | GetBValue(cc.rgbResult));
+}
+
+// Camembert de six teintes (pastille "au hasard", bouton "Autre couleur").
+static void DrawCarWheel(Graphics &g, RectF r)
+{
+    static const int pick[] = { 5, 2, 10, 1, 13, 3 };
+    for (int k = 0; k < 6; k++) { SolidBrush b(CarRgb(kSwatches[pick[k]].rgb)); g.FillPie(&b, r, k * 60.0f - 90, 60.0f); }
+}
+
+static void DrawCar(Graphics &g)
+{
+    CarCheckFile();
+    DrawPanel(g);
+    RectF view = kCarView;
+    {   // carte de l'apercu : leger degrade
+        GraphicsPath cp;
+        RoundRect(cp, view, 12);
+        LinearGradientBrush lg(RectF(view.X, view.Y - 1, view.Width, view.Height + 2), Mix(TH(card), kAcc, g_dark ? 0.10f : 0.06f), TH(card), LinearGradientModeVertical);
+        g.FillPath(&lg, &cp);
+        Pen pen(TH(choiceBorder), 1.2f);
+        g.DrawPath(&pen, &cp);
+    }
+    if (g_car.state != 1) {
+        const wchar_t *msg = g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\corris.mesh) : lancez une partie pour le refaire.", L"Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.")
+                                               : T(L"Lancez une partie une fois pour voir l'aper\u00E7u de la voiture", L"Start a game once to see the car preview");
+        FontFamily fam(L"Segoe UI");
+        Font font(&fam, 13.5f, FontStyleRegular, UnitPixel);
+        StringFormat sf;
+        sf.SetAlignment(StringAlignmentCenter);
+        sf.SetLineAlignment(StringAlignmentCenter);
+        SolidBrush gb(kGrey);
+        g.DrawString(msg, -1, &font, RectF(view.X + 40, view.Y, view.Width - 80, view.Height), &sf, &gb);
+    } else {
+        int W = max(8, (int)(view.Width * g_scale + 0.5f)), H = max(8, (int)(view.Height * g_scale + 0.5f));
+        DWORD now = GetTickCount();
+        if (W != g_carW || H != g_carH || g_carDirty || g_carDrawnColor != g_carColor || now - g_carDrawT >= 33) {
+            g_carW = W; g_carH = H;
+            g_carDirty = false;
+            g_carDrawnColor = g_carColor;
+            g_carDrawT = now;
+            CarRender(W, H);
+        }
+        {   // ombre douce sous la voiture : empreinte au sol projetee
+            CarCam cam = CarCamera(W * 2, H * 2);
+            float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
+            for (int k = 0; k < 4; k++) {
+                float sx, sy, iz;
+                CarProject(cam, (k & 1) ? g_car.mx[0] : g_car.mn[0], g_car.mn[1], (k & 2) ? g_car.mx[2] : g_car.mn[2], sx, sy, iz);
+                x0 = min(x0, sx); x1 = max(x1, sx); y0 = min(y0, sy); y1 = max(y1, sy);
+            }
+            float k = 1.0f / (2 * g_scale);
+            RectF sr(view.X + x0 * k, view.Y + y0 * k, (x1 - x0) * k, (y1 - y0) * k);
+            sr.Inflate(sr.Width * 0.06f, max(6.0f, sr.Height * 0.12f));
+            sr.Offset(0, 4);
+            GraphicsPath sp;
+            sp.AddEllipse(sr);
+            PathGradientBrush pb(&sp);
+            pb.SetCenterColor(Color(g_dark ? 150 : 90, 0, 0, 0));
+            Color edge(0, 0, 0, 0);
+            int one = 1;
+            pb.SetSurroundColors(&edge, &one);
+            g.SetClip(view);
+            g.FillPath(&pb, &sp);
+            g.ResetClip();
+        }
+        Bitmap bm(g_carW, g_carH, g_carW * 4, PixelFormat32bppPARGB, (BYTE *)g_carPix.data());
+        InterpolationMode im = g.GetInterpolationMode();
+        g.SetInterpolationMode(InterpolationModeNearestNeighbor);   // 1 pixel pour 1 pixel (deja lisse)
+        g.DrawImage(&bm, view);
+        g.SetInterpolationMode(im);
+        Text(g, T(L"Glisse pour tourner", L"Drag to rotate"), RectF(view.X + 12, view.Y + view.Height - 24, view.Width - 24, 18), 10.5f, FontStyleRegular, WithA(kGrey, 0.85f), StringAlignmentFar);
+    }
+
+    // Choix de la couleur : nom (survol, sinon choix actuel) et pastilles
+    int sel = CarSwatchSel(), show = g_carHot >= 0 ? g_carHot : sel;
+    wchar_t hex[16] = L"";
+    std::wstring name;
+    if (show == 0) name = T(L"Couleur au hasard (comme le jeu)", L"Random color (like the game)");
+    else {
+        int c = show > 0 ? kSwatches[show - 1].rgb : g_carColor;
+        swprintf_s(hex, L" \u00B7 #%06X", c & 0xFFFFFF);
+        name = (show > 0 ? (g_fr ? kSwatches[show - 1].fr : kSwatches[show - 1].en) : T(L"Couleur personnalis\u00E9e", L"Custom color")) + std::wstring(hex);
+    }
+    Text(g, T(L"COULEUR DE LA CARROSSERIE", L"BODY COLOR"), RectF(458, 402, 220, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+    Text(g, name, RectF(640, 402, 296, 18), 12, FontStyleBold, kInk, StringAlignmentFar);
+    for (int i = 0; i < kSwatchN; i++) {
+        RectF r = CarSwatchRect(i);
+        if (i == sel) { Pen ring(kAcc, 2.2f); g.DrawEllipse(&ring, r.X - 4, r.Y - 4, r.Width + 8, r.Height + 8); }
+        else if (i == g_carHot) { Pen ring(WithA(kGrey, 0.75f), 1.4f); g.DrawEllipse(&ring, r.X - 3.5f, r.Y - 3.5f, r.Width + 7, r.Height + 7); }
+        if (i == 0) {   // au hasard : camembert et point d'interrogation
+            DrawCarWheel(g, r);
+            SolidBrush mid(TH(card));
+            g.FillEllipse(&mid, r.X + 7, r.Y + 7, r.Width - 14, r.Height - 14);
+            Text(g, L"?", RectF(r.X, r.Y + 0.5f, r.Width, r.Height), 11.5f, FontStyleBold, kInk);
+        } else {
+            SolidBrush b(CarRgb(kSwatches[i - 1].rgb));
+            g.FillEllipse(&b, r);
+        }
+        Pen edge(WithA(kInk, 0.22f), 1.0f);
+        g.DrawEllipse(&edge, r);
+    }
+    {   // Autre couleur... : pilule ; la couleur personnalisee y est montree (et entouree) quand elle est choisie
+        Button &b = g_btn[B_COLOR];
+        RectF r = b.r;
+        if (g_pressed == B_COLOR && g_hot == B_COLOR) r.Offset(0, 1);
+        GraphicsPath p;
+        RoundRect(p, r, r.Height / 2);
+        SolidBrush fill(Mix(TH(btn2), TH(btn2Hot), b.hover));
+        g.FillPath(&fill, &p);
+        Pen pen(sel < 0 ? kAcc : WithA(Mix(kGrey, kAcc, b.hover), 0.8f), sel < 0 ? 2.2f : 1.2f);
+        g.DrawPath(&pen, &p);
+        RectF dot(r.X + 7, r.Y + 6, r.Height - 12, r.Height - 12);
+        if (sel < 0) { SolidBrush db(CarRgb(g_carColor)); g.FillEllipse(&db, dot); }
+        else DrawCarWheel(g, dot);
+        Pen de(WithA(kInk, 0.22f), 1.0f);
+        g.DrawEllipse(&de, dot);
+        Text(g, T(L"Autre couleur\u2026", L"Other color\u2026"), RectF(dot.X + dot.Width + 4, r.Y, r.Width - dot.Width - 18, r.Height), 12.5f, FontStyleBold, Mix(kInk, kAcc, b.hover));
+    }
+    Pen sep(TH(sep), 1);
+    g.DrawLine(&sep, kOptPanel.X + 18, 532.0f, kOptPanel.X + kOptPanel.Width - 18, 532.0f);
+    Para(g, T(L"S'applique \u00E0 une nouvelle partie ; l'h\u00F4te la donne aux invit\u00E9s.", L"Applies to a new game; the host gives it to the guests."),
+         RectF(kOptPanel.X + 20, 536, kOptPanel.Width - 40, 44), 12, kGrey, StringAlignmentCenter);
+}
+
+// Clic dans l'onglet : une pastille, ou l'apercu (debut du glisser).
+static bool CarMouseDown(float x, float y)
+{
+    int s = CarSwatchAt(x, y);
+    if (s >= 0) { CarSetColor(CarSwatchColor(s)); return true; }
+    if (g_car.state == 1 && kCarView.Contains(x, y)) {
+        g_carDrag = true;
+        g_carDragX = x; g_carDragY = y;
+        SetCapture(g_wnd);
+        return true;
+    }
+    return kOptPanel.Contains(x, y);
+}
+static void CarDragTo(float x, float y)
+{
+    g_carYaw = fmodf(g_carYaw - (x - g_carDragX) * 0.012f + 6.2831853f, 6.2831853f);
+    g_carPitch = min(max(g_carPitch + (y - g_carDragY) * 0.008f, kPitchMin), kPitchMax);
+    g_carDragX = x; g_carDragY = y;
+    g_carDirty = true;
 }
 
 // ---------------------------------------------------------------- interface
@@ -1776,6 +2359,7 @@ static void OnButton(int id)
     case B_LOGS: g_tab = g_tab == TAB_LOGS ? -1 : TAB_LOGS; g_optHot = -1; if (g_tab == TAB_LOGS) LogsScan(); break;
     case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
+    case B_COLOR: CarPickColor(); break;
     }
 }
 
@@ -1794,6 +2378,8 @@ static void Tick()
         g_alpha -= dt * 4;
         if (g_alpha <= 0) { DestroyWindow(g_wnd); return; }
     } else if (g_alpha < 1) g_alpha = min(g_alpha + dt * 5, 1.0f);
+    // Apercu de la voiture : rotation lente, arretee pendant un glisser et 2,5 s apres
+    if (g_tab == TAB_CAR && g_state == ST_IDLE && !g_carDrag && now - g_carIdleT > 2500) g_carYaw = fmodf(g_carYaw + dt * 0.45f, 6.2831853f);
 
     // Ecran d'attente : jusqu'a la fenetre du jeu. Le processus lance peut se fermer tout de suite si Steam relance
     // le jeu lui-meme : on ne conclut a un echec qu'apres 15 s sans aucun mywintercar.exe.
@@ -1845,18 +2431,21 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     case WM_MOUSEMOVE: {
         float x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
+        if (g_carDrag) { CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
         g_hot = HitButton(x, y);
         g_tabHot = HitTab(x, y);
         HitOption(x, y, &g_optHot, &g_optPart);
         g_logRowHot = g_tab == TAB_LOGS ? LogRowAt(x, y, &g_logPart) : -1;
+        g_carHot = g_tab == TAB_CAR && g_state == ST_IDLE ? CarSwatchAt(x, y) : -1;
         TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, h, 0 };
         TrackMouseEvent(&tme);
         bool link = g_tab == TAB_LOGS && kLogsFolderR.Contains(x, y);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || link) ? IDC_HAND
-                                   : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
+        bool carView = g_tab == TAB_CAR && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(x, y);
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || link) ? IDC_HAND
+                                   : carView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
-    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; return 0;
+    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; return 0;
     case WM_MOUSEWHEEL:
         if (g_tab >= 0) {
             float step = -(short)HIWORD(wp) / 120.0f * kRowH * 1.5f;
@@ -1876,6 +2465,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         int t = HitTab(x, y);
         if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); return 0; }   // un 2e clic referme
         if (g_tab == TAB_LOGS && LogsMouseDown(x, y)) return 0;
+        if (g_tab == TAB_CAR && CarMouseDown(x, y)) return 0;
         int row, part;
         HitOption(x, y, &row, &part);
         if (row >= 0) { OptStep(row, part < 0 ? -1 : 1); return 0; }
@@ -1884,7 +2474,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         SendMessageW(h, WM_NCLBUTTONDOWN, HTCAPTION, 0);   // glisser la fenetre
         return 0;
     }
+    case WM_CAPTURECHANGED:   // capture perdue en plein glisser (Alt+Tab...) : fin du glisser
+        if (g_carDrag) { g_carDrag = false; g_carIdleT = GetTickCount(); }
+        return 0;
     case WM_LBUTTONUP: {
+        if (g_carDrag) { g_carDrag = false; g_carIdleT = GetTickCount(); }
         int p = g_pressed;
         g_pressed = -1;
         ReleaseCapture();
@@ -2043,6 +2637,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop") { g_tab = TAB_COOP; g_optHot = TabRows(TAB_COOP)[1]; g_optPart = 1; }
+        else if (st == L"voiture") g_tab = TAB_CAR;   // couleur : CouleurVoiture du mwcoop.ini du jeu
         else if (st == L"notes") {   // notes d'exemple (le depot n'a pas encore de release)
             g_notes = { { L"0.1.1-prealpha", L"09/10/2026", L"\u2022 Exemple de note de version (capture).\n\u2022 Deuxi\u00E8me ligne : une correction.", L"\u2022 Sample release note (capture).\n\u2022 Second line: a fix.", L"" },
                         { L"0.1.0-prealpha", L"02/10/2026", L"\u2022 Premi\u00E8re version : chargeur, joueurs visibles.", L"\u2022 First version: loader, visible players.", L"" } };

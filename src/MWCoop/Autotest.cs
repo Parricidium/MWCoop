@@ -64,6 +64,26 @@ namespace MWCoop
             }
             if (mode == "etatpeinture" && t > 36f && !done) { done = true; string id = Config.Get("Test", "TestPiece", "VIN4111"); Log.Info("autotest : peinture " + id + " : " + Paint.State(id)); }
             if (mode == "reglage" && t > 30f && !done) { done = true; Log.Info("autotest : reglage " + Settings.TestNearest()); }
+            if (mode == "quete")
+            {
+                // [Test] TestQuete=partie de cle, TestEvenement=evenement envoye a 30 s ; etat a 40 s.
+                string part = Config.Get("Test", "TestQuete", "WoodJob1Point");
+                if (t > 30f && step == 0)
+                {
+                    step = 1;
+                    Log.Info("autotest : quete " + Jobs.TestEvent(part, Config.Get("Test", "TestEvenement", "ORDER")));
+                    if (Config.GetInt("Test", "TestPaie", 0) != 0) Log.Info("autotest : le boulot paie, " + Wallet.Test(300));
+                }
+                if (t > 40f && step == 1) { step = 2; Log.Info("autotest : quete " + Jobs.StateOf(part)); }
+            }
+            if (mode == "etatquete")
+            {
+                string part = Config.Get("Test", "TestQuete", "WoodJob1Point");
+                string st = Jobs.StateOf(part);
+                // Le boulot rejoue ici paie lui aussi (simule) : ne doit pas etre compte deux fois.
+                if (Config.GetInt("Test", "TestPaie", 0) != 0 && step == 0 && st.EndsWith("Activate order")) { step = 1; Log.Info("autotest : le boulot rejoue paie, " + Wallet.Test(300)); }
+                if (t > 45f && !done) { done = true; Log.Info("autotest : quete " + st + ", " + Wallet.State()); }
+            }
             if (mode == "phares" && t > 20f && !done) { done = true; Log.Info("autotest : " + Interactions.TestNamed("KEKMET(350-400psi)/LOD/Dashboard/ButtonLightModes")); }
             if (mode == "porte" && t > 15f && !done)
             {
