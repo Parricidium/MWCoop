@@ -58,6 +58,7 @@ namespace MWCoop
             Step("reglages", Settings.Update);
             Step("liquides", Fluids.Update);
             Step("consommables", Consume.Update);
+            Step("voix", Voices.Update);
             Step("trafic", Traffic.Update);
             Step("couleur", CarColor.Update);
             Step("quetes", Jobs.Update);
@@ -86,6 +87,7 @@ namespace MWCoop
             Settings.OnLevelLoaded();
             Fluids.OnLevelLoaded();
             Consume.OnLevelLoaded();
+            Voices.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             CarColor.OnLevelLoaded();
             Jobs.OnLevelLoaded();

@@ -75,5 +75,6 @@ namespace MWCoop.Net
         Job = 21,         // boulot : changement d'etat d'un automate de progression
         Fluid = 22,       // liquides et usure : lot de (cle, valeur) changees
         Consume = 23,     // objet mange, bu ou jete (ID) : il disparait chez tous
+        Voice = 24,       // replique d'un PNJ ou juron d'un joueur (groupe/variante MasterAudio)
     }
 }

@@ -191,6 +191,11 @@ namespace MWCoop
                         Log.Info("autotest : produit cree " + (made != null ? made.name + " " + Props.ItemId(made) : "?"));
                     }
             }
+            if (mode == "voix" && t > 35f && !done)
+            {
+                done = true;
+                Log.Info("autotest : voix " + Voices.Test(Config.Get("Test", "TestVoix", "Teimo")));
+            }
             if (mode == "manger" && t > 40f && !done)
             {
                 done = true;
