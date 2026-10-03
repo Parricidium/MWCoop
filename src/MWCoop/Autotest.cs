@@ -231,6 +231,7 @@ namespace MWCoop
                         Log.Info("autotest : produit cree " + (made != null ? made.name + " " + Props.ItemId(made) : "?"));
                     }
             }
+            if (mode == "portiere" && t > 38f && step == 0) { step = 1; Log.Info("autotest : " + CarDoors.TestPush(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), -35f)); }
             if (mode == "portiere" && t > 30f && !done)
             {
                 done = true;
