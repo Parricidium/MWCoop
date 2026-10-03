@@ -57,6 +57,7 @@ namespace MWCoop
             Step("peinture", Paint.Update);
             Step("reglages", Settings.Update);
             Step("liquides", Fluids.Update);
+            Step("sauvegarde", SaveTransfer.Update);
             Step("consommables", Consume.Update);
             Step("voix", Voices.Update);
             Step("trafic", Traffic.Update);

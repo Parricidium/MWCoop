@@ -38,7 +38,7 @@ Already synced
 
 Not yet (roadmap)
 -----------------
-Fluids and wear, NPC conversations and voices, eating animation.
+Some solo actions for guests (windshield scraping...), items held in the hand.
 
 Problems?
 ---------
