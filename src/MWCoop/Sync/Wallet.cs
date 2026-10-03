@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -15,6 +16,13 @@ namespace MWCoop
     //    et retabli a son retour dans ce monde.
     public static class Wallet
     {
+        // Boulots rejoues (Jobs) : la paie qu'ils versent ici n'est pas renvoyee, et elle « consomme »
+        // le meme revenu annonce par le joueur qui a vraiment fait le boulot (pas de double paie).
+        static float suppressUntil;
+        static readonly System.Collections.Generic.List<KeyValuePair<float, float>> suppressed = new System.Collections.Generic.List<KeyValuePair<float, float>>();
+
+        public static void Suppress(float seconds) { suppressUntil = Mathf.Max(suppressUntil, Time.realtimeSinceStartup + seconds); }
+
         static FsmFloat cash, bank;
         static float lastCash, lastBank, next, readyAt = -1, nextStore;
         static string world;
@@ -85,6 +93,12 @@ namespace MWCoop
             float inB = dB > 0 ? dB - (dC < 0 ? transfer : 0) : 0;
             lastCash = cash.Value; lastBank = bank.Value;
             if (inC < 0.005f && inB < 0.005f) return;
+            if (Time.realtimeSinceStartup < suppressUntil)
+            {
+                suppressed.Add(new KeyValuePair<float, float>(Time.realtimeSinceStartup, inC + inB));
+                Log.Info("argent : revenu " + (inC + inB) + " venu d'un boulot rejoue, garde pour soi");
+                return;
+            }
             Log.Info("argent : revenu " + inC + " (liquide) + " + inB + " (banque), partage");
             Session.SendAll(new NetWriter(Msg.Income).U8(Session.LocalId).F32(inC).F32(inB), true);
         }
@@ -96,6 +110,10 @@ namespace MWCoop
             float inC = r.F32(), inB = r.F32();
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Income).U8(who).F32(inC).F32(inB), true, who);
             if (!ready || inC < 0 || inB < 0 || inC + inB > 1e6f) return;
+            // Deja recu par le boulot rejoue ici ?
+            suppressed.RemoveAll(s => Time.realtimeSinceStartup - s.Key > 20f);
+            int hit = suppressed.FindIndex(s => Mathf.Abs(s.Value - (inC + inB)) < 0.5f);
+            if (hit >= 0) { suppressed.RemoveAt(hit); Log.Info("argent : revenu " + (inC + inB) + " deja verse par le boulot rejoue"); return; }
             cash.Value += inC; bank.Value += inB;
             lastCash += inC; lastBank += inB;   // pas de renvoi
             PlayerInfo pi;

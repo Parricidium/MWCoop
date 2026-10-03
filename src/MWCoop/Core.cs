@@ -58,6 +58,7 @@ namespace MWCoop
             Step("reglages", Settings.Update);
             Step("trafic", Traffic.Update);
             Step("couleur", CarColor.Update);
+            Step("quetes", Jobs.Update);
             Step("trace", Trace.Update);
             Step("deroule", Flow.Update);
             Step("autotest", Autotest.Update);
@@ -83,6 +84,7 @@ namespace MWCoop
             Settings.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             CarColor.OnLevelLoaded();
+            Jobs.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
 
