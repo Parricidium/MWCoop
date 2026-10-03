@@ -7,9 +7,11 @@ namespace MWCoop
     // Position, regard et posture de chaque joueur ; un avatar (PNJ du jeu) par joueur distant.
     public static class PlayerSync
     {
+        // Posture et actions du joueur, montrees par son avatar (Avatar).
+        public const int F_Crouch = 1, F_Seated = 2, F_Smoke = 4, F_Drink = 8, F_Carry = 16, F_Hello = 32, F_Sleep = 64;
         const float SendRate = 1f / 20f;
         static float nextSend;
-        static Transform player, cam;
+        static Transform player, cam, smoking, drinking, hello;
         static CharacterController controller;
         static float standHeight;
         static readonly Dictionary<int, Avatar> avatars = new Dictionary<int, Avatar>();
@@ -39,6 +41,10 @@ namespace MWCoop
             controller = go.GetComponent<CharacterController>();
             Transform c = player.Find("Pivot/AnimPivot/Camera/FPSCamera");
             cam = c != null ? c : player;
+            // Mains a la premiere personne : actives seulement pendant l'action.
+            Transform fps = player.Find("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+            // Drink reste actif (conteneur) : ce sont ses mains HandJuice, HandCoffeeHome... qui s'allument.
+            if (fps != null) { smoking = fps.Find("Smoking"); drinking = fps.Find("Drink/Hand"); hello = fps.Find("Hello"); }
             return true;
         }
 
@@ -70,6 +76,13 @@ namespace MWCoop
             }
         }
 
+        static bool AnyChildActive(Transform t)
+        {
+            if (t == null || !t.gameObject.activeInHierarchy) return false;
+            foreach (Transform c in t) if (c.gameObject.activeSelf) return true;
+            return false;
+        }
+
         static void SendLocal()
         {
             var st = new PlayerState();
@@ -85,7 +98,14 @@ namespace MWCoop
                 st.Speed = controller != null ? new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude : 0f;
                 // Accroupi : hauteur nettement sous la hauteur debout (la plus grande vue).
                 if (h > standHeight) standHeight = h;
-                if (h < standHeight * 0.8f) st.Flags |= 1;
+                if (h < standHeight * 0.8f) st.Flags |= F_Crouch;
+                if (Game.GlobalBool("PlayerSeated") || VehicleSync.LocalDriving >= 0) st.Flags |= F_Seated;
+                if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
+                if (smoking != null && smoking.gameObject.activeInHierarchy) st.Flags |= F_Smoke;
+                if (AnyChildActive(drinking) || Game.GlobalBool("PlayerDrinkOn")) st.Flags |= F_Drink;
+                if (hello != null && hello.gameObject.activeInHierarchy) st.Flags |= F_Hello;
+                if (Props.Holding) st.Flags |= F_Carry;
+                st.Flags |= Config.GetInt("Test", "TestFlags", 0) | Autotest.PoseFlags;   // essais : postures forcees
             }
             Session.Me.State = st;
             var w = new NetWriter(Msg.PlayerState).U8(Session.LocalId).U8(Session.Me.Level)

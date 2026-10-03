@@ -236,6 +236,8 @@ namespace MWCoop
             return best;
         }
 
+        public static bool Holding { get { return held != null; } }
+
         public static string Where(string id)
         {
             Prop p;

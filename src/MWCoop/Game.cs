@@ -32,6 +32,12 @@ namespace MWCoop
             if (v != null) v.Value = value; else Log.Warn("globale texte absente : " + name);
         }
 
+        public static bool GlobalBool(string name)
+        {
+            var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool(name);
+            return v != null && v.Value;
+        }
+
         public static void SetGlobalBool(string name, bool value)
         {
             var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool(name);
