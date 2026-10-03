@@ -26,28 +26,38 @@ namespace MWCoop.Net
         static int expected, got;
         static readonly List<Peer> waiting = new List<Peer>();
         static float inGameSince = -1, sendAt = -1;
-        static bool mustSave;            // nouvelle partie lancee : pas encore de vraie sauvegarde
+        static bool mustSave;            // sauvegarder avant d'envoyer (etat courant du monde)
+        static int lastHostLevel = -1;   // invite : niveau de l'hote vu au dernier passage
+        static float backToMenuAt = -1;
 
         // Hote : un invite vient d'arriver ; sa sauvegarde partira des que possible.
         public static void Queue(Peer p)
         {
             if (!waiting.Contains(p)) waiting.Add(p);
+            mustSave = true;   // l'invite doit avoir le monde tel qu'il est, pas la derniere sauvegarde
             if (!PlayerSync.InGame) Log.Info("sauvegarde : " + p + " attend que l'hote soit en jeu");
         }
 
         public static void Update()
         {
-            if (!Session.Active || !Session.IsHost) return;
+            if (!Session.Active) return;
             float now = Time.realtimeSinceStartup;
+            if (!Session.IsHost) { GuestFollow(now); return; }
             if (!PlayerSync.InGame) { inGameSince = sendAt = -1; if (CarColor.NewGame) mustSave = true; return; }
-            if (inGameSince < 0) inGameSince = now;
+            if (inGameSince < 0)
+            {
+                // L'hote (re)entre en jeu : chaque invite deja la recevra cette partie.
+                inGameSince = now;
+                foreach (Peer p in Session.T.Peers) if (p.Accepted && !waiting.Contains(p)) waiting.Add(p);
+                if (waiting.Count > 0) mustSave = true;
+            }
             if (waiting.Count == 0 || now - inGameSince < 15f) return;
             if (sendAt < 0)
             {
                 if (mustSave || !File.Exists(Path.Combine(SaveDir, "savefile.txt")))
                 {
                     mustSave = false;
-                    Log.Info("sauvegarde : nouvelle partie pas encore sauvegardee, l'hote sauvegarde avant d'envoyer");
+                    Log.Info("sauvegarde : l'hote sauvegarde le monde actuel avant d'envoyer");
                     Game.SaveInPlace();
                     sendAt = now + 3f;
                     return;
@@ -60,8 +70,32 @@ namespace MWCoop.Net
             foreach (string f in SaveFiles()) { DateTime m = File.GetLastWriteTime(f); if (m > newest) newest = m; }
             if ((DateTime.Now - newest).TotalSeconds < 2) { sendAt = now + 0.5f; return; }
             sendAt = -1;
-            foreach (Peer p in waiting) if (p.Accepted) SendTo(p);
+            foreach (Peer p in waiting) if (p.Accepted && Session.T.Peers.Contains(p)) SendTo(p);
             waiting.Clear();
+        }
+
+        // Invite : l'hote revient au menu -> on y revient aussi (sans sauver : la sauvegarde recue
+        // doit rester intacte) et on attend sa prochaine partie et sa nouvelle sauvegarde.
+        static void GuestFollow(float now)
+        {
+            PlayerInfo host = Session.Host;
+            int lv = host != null ? host.Level : -1;
+            if (lastHostLevel == 1 && lv == 0)
+            {
+                Done = Received = HostHasSave = false;
+                if (PlayerSync.InGame)
+                {
+                    backToMenuAt = now + 3f;
+                    Hud.Toast("L'hote est revenu au menu : retour au menu");
+                    Log.Info("l'hote est revenu au menu : l'invite le suit");
+                }
+            }
+            lastHostLevel = lv;
+            if (backToMenuAt > 0 && now >= backToMenuAt)
+            {
+                backToMenuAt = -1;
+                if (PlayerSync.InGame && lv == 0) Application.LoadLevel("MainMenu");
+            }
         }
 
         public static string SaveDir { get { return Application.persistentDataPath; } }
@@ -164,9 +198,20 @@ namespace MWCoop.Net
                 files = null;
                 return;
             }
-            Directory.CreateDirectory(SaveDir);
-            foreach (string f in SaveFiles()) File.Delete(f);
-            for (int i = 0; i < names.Count; i++) File.WriteAllBytes(Path.Combine(SaveDir, names[i]), files[i]);
+            try
+            {
+                Directory.CreateDirectory(SaveDir);
+                foreach (string f in SaveFiles()) File.Delete(f);
+                for (int i = 0; i < names.Count; i++) File.WriteAllBytes(Path.Combine(SaveDir, names[i]), files[i]);
+            }
+            catch (Exception e)
+            {
+                // Fichier bloque (antivirus, synchro OneDrive...) : on le dit au lieu de rester au menu.
+                Log.Error("sauvegarde de l'hote non ecrite : " + e.Message);
+                Hud.Toast("Sauvegarde de l'hote non ecrite : " + e.Message);
+                files = null;
+                return;
+            }
             Log.Info("sauvegarde de l'hote ecrite dans " + SaveDir);
             Hud.Toast("Sauvegarde de l'hote recue");
             files = null;

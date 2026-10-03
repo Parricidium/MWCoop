@@ -13,8 +13,10 @@ namespace MWCoop
     {
         static readonly Dictionary<string, PlayMakerFSM> byId = new Dictionary<string, PlayMakerFSM>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
-        static float nextScan = -1;
+        static float nextScan = -1, lastRescan, nextWarn;
         static bool applying;
+        static readonly List<string> consumed = new List<string>();   // hote : consommes depuis le chargement
+        static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         public static float EatUntil;
 
         class Hook : FsmStateAction
@@ -22,26 +24,44 @@ namespace MWCoop
             public string Id;
             public override void OnEnter()
             {
-                if (!applying) OnLocal(Id, Fsm.ActiveStateName);
+                if (!applying) OnLocal(Id, Fsm.PreviousActiveState != null ? Fsm.PreviousActiveState.Name : "");
                 Finish();
             }
         }
 
         public static void OnLevelLoaded()
         {
-            byId.Clear(); hooked.Clear();
+            byId.Clear(); hooked.Clear(); consumed.Clear(); snapshots.Clear();
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 11f : -1;
         }
 
         public static void Update()
         {
-            if (!Session.Active || nextScan < 0 || Time.realtimeSinceStartup < nextScan) return;
-            nextScan = Time.realtimeSinceStartup + 10f;
+            if (!Session.Active || nextScan < 0) return;
+            float now = Time.realtimeSinceStartup;
+            for (int i = snapshots.Count - 1; i >= 0; i--)
+            {
+                if (now < snapshots[i].Key) continue;
+                Peer p = snapshots[i].Value;
+                snapshots.RemoveAt(i);
+                if (!p.Accepted || !Session.T.Peers.Contains(p)) continue;
+                foreach (string id in consumed) Session.T.SendReliable(p, new NetWriter(Msg.Consume).U8(Session.LocalId).Str(id).U8(1).ToArray());
+                if (consumed.Count > 0) Log.Info("consommables : " + consumed.Count + " objets deja consommes envoyes a " + p);
+            }
+            if (now < nextScan) return;
+            nextScan = now + 10f;
             Scan();
         }
 
+        // Hote : invite arrive en jeu -> 20 s plus tard, ce qui a ete mange ou jete pendant son chargement.
+        public static void ScheduleSnapshot(Peer p) { snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
+
         static void Scan()
         {
+            hooked.RemoveWhere(x => x == null);
+            var gone = new List<string>();
+            foreach (KeyValuePair<string, PlayMakerFSM> kv in byId) if (kv.Value == null) gone.Add(kv.Key);
+            foreach (string g in gone) byId.Remove(g);
             int n = 0;
             foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
             {
@@ -67,10 +87,12 @@ namespace MWCoop
 
         static void OnLocal(string id, string from)
         {
-            // Mange ou bu par le joueur local (il le tenait ou le regardait) : la main va a la bouche.
-            EatUntil = Time.realtimeSinceStartup + 2f;
-            Log.Info("consommables : " + id + " consomme ou jete ici");
-            Session.SendAll(new NetWriter(Msg.Consume).U8(Session.LocalId).Str(id), true);
+            // Mange ou bu (pas jete) : la main va a la bouche.
+            if (from.Contains("Eat") || from.Contains("Drink") || from.Contains("drink") || from == "Play anim")
+                EatUntil = Time.realtimeSinceStartup + 2f;
+            if (Session.IsHost) consumed.Add(id);
+            Log.Info("consommables : " + id + " consomme ou jete ici (" + from + ")");
+            Session.SendAll(new NetWriter(Msg.Consume).U8(Session.LocalId).Str(id).U8(0), true);
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -78,9 +100,21 @@ namespace MWCoop
             int who = r.U8();
             if (Session.IsHost) who = from.Id;
             string id = r.Str();
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Consume).U8(who).Str(id), true, who);
+            bool snapshot = r.U8() == 1;
+            if (Session.IsHost) { consumed.Add(id); Session.Broadcast(new NetWriter(Msg.Consume).U8(who).Str(id).U8(0), true, who); }
             PlayMakerFSM f;
-            if (!byId.TryGetValue(id, out f) || f == null) { Log.Warn("consommables : " + id + " introuvable ici"); return; }
+            float now = Time.realtimeSinceStartup;
+            if ((!byId.TryGetValue(id, out f) || f == null) && now - lastRescan > 1f)
+            {
+                lastRescan = now;   // objet tout neuf (achete il y a peu) : nouveau passage
+                Scan();
+                byId.TryGetValue(id, out f);
+            }
+            if (f == null)
+            {
+                if (!snapshot && now >= nextWarn) { nextWarn = now + 10f; Log.Warn("consommables : " + id + " introuvable ici"); }
+                return;
+            }
             applying = true;
             try { Game.SetState(f, "Destroy"); }
             finally { applying = false; }

@@ -33,13 +33,40 @@ namespace MWCoop
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
         static readonly HashSet<string> ambiguous = new HashSet<string>();
         static float nextScan = -1, nextPoll, nextWarn;
+        static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
+
+        // Hote : invite arrive en jeu -> 20 s plus tard (ses automates sont trouves), toutes les valeurs.
+        public static void ScheduleSnapshot(Peer p) { snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
+
+        static void SendSnapshots(float now)
+        {
+            for (int i = snapshots.Count - 1; i >= 0; i--)
+            {
+                if (now < snapshots[i].Key) continue;
+                Peer p = snapshots[i].Value;
+                snapshots.RemoveAt(i);
+                if (!p.Accepted || !Session.T.Peers.Contains(p)) continue;
+                NetWriter w = null;
+                int n = 0;
+                foreach (Watch x in watches)
+                {
+                    if (x.Fsm == null) continue;
+                    if (w != null && w.Length + 6 + System.Text.Encoding.UTF8.GetByteCount(x.Key) > 1000) { Session.T.SendReliable(p, w.ToArray()); w = null; }
+                    if (w == null) w = new NetWriter(Msg.Fluid).U8(Session.LocalId);
+                    w.Str(x.Key).F32(x.Var.Value);
+                    n++;
+                }
+                if (w != null) Session.T.SendReliable(p, w.ToArray());
+                Log.Info("liquides et usure : instantane de " + n + " valeurs envoye a " + p);
+            }
+        }
         static int sent, applied;
 
         public static int Count { get { return watches.Count; } }
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); watches.Clear(); seen.Clear(); ambiguous.Clear();
+            byKey.Clear(); watches.Clear(); seen.Clear(); ambiguous.Clear(); snapshots.Clear();
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -98,7 +125,8 @@ namespace MWCoop
         {
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 20f; Scan(); }
+            if (now >= nextScan) { nextScan = now + 20f; watches.RemoveAll(x => x.Fsm == null); Scan(); }
+            if (snapshots.Count > 0 && Session.IsHost) SendSnapshots(now);
             if (now < nextPoll) return;
             nextPoll = now + 1f;
             bool alone = Session.RemoteCount == 0;
