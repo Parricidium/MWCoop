@@ -15,10 +15,26 @@ namespace MWCoop
     //  - ailleurs : variables recopiees, puis meme evenement si l'automate est dans le meme etat de
     //    depart, sinon recalage direct sur l'etat d'arrivee.
     // L'argent d'un boulot rejoue n'est pas double : voir Wallet.Suppress.
+    // Meme mecanisme pour les automates a sauvegarde des vehicules (cablage electrique de la
+    // CORRIS, pare-brise, boutons du tableau de bord : starter, warnings, chauffage, frein a main...),
+    // hors peinture (Paint), boutons deja suivis par Interactions et degats de roues (terrain).
     public static class Jobs
     {
-        static readonly string[] Roots = { "JOBS" };
-        static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE" };
+        static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE",
+                                                                        "TERRAIN", "DEEPSNOW", "RIM" };
+
+        // Racines suivies : JOBS (sans les automates Use des objets) et chaque vehicule (avec ses boutons).
+        static List<KeyValuePair<GameObject, bool>> RootsNow()
+        {
+            var list = new List<KeyValuePair<GameObject, bool>>();
+            GameObject jobsRoot = Game.FindAny("JOBS");
+            if (jobsRoot != null) list.Add(new KeyValuePair<GameObject, bool>(jobsRoot, false));
+            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                if (rb.transform.parent == null && rb.GetComponent("CarDynamics") != null)
+                    list.Add(new KeyValuePair<GameObject, bool>(rb.gameObject, true));
+            list.Sort((a, b) => string.CompareOrdinal(a.Key.name, b.Key.name));
+            return list;
+        }
         class Job { public string Key; public PlayMakerFSM F; public float WindowStart; public int Count; public bool Noisy; }
         static readonly Dictionary<string, Job> jobs = new Dictionary<string, Job>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
@@ -49,15 +65,16 @@ namespace MWCoop
             nextScan = Time.realtimeSinceStartup + 20f;
             int added = 0;
             var seen = new Dictionary<string, int>();
-            foreach (string root in Roots)
+            foreach (KeyValuePair<GameObject, bool> root in RootsNow())
             {
-                GameObject r = Game.FindAny(root);
-                if (r == null) continue;
+                GameObject r = root.Key;
+                bool vehicle = root.Value;
                 foreach (PlayMakerFSM f in r.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
-                    if (f.FsmName == "Use" || f.FsmName == "LOD" || !Persistent(f)) continue;
+                    if ((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || !Persistent(f)) continue;
+                    if (Interactions.Tracks(f)) continue;
                     string on = f.gameObject.name;
-                    if (on.Contains("(itemx)") || on.Contains("(Clone)")) continue;   // objets : Props/Interactions
+                    if (on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r)) continue;   // objets : Props/Interactions
                     string path = Recon.Path(f.transform) + "::" + f.FsmName;
                     int k;
                     seen.TryGetValue(path, out k);
@@ -71,7 +88,7 @@ namespace MWCoop
                     added++;
                 }
             }
-            if (added > 0) Log.Info("quetes : " + added + " automates de boulots de plus suivis (" + jobs.Count + " en tout)");
+            if (added > 0) Log.Info("progression : " + added + " automates de plus suivis (boulots, cablage, tableaux de bord : " + jobs.Count + " en tout)");
         }
 
         static bool Persistent(PlayMakerFSM f)

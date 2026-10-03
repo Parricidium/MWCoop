@@ -1900,7 +1900,7 @@ static void DrawCar(Graphics &g)
     }
     if (g_car.state != 1) {
         const wchar_t *msg = g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\corris.mesh) : lancez une partie pour le refaire.", L"Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.")
-                                               : T(L"Lancez une partie une fois pour voir l'aper\u00E7u de la voiture", L"Start a game once to see the car preview");
+                                               : T(L"Lance une partie une fois pour voir l'aper\u00E7u de la voiture", L"Start a game once to see the car preview");
         FontFamily fam(L"Segoe UI");
         Font font(&fam, 13.5f, FontStyleRegular, UnitPixel);
         StringFormat sf;

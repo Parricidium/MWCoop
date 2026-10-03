@@ -6,14 +6,16 @@ pouvoir le faire, et les autres doivent le voir.
 ## Monde
 - [~] Monde synchronisé : météo, PNJ, circulation, interactions avec les PNJ, voix des PNJ.
       Fait (0.1) : heure, jour, météo (nuages, pluie, température) de l'hôte.
+      Fait (0.6) : circulation (routes, bus, train...) et passants dictés par l'hôte.
+      Reste : discussions et voix des PNJ.
 - [~] Portes, lumières, interrupteurs : ce qu'un joueur ouvre ou allume, les autres le voient.
       Fait (0.1) : portes des bâtiments, interrupteurs, télé, lecteur CD. Reste : état à l'arrivée d'un invité.
 - [ ] Toutes les actions du solo possibles pour les invités : gratter le pare-brise, boutons,
       pénalités, utilisation des objets…
 
 ## Quêtes et argent
-- [ ] Quêtes communes : si l'invité entame une quête et que l'hôte en remplit les conditions,
-      elle se termine et est validée pour les deux.
+- [x] Quêtes communes : si l'invité entame une quête et que l'hôte en remplit les conditions,
+      elle se termine et est validée pour les deux (0.6 : boulots rejoués chez tous, sans double paie).
 - [x] Revenus partagés (quêtes ou autre source) : chaque joueur reçoit l'argent qui arrive (0.3).
 - [x] Porte-monnaie séparés : chacun gère ses achats avec son propre argent (0.3, celui de
       l'invité est gardé d'une session à l'autre).
@@ -23,7 +25,8 @@ pouvoir le faire, et les autres doivent le voir.
       état, rotation, mal vissée), peinture… tout ce qui sert à refaire la voiture.
       Fait (0.2) : pièces montées/démontées, vis serrées/desserrées cran par cran, pièces portées
       et lâchées. Fait (0.5) : peinture (pièces et carrosserie), réglages à la main (carburateur,
-      molettes...). Reste : liquides, usure.
+      molettes...). Fait (0.6) : câblage électrique, pare-brise, boutons du tableau de bord.
+      Reste : liquides, usure.
 
 ## Achats et objets
 - [x] Chaque joueur achète de son côté ; tous voient les achats des autres (sac de courses…) (0.3).
@@ -40,5 +43,5 @@ pouvoir le faire, et les autres doivent le voir.
 ## Lanceur
 - [~] Mise à jour automatique depuis les releases GitHub, options, salon (comme VCCoop/SACoop).
       Fait (0.1) : mise à jour, options, journaux. Reste : salon.
-- [ ] Nouvelle partie : quand l'hôte lance, un onglet pour choisir la couleur de la voiture,
-      avec aperçu 3D.
+- [x] Nouvelle partie : quand l'hôte lance, un onglet pour choisir la couleur de la voiture,
+      avec aperçu 3D (0.6 : onglet VOITURE du lanceur, maillage exporté depuis le jeu du joueur).

@@ -7,9 +7,10 @@ using UnityEngine;
 namespace MWCoop
 {
     // Couleur de la CORRIS choisie dans le lanceur (demande de JD) et apercu 3D du lanceur.
-    //  - Export : une fois par installation, le maillage de la CORRIS (carrosserie et pieces montees)
-    //    est ecrit dans MWCoop\cache\corris.mesh depuis le jeu du joueur (aucune donnee du jeu dans
-    //    le depot ni dans le zip). Format (petit-boutiste) :
+    //  - Export : a chaque partie (20 s apres le chargement), le maillage de la CORRIS est ecrit dans
+    //    MWCoop\cache\corris.mesh depuis le jeu du joueur (aucune donnee du jeu dans le depot ni dans
+    //    le zip) : carrosserie, pieces montees, et pieces pas encore montees (portes, capot, roues...)
+    //    posees sur leur point de montage, pour que l'apercu montre la voiture entiere. Format :
     //      "MWCM", u32 version=1, u32 n, puis n fois :
     //        u16 longueur + nom UTF-8, u8 peignable (1 = prend la couleur choisie),
     //        3 x f32 couleur de base (0..1), u32 nb sommets + nb x (3 x f32) en repere de la voiture
@@ -58,8 +59,7 @@ namespace MWCoop
             if (!exported)
             {
                 exported = true;
-                if (!File.Exists(MeshPath) || Config.GetInt("Test", "ExportVoiture", 0) != 0)
-                    try { Log.Info("voiture : apercu exporte, " + Export()); } catch (System.Exception e) { Log.Warn("voiture : export " + e.Message); }
+                try { Log.Info("voiture : apercu exporte, " + Export()); } catch (System.Exception e) { Log.Warn("voiture : export " + e.Message); }
             }
         }
 
@@ -75,14 +75,17 @@ namespace MWCoop
             GameObject car = GameObject.Find("CORRIS");
             if (car == null) return "CORRIS introuvable";
             Transform root = car.transform;
-            var parts = new List<KeyValuePair<Renderer, Mesh>>();
+            var parts = new List<Piece>();
             foreach (MeshFilter mf in car.GetComponentsInChildren<MeshFilter>())
             {
                 Renderer r = mf.GetComponent<Renderer>();
-                if (r != null && r.enabled && mf.sharedMesh != null) parts.Add(new KeyValuePair<Renderer, Mesh>(r, mf.sharedMesh));
+                if (r != null && r.enabled && mf.sharedMesh != null)
+                    parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = root.worldToLocalMatrix * r.transform.localToWorldMatrix, Paint = IsPaintable(r.transform, root) });
             }
             foreach (SkinnedMeshRenderer s in car.GetComponentsInChildren<SkinnedMeshRenderer>())
-                if (s.enabled && s.sharedMesh != null) parts.Add(new KeyValuePair<Renderer, Mesh>(s, s.sharedMesh));
+                if (s.enabled && s.sharedMesh != null)
+                    parts.Add(new Piece { R = s, M = s.sharedMesh, ToCar = root.worldToLocalMatrix * s.transform.localToWorldMatrix, Paint = IsPaintable(s.transform, root) });
+            AddLooseParts(root, parts);
 
             Directory.CreateDirectory(Path.GetDirectoryName(MeshPath));
             int written = 0, tris = 0;
@@ -92,10 +95,10 @@ namespace MWCoop
                 w.Write(1);
                 long countPos = w.BaseStream.Position;
                 w.Write(0);
-                foreach (KeyValuePair<Renderer, Mesh> kv in parts)
+                foreach (Piece pc in parts)
                 {
-                    Renderer r = kv.Key;
-                    Mesh m = kv.Value;
+                    Renderer r = pc.R;
+                    Mesh m = pc.M;
                     Material mat = r.sharedMaterial;
                     string mn = mat != null ? mat.name.ToLowerInvariant() : "";
                     if (mn.Contains("glass") || mn.Contains("window") || mn.Contains("shadow") || mn.Contains("alpha")) continue;
@@ -105,11 +108,11 @@ namespace MWCoop
                     if (v.Length == 0 || idx.Length == 0 || v.Length > 60000) continue;
                     byte[] name = System.Text.Encoding.UTF8.GetBytes(r.name);
                     w.Write((ushort)name.Length); w.Write(name);
-                    w.Write((byte)(IsPaintable(r.transform, root) ? 1 : 0));
+                    w.Write((byte)(pc.Paint ? 1 : 0));
                     Color c = mat != null && mat.HasProperty("_Color") ? mat.color : Color.gray;
                     w.Write(c.r); w.Write(c.g); w.Write(c.b);
                     w.Write(v.Length);
-                    Matrix4x4 toCar = root.worldToLocalMatrix * r.transform.localToWorldMatrix;
+                    Matrix4x4 toCar = pc.ToCar;
                     foreach (Vector3 p in v)
                     {
                         Vector3 q = toCar.MultiplyPoint3x4(p);
@@ -124,6 +127,35 @@ namespace MWCoop
                 w.Write(written);
             }
             return written + " morceaux, " + tris + " triangles, " + MeshPath;
+        }
+
+        class Piece { public Renderer R; public Mesh M; public Matrix4x4 ToCar; public bool Paint; }
+
+        // Pieces pas encore montees dont le point de montage est sur la CORRIS (portes, capot, ailes,
+        // pare-chocs, roues...) : posees la ou le jeu les fixerait (SetParent sur le point, position
+        // locale nulle). Une seule par point de montage.
+        static void AddLooseParts(Transform root, List<Piece> parts)
+        {
+            var points = new HashSet<Transform>();
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = (PlayMakerFSM)o;
+                if (f.hideFlags != HideFlags.None || f.FsmName != "Data") continue;
+                FsmGameObject ip = f.FsmVariables.FindFsmGameObject("InstallPoint");
+                FsmString id = f.FsmVariables.FindFsmString("ID");
+                if (ip == null || ip.Value == null || id == null || id.Value.Length == 0) continue;
+                Transform point = ip.Value.transform, part = f.transform;
+                if (!point.IsChildOf(root) || part.IsChildOf(root) || points.Contains(point)) continue;
+                points.Add(point);
+                Matrix4x4 place = root.worldToLocalMatrix * point.localToWorldMatrix * part.worldToLocalMatrix;
+                foreach (MeshFilter mf in part.GetComponentsInChildren<MeshFilter>())
+                {
+                    Renderer r = mf.GetComponent<Renderer>();
+                    if (r == null || !r.enabled || mf.sharedMesh == null) continue;
+                    if (mf.transform != part && mf.transform.parent != null && mf.transform.parent.name == "Bolts") continue;
+                    parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = place * r.transform.localToWorldMatrix, Paint = IsPaintable(r.transform, part) });
+                }
+            }
         }
 
         static void ApplyChosen()
