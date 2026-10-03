@@ -21,6 +21,12 @@ namespace MWCoop
             Session.Start();
         }
 
+        void LateUpdate()
+        {
+            try { PlayerSync.LateUpdate(); }
+            catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
+        }
+
         void Update()
         {
             if (Time.realtimeSinceStartup >= nextBeat)

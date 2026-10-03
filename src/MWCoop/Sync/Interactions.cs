@@ -23,6 +23,7 @@ namespace MWCoop
             { "Trigger",      "Check position" },
             { "Mesh",         "Check position" },
             { "Switch",       "Sound" },            // interrupteurs, radiateurs
+            { "switch_*",     "Switch" },           // interrupteurs de la maison (switch_kitchen...)
             { "TVSwitch",     "Switch" },
             { "CDSwitch",     "Switch" },
             { "Eject",        "Switch" },
@@ -113,7 +114,8 @@ namespace MWCoop
             string obj = f.gameObject.name;
             for (int i = 0; i < Allowed.GetLength(0); i++)
             {
-                if (Allowed[i, 0] != obj) continue;
+                string pat = Allowed[i, 0];
+                if (pat.EndsWith("*") ? !obj.StartsWith(pat.Substring(0, pat.Length - 1)) : pat != obj) continue;
                 foreach (FsmState s in f.Fsm.States)
                     foreach (FsmTransition t in s.Transitions)
                         if (t.EventName == "USE" && t.ToState == Allowed[i, 1]) return t.ToState;

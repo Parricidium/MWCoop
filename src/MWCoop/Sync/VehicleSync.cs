@@ -296,6 +296,13 @@ namespace MWCoop
 
         // Avatar d'un joueur qui conduit chez lui : position et rotation dans la copie locale de la
         // voiture (calculees par rapport a l'etat de la voiture envoye en meme temps : pas de tremblement).
+        // Nom de la voiture que 'player' conduit chez lui (null : aucune).
+        public static string RemoteCarName(int player)
+        {
+            foreach (Car c in cars) if (c.RemoteDriver == player) return c.Name;
+            return null;
+        }
+
         public static bool SeatPose(int player, Vector3 feet, out Vector3 pos, out Quaternion rot)
         {
             foreach (Car c in cars)
