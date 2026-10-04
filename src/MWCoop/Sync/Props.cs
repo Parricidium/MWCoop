@@ -17,17 +17,31 @@ namespace MWCoop
     // boitiers de CD, buches...) : cle "w:<chemin>#<rang>" prise au premier passage, quand tout est
     // encore a sa place de chargement (meme sauvegarde -> meme cle des deux cotes), puis gardee
     // pour cet objet meme s'il change de parent (tenu, lache).
+    // Objets transportes (coffre, banquette, plateau) : celui qui conduit la voiture (ou en garde la main
+    // moteur tournant) fait autorite sur ce qui est pose dedans. Il envoie leur pose DANS la voiture (etat 3 :
+    // numero de la voiture, position et rotation locales) 8 fois/s tant qu'elle roule ; chez les autres
+    // l'objet devient cinematique et colle a leur copie de la voiture (pas de glissade ni de traversee sur une
+    // copie qui avance par a-coups). Sorti de la voiture, ou quand il n'en a plus la main : pose dans le monde
+    // (etat 0, fiable) et l'objet retombe sous la physique. L'hote ne recale pas ce qu'un autre transporte,
+    // et une pose au repos recue pour un objet dans la voiture qu'on conduit est ignoree.
     public static class Props
     {
         class Prop
         {
             public string Id;
             public Rigidbody Body;
+            public PlayMakerFSM Use;              // automate 'Use' qui porte l'ID (articles) : voit qu'il a disparu
             public int RemoteBy = -1;
             public float LastRemote, SettleUntil;
             public Vector3 Pos, Vel, LastSentPos;
             public Quaternion Rot;
             public bool Kinematic, WasKinematic;
+            public int RideCar = -1;              // recu : numero de la voiture ou l'objet est colle ici
+            public Vector3 RideLocal, RideCur;    // pose recue dans la voiture, pose affichee (rattrape)
+            public Quaternion RideLocalRot, RideCurRot;
+            public int RideOut = -1, RidePass;    // envoye : voiture ou on le transporte (autorite ici)
+            public float RideKeep, RideSeen;
+            public float GoneAt;                  // corps detruit ici (disparu) : > 0 en attente, -1 traite
         }
 
         static readonly Dictionary<string, Prop> props = new Dictionary<string, Prop>();
@@ -35,11 +49,18 @@ namespace MWCoop
         static PlayMakerFSM hand;
         static Prop held;
         static readonly List<Prop> settling = new List<Prop>();
-        static float nextScan = -1, nextSend, nextHost, lastForced;
+        static readonly List<Prop> ridingIn = new List<Prop>();    // colles ici a une copie de voiture
+        static readonly List<Prop> ridingOut = new List<Prop>();   // transportes par nous
+        static readonly List<Prop> vanished = new List<Prop>();
+        static readonly HashSet<string> noKey = new HashSet<string>();
+        static readonly Dictionary<string, float> unknown = new Dictionary<string, float>();
+        static float nextScan = -1, nextSend, nextHost, lastForced, nextRide;
+        static int ridePass;
 
         public static void OnLevelLoaded()
         {
             props.Clear(); byBody.Clear(); settling.Clear(); worldKeys.Clear(); worldLogged = false;
+            ridingIn.Clear(); ridingOut.Clear(); vanished.Clear(); unknown.Clear();
             hand = null; held = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
         }
@@ -49,10 +70,17 @@ namespace MWCoop
         // (nom a compteur sauvegarde), elle reste la meme quand le jeu le renomme ensuite.
         public static string ItemId(GameObject go)
         {
+            PlayMakerFSM use;
+            return ItemId(go, out use);
+        }
+
+        static string ItemId(GameObject go, out PlayMakerFSM use)
+        {
+            use = null;
             foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
             {
                 FsmString s = f.FsmVariables.FindFsmString("ID");
-                if (s != null && s.Value.Length > 0) return s.Value;
+                if (s != null && s.Value.Length > 0) { if (f.FsmName == "Use") use = f; return s.Value; }
             }
             return "";
         }
@@ -87,18 +115,33 @@ namespace MWCoop
             return k;
         }
 
+        static void Register(Rigidbody rb, string id, PlayMakerFSM use)
+        {
+            Prop p;
+            if (!props.TryGetValue(id, out p)) { p = new Prop { Id = id }; props[id] = p; }
+            p.Body = rb;
+            p.GoneAt = 0f;
+            if (use != null) p.Use = use;
+            byBody[rb] = p;
+        }
+
+        // Objet Unity detruit dont on garde la reference (le corps d'un article mange, empoche, jete).
+        static bool Destroyed(Object o) { return !ReferenceEquals(o, null) && o == null; }
+
         static void Scan()
         {
             // Le Rigidbody d'une piece disparait quand elle est montee et revient au demontage :
             // la table est refaite a chaque passage, seuls les objets physiques actifs y sont.
+            float now = Time.realtimeSinceStartup;
             byBody.Clear();
-            foreach (Prop p in props.Values) p.Body = null;
+            foreach (Prop p in props.Values) { if (Destroyed(p.Body)) Gone(p, now); p.Body = null; }
             bool census = Config.GetInt("Test", "JournalSansId", 0) != 0 && !censusDone;
             var noId = census ? new Dictionary<string, int>() : null;
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
                 if (rb.transform.root.name == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
-                string id = ItemId(rb.gameObject);
+                PlayMakerFSM use;
+                string id = ItemId(rb.gameObject, out use);
                 if (id.Length == 0) id = PackageKey(rb.gameObject);
                 if (id.Length == 0) id = WorldKey(rb) ?? "";
                 if (id.Length == 0)
@@ -110,10 +153,7 @@ namespace MWCoop
                     }
                     continue;
                 }
-                Prop p;
-                if (!props.TryGetValue(id, out p)) { p = new Prop { Id = id }; props[id] = p; }
-                p.Body = rb;
-                byBody[rb] = p;
+                Register(rb, id, use);
             }
             if (census)
             {
@@ -134,6 +174,25 @@ namespace MWCoop
             }
         }
 
+        // Objet tout juste cree (Consume, a sa creation) : suivi tout de suite, sans attendre le releve.
+        public static void Track(GameObject go)
+        {
+            if (nextScan < 0 || go == null) return;
+            Rigidbody rb = go.GetComponent<Rigidbody>();
+            if (rb == null || byBody.ContainsKey(rb)) return;
+            PlayMakerFSM use;
+            string id = ItemId(go, out use);
+            if (id.Length == 0) id = PackageKey(go);
+            if (id.Length > 0) Register(rb, id, use);
+        }
+
+        // Objets crees en nombre (sac vide d'un coup) : releve complet tout de suite (ou presque).
+        public static void SoonScan()
+        {
+            float t = Time.realtimeSinceStartup + 0.3f;
+            if (nextScan > t) nextScan = t;
+        }
+
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame || nextScan < 0) return;
@@ -151,12 +210,18 @@ namespace MWCoop
                     lastForced = Time.realtimeSinceStartup;
                     Scan();
                     byBody.TryGetValue(rb, out h);
+                    Consume.Track(go);   // article tout neuf : son automate Use suivi avant qu'il soit mange ou empoche
+                    if (h == null && noKey.Add(go.name)) Log.Info("objets : objet tenu sans cle, non synchronise : " + go.name);
                 }
             }
             if (h != held)
             {
                 if (held != null) { held.SettleUntil = now + 5f; if (!settling.Contains(held)) settling.Add(held); }
-                if (h != null) { settling.Remove(h); h.RemoteBy = -1; SetKinematic(h, false); Log.Info("piece prise : " + h.Id); }
+                if (h != null)
+                {
+                    settling.Remove(h); Unride(h); h.RemoteBy = -1; SetKinematic(h, false); Log.Info("piece prise : " + h.Id);
+                    if (h.Body != null) Consume.Track(h.Body.gameObject);   // empoche ou mange en main : deja suivi
+                }
                 held = h;
             }
 
@@ -172,26 +237,50 @@ namespace MWCoop
                     if (done) settling.RemoveAt(i);
                 }
             }
+            if (now >= nextRide) { nextRide = now + 0.125f; Ride(now); }
 
             if (Session.IsHost && now >= nextHost && Session.RemoteCount > 0)
             {
                 nextHost = now + 2f;
                 foreach (Prop p in props.Values)
                 {
-                    if (p.Body == null || p == held || p.RemoteBy >= 0 || settling.Contains(p)) continue;
+                    if (p.Body == null || p == held || p.RemoteBy >= 0 || p.RideOut >= 0 || settling.Contains(p)) continue;
                     if ((p.Body.position - p.LastSentPos).sqrMagnitude < 0.04f) continue;
                     // Piece montee sur un vehicule (portiere, capot...) : elle suit la voiture, pas de recalage.
                     Transform root = p.Body.transform.root;
                     if (root != p.Body.transform && root.GetComponent("CarDynamics") != null) continue;
+                    // Posee dans une voiture qu'un autre fait rouler : c'est lui qui la transporte.
+                    Rigidbody car = VehicleSync.CarUnder(p.Body);
+                    if (car != null && VehicleSync.Authority(car) != Session.LocalId) continue;
                     Send(p, 0);
                 }
             }
 
             foreach (Prop p in props.Values)
             {
-                if (p.RemoteBy < 0 || p.Body == null) continue;
+                if (p.Body == null) { if (p.GoneAt == 0f && Destroyed(p.Body)) Gone(p, now); continue; }
+                if (p.RemoteBy < 0 || p.RideCar >= 0) continue;   // transporte : place apres la physique (LateUpdate)
                 if (now - p.LastRemote > 1.5f) { p.RemoteBy = -1; SetKinematic(p, false); continue; }
                 Follow(p);
+            }
+            // Transport recu : la voiture n'est plus une copie ici (conducteur sorti), ou plus de nouvelles
+            // (conducteur parti) -> retombe sous la physique locale.
+            for (int i = ridingIn.Count - 1; i >= 0; i--)
+            {
+                Prop p = ridingIn[i];
+                bool copy = VehicleSync.IsCopy(p.RideCar);
+                if (p.Body != null && p != held && now - p.LastRemote < 3f && copy) continue;
+                Log.Info("objet " + p.Id + " n'est plus transporte (" + (copy ? "sans nouvelles" : "voiture rendue") + ")");
+                Unglue(p);
+            }
+            for (int i = vanished.Count - 1; i >= 0; i--)
+            {
+                Prop p = vanished[i];
+                if (p.GoneAt > 0f && now - p.GoneAt < 0.5f) continue;
+                vanished.RemoveAt(i);
+                if (p.GoneAt <= 0f) continue;   // revenu (meme ID) entre-temps
+                p.GoneAt = -1f;
+                if (!Consume.Done(p.Id)) Consume.SendGone(p.Id, Consume.GoneState(p.Use));
             }
         }
 
@@ -212,12 +301,188 @@ namespace MWCoop
             t.rotation = Quaternion.Slerp(t.rotation, p.Rot, k);
         }
 
-        static void Send(Prop p, int state)
+        static void Send(Prop p, int state, bool reliable = false)
         {
             if (p.Body == null) return;
             p.LastSentPos = p.Body.position;
             Session.SendAll(new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(state)
-                .Vec(p.Body.position).Quat(p.Body.rotation).Vec(p.Body.velocity), false);
+                .Vec(p.Body.position).Quat(p.Body.rotation).Vec(p.Body.velocity), reliable);
+        }
+
+        // Corps detruit ici : l'article a-t-il disparu (automate Use detruit, inactif, ou dans un etat de
+        // disparition) ? Consume l'a normalement dit aux autres ; sinon (article tout neuf pas encore suivi,
+        // etat inconnu) on le dit a sa place une demi-seconde plus tard. Pas les pieces (corps retire au montage).
+        static void Gone(Prop p, float now)
+        {
+            if (p.GoneAt != 0f || ReferenceEquals(p.Use, null)) return;
+            if (p.Use != null && p.Use.gameObject.activeInHierarchy && !Consume.IsGone(p.Use)) return;
+            p.GoneAt = now;
+            vanished.Add(p);
+        }
+
+        // Objet suivi de cle 'id' (null : inconnu ou plus de corps ici).
+        public static GameObject ObjectOf(string id)
+        {
+            Prop p;
+            return props.TryGetValue(id, out p) && p.Body != null ? p.Body.gameObject : null;
+        }
+
+        // Objet disparu chez un autre sans automate a rejouer ici (Consume) : on le cache.
+        public static bool Vanish(string id)
+        {
+            Prop p;
+            if (!props.TryGetValue(id, out p) || p.Body == null) return false;
+            p.Body.gameObject.SetActive(false);
+            byBody.Remove(p.Body);
+            p.Body = null;
+            p.GoneAt = -1f;
+            return true;
+        }
+
+        // ---------------------------------------------------------------- objets transportes
+        // Autorite ici sur une voiture (on la conduit, ou son moteur tourne a nous) : ce qui est pose dedans.
+        // Pose dans la voiture envoyee 8 fois/s tant qu'elle roule, sinon quand l'objet a glisse (> 2 cm,
+        // 3 degres) et une fois par seconde pour rester colle chez les autres.
+        static void Ride(float now)
+        {
+            ridePass++;
+            for (int ci = 0; ci < VehicleSync.Count; ci++)
+            {
+                if (!VehicleSync.DrivenHere(ci)) continue;
+                Rigidbody car = VehicleSync.CarBody(ci);
+                if (car == null) continue;
+                Transform ct = car.transform;
+                Vector3 cp = car.position;
+                Quaternion inv = Quaternion.Inverse(car.rotation);
+                bool moving = car.velocity.sqrMagnitude > 0.04f || car.angularVelocity.sqrMagnitude > 0.01f;
+                foreach (Prop p in props.Values)
+                {
+                    if (p.Body == null || p == held || p.RemoteBy >= 0 || p.GoneAt != 0f || p.Body.isKinematic) continue;
+                    if ((p.Body.position - cp).sqrMagnitude > 49f || p.Body.transform.root == ct || settling.Contains(p)) continue;
+                    if (VehicleSync.CarUnder(p.Body) != car) continue;
+                    p.RidePass = ridePass; p.RideSeen = now;
+                    Vector3 lp = inv * (p.Body.position - cp);
+                    Quaternion lr = inv * p.Body.rotation;
+                    bool start = p.RideOut != ci;
+                    if (!start && !moving && now < p.RideKeep && (lp - p.RideLocal).sqrMagnitude < 0.0004f && Quaternion.Angle(lr, p.RideLocalRot) < 3f) continue;
+                    if (start)
+                    {
+                        if (p.RideOut < 0) ridingOut.Add(p);
+                        p.RideOut = ci;
+                        Log.Info("objet " + p.Id + " transporte dans " + car.name);
+                    }
+                    p.RideLocal = lp; p.RideLocalRot = lr; p.RideKeep = now + 1f;
+                    p.LastSentPos = p.Body.position;
+                    Session.SendAll(new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(3)
+                        .Vec(lp).Quat(lr).Vec(p.Body.velocity).U8(ci), false);
+                }
+            }
+            // Sorti de la voiture, ou on n'en a plus la main : pose dans le monde, il retombe chez tous.
+            for (int i = ridingOut.Count - 1; i >= 0; i--)
+            {
+                Prop p = ridingOut[i];
+                if (p.RidePass == ridePass) continue;
+                // Pas vu a un passage (cahot, rayon a cote) : encore 0,6 s avant de le declarer sorti.
+                bool free = p.Body == null || p == held || p.RemoteBy >= 0 || p.GoneAt != 0f;
+                if (!free && VehicleSync.DrivenHere(p.RideOut) && now - p.RideSeen < 0.6f) continue;
+                ridingOut.RemoveAt(i);
+                p.RideOut = -1;
+                // Pris en main (ici ou ailleurs), en train de retomber, disparu : son propre message suit.
+                if (p.Body == null || p == held || p.RemoteBy >= 0 || p.GoneAt != 0f || settling.Contains(p)) continue;
+                Send(p, 0, true);
+                Log.Info("objet " + p.Id + " n'est plus transporte, pose en " + p.Body.position.ToString("F1"));
+            }
+        }
+
+        // Transport recu : l'objet devient cinematique et colle a notre copie de la voiture, a la pose recue
+        // dans la voiture. Pas une copie ici (pas encore, ou plus) : la pose de fin suivra.
+        static void Glue(Prop p, int who, int ci, Vector3 lp, Quaternion lr, Vector3 vel)
+        {
+            Rigidbody car = VehicleSync.CarBody(ci);
+            if (car == null || !VehicleSync.IsCopy(ci)) return;
+            if (p.RideCar != ci)
+            {
+                // Depart de la pose actuelle dans la voiture locale, rattrapee en douceur (sauf si trop loin).
+                Transform ct = car.transform, t = p.Body.transform;
+                Quaternion inv = Quaternion.Inverse(ct.rotation);
+                p.RideCur = inv * (t.position - ct.position);
+                p.RideCurRot = inv * t.rotation;
+                if ((p.RideCur - lp).sqrMagnitude > 1f) { p.RideCur = lp; p.RideCurRot = lr; }
+                if (p.RideCar < 0) ridingIn.Add(p);
+                p.RideCar = ci;
+                settling.Remove(p);
+                Log.Info("objet " + p.Id + " transporte dans " + car.name + " par #" + who);
+            }
+            p.RideLocal = lp; p.RideLocalRot = lr; p.Vel = vel;
+            p.RemoteBy = who;
+            p.LastRemote = Time.realtimeSinceStartup;
+            SetKinematic(p, true);
+        }
+
+        // Fin du transport recu sans pose de fin : retombe sous la physique, a la vitesse de la voiture, la
+        // ou il est dans la voiture (qui a pu etre recalee d'un coup depuis la derniere image).
+        static void Unglue(Prop p)
+        {
+            int ci = p.RideCar;
+            Place(p);
+            Unride(p);
+            p.RemoteBy = -1;
+            p.Vel = VehicleSync.CarVelocity(ci);
+            SetKinematic(p, false);
+        }
+
+        static void Unride(Prop p)
+        {
+            if (p.RideCar < 0) return;
+            p.RideCar = -1;
+            ridingIn.Remove(p);
+        }
+
+        // Apres la physique (VehicleSync.LateUpdate) : les objets colles suivent la pose affichee de la copie.
+        public static void LateUpdate()
+        {
+            if (ridingIn.Count == 0) return;
+            float k = 1f - Mathf.Exp(-12f * Time.deltaTime);
+            for (int i = 0; i < ridingIn.Count; i++)
+            {
+                Prop p = ridingIn[i];
+                if (p.Body == null || p == held) continue;
+                p.RideCur = Vector3.Lerp(p.RideCur, p.RideLocal, k);
+                p.RideCurRot = Quaternion.Slerp(p.RideCurRot, p.RideLocalRot, k);
+                Place(p);
+            }
+        }
+
+        static void Place(Prop p)
+        {
+            Rigidbody car = VehicleSync.CarBody(p.RideCar);
+            if (p.Body == null || car == null) return;
+            Transform ct = car.transform, t = p.Body.transform;
+            t.position = ct.position + ct.rotation * p.RideCur;
+            t.rotation = ct.rotation * p.RideCurRot;
+        }
+
+        // La voiture 'car' va etre replacee d'un coup (recalage d'une voiture garee, copie trop loin) : ce qui
+        // est pose dedans la suit (meme deplacement), au lieu de rester sur place ou de tomber a travers.
+        public static void CarMoved(Rigidbody car, Vector3 pos, Quaternion rot, Vector3 vel)
+        {
+            if (car == null || nextScan < 0) return;
+            Vector3 cp = car.position;
+            Quaternion inv = Quaternion.Inverse(car.rotation);
+            int n = 0;
+            foreach (Prop p in props.Values)
+            {
+                if (p.Body == null || p == held || p.RideCar >= 0 || p.RemoteBy >= 0) continue;
+                if ((p.Body.position - cp).sqrMagnitude > 49f || p.Body.transform.root == car.transform) continue;
+                if (VehicleSync.CarUnder(p.Body) != car) continue;
+                Transform t = p.Body.transform;
+                Quaternion r = rot * (inv * p.Body.rotation);
+                t.position = pos + rot * (inv * (p.Body.position - cp));
+                t.rotation = r;
+                if (!p.Body.isKinematic) p.Body.velocity = vel;
+                n++;
+            }
+            if (n > 0) Log.Info("objets : " + n + " objets suivent " + car.name + " recalee");
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -229,16 +494,26 @@ namespace MWCoop
             Vector3 pos = r.Vec();
             Quaternion rot = r.Quat();
             Vector3 vel = r.Vec();
+            int car = state == 3 ? r.U8() : -1;   // transporte : pos et rot sont dans la voiture 'car'
             if (Session.IsHost)
-                Session.Broadcast(new NetWriter(Msg.Prop).U8(who).Str(id).U8(state).Vec(pos).Quat(rot).Vec(vel), false, who);
-            Prop p;
-            if ((!props.TryGetValue(id, out p) || p.Body == null) && Time.realtimeSinceStartup - lastForced > 1f)
             {
-                lastForced = Time.realtimeSinceStartup;   // objet tout neuf (achat...) : nouveau passage
+                var w = new NetWriter(Msg.Prop).U8(who).Str(id).U8(state).Vec(pos).Quat(rot).Vec(vel);
+                if (state == 3) w.U8(car);
+                Session.Broadcast(w, state == 0, who);
+            }
+            Prop p;
+            float now = Time.realtimeSinceStartup, until;
+            if ((!props.TryGetValue(id, out p) || p.Body == null) && now - lastForced > 1f && !(unknown.TryGetValue(id, out until) && now < until))
+            {
+                lastForced = now;   // objet tout neuf (achat...) : nouveau passage
                 Scan();
                 props.TryGetValue(id, out p);
+                // Toujours inconnu (objet absent ici) : pas d'autre releve force pour lui avant 10 s (messages a 8-15/s).
+                if (p == null || p.Body == null) unknown[id] = now + 10f;
             }
             if (p == null || p.Body == null || p == held) return;
+            if (state == 3) { Glue(p, who, car, pos, rot, vel); return; }
+            Unride(p);
             p.Pos = pos; p.Rot = rot; p.Vel = vel;
             if (state != 0)
             {
@@ -246,6 +521,14 @@ namespace MWCoop
                 p.RemoteBy = who;
                 p.LastRemote = Time.realtimeSinceStartup;
                 SetKinematic(p, true);
+                return;
+            }
+            // Au repos, mais pose dans la voiture qu'on conduit : c'est nous qui le transportons (la pose de
+            // l'autre est prise sur sa copie, en retard) ; seulement la fin de son deplacement.
+            int ci = VehicleSync.CarIndex(VehicleSync.CarUnder(p.Body));
+            if (VehicleSync.DrivenHere(ci))
+            {
+                if (p.RemoteBy == who) { p.RemoteBy = -1; p.Vel = VehicleSync.CarVelocity(ci); SetKinematic(p, false); }
                 return;
             }
             // Au repos : fin du deplacement distant, ou recalage par l'hote.
@@ -270,6 +553,86 @@ namespace MWCoop
             p.Body.position = p.Body.position + new Vector3(Mathf.Cos(t) * 0.05f, 0.02f, Mathf.Sin(t) * 0.05f);
             p.Body.isKinematic = false;
             return p.Id + " en " + p.Body.position.ToString("F2");
+        }
+
+        // Essais : pose l'objet 'id' dans la voiture, a 'local' (repere de la voiture), immobile par rapport a elle.
+        public static string TestPlace(string id, Rigidbody car, Vector3 local)
+        {
+            Prop p;
+            if (car == null) return "voiture absente";
+            if (!props.TryGetValue(id, out p) || p.Body == null) return "objet " + id + " absent";
+            Transform t = p.Body.transform;
+            t.position = car.position + car.rotation * local;
+            t.rotation = car.rotation;
+            if (!p.Body.isKinematic) { p.Body.velocity = car.velocity; p.Body.angularVelocity = Vector3.zero; p.Body.WakeUp(); }
+            return id + " pose dans " + car.name + " en " + local.ToString("F2") + (p.Body.isKinematic ? " (cinematique)" : "");
+        }
+
+        // Essais : objets suivis poses dans la voiture (pose dans son repere ; colle = transport recu,
+        // envoye = transporte par nous), et combien d'autres a moins de 7 m.
+        public static string InCar(Rigidbody car)
+        {
+            var sb = new System.Text.StringBuilder();
+            Transform ct = car.transform;
+            Quaternion inv = Quaternion.Inverse(ct.rotation);
+            int outside = 0;
+            foreach (Prop p in props.Values)
+            {
+                if (p.Body == null || p.Body.transform.root == ct) continue;
+                Vector3 d = p.Body.transform.position - ct.position;
+                if (d.sqrMagnitude > 49f) continue;
+                if (VehicleSync.CarUnder(p.Body) != car) { outside++; continue; }
+                sb.Append(p.Id).Append(' ').Append((inv * d).ToString("F2"))
+                  .Append(p.RideCar >= 0 ? " colle" : p.RideOut >= 0 ? " envoye" : "").Append(" ; ");
+            }
+            return (sb.Length > 0 ? sb.ToString() : "rien ; ") + outside + " autres autour";
+        }
+
+        // Essais ([Test] Autotest=coffre-objets : l'hote conduit ; coffre-objets-invite : l'invite conduit) :
+        // l'hote pose les objets [Test] TestPlace (cles separees par ';', '~' = partie de cle, sinon cle ou debut
+        // d'ID ; '@x,y,z' = pose dans le repere de la voiture, coffre de la SORBET par defaut, cote a cote) dans
+        // TestVoiture a 20 s. Le conducteur monte a 15-22 s, la voiture est poussee a 8 m/s de 25 a 37 s. Chacun
+        // note chaque seconde la pose dans la voiture de ce qui y est pose : moins de 5 cm d'ecart entre les
+        // deux journaux, toujours dedans a 45 s.
+        static int testStep;
+        static float testLog;
+        static bool testPlaced;
+
+        public static void Test(string mode, float t)
+        {
+            if (mode != "coffre-objets" && mode != "coffre-objets-invite") return;
+            string name = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            Rigidbody car = VehicleSync.Body(name);
+            bool driver = Session.IsHost != (mode == "coffre-objets-invite");
+            if (driver && t > 15f && testStep == 0) { testStep = 1; Log.Info("autotest : " + VehicleSync.TestEnter(name, false)); }
+            if (driver && t > 22f && testStep == 1) { testStep = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(name, true)); }
+            if (driver && car != null && t > 25f && t < 37f)
+            {
+                Vector3 f = car.transform.forward; f.y = 0;
+                car.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(car.velocity.y, 0f);
+            }
+            if (Session.IsHost && car != null && t > 20f && !testPlaced)
+            {
+                testPlaced = true;
+                string[] keys = Config.Get("Test", "TestPlace", "~gasoline").Split(';');
+                for (int i = 0; i < keys.Length; i++)
+                {
+                    string[] ka = keys[i].Trim().Split('@');
+                    string k = ka[0];
+                    if (k.Length == 0) continue;
+                    Vector3 at = ka.Length > 1 ? ParseVec(ka[1]) : new Vector3((i - (keys.Length - 1) * 0.5f) * 0.35f, 0.45f, -1.5f);
+                    string id = k.StartsWith("~") ? FindKey(k.Substring(1)) : props.ContainsKey(k) ? k : NearestId(k, car.position) ?? k;
+                    Log.Info("autotest : " + TestPlace(id, car, at));
+                }
+            }
+            if (car != null && t > 20f && t < 60f && t - testLog >= 1f) { testLog = t; Log.Info("autotest : dans " + name + " : " + InCar(car)); }
+        }
+
+        static Vector3 ParseVec(string s)
+        {
+            string[] c = s.Split(',');
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            return c.Length < 3 ? Vector3.zero : new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci));
         }
 
         // Essais : objets physiques a moins de 'radius' m de 'pos' (nom et position).
@@ -302,6 +665,15 @@ namespace MWCoop
         {
             foreach (string k in props.Keys) if (k.Contains(part)) return k;
             return part;
+        }
+
+        // Essais : objets suivis dont l'ID commence par 'prefix', et ou ils sont ('?' : disparus ici).
+        public static string Ids(string prefix)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Prop p in props.Values)
+                if (p.Id.StartsWith(prefix)) sb.Append(p.Id).Append(' ').Append(p.Body != null ? p.Body.position.ToString("F1") : "?").Append(" ; ");
+            return sb.Length > 0 ? sb.ToString() : "aucun";
         }
 
         public static bool Holding { get { return held != null; } }

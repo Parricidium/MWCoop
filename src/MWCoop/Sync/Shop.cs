@@ -16,6 +16,11 @@ namespace MWCoop
     //    'Spawn bag' (le sac et les articles apparaissent, sans rien payer), puis panier local remis.
     // Les objets crees portent un nom a compteur sauvegarde (shoppingbag5...) : rejoues dans le
     // meme ordre, ils ont le meme nom partout (Props les suit ensuite par ce nom).
+    // Le sac est prepare par le BagCreator de la caisse (automate 'Create', global COPY envoye par 'Spawn
+    // bag' : sac modele active, panier recopie dedans). Le rejeu de 'Spawn bag' le refait deja : il est
+    // reserve a ce module (Replay.Claim) pour que le monde (WorldFsms) ne rejoue pas son COPY une 2e fois
+    // (« deja fait ici » seulement si le COPY local passe avant le message ; sinon sac modele reactive et
+    // panier recopie apres sa remise a zero).
     public static class Shop
     {
         class Register { public string Key; public PlayMakerFSM Fsm; }
@@ -83,6 +88,20 @@ namespace MWCoop
                 hooked.Add(f);
                 registers[r.Key] = r;
                 Log.Info("magasin : caisse suivie " + r.Key);
+                ClaimBagCreator(f);
+            }
+        }
+
+        // BagCreator de la caisse (variable {BagCreator}) : a ce module, avant le premier releve du monde (16 s).
+        static void ClaimBagCreator(PlayMakerFSM register)
+        {
+            FsmGameObject v = register.FsmVariables.FindFsmGameObject("BagCreator");
+            GameObject go = v != null ? v.Value : null;
+            if (go == null) return;
+            foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
+            {
+                if (Replay.Claim(f, "magasin")) Log.Info("magasin : " + go.name + "::" + f.FsmName + " reserve a la caisse (refait par le rejeu de l'achat)");
+                else Log.Warn("magasin : " + go.name + "::" + f.FsmName + " deja suivi par " + Replay.Owner(f) + " : sac prepare deux fois chez les autres");
             }
         }
 
