@@ -18,10 +18,16 @@ namespace MWCoop
     //     - une action injectee au debut de 'Spawn bag' envoie (caisse, panier, temps de banc) ;
     //     - ailleurs : panier local mis de cote, panier recu pose dans Carried, caisse mise dans 'Spawn bag'
     //       (le sac et les articles apparaissent) ; ce qui ferait payer ou ecrirait a l'ecran de celui qui
-    //       rejoue ('Purchase' de Fleetari, statistiques, GUI*) est coupe jusqu'a la fin, puis panier remis ;
+    //       rejoue ('Purchase' de Fleetari, statistiques, GUI*) est coupe jusqu'a la fin, puis panier remis --
+    //       dans la table que l'inventaire tient A CE MOMENT : 'Reset purchase' (HashTableRevertSnapShot) ne vide
+    //       pas la table, il en met une NEUVE dans le proxy (PlayMakerHashTableProxy.RevertToSnapShot) ;
     //     - caisse eteinte chez celui qui recoit (Fleetari loin : son automate ne tourne pas, le message etait
     //       perdu et les compteurs d'objets divergeaient) : la chaine est refaite a la main sur les distributeurs
-    //       (racine Spawner, toujours active) -- sac rempli, gros articles un par un, temps de banc.
+    //       (racine Spawner, toujours active) -- sac rempli, gros articles un par un, temps de banc. Ce qui sort
+    //       sous un point eteint (sac sous ShoppingBagSpawn, toujours eteint ; articles sous SpawnItemStore) est
+    //       sorti a la racine comme le fait le BagCreator, et fige (contraintes) tant que le magasin n'est pas
+    //       charge ici ou que Props ne l'a pas deplace : actif, son automate demarre et pose son ID (Props et
+    //       Consume le suivent), sans tomber a travers le comptoir eteint.
     //    Les objets crees portent un nom a compteur sauvegarde (shoppingbag5...) : rejoues dans le meme ordre,
     //    ils ont le meme nom partout (Props les suit ensuite par ce nom).
     //    Le sac est prepare par le BagCreator de la caisse (automate 'Create', global COPY envoye par 'Spawn
@@ -44,12 +50,21 @@ namespace MWCoop
     //    est au repos (etat qui attend le joueur, ou sans suite) : la suite (service, objets crees) se deroule
     //    comme chez l'acheteur. Ce qui touche au joueur qui rejoue (PlayerMoney, GUI*, statistiques, objets sous
     //    PLAYER) est coupe jusqu'au retour au repos : seul l'acheteur paie, les sous-titres restent chez lui.
+    //    Releve refait a chaque rejeu, et seulement sur les references fixes : une variable que l'automate
+    //    ecrit lui-meme (verre cree, objet des puces en cours) peut viser un instant l'objet en main du joueur.
+    //    Bar : le rejeu entre directement dans 'Pay' ; la carte (OrderList) est cachee le temps du service, comme
+    //    le fait 'State 6' a une commande -- sinon une commande locale (PURCHASE global) coupait le service rejoue
+    //    (paquet de cigarettes jamais cree ici : compteur du distributeur decale pour toute la partie).
+    //    Puces : jamais rejoues par l'automate (le joueur local y a peut-etre sa propre selection : Total, liste
+    //    'Bought', articles marques 'Added', que le rejeu ecrasait puis remettait a zero) ; les objets achetes
+    //    sont sortis a la main, et retires de la selection locale s'ils y etaient.
     //    Objets crees par le comptoir sans ID (verre de biere, shot, cafe, assiette du pub : rien a sauvegarder) :
     //    un ID est pose a leur creation, le meme partout (nom + joueur + numero d'achat) : Props et Consume les
     //    suivent (bu, mange, deplace) comme les autres articles.
     //    Comptoir eteint chez celui qui recoit : cigarettes du bar, objets des puces et trajet de bus faits a la
     //    main (compteurs, objets persistants, bus de l'hote) ; le reste attend que le comptoir s'allume, ou est
-    //    abandonne (verres, cafe).
+    //    abandonne (verres, cafe). Objets faits a la main sous un point eteint : sortis a la racine et figes,
+    //    comme les sacs.
     //    Pas suivis ici (voir le rapport du lot 2) : restaurant PSK (le repas est cuisine par Keijo/Jouni d'apres
     //    la distance du joueur LOCAL au comptoir), kiosque a saucisses et vendeur de pieces du rallye (leur effet
     //    passe deja par un automate du monde, PURCHASE / ALTERNATOR globaux), bureau de poste (courrier).
@@ -59,9 +74,11 @@ namespace MWCoop
 
         // ================================================================ caisses a sac
         class Register { public string Key; public PlayMakerFSM Fsm; public bool Hooked; }
+        // Panier local mis de cote pendant le rejeu d'un achat a la caisse R. Pas de reference a la table elle-meme :
+        // 'Reset purchase' en met une neuve dans le proxy, le panier est remis dans celle du moment (CarriedOf).
         class Pending
         {
-            public Register R; public float PriceTotal; public int BagStuff; public Hashtable Carried, Live; public float Until;
+            public Register R; public float PriceTotal; public int BagStuff; public Hashtable Carried; public float Until;
             public List<KeyValuePair<FsmFloat, float>> Floats = new List<KeyValuePair<FsmFloat, float>>();
             public List<FsmStateAction> Muted;
         }
@@ -79,6 +96,7 @@ namespace MWCoop
             public bool Hooked; public float Wait;                 // attente max d'un rejeu (comptoir eteint, occupe)
             public int SerialWho, Serial, Made;                    // achat en cours : nom des objets crees
             public List<FsmStateAction> Muted; public float MutedUntil, MutedAt;
+            public GameObject Hidden;                              // carte du bar cachee le temps d'un service rejoue
         }
         class Replayed
         {
@@ -92,8 +110,12 @@ namespace MWCoop
             public List<KeyValuePair<string, bool>> B = new List<KeyValuePair<string, bool>>();
             public List<KeyValuePair<string, string>> S = new List<KeyValuePair<string, string>>();
         }
-        // Distributeur a rejouer a la main (caisse eteinte) : un objet tous les 0,15 s, comme la caisse.
-        class SpawnStep { public PlayMakerFSM Fsm; public GameObject Point; public string Event; }
+        // Distributeur a rejouer a la main (caisse eteinte) : un objet tous les 0,15 s, comme la caisse. Area : la
+        // caisse (allumee = magasin charge ici).
+        class SpawnStep { public PlayMakerFSM Fsm; public GameObject Point, Area; public string Event; }
+        // Objet fait a la main loin d'ici, sorti a la racine et fige (contraintes, pas cinematique : Props garde la
+        // main sur isKinematic) jusqu'a ce que sa zone soit chargee ici ou qu'il ait ete deplace (pose recue).
+        class Frozen { public Rigidbody Body; public GameObject Area; public Vector3 At; public RigidbodyConstraints Was; }
 
         static readonly Dictionary<string, Counter> counters = new Dictionary<string, Counter>();
         static readonly Dictionary<PlayMakerFSM, Counter> counterOf = new Dictionary<PlayMakerFSM, Counter>();
@@ -103,17 +125,19 @@ namespace MWCoop
         static readonly List<Replayed> queue = new List<Replayed>();
         static readonly List<SpawnStep> spawnSteps = new List<SpawnStep>();
         static readonly HashSet<PlayMakerFSM> ignored = new HashSet<PlayMakerFSM>();
-        static readonly Dictionary<PlayMakerFSM, List<FsmStateAction>> personalOf = new Dictionary<PlayMakerFSM, List<FsmStateAction>>();
         static readonly Dictionary<FsmState, bool> restCache = new Dictionary<FsmState, bool>();
         static readonly HashSet<string> named = new HashSet<string>();   // ID poses ici sur des objets de comptoir
+        static readonly List<Frozen> frozen = new List<Frozen>();
         static bool applying;
-        static float nextScan = -1, nextHookCheck, nextSpawnStep, nextWarn;
+        static float nextScan = -1, nextHookCheck, nextSpawnStep, nextWarn, nextFrozen;
         static int serialBase, serialN;
 
         static readonly HashSet<string> InputActions = new HashSet<string> {
             "MousePickEvent", "GetButtonDown", "GetButtonUp", "GetMouseButtonDown", "GetMouseButtonUp", "GetKeyDown", "GetButton", "GetMouseButton", "GetKey" };
         static readonly HashSet<string> WriteFields = new HashSet<string> {
             "floatVariable", "intVariable", "boolVariable", "stringVariable", "storeResult", "storeValue", "variable", "store" };
+        // Champs objet ecrits par l'action (sorties) : jamais une cible. "variable" : SetGameObject.
+        static bool OutputField(string name) { return name.StartsWith("store") || name == "variable" || name == "result"; }
 
         class Hook : ModHook
         {
@@ -162,15 +186,19 @@ namespace MWCoop
         {
             registers.Clear(); registerOf.Clear(); pending.Clear(); unhookedRegisters.Clear();
             counters.Clear(); counterOf.Clear(); unhooked.Clear(); mutedCounters.Clear(); queue.Clear(); spawnSteps.Clear();
-            ignored.Clear(); personalOf.Clear(); restCache.Clear(); named.Clear();
-            testStep = 0; testLog = 0;
+            ignored.Clear(); restCache.Clear(); named.Clear(); frozen.Clear();
+            testStep = 0; testLog = 0; testBag = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 9f : -1;
         }
 
-        // Stock : la table Carried d'un magasin est-elle pretee au rejeu d'un achat (panier d'un autre) ?
-        public static bool Borrowed(Hashtable carried)
+        // Stock : le panier de l'inventaire 'inventory' (objet INVENTORY_... qui porte Stocked et Carried) est-il
+        // prete au rejeu d'un achat (panier d'un autre) ? Par l'objet, pas par la table (remplacee a chaque
+        // 'Reset purchase').
+        public static bool Borrowed(GameObject inventory)
         {
-            for (int i = 0; i < pending.Count; i++) if (pending[i].Live == carried) return true;
+            if (inventory == null) return false;
+            for (int i = 0; i < pending.Count; i++)
+                if (pending[i].R.Fsm != null && Var(pending[i].R.Fsm, "Inventory") == inventory) return true;
             return false;
         }
 
@@ -203,8 +231,10 @@ namespace MWCoop
                 string s = p.R.Fsm.ActiveStateName;
                 bool finished = s == "State 5" || s == "Wait player" || s == "Player distance";
                 if (!finished && now < p.Until) continue;
-                // Le panier du joueur local revient (le jeu l'a vide dans 'Reset purchase').
-                if (p.Live != null) { p.Live.Clear(); foreach (DictionaryEntry e in p.Carried) p.Live[e.Key] = e.Value; }
+                // Le panier du joueur local revient, dans la table que le proxy tient maintenant ('Reset purchase'
+                // y a mis une table neuve ; l'ancienne n'est plus lue par personne).
+                Hashtable live = CarriedOf(p.R.Fsm);
+                if (live != null) { live.Clear(); foreach (DictionaryEntry e in p.Carried) live[e.Key] = e.Value; }
                 p.R.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value = p.PriceTotal;
                 p.R.Fsm.FsmVariables.GetFsmInt("BagStuff").Value = p.BagStuff;
                 foreach (KeyValuePair<FsmFloat, float> kv in p.Floats) kv.Key.Value = kv.Value;
@@ -231,8 +261,47 @@ namespace MWCoop
                     FsmGameObject sp = st.Fsm.FsmVariables.FindFsmGameObject("SpawnPoint");
                     if (sp != null && st.Point != null) sp.Value = st.Point;
                     st.Fsm.SendEvent(st.Event);
+                    Loosen(Var(st.Fsm, "New"), st.Area);   // sous SpawnItemStore eteint : a la racine, fige
                 }
             }
+            if (frozen.Count > 0 && now >= nextFrozen)
+            {
+                nextFrozen = now + 0.5f;
+                for (int i = frozen.Count - 1; i >= 0; i--)
+                {
+                    Frozen fz = frozen[i];
+                    if (fz.Body == null) { frozen.RemoveAt(i); continue; }
+                    bool loaded = fz.Area == null || fz.Area.activeInHierarchy;
+                    bool moved = (fz.Body.transform.position - fz.At).sqrMagnitude > 0.25f;   // pose recue (Props), pris en main
+                    if (!loaded && !moved) continue;
+                    fz.Body.constraints = fz.Was;
+                    if (!fz.Body.isKinematic) fz.Body.WakeUp();
+                    frozen.RemoveAt(i);
+                    Log.Info("magasin : " + fz.Body.name + " libere (" + (loaded ? "zone chargee ici" : "deplace") + ")");
+                }
+            }
+        }
+
+        // Objet tout juste cree par un distributeur sous un point eteint (sac sous ShoppingBagSpawn, toujours
+        // eteint ; articles sous SpawnItemStore, cigarettes sous DrinkSpawnPoint, magasin loin) : jamais demarre
+        // la-dessous (pas d'ID, ni Props ni Consume ne le voient, et il disparait avec la zone). Sorti a la racine
+        // et active (comme le BagCreator, 'Activate bag'), fige si sa zone ('area') n'est pas chargee ici.
+        static void Loosen(GameObject go, GameObject area)
+        {
+            if (go == null || go.activeInHierarchy) return;   // deja dans le monde (zone chargee) : comme le jeu
+            go.transform.parent = null;
+            go.SetActive(true);
+            Freeze(go, area);
+            Consume.Soon(go);   // suivi des que son automate a pose son ID (image suivante)
+        }
+
+        static void Freeze(GameObject go, GameObject area)
+        {
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            if (rb == null || area == null || area.activeInHierarchy) return;
+            for (int i = 0; i < frozen.Count; i++) if (frozen[i].Body == rb) return;
+            frozen.Add(new Frozen { Body = rb, Area = area, At = rb.transform.position, Was = rb.constraints });
+            rb.constraints = RigidbodyConstraints.FreezeAll;
         }
 
         // ---------------------------------------------------------------- releve
@@ -495,25 +564,39 @@ namespace MWCoop
             Hashtable carried = CarriedOf(reg.Fsm);
             if (carried == null) return;
             FsmVariables fv = reg.Fsm.FsmVariables;
-            var keep = new Pending
+            // Rejeu precedent pas fini a cette caisse (deux achats coup sur coup) : la table tient le panier du
+            // premier acheteur, pas celui du joueur local -- c'est la sauvegarde du premier qui sera remise.
+            Pending keep = null;
+            foreach (Pending x in pending) if (x.R == reg) keep = x;
+            if (keep != null)
             {
-                R = reg, Carried = new Hashtable(carried), Live = carried, Until = Time.realtimeSinceStartup + 20f,
-                PriceTotal = fv.GetFsmFloat("PriceTotal").Value,
-                BagStuff = fv.GetFsmInt("BagStuff").Value,
-            };
-            foreach (string bf in BagFloats)
+                pending.Remove(keep);
+                keep.Until = Time.realtimeSinceStartup + 20f;
+                foreach (KeyValuePair<FsmFloat, float> kv in keep.Floats) kv.Key.Value = 0f;
+            }
+            else
             {
-                FsmFloat v = fv.FindFsmFloat(bf);
-                if (v == null) continue;
-                keep.Floats.Add(new KeyValuePair<FsmFloat, float>(v, v.Value));
-                v.Value = 0f;
+                keep = new Pending
+                {
+                    R = reg, Carried = new Hashtable(carried), Until = Time.realtimeSinceStartup + 20f,
+                    PriceTotal = fv.GetFsmFloat("PriceTotal").Value,
+                    BagStuff = fv.GetFsmInt("BagStuff").Value,
+                };
+                foreach (string bf in BagFloats)
+                {
+                    FsmFloat v = fv.FindFsmFloat(bf);
+                    if (v == null) continue;
+                    keep.Floats.Add(new KeyValuePair<FsmFloat, float>(v, v.Value));
+                    v.Value = 0f;
+                }
             }
             foreach (KeyValuePair<string, float> kv in floats) { FsmFloat v = fv.FindFsmFloat(kv.Key); if (v != null) v.Value = kv.Value; }
             carried.Clear();
             for (int i = 0; i < keys.Count; i++) carried[keys[i]] = qtys[i];
             fv.GetFsmInt("BagStuff").Value = bagStuff;
             // 'Purchase' de Fleetari vient apres le sac : coupe (avec l'ecran et les statistiques) jusqu'a la fin.
-            keep.Muted = MuteFsm(reg.Fsm);
+            List<FsmStateAction> muted = MuteFsm(reg.Fsm);
+            if (keep.Muted == null) keep.Muted = muted; else keep.Muted.AddRange(muted);
             applying = true; Replay.Depth++;
             try { Game.SetState(reg.Fsm, "Spawn bag"); }
             finally { applying = false; Replay.Depth--; }
@@ -534,28 +617,32 @@ namespace MWCoop
                     GameObject bag = Var(sp, "New");
                     if (bag != null)
                     {
-                        // = BagCreator 'Create' (COPY) : sac active, panier recopie dedans. Il reste sous son point de
-                        // depart (eteint avec le magasin) : sorti, il tomberait a travers le comptoir et le sol eteints ;
-                        // il apparait sur le comptoir quand le magasin s'allume ici.
-                        bag.SetActive(true);
+                        // = BagCreator 'Create' (COPY) : 'Activate bag' le sort a la racine (SetParent null) et l'active
+                        // -- sous ShoppingBagSpawn (toujours eteint) il ne demarrerait jamais : pas d'ID, invisible a
+                        // Props et Consume, jamais montre. Puis 'Copy contents 2' : panier recopie dans ses listes,
+                        // creees par l'Awake des proxies a l'activation. Fige tant que le magasin n'est pas charge ici.
+                        Loosen(bag, f.gameObject);
                         System.Collections.ArrayList k = ListOn(bag, "Keys"), v = ListOn(bag, "Values");
                         if (k != null && v != null)
                         {
                             k.Clear(); v.Clear();
                             for (int i = 0; i < keys.Count; i++) { k.Add(keys[i]); v.Add(qtys[i]); }
                         }
-                        Log.Info("magasin : sac " + bag.name + " cree ici sans la caisse (sous " + (bag.transform.parent != null ? bag.transform.parent.name : "rien") + ")");
+                        Log.Info("magasin : sac " + bag.name + " cree ici sans la caisse (" + (bag.transform.parent != null ? "sous " + bag.transform.parent.name : "racine")
+                                 + (k != null ? "" : ", listes absentes : sac vide") + ")");
                     }
                 }
             }
+            // Gros articles : la liste 'Separates' de l'inventaire (proxy jamais eveille si le magasin n'a pas ete
+            // charge depuis le chargement de la partie : a defaut, un distributeur a ce nom dans {Spawners}).
             System.Collections.ArrayList separates = ListOn(Var(f, "Inventory"), "Separates");
             GameObject spawners = Var(f, "Spawners"), point = Var(f, "SpawnPoint");
-            if (separates != null && spawners != null)
+            if (spawners != null)
                 for (int i = 0; i < keys.Count; i++)
                 {
-                    if (qtys[i] <= 0 || !separates.Contains(keys[i])) continue;
+                    if (qtys[i] <= 0 || separates != null && !separates.Contains(keys[i])) continue;
                     PlayMakerFSM pf = Game.FsmOn(spawners, keys[i]);
-                    for (int j = 0; j < qtys[i] && pf != null; j++) spawnSteps.Add(new SpawnStep { Fsm = pf, Point = point, Event = "SPAWNITEM" });
+                    for (int j = 0; j < qtys[i] && pf != null; j++) spawnSteps.Add(new SpawnStep { Fsm = pf, Point = point, Area = f.gameObject, Event = "SPAWNITEM" });
                 }
             foreach (KeyValuePair<string, float> kv in floats)
             {
@@ -709,6 +796,11 @@ namespace MWCoop
             Counter c = it.C;
             PlayMakerFSM f = c.Fsm;
             if (f == null) return true;
+            // Puces : toujours a la main. La caisse au repos ('Wait player'/'Wait button') est justement celle ou le
+            // joueur local a peut-etre choisi des objets (Total, 'Bought', TriggerFlea 'Added') : le rejeu les
+            // ecrasait, puis 'Delay' et 'State 4' remettaient tout a zero -- objets choisis caches pour de bon,
+            // semaines de location perdues. Et un clic local (PURCHASE) coupait la boucle 'Spawn product'.
+            if (c.Kind == "puces") { Emulate(it); return true; }
             bool on = f.gameObject.activeInHierarchy;
             if (!on && Emulate(it)) return true;   // eteint : ce qui doit exister partout, fait a la main
             if (!on || !AtRest(f))
@@ -729,11 +821,23 @@ namespace MWCoop
             SetLists(c, it.Lists);
             c.SerialWho = it.SerialWho; c.Serial = it.Serial; c.Made = 0;
             MuteCounter(c);
+            if (c.Kind == "bar") HideOrders(c);
             applying = true; Replay.Depth++;
             try { Game.SetState(f, it.State); }
             finally { applying = false; Replay.Depth--; }
             Log.Info("magasin : " + c.Label + " de " + PlayerName(it.Who) + " rejoue (" + c.Kind + " " + Describe(f) + ", " + idle + " -> " + it.State + ", achat " + it.Serial + ")");
             return true;
+        }
+
+        // Bar : carte cachee le temps du service rejoue (ce que fait 'State 6' a une commande, que le rejeu saute en
+        // entrant dans 'Pay') ; remise par UnmuteCounter au retour au repos ('State 3'), ou au plus tard 120 s apres.
+        static void HideOrders(Counter c)
+        {
+            c.MutedUntil = c.MutedAt + 120f;   // service du plat (cuisine, micro-ondes) : plus long qu'une biere
+            Transform ol = c.Fsm.transform.root.Find("Stuff/LOD/ActivateBar/OrderList");
+            if (ol == null || !ol.gameObject.activeSelf) return;   // deja cachee (par le jeu, ou un rejeu en cours)
+            ol.gameObject.SetActive(false);
+            c.Hidden = ol.gameObject;
         }
 
         static void SetLists(Counter c, List<KeyValuePair<string, List<object>>> lists)
@@ -762,7 +866,15 @@ namespace MWCoop
                 if (ev == "CIGARETTES")
                 {
                     PlayMakerFSM sp = FsmOnVar(c.Fsm, "Spawner", "Cigarettes");
-                    if (sp != null) { sp.SendEvent("SPAWNPUB"); Log.Info("magasin : cigarettes du bar creees ici sans le bar (" + PlayerName(it.Who) + ")"); }
+                    if (sp != null)
+                    {
+                        sp.SendEvent("SPAWNPUB");
+                        // Sous le point du comptoir (eteint avec le bar) : a la racine, fige jusqu'a ce que le bar soit
+                        // charge ici (sinon jamais d'ID : le paquet empoche par l'acheteur restait ici sur le comptoir).
+                        GameObject pack = Var(sp, "New");
+                        Loosen(pack, c.Fsm.gameObject);
+                        Log.Info("magasin : cigarettes du bar creees ici sans le bar (" + PlayerName(it.Who) + (pack != null ? ", " + pack.name : "") + ")");
+                    }
                 }
                 else Log.Info("magasin : " + (ev ?? "?") + " du bar pas servi ici (bar eteint ou occupe)");
                 return true;
@@ -775,24 +887,38 @@ namespace MWCoop
                 foreach (var l in it.Lists) if (l.Key == "Bought") bought = l.Value;
                 if (items == null || bought == null) return true;
                 GameObject point = Var(c.Fsm, "SpawnPoint");
-                int n = 0;
+                System.Collections.ArrayList mine = ListOn(inv, "Bought");   // selection du joueur local (pas payee)
+                int n = 0, dropped = 0;
                 for (int i = 0; i < bought.Count && i < items.Count; i++)
                 {
                     if (!(bought[i] is bool) || !(bool)bought[i]) continue;
-                    // = 'Spawn product' : objet sorti de l'inventaire, pose au comptoir, rayon cache. Pose SOUS le point de
-                    // sortie (eteint avec le marche) plutot qu'a la racine : il tomberait a travers le comptoir eteint ;
-                    // il apparait au comptoir quand le marche s'allume ici.
+                    if (purchased != null && i < purchased.Count && purchased[i] is bool && (bool)purchased[i]) continue;   // deja vendu ici
+                    // = 'Spawn product' : objet sorti de l'inventaire (FleaMarketProducts/Disable, eteint) a la racine
+                    // (SetParent null), pose au comptoir, active ; rayon cache. Fige tant que le marche n'est pas charge
+                    // ici (il tomberait a travers le comptoir eteint) ou que Props ne l'a pas deplace.
                     var go = items[i] as GameObject;
                     if (go == null) continue;
-                    go.transform.parent = point != null ? point.transform : null;
+                    go.transform.parent = null;
                     if (point != null) go.transform.position = point.transform.position + Vector3.up * (0.1f * n);
                     go.SetActive(true);
+                    Freeze(go, c.Fsm.gameObject);
+                    Consume.Soon(go);
                     if (purchased != null && i < purchased.Count) purchased[i] = true;
                     var sh = shelf != null && i < shelf.Count ? shelf[i] as GameObject : null;
                     if (sh != null) sh.SetActive(false);
                     n++;
+                    // Choisi ici aussi : retire de la selection locale (sinon paye une 2e fois et repris a l'acheteur).
+                    if (mine != null && i < mine.Count && mine[i] is bool && (bool)mine[i]) { Deselect(c, i, mine); dropped++; }
                 }
-                Log.Info("magasin : " + n + " objets des puces sortis ici sans le comptoir (" + PlayerName(it.Who) + ")");
+                if (dropped > 0 && c.Fsm.gameObject.activeInHierarchy && AtRest(c.Fsm))
+                {
+                    // Total affiche et TotalFinal recalcules par la caisse, comme apres un clic sur un objet.
+                    applying = true; Replay.Depth++;
+                    try { c.Fsm.SendEvent("PURCHASE"); }
+                    finally { applying = false; Replay.Depth--; }
+                }
+                Log.Info("magasin : " + n + " objets des puces de " + PlayerName(it.Who) + " sortis ici a la main (comptoir "
+                         + (c.Fsm.gameObject.activeInHierarchy ? "allume" : "eteint") + (dropped > 0 ? ", " + dropped + " retires de la selection locale" : "") + ")");
                 return true;
             }
             if (c.Kind == "bus")
@@ -806,6 +932,33 @@ namespace MWCoop
                 return true;
             }
             return false;
+        }
+
+        // Puces : l'objet de rang i, achete par un autre, etait aussi choisi par le joueur local (TriggerFlea 'Buy'
+        // de meme ID : Added, prix ajoute au Total de la caisse, rang i vrai dans 'Bought'). Defait comme 'Subtract'
+        // (clic droit) : rang i hors de 'Bought', Added faux, prix retire du total. L'objet du rayon n'est pas
+        // retouche : son rayon est cache (vendu). Releve de tous les automates : seulement dans ce cas rare.
+        static void Deselect(Counter c, int i, System.Collections.ArrayList mine)
+        {
+            mine[i] = false;
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var t = (PlayMakerFSM)o;
+                if (t.hideFlags != HideFlags.None || t.FsmName != "Buy" || t.gameObject.name != "TriggerFlea" || Var(t, "CashRegister") != c.Fsm.gameObject) continue;
+                FsmInt id = t.FsmVariables.FindFsmInt("ID");
+                if (id == null || id.Value != i) continue;
+                FsmBool added = t.FsmVariables.FindFsmBool("Added");
+                if (added == null || !added.Value) return;
+                added.Value = false;
+                FsmFloat price = t.FsmVariables.FindFsmFloat("Price");
+                float p = price != null ? price.Value : 0f;
+                FsmFloat total = c.Fsm.FsmVariables.FindFsmFloat("Total"), final = c.Fsm.FsmVariables.FindFsmFloat("TotalFinal");
+                if (total != null) total.Value = total.Value - p < 0.005f ? 0f : total.Value - p;
+                if (final != null) final.Value = final.Value - p < 0.005f ? 0f : final.Value - p;
+                FsmString pn = t.FsmVariables.FindFsmString("ProductNameString");
+                Log.Info("magasin : " + (pn != null ? pn.Value : "objet " + i) + " retire de la selection locale (achete par un autre, " + p + " mk)");
+                return;
+            }
         }
 
         // ---------------------------------------------------------------- objets crees : ID d'achat
@@ -845,24 +998,57 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- actions coupees pendant un rejeu
         // Ce qui toucherait au joueur qui rejoue : ecriture d'une globale Player* ou GUI* (argent, sous-titres,
-        // corps), statistiques personnelles, objets sous PLAYER ou GUI (jurons, main). Lu une fois par automate.
+        // corps), statistiques personnelles, objets sous PLAYER ou GUI (jurons, main). Refait a chaque rejeu (rare),
+        // jamais garde : la cible d'une action peut changer. Seules les cibles FIXES comptent (objet donne tel quel,
+        // globale, variable de l'automate qu'aucune de ses actions n'ecrit) ; les sorties (storeObject du verre cree
+        // par 'Spawn beer') et les variables que l'automate remplit lui-meme ({Item} des puces, lu dans 'Items')
+        // visent ce qu'elles visaient au dernier passage -- le verre ou l'objet que le joueur a encore EN MAIN :
+        // les couper empechait de creer les verres et de sortir les objets des autres pour toute la partie.
         static List<FsmStateAction> PersonalWrites(PlayMakerFSM f)
         {
-            List<FsmStateAction> l;
-            if (personalOf.TryGetValue(f, out l)) return l;
-            l = new List<FsmStateAction>();
+            var l = new List<FsmStateAction>();
             try
             {
+                HashSet<string> written = Written(f);
                 foreach (FsmState st in f.Fsm.States)
                     foreach (FsmStateAction a in st.Actions)
-                        if (a != null && !(a is ModHook) && !(a is Made) && Personal(f, a)) l.Add(a);
+                        if (a != null && !(a is ModHook) && !(a is Made) && Personal(f, a, written)) l.Add(a);
             }
             catch { }
-            personalOf[f] = l;
             return l;
         }
 
-        static bool Personal(PlayMakerFSM f, FsmStateAction a)
+        // Variables objet ecrites par les actions de l'automate : champs de sortie (storeObject, storeResult...)
+        // et resultats des listes (FsmVar : ArrayListGet 'result', ArrayListGetRandom...).
+        static HashSet<string> Written(PlayMakerFSM f)
+        {
+            var w = new HashSet<string>();
+            foreach (FsmState st in f.Fsm.States)
+                foreach (FsmStateAction a in st.Actions)
+                {
+                    if (a == null) continue;
+                    foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        object v = fi.GetValue(a);
+                        var g = v as FsmGameObject;
+                        if (g != null && g.UseVariable && OutputField(fi.Name) && !string.IsNullOrEmpty(g.Name)) w.Add(g.Name);
+                        var fv = v as FsmVar;
+                        if (fv != null && fv.useVariable && !string.IsNullOrEmpty(fv.variableName)) w.Add(fv.variableName);
+                    }
+                }
+            return w;
+        }
+
+        // Cible qui change en cours de partie : variable sans nom (sortie jetee), ou variable de l'automate qu'il
+        // ecrit lui-meme.
+        static bool Moving(PlayMakerFSM f, FsmGameObject g, HashSet<string> written)
+        {
+            if (g == null || !g.UseVariable) return false;
+            if (string.IsNullOrEmpty(g.Name)) return true;
+            return written.Contains(g.Name) && f.FsmVariables.GetVariable(g.Name) != null;
+        }
+
+        static bool Personal(PlayMakerFSM f, FsmStateAction a, HashSet<string> written)
         {
             string tn = a.GetType().Name;
             // Tests et conversions lisent leur premiere variable (BoolTest boolVariable...) : jamais coupes pour ca.
@@ -874,9 +1060,15 @@ namespace MWCoop
                 if (nv != null && !reads && WriteFields.Contains(fi.Name) && nv.UseVariable
                     && (nv.Name.StartsWith("Player") || nv.Name.StartsWith("GUI")) && f.FsmVariables.GetVariable(nv.Name) == null) return true;
                 if (tn.StartsWith("Get")) continue;   // lit seulement (distance au joueur, variable d'un autre automate)
+                if (OutputField(fi.Name)) continue;   // ce que l'action produit (objet cree) : pas sa cible
                 GameObject go = null;
-                if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
-                else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
+                var g = v as FsmGameObject;
+                if (g != null) { if (!Moving(f, g, written)) go = g.Value; }
+                else if (v is FsmOwnerDefault)
+                {
+                    var od = (FsmOwnerDefault)v;
+                    if (od.OwnerOption != OwnerDefaultOption.UseOwner && !Moving(f, od.GameObject, written)) go = od.GameObject.Value;
+                }
                 if (go == null) continue;
                 string root = go.transform.root.name;
                 if (go.name == "Statistics" || root == "PLAYER" || root == "GUI") return true;
@@ -909,6 +1101,7 @@ namespace MWCoop
 
         static void UnmuteCounter(Counter c)
         {
+            if (c.Hidden != null) { c.Hidden.SetActive(true); c.Hidden = null; }   // carte du bar rendue
             if (c.Muted == null) return;
             Unmute(c.Muted);
             c.Muted = null;
@@ -932,20 +1125,34 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- essais
         // Essais : met des produits dans le panier de la caisse 'key' et paie comme le joueur.
-        public static string TestBuy(string product, int qty)
+        public static string TestBuy(string product, int qty) { return TestBuy(product, qty, null, 0); }
+
+        // 'extra' : un 2e produit dans le meme panier (gros article : caisse de biere...), hors BagStuff.
+        static string TestBuy(string product, int qty, string extra, int extraQty)
         {
+            Register r = StoreRegister();
+            if (r == null) return "aucune caisse de magasin";
+            Hashtable carried = CarriedOf(r.Fsm);
+            if (carried == null) return "pas de panier";
+            carried[product] = qty;
+            if (!string.IsNullOrEmpty(extra) && extraQty > 0) carried[extra] = extraQty;
+            r.Fsm.FsmVariables.GetFsmInt("BagStuff").Value = qty;
+            r.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value = 10f * (qty + extraQty);
+            Game.SetState(r.Fsm, "Check money");
+            return "achat de " + product + " x" + qty + (extraQty > 0 ? " et " + extra + " x" + extraQty : "") + " a " + r.Key;
+        }
+
+        // Caisse du magasin PSK (Fleetari a aussi un chemin en /Store/).
+        static Register StoreRegister()
+        {
+            Register any = null;
             foreach (Register r in registers.Values)
             {
                 if (r.Fsm == null || !r.Key.Contains("/Store/")) continue;
-                Hashtable carried = CarriedOf(r.Fsm);
-                if (carried == null) return "pas de panier";
-                carried[product] = qty;
-                r.Fsm.FsmVariables.GetFsmInt("BagStuff").Value = qty;
-                r.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value = 10f * qty;
-                Game.SetState(r.Fsm, "Check money");
-                return "achat de " + product + " x" + qty + " a " + r.Key;
+                if (r.Key.StartsWith("PERAPORTTI")) return r;
+                any = r;
             }
-            return "aucune caisse de magasin";
+            return any;
         }
 
         // Appele par Consume.Test (deja branche dans Autotest).
@@ -963,7 +1170,20 @@ namespace MWCoop
         // [Test] Autotest=sac-double : l'hote achete a 32 s [Test] TestProduit (Sausages) x2 a la caisse PSK ; chacun
         //   note toutes les 5 s de 25 a 60 s les sacs (shoppingbag*) et le module qui tient chaque BagCreator.
         //   Attendu : un seul sac de plus, le meme ID des deux cotes, BagCreator a « magasin » partout.
+        // [Test] Autotest=panier : les deux joueurs devant la caisse PSK (caisse allumee chez chacun). A 28 s l'invite
+        //   met TestProduit (Sausages) x3 dans SON panier (comme en rayon, PriceTotal +30) ; a 32 s l'hote achete
+        //   TestProduit x2 ; chacun note de 30 a 60 s le panier que la caisse lit A CE MOMENT (proxy Carried),
+        //   PriceTotal et l'etat Stock du produit. Attendu chez l'invite : « rejoue », puis son panier x3 et
+        //   PriceTotal 30 a nouveau dans la table lue par la caisse (pas x0 : 'Reset purchase' change de table) ;
+        //   chez l'hote, le panier des autres = 3 apres son achat.
+        // [Test] Autotest=sac-loin : l'hote devant la caisse PSK, l'invite loin (TestPos ailleurs : caisse eteinte chez
+        //   lui). A 32 s l'hote achete TestProduit x2 et [Test] TestGros (Beer : caisse de biere, gros article) x1 ;
+        //   chacun note toutes les 5 s de 25 a 70 s les sacs et caisses de biere actifs (parent, fige ou non) et les
+        //   ID que Props suit ; de 45 a 50 s l'hote promene le sac (Props.TestCarry). Attendu chez l'invite : « sac
+        //   shoppingbagN cree ici sans la caisse (racine) », sac et caisse a la racine, figes, suivis par Props sous
+        //   les memes ID que chez l'hote, puis « libere (deplace) » pour le sac quand l'hote le deplace.
         static int testStep;
+        static string testBag;
         static float testLog;
         static Rigidbody testCup;
 
@@ -972,6 +1192,69 @@ namespace MWCoop
             if (mode == "bar") TestBar(t);
             else if (mode == "cafe") TestCafe(t);
             else if (mode == "sac-double") TestBags(t);
+            else if (mode == "panier") TestCart(t);
+            else if (mode == "sac-loin") TestFar(t);
+        }
+
+        static void TestCart(float t)
+        {
+            string product = Config.Get("Test", "TestProduit", "Sausages");
+            Register reg = StoreRegister();
+            if (reg == null || reg.Fsm == null) { if (testStep == 0 && t > 28f) { testStep = 9; Log.Info("autotest : panier, aucune caisse PSK suivie"); } return; }
+            if (!Session.IsHost && testStep == 0 && t > 28f)
+            {
+                testStep = 1;
+                Hashtable c = CarriedOf(reg.Fsm);
+                if (c != null) { c[product] = (c[product] is int ? (int)c[product] : 0) + 3; reg.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value += 30f; }
+                Log.Info("autotest : panier de l'invite rempli (" + (c != null ? product + " x3" : "pas de panier") + ")");
+            }
+            if (Session.IsHost && testStep == 0 && t > 32f) { testStep = 1; Log.Info("autotest : " + TestBuy(product, 2)); }
+            if (t > 30f && t < 61f && t - testLog >= 3f)
+            {
+                testLog = t;
+                Hashtable c = CarriedOf(reg.Fsm);
+                var sb = new System.Text.StringBuilder();
+                if (c != null) foreach (DictionaryEntry e in c) if (e.Value is int && (int)e.Value != 0) sb.Append(e.Key).Append(" x").Append(e.Value).Append(' ');
+                Log.Info("autotest : panier lu par la caisse [" + reg.Fsm.ActiveStateName + "] " + (c == null ? "absent" : sb.Length > 0 ? sb.ToString().TrimEnd() : "vide")
+                         + ", PriceTotal=" + reg.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value.ToString("0.##") + ", rejeux en cours " + pending.Count + " ; " + Stock.State(product));
+            }
+        }
+
+        static void TestFar(float t)
+        {
+            string gros = Config.Get("Test", "TestGros", "Beer");
+            if (Session.IsHost && testStep == 0 && t > 32f)
+            {
+                testStep = 1;
+                Log.Info("autotest : " + TestBuy(Config.Get("Test", "TestProduit", "Sausages"), 2, gros, 1));
+            }
+            if (Session.IsHost && testStep == 1 && t > 44f)
+            {
+                // Sac le plus recent (compteur le plus haut) : celui de l'achat.
+                testStep = 2;
+                int best = -1;
+                foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                {
+                    string id = rb.name.StartsWith("shoppingbag") ? Props.ItemId(rb.gameObject) : "";
+                    int num;
+                    if (id.StartsWith("shoppingbag") && int.TryParse(id.Substring(11), out num) && num > best) { best = num; testBag = id; }
+                }
+                Log.Info("autotest : sac a promener " + (testBag ?? "introuvable"));
+            }
+            if (Session.IsHost && testStep == 2 && testBag != null && t > 45f && t < 50f) Props.TestCarry(testBag, t);
+            if (t > 25f && t < 71f && t - testLog >= 5f)
+            {
+                testLog = t;
+                var sb = new System.Text.StringBuilder();
+                foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+                {
+                    if (!rb.name.StartsWith("shoppingbag") && !rb.name.StartsWith("beercase")) continue;
+                    bool fz = false;
+                    foreach (Frozen x in frozen) if (x.Body == rb) fz = true;
+                    sb.Append(rb.name).Append(rb.transform.parent != null ? " sous " + rb.transform.parent.name : " racine").Append(fz ? " fige" : "").Append(" ; ");
+                }
+                Log.Info("autotest : sac-loin, " + (sb.Length > 0 ? sb.ToString() : "aucun sac actif ; ") + "figes " + frozen.Count + " ; suivis " + Props.Ids("shoppingbag") + " " + Props.Ids("beercase"));
+            }
         }
 
         static void TestBar(float t)
