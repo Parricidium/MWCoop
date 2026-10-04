@@ -18,6 +18,8 @@ namespace MWCoop
     //    rejouee que si son etat d'arrivee ET tout ce qui peut s'enchainer automatiquement apres
     //    (minuteurs, comparaisons -- pas ce qui attend le joueur) ne touchent pas au joueur. Ainsi le pont
     //    elevateur ou les fusibles passent, le lit (qui finit par deplacer le joueur) non.
+    //  - Ni la logique propre des PNJ (marche, ragdoll, telephone : Npcs fait suivre leur corps), sauf ce
+    //    qu'un joueur leur fait, ni les machines a sous et le video-poker (la partie reste a celui qui joue).
     //  - Chez celui qui rejoue, son argent et son corps (globales Player*) sont remis comme avant :
     //    seul celui qui paie paie, seul celui qui mange mange.
     //  - ETATS : l'hote fait reference pour les variables des automates sauvegardes (UT/UniqueTag :
@@ -29,8 +31,15 @@ namespace MWCoop
         static readonly HashSet<string> PersonalRoots = new HashSet<string> { "PLAYER", "GUI", "Sheets", "COMPUTER" };
         static readonly string[] SkipObjects = { "OptionsDB", "InitializeControls", "Photomode", "Statistics", "Setup Game", "SAVEGAME", "BankAccount", "Expenses", "PlayerWanted",
                                                  "Cashier", "CashRegister", "INVENTORY" };
+        // Machines a sous et video-poker (station, bar : SlotMachinePub) : la partie reste a celui qui joue (son
+        // argent, ses cartes et ses rouleaux tires au hasard). Rejouee chez l'autre, elle y tirait d'autres cartes
+        // et creditait sa machine gratuitement (l'argent est force pendant un rejeu). Tout ce qui est dessous.
+        static readonly string[] SkipParents = { "VideoPoker", "SlotMachine" };
         // "Buy" : prendre un article en rayon le met dans SON panier ; c'est la caisse qui est synchronisee (Shop).
         static readonly HashSet<string> SkipFsmNames = new HashSet<string> { "Paint", "LOD", "Death", "HeadForce", "Coldness", "Strafe", "Buy" };
+        // Automates de PNJ provoques par un joueur (colere quand on lui urine dessus ou lui fait un doigt, coup de
+        // poing, voiture qui le renverse, client au comptoir) : suivis malgre Npcs.IsNpcLogic, ils vont a l'hote.
+        static readonly HashSet<string> NpcPlayerFsms = new HashSet<string> { "Anger", "PlayerHit", "CarHit", "Work" };
         // Miroir de l'hote : seulement les systemes de la maison et du monde (pas les machines qu'un invite
         // utilise en ce moment, comme une pompe a essence : l'hote ecraserait son compteur).
         static readonly HashSet<string> MirrorRoots = new HashSet<string> { "Systems", "HOMENEW", "YARD", "CABIN", "COTTAGE" };
@@ -139,7 +148,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear(); pathOf.Clear(); mutedList.Clear(); alias.Clear();
-            hostTvOn = false; scanIdx = -1; scanRoots = null; rootsDirty = true;
+            hostTvOn = false; scanIdx = -1; scanRoots = null; rootsDirty = true; npcLeft = npcLogged = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
@@ -157,6 +166,11 @@ namespace MWCoop
             string n = f.gameObject.name;
             if (n.Contains("(itemx)") || n.Contains("(item")) return true;              // objets portes : Props, Consume
             foreach (string s in SkipObjects) if (n.Contains(s) || root.name.Contains(s)) return true;
+            for (Transform p = f.transform; p != null; p = p.parent)
+            {
+                string pn = p.name;
+                foreach (string s in SkipParents) if (pn.StartsWith(s, System.StringComparison.Ordinal)) return true;
+            }
             if (f.FsmName == "Data" && Parts.IdOf(f.gameObject).Length > 0) return true;  // pieces : Parts
             if (n.StartsWith("VINP")) return true;                                       // points de montage : Parts
             if (Interactions.Tracks(f) || Interactions.Wants(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) return true;
@@ -172,6 +186,21 @@ namespace MWCoop
         static bool HasSave(PlayMakerFSM f)
         {
             foreach (FsmString x in f.FsmVariables.StringVariables) if (x.Name.StartsWith("UniqueTag") || x.Name.StartsWith("UT")) return true;
+            return false;
+        }
+
+        // Automate de PNJ qu'un joueur fait reagir : par son nom (colere, coup, voiture, comptoir) ou parce qu'il
+        // attend un clic ou une touche (objet tenu par le PNJ qu'on peut prendre). Actions non chargees : non.
+        public static bool PlayerCaused(PlayMakerFSM f)
+        {
+            if (NpcPlayerFsms.Contains(f.FsmName)) return true;
+            try
+            {
+                foreach (FsmState st in f.Fsm.States)
+                    foreach (FsmStateAction a in st.Actions)
+                        if (a != null && InputActions.Contains(a.GetType().Name)) return true;
+            }
+            catch { }
             return false;
         }
 
@@ -306,9 +335,10 @@ namespace MWCoop
                 }
         }
 
-        static int addedSinceLog;
+        static int addedSinceLog, npcLeft, npcLogged;
         static void LogAdded()
         {
+            if (npcLeft != npcLogged) { npcLogged = npcLeft; Log.Info("monde : " + npcLeft + " automates de PNJ laisses a leur logique (corps suivi par Npcs)"); }
             if (addedSinceLog == 0) return;
             int p = 0; foreach (W x in byKey.Values) if (x.Persistent) p++;
             Log.Info("monde : " + addedSinceLog + " automates de plus suivis (" + byKey.Count + " en tout, dont " + p + " sauvegardes, " + pending.Count + " en attente)");
@@ -324,6 +354,10 @@ namespace MWCoop
             try { if (!Classify(f, w, out personal)) { rejected.Add(f); return true; } }
             catch { return false; }
             if (personal) { rejected.Add(f); return true; }
+            // Logique propre d'un PNJ (marche WALK, colere ANGRY, ragdoll, telephone, regard) : chacun la sienne,
+            // le corps visible vient de l'hote (Npcs). Rejouee, elle faisait sauter le PNJ de l'autre a un autre
+            // point de passage. Restent ce qu'un joueur provoque (PlayerCaused), qui va a l'hote.
+            if (Npcs.IsNpcLogic(f.transform) && !PlayerCaused(f)) { rejected.Add(f); npcLeft++; return true; }
             if (byKey.ContainsKey(w.Key)) return true;
             if (!Replay.Claim(f, "monde")) { rejected.Add(f); return true; }   // deja a un autre module
             try
