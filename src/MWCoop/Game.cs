@@ -10,14 +10,21 @@ namespace MWCoop
         // d'automates (interrupteurs, objets, boutons...) dans un etat "Save" sans sortie. On note
         // l'etat de chaque automate qui ecoute SAVEGAME, on sauve, et 2,5 s plus tard (le temps que
         // les fichiers soient ecrits) on remet chacun dans son etat d'avant.
+        // Appelee avant l'envoi de la sauvegarde a un invite qui arrive, et par la sauvegarde coop des
+        // toilettes (SaveTransfer) : chez l'hote, et chez l'invite pour comparer les deux sauvegardes.
+        // Les boutons des toilettes (SAVEGAME :: Button) n'ecoutent pas SAVEGAME : jamais touches ici.
         static List<KeyValuePair<PlayMakerFSM, string>> restore;
         static Dictionary<PlayMakerFSM, string> afterSave;   // etat atteint par SAVEGAME
         static float restoreAt;
         public static bool Saving { get { return restore != null; } }
+        public static float LastSaveAt = -100;               // derniere sauvegarde en jeu (horloge reelle)
 
         public static void SaveInPlace()
         {
             if (restore != null) return;
+            // Hors de la partie (menu) : rien a sauver, SAVEGAME n'y ecrirait qu'une sauvegarde vide.
+            if (Application.loadedLevelName != "GAME") { Log.Warn("sauvegarde en jeu refusee : niveau " + Application.loadedLevelName); return; }
+            LastSaveAt = Time.realtimeSinceStartup;
             restore = new List<KeyValuePair<PlayMakerFSM, string>>();
             foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
             {
