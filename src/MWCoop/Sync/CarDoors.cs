@@ -25,7 +25,8 @@ namespace MWCoop
     // chez nous sur une portiere qu'un autre manie (ouverture rejouee, angle lu 359 degres a l'ouverture) est
     // retiree : sur la copie d'une voiture conduite ailleurs, VehicleSync rend les attaches incassables, et
     // celle-ci soudait la portiere (ouverte chez le conducteur, fermee ici). Pareil pour le verrou que le jeu
-    // pose en ouvrant (moins de 0,7 s apres l'ouverture : jamais annonce aux autres).
+    // pose en ouvrant (moins de 0,7 s apres l'ouverture : jamais annonce aux autres). Le notre, garde, reste
+    // cassable sur la copie (IsDoorLock : ProtectJoints le saute, lui seul).
     // Les portieres gauches n'ont pas de SetRotation dans "Close door" : une fermeture rejouee est d'abord
     // posee sur la pose fermee (pivotee autour de la charniere), PUIS le jeu change ses butees -- sinon la
     // charniere est recreee avec la pose entrouverte pour zero et sa course derive a chaque cycle.
@@ -73,7 +74,7 @@ namespace MWCoop
 
         static readonly Dictionary<string, Door> byKey = new Dictionary<string, Door>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
-        static readonly HashSet<Rigidbody> doorBodies = new HashSet<Rigidbody>();
+        static readonly HashSet<Joint> lockJoints = new HashSet<Joint>();   // attaches de verrou posees ici (toutes portieres)
         static float nextScan = -1, nextAngle, lastUnknownScan = -100;
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static bool applying;
@@ -104,14 +105,15 @@ namespace MWCoop
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
 
-        // Corps d'une portiere, d'un capot ou d'un coffre suivi : VehicleSync.ProtectJoints ne rend pas ses attaches
-        // incassables sur la copie (le verrou du jeu, cassable a dessein, y devenait une soudure ; la charniere
-        // n'en a pas besoin : jamais cinematique, menee par une correction bornee).
-        public static bool IsDoorBody(Rigidbody rb) { return rb != null && doorBodies.Contains(rb); }
+        // Attache posee par le verrou du jeu ("Set lock 2", reperee en fin d'etat, avant tout passage de
+        // VehicleSync.ProtectJoints) : laissee cassable sur la copie -- incassable, elle soudait la portiere et le
+        // clic suivant (qui la casse en tirant) ne l'ouvrait plus. Seulement elle : la charniere, le loquet de la
+        // portiere fermee (CORRIS : "State 1") et les attaches de montage ("Set joint 2") restent protegees.
+        public static bool IsDoorLock(Joint j) { return j != null && lockJoints.Contains(j); }
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); hooked.Clear(); snapshots.Clear(); doorBodies.Clear();
+            byKey.Clear(); hooked.Clear(); snapshots.Clear(); lockJoints.Clear();
             plColls = new Collider[0]; plCollsAt = -10f; plCc = null; ccWasOn = false;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 12f : -1;
         }
@@ -154,7 +156,6 @@ namespace MWCoop
                     if (d.HasLock && d.SetLockState != null) Inject(d, d.SetLockState, K_LOCKSET, true);
                     hooked.Add(f);
                     byKey[d.Key] = d;
-                    if (d.Body != null) doorBodies.Add(d.Body);
                     NoteRest(d);
                 }
             }
@@ -180,7 +181,7 @@ namespace MWCoop
         static bool Inject(Door d, string state, int kind, bool atEnd = false)
         {
             FsmState s = d.Fsm.Fsm.GetState(state);
-            if (s == null) return false;
+            if (s == null || !s.IsInitialized) return false;   // (automate jamais demarre : au prochain releve)
             try
             {
                 var list = new List<FsmStateAction>(s.Actions);
@@ -198,10 +199,12 @@ namespace MWCoop
             return null;
         }
 
+        // (Automate jamais demarre : ses actions ne se chargent pas -- le getter de PlayMaker leve une exception.)
         static bool HasAction(FsmState s, string type)
         {
-            if (s == null) return false;
-            foreach (FsmStateAction a in s.Actions) if (a != null && a.GetType().Name == type) return true;
+            if (s == null || !s.IsInitialized) return false;
+            try { foreach (FsmStateAction a in s.Actions) if (a != null && a.GetType().Name == type) return true; }
+            catch { }
             return false;
         }
 
@@ -456,15 +459,25 @@ namespace MWCoop
         static void LockSet(Door d)
         {
             if (d.Body == null) return;
+            // Verrous precedents deja casses (le clic d'ouverture les casse en tirant) : oublies.
+            for (int i = d.Locks.Count - 1; i >= 0; i--)
+                if (d.Locks[i] == null) { lockJoints.Remove(d.Locks[i]); d.Locks.RemoveAt(i); }
             // Les attaches apparues depuis l'entree du verrou (sans releve d'entree : seulement sa variable Joint).
             if (d.PreLock != null)
                 foreach (Joint j in d.Body.GetComponents<Joint>())
-                    if (j != d.Hinge && System.Array.IndexOf(d.PreLock, j) < 0 && !d.Locks.Contains(j)) d.Locks.Add(j);
+                    if (j != d.Hinge && System.Array.IndexOf(d.PreLock, j) < 0) AddLock(d, j);
             FsmObject v = d.Fsm.FsmVariables.FindFsmObject("Joint");
             Joint vj = v != null ? v.Value as Joint : null;
-            if (vj != null && vj != d.Hinge && (d.PreLock == null || System.Array.IndexOf(d.PreLock, vj) < 0) && !d.Locks.Contains(vj)) d.Locks.Add(vj);
+            if (vj != null && vj != d.Hinge && (d.PreLock == null || System.Array.IndexOf(d.PreLock, vj) < 0)) AddLock(d, vj);
             d.PreLock = null;
             if (d.LockSpurious || !d.Mine) DropLocks(d, d.Mine ? "verrou d'ouverture" : "portiere de #" + d.Owner);
+        }
+
+        static void AddLock(Door d, Joint j)
+        {
+            if (d.Locks.Contains(j)) return;
+            d.Locks.Add(j);
+            lockJoints.Add(j);
         }
 
         // Attaches posees par le verrou du jeu retirees (seulement celles-la : jamais la charniere ni une attache
@@ -472,7 +485,11 @@ namespace MWCoop
         static void DropLocks(Door d, string why)
         {
             int n = 0;
-            foreach (Joint j in d.Locks) if (j != null) { Object.Destroy(j); n++; }
+            foreach (Joint j in d.Locks)
+            {
+                lockJoints.Remove(j);
+                if (j != null) { Object.Destroy(j); n++; }
+            }
             d.Locks.Clear();
             if (n > 0) Log.Info("portiere " + d.Key + " : verrou retire (" + why + ")");
         }
