@@ -58,6 +58,13 @@ namespace MWCoop
         // pose : sac ouvert puis paquet empoche, recus dans la meme image) : repris jusqu'a 3 s.
         class Late { public float Until; public string Id, State; public int Who; public bool Snapshot; }
         static readonly List<Late> late = new List<Late>();
+        // Messages restes sans objet apres ces 3 s (objet sous une zone pas chargee ici, jamais demarre : pas d'ID ;
+        // ou cree a la main par Shop loin d'ici) : gardes, et rejoues dans l'ordre des que l'objet de cet ID est
+        // enfin suivi -- sinon il reapparaissait plein ou intact (sac deja vide, caisse deja bue chez l'autre).
+        // 256 articles au plus, 8 fins par article ; pas l'instantane d'arrivee (articles finis avant la sauvegarde
+        // envoyee, qui ne seront jamais la).
+        static readonly Dictionary<string, List<Late>> missed = new Dictionary<string, List<Late>>();
+        static readonly List<string> missedOrder = new List<string>();
 
         class Hook : ModHook
         {
@@ -102,6 +109,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             byId.Clear(); hooked.Clear(); watched.Clear(); toWatch.Clear(); consumed.Clear(); remembered.Clear(); rememberedGone.Clear(); snapshots.Clear(); fresh.Clear(); done.Clear(); late.Clear();
+            missed.Clear(); missedOrder.Clear();
             trackedCache.Clear(); destroyCache.Clear();
             testStep = 0; testLog = 0;
             watchedStates = 0;
@@ -127,7 +135,7 @@ namespace MWCoop
             {
                 GameObject go = fresh[i].Value;
                 bool alive = go != null && now < fresh[i].Key;
-                if (alive && !Track(go)) continue;
+                if (alive && !Track(go, true)) continue;
                 if (alive) Props.Track(go);
                 fresh.RemoveAt(i);
             }
@@ -138,8 +146,9 @@ namespace MWCoop
                 bool found = byId.TryGetValue(l.Id, out f) && f != null;
                 if (!found && now < l.Until) { i++; continue; }
                 late.RemoveAt(i);
-                if (found) Apply(f, l.Id, l.State, l.Who, l.Snapshot);
-                else if (!l.Snapshot && now >= nextWarn) { nextWarn = now + 10f; Log.Warn("consommables : " + l.Id + " introuvable ici"); }
+                if (found) { Apply(f, l.Id, l.State, l.Who, l.Snapshot); continue; }
+                if (!l.Snapshot) Miss(l);   // instantane d'arrivee : surtout des articles finis avant la sauvegarde, jamais la
+                if (!l.Snapshot && now >= nextWarn) { nextWarn = now + 10f; Log.Warn("consommables : " + l.Id + " introuvable ici (garde pour quand il sera la)"); }
             }
             // Lecture des automates a observer etalee (milliers d'automates au premier releve : pas d'a-coup).
             if (toWatch.Count > 0)
@@ -281,6 +290,22 @@ namespace MWCoop
             Props.SoonScan();
         }
 
+        static void Miss(Late l)
+        {
+            List<Late> m;
+            if (!missed.TryGetValue(l.Id, out m))
+            {
+                missed[l.Id] = m = new List<Late>();
+                missedOrder.Add(l.Id);
+                if (missedOrder.Count > 256) { missed.Remove(missedOrder[0]); missedOrder.RemoveAt(0); }
+            }
+            if (m.Count < 8) m.Add(l);
+        }
+
+        // Shop : objet cree a la main (achat d'un autre, comptoir eteint ici) et sorti a la racine : suivi des que
+        // son automate a pose son ID.
+        public static void Soon(GameObject go) { if (go != null) Fresh(go); }
+
         static void Fresh(GameObject go)
         {
             if (go.GetComponent<Rigidbody>() == null) return;   // pas un article (effet, decor)
@@ -290,7 +315,11 @@ namespace MWCoop
 
         // Objet tout juste cree, ou pris en main : son automate Use suivi tout de suite. Faux tant qu'il n'a
         // pas son ID (son automate ne l'a pas encore pose, a son demarrage).
-        public static bool Track(GameObject go)
+        public static bool Track(GameObject go) { return Track(go, false); }
+
+        // created : objet tout juste cree ici (observateur de CreateObject, Shop) -- pas celui que visaient des fins
+        // recues avant (voir TryHook).
+        static bool Track(GameObject go, bool created)
         {
             if (nextScan < 0 || go == null) return false;
             bool id = false;
@@ -299,7 +328,7 @@ namespace MWCoop
                 FsmString idv = f.FsmVariables.FindFsmString("ID");
                 if (idv == null || idv.Value.Length == 0) continue;
                 id = true;
-                if (f.FsmName == "Use" && !hooked.Contains(f) && TryHook(f) && (++freshLogged <= 20 || freshLogged % 50 == 0))
+                if (f.FsmName == "Use" && !hooked.Contains(f) && TryHook(f, created) && (++freshLogged <= 20 || freshLogged % 50 == 0))
                     Log.Info("consommables : " + idv.Value + " suivi des sa creation (" + byId.Count + ")");
             }
             return id;
@@ -332,7 +361,7 @@ namespace MWCoop
             if (n > 0) Log.Info("consommables : " + n + " objets de plus suivis (" + byId.Count + ")");
         }
 
-        static bool TryHook(PlayMakerFSM f)
+        static bool TryHook(PlayMakerFSM f, bool created = false)
         {
             FsmString idv = f.FsmVariables.FindFsmString("ID");
             if (idv == null || idv.Value.Length == 0) return false;
@@ -352,6 +381,22 @@ namespace MWCoop
             if (!any) return false;
             hooked.Add(f);
             byId[idv.Value] = f;
+            // Fins recues avant qu'il soit la (objet qui vient de s'activer : zone chargee, pris en main) : rejouees
+            // maintenant, dans l'ordre, par la file 'late'. Pas sur un objet tout juste CREE ici : un compteur en
+            // retard redonne ce nom a un nouvel objet du joueur local, que ces fins videraient ou detruiraient.
+            List<Late> m;
+            if (missed.TryGetValue(idv.Value, out m))
+            {
+                missed.Remove(idv.Value);
+                missedOrder.Remove(idv.Value);
+                if (created) Log.Info("consommables : " + idv.Value + " cree ici, " + m.Count + " fin(s) recue(s) plus tot pour un autre objet de ce nom oubliee(s)");
+                else
+                {
+                    float until = Time.realtimeSinceStartup + 3f;
+                    foreach (Late l in m) { l.Until = until; late.Add(l); }
+                    Log.Info("consommables : " + idv.Value + " enfin la ici, " + m.Count + " fin(s) recue(s) plus tot a rejouer (" + m[m.Count - 1].State + ")");
+                }
+            }
             return true;
         }
 

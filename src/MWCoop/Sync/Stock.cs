@@ -15,11 +15,16 @@ namespace MWCoop
     // retires de l'etagere -- on voit le rayon se vider en direct, et se remplir s'il les repose.
     // Pendant le rejeu d'un achat (Shop pose le panier de l'acheteur dans 'Carried' le temps de 'Spawn bag'),
     // le panier n'est ni envoye ni deduit des etageres : il n'est pas celui du joueur local.
+    // Les tables sont relues dans leur proxy a chaque passage : 'Reset purchase' (HashTableRevertSnapShot) met
+    // une table NEUVE dans le proxy a chaque passage en caisse -- une table gardee depuis le releve restait figee
+    // sur le panier deja paye (rayons des autres toujours vides, panier suivant jamais envoye).
     public static class Stock
     {
         class Store
         {
-            public string Key; public Hashtable Stocked, Carried;
+            public string Key; public GameObject Inventory; public PlayMakerHashTableProxy StockedProxy, CarriedProxy;
+            public Hashtable Stocked { get { return StockedProxy != null ? StockedProxy._hashTable : null; } }
+            public Hashtable Carried { get { return CarriedProxy != null ? CarriedProxy._hashTable : null; } }
             public Dictionary<string, int> SentStocked = new Dictionary<string, int>(), SentCarried = new Dictionary<string, int>();
             public Dictionary<int, Dictionary<string, int>> Remote = new Dictionary<int, Dictionary<string, int>>();   // paniers des autres
             public Dictionary<string, List<Transform>> Shelves = new Dictionary<string, List<Transform>>();          // produit -> listes d'objets
@@ -48,10 +53,10 @@ namespace MWCoop
                 if (h.hideFlags != HideFlags.None || h.referenceName != "Stocked" || !h.transform.root.gameObject.activeInHierarchy) continue;
                 string key = Recon.Path(h.transform);
                 if (stores.ContainsKey(key)) continue;
-                Hashtable carried = null;
-                foreach (PlayMakerHashTableProxy c in h.GetComponents<PlayMakerHashTableProxy>()) if (c.referenceName == "Carried") carried = c._hashTable;
-                if (h._hashTable == null || carried == null) continue;
-                var s = new Store { Key = key, Stocked = h._hashTable, Carried = carried };
+                PlayMakerHashTableProxy carried = null;
+                foreach (PlayMakerHashTableProxy c in h.GetComponents<PlayMakerHashTableProxy>()) if (c.referenceName == "Carried") carried = c;
+                if (h._hashTable == null || carried == null || carried._hashTable == null) continue;
+                var s = new Store { Key = key, Inventory = h.gameObject, StockedProxy = h, CarriedProxy = carried };
                 foreach (DictionaryEntry e in s.Stocked) s.SentStocked[e.Key.ToString()] = ToInt(e.Value);
                 foreach (DictionaryEntry e in s.Carried) s.SentCarried[e.Key.ToString()] = ToInt(e.Value);
                 stores[key] = s;
@@ -85,15 +90,17 @@ namespace MWCoop
             nextCheck = now + 0.5f;
             foreach (Store s in stores.Values)
             {
+                Hashtable stocked = s.Stocked, carried = s.Carried;
+                if (stocked == null || carried == null) continue;   // inventaire detruit
                 // Panier prete au rejeu de l'achat d'un autre (Shop) : ce n'est pas celui du joueur local, ni a
                 // envoyer (les rayons des autres se videraient une 2e fois) ni a deduire des etageres ici ; le
                 // vrai panier revient a la fin du rejeu.
-                bool borrowed = Shop.Borrowed(s.Carried);
+                bool borrowed = Shop.Borrowed(s.Inventory);
                 // Ce qui a change ici (panier du joueur local, stock) depuis le dernier envoi.
                 var changed = new List<string>();
-                foreach (DictionaryEntry e in s.Stocked) { string k = e.Key.ToString(); int v = ToInt(e.Value), old; if (!s.SentStocked.TryGetValue(k, out old) || old != v) { s.SentStocked[k] = v; if (!changed.Contains(k)) changed.Add(k); } }
+                foreach (DictionaryEntry e in stocked) { string k = e.Key.ToString(); int v = ToInt(e.Value), old; if (!s.SentStocked.TryGetValue(k, out old) || old != v) { s.SentStocked[k] = v; if (!changed.Contains(k)) changed.Add(k); } }
                 if (!borrowed)
-                    foreach (DictionaryEntry e in s.Carried) { string k = e.Key.ToString(); int v = ToInt(e.Value), old; if (!s.SentCarried.TryGetValue(k, out old) || old != v) { s.SentCarried[k] = v; if (!changed.Contains(k)) changed.Add(k); } }
+                    foreach (DictionaryEntry e in carried) { string k = e.Key.ToString(); int v = ToInt(e.Value), old; if (!s.SentCarried.TryGetValue(k, out old) || old != v) { s.SentCarried[k] = v; if (!changed.Contains(k)) changed.Add(k); } }
                 if (changed.Count > 0 && Session.RemoteCount > 0)
                 {
                     var w = new NetWriter(Msg.Stock).U8(Session.LocalId).Str(s.Key).U8(Mathf.Min(changed.Count, 255));
@@ -114,8 +121,9 @@ namespace MWCoop
         static void Refresh(Store s, string item)
         {
             List<Transform> lists;
-            if (!s.Shelves.TryGetValue(item, out lists)) return;
-            int visible = ToInt(s.Stocked[item]) - ToInt(s.Carried[item]);
+            Hashtable stocked = s.Stocked, carried = s.Carried;
+            if (!s.Shelves.TryGetValue(item, out lists) || stocked == null || carried == null) return;
+            int visible = ToInt(stocked[item]) - ToInt(carried[item]);
             foreach (Dictionary<string, int> r in s.Remote.Values) { int c; if (r.TryGetValue(item, out c)) visible -= c; }
             foreach (Transform l in lists)
             {
@@ -144,8 +152,9 @@ namespace MWCoop
                 string item = r.Str();
                 int stocked = r.I32(), carried = r.I32();
                 if (relay != null) relay.Str(item).I32(stocked).I32(carried);
-                if (s == null) continue;
-                if (stocked >= 0 && s.Stocked.ContainsKey(item) && ToInt(s.Stocked[item]) != stocked) { s.Stocked[item] = stocked; s.SentStocked[item] = stocked; }
+                Hashtable st = s != null ? s.Stocked : null;
+                if (st == null) continue;
+                if (stocked >= 0 && st.ContainsKey(item) && ToInt(st[item]) != stocked) { st[item] = stocked; s.SentStocked[item] = stocked; }
                 Dictionary<string, int> rc;
                 if (!s.Remote.TryGetValue(who, out rc)) s.Remote[who] = rc = new Dictionary<string, int>();
                 rc[item] = carried;
@@ -157,7 +166,7 @@ namespace MWCoop
         public static string State(string item)
         {
             foreach (Store s in stores.Values)
-                if (s.Stocked.ContainsKey(item))
+                if (s.Stocked != null && s.Carried != null && s.Stocked.ContainsKey(item))
                 {
                     int remote = 0;
                     foreach (Dictionary<string, int> r in s.Remote.Values) { int c; if (r.TryGetValue(item, out c)) remote += c; }
@@ -173,7 +182,7 @@ namespace MWCoop
         public static string TestCarry(string item, int count)
         {
             foreach (Store s in stores.Values)
-                if (s.Carried.ContainsKey(item)) { s.Carried[item] = ToInt(s.Carried[item]) + count; s.Touched.Add(item); return State(item); }
+                if (s.Carried != null && s.Carried.ContainsKey(item)) { s.Carried[item] = ToInt(s.Carried[item]) + count; s.Touched.Add(item); return State(item); }
             return "?";
         }
     }
