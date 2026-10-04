@@ -186,11 +186,22 @@ namespace MWCoop
             string part = r.Str(), key = r.Str();
             int target = r.U8();
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Bolt).U8(who).Str(part).Str(key).U8(target), true, who);
-            // Deja des vis en attente : celle-ci passe apres elles (meme ordre que chez l'autre).
-            if (pendingBolts.Count == 0 && ApplyBolt(who, part, key, target, false)) return;
-            CheckWaiting();
-            if (pendingBolts.Count == 0 && ApplyBolt(who, part, key, target, false)) return;
+            // Deja des tours en attente pour cette vis : celui-ci passe apres eux (meme ordre que chez l'autre).
+            bool queued = Queued(part, key, pendingBolts.Count);
+            if (!queued && ApplyBolt(who, part, key, target, false)) return;
+            if (!queued) { CheckWaiting(); if (ApplyBolt(who, part, key, target, false)) return; }
             pendingBolts.Add(new PendingBolt { Who = who, Part = part, Key = key, Target = target, Until = Time.realtimeSinceStartup + 6f });
+        }
+
+        // Un tour de la meme vis attend-il deja (parmi les 'upTo' premiers) ?
+        static bool Queued(string part, string key, int upTo)
+        {
+            for (int i = 0; i < upTo; i++)
+            {
+                PendingBolt pb = pendingBolts[i];
+                if (pb != null && pb.Key == key && pb.Part == part) return true;
+            }
+            return false;
         }
 
         static Bolt FindBolt(string part, string key)
@@ -255,7 +266,7 @@ namespace MWCoop
             hooked.Clear();
             waiting.Clear(); waitingSet.Clear(); fresh.Clear(); pendingBolts.Clear();
             idMap.Clear(); idMapAt = -100;
-            testStep = 0;
+            testStep = testLogs = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
         }
@@ -318,18 +329,24 @@ namespace MWCoop
             return n;
         }
 
+        // Dans l'ordre d'arrivee, vis par vis : un tour reste derriere un tour plus ancien de la meme vis
+        // encore en attente ; une vis jamais trouvee (piece pas montee ici) ne retient pas les autres.
         static void RetryBolts(float now)
         {
-            int done = 0;
-            while (done < pendingBolts.Count)
+            if (now < nextRetry) return;
+            nextRetry = now + 0.1f;
+            for (int i = 0; i < pendingBolts.Count; i++)
             {
-                PendingBolt pb = pendingBolts[done];
+                PendingBolt pb = pendingBolts[i];
+                if (Queued(pb.Part, pb.Key, i)) continue;
                 bool last = now > pb.Until;
-                if (!ApplyBolt(pb.Who, pb.Part, pb.Key, pb.Target, last) && !last) break;   // garde l'ordre
-                done++;
+                if (ApplyBolt(pb.Who, pb.Part, pb.Key, pb.Target, last) || last) pendingBolts[i] = null;
             }
-            if (done > 0) pendingBolts.RemoveRange(0, done);
+            int n = 0;
+            for (int i = 0; i < pendingBolts.Count; i++) if (pendingBolts[i] != null) pendingBolts[n++] = pendingBolts[i];
+            pendingBolts.RemoveRange(n, pendingBolts.Count - n);
         }
+        static float nextRetry;
 
         // Montage fait (ici ou rejoue) : vis et points de la piece et du point revus, commandes de la voiture cherchees.
         static void Freshen(GameObject part, PlayMakerFSM point, string id)
@@ -503,11 +520,12 @@ namespace MWCoop
         }
 
         // Essais ([Test] Autotest=boulons, TestPiece = ID d'une piece libre a monter, VIN413C1 par defaut) :
-        // l'hote monte la piece a 30 s puis serre tout de suite sa premiere vis de 3 crans (0,5 s, 1 s, 1,5 s
-        // apres le montage : avant tout releve periodique) ; a 42 s chacun note les vis de la piece. Attendu chez
-        // l'invite : "piece ... montee", trois "vis <ID>/Bolts/BoltPM#k/boltk = 1, 2, 3 (joueur #0)" et le meme
-        // etat qu'a l'hote ("...=3"), aucune "vis ... introuvable".
-        static int testStep;
+        // l'hote monte la piece a 30 s au plus tot (l'invite en partie depuis 15 s), puis serre tout de suite sa
+        // premiere vis de 3 crans (0,5 s, 1 s, 1,5 s apres le montage : avant tout releve periodique) ; a 45 et
+        // 60 s chacun note les vis de la piece. Attendu chez l'invite : "piece ... montee", trois "vis
+        // <ID>/Bolts/BoltPM#k/boltk = 1, 2, 3 (joueur #0)" et le meme etat qu'a l'hote ("...=3"), aucune
+        // "vis ... introuvable".
+        static int testStep, testLogs;
         static float testAt;
 
         public static void Test(string mode, float t)
@@ -515,12 +533,12 @@ namespace MWCoop
             if (mode != "boulons") return;
             string id = Config.Get("Test", "TestPiece", "VIN413C1");
             float now = Time.realtimeSinceStartup;
-            if (Session.IsHost && t > 30f && testStep == 0) { testStep = 1; testAt = now; Log.Info("autotest : boulons, " + TestToggle(id)); }
+            if (Session.IsHost && t > 30f && testStep == 0 && Jobs.OtherInGame(15f)) { testStep = 1; testAt = now; Log.Info("autotest : boulons, " + TestToggle(id)); }
             if (Session.IsHost && testStep >= 1 && testStep <= 3 && now - testAt > 0.5f * testStep)
             { testStep++; Log.Info("autotest : boulons, " + (now - testAt).ToString("F1") + " s apres le montage, vis " + TestBolt(id, true)); }
-            if (t > 42f && testStep < 10)
+            if (testLogs < 2 && t > 45f + 15f * testLogs)
             {
-                testStep = 10;
+                testLogs++;
                 Log.Info("autotest : boulons, " + id + " : " + BoltState(id) + " (" + screws.Count + " vis suivies, " + waiting.Count + " en attente, " + pendingBolts.Count + " recues en attente)");
             }
         }

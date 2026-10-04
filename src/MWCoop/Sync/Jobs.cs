@@ -175,7 +175,7 @@ namespace MWCoop
             creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
             specialsScanned = false; logTrigger = null; ltCollider = null;
             bed = flatbed = null; bedHinge = null; bedTargetAt = -100; bedSent = float.NaN;
-            chopped = null; lastId = null; testStep = 0;
+            chopped = null; lastId = null; testStep = testLogs = 0; testBefore = false; otherSince = -1;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 10f : -1;
         }
@@ -696,13 +696,14 @@ namespace MWCoop
                 // La meme creation que chez l'autre (son, rattachement), sans ce qui touche au joueur d'ici.
                 FsmGameObject v = c.F.FsmVariables.FindFsmGameObject("Log");
                 if (v != null) v.Value = null;
-                foreach (FsmStateAction a in c.Personal) a.Enabled = false;
+                var muted = new List<FsmStateAction>();
+                foreach (FsmStateAction a in c.Personal) if (a.Enabled) { a.Enabled = false; muted.Add(a); }
                 applying = true; Replay.Depth++;
                 try { Game.SetState(c.F, c.State); }
                 finally
                 {
                     applying = false; Replay.Depth--;
-                    foreach (FsmStateAction a in c.Personal) a.Enabled = true;
+                    foreach (FsmStateAction a in muted) a.Enabled = true;
                 }
                 made = v != null ? v.Value : null;
             }
@@ -748,9 +749,19 @@ namespace MWCoop
             FsmInt count = LogsChopped();
             float s0 = stress != null ? stress.Value : 0f;
             int c0 = count != null ? count.Value : 0;
+            // (ce qui viserait le joueur d'ici -- camera, interface -- est coupe le temps du rejeu)
+            var muted = new List<FsmStateAction>();
+            FsmState s2 = cj.Fsm.GetState("State 2");
+            if (s2 != null && s2.IsInitialized)
+                foreach (FsmStateAction a in s2.Actions)
+                    if (a != null && a.Enabled && !(a is ModHook) && TouchesPlayer(a)) { a.Enabled = false; muted.Add(a); }
             applying = true; Replay.Depth++;
             try { Game.SetState(cj, "State 2"); }
-            finally { applying = false; Replay.Depth--; }
+            finally
+            {
+                applying = false; Replay.Depth--;
+                foreach (FsmStateAction a in muted) a.Enabled = true;
+            }
             // La detente du coup de hache et la statistique sont a celui qui a fendu.
             if (stress != null) stress.Value = s0;
             if (count != null) count.Value = c0;
@@ -989,34 +1000,53 @@ namespace MWCoop
         }
 
         // ================================================================ essais
+        // Chacun note son etat a 28 s ("avant"), puis a 40, 52, 64 et 76 s. Les gestes partent a 30 s au plus
+        // tot, une fois l'autre joueur en partie depuis 15 s (T = ce moment).
         // [Test] Autotest=bois (TestQuete : partie de la cle du billot, "MachineHall/Logging/Logwall" par defaut) :
-        // l'hote pose une buche sur le billot a 30 s (comme le clic), la fend a 34 s (attache cassee, comme la
-        // hache) ; a 40 s chacun note les objets marques, son stress, ses buches coupees et son argent ; a 44 s
-        // l'hote jette une moitie fendue dans le plateau ; a 52 s chacun note le plateau. Attendu chez l'invite :
-        // "bois : log(Clone) b0..-1 cree par #0", "buche ... fendue par #0", stress et LogsChopped inchanges,
-        // les deux moities "firewood(Clone)" ; apres 44 s, "objets marques disparus" chez l'hote, la moitie
-        // absente chez l'invite aussi, Firewood du plateau egal des deux cotes.
-        // [Test] Autotest=fosse : etat des fosses a 30 s ; l'hote (autorite de la GIFU garee) vide 1 m de la
-        // premiere fosse et ajoute 1000 L a la citerne a 33 s ; l'invite derive seul la 2e fosse a 36 s (pas
-        // envoye), met le tuyau dans la 1re a 38 s (comme le declencheur), l'en retire a 48 s ; etats a 45 et 55 s.
-        // Attendu : chez l'invite la 1re fosse et la citerne = l'hote ; chez l'hote la 2e fosse inchangee,
-        // "fosse : tuyau de #1 dans ..." puis HoseInShit=True a 45 s, False a 55 s.
-        static int testStep;
+        // l'hote pose une buche sur le billot a T (comme le clic), la fend a T+4 s (attache cassee, comme la
+        // hache), jette une moitie fendue dans le plateau a T+14 s. Etat : objets marques, stress, buches
+        // coupees, argent, plateau. Attendu chez l'invite : "bois : log(Clone) b0..-1 cree par #0", "buche ...
+        // fendue par #0", stress et "coupees" comme "avant", deux moities "firewood(Clone)" ; apres T+14 s,
+        // "objets marques disparus ici" chez l'hote, cette moitie "absent" chez l'invite aussi, plateau : meme
+        // Firewood des deux cotes, declencheur actif chez l'hote, coupe chez l'invite.
+        // [Test] Autotest=fosse : l'hote (autorite de la GIFU garee) vide 1 m de la premiere fosse et ajoute
+        // 1000 L a la citerne a T ; l'invite derive seul la 2e fosse a T+3 s (pas envoye), met le tuyau dans la
+        // 1re a T+5 s (comme le declencheur), l'en retire a T+17 s. Attendu : chez l'invite la 1re fosse et la
+        // citerne = l'hote ; chez l'hote la 2e fosse inchangee, "fosse : tuyau de #1 dans ..." puis
+        // HoseInShit=True, puis "sorti de" et HoseInShit=False.
+        static int testStep, testLogs;
+        static float testAt;
+        static bool testBefore;
 
         public static void Test(string mode, float t)
         {
-            if (mode == "bois") TestBois(t);
-            else if (mode == "fosse") TestFosse(t);
+            if (mode != "bois" && mode != "fosse") return;
+            bool bois = mode == "bois";
+            if (t > 28f && !testBefore) { testBefore = true; Log.Info("autotest : " + mode + ", avant : " + (bois ? BoisState() : Fluids.SepticState() + " ; " + HoseState())); }
+            if (bois) TestBois(); else TestFosse();
+            // Etats notes par chacun a 40, 52, 64 et 76 s.
+            if (testLogs < 4 && t > 40f + 12f * testLogs) { testLogs++; Log.Info("autotest : " + mode + ", " + (bois ? BoisState() : Fluids.SepticState() + " ; " + HoseState())); }
         }
 
-        static void TestBois(float t)
+        // Essais : un autre joueur est en partie depuis 'seconds' s (ses automates sont releves).
+        static float otherSince = -1;
+        public static bool OtherInGame(float seconds)
         {
-            bool host = Session.IsHost;
-            if (host && t > 30f && testStep == 0) { testStep = 1; Log.Info("autotest : bois, " + TestCreate(Config.Get("Test", "TestQuete", "MachineHall/Logging/Logwall"))); }
-            if (host && t > 34f && testStep == 1) { testStep = 2; Log.Info("autotest : bois, " + TestSplit(lastId)); }
-            if (t > 40f && testStep < 3) { testStep = 3; Log.Info("autotest : bois, " + BoisState()); }
-            if (host && t > 44f && testStep == 3) { testStep = 4; Log.Info("autotest : bois, " + TestDrop(lastId != null ? lastId + "a" : null)); }
-            if (t > 52f && testStep < 5) { testStep = 5; Log.Info("autotest : bois, " + BoisState()); }
+            float now = Time.realtimeSinceStartup;
+            bool any = false;
+            foreach (PlayerInfo p in Session.Players.Values) if (!p.Local && p.Level == 1 && now - p.StateTime < 3f) { any = true; break; }
+            if (!any) { otherSince = -1; return false; }
+            if (otherSince < 0) otherSince = now;
+            return now - otherSince > seconds;
+        }
+
+        static void TestBois()
+        {
+            if (!Session.IsHost) return;
+            float now = Time.realtimeSinceStartup;
+            if (testStep == 0 && OtherInGame(15f)) { testStep = 1; testAt = now; Log.Info("autotest : bois, " + TestCreate(Config.Get("Test", "TestQuete", "MachineHall/Logging/Logwall"))); }
+            if (testStep == 1 && now - testAt > 4f) { testStep = 2; Log.Info("autotest : bois, " + TestSplit(lastId)); }
+            if (testStep == 2 && now - testAt > 14f) { testStep = 3; Log.Info("autotest : bois, " + TestDrop(lastId != null ? lastId + "a" : null)); }
         }
 
         static string TestCreate(string part)
@@ -1084,16 +1114,18 @@ namespace MWCoop
                    + ", " + Wallet.State() + " ; plateau " + plateau;
         }
 
-        static void TestFosse(float t)
+        static void TestFosse()
         {
-            bool host = Session.IsHost;
-            if (t > 30f && testStep == 0) { testStep = 1; Log.Info("autotest : fosse, " + Fluids.SepticState() + " ; " + HoseState()); }
-            if (host && t > 33f && testStep == 1) { testStep = 2; Log.Info("autotest : fosse, pompe ici : " + Fluids.TestSeptic(0, -1f, 1000f)); }
-            if (!host && t > 36f && testStep == 1) { testStep = 2; Log.Info("autotest : fosse, derive locale : " + Fluids.TestSeptic(1, -0.5f, 0f)); }
-            if (!host && t > 38f && testStep == 2) { testStep = 3; Log.Info("autotest : fosse, " + TestHose(0, true)); }
-            if (t > 45f && testStep < 4) { testStep = 4; Log.Info("autotest : fosse, " + Fluids.SepticState() + " ; " + HoseState()); }
-            if (!host && t > 48f && testStep == 4) { testStep = 5; Log.Info("autotest : fosse, " + TestHose(0, false)); }
-            if (t > 55f && testStep < 6) { testStep = 6; Log.Info("autotest : fosse, " + Fluids.SepticState() + " ; " + HoseState()); }
+            float now = Time.realtimeSinceStartup;
+            if (testStep == 0 && OtherInGame(15f))
+            {
+                testStep = 1; testAt = now;
+                if (Session.IsHost) Log.Info("autotest : fosse, pompe ici : " + Fluids.TestSeptic(0, -1f, 1000f));
+            }
+            if (Session.IsHost) return;
+            if (testStep == 1 && now - testAt > 3f) { testStep = 2; Log.Info("autotest : fosse, derive locale : " + Fluids.TestSeptic(1, -0.5f, 0f)); }
+            if (testStep == 2 && now - testAt > 5f) { testStep = 3; Log.Info("autotest : fosse, " + TestHose(0, true)); }
+            if (testStep == 3 && now - testAt > 17f) { testStep = 4; Log.Info("autotest : fosse, " + TestHose(0, false)); }
         }
 
         static List<Well> SortedWells()
