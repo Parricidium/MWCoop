@@ -331,8 +331,8 @@ namespace MWCoop
         // ---------------------------------------------------------------- essais
         // [Test] Autotest=givre : l'hote gratte le pare-brise de [Test] GivreVoiture (SORBET par defaut) de 30 a
         // 40 s, 10 passes par seconde, par le chemin du jeu ('Scrape 2' : GlassPos puis evenement WINDSHIELD a
-        // 'Freezing', +0,005 chacune : environ +0,5). Chacun note chaque seconde, de 25 a 60 s, le seuil du
-        // pare-brise de cette voiture (variable et materiau) et sa buee.
+        // 'Freezing', +0,005 chacune : environ +0,5). Chacun note chaque seconde, de 15 a 65 s (l'invite arrive
+        // une dizaine de secondes apres l'hote), le seuil du pare-brise de cette voiture (variable et materiau) et sa buee.
         static int testStrokes;
         static float testNext, testLog;
         static bool testWarned;
@@ -355,7 +355,7 @@ namespace MWCoop
                 string how = Stroke(c, 5);
                 if (++testStrokes == 1 || testStrokes == 100) Log.Info("autotest : givre : passe " + testStrokes + " (" + how + ") -> " + Describe(c));
             }
-            if (t >= 25f && t < 60f && t >= testLog)
+            if (t >= 15f && t < 65f && t >= testLog)
             {
                 testLog = t + 1f;
                 Log.Info("autotest : givre t=" + t.ToString("F0") + " " + c.Name + " " + Describe(c));
