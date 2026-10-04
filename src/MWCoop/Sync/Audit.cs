@@ -88,7 +88,9 @@ namespace MWCoop
         // Conduits par l'hote (positions), logique propre a chacun : recenses, jamais compares.
         static readonly HashSet<string> hostDrivenRoots = new HashSet<string> { "NPC_CARS", "TRAFFIC", "TRAIN" };
         static bool subscribed;
-        static readonly HashSet<string> localFsmNames = new HashSet<string> { "LOD", "Lod", "LODSwitch", "Update Cursor", "Distance", "DistanceCheck", "Raycast" };
+        static readonly HashSet<string> localFsmNames = new HashSet<string> { "LOD", "Lod", "LODSwitch", "Update Cursor", "Distance", "DistanceCheck", "Raycast", "Normalize", "SwitchCamera", "CrouchTriggers", "PlayerTrigger" };
+        // Etats qui ne disent que « le joueur local est la / assis / au volant » : un ecart y est normal.
+        static readonly HashSet<string> presenceStates = new HashSet<string> { "Player in car", "Wait for player", "Press return", "Sitting in car", "Not sitting", "Check player", "Wait player" };
 
         public static void Update()
         {
@@ -264,6 +266,7 @@ namespace MWCoop
                 else if (Consume.Tracks(f)) set.Add("consommables");
                 else if (Jobs.Tracks(f)) set.Add("quetes");
                 else if (WorldFsms.Tracks(f)) set.Add("monde");
+                else if (Wallet.Observes(f)) set.Add("argent");
                 else { string r = Replay.Owner(f); if (r != null) set.Add(r); }
             }
             string cov = Covers(f);
@@ -427,6 +430,7 @@ namespace MWCoop
                 string g;
                 if (!pa.Values.TryGetValue(kv.Key, out g)) continue;
                 if (kv.Value == "~" || g == "~" || kv.Value == g) continue;
+                if (presenceStates.Contains(kv.Value) || presenceStates.Contains(g)) continue;   // (presence d'un joueur : propre a chacun)
                 now.Add(kv.Key);
             }
             // Ecart present a trois empreintes de suite (45 s) : desync (signalee une fois, jusqu'a ce qu'elle se resorbe).

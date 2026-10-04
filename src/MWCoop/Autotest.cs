@@ -16,6 +16,9 @@ namespace MWCoop
             if (Application.loadedLevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
+            // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
+            CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); Consume.Test(mode, t);
+            Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {
                 GameObject p = GameObject.Find("PLAYER");

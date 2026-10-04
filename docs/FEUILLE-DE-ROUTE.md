@@ -32,6 +32,10 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.17) : coffre fermé pendant qu'un autre conduit sans envol (portières jamais figées), réapparition
       au choix (appartement ou maison des parents) au lieu du retour au menu.
 - [x] Audit de la synchro (0.18) : recensement, empreintes hôte/invités (DESYNC), enregistreur d'actions non partagées.
+- [x] Lot 1 de l'analyse (0.19) : portières (verrou, gauche), PNJ (calques, téléphone, clients, lissage), objets dans les
+      voitures, objets empochés, revenus du monde une fois, train, machines à jeu (verrou + spectateurs).
+- [ ] Lot 2 : taxi (MACHTWAGEN), givre/grattage, remorquage, appels sortants, achats hors épicerie, vêtements portés,
+      boulons des pièces juste montées, simulation moteur à la reprise du volant (voir l'analyse).
       Reste : marché aux puces (articles tirés au hasard de chaque côté), facture de téléphone des appels
       passés par un invité, appels quand l'hôte est loin de la maison (la logique du téléphone ne tourne
       que près de la maison, chez l'hôte).

@@ -647,7 +647,9 @@ namespace MWCoop
             if (driver && car != null && t > 25f && t < 37f)
             {
                 Vector3 f = car.transform.forward; f.y = 0;
-                car.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(car.velocity.y, 0f);
+                // (accelere a 2 m/s2 jusqu'a 8 m/s, freine de meme : un demarrage instantane ejecte tout chargement)
+                float v = Mathf.Min(8f, Mathf.Min((t - 25f) * 2f, (37f - t) * 2f));
+                car.velocity = f.normalized * v + Vector3.up * Mathf.Min(car.velocity.y, 0f);
             }
             if (Session.IsHost && car != null && t > 20f && !testPlaced)
             {
