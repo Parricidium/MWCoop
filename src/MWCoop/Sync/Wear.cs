@@ -56,7 +56,7 @@ namespace MWCoop
             clothLogic = helmetLogic = null;
             player = null;
             found = false;
-            step = 0; testLog = 0;
+            step = seatStep = 0; testLog = 0; testSeat = null;
             // Tout de suite (avant que le jeu ne range sous PLAYER un vetement porte a la sauvegarde), puis 5 s plus
             // tard pour ce qui manquerait.
             if (PlayerSync.InGame) { Find(); findAt = Time.realtimeSinceStartup + 5f; }
@@ -259,8 +259,12 @@ namespace MWCoop
         // (logique du jeu, comme en regardant en bas). Les deux notent toutes les 2 s de 30 a 75 s : chez l'autre,
         // l'objet est cache de ~40 a ~60 s puis reapparait la ou il a ete enleve ; l'avatar montre la teinte (veste,
         // combinaison) ou le casque pendant ce temps.
-        static int step;
+        // [Test] TestVetementAssis=1 : de 45 a 55 s, PLAYER du porteur est range sous un objet vide (comme au volant ou
+        // passager : DriveTrigger 'Reset view', Seats) ; le vetement doit rester porte (pas de "enleve(e)" ici, toujours
+        // cache chez l'autre), State montre "sous MWCoop-EssaiSiege".
+        static int step, seatStep;
         static float testLog;
+        static GameObject testSeat;
 
         public static void Test(string mode, float t)
         {
@@ -268,6 +272,25 @@ namespace MWCoop
             bool wearer = Session.IsHost == (Config.Get("Test", "TestPorteur", "invite") == "hote");
             int i = Mathf.Clamp(Config.GetInt("Test", "TestVetement", 0), 0, N - 1);
             if (wearer && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + TestWear(i, true)); }
+            if (wearer && Config.GetInt("Test", "TestVetementAssis", 0) != 0)
+            {
+                if (t > 45f && seatStep == 0 && player != null)
+                {
+                    seatStep = 1;
+                    testSeat = new GameObject("MWCoop-EssaiSiege");
+                    testSeat.transform.position = player.position;
+                    player.parent = testSeat.transform;
+                    Log.Info("autotest : vetements, PLAYER range sous " + testSeat.name + " (comme assis dans une voiture)");
+                }
+                if (t > 55f && seatStep == 1)
+                {
+                    seatStep = 2;
+                    if (player != null && testSeat != null && player.parent == testSeat.transform) player.parent = null;
+                    if (testSeat != null) Object.Destroy(testSeat);
+                    testSeat = null;
+                    Log.Info("autotest : vetements, PLAYER rendu a la racine");
+                }
+            }
             if (wearer && t > 60f && step == 1) { step = 2; Log.Info("autotest : " + TestWear(i, false)); }
             if (t > 30f && t < 75f && t - testLog >= 2f) { testLog = t; Log.Info("autotest : vetements, " + State(i)); }
         }
