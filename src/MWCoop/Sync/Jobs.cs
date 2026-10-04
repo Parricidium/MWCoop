@@ -64,8 +64,11 @@ namespace MWCoop
             return !n.StartsWith("PlayerTrigger") && !n.StartsWith("DriveTrigger") && !n.StartsWith("CameraPivot");
         }
 
-        // Automate mene seulement par les portieres : aucune action d'entree (souris, touches) et pas d'autre
-        // transition que FINISHED et leurs evenements.
+        // Automate mene seulement par les portieres : pas d'autre transition que FINISHED et leurs evenements, et
+        // aucune action d'entree (souris, touches). Les transitions d'abord : elles se lisent toujours. Les
+        // actions d'un automate jamais demarre (objet jamais actif, Awake pas joue) ne se chargent pas -- le
+        // getter de PlayMaker leve une exception, qui coupait tout le releve (JOBS compris) : les transitions
+        // seules decident alors (meme tri qu'une fois l'objet actif).
         static bool DoorDriven(PlayMakerFSM f)
         {
             bool door = false;
@@ -75,20 +78,25 @@ namespace MWCoop
                 else if (t.EventName != "FINISHED") return false;
             }
             foreach (FsmState s in f.Fsm.States)
-            {
                 foreach (FsmTransition t in s.Transitions)
                 {
                     if (DoorEvents.Contains(t.EventName)) door = true;
                     else if (t.EventName != "FINISHED") return false;
                 }
-                foreach (FsmStateAction a in s.Actions)
+            if (!door) return false;
+            foreach (FsmState s in f.Fsm.States)
+            {
+                if (!s.IsInitialized) continue;
+                FsmStateAction[] acts;
+                try { acts = s.Actions; } catch { continue; }
+                foreach (FsmStateAction a in acts)
                 {
                     if (a == null) continue;
                     string tn = a.GetType().Name;
                     foreach (string p in InputActions) if (tn.StartsWith(p)) return false;
                 }
             }
-            return door;
+            return true;
         }
         static readonly Dictionary<string, Job> jobs = new Dictionary<string, Job>();
         class Classified { public string Path; public bool Control; }
@@ -134,7 +142,14 @@ namespace MWCoop
                     Classified c;
                     if (!classified.TryGetValue(f, out c))
                     {
-                        bool control = vehicle && !Persistent(f) && IsControl(f);
+                        // Un automate illisible ne coupe pas le releve (les suivants, JOBS compris) : revu au prochain.
+                        bool control;
+                        try { control = vehicle && !Persistent(f) && IsControl(f); }
+                        catch (System.Exception e)
+                        {
+                            if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("progression : " + f.gameObject.name + "::" + f.FsmName + " illisible (" + e.GetType().Name + "), revu au prochain releve"); }
+                            continue;
+                        }
                         string on = f.gameObject.name;
                         bool keep = !((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || (!Persistent(f) && !control))
                                     && !Interactions.Tracks(f) && !(on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r));   // objets : Props/Interactions
@@ -173,6 +188,8 @@ namespace MWCoop
 
         static bool InjectAll(Job j)
         {
+            // Automate jamais demarre : rien a lire (et pas une erreur PlayMaker par etat a chaque releve).
+            foreach (FsmState s in j.F.Fsm.States) if (!s.IsInitialized) return false;
             try
             {
                 foreach (FsmState s in j.F.Fsm.States)
