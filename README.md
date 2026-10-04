@@ -94,6 +94,7 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Launcher CAR tab: pick the CORRIS color for a new game, with a 3D preview | |
 | Chat, F10 menu | |
 | Respawn: in co-op, death no longer ends the game; the player picks where to come back (apartment or parents' house), even after a car crash | |
+| Sync audit (F10 > SYNCHRO): census of every interactive object and which module syncs it, host/guest state comparison every 15 s (lasting differences logged as DESYNC), local actions that are not shared | |
 
 The full list is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
 
@@ -207,6 +208,9 @@ Fait aussi (0.17, retours de JD) : réapparition — en coop, mourir ne renvoie 
 monde) : on choisit où revenir, l'appartement ou la maison des parents, même après un accident de voiture (la voiture
 reste conduisible). Portières et coffres ouverts par l'un pendant qu'un autre conduit : la voiture ne s'envole plus
 (les portières suivent l'autre en restant des corps physiques, plus jamais figées). [Coop] Reapparition=0 la coupe.
+Fait aussi (0.18) : audit de la synchro (F10 > SYNCHRO) — recensement de tout ce qui est interactif dans le jeu et du
+module qui le partage (dumps/recensement.txt), comparaison hôte/invités toutes les 15 s (écarts durables notés DESYNC
+dans le journal et dumps/desync.txt), actions d'un joueur qui ne partent pas chez les autres (dumps/actions.txt).
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
