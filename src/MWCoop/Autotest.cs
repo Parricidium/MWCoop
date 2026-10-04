@@ -401,6 +401,27 @@ namespace MWCoop
                 done = true;
                 Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), true));
             }
+            if (mode == "chemin" || mode == "spam")
+            {
+                // Portiere [Test] TestVoiture / TestPorte. chemin : l'invite debout dans sa course, l'hote l'ouvre
+                // (bouton tenu 0,6 s) ; spam : les deux cliquent au hasard tres vite, puis on compare.
+                string vc = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), vp = Config.Get("Test", "TestPorte", "DoorRear(right)");
+                if (mode == "chemin" && !MWCoop.Net.Session.IsHost && t > 15f && step == 0) { step = 1; Log.Info("autotest : " + CarDoors.TestStandInPath(vc, vp)); }
+                if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + CarDoors.TestOpen(vc, true, vp)); }
+                if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 40.6f && step == 1) { step = 2; Log.Info("autotest : relache " + CarDoors.TestState(vc, "Mouse off", vp)); }
+                // TestRelache=1 : l'hote appuie pour la refermer et relache tout de suite (avant qu'elle soit fermee).
+                if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 46f && step == 2 && Config.GetInt("Test", "TestRelache", 0) != 0) { step = 30; Log.Info("autotest : appuie pour fermer " + CarDoors.TestGrab(vc, vp)); }
+                if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 46.12f && step == 30) { step = 31; Log.Info("autotest : relache tout de suite " + CarDoors.TestState(vc, "Check position", vp) + " " + CarDoors.StateOf(vc, vp)); }
+                if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 45f && step == 2 && Config.GetInt("Test", "TestPousse", 0) != 0) { step = 22; Log.Info("autotest : refermee en poussant " + CarDoors.TestState(vc, "Reset 2", vp)); }
+                if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 50f && (step == 2 || step == 22)) { step = 3; Log.Info("autotest : pousse vers la fermeture " + CarDoors.TestGrab(vc, vp)); }
+                // (fenetre a l'horloge du PC : les deux s'arretent a la meme seconde, en plein echange)
+                int sec = System.DateTime.Now.Second;
+                if (mode == "spam" && t > 25f && sec >= 5 && sec < 45) { string w = CarDoors.TestRace(vc, vp); if (w != null) Log.Info("autotest : " + w); }
+                if (mode == "spam" && t > 25f && (sec == 47 || sec == 51 || sec == 55) && sec != spamLogged) { spamLogged = sec; Log.Info("autotest : portiere a :" + sec + " " + CarDoors.StateOf(vc, vp)); }
+                int mark = mode == "spam" ? 0
+                         : (t > 62f ? 5 : t > 55f ? 4 : t > 48f ? 3 : t > 44f ? 2 : t > 41f ? 1 : 0);
+                if (mark > portiereMark) { portiereMark = mark; Log.Info("autotest : portiere " + mark + " " + CarDoors.StateOf(vc, vp)); }
+            }
             string doorWatch = Config.Get("Test", "SuivrePortiere", "");
             if (doorWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : " + CarDoors.State(doorWatch));
             if (mode == "voix" && t > 35f && !done)
@@ -474,7 +495,7 @@ namespace MWCoop
         static int seenFlags = -1;
         static float shotAt = -1;
         static string bagId;
-        static int step, step2;
+        static int step, step2, portiereMark, spamLogged = -1;
         static float lastPeriodic;
 
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).

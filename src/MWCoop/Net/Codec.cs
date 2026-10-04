@@ -84,7 +84,7 @@ namespace MWCoop.Net
         WorldVars = 29,   // hote -> invites : variables des automates sauvegardes et globales House*
         Seat = 27,        // joueur assis a une place passager (voiture, place) ou sorti
         CarVisual = 26,   // tableau de bord, voyants, vitres, leviers... : lot de (cle, drapeaux, pose)
-        CarDoor = 25,     // portiere / capot / coffre : ouverte (1), fermee (0), angle en temps reel (2)
+        CarDoor = 25,     // portiere / capot / coffre : fermee (0), ouverte (1), angle (2), saisie (3), verrouillee (4) ; ordre de l'hote
         Machine = 30,     // non fiable : ce qu'on voit d'une machine a ecran (pompe a essence) chez celui qui s'en sert
         Stock = 31,       // magasin : panier d'un joueur et stock d'un produit qui ont change
         Npc = 32,         // non fiable, hote -> invites : PNJ proches des invites (pose, clip, objets tenus)

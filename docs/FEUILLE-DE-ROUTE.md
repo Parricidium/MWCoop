@@ -28,6 +28,7 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.14) : portes automatiques et barrières pour tous, écran de la pompe à essence, voitures
       garées, PNJ visibles pareil chez tous, rayons et paniers des magasins, portières battantes.
       Fait (0.15) : sacs de courses ouverts chez tous, portières refermées en poussant, chaleur de l'habitacle.
+      Fait (0.16) : portières arbitrées par l'hôte (clics croisés, spam du clic), fermeture au claquement réel.
       Reste : marché aux puces (articles tirés au hasard de chaque côté), facture de téléphone des appels
       passés par un invité, appels quand l'hôte est loin de la maison (la logique du téléphone ne tourne
       que près de la maison, chez l'hôte).
