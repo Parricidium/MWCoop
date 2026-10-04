@@ -21,7 +21,14 @@ namespace MWCoop
     // que son clic arretait).
     // Le verrou ("Reset 2" -> "Set lock 2" : une attache rigide a la carrosserie, qui casse quand on tire)
     // n'est PAS rejoue : chez les autres la portiere reste figee a l'angle de celui qui l'a poussee (une
-    // attache jamais cassee chez eux tirerait la voiture a la fermeture suivante).
+    // attache jamais cassee chez eux tirerait la voiture a la fermeture suivante). Une attache de verrou posee
+    // chez nous sur une portiere qu'un autre manie (ouverture rejouee, angle lu 359 degres a l'ouverture) est
+    // retiree : sur la copie d'une voiture conduite ailleurs, VehicleSync rend les attaches incassables, et
+    // celle-ci soudait la portiere (ouverte chez le conducteur, fermee ici). Pareil pour le verrou que le jeu
+    // pose en ouvrant (moins de 0,7 s apres l'ouverture : jamais annonce aux autres).
+    // Les portieres gauches n'ont pas de SetRotation dans "Close door" : une fermeture rejouee est d'abord
+    // posee sur la pose fermee (pivotee autour de la charniere), PUIS le jeu change ses butees -- sinon la
+    // charniere est recreee avec la pose entrouverte pour zero et sa course derive a chaque cycle.
     // Position en temps reel : celui qui l'a ouverte ou saisie en dernier (Owner) envoie l'angle de sa
     // charniere, mesure depuis sa pose fermee (le repere des butees et du ressort : 0 fermee ; HingeJoint.angle,
     // lui, lit 120 coffre ferme et 93 ouvert pour des butees 0 et 60, inutilisable). Chez les autres, la portiere reste un corps physique ordinaire, menee a cet
@@ -34,12 +41,15 @@ namespace MWCoop
     public static class CarDoors
     {
         const int K_CLOSED = 0, K_OPEN = 1, K_ANGLE = 2, K_GRAB = 3, K_LOCK = 4;
+        const int K_LOCKSET = 5;   // (local : fin de "Set lock 2", l'attache du verrou vient d'etre posee ; jamais envoye)
         enum DoorState { Closed, Open, Locked }
 
         class Door
         {
             public string Key; public PlayMakerFSM Fsm; public string Open, Grab, Close;
             public bool HasLock, IsDoor;
+            public string LockState, SetLockState;     // "Reset 2" -> "Set lock 2" (camion : "Reset 3" -> "Set lock 3")
+            public bool NoRot;                         // fermeture sans SetRotation (portieres gauches) : posee par nous
             public Rigidbody Body; public HingeJoint Hinge;
             public DoorState State;
             public int Owner = -1; public bool Mine;   // dernier a l'avoir maniee ; nous (on envoie son angle)
@@ -47,9 +57,15 @@ namespace MWCoop
             public float LastAngle; public bool Sent;
             public bool Showing; public float TargetAngle; public float LastRemote;
             public bool Springing;                     // menee vers TargetAngle (Follow)
-            public CharacterController IgnoredCc;      // joueur local traverse pendant ce temps
+            public float NextCheck;                    // suivie : paires joueur/portiere et verrous revus (0,5 s)
+            public Collider[] Colls;                   // collisionneurs de la portiere
+            public readonly Dictionary<long, KeyValuePair<Collider, Collider>> Ignored = new Dictionary<long, KeyValuePair<Collider, Collider>>();   // paires (portiere, joueur local) ignorees par nous
             public bool Closing; public float ClosingSince;   // fermeture rejouee : ramenee a 0 avant de claquer
             public float LastSentAt, OpenedAt;
+            public Joint[] PreLock;                    // attaches presentes a l'entree du verrou
+            public readonly List<Joint> Locks = new List<Joint>();   // attaches posees par "Set lock 2"
+            public bool LockSpurious;                  // verrou d'ouverture (359 degres) ou rejoue : retire une fois pose
+            public float LockCheckUntil;               // ouverture rejouee : l'automate ne doit pas rester au verrou
             public float TraceUntil, NextTrace;        // essais : [Test] TracePortiere
             public bool RestSet; public Quaternion RestRot;   // pose fermee (repere du parent)
             public float TestOffset;   // essais : degres ajoutes a l'angle envoye
@@ -57,9 +73,15 @@ namespace MWCoop
 
         static readonly Dictionary<string, Door> byKey = new Dictionary<string, Door>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
+        static readonly HashSet<Rigidbody> doorBodies = new HashSet<Rigidbody>();
         static float nextScan = -1, nextAngle, lastUnknownScan = -100;
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static bool applying;
+        // Joueur local : ses collisionneurs pleins (controleur, objet tenu, poings...), revus toutes les 0,5 s.
+        static Collider[] plColls = new Collider[0];
+        static float plCollsAt = -10f;
+        static CharacterController plCc;
+        static bool ccWasOn;
 
         class Hook : ModHook
         {
@@ -70,9 +92,10 @@ namespace MWCoop
             {
                 try
                 {
-                    if (applying || Replay.Depth > 0) { }
+                    if (Kind == K_LOCKSET) LockSet(D);   // (meme rejoue : c'est l'attache posee ici qui compte)
+                    else if (applying || Replay.Depth > 0) { if (Kind == K_LOCK) LockEnter(D, true); }
                     else if (D.Closing && Kind == K_CLOSED) EndClosing(D, false);   // (le jeu acheve la fermeture rejouee)
-                    else Local(D, Kind);
+                    else { if (Kind == K_LOCK) LockEnter(D, false); Local(D, Kind); }
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
@@ -81,9 +104,15 @@ namespace MWCoop
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
 
+        // Corps d'une portiere, d'un capot ou d'un coffre suivi : VehicleSync.ProtectJoints ne rend pas ses attaches
+        // incassables sur la copie (le verrou du jeu, cassable a dessein, y devenait une soudure ; la charniere
+        // n'en a pas besoin : jamais cinematique, menee par une correction bornee).
+        public static bool IsDoorBody(Rigidbody rb) { return rb != null && doorBodies.Contains(rb); }
+
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); hooked.Clear(); snapshots.Clear();
+            byKey.Clear(); hooked.Clear(); snapshots.Clear(); doorBodies.Clear();
+            plColls = new Collider[0]; plCollsAt = -10f; plCc = null; ccWasOn = false;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 12f : -1;
         }
 
@@ -114,9 +143,18 @@ namespace MWCoop
                     d.State = OpenVar(d) ? DoorState.Open : DoorState.Closed;
                     if (!Inject(d, open, K_OPEN) || !Inject(d, close, K_CLOSED)) continue;
                     if (grab != null) Inject(d, grab, K_GRAB);
-                    d.HasLock = f.Fsm.GetState("Reset 2") != null && Inject(d, "Reset 2", K_LOCK);
+                    if (isDoor)
+                    {
+                        // Verrou : l'etat que LOCK atteint depuis "Open door", puis celui qui pose l'attache (FINISHED).
+                        d.LockState = Target(f.Fsm.GetState(open), "LOCK");
+                        d.SetLockState = d.LockState != null ? Target(f.Fsm.GetState(d.LockState), "FINISHED") : null;
+                        d.NoRot = !HasAction(f.Fsm.GetState("Close door"), "SetRotation");
+                    }
+                    d.HasLock = d.LockState != null && Inject(d, d.LockState, K_LOCK);
+                    if (d.HasLock && d.SetLockState != null) Inject(d, d.SetLockState, K_LOCKSET, true);
                     hooked.Add(f);
                     byKey[d.Key] = d;
+                    if (d.Body != null) doorBodies.Add(d.Body);
                     NoteRest(d);
                 }
             }
@@ -138,18 +176,33 @@ namespace MWCoop
             if (byKey.Count != before) Log.Info("portieres : " + byKey.Count + " suivies (portes, coffres, hayons, prises)");
         }
 
-        static bool Inject(Door d, string state, int kind)
+        // Action ajoutee en tete de l'etat (atEnd : en fin, apres les actions du jeu).
+        static bool Inject(Door d, string state, int kind, bool atEnd = false)
         {
             FsmState s = d.Fsm.Fsm.GetState(state);
             if (s == null) return false;
             try
             {
                 var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, new Hook { D = d, Kind = kind });
+                list.Insert(atEnd ? list.Count : 0, new Hook { D = d, Kind = kind });
                 s.Actions = list.ToArray();
                 return true;
             }
             catch { return false; }
+        }
+
+        static string Target(FsmState s, string ev)
+        {
+            if (s == null) return null;
+            foreach (FsmTransition t in s.Transitions) if (t.EventName == ev) return t.ToState;
+            return null;
+        }
+
+        static bool HasAction(FsmState s, string type)
+        {
+            if (s == null) return false;
+            foreach (FsmStateAction a in s.Actions) if (a != null && a.GetType().Name == type) return true;
+            return false;
         }
 
         static bool OpenVar(Door d)
@@ -192,10 +245,22 @@ namespace MWCoop
                 foreach (Door d in byKey.Values)
                     if (d.State != DoorState.Closed && d.Fsm != null)
                     {
+                        // Ouverte sans main (deja ouverte au chargement, joueur parti) : l'hote la prend, sinon
+                        // personne n'enverrait son angle au nouveau venu.
+                        if (d.Owner < 0) Take(d);
                         Session.T.SendReliable(p, new NetWriter(Msg.CarDoor).U8(d.Owner >= 0 ? d.Owner : Session.LocalId).Str(d.Key).U8(K_OPEN).ToArray());
                         n++;
                     }
                 Log.Info("portieres : " + n + " ouvertes envoyees a " + p);
+            }
+            // Controleur du joueur local coupe ou remis (assis, debout, reapparition) : le jeu a oublie ses paires
+            // ignorees -- reposees tout de suite sur les portieres suivies.
+            bool ccOn = plCc != null && plCc.enabled;
+            if (ccOn != ccWasOn)
+            {
+                ccWasOn = ccOn;
+                plCollsAt = -10f;
+                foreach (Door d in byKey.Values) d.NextCheck = 0f;
             }
             // Chez nous, pour un autre : le ressort de la charniere la mene a son angle ; fermeture rejouee :
             // ramenee a 0, puis le jeu la claque (comme quand on la pousse jusqu'au bout).
@@ -205,9 +270,12 @@ namespace MWCoop
                 NoteRest(d);
                 if (trace && now < d.TraceUntil && now >= d.NextTrace && d.Hinge != null)
                 { d.NextTrace = now + 0.1f; Log.Info("trace " + d.Key + " " + Angle(d).ToString("F1") + (d.Springing ? " -> " + d.TargetAngle.ToString("F1") : "") + " " + Diag(d)); }
+                if (d.LockCheckUntil > 0f) CheckLock(d, now);
                 if (d.Closing)
                 {
-                    if (d.Hinge == null || !d.RestSet || Mathf.Abs(Angle(d)) < 1.5f || now - d.ClosingSince > 1.2f) EndClosing(d, true);
+                    // Copie d'une voiture conduite ailleurs : la portiere suit la caisse par a-coups, plus de temps.
+                    float limit = now - d.ClosingSince > 1.2f && d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform) ? 3f : 1.2f;
+                    if (d.Hinge == null || !d.RestSet || Mathf.Abs(Angle(d)) < 1.5f || now - d.ClosingSince > limit) EndClosing(d, true);
                     else { d.TargetAngle = 0f; Follow(d); }
                     continue;
                 }
@@ -249,7 +317,17 @@ namespace MWCoop
         static void Follow(Door d)
         {
             if (d.Hinge == null || d.Body == null || !d.RestSet || d.Body.isKinematic) return;
-            if (!d.Springing) { d.Springing = true; IgnorePlayer(d, true); }
+            if (!d.Springing) { d.Springing = true; d.NextCheck = 0f; }
+            float now = Time.realtimeSinceStartup;
+            if (now >= d.NextCheck)
+            {
+                // Toutes les 0,5 s : le joueur local (et ce qu'il tient) la traverse toujours -- le jeu oublie une
+                // paire quand l'un des deux est coupe puis remis (objet pris, assis, penche au volant) ; un verrou
+                // pose ici sur la portiere d'un autre est retire.
+                d.NextCheck = now + 0.5f;
+                IgnorePlayer(d);
+                if (!d.Mine && d.Locks.Count > 0) DropLocks(d, "suivie");
+            }
             Vector3 axis = d.Body.transform.TransformDirection(d.Hinge.axis).normalized;
             Rigidbody car = d.Hinge.connectedBody;
             Vector3 rel = d.Body.angularVelocity - (car != null ? car.angularVelocity : Vector3.zero);
@@ -259,23 +337,52 @@ namespace MWCoop
             if (d.Body.IsSleeping()) d.Body.WakeUp();
         }
 
-        static void IgnorePlayer(Door d, bool on)
+        // Le joueur local traverse la portiere : chaque collisionneur plein de la portiere ignore chaque
+        // collisionneur plein sous PLAYER (controleur, objet tenu sous ItemPivot, poings...). Rappele toutes les
+        // 0,5 s (paires deja posees : sans effet) ; on retient celles qu'on a posees pour ne lever qu'elles.
+        static void IgnorePlayer(Door d)
         {
-            if (on)
+            Collider[] pc = PlayerColliders();
+            if (pc.Length == 0 || d.Body == null) return;
+            if (d.Colls == null) d.Colls = d.Body.GetComponentsInChildren<Collider>(true);
+            foreach (Collider c in d.Colls)
             {
-                GameObject pl = GameObject.Find("PLAYER");
-                d.IgnoredCc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                if (!Solid(c)) continue;
+                foreach (Collider p in pc)
+                {
+                    if (!Solid(p)) continue;
+                    Physics.IgnoreCollision(c, p, true);
+                    long k = ((long)c.GetInstanceID() << 32) | (uint)p.GetInstanceID();
+                    if (!d.Ignored.ContainsKey(k)) d.Ignored[k] = new KeyValuePair<Collider, Collider>(c, p);
+                }
             }
-            if (d.IgnoredCc == null || d.Body == null) return;
-            foreach (Collider c in d.Body.GetComponentsInChildren<Collider>(true))
-                if (c != null && !c.isTrigger && c.enabled && c.gameObject.activeInHierarchy) Physics.IgnoreCollision(c, d.IgnoredCc, on);
-            if (!on) d.IgnoredCc = null;
+        }
+
+        // (Unity refuse IgnoreCollision sur un collisionneur coupe ou inactif -- et oublie alors ses paires.)
+        static bool Solid(Collider c) { return c != null && !c.isTrigger && c.enabled && c.gameObject.activeInHierarchy; }
+
+        static Collider[] PlayerColliders()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now - plCollsAt < 0.5f) return plColls;
+            plCollsAt = now;
+            GameObject pl = GameObject.Find("PLAYER");
+            plCc = pl != null ? pl.GetComponent<CharacterController>() : null;
+            plColls = pl != null ? pl.GetComponentsInChildren<Collider>() : new Collider[0];
+            return plColls;
+        }
+
+        static void ClearIgnore(Door d)
+        {
+            foreach (KeyValuePair<Collider, Collider> kv in d.Ignored.Values)
+                if (Solid(kv.Key) && Solid(kv.Value)) Physics.IgnoreCollision(kv.Key, kv.Value, false);
+            d.Ignored.Clear();
         }
 
         // Fin du suivi : le joueur local la heurte de nouveau.
         static void StopFollow(Door d)
         {
-            if (d.Springing) IgnorePlayer(d, false);
+            if (d.Springing || d.Ignored.Count > 0) ClearIgnore(d);
             d.Springing = false;
             d.Showing = false;
         }
@@ -284,13 +391,33 @@ namespace MWCoop
         {
             if (d.Hinge == null || d.Body == null) return "";
             JointLimits l = d.Hinge.limits;
+            // Attaches en plus de la charniere (verrou du jeu) et leur couple de casse : une soudure se lit "inf".
+            int extra = 0; string casse = "";
+            foreach (Joint j in d.Body.GetComponents<Joint>())
+                if (j != d.Hinge) { extra++; casse += " " + (float.IsInfinity(j.breakTorque) ? "inf" : j.breakTorque.ToString("F0")); }
             return "[" + d.Fsm.ActiveStateName + (d.Body.isKinematic ? " cin" : "") + (d.Body.IsSleeping() ? " dort" : "") + " m" + d.Body.mass.ToString("F0")
                    + (d.Hinge.useLimits ? " butees " + l.min.ToString("F0") + ".." + l.max.ToString("F0") : "") + (d.Hinge.useSpring ? " ressort " + d.Hinge.spring.spring.ToString("F0") + "@" + d.Hinge.spring.targetPosition.ToString("F0") : "")
-                   + (d.Hinge.useMotor ? " moteur" : "") + (d.Hinge.connectedBody != null ? " sur " + d.Hinge.connectedBody.name : " libre") + "]";
+                   + (d.Hinge.useMotor ? " moteur" : "") + (d.Hinge.connectedBody != null ? " sur " + d.Hinge.connectedBody.name : " libre")
+                   + " attaches en plus " + extra + (extra > 0 ? " (casse" + casse + ")" : "") + (d.Ignored.Count > 0 ? " traverse " + d.Ignored.Count : "") + "]";
         }
 
-        // Fin d'une fermeture rejouee : le jeu la claque (pose et butees fermees) ; reveillee pour que les
-        // butees la tiennent tout de suite.
+        // Pose fermee : pivotee autour de sa charniere (repere de la voiture), vitesse de rotation nulle.
+        static void Snap(Door d)
+        {
+            Transform b = d.Body.transform;
+            Vector3 anchor = Vector3.Scale(b.localScale, d.Hinge.anchor);
+            Vector3 pivot = b.localPosition + b.localRotation * anchor;
+            b.localRotation = d.RestRot;
+            b.localPosition = pivot - d.RestRot * anchor;
+            d.Body.rotation = b.rotation; d.Body.position = b.position;
+            d.Body.angularVelocity = Vector3.zero;
+            d.Body.WakeUp();
+        }
+
+        static bool CanSnap(Door d) { return d.Body != null && d.Hinge != null && d.RestSet && !d.Body.isKinematic; }
+
+        // Fin d'une fermeture rejouee : posee fermee, PUIS le jeu la claque (butees fermees posees sur la pose du
+        // moment) ; reveillee pour que les butees la tiennent tout de suite.
         static void EndClosing(Door d, bool shut)
         {
             if (!d.Closing) return;
@@ -298,21 +425,69 @@ namespace MWCoop
             StopFollow(d);
             if (shut)
             {
-                Drive(d, d.Close);
                 // Les derniers degres (elle bute sur la caisse) : pivotee autour de sa charniere jusqu'a la pose
-                // fermee -- seulement si l'ecart est petit (sinon la charniere tirerait sur la voiture).
-                if (d.Body != null && d.Hinge != null && d.RestSet && Mathf.Abs(Angle(d)) <= 10f)
+                // fermee. Portiere : toujours, meme loin (delai depasse sur une copie qui roule) -- claquee
+                // entrouverte, sa charniere garderait cette pose pour zero. Capot, coffre : seulement pres (leur
+                // fermeture pose elle-meme la rotation).
+                if (CanSnap(d))
                 {
-                    Transform b = d.Body.transform;
-                    Vector3 anchor = Vector3.Scale(b.localScale, d.Hinge.anchor);
-                    Vector3 pivot = b.localPosition + b.localRotation * anchor;
-                    b.localRotation = d.RestRot;
-                    b.localPosition = pivot - d.RestRot * anchor;
-                    d.Body.rotation = b.rotation; d.Body.position = b.position;
-                    d.Body.angularVelocity = Vector3.zero;
+                    float a = Mathf.Abs(Angle(d));
+                    if (a > 10f && d.IsDoor) Log.Info("portiere " + d.Key + " posee fermee de " + a.ToString("F0") + " deg" + (d.NoRot ? " (sans SetRotation)" : "") + " " + Diag(d));
+                    if (a <= 10f || d.IsDoor) Snap(d);
                 }
+                Drive(d, d.Close);
             }
             if (d.Body != null) d.Body.WakeUp();
+        }
+
+        // ------------------------------------------------------------ verrou ("Reset 2" -> "Set lock 2")
+        // Entree dans le verrou : attaches deja la (pour reconnaitre celle que le jeu va poser) ; verrou
+        // d'ouverture (angle lu 359 degres, moins de 0,7 s apres l'ouverture), rejoue ou sur la portiere d'un autre :
+        // jamais annonce, retire une fois pose.
+        static void LockEnter(Door d, bool replayed)
+        {
+            d.PreLock = d.Body != null ? d.Body.GetComponents<Joint>() : null;
+            d.LockSpurious = replayed || !d.Mine || SpuriousLock(d, Time.realtimeSinceStartup);
+        }
+
+        static bool SpuriousLock(Door d, float now) { return d.State != DoorState.Open || now - d.OpenedAt < 0.7f; }
+
+        // Fin de "Set lock 2" (action en fin d'etat : composant ajoute, relie a la caisse, couple de casse pose).
+        static void LockSet(Door d)
+        {
+            if (d.Body == null) return;
+            // Les attaches apparues depuis l'entree du verrou (sans releve d'entree : seulement sa variable Joint).
+            if (d.PreLock != null)
+                foreach (Joint j in d.Body.GetComponents<Joint>())
+                    if (j != d.Hinge && System.Array.IndexOf(d.PreLock, j) < 0 && !d.Locks.Contains(j)) d.Locks.Add(j);
+            FsmObject v = d.Fsm.FsmVariables.FindFsmObject("Joint");
+            Joint vj = v != null ? v.Value as Joint : null;
+            if (vj != null && vj != d.Hinge && (d.PreLock == null || System.Array.IndexOf(d.PreLock, vj) < 0) && !d.Locks.Contains(vj)) d.Locks.Add(vj);
+            d.PreLock = null;
+            if (d.LockSpurious || !d.Mine) DropLocks(d, d.Mine ? "verrou d'ouverture" : "portiere de #" + d.Owner);
+        }
+
+        // Attaches posees par le verrou du jeu retirees (seulement celles-la : jamais la charniere ni une attache
+        // de montage).
+        static void DropLocks(Door d, string why)
+        {
+            int n = 0;
+            foreach (Joint j in d.Locks) if (j != null) { Object.Destroy(j); n++; }
+            d.Locks.Clear();
+            if (n > 0) Log.Info("portiere " + d.Key + " : verrou retire (" + why + ")");
+        }
+
+        // Apres une ouverture rejouee : si LOCK l'a menee au verrou (traite apres notre "Mouse off"), elle revient
+        // au repos et l'attache eventuelle est retiree.
+        static void CheckLock(Door d, float now)
+        {
+            if (now > d.LockCheckUntil || d.Mine || d.Fsm == null) { d.LockCheckUntil = 0f; return; }
+            string s = d.Fsm.ActiveStateName;
+            if (s != d.LockState && s != d.SetLockState) return;
+            d.LockCheckUntil = 0f;
+            if (d.Fsm.Fsm.GetState("Mouse off") != null) Drive(d, "Mouse off");
+            DropLocks(d, "ouverture rejouee");
+            Log.Info("portiere " + d.Key + " : sortie du verrou (" + s + ") apres l'ouverture rejouee");
         }
 
         static void Trace(Door d) { d.TraceUntil = Time.realtimeSinceStartup + 6f; }
@@ -322,7 +497,7 @@ namespace MWCoop
         {
             float now = Time.realtimeSinceStartup;
             Trace(d);
-            if (kind == K_LOCK && (d.State != DoorState.Open || now - d.OpenedAt < 0.7f)) return;   // (a l'ouverture, l'angle peut se lire 359 degres et le jeu passe une fois par la)
+            if (kind == K_LOCK && d.LockSpurious) return;   // (a l'ouverture, l'angle peut se lire 359 degres et le jeu passe une fois par la ; LockEnter)
             switch (kind)
             {
                 case K_OPEN: d.State = DoorState.Open; d.OpenedAt = now; Take(d); break;
@@ -357,6 +532,8 @@ namespace MWCoop
             bool me = who == Session.LocalId;
             Trace(d);
             if (kind == K_OPEN || kind == K_GRAB) EndClosing(d, false);
+            // Maniee par un autre : un verrou pose ici la souderait (copie d'une voiture conduite ailleurs).
+            if (!me && kind != K_LOCK) DropLocks(d, KindName(kind) + " par #" + who);
             switch (kind)
             {
                 case K_OPEN:
@@ -364,10 +541,18 @@ namespace MWCoop
                     if (me) StopFollow(d);
                     if (d.State != DoorState.Closed) { d.State = DoorState.Open; return; }
                     d.State = DoorState.Open; d.OpenedAt = Time.realtimeSinceStartup;
+                    // Ses butees d'ouverture se posent sur la pose du moment : fermee pour de bon d'abord.
+                    if (d.IsDoor && CanSnap(d))
+                    {
+                        float a = Mathf.Abs(Angle(d));
+                        if (a <= 10f) Snap(d);
+                        else Log.Info("portiere " + d.Key + " ouverte de " + a.ToString("F0") + " deg ici " + Diag(d));
+                    }
                     Drive(d, d.Open);
                     // Ses actions d'ouverture jouees (butees, son, Open), l'automate revient au repos -- sinon il
                     // attendrait ici un relachement de souris. (L'angle vient de celui qui l'a ouverte.)
                     if (d.IsDoor && d.Fsm.Fsm.GetState("Mouse off") != null) Drive(d, "Mouse off");
+                    if (!me && d.HasLock) d.LockCheckUntil = Time.realtimeSinceStartup + 0.5f;
                     break;
                 case K_GRAB:
                     d.Owner = who; d.Mine = me; d.Sent = false;
@@ -386,7 +571,12 @@ namespace MWCoop
                         if (!d.IsDoor && d.Grab != null) Drive(d, d.Grab);
                         Follow(d);
                     }
-                    else { StopFollow(d); Drive(d, d.Close); }
+                    else
+                    {
+                        StopFollow(d);
+                        if (d.IsDoor && CanSnap(d)) Snap(d);   // (butees fermees posees sur la pose fermee)
+                        Drive(d, d.Close);
+                    }
                     break;
                 case K_LOCK:
                     if (d.State != DoorState.Open) return;
@@ -562,9 +752,82 @@ namespace MWCoop
                 {
                     return d.Key + " etat " + d.Fsm.ActiveStateName + " Open=" + OpenVar(d)
                            + (d.Hinge != null && d.RestSet ? ", angle " + Angle(d).ToString("F1") + " deg" : ", pas de pose fermee")
-                           + ", " + d.State + ", main #" + d.Owner + (d.Mine ? " (nous)" : "") + (d.Springing ? ", suit" : "") + (d.Closing ? ", se ferme" : "") + (d.PendingOwn > 0 ? ", attend " + d.PendingOwn : "") + " " + Diag(d);
+                           + ", " + d.State + ", main #" + d.Owner + (d.Mine ? " (nous)" : "") + (d.Springing ? ", suit" : "") + (d.Closing ? ", se ferme" : "") + (d.PendingOwn > 0 ? ", attend " + d.PendingOwn : "")
+                           + (d.Locks.Count > 0 ? ", verrou pose ici" : "") + (d.NoRot ? ", fermeture sans SetRotation" : "") + " " + Diag(d);
                 }
             return "?";
+        }
+
+        // ------------------------------------------------------------ essais automatiques (appeles par Autotest)
+        // portiere-verrou (invite ; l'hote en Autotest=conduite sur [Test] TestVoiture) : des que la voiture est
+        // conduite par l'autre, [Test] TestCycles fois (3) : ouvre [Test] TestPorte (DoorFront(leftx)), la lache
+        // 0,6 s apres, la saisit 3 s apres pour la refermer ; etat (attaches en plus comprises) a chaque etape et
+        // chaque seconde. Puis attend que le conducteur l'ouvre ; [Test] PortiereDansCourse=1 : debout dans sa
+        // course, controleur coupe puis remis (comme assis puis debout) -- elle doit le traverser et suivre l'angle.
+        // Hote ([Test] PortiereAuVolant=1, en Autotest=conduite) : memes cycles au volant a partir de
+        // [Test] PortiereAuVolantA (60 s).
+        static int tStep, tCycle;
+        static float tNext, tLog, tUntil;
+
+        public static void Test(string mode, float t)
+        {
+            bool guest = mode == "portiere-verrou";
+            bool driver = mode == "conduite" && Config.GetInt("Test", "PortiereAuVolant", 0) != 0;
+            if ((!guest && !driver) || t < 12f) { if (t < 1f) tStep = 0; return; }
+            string vc = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), vp = Config.Get("Test", "TestPorte", "DoorFront(leftx)");
+            Rigidbody car = VehicleSync.Body(vc);
+            if (car == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (tStep == 0)
+            {
+                bool go = guest ? t > 20f && VehicleSync.RemotelyDriven(car.transform) : t > Config.GetInt("Test", "PortiereAuVolantA", 60);
+                if (!go) return;
+                tStep = 1; tCycle = 0; tNext = now; tLog = now;
+                Log.Info("autotest : verrou, " + Config.GetInt("Test", "TestCycles", 3) + " cycles de " + vp + (guest ? " pendant que l'autre conduit" : " au volant"));
+            }
+            if (tStep >= 1 && tStep <= 8 && now >= tLog) { tLog = now + 1f; Log.Info("autotest : verrou " + StateOf(vc, vp) + ", voiture " + (car.isKinematic ? "copie" : "locale")); }
+            if (now < tNext) return;
+            switch (tStep)
+            {
+                case 1: tStep = 2; tNext = now + 0.6f; Log.Info("autotest : verrou cycle " + (tCycle + 1) + " ouvre " + TestOpen(vc, true, vp)); break;
+                case 2: tStep = 3; tNext = now + 3f; Log.Info("autotest : verrou lache " + TestState(vc, "Mouse off", vp) + " | " + StateOf(vc, vp)); break;
+                case 3:
+                    Log.Info("autotest : verrou referme " + TestGrab(vc, vp));
+                    tNext = now + 3f;
+                    tStep = ++tCycle < Config.GetInt("Test", "TestCycles", 3) ? 1 : guest ? 4 : 8;
+                    tUntil = now + (guest ? 45f : 6f);
+                    break;
+                case 4:
+                    {
+                        // Ouverte par le conducteur : la copie doit suivre son angle (TracePortiere : angle -> voulu).
+                        Door d = First(vc, vp);
+                        if (now > tUntil) { tStep = 9; Log.Info("autotest : verrou, personne d'autre ne l'a ouverte"); break; }
+                        if (d == null || d.State == DoorState.Closed || d.Mine || d.Owner < 0) break;
+                        Log.Info("autotest : verrou ouverte par #" + d.Owner + " " + State(d.Key));
+                        tStep = Config.GetInt("Test", "PortiereDansCourse", 0) != 0 ? 5 : 8;
+                        tNext = now + 1.5f; tUntil = now + 20f;
+                        break;
+                    }
+                case 5: tStep = 6; tNext = now + 2f; Log.Info("autotest : verrou " + TestStandInPath(vc, vp)); break;
+                case 6:
+                case 7:
+                    {
+                        // Comme Seats : moteur de deplacement coupe avec le controleur (sinon Move sur un controleur coupe).
+                        GameObject pl = GameObject.Find("PLAYER");
+                        if (pl == null) { tStep = 8; break; }
+                        bool on = tStep == 7;
+                        Behaviour motor = pl.GetComponent("CharacterMotor") as Behaviour, input = pl.GetComponent("FPSInputController") as Behaviour;
+                        CharacterController cc = pl.GetComponent<CharacterController>();
+                        if (!on) { if (motor != null) motor.enabled = false; if (input != null) input.enabled = false; }
+                        if (cc != null) cc.enabled = on;
+                        if (on) { if (motor != null) motor.enabled = true; if (input != null) input.enabled = true; }
+                        Log.Info("autotest : verrou controleur " + (on ? "remis" : "coupe") + " | " + StateOf(vc, vp));
+                        tNext = now + (on ? 0f : 0.3f);
+                        tStep++;
+                        break;
+                    }
+                case 8: if (now > tUntil) { tStep = 9; Log.Info("autotest : verrou fin " + StateOf(vc, vp)); } break;
+            }
         }
     }
 }
