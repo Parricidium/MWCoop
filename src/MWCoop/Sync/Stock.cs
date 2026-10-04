@@ -13,6 +13,8 @@ namespace MWCoop
     //  - le stock d'un produit, quand il change chez lui (achat paye, reassort).
     // Chez les autres : le stock recu est recopie, et les articles dans le panier des autres sont
     // retires de l'etagere -- on voit le rayon se vider en direct, et se remplir s'il les repose.
+    // Pendant le rejeu d'un achat (Shop pose le panier de l'acheteur dans 'Carried' le temps de 'Spawn bag'),
+    // le panier n'est ni envoye ni deduit des etageres : il n'est pas celui du joueur local.
     public static class Stock
     {
         class Store
@@ -83,10 +85,15 @@ namespace MWCoop
             nextCheck = now + 0.5f;
             foreach (Store s in stores.Values)
             {
+                // Panier prete au rejeu de l'achat d'un autre (Shop) : ce n'est pas celui du joueur local, ni a
+                // envoyer (les rayons des autres se videraient une 2e fois) ni a deduire des etageres ici ; le
+                // vrai panier revient a la fin du rejeu.
+                bool borrowed = Shop.Borrowed(s.Carried);
                 // Ce qui a change ici (panier du joueur local, stock) depuis le dernier envoi.
                 var changed = new List<string>();
                 foreach (DictionaryEntry e in s.Stocked) { string k = e.Key.ToString(); int v = ToInt(e.Value), old; if (!s.SentStocked.TryGetValue(k, out old) || old != v) { s.SentStocked[k] = v; if (!changed.Contains(k)) changed.Add(k); } }
-                foreach (DictionaryEntry e in s.Carried) { string k = e.Key.ToString(); int v = ToInt(e.Value), old; if (!s.SentCarried.TryGetValue(k, out old) || old != v) { s.SentCarried[k] = v; if (!changed.Contains(k)) changed.Add(k); } }
+                if (!borrowed)
+                    foreach (DictionaryEntry e in s.Carried) { string k = e.Key.ToString(); int v = ToInt(e.Value), old; if (!s.SentCarried.TryGetValue(k, out old) || old != v) { s.SentCarried[k] = v; if (!changed.Contains(k)) changed.Add(k); } }
                 if (changed.Count > 0 && Session.RemoteCount > 0)
                 {
                     var w = new NetWriter(Msg.Stock).U8(Session.LocalId).Str(s.Key).U8(Mathf.Min(changed.Count, 255));
@@ -97,6 +104,7 @@ namespace MWCoop
                 // Produit que d'autres ont aussi dans leur panier : l'etagere se recalcule.
                 foreach (string k in changed)
                     foreach (Dictionary<string, int> rr in s.Remote.Values) { int c; if (rr.TryGetValue(k, out c) && c > 0) { s.Touched.Add(k); break; } }
+                if (borrowed) continue;   // etageres recalculees quand le panier local est revenu
                 foreach (string it in s.Touched) Refresh(s, it);
                 s.Touched.Clear();
             }
