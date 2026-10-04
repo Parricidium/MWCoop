@@ -11,6 +11,8 @@ namespace MWCoop
     // par seconde ce qui a change : pose locale (objets qui bougent) ou visibilite (objets qui
     // s'allument). Chez les autres, les valeurs recues sont reappliquees apres la logique du jeu
     // (LateUpdate), tant que la voiture est conduite par l'autre, ou 3 s apres le dernier message.
+    // Voitures : celles de VehicleSync (taxi sous JOBS compris), par leur cle ; releve toutes les 30 s et des que
+    // sa liste change (voiture activee plus tard).
     public static class CarVisuals
     {
         static readonly string[] PoseWords = { "needle", "glasspivot", "windowpivot", "lever", "pivot_brake", "handbrake", "belt", "steering",
@@ -31,11 +33,11 @@ namespace MWCoop
         static readonly Dictionary<string, Car> cars = new Dictionary<string, Car>();
         static float nextScan = -1, nextSend;
         static Transform player;
-        static int sentTotal;
+        static int sentTotal, gen = -1;
 
         public static void OnLevelLoaded()
         {
-            cars.Clear(); player = null;
+            cars.Clear(); player = null; gen = -1;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 13f : -1;
         }
 
@@ -44,10 +46,12 @@ namespace MWCoop
         static void Scan()
         {
             int total = 0;
-            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+            gen = VehicleSync.Generation;
+            for (int ci = 0; ci < VehicleSync.LocalCount; ci++)
             {
-                if (rb.transform.parent != null || rb.GetComponent("CarDynamics") == null) continue;
-                var c = new Car { Name = rb.name, Root = rb.transform };
+                Rigidbody rb = VehicleSync.LocalBody(ci);
+                if (rb == null) continue;
+                var c = new Car { Name = VehicleSync.LocalKey(ci), Root = rb.transform };
                 var seen = new Dictionary<string, int>();
                 foreach (Transform t in rb.GetComponentsInChildren<Transform>(true))
                 {
@@ -56,7 +60,7 @@ namespace MWCoop
                     if (Has(n, SkipWords)) continue;
                     bool pose = Has(n, PoseWords), show = Has(n, ShowWords) || t.GetComponent<Light>() != null;   // toute lampe
                     if (!pose && !show) continue;
-                    string rel = Recon.Path(t).Substring(rb.name.Length);
+                    string rel = VehicleSync.RelPath(rb.transform, t);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
                     var it = new Item { Key = rel + "#" + k, T = t, Pose = pose, Show = show, Pos = t.localPosition, Rot = t.localRotation, Active = t.gameObject.activeSelf };
                     c.Items.Add(it);
@@ -76,7 +80,7 @@ namespace MWCoop
         // et il est a moins de 6 m.
         static bool Sender(Car c)
         {
-            if (VehicleSync.LocalDrivingName == c.Name) return true;
+            if (ReferenceEquals(VehicleSync.LocalDrivingRoot, c.Root)) return true;
             if (VehicleSync.RemotelyDriven(c.Root)) return false;
             return player != null && (c.Root.position - player.position).sqrMagnitude < 36f;
         }
@@ -85,13 +89,14 @@ namespace MWCoop
         {
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 30f; Scan(); }
+            // Liste des voitures changee (voiture activee, corps recree) apres le premier releve : releve tout de suite.
+            if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
             if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
             if (now < nextSend || Session.RemoteCount == 0) return;
             nextSend = now + 0.1f;
             foreach (Car c in cars.Values)
             {
-                if (c.Root == null || !Sender(c)) continue;
+                if (c.Root == null || !c.Root.gameObject.activeInHierarchy || !Sender(c)) continue;
                 NetWriter w = null;
                 foreach (Item it in c.Items)
                 {
@@ -168,6 +173,13 @@ namespace MWCoop
                 return car + it.Key + (it.Pose ? " tourne de 40 deg" : " visible " + it.T.gameObject.activeSelf);
             }
             return "rien pour " + part;
+        }
+
+        // Essais : elements suivis sur la voiture de cle 'car' (-1 : voiture pas relevee).
+        public static int CountFor(string car)
+        {
+            Car c;
+            return cars.TryGetValue(car, out c) ? c.Items.Count : -1;
         }
 
         public static string State(string car, string part)
