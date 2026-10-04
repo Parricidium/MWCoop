@@ -43,6 +43,9 @@ namespace MWCoop
         // Miroir de l'hote : seulement les systemes de la maison et du monde (pas les machines qu'un invite
         // utilise en ce moment, comme une pompe a essence : l'hote ecraserait son compteur).
         static readonly HashSet<string> MirrorRoots = new HashSet<string> { "Systems", "HOMENEW", "YARD", "CABIN", "COTTAGE" };
+        // Variables sous cette racine recopiees de l'hote (Calls : un invite n'y ajoute pas la facture d'un appel, l'hote
+        // l'ajoute et son miroir la lui apporte).
+        public static bool IsMirrorRoot(string rootName) { return MirrorRoots.Contains(rootName); }
         static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE", "LOOP" };
         static readonly HashSet<string> InputActions = new HashSet<string> { "MousePickEvent", "GetButtonDown", "GetButtonUp", "GetMouseButtonDown", "GetMouseButtonUp", "GetAxis", "GetKeyDown", "GetButton" };
 
@@ -117,8 +120,8 @@ namespace MWCoop
         }
 
         // Un automate suivi vient de creer un objet (commande, colis...) : releve dans 1,5 s, pour que
-        // l'objet soit suivi avant qu'un joueur s'en serve.
-        static void SoonScan()
+        // l'objet soit suivi avant qu'un joueur s'en serve. (Aussi Calls : commande creee ou rejouee.)
+        public static void SoonScan()
         {
             float t = Time.realtimeSinceStartup + 1.5f;
             if (nextScan > t) nextScan = t;
@@ -143,6 +146,12 @@ namespace MWCoop
 
         // Variables objet envoyees par leur chemin (la fiche de la commande en cours).
         static bool GoVar(string n) { return n == "CurrentListing" || n == "FoundListing"; }
+
+        // Commande de pieces (CARPARTS/PARTSYSTEM/OrdersSpawnerYP/OrderYP7::Data, ...AMIS/OrderAMIS3::Data) : creee
+        // par Calls (meme nom chez tous). Son attente avant livraison (WaitTime, tiree au hasard chez chacun), son
+        // etat (OrderActive : avis de colis, guichet) et sa liste de pieces suivent l'hote (miroir) ; le paiement
+        // au guichet (PAYMENT) est rejoue chez tous : le colis apparait partout, pas seulement chez celui qui paie.
+        static bool IsOrder(string path) { return path.Contains("/OrdersSpawner") && path.Contains("::Data"); }
         public static int Count { get { return byKey.Count; } }
 
         public static void OnLevelLoaded()
@@ -178,7 +187,8 @@ namespace MWCoop
             if (n == "CashRegisterLogic") return true;                                    // magasin : Shop
             // Createurs d'objets (pieces, articles) : jamais rejoues directement -- c'est l'action qui les
             // declenche (ouvrir un colis, passer une commande) qui l'est, sinon l'objet apparaitrait en
-            // double. Sauf les createurs de COMMANDES (OrdersSpawner*), seul chemin de la commande.
+            // double. Sauf les createurs de COMMANDES (OrdersSpawner*), seul chemin de la commande -- d'ordinaire
+            // pris avant nous par Calls (annonce retrouvee par son nom d'origine, meme liste chez tous).
             try { if (f.Fsm.GetState("Create product") != null && !n.StartsWith("OrdersSpawner")) return true; } catch { }
             return false;
         }
@@ -326,8 +336,10 @@ namespace MWCoop
                     int k; seen.TryGetValue(path, out k); seen[path] = k + 1;
                     if (known.Contains(f) || rejected.Contains(f)) continue;
                     if (Skip(f)) { if (root.activeInHierarchy) rejected.Add(f); continue; }
-                    // Miroir aussi des petites annonces de pieces (PhoneNumbers, tirees au hasard chaque semaine).
-                    bool mirror = MirrorRoots.Contains(root.name) || f.FsmName == "Fuelprices" || path.Contains("/PhoneNumbers/");
+                    // Miroir aussi des petites annonces de pieces (PhoneNumbers, tirees au hasard chaque semaine), des
+                    // commandes en attente (IsOrder) et de la poste (avis de colis lu : guichet ouvert).
+                    bool mirror = MirrorRoots.Contains(root.name) || f.FsmName == "Fuelprices" || path.Contains("/PhoneNumbers/")
+                                  || IsOrder(path) || path.EndsWith("/PostSystem::Logic");
                     var w = new W { Key = path + "#" + k, F = f, Mirror = mirror };
                     known.Add(f);
                     // Objet inactif : ses actions ne sont pas chargees ; on le reprend quand il s'active.
@@ -420,11 +432,15 @@ namespace MWCoop
             // Les commandes (OrdersSpawner*) arrivent apres l'appel ou le courrier, longtemps apres le
             // dernier clic : seul celui qui commande les declenche, elles passent toujours.
             bool order = global && j.Key.Contains("OrdersSpawner");
+            // Paiement d'une commande au guichet (NotificationsPile -> PAYMENT : transition locale de la commande,
+            // sans saisie, renvoyee par le guichet) : seul celui qui paie la declenche, elle passe toujours ; chez
+            // les autres le colis est cree aussi (recalage sur 'Spawn package' si leur commande attend encore).
+            if (tr.EventName == "PAYMENT" && IsOrder(j.Key)) order = true;
             // Global diffuse par la logique du monde (horloge, hockey, radio : un automate sans aucune
             // commande du joueur) : chacun le recoit de son propre jeu, le rejouer le doublerait.
             if (global && !byPlayer && !order && !forceNext && SenderIsWorldLogic(j)) return;
             forceNext = false;
-            if ((!global && !byPlayer) || (now - lastInput > 1f && !order)) return;
+            if ((!global && !byPlayer && !order) || (now - lastInput > 1f && !order)) return;
             if (!Safe(j, state)) return;   // finirait par agir sur ce joueur-ci chez l'autre
             if (j.Noisy && now - j.NoisySince > 30f) { j.Noisy = false; j.WindowStart = now; j.Count = 0; }
             if (now - j.WindowStart > 10f) { j.WindowStart = now; j.Count = 0; }
@@ -474,6 +490,10 @@ namespace MWCoop
         }
 
         static bool SkipVar(string n) { return n.StartsWith("UT") || n.StartsWith("UniqueTag"); }
+
+        // Compteur de boucle de la poste (PostSystem::Logic parcourt ses commandes toutes les 10 s) : pas au miroir,
+        // il casserait la boucle de l'invite en cours de route.
+        static bool LoopVar(W j, string n) { return n == "Index" && j.Key.Contains("/PostSystem::"); }
 
         // Argent et corps du joueur (globales Player* nombres) : un rejeu ne les touche pas, ni sur le
         // moment (RestorePersonal) ni plus tard dans la chaine automatique (paie apres un minuteur...).
@@ -837,7 +857,7 @@ namespace MWCoop
                 if (!j.Persistent || !j.Mirror || j.F == null) continue;
                 entries.Clear();
                 foreach (FsmFloat x in j.F.FsmVariables.FloatVariables) if (!SkipVar(x.Name) && (all || Changed(j.Sent, x.Name, x.Value))) entries.Add(new KeyValuePair<string, object>(x.Name, x.Value));
-                foreach (FsmInt x in j.F.FsmVariables.IntVariables) if (!SkipVar(x.Name) && (all || Changed(j.Sent, "i:" + x.Name, x.Value))) entries.Add(new KeyValuePair<string, object>(x.Name, x.Value));
+                foreach (FsmInt x in j.F.FsmVariables.IntVariables) if (!SkipVar(x.Name) && !LoopVar(j, x.Name) && (all || Changed(j.Sent, "i:" + x.Name, x.Value))) entries.Add(new KeyValuePair<string, object>(x.Name, x.Value));
                 foreach (FsmBool x in j.F.FsmVariables.BoolVariables) if (!SkipVar(x.Name) && (all || Changed(j.Sent, "b:" + x.Name, x.Value ? 1 : 0))) entries.Add(new KeyValuePair<string, object>(x.Name, x.Value));
                 // Listes de l'objet (annonces, numeros tires...) : envoyees quand leur contenu change.
                 foreach (PlayMakerArrayListProxy pr in j.F.GetComponents<PlayMakerArrayListProxy>())
@@ -1010,7 +1030,8 @@ namespace MWCoop
                     forceNext = false;
                     return j.Key + " : " + before + " -" + ev + "-> " + j.F.ActiveStateName;
                 }
-            return "rien pour " + part;
+            // Automates passes a Calls (createurs de commandes, cadrans, boite aux lettres) : l'essai 'colis' marche encore.
+            return Calls.TestEvent(part, ev) ?? "rien pour " + part;
         }
 
         // Comme si la logique passait d'elle-meme a 'state' (le crochet envoie comme en vrai).
