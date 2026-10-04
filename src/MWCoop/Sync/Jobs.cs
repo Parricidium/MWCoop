@@ -27,6 +27,11 @@ namespace MWCoop
         static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE",
                                                                         "TERRAIN", "DEEPSNOW", "RIM", "LOOP" };
         static readonly HashSet<string> RandomActions = new HashSet<string> { "SendRandomEvent", "RandomEvent" };
+        // Evenements des portieres ("Open door"/"Close door" les envoient a la lumiere de l'habitacle) : CarDoors
+        // rejoue ces etats chez les autres, qui les envoient donc eux-memes -- les rejouer aussi allumait ou
+        // eteignait la lumiere une 2e fois (forcee sur "State 1" apres la fermeture).
+        static readonly HashSet<string> DoorEvents = new HashSet<string> { "DOOROPEN", "DOORCLOSE", "DOOR" };
+        static readonly string[] InputActions = { "MousePick", "GetMouse", "GetButton", "GetKey", "GetAxis" };
 
         // Racines suivies : JOBS (sans les automates Use des objets) et chaque vehicule (avec ses boutons).
         static List<KeyValuePair<GameObject, bool>> RootsNow()
@@ -54,8 +59,44 @@ namespace MWCoop
         {
             if (!ControlFsms.Contains(f.FsmName) || CarDoors.Tracks(f)) return false;
             if (f.Fsm.GetState("Open door") != null || f.Fsm.GetState("Open hood") != null) return false;   // portieres : CarDoors
+            if (DoorDriven(f)) return false;   // suit les portieres rejouees
             string n = f.gameObject.name;
             return !n.StartsWith("PlayerTrigger") && !n.StartsWith("DriveTrigger") && !n.StartsWith("CameraPivot");
+        }
+
+        // Automate mene seulement par les portieres : pas d'autre transition que FINISHED et leurs evenements, et
+        // aucune action d'entree (souris, touches). Les transitions d'abord : elles se lisent toujours. Les
+        // actions d'un automate jamais demarre (objet jamais actif, Awake pas joue) ne se chargent pas -- le
+        // getter de PlayMaker leve une exception, qui coupait tout le releve (JOBS compris) : les transitions
+        // seules decident alors (meme tri qu'une fois l'objet actif).
+        static bool DoorDriven(PlayMakerFSM f)
+        {
+            bool door = false;
+            foreach (FsmTransition t in f.Fsm.GlobalTransitions)
+            {
+                if (DoorEvents.Contains(t.EventName)) door = true;
+                else if (t.EventName != "FINISHED") return false;
+            }
+            foreach (FsmState s in f.Fsm.States)
+                foreach (FsmTransition t in s.Transitions)
+                {
+                    if (DoorEvents.Contains(t.EventName)) door = true;
+                    else if (t.EventName != "FINISHED") return false;
+                }
+            if (!door) return false;
+            foreach (FsmState s in f.Fsm.States)
+            {
+                if (!s.IsInitialized) continue;
+                FsmStateAction[] acts;
+                try { acts = s.Actions; } catch { continue; }
+                foreach (FsmStateAction a in acts)
+                {
+                    if (a == null) continue;
+                    string tn = a.GetType().Name;
+                    foreach (string p in InputActions) if (tn.StartsWith(p)) return false;
+                }
+            }
+            return true;
         }
         static readonly Dictionary<string, Job> jobs = new Dictionary<string, Job>();
         class Classified { public string Path; public bool Control; }
@@ -101,7 +142,14 @@ namespace MWCoop
                     Classified c;
                     if (!classified.TryGetValue(f, out c))
                     {
-                        bool control = vehicle && !Persistent(f) && IsControl(f);
+                        // Un automate illisible ne coupe pas le releve (les suivants, JOBS compris) : revu au prochain.
+                        bool control;
+                        try { control = vehicle && !Persistent(f) && IsControl(f); }
+                        catch (System.Exception e)
+                        {
+                            if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("progression : " + f.gameObject.name + "::" + f.FsmName + " illisible (" + e.GetType().Name + "), revu au prochain releve"); }
+                            continue;
+                        }
                         string on = f.gameObject.name;
                         bool keep = !((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || (!Persistent(f) && !control))
                                     && !Interactions.Tracks(f) && !(on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r));   // objets : Props/Interactions
@@ -140,6 +188,8 @@ namespace MWCoop
 
         static bool InjectAll(Job j)
         {
+            // Automate jamais demarre : rien a lire (et pas une erreur PlayMaker par etat a chaque releve).
+            foreach (FsmState s in j.F.Fsm.States) if (!s.IsInitialized) return false;
             try
             {
                 foreach (FsmState s in j.F.Fsm.States)
@@ -159,6 +209,7 @@ namespace MWCoop
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 25f) return;
             FsmTransition tr = j.F.Fsm.LastTransition;
             if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
+            if (j.Control && DoorEvents.Contains(tr.EventName)) return;   // (lumiere de l'habitacle : la portiere rejouee la mene deja chez les autres)
             FsmState from = j.F.Fsm.PreviousActiveState;
             j.LocalRecent[(from != null ? from.Name : "") + "|" + tr.EventName + "|" + state] = Time.realtimeSinceStartup;
             // Tirage au sort : seul celui de l'hote compte (les invites s'y recalent a son message).
