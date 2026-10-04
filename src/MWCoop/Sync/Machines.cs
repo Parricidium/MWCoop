@@ -12,7 +12,8 @@ namespace MWCoop
     // bougent. Chez les autres ces valeurs l'emportent, apres la logique du jeu, tant qu'il s'en sert ;
     // 3 s apres son dernier envoi la machine revient a son propre etat. Ni paiement en double, ni
     // carte avalee chez l'autre.
-    // Machines a jeu de la station (video poker 'Rami-Pokeri', machine a sous) : un seul joueur a la fois.
+    // Machines a jeu (video poker 'Rami-Pokeri' et machine a sous de la station, machine a sous du bar,
+    // SlotMachinePub, meme modele) : un seul joueur a la fois.
     //  - Verrou arbitre par l'hote (Msg.MachineLock) : demande au premier clic sur un bouton, accorde s'il
     //    est libre ; bail de 20 s renouvele a chaque clic ; rendu a plus de 3,5 m, a l'expiration du bail
     //    ou au depart du joueur. Celui qui clique joue tout de suite (sa logique, son argent, son hasard) ;
@@ -23,7 +24,8 @@ namespace MWCoop
     //    materiaux et textures (cartes, voyants, ecran ; retrouves ici par leur nom), camera de l'ecran,
     //    rouleaux (angle final ; tant qu'ils tournent chez lui, ils tournent ici a vitesse fixe puis
     //    s'arretent sur cet angle). A la fin, chaque piece reprend son etat d'avant chez le spectateur.
-    //    Les credits et l'argent restent ceux de chacun.
+    //    Les credits et l'argent restent ceux de chacun : ce que la machine paie (encaissement, gain pris,
+    //    mise reprise) n'est pas un revenu a partager, Wallet le demande a KeepsMoney.
     //  - Ordinateur de la maison : chacun joue chez lui ; les autres voient "X joue a Massacre".
     public static class Machines
     {
@@ -52,7 +54,7 @@ namespace MWCoop
             public bool Spectating, Hover, Toasted, Watched; public int HeldFrom = -1; public float NextRenew;
         }
 
-        const float Lease = 20f, Reach = 3.5f, SpinSpeed = 720f;
+        const float Lease = 20f, Reach = 3.5f, SpinSpeed = 720f, KeepMoney = 5f;
         const int L_FREE = 0, L_ASK = 1, L_HELD = 2, L_REFUSED = 3, L_GAME = 4;   // Msg.MachineLock
 
         static readonly Dictionary<string, Machine> machines = new Dictionary<string, Machine>();
@@ -67,13 +69,13 @@ namespace MWCoop
         }
 
         static bool IsMachine(Transform t) { string n = t.name; return n.StartsWith("FuelPumps_") || IsLockable(n); }
-        static bool IsLockable(string n) { return n == "VideoPoker" || n == "SlotMachine"; }
+        static bool IsLockable(string n) { return n == "VideoPoker" || n.StartsWith("SlotMachine"); }   // SlotMachine (station), SlotMachinePub (bar)
 
         public static void OnLevelLoaded()
         {
             machines.Clear(); lockables.Clear(); locks.Clear(); player = null;
-            matByName = null; texByName = null; system = null; playing = "";
-            testStep = 0; testNextLog = 0; testSeq = null; testRefus = null;
+            matByName = null; texByName = null; system = null; playing = ""; keepMoneyUntil = 0;
+            testStep = 0; testNextLog = 0; testSeq = null; testRefus = null; testMoneyBase = testMoneyDone = false;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;
             nextComputer = Time.realtimeSinceStartup + 20f;
         }
@@ -285,6 +287,7 @@ namespace MWCoop
             Lock l = GetLock(key);
             l.Seen = Time.realtimeSinceStartup;
             if (l.Owner == owner) return;
+            if (l.Owner == Session.LocalId) keepMoneyUntil = l.Seen + KeepMoney;   // ce qu'elle paie encore (Take Win attend) reste a lui
             l.Owner = owner;
             Machine m;
             if (owner == Session.LocalId && machines.TryGetValue(key, out m)) m.NextFull = 0f;   // tout de suite tout
@@ -355,9 +358,25 @@ namespace MWCoop
             return false;
         }
 
+        // Argent : ce que paie une machine a jeu (encaissement de la machine a sous, gain pris ou mise reprise
+        // au poker) reste a celui qui y joue, comme ses mises restent a sa charge. Wallet le demande avant de
+        // partager une hausse du liquide : vrai tant qu'il tient une machine ou que sa souris est sur un de
+        // ses boutons, et 5 s apres son dernier clic ou apres l'avoir rendue (Take Win paie apres une attente).
+        static float keepMoneyUntil;
+        public static bool KeepsMoney
+        {
+            get
+            {
+                if (Time.realtimeSinceStartup < keepMoneyUntil) return true;
+                foreach (Machine m in lockables) if (m.L.Owner == Session.LocalId || m.Hover) return true;
+                return false;
+            }
+        }
+
         static void Press(Machine m)
         {
             float now = Time.realtimeSinceStartup;
+            keepMoneyUntil = now + KeepMoney;
             if (m.L.Owner == Session.LocalId && now < m.NextRenew) return;   // bail renouvele au plus 1 fois / s
             m.NextRenew = now + 1f;
             Ask(m);
@@ -761,6 +780,7 @@ namespace MWCoop
             if (!f.gameObject.activeInHierarchy) return name + "/" + button + " : machine inactive ici (trop loin ?)";
             if (!Ask(m)) return name + "/" + button + " refuse : machine occupee par " + NameOf(m.L.Owner) + " (bouton '" + f.ActiveStateName + "', " + (f.enabled ? "actif" : "arrete") + ")";
             m.NextRenew = Time.realtimeSinceStartup + 1f;
+            keepMoneyUntil = Time.realtimeSinceStartup + KeepMoney;   // comme Press
             string target = UseTarget(f), before = f.ActiveStateName;
             if (target == null) return name + "/" + button + " : pas de transition USE";
             Game.SetState(f, target);
@@ -776,37 +796,71 @@ namespace MWCoop
         }
 
         static int testStep;
-        static float testNextLog, testTryAt;
+        static float testNextLog, testTryAt, testLastAt, testMoney0, testMoneyAt;
+        static bool testMoneyBase, testMoneyDone;
         static string[] testSeq, testRefus;
 
+        static float Money()
+        {
+            FsmFloat c = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
+            return c != null ? c.Value : -1f;
+        }
+
         // [Test] Autotest=machine. Invite (TestPos devant les machines) : boutons [Test] TestBoutons
-        // (machine/bouton@t;...). Hote : 2 s apres avoir vu la machine [Test] TestRefus prise par un autre,
-        // il appuie a son tour (refus attendu). Les deux : etat des machines [Test] SuivreMachines toutes les 2 s.
+        // (machine/bouton@t;...) et son liquide apres chaque appui, puis 6 s apres le dernier (TakeWin et
+        // Cashout le font monter : gain garde pour soi). Hote : 2 s apres avoir vu la machine [Test] TestRefus
+        // prise par un autre, il appuie a son tour (refus attendu) ; son liquide ne doit pas bouger pendant que
+        // l'invite joue (verdict quand plus aucune machine n'est tenue par un autre, au plus 35 s apres).
+        // Les deux : etat des machines [Test] SuivreMachines toutes les 2 s.
         public static void Test(string mode, float t)
         {
             if (mode != "machine") return;
             if (t > 20f && t >= testNextLog)
             {
                 testNextLog = t + 2f;
-                foreach (string n in Config.Get("Test", "SuivreMachines", "VideoPoker;SlotMachine").Split(';')) Log.Info("autotest : " + State(n));
+                foreach (string n in Config.Get("Test", "SuivreMachines", "VideoPoker;SlotMachine;SlotMachinePub").Split(';')) Log.Info("autotest : " + State(n));
             }
             if (!Session.IsHost)
             {
-                if (testSeq == null) testSeq = Config.Get("Test", "TestBoutons", "VideoPoker/InsertCoin@40;VideoPoker/Deal@45;SlotMachine/PayMoney@50;SlotMachine/Start@51.5").Split(';');
+                if (testSeq == null) testSeq = Config.Get("Test", "TestBoutons", "VideoPoker/InsertCoin@40;VideoPoker/TakeWin@42;VideoPoker/InsertCoin@48;VideoPoker/Deal@50;"
+                                                          + "SlotMachine/PayMoney@53;SlotMachine/Start@54.5;SlotMachine/Cashout@60").Split(';');
+                if (testStep == testSeq.Length && t >= testLastAt + 6f) { testStep++; Log.Info("autotest : liquide de l'invite apres les machines : " + Money()); }
                 if (testStep >= testSeq.Length) return;
                 string[] it = testSeq[testStep].Split('@');
                 float at = it.Length > 1 ? float.Parse(it[1], System.Globalization.CultureInfo.InvariantCulture) : 40f;
                 if (t < at) return;
-                testStep++;
+                testStep++; testLastAt = t;
                 string[] mb = it[0].Split('/');
-                Log.Info("autotest : appuie " + (mb.Length > 1 ? TestPress(mb[0], mb[1]) : it[0] + " ?"));
+                Log.Info("autotest : appuie " + (mb.Length > 1 ? TestPress(mb[0], mb[1]) : it[0] + " ?") + " ; liquide " + Money());
                 return;
             }
+            HostMoney(t);
             if (testRefus == null) testRefus = Config.Get("Test", "TestRefus", "VideoPoker/Deal").Split('/');
             if (testRefus.Length < 2) return;
             Machine m = Find(testRefus[0]);
             if (testStep == 0 && m != null && m.L != null && m.L.Owner >= 0 && m.L.Owner != Session.LocalId) { testStep = 1; testTryAt = t + 2f; }
             if (testStep == 1 && t >= testTryAt) { testStep = 2; Log.Info("autotest : l'hote essaie " + TestPress(testRefus[0], testRefus[1]) + " ; " + State(testRefus[0])); }
+        }
+
+        // Hote : son liquide quand un autre prend une machine, puis quand plus aucune n'est tenue par un autre
+        // (au plus 35 s apres) : inchange attendu, les gains de l'invite restent a l'invite.
+        static void HostMoney(float t)
+        {
+            if (testMoneyDone) return;
+            bool other = false;
+            foreach (Machine x in lockables) if (x.L.Owner >= 0 && x.L.Owner != Session.LocalId) other = true;
+            if (!testMoneyBase)
+            {
+                if (!other) return;
+                testMoneyBase = true; testMoney0 = Money(); testMoneyAt = t;
+                Log.Info("autotest : liquide de l'hote avant les gains de l'invite : " + testMoney0);
+                return;
+            }
+            if (other && t < testMoneyAt + 35f) return;
+            testMoneyDone = true;
+            float now = Money(), d = now - testMoney0;
+            Log.Info("autotest : liquide de l'hote apres les gains de l'invite : " + testMoney0 + " -> " + now
+                     + (Mathf.Abs(d) < 0.5f ? ", inchange (OK)" : ", ECART " + d + " (gain de machine partage ?)"));
         }
     }
 }
