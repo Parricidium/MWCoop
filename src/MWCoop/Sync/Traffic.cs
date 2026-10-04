@@ -5,12 +5,17 @@ using UnityEngine;
 namespace MWCoop
 {
     // Circulation et passants dictes par l'hote (comme la meteo) : voitures de TRAFFIC (routes,
-    // chemins, train) et de NPC_CARS, marcheurs de HUMANS/Randomizer/Walkers.
+    // chemins) et de NPC_CARS, le train (racine TRAIN), marcheurs de HUMANS/Randomizer/Walkers.
     //  - meme liste des deux cotes : chemin + rang parmi les homonymes (LAMORE x2, VICTRO x3...) ;
     //  - l'hote envoie 5 fois/s, par lots, actif, position, rotation, vitesse de chacun ;
     //  - chez l'invite : leur logique (MobileCarController, automates de conduite et de marche,
     //    automates des conteneurs qui les font apparaitre) est coupee, les voitures deviennent
     //    cinematiques et suivent ; les marcheurs jouent fat_walk / fat_standing selon leur vitesse.
+    //  - le train (TRAIN/SpawnEast/TRAIN, que son automate Move fait passer sous SpawnWest et retour) :
+    //    chez l'invite seuls Move et Reset sont coupes ; Player (le train tue le joueur local qu'il
+    //    percute), Whistle et TunnelAudio restent, et son corps reste dynamique (sinon pas de collision
+    //    avec le CharacterController du joueur). Pendant son attente au tunnel l'hote cache sa
+    //    carrosserie (Mesh) : il l'envoie comme inactif.
     public static class Traffic
     {
         class Ent
@@ -24,14 +29,18 @@ namespace MWCoop
             public Quaternion Rot;
             public float LastRecv;
             public bool Muted;
+            public bool Train;
+            public GameObject Mesh;          // train : carrosserie (et collisions), cachee pendant l'attente
         }
 
-        static readonly string[] Containers = { "TRAFFIC/VehiclesHighway", "TRAFFIC/VehiclesDirtRoad", "TRAFFIC/SpawnEast", "TRAFFIC/SpawnWest", "NPC_CARS" };
+        // TRAIN : toute la racine (le train change de parent entre SpawnEast et SpawnWest ; c'en est le seul
+        // Rigidbody, son rang ne depend donc pas de son parent du moment).
+        static readonly string[] Containers = { "TRAFFIC/VehiclesHighway", "TRAFFIC/VehiclesDirtRoad", "TRAIN", "NPC_CARS" };
         const string WalkersPath = "HUMANS/Randomizer/Walkers";
         static readonly List<Ent> ents = new List<Ent>();
         static readonly List<PlayMakerFSM> mutedSpawners = new List<PlayMakerFSM>();
         static bool built;
-        static float buildAt = -1, nextSend, nextLog, nextSample;
+        static float buildAt = -1, nextSend, nextLog, nextSample, nextTrainLog;
 
         public static void OnLevelLoaded()
         {
@@ -47,12 +56,17 @@ namespace MWCoop
             foreach (string c in Containers)
             {
                 GameObject root = Game.FindAny(c);
-                if (root == null) continue;
+                if (root == null) { Log.Warn("trafic : conteneur " + c + " introuvable"); continue; }
                 // Vehicules : objets a CarDynamics (ou le train : Rigidbody direct) sous le conteneur.
                 foreach (Rigidbody rb in root.GetComponentsInChildren<Rigidbody>(true))
                 {
-                    if (rb.GetComponent("CarDynamics") == null && rb.name != "TRAIN") continue;
-                    Add(keys, rb.transform, rb, false);
+                    bool train = rb.name == "TRAIN";
+                    if (rb.GetComponent("CarDynamics") == null && !train) continue;
+                    var e = Add(keys, rb.transform, rb, false);
+                    if (!train) continue;
+                    e.Train = true;
+                    Transform mesh = rb.transform.Find("Mesh");
+                    if (mesh != null) e.Mesh = mesh.gameObject;
                 }
             }
             GameObject walkers = Game.FindAny(WalkersPath);
@@ -63,12 +77,21 @@ namespace MWCoop
                     Transform sk = w.Find("Pivot/Char/skeleton");
                     if (sk != null) e.Anim = sk.GetComponent<Animation>();
                 }
-            Log.Info("trafic : " + ents.Count + " vehicules et passants suivis");
+            // Empreinte de la liste (cles dans l'ordre) : la meme chez l'hote et l'invite, sinon les numeros
+            // des messages designent d'autres vehicules.
+            uint h = 2166136261;
+            bool hasTrain = false;
+            foreach (Ent e in ents)
+            {
+                foreach (char ch in e.Key) { h ^= ch; h *= 16777619; }
+                if (e.Train) hasTrain = true;
+            }
+            Log.Info("trafic : " + ents.Count + " vehicules et passants suivis (train " + (hasTrain ? "oui" : "non") + ", empreinte " + h.ToString("x8") + ")");
         }
 
         static Ent Add(Dictionary<string, int> keys, Transform t, Rigidbody rb, bool walker)
         {
-            string path = Recon.Path(t);
+            string path = rb != null && rb.name == "TRAIN" ? "TRAIN/" + t.name : Recon.Path(t);   // train : sans son parent du moment
             int k;
             keys.TryGetValue(path, out k);
             keys[path] = k + 1;
@@ -126,10 +149,13 @@ namespace MWCoop
                 for (int i = start; i < start + n; i++)
                 {
                     Ent e = ents[i];
-                    bool on = e.T != null && e.T.gameObject.activeInHierarchy;
+                    bool on = e.T != null && e.T.gameObject.activeInHierarchy && (e.Mesh == null || e.Mesh.activeSelf);
                     w.Bool(on);
                     if (!on) continue;
-                    Vector3 v = e.Body != null && !e.Body.isKinematic ? e.Body.velocity : (e.T.position - e.Pos) / 0.2f;
+                    // Train : deplace par son automate (MoveTowards), sa vitesse vient de sa position (sauf
+                    // saut : retour au point de depart apres l'attente, cache entre-temps).
+                    Vector3 d = e.T.position - e.Pos;
+                    Vector3 v = e.Body != null && !e.Body.isKinematic && !e.Train ? e.Body.velocity : d.sqrMagnitude > 400f ? Vector3.zero : d / 0.2f;
                     e.Pos = e.T.position;
                     w.Vec(e.T.position).Quat(e.T.rotation).Vec(v);
                 }
@@ -154,6 +180,7 @@ namespace MWCoop
                 Mute(e);
                 if (e.T.gameObject.activeSelf != on) e.T.gameObject.SetActive(on);
                 if (!on) continue;
+                if (e.Mesh != null && !e.Mesh.activeSelf) e.Mesh.SetActive(true);   // cachee par Move avant sa coupure
                 if (e.LastRecv <= 0 || (p - e.T.position).sqrMagnitude > 400f) { e.T.position = p; e.T.rotation = q; }
                 e.Pos = p; e.Rot = q; e.Vel = v; e.LastRecv = now;
             }
@@ -167,15 +194,36 @@ namespace MWCoop
             foreach (MonoBehaviour m in e.T.GetComponents<MonoBehaviour>())
             {
                 string n = m.GetType().Name;
-                if (m is PlayMakerFSM || n == "MobileCarController" || n == "AxisCarController") m.enabled = false;
+                var f = m as PlayMakerFSM;
+                if (f != null && e.Train && f.FsmName != "Move" && f.FsmName != "Reset") continue;   // train : collision, sifflet, tunnel
+                if (f != null || n == "MobileCarController" || n == "AxisCarController") m.enabled = false;
             }
-            if (e.Body != null) e.Body.isKinematic = true;
+            // Train : son corps reste dynamique comme chez l'hote (scene : non cinematique, positions X/Y et
+            // rotations bloquees). Un corps cinematique ne recoit aucune collision du CharacterController du
+            // joueur : Player ne tuerait plus l'invite sur la voie.
+            if (e.Body != null && !e.Train) e.Body.isKinematic = true;
             foreach (Wheel wh in e.T.GetComponentsInChildren<Wheel>(true)) wh.enabled = false;
             if (e.Walker)
                 foreach (PlayMakerFSM f in e.T.GetComponentsInChildren<PlayMakerFSM>(true)) f.enabled = false;
             for (Transform p = e.T.parent; p != null; p = p.parent)
                 foreach (PlayMakerFSM f in p.GetComponents<PlayMakerFSM>())
                     if (!mutedSpawners.Contains(f)) { f.enabled = false; mutedSpawners.Add(f); }
+        }
+
+        // Essais (Autotest) 'train' : position du train toutes les 2 s des deux cotes (a comparer a la meme
+        // heure des journaux : l'invite doit suivre l'hote a quelques metres pres).
+        public static void Test(string mode, float t)
+        {
+            if (mode != "train" || t < 10f || Time.realtimeSinceStartup < nextTrainLog) return;
+            nextTrainLog = Time.realtimeSinceStartup + 2f;
+            Ent tr = null;
+            foreach (Ent e in ents) if (e.Train) { tr = e; break; }
+            if (tr == null || tr.T == null) { Log.Info("autotest : train " + (built ? "absent de la liste du trafic" : "pas encore releve")); return; }
+            Log.Info("autotest : train (" + (Session.IsHost ? "hote" : "invite") + ") " + tr.T.position.ToString("F1")
+                     + " actif " + tr.T.gameObject.activeInHierarchy + ", carrosserie " + (tr.Mesh == null || tr.Mesh.activeInHierarchy)
+                     + ", sous " + (tr.T.parent != null ? tr.T.parent.name : "-")
+                     + ", corps " + (tr.Body != null && tr.Body.isKinematic ? "cinematique" : "dynamique")
+                     + (Session.IsHost ? "" : ", recu il y a " + (Time.realtimeSinceStartup - tr.LastRecv).ToString("F1") + " s"));
         }
 
         static void Follow(Ent e)
@@ -186,6 +234,7 @@ namespace MWCoop
             float k = 1f - Mathf.Exp(-10f * Time.deltaTime);
             e.T.position = Vector3.Lerp(e.T.position, target, k);
             e.T.rotation = Quaternion.Slerp(e.T.rotation, e.Rot, k);
+            if (e.Train && e.Body != null && !e.Body.isKinematic) e.Body.velocity = Vector3.zero;   // pas de derive apres un choc
             if (e.Anim != null)
             {
                 string clip = e.Vel.sqrMagnitude > 0.2f ? "fat_walk" : "fat_standing";
