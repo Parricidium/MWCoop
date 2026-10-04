@@ -24,6 +24,8 @@ namespace MWCoop
     // Chaleur de l'habitacle : la source de chaleur de la voiture (HeatSource*, ecrite par son automate
     // CarTemp... d'apres le moteur, le chauffage, les portieres) est envoyee avec la voiture ; sur la
     // copie (moteur froid), elle est reprise apres la logique du jeu -- le passager se rechauffe aussi.
+    // Objets poses dedans (coffre, banquette) : voir Props (CarUnder, Authority) ; un recalage d'un coup
+    // de la voiture les emmene avec elle.
     public static class VehicleSync
     {
         class Car
@@ -66,7 +68,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            cars.Clear();
+            cars.Clear(); under.Clear();
             scanned = false;
             LocalDriving = -1; owned = -1;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
@@ -149,7 +151,7 @@ namespace MWCoop
 
             foreach (Car c in cars)
             {
-                bool remote = c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving && c.Index != owned;
+                bool remote = Remote(c, now);
                 if (!remote && c.RemoteBy >= 0 && now - c.LastRemote >= 1.5f) { c.RemoteBy = -1; c.RemoteDriver = -1; }
                 SetKinematic(c, remote);
                 if (remote)
@@ -170,7 +172,99 @@ namespace MWCoop
             foreach (Car c in cars)
                 if (c.Heat != null && !float.IsNaN(c.RemoteHeat) && c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving)
                     c.Heat.Value = c.RemoteHeat;
+            // Objets transportes dans une copie : places sur la pose affichee de la voiture (apres sa physique).
+            Props.LateUpdate();
         }
+
+        // Copie conduite ailleurs (cinematique ici, suit les messages de celui qui la fait rouler).
+        static bool Remote(Car c, float now)
+        {
+            return c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving && c.Index != owned;
+        }
+
+        // ---------------------------------------------------------------- objets dans les voitures
+        // Numero d'une voiture : son rang dans la liste triee par nom, le meme chez tous (-1 : pas une voiture).
+        public static int Count { get { return cars.Count; } }
+        public static int CarIndex(Rigidbody body)
+        {
+            if (body == null) return -1;
+            foreach (Car c in cars) if (c.Body == body) return c.Index;
+            return -1;
+        }
+        public static Rigidbody CarBody(int index) { return index >= 0 && index < cars.Count ? cars[index].Body : null; }
+
+        // Conduite ici, ou quittee moteur tournant (on en garde la main) : on fait autorite dessus.
+        public static bool DrivenHere(int index) { return index >= 0 && (index == LocalDriving || index == owned); }
+
+        // Copie ici d'une voiture qu'un autre fait rouler.
+        public static bool IsCopy(int index) { return index >= 0 && index < cars.Count && Remote(cars[index], Time.realtimeSinceStartup); }
+
+        // Qui fait autorite sur la voiture : nous si on la conduit (ou moteur laisse tournant), le joueur qui
+        // la fait rouler chez lui, sinon l'hote (voiture garee).
+        public static int Authority(int index)
+        {
+            if (index < 0 || index >= cars.Count) return 0;
+            if (DrivenHere(index)) return Session.LocalId;
+            Car c = cars[index];
+            return Remote(c, Time.realtimeSinceStartup) ? c.RemoteBy : 0;
+        }
+        public static int Authority(Rigidbody car) { return Authority(CarIndex(car)); }
+
+        // Vitesse de la voiture telle qu'on la voit ici (copie : celle recue, le corps cinematique n'en a pas).
+        public static Vector3 CarVelocity(int index)
+        {
+            if (index < 0 || index >= cars.Count || cars[index].Body == null) return Vector3.zero;
+            Car c = cars[index];
+            return c.Kinematic ? c.Vel : c.Body.velocity;
+        }
+
+        // Voiture sous un objet pose (coffre, banquette, plateau) : court rayon vers le bas depuis son centre,
+        // premiere surface solide d'une voiture (corps racine a CarDynamics, ou piece articulee dessus comme
+        // le hayon). Les autres objets en travers sont ignores (sac pose sur une caisse). Resultat garde
+        // 0,5 s par objet. null : pas dans une voiture.
+        class Under { public float Until; public Rigidbody Car; }
+        static readonly Dictionary<Rigidbody, Under> under = new Dictionary<Rigidbody, Under>();
+
+        public static Rigidbody CarUnder(Rigidbody item)
+        {
+            if (item == null || !scanned) return null;
+            float now = Time.realtimeSinceStartup;
+            Under u;
+            if (under.TryGetValue(item, out u) && now < u.Until) return u.Car;
+            if (u == null)
+            {
+                if (under.Count > 512) under.Clear();   // objets detruits depuis
+                u = new Under();
+                under[item] = u;
+            }
+            u.Until = now + 0.5f;
+            u.Car = null;
+            // Aucune voiture a moins de 8 m : pas de rayon (la plupart des objets du monde, recalage de l'hote).
+            Vector3 at = item.position;
+            bool near = false;
+            foreach (Car c in cars) if (c.Body != null && (c.Body.position - at).sqrMagnitude < 64f) { near = true; break; }
+            if (!near) return null;
+            float best = float.MaxValue;
+            foreach (RaycastHit h in Physics.RaycastAll(item.worldCenterOfMass + Vector3.up * 0.25f, Vector3.down, 0.85f, ~0))
+            {
+                Collider col = h.collider;
+                if (col == null || col.isTrigger || h.distance >= best) continue;
+                Rigidbody rb = col.attachedRigidbody;
+                if (rb == null || rb == item) continue;
+                Transform root = rb.transform.root;
+                foreach (Car c in cars)
+                    if (c.Body != null && c.Body.transform == root) { best = h.distance; u.Car = c.Body; break; }
+            }
+            return u.Car;
+        }
+
+        // Objet replace d'un coup (pose recue) : la voiture sous lui sera cherchee a nouveau.
+        public static void Forget(Rigidbody item) { if (item != null) under.Remove(item); }
+
+        // Portieres, capot, hayon : leurs attaches ne sont pas rendues incassables sur la copie (CarDoors les
+        // asservit, une charniere figee en ferait une soudure). Branche a l'integration (CarDoors.IsDoorBody).
+        static System.Func<Rigidbody, bool> IsDoorBody = null;
+        public static void SetDoorBodyCheck(System.Func<Rigidbody, bool> f) { IsDoorBody = f; }
 
         static void SetKinematic(Car c, bool on)
         {
@@ -224,6 +318,7 @@ namespace MWCoop
             foreach (Joint j in c.Body.GetComponentsInChildren<Joint>(true))
             {
                 if (j == null || c.JointsWas.ContainsKey(j)) continue;
+                if (IsDoorBody != null && IsDoorBody(j.GetComponent<Rigidbody>())) continue;   // portiere, capot, hayon (et leur verrou)
                 c.JointsWas[j] = new Vector2(j.breakForce, j.breakTorque);
                 j.breakForce = Mathf.Infinity;
                 j.breakTorque = Mathf.Infinity;
@@ -241,7 +336,7 @@ namespace MWCoop
                 rot = Quaternion.AngleAxis(c.AngVel.magnitude * dt * Mathf.Rad2Deg, c.AngVel.normalized) * c.Rot;
             Transform t = c.Body.transform;
             float k = 1f - Mathf.Exp(-15f * Time.deltaTime);
-            if ((target - t.position).sqrMagnitude > 25f) { t.position = target; t.rotation = rot; }
+            if ((target - t.position).sqrMagnitude > 25f) { Props.CarMoved(c.Body, target, rot, c.Vel); t.position = target; t.rotation = rot; }
             else
             {
                 c.Body.MovePosition(Vector3.Lerp(t.position, target, k));
@@ -503,6 +598,7 @@ namespace MWCoop
             if ((t.position - pos).sqrMagnitude > 1f || Quaternion.Angle(t.rotation, rot) > 10f)
             {
                 SetKinematic(c, false);
+                Props.CarMoved(c.Body, pos, rot, vel);   // ce qui est pose dedans suit (avant que la voiture bouge)
                 t.position = pos;
                 t.rotation = rot;
                 c.Body.velocity = vel;
