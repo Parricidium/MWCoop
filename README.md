@@ -179,6 +179,13 @@ Fait aussi (0.13.1, retours de JD) : places passagers à la bonne place (yeux co
 l'arrière), icône passager seulement en visant le siège ; feux de recul et toute lampe des voitures vus par tous ;
 plus de son moteur superposé en sortant d'une voiture (le moteur de la copie restait relancé) ; moteur laissé
 tournant entendu par tous ; programme de la télé identique chez tous (grille de l'hôte).
+Fait aussi (0.14, retours de JD) : vrai accroupi à deux niveaux (genoux pliés, puis à genoux penché pour regarder
+dessous) ; places passagers comme le conducteur (on entre jusqu'au siège, ENTRÉE s'assoit sur place à la bonne
+hauteur, on ressort sur place) ; portières qui battent comme chez celui qui les a ouvertes (angle de charnière,
+butées) ; pare-brise et pièces qui ne cassent plus sur la copie d'une voiture conduite par un autre ; portes
+automatiques du magasin et barrière du market pour tous les joueurs ; écran de la pompe à essence vu par tous ;
+voitures garées de la station identiques ; PNJ (vendeurs, caissières, clients) aux mêmes places et mêmes gestes ;
+rayons des magasins qui se vident en direct quand un autre prend un article.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

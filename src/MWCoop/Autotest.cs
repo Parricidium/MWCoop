@@ -324,6 +324,8 @@ namespace MWCoop
             }
             if (mode == "magasin" && MWCoop.Net.Session.IsHost && t > 32f && step == 0) { step = 1; Log.Info("autotest : panier " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), 3)); }
             if (mode == "magasin" && MWCoop.Net.Session.IsHost && t > 48f && step == 1) { step = 2; Log.Info("autotest : repose " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), -3)); }
+            string npcWatch = Config.Get("Test", "SuivrePNJ", "");
+            if (npcWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : pnj " + Npcs.State(npcWatch) + " | garees " + Parked.State());
             string stockWatch = Config.Get("Test", "SuivreStock", "");
             if (stockWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : rayon " + Stock.State(stockWatch));
             // [Test] SuivreEtat=chemin::automate : etat courant d'un automate quelconque.

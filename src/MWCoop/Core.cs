@@ -23,7 +23,7 @@ namespace MWCoop
 
         void LateUpdate()
         {
-            try { PlayerSync.LateUpdate(); CarVisuals.LateUpdate(); Machines.LateUpdate(); }
+            try { PlayerSync.LateUpdate(); CarVisuals.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
         }
 
@@ -73,6 +73,8 @@ namespace MWCoop
             Step("portes automatiques", NearDoors.Update);
             Step("machines", Machines.Update);
             Step("rayons", Stock.Update);
+            Step("PNJ", Npcs.Update);
+            Step("voitures garees", Parked.Update);
             Step("monde (automates)", WorldFsms.Update);
             Step("trafic", Traffic.Update);
             Step("couleur", CarColor.Update);
@@ -125,6 +127,8 @@ namespace MWCoop
             NearDoors.OnLevelLoaded();
             Machines.OnLevelLoaded();
             Stock.OnLevelLoaded();
+            Npcs.OnLevelLoaded();
+            Parked.OnLevelLoaded();
             WorldFsms.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             CarColor.OnLevelLoaded();

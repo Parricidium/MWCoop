@@ -78,7 +78,7 @@ namespace MWCoop
         {
             if (!Session.Active || nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 60f; Scan(); }
+            if (now >= nextScan) { nextScan = now + (stores.Count == 0 ? 30f : 300f); Scan(); }
             if (now < nextCheck || stores.Count == 0) return;
             nextCheck = now + 0.5f;
             foreach (Store s in stores.Values)

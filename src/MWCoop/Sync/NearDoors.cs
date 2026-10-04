@@ -30,7 +30,7 @@ namespace MWCoop
         {
             if (nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 30f; Scan(); }
+            if (now >= nextScan) { nextScan = now + 90f; Scan(); }
             if (probes.Count == 0) return;
             if (player == null) { GameObject g = GameObject.Find("PLAYER"); if (g == null) return; player = g.transform; }
             // Hauteur du point PLAYER au-dessus des pieds (les avatars sont places par les pieds).

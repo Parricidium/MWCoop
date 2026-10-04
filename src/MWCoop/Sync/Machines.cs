@@ -62,7 +62,7 @@ namespace MWCoop
         {
             if (!Session.Active || nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 60f; Scan(); }
+            if (now >= nextScan) { nextScan = machines.Count == 0 ? now + 30f : float.MaxValue; Scan(); }
             if (machines.Count == 0) return;
             if (player == null) { GameObject g = GameObject.Find("PLAYER"); if (g == null) return; player = g.transform; }
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1)) lastInput = now;
