@@ -5,24 +5,39 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Portieres, coffres, hayons et capots des vehicules. Leur automate 'Use' ouvre et ferme :
-    //  - portieres : "Open door" (ouvrir), "Open door 2" -> Sound -> "Close door" (fermer) ;
-    //  - hayons, capots : "Open hood" (ouvrir), "Sound" -> "Close hood" (fermer).
-    // Une action ajoutee en tete de ces etats previent les autres, qui menent la meme portiere au
-    // meme etat : le jeu l'ouvre ou la ferme lui-meme, animation et son compris. Rien n'est deplace
-    // de force (une portiere teleportee pousse la voiture, qui s'envole).
-    // Position en temps reel : tant qu'elle est ouverte, celui qui l'a ouverte envoie son ANGLE autour de
-    // sa charniere (HingeJoint) quand il change, et au moins chaque seconde. Chez les autres, le corps de
-    // la portiere devient cinematique et prend cet angle autour de SA charniere (pose de fermeture notee
-    // portiere fermee) : la pose reste toujours une pose de la charniere, la voiture n'est jamais tiree.
-    // Elle bat comme chez celui qui l'a ouverte, avec ses butees. Rendue a la physique a la fermeture.
+    // Portieres, coffres, hayons et capots des vehicules, et prises du chauffage moteur. Automate 'Use' :
+    //  - portieres : clic -> "Open door" (ouvre tant que le bouton est tenu), clic sur une portiere ouverte ->
+    //    "Open door 2" (la pousse vers la fermeture tant que le bouton est tenu ; relachee avant, elle reste
+    //    ouverte), arrivee fermee -> "Sound" -> "Close door" (claque, verrouillee). Refermee en la poussant
+    //    pendant l'ouverture : "Reset 2" (verrou) ;
+    //  - hayons, capots : "Open hood", "State 2" (pousse vers la fermeture), "Sound" -> "Close hood".
+    // Evenements (actions ajoutees en tete des etats) : 1 ouverte, 3 saisie (pousse vers la fermeture),
+    // 0 fermee pour de bon (Sound : pas au clic, qui peut etre relache avant), 4 verrouillee.
+    // L'hote est l'arbitre : il applique les evenements dans l'ordre d'arrivee et les renvoie a TOUS, auteur
+    // compris. Chacun les rejoue dans cet ordre (un invite saute ceux d'autrui tant qu'il attend le retour
+    // des siens : ils sont ordonnes avant les siens). Deux clics croises finissent donc pareil partout.
+    // Rejouer une fermeture = "Sound" -> "Close door" (pose fermee, verrou) : rien ne depend de la physique
+    // ni de la souris de celui qui la rejoue (avant : "Open door 2", que son corps ou son clic arretait).
+    // Le verrou ("Reset 2" -> "Set lock 2" : une attache rigide a la carrosserie, qui casse quand on tire)
+    // n'est PAS rejoue : chez les autres la portiere reste figee a l'angle de celui qui l'a poussee (une
+    // attache jamais cassee chez eux tirerait la voiture a la fermeture suivante).
+    // Position en temps reel : celui qui l'a ouverte ou saisie en dernier (Owner) envoie son ANGLE autour
+    // de la charniere (HingeJoint). Chez les autres, le corps de la portiere devient cinematique et prend cet
+    // angle autour de SA charniere (pose fermee notee portiere fermee) : la voiture n'est jamais tiree, et la
+    // portiere traverse les joueurs comme chez celui qui la manie (les avatars n'ont pas de collision).
     public static class CarDoors
     {
+        const int K_CLOSED = 0, K_OPEN = 1, K_ANGLE = 2, K_GRAB = 3, K_LOCK = 4;
+        enum DoorState { Closed, Open, Locked }
+
         class Door
         {
-            public string Key; public PlayMakerFSM Fsm; public string Open, Close;
+            public string Key; public PlayMakerFSM Fsm; public string Open, Grab, Close;
+            public bool HasLock, IsDoor;
             public Rigidbody Body; public HingeJoint Hinge;
-            public bool IsOpen, Mine;          // ouverte ; ouverte par nous (on envoie son angle)
+            public DoorState State;
+            public int Owner = -1; public bool Mine;   // dernier a l'avoir maniee ; nous (on envoie son angle)
+            public int PendingOwn;                     // invite : evenements envoyes dont le retour de l'hote manque
             public float LastAngle; public bool Sent;
             public bool Showing; public float TargetAngle; public float LastRemote;
             public bool Pinned, PinnedWasKinematic;   // corps fige a l'angle recu
@@ -40,15 +55,10 @@ namespace MWCoop
         class Hook : FsmStateAction
         {
             public Door D;
-            public bool Opening, Lock;
+            public int Kind;
             public override void OnEnter()
             {
-                try
-                {
-                    // « Reset 2 » (verrou en la poussant) ne compte que portiere ouverte depuis un moment : a
-                    // l'ouverture, l'angle peut se lire 359 degres et le jeu passe une fois par la.
-                    if (!applying && Replay.Depth == 0 && !(Lock && (!D.IsOpen || Time.realtimeSinceStartup - D.OpenedAt < 0.7f))) Send(D, Opening);
-                }
+                try { if (!applying && Replay.Depth == 0) Local(D, Kind); }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
@@ -72,23 +82,27 @@ namespace MWCoop
                 foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
                     if (f.FsmName != "Use") continue;
-                    string open = null, close = null;
-                    if (f.Fsm.GetState("Open door") != null && f.Fsm.GetState("Open door 2") != null) { open = "Open door"; close = "Open door 2"; }
+                    string open = null, grab = null, close = null;
+                    bool isDoor = false;
+                    if (f.Fsm.GetState("Open door") != null && f.Fsm.GetState("Open door 2") != null && f.Fsm.GetState("Close door") != null)
+                    { open = "Open door"; grab = "Open door 2"; close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close door"; isDoor = true; }
                     else if (f.Fsm.GetState("Open hood") != null && f.Fsm.GetState("Close hood") != null)
-                    { open = "Open hood"; close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close hood"; }
+                    { open = "Open hood"; grab = f.Fsm.GetState("State 2") != null ? "State 2" : null; close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close hood"; }
                     if (open == null) continue;
                     string rel = Recon.Path(f.transform).Substring(car.name.Length);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;   // compte aussi les portieres deja suivies
                     if (hooked.Contains(f) || !Replay.Claim(f, "portieres")) continue;
-                    var d = new Door { Key = car.name + rel + "#" + k, Fsm = f, Open = open, Close = close };
+                    var d = new Door { Key = car.name + rel + "#" + k, Fsm = f, Open = open, Grab = grab, Close = close, IsDoor = isDoor };
                     d.Body = f.GetComponentInParent<Rigidbody>();
                     if (d.Body != null && d.Body.transform == car.transform) d.Body = null;
                     d.Hinge = d.Body != null ? d.Body.GetComponent<HingeJoint>() : null;
-                    if (!Inject(d, open, true) || !Inject(d, close, false)) continue;
-                    // Refermee en la poussant (pas en cliquant) : « Reset 2 » puis verrou -- c'est aussi une fermeture.
-                    if (f.Fsm.GetState("Reset 2") != null) Inject(d, "Reset 2", false, true);
+                    d.State = OpenVar(d) ? DoorState.Open : DoorState.Closed;
+                    if (!Inject(d, open, K_OPEN) || !Inject(d, close, K_CLOSED)) continue;
+                    if (grab != null) Inject(d, grab, K_GRAB);
+                    d.HasLock = f.Fsm.GetState("Reset 2") != null && Inject(d, "Reset 2", K_LOCK);
                     hooked.Add(f);
                     byKey[d.Key] = d;
+                    NoteRest(d);
                 }
             }
             // Prises du chauffage moteur (cable plug) : "Heater on" = branchee sur la voiture, "Heater off"
@@ -101,25 +115,39 @@ namespace MWCoop
                 FsmGameObject sock = f.FsmVariables.FindFsmGameObject("Socket");
                 if (sock == null || sock.Value == null) continue;
                 var d = new Door { Key = "prise:" + Recon.Path(sock.Value.transform), Fsm = f, Open = "Heater on", Close = "Heater off" };
-                if (!Inject(d, d.Open, true) || !Inject(d, d.Close, false)) continue;
+                d.State = f.ActiveStateName == "Heater on" ? DoorState.Open : DoorState.Closed;
+                if (!Inject(d, d.Open, K_OPEN) || !Inject(d, d.Close, K_CLOSED)) continue;
                 hooked.Add(f);
                 byKey[d.Key] = d;
             }
             if (byKey.Count != before) Log.Info("portieres : " + byKey.Count + " suivies (portes, coffres, hayons, prises)");
         }
 
-        static bool Inject(Door d, string state, bool opening, bool isLock = false)
+        static bool Inject(Door d, string state, int kind)
         {
             FsmState s = d.Fsm.Fsm.GetState(state);
             if (s == null) return false;
             try
             {
                 var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, new Hook { D = d, Opening = opening, Lock = isLock });
+                list.Insert(0, new Hook { D = d, Kind = kind });
                 s.Actions = list.ToArray();
                 return true;
             }
             catch { return false; }
+        }
+
+        static bool OpenVar(Door d)
+        {
+            FsmBool o = d.Fsm.FsmVariables.FindFsmBool("Open");
+            return o != null && o.Value;
+        }
+
+        // Pose fermee (repere de la voiture) : portiere fermee pour le jeu (verrouillee par ses butees).
+        static void NoteRest(Door d)
+        {
+            if (d.RestSet || d.Hinge == null || d.Body == null || d.Pinned || d.State != DoorState.Closed || OpenVar(d)) return;
+            d.RestSet = true; d.RestRot = d.Body.transform.localRotation; d.RestPos = d.Body.transform.localPosition;
         }
 
         public static void Update()
@@ -136,43 +164,47 @@ namespace MWCoop
                 if (!p.Accepted || !Session.T.Peers.Contains(p)) continue;
                 int n = 0;
                 foreach (Door d in byKey.Values)
-                    if (d.IsOpen && d.Fsm != null) { Session.T.SendReliable(p, new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(1).ToArray()); n++; }
+                    if (d.State != DoorState.Closed && d.Fsm != null)
+                    {
+                        Session.T.SendReliable(p, new NetWriter(Msg.CarDoor).U8(d.Owner >= 0 ? d.Owner : Session.LocalId).Str(d.Key).U8(K_OPEN).ToArray());
+                        n++;
+                    }
                 Log.Info("portieres : " + n + " ouvertes envoyees a " + p);
             }
-            // Pose fermee de chaque portiere (une fois, portiere fermee et au repos).
-            foreach (Door d in byKey.Values)
-                if (!d.RestSet && d.Hinge != null && !d.IsOpen && !d.Pinned && d.Body != null && ClosedNow(d))
-                { d.RestSet = true; d.RestRot = d.Body.transform.localRotation; d.RestPos = d.Body.transform.localPosition; }
+            foreach (Door d in byKey.Values) NoteRest(d);
             // Chez nous, pour un autre : la portiere prend son angle, chaque image.
             foreach (Door d in byKey.Values)
             {
                 if (!d.Showing) continue;
-                if (d.Body == null || !d.IsOpen || d.Mine) { StopFollow(d); continue; }
+                if (d.Body == null || d.State == DoorState.Closed || d.Mine) { StopFollow(d); continue; }
                 Show(d);
             }
             if (now < nextAngle || Session.RemoteCount == 0) return;
             nextAngle = now + 1f / 15f;
             foreach (Door d in byKey.Values)
             {
-                if (!d.Mine || !d.IsOpen || d.Body == null || d.Fsm == null || d.Hinge == null || !d.RestSet) continue;
+                if (!d.Mine || d.State == DoorState.Closed || d.Body == null || d.Fsm == null || d.Hinge == null || !d.RestSet) continue;
                 float ang = HingeAngle(d) + d.TestOffset;
                 if (d.Sent && Mathf.Abs(Mathf.DeltaAngle(ang, d.LastAngle)) < 0.4f && now - d.LastSentAt < 1f) continue;
                 d.Sent = true;
                 d.LastAngle = ang;
                 d.LastSentAt = now;
-                Session.SendAll(new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(2).F32(ang), false);
+                Session.SendAll(new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(K_ANGLE).F32(ang), false);
             }
         }
 
-        static Transform CarOf(Door d) { return d.Fsm.transform.root; }
-
         public static void ScheduleSnapshot(Peer p) { if (Session.IsHost) snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
 
-        // Portiere fermee pour de bon ? (automate au repos, variable Open fausse)
-        static bool ClosedNow(Door d)
+        // Joueur parti : ses portieres ouvertes ne suivent plus personne ; l'hote les reprend.
+        public static void PlayerLeft(int id)
         {
-            FsmBool o = d.Fsm.FsmVariables.FindFsmBool("Open");
-            return o != null && !o.Value && d.Fsm.ActiveStateName == "Mouse off" && d.Body.velocity.sqrMagnitude < 1e-4f;
+            foreach (Door d in byKey.Values)
+            {
+                if (d.Owner != id) continue;
+                d.Owner = -1;
+                StopFollow(d);
+                if (Session.IsHost && d.State != DoorState.Closed && d.Fsm != null) Local(d, K_GRAB);
+            }
         }
 
         // Angle (degres) de la portiere autour de l'axe de sa charniere, depuis sa pose fermee.
@@ -191,10 +223,15 @@ namespace MWCoop
         {
             if (d.Hinge == null || !d.RestSet) return;
             if (!d.Pinned) { d.Pinned = true; d.PinnedWasKinematic = d.Body.isKinematic; d.Body.isKinematic = true; }
+            Pose(d, d.TargetAngle);
+        }
+
+        static void Pose(Door d, float angle)
+        {
             Transform b = d.Body.transform;
             Vector3 anchor = Vector3.Scale(b.localScale, d.Hinge.anchor);
             Vector3 pivot = d.RestPos + d.RestRot * anchor;                       // ancrage, repere du parent
-            Quaternion q = d.RestRot * Quaternion.AngleAxis(d.TargetAngle, d.Hinge.axis);
+            Quaternion q = d.RestRot * Quaternion.AngleAxis(angle, d.Hinge.axis);
             b.localRotation = q;
             b.localPosition = pivot - q * anchor;
         }
@@ -207,16 +244,95 @@ namespace MWCoop
             d.Showing = false;
         }
 
-        static void Send(Door d, bool opening)
+        // Evenement du joueur local (le jeu vient d'entrer dans l'etat accroche).
+        static void Local(Door d, int kind)
         {
-            if (opening) d.OpenedAt = Time.realtimeSinceStartup;
-            d.IsOpen = opening;
-            d.Mine = opening;          // celui qui ouvre envoie l'angle ensuite
+            float now = Time.realtimeSinceStartup;
+            if (kind == K_LOCK && (d.State != DoorState.Open || now - d.OpenedAt < 0.7f)) return;   // (a l'ouverture, l'angle peut se lire 359 degres et le jeu passe une fois par la)
+            switch (kind)
+            {
+                case K_OPEN: d.State = DoorState.Open; d.OpenedAt = now; Take(d); break;
+                case K_GRAB: if (d.State == DoorState.Locked) d.State = DoorState.Open; Take(d); break;
+                case K_CLOSED: d.State = DoorState.Closed; d.Owner = -1; d.Mine = false; StopFollow(d); break;
+                case K_LOCK: d.State = DoorState.Locked; break;   // (on continue d'envoyer son angle : figee par l'attache)
+            }
+            if (!Session.Active) return;
+            Log.Info("portiere " + d.Key + " " + KindName(kind) + " ici");
+            var w = new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(kind);
+            if (Session.IsHost) Session.Broadcast(w, true);
+            else { d.PendingOwn++; Session.SendToHost(w, true); }
+        }
+
+        static void Take(Door d)
+        {
+            d.Owner = Session.Active ? Session.LocalId : 0;
+            d.Mine = true;
             d.Sent = false;
             StopFollow(d);
-            if (!Session.Active) return;
-            Log.Info("portiere " + d.Key + (opening ? " ouverte" : " fermee") + " ici");
-            Session.SendAll(new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(opening ? 1 : 0), true);
+        }
+
+        static string KindName(int kind)
+        {
+            return kind == K_OPEN ? "ouverte" : kind == K_CLOSED ? "fermee" : kind == K_GRAB ? "saisie" : kind == K_LOCK ? "verrouillee" : "?";
+        }
+
+        // Evenement dans l'ordre de l'hote : le jeu est mene au meme etat (s'il n'y est pas deja).
+        static void Apply(Door d, int kind, int who)
+        {
+            bool me = who == Session.LocalId;
+            switch (kind)
+            {
+                case K_OPEN:
+                    d.Owner = who; d.Mine = me; d.Sent = false;
+                    if (me) StopFollow(d);
+                    if (d.State != DoorState.Closed) { d.State = DoorState.Open; return; }
+                    d.State = DoorState.Open; d.OpenedAt = Time.realtimeSinceStartup;
+                    Drive(d, d.Open);
+                    // Ses actions d'ouverture jouees (butees, son, Open), l'automate revient au repos -- sinon il
+                    // attendrait ici un relachement de souris. (L'angle vient de celui qui l'a ouverte.)
+                    if (d.IsDoor && d.Fsm.Fsm.GetState("Mouse off") != null) Drive(d, "Mouse off");
+                    break;
+                case K_GRAB:
+                    d.Owner = who; d.Mine = me; d.Sent = false;
+                    if (d.State == DoorState.Locked) d.State = DoorState.Open;
+                    if (me) StopFollow(d);
+                    return;
+                case K_CLOSED:
+                    d.Owner = -1; d.Mine = false;
+                    if (d.State == DoorState.Closed) { StopFollow(d); return; }
+                    d.State = DoorState.Closed;
+                    Shut(d);
+                    Drive(d, d.Close);
+                    break;
+                case K_LOCK:
+                    if (d.State != DoorState.Open) return;
+                    d.State = DoorState.Locked;   // (pas d'attache ici : elle suit toujours l'angle de celui qui l'a poussee)
+                    break;
+                default: return;
+            }
+            Log.Info("portiere " + d.Key + " " + KindName(kind) + " par #" + who);
+        }
+
+        // Pose fermee, puis la physique du jeu (le claquement de "Close door" la verrouille la). La pose est
+        // aussi donnee au corps physique : sinon, rendu dynamique dans la meme image, il reprendrait l'ancienne.
+        static void Shut(Door d)
+        {
+            if (d.Body != null && d.RestSet && d.Hinge != null)
+            {
+                if (!d.Pinned) { d.Pinned = true; d.PinnedWasKinematic = d.Body.isKinematic; d.Body.isKinematic = true; }
+                Pose(d, 0f);
+                d.Body.position = d.Body.transform.position;
+                d.Body.rotation = d.Body.transform.rotation;
+            }
+            StopFollow(d);
+            if (d.Body != null && !d.Body.isKinematic) { d.Body.velocity = Vector3.zero; d.Body.angularVelocity = Vector3.zero; }
+        }
+
+        static void Drive(Door d, string state)
+        {
+            applying = true; Replay.Depth++;
+            try { Game.SetState(d.Fsm, state); }
+            finally { applying = false; Replay.Depth--; }
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -226,56 +342,62 @@ namespace MWCoop
             string key = r.Str();
             int kind = r.U8();
             float angle = 0f;
-            if (kind == 2) angle = r.F32();
-            if (Session.IsHost)
-            {
-                var w = new NetWriter(Msg.CarDoor).U8(who).Str(key).U8(kind);
-                if (kind == 2) w.F32(angle);
-                Session.Broadcast(w, kind != 2, who);
-            }
+            if (kind == K_ANGLE) angle = r.F32();
             Door d;
             if (!byKey.TryGetValue(key, out d) || d.Fsm == null)
             {
-                if (kind == 2) return;
-                if (Time.realtimeSinceStartup - lastUnknownScan < 10f) return;   // pas un releve complet a chaque message
-                lastUnknownScan = Time.realtimeSinceStartup;
-                Scan();
-                if (!byKey.TryGetValue(key, out d) || d.Fsm == null) { Log.Warn("portiere " + key + " introuvable ici"); return; }
+                d = null;
+                if (kind != K_ANGLE && Time.realtimeSinceStartup - lastUnknownScan >= 10f)   // pas un releve complet a chaque message
+                {
+                    lastUnknownScan = Time.realtimeSinceStartup;
+                    Scan();
+                    if (!byKey.TryGetValue(key, out d) || d.Fsm == null) d = null;
+                }
+                if (d == null && kind != K_ANGLE) Log.Warn("portiere " + key + " introuvable ici");
             }
-            if (kind == 2)
+            if (kind == K_ANGLE)
             {
-                if (!d.IsOpen || d.Mine || d.Body == null) return;
+                if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.CarDoor).U8(who).Str(key).U8(K_ANGLE).F32(angle), false, who);
+                if (d == null || who != d.Owner || d.Mine || d.State == DoorState.Closed || d.Body == null) return;
                 d.TargetAngle = angle; d.LastRemote = Time.realtimeSinceStartup; d.Showing = true;
                 return;
             }
-            bool opening = kind == 1;
-            d.IsOpen = opening;
-            d.Mine = false;
-            StopFollow(d);
-            applying = true; Replay.Depth++;
-            try
+            if (Session.IsHost)
             {
-                Game.SetState(d.Fsm, opening ? d.Open : d.Close);
-                // Portiere ouverte par un autre : ses actions d'ouverture jouees (butees, son, Open), puis
-                // l'automate revient au repos -- sinon il attend ici un relachement de souris et la
-                // portiere ne se laisse plus refermer. (L'angle vient de celui qui l'a ouverte.)
-                if (opening && d.Open == "Open door" && d.Fsm.Fsm.GetState("Mouse off") != null) Game.SetState(d.Fsm, "Mouse off");
+                // Arbitre : applique dans l'ordre d'arrivee, renvoie a tous (l'auteur compris : son retour).
+                if (d != null) Apply(d, kind, who);
+                Session.Broadcast(new NetWriter(Msg.CarDoor).U8(who).Str(key).U8(kind), true);
+                return;
             }
-            finally { applying = false; Replay.Depth--; }
-            Log.Info("portiere " + key + (opening ? " ouverte" : " fermee") + " par #" + who);
+            if (d == null) return;
+            if (who == Session.LocalId)
+            {
+                // Retour d'un des notres : s'il est le dernier attendu, on se cale sur l'ordre de l'hote.
+                if (d.PendingOwn > 0) d.PendingOwn--;
+                if (d.PendingOwn == 0) Apply(d, kind, who);
+                return;
+            }
+            // Evenement d'un autre, ordonne AVANT nos evenements en route : nos retours le corrigeront.
+            if (d.PendingOwn > 0) return;
+            Apply(d, kind, who);
+        }
+
+        // ------------------------------------------------------------ essais
+        static Door First(string car, string part)
+        {
+            foreach (Door d in byKey.Values)
+                if (d.Fsm != null && d.Key.StartsWith(car) && (part.Length == 0 || d.Key.Contains(part))) return d;
+            return null;
         }
 
         // Essais : ouvre (ou ferme) la premiere portiere de 'car' comme un clic du joueur.
-        public static string TestOpen(string car, bool open)
+        public static string TestOpen(string car, bool open, string part = "")
         {
             Scan();
-            foreach (Door d in byKey.Values)
-            {
-                if (d.Fsm == null || !d.Key.StartsWith(car)) continue;
-                Game.SetState(d.Fsm, open ? d.Open : d.Close);
-                return d.Key + (open ? " -> " + d.Open : " -> " + d.Close);
-            }
-            return "aucune portiere sur " + car + " (" + byKey.Count + ")";
+            Door d = First(car, part);
+            if (d == null) return "aucune portiere sur " + car + " (" + byKey.Count + ")";
+            Game.SetState(d.Fsm, open ? d.Open : d.Close);
+            return d.Key + (open ? " -> " + d.Open : " -> " + d.Close);
         }
 
         // Essais : pousse la portiere ouverte de 'car' de 'deg' degres (ressort local, comme une main).
@@ -291,11 +413,77 @@ namespace MWCoop
         }
 
         // Essais : met la premiere portiere de 'car' dans l'etat 'state' (comme le jeu).
-        public static string TestState(string car, string state)
+        public static string TestState(string car, string state, string part = "")
         {
             foreach (Door d in byKey.Values)
-                if (d.Fsm != null && d.Key.StartsWith(car) && d.Fsm.Fsm.GetState(state) != null) { Game.SetState(d.Fsm, state); return d.Key + " -> " + state; }
+                if (d.Fsm != null && d.Key.StartsWith(car) && (part.Length == 0 || d.Key.Contains(part)) && d.Fsm.Fsm.GetState(state) != null) { Game.SetState(d.Fsm, state); return d.Key + " -> " + state; }
             return "rien";
+        }
+
+        // Essais : le joueur local debout dans la course de la portiere (dehors, a 45 cm, aux deux tiers).
+        public static string TestStandInPath(string car, string part)
+        {
+            Scan();
+            Door d = First(car, part);
+            if (d == null || d.Body == null || d.Hinge == null) return "pas de portiere " + part;
+            GameObject pl = GameObject.Find("PLAYER");
+            if (pl == null) return "pas de joueur";
+            Transform b = d.Body.transform, carT = d.Fsm.transform.root;
+            Vector3 axis = b.TransformDirection(d.Hinge.axis).normalized;
+            Vector3 hinge = b.TransformPoint(d.Hinge.anchor);
+            Bounds bb = new Bounds(b.position, Vector3.zero);
+            foreach (Renderer rr in b.GetComponentsInChildren<Renderer>()) bb.Encapsulate(rr.bounds);
+            Vector3 along = Vector3.ProjectOnPlane(bb.center - hinge, axis);
+            Vector3 side = carT.right * Mathf.Sign(Vector3.Dot(bb.center - carT.position, carT.right));
+            Vector3 p = hinge + along * 1.25f + side * 0.45f;
+            p.y = carT.position.y + 0.1f;
+            var cc = pl.GetComponent<CharacterController>();
+            cc.enabled = false;
+            pl.transform.position = p;
+            cc.enabled = true;
+            return "debout dans la course de " + d.Key + " en " + p.ToString("F2");
+        }
+
+        // Essais : clics rapides au hasard sur une portiere (ouvrir / pousser vers la fermeture, relache vite),
+        // comme un joueur qui « spamme » le clic gauche. A appeler a chaque image.
+        static float raceNext, raceRelease;
+        static System.Random raceRnd;
+        public static string TestRace(string car, string part)
+        {
+            Door d = First(car, part);
+            if (d == null || d.Grab == null) return null;
+            if (raceRnd == null) raceRnd = new System.Random(1234 + Session.LocalId * 77);
+            float now = Time.realtimeSinceStartup;
+            string s = d.Fsm.ActiveStateName;
+            if (raceRelease > 0 && now >= raceRelease)
+            {
+                raceRelease = 0;
+                // Relachement : "Open door" -> Mouse off, "Open door 2" -> Check position (comme le jeu).
+                if (s == d.Open) { Game.SetState(d.Fsm, "Mouse off"); return "relache (ouverture)"; }
+                if (s == d.Grab) { Game.SetState(d.Fsm, "Check position"); return "relache (fermeture)"; }
+                return null;
+            }
+            if (raceRelease > 0 || now < raceNext) return null;
+            raceNext = now + 0.15f + (float)raceRnd.NextDouble() * 0.45f;
+            raceRelease = now + 0.08f + (float)raceRnd.NextDouble() * 0.5f;
+            bool open = OpenVar(d);
+            Game.SetState(d.Fsm, open ? d.Grab : d.Open);
+            return "clic " + (open ? "fermer" : "ouvrir");
+        }
+
+        // Essais : saisit la portiere pour la refermer (bouton tenu : le jeu la pousse jusqu'a la fermer).
+        public static string TestGrab(string car, string part)
+        {
+            Door d = First(car, part);
+            if (d == null || d.Grab == null) return "rien a saisir";
+            Game.SetState(d.Fsm, d.Grab);
+            return d.Key + " -> " + d.Grab;
+        }
+
+        public static string StateOf(string car, string part)
+        {
+            Door d = First(car, part);
+            return d == null ? "?" : State(d.Key);
         }
 
         public static string State(string key)
@@ -303,9 +491,9 @@ namespace MWCoop
             foreach (Door d in byKey.Values)
                 if (d.Key.StartsWith(key) && d.Fsm != null)
                 {
-                    return d.Key + " etat " + d.Fsm.ActiveStateName
+                    return d.Key + " etat " + d.Fsm.ActiveStateName + " Open=" + OpenVar(d)
                            + (d.Body != null && d.Hinge != null && d.RestSet ? ", angle " + HingeAngle(d).ToString("F1") + " deg" : ", pas de pose fermee")
-                           + (d.IsOpen ? (d.Mine ? ", ouverte par nous" : ", ouverte par un autre") : ", fermee");
+                           + ", " + d.State + ", main #" + d.Owner + (d.Mine ? " (nous)" : "") + (d.Pinned ? ", suit" : "") + (d.PendingOwn > 0 ? ", attend " + d.PendingOwn : "");
                 }
             return "?";
         }

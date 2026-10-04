@@ -198,6 +198,10 @@ fumée en relâchant ; chaleur de l'habitacle de la voiture conduite par un autr
 Fait aussi (0.15.1) : nouveau logo de MWCoop (lanceur, icône, GitHub) ; fond du lanceur animé (neige qui tombe,
 fumée de la cheminée et du pot, fenêtres qui vacillent, étoiles et étoile filante la nuit) ; lanceur dix fois moins
 gourmand (fond mis à l'échelle une seule fois).
+Fait aussi (0.16, retours de JD) : portières, coffres et capots refaits : l'hôte arbitre l'ordre des clics (deux
+clics croisés ou un « spam » du clic gauche finissent pareil chez tous), la fermeture n'est envoyée que quand la
+portière claque vraiment (appuyer puis relâcher avant ne la ferme plus chez l'autre), et chez l'autre elle se
+referme d'un coup, sans que son corps ou sa souris puissent l'arrêter. Celui qui la manie en dernier donne l'angle.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
