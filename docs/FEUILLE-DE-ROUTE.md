@@ -74,3 +74,4 @@ pouvoir le faire, et les autres doivent le voir.
       PRÊT, choix continuer/nouvelle partie, LANCER démarre le jeu de chacun ; port TCP en plus de l'UDP).
 - [x] Nouvelle partie : quand l'hôte lance, un onglet pour choisir la couleur de la voiture,
       avec aperçu 3D (0.6 : onglet VOITURE du lanceur, maillage exporté depuis le jeu du joueur).
+- [x] Logo de MWCoop (dessiné par JD) et fond animé du lanceur (0.15.1).

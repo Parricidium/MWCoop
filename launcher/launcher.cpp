@@ -77,7 +77,10 @@ static std::wstring g_localVer;                     // MWCoop\version.txt
 static bool g_modOk;                                // version.dll + MWCoop\MWCoop.dll presents
 static int g_state = ST_IDLE;
 static float g_scale = 1, g_alpha = 0, g_time = 0;
+static float g_sceneT = 12;   // horloge de la scene animee (g_time est remis a zero par le curseur des champs)
+static int g_bench;           // /capture ... /images n : temps de n images (journal a cote de la capture)
 static Bitmap *g_bg, *g_bgDark;
+static Bitmap *g_bgCache, *g_bgCacheSrc;   // fond deja a l'echelle de la fenetre (le redimensionner coutait ~30 ms par image)
 static int g_winW, g_winH;
 static HDC g_memDC;
 static HBITMAP g_dib;
@@ -2204,17 +2207,171 @@ static void DrawUI(Graphics &g)
     }
 }
 
+// ---------------------------------------------------------------- scene animee
+// Par-dessus le fond fixe (launcher\make-art.ps1, memes coordonnees) : neige qui tombe en trois plans, fumee de la
+// cheminee et du pot d'echappement, fenetres qui vacillent (feu de bois), etoiles qui scintillent et etoile filante
+// (theme sombre). Tout se calcule a partir de g_sceneT, sans etat : /capture ... /temps t donne l'image a l'instant t.
+static float Rnd01(int i, int k)
+{
+    unsigned h = (unsigned)i * 2654435761u ^ (unsigned)(k + 1) * 2246822519u;
+    h ^= h >> 13; h *= 3266489917u; h ^= h >> 16;
+    return (h & 0xFFFFFF) / 16777216.0f;
+}
+
+static float SceneFade(float x)   // 0 sous le panneau, 1 dans le paysage (comme le degrade du fond, de 400 a 580)
+{
+    if (x <= 400) return 0;
+    if (x >= 580) return 1;
+    float k = (x - 400) / 180.0f;
+    return k * k * (3 - 2 * k);
+}
+
+static void Puff(Graphics &g, SolidBrush &b, Color c, float x, float y, float r, float a)
+{
+    if (a < 1) return;
+    b.SetColor(Color((BYTE)min(a * 0.45f, 255.0f), c.GetR(), c.GetG(), c.GetB()));
+    g.FillEllipse(&b, x - r * 1.35f, y - r * 1.35f, r * 2.7f, r * 2.7f);
+    b.SetColor(Color((BYTE)min(a * 0.7f, 255.0f), c.GetR(), c.GetG(), c.GetB()));
+    g.FillEllipse(&b, x - r, y - r, r * 2, r * 2);
+}
+
+static void DrawScene(Graphics &g)
+{
+    float t = g_sceneT;
+    GraphicsPath card;
+    RoundRect(card, RectF(20, 60, 960, 540), 26);
+    g.SetClip(&card);
+    SolidBrush b(Color(0, 0, 0, 0));
+
+    if (g_dark) {   // etoiles qui scintillent (hors de la lune et de l'accroche)
+        for (int i = 0; i < 46; i++) {
+            float x = 585 + Rnd01(i, 1) * 390, y = 66 + Rnd01(i, 2) * 250;
+            if ((x - 905) * (x - 905) + (y - 128) * (y - 128) < 70 * 70) continue;
+            if (x > 565 && x < 865 && y > 138 && y < 275) continue;
+            float s = sinf(t * (0.6f + Rnd01(i, 3) * 1.6f) + Rnd01(i, 4) * 6.283f);
+            float a = s > 0 ? powf(s, 6) * (150 + 100 * Rnd01(i, 5)) : 0;
+            if (a < 3) continue;
+            float r = 0.7f + 0.6f * Rnd01(i, 6);
+            b.SetColor(Color((BYTE)a, 225, 235, 255));
+            g.FillEllipse(&b, x - r, y - r, 2 * r, 2 * r);
+            if (a > 120) {   // petite croix de lumiere
+                Pen pen(Color((BYTE)(a * 0.45f), 210, 225, 255), 0.7f);
+                g.DrawLine(&pen, x - 4, y, x + 4, y);
+                g.DrawLine(&pen, x, y - 4, x, y + 4);
+            }
+        }
+        // etoile filante : une toutes les 17 s, 0,8 s, en haut du ciel (au-dessus de l'accroche)
+        int n = (int)(t / 17);
+        float p = fmodf(t, 17) - 6;
+        if (p > 0 && p < 0.8f) {
+            float x0 = 700 + Rnd01(n, 7) * 220, y0 = 68 + Rnd01(n, 8) * 18;
+            float hx = x0 - p * 230, hy = y0 + p * 230 * 0.28f;
+            float a = 230 * sinf(p / 0.8f * 3.14159f);
+            PointF head(hx, hy), tail(hx + 60, hy - 60 * 0.28f);
+            LinearGradientBrush lb(tail, head, Color(0, 220, 232, 255), Color((BYTE)a, 235, 242, 255));
+            Pen pen(&lb, 1.4f);
+            pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
+            g.DrawLine(&pen, tail, head);
+        }
+    }
+
+    // fenetres de la maison : feu de bois (vitres, halo, lumiere sur la neige)
+    for (int k = 0; k < 2; k++) {
+        float wx = k ? 744.0f : 658.0f, wy = 396;
+        float f = 0.5f + 0.5f * (0.5f * sinf(t * 7.3f + k * 2.1f) + 0.3f * sinf(t * 12.7f + k * 4.4f) + 0.2f * sinf(t * 2.3f + k));
+        f = min(max(f, 0.0f), 1.0f);
+        b.SetColor(Color((BYTE)(10 * f), 255, 190, 110));
+        g.FillEllipse(&b, wx + 14 - 38, wy + 15 - 38, 76.0f, 76.0f);
+        b.SetColor(Color((BYTE)(14 + 48 * f), 255, 236, 186));
+        g.FillRectangle(&b, wx + 1.2f, wy + 1.2f, 11.6f, 12.6f);
+        g.FillRectangle(&b, wx + 15.2f, wy + 1.2f, 11.6f, 12.6f);
+        g.FillRectangle(&b, wx + 1.2f, wy + 16.2f, 11.6f, 12.6f);
+        g.FillRectangle(&b, wx + 15.2f, wy + 16.2f, 11.6f, 12.6f);
+        b.SetColor(Color((BYTE)((g_dark ? 22 : 10) * f), 255, 200, 120));
+        g.FillEllipse(&b, wx + 14 - 40, 454.0f, 80.0f, 16.0f);
+    }
+
+    // fumee : cheminee (monte doucement, vers la droite, s'efface avant l'accroche) et pot d'echappement
+    Color smoke = g_dark ? Color(255, 200, 210, 228) : Color(255, 150, 162, 182);
+    for (int i = 0; i < 8; i++) {
+        const float life = 5.0f;
+        float u = fmodf(t + i * life / 8, life) / life;
+        float x = 751 + 22 * u + 14 * u * u + 3 * sinf(t * 0.8f + i * 1.7f) * u;
+        float y = 315 - 54 * u;
+        float a = (g_dark ? 64.0f : 58.0f) * min(u / 0.12f, 1.0f) * powf(1 - u, 1.4f);
+        Puff(g, b, smoke, x, y, 3.5f + 11 * u, a);
+    }
+    for (int i = 0; i < 6; i++) {
+        const float life = 2.2f;
+        float u = fmodf(t + i * life / 6, life) / life;
+        float x = 805 - 22 * u - 8 * u * u, y = 461 - 12 * u + 2 * sinf(t * 1.3f + i);
+        float a = (g_dark ? 62.0f : 56.0f) * min(u / 0.15f, 1.0f) * powf(1 - u, 1.6f);
+        Puff(g, b, smoke, x, y, 1.8f + 6 * u, a);
+    }
+
+    // neige qui tombe : loin (petits, lents), milieu, pres (gros, rapides, flous) ; vent qui forcit et retombe
+    struct Layer { int n; float s0, s1, speed, sway, alpha; } layers[3] = {
+        { 210, 1.0f, 1.9f, 15, 5, 150 }, { 110, 1.9f, 3.0f, 30, 9, 190 }, { 22, 3.2f, 4.6f, 58, 15, 210 } };
+    float drift = 9 * t - 46.0f * cosf(t * 0.13f);   // integrale du vent 9 + 6 sin(0.13 t) px/s
+    Color halo = g_dark ? Color(255, 160, 180, 220) : Color(255, 110, 140, 185);
+    for (int l = 0; l < 3; l++) {
+        const Layer &L = layers[l];
+        for (int i = 0; i < L.n; i++) {
+            float sp = L.speed * (0.8f + 0.4f * Rnd01(i, 10 + l));
+            float y = 50 + fmodf(Rnd01(i, 20 + l) * 560 + sp * t, 560);
+            float x = 10 + fmodf(Rnd01(i, 30 + l) * 980 + drift * L.speed / 30 + L.sway * sinf(t * (0.7f + 0.5f * Rnd01(i, 40 + l)) + Rnd01(i, 50 + l) * 6.283f) + 98000, 980);
+            float fade = SceneFade(x);
+            if (fade <= 0) continue;
+            float a = L.alpha * (0.5f + 0.5f * Rnd01(i, 60 + l)) * fade;
+            float r = (L.s0 + (L.s1 - L.s0) * Rnd01(i, 70 + l)) / 2;
+            if (l == 2) {   // pres : flou (halos de plus en plus clairs vers le centre)
+                Color c = g_dark ? Color(255, 232, 238, 255) : halo;
+                for (int k = 0; k < 2; k++) {
+                    float rr = r * (k ? 1.35f : 1.9f);
+                    b.SetColor(Color((BYTE)(a * (k ? 0.22f : 0.1f)), c.GetR(), c.GetG(), c.GetB()));
+                    g.FillEllipse(&b, x - rr, y - rr, 2 * rr, 2 * rr);
+                }
+                r *= 0.75f;
+            } else if (!g_dark) {   // theme clair : contour bleute (flocons blancs sur ciel pale)
+                b.SetColor(Color((BYTE)min(a * 0.5f, 255.0f), halo.GetR(), halo.GetG(), halo.GetB()));
+                g.FillEllipse(&b, x - r * 1.6f, y - r * 1.6f, r * 3.2f, r * 3.2f);
+            }
+            b.SetColor(Color((BYTE)a, g_dark ? 232 : 255, g_dark ? 238 : 255, 255));
+            g.FillEllipse(&b, x - r, y - r, 2 * r, 2 * r);
+        }
+    }
+    g.ResetClip();
+}
+
 static void RenderTo(Bitmap &target, float scale)
 {
     Graphics g(&target);
     g.Clear(Color(0, 0, 0, 0));
+    Bitmap *bgi = (g_dark && g_bgDark) ? g_bgDark : g_bg;
+    if (bgi) {
+        int w = (int)target.GetWidth(), h = (int)target.GetHeight();
+        if (!g_bgCache || g_bgCacheSrc != bgi || (int)g_bgCache->GetWidth() != w || (int)g_bgCache->GetHeight() != h) {
+            delete g_bgCache;
+            g_bgCache = new Bitmap(w, h, PixelFormat32bppPARGB);
+            g_bgCacheSrc = bgi;
+            Graphics cg(g_bgCache);
+            cg.Clear(Color(0, 0, 0, 0));
+            cg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+            cg.SetPixelOffsetMode(PixelOffsetModeHalf);
+            cg.ScaleTransform(scale, scale);
+            cg.DrawImage(bgi, RectF(0, 0, kImgW, kImgH));
+        }
+        g.SetCompositingMode(CompositingModeSourceCopy);   // (copie telle quelle, a la meme taille)
+        g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+        g.DrawImage(g_bgCache, 0, 0, w, h);
+        g.SetCompositingMode(CompositingModeSourceOver);
+    }
     g.SetSmoothingMode(SmoothingModeAntiAlias);
     g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
     g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
     g.SetPixelOffsetMode(PixelOffsetModeHalf);
     g.ScaleTransform(scale, scale);
-    Bitmap *bgi = (g_dark && g_bgDark) ? g_bgDark : g_bg;
-    if (bgi) g.DrawImage(bgi, RectF(0, 0, kImgW, kImgH));
+    if (bgi) DrawScene(g);
     else {   // pas d'image : carte simple
         GraphicsPath p;
         RoundRect(p, RectF(20, 60, 960, 540), 26);
@@ -3216,6 +3373,7 @@ static void Tick()
     float dt = min((now - last) / 1000.0f, 0.1f);
     last = now;
     g_time += dt;
+    g_sceneT += dt;
     LobbyTick();
     LobbySoundsTick();
     if (!g_testSalon.empty()) { TestSalonStep(); return; }   // (mode d'essai : rien a dessiner)
@@ -3245,7 +3403,7 @@ static void Tick()
         }
     }
     if (g_state == ST_LAUNCH && ((g_winSeenT && now - g_winSeenT > 1200) || now - g_launchT > 300000)) g_state = ST_CLOSING;
-    Present();
+    if (!IsIconic(g_wnd)) Present();   // (reduit : rien a dessiner)
 }
 
 // ---------------------------------------------------------------- fenetre
@@ -3492,6 +3650,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];
         if (!_wcsicmp(argv[i], L"/testsalon") && i + 2 < argc) { g_testSalon = argv[i + 1]; g_testSalonLog = argv[i + 2]; }
         if (!_wcsicmp(argv[i], L"/partie")) g_testPartie = argv[i + 1];
+        if (!_wcsicmp(argv[i], L"/temps")) g_sceneT = (float)_wtof(argv[i + 1]);   // captures : instant de la scene animee
+        if (!_wcsicmp(argv[i], L"/images")) g_bench = _wtoi(argv[i + 1]);
     }
     if (!g_testSalonLog.empty()) {   // journal neuf ; role inconnu : rien
         FILE *f = _wfopen(g_testSalonLog.c_str(), L"wb");
@@ -3526,7 +3686,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!g_gameDir.empty()) { g_busy = true; UpdateThread(NULL); }
         FILE *f = _wfopen(argv[3], L"w, ccs=UTF-8");
         if (f) { fwprintf(f, L"jeu=%s mod=%d local=%s releases=%d\n%s\n", g_gameDir.c_str(), (int)g_modOk, g_localVer.c_str(), (int)g_relState, g_status.c_str()); fclose(f); }
-        delete g_bg; delete g_bgDark;
+        delete g_bg; delete g_bgDark; delete g_bgCache;
         GdiplusShutdown(gtok);
         return 0;
     }
@@ -3576,10 +3736,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         {
             Bitmap out((INT)(kImgW * g_scale), (INT)(kImgH * g_scale), PixelFormat32bppPARGB);
             RenderTo(out, g_scale);
+            if (g_bench > 0) {
+                LARGE_INTEGER f, a, z;
+                QueryPerformanceFrequency(&f); QueryPerformanceCounter(&a);
+                for (int k = 0; k < g_bench; k++) { g_sceneT += 0.016f; RenderTo(out, g_scale); }
+                QueryPerformanceCounter(&z);
+                FILE *bf = _wfopen((std::wstring(argv[2]) + L".txt").c_str(), L"w");
+                if (bf) { fprintf(bf, "%d images, %.2f ms par image (echelle %.2f)\n", g_bench, (z.QuadPart - a.QuadPart) * 1000.0 / f.QuadPart / g_bench, g_scale); fclose(bf); }
+            }
             CLSID png;
             if (EncoderClsid(L"image/png", &png) && out.Save(argv[2], &png, NULL) == Ok) rc = 0;
         }   // (detruit avant GdiplusShutdown)
-        delete g_bg; delete g_bgDark;
+        delete g_bg; delete g_bgDark; delete g_bgCache;
         GdiplusShutdown(gtok);
         return rc;
     }
@@ -3604,7 +3772,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             MSG msg;
             while (GetMessageW(&msg, NULL, 0, 0) > 0) DispatchMessageW(&msg);
         }
-        delete g_bg; delete g_bgDark;
+        delete g_bg; delete g_bgDark; delete g_bgCache;
         GdiplusShutdown(gtok);
         WSACleanup();
         return rc;
@@ -3655,7 +3823,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     if (g_proc) CloseHandle(g_proc);
-    delete g_bg; delete g_bgDark;
+    delete g_bg; delete g_bgDark; delete g_bgCache;
     GdiplusShutdown(gtok);
     return 0;
 }

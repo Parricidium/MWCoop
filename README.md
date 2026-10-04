@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="docs/img/logo.png" width="240" alt="MWCoop">
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/status-PRE--ALPHA-red?style=for-the-badge" alt="Pre-alpha">
   <a href="https://github.com/Parricidium/MWCoop/releases"><img src="https://img.shields.io/github/v/release/Parricidium/MWCoop?include_prereleases&label=Download&style=for-the-badge" alt="Download"></a>
 </p>
@@ -11,9 +15,10 @@
 </p>
 
 > [!WARNING]
-> **PRE-ALPHA, rebuilt from scratch.** Players see each other, share the host's time and weather, doors and
-> switches, see each other's vehicles move, and rebuild the car together part by part and bolt by bolt;
-> shop together with separate wallets; paint, NPCs and quests are not synced yet. Expect bugs and send your logs (round LOGS button of `MWCoop.exe`).
+> **PRE-ALPHA, rebuilt from scratch.** Players see each other, share the host's time, weather and world (doors,
+> phone, TV, bills, shops, NPCs, quests), drive and ride together, and rebuild the car together part by part and
+> bolt by bolt; shop together with separate wallets. Not yet tested much between real friends: expect bugs and send
+> your logs (round LOGS button of `MWCoop.exe`).
 
 <p align="center">
   <img src="docs/img/avatar.jpg" width="100%" alt="The host seen by a guest">
@@ -21,9 +26,9 @@
 <p align="center"><i>The host ("Joueur1") as seen by a guest, wearing an outfit picked among the game's NPCs.</i></p>
 
 <p align="center">
-  <img src="docs/img/lanceur.png" width="80%" alt="The MWCoop launcher">
+  <img src="docs/img/lanceur-anime.webp" width="80%" alt="The MWCoop launcher">
 </p>
-<p align="center"><i>The launcher: host, join or play solo; it keeps the mod up to date by itself.</i></p>
+<p align="center"><i>The launcher: host, join or play solo; it keeps the mod up to date by itself. Snow, smoke and firelight are animated.</i></p>
 
 <p align="center">
   <img src="docs/img/lanceur-salon.png" width="80%" alt="The launcher lobby">
@@ -190,6 +195,9 @@ Fait aussi (0.15, retours de JD) : portières refermées en les poussant vues pa
 chez l'autre) ; sacs de courses ouverts chez tous, articles sortis avec les mêmes identifiants et leur physique
 suivie ; cigarette : l'avatar la tient dans la main, la porte à la bouche tant que le joueur tire et souffle la
 fumée en relâchant ; chaleur de l'habitacle de la voiture conduite par un autre reprise (le passager se réchauffe).
+Fait aussi (0.15.1) : nouveau logo de MWCoop (lanceur, icône, GitHub) ; fond du lanceur animé (neige qui tombe,
+fumée de la cheminée et du pot, fenêtres qui vacillent, étoiles et étoile filante la nuit) ; lanceur dix fois moins
+gourmand (fond mis à l'échelle une seule fois).
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

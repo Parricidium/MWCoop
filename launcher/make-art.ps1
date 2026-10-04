@@ -1,10 +1,13 @@
 # Compose les fonds du lanceur (launcher\launcher.png et launcher-sombre.png, 1000x620 en double resolution, avec
 # transparence ; integres a MWCoop.exe par launcher.rc) et son icone (launcher\mwcoop.ico) : carte arrondie + ombre
-# douce, nuit d'hiver en Finlande dessinee ici (ciel, neige qui tombe, collines, sapins, maison en bois eclairee,
-# vieille voiture sous la neige), panneau depoli a gauche, logo qui depasse de la carte.
+# douce, nuit d'hiver en Finlande dessinee ici (ciel, collines, sapins, maison en bois eclairee, vieille voiture
+# sous la neige), panneau depoli a gauche, logo qui depasse de la carte.
+# Ce qui bouge (neige qui tombe, fumee de la cheminee et du pot, fenetres, etoiles) est dessine par le lanceur
+# par-dessus ce fond (launcher.cpp, DrawScene) : memes coordonnees.
 # Aucune image du jeu, aucun logo d'Amistech. Accents bleu glacier / blanc (pas de vert).
 # Le lanceur dessine ses textes et boutons par-dessus (coordonnees fixes, voir launcher.cpp).
-# Logo : launcher\logo.png s'il existe (logo blanc sur fond transparent) ; sinon un logo provisoire (texte) est dessine.
+# Logo : launcher\logo.png s'il existe (logo en couleurs sur fond transparent, dessine tel quel avec une ombre douce) ;
+# sinon un logo provisoire (texte) est dessine.
 Add-Type -AssemblyName System.Drawing
 $W = 1000; $H = 620
 $S = 2   # fonds en double resolution (ecrans a 150-200 %) ; le lanceur les dessine en 1000x620
@@ -84,14 +87,14 @@ function DrawWinter($g, [bool]$dark) {
         $snowA = C 255 74 96 136; $snowB = C 255 40 56 88
         $tree = C 255 8 14 28; $treeFar = C 255 22 34 58; $treeSnow = C 200 150 175 215
         $wall = C 255 96 38 32; $wallDark = C 255 62 24 22; $trim = C 255 200 210 225
-        $roofSnow = C 255 176 196 226; $win = C 255 255 196 110; $flake = 230
+        $roofSnow = C 255 176 196 226; $win = C 255 255 196 110
     } else {
         $skyA = C 255 150 190 232; $skyB = C 255 236 243 251
         $far = C 255 186 205 228; $mid = C 255 160 182 210
         $snowA = C 255 252 253 255; $snowB = C 255 214 226 242
         $tree = C 255 40 60 86; $treeFar = C 255 120 146 178; $treeSnow = C 235 250 252 255
         $wall = C 255 168 64 50; $wallDark = C 255 128 46 38; $trim = C 255 250 250 250
-        $roofSnow = C 255 252 253 255; $win = C 255 255 214 140; $flake = 255
+        $roofSnow = C 255 252 253 255; $win = C 255 255 214 140
     }
     $sky = New-Object System.Drawing.Drawing2D.LinearGradientBrush (P 0 60), (P 0 440), $skyA, $skyB
     $g.FillRectangle($sky, 20, 60, 960, 400)
@@ -148,13 +151,9 @@ function DrawWinter($g, [bool]$dark) {
     # pignon
     $gable = @((P ($hx - 4) ($hy - $hh)), (P ($hx + $hw / 2) ($hy - $hh - 52)), (P ($hx + $hw + 4) ($hy - $hh)))
     $g.FillPolygon((Brush $wallDark), $gable)
-    # cheminee + fumee
+    # cheminee (la fumee est animee par le lanceur)
     $g.FillRectangle((Brush (C 255 ([int]($wallDark.R * 0.7)) ([int]($wallDark.G * 0.7)) ([int]($wallDark.B * 0.7)))), $hx + 104, $hy - $hh - 52, 14, 34)
     $g.FillRectangle((Brush $roofSnow), $hx + 102, $hy - $hh - 56, 18, 6)
-    for ($i = 0; $i -lt 6; $i++) {   # (courte : ne doit pas passer sur l'accroche)
-        $sx = $hx + 112 + $i * 7 + 3 * [math]::Sin($i); $sy = $hy - $hh - 62 - $i * 9; $sr = 5 + $i * 2.0
-        $g.FillEllipse((Brush (C ([int](64 - $i * 9)) 200 210 228)), $sx - $sr, $sy - $sr, 2 * $sr, 2 * $sr)
-    }
     # toit (neige epaisse qui deborde)
     $roof = New-Object System.Drawing.Drawing2D.GraphicsPath
     $roof.AddPolygon(@((P ($hx - 16) ($hy - $hh + 4)), (P ($hx + $hw / 2) ($hy - $hh - 60)), (P ($hx + $hw + 16) ($hy - $hh + 4)), (P ($hx + $hw + 10) ($hy - $hh + 11)), (P ($hx + $hw / 2) ($hy - $hh - 49)), (P ($hx - 10) ($hy - $hh + 11))))
@@ -193,14 +192,6 @@ function DrawWinter($g, [bool]$dark) {
     # grands sapins au premier plan
     $ink = Brush $tree; $tsnow = Brush $treeSnow
     foreach ($t in @(@(470, 470, 150), @(520, 458, 104), @(585, 450, 70), @(612, 446, 50), @(978, 492, 200))){ Spruce $g $t[0] $t[1] $t[2] $ink $tsnow }
-
-    # neige qui tombe
-    for ($i = 0; $i -lt 420; $i++) {
-        $x = 20 + $rnd.NextDouble() * 960; $y = 60 + $rnd.NextDouble() * 540
-        $s = 1.0 + [math]::Pow($rnd.NextDouble(), 3) * 4.0
-        $a = 70 + $rnd.Next(0, 150)
-        $g.FillEllipse((Brush (C $a $flake $flake $flake)), $x, $y, $s, $s)
-    }
 }
 
 function SpacedText($gr, [string]$t, $font, $brush, [float]$cx, [float]$y, [float]$gap) {
@@ -267,35 +258,24 @@ foreach ($dark in $false, $true) {
     $g.DrawPath((New-Object System.Drawing.Pen $(if ($dark) { C 60 200 225 255 } else { C 150 255 255 255 }), 1.5), $panelPath)
     $g.DrawPath((New-Object System.Drawing.Pen $(if ($dark) { C 70 200 225 255 } else { C 110 190 205 225 }), 1.5), $cardPath)
 
-    # Logo : depasse du haut de la carte, halo doux derriere pour qu'il se lise sur le bureau.
-    $dh = 170.0; $dw = $dh * $src.Width / $src.Height
+    # Logo : depasse du haut de la carte ; ombre douce bleu nuit (un peu vers le bas) pour qu'il se detache du bureau
+    # comme de la carte, puis le logo tel quel (il a son propre contour blanc).
+    $dh = 172.0; $dw = $dh * $src.Width / $src.Height
     if ($dw -gt 220) { $dw = 220.0; $dh = $dw * $src.Height / $src.Width }
-    $dst = New-Object System.Drawing.RectangleF (228 - $dw / 2), 8, $dw, $dh
-    # Logo blanc : tel quel en theme sombre (ombre bleu nuit autour) ; en theme clair il passerait inapercu sur le
-    # panneau blanc, il est donc dessine en bleu nuit (halo blanc autour).
-    for ($i = 6; $i -ge 1; $i--) {
+    $dst = New-Object System.Drawing.RectangleF (228 - $dw / 2), 6, $dw, $dh
+    for ($i = 7; $i -ge 1; $i--) {
         $ia = New-Object System.Drawing.Imaging.ImageAttributes
         $cm = New-Object System.Drawing.Imaging.ColorMatrix
-        $cm.Matrix00 = 0; $cm.Matrix11 = 0; $cm.Matrix22 = 0; $cm.Matrix33 = $(if ($dark) { 0.17 } else { 0.22 })
-        if ($dark) { $cm.Matrix40 = 4 / 255.0; $cm.Matrix41 = 10 / 255.0; $cm.Matrix42 = 24 / 255.0 } else { $cm.Matrix40 = 1; $cm.Matrix41 = 1; $cm.Matrix42 = 1 }
+        $cm.Matrix00 = 0; $cm.Matrix11 = 0; $cm.Matrix22 = 0; $cm.Matrix33 = $(if ($dark) { 0.16 } else { 0.06 })
+        $cm.Matrix40 = 4 / 255.0; $cm.Matrix41 = 10 / 255.0; $cm.Matrix42 = 24 / 255.0
         $ia.SetColorMatrix($cm)
         $d = $i * 0.7
         foreach ($o in @(@(-$i, 0), @($i, 0), @(0, -$i), @(0, $i), @(-$d, -$d), @($d, $d), @(-$d, $d), @($d, -$d))) {
-            $r = New-Object System.Drawing.Rectangle ([int]($dst.X + $o[0])), ([int]($dst.Y + $o[1])), ([int]$dst.Width), ([int]$dst.Height)
+            $r = New-Object System.Drawing.Rectangle ([int]($dst.X + $o[0])), ([int]($dst.Y + $o[1] + 4)), ([int]$dst.Width), ([int]$dst.Height)
             $g.DrawImage($logo, $r, $src.X, $src.Y, $src.Width, $src.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
         }
     }
-    # (le logo provisoire a deja son contour bleu nuit : tel quel dans les deux themes)
-    if ($dark -or $provisoire) { $g.DrawImage($logo, $dst, $src, [System.Drawing.GraphicsUnit]::Pixel) }
-    else {
-        $ia = New-Object System.Drawing.Imaging.ImageAttributes
-        $cm = New-Object System.Drawing.Imaging.ColorMatrix
-        $cm.Matrix00 = 0; $cm.Matrix11 = 0; $cm.Matrix22 = 0; $cm.Matrix33 = 1
-        $cm.Matrix40 = 16 / 255.0; $cm.Matrix41 = 34 / 255.0; $cm.Matrix42 = 58 / 255.0
-        $ia.SetColorMatrix($cm)
-        $r = New-Object System.Drawing.Rectangle ([int]$dst.X), ([int]$dst.Y), ([int]$dst.Width), ([int]$dst.Height)
-        $g.DrawImage($logo, $r, $src.X, $src.Y, $src.Width, $src.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
-    }
+    $g.DrawImage($logo, $dst, $src, [System.Drawing.GraphicsUnit]::Pixel)
 
     $g.Dispose()
     $out = Join-Path $PSScriptRoot $(if ($dark) { 'launcher-sombre.png' } else { 'launcher.png' })
@@ -304,8 +284,8 @@ foreach ($dark in $false, $true) {
     "Ecrit : $out ($([int]((Get-Item $out).Length / 1024)) Ko)"
 }
 
-# Icone du lanceur (launcher\mwcoop.ico) : le logo blanc sur une pastille bleu nuit, en PNG 256/48/32/16 dans un .ico.
-$side = [math]::Max($src.Width, $src.Height) + 8
+# Icone du lanceur (launcher\mwcoop.ico) : le logo tel quel, centre dans un carre, en PNG 256/48/32/16 dans un .ico.
+$side = [math]::Max($src.Width, $src.Height) + 2
 $cx = $src.X + $src.Width / 2; $cy = $src.Y + $src.Height / 2
 $imgs = @()
 foreach ($s in 256, 48, 32, 16) {
@@ -313,9 +293,7 @@ foreach ($s in 256, 48, 32, 16) {
     $gg = [System.Drawing.Graphics]::FromImage($b)
     $gg.InterpolationMode = 'HighQualityBicubic'; $gg.SmoothingMode = 'AntiAlias'; $gg.PixelOffsetMode = 'HighQuality'
     $gg.Clear([System.Drawing.Color]::Transparent)
-    $gb = New-Object System.Drawing.Drawing2D.LinearGradientBrush (P 0 0), (P 0 $s), (C 255 36 62 100), (C 255 8 14 30)
-    $gg.FillEllipse($gb, 0, 0, $s - 1, $s - 1)
-    $m = $s * 0.12
+    $m = 0
     $gg.DrawImage($logo, (New-Object System.Drawing.RectangleF $m, $m, ($s - 2 * $m), ($s - 2 * $m)), (New-Object System.Drawing.RectangleF ($cx - $side / 2), ($cy - $side / 2), $side, $side), [System.Drawing.GraphicsUnit]::Pixel)
     $gg.Dispose()
     $ms = New-Object System.IO.MemoryStream
