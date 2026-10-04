@@ -529,8 +529,9 @@ namespace MWCoop
         // [Test] Autotest=remorque : l'hote amene [Test] RemorqueAutre (GIFU par defaut) 2 m derriere [Test]
         // RemorqueVoiture (SORBET) a 25 s, va a cote de son crochet avant a 29 s, clique le crochet arriere de la
         // SORBET a 30 s puis le crochet avant de l'autre a 31 s (etats 'State 3' des automates 'Logic', comme le
-        // bouton de la souris) et retire la corde a 60 s ('Remove rope'). Chacun note toutes les 2 s, de 26 a
-        // 75 s, les cordes vues chez lui : joint present ou non, distance des crochets.
+        // bouton de la souris) et retire la corde a 60 s ('Remove rope'). Chacun note toutes les 2 s, de 16 a
+        // 80 s (l'invite arrive une dizaine de secondes apres l'hote), les cordes vues chez lui : joint present
+        // ou non, distance des crochets.
         static int testStep;
         static float testLog;
         static Transform testH1, testH2;
@@ -538,7 +539,7 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode != "remorque") return;
-            if (t >= 26f && t < 76f && t >= testLog) { testLog = t + 2f; Log.Info("autotest : remorque t=" + t.ToString("F0") + " : " + State()); }
+            if (t >= 16f && t < 80f && t >= testLog) { testLog = t + 2f; Log.Info("autotest : remorque t=" + t.ToString("F0") + " : " + State()); }
             if (!Session.IsHost) return;
             if (testStep == 0 && t >= 25f) { testStep = 1; Log.Info("autotest : remorque : " + TestPlace()); }
             if (testStep == 1 && t >= 29f) { testStep = 2; Log.Info("autotest : remorque : " + TestWalk()); }
