@@ -607,7 +607,9 @@ namespace MWCoop
         // Essais ([Test] Autotest=..., SuivrePNJ=partie du chemin du PNJ, TeppoSarkain par defaut).
         //  pnjtel : l'hote rend le client present (30 s) puis fait sonner son telephone ([Test] PnjTelephone,
         //    PnjEtat : PhoneSarkain, Ringing) a 40 s ; les deux cotes notent chaque couche toutes les 2 s (et
-        //    avec CapturePeriode, regardent le PNJ et le capturent).
+        //    avec CapturePeriode, regardent le PNJ et le capturent). [Test] PnjArrivee=s : l'invite, loin jusque-la,
+        //    est teleporte pres du PNJ a s secondes (ou en PnjArriveePos=x,y,z) : il doit recevoir la pose tenue
+        //    (fin du clip joue pendant son absence, comme le telephone decroche).
         //  pnjfluide : l'invite note toutes les 5 s la fluidite du PNJ suivi (vitesse moyenne, a-coups = ecart
         //    type / moyenne de la vitesse image par image, plus grand saut d'une image, tampon, extrapolations).
         static int testStep;
@@ -628,6 +630,8 @@ namespace MWCoop
             {
                 if (Session.IsHost && t > 30f && testStep == 0) { testStep = 1; Log.Info("autotest : " + TestPresent(part)); }
                 if (Session.IsHost && t > 40f && testStep == 1) { testStep = 2; Log.Info("autotest : " + TestRing(part)); }
+                int arrive = Config.GetInt("Test", "PnjArrivee", 0);
+                if (!Session.IsHost && arrive > 0 && t > arrive && testStep == 0) { testStep = 1; Log.Info("autotest : " + TestArrive(part)); }
                 if (t > 20f && now >= testNext) { testNext = now + 2f; Log.Info("autotest : pnjtel " + State(part)); }
                 // [Test] CapturePeriode=N : la camera regarde le PNJ, capture toutes les N s (dumps\pnjtel-t<s>.png).
                 int per = Config.GetInt("Test", "CapturePeriode", 0);
@@ -673,6 +677,23 @@ namespace MWCoop
             if (n.Customer == null || n.Customer.gameObject.activeSelf) return "pnjtel : " + n.Path + " deja la";
             n.Customer.gameObject.SetActive(true);
             return "pnjtel : " + n.Customer.name + " rendu present";
+        }
+
+        // Invite : teleporte derriere le PNJ (2 m, ou en [Test] PnjArriveePos), comme le fait TestPos.
+        static string TestArrive(string part)
+        {
+            Npc n = Find(part);
+            GameObject pl = GameObject.Find("PLAYER");
+            if (n == null || pl == null) return "pnjtel : arrivee impossible (" + (n == null ? "aucun PNJ " + part : "pas de joueur") + ")";
+            Vector3 to = n.Char.position - n.Char.forward * 2f + Vector3.up * 0.5f;
+            string[] c = Config.Get("Test", "PnjArriveePos", "").Split(',');
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            if (c.Length == 3) to = new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci));
+            var cc = pl.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            pl.transform.position = to;
+            if (cc != null) cc.enabled = true;
+            return "pnjtel : arrivee de l'invite en " + to.ToString("F1") + " pres de " + n.Path;
         }
 
         static string TestRing(string part)
