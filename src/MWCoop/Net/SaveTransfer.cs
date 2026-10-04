@@ -258,7 +258,7 @@ namespace MWCoop.Net
         // repartaient au menu ; chez un invite, sa sauvegarde (profil isole) ne servait a rien : Flow le
         // refaisait entrer dessus, sur SON monde, et le prochain envoi de l'hote l'ecrasait.
         // En coop, le CLICK mene a "Wait" (transition redirigee) ; une action en tete de "Wait" voit le clic
-        // (derniere transition : CLICK depuis "Wait for click") :
+        // (derniere transition : CLICK depuis "Wait for click") et empeche le retour immediat (boucle, ButtonHook) :
         //  - hote : sauvegarde EN JEU (Game.SaveInPlace), annoncee aux invites et faite FlushDelay s plus
         //    tard (le temps que leurs derniers changements arrivent) ; personne ne part. Un 2e clic dans les
         //    QuitWindow s qui suivent = sauver et quitter comme le jeu (les invites suivent au menu, puis
@@ -296,8 +296,18 @@ namespace MWCoop.Net
             public FsmTransition Click;
             public bool Hooked, Broken;
             public FsmString Label;   // texte du survol (SetStringValue de "Wait for click")
+            public HutongGames.PlayMaker.Actions.MousePickEvent Pick;   // celui de "Wait" (mouseOver -> FINISHED)
+            public FsmEvent PickOver;
+            public int HeldFrame = -1;   // image du clic : survol de "Wait" coupe jusqu'a l'image suivante
         }
 
+        // Boucle d'une image : "Wait" a un MousePickEvent (survol -> FINISHED -> "Wait for click") qui agit des son
+        // OnEnter, et celui de "Wait for click" (clic -> CLICK) aussi ; le raycast est le meme et
+        // GetMouseButtonDown(0) reste vrai toute l'image du clic. CLICK redirige vers "Wait" renvoyait donc
+        // aussitot a "Wait for click", qui revoyait le clic... jusqu'a 1000 entrees : PlayMaker coupe alors
+        // l'automate (Owner.enabled = false), toilettes mortes jusqu'au prochain chargement. L'action de tete de
+        // "Wait" retire le survol de son MousePickEvent a chaque CLICK (il reste actif) ; Buttons() le remet a
+        // l'image suivante, bouton relache : son OnUpdate renvoie alors a "Wait for click" sans clic.
         class ButtonHook : ModHook
         {
             public override string Module { get { return "sauvegarde"; } }
@@ -308,10 +318,37 @@ namespace MWCoop.Net
                 {
                     FsmTransition t = Fsm.LastTransition;
                     FsmState prev = Fsm.PreviousActiveState;
-                    if (Replay.Depth == 0 && t != null && t.EventName == "CLICK" && prev != null && prev.Name == "Wait for click") Clicked(B);
+                    if (t != null && t.EventName == "CLICK" && prev != null && prev.Name == "Wait for click")
+                    {
+                        Hold(B);
+                        if (Replay.Depth == 0) Clicked(B);
+                    }
                 }
                 catch (Exception e) { Replay.HookError(e); }
                 Finish();
+            }
+        }
+
+        static readonly List<SaveButton> held = new List<SaveButton>();
+
+        static void Hold(SaveButton b)
+        {
+            if (b.Pick == null) return;
+            b.Pick.mouseOver = null;
+            b.HeldFrame = Time.frameCount;
+            if (!held.Contains(b)) held.Add(b);
+        }
+
+        // Survol rendu une image apres le clic, bouton relache (sinon la boucle reprendrait).
+        static void Release()
+        {
+            for (int i = held.Count - 1; i >= 0; i--)
+            {
+                SaveButton b = held[i];
+                if (Time.frameCount <= b.HeldFrame || Input.GetMouseButtonDown(0)) continue;
+                if (b.Pick != null) b.Pick.mouseOver = b.PickOver;
+                b.HeldFrame = -1;
+                held.RemoveAt(i);
             }
         }
 
@@ -336,7 +373,8 @@ namespace MWCoop.Net
         // ------------------------------------------------------------ boutons
         static void Buttons(float now)
         {
-            if (!PlayerSync.InGame) { buttons.Clear(); buttonsScanned = false; buttonsAt = -1; proceed = null; return; }
+            if (!PlayerSync.InGame) { buttons.Clear(); held.Clear(); buttonsScanned = false; buttonsAt = -1; proceed = null; return; }
+            if (held.Count > 0) Release();
             if (proceed != null)
             {
                 SaveButton b = proceed;
@@ -346,6 +384,8 @@ namespace MWCoop.Net
                     Log.Info("toilettes : sauver et quitter au menu comme le jeu (" + Recon.Path(b.F.transform) + " -> " + b.Target + ")");
                     Game.SetState(b.F, b.Target);
                 }
+                else Log.Warn("toilettes : sauver et quitter ABANDONNE, automate " + (b.F == null ? "detruit" : !b.F.enabled ? "coupe" : "inactif")
+                              + (b.F != null ? " (" + Recon.Path(b.F.transform) + ")" : ""));
             }
             if (now < nextButtonCheck) return;
             nextButtonCheck = now + 1f;
@@ -359,7 +399,7 @@ namespace MWCoop.Net
                 ScanButtons();
             }
             // Toilettes sous un LOD eteint : automate jamais demarre, ses actions ne sont pas chargees (et le
-            // seraient de nouveau a son demarrage) ; l'action est ajoutee des qu'il a demarre.
+            // seraient de nouveau a son demarrage) ; l'action est ajoutee (et CLICK redirige) des qu'il a demarre.
             string label = LabelText(now);
             foreach (SaveButton b in buttons)
             {
@@ -381,12 +421,24 @@ namespace MWCoop.Net
                 if (wfc == null || f.Fsm.GetState("Wait") == null || f.Fsm.GetState("Load menu") == null) continue;
                 FsmTransition click = null;
                 foreach (FsmTransition t in wfc.Transitions) if (t.EventName == "CLICK") click = t;
-                if (click == null || click.ToState == "Wait") continue;
+                if (click == null) continue;
+                if (click.ToState == "Wait")
+                {
+                    // Deja accrochees (releve refait dans la meme scene) : leur description est portee par l'action.
+                    FsmState ws = f.Fsm.GetState("Wait");
+                    if (ws != null && ws.IsInitialized)
+                        foreach (FsmStateAction a in ws.Actions)
+                        {
+                            var h = a as ButtonHook;
+                            if (h != null && h.B != null) { if (!buttons.Contains(h.B)) buttons.Add(h.B); break; }
+                        }
+                    continue;
+                }
                 if (!Replay.Claim(f, "sauvegarde")) { Log.Warn("toilettes : " + Recon.Path(f.transform) + " deja accrochees par " + Replay.Owner(f)); continue; }
-                // La redirection tient meme avant le demarrage de l'automate (les transitions ne sont pas
-                // rechargees) : un clic avant l'ajout de l'action ne ferait que revenir a "Wait".
+                // CLICK n'est redirige vers "Wait" qu'une fois l'action posee (Hook) : sans elle, la garde contre
+                // la boucle d'une image manquerait. Avant (automate pas demarre, sous un LOD eteint), le clic reste
+                // celui du jeu.
                 var b = new SaveButton { F = f, Target = click.ToState, Click = click };
-                click.ToState = "Wait";
                 buttons.Add(b);
                 Hook(b);
                 names.Append(names.Length > 0 ? ", " : "").Append(f.transform.root.name).Append(b.Hooked ? "" : " (pas demarre)");
@@ -400,10 +452,17 @@ namespace MWCoop.Net
             if (s == null || w == null || !s.IsInitialized || !w.IsInitialized) return;
             try
             {
+                // MousePickEvent de "Wait" qui renvoie a "Wait for click" au survol : coupe a chaque clic (boucle).
+                foreach (FsmStateAction a in s.Actions)
+                {
+                    var mp = a as HutongGames.PlayMaker.Actions.MousePickEvent;
+                    if (mp != null && mp.mouseOver != null) { b.Pick = mp; b.PickOver = mp.mouseOver; break; }
+                }
                 var list = new List<FsmStateAction>(s.Actions);
                 list.Insert(0, new ButtonHook { B = b });
                 s.Actions = list.ToArray();
                 b.Hooked = true;
+                b.Click.ToState = "Wait";
                 // Texte du survol : le parametre FsmString du SetStringValue qui affiche "SAVE AND QUIT TO MENU".
                 foreach (FsmStateAction a in w.Actions)
                 {
@@ -418,7 +477,7 @@ namespace MWCoop.Net
             }
             catch (Exception e)
             {
-                // Action non posee : le clic reprend son chemin d'origine (comme le jeu) plutot que de ne rien faire.
+                // Action non posee : le clic garde son chemin d'origine (comme le jeu) plutot que de ne rien faire.
                 b.Broken = true;
                 if (!b.Hooked) b.Click.ToState = b.Target;
                 Log.Warn("toilettes : " + Recon.Path(b.F.transform) + " : " + e.Message);
@@ -887,8 +946,14 @@ namespace MWCoop.Net
         //  sauve-hote (hote) : clic a 40 s -> sauvegarde en jeu, invites restes ; [Test] TestQuitter=1 : 2e clic
         //    3 s apres -> sauver et quitter, les invites suivent au menu ; avec [Test] Continuer=1 l'hote
         //    revient ("entree en jeu n2") et les invites aussi, sauvegarde neuve. Invites : chaque entree.
+        //  Les deux : 1 s apres chaque clic d'essai, l'automate des toilettes (attendu "actif", survol "rendu" ;
+        //    "COUPE" = la boucle d'une image l'a eteint) ; 10 s apres, Systems/Setup Game :: WaitPlayer (attendu
+        //    "Save game" chez l'hote, et chez l'invite s'il compare ; "Activate game" apres une sauvegarde = la
+        //    chaine de chargement du joueur a tourne apres SAVEGAME, cf. Game.SaveInPlace).
         static int testStep, testEntries;
-        static float testLastT = float.MaxValue, testQuitAt = -1;
+        static float testLastT = float.MaxValue, testQuitAt = -1, testCheckAt = -1, testWaitAt = -1;
+        static SaveButton testBtn;
+        static string testMode;
 
         public static void Test(string mode, float t)
         {
@@ -897,6 +962,8 @@ namespace MWCoop.Net
             if (t < testLastT) { testEntries++; Log.Info("autotest : " + mode + " : entree en jeu n" + testEntries + (host ? " (hote)" : " (invite)")); }
             testLastT = t;
             float now = Time.realtimeSinceStartup;
+            testMode = mode;
+            TestChecks(now);
             if (mode == "sauve")
             {
                 if (!host && testStep == 0 && t > 40f) { testStep = 1; Log.Info("autotest : sauve : " + TestPress()); }
@@ -925,6 +992,26 @@ namespace MWCoop.Net
             {
                 testStep = testEntries;
                 Log.Info("autotest : sauve-hote : invite en jeu depuis 30 s (entree n" + testEntries + "), hote " + (Session.Host != null && Session.Host.Level == 1 ? "en jeu" : "absent/au menu"));
+            }
+        }
+
+        static void TestChecks(float now)
+        {
+            if (testBtn != null && now >= testCheckAt)
+            {
+                SaveButton b = testBtn;
+                testBtn = null;
+                if (b.F == null) Log.Info("autotest : " + testMode + " : toilettes 1 s apres le clic : automate detruit (changement de niveau)");
+                else Log.Info("autotest : " + testMode + " : toilettes 1 s apres le clic : automate " + (b.F.enabled ? "actif" : "COUPE")
+                              + ", etat " + b.F.ActiveStateName + ", survol " + (b.Pick == null ? "absent" : b.Pick.mouseOver != null ? "rendu" : "TOUJOURS COUPE"));
+            }
+            if (testWaitAt > 0 && now >= testWaitAt)
+            {
+                testWaitAt = -1;
+                PlayMakerFSM wp = PlayerSync.InGame ? Game.FindFsm("Setup Game", "WaitPlayer") : null;
+                Log.Info("autotest : " + testMode + " : chargement du joueur (Setup Game :: WaitPlayer) 10 s apres le clic : "
+                         + (wp == null ? "introuvable" : wp.ActiveStateName) + ", PlayerStop " + Game.GlobalBool("PlayerStop")
+                         + ", PlayerSeated " + Game.GlobalBool("PlayerSeated"));
             }
         }
 
@@ -957,7 +1044,11 @@ namespace MWCoop.Net
                 if (a != null && a.Enabled && a.GetType().Name == "MousePickEvent") { a.Enabled = false; off.Add(a); }
             try { Game.SetState(best.F, "Wait for click"); best.F.SendEvent("CLICK"); }
             finally { foreach (FsmStateAction a in off) a.Enabled = true; }
-            return "clic sur " + Recon.Path(best.F.transform) + " a " + Mathf.Sqrt(bd).ToString("F0") + " m -> " + best.F.ActiveStateName;
+            float now = Time.realtimeSinceStartup;
+            testBtn = best; testCheckAt = now + 1f; testWaitAt = now + 10f;
+            // (La boucle elle-meme ne se reproduit pas sans curseur ni bouton enfonce : on verifie la garde.)
+            return "clic sur " + Recon.Path(best.F.transform) + " a " + Mathf.Sqrt(bd).ToString("F0") + " m -> " + best.F.ActiveStateName
+                   + ", garde anti-boucle " + (best.Pick == null ? "sans objet (pas de survol dans Wait)" : best.Pick.mouseOver == null ? "armee" : "NON ARMEE");
         }
     }
 }
