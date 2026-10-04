@@ -91,5 +91,9 @@ namespace MWCoop.Net
         Parked = 33,      // hote -> invites : voitures garees du decor (parent, pose, visible)
         Audit = 34,       // audit de la synchro : hote -> invites « SNAP n », invites -> hote leurs etats changes (cle hachee, etat)
         MachineLock = 35, // verrou d'une machine a jeu (poker, machine a sous), arbitre par l'hote : libre, demande, tenue, refus ; jeu lance sur l'ordinateur
+        Frost = 36,       // givre et buee des vitres, grattage du pare-brise (a remplir : lot 2)
+        Tow = 37,         // corde de remorquage entre deux vehicules (a remplir : lot 2)
+        Call = 38,        // appels sortants (telephone fixe, telephone du taxi) (a remplir : lot 2)
+        Wear = 39,        // vetements portes (veste, combinaison, casque) (a remplir : lot 2)
     }
 }
