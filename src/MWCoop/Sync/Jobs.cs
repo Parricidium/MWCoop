@@ -27,6 +27,11 @@ namespace MWCoop
         static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE",
                                                                         "TERRAIN", "DEEPSNOW", "RIM", "LOOP" };
         static readonly HashSet<string> RandomActions = new HashSet<string> { "SendRandomEvent", "RandomEvent" };
+        // Evenements des portieres ("Open door"/"Close door" les envoient a la lumiere de l'habitacle) : CarDoors
+        // rejoue ces etats chez les autres, qui les envoient donc eux-memes -- les rejouer aussi allumait ou
+        // eteignait la lumiere une 2e fois (forcee sur "State 1" apres la fermeture).
+        static readonly HashSet<string> DoorEvents = new HashSet<string> { "DOOROPEN", "DOORCLOSE", "DOOR" };
+        static readonly string[] InputActions = { "MousePick", "GetMouse", "GetButton", "GetKey", "GetAxis" };
 
         // Racines suivies : JOBS (sans les automates Use des objets) et chaque vehicule (avec ses boutons).
         static List<KeyValuePair<GameObject, bool>> RootsNow()
@@ -54,8 +59,36 @@ namespace MWCoop
         {
             if (!ControlFsms.Contains(f.FsmName) || CarDoors.Tracks(f)) return false;
             if (f.Fsm.GetState("Open door") != null || f.Fsm.GetState("Open hood") != null) return false;   // portieres : CarDoors
+            if (DoorDriven(f)) return false;   // suit les portieres rejouees
             string n = f.gameObject.name;
             return !n.StartsWith("PlayerTrigger") && !n.StartsWith("DriveTrigger") && !n.StartsWith("CameraPivot");
+        }
+
+        // Automate mene seulement par les portieres : aucune action d'entree (souris, touches) et pas d'autre
+        // transition que FINISHED et leurs evenements.
+        static bool DoorDriven(PlayMakerFSM f)
+        {
+            bool door = false;
+            foreach (FsmTransition t in f.Fsm.GlobalTransitions)
+            {
+                if (DoorEvents.Contains(t.EventName)) door = true;
+                else if (t.EventName != "FINISHED") return false;
+            }
+            foreach (FsmState s in f.Fsm.States)
+            {
+                foreach (FsmTransition t in s.Transitions)
+                {
+                    if (DoorEvents.Contains(t.EventName)) door = true;
+                    else if (t.EventName != "FINISHED") return false;
+                }
+                foreach (FsmStateAction a in s.Actions)
+                {
+                    if (a == null) continue;
+                    string tn = a.GetType().Name;
+                    foreach (string p in InputActions) if (tn.StartsWith(p)) return false;
+                }
+            }
+            return door;
         }
         static readonly Dictionary<string, Job> jobs = new Dictionary<string, Job>();
         class Classified { public string Path; public bool Control; }
@@ -159,6 +192,7 @@ namespace MWCoop
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 25f) return;
             FsmTransition tr = j.F.Fsm.LastTransition;
             if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
+            if (j.Control && DoorEvents.Contains(tr.EventName)) return;   // (lumiere de l'habitacle : la portiere rejouee la mene deja chez les autres)
             FsmState from = j.F.Fsm.PreviousActiveState;
             j.LocalRecent[(from != null ? from.Name : "") + "|" + tr.EventName + "|" + state] = Time.realtimeSinceStartup;
             // Tirage au sort : seul celui de l'hote compte (les invites s'y recalent a son message).
