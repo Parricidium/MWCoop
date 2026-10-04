@@ -23,7 +23,7 @@ namespace MWCoop
 
         void LateUpdate()
         {
-            try { PlayerSync.LateUpdate(); CarVisuals.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); }
+            try { PlayerSync.LateUpdate(); CarVisuals.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
         }
 

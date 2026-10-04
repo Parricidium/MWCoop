@@ -362,6 +362,7 @@ namespace MWCoop
             }
             FixFacing();
             Pose();
+            PlaceCigarette();
             if (Config.GetInt("Test", "JournalPose", 0) != 0 && Time.realtimeSinceStartup >= nextPoseLog && headBone != null && Bone("pelvis") != null)
             {
                 nextPoseLog = Time.realtimeSinceStartup + 5f;
@@ -374,6 +375,16 @@ namespace MWCoop
                 {
                     Transform bt = Bone(n);
                     if (bt != null) sb.Append(' ').Append(n).Append(r.InverseTransformPoint(bt.position).ToString("F2"));
+                }
+                if (cig != null && cig.activeSelf)
+                {
+                    MeshRenderer cr = cig.GetComponentInChildren<MeshRenderer>();
+                    Vector3 cw = cr != null ? cr.bounds.center : cig.transform.position;
+                    sb.Append(" cigarette ").Append(r.InverseTransformPoint(cw).ToString("F2"));
+                    Camera cam = PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.GetComponent<Camera>() : Camera.main;
+                    if (cam != null && Bone("hand_left") != null)
+                        sb.Append(" ecran main ").Append(cam.WorldToScreenPoint(Bone("hand_left").position).ToString("F0")).Append(" doigts ").Append(Bone("finger_left") != null ? cam.WorldToScreenPoint(Bone("finger_left").position).ToString("F0") : "-")
+                          .Append(" cigarette ").Append(cam.WorldToScreenPoint(cw).ToString("F0")).Append(" nb rendus ").Append(cig.GetComponentsInChildren<Renderer>(true).Length);
                 }
                 if (charT != null) sb.Append(" Char yaw local ").Append(charT.localEulerAngles.ToString("F0")).Append(" skeleton ").Append(anim.transform.localEulerAngles.ToString("F0"));
                 Log.Info(sb.ToString());
@@ -594,8 +605,107 @@ namespace MWCoop
                 wasHello = helloNow;
                 if (armR != null && !armR.IsPlaying("saluer"))
                     ArmPlay(armR, (f & PlayerSync.F_Drink) != 0 ? "boire" : (f & PlayerSync.F_Carry) != 0 ? "porter" : null, "marche_d", moving);
-                ArmPlay(armL, (f & PlayerSync.F_Smoke) != 0 ? "fumer" : null, "marche_g", moving);
+                if ((f & PlayerSync.F_Smoke) != 0 && armL != null && armL["fumer"] != null) SmokeArm(f);
+                else ArmPlay(armL, null, "marche_g", moving);
+                Cigarette((f & PlayerSync.F_Smoke) != 0, (f & PlayerSync.F_Exhale) != 0);
             }
+        }
+
+        // Cigarette : le bras gauche (clip fumer, fige) monte la main a la bouche tant que le joueur tire
+        // (touche tenue), redescend quand il relache. Instants du clip pris une fois : main la plus pres
+        // de la tete (bouche) et la plus loin (bras baisse).
+        float smokeRaise, tUp = -1f, tDown;
+        GameObject cig, smoke;
+        bool wasExhale; float exhaleAt;
+
+        void SmokeArm(int f)
+        {
+            AnimationState s = armL["fumer"];
+            if (!armL.IsPlaying("fumer")) armL.Play("fumer");
+            s.speed = 0f;
+            if (tUp < 0f)
+            {
+                Transform hand = Bone("hand_left"), head = headBone;
+                float best = float.MaxValue, worst = -1f;
+                tUp = 0.5f; tDown = 0f;
+                if (hand != null && head != null)
+                    for (int i = 0; i <= 20; i++)
+                    {
+                        s.normalizedTime = i / 20f;
+                        armL.Sample();
+                        float d = (hand.position - head.position).sqrMagnitude;
+                        if (d < best) { best = d; tUp = i / 20f; }
+                        if (d > worst) { worst = d; tDown = i / 20f; }
+                    }
+            }
+            smokeRaise = Mathf.MoveTowards(smokeRaise, (f & PlayerSync.F_Inhale) != 0 ? 1f : 0f, Time.deltaTime * 2.5f);
+            s.normalizedTime = Mathf.Lerp(tDown, tUp, smokeRaise);
+        }
+
+        // Cigarette dans la main gauche (copie de celle du joueur local) et fumee a la bouche (copie de
+        // son BreathSmoke), creees a la premiere cigarette.
+        void Cigarette(bool on, bool exhale)
+        {
+            if (on && cig == null)
+            {
+                // Petite cigarette faite ici (cylindre de 8 cm), avec la matiere de celle du joueur local : le
+                // modele du jeu est en plusieurs pieces calees pour la vue a la premiere personne.
+                cig = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                Object.Destroy(cig.GetComponent<Collider>());
+                cig.name = "MWCoop-Cigarette";
+                cig.transform.parent = Root.transform;
+                cig.transform.localScale = new Vector3(0.009f, 0.04f, 0.009f);
+                Shader diff = Shader.Find("Diffuse");
+                if (diff != null) cig.GetComponent<Renderer>().material = new Material(diff) { color = new Color(0.95f, 0.93f, 0.88f) };
+                // Bout rougeoyant.
+                GameObject tip = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                Object.Destroy(tip.GetComponent<Collider>());
+                tip.transform.parent = cig.transform;
+                tip.transform.localScale = new Vector3(1.05f, 0.12f, 1.05f);
+                tip.transform.localPosition = new Vector3(0f, 0.95f, 0f);
+                Shader unlit = Shader.Find("Unlit/Color") ?? diff;
+                if (unlit != null) tip.GetComponent<Renderer>().material = new Material(unlit) { color = new Color(1f, 0.35f, 0.05f) };
+                GameObject pl = GameObject.Find("PLAYER");
+                Transform bs = pl != null ? FindBone(pl.transform, "BreathSmoke") : null;
+                if (bs != null)
+                {
+                    smoke = (GameObject)Object.Instantiate(bs.gameObject);
+                    foreach (PlayMakerFSM pf in smoke.GetComponentsInChildren<PlayMakerFSM>(true)) Object.Destroy(pf);
+                    smoke.name = "MWCoop-Fumee";
+                    smoke.transform.parent = Root.transform;
+                    smoke.SetActive(true);
+                }
+            }
+            if (cig != null && cig.activeSelf != on) cig.SetActive(on);
+            if (smoke != null)
+            {
+                var pe = smoke.GetComponent<ParticleEmitter>();
+                // Une bouffee : 1,2 s au debut de l'expiration, moins dense que chez le joueur (vue de pres).
+                if (exhale && !wasExhale) exhaleAt = Time.realtimeSinceStartup;
+                wasExhale = exhale;
+                bool puff = on && exhale && Time.realtimeSinceStartup - exhaleAt < 1.2f;
+                if (pe != null) { pe.emit = puff; if (puff) pe.maxEmission = 4f; }
+            }
+        }
+
+        // Apres la pose : la cigarette entre les doigts, la fumee devant la bouche.
+        void PlaceCigarette()
+        {
+            Transform hand = Bone("hand_left"), sh = Bone("shoulder_left");
+            if (cig != null && cig.activeSelf && hand != null && sh != null)
+            {
+                // Entre les doigts : un peu au-dela du poignet, en travers de l'avant-bras ; c'est le CENTRE
+                // du modele (pas son origine, au bout) qui est pose la.
+                // Reperes du modele lui-meme (epaules), pas de la racine de l'avatar.
+                Transform shr = Bone("shoulder_right");
+                Vector3 right = shr != null ? (shr.position - sh.position).normalized : Root.transform.right;
+                cig.transform.rotation = Quaternion.FromToRotation(Vector3.up, right);   // axe du cylindre : en travers de la main
+                // L'os de la main est au poignet, celui des doigts au bout : la cigarette est tenue au bout des doigts.
+                Transform finger = Bone("finger_left");
+                Vector3 at = finger != null ? Vector3.Lerp(hand.position, finger.position, 0.8f) : hand.position + (hand.position - sh.position).normalized * 0.08f;
+                cig.transform.position = at;
+            }
+            if (smoke != null && headBone != null) smoke.transform.position = headBone.position + Root.transform.forward * 0.12f - Root.transform.up * 0.05f;
         }
 
         public void Destroy()

@@ -141,16 +141,17 @@ namespace MWCoop
             foreach (string path in list.Split(';'))
             {
                 if (path.Trim().Length == 0) continue;
-                if (path.StartsWith("pres:"))
+                if (path.StartsWith("pres:") || path.StartsWith("presp:"))
                 {
+                    bool withParams = path.StartsWith("presp:");
                     // Objets physiques a moins de N m du joueur, avec leurs automates (sans actions).
-                    float rad = float.Parse(path.Substring(5), System.Globalization.CultureInfo.InvariantCulture);
+                    float rad = float.Parse(path.Substring(path.IndexOf(':') + 1), System.Globalization.CultureInfo.InvariantCulture);
                     Vector3 c = GameObject.Find("PLAYER").transform.position;
                     foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
                         if ((rb.position - c).sqrMagnitude < rad * rad && rb.transform.root.name != "PLAYER")
                         {
                             sb.Append("===== ").Append(Path(rb.transform)).Append('\n');
-                            Walk(sb, rb.transform, 0, false);
+                            Walk(sb, rb.transform, 0, withParams);
                         }
                     continue;
                 }

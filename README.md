@@ -186,6 +186,10 @@ butées) ; pare-brise et pièces qui ne cassent plus sur la copie d'une voiture 
 automatiques du magasin et barrière du market pour tous les joueurs ; écran de la pompe à essence vu par tous ;
 voitures garées de la station identiques ; PNJ (vendeurs, caissières, clients) aux mêmes places et mêmes gestes ;
 rayons des magasins qui se vident en direct quand un autre prend un article.
+Fait aussi (0.15, retours de JD) : portières refermées en les poussant vues par tous (et toujours manipulables
+chez l'autre) ; sacs de courses ouverts chez tous, articles sortis avec les mêmes identifiants et leur physique
+suivie ; cigarette : l'avatar la tient dans la main, la porte à la bouche tant que le joueur tire et souffle la
+fumée en relâchant ; chaleur de l'habitacle de la voiture conduite par un autre reprise (le passager se réchauffe).
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

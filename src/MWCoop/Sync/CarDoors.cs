@@ -26,7 +26,7 @@ namespace MWCoop
             public float LastAngle; public bool Sent;
             public bool Showing; public float TargetAngle; public float LastRemote;
             public bool Pinned, PinnedWasKinematic;   // corps fige a l'angle recu
-            public float LastSentAt;
+            public float LastSentAt, OpenedAt;
             public bool RestSet; public Quaternion RestRot; public Vector3 RestPos;   // pose fermee (repere du parent)
             public float TestOffset;   // essais : degres ajoutes a l'angle envoye
         }
@@ -40,10 +40,16 @@ namespace MWCoop
         class Hook : FsmStateAction
         {
             public Door D;
-            public bool Opening;
+            public bool Opening, Lock;
             public override void OnEnter()
             {
-                try { if (!applying && Replay.Depth == 0) Send(D, Opening); } catch (System.Exception e) { Replay.HookError(e); }
+                try
+                {
+                    // « Reset 2 » (verrou en la poussant) ne compte que portiere ouverte depuis un moment : a
+                    // l'ouverture, l'angle peut se lire 359 degres et le jeu passe une fois par la.
+                    if (!applying && Replay.Depth == 0 && !(Lock && (!D.IsOpen || Time.realtimeSinceStartup - D.OpenedAt < 0.7f))) Send(D, Opening);
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -79,6 +85,8 @@ namespace MWCoop
                     if (d.Body != null && d.Body.transform == car.transform) d.Body = null;
                     d.Hinge = d.Body != null ? d.Body.GetComponent<HingeJoint>() : null;
                     if (!Inject(d, open, true) || !Inject(d, close, false)) continue;
+                    // Refermee en la poussant (pas en cliquant) : « Reset 2 » puis verrou -- c'est aussi une fermeture.
+                    if (f.Fsm.GetState("Reset 2") != null) Inject(d, "Reset 2", false, true);
                     hooked.Add(f);
                     byKey[d.Key] = d;
                 }
@@ -100,14 +108,14 @@ namespace MWCoop
             if (byKey.Count != before) Log.Info("portieres : " + byKey.Count + " suivies (portes, coffres, hayons, prises)");
         }
 
-        static bool Inject(Door d, string state, bool opening)
+        static bool Inject(Door d, string state, bool opening, bool isLock = false)
         {
             FsmState s = d.Fsm.Fsm.GetState(state);
             if (s == null) return false;
             try
             {
                 var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, new Hook { D = d, Opening = opening });
+                list.Insert(0, new Hook { D = d, Opening = opening, Lock = isLock });
                 s.Actions = list.ToArray();
                 return true;
             }
@@ -201,6 +209,7 @@ namespace MWCoop
 
         static void Send(Door d, bool opening)
         {
+            if (opening) d.OpenedAt = Time.realtimeSinceStartup;
             d.IsOpen = opening;
             d.Mine = opening;          // celui qui ouvre envoie l'angle ensuite
             d.Sent = false;
@@ -244,7 +253,14 @@ namespace MWCoop
             d.Mine = false;
             StopFollow(d);
             applying = true; Replay.Depth++;
-            try { Game.SetState(d.Fsm, opening ? d.Open : d.Close); }
+            try
+            {
+                Game.SetState(d.Fsm, opening ? d.Open : d.Close);
+                // Portiere ouverte par un autre : ses actions d'ouverture jouees (butees, son, Open), puis
+                // l'automate revient au repos -- sinon il attend ici un relachement de souris et la
+                // portiere ne se laisse plus refermer. (L'angle vient de celui qui l'a ouverte.)
+                if (opening && d.Open == "Open door" && d.Fsm.Fsm.GetState("Mouse off") != null) Game.SetState(d.Fsm, "Mouse off");
+            }
             finally { applying = false; Replay.Depth--; }
             Log.Info("portiere " + key + (opening ? " ouverte" : " fermee") + " par #" + who);
         }
@@ -272,6 +288,14 @@ namespace MWCoop
                 return d.Key + " poussee de " + deg + " deg (angle envoye)";
             }
             return "rien a pousser";
+        }
+
+        // Essais : met la premiere portiere de 'car' dans l'etat 'state' (comme le jeu).
+        public static string TestState(string car, string state)
+        {
+            foreach (Door d in byKey.Values)
+                if (d.Fsm != null && d.Key.StartsWith(car) && d.Fsm.Fsm.GetState(state) != null) { Game.SetState(d.Fsm, state); return d.Key + " -> " + state; }
+            return "rien";
         }
 
         public static string State(string key)

@@ -322,6 +322,16 @@ namespace MWCoop
                 }
                 Log.Info("autotest : " + cnt + " objets " + countWatch + "* : " + names);
             }
+            if (mode == "sac" && MWCoop.Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Shop.TestBuy(Config.Get("Test", "TestProduit", "Sausages"), 2)); }
+            if (mode == "sac" && MWCoop.Net.Session.IsHost && t > 42f && step == 1 && Config.Get("Test", "VidageSac", "").Length > 0) { step = 11; Log.Info("autotest : vidage " + Recon.DumpTargets(Config.Get("Test", "VidageSac", ""))); }
+            if (mode == "sac" && MWCoop.Net.Session.IsHost && t > 48f && (step == 1 || step == 11) && Config.GetInt("Test", "SacOuvrir", 1) != 0) { step = 2; Log.Info("autotest : " + Consume.TestOpenBag()); }
+            if (mode == "fume")
+            {
+                // Cigarette : en main 20-30 s, tire 30-37 s, souffle 37-41 s, en main, tire 46-50, souffle 50-53.
+                int fl = t < 20f ? 0 : t < 30f ? PlayerSync.F_Smoke : t < 37f ? PlayerSync.F_Smoke | PlayerSync.F_Inhale : t < 41f ? PlayerSync.F_Smoke | PlayerSync.F_Exhale
+                         : t < 46f ? PlayerSync.F_Smoke : t < 50f ? PlayerSync.F_Smoke | PlayerSync.F_Inhale : t < 53f ? PlayerSync.F_Smoke | PlayerSync.F_Exhale : 0;
+                if (fl != PoseFlags) { PoseFlags = fl; Log.Info("autotest : cigarette " + fl); }
+            }
             if (mode == "magasin" && MWCoop.Net.Session.IsHost && t > 32f && step == 0) { step = 1; Log.Info("autotest : panier " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), 3)); }
             if (mode == "magasin" && MWCoop.Net.Session.IsHost && t > 48f && step == 1) { step = 2; Log.Info("autotest : repose " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), -3)); }
             string npcWatch = Config.Get("Test", "SuivrePNJ", "");
@@ -384,6 +394,7 @@ namespace MWCoop
             string visWatch = Config.Get("Test", "SuivreElement", "");
             if (visWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f)
                 Log.Info("autotest : " + CarVisuals.State(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), visWatch));
+            if (mode == "portiere" && t > 52f && step == 1 && Config.GetInt("Test", "TestPousse", 0) != 0) { step = 2; Log.Info("autotest : refermee en poussant " + CarDoors.TestState(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), "Reset 2")); }
             if (mode == "portiere" && t > 38f && step == 0) { step = 1; Log.Info("autotest : " + CarDoors.TestPush(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), -35f)); }
             if (mode == "portiere" && t > 30f && !done)
             {
