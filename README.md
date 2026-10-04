@@ -219,6 +219,8 @@ création : disparaît chez tous ; revenus du monde (allocations, aide au logeme
 train partagé ; machines à sous et poker de la station : un joueur à la fois, les autres regardent, gains gardés.
 Fait aussi (0.19.1) : lanceur, onglet JOURNAUX : journaux de tous les profils (invité, essais), les plus récents en
 premier ; au démarrage, il signale un dernier lancement fait sans le mod (antivirus, version.dll, autre dossier du jeu).
+Fait aussi (0.19.2) : dossier du jeu en lecture seule (droits Windows, antivirus) : profils et journaux basculent dans
+%LOCALAPPDATA%\MWCoop au lieu de bloquer le jeu sur l'avertissement de départ ; trace de chargement du mod au même endroit.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

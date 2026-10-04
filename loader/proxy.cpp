@@ -27,6 +27,8 @@ static const char* kExports[17] = {
 
 static wchar_t g_gameDir[MAX_PATH];   // dossier de mywintercar.exe (sans \ final)
 static wchar_t g_modDir[MAX_PATH];    // <jeu>\MWCoop
+static wchar_t g_dataRoot[MAX_PATH];  // ou ecrire (profils, journaux) : <jeu>\MWCoop, ou %LOCALAPPDATA%\MWCoop si le jeu est en lecture seule
+static bool g_gameWritable = true;
 static wchar_t g_profil[64];          // vide = profil normal du joueur
 static wchar_t g_profilDir[MAX_PATH]; // <jeu>\MWCoop\profils\<profil>
 static int g_arrierePlan, g_fenX = -3000, g_fenY = 100;
@@ -298,7 +300,7 @@ static void ReadConfig() {
     for (wchar_t* c = g_profil; *c; c++)   // nom de dossier sur
         if (wcschr(L"\\/:*?\"<>|", *c)) *c = L'_';
     if (g_profil[0]) {
-        swprintf(g_profilDir, MAX_PATH, L"%s\\profils\\%s", g_modDir, g_profil);
+        swprintf(g_profilDir, MAX_PATH, L"%s\\profils\\%s", g_dataRoot, g_profil);
         SHCreateDirectoryExW(NULL, g_profilDir, NULL);
         // Premier usage du profil : il part des reglages du joueur (touches cInput, resolution...),
         // copies depuis sa vraie cle, qui n'est que lue.
@@ -328,19 +330,50 @@ static void Init() {
     HMODULE real = LoadLibraryW(sys);
     for (int i = 0; i < 17; i++) g_real[i] = real ? GetProcAddress(real, kExports[i]) : NULL;
 
+    // Dossier du jeu en lecture seule (droits, antivirus) : profils et journaux dans %LOCALAPPDATA%\MWCoop.
+    // Sans cela rien ne s'ecrit, le mod ne demarre pas et le jeu reste sur l'avertissement « I understand ».
+    wcscpy(g_dataRoot, g_modDir);
+    wchar_t probe[MAX_PATH]; swprintf(probe, MAX_PATH, L"%s\\logs", g_modDir);
+    SHCreateDirectoryExW(NULL, probe, NULL);
+    wcscat(probe, L"\\.ecriture");
+    HANDLE hp = CreateFileW(probe, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+    wchar_t local[MAX_PATH] = L"";
+    GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
+    wchar_t sim[MAX_PATH]; swprintf(sim, MAX_PATH, L"%s\\lecture-seule.test", g_modDir);   // (essais : simule un jeu en lecture seule)
+    bool simulated = GetFileAttributesW(sim) != INVALID_FILE_ATTRIBUTES;
+    if (hp == INVALID_HANDLE_VALUE || simulated) {
+        g_gameWritable = false;
+        if (local[0]) { swprintf(g_dataRoot, MAX_PATH, L"%s\\MWCoop", local); SHCreateDirectoryExW(NULL, g_dataRoot, NULL); }
+    }
+    if (hp != INVALID_HANDLE_VALUE) CloseHandle(hp);
+
     ReadConfig();
     wchar_t logs[MAX_PATH], lp[MAX_PATH];
-    swprintf(logs, MAX_PATH, L"%s\\logs", g_profil[0] ? g_profilDir : g_modDir);
+    swprintf(logs, MAX_PATH, L"%s\\logs", g_profil[0] ? g_profilDir : g_dataRoot);
     SHCreateDirectoryExW(NULL, logs, NULL);
     swprintf(lp, MAX_PATH, L"%s\\chargeur.log", logs);
     g_log = _wfopen(lp, L"w");
     Log("MWCoop chargeur - jeu : %ls", g_gameDir);
     Log("profil : %ls, arriere-plan : %d", g_profil[0] ? g_profil : L"(normal)", g_arrierePlan);
+    if (!g_gameWritable) Log("ATTENTION : dossier du jeu en lecture seule, donnees dans %ls", g_dataRoot);
+    // Trace de chargement, toujours au meme endroit (le lanceur la lit : le mod a-t-il ete charge ?).
+    if (local[0]) {
+        wchar_t td[MAX_PATH]; swprintf(td, MAX_PATH, L"%s\\MWCoop", local);
+        SHCreateDirectoryExW(NULL, td, NULL);
+        wcscat(td, L"\\dernier-lancement.txt");
+        FILE* tf = _wfopen(td, L"w");
+        if (tf) {
+            SYSTEMTIME t; GetLocalTime(&t);
+            fwprintf(tf, L"%04d-%02d-%02d %02d:%02d:%02d chargeur MWCoop charge\njeu=%ls\nprofil=%ls\ndonnees=%ls\necriture_jeu=%d\njournal=%ls\n",
+                     t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, g_gameDir, g_profil, g_dataRoot, g_gameWritable ? 1 : 0, lp);
+            fclose(tf);
+        }
+    }
     if (!real) Log("ERREUR : %ls introuvable", sys);
     // Pour le mod (Environment.GetEnvironmentVariable) : ou ecrire ses journaux et ses donnees.
     SetEnvironmentVariableW(L"MWCOOP_DIR", g_modDir);
     SetEnvironmentVariableW(L"MWCOOP_PROFIL", g_profil);
-    SetEnvironmentVariableW(L"MWCOOP_DATA", g_profil[0] ? g_profilDir : g_modDir);
+    SetEnvironmentVariableW(L"MWCOOP_DATA", g_profil[0] ? g_profilDir : g_dataRoot);
     SetEnvironmentVariableW(L"MWCOOP_ARRIEREPLAN", g_arrierePlan ? L"1" : L"0");
 
     HMODULE exe = GetModuleHandleW(NULL);

@@ -1334,6 +1334,14 @@ static const float kLogRowH = 54;
 
 static std::wstring LogsDir() { return g_gameDir + L"MWCoop\\logs\\"; }
 
+// %LOCALAPPDATA%\MWCoop\ : trace de chargement du mod, et ses donnees si le dossier du jeu est en lecture seule.
+static std::wstring LocalDir()
+{
+    wchar_t l[MAX_PATH] = L"";
+    GetEnvironmentVariableW(L"LOCALAPPDATA", l, MAX_PATH);
+    return l[0] ? std::wstring(l) + L"\\MWCoop\\" : L"";
+}
+
 // Profils du mod dans le dossier du jeu (MWCoop\profils\<nom>) : invite, ou un profil d'essai.
 static std::vector<std::wstring> Profiles()
 {
@@ -1367,6 +1375,7 @@ static bool LastLaunchWithoutMod()
         if (unix > newest) newest = unix;
     };
     look(LogsDir() + L"chargeur.log");
+    if (!LocalDir().empty()) look(LocalDir() + L"dernier-lancement.txt");
     for (const std::wstring &pr : Profiles()) look(g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\chargeur.log");
     return newest < t - 5;
 }
@@ -1418,6 +1427,15 @@ static void LogsScan()
             add(d + L"chargeur.log", LOG_LOADER, pr);
         }
         add(g_gameDir + L"mywintercar_Data\\output_log.txt", LOG_UNITY, L"");
+    }
+    // Repli quand le dossier du jeu est en lecture seule, et trace de chargement du mod.
+    std::wstring ld = LocalDir();
+    if (!ld.empty()) {
+        add(ld + L"logs\\mwcoop.log", LOG_MOD, L"(secours)");
+        add(ld + L"logs\\chargeur.log", LOG_LOADER, L"(secours)");
+        add(ld + L"profils\\invite\\logs\\mwcoop.log", LOG_MOD, L"invite (secours)");
+        add(ld + L"profils\\invite\\logs\\chargeur.log", LOG_LOADER, L"invite (secours)");
+        add(ld + L"dernier-lancement.txt", LOG_LOADER, L"trace de lancement");
     }
     // Les plus recents d'abord : le dernier lancement est en haut.
     std::sort(list.begin(), list.end(), [](const LogEntry &a, const LogEntry &b) { return CompareFileTime(&a.mt, &b.mt) > 0; });
