@@ -16,6 +16,11 @@ namespace MWCoop
     //    percute), Whistle et TunnelAudio restent, et son corps reste dynamique (sinon pas de collision
     //    avec le CharacterController du joueur). Pendant son attente au tunnel l'hote cache sa
     //    carrosserie (Mesh) : il l'envoie comme inactif.
+    // Numeros : rang dans la liste (meme construction des deux cotes). L'invite donne l'empreinte de sa liste a
+    // l'hote (toutes les 3 s tant qu'il n'a pas de reponse) : meme empreinte -> confirmee ; sinon l'hote envoie
+    // ses cles et l'invite traduit chaque numero de l'hote vers sa propre entite de meme cle (absente : ignoree).
+    // Avant la reponse, rien n'est applique (un numero pouvait deplacer un autre vehicule).
+    // Message de controle : numero de depart 0xFFFF, puis genre (1 liste confirmee, 2 demande, 3 cles).
     public static class Traffic
     {
         class Ent
@@ -39,13 +44,18 @@ namespace MWCoop
         const string WalkersPath = "HUMANS/Randomizer/Walkers";
         static readonly List<Ent> ents = new List<Ent>();
         static readonly List<PlayMakerFSM> mutedSpawners = new List<PlayMakerFSM>();
-        static bool built;
-        static float buildAt = -1, nextSend, nextLog, nextSample, nextTrainLog;
+        static bool built, verified;
+        static float buildAt = -1, nextSend, nextLog, nextSample, nextTrainLog, nextAsk;
+        static uint listHash;
+        const int Control = 0xFFFF, C_SAME = 1, C_ASK = 2, C_KEYS = 3;
+        static int[] remap;                 // invite : numero de l'hote -> rang ici (-1 : absente ici) ; null : memes listes
+        static string[] hostKeys;           // invite : cles de l'hote en cours de reception
+        static int hostKeysGot;
 
         public static void OnLevelLoaded()
         {
             ents.Clear(); mutedSpawners.Clear();
-            built = false;
+            built = false; verified = false; remap = null; hostKeys = null; hostKeysGot = 0; nextAsk = 0;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 6f : -1;
         }
 
@@ -86,6 +96,7 @@ namespace MWCoop
                 foreach (char ch in e.Key) { h ^= ch; h *= 16777619; }
                 if (e.Train) hasTrain = true;
             }
+            listHash = h;
             Log.Info("trafic : " + ents.Count + " vehicules et passants suivis (train " + (hasTrain ? "oui" : "non") + ", empreinte " + h.ToString("x8") + ")");
         }
 
@@ -122,6 +133,12 @@ namespace MWCoop
                 nextSend = now + 0.2f;
                 SendAll();
                 return;
+            }
+            // Invite : empreinte de sa liste a l'hote jusqu'a sa reponse.
+            if (!verified && now >= nextAsk)
+            {
+                nextAsk = now + 3f;
+                Session.SendToHost(new NetWriter(Msg.Traffic).U16(Control).U8(C_ASK).I32((int)listHash).U16(ents.Count), true);
             }
             int moving = 0;
             foreach (Ent e in ents)
@@ -165,8 +182,11 @@ namespace MWCoop
 
         public static void OnMessage(Peer from, NetReader r)
         {
-            if (Session.IsHost || !built) return;
-            int start = r.U16(), n = r.U8();
+            if (!built) return;
+            int start = r.U16();
+            if (start == Control) { OnControl(from, r); return; }
+            if (Session.IsHost || !verified) return;
+            int n = r.U8();
             float now = Time.realtimeSinceStartup;
             for (int i = start; i < start + n; i++)
             {
@@ -174,8 +194,9 @@ namespace MWCoop
                 Vector3 p = Vector3.zero, v = Vector3.zero;
                 Quaternion q = Quaternion.identity;
                 if (on) { p = r.Vec(); q = r.Quat(); v = r.Vec(); }
-                if (i >= ents.Count) continue;
-                Ent e = ents[i];
+                int li = remap == null ? i : i < remap.Length ? remap[i] : -1;
+                if (li < 0 || li >= ents.Count) continue;
+                Ent e = ents[li];
                 if (e.T == null) continue;
                 Mute(e);
                 if (e.T.gameObject.activeSelf != on) e.T.gameObject.SetActive(on);
@@ -184,6 +205,73 @@ namespace MWCoop
                 if (e.LastRecv <= 0 || (p - e.T.position).sqrMagnitude > 400f) { e.T.position = p; e.T.rotation = q; }
                 e.Pos = p; e.Rot = q; e.Vel = v; e.LastRecv = now;
             }
+        }
+
+        // Liste de l'invite comparee a celle de l'hote (empreinte), cles de l'hote si elles different.
+        static void OnControl(Peer from, NetReader r)
+        {
+            int kind = r.U8();
+            uint h = (uint)r.I32();
+            if (Session.IsHost)
+            {
+                if (kind != C_ASK) return;
+                int count = r.U16();
+                if (h == listHash && count == ents.Count)
+                {
+                    Session.T.SendReliable(from, new NetWriter(Msg.Traffic).U16(Control).U8(C_SAME).I32((int)listHash).U16(ents.Count).ToArray());
+                    Log.Info("trafic : liste de " + from + " identique (" + count + ", empreinte " + h.ToString("x8") + ")");
+                    return;
+                }
+                Log.Warn("trafic : liste de " + from + " differente (" + count + " entites, empreinte " + h.ToString("x8") + " ; ici " + ents.Count + ", " + listHash.ToString("x8") + ") : envoi des cles");
+                for (int first = 0; first < ents.Count; )
+                {
+                    var w = new NetWriter(Msg.Traffic).U16(Control).U8(C_KEYS).I32((int)listHash).U16(ents.Count).U16(first);
+                    int n = 0, len = 0;
+                    while (first + n < ents.Count && n < 200 && (n == 0 || len + ents[first + n].Key.Length < 900)) { len += ents[first + n].Key.Length + 2; n++; }
+                    w.U8(n);
+                    for (int i = first; i < first + n; i++) w.Str(ents[i].Key);
+                    Session.T.SendReliable(from, w.ToArray());
+                    first += n;
+                }
+                return;
+            }
+            if (verified) return;
+            int total = r.U16();
+            if (kind == C_SAME)
+            {
+                if (h != listHash || total != ents.Count) return;   // (reponse a une autre liste)
+                verified = true; remap = null;
+                Log.Info("trafic : liste identique a celle de l'hote (" + total + ")");
+                return;
+            }
+            if (kind != C_KEYS) return;
+            int start = r.U16(), cnt = r.U8();
+            if (hostKeys == null || hostKeys.Length != total) { hostKeys = new string[total]; hostKeysGot = 0; }
+            for (int i = start; i < start + cnt; i++)
+            {
+                string k = r.Str();
+                if (i < total && hostKeys[i] == null) { hostKeys[i] = k; hostKeysGot++; }
+            }
+            if (hostKeysGot < total) return;
+            // Toutes les cles de l'hote : traduction de ses numeros vers les notres.
+            var mine = new Dictionary<string, int>();
+            for (int i = 0; i < ents.Count; i++) mine[ents[i].Key] = i;
+            remap = new int[total];
+            var notHere = new List<string>();
+            var hostHas = new HashSet<string>();
+            for (int i = 0; i < total; i++)
+            {
+                int li;
+                remap[i] = mine.TryGetValue(hostKeys[i], out li) ? li : -1;
+                if (remap[i] < 0 && notHere.Count < 12) notHere.Add(hostKeys[i]);
+                hostHas.Add(hostKeys[i]);
+            }
+            var notThere = new List<string>();
+            foreach (Ent e in ents) if (!hostHas.Contains(e.Key) && notThere.Count < 12) notThere.Add(e.Key);
+            verified = true;
+            hostKeys = null;
+            Log.Warn("trafic : liste differente de celle de l'hote (" + total + " chez lui, " + ents.Count + " ici), numeros traduits par cle -- absentes ici : "
+                     + string.Join(", ", notHere.ToArray()) + " ; absentes chez l'hote : " + string.Join(", ", notThere.ToArray()));
         }
 
         // Coupe la logique locale d'une entite (une fois) et celle des conteneurs qui la font apparaitre.
