@@ -11,9 +11,11 @@ namespace MWCoop
     // Une action ajoutee en tete de cet etat previent les autres, qui menent l'objet de meme ID
     // au meme etat : il disparait chez tout le monde. Celui qui mange porte la main a la bouche.
     // Autres fins rejouees par leur nom, seulement si rien ne s'enchaine apres (etat terminal) : "Destroy 2"
-    // (sucre, levure), "Is garbage" (jete), "Empty" (boite de pieces videe, bouteille vide), "State 4" quand il
-    // detruit (caisse de biere vide). Jamais "Add inventory" (paquet empoche : il compte dans les cigarettes de
-    // celui qui l'empoche) -- le "Destroy" qui le suit suffit a faire disparaitre le paquet chez les autres.
+    // (sucre, levure), "Is garbage" (jete), "Empty" (boite de pieces videe, charbon), "State 4" quand il
+    // detruit (caisse de biere vide, bidon d'huile vide). Jamais "Add inventory" (paquet empoche : il compte dans
+    // les cigarettes de celui qui l'empoche) -- le "Destroy" qui le suit suffit a faire disparaitre le paquet.
+    // "Empty" et "State 4" ne sont pas des disparitions : l'objet vide reste la (renomme) et peut encore etre
+    // jete ("Is garbage", par GARBAGE) -- il reste suivi pour que cette vraie fin soit rejouee aussi.
     // Caisse de biere : "Remove bottle" (une bouteille de moins) est rejoue sans enchainer sur "Play anim"
     // (la biere en main de celui qui boit).
     // Pareil pour les sacs de courses : « Spawn one » (sortir un article) et « Spawn all » (tout vider)
@@ -30,13 +32,14 @@ namespace MWCoop
         static readonly List<PlayMakerFSM> toWatch = new List<PlayMakerFSM>();         // a lire, 2 ms par image
         static readonly System.Diagnostics.Stopwatch watchClock = new System.Diagnostics.Stopwatch();
         static int watchedStates;
-        static readonly string[] GoneStates = { "Destroy", "Destroy 2", "Is garbage", "Empty", "State 4" };
+        static readonly string[] GoneStates = { "Destroy", "Destroy 2", "Is garbage" };   // l'article quitte le monde
+        static readonly string[] EmptyStates = { "Empty", "State 4" };                     // vide, mais toujours la
         const string Bottle = "Remove bottle";
         static float nextScan = -1, lastRescan, nextWarn;
         static bool applying;
         static readonly List<KeyValuePair<string, string>> consumed = new List<KeyValuePair<string, string>>();   // hote : (ID, fin) depuis le chargement
         static readonly HashSet<string> remembered = new HashSet<string>();
-        static readonly HashSet<string> done = new HashSet<string>();   // articles finis, dits ou recus (Props n'a rien a redire)
+        static readonly HashSet<string> done = new HashSet<string>();   // articles disparus, dits ou recus (Props n'a rien a redire)
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static readonly List<KeyValuePair<float, GameObject>> fresh = new List<KeyValuePair<float, GameObject>>();
         static int freshLogged;
@@ -151,6 +154,7 @@ namespace MWCoop
 
         static bool IsBag(string state) { return state == "Spawn one" || state == "Spawn all"; }
         static bool IsGoneName(string state) { return System.Array.IndexOf(GoneStates, state) >= 0; }
+        static bool IsEndName(string state) { return IsGoneName(state) || System.Array.IndexOf(EmptyStates, state) >= 0; }
 
         // Etat suivi d'un automate Use d'article. Les fins autres que "Destroy" seulement si elles sont
         // terminales (rien ne s'enchaine : ni animation du joueur, ni logique de chargement), sans rien qui
@@ -161,7 +165,7 @@ namespace MWCoop
         {
             string n = s.Name;
             if (n == "Destroy" || IsBag(n)) return true;
-            if (n != Bottle && !IsGoneName(n)) return false;
+            if (n != Bottle && !IsEndName(n)) return false;
             bool r;
             if (trackedCache.TryGetValue(s, out r)) return r;
             r = n == Bottle || s.Transitions.Length == 0;
@@ -208,7 +212,7 @@ namespace MWCoop
         public static bool IsGone(PlayMakerFSM f)
         {
             FsmState s = f != null ? f.Fsm.ActiveState : null;
-            return s != null && IsGoneName(s.Name) && Tracked(s);
+            return s != null && IsEndName(s.Name) && Tracked(s);
         }
 
         // Fin a annoncer pour un article disparu (Props) : son etat s'il est suivi, sinon "Destroy".
@@ -348,9 +352,11 @@ namespace MWCoop
             // Mange ou bu (pas jete) : la main va a la bouche.
             if (from.Contains("Eat") || from.Contains("Drink") || from.Contains("drink") || from == "Play anim")
                 EatUntil = Time.realtimeSinceStartup + 2f;
-            done.Add(id);
+            bool gone = IsGoneName(state);
+            if (gone) done.Add(id);
             if (Session.IsHost) Remember(id, state);
-            Log.Info("consommables : " + id + " consomme ou jete ici (" + from + (state != "Destroy" ? " -> " + state : "") + ")");
+            lastEnd = id;
+            Log.Info("consommables : " + id + (gone ? " consomme ou jete ici (" : " vide ici (") + from + (state != "Destroy" ? " -> " + state : "") + ")");
             Session.SendAll(new NetWriter(Msg.Consume).U8(Session.LocalId).Str(id).U8(0).Str(state), true);
         }
 
@@ -358,7 +364,8 @@ namespace MWCoop
         // le font disparaitre aussi, par son ID.
         public static void SendGone(string id, string state)
         {
-            if (!done.Add(id)) return;
+            if (done.Contains(id)) return;
+            if (IsGoneName(state)) done.Add(id);
             if (Session.IsHost) Remember(id, state);
             Log.Info("consommables : " + id + " disparu ici sans etat suivi, signale aux autres (" + state + ")");
             Session.SendAll(new NetWriter(Msg.Consume).U8(Session.LocalId).Str(id).U8(0).Str(state), true);
@@ -372,8 +379,10 @@ namespace MWCoop
             bool snapshot = r.U8() == 1;
             string state = r.More ? r.Str() : "Destroy";
             bool gone = IsGoneName(state);
+            bool over = done.Contains(id);   // deja disparu ici (mange, jete, recu) : rien a rejouer ni a cacher
             if (gone) done.Add(id);
-            if (Session.IsHost) { if (gone) Remember(id, state); Session.Broadcast(new NetWriter(Msg.Consume).U8(who).Str(id).U8(0).Str(state), true, who); }
+            if (Session.IsHost) { if (IsEndName(state)) Remember(id, state); Session.Broadcast(new NetWriter(Msg.Consume).U8(who).Str(id).U8(0).Str(state), true, who); }
+            if (over) { if (!snapshot) Log.Info("consommables : " + id + " deja fini ici (" + state + " du joueur #" + who + ")"); return; }
             PlayMakerFSM f;
             float now = Time.realtimeSinceStartup;
             if (!byId.TryGetValue(id, out f) || f == null)
@@ -391,7 +400,8 @@ namespace MWCoop
             foreach (Late l in late) if (l.Id == id) { queued = true; break; }
             if (f == null || queued)
             {
-                // Disparu chez l'autre, sans automate suivi ici pour le rejouer : Props le cache s'il le connait.
+                // Disparu chez l'autre, sans automate suivi ici pour le rejouer : Props le cache s'il le connait
+                // (pas un objet seulement vide : il est toujours la, et sa vraie fin viendra).
                 if (f == null && gone && Props.Vanish(id)) { Log.Info("consommables : " + id + " disparu chez le joueur #" + who + ", cache ici"); return; }
                 late.Add(new Late { Until = now + 3f, Id = id, State = state, Who = who, Snapshot = snapshot });
                 return;
@@ -401,11 +411,13 @@ namespace MWCoop
 
         static void Apply(PlayMakerFSM f, string id, string state, int who, bool snapshot)
         {
-            bool gone = IsGoneName(state);
+            bool gone = IsGoneName(state), end = IsEndName(state);
             FsmState s = f.Fsm.GetState(state);
             if (s == null || !Tracked(s)) return;
             // Deja la (meme fin atteinte des deux cotes, sac deja vide) : pas une 2e fois.
-            if ((gone || state == "Spawn all") && f.ActiveStateName == state) { if (!snapshot) Log.Info("consommables : " + id + " deja " + state + " ici"); return; }
+            if ((end || state == "Spawn all") && f.ActiveStateName == state) { if (!snapshot) Log.Info("consommables : " + id + " deja " + state + " ici"); return; }
+            // Deja jete ou mange ici : un "vide" arrive apres coup ne le ramene pas en arriere.
+            if (end && !gone && IsGoneName(f.ActiveStateName)) return;
             applying = true; Replay.Depth++;
             try
             {
@@ -421,6 +433,9 @@ namespace MWCoop
             finally { applying = false; Replay.Depth--; }
             if (IsBag(state)) { Log.Info("consommables : sac " + id + " ouvert par le joueur #" + who + " (" + state + ")"); return; }
             if (state == Bottle) { Log.Info("consommables : " + id + " une bouteille de moins (joueur #" + who + ")"); return; }
+            lastEnd = id;
+            // Vide mais toujours la : reste suivi, sa vraie fin (jete) sera rejouee elle aussi.
+            if (!gone) { Log.Info("consommables : " + id + " vide par le joueur #" + who + " (" + state + ")"); return; }
             byId.Remove(id);
             Log.Info("consommables : " + id + " consomme par le joueur #" + who + (state != "Destroy" ? " (" + state + ")" : ""));
         }
@@ -480,9 +495,12 @@ namespace MWCoop
         static int testStep;
         static float testAt, testLog;
         static HashSet<string> testPacks, testBags;
+        static string lastEnd, testBox;   // dernier article fini ici (dit ou recu) ; boite videe par l'essai
+        static bool testBoxLogged;
 
         public static void Test(string mode, float t)
         {
+            if (mode == "boite-vide") { TestBox(t); return; }
             if (mode != "poche") return;
             string prefix = Config.Get("Test", "TestPiece", "cigarettes");
             if (Session.IsHost && t > 30f && testStep == 0)
@@ -510,6 +528,54 @@ namespace MWCoop
                 if (testStep == 2 && t - testAt > 8f) { testStep = 3; Log.Info("autotest : aucun paquet neuf a empocher"); }
             }
             if (t > 34f && t < 60f && t - testLog >= 2f) { testLog = t; Log.Info("autotest : paquets " + Props.Ids(prefix)); }
+        }
+
+        // Essais ([Test] Autotest=boite-vide) : l'hote vide a 30 s l'article suivi le plus proche qui a une fin
+        // "vide" ("Empty" : boite de pieces, "State 4" : caisse de biere, bidon d'huile) et "Is garbage" ([Test]
+        // TestBoite : debut d'ID, n'importe lequel par defaut), puis le jette a 34 s. Chez l'invite : « vide par le
+        // joueur #0 », puis « consomme par le joueur #0 (Is garbage) » -- jamais « cache ici » ni « introuvable » ;
+        // a 37 s chacun note ou est cet article (meme place des deux cotes, celle de la poubelle).
+        static void TestBox(float t)
+        {
+            if (Session.IsHost && t > 30f && testStep == 0)
+            {
+                testStep = 1;
+                PlayMakerFSM f = EmptyBox(Config.Get("Test", "TestBoite", ""));
+                if (f == null) { Log.Info("autotest : aucune boite a vider (" + byId.Count + " suivis)"); return; }
+                testBox = f.FsmVariables.FindFsmString("ID").Value;
+                string empty = f.Fsm.GetState("Empty") != null ? "Empty" : "State 4";
+                Game.SetState(f, empty);
+                Log.Info("autotest : boite " + testBox + " videe (" + empty + ") -> " + f.ActiveStateName);
+            }
+            if (Session.IsHost && t > 34f && testStep == 1)
+            {
+                testStep = 2;
+                PlayMakerFSM f = null;
+                if (testBox != null && byId.TryGetValue(testBox, out f) && f != null) Game.SetState(f, "Is garbage");
+                Log.Info("autotest : boite " + testBox + " jetee -> " + (f != null ? f.ActiveStateName : "introuvable"));
+            }
+            if (t > 37f && !testBoxLogged)
+            {
+                testBoxLogged = true;
+                Log.Info("autotest : derniere fin " + (lastEnd ?? "aucune") + " en " + (lastEnd != null ? Props.Where(lastEnd) : "?"));
+            }
+        }
+
+        // Essais : article suivi le plus proche du joueur, pas encore vide, qui a une fin "vide" suivie et "Is garbage".
+        static PlayMakerFSM EmptyBox(string prefix)
+        {
+            Scan();
+            Vector3 me = GameObject.Find("PLAYER").transform.position;
+            PlayMakerFSM best = null;
+            foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
+            {
+                PlayMakerFSM f = kv.Value;
+                if (f == null || !kv.Key.StartsWith(prefix) || f.Fsm.GetState("Is garbage") == null || IsEndName(f.ActiveStateName)) continue;
+                FsmState e = f.Fsm.GetState("Empty") ?? f.Fsm.GetState("State 4");
+                if (e == null || !Tracked(e)) continue;
+                if (best == null || (f.transform.position - me).sqrMagnitude < (best.transform.position - me).sqrMagnitude) best = f;
+            }
+            return best;
         }
 
         // Essais : automates Use actifs des paquets (etat 'Check pocket'), ID deja pose.

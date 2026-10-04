@@ -24,6 +24,9 @@ namespace MWCoop
     // copie qui avance par a-coups). Sorti de la voiture, ou quand il n'en a plus la main : pose dans le monde
     // (etat 0, fiable) et l'objet retombe sous la physique. L'hote ne recale pas ce qu'un autre transporte,
     // et une pose au repos recue pour un objet dans la voiture qu'on conduit est ignoree.
+    // Pose au repos (etat 0) d'un objet pose dans une voiture : envoyee aussi DANS la voiture, et posee chez
+    // les autres sur leur propre voiture -- le recalage de la voiture (avant ou apres) l'emmene alors une seule
+    // fois. Une pose au repos hors voiture fait autorite : un recalage de voiture juste apres ne la deplace pas.
     public static class Props
     {
         class Prop
@@ -42,6 +45,7 @@ namespace MWCoop
             public int RideOut = -1, RidePass;    // envoye : voiture ou on le transporte (autorite ici)
             public float RideKeep, RideSeen;
             public float GoneAt;                  // corps detruit ici (disparu) : > 0 en attente, -1 traite
+            public float WorldAt;                 // recu : pose au repos hors voiture (CarMoved ne l'emmene pas)
         }
 
         static readonly Dictionary<string, Prop> props = new Dictionary<string, Prop>();
@@ -305,8 +309,20 @@ namespace MWCoop
         {
             if (p.Body == null) return;
             p.LastSentPos = p.Body.position;
-            Session.SendAll(new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(state)
-                .Vec(p.Body.position).Quat(p.Body.rotation).Vec(p.Body.velocity), reliable);
+            var w = new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(state)
+                .Vec(p.Body.position).Quat(p.Body.rotation).Vec(p.Body.velocity);
+            if (state == 0) InCarPose(p, w);
+            Session.SendAll(w, reliable);
+        }
+
+        // Au repos dans une voiture : numero de la voiture, position et rotation dans son repere, a la suite.
+        static void InCarPose(Prop p, NetWriter w)
+        {
+            Rigidbody car = VehicleSync.CarUnder(p.Body);
+            int ci = VehicleSync.CarIndex(car);
+            if (ci < 0) return;
+            Quaternion inv = Quaternion.Inverse(car.rotation);
+            w.U8(ci).Vec(inv * (p.Body.position - car.position)).Quat(inv * p.Body.rotation);
         }
 
         // Corps detruit ici : l'article a-t-il disparu (automate Use detruit, inactif, ou dans un etat de
@@ -464,15 +480,17 @@ namespace MWCoop
 
         // La voiture 'car' va etre replacee d'un coup (recalage d'une voiture garee, copie trop loin) : ce qui
         // est pose dedans la suit (meme deplacement), au lieu de rester sur place ou de tomber a travers.
+        // Pas un objet dont on vient de recevoir la pose hors voiture : elle compte deja ce deplacement.
         public static void CarMoved(Rigidbody car, Vector3 pos, Quaternion rot, Vector3 vel)
         {
             if (car == null || nextScan < 0) return;
             Vector3 cp = car.position;
             Quaternion inv = Quaternion.Inverse(car.rotation);
+            float now = Time.realtimeSinceStartup;
             int n = 0;
             foreach (Prop p in props.Values)
             {
-                if (p.Body == null || p == held || p.RideCar >= 0 || p.RemoteBy >= 0) continue;
+                if (p.Body == null || p == held || p.RideCar >= 0 || p.RemoteBy >= 0 || now - p.WorldAt < 2.5f) continue;
                 if ((p.Body.position - cp).sqrMagnitude > 49f || p.Body.transform.root == car.transform) continue;
                 if (VehicleSync.CarUnder(p.Body) != car) continue;
                 Transform t = p.Body.transform;
@@ -495,10 +513,16 @@ namespace MWCoop
             Quaternion rot = r.Quat();
             Vector3 vel = r.Vec();
             int car = state == 3 ? r.U8() : -1;   // transporte : pos et rot sont dans la voiture 'car'
+            // Au repos dans une voiture : sa pose dans la voiture 'car' suit (InCarPose).
+            bool inCar = state == 0 && r.More;
+            Vector3 lp = Vector3.zero;
+            Quaternion lr = Quaternion.identity;
+            if (inCar) { car = r.U8(); lp = r.Vec(); lr = r.Quat(); }
             if (Session.IsHost)
             {
                 var w = new NetWriter(Msg.Prop).U8(who).Str(id).U8(state).Vec(pos).Quat(rot).Vec(vel);
                 if (state == 3) w.U8(car);
+                if (inCar) w.U8(car).Vec(lp).Quat(lr);
                 Session.Broadcast(w, state == 0, who);
             }
             Prop p;
@@ -525,12 +549,16 @@ namespace MWCoop
             }
             // Au repos, mais pose dans la voiture qu'on conduit : c'est nous qui le transportons (la pose de
             // l'autre est prise sur sa copie, en retard) ; seulement la fin de son deplacement.
-            int ci = VehicleSync.CarIndex(VehicleSync.CarUnder(p.Body));
+            int ci = inCar ? car : VehicleSync.CarIndex(VehicleSync.CarUnder(p.Body));
             if (VehicleSync.DrivenHere(ci))
             {
                 if (p.RemoteBy == who) { p.RemoteBy = -1; p.Vel = VehicleSync.CarVelocity(ci); SetKinematic(p, false); }
                 return;
             }
+            // Pose dans une voiture : sur notre voiture, ou qu'elle soit ici (son recalage l'emmenera ensuite).
+            Rigidbody cb = inCar ? VehicleSync.CarBody(car) : null;
+            if (cb != null) { Transform ct = cb.transform; pos = ct.position + ct.rotation * lp; rot = ct.rotation * lr; }
+            p.WorldAt = cb != null ? 0f : now;
             // Au repos : fin du deplacement distant, ou recalage par l'hote.
             p.RemoteBy = -1;
             SetKinematic(p, false);
@@ -539,6 +567,7 @@ namespace MWCoop
             {
                 t.position = pos; t.rotation = rot;
                 p.Body.velocity = vel;
+                VehicleSync.Forget(p.Body);   // voiture sous l'objet a revoir a sa nouvelle place
             }
         }
 
@@ -594,16 +623,25 @@ namespace MWCoop
         // TestVoiture a 20 s. Le conducteur monte a 15-22 s, la voiture est poussee a 8 m/s de 25 a 37 s. Chacun
         // note chaque seconde la pose dans la voiture de ce qui y est pose : moins de 5 cm d'ecart entre les
         // deux journaux, toujours dedans a 45 s.
+        // coffre-pousse : personne au volant ; l'hote pousse la voiture garee a 1,5 m/s de 28 a 29,5 s (recalage
+        // chez l'invite, objets recales aussi) : chez l'invite la pose dans la voiture ne fait pas un 2e bond
+        // (meme pose que chez l'hote a 5 cm pres apres 33 s).
         static int testStep;
         static float testLog;
         static bool testPlaced;
 
         public static void Test(string mode, float t)
         {
-            if (mode != "coffre-objets" && mode != "coffre-objets-invite") return;
+            bool push = mode == "coffre-pousse";
+            if (mode != "coffre-objets" && mode != "coffre-objets-invite" && !push) return;
             string name = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
             Rigidbody car = VehicleSync.Body(name);
-            bool driver = Session.IsHost != (mode == "coffre-objets-invite");
+            bool driver = !push && Session.IsHost != (mode == "coffre-objets-invite");
+            if (push && Session.IsHost && car != null && t > 28f && t < 29.5f)
+            {
+                Vector3 f = car.transform.forward; f.y = 0;
+                car.velocity = f.normalized * 1.5f + Vector3.up * Mathf.Min(car.velocity.y, 0f);
+            }
             if (driver && t > 15f && testStep == 0) { testStep = 1; Log.Info("autotest : " + VehicleSync.TestEnter(name, false)); }
             if (driver && t > 22f && testStep == 1) { testStep = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(name, true)); }
             if (driver && car != null && t > 25f && t < 37f)
