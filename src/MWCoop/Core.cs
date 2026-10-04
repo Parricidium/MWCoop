@@ -74,6 +74,10 @@ namespace MWCoop
             Step("audit", Audit.Update);
             Step("portes automatiques", NearDoors.Update);
             Step("machines", Machines.Update);
+            Step("givre", Frost.Update);
+            Step("remorquage", Tow.Update);
+            Step("appels", Calls.Update);
+            Step("vetements", Wear.Update);
             Step("rayons", Stock.Update);
             Step("PNJ", Npcs.Update);
             Step("voitures garees", Parked.Update);
@@ -130,6 +134,10 @@ namespace MWCoop
             Audit.OnLevelLoaded();
             NearDoors.OnLevelLoaded();
             Machines.OnLevelLoaded();
+            Frost.OnLevelLoaded();
+            Tow.OnLevelLoaded();
+            Calls.OnLevelLoaded();
+            Wear.OnLevelLoaded();
             Stock.OnLevelLoaded();
             Npcs.OnLevelLoaded();
             Parked.OnLevelLoaded();
