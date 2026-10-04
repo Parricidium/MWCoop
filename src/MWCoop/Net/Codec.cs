@@ -85,10 +85,11 @@ namespace MWCoop.Net
         Seat = 27,        // joueur assis a une place passager (voiture, place) ou sorti
         CarVisual = 26,   // tableau de bord, voyants, vitres, leviers... : lot de (cle, drapeaux, pose)
         CarDoor = 25,     // portiere / capot / coffre : fermee (0), ouverte (1), angle (2), saisie (3), verrouillee (4) ; ordre de l'hote
-        Machine = 30,     // non fiable : ce qu'on voit d'une machine a ecran (pompe a essence) chez celui qui s'en sert
+        Machine = 30,     // non fiable : ce qu'on voit d'une machine a ecran (pompe, poker, machine a sous) chez celui qui s'en sert
         Stock = 31,       // magasin : panier d'un joueur et stock d'un produit qui ont change
         Npc = 32,         // non fiable, hote -> invites : PNJ proches des invites (pose, clip, objets tenus)
         Parked = 33,      // hote -> invites : voitures garees du decor (parent, pose, visible)
         Audit = 34,       // audit de la synchro : hote -> invites « SNAP n », invites -> hote leurs etats changes (cle hachee, etat)
+        MachineLock = 35, // verrou d'une machine a jeu (poker, machine a sous), arbitre par l'hote : libre, demande, tenue, refus ; jeu lance sur l'ordinateur
     }
 }
