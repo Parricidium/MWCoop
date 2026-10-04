@@ -112,6 +112,7 @@ namespace MWCoop
         {
             float t = Time.realtimeSinceStartup + 1.5f;
             if (nextScan > t) nextScan = t;
+            rootsDirty = true;   // l'objet cree peut etre une nouvelle racine (colis...)
         }
 
         // Logique tiree au hasard qui doit etre la meme pour tous : seul l'hote la fait tourner, les
@@ -137,7 +138,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear(); pathOf.Clear(); mutedList.Clear(); alias.Clear();
-            hostTvOn = false;
+            hostTvOn = false; scanIdx = -1; scanRoots = null; rootsDirty = true;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
@@ -244,12 +245,48 @@ namespace MWCoop
         // ou non) dans l'ordre de la hierarchie : la meme cle designe le meme automate chez chacun.
         static readonly Dictionary<PlayMakerFSM, string> pathOf = new Dictionary<PlayMakerFSM, string>();
 
-        static void Scan()
+        // Releve etale sur plusieurs images (4 ms par image, racine par racine) : plus d'a-coup toutes les
+        // 60 s. Les racines de la scene sont relevees une fois, puis de nouveau seulement quand un objet a
+        // ete cree (SoonScan).
+        static List<GameObject> scanRoots;
+        static bool rootsDirty = true;
+        static int scanIdx = -1;
+        static Dictionary<string, int> scanSeen;
+        static readonly System.Diagnostics.Stopwatch scanWatch = new System.Diagnostics.Stopwatch();
+
+        static void StartScan()
         {
-            var seen = new Dictionary<string, int>();
-            List<GameObject> roots = Recon.SceneRoots();
-            roots.Sort((x, y) => { int c = string.CompareOrdinal(x.name, y.name); return c != 0 ? c : x.transform.GetSiblingIndex().CompareTo(y.transform.GetSiblingIndex()); });
-            foreach (GameObject root in roots)
+            if (rootsDirty || scanRoots == null)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                scanRoots = Recon.SceneRoots();
+                scanRoots.Sort((x, y) => { int c = string.CompareOrdinal(x.name, y.name); return c != 0 ? c : x.transform.GetSiblingIndex().CompareTo(y.transform.GetSiblingIndex()); });
+                rootsDirty = false;
+                if (sw.ElapsedMilliseconds > 25) Log.Info("monde : racines relevees en " + sw.ElapsedMilliseconds + " ms");
+            }
+            scanIdx = 0;
+            scanSeen = new Dictionary<string, int>();
+        }
+
+        // Vrai quand le releve est fini.
+        static bool ScanStep()
+        {
+            scanWatch.Reset(); scanWatch.Start();
+            while (scanIdx < scanRoots.Count && scanWatch.ElapsedMilliseconds < 4)
+            {
+                GameObject root = scanRoots[scanIdx++];
+                long t0 = scanWatch.ElapsedMilliseconds;
+                if (root != null) ScanRoot(root, scanSeen);
+                if (scanWatch.ElapsedMilliseconds - t0 > 25 && root != null) Log.Info("monde : releve de " + root.name + " " + (scanWatch.ElapsedMilliseconds - t0) + " ms");
+            }
+            if (scanIdx < scanRoots.Count) return false;
+            scanIdx = -1;
+            LogAdded();
+            return true;
+        }
+
+        static void ScanRoot(GameObject root, Dictionary<string, int> seen)
+        {
                 foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
                     if (f.hideFlags != HideFlags.None) continue;
@@ -265,7 +302,6 @@ namespace MWCoop
                     // Objet inactif : ses actions ne sont pas chargees ; on le reprend quand il s'active.
                     if (!f.gameObject.activeInHierarchy || !TryHook(w)) pending.Add(w);
                 }
-            LogAdded();
         }
 
         static int addedSinceLog;
@@ -707,7 +743,8 @@ namespace MWCoop
             if (!Session.Active || nextScan < 0 || Config.GetInt("Coop", "SynchroMonde", 1) == 0) return;
             float now = Time.realtimeSinceStartup;
             // Releve complet toutes les 60 s (objets crees en jeu) ; les objets qui s'activent, toutes les 2 s.
-            if (now >= nextScan) { nextScan = now + 60f; Scan(); }
+            if (scanIdx >= 0) { if (ScanStep()) nextScan = now + 60f; }
+            else if (now >= nextScan) StartScan();
             else if (now >= nextPending) { nextPending = now + 2f; CheckPending(); }
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetAxis("Mouse ScrollWheel") != 0f) lastInput = now;
             for (int i = mutedList.Count - 1; i >= 0; i--) if (now > mutedList[i].MutedUntil) Unmute(mutedList[i]);

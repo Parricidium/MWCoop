@@ -58,6 +58,8 @@ namespace MWCoop
             return !n.StartsWith("PlayerTrigger") && !n.StartsWith("DriveTrigger") && !n.StartsWith("CameraPivot");
         }
         static readonly Dictionary<string, Job> jobs = new Dictionary<string, Job>();
+        class Classified { public string Path; public bool Control; }
+        static readonly Dictionary<PlayMakerFSM, Classified> classified = new Dictionary<PlayMakerFSM, Classified>();
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
         static float nextScan = -1, loadedAt, nextWarn;
         static bool applying;
@@ -77,7 +79,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            jobs.Clear(); hooked.Clear();
+            jobs.Clear(); hooked.Clear(); classified.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 10f : -1;
         }
@@ -85,7 +87,7 @@ namespace MWCoop
         public static void Update()
         {
             if (nextScan < 0 || Time.realtimeSinceStartup < nextScan) return;
-            nextScan = Time.realtimeSinceStartup + 20f;
+            nextScan = Time.realtimeSinceStartup + 30f;
             int added = 0;
             var seen = new Dictionary<string, int>();
             foreach (KeyValuePair<GameObject, bool> root in RootsNow())
@@ -94,18 +96,26 @@ namespace MWCoop
                 bool vehicle = root.Value;
                 foreach (PlayMakerFSM f in r.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
-                    bool control = vehicle && !Persistent(f) && IsControl(f);
-                    if ((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || (!Persistent(f) && !control)) continue;
-                    if (Interactions.Tracks(f)) continue;
-                    string on = f.gameObject.name;
-                    if (on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r)) continue;   // objets : Props/Interactions
-                    string path = Recon.Path(f.transform) + "::" + f.FsmName;
+                    // Tri fait une fois par automate (le releve revient toutes les 30 s sans tout refaire).
+                    Classified c;
+                    if (!classified.TryGetValue(f, out c))
+                    {
+                        bool control = vehicle && !Persistent(f) && IsControl(f);
+                        string on = f.gameObject.name;
+                        bool keep = !((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || (!Persistent(f) && !control))
+                                    && !Interactions.Tracks(f) && !(on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r));   // objets : Props/Interactions
+                        c = new Classified { Path = keep ? Recon.Path(f.transform) + "::" + f.FsmName : null, Control = control };
+                        classified[f] = c;
+                    }
+                    if (c.Path == null) continue;
+                    bool controlF = c.Control;
+                    string path = c.Path;
                     int k;
                     seen.TryGetValue(path, out k);
                     seen[path] = k + 1;
                     string key = path + "#" + k;
                     if (hooked.Contains(f) || !Replay.Claim(f, "quetes")) continue;
-                    var j = new Job { Key = key, F = f, Control = control || vehicle };   // vehicules : molettes, boutons
+                    var j = new Job { Key = key, F = f, Control = controlF || vehicle };   // vehicules : molettes, boutons
                     if (!InjectAll(j)) continue;   // automate pas encore charge : au prochain passage
                     hooked.Add(f);
                     jobs[key] = j;

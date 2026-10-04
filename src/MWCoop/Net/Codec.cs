@@ -87,5 +87,7 @@ namespace MWCoop.Net
         CarDoor = 25,     // portiere / capot / coffre : ouverte (1), fermee (0), angle en temps reel (2)
         Machine = 30,     // non fiable : ce qu'on voit d'une machine a ecran (pompe a essence) chez celui qui s'en sert
         Stock = 31,       // magasin : panier d'un joueur et stock d'un produit qui ont change
+        Npc = 32,         // non fiable, hote -> invites : PNJ proches des invites (pose, clip, objets tenus)
+        Parked = 33,      // hote -> invites : voitures garees du decor (parent, pose, visible)
     }
 }
