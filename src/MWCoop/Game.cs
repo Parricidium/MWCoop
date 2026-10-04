@@ -13,31 +13,68 @@ namespace MWCoop
         // Appelee avant l'envoi de la sauvegarde a un invite qui arrive, et par la sauvegarde coop des
         // toilettes (SaveTransfer) : chez l'hote, et chez l'invite pour comparer les deux sauvegardes.
         // Les boutons des toilettes (SAVEGAME :: Button) n'ecoutent pas SAVEGAME : jamais touches ici.
+        // Exception : Systems/Setup Game :: WaitPlayer (le chargement du joueur) ne s'arrete pas dans son etat
+        // de sauvegarde. SAVEGAME -> "Save game" (SaveBool PlayerDead, SaveTransform PLAYER : sa place dans la
+        // sauvegarde) -FINISHED-> Load game 2 -> Check dead (dans la meme image : PlayerSeated, PlayerHelmet,
+        // PlayerInMenu, PlayerComputer = faux, CarVelocity et PlayerVelocity = 0) -> Load position -> Wait for
+        // options load (1 s) -> Move player (SetRotation PLAYER x/z = 0 en monde, echelle 1, PlayerCurrentVehicle,
+        // PlayerStop et PlayerSeated = faux, EngineTemp = AmbientTemperature, LoadSongs relance) -> 5 s -> Jailed?
+        // -> Activate game : tout le chargement de la partie, que le jeu ne voit jamais (il charge le menu 0,4 s
+        // apres SAVEGAME). Assis dans une voiture qui roule, le joueur retrouvait la marche ; la restauration
+        // ci-dessous ne pouvait rien (a 2,5 s il est dans Move player, "parti ailleurs").
+        // Pendant la diffusion, la sortie FINISHED de "Save game" vise donc un etat qui n'existe pas (le
+        // DoTransition de PlayMaker ne fait alors rien) : il ecrit, puis reste dans "Save game" (fini, aucune
+        // action par image), et n'est pas remis dans "Activate game" (ses ActivateGameObject seraient rejoues ;
+        // aucune n'a resetOnExit ni everyFrame : l'y laisser ou non ne change rien d'autre). Seulement s'il est
+        // au repos ("Activate game", ou "Save game" d'une sauvegarde precedente) : en plein chargement (debut de
+        // partie, reapparition), la chaine doit aller au bout comme avant.
         static List<KeyValuePair<PlayMakerFSM, string>> restore;
         static Dictionary<PlayMakerFSM, string> afterSave;   // etat atteint par SAVEGAME
         static float restoreAt;
         public static bool Saving { get { return restore != null; } }
-        public static float LastSaveAt = -100;               // derniere sauvegarde en jeu (horloge reelle)
+        const string HoldState = "(MWCoop : sauvegarde en jeu)";   // nom d'etat absent : transition sans effet
 
         public static void SaveInPlace()
         {
             if (restore != null) return;
             // Hors de la partie (menu) : rien a sauver, SAVEGAME n'y ecrirait qu'une sauvegarde vide.
             if (Application.loadedLevelName != "GAME") { Log.Warn("sauvegarde en jeu refusee : niveau " + Application.loadedLevelName); return; }
-            LastSaveAt = Time.realtimeSinceStartup;
             restore = new List<KeyValuePair<PlayMakerFSM, string>>();
+            PlayMakerFSM setup = null;
             foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
             {
                 string s = f.ActiveStateName;
                 if (string.IsNullOrEmpty(s)) continue;
+                bool listens = false;
                 foreach (HutongGames.PlayMaker.FsmTransition t in f.Fsm.GlobalTransitions)
-                    if (t.EventName == "SAVEGAME") { restore.Add(new KeyValuePair<PlayMakerFSM, string>(f, s)); break; }
+                    if (t.EventName == "SAVEGAME") { listens = true; break; }
+                if (!listens) continue;
+                if (setup == null && f.FsmName == "WaitPlayer" && f.gameObject.name == "Setup Game" && (s == "Activate game" || s == "Save game")) setup = f;
+                else restore.Add(new KeyValuePair<PlayMakerFSM, string>(f, s));
             }
-            PlayMakerFSM.BroadcastEvent("SAVEGAME");
+            HutongGames.PlayMaker.FsmTransition held = null;
+            string heldTo = null;
+            bool odd = false;
+            if (setup != null)
+            {
+                HutongGames.PlayMaker.FsmState sg = setup.Fsm.GetState("Save game");
+                if (sg != null)
+                    foreach (HutongGames.PlayMaker.FsmTransition t in sg.Transitions)
+                        if (t.EventName == "FINISHED") { held = t; heldTo = t.ToState; break; }
+                // Forme inattendue (mise a jour du jeu) : comme les autres, remis dans son etat d'avant.
+                if (held == null) { restore.Add(new KeyValuePair<PlayMakerFSM, string>(setup, setup.ActiveStateName)); setup = null; odd = true; }
+                else held.ToState = HoldState;
+            }
+            try { PlayMakerFSM.BroadcastEvent("SAVEGAME"); }
+            finally { if (held != null) held.ToState = heldTo; }
             afterSave = new Dictionary<PlayMakerFSM, string>();
             foreach (KeyValuePair<PlayMakerFSM, string> kv in restore) if (kv.Key != null) afterSave[kv.Key] = kv.Key.ActiveStateName;
             restoreAt = Time.realtimeSinceStartup + 2.5f;
-            Log.Info("sauvegarde en jeu : " + restore.Count + " automates notes avant SAVEGAME");
+            string wp = odd ? "chargement du joueur : \"Save game\" sans sortie FINISHED, traite comme les autres"
+                      : setup == null ? "chargement du joueur absent ou pas au repos, traite comme les autres"
+                      : setup.ActiveStateName == "Save game" ? "chargement du joueur arrete apres l'ecriture de sa place"
+                      : "ATTENTION chargement du joueur parti dans " + setup.ActiveStateName;
+            Log.Info("sauvegarde en jeu : " + restore.Count + " automates notes avant SAVEGAME ; " + wp);
         }
 
         public static void Update()
