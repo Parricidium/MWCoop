@@ -211,6 +211,12 @@ reste conduisible). Portières et coffres ouverts par l'un pendant qu'un autre c
 Fait aussi (0.18) : audit de la synchro (F10 > SYNCHRO) — recensement de tout ce qui est interactif dans le jeu et du
 module qui le partage (dumps/recensement.txt), comparaison hôte/invités toutes les 15 s (écarts durables notés DESYNC
 dans le journal et dumps/desync.txt), actions d'un joueur qui ne partent pas chez les autres (dumps/actions.txt).
+Fait aussi (0.19, d'après l'analyse complète du 04/10) : portière avant gauche (verrou soudé chez celui qui ne conduit
+pas, fermeture des portières de gauche), lumière intérieure plus rejouée deux fois ; PNJ : tous les calques d'animation
+(le client de la station tient son téléphone à l'oreille chez tous), mêmes clients présents, mouvements lissés ;
+objets posés dans un coffre ou l'habitacle : restent en place pendant que l'autre conduit ; objet empoché dès sa
+création : disparaît chez tous ; revenus du monde (allocations, aide au logement, paies) comptés une seule fois ;
+train partagé ; machines à sous et poker de la station : un joueur à la fois, les autres regardent, gains gardés.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

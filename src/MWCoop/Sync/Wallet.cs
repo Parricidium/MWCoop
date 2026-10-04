@@ -254,6 +254,7 @@ namespace MWCoop
                 Log.Info("argent : revenu " + (inC + inB) + " venu d'un boulot rejoue, garde pour soi");
                 return;
             }
+            if (Machines.KeepsMoney) { Log.Info("argent : gain " + (inC + inB) + " d'une machine a jeu, garde pour soi"); return; }   // encaissement, gain pris : pas un revenu a partager
             Log.Info("argent : revenu " + inC + " (liquide) + " + inB + " (banque), partage");
             Session.SendAll(new NetWriter(Msg.Income).U8(Session.LocalId).F32(inC).F32(inB), true);
         }

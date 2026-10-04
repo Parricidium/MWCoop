@@ -261,10 +261,6 @@ namespace MWCoop
         // Objet replace d'un coup (pose recue) : la voiture sous lui sera cherchee a nouveau.
         public static void Forget(Rigidbody item) { if (item != null) under.Remove(item); }
 
-        // Portieres, capot, hayon : leurs attaches ne sont pas rendues incassables sur la copie (CarDoors les
-        // asservit, une charniere figee en ferait une soudure). Branche a l'integration (CarDoors.IsDoorBody).
-        static System.Func<Rigidbody, bool> IsDoorBody = null;
-        public static void SetDoorBodyCheck(System.Func<Rigidbody, bool> f) { IsDoorBody = f; }
 
         static void SetKinematic(Car c, bool on)
         {
@@ -318,7 +314,7 @@ namespace MWCoop
             foreach (Joint j in c.Body.GetComponentsInChildren<Joint>(true))
             {
                 if (j == null || c.JointsWas.ContainsKey(j)) continue;
-                if (IsDoorBody != null && IsDoorBody(j.GetComponent<Rigidbody>())) continue;   // portiere, capot, hayon (et leur verrou)
+                if (CarDoors.IsDoorLock(j)) continue;   // verrou de portiere (« Set lock 2 ») : doit pouvoir casser, sinon soudure
                 c.JointsWas[j] = new Vector2(j.breakForce, j.breakTorque);
                 j.breakForce = Mathf.Infinity;
                 j.breakTorque = Mathf.Infinity;
