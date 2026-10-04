@@ -9,7 +9,8 @@ namespace MWCoop
     // 40 m, 5 au-dela), son heure, la pose du corps visible (objet Char), TOUTES ses couches d'animation
     // (squelette, AnimationRoot, spine_upper... : clip dominant, second clip d'un fondu, instant, poids ; une
     // couche qui ne joue plus garde la pose de fin de son dernier clip, comme le telephone a l'oreille) et les
-    // objets tenus ou poses (telephone, assiette, sonnerie...).
+    // objets tenus ou poses (telephone, assiette, sonnerie...). Ce dernier clip est suivi pour tous ses PNJ,
+    // meme loin des invites ou sans invite en partie : celui qui arrive recoit d'emblee la bonne pose tenue.
     // Chez l'invite, les 8 derniers instantanes de chaque PNJ sont gardes et rejoues 0,25 s apres l'heure de
     // l'hote : pose interpolee entre les deux qui encadrent (extrapolee 0,3 s au plus si le tampon se vide),
     // posee directement, puis les couches appliquees parents d'abord.
@@ -29,7 +30,8 @@ namespace MWCoop
         class Layer
         {
             public Animation A; public AnimationState[] St; public int[] H; public bool[] Loop; public bool Built;
-            public int Last;   // hote : dernier clip dominant (tenu quand plus rien ne joue)
+            public int Last;               // hote : dernier clip dominant (tenu quand plus rien ne joue)
+            public int Top = -1, Next = -1;  // hote : les deux etats les plus forts au dernier releve
         }
 
         // Instantane de l'hote : par couche, jusqu'a 2 etats (clip, instant, poids) aux indices l*MaxStates+k.
@@ -159,8 +161,11 @@ namespace MWCoop
             if (!Session.Active || nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = now + 45f; Scan(); }
-            if (!Session.IsHost || Session.RemoteCount == 0 || now < nextSend) return;
+            if (!Session.IsHost || now < nextSend) return;
             nextSend = now + 0.1f;
+            // Couches de tous les PNJ, avant tout envoi : un clip qui finit loin des invites compte aussi.
+            for (int k = 0; k < all.Count; k++) if (all[k].Char != null) Track(all[k]);
+            if (Session.RemoteCount == 0) return;
             bool slow = (++tick & 1) == 0;   // 5 fois par seconde : tous ; entre deux : ceux a moins de 40 m
             // Invites en partie : leurs pieds.
             guests.Clear();
@@ -204,25 +209,40 @@ namespace MWCoop
             for (int l = 0; l < n.Layers.Length; l++) WriteLayer(w, n.Layers[l]);
         }
 
+        // Hote, a chaque tour : etats dominants de chaque couche et dernier clip joue. PNJ ou couche eteint : rien
+        // de tenu (rallume, il repart de ce que sa logique rejoue).
+        static void Track(Npc n)
+        {
+            bool on = n.Char.gameObject.activeInHierarchy;
+            for (int l = 0; l < n.Layers.Length; l++)
+            {
+                Layer L = n.Layers[l];
+                L.Top = L.Next = -1;
+                if (!on || L.A == null || !L.A.gameObject.activeInHierarchy) { L.Last = 0; continue; }
+                Build(L);
+                int a = -1, b = -1;
+                for (int i = 0; L.St != null && i < L.St.Length; i++)
+                {
+                    AnimationState st = L.St[i];
+                    if (st == null) { L.Built = false; a = b = -1; break; }
+                    if (!st.enabled || st.weight <= 0.001f) continue;
+                    if (a < 0 || st.weight > L.St[a].weight) { b = a; a = i; }
+                    else if (b < 0 || st.weight > L.St[b].weight) b = i;
+                }
+                L.Top = a; L.Next = b;
+                if (a >= 0) L.Last = L.H[a];
+            }
+        }
+
         static void WriteLayer(NetWriter w, Layer L)
         {
-            Build(L);
-            int a = -1, b = -1;
-            for (int i = 0; L.St != null && i < L.St.Length; i++)
-            {
-                AnimationState st = L.St[i];
-                if (st == null) { L.Built = false; break; }
-                if (!st.enabled || st.weight <= 0.001f) continue;
-                if (a < 0 || st.weight > L.St[a].weight) { b = a; a = i; }
-                else if (b < 0 || st.weight > L.St[b].weight) b = i;
-            }
+            int a = L.Top, b = L.Next;
             if (a < 0)
             {
                 // Plus rien ne joue : les os gardent la fin du dernier clip.
                 if (L.Last != 0) w.U8(0x81).I32(L.Last).F32(1f).U8(255); else w.U8(0);
                 return;
             }
-            L.Last = L.H[a];
             bool two = b >= 0 && L.St[b].weight > 0.05f;
             w.U8(two ? 2 : 1);
             WriteState(w, L, a);
