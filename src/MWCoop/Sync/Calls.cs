@@ -23,11 +23,16 @@ namespace MWCoop
     //    du colis est donc le meme pour tous). L'annonce est retrouvee par son nom d'origine (ListRand03 : variable
     //    Name de Generate), pas par son numero de telephone, tire au hasard chez chacun. Catalogue : rejoue par la
     //    boite aux lettres (INBOX) -- l'enveloppe disparait aussi chez les autres, pas de 2e envoi possible.
-    //  - Boite aux lettres de la station (Post Box/OrderTrigger) : une enveloppe qu'un AUTRE joueur a deplacee en
-    //    dernier (sa copie suit ses messages) n'est jamais postee ici ; seul celui qui la lache la poste.
+    //  - Boite aux lettres de la station (Post Box/OrderTrigger) : l'enveloppe du catalogue qu'un AUTRE joueur a
+    //    deplacee en dernier (sa copie suit ses messages) n'est jamais postee ici ; seul celui qui la lache la poste.
+    //    La lettre de Kela (envelope(kela1)) n'est pas concernee : chaque joueur a la sienne (Expenses local), non
+    //    synchronisee, et la poste lui-meme.
     //  Le paiement au guichet (PAYMENT) et l'attente des commandes (miroir de l'hote) : WorldFsms.
     public static class Calls
     {
+        // Seule enveloppe commune (cle fixe dans Props) : celle du catalogue. Nom compare tel quel par la boite
+        // aux lettres (OrderTrigger : Letter1).
+        public const string PartsEnvelope = "envelope(parts)";
         const int K_Bill = 0, K_Order = 1, K_Job = 2;
         const int H_Find = 0, H_Hangup = 1, H_Hangup2 = 2, H_Create = 3, H_CheckHand = 4;
         const int MaxMsg = 1100, NoList = 255;
@@ -491,7 +496,8 @@ namespace MWCoop
             FsmGameObject e = f.FsmVariables.FindFsmGameObject("Envelope");
             GameObject env = e != null ? e.Value : null;
             float age;
-            if (env == null || !Props.MovedByOther(env, out age)) return;
+            // Lettre de Kela (ou autre) : a ce joueur seul, postee normalement.
+            if (env == null || env.name != PartsEnvelope || !Props.MovedByOther(env, out age)) return;
             float now = Time.realtimeSinceStartup;
             if (age > 6f)
             {
