@@ -13,7 +13,8 @@ namespace MWCoop
     //    cinematiques et suivent ; les marcheurs jouent fat_walk / fat_standing selon leur vitesse.
     //  - le train (TRAIN/SpawnEast/TRAIN, que son automate Move fait passer sous SpawnWest et retour) :
     //    chez l'invite seuls Move et Reset sont coupes ; Player (le train tue le joueur local qu'il
-    //    percute), Whistle et TunnelAudio restent. Pendant son attente au tunnel l'hote cache sa
+    //    percute), Whistle et TunnelAudio restent, et son corps reste dynamique (sinon pas de collision
+    //    avec le CharacterController du joueur). Pendant son attente au tunnel l'hote cache sa
     //    carrosserie (Mesh) : il l'envoie comme inactif.
     public static class Traffic
     {
@@ -197,7 +198,10 @@ namespace MWCoop
                 if (f != null && e.Train && f.FsmName != "Move" && f.FsmName != "Reset") continue;   // train : collision, sifflet, tunnel
                 if (f != null || n == "MobileCarController" || n == "AxisCarController") m.enabled = false;
             }
-            if (e.Body != null) e.Body.isKinematic = true;
+            // Train : son corps reste dynamique comme chez l'hote (scene : non cinematique, positions X/Y et
+            // rotations bloquees). Un corps cinematique ne recoit aucune collision du CharacterController du
+            // joueur : Player ne tuerait plus l'invite sur la voie.
+            if (e.Body != null && !e.Train) e.Body.isKinematic = true;
             foreach (Wheel wh in e.T.GetComponentsInChildren<Wheel>(true)) wh.enabled = false;
             if (e.Walker)
                 foreach (PlayMakerFSM f in e.T.GetComponentsInChildren<PlayMakerFSM>(true)) f.enabled = false;
@@ -218,6 +222,7 @@ namespace MWCoop
             Log.Info("autotest : train (" + (Session.IsHost ? "hote" : "invite") + ") " + tr.T.position.ToString("F1")
                      + " actif " + tr.T.gameObject.activeInHierarchy + ", carrosserie " + (tr.Mesh == null || tr.Mesh.activeInHierarchy)
                      + ", sous " + (tr.T.parent != null ? tr.T.parent.name : "-")
+                     + ", corps " + (tr.Body != null && tr.Body.isKinematic ? "cinematique" : "dynamique")
                      + (Session.IsHost ? "" : ", recu il y a " + (Time.realtimeSinceStartup - tr.LastRecv).ToString("F1") + " s"));
         }
 
@@ -229,6 +234,7 @@ namespace MWCoop
             float k = 1f - Mathf.Exp(-10f * Time.deltaTime);
             e.T.position = Vector3.Lerp(e.T.position, target, k);
             e.T.rotation = Quaternion.Slerp(e.T.rotation, e.Rot, k);
+            if (e.Train && e.Body != null && !e.Body.isKinematic) e.Body.velocity = Vector3.zero;   // pas de derive apres un choc
             if (e.Anim != null)
             {
                 string clip = e.Vel.sqrMagnitude > 0.2f ? "fat_walk" : "fat_standing";
