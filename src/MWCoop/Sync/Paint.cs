@@ -22,8 +22,9 @@ namespace MWCoop
         static float nextScan = -1, loadedAt;
         static bool applying;
 
-        class Hook : FsmStateAction
+        class Hook : ModHook
         {
+            public override string Module { get { return "peinture"; } }
             public PlayMakerFSM F;
             public override void OnEnter()
             {

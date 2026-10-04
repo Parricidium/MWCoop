@@ -64,8 +64,9 @@ namespace MWCoop
         static float nextScan = -1, loadedAt, nextWarn;
         static bool applying;
 
-        class Hook : FsmStateAction
+        class Hook : ModHook
         {
+            public override string Module { get { return "quetes"; } }
             public Job J;
             public string State;
             public override void OnEnter()

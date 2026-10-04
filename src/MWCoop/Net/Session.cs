@@ -210,6 +210,7 @@ namespace MWCoop.Net
                     case Msg.Stock: Stock.OnMessage(from, r); break;
                     case Msg.Npc: Npcs.OnMessage(from, r); break;
                     case Msg.Parked: Parked.OnMessage(from, r); break;
+                    case Msg.Audit: Audit.OnMessage(from, r); break;
                     case Msg.WorldFsm: WorldFsms.OnMessage(from, r); break;
                     case Msg.WorldVars: WorldFsms.OnVars(from, r); break;
                     case Msg.Traffic: Traffic.OnMessage(from, r); break;

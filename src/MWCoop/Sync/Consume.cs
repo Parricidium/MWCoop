@@ -23,8 +23,9 @@ namespace MWCoop
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         public static float EatUntil;
 
-        class Hook : FsmStateAction
+        class Hook : ModHook
         {
+            public override string Module { get { return "consommables"; } }
             public string Id, StateName;
             public override void OnEnter()
             {

@@ -89,5 +89,6 @@ namespace MWCoop.Net
         Stock = 31,       // magasin : panier d'un joueur et stock d'un produit qui ont change
         Npc = 32,         // non fiable, hote -> invites : PNJ proches des invites (pose, clip, objets tenus)
         Parked = 33,      // hote -> invites : voitures garees du decor (parent, pose, visible)
+        Audit = 34,       // audit de la synchro : hote -> invites « SNAP n », invites -> hote leurs etats changes (cle hachee, etat)
     }
 }

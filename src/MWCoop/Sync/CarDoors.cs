@@ -61,8 +61,9 @@ namespace MWCoop
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static bool applying;
 
-        class Hook : FsmStateAction
+        class Hook : ModHook
         {
+            public override string Module { get { return "portieres"; } }
             public Door D;
             public int Kind;
             public override void OnEnter()

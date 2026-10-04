@@ -21,8 +21,9 @@ namespace MWCoop
         static float nextScan = -1, loadedAt;
         static bool applying;
 
-        class Hook : FsmStateAction
+        class Hook : ModHook
         {
+            public override string Module { get { return "pieces"; } }
             public Point P;
             public bool Install;
             public override void OnEnter()
@@ -38,8 +39,9 @@ namespace MWCoop
         // TIGHTEN/UNTIGHTEN jusqu'a cette valeur : meme position de la vis, meme serrage de la piece.
         static readonly HashSet<PlayMakerFSM> screws = new HashSet<PlayMakerFSM>();
 
-        class BoltHook : FsmStateAction
+        class BoltHook : ModHook
         {
+            public override string Module { get { return "pieces (boulons)"; } }
             public PlayMakerFSM F;
             public override void OnEnter()
             {

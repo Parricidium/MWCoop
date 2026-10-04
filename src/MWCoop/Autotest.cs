@@ -105,6 +105,8 @@ namespace MWCoop
                     if (b.velocity.y > maxUp) { maxUp = b.velocity.y; Log.Info("autotest : vitesse verticale max " + maxUp.ToString("F2") + " m/s, rotation " + b.angularVelocity.magnitude.ToString("F2") + " rad/s en " + b.position.ToString("F1")); }
                 }
             }
+            if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
+            if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
             if (mode == "mort")
             {
                 // [Test] TestCause (booleen de Systems/Death) a 30 s ; TestReapparition=1/2 choisit 3 s apres.

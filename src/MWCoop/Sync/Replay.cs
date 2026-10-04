@@ -11,6 +11,13 @@ namespace MWCoop
     //    fois, et le rejeu de l'un serait renvoye par l'autre).
     //  - HookError : une exception dans un crochet est notee, jamais propagee (PlayMaker ne la rattrape
     //    pas : les vraies actions de l'etat ne tourneraient pas et l'automate du jeu resterait bloque).
+    // Base de toute action ajoutee par un module dans un automate du jeu : l'audit lit ainsi qui a accroche quoi
+    // (et voit les automates accroches par deux modules).
+    public abstract class ModHook : HutongGames.PlayMaker.FsmStateAction
+    {
+        public abstract string Module { get; }
+    }
+
     public static class Replay
     {
         public static int Depth;
@@ -26,6 +33,13 @@ namespace MWCoop
             if (owners.TryGetValue(f, out o)) return o == module;
             owners[f] = module;
             return true;
+        }
+
+        // Module qui a accroche 'f' (null : personne).
+        public static string Owner(PlayMakerFSM f)
+        {
+            string o;
+            return owners.TryGetValue(f, out o) ? o : null;
         }
 
         public static bool ClaimedByOther(PlayMakerFSM f, string module)
