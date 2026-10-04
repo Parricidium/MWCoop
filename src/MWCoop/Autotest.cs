@@ -48,6 +48,17 @@ namespace MWCoop
                     else Avatar.ForceClip = null;
                 }
                 LookAtNearestAvatar();
+                // [Test] CapturePeriode=N : en plus, une capture toutes les N s a partir de 20 s (pose-t<s>.png).
+                int per = Config.GetInt("Test", "CapturePeriode", 0);
+                if (per > 0 && t > 20f && t - lastPeriodic >= per)
+                {
+                    lastPeriodic = t;
+                    string dirp = System.IO.Path.Combine(Log.DataDir, "dumps");
+                    System.IO.Directory.CreateDirectory(dirp);
+                    string pngp = System.IO.Path.Combine(dirp, "pose-t" + ((int)t).ToString("000") + ".png");
+                    Application.CaptureScreenshot(pngp);
+                    Log.Info("autotest : capture " + pngp);
+                }
                 // Capture 2,5 s apres chaque changement de posture de l'avatar regarde : dumps\pose-<drapeaux>.png
                 foreach (Avatar a in PlayerSync.Avatars)
                 {
@@ -64,6 +75,14 @@ namespace MWCoop
                     Application.CaptureScreenshot(png);
                     Log.Info("autotest : capture " + png);
                 }
+            }
+            if (mode == "accroupi")
+            {
+                // Comme la touche du jeu : niveau 1 a 22 s, niveau 2 a 34 s, debout a 46 s (automate Crouch).
+                PlayMakerFSM cf = Game.FindFsm("PLAYER", "Crouch");
+                if (cf != null && t > 22f && step == 0) { step = 1; Game.SetState(cf, "Move down 1"); Log.Info("autotest : accroupi 1"); }
+                if (cf != null && t > 34f && step == 1) { step = 2; Game.SetState(cf, "Move down 2"); Log.Info("autotest : accroupi 2"); }
+                if (cf != null && t > 46f && step == 2) { step = 3; Game.SetState(cf, "Move up"); Log.Info("autotest : debout"); }
             }
             if (mode == "conduite")
             {
@@ -303,6 +322,20 @@ namespace MWCoop
                 }
                 Log.Info("autotest : " + cnt + " objets " + countWatch + "* : " + names);
             }
+            if (mode == "magasin" && MWCoop.Net.Session.IsHost && t > 32f && step == 0) { step = 1; Log.Info("autotest : panier " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), 3)); }
+            if (mode == "magasin" && MWCoop.Net.Session.IsHost && t > 48f && step == 1) { step = 2; Log.Info("autotest : repose " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), -3)); }
+            string stockWatch = Config.Get("Test", "SuivreStock", "");
+            if (stockWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : rayon " + Stock.State(stockWatch));
+            // [Test] SuivreEtat=chemin::automate : etat courant d'un automate quelconque.
+            string stateWatch = Config.Get("Test", "SuivreEtat", "");
+            if (stateWatch.Length > 0 && Time.frameCount % 120 == 0 && t > 20f)
+            {
+                string[] pf = stateWatch.Split(new[] { "::" }, System.StringSplitOptions.None);
+                GameObject g = Game.FindAny(pf[0]);
+                PlayMakerFSM sf = g != null && pf.Length > 1 ? Game.FsmOn(g, pf[1]) : null;
+                Log.Info("autotest : etat " + stateWatch + " = " + (sf != null ? sf.ActiveStateName : "?"));
+            }
+            if (mode == "passager" && Time.frameCount % 120 == 0 && t > 28f) Log.Info("autotest : place " + Seats.PlaceDans(Config.Get("Test", "TestVoiture", "SORBET")));
             string soundWatch = Config.Get("Test", "SuivreSons", "");
             if (soundWatch.Length > 0 && Time.frameCount % 90 == 0 && t > 20f) Log.Info("autotest : sons " + VehicleSync.AudioState(soundWatch));
             if (soundWatch.Length > 0 && Time.frameCount % 900 == 0 && t > 20f) Log.Info("autotest : " + VehicleSync.DtState(soundWatch));
@@ -329,12 +362,16 @@ namespace MWCoop
                 string[] pv = varWatch.Split(':');
                 Log.Info("autotest : " + Jobs.Var(pv[0], pv.Length > 1 ? pv[1] : "Angle"));
             }
-            if (mode == "visee" && t > 30f && !done)
+            if (mode == "habitacle")
             {
-                done = true;
                 string vc = Config.Get("Test", "TestVoiture", "SORBET");
-                for (int i = 0; i < 3; i++) Log.Info("autotest : visee " + Seats.TestAim(vc, i));
+                if (t > 25f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestStandIn(vc, Config.GetInt("Test", "TestPlace", 0))); }
+                if (t > 26f && step >= 1 && step < 6 && t > 26f + step) { step++; Log.Info("autotest : habitacle " + Seats.PlaceDans(vc)); }
             }
+            if (mode == "passager2" && t > 27f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestStandIn(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "TestPlace", 0))); }
+            if (mode == "passager2" && t > 31f && step == 1) { step = 2; Log.Info("autotest : entree " + Seats.TestEnter()); }
+            if (mode == "passager2" && t > 50f && step == 2) { step = 3; Log.Info("autotest : " + Seats.TestLeave()); }
+            if (mode == "passager2" && Time.frameCount % 120 == 0 && t > 26f) Log.Info("autotest : place " + Seats.PlaceDans(Config.Get("Test", "TestVoiture", "SORBET")));
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "TestPlace", 0))); }
             if (mode == "passager" && t > 60f && step == 1 && Config.GetInt("Test", "TestSortie", 1) != 0) { step = 2; Log.Info("autotest : " + Seats.TestLeave()); }
             if (mode == "tableau" && t > 35f && !done)
@@ -425,6 +462,7 @@ namespace MWCoop
         static float shotAt = -1;
         static string bagId;
         static int step, step2;
+        static float lastPeriodic;
 
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).
         static void LookAtNearestAvatar()

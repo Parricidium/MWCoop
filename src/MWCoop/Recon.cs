@@ -190,6 +190,19 @@ namespace MWCoop
             sb.Append('\n');
             foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
                 AppendFsm(sb, pad + "  ", f, actionParams);
+            if (actionParams)
+            {
+                foreach (PlayMakerHashTableProxy h in go.GetComponents<PlayMakerHashTableProxy>())
+                {
+                    sb.Append(pad).Append("  # table '").Append(h.referenceName).Append("' ");
+                    int n = 0;
+                    if (h._hashTable != null)
+                        foreach (System.Collections.DictionaryEntry e in h._hashTable) { if (n++ < 12) sb.Append(e.Key).Append('=').Append(e.Value).Append(' '); }
+                    sb.Append("(").Append(n).Append(")\n");
+                }
+                foreach (PlayMakerArrayListProxy l in go.GetComponents<PlayMakerArrayListProxy>())
+                    sb.Append(pad).Append("  # liste '").Append(l.referenceName).Append("' (").Append(l._arrayList != null ? l._arrayList.Count : -1).Append(")\n");
+            }
             foreach (Transform c in t) Walk(sb, c, depth + 1, actionParams);
         }
 
@@ -253,6 +266,20 @@ namespace MWCoop
                 return owner.OwnerOption == OwnerDefaultOption.UseOwner ? "(soi)" : Value(owner.GameObject);
             var ev = o as FsmEvent;
             if (ev != null) return "evt:" + ev.Name;
+            var fp = o as FsmProperty;
+            if (fp != null)
+            {
+                // Propriete visee : objet, nom, et valeur (lue ou ecrite).
+                string val = "";
+                foreach (FieldInfo f in typeof(FsmProperty).GetFields(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (!f.Name.EndsWith("Parameter")) continue;
+                    var pv = f.GetValue(fp) as NamedVariable;
+                    if (pv != null && (!string.IsNullOrEmpty(pv.Name) || pv.ToString() != "" && pv.ToString() != "0" && pv.ToString() != "False" && pv.ToString() != "None" && pv.ToString() != "(0.0, 0.0, 0.0)"))
+                        val += " " + f.Name.Replace("Parameter", "") + "=" + Value(pv);
+                }
+                return "prop(" + Value(fp.TargetObject) + " ." + fp.PropertyName + (fp.setProperty ? " :=" : " ->") + val + ")";
+            }
             var nv = o as NamedVariable;
             if (nv != null)
             {

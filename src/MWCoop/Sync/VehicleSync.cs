@@ -32,6 +32,8 @@ namespace MWCoop
             public int RemoteDriver = -1;       // joueur qui la conduit chez lui (-1 : personne)
             public int RemoteBy = -1;           // joueur qui la fait avancer et tourner chez lui (conducteur ou moteur laisse tournant)
             public bool DtWas, AxisWas; public bool[] WheelsWas;
+            public Dictionary<Joint, Vector2> JointsWas;   // attaches rendues incassables sur la copie
+            public float NextJoints;
             public float LastRemote;
             public Vector3 Pos, Vel, AngVel;
             public Quaternion Rot;
@@ -146,6 +148,7 @@ namespace MWCoop
                 SetKinematic(c, remote);
                 if (remote)
                 {
+                    if (now >= c.NextJoints) ProtectJoints(c);   // pieces montees entre-temps
                     Follow(c);
                     Animate(c);
                     if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Name + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
@@ -181,12 +184,35 @@ namespace MWCoop
             {
                 c.WasKinematic = c.Body.isKinematic;
                 c.Body.isKinematic = true;
+                ProtectJoints(c);
             }
             else
             {
+                if (c.JointsWas != null)
+                {
+                    foreach (KeyValuePair<Joint, Vector2> kv in c.JointsWas)
+                        if (kv.Key != null) { kv.Key.breakForce = kv.Value.x; kv.Key.breakTorque = kv.Value.y; }
+                    c.JointsWas = null;
+                }
                 c.Body.isKinematic = c.WasKinematic;
                 if (!c.Body.isKinematic) { c.Body.velocity = c.Vel; c.Body.angularVelocity = c.AngVel; }
             }
+        }
+
+        // Copie conduite ailleurs : ses attaches cassables (pare-brise, portieres, pieces montees) ne cassent
+        // pas ici -- la copie suit par a-coups (recalages) et le pare-brise volait en eclats en roulant. Une
+        // vraie casse chez le conducteur est renvoyee par les automates de la voiture (Jobs).
+        static void ProtectJoints(Car c)
+        {
+            if (c.JointsWas == null) c.JointsWas = new Dictionary<Joint, Vector2>();
+            foreach (Joint j in c.Body.GetComponentsInChildren<Joint>(true))
+            {
+                if (j == null || c.JointsWas.ContainsKey(j)) continue;
+                c.JointsWas[j] = new Vector2(j.breakForce, j.breakTorque);
+                j.breakForce = Mathf.Infinity;
+                j.breakTorque = Mathf.Infinity;
+            }
+            c.NextJoints = Time.realtimeSinceStartup + 2f;
         }
 
         static void Follow(Car c)

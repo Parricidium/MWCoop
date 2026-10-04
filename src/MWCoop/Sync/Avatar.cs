@@ -57,7 +57,7 @@ namespace MWCoop
         string anchorCar;
         bool passenger;                      // assis a une place passager (pose assise, pas de volant)
         string carName;
-        float armWR, armWL, crouchW;
+        float armWR, armWL, crouchW, crouchDepth;
         bool crouching;
         // Os que l'animation en cours ne pilote pas : nos retouches s'y ajouteraient d'une image a
         // l'autre. On garde la valeur de base et celle posee ; si l'os n'a pas bouge depuis, on le remet.
@@ -287,20 +287,34 @@ namespace MWCoop
             s.rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(dir, target), w) * s.rotation;
         }
 
+        // Accroupi d'apres la profondeur w (0 debout, 0,5 accroupi, 1 au ras du sol), en suivant la camera :
+        //  0 -> 0,5 : accroupi pour de vrai : bassin bas et en arriere, genoux en avant, pieds a plat ou
+        //            ils sont (IK : ils suivent aussi la marche), buste un peu penche ;
+        //  0,5 -> 1 : second niveau du jeu (pour regarder dessous) : a genoux, penche en avant -- genoux au
+        //            sol sous le bassin, tibias a plat derriere, buste presque a l'horizontale, bras tombant
+        //            vers le sol. La tete compense pour regarder devant (le regard s'y ajoute ensuite).
         void Crouch(float w)
         {
             Transform pelvis = Bone("pelvis");
             if (pelvis == null) return;
             Transform r = Root.transform;
-            Vector3 footL = Bone("ankle_left") != null ? Bone("ankle_left").position : Vector3.zero;
-            Vector3 footR = Bone("ankle_right") != null ? Bone("ankle_right").position : Vector3.zero;
-            pelvis.position -= r.up * 0.42f * w;
-            pelvis.position -= r.forward * 0.08f * w;
-            Leg("thig_left", "knee_left", "ankle_left", footL);
-            Leg("thig_right", "knee_right", "ankle_right", footR);
-            Turn(Bone("spine_middle"), 0f, 18f * w);
-            Turn(Bone("spine_upper"), 0f, 10f * w);
-            Turn(Bone("HeadPivot") ?? headBone, 0f, -22f * w);   // le regard reste devant
+            float a = Mathf.Clamp01(w / 0.5f), b = Mathf.Clamp01((w - 0.5f) / 0.5f);
+            Transform al = Bone("ankle_left"), ar = Bone("ankle_right");
+            Vector3 footL = al != null ? r.InverseTransformPoint(al.position) : Vector3.zero;
+            Vector3 footR = ar != null ? r.InverseTransformPoint(ar.position) : Vector3.zero;
+            Vector3 p0 = r.InverseTransformPoint(pelvis.position);
+            Vector3 squat = p0 + new Vector3(0f, -0.50f * a, -0.16f * a);
+            Vector3 kneel = new Vector3(p0.x, 0.50f, p0.z - 0.02f);
+            Vector3 pT = Vector3.Lerp(squat, kneel, b);
+            // Les jambes ne sont pas des enfants du bassin dans ce squelette : c'est tout le squelette qui
+            // descend (il est remis a sa place de repos a chaque image), l'IK replie ensuite les jambes.
+            anim.transform.position += r.TransformVector(pT - p0);
+            if (al != null) Leg("thig_left", "knee_left", "ankle_left", r.TransformPoint(Vector3.Lerp(footL, new Vector3(footL.x, 0.1f, pT.z - 0.42f), b)));
+            if (ar != null) Leg("thig_right", "knee_right", "ankle_right", r.TransformPoint(Vector3.Lerp(footR, new Vector3(footR.x, 0.1f, pT.z - 0.42f), b)));
+            float lean = 20f * a + 58f * b;
+            Turn(Bone("spine_middle"), 0f, lean * 0.55f);
+            Turn(Bone("spine_upper"), 0f, lean * 0.45f);
+            Turn(Bone("HeadPivot") ?? headBone, 0f, -lean * 0.85f);
         }
 
         // IK a deux os : la hanche ne bouge pas, la cheville revient sur 'foot', genou vers l'avant.
@@ -438,15 +452,15 @@ namespace MWCoop
                 return;
             }
             if ((f & PlayerSync.F_Sleep) != 0 || ForceClip != null) return;
-            // Accroupi : bassin abaisse, jambes pliees par IK (pieds restes au sol), buste penche.
-            crouchW = Mathf.MoveTowards(crouchW, crouching ? 1f : 0f, Time.deltaTime * 4f);
+            // Accroupi (deux niveaux, comme le jeu) : voir Crouch.
+            crouchW = Mathf.MoveTowards(crouchW, crouchDepth, Time.deltaTime * 3f);
             if (crouchW > 0.001f) Crouch(crouchW);
             // Buste et tete suivent le regard : penche en avant en regardant en bas, en arriere en haut.
             Turn(Bone("spine_middle"), 0f, pitch * 0.15f);
             Turn(Bone("spine_upper"), 0f, pitch * 0.2f);
             Turn(Bone("HeadPivot") ?? headBone, 0f, pitch * 0.5f);
             // Au repos et sans geste : bras le long du corps.
-            bool idle = !moving && !sitting;
+            bool idle = !moving && (!sitting || crouching);   // accroupi : bras le long du corps / vers le sol
             float dt = Time.deltaTime * 3f;
             armWR = Mathf.MoveTowards(armWR, idle && (f & (PlayerSync.F_Drink | PlayerSync.F_Carry | PlayerSync.F_Hello)) == 0 && (armR == null || !armR.IsPlaying("saluer")) ? 1f : 0f, dt);
             armWL = Mathf.MoveTowards(armWL, idle && (f & PlayerSync.F_Smoke) == 0 ? 1f : 0f, dt);
@@ -534,6 +548,9 @@ namespace MWCoop
             bool crouch = (f & PlayerSync.F_Crouch) != 0 && (f & (PlayerSync.F_Seated | PlayerSync.F_Sleep)) == 0;
             bool sit = (f & (PlayerSync.F_Seated | PlayerSync.F_Sleep)) != 0;
             crouching = crouch;
+            // Profondeur : hauteur de camera de l'automate Crouch du joueur (1,4 debout -> 0,3 au ras du sol).
+            // Anciennes versions (hauteur du corps envoyee, > 1,4) : accroupi simple.
+            crouchDepth = !crouch ? 0f : st.Height > 1.45f ? 0.5f : Mathf.Clamp01((1.4f - st.Height) / 1.1f);
             sitting = sit || crouch;
             Root.transform.localScale = Vector3.one;
             if (Time.realtimeSinceStartup >= nextDiag && body != null)
