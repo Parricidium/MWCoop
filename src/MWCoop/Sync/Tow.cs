@@ -51,6 +51,7 @@ namespace MWCoop
             public Transform Hook1, Hook2;
             public Rigidbody Body1, Body2;             // porteur de chaque crochet (Body2 null : relie au monde)
             public int Car1 = -1, Car2 = -1;           // voiture (VehicleSync) de chaque bout, -1 : aucune
+            public bool CarsKnown;                     // Car1/Car2 cherchees (liste de VehicleSync faite)
             public Joint Joint;                        // SpringJoint du jeu (notre corde) ou ConfigurableJoint (copie)
             public Vector3 Anchor, ConnAnchor;
             public float Spring, Damper, MaxDist, BreakForce, BreakTorque;
@@ -111,8 +112,10 @@ namespace MWCoop
             }
         }
 
-        // Voiture (index VehicleSync) que nous faisons avancer chez tous au bout d'une corde. VehicleSync doit
-        // l'exclure de son recalage de l'hote toutes les 2 s (voir le rapport du lot 2).
+        // Voiture (index VehicleSync) que nous faisons avancer chez tous au bout d'une corde. VehicleSync DOIT
+        // l'exclure de son recalage de l'hote toutes les 2 s (branchement du lot 2) : sinon, l'hote qui tire
+        // envoie aussi l'etat 0 de cette voiture, et chez les invites la copie est rendue physique (et recalee
+        // si elle a plus de 1 m de retard) a chaque fois, a-coup et attaches cassables rendues pendant 0,1 s.
         public static bool Carries(int car)
         {
             if (car < 0) return false;
@@ -211,8 +214,7 @@ namespace MWCoop
             // La casse de l'automate (le joint d'une copie est rendu incassable par VehicleSync).
             r.BreakForce = rBreak != null ? rBreak.Value : j.breakForce;
             r.BreakTorque = rBreak != null ? rBreak.Value : j.breakTorque;
-            r.Car1 = CarOf(r.Body1);
-            r.Car2 = CarOf(r.Body2);
+            Resolve(r, false);
             return r;
         }
 
@@ -282,8 +284,7 @@ namespace MWCoop
                 if (now >= nextWarn) { nextWarn = now + 10f; Log.Warn("remorquage : corde de " + Name(owner) + " : crochets " + p1 + " / " + p2 + " introuvables ici"); }
                 return;
             }
-            m.Car1 = CarOf(m.Body1);
-            m.Car2 = CarOf(m.Body2);
+            Resolve(m, false);   // annonce arrivee avant la liste de VehicleSync (arrivant, 3 s) : plus tard, par Keep/Lead
             mirrors[owner] = m;
             all.Add(m);
             Log.Info("remorquage : corde de " + Name(owner) + " : " + p1 + " <-> " + p2 + " (" + Settings(m) + ")");
@@ -295,6 +296,7 @@ namespace MWCoop
         {
             if (now - m.Seen > 15f) { Log.Info("remorquage : corde de " + Name(m.Owner) + " plus annoncee, retiree"); Drop(m); return; }
             if (m.Hook1 == null || m.Hook2 == null || m.Body1 == null) { Log.Info("remorquage : corde de " + Name(m.Owner) + " : crochet detruit, retiree"); Drop(m); return; }
+            Resolve(m, true);
             float d = Vector3.Distance(m.Hook1.position, m.Hook2.position);
             bool auth = Authoritative(m);
             if (!m.Gone && m.Joint == null)
@@ -422,6 +424,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- qui tire
         static void Lead(Rope r)
         {
+            Resolve(r, true);
             bool h1 = Driven(r.Car1), h2 = Driven(r.Car2);
             int want = -1;
             if (r.Joint != null)
@@ -501,6 +504,20 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- utilitaires
+        // Voitures des deux bouts, des que VehicleSync a fait sa liste (3 s apres le chargement). Une copie faite
+        // avant (annonce periodique arrivee tot chez un arrivant) les aurait sinon a -1 tant que la corde reste
+        // accrochee (les annonces suivantes, memes crochets, ne la refont pas) : personne ne tirerait la voiture
+        // remorquee, et l'hote en garderait l'autorite (casse chez le conducteur jamais signalee).
+        static void Resolve(Rope r, bool late)
+        {
+            if (r.CarsKnown || VehicleSync.Count == 0) return;
+            r.CarsKnown = true;
+            r.Car1 = CarOf(r.Body1);
+            r.Car2 = CarOf(r.Body2);
+            if (late) Log.Info("remorquage : " + (r.Mirror ? "corde de " + Name(r.Owner) : "notre corde") + " : voitures des bouts reconnues apres coup ("
+                               + (r.Car1 >= 0 ? CarName(r.Car1) : "-") + " / " + (r.Car2 >= 0 ? CarName(r.Car2) : "-") + ")");
+        }
+
         static int CarOf(Rigidbody b)
         {
             if (b == null) return -1;
@@ -618,6 +635,7 @@ namespace MWCoop
             sb.Append(" : joint ").Append(r.Joint != null ? r.Joint.GetType().Name : "absent");
             if (r.Hook1 != null && r.Hook2 != null)
                 sb.Append(", crochets a ").Append(Vector3.Distance(r.Hook1.position, r.Hook2.position).ToString("F2")).Append(" m (longueur ").Append(r.MaxDist.ToString("F2")).Append(')');
+            sb.Append(", voitures ").Append(r.Car1 >= 0 ? CarName(r.Car1) : "-").Append('/').Append(r.Car2 >= 0 ? CarName(r.Car2) : "-");
             if (r.Mirror) sb.Append(r.Visual != null ? ", visible" : ", invisible");
             if (r.Body1 != null) sb.Append(", corps ").Append(r.Body1.isKinematic ? "cinematique" : "physique");
             if (r.Body2 != null) sb.Append('/').Append(r.Body2.isKinematic ? "cinematique" : "physique");
