@@ -27,8 +27,9 @@ namespace MWCoop
         static bool applying;
         static float nextScan = -1;
 
-        class Hook : FsmStateAction
+        class Hook : ModHook
         {
+            public override string Module { get { return "magasin"; } }
             public Register R;
             public override void OnEnter()
             {

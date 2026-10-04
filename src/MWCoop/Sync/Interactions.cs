@@ -39,8 +39,9 @@ namespace MWCoop
         static float scanAt = -1;
 
         // Action injectee : previent a l'entree de l'etat.
-        class Hook : FsmStateAction
+        class Hook : ModHook
         {
+            public override string Module { get { return "interactions"; } }
             public Entry Target;
             public string StateName;
             public override void OnEnter()

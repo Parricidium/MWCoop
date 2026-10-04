@@ -67,8 +67,9 @@ namespace MWCoop
         static bool applying;
         static int sentEvents, recvEvents;
 
-        class Hook : FsmStateAction
+        class Hook : ModHook
         {
+            public override string Module { get { return "monde"; } }
             public W J; public string State;
             public override void OnEnter()
             {
@@ -249,6 +250,7 @@ namespace MWCoop
         // 60 s. Les racines de la scene sont relevees une fois, puis de nouveau seulement quand un objet a
         // ete cree (SoonScan).
         static List<GameObject> scanRoots;
+        public static List<GameObject> CachedRoots { get { return scanRoots; } }   // (audit : evite un releve de 80 ms)
         static bool rootsDirty = true;
         static int scanIdx = -1;
         static Dictionary<string, int> scanSeen;

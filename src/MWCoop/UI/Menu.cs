@@ -15,7 +15,7 @@ namespace MWCoop
         static List<string> skins;
         static readonly List<Behaviour> blocked = new List<Behaviour>();
         static bool focusChat, testDone;
-        static readonly string[] tabs = { "JOUEURS", "APPARENCE", "TCHAT" };
+        static readonly string[] tabs = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO" };
         static GUIStyle title, small, button, active;
 
         public static void Update()
@@ -93,7 +93,8 @@ namespace MWCoop
             scroll = GUILayout.BeginScrollView(scroll);
             if (tab == 0) Players();
             else if (tab == 1) Skins();
-            else ChatTab();
+            else if (tab == 2) ChatTab();
+            else SyncTab();
             GUILayout.EndScrollView();
             GUILayout.Label("F10 ou Echap : fermer.   T : tchat.", small);
         }
@@ -160,6 +161,17 @@ namespace MWCoop
             Session.Me.Skin = s;
             Config.Save("Coop", "Apparence", s);
             Session.SendProfile();
+        }
+
+        // Audit de la synchro : ecarts durables entre l'hote et les invites, actions locales non partagees.
+        static void SyncTab()
+        {
+            GUILayout.Label(Audit.State() + (Audit.Summary.Length > 0 ? "\n" + Audit.Summary : ""), small);
+            if (GUILayout.Button("Ecrire le recensement (dumps/recensement.txt)", button)) Audit.Census();
+            GUILayout.Label(Session.IsHost ? "ECARTS AVEC LES INVITES (hote = tout le monde compare a vous)" : "Ecarts : vus par l'hote (son onglet SYNCHRO et son journal).", title);
+            foreach (string l in Audit.Desyncs) GUILayout.Label(l, small);
+            GUILayout.Label("VOS ACTIONS QUI NE PARTENT PAS CHEZ LES AUTRES", title);
+            foreach (string l in Audit.Unshared) GUILayout.Label(l, small);
         }
 
         static void ChatTab()

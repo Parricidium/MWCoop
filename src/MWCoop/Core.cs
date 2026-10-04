@@ -71,6 +71,7 @@ namespace MWCoop
             Step("tableaux de bord", CarVisuals.Update);
             Step("passagers", Seats.Update);
             Step("reapparition", Respawn.Update);
+            Step("audit", Audit.Update);
             Step("portes automatiques", NearDoors.Update);
             Step("machines", Machines.Update);
             Step("rayons", Stock.Update);
@@ -126,6 +127,7 @@ namespace MWCoop
             CarVisuals.OnLevelLoaded();
             Seats.OnLevelLoaded();
             Respawn.OnLevelLoaded();
+            Audit.OnLevelLoaded();
             NearDoors.OnLevelLoaded();
             Machines.OnLevelLoaded();
             Stock.OnLevelLoaded();
