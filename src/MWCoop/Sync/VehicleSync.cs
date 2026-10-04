@@ -366,6 +366,17 @@ namespace MWCoop
         }
 
         // Essais : sort le joueur local de la voiture comme la touche ENTREE.
+        // Sortie forcee du vehicule conduit ici (reapparition) : l'etat de sortie du jeu, quelle que soit la vitesse.
+        public static bool ExitLocal()
+        {
+            if (LocalDriving < 0 || LocalDriving >= cars.Count) return false;
+            Car c = cars[LocalDriving];
+            if (c.Drive == null || c.Drive.Fsm.GetState("Create player") == null) return false;
+            Game.SetState(c.Drive, "Create player");
+            Log.Info("sortie forcee de " + c.Name);
+            return true;
+        }
+
         public static string TestExit(string name)
         {
             foreach (Car c in cars)

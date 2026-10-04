@@ -93,6 +93,7 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Wiring, windshield and dashboard buttons of every vehicle | |
 | Launcher CAR tab: pick the CORRIS color for a new game, with a 3D preview | |
 | Chat, F10 menu | |
+| Respawn: in co-op, death no longer ends the game; the player picks where to come back (apartment or parents' house), even after a car crash | |
 
 The full list is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
 
@@ -202,6 +203,10 @@ Fait aussi (0.16, retours de JD) : portières, coffres et capots refaits : l'hô
 clics croisés ou un « spam » du clic gauche finissent pareil chez tous), la fermeture n'est envoyée que quand la
 portière claque vraiment (appuyer puis relâcher avant ne la ferme plus chez l'autre), et chez l'autre elle se
 referme d'un coup, sans que son corps ou sa souris puissent l'arrêter. Celui qui la manie en dernier donne l'angle.
+Fait aussi (0.17, retours de JD) : réapparition — en coop, mourir ne renvoie plus au menu (l'hôte emmenait tout le
+monde) : on choisit où revenir, l'appartement ou la maison des parents, même après un accident de voiture (la voiture
+reste conduisible). Portières et coffres ouverts par l'un pendant qu'un autre conduit : la voiture ne s'envole plus
+(les portières suivent l'autre en restant des corps physiques, plus jamais figées). [Coop] Reapparition=0 la coupe.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

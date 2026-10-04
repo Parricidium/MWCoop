@@ -16,15 +16,21 @@ namespace MWCoop
     // L'hote est l'arbitre : il applique les evenements dans l'ordre d'arrivee et les renvoie a TOUS, auteur
     // compris. Chacun les rejoue dans cet ordre (un invite saute ceux d'autrui tant qu'il attend le retour
     // des siens : ils sont ordonnes avant les siens). Deux clics croises finissent donc pareil partout.
-    // Rejouer une fermeture = "Sound" -> "Close door" (pose fermee, verrou) : rien ne depend de la physique
-    // ni de la souris de celui qui la rejoue (avant : "Open door 2", que son corps ou son clic arretait).
+    // Rejouer une fermeture : ramenee a 0 (capot : "State 2" leve d'abord ses butees d'ouverture), puis "Sound"
+    // -> "Close door" (claque, verrou) : la souris de celui qui la rejoue n'y peut rien (avant : "Open door 2",
+    // que son clic arretait).
     // Le verrou ("Reset 2" -> "Set lock 2" : une attache rigide a la carrosserie, qui casse quand on tire)
     // n'est PAS rejoue : chez les autres la portiere reste figee a l'angle de celui qui l'a poussee (une
     // attache jamais cassee chez eux tirerait la voiture a la fermeture suivante).
-    // Position en temps reel : celui qui l'a ouverte ou saisie en dernier (Owner) envoie son ANGLE autour
-    // de la charniere (HingeJoint). Chez les autres, le corps de la portiere devient cinematique et prend cet
-    // angle autour de SA charniere (pose fermee notee portiere fermee) : la voiture n'est jamais tiree, et la
-    // portiere traverse les joueurs comme chez celui qui la manie (les avatars n'ont pas de collision).
+    // Position en temps reel : celui qui l'a ouverte ou saisie en dernier (Owner) envoie l'angle de sa
+    // charniere, mesure depuis sa pose fermee (le repere des butees et du ressort : 0 fermee ; HingeJoint.angle,
+    // lui, lit 120 coffre ferme et 93 ouvert pour des butees 0 et 60, inutilisable). Chez les autres, la portiere reste un corps physique ordinaire, menee a cet
+    // angle par une petite correction de sa vitesse autour de l'axe de la charniere (a chaque image ; la charniere
+    // elle-meme n'est JAMAIS modifiee : dans ce Unity, changer son ressort ou ses butees la recree avec la pose
+    // du moment pour zero -- portieres « fermees » a 120 degres apres un spam de clics), et ne heurte plus le joueur local (elle traverse les joueurs comme
+    // chez celui qui la manie : les avatars n'ont pas de collision). Jamais cinematique ni teleportee : une
+    // portiere cinematique (masse infinie) accrochee a une voiture qui roule la tirait -- coffre referme pendant
+    // qu'un autre conduisait : voiture envolee (retour de JD, 0.16).
     public static class CarDoors
     {
         const int K_CLOSED = 0, K_OPEN = 1, K_ANGLE = 2, K_GRAB = 3, K_LOCK = 4;
@@ -40,9 +46,12 @@ namespace MWCoop
             public int PendingOwn;                     // invite : evenements envoyes dont le retour de l'hote manque
             public float LastAngle; public bool Sent;
             public bool Showing; public float TargetAngle; public float LastRemote;
-            public bool Pinned, PinnedWasKinematic;   // corps fige a l'angle recu
+            public bool Springing;                     // menee vers TargetAngle (Follow)
+            public CharacterController IgnoredCc;      // joueur local traverse pendant ce temps
+            public bool Closing; public float ClosingSince;   // fermeture rejouee : ramenee a 0 avant de claquer
             public float LastSentAt, OpenedAt;
-            public bool RestSet; public Quaternion RestRot; public Vector3 RestPos;   // pose fermee (repere du parent)
+            public float TraceUntil, NextTrace;        // essais : [Test] TracePortiere
+            public bool RestSet; public Quaternion RestRot;   // pose fermee (repere du parent)
             public float TestOffset;   // essais : degres ajoutes a l'angle envoye
         }
 
@@ -58,7 +67,12 @@ namespace MWCoop
             public int Kind;
             public override void OnEnter()
             {
-                try { if (!applying && Replay.Depth == 0) Local(D, Kind); }
+                try
+                {
+                    if (applying || Replay.Depth > 0) { }
+                    else if (D.Closing && Kind == K_CLOSED) EndClosing(D, false);   // (le jeu acheve la fermeture rejouee)
+                    else Local(D, Kind);
+                }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
@@ -146,8 +160,19 @@ namespace MWCoop
         // Pose fermee (repere de la voiture) : portiere fermee pour le jeu (verrouillee par ses butees).
         static void NoteRest(Door d)
         {
-            if (d.RestSet || d.Hinge == null || d.Body == null || d.Pinned || d.State != DoorState.Closed || OpenVar(d)) return;
-            d.RestSet = true; d.RestRot = d.Body.transform.localRotation; d.RestPos = d.Body.transform.localPosition;
+            if (d.RestSet || d.Hinge == null || d.Body == null || d.Springing || d.State != DoorState.Closed || OpenVar(d)) return;
+            d.RestSet = true; d.RestRot = d.Body.transform.localRotation;
+        }
+
+        // Angle (degres) autour de l'axe de la charniere depuis la pose fermee : le repere des butees du jeu.
+        static float Angle(Door d)
+        {
+            if (!d.RestSet) return 0f;
+            Quaternion rel = Quaternion.Inverse(d.RestRot) * d.Body.transform.localRotation;
+            float a; Vector3 ax;
+            rel.ToAngleAxis(out a, out ax);
+            if (a > 180f) a -= 360f;
+            return Vector3.Dot(ax, d.Hinge.axis) < 0f ? -a : a;
         }
 
         public static void Update()
@@ -171,20 +196,30 @@ namespace MWCoop
                     }
                 Log.Info("portieres : " + n + " ouvertes envoyees a " + p);
             }
-            foreach (Door d in byKey.Values) NoteRest(d);
-            // Chez nous, pour un autre : la portiere prend son angle, chaque image.
+            // Chez nous, pour un autre : le ressort de la charniere la mene a son angle ; fermeture rejouee :
+            // ramenee a 0, puis le jeu la claque (comme quand on la pousse jusqu'au bout).
+            bool trace = Config.GetInt("Test", "TracePortiere", 0) != 0;
             foreach (Door d in byKey.Values)
             {
+                NoteRest(d);
+                if (trace && now < d.TraceUntil && now >= d.NextTrace && d.Hinge != null)
+                { d.NextTrace = now + 0.1f; Log.Info("trace " + d.Key + " " + Angle(d).ToString("F1") + (d.Springing ? " -> " + d.TargetAngle.ToString("F1") : "") + " " + Diag(d)); }
+                if (d.Closing)
+                {
+                    if (d.Hinge == null || !d.RestSet || Mathf.Abs(Angle(d)) < 1.5f || now - d.ClosingSince > 1.2f) EndClosing(d, true);
+                    else { d.TargetAngle = 0f; Follow(d); }
+                    continue;
+                }
                 if (!d.Showing) continue;
-                if (d.Body == null || d.State == DoorState.Closed || d.Mine) { StopFollow(d); continue; }
-                Show(d);
+                if (d.Body == null || d.Hinge == null || !d.RestSet || d.State == DoorState.Closed || d.Mine) { StopFollow(d); continue; }
+                Follow(d);
             }
             if (now < nextAngle || Session.RemoteCount == 0) return;
             nextAngle = now + 1f / 15f;
             foreach (Door d in byKey.Values)
             {
                 if (!d.Mine || d.State == DoorState.Closed || d.Body == null || d.Fsm == null || d.Hinge == null || !d.RestSet) continue;
-                float ang = HingeAngle(d) + d.TestOffset;
+                float ang = Angle(d) + d.TestOffset;
                 if (d.Sent && Mathf.Abs(Mathf.DeltaAngle(ang, d.LastAngle)) < 0.4f && now - d.LastSentAt < 1f) continue;
                 d.Sent = true;
                 d.LastAngle = ang;
@@ -207,53 +242,91 @@ namespace MWCoop
             }
         }
 
-        // Angle (degres) de la portiere autour de l'axe de sa charniere, depuis sa pose fermee.
-        static float HingeAngle(Door d)
+        // Menee vers TargetAngle : sa vitesse autour de l'axe de la charniere (par rapport a la voiture) est
+        // corrigee a chaque image, proportionnelle a l'ecart et bornee ; le joueur local ne la bloque pas.
+        const float ServoGain = 12f, ServoMax = 360f;   // (1/s, degres/s)
+        static void Follow(Door d)
         {
-            Quaternion rel = Quaternion.Inverse(d.RestRot) * d.Body.transform.localRotation;
-            float a; Vector3 ax;
-            rel.ToAngleAxis(out a, out ax);
-            if (a > 180f) a -= 360f;
-            return Vector3.Dot(ax, d.Hinge.axis) < 0f ? -a : a;
+            if (d.Hinge == null || d.Body == null || !d.RestSet || d.Body.isKinematic) return;
+            if (!d.Springing) { d.Springing = true; IgnorePlayer(d, true); }
+            Vector3 axis = d.Body.transform.TransformDirection(d.Hinge.axis).normalized;
+            Rigidbody car = d.Hinge.connectedBody;
+            Vector3 rel = d.Body.angularVelocity - (car != null ? car.angularVelocity : Vector3.zero);
+            float w = Vector3.Dot(rel, axis) * Mathf.Rad2Deg;
+            float want = Mathf.Clamp(Mathf.DeltaAngle(Angle(d), d.TargetAngle) * ServoGain, -ServoMax, ServoMax);
+            d.Body.AddTorque(axis * ((want - w) * Mathf.Deg2Rad), ForceMode.VelocityChange);
+            if (d.Body.IsSleeping()) d.Body.WakeUp();
         }
 
-        // Le corps de la portiere prend l'angle recu autour de SA charniere (l'ancrage ne bouge pas),
-        // cinematique tant qu'il suit.
-        static void Show(Door d)
+        static void IgnorePlayer(Door d, bool on)
         {
-            if (d.Hinge == null || !d.RestSet) return;
-            if (!d.Pinned) { d.Pinned = true; d.PinnedWasKinematic = d.Body.isKinematic; d.Body.isKinematic = true; }
-            Pose(d, d.TargetAngle);
+            if (on)
+            {
+                GameObject pl = GameObject.Find("PLAYER");
+                d.IgnoredCc = pl != null ? pl.GetComponent<CharacterController>() : null;
+            }
+            if (d.IgnoredCc == null || d.Body == null) return;
+            foreach (Collider c in d.Body.GetComponentsInChildren<Collider>(true))
+                if (c != null && !c.isTrigger && c.enabled && c.gameObject.activeInHierarchy) Physics.IgnoreCollision(c, d.IgnoredCc, on);
+            if (!on) d.IgnoredCc = null;
         }
 
-        static void Pose(Door d, float angle)
-        {
-            Transform b = d.Body.transform;
-            Vector3 anchor = Vector3.Scale(b.localScale, d.Hinge.anchor);
-            Vector3 pivot = d.RestPos + d.RestRot * anchor;                       // ancrage, repere du parent
-            Quaternion q = d.RestRot * Quaternion.AngleAxis(angle, d.Hinge.axis);
-            b.localRotation = q;
-            b.localPosition = pivot - q * anchor;
-        }
-
-        // Fin du suivi : la portiere revient a la physique du jeu.
+        // Fin du suivi : le joueur local la heurte de nouveau.
         static void StopFollow(Door d)
         {
-            if (d.Pinned && d.Body != null) d.Body.isKinematic = d.PinnedWasKinematic;
-            d.Pinned = false;
+            if (d.Springing) IgnorePlayer(d, false);
+            d.Springing = false;
             d.Showing = false;
         }
+
+        static string Diag(Door d)
+        {
+            if (d.Hinge == null || d.Body == null) return "";
+            JointLimits l = d.Hinge.limits;
+            return "[" + d.Fsm.ActiveStateName + (d.Body.isKinematic ? " cin" : "") + (d.Body.IsSleeping() ? " dort" : "") + " m" + d.Body.mass.ToString("F0")
+                   + (d.Hinge.useLimits ? " butees " + l.min.ToString("F0") + ".." + l.max.ToString("F0") : "") + (d.Hinge.useSpring ? " ressort " + d.Hinge.spring.spring.ToString("F0") + "@" + d.Hinge.spring.targetPosition.ToString("F0") : "")
+                   + (d.Hinge.useMotor ? " moteur" : "") + (d.Hinge.connectedBody != null ? " sur " + d.Hinge.connectedBody.name : " libre") + "]";
+        }
+
+        // Fin d'une fermeture rejouee : le jeu la claque (pose et butees fermees) ; reveillee pour que les
+        // butees la tiennent tout de suite.
+        static void EndClosing(Door d, bool shut)
+        {
+            if (!d.Closing) return;
+            d.Closing = false;
+            StopFollow(d);
+            if (shut)
+            {
+                Drive(d, d.Close);
+                // Les derniers degres (elle bute sur la caisse) : pivotee autour de sa charniere jusqu'a la pose
+                // fermee -- seulement si l'ecart est petit (sinon la charniere tirerait sur la voiture).
+                if (d.Body != null && d.Hinge != null && d.RestSet && Mathf.Abs(Angle(d)) <= 10f)
+                {
+                    Transform b = d.Body.transform;
+                    Vector3 anchor = Vector3.Scale(b.localScale, d.Hinge.anchor);
+                    Vector3 pivot = b.localPosition + b.localRotation * anchor;
+                    b.localRotation = d.RestRot;
+                    b.localPosition = pivot - d.RestRot * anchor;
+                    d.Body.rotation = b.rotation; d.Body.position = b.position;
+                    d.Body.angularVelocity = Vector3.zero;
+                }
+            }
+            if (d.Body != null) d.Body.WakeUp();
+        }
+
+        static void Trace(Door d) { d.TraceUntil = Time.realtimeSinceStartup + 6f; }
 
         // Evenement du joueur local (le jeu vient d'entrer dans l'etat accroche).
         static void Local(Door d, int kind)
         {
             float now = Time.realtimeSinceStartup;
+            Trace(d);
             if (kind == K_LOCK && (d.State != DoorState.Open || now - d.OpenedAt < 0.7f)) return;   // (a l'ouverture, l'angle peut se lire 359 degres et le jeu passe une fois par la)
             switch (kind)
             {
                 case K_OPEN: d.State = DoorState.Open; d.OpenedAt = now; Take(d); break;
                 case K_GRAB: if (d.State == DoorState.Locked) d.State = DoorState.Open; Take(d); break;
-                case K_CLOSED: d.State = DoorState.Closed; d.Owner = -1; d.Mine = false; StopFollow(d); break;
+                case K_CLOSED: d.State = DoorState.Closed; d.Owner = -1; d.Mine = false; EndClosing(d, false); StopFollow(d); break;
                 case K_LOCK: d.State = DoorState.Locked; break;   // (on continue d'envoyer son angle : figee par l'attache)
             }
             if (!Session.Active) return;
@@ -268,6 +341,7 @@ namespace MWCoop
             d.Owner = Session.Active ? Session.LocalId : 0;
             d.Mine = true;
             d.Sent = false;
+            EndClosing(d, false);
             StopFollow(d);
         }
 
@@ -280,6 +354,8 @@ namespace MWCoop
         static void Apply(Door d, int kind, int who)
         {
             bool me = who == Session.LocalId;
+            Trace(d);
+            if (kind == K_OPEN || kind == K_GRAB) EndClosing(d, false);
             switch (kind)
             {
                 case K_OPEN:
@@ -299,10 +375,17 @@ namespace MWCoop
                     return;
                 case K_CLOSED:
                     d.Owner = -1; d.Mine = false;
-                    if (d.State == DoorState.Closed) { StopFollow(d); return; }
+                    if (d.State == DoorState.Closed) { if (!d.Closing) StopFollow(d); return; }
                     d.State = DoorState.Closed;
-                    Shut(d);
-                    Drive(d, d.Close);
+                    if (d.Body != null && d.Hinge != null && d.RestSet && Mathf.Abs(Angle(d)) >= 2.5f)
+                    {
+                        // Ramenee a 0, claquee par Update une fois fermee. Un capot ouvert est tenu a 60-65 par ses
+                        // butees : son etat de fermeture ("State 2") les leve, comme quand on le rabat a la main.
+                        d.Closing = true; d.ClosingSince = Time.realtimeSinceStartup; d.TargetAngle = 0f;
+                        if (!d.IsDoor && d.Grab != null) Drive(d, d.Grab);
+                        Follow(d);
+                    }
+                    else { StopFollow(d); Drive(d, d.Close); }
                     break;
                 case K_LOCK:
                     if (d.State != DoorState.Open) return;
@@ -311,21 +394,6 @@ namespace MWCoop
                 default: return;
             }
             Log.Info("portiere " + d.Key + " " + KindName(kind) + " par #" + who);
-        }
-
-        // Pose fermee, puis la physique du jeu (le claquement de "Close door" la verrouille la). La pose est
-        // aussi donnee au corps physique : sinon, rendu dynamique dans la meme image, il reprendrait l'ancienne.
-        static void Shut(Door d)
-        {
-            if (d.Body != null && d.RestSet && d.Hinge != null)
-            {
-                if (!d.Pinned) { d.Pinned = true; d.PinnedWasKinematic = d.Body.isKinematic; d.Body.isKinematic = true; }
-                Pose(d, 0f);
-                d.Body.position = d.Body.transform.position;
-                d.Body.rotation = d.Body.transform.rotation;
-            }
-            StopFollow(d);
-            if (d.Body != null && !d.Body.isKinematic) { d.Body.velocity = Vector3.zero; d.Body.angularVelocity = Vector3.zero; }
         }
 
         static void Drive(Door d, string state)
@@ -492,8 +560,8 @@ namespace MWCoop
                 if (d.Key.StartsWith(key) && d.Fsm != null)
                 {
                     return d.Key + " etat " + d.Fsm.ActiveStateName + " Open=" + OpenVar(d)
-                           + (d.Body != null && d.Hinge != null && d.RestSet ? ", angle " + HingeAngle(d).ToString("F1") + " deg" : ", pas de pose fermee")
-                           + ", " + d.State + ", main #" + d.Owner + (d.Mine ? " (nous)" : "") + (d.Pinned ? ", suit" : "") + (d.PendingOwn > 0 ? ", attend " + d.PendingOwn : "");
+                           + (d.Hinge != null && d.RestSet ? ", angle " + Angle(d).ToString("F1") + " deg" : ", pas de pose fermee")
+                           + ", " + d.State + ", main #" + d.Owner + (d.Mine ? " (nous)" : "") + (d.Springing ? ", suit" : "") + (d.Closing ? ", se ferme" : "") + (d.PendingOwn > 0 ? ", attend " + d.PendingOwn : "") + " " + Diag(d);
                 }
             return "?";
         }

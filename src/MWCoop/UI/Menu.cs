@@ -31,7 +31,7 @@ namespace MWCoop
                 focusChat = true;
                 chatText = "";
             }
-            Block(inGame && (Open || ChatOpen));
+            Block(inGame && (Open || ChatOpen || Respawn.Choosing));
         }
 
         // Coupe/rend la visee et les deplacements du joueur (et le verrouillage du curseur du jeu).

@@ -70,6 +70,7 @@ namespace MWCoop
             Step("portieres", CarDoors.Update);
             Step("tableaux de bord", CarVisuals.Update);
             Step("passagers", Seats.Update);
+            Step("reapparition", Respawn.Update);
             Step("portes automatiques", NearDoors.Update);
             Step("machines", Machines.Update);
             Step("rayons", Stock.Update);
@@ -124,6 +125,7 @@ namespace MWCoop
             CarDoors.OnLevelLoaded();
             CarVisuals.OnLevelLoaded();
             Seats.OnLevelLoaded();
+            Respawn.OnLevelLoaded();
             NearDoors.OnLevelLoaded();
             Machines.OnLevelLoaded();
             Stock.OnLevelLoaded();
@@ -138,7 +140,7 @@ namespace MWCoop
 
         void OnGUI()
         {
-            try { Hud.Draw(); Menu.Draw(); } catch (System.Exception e) { Log.Error("hud : " + e); }
+            try { Hud.Draw(); Menu.Draw(); Respawn.Draw(); } catch (System.Exception e) { Log.Error("hud : " + e); }
         }
 
         void OnApplicationQuit()
