@@ -98,6 +98,52 @@ namespace MWCoop
                 if (t > 56f && step == 4) { step = 5; Log.Info("autotest : apres sortie -> " + VehicleSync.TestExit(car)); }
                 if (b != null && t > 25f && t < 37f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
                 if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + " rot " + b.rotation.eulerAngles.ToString("F0") + ", cinematique " + b.isKinematic);
+                if (b != null && t > 20f && !b.isKinematic)
+                {
+                    // Envol ? vitesse verticale et rotation maximales de la voiture conduite.
+                    if (b.angularVelocity.magnitude > maxRot) { maxRot = b.angularVelocity.magnitude; if (maxRot > 1f) Log.Info("autotest : rotation max " + maxRot.ToString("F2") + " rad/s"); }
+                    if (b.velocity.y > maxUp) { maxUp = b.velocity.y; Log.Info("autotest : vitesse verticale max " + maxUp.ToString("F2") + " m/s, rotation " + b.angularVelocity.magnitude.ToString("F2") + " rad/s en " + b.position.ToString("F1")); }
+                }
+            }
+            if (mode == "mort")
+            {
+                // [Test] TestCause (booleen de Systems/Death) a 30 s ; TestReapparition=1/2 choisit 3 s apres.
+                if (t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Respawn.TestDie(Config.Get("Test", "TestCause", "Hunger"))); }
+                if (t > 31f && Time.frameCount % 90 == 0 && t < 45f) Log.Info("autotest : " + Respawn.State());
+                if (t > 38f && step == 1)
+                {
+                    step = 2;
+                    string png = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "reapparition-" + Config.GetInt("Test", "TestReapparition", 1) + ".png");
+                    Application.CaptureScreenshot(png);
+                    Log.Info("autotest : capture " + png);
+                }
+            }
+            if (mode == "accident")
+            {
+                // Au volant (mode conduite), la tete du conducteur se detache a 30 s, en roulant.
+                string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                Rigidbody b = VehicleSync.Body(car);
+                if (b != null && t > 25f && t < 31f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                if (t > 30f && step == 2) { step = 3; Log.Info("autotest : choc " + Respawn.TestCrash(car)); }
+                if (t > 30.5f && Time.frameCount % 90 == 0 && t < 46f) Log.Info("autotest : " + Respawn.State());
+                if (t > 46f && step == 3) { step = 4; Log.Info("autotest : remonte " + VehicleSync.TestEnter(car, false)); }
+                if (t > 52f && step == 4) { step = 5; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (t > 54f && step == 5 && Time.frameCount % 120 == 0 && t < 60f) Log.Info("autotest : yeux " + Seats.DriverEyes(car.Split('(')[0]));
+            }
+            if (mode == "coffre")
+            {
+                // Invite : ouvre [Test] TestPorte de TestVoiture des que la voiture (conduite par l'autre) roule,
+                // la lache, puis la referme 3 s plus tard (bouton tenu jusqu'au claquement).
+                string vc = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), vp = Config.Get("Test", "TestPorte", "Hatch");
+                Rigidbody b = VehicleSync.Body(vc);
+                float now = Time.realtimeSinceStartup;
+                if (b != null && t > 12f && !coffreStartSet) { coffreStartSet = true; coffreStart = b.position; }
+                if (b != null && coffreStartSet && step == 0 && (b.position - coffreStart).magnitude > 3f) { step = 1; coffreT = now; Log.Info("autotest : la voiture roule, ouvre " + CarDoors.TestOpen(vc, true, vp)); }
+                if (step == 1 && now - coffreT > 0.6f) { step = 2; coffreT = now; Log.Info("autotest : lache " + CarDoors.TestState(vc, "Mouse off", vp)); }
+                if (step == 2 && now - coffreT > 3f) { step = 3; Log.Info("autotest : referme " + CarDoors.TestGrab(vc, vp)); }
+                if (b != null && step >= 1 && Time.frameCount % 60 == 0) Log.Info("autotest : " + CarDoors.StateOf(vc, vp) + ", voiture en " + b.position.ToString("F1"));
             }
             if (mode == "peindre")
             {
@@ -496,6 +542,9 @@ namespace MWCoop
         static float shotAt = -1;
         static string bagId;
         static int step, step2, portiereMark, spamLogged = -1;
+        static float maxUp = 0.5f, maxRot, coffreT;
+        static bool coffreStartSet;
+        static Vector3 coffreStart;
         static float lastPeriodic;
 
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).
