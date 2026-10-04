@@ -10,13 +10,14 @@ namespace MWCoop
     {
         // Posture et actions du joueur, montrees par son avatar (Avatar).
         public const int F_Crouch = 1, F_Seated = 2, F_Smoke = 4, F_Drink = 8, F_Carry = 16, F_Hello = 32, F_Sleep = 64,
-            F_SleepFast = 128;   // le lit compte les heures : quand tous l'ont, l'hote accelere
+            F_SleepFast = 128,
+                         F_Inhale = 256, F_Exhale = 512;   // cigarette : tire (main a la bouche), souffle (fumee)   // le lit compte les heures : quand tous l'ont, l'hote accelere
         const float SendRate = 1f / 20f;
         static float nextSend;
         static Transform player, cam, smoking, drinking, hello;
         public static Transform LocalCamera { get { return cam; } }
         static CharacterController controller;
-        static PlayMakerFSM crouchFsm;
+        static PlayMakerFSM crouchFsm, smokeFsm;
         static readonly Dictionary<int, Avatar> avatars = new Dictionary<int, Avatar>();
 
         static PlayerSync()
@@ -28,7 +29,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            player = cam = null; crouchFsm = null;
+            player = cam = null; crouchFsm = null; smokeFsm = null;
             controller = null;
             foreach (Avatar a in avatars.Values) a.Destroy();
             avatars.Clear();
@@ -124,7 +125,15 @@ namespace MWCoop
                 if (seatedNow) st.Flags |= F_Seated;
                 if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
                 if (Game.GlobalBool("PlayerSleeps") && World.BedCounting()) st.Flags |= F_SleepFast;
-                if (smoking != null && smoking.gameObject.activeInHierarchy) st.Flags |= F_Smoke;
+                if (smoking != null && smoking.gameObject.activeInHierarchy)
+                {
+                    st.Flags |= F_Smoke;
+                    // Tirer sur la cigarette (touche tenue) : la main a la bouche ; relacher : la fumee.
+                    if (smokeFsm == null) smokeFsm = Game.FsmOn(smoking.gameObject, "Start");
+                    string sm = smokeFsm != null ? smokeFsm.ActiveStateName : "";
+                    if (sm == "Anim 2" || sm == "Explosion?" || sm == "Inhale") st.Flags |= F_Inhale;
+                    else if (sm == "Anim 3" || sm == "Outhale" || sm == "Anim 4" || sm == "Outhale 2") st.Flags |= F_Exhale;
+                }
                 if (AnyChildActive(drinking) || Game.GlobalBool("PlayerDrinkOn") || Time.realtimeSinceStartup < Consume.EatUntil) st.Flags |= F_Drink;
                 if (hello != null && hello.gameObject.activeInHierarchy) st.Flags |= F_Hello;
                 if (Props.Holding) st.Flags |= F_Carry;
@@ -132,7 +141,7 @@ namespace MWCoop
             }
             Session.Me.State = st;
             var w = new NetWriter(Msg.PlayerState).U8(Session.LocalId).U8(Session.Me.Level)
-                .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U8(st.Flags);
+                .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags);
             Session.SendAll(w, false);
         }
 
@@ -143,7 +152,7 @@ namespace MWCoop
             PlayerInfo pi;
             if (!Session.Players.TryGetValue(id, out pi) || pi.Local) return;
             int level = r.U8();
-            var st = new PlayerState { Feet = r.Vec(), Head = r.Vec(), Yaw = r.F32(), Pitch = r.F32(), Height = r.F32(), Speed = r.F32(), Flags = r.U8() };
+            var st = new PlayerState { Feet = r.Vec(), Head = r.Vec(), Yaw = r.F32(), Pitch = r.F32(), Height = r.F32(), Speed = r.F32(), Flags = r.U16() };
             bool levelChanged = pi.Level != level;
             pi.Level = level;
             pi.State = st;
@@ -152,7 +161,7 @@ namespace MWCoop
             {
                 // Relais aux autres invites, avec le bon numero de joueur.
                 var w = new NetWriter(Msg.PlayerState).U8(id).U8(level)
-                    .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U8(st.Flags);
+                    .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags);
                 Session.Broadcast(w, false, id);
                 if (levelChanged) Session.SendRoster();
                 if (levelChanged && level == 1)

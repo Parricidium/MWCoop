@@ -21,6 +21,9 @@ namespace MWCoop
     // conducteur assis. A la fin de la copie, moteur, commandes et roues reprennent l'etat d'AVANT
     // (le jeu coupe le Drivetrain d'un moteur arrete : le rallumer de force le faisait caler et
     // redemarrer en boucle, sons superposes).
+    // Chaleur de l'habitacle : la source de chaleur de la voiture (HeatSource*, ecrite par son automate
+    // CarTemp... d'apres le moteur, le chauffage, les portieres) est envoyee avec la voiture ; sur la
+    // copie (moteur froid), elle est reprise apres la logique du jeu -- le passager se rechauffe aussi.
     public static class VehicleSync
     {
         class Car
@@ -50,6 +53,7 @@ namespace MWCoop
             public int SoundMask;
             public float[] SoundPitch, SoundVol;
             public float Rpm, Throttle, Steer;
+            public HutongGames.PlayMaker.FsmFloat Heat; public float RemoteHeat = float.NaN;   // temperature de la source de chaleur
             public float[] WheelRot;
         }
 
@@ -94,6 +98,8 @@ namespace MWCoop
                 car.SoundVol = new float[snd.Count];
                 foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { car.Drive = f; break; }
+                foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
+                    if (f.FsmName == "Data" && f.gameObject.name.StartsWith("HeatSource")) { car.Heat = f.FsmVariables.FindFsmFloat("Temperature"); break; }
                 cars.Add(car);
             }
             var names = new List<string>();
@@ -151,9 +157,19 @@ namespace MWCoop
                     if (now >= c.NextJoints) ProtectJoints(c);   // pieces montees entre-temps
                     Follow(c);
                     Animate(c);
-                    if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Name + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
+                    if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Name + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + ", chaleur " + (c.Heat != null ? c.Heat.Value.ToString("F1") : "?") + " (recue " + c.RemoteHeat.ToString("F1") + ")" +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
                 }
             }
+        }
+
+        // Apres la logique du jeu : la chaleur de l'habitacle de la copie est celle de chez le conducteur.
+        public static void LateUpdate()
+        {
+            if (!scanned) return;
+            float now = Time.realtimeSinceStartup;
+            foreach (Car c in cars)
+                if (c.Heat != null && !float.IsNaN(c.RemoteHeat) && c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving)
+                    c.Heat.Value = c.RemoteHeat;
         }
 
         static void SetKinematic(Car c, bool on)
@@ -389,7 +405,7 @@ namespace MWCoop
                 float thr = testRpm >= 0f ? testThr : c.Dt != null ? c.Dt.throttle : 0f;
                 int mask = 0;
                 for (int i = 0; i < c.SoundObjs.Length; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;
-                w.F32(rpm).F32(thr).F32(SteerOf(c)).U16(mask);
+                w.F32(rpm).F32(thr).F32(SteerOf(c)).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
                 for (int i = 0; i < c.SoundObjs.Length; i++)
                     if ((mask & (1 << i)) != 0)
                     {
@@ -439,18 +455,18 @@ namespace MWCoop
             Vector3 pos = r.Vec();
             Quaternion rot = r.Quat();
             Vector3 vel = r.Vec(), ang = r.Vec();
-            float rpm = 0f, thr = 0f, steer = 0f;
+            float rpm = 0f, thr = 0f, steer = 0f, heat = float.NaN;
             int smask = 0;
             var spitch = new List<float>();
             if (driven)
             {
-                rpm = r.F32(); thr = r.F32(); steer = r.F32(); smask = r.U16();
+                rpm = r.F32(); thr = r.F32(); steer = r.F32(); heat = r.F32(); smask = r.U16();
                 for (int i = 0; i < 16; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
             }
             if (Session.IsHost)
             {
                 var fw = new NetWriter(Msg.Vehicle).U8(who).U8(idx).U8(mode).Vec(pos).Quat(rot).Vec(vel).Vec(ang);
-                if (driven) { fw.F32(rpm).F32(thr).F32(steer).U16(smask); foreach (float v in spitch) fw.F32(v); }
+                if (driven) { fw.F32(rpm).F32(thr).F32(steer).F32(heat).U16(smask); foreach (float v in spitch) fw.F32(v); }
                 Session.Broadcast(fw, false, who);
             }
             if (!scanned || idx >= cars.Count) return;
@@ -464,7 +480,7 @@ namespace MWCoop
                 c.RemoteDriver = mode == 1 ? who : -1;
                 c.LastRemote = Time.realtimeSinceStartup;
                 c.Pos = pos; c.Rot = rot; c.Vel = vel; c.AngVel = ang;
-                c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask;
+                c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask; c.RemoteHeat = heat;
                 for (int i = 0, k = 0; i < c.SoundObjs.Length && i < 16; i++)
                     if ((smask & (1 << i)) != 0 && k + 1 < spitch.Count) { c.SoundPitch[i] = spitch[k]; c.SoundVol[i] = spitch[k + 1]; k += 2; }
                 return;

@@ -27,6 +27,7 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.13.1) : programme de la télé suivi chez tous ; feux de recul ; places passagers corrigées.
       Fait (0.14) : portes automatiques et barrières pour tous, écran de la pompe à essence, voitures
       garées, PNJ visibles pareil chez tous, rayons et paniers des magasins, portières battantes.
+      Fait (0.15) : sacs de courses ouverts chez tous, portières refermées en poussant, chaleur de l'habitacle.
       Reste : marché aux puces (articles tirés au hasard de chaque côté), facture de téléphone des appels
       passés par un invité, appels quand l'hôte est loin de la maison (la logique du téléphone ne tourne
       que près de la maison, chez l'hôte).
@@ -59,6 +60,7 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.4) : marche avec les bras qui balancent, assis, accroupi, assis au volant.
       Fait (0.14) : accroupi à deux niveaux (squelette abaissé, jambes pliées, à genoux), places passagers
       comme celle du conducteur.
+      Fait (0.15) : cigarette en main, main à la bouche quand le joueur tire, fumée quand il souffle.
       Fait (0.10, retours de JD) : pose de conduite des PNJ de la circulation (voiture / camion), tête qui
       suit la caméra au volant, buste qui suit le regard, accroupi procédural, bras au repos.
 - [x] Actions visibles : un joueur qui fume, boit, mange… est vu par les autres.

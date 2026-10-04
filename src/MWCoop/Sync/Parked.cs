@@ -21,24 +21,19 @@ namespace MWCoop
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 16f : -1;
         }
 
+        // Une seule station : ses deux objets sont cherches par leur chemin (pas de releve de toute la scene).
         static void Scan()
         {
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            GameObject pc = Game.FindAny("PERAPORTTI/ParkedCars");
+            PlayMakerFSM f = pc != null ? Game.FsmOn(pc, "ParkedCars") : null;
+            if (f != null && !placers.Contains(f)) placers.Add(f);
+            GameObject sc = Game.FindAny("PERAPORTTI/Building/LOD300/StaticCars");
+            if (sc == null) return;
+            foreach (Transform c in sc.transform)
             {
-                var f = (PlayMakerFSM)o;
-                if (f.hideFlags != HideFlags.None || f.FsmName != "ParkedCars" || placers.Contains(f)) continue;
-                placers.Add(f);
-            }
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Transform)))
-            {
-                var t = (Transform)o;
-                if (t.gameObject.hideFlags != HideFlags.None || t.name != "StaticCars" || !t.root.gameObject.activeInHierarchy) continue;
-                foreach (Transform c in t)
-                {
-                    bool known = false;
-                    foreach (Car k in cars) if (k.T == c) known = true;
-                    if (!known) cars.Add(new Car { Name = c.name, T = c });
-                }
+                bool known = false;
+                foreach (Car k in cars) if (k.T == c) known = true;
+                if (!known) cars.Add(new Car { Name = c.name, T = c });
             }
         }
 
