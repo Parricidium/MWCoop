@@ -838,6 +838,7 @@ namespace MWCoop
             if (ol == null || !ol.gameObject.activeSelf) return;   // deja cachee (par le jeu, ou un rejeu en cours)
             ol.gameObject.SetActive(false);
             c.Hidden = ol.gameObject;
+            Log.Info("magasin : carte du bar cachee le temps du service rejoue");
         }
 
         static void SetLists(Counter c, List<KeyValuePair<string, List<object>>> lists)
@@ -1101,7 +1102,7 @@ namespace MWCoop
 
         static void UnmuteCounter(Counter c)
         {
-            if (c.Hidden != null) { c.Hidden.SetActive(true); c.Hidden = null; }   // carte du bar rendue
+            if (c.Hidden != null) { c.Hidden.SetActive(true); c.Hidden = null; Log.Info("magasin : carte du bar rendue (" + (c.Fsm != null ? c.Fsm.ActiveStateName : "?") + ")"); }
             if (c.Muted == null) return;
             Unmute(c.Muted);
             c.Muted = null;
@@ -1182,6 +1183,12 @@ namespace MWCoop
         //   ID que Props suit ; de 45 a 50 s l'hote promene le sac (Props.TestCarry). Attendu chez l'invite : « sac
         //   shoppingbagN cree ici sans la caisse (racine) », sac et caisse a la racine, figes, suivis par Props sous
         //   les memes ID que chez l'hote, puis « libere (deplace) » pour le sac quand l'hote le deplace.
+        // [Test] Autotest=puces : les deux joueurs devant le comptoir du marche aux puces (TestPos, jour d'ouverture :
+        //   TriggerFlea actifs). A 26 s l'invite choisit l'objet de rang [Test] TestObjet (0 : boitier PC) comme un clic
+        //   gauche (Added, Total, 'Bought') ; a 30 s l'hote choisit le meme et paie ('Check money', comme le clic sur
+        //   la caisse). Chacun note de 28 a 50 s le Total, le nombre d'objets choisis et ou est l'objet. Attendu chez
+        //   l'invite : « 1 objets des puces de X sortis ici a la main (comptoir allume, 1 retires de la selection
+        //   locale) », puis Total 0, choisis 0 ; l'objet a la racine pres du comptoir des deux cotes, pas fige.
         static int testStep;
         static string testBag;
         static float testLog;
@@ -1194,6 +1201,63 @@ namespace MWCoop
             else if (mode == "sac-double") TestBags(t);
             else if (mode == "panier") TestCart(t);
             else if (mode == "sac-loin") TestFar(t);
+            else if (mode == "puces") TestFlea(t);
+        }
+
+        // Puces (essais) : comme un clic gauche sur l'objet de rang k (TriggerFlea 'Add' -> 'Cashier').
+        static string FleaSelect(Counter c, int k)
+        {
+            System.Collections.ArrayList mine = ListOn(Var(c.Fsm, "Inventory"), "Bought");
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var t = (PlayMakerFSM)o;
+                if (t.hideFlags != HideFlags.None || t.FsmName != "Buy" || t.gameObject.name != "TriggerFlea" || Var(t, "CashRegister") != c.Fsm.gameObject) continue;
+                FsmInt id = t.FsmVariables.FindFsmInt("ID");
+                if (id == null || id.Value != k) continue;
+                FsmBool added = t.FsmVariables.FindFsmBool("Added");
+                if (added == null || added.Value) return "deja choisi";
+                added.Value = true;
+                float p = t.FsmVariables.FindFsmFloat("Price").Value;
+                c.Fsm.FsmVariables.FindFsmFloat("Total").Value += p;
+                c.Fsm.FsmVariables.FindFsmFloat("TotalFinal").Value += p;
+                if (mine != null && k < mine.Count) mine[k] = true;
+                return t.FsmVariables.FindFsmString("ProductNameString").Value + " " + p + " mk";
+            }
+            return "TriggerFlea " + k + " introuvable";
+        }
+
+        static string FleaState(Counter c, int k)
+        {
+            GameObject inv = Var(c.Fsm, "Inventory");
+            System.Collections.ArrayList mine = ListOn(inv, "Bought"), items = ListOn(inv, "Items");
+            int n = 0;
+            if (mine != null) foreach (object o in mine) if (o is bool && (bool)o) n++;
+            var go = items != null && k < items.Count ? items[k] as GameObject : null;
+            return "caisse [" + c.Fsm.ActiveStateName + "] Total=" + c.Fsm.FsmVariables.FindFsmFloat("Total").Value.ToString("0.##")
+                   + " TotalFinal=" + c.Fsm.FsmVariables.FindFsmFloat("TotalFinal").Value.ToString("0.##") + ", choisis " + n
+                   + ", objet " + k + " " + (go == null ? "?" : go.name + (go.activeInHierarchy ? " actif" : " eteint") + (go.transform.parent != null ? " sous " + go.transform.parent.name : " racine")
+                   + " en " + go.transform.position.ToString("F1")) + ", figes " + frozen.Count;
+        }
+
+        static void TestFlea(float t)
+        {
+            Counter c = null;
+            foreach (Counter x in counters.Values) if (x.Kind == "puces" && x.Fsm != null) c = x;
+            if (c == null || !c.Fsm.gameObject.activeInHierarchy)
+            {
+                if (testStep == 0 && t > 26f) { testStep = 9; Log.Info("autotest : puces, comptoir " + (c == null ? "introuvable" : "eteint ici (TestPos devant, jour d'ouverture)")); }
+                return;
+            }
+            int k = Config.GetInt("Test", "TestObjet", 0);
+            if (!Session.IsHost && testStep == 0 && t > 26f) { testStep = 1; Log.Info("autotest : puces, l'invite choisit " + FleaSelect(c, k) + " ; " + FleaState(c, k)); }
+            if (Session.IsHost && testStep == 0 && t > 30f)
+            {
+                testStep = 1;
+                string sel = FleaSelect(c, k);
+                Game.SetState(c.Fsm, "Check money");
+                Log.Info("autotest : puces, l'hote achete " + sel + " -> " + c.Fsm.ActiveStateName);
+            }
+            if (t > 28f && t < 51f && t - testLog >= 4f) { testLog = t; Log.Info("autotest : puces, " + FleaState(c, k)); }
         }
 
         static void TestCart(float t)
