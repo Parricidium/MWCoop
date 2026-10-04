@@ -207,6 +207,7 @@ namespace MWCoop.Net
                     case Msg.CarVisual: CarVisuals.OnMessage(from, r); break;
                     case Msg.Seat: Seats.OnMessage(from, r); break;
                     case Msg.Machine: Machines.OnMessage(from, r); break;
+                    case Msg.MachineLock: Machines.OnLock(from, r); break;
                     case Msg.Stock: Stock.OnMessage(from, r); break;
                     case Msg.Npc: Npcs.OnMessage(from, r); break;
                     case Msg.Parked: Parked.OnMessage(from, r); break;
