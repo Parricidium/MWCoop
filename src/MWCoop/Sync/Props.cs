@@ -115,10 +115,12 @@ namespace MWCoop
             // Vetements (veste, combinaison, casque) : cle fixe. Portes au chargement puis enleves, ils sont a la
             // racine de la scene (hors de EQUIPMENTS) et n'auraient sinon jamais de cle.
             k = Wear.KeyOf(rb.gameObject);
-            // Enveloppe de commande (catalogue, Kela) : sortie du catalogue a la racine de la scene, de meme ;
-            // un seul objet de chaque nom.
+            // Enveloppe du catalogue (commande commune, rejouee chez tous) : sortie du catalogue a la racine de la
+            // scene, de meme ; un seul objet. PAS la lettre de Kela (Sheets/envelope(kela1)) : Systems/Expenses tourne
+            // chez chaque joueur (WorldFsms.SkipObjects), chacun a et poste la sienne -- partagee, celle de l'un
+            // n'etait plus postee chez l'autre (Calls.CheckEnvelope) et sa demande d'allocation de la semaine perdue.
             string tn = t.name;
-            if (k == null && tn.StartsWith("envelope(")) k = "w:enveloppe:" + tn;
+            if (k == null && tn == Calls.PartsEnvelope) k = "w:enveloppe:" + tn;
             if (k != null) { worldKeys[rb.gameObject] = k; return k; }
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement.
             bool plug = tn.StartsWith("cable plug");

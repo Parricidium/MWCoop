@@ -15,15 +15,18 @@ namespace MWCoop
     //  - porte par deux joueurs a la fois (sauvegarde de l'hote faite en le portant, chargee par un invite ; deux
     //    clics croises) : le plus petit numero (l'hote d'abord) le garde, l'autre l'enleve (logique du jeu).
     // Detection par sondage 4 fois/s (3 objets, sans allocation) : l'objet porte est sous PLAYER et inactif ;
-    // tenu en main il est sous PLAYER mais actif (ItemPivot).
+    // tenu en main il est sous PLAYER mais actif (ItemPivot). "Sous PLAYER" = descendant (IsChildOf), pas racine :
+    // au volant ou passager, PLAYER lui-meme est range sous la voiture.
     public static class Wear
     {
         const int N = 3;
         static readonly string[] Paths = { "EQUIPMENTS/winter jacket(itemx)", "EQUIPMENTS/winter coverall(itemx)", "EQUIPMENTS/Helmet/helmet(itemx)" };
         static readonly string[] Names = { "veste", "combinaison", "casque" };
         static readonly int[] Bits = { PlayerSync.F_Jacket, PlayerSync.F_Coverall, PlayerSync.F_Helmet };
-        const string ClothingPath = "PLAYER/Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Clothing";
-        const string HelmetPath = "PLAYER/Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Helmet";
+        // Depuis PLAYER : au volant ou passager, PLAYER est range sous la voiture (DriveTrigger 'Reset view', Seats) et
+        // n'est plus une racine de la scene (Game.FindAny ne le trouverait pas).
+        const string ClothingPath = "Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Clothing";
+        const string HelmetPath = "Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Helmet";
 
         class Item
         {
@@ -38,7 +41,7 @@ namespace MWCoop
 
         static readonly Item[] items = new Item[N];
         static PlayMakerFSM clothLogic, helmetLogic;
-        static Transform player;   // racine PLAYER (comparee par reference : pas de nom lu 12 fois/s)
+        static Transform player;   // PLAYER (par reference : pas de nom lu 12 fois/s), garde une fois trouve
         static float nextPoll, findAt = -1;
         static bool found;
 
@@ -69,11 +72,12 @@ namespace MWCoop
                 items[i].Go = Game.FindAny(Paths[i]);
                 if (items[i].Go == null) found = false;
             }
-            GameObject c = Game.FindAny(ClothingPath), h = Game.FindAny(HelmetPath), p = Game.FindAny("PLAYER");
-            clothLogic = c != null ? Game.FsmOn(c, "Logic") : null;
-            helmetLogic = h != null ? Game.FsmOn(h, "Logic") : null;
-            player = p != null ? p.transform : null;
-            if (player == null) found = false;
+            // PLAYER par son nom seul (GameObject.Find cherche alors partout, pas seulement les racines) : trouve
+            // aussi quand le joueur est assis dans une voiture ; une fois trouve, garde (jamais remis a null ici).
+            if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p != null) player = p.transform; }
+            if (player == null) { found = false; return; }
+            if (clothLogic == null) { Transform c = player.Find(ClothingPath); if (c != null) clothLogic = Game.FsmOn(c.gameObject, "Logic"); }
+            if (helmetLogic == null) { Transform h = player.Find(HelmetPath); if (h != null) helmetLogic = Game.FsmOn(h.gameObject, "Logic"); }
             // Deja range sous PLAYER (porte au chargement) : l'automate du jeu sait lequel.
             if (helmetLogic != null && items[2].Go == null) items[2].Go = GoVar(helmetLogic, "Helmet");
             if (clothLogic != null)
@@ -117,13 +121,15 @@ namespace MWCoop
             if (!found && now >= findAt) { findAt = now + 10f; Find(); }
             if (now < nextPoll) return;
             nextPoll = now + 0.25f;
+            if (found && player == null) { found = false; findAt = now; }   // PLAYER detruit : recherche a la prochaine image
             for (int i = 0; i < N; i++)
             {
                 Item it = items[i];
                 GameObject go = it.Go;
                 if (go == null) continue;
                 Transform t = go.transform;
-                bool worn = !go.activeSelf && player != null && t.root == player;
+                // Sous PLAYER (pas sa racine : au volant ou passager, la racine est la voiture).
+                bool worn = !go.activeSelf && player != null && t.IsChildOf(player);
                 if (worn != it.LocalWorn)
                 {
                     it.LocalWorn = worn;
@@ -176,9 +182,9 @@ namespace MWCoop
         static void Hide(Item it, int i, int wearer, float now)
         {
             Transform t = it.Go.transform;
-            if (player != null && t.root == player)
+            if (player != null && t.IsChildOf(player))
             {
-                // Tenu en main ici : on attend qu'il soit lache.
+                // Tenu en main (ou porte) ici, meme assis dans une voiture : on attend qu'il soit lache.
                 if (now - it.HeldLog > 10f) { it.HeldLog = now; Log.Info("vetements : " + Names[i] + " porte(e) par #" + wearer + " mais tenu(e) ici"); }
                 return;
             }

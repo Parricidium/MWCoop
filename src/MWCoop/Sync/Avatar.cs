@@ -127,16 +127,19 @@ namespace MWCoop
             foreach (AudioSource a in go.GetComponentsInChildren<AudioSource>(true)) Object.DestroyImmediate(a);
         }
 
+        // Matiere du jeu par son nom. Jamais une matiere sans nom : celles creees en cours de partie (effets d'image des
+        // cameras, cigarette de l'avatar) n'en ont pas, et un nom vide (reglage absent) en aurait pris une au hasard.
         public static Material FindMaterial(string name)
         {
+            if (string.IsNullOrEmpty(name)) return null;
             if (materials == null)
             {
                 materials = new Dictionary<string, Material>();
                 foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Material)))
-                    if (!materials.ContainsKey(o.name)) materials[o.name] = (Material)o;
+                    if (o.name.Length > 0 && !materials.ContainsKey(o.name)) materials[o.name] = (Material)o;
             }
             Material m;
-            return materials.TryGetValue(name ?? "", out m) ? m : null;
+            return materials.TryGetValue(name, out m) ? m : null;
         }
 
         // Apparences proposees : materiaux des corps des PNJ (char_shirtNN, cop_shirt...).
@@ -729,7 +732,9 @@ namespace MWCoop
             int kind = (clothFlags & PlayerSync.F_Coverall) != 0 ? 2 : (clothFlags & PlayerSync.F_Jacket) != 0 ? 1 : 0;
             if (kind != 0 && m != null)
             {
-                Material swap = FindMaterial(Config.Get("Coop", kind == 1 ? "ApparenceVeste" : "ApparenceCombinaison", ""));
+                // Autre matiere seulement si le reglage en nomme une (vide par defaut : teinte).
+                string sw = Config.Get("Coop", kind == 1 ? "ApparenceVeste" : "ApparenceCombinaison", "");
+                Material swap = sw.Length > 0 ? FindMaterial(sw) : null;
                 if (swap != null) m = swap;
                 else if (m.HasProperty("_Color"))
                 {
