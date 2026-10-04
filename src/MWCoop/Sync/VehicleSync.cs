@@ -258,6 +258,9 @@ namespace MWCoop
             return u.Car;
         }
 
+        // Objet replace d'un coup (pose recue) : la voiture sous lui sera cherchee a nouveau.
+        public static void Forget(Rigidbody item) { if (item != null) under.Remove(item); }
+
         // Portieres, capot, hayon : leurs attaches ne sont pas rendues incassables sur la copie (CarDoors les
         // asservit, une charniere figee en ferait une soudure). Branche a l'integration (CarDoors.IsDoorBody).
         static System.Func<Rigidbody, bool> IsDoorBody = null;
