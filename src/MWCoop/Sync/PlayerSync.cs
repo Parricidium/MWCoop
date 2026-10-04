@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -15,19 +16,19 @@ namespace MWCoop
         static Transform player, cam, smoking, drinking, hello;
         public static Transform LocalCamera { get { return cam; } }
         static CharacterController controller;
-        static float standHeight;
+        static PlayMakerFSM crouchFsm;
         static readonly Dictionary<int, Avatar> avatars = new Dictionary<int, Avatar>();
 
         static PlayerSync()
         {
-            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); };
+            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); Stock.PlayerLeft(pi.Id); };
         }
 
         public static bool InGame { get { return Application.loadedLevelName == "GAME"; } }
 
         public static void OnLevelLoaded()
         {
-            player = cam = null;
+            player = cam = null; crouchFsm = null;
             controller = null;
             foreach (Avatar a in avatars.Values) a.Destroy();
             avatars.Clear();
@@ -110,15 +111,17 @@ namespace MWCoop
                 st.Pitch = -Mathf.Asin(Mathf.Clamp(fw.y, -1f, 1f)) * Mathf.Rad2Deg;
                 string forced = Config.Get("Test", "TestRegard", "");
                 if (forced.Length > 0) st.Pitch = float.Parse(forced, System.Globalization.CultureInfo.InvariantCulture);
-                st.Height = h;
+                // Hauteur de la camera voulue par l'automate Crouch du jeu (1,4 debout, 0,85 accroupi, 0,3 au
+                // ras du sol) : l'avatar en tire sa posture (accroupi, puis a genoux penche).
+                if (crouchFsm == null) crouchFsm = Game.FsmOn(player.gameObject, "Crouch");
+                FsmFloat cpos = crouchFsm != null ? crouchFsm.FsmVariables.FindFsmFloat("Position") : null;
+                st.Height = cpos != null ? cpos.Value : 1.4f;
                 st.Speed = controller != null ? new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude : 0f;
                 // Accroupi : hauteur nettement sous la hauteur debout (la plus grande vue).
                 // Accroupi : la camera descend nettement sous sa hauteur debout (la plus grande vue a pied).
-                bool seatedNow = Game.GlobalBool("PlayerSeated") || VehicleSync.LocalDriving >= 0;
-                float camH = cam.position.y - st.Feet.y;
-                if (!seatedNow && camH > standHeight) standHeight = camH;
-                if (!seatedNow && standHeight > 1f && camH < standHeight - 0.3f) st.Flags |= F_Crouch;
-                if (Game.GlobalBool("PlayerSeated") || VehicleSync.LocalDriving >= 0) st.Flags |= F_Seated;
+                bool seatedNow = Game.GlobalBool("PlayerSeated") || VehicleSync.LocalDriving >= 0 || Seats.Seated;
+                if (!seatedNow && st.Height < 1.2f) st.Flags |= F_Crouch;
+                if (seatedNow) st.Flags |= F_Seated;
                 if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
                 if (Game.GlobalBool("PlayerSleeps") && World.BedCounting()) st.Flags |= F_SleepFast;
                 if (smoking != null && smoking.gameObject.activeInHierarchy) st.Flags |= F_Smoke;

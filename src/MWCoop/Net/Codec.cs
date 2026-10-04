@@ -85,5 +85,7 @@ namespace MWCoop.Net
         Seat = 27,        // joueur assis a une place passager (voiture, place) ou sorti
         CarVisual = 26,   // tableau de bord, voyants, vitres, leviers... : lot de (cle, drapeaux, pose)
         CarDoor = 25,     // portiere / capot / coffre : ouverte (1), fermee (0), angle en temps reel (2)
+        Machine = 30,     // non fiable : ce qu'on voit d'une machine a ecran (pompe a essence) chez celui qui s'en sert
+        Stock = 31,       // magasin : panier d'un joueur et stock d'un produit qui ont change
     }
 }

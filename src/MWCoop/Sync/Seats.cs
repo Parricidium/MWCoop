@@ -5,34 +5,41 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Places passagers (le jeu n'a qu'une place, celle du conducteur). Pour chaque voiture, d'apres les
-    // yeux du conducteur (DriverHeadPivot + 27 cm vers l'avant : la vraie camera au volant, mesuree sur la
-    // SORBET) : la place avant droite en symetrique, et pour les voitures a banquette (SORBET, CORRIS)
-    // deux places a l'arriere. Quand le regard TOUCHE le siege (rayon depuis la camera : premier objet
-    // solide = assise ou dossier d'une place libre, a moins de 2,2 m), l'icone passager du jeu s'affiche
-    // (GUIpassenger, comme le volant pour le conducteur) et ENTREE assoit le joueur -- jamais quand le jeu s'apprete deja a le
-    // faire conduire (zone du conducteur en attente d'ENTREE) : il est accroche a la voiture (il suit sa copie quand un autre conduit),
-    // ne marche plus, garde la vue libre ; ENTREE le fait ressortir cote portiere. Les autres voient son
-    // avatar assis a cette place, la tete qui suit son regard. Les commandes du vehicule (cle, frein a
-    // main, vitres...) restent accessibles et sont rejouees chez tous (Jobs).
+    // Places passagers (le jeu n'a qu'une place, celle du conducteur), faites comme la sienne :
+    //  - places : d'apres les yeux du conducteur (DriverHeadPivot + 27 cm vers l'avant, mesure au volant
+    //    de la SORBET) : avant droite en symetrique ; banquette a l'arriere pour SORBET et CORRIS ;
+    //  - on entre dans l'habitacle jusqu'au siege (pieds sur le plancher, a moins de 38 cm de cote et
+    //    50 cm en long de la place) : l'icone passager du jeu s'affiche (GUIpassenger, comme le volant) ;
+    //  - ENTREE : le joueur est accroche a la voiture LA OU IL EST (pas de teleportation), tourne vers
+    //    l'avant ; l'automate Crouch du joueur passe en « Incar » (variable PlayerInCar), exactement comme
+    //    pour le conducteur : il abaisse la camera a la hauteur assise et fige les deplacements ;
+    //  - ENTREE de nouveau : decroche sur place (dans l'habitacle), Crouch « Get out » releve la camera.
+    // Jamais quand le jeu s'apprete a faire conduire (zone du conducteur en attente d'ENTREE). Les autres
+    // voient l'avatar assis, la tete a la place reelle de sa camera (envoyee), qui suit son regard. Les
+    // commandes du vehicule restent accessibles et sont rejouees chez tous (Jobs).
     public static class Seats
     {
         class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; }
+        class Remote { public string Car; public int Index; public Vector3 Head; }
         static readonly List<PlayMakerFSM> driveTriggers = new List<PlayMakerFSM>();
         static bool iconOn;
 
         static readonly List<Seat> seats = new List<Seat>();
-        static readonly Dictionary<int, KeyValuePair<string, int>> remote = new Dictionary<int, KeyValuePair<string, int>>();
+        static readonly Dictionary<int, Remote> remote = new Dictionary<int, Remote>();
         static Seat current;
         static Transform pivot, player, cam;
         static CharacterController controller;
-        static float nextScan = -1, nextHint, satAt, nextResend;
+        static PlayMakerFSM crouch;
+        static float nextScan = -1, satAt, nextResend;
+        static Vector3 headLocal;
+        static int debugFrames;
+        static float crouchCheckAt = -1;
 
         public static bool Seated { get { return current != null; } }
 
         public static void OnLevelLoaded()
         {
-            seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; remote.Clear();
+            seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear();
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -79,6 +86,7 @@ namespace MWCoop
             player = go.transform;
             controller = go.GetComponent<CharacterController>();
             cam = PlayerSync.LocalCamera ?? player;
+            crouch = Game.FsmOn(go, "Crouch");
             return true;
         }
 
@@ -91,51 +99,53 @@ namespace MWCoop
             if (current != null)
             {
                 if (pivot == null || current.CarT == null) { Leave(); return; }
+                if (debugFrames > 0)
+                {
+                    debugFrames--;
+                    Log.Info("passager : image " + Time.frameCount + " joueur " + current.CarT.InverseTransformPoint(player.position).ToString("F3") + " local " + player.localPosition.ToString("F3")
+                             + " parent " + (player.parent != null ? player.parent.name : "-") + " echelle " + player.localScale.ToString("F2") + " cc " + (controller != null && controller.enabled)
+                             + " pivot " + current.CarT.InverseTransformPoint(pivot.position).ToString("F3"));
+                }
                 if (Input.GetKeyDown(KeyCode.Return) && now - satAt > 0.6f) { Leave(); return; }
-                if (now >= nextResend) { nextResend = now + 5f; SendSeat(current.Car, current.Index); }
+                // Tete : la ou la camera s'est posee (le jeu l'abaisse en 0,4 s), puis renvoyee de temps en temps.
+                if (now >= nextResend && now - satAt > 0.7f)
+                {
+                    nextResend = now + 5f;
+                    headLocal = current.CarT.InverseTransformPoint(cam.position);
+                    SendSeat(current.Car, current.Index, headLocal);
+                }
                 return;
             }
+            // Sorti dans l'habitacle : une fois la camera relevee par le jeu, accroupi si le toit est au-dessus.
+            if (crouchCheckAt > 0 && now >= crouchCheckAt)
+            {
+                crouchCheckAt = -1;
+                if (crouch != null && crouch.ActiveStateName == "Wait key" && UnderRoof()) Game.SetState(crouch, "Move down 1");
+            }
             Seat best = null;
-            if (VehicleSync.LocalDriving < 0 && !Game.GlobalBool("PlayerSeated") && !InDriverZone()) best = Aimed();
+            if (VehicleSync.LocalDriving < 0 && !Game.GlobalBool("PlayerSeated") && !InDriverZone()) best = InZone();
             Icon(best != null);
             if (best != null && Input.GetKeyDown(KeyCode.Return)) Sit(best);
         }
 
-        // La place dont le regard touche le siege : premier objet solide sur le rayon de la camera (2,2 m),
-        // appartenant a une voiture, a hauteur d'assise ou de dossier (entre le plancher et les yeux), a
-        // moins de 30 cm de cote et 35 cm en tout du centre de la place. Le toit, la portiere fermee, la
-        // carrosserie arretent le rayon : pas d'icone en regardant la voiture de dehors.
-        static Seat Aimed() { return AimedFrom(cam.position, cam.forward); }
-        static string aimInfo = "";
-
-        static Seat AimedFrom(Vector3 origin, Vector3 dir)
+        // La place ou se tient le joueur : dans l'habitacle (pieds sur le plancher, pas dehors), a moins de
+        // 38 cm de cote et 50 cm en long du siege ; la plus proche.
+        static Seat InZone()
         {
-            RaycastHit[] hits = Physics.RaycastAll(origin, dir, 2.2f);
-            RaycastHit hit = default(RaycastHit);
-            bool any = false;
-            foreach (RaycastHit h in hits)
-            {
-                if (h.collider == null || h.collider.isTrigger || h.collider.transform.root == player.root) continue;
-                if (h.collider.name == "CarCollider") continue;   // enveloppe de la voiture contre le decor (couvre vitres et portes ouvertes)
-                if (!any || h.distance < hit.distance) { hit = h; any = true; }
-            }
-            aimInfo = any ? hit.collider.name + " a " + hit.distance.ToString("F2") + " m" : "rien touche";
-            if (!any) return null;
-            Transform car = hit.collider.transform.root;
-            if (car.GetComponent("CarDynamics") == null) return null;
-            Vector3 p = car.InverseTransformPoint(hit.point);
-            aimInfo += " " + p.ToString("F2");
             Seat best = null;
-            float bestD = 0.35f;
+            float bestD = 1f;
             foreach (Seat s in seats)
             {
-                if (s.CarT != car) continue;
-                if (p.y > s.Head.y + 0.05f || p.y < s.Head.y - 0.95f) continue;   // ni le toit, ni le plancher
-                float dx = p.x - s.Head.x, dz = p.z - (s.Head.z - 0.2f);            // centre : un peu derriere les yeux
-                float dd = Mathf.Sqrt(dx * dx + dz * dz);
-                if (Mathf.Abs(dx) < 0.3f && dd < bestD) { bestD = dd; best = s; }
+                if (s.CarT == null || SeatTaken(s)) continue;
+                if ((s.CarT.position - player.position).sqrMagnitude > 25f) continue;
+                Vector3 p = s.CarT.InverseTransformPoint(player.position);
+                if (p.y < -0.3f || p.y > s.Head.y) continue;
+                float dx = Mathf.Abs(p.x - s.Head.x), dz = Mathf.Abs(p.z - (s.Head.z - 0.1f));
+                if (dx > 0.38f || dz > 0.5f) continue;
+                float d = dx * dx + dz * dz;
+                if (d < bestD) { bestD = d; best = s; }
             }
-            return best != null && !SeatTaken(best) ? best : null;
+            return best;
         }
 
         // Le jeu s'apprete a faire conduire le joueur (zone du conducteur, attente d'ENTREE) ?
@@ -155,8 +165,16 @@ namespace MWCoop
 
         static bool SeatTaken(Seat s)
         {
-            foreach (KeyValuePair<string, int> kv in remote.Values) if (kv.Key == s.Car && kv.Value == s.Index) return true;
+            foreach (Remote r in remote.Values) if (r.Car == s.Car && r.Index == s.Index) return true;
             return false;
+        }
+
+        // Comme le conducteur : l'automate Crouch du joueur passe en « Incar » (camera assise, joueur fige).
+        static void InCar(bool on)
+        {
+            FsmBool b = crouch != null ? crouch.FsmVariables.FindFsmBool("PlayerInCar") : null;
+            if (b != null) b.Value = on;
+            else Log.Warn("passager : variable PlayerInCar introuvable (automate Crouch)");
         }
 
         static void Sit(Seat s)
@@ -164,49 +182,66 @@ namespace MWCoop
             Icon(false);
             pivot = new GameObject("MWCoop-SiegePassager").transform;
             pivot.parent = s.CarT;
-            pivot.localPosition = s.Head;
+            pivot.position = player.position;          // la ou il est : pas de teleportation
             pivot.localRotation = Quaternion.identity;
+            // Comme l'automate Stopping du jeu (PlayerStop), mais tout de suite : moteur de deplacement et
+            // commandes coupes AVANT de bouger le joueur -- sinon le CharacterMotor, une image encore actif
+            // avec le controleur coupe, se croit en l'air et remonte le joueur de sa hauteur de marche (0,4 m).
+            Motor(false);
             if (controller != null) controller.enabled = false;
             Game.SetGlobalBool("PlayerStop", true);
-            Game.SetGlobalBool("PlayerSeated", true);
             player.parent = pivot;
-            player.localRotation = Quaternion.identity;
-            player.position += pivot.position - cam.position;   // les yeux sur la place
+            player.localPosition = Vector3.zero;
+            player.localRotation = Quaternion.identity; // tourne vers l'avant de la voiture
+            InCar(true);
             current = s;
             satAt = Time.realtimeSinceStartup;
-            Log.Info("passager : assis dans " + s.Car + " (place " + s.Index + ")");
-            SendSeat(s.Car, s.Index);
+            nextResend = satAt + 0.7f;
+            debugFrames = Config.GetInt("Test", "JournalPassager", 0);
+            headLocal = s.Head;
+            Log.Info("passager : assis dans " + s.Car + " (place " + s.Index + ") en " + s.CarT.InverseTransformPoint(player.position).ToString("F2"));
+            SendSeat(s.Car, s.Index, s.Head);
         }
 
         static void Leave()
         {
-            Seat s = current;
             current = null;
             if (player != null)
             {
-                player.parent = null;
-                if (s != null && s.CarT != null)
-                {
-                    // Dehors, cote de la place (droite pour l'avant droit, gauche ou droite a l'arriere).
-                    float side = Mathf.Sign(s.Head.x == 0f ? 1f : s.Head.x);
-                    Vector3 outPos = s.CarT.TransformPoint(s.Head + new Vector3(side * 1.4f, 0f, 0f));
-                    player.position = outPos - (cam.position - player.position) + Vector3.up * 0.1f;
-                }
+                player.parent = null;                   // sur place, dans l'habitacle
                 player.rotation = Quaternion.Euler(0f, player.eulerAngles.y, 0f);
             }
+            InCar(false);
             if (controller != null) controller.enabled = true;
+            if (player != null) Motor(true);
             Game.SetGlobalBool("PlayerStop", false);
-            Game.SetGlobalBool("PlayerSeated", false);
             if (pivot != null) Object.Destroy(pivot.gameObject);
             pivot = null;
+            crouchCheckAt = Time.realtimeSinceStartup + 0.6f;
             Log.Info("passager : sorti");
-            SendSeat("", -1);
+            SendSeat("", -1, Vector3.zero);
         }
 
-        static void SendSeat(string car, int index)
+        static bool UnderRoof()
+        {
+            foreach (RaycastHit h in Physics.RaycastAll(player.position, Vector3.up, 1.5f))
+                if (h.collider != null && !h.collider.isTrigger && h.collider.transform.root != player.root && h.collider.transform.root.GetComponent("CarDynamics") != null) return true;
+            return false;
+        }
+
+        static void Motor(bool on)
+        {
+            foreach (string n in new[] { "CharacterMotor", "FPSInputController" })
+            {
+                var b = player.GetComponent(n) as Behaviour;
+                if (b != null) b.enabled = on;
+            }
+        }
+
+        static void SendSeat(string car, int index, Vector3 head)
         {
             if (!Session.Active) return;
-            Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(car).U8(index + 1), true);
+            Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(car).U8(index + 1).Vec(head), true);
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -215,12 +250,13 @@ namespace MWCoop
             if (Session.IsHost) who = from.Id;
             string car = r.Str();
             int index = r.U8() - 1;
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Seat).U8(who).Str(car).U8(index + 1), true, who);
-            KeyValuePair<string, int> old;
+            Vector3 head = r.Vec();
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Seat).U8(who).Str(car).U8(index + 1).Vec(head), true, who);
+            Remote old;
             bool had = remote.TryGetValue(who, out old);
-            if (index < 0) { remote.Remove(who); if (had) Log.Info("passager : #" + who + " est sorti de " + old.Key); return; }
-            remote[who] = new KeyValuePair<string, int>(car, index);
-            if (!had || old.Key != car || old.Value != index) Log.Info("passager : #" + who + " assis dans " + car + " (place " + index + ")");
+            if (index < 0) { remote.Remove(who); if (had) Log.Info("passager : #" + who + " est sorti de " + old.Car); return; }
+            remote[who] = new Remote { Car = car, Index = index, Head = head };
+            if (!had || old.Car != car || old.Index != index) Log.Info("passager : #" + who + " assis dans " + car + " (place " + index + ")");
         }
 
         public static void PlayerLeft(int id) { remote.Remove(id); }
@@ -229,21 +265,77 @@ namespace MWCoop
         public static bool RemoteSeat(int id, out Transform car, out Vector3 head, out string carName)
         {
             car = null; head = Vector3.zero; carName = null;
-            KeyValuePair<string, int> kv;
-            if (!remote.TryGetValue(id, out kv)) return false;
+            Remote rs;
+            if (!remote.TryGetValue(id, out rs)) return false;
             foreach (Seat s in seats)
-                if (s.Car == kv.Key && s.Index == kv.Value && s.CarT != null) { car = s.CarT; head = s.Head; carName = s.Car; return true; }
+                if (s.Car == rs.Car && s.CarT != null)
+                {
+                    car = s.CarT; carName = s.Car;
+                    head = rs.Head != Vector3.zero ? rs.Head : SeatHead(rs.Car, rs.Index);
+                    return true;
+                }
             return false;
         }
 
-        // Essais : assoit le joueur local a la place 'index' de 'car' (sans touche).
+        static Vector3 SeatHead(string car, int index)
+        {
+            foreach (Seat s in seats) if (s.Car == car && s.Index == index) return s.Head;
+            return Vector3.zero;
+        }
+
+        // Essais : assoit le joueur local a la place 'index' de 'car' (debout dans l'habitacle, puis ENTREE).
         public static string TestSit(string car, int index)
         {
             if (!FindPlayer()) return "pas de joueur";
             if (seats.Count == 0) Scan();
             foreach (Seat s in seats)
-                if (s.Car.StartsWith(car) && s.Index == index) { Sit(s); return "assis dans " + s.Car + " place " + index; }
+                if (s.Car.StartsWith(car) && s.Index == index && s.CarT != null)
+                {
+                    StandIn(s);
+                    Sit(s);
+                    return "assis dans " + s.Car + " place " + index;
+                }
             return "aucune place " + index + " sur " + car + " (" + seats.Count + ")";
+        }
+
+        // Essais : comme ENTREE la ou se tient le joueur (zone d'une place).
+        public static string TestEnter()
+        {
+            if (!FindPlayer()) return "pas de joueur";
+            Seat z = InZone();
+            if (z == null) return "hors zone : " + PlaceDans("");
+            Sit(z);
+            return "assis place " + z.Index;
+        }
+
+        static void StandIn(Seat s)
+        {
+            if (controller != null) controller.enabled = false;
+            player.position = s.CarT.TransformPoint(s.Head + new Vector3(0f, -0.55f, -0.1f));
+            if (controller != null) controller.enabled = true;
+        }
+
+        // Essais : met le joueur debout dans l'habitacle, a la place 'index' ; dit si la zone le voit.
+        public static string TestStandIn(string car, int index)
+        {
+            if (!FindPlayer()) return "pas de joueur";
+            if (seats.Count == 0) Scan();
+            foreach (Seat s in seats)
+                if (s.Car.StartsWith(car) && s.Index == index && s.CarT != null) { StandIn(s); return "debout dans " + s.Car + " place " + index + " : " + PlaceDans(car); }
+            return "aucune place";
+        }
+
+        public static string PlaceDans(string car)
+        {
+            if (!FindPlayer()) return "?";
+            foreach (Seat s in seats)
+                if ((car.Length == 0 || s.Car.StartsWith(car)) && s.CarT != null && (car.Length > 0 || (s.CarT.position - player.position).sqrMagnitude < 25f))
+                {
+                    Seat z = current == null ? InZone() : null;
+                    return "joueur " + s.CarT.InverseTransformPoint(player.position).ToString("F2") + ", camera " + s.CarT.InverseTransformPoint(cam.position).ToString("F2")
+                           + (current != null ? ", assis place " + current.Index : z != null ? ", zone place " + z.Index : ", hors zone");
+                }
+            return "?";
         }
 
         // Essais : camera du joueur local et DriverHeadPivot dans le repere de la voiture 'car'.
@@ -258,29 +350,6 @@ namespace MWCoop
                        + ", DriverHeadPivot " + (dhp != null ? rb.transform.InverseTransformPoint(dhp.position).ToString("F3") : "?");
             }
             return "pas de " + car;
-        }
-
-        // Essais : regard depuis dehors, a cote de la place 'index' de 'car' (hauteur debout) : vers le
-        // siege, vers le toit, vers la portiere.
-        public static string TestAim(string car, int index)
-        {
-            if (!FindPlayer()) return "pas de joueur";
-            if (seats.Count == 0) Scan();
-            foreach (Seat st in seats)
-            {
-                if (!st.Car.StartsWith(car) || st.Index != index || st.CarT == null) continue;
-                float side = Mathf.Sign(st.Head.x == 0f ? 1f : st.Head.x);
-                Vector3 o = st.CarT.TransformPoint(st.Head + new Vector3(side * 0.9f, 0.35f, 0f));
-                System.Func<Vector3, string> look = local =>
-                {
-                    Seat r = AimedFrom(o, (st.CarT.TransformPoint(local) - o).normalized);
-                    return (r == null ? "rien" : "place " + r.Index) + " [" + aimInfo + "]";
-                };
-                return car + " place " + index + " : siege -> " + look(st.Head + new Vector3(0f, -0.45f, -0.2f))
-                       + ", toit -> " + look(st.Head + new Vector3(0f, 0.45f, 0f))
-                       + ", portiere -> " + look(st.Head + new Vector3(side * 0.7f, -0.6f, 0f));
-            }
-            return "aucune place";
         }
 
         public static string TestLeave() { if (current == null) return "pas assis"; Leave(); return "sorti"; }
