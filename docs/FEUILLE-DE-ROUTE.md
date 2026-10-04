@@ -31,6 +31,7 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.16) : portières arbitrées par l'hôte (clics croisés, spam du clic), fermeture au claquement réel.
       Fait (0.17) : coffre fermé pendant qu'un autre conduit sans envol (portières jamais figées), réapparition
       au choix (appartement ou maison des parents) au lieu du retour au menu.
+- [x] Audit de la synchro (0.18) : recensement, empreintes hôte/invités (DESYNC), enregistreur d'actions non partagées.
       Reste : marché aux puces (articles tirés au hasard de chaque côté), facture de téléphone des appels
       passés par un invité, appels quand l'hôte est loin de la maison (la logique du téléphone ne tourne
       que près de la maison, chez l'hôte).
