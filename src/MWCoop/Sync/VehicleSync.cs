@@ -125,9 +125,9 @@ namespace MWCoop
         {
             cars.Clear(); under.Clear(); byNet.Clear(); netKeys.Clear(); missingLogged.Clear();
             scanned = false; tableSeen = false; inCarWas = false; curVehicle = null; curVehicleLooked = false;
-            LocalDriving = -1; owned = -1;
+            LocalDriving = -1; owned = -1; moving = null;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
-            tStep = 0;
+            tStep = 0; tRec = 0;
         }
 
         // ---------------------------------------------------------------- quelles voitures
@@ -1047,7 +1047,9 @@ namespace MWCoop
         // automate de conduite) et ce que les autres modules en suivent. Hote : monte a 20 s, au volant a 27 s,
         // poussee a 8 m/s de 30 a 42 s puis de 58 a 64 s (l'invite doit la voir suivre). Invite : ouvre la
         // portiere arriere droite a 44 s, la lache, la referme a 48 s ; s'assoit a l'arriere a 52 s (passager
-        // emmene de 58 a 64 s), se leve a 72 s.
+        // emmene de 58 a 64 s), se leve a 72 s. Options (invite) : TaxiRecale=1 (taxi decale de 2 m a 21 s, recale par
+        // l'hote : portiere a sa place dans le repere du taxi a 25 s) ; TaxiRanger=1 (taxi range ici a 66 s, le joueur
+        // assis : decroche a 67 s, taxi remis a 70 s).
         // reprise : [Test] TestVoiture (SORBET). Hote : au volant a 22 s, moteur (sons, regime d'essai) a 24 s,
         // valeurs reconnaissables posees a 27 s (batterie 87.25, temperatures 61.5, tirette 0.4) ; moteur coupe a
         // 33 s et sortie a 35 s (voiture rendue : etat envoye, fiable) -- [Test] RepriseMoteur=1 : sort moteur
@@ -1055,8 +1057,17 @@ namespace MWCoop
         // seconde, la tirette reste a Jobs). Invite : monte a 45 s, au volant a 50 s, sort a 65 s (moteur arrete :
         // etat rendu). Les deux notent l'etat du moteur toutes les 5 s de 20 a 80 s : l'invite doit montrer les
         // valeurs de l'hote des 28 s (copie) et apres 35 s, puis l'hote celles de l'invite apres 65 s.
-        static int tStep;
+        static int tStep, tRec;
         static float tLog;
+        static Vector3 tDoor;
+        static Rigidbody tDoorBody;
+
+        // Essais : corps de la piece 'name' de la voiture (portiere...).
+        static Rigidbody Part(Car c, string name)
+        {
+            foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true)) if (rb.name == name) return rb;
+            return null;
+        }
 
         public static void Test(string mode, float t)
         {
@@ -1085,11 +1096,69 @@ namespace MWCoop
                 }
                 else
                 {
+                    // [Test] TaxiRecale=1 : taxi decale de 2 m ici a 21 s (gare des deux cotes, portieres deja suivies par
+                    // Props) ; le recalage de l'hote (2 s) le ramene : la portiere doit rester a sa place dans le repere du
+                    // taxi (pas deplacee deux fois).
+                    if (t > 21f && tRec == 0 && Config.GetInt("Test", "TaxiRecale", 0) != 0)
+                    {
+                        tRec = 1;
+                        Car tc = Named(name);
+                        tDoorBody = tc != null && tc.Body != null ? Part(tc, "DoorRear(right)") : null;
+                        if (tDoorBody == null) Log.Info("autotest : taxi recale : pas de portiere DoorRear(right)");
+                        else
+                        {
+                            tDoor = tc.T.InverseTransformPoint(tDoorBody.position);
+                            tc.T.position += tc.T.right * 2f;
+                            Log.Info("autotest : taxi decale de 2 m ici, portiere en " + tDoor.ToString("F2") + " (repere du taxi)");
+                        }
+                    }
+                    if (t > 25f && tRec == 1)
+                    {
+                        tRec = 2;
+                        Car tc = Named(name);
+                        if (tc != null && tDoorBody != null)
+                        {
+                            float d = (tc.T.InverseTransformPoint(tDoorBody.position) - tDoor).magnitude;
+                            Log.Info("autotest : taxi recale " + (d < 0.2f ? "OK" : "ECHEC") + " : portiere a " + d.ToString("F2") + " m de sa place dans le repere du taxi (attendu < 0,2), taxi " + TaxiState(name));
+                        }
+                    }
+                    bool ranger = Config.GetInt("Test", "TaxiRanger", 0) != 0;
                     if (t > 44f && tStep == 2) { tStep = 3; Log.Info("autotest : taxi " + CarDoors.TestOpen(name, true, "DoorRear(right)")); }
                     if (t > 44.6f && tStep == 3) { tStep = 4; Log.Info("autotest : taxi lache " + CarDoors.TestState(name, "Mouse off", "DoorRear(right)")); }
                     if (t > 48f && tStep == 4) { tStep = 5; Log.Info("autotest : taxi referme " + CarDoors.TestGrab(name, "DoorRear(right)")); }
                     if (t > 52f && tStep == 5) { tStep = 6; Log.Info("autotest : taxi " + Seats.TestSit(name, 1)); }
-                    if (t > 72f && tStep == 6) { tStep = 7; Log.Info("autotest : taxi " + Seats.TestLeave()); }
+                    if (!ranger && t > 72f && tStep == 6) { tStep = 7; Log.Info("autotest : taxi " + Seats.TestLeave()); }
+                    // [Test] TaxiRanger=1 : taxi range ici (SetActive(false), comme a la fin du service) avec le joueur assis a
+                    // l'arriere : il doit etre decroche (PLAYER actif) ; taxi remis a 70 s, le joueur pose a 3 m a cote.
+                    if (ranger && t > 66f && tStep == 6)
+                    {
+                        tStep = 10;
+                        GameObject taxi = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN");
+                        if (taxi != null) taxi.SetActive(false);
+                        Log.Info("autotest : taxi range ici (assis : " + Seats.Seated + ")");
+                    }
+                    if (t > 67f && tStep == 10)
+                    {
+                        tStep = 11;
+                        GameObject pl = GameObject.Find("PLAYER");   // (introuvable si inactif)
+                        Log.Info("autotest : taxi range " + (!Seats.Seated && pl != null ? "OK" : "ECHEC") + " : passager " + (Seats.Seated ? "toujours assis" : "sorti")
+                                 + ", PLAYER " + (pl != null ? "actif en " + pl.transform.position.ToString("F1") : "inactif"));
+                    }
+                    if (t > 70f && tStep == 11)
+                    {
+                        tStep = 12;
+                        GameObject taxi = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN");
+                        GameObject pl = GameObject.Find("PLAYER");
+                        if (taxi != null && pl != null)
+                        {
+                            var cc = pl.GetComponent<CharacterController>();
+                            if (cc != null) cc.enabled = false;
+                            pl.transform.position = taxi.transform.position + taxi.transform.right * 3f + Vector3.up * 0.5f;
+                            if (cc != null) cc.enabled = true;
+                        }
+                        if (taxi != null) taxi.SetActive(true);
+                        Log.Info("autotest : taxi remis ici");
+                    }
                 }
                 if (t > 10f && t < 90f && now >= tLog) { tLog = now + 5f; Log.Info("autotest : taxi (" + (host ? "hote" : "invite") + ") " + TaxiState(name) + " | " + CarDoors.StateOf(name, "DoorRear(right)")); }
                 return;
