@@ -107,7 +107,14 @@ namespace MWCoop
             if (!FindPlayer()) return;
             if (current != null)
             {
-                if (pivot == null || current.CarT == null) { Leave(); return; }
+                // Voiture detruite, ou rangee (taxi remis en place par son travail : SetActive(false), rejoue chez
+                // tous) : le joueur accroche dessous serait inactif, sans camera ni commandes -- decroche tout de suite.
+                if (pivot == null || current.CarT == null || !current.CarT.gameObject.activeInHierarchy)
+                {
+                    if (current.CarT != null) Log.Info("passager : " + current.Car + " rangee (inactive)");
+                    Leave();
+                    return;
+                }
                 if (debugFrames > 0)
                 {
                     debugFrames--;
@@ -276,8 +283,9 @@ namespace MWCoop
             car = null; head = Vector3.zero; carName = null;
             Remote rs;
             if (!remote.TryGetValue(id, out rs)) return false;
+            // (Voiture inactive ici -- taxi range : l'avatar reste a la place envoyee.)
             foreach (Seat s in seats)
-                if (s.Car == rs.Car && s.CarT != null)
+                if (s.Car == rs.Car && s.CarT != null && s.CarT.gameObject.activeInHierarchy)
                 {
                     car = s.CarT; carName = s.Car;
                     head = rs.Head != Vector3.zero ? rs.Head : SeatHead(rs.Car, rs.Index);

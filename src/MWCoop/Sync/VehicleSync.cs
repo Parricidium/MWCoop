@@ -547,15 +547,22 @@ namespace MWCoop
         // premiere surface solide d'une voiture (son corps, ou une piece articulee dessus comme le hayon). Les
         // autres objets en travers sont ignores (sac pose sur une caisse). Resultat garde 0,5 s par objet.
         // null : pas dans une voiture.
-        class Under { public float Until; public Rigidbody Car; }
+        // Pieces de la voiture elle-meme (corps sous elle dans la hierarchie : portieres, hayon, reservoir, tete du
+        // conducteur, recu de l'imprimante du taxi...) : la voiture, sans rayon -- leur pose au repos part dans
+        // son repere et l'hote ne les recale pas quand un autre la conduit (Props, Authority). Mais jamais un
+        // chargement : null pour celle qu'on fait rouler ici (Props.Ride les collerait, cinematiques, chez les
+        // autres) et pendant son propre recalage d'un coup (MoveCargo : elles suivent deja son transform).
+        // Les voitures a la racine en etaient deja exclues par Props (racine == voiture) ; pas le taxi, sous JOBS.
+        class Under { public float Until; public Rigidbody Car; public Car Own; }
         static readonly Dictionary<Rigidbody, Under> under = new Dictionary<Rigidbody, Under>();
+        static Car moving;   // voiture replacee d'un coup en ce moment (MoveCargo)
 
         public static Rigidbody CarUnder(Rigidbody item)
         {
             if (item == null || !scanned) return null;
             float now = Time.realtimeSinceStartup;
             Under u;
-            if (under.TryGetValue(item, out u) && now < u.Until) return u.Car;
+            if (under.TryGetValue(item, out u) && now < u.Until) return UnderFor(u);
             if (u == null)
             {
                 if (under.Count > 512) under.Clear();   // objets detruits depuis
@@ -564,11 +571,14 @@ namespace MWCoop
             }
             u.Until = now + 0.5f;
             u.Car = null;
+            u.Own = null;
             // Aucune voiture a moins de 8 m : pas de rayon (la plupart des objets du monde, recalage de l'hote).
             Vector3 at = item.position;
             bool near = false;
             foreach (Car c in cars) if (c.Body != null && (c.Body.position - at).sqrMagnitude < 64f) { near = true; break; }
             if (!near) return null;
+            Car own = CarOf(item.transform);
+            if (own != null && own.Body != null && !ReferenceEquals(own.Body, item)) { u.Own = own; u.Car = own.Body; return UnderFor(u); }
             float best = float.MaxValue;
             foreach (RaycastHit h in Physics.RaycastAll(item.worldCenterOfMass + Vector3.up * 0.25f, Vector3.down, 0.85f, ~0))
             {
@@ -580,6 +590,24 @@ namespace MWCoop
                 if (hc != null && hc.Body != null) { best = h.distance; u.Car = hc.Body; }
             }
             return u.Car;
+        }
+
+        // Piece de la voiture : pas un chargement de celle qu'on fait rouler ici, ni de celle qu'on replace (hors cache :
+        // monter au volant compte tout de suite).
+        static Rigidbody UnderFor(Under u)
+        {
+            Car o = u.Own;
+            if (o != null && (ReferenceEquals(o, moving) || o.Index == LocalDriving || o.Index == owned)) return null;
+            return u.Car;
+        }
+
+        // Voiture replacee d'un coup : ce qui est pose dedans la suit (Props), pas ses propres pieces (le transform
+        // de la voiture les emmene : deplacees deux fois sinon, attaches tirees d'autant).
+        static void MoveCargo(Car c, Vector3 pos, Quaternion rot, Vector3 vel)
+        {
+            moving = c;
+            try { Props.CarMoved(c.Body, pos, rot, vel); }
+            finally { moving = null; }
         }
 
         // Objet replace d'un coup (pose recue) : la voiture sous lui sera cherchee a nouveau.
@@ -656,7 +684,7 @@ namespace MWCoop
                 rot = Quaternion.AngleAxis(c.AngVel.magnitude * dt * Mathf.Rad2Deg, c.AngVel.normalized) * c.Rot;
             Transform t = c.Body.transform;
             float k = 1f - Mathf.Exp(-15f * Time.deltaTime);
-            if ((target - t.position).sqrMagnitude > 25f) { Props.CarMoved(c.Body, target, rot, c.Vel); t.position = target; t.rotation = rot; }
+            if ((target - t.position).sqrMagnitude > 25f) { MoveCargo(c, target, rot, c.Vel); t.position = target; t.rotation = rot; }
             else
             {
                 c.Body.MovePosition(Vector3.Lerp(t.position, target, k));
@@ -977,7 +1005,7 @@ namespace MWCoop
             if ((t.position - pos).sqrMagnitude > 1f || Quaternion.Angle(t.rotation, rot) > 10f)
             {
                 SetKinematic(c, false);
-                Props.CarMoved(c.Body, pos, rot, vel);   // ce qui est pose dedans suit (avant que la voiture bouge)
+                MoveCargo(c, pos, rot, vel);   // ce qui est pose dedans suit (avant que la voiture bouge)
                 t.position = pos;
                 t.rotation = rot;
                 c.Body.velocity = vel;
