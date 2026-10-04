@@ -1326,13 +1326,50 @@ static void DrawNotes(Graphics &g)
 // ceux du profil invite (MWCoop\profils\invite\logs) et celui de Unity s'il existe (mywintercar_Data\output_log.txt).
 // Un clic ouvre le journal, l'icone dossier le montre dans l'explorateur.
 enum { LOG_MOD, LOG_LOADER, LOG_UNITY };
-struct LogEntry { std::wstring path; int kind; bool guest; uint64_t bytes; FILETIME mt; int errors; };
+struct LogEntry { std::wstring path, profile; int kind; bool guest; uint64_t bytes; FILETIME mt; int errors; };
 static std::vector<LogEntry> g_logList;
 static int g_logRowHot = -1, g_logPart = 0;          // g_logPart : 0 la ligne (ouvrir), 1 dossier
 static const RectF kLogsFolderR(796, 124, 140, 22), kLogsR(452, 152, 488, 374);
 static const float kLogRowH = 54;
 
 static std::wstring LogsDir() { return g_gameDir + L"MWCoop\\logs\\"; }
+
+// Profils du mod dans le dossier du jeu (MWCoop\profils\<nom>) : invite, ou un profil d'essai.
+static std::vector<std::wstring> Profiles()
+{
+    std::vector<std::wstring> out;
+    if (g_gameDir.empty()) return out;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((g_gameDir + L"MWCoop\\profils\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return out;
+    do {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && fd.cFileName[0] != L'.') out.push_back(fd.cFileName);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return out;
+}
+
+// Dernier lancement par le lanceur (lancement.ini, Horodatage) sans aucun journal du chargeur ecrit
+// apres : le jeu a demarre sans le mod (version.dll bloque par l'antivirus, autre dossier du jeu...).
+static bool LastLaunchWithoutMod()
+{
+    if (g_gameDir.empty()) return false;
+    wchar_t ts[32];
+    GetPrivateProfileStringW(L"Lancement", L"Horodatage", L"0", ts, 32, (g_gameDir + L"MWCoop\\lancement.ini").c_str());
+    long long t = _wtoi64(ts), now = (long long)_time64(NULL);
+    if (t <= 0 || now - t > 2 * 86400 || now - t < 90) return false;   // (trop vieux, ou le jeu demarre encore)
+    long long newest = 0;
+    auto look = [&](const std::wstring &p) {
+        WIN32_FILE_ATTRIBUTE_DATA a;
+        if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a)) return;
+        ULARGE_INTEGER u; u.LowPart = a.ftLastWriteTime.dwLowDateTime; u.HighPart = a.ftLastWriteTime.dwHighDateTime;
+        long long unix = (long long)(u.QuadPart / 10000000ULL) - 11644473600LL;
+        if (unix > newest) newest = unix;
+    };
+    look(LogsDir() + L"chargeur.log");
+    for (const std::wstring &pr : Profiles()) look(g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\chargeur.log");
+    return newest < t - 5;
+}
 
 // Lignes d'erreur du journal (ERREUR, exception) ; au-dela de 4 Mo, les 4 derniers seulement.
 static int CountErrors(const std::wstring &path, uint64_t bytes)
@@ -1361,23 +1398,29 @@ static int CountErrors(const std::wstring &path, uint64_t bytes)
 static void LogsScan()
 {
     std::vector<LogEntry> list;
-    auto add = [&](const std::wstring &p, int kind, bool guest) {
+    auto add = [&](const std::wstring &p, int kind, const std::wstring &profile) {
         WIN32_FILE_ATTRIBUTE_DATA a;
         if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return;
         LogEntry e;
-        e.path = p; e.kind = kind; e.guest = guest;
+        e.path = p; e.kind = kind; e.profile = profile; e.guest = !_wcsicmp(profile.c_str(), L"invite");
         e.bytes = ((uint64_t)a.nFileSizeHigh << 32) | a.nFileSizeLow;
         e.mt = a.ftLastWriteTime;
         e.errors = kind == LOG_UNITY ? -1 : CountErrors(p, e.bytes);   // (Unity : trop d'exceptions sans gravite)
         list.push_back(e);
     };
     if (!g_gameDir.empty()) {
-        add(LogsDir() + L"mwcoop.log", LOG_MOD, false);
-        add(LogsDir() + L"chargeur.log", LOG_LOADER, false);
-        add(g_gameDir + L"MWCoop\\profils\\invite\\logs\\mwcoop.log", LOG_MOD, true);
-        add(g_gameDir + L"MWCoop\\profils\\invite\\logs\\chargeur.log", LOG_LOADER, true);
-        add(g_gameDir + L"mywintercar_Data\\output_log.txt", LOG_UNITY, false);
+        add(LogsDir() + L"mwcoop.log", LOG_MOD, L"");
+        add(LogsDir() + L"chargeur.log", LOG_LOADER, L"");
+        // Chaque profil (invite, ou celui de mwcoop.ini [Test] Profil) a ses propres journaux.
+        for (const std::wstring &pr : Profiles()) {
+            std::wstring d = g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\";
+            add(d + L"mwcoop.log", LOG_MOD, pr);
+            add(d + L"chargeur.log", LOG_LOADER, pr);
+        }
+        add(g_gameDir + L"mywintercar_Data\\output_log.txt", LOG_UNITY, L"");
     }
+    // Les plus recents d'abord : le dernier lancement est en haut.
+    std::sort(list.begin(), list.end(), [](const LogEntry &a, const LogEntry &b) { return CompareFileTime(&a.mt, &b.mt) > 0; });
     g_logList.swap(list);
     g_scroll[TAB_LOGS] = min(g_scroll[TAB_LOGS], LogsMaxScroll());
 }
@@ -1388,6 +1431,7 @@ static std::wstring LogTitle(const LogEntry &e)
 {
     std::wstring s = e.kind == LOG_MOD ? T(L"Journal du mod", L"Mod log") : e.kind == LOG_LOADER ? T(L"Journal du chargeur", L"Loader log") : T(L"Journal de Unity", L"Unity log");
     if (e.guest) s += T(L" \u00B7 profil invit\u00E9", L" \u00B7 guest profile");
+    else if (!e.profile.empty()) s += T(L" \u00B7 profil ", L" \u00B7 profile ") + e.profile;
     return s;
 }
 static std::wstring LogDate(const FILETIME &ft)
@@ -3677,6 +3721,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     g_bg = LoadPngRes(2);
     g_bgDark = LoadPngRes(3);
     if (g_gameDir.empty()) SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe"));
+    else if (LastLaunchWithoutMod()) SetStatus(K_WARN, T(L"Le dernier lancement s'est fait SANS le mod (antivirus ? version.dll ?) : voir JOURNAUX", L"The last launch ran WITHOUT the mod (antivirus? version.dll?): see LOGS"));
     else SetStatus(K_NORMAL, L"%s", ModLabel().c_str());
 
     // /maj <dossier du jeu> <journal> : mise a jour sans fenetre (tests) ; journal = etat final

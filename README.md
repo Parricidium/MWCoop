@@ -217,6 +217,8 @@ pas, fermeture des portières de gauche), lumière intérieure plus rejouée deu
 objets posés dans un coffre ou l'habitacle : restent en place pendant que l'autre conduit ; objet empoché dès sa
 création : disparaît chez tous ; revenus du monde (allocations, aide au logement, paies) comptés une seule fois ;
 train partagé ; machines à sous et poker de la station : un joueur à la fois, les autres regardent, gains gardés.
+Fait aussi (0.19.1) : lanceur, onglet JOURNAUX : journaux de tous les profils (invité, essais), les plus récents en
+premier ; au démarrage, il signale un dernier lancement fait sans le mod (antivirus, version.dll, autre dossier du jeu).
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
