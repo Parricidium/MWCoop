@@ -145,7 +145,22 @@ namespace MWCoop
         static bool ExternalFsm(PlayMakerFSM f) { return f.gameObject.name.StartsWith("Ringing"); }
 
         // Variables objet envoyees par leur chemin (la fiche de la commande en cours).
-        static bool GoVar(string n) { return n == "CurrentListing" || n == "FoundListing"; }
+        // Part : le CD tenu en main que le point d'insertion pose (boitier, chaine, lecteur de voiture : DiscTrigger*).
+        static bool GoVar(string n) { return n == "CurrentListing" || n == "FoundListing" || n == "Part"; }
+
+        // Les trois CD s'appellent tous cd(itemx) : designes par leur disque (Data.ThisCD), "cd:CD1".
+        static string GoRef(GameObject go)
+        {
+            if (go == null) return "";
+            if (go.name == "cd(itemx)") { string k = Props.CdKey(go); if (k != null) return "cd:" + k.Substring("w:cd:".Length); }
+            return Recon.Path(go.transform);
+        }
+
+        static GameObject GoFind(string r)
+        {
+            if (r.StartsWith("cd:")) return Props.FindCd(r.Substring(3));
+            return Game.FindAny(r);
+        }
 
         // Commande de pieces (CARPARTS/PARTSYSTEM/OrdersSpawnerYP/OrderYP7::Data, ...AMIS/OrderAMIS3::Data) : creee
         // par Calls (meme nom chez tous). Son attente avant livraison (WaitTime, tiree au hasard chez chacun), son
@@ -170,7 +185,8 @@ namespace MWCoop
             Transform root = f.transform.root;
             if (!root.gameObject.activeInHierarchy) return true;                        // modeles (prefabs)
             if (SkipRoots.Contains(root.name) || root.name.StartsWith("MWCoop")) return true;
-            if (root.GetComponent("CarDynamics") != null) return true;                  // vehicules : Jobs, CarDoors...
+            // Vehicules : Jobs, CarDoors... Sauf le lecteur CD (DiscTriggerPlayer* :: Data, point d'insertion du CD).
+            if (root.GetComponent("CarDynamics") != null && !(f.gameObject.name.StartsWith("DiscTrigger") && f.FsmName == "Data")) return true;
             if (SkipFsmNames.Contains(f.FsmName)) return true;
             string n = f.gameObject.name;
             // Objets portes : Props, Consume. Sauf l'ouverture des boitiers de CD (Systems/CDs/cd case(itemN) :: Use,
@@ -240,7 +256,10 @@ namespace MWCoop
                         GameObject go = null;
                         if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
                         else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
-                        if (go != null && PersonalRoots.Contains(go.transform.root.name)) w.PersonalStates.Add(st.Name);
+                        // Point d'insertion d'un CD : 'Find correct part' LIT la main du joueur (GetChild de ItemPivot) ;
+                        // ce n'est pas agir sur lui, et sans cela la pose du CD (ASSEMBLE) n'etait jamais envoyee.
+                        bool reads = f.gameObject.name.StartsWith("DiscTrigger") && a.GetType().Name.StartsWith("Get");
+                        if (go != null && PersonalRoots.Contains(go.transform.root.name) && !reads) w.PersonalStates.Add(st.Name);
                         var nv = v as NamedVariable;
                         if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && !Game.LocalVar(f, nv.Name)
                             && (v is FsmGameObject || nv.Name == "PlayerStop" || nv.Name == "PlayerInMenu" || nv.Name == "PlayerSeated" || nv.Name == "PlayerSleeps"))
@@ -575,7 +594,7 @@ namespace MWCoop
             var strs = new List<FsmString>(); foreach (FsmString x in v.StringVariables) if (!SkipVar(x.Name) && (x.Value ?? "").Length < 200) strs.Add(x);
             w.U8(System.Math.Min(strs.Count, 255)); for (int i = 0; i < strs.Count && i < 255; i++) w.Str(strs[i].Name).Str(strs[i].Value);
             var gos = new List<FsmGameObject>(); foreach (FsmGameObject x in v.GameObjectVariables) if (GoVar(x.Name)) gos.Add(x);
-            w.U8(gos.Count); foreach (FsmGameObject x in gos) w.Str(x.Name).Str(x.Value != null ? Recon.Path(x.Value.transform) : "");
+            w.U8(gos.Count); foreach (FsmGameObject x in gos) w.Str(x.Name).Str(GoRef(x.Value));
             if (lists) WriteLists(f, w); else w.U8(0);
         }
 
@@ -760,7 +779,7 @@ namespace MWCoop
                 {
                     FsmGameObject t = v.FindFsmGameObject(x.Key);
                     if (t == null) continue;
-                    GameObject go = x.Value.Length > 0 ? Game.FindAny(x.Value) : null;
+                    GameObject go = x.Value.Length > 0 ? GoFind(x.Value) : null;
                     if (go != null || x.Value.Length == 0) t.Value = go;
                 }
                 ApplyLists(j.F, lists);

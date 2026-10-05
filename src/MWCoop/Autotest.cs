@@ -580,7 +580,23 @@ namespace MWCoop
                     if (rb != null && c1 != null) { rb.position = c1.position + Vector3.up * 0.3f + c1.right * 1f; rb.velocity = Vector3.zero; Props.SoonScan(); }
                     Log.Info("autotest : cd, CD1 pose a cote : " + (rb != null ? rb.position.ToString("F2") : "pas de corps"));
                 }
-                if (step == 3 && t > 60f) { step = 4; Log.Info("autotest : cd, referme " + CaseClick()); }
+                if (step == 3 && t > 56f)
+                {
+                    // Remis dans le boitier comme le joueur : le point d'insertion a le CD tenu ({Part}, 'Find correct
+                    // part'), 'Wait for assembly' attend le clic -> ASSEMBLE.
+                    step = 4;
+                    GameObject cd = CdObject("CD1");
+                    Transform trig = c1 != null ? c1.Find("DiscTriggerCase1") : null;
+                    PlayMakerFSM d = trig != null ? Game.FsmOn(trig.gameObject, "Data") : null;
+                    if (d != null && cd != null)
+                    {
+                        d.FsmVariables.FindFsmGameObject("Part").Value = cd;
+                        WorldFsms.TestClick("DiscTriggerCase1::Data", "Wait for assembly");
+                        Log.Info("autotest : cd, remis dans le boitier " + WorldFsms.TestEvent("DiscTriggerCase1::Data", "ASSEMBLE"));
+                    }
+                    else Log.Info("autotest : cd, remise impossible (point " + (d != null) + ", CD " + (cd != null) + ")");
+                }
+                if (step == 4 && t > 62f) { step = 5; Log.Info("autotest : cd, referme " + CaseClick()); }
             }
             if (t > 40f && t < 75f && t - cdLog >= 2f)
             {

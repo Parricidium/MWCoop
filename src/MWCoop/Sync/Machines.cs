@@ -31,7 +31,7 @@ namespace MWCoop
     {
         class Part
         {
-            public string Key; public Transform T; public TextMesh Text;
+            public string Key; public Transform T; public TextMesh Text; public bool Ext;   // Ext : hors de la machine (ecran du terminal)
             public bool Active; public Vector3 Pos; public Quaternion Rot; public string Txt;          // dernier envoye
             public bool Held; public bool HActive; public bool HPose; public Vector3 HPos; public Quaternion HRot; public string HTxt; public float HeldAt;
             // machines a jeu : rendu (pas pour les textes), camera, rouleau
@@ -111,10 +111,42 @@ namespace MWCoop
                     m.Parts.Add(p);
                     m.ByKey[p.Key] = p;
                 }
+                AddScreen(m);
                 machines[key] = m;
                 if (m.Lockable) SetupLock(m);
             }
             if (machines.Count > 0) Log.Info("machines a ecran : " + machines.Count + " suivies");
+        }
+
+        // Ecran du terminal de la pompe (code PIN, montant, messages) : il n'est pas sous la pompe mais sous
+        // PERAPORTTI/ActiveFunctions/ATMs/FuelATM, que l'automate 'Logic' de la pompe designe (ScreenPIN). Sans lui,
+        // les autres voyaient le premier '*' du code puis plus rien.
+        static void AddScreen(Machine m)
+        {
+            foreach (PlayMakerFSM f in m.Root.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                FsmGameObject sp = f.FsmVariables.FindFsmGameObject("ScreenPIN");
+                if (sp == null || sp.Value == null) continue;
+                Transform scr = sp.Value.transform.parent;
+                if (scr == null || scr.IsChildOf(m.Root)) return;
+                Transform top = scr.parent ?? scr;
+                string tk = Recon.Path(top);
+                var seen = new Dictionary<string, int>();
+                int n = 0;
+                foreach (Transform c in top.GetComponentsInChildren<Transform>(true))
+                {
+                    if (c == top) continue;
+                    string rel = "@" + Recon.Path(c).Substring(tk.Length);
+                    int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
+                    var p = new Part { Key = rel + "#" + k, T = c, Ext = true, Text = c.GetComponent<TextMesh>(), Active = c.gameObject.activeSelf, Pos = c.localPosition, Rot = c.localRotation };
+                    if (p.Text != null) p.Txt = p.Text.text;
+                    m.Parts.Add(p);
+                    m.ByKey[p.Key] = p;
+                    n++;
+                }
+                Log.Info("machines a ecran : " + m.Name + " + ecran " + tk + " (" + n + " pieces)");
+                return;
+            }
         }
 
         // Pieces qui portent un rendu, un texte, une camera ou un son, et leurs parents jusqu'a la machine.
@@ -174,7 +206,7 @@ namespace MWCoop
                 NetWriter w = null;
                 foreach (Part p in m.Parts)
                 {
-                    if (p.T == null || p.Held || !p.T.IsChildOf(m.Root)) continue;   // pistolet decroche : il n'est plus a la machine
+                    if (p.T == null || p.Held || (!p.Ext && !p.T.IsChildOf(m.Root))) continue;   // pistolet decroche : il n'est plus a la machine
                     bool act = p.T.gameObject.activeSelf;
                     bool pose = Quaternion.Angle(p.T.localRotation, p.Rot) > 0.5f || (p.T.localPosition - p.Pos).sqrMagnitude > 1e-6f;
                     string txt = p.Text != null ? p.Text.text : null;
@@ -812,8 +844,38 @@ namespace MWCoop
         // prise par un autre, il appuie a son tour (refus attendu) ; son liquide ne doit pas bouger pendant que
         // l'invite joue (verdict quand plus aucune machine n'est tenue par un autre, au plus 35 s apres).
         // Les deux : etat des machines [Test] SuivreMachines toutes les 2 s.
+        // Essai 'pin' : l'hote (TestPos devant la pompe) entre un code au terminal comme au clavier du jeu (PIN puis un
+        // PINTYPE par chiffre, PINadd = le chiffre) ; les deux cotes notent le texte du code toutes les secondes.
+        static float pinNext; static int pinStep;
+        static void TestPin(float t)
+        {
+            Machine m = null;
+            foreach (Machine x in machines.Values) if (x.Name.StartsWith("FuelPumps_")) m = x;
+            if (m == null) return;
+            Part code = null;
+            foreach (Part p in m.Parts) if (p.Ext && p.Text != null && p.T.name == "PINcode") code = p;
+            if (t > 30f && t < 60f && t >= pinNext)
+            {
+                pinNext = t + 1f;
+                Log.Info("autotest : pin, ecran " + (code != null ? "'" + code.Text.text + "' actif " + code.T.gameObject.activeInHierarchy + (code.Held ? " (recu)" : "") : "sans texte du code"));
+            }
+            if (!Session.IsHost) return;
+            PlayMakerFSM logic = null;
+            foreach (PlayMakerFSM f in m.Root.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Logic" && f.FsmVariables.FindFsmString("PINadd") != null) logic = f;
+            if (logic == null || !logic.gameObject.activeInHierarchy) { if (t > 34f && pinStep == 0) { pinStep = -1; Log.Info("autotest : pin, terminal eteint ici (TestPos devant la pompe)"); } return; }
+            if (pinStep >= 0 && pinStep < 5 && t > 36f + pinStep * 2f)
+            {
+                lastInput = Time.realtimeSinceStartup;   // comme une touche du clavier
+                if (pinStep == 0) logic.SendEvent("PIN");
+                else { logic.FsmVariables.FindFsmString("PINadd").Value = "" + pinStep; logic.SendEvent("PINTYPE"); }
+                Log.Info("autotest : pin, " + (pinStep == 0 ? "saisie du code" : "chiffre " + pinStep) + " -> " + logic.ActiveStateName);
+                pinStep++;
+            }
+        }
+
         public static void Test(string mode, float t)
         {
+            if (mode == "pin") { TestPin(t); return; }
             if (mode != "machine") return;
             if (t > 20f && t >= testNextLog)
             {
