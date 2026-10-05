@@ -39,6 +39,8 @@ namespace MWCoop
     // chez celui qui la manie : les avatars n'ont pas de collision). Jamais cinematique ni teleportee : une
     // portiere cinematique (masse infinie) accrochee a une voiture qui roule la tirait -- coffre referme pendant
     // qu'un autre conduisait : voiture envolee (retour de JD, 0.16).
+    // Voitures : celles de VehicleSync (taxi JOBS/TAXIJOB/MACHTWAGEN compris), cle = cle de la voiture + chemin sous
+    // elle ; releve toutes les 30 s et des que sa liste change (voiture activee plus tard).
     public static class CarDoors
     {
         const int K_CLOSED = 0, K_OPEN = 1, K_ANGLE = 2, K_GRAB = 3, K_LOCK = 4;
@@ -76,6 +78,7 @@ namespace MWCoop
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
         static readonly HashSet<Joint> lockJoints = new HashSet<Joint>();   // attaches de verrou posees ici (toutes portieres)
         static float nextScan = -1, nextAngle, lastUnknownScan = -100;
+        static int gen = -1;   // VehicleSync.Generation au dernier releve
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static bool applying;
         // Joueur local : ses collisionneurs pleins (controleur, objet tenu, poings...), revus toutes les 0,5 s.
@@ -114,16 +117,19 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             byKey.Clear(); hooked.Clear(); snapshots.Clear(); lockJoints.Clear();
-            plColls = new Collider[0]; plCollsAt = -10f; plCc = null; ccWasOn = false;
+            plColls = new Collider[0]; plCollsAt = -10f; plCc = null; ccWasOn = false; gen = -1;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 12f : -1;
         }
 
         static void Scan()
         {
             int before = byKey.Count;
-            foreach (Rigidbody car in Object.FindObjectsOfType<Rigidbody>())
+            gen = VehicleSync.Generation;
+            for (int ci = 0; ci < VehicleSync.LocalCount; ci++)
             {
-                if (car.transform.parent != null || car.GetComponent("CarDynamics") == null) continue;
+                Rigidbody car = VehicleSync.LocalBody(ci);
+                if (car == null) continue;
+                string carKey = VehicleSync.LocalKey(ci);
                 var seen = new Dictionary<string, int>();
                 foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
@@ -135,10 +141,10 @@ namespace MWCoop
                     else if (f.Fsm.GetState("Open hood") != null && f.Fsm.GetState("Close hood") != null)
                     { open = "Open hood"; grab = f.Fsm.GetState("State 2") != null ? "State 2" : null; close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close hood"; }
                     if (open == null) continue;
-                    string rel = Recon.Path(f.transform).Substring(car.name.Length);
+                    string rel = VehicleSync.RelPath(car.transform, f.transform);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;   // compte aussi les portieres deja suivies
                     if (hooked.Contains(f) || !Replay.Claim(f, "portieres")) continue;
-                    var d = new Door { Key = car.name + rel + "#" + k, Fsm = f, Open = open, Grab = grab, Close = close, IsDoor = isDoor };
+                    var d = new Door { Key = carKey + rel + "#" + k, Fsm = f, Open = open, Grab = grab, Close = close, IsDoor = isDoor };
                     d.Body = f.GetComponentInParent<Rigidbody>();
                     if (d.Body != null && d.Body.transform == car.transform) d.Body = null;
                     d.Hinge = d.Body != null ? d.Body.GetComponent<HingeJoint>() : null;
@@ -236,7 +242,8 @@ namespace MWCoop
         {
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 30f; Scan(); }
+            // Liste des voitures changee apres le premier releve (taxi active, cyclomoteur recree) : releve tout de suite.
+            if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
             // Arrivee d'un joueur : les portieres, capots et prises deja ouverts/branches chez l'hote.
             for (int i = snapshots.Count - 1; i >= 0; i--)
             {
@@ -704,7 +711,7 @@ namespace MWCoop
             if (d == null || d.Body == null || d.Hinge == null) return "pas de portiere " + part;
             GameObject pl = GameObject.Find("PLAYER");
             if (pl == null) return "pas de joueur";
-            Transform b = d.Body.transform, carT = d.Fsm.transform.root;
+            Transform b = d.Body.transform, carT = VehicleSync.CarRoot(d.Fsm.transform) ?? d.Fsm.transform.root;
             Vector3 axis = b.TransformDirection(d.Hinge.axis).normalized;
             Vector3 hinge = b.TransformPoint(d.Hinge.anchor);
             Bounds bb = new Bounds(b.position, Vector3.zero);
@@ -754,6 +761,14 @@ namespace MWCoop
             if (d == null || d.Grab == null) return "rien a saisir";
             Game.SetState(d.Fsm, d.Grab);
             return d.Key + " -> " + d.Grab;
+        }
+
+        // Essais : portieres, coffres et capots suivis sur la voiture de cle 'car'.
+        public static int CountFor(string car)
+        {
+            int n = 0;
+            foreach (Door d in byKey.Values) if (d.Fsm != null && d.Key.StartsWith(car + "/")) n++;
+            return n;
         }
 
         public static string StateOf(string car, string part)

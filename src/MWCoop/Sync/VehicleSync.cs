@@ -1,17 +1,25 @@
 using System.Collections.Generic;
+using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
 namespace MWCoop
 {
-    // Voitures (objets racines portant CarDynamics : CORRIS, GIFU, KEKMET, FLATBED...).
+    // Voitures (corps portant CarDynamics : CORRIS, GIFU, KEKMET, FLATBED... a la racine de la scene, et les
+    // voitures de joueur rangees sous une autre racine : le taxi JOBS/TAXIJOB/MACHTWAGEN -- IsCarBody, CarRoot).
     // Celui qui conduit fait autorite : il envoie position et vitesses 20 fois/s ; chez les autres
     // la voiture devient cinematique et suit. Sans conducteur, l'hote recale toutes les 2 s les
     // voitures qui ont derive (arrivee d'un invite, voiture poussee...).
+    // Numeros : chaque voiture a une cle (son nom, + "#rang" entre homonymes) ; l'hote numerote les siennes dans
+    // l'ordre ou il les trouve (table, envoyee a chaque invite qui donne sa liste, et a tous quand elle grandit) ;
+    // chaque invite rattache ses voitures a ces numeros par la cle. La liste est revue toutes les 20 s (voitures
+    // activees plus tard : taxi, voiture pretee, HYDROCOPTER, JOKKIS ; cyclomoteur recree : meme cle, nouveau corps).
+    // Une voiture absente de la table de l'hote n'est pas suivie (journal).
     // Conduite : automate 'PlayerTrigger' d'un objet DriveTrigger* de la voiture, etat 'Player in car'.
     // Le conducteur envoie aussi regime, accelerateur et braquage : chez les autres, la copie
     // cinematique a son Drivetrain, ses Wheel et son AxisCarController coupes ; le regime et
-    // l'accelerateur recus nourrissent le son, et les roues sont tournees et braquees ici
+    // l'accelerateur recus nourrissent le son (et le Drivetrain de la copie : sa pompe de fosse septique
+    // lit ce regime, EngineRpm), et les roues sont tournees et braquees ici
     // (Wheel.CalcWheelMovement du jeu, sans sa physique). Le bruit du moteur est fait par des objets
     // a AudioSource sous un conteneur 'Sounds' (KEKMET/LOD/Sounds/SoundKekmet...), allumes par le
     // contact quand le moteur tourne : le conducteur envoie lesquels sont actifs, avec leur hauteur
@@ -21,6 +29,12 @@ namespace MWCoop
     // conducteur assis. A la fin de la copie, moteur, commandes et roues reprennent l'etat d'AVANT
     // (le jeu coupe le Drivetrain d'un moteur arrete : le rallumer de force le faisait caler et
     // redemarrer en boucle, sons superposes).
+    // Etat de la simulation (batterie, temperature du moteur, amorcage/noyage du carburateur, bougies de
+    // prechauffage, pression des freins a air, tirette de starter : SimVars) : seul celui qui fait autorite
+    // la calcule vraiment. Il l'envoie une fois par seconde (les copies la reprennent : une batterie videe par
+    // des feux rejoues sur une copie a l'arret ne compte pas), puis une derniere fois, fiable, en rendant la
+    // voiture : le conducteur suivant part de cet etat. Voiture garee : l'hote envoie le sien toutes les 10 s.
+    // La tirette de starter (commande, rejouee par Jobs) ne part qu'avec l'etat rendu.
     // Chaleur de l'habitacle : la source de chaleur de la voiture (HeatSource*, ecrite par son automate
     // CarTemp... d'apres le moteur, le chauffage, les portieres) est envoyee avec la voiture ; sur la
     // copie (moteur froid), elle est reprise apres la logique du jeu -- le passager se rechauffe aussi.
@@ -28,10 +42,15 @@ namespace MWCoop
     // de la voiture les emmene avec elle.
     public static class VehicleSync
     {
+        class Sim { public string Key; public uint Hash; public FsmFloat Var; public bool Control; }
+
         class Car
         {
-            public int Index;
+            public int Index;                   // rang dans la liste locale (les voitures trouvees plus tard s'ajoutent a la fin)
+            public int Net = -1;                // numero sur le reseau : rang dans la table de l'hote (-1 : absente de sa table)
+            public string Key;                  // nom, + "#rang" entre homonymes : la meme chez tous
             public string Name;
+            public Transform T;
             public Rigidbody Body;
             public PlayMakerFSM Drive;
             public int RemoteDriver = -1;       // joueur qui la conduit chez lui (-1 : personne)
@@ -55,76 +74,333 @@ namespace MWCoop
             public int SoundMask;
             public float[] SoundPitch, SoundVol;
             public float Rpm, Throttle, Steer;
-            public HutongGames.PlayMaker.FsmFloat Heat; public float RemoteHeat = float.NaN;   // temperature de la source de chaleur
+            public FsmFloat Heat; public float RemoteHeat = float.NaN;   // temperature de la source de chaleur
             public float[] WheelRot;
+            public Sim[] Sims = new Sim[0];     // etat de la simulation (SimVars)
+            public float AuthorityUntil;        // on vient de la rendre : l'instantane de l'hote (voiture garee) attend
+            public bool SimLogged;
         }
 
+        // Message Msg.Vehicle : joueur, numero de voiture, mode. Modes 0 garee, 1 conduite, 2 moteur tournant (pose,
+        // vitesses...) ; 8 etat de la simulation ; 9 table de l'hote et 10 liste d'un invite (numero NoCar).
+        const int M_SIM = 8, M_TABLE = 9, M_KEYS = 10;
+        const int NoCar = 255;
+        const int SimFinal = 1, SimParked = 2;   // drapeaux de M_SIM : rendue (fiable), instantane de l'hote (garee)
+
+        // Etat de la simulation porte d'un conducteur a l'autre : { automate, debut du nom de l'objet ("" : tous),
+        // variables float... }. Les commandes (lignes FirstControlRow et suivantes) : seulement dans l'etat rendu.
+        static readonly string[][] SimVars = {
+            new[] { "Power", "Electricity", "Charge" },                               // batterie (SORBET, taxi...)
+            new[] { "Electrics", "", "Charge" },                                      // batterie (CORRIS : Systems/Electrics)
+            new[] { "Data", "VINP_Battery", "Charge" },                               // batterie montee (CORRIS)
+            new[] { "Cooling", "", "Temp", "Temp2", "EngineTemp", "CoolantTemp" },    // temperature du moteur
+            new[] { "OperatingTemp", "", "Temp", "Temp2" },
+            new[] { "Priming", "", "FuelChamber", "Priming" },                        // amorcage, carburateur noye
+            new[] { "Starter", "", "PlugHeat" },                                      // bougies de prechauffage (diesels)
+            new[] { "Air Pressure", "", "Pressure" },                                 // freins a air (GIFU)
+            new[] { "Use", "ButtonChoke", "Choke" },                                  // tirette de starter (commande)
+            new[] { "FuelLine", "", "Choke" },
+            new[] { "Mixture", "", "Choke", "Choke2" },
+        };
+        const int FirstControlRow = 8;
+
         static readonly List<Car> cars = new List<Car>();
-        static bool scanned;
-        static float scanAt = -1, nextFast, nextSlow;
-        public static int LocalDriving = -1;    // index de la voiture conduite localement
+        static readonly List<Car> byNet = new List<Car>();         // numero reseau -> voiture d'ici (null : absente ici)
+        static readonly List<string> netKeys = new List<string>(); // numero reseau -> cle (table de l'hote)
+        static readonly HashSet<int> missingLogged = new HashSet<int>();
+        static bool scanned, tableSeen, inCarWas, curVehicleLooked;
+        static float scanAt = -1, nextScan, nextFast, nextSlow, nextSim, nextParkedSim, nextKeys, lastMissingScan;
+        static int generation;
+        static FsmString curVehicle;
+        public static int LocalDriving = -1;    // rang local de la voiture conduite ici
         static int owned = -1, ownedTick;        // voiture quittee moteur tournant : on en garde la main
         public static string LocalDrivingName { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].Name : null; } }
+        public static Transform LocalDrivingRoot { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].T : null; } }
+
+        // Change quand la liste des voitures d'ici change (voiture trouvee, corps recree) : CarDoors, CarVisuals et
+        // Seats relevent alors la leur.
+        public static int Generation { get { return generation; } }
 
         public static void OnLevelLoaded()
         {
-            cars.Clear(); under.Clear();
-            scanned = false;
-            LocalDriving = -1; owned = -1;
+            cars.Clear(); under.Clear(); byNet.Clear(); netKeys.Clear(); missingLogged.Clear();
+            scanned = false; tableSeen = false; inCarWas = false; curVehicle = null; curVehicleLooked = false;
+            LocalDriving = -1; owned = -1; moving = null;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
+            tStep = 0; tRec = 0;
+        }
+
+        // ---------------------------------------------------------------- quelles voitures
+        // Corps de voiture : CarDynamics a la racine de la scene, ou voiture de joueur (AxisCarController : pas la
+        // circulation, menee par MobileCarController) rangee sous une autre racine (taxi sous JOBS/TAXIJOB).
+        public static bool IsCarBody(Rigidbody rb)
+        {
+            if (rb == null || rb.GetComponent("CarDynamics") == null) return false;
+            return rb.transform.parent == null || rb.GetComponent<AxisCarController>() != null;
+        }
+
+        // Voiture qui porte 't' (lui-meme ou un parent) : celles connues d'abord (sans GetComponent), sinon en
+        // remontant les parents (voiture pas encore relevee, inactive). null : pas dans une voiture.
+        public static Transform CarRoot(Transform t)
+        {
+            Car c = CarOf(t);
+            if (c != null) return c.T;
+            for (Transform p = t; p != null; p = p.parent)
+            {
+                Rigidbody rb = p.GetComponent<Rigidbody>();
+                if (rb != null && IsCarBody(rb)) return p;
+            }
+            return null;
+        }
+
+        // Chemin de 't' sous la voiture "/Doors/DoorFront(leftx)..." ("" : la voiture elle-meme). Pour une voiture a
+        // la racine, c'est le chemin complet sans le nom de la voiture (cles inchangees).
+        public static string RelPath(Transform car, Transform t)
+        {
+            string p = "";
+            for (Transform x = t; x != null && x != car; x = x.parent) p = "/" + x.name + p;
+            return p;
+        }
+
+        // Cle (reseau) de la voiture qui porte 't' (null : pas une voiture connue).
+        public static string KeyOf(Transform t) { Car c = CarOf(t); return c != null ? c.Key : null; }
+
+        // Voitures connues ici, dans l'ordre local (corps null : detruit, en attente d'un nouveau).
+        public static int LocalCount { get { return cars.Count; } }
+        public static Rigidbody LocalBody(int i) { return i >= 0 && i < cars.Count ? cars[i].Body : null; }
+        public static string LocalKey(int i) { return i >= 0 && i < cars.Count ? cars[i].Key : null; }
+
+        static Car CarOf(Transform t)
+        {
+            for (; t != null; t = t.parent)
+                for (int i = 0; i < cars.Count; i++)
+                    if (ReferenceEquals(cars[i].T, t)) return cars[i];
+            return null;
+        }
+
+        static Car Named(string name)
+        {
+            foreach (Car c in cars) if (c.Name == name || c.Key == name) return c;
+            foreach (Car c in cars) if (c.Name.StartsWith(name)) return c;
+            return null;
+        }
+
+        static int CompareBodies(Rigidbody a, Rigidbody b)
+        {
+            int k = string.CompareOrdinal(a.name, b.name);
+            if (k != 0) return k;
+            k = string.CompareOrdinal(Recon.Path(a.transform), Recon.Path(b.transform));
+            if (k != 0) return k;
+            k = a.position.x.CompareTo(b.position.x);
+            return k != 0 ? k : a.position.z.CompareTo(b.position.z);
         }
 
         static void Scan()
         {
             scanned = true;
-            var roots = new List<GameObject>();
-            foreach (Component c in Object.FindObjectsOfType<Rigidbody>())
+            float now = Time.realtimeSinceStartup;
+            nextScan = now + 20f;
+            var found = new List<Rigidbody>();
+            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
-                GameObject go = c.gameObject;
-                if (go.transform.parent == null && go.GetComponent("CarDynamics") != null) roots.Add(go);
+                if (!IsCarBody(rb)) continue;
+                bool known = false;
+                foreach (Car c in cars) if (ReferenceEquals(c.Body, rb)) { known = true; break; }
+                if (!known) found.Add(rb);
             }
-            roots.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
-            foreach (GameObject go in roots)
+            // Pieces montees depuis (batterie de la CORRIS) : variables de simulation revues.
+            foreach (Car c in cars) if (c.Body != null) FindSims(c);
+            if (found.Count == 0) return;
+            found.Sort(CompareBodies);
+            var added = new List<string>();
+            foreach (Rigidbody rb in found)
             {
-                var car = new Car { Index = cars.Count, Name = go.name, Body = go.GetComponent<Rigidbody>(),
-                                    Dt = go.GetComponent<Drivetrain>(), Wheels = go.GetComponentsInChildren<Wheel>(true),
-                                    Axis = go.GetComponent<AxisCarController>(), Sound = go.GetComponent<SoundController>() };
-                car.WheelRot = new float[car.Wheels.Length];
-                var snd = new List<GameObject>();
-                foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
-                    if (t.name == "Sounds")
-                        foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 16) snd.Add(s.gameObject);
-                car.SoundObjs = snd.ToArray();
-                car.SoundObjsWas = new bool[snd.Count];
-                car.SoundPitch = new float[snd.Count];
-                car.SoundVol = new float[snd.Count];
-                foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
-                    if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { car.Drive = f; break; }
-                foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
-                    if (f.FsmName == "Data" && f.gameObject.name.StartsWith("HeatSource")) { car.Heat = f.FsmVariables.FindFsmFloat("Temperature"); break; }
+                // Corps recree (cyclomoteur reapparu) : la voiture de meme nom dont le corps a disparu le reprend.
+                Car dead = null;
+                foreach (Car c in cars) if (c.Name == rb.name && c.Body == null) { dead = c; break; }
+                Car car = Make(rb);
+                if (dead != null)
+                {
+                    car.Index = dead.Index; car.Net = dead.Net; car.Key = dead.Key;
+                    cars[car.Index] = car;
+                    if (car.Net >= 0 && car.Net < byNet.Count) byNet[car.Net] = car;
+                    if (owned == car.Index) owned = -1;
+                    added.Add(car.Key + " (nouveau corps)");
+                    continue;
+                }
+                int rank = 0;
+                foreach (Car c in cars) if (c.Name == rb.name) rank++;
+                car.Index = cars.Count;
+                car.Key = rank == 0 ? rb.name : rb.name + "#" + rank;
                 cars.Add(car);
+                if (Session.IsHost) { if (byNet.Count < NoCar) { car.Net = byNet.Count; byNet.Add(car); netKeys.Add(car.Key); } }
+                else Bind(car);
+                added.Add(car.Key + (car.Drive != null ? "" : "(?)") + (car.T.parent != null ? " [" + Recon.Path(car.T.parent) + "]" : "") + (car.Sims.Length > 0 ? " sim " + car.Sims.Length : ""));
             }
-            var names = new List<string>();
-            foreach (Car c in cars) names.Add(c.Name + (c.Drive != null ? "" : "(?)"));
-            Log.Info("voitures : " + string.Join(", ", names.ToArray()));
+            generation++;
+            Log.Info("voitures : " + string.Join(", ", added.ToArray()) + " (" + cars.Count + " ici)");
+            if (Session.IsHost) SendTable(null); else SendKeys();
         }
 
+        static Car Make(Rigidbody rb)
+        {
+            GameObject go = rb.gameObject;
+            var car = new Car { Name = go.name, T = go.transform, Body = rb,
+                                Dt = go.GetComponent<Drivetrain>(), Wheels = go.GetComponentsInChildren<Wheel>(true),
+                                Axis = go.GetComponent<AxisCarController>(), Sound = go.GetComponent<SoundController>() };
+            car.WheelRot = new float[car.Wheels.Length];
+            var snd = new List<GameObject>();
+            foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
+                if (t.name == "Sounds")
+                    foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 16) snd.Add(s.gameObject);
+            car.SoundObjs = snd.ToArray();
+            car.SoundObjsWas = new bool[snd.Count];
+            car.SoundPitch = new float[snd.Count];
+            car.SoundVol = new float[snd.Count];
+            foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { car.Drive = f; break; }
+            foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Data" && f.gameObject.name.StartsWith("HeatSource")) { car.Heat = f.FsmVariables.FindFsmFloat("Temperature"); break; }
+            FindSims(car);
+            return car;
+        }
+
+        // Variables de simulation de la voiture (SimVars) ; cle : chemin sous la voiture, automate, variable (+ rang).
+        static void FindSims(Car c)
+        {
+            var list = new List<Sim>();
+            var seen = new Dictionary<string, int>();
+            foreach (PlayMakerFSM f in c.Body.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                for (int row = 0; row < SimVars.Length; row++)
+                {
+                    string[] sv = SimVars[row];
+                    if (f.FsmName != sv[0] || (sv[1].Length > 0 && !f.gameObject.name.StartsWith(sv[1]))) continue;
+                    for (int i = 2; i < sv.Length; i++)
+                    {
+                        FsmFloat v = f.FsmVariables.FindFsmFloat(sv[i]);
+                        if (v == null) continue;
+                        string key = RelPath(c.T, f.transform) + ":" + f.FsmName + "." + sv[i];
+                        int k; seen.TryGetValue(key, out k); seen[key] = k + 1;
+                        if (k > 0) key += "#" + k;
+                        list.Add(new Sim { Key = key, Hash = Hash(key), Var = v, Control = row >= FirstControlRow });
+                    }
+                }
+            }
+            c.Sims = list.ToArray();
+        }
+
+        static uint Hash(string s)
+        {
+            uint h = 2166136261;
+            foreach (char ch in s) { h ^= ch; h *= 16777619; }
+            return h;
+        }
+
+        // ---------------------------------------------------------------- table des numeros
+        // Invite : rattache la voiture a son numero chez l'hote (meme cle).
+        static void Bind(Car car)
+        {
+            for (int n = 0; n < netKeys.Count; n++)
+                if (netKeys[n] == car.Key) { car.Net = n; byNet[n] = car; return; }
+        }
+
+        // Hote : la table (numero, cle) a 'to', ou a tous (null). Par messages de moins de 1000 octets.
+        static void SendTable(Peer to)
+        {
+            if (!Session.Active || Session.T == null) return;
+            int i = 0;
+            while (i < netKeys.Count)
+            {
+                var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(NoCar).U8(M_TABLE);
+                int start = i, n = 0, len = 0;
+                while (i < netKeys.Count && n < 200 && (n == 0 || len + netKeys[i].Length < 900)) { len += netKeys[i].Length + 3; n++; i++; }
+                w.U8(n);
+                for (int k = start; k < start + n; k++) w.U8(k).Str(netKeys[k]);
+                if (to == null) Session.Broadcast(w, true);
+                else Session.T.SendReliable(to, w.ToArray());
+            }
+        }
+
+        // Invite : ses cles a l'hote, qui repond par sa table (et note les differences).
+        static void SendKeys()
+        {
+            if (!Session.Active || Session.IsHost) return;
+            nextKeys = Time.realtimeSinceStartup + 5f;
+            var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(NoCar).U8(M_KEYS);
+            int n = 0, len = 0;
+            foreach (Car c in cars) { if (len + c.Key.Length > 900) break; len += c.Key.Length + 2; n++; }
+            w.U8(n);
+            for (int i = 0; i < n; i++) w.Str(cars[i].Key);
+            Session.SendToHost(w, true);
+        }
+
+        static void OnTable(NetReader r)
+        {
+            if (Session.IsHost) return;
+            int n = r.U8();
+            for (int i = 0; i < n; i++)
+            {
+                int net = r.U8();
+                string key = r.Str();
+                while (netKeys.Count <= net) { netKeys.Add(null); byNet.Add(null); }
+                netKeys[net] = key;
+                Car c = null;
+                foreach (Car x in cars) if (x.Key == key) { c = x; break; }
+                byNet[net] = c;
+                if (c != null) c.Net = net;
+            }
+            tableSeen = true;
+            var missing = new List<string>();
+            for (int i = 0; i < netKeys.Count; i++) if (netKeys[i] != null && byNet[i] == null) missing.Add(netKeys[i]);
+            var extra = new List<string>();
+            foreach (Car c in cars) if (c.Net < 0) extra.Add(c.Key);
+            Log.Info("voitures : table de l'hote, " + netKeys.Count + " numeros" + (missing.Count > 0 ? " ; absentes ici (pas encore actives ?) : " + string.Join(", ", missing.ToArray()) : "")
+                     + (extra.Count > 0 ? " ; inconnues de l'hote (non suivies) : " + string.Join(", ", extra.ToArray()) : ""));
+            // Voitures de l'hote pas encore vues ici : nouveau releve bientot.
+            if (missing.Count > 0) nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 10f);
+        }
+
+        static void OnKeys(Peer from, NetReader r)
+        {
+            if (!Session.IsHost) return;
+            var theirs = new HashSet<string>();
+            for (int i = 0, n = r.U8(); i < n; i++) theirs.Add(r.Str());
+            if (!scanned) return;   // (il redemandera)
+            var notThere = new List<string>();
+            foreach (string k in netKeys) if (!theirs.Contains(k)) notThere.Add(k);
+            var notHere = new List<string>();
+            foreach (string k in theirs) if (!netKeys.Contains(k)) notHere.Add(k);
+            if (notThere.Count + notHere.Count == 0) Log.Info("voitures : liste de " + from + " identique (" + theirs.Count + ")");
+            else Log.Warn("voitures : liste de " + from + " differente -- absentes chez lui : " + string.Join(", ", notThere.ToArray()) + " ; absentes ici : " + string.Join(", ", notHere.ToArray()));
+            SendTable(from);
+        }
+
+        // ---------------------------------------------------------------- boucle
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame) return;
-            if (!scanned) { if (scanAt > 0 && Time.realtimeSinceStartup >= scanAt) Scan(); return; }
             float now = Time.realtimeSinceStartup;
+            if (!scanned) { if (scanAt > 0 && now >= scanAt) Scan(); return; }
+            // Joueur monte dans une voiture que la liste ne connait pas encore (taxi tout juste active) : releve.
+            if (!curVehicleLooked) { curVehicleLooked = true; curVehicle = FsmVariables.GlobalVariables.FindFsmString("PlayerCurrentVehicle"); }
+            bool inCar = curVehicle != null && !string.IsNullOrEmpty(curVehicle.Value);
+            if (inCar && !inCarWas && LocalDriving < 0) nextScan = Mathf.Min(nextScan, now + 0.5f);
+            inCarWas = inCar;
+            if (now >= nextScan) Scan();
+            if (!Session.IsHost && !tableSeen && now >= nextKeys) SendKeys();
 
             int driving = -1;
             foreach (Car c in cars)
                 if (c.Drive != null && c.Drive.ActiveStateName == "Player in car") { driving = c.Index; break; }
             if (driving != LocalDriving)
             {
-                Log.Info(driving >= 0 ? "au volant de " + cars[driving].Name : "sorti de " + cars[LocalDriving].Name);
+                Log.Info(driving >= 0 ? "au volant de " + cars[driving].Key + (cars[driving].Net < 0 ? " (absente de la table de l'hote : non suivie)" : "") : "sorti de " + cars[LocalDriving].Key);
                 if (LocalDriving >= 0)
                 {
-                    if (EngineRunning(cars[LocalDriving])) { owned = LocalDriving; Log.Info("moteur laisse tournant : " + cars[owned].Name + " reste a nous"); }
-                    else Send(cars[LocalDriving], 0);   // derniere position, sans conducteur
+                    Car was = cars[LocalDriving];
+                    if (EngineRunning(was)) { owned = LocalDriving; Log.Info("moteur laisse tournant : " + was.Key + " reste a nous"); }
+                    else Release(was, now);   // derniere position et etat du moteur, sans conducteur
                 }
                 if (driving >= 0) owned = -1;
                 LocalDriving = driving;
@@ -139,18 +415,33 @@ namespace MWCoop
                     Car o = cars[owned];
                     if (o.RemoteBy >= 0 && o.RemoteBy != Session.LocalId) owned = -1;     // un autre l'a prise
                     else if (EngineRunning(o)) Send(o, 2);
-                    else { Send(o, 0); Log.Info("moteur coupe : " + o.Name + " rendue"); owned = -1; }
+                    else { Release(o, now); Log.Info("moteur coupe : " + o.Key + " rendue"); owned = -1; }
                 }
+            }
+            // Etat de la simulation de ce qu'on fait rouler : une fois par seconde.
+            if (now >= nextSim)
+            {
+                nextSim = now + 1f;
+                if (LocalDriving >= 0) SendSim(cars[LocalDriving], 0, false);
+                if (owned >= 0) SendSim(cars[owned], 0, false);
             }
             if (Session.IsHost && now >= nextSlow)
             {
                 nextSlow = now + 2f;
                 foreach (Car c in cars)
-                    if (c.Index != LocalDriving && c.Index != owned && c.RemoteBy < 0 && c.Body != null) Send(c, 0);
+                    if (c.Index != LocalDriving && c.Index != owned && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy) Send(c, 0);
+            }
+            // Hote : etat de la simulation des voitures garees (personne ne les fait rouler), toutes les 10 s.
+            if (Session.IsHost && now >= nextParkedSim && Session.RemoteCount > 0)
+            {
+                nextParkedSim = now + 10f;
+                foreach (Car c in cars)
+                    if (c.Index != LocalDriving && c.Index != owned && !Remote(c, now) && c.Body != null && c.Body.gameObject.activeInHierarchy) SendSim(c, SimParked, false);
             }
 
             foreach (Car c in cars)
             {
+                if (c.Body == null) continue;
                 bool remote = Remote(c, now);
                 if (!remote && c.RemoteBy >= 0 && now - c.LastRemote >= 1.5f) { c.RemoteBy = -1; c.RemoteDriver = -1; }
                 SetKinematic(c, remote);
@@ -159,9 +450,18 @@ namespace MWCoop
                     if (now >= c.NextJoints) ProtectJoints(c);   // pieces montees entre-temps
                     Follow(c);
                     Animate(c);
-                    if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Name + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + ", chaleur " + (c.Heat != null ? c.Heat.Value.ToString("F1") : "?") + " (recue " + c.RemoteHeat.ToString("F1") + ")" +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
+                    if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Key + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + ", chaleur " + (c.Heat != null ? c.Heat.Value.ToString("F1") : "?") + " (recue " + c.RemoteHeat.ToString("F1") + ")" +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
                 }
             }
+        }
+
+        // Voiture rendue (conducteur sorti moteur arrete, ou moteur coupe) : derniere pose et etat de la simulation
+        // (fiable) ; l'instantane de l'hote ne l'ecrase pas tout de suite.
+        static void Release(Car c, float now)
+        {
+            Send(c, 0);
+            SendSim(c, SimFinal, true);
+            c.AuthorityUntil = now + 5f;
         }
 
         // Apres la logique du jeu : la chaleur de l'habitacle de la copie est celle de chez le conducteur.
@@ -183,29 +483,31 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- objets dans les voitures
-        // Numero d'une voiture : son rang dans la liste triee par nom, le meme chez tous (-1 : pas une voiture).
-        public static int Count { get { return cars.Count; } }
+        // Numero d'une voiture : son numero reseau (table de l'hote), le meme chez tous (-1 : pas une voiture,
+        // ou absente de la table).
+        public static int Count { get { return byNet.Count; } }
+        static Car ByNet(int index) { return index >= 0 && index < byNet.Count ? byNet[index] : null; }
         public static int CarIndex(Rigidbody body)
         {
             if (body == null) return -1;
-            foreach (Car c in cars) if (c.Body == body) return c.Index;
+            foreach (Car c in cars) if (ReferenceEquals(c.Body, body)) return c.Net;
             return -1;
         }
-        public static Rigidbody CarBody(int index) { return index >= 0 && index < cars.Count ? cars[index].Body : null; }
+        public static Rigidbody CarBody(int index) { Car c = ByNet(index); return c != null ? c.Body : null; }
 
         // Conduite ici, ou quittee moteur tournant (on en garde la main) : on fait autorite dessus.
-        public static bool DrivenHere(int index) { return index >= 0 && (index == LocalDriving || index == owned); }
+        public static bool DrivenHere(int index) { Car c = ByNet(index); return c != null && (c.Index == LocalDriving || c.Index == owned); }
 
         // Copie ici d'une voiture qu'un autre fait rouler.
-        public static bool IsCopy(int index) { return index >= 0 && index < cars.Count && Remote(cars[index], Time.realtimeSinceStartup); }
+        public static bool IsCopy(int index) { Car c = ByNet(index); return c != null && Remote(c, Time.realtimeSinceStartup); }
 
         // Qui fait autorite sur la voiture : nous si on la conduit (ou moteur laisse tournant), le joueur qui
         // la fait rouler chez lui, sinon l'hote (voiture garee).
         public static int Authority(int index)
         {
-            if (index < 0 || index >= cars.Count) return 0;
-            if (DrivenHere(index)) return Session.LocalId;
-            Car c = cars[index];
+            Car c = ByNet(index);
+            if (c == null) return 0;
+            if (c.Index == LocalDriving || c.Index == owned) return Session.LocalId;
             return Remote(c, Time.realtimeSinceStartup) ? c.RemoteBy : 0;
         }
         public static int Authority(Rigidbody car) { return Authority(CarIndex(car)); }
@@ -213,24 +515,54 @@ namespace MWCoop
         // Vitesse de la voiture telle qu'on la voit ici (copie : celle recue, le corps cinematique n'en a pas).
         public static Vector3 CarVelocity(int index)
         {
-            if (index < 0 || index >= cars.Count || cars[index].Body == null) return Vector3.zero;
-            Car c = cars[index];
+            Car c = ByNet(index);
+            if (c == null || c.Body == null) return Vector3.zero;
             return c.Kinematic ? c.Vel : c.Body.velocity;
         }
 
+        // Regime du moteur de la voiture qui porte 't', tel que chez celui qui la fait tourner : le notre si on la
+        // conduit ou en garde la main, celui recu sur une copie (recopie aussi a chaque image dans le Drivetrain
+        // coupe de la copie : les automates qui le lisent, pompe de la fosse septique comprise, le voient), le
+        // regime local d'une voiture garee. -1 : pas une voiture connue.
+        public static float EngineRpm(Transform t)
+        {
+            Car c = CarOf(t);
+            if (c == null) return -1f;
+            if (Remote(c, Time.realtimeSinceStartup)) return c.Rpm;
+            return c.Dt != null ? c.Dt.rpm : 0f;
+        }
+
+        // Cette machine fait-elle tourner la simulation qui compte pour la voiture qui porte 't' ? Oui si on la
+        // conduit ou en garde la main ; non sur la copie d'une voiture qu'un autre fait rouler ; garee : l'hote.
+        public static bool SimAuthority(Transform t)
+        {
+            Car c = CarOf(t);
+            if (c == null) return Session.IsHost;
+            if (c.Index == LocalDriving || c.Index == owned) return true;
+            if (Remote(c, Time.realtimeSinceStartup)) return false;
+            return Session.IsHost;
+        }
+
         // Voiture sous un objet pose (coffre, banquette, plateau) : court rayon vers le bas depuis son centre,
-        // premiere surface solide d'une voiture (corps racine a CarDynamics, ou piece articulee dessus comme
-        // le hayon). Les autres objets en travers sont ignores (sac pose sur une caisse). Resultat garde
-        // 0,5 s par objet. null : pas dans une voiture.
-        class Under { public float Until; public Rigidbody Car; }
+        // premiere surface solide d'une voiture (son corps, ou une piece articulee dessus comme le hayon). Les
+        // autres objets en travers sont ignores (sac pose sur une caisse). Resultat garde 0,5 s par objet.
+        // null : pas dans une voiture.
+        // Pieces de la voiture elle-meme (corps sous elle dans la hierarchie : portieres, hayon, reservoir, tete du
+        // conducteur, recu de l'imprimante du taxi...) : la voiture, sans rayon -- leur pose au repos part dans
+        // son repere et l'hote ne les recale pas quand un autre la conduit (Props, Authority). Mais jamais un
+        // chargement : null pour celle qu'on fait rouler ici (Props.Ride les collerait, cinematiques, chez les
+        // autres) et pendant son propre recalage d'un coup (MoveCargo : elles suivent deja son transform).
+        // Les voitures a la racine en etaient deja exclues par Props (racine == voiture) ; pas le taxi, sous JOBS.
+        class Under { public float Until; public Rigidbody Car; public Car Own; }
         static readonly Dictionary<Rigidbody, Under> under = new Dictionary<Rigidbody, Under>();
+        static Car moving;   // voiture replacee d'un coup en ce moment (MoveCargo)
 
         public static Rigidbody CarUnder(Rigidbody item)
         {
             if (item == null || !scanned) return null;
             float now = Time.realtimeSinceStartup;
             Under u;
-            if (under.TryGetValue(item, out u) && now < u.Until) return u.Car;
+            if (under.TryGetValue(item, out u) && now < u.Until) return UnderFor(u);
             if (u == null)
             {
                 if (under.Count > 512) under.Clear();   // objets detruits depuis
@@ -239,11 +571,14 @@ namespace MWCoop
             }
             u.Until = now + 0.5f;
             u.Car = null;
+            u.Own = null;
             // Aucune voiture a moins de 8 m : pas de rayon (la plupart des objets du monde, recalage de l'hote).
             Vector3 at = item.position;
             bool near = false;
             foreach (Car c in cars) if (c.Body != null && (c.Body.position - at).sqrMagnitude < 64f) { near = true; break; }
             if (!near) return null;
+            Car own = CarOf(item.transform);
+            if (own != null && own.Body != null && !ReferenceEquals(own.Body, item)) { u.Own = own; u.Car = own.Body; return UnderFor(u); }
             float best = float.MaxValue;
             foreach (RaycastHit h in Physics.RaycastAll(item.worldCenterOfMass + Vector3.up * 0.25f, Vector3.down, 0.85f, ~0))
             {
@@ -251,11 +586,28 @@ namespace MWCoop
                 if (col == null || col.isTrigger || h.distance >= best) continue;
                 Rigidbody rb = col.attachedRigidbody;
                 if (rb == null || rb == item) continue;
-                Transform root = rb.transform.root;
-                foreach (Car c in cars)
-                    if (c.Body != null && c.Body.transform == root) { best = h.distance; u.Car = c.Body; break; }
+                Car hc = CarOf(rb.transform);
+                if (hc != null && hc.Body != null) { best = h.distance; u.Car = hc.Body; }
             }
             return u.Car;
+        }
+
+        // Piece de la voiture : pas un chargement de celle qu'on fait rouler ici, ni de celle qu'on replace (hors cache :
+        // monter au volant compte tout de suite).
+        static Rigidbody UnderFor(Under u)
+        {
+            Car o = u.Own;
+            if (o != null && (ReferenceEquals(o, moving) || o.Index == LocalDriving || o.Index == owned)) return null;
+            return u.Car;
+        }
+
+        // Voiture replacee d'un coup : ce qui est pose dedans la suit (Props), pas ses propres pieces (le transform
+        // de la voiture les emmene : deplacees deux fois sinon, attaches tirees d'autant).
+        static void MoveCargo(Car c, Vector3 pos, Quaternion rot, Vector3 vel)
+        {
+            moving = c;
+            try { Props.CarMoved(c.Body, pos, rot, vel); }
+            finally { moving = null; }
         }
 
         // Objet replace d'un coup (pose recue) : la voiture sous lui sera cherchee a nouveau.
@@ -332,7 +684,7 @@ namespace MWCoop
                 rot = Quaternion.AngleAxis(c.AngVel.magnitude * dt * Mathf.Rad2Deg, c.AngVel.normalized) * c.Rot;
             Transform t = c.Body.transform;
             float k = 1f - Mathf.Exp(-15f * Time.deltaTime);
-            if ((target - t.position).sqrMagnitude > 25f) { Props.CarMoved(c.Body, target, rot, c.Vel); t.position = target; t.rotation = rot; }
+            if ((target - t.position).sqrMagnitude > 25f) { MoveCargo(c, target, rot, c.Vel); t.position = target; t.rotation = rot; }
             else
             {
                 c.Body.MovePosition(Vector3.Lerp(t.position, target, k));
@@ -381,82 +733,59 @@ namespace MWCoop
             return sb.ToString();
         }
 
-        static float EngineVolume(Car c)
-        {
-            SoundController sc = c.Body.GetComponent<SoundController>();
-            float v = 0f;
-            if (sc == null) return -1f;
-            foreach (AudioSource a in c.Body.GetComponentsInChildren<AudioSource>())
-                if (a.clip != null && (a.clip == sc.engineThrottle || a.clip == sc.engineNoThrottle) && a.isPlaying) v = Mathf.Max(v, a.volume);
-            return v;
-        }
-
         // Essais : regime et accelerateur envoyes a la place de ceux du moteur local (< 0 : les vrais).
         static float testRpm = -1f, testThr;
 
-        // Essais : allume les sons moteur de la voiture locale (comme le contact quand le moteur tourne).
         // L'objet appartient-il a une voiture qu'un autre joueur conduit en ce moment ?
         public static bool RemotelyDriven(Transform t)
         {
-            string root = t.root.name;
-            float now = Time.realtimeSinceStartup;
-            foreach (Car c in cars)
-                if (c.Name == root) return c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving && c.Index != owned;
-            return false;
+            Car c = CarOf(t);
+            return c != null && Remote(c, Time.realtimeSinceStartup);
         }
 
+        // Essais : allume les sons moteur de la voiture locale (comme le contact quand le moteur tourne).
         public static string TestSounds(string name, bool on)
         {
-            foreach (Car c in cars)
-                if (c.Name == name)
+            Car c = Named(name);
+            if (c == null) return "?";
+            foreach (GameObject g in c.SoundObjs)
+                if (g != null && g.name.StartsWith("Sound"))
                 {
-                    foreach (GameObject g in c.SoundObjs)
-                        if (g != null && g.name.StartsWith("Sound"))
-                        {
-                            g.SetActive(on);
-                            // Moteur pas vraiment demarre : on fige une hauteur de son pour verifier l'envoi.
-                            foreach (PlayMakerFSM f in g.GetComponents<PlayMakerFSM>()) f.enabled = false;
-                            g.GetComponent<AudioSource>().pitch = 0.9f;
-                        }
-                    return SoundDiag(c);
+                    g.SetActive(on);
+                    // Moteur pas vraiment demarre : on fige une hauteur de son pour verifier l'envoi.
+                    foreach (PlayMakerFSM f in g.GetComponents<PlayMakerFSM>()) f.enabled = false;
+                    g.GetComponent<AudioSource>().pitch = 0.9f;
                 }
-            return "?";
+            return SoundDiag(c);
         }
         public static void TestEngine(float rpm, float thr) { testRpm = rpm; testThr = thr; }
 
         // Essais : toutes les sources audio de la voiture (clip, joue, volume, hauteur) et son etat.
         public static string AudioState(string name)
         {
-            foreach (Car c in cars)
-                if (c.Name == name && c.Body != null)
-                {
-                    var sb = new System.Text.StringBuilder(name + (c.Kinematic ? " (copie)" : "") + " SoundController " + (c.Sound != null ? (c.Sound.enabled ? "actif" : "coupe") : "-") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + " :");
-                    foreach (AudioSource a in c.Body.GetComponentsInChildren<AudioSource>(true))
-                        if (a.isPlaying && a.volume > 0.001f) sb.Append(' ').Append(a.gameObject.name).Append('/').Append(a.clip != null ? a.clip.name : "-").Append('/').Append(a.volume.ToString("F2")).Append('/').Append(a.pitch.ToString("F2"));
-                    return sb.ToString();
-                }
-            return "?";
+            Car c = Named(name);
+            if (c == null || c.Body == null) return "?";
+            var sb = new System.Text.StringBuilder(name + (c.Kinematic ? " (copie)" : "") + " SoundController " + (c.Sound != null ? (c.Sound.enabled ? "actif" : "coupe") : "-") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + " :");
+            foreach (AudioSource a in c.Body.GetComponentsInChildren<AudioSource>(true))
+                if (a.isPlaying && a.volume > 0.001f) sb.Append(' ').Append(a.gameObject.name).Append('/').Append(a.clip != null ? a.clip.name : "-").Append('/').Append(a.volume.ToString("F2")).Append('/').Append(a.pitch.ToString("F2"));
+            return sb.ToString();
         }
 
         // Essais : champs simples du Drivetrain (nombres, booleens) de la voiture.
         public static string DtState(string name)
         {
-            foreach (Car c in cars)
-                if (c.Name == name && c.Dt != null)
-                {
-                    var sb = new System.Text.StringBuilder("drivetrain " + name + " (" + (c.Dt.enabled ? "actif" : "coupe") + ") :");
-                    foreach (System.Reflection.FieldInfo fi in c.Dt.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
-                    {
-                        object v = fi.GetValue(c.Dt);
-                        if (v is bool || v is int) sb.Append(' ').Append(fi.Name).Append('=').Append(v);
-                        else if (v is float) sb.Append(' ').Append(fi.Name).Append('=').Append(((float)v).ToString("F1"));
-                    }
-                    return sb.ToString();
-                }
-            return "?";
+            Car c = Named(name);
+            if (c == null || c.Dt == null) return "?";
+            var sb = new System.Text.StringBuilder("drivetrain " + name + " (" + (c.Dt.enabled ? "actif" : "coupe") + ") :");
+            foreach (System.Reflection.FieldInfo fi in c.Dt.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+            {
+                object v = fi.GetValue(c.Dt);
+                if (v is bool || v is int) sb.Append(' ').Append(fi.Name).Append('=').Append(v);
+                else if (v is float) sb.Append(' ').Append(fi.Name).Append('=').Append(((float)v).ToString("F1"));
+            }
+            return sb.ToString();
         }
 
-        // Essais : sort le joueur local de la voiture comme la touche ENTREE.
         // Sortie forcee du vehicule conduit ici (reapparition) : l'etat de sortie du jeu, quelle que soit la vitesse.
         public static bool ExitLocal()
         {
@@ -464,19 +793,17 @@ namespace MWCoop
             Car c = cars[LocalDriving];
             if (c.Drive == null || c.Drive.Fsm.GetState("Create player") == null) return false;
             Game.SetState(c.Drive, "Create player");
-            Log.Info("sortie forcee de " + c.Name);
+            Log.Info("sortie forcee de " + c.Key);
             return true;
         }
 
+        // Essais : sort le joueur local de la voiture comme la touche ENTREE.
         public static string TestExit(string name)
         {
-            foreach (Car c in cars)
-                if (c.Name == name && c.Drive != null)
-                {
-                    if (c.Drive.ActiveStateName == "Player in car") c.Drive.SendEvent("Key DOWN");
-                    return c.Drive.ActiveStateName;
-                }
-            return "?";
+            Car c = Named(name);
+            if (c == null || c.Drive == null) return "?";
+            if (c.Drive.ActiveStateName == "Player in car") c.Drive.SendEvent("Key DOWN");
+            return c.Drive.ActiveStateName;
         }
 
         static float SteerOf(Car c)
@@ -497,9 +824,9 @@ namespace MWCoop
 
         static void Send(Car c, int mode)
         {
-            if (c.Body == null) return;
+            if (c.Body == null || c.Net < 0) return;   // (absente de la table de l'hote : personne ne la connait sous ce numero)
             bool driven = mode != 0;
-            var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(c.Index).U8(mode)
+            var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(c.Net).U8(mode)
                 .Vec(c.Body.position).Quat(c.Body.rotation).Vec(c.Body.velocity).Vec(c.Body.angularVelocity);
             if (driven)
             {
@@ -516,6 +843,61 @@ namespace MWCoop
                     }
             }
             Session.SendAll(w, false);
+        }
+
+        // Etat de la simulation (SimVars) : (empreinte de la cle, valeur). Les commandes (tirette de starter) seulement
+        // quand on rend la voiture : en roulant, Jobs rejoue la tirette (un passager qui la tire ne doit pas etre
+        // ramene en arriere chaque seconde par la valeur du conducteur).
+        static void SendSim(Car c, int flags, bool reliable)
+        {
+            if (c.Body == null || c.Net < 0 || c.Sims.Length == 0 || !Session.Active || Session.RemoteCount == 0) return;
+            bool controls = (flags & SimFinal) != 0;
+            int n = 0;
+            foreach (Sim s in c.Sims) if ((controls || !s.Control) && n < 100) n++;
+            var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(c.Net).U8(M_SIM).U8(flags).U8(n);
+            int k = 0;
+            foreach (Sim s in c.Sims)
+            {
+                if (!controls && s.Control) continue;
+                if (k++ >= n) break;
+                w.I32((int)s.Hash).F32(s.Var.Value);
+            }
+            Session.SendAll(w, reliable);
+            if ((flags & SimFinal) != 0) Log.Info("voiture " + c.Key + " rendue : etat du moteur envoye (" + SimSummary(c) + ")");
+        }
+
+        static void OnSim(Car c, int who, NetReader r)
+        {
+            int flags = r.U8(), n = r.U8();
+            float now = Time.realtimeSinceStartup;
+            // On fait autorite (conduite ici, moteur tournant a nous) ; ou instantane de l'hote d'une voiture qu'un
+            // autre fait rouler ici, ou qu'on vient de rendre (notre derniere valeur est en route).
+            bool skip = c == null || c.Index == LocalDriving || c.Index == owned
+                        || ((flags & SimParked) != 0 && (Remote(c, now) || now < c.AuthorityUntil));
+            for (int i = 0; i < n; i++)
+            {
+                uint h = (uint)r.I32();
+                float v = r.F32();
+                if (skip) continue;
+                foreach (Sim s in c.Sims) if (s.Hash == h) { s.Var.Value = v; break; }
+            }
+            if (skip) return;
+            if ((flags & SimFinal) != 0) Log.Info("voiture " + c.Key + " rendue par #" + who + " : etat du moteur repris (" + SimSummary(c) + ")");
+            else if (!c.SimLogged && (flags & SimParked) == 0) { c.SimLogged = true; Log.Info("voiture " + c.Key + " : etat du moteur de #" + who + " suivi (" + SimSummary(c) + ")"); }
+        }
+
+        // Batterie, temperature du moteur, tirette de starter, amorcage : pour les journaux.
+        static string SimSummary(Car c)
+        {
+            if (c == null || c.Sims.Length == 0) return "pas de simulation suivie";
+            var sb = new System.Text.StringBuilder();
+            foreach (Sim s in c.Sims)
+            {
+                string k = s.Key.Substring(s.Key.LastIndexOf(':') + 1);
+                if (sb.Length > 0) sb.Append(' ');
+                sb.Append(k).Append('=').Append(s.Var.Value.ToString("F2"));
+            }
+            return sb.ToString();
         }
 
         // Avatar d'un joueur qui conduit chez lui : position et rotation dans la copie locale de la
@@ -547,12 +929,40 @@ namespace MWCoop
             return false;
         }
 
+        // Numero inconnu ici (voiture de l'hote pas encore active ici) : note une fois, nouveau releve (10 s au plus souvent).
+        static void Missing(int idx, bool rescan)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (missingLogged.Add(idx)) Log.Info("voitures : numero " + idx + " (" + (idx < netKeys.Count && netKeys[idx] != null ? netKeys[idx] : "?") + ") absente ici");
+            if (rescan && tableSeen && now - lastMissingScan >= 10f) { lastMissingScan = now; nextScan = Mathf.Min(nextScan, now + 0.5f); }
+        }
+
         public static void OnMessage(Peer from, NetReader r)
         {
             int who = r.U8();
             if (Session.IsHost) who = from.Id;
             int idx = r.U8();
             int mode = r.U8();
+            if (idx == NoCar)
+            {
+                if (mode == M_TABLE) OnTable(r);
+                else if (mode == M_KEYS) OnKeys(from, r);
+                return;
+            }
+            if (mode == M_SIM)
+            {
+                if (Session.IsHost)
+                {
+                    byte[] rest = r.Rest();
+                    bool rel = rest.Length > 0 && (rest[0] & SimFinal) != 0;
+                    Session.Broadcast(new NetWriter(Msg.Vehicle).U8(who).U8(idx).U8(M_SIM).Raw(rest), rel, who);
+                }
+                if (!scanned) return;
+                Car sc = ByNet(idx);
+                if (sc == null) { Missing(idx, (r.U8() & SimParked) == 0); return; }
+                OnSim(sc, who, r);
+                return;
+            }
             bool driven = mode != 0;
             Vector3 pos = r.Vec();
             Quaternion rot = r.Quat();
@@ -571,11 +981,12 @@ namespace MWCoop
                 if (driven) { fw.F32(rpm).F32(thr).F32(steer).F32(heat).U16(smask); foreach (float v in spitch) fw.F32(v); }
                 Session.Broadcast(fw, false, who);
             }
-            if (!scanned || idx >= cars.Count) return;
-            Car c = cars[idx];
+            if (!scanned) return;
+            Car c = ByNet(idx);
+            if (c == null || c.Body == null) { if (driven) Missing(idx, true); return; }
             if (c.Index == LocalDriving) return;              // je la conduis : je garde la main
             if (c.Index == owned && mode != 1) return;        // mon moteur tourne : je garde la main
-            if (c.Index == owned) { owned = -1; Log.Info(c.Name + " prise par #" + who); }
+            if (c.Index == owned) { owned = -1; Log.Info(c.Key + " prise par #" + who); }
             if (driven)
             {
                 c.RemoteBy = who;
@@ -594,12 +1005,12 @@ namespace MWCoop
             if ((t.position - pos).sqrMagnitude > 1f || Quaternion.Angle(t.rotation, rot) > 10f)
             {
                 SetKinematic(c, false);
-                Props.CarMoved(c.Body, pos, rot, vel);   // ce qui est pose dedans suit (avant que la voiture bouge)
+                MoveCargo(c, pos, rot, vel);   // ce qui est pose dedans suit (avant que la voiture bouge)
                 t.position = pos;
                 t.rotation = rot;
                 c.Body.velocity = vel;
                 c.Body.angularVelocity = ang;
-                Log.Info("voiture " + c.Name + " recalee sur " + (who == 0 ? "l'hote" : "#" + who));
+                Log.Info("voiture " + c.Key + " recalee sur " + (who == 0 ? "l'hote" : "#" + who));
             }
         }
 
@@ -607,30 +1018,203 @@ namespace MWCoop
         // 2) le met au volant comme l'automate du jeu (etat 'Check seat').
         public static string TestEnter(string name, bool seat)
         {
-            foreach (Car c in cars)
+            Car c = Named(name);
+            if (c == null || c.Drive == null) return null;
+            if (!seat)
             {
-                if (c.Name != name || c.Drive == null) continue;
-                if (!seat)
-                {
-                    GameObject p = GameObject.Find("PLAYER");
-                    var cc = p.GetComponent<CharacterController>();
-                    cc.enabled = false;
-                    p.transform.position = c.Drive.transform.position + Vector3.up * 0.5f;
-                    cc.enabled = true;
-                    return "a cote, automate " + (c.Drive.gameObject.activeInHierarchy ? "actif" : "inactif");
-                }
-                // 'Press return' attend la touche d'entree (GetButtonDown -> Key DOWN).
-                if (c.Drive.ActiveStateName == "Press return") c.Drive.SendEvent("Key DOWN");
-                else Game.SetState(c.Drive, "Check seat");
-                return c.Drive.ActiveStateName;
+                GameObject p = GameObject.Find("PLAYER");
+                var cc = p.GetComponent<CharacterController>();
+                cc.enabled = false;
+                p.transform.position = c.Drive.transform.position + Vector3.up * 0.5f;
+                cc.enabled = true;
+                return "a cote, automate " + (c.Drive.gameObject.activeInHierarchy ? "actif" : "inactif");
             }
-            return null;
+            // 'Press return' attend la touche d'entree (GetButtonDown -> Key DOWN).
+            if (c.Drive.ActiveStateName == "Press return") c.Drive.SendEvent("Key DOWN");
+            else Game.SetState(c.Drive, "Check seat");
+            return c.Drive.ActiveStateName;
         }
 
         public static Rigidbody Body(string name)
         {
-            foreach (Car c in cars) if (c.Name == name) return c.Body;
+            Car c = Named(name);
+            return c != null ? c.Body : null;
+        }
+
+        // ------------------------------------------------------------ essais automatiques (appeles par Autotest)
+        // taxi : [Test] TaxiActiver=1 (defaut) active JOBS/TAXIJOB/MACHTWAGEN des deux cotes a 8 s s'il dort, puis
+        // releve a 9 s. Toutes les 5 s, chacun note la voiture (cle, rang, numero reseau, pose, copie ou non,
+        // automate de conduite) et ce que les autres modules en suivent. Hote : monte a 20 s, au volant a 27 s,
+        // poussee a 8 m/s de 30 a 42 s puis de 58 a 64 s (l'invite doit la voir suivre). Invite : ouvre la
+        // portiere arriere droite a 44 s, la lache, la referme a 48 s ; s'assoit a l'arriere a 52 s (passager
+        // emmene de 58 a 64 s), se leve a 72 s. Options (invite) : TaxiRecale=1 (taxi decale de 2 m a 21 s, recale par
+        // l'hote : portiere a sa place dans le repere du taxi a 25 s) ; TaxiRanger=1 (taxi range ici a 66 s, le joueur
+        // assis : decroche a 67 s, taxi remis a 70 s).
+        // reprise : [Test] TestVoiture (SORBET). Hote : au volant a 22 s, moteur (sons, regime d'essai) a 24 s,
+        // valeurs reconnaissables posees a 27 s (batterie 87.25, temperatures 61.5, tirette 0.4) ; moteur coupe a
+        // 33 s et sortie a 35 s (voiture rendue : etat envoye, fiable) -- [Test] RepriseMoteur=1 : sort moteur
+        // tournant (il en garde la main ; l'invite la prend en montant : batterie et temperatures par le flux d'une
+        // seconde, la tirette reste a Jobs). Invite : monte a 45 s, au volant a 50 s, sort a 65 s (moteur arrete :
+        // etat rendu). Les deux notent l'etat du moteur toutes les 5 s de 20 a 80 s : l'invite doit montrer les
+        // valeurs de l'hote des 28 s (copie) et apres 35 s, puis l'hote celles de l'invite apres 65 s.
+        static int tStep, tRec;
+        static float tLog;
+        static Vector3 tDoor;
+        static Rigidbody tDoorBody;
+
+        // Essais : corps de la piece 'name' de la voiture (portiere...).
+        static Rigidbody Part(Car c, string name)
+        {
+            foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true)) if (rb.name == name) return rb;
             return null;
+        }
+
+        public static void Test(string mode, float t)
+        {
+            if (mode != "taxi" && mode != "reprise") return;
+            bool host = Session.IsHost;
+            string name = mode == "taxi" ? "MACHTWAGEN" : Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            float now = Time.realtimeSinceStartup;
+            if (mode == "taxi")
+            {
+                if (t > 8f && tStep == 0)
+                {
+                    tStep = 1;
+                    GameObject taxi = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN");
+                    if (taxi == null) Log.Info("autotest : taxi JOBS/TAXIJOB/MACHTWAGEN introuvable");
+                    else if (!taxi.activeSelf && Config.GetInt("Test", "TaxiActiver", 1) != 0) { taxi.SetActive(true); Log.Info("autotest : taxi active"); }
+                    else Log.Info("autotest : taxi " + (taxi.activeInHierarchy ? "deja actif" : "inactif (TaxiActiver=0)"));
+                }
+                if (t > 9f && tStep == 1) { tStep = 2; if (scanned) Scan(); Log.Info("autotest : taxi releve, " + TaxiState(name)); }
+                if (host)
+                {
+                    if (t > 20f && tStep == 2) { tStep = 3; Log.Info("autotest : taxi " + TestEnter(name, false)); }
+                    if (t > 27f && tStep == 3) { tStep = 4; Log.Info("autotest : taxi volant -> " + TestEnter(name, true)); }
+                    Rigidbody b = Body(name);
+                    if (b != null && tStep >= 4 && ((t > 30f && t < 42f) || (t > 58f && t < 64f)))
+                    { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                }
+                else
+                {
+                    // [Test] TaxiRecale=1 : taxi decale de 2 m ici a 21 s (gare des deux cotes, portieres deja suivies par
+                    // Props) ; le recalage de l'hote (2 s) le ramene : la portiere doit rester a sa place dans le repere du
+                    // taxi (pas deplacee deux fois).
+                    if (t > 21f && tRec == 0 && Config.GetInt("Test", "TaxiRecale", 0) != 0)
+                    {
+                        tRec = 1;
+                        Car tc = Named(name);
+                        tDoorBody = tc != null && tc.Body != null ? Part(tc, "DoorRear(right)") : null;
+                        if (tDoorBody == null) Log.Info("autotest : taxi recale : pas de portiere DoorRear(right)");
+                        else
+                        {
+                            tDoor = tc.T.InverseTransformPoint(tDoorBody.position);
+                            tc.T.position += tc.T.right * 2f;
+                            Log.Info("autotest : taxi decale de 2 m ici, portiere en " + tDoor.ToString("F2") + " (repere du taxi)");
+                        }
+                    }
+                    if (t > 25f && tRec == 1)
+                    {
+                        tRec = 2;
+                        Car tc = Named(name);
+                        if (tc != null && tDoorBody != null)
+                        {
+                            float d = (tc.T.InverseTransformPoint(tDoorBody.position) - tDoor).magnitude;
+                            Log.Info("autotest : taxi recale " + (d < 0.2f ? "OK" : "ECHEC") + " : portiere a " + d.ToString("F2") + " m de sa place dans le repere du taxi (attendu < 0,2), taxi " + TaxiState(name));
+                        }
+                    }
+                    bool ranger = Config.GetInt("Test", "TaxiRanger", 0) != 0;
+                    if (t > 44f && tStep == 2) { tStep = 3; Log.Info("autotest : taxi " + CarDoors.TestOpen(name, true, "DoorRear(right)")); }
+                    if (t > 44.6f && tStep == 3) { tStep = 4; Log.Info("autotest : taxi lache " + CarDoors.TestState(name, "Mouse off", "DoorRear(right)")); }
+                    if (t > 48f && tStep == 4) { tStep = 5; Log.Info("autotest : taxi referme " + CarDoors.TestGrab(name, "DoorRear(right)")); }
+                    if (t > 52f && tStep == 5) { tStep = 6; Log.Info("autotest : taxi " + Seats.TestSit(name, 1)); }
+                    if (!ranger && t > 72f && tStep == 6) { tStep = 7; Log.Info("autotest : taxi " + Seats.TestLeave()); }
+                    // [Test] TaxiRanger=1 : taxi range ici (SetActive(false), comme a la fin du service) avec le joueur assis a
+                    // l'arriere : il doit etre decroche (PLAYER actif) ; taxi remis a 70 s, le joueur pose a 3 m a cote.
+                    if (ranger && t > 66f && tStep == 6)
+                    {
+                        tStep = 10;
+                        GameObject taxi = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN");
+                        if (taxi != null) taxi.SetActive(false);
+                        Log.Info("autotest : taxi range ici (assis : " + Seats.Seated + ")");
+                    }
+                    if (t > 67f && tStep == 10)
+                    {
+                        tStep = 11;
+                        GameObject pl = GameObject.Find("PLAYER");   // (introuvable si inactif)
+                        Log.Info("autotest : taxi range " + (!Seats.Seated && pl != null ? "OK" : "ECHEC") + " : passager " + (Seats.Seated ? "toujours assis" : "sorti")
+                                 + ", PLAYER " + (pl != null ? "actif en " + pl.transform.position.ToString("F1") : "inactif"));
+                    }
+                    if (t > 70f && tStep == 11)
+                    {
+                        tStep = 12;
+                        GameObject taxi = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN");
+                        GameObject pl = GameObject.Find("PLAYER");
+                        if (taxi != null && pl != null)
+                        {
+                            var cc = pl.GetComponent<CharacterController>();
+                            if (cc != null) cc.enabled = false;
+                            pl.transform.position = taxi.transform.position + taxi.transform.right * 3f + Vector3.up * 0.5f;
+                            if (cc != null) cc.enabled = true;
+                        }
+                        if (taxi != null) taxi.SetActive(true);
+                        Log.Info("autotest : taxi remis ici");
+                    }
+                }
+                if (t > 10f && t < 90f && now >= tLog) { tLog = now + 5f; Log.Info("autotest : taxi (" + (host ? "hote" : "invite") + ") " + TaxiState(name) + " | " + CarDoors.StateOf(name, "DoorRear(right)")); }
+                return;
+            }
+            // reprise
+            if (host)
+            {
+                if (t > 15f && tStep == 0) { tStep = 1; Log.Info("autotest : reprise " + TestEnter(name, false)); }
+                if (t > 22f && tStep == 1) { tStep = 2; Log.Info("autotest : reprise volant -> " + TestEnter(name, true)); }
+                if (t > 24f && tStep == 2) { tStep = 3; TestEngine(2000f, 0.3f); Log.Info("autotest : reprise moteur " + TestSounds(name, true)); }
+                if (t > 27f && tStep == 3) { tStep = 4; Log.Info("autotest : reprise valeurs posees : " + TestSetSim(name)); }
+                if (t > 33f && tStep == 4)
+                {
+                    tStep = 5;
+                    if (Config.GetInt("Test", "RepriseMoteur", 0) == 0) { TestEngine(-1f, 0f); Log.Info("autotest : reprise moteur coupe " + TestSounds(name, false)); }
+                }
+                if (t > 35f && tStep == 5) { tStep = 6; Log.Info("autotest : reprise sortie -> " + TestExit(name)); }
+                if (t > 70f && tStep == 6) { tStep = 7; TestEngine(-1f, 0f); }
+            }
+            else
+            {
+                if (t > 45f && tStep == 0) { tStep = 1; Log.Info("autotest : reprise " + TestEnter(name, false)); }
+                if (t > 50f && tStep == 1) { tStep = 2; Log.Info("autotest : reprise volant -> " + TestEnter(name, true)); }
+                if (t > 65f && tStep == 2) { tStep = 3; Log.Info("autotest : reprise sortie -> " + TestExit(name)); }
+            }
+            if (t > 20f && t < 80f && now >= tLog) { tLog = now + 5f; Log.Info("autotest : reprise (" + (host ? "hote" : "invite") + ") " + TaxiState(name)); }
+        }
+
+        // Essais : ce qu'on sait de la voiture 'name' ici.
+        static string TaxiState(string name)
+        {
+            Car c = Named(name);
+            if (c == null) return name + " inconnue ici (" + cars.Count + " voitures, table " + netKeys.Count + (tableSeen || Session.IsHost ? "" : ", pas encore recue") + ")";
+            float now = Time.realtimeSinceStartup;
+            string role = c.Index == LocalDriving ? "conduite ici" : c.Index == owned ? "moteur tournant a nous" : Remote(c, now) ? (c.RemoteDriver >= 0 ? "copie, conduite par #" + c.RemoteDriver : "copie, moteur tournant chez #" + c.RemoteBy) : "garee";
+            return c.Key + " rang " + c.Index + " numero " + c.Net + (c.Body == null ? " (corps detruit)" : (c.Body.gameObject.activeInHierarchy ? "" : " (inactive)") + " en " + c.Body.position.ToString("F1") + " rot " + c.Body.rotation.eulerAngles.y.ToString("F0"))
+                   + ", " + role + ", conduite " + (c.Drive != null ? c.Drive.ActiveStateName : "?") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?")
+                   + ", PlayerCurrentVehicle '" + (curVehicle != null ? curVehicle.Value : "?") + "'"
+                   + " | suivi : portieres " + CarDoors.CountFor(c.Key) + ", tableau de bord " + CarVisuals.CountFor(c.Key) + ", places " + Seats.CountFor(c.Key)
+                   + " | moteur : " + SimSummary(c);
+        }
+
+        // Essais : valeurs reconnaissables dans la simulation de 'name' (batterie, temperatures, tirette).
+        static string TestSetSim(string name)
+        {
+            Car c = Named(name);
+            if (c == null) return "?";
+            foreach (Sim s in c.Sims)
+            {
+                string v = s.Key.Substring(s.Key.LastIndexOf('.') + 1);
+                if (v == "Charge") s.Var.Value = 87.25f;
+                else if (s.Key.Contains(":Cooling.")) s.Var.Value = 61.5f;
+                else if (s.Key.Contains(":OperatingTemp.")) s.Var.Value = 0.62f;
+                else if (s.Key.Contains(":Use.Choke")) s.Var.Value = 0.4f;
+            }
+            return SimSummary(c);
         }
     }
 }

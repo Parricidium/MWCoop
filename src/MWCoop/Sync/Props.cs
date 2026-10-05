@@ -46,6 +46,7 @@ namespace MWCoop
             public float RideKeep, RideSeen;
             public float GoneAt;                  // corps detruit ici (disparu) : > 0 en attente, -1 traite
             public float WorldAt;                 // recu : pose au repos hors voiture (CarMoved ne l'emmene pas)
+            public float LocalAt, RemoteAt;       // dernier deplacement par ce joueur-ci (tenu, lache) / par un autre (message)
         }
 
         static readonly Dictionary<string, Prop> props = new Dictionary<string, Prop>();
@@ -111,8 +112,18 @@ namespace MWCoop
             string k;
             if (worldKeys.TryGetValue(rb.gameObject, out k)) return k;
             Transform t = rb.transform;
+            // Vetements (veste, combinaison, casque) : cle fixe. Portes au chargement puis enleves, ils sont a la
+            // racine de la scene (hors de EQUIPMENTS) et n'auraient sinon jamais de cle.
+            k = Wear.KeyOf(rb.gameObject);
+            // Enveloppe du catalogue (commande commune, rejouee chez tous) : sortie du catalogue a la racine de la
+            // scene, de meme ; un seul objet. PAS la lettre de Kela (Sheets/envelope(kela1)) : Systems/Expenses tourne
+            // chez chaque joueur (WorldFsms.SkipObjects), chacun a et poste la sienne -- partagee, celle de l'un
+            // n'etait plus postee chez l'autre (Calls.CheckEnvelope) et sa demande d'allocation de la semaine perdue.
+            string tn = t.name;
+            if (k == null && tn == Calls.PartsEnvelope) k = "w:enveloppe:" + tn;
+            if (k != null) { worldKeys[rb.gameObject] = k; return k; }
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement.
-            bool plug = t.name.StartsWith("cable plug");
+            bool plug = tn.StartsWith("cable plug");
             if ((!WorldRoots.Contains(t.root.name) && !plug) || rb.GetComponent("CarDynamics") != null) return null;
             k = plug ? "w:prise:" + t.root.name + "/" + (t.parent != null ? t.parent.name : "") : "w:" + Recon.Path(t) + "#" + t.GetSiblingIndex();
             worldKeys[rb.gameObject] = k;
@@ -232,11 +243,12 @@ namespace MWCoop
             if (now >= nextSend)
             {
                 nextSend = now + 1f / 15f;
-                if (held != null && held.Body != null) Send(held, 1);
+                if (held != null && held.Body != null) { held.LocalAt = now; Send(held, 1); }
                 for (int i = settling.Count - 1; i >= 0; i--)
                 {
                     Prop p = settling[i];
                     bool done = p.Body == null || now > p.SettleUntil || (now > p.SettleUntil - 4.5f && p.Body.IsSleeping());
+                    p.LocalAt = now;
                     Send(p, done ? 0 : 2);
                     if (done) settling.RemoveAt(i);
                 }
@@ -341,6 +353,32 @@ namespace MWCoop
         {
             Prop p;
             return props.TryGetValue(id, out p) && p.Body != null ? p.Body.gameObject : null;
+        }
+
+        // Le dernier a avoir deplace l'objet est-il un autre joueur (sa copie suit ici ses messages) ? 'age' : temps
+        // depuis son dernier message pour cet objet. Faux pour un objet inconnu, ou deplace en dernier par ce joueur-ci.
+        // (Boite aux lettres : seul celui qui lache l'enveloppe la poste.)
+        public static bool MovedByOther(GameObject go, out float age)
+        {
+            age = float.MaxValue;
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            Prop p;
+            if (rb == null || !byBody.TryGetValue(rb, out p) || p.RemoteAt <= 0f || p.RemoteAt <= p.LocalAt) return false;
+            age = Time.realtimeSinceStartup - p.RemoteAt;
+            return true;
+        }
+
+        // Objet que ce joueur-ci va cacher ou deplacer lui-meme (vetement porte par un autre) : plus suivi ni colle,
+        // rendu a sa physique d'avant.
+        public static void Release(GameObject go)
+        {
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            Prop p;
+            if (rb == null || !byBody.TryGetValue(rb, out p)) return;
+            Unride(p);
+            p.RemoteBy = -1;
+            SetKinematic(p, false);
+            settling.Remove(p);
         }
 
         // Objet disparu chez un autre sans automate a rejouer ici (Consume) : on le cache.
@@ -536,6 +574,7 @@ namespace MWCoop
                 if (p == null || p.Body == null) unknown[id] = now + 10f;
             }
             if (p == null || p.Body == null || p == held) return;
+            p.RemoteAt = now;
             if (state == 3) { Glue(p, who, car, pos, rot, vel); return; }
             Unride(p);
             p.Pos = pos; p.Rot = rot; p.Vel = vel;
