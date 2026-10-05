@@ -23,14 +23,16 @@
 //    logiciel).
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
-//   /capture <png> <menu|coop|voiture|notes|notesvide|journaux|attente|maj|sansjeu|salon|salon-invite>
+//   /capture <png> <menu|coop|voiture|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|salon-invite|salon-udp>
 //            [/theme clair|sombre] [/lang fr|en] [/echelle k] : rendu d'un etat dans un PNG ;
-//   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] : salon sans fenetre visible (fenetre "message
-//            only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon et
-//            lance des que l'invite est pret ; l'invite rejoint et se met pret. Chacun ecrit son lancement.ini et le
-//            recopie dans le journal, SANS lancer le jeu. Pas de mise a jour ; salon sur 127.0.0.1 seulement.
+//   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
+//            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
+//            et lance des que l'invite est pret (et son test UDP fini) ; l'invite rejoint et se met pret. Chacun ecrit
+//            son lancement.ini et le recopie dans le journal, SANS lancer le jeu. Pas de mise a jour ; salon sur
+//            127.0.0.1 seulement. /sansudp : l'hote ne repond pas aux sondes UDP (port UDP "pas redirige").
 //   /maj <dossier du jeu> <journal> [/depot proprietaire/depot] : mise a jour sans fenetre, journal = etat final ;
-//   /jeu <journal> : jeu trouve (dossier, version).
+//   /jeu <journal> : jeu trouve (dossier, version) ;
+//   /zip <fichier.zip> : le zip des journaux (bouton de la page JOURNAUX), ecrit la ou on le demande, sans explorateur.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -48,6 +50,7 @@ using std::max;
 #include <winhttp.h>
 #include <commdlg.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <string>
 #include <vector>
 #include <atomic>
@@ -106,7 +109,9 @@ static std::wstring g_launchInfo;
 enum { LB_NONE, LB_HOST, LB_CONNECTING, LB_GUEST };
 enum { PARTIE_CONTINUER, PARTIE_NOUVELLE };
 static const int kLobbyMax = 8;                     // joueurs dans un salon (hote compris)
-struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; };
+// Test UDP du salon (le jeu passe en UDP sur le port du salon) : sans objet (ancien lanceur), en cours, recu, bloque.
+enum { UDP_NA, UDP_WAIT, UDP_OK, UDP_FAIL };
+struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; int udp; DWORD since; };
 static std::atomic<int> g_lobby(LB_NONE);
 static CRITICAL_SECTION g_lcs;
 static std::vector<LobbyPeer> g_peers;
@@ -118,6 +123,10 @@ static bool g_joinFallback;                         // invite : pas de salon che
 static std::string g_rejectWhy;                     // invite : raison du refus (sous g_lcs)
 static std::wstring g_testSalon, g_testSalonLog;    // /testsalon hote|invite <journal>
 static std::wstring g_testPartie = L"continuer";    // /testsalon : choix de l'hote
+static bool g_testNoUdp;                            // /testsalon hote ... /sansudp : l'hote ne repond pas en UDP
+static std::atomic<int> g_udpMine(UDP_NA);          // invite : reponse UDP de l'hote a ses sondes
+static std::atomic<bool> g_hostUdpTest(false);      // invite : l'hote fait le test UDP (sinon : ancien lanceur)
+static std::wstring g_launchWarn;                   // ecran d'attente : avertissement (UDP non confirme)
 static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return g_fr ? fr : en; }
 
 static void SetStatus(int kind, const wchar_t *fmt, ...)
@@ -771,7 +780,7 @@ static void StartUpdate()
 enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_COUNT };
 static int g_tab = -1;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_COUNT };
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_COUNT };
 struct Button { RectF r; float hover; bool visible, enabled; };
 static Button g_btn[B_COUNT];
 static int g_hot = -1, g_pressed = -1;
@@ -790,6 +799,8 @@ static void Layout()
     g_btn[B_THEME].r = RectF(62, 100, 26, 26);   // coin du panneau, a gauche du logo
     g_btn[B_LOGS].r = RectF(368, 100, 26, 26);   // coin oppose : page des journaux
     g_btn[B_COLOR].r = RectF(756, 439, 180, 30);  // onglet VOITURE : "Autre couleur..."
+    g_btn[B_LOGDIR].r = RectF(616, 122, 136, 26); // page JOURNAUX : ouvrir le dossier, zip a envoyer
+    g_btn[B_LOGZIP].r = RectF(760, 122, 176, 26);
 }
 
 static void UpdateButtons()
@@ -809,6 +820,8 @@ static void UpdateButtons()
     g_btn[B_LOGS].enabled = true;
     g_btn[B_COLOR].visible = menu && game && g_tab == TAB_CAR;
     g_btn[B_COLOR].enabled = true;
+    g_btn[B_LOGDIR].visible = g_btn[B_LOGZIP].visible = menu && game && g_tab == TAB_LOGS;
+    g_btn[B_LOGDIR].enabled = g_btn[B_LOGZIP].enabled = true;
 }
 
 // ---------------------------------------------------------------- dessin
@@ -1067,10 +1080,11 @@ static const wchar_t *TabName(int t)
     static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE", L"SALON" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR", L"LOBBY" };
     return g_fr ? fr[t] : en[t];
 }
-static bool TabVisible(int t) { return t == TAB_LOBBY ? g_lobby != LB_NONE : t != TAB_LOGS; }
+// JOURNAUX : onglet aussi (l'icone seule, les amis de JD ne la trouvaient pas).
+static bool TabVisible(int t) { return t == TAB_LOBBY ? g_lobby != LB_NONE : true; }
 static void LayoutTabs()
 {
-    static const int order[] = { TAB_LOBBY, TAB_COOP, TAB_CAR, TAB_NOTES };
+    static const int order[] = { TAB_LOBBY, TAB_COOP, TAB_CAR, TAB_NOTES, TAB_LOGS };
     float x = 440, pad = 12, gap = 6;
     Bitmap bm(1, 1);
     Graphics mg(&bm);
@@ -1321,15 +1335,18 @@ static void DrawNotes(Graphics &g)
     }
 }
 
-// ---------------------------------------------------------------- page JOURNAUX (bouton rond)
+// ---------------------------------------------------------------- page JOURNAUX (onglet, et bouton rond)
 // Les journaux du chargeur et du mod (MWCoop\logs\chargeur.log, mwcoop.log, remplaces a chaque lancement du jeu),
 // ceux du profil invite (MWCoop\profils\invite\logs) et celui de Unity s'il existe (mywintercar_Data\output_log.txt).
-// Un clic ouvre le journal, l'icone dossier le montre dans l'explorateur.
+// Un clic ouvre le journal, l'icone dossier le montre dans l'explorateur. En haut : "Ouvrir le dossier" (celui du
+// dernier journal ouvert, sinon MWCoop\) et "Creer un zip a envoyer" (tous les journaux + mwcoop.ini et
+// lancement.ini, sur le Bureau : un seul fichier a envoyer).
 enum { LOG_MOD, LOG_LOADER, LOG_UNITY };
 struct LogEntry { std::wstring path, profile; int kind; bool guest; uint64_t bytes; FILETIME mt; int errors; };
 static std::vector<LogEntry> g_logList;
 static int g_logRowHot = -1, g_logPart = 0;          // g_logPart : 0 la ligne (ouvrir), 1 dossier
-static const RectF kLogsFolderR(796, 124, 140, 22), kLogsR(452, 152, 488, 374);
+static const RectF kLogsR(452, 156, 488, 370);
+static std::wstring g_logSelPath;                     // dernier journal ouvert d'un clic (bouton "Ouvrir le dossier")
 static const float kLogRowH = 54;
 
 static std::wstring LogsDir() { return g_gameDir + L"MWCoop\\logs\\"; }
@@ -1482,8 +1499,20 @@ static RectF LogIconRect(const RectF &r) { return RectF(r.X + r.Width - 38, r.Y 
 static void DrawLogs(Graphics &g)
 {
     DrawPanel(g);
-    Text(g, T(L"JOURNAUX", L"LOGS"), RectF(460, 122, 120, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
-    Text(g, T(L"Ouvrir le dossier", L"Open folder"), kLogsFolderR, 12, FontStyleUnderline, kInk, StringAlignmentFar);
+    Text(g, T(L"JOURNAUX", L"LOGS"), RectF(460, 122, 150, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
+    DrawSmallButton(g, B_LOGDIR, T(L"Ouvrir le dossier", L"Open folder"));
+    {   // zip a envoyer : pilule pleine (l'action a faire quand ca plante)
+        Button &b = g_btn[B_LOGZIP];
+        RectF r = b.r;
+        if (g_pressed == B_LOGZIP && g_hot == B_LOGZIP) r.Offset(0, 1);
+        GraphicsPath zp;
+        RoundRect(zp, r, r.Height / 2);
+        LinearGradientBrush lg(r, kAcc, kAcc2, LinearGradientModeHorizontal);
+        g.FillPath(&lg, &zp);
+        SolidBrush hi(Color((BYTE)(60 * b.hover), 255, 255, 255));
+        g.FillPath(&hi, &zp);
+        Text(g, T(L"Cr\u00E9er un zip \u00E0 envoyer", L"Create a zip to send"), r, 12, FontStyleBold, kOnAcc);
+    }
     if (g_logList.empty())
         Para(g, T(L"Aucun journal pour l'instant : le jeu en \u00E9crit \u00E0 chaque lancement avec MWCoop.", L"No logs yet: the game writes them every time it starts with MWCoop."),
              kLogsR, 13, kGrey, StringAlignmentCenter);
@@ -1530,10 +1559,10 @@ static void DrawLogs(Graphics &g)
     }
     Pen sep(TH(sep), 1);
     g.DrawLine(&sep, kOptPanel.X + 18, 536.0f, kOptPanel.X + kOptPanel.Width - 18, 536.0f);
-    Para(g, T(L"Un clic ouvre le journal. Un souci en jeu : envoie mwcoop.log et chargeur.log, juste apr\u00E8s la partie "
-              L"(ils sont remplac\u00E9s \u00E0 chaque lancement du jeu).",
-              L"Click a log to open it. Trouble in game: send mwcoop.log and chargeur.log right after the session "
-              L"(they are replaced every time the game starts)."),
+    Para(g, T(L"Un souci en jeu : \u00AB Cr\u00E9er un zip \u00E0 envoyer \u00BB juste apr\u00E8s la partie (les journaux sont "
+              L"remplac\u00E9s \u00E0 chaque lancement du jeu), puis envoie le zip pos\u00E9 sur le Bureau.",
+              L"Trouble in game: \"Create a zip to send\" right after the session (logs are replaced every time the game "
+              L"starts), then send the zip saved on the Desktop."),
          RectF(kOptPanel.X + 20, 540, kOptPanel.Width - 40, 42), 12, kGrey, StringAlignmentCenter);
 }
 
@@ -1553,15 +1582,10 @@ static int LogRowAt(float x, float y, int *part)
 
 static bool LogsMouseDown(float x, float y)
 {
-    if (kLogsFolderR.Contains(x, y)) {
-        EnsureModDir();
-        CreateDirectoryW(LogsDir().c_str(), NULL);
-        ShellExecuteW(g_wnd, L"open", LogsDir().c_str(), NULL, NULL, SW_SHOWNORMAL);
-        return true;
-    }
     int part, i = LogRowAt(x, y, &part);
     if (i < 0) return kOptPanel.Contains(x, y);
     std::wstring path = g_logList[i].path;
+    g_logSelPath = path;
     if (part == 1) {
         std::wstring arg = L"/select,\"" + path + L"\"";
         ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
@@ -2218,6 +2242,7 @@ static void DrawUI(Graphics &g)
         Para(g, T(L"Une petite fen\u00EAtre Unity peut d'abord demander la r\u00E9solution : choisis-la puis clique sur Play.",
                   L"A small Unity window may ask for the resolution first: pick it, then click Play."),
              RectF(76, 436, 304, 40), 11.5f, WithA(kGrey, 0.9f));
+        if (!g_launchWarn.empty()) Para(g, g_launchWarn, RectF(76, 236, 304, 48), 12, Color(255, 205, 120, 30), StringAlignmentCenter);
     } else {
         DrawTabs(g);
         DrawOptions(g);
@@ -2573,6 +2598,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
 
 static void Launch(int mode, const char *partie = NULL)
 {
+    if (mode == MODE_SOLO) g_launchWarn.clear();   // (avertissement UDP : salon seulement)
     if (g_gameDir.empty() || g_busy || !g_modOk) { TestLog("lancement impossible (jeu=%d occupe=%d mod=%d)", (int)!g_gameDir.empty(), (int)g_busy, (int)g_modOk); return; }
     std::wstring addr = Trim(g_fields[1].text);
     const Opt *po = OptByKey("Port");
@@ -2655,8 +2681,20 @@ static void Launch(int mode, const char *partie = NULL)
 //   GO (u8 partie).
 // GO : l'hote lance son jeu (lancement.ini : Partie=continuer|nouvelle, il entre en partie tout seul) ; chaque invite
 // attend ~4 s (deux jeux sur le meme PC ne demarrent pas ensemble) puis lance le sien en invite : il suit l'hote.
+//
+// Test UDP (le salon passe en TCP, le jeu en UDP : une box qui ne redirige que le TCP laisse entrer dans le salon,
+// puis le jeu de l'invite ne recoit jamais rien). Pendant le salon, l'hote ecoute aussi en UDP sur le port :
+//   sonde de l'invite  : "MWU1" + 8 octets (nonce de l'invite) + u8 (son numero du salon)   [13 octets]
+//   reponse de l'hote  : "MWU2" + les 8 memes octets                                         [12 octets]
+// L'invite sonde toutes les 2 s (10 essais, puis toutes les 5 s) jusqu'a la reponse. L'hote note la sonde recue et
+// l'ajoute a STATE, APRES le choix de partie : u8 n, puis n fois (u8 numero, u8 etat UDP_*). Un ancien lanceur ignore
+// ces octets en trop (et les sondes : il n'ecoute pas en UDP). La socket UDP de l'hote est fermee par LobbyClose(),
+// donc avant le lancement de son jeu (qui ouvre ce meme port UDP).
 enum { LB_PROTO = 1, M_HELLO = 1, M_WELCOME, M_REJECT, M_STATE, M_READY, M_GO, M_PING, M_PONG, M_SKIN };
 static SOCKET g_listen = INVALID_SOCKET, g_guestSock = INVALID_SOCKET;
+static SOCKET g_udpHost = INVALID_SOCKET;           // hote : ecoute UDP du salon (sous g_lcs)
+static int g_udpHostErr;                            // hote : erreur de l'ouverture du port UDP (0 = ouvert)
+static const DWORD kUdpWaitMs = 22000;              // hote : sans sonde apres ce delai, l'UDP de l'invite est bloque
 struct Conn { SOCKET s; int id; };
 static std::vector<Conn> g_conns;                   // hote : invites du salon (sous g_lcs)
 static std::atomic<bool> g_goSent(false);
@@ -2782,6 +2820,8 @@ static void BroadcastState()
     w.u8((int)g_peers.size());
     for (auto &p : g_peers) { w.u8(p.id); w.str(p.name); w.str(p.skin); w.str(p.ver); w.u8(p.ready); w.u16(min(p.ping, 9999)); }
     w.u8(g_partie);
+    w.u8((int)g_peers.size());   // test UDP de chacun (ignore par un ancien lanceur)
+    for (auto &p : g_peers) { w.u8(p.id); w.u8(p.udp); }
     for (auto &c : g_conns) SendMsg(c.s, w);
     LeaveCriticalSection(&g_lcs);
 }
@@ -2821,7 +2861,7 @@ static void LobbySession(SOCKET s)
     EnterCriticalSection(&g_lcs);   // (WELCOME envoye sous le verrou : pas de STATE glisse avant lui)
     for (int k = 1; k < kLobbyMax && id < 0; k++) if (!PeerById(k)) id = k;
     if (id > 0) {
-        g_peers.push_back({ id, name, skin, ver, false, 0 });
+        g_peers.push_back({ id, name, skin, ver, false, 0, UDP_WAIT, GetTickCount() });
         g_conns.push_back({ s, id });
         Wr w; w.u8(M_WELCOME); w.u8(id); SendMsg(s, w);
     }
@@ -2889,6 +2929,122 @@ static std::wstring LocalAddresses()
     return out;
 }
 
+// --- test UDP
+#ifndef SIO_UDP_CONNRESET
+#define SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR, 12)
+#endif
+// Socket UDP sans l'erreur "connexion reinitialisee" de Windows (un ICMP "port injoignable" apres un envoi ferait
+// echouer le recvfrom suivant).
+static SOCKET UdpSocket()
+{
+    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == INVALID_SOCKET) return s;
+    BOOL off = FALSE;
+    DWORD got = 0;
+    WSAIoctl(s, SIO_UDP_CONNRESET, &off, sizeof(off), NULL, 0, &got, NULL, NULL);
+    return s;
+}
+// Hote : repond aux sondes et note l'invite qui a sonde ; s'arrete quand LobbyClose() ferme la socket.
+static DWORD WINAPI UdpHostThread(void *param)
+{
+    SOCKET s = (SOCKET)param;
+    char buf[64];
+    for (;;) {
+        sockaddr_in from = {};
+        int fl = sizeof(from);
+        int n = recvfrom(s, buf, sizeof(buf), 0, (sockaddr *)&from, &fl);
+        if (n < 0) {
+            int e = WSAGetLastError();
+            if (e == WSAECONNRESET || e == WSAEMSGSIZE) continue;
+            break;   // (socket fermee : fin du salon)
+        }
+        if (n < 12 || memcmp(buf, "MWU1", 4)) continue;
+        char reply[12];
+        memcpy(reply, "MWU2", 4);
+        memcpy(reply + 4, buf + 4, 8);
+        sendto(s, reply, sizeof(reply), 0, (sockaddr *)&from, fl);
+        if (n < 13) continue;
+        int id = (uint8_t)buf[12];
+        bool changed = false;
+        std::string name;
+        EnterCriticalSection(&g_lcs);
+        LobbyPeer *p = id != 0 ? PeerById(id) : NULL;
+        if (p && p->udp != UDP_OK) { p->udp = UDP_OK; changed = true; name = p->name; }
+        LeaveCriticalSection(&g_lcs);
+        if (changed) {
+            char ip[64] = "";
+            inet_ntop(AF_INET, &from.sin_addr, ip, sizeof(ip));
+            TestLog("udp : sonde de %s (joueur %d) recue de %s:%d, reponse envoyee", name.c_str(), id, ip, ntohs(from.sin_port));
+            BroadcastState();
+        }
+    }
+    return 0;
+}
+static void UdpHostOpen(u_long bindAddr)
+{
+    g_udpHostErr = 0;
+    if (g_testNoUdp) { TestLog("udp : pas d'ecoute UDP (essai /sansudp)"); return; }
+    SOCKET s = UdpSocket();
+    sockaddr_in a = {};
+    a.sin_family = AF_INET;
+    a.sin_addr.s_addr = htonl(bindAddr);
+    a.sin_port = htons((u_short)g_lobbyPort);
+    if (s == INVALID_SOCKET || bind(s, (sockaddr *)&a, sizeof(a)) != 0) {
+        g_udpHostErr = WSAGetLastError();
+        if (s != INVALID_SOCKET) closesocket(s);
+        TestLog("udp : ecoute impossible sur le port %d (erreur %d)", g_lobbyPort, g_udpHostErr);
+        return;
+    }
+    EnterCriticalSection(&g_lcs);
+    g_udpHost = s;
+    LeaveCriticalSection(&g_lcs);
+    HANDLE t = CreateThread(NULL, 0, UdpHostThread, (void *)s, 0, NULL);
+    if (t) CloseHandle(t);
+    TestLog("udp : ecoute sur le port UDP %d", g_lobbyPort);
+}
+
+// Invite : sonde l'hote (2 s entre deux essais ; apres 10 essais sans reponse : bloque, puis un essai toutes les
+// 5 s au cas ou l'hote corrige sa box). Fin : reponse recue, l'hote dit avoir recu une sonde, ou salon quitte.
+static DWORD WINAPI UdpProbeThread(void *param)
+{
+    int gen = (int)(intptr_t)param;
+    addrinfo hints = {}, *res = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    if (getaddrinfo(Narrow(g_lobbyAddr).c_str(), NULL, &hints, &res) != 0 || !res) { TestLog("udp : adresse de l'hote introuvable"); return 0; }
+    sockaddr_in to = *(sockaddr_in *)res->ai_addr;
+    freeaddrinfo(res);
+    to.sin_port = htons((u_short)g_lobbyPort);
+    SOCKET s = UdpSocket();   // (port quelconque ; fermee ici meme, au plus 1/4 s apres la fin du salon)
+    if (s == INVALID_SOCKET) return 0;
+    char probe[13];
+    LARGE_INTEGER qpc;
+    QueryPerformanceCounter(&qpc);
+    uint64_t nonce = (uint64_t)qpc.QuadPart * 6364136223846793005ULL ^ ((uint64_t)GetCurrentProcessId() << 32) ^ GetTickCount();
+    memcpy(probe, "MWU1", 4);
+    memcpy(probe + 4, &nonce, 8);
+    probe[12] = (char)(uint8_t)g_myId;
+    for (int tries = 0; gen == g_lobbyGen && g_udpMine != UDP_OK; tries++) {
+        if (tries == 10 && g_udpMine == UDP_WAIT) { g_udpMine = UDP_FAIL; TestLog("udp : aucune reponse de l'hote apres 10 essais"); }
+        if (sendto(s, probe, sizeof(probe), 0, (sockaddr *)&to, sizeof(to)) < 0) TestLog("udp : envoi impossible (erreur %d)", WSAGetLastError());
+        DWORD t0 = GetTickCount(), wait = tries < 10 ? 2000 : 5000;
+        while (gen == g_lobbyGen && g_udpMine != UDP_OK && GetTickCount() - t0 < wait) {
+            fd_set rd;
+            FD_ZERO(&rd); FD_SET(s, &rd);
+            timeval tv = { 0, 250000 };   // (quart de seconde : suit la fermeture du salon)
+            if (select(0, &rd, NULL, NULL, &tv) <= 0) continue;
+            char buf[64];
+            int n = recv(s, buf, sizeof(buf), 0);
+            if (n == 12 && !memcmp(buf, "MWU2", 4) && !memcmp(buf + 4, &nonce, 8)) {
+                g_udpMine = UDP_OK;
+                TestLog("udp : reponse de l'hote (essai %d, %lu ms)", tries + 1, GetTickCount() - t0);
+            }
+        }
+    }
+    closesocket(s);
+    return 0;
+}
+
 static void LobbyHost()
 {
     SavePlayer();
@@ -2915,6 +3071,7 @@ static void LobbyHost()
     g_conns.clear();
     g_peers.push_back({ 0, MyName(), MySkin(), MyVersion(), true, 0 });
     LeaveCriticalSection(&g_lcs);
+    UdpHostOpen(g_testSalon.empty() ? INADDR_ANY : INADDR_LOOPBACK);   // (meme adresse que le salon TCP)
     g_mySkinSent = MySkin();
     g_partie = PARTIE_CONTINUER;
     g_goSent = false;
@@ -2954,12 +3111,16 @@ static void LobbyClose()
     g_lobby = LB_NONE;
     if (g_listen != INVALID_SOCKET) { closesocket(g_listen); g_listen = INVALID_SOCKET; }
     EnterCriticalSection(&g_lcs);
+    // Port UDP rendu tout de suite : le jeu de l'hote l'ouvre juste apres (LANCER : LobbyClose puis Launch). La
+    // sonde de l'invite (UdpProbeThread) s'arrete d'elle-meme sur le changement de g_lobbyGen.
+    if (g_udpHost != INVALID_SOCKET) { closesocket(g_udpHost); g_udpHost = INVALID_SOCKET; }
     for (auto &c : g_conns) shutdown(c.s, SD_BOTH);   // les fils des sessions ferment leurs sockets
     g_conns.clear();
     g_peers.clear();
     if (g_guestSock != INVALID_SOCKET) shutdown(g_guestSock, SD_BOTH);   // GuestThread la ferme
     LeaveCriticalSection(&g_lcs);
     g_meReady = false;
+    g_udpMine = UDP_NA;
     g_lobbyHot = -1;
     if (g_tab == TAB_LOBBY) g_tab = -1;
     LayoutTabs();
@@ -2982,6 +3143,20 @@ static void HostStart()
         if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
         if (g_lobby != LB_HOST || g_goSent) return;   // (le salon a pu changer pendant la question)
     }
+    // UDP pas confirme pour un invite : on lance quand meme, mais on le dit (son jeu risque de ne rien recevoir).
+    std::string noUdp;
+    EnterCriticalSection(&g_lcs);
+    for (auto &p : g_peers) if (p.id != 0 && p.udp != UDP_OK && p.udp != UDP_NA) noUdp += (noUdp.empty() ? "" : ", ") + p.name;
+    LeaveCriticalSection(&g_lcs);
+    g_launchWarn.clear();
+    if (!noUdp.empty()) {
+        wchar_t wb[300];
+        swprintf_s(wb, T(L"UDP non confirm\u00E9 pour %s : redirige le port UDP %d (pas seulement TCP) sur ta box",
+                         L"UDP not confirmed for %s: forward UDP port %d (not just TCP) on your router"), Widen(noUdp, CP_UTF8).c_str(), g_lobbyPort);
+        g_launchWarn = wb;
+        SetStatus(K_WARN, L"%s", wb);
+        TestLog("salon : LANCER avec l'UDP non confirme pour %s", noUdp.c_str());
+    }
     int partie = g_partie;
     g_goSent = true;
     Wr w;
@@ -2999,6 +3174,16 @@ static void HostStart()
         Sleep(50);
     }
     LobbyClose();
+    if (!g_testSalon.empty()) {   // essai : le port UDP est-il bien rendu au jeu ?
+        SOCKET u = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        sockaddr_in a = {};
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        a.sin_port = htons((u_short)g_lobbyPort);
+        bool free = u != INVALID_SOCKET && bind(u, (sockaddr *)&a, sizeof(a)) == 0;
+        TestLog("udp : port UDP %d libre pour le jeu apres la fermeture du salon : %s", g_lobbyPort, free ? "oui" : "NON");
+        if (u != INVALID_SOCKET) closesocket(u);
+    }
     Launch(MODE_HOST, PartieName(partie));
 }
 
@@ -3091,6 +3276,9 @@ static DWORD WINAPI GuestThread(void *param)
     g_lobby = LB_GUEST;
     SetStatus(K_OK, T(L"Dans le salon de %s", L"In %s's lobby"), g_lobbyAddr.c_str());
     TestLog("salon : entre (joueur %d)", myId);
+    g_udpMine = UDP_WAIT;   // test UDP : le jeu passera par la, pas par le TCP du salon
+    g_hostUdpTest = false;
+    if (HANDLE ut = CreateThread(NULL, 0, UdpProbeThread, (void *)(intptr_t)gen, 0, NULL)) CloseHandle(ut);
     to = 60000;   // (l'hote envoie un ping toutes les 2 s)
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
     bool go = false;
@@ -3109,6 +3297,17 @@ static DWORD WINAPI GuestThread(void *param)
                 list += (list.empty() ? "" : ", ") + p.name + " (" + (p.id == 0 ? "hote" : p.ready ? "pret" : "pas pret") + ", " + p.skin + ", " + p.ver + ")";
             }
             int partie = q.u8();
+            if (q.ok && q.p < m.size()) {   // test UDP de chacun (hote recent)
+                g_hostUdpTest = true;
+                int k = q.u8();
+                for (int i = 0; i < k && q.ok; i++) {
+                    int id = q.u8(), udp = q.u8();
+                    if (!q.ok) break;
+                    for (auto &p : peers) if (p.id == id) p.udp = udp <= UDP_FAIL ? udp : UDP_NA;
+                    if (id == g_myId && udp == UDP_OK && g_udpMine != UDP_OK) { g_udpMine = UDP_OK; TestLog("udp : l'hote a recu ma sonde"); }
+                }
+                q.ok = true;   // (extension abimee : la liste reste bonne)
+            }
             if (q.ok) {
                 EnterCriticalSection(&g_lcs);
                 g_peers = peers;
@@ -3174,6 +3373,8 @@ static void GuestToggleReady()
     Wr w; w.u8(M_READY); w.u8(g_meReady ? 1 : 0);
     GuestSend(w);
     TestLog("salon : moi pret=%d", (int)g_meReady);
+    if (g_meReady && g_udpMine == UDP_FAIL && g_hostUdpTest)
+        SetStatus(K_WARN, T(L"Pr\u00EAt, mais UDP bloqu\u00E9 : l'h\u00F4te doit rediriger le port UDP %d", L"Ready, but UDP is blocked: the host must forward UDP port %d"), g_lobbyPort);
 }
 
 // Toutes les 2 s, l'hote mesure le ping de chacun ; chaque seconde, l'apparence choisie dans l'onglet COOP est
@@ -3198,6 +3399,10 @@ static void LobbyTick()
     }
     if (lobby != LB_HOST || now - lastPing < 2000) return;
     lastPing = now;
+    EnterCriticalSection(&g_lcs);   // pas de sonde UDP de l'invite apres ~20 s : bloque (box de l'hote, le plus souvent)
+    for (auto &p : g_peers)
+        if (p.id != 0 && p.udp == UDP_WAIT && now - p.since > kUdpWaitMs) { p.udp = UDP_FAIL; TestLog("udp : aucune sonde de %s (joueur %d)", p.name.c_str(), p.id); }
+    LeaveCriticalSection(&g_lcs);
     Wr w; w.u8(M_PING); w.u32(now);
     EnterCriticalSection(&g_lcs);
     for (auto &c : g_conns) SendMsg(c.s, w);
@@ -3265,7 +3470,25 @@ static void DrawLobby(Graphics &g)
     std::wstring sub;
     if (host) sub = std::wstring(T(L"Port ", L"Port ")) + std::to_wstring(g_lobbyPort) + T(L" (UDP et TCP) \u00B7 adresse locale : ", L" (UDP and TCP) \u00B7 local address: ") + (g_myAddresses.empty() ? L"?" : g_myAddresses);
     else sub = std::wstring(T(L"H\u00F4te : ", L"Host: ")) + g_lobbyAddr + L":" + std::to_wstring(g_lobbyPort);
-    Text(g, sub, RectF(460, 148, 476, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    // Test UDP : l'invite (sa sonde, ou l'hote qui dit l'avoir recue) ; l'hote, chaque invite (sous la colonne du ping)
+    int myUdp = g_udpMine;
+    std::wstring udpLine;
+    Color udpC = kGrey;
+    if (lobby == LB_GUEST) {
+        if (myUdp == UDP_OK) { udpLine = T(L"UDP : OK \u2713", L"UDP: OK \u2713"); udpC = kAcc; }
+        else if (myUdp == UDP_FAIL && !g_hostUdpTest) udpLine = T(L"UDP : non v\u00E9rifi\u00E9 (lanceur de l'h\u00F4te ancien)", L"UDP: not checked (host has an old launcher)");
+        else if (myUdp == UDP_FAIL) { udpLine = T(L"UDP : bloqu\u00E9", L"UDP: blocked"); udpC = kRed; }
+        else if (myUdp == UDP_WAIT) udpLine = T(L"UDP : test en cours\u2026", L"UDP: testing\u2026");
+    }
+    float subW = 476;
+    if (!udpLine.empty()) {
+        Bitmap mb(1, 1);
+        Graphics mg(&mb);
+        float uw = MeasureW(mg, udpLine, 11.5f, FontStyleBold) + 4;
+        Text(g, udpLine, RectF(936 - uw, 148, uw, 20), 11.5f, FontStyleBold, udpC, StringAlignmentFar);
+        subW -= uw + 8;
+    }
+    Text(g, sub, RectF(460, 148, subW, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
 
     if (lobby == LB_CONNECTING) {
         Text(g, T(L"Connexion au salon\u2026", L"Connecting to the lobby\u2026"), RectF(460, 260, 476, 30), 16, FontStyleBold, kInk);
@@ -3318,7 +3541,14 @@ static void DrawLobby(Graphics &g)
             if (p.id != 0) {
                 wchar_t pb[32];
                 swprintf_s(pb, L"%d ms", p.ping);
-                Text(g, pb, RectF(r.X + r.Width - 70, r.Y, 60, r.Height), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+                int udp = me && myUdp == UDP_OK ? UDP_OK : p.udp;   // (l'invite local : sa propre sonde compte)
+                if (me && udp != UDP_OK && myUdp == UDP_FAIL && g_hostUdpTest) udp = UDP_FAIL;
+                if (udp == UDP_NA) Text(g, pb, RectF(r.X + r.Width - 70, r.Y, 60, r.Height), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+                else {
+                    Text(g, pb, RectF(r.X + r.Width - 74, r.Y + 3, 64, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+                    const wchar_t *ul = udp == UDP_OK ? L"UDP \u2713" : udp == UDP_FAIL ? T(L"UDP bloqu\u00E9", L"UDP blocked") : L"UDP \u2026";
+                    Text(g, ul, RectF(r.X + r.Width - 94, r.Y + 22, 84, 18), 10.5f, FontStyleBold, udp == UDP_OK ? kAcc : udp == UDP_FAIL ? kRed : kGrey, StringAlignmentFar);
+                }
             }
         }
         g.ResetClip();
@@ -3361,7 +3591,31 @@ static void DrawLobby(Graphics &g)
                                    L"Once everyone is ready, START launches everyone's game; the guests follow your game.")
                                : T(L"Clique sur PR\u00CAT. Ton jeu d\u00E9marre tout seul quand l'h\u00F4te lance la partie.",
                                    L"Click READY. Your game starts by itself when the host starts the session.");
-    Para(g, hint, RectF(kOptPanel.X + 20, 536, kOptPanel.Width - 40, 44), 12, kGrey, StringAlignmentCenter);
+    // UDP bloque (ou port UDP pris chez l'hote) : l'avertissement prend la place du conseil
+    std::wstring warn;
+    if (host && g_udpHostErr) {
+        wchar_t wb[200];
+        swprintf_s(wb, T(L"Port UDP %d d\u00E9j\u00E0 pris sur ce PC (erreur %d) : le jeu ne pourra pas l'ouvrir. Ferme le programme qui l'occupe.",
+                         L"UDP port %d is already in use on this PC (error %d): the game will not be able to open it. Close the program using it."), g_lobbyPort, g_udpHostErr);
+        warn = wb;
+    } else if (host) {
+        std::string names;
+        for (auto &p : peers) if (p.id != 0 && p.udp == UDP_FAIL) names += (names.empty() ? "" : ", ") + p.name;
+        if (!names.empty()) {
+            wchar_t wb[300];
+            swprintf_s(wb, T(L"UDP bloqu\u00E9 pour %s : redirige le port UDP %d (pas seulement TCP) sur ta box, vers ce PC. Le salon passe en TCP, le jeu en UDP.",
+                             L"UDP blocked for %s: forward UDP port %d (not just TCP) on your router to this PC. The lobby uses TCP, the game uses UDP."),
+                       Widen(names, CP_UTF8).c_str(), g_lobbyPort);
+            warn = wb;
+        }
+    } else if (lobby == LB_GUEST && myUdp == UDP_FAIL && g_hostUdpTest) {
+        wchar_t wb[300];
+        swprintf_s(wb, T(L"UDP bloqu\u00E9 : l'h\u00F4te doit rediriger le port UDP %d (pas seulement TCP) sur sa box. Le salon passe en TCP, le jeu en UDP.",
+                         L"UDP blocked: the host must forward UDP port %d (not just TCP) on their router. The lobby uses TCP, the game uses UDP."), g_lobbyPort);
+        warn = wb;
+    }
+    if (!warn.empty()) Para(g, warn, RectF(kOptPanel.X + 20, 536, kOptPanel.Width - 40, 44), 12, Color(255, 205, 120, 30), StringAlignmentCenter);
+    else Para(g, hint, RectF(kOptPanel.X + 20, 536, kOptPanel.Width - 40, 44), 12, kGrey, StringAlignmentCenter);
 }
 
 static bool LobbyClick(float x, float y)
@@ -3390,7 +3644,11 @@ static void TestSalonStep()
         if (g_lobby != LB_HOST) return;
         int guests, notReady;
         GuestCounts(&guests, &notReady);
-        bool can = guests >= 1 && LobbyCanStart();
+        bool udpDone = true;   // (et le test UDP de chacun termine : recu, ou bloque apres ~20 s)
+        EnterCriticalSection(&g_lcs);
+        for (auto &p : g_peers) if (p.id != 0 && p.udp == UDP_WAIT) udpDone = false;
+        LeaveCriticalSection(&g_lcs);
+        bool can = guests >= 1 && LobbyCanStart() && udpDone;
         if (!can) allReadySince = 0;
         else if (!allReadySince) { allReadySince = GetTickCount(); TestLog("test : tous les invites sont prets"); }
         else if (GetTickCount() - allReadySince > 1500) { TestLog("test : LANCER"); HostStart(); }
@@ -3398,6 +3656,153 @@ static void TestSalonStep()
         if (!tried && t > 2000) { tried = true; LobbyJoin(); }
         if (g_lobby == LB_GUEST && !readied && t > 4500) { readied = true; TestLog("test : clic sur PRET"); GuestToggleReady(); }
     }
+}
+
+// ---------------------------------------------------------------- page JOURNAUX : dossier, zip a envoyer
+// "Ouvrir le dossier" : le dernier journal ouvert d'un clic (selectionne dans l'explorateur), sinon <jeu>\MWCoop\,
+// sinon %LOCALAPPDATA%\MWCoop\ (dossier du jeu en lecture seule).
+static void LogsOpenFolder()
+{
+    if (!g_logSelPath.empty() && FileExists(g_logSelPath)) {
+        std::wstring arg = L"/select,\"" + g_logSelPath + L"\"";
+        ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
+        return;
+    }
+    auto isDir = [](const std::wstring &d) { DWORD a = GetFileAttributesW(d.c_str()); return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY); };
+    std::wstring d = g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\", ld = LocalDir();
+    if ((d.empty() || !isDir(d)) && !ld.empty() && isDir(ld)) d = ld;
+    else if (!d.empty() && !isDir(d)) EnsureModDir();
+    if (!d.empty()) ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
+}
+
+// Zip SANS compression (methode 0 "stored") : en-tete local + donnees par fichier, puis repertoire central et fin ;
+// noms en UTF-8 (bit 11). Pas de bibliotheque, l'explorateur de Windows et tous les outils l'ouvrent.
+static uint32_t Crc32(uint32_t crc, const uint8_t *p, size_t n)
+{
+    static uint32_t tab[256];
+    if (!tab[1]) for (uint32_t i = 0; i < 256; i++) { uint32_t c = i; for (int k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320u ^ (c >> 1) : c >> 1; tab[i] = c; }
+    crc = ~crc;
+    while (n--) crc = tab[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
+    return ~crc;
+}
+// Contenu d'un journal (le jeu peut l'avoir encore ouvert). Au-dela de 16 Mo (output_log de Unity) : le 1er Mo et les
+// derniers, avec une ligne qui le dit.
+static bool ReadForZip(const std::wstring &path, std::string &out, FILETIME *mt)
+{
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size;
+    bool ok = GetFileSizeEx(f, &size) && GetFileTime(f, NULL, NULL, mt);
+    const LONGLONG cap = 16 << 20, head = 1 << 20;
+    auto readAt = [&](LONGLONG at, LONGLONG n) {
+        LARGE_INTEGER p; p.QuadPart = at;
+        size_t base = out.size();
+        out.resize(base + (size_t)n);
+        DWORD got = 0;
+        ok = ok && SetFilePointerEx(f, p, NULL, FILE_BEGIN) && (n == 0 || ReadFile(f, &out[base], (DWORD)n, &got, NULL));
+        out.resize(base + got);
+    };
+    out.clear();
+    if (ok && size.QuadPart <= cap) readAt(0, size.QuadPart);
+    else if (ok) {
+        readAt(0, head);
+        char note[160];
+        sprintf_s(note, "\r\n\r\n[MWCoop : %lld octets coupes ici, le journal faisait %lld octets]\r\n\r\n", size.QuadPart - cap, size.QuadPart);
+        out += note;
+        readAt(size.QuadPart - (cap - head), cap - head);
+    }
+    CloseHandle(f);
+    return ok;
+}
+// Nom dans le zip : chemin depuis le dossier du jeu (jeu/...) ou depuis %LOCALAPPDATA%\MWCoop (LOCALAPPDATA/...).
+static std::wstring ZipEntryName(const std::wstring &path)
+{
+    std::wstring ld = LocalDir(), rel;
+    if (!g_gameDir.empty() && !_wcsnicmp(path.c_str(), g_gameDir.c_str(), g_gameDir.size())) rel = L"jeu\\" + path.substr(g_gameDir.size());
+    else if (!ld.empty() && !_wcsnicmp(path.c_str(), ld.c_str(), ld.size())) rel = L"LOCALAPPDATA-MWCoop\\" + path.substr(ld.size());
+    else rel = path.substr(path.find_last_of(L'\\') + 1);
+    for (auto &c : rel) if (c == L'\\') c = L'/';
+    return rel;
+}
+static bool WriteZip(const std::wstring &zip, const std::vector<std::wstring> &files, int *count)
+{
+    *count = 0;
+    std::wstring tmp = zip + L".tmp";
+    HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    std::string central, data;
+    uint32_t off = 0;
+    bool ok = true;
+    auto put = [&](const std::string &b) { DWORD w = 0; ok = ok && WriteFile(f, b.data(), (DWORD)b.size(), &w, NULL) && w == b.size(); off += (uint32_t)b.size(); };
+    for (const std::wstring &path : files) {
+        FILETIME mt = {}, lt;
+        if (!ReadForZip(path, data, &mt)) continue;
+        std::string name = Narrow(ZipEntryName(path), CP_UTF8);
+        WORD dd = 0x21, dt = 0;   // (1/1/1980 si la date est illisible)
+        FileTimeToLocalFileTime(&mt, &lt);
+        FileTimeToDosDateTime(&lt, &dd, &dt);
+        uint32_t crc = Crc32(0, (const uint8_t *)data.data(), data.size()), size = (uint32_t)data.size();
+        Wr h;
+        h.u32(0x04034b50); h.u16(20); h.u16(0x0800); h.u16(0); h.u16(dt); h.u16(dd);
+        h.u32(crc); h.u32(size); h.u32(size); h.u16((int)name.size()); h.u16(0);
+        h.d += name;
+        Wr c;
+        c.u32(0x02014b50); c.u16(20); c.u16(20); c.u16(0x0800); c.u16(0); c.u16(dt); c.u16(dd);
+        c.u32(crc); c.u32(size); c.u32(size); c.u16((int)name.size()); c.u16(0); c.u16(0); c.u16(0); c.u16(0); c.u32(0); c.u32(off);
+        c.d += name;
+        central += c.d;
+        put(h.d);
+        put(data);
+        (*count)++;
+    }
+    Wr e;
+    e.u32(0x06054b50); e.u16(0); e.u16(0); e.u16(*count); e.u16(*count); e.u32((uint32_t)central.size()); e.u32(off); e.u16(0);
+    put(central);
+    put(e.d);
+    CloseHandle(f);
+    ok = ok && *count > 0 && MoveFileExW(tmp.c_str(), zip.c_str(), MOVEFILE_REPLACE_EXISTING);
+    if (!ok) DeleteFileW(tmp.c_str());
+    return ok;
+}
+// Tous les journaux de la page (mod, chargeur, profils, secours LOCALAPPDATA, trace de lancement, Unity) avec
+// MWCoop\mwcoop.ini et MWCoop\lancement.ini.
+static std::vector<std::wstring> ZipFiles()
+{
+    LogsScan();
+    std::vector<std::wstring> files;
+    auto add = [&](const std::wstring &p) {
+        if (!FileExists(p)) return;
+        for (auto &q : files) if (!_wcsicmp(q.c_str(), p.c_str())) return;
+        files.push_back(p);
+    };
+    for (auto &e : g_logList) add(e.path);
+    if (!g_gameDir.empty()) { add(g_gameDir + L"MWCoop\\mwcoop.ini"); add(g_gameDir + L"MWCoop\\lancement.ini"); }
+    return files;
+}
+// Bouton "Creer un zip a envoyer" : MWCoop-journaux-<date>.zip sur le Bureau, montre dans l'explorateur.
+static void LogsZip()
+{
+    std::vector<std::wstring> files = ZipFiles();
+    if (files.empty()) { SetStatus(K_WARN, T(L"Aucun journal pour l'instant : lance le jeu avec MWCoop d'abord", L"No logs yet: start the game with MWCoop first")); return; }
+    wchar_t desk[MAX_PATH] = L"";
+    std::wstring dir;
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, desk)) && desk[0]) dir = WithSlash(desk);
+    bool onDesk = !dir.empty();
+    if (!onDesk) { dir = LocalDir(); if (!dir.empty()) CreateDirectoryW(dir.c_str(), NULL); }
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    wchar_t name[80];
+    swprintf_s(name, L"MWCoop-journaux-%04d-%02d-%02d_%02dh%02d.zip", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
+    std::wstring zip = dir + name;
+    int n = 0;
+    if (dir.empty() || !WriteZip(zip, files, &n)) {
+        SetStatus(K_ERR, T(L"Zip impossible (erreur %lu)", L"Could not create the zip (error %lu)"), GetLastError());
+        return;
+    }
+    if (onDesk) SetStatus(K_OK, T(L"Zip sur le Bureau (%d fichiers) : envoie-le", L"Zip on the Desktop (%d files): send it"), n);
+    else SetStatus(K_OK, T(L"Zip cr\u00E9\u00E9 (%d fichiers) : envoie-le", L"Zip created (%d files): send it"), n);
+    std::wstring arg = L"/select,\"" + zip + L"\"";
+    ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
 }
 
 static void OnButton(int id)
@@ -3414,7 +3819,7 @@ static void OnButton(int id)
             LobbyClose();
             SetStatus(K_NORMAL, host ? T(L"Salon ferm\u00E9 \u00B7 %s", L"Lobby closed \u00B7 %s") : T(L"Salon quitt\u00E9 \u00B7 %s", L"Left the lobby \u00B7 %s"), ModLabel().c_str());
         }
-        else if (g_joinFallback) { g_joinFallback = false; Launch(MODE_GUEST); }
+        else if (g_joinFallback) { g_joinFallback = false; g_launchWarn.clear(); Launch(MODE_GUEST); }
         else LobbyJoin();
         break;
     case B_SOLO: Launch(MODE_SOLO); break;
@@ -3425,6 +3830,8 @@ static void OnButton(int id)
     case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_COLOR: CarPickColor(); break;
+    case B_LOGDIR: LogsOpenFolder(); break;
+    case B_LOGZIP: LogsZip(); break;
     }
 }
 
@@ -3507,9 +3914,20 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     case WM_APP_GO:   // l'invite demarre un peu apres l'hote : deux jeux sur le meme PC ne peuvent pas demarrer ensemble
         if ((int)lp != g_lobbyGen) return 0;
+    {
+        bool udpOk = g_udpMine == UDP_OK;
         LobbyClose();
         g_goWait = true;
-        SetStatus(K_OK, T(L"L'h\u00F4te lance la partie\u2026 ton jeu d\u00E9marre dans un instant", L"The host is starting the game\u2026 yours starts in a moment"));
+        g_launchWarn.clear();
+        if (udpOk) SetStatus(K_OK, T(L"L'h\u00F4te lance la partie\u2026 ton jeu d\u00E9marre dans un instant", L"The host is starting the game\u2026 yours starts in a moment"));
+        else {   // on lance quand meme : l'avertissement reste sur l'ecran d'attente
+            SetStatus(K_WARN, T(L"L'h\u00F4te lance\u2026 UDP non confirm\u00E9 (port UDP %d)", L"The host is starting\u2026 UDP not confirmed (UDP port %d)"), g_lobbyPort);
+            wchar_t wb[200];
+            swprintf_s(wb, T(L"UDP non confirm\u00E9 : l'h\u00F4te doit rediriger le port UDP %d (pas seulement TCP) sur sa box", L"UDP not confirmed: the host must forward UDP port %d (not just TCP) on their router"), g_lobbyPort);
+            g_launchWarn = wb;
+            TestLog("udp : GO recu sans UDP confirme");
+        }
+    }
         SetTimer(h, 4, 4000 + 3000 * max(0, g_myId - 1), NULL);   // (invites sur le meme PC, en test : l'un apres l'autre)
         return 0;
     case WM_APP_LOBBYEND: {
@@ -3555,9 +3973,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         g_lobbyHot = g_tab == TAB_LOBBY && g_state == ST_IDLE ? LobbyChoiceAt(x, y) : -1;
         TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, h, 0 };
         TrackMouseEvent(&tme);
-        bool link = g_tab == TAB_LOGS && kLogsFolderR.Contains(x, y);
         bool carView = g_tab == TAB_CAR && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(x, y);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || link) ? IDC_HAND
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0) ? IDC_HAND
                                    : carView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
@@ -3579,7 +3996,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (f >= 0) { g_focus = f; g_time = 0; return 0; }
         g_focus = -1;
         int t = HitTab(x, y);
-        if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); return 0; }   // un 2e clic referme
+        if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); if (g_tab == TAB_LOGS) LogsScan(); return 0; }   // un 2e clic referme
         if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
         if (g_tab == TAB_LOGS && LogsMouseDown(x, y)) return 0;
         if (g_tab == TAB_CAR && CarMouseDown(x, y)) return 0;
@@ -3712,6 +4129,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];
         if (!_wcsicmp(argv[i], L"/testsalon") && i + 2 < argc) { g_testSalon = argv[i + 1]; g_testSalonLog = argv[i + 2]; }
         if (!_wcsicmp(argv[i], L"/partie")) g_testPartie = argv[i + 1];
+        if (!_wcsicmp(argv[i + 1], L"/sansudp")) g_testNoUdp = true;   // (dernier argument)
         if (!_wcsicmp(argv[i], L"/temps")) g_sceneT = (float)_wtof(argv[i + 1]);   // captures : instant de la scene animee
         if (!_wcsicmp(argv[i], L"/images")) g_bench = _wtoi(argv[i + 1]);
     }
@@ -3754,6 +4172,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         return 0;
     }
 
+    // /zip <fichier> : le zip de la page JOURNAUX (essai du format), sans explorateur ; code 0 si ecrit
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/zip")) {
+        int n = 0;
+        bool ok = WriteZip(argv[2], ZipFiles(), &n);
+        delete g_bg; delete g_bgDark; delete g_bgCache;
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
+
     // Capture d'un etat, sans fenetre (verification du rendu)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/capture")) {
         std::wstring st = argv[3];
@@ -3761,8 +4188,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         g_time = 0.3f;
         if (g_localVer.empty()) g_localVer = L"0.1.0-prealpha";
         g_modOk = true;
-        if (st == L"attente") {
+        if (st == L"attente" || st == L"attente-udp") {
             g_state = ST_LAUNCH; g_time = 1.3f;
+            if (st == L"attente-udp") g_launchWarn = T(L"UDP non confirm\u00E9 pour Kalle : redirige le port UDP 7870 (pas seulement TCP) sur ta box",
+                                                       L"UDP not confirmed for Kalle: forward UDP port 7870 (not just TCP) on your router");
             wchar_t info[160];
             swprintf_s(info, T(L"%s h\u00E9berge la partie (port %d)", L"%s is hosting (port %d)"), PlayerName().c_str(), 7870);
             g_launchInfo = info;
@@ -3777,12 +4206,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; g_btn[B_LOGS].hover = 1; }
-        else if (st == L"salon" || st == L"salon-invite") {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
-            bool host = st == L"salon";
+        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp") {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
+            bool host = st == L"salon";   // (salon-udp : invite dont l'UDP est bloque)
             std::string v = MyVersion();
             g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0 },
-                        { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38 },
-                        { 2, "Kalle", "char_shirt07", v, false, 71 } };
+                        { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38, UDP_OK },
+                        { 2, "Kalle", "char_shirt07", v, false, 71, host ? UDP_FAIL : UDP_WAIT } };
+            g_udpMine = host ? UDP_NA : UDP_OK;
             g_myId = host ? 0 : 1;
             g_lobby = host ? LB_HOST : LB_GUEST;
             g_partie = host ? PARTIE_CONTINUER : PARTIE_NOUVELLE;
@@ -3792,6 +4222,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             LayoutTabs();
             if (host) { SetStatus(K_OK, T(L"Salon ouvert \u00B7 port %d", L"Lobby open \u00B7 port %d"), 7870); g_lobbyHot = 1; }
             else SetStatus(K_OK, T(L"Dans le salon de %s", L"In %s's lobby"), L"192.168.1.20");
+            if (st == L"salon-udp") { g_udpMine = UDP_FAIL; g_peers[1].udp = UDP_WAIT; }
+            g_hostUdpTest = true;
         }
         else if (st == L"maj") { g_busy = true; g_progress = 0.42f; SetStatus(K_NORMAL, T(L"T\u00E9l\u00E9chargement de MWCoop %s\u2026", L"Downloading MWCoop %s\u2026"), L"0.1.1-prealpha"); g_focus = 0; g_time = 0.2f; }
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }
