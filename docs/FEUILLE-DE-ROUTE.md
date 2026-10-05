@@ -34,11 +34,13 @@ pouvoir le faire, et les autres doivent le voir.
 - [x] Audit de la synchro (0.18) : recensement, empreintes hôte/invités (DESYNC), enregistreur d'actions non partagées.
 - [x] Lot 1 de l'analyse (0.19) : portières (verrou, gauche), PNJ (calques, téléphone, clients, lissage), objets dans les
       voitures, objets empochés, revenus du monde une fois, train, machines à jeu (verrou + spectateurs).
-- [ ] Lot 2 : taxi (MACHTWAGEN), givre/grattage, remorquage, appels sortants, achats hors épicerie, vêtements portés,
-      boulons des pièces juste montées, simulation moteur à la reprise du volant (voir l'analyse).
-      Reste : marché aux puces (articles tirés au hasard de chaque côté), facture de téléphone des appels
-      passés par un invité, appels quand l'hôte est loin de la maison (la logique du téléphone ne tourne
-      que près de la maison, chez l'hôte).
+- [x] Lot 2 (0.20) : taxi (MACHTWAGEN), givre/grattage, remorquage, appels sortants et courrier, achats hors épicerie
+      (bar, contrôle technique, brocante, café, bus), vêtements portés, boulons des pièces juste montées, bois et
+      fendeuse, fosses septiques, état moteur à la reprise du volant, sauvegarde coop aux toilettes.
+      Reste : prix de la brocante tirés au hasard de chaque côté, appels quand l'hôte est loin de la maison.
+- [ ] Lot 3 : boîtier CD (ouvert/fermé) et CD tenu en main ; voiture du lanceur toujours complète d'origine.
+- [ ] Interface : écran d'attente des invités au menu, test UDP dans le salon, journaux plus visibles, F10 façon GTA.
+- [ ] Plus tard : mods (MSCLoader géré par le lanceur, onglet MODS, comparaison des mods dans le salon).
 
 ## Quêtes et argent
 - [x] Quêtes communes : si l'invité entame une quête et que l'hôte en remplit les conditions,
