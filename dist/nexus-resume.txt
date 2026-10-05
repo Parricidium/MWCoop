@@ -4,7 +4,7 @@ Co-op for My Winter Car: one player hosts, friends join the same world — same 
 
 Résumé (champ « Summary » de Nexus, 350 caractères maximum) :
 
-Coop pour My Winter Car : un joueur héberge, ses amis rejoignent le même monde — même sauvegarde, heure, météo et voiture, remontée vis par vis ensemble, avec chacun son porte-monnaie. Circulation, PNJ, magasins, boulots et factures partagés. Chargeur maison (sans MSCLoader), lanceur avec salon et mises à jour. Français, anglais. Pré-alpha.
+Coop pour My Winter Car : un joueur héberge, ses amis rejoignent le même monde — même sauvegarde, heure, météo et voiture, remontée vis par vis ensemble, avec chacun son porte-monnaie. Circulation, PNJ, magasins, boulots et factures partagés. Chargeur maison (sans MSCLoader), lanceur avec salon. Français, anglais. Pré-alpha.
 
 Images suggested for the gallery (docs/img), in this order:
 1. jeu-duo.jpg        — the host seen by a guest in the farm yard (main image)
