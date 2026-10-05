@@ -28,12 +28,23 @@ namespace MWCoop
     //    La lettre de Kela (envelope(kela1)) n'est pas concernee : chaque joueur a la sienne (Expenses local), non
     //    synchronisee, et la poste lui-meme.
     //  Le paiement au guichet (PAYMENT) et l'attente des commandes (miroir de l'hote) : WorldFsms.
+    //  - Appels ENTRANTS (PhoneLogicNEW de l'appartement, PhoneLogicOLD de la maison des parents : 'Ring' tire qui
+    //    appelle et quand, 'Jokes' les farces) : logique de l'hote, suivie etat par etat par les invites (WorldFsms,
+    //    copie arretee chez eux). Si elle ne tourne pas chez l'hote (objet Logic eteint, automate desactive) alors
+    //    qu'un invite est pres du telephone, l'invite n'avait plus aucun appel (boulots de fosse septique, de bois...).
+    //     * chez l'hote, l'automate desactive alors que son objet est allume est rallume (il tourne quelle que soit la
+    //       distance), et l'etat de chaque ligne (tourne ou non) est envoye aux invites (quand il change, et toutes les
+    //       10 s) ; logique eteinte chez lui avec un invite a moins de 20 m du telephone : note au journal ;
+    //     * un invite a moins de 25 m d'un telephone dont la logique ne tourne pas chez l'hote la fait tourner chez lui
+    //       (RunsHere : WorldFsms ne l'arrete plus et ignore les etats de l'hote pour elle), jusqu'a ce que l'hote la
+    //       fasse de nouveau tourner ou qu'il s'eloigne (60 m). Decrocher passe ensuite par le monde comme d'habitude
+    //       (Ringing* : rejoue sans voix chez les autres).
     public static class Calls
     {
         // Seule enveloppe commune (cle fixe dans Props) : celle du catalogue. Nom compare tel quel par la boite
         // aux lettres (OrderTrigger : Letter1).
         public const string PartsEnvelope = "envelope(parts)";
-        const int K_Bill = 0, K_Order = 1, K_Job = 2;
+        const int K_Bill = 0, K_Order = 1, K_Job = 2, K_Phone = 3;
         const int H_Find = 0, H_Hangup = 1, H_Hangup2 = 2, H_Create = 3, H_CheckHand = 4;
         const int MaxMsg = 1100, NoList = 255;
         static readonly string[] LinePaths =
@@ -80,6 +91,8 @@ namespace MWCoop
             postHooked = resolved = false;
             billTargets.Clear();
             step = step2 = 0; testCall = null; testKeypad = null; testLogged = false;
+            for (int i = 0; i < phones.Length; i++) phones[i] = null;
+            nextPhone = 0; nextPhoneSend = 0; phoneSig = ""; farStep = 0; farLog = 0;
             // Avant le releve du monde (16 s apres le chargement) : les createurs de commandes sont a nous.
             resolveAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
         }
@@ -90,6 +103,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (!resolved) { if (now < resolveAt) return; Resolve(); }
             if (now >= nextCheck) { nextCheck = now + 1f; Inject(); }
+            if (now >= nextPhone) { nextPhone = now + 1f; PhoneStep(now); }
             for (int i = 0; i < lines.Length; i++)
             {
                 Line l = lines[i];
@@ -528,6 +542,141 @@ namespace MWCoop
             if (kind == K_Bill) OnBill(who, r);
             else if (kind == K_Order) OnOrder(who, r);
             else if (kind == K_Job) OnJob(who, r);
+            else if (kind == K_Phone && !Session.IsHost) OnPhones(r);
+        }
+
+        // ---------------------------------------------------------------- appels entrants (logique de l'hote)
+        static readonly string[] LogicPaths = { "HOMENEW/Functions/FunctionsDisable/Telephone/Logic/PhoneLogicNEW", "YARD/Building/LIVINGROOM/Telephone 1/Logic/PhoneLogicOLD" };
+        static readonly string[] LogicNames = { "appartement", "parents" };
+        const float TakeDist = 25f, KeepDist = 60f, WarnDist = 20f;
+        class Phone
+        {
+            public string Name; public GameObject Go; public PlayMakerFSM Ring, Jokes;
+            public bool HostRuns = true, RunsHere, LastRuns = true, Fought;
+            public float HostSeen = -1, WarnAt;
+            public string HostState = "";
+        }
+        static readonly Phone[] phones = new Phone[2];
+        static float nextPhone, nextPhoneSend;
+        static string phoneSig = "";
+
+        // Vrai chez un invite qui fait tourner lui-meme la logique de ce telephone (celle de l'hote ne tourne pas) :
+        // WorldFsms ne doit ni l'arreter ni la recaler sur les etats de l'hote.
+        public static bool RunsHere(PlayMakerFSM f)
+        {
+            if (Session.IsHost || f == null) return false;
+            foreach (Phone p in phones) if (p != null && p.RunsHere && (p.Ring == f || p.Jokes == f)) return true;
+            return false;
+        }
+
+        static Phone PhoneAt(int i)
+        {
+            if (phones[i] != null) return phones[i];
+            GameObject go = Game.FindAny(LogicPaths[i]);
+            if (go == null) return null;
+            phones[i] = new Phone { Name = LogicNames[i], Go = go, Ring = Game.FsmOn(go, "Ring"), Jokes = Game.FsmOn(go, "Jokes") };
+            return phones[i];
+        }
+
+        static bool Runs(Phone p) { return p.Go != null && p.Go.activeInHierarchy && p.Ring != null && p.Ring.enabled; }
+
+        static float NearestGuest(Vector3 pos, out string name)
+        {
+            float best = float.MaxValue;
+            name = "";
+            foreach (PlayerInfo pi in Session.Players.Values)
+            {
+                if (pi.Local || pi.Level != 1) continue;
+                float d = Vector3.Distance(pi.State.Feet, pos);
+                if (d < best) { best = d; name = pi.Name; }
+            }
+            return best;
+        }
+
+        static float LocalDistance(Vector3 pos)
+        {
+            GameObject pl = GameObject.Find("PLAYER");
+            return pl != null ? Vector3.Distance(pl.transform.position, pos) : float.MaxValue;
+        }
+
+        // Call : U8 joueur, U8 K_Phone, U8 n, (U8 ligne, Bool tourne chez l'hote, Str etat de 'Ring') x n (hote -> invites).
+        static void PhoneStep(float now)
+        {
+            if (Session.IsHost)
+            {
+                var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < phones.Length; i++)
+                {
+                    Phone p = PhoneAt(i);
+                    if (p == null) continue;
+                    if (p.Go.activeInHierarchy && p.Ring != null && !p.Ring.enabled)
+                    {
+                        // Objet allume, automate arrete (par une autre logique) : la logique de l'hote tourne quelle que soit la distance.
+                        p.Ring.enabled = true;
+                        if (p.Jokes != null) p.Jokes.enabled = true;
+                        Log.Info("appels : logique du telephone " + p.Name + " arretee chez l'hote alors que son objet est allume : rallumee");
+                    }
+                    bool runs = Runs(p);
+                    if (runs != p.LastRuns)
+                    {
+                        p.LastRuns = runs;
+                        Log.Info("appels : logique du telephone " + p.Name + (runs ? " tourne de nouveau" : " ne tourne plus (objet " + (p.Go.activeInHierarchy ? "allume" : "eteint") + ")") + " chez l'hote");
+                    }
+                    if (!runs && Session.RemoteCount > 0 && now >= p.WarnAt)
+                    {
+                        string who;
+                        float d = NearestGuest(p.Go.transform.position, out who);
+                        if (d < WarnDist) { p.WarnAt = now + 30f; Log.Warn("appels : logique du telephone " + p.Name + " eteinte chez l'hote, " + who + " a " + d.ToString("F0") + " m du telephone (il la fait tourner chez lui)"); }
+                    }
+                    sb.Append(i).Append(runs ? '1' : '0').Append(p.Ring != null ? p.Ring.ActiveStateName : "").Append('|');
+                }
+                string sig = sb.ToString();
+                if (Session.RemoteCount > 0 && (sig != phoneSig || now >= nextPhoneSend))
+                {
+                    phoneSig = sig; nextPhoneSend = now + 10f;
+                    var w = new NetWriter(Msg.Call).U8(Session.LocalId).U8(K_Phone);
+                    int n = 0; foreach (Phone p in phones) if (p != null) n++;
+                    w.U8(n);
+                    for (int i = 0; i < phones.Length; i++) if (phones[i] != null) w.U8(i).Bool(Runs(phones[i])).Str(phones[i].Ring != null ? phones[i].Ring.ActiveStateName ?? "" : "");
+                    Session.SendAll(w, true);
+                }
+                return;
+            }
+            for (int i = 0; i < phones.Length; i++)
+            {
+                Phone p = PhoneAt(i);
+                if (p == null || p.Ring == null) continue;
+                float d = LocalDistance(p.Go.transform.position);
+                bool want = !p.HostRuns && p.Go.activeInHierarchy && d < (p.RunsHere ? KeepDist : TakeDist);
+                if (want != p.RunsHere)
+                {
+                    p.RunsHere = want; p.Fought = false;
+                    p.Ring.enabled = want;
+                    if (p.Jokes != null) p.Jokes.enabled = want;
+                    Log.Info("appels : telephone " + p.Name + (want ? " : la logique de l'hote ne tourne pas, elle tourne ici (joueur a " + d.ToString("F0") + " m)"
+                                                                     : " : logique rendue a l'hote (" + (p.HostRuns ? "elle tourne de nouveau chez lui" : "joueur a " + d.ToString("F0") + " m") + ")"));
+                }
+                else if (p.RunsHere && !p.Ring.enabled && !p.Fought)
+                {
+                    p.Fought = true;   // arretee par WorldFsms (sans Calls.RunsHere) : on ne lutte pas (chaque rallumage la relancerait)
+                    Log.Warn("appels : telephone " + p.Name + " : logique arretee par le monde alors qu'elle devrait tourner ici");
+                }
+            }
+        }
+
+        static void OnPhones(NetReader r)
+        {
+            float now = Time.realtimeSinceStartup;
+            for (int i = 0, n = r.U8(); i < n; i++)
+            {
+                int idx = r.U8();
+                bool runs = r.Bool();
+                string st = r.Str();
+                Phone p = idx < phones.Length ? PhoneAt(idx) : null;
+                if (p == null) continue;
+                if (p.HostRuns != runs) Log.Info("appels : logique du telephone " + p.Name + (runs ? " tourne" : " ne tourne pas") + " chez l'hote");
+                p.HostRuns = runs; p.HostState = st; p.HostSeen = now;
+            }
         }
 
         // Essais (WorldFsms.TestEvent, essai 'colis') : evenement envoye a un automate de ce module, comme le jeu.
@@ -572,6 +721,44 @@ namespace MWCoop
         {
             if (mode == "appel") TestCall(t);
             else if (mode == "courrier") TestMail(t);
+            else if (mode == "appel-loin") TestFar(t);
+        }
+
+        // appel-loin ([Test] Autotest=appel-loin) : ligne [Test] TestLigne (0 appartement, 1 parents) ; l'invite pres de ce
+        // telephone (TestPos=-1284.5,1,1079.5 pour l'appartement, -9,0.5,10 pour les parents), l'hote n'importe ou.
+        // 30 s : chez l'hote, l'automate 'Ring' est arrete (attendu : « rallumee » dans la seconde) ; 36 s : l'hote eteint
+        // l'objet Logic de ce telephone (comme si sa logique ne tournait pas) ; 44 s : si la logique tourne chez l'invite,
+        // son 'Ring' passe a 'Ring' (comme un appel qui arrive : RingingNEW/RingingOLD s'allume) ; 60 s : l'hote rallume
+        // Logic. Chacun note toutes les 2 s de 28 a 70 s : « autotest : appel-loin, <ligne> : hote tourne .., ici tourne ..,
+        // Ring <etat>, sonnerie <allumee> ». Attendu chez l'invite : « elle tourne ici » vers 37 s, sonnerie allumee a 44 s,
+        // « logique rendue a l'hote » vers 61 s.
+        static float farLog;
+        static int farStep;
+
+        static void TestFar(float t)
+        {
+            int line = Mathf.Clamp(Config.GetInt("Test", "TestLigne", 0), 0, phones.Length - 1);
+            Phone p = PhoneAt(line);
+            if (p == null || p.Ring == null) { if (farStep == 0 && t > 28f) { farStep = 9; Log.Info("autotest : appel-loin, telephone " + line + " absent"); } return; }
+            GameObject logic = p.Go.transform.parent != null ? p.Go.transform.parent.gameObject : p.Go;
+            if (Session.IsHost && farStep == 0 && t > 30f) { farStep = 1; p.Ring.enabled = false; Log.Info("autotest : appel-loin, l'hote arrete son automate 'Ring'"); }
+            if (Session.IsHost && farStep == 1 && t > 36f) { farStep = 2; logic.SetActive(false); Log.Info("autotest : appel-loin, l'hote eteint " + Recon.Path(logic.transform)); }
+            if (!Session.IsHost && farStep == 0 && t > 44f)
+            {
+                farStep = 1;
+                if (p.RunsHere) { Game.SetState(p.Ring, "Ring"); Log.Info("autotest : appel-loin, un appel arrive ici -> " + p.Ring.ActiveStateName); }
+                else Log.Info("autotest : appel-loin, la logique ne tourne pas ici : pas d'appel force");
+            }
+            if (Session.IsHost && farStep == 2 && t > 60f) { farStep = 3; logic.SetActive(true); Log.Info("autotest : appel-loin, l'hote rallume " + logic.name); }
+            if (t > 28f && t < 71f && t - farLog >= 2f)
+            {
+                farLog = t;
+                FsmGameObject rg = p.Ring.FsmVariables.FindFsmGameObject("Ringing");
+                GameObject ringing = rg != null ? rg.Value : null;
+                Log.Info("autotest : appel-loin, " + p.Name + " : hote tourne " + (Session.IsHost ? Runs(p) : p.HostRuns) + ", ici tourne " + (Session.IsHost ? Runs(p) : p.RunsHere)
+                         + ", Ring " + p.Ring.ActiveStateName + (p.Ring.enabled ? "" : " (arrete)") + ", sonnerie " + (ringing != null && ringing.activeInHierarchy ? "allumee" : "eteinte")
+                         + ", a " + LocalDistance(p.Go.transform.position).ToString("F0") + " m");
+            }
         }
 
         static void TestCall(float t)
