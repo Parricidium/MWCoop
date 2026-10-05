@@ -1393,7 +1393,15 @@ namespace MWCoop
                 f.SendEvent(ev);
                 r = "direct (automate pas suivi par le monde) " + before + " -" + ev + "-> " + f.ActiveStateName;
             }
-            return r + " ; telephone " + StateOf(PhoneFsm(n));
+            // En jeu, Move "Look at plaer" met Angry au telephone (il raccroche en colere) ; Move n'y va que si Teppo
+            // est a l'arret pres du joueur, ce qu'un essai ne garantit pas : [Test] PnjInsulteForcer=1 le fait ici.
+            PlayMakerFSM ph = PhoneFsm(n);
+            if (ph != null && Config.GetInt("Test", "PnjInsulteForcer", 1) == 1)
+            {
+                FsmBool angry = ph.FsmVariables.GetFsmBool("Angry");
+                if (angry != null) { angry.Value = true; r += " ; Angry force au telephone"; }
+            }
+            return r + " ; telephone " + StateOf(ph);
         }
 
         static string StateOf(PlayMakerFSM f)
