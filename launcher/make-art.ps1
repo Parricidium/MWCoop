@@ -264,10 +264,10 @@ foreach ($dark in $false, $true) {
 
     # Logo : depasse du haut de la carte ; ombre douce bleu nuit (un peu vers le bas) pour qu'il se detache du bureau
     # comme de la carte, puis le logo tel quel (il a son propre contour blanc).
-    $maxW = if ($banner -ne $logo) { 272.0 } else { 220.0 }
+    $maxW = if ($banner -ne $logo) { 250.0 } else { 220.0 }   # (titre : laisse la place aux boutons GitHub / Ko-fi)
     $dh = 172.0; $dw = $dh * $bsrc.Width / $bsrc.Height
     if ($dw -gt $maxW) { $dw = $maxW; $dh = $dw * $bsrc.Height / $bsrc.Width }
-    $top = if ($banner -ne $logo) { 38.0 } else { 6.0 }   # titre large : plus bas, au ras de la pastille PRE-ALPHA
+    $top = if ($banner -ne $logo) { 36.0 } else { 6.0 }   # titre large : plus bas, au ras de la pastille PRE-ALPHA
     $dst = New-Object System.Drawing.RectangleF (228 - $dw / 2), $top, $dw, $dh
     for ($i = 7; $i -ge 1; $i--) {
         $ia = New-Object System.Drawing.Imaging.ImageAttributes

@@ -785,7 +785,7 @@ static void StartUpdate()
 enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_SKIN, TAB_COUNT };
 static int g_tab = -1;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_COUNT };
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_COUNT };
 struct Button { RectF r; float hover; bool visible, enabled; };
 static Button g_btn[B_COUNT];
 static int g_hot = -1, g_pressed = -1;
@@ -806,6 +806,8 @@ static void Layout()
     g_btn[B_COLOR].r = RectF(756, 439, 180, 30);  // onglet VOITURE : "Autre couleur..."
     g_btn[B_LOGDIR].r = RectF(616, 122, 136, 26); // page JOURNAUX : ouvrir le dossier, zip a envoyer
     g_btn[B_LOGZIP].r = RectF(760, 122, 176, 26);
+    g_btn[B_GITHUB].r = RectF(142, 152, 82, 24);  // sous le logo, au-dessus de PRE-ALPHA : liens de JD
+    g_btn[B_KOFI].r = RectF(232, 152, 82, 24);
 }
 
 static void UpdateButtons()
@@ -821,6 +823,7 @@ static void UpdateButtons()
     g_btn[B_SOLO].enabled = can;
     g_btn[B_EXE].enabled = menu && !busy;
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = true;
+    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = true;
     g_btn[B_LOGS].visible = menu && game;
     g_btn[B_LOGS].enabled = true;
     g_btn[B_COLOR].visible = menu && game && g_tab == TAB_CAR;
@@ -2644,6 +2647,38 @@ static void DrawUI(Graphics &g)
         else g.DrawLine(&pen, cx - 5, cy, cx + 5, cy);
     }
 
+    // Liens de JD : GitHub (pilule sombre, chat stylise) et Ko-fi (bleu Ko-fi, coeur) ; plus clairs au survol.
+    for (int id : { B_GITHUB, B_KOFI }) {
+        Button &b = g_btn[id];
+        bool gh = id == B_GITHUB;
+        Color base = gh ? Color(255, 36, 41, 47) : Color(255, 41, 171, 224);
+        Color hot = gh ? Color(255, 70, 78, 88) : Color(255, 92, 196, 238);
+        GraphicsPath bp; RoundRect(bp, b.r, b.r.Height / 2);
+        SolidBrush fb(Mix(base, hot, b.hover));
+        g.FillPath(&fb, &bp);
+        Pen edge(Color(70, 255, 255, 255), 1.0f);
+        g.DrawPath(&edge, &bp);
+        float ix = b.r.X + 15, iy = b.r.Y + b.r.Height / 2;
+        SolidBrush white(Color(255, 255, 255, 255));
+        if (gh) {
+            // Tete de chat : rond, deux oreilles, et la queue en crochet (repere, pas le logo exact).
+            g.FillEllipse(&white, ix - 6.0f, iy - 5.0f, 12.0f, 11.0f);
+            PointF ear1[] = { PointF(ix - 6.0f, iy - 2.0f), PointF(ix - 5.5f, iy - 8.0f), PointF(ix - 1.5f, iy - 4.5f) };
+            PointF ear2[] = { PointF(ix + 6.0f, iy - 2.0f), PointF(ix + 5.5f, iy - 8.0f), PointF(ix + 1.5f, iy - 4.5f) };
+            g.FillPolygon(&white, ear1, 3); g.FillPolygon(&white, ear2, 3);
+            SolidBrush eye(Mix(base, hot, b.hover));
+            g.FillEllipse(&eye, ix - 3.5f, iy - 1.5f, 2.4f, 3.0f);
+            g.FillEllipse(&eye, ix + 1.1f, iy - 1.5f, 2.4f, 3.0f);
+        } else {
+            // Coeur : deux ronds et une pointe.
+            g.FillEllipse(&white, ix - 6.0f, iy - 5.0f, 7.0f, 7.0f);
+            g.FillEllipse(&white, ix - 1.0f, iy - 5.0f, 7.0f, 7.0f);
+            PointF tip[] = { PointF(ix - 5.6f, iy), PointF(ix + 5.6f, iy), PointF(ix, iy + 6.0f) };
+            g.FillPolygon(&white, tip, 3);
+        }
+        Text(g, gh ? L"GitHub" : L"Ko-fi", RectF(b.r.X + 24, b.r.Y, b.r.Width - 28, b.r.Height), 11.5f, FontStyleBold, Color(255, 255, 255, 255));
+    }
+
     // PRE-ALPHA : pastille bien visible sous le logo
     {
         RectF pr(170, 184, 116, 20);
@@ -4315,6 +4350,8 @@ static void OnButton(int id)
     case B_LOGS: g_tab = g_tab == TAB_LOGS ? -1 : TAB_LOGS; g_optHot = -1; if (g_tab == TAB_LOGS) LogsScan(); break;
     case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
+    case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
+    case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
     case B_COLOR: CarPickColor(); break;
     case B_LOGDIR: LogsOpenFolder(); break;
     case B_LOGZIP: LogsZip(); break;
