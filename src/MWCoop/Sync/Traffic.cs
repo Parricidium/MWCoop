@@ -136,10 +136,18 @@ namespace MWCoop
                 // Essais : meme instant (horloge du PC) des deux cotes, toutes les 10 s.
                 nextSample = now + 10f;
                 var sb = new System.Text.StringBuilder("trafic echantillon " + System.DateTime.Now.ToString("ss.f") + " :");
-                int k = 0;
+                // Vehicules actifs (pas les marcheurs) : position, cap, vitesse, rendu visible ([Test] JournalTrafic=2 : tous).
+                int k = 0, max = Config.GetInt("Test", "JournalTrafic", 0) >= 2 ? 99 : 4;
                 foreach (Ent e in ents)
-                    if (e.T != null && e.T.gameObject.activeInHierarchy && k++ < 4)
-                        sb.Append(' ').Append(e.T.name).Append(e.T.position.ToString("F1"));
+                    if (e.T != null && e.T.gameObject.activeInHierarchy && !e.Walker && k++ < max)
+                    {
+                        bool vis = false;
+                        foreach (Renderer r in e.T.GetComponentsInChildren<Renderer>()) if (r.enabled) { vis = true; break; }
+                        sb.Append(' ').Append(e.T.name).Append(e.T.position.ToString("F0")).Append(" cap ").Append(e.T.eulerAngles.y.ToString("F0"))
+                          .Append(e.Body != null ? " v" + e.Body.velocity.magnitude.ToString("F0") : "").Append(vis ? " rendu" : " SANS RENDU");
+                        Transform lod = e.T.Find("LOD");
+                        sb.Append(lod != null ? (lod.gameObject.activeSelf ? " lod on" : " lod off") : "").Append(';');
+                    }
                 Log.Info(sb.ToString());
             }
             if (Session.IsHost)
@@ -302,6 +310,10 @@ namespace MWCoop
                 string n = m.GetType().Name;
                 var f = m as PlayMakerFSM;
                 if (f != null && e.Train && f.FsmName != "Move" && f.FsmName != "Reset") continue;   // train : collision, sifflet, tunnel
+                // 'LOD' : montre ou cache le modele (<vehicule>/LOD) selon la distance a la camera du joueur D'ICI (300 m).
+                // Coupe, il restait dans l'etat du moment : une voiture loin de l'invite a son arrivee restait invisible
+                // pour toujours, meme en le croisant (vraie partie du 05/10 : 3 voitures croisees par l'hote, pas vues).
+                if (f != null && f.FsmName == "LOD") continue;
                 if (f != null || n == "MobileCarController" || n == "AxisCarController") m.enabled = false;
             }
             // Train : son corps reste dynamique comme chez l'hote (scene : non cinematique, positions X/Y et
