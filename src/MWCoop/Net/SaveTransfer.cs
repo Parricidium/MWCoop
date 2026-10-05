@@ -25,6 +25,9 @@ namespace MWCoop.Net
         public static bool Received;          // invite : sauvegarde de l'hote recue et ecrite
         public static bool HostHasSave;       // invite : l'hote avait une sauvegarde a envoyer
         public static float Progress;         // invite : 0..1 pendant la reception
+        public static bool Receiving { get { return files != null; } }   // invite : envoi annonce, pas encore fini
+        public static int BytesGot { get { return got; } }
+        public static int BytesExpected { get { return expected; } }
         static List<string> names;
         static byte[][] files;
         static int expected, got;
@@ -95,7 +98,7 @@ namespace MWCoop.Net
             PlayerInfo host = Session.Host;
             int lv = host != null ? host.Level : -1;
             // Au menu en attendant : dire ce qui se passe plutot que rien.
-            if (!PlayerSync.InGame && !Done && Session.T != null && Session.T.Peers.Count > 0 && now >= nextWaitToast)
+            if (!PlayerSync.InGame && !Done && !WaitScreen.Shown && Session.T != null && Session.T.Peers.Count > 0 && now >= nextWaitToast)
             {
                 nextWaitToast = now + 8f;
                 Hud.Toast(lv == 1 ? "L'hote prepare sa sauvegarde, vous entrez en jeu dans un instant..." : "En attente : l'hote n'est pas encore en jeu");

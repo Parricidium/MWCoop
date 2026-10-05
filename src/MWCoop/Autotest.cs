@@ -13,6 +13,7 @@ namespace MWCoop
         public static void Update()
         {
             string mode = Config.Get("Test", "Autotest", "");
+            WaitScreen.Test(mode, Time.realtimeSinceStartup);   // au menu : avant le filtre GAME
             if (Application.loadedLevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
