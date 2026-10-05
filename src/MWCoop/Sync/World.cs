@@ -101,7 +101,7 @@ namespace MWCoop
         {
             if (fast || Session.RemoteCount == 0 || !Game.GlobalBool("PlayerSleeps") || Time.realtimeSinceStartup < waitToastAt) return;
             waitToastAt = Time.realtimeSinceStartup + 30f;
-            Hud.Toast("Le temps passera quand tout le monde dormira");
+            Hud.Toast(Lang.T("Le temps passera quand tout le monde dormira", "Time will pass once everyone is asleep"));
         }
 
         static bool Find()
@@ -201,7 +201,8 @@ namespace MWCoop
             {
                 passOutSince = now;
                 Log.Info("monde : evanoui (" + s + "), les autres ne dorment pas : reveil seul dans " + PassOutWait + " s");
-                Hud.Toast("Evanoui : reveil dans " + (int)PassOutWait + " s, l'heure ne bouge pas pour les autres (sauf si tout le monde dort)");
+                Hud.Toast(Lang.T("\u00C9vanoui : r\u00E9veil dans " + (int)PassOutWait + " s, l'heure ne bouge pas pour les autres (sauf si tout le monde dort)",
+                              "Passed out: waking up in " + (int)PassOutWait + " s, the clock does not move for the others (unless everyone sleeps)"));
                 return;
             }
             if (now - passOutSince < PassOutWait) return;

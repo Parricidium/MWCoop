@@ -345,7 +345,7 @@ namespace MWCoop
                 bool near = Near(m);
                 if (spect)
                 {
-                    if (near && !m.Toasted) Hud.Toast("Machine occupee par " + NameOf(l.Owner));
+                    if (near && !m.Toasted) Hud.Toast(Lang.T("Machine occup\u00E9e par ", "Machine in use by ") + NameOf(l.Owner));
                     m.Toasted = near;
                     continue;
                 }
@@ -418,7 +418,7 @@ namespace MWCoop
         static bool Ask(Machine m)
         {
             if (Session.IsHost) return HostAsk(Session.LocalId, m.Key);
-            if (m.L.Owner >= 0 && m.L.Owner != Session.LocalId) { Hud.Toast("Machine occupee par " + NameOf(m.L.Owner)); return false; }
+            if (m.L.Owner >= 0 && m.L.Owner != Session.LocalId) { Hud.Toast(Lang.T("Machine occup\u00E9e par ", "Machine in use by ") + NameOf(m.L.Owner)); return false; }
             Session.SendToHost(new NetWriter(Msg.MachineLock).U8(L_ASK).U8(Session.LocalId).Str(m.Key), true);
             if (m.L.Owner != Session.LocalId) SetOwner(m.Key, Session.LocalId, "demandee");
             return true;
@@ -438,7 +438,7 @@ namespace MWCoop
             if (l.Owner >= 0 && l.Owner != who && now < l.Until)
             {
                 Log.Info("machine " + Short(key) + " : refusee a " + NameOf(who) + ", tenue par " + NameOf(l.Owner));
-                if (who == Session.LocalId) { Hud.Toast("Machine occupee par " + NameOf(l.Owner)); return false; }
+                if (who == Session.LocalId) { Hud.Toast(Lang.T("Machine occup\u00E9e par ", "Machine in use by ") + NameOf(l.Owner)); return false; }
                 PlayerInfo pi;
                 if (Session.Players.TryGetValue(who, out pi) && pi.Peer != null && Session.T != null)
                     Session.T.SendReliable(pi.Peer, new NetWriter(Msg.MachineLock).U8(L_REFUSED).U8(l.Owner).Str(key).ToArray());
@@ -508,7 +508,7 @@ namespace MWCoop
             }
             if (op == L_HELD) SetOwner(key, who, "hote");
             else if (op == L_FREE) { if (GetLock(key).Owner == who) SetOwner(key, -1, "hote"); }
-            else if (op == L_REFUSED) { SetOwner(key, who, "refusee par l'hote"); Hud.Toast("Machine occupee par " + NameOf(who)); }
+            else if (op == L_REFUSED) { SetOwner(key, who, "refusee par l'hote"); Hud.Toast(Lang.T("Machine occup\u00E9e par ", "Machine in use by ") + NameOf(who)); }
             else if (op == L_GAME) Played(who, key);
         }
 
@@ -752,7 +752,7 @@ namespace MWCoop
 
         static void Played(int who, string game)
         {
-            if (game.Length > 0) Hud.Toast(NameOf(who) + " joue a " + game);
+            if (game.Length > 0) Hud.Toast(NameOf(who) + Lang.T(" joue \u00E0 ", " plays ") + game);
         }
 
         // ---------------------------------------------------------------- essais

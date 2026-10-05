@@ -101,7 +101,8 @@ namespace MWCoop.Net
             if (!PlayerSync.InGame && !Done && !WaitScreen.Shown && Session.T != null && Session.T.Peers.Count > 0 && now >= nextWaitToast)
             {
                 nextWaitToast = now + 8f;
-                Hud.Toast(lv == 1 ? "L'hote prepare sa sauvegarde, vous entrez en jeu dans un instant..." : "En attente : l'hote n'est pas encore en jeu");
+                Hud.Toast(lv == 1 ? Lang.T("L'h\u00F4te pr\u00E9pare sa sauvegarde, vous entrez en jeu dans un instant...", "The host is preparing the save, you will join in a moment...")
+                                  : Lang.T("En attente : l'h\u00F4te n'est pas encore en jeu", "Waiting: the host is not in game yet"));
             }
             if (lastHostLevel == 1 && lv == 0)
             {
@@ -109,7 +110,7 @@ namespace MWCoop.Net
                 if (PlayerSync.InGame)
                 {
                     backToMenuAt = now + 3f;
-                    Hud.Toast("L'hote est revenu au menu : retour au menu");
+                    Hud.Toast(Lang.T("L'h\u00F4te est revenu au menu : retour au menu", "The host went back to the menu: back to the menu"));
                     Log.Info("l'hote est revenu au menu : l'invite le suit");
                 }
             }
@@ -228,7 +229,7 @@ namespace MWCoop.Net
             if (!IsolatedProfile)
             {
                 Log.Error("sauvegarde de l'hote NON ecrite : le jeu n'est pas lance dans un profil MWCoop (" + SaveDir + ")");
-                Hud.Toast("Sauvegarde de l'hote ignoree : lancez le jeu depuis MWCoop.exe");
+                Hud.Toast(Lang.T("Sauvegarde de l'h\u00F4te ignor\u00E9e : lancez le jeu depuis MWCoop.exe", "Host's save ignored: start the game from MWCoop.exe"));
                 files = null;
                 return;
             }
@@ -242,12 +243,12 @@ namespace MWCoop.Net
             {
                 // Fichier bloque (antivirus, synchro OneDrive...) : on le dit au lieu de rester au menu.
                 Log.Error("sauvegarde de l'hote non ecrite : " + e.Message);
-                Hud.Toast("Sauvegarde de l'hote non ecrite : " + e.Message);
+                Hud.Toast(Lang.T("Sauvegarde de l'h\u00F4te non \u00E9crite : ", "Host's save not written: ") + e.Message);
                 files = null;
                 return;
             }
             Log.Info("sauvegarde de l'hote ecrite dans " + SaveDir);
-            Hud.Toast("Sauvegarde de l'hote recue");
+            Hud.Toast(Lang.T("Sauvegarde de l'h\u00F4te re\u00E7ue", "Host's save received"));
             files = null;
             Received = true;
             Progress = 1;
@@ -508,7 +509,7 @@ namespace MWCoop.Net
             if (Session.IsHost)
             {
                 if (Session.RemoteCount == 0) { Log.Info("toilettes (" + where + ") : aucun invite, sauver et quitter comme le jeu"); proceed = b; return; }
-                if (coopPhase != 0) { Hud.Toast("Sauvegarde en cours..."); return; }
+                if (coopPhase != 0) { Hud.Toast(Lang.T("Sauvegarde en cours...", "Saving...")); return; }
                 if (now < quitUntil)
                 {
                     quitUntil = 0;
@@ -522,11 +523,11 @@ namespace MWCoop.Net
                 return;
             }
             if (Session.Host == null) { Log.Info("toilettes (" + where + ") : pas d'hote, sauver et quitter comme le jeu"); proceed = b; return; }
-            if (now - guestAskedAt < 6f) { Hud.Toast("Sauvegarde deja demandee a l'hote"); return; }
+            if (now - guestAskedAt < 6f) { Hud.Toast(Lang.T("Sauvegarde d\u00E9j\u00E0 demand\u00E9e \u00E0 l'h\u00F4te", "Save already requested from the host")); return; }
             guestAskedAt = now;
             Session.SendToHost(new NetWriter(CoopMsg).U8(K_REQ), true);
             Log.Info("toilettes (" + where + ") : sauvegarde demandee a l'hote, l'invite reste en jeu");
-            Hud.Toast("Sauvegarde demandee a l'hote : vous restez en jeu");
+            Hud.Toast(Lang.T("Sauvegarde demand\u00E9e \u00E0 l'h\u00F4te : vous restez en jeu", "Save requested from the host: you stay in game"));
         }
 
         // ------------------------------------------------------------ hote
@@ -548,7 +549,8 @@ namespace MWCoop.Net
             hostSave = null; guestSaves.Clear();
             Session.Broadcast(new NetWriter(CoopMsg).U8(K_START).U16(coopSeq).Str(by), true);
             Log.Info("sauvegarde coop #" + coopSeq + " demandee par " + by + " : ecriture dans " + FlushDelay + " s (derniers changements des invites)");
-            Hud.Toast(hostButton ? "Sauvegarde coop : les invites restent en jeu" : by + " demande une sauvegarde : dans " + (int)FlushDelay + " s");
+            Hud.Toast(hostButton ? Lang.T("Sauvegarde coop : les invit\u00E9s restent en jeu", "Co-op save: guests stay in game")
+                                 : by + Lang.T(" demande une sauvegarde : dans ", " asks for a save: in ") + (int)FlushDelay + " s");
         }
 
         static void HostCoop(float now)
@@ -579,9 +581,10 @@ namespace MWCoop.Net
             if (coopByHost)
             {
                 quitUntil = now + QuitWindow;
-                Hud.Toast("Partie sauvegardee, tout le monde reste en jeu. Recliquez dans les " + (int)QuitWindow + " s pour sauver et quitter au menu");
+                Hud.Toast(Lang.T("Partie sauvegard\u00E9e, tout le monde reste en jeu. Recliquez dans les " + (int)QuitWindow + " s pour sauver et quitter au menu",
+                                  "Game saved, everyone stays in game. Click again within " + (int)QuitWindow + " s to save and quit to the menu"));
             }
-            else Hud.Toast("Partie sauvegardee (demandee par " + coopBy + ")");
+            else Hud.Toast(Lang.T("Partie sauvegard\u00E9e (demand\u00E9e par ", "Game saved (requested by ") + coopBy + ")");
             if (CompareOn) { hostSave = ReadSaveFiles(); hostSaveSeq = coopSeq; TryCompare(); }
         }
 
@@ -610,7 +613,7 @@ namespace MWCoop.Net
                     int seq = r.U16();
                     string by = r.Str();
                     Log.Info("sauvegarde coop #" + seq + " annoncee par l'hote (demandee par " + by + ")");
-                    Hud.Toast("Sauvegarde coop dans " + (int)FlushDelay + " s (" + by + ") : vous restez en jeu");
+                    Hud.Toast(Lang.T("Sauvegarde coop dans " + (int)FlushDelay + " s (" + by + ") : vous restez en jeu", "Co-op save in " + (int)FlushDelay + " s (" + by + "): you stay in game"));
                     SendReport(seq);
                     break;
                 }
@@ -631,12 +634,12 @@ namespace MWCoop.Net
                     string by = r.Str();
                     guestDone++;
                     Log.Info("sauvegarde coop #" + seq + " ecrite chez l'hote (demandee par " + by + "), l'invite reste en jeu");
-                    Hud.Toast("Partie sauvegardee chez l'hote (" + by + ")");
+                    Hud.Toast(Lang.T("Partie sauvegard\u00E9e chez l'h\u00F4te (", "Game saved on the host (") + by + ")");
                     break;
                 }
                 case K_QUIT:
                     Log.Info("l'hote sauvegarde et quitte au menu (toilettes) : l'invite le suivra");
-                    Hud.Toast("L'hote sauvegarde et quitte au menu : vous le suivez, puis revenez avec lui");
+                    Hud.Toast(Lang.T("L'h\u00F4te sauvegarde et quitte au menu : vous le suivez, puis revenez avec lui", "The host saves and quits to the menu: you follow, then come back with them"));
                     break;
             }
         }
@@ -932,7 +935,7 @@ namespace MWCoop.Net
             foreach (List<string> l in new[] { onlyGuest, differ, onlyHost })
                 foreach (string s in l) { if (shown++ >= 10) break; Log.Info("  ecart sauvegarde : " + s); }
             int lost = onlyGuest.Count + differ.Count;
-            if (lost > 0) Hud.Toast("Sauvegarde : " + lost + " ecart(s) avec " + name + " (dumps\\ecarts-sauvegarde-joueur" + id + ".txt)");
+            if (lost > 0) Hud.Toast(Lang.T("Sauvegarde : " + lost + " \u00E9cart(s) avec ", "Save: " + lost + " difference(s) with ") + name + " (dumps\\ecarts-sauvegarde-joueur" + id + ".txt)");
         }
 
         static void Section(StringBuilder sb, string title, List<string> lines)

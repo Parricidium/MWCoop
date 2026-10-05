@@ -24,7 +24,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             // Statut en haut a gauche : pastille discrete (point vert : relie a l'hote).
             string head = "MWCoop " + Version.Text;
-            if (Session.Active) head += "  \u00B7  " + Session.Status + "  \u00B7  " + Session.Players.Count + " joueur(s)";
+            if (Session.Active) head += "  \u00B7  " + Lang.Status(Session.Status) + "  \u00B7  " + Lang.Players(Session.Players.Count);
             float ph = Style.Px(28), tw = Style.Width(head, 14, false);
             var hr = new Rect(Style.Px(10), Style.Px(8), tw + Style.Px(44), ph);
             Style.Round(hr, ph / 2, pill);

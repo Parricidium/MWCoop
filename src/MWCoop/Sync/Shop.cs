@@ -1073,7 +1073,7 @@ namespace MWCoop
             Register reg;
             if (!registers.TryGetValue(key, out reg) || reg.Fsm == null) { Scan(); registers.TryGetValue(key, out reg); }
             string name = PlayerName(who);
-            Hud.Toast(name + " a fait des courses : " + desc);
+            Hud.Toast(name + Lang.T(" a fait des courses : ", " went shopping: ") + desc);
             if (reg == null || reg.Fsm == null) { Log.Warn("magasin : caisse " + key + " introuvable ici"); return; }
             if (!reg.Fsm.gameObject.activeInHierarchy)
             {
@@ -1286,7 +1286,7 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("magasin : comptoir " + key + " introuvable ici"); }
                 return;
             }
-            if (c.Kind != "tasse") Hud.Toast(PlayerName(who) + (c.Kind == "cafe" ? " a pris " : " a paye ") + c.Label);
+            if (c.Kind != "tasse") Hud.Toast(PlayerName(who) + (c.Kind == "cafe" ? Lang.T(" a pris ", " took ") : Lang.T(" a pay\u00E9 ", " paid for ")) + c.Label);
             var item = new Replayed { C = c, State = state, Who = who, SerialWho = sw, Serial = serial, V = v, Lists = lists, Until = Time.realtimeSinceStartup + c.Wait };
             if (!TryApply(item, Time.realtimeSinceStartup))
             {
