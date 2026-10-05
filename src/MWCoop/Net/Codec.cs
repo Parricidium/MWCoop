@@ -95,5 +95,10 @@ namespace MWCoop.Net
         Tow = 37,         // corde de remorquage entre deux vehicules (a remplir : lot 2)
         Call = 38,        // appels sortants (telephone fixe, telephone du taxi) (a remplir : lot 2)
         Wear = 39,        // vetements portes (veste, combinaison, casque) (a remplir : lot 2)
+        Cook = 40,        // cuisine : saucisses et viande grillees, cafe, peremption (a remplir : lot 4)
+        Fire = 41,        // feux : bois dans les cheminees, poeles, sauna, grill ; incendies (a remplir : lot 4)
+        Garage = 42,      // atelier : crics, pont, palan, degats d'accident, chargeur du tracteur (a remplir : lot 4)
+        Home = 43,        // maison : fusibles et electricite, kilju (a remplir : lot 4)
+        Gesture = 44,     // gestes du joueur : coup, doigt, pouce, pipi, montre, pencher, ivresse, assis (a remplir : lot 4)
     }
 }
