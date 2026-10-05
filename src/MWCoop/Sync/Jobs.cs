@@ -186,24 +186,33 @@ namespace MWCoop
             creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
             specialsScanned = false; logTrigger = null; ltCollider = null;
             feed = null; feedHand = null; feedMute = null; feedMuted.Clear(); feedClick = feedActivation = feedWasActive = false; feedStageLocal = true;
-            bed = flatbed = null; bedHinge = null; bedTargetAt = -100; bedSent = float.NaN;
-            chopped = null; lastId = null; testStep = testLogs = 0; testBefore = false; otherSince = -1;
+            bed = flatbed = null; bedHinge = null; bedTargetAt = -100; bedSent = float.NaN; bedLift = null; bedFollow = false;
+            feedStep2 = false; feedStageSeen = -1; feedCaughtUp = 0; jobGen = -1; fastWaitUntil = 0;
+            chopped = null; lastId = null; testStep = testLogs = 0; testBefore = false; otherSince = -1; testClick2 = false;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 10f : -1;
         }
 
         // Une piece vient d'etre montee (Parts) : ses commandes (boite a gants, interrupteurs, jauges, loquet,
         // branchements) sont cherchees tout de suite, sans attendre le releve des 30 s.
+        // Les automates d'abord inactifs (gardes de cote au releve) sont alors guettes 4 fois par seconde pendant 10 s :
+        // le montage active la boite a gants, les jauges ou les fils une image plus tard (Wiring/Status, Installed).
+        // Meme chose quand VehicleSync trouve une voiture de plus (taxi, voiture pretee, corps recree).
         public static void SoonScan()
         {
             if (nextScan < 0 || Time.realtimeSinceStartup - loadedAt < 12f) return;
             nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1.5f);
+            fastWaitUntil = Time.realtimeSinceStartup + 10f;
+            nextWaiting = 0f;
         }
+        static int jobGen = -1;
+        static float fastWaitUntil;
 
         public static void Update()
         {
             if (nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
+            if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
             SpecialUpdate(now);
             if (now < nextScan) return;
             nextScan = now + 30f;
@@ -285,7 +294,7 @@ namespace MWCoop
         static void CheckWaiting(float now)
         {
             if (now < nextWaiting || waitingJobs.Count == 0) return;
-            nextWaiting = now + 1f;
+            nextWaiting = now + (now < fastWaitUntil ? 0.25f : 1f);
             int n = 0;
             for (int i = waitingJobs.Count - 1; i >= 0; i--)
             {
@@ -838,7 +847,7 @@ namespace MWCoop
         static FsmGameObject feedHand;                  // Cutter/Triggers 'Logic' LogInHand (grume tenue par le joueur d'ici)
         static FsmStateAction[] feedMute;               // "State 4" : SetParent des buches du reservoir, succes Steam
         static readonly List<FsmStateAction> feedMuted = new List<FsmStateAction>();
-        static bool feedClick, feedActivation, feedWasActive, feedStageLocal = true;
+        static bool feedClick, feedActivation, feedWasActive, feedStageLocal = true, feedStep2;
 
         class FeedHook : ModHook
         {
@@ -890,6 +899,7 @@ namespace MWCoop
                 }
                 // Retabli juste apres les SetParent : avant IntCompare, dont l'evenement STOP arrete la liste.
                 if (last >= 0) l4.Insert(last + 1, new FeedHook { Step = 2 });
+                feedStep2 = last >= 0;
                 l4.Insert(0, new FeedHook { Step = 1 });
                 s4.Actions = l4.ToArray();
                 feedMute = mute.ToArray();
@@ -913,17 +923,64 @@ namespace MWCoop
                 return;
             }
             FeedRestore();
-            if (step == 2) return;
-            // Debut de "State 4" (avant IntAdd) : a qui sont les deux buches de cette etape ?
             FsmInt stage = feed.F.FsmVariables.FindFsmInt("Stage");
+            if (step == 2)
+            {
+                // Apres IntAdd : l'etape faite ici est annoncee (les autres s'y recalent, voir OnFeedStage).
+                if (feedStageLocal && stage != null) SendFeedStage(stage.Value);
+                return;
+            }
+            // Debut de "State 4" (avant IntAdd) : a qui sont les deux buches de cette etape ?
             bool first = stage != null && stage.Value == 0;
             feedStageLocal = !Session.Active || Session.RemoteCount == 0 || feedClick || (first && feedActivation);
             feedClick = false;
             if (first) feedActivation = false;
+            if (feedStageLocal && !feedStep2 && stage != null) SendFeedStage(stage.Value + 1);   // (pas de crochet apres IntAdd)
             if (feedStageLocal || feedMute == null) return;
             foreach (FsmStateAction a in feedMute) if (a.Enabled) { a.Enabled = false; feedMuted.Add(a); }
             Log.Info("bois : etape " + (stage != null ? (stage.Value + 1).ToString() : "?") + " de la fendeuse a un autre joueur, ses buches arrivent par @cree");
         }
+
+        // Etape de la fendeuse : celui dont c'etait l'etape annonce le Stage atteint (@etape). Chez les autres la meme
+        // etape est rejouee (clic recu) mais attend leur propre lame ("Wait blade" : Blocked de Conveyer 'Blade') ;
+        // une lame en retard laissait l'etape en plan, et le clic suivant (recalage direct sur "State 2") la sautait :
+        // Stage 1 chez l'invite quand l'hote etait a 2. A l'annonce, une fendeuse d'ici en retard d'une etape fait
+        // "State 4" tout de suite (rejeu : sans ses buches, qui arrivent par @cree) ; plus en retard, Stage est
+        // d'abord mis juste avant.
+        static void SendFeedStage(int s)
+        {
+            if (!Session.Active || Session.RemoteCount == 0) return;
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@etape").U8(s), true);
+        }
+
+        static void OnFeedStage(int who, int s)
+        {
+            if (feed == null || feed.F == null) return;
+            FsmInt stage = feed.F.FsmVariables.FindFsmInt("Stage");
+            if (stage == null) return;
+            if (!feed.F.gameObject.activeInHierarchy || !hooked.Contains(feed.F))
+            {
+                Log.Info("bois : etape " + s + " de la fendeuse chez #" + who + ", fendeuse arretee ici (Stage " + stage.Value + ")");
+                return;
+            }
+            int local = stage.Value;
+            if (local >= s) { feedStageSeen = s; return; }   // deja faite ici (lame d'ici a l'heure)
+            if (local < s - 1)
+            {
+                stage.Value = s - 1;
+                FsmString sn = feed.F.FsmVariables.FindFsmString("StageName");
+                if (sn != null) sn.Value = (s - 1).ToString();
+            }
+            string was = feed.F.ActiveStateName;
+            feedClick = false; feedActivation = false;   // (etape d'un autre : ses buches sont coupees ici)
+            applying = true; Replay.Depth++;
+            try { Game.SetState(feed.F, "State 4"); }
+            finally { applying = false; Replay.Depth--; }
+            feedStageSeen = s;
+            feedCaughtUp++;
+            Log.Info("bois : etape " + s + " de la fendeuse recue de #" + who + ", rattrapee ici (Stage " + local + " -> " + stage.Value + ", etait en " + was + ", maintenant " + feed.F.ActiveStateName + ")");
+        }
+        static int feedStageSeen = -1, feedCaughtUp;
 
         static void FeedRestore()
         {
@@ -972,6 +1029,12 @@ namespace MWCoop
         static HingeJoint bedHinge;
         static Quaternion bedRest;
         static float bedTarget, bedTargetAt = -100, bedSent = float.NaN, bedSentAt, nextBedSend, bedLastFixed = -1;
+        // La benne monte par sa charniere : automate 'Lift' de FLATBED/Bed (evenements globaux HYD_UP -> "UP",
+        // HYD_DOWN -> "UP 2", HYD_OFF -> "UP 3", tenue "UP 4" : SetHingeJointProperties = moteur / butees de la
+        // charniere). Chez celui qui suit, ce moteur et ces butees tenaient la benne contre la correction : le temps
+        // du suivi, l'automate est arrete et la charniere libre (moteur, ressort, butees coupes), puis rendus.
+        static PlayMakerFSM bedLift;
+        static bool bedFollow, bedLiftWas, bedMotorWas, bedLimitsWas, bedSpringWas;
 
         static void FindBed()
         {
@@ -984,6 +1047,47 @@ namespace MWCoop
             flatbed = b.transform.root.GetComponent<Rigidbody>();
             bedRest = b.transform.localRotation;   // (benne baissee au chargement : la sauvegarde ne garde que le plateau)
             ltCollider = logTrigger.F.GetComponent<Collider>();
+            bedLift = Game.FsmOn(b.gameObject, "Lift");
+            if (bedLift != null && !Replay.Claim(bedLift, "quetes")) { Log.Warn("bois : 'Lift' de la benne deja a " + Replay.Owner(bedLift)); bedLift = null; }
+            if (bedHinge != null) Log.Info("bois : benne trouvee (" + HingeState() + ")");
+        }
+
+        static string HingeState()
+        {
+            if (bedHinge == null) return "pas de charniere";
+            JointMotor m = bedHinge.motor; JointLimits l = bedHinge.limits; JointSpring s = bedHinge.spring;
+            return "angle " + (bed != null ? BedAngle().ToString("F1") : "?") + ", moteur " + (bedHinge.useMotor ? "v " + m.targetVelocity.ToString("F1") + " f " + m.force.ToString("F0") : "non")
+                   + ", butees " + (bedHinge.useLimits ? "[" + l.min.ToString("F1") + " ; " + l.max.ToString("F1") + "]" : "non")
+                   + ", ressort " + (bedHinge.useSpring ? s.spring.ToString("F0") + " vers " + s.targetPosition.ToString("F1") : "non")
+                   + ", Lift " + (bedLift != null ? (bedLift.enabled ? "" : "arrete, ") + bedLift.ActiveStateName : "?");
+        }
+
+        static void BedFollow(bool on)
+        {
+            if (on == bedFollow || bedHinge == null) return;
+            bedFollow = on;
+            if (on)
+            {
+                bedMotorWas = bedHinge.useMotor; bedLimitsWas = bedHinge.useLimits; bedSpringWas = bedHinge.useSpring;
+                bedLiftWas = bedLift != null && bedLift.enabled;
+                if (bedLift != null) bedLift.enabled = false;
+                bedHinge.useMotor = false; bedHinge.useSpring = false; bedHinge.useLimits = false;
+                Log.Info("bois : benne suivie (charniere libre le temps du suivi)");
+                return;
+            }
+            // Rendue a sa charniere : tenue a l'angle atteint (la cible du ressort, les butees d'avant l'auraient ramenee).
+            float ang = bedHinge.angle;
+            if (bedSpringWas) { JointSpring s = bedHinge.spring; s.targetPosition = ang; bedHinge.spring = s; }
+            if (bedLimitsWas)
+            {
+                JointLimits l = bedHinge.limits;
+                if (ang < l.min) l.min = ang; if (ang > l.max) l.max = ang;
+                bedHinge.limits = l;
+            }
+            if (bedMotorWas) { JointMotor m = bedHinge.motor; m.targetVelocity = 0f; bedHinge.motor = m; }
+            bedHinge.useMotor = bedMotorWas; bedHinge.useLimits = bedLimitsWas; bedHinge.useSpring = bedSpringWas;
+            if (bedLift != null) bedLift.enabled = bedLiftWas;
+            Log.Info("bois : benne rendue a sa charniere (" + HingeState() + ")");
         }
 
         static int BedAuthority() { return flatbed != null ? VehicleSync.Authority(flatbed) : 0; }
@@ -1000,8 +1104,12 @@ namespace MWCoop
 
         static void BedUpdate(float now)
         {
-            if (bed == null || bedHinge == null || !Session.Active || Session.RemoteCount == 0) return;
-            if (BedAuthority() == Session.LocalId)
+            if (bed == null || bedHinge == null) return;
+            bool active = Session.Active && Session.RemoteCount > 0;
+            bool authority = BedAuthority() == Session.LocalId;
+            BedFollow(active && !authority && now - bedTargetAt < 2f && !bed.isKinematic);
+            if (!active) return;
+            if (authority)
             {
                 if (now < nextBedSend) return;
                 float a = BedAngle();
@@ -1011,24 +1119,25 @@ namespace MWCoop
                 Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@benne").F32(a), false);
                 return;
             }
-            if (now - bedTargetAt > 2f || bed.isKinematic) return;
+            if (!bedFollow) return;
             // Une correction par pas de physique : les VelocityChange s'additionnent jusqu'au pas suivant et
             // angularVelocity ne bouge pas entre deux images sans pas -- a 100-144 i/s (2-3 images par pas de
             // 50 Hz) la correction etait appliquee 2-3 fois et la benne oscillait contre ses butees.
             if (Time.fixedTime == bedLastFixed) return;
             bedLastFixed = Time.fixedTime;
             float err = Mathf.DeltaAngle(BedAngle(), bedTarget);
-            if (Mathf.Abs(err) < 0.5f) return;
             Vector3 axis = bed.transform.TransformDirection(bedHinge.axis).normalized;
             Rigidbody car = bedHinge.connectedBody;
             Vector3 rel = bed.angularVelocity - (car != null ? car.angularVelocity : Vector3.zero);
             float w = Vector3.Dot(rel, axis) * Mathf.Rad2Deg;
+            // (charniere libre : sans correction a chaque pas, la benne retomberait sous son poids)
+            if (Mathf.Abs(err) < 0.05f && Mathf.Abs(w) < 0.5f) return;
             float want = Mathf.Clamp(err * 4f, -25f, 25f);
             bed.AddTorque(axis * ((want - w) * Mathf.Deg2Rad), ForceMode.VelocityChange);
             if (bed.IsSleeping()) bed.WakeUp();
         }
 
-        static void OnBed(float a) { bedTarget = a; bedTargetAt = Time.realtimeSinceStartup; }
+        static void OnBed(float a) { bedTarget = Mathf.Clamp(a, -10f, 90f); bedTargetAt = Time.realtimeSinceStartup; }
 
         // Declencheur du plateau : seulement chez l'autorite (sinon chacun comptait la buche tombee chez lui).
         static void LogTriggerAuthority()
@@ -1114,6 +1223,7 @@ namespace MWCoop
         //  @parti  nombre, IDs                        (fiable)
         //  @benne  angle de la benne                  (non fiable, 4/s au plus)
         //  @tuyau  fosse, dedans                      (fiable)
+        //  @etape  Stage atteint par la fendeuse      (fiable, U8)
         static void OnSpecial(int who, string kind, NetReader r)
         {
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), kind != "@benne", who);
@@ -1135,6 +1245,7 @@ namespace MWCoop
                     break;
                 }
                 case "@benne": OnBed(r.F32()); break;
+                case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":
                 {
                     string key = r.Str();
@@ -1209,16 +1320,39 @@ namespace MWCoop
         // Jobs ; a T chacun active le taxi s'il est inactif (rendu inactif a T+20 s). Attendu, des "avant" et
         // pareil des deux cotes : "autres 0" (aucune commande du taxi a WorldFsms), puis apres activation
         // "en attente" qui baisse et "accroches" qui monte (CheckWaiting).
+        // [Test] Autotest=fendeuse2 (TestPos=62,0,-85 : devant la fendeuse) : comme fendeuse, mais la lame simulee
+        // de l'invite est en retard ([Test] FendeuseRetard=8 s apres "Wait blade", au lieu de 1 s) et l'hote clique
+        // une 2e fois a T+16 s. Attendu chez l'invite : 3 fois "etape N de la fendeuse recue de #0, rattrapee ici"
+        // (N = 1, 2, 3) et, a 64 et 76 s, le meme Stage (3) que l'hote.
+        // [Test] Autotest=benne2 (TestPos=62,0,-78 : a cote du plateau) : la benne levee comme par le levier du
+        // tracteur : l'hote envoie HYD_UP a 'Lift' de FLATBED/Bed a T, HYD_OFF a T+5, HYD_DOWN a T+9, HYD_OFF a T+15
+        // ([Test] BenneForce=x : HydraulicForce mise avant, si le jeu la tient a 0 sans tracteur). Si la benne n'a
+        // pas bouge 3 s apres HYD_UP, la charniere de l'hote est menee directement (moteur 10 deg/s, 3 s : note
+        // "moteur d'essai"). Les actions de 'Lift' (parametres) sont notees au debut. Chacun note chaque seconde
+        // angle, cible, suivi et charniere. Attendu chez l'invite : "benne suivie", ecart final < 3 deg ("OK").
+        // [Test] Autotest=boitegants (TestPos=1933,5,-419 : a cote de la CORRIS) : a T, chacun active
+        // [Test] BoiteGants (CORRIS/Assemblies/VINP_Dashboard/Glovebox, comme le montage du tableau de bord) ; l'hote
+        // clique la boite a T+5 ("Mouse over 1" -FINISHED-> "Open door") et le loquet du capot a T+9 ("Mouse over 2"
+        // -PROCEED-> "State 1"), puis les deux encore a T+15 et T+19. Attendu : "automates suivis a leur activation"
+        // des deux cotes (quelques dixiemes de seconde apres T) ; chez l'invite "quete de #0 : ...Glovebox/Pivot/coll
+        // ::Use#0 -> Open door" puis la boite Open=True, le loquet Open qui bascule comme chez l'hote.
         static int testStep, testLogs;
         static float testAt;
-        static bool testBefore;
+        static bool testBefore, testClick2;
 
         public static void Test(string mode, float t)
         {
-            if (mode == "fendeuse" || mode == "benne" || mode == "taxi-commandes")
+            if (mode == "fendeuse" || mode == "fendeuse2" || mode == "benne" || mode == "benne2" || mode == "taxi-commandes" || mode == "boitegants")
             {
                 if (t > 28f && !testBefore) { testBefore = true; Log.Info("autotest : " + mode + ", avant : " + MoreState(mode)); }
-                if (t > 30f) { if (mode == "fendeuse") TestFeed(); else if (mode == "benne") TestBed(); else TestTaxi(); }
+                if (t > 30f)
+                {
+                    if (mode == "fendeuse" || mode == "fendeuse2") TestFeed(mode == "fendeuse2");
+                    else if (mode == "benne") TestBed();
+                    else if (mode == "benne2") TestBed2();
+                    else if (mode == "boitegants") TestGlovebox();
+                    else TestTaxi();
+                }
                 if (testLogs < 4 && t > 40f + 12f * testLogs) { testLogs++; Log.Info("autotest : " + mode + ", " + MoreState(mode)); }
                 return;
             }
@@ -1361,8 +1495,9 @@ namespace MWCoop
 
         static string MoreState(string mode)
         {
-            if (mode == "fendeuse") return FeedState();
-            if (mode == "benne") { FindBed(); return bed != null && bedHinge != null ? "benne " + BedAngle().ToString("F1") + " (autorite #" + BedAuthority() + ")" : "pas de benne (plateau pas suivi)"; }
+            if (mode == "fendeuse" || mode == "fendeuse2") return FeedState();
+            if (mode == "benne" || mode == "benne2") { FindBed(); return bed != null && bedHinge != null ? "benne " + BedAngle().ToString("F1") + " (autorite #" + BedAuthority() + ", " + HingeState() + ")" : "pas de benne (plateau pas suivi)"; }
+            if (mode == "boitegants") return GloveState();
             return TaxiState();
         }
 
@@ -1371,9 +1506,10 @@ namespace MWCoop
         static bool testBladeWas, testNoAchievement;
         static float testWaitBladeSince = -1;
 
-        static void TestFeed()
+        static void TestFeed(bool late)
         {
             float now = Time.realtimeSinceStartup;
+            testBladeDelay = late && !Session.IsHost ? Config.GetInt("Test", "FendeuseRetard", 8) : 1f;
             if (testStep == 0 && OtherInGame(15f))
             {
                 testStep = 1; testAt = now;
@@ -1390,7 +1526,8 @@ namespace MWCoop
             TestBladeSim(now);
             if (Session.IsHost && testStep == 1 && now - testAt > 1f) { testStep = 2; Log.Info("autotest : fendeuse, " + TestFeedStart()); }
             if (Session.IsHost && testStep == 2 && now - testAt > 6f) { testStep = 3; Log.Info("autotest : fendeuse, " + TestFeedClick()); }
-            if (now - testAt > 25f)
+            if (late && Session.IsHost && testStep == 3 && !testClick2 && now - testAt > 16f) { testClick2 = true; Log.Info("autotest : fendeuse2, 2e " + TestFeedClick()); }
+            if (now - testAt > (late ? 32f : 25f))
             {
                 testStep = 4;
                 if (testBlade != null) testBlade.enabled = testBladeWas;
@@ -1408,8 +1545,9 @@ namespace MWCoop
             if (bl == null) return;
             if (!feed.F.gameObject.activeInHierarchy || feed.F.ActiveStateName != "Wait blade") { testWaitBladeSince = -1; bl.Value = false; return; }
             if (testWaitBladeSince < 0) testWaitBladeSince = now;
-            bl.Value = now - testWaitBladeSince > 1f;
+            bl.Value = now - testWaitBladeSince > testBladeDelay;
         }
+        static float testBladeDelay = 1f;
 
         static void TestMuteAchievement()
         {
@@ -1462,7 +1600,8 @@ namespace MWCoop
             int wood = 0;
             foreach (KeyValuePair<string, GameObject> kv in tagged) if (kv.Value != null && kv.Value.name.StartsWith("firewood")) wood++;
             return "fendeuse " + (feed.F.gameObject.activeInHierarchy ? "en marche" : "arretee") + ", etat " + feed.F.ActiveStateName + ", Stage " + FeedStage()
-                   + ", suivie " + (hooked.Contains(feed.F) ? "oui" : "non") + ", derniere etape " + (feedStageLocal ? "ici" : "a un autre") + ", buches marquees " + wood;
+                   + ", suivie " + (hooked.Contains(feed.F) ? "oui" : "non") + ", derniere etape " + (feedStageLocal ? "ici" : "a un autre") + ", buches marquees " + wood
+                   + ", etapes rattrapees " + feedCaughtUp;
         }
 
         // ---------------------------------------------------------------- essai benne
@@ -1510,6 +1649,178 @@ namespace MWCoop
                 Log.Info("autotest : benne suivie : angle " + BedAngle().ToString("F1") + (BedAuthority() == Session.LocalId ? " (autorite ici)"
                          : ", cible " + bedTarget.ToString("F1") + ", inversions " + testBedFlips + ", vitesse max " + testBedMaxW.ToString("F0") + " deg/s, " + (1f / Mathf.Max(Time.smoothDeltaTime, 0.001f)).ToString("F0") + " i/s"));
             }
+        }
+
+        // ---------------------------------------------------------------- essai benne (levier)
+        static float testBed2Log, testBed2Up = float.NaN, testBed2MaxErr;
+        static bool testBed2Motor;
+
+        static void TestBed2()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (testStep == 0 && OtherInGame(15f))
+            {
+                testStep = 1; testAt = now; testBed2MaxErr = 0f; testBed2Motor = false;
+                FindBed();
+                if (bed == null || bedHinge == null) { testStep = 99; Log.Info("autotest : benne2, pas de benne ici (plateau pas suivi)"); return; }
+                Log.Info("autotest : benne2, debut : " + HingeState() + ", autorite #" + BedAuthority());
+                if (bedLift != null) foreach (string st in new[] { "UP", "UP 2", "UP 3", "UP 4" }) Log.Info("autotest : benne2, 'Lift' " + DumpActions(bedLift, st));
+            }
+            if (testStep < 1 || testStep > 6 || bed == null || bedHinge == null) return;
+            float dt = now - testAt;
+            bool host = BedAuthority() == Session.LocalId;
+            if (host && bedLift == null && testStep == 1) { testStep = 2; Log.Info("autotest : benne2, pas d'automate 'Lift' sur la benne"); }
+            if (host && bedLift != null)
+            {
+                if (testStep == 1)
+                {
+                    testStep = 2;
+                    float force = Config.GetInt("Test", "BenneForce", 0);
+                    FsmFloat hf = bedLift.FsmVariables.FindFsmFloat("HydraulicForce");
+                    if (force > 0f && hf != null) hf.Value = force;
+                    testBed2Up = BedAngle();
+                    bedLift.SendEvent("HYD_UP");   // comme le levier du tracteur
+                    Log.Info("autotest : benne2, HYD_UP -> " + bedLift.ActiveStateName + " (" + HingeState() + ")");
+                }
+                // La benne n'a pas bougee (pas de pression sans tracteur ?) : charniere menee directement.
+                if (testStep == 2 && dt > 3f && Mathf.Abs(BedAngle() - testBed2Up) < 1f)
+                {
+                    testBed2Motor = true;
+                    Log.Info("autotest : benne2, pas montee par HYD_UP (" + HingeState() + "), moteur d'essai 10 deg/s");
+                    bedLift.enabled = false;   // (ses SetHingeJointProperties remettraient le moteur du jeu ; rendu a la fin)
+                }
+                if (testBed2Motor && testStep == 2)
+                {
+                    JointMotor m = bedHinge.motor; m.targetVelocity = dt < 6f ? 10f : 0f; m.force = 50000f; m.freeSpin = false;
+                    bedHinge.motor = m; bedHinge.useMotor = true; bedHinge.useLimits = false;
+                    if (bed.IsSleeping()) bed.WakeUp();
+                }
+                if (testStep == 2 && dt > 5f) { testStep = 3; if (!testBed2Motor) bedLift.SendEvent("HYD_OFF"); Log.Info("autotest : benne2, HYD_OFF -> " + bedLift.ActiveStateName + ", angle " + BedAngle().ToString("F1")); }
+                if (testStep == 3 && dt > 9f)
+                {
+                    testStep = 4;
+                    if (testBed2Motor) { JointMotor m = bedHinge.motor; m.targetVelocity = -10f; bedHinge.motor = m; }
+                    else bedLift.SendEvent("HYD_DOWN");
+                    Log.Info("autotest : benne2, HYD_DOWN -> " + bedLift.ActiveStateName);
+                }
+                if (testStep == 4 && dt > 15f)
+                {
+                    testStep = 5;
+                    if (testBed2Motor) { JointMotor m = bedHinge.motor; m.targetVelocity = 0f; bedHinge.motor = m; bedLift.enabled = true; }
+                    else bedLift.SendEvent("HYD_OFF");
+                    Log.Info("autotest : benne2, HYD_OFF -> " + bedLift.ActiveStateName + ", angle " + BedAngle().ToString("F1"));
+                }
+            }
+            if (!host && dt > 2f && now - bedTargetAt < 1f) testBed2MaxErr = Mathf.Max(testBed2MaxErr, Mathf.Abs(Mathf.DeltaAngle(BedAngle(), bedTarget)));
+            if (now >= testBed2Log && dt < 20f)
+            {
+                testBed2Log = now + 1f;
+                Log.Info("autotest : benne2 (" + (Session.IsHost ? "hote" : "invite") + ") t+" + dt.ToString("F0") + " angle " + BedAngle().ToString("F1")
+                         + (host ? " (autorite)" : ", cible " + bedTarget.ToString("F1") + " (recue il y a " + (now - bedTargetAt).ToString("F1") + " s), suivi " + bedFollow)
+                         + " | " + HingeState());
+            }
+            if (dt > 20f)
+            {
+                testStep = 7;
+                float err = host ? 0f : Mathf.Abs(Mathf.DeltaAngle(BedAngle(), bedTarget));
+                Log.Info("autotest : benne2 " + (host ? "fin (autorite), angle " + BedAngle().ToString("F1") + (testBed2Motor ? ", moteur d'essai" : "")
+                         : (err < 3f ? "OK" : "ECHEC") + " : angle " + BedAngle().ToString("F1") + ", cible " + bedTarget.ToString("F1") + ", ecart max en route " + testBed2MaxErr.ToString("F1") + " deg"));
+            }
+        }
+
+        // Essais : actions d'un etat, avec leurs parametres (champs publics : variables nommees, valeurs, cibles).
+        public static string DumpActions(PlayMakerFSM f, string state)
+        {
+            if (f == null) return "pas d'automate";
+            FsmState s = f.Fsm.GetState(state);
+            if (s == null) return "pas d'etat " + state;
+            var sb = new System.Text.StringBuilder(state + " :");
+            FsmStateAction[] acts;
+            try { acts = s.Actions; } catch (System.Exception e) { return state + " illisible (" + e.GetType().Name + ")"; }
+            foreach (FsmStateAction a in acts)
+            {
+                if (a == null || a is ModHook) continue;
+                sb.Append(" [").Append(a.GetType().Name);
+                foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    object v = fi.GetValue(a);
+                    string txt = null;
+                    var nv = v as NamedVariable;
+                    if (nv != null) txt = nv.UseVariable && !string.IsNullOrEmpty(nv.Name) ? "{" + nv.Name + "}" : nv.ToString();
+                    else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; txt = od.OwnerOption == OwnerDefaultOption.UseOwner ? "proprietaire" : od.GameObject != null && od.GameObject.Value != null ? od.GameObject.Value.name : "?"; }
+                    else if (v is FsmEvent) txt = ((FsmEvent)v).Name;
+                    else if (v is bool || v is int || v is float || v is string || v is System.Enum) txt = v.ToString();
+                    if (txt != null) sb.Append(' ').Append(fi.Name).Append('=').Append(txt);
+                }
+                sb.Append(']');
+            }
+            return sb.ToString();
+        }
+
+        // ---------------------------------------------------------------- essai boite a gants / loquet
+        static PlayMakerFSM testGlove, testLatch;
+
+        static void TestGlovebox()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (testStep == 0 && OtherInGame(15f))
+            {
+                testStep = 1; testAt = now;
+                GameObject gb = Game.FindAny(Config.Get("Test", "BoiteGants", "CORRIS/Assemblies/VINP_Dashboard/Glovebox"));
+                if (gb == null) { testStep = 99; Log.Info("autotest : boitegants, boite a gants introuvable"); return; }
+                bool was = gb.activeSelf;
+                if (!was) gb.SetActive(true);   // comme le tableau de bord monte (la boite s'active, ses automates aussi)
+                foreach (PlayMakerFSM f in gb.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Use") { testGlove = f; break; }
+                GameObject lt = Game.FindAny("CORRIS/BODY/HoodLatch/Function");
+                testLatch = lt != null ? Game.FsmOn(lt, "Latch") : null;
+                SoonScan();
+                Log.Info("autotest : boitegants, boite a gants " + (was ? "deja active" : "activee ici") + " ; " + GloveState());
+            }
+            if (!Session.IsHost || testStep < 1 || testStep > 4) return;
+            if (testStep == 1 && now - testAt > 5f) { testStep = 2; Log.Info("autotest : boitegants, " + TestClick(testGlove, GloveOpen() ? "Mouse over 2" : "Mouse over 1", "FINISHED")); }
+            if (testStep == 2 && now - testAt > 9f) { testStep = 3; Log.Info("autotest : boitegants, " + TestClick(testLatch, "Mouse over 2", "PROCEED")); }
+            if (testStep == 3 && now - testAt > 15f) { testStep = 4; Log.Info("autotest : boitegants, " + TestClick(testGlove, GloveOpen() ? "Mouse over 2" : "Mouse over 1", "FINISHED")); }
+            if (testStep == 4 && now - testAt > 19f) { testStep = 5; Log.Info("autotest : boitegants, " + TestClick(testLatch, "Mouse over 2", "PROCEED")); }
+        }
+
+        static bool GloveOpen()
+        {
+            FsmBool o = testGlove != null ? testGlove.FsmVariables.FindFsmBool("Open") : null;
+            return o != null && o.Value;
+        }
+
+        // Comme le clic : l'etat de survol (sans son MousePick, qui le quitterait faute de souris), puis l'evenement du clic.
+        static string TestClick(PlayMakerFSM f, string state, string ev)
+        {
+            if (f == null) return "pas d'automate";
+            if (!f.gameObject.activeInHierarchy) return f.gameObject.name + " inactif";
+            FsmState s = f.Fsm.GetState(state);
+            if (s == null) return "pas d'etat " + state;
+            var off = new List<FsmStateAction>();
+            foreach (FsmStateAction a in s.Actions) if (a != null && a.Enabled && a.GetType().Name.StartsWith("MousePick")) { a.Enabled = false; off.Add(a); }
+            try { Game.SetState(f, state); f.SendEvent(ev); }
+            finally { foreach (FsmStateAction a in off) a.Enabled = true; }
+            return "clic " + f.gameObject.name + "::" + f.FsmName + " " + state + " -" + ev + "-> " + f.ActiveStateName + " (suivi " + (hooked.Contains(f) ? "oui" : "non") + ")";
+        }
+
+        static string GloveState()
+        {
+            string g = "boite ?";
+            if (testGlove != null)
+            {
+                FsmBool o = testGlove.FsmVariables.FindFsmBool("Open");
+                g = "boite " + (testGlove.gameObject.activeInHierarchy ? "active" : "inactive") + " etat " + testGlove.ActiveStateName + " Open " + (o != null ? o.Value.ToString() : "?")
+                    + " suivie " + (hooked.Contains(testGlove) ? "oui" : waitingSet.Contains(testGlove) ? "en attente" : "non (" + (Replay.Owner(testGlove) ?? "personne") + ")");
+            }
+            string l = "loquet ?";
+            if (testLatch != null)
+            {
+                FsmBool o = testLatch.FsmVariables.FindFsmBool("Open");
+                FsmFloat r = testLatch.FsmVariables.FindFsmFloat("Rotation");
+                l = "loquet etat " + testLatch.ActiveStateName + " Open " + (o != null ? o.Value.ToString() : "?") + " Rotation " + (r != null ? r.Value.ToString("F1") : "?")
+                    + " suivi " + (hooked.Contains(testLatch) ? "oui" : "non (" + (Replay.Owner(testLatch) ?? "personne") + ")");
+            }
+            return g + " ; " + l;
         }
 
         // ---------------------------------------------------------------- essai taxi

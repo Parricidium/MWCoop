@@ -13,6 +13,8 @@ namespace MWCoop
     // (LateUpdate), tant que la voiture est conduite par l'autre, ou 3 s apres le dernier message.
     // Voitures : celles de VehicleSync (taxi sous JOBS compris), par leur cle ; releve toutes les 30 s et des que
     // sa liste change (voiture activee plus tard).
+    // Maillages "New"/"Damaged"/"Broken" (pieces usees ou cassees) suivis comme des lampes. Le bras du chargeur du
+    // KEKMET et les appareils de l'atelier sont a Garage (son LateUpdate est appele d'ici, apres la logique du jeu).
     public static class CarVisuals
     {
         static readonly string[] PoseWords = { "needle", "glasspivot", "windowpivot", "lever", "pivot_brake", "handbrake", "belt", "steering",
@@ -20,6 +22,9 @@ namespace MWCoop
         static readonly string[] ShowWords = { "light", "beam", "indicator", "lamp", "frost", "frozen", "heater", "belt", "lock", "key",
             "sunvisors", "marker", "brakes", "blinker", "turnsignal", "reverse" };   // reverse : feux de recul
         static readonly string[] SkipWords = { "wheel", "tire", "rim", "hubcap", "spindle", "driver", "passenger", "headpivot" };
+        // Maillages echanges a l'usure ou au choc ("New" / "Damaged" sous une piece montee : bloc moteur, phares...) :
+        // nom exact (un mot cle "new" prendrait n'importe quoi).
+        static readonly HashSet<string> ShowNames = new HashSet<string> { "new", "damaged", "broken" };
 
         class Item
         {
@@ -58,7 +63,7 @@ namespace MWCoop
                     if (t == rb.transform || t.GetComponent<Rigidbody>() != null) continue;
                     string n = t.name.ToLowerInvariant();
                     if (Has(n, SkipWords)) continue;
-                    bool pose = Has(n, PoseWords), show = Has(n, ShowWords) || t.GetComponent<Light>() != null;   // toute lampe
+                    bool pose = Has(n, PoseWords), show = Has(n, ShowWords) || ShowNames.Contains(n) || t.GetComponent<Light>() != null;   // toute lampe
                     if (!pose && !show) continue;
                     string rel = VehicleSync.RelPath(rb.transform, t);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
@@ -120,6 +125,8 @@ namespace MWCoop
         public static void LateUpdate()
         {
             if (!Session.Active) return;
+            // Atelier (crics, pont, palan, chargeur) : memes poses tenues apres la logique du jeu.
+            try { Garage.LateUpdate(); } catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("atelier (poses) : " + e.Message); }
             float now = Time.realtimeSinceStartup;
             foreach (Car c in cars.Values)
             {
