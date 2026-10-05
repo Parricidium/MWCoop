@@ -76,19 +76,31 @@ namespace MWCoop
             if (car == null) return "CORRIS introuvable";
             Transform root = car.transform;
             var parts = new List<Piece>();
+            var extra = new List<Piece>();
+            // Voiture COMPLETE d'origine (demande de JD : le jeu tire l'etat de la voiture au hasard, l'apercu ne doit
+            // pas montrer la sauvegarde) : chaque point de montage recoit la piece de serie que son createur y pose
+            // (automates 'Spawn' : Prefab -> VINP), les roues sont les jantes acier 13". Ce qui est monte sur ces
+            // points, le tuning et les pieces qui trainent sont ignores. [Coop] ApercuComplet=0 : l'etat de la partie.
+            bool stockOnly = Config.GetInt("Coop", "ApercuComplet", 1) != 0;
+            Dictionary<Transform, GameObject> stock = stockOnly ? StockParts(root) : new Dictionary<Transform, GameObject>();
             foreach (MeshFilter mf in car.GetComponentsInChildren<MeshFilter>())
             {
                 Renderer r = mf.GetComponent<Renderer>();
-                if (r != null && r.enabled && mf.sharedMesh != null)
+                if (r != null && r.enabled && mf.sharedMesh != null && !Replaced(r.transform, root, stock, stockOnly))
                     parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = root.worldToLocalMatrix * r.transform.localToWorldMatrix, Paint = IsPaintable(r.transform, root) });
             }
             foreach (SkinnedMeshRenderer s in car.GetComponentsInChildren<SkinnedMeshRenderer>())
-                if (s.enabled && s.sharedMesh != null)
+                if (s.enabled && s.sharedMesh != null && !Replaced(s.transform, root, stock, stockOnly))
                     parts.Add(new Piece { R = s, M = s.sharedMesh, ToCar = root.worldToLocalMatrix * s.transform.localToWorldMatrix, Paint = IsPaintable(s.transform, root) });
-            var points = AddLooseParts(root, parts);
-            var extra = new List<Piece>();
+            HashSet<Transform> points;
+            if (stockOnly)
+            {
+                points = new HashSet<Transform>(stock.Keys);
+                foreach (KeyValuePair<Transform, GameObject> kv in stock) AddPrefab(root, kv.Key, kv.Value, parts);
+            }
+            else points = AddLooseParts(root, parts);
             AddPointMeshes(root, points, extra);
-            AddWheels(car, root, extra);
+            if (!stockOnly || !AddStockWheels(root, parts)) AddWheels(car, root, extra);
 
             Directory.CreateDirectory(Path.GetDirectoryName(MeshPath));
             int written = 0, tris = 0;
@@ -146,6 +158,95 @@ namespace MWCoop
                 w.Write(written);
             }
             return written + " morceaux, " + tris + " triangles, " + MeshPath;
+        }
+
+        // Points de montage de la CORRIS (hors tuning) -> piece de serie (prefab VIN..., premier par nom).
+        static Dictionary<Transform, GameObject> StockParts(Transform root)
+        {
+            var map = new Dictionary<Transform, GameObject>();
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = (PlayMakerFSM)o;
+                if (f.FsmName != "Spawn" || f.hideFlags != HideFlags.None) continue;
+                FsmGameObject pre = f.FsmVariables.FindFsmGameObject("Prefab"), vinp = f.FsmVariables.FindFsmGameObject("VINP");
+                if (pre == null || vinp == null || pre.Value == null || vinp.Value == null || !pre.Value.name.StartsWith("VIN")) continue;
+                Transform pt = vinp.Value.transform;
+                if (!pt.IsChildOf(root) || Recon.Path(pt).Contains("/AssembliesTuning/")) continue;
+                GameObject had;
+                if (!map.TryGetValue(pt, out had) || string.CompareOrdinal(pre.Value.name, had.name) < 0) map[pt] = pre.Value;
+            }
+            Log.Info("voiture : " + map.Count + " pieces de serie trouvees pour l'apercu");
+            return map;
+        }
+
+        // Rendu de la voiture remplace par une piece de serie (sous un de ces points), ou tuning monte.
+        static bool Replaced(Transform t, Transform root, Dictionary<Transform, GameObject> stock, bool stockOnly)
+        {
+            if (!stockOnly) return false;
+            for (Transform p = t; p != null && p != root; p = p.parent)
+            {
+                if (stock.ContainsKey(p) || p.name == "AssembliesTuning") return true;
+                if (p.name.StartsWith("VINP_Wheel") || p.name.StartsWith("VINP_Hubcap")) return true;   // roues de serie a la place
+            }
+            return false;
+        }
+
+        // Rendus d'un prefab (actifs dans le prefab : un prefab n'est jamais actif dans la scene), poses sur le point.
+        static void AddPrefab(Transform root, Transform point, GameObject prefab, List<Piece> parts)
+        {
+            AddPrefab(root, point, prefab, parts, Matrix4x4.identity);
+        }
+
+        static void AddPrefab(Transform root, Transform point, GameObject prefab, List<Piece> parts, Matrix4x4 scale)
+        {
+            Matrix4x4 place = root.worldToLocalMatrix * point.localToWorldMatrix * scale * prefab.transform.worldToLocalMatrix;
+            foreach (MeshFilter mf in prefab.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Renderer r = mf.GetComponent<Renderer>();
+                if (r == null || !r.enabled || mf.sharedMesh == null || !ActiveIn(mf.transform, prefab.transform)) continue;
+                if (mf.transform != prefab.transform && mf.transform.parent != null && mf.transform.parent.name == "Bolts") continue;
+                parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = place * r.transform.localToWorldMatrix, Paint = IsPaintable(r.transform, prefab.transform) });
+            }
+        }
+
+        static bool ActiveIn(Transform t, Transform top)
+        {
+            for (; t != null; t = t.parent) { if (!t.gameObject.activeSelf) return false; if (t == top) return true; }
+            return true;
+        }
+
+        // Jantes acier 13" (RIM13STEELa0, celles des createurs de roues) sur les quatre points VINP_Wheel*.
+        static bool AddStockWheels(Transform root, List<Piece> parts)
+        {
+            GameObject rim = null;
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(GameObject)))
+                if (o.name == "RIM13STEELa0" && ((GameObject)o).transform.parent == null) { rim = (GameObject)o; break; }
+            if (rim == null) return false;
+            var points = new List<Transform>();
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                if (t.name.StartsWith("VINP_Wheel") && t.name.Length == "VINP_WheelFL".Length) points.Add(t);
+            if (points.Count == 0) return false;
+            // Rayon de la jante du prefab (le jeu la met a l'echelle du pneu a l'execution, ScalePivot) : ramenee a 60 %
+            // du rayon de la roue physique. Pneu : le jeu le cree a l'execution (Use 'GetTire'), le prefab n'en a pas ;
+            // un pneu fabrique au rayon de la roue.
+            Transform meshT = rim.transform.Find("ScalePivot/meshrim");
+            MeshFilter rmf = meshT != null ? meshT.GetComponent<MeshFilter>() : null;
+            Vector3 ext = rmf != null && rmf.sharedMesh != null ? Vector3.Scale(rmf.sharedMesh.bounds.extents, meshT.lossyScale) : Vector3.zero;
+            float rimR = Mathf.Max(ext.x, Mathf.Max(ext.y, ext.z));
+            foreach (Wheel wh in root.GetComponentsInChildren<Wheel>(true))
+            {
+                Transform t = wh.transform, best = null;
+                foreach (Transform pt in points) if (best == null || (pt.position - t.position).sqrMagnitude < (best.position - t.position).sqrMagnitude) best = pt;
+                float rad = wh.radius > 0.1f ? wh.radius : 0.3f, width = wh.width > 0.05f ? wh.width : 0.18f;
+                if (best != null)
+                {
+                    float k = rimR > 0.05f ? rad * 0.72f / rimR : 1f;
+                    AddPrefab(root, best, rim, parts, Matrix4x4.Scale(new Vector3(k, k, k)));
+                }
+                parts.Add(Ring(wh.name + " pneu", root.InverseTransformPoint(best != null ? best.position : t.position), root.InverseTransformDirection(t.right).normalized,
+                               rad, rad * 0.7f, width, new Color(0.07f, 0.07f, 0.075f)));
+            }
+            return true;
         }
 
         class Piece
@@ -249,6 +350,34 @@ namespace MWCoop
         static void AddPointMeshes(Transform root, HashSet<Transform> taken, List<Piece> parts)
         {
             int n = 0;
+            if (Config.GetInt("Test", "JournalApercu", 0) != 0)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                {
+                    if (f.hideFlags != HideFlags.None || f.FsmName != "Data" || !f.name.StartsWith("VINP_")) continue;
+                    FsmBool inst = f.FsmVariables.FindFsmBool("Installed");
+                    FsmGameObject active = f.FsmVariables.FindFsmGameObject("ActivePart");
+                    FsmObject om = f.FsmVariables.FindFsmObject("OriginalMesh");
+                    var mesh = om != null ? om.Value as Mesh : null;
+                    sb.Append(Recon.Path(f.transform)).Append(inst != null && inst.Value ? " monte" : "").Append(active != null && active.Value != null ? " actif=" + active.Value.name : "")
+                      .Append(mesh != null ? " maillage=" + mesh.name + (mesh.isReadable ? "" : "(illisible)") : " sans maillage").Append(" | ");
+                }
+                Log.Info("voiture : points " + sb);
+                sb.Length = 0;
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                {
+                    if (f.FsmName != "Data" || f.gameObject.activeInHierarchy || f.name.StartsWith("VINP_")) continue;
+                    FsmString id = f.FsmVariables.FindFsmString("ID");
+                    if (id == null || id.Value.Length > 0) continue;
+                    sb.Append(f.name).Append(" [hf ").Append((int)f.hideFlags).Append(", parent ").Append(f.transform.parent != null ? f.transform.parent.name : "-").Append("]");
+                    foreach (FsmString s in f.FsmVariables.StringVariables) if (s.Value.Length > 0 && s.Value.Length < 40) sb.Append(' ').Append(s.Name).Append('=').Append(s.Value);
+                    foreach (FsmGameObject g in f.FsmVariables.GameObjectVariables) if (g.Value != null) sb.Append(' ').Append(g.Name).Append('=').Append(g.Value.name);
+                    foreach (FsmObject o in f.FsmVariables.ObjectVariables) if (o.Value != null) sb.Append(' ').Append(o.Name).Append('=').Append(o.Value.name);
+                    sb.Append(" | ");
+                }
+                Log.Info("voiture : modeles " + sb);
+            }
             foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
             {
                 if (f.FsmName != "Data" || !f.name.StartsWith("VINP_") || taken.Contains(f.transform)) continue;
