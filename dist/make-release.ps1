@@ -32,7 +32,11 @@ if ($Publier) {
     if (-not $Notes) { $Notes = "MWCoop $Version" }
     $nf = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($nf, $Notes, (New-Object System.Text.UTF8Encoding $false))
-    gh release create "v$Version" $zip --repo Parricidium/MWCoop --title "MWCoop $Version (pre-alpha)" --notes-file $nf --prerelease
+    # Le tag est cree sur GitHub : le code doit y etre avant (sinon il pointe sur l'ancien main).
+    $head = (git -C $root rev-parse HEAD).Trim()
+    git -C $root push origin HEAD:main
+    if ($LASTEXITCODE -ne 0) { Remove-Item $nf; throw "echec du push de main" }
+    gh release create "v$Version" $zip --repo Parricidium/MWCoop --title "MWCoop $Version (pre-alpha)" --notes-file $nf --prerelease --target $head
     $rc = $LASTEXITCODE
     Remove-Item $nf
     if ($rc -ne 0) { throw "echec de la publication GitHub" }
