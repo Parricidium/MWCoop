@@ -42,7 +42,10 @@ namespace MWCoop
                 nextBeat = Time.realtimeSinceStartup + 10f;
                 Log.Info("images " + Time.frameCount + ", temps " + Time.time.ToString("F1")
                          + ", niveau " + Application.loadedLevelName + ", " + Session.Status
-                         + (Session.T != null ? ", recu " + Session.T.BytesIn / 1024 + " Ko, envoye " + Session.T.BytesOut / 1024 + " Ko" : ""));
+                         + (Session.T != null ? ", recu " + Session.T.BytesIn / 1024 + " Ko, envoye " + Session.T.BytesOut / 1024 + " Ko" : "")
+                         // Besoins du joueur (une mort de soif ou de faim se relit dans le journal) :
+                         + (PlayerSync.InGame ? ", soif " + Game.GlobalFloat("PlayerThirst").ToString("F0") + " faim " + Game.GlobalFloat("PlayerHunger").ToString("F0")
+                            + " fatigue " + Game.GlobalFloat("PlayerFatigue").ToString("F0") + " vessie " + Game.GlobalFloat("PlayerUrine").ToString("F0") : ""));
             }
             if (dumpAt > 0 && Time.realtimeSinceStartup >= dumpAt)
             {
@@ -91,6 +94,7 @@ namespace MWCoop
             Step("atelier", Garage.Update);
             Step("maison", Home.Update);
             Step("gestes", Gestures.Update);
+            Step("boissons", Drinks.Update);
             Step("rayons", Stock.Update);
             Step("PNJ", Npcs.Update);
             Step("voitures garees", Parked.Update);
@@ -158,6 +162,7 @@ namespace MWCoop
             Garage.OnLevelLoaded();
             Home.OnLevelLoaded();
             Gestures.OnLevelLoaded();
+            Drinks.OnLevelLoaded();
             Stock.OnLevelLoaded();
             Npcs.OnLevelLoaded();
             Parked.OnLevelLoaded();

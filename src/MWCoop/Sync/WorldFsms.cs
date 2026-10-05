@@ -51,7 +51,7 @@ namespace MWCoop
         // l'ajoute et son miroir la lui apporte).
         public static bool IsMirrorRoot(string rootName) { return MirrorRoots.Contains(rootName); }
         static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE", "LOOP" };
-        static readonly HashSet<string> InputActions = new HashSet<string> { "MousePickEvent", "GetButtonDown", "GetButtonUp", "GetMouseButtonDown", "GetMouseButtonUp", "GetAxis", "GetKeyDown", "GetButton" };
+        static readonly HashSet<string> InputActions = new HashSet<string> { "MousePickEvent", "GetButtonDown", "GetButtonUp", "GetMouseButtonDown", "GetMouseButtonUp", "GetAxis", "GetKeyDown", "GetButton", "AnyKeyStoreString" };   // (AnyKeyStoreString : pave de la telecommande)
 
         class W
         {
@@ -194,8 +194,10 @@ namespace MWCoop
             if (SkipFsmNames.Contains(f.FsmName)) return true;
             string n = f.gameObject.name;
             // Objets portes : Props, Consume. Sauf l'ouverture des boitiers de CD (Systems/CDs/cd case(itemN) :: Use,
-            // Bool test -> Open/Close), qui n'est suivie par personne d'autre.
-            if ((n.Contains("(itemx)") || n.Contains("(item")) && !(n.StartsWith("cd case(item") && f.FsmName == "Use")) return true;
+            // Bool test -> Open/Close), et la telecommande de la tele (Use : teletexte allume/eteint, Input : numero de
+            // page) -- personne d'autre ne les suit ; sans elle, la tele des autres ne changeait pas (retour de JD, 05/10).
+            bool remote = n.StartsWith("tv remote control(item") && (f.FsmName == "Use" || f.FsmName == "Input");
+            if ((n.Contains("(itemx)") || n.Contains("(item")) && !(n.StartsWith("cd case(item") && f.FsmName == "Use") && !remote) return true;
             foreach (string s in SkipObjects) if (n.Contains(s) || root.name.Contains(s)) return true;
             for (Transform p = f.transform; p != null; p = p.parent)
             {
@@ -479,6 +481,19 @@ namespace MWCoop
         }
 
         static bool forceNext;   // essais : le prochain global part comme s'il venait du joueur
+        static readonly List<KeyValuePair<PlayMakerFSM, float>> reDisable = new List<KeyValuePair<PlayMakerFSM, float>>();
+
+        // Automates allumes pour un rejeu (OnMessage) : recoupes 0,5 s apres.
+        static void ReDisable()
+        {
+            float now = Time.realtimeSinceStartup;
+            for (int i = reDisable.Count - 1; i >= 0; i--)
+                if (now >= reDisable[i].Value)
+                {
+                    if (reDisable[i].Key != null) reDisable[i].Key.enabled = false;
+                    reDisable.RemoveAt(i);
+                }
+        }
         static readonly Dictionary<Fsm, bool> worldLogic = new Dictionary<Fsm, bool>();
 
         // L'expediteur de l'evenement en cours est-il un automate de pure logique (aucune action de saisie,
@@ -771,6 +786,9 @@ namespace MWCoop
                 return;
             }
             FsmVariables v = j.F.FsmVariables;
+            // Automate coupe ici (pave de la telecommande : le jeu ne l'allume que quand on la vise) : allume le temps
+            // que sa chaine se deroule (0,5 s), puis recoupe -- sinon l'etat rejoue reste en plan (page jamais tapee).
+            if (!j.F.enabled && global < 2) { j.F.enabled = true; reDisable.Add(new KeyValuePair<PlayMakerFSM, float>(j.F, Time.realtimeSinceStartup + 0.5f)); }
             Personal mine = SavePersonal();
             if (global < 2) MuteWrites(j);
             // Celui qui a agi a deja verifie qu'il pouvait payer : ici, la meme verification (argent du
@@ -828,6 +846,7 @@ namespace MWCoop
             // [Coop] SynchroMonde=0 coupe ce module (au cas ou il generait en partie).
             if (!Session.Active || nextScan < 0 || Config.GetInt("Coop", "SynchroMonde", 1) == 0) return;
             float now = Time.realtimeSinceStartup;
+            if (reDisable.Count > 0) ReDisable();
             // Releve complet toutes les 60 s (objets crees en jeu) ; les objets qui s'activent, toutes les 2 s.
             if (scanIdx >= 0) { if (ScanStep()) nextScan = now + 60f; }
             else if (now >= nextScan) StartScan();

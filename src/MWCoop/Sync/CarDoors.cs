@@ -72,6 +72,7 @@ namespace MWCoop
             public float TraceUntil, NextTrace;        // essais : [Test] TracePortiere
             public bool RestSet; public Quaternion RestRot;   // pose fermee (repere du parent)
             public float TestOffset;   // essais : degres ajoutes a l'angle envoye
+            public bool Held;          // fermee sur la copie d'une voiture conduite ailleurs : figee sur la caisse (Hold)
         }
 
         static readonly Dictionary<string, Door> byKey = new Dictionary<string, Door>();
@@ -277,6 +278,7 @@ namespace MWCoop
             bool trace = Config.GetInt("Test", "TracePortiere", 0) != 0;
             foreach (Door d in byKey.Values)
             {
+                Hold(d);
                 NoteRest(d);
                 if (trace && now < d.TraceUntil && now >= d.NextTrace && d.Hinge != null)
                 { d.NextTrace = now + 0.1f; Log.Info("trace " + d.Key + " " + Angle(d).ToString("F1") + (d.Springing ? " -> " + d.TargetAngle.ToString("F1") : "") + " " + Diag(d)); }
@@ -320,6 +322,35 @@ namespace MWCoop
                 if (Session.IsHost && d.State != DoorState.Closed && d.Fsm != null) Local(d, K_GRAB);
             }
         }
+
+        // Copie d'une voiture conduite par un autre (cinematique, deplacee a chaque pas de physique) : une portiere ou un
+        // hayon FERME restait un corps libre sur sa charniere (le verrou n'est pas rejoue ici) et ballottait -- 5 mm et
+        // 0,3 degre par image pour le hayon de la SORBET, « coffre et banquette qui tremblent » chez le passager (05/10).
+        // Fermee et copie : posee fermee et rendue cinematique (enfant de la caisse, elle la suit exactement ; une
+        // charniere entre deux corps cinematiques ne tire rien). Rendue des qu'elle s'ouvre ou que la voiture redevient
+        // locale (sinon un corps cinematique accroche a une voiture qui roule la tirerait).
+        static void Hold(Door d)
+        {
+            if (d.Body == null || d.Hinge == null) { d.Held = false; return; }
+            bool hold = d.RestSet && d.State != DoorState.Open && !d.Closing && !d.Mine && d.Fsm != null && VehicleSync.RemotelyDriven(d.Fsm.transform);
+            if (hold == d.Held) return;
+            if (hold)
+            {
+                if (d.Body.isKinematic) return;   // (deja figee par le jeu : rien a faire)
+                Snap(d);
+                d.Body.isKinematic = true;
+                d.Held = true;
+                if (holdLogs++ < 20) Log.Info("portieres : " + d.Key + " fermee, figee sur la copie de la voiture");
+            }
+            else
+            {
+                d.Held = false;
+                d.Body.isKinematic = false;
+                d.Body.WakeUp();
+            }
+        }
+
+        static int holdLogs;
 
         // Menee vers TargetAngle : sa vitesse autour de l'axe de la charniere (par rapport a la voiture) est
         // corrigee a chaque image, proportionnelle a l'ecart et bornee ; le joueur local ne la bloque pas.

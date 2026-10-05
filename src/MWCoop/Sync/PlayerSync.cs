@@ -140,6 +140,7 @@ namespace MWCoop
                     else if (sm == "Anim 3" || sm == "Outhale" || sm == "Anim 4" || sm == "Outhale 2") st.Flags |= F_Exhale;
                 }
                 if (AnyChildActive(drinking) || Game.GlobalBool("PlayerDrinkOn") || Time.realtimeSinceStartup < Consume.EatUntil) st.Flags |= F_Drink;
+                st.Drink = (st.Flags & F_Drink) != 0 ? Drinks.LocalIndex() : 0;
                 if (hello != null && hello.gameObject.activeInHierarchy) st.Flags |= F_Hello;
                 if (Props.Holding) st.Flags |= F_Carry;
                 st.Flags |= Wear.LocalFlags;
@@ -147,7 +148,7 @@ namespace MWCoop
             }
             Session.Me.State = st;
             var w = new NetWriter(Msg.PlayerState).U8(Session.LocalId).U8(Session.Me.Level)
-                .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags);
+                .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags).U8(st.Drink);
             Session.SendAll(w, false);
         }
 
@@ -158,7 +159,7 @@ namespace MWCoop
             PlayerInfo pi;
             if (!Session.Players.TryGetValue(id, out pi) || pi.Local) return;
             int level = r.U8();
-            var st = new PlayerState { Feet = r.Vec(), Head = r.Vec(), Yaw = r.F32(), Pitch = r.F32(), Height = r.F32(), Speed = r.F32(), Flags = r.U16() };
+            var st = new PlayerState { Feet = r.Vec(), Head = r.Vec(), Yaw = r.F32(), Pitch = r.F32(), Height = r.F32(), Speed = r.F32(), Flags = r.U16(), Drink = r.U8() };
             bool levelChanged = pi.Level != level;
             pi.Level = level;
             pi.State = st;
@@ -167,7 +168,7 @@ namespace MWCoop
             {
                 // Relais aux autres invites, avec le bon numero de joueur.
                 var w = new NetWriter(Msg.PlayerState).U8(id).U8(level)
-                    .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags);
+                    .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags).U8(st.Drink);
                 Session.Broadcast(w, false, id);
                 if (levelChanged) Session.SendRoster();
                 if (levelChanged && level == 1)

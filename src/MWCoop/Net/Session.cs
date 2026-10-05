@@ -21,12 +21,13 @@ namespace MWCoop.Net
         public Vector3 Head;           // camera (yeux) : place l'avatar assis dans un vehicule
         public float Yaw, Pitch, Height, Speed;
         public int Flags;              // PlayerSync.F_* : accroupi, assis, fume, boit, porte, salue, dort
+        public int Drink;              // ce qu'il a en main en buvant : rang dans Drinks.Names (0 : rien)
     }
 
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 24;
+        public const int NetVersion = 25;
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;
@@ -217,6 +218,7 @@ namespace MWCoop.Net
                     case Msg.Garage: Garage.OnMessage(from, r); break;
                     case Msg.Home: Home.OnMessage(from, r); break;
                     case Msg.Gesture: Gestures.OnMessage(from, r); break;
+                    case Msg.Thrown: Drinks.OnMessage(from, r); break;
                     case Msg.Stock: Stock.OnMessage(from, r); break;
                     case Msg.Npc: Npcs.OnMessage(from, r); break;
                     case Msg.Parked: Parked.OnMessage(from, r); break;
