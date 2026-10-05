@@ -114,6 +114,7 @@ namespace MWCoop
             public float BlendUntil; public Vector3 BlendPos; public Quaternion BlendRot;
             public Rule[] Rules; public PlayMakerFSM[] RuleFsms;
             public bool Engaged; public float EngagedAt, ClaimAt;
+            public Vector3 HoldAt; public float HeldSince; public List<Transform> Phones;   // voix (Voices)
         }
         static readonly Dictionary<int, Npc> byId = new Dictionary<int, Npc>();
         static readonly List<Npc> all = new List<Npc>();   // les memes, parcourus a chaque image sans allocation
@@ -774,6 +775,7 @@ namespace MWCoop
         static void Hold(Npc n)
         {
             n.Held = true; n.Dry = false; n.BlendUntil = 0f; anyHeld = true;
+            n.HoldAt = n.Char.position; n.HeldSince = Time.realtimeSinceStartup;   // place d'ici, avant la premiere pose recue
             Mute(n);
             if (++held <= 20) Log.Info("PNJ : " + Name(n) + " suit #" + n.Sender + (n.Muted.Count > 0 ? " (" + n.Muted.Count + " automates coupes)" : ""));
         }
@@ -1041,6 +1043,68 @@ namespace MWCoop
             if (sum > 0.001f) L.A.Sample();
         }
 
+        // ---------------------------------------------------------------- voix des PNJ suivis (Voices)
+        // Un PNJ suivi ici dont la logique est coupee (client, hostile, policier : tout son objet ; personnel : son
+        // telephone) ne parle que par la voix de son auteur : ce qu'il dirait encore ici (appel en cours au moment du
+        // suivi, replique relancee par un automate laisse tourner comme Anger) est coupe, et la replique recue est
+        // accrochee a lui. 'follow' : objet que la variante MasterAudio suit (null : on juge a la position). Rend
+        // l'objet ou poser la copie (corps ou telephone), null si ce n'est pas un tel PNJ.
+        public static Transform MutedSpeaker(Transform follow, Vector3 pos)
+        {
+            if (!anyHeld) return null;
+            float now = Time.realtimeSinceStartup;
+            for (int k = 0; k < all.Count; k++)
+            {
+                Npc n = all[k];
+                if (!n.Held || n.Muted == null || n.Char == null) continue;
+                if (n.Whole || n.Ambient)
+                {
+                    Transform scope = n.Whole ? n.Top : n.Root;
+                    if (scope == null) scope = n.Char;
+                    if (follow != null ? follow.IsChildOf(scope)
+                        : (n.Char.position - pos).sqrMagnitude < 2.6f || now - n.HeldSince < 3f && (n.HoldAt - pos).sqrMagnitude < 2.6f)
+                        return n.Char;
+                    continue;
+                }
+                foreach (PlayMakerFSM f in n.Muted)
+                    if (f != null && (follow != null ? follow.IsChildOf(f.transform) : (f.transform.position - pos).sqrMagnitude < 0.7f)) return f.transform;
+            }
+            return null;
+        }
+
+        // Auteur : la replique vient-elle d'un PNJ mene d'ici que les autres suivent logique coupee (meme
+        // perimetre) ? Voices l'envoie alors aussi quand c'est un autre joueur qui est pres de lui. Hote : seulement
+        // les PNJ envoyes aux invites (a moins de 80 m de l'un d'eux) ; un hostile, seulement pendant l'engagement.
+        public static bool MirroredSpeaker(Transform follow, Vector3 pos)
+        {
+            for (int k = 0; k < all.Count; k++)
+            {
+                Npc n = all[k];
+                if (n.Char == null || n.Held || Owner(n) != Session.LocalId || !n.Char.gameObject.activeInHierarchy) continue;
+                if (Session.IsHost && !n.InRange || n.Whole && !n.Engaged) continue;
+                if (n.Whole || n.Ambient)
+                {
+                    Transform scope = n.Whole ? n.Top : n.Root;
+                    if (scope == null) scope = n.Char;
+                    if (follow != null ? follow.IsChildOf(scope) : (n.Char.position - pos).sqrMagnitude < 2.6f) return true;
+                    continue;
+                }
+                foreach (Transform ph in PhonesOf(n))
+                    if (ph != null && (follow != null ? follow.IsChildOf(ph) : (ph.position - pos).sqrMagnitude < 0.7f)) return true;
+            }
+            return false;
+        }
+
+        // Telephones du PNJ (Phone* :: Logic sous le corps), ceux que Mute coupe chez les suiveurs.
+        static List<Transform> PhonesOf(Npc n)
+        {
+            if (n.Phones != null) return n.Phones;
+            n.Phones = new List<Transform>();
+            foreach (PlayMakerFSM f in n.Char.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Logic" && f.gameObject.name.StartsWith("Phone")) n.Phones.Add(f.transform);
+            return n.Phones;
+        }
+
         // ---------------------------------------------------------------- etat et essais
         static Npc Find(string part)
         {
@@ -1115,6 +1179,14 @@ namespace MWCoop
         //    suivre ("montre", "suit #1").
         //  police : [Test] PoliceMaison=1 : a 40 s l'hote allume COPS et l'agent [Test] PoliceAgent (CopHome2) comme
         //    pour un joueur recherche ; les deux cotes notent l'agent toutes les 2 s (l'invite doit le voir "montre").
+        //  pnj-tel : le client au telephone de la station (Teppo Sarkain, [Test] SuivrePNJ ; les deux joueurs pres de
+        //    lui : TestPos=-1723.5,3.6,923.5). A 21 s chacun note une fois les parametres des actions en jeu (Anger,
+        //    telephone, Speak, Move, PlayerFunctions du joueur). L'hote rend Teppo present (22 s), fait sonner son
+        //    telephone (PhoneSarkain::Logic "Ringing", 24 s ; "State 4" a 34 s s'il n'est pas encore en ligne), puis a
+        //    [Test] PnjInsulteT (40 s) [Test] PnjInsulteur (hote | invite) lui fait un doigt comme PlayerFunctions
+        //    "Finger" : FINGER ([Test] PnjInsulteEvenement) a son automate Anger ([Test] PnjInsulteAutomate), par
+        //    WorldFsms (envoye aux autres comme un vrai geste ; d'un invite, l'hote le rejoue). Les deux notent toutes
+        //    les 2 s les etats des automates de Teppo et ce qui parle pres de lui (variantes MasterAudio, copies).
         static int testStep;
         static float testNext, lastShot;
         static Npc watch;
@@ -1132,6 +1204,7 @@ namespace MWCoop
             if (mode == "service") { TestService(t); return; }
             if (mode == "bagarre") { TestFight(t); return; }
             if (mode == "police") { TestCops(t); return; }
+            if (mode == "pnj-tel") { TestInsult(t); return; }
             if (mode != "pnjtel" && mode != "pnjfluide") return;
             string part = Config.Get("Test", "SuivrePNJ", "TeppoSarkain");
             float now = Time.realtimeSinceStartup;
@@ -1269,6 +1342,156 @@ namespace MWCoop
                 }
             }
             if (Every2s(t)) Log.Info("autotest : police agent (" + Role + ") " + State(part));
+        }
+
+        static readonly string[] InCall = { "Get clip", "State 2", "State 3", "State 8", "In phone" };
+
+        static void TestInsult(float t)
+        {
+            string part = Config.Get("Test", "SuivrePNJ", "TeppoSarkain");
+            Npc n = Find(part);
+            if (testStep == 0 && t > 21f) { testStep = 1; DumpSpeech(n); }
+            if (Session.IsHost && testStep == 1 && t > 22f) { testStep = 2; Log.Info("autotest : pnj-tel (hote) " + TestPresent(part)); }
+            if (Session.IsHost && testStep == 2 && t > 24f) { testStep = 3; Log.Info("autotest : pnj-tel (hote) sonnerie : " + Phone(n, "Ringing")); }
+            if (Session.IsHost && testStep == 3 && t > 34f)
+            {
+                testStep = 4;
+                PlayMakerFSM f = n != null ? PhoneFsm(n) : null;
+                if (f != null && System.Array.IndexOf(InCall, f.ActiveStateName) < 0) Log.Info("autotest : pnj-tel (hote) pas encore en ligne, decroche : " + Phone(n, "State 4"));
+            }
+            bool insulter = (Config.Get("Test", "PnjInsulteur", "hote") == "invite") != Session.IsHost;
+            if (insulter && testStep < 9 && t > Config.GetInt("Test", "PnjInsulteT", 40)) { testStep = 9; Log.Info("autotest : pnj-tel (" + Role + ") doigt : " + Insult(n, part)); }
+            if (Every2s(t)) Log.Info("autotest : pnj-tel (" + Role + ") " + Speech(n));
+        }
+
+        static PlayMakerFSM PhoneFsm(Npc n)
+        {
+            foreach (Transform ph in PhonesOf(n)) if (ph != null) { PlayMakerFSM f = Game.FsmOn(ph.gameObject, "Logic"); if (f != null) return f; }
+            return null;
+        }
+
+        static string Phone(Npc n, string state)
+        {
+            PlayMakerFSM f = n != null ? PhoneFsm(n) : null;
+            if (f == null) return "pas de telephone (Phone* :: Logic)";
+            string before = f.ActiveStateName;
+            Game.SetState(f, state);
+            return f.gameObject.name + "::Logic " + before + " => " + f.ActiveStateName;
+        }
+
+        // Comme le doigt du joueur (PlayerFunctions "Finger") : l'evenement a l'automate de colere du PNJ, par WorldFsms
+        // (qui l'envoie aux autres comme un vrai geste) ; s'il ne le suit pas, directement.
+        static string Insult(Npc n, string part)
+        {
+            string fsm = Config.Get("Test", "PnjInsulteAutomate", "Anger"), ev = Config.Get("Test", "PnjInsulteEvenement", "FINGER");
+            PlayMakerFSM f = n != null ? FindFsm(n, fsm) : null;
+            if (f == null) return "pas d'automate " + fsm + " pour " + part;
+            string r = WorldFsms.TestEvent(f.gameObject.name + "::" + fsm, ev);
+            if (r.StartsWith("rien pour"))
+            {
+                string before = f.ActiveStateName;
+                f.SendEvent(ev);
+                r = "direct (automate pas suivi par le monde) " + before + " -" + ev + "-> " + f.ActiveStateName;
+            }
+            return r + " ; telephone " + StateOf(PhoneFsm(n));
+        }
+
+        static string StateOf(PlayMakerFSM f)
+        {
+            if (f == null) return "-";
+            string s = f.ActiveStateName;
+            return (string.IsNullOrEmpty(s) ? "?" : s) + (f.enabled ? "" : "(coupe)");
+        }
+
+        static string Speech(Npc n)
+        {
+            if (n == null || n.Char == null) return "aucun PNJ suivi";
+            var sb = new System.Text.StringBuilder(Name(n));
+            sb.Append(n.Char.gameObject.activeInHierarchy ? " present" : " absent");
+            sb.Append(" tel=").Append(StateOf(PhoneFsm(n))).Append(" colere=").Append(StateOf(FindFsm(n, "Anger")))
+              .Append(" marche=").Append(StateOf(FindFsm(n, "Move"))).Append(" parole=").Append(StateOf(FindFsm(n, "Speak")));
+            foreach (GameObject p in n.Props) if (p != null && p.name == "PhoneMeshHand") sb.Append(p.activeSelf ? ", telephone en main" : ", telephone range");
+            sb.Append(" | voix ").Append(Voices.AudioNear(n.Char.position, 4f));
+            sb.Append(" | ").Append(n.Held ? "suit #" + n.Sender + " (" + (n.Muted != null ? n.Muted.Count : 0) + " automates coupes)" : "local");
+            return sb.ToString();
+        }
+
+        // Parametres des actions des automates en jeu (non visibles dans le vidage) : cible du FINGER du joueur, de
+        // l'evenement qu'Anger renvoie, groupes MasterAudio et objet suivi des repliques.
+        static void DumpSpeech(Npc n)
+        {
+            var fsms = new List<PlayMakerFSM>();
+            if (n != null) { fsms.Add(FindFsm(n, "Anger")); fsms.Add(PhoneFsm(n)); fsms.Add(FindFsm(n, "Speak")); fsms.Add(FindFsm(n, "Move")); }
+            GameObject pl = GameObject.Find("PLAYER");
+            if (pl != null) foreach (PlayMakerFSM f in pl.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "PlayerFunctions") { fsms.Add(f); break; }
+            foreach (PlayMakerFSM f in fsms)
+            {
+                if (f == null) continue;
+                try { f.Fsm.InitData(); } catch { }
+                foreach (FsmState st in f.Fsm.States)
+                {
+                    if (f.FsmName == "PlayerFunctions" && st.Name != "Finger" && st.Name != "Fuck singer" && st.Name != "State 2") continue;
+                    if (f.FsmName == "Move" && st.Name != "Look at plaer") continue;
+                    var sb = new System.Text.StringBuilder();
+                    try { foreach (FsmStateAction a in st.Actions) if (a != null && !(a is ModHook)) sb.Append(Params(a)).Append("; "); }
+                    catch (System.Exception e) { sb.Append("? ").Append(e.Message); }
+                    string s = sb.ToString();
+                    if (s.Length > 1500) s = s.Substring(0, 1500) + "...";
+                    Log.Info("autotest : pnj-tel parametres " + f.gameObject.name + "::" + f.FsmName + " \"" + st.Name + "\" : " + s);
+                }
+            }
+        }
+
+        static string Params(FsmStateAction a)
+        {
+            var sb = new System.Text.StringBuilder(a.GetType().Name).Append('(');
+            bool first = true;
+            foreach (System.Reflection.FieldInfo fi in a.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                string v = Param(fi.GetValue(a), 0);
+                if (v == null) continue;
+                if (!first) sb.Append(", ");
+                first = false;
+                sb.Append(fi.Name).Append('=').Append(v);
+            }
+            return sb.Append(')').ToString();
+        }
+
+        static string Param(object v, int depth)
+        {
+            if (v == null) return null;
+            var nv = v as NamedVariable;
+            if (nv != null && nv.UseVariable) return "{" + nv.Name + "}";
+            if (v is FsmString) return "\"" + ((FsmString)v).Value + "\"";
+            if (v is FsmFloat) return ((FsmFloat)v).Value.ToString("0.##");
+            if (v is FsmInt) return ((FsmInt)v).Value.ToString();
+            if (v is FsmBool) return ((FsmBool)v).Value ? "oui" : "non";
+            if (v is FsmGameObject) { GameObject g = ((FsmGameObject)v).Value; return g != null ? Recon.Path(g.transform) : "null"; }
+            if (v is FsmEvent) return "ev:" + ((FsmEvent)v).Name;
+            if (v is FsmOwnerDefault)
+            {
+                var od = (FsmOwnerDefault)v;
+                return od.OwnerOption == OwnerDefaultOption.UseOwner ? "soi" : Param(od.GameObject, depth);
+            }
+            if (v is string || v is bool || v is float || v is int || v is System.Enum) return v.ToString();
+            if (v is Object) { var o = (Object)v; return o != null ? o.name : "null"; }
+            if (depth > 0) return null;
+            var arr = v as System.Array;
+            if (arr != null)
+            {
+                var parts = new List<string>();
+                foreach (object e in arr) { if (parts.Count >= 8) break; string s = Param(e, depth + 1); if (s != null) parts.Add(s); }
+                return "[" + string.Join(" ", parts.ToArray()) + "]";
+            }
+            string ns = v.GetType().Namespace;
+            if (ns == null || !ns.StartsWith("HutongGames")) return null;
+            var sb = new System.Text.StringBuilder("{");
+            foreach (System.Reflection.FieldInfo fi in v.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                string s = Param(fi.GetValue(v), depth + 1);
+                if (s != null) sb.Append(fi.Name).Append('=').Append(s).Append(' ');
+            }
+            return sb.ToString().TrimEnd() + "}";
         }
 
         // Invite : teleporte a 'dist' m devant le PNJ.
