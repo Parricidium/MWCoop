@@ -240,7 +240,7 @@ namespace MWCoop
                         else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
                         if (go != null && PersonalRoots.Contains(go.transform.root.name)) w.PersonalStates.Add(st.Name);
                         var nv = v as NamedVariable;
-                        if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && f.FsmVariables.GetVariable(nv.Name) == null
+                        if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && !Game.LocalVar(f, nv.Name)
                             && (v is FsmGameObject || nv.Name == "PlayerStop" || nv.Name == "PlayerInMenu" || nv.Name == "PlayerSeated" || nv.Name == "PlayerSleeps"))
                             w.PersonalStates.Add(st.Name);
                         if (v is FsmEvent && ((FsmEvent)v).Name == "SAVEGAME") personal = true;
@@ -515,7 +515,7 @@ namespace MWCoop
                         {
                             if (!WriteFields.Contains(fi.Name)) continue;
                             var nv = fi.GetValue(a) as NamedVariable;
-                            if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && (nv is FsmFloat || nv is FsmInt) && j.F.FsmVariables.GetVariable(nv.Name) == null)
+                            if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && (nv is FsmFloat || nv is FsmInt) && !Game.LocalVar(j.F, nv.Name))
                             { j.Writes.Add(a); break; }
                         }
                     }
@@ -551,7 +551,7 @@ namespace MWCoop
                         else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
                         if (go != null && PersonalRoots.Contains(go.transform.root.name)) personal = true;
                         var nv = v as NamedVariable;
-                        if (nv != null && nv.UseVariable && (nv.Name.StartsWith("GUI") || nv.Name.StartsWith("Player")) && j.F.FsmVariables.GetVariable(nv.Name) == null) personal = true;
+                        if (nv != null && nv.UseVariable && (nv.Name.StartsWith("GUI") || nv.Name.StartsWith("Player")) && !Game.LocalVar(j.F, nv.Name)) personal = true;
                     }
                     if (a.GetType().Name.StartsWith("MasterAudio")) personal = true;   // la voix de l'appel, la tonalite
                     if (personal) { a.Enabled = false; r.Add(a); }

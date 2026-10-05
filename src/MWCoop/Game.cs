@@ -152,6 +152,15 @@ namespace MWCoop
             return true;
         }
 
+        // Variable propre a l'automate (pas une globale). FsmVariables.GetVariable cherche aussi dans les globales :
+        // un test "GetVariable(n) == null" ne reconnait jamais PlayerMoney, PlayerStop, GUI*... (vu au bar : l'invite
+        // payait la biere de l'hote).
+        public static bool LocalVar(PlayMakerFSM f, string name)
+        {
+            foreach (HutongGames.PlayMaker.NamedVariable v in f.FsmVariables.GetAllNamedVariables()) if (v.Name == name) return true;
+            return false;
+        }
+
         public static PlayMakerFSM FsmOn(GameObject go, string fsmName)
         {
             foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
