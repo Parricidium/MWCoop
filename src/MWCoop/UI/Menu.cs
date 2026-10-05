@@ -17,12 +17,15 @@ namespace MWCoop
         static readonly List<string> skinLabels = new List<string>();
         static readonly List<Behaviour> blocked = new List<Behaviour>();
         static bool focusChat, testDone;
-        static readonly string[] tabs = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO" };
+        static readonly string[] tabsFr = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO" }, tabsEn = { "PLAYERS", "APPEARANCE", "CHAT", "SYNC" };
+        static string[] tabs { get { return Lang.Fr ? tabsFr : tabsEn; } }
         const int TabChat = 2;
         const string ChatField = "mwcoop-chat2";
         const string Sep = "  ·  ";
-        const string Controls = "Haut/Bas : choisir" + Sep + "Gauche/Droite : changer" + Sep + "Entr\u00E9e : valider" + Sep + "Tab, Q/E : onglet" + Sep + "F10/\u00C9chap : fermer";
-        const string TabsHint = "Gauche/Droite : changer d'onglet" + Sep + "Bas ou Entr\u00E9e : entrer dans la liste";
+        static string Controls { get { return Lang.T("Haut/Bas : choisir" + Sep + "Gauche/Droite : changer" + Sep + "Entr\u00E9e : valider" + Sep + "Tab, Q/E : onglet" + Sep + "F10/\u00C9chap : fermer",
+                                                     "Up/Down: select" + Sep + "Left/Right: change" + Sep + "Enter: confirm" + Sep + "Tab, Q/E: tab" + Sep + "F10/Esc: close"); } }
+        static string TabsHint { get { return Lang.T("Gauche/Droite : changer d'onglet" + Sep + "Bas ou Entr\u00E9e : entrer dans la liste",
+                                                     "Left/Right: switch tab" + Sep + "Down or Enter: go to the list"); } }
 
         // Navigation : ligne choisie (-1 = bandeau des onglets), defilement, touches du passage OnGUI en cours.
         static int sel, items;
@@ -155,7 +158,7 @@ namespace MWCoop
             var head = new Rect(x + pad, y + Style.Px(8), w - 2 * pad, hh - Style.Px(8));
             Style.Title(head, "MWCoop", Style.White, TextAnchor.MiddleLeft, 36);
             float nx = head.x + Style.TitleWidth("MWCoop", 36) + Style.Px(14);
-            string badge = !Session.Active ? "SOLO" : Session.IsHost ? "H\u00D4TE" : "INVIT\u00C9";
+            string badge = !Session.Active ? "SOLO" : Session.IsHost ? Lang.T("H\u00D4TE", "HOST") : Lang.T("INVIT\u00C9", "GUEST");
             float bw = Style.Width(badge, 14) + Style.Px(22), bh = Style.Px(26);
             var br = new Rect(nx, head.center.y - bh / 2 + Style.Px(2), bw, bh);
             Style.Round(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.18f));
@@ -409,8 +412,8 @@ namespace MWCoop
                 if (n == prows.Count) prows.Add(new PRow());
                 PRow r = prows[n++];
                 r.P = pi;
-                r.Label = (pi.Id == 0 ? "[h\u00F4te] " : "") + pi.Name + (pi.Local ? " (vous)" : "");
-                string where = pi.Level == 1 ? "en partie" : "au menu";
+                r.Label = (pi.Id == 0 ? Lang.T("[h\u00F4te] ", "[host] ") : "") + pi.Name + (pi.Local ? Lang.T(" (vous)", " (you)") : "");
+                string where = pi.Level == 1 ? Lang.T("en partie", "in game") : Lang.T("au menu", "at the menu");
                 r.Value = !pi.Local && pi.Peer != null ? where + "  " + Mathf.RoundToInt(pi.Peer.Rtt * 1000) + " ms" : where;
             }
             prows.RemoveRange(n, prows.Count - n);
@@ -418,14 +421,14 @@ namespace MWCoop
 
         static void Players()
         {
-            Para(Session.Active ? Session.Status : "Solo (lancez le jeu depuis MWCoop.exe pour jouer \u00E0 plusieurs)", Style.Dim);
+            Para(Session.Active ? Lang.Status(Session.Status) : Lang.T("Solo (lancez le jeu depuis MWCoop.exe pour jouer \u00E0 plusieurs)", "Solo (start the game from MWCoop.exe to play with friends)"), Style.Dim);
             RefreshPlayers();
-            Header("JOUEURS");
+            Header(Lang.T("JOUEURS", "PLAYERS"));
             for (int i = 0; i < prows.Count; i++)
             {
                 PlayerInfo pi = prows[i].P;
                 bool canGo = !pi.Local && pi.Level == 1 && PlayerSync.InGame;
-                if (Item(prows[i].Label, prows[i].Value, false, canGo ? "Entr\u00E9e ou clic : aller vers ce joueur" : null, false) == 2 && canGo) GoTo(pi);
+                if (Item(prows[i].Label, prows[i].Value, false, canGo ? Lang.T("Entr\u00E9e ou clic : aller vers ce joueur", "Enter or click: go to this player") : null, false) == 2 && canGo) GoTo(pi);
             }
         }
 
@@ -457,16 +460,16 @@ namespace MWCoop
         static void Skins()
         {
             LoadSkins();
-            if (skins == null || skins.Count == 0) { Para("Les apparences se choisissent en partie.", Style.Dim); return; }
-            Para("Votre apparence vue par les autres joueurs.", Style.Dim);
+            if (skins == null || skins.Count == 0) { Para(Lang.T("Les apparences se choisissent en partie.", "Outfits are picked in game."), Style.Dim); return; }
+            Para(Lang.T("Votre apparence vue par les autres joueurs.", "Your outfit, as the other players see it."), Style.Dim);
             string me = Session.Me.Skin ?? "";
             int cur = skins.IndexOf(me);
             if (me != lastSkin) { lastSkin = me; lastSkinLabel = SkinLabel(me); }
-            int d = Item("Apparence", cur >= 0 ? skinLabels[cur] : lastSkinLabel, true, "Gauche/Droite : changer d'apparence", false);
+            int d = Item(Lang.T("Apparence", "Outfit"), cur >= 0 ? skinLabels[cur] : lastSkinLabel, true, Lang.T("Gauche/Droite : changer d'apparence", "Left/Right: change outfit"), false);
             if (d == 1 || d == -1) SetSkin(skins[((cur < 0 ? 0 : cur) + d + skins.Count) % skins.Count]);
-            Header("TENUES");
+            Header(Lang.T("TENUES", "OUTFITS"));
             for (int j = 0; j < skins.Count; j++)
-                if (Item(skinLabels[j], j == cur ? "PORT\u00C9E" : null, false, "Entr\u00E9e ou clic : porter cette tenue", false) == 2) SetSkin(skins[j]);
+                if (Item(skinLabels[j], j == cur ? Lang.T("PORT\u00C9E", "WORN") : null, false, Lang.T("Entr\u00E9e ou clic : porter cette tenue", "Enter or click: wear this outfit"), false) == 2) SetSkin(skins[j]);
         }
 
         static bool dragging;
@@ -480,7 +483,7 @@ namespace MWCoop
             string me = Session.Me.Skin ?? "";
             int k = sel - 1;   // lignes : 0 = « Apparence », 1.. = les tenues
             string s = k >= 0 && k < skins.Count ? skins[k] : me;
-            if (s != pvSkin) { pvSkin = s; pvLabel = s.Length > 0 ? SkinLabel(s).ToUpperInvariant() : "PAR D\u00C9FAUT"; }
+            if (s != pvSkin) { pvSkin = s; pvLabel = s.Length > 0 ? SkinLabel(s).ToUpperInvariant() : Lang.T("PAR D\u00C9FAUT", "DEFAULT"); }
             Texture tex = Studio.Live(s, (int)r.width, (int)r.height);
             if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition)) { dragging = true; e.Use(); }
             else if (e.type == EventType.MouseDrag && dragging) { Studio.Drag(e.delta.x); e.Use(); }
@@ -500,10 +503,10 @@ namespace MWCoop
             Style.Ring(r, rad, line);
             if (s == me && s.Length > 0)
             {
-                float pw = Style.Width("PORT\u00C9E", 13) + Style.Px(18), ph = Style.Px(24);
+                float pw = Style.Width(Lang.T("PORT\u00C9E", "WORN"), 13) + Style.Px(18), ph = Style.Px(24);
                 var pr = new Rect(r.xMax - pw - Style.Px(10), r.y + Style.Px(10), pw, ph);
                 Style.Round(pr, ph / 2, Style.Accent);
-                Style.Text(pr, "PORT\u00C9E", 13, TextAnchor.MiddleCenter, Style.OnAccent);
+                Style.Text(pr, Lang.T("PORT\u00C9E", "WORN"), 13, TextAnchor.MiddleCenter, Style.OnAccent);
             }
             var lr = new Rect(r.x, r.yMax + Style.Px(8), r.width, Style.Px(40));
             Style.Round(lr, lr.height / 2, new Color(1f, 1f, 1f, 0.08f));
@@ -529,14 +532,14 @@ namespace MWCoop
 
         public static string SkinLabel(string s)
         {
-            if (s.StartsWith("char_shirt")) return "Tenue " + s.Substring(10).TrimStart('0');
+            if (s.StartsWith("char_shirt")) return Lang.T("Tenue ", "Outfit ") + s.Substring(10).TrimStart('0');
             switch (s)
             {
-                case "cop_shirt": return "Policier";
-                case "cop_shirt2": return "Policier 2";
-                case "rally_shirt": return "Pilote de rallye";
-                case "psk_shirt": return "Employ\u00E9 PSK";
-                case "inspector_shirt": return "Inspecteur";
+                case "cop_shirt": return Lang.T("Policier", "Police officer");
+                case "cop_shirt2": return Lang.T("Policier 2", "Police officer 2");
+                case "rally_shirt": return Lang.T("Pilote de rallye", "Rally driver");
+                case "psk_shirt": return Lang.T("Employ\u00E9 PSK", "PSK employee");
+                case "inspector_shirt": return Lang.T("Inspecteur", "Inspector");
             }
             return s;
         }
@@ -560,17 +563,18 @@ namespace MWCoop
                 syncHead = Audit.State() + (Audit.Summary.Length > 0 ? "\n" + Audit.Summary : "");
             }
             Para(syncHead, Style.Dim);
-            if (Item("\u00C9crire le recensement (dumps/recensement.txt)", null, false, "Entr\u00E9e ou clic : \u00E9crire le recensement", false) == 2) Audit.Census();
-            Header("\u00C9CARTS AVEC LES INVIT\u00C9S");
-            Para(Session.IsHost ? "H\u00F4te : tout le monde est compar\u00E9 \u00E0 vous." : "\u00C9carts : vus par l'h\u00F4te (son onglet SYNCHRO et son journal).", Style.Dim);
+            if (Item(Lang.T("\u00C9crire le recensement (dumps/recensement.txt)", "Write the census (dumps/recensement.txt)"), null, false, Lang.T("Entr\u00E9e ou clic : \u00E9crire le recensement", "Enter or click: write the census"), false) == 2) Audit.Census();
+            Header(Lang.T("\u00C9CARTS AVEC LES INVIT\u00C9S", "DIFFERENCES WITH THE GUESTS"));
+            Para(Session.IsHost ? Lang.T("H\u00F4te : tout le monde est compar\u00E9 \u00E0 vous.", "Host: everyone is compared to you.") : Lang.T("\u00C9carts : vus par l'h\u00F4te (son onglet SYNCHRO et son journal).", "Differences: seen by the host (their SYNC tab and log)."), Style.Dim);
             foreach (string l in Audit.Desyncs) Item(l, null, false, null, true);
-            Header("VOS ACTIONS QUI NE PARTENT PAS CHEZ LES AUTRES");
+            Header(Lang.T("VOS ACTIONS QUI NE PARTENT PAS CHEZ LES AUTRES", "YOUR ACTIONS NOT SHARED WITH THE OTHERS"));
             foreach (string l in Audit.Unshared) Item(l, null, false, null, true);
         }
 
         static void ChatTab()
         {
-            Para(Chat.History.Count == 0 ? "Aucun message. En jeu, T \u00E9crit sans ouvrir ce menu." : "En jeu, T \u00E9crit sans ouvrir ce menu.", Style.Dim);
+            Para(Chat.History.Count == 0 ? Lang.T("Aucun message. En jeu, T \u00E9crit sans ouvrir ce menu.", "No messages yet. In game, T opens the chat without this menu.")
+                                         : Lang.T("En jeu, T \u00E9crit sans ouvrir ce menu.", "In game, T opens the chat without this menu."), Style.Dim);
             foreach (string l in Chat.History) Item(l, null, false, null, true);
             ChatInput();
         }
@@ -584,7 +588,7 @@ namespace MWCoop
             var r = new Rect(0, cy - scroll + Style.Px(4), cw, h);
             cy += h + Style.Px(6);
             bool selected = me == sel;
-            if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; hint = "Entr\u00E9e : envoyer le message" + Sep + "Haut : relire l'historique"; }
+            if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; hint = Lang.T("Entr\u00E9e : envoyer le message" + Sep + "Haut : relire l'historique", "Enter: send the message" + Sep + "Up: read the history"); }
             float bw = Style.Px(150);
             var rb = new Rect(r.xMax - bw, r.y, bw, h);
             var rf = new Rect(r.x, r.y, r.width - bw - Style.Px(6), h);
@@ -599,7 +603,7 @@ namespace MWCoop
             if (e.type == EventType.Repaint)
             {
                 Style.FieldBack(rf, selected);
-                Style.Button(rb, "ENVOYER", true, 18, selected);
+                Style.Button(rb, Lang.T("ENVOYER", "SEND"), true, 18, selected);
             }
             // Le caractere de retour a la ligne qui suit Entree n'entre pas dans le champ (Key a deja pris Entree).
             if (e.type == EventType.KeyDown && IsNewline(e.character)) e.Use();
@@ -619,7 +623,7 @@ namespace MWCoop
             Style.Glass(r, h / 2);
             Style.Ring(r, h / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.55f));
             float lw = Style.Px(104);
-            Style.Title(new Rect(r.x + Style.Px(20), r.y, lw, h), "TCHAT", Style.Accent, TextAnchor.MiddleLeft, 18);
+            Style.Title(new Rect(r.x + Style.Px(20), r.y, lw, h), Lang.T("TCHAT", "CHAT"), Style.Accent, TextAnchor.MiddleLeft, 18);
             // Entree AVANT le champ : le champ actif consomme la touche (le message ne partait pas, retour de JD
             // du 05/10) et le caractere '\n' qui la suit s'inscrivait dans le texte.
             Event e = Event.current;
@@ -654,7 +658,7 @@ namespace MWCoop
 
         static void TestChat(float t)
         {
-            if (testStep == 0 && t > 20f) { testStep = 1; ChatOpen = true; focusChat = true; chatText = "essai du tchat " + Session.LocalId; Log.Info("autotest : tchat ouvert"); }
+            if (testStep == 0 && t > 20f) { testStep = 1; ChatOpen = true; focusChat = true; chatText = Config.Get("Test", "TchatTexte", "essai du tchat " + Session.LocalId); Log.Info("autotest : tchat ouvert"); }
             else if (testStep == 1 && t > 22f) { testStep = 2; testKey = new Event { type = EventType.KeyDown, keyCode = KeyCode.Return }; }
             else if (testStep == 2 && t > 24f) { testStep = 3; Log.Info("autotest : tchat historique : " + string.Join(" | ", Chat.History.ToArray())); }
             else if (testStep == 3 && t > 26f) { testStep = 4; ChatOpen = true; chatText = "second " + Session.LocalId; testKey = new Event { type = EventType.KeyDown, character = '\n' }; }

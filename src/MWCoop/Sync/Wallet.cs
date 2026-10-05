@@ -109,7 +109,7 @@ namespace MWCoop
                 {
                     cash.Value = c; bank.Value = b;
                     Log.Info("argent : porte-monnaie retrouve pour ce monde (" + world + ")");
-                    Hud.Toast("Votre porte-monnaie : " + Mathf.RoundToInt(c) + " mk");
+                    Hud.Toast(Lang.T("Votre porte-monnaie : ", "Your wallet: ") + Mathf.RoundToInt(c) + " mk");
                 }
             }
         }
@@ -520,7 +520,7 @@ namespace MWCoop
             FsmFloat mt = MoneyTotal;
             if (mt == null) { Log.Warn("argent : vente aux puces de " + item + " (+" + amount + ") perdue : table absente ici"); return; }
             mt.Value += amount;
-            Hud.Toast(item + " vendu aux puces : +" + Mathf.RoundToInt(amount) + " mk (enveloppe a la fin de la location)");
+            Hud.Toast(item + Lang.T(" vendu aux puces : +", " sold at the flea market: +") + Mathf.RoundToInt(amount) + Lang.T(" mk (enveloppe \u00E0 la fin de la location)", " mk (envelope when the rental ends)"));
             Log.Info("argent : " + item + " vendu aux puces par l'hote pour ce joueur : +" + amount + " (MoneyTotal " + mt.Value + ")");
         }
 
@@ -588,7 +588,7 @@ namespace MWCoop
             if (hit >= 0) { suppressed.RemoveAt(hit); Log.Info("argent : revenu " + (inC + inB) + " deja verse par le boulot rejoue"); return; }
             cash.Value += inC; bank.Value += inB;
             lastCash += inC; lastBank += inB;   // pas de renvoi
-            Hud.Toast("+" + Mathf.RoundToInt(inC + inB) + " mk (revenu de " + name + ")");
+            Hud.Toast("+" + Mathf.RoundToInt(inC + inB) + Lang.T(" mk (revenu de ", " mk (income from ") + name + ")");
             Log.Info("argent : +" + inC + " liquide, +" + inB + " banque, de " + name);
         }
 

@@ -157,7 +157,7 @@ namespace MWCoop.Net
                 if (Players.TryGetValue(p.Id, out pi))
                 {
                     Log.Info(pi.Name + " est parti (" + reason + ")");
-                    Hud.Toast(pi.Name + " a quitte la partie");
+                    Hud.Toast(pi.Name + Lang.T(" a quitt\u00E9 la partie", " left the game"));
                     Players.Remove(p.Id);
                     if (PlayerLeft != null) PlayerLeft(pi);
                     SendRoster();
@@ -165,7 +165,7 @@ namespace MWCoop.Net
                 return;
             }
             Log.Warn("deconnecte de l'hote : " + reason);
-            Hud.Toast("Deconnecte de l'hote : " + reason);
+            Hud.Toast(Lang.T("D\u00E9connect\u00E9 de l'h\u00F4te : ", "Disconnected from the host: ") + reason);
             foreach (PlayerInfo pi in new List<PlayerInfo>(Players.Values))
                 if (!pi.Local && PlayerLeft != null) PlayerLeft(pi);
             Players.Clear();
@@ -250,7 +250,7 @@ namespace MWCoop.Net
                 Players.Remove(from.Id);
                 return;
             }
-            Hud.Toast(pi.Name + " a rejoint la partie");
+            Hud.Toast(pi.Name + Lang.T(" a rejoint la partie", " joined the game"));
             SendRoster();
             SaveTransfer.Queue(from);
         }
@@ -288,7 +288,7 @@ namespace MWCoop.Net
                 {
                     pi = new PlayerInfo { Id = id };
                     Players[id] = pi;
-                    if (id != LocalId) Hud.Toast(name + " est dans la partie");
+                    if (id != LocalId) Hud.Toast(name + Lang.T(" est dans la partie", " is in the game"));
                 }
                 if (pi.Local) continue;
                 pi.Name = name; pi.Skin = skin; pi.Level = level;
@@ -297,7 +297,7 @@ namespace MWCoop.Net
                 if (!pi.Local && !seen.Contains(pi.Id))
                 {
                     Players.Remove(pi.Id);
-                    Hud.Toast(pi.Name + " a quitte la partie");
+                    Hud.Toast(pi.Name + Lang.T(" a quitt\u00E9 la partie", " left the game"));
                     if (PlayerLeft != null) PlayerLeft(pi);
                 }
         }

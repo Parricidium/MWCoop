@@ -24,10 +24,10 @@ namespace MWCoop
         static float scanAt = -1, deactivateAt = -1, restoreAt = -1;
 
         // Lieux : point au sol cherche par un rayon vers le bas depuis une hauteur sous le plafond.
-        struct Place { public string Name; public Vector3 Top; }
+        struct Place { public string Name, NameEn; public Vector3 Top; }
         static readonly Place[] places = {
-            new Place { Name = "l'appartement", Top = new Vector3(-1285.5f, 1.2f, 1076.4f) },
-            new Place { Name = "la maison des parents", Top = new Vector3(-6.2f, 1.0f, 6.6f) },
+            new Place { Name = "l'appartement", NameEn = "the apartment", Top = new Vector3(-1285.5f, 1.2f, 1076.4f) },
+            new Place { Name = "la maison des parents", NameEn = "the parents' house", Top = new Vector3(-6.2f, 1.0f, 6.6f) },
         };
 
         // Accident : liaison de la tete et mannequin de chaque voiture, notes au depart.
@@ -119,7 +119,7 @@ namespace MWCoop
             Needs();
             restoreAt = Time.realtimeSinceStartup + 0.3f;   // (apres son "State 3" : Wait 0,1 puis "State 1")
             Choosing = true;
-            if (Session.Active) Chat.Send("* mort (" + cause + ") *");
+            if (Session.Active) Chat.Send(Lang.T("* mort (", "* died (") + cause + ") *");
             if (Config.GetInt("Test", "TestReapparition", 0) > 0) testChoiceAt = Time.realtimeSinceStartup + 3f;
             return true;
         }
@@ -175,7 +175,7 @@ namespace MWCoop
             if (cc != null) cc.enabled = true;
             Needs();
             Log.Info("reapparition : a " + place.Name + " en " + to.ToString("F2"));
-            Hud.Toast("De retour a " + place.Name);
+            Hud.Toast(Lang.T("De retour \u00E0 " + place.Name, "Back at " + place.NameEn));
             if (Session.Active) Chat.Send("* revient a " + place.Name + " *");
         }
 
@@ -220,24 +220,24 @@ namespace MWCoop
         {
             switch (v)
             {
-                case "Crash": return "accident";
-                case "RunOver": case "RunOverRally": return "renverse";
+                case "Crash": return Lang.T("accident", "crash");
+                case "RunOver": case "RunOverRally": return Lang.T("renvers\u00E9", "run over");
                 case "Train": return "train";
-                case "Sewage": return "fosse septique";
-                case "Murder": return "meurtre";
-                case "Fatigue": return "epuisement";
-                case "Hunger": return "faim";
-                case "Thirst": return "soif";
-                case "Urine": return "vessie";
+                case "Sewage": return Lang.T("fosse septique", "septic tank");
+                case "Murder": return Lang.T("meurtre", "murder");
+                case "Fatigue": return Lang.T("\u00E9puisement", "exhaustion");
+                case "Hunger": return Lang.T("faim", "hunger");
+                case "Thirst": return Lang.T("soif", "thirst");
+                case "Urine": return Lang.T("vessie", "bladder");
                 case "Stress": return "stress";
-                case "Gasolinefire": case "Burn": return "brule";
-                case "DrunkDrown": case "Drown": return "noyade";
-                case "Electrocute": case "PissTV": return "electrocution";
-                case "InJail": return "prison";
-                case "Hypothermia": return "froid";
-                case "PTO": case "CutterBlade": return "machine agricole";
-                case "Carbon": return "monoxyde de carbone";
-                case "HeartAttack": return "crise cardiaque";
+                case "Gasolinefire": case "Burn": return Lang.T("br\u00FBl\u00E9", "burnt");
+                case "DrunkDrown": case "Drown": return Lang.T("noyade", "drowned");
+                case "Electrocute": case "PissTV": return Lang.T("\u00E9lectrocution", "electrocuted");
+                case "InJail": return Lang.T("prison", "jail");
+                case "Hypothermia": return Lang.T("froid", "cold");
+                case "PTO": case "CutterBlade": return Lang.T("machine agricole", "farm machine");
+                case "Carbon": return Lang.T("monoxyde de carbone", "carbon monoxide");
+                case "HeartAttack": return Lang.T("crise cardiaque", "heart attack");
             }
             return v;
         }
@@ -251,13 +251,13 @@ namespace MWCoop
             float w = Mathf.Min(Style.Px(600), Screen.width - Style.Px(32)), h = Style.Px(330), pad = Style.Px(30);
             float x = Mathf.Round((Screen.width - w) / 2), y = Mathf.Round((Screen.height - h) / 2);
             Style.Glass(new Rect(x, y, w, h), Style.Px(24));
-            Style.Title(new Rect(x, y + Style.Px(26), w, Style.Px(52)), "Vous \u00EAtes mort", Style.White, TextAnchor.MiddleCenter, 38);
-            Style.Text(new Rect(x + pad, y + Style.Px(88), w - 2 * pad, Style.Px(26)), "Cause : " + cause, 18, TextAnchor.MiddleCenter, Style.Warn, false);
-            Style.Text(new Rect(x + pad, y + Style.Px(122), w - 2 * pad, Style.Px(26)), "O\u00F9 voulez-vous r\u00E9appara\u00EEtre ?", 18, TextAnchor.MiddleCenter, Style.Dim, false);
+            Style.Title(new Rect(x, y + Style.Px(26), w, Style.Px(52)), Lang.T("Vous \u00EAtes mort", "You are dead"), Style.White, TextAnchor.MiddleCenter, 38);
+            Style.Text(new Rect(x + pad, y + Style.Px(88), w - 2 * pad, Style.Px(26)), Lang.T("Cause : ", "Cause: ") + cause, 18, TextAnchor.MiddleCenter, Style.Warn, false);
+            Style.Text(new Rect(x + pad, y + Style.Px(122), w - 2 * pad, Style.Px(26)), Lang.T("O\u00F9 voulez-vous r\u00E9appara\u00EEtre ?", "Where do you want to come back?"), 18, TextAnchor.MiddleCenter, Style.Dim, false);
             float bw = (w - 2 * pad - Style.Px(14)) / 2, by = y + Style.Px(172), bh = Style.Px(58);
-            if (Style.Button(new Rect(x + pad, by, bw, bh), "1  \u00B7  L'appartement", true, 19)) Choose(0);
-            if (Style.Button(new Rect(x + pad + bw + Style.Px(14), by, bw, bh), "2  \u00B7  Chez les parents", true, 19)) Choose(1);
-            Style.Text(new Rect(x + pad, by + bh + Style.Px(22), w - 2 * pad, Style.Px(24)), "La partie continue pour les autres joueurs.", 15, TextAnchor.MiddleCenter, Style.Dim, false);
+            if (Style.Button(new Rect(x + pad, by, bw, bh), Lang.T("1  \u00B7  L'appartement", "1  \u00B7  The apartment"), true, 19)) Choose(0);
+            if (Style.Button(new Rect(x + pad + bw + Style.Px(14), by, bw, bh), Lang.T("2  \u00B7  Chez les parents", "2  \u00B7  Parents' house"), true, 19)) Choose(1);
+            Style.Text(new Rect(x + pad, by + bh + Style.Px(22), w - 2 * pad, Style.Px(24)), Lang.T("La partie continue pour les autres joueurs.", "The game goes on for the other players."), 15, TextAnchor.MiddleCenter, Style.Dim, false);
         }
 
         // ------------------------------------------------------------ essais

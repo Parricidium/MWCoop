@@ -21,19 +21,10 @@ namespace MWCoop
         static bool blocking;
         static float nextScan, lostSince = -1, nextTestLog;
         static string refusal = "", drop = "";
-        static int fr = -1;
 
         static bool Enabled { get { return Config.GetInt("Coop", "EcranAttente", 1) != 0; } }
 
-        static string L(string f, string e)
-        {
-            if (fr < 0)
-            {
-                string l = Config.Get("Coop", "Langue", "").ToLowerInvariant();
-                fr = l == "fr" ? 1 : l == "en" ? 0 : Application.systemLanguage == SystemLanguage.French ? 1 : 0;
-            }
-            return fr == 1 ? f : e;
-        }
+        static string L(string f, string e) { return Lang.T(f, e); }
 
         public static void OnLevelLoaded()
         {

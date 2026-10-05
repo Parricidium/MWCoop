@@ -198,7 +198,7 @@ namespace MWCoop
                     Session.SendAll(new NetWriter(Msg.Tow).U8(REMOVE).U8(m.Owner).U8(Session.LocalId), true);
                     rAttached.Value = false;   // 'Check distance' -> 'Snap off' ; le crochet -> 'Remove rope'
                     if (ropeFsm.ActiveStateName == "Wait") Game.SetState(ropeFsm, "Snap off");
-                    Hud.Toast("Corde de " + Name(m.Owner) + " retiree");
+                    Hud.Toast(Lang.T("Corde de " + Name(m.Owner) + " retir\u00E9e", Name(m.Owner) + "'s rope removed"));
                     Log.Info("remorquage : clic sur " + m.Path1 + " : retrait de la corde de " + Name(m.Owner) + " demande");
                 }
             }
@@ -230,7 +230,7 @@ namespace MWCoop
         {
             if (local == null || rAttached == null || !rAttached.Value) return;
             Log.Info("remorquage : corde " + (kind == BROKEN ? "cassee chez " : "retiree par ") + Name(by));
-            Hud.Toast(kind == BROKEN ? "La corde a casse" : Name(by) + " a retire la corde");
+            Hud.Toast(kind == BROKEN ? Lang.T("La corde a cass\u00E9", "The rope broke") : Name(by) + Lang.T(" a retir\u00E9 la corde", " removed the rope"));
             rAttached.Value = false;   // comme 'Remove rope' : 'Wait detach' detruit le joint, 'Snap off' range la corde
         }
 

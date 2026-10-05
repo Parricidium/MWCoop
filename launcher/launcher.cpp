@@ -316,6 +316,7 @@ static void SavePlayer()
     std::string ini = ModIniA();
     WritePrivateProfileStringA("Coop", "Pseudo", Narrow(PlayerName()).c_str(), ini.c_str());
     WritePrivateProfileStringA("Coop", "Adresse", Narrow(Trim(g_fields[1].text)).c_str(), ini.c_str());
+    WritePrivateProfileStringA("Coop", "Langue", g_fr ? "fr" : "en", ini.c_str());   // textes du mod en jeu dans la langue du lanceur
 }
 
 static void LoadLocalVersion()
