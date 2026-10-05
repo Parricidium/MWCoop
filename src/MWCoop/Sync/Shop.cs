@@ -67,9 +67,27 @@ namespace MWCoop
     //    comme les sacs.
     // 3) TIRAGE DES PUCES (FleaMarketProducts :: Creator) : prix et objets en rayon tires chez chacun -- l'hote fait
     //    reference (voir « prix et rayons des puces » plus bas).
-    //    Pas suivis ici (voir le rapport du lot 2) : restaurant PSK (le repas est cuisine par Keijo/Jouni d'apres
-    //    la distance du joueur LOCAL au comptoir), kiosque a saucisses et vendeur de pieces du rallye (leur effet
-    //    passe deja par un automate du monde, PURCHASE / ALTERNATOR globaux), bureau de poste (courrier).
+    // 4) RESTAURANT PSK (PERAPORTTI/Building/LOD100/Restaurant). On choisit un plat (OrderTriggers/* 'Buy' ->
+    //    'Cashier' : Event FOODn et PriceTotal ecrits dans la caisse, PURCHASE), on paie a la caisse ('Purchase').
+    //     - comptoir burger (BurgerCashRegister) : 'Purchase' -> 'State 1|2' (BurgerSmall/Large chez Keijo) ->
+    //       'State 4' (Event et ORDER a Keijo) ; Keijo (Staff/BurgerRunnerPIVOT/Keijo :: Work) 'Tray1'... va en
+    //       cuisine, et 'Burger2' cree le plateau (prefab Tray : burger, frites, soda ; son automate Data lit Event)
+    //       a SpawnTray. Rejoue comme le bar (meme message, argent coupe) quand la caisse est au repos ici et Keijo
+    //       libre : Keijo ne prend ORDER que dans 'Hello!', ou il n'est que si le joueur LOCAL est au comptoir --
+    //       une action en fin de 'State 4' le met donc a 'Tray1' s'il ne sert pas deja. Ainsi Keijo sert chez tous
+    //       (sa pose, envoyee par son auteur, Npcs, montre partout le service) ;
+    //     - a la carte (AlaCarteRegister) : Jouni porte l'assiette a la TABLE du client (son marqueur de table, que
+    //       personne d'autre n'a au meme endroit) : jamais rejoue par l'automate ; l'assiette est posee chez les
+    //       autres d'apres le message du serveur (ci-dessous).
+    //    Le plateau ou l'assiette recoit a sa creation l'ID de la commande (nom + acheteur + numero d'achat), le
+    //    meme partout : Props le suit. Quand le serveur de l'ACHETEUR le pose ('Burger2', 'Spawn plate'), un message
+    //    donne sa pose : chez qui ne l'a pas (caisse eteinte, Keijo occupe, assiette), il est cree de la meme prefab
+    //    a cette pose (fige si le restaurant n'est pas charge ici) ; un plateau que Keijo d'ici sert ensuite pour
+    //    la meme commande est retire (deja la). Manger (boutons 'Button' du plateau ou de l'assiette : frites,
+    //    burger deballe puis mange, soda gorgee par gorgee) : les etats « State N » apres le clic sont rejoues
+    //    chez les autres, ce qui touche au joueur coupe (seul celui qui mange a moins faim).
+    //    Pas suivis ici : kiosque a saucisses et vendeur de pieces du rallye (leur effet passe deja par un automate
+    //    du monde, PURCHASE / ALTERNATOR globaux), bureau de poste (courrier).
     public static class Shop
     {
         const string Mod = "magasin";
@@ -99,6 +117,11 @@ namespace MWCoop
             public int SerialWho, Serial, Made;                    // achat en cours : nom des objets crees
             public List<FsmStateAction> Muted; public float MutedUntil, MutedAt;
             public GameObject Hidden;                              // carte du bar cachee le temps d'un service rejoue
+            // Restaurant : le serveur (Keijo, Jouni :: Work), l'etat ou il prend la commande, celui ou il la pose.
+            public PlayMakerFSM Waiter; public string WaiterStart, PlaceState; public bool WaiterHooked;
+            public int ServeWho, ServeSerial, LastStart;            // commande que le serveur sert en ce moment
+            public bool ReplayOrder;                               // commande rejouee : Keijo a mettre au service
+            public GameObject LastMade;                            // plateau, assiette de la commande en cours
         }
         class Replayed
         {
@@ -133,6 +156,96 @@ namespace MWCoop
         static bool applying;
         static float nextScan = -1, nextHookCheck, nextSpawnStep, nextWarn, nextFrozen;
         static int serialBase, serialN;
+
+        // Restaurant : plateaux et assiettes servis (ID de commande -> objet), dans l'ordre ; poses recues en
+        // attente du Keijo d'ici (il sert la meme commande) ; boutons a manger ; fins recues pas encore applicables.
+        static readonly Dictionary<string, GameObject> served = new Dictionary<string, GameObject>();
+        static readonly List<string> servedOrder = new List<string>();
+        class ServedMsg { public Counter C; public int Who, SerialWho, Serial; public string Event, Id; public Vector3 Pos; public Quaternion Rot; public float Until; }
+        static readonly List<ServedMsg> waitServe = new List<ServedMsg>();
+        class EatObj { public GameObject Go; public string Id; public readonly HashSet<PlayMakerFSM> Hooked = new HashSet<PlayMakerFSM>(); }
+        static readonly List<EatObj> eatObjs = new List<EatObj>();
+        class EatMsg { public int Who; public string Id, Path, State; public List<KeyValuePair<string, int>> Ints; public float Until; }
+        static readonly List<EatMsg> eatPending = new List<EatMsg>();
+        static readonly List<KeyValuePair<float, List<FsmStateAction>>> eatMuted = new List<KeyValuePair<float, List<FsmStateAction>>>();
+        static readonly Dictionary<string, GameObject> prefabs = new Dictionary<string, GameObject>();
+        static float nextEatCheck, nextWaiterCheck;
+        // Keijo :: Work : etats du service d'une commande (de 'Tray1' a 'You welcome') ; ceux de sa ronde, ou il ne
+        // sert que si OrderStage > 0 (sa ronde a vide passe aussi par la cuisine).
+        static readonly HashSet<string> ServingStates = new HashSet<string> {
+            "Tray1", "Tray2", "Tray3", "Soda and fries", "Fries 2", "Get fries", "Get burger", "Burger", "Burger2", "You welcome" };
+        static readonly HashSet<string> RoundStates = new HashSet<string> { "Move", "Wait", "Move 2", "State 1", "Wait 2" };
+        // Caisse du restaurant : aucun choix du joueur local en cours (rejeu possible) / au repos (fin du rejeu).
+        static readonly HashSet<string> RestoFree = new HashSet<string> { "Player distance", "Player waiting", "Hello!" };
+        static readonly HashSet<string> RestoIdle = new HashSet<string> { "Player distance", "Player waiting", "Hello!", "Wait player", "Wait button" };
+        // Kinds du message Purchase pour le restaurant.
+        const int K_Served = 5, K_Eat = 6;
+
+        // Debut du service d'une commande par le serveur ('Tray1' de Keijo, 'Purchase' de Jouni) : la commande qu'il
+        // sert est celle du dernier achat a sa caisse (ici ou rejoue). N'envoie rien.
+        class ServeStart : FsmStateAction
+        {
+            public Counter C;
+            public override void OnEnter()
+            {
+                try
+                {
+                    C.ReplayOrder = false;
+                    C.LastMade = null;
+                    // Meme achat deja servi (service relance sans nouveau paiement suivi) : pas d'ID partage.
+                    if (C.Serial != 0 && C.Serial == C.LastStart) C.ServeSerial = 0;
+                    else { C.ServeWho = C.SerialWho; C.ServeSerial = C.Serial; C.LastStart = C.Serial; }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        // Fin d'un etat du serveur qui cree le plateau ou l'assiette (ID de la commande) et/ou qui le pose (pose
+        // envoyee par l'acheteur). N'envoie que la pose, pas un ModHook (comme Made).
+        class Served : FsmStateAction
+        {
+            public Counter C; public CreateObject[] Acts; public bool Place;
+            public override void OnEnter()
+            {
+                try
+                {
+                    foreach (CreateObject co in Acts)
+                    {
+                        GameObject go = co.storeObject != null ? co.storeObject.Value : null;
+                        if (go != null) MadeServed(C, go);
+                    }
+                    if (Place) PlaceServed(C);
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        // Fin de 'State 4' de la caisse burger (ORDER envoye a Keijo) : commande rejouee que Keijo n'a pas prise
+        // (pas dans 'Hello!' ici) -> mis au service.
+        class OrderHook : FsmStateAction
+        {
+            public Counter C;
+            public override void OnEnter()
+            {
+                try { if (C.ReplayOrder) { C.ReplayOrder = false; ForceServe(C); } }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        // Etat « State N » d'un bouton a manger (plateau, assiette) atteint apres un clic.
+        class EatHook : ModHook
+        {
+            public override string Module { get { return Mod; } }
+            public string Id, Path, StateName;
+            public override void OnEnter()
+            {
+                try { if (!applying && Replay.Depth == 0) OnLocalEat(this, Fsm.Owner as PlayMakerFSM); } catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
 
         static readonly HashSet<string> InputActions = new HashSet<string> {
             "MousePickEvent", "GetButtonDown", "GetButtonUp", "GetMouseButtonDown", "GetMouseButtonUp", "GetKeyDown", "GetButton", "GetMouseButton", "GetKey" };
@@ -189,7 +302,8 @@ namespace MWCoop
             registers.Clear(); registerOf.Clear(); pending.Clear(); unhookedRegisters.Clear();
             counters.Clear(); counterOf.Clear(); unhooked.Clear(); mutedCounters.Clear(); queue.Clear(); spawnSteps.Clear();
             ignored.Clear(); restCache.Clear(); named.Clear(); frozen.Clear();
-            testStep = 0; testLog = 0; testBag = null;
+            served.Clear(); servedOrder.Clear(); waitServe.Clear(); eatObjs.Clear(); eatPending.Clear(); eatMuted.Clear(); prefabs.Clear();
+            testStep = 0; testLog = 0; testBag = null; testEatAt = 0;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 9f : -1;
             fleaDb = null; fleaCreator = null; fleaHostLists.Clear(); fleaHostShelf = null; fleaSentSig = null;
             fleaRolling = fleaPending = false; fleaReplyAt = -1; fleaApplied = 0; fleaRetry = 0; fleaNextSig = 0;
@@ -255,8 +369,9 @@ namespace MWCoop
             for (int i = mutedCounters.Count - 1; i >= 0; i--)
             {
                 Counter c = mutedCounters[i];
-                if (c.Fsm == null || now > c.MutedUntil || (now - c.MutedAt > 0.5f && c.Fsm.gameObject.activeInHierarchy && AtRest(c.Fsm))) UnmuteCounter(c);
+                if (c.Fsm == null || now > c.MutedUntil || (now - c.MutedAt > 0.5f && c.Fsm.gameObject.activeInHierarchy && Idle(c))) UnmuteCounter(c);
             }
+            if (nextScan > 0) RestoUpdate(now);
             if (spawnSteps.Count > 0 && now >= nextSpawnStep)
             {
                 nextSpawnStep = now + 0.15f;
@@ -334,6 +449,12 @@ namespace MWCoop
                 if (c == null) { ignored.Add(f); continue; }
                 counters[c.Key] = c; counterOf[f] = c;
                 if (c.Kind == "cafe") ClaimPan(c);
+                if (c.Waiter != null && !Replay.Claim(c.Waiter, Mod))
+                {
+                    // (Keijo et Jouni n'ont ni clic ni evenement global : le monde ne les prend pas d'ordinaire.)
+                    Log.Warn("magasin : " + Recon.Path(c.Waiter.transform) + "::Work deja suivi par " + Replay.Owner(c.Waiter) + " : plateaux sans ID partage");
+                    c.Waiter = null;
+                }
                 if (c.Fsm == null) continue;
                 HookCounter(c);
                 if (!c.Hooked) unhooked.Add(c);
@@ -375,13 +496,30 @@ namespace MWCoop
             string[] states = null;
             float wait = 30f;
             Transform parent = f.transform.parent;
+            PlayMakerFSM waiter = null;
+            string wStart = null, wPlace = null;
             if (fsm == "Data" && n == "CashRegisterLogic")
             {
                 string path = Recon.Path(f.transform);
-                // Courrier (autre lot) ; repas du restaurant : cuisine par les PNJ d'apres le joueur local.
-                if (path.Contains("/PostOffice/") || path.Contains("/Restaurant/")) return null;
+                if (path.Contains("/PostOffice/")) return null;   // courrier (autre lot)
                 key = path + "::" + fsm;
-                if (f.Fsm.GetState("Pay") != null) { kind = "bar"; label = "au bar"; states = new[] { "Pay" }; wait = 30f; }
+                if (path.Contains("/Restaurant/"))
+                {
+                    if (f.Fsm.GetState("Purchase") == null) return null;
+                    // Burger : Keijo ({Cashier}) prend la commande ('State 4' -> ORDER) ; a la carte : Jouni ({Runner}).
+                    PlayMakerFSM keijo = FsmOnVar(f, "Cashier", "Work"), jouni = FsmOnVar(f, "Runner", "Work");
+                    if (jouni != null && jouni.Fsm.GetState("Spawn plate") != null)
+                    {
+                        kind = "carte"; label = "un plat a la carte"; waiter = jouni; wStart = "Purchase"; wPlace = "Spawn plate"; wait = 5f;
+                    }
+                    else if (keijo != null && f.Fsm.GetState("State 4") != null && keijo.Fsm.GetState("Burger2") != null && keijo.Fsm.GetState("Tray1") != null)
+                    {
+                        kind = "resto"; label = "un repas au comptoir burger"; waiter = keijo; wStart = "Tray1"; wPlace = "Burger2"; wait = 60f;
+                    }
+                    else return null;
+                    states = new[] { "Purchase" };
+                }
+                else if (f.Fsm.GetState("Pay") != null) { kind = "bar"; label = "au bar"; states = new[] { "Pay" }; wait = 30f; }
                 else if (f.Fsm.GetState("Spawn product") != null && f.FsmVariables.FindFsmGameObject("Inventory") != null) { kind = "puces"; label = "au marche aux puces"; states = new[] { "Purchase" }; wait = 120f; }
                 else if (f.Fsm.GetState("Purchase") != null)
                 {
@@ -409,7 +547,7 @@ namespace MWCoop
             }
             if (kind == null) return null;
             if (key == null) key = Recon.Path(f.transform) + "::" + fsm;
-            return new Counter { Key = key, Kind = kind, Label = label, Fsm = f, PayStates = states, Wait = wait };
+            return new Counter { Key = key, Kind = kind, Label = label, Fsm = f, PayStates = states, Wait = wait, Waiter = waiter, WaiterStart = wStart, PlaceState = wPlace };
         }
 
         // Verseur de la machine a cafe ({Pan}) : a ce module (sinon le monde rejouerait aussi POUR). Deja au monde :
@@ -456,10 +594,382 @@ namespace MWCoop
                         s.Actions = list.ToArray();
                         made++;
                     }
+                // Caisse burger : 'State 4' envoie la commande a Keijo ; en fin d'etat, un rejeu qu'il n'a pas prise.
+                if (c.Kind == "resto")
+                {
+                    FsmState s4 = f.Fsm.GetState("State 4");
+                    if (!System.Array.Exists(s4.Actions, a => a is OrderHook))
+                    {
+                        var list = new List<FsmStateAction>(s4.Actions);
+                        list.Add(new OrderHook { C = c });
+                        s4.Actions = list.ToArray();
+                    }
+                }
             }
             catch { return; }
             c.Hooked = true;
             Log.Info("magasin : comptoir suivi (" + c.Kind + ") " + c.Key + (made > 0 ? ", " + made + " etats createurs" : ""));
+            if (c.Waiter != null) HookWaiter(c);
+        }
+
+        // ---------------------------------------------------------------- restaurant
+        // Serveur : debut du service (commande servie), etats qui creent le plateau ou l'assiette, etat qui le pose.
+        // Actions chargees seulement objet actif : sinon repris par RestoUpdate.
+        static void HookWaiter(Counter c)
+        {
+            PlayMakerFSM w = c.Waiter;
+            if (c.WaiterHooked || w == null || !w.gameObject.activeInHierarchy) return;
+            int made = 0;
+            try
+            {
+                FsmState start = w.Fsm.GetState(c.WaiterStart);
+                if (start != null && !System.Array.Exists(start.Actions, a => a is ServeStart))
+                {
+                    var l = new List<FsmStateAction>(start.Actions);
+                    l.Insert(0, new ServeStart { C = c });
+                    start.Actions = l.ToArray();
+                }
+                foreach (FsmState s in w.Fsm.States)
+                {
+                    List<CreateObject> acts = null;
+                    foreach (FsmStateAction a in s.Actions) { var co = a as CreateObject; if (co != null) { if (acts == null) acts = new List<CreateObject>(); acts.Add(co); } }
+                    bool place = s.Name == c.PlaceState;
+                    if ((acts == null && !place) || System.Array.Exists(s.Actions, a => a is Served)) continue;
+                    var list = new List<FsmStateAction>(s.Actions);
+                    list.Add(new Served { C = c, Acts = acts != null ? acts.ToArray() : new CreateObject[0], Place = place });
+                    s.Actions = list.ToArray();
+                    if (acts != null) made++;
+                }
+            }
+            catch { return; }
+            c.WaiterHooked = true;
+            Log.Info("magasin : serveur " + w.gameObject.name + " suivi (" + c.Kind + ", " + made + " etats createurs, pose en '" + c.PlaceState + "')");
+        }
+
+        static bool Idle(Counter c)
+        {
+            if (c.Kind == "resto" || c.Kind == "carte") return RestoIdle.Contains(c.Fsm.ActiveStateName ?? "");
+            return AtRest(c.Fsm);
+        }
+
+        // Comptoir pret a rejouer un achat d'un autre. Burger : caisse sans choix local en cours, Keijo libre.
+        static bool Ready(Counter c)
+        {
+            if (c.Kind != "resto") return AtRest(c.Fsm);
+            // (Keijo encaisse aussi a la carte, avec Virpi : 'Move 3' a 'Move 6' -- pas interrompu.)
+            string k = c.Waiter != null && c.Waiter.gameObject.activeInHierarchy ? c.Waiter.ActiveStateName ?? "" : "";
+            return RestoFree.Contains(c.Fsm.ActiveStateName ?? "") && !WaiterBusy(c) && !KeijoAway.Contains(k);
+        }
+        static readonly HashSet<string> KeijoAway = new HashSet<string> { "Move 3", "Cashing 3", "Talk to Virpi", "Move 6" };
+
+        static int OrderStage(Counter c)
+        {
+            FsmInt v = c.Waiter != null ? c.Waiter.FsmVariables.FindFsmInt("OrderStage") : null;
+            return v != null ? v.Value : 0;
+        }
+
+        // Keijo sert-il une commande ?
+        static bool WaiterBusy(Counter c)
+        {
+            if (c.Waiter == null || !c.Waiter.gameObject.activeInHierarchy) return false;
+            string s = c.Waiter.ActiveStateName ?? "";
+            return ServingStates.Contains(s) || RoundStates.Contains(s) && OrderStage(c) > 0;
+        }
+
+        static void ForceServe(Counter c)
+        {
+            PlayMakerFSM w = c.Waiter;
+            if (w == null || !w.gameObject.activeInHierarchy) { Log.Info("magasin : commande rejouee, serveur absent ou eteint ici"); return; }
+            string was = w.ActiveStateName;
+            if (WaiterBusy(c)) { Log.Info("magasin : " + w.gameObject.name + " a pris la commande rejouee (" + was + ")"); return; }
+            applying = true; Replay.Depth++;
+            try { Game.SetState(w, c.WaiterStart); }
+            finally { applying = false; Replay.Depth--; }
+            Log.Info("magasin : " + w.gameObject.name + " mis au service de la commande rejouee (" + was + " -> " + w.ActiveStateName + ", achat " + c.ServeSerial + ")");
+        }
+
+        static GameObject Live(string id)
+        {
+            GameObject g;
+            if (id != null && served.TryGetValue(id, out g) && g != null) return g;
+            return id != null ? Props.ObjectOf(id) : null;
+        }
+
+        // Plateau ou assiette tout juste cree par le serveur d'ici : ID de la commande servie ; deja la (fait
+        // d'apres la pose de l'acheteur) : celui-ci est retire.
+        static void MadeServed(Counter c, GameObject go)
+        {
+            if (c.ServeSerial == 0)
+            {
+                // Commande sans achat suivi (servie avant le releve, ou service relance) : ID propre a ce joueur.
+                string own = Prefix(go.name) + "-" + (Session.Active ? Session.LocalId : 0) + "-" + NextSerial();
+                AdoptServed(c, go, own);
+                Log.Info("magasin : " + go.name + " servi sans achat suivi, ID local " + own);
+                return;
+            }
+            string id = Prefix(go.name) + "-" + c.ServeWho + "-" + c.ServeSerial;
+            GameObject old = Live(id);
+            if (old != null && old != go)
+            {
+                Object.Destroy(go);
+                c.LastMade = old;
+                Log.Info("magasin : " + id + " deja la ici (pose de l'acheteur) : " + go.name + " de " + c.Waiter.gameObject.name + " retire");
+                return;
+            }
+            AdoptServed(c, go, id);
+            Log.Info("magasin : " + go.name + " servi (" + c.Label + "), ID " + id);
+        }
+
+        static void AdoptServed(Counter c, GameObject go, string id)
+        {
+            SetId(go, id);
+            served[id] = go;
+            servedOrder.Remove(id); servedOrder.Add(id);
+            if (servedOrder.Count > 64) { served.Remove(servedOrder[0]); servedOrder.RemoveAt(0); }
+            if (c != null) c.LastMade = go;
+            Props.Track(go);
+            Consume.Soon(go);
+            WatchEats(go, id);
+        }
+
+        // Le serveur de l'acheteur pose le plateau (a SpawnTray) ou l'assiette (sur sa table) : pose aux autres.
+        // Purchase : U8 joueur, U8 K_Served, Str comptoir, U8 acheteur, I32 numero d'achat, Str Event, Str ID,
+        // Vec position, Quat rotation.
+        static void PlaceServed(Counter c)
+        {
+            GameObject go = c.LastMade;
+            if (!Session.Active || go == null || c.ServeSerial == 0 || c.ServeWho != Session.LocalId) return;
+            string id = Props.ItemId(go);
+            if (id.Length == 0) return;
+            string ev = EventOf(go);
+            if (ev.Length == 0) ev = StrVar(c.Waiter, "Event");
+            if (ev.Length == 0) ev = StrVar(c.Fsm, "Event");
+            var w = new NetWriter(Msg.Purchase).U8(Session.LocalId).U8(K_Served).Str(c.Key).U8(c.ServeWho).I32(c.ServeSerial)
+                .Str(ev).Str(id).Vec(go.transform.position).Quat(go.transform.rotation);
+            Session.SendAll(w, true);
+            Log.Info("magasin : " + id + " pose par " + c.Waiter.gameObject.name + " en " + go.transform.position.ToString("F2") + " (" + ev + "), pose envoyee");
+        }
+
+        static string StrVar(PlayMakerFSM f, string name)
+        {
+            FsmString v = f != null ? f.FsmVariables.FindFsmString(name) : null;
+            return v != null && v.Value != null ? v.Value : "";
+        }
+
+        static string EventOf(GameObject go)
+        {
+            foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>()) { string s = StrVar(f, "Event"); if (s.Length > 0) return s; }
+            return "";
+        }
+
+        static void OnServed(int who, NetReader r)
+        {
+            var m = new ServedMsg { Who = who };
+            string key = r.Str();
+            m.SerialWho = r.U8(); m.Serial = r.I32(); m.Event = r.Str(); m.Id = r.Str(); m.Pos = r.Vec(); m.Rot = r.Quat();
+            m.C = FindCounter(key);
+            if (m.C == null || m.C.Waiter == null) { Log.Warn("magasin : " + m.Id + " servi chez " + PlayerName(who) + ", comptoir " + key + " introuvable ici"); return; }
+            GameObject go = Live(m.Id);
+            if (go != null) { Align(go, m); return; }
+            // Achat pas encore rejoue ici (Keijo occupe) : plus la peine, le plateau arrive tout fait.
+            for (int i = queue.Count - 1; i >= 0; i--)
+                if (queue[i].C == m.C && queue[i].Serial == m.Serial && queue[i].SerialWho == m.SerialWho)
+                {
+                    queue.RemoveAt(i);
+                    Log.Info("magasin : rejeu de l'achat " + m.Serial + " abandonne, " + m.Id + " pose d'apres l'acheteur");
+                }
+            // Keijo d'ici sert cette meme commande : son plateau (meme ID, meme SpawnTray) est attendu un moment.
+            if (m.C.ServeSerial == m.Serial && m.C.ServeWho == m.SerialWho && WaiterBusy(m.C))
+            {
+                m.Until = Time.realtimeSinceStartup + 40f;
+                waitServe.Add(m);
+                Log.Info("magasin : " + m.Id + " pose chez " + PlayerName(who) + ", " + m.C.Waiter.gameObject.name + " le sert encore ici (" + m.C.Waiter.ActiveStateName + ")");
+                return;
+            }
+            MakeServed(m);
+        }
+
+        // Deja la ici (Keijo d'ici) : recale s'il est ailleurs que chez l'acheteur et n'a pas bouge depuis.
+        static void Align(GameObject go, ServedMsg m)
+        {
+            float d = (go.transform.position - m.Pos).magnitude;
+            Rigidbody rb = go.GetComponent<Rigidbody>();
+            float age;
+            bool moved = Props.MovedByOther(go, out age) || rb != null && rb.isKinematic;
+            if (d > 0.5f && !moved)
+            {
+                go.transform.position = m.Pos; go.transform.rotation = m.Rot;
+                if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+            }
+            Log.Info("magasin : " + m.Id + " deja la ici, a " + d.ToString("0.00") + " m de celui de " + PlayerName(m.Who) + (d > 0.5f && !moved ? " : recale" : ""));
+        }
+
+        // Plateau ou assiette de l'acheteur, fait ici de la meme prefab que son serveur, a sa pose.
+        static void MakeServed(ServedMsg m)
+        {
+            GameObject prefab = ServedPrefab(m.C, m.Event);
+            if (prefab == null) { Log.Warn("magasin : " + m.Id + " : prefab du serveur introuvable (" + m.C.Kind + " " + m.Event + ")"); return; }
+            var go = (GameObject)Object.Instantiate(prefab, m.Pos, m.Rot);
+            // = SetFsmString de 'Burger2' : le plateau lit sa commande (Event) a son demarrage.
+            if (m.C.Kind == "resto")
+                foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>()) { FsmString ev = f.FsmVariables.FindFsmString("Event"); if (ev != null) ev.Value = m.Event; }
+            AdoptServed(null, go, m.Id);
+            Freeze(go, m.C.Fsm.gameObject);   // restaurant pas charge ici : tenu en l'air, pas a travers le comptoir eteint
+            Log.Info("magasin : " + go.name + " de " + PlayerName(m.Who) + " pose ici d'apres lui (" + m.C.Label + " " + m.Event + ", ID " + m.Id + ", "
+                     + (m.C.Fsm.gameObject.activeInHierarchy ? "restaurant charge" : "restaurant pas charge ici : fige") + ")");
+        }
+
+        // Prefab du plateau (CreateObject de 'Burger2') ou de l'assiette (etat de Jouni choisi par Event dans
+        // 'Purchase' : FOOD1 -> Sausages...). Serveur jamais allume ici : ses actions sont chargees a la main.
+        static GameObject ServedPrefab(Counter c, string ev)
+        {
+            string k = c.Key + "|" + (c.Kind == "resto" ? "" : ev);
+            GameObject p;
+            if (prefabs.TryGetValue(k, out p) && p != null) return p;
+            PlayMakerFSM w = c.Waiter;
+            string state = c.Kind == "resto" ? c.PlaceState : null;
+            try
+            {
+                FsmState buy = c.Kind == "carte" ? w.Fsm.GetState(c.WaiterStart) : null;
+                if (buy != null) foreach (FsmTransition t in buy.Transitions) if (t.EventName == ev) state = t.ToState;
+                FsmState s = state != null ? w.Fsm.GetState(state) : null;
+                if (s == null) return null;
+                FsmStateAction[] acts;
+                try { acts = s.Actions; }
+                catch { w.Fsm.InitData(); acts = s.Actions; }
+                foreach (FsmStateAction a in acts)
+                {
+                    var co = a as CreateObject;
+                    if (co != null && co.gameObject != null && co.gameObject.Value != null) { p = co.gameObject.Value; break; }
+                }
+            }
+            catch (System.Exception e) { Log.Warn("magasin : prefab de " + w.gameObject.name + " '" + state + "' illisible : " + e.Message); return null; }
+            if (p != null) prefabs[k] = p;
+            return p;
+        }
+
+        static void RestoUpdate(float now)
+        {
+            if (now >= nextWaiterCheck)
+            {
+                nextWaiterCheck = now + 1f;
+                foreach (Counter c in counters.Values) if (c.Waiter != null && c.Hooked && !c.WaiterHooked) HookWaiter(c);
+                for (int i = waitServe.Count - 1; i >= 0; i--)
+                {
+                    ServedMsg m = waitServe[i];
+                    GameObject go = Live(m.Id);
+                    if (go != null) { waitServe.RemoveAt(i); Align(go, m); continue; }
+                    if (now < m.Until && WaiterBusy(m.C)) continue;
+                    waitServe.RemoveAt(i);
+                    Log.Info("magasin : " + m.Id + " pas servi par " + m.C.Waiter.gameObject.name + " d'ici (" + m.C.Waiter.ActiveStateName + ") : pose d'apres " + PlayerName(m.Who));
+                    MakeServed(m);
+                }
+            }
+            if (now >= nextEatCheck && (eatObjs.Count > 0 || eatPending.Count > 0 || eatMuted.Count > 0))
+            {
+                nextEatCheck = now + 0.25f;
+                for (int i = eatObjs.Count - 1; i >= 0; i--) { if (eatObjs[i].Go == null) eatObjs.RemoveAt(i); else HookEats(eatObjs[i]); }
+                for (int i = 0; i < eatPending.Count; )
+                {
+                    EatMsg m = eatPending[i];
+                    if (ApplyEat(m)) { eatPending.RemoveAt(i); continue; }
+                    if (now > m.Until) { eatPending.RemoveAt(i); Log.Info("magasin : repas " + m.Id + "/" + m.Path + " -> " + m.State + " de " + PlayerName(m.Who) + " abandonne (objet absent ou eteint ici)"); continue; }
+                    i++;
+                }
+                for (int i = eatMuted.Count - 1; i >= 0; i--)
+                    if (now > eatMuted[i].Key) { Unmute(eatMuted[i].Value); eatMuted.RemoveAt(i); }
+            }
+        }
+
+        // ---------------------------------------------------------------- restaurant : manger
+        // Boutons 'Button' du plateau (EatFries, DrinkSoda, LARGE/SMALL a deballer, EatBurger) ou de l'assiette (sur
+        // elle) : reserves a ce module (sinon le monde rejouerait le clic), accroches des qu'ils s'allument (EatBurger
+        // apres le deballage).
+        static void WatchEats(GameObject go, string id)
+        {
+            foreach (EatObj e in eatObjs) if (e.Go == go) return;
+            var eo = new EatObj { Go = go, Id = id };
+            foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Button" && !Replay.Claim(f, Mod)) Log.Warn("magasin : " + id + "/" + f.gameObject.name + " deja suivi par " + Replay.Owner(f));
+            eatObjs.Add(eo);
+            HookEats(eo);
+        }
+
+        static void HookEats(EatObj e)
+        {
+            foreach (PlayMakerFSM f in e.Go.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (f.FsmName != "Button" || e.Hooked.Contains(f) || !f.gameObject.activeInHierarchy || Replay.ClaimedByOther(f, Mod)) continue;
+                string path = RelPath(e.Go.transform, f.transform);
+                int n = 0;
+                try
+                {
+                    foreach (FsmState s in f.Fsm.States)
+                    {
+                        if (!s.Name.StartsWith("State ") || System.Array.Exists(s.Actions, a => a is EatHook)) continue;
+                        var l = new List<FsmStateAction>(s.Actions);
+                        l.Insert(0, new EatHook { Id = e.Id, Path = path, StateName = s.Name });
+                        s.Actions = l.ToArray();
+                        n++;
+                    }
+                }
+                catch { continue; }
+                e.Hooked.Add(f);
+            }
+        }
+
+        static string RelPath(Transform root, Transform t)
+        {
+            string p = "";
+            for (; t != null && t != root; t = t.parent) p = p.Length == 0 ? t.name : t.name + "/" + p;
+            return p;
+        }
+
+        // Purchase : U8 joueur, U8 K_Eat, Str ID, Str chemin du bouton sous l'objet, Str etat, U8 n, (Str, I32) x n
+        // (entiers de l'automate avant l'etat : gorgees du soda).
+        static void OnLocalEat(EatHook h, PlayMakerFSM f)
+        {
+            if (!Session.Active || f == null) return;
+            var w = new NetWriter(Msg.Purchase).U8(Session.LocalId).U8(K_Eat).Str(h.Id).Str(h.Path).Str(h.StateName);
+            FsmInt[] ints = f.FsmVariables.IntVariables;
+            int n = Mathf.Min(ints.Length, 16);
+            w.U8(n);
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < n; i++) { w.Str(ints[i].Name).I32(ints[i].Value); sb.Append(' ').Append(ints[i].Name).Append('=').Append(ints[i].Value); }
+            Session.SendAll(w, true);
+            Log.Info("magasin : repas " + h.Id + "/" + (h.Path.Length > 0 ? h.Path : f.gameObject.name) + " -> " + h.StateName + sb);
+        }
+
+        static void OnEat(int who, NetReader r)
+        {
+            var m = new EatMsg { Who = who, Id = r.Str(), Path = r.Str(), State = r.Str(), Ints = new List<KeyValuePair<string, int>>() };
+            for (int i = 0, n = r.U8(); i < n; i++) m.Ints.Add(new KeyValuePair<string, int>(r.Str(), r.I32()));
+            if (ApplyEat(m)) return;
+            // Plateau pas encore la (Keijo d'ici plus lent, pose en route), bouton pas encore allume (burger pas encore
+            // deballe ici).
+            m.Until = Time.realtimeSinceStartup + 45f;
+            eatPending.Add(m);
+        }
+
+        // Etat du bouton rejoue ici, ce qui touche au joueur coupe un moment (il ne mange pas, lui).
+        static bool ApplyEat(EatMsg m)
+        {
+            GameObject go = Live(m.Id);
+            if (go == null) return false;
+            Transform t = m.Path.Length == 0 ? go.transform : go.transform.Find(m.Path);
+            PlayMakerFSM f = t != null ? Game.FsmOn(t.gameObject, "Button") : null;
+            if (f == null || !t.gameObject.activeInHierarchy || string.IsNullOrEmpty(f.ActiveStateName)) return false;
+            string was = f.ActiveStateName;
+            if (was == m.State) { Log.Info("magasin : repas " + m.Id + "/" + m.Path + " deja " + m.State + " ici"); return true; }
+            foreach (KeyValuePair<string, int> kv in m.Ints) { FsmInt v = f.FsmVariables.FindFsmInt(kv.Key); if (v != null) v.Value = kv.Value; }
+            List<FsmStateAction> muted = MuteFsm(f);
+            applying = true; Replay.Depth++;
+            try { Game.SetState(f, m.State); }
+            finally { applying = false; Replay.Depth--; }
+            eatMuted.Add(new KeyValuePair<float, List<FsmStateAction>>(Time.realtimeSinceStartup + 1.5f, muted));
+            Log.Info("magasin : repas de " + PlayerName(m.Who) + " rejoue ici : " + m.Id + "/" + (m.Path.Length > 0 ? m.Path : go.name) + " " + was + " -> " + f.ActiveStateName
+                     + " (" + muted.Count + " actions coupees)");
+            return true;
         }
 
         static GameObject Var(PlayMakerFSM f, string name)
@@ -536,6 +1046,8 @@ namespace MWCoop
             int kind = r.U8();
             if (kind == 0) OnBag(who, r);
             else if (kind == 1) OnCounter(who, r);
+            else if (kind == K_Served) OnServed(who, r);
+            else if (kind == K_Eat) OnEat(who, r);
             else if (kind == K_FleaLists || kind == K_FleaShelf) { if (!Session.IsHost && who == 0) OnFleaPrices(kind, r); }
             else if (kind == K_FleaAsk) { if (Session.IsHost) { fleaReplyAt = Time.realtimeSinceStartup + 0.5f; Log.Info("magasin : puces : " + PlayerName(who) + " demande le tirage de l'hote"); } }
         }
@@ -675,6 +1187,7 @@ namespace MWCoop
             // Achat du joueur local pendant que le comptoir etait coupe (rejeu d'un autre) : il paie bien, lui
             // (les actions de l'etat viennent apres ce crochet).
             UnmuteCounter(c);
+            c.ReplayOrder = false;
             c.SerialWho = Session.Active ? Session.LocalId : 0; c.Serial = NextSerial(); c.Made = 0;
             if (!Session.Active) return;
             var w = new NetWriter(Msg.Purchase).U8(Session.LocalId).U8(1).Str(c.Key).Str(state).U8(c.SerialWho).I32(c.Serial);
@@ -808,10 +1321,12 @@ namespace MWCoop
             // joueur local a peut-etre choisi des objets (Total, 'Bought', TriggerFlea 'Added') : le rejeu les
             // ecrasait, puis 'Delay' et 'State 4' remettaient tout a zero -- objets choisis caches pour de bon,
             // semaines de location perdues. Et un clic local (PURCHASE) coupait la boucle 'Spawn product'.
-            if (c.Kind == "puces") { Emulate(it); return true; }
+            // A la carte : Jouni porterait l'assiette a la table du marqueur d'ICI ; l'assiette vient de la pose de
+            // l'acheteur.
+            if (c.Kind == "puces" || c.Kind == "carte") { Emulate(it); return true; }
             bool on = f.gameObject.activeInHierarchy;
             if (!on && Emulate(it)) return true;   // eteint : ce qui doit exister partout, fait a la main
-            if (!on || !AtRest(f))
+            if (!on || !Ready(c))
             {
                 if (now < it.Until) return false;
                 // Trop longtemps eteint ou occupe (le joueur local s'en sert) : fait a la main si possible, sinon abandonne.
@@ -830,6 +1345,7 @@ namespace MWCoop
             c.SerialWho = it.SerialWho; c.Serial = it.Serial; c.Made = 0;
             MuteCounter(c);
             if (c.Kind == "bar") HideOrders(c);
+            if (c.Kind == "resto") c.ReplayOrder = true;   // 'State 4' : Keijo mis au service s'il ne prend pas ORDER
             applying = true; Replay.Depth++;
             try { Game.SetState(f, it.State); }
             finally { applying = false; Replay.Depth--; }
@@ -867,6 +1383,17 @@ namespace MWCoop
         static bool Emulate(Replayed it)
         {
             Counter c = it.C;
+            if (c.Kind == "resto" || c.Kind == "carte")
+            {
+                // Rien a faire tout de suite : le plateau ou l'assiette est pose ici quand le serveur de l'acheteur le
+                // pose (K_Served), de la meme prefab, au meme endroit.
+                string food = "?";
+                foreach (var x in it.V.S) if (x.Key == "Event") food = x.Value;
+                Log.Info("magasin : " + c.Label + " de " + PlayerName(it.Who) + " (" + food + ") pas rejoue par l'automate ici ("
+                         + (c.Kind == "carte" ? "table de l'acheteur" : !c.Fsm.gameObject.activeInHierarchy ? "caisse eteinte" : "caisse ou Keijo occupe")
+                         + ") : pose d'apres son serveur");
+                return true;
+            }
             if (c.Kind == "bar")
             {
                 // Cigarettes : distributeur a compteur (le meme que le magasin), toujours actif. Verre, shot, cafe,
@@ -1272,6 +1799,16 @@ namespace MWCoop
             if (use == null) return;
             string id = Prefix(go.name) + "-" + c.SerialWho + "-" + c.Serial + (c.Made > 0 ? "-" + c.Made : "");
             c.Made++;
+            SetId(go, id);
+            Log.Info("magasin : " + go.name + " cree " + c.Label + ", ID " + id);
+        }
+
+        // ID d'achat pose sur l'objet : variable 'ID' de son automate Use, a defaut du premier (ajoutee au besoin).
+        static void SetId(GameObject go, string id)
+        {
+            PlayMakerFSM use = Game.FsmOn(go, "Use");
+            if (use == null) { PlayMakerFSM[] all = go.GetComponents<PlayMakerFSM>(); if (all.Length > 0) use = all[0]; }
+            if (use == null) return;
             FsmString v = use.FsmVariables.FindFsmString("ID");
             if (v == null)
             {
@@ -1283,7 +1820,6 @@ namespace MWCoop
             }
             v.Value = id;
             named.Add(id);
-            Log.Info("magasin : " + go.name + " cree " + c.Label + ", ID " + id);
         }
 
         // Consume : objet de comptoir nomme ici (sa fin "vide" -- barquette mangee -- est suivie aussi).
@@ -1489,14 +2025,25 @@ namespace MWCoop
         //   la caisse). Chacun note de 28 a 50 s le Total, le nombre d'objets choisis et ou est l'objet. Attendu chez
         //   l'invite : « 1 objets des puces de X sortis ici a la main (comptoir allume, 1 retires de la selection
         //   locale) », puis Total 0, choisis 0 ; l'objet a la racine pres du comptoir des deux cotes, pas fige.
+        // [Test] Autotest=resto : les deux joueurs devant le comptoir burger du restaurant PSK (TestPos pres de
+        //   WaitingPointBurger, restaurant charge chez chacun). A 35 s l'hote choisit la ligne [Test] TestObjet (1
+        //   hamburger par defaut -- plateau burger + frites + soda ; 2 jumbo, 3 bacon, 4 poulet, 5 vege) comme un clic
+        //   (OrderTriggers/<plat> 'Buy' -> 'Cashier'), a 37 s paie (caisse -> 'Check money', comme le clic USE).
+        //   Chacun note toutes les 2 s de 30 a 110 s la caisse, Keijo (etat, OrderStage, commande servie), les
+        //   plateaux (ID, position, etat de chaque bouton et maillage) et son argent. Des 55 s (des que le plateau est
+        //   la) l'hote mange [Test] TestManger (EatFries par defaut) : 'Play anim' comme le clic, 'State 3' force 2 s
+        //   apres si le clic n'a pas abouti. Attendu : « rejoue » puis Keijo au service chez l'invite, un plateau
+        //   de meme ID au meme endroit des deux cotes, argent de l'invite inchange ; puis EatFries en State 3 et Fries
+        //   eteint des deux cotes (« repas de X rejoue ici »).
         static int testStep;
         static string testBag;
-        static float testLog;
+        static float testLog, testEatAt;
         static Rigidbody testCup;
 
         public static void Test(string mode, float t)
         {
-            if (mode == "bar") TestBar(t);
+            if (mode == "resto") TestResto(t);
+            else if (mode == "bar") TestBar(t);
             else if (mode == "cafe") TestCafe(t);
             else if (mode == "sac-double") TestBags(t);
             else if (mode == "panier") TestCart(t);
@@ -1620,6 +2167,122 @@ namespace MWCoop
                 }
                 Log.Info("autotest : sac-loin, " + (sb.Length > 0 ? sb.ToString() : "aucun sac actif ; ") + "figes " + frozen.Count + " ; suivis " + Props.Ids("shoppingbag") + " " + Props.Ids("beercase"));
             }
+        }
+
+        static void TestResto(float t)
+        {
+            string who = Session.IsHost ? "hote" : "invite";
+            Counter c = null;
+            foreach (Counter x in counters.Values) if (x.Kind == "resto" && x.Fsm != null) c = x;
+            if (c == null) { if (testStep == 0 && t > 30f) { testStep = 9; Log.Info("autotest : resto (" + who + ") comptoir burger introuvable (" + counters.Count + " comptoirs)"); } return; }
+            bool on = c.Fsm.gameObject.activeInHierarchy;
+            if (Session.IsHost && testStep == 0 && t > 35f)
+            {
+                testStep = 1;
+                if (!on) { testStep = 9; Log.Info("autotest : resto (hote) caisse burger eteinte ici (TestPos devant WaitingPointBurger)"); }
+                else
+                {
+                    if (!c.Hooked) HookCounter(c);
+                    int line = Mathf.Clamp(Config.GetInt("Test", "TestObjet", 1), 1, 5);
+                    string[] names = { "Hampurilainen", "Jumbojuusto", "Grillipekoni", "Kanahampurilainen", "Vegehampurilainen" };
+                    float[] prices = { 25f, 37f, 35f, 30f, 32f };
+                    string before = c.Fsm.ActiveStateName;
+                    Transform tr = c.Fsm.transform.root.Find("Building/LOD100/OrderTriggers/" + names[line - 1]);
+                    PlayMakerFSM buy = tr != null ? Game.FsmOn(tr.gameObject, "Buy") : null;
+                    bool click = buy != null && buy.gameObject.activeInHierarchy;
+                    if (click) Game.SetState(buy, "Cashier");   // Event, PriceTotal ecrits dans la caisse, PURCHASE
+                    else
+                    {
+                        c.Fsm.FsmVariables.GetFsmString("Event").Value = "FOOD" + line;
+                        c.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value = prices[line - 1];
+                    }
+                    Log.Info("autotest : resto (hote) commande " + names[line - 1] + (click ? " par OrderTriggers 'Cashier'" : " directement dans la caisse") + ", caisse "
+                             + before + " -> " + c.Fsm.ActiveStateName + ", Event=" + StrVar(c.Fsm, "Event") + " PriceTotal=" + c.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value + " ; " + Wallet.State());
+                }
+            }
+            if (Session.IsHost && testStep == 1 && t > 37f)
+            {
+                testStep = 2;
+                Game.SetState(c.Fsm, "Check money");   // = clic sur la caisse (Wait button : USE)
+                Log.Info("autotest : resto (hote) paie -> caisse " + c.Fsm.ActiveStateName + " ; " + Wallet.State());
+            }
+            if (Session.IsHost && testStep == 2 && t > 55f)
+            {
+                GameObject tray = null;
+                for (int i = servedOrder.Count - 1; i >= 0 && tray == null; i--) { GameObject g = Live(servedOrder[i]); if (g != null && g.name.StartsWith("Tray")) tray = g; }
+                if (tray == null) { if (t > 100f) { testStep = 9; Log.Info("autotest : resto (hote) aucun plateau a manger"); } }
+                else
+                {
+                    testStep = 3; testEatAt = t; testBag = Props.ItemId(tray);
+                    PlayMakerFSM bf = TestEatFsm(tray);
+                    if (bf != null) Game.SetState(bf, "Play anim");   // = CLICK sur le bouton
+                    Log.Info("autotest : resto (hote) mange " + testBag + "/" + Config.Get("Test", "TestManger", "EatFries") + " -> " + (bf != null ? bf.ActiveStateName : "bouton introuvable ou eteint"));
+                }
+            }
+            if (Session.IsHost && testStep == 3 && t > testEatAt + 2f)
+            {
+                testStep = 4;
+                GameObject tray = Live(testBag);
+                PlayMakerFSM bf = tray != null ? TestEatFsm(tray) : null;
+                if (bf != null && bf.ActiveStateName != "State 3" && bf.Fsm.GetState("State 3") != null)
+                {
+                    string was = bf.ActiveStateName;
+                    Game.SetState(bf, "State 3");
+                    Log.Info("autotest : resto (hote) le clic n'a pas abouti (" + was + ") : State 3 force -> " + bf.ActiveStateName);
+                }
+            }
+            if (t > 30f && t < 111f && t - testLog >= 2f)
+            {
+                testLog = t;
+                PlayMakerFSM k = c.Waiter;
+                var sb = new System.Text.StringBuilder("autotest : resto (" + who + ") caisse [" + (on ? c.Fsm.ActiveStateName : "eteinte") + "] ");
+                sb.Append(k == null ? "serveur ?" : k.gameObject.name + " [" + (k.gameObject.activeInHierarchy ? k.ActiveStateName : "eteint") + "] OrderStage=" + OrderStage(c)
+                          + " commande " + c.ServeWho + "-" + c.ServeSerial);
+                sb.Append(" ; plateaux : ").Append(TestTrays());
+                sb.Append(" ; suivis ").Append(Props.Ids("tray")).Append(" ; rejeux en attente ").Append(queue.Count).Append(", poses attendues ").Append(waitServe.Count);
+                sb.Append(" ; ").Append(Wallet.State());
+                Log.Info(sb.ToString());
+            }
+        }
+
+        static PlayMakerFSM TestEatFsm(GameObject tray)
+        {
+            Transform ef = tray.transform.Find(Config.Get("Test", "TestManger", "EatFries"));
+            PlayMakerFSM bf = ef != null ? Game.FsmOn(ef.gameObject, "Button") : null;
+            return bf != null && ef.gameObject.activeInHierarchy ? bf : null;
+        }
+
+        // Plateaux servis et tout Tray(Clone) de la scene (doublon, plateau sans ID) : ID, pose, enfants.
+        static string TestTrays()
+        {
+            var seen = new List<GameObject>();
+            foreach (string id in servedOrder) { GameObject g = Live(id); if (g != null && !seen.Contains(g)) seen.Add(g); }
+            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>()) if (rb.name.StartsWith("Tray(Clone)") && !seen.Contains(rb.gameObject)) seen.Add(rb.gameObject);
+            if (seen.Count == 0) return "aucun";
+            var sb = new System.Text.StringBuilder();
+            foreach (GameObject g in seen)
+            {
+                string id = Props.ItemId(g);
+                sb.Append(g.name).Append(' ').Append(id.Length > 0 ? id : "sans ID").Append(" en ").Append(g.transform.position.ToString("F2"));
+                bool fz = false;
+                foreach (Frozen x in frozen) if (x.Body != null && x.Body.gameObject == g) fz = true;
+                if (fz) sb.Append(" fige");
+                sb.Append(" {");
+                foreach (Transform ch in g.GetComponentsInChildren<Transform>(true))
+                {
+                    if (ch == g.transform) continue;
+                    PlayMakerFSM b = Game.FsmOn(ch.gameObject, "Button");
+                    sb.Append(' ').Append(ch.name).Append(ch.gameObject.activeSelf ? "" : "(off)");
+                    if (b != null && ch.gameObject.activeInHierarchy)
+                    {
+                        sb.Append('[').Append(b.ActiveStateName);
+                        foreach (FsmInt v in b.FsmVariables.IntVariables) sb.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                        sb.Append(']');
+                    }
+                }
+                sb.Append(" } ");
+            }
+            return sb.ToString().TrimEnd();
         }
 
         static void TestBar(float t)
