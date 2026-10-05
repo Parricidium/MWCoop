@@ -17,13 +17,15 @@ namespace MWCoop
         static float nextSend;
         static Transform player, cam, smoking, drinking, hello;
         public static Transform LocalCamera { get { return cam; } }
+        // Pieds du joueur local (dernier etat envoye).
+        public static Vector3 LocalFeet { get { return Session.Me != null ? Session.Me.State.Feet : Vector3.zero; } }
         static CharacterController controller;
         static PlayMakerFSM crouchFsm, smokeFsm;
         static readonly Dictionary<int, Avatar> avatars = new Dictionary<int, Avatar>();
 
         static PlayerSync()
         {
-            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); Stock.PlayerLeft(pi.Id); CarDoors.PlayerLeft(pi.Id); };
+            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); Gestures.PlayerLeft(pi.Id); Stock.PlayerLeft(pi.Id); CarDoors.PlayerLeft(pi.Id); };
         }
 
         public static bool InGame { get { return Application.loadedLevelName == "GAME"; } }
@@ -121,7 +123,9 @@ namespace MWCoop
                 st.Speed = controller != null ? new Vector3(controller.velocity.x, 0, controller.velocity.z).magnitude : 0f;
                 // Accroupi : hauteur nettement sous la hauteur debout (la plus grande vue).
                 // Accroupi : la camera descend nettement sous sa hauteur debout (la plus grande vue a pied).
-                bool seatedNow = Game.GlobalBool("PlayerSeated") || VehicleSync.LocalDriving >= 0 || Seats.Seated;
+                // Assis : au volant, passager (Seats), ou sur un siege du jeu (chaise, canape, banc : PlayerSeated, que
+                // l'automate Crouch suit en "Seated" -- camera abaissee).
+                bool seatedNow = Game.GlobalBool("PlayerSeated") || crouchFsm != null && crouchFsm.ActiveStateName == "Seated" || VehicleSync.LocalDriving >= 0 || Seats.Seated;
                 if (!seatedNow && st.Height < 1.2f) st.Flags |= F_Crouch;
                 if (seatedNow) st.Flags |= F_Seated;
                 if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
