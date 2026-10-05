@@ -552,16 +552,40 @@ namespace MWCoop
         static int testStep;
         static float testLog;
         static Transform testH1, testH2;
+        static Rigidbody testA, testB;
+        static float testTraceEnd;
+        static string testTrace;
 
         public static void Test(string mode, float t)
         {
             if (mode != "remorque") return;
-            if (t >= 16f && t < 80f && t >= testLog) { testLog = t + 2f; Log.Info("autotest : remorque t=" + t.ToString("F0") + " : " + State()); }
+            if (t >= 16f && t < 80f && t >= testLog)
+            {
+                testLog = t + 2f;
+                Log.Info("autotest : remorque t=" + t.ToString("F0") + " : " + State()
+                         + (testA != null && testB != null ? " ; voitures en " + testA.position.ToString("F1") + " v " + testA.velocity.magnitude.ToString("F1")
+                            + " / " + testB.position.ToString("F1") + " v " + testB.velocity.magnitude.ToString("F1") : ""));
+            }
             if (!Session.IsHost) return;
             if (testStep == 0 && t >= 25f) { testStep = 1; Log.Info("autotest : remorque : " + TestPlace()); }
             if (testStep == 1 && t >= 29f) { testStep = 2; Log.Info("autotest : remorque : " + TestWalk()); }
             if (testStep == 2 && t >= 30f) { testStep = 3; Log.Info("autotest : remorque : clic " + TestClick(testH1, "State 3")); }
-            if (testStep == 3 && t >= 31f) { testStep = 4; Log.Info("autotest : remorque : clic " + TestClick(testH2, "State 3")); }
+            // 2e clic une fois la corde en attente du 2e crochet, comme un vrai joueur (plus tot, le jeu ne le voit pas changer).
+            if (testStep == 3 && t >= 34f && (ropeFsm == null || ropeFsm.ActiveStateName == "Check distance")) { testStep = 4; testTraceEnd = t + 3f; Log.Info("autotest : remorque : clic " + TestClick(testH2, "State 3")); }
+            // Trace de la corde image par image juste apres le 2e clic (joint pose, casse, corde rangee...).
+            if (testStep == 4 && t < testTraceEnd && ropeFsm != null)
+            {
+                string st = ropeFsm.ActiveStateName;
+                var sj = rSpring.Value as SpringJoint;
+                string k = st + "|" + (sj != null) + "|" + rAttached.Value;
+                if (k != testTrace)
+                {
+                    testTrace = k;
+                    Log.Info("autotest : remorque : corde " + st + ", joint " + (sj != null ? "pose (max " + sj.maxDistance.ToString("F2") + ", casse " + sj.breakForce + ")" : "absent")
+                             + ", Attached " + rAttached.Value + ", bout 2 a " + (rHook1.Value != null && ropeGo.transform.Find("RopeSecond") != null
+                                 ? Vector3.Distance(rHook1.Value.transform.position, ropeGo.transform.Find("RopeSecond").position).ToString("F2") : "?") + " m du crochet 1");
+                }
+            }
             if (testStep == 4 && t >= 60f) { testStep = 5; Log.Info("autotest : remorque : retrait " + TestClick(testH1, "Remove rope")); }
         }
 
@@ -577,21 +601,32 @@ namespace MWCoop
 
         static Vector3 Flat(Vector3 v) { v.y = 0f; return v.normalized; }
 
+        static float Ground(Vector3 p)
+        {
+            float best = float.MinValue;   // RaycastAll n'est pas trie : le plus haut sol fixe (route, terrain), pas une voiture
+            foreach (RaycastHit h in Physics.RaycastAll(new Vector3(p.x, 200f, p.z), Vector3.down, 400f))
+                if (h.rigidbody == null && !h.collider.isTrigger && h.point.y > best) best = h.point.y;
+            return best > float.MinValue ? best : p.y;
+        }
+
         static string TestPlace()
         {
             Rigidbody a = TestCar(Config.Get("Test", "RemorqueVoiture", "SORBET")), b = TestCar(Config.Get("Test", "RemorqueAutre", "GIFU"));
             if (a == null || b == null) return "voitures introuvables (" + VehicleSync.Count + " suivies)";
             Transform aF = a.transform.Find("HookFront"), aR = a.transform.Find("HookRear"), bF = b.transform.Find("HookFront"), bR = b.transform.Find("HookRear");
             if (aF == null || aR == null || bF == null || bR == null) return "crochets introuvables";
+            // La voiture remorquee reste ou elle est (la teleporter l'ejecte : 87 km/s en une image, CORRIS comme GIFU),
+            // la voiture qui tire est amenee devant elle, crochets a 2 m, posee au sol.
+            float offA = a.position.y - Ground(a.position);
             Vector3 da = Flat(aF.position - aR.position), db = Flat(bF.position - bR.position);
-            float yaw = (Mathf.Atan2(da.x, da.z) - Mathf.Atan2(db.x, db.z)) * Mathf.Rad2Deg;
-            b.transform.rotation = Quaternion.AngleAxis(yaw, Vector3.up) * b.transform.rotation;
-            Vector3 target = aR.position - da * 2f;
-            b.transform.position += target - bF.position + Vector3.up * 0.3f;
-            b.velocity = Vector3.zero;
-            b.angularVelocity = Vector3.zero;
-            testH1 = aR; testH2 = bF;
-            return b.name + " amenee derriere " + a.name + ", crochets a " + Vector3.Distance(aR.position, bF.position).ToString("F2") + " m";
+            float yaw = (Mathf.Atan2(db.x, db.z) - Mathf.Atan2(da.x, da.z)) * Mathf.Rad2Deg;
+            a.transform.rotation = Quaternion.AngleAxis(yaw, Vector3.up) * a.transform.rotation;
+            a.transform.position += bF.position + db * 2f - aR.position;
+            Vector3 ap = a.transform.position; ap.y = Ground(ap) + offA + 0.2f; a.transform.position = ap;
+            a.velocity = Vector3.zero;
+            a.angularVelocity = Vector3.zero;
+            testH1 = aR; testH2 = bF; testA = a; testB = b;
+            return a.name + " amenee devant " + b.name + ", crochets a " + Vector3.Distance(aR.position, bF.position).ToString("F2") + " m";
         }
 
         static string TestWalk()

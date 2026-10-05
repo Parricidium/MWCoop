@@ -1215,7 +1215,7 @@ namespace MWCoop
 
         public static void Test(string mode, float t)
         {
-            if (mode == "fendeuse" || mode == "benne" || mode == "taxi")
+            if (mode == "fendeuse" || mode == "benne" || mode == "taxi-commandes")
             {
                 if (t > 28f && !testBefore) { testBefore = true; Log.Info("autotest : " + mode + ", avant : " + MoreState(mode)); }
                 if (t > 30f) { if (mode == "fendeuse") TestFeed(); else if (mode == "benne") TestBed(); else TestTaxi(); }

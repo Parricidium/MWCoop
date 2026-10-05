@@ -429,7 +429,7 @@ namespace MWCoop
             {
                 nextSlow = now + 2f;
                 foreach (Car c in cars)
-                    if (c.Index != LocalDriving && c.Index != owned && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy) Send(c, 0);
+                    if (c.Index != LocalDriving && c.Index != owned && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy && !Tow.Carries(c.Index)) Send(c, 0);
             }
             // Hote : etat de la simulation des voitures garees (personne ne les fait rouler), toutes les 10 s.
             if (Session.IsHost && now >= nextParkedSim && Session.RemoteCount > 0)
