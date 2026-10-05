@@ -30,7 +30,7 @@ namespace MWCoop
         const int FrameW = 160, FrameH = 320, Frames = 16, PortraitSize = 128;
         const float Fov = 15f;
         static readonly Vector3 GenPivot = new Vector3(0f, -3000f, 0f), LivePivot = new Vector3(80f, -3000f, 0f);
-        static readonly Color LiveBg = new Color(0.09f, 0.11f, 0.14f, 1f);
+        static readonly Color LiveBg = new Color(0.07f, 0.11f, 0.18f, 1f);   // bleu nuit des panneaux du menu
         static readonly Color Ambient = new Color(0.36f, 0.37f, 0.40f, 1f);
 
         class Model

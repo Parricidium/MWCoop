@@ -21,8 +21,8 @@ namespace MWCoop
         const int TabChat = 2;
         const string ChatField = "mwcoop-chat2";
         const string Sep = "  ·  ";
-        const string Controls = "Haut/Bas : choisir" + Sep + "Gauche/Droite : changer" + Sep + "Entree : valider" + Sep + "Tab, Q/E : onglet" + Sep + "F10/Echap : fermer";
-        const string TabsHint = "Gauche/Droite : changer d'onglet" + Sep + "Bas ou Entree : entrer dans la liste";
+        const string Controls = "Haut/Bas : choisir" + Sep + "Gauche/Droite : changer" + Sep + "Entr\u00E9e : valider" + Sep + "Tab, Q/E : onglet" + Sep + "F10/\u00C9chap : fermer";
+        const string TabsHint = "Gauche/Droite : changer d'onglet" + Sep + "Bas ou Entr\u00E9e : entrer dans la liste";
 
         // Navigation : ligne choisie (-1 = bandeau des onglets), defilement, touches du passage OnGUI en cours.
         static int sel, items;
@@ -33,13 +33,13 @@ namespace MWCoop
         static Vector2 lastMouse;
         static string hint;
 
-        static readonly Color rowText = new Color(0.93f, 0.93f, 0.93f);
-        static readonly Color tabOn = new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.22f);
-        static readonly Color tabStrip = new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.45f);
-        static readonly Color line = new Color(1f, 1f, 1f, 0.15f);
-        static readonly Color selBar = new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.9f);
-        static readonly Color fieldBg = new Color(1f, 1f, 1f, 0.08f);
-        static readonly Color buttonOff = new Color(1f, 1f, 1f, 0.12f);
+        static readonly Color rowText = new Color(0.88f, 0.91f, 0.95f);
+        static readonly Color line = Style.Line;
+        static readonly Color selFill = new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.20f);
+        static readonly Color selEdge = new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.60f);
+        static readonly Color trackBg = new Color(1f, 1f, 1f, 0.06f);
+        static readonly Color hoverBg = new Color(1f, 1f, 1f, 0.07f);
+        static float openedAt;
 
         public static void Update()
         {
@@ -55,6 +55,22 @@ namespace MWCoop
                 chatText = "";
             }
             Block(inGame && (Open || ChatOpen || Respawn.Choosing));
+        }
+
+        // Curseur du mod (Core le dessine en dernier) : menu ouvert ou choix de reapparition, en partie.
+        // [Test] CurseurTest=x,y : dessine a ce point sans lire la souris (captures des instances d'essai).
+        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing); } }
+
+        public static Vector2 CursorPos()
+        {
+            string t = Config.Get("Test", "CurseurTest", "");
+            if (t.Length > 0)
+            {
+                string[] p = t.Split(',');
+                float cx, cy2;
+                if (p.Length == 2 && float.TryParse(p[0], out cx) && float.TryParse(p[1], out cy2)) return new Vector2(cx, cy2);
+            }
+            return Event.current.mousePosition;
         }
 
         // Coupe/rend la visee et les deplacements du joueur (et le verrouillage du curseur du jeu).
@@ -84,7 +100,8 @@ namespace MWCoop
                 foreach (Behaviour b in blocked) if (b != null) b.enabled = true;
                 blocked.Clear();
             }
-            if (on) { Screen.lockCursor = false; Cursor.visible = true; }
+            // Curseur libere ; le jeu le laisse invisible : Core dessine le notre (Style.DrawCursor) par-dessus.
+            if (on) { Screen.lockCursor = false; Cursor.visible = false; }
         }
 
         public static void Draw()
@@ -95,6 +112,7 @@ namespace MWCoop
             if (!wasOpen)
             {
                 wasOpen = true;
+                openedAt = Time.realtimeSinceStartup;
                 lastMouse = e.mousePosition;
                 sel = tab == TabChat ? 9999 : 0;
                 scroll = 0;
@@ -111,37 +129,52 @@ namespace MWCoop
                 lastMouse = e.mousePosition;
             }
 
-            float titleH = Style.Px(84);
-            float w = Mathf.Min(Style.Px(980), Screen.width - Style.Px(32));
-            float h = Mathf.Min(Style.Px(700), Screen.height - titleH - Style.Px(32));
-            float x = Mathf.Round((Screen.width - w) / 2), y = Mathf.Round((Screen.height - titleH - h) / 2);
-            float pad = Style.Px(18), one = Mathf.Max(1f, Style.Px(1));
+            // Ouverture : fondu et leger glissement (0,16 s).
+            float k = Mathf.Clamp01((Time.realtimeSinceStartup - openedAt) / 0.16f);
+            k = 1f - (1f - k) * (1f - k);
+            Style.Alpha = k;
+            float w = Mathf.Min(Style.Px(1000), Screen.width - Style.Px(32));
+            float h = Mathf.Min(Style.Px(800), Screen.height - Style.Px(32));
+            float x = Mathf.Round((Screen.width - w) / 2), y = Mathf.Round((Screen.height - h) / 2 + (1f - k) * Style.Px(16));
+            float pad = Style.Px(24), one = Mathf.Max(1f, Style.Px(1));
+            Style.Glass(new Rect(x, y, w, h), Style.Px(22));
 
-            // Titre au-dessus du panneau.
-            Style.Title(new Rect(x, y, w, titleH), "MWCoop");
-            Style.Text(new Rect(x, y, w, titleH - Style.Px(10)), Version.Text, 18, TextAnchor.LowerRight, Style.Dim);
-            y += titleH;
-            Style.Panel(new Rect(x, y, w, h));
+            // Entete : nom du mod, pastille de session, version.
+            float hh = Style.Px(74);
+            var head = new Rect(x + pad, y + Style.Px(8), w - 2 * pad, hh - Style.Px(8));
+            Style.Title(head, "MWCoop", Style.White, TextAnchor.MiddleLeft, 36);
+            float nx = head.x + Style.TitleWidth("MWCoop", 36) + Style.Px(14);
+            string badge = !Session.Active ? "SOLO" : Session.IsHost ? "H\u00D4TE" : "INVIT\u00C9";
+            float bw = Style.Width(badge, 14) + Style.Px(22), bh = Style.Px(26);
+            var br = new Rect(nx, head.center.y - bh / 2 + Style.Px(2), bw, bh);
+            Style.Round(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.18f));
+            Style.Ring(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.5f));
+            Style.Text(br, badge, 14, TextAnchor.MiddleCenter, Style.Accent);
+            Style.Text(head, Version.Text, 16, TextAnchor.MiddleRight, Style.Dim, false);
 
-            // Bandeau des onglets.
-            float th = Style.Px(54), tw = w / tabs.Length;
+            // Onglets : piste arrondie, onglet actif en pilule d'accent.
+            float th = Style.Px(48);
+            var trk = new Rect(x + pad, y + hh, w - 2 * pad, th);
+            Style.Round(trk, th / 2, trackBg);
+            float inset = Style.Px(4), tw = (trk.width - 2 * inset) / tabs.Length;
             for (int i = 0; i < tabs.Length; i++)
             {
-                var tr = new Rect(x + i * tw, y, tw, th);
+                var tr = new Rect(Mathf.Round(trk.x + inset + i * tw), trk.y + inset, Mathf.Round(tw), th - 2 * inset);
                 bool on = i == tab;
                 if (on)
                 {
-                    Style.Fill(tr, sel < 0 ? tabStrip : tabOn);
-                    Style.Fill(new Rect(tr.x, tr.yMax - Style.Px(4), tr.width, Style.Px(4)), Style.Accent);
+                    Style.Round(tr, tr.height / 2, Style.Accent);
+                    if (sel < 0) Style.Ring(new Rect(tr.x - 2 * one, tr.y - 2 * one, tr.width + 4 * one, tr.height + 4 * one), tr.height / 2 + 2 * one, Style.White);
                 }
-                Style.Title(tr, tabs[i], on ? Style.White : Style.Dim, TextAnchor.MiddleCenter, 30);
+                else if (tr.Contains(e.mousePosition)) Style.Round(tr, tr.height / 2, hoverBg);
+                Style.Title(tr, tabs[i], on ? Style.OnAccent : Style.Dim, TextAnchor.MiddleCenter, 19);
                 if (e.type == EventType.MouseDown && e.button == 0 && tr.Contains(e.mousePosition)) { SetTab(i); e.Use(); }
             }
-            Style.Fill(new Rect(x, y + th, w, one), line);
+            float top = y + hh + th + Style.Px(14);
 
             // Contenu de l'onglet (defile), puis pied de page.
-            float fh = Style.Px(72);
-            var view = new Rect(x + pad, y + th + Style.Px(12), w - 2 * pad, h - th - Style.Px(12) - fh - Style.Px(6));
+            float fh = Style.Px(74);
+            var view = new Rect(x + pad, top, w - 2 * pad, y + h - fh - Style.Px(6) - top);
             // APPARENCE : apercu 3D de la tenue en surbrillance, a droite de la liste (qui se retrecit d'autant).
             bool preview = tab == 1 && skins != null && skins.Count > 0 && Studio.LiveEnabled;
             Rect pvr = default(Rect);
@@ -168,10 +201,11 @@ namespace MWCoop
             items = idx;
             if (contentH > viewH)
             {
-                var track = new Rect(view.xMax - Style.Px(5), view.y, Mathf.Max(2f, Style.Px(4)), viewH);
-                Style.Fill(track, line);
-                float thumb = Mathf.Max(Style.Px(24), viewH * viewH / contentH);
-                Style.Fill(new Rect(track.x, track.y + (viewH - thumb) * scroll / (contentH - viewH), track.width, thumb), Style.Accent);
+                var track = new Rect(view.xMax - Style.Px(5), view.y, Mathf.Max(3f, Style.Px(5)), viewH);
+                Style.Round(track, track.width / 2, line);
+                float thumb = Mathf.Max(Style.Px(28), viewH * viewH / contentH);
+                var tb = new Rect(track.x, track.y + (viewH - thumb) * scroll / (contentH - viewH), track.width, thumb);
+                Style.Round(tb, tb.width / 2, Style.Accent);
             }
             if (preview) SkinPreview(pvr, e);
 
@@ -192,8 +226,9 @@ namespace MWCoop
 
             float fy = y + h - fh;
             Style.Fill(new Rect(x + pad, fy, w - 2 * pad, one), line);
-            if (hint != null) Style.Text(new Rect(x + pad, fy + Style.Px(6), w - 2 * pad, Style.Px(30)), hint, 19, TextAnchor.MiddleLeft, Style.White);
-            Style.Text(new Rect(x + pad, fy + Style.Px(38), w - 2 * pad, Style.Px(26)), Controls, 16, TextAnchor.MiddleLeft, Style.Dim, false);
+            if (hint != null) Style.Text(new Rect(x + pad, fy + Style.Px(10), w - 2 * pad, Style.Px(28)), hint, 18, TextAnchor.MiddleLeft, Style.White);
+            Style.Text(new Rect(x + pad, fy + Style.Px(40), w - 2 * pad, Style.Px(24)), Controls, 15, TextAnchor.MiddleLeft, Style.Dim, false);
+            Style.Alpha = 1f;
 
             if (testLog && e.type == EventType.Repaint) { testLog = false; Log.Info("autotest : menu onglet " + tabs[tab] + ", " + lines + " lignes"); }
         }
@@ -301,19 +336,25 @@ namespace MWCoop
             else if (selected && choice && kDir != 0) { res = kDir; kDir = 0; }
 
             if (!vis || e.type != EventType.Repaint) return res;
-            if (selected) Style.Fill(r, selBar);
+            float rr = Style.Px(10);
+            if (selected) { Style.Round(r, rr, selFill); Style.Ring(r, rr, selEdge); }
             Color tc = selected ? Style.White : rowText;
             if (wrap) Style.Text(new Rect(r.x + ip, r.y + Style.Px(5), r.width - 2 * ip, h - Style.Px(10)), label, 19, TextAnchor.UpperLeft, tc, false, true);
-            else Style.Text(new Rect(r.x + ip, r.y, (value != null ? r.width * 0.6f : r.width) - 2 * ip, h), label, 21, TextAnchor.MiddleLeft, tc);
+            else Style.Text(new Rect(r.x + ip, r.y, (value != null ? r.width * 0.6f : r.width) - 2 * ip, h), label, 20, TextAnchor.MiddleLeft, tc, false);
             if (value == null) return res;
             if (choice)
             {
                 Color ac = selected ? Style.White : Style.Accent;
-                Style.Text(la, "<", 21, TextAnchor.MiddleCenter, ac);
-                Style.Text(rv, value, 21, TextAnchor.MiddleRight, tc);
-                Style.Text(ra, ">", 21, TextAnchor.MiddleCenter, ac);
+                float cs = Mathf.Min(aw + Style.Px(4), h - Style.Px(10));
+                var lc = new Rect(la.center.x - cs / 2, la.center.y - cs / 2, cs, cs);
+                var rc = new Rect(ra.center.x - cs / 2, ra.center.y - cs / 2, cs, cs);
+                Style.Round(lc, cs / 2, hoverBg);
+                Style.Round(rc, cs / 2, hoverBg);
+                Style.Text(new Rect(la.x, la.y - Style.Px(1), la.width, la.height), "<", 19, TextAnchor.MiddleCenter, ac);
+                Style.Text(rv, value, 20, TextAnchor.MiddleRight, tc);
+                Style.Text(new Rect(ra.x, ra.y - Style.Px(1), ra.width, ra.height), ">", 19, TextAnchor.MiddleCenter, ac);
             }
-            else Style.Text(new Rect(r.x + r.width * 0.4f, r.y, r.width * 0.6f - ip, h), value, 19, TextAnchor.MiddleRight, selected ? Style.White : Style.Dim);
+            else Style.Text(new Rect(r.x + r.width * 0.4f, r.y, r.width * 0.6f - ip, h), value, 18, TextAnchor.MiddleRight, selected ? Style.Accent : Style.Dim);
             return res;
         }
 
@@ -336,8 +377,8 @@ namespace MWCoop
             var r = new Rect(0, cy - scroll, cw, h);
             cy += h + Style.Px(4);
             if (!Visible(r) || Event.current.type != EventType.Repaint) return;
-            Style.Title(new Rect(r.x + Style.Px(12), r.y + Style.Px(6), r.width - Style.Px(24), h - Style.Px(10)), s, Style.Accent, TextAnchor.MiddleLeft, 26);
-            Style.Fill(new Rect(r.x, r.yMax - Style.Px(3), r.width, Mathf.Max(1f, Style.Px(2))), line);
+            Style.Title(new Rect(r.x + Style.Px(12), r.y + Style.Px(8), r.width - Style.Px(24), h - Style.Px(12)), s, Style.Accent, TextAnchor.MiddleLeft, 18);
+            Style.Fill(new Rect(r.x + Style.Px(12), r.yMax - Style.Px(3), r.width - Style.Px(24), Mathf.Max(1f, Style.Px(1))), line);
         }
 
         // ---- Onglets ----
@@ -357,7 +398,7 @@ namespace MWCoop
                 if (n == prows.Count) prows.Add(new PRow());
                 PRow r = prows[n++];
                 r.P = pi;
-                r.Label = (pi.Id == 0 ? "[hote] " : "") + pi.Name + (pi.Local ? " (vous)" : "");
+                r.Label = (pi.Id == 0 ? "[h\u00F4te] " : "") + pi.Name + (pi.Local ? " (vous)" : "");
                 string where = pi.Level == 1 ? "en partie" : "au menu";
                 r.Value = !pi.Local && pi.Peer != null ? where + "  " + Mathf.RoundToInt(pi.Peer.Rtt * 1000) + " ms" : where;
             }
@@ -366,14 +407,14 @@ namespace MWCoop
 
         static void Players()
         {
-            Para(Session.Active ? Session.Status : "Solo (lancez le jeu depuis MWCoop.exe pour jouer a plusieurs)", Style.Dim);
+            Para(Session.Active ? Session.Status : "Solo (lancez le jeu depuis MWCoop.exe pour jouer \u00E0 plusieurs)", Style.Dim);
             RefreshPlayers();
             Header("JOUEURS");
             for (int i = 0; i < prows.Count; i++)
             {
                 PlayerInfo pi = prows[i].P;
                 bool canGo = !pi.Local && pi.Level == 1 && PlayerSync.InGame;
-                if (Item(prows[i].Label, prows[i].Value, false, canGo ? "Entree ou clic : aller vers ce joueur" : null, false) == 2 && canGo) GoTo(pi);
+                if (Item(prows[i].Label, prows[i].Value, false, canGo ? "Entr\u00E9e ou clic : aller vers ce joueur" : null, false) == 2 && canGo) GoTo(pi);
             }
         }
 
@@ -414,12 +455,12 @@ namespace MWCoop
             if (d == 1 || d == -1) SetSkin(skins[((cur < 0 ? 0 : cur) + d + skins.Count) % skins.Count]);
             Header("TENUES");
             for (int j = 0; j < skins.Count; j++)
-                if (Item(skinLabels[j], j == cur ? "PORTEE" : null, false, "Entree ou clic : porter cette tenue", false) == 2) SetSkin(skins[j]);
+                if (Item(skinLabels[j], j == cur ? "PORT\u00C9E" : null, false, "Entr\u00E9e ou clic : porter cette tenue", false) == 2) SetSkin(skins[j]);
         }
 
         static bool dragging;
         static string pvSkin, pvLabel;
-        static readonly Color previewBg = new Color(0f, 0f, 0f, 0.35f);
+        static readonly Color previewBg = new Color(0f, 0.02f, 0.06f, 0.30f);
 
         // Apercu 3D (Studio.Live) : la tenue en surbrillance dans la liste (sinon celle portee), qui tourne lentement ;
         // glisser a la souris pour la tourner. Son nom dessous, facon GTA.
@@ -428,24 +469,35 @@ namespace MWCoop
             string me = Session.Me.Skin ?? "";
             int k = sel - 1;   // lignes : 0 = « Apparence », 1.. = les tenues
             string s = k >= 0 && k < skins.Count ? skins[k] : me;
-            if (s != pvSkin) { pvSkin = s; pvLabel = s.Length > 0 ? SkinLabel(s).ToUpperInvariant() : "PAR DEFAUT"; }
+            if (s != pvSkin) { pvSkin = s; pvLabel = s.Length > 0 ? SkinLabel(s).ToUpperInvariant() : "PAR D\u00C9FAUT"; }
             Texture tex = Studio.Live(s, (int)r.width, (int)r.height);
             if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition)) { dragging = true; e.Use(); }
             else if (e.type == EventType.MouseDrag && dragging) { Studio.Drag(e.delta.x); e.Use(); }
             else if (e.rawType == EventType.MouseUp && dragging) { dragging = false; e.Use(); }
             if (e.type != EventType.Repaint) return;
-            Style.Fill(r, previewBg);
-            if (tex != null) GUI.DrawTexture(r, tex, ScaleMode.StretchToFill, false);
-            float one = Mathf.Max(1f, Style.Px(1));
-            Style.Fill(new Rect(r.x, r.y, r.width, one), line);
-            Style.Fill(new Rect(r.x, r.yMax - one, r.width, one), line);
-            Style.Fill(new Rect(r.x, r.y, one, r.height), line);
-            Style.Fill(new Rect(r.xMax - one, r.y, one, r.height), line);
-            if (s == me && s.Length > 0) Style.Text(new Rect(r.x + Style.Px(8), r.y + Style.Px(6), r.width - Style.Px(16), Style.Px(26)), "PORTEE", 17, TextAnchor.UpperRight, Style.Accent);
-            var lr = new Rect(r.x, r.yMax + Style.Px(6), r.width, Style.Px(42));
-            Style.Fill(lr, Style.PanelColor);
-            Style.Fill(new Rect(lr.x, lr.yMax - Style.Px(4), lr.width, Style.Px(4)), Style.Accent);
-            Style.Title(new Rect(lr.x, lr.y, lr.width, lr.height - Style.Px(4)), pvLabel, Style.White, TextAnchor.MiddleCenter, 28);
+            float rad = Style.Px(16);
+            Style.Round(r, rad, previewBg);
+            if (tex != null && !Backdrop.DrawImage(r, rad, tex, Style.Alpha))
+            {
+                // Sans maillage arrondi (ou pendant le fondu) : image carree, en retrait pour rester dans le cadre.
+                float ins = Mathf.Round(rad * 0.3f);
+                Color oc = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, Style.Alpha);
+                GUI.DrawTexture(new Rect(r.x + ins, r.y + ins, r.width - 2 * ins, r.height - 2 * ins), tex, ScaleMode.StretchToFill, false);
+                GUI.color = oc;
+            }
+            Style.Ring(r, rad, line);
+            if (s == me && s.Length > 0)
+            {
+                float pw = Style.Width("PORT\u00C9E", 13) + Style.Px(18), ph = Style.Px(24);
+                var pr = new Rect(r.xMax - pw - Style.Px(10), r.y + Style.Px(10), pw, ph);
+                Style.Round(pr, ph / 2, Style.Accent);
+                Style.Text(pr, "PORT\u00C9E", 13, TextAnchor.MiddleCenter, Style.OnAccent);
+            }
+            var lr = new Rect(r.x, r.yMax + Style.Px(8), r.width, Style.Px(40));
+            Style.Round(lr, lr.height / 2, new Color(1f, 1f, 1f, 0.08f));
+            Style.Ring(lr, lr.height / 2, line);
+            Style.Title(lr, pvLabel, Style.White, TextAnchor.MiddleCenter, 19);
         }
 
         // Autotest "tenues" (Studio.Test) : k >= 0 ouvre le menu sur APPARENCE avec une tenue en surbrillance (rendue),
@@ -472,7 +524,7 @@ namespace MWCoop
                 case "cop_shirt": return "Policier";
                 case "cop_shirt2": return "Policier 2";
                 case "rally_shirt": return "Pilote de rallye";
-                case "psk_shirt": return "Employe PSK";
+                case "psk_shirt": return "Employ\u00E9 PSK";
                 case "inspector_shirt": return "Inspecteur";
             }
             return s;
@@ -497,9 +549,9 @@ namespace MWCoop
                 syncHead = Audit.State() + (Audit.Summary.Length > 0 ? "\n" + Audit.Summary : "");
             }
             Para(syncHead, Style.Dim);
-            if (Item("Ecrire le recensement (dumps/recensement.txt)", null, false, "Entree ou clic : ecrire le recensement", false) == 2) Audit.Census();
-            Header("ECARTS AVEC LES INVITES");
-            Para(Session.IsHost ? "Hote : tout le monde est compare a vous." : "Ecarts : vus par l'hote (son onglet SYNCHRO et son journal).", Style.Dim);
+            if (Item("\u00C9crire le recensement (dumps/recensement.txt)", null, false, "Entr\u00E9e ou clic : \u00E9crire le recensement", false) == 2) Audit.Census();
+            Header("\u00C9CARTS AVEC LES INVIT\u00C9S");
+            Para(Session.IsHost ? "H\u00F4te : tout le monde est compar\u00E9 \u00E0 vous." : "\u00C9carts : vus par l'h\u00F4te (son onglet SYNCHRO et son journal).", Style.Dim);
             foreach (string l in Audit.Desyncs) Item(l, null, false, null, true);
             Header("VOS ACTIONS QUI NE PARTENT PAS CHEZ LES AUTRES");
             foreach (string l in Audit.Unshared) Item(l, null, false, null, true);
@@ -507,7 +559,7 @@ namespace MWCoop
 
         static void ChatTab()
         {
-            Para(Chat.History.Count == 0 ? "Aucun message. En jeu, T ecrit sans ouvrir ce menu." : "En jeu, T ecrit sans ouvrir ce menu.", Style.Dim);
+            Para(Chat.History.Count == 0 ? "Aucun message. En jeu, T \u00E9crit sans ouvrir ce menu." : "En jeu, T \u00E9crit sans ouvrir ce menu.", Style.Dim);
             foreach (string l in Chat.History) Item(l, null, false, null, true);
             ChatInput();
         }
@@ -521,7 +573,7 @@ namespace MWCoop
             var r = new Rect(0, cy - scroll + Style.Px(4), cw, h);
             cy += h + Style.Px(6);
             bool selected = me == sel;
-            if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; hint = "Entree : envoyer le message" + Sep + "Haut : relire l'historique"; }
+            if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; hint = "Entr\u00E9e : envoyer le message" + Sep + "Haut : relire l'historique"; }
             float bw = Style.Px(150);
             var rb = new Rect(r.xMax - bw, r.y, bw, h);
             var rf = new Rect(r.x, r.y, r.width - bw - Style.Px(6), h);
@@ -535,10 +587,8 @@ namespace MWCoop
             if (selected && kEnter) { kEnter = false; send = true; }
             if (e.type == EventType.Repaint)
             {
-                Style.Fill(rf, fieldBg);
-                Style.Fill(new Rect(rf.x, rf.yMax - Style.Px(3), rf.width, Style.Px(3)), selected ? Style.Accent : line);
-                Style.Fill(rb, selected ? Style.Accent : buttonOff);
-                Style.Title(rb, "ENVOYER", Style.White, TextAnchor.MiddleCenter, 26);
+                Style.FieldBack(rf, selected);
+                Style.Button(rb, "ENVOYER", true, 18, selected);
             }
             GUI.SetNextControlName(ChatField);
             chatText = GUI.TextField(rf, chatText, 200, Style.Field(21));
@@ -553,10 +603,10 @@ namespace MWCoop
         {
             float h = Style.Px(42);
             var r = new Rect(Style.Px(24), Screen.height - Style.Px(84), Mathf.Min(Style.Px(760), Screen.width - Style.Px(48)), h);
-            Style.Panel(r);
-            Style.Fill(new Rect(r.x, r.yMax - Style.Px(3), r.width, Style.Px(3)), Style.Accent);
+            Style.Glass(r, h / 2);
+            Style.Ring(r, h / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.55f));
             float lw = Style.Px(104);
-            Style.Title(new Rect(r.x + Style.Px(12), r.y, lw, h), "TCHAT", Style.Accent, TextAnchor.MiddleLeft, 26);
+            Style.Title(new Rect(r.x + Style.Px(20), r.y, lw, h), "TCHAT", Style.Accent, TextAnchor.MiddleLeft, 18);
             GUI.SetNextControlName("mwcoop-chat");
             chatText = GUI.TextField(new Rect(r.x + lw, r.y, r.width - lw, h), chatText, 200, Style.Field(21));
             if (focusChat) { GUI.FocusControl("mwcoop-chat"); focusChat = false; }

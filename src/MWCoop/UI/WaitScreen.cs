@@ -21,7 +21,6 @@ namespace MWCoop
         static bool blocking;
         static float nextScan, lostSince = -1, nextTestLog;
         static string refusal = "", drop = "";
-        static GUIStyle title, sub, step, stepOn, stepOff, detail, error, hint, button;
         static int fr = -1;
 
         static bool Enabled { get { return Config.GetInt("Coop", "EcranAttente", 1) != 0; } }
@@ -152,92 +151,112 @@ namespace MWCoop
             }
         }
 
-        static void Styles()
-        {
-            if (title != null) return;
-            title = new GUIStyle(GUI.skin.label) { fontSize = 40, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            title.normal.textColor = Color.white;
-            sub = new GUIStyle(GUI.skin.label) { fontSize = 15, alignment = TextAnchor.MiddleCenter };
-            sub.normal.textColor = new Color(0.65f, 0.7f, 0.75f);
-            step = new GUIStyle(GUI.skin.label) { fontSize = 18 };
-            step.normal.textColor = new Color(0.8f, 0.85f, 0.8f);
-            stepOn = new GUIStyle(step) { fontStyle = FontStyle.Bold };
-            stepOn.normal.textColor = Color.white;
-            stepOff = new GUIStyle(step);
-            stepOff.normal.textColor = new Color(0.45f, 0.47f, 0.5f);
-            detail = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true };
-            detail.normal.textColor = new Color(0.6f, 0.65f, 0.7f);
-            error = new GUIStyle(GUI.skin.label) { fontSize = 14, wordWrap = true };
-            error.normal.textColor = new Color(1f, 0.6f, 0.35f);
-            hint = new GUIStyle(GUI.skin.label) { fontSize = 12, alignment = TextAnchor.MiddleLeft };
-            hint.normal.textColor = new Color(0.5f, 0.53f, 0.56f);
-            button = new GUIStyle(GUI.skin.button) { fontSize = 13 };
-        }
+        static float cardH;
 
-        static void Fill(Rect r, Color c)
-        {
-            Color old = GUI.color;
-            GUI.color = c;
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            GUI.color = old;
-        }
-
+        // Carte verre au centre (le menu du jeu flou derriere) : titre, etapes numerotees reliees (faite : vert,
+        // en cours : accent qui pulse), detail et jauge de la sauvegarde, erreur encadree, bouton Quitter.
         public static void Draw()
         {
-            if (!Shown) return;
-            Styles();
+            // [Test] AttenteForcee=etape (1-4) : l'ecran par-dessus la partie, pour le photographier (la capture
+            // d'ecran du jeu ne s'ecrit pas au menu principal) ; jauge a 60 % a l'etape 3, [Test] AttenteErreur=texte.
+            int forced = Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "AttenteForcee", 0) : 0;
+            if (!Shown && forced == 0) return;
+            if (forced > 0) { Current = Mathf.Clamp(forced - 1, 0, 3); Error = Config.Get("Test", "AttenteErreur", ""); }
             float now = Time.realtimeSinceStartup;
-            Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0.05f, 0.06f, 0.07f, 0.97f));
-            float w = Mathf.Min(640f, Screen.width - 40f), x = (Screen.width - w) / 2f;
-            float y = Mathf.Max(16f, Screen.height * 0.5f - 230f);
-            GUI.Label(new Rect(x, y, w, 50), "MWCoop", title); y += 52;
-            GUI.Label(new Rect(x, y, w, 22), L("Partie coop : invité", "Co-op game: guest") + "   -   " + Version.Text, sub); y += 34;
-            Fill(new Rect(x, y, w, 1), new Color(1, 1, 1, 0.12f)); y += 22;
+            Style.Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0.02f, 0.04f, 0.08f, 0.55f));
+            float w = Mathf.Min(Style.Px(700), Screen.width - Style.Px(40)), pad = Style.Px(34), iw = w - 2 * pad;
+            float h = cardH > 0 ? cardH : Style.Px(520);
+            float x = Mathf.Round((Screen.width - w) / 2f), y0 = Mathf.Round(Mathf.Max(Style.Px(16), (Screen.height - h) / 2f));
+            float one = Mathf.Max(1f, Style.Px(1));
+            Style.Glass(new Rect(x, y0, w, h), Style.Px(24));
+
+            float y = y0 + Style.Px(24);
+            var head = new Rect(x + pad, y, iw, Style.Px(54));
+            Style.Title(head, "MWCoop", Style.White, TextAnchor.MiddleLeft, 42);
+            string badge = L("INVITÉ", "GUEST");
+            float bw = Style.Width(badge, 14) + Style.Px(22), bh = Style.Px(26);
+            var br = new Rect(head.x + Style.TitleWidth("MWCoop", 42) + Style.Px(14), head.center.y - bh / 2 + Style.Px(2), bw, bh);
+            Style.Round(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.18f));
+            Style.Ring(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.5f));
+            Style.Text(br, badge, 14, TextAnchor.MiddleCenter, Style.Accent);
+            Style.Text(head, Version.Text, 16, TextAnchor.MiddleRight, Style.Dim, false);
+            y += Style.Px(56);
+            Style.Text(new Rect(x + pad, y, iw, Style.Px(24)), L("Partie coop : tu rejoins la partie de l'hôte", "Co-op game: you are joining the host's game"), 17, TextAnchor.MiddleLeft, Style.Dim, false);
+            y += Style.Px(38);
+            Style.Fill(new Rect(x + pad, y, iw, one), Style.Line);
+            y += Style.Px(24);
 
             string dots = new string('.', 1 + (int)(now * 2.5f) % 3);
+            float dot = Style.Px(28), tx = x + pad + dot + Style.Px(16), tw = iw - dot - Style.Px(16);
+            float prevBottom = -1;
             for (int i = 0; i < 4; i++)
             {
                 bool done = i < Current, cur = i == Current;
-                Color mark = done ? new Color(0.35f, 0.8f, 0.45f)
-                           : cur ? new Color(1f, 0.75f, 0.25f, 0.45f + 0.55f * Mathf.Abs(Mathf.Sin(now * 3f)))
-                           : new Color(0.3f, 0.32f, 0.35f);
-                Fill(new Rect(x + 2, y + 6, 14, 14), mark);
-                GUI.Label(new Rect(x + 28, y, w - 28, 26), StepLabel(i) + (cur ? dots : ""), done ? step : cur ? stepOn : stepOff);
-                y += 26;
+                var dr = new Rect(x + pad, y, dot, dot);
+                if (prevBottom >= 0)
+                    Style.Round(new Rect(dr.center.x - one, prevBottom + Style.Px(5), 2 * one, Mathf.Max(0, dr.y - prevBottom - Style.Px(10))), one,
+                                done || cur ? new Color(Style.Good.r, Style.Good.g, Style.Good.b, 0.55f) : Style.Line);
+                if (done)
+                {
+                    Style.Round(dr, dot / 2, Style.Good);
+                    Style.Text(dr, (i + 1).ToString(), 15, TextAnchor.MiddleCenter, Style.OnAccent);
+                }
+                else if (cur)
+                {
+                    float pulse = (now * 0.9f) % 1f;
+                    float grow = pulse * Style.Px(9);
+                    Style.Ring(new Rect(dr.x - grow, dr.y - grow, dr.width + 2 * grow, dr.height + 2 * grow), dot / 2 + grow,
+                               new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.8f * (1f - pulse)));
+                    Style.Round(dr, dot / 2, Style.Accent);
+                    Style.Text(dr, (i + 1).ToString(), 15, TextAnchor.MiddleCenter, Style.OnAccent);
+                }
+                else
+                {
+                    Style.Ring(dr, dot / 2, new Color(Style.Dim.r, Style.Dim.g, Style.Dim.b, 0.6f));
+                    Style.Text(dr, (i + 1).ToString(), 15, TextAnchor.MiddleCenter, Style.Dim);
+                }
+                prevBottom = dr.yMax;
+                Style.Text(new Rect(tx, y, tw, dot), StepLabel(i) + (cur ? dots : ""), 20, TextAnchor.MiddleLeft,
+                           cur ? Style.White : done ? new Color(0.82f, 0.88f, 0.92f) : Style.Dim, cur);
+                y += dot + Style.Px(2);
                 string d = i <= Current ? StepDetail(i) : "";
                 if (d.Length > 0)
                 {
-                    float h = detail.CalcHeight(new GUIContent(d), w - 28);
-                    GUI.Label(new Rect(x + 28, y, w - 28, h), d, detail);
-                    y += h;
+                    float dh = Style.Height(d, 15, tw, false);
+                    Style.Text(new Rect(tx, y, tw, dh), d, 15, TextAnchor.UpperLeft, Style.Dim, false, true);
+                    y += dh;
                 }
-                if (i == 2 && cur && SaveTransfer.Receiving)
+                if (i == 2 && cur && (SaveTransfer.Receiving || forced > 0))
                 {
-                    y += 4;
-                    Fill(new Rect(x + 28, y, w - 28, 10), new Color(1, 1, 1, 0.1f));
-                    Fill(new Rect(x + 28, y, (w - 28) * Mathf.Clamp01(SaveTransfer.Progress), 10), new Color(0.4f, 0.7f, 1f));
-                    y += 12;
+                    y += Style.Px(6);
+                    Style.Bar(new Rect(tx, y, tw, Style.Px(8)), forced > 0 ? 0.6f : SaveTransfer.Progress, Style.Accent);
+                    y += Style.Px(10);
                 }
-                y += 12;
+                y += Style.Px(18);
             }
 
             if (Error.Length > 0)
             {
-                y += 4;
-                float h = error.CalcHeight(new GUIContent(Error), w);
-                GUI.Label(new Rect(x, y, w, h), Error, error);
-                y += h + 8;
+                float eh = Style.Height(Error, 15, iw - Style.Px(32), false) + Style.Px(22);
+                var er = new Rect(x + pad, y, iw, eh);
+                Style.Round(er, Style.Px(12), new Color(Style.Warn.r, Style.Warn.g, Style.Warn.b, 0.12f));
+                Style.Ring(er, Style.Px(12), new Color(Style.Warn.r, Style.Warn.g, Style.Warn.b, 0.5f));
+                Style.Text(new Rect(er.x + Style.Px(16), er.y + Style.Px(11), er.width - Style.Px(32), eh - Style.Px(22)), Error, 15, TextAnchor.UpperLeft, Style.Warn, false, true);
+                y += eh + Style.Px(16);
             }
-            y += 14;
-            Fill(new Rect(x, y, w, 1), new Color(1, 1, 1, 0.12f)); y += 12;
+            Style.Fill(new Rect(x + pad, y, iw, one), Style.Line);
+            y += Style.Px(18);
+            float bh2 = Style.Px(42), bw2 = Style.Px(190);
             // Echap quitte le jeu au menu (automate Quit du jeu) ; a l'introduction, il la passe.
             if (Application.loadedLevelName == "MainMenu")
-                GUI.Label(new Rect(x, y, w - 170, 28), L("Échap : quitter le jeu", "Esc: quit the game"), hint);
-            if (GUI.Button(new Rect(x + w - 160, y, 160, 28), L("Quitter le jeu", "Quit the game"), button))
+                Style.Text(new Rect(x + pad, y, iw - bw2 - Style.Px(12), bh2), L("Échap : quitter le jeu", "Esc: quit the game"), 15, TextAnchor.MiddleLeft, Style.Dim, false);
+            if (Style.Button(new Rect(x + w - pad - bw2, y, bw2, bh2), L("Quitter le jeu", "Quit the game"), false, 17))
             {
                 Log.Info("ecran d'attente : quitter");
                 Application.Quit();
             }
+            y += bh2 + Style.Px(26);
+            if (Event.current.type == EventType.Repaint) cardH = y - y0;
         }
 
         // Autotest "attente" : etat de l'ecran toutes les 2 s (menu compris : appele avant le filtre GAME).

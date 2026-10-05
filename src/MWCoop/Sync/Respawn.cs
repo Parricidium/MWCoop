@@ -243,26 +243,21 @@ namespace MWCoop
         }
 
         // ------------------------------------------------------------ choix
-        static GUIStyle title, small, button;
-        static Texture2D shade;
+        // Carte verre (habillage de Style) ; 1 / 2 au clavier, ou clic.
         public static void Draw()
         {
             if (!Choosing) return;
-            if (title == null)
-            {
-                title = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-                small = new GUIStyle(GUI.skin.label) { fontSize = 14, alignment = TextAnchor.MiddleCenter, wordWrap = true };
-                button = new GUIStyle(GUI.skin.button) { fontSize = 16 };
-                shade = new Texture2D(1, 1); shade.SetPixel(0, 0, new Color(0f, 0f, 0f, 0.72f)); shade.Apply();
-            }
-            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), shade);
-            float w = 460, h = 210, x = (Screen.width - w) / 2, y = (Screen.height - h) / 2;
-            GUI.Label(new Rect(x, y, w, 34), "Vous etes mort", title);
-            GUI.Label(new Rect(x, y + 36, w, 24), "Cause : " + cause, small);
-            GUI.Label(new Rect(x, y + 64, w, 24), "Ou voulez-vous reapparaitre ?", small);
-            if (GUI.Button(new Rect(x, y + 100, w / 2 - 6, 46), "1 - L'appartement", button)) Choose(0);
-            if (GUI.Button(new Rect(x + w / 2 + 6, y + 100, w / 2 - 6, 46), "2 - Chez les parents", button)) Choose(1);
-            GUI.Label(new Rect(x, y + 156, w, 40), "La partie continue pour les autres joueurs.", small);
+            Style.Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0.10f, 0.01f, 0.03f, 0.55f));
+            float w = Mathf.Min(Style.Px(600), Screen.width - Style.Px(32)), h = Style.Px(330), pad = Style.Px(30);
+            float x = Mathf.Round((Screen.width - w) / 2), y = Mathf.Round((Screen.height - h) / 2);
+            Style.Glass(new Rect(x, y, w, h), Style.Px(24));
+            Style.Title(new Rect(x, y + Style.Px(26), w, Style.Px(52)), "Vous \u00EAtes mort", Style.White, TextAnchor.MiddleCenter, 38);
+            Style.Text(new Rect(x + pad, y + Style.Px(88), w - 2 * pad, Style.Px(26)), "Cause : " + cause, 18, TextAnchor.MiddleCenter, Style.Warn, false);
+            Style.Text(new Rect(x + pad, y + Style.Px(122), w - 2 * pad, Style.Px(26)), "O\u00F9 voulez-vous r\u00E9appara\u00EEtre ?", 18, TextAnchor.MiddleCenter, Style.Dim, false);
+            float bw = (w - 2 * pad - Style.Px(14)) / 2, by = y + Style.Px(172), bh = Style.Px(58);
+            if (Style.Button(new Rect(x + pad, by, bw, bh), "1  \u00B7  L'appartement", true, 19)) Choose(0);
+            if (Style.Button(new Rect(x + pad + bw + Style.Px(14), by, bw, bh), "2  \u00B7  Chez les parents", true, 19)) Choose(1);
+            Style.Text(new Rect(x + pad, by + bh + Style.Px(22), w - 2 * pad, Style.Px(24)), "La partie continue pour les autres joueurs.", 15, TextAnchor.MiddleCenter, Style.Dim, false);
         }
 
         // ------------------------------------------------------------ essais

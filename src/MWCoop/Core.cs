@@ -172,7 +172,12 @@ namespace MWCoop
 
         void OnGUI()
         {
-            try { Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); Respawn.Draw(); } catch (System.Exception e) { Log.Error("hud : " + e); }
+            try
+            {
+                Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); Respawn.Draw();
+                if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
+            }
+            catch (System.Exception e) { Style.Alpha = 1f; Log.Error("hud : " + e); }
         }
 
         void OnApplicationQuit()
