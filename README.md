@@ -95,6 +95,7 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Chat, F10 menu | |
 | Respawn: in co-op, death no longer ends the game; the player picks where to come back (apartment or parents' house), even after a car crash | |
 | Sync audit (F10 > SYNCHRO): census of every interactive object and which module syncs it, host/guest state comparison every 15 s (lasting differences logged as DESYNC), local actions that are not shared | |
+| Taxi (passengers, doors), engine state handed over with the wheel, window frost and scraping, towing rope, pub/inspection/flea market/coffee/bus purchases, outgoing calls, mail orders, worn clothes, bolts of freshly installed parts, firewood, septic tanks, co-op save at the toilet without kicking guests | |
 
 The full list is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
 
@@ -221,6 +222,12 @@ Fait aussi (0.19.1) : lanceur, onglet JOURNAUX : journaux de tous les profils (i
 premier ; au démarrage, il signale un dernier lancement fait sans le mod (antivirus, version.dll, autre dossier du jeu).
 Fait aussi (0.19.2) : dossier du jeu en lecture seule (droits Windows, antivirus) : profils et journaux basculent dans
 %LOCALAPPDATA%\MWCoop au lieu de bloquer le jeu sur l'avertissement de départ ; trace de chargement du mod au même endroit.
+Fait aussi (0.20, lot 2 de l'analyse) : taxi MACHTWAGEN (passagers, portières, recalage), état du moteur et de la
+batterie repris avec le volant ; givre des vitres et grattage ; corde de remorquage (vue et tirée chez tous) ; achats au
+bar, au contrôle technique, à la brocante, au café et au bus (l'invité ne paie plus ce que l'hôte commande) ; appels
+sortants, commandes par courrier et colis ; vêtements portés (veste, combinaison, casque) ; boulons des pièces juste
+montées, bois (bûches, fendeuse), fosses septiques ; sauvegarde aux toilettes en coop sans éjecter les invités (un
+invité peut la demander).
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
