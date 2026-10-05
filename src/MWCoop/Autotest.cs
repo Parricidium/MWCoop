@@ -20,6 +20,8 @@ namespace MWCoop
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); Consume.Test(mode, t);
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t);
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
+            VehicleSync.Test(mode, t); Jobs.Test(mode, t); Parts.Test(mode, t);
+            MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {
                 GameObject p = GameObject.Find("PLAYER");

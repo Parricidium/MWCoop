@@ -125,6 +125,7 @@ namespace MWCoop
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement.
             bool plug = tn.StartsWith("cable plug");
             if ((!WorldRoots.Contains(t.root.name) && !plug) || rb.GetComponent("CarDynamics") != null) return null;
+            if (!plug && VehicleSync.CarRoot(t) != null) return null;   // piece d'une voiture rangee sous une racine du monde (taxi sous JOBS) : CarDoors, pas Props
             k = plug ? "w:prise:" + t.root.name + "/" + (t.parent != null ? t.parent.name : "") : "w:" + Recon.Path(t) + "#" + t.GetSiblingIndex();
             worldKeys[rb.gameObject] = k;
             return k;
@@ -263,8 +264,8 @@ namespace MWCoop
                     if (p.Body == null || p == held || p.RemoteBy >= 0 || p.RideOut >= 0 || settling.Contains(p)) continue;
                     if ((p.Body.position - p.LastSentPos).sqrMagnitude < 0.04f) continue;
                     // Piece montee sur un vehicule (portiere, capot...) : elle suit la voiture, pas de recalage.
-                    Transform root = p.Body.transform.root;
-                    if (root != p.Body.transform && root.GetComponent("CarDynamics") != null) continue;
+                    Transform root = VehicleSync.CarRoot(p.Body.transform);
+                    if (root != null && root != p.Body.transform) continue;
                     // Posee dans une voiture qu'un autre fait rouler : c'est lui qui la transporte.
                     Rigidbody car = VehicleSync.CarUnder(p.Body);
                     if (car != null && VehicleSync.Authority(car) != Session.LocalId) continue;
