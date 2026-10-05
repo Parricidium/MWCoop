@@ -63,6 +63,7 @@ namespace MWCoop
             public Quaternion Rot;
             public bool Kinematic;
             public bool WasKinematic;
+            public Dictionary<Rigidbody, RigidbodyInterpolation> InterpWas;   // copie : interpolation de la voiture et de ses pieces
             public float NextLog;
             public Drivetrain Dt;
             public Wheel[] Wheels;
@@ -448,7 +449,6 @@ namespace MWCoop
                 if (remote)
                 {
                     if (now >= c.NextJoints) ProtectJoints(c);   // pieces montees entre-temps
-                    Follow(c);
                     Animate(c);
                     if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Key + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + ", chaleur " + (c.Heat != null ? c.Heat.Value.ToString("F1") : "?") + " (recue " + c.RemoteHeat.ToString("F1") + ")" +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
                 }
@@ -642,6 +642,15 @@ namespace MWCoop
             {
                 c.WasKinematic = c.Body.isKinematic;
                 c.Body.isKinematic = true;
+                // Copie deplacee au pas de physique (FixedUpdate) : interpolee pour le rendu, elle et ses pieces
+                // articulees (banquette, coffre, portieres) -- sans cela, a-coups a 50 Hz chez le passager et
+                // pieces qui tremblent en roulant.
+                c.InterpWas = new Dictionary<Rigidbody, RigidbodyInterpolation>();
+                foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true))
+                {
+                    c.InterpWas[rb] = rb.interpolation;
+                    rb.interpolation = RigidbodyInterpolation.Interpolate;
+                }
                 ProtectJoints(c);
             }
             else
@@ -654,6 +663,11 @@ namespace MWCoop
                 }
                 c.Body.isKinematic = c.WasKinematic;
                 if (!c.Body.isKinematic) { c.Body.velocity = c.Vel; c.Body.angularVelocity = c.AngVel; }
+                if (c.InterpWas != null)
+                {
+                    foreach (KeyValuePair<Rigidbody, RigidbodyInterpolation> kv in c.InterpWas) if (kv.Key != null) kv.Key.interpolation = kv.Value;
+                    c.InterpWas = null;
+                }
             }
         }
 
@@ -674,6 +688,15 @@ namespace MWCoop
             c.NextJoints = Time.realtimeSinceStartup + 2f;
         }
 
+        // Suivi des copies au pas de physique (MovePosition ne s'applique qu'au pas suivant : appele a chaque
+        // image, la voiture avancait par paliers de 20 ms, sans interpolation).
+        public static void FixedUpdate()
+        {
+            if (!scanned) return;
+            foreach (Car c in cars)
+                if (c.Body != null && c.Kinematic && c.Body.gameObject.activeInHierarchy) Follow(c);
+        }
+
         static void Follow(Car c)
         {
             // Extrapole a partir du dernier etat recu, puis rattrape en douceur.
@@ -683,12 +706,12 @@ namespace MWCoop
             if (c.AngVel.sqrMagnitude > 1e-4f)
                 rot = Quaternion.AngleAxis(c.AngVel.magnitude * dt * Mathf.Rad2Deg, c.AngVel.normalized) * c.Rot;
             Transform t = c.Body.transform;
-            float k = 1f - Mathf.Exp(-15f * Time.deltaTime);
+            float k = 1f - Mathf.Exp(-15f * Time.fixedDeltaTime);
             if ((target - t.position).sqrMagnitude > 25f) { MoveCargo(c, target, rot, c.Vel); t.position = target; t.rotation = rot; }
             else
             {
-                c.Body.MovePosition(Vector3.Lerp(t.position, target, k));
-                c.Body.MoveRotation(Quaternion.Slerp(t.rotation, rot, k));
+                c.Body.MovePosition(Vector3.Lerp(c.Body.position, target, k));   // pose physique (le transform est interpole pour le rendu)
+                c.Body.MoveRotation(Quaternion.Slerp(c.Body.rotation, rot, k));
             }
         }
 

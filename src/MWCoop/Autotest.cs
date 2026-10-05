@@ -130,6 +130,18 @@ namespace MWCoop
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
             if (mode == "cd") TestCd(t);
+            if (mode == "fluide")
+            {
+                // Invite : vitesse apparente de la copie de TestVoiture image par image (a-coups = grand ecart-type).
+                Rigidbody b = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"));
+                if (b != null && Time.deltaTime > 0f)
+                {
+                    Vector3 pos = b.transform.position;
+                    if (fluLast != Vector3.zero) { float v = (pos - fluLast).magnitude / Time.deltaTime; fluN++; fluSum += v; fluSq += v * v; if (v < 0.05f) fluStill++; }
+                    fluLast = pos;
+                    if (t >= fluLog) { fluLog = t + 2f; if (fluN > 0) { float m = fluSum / fluN; Log.Info("autotest : fluide, vitesse " + m.ToString("F2") + " m/s, ecart-type " + Mathf.Sqrt(Mathf.Max(0f, fluSq / fluN - m * m)).ToString("F2") + ", images immobiles " + fluStill + "/" + fluN); } fluN = 0; fluSum = fluSq = 0f; fluStill = 0; }
+                }
+            }
             if (mode == "mort")
             {
                 // [Test] TestCause (booleen de Systems/Death) a 30 s ; TestReapparition=1/2 choisit 3 s apres.
@@ -560,7 +572,9 @@ namespace MWCoop
         }
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
-        static float cdLog;
+        static float cdLog, fluLog, fluSum, fluSq;
+        static int fluN, fluStill;
+        static Vector3 fluLast;
 
         // Boitier de CD et CD : l'hote ouvre le boitier 1 (45 s), en sort le CD (49 s), le pose 1 m plus loin (52 s),
         // referme le boitier (60 s) ; les deux cotes notent le boitier et le CD toutes les 2 s.
