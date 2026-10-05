@@ -129,6 +129,9 @@ namespace MWCoop
                         Material mat = r.sharedMaterial;
                         string mn = mat != null ? mat.name.ToLowerInvariant() : "";
                         if (mn.Contains("shadow") || mn.Contains("alpha")) continue;
+                        // Calques de givre/buee des vitres (doorwindow_frozen, sidewindow_frozen...) : vitres blanches sinon.
+                        string rn = r.name.ToLowerInvariant();
+                        if (rn.Contains("frozen") || rn.Contains("frost") || mn.Contains("frozen") || mn.Contains("frost")) continue;
                         bool glass = mn.Contains("glass") || mn.Contains("window");
                         if (!m.isReadable) continue;
                         v = m.vertices;
@@ -226,9 +229,10 @@ namespace MWCoop
             foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
                 if (t.name.StartsWith("VINP_Wheel") && t.name.Length == "VINP_WheelFL".Length) points.Add(t);
             if (points.Count == 0) return false;
-            // Rayon de la jante du prefab (le jeu la met a l'echelle du pneu a l'execution, ScalePivot) : ramenee a 60 %
-            // du rayon de la roue physique. Pneu : le jeu le cree a l'execution (Use 'GetTire'), le prefab n'en a pas ;
-            // un pneu fabrique au rayon de la roue.
+            // Roue de serie : jante 13" (rayon 16,5 cm ; le prefab est mis a l'echelle du pneu a l'execution, ScalePivot)
+            // dans un pneu 155R13 (rayon 29 cm). Le pneu, le jeu le cree a l'execution (Use 'GetTire') : fabrique ici.
+            // Pas le rayon de la roue physique : sans pneu monte, elle garde 13,5 cm (roues minuscules).
+            const float RimR = 0.165f, TireR = 0.29f, TireW = 0.16f;
             Transform meshT = rim.transform.Find("ScalePivot/meshrim");
             MeshFilter rmf = meshT != null ? meshT.GetComponent<MeshFilter>() : null;
             Vector3 ext = rmf != null && rmf.sharedMesh != null ? Vector3.Scale(rmf.sharedMesh.bounds.extents, meshT.lossyScale) : Vector3.zero;
@@ -237,14 +241,23 @@ namespace MWCoop
             {
                 Transform t = wh.transform, best = null;
                 foreach (Transform pt in points) if (best == null || (pt.position - t.position).sqrMagnitude < (best.position - t.position).sqrMagnitude) best = pt;
-                float rad = wh.radius > 0.1f ? wh.radius : 0.3f, width = wh.width > 0.05f ? wh.width : 0.18f;
+                // Hauteur de repos : la voiture de l'apercu ne pose pas sur ses roues (suspension en detente, roue 8,6 cm
+                // sous son point de fixation WHEELc_*, sous les ailes) ; chargee, la roue remonte a ce point.
+                Vector3 center = root.InverseTransformPoint(best != null ? best.position : t.position);
+                Vector3 lift = new Vector3(0f, root.InverseTransformPoint(t.position).y - center.y, 0f);
                 if (best != null)
                 {
-                    float k = rimR > 0.05f ? rad * 0.72f / rimR : 1f;
+                    float k = rimR > 0.05f ? RimR / rimR : 1f;
+                    int from = parts.Count;
                     AddPrefab(root, best, rim, parts, Matrix4x4.Scale(new Vector3(k, k, k)));
+                    for (int i = from; i < parts.Count; i++)
+                    {
+                        parts[i].Paint = false;   // acier, pas la couleur de la carrosserie
+                        parts[i].ToCar = Matrix4x4.TRS(lift, Quaternion.identity, Vector3.one) * parts[i].ToCar;
+                    }
                 }
-                parts.Add(Ring(wh.name + " pneu", root.InverseTransformPoint(best != null ? best.position : t.position), root.InverseTransformDirection(t.right).normalized,
-                               rad, rad * 0.7f, width, new Color(0.07f, 0.07f, 0.075f)));
+                parts.Add(Ring(wh.name + " pneu", center + lift, root.InverseTransformDirection(t.right).normalized,
+                               TireR, RimR * 0.97f, TireW, new Color(0.07f, 0.07f, 0.075f)));
             }
             return true;
         }
@@ -377,6 +390,16 @@ namespace MWCoop
                     sb.Append(" | ");
                 }
                 Log.Info("voiture : modeles " + sb);
+                sb.Length = 0;
+                foreach (Wheel wh in root.GetComponentsInChildren<Wheel>(true))
+                {
+                    sb.Append(wh.name).Append(" pos ").Append(root.InverseTransformPoint(wh.transform.position).ToString("F3"));
+                    foreach (System.Reflection.FieldInfo fi in typeof(Wheel).GetFields())
+                        if (fi.FieldType == typeof(float) || fi.FieldType == typeof(bool)) sb.Append(' ').Append(fi.Name).Append('=').Append(fi.GetValue(wh));
+                    if (wh.model != null) sb.Append(" model ").Append(wh.model.name).Append(' ').Append(root.InverseTransformPoint(wh.model.transform.position).ToString("F3"));
+                    sb.Append(" | ");
+                }
+                Log.Info("voiture : roues " + sb);
             }
             foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
             {
