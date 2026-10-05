@@ -113,6 +113,7 @@ namespace MWCoop
             }
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
+            if (mode == "cd") TestCd(t);
             if (mode == "mort")
             {
                 // [Test] TestCause (booleen de Systems/Death) a 30 s ; TestReapparition=1/2 choisit 3 s apres.
@@ -543,6 +544,71 @@ namespace MWCoop
         }
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
+        static float cdLog;
+
+        // Boitier de CD et CD : l'hote ouvre le boitier 1 (45 s), en sort le CD (49 s), le pose 1 m plus loin (52 s),
+        // referme le boitier (60 s) ; les deux cotes notent le boitier et le CD toutes les 2 s.
+        static void TestCd(float t)
+        {
+            GameObject cases = GameObject.Find("Systems/CDs");
+            Transform c1 = cases != null ? cases.transform.Find("cd case(item1)") : null;
+            if (MWCoop.Net.Session.IsHost)
+            {
+                if (step == 0 && t > 45f) { step = 1; Log.Info("autotest : cd, ouvre " + CaseClick()); }
+                if (step == 1 && t > 49f) step = 2;   // le jeu libere le CD 1 s apres l'ouverture (CHECK -> Detach)
+                if (step == 2 && t > 52f)
+                {
+                    step = 3;
+                    GameObject cd = CdObject("CD1");
+                    Rigidbody rb = cd != null ? cd.GetComponent<Rigidbody>() : null;
+                    if (rb != null && c1 != null) { rb.position = c1.position + Vector3.up * 0.3f + c1.right * 1f; rb.velocity = Vector3.zero; Props.SoonScan(); }
+                    Log.Info("autotest : cd, CD1 pose a cote : " + (rb != null ? rb.position.ToString("F2") : "pas de corps"));
+                }
+                if (step == 3 && t > 60f) { step = 4; Log.Info("autotest : cd, referme " + CaseClick()); }
+            }
+            if (t > 40f && t < 75f && t - cdLog >= 2f)
+            {
+                cdLog = t;
+                PlayMakerFSM use = c1 != null ? Game.FsmOn(c1.gameObject, "Use") : null;
+                FsmBool open = use != null ? use.FsmVariables.FindFsmBool("Open") : null;
+                GameObject cd = CdObject("CD1");
+                Transform lid = c1 != null ? c1.Find("PivotTop") : null;
+                Log.Info("autotest : cd, boitier 1 " + (use != null ? use.ActiveStateName + " Open=" + (open != null && open.Value) : "introuvable")
+                         + (lid != null ? " couvercle " + lid.localEulerAngles.ToString("F0") : "")
+                         + " ; CD1 " + (cd != null ? "sous " + (cd.transform.parent != null ? cd.transform.parent.name : "(racine)") + " en " + cd.transform.position.ToString("F2")
+                                        + (cd.GetComponent<Rigidbody>() != null ? ", physique" : ", sans corps") : "introuvable")
+                         + " ; suivis " + Props.Ids("w:cd:"));
+            }
+        }
+
+        // Comme un vrai clic : 'Wait button' (survol) puis USE dans la meme image (sinon MousePickEvent ressort).
+        // Le survol (MousePickEvent, curseur absent) est coupe le temps du clic.
+        static string CaseClick()
+        {
+            GameObject c = GameObject.Find("Systems/CDs/cd case(item1)");
+            PlayMakerFSM use = c != null ? Game.FsmOn(c, "Use") : null;
+            FsmState wb = use != null ? use.Fsm.GetState("Wait button") : null;
+            if (wb == null) return "boitier introuvable";
+            var off = new System.Collections.Generic.List<FsmStateAction>();
+            foreach (FsmStateAction a in wb.Actions) if (a != null && a.Enabled && a.GetType().Name == "MousePickEvent") { a.Enabled = false; off.Add(a); }
+            try
+            {
+                WorldFsms.TestClick("cd case(item1)::Use", "Wait button");
+                return WorldFsms.TestEvent("cd case(item1)::Use", "USE");
+            }
+            finally { foreach (FsmStateAction a in off) a.Enabled = true; }
+        }
+
+        static GameObject CdObject(string name)
+        {
+            foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                if (f.FsmName == "Data" && f.gameObject.name == "cd(itemx)" && f.hideFlags == HideFlags.None)
+                {
+                    FsmString n = f.FsmVariables.FindFsmString("ThisCD");
+                    if (n != null && n.Value == name) return f.gameObject;
+                }
+            return null;
+        }
         static string clipShot;
         static float nextSleepLog;
         public static int PoseFlags;
