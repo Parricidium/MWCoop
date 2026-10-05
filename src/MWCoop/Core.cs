@@ -86,6 +86,11 @@ namespace MWCoop
             Step("remorquage", Tow.Update);
             Step("appels", Calls.Update);
             Step("vetements", Wear.Update);
+            Step("cuisine", Cooking.Update);
+            Step("feux", Fires.Update);
+            Step("atelier", Garage.Update);
+            Step("maison", Home.Update);
+            Step("gestes", Gestures.Update);
             Step("rayons", Stock.Update);
             Step("PNJ", Npcs.Update);
             Step("voitures garees", Parked.Update);
@@ -148,6 +153,11 @@ namespace MWCoop
             Tow.OnLevelLoaded();
             Calls.OnLevelLoaded();
             Wear.OnLevelLoaded();
+            Cooking.OnLevelLoaded();
+            Fires.OnLevelLoaded();
+            Garage.OnLevelLoaded();
+            Home.OnLevelLoaded();
+            Gestures.OnLevelLoaded();
             Stock.OnLevelLoaded();
             Npcs.OnLevelLoaded();
             Parked.OnLevelLoaded();

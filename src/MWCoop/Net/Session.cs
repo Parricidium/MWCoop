@@ -212,6 +212,11 @@ namespace MWCoop.Net
                     case Msg.Tow: Tow.OnMessage(from, r); break;
                     case Msg.Call: Calls.OnMessage(from, r); break;
                     case Msg.Wear: Wear.OnMessage(from, r); break;
+                    case Msg.Cook: Cooking.OnMessage(from, r); break;
+                    case Msg.Fire: Fires.OnMessage(from, r); break;
+                    case Msg.Garage: Garage.OnMessage(from, r); break;
+                    case Msg.Home: Home.OnMessage(from, r); break;
+                    case Msg.Gesture: Gestures.OnMessage(from, r); break;
                     case Msg.Stock: Stock.OnMessage(from, r); break;
                     case Msg.Npc: Npcs.OnMessage(from, r); break;
                     case Msg.Parked: Parked.OnMessage(from, r); break;
