@@ -21,6 +21,12 @@ namespace MWCoop
             Session.Start();
         }
 
+        void FixedUpdate()
+        {
+            try { VehicleSync.FixedUpdate(); }
+            catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("voitures (physique) : " + e.Message); }
+        }
+
         void LateUpdate()
         {
             try { PlayerSync.LateUpdate(); CarVisuals.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); }

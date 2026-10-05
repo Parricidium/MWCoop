@@ -35,6 +35,7 @@ namespace MWCoop
             public Rigidbody Body;
             public PlayMakerFSM Use;              // automate 'Use' qui porte l'ID (articles) : voit qu'il a disparu
             public int RemoteBy = -1;
+            public int LayerWas = -1;             // deplace par un autre : calque du jeu pour un objet tenu (16), le sien avant
             public float LastRemote, SettleUntil;
             public Vector3 Pos, Vel, LastSentPos;
             public Quaternion Rot;
@@ -324,8 +325,22 @@ namespace MWCoop
             }
         }
 
+        // Calque d'un objet tenu en main (automate PickUp du jeu : SetLayer 16 a la prise, 19 au lacher) : il ne
+        // heurte pas les voitures. Un objet deplace par un autre joueur y est mis aussi, sinon ce corps cinematique
+        // teleporte a chaque image poussait la voiture contre laquelle l'autre l'amenait.
+        const int HeldLayer = 16;
+
+        static void HeldLook(Prop p, bool on)
+        {
+            if (p.Body == null) return;
+            GameObject g = p.Body.gameObject;
+            if (on && p.LayerWas < 0) { p.LayerWas = g.layer; g.layer = HeldLayer; }
+            else if (!on && p.LayerWas >= 0) { if (g.layer == HeldLayer && p != held) g.layer = p.LayerWas; p.LayerWas = -1; }   // pris ici : le jeu le garde au 16
+        }
+
         static void SetKinematic(Prop p, bool on)
         {
+            if (!on) HeldLook(p, false);
             if (p.Body == null || p.Kinematic == on) return;
             p.Kinematic = on;
             if (on) { p.WasKinematic = p.Body.isKinematic; p.Body.isKinematic = true; }
@@ -334,6 +349,7 @@ namespace MWCoop
 
         static void Follow(Prop p)
         {
+            if (p.LayerWas < 0 && p.Body.gameObject.layer != HeldLayer) HeldLook(p, true);
             Transform t = p.Body.transform;
             float k = 1f - Mathf.Exp(-20f * Time.deltaTime);
             if ((p.Pos - t.position).sqrMagnitude > 9f) { t.position = p.Pos; t.rotation = p.Rot; return; }
