@@ -38,16 +38,24 @@ namespace MWCoop
         {
             string level = Application.loadedLevelName;
             float now = Time.realtimeSinceStartup;
-            bool want = Session.Active && !Session.IsHost && Enabled && (level == "MainMenu" || level == "Intro");
+            // Hote lance par le salon (le mod ouvre sa partie tout seul) : son ecran de demarrage, meme habillage.
+            Host = Session.Active && Session.IsHost && Flow.HostChoice != null;
+            bool want = Session.Active && (!Session.IsHost || Host) && Enabled && (level == "MainMenu" || level == "Intro");
             if (want != Shown)
             {
                 Shown = want;
-                if (want) Log.Info("ecran d'attente : affiche (invite)");
+                if (want) Log.Info("ecran d'attente : affiche (" + (Host ? "hote, " + Flow.HostChoice : "invite") + ")");
                 else Log.Info("ecran d'attente : retire (" + (level == "GAME" ? "en jeu" : !Session.Active ? "session terminee" : !Enabled ? "desactive" : level) + ")");
             }
             if (want && level == "MainMenu") { if (!blocking && now >= nextScan) Block(now); }
             else if (blocking) Unblock();
             if (!want) return;
+            if (Host)
+            {
+                Current = level == "Intro" || Flow.MenuDone ? 2 : 1;
+                Error = "";
+                return;
+            }
 
             // Connexion : refus et coupure gardes jusqu'a la prochaine connexion (Session reessaie et reecrit son etat).
             bool connected = Session.HostConnected;
@@ -107,8 +115,28 @@ namespace MWCoop
             blocking = false;
         }
 
+        public static bool Host;             // ecran de demarrage de l'hote (sinon : attente de l'invite)
+
+        static int Steps { get { return Host ? 3 : 4; } }
+        static string Badge { get { return Host ? L("HÔTE", "HOST") : L("INVITÉ", "GUEST"); } }
+        static string Subtitle
+        {
+            get
+            {
+                return Host ? L("Partie coop : tu héberges, tes amis te rejoignent", "Co-op game: you are hosting, your friends join you")
+                            : L("Partie coop : tu rejoins la partie de l'hôte", "Co-op game: you are joining the host's game");
+            }
+        }
+
         static string StepLabel(int i)
         {
+            if (Host)
+                switch (i)
+                {
+                    case 0: return L("Démarrage du jeu", "Starting the game");
+                    case 1: return Flow.HostChoice == "nouvelle" ? L("Nouvelle partie", "New game") : L("Ouverture de ta sauvegarde", "Opening your save");
+                    default: return L("Chargement de la partie", "Loading the game");
+                }
             PlayerInfo host = Session.Host;
             string name = host != null && host.Name.Length > 0 && host.Name != "?" ? " (" + host.Name + ")" : "";
             switch (i)
@@ -122,6 +150,12 @@ namespace MWCoop
 
         static string StepDetail(int i)
         {
+            if (Host)
+            {
+                if (i == 1 && Current == 1) return Flow.HostChoice == "nouvelle" ? L("Le permis est rempli pour toi.", "The licence is filled in for you.") : L("Comme « Continuer » dans le menu.", "Like \"Continue\" in the menu.");
+                if (i == 2 && Current == 2) return L("Tes amis reçoivent ta sauvegarde dès que tu es en jeu.", "Your friends receive your save as soon as you are in game.");
+                return "";
+            }
             switch (i)
             {
                 case 0:
@@ -162,17 +196,18 @@ namespace MWCoop
             Style.Glass(new Rect(x, y0, w, h), Style.Px(24));
 
             float y = y0 + Style.Px(24);
-            var head = new Rect(x + pad, y, iw, Style.Px(54));
-            Style.Title(head, "MWCoop", Style.White, TextAnchor.MiddleLeft, 42);
-            string badge = L("INVITÉ", "GUEST");
+            var head = new Rect(x + pad, y, iw, Style.Px(84));
+            float lw = Style.Logo(head);
+            if (lw <= 0f) { Style.Title(head, "MWCoop", Style.White, TextAnchor.MiddleLeft, 42); lw = Style.TitleWidth("MWCoop", 42); }
+            string badge = Badge;
             float bw = Style.Width(badge, 14) + Style.Px(22), bh = Style.Px(26);
-            var br = new Rect(head.x + Style.TitleWidth("MWCoop", 42) + Style.Px(14), head.center.y - bh / 2 + Style.Px(2), bw, bh);
+            var br = new Rect(head.x + lw + Style.Px(14), head.center.y - bh / 2 + Style.Px(2), bw, bh);
             Style.Round(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.18f));
             Style.Ring(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.5f));
             Style.Text(br, badge, 14, TextAnchor.MiddleCenter, Style.Accent);
             Style.Text(head, Version.Text, 16, TextAnchor.MiddleRight, Style.Dim, false);
-            y += Style.Px(56);
-            Style.Text(new Rect(x + pad, y, iw, Style.Px(24)), L("Partie coop : tu rejoins la partie de l'hôte", "Co-op game: you are joining the host's game"), 17, TextAnchor.MiddleLeft, Style.Dim, false);
+            y += Style.Px(88);
+            Style.Text(new Rect(x + pad, y, iw, Style.Px(24)), Subtitle, 17, TextAnchor.MiddleLeft, Style.Dim, false);
             y += Style.Px(38);
             Style.Fill(new Rect(x + pad, y, iw, one), Style.Line);
             y += Style.Px(24);
@@ -180,7 +215,7 @@ namespace MWCoop
             string dots = new string('.', 1 + (int)(now * 2.5f) % 3);
             float dot = Style.Px(28), tx = x + pad + dot + Style.Px(16), tw = iw - dot - Style.Px(16);
             float prevBottom = -1;
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < Steps; i++)
             {
                 bool done = i < Current, cur = i == Current;
                 var dr = new Rect(x + pad, y, dot, dot);
@@ -226,6 +261,15 @@ namespace MWCoop
                 y += Style.Px(18);
             }
 
+            if (Host)
+            {
+                // Les amis deja connectes (salon) : ils attendent sur leur propre ecran.
+                var names = new System.Text.StringBuilder();
+                foreach (PlayerInfo pi in Session.Players.Values) if (!pi.Local) { if (names.Length > 0) names.Append(", "); names.Append(pi.Name); }
+                string who = names.Length > 0 ? L("Connectés : ", "Connected: ") + names : L("Aucun ami connecté pour l'instant.", "No friend connected yet.");
+                Style.Text(new Rect(x + pad, y, iw, Style.Px(24)), who, 16, TextAnchor.MiddleLeft, names.Length > 0 ? Style.Good : Style.Dim, false);
+                y += Style.Px(34);
+            }
             if (Error.Length > 0)
             {
                 float eh = Style.Height(Error, 15, iw - Style.Px(32), false) + Style.Px(22);

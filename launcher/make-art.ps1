@@ -1,4 +1,4 @@
-# Compose les fonds du lanceur (launcher\launcher.png et launcher-sombre.png, 1000x620 en double resolution, avec
+﻿# Compose les fonds du lanceur (launcher\launcher.png et launcher-sombre.png, 1000x620 en double resolution, avec
 # transparence ; integres a MWCoop.exe par launcher.rc) et son icone (launcher\mwcoop.ico) : carte arrondie + ombre
 # douce, nuit d'hiver en Finlande dessinee ici (ciel, collines, sapins, maison en bois eclairee, vieille voiture
 # sous la neige), panneau depoli a gauche, logo qui depasse de la carte.
@@ -204,6 +204,10 @@ function SpacedText($gr, [string]$t, $font, $brush, [float]$cx, [float]$y, [floa
 }
 
 $src = AlphaBox $logo
+# Logo de la carte : launcher\logo-titre.png s'il existe (titre « my Winter Car coop », large) ; l'icone garde logo.png.
+$titleFile = Join-Path $PSScriptRoot 'logo-titre.png'
+$banner = if (Test-Path $titleFile) { [System.Drawing.Image]::FromFile($titleFile) } else { $logo }
+$bsrc = AlphaBox $banner
 foreach ($dark in $false, $true) {
     $top = if ($dark) { @(8, 14, 28) } else { @(250, 252, 255) }
     $bot = if ($dark) { @(18, 28, 48) } else { @(228, 238, 248) }
@@ -260,9 +264,11 @@ foreach ($dark in $false, $true) {
 
     # Logo : depasse du haut de la carte ; ombre douce bleu nuit (un peu vers le bas) pour qu'il se detache du bureau
     # comme de la carte, puis le logo tel quel (il a son propre contour blanc).
-    $dh = 172.0; $dw = $dh * $src.Width / $src.Height
-    if ($dw -gt 220) { $dw = 220.0; $dh = $dw * $src.Height / $src.Width }
-    $dst = New-Object System.Drawing.RectangleF (228 - $dw / 2), 6, $dw, $dh
+    $maxW = if ($banner -ne $logo) { 272.0 } else { 220.0 }
+    $dh = 172.0; $dw = $dh * $bsrc.Width / $bsrc.Height
+    if ($dw -gt $maxW) { $dw = $maxW; $dh = $dw * $bsrc.Height / $bsrc.Width }
+    $top = if ($banner -ne $logo) { 38.0 } else { 6.0 }   # titre large : plus bas, au ras de la pastille PRE-ALPHA
+    $dst = New-Object System.Drawing.RectangleF (228 - $dw / 2), $top, $dw, $dh
     for ($i = 7; $i -ge 1; $i--) {
         $ia = New-Object System.Drawing.Imaging.ImageAttributes
         $cm = New-Object System.Drawing.Imaging.ColorMatrix
@@ -272,10 +278,10 @@ foreach ($dark in $false, $true) {
         $d = $i * 0.7
         foreach ($o in @(@(-$i, 0), @($i, 0), @(0, -$i), @(0, $i), @(-$d, -$d), @($d, $d), @(-$d, $d), @($d, -$d))) {
             $r = New-Object System.Drawing.Rectangle ([int]($dst.X + $o[0])), ([int]($dst.Y + $o[1] + 4)), ([int]$dst.Width), ([int]$dst.Height)
-            $g.DrawImage($logo, $r, $src.X, $src.Y, $src.Width, $src.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
+            $g.DrawImage($banner, $r, $bsrc.X, $bsrc.Y, $bsrc.Width, $bsrc.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
         }
     }
-    $g.DrawImage($logo, $dst, $src, [System.Drawing.GraphicsUnit]::Pixel)
+    $g.DrawImage($banner, $dst, $bsrc, [System.Drawing.GraphicsUnit]::Pixel)
 
     $g.Dispose()
     $out = Join-Path $PSScriptRoot $(if ($dark) { 'launcher-sombre.png' } else { 'launcher.png' })
