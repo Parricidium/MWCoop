@@ -791,7 +791,7 @@ namespace MWCoop
                 {
                     // Logique de l'hote (tele : seulement si la sienne est allumee).
                     if (j.Tv && j.F.FsmName == "Schedule") { FsmBool on = j.F.FsmVariables.FindFsmBool("TVOn"); hostTvOn = on != null && on.Value; }
-                    if ((!j.Tv || hostTvOn) && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
+                    if ((!j.Tv || hostTvOn) && !Calls.RunsHere(j.F) && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);   // telephone repris ici (hote loin) : sa logique tourne ici
                 }
                 else if (global == 3)
                 {
@@ -831,7 +831,7 @@ namespace MWCoop
                 foreach (W x in byKey.Values)
                 {
                     if (!x.HostDriven || x.F == null) continue;
-                    bool follow = !x.Tv || hostTvOn;
+                    bool follow = (!x.Tv || hostTvOn) && !Calls.RunsHere(x.F);
                     if (x.F.enabled == follow) { x.F.enabled = !follow; Log.Info("monde : " + x.Key + (follow ? " suit l'hote" : " tourne ici")); }
                 }
             }
