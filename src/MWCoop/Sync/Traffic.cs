@@ -5,7 +5,8 @@ using UnityEngine;
 namespace MWCoop
 {
     // Circulation et passants dictes par l'hote (comme la meteo) : voitures de TRAFFIC (routes,
-    // chemins) et de NPC_CARS, le train (racine TRAIN), marcheurs de HUMANS/Randomizer/Walkers.
+    // chemins), de NPC_CARS (dont le bus : Bus.cs) et des barrages de police (TRAFFIC/Police : Police.cs), le train
+    // (racine TRAIN), marcheurs de HUMANS/Randomizer/Walkers.
     //  - meme liste des deux cotes : chemin + rang parmi les homonymes (LAMORE x2, VICTRO x3...) ;
     //  - l'hote envoie 5 fois/s, par lots, actif, position, rotation, vitesse de chacun ;
     //  - chez l'invite : leur logique (MobileCarController, automates de conduite et de marche,
@@ -20,7 +21,8 @@ namespace MWCoop
     // l'hote (toutes les 3 s tant qu'il n'a pas de reponse) : meme empreinte -> confirmee ; sinon l'hote envoie
     // ses cles et l'invite traduit chaque numero de l'hote vers sa propre entite de meme cle (absente : ignoree).
     // Avant la reponse, rien n'est applique (un numero pouvait deplacer un autre vehicule).
-    // Message de controle : numero de depart 0xFFFF, puis genre (1 liste confirmee, 2 demande, 3 cles).
+    // Message de controle : numero de depart 0xFFFF, puis genre (1 liste confirmee, 2 demande, 3 cles ; 10 barrage de
+    // police, 11 action d'un invite dans le bus, 12 etat du bus : voir Police.cs et Bus.cs).
     public static class Traffic
     {
         class Ent
@@ -36,11 +38,12 @@ namespace MWCoop
             public bool Muted;
             public bool Train;
             public GameObject Mesh;          // train : carrosserie (et collisions), cachee pendant l'attente
+            public bool Police;              // voiture de police d'un barrage (Police.cs)
         }
 
         // TRAIN : toute la racine (le train change de parent entre SpawnEast et SpawnWest ; c'en est le seul
         // Rigidbody, son rang ne depend donc pas de son parent du moment).
-        static readonly string[] Containers = { "TRAFFIC/VehiclesHighway", "TRAFFIC/VehiclesDirtRoad", "TRAIN", "NPC_CARS" };
+        static readonly string[] Containers = { "TRAFFIC/VehiclesHighway", "TRAFFIC/VehiclesDirtRoad", "TRAIN", "NPC_CARS", "TRAFFIC/Police" };
         const string WalkersPath = "HUMANS/Randomizer/Walkers";
         static readonly List<Ent> ents = new List<Ent>();
         static readonly List<PlayMakerFSM> mutedSpawners = new List<PlayMakerFSM>();
@@ -57,6 +60,8 @@ namespace MWCoop
             ents.Clear(); mutedSpawners.Clear();
             built = false; verified = false; remap = null; hostKeys = null; hostKeysGot = 0; nextAsk = 0;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 6f : -1;
+            Police.OnLevelLoaded();
+            Bus.OnLevelLoaded();
         }
 
         static void Build()
@@ -102,11 +107,14 @@ namespace MWCoop
 
         static Ent Add(Dictionary<string, int> keys, Transform t, Rigidbody rb, bool walker)
         {
-            string path = rb != null && rb.name == "TRAIN" ? "TRAIN/" + t.name : Recon.Path(t);   // train : sans son parent du moment
+            // Train, bus : sans leur parent du moment (le train passe de SpawnEast a SpawnWest, le bus d'un BusSpawn* a
+            // l'autre : NPC_CARS::Bus Setup) ; voitures de police : sans le lieu du barrage du jour (Police::Parenting).
+            string path = rb != null && rb.name == "TRAIN" ? "TRAIN/" + t.name : rb != null && rb.name == "BUS" ? "NPC_CARS/BUS"
+                        : rb != null && rb.name.StartsWith("POLICECAR") ? "TRAFFIC/Police/" + t.name : Recon.Path(t);
             int k;
             keys.TryGetValue(path, out k);
             keys[path] = k + 1;
-            var e = new Ent { Key = path + "#" + k, T = t, Body = rb, Walker = walker, Pos = t.position, Rot = t.rotation };
+            var e = new Ent { Key = path + "#" + k, T = t, Body = rb, Walker = walker, Pos = t.position, Rot = t.rotation, Police = path.StartsWith("TRAFFIC/Police/") };
             ents.Add(e);
             return e;
         }
@@ -114,6 +122,13 @@ namespace MWCoop
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame) return;
+            Police.Update();
+            UpdateTraffic();
+            Bus.Update();   // apres le suivi : la copie du bus est a sa place de cette image
+        }
+
+        static void UpdateTraffic()
+        {
             if (!built) { if (buildAt > 0 && Time.realtimeSinceStartup >= buildAt) Build(); return; }
             float now = Time.realtimeSinceStartup;
             if (Config.GetInt("Test", "JournalTrafic", 0) != 0 && now >= nextSample)
@@ -211,6 +226,9 @@ namespace MWCoop
         static void OnControl(Peer from, NetReader r)
         {
             int kind = r.U8();
+            // Barrages (10), bus (11, 12) : leurs propres messages.
+            if (kind == 10) { Police.OnMessage(from, r); return; }
+            if (kind == 11 || kind == 12) { Bus.OnMessage(kind, from, r); return; }
             uint h = (uint)r.I32();
             if (Session.IsHost)
             {
@@ -293,6 +311,8 @@ namespace MWCoop
             foreach (Wheel wh in e.T.GetComponentsInChildren<Wheel>(true)) wh.enabled = false;
             if (e.Walker)
                 foreach (PlayMakerFSM f in e.T.GetComponentsInChildren<PlayMakerFSM>(true)) f.enabled = false;
+            // Police : pas ses parents (Cops::SpeakDB fait parler les agents ; l'automate Police est coupe par Police.cs).
+            if (e.Police) return;
             for (Transform p = e.T.parent; p != null; p = p.parent)
                 foreach (PlayMakerFSM f in p.GetComponents<PlayMakerFSM>())
                     if (!mutedSpawners.Contains(f)) { f.enabled = false; mutedSpawners.Add(f); }
@@ -302,6 +322,8 @@ namespace MWCoop
         // heure des journaux : l'invite doit suivre l'hote a quelques metres pres).
         public static void Test(string mode, float t)
         {
+            Police.Test(mode, t);
+            Bus.Test(mode, t);
             if (mode != "train" || t < 10f || Time.realtimeSinceStartup < nextTrainLog) return;
             nextTrainLog = Time.realtimeSinceStartup + 2f;
             Ent tr = null;
@@ -312,6 +334,14 @@ namespace MWCoop
                      + ", sous " + (tr.T.parent != null ? tr.T.parent.name : "-")
                      + ", corps " + (tr.Body != null && tr.Body.isKinematic ? "cinematique" : "dynamique")
                      + (Session.IsHost ? "" : ", recu il y a " + (Time.realtimeSinceStartup - tr.LastRecv).ToString("F1") + " s"));
+        }
+
+        // Objet suivi ici d'apres l'hote (copie cinematique de la circulation) ?
+        public static bool Follows(Transform t)
+        {
+            if (Session.IsHost || t == null) return false;
+            foreach (Ent e in ents) if (e.T == t) return e.LastRecv > 0;
+            return false;
         }
 
         static void Follow(Ent e)
