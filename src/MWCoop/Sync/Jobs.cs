@@ -433,9 +433,15 @@ namespace MWCoop
                 return;
             }
             FsmVariables v = j.F.FsmVariables;
-            foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
-            foreach (var x in floats) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
-            foreach (var x in bools) { FsmBool t = v.FindFsmBool(x.Key); if (t != null) t.Value = x.Value; }
+            // Deja dans l'etat d'arrivee (l'enchainement du message precedent l'y a mene) : ses actions ont tourne ici,
+            // les variables relevees chez l'autre a l'ENTREE de cet etat (avant ses SetBoolValue...) les defairaient
+            // (loquet du capot : Open inverse chez l'invite).
+            if (j.F.ActiveStateName != state)
+            {
+                foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
+                foreach (var x in floats) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
+                foreach (var x in bools) { FsmBool t = v.FindFsmBool(x.Key); if (t != null) t.Value = x.Value; }
+            }
             // Plateau a bois : la buche comptee chez l'autre est detruite ici par son propre message (@parti) ;
             // l'objet que "Destroy Wood" detruirait ici (variable Log, d'un ancien passage) n'est pas le bon.
             if (j.Kind == K_LOGTRIGGER) { FsmGameObject lg = v.FindFsmGameObject("Log"); if (lg != null) lg.Value = null; }

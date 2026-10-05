@@ -95,6 +95,7 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Chat, F10 menu | |
 | Respawn: in co-op, death no longer ends the game; the player picks where to come back (apartment or parents' house), even after a car crash | |
 | Sync audit (F10 > SYNCHRO): census of every interactive object and which module syncs it, host/guest state comparison every 15 s (lasting differences logged as DESYNC), local actions that are not shared | |
+| Batch 4: beer cases, juice, trash, part boxes; cooking (sausages, coffee, spoilage), wood fires, house and car fires; jacks, lift, engine hoist, crash damage (glass, dents, bent suspension), tractor loader, glovebox and hood latch; fuses, kilju, scrap/lottery/flea payouts counted once, host's flea prices, phone taken over by a guest when the host is away; NPCs outside 'Char' (Teimo, Fleetari...), NPC ownership while serving or fighting a player, police checkpoints, bus for guests; avatar gestures (punch, finger, thumb, watch, pee, drunk sway, pass-out), held item in the hands, seated on furniture | |
 | Outfits in 3D: turntable preview in F10 > APPEARANCE and in the launcher's OUTFIT tab (portrait gallery), player portraits in the lobby; CDs put back in their case or a player seen in place; gas pump terminal screen (PIN, amount) seen by all | |
 | Guests' waiting screen instead of the main menu (connection, host, save download, loading); lobby UDP check (tells the host to forward UDP, not just TCP); LOGS tab with "open folder" and "zip to send"; GTA-style F10 menu with keyboard navigation; CD cases and CDs shared; launcher car preview always the complete stock CORRIS | |
 | Taxi (passengers, doors), engine state handed over with the wheel, window frost and scraping, towing rope, pub/inspection/flea market/coffee/bus purchases, outgoing calls, mail orders, worn clothes, bolts of freshly installed parts, firewood, septic tanks, co-op save at the toilet without kicking guests | |
@@ -244,6 +245,13 @@ par tous jusqu'au bout.
 Fait aussi (0.22.1, retours de JD) : voiture conduite par un autre fluide chez le passager (plus d'à-coups), banquette
 et coffre qui ne tremblent plus en roulant ; un objet tenu par un autre ne pousse plus la voiture ; nuages et neige du
 jour identiques chez l'hôte et les invités.
+Fait aussi (0.23, lot 4) : packs de bières, jus, poubelle, boîtes de pièces (fusibles, bougies...) ; cuisine
+(saucisses grillées ou brûlées, café, péremption), feux de bois (cheminée, poêle, sauna, grill), incendies de la maison
+et des voitures ; crics, pont de Fleetari, palan, dégâts d'accident (vitres, tôle, suspension), chargeur du tracteur,
+boîte à gants et loquet du capot ; fusibles, kilju, ferraille, loto et brocante payés une fois, prix de la brocante de
+l'hôte, téléphone repris par un invité quand l'hôte est loin ; PNJ hors « Char » (Teimo, Fleetari...), PNJ qui servent
+ou se battent avec un invité, barrages de police, bus pour les invités ; gestes de l'avatar (poing, doigt, pouce,
+montre, pipi, ivresse, évanoui), objet tenu dans les mains, assis sur un meuble.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

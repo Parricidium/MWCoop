@@ -41,6 +41,10 @@ pouvoir le faire, et les autres doivent le voir.
 - [x] Lot 3 (0.21) : boîtier CD (ouvert/fermé) et CD sorti suivis ; voiture du lanceur toujours complète d'origine.
 - [x] Interface (0.21) : écran d'attente des invités au menu, test UDP dans le salon, journaux plus visibles (zip à
       envoyer), F10 façon GTA.
+- [x] Lot 4 (0.23) : boissons, poubelle, boîtes de pièces, cuisine, feux, incendies, crics, pont, palan, dégâts,
+      chargeur, boîte à gants, fusibles, kilju, gains uniques, prix de la brocante, téléphone, PNJ, police, bus, gestes.
+      À vérifier en vraie partie : luge de Teimo renversée, PNJ qui sert un invité, bagarre, retrait d'un fusible par
+      un invité, jus.
 - [ ] Plus tard : mods (MSCLoader géré par le lanceur, onglet MODS, comparaison des mods dans le salon).
 
 ## Quêtes et argent
