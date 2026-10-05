@@ -87,6 +87,7 @@ namespace MWCoop
             Step("quetes", Jobs.Update);
             Step("trace", Trace.Update);
             Step("deroule", Flow.Update);
+            Step("ecran d'attente", WaitScreen.Update);
             Step("autotest", Autotest.Update);
         }
 
@@ -145,12 +146,13 @@ namespace MWCoop
             Traffic.OnLevelLoaded();
             CarColor.OnLevelLoaded();
             Jobs.OnLevelLoaded();
+            WaitScreen.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
 
         void OnGUI()
         {
-            try { Hud.Draw(); Menu.Draw(); Respawn.Draw(); } catch (System.Exception e) { Log.Error("hud : " + e); }
+            try { Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); Respawn.Draw(); } catch (System.Exception e) { Log.Error("hud : " + e); }
         }
 
         void OnApplicationQuit()
