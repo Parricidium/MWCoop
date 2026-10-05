@@ -106,6 +106,17 @@ namespace MWCoop
 
         public static void Draw()
         {
+            if (ChatOpen && testKey != null && Event.current.type == EventType.Layout)
+            {
+                // Autotest "tchat" : la touche simulee remplace l'evenement de ce passage, comme une vraie frappe.
+                Event real = Event.current;
+                Event.current = testKey;
+                testKey = null;
+                DrawChatLine();
+                Log.Info("autotest : tchat apres la touche : ligne " + (ChatOpen ? "OUVERTE" : "fermee") + ", texte \"" + chatText + "\"");
+                Event.current = real;
+                return;
+            }
             if (ChatOpen) DrawChatLine();
             if (!Open) { wasOpen = false; return; }
             Event e = Event.current;
@@ -590,8 +601,10 @@ namespace MWCoop
                 Style.FieldBack(rf, selected);
                 Style.Button(rb, "ENVOYER", true, 18, selected);
             }
+            // Le caractere de retour a la ligne qui suit Entree n'entre pas dans le champ (Key a deja pris Entree).
+            if (e.type == EventType.KeyDown && IsNewline(e.character)) e.Use();
             GUI.SetNextControlName(ChatField);
-            chatText = GUI.TextField(rf, chatText, 200, Style.Field(21));
+            chatText = Clean(GUI.TextField(rf, chatText, 200, Style.Field(21)));
             fieldFocused = GUI.GetNameOfFocusedControl() == ChatField;
             if (selected && !fieldFocused) GUI.FocusControl(ChatField);
             else if (!selected && fieldFocused) { GUIUtility.keyboardControl = 0; fieldFocused = false; }
@@ -607,30 +620,50 @@ namespace MWCoop
             Style.Ring(r, h / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.55f));
             float lw = Style.Px(104);
             Style.Title(new Rect(r.x + Style.Px(20), r.y, lw, h), "TCHAT", Style.Accent, TextAnchor.MiddleLeft, 18);
-            GUI.SetNextControlName("mwcoop-chat");
-            chatText = GUI.TextField(new Rect(r.x + lw, r.y, r.width - lw, h), chatText, 200, Style.Field(21));
-            if (focusChat) { GUI.FocusControl("mwcoop-chat"); focusChat = false; }
-            if (EnterPressed())
+            // Entree AVANT le champ : le champ actif consomme la touche (le message ne partait pas, retour de JD
+            // du 05/10) et le caractere '\n' qui la suit s'inscrivait dans le texte.
+            Event e = Event.current;
+            if (e.type == EventType.KeyDown && (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter || IsNewline(e.character)))
             {
+                e.Use();
                 Chat.Send(chatText);
                 chatText = "";
                 ChatOpen = false;
+                GUIUtility.keyboardControl = 0;
+                return;
             }
+            GUI.SetNextControlName("mwcoop-chat");
+            chatText = Clean(GUI.TextField(new Rect(r.x + lw, r.y, r.width - lw, h), chatText, 200, Style.Field(21)));
+            if (focusChat) { GUI.FocusControl("mwcoop-chat"); focusChat = false; }
         }
 
-        static bool EnterPressed()
-        {
-            Event e = Event.current;
-            return e.type == EventType.KeyDown && (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter);
-        }
+        static bool IsNewline(char c) { return c == '\n' || c == '\r'; }
+
+        static string Clean(string s) { return s.IndexOf('\n') < 0 && s.IndexOf('\r') < 0 ? s : s.Replace("\r", "").Replace("\n", ""); }
 
         // ---- Autotest "menu" : ouvert a 20 s, un onglet toutes les 3 s (captures), ferme a la fin ----
 
         static int testTab = -1;
         static bool testLog, testEnd;
 
+        // Autotest "tchat" : T a 20 s (texte pose), Entree simulee a 22 s (KeyDown Return comme Windows l'envoie,
+        // puis le caractere retour a la ligne), message attendu chez l'autre et ligne fermee ; puis a 26 s le
+        // caractere seul dans la ligne ouverte (ne doit pas s'inscrire), Entree a 28 s.
+        static Event testKey;
+        static int testStep;
+
+        static void TestChat(float t)
+        {
+            if (testStep == 0 && t > 20f) { testStep = 1; ChatOpen = true; focusChat = true; chatText = "essai du tchat " + Session.LocalId; Log.Info("autotest : tchat ouvert"); }
+            else if (testStep == 1 && t > 22f) { testStep = 2; testKey = new Event { type = EventType.KeyDown, keyCode = KeyCode.Return }; }
+            else if (testStep == 2 && t > 24f) { testStep = 3; Log.Info("autotest : tchat historique : " + string.Join(" | ", Chat.History.ToArray())); }
+            else if (testStep == 3 && t > 26f) { testStep = 4; ChatOpen = true; chatText = "second " + Session.LocalId; testKey = new Event { type = EventType.KeyDown, character = '\n' }; }
+            else if (testStep == 4 && t > 30f) { testStep = 5; Log.Info("autotest : tchat historique : " + string.Join(" | ", Chat.History.ToArray()) + " ; ligne " + (ChatOpen ? "ouverte" : "fermee")); }
+        }
+
         public static void Test(string mode, float t)
         {
+            if (mode == "tchat") { TestChat(t); return; }
             if (mode != "menu" || testEnd || t < 20f) return;
             int k = (int)((t - 20f) / 3f);
             if (k >= tabs.Length)
