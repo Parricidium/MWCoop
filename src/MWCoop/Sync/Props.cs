@@ -180,6 +180,7 @@ namespace MWCoop
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
                 if (rb.transform.root.name == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
+                if (Garage.Owns(rb)) continue;   // levage d'un cric (corps rajoute par le jeu) : Garage, pas Props (recalage de l'hote sinon)
                 PlayMakerFSM use;
                 string id = ItemId(rb.gameObject, out use);
                 if (id.Length == 0) id = PackageKey(rb.gameObject);
