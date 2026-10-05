@@ -1055,7 +1055,9 @@ namespace MWCoop
                 // Reperes du modele lui-meme (epaules), pas de la racine de l'avatar.
                 Transform shr = Bone("shoulder_right");
                 Vector3 right = shr != null ? (shr.position - sh.position).normalized : Root.transform.right;
-                cig.transform.rotation = Quaternion.FromToRotation(Vector3.up, right);   // axe du cylindre : en travers de la main
+                // Axe du cylindre en travers de la main, le bout rougeoyant (+y) vers l'EXTERIEUR (main gauche : a l'oppose
+                // de l'epaule droite) ; il etait cote paume, filtre dehors (retour de JD du 05/10).
+                cig.transform.rotation = Quaternion.FromToRotation(Vector3.up, -right);
                 // L'os de la main est au poignet, celui des doigts au bout : la cigarette est tenue au bout des doigts.
                 Transform finger = Bone("finger_left");
                 Vector3 at = finger != null ? Vector3.Lerp(hand.position, finger.position, 0.8f) : hand.position + (hand.position - sh.position).normalized * 0.08f;

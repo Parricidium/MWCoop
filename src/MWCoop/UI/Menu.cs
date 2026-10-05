@@ -154,10 +154,12 @@ namespace MWCoop
             Style.Glass(new Rect(x, y, w, h), Style.Px(22));
 
             // Entete : nom du mod, pastille de session, version.
-            float hh = Style.Px(74);
-            var head = new Rect(x + pad, y + Style.Px(8), w - 2 * pad, hh - Style.Px(8));
-            Style.Title(head, "MWCoop", Style.White, TextAnchor.MiddleLeft, 36);
-            float nx = head.x + Style.TitleWidth("MWCoop", 36) + Style.Px(14);
+            float hh = Style.Px(92);
+            var head = new Rect(x + pad, y + Style.Px(10), w - 2 * pad, hh - Style.Px(14));
+            // Le logo « my Winter Car coop » (a defaut, le nom en texte).
+            float lw = Style.Logo(head);
+            if (lw <= 0f) { Style.Title(head, "MWCoop", Style.White, TextAnchor.MiddleLeft, 36); lw = Style.TitleWidth("MWCoop", 36); }
+            float nx = head.x + lw + Style.Px(14);
             string badge = !Session.Active ? "SOLO" : Session.IsHost ? Lang.T("H\u00D4TE", "HOST") : Lang.T("INVIT\u00C9", "GUEST");
             float bw = Style.Width(badge, 14) + Style.Px(22), bh = Style.Px(26);
             var br = new Rect(nx, head.center.y - bh / 2 + Style.Px(2), bw, bh);

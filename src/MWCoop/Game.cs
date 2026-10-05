@@ -137,6 +137,18 @@ namespace MWCoop
             if (v != null) v.Value = value; else Log.Warn("globale booleenne absente : " + name);
         }
 
+        public static float GlobalFloat(string name)
+        {
+            var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmFloat(name);
+            return v != null ? v.Value : -1f;
+        }
+
+        public static void SetGlobalFloat(string name, float value)
+        {
+            var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmFloat(name);
+            if (v != null) v.Value = value; else Log.Warn("globale flottante absente : " + name);
+        }
+
         static System.Reflection.MethodInfo switchState;
 
         // Force l'etat d'un automate (Fsm.SwitchState est prive dans cette version de PlayMaker).

@@ -57,7 +57,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            ents.Clear(); mutedSpawners.Clear();
+            ents.Clear(); mutedSpawners.Clear(); wokenLogged.Clear(); triggersMuted = false;
             built = false; verified = false; remap = null; hostKeys = null; hostKeysGot = 0; nextAsk = 0;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 6f : -1;
             Police.OnLevelLoaded();
@@ -224,6 +224,7 @@ namespace MWCoop
                 Mute(e);
                 if (e.T.gameObject.activeSelf != on) e.T.gameObject.SetActive(on);
                 if (!on) continue;
+                if (!e.T.gameObject.activeInHierarchy) WakeParents(e);
                 if (e.Mesh != null && !e.Mesh.activeSelf) e.Mesh.SetActive(true);   // cachee par Move avant sa coupure
                 if (e.LastRecv <= 0 || (p - e.T.position).sqrMagnitude > 400f) { e.T.position = p; e.T.rotation = q; }
                 e.Pos = p; e.Rot = q; e.Vel = v; e.LastRecv = now;
@@ -300,6 +301,36 @@ namespace MWCoop
                      + string.Join(", ", notHere.ToArray()) + " ; absentes chez l'hote : " + string.Join(", ", notThere.ToArray()));
         }
 
+        // Conteneur (TRAFFIC/VehiclesHighway ou VehiclesDirtRoad) eteint ici alors que l'hote montre la voiture : le jeu
+        // n'allume que celui de la route ou passe le joueur LOCAL (TRAFFIC/TriggerManager, declencheurs d'entree et de
+        // sortie). Chez l'invite les voitures de la route de l'hote restaient donc invisibles (vraie partie du 05/10 :
+        // « 7 actifs, 17 en mouvement selon l'hote »). On rallume les parents, et ces declencheurs sont coupes ici.
+        static readonly HashSet<GameObject> wokenLogged = new HashSet<GameObject>();
+
+        static void WakeParents(Ent e)
+        {
+            MuteTriggerManager();
+            for (Transform p = e.T.parent; p != null; p = p.parent)
+                if (!p.gameObject.activeSelf)
+                {
+                    p.gameObject.SetActive(true);
+                    if (wokenLogged.Add(p.gameObject)) Log.Info("trafic : " + Recon.Path(p) + " rallume ici (eteint par les declencheurs du joueur local, l'hote y a " + e.T.name + ")");
+                }
+        }
+
+        static bool triggersMuted, testOffDone;
+
+        static void MuteTriggerManager()
+        {
+            if (triggersMuted) return;
+            triggersMuted = true;
+            GameObject tm = Game.FindAny("TRAFFIC/TriggerManager");
+            if (tm == null) { Log.Warn("trafic : TRAFFIC/TriggerManager introuvable"); return; }
+            int n = 0;
+            foreach (PlayMakerFSM f in tm.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.enabled) { f.enabled = false; n++; }
+            Log.Info("trafic : " + n + " declencheurs de TRAFFIC/TriggerManager coupes ici (routes allumees d'apres l'hote)");
+        }
+
         // Coupe la logique locale d'une entite (une fois) et celle des conteneurs qui la font apparaitre.
         static void Mute(Ent e)
         {
@@ -336,6 +367,14 @@ namespace MWCoop
         {
             Police.Test(mode, t);
             Bus.Test(mode, t);
+            // [Test] EteindreConteneur=chemin (invite, 25 s) : comme un declencheur de route du joueur local.
+            string off = Config.Get("Test", "EteindreConteneur", "");
+            if (off.Length > 0 && !Session.IsHost && t > 25f && !testOffDone)
+            {
+                testOffDone = true;
+                GameObject c = Game.FindAny(off);
+                if (c != null) { c.SetActive(false); Log.Info("autotest : " + off + " eteint ici"); }
+            }
             if (mode != "train" || t < 10f || Time.realtimeSinceStartup < nextTrainLog) return;
             nextTrainLog = Time.realtimeSinceStartup + 2f;
             Ent tr = null;

@@ -105,6 +105,7 @@ namespace MWCoop
             // Liste des voitures changee apres le premier releve (taxi active) : releve tout de suite.
             if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
             if (!FindPlayer()) return;
+            if (current != null) TrackSpeed(current.CarT);
             if (current != null)
             {
                 // Voiture detruite, ou rangee (taxi remis en place par son travail : SetActive(false), rejoue chez
@@ -122,7 +123,12 @@ namespace MWCoop
                              + " parent " + (player.parent != null ? player.parent.name : "-") + " echelle " + player.localScale.ToString("F2") + " cc " + (controller != null && controller.enabled)
                              + " pivot " + current.CarT.InverseTransformPoint(pivot.position).ToString("F3"));
                 }
-                if (Input.GetKeyDown(KeyCode.Return) && now - satAt > 0.6f) { Leave(); return; }
+                if (Input.GetKeyDown(KeyCode.Return) && now - satAt > 0.6f)
+                {
+                    // Pas de sortie en roulant (demande de JD, 05/10) : on descend a l'arret.
+                    if (Moving(current.CarT)) { Refuse(Lang.T("La voiture roule : attends qu'elle s'arr\u00EAte pour descendre", "The car is moving: wait until it stops to get out")); return; }
+                    Leave(); return;
+                }
                 // Tete : la ou la camera s'est posee (le jeu l'abaisse en 0,4 s), puis renvoyee de temps en temps.
                 if (now >= nextResend && now - satAt > 0.7f)
                 {
@@ -140,8 +146,49 @@ namespace MWCoop
             }
             Seat best = null;
             if (VehicleSync.LocalDriving < 0 && !Game.GlobalBool("PlayerSeated") && !InDriverZone()) best = InZone();
+            if (best != null) TrackSpeed(best.CarT);
             Icon(best != null);
-            if (best != null && Input.GetKeyDown(KeyCode.Return)) Sit(best);
+            if (best != null && Input.GetKeyDown(KeyCode.Return))
+            {
+                if (Moving(best.CarT)) Refuse(Lang.T("La voiture roule : on monte \u00E0 l'arr\u00EAt", "The car is moving: get in once it stops"));
+                else Sit(best);
+            }
+        }
+
+        // Vitesse de la voiture d'apres sa position (la copie d'une voiture conduite par un autre est cinematique : sa
+        // vitesse physique reste nulle). Plus de 1,5 m/s (5 km/h) : elle roule.
+        static Transform speedCar;
+        static Vector3 speedPos;
+        static float speedAt, speedVal, refusedAt;
+
+        static bool Moving(Transform car)
+        {
+            if (car == null) return false;
+            float now = Time.realtimeSinceStartup;
+            if (car != speedCar || now - speedAt > 0.5f) { speedCar = car; speedPos = car.position; speedAt = now; speedVal = 0f; }
+            Rigidbody rb = car.GetComponent<Rigidbody>();
+            float v = rb != null && !rb.isKinematic ? rb.velocity.magnitude : speedVal;
+            return v > 1.5f;
+        }
+
+        // Chaque image : vitesse mesuree de la voiture ou l'on est assis, ou de la plus proche place libre.
+        static void TrackSpeed(Transform car)
+        {
+            if (car == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (car != speedCar) { speedCar = car; speedPos = car.position; speedAt = now; speedVal = 0f; return; }
+            float dt = now - speedAt;
+            if (dt < 0.1f) return;
+            float v = (car.position - speedPos).magnitude / dt;
+            speedVal = dt > 0.5f ? v : Mathf.Lerp(speedVal, v, 0.5f);
+            speedPos = car.position; speedAt = now;
+        }
+
+        static void Refuse(string text)
+        {
+            if (Time.realtimeSinceStartup - refusedAt < 2f) return;
+            refusedAt = Time.realtimeSinceStartup;
+            Hud.Toast(text);
         }
 
         // La place ou se tient le joueur : dans l'habitacle (pieds sur le plancher, pas dehors), a moins de

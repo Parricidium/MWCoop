@@ -315,6 +315,44 @@ namespace MWCoop
             Ring(r, rad, active ? Accent : glassEdge);
         }
 
+        // ---- Logo ----
+
+        static Texture2D logo;
+        static bool logoTried;
+
+        // Titre « my Winter Car coop » (launcher\logo-titre.png, ressource du DLL) a gauche du rectangle, a sa hauteur ;
+        // largeur dessinee (0 : pas de logo, l'appelant ecrit « MWCoop »).
+        public static float Logo(Rect r)
+        {
+            if (!logoTried)
+            {
+                logoTried = true;
+                try
+                {
+                    using (var s = typeof(Style).Assembly.GetManifestResourceStream("MWCoop.logo-titre.png"))
+                        if (s != null)
+                        {
+                            var b = new byte[s.Length];
+                            s.Read(b, 0, b.Length);
+                            logo = new Texture2D(2, 2, TextureFormat.ARGB32, false) { hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp };
+                            if (!logo.LoadImage(b)) logo = null;
+                        }
+                }
+                catch (System.Exception e) { Log.Warn("interface : logo illisible : " + e.Message); logo = null; }
+                Log.Info("interface : logo " + (logo != null ? logo.width + "x" + logo.height : "absent"));
+            }
+            if (logo == null) return 0f;
+            float w = Mathf.Round(r.height * logo.width / logo.height);
+            if (Painting)
+            {
+                Color old = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, Alpha);
+                GUI.DrawTexture(new Rect(r.x, r.y, w, r.height), logo, ScaleMode.StretchToFill, true);
+                GUI.color = old;
+            }
+            return w;
+        }
+
         // ---- Curseur ----
 
         // Fleche dessinee par le mod (le jeu cache le curseur systeme en partie, meme libere) au point donne.

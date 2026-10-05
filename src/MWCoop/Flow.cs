@@ -20,13 +20,18 @@ namespace MWCoop
         // Invite : l'hote est en partie et la sauvegarde recue, le menu a ete lance (ecran d'attente).
         public static bool GuestJoining { get { return guestStarted; } }
 
+        // Hote lance par le salon : "continuer" | "nouvelle" (ecran de demarrage) ; null sinon. Remis a null en jeu.
+        public static string HostChoice;
+        // Le bouton du menu a ete actionne : le jeu charge la partie.
+        public static bool MenuDone { get { return step == 9; } }
+
         // Partie demandee par le salon du lanceur (une seule fois par lancement du jeu).
         static string LaunchChoice
         {
             get
             {
                 if (launchUsed) return null;
-                string p = Config.Get("Coop", "Partie", "").ToLowerInvariant();
+                string p = Config.Get("Coop", "Partie", Config.Get("Test", "Partie", "")).ToLowerInvariant();   // ([Test] Partie : essais)
                 return p == "continuer" || p == "nouvelle" ? p : null;
             }
         }
@@ -45,7 +50,7 @@ namespace MWCoop
             if (level == "SplashScreen" && AutoSkip) Splash();
             else if (level == "Intro" && AutoSkip) Intro();
             else if (level == "MainMenu") Menu();
-            if (level == "GAME") guestStarted = false;
+            if (level == "GAME") { guestStarted = false; HostChoice = null; }
         }
 
         static void Splash()
@@ -91,6 +96,7 @@ namespace MWCoop
                 launchUsed = true;
                 if (choice == "continuer" && !HasSave()) choice = "nouvelle";
                 Log.Info("salon : partie demandee par le lanceur : " + choice);
+                if (Session.Active && Session.IsHost) HostChoice = choice;
                 return choice;
             }
             if (!SaveTransfer.IsolatedProfile) return null;   // les tests ne touchent qu'aux profils isoles

@@ -1057,7 +1057,8 @@ namespace MWCoop
         // [Test] TestPiece, cigarettes par defaut) et ou ils sont ('?' : disparu) ; chez l'invite : « consomme
         // par le joueur #0 » et ce paquet a '?'.
         static int testStep;
-        static float testAt, testLog;
+        static float testAt, testLog, testThirstLog;
+        static int testThirstSet;
         static HashSet<string> testPacks, testBags;
         static string lastEnd, testBox;   // dernier article fini ici (dit ou recu) ; boite videe par l'essai
         static bool testBoxLogged;
@@ -1221,6 +1222,32 @@ namespace MWCoop
         {
             string prefix = Config.Get("Test", "TestPiece", "");
             System.Predicate<PlayMakerFSM> isCase = f => f.Fsm.GetState(Bottle) != null && ActiveChildren(f.transform) > 0;
+            // [Test] BiereBuveur=invite : c'est l'invite qui boit (soif mise a 60 a 26 s, suivie toutes les 2 s).
+            string who = Config.Get("Test", "BiereBuveur", "hote");   // hote, invite, ou deux (l'hote boit, puis l'invite)
+            bool drinker = who == "deux" || (who == "invite") != Session.IsHost;
+            if (t > 26f && testThirstSet == 0 && drinker) { testThirstSet = 1; Game.SetGlobalFloat("PlayerThirst", 60f); }
+            if (t > 26f && t < 90f && t - testThirstLog >= 2f)
+            {
+                testThirstLog = t;
+                Log.Info("autotest : biere soif " + Game.GlobalFloat("PlayerThirst").ToString("F1") + " ivresse " + Game.GlobalFloat("PlayerDrunk").ToString("F2")
+                         + " urine " + Game.GlobalFloat("PlayerUrine").ToString("F1") + (drinker ? " (buveur)" : ""));
+            }
+            if (!Session.IsHost && drinker)
+            {
+                // (l'hote achete la caisse a 30 s s'il n'y en a pas : on la cherche de 40 a 70 s)
+                if (t > (who == "deux" ? 52f : 40f) && t < 75f && testStep == 0 && t - testAt >= 2f)
+                {
+                    testAt = t;
+                    testFsm = TestFind(prefix, isCase);
+                    if (testFsm != null) { testStep = 1; TestTakeBottle(testFsm); }
+                }
+                return;
+            }
+            if (Session.IsHost && !drinker)
+            {
+                if (t > 30f && testStep == 0) { testStep = 1; if (TestFind(prefix, isCase) == null) TestBuyFallback(t, Config.Get("Test", "TestAchat", "Beer"), false); }
+                return;
+            }
             if (Session.IsHost && t > 30f && testStep == 0)
             {
                 testStep = 1;
