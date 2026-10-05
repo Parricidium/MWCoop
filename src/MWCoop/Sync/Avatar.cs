@@ -17,6 +17,11 @@ namespace MWCoop
     //    regardant en bas, en arriere en regardant en haut) ; au repos, les bras le long du corps.
     //  - vetements portes (Wear, bits de l'etat du joueur) : teinte du corps (veste, combinaison), copie du
     //    casque sur la tete.
+    //  - gestes (Gestures) : seuls les clips fat_* et worker1_sitdown animent bien ce squelette (ceux des autres PNJ
+    //    ne bougent que l'os racine) -> poses calculees apres les animations : bras vers une cible (IK a deux os :
+    //    coup, doigt, pouce, montre, pousser, uriner, objet tenu), buste penche (touche de penche, ivresse qui
+    //    balance), corps a terre (evanoui, assomme), assis sur le siege envoye (chaise, canape, banc), jet copie de
+    //    celui du joueur local.
     public class Avatar
     {
         static GameObject template;          // copie inactive, sans logique
@@ -61,6 +66,15 @@ namespace MWCoop
         string carName;
         float armWR, armWL, crouchW, crouchDepth;
         bool crouching;
+        // Gestes (Gestures) : a terre (evanoui, assomme), penche et ivresse affiches, poids des bras vers leur cible,
+        // assis sur un siege du jeu (bassin mesure dans la pose assise, repere avatar), jet.
+        float lieW, sideS, fwdS, swayT;
+        readonly float[] wR = new float[5], wL = new float[4];
+        Vector3 sitPelvis;
+        bool chair, sitMeasured, peeTried;
+        GameObject pee;
+        Quaternion peeLocal = Quaternion.identity;
+        string gestR = "", gestL = "";
         // Os que l'animation en cours ne pilote pas : nos retouches s'y ajouteraient d'une image a
         // l'autre. On garde la valeur de base et celle posee ; si l'os n'a pas bouge depuis, on le remet.
         Quaternion headRest;                 // tete par rapport a l'avatar, debout (pour viser en voiture)
@@ -449,6 +463,15 @@ namespace MWCoop
             Helmet((Player.State.Flags & PlayerSync.F_Helmet) != 0);
             Pose();
             PlaceCigarette();
+            PlacePee();
+            // Assis sur un siege : ou tombe le bassin dans la pose assise (repere avatar) -> Apply y place le siege.
+            Transform pv = Bone("pelvis");
+            if (chair && sitting && pv != null)
+            {
+                Vector3 pl = Root.transform.InverseTransformPoint(pv.position);
+                sitPelvis = sitMeasured ? Vector3.Lerp(sitPelvis, pl, 0.2f) : pl;
+                sitMeasured = true;
+            }
             if (Config.GetInt("Test", "JournalPose", 0) != 0 && Time.realtimeSinceStartup >= nextPoseLog && headBone != null && Bone("pelvis") != null)
             {
                 nextPoseLog = Time.realtimeSinceStartup + 5f;
@@ -489,7 +512,7 @@ namespace MWCoop
         // on tourne le modele pour qu'il regarde la ou regarde le joueur (une fois).
         void FixFacing()
         {
-            if (facingFrames < 0 || charT == null || sitting || inCar) return;
+            if (facingFrames < 0 || charT == null || sitting || inCar || lieW > 0.01f) return;
             if (++facingFrames < 10) return;
             facingFrames = -1;
             float ang;
@@ -557,7 +580,16 @@ namespace MWCoop
                     hp.rotation = Root.transform.rotation * Quaternion.Euler(pitch, Mathf.DeltaAngle(Root.transform.eulerAngles.y, st.Yaw), 0f) * headRest;
                 return;
             }
-            if ((f & PlayerSync.F_Sleep) != 0 || ForceClip != null) return;
+            if (ForceClip != null) return;
+            if (lieW > 0.01f)
+            {
+                // A terre : raide, bras le long du corps (vers les pieds).
+                gestR = gestL = "a terre";
+                ArmDown("shoulder_right", "hand_right", 1f, 1f);
+                ArmDown("shoulder_left", "hand_left", -1f, 1f);
+                return;
+            }
+            if ((f & PlayerSync.F_Sleep) != 0) return;
             // Accroupi (deux niveaux, comme le jeu) : voir Crouch.
             crouchW = Mathf.MoveTowards(crouchW, crouchDepth, Time.deltaTime * 3f);
             if (crouchW > 0.001f) Crouch(crouchW);
@@ -565,13 +597,199 @@ namespace MWCoop
             Turn(Bone("spine_middle"), 0f, pitch * 0.15f);
             Turn(Bone("spine_upper"), 0f, pitch * 0.2f);
             Turn(Bone("HeadPivot") ?? headBone, 0f, pitch * 0.5f);
+            Gestures.Remote g = Gestures.Of(Player.Id);
+            LeanPose(st, g);
+            ChooseGestures(f, g);
             // Au repos et sans geste : bras le long du corps.
             bool idle = !moving && (!sitting || crouching);   // accroupi : bras le long du corps / vers le sol
             float dt = Time.deltaTime * 3f;
-            armWR = Mathf.MoveTowards(armWR, idle && (f & (PlayerSync.F_Drink | PlayerSync.F_Carry | PlayerSync.F_Hello)) == 0 && (armR == null || !armR.IsPlaying("saluer")) ? 1f : 0f, dt);
-            armWL = Mathf.MoveTowards(armWL, idle && (f & PlayerSync.F_Smoke) == 0 ? 1f : 0f, dt);
+            armWR = Mathf.MoveTowards(armWR, idle && gestR.Length == 0 && (f & (PlayerSync.F_Drink | PlayerSync.F_Carry | PlayerSync.F_Hello)) == 0 && (armR == null || !armR.IsPlaying("saluer")) ? 1f : 0f, dt);
+            armWL = Mathf.MoveTowards(armWL, idle && gestL.Length == 0 && (f & PlayerSync.F_Smoke) == 0 ? 1f : 0f, dt);
             ArmDown("shoulder_right", "hand_right", 1f, armWR);
             ArmDown("shoulder_left", "hand_left", -1f, armWL);
+            GesturePose(st, f, g);
+        }
+
+        // ---------------------------------------------------------------- gestes (Gestures)
+        // Buste penche : touche de penche de l'autre (degres, droite +, avant +), balancement d'ivresse (PlayerDrunk :
+        // jusqu'a 7 deg a 2,5), la tete se redresse a moitie. Assis sur un siege : la tete et le haut du buste suivent
+        // son regard (le corps garde le sens du siege).
+        void LeanPose(PlayerState st, Gestures.Remote g)
+        {
+            Transform r = Root.transform;
+            float side = 0f, fwd = 0f, drunk = 0f;
+            if (g != null && !chair && !crouching) { side = g.LeanSide; fwd = g.LeanFwd; }
+            if (g != null) drunk = g.Drunk;
+            sideS = Mathf.MoveTowards(sideS, Mathf.Clamp(side, -30f, 30f), Time.deltaTime * 90f);
+            fwdS = Mathf.MoveTowards(fwdS, Mathf.Clamp(fwd, -30f, 40f), Time.deltaTime * 90f);
+            swayT += Time.deltaTime;
+            float amp = Mathf.Clamp01(drunk / 2.5f) * 7f;
+            float roll = sideS + amp * Mathf.Sin(swayT * 1.1f), pit = fwdS + amp * 0.5f * Mathf.Sin(swayT * 0.7f + 1f);
+            if (Mathf.Abs(roll) > 0.05f || Mathf.Abs(pit) > 0.05f)
+            {
+                foreach (string sp in new[] { "spine_middle", "spine_upper" })
+                {
+                    Transform b = Bone(sp);
+                    if (b != null) b.rotation = Quaternion.AngleAxis(-roll * 0.5f, r.forward) * Quaternion.AngleAxis(pit * 0.5f, r.right) * b.rotation;
+                }
+                Transform hp = Bone("HeadPivot") ?? headBone;
+                if (hp != null) hp.rotation = Quaternion.AngleAxis(roll * 0.4f, r.forward) * hp.rotation;
+            }
+            if (chair)
+            {
+                float dy = Mathf.Clamp(Mathf.DeltaAngle(r.eulerAngles.y, st.Yaw), -80f, 80f);
+                Turn(Bone("spine_upper"), dy * 0.25f, 0f);
+                Turn(Bone("HeadPivot") ?? headBone, dy * 0.6f, 0f);
+            }
+        }
+
+        // Gestes en cours par bras (journal, et bras qui ne retombent pas le long du corps).
+        void ChooseGestures(int f, Gestures.Remote g)
+        {
+            int gb = g != null ? g.Bits : 0;
+            float now = Time.realtimeSinceStartup;
+            bool carry = (f & PlayerSync.F_Carry) != 0;
+            float heldSize = g != null && (gb & Gestures.G_Held) != 0 ? g.HeldSize : 0.4f;
+            gestR = g != null && now - g.PunchAt < 0.55f ? "coup" : g != null && now - g.FingerAt < 1.6f ? "doigt"
+                  : (gb & Gestures.G_Thumb) != 0 ? "pouce" : (gb & Gestures.G_Push) != 0 ? "pousse" : (gb & Gestures.G_Piss) != 0 ? "pipi"
+                  : carry ? "porte" : "";
+            gestL = (gb & Gestures.G_Watch) != 0 ? "montre" : (gb & Gestures.G_Push) != 0 ? "pousse" : (gb & Gestures.G_Piss) != 0 ? "pipi"
+                  : carry && heldSize > 0.25f && (f & PlayerSync.F_Smoke) == 0 ? "porte" : "";
+        }
+
+        static void Ease(ref float w, bool on, float rate) { w = Mathf.MoveTowards(w, on ? 1f : 0f, rate); }
+
+        // Bras vers leur cible, du moins prioritaire au plus prioritaire (chacun part de la pose laissee par le
+        // precedent) ; poids lisses ; le coup suit une courbe (aller 0,12 s, retour 0,4 s).
+        void GesturePose(PlayerState st, int f, Gestures.Remote g)
+        {
+            Transform r = Root.transform;
+            Transform sR = Bone("shoulder_right"), sL = Bone("shoulder_left"), pelvis = Bone("pelvis");
+            if (sR == null || sL == null) return;
+            int gb = g != null ? g.Bits : 0;
+            float now = Time.realtimeSinceStartup;
+            float tp = g != null ? now - g.PunchAt : 99f;
+            float punch = tp < 0.12f ? tp / 0.12f : tp < 0.52f ? 1f - (tp - 0.12f) / 0.4f : 0f;
+            bool finger = g != null && now - g.FingerAt < 1.6f;
+            bool carry = (f & PlayerSync.F_Carry) != 0 && !inCar;
+            bool piss = (gb & Gestures.G_Piss) != 0 && pelvis != null, push = (gb & Gestures.G_Push) != 0;
+            float rate = Time.deltaTime * 5f;
+            Ease(ref wR[0], finger, rate); Ease(ref wR[1], (gb & Gestures.G_Thumb) != 0, rate); Ease(ref wR[2], push, rate);
+            Ease(ref wR[3], piss, rate); Ease(ref wR[4], carry, rate);
+            Ease(ref wL[0], (gb & Gestures.G_Watch) != 0, rate); Ease(ref wL[1], push, rate); Ease(ref wL[2], piss, rate);
+            Ease(ref wL[3], gestL == "porte", rate);
+            // Objet tenu : place recue (repere de sa camera) ou devant lui ; deux mains de part et d'autre s'il est large.
+            if (wR[4] > 0.001f || wL[3] > 0.001f)
+            {
+                Vector3 head = chair ? st.Head : r.position + (st.Head - st.Feet);
+                Vector3 local = g != null && (gb & Gestures.G_Held) != 0 ? g.Held : new Vector3(0f, -0.3f, 0.6f);
+                float size = g != null && (gb & Gestures.G_Held) != 0 ? g.HeldSize : 0.4f;
+                Vector3 at = head + Quaternion.Euler(Mathf.Clamp(st.Pitch, -80f, 80f), st.Yaw, 0f) * local;
+                float half = wL[3] > 0.001f ? Mathf.Min(size * 0.5f, 0.25f) : 0f;
+                ArmTo(true, at + r.right * half, wR[4]);
+                ArmTo(false, at - r.right * half, wL[3]);
+            }
+            if (pelvis != null)
+            {
+                Vector3 crotch = pelvis.position + r.forward * 0.2f - r.up * 0.02f;
+                ArmTo(true, crotch + r.right * 0.05f, wR[3]);
+                ArmTo(false, crotch - r.right * 0.05f, wL[2]);
+            }
+            ArmTo(true, sR.position + r.forward * 0.55f - r.up * 0.05f, wR[2]);
+            ArmTo(false, sL.position + r.forward * 0.55f - r.up * 0.05f, wL[1]);
+            // Pouce leve (auto-stop) : bras tendu sur le cote, un peu en avant.
+            ArmTo(true, sR.position + r.right * 0.55f + r.forward * 0.15f + r.up * 0.02f, wR[1]);
+            // Montre : poignet gauche devant la poitrine, la tete baissee dessus.
+            Vector3 chest = (sR.position + sL.position) * 0.5f;
+            ArmTo(false, chest + r.forward * 0.32f - r.up * 0.08f + r.right * 0.05f, wL[0]);
+            if (wL[0] > 0.001f) Turn(Bone("HeadPivot") ?? headBone, 0f, 25f * wL[0]);
+            // Doigt : main levee devant, a hauteur du visage.
+            ArmTo(true, sR.position + r.forward * 0.45f + r.up * 0.25f - r.right * 0.05f, wR[0]);
+            // Coup de poing : bras tendu droit devant.
+            ArmTo(true, sR.position + r.forward * 0.7f - r.right * 0.12f, punch);
+        }
+
+        // IK a deux os du bras (epaule -> coude -> poignet) : la main va vers 'target' (dosage w, depuis sa place
+        // actuelle), le coude vers le bas, l'arriere et l'exterieur.
+        void ArmTo(bool right, Vector3 target, float w)
+        {
+            if (w <= 0.001f) return;
+            string s = right ? "_right" : "_left";
+            Transform sh = Bone("shoulder" + s), el = Bone("arm" + s), ha = Bone("hand" + s);
+            if (sh == null || el == null || ha == null) return;
+            Transform r = Root.transform;
+            Vector3 goal = Vector3.Lerp(ha.position, target, Mathf.Clamp01(w));
+            float l1 = (el.position - sh.position).magnitude, l2 = (ha.position - el.position).magnitude;
+            if (l1 < 1e-3f || l2 < 1e-3f) return;
+            Vector3 d = goal - sh.position;
+            float dist = Mathf.Clamp(d.magnitude, Mathf.Abs(l1 - l2) + 0.01f, l1 + l2 - 0.001f);
+            Vector3 dir = d.normalized;
+            Vector3 hint = -r.up * 0.7f - r.forward * 0.3f + r.right * (right ? 0.4f : -0.4f);
+            Vector3 bend = Vector3.ProjectOnPlane(hint, dir).normalized;
+            float cosA = Mathf.Clamp((l1 * l1 + dist * dist - l2 * l2) / (2f * l1 * dist), -1f, 1f);
+            Vector3 elbow = sh.position + dir * (l1 * cosA) + bend * (l1 * Mathf.Sqrt(1f - cosA * cosA));
+            sh.rotation = Quaternion.FromToRotation(el.position - sh.position, elbow - sh.position) * sh.rotation;
+            el.rotation = Quaternion.FromToRotation(ha.position - el.position, sh.position + dir * dist - el.position) * el.rotation;
+        }
+
+        // Jet : copie de celui du joueur local (PLAYER/.../Piss/Fluid/Fluid, particules), faite au premier pipi.
+        void Pee(bool on)
+        {
+            if (on && pee == null && !peeTried)
+            {
+                peeTried = true;
+                GameObject pl = GameObject.Find("PLAYER");
+                Transform piss = pl != null ? pl.transform.Find("Pivot/AnimPivot/Camera/FPSCamera/Piss") : null;
+                Transform src = piss != null ? piss.Find("Fluid/Fluid") : null;
+                if (src != null)
+                {
+                    peeLocal = Quaternion.Inverse(piss.rotation) * src.rotation;
+                    pee = (GameObject)Object.Instantiate(src.gameObject);
+                    foreach (PlayMakerFSM pf in pee.GetComponentsInChildren<PlayMakerFSM>(true)) Object.Destroy(pf);
+                    foreach (Collider c in pee.GetComponentsInChildren<Collider>(true)) Object.Destroy(c);
+                    pee.name = "MWCoop-Jet";
+                    pee.transform.parent = Root.transform;
+                    pee.SetActive(true);
+                }
+                else Log.Warn("avatar : jet du joueur introuvable (Piss/Fluid/Fluid)");
+            }
+            if (pee == null) return;
+            var pe = pee.GetComponent<ParticleEmitter>();
+            if (pe == null) return;
+            pe.emit = on;
+            if (on && pe.maxEmission < 1f) { pe.minEmission = 150f; pe.maxEmission = 250f; }
+        }
+
+        void PlacePee()
+        {
+            Transform pv = Bone("pelvis");
+            if (pee == null || pv == null) return;
+            Transform r = Root.transform;
+            pee.transform.position = pv.position + r.forward * 0.17f - r.up * 0.03f;
+            pee.transform.rotation = r.rotation * Quaternion.Euler(15f, 0f, 0f) * peeLocal;
+        }
+
+        // Essais (Gestures.Test) : ce que montre l'avatar.
+        public string GestureState()
+        {
+            Transform r = Root.transform;
+            Gestures.Remote g = Gestures.Of(Player.Id);
+            var sb = new System.Text.StringBuilder();
+            sb.Append("recu ").Append(g != null ? Gestures.Names(g.Bits) : "rien");
+            if (g != null) sb.Append(", ivresse ").Append(g.Drunk.ToString("F2")).Append(", penche ").Append(g.LeanSide.ToString("F0")).Append('/').Append(g.LeanFwd.ToString("F0"));
+            sb.Append(" | corps ").Append(body0 ?? "-").Append(", bras d '").Append(gestR).Append("' g '").Append(gestL).Append('\'');
+            sb.Append(", a terre ").Append(lieW.ToString("F2")).Append(", buste ").Append(sideS.ToString("F0")).Append('/').Append(fwdS.ToString("F0"));
+            Transform hr = Bone("hand_right"), hl = Bone("hand_left"), pv = Bone("pelvis");
+            if (hr != null && hl != null) sb.Append(", mains ").Append(r.InverseTransformPoint(hr.position).ToString("F2")).Append(' ').Append(r.InverseTransformPoint(hl.position).ToString("F2"));
+            if (chair && g != null && pv != null)
+            {
+                Vector3 e = pv.position - g.Seat; e.y = 0f;
+                sb.Append(", sur le siege ").Append(g.Seat.ToString("F2")).Append(" sens ").Append(g.SeatYaw.ToString("F0"))
+                  .Append(", bassin ").Append(pv.position.ToString("F2")).Append(" (ecart ").Append(e.magnitude.ToString("F2")).Append(" m)");
+            }
+            if (pee != null) { var pe = pee.GetComponent<ParticleEmitter>(); sb.Append(", jet ").Append(pe != null && pe.emit).Append(' ').Append(pe != null ? pe.particleCount : 0); }
+            sb.Append(", racine ").Append(r.position.ToString("F2")).Append(" yaw ").Append(r.eulerAngles.y.ToString("F0")).Append(" incl ").Append(Mathf.DeltaAngle(0f, r.eulerAngles.x).ToString("F0"));
+            return sb.ToString();
         }
 
         // Geste d'un bras sur l'Animation de son epaule. Sans geste : le balancement de marche ; a
@@ -599,6 +817,8 @@ namespace MWCoop
                 clothFlags = cloth;
                 ApplyMaterial();
             }
+            Gestures.Remote g = Gestures.Of(pi.Id);
+            bool down = g != null && (g.Bits & Gestures.G_Down) != 0;
             Vector3 seatPos;
             Quaternion seatRot;
             inCar = VehicleSync.SeatPose(pi.Id, st.Head, out seatPos, out seatRot);
@@ -651,9 +871,28 @@ namespace MWCoop
                 Root.transform.position = pos;
                 Root.transform.rotation = Quaternion.Euler(0, yaw, 0);
             }
-            // Assis (vehicule, chaise), couche : pose assise ; accroupi : pose debout pliee (LatePose).
-            bool crouch = (f & PlayerSync.F_Crouch) != 0 && (f & (PlayerSync.F_Seated | PlayerSync.F_Sleep)) == 0;
-            bool sit = (f & (PlayerSync.F_Seated | PlayerSync.F_Sleep)) != 0;
+            // Assis sur un siege du jeu (chaise, canape, banc, sauna) : pose sur le siege envoye, dans son sens, le
+            // bassin (mesure dans la pose assise, LatePose) au-dessus du milieu du siege ; les pieds au sol du meuble.
+            chair = !inCar && (f & PlayerSync.F_Seated) != 0 && g != null && (g.Bits & Gestures.G_Seat) != 0 && !down;
+            if (chair)
+            {
+                Quaternion sr = Quaternion.Euler(0f, g.SeatYaw, 0f);
+                pos = g.Seat - sr * new Vector3(sitPelvis.x, 0f, sitPelvis.z);
+                yaw = g.SeatYaw;
+                Root.transform.position = pos;
+                Root.transform.rotation = sr;
+            }
+            else sitMeasured = false;
+            // A terre (evanoui, assomme) : le corps tombe en arriere, pivot aux pieds, et reste allonge sur le dos.
+            lieW = Mathf.MoveTowards(lieW, down && !inCar ? 1f : 0f, Time.deltaTime * (down ? 1.2f : 2f));
+            if (lieW > 0.001f && !inCar)
+            {
+                Root.transform.rotation = Root.transform.rotation * Quaternion.Euler(-90f * Mathf.SmoothStep(0f, 1f, lieW), 0f, 0f);
+                Root.transform.position += Vector3.up * 0.14f * lieW;
+            }
+            // Assis (vehicule, chaise), couche : pose assise ; accroupi : pose debout pliee (LatePose). A terre : debout raide.
+            bool crouch = (f & PlayerSync.F_Crouch) != 0 && (f & (PlayerSync.F_Seated | PlayerSync.F_Sleep)) == 0 && !down;
+            bool sit = (f & (PlayerSync.F_Seated | PlayerSync.F_Sleep)) != 0 && !down;
             crouching = crouch;
             // Profondeur : hauteur de camera de l'automate Crouch du joueur (1,4 debout -> 0,3 au ras du sol).
             // Anciennes versions (hauteur du corps envoyee, > 1,4) : accroupi simple.
@@ -704,6 +943,7 @@ namespace MWCoop
                 if ((f & PlayerSync.F_Smoke) != 0 && armL != null && armL["fumer"] != null) SmokeArm(f);
                 else ArmPlay(armL, null, "marche_g", moving);
                 Cigarette((f & PlayerSync.F_Smoke) != 0, (f & PlayerSync.F_Exhale) != 0);
+                Pee(!inCar && !down && g != null && (g.Bits & Gestures.G_Piss) != 0);
             }
         }
 
