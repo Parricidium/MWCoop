@@ -95,6 +95,7 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Chat, F10 menu | |
 | Respawn: in co-op, death no longer ends the game; the player picks where to come back (apartment or parents' house), even after a car crash | |
 | Sync audit (F10 > SYNCHRO): census of every interactive object and which module syncs it, host/guest state comparison every 15 s (lasting differences logged as DESYNC), local actions that are not shared | |
+| Guests' waiting screen instead of the main menu (connection, host, save download, loading); lobby UDP check (tells the host to forward UDP, not just TCP); LOGS tab with "open folder" and "zip to send"; GTA-style F10 menu with keyboard navigation; CD cases and CDs shared; launcher car preview always the complete stock CORRIS | |
 | Taxi (passengers, doors), engine state handed over with the wheel, window frost and scraping, towing rope, pub/inspection/flea market/coffee/bus purchases, outgoing calls, mail orders, worn clothes, bolts of freshly installed parts, firewood, septic tanks, co-op save at the toilet without kicking guests | |
 
 The full list is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
@@ -228,6 +229,12 @@ bar, au contrôle technique, à la brocante, au café et au bus (l'invité ne pa
 sortants, commandes par courrier et colis ; vêtements portés (veste, combinaison, casque) ; boulons des pièces juste
 montées, bois (bûches, fendeuse), fosses septiques ; sauvegarde aux toilettes en coop sans éjecter les invités (un
 invité peut la demander).
+Fait aussi (0.21, retours de JD) : écran d'attente des invités à la place du menu principal (connexion, l'hôte crée
+ou charge la partie, réception de la sauvegarde en %, chargement ; boutons du menu bloqués) ; salon : test UDP de chaque
+invité avant LANCER (« UDP bloqué : l'hôte doit rediriger le port UDP, pas seulement TCP ») ; onglet JOURNAUX bien
+visible avec « Ouvrir le dossier » et « Créer un zip à envoyer » (sur le Bureau) ; menu F10 façon GTA (navigation au
+clavier) ; boîtiers de CD ouverts/fermés et CD sortis vus par tous ; aperçu du lanceur : la CORRIS complète d'origine
+(pièces de série, jantes et pneus), plus l'état de la sauvegarde.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

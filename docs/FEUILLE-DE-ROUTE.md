@@ -38,8 +38,9 @@ pouvoir le faire, et les autres doivent le voir.
       (bar, contrôle technique, brocante, café, bus), vêtements portés, boulons des pièces juste montées, bois et
       fendeuse, fosses septiques, état moteur à la reprise du volant, sauvegarde coop aux toilettes.
       Reste : prix de la brocante tirés au hasard de chaque côté, appels quand l'hôte est loin de la maison.
-- [ ] Lot 3 : boîtier CD (ouvert/fermé) et CD tenu en main ; voiture du lanceur toujours complète d'origine.
-- [ ] Interface : écran d'attente des invités au menu, test UDP dans le salon, journaux plus visibles, F10 façon GTA.
+- [x] Lot 3 (0.21) : boîtier CD (ouvert/fermé) et CD sorti suivis ; voiture du lanceur toujours complète d'origine.
+- [x] Interface (0.21) : écran d'attente des invités au menu, test UDP dans le salon, journaux plus visibles (zip à
+      envoyer), F10 façon GTA.
 - [ ] Plus tard : mods (MSCLoader géré par le lanceur, onglet MODS, comparaison des mods dans le salon).
 
 ## Quêtes et argent

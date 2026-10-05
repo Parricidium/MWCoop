@@ -9,11 +9,26 @@ namespace MWCoop
     public static class Autotest
     {
         static float t0 = -1;
+        static System.Collections.Generic.List<float> captureTimes;
 
         public static void Update()
         {
             string mode = Config.Get("Test", "Autotest", "");
             WaitScreen.Test(mode, Time.realtimeSinceStartup);   // au menu : avant le filtre GAME
+            // [Test] Captures=s1,s2... : capture d'ecran a ces secondes depuis le lancement (menu compris), dumps\ecran-<s>.png.
+            if (captureTimes == null)
+            {
+                captureTimes = new System.Collections.Generic.List<float>();
+                foreach (string c in Config.Get("Test", "Captures", "").Split(',')) { float v; if (float.TryParse(c.Trim(), out v)) captureTimes.Add(v); }
+            }
+            if (captureTimes.Count > 0 && Time.realtimeSinceStartup >= captureTimes[0])
+            {
+                string png = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "ecran-" + ((int)captureTimes[0]).ToString("000") + ".png");
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(png));
+                Application.CaptureScreenshot(png);
+                Log.Info("autotest : capture " + png + " (" + Application.loadedLevelName + ")");
+                captureTimes.RemoveAt(0);
+            }
             if (Application.loadedLevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
