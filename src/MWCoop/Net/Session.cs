@@ -305,5 +305,8 @@ namespace MWCoop.Net
         }
 
         public static PlayerInfo Host { get { PlayerInfo h; Players.TryGetValue(0, out h); return h; } }
+
+        // Invite : accepte par l'hote (connexion etablie).
+        public static bool HostConnected { get { return !IsHost && hostPeer != null && hostPeer.Accepted; } }
     }
 }

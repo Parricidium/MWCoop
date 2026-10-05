@@ -13,6 +13,7 @@ namespace MWCoop
         public static void Update()
         {
             string mode = Config.Get("Test", "Autotest", "");
+            WaitScreen.Test(mode, Time.realtimeSinceStartup);   // au menu : avant le filtre GAME
             if (Application.loadedLevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
@@ -21,7 +22,7 @@ namespace MWCoop
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t);
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             VehicleSync.Test(mode, t); Jobs.Test(mode, t); Parts.Test(mode, t);
-            MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t);
+            MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {
                 GameObject p = GameObject.Find("PLAYER");
