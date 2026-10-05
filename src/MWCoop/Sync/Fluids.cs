@@ -14,6 +14,12 @@ namespace MWCoop
     //    de ses valeurs est ignoree ;
     //  - une valeur que les deux cotes recalculent sans cesse (derivee chaque image) est dite
     //    disputee : seul l'hote l'envoie encore.
+    // Fosses septiques (boulot de la GIFU) : le niveau de chaque fosse (JOBS/HouseShit*/.../ShitLevelTrigger
+    // 'Level', ShitLevel) et le contenu de la citerne (GIFU/ShitTank 'Waste', Waste) ne sont tenus que par
+    // l'autorite de la GIFU (son conducteur, celui qui a laisse son moteur tourner, sinon l'hote : c'est chez
+    // lui que la pompe tourne au vrai regime, tuyau dans la fosse -- voir Jobs, @tuyau). Lui seul les envoie ;
+    // ailleurs la derive locale (pompage refait sur la copie avec le regime recu, montee lente du niveau) n'est
+    // jamais envoyee et la valeur recue l'ecrase. Jamais disputees : une seule source.
     public static class Fluids
     {
         static readonly HashSet<string> Names = new HashSet<string> {
@@ -27,7 +33,19 @@ namespace MWCoop
             public string Key; public PlayMakerFSM Fsm; public FsmFloat Var;
             public float Last, NextSend;
             public int Sends, Recvs; public float WindowStart; public bool Contested;
+            public bool Septic;   // fosse ou citerne : envoyee par l'autorite de la GIFU seulement
         }
+
+        static Rigidbody gifu;   // corps de la GIFU (racine de la citerne)
+
+        static bool SepticVar(PlayMakerFSM f, FsmFloat v)
+        {
+            return v.Name == "Waste" && f.FsmName == "Waste" && f.gameObject.name == "ShitTank"
+                   || v.Name == "ShitLevel" && f.FsmName == "Level" && f.gameObject.name == "ShitLevelTrigger";
+        }
+
+        // Qui tient les fosses et la citerne : l'autorite de la GIFU (l'hote tant qu'elle n'est pas trouvee).
+        static int SepticAuthority() { return gifu != null ? VehicleSync.Authority(gifu) : 0; }
         static readonly Dictionary<string, Watch> byKey = new Dictionary<string, Watch>();
         static readonly List<Watch> watches = new List<Watch>();
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
@@ -67,6 +85,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             byKey.Clear(); watches.Clear(); seen.Clear(); ambiguous.Clear(); snapshots.Clear();
+            gifu = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -85,7 +104,9 @@ namespace MWCoop
                 if (owner == null) continue;
                 foreach (FsmFloat v in f.FsmVariables.FloatVariables)
                 {
-                    if (!Names.Contains(v.Name)) continue;
+                    bool septic = SepticVar(f, v);
+                    if (!Names.Contains(v.Name) && !septic) continue;
+                    if (septic && f.FsmName == "Waste") gifu = f.transform.root.GetComponent<Rigidbody>();
                     string key = owner + ":" + f.FsmName + "." + v.Name;
                     // Homonymes : l'ordre de decouverte differe d'une machine a l'autre, la cle est abandonnee.
                     if (ambiguous.Contains(key)) continue;
@@ -96,7 +117,7 @@ namespace MWCoop
                         byKey.Remove(key); watches.Remove(old); ambiguous.Add(key);
                         continue;
                     }
-                    var w = new Watch { Key = key, Fsm = f, Var = v, Last = v.Value };
+                    var w = new Watch { Key = key, Fsm = f, Var = v, Last = v.Value, Septic = septic };
                     byKey[key] = w;
                     watches.Add(w);
                 }
@@ -130,6 +151,7 @@ namespace MWCoop
             if (now < nextPoll) return;
             nextPoll = now + 1f;
             bool alone = Session.RemoteCount == 0;
+            bool septicHere = SepticAuthority() == Session.LocalId;
             NetWriter w = null;
             foreach (Watch x in watches)
             {
@@ -138,7 +160,13 @@ namespace MWCoop
                 if (x.Contested && now - x.WindowStart > 30f) x.Contested = false;   // plus de conflit depuis 30 s
                 if (Mathf.Abs(v - x.Last) <= 0.005f + 0.001f * Mathf.Abs(v)) continue;
                 if (alone) { x.Last = v; continue; }   // personne a prevenir : l'arrivant recevra l'instantane
-                if (VehicleSync.RemotelyDriven(x.Fsm.transform) || (x.Contested && !Session.IsHost) || now < x.NextSend)
+                if (x.Septic)
+                {
+                    // Fosse, citerne : pas a nous, la derive d'ici ne part jamais (la valeur recue l'ecrase).
+                    if (!septicHere) { x.Last = v; continue; }
+                    if (now < x.NextSend) continue;
+                }
+                else if (VehicleSync.RemotelyDriven(x.Fsm.transform) || (x.Contested && !Session.IsHost) || now < x.NextSend)
                 {
                     if (now >= x.NextSend) x.Last = v;   // derive locale ignoree
                     continue;
@@ -159,7 +187,7 @@ namespace MWCoop
         {
             if (now - x.WindowStart > 10f) { x.WindowStart = now; x.Sends = x.Recvs = 0; }
             if (send) x.Sends++; else x.Recvs++;
-            if (!x.Contested && x.Sends >= 3 && x.Recvs >= 3)
+            if (!x.Septic && !x.Contested && x.Sends >= 3 && x.Recvs >= 3)
             {
                 x.Contested = true;
                 Log.Info("liquides et usure : " + x.Key + " recalculee des deux cotes, seul l'hote l'envoie");
@@ -207,6 +235,44 @@ namespace MWCoop
             if (best == null) return "aucune valeur " + name + " (" + watches.Count + " suivies)";
             best.Var.Value += 3f;
             return best.Key + " = " + best.Var.Value + " a " + Mathf.Sqrt(bd).ToString("F0") + " m (" + watches.Count + " suivies)";
+        }
+
+        // Essais (Jobs, [Test] Autotest=fosse) : fosses (par cle) et citerne suivies.
+        static List<Watch> SepticWatches(string var)
+        {
+            var l = new List<Watch>();
+            foreach (Watch x in watches) if (x.Septic && x.Fsm != null && x.Var.Name == var) l.Add(x);
+            l.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+            return l;
+        }
+
+        public static string SepticState()
+        {
+            var sb = new System.Text.StringBuilder("fosses (autorite #" + SepticAuthority() + ") :");
+            foreach (Watch x in SepticWatches("ShitLevel"))
+            {
+                string[] seg = x.Key.Split('/');
+                sb.Append(' ').Append(seg.Length > 1 ? seg[1] : x.Key).Append('=').Append(x.Var.Value.ToString("F2"));
+            }
+            List<Watch> tank = SepticWatches("Waste");
+            sb.Append(" ; citerne ").Append(tank.Count > 0 ? tank[0].Var.Value.ToString("F0") + " L" : "?");
+            if (tank.Count > 0)
+            {
+                PlayMakerFSM pump = Game.FsmOn(tank[0].Fsm.gameObject, "Pump");
+                FsmBool hose = pump != null ? pump.FsmVariables.FindFsmBool("HoseInShit") : null;
+                sb.Append(", HoseInShit=").Append(hose != null ? hose.Value.ToString() : "?").Append(" (pompe ").Append(pump != null ? pump.ActiveStateName : "?").Append(')');
+            }
+            return sb.ToString();
+        }
+
+        // Essais : change ici le niveau de la fosse 'well' (rang par cle) et la citerne, comme la pompe.
+        public static string TestSeptic(int well, float dLevel, float dWaste)
+        {
+            List<Watch> wl = SepticWatches("ShitLevel"), tank = SepticWatches("Waste");
+            string r = "";
+            if (well < wl.Count && dLevel != 0f) { wl[well].Var.Value += dLevel; r += wl[well].Key + " = " + wl[well].Var.Value.ToString("F2") + " "; }
+            if (tank.Count > 0 && dWaste != 0f) { tank[0].Var.Value += dWaste; r += "citerne = " + tank[0].Var.Value.ToString("F0") + " L "; }
+            return (r.Length > 0 ? r : "rien (" + wl.Count + " fosses, " + tank.Count + " citerne) ") + "(autorite #" + SepticAuthority() + (SepticAuthority() == Session.LocalId ? " : envoye" : " : pas envoye") + ")";
         }
     }
 }

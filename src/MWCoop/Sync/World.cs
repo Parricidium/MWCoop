@@ -19,6 +19,14 @@ namespace MWCoop
     //    quand le lit de chaque joueur compte les heures, et dure tant qu'un lit les compte encore
     //    (les gros dormeurs finissent leur nuit). L'invite prend l'echelle de l'hote et n'est pas
     //    ramene en arriere pendant l'acceleration.
+    //  - evanouissement (ivresse, froid) : Systems/PassOut :: Activate dort comme un lit (State 2 tire
+    //    5 a 11 heures ; "Day change" met GlobalTimeScale a SA variable TimeScaleSleep ; "Sleep time"
+    //    retire une heure a chaque changement d'heure ; "Calc rates 2" applique faim, soif... et
+    //    reveille). Il n'etait pas compte comme un lit : l'echelle etait remise a 300 aussitot (chez
+    //    l'hote meme sans invite), et l'evanoui restait 5 a 11 heures de jeu (25 a 55 min) dans le
+    //    noir. Il compte maintenant comme un lit ; et si les autres ne dorment pas, au bout de
+    //    PassOutWait s il se reveille seul : ses heures restantes lui sont appliquees (fatigue, puis la
+    //    faim... de "Calc rates 2" par ABORT, la transition globale du jeu), l'heure commune ne bouge pas.
     public static class World
     {
         static float nextSend;
@@ -27,29 +35,40 @@ namespace MWCoop
         static PlayMakerFSM sunColor, sunRotation, weather, forecast, temperature;
         static bool found;
         const float SleepScale = 0.5f, NormalScale = 300f;
+        const float PassOutWait = 30f;
         static bool phase;            // hote : tout le monde dort, le temps file
         static bool hostFast;         // invite : l'hote dit que le temps file
         static float waitToastAt, nextBedScan;
         static readonly System.Collections.Generic.List<PlayMakerFSM> beds = new System.Collections.Generic.List<PlayMakerFSM>();
+        static PlayMakerFSM passOut;  // Systems/PassOut :: Activate (aussi dans 'beds')
+        static float passOutSince = -1;
 
         public static void OnLevelLoaded()
         {
             found = muted = phase = hostFast = false;
             beds.Clear();
+            passOut = null; passOutSince = -1;
             nextBedScan = 0;
         }
 
-        // Lits (et canape) : SleepTrigger :: Activate. Rescannes toutes les 20 s.
+        // Lits (et canape) : SleepTrigger :: Activate ; evanouissement : PassOut :: Activate (memes etats
+        // "Day change" / "Sleep time", meme variable TimeScaleSleep). Rescannes toutes les 20 s.
         static void ScanBeds()
         {
             if (Time.realtimeSinceStartup < nextBedScan) return;
             nextBedScan = Time.realtimeSinceStartup + 20f;
             beds.Clear();
+            passOut = null;
             foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
             {
                 var f = (PlayMakerFSM)o;
-                if (f.hideFlags == HideFlags.None && f.FsmName == "Activate" && f.gameObject.name == "SleepTrigger"
-                    && f.FsmVariables.FindFsmFloat("TimeScaleSleep") != null) beds.Add(f);
+                if (f.hideFlags != HideFlags.None || f.FsmName != "Activate") continue;
+                bool bed = f.gameObject.name == "SleepTrigger", pass = f.gameObject.name == "PassOut";
+                if ((bed || pass) && f.FsmVariables.FindFsmFloat("TimeScaleSleep") != null)
+                {
+                    beds.Add(f);
+                    if (pass) passOut = f;
+                }
             }
         }
 
@@ -119,10 +138,12 @@ namespace MWCoop
                 FsmFloat sc = FsmVariables.GlobalVariables.FindFsmFloat("GlobalTimeScale");
                 if (sc != null && !hostFast && sc.Value < 1f) sc.Value = NormalScale;
                 WaitToast(hostFast);
+                PassOutAlone(hostFast);
             }
             if (Session.IsHost)
             {
                 bool fast = HostSleep();
+                PassOutAlone(fast);
                 if (Time.realtimeSinceStartup < nextSend) return;
                 nextSend = Time.realtimeSinceStartup + (fast ? 0.1f : 1f);
                 if (Session.RemoteCount == 0) return;
@@ -163,8 +184,79 @@ namespace MWCoop
             return phase;
         }
 
+        // Evanoui alors que les autres ne dorment pas (fast faux) : apres PassOutWait s, reveil de ce joueur
+        // seul. Les heures que "Sleep time" aurait comptees une a une lui sont appliquees d'un coup (fatigue
+        // -FatigueRemovalRate et Rate +10 par heure, Hours = 0 ; le deplacement des nuages par heure est
+        // laisse : la meteo est commune), puis ABORT -> "Calc rates 2" (faim, soif, ivresse...), et le jeu
+        // le reveille la ou il l'aurait reveille. Une image : seulement des comparaisons de textes.
+        static void PassOutAlone(bool fast)
+        {
+            if (passOut == null) return;
+            string s = passOut.ActiveStateName;
+            bool counting = s == "Day change" || s == "Sleep time";
+            float now = Time.realtimeSinceStartup;
+            // (Temps rapide commun, ou seul en jeu : il dort comme dans un lit ; l'attente ne court pas.)
+            if (!counting || fast || Session.RemoteCount == 0) { passOutSince = counting ? now : -1; return; }
+            if (passOutSince < 0)
+            {
+                passOutSince = now;
+                Log.Info("monde : evanoui (" + s + "), les autres ne dorment pas : reveil seul dans " + PassOutWait + " s");
+                Hud.Toast("Evanoui : reveil dans " + (int)PassOutWait + " s, l'heure ne bouge pas pour les autres (sauf si tout le monde dort)");
+                return;
+            }
+            if (now - passOutSince < PassOutWait) return;
+            passOutSince = -1;
+            FsmVariables v = passOut.FsmVariables;
+            FsmInt hours = v.FindFsmInt("Hours");
+            FsmFloat rate = v.FindFsmFloat("Rate"), removal = v.FindFsmFloat("FatigueRemovalRate");
+            FsmFloat fatigue = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFatigue");
+            int h = hours != null ? Mathf.Max(0, hours.Value) : 0;
+            float before = fatigue != null ? fatigue.Value : 0f;
+            if (fatigue != null && removal != null) fatigue.Value = Mathf.Max(0f, fatigue.Value - removal.Value * h);
+            if (rate != null) rate.Value += 10f * h;
+            if (hours != null) hours.Value = 0;
+            Log.Info("monde : evanoui seul : " + h + " h de sommeil appliquees a ce joueur (fatigue " + before.ToString("F1") + " -> "
+                     + (fatigue != null ? fatigue.Value.ToString("F1") : "?") + "), reveil sans toucher a l'heure commune");
+            passOut.SendEvent("ABORT");
+        }
+
+        // Essais ([Test] Autotest=evanoui) : le joueur s'evanouit a 30 s (PassOut -> "Pass out", comme
+        // l'ivresse ou le froid) ; etat, heure, echelle et fatigue toutes les 2 s jusqu'au reveil.
+        // Attendu, les autres eveilles : "reveil seul dans 30 s", puis "evanoui seul : N h ... reveil",
+        // l'heure commune inchangee chez tous (aucune ligne "monde : heure" chez les invites).
+        static int testStep;
+        static float testLogAt;
+        public static void Test(string mode, float t)
+        {
+            if (mode != "evanoui") return;
+            float now = Time.realtimeSinceStartup;
+            if (testStep == 0 && t > 30f)
+            {
+                testStep = 1;
+                nextBedScan = 0; ScanBeds();
+                if (passOut == null) { Log.Warn("autotest : evanoui : Systems/PassOut :: Activate introuvable"); testStep = 3; return; }
+                Log.Info("autotest : evanoui : " + passOut.ActiveStateName + " -> Pass out, heure " + (sunColor != null ? sunColor.FsmVariables.GetFsmInt("Time").Value : -1));
+                Game.SetState(passOut, "Pass out");
+            }
+            if (testStep == 1 && passOut != null && now >= testLogAt)
+            {
+                testLogAt = now + 2f;
+                string s = passOut.ActiveStateName;
+                FsmFloat fat = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFatigue");
+                FsmInt hours = passOut.FsmVariables.FindFsmInt("Hours");
+                Log.Info("autotest : evanoui : etat " + s + ", heures restantes " + (hours != null ? hours.Value : -1)
+                         + ", heure " + (sunColor != null ? sunColor.FsmVariables.GetFsmInt("Time").Value : -1)
+                         + ", echelle " + GlobalFloat("GlobalTimeScale") + ", fatigue " + (fat != null ? fat.Value.ToString("F1") : "?")
+                         + ", dort " + Game.GlobalBool("PlayerSleeps"));
+                if (s == "Test alc" && t > 45f) { testStep = 2; Log.Info("autotest : evanoui : reveille"); }
+            }
+        }
+
         public static void OnMessage(Msg type, Peer from, NetReader r)
         {
+            // Msg 9 (StartGame, reserve jusqu'ici) : sauvegarde coop des toilettes ; Session passe ici les
+            // types qu'il ne connait pas.
+            if (type == SaveTransfer.CoopMsg) { SaveTransfer.OnCoop(from, r); return; }
             if (type != Msg.World) { Log.Warn("message non gere : " + type); return; }
             if (Session.IsHost || !PlayerSync.InGame || !Find()) return;
             int day = r.I32(), daysPassed = r.I32(), weeksPassed = r.I32(), hour = r.I32();

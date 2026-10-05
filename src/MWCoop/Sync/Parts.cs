@@ -13,6 +13,12 @@ namespace MWCoop
     //  - montage : une action injectee au debut de 'Install 2' envoie (point, piece, AssemblyID) ;
     //    chez les autres : piece amenee au point, INSTALL a la piece, point mis dans 'Install 2'.
     //  - demontage : 'Remove part', rejoue tel quel (le jeu rend le Rigidbody et detache la piece).
+    // Automates trouves inactifs (vis d'une piece pas encore montee, point d'une piece rangee) : gardes de
+    // cote et accroches des que leur objet s'active (montage, piece sortie du carton), sans attendre le
+    // releve suivant -- les premieres vis serrees juste apres un montage partaient sinon a la trappe.
+    // Apres un montage (ici ou chez un autre), le sous-arbre de la piece et du point est revu plusieurs
+    // fois dans les 3 s (pieces achetees depuis le dernier releve), et les commandes que la piece apporte a
+    // la voiture (boite a gants, jauges, interrupteurs, cablage) sont cherchees tout de suite (Jobs.SoonScan).
     public static class Parts
     {
         class Point { public string Key; public PlayMakerFSM Fsm; }
@@ -37,113 +43,317 @@ namespace MWCoop
         // ScrewInt (+1/-1) a BoltTightness et a la Tightness de la piece, et envoie BOLTING.
         // Une action injectee dans 'Screw' envoie (piece, vis, valeur visee) ; ailleurs on rejoue
         // TIGHTEN/UNTIGHTEN jusqu'a cette valeur : meme position de la vis, meme serrage de la piece.
+        // Piece : son ID, ou "p:" + chemin si elle n'en a pas (cablage de la CORRIS : DatabaseWiring/...).
+        // Vis : son chemin depuis la piece (complet si la piece n'est pas un de ses parents : cablage, supports
+        // du moteur sur la caisse), chaque maillon avec son rang parmi ses freres du meme nom (BoltPM#3), puis
+        // son premier enfant (bolt3). L'ancienne cle (premier enfant seul) confondait les deux vis de reglage
+        // de la cremaillere, ou la vis de vidange et la premiere vis du carter.
+        class Bolt { public PlayMakerFSM F; public string Key; }
         static readonly HashSet<PlayMakerFSM> screws = new HashSet<PlayMakerFSM>();
+        static readonly List<Bolt> bolts = new List<Bolt>();
 
         class BoltHook : ModHook
         {
             public override string Module { get { return "pieces (boulons)"; } }
-            public PlayMakerFSM F;
+            public Bolt B;
             public override void OnEnter()
             {
-                try { if (!applying && Replay.Depth == 0) OnLocalBolt(F); } catch (System.Exception e) { Replay.HookError(e); }
+                try { if (!applying && Replay.Depth == 0) OnLocalBolt(B); } catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
 
-        static string BoltName(PlayMakerFSM f)
+        // Automates vus inactifs (vis, points) : accroches des que leur objet s'active (revus 4 fois/s).
+        static readonly List<PlayMakerFSM> waiting = new List<PlayMakerFSM>();
+        static readonly HashSet<PlayMakerFSM> waitingSet = new HashSet<PlayMakerFSM>();
+        static float nextWaiting;
+
+        // Pieces tout juste montees : leur sous-arbre et celui du point revus pendant 3 s.
+        class Fresh { public Transform A, B; public string Id; public float Until, Next; }
+        static readonly List<Fresh> fresh = new List<Fresh>();
+
+        // Vis recues avant d'etre accrochees ici (piece montee a l'instant chez nous aussi) : rejouees des que
+        // possible, 6 s au plus, dans l'ordre d'arrivee.
+        class PendingBolt { public int Who; public string Part, Key; public int Target; public float Until; }
+        static readonly List<PendingBolt> pendingBolts = new List<PendingBolt>();
+
+        public static bool IsBolt(PlayMakerFSM f)
         {
-            return f.transform.childCount > 0 ? f.transform.GetChild(0).name : f.name;
+            return f.FsmName == "Screw" && f.FsmVariables.FindFsmGameObject("ThisPart") != null
+                   && f.FsmVariables.FindFsmInt("BoltTightness") != null && f.Fsm.GetState("Screw") != null;
         }
 
-        static void OnLocalBolt(PlayMakerFSM f)
+        static bool IsPoint(PlayMakerFSM f)
+        {
+            if (f.FsmName != "Data") return false;
+            if (!f.name.StartsWith("VINP") && f.Fsm.GetState("Install 2") == null) return false;
+            if (f.Fsm.GetState("Install 2") == null || f.Fsm.GetState("Remove part") == null || f.FsmVariables.FindFsmGameObject("ActivePart") == null) return false;
+            return !(f.transform.root.position == Vector3.zero && f.transform.root.name.StartsWith("VIN"));   // modeles
+        }
+
+        // Cle d'une piece : son ID, sinon "p:" + chemin (pieces sans ID : cablage de la CORRIS).
+        static string PartKey(GameObject part)
+        {
+            if (part == null) return "";
+            string id = IdOf(part);
+            return id.Length > 0 ? id : "p:" + Recon.Path(part.transform);
+        }
+
+        static string BoltKey(PlayMakerFSM f, GameObject part)
+        {
+            Transform t = f.transform;
+            Transform stop = part != null && t != part.transform && t.IsChildOf(part.transform) ? part.transform : null;
+            string key = t.childCount > 0 ? t.GetChild(0).name : "";
+            for (; t != null && t != stop; t = t.parent) key = Link(t) + "/" + key;
+            return key;
+        }
+
+        // Chemin a rangs : chaque maillon suivi de son rang parmi ses freres du meme nom quand il en a
+        // (LogLongPile#2). Ce rang ne bouge pas quand le jeu ajoute d'autres enfants (piece montee : derniere).
+        public static string RankPath(Transform t)
+        {
+            string p = Link(t);
+            for (Transform c = t.parent; c != null; c = c.parent) p = Link(c) + "/" + p;
+            return p;
+        }
+
+        static string Link(Transform t)
+        {
+            Transform p = t.parent;
+            if (p == null) return t.name;
+            int rank = 0, same = 0;
+            for (int i = 0; i < p.childCount; i++)
+            {
+                Transform c = p.GetChild(i);
+                if (c.name != t.name) continue;
+                if (c == t) rank = same;
+                same++;
+            }
+            return same > 1 ? t.name + "#" + rank : t.name;
+        }
+
+        // Vrai : vis accrochee ; faux : a reprendre quand son objet s'activera (automate pas encore charge).
+        static bool TryHookScrew(PlayMakerFSM f)
+        {
+            FsmState st = f.Fsm.GetState("Screw");
+            if (st == null || !st.IsInitialized) return false;
+            var b = new Bolt { F = f, Key = BoltKey(f, f.FsmVariables.GetFsmGameObject("ThisPart").Value) };
+            if (!Inject(st, new BoltHook { B = b })) return false;
+            screws.Add(f);
+            bolts.Add(b);
+            return true;
+        }
+
+        static bool TryHookPoint(PlayMakerFSM f)
+        {
+            FsmState inst = f.Fsm.GetState("Install 2"), rem = f.Fsm.GetState("Remove part");
+            if (!inst.IsInitialized || !rem.IsInitialized) return false;
+            var p = new Point { Key = KeyOf(f.transform), Fsm = f };
+            if (!Inject(inst, new Hook { P = p, Install = true })) return false;
+            if (!Inject(rem, new Hook { P = p, Install = false })) return false;
+            hooked.Add(f);
+            points[p.Key] = p;
+            return true;
+        }
+
+        // Vis ou point vu pour la premiere fois : a nous (WorldFsms et Jobs ne le rejouent plus), accroche ou
+        // mis en attente de son activation.
+        static int Consider(PlayMakerFSM f)
+        {
+            bool screw = f.FsmName == "Screw";
+            if (screw ? screws.Contains(f) || !IsBolt(f) : hooked.Contains(f) || !IsPoint(f)) return 0;
+            if (waitingSet.Contains(f)) return 0;
+            Replay.Claim(f, "pieces");
+            if (screw ? TryHookScrew(f) : TryHookPoint(f)) return 1;
+            waitingSet.Add(f);
+            waiting.Add(f);
+            return 0;
+        }
+
+        static void OnLocalBolt(Bolt b)
         {
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;
-            GameObject part = f.FsmVariables.GetFsmGameObject("ThisPart").Value;
-            string id = IdOf(part);
-            if (id.Length == 0) return;
-            int target = f.FsmVariables.GetFsmInt("BoltTightness").Value + f.FsmVariables.GetFsmInt("ScrewInt").Value;
-            Session.SendAll(new NetWriter(Msg.Bolt).U8(Session.LocalId).Str(id).Str(BoltName(f)).U8(target), true);
+            string part = PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value);
+            if (part.Length == 0) return;
+            int target = b.F.FsmVariables.GetFsmInt("BoltTightness").Value + b.F.FsmVariables.GetFsmInt("ScrewInt").Value;
+            Session.SendAll(new NetWriter(Msg.Bolt).U8(Session.LocalId).Str(part).Str(b.Key).U8(Mathf.Clamp(target, 0, 255)), true);
         }
 
         public static void OnBolt(Peer from, NetReader r)
         {
             int who = r.U8();
             if (Session.IsHost) who = from.Id;
-            string id = r.Str(), bolt = r.Str();
+            string part = r.Str(), key = r.Str();
             int target = r.U8();
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Bolt).U8(who).Str(id).Str(bolt).U8(target), true, who);
-            GameObject part = FindById(id);
-            PlayMakerFSM f = null;
-            foreach (PlayMakerFSM s in screws)
-                if (s != null && s.FsmVariables.GetFsmGameObject("ThisPart").Value == part && BoltName(s) == bolt) { f = s; break; }
-            if (part == null || f == null) { Log.Warn("vis " + id + "/" + bolt + " introuvable ici"); return; }
-            FsmInt t = f.FsmVariables.GetFsmInt("BoltTightness");
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Bolt).U8(who).Str(part).Str(key).U8(target), true, who);
+            // Deja des tours en attente pour cette vis : celui-ci passe apres eux (meme ordre que chez l'autre).
+            bool queued = Queued(part, key, pendingBolts.Count);
+            if (!queued && ApplyBolt(who, part, key, target, false)) return;
+            if (!queued) { CheckWaiting(); if (ApplyBolt(who, part, key, target, false)) return; }
+            pendingBolts.Add(new PendingBolt { Who = who, Part = part, Key = key, Target = target, Until = Time.realtimeSinceStartup + 6f });
+        }
+
+        // Un tour de la meme vis attend-il deja (parmi les 'upTo' premiers) ?
+        static bool Queued(string part, string key, int upTo)
+        {
+            for (int i = 0; i < upTo; i++)
+            {
+                PendingBolt pb = pendingBolts[i];
+                if (pb != null && pb.Key == key && pb.Part == part) return true;
+            }
+            return false;
+        }
+
+        static Bolt FindBolt(string part, string key)
+        {
+            foreach (Bolt b in bolts)
+            {
+                if (b.F == null || b.Key != key) continue;
+                if (PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value) == part) return b;
+            }
+            return null;
+        }
+
+        static bool ApplyBolt(int who, string part, string key, int target, bool last)
+        {
+            Bolt b = FindBolt(part, key);
+            if (b == null)
+            {
+                if (last) Log.Warn("vis " + part + "/" + key + " introuvable ici (piece pas montee ici ?)");
+                return false;
+            }
+            FsmInt t = b.F.FsmVariables.GetFsmInt("BoltTightness");
             applying = true; Replay.Depth++;
             try
             {
                 for (int guard = 0; t.Value != target && guard < 10; guard++)
-                    f.SendEvent(t.Value < target ? "TIGHTEN" : "UNTIGHTEN");
+                    b.F.SendEvent(t.Value < target ? "TIGHTEN" : "UNTIGHTEN");
             }
             finally { applying = false; Replay.Depth--; }
-            if (t.Value != target) Log.Warn("vis " + id + "/" + bolt + " : " + t.Value + " au lieu de " + target);
-            else Log.Info("vis " + id + "/" + bolt + " = " + target + " (joueur #" + who + ")");
+            if (t.Value != target) Log.Warn("vis " + part + "/" + key + " : " + t.Value + " au lieu de " + target);
+            else Log.Info("vis " + part + "/" + key + " = " + target + " (joueur #" + who + ")");
+            return true;
         }
 
-        static int ScanBolts()
-        {
-            int n = 0;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
-            {
-                var f = (PlayMakerFSM)o;
-                if (f.hideFlags != HideFlags.None || f.FsmName != "Screw" || screws.Contains(f)) continue;
-                if (f.FsmVariables.FindFsmGameObject("ThisPart") == null || f.FsmVariables.FindFsmInt("BoltTightness") == null) continue;
-                FsmState st = f.Fsm.GetState("Screw");
-                if (st == null || !Inject(st, new BoltHook { F = f })) continue;   // inactive : on reessaiera
-                screws.Add(f);
-                n++;
-            }
-            return n;
-        }
-
-        // Essais : serre (ou desserre) d'un cran la premiere vis de la piece 'id', comme la cle.
+        // Essais : serre (ou desserre) d'un cran la premiere vis (par cle) de la piece 'id', comme la cle.
         public static string TestBolt(string id, bool tighten)
         {
-            GameObject part = FindById(id);
-            foreach (PlayMakerFSM s in screws)
-                if (s != null && s.FsmVariables.GetFsmGameObject("ThisPart").Value == part)
-                {
-                    s.SendEvent(tighten ? "TIGHTEN" : "UNTIGHTEN");
-                    return BoltName(s) + " = " + s.FsmVariables.GetFsmInt("BoltTightness").Value;
-                }
-            return "aucune vis active pour " + id;
+            Bolt first = null;
+            foreach (Bolt b in bolts)
+                if (b.F != null && PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value) == id && (first == null || string.CompareOrdinal(b.Key, first.Key) < 0)) first = b;
+            if (first == null) return "aucune vis active pour " + id + " (" + bolts.Count + " vis suivies, " + waiting.Count + " automates en attente)";
+            first.F.SendEvent(tighten ? "TIGHTEN" : "UNTIGHTEN");
+            return first.Key + " = " + first.F.FsmVariables.GetFsmInt("BoltTightness").Value;
         }
 
         public static string BoltState(string id)
         {
-            GameObject part = FindById(id);
-            var sb = new System.Text.StringBuilder();
-            foreach (PlayMakerFSM s in screws)
-                if (s != null && s.FsmVariables.GetFsmGameObject("ThisPart").Value == part)
-                    sb.Append(BoltName(s)).Append('=').Append(s.FsmVariables.GetFsmInt("BoltTightness").Value).Append(' ');
+            var keys = new List<string>();
+            foreach (Bolt b in bolts)
+                if (b.F != null && PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value) == id)
+                    keys.Add(b.Key + "=" + b.F.FsmVariables.GetFsmInt("BoltTightness").Value);
+            keys.Sort(string.CompareOrdinal);
+            GameObject part = FindByIdCached(id);
             PlayMakerFSM d = part != null ? Game.FsmOn(part, "Data") : null;
             FsmFloat tight = d != null ? d.FsmVariables.FindFsmFloat("Tightness") : null;
-            return sb + "| serrage piece " + (tight != null ? tight.Value.ToString() : "?");
+            return string.Join(" ", keys.ToArray()) + " | serrage piece " + (tight != null ? tight.Value.ToString() : "?");
         }
 
         public static void OnLevelLoaded()
         {
-            screws.Clear();
+            screws.Clear(); bolts.Clear();
             points.Clear();
             hooked.Clear();
+            waiting.Clear(); waitingSet.Clear(); fresh.Clear(); pendingBolts.Clear();
+            idMap.Clear(); idMapAt = -100;
+            testStep = testLogs = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
         }
 
+        // Releve complet bientot (objets crees en nombre par un autre module).
+        public static void SoonScan()
+        {
+            if (nextScan > 0) nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1f);
+        }
+
         public static void Update()
         {
-            if (nextScan < 0 || Time.realtimeSinceStartup < nextScan) return;
-            nextScan = Time.realtimeSinceStartup + 15f;   // nouvelles pieces (achats...) : nouveau passage
+            if (nextScan < 0) return;
+            float now = Time.realtimeSinceStartup;
+            if (now >= nextWaiting) { nextWaiting = now + 0.25f; CheckWaiting(); }
+            if (fresh.Count > 0) CheckFresh(now);
+            if (pendingBolts.Count > 0) RetryBolts(now);
+            if (now < nextScan) return;
+            nextScan = now + 15f;   // nouvelles pieces (achats...) : nouveau passage
             Scan();
+        }
+
+        // Automates en attente dont l'objet vient de s'activer.
+        static void CheckWaiting()
+        {
+            int n = 0;
+            for (int i = waiting.Count - 1; i >= 0; i--)
+            {
+                PlayMakerFSM f = waiting[i];
+                if (f == null) { waiting.RemoveAt(i); waitingSet.Remove(f); continue; }
+                bool screw = f.FsmName == "Screw";
+                if (screw ? screws.Contains(f) : hooked.Contains(f)) { waiting.RemoveAt(i); waitingSet.Remove(f); continue; }
+                if (!f.gameObject.activeInHierarchy) continue;
+                if (!(screw ? TryHookScrew(f) : TryHookPoint(f))) continue;   // pas encore charge : au prochain tour
+                waiting.RemoveAt(i); waitingSet.Remove(f);
+                n++;
+            }
+            if (n > 0) Log.Info("pieces : " + n + " vis ou points accroches a leur activation (" + screws.Count + " vis, " + points.Count + " points)");
+        }
+
+        static void CheckFresh(float now)
+        {
+            for (int i = fresh.Count - 1; i >= 0; i--)
+            {
+                Fresh fr = fresh[i];
+                if (now < fr.Next) continue;
+                fr.Next = now + 0.5f;
+                int n = ScanUnder(fr.A) + ScanUnder(fr.B);
+                if (n > 0) Log.Info("pieces : " + n + " vis ou points accroches juste apres le montage de " + fr.Id);
+                if (now > fr.Until) fresh.RemoveAt(i);
+            }
+        }
+
+        static int ScanUnder(Transform t)
+        {
+            if (t == null) return 0;
+            int n = 0;
+            foreach (PlayMakerFSM f in t.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Screw" || f.FsmName == "Data") n += Consider(f);
+            return n;
+        }
+
+        // Dans l'ordre d'arrivee, vis par vis : un tour reste derriere un tour plus ancien de la meme vis
+        // encore en attente ; une vis jamais trouvee (piece pas montee ici) ne retient pas les autres.
+        static void RetryBolts(float now)
+        {
+            if (now < nextRetry) return;
+            nextRetry = now + 0.1f;
+            for (int i = 0; i < pendingBolts.Count; i++)
+            {
+                PendingBolt pb = pendingBolts[i];
+                if (Queued(pb.Part, pb.Key, i)) continue;
+                bool last = now > pb.Until;
+                if (ApplyBolt(pb.Who, pb.Part, pb.Key, pb.Target, last) || last) pendingBolts[i] = null;
+            }
+            int n = 0;
+            for (int i = 0; i < pendingBolts.Count; i++) if (pendingBolts[i] != null) pendingBolts[n++] = pendingBolts[i];
+            pendingBolts.RemoveRange(n, pendingBolts.Count - n);
+        }
+        static float nextRetry;
+
+        // Montage fait (ici ou rejoue) : vis et points de la piece et du point revus, commandes de la voiture cherchees.
+        static void Freshen(GameObject part, PlayMakerFSM point, string id)
+        {
+            float now = Time.realtimeSinceStartup;
+            fresh.Add(new Fresh { A = part != null ? part.transform : null, B = point != null ? point.transform : null, Id = id, Until = now + 3f, Next = now + 0.1f });
+            Jobs.SoonScan();
         }
 
         public static string IdOf(GameObject go)
@@ -169,24 +379,16 @@ namespace MWCoop
 
         static void Scan()
         {
-            int added = 0;
+            int before = points.Count, beforeBolts = screws.Count;
             foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
             {
                 var f = (PlayMakerFSM)o;
-                if (f.hideFlags != HideFlags.None || f.FsmName != "Data" || hooked.Contains(f)) continue;
-                if (!f.name.StartsWith("VINP") && f.Fsm.GetState("Install 2") == null) continue;
-                FsmState inst = f.Fsm.GetState("Install 2"), rem = f.Fsm.GetState("Remove part");
-                if (inst == null || rem == null || f.FsmVariables.FindFsmGameObject("ActivePart") == null) continue;
-                if (f.transform.root.position == Vector3.zero && f.transform.root.name.StartsWith("VIN")) continue;   // modeles
-                var p = new Point { Key = KeyOf(f.transform), Fsm = f };
-                if (!Inject(inst, new Hook { P = p, Install = true }) || !Inject(rem, new Hook { P = p, Install = false })) continue;
-                hooked.Add(f);
-                points[p.Key] = p;
-                added++;
+                if (f.hideFlags != HideFlags.None || (f.FsmName != "Data" && f.FsmName != "Screw")) continue;
+                Consider(f);
             }
-            int bolts = ScanBolts();
-            if (added > 0 || bolts > 0)
-                Log.Info("pieces : " + added + " points de montage et " + bolts + " vis de plus (" + points.Count + " points, " + screws.Count + " vis)");
+            if (points.Count != before || screws.Count != beforeBolts)
+                Log.Info("pieces : " + (points.Count - before) + " points de montage et " + (screws.Count - beforeBolts) + " vis de plus (" + points.Count + " points, "
+                         + screws.Count + " vis, " + waiting.Count + " automates en attente de leur activation)");
         }
 
         static bool Inject(FsmState s, FsmStateAction a)
@@ -203,9 +405,9 @@ namespace MWCoop
 
         static void OnLocal(Point p, bool install)
         {
-            nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1f);   // les vis de la piece s'activent
-            if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;   // chargement : chacun le sien
             GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+            if (install) Freshen(part, p.Fsm, IdOf(part));   // ses vis s'activent : accrochees avant le premier tour de cle
+            if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;   // chargement : chacun le sien
             string id = IdOf(part);
             if (id.Length == 0) { Log.Warn("piece sans ID sur " + p.Key); return; }
             PlayMakerFSM data = Game.FsmOn(part, "Data");
@@ -228,7 +430,8 @@ namespace MWCoop
                 Session.Broadcast(new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).I32(aid).Vec(pos).Quat(rot), true, who);
             Point p;
             if (!points.TryGetValue(key, out p) || p.Fsm == null) { Scan(); points.TryGetValue(key, out p); }
-            GameObject part = FindById(id);
+            GameObject part = FindByIdCached(id);
+            if (part == null) part = FindById(id);   // (achetee depuis le dernier releve des ID)
             if (p == null || part == null) { Log.Warn("piece " + id + " / point " + key + " introuvable ici"); return; }
             PlayMakerFSM data = Game.FsmOn(part, "Data");
             bool isIn = Holds(p.Fsm, part);
@@ -252,7 +455,7 @@ namespace MWCoop
                 else Game.SetState(p.Fsm, "Remove part");
             }
             finally { applying = false; Replay.Depth--; }
-            nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1f);
+            if (install) Freshen(part, p.Fsm, id);   // ses vis, avant les tours de cle de l'autre
             Log.Info("piece " + id + (install ? " montee sur " : " demontee de ") + key + " (joueur #" + who + ")");
         }
 
@@ -314,6 +517,30 @@ namespace MWCoop
             part.transform.position = ip.transform.position;
             Game.SetState(asm, "Install 1");   // comme le clic : AssemblyID, INSTALL a la piece, puis Install 2
             return "montage de " + id + " sur " + Recon.Path(ip.transform);
+        }
+
+        // Essais ([Test] Autotest=boulons, TestPiece = ID d'une piece libre a monter, VIN413C1 par defaut) :
+        // l'hote monte la piece a 30 s au plus tot (l'invite en partie depuis 15 s), puis serre tout de suite sa
+        // premiere vis de 3 crans (0,5 s, 1 s, 1,5 s apres le montage : avant tout releve periodique) ; a 45 et
+        // 60 s chacun note les vis de la piece. Attendu chez l'invite : "piece ... montee", trois "vis
+        // <ID>/Bolts/BoltPM#k/boltk = 1, 2, 3 (joueur #0)" et le meme etat qu'a l'hote ("...=3"), aucune
+        // "vis ... introuvable".
+        static int testStep, testLogs;
+        static float testAt;
+
+        public static void Test(string mode, float t)
+        {
+            if (mode != "boulons") return;
+            string id = Config.Get("Test", "TestPiece", "VIN413C1");
+            float now = Time.realtimeSinceStartup;
+            if (Session.IsHost && t > 30f && testStep == 0 && Jobs.OtherInGame(15f)) { testStep = 1; testAt = now; Log.Info("autotest : boulons, " + TestToggle(id)); }
+            if (Session.IsHost && testStep >= 1 && testStep <= 3 && now - testAt > 0.5f * testStep)
+            { testStep++; Log.Info("autotest : boulons, " + (now - testAt).ToString("F1") + " s apres le montage, vis " + TestBolt(id, true)); }
+            if (testLogs < 2 && t > 45f + 15f * testLogs)
+            {
+                testLogs++;
+                Log.Info("autotest : boulons, " + id + " : " + BoltState(id) + " (" + screws.Count + " vis suivies, " + waiting.Count + " en attente, " + pendingBolts.Count + " recues en attente)");
+            }
         }
 
         // Reconnaissance : chaque automate Data -> objet, chemin, ID, Installed, point de montage.

@@ -15,6 +15,8 @@ namespace MWCoop
     //    (TRAFFIC/.../Driver, squelette fige ; voiture ou camion), la tete tournee comme la camera du
     //    joueur, meme a 360 degres ; a pied, le buste et la tete suivent le regard (se penche en
     //    regardant en bas, en arriere en regardant en haut) ; au repos, les bras le long du corps.
+    //  - vetements portes (Wear, bits de l'etat du joueur) : teinte du corps (veste, combinaison), copie du
+    //    casque sur la tete.
     public class Avatar
     {
         static GameObject template;          // copie inactive, sans logique
@@ -125,16 +127,19 @@ namespace MWCoop
             foreach (AudioSource a in go.GetComponentsInChildren<AudioSource>(true)) Object.DestroyImmediate(a);
         }
 
+        // Matiere du jeu par son nom. Jamais une matiere sans nom : celles creees en cours de partie (effets d'image des
+        // cameras, cigarette de l'avatar) n'en ont pas, et un nom vide (reglage absent) en aurait pris une au hasard.
         public static Material FindMaterial(string name)
         {
+            if (string.IsNullOrEmpty(name)) return null;
             if (materials == null)
             {
                 materials = new Dictionary<string, Material>();
                 foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Material)))
-                    if (!materials.ContainsKey(o.name)) materials[o.name] = (Material)o;
+                    if (o.name.Length > 0 && !materials.ContainsKey(o.name)) materials[o.name] = (Material)o;
             }
             Material m;
-            return materials.TryGetValue(name ?? "", out m) ? m : null;
+            return materials.TryGetValue(name, out m) ? m : null;
         }
 
         // Apparences proposees : materiaux des corps des PNJ (char_shirtNN, cop_shirt...).
@@ -361,6 +366,7 @@ namespace MWCoop
                 anim.transform.localPosition = skelPos;
             }
             FixFacing();
+            Helmet((Player.State.Flags & PlayerSync.F_Helmet) != 0);
             Pose();
             PlaceCigarette();
             if (Config.GetInt("Test", "JournalPose", 0) != 0 && Time.realtimeSinceStartup >= nextPoseLog && headBone != null && Bone("pelvis") != null)
@@ -495,14 +501,15 @@ namespace MWCoop
 
         public void Apply(PlayerInfo pi)
         {
-            if (skin != pi.Skin && body != null)
-            {
-                skin = pi.Skin;
-                Material m = FindMaterial(skin);
-                if (m != null) body.sharedMaterial = m;
-            }
             PlayerState st = pi.State;
             int f = st.Flags;
+            int cloth = f & (PlayerSync.F_Jacket | PlayerSync.F_Coverall);
+            if ((skin != pi.Skin || cloth != clothFlags) && body != null)
+            {
+                skin = pi.Skin;
+                clothFlags = cloth;
+                ApplyMaterial();
+            }
             Vector3 seatPos;
             Quaternion seatRot;
             inCar = VehicleSync.SeatPose(pi.Id, st.Head, out seatPos, out seatRot);
@@ -708,10 +715,107 @@ namespace MWCoop
             if (smoke != null && headBone != null) smoke.transform.position = headBone.position + Root.transform.forward * 0.12f - Root.transform.up * 0.05f;
         }
 
+        // ---------------------------------------------------------------- vetements (Wear)
+        // Veste, combinaison : l'objet du jeu n'est qu'un rouleau de tissu ; le corps prend la teinte du tissu (moyenne
+        // de sa texture : veste brune, combinaison camouflage bleutee), ou une autre matiere de PNJ si [Coop]
+        // ApparenceVeste / ApparenceCombinaison en nomme une. Casque : copie de ses maillages, sur la tete.
+        int clothFlags;
+        Material baseMat, clothMat;
+        GameObject helmet;
+        float nextHelmetTry;
+
+        void ApplyMaterial()
+        {
+            Material m = FindMaterial(skin) ?? baseMat ?? body.sharedMaterial;
+            baseMat = m;
+            if (clothMat != null) { Object.Destroy(clothMat); clothMat = null; }
+            int kind = (clothFlags & PlayerSync.F_Coverall) != 0 ? 2 : (clothFlags & PlayerSync.F_Jacket) != 0 ? 1 : 0;
+            if (kind != 0 && m != null)
+            {
+                // Autre matiere seulement si le reglage en nomme une (vide par defaut : teinte).
+                string sw = Config.Get("Coop", kind == 1 ? "ApparenceVeste" : "ApparenceCombinaison", "");
+                Material swap = sw.Length > 0 ? FindMaterial(sw) : null;
+                if (swap != null) m = swap;
+                else if (m.HasProperty("_Color"))
+                {
+                    clothMat = new Material(m);
+                    Color tint = ParseColor(Config.Get("Coop", kind == 1 ? "TeinteVeste" : "TeinteCombinaison", kind == 1 ? "1,0.83,0.72" : "0.57,0.86,1"));
+                    clothMat.color = m.color * tint;
+                    m = clothMat;
+                }
+            }
+            if (m != null) body.sharedMaterial = m;
+        }
+
+        static Color ParseColor(string s)
+        {
+            string[] c = s.Split(',');
+            float r, g, b;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            if (c.Length < 3 || !float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out r)
+                || !float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out g) || !float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out b)) return Color.white;
+            return new Color(r, g, b, 1f);
+        }
+
+        // Avant la pose (LatePose) : la tete est encore dans la pose du clip, a peu pres droite ; le casque y est pose
+        // une fois (droit, devant comme l'avatar), puis suit la tete.
+        void Helmet(bool on)
+        {
+            if (on && helmet == null && Time.realtimeSinceStartup >= nextHelmetTry) BuildHelmet();
+            if (helmet != null && helmet.activeSelf != on) helmet.SetActive(on);
+        }
+
+        void BuildHelmet()
+        {
+            nextHelmetTry = Time.realtimeSinceStartup + 10f;
+            GameObject src = Wear.ItemObject(2);
+            Transform hp = Bone("HeadPivot") ?? headBone;
+            if (src == null || hp == null || headBone == null) return;
+            Transform st = src.transform;
+            helmet = new GameObject("MWCoop-Casque");
+            Transform ht = helmet.transform;
+            // Maillages seulement (pas l'objet du jeu : ses automates et sa physique), poses comme dans l'objet.
+            foreach (MeshFilter mf in src.GetComponentsInChildren<MeshFilter>(true))
+            {
+                MeshRenderer mr = mf.GetComponent<MeshRenderer>();
+                if (mr == null || mf.sharedMesh == null) continue;
+                var g = new GameObject(mf.name);
+                g.transform.parent = ht;
+                g.transform.localPosition = st.InverseTransformPoint(mf.transform.position);
+                g.transform.localRotation = Quaternion.Inverse(st.rotation) * mf.transform.rotation;
+                Vector3 ls = mf.transform.lossyScale, ss = st.lossyScale;
+                g.transform.localScale = new Vector3(ls.x / ss.x, ls.y / ss.y, ls.z / ss.z);
+                g.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
+                g.AddComponent<MeshRenderer>().sharedMaterials = mr.sharedMaterials;
+            }
+            // [Coop] CasquePose = haut, avant (m, depuis l'os de la tete), rotation x, y, z (degres) : modele droit,
+            // visiere vers +Z, centre vers la tete.
+            string[] p = Config.Get("Coop", "CasquePose", "0.09,0.02,0,0,0").Split(',');
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            float[] v = new float[5];
+            for (int i = 0; i < 5 && i < p.Length; i++) float.TryParse(p[i], System.Globalization.NumberStyles.Float, ci, out v[i]);
+            Transform r = Root.transform;
+            ht.localScale = st.lossyScale;
+            ht.position = headBone.position + r.up * v[0] + r.forward * v[1];
+            ht.rotation = r.rotation * Quaternion.Euler(v[2], v[3], v[4]);
+            ht.SetParent(hp, true);
+            Log.Info("avatar " + Player.Name + " : casque pose sur " + hp.name + " (" + ht.childCount + " maillages)");
+        }
+
+        // Essais (Wear.State) : ce que l'avatar montre.
+        public string ClothesState()
+        {
+            return Player.Name + " : " + ((clothFlags & PlayerSync.F_Coverall) != 0 ? "combinaison" : (clothFlags & PlayerSync.F_Jacket) != 0 ? "veste" : "sans veste")
+                   + (clothMat != null ? " (teinte " + clothMat.color + ")" : "")
+                   + (helmet != null && helmet.activeSelf ? ", casque" : ", sans casque");
+        }
+
         public void Destroy()
         {
             if (Root != null) Object.Destroy(Root);
             Root = null;
+            if (clothMat != null) Object.Destroy(clothMat);
+            clothMat = null;
         }
     }
 }

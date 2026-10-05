@@ -7,7 +7,8 @@ namespace MWCoop
 {
     // Places passagers (le jeu n'a qu'une place, celle du conducteur), faites comme la sienne :
     //  - places : d'apres les yeux du conducteur (DriverHeadPivot + 27 cm vers l'avant, mesure au volant
-    //    de la SORBET) : avant droite en symetrique ; banquette a l'arriere pour SORBET et CORRIS ;
+    //    de la SORBET) : avant droite en symetrique ; banquette a l'arriere pour SORBET, CORRIS et le taxi
+    //    (MACHTWAGEN, sous JOBS/TAXIJOB : voitures de VehicleSync, par leur cle) ;
     //  - on entre dans l'habitacle jusqu'au siege (pieds sur le plancher, a moins de 38 cm de cote et
     //    50 cm en long de la place) : l'icone passager du jeu s'affiche (GUIpassenger, comme le volant) ;
     //  - ENTREE : le joueur est accroche a la voiture LA OU IL EST (pas de teleportation), tourne vers
@@ -31,6 +32,7 @@ namespace MWCoop
         static CharacterController controller;
         static PlayMakerFSM crouch;
         static float nextScan = -1, satAt, nextResend;
+        static int gen = -1;   // VehicleSync.Generation au dernier releve
         static Vector3 headLocal;
         static int debugFrames;
         static float crouchCheckAt = -1;
@@ -39,18 +41,22 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear();
+            seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
         static void Scan()
         {
+            // (Assis : la place gardee pointe sur l'ancienne liste, retrouvee ci-dessous par voiture et rang.)
+            Seat was = current;
             seats.Clear();
             driveTriggers.Clear();
-            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+            gen = VehicleSync.Generation;
+            for (int ci = 0; ci < VehicleSync.LocalCount; ci++)
             {
-                if (rb.transform.parent != null || rb.GetComponent("CarDynamics") == null) continue;
-                string n = rb.name;
+                Rigidbody rb = VehicleSync.LocalBody(ci);
+                if (rb == null) continue;
+                string n = VehicleSync.LocalKey(ci);
                 if (n.StartsWith("KEKMET") || n.StartsWith("JONNEZ") || n.StartsWith("FLATBED")) continue;   // une seule place
                 foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) driveTriggers.Add(f);
@@ -58,13 +64,15 @@ namespace MWCoop
                 if (dhp == null) continue;
                 Vector3 d = rb.transform.InverseTransformPoint(dhp.position) + EyeFromPivot;
                 seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-d.x, d.y, d.z) });
-                if (n.StartsWith("SORBET") || n.StartsWith("CORRIS"))
+                if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("MACHTWAGEN"))
                 {
                     // Banquette : 85 cm derriere, un peu plus haute.
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + 0.06f, d.z - 0.85f) });
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-d.x, d.y + 0.06f, d.z - 0.85f) });
                 }
             }
+            if (was != null)
+                foreach (Seat x in seats) if (x.Car == was.Car && x.Index == was.Index) { current = x; break; }
             Log.Info("places passagers : " + seats.Count);
         }
 
@@ -94,11 +102,19 @@ namespace MWCoop
         {
             if (!Session.Active || nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 30f; Scan(); }
+            // Liste des voitures changee apres le premier releve (taxi active) : releve tout de suite.
+            if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
             if (!FindPlayer()) return;
             if (current != null)
             {
-                if (pivot == null || current.CarT == null) { Leave(); return; }
+                // Voiture detruite, ou rangee (taxi remis en place par son travail : SetActive(false), rejoue chez
+                // tous) : le joueur accroche dessous serait inactif, sans camera ni commandes -- decroche tout de suite.
+                if (pivot == null || current.CarT == null || !current.CarT.gameObject.activeInHierarchy)
+                {
+                    if (current.CarT != null) Log.Info("passager : " + current.Car + " rangee (inactive)");
+                    Leave();
+                    return;
+                }
                 if (debugFrames > 0)
                 {
                     debugFrames--;
@@ -137,7 +153,7 @@ namespace MWCoop
             foreach (Seat s in seats)
             {
                 if (s.CarT == null || SeatTaken(s)) continue;
-                if ((s.CarT.position - player.position).sqrMagnitude > 25f) continue;
+                if ((s.CarT.position - player.position).sqrMagnitude > 25f || !s.CarT.gameObject.activeInHierarchy) continue;   // (taxi range : inactif)
                 Vector3 p = s.CarT.InverseTransformPoint(player.position);
                 if (p.y < -0.3f || p.y > s.Head.y) continue;
                 float dx = Mathf.Abs(p.x - s.Head.x), dz = Mathf.Abs(p.z - (s.Head.z - 0.1f));
@@ -225,7 +241,7 @@ namespace MWCoop
         static bool UnderRoof()
         {
             foreach (RaycastHit h in Physics.RaycastAll(player.position, Vector3.up, 1.5f))
-                if (h.collider != null && !h.collider.isTrigger && h.collider.transform.root != player.root && h.collider.transform.root.GetComponent("CarDynamics") != null) return true;
+                if (h.collider != null && !h.collider.isTrigger && h.collider.transform.root != player.root && VehicleSync.CarRoot(h.collider.transform) != null) return true;
             return false;
         }
 
@@ -267,8 +283,9 @@ namespace MWCoop
             car = null; head = Vector3.zero; carName = null;
             Remote rs;
             if (!remote.TryGetValue(id, out rs)) return false;
+            // (Voiture inactive ici -- taxi range : l'avatar reste a la place envoyee.)
             foreach (Seat s in seats)
-                if (s.Car == rs.Car && s.CarT != null)
+                if (s.Car == rs.Car && s.CarT != null && s.CarT.gameObject.activeInHierarchy)
                 {
                     car = s.CarT; carName = s.Car;
                     head = rs.Head != Vector3.zero ? rs.Head : SeatHead(rs.Car, rs.Index);
@@ -342,9 +359,10 @@ namespace MWCoop
         public static string DriverEyes(string car)
         {
             if (!FindPlayer()) return "pas de joueur";
-            foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
+            for (int ci = 0; ci < VehicleSync.LocalCount; ci++)
             {
-                if (rb.transform.parent != null || !rb.name.StartsWith(car)) continue;
+                Rigidbody rb = VehicleSync.LocalBody(ci);
+                if (rb == null || !rb.name.StartsWith(car)) continue;
                 Transform dhp = Find(rb.transform, "DriverHeadPivot");
                 return car + " : camera " + rb.transform.InverseTransformPoint(cam.position).ToString("F3")
                        + ", DriverHeadPivot " + (dhp != null ? rb.transform.InverseTransformPoint(dhp.position).ToString("F3") : "?");
@@ -353,5 +371,13 @@ namespace MWCoop
         }
 
         public static string TestLeave() { if (current == null) return "pas assis"; Leave(); return "sorti"; }
+
+        // Essais : places passagers de la voiture de cle 'car'.
+        public static int CountFor(string car)
+        {
+            int n = 0;
+            foreach (Seat s in seats) if (s.Car == car) n++;
+            return n;
+        }
     }
 }

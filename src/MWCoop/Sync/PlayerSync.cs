@@ -10,8 +10,9 @@ namespace MWCoop
     {
         // Posture et actions du joueur, montrees par son avatar (Avatar).
         public const int F_Crouch = 1, F_Seated = 2, F_Smoke = 4, F_Drink = 8, F_Carry = 16, F_Hello = 32, F_Sleep = 64,
-            F_SleepFast = 128,
-                         F_Inhale = 256, F_Exhale = 512;   // cigarette : tire (main a la bouche), souffle (fumee)   // le lit compte les heures : quand tous l'ont, l'hote accelere
+            F_SleepFast = 128,                      // le lit compte les heures : quand tous l'ont, l'hote accelere
+            F_Inhale = 256, F_Exhale = 512,         // cigarette : tire (main a la bouche), souffle (fumee)
+            F_Jacket = 1024, F_Coverall = 2048, F_Helmet = 4096;   // vetements portes (Wear) : caches chez les autres, montres par l'avatar
         const float SendRate = 1f / 20f;
         static float nextSend;
         static Transform player, cam, smoking, drinking, hello;
@@ -137,6 +138,7 @@ namespace MWCoop
                 if (AnyChildActive(drinking) || Game.GlobalBool("PlayerDrinkOn") || Time.realtimeSinceStartup < Consume.EatUntil) st.Flags |= F_Drink;
                 if (hello != null && hello.gameObject.activeInHierarchy) st.Flags |= F_Hello;
                 if (Props.Holding) st.Flags |= F_Carry;
+                st.Flags |= Wear.LocalFlags;
                 st.Flags |= Config.GetInt("Test", "TestFlags", 0) | Autotest.PoseFlags;   // essais : postures forcees
             }
             Session.Me.State = st;
