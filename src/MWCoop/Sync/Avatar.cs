@@ -464,6 +464,7 @@ namespace MWCoop
             Helmet((Player.State.Flags & PlayerSync.F_Helmet) != 0);
             Pose();
             PlaceCigarette();
+            PlaceDrink();
             PlacePee();
             // Assis sur un siege : ou tombe le bassin dans la pose assise (repere avatar) -> Apply y place le siege.
             Transform pv = Bone("pelvis");
@@ -963,6 +964,7 @@ namespace MWCoop
                 if ((f & PlayerSync.F_Smoke) != 0 && armL != null && armL["fumer"] != null) SmokeArm(f);
                 else ArmPlay(armL, null, "marche_g", moving);
                 Cigarette((f & PlayerSync.F_Smoke) != 0, (f & PlayerSync.F_Exhale) != 0);
+                DrinkInHand((f & PlayerSync.F_Drink) != 0 ? st.Drink : 0);
                 Pee(!inCar && !down && g != null && (g.Bits & Gestures.G_Piss) != 0);
             }
         }
@@ -1042,6 +1044,48 @@ namespace MWCoop
                 bool puff = on && exhale && Time.realtimeSinceStartup - exhaleAt < 1.2f;
                 if (pe != null) { pe.emit = puff; if (puff) pe.maxEmission = 4f; }
             }
+        }
+
+        // Boisson en main (Drinks) : copie de l'objet que le joueur tient en buvant (biere, lait, soda, cafe...),
+        // dans la main droite (clip « boire »), ramenee a une taille de bouteille ; retiree quand il a fini.
+        GameObject drinkGo;
+        int drinkIdx;
+
+        void DrinkInHand(int i)
+        {
+            if (i == drinkIdx) { if (drinkGo != null && drinkGo.activeSelf != (i > 0)) drinkGo.SetActive(i > 0); return; }
+            drinkIdx = i;
+            if (drinkGo != null) { Object.Destroy(drinkGo); drinkGo = null; }
+            if (i <= 0) return;
+            drinkGo = Drinks.Model(i, Root.transform);
+            if (drinkGo == null) return;
+            // Taille : la plus grande dimension de ses rendus ramenee a 24 cm (bouteilles) ou 11 cm (tasses, verres).
+            Bounds b = new Bounds(drinkGo.transform.position, Vector3.zero);
+            bool any = false;
+            foreach (Renderer r in drinkGo.GetComponentsInChildren<Renderer>()) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
+            string n = Drinks.Names[i];
+            float want = n.Contains("Coffee") || n.Contains("Glass") ? 0.11f : 0.24f;
+            float size = any ? Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z)) : 0f;
+            if (size > 0.01f) drinkGo.transform.localScale *= want / size;
+            Log.Info("avatar " + Player.Name + " : boit (" + n + ", " + (size > 0f ? (size * 100f).ToString("F0") + " cm ramenes a " + (want * 100f).ToString("F0") : "taille ?") + ")");
+        }
+
+        void PlaceDrink()
+        {
+            if (drinkGo == null || !drinkGo.activeSelf) return;
+            Transform hand = Bone("hand_right"), finger = Bone("finger_right");
+            if (hand == null) return;
+            // Dans le poing : entre le poignet et le bout des doigts ; debout dans la main, penchee vers la bouche
+            // quand la main y monte (axe de la bouteille : du poing vers la tete, moitie avec la verticale).
+            Vector3 at = finger != null ? Vector3.Lerp(hand.position, finger.position, 0.55f) : hand.position;
+            Vector3 up = Root.transform.up;
+            if (headBone != null) up = Vector3.Slerp(up, (headBone.position - at).normalized, 0.5f);
+            drinkGo.transform.rotation = Quaternion.FromToRotation(Vector3.up, up) * Quaternion.Euler(0f, Root.transform.eulerAngles.y, 0f);
+            // Le centre des rendus est pose la (l'origine du modele du jeu n'est pas forcement en son milieu).
+            Vector3 c = drinkGo.transform.position;
+            bool any = false; Bounds b = new Bounds();
+            foreach (Renderer r in drinkGo.GetComponentsInChildren<Renderer>()) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
+            drinkGo.transform.position = any ? at + (c - b.center) : at;
         }
 
         // Apres la pose : la cigarette entre les doigts, la fumee devant la bouche.

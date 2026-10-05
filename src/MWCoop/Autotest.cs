@@ -132,6 +132,7 @@ namespace MWCoop
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
             if (Config.GetInt("Test", "Regarder", 0) != 0) LookAtNearestAvatar();   // captures : la camera vise l'avatar le plus proche
             if (mode == "cd") TestCd(t);
+            if (mode == "teletexte") TestTeletext(t);
             if (mode == "nuages" && !MWCoop.Net.Session.IsHost && t > 30f && step == 0)
             {
                 // Invite : nuages inverses ici ; le message suivant de l'hote doit les remettre comme chez lui.
@@ -156,7 +157,36 @@ namespace MWCoop
                     Vector3 pos = b.transform.position;
                     if (fluLast != Vector3.zero) { float v = (pos - fluLast).magnitude / Time.deltaTime; fluN++; fluSum += v; fluSq += v * v; if (v < 0.05f) fluStill++; }
                     fluLast = pos;
-                    if (t >= fluLog) { fluLog = t + 2f; if (fluN > 0) { float m = fluSum / fluN; Log.Info("autotest : fluide, vitesse " + m.ToString("F2") + " m/s, ecart-type " + Mathf.Sqrt(Mathf.Max(0f, fluSq / fluN - m * m)).ToString("F2") + ", images immobiles " + fluStill + "/" + fluN); } fluN = 0; fluSum = fluSq = 0f; fluStill = 0; }
+                    // Pieces de la voiture qui bougent PAR RAPPORT a elle (banquette, coffre qui tremblent chez le passager) :
+                    // deplacement moyen par image de chaque corps et de chaque objet a rendu nomme, dans le repere de la voiture.
+                    foreach (Transform c in b.GetComponentsInChildren<Transform>())
+                    {
+                        if (c == b.transform || (c.GetComponent<Rigidbody>() == null && c.GetComponent<Renderer>() == null)) continue;
+                        string cn = c.name.ToLowerInvariant();
+                        if (cn.Contains("tire") || cn.Contains("rim") || cn.Contains("wheel") || cn.Contains("hubcap") || cn.Contains("needle")) continue;   // (tournent normalement)
+                        Vector3 lp = b.transform.InverseTransformPoint(c.position);
+                        Quaternion lr = Quaternion.Inverse(b.rotation) * c.rotation;
+                        float[] acc;
+                        if (!fluParts.TryGetValue(c, out acc)) { fluParts[c] = new float[] { lp.x, lp.y, lp.z, 0, 0, 0, lr.x, lr.y, lr.z, lr.w }; continue; }
+                        var plp = new Vector3(acc[0], acc[1], acc[2]);
+                        var plr = new Quaternion(acc[6], acc[7], acc[8], acc[9]);
+                        acc[3] += (lp - plp).magnitude; acc[4] += Quaternion.Angle(lr, plr); acc[5] += 1;
+                        acc[0] = lp.x; acc[1] = lp.y; acc[2] = lp.z; acc[6] = lr.x; acc[7] = lr.y; acc[8] = lr.z; acc[9] = lr.w;
+                    }
+                    if (t >= fluLog) { fluLog = t + 2f; if (fluN > 0) { float m = fluSum / fluN; Log.Info("autotest : fluide, vitesse " + m.ToString("F2") + " m/s, ecart-type " + Mathf.Sqrt(Mathf.Max(0f, fluSq / fluN - m * m)).ToString("F2") + ", images immobiles " + fluStill + "/" + fluN); } fluN = 0; fluSum = fluSq = 0f; fluStill = 0;
+                        var worst = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<float, string>>();
+                        foreach (var kv in fluParts)
+                            if (kv.Key != null && kv.Value[5] > 0)
+                            {
+                                float mm = kv.Value[3] / kv.Value[5] * 1000f, deg = kv.Value[4] / kv.Value[5];
+                                if (mm > 0.5f || deg > 0.05f) worst.Add(new System.Collections.Generic.KeyValuePair<float, string>(mm + deg * 10f, VehicleSync.RelPath(b.transform, kv.Key) + (kv.Key.GetComponent<Rigidbody>() != null ? "[corps " + (kv.Key.GetComponent<Rigidbody>().isKinematic ? "cin" : "dyn") + "]" : "") + " " + mm.ToString("F1") + " mm " + deg.ToString("F2") + " deg"));
+                                kv.Value[3] = kv.Value[4] = kv.Value[5] = 0;
+                            }
+                        worst.Sort((x, y) => y.Key.CompareTo(x.Key));
+                        var sbw = new System.Text.StringBuilder("autotest : fluide, pieces qui bougent dans la voiture (par image) :");
+                        for (int i = 0; i < worst.Count && i < 8; i++) sbw.Append(' ').Append(worst[i].Value).Append(';');
+                        Log.Info(worst.Count == 0 ? "autotest : fluide, aucune piece ne bouge dans la voiture" : sbw.ToString());
+                    }
                 }
             }
             if (mode == "mort")
@@ -592,9 +622,52 @@ namespace MWCoop
         static float cdLog, fluLog, fluSum, fluSq;
         static int fluN, fluStill;
         static Vector3 fluLast;
+        static readonly System.Collections.Generic.Dictionary<Transform, float[]> fluParts = new System.Collections.Generic.Dictionary<Transform, float[]>();
 
         // Boitier de CD et CD : l'hote ouvre le boitier 1 (45 s), en sort le CD (49 s), le pose 1 m plus loin (52 s),
         // referme le boitier (60 s) ; les deux cotes notent le boitier et le CD toutes les 2 s.
+        // Teletexte ([Test] Autotest=teletexte) : a 30 s l'hote allume le teletexte avec la telecommande (Use : 'Bool
+        // test' -> Open), a 36 s il tape la page 123 (Input : 'Send code', NumberInt) ; les deux notent toutes les 2 s si
+        // Systems/TV/Teletext est allume et sa page (Pages.PageNumber). Attendu chez l'invite : allume, 123.
+        static float ttLog;
+        static void TestTeletext(float t)
+        {
+            if (MWCoop.Net.Session.IsHost && t > 24f && step == 0)
+            {
+                step = 10;   // la tele d'abord (la telecommande ne marche que tele allumee)
+                GameObject sw = Game.FindAny("YARD/Building/LIVINGROOM/TV/TVSwitch");
+                PlayMakerFSM u = sw != null ? Game.FsmOn(sw, "Use") : null;
+                if (u != null) { Game.SetState(u, "Switch"); Log.Info("autotest : tele -> " + u.ActiveStateName); }
+            }
+            // Comme le joueur : il vise la telecommande (Use 'Wait button', le pave Input s'allume), clique (USE :
+            // teletexte allume), puis la vise de nouveau et tape 1, 2, 3 (Input 'Wait key' -KEY-> avec Key).
+            GameObject rc = Game.FindAny("EQUIPMENTS/tv remote control(item1)");
+            PlayMakerFSM use = rc != null ? Game.FsmOn(rc, "Use") : null, inp = rc != null ? Game.FsmOn(rc, "Input") : null;
+            if (MWCoop.Net.Session.IsHost && use != null && inp != null)
+            {
+                if (t > 30f && step == 10) { step = 1; Log.Info("autotest : clic (envoye comme chez le joueur) " + WorldFsms.TestSend("tv remote control(item1)::Use", "Wait button", "USE", "Bool test")); }
+                for (int k = 0; k < 3; k++)
+                    if (t > 36f + k && step == 2 + k)
+                    {
+                        step = 3 + k;
+                        Game.SetState(use, "Wait button");
+                        if (!inp.enabled) inp.enabled = true;
+                        Game.SetState(inp, "Wait key");
+                        inp.FsmVariables.FindFsmString("Key").Value = (k + 1).ToString();
+                        Log.Info("autotest : touche " + (k + 1) + " " + WorldFsms.TestEvent("tv remote control(item1)::Input", "KEY"));
+                    }
+                if (t > 35f && step == 1) step = 2;
+            }
+            if (t > 28f && t < 60f && t >= ttLog)
+            {
+                ttLog = t + 2f;
+                GameObject tt = Game.FindAny("Systems/TV/Teletext");
+                PlayMakerFSM pages = tt != null ? Game.FsmOn(tt, "Pages") : null;
+                FsmInt pn = pages != null ? pages.FsmVariables.FindFsmInt("PageNumber") : null;
+                Log.Info("autotest : teletexte " + (tt == null ? "absent" : tt.activeSelf ? "allume" : "eteint") + ", page " + (pn != null ? pn.Value.ToString() : "?"));
+            }
+        }
+
         static void TestCd(float t)
         {
             GameObject cases = GameObject.Find("Systems/CDs");

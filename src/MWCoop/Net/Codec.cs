@@ -100,5 +100,6 @@ namespace MWCoop.Net
         Garage = 42,      // atelier : crics, pont, palan, degats d'accident, chargeur du tracteur (a remplir : lot 4)
         Home = 43,        // maison : fusibles et electricite, kilju (a remplir : lot 4)
         Gesture = 44,     // gestes du joueur : coup, doigt, pouce, pipi, montre, pencher, ivresse, assis (a remplir : lot 4)
+        Thrown = 45,      // bouteille vide jetee par un joueur qui a bu (etat de l'automate Drink, pose, vitesse)
     }
 }
