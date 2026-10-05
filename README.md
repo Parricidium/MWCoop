@@ -95,6 +95,7 @@ No other loader is needed (MWCoop does not use MSCLoader).
 | Chat, F10 menu | |
 | Respawn: in co-op, death no longer ends the game; the player picks where to come back (apartment or parents' house), even after a car crash | |
 | Sync audit (F10 > SYNCHRO): census of every interactive object and which module syncs it, host/guest state comparison every 15 s (lasting differences logged as DESYNC), local actions that are not shared | |
+| Outfits in 3D: turntable preview in F10 > APPEARANCE and in the launcher's OUTFIT tab (portrait gallery), player portraits in the lobby; CDs put back in their case or a player seen in place; gas pump terminal screen (PIN, amount) seen by all | |
 | Guests' waiting screen instead of the main menu (connection, host, save download, loading); lobby UDP check (tells the host to forward UDP, not just TCP); LOGS tab with "open folder" and "zip to send"; GTA-style F10 menu with keyboard navigation; CD cases and CDs shared; launcher car preview always the complete stock CORRIS | |
 | Taxi (passengers, doors), engine state handed over with the wheel, window frost and scraping, towing rope, pub/inspection/flea market/coffee/bus purchases, outgoing calls, mail orders, worn clothes, bolts of freshly installed parts, firewood, septic tanks, co-op save at the toilet without kicking guests | |
 
@@ -235,6 +236,11 @@ invité avant LANCER (« UDP bloqué : l'hôte doit rediriger le port UDP, pas s
 visible avec « Ouvrir le dossier » et « Créer un zip à envoyer » (sur le Bureau) ; menu F10 façon GTA (navigation au
 clavier) ; boîtiers de CD ouverts/fermés et CD sortis vus par tous ; aperçu du lanceur : la CORRIS complète d'origine
 (pièces de série, jantes et pneus), plus l'état de la sauvegarde.
+Fait aussi (0.22, retours de JD) : tenues en 3D comme dans GTA — le jeu photographie chaque tenue sous 16 angles
+(MWCoop\cache\skins) ; F10 > APPARENCE montre le personnage qui tourne, le lanceur a un onglet TENUE (aperçu qu'on fait
+tourner, galerie de portraits) et le salon affiche le portrait de chaque joueur ; CD remis dans un boîtier, une chaîne
+ou un lecteur de voiture : posé à sa place chez tous (plus de chute) ; écran du terminal de la pompe (code, montant) vu
+par tous jusqu'au bout.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
