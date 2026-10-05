@@ -121,6 +121,9 @@ namespace MWCoop
             // n'etait plus postee chez l'autre (Calls.CheckEnvelope) et sa demande d'allocation de la semaine perdue.
             string tn = t.name;
             if (k == null && tn == Calls.PartsEnvelope) k = "w:enveloppe:" + tn;
+            // CD sorti de son boitier (ou d'un lecteur) : 'Remove part' le detache de PivotCD et lui rend un corps,
+            // hors de toute racine du monde. Cle fixe par son nom de disque (Data.ThisCD : CD1, CD2...).
+            if (k == null && tn == "cd(itemx)") k = CdKey(t.gameObject);
             if (k != null) { worldKeys[rb.gameObject] = k; return k; }
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement.
             bool plug = tn.StartsWith("cable plug");
@@ -129,6 +132,13 @@ namespace MWCoop
             k = plug ? "w:prise:" + t.root.name + "/" + (t.parent != null ? t.parent.name : "") : "w:" + Recon.Path(t) + "#" + t.GetSiblingIndex();
             worldKeys[rb.gameObject] = k;
             return k;
+        }
+
+        public static string CdKey(GameObject cd)
+        {
+            PlayMakerFSM d = Game.FsmOn(cd, "Data");
+            FsmString n = d != null ? d.FsmVariables.FindFsmString("ThisCD") : null;
+            return n != null && !string.IsNullOrEmpty(n.Value) ? "w:cd:" + n.Value : null;
         }
 
         static void Register(Rigidbody rb, string id, PlayMakerFSM use)

@@ -173,7 +173,9 @@ namespace MWCoop
             if (root.GetComponent("CarDynamics") != null) return true;                  // vehicules : Jobs, CarDoors...
             if (SkipFsmNames.Contains(f.FsmName)) return true;
             string n = f.gameObject.name;
-            if (n.Contains("(itemx)") || n.Contains("(item")) return true;              // objets portes : Props, Consume
+            // Objets portes : Props, Consume. Sauf l'ouverture des boitiers de CD (Systems/CDs/cd case(itemN) :: Use,
+            // Bool test -> Open/Close), qui n'est suivie par personne d'autre.
+            if ((n.Contains("(itemx)") || n.Contains("(item")) && !(n.StartsWith("cd case(item") && f.FsmName == "Use")) return true;
             foreach (string s in SkipObjects) if (n.Contains(s) || root.name.Contains(s)) return true;
             for (Transform p = f.transform; p != null; p = p.parent)
             {
@@ -1032,6 +1034,20 @@ namespace MWCoop
                 }
             // Automates passes a Calls (createurs de commandes, cadrans, boite aux lettres) : l'essai 'colis' marche encore.
             return Calls.TestEvent(part, ev) ?? "rien pour " + part;
+        }
+
+        // Comme si le joueur venait d'agir et que l'automate passait a 'state' (boitier de CD : 'Bool test').
+        public static string TestClick(string part, string state)
+        {
+            foreach (W j in byKey.Values)
+                if (j.F != null && j.Key.Contains(part))
+                {
+                    string before = j.F.ActiveStateName;
+                    lastInput = Time.realtimeSinceStartup;
+                    Game.SetState(j.F, state);
+                    return j.Key + " : " + before + " => " + j.F.ActiveStateName;
+                }
+            return "rien pour " + part;
         }
 
         // Comme si la logique passait d'elle-meme a 'state' (le crochet envoie comme en vrai).
