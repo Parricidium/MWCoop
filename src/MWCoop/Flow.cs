@@ -17,6 +17,9 @@ namespace MWCoop
 
         static bool launchUsed;
 
+        // Invite : l'hote est en partie et la sauvegarde recue, le menu a ete lance (ecran d'attente).
+        public static bool GuestJoining { get { return guestStarted; } }
+
         // Partie demandee par le salon du lanceur (une seule fois par lancement du jeu).
         static string LaunchChoice
         {
