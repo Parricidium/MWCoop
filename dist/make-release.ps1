@@ -34,7 +34,7 @@ if ($Publier) {
     [System.IO.File]::WriteAllText($nf, $Notes, (New-Object System.Text.UTF8Encoding $false))
     # Le tag est cree sur GitHub : le code doit y etre avant (sinon il pointe sur l'ancien main).
     $head = (git -C $root rev-parse HEAD).Trim()
-    git -C $root push origin HEAD:main
+    $po = cmd /c "git -C `"$root`" push origin HEAD:main 2>&1"   # par cmd : git ecrit sur stderr, ce qui arreterait le script
     if ($LASTEXITCODE -ne 0) { Remove-Item $nf; throw "echec du push de main" }
     gh release create "v$Version" $zip --repo Parricidium/MWCoop --title "MWCoop $Version (pre-alpha)" --notes-file $nf --prerelease --target $head
     $rc = $LASTEXITCODE
