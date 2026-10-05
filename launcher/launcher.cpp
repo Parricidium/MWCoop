@@ -21,10 +21,13 @@
 //  - Options du joueur : MWCoop\mwcoop.ini, section [Coop] (Pseudo, Adresse, Port, Apparence, CouleurVoiture).
 //  - Onglet VOITURE : couleur de la CORRIS pour une nouvelle partie, apercu 3D (MWCoop\cache\corris.mesh, rendu
 //    logiciel).
+//  - Onglet TENUE : l'Apparence choisie facon GTA (personnage qui tourne, fleches, galerie de portraits) ; images
+//    pre-rendues par le mod dans MWCoop\cache\skins (portraits repris dans le salon).
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
-//   /capture <png> <menu|coop|voiture|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|salon-invite|salon-udp>
-//            [/theme clair|sombre] [/lang fr|en] [/echelle k] : rendu d'un etat dans un PNG ;
+//   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
+//            salon-invite|salon-udp> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
 //            et lance des que l'invite est pret (et son test UDP fini) ; l'invite rejoint et se met pret. Chacun ecrit
@@ -53,6 +56,7 @@ using std::max;
 #include <shlobj.h>
 #include <string>
 #include <vector>
+#include <map>
 #include <atomic>
 #include <stdio.h>
 #include <math.h>
@@ -777,7 +781,7 @@ static void StartUpdate()
 
 // ---------------------------------------------------------------- boutons
 // Onglets du panneau de droite (TAB_LOGS : page du bouton journaux, pas d'onglet ; TAB_LOBBY : pendant un salon)
-enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_COUNT };
+enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_SKIN, TAB_COUNT };
 static int g_tab = -1;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_COUNT };
@@ -1047,8 +1051,8 @@ static void BuildOptions()
         for (int i = 0; i < (int)o.svals.size(); i++) o.vals.push_back(i);
         o.def = 20;   // char_shirt21 (defaut du mod)
         o.fr = L"Apparence"; o.en = L"Appearance"; o.suffix = L"";
-        o.dFr = L"Le personnage que les autres joueurs voient : la tenue d'un habitant, ou celle du policier, du pilote de rallye\u2026";
-        o.dEn = L"The character the other players see: a local's outfit, or the police officer's, the rally driver's\u2026";
+        o.dFr = L"Le personnage que les autres joueurs voient : la tenue d'un habitant, ou celle du policier, du pilote de rallye\u2026 Aper\u00E7u en 3D : onglet TENUE.";
+        o.dEn = L"The character the other players see: a local's outfit, or the police officer's, the rally driver's\u2026 3D preview: OUTFIT tab.";
         g_opts.push_back(o);
     }
 }
@@ -1077,14 +1081,14 @@ static const Opt *OptByKey(const char *key) { for (auto &o : g_opts) if (!strcmp
 
 static const wchar_t *TabName(int t)
 {
-    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE", L"SALON" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR", L"LOBBY" };
+    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE", L"SALON", L"TENUE" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR", L"LOBBY", L"OUTFIT" };
     return g_fr ? fr[t] : en[t];
 }
 // JOURNAUX : onglet aussi (l'icone seule, les amis de JD ne la trouvaient pas).
 static bool TabVisible(int t) { return t == TAB_LOBBY ? g_lobby != LB_NONE : true; }
 static void LayoutTabs()
 {
-    static const int order[] = { TAB_LOBBY, TAB_COOP, TAB_CAR, TAB_NOTES, TAB_LOGS };
+    static const int order[] = { TAB_LOBBY, TAB_COOP, TAB_SKIN, TAB_CAR, TAB_NOTES, TAB_LOGS };
     float x = 440, pad = 12, gap = 6;
     Bitmap bm(1, 1);
     Graphics mg(&bm);
@@ -1168,11 +1172,13 @@ static void DrawNotes(Graphics &g);
 static void DrawLogs(Graphics &g);
 static void DrawCar(Graphics &g);
 static void DrawLobby(Graphics &g);
+static void DrawSkins(Graphics &g);
 
 static void DrawOptions(Graphics &g)
 {
     if (g_tab < 0 || g_gameDir.empty()) return;
     if (g_tab == TAB_LOBBY) { DrawLobby(g); return; }
+    if (g_tab == TAB_SKIN) { DrawSkins(g); return; }
     if (g_tab == TAB_CAR) { DrawCar(g); return; }
     if (g_tab == TAB_NOTES) { DrawNotes(g); return; }
     if (g_tab == TAB_LOGS) { DrawLogs(g); return; }
@@ -1237,7 +1243,7 @@ static void DrawOptions(Graphics &g)
 static void HitOption(float x, float y, int *row, int *part)
 {
     *row = -1; *part = 0;
-    if (g_tab < 0 || g_tab == TAB_NOTES || g_tab == TAB_LOGS || g_tab == TAB_CAR || g_tab == TAB_LOBBY || !kOptList.Contains(x, y)) return;
+    if (g_tab < 0 || g_tab == TAB_NOTES || g_tab == TAB_LOGS || g_tab == TAB_CAR || g_tab == TAB_LOBBY || g_tab == TAB_SKIN || !kOptList.Contains(x, y)) return;
     std::vector<int> rows = TabRows(g_tab);
     int k = (int)((y - kOptList.Y + g_scroll[g_tab]) / kRowH);
     if (k < 0 || k >= (int)rows.size()) return;
@@ -2162,6 +2168,418 @@ static void CarDragTo(float x, float y)
     g_carDirty = true;
 }
 
+// ---------------------------------------------------------------- onglet TENUE (Apparence, apercu facon GTA)
+// Images pre-rendues par le mod dans <jeu>\MWCoop\cache\skins\ (apres ~30 s en jeu) :
+//   <tenue>.png          : bande de 16 vues de 160 x 320 (RGBA, fond transparent) ; vue i = personnage tourne de
+//                          i x 22,5 degres, vue 0 face a la camera ;
+//   <tenue>-portrait.png : 128 x 128, tete et epaules (aussi dans le salon) ;
+//   index.txt            : "MWSK 1 <version du mod>" puis "<tenue>\t<libelle>" par ligne ; ecrit en dernier : sans lui
+//                          (ou avec un autre format), le dossier est ignore.
+// Cache : PNG lus en memoire (le mod peut les reecrire, rien n'est garde ouvert) et copies en PARGB ; tout est oublie
+// quand index.txt change (date verifiee au plus toutes les 3 s). Portraits charges au besoin (quelques-uns par image
+// pour ne pas figer la fenetre), bandes seulement pour la tenue montree (6 au plus en memoire, ~3 Mo chacune).
+// Choisir une tenue ecrit [Coop] Apparence comme l'onglet COOP ; dans un salon, LobbyTick l'annonce aussitot.
+struct SkinPic {
+    Bitmap *strip = NULL, *portrait = NULL;
+    bool stripTried = false, portraitTried = false;
+    DWORD used = 0;
+    Bitmap *thumb[2] = {};                                  // portrait deja reduit et masque (0 galerie, 1 salon)
+    int thumbW[2] = {}, thumbH[2] = {};
+};
+static std::map<std::string, SkinPic> g_skinPics;           // par tenue (nom en minuscules)
+static std::map<std::string, std::wstring> g_skinLabels;    // libelles de index.txt (tenue inconnue du lanceur)
+static std::wstring g_skinsArg;                             // /skins <dossier> : images de test
+static std::wstring g_skinDirSeen;
+static int g_skinState;                                     // 0 pas vu, 1 index.txt valide, -1 absent ou illisible
+static FILETIME g_skinIdxMt;
+static DWORD g_skinCheckT;
+static int g_skinBudget = 1000;                             // portraits a charger pendant cette image
+static bool g_skinAnnounce;                                 // salon : annoncer l'apparence sans attendre
+static const RectF kSkinView(452, 128, 220, 330);
+static const float kSkinCell = 46, kSkinGap = 6;
+static const int kSkinCols = 5;
+static float g_skinYaw;                                     // vue montree (0..16, la plus proche est dessinee)
+static bool g_skinDrag;
+static float g_skinDragX;
+static DWORD g_skinIdleT, g_skinChangeT;                    // fin du dernier glisser / changement de tenue
+static int g_skinChangeDir = 1;
+static int g_skinHot = -1, g_skinArrowHot;                  // portrait survole ; fleche survolee (-1, +1)
+static Bitmap *g_skinFrame;                                 // vue montree, deja a la taille de l'ecran
+static const Bitmap *g_skinFrameSrc;
+static int g_skinFrameN = -1, g_skinFrameW, g_skinFrameH;
+
+// PNG en memoire -> copie PARGB (dessin rapide) ; NULL si illisible ou trop grand.
+static Bitmap *LoadPngMem(const void *p, size_t n, UINT maxW, UINT maxH)
+{
+    IStream *s = SHCreateMemStream((const BYTE *)p, (UINT)n);
+    if (!s) return NULL;
+    Bitmap *copy = NULL;
+    Bitmap *b = Bitmap::FromStream(s);
+    if (b && b->GetLastStatus() == Ok && b->GetWidth() > 0 && b->GetHeight() > 0 && b->GetWidth() <= maxW && b->GetHeight() <= maxH) {
+        copy = new Bitmap(b->GetWidth(), b->GetHeight(), PixelFormat32bppPARGB);
+        if (copy->GetLastStatus() != Ok) { delete copy; copy = NULL; }
+        else {
+            Graphics g(copy);
+            g.SetCompositingMode(CompositingModeSourceCopy);
+            g.DrawImage(b, 0, 0, b->GetWidth(), b->GetHeight());
+        }
+    }
+    delete b;
+    s->Release();
+    return copy;
+}
+
+static std::wstring SkinsDir() { return !g_skinsArg.empty() ? g_skinsArg : g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\cache\\skins\\"; }
+
+// Nom de tenue sur (il vient aussi du reseau et finit dans un chemin) : lettres, chiffres, _ et -, en minuscules.
+static std::string SkinKey(const std::string &skin)
+{
+    if (skin.empty() || skin.size() > 64) return "";
+    std::string k;
+    for (char c : skin) {
+        if (!isalnum((unsigned char)c) && c != '_' && c != '-') return "";
+        k += (char)tolower((unsigned char)c);
+    }
+    return k;
+}
+
+static void SkinsFree()
+{
+    for (auto &kv : g_skinPics) { delete kv.second.strip; delete kv.second.portrait; delete kv.second.thumb[0]; delete kv.second.thumb[1]; }
+    g_skinPics.clear();
+    delete g_skinFrame;
+    g_skinFrame = NULL;
+    g_skinFrameSrc = NULL;
+}
+
+// index.txt apparu, disparu ou reecrit : cache oublie. Au plus toutes les 3 s.
+static void SkinsCheck()
+{
+    DWORD now = GetTickCount();
+    std::wstring dir = SkinsDir();
+    if (g_skinState != 0 && dir == g_skinDirSeen && now - g_skinCheckT < 3000) return;
+    g_skinCheckT = now;
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    bool exists = !dir.empty() && GetFileAttributesExW((dir + L"index.txt").c_str(), GetFileExInfoStandard, &a) && !(a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    FILETIME mt = {};
+    if (exists) mt = a.ftLastWriteTime;
+    if (g_skinState != 0 && dir == g_skinDirSeen && exists == (g_skinState == 1) && CompareFileTime(&mt, &g_skinIdxMt) == 0) return;
+    SkinsFree();
+    g_skinLabels.clear();
+    g_skinDirSeen = dir;
+    g_skinIdxMt = mt;
+    g_skinState = -1;
+    std::vector<unsigned char> d;
+    if (!exists || !ReadAll(dir + L"index.txt", d)) return;
+    std::string t(d.begin(), d.end());
+    if (t.size() >= 3 && (unsigned char)t[0] == 0xEF && (unsigned char)t[1] == 0xBB && (unsigned char)t[2] == 0xBF) t.erase(0, 3);
+    size_t pos = 0;
+    for (int line = 0; pos <= t.size(); line++) {
+        size_t e = t.find('\n', pos);
+        std::string l = t.substr(pos, e == std::string::npos ? std::string::npos : e - pos);
+        pos = e == std::string::npos ? t.size() + 1 : e + 1;
+        while (!l.empty() && (l.back() == '\r' || l.back() == ' ')) l.pop_back();
+        if (line == 0) { if (l != "MWSK 1" && l.compare(0, 7, "MWSK 1 ")) return; g_skinState = 1; continue; }
+        size_t tab = l.find('\t');
+        std::string k = SkinKey(l.substr(0, tab));
+        if (!k.empty() && tab != std::string::npos) g_skinLabels[k] = Trim(Widen(l.substr(tab + 1)));
+    }
+}
+
+static SkinPic *SkinPicFor(const std::string &skin, std::string *key)
+{
+    if (g_skinState != 1) return NULL;
+    *key = SkinKey(skin);
+    return key->empty() ? NULL : &g_skinPics[*key];
+}
+static Bitmap *SkinLoad(const std::string &key, const wchar_t *suffix, UINT maxW, UINT maxH)
+{
+    std::vector<unsigned char> d;
+    if (!ReadAll(g_skinDirSeen + Widen(key) + suffix, d) || d.empty()) return NULL;
+    return LoadPngMem(d.data(), d.size(), maxW, maxH);
+}
+static Bitmap *SkinPortrait(const std::string &skin)
+{
+    std::string k;
+    SkinPic *p = SkinPicFor(skin, &k);
+    if (!p) return NULL;
+    if (!p->portraitTried && g_skinBudget > 0) {
+        g_skinBudget--;
+        p->portraitTried = true;
+        p->portrait = SkinLoad(k, L"-portrait.png", 1024, 1024);
+    }
+    return p->portrait;
+}
+static Bitmap *SkinStrip(const std::string &skin)
+{
+    std::string k;
+    SkinPic *p = SkinPicFor(skin, &k);
+    if (!p) return NULL;
+    p->used = GetTickCount();
+    if (!p->stripTried) {
+        p->stripTried = true;
+        p->strip = SkinLoad(k, L".png", 16 * 1024, 2048);
+        if (p->strip && p->strip->GetWidth() < 16) { delete p->strip; p->strip = NULL; }
+        for (;;) {   // au plus 6 bandes en memoire : la plus ancienne repart
+            int n = 0;
+            SkinPic *old = NULL;
+            for (auto &kv : g_skinPics)
+                if (kv.second.strip) { n++; if (&kv.second != p && (!old || kv.second.used < old->used)) old = &kv.second; }
+            if (n <= 6 || !old) break;
+            if (g_skinFrameSrc == old->strip) g_skinFrameSrc = NULL;
+            delete old->strip; old->strip = NULL; old->stripTried = false;
+        }
+    }
+    return p->strip;
+}
+
+// Portrait reduit une fois a la taille de l'ecran et masque (0 : carre arrondi de la galerie, 1 : cercle du salon),
+// bords lisses ; ensuite copie pixel pour pixel a chaque image. Refait si la taille change.
+static Bitmap *SkinThumb(const std::string &skin, int shape, float w, float h)
+{
+    Bitmap *pt = SkinPortrait(skin);
+    if (!pt) return NULL;
+    SkinPic &p = g_skinPics[SkinKey(skin)];
+    int W = max(4, (int)(w * g_scale + 0.5f)), H = max(4, (int)(h * g_scale + 0.5f));
+    if (p.thumb[shape] && p.thumbW[shape] == W && p.thumbH[shape] == H) return p.thumb[shape];
+    delete p.thumb[shape];
+    p.thumb[shape] = NULL;
+    Bitmap tmp(W, H, PixelFormat32bppPARGB), *th = new Bitmap(W, H, PixelFormat32bppPARGB);
+    float kx = W / w, ky = H / h;
+    {
+        Graphics tg(&tmp);
+        tg.Clear(Color(0, 0, 0, 0));
+        tg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        tg.SetPixelOffsetMode(PixelOffsetModeHalf);
+        tg.DrawImage(pt, RectF(1 * kx, 2.5f * ky, (w - 2) * kx, (h - 2) * ky));
+    }
+    {
+        Graphics g(th);
+        g.Clear(Color(0, 0, 0, 0));
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        GraphicsPath mask;
+        if (shape == 0) RoundRect(mask, RectF(0, 0, (float)W, (float)H), 10 * kx);
+        else mask.AddEllipse(RectF(0, 0, (float)W, (float)H));
+        TextureBrush tb(&tmp, WrapModeClamp);
+        g.FillPath(&tb, &mask);
+    }
+    p.thumb[shape] = th;
+    p.thumbW[shape] = W;
+    p.thumbH[shape] = H;
+    return th;
+}
+// Copie d'une image deja a la taille de l'ecran (pas de reechantillonnage).
+static void DrawPixels(Graphics &g, Bitmap *b, RectF r)
+{
+    InterpolationMode im = g.GetInterpolationMode();
+    g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+    g.DrawImage(b, r);
+    g.SetInterpolationMode(im);
+}
+
+// Pastille d'un joueur (salon) : son portrait dans un cercle borde de sa couleur, sinon l'initiale sur sa couleur.
+static void DrawSkinAvatar(Graphics &g, RectF c, const std::string &skin, Color col, const std::wstring &name)
+{
+    Bitmap *th = SkinThumb(skin, 1, c.Width, c.Height);
+    if (!th) {
+        SolidBrush ab(col);
+        g.FillEllipse(&ab, c);
+        Text(g, name.empty() ? L"?" : name.substr(0, 1), RectF(c.X, c.Y + 0.5f, c.Width, c.Height), c.Height * 0.45f, FontStyleBold, Color(255, 255, 255, 255));
+        return;
+    }
+    LinearGradientBrush bg(RectF(c.X, c.Y - 1, c.Width, c.Height + 2), Mix(TH(card), col, g_dark ? 0.55f : 0.40f), Mix(TH(card), col, g_dark ? 0.25f : 0.15f), LinearGradientModeVertical);
+    g.FillEllipse(&bg, c);
+    DrawPixels(g, th, c);
+    Pen ring(col, 2.0f);
+    g.DrawEllipse(&ring, c);
+}
+
+static const Opt *SkinOpt() { return OptByKey("Apparence"); }
+static int SkinCount() { const Opt *ap = SkinOpt(); return ap ? (int)ap->svals.size() : 0; }
+static RectF SkinCellRect(int i) { return RectF(685 + (i % kSkinCols) * (kSkinCell + kSkinGap), 154 + (i / kSkinCols) * (kSkinCell + kSkinGap), kSkinCell, kSkinCell); }
+static RectF SkinArrowRect(int side) { return RectF(side < 0 ? kSkinView.X + 8 : kSkinView.X + kSkinView.Width - 38, kSkinView.Y + kSkinView.Height / 2 - 25, 30, 30); }
+static int SkinCellAt(float x, float y)
+{
+    for (int i = 0; i < SkinCount(); i++) { RectF r = SkinCellRect(i); r.Inflate(2, 2); if (r.Contains(x, y)) return i; }
+    return -1;
+}
+static int SkinArrowAt(float x, float y)
+{
+    for (int s = -1; s <= 1; s += 2) { RectF r = SkinArrowRect(s); r.Inflate(4, 4); if (r.Contains(x, y)) return s; }
+    return 0;
+}
+
+static void SkinSelect(int i, int dir)
+{
+    const Opt *ap = SkinOpt();
+    if (!ap || i < 0 || i >= (int)ap->svals.size() || i == OptGet(*ap)) return;
+    OptSet(*ap, i);
+    g_skinAnnounce = true;
+    g_skinYaw = 0;   // nouvelle tenue : de face, puis la rotation reprend
+    g_skinChangeT = g_skinIdleT = GetTickCount();
+    g_skinChangeDir = dir;
+}
+static void SkinStep(int dir)
+{
+    int n = SkinCount();
+    if (n <= 0) return;
+    SkinSelect((OptGet(*SkinOpt()) + dir + n) % n, dir);
+}
+
+// Silhouette neutre (pas d'image) : tete et buste.
+static void DrawSkinGhost(Graphics &g, float cx, float top, float k)
+{
+    SolidBrush b(WithA(kGrey, 0.22f));
+    g.FillEllipse(&b, cx - 22 * k, top, 44 * k, 48 * k);
+    GraphicsPath bp;
+    RoundRect(bp, RectF(cx - 42 * k, top + 56 * k, 84 * k, 96 * k), 24 * k);
+    g.FillPath(&b, &bp);
+}
+
+static void DrawSkins(Graphics &g)
+{
+    SkinsCheck();
+    DrawPanel(g);
+    const Opt *ap = SkinOpt();
+    if (!ap) return;
+    int n = (int)ap->svals.size(), sel = OptGet(*ap);
+    const std::string &skin = ap->svals[sel];
+    const std::vector<std::wstring> &lab = g_fr ? ap->labFr : ap->labEn;
+    RectF view = kSkinView;
+    {   // carte de l'apercu : degrade et halo derriere le personnage
+        GraphicsPath cp;
+        RoundRect(cp, view, 12);
+        LinearGradientBrush lg(RectF(view.X, view.Y - 1, view.Width, view.Height + 2), Mix(TH(card), kAcc, g_dark ? 0.14f : 0.08f), TH(card), LinearGradientModeVertical);
+        g.FillPath(&lg, &cp);
+        GraphicsPath hp;
+        hp.AddEllipse(view.X + 10, view.Y + 30, view.Width - 20, view.Height - 70);
+        PathGradientBrush hb(&hp);
+        hb.SetCenterColor(WithA(kAcc, g_dark ? 0.20f : 0.13f));
+        Color edge(0, 0, 0, 0);
+        int one = 1;
+        hb.SetSurroundColors(&edge, &one);
+        g.SetClip(&cp);
+        g.FillPath(&hb, &hp);
+        g.ResetClip();
+        Pen pen(TH(choiceBorder), 1.2f);
+        g.DrawPath(&pen, &cp);
+    }
+    float cx = view.X + view.Width / 2, top = view.Y + 8, figH = view.Height - 30, figW = figH / 2;
+    Bitmap *strip = SkinStrip(skin), *portrait = strip ? NULL : SkinPortrait(skin);
+    // changement de tenue : glisse et apparait (180 ms)
+    float k = min((GetTickCount() - g_skinChangeT) / 180.0f, 1.0f);
+    k = 1 - (1 - k) * (1 - k);
+    if (strip) {
+        {   // ombre au sol
+            RectF sr(cx - figW * 0.42f, top + figH - 14, figW * 0.84f, 16);
+            GraphicsPath sp;
+            sp.AddEllipse(sr);
+            PathGradientBrush pb(&sp);
+            pb.SetCenterColor(Color(g_dark ? 150 : 80, 0, 0, 0));
+            Color edge(0, 0, 0, 0);
+            int one = 1;
+            pb.SetSurroundColors(&edge, &one);
+            g.FillPath(&pb, &sp);
+        }
+        float fw = strip->GetWidth() / 16.0f, fh = (float)strip->GetHeight();
+        int fr = (int)floorf(g_skinYaw + 0.5f) & 15;   // vue la plus proche de l'angle
+        float h = figH, w = h * fw / fh;
+        if (w > view.Width - 76) { w = view.Width - 76; h = w * fh / fw; }
+        RectF dst(cx - w / 2 + (1 - k) * 22 * g_skinChangeDir, top + figH - h, w, h);
+        if (k < 1) {
+            ColorMatrix cm = { { { 1, 0, 0, 0, 0 }, { 0, 1, 0, 0, 0 }, { 0, 0, 1, 0, 0 }, { 0, 0, 0, k, 0 }, { 0, 0, 0, 0, 1 } } };
+            ImageAttributes ia;
+            ia.SetColorMatrix(&cm);
+            g.DrawImage(strip, dst, fr * fw, 0, fw, fh, UnitPixel, &ia);
+        } else {   // vue reduite une fois (elle change ~2 fois par seconde), puis copiee
+            int W = max(4, (int)(dst.Width * g_scale + 0.5f)), H = max(4, (int)(dst.Height * g_scale + 0.5f));
+            if (!g_skinFrame || g_skinFrameSrc != strip || g_skinFrameN != fr || g_skinFrameW != W || g_skinFrameH != H) {
+                delete g_skinFrame;
+                g_skinFrame = new Bitmap(W, H, PixelFormat32bppPARGB);
+                Graphics fg(g_skinFrame);
+                fg.Clear(Color(0, 0, 0, 0));
+                fg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+                fg.SetPixelOffsetMode(PixelOffsetModeHalf);
+                fg.DrawImage(strip, RectF(0, 0, (float)W, (float)H), fr * fw, 0, fw, fh, UnitPixel);
+                g_skinFrameSrc = strip; g_skinFrameN = fr; g_skinFrameW = W; g_skinFrameH = H;
+            }
+            DrawPixels(g, g_skinFrame, dst);
+        }
+        Text(g, T(L"Glisse pour tourner", L"Drag to rotate"), RectF(view.X + 8, view.Y + view.Height - 22, view.Width - 16, 16), 10.5f, FontStyleRegular, WithA(kGrey, 0.85f));
+    } else if (portrait) {   // pas de bande pour cette tenue : le portrait
+        g.DrawImage(portrait, RectF(cx - 64, view.Y + 90, 128, 128));
+    } else {
+        DrawSkinGhost(g, cx, view.Y + 40, 1.0f);
+        const wchar_t *msg = g_skinState == 1 ? T(L"Pas d'aper\u00E7u pour cette tenue.", L"No preview for this outfit.")
+                                              : T(L"Les aper\u00E7us des tenues apparaissent apr\u00E8s une premi\u00E8re partie (30 s en jeu) avec cette version.",
+                                                  L"Outfit previews appear after a first game (30 s in game) with this version.");
+        Para(g, msg, RectF(view.X + 18, view.Y + 196, view.Width - 36, view.Height - 206), 12.5f, kGrey);
+    }
+    // fleches : tenue precedente / suivante
+    for (int s = -1; s <= 1; s += 2) {
+        RectF r = SkinArrowRect(s);
+        bool hot = g_skinArrowHot == s;
+        SolidBrush cb(hot ? TH(circleHot) : TH(circle));
+        g.FillEllipse(&cb, r);
+        Pen pen(hot ? kAcc : WithA(kAcc, 0.6f), 1.2f);
+        g.DrawEllipse(&pen, r);
+        Text(g, s < 0 ? L"\u2039" : L"\u203A", RectF(r.X + (s < 0 ? -1.0f : 1.0f), r.Y - 2, r.Width, r.Height), 22, FontStyleBold, hot ? kAcc : WithA(kAcc, 0.85f));
+    }
+    // nom de la tenue, en grand ; dessous : genre et rang
+    Text(g, lab[sel], RectF(view.X, view.Y + view.Height + 8, view.Width, 28), 19, FontStyleBold, kInk);
+    wchar_t rank[64];
+    swprintf_s(rank, L"%s \u00B7 %d / %d", ap->svals[sel].compare(0, 10, "char_shirt") ? T(L"Uniforme", L"Uniform") : T(L"Habitant", L"Local"), sel + 1, n);
+    Text(g, rank, RectF(view.X, view.Y + view.Height + 36, view.Width, 18), 11.5f, FontStyleRegular, kGrey);
+
+    // galerie : un portrait par tenue (sinon le numero ou l'initiale)
+    Text(g, T(L"TENUES", L"OUTFITS"), RectF(686, 128, 100, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+    if (g_skinHot >= 0 && g_skinHot < n) Text(g, lab[g_skinHot], RectF(760, 128, 178, 18), 12, FontStyleBold, kInk, StringAlignmentFar);
+    for (int i = 0; i < n; i++) {
+        RectF r = SkinCellRect(i);
+        GraphicsPath cp;
+        RoundRect(cp, r, 10);
+        bool on = i == sel, hot = i == g_skinHot;
+        SolidBrush cb(on ? TH(cardSel) : hot ? Mix(TH(card), TH(cardSel), 0.6f) : TH(card));
+        g.FillPath(&cb, &cp);
+        if (Bitmap *th = SkinThumb(ap->svals[i], 0, r.Width, r.Height)) DrawPixels(g, th, r);
+        else {
+            const std::string &sv = ap->svals[i];
+            std::wstring t = !sv.compare(0, 10, "char_shirt") ? Widen(sv.substr(10)) : lab[i].substr(0, 2);   // (Po, Pi : policier, pilote)
+            Text(g, t, r, 13, FontStyleBold, on ? kAcc : kGrey);
+        }
+        if (on) { GraphicsPath rp; RoundRect(rp, RectF(r.X - 2.5f, r.Y - 2.5f, r.Width + 5, r.Height + 5), 12); Pen ring(kAcc, 2.2f); g.DrawPath(&ring, &rp); }
+        else { Pen edge(hot ? WithA(kGrey, 0.9f) : TH(choiceBorder), hot ? 1.4f : 1.0f); g.DrawPath(&edge, &cp); }
+    }
+
+    Pen sep(TH(sep), 1);
+    g.DrawLine(&sep, kOptPanel.X + 18, 532.0f, kOptPanel.X + kOptPanel.Width - 18, 532.0f);
+    Para(g, T(L"Ce que les autres joueurs voient. Fl\u00E8ches \u2190 \u2192 ou un portrait pour changer ; dans un salon, les autres le voient aussit\u00F4t.",
+              L"What the other players see. Arrow keys \u2190 \u2192 or a portrait to change; in a lobby, the others see it right away."),
+         RectF(kOptPanel.X + 20, 536, kOptPanel.Width - 40, 44), 12, kGrey, StringAlignmentCenter);
+}
+
+// Clic dans l'onglet : un portrait, une fleche, ou l'apercu (debut du glisser).
+static bool SkinMouseDown(float x, float y)
+{
+    int c = SkinCellAt(x, y);
+    if (c >= 0) { const Opt *ap = SkinOpt(); SkinSelect(c, ap && c < OptGet(*ap) ? -1 : 1); return true; }
+    int a = SkinArrowAt(x, y);
+    if (a) { SkinStep(a); return true; }
+    if (kSkinView.Contains(x, y)) {
+        g_skinDrag = true;
+        g_skinDragX = x;
+        SetCapture(g_wnd);
+        return true;
+    }
+    return kOptPanel.Contains(x, y);
+}
+static void SkinDragTo(float x)
+{
+    g_skinYaw = fmodf(g_skinYaw - (x - g_skinDragX) / 14.0f, 16.0f);   // une vue tous les 14 px
+    if (g_skinYaw < 0) g_skinYaw += 16;
+    g_skinDragX = x;
+}
+
 // ---------------------------------------------------------------- interface
 static void DrawUI(Graphics &g)
 {
@@ -2432,6 +2850,7 @@ static void DrawScene(Graphics &g)
 
 static void RenderTo(Bitmap &target, float scale)
 {
+    g_skinBudget = g_wnd ? 6 : 100000;   // portraits lus par image (capture : tous)
     Graphics g(&target);
     g.Clear(Color(0, 0, 0, 0));
     Bitmap *bgi = (g_dark && g_bgDark) ? g_bgDark : g_bg;
@@ -2704,7 +3123,7 @@ static int g_lobbyPort = 7870;
 static int g_lobbyHot = -1;                         // choix de partie survole (0 continuer, 1 nouvelle)
 static std::string g_mySkinSent;                    // derniere apparence annoncee au salon
 static const RectF kLobbyList(452, 172, 488, 250), kChoiceR[2] = { RectF(456, 450, 236, 32), RectF(700, 450, 236, 32) };
-static const float kLobbyRowH = 50;
+static const float kLobbyRowH = 58;
 
 // Sons du salon (repris de SACoop) : arrivee, depart, pret, plus pret. Petites notes synthetisees (WAV en memoire).
 enum { SND_JOIN, SND_LEAVE, SND_READY, SND_UNREADY, SND_COUNT };
@@ -2797,6 +3216,8 @@ static std::wstring SkinLabel(const std::string &skin)
     if (const Opt *ap = OptByKey("Apparence"))
         for (size_t i = 0; i < ap->svals.size(); i++)
             if (!_stricmp(ap->svals[i].c_str(), skin.c_str())) return (g_fr ? ap->labFr : ap->labEn)[i];
+    auto il = g_skinLabels.find(SkinKey(skin));   // tenue plus recente que ce lanceur : libelle de index.txt
+    if (il != g_skinLabels.end() && !il->second.empty()) return il->second;
     return skin.empty() ? L"?" : Widen(skin, CP_UTF8);
 }
 static const char *PartieName(int p) { return p == PARTIE_NOUVELLE ? "nouvelle" : "continuer"; }
@@ -3377,15 +3798,16 @@ static void GuestToggleReady()
         SetStatus(K_WARN, T(L"Pr\u00EAt, mais UDP bloqu\u00E9 : l'h\u00F4te doit rediriger le port UDP %d", L"Ready, but UDP is blocked: the host must forward UDP port %d"), g_lobbyPort);
 }
 
-// Toutes les 2 s, l'hote mesure le ping de chacun ; chaque seconde, l'apparence choisie dans l'onglet COOP est
-// annoncee si elle a change.
+// Toutes les 2 s, l'hote mesure le ping de chacun ; chaque seconde (aussitot apres un choix dans l'onglet TENUE),
+// l'apparence choisie (onglets COOP et TENUE) est annoncee si elle a change.
 static void LobbyTick()
 {
     static DWORD lastPing, lastSkin;
     DWORD now = GetTickCount();
     int lobby = g_lobby;
-    if ((lobby == LB_HOST || lobby == LB_GUEST) && now - lastSkin >= 1000) {
+    if ((lobby == LB_HOST || lobby == LB_GUEST) && (now - lastSkin >= 1000 || g_skinAnnounce)) {
         lastSkin = now;
+        g_skinAnnounce = false;
         std::string sk = MySkin();
         if (sk != g_mySkinSent) {
             g_mySkinSent = sk;
@@ -3462,6 +3884,7 @@ static void DrawLobby(Graphics &g)
     int lobby = g_lobby, partie = g_partie;
     bool host = lobby == LB_HOST;
     DrawPanel(g);
+    SkinsCheck();   // (portraits des joueurs)
 
     wchar_t head[64];
     swprintf_s(head, T(L"%d / %d joueurs", L"%d / %d players"), (int)peers.size(), kLobbyMax);
@@ -3519,16 +3942,13 @@ static void DrawLobby(Graphics &g)
             g.FillPath(&rb, &rp);
             Pen rpen(me ? kAcc : TH(choiceBorder), me ? 1.6f : 1.1f);
             g.DrawPath(&rpen, &rp);
-            // pastille du joueur : initiale sur sa couleur
+            // pastille du joueur : portrait de sa tenue (onglet TENUE), sinon son initiale, sur sa couleur
             std::wstring nm = Widen(p.name, CP_UTF8);
-            RectF av(r.X + 9, r.Y + 6, 32, 32);
-            SolidBrush ab(CarRgb(pal[p.id % kLobbyMax]));
-            g.FillEllipse(&ab, av);
-            Text(g, nm.empty() ? L"?" : nm.substr(0, 1), RectF(av.X, av.Y + 0.5f, av.Width, av.Height), 15, FontStyleBold, Color(255, 255, 255, 255));
+            DrawSkinAvatar(g, RectF(r.X + 6, r.Y + 4, r.Height - 8, r.Height - 8), p.skin, CarRgb(pal[p.id % kLobbyMax]), nm);
             if (me) nm += T(L"  (toi)", L"  (you)");
-            Text(g, nm, RectF(r.X + 50, r.Y + 3, 250, 20), 14, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, nm, RectF(r.X + 60, r.Y + 6, 232, 20), 14, FontStyleBold, kInk, StringAlignmentNear);
             std::wstring line = SkinLabel(p.skin) + L" \u00B7 " + (p.ver == "dev" ? std::wstring(L"dev") : L"v" + Widen(p.ver, CP_UTF8));
-            Text(g, line, RectF(r.X + 50, r.Y + 22, 250, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            Text(g, line, RectF(r.X + 60, r.Y + 27, 232, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             // etat : HOTE, PRET, PAS PRET
             const wchar_t *st = p.id == 0 ? T(L"H\u00D4TE", L"HOST") : p.ready ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PAS PR\u00CAT", L"NOT READY");
             RectF pr(r.X + r.Width - 172, r.Y + (r.Height - 22) / 2, 96, 22);
@@ -3856,6 +4276,8 @@ static void Tick()
     } else if (g_alpha < 1) g_alpha = min(g_alpha + dt * 5, 1.0f);
     // Apercu de la voiture : rotation lente, arretee pendant un glisser et 2,5 s apres
     if (g_tab == TAB_CAR && g_state == ST_IDLE && !g_carDrag && now - g_carIdleT > 2500) g_carYaw = fmodf(g_carYaw + dt * 0.45f, 6.2831853f);
+    // Tenue : un tour en 10 s ; arretee pendant un glisser, et 1,5 s apres (ou apres un changement : de face)
+    if (g_tab == TAB_SKIN && g_state == ST_IDLE && !g_skinDrag && now - g_skinIdleT > 1500) g_skinYaw = fmodf(g_skinYaw + dt * 1.6f, 16.0f);
 
     // Ecran d'attente : jusqu'a la fenetre du jeu. Le processus lance peut se fermer tout de suite si Steam relance
     // le jeu lui-meme : on ne conclut a un echec qu'apres 15 s sans aucun mywintercar.exe.
@@ -3965,20 +4387,28 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_MOUSEMOVE: {
         float x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
         if (g_carDrag) { CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
+        if (g_skinDrag) { SkinDragTo(x); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
         g_hot = HitButton(x, y);
         g_tabHot = HitTab(x, y);
         HitOption(x, y, &g_optHot, &g_optPart);
         g_logRowHot = g_tab == TAB_LOGS ? LogRowAt(x, y, &g_logPart) : -1;
         g_carHot = g_tab == TAB_CAR && g_state == ST_IDLE ? CarSwatchAt(x, y) : -1;
         g_lobbyHot = g_tab == TAB_LOBBY && g_state == ST_IDLE ? LobbyChoiceAt(x, y) : -1;
+        bool skinTab = g_tab == TAB_SKIN && g_state == ST_IDLE;
+        g_skinHot = skinTab ? SkinCellAt(x, y) : -1;
+        g_skinArrowHot = skinTab ? SkinArrowAt(x, y) : 0;
         TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, h, 0 };
         TrackMouseEvent(&tme);
         bool carView = g_tab == TAB_CAR && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(x, y);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0) ? IDC_HAND
-                                   : carView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
+        bool skinView = skinTab && !g_skinArrowHot && kSkinView.Contains(x, y);
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot) ? IDC_HAND
+                                   : carView || skinView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
-    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; return 0;
+    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; return 0;
+    case WM_KEYDOWN:   // onglet TENUE : fleches gauche / droite (hors des champs)
+        if ((wp == VK_LEFT || wp == VK_RIGHT) && g_tab == TAB_SKIN && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
+        break;
     case WM_MOUSEWHEEL:
         if (g_tab >= 0) {
             float step = -(short)HIWORD(wp) / 120.0f * kRowH * 1.5f;
@@ -4000,6 +4430,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
         if (g_tab == TAB_LOGS && LogsMouseDown(x, y)) return 0;
         if (g_tab == TAB_CAR && CarMouseDown(x, y)) return 0;
+        if (g_tab == TAB_SKIN && SkinMouseDown(x, y)) return 0;
         int row, part;
         HitOption(x, y, &row, &part);
         if (row >= 0) { OptStep(row, part < 0 ? -1 : 1); return 0; }
@@ -4010,9 +4441,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     }
     case WM_CAPTURECHANGED:   // capture perdue en plein glisser (Alt+Tab...) : fin du glisser
         if (g_carDrag) { g_carDrag = false; g_carIdleT = GetTickCount(); }
+        if (g_skinDrag) { g_skinDrag = false; g_skinIdleT = GetTickCount(); }
         return 0;
     case WM_LBUTTONUP: {
         if (g_carDrag) { g_carDrag = false; g_carIdleT = GetTickCount(); }
+        if (g_skinDrag) { g_skinDrag = false; g_skinIdleT = GetTickCount(); }
         int p = g_pressed;
         g_pressed = -1;
         ReleaseCapture();
@@ -4075,20 +4508,7 @@ static Bitmap *LoadPngRes(int id)
     HRSRC r = FindResourceW(NULL, MAKEINTRESOURCEW(id), RT_RCDATA);
     HGLOBAL h = r ? LoadResource(NULL, r) : NULL;
     const BYTE *p = h ? (const BYTE *)LockResource(h) : NULL;
-    if (!p) return NULL;
-    IStream *s = SHCreateMemStream(p, SizeofResource(NULL, r));
-    if (!s) return NULL;
-    Bitmap *copy = NULL;
-    Bitmap *b = Bitmap::FromStream(s);
-    if (b && b->GetLastStatus() == Ok) {
-        copy = new Bitmap(b->GetWidth(), b->GetHeight(), PixelFormat32bppPARGB);
-        Graphics g(copy);
-        g.SetCompositingMode(CompositingModeSourceCopy);
-        g.DrawImage(b, 0, 0, b->GetWidth(), b->GetHeight());
-    }
-    delete b;
-    s->Release();
-    return copy;
+    return p ? LoadPngMem(p, SizeofResource(NULL, r), 1 << 14, 1 << 14) : NULL;
 }
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
@@ -4132,6 +4552,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i + 1], L"/sansudp")) g_testNoUdp = true;   // (dernier argument)
         if (!_wcsicmp(argv[i], L"/temps")) g_sceneT = (float)_wtof(argv[i + 1]);   // captures : instant de la scene animee
         if (!_wcsicmp(argv[i], L"/images")) g_bench = _wtoi(argv[i + 1]);
+        if (!_wcsicmp(argv[i], L"/skins")) g_skinsArg = WithSlash(argv[i + 1]);   // images des tenues de test
     }
     if (!g_testSalonLog.empty()) {   // journal neuf ; role inconnu : rien
         FILE *f = _wfopen(g_testSalonLog.c_str(), L"wb");
@@ -4167,7 +4588,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!g_gameDir.empty()) { g_busy = true; UpdateThread(NULL); }
         FILE *f = _wfopen(argv[3], L"w, ccs=UTF-8");
         if (f) { fwprintf(f, L"jeu=%s mod=%d local=%s releases=%d\n%s\n", g_gameDir.c_str(), (int)g_modOk, g_localVer.c_str(), (int)g_relState, g_status.c_str()); fclose(f); }
-        delete g_bg; delete g_bgDark; delete g_bgCache;
+        delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
         GdiplusShutdown(gtok);
         return 0;
     }
@@ -4176,7 +4597,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     if (argc >= 3 && !_wcsicmp(argv[1], L"/zip")) {
         int n = 0;
         bool ok = WriteZip(argv[2], ZipFiles(), &n);
-        delete g_bg; delete g_bgDark; delete g_bgCache;
+        delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
@@ -4199,6 +4620,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop") { g_tab = TAB_COOP; g_optHot = TabRows(TAB_COOP)[1]; g_optPart = 1; }
         else if (st == L"voiture") g_tab = TAB_CAR;   // couleur : CouleurVoiture du mwcoop.ini du jeu
+        else if (st == L"tenue" || st == L"tenue-survol") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s)
+            g_tab = TAB_SKIN;
+            g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);
+            if (st == L"tenue-survol") { g_skinHot = 29; g_skinArrowHot = 1; }
+        }
         else if (st == L"notes") {   // notes d'exemple (le depot n'a pas encore de release)
             g_notes = { { L"0.1.1-prealpha", L"09/10/2026", L"\u2022 Exemple de note de version (capture).\n\u2022 Deuxi\u00E8me ligne : une correction.", L"\u2022 Sample release note (capture).\n\u2022 Second line: a fix.", L"" },
                         { L"0.1.0-prealpha", L"02/10/2026", L"\u2022 Premi\u00E8re version : chargeur, joueurs visibles.", L"\u2022 First version: loader, visible players.", L"" } };
@@ -4242,7 +4668,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             CLSID png;
             if (EncoderClsid(L"image/png", &png) && out.Save(argv[2], &png, NULL) == Ok) rc = 0;
         }   // (detruit avant GdiplusShutdown)
-        delete g_bg; delete g_bgDark; delete g_bgCache;
+        delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
         GdiplusShutdown(gtok);
         return rc;
     }
@@ -4267,7 +4693,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             MSG msg;
             while (GetMessageW(&msg, NULL, 0, 0) > 0) DispatchMessageW(&msg);
         }
-        delete g_bg; delete g_bgDark; delete g_bgCache;
+        delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
         GdiplusShutdown(gtok);
         WSACleanup();
         return rc;
@@ -4318,7 +4744,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     if (g_proc) CloseHandle(g_proc);
-    delete g_bg; delete g_bgDark; delete g_bgCache;
+    delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
     GdiplusShutdown(gtok);
     return 0;
 }
