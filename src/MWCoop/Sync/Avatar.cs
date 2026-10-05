@@ -161,31 +161,111 @@ namespace MWCoop
         {
             if (!BuildTemplate()) return null;
             var a = new Avatar { Player = pi };
-            a.Root = new GameObject("MWCoop-Joueur-" + pi.Id);
+            a.Build("MWCoop-Joueur-" + pi.Id);
+            Log.Info("avatar cree pour " + pi.Name + " (#" + pi.Id + ")");
+            return a;
+        }
+
+        // Copie du modele sous une nouvelle racine 'name', animations pretes.
+        void Build(string name)
+        {
+            Root = new GameObject(name);
             GameObject ch = (GameObject)Object.Instantiate(template);
             ch.name = "Char";
-            ch.transform.parent = a.Root.transform;
+            ch.transform.parent = Root.transform;
             ch.transform.localPosition = charOffset;
             ch.transform.localRotation = charRotation;
             ch.transform.localScale = charScale;
             ch.SetActive(true);
-            a.anim = ch.GetComponentInChildren<Animation>();
-            if (a.anim != null)
+            anim = ch.GetComponentInChildren<Animation>();
+            if (anim != null)
             {
-                a.anim.cullingType = AnimationCullingType.AlwaysAnimate;
-                a.skelRot = a.anim.transform.localRotation;
-                a.skelPos = a.anim.transform.localPosition;
-                a.headBone = FindBone(a.anim.transform, "head");
-                a.bones = new Dictionary<string, Transform>();
-                foreach (Transform b in a.anim.GetComponentsInChildren<Transform>(true)) if (!a.bones.ContainsKey(b.name)) a.bones[b.name] = b;
-                a.AddClips();
+                anim.cullingType = AnimationCullingType.AlwaysAnimate;
+                skelRot = anim.transform.localRotation;
+                skelPos = anim.transform.localPosition;
+                headBone = FindBone(anim.transform, "head");
+                bones = new Dictionary<string, Transform>();
+                foreach (Transform b in anim.GetComponentsInChildren<Transform>(true)) if (!bones.ContainsKey(b.name)) bones[b.name] = b;
+                AddClips();
             }
-            a.charT = ch.transform;
-            a.body = ch.GetComponentInChildren<SkinnedMeshRenderer>();
-            if (a.body != null) { a.body.updateWhenOffscreen = true; a.body.enabled = true; }
-            Log.Info("avatar cree pour " + pi.Name + " (#" + pi.Id + ")");
+            charT = ch.transform;
+            body = ch.GetComponentInChildren<SkinnedMeshRenderer>();
+            if (body != null) { body.updateWhenOffscreen = true; body.enabled = true; }
+        }
+
+        // ---------------------------------------------------------------- apercu des tenues (Studio)
+        // Personnage seul, sans joueur ni reseau : animations arretees, la pose debout au repos n'est posee que par
+        // PoseStanding (echantillons des clips, puis bras le long du corps comme Pose), tourne pour regarder l'avant
+        // de sa racine (comme FixFacing), tout sur la couche 'layer'.
+        Transform[] restBones;
+        Quaternion[] restRot;
+        Vector3[] restPos;
+
+        public static Avatar CreatePreview(string name, int layer)
+        {
+            if (!BuildTemplate()) return null;
+            var a = new Avatar();
+            a.Build(name);
+            if (a.anim == null || a.body == null || a.bones == null) { a.Destroy(); return null; }
+            a.anim.playAutomatically = false;
+            a.anim.Stop();
+            if (a.armR != null) a.armR.Stop();
+            if (a.armL != null) a.armL.Stop();
+            if (a.anim["fat_standing"] == null) { AnimationClip c = FindClip("fat_standing"); if (c != null) a.anim.AddClip(c, "fat_standing"); }
+            foreach (Transform t in a.Root.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = layer;
+            a.restBones = new List<Transform>(a.bones.Values).ToArray();
+            a.restRot = new Quaternion[a.restBones.Length];
+            a.restPos = new Vector3[a.restBones.Length];
+            for (int i = 0; i < a.restBones.Length; i++) { a.restRot[i] = a.restBones[i].localRotation; a.restPos[i] = a.restBones[i].localPosition; }
+            a.PoseStanding(0f);
+            float ang;
+            if (a.FacingAngle(out ang)) a.charT.localRotation = Quaternion.Euler(0f, -ang, 0f) * a.charT.localRotation;
             return a;
         }
+
+        // Debout au repos, a l'instant 'time' (s) du clip : meme pose que l'avatar immobile sans geste.
+        public void PoseStanding(float time)
+        {
+            if (anim == null || restBones == null) return;
+            for (int i = 0; i < restBones.Length; i++)
+                if (restBones[i] != null) { restBones[i].localRotation = restRot[i]; restBones[i].localPosition = restPos[i]; }
+            SampleClip(anim, "fat_standing", time, false);
+            // Bras : le balancement de marche fige au quart du cycle (ArmPlay a l'arret).
+            SampleClip(armR, "marche_d", 0.25f, true);
+            SampleClip(armL, "marche_g", 0.25f, true);
+            anim.transform.localRotation = skelRot;
+            anim.transform.localPosition = skelPos;
+            ArmDown("shoulder_right", "hand_right", 1f, 1f);
+            ArmDown("shoulder_left", "hand_left", -1f, 1f);
+        }
+
+        static void SampleClip(Animation a, string clip, float t, bool normalized)
+        {
+            if (a == null) return;
+            AnimationState s = a[clip];
+            if (s == null) return;
+            s.enabled = true;
+            s.weight = 1f;
+            if (normalized) s.normalizedTime = t; else s.time = s.length > 0f ? t % s.length : 0f;
+            a.Sample();
+            s.enabled = false;
+        }
+
+        Material previewDefault;
+
+        // Tenue de l'apercu ; inconnue ou vide : la matiere d'origine du modele.
+        public void PreviewSkin(string s)
+        {
+            if (body == null) return;
+            if (previewDefault == null) previewDefault = body.sharedMaterial;
+            skin = s;
+            clothFlags = 0;
+            if (FindMaterial(s) == null) { baseMat = null; body.sharedMaterial = previewDefault; return; }
+            ApplyMaterial();
+        }
+
+        public Bounds BodyBounds { get { return body != null ? body.bounds : new Bounds(Root.transform.position, Vector3.zero); } }
+        public Transform HeadBone { get { return headBone; } }
 
         static AnimationClip FindClip(string name)
         {
@@ -412,16 +492,25 @@ namespace MWCoop
             if (facingFrames < 0 || charT == null || sitting || inCar) return;
             if (++facingFrames < 10) return;
             facingFrames = -1;
-            Transform sr = Bone("shoulder_right"), sl = Bone("shoulder_left");
-            if (sr == null || sl == null) return;
-            Vector3 right = Root.transform.InverseTransformDirection(sr.position - sl.position);
-            right.y = 0f;
-            if (right.sqrMagnitude < 1e-4f) return;
-            Vector3 fwd = Vector3.Cross(right.normalized, Vector3.up);
-            float ang = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+            float ang;
+            if (!FacingAngle(out ang)) return;
             charT.localRotation = Quaternion.Euler(0f, -ang, 0f) * charT.localRotation;
             headRestSet = false;   // la tete au repos se reprend dans le bon sens
             Log.Info("avatar " + Player.Name + " : modele tourne de " + (-ang).ToString("F0") + " deg pour regarder devant");
+        }
+
+        // Sens du modele (epaule gauche -> epaule droite) par rapport a l'avant de la racine, en degres.
+        bool FacingAngle(out float ang)
+        {
+            ang = 0f;
+            Transform sr = Bone("shoulder_right"), sl = Bone("shoulder_left");
+            if (sr == null || sl == null) return false;
+            Vector3 right = Root.transform.InverseTransformDirection(sr.position - sl.position);
+            right.y = 0f;
+            if (right.sqrMagnitude < 1e-4f) return false;
+            Vector3 fwd = Vector3.Cross(right.normalized, Vector3.up);
+            ang = Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg;
+            return true;
         }
 
         void Pose()

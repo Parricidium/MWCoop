@@ -101,6 +101,7 @@ namespace MWCoop
                 follow = true;
                 if (fieldFocused) { GUIUtility.keyboardControl = 0; fieldFocused = false; }
             }
+            if (testSel >= 0) { sel = testSel; testSel = -1; follow = true; }
             typing = tab == TabChat && fieldFocused;
             if (e.type == EventType.KeyDown && e.keyCode != KeyCode.None && Key(e.keyCode, e.shift)) e.Use();
             mouseMoved = false;
@@ -141,6 +142,16 @@ namespace MWCoop
             // Contenu de l'onglet (defile), puis pied de page.
             float fh = Style.Px(72);
             var view = new Rect(x + pad, y + th + Style.Px(12), w - 2 * pad, h - th - Style.Px(12) - fh - Style.Px(6));
+            // APPARENCE : apercu 3D de la tenue en surbrillance, a droite de la liste (qui se retrecit d'autant).
+            bool preview = tab == 1 && skins != null && skins.Count > 0 && Studio.LiveEnabled;
+            Rect pvr = default(Rect);
+            if (preview)
+            {
+                float ph = Mathf.Min(view.height - Style.Px(52), Style.Px(512)), pw = Mathf.Round(ph / 2f);
+                pvr = new Rect(view.xMax - pw, view.y, pw, ph);
+                view.width -= pw + Style.Px(16);
+            }
+            else dragging = false;
             viewH = view.height;
             if (e.type == EventType.ScrollWheel && view.Contains(e.mousePosition)) { scroll += e.delta.y * Style.Px(14); e.Use(); }
             scroll = Mathf.Clamp(scroll, 0, Mathf.Max(0, contentH - viewH));
@@ -162,6 +173,7 @@ namespace MWCoop
                 float thumb = Mathf.Max(Style.Px(24), viewH * viewH / contentH);
                 Style.Fill(new Rect(track.x, track.y + (viewH - thumb) * scroll / (contentH - viewH), track.width, thumb), Style.Accent);
             }
+            if (preview) SkinPreview(pvr, e);
 
             // Fin du passage : selection bornee, Gauche/Droite non pris par une ligne = onglet suivant.
             if (sel >= items) sel = items - 1;
@@ -380,7 +392,7 @@ namespace MWCoop
 
         static string lastSkin, lastSkinLabel;
 
-        static void Skins()
+        static void LoadSkins()
         {
             if ((skins == null || skins.Count == 0) && PlayerSync.InGame)
             {
@@ -388,6 +400,11 @@ namespace MWCoop
                 skinLabels.Clear();
                 foreach (string s in skins) skinLabels.Add(SkinLabel(s));
             }
+        }
+
+        static void Skins()
+        {
+            LoadSkins();
             if (skins == null || skins.Count == 0) { Para("Les apparences se choisissent en partie.", Style.Dim); return; }
             Para("Votre apparence vue par les autres joueurs.", Style.Dim);
             string me = Session.Me.Skin ?? "";
@@ -398,6 +415,53 @@ namespace MWCoop
             Header("TENUES");
             for (int j = 0; j < skins.Count; j++)
                 if (Item(skinLabels[j], j == cur ? "PORTEE" : null, false, "Entree ou clic : porter cette tenue", false) == 2) SetSkin(skins[j]);
+        }
+
+        static bool dragging;
+        static string pvSkin, pvLabel;
+        static readonly Color previewBg = new Color(0f, 0f, 0f, 0.35f);
+
+        // Apercu 3D (Studio.Live) : la tenue en surbrillance dans la liste (sinon celle portee), qui tourne lentement ;
+        // glisser a la souris pour la tourner. Son nom dessous, facon GTA.
+        static void SkinPreview(Rect r, Event e)
+        {
+            string me = Session.Me.Skin ?? "";
+            int k = sel - 1;   // lignes : 0 = « Apparence », 1.. = les tenues
+            string s = k >= 0 && k < skins.Count ? skins[k] : me;
+            if (s != pvSkin) { pvSkin = s; pvLabel = s.Length > 0 ? SkinLabel(s).ToUpperInvariant() : "PAR DEFAUT"; }
+            Texture tex = Studio.Live(s, (int)r.width, (int)r.height);
+            if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition)) { dragging = true; e.Use(); }
+            else if (e.type == EventType.MouseDrag && dragging) { Studio.Drag(e.delta.x); e.Use(); }
+            else if (e.rawType == EventType.MouseUp && dragging) { dragging = false; e.Use(); }
+            if (e.type != EventType.Repaint) return;
+            Style.Fill(r, previewBg);
+            if (tex != null) GUI.DrawTexture(r, tex, ScaleMode.StretchToFill, false);
+            float one = Mathf.Max(1f, Style.Px(1));
+            Style.Fill(new Rect(r.x, r.y, r.width, one), line);
+            Style.Fill(new Rect(r.x, r.yMax - one, r.width, one), line);
+            Style.Fill(new Rect(r.x, r.y, one, r.height), line);
+            Style.Fill(new Rect(r.xMax - one, r.y, one, r.height), line);
+            if (s == me && s.Length > 0) Style.Text(new Rect(r.x + Style.Px(8), r.y + Style.Px(6), r.width - Style.Px(16), Style.Px(26)), "PORTEE", 17, TextAnchor.UpperRight, Style.Accent);
+            var lr = new Rect(r.x, r.yMax + Style.Px(6), r.width, Style.Px(42));
+            Style.Fill(lr, Style.PanelColor);
+            Style.Fill(new Rect(lr.x, lr.yMax - Style.Px(4), lr.width, Style.Px(4)), Style.Accent);
+            Style.Title(new Rect(lr.x, lr.y, lr.width, lr.height - Style.Px(4)), pvLabel, Style.White, TextAnchor.MiddleCenter, 28);
+        }
+
+        // Autotest "tenues" (Studio.Test) : k >= 0 ouvre le menu sur APPARENCE avec une tenue en surbrillance (rendue),
+        // k < 0 le ferme.
+        static int testSel = -1;
+
+        public static string TestApparence(int k)
+        {
+            if (k < 0) { Open = false; return null; }
+            Open = true;
+            SetTab(1);
+            LoadSkins();
+            if (skins == null || skins.Count == 0) { testSel = 0; return "(aucune tenue)"; }
+            int j = k * Mathf.Max(1, skins.Count / 5) % skins.Count;
+            testSel = 1 + j;
+            return skins[j] + " (" + skinLabels[j] + ")";
         }
 
         public static string SkinLabel(string s)
