@@ -3056,6 +3056,17 @@ static void Launch(int mode, const char *partie = NULL)
         DestroyWindow(g_wnd);
         return;
     }
+    // steam_appid.txt a cote du jeu : sans lui, le jeu lance directement se ferme et demande a Steam de le
+    // relancer ; la copie relancee par Steam (overlay injecte au demarrage) a deja la version.dll de Windows en
+    // memoire, et le mod ne se charge pas (vu le 05/10 sur l'installation Steam de JD). Steam doit etre ouvert.
+    {
+        std::wstring appid = g_gameDir + L"steam_appid.txt";
+        if (GetFileAttributesW(appid.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            HANDLE f = CreateFileW(appid.c_str(), GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (f != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(f, "4164420", 7, &n, NULL); CloseHandle(f); TestLog("steam_appid.txt cree"); }
+            else TestLog("steam_appid.txt : creation impossible (erreur %lu)", GetLastError());
+        }
+    }
     static const wchar_t *modes[] = { L"solo", L"hote", L"invite" };
     std::wstring args = std::wstring(L"-mwcoop-mode ") + modes[mode] + L" -mwcoop-port " + std::to_wstring(port);
     if (mode == MODE_GUEST) args += L" -mwcoop-adresse " + addr + L" -mwcoop-profil invite";
