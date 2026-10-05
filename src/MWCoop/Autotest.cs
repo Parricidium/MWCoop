@@ -130,6 +130,21 @@ namespace MWCoop
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
             if (mode == "cd") TestCd(t);
+            if (mode == "nuages" && !MWCoop.Net.Session.IsHost && t > 30f && step == 0)
+            {
+                // Invite : nuages inverses ici ; le message suivant de l'hote doit les remettre comme chez lui.
+                step = 1;
+                GameObject co = GameObject.Find("MAP/WEATHER/Clouds");
+                Transform o = co != null ? co.transform.Find("CloudObjects") : null;
+                if (o != null) { o.gameObject.SetActive(!o.gameObject.activeSelf); Log.Info("autotest : nuages inverses ici -> " + o.gameObject.activeSelf); }
+            }
+            if (mode == "nuages" && t > 28f && t < 40f && t >= cdLog)
+            {
+                cdLog = t + 2f;
+                GameObject co = GameObject.Find("MAP/WEATHER/Clouds");
+                Transform o = co != null ? co.transform.Find("CloudObjects") : null;
+                Log.Info("autotest : nuages " + (o != null ? o.gameObject.activeSelf.ToString() : "?"));
+            }
             if (mode == "fluide")
             {
                 // Invite : vitesse apparente de la copie de TestVoiture image par image (a-coups = grand ecart-type).

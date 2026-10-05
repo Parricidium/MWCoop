@@ -241,6 +241,9 @@ Fait aussi (0.22, retours de JD) : tenues en 3D comme dans GTA — le jeu photog
 tourner, galerie de portraits) et le salon affiche le portrait de chaque joueur ; CD remis dans un boîtier, une chaîne
 ou un lecteur de voiture : posé à sa place chez tous (plus de chute) ; écran du terminal de la pompe (code, montant) vu
 par tous jusqu'au bout.
+Fait aussi (0.22.1, retours de JD) : voiture conduite par un autre fluide chez le passager (plus d'à-coups), banquette
+et coffre qui ne tremblent plus en roulant ; un objet tenu par un autre ne pousse plus la voiture ; nuages et neige du
+jour identiques chez l'hôte et les invités.
 À venir : essais réels entre amis.
 La liste complète : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

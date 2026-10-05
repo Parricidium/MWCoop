@@ -32,7 +32,7 @@ namespace MWCoop
         static float nextSend;
         static bool muted;
         static Transform clouds, cloudObjects;
-        static PlayMakerFSM sunColor, sunRotation, weather, forecast, temperature;
+        static PlayMakerFSM sunColor, sunRotation, weather, forecast, temperature, playerRain;
         static bool found;
         const float SleepScale = 0.5f, NormalScale = 300f;
         const float PassOutWait = 30f;
@@ -305,6 +305,17 @@ namespace MWCoop
             FsmFloat amb = FsmVariables.GlobalVariables.FindFsmFloat("AmbientTemperature");
             if (amb != null) amb.Value = temp;
             if (forecast != null) forecast.FsmVariables.GetFsmBool("Snowing").Value = snowing;
+            // Ce que fait 'Fudge' (Forecast, coupe ici) avec Snowing : les nuages (CloudObjects) n'existent que les
+            // jours de neige, et la neige qui tombe sur le joueur (PLAYER/Rain :: Rain, RainYes). Sans cela le ciel de
+            // l'invite restait celui du chargement (couvert chez lui, degage chez l'hote).
+            if (cloudObjects != null && cloudObjects.gameObject.activeSelf != snowing)
+            {
+                cloudObjects.gameObject.SetActive(snowing);
+                Log.Info("monde : nuages " + (snowing ? "affiches" : "caches") + " (hote)");
+            }
+            if (playerRain == null) { GameObject pr = GameObject.Find("PLAYER/Rain"); if (pr != null) playerRain = Game.FsmOn(pr, "Rain"); }
+            FsmBool rainYes = playerRain != null ? playerRain.FsmVariables.FindFsmBool("RainYes") : null;
+            if (rainYes != null) rainYes.Value = snowing;
         }
 
         public static float LocalScale { get { return GlobalFloat("GlobalTimeScale"); } }
