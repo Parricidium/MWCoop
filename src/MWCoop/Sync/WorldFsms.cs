@@ -203,6 +203,7 @@ namespace MWCoop
             if (Interactions.Tracks(f) || Interactions.Wants(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) return true;
             if (root.name == "JOBS" && f.FsmName != "Use" && HasSave(f)) return true;   // boulots : Jobs (meme s'il ne les a pas encore vus)
             if (n == "CashRegisterLogic") return true;                                    // magasin : Shop
+            if (n.StartsWith("fuse holder")) return true;                                 // porte-fusibles : Home (crees tard chez l'invite, ils etaient pris ici avant lui)
             // Createurs d'objets (pieces, articles) : jamais rejoues directement -- c'est l'action qui les
             // declenche (ouvrir un colis, passer une commande) qui l'est, sinon l'objet apparaitrait en
             // double. Sauf les createurs de COMMANDES (OrdersSpawner*), seul chemin de la commande -- d'ordinaire
