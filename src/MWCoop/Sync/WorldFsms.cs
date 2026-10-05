@@ -30,11 +30,15 @@ namespace MWCoop
         static readonly HashSet<string> SkipRoots = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase) { "PLAYER", "GUI", "Sheets", "COMPUTER", "TRAFFIC", "NPC_CARS", "Spawner", "Radio" };
         static readonly HashSet<string> PersonalRoots = new HashSet<string> { "PLAYER", "GUI", "Sheets", "COMPUTER" };
         static readonly string[] SkipObjects = { "OptionsDB", "InitializeControls", "Photomode", "Statistics", "Setup Game", "SAVEGAME", "BankAccount", "Expenses", "PlayerWanted",
-                                                 "Cashier", "CashRegister", "INVENTORY" };
+                                                 "Cashier", "CashRegister", "INVENTORY",
+                                                 "PlayerDatabase" };   // simulation du joueur (faim, soif, fatigue, ivresse, cigarettes) : a chacun la sienne
         // Machines a sous et video-poker (station, bar : SlotMachinePub) : la partie reste a celui qui joue (son
         // argent, ses cartes et ses rouleaux tires au hasard). Rejouee chez l'autre, elle y tirait d'autres cartes
         // et creditait sa machine gratuitement (l'argent est force pendant un rejeu). Tout ce qui est dessous.
-        static readonly string[] SkipParents = { "VideoPoker", "SlotMachine" };
+        // Pompes a essence (FuelPumps_*) : Machines en recopie ce qu'on voit. Rejouees ici, la prise du pistolet
+        // (FuelTrigger*::Use, Check hand) le mettait dans la main du joueur de chaque client, puis il disparaissait ;
+        // le clavier et le terminal (argent) tournaient aussi chez les autres (vrai partie du 05/10).
+        static readonly string[] SkipParents = { "VideoPoker", "SlotMachine", "FuelPumps_" };
         // "Buy" : prendre un article en rayon le met dans SON panier ; c'est la caisse qui est synchronisee (Shop).
         static readonly HashSet<string> SkipFsmNames = new HashSet<string> { "Paint", "LOD", "Death", "HeadForce", "Coldness", "Strafe", "Buy" };
         // Automates de PNJ provoques par un joueur (colere quand on lui urine dessus ou lui fait un doigt, coup de
@@ -537,7 +541,9 @@ namespace MWCoop
                         {
                             if (!WriteFields.Contains(fi.Name)) continue;
                             var nv = fi.GetValue(a) as NamedVariable;
-                            if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && (nv is FsmFloat || nv is FsmInt) && !Game.LocalVar(j.F, nv.Name))
+                            // (Booleens aussi : PlayerHandRight mis a vrai par le pistolet de la pompe rejoue laissait la main de
+                            // l'invite « occupee » : plus de coup de poing ni de cigarette, vraie partie du 05/10.)
+                            if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && (nv is FsmFloat || nv is FsmInt || nv is FsmBool) && !Game.LocalVar(j.F, nv.Name))
                             { j.Writes.Add(a); break; }
                         }
                     }
@@ -713,18 +719,20 @@ namespace MWCoop
         }
 
         // Argent et corps du joueur local : notes avant un rejeu, remis apres.
-        class Personal { public List<KeyValuePair<FsmFloat, float>> F = new List<KeyValuePair<FsmFloat, float>>(); public List<KeyValuePair<FsmInt, int>> I = new List<KeyValuePair<FsmInt, int>>(); }
+        class Personal { public List<KeyValuePair<FsmFloat, float>> F = new List<KeyValuePair<FsmFloat, float>>(); public List<KeyValuePair<FsmInt, int>> I = new List<KeyValuePair<FsmInt, int>>(); public List<KeyValuePair<FsmBool, bool>> B = new List<KeyValuePair<FsmBool, bool>>(); }
         static Personal SavePersonal()
         {
             var p = new Personal();
             foreach (FsmFloat x in FsmVariables.GlobalVariables.FloatVariables) if (x.Name.StartsWith("Player")) p.F.Add(new KeyValuePair<FsmFloat, float>(x, x.Value));
             foreach (FsmInt x in FsmVariables.GlobalVariables.IntVariables) if (x.Name.StartsWith("Player")) p.I.Add(new KeyValuePair<FsmInt, int>(x, x.Value));
+            foreach (FsmBool x in FsmVariables.GlobalVariables.BoolVariables) if (x.Name.StartsWith("PlayerHand")) p.B.Add(new KeyValuePair<FsmBool, bool>(x, x.Value));
             return p;
         }
         static void RestorePersonal(Personal p)
         {
             foreach (var kv in p.F) kv.Key.Value = kv.Value;
             foreach (var kv in p.I) kv.Key.Value = kv.Value;
+            foreach (var kv in p.B) kv.Key.Value = kv.Value;
         }
 
         public static void OnMessage(Peer from, NetReader r)
