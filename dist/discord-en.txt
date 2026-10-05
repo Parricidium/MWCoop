@@ -1,0 +1,27 @@
+# ❄️ MWCoop — My Winter Car in co-op
+
+One player hosts their world, friends join **that** world: same save, same time of day, same snow, the same CORRIS rebuilt **bolt by bolt** together — with **a wallet each**. Own loader (no MSCLoader needed) and a launcher that installs and updates the mod by itself. 🇬🇧 English / 🇫🇷 French.
+
+**🎮 Playing together**
+• Launcher lobby: outfit portraits, versions, ping, UDP check — the host picks *Continue* or *New game* and everyone's game starts
+• Your own save is never touched: guests play in a separate profile
+• Up to 8 players — port **7870 UDP + TCP** on the host, or a VPN (Radmin, ZeroTier…)
+• **F10** menu (players, outfit with live 3D preview, chat) · **T** to chat
+
+**🚗 What's shared**
+• Players with NPC outfits & name tags, animated (smoking, drinking, waving, punching, passing out…)
+• Host's time, weather and snow — time only skips when **everyone** sleeps
+• Driving together, passenger seats, doors & hoods, towing, frost, crash damage
+• Car building: parts, every bolt turn, paint, wiring, fluids
+• Shops & money: separate wallets, only the buyer pays
+• Traffic, train, bus and NPCs driven by the host, their voices heard by all
+• Bills, phone, parcels, jobs (no double pay), cooking, fires, TV & teletext…
+• Death no longer ends the co-op game: pick where you come back
+
+**📥 Install**
+Copy `version.dll`, `MWCoop.exe` and the `MWCoop` folder next to `mywintercar.exe`, then start **MWCoop.exe**. Needs your own copy of My Winter Car (Steam).
+
+⚠️ **PRE-ALPHA** — expect bugs! Send your logs: launcher › **LOGS** › *Create a zip to send*.
+
+🔗 Download & source: <https://github.com/Parricidium/MWCoop/releases>
+☕ Support: <https://ko-fi.com/parricidium>
