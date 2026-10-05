@@ -269,7 +269,7 @@ namespace MWCoop.Net
         // session (sa sauvegarde est la seule envoyee) : avant d'ecrire, l'hote note les ecarts durables de
         // l'audit ; chaque invite lui dit ses actions non partagees, puis (profil isole) sauve aussi chez lui
         // et lui envoie ses fichiers : l'hote compare les deux sauvegardes cle par cle, avec tolerance sur
-        // les nombres et les positions -> dumps/ecarts-sauvegarde-joueur<n>.txt ([Coop] ComparerSauvegardes=0 : sans).
+        // les nombres et les positions -> dumps/ecarts-sauvegarde-joueur<n>.txt ([Coop] ComparerSauvegardes=1 : avec, coupe par defaut).
         // Messages : Msg 9 (StartGame, reserve jusqu'ici ; Session le passe a World.OnMessage qui le renvoie
         // a OnCoop), 1er octet = genre.
         public const Msg CoopMsg = Msg.StartGame;
@@ -287,7 +287,8 @@ namespace MWCoop.Net
         const float FlushDelay = 2f, QuitWindow = 15f;
         const int MaxCompared = 128 * 1024;   // speedcam.txt (photos des radars, 225 Ko) : pas compare
         const string OrigLabel = "SAVE AND QUIT TO MENU";
-        static bool CompareOn { get { return Config.GetInt("Coop", "ComparerSauvegardes", 1) != 0; } }
+        // Coupee par defaut : l'invite sauvegarde aussi pour comparer, et une sauvegarde fige le jeu ~4 s (diagnostic).
+        static bool CompareOn { get { return Config.GetInt("Coop", "ComparerSauvegardes", 0) != 0; } }
 
         class SaveButton
         {

@@ -825,7 +825,8 @@ namespace MWCoop
             applying = true; Replay.Depth++;
             try { Game.SetState(f, it.State); }
             finally { applying = false; Replay.Depth--; }
-            Log.Info("magasin : " + c.Label + " de " + PlayerName(it.Who) + " rejoue (" + c.Kind + " " + Describe(f) + ", " + idle + " -> " + it.State + ", achat " + it.Serial + ")");
+            Log.Info("magasin : " + c.Label + " de " + PlayerName(it.Who) + " rejoue (" + c.Kind + " " + Describe(f) + ", " + idle + " -> " + it.State + ", achat " + it.Serial
+                     + ", " + (c.Muted != null ? c.Muted.Count : 0) + " actions coupees : " + MutedNames(c) + " ; " + Wallet.State() + ")");
             return true;
         }
 
@@ -1046,7 +1047,7 @@ namespace MWCoop
         {
             if (g == null || !g.UseVariable) return false;
             if (string.IsNullOrEmpty(g.Name)) return true;
-            return written.Contains(g.Name) && f.FsmVariables.GetVariable(g.Name) != null;
+            return written.Contains(g.Name) && Game.LocalVar(f, g.Name);
         }
 
         static bool Personal(PlayMakerFSM f, FsmStateAction a, HashSet<string> written)
@@ -1059,7 +1060,7 @@ namespace MWCoop
                 object v = fi.GetValue(a);
                 var nv = v as NamedVariable;
                 if (nv != null && !reads && WriteFields.Contains(fi.Name) && nv.UseVariable
-                    && (nv.Name.StartsWith("Player") || nv.Name.StartsWith("GUI")) && f.FsmVariables.GetVariable(nv.Name) == null) return true;
+                    && (nv.Name.StartsWith("Player") || nv.Name.StartsWith("GUI")) && !Game.LocalVar(f, nv.Name)) return true;
                 if (tn.StartsWith("Get")) continue;   // lit seulement (distance au joueur, variable d'un autre automate)
                 if (OutputField(fi.Name)) continue;   // ce que l'action produit (objet cree) : pas sa cible
                 GameObject go = null;
@@ -1100,9 +1101,17 @@ namespace MWCoop
             if (!mutedCounters.Contains(c)) mutedCounters.Add(c);
         }
 
+        static string MutedNames(Counter c)
+        {
+            if (c.Muted == null) return "";
+            var sb = new System.Text.StringBuilder();
+            foreach (FsmStateAction a in c.Muted) sb.Append(a.State != null ? a.State.Name : "?").Append('/').Append(a.GetType().Name).Append(' ');
+            return sb.ToString();
+        }
+
         static void UnmuteCounter(Counter c)
         {
-            if (c.Hidden != null) { c.Hidden.SetActive(true); c.Hidden = null; Log.Info("magasin : carte du bar rendue (" + (c.Fsm != null ? c.Fsm.ActiveStateName : "?") + ")"); }
+            if (c.Hidden != null) { c.Hidden.SetActive(true); c.Hidden = null; Log.Info("magasin : carte du bar rendue (" + (c.Fsm != null ? c.Fsm.ActiveStateName : "?") + ", " + Wallet.State() + ")"); }
             if (c.Muted == null) return;
             Unmute(c.Muted);
             c.Muted = null;

@@ -59,7 +59,7 @@ namespace MWCoop
                                 else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; go = od.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : od.GameObject.Value; }
                                 if (go != null && go.transform.root.name == "PLAYER") personal = true;
                                 var nv = v as NamedVariable;
-                                if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && f.FsmVariables.GetVariable(nv.Name) == null)
+                                if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && !Game.LocalVar(f, nv.Name))
                                 {
                                     playerGlobal = true;
                                     if (nv.Name == "PlayerMoney") money = true;
