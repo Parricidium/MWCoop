@@ -25,6 +25,8 @@ namespace MWCoop
         {
             try { PlayerSync.LateUpdate(); CarVisuals.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
+            try { Studio.LateUpdate(); }
+            catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("tenues (pose) : " + e.Message); }
         }
 
         void Update()
@@ -84,6 +86,7 @@ namespace MWCoop
             Step("monde (automates)", WorldFsms.Update);
             Step("trafic", Traffic.Update);
             Step("couleur", CarColor.Update);
+            Step("tenues", Studio.Update);
             Step("quetes", Jobs.Update);
             Step("trace", Trace.Update);
             Step("deroule", Flow.Update);
@@ -145,6 +148,7 @@ namespace MWCoop
             WorldFsms.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             CarColor.OnLevelLoaded();
+            Studio.OnLevelLoaded();
             Jobs.OnLevelLoaded();
             WaitScreen.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
