@@ -116,7 +116,7 @@ namespace MWCoop
                 foreach (string f in Directory.GetFiles(Dir, "*.tmp")) File.Delete(f);
             }
             catch (System.Exception e) { Log.Warn("tenues : dossier " + Dir + " : " + e.Message); return; }
-            int aa = Mathf.Clamp(Config.GetInt("Coop", "ApercuTenuesAA", 4), 1, 8);
+            int aa = Mathf.Clamp(Config.GetInt("Coop", "ApercuTenuesAA", 1), 1, 8);   // ReadPixels sur une RenderTexture multi-echantillonnee lit du noir (Unity 5.0)
             frameRt = NewRt(FrameW, FrameH, aa);
             portraitRt = NewRt(PortraitSize, PortraitSize, aa);
             readA = NewTex(FrameW, FrameH); readB = NewTex(FrameW, FrameH);
