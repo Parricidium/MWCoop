@@ -1038,18 +1038,21 @@ static void BuildOptions()
     {   // Apparence : materiaux des corps des PNJ du jeu (Sync\Avatar.cs)
         Opt o = {};
         o.tab = TAB_COOP; o.key = "Apparence"; o.kind = O_CHOICE;
-        for (int i = 1; i <= 28; i++) {
+        // Tenues qui existent vraiment dans le jeu (Avatar.SkinNames, releve du 05/10 : pas de 05, 06, 08, 14, 15, 27).
+        const int shirts[] = { 1, 2, 3, 4, 7, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28 };
+        for (int i : shirts) {
             char k[32]; sprintf_s(k, "char_shirt%02d", i);
             o.svals.push_back(k);
             o.labFr.push_back(L"Tenue " + std::to_wstring(i));
             o.labEn.push_back(L"Outfit " + std::to_wstring(i));
         }
-        const char *extra[] = { "cop_shirt", "rally_shirt", "psk_shirt", "inspector_shirt" };
-        const wchar_t *fr[] = { L"Policier", L"Pilote de rallye", L"Employ\u00E9 PSK", L"Inspecteur" };
-        const wchar_t *en[] = { L"Police officer", L"Rally driver", L"PSK employee", L"Inspector" };
-        for (int i = 0; i < 4; i++) { o.svals.push_back(extra[i]); o.labFr.push_back(fr[i]); o.labEn.push_back(en[i]); }
+        const char *extra[] = { "cop_shirt", "cop_shirt2", "rally_shirt", "psk_shirt", "inspector_shirt" };
+        const wchar_t *fr[] = { L"Policier", L"Policier 2", L"Pilote de rallye", L"Employ\u00E9 PSK", L"Inspecteur" };
+        const wchar_t *en[] = { L"Police officer", L"Police officer 2", L"Rally driver", L"PSK employee", L"Inspector" };
+        for (int i = 0; i < 5; i++) { o.svals.push_back(extra[i]); o.labFr.push_back(fr[i]); o.labEn.push_back(en[i]); }
         for (int i = 0; i < (int)o.svals.size(); i++) o.vals.push_back(i);
-        o.def = 20;   // char_shirt21 (defaut du mod)
+        o.def = 0;
+        for (int i = 0; i < (int)o.svals.size(); i++) if (o.svals[i] == "char_shirt21") o.def = i;   // defaut du mod
         o.fr = L"Apparence"; o.en = L"Appearance"; o.suffix = L"";
         o.dFr = L"Le personnage que les autres joueurs voient : la tenue d'un habitant, ou celle du policier, du pilote de rallye\u2026 Aper\u00E7u en 3D : onglet TENUE.";
         o.dEn = L"The character the other players see: a local's outfit, or the police officer's, the rally driver's\u2026 3D preview: OUTFIT tab.";
