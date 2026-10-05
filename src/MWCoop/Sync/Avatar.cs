@@ -70,7 +70,8 @@ namespace MWCoop
         // assis sur un siege du jeu (bassin mesure dans la pose assise, repere avatar), jet.
         float lieW, sideS, fwdS, swayT;
         readonly float[] wR = new float[5], wL = new float[4];
-        Vector3 sitPelvis;
+        Vector3 sitPelvis, chairSeatAt;
+        float chairTop = 0.45f;
         bool chair, sitMeasured, peeTried;
         GameObject pee;
         Quaternion peeLocal = Quaternion.identity;
@@ -878,6 +879,25 @@ namespace MWCoop
             {
                 Quaternion sr = Quaternion.Euler(0f, g.SeatYaw, 0f);
                 pos = g.Seat - sr * new Vector3(sitPelvis.x, 0f, sitPelvis.z);
+                // La pose assise (worker1_sitdown) suppose une chaise haute : bassin a sitPelvis.y du sol. Sur un canape
+                // l'assise est plus basse (l'avatar flottait au-dessus des coussins, pieds dans le vide) : hauteur
+                // reelle du coussin sous le siege (rayon vertical, 0,2 a 0,75 m au-dessus du sol), bassin pose dessus.
+                if (g.Seat != chairSeatAt)
+                {
+                    chairSeatAt = g.Seat;
+                    float top = g.Seat.y + 0.45f;
+                    float best = -1f;
+                    foreach (RaycastHit h in Physics.RaycastAll(g.Seat + Vector3.up * 1.5f, Vector3.down, 1.6f))
+                    {
+                        if (h.collider.isTrigger || h.transform.IsChildOf(Root.transform)) continue;
+                        float dy = h.point.y - g.Seat.y;
+                        if (dy > 0.2f && dy < 0.75f && dy > best) best = dy;
+                    }
+                    if (best > 0f) top = g.Seat.y + best;
+                    chairTop = top - g.Seat.y;
+                }
+                // (sitPelvis n'est mesure qu'apres quelques images de pose assise : recalcule a chaque image)
+                pos.y -= Mathf.Clamp(sitPelvis.y - chairTop - 0.06f, 0f, 0.6f);
                 yaw = g.SeatYaw;
                 Root.transform.position = pos;
                 Root.transform.rotation = sr;
