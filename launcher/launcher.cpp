@@ -2948,6 +2948,52 @@ static bool IsGamePid(DWORD pid)
     CloseHandle(p);
     return ok;
 }
+// Copie de lancement pour une installation Steam : un jeu lance depuis steamapps ne charge pas notre version.dll
+// (Steam y injecte son overlay au demarrage, et la version.dll de Windows est deja en memoire quand le jeu cherche
+// la sienne ; vu le 05/10 sur l'installation de JD, alors que les copies hors de steamapps marchent). On lance
+// donc, comme les copies COOPTEST, une copie de l'exe dans %LOCALAPPDATA%\MWCoop\jeu, les gros dossiers et
+// MWCoop relies par jonctions (memes donnees, reglages, journaux et sauvegardes). Vide : pas de copie.
+static std::wstring MirrorDir()
+{
+    std::wstring low = g_gameDir;
+    for (auto &c : low) c = towlower(c);
+    if (low.find(L"\\steamapps\\") == std::wstring::npos || LocalDir().empty()) return L"";
+    return LocalDir() + L"jeu\\";
+}
+
+static std::wstring GameExe() { std::wstring m = MirrorDir(); return (m.empty() ? g_gameDir : m) + L"mywintercar.exe"; }
+
+static bool SameFile(const std::wstring &a, const std::wstring &b)
+{
+    WIN32_FILE_ATTRIBUTE_DATA x, y;
+    if (!GetFileAttributesExW(a.c_str(), GetFileExInfoStandard, &x) || !GetFileAttributesExW(b.c_str(), GetFileExInfoStandard, &y)) return false;
+    return x.nFileSizeLow == y.nFileSizeLow && x.nFileSizeHigh == y.nFileSizeHigh && CompareFileTime(&x.ftLastWriteTime, &y.ftLastWriteTime) == 0;
+}
+
+// Prepare la copie (fichiers recopies s'ils ont change, jonctions creees si absentes). Faux si impossible.
+static bool PrepareMirror(const std::wstring &m)
+{
+    SHCreateDirectoryExW(NULL, m.c_str(), NULL);
+    const wchar_t *files[] = { L"mywintercar.exe", L"steam_api64.dll", L"version.dll", L"changelog.txt" };
+    for (const wchar_t *f : files) {
+        std::wstring src = g_gameDir + f, dst = m + f;
+        if (GetFileAttributesW(src.c_str()) == INVALID_FILE_ATTRIBUTES || SameFile(src, dst)) continue;
+        if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { TestLog("copie de lancement : %ls impossible (erreur %lu)", f, GetLastError()); return false; }
+    }
+    HANDLE a = CreateFileW((m + L"steam_appid.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (a != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(a, "4164420", 7, &n, NULL); CloseHandle(a); }
+    const wchar_t *dirs[] = { L"mywintercar_Data", L"MWCoop", L"CD1", L"CD2", L"CD3", L"Extra", L"Images", L"Radio" };
+    for (const wchar_t *d : dirs) {
+        std::wstring src = g_gameDir + d, dst = m + d;
+        if (GetFileAttributesW(src.c_str()) == INVALID_FILE_ATTRIBUTES || GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) continue;
+        DWORD code = 1;
+        RunHidden(L"cmd.exe /c mklink /J \"" + dst + L"\" \"" + src + L"\"", &code);
+        if (GetFileAttributesW(dst.c_str()) == INVALID_FILE_ATTRIBUTES) { TestLog("copie de lancement : jonction %ls impossible", d); return false; }
+    }
+    TestLog("copie de lancement prete : %ls", m.c_str());
+    return true;
+}
+
 // Le jeu de CE dossier tourne-t-il deja ? Les jeux d'autres dossiers (copies pour jouer a deux sur
 // un PC, instances de test) ont leur propre profil MWCoop, donc leur propre verrou d'instance unique.
 static bool GameProcessRunning()
@@ -2955,7 +3001,7 @@ static bool GameProcessRunning()
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe = { sizeof(pe) };
-    std::wstring mine = g_gameDir + L"mywintercar.exe";
+    std::wstring mine = g_gameDir + L"mywintercar.exe", mirror = GameExe();
     bool found = false;
     for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
         if (_wcsicmp(pe.szExeFile, L"mywintercar.exe")) continue;
@@ -2963,7 +3009,7 @@ static bool GameProcessRunning()
         if (!h) { found = true; break; }   // inconnu : prudence
         wchar_t path[MAX_PATH];
         DWORD n = MAX_PATH;
-        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str())) found = true;
+        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str())) found = true;
         CloseHandle(h);
     }
     CloseHandle(snap);
@@ -3074,14 +3120,19 @@ static void Launch(int mode, const char *partie = NULL)
     EnumWindows(ListUnityWindows, (LPARAM)&g_preWnds);
     // Lance comme un double-clic dans l'explorateur : un mode de compatibilite de l'exe peut exiger l'administrateur ;
     // CreateProcess echoue alors (erreur 740), ShellExecuteEx affiche la demande de Windows.
-    std::wstring exe = g_gameDir + L"mywintercar.exe";
+    std::wstring exe = g_gameDir + L"mywintercar.exe", runDir = g_gameDir;
+    std::wstring mirror = MirrorDir();
+    if (!mirror.empty()) {
+        if (PrepareMirror(mirror)) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
+        else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de Steam (le mod risque de ne pas se charger)", L"Could not prepare the launch copy: starting from Steam (the mod may not load)"));
+    }
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
     sei.hwnd = g_wnd;
     sei.lpVerb = L"open";
     sei.lpFile = exe.c_str();
     sei.lpParameters = args.c_str();
-    sei.lpDirectory = g_gameDir.c_str();
+    sei.lpDirectory = runDir.c_str();
     sei.nShow = SW_SHOWNORMAL;
     if (!ShellExecuteExW(&sei) || !sei.hProcess) {
         DWORD e = GetLastError();
