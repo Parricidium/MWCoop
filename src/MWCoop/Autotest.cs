@@ -130,6 +130,7 @@ namespace MWCoop
             }
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
+            if (Config.GetInt("Test", "Regarder", 0) != 0) LookAtNearestAvatar();   // captures : la camera vise l'avatar le plus proche
             if (mode == "cd") TestCd(t);
             if (mode == "nuages" && !MWCoop.Net.Session.IsHost && t > 30f && step == 0)
             {
