@@ -17,6 +17,13 @@ namespace MWCoop
     //  - versements DU MONDE (la logique du jeu paie d'elle-meme, a l'heure commune, chez CHAQUE joueur :
     //    ce n'est pas un joueur qui gagne) : jamais pris pour un revenu ordinaire (relayes, ils etaient
     //    doubles : chacun recevait le sien plus celui de l'autre). Voir Pays.
+    //  - gains declenches par un OBJET (ferraille jetee dans la benne de Fleetari, billet de loto gagnant jete a la
+    //    poubelle du Voittous, objets vendus a la table des puces, kilju vendu a Jokke) : le declencheur tourne chez
+    //    chaque joueur ou la copie Props de l'objet tombe, et chacun se payait (puis relayait). Le gain va une fois, a
+    //    celui qui a mis l'objet (Home.CausedHere) ; chez les autres les ecritures d'argent de l'etat sont coupees
+    //    (Trigs). Il reste a lui : l'enveloppe qu'il touche (ScrapMoney, MoneyFlea, PayMoney de Jokke) et la banque du
+    //    loto sont des versements personnels (Pays, gardes pour soi), et ces enveloppes sont a ce module (le monde n'y
+    //    rejoue plus le clic d'un autre, qui vidait la sienne). Voir Trigs et Puces.
     public static class Wallet
     {
         // Boulots rejoues (Jobs) : la paie qu'ils versent ici n'est pas renvoyee, et elle « consomme »
@@ -42,12 +49,12 @@ namespace MWCoop
         class Pay
         {
             public readonly string Path, Fsm, State, Label;
-            public readonly bool Shared;
+            public readonly bool Shared, Own;                           // Own : enveloppe reservee a ce module (Claim)
             public PlayMakerFSM F;
             public bool Hooked, Open;
             public float C0, B0;                                        // releve au debut de l'etat
             public float At = -100, HaveC, HaveB, BestC, BestB, Sent;   // versement en cours : deja en poche, plus haut vu, envoye
-            public Pay(string path, string fsm, string state, string label, bool shared) { Path = path; Fsm = fsm; State = state; Label = label; Shared = shared; }
+            public Pay(string path, string fsm, string state, string label, bool shared, bool own = false) { Path = path; Fsm = fsm; State = state; Label = label; Shared = shared; Own = own; }
         }
         static readonly Pay[] Pays =
         {
@@ -58,8 +65,16 @@ namespace MWCoop
             new Pay("JOBS/ADs", "Data", "Bank transfer 2", "paie des publicites", true),                   // mardi et vendredi
             new Pay("JOBS/TAXIJOB/MACHTWAGEN/TaxiFunctions", "Payments", "Payment", "paie du taxi", true),  // mercredi
             new Pay("Systems/BankAccount", "Data", "Interest", "interets", false),                         // chaque jour
+            // Gains d'un objet mis par ce joueur (voir Trigs) : touches par lui seul, gardes pour soi.
+            new Pay("REPAIRSHOP/LOD/Office/Fleetari/ScrapMoney", "Use", "State 1", "rachat de ferraille", false, true),
+            new Pay("FleaMarket/LOD/OpenHours/MoneyFlea", "Use", "State 1", "ventes aux puces", false, true),
+            new Pay(JokkePay, "Use", "State 1", "kilju vendu a Jokke", false, true),
+            new Pay(LottoPath, "Logic", "Bank", "gains du loto", false),
         };
+        const string JokkePay = "JOBS/JOKKEHOME/HouseDrunkNew/KiljuBuyer/Char/skeleton/pelvis/spine_middle/spine_upper/collar_left/shoulder_left/arm_left/hand_left/PayMoney";
+        const string ScrapPath = "REPAIRSHOP/Scrapmetal/GarbageTrigger", LottoPath = "PERAPORTTI/Building/LOD100/Store/VoittousArea/TrashTrigger";
         const float PayWindow = 30f;   // < 36 s : mardi -> vendredi des publicites en sommeil accelere (12 s par jour)
+        const int FirstGain = 7;       // rang du 1er gain d'objet dans Pays
         static float nextPayScan;
         static int payHooked, worldLocal, worldIn;
 
@@ -118,14 +133,20 @@ namespace MWCoop
             foreach (Pay p in Pays) { p.F = null; p.Hooked = p.Open = false; p.At = -100; }
             nextPayScan = 0; payHooked = worldLocal = worldIn = 0;
             testStep = 0; remoteSince = -1;
+            UnmuteTrigs();
+            foreach (Trig g in Trigs) { g.F = null; g.Hooked = false; }
+            claimAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 4f : -1;
+            saleLogic = saleSell = null; saleHooked = saleOpen = sellOffLogged = false; sellers.Clear();
+            trigLocal = trigOther = 0;
         }
 
-        // Accroche les etats de paiement des automates charges (objet actif) ; les autres (taxi pas encore la)
-        // au prochain passage, toutes les 10 s.
+        // Accroche les etats de paiement des automates charges (objet actif) ; les autres (taxi pas encore la, enveloppe
+        // pas encore sortie) au prochain passage, toutes les 2 s : une enveloppe touchee juste apres son apparition doit
+        // deja etre suivie (sinon son argent passait pour un revenu ordinaire, partage).
         static void HookPays()
         {
             if (payHooked == Pays.Length || Time.realtimeSinceStartup < nextPayScan) return;
-            nextPayScan = Time.realtimeSinceStartup + 10f;
+            nextPayScan = Time.realtimeSinceStartup + 2f;
             foreach (Pay p in Pays)
             {
                 if (p.Hooked) continue;
@@ -172,7 +193,12 @@ namespace MWCoop
             dC = Mathf.Max(dC, 0f); dB = Mathf.Max(dB, 0f);
             if (dC < 0.005f && dB < 0.005f) return;   // rien de verse
             lastCash += dC; lastBank += dB;            // hors du releve ordinaire : jamais renvoye comme un revenu
-            if (!p.Shared) { Log.Info("argent : " + p.Label + " +" + (dC + dB) + ", gardes pour soi (calcules sur son propre solde)"); return; }
+            if (!p.Shared)
+            {
+                bool gain = System.Array.IndexOf(Pays, p) >= FirstGain;
+                Log.Info("argent : " + p.Label + " +" + (dC + dB) + (gain ? ", garde pour soi (gain d'un objet mis par ce joueur, pas partage)" : ", gardes pour soi (calcules sur son propre solde)"));
+                return;
+            }
             worldLocal++;
             float adj = Merge(p, dC, dB, true);
             if (dC + dB > p.Sent + 0.005f)
@@ -217,12 +243,291 @@ namespace MWCoop
         // Audit : automate dont Wallet observe un etat de paiement.
         public static bool Observes(PlayMakerFSM f)
         {
-            foreach (Pay p in Pays) if (p.F == f && f != null) return true;
+            if (f == null) return false;
+            foreach (Pay p in Pays) if (p.F == f) return true;
+            return f == saleLogic;
+        }
+
+        // ================================================================ gains declenches par un objet
+        // Declencheur qui paie quand un objet y tombe : 'Object' = l'objet ; ses etats d'argent n'ecrivent rien chez un
+        // joueur qui ne l'a pas mis la (sa copie Props y est tombee aussi). Ces automates (sans saisie ni sauvegarde) ne
+        // sont rejoues par personne : ils sont a ce module.
+        //  - benne a ferraille de Fleetari : 'State 3' (AddFsmFloat : valeur du metal ajoutee a l'enveloppe ScrapMoney) ;
+        //  - poubelle du Voittous (billets de loto, megaveto) : 'State 4', 'Bank' (gain vire a la banque, releve).
+        // Le billet ou la piece part a la decharge chez tous ('Turn into garbage' n'est pas coupe).
+        class Trig
+        {
+            public readonly string Path, Fsm, Label; public readonly string[] States;
+            public PlayMakerFSM F; public bool Hooked;
+            public Trig(string path, string fsm, string label, params string[] states) { Path = path; Fsm = fsm; Label = label; States = states; }
+        }
+        static readonly Trig[] Trigs =
+        {
+            new Trig(ScrapPath, "Logic", "ferraille", "State 3"),
+            new Trig(LottoPath, "Logic", "loto", "State 4", "Bank"),
+        };
+        static readonly List<FsmStateAction> trigMuted = new List<FsmStateAction>();
+        static float claimAt = -1, nextTrigScan;
+        static int trigLocal, trigOther;
+
+        class TrigHook : ModHook
+        {
+            public override string Module { get { return "argent"; } }
+            public Trig G; public FsmState St;
+            public override void OnEnter()
+            {
+                try { if (Session.Active && Replay.Depth == 0) OnTrig(this); } catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        // Avant le releve du monde (16 s) : enveloppes et declencheurs a ce module.
+        static void ClaimEarly()
+        {
+            var sb = new System.Text.StringBuilder("argent : reserves a ce module :");
+            foreach (Pay p in Pays) if (p.Own) sb.Append(' ').Append(ClaimAt(p.Path, p.Fsm));
+            foreach (Trig g in Trigs) sb.Append(' ').Append(ClaimAt(g.Path, g.Fsm));
+            Log.Info(sb.ToString());
+        }
+
+        static string ClaimAt(string path, string fsm)
+        {
+            GameObject go = Game.FindAny(path);
+            PlayMakerFSM f = go != null ? Game.FsmOn(go, fsm) : null;
+            string n = path.Substring(path.LastIndexOf('/') + 1);
+            if (f == null) return n + " (absent)";
+            return Replay.Claim(f, "argent") ? n : n + " (deja a " + Replay.Owner(f) + ")";
+        }
+
+        static void HookTrigs()
+        {
+            if (Time.realtimeSinceStartup < nextTrigScan) return;
+            nextTrigScan = Time.realtimeSinceStartup + 2f;
+            foreach (Trig g in Trigs)
+            {
+                if (g.Hooked) continue;
+                GameObject go = GameObject.Find(g.Path);
+                PlayMakerFSM f = go != null && go.activeInHierarchy ? Game.FsmOn(go, g.Fsm) : null;
+                if (f == null || Replay.Owner(f) != "argent") continue;
+                try
+                {
+                    foreach (string s in g.States)
+                    {
+                        FsmState st = f.Fsm.GetState(s);
+                        if (st == null) { Log.Warn("argent : etat " + s + " absent de " + g.Path); continue; }
+                        if (System.Array.Exists(st.Actions, a => a is TrigHook)) continue;
+                        var list = new List<FsmStateAction>(st.Actions);
+                        list.Insert(0, new TrigHook { G = g, St = st });
+                        st.Actions = list.ToArray();
+                    }
+                }
+                catch { continue; }   // pas encore pret
+                g.F = f; g.Hooked = true;
+                Log.Info("argent : declencheur suivi : " + g.Label + " (" + g.Path + "::" + g.Fsm + "), paye seulement chez celui qui y met l'objet");
+            }
+        }
+
+        // Ecritures d'argent : vers un autre automate (AddFsmFloat, SetFsmString : releve de banque, SendEventByName :
+        // avis), ou vers une globale (PlayerBankAccount, PlayerMoney).
+        static bool MoneyAction(PlayMakerFSM f, FsmStateAction a)
+        {
+            string n = a.GetType().Name;
+            if (n == "AddFsmFloat" || n == "SetFsmFloat" || n == "SubtractFsmFloat" || n == "SetFsmInt" || n == "AddToFsmInt"
+                || n == "SetFsmString" || n == "SetFsmBool" || n == "SendEventByName") return true;
+            foreach (System.Reflection.FieldInfo fi in a.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                if (fi.Name != "floatVariable" && fi.Name != "intVariable" && fi.Name != "storeResult") continue;
+                var nv = fi.GetValue(a) as NamedVariable;
+                if (nv != null && nv.UseVariable && !Game.LocalVar(f, nv.Name)) return true;
+            }
             return false;
+        }
+
+        static void OnTrig(TrigHook h)
+        {
+            Trig g = h.G;
+            FsmGameObject ov = g.F != null ? g.F.FsmVariables.FindFsmGameObject("Object") : null;
+            GameObject obj = ov != null ? ov.Value : null;
+            if (Home.CausedHere(obj, 120f))
+            {
+                trigLocal++;
+                Log.Info("argent : " + g.Label + " (" + h.St.Name + ") : " + (obj != null ? obj.name : "?") + " mis par ce joueur-ci, paye ici");
+                return;
+            }
+            int n = 0;
+            bool after = false;
+            foreach (FsmStateAction a in h.St.Actions)
+            {
+                if (a == h) { after = true; continue; }
+                if (!after || a == null || !a.Enabled || !MoneyAction(g.F, a)) continue;
+                a.Enabled = false; trigMuted.Add(a); n++;
+            }
+            trigOther++;
+            Log.Info("argent : " + g.Label + " (" + h.St.Name + ") : " + (obj != null ? obj.name : "?") + " mis par un autre joueur, rien verse ici (" + n + " actions coupees)");
+        }
+
+        static void UnmuteTrigs()
+        {
+            if (trigMuted.Count == 0) return;
+            foreach (FsmStateAction a in trigMuted) if (a != null) a.Enabled = true;
+            trigMuted.Clear();
+        }
+
+        // ================================================================ table des puces (objets vendus par le joueur)
+        // FleaMarket/SaleTable : on y pose des objets a vendre ('Freeze object' : prix, ID tire au hasard) ; l'automate
+        // 'Sell' tire au hasard toutes les 30 s une vente (SELL) ; 'Find item' / 'Find item 2' retirent l'objet vendu et
+        // ajoutent son prix a MoneyTotal, verse en fin de location dans l'enveloppe MoneyFlea (State 2). Chacun tirait ses
+        // propres ventes (autres objets, autres sommes) et touchait sa propre enveloppe.
+        //  - seul l'hote vend : 'Sell' arrete chez les invites (et une vente faite quand meme chez un invite par sa logique
+        //    n'ajoute rien a son MoneyTotal) ; l'objet vendu disparait chez les autres par Props (pose recalee par l'hote) ;
+        //  - le vendeur est celui qui a pose l'objet ('Freeze object' chez celui qui le tenait : un invite l'annonce a
+        //    l'hote) ; une vente d'un objet d'invite est retiree du MoneyTotal de l'hote et creditee au MoneyTotal de
+        //    l'invite (K_FleaCredit) : chacun touche ses ventes dans sa propre enveloppe, une fois.
+        static PlayMakerFSM saleLogic, saleSell;
+        static bool saleHooked, saleOpen, sellOffLogged;
+        static float saleStart, saleAt, nextSaleCheck;
+        static readonly Dictionary<string, int> sellers = new Dictionary<string, int>();
+
+        class FleaHook : FsmStateAction
+        {
+            public int Kind;   // 0 objet pose, 1 debut de vente, 2 fin de vente
+            public override void OnEnter()
+            {
+                try { if (Session.Active) OnFleaHook(Kind); } catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        static FsmFloat MoneyTotal { get { return saleLogic != null ? saleLogic.FsmVariables.FindFsmFloat("MoneyTotal") : null; } }
+
+        static string ItemKey(GameObject go)
+        {
+            if (go == null) return "";
+            string id = Props.ItemId(go);
+            return id.Length > 0 ? id : go.name;
+        }
+
+        static void FleaStep()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < nextSaleCheck) return;
+            nextSaleCheck = now + 1f;
+            if (saleLogic == null)
+            {
+                GameObject st = GameObject.Find("FleaMarket/SaleTable");
+                if (st == null) return;
+                saleLogic = Game.FsmOn(st, "Logic");
+                saleSell = Game.FsmOn(st, "Sell");
+            }
+            if (!saleHooked && saleLogic != null && saleLogic.gameObject.activeInHierarchy)
+            {
+                try
+                {
+                    AddFlea("Freeze object", 0, false);
+                    AddFlea("Find item", 1, false); AddFlea("Find item", 2, true);
+                    AddFlea("Find item 2", 1, false); AddFlea("Find item 2", 2, true);
+                    saleHooked = true;
+                    Log.Info("argent : table des puces suivie (" + (Session.IsHost ? "l'hote vend" : "les ventes viennent de l'hote") + ")");
+                }
+                catch { }
+            }
+            if (!Session.IsHost && saleSell != null && saleSell.enabled)
+            {
+                saleSell.enabled = false;
+                if (!sellOffLogged) { sellOffLogged = true; Log.Info("argent : ventes des puces tirees par l'hote seul ('Sell' arrete ici)"); }
+            }
+            if (saleOpen && now - saleAt > 2f) SettleSale();   // fin de 'Find item' pas vue
+        }
+
+        static void AddFlea(string state, int kind, bool end)
+        {
+            FsmState st = saleLogic.Fsm.GetState(state);
+            if (st == null) return;
+            foreach (FsmStateAction a in st.Actions) { var h = a as FleaHook; if (h != null && h.Kind == kind) return; }
+            var list = new List<FsmStateAction>(st.Actions);
+            if (end) list.Add(new FleaHook { Kind = kind }); else list.Insert(0, new FleaHook { Kind = kind });
+            st.Actions = list.ToArray();
+        }
+
+        static void OnFleaHook(int kind)
+        {
+            if (kind == 0)
+            {
+                if (Replay.Depth > 0) return;
+                FsmGameObject iv = saleLogic.FsmVariables.FindFsmGameObject("Item");
+                GameObject item = iv != null ? iv.Value : null;
+                if (item == null || Home.HeldAgo(item) > 60f) return;   // copie d'un objet pose par un autre
+                string key = ItemKey(item);
+                if (Session.IsHost) sellers[key] = Session.LocalId;
+                else Session.SendAll(new NetWriter(Msg.Home).U8(Session.LocalId).U8(Home.K_FleaPlaced).Str(key), true);
+                Log.Info("argent : " + key + " mis en vente aux puces par ce joueur-ci" + (Session.IsHost ? "" : " (annonce a l'hote)"));
+                return;
+            }
+            FsmFloat mt = MoneyTotal;
+            if (mt == null) return;
+            if (kind == 1) { saleOpen = true; saleStart = mt.Value; saleAt = Time.realtimeSinceStartup; return; }
+            SettleSale();
+        }
+
+        // Home : U8 joueur, U8 K_FleaCredit, U8 vendeur, F32 montant, Str objet (hote -> tous ; seul le vendeur l'ajoute).
+        static void SettleSale()
+        {
+            if (!saleOpen) return;
+            saleOpen = false;
+            FsmFloat mt = MoneyTotal;
+            if (mt == null) return;
+            float d = mt.Value - saleStart;
+            if (d <= 0.005f) return;
+            if (!Session.IsHost)
+            {
+                if (Replay.Depth > 0) return;
+                mt.Value = saleStart;
+                Log.Info("argent : vente aux puces tiree par la logique de cet invite (+" + d + ") : pas comptee (l'hote vend)");
+                return;
+            }
+            FsmGameObject sv = saleLogic.FsmVariables.FindFsmGameObject("ItemSold"), iv = saleLogic.FsmVariables.FindFsmGameObject("Item");
+            GameObject sold = sv != null && sv.Value != null ? sv.Value : iv != null ? iv.Value : null;
+            string key = ItemKey(sold);
+            int seller;
+            if (!sellers.TryGetValue(key, out seller)) seller = Session.LocalId;
+            if (seller == Session.LocalId || !Session.Players.ContainsKey(seller))
+            {
+                Log.Info("argent : " + key + " vendu aux puces +" + d + " (enveloppe de l'hote" + (seller != Session.LocalId ? ", vendeur #" + seller + " parti" : "") + ")");
+                return;
+            }
+            mt.Value -= d;
+            sellers.Remove(key);
+            Session.SendAll(new NetWriter(Msg.Home).U8(Session.LocalId).U8(Home.K_FleaCredit).U8(seller).F32(d).Str(key), true);
+            Log.Info("argent : " + key + " vendu aux puces +" + d + " pour #" + seller + " (retire ici, credite chez lui)");
+        }
+
+        // Messages de la table des puces (recus par Home).
+        public static void OnFlea(int who, int kind, NetReader r)
+        {
+            if (kind == Home.K_FleaPlaced)
+            {
+                string key = r.Str();
+                if (!Session.IsHost) return;
+                sellers[key] = who;
+                Log.Info("argent : " + key + " mis en vente aux puces par #" + who);
+                return;
+            }
+            int seller = r.U8();
+            float amount = r.F32();
+            string item = r.Str();
+            if (seller != Session.LocalId || amount <= 0f || amount > 1e6f) return;
+            if (saleLogic == null) { GameObject st = Game.FindAny("FleaMarket/SaleTable"); saleLogic = st != null ? Game.FsmOn(st, "Logic") : null; }
+            FsmFloat mt = MoneyTotal;
+            if (mt == null) { Log.Warn("argent : vente aux puces de " + item + " (+" + amount + ") perdue : table absente ici"); return; }
+            mt.Value += amount;
+            Hud.Toast(item + " vendu aux puces : +" + Mathf.RoundToInt(amount) + " mk (enveloppe a la fin de la location)");
+            Log.Info("argent : " + item + " vendu aux puces par l'hote pour ce joueur : +" + amount + " (MoneyTotal " + mt.Value + ")");
         }
 
         public static void Update()
         {
+            UnmuteTrigs();   // ecritures d'argent coupees pour un seul passage (etat deja entre)
+            if (Session.Active && claimAt > 0 && Time.realtimeSinceStartup >= claimAt) { claimAt = -1; ClaimEarly(); }
             if (!Session.Active || readyAt < 0 || Time.realtimeSinceStartup < readyAt) return;
             if (!ready)
             {
@@ -235,6 +540,8 @@ namespace MWCoop
                 Log.Info("argent : liquide " + lastCash + ", banque " + lastBank);
             }
             HookPays();
+            HookTrigs();
+            FleaStep();
             foreach (Pay p in Pays) if (p.Open) PayEnd(p);   // fin d'etat pas vue (etat quitte avant la fin de ses actions)
             if (Time.realtimeSinceStartup >= nextStore) { nextStore = Time.realtimeSinceStartup + 10f; Store(); }
             if (Time.realtimeSinceStartup < next) return;
@@ -295,6 +602,7 @@ namespace MWCoop
 
         public static void Test(string mode, float t)
         {
+            if (mode == "ferraille" && ready) { TestScrap(t); return; }
             if (mode != "revenu" || !ready) return;
             float now = Time.realtimeSinceStartup;
             if (testStep == 0 && t > 25f) { testStep = 1; Log.Info("autotest : revenu, avant : " + State()); }
@@ -309,6 +617,82 @@ namespace MWCoop
                 testStep = 4;
                 Log.Info("autotest : revenu, apres : " + State() + " (versements du monde : " + worldLocal + " ici, " + worldIn + " recus)");
             }
+        }
+
+        // Essais 'ferraille' : les deux a la benne de Fleetari (TestPos=1556,6,718). Objet jete : [Test] TestObjet (cle Props,
+        // ou '~partie de cle') ou, par defaut, l'objet suivi le plus proche de la benne (meme regle des deux cotes : meme
+        // objet). 26-32 s : l'invite le promene (Props.TestCarry : ses poses partent, il passe pour tenu ici) ; 34 s : chez
+        // les deux, la benne recoit l'objet (Object, Weight 10, 'State 3' : comme apres 'Turn into garbage') ; 40 s :
+        // l'enveloppe ScrapMoney sort chez l'invite ; 42 s : il la touche ('State 1'). Notes a 30 s et 50 s.
+        // Attendu : invite « ferraille (State 3) : ... mis par ce joueur-ci, paye ici », hote « mis par un autre joueur,
+        // rien verse ici » (enveloppe de l'hote inchangee) ; invite « rachat de ferraille +X, garde pour soi », aucun
+        // « argent : +... de » chez l'hote.
+        static string testKey;
+        static GameObject testObj;
+
+        static void TestScrap(float t)
+        {
+            Trig g = Trigs[0];
+            if (g.F == null) { if (testStep == 0 && t > 26f) { testStep = 9; Log.Info("autotest : ferraille, benne pas suivie ici (REPAIRSHOP charge ? TestPos)"); } return; }
+            if (testStep == 0 && t > 26f)
+            {
+                testStep = 1;
+                string k = Config.Get("Test", "TestObjet", "");
+                testKey = k.StartsWith("~") ? Props.FindKey(k.Substring(1)) : k.Length > 0 ? k : Props.NearestId("", g.F.transform.position);
+                testObj = testKey != null ? Props.ObjectOf(testKey) : null;
+                Log.Info("autotest : ferraille, objet " + (testKey ?? "?") + (testObj != null ? " en " + testObj.transform.position.ToString("F1") : " absent") + " ; " + State() + " ; " + PotState(g.F));
+            }
+            if (!Session.IsHost && testStep == 1 && t < 32f && testObj != null) { Props.TestCarry(testKey, t); Home.MarkHeld(testObj); }
+            if (testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest : ferraille, " + State()); }
+            if (testStep == 2 && t > 34f)
+            {
+                testStep = 3;
+                if (testObj == null) { Log.Info("autotest : ferraille, pas d'objet"); return; }
+                g.F.FsmVariables.FindFsmGameObject("Object").Value = testObj;
+                FsmFloat wv = g.F.FsmVariables.FindFsmFloat("Weight");
+                if (wv != null) wv.Value = 10f;
+                string before = PotState(g.F);
+                Game.SetState(g.F, "State 3");
+                Log.Info("autotest : ferraille, la benne recoit " + testObj.name + " : " + before + " -> " + PotState(g.F) + " (etat " + g.F.ActiveStateName + ")");
+            }
+            GameObject env = Game.FindAny("REPAIRSHOP/LOD/Office/Fleetari/ScrapMoney");
+            PlayMakerFSM use = env != null ? Game.FsmOn(env, "Use") : null;
+            if (!Session.IsHost && testStep == 3 && t > 40f)
+            {
+                testStep = 4;
+                if (env != null && !env.activeSelf) env.SetActive(true);
+                Log.Info("autotest : ferraille, enveloppe sortie chez l'invite : " + (env != null ? "active " + env.activeInHierarchy : "absente") + ", " + (use != null ? "Money " + use.FsmVariables.FindFsmFloat("Money").Value : "?"));
+            }
+            if (!Session.IsHost && testStep == 4 && t > 42f)
+            {
+                testStep = 5;
+                if (use != null && env.activeInHierarchy) Game.SetState(use, "State 1");
+                Log.Info("autotest : ferraille, l'invite touche l'enveloppe : " + State());
+            }
+            if (testStep >= 3 && testStep < 9 && t > 50f) { testStep = 9; Log.Info("autotest : ferraille, fin : " + State() + " ; " + PotState(g.F) + " ; payes ici " + trigLocal + ", pas payes ici " + trigOther); }
+        }
+
+        // Essais : ou 'State 3' de la benne ajoute (AddFsmFloat : automate, variable, valeur actuelle).
+        static string PotState(PlayMakerFSM f)
+        {
+            var sb = new System.Text.StringBuilder("pot");
+            try
+            {
+                FsmState st = f.Fsm.GetState("State 3");
+                foreach (FsmStateAction a in st.Actions)
+                {
+                    if (a == null || a.GetType().Name != "AddFsmFloat") continue;
+                    var od = a.GetType().GetField("gameObject").GetValue(a) as FsmOwnerDefault;
+                    var fsm = a.GetType().GetField("fsmName").GetValue(a) as FsmString;
+                    var name = a.GetType().GetField("variableName").GetValue(a) as FsmString;
+                    GameObject go = od == null ? null : od.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : od.GameObject.Value;
+                    PlayMakerFSM target = go != null && fsm != null ? Game.FsmOn(go, fsm.Value) : null;
+                    FsmFloat v = target != null && name != null ? target.FsmVariables.FindFsmFloat(name.Value) : null;
+                    sb.Append(' ').Append(go != null ? go.name : "?").Append('.').Append(name != null ? name.Value : "?").Append('=').Append(v != null ? v.Value.ToString("0.##") : "?");
+                }
+            }
+            catch (System.Exception e) { sb.Append(" ?").Append(e.GetType().Name); }
+            return sb.ToString();
         }
 
         // Hote : un invite est en partie depuis 20 s.
