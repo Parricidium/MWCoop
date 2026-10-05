@@ -1,0 +1,20 @@
+Brief overview (Nexus "Summary", 350 characters max):
+
+Co-op for My Winter Car: one player hosts, friends join the same world — same save, time, weather and car, built bolt by bolt together, with a wallet each. Shared traffic, NPCs, shops, jobs and bills. Own loader (no MSCLoader) and an auto-updating launcher with a lobby. English and French. Pre-alpha.
+
+Résumé (champ « Summary » de Nexus, 350 caractères maximum) :
+
+Coop pour My Winter Car : un joueur héberge, ses amis rejoignent le même monde — même sauvegarde, heure, météo et voiture, remontée vis par vis ensemble, avec chacun son porte-monnaie. Circulation, PNJ, magasins, boulots et factures partagés. Chargeur maison (sans MSCLoader), lanceur avec salon et mises à jour. Français, anglais. Pré-alpha.
+
+Images suggested for the gallery (docs/img), in this order:
+1. jeu-duo.jpg        — the host seen by a guest in the farm yard (main image)
+2. lanceur-salon.png  — the launcher lobby
+3. jeu-conduite.jpg   — the host driving past a guest
+4. jeu-menu.jpg       — F10 menu, outfit with 3D preview
+5. lanceur-tenue.png  — launcher outfit tab
+6. jeu-attente.jpg    — guest waiting screen
+7. lanceur-voiture.png — launcher car colour
+8. jeu-tchat.jpg      — chat and name tags
+9. jeu-mort.jpg       — death screen
+10. lanceur-clair.png — light theme
+Logo: docs/img/logo-titre.png
