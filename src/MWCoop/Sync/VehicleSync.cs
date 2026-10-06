@@ -440,6 +440,7 @@ namespace MWCoop
                     if (c.Index != LocalDriving && c.Index != owned && !Remote(c, now) && c.Body != null && c.Body.gameObject.activeInHierarchy) SendSim(c, SimParked, false);
             }
 
+            HotTick();
             foreach (Car c in cars)
             {
                 if (c.Body == null) continue;
@@ -621,7 +622,13 @@ namespace MWCoop
             if (c.Dt != null)
             {
                 if (on) { c.DtWas = c.Dt.enabled; c.Dt.enabled = false; c.Dt.startEngine = false; }
-                else { c.Dt.rpm = 0; c.Dt.throttle = 0; c.Dt.enabled = c.DtWas; }
+                else
+                {
+                    // Volant pris alors que le moteur tournait chez l'autre (regime recu a l'instant) : il continue ici.
+                    bool hot = c.Index == LocalDriving && c.Rpm > 200f && Time.realtimeSinceStartup - c.LastRemote < 2f;
+                    c.Dt.rpm = 0; c.Dt.throttle = 0; c.Dt.enabled = c.DtWas;
+                    if (hot) HotStart(c);
+                }
             }
             if (c.Axis != null) { if (on) { c.AxisWas = c.Axis.enabled; c.Axis.enabled = false; } else c.Axis.enabled = c.AxisWas; }
             if (c.Sound != null)
@@ -764,6 +771,61 @@ namespace MWCoop
         {
             Car c = CarOf(t);
             return c != null && Remote(c, Time.realtimeSinceStartup);
+        }
+
+        // ... par un joueur assis au volant (pas un moteur laisse tournant, conducteur sorti).
+        public static bool RemotelySeated(Transform t)
+        {
+            Car c = CarOf(t);
+            return c != null && c.RemoteDriver >= 0 && Remote(c, Time.realtimeSinceStartup);
+        }
+
+        // Volant pris d'une voiture dont le moteur tourne chez un autre (copie : son Drivetrain coupe ici, son
+        // automate Starter a l'arret) : sans rien faire, le moteur calait en prenant le volant -- en marche chez
+        // l'autre, coupe ici (retour de JD, 06/10 soir). On le relance comme le jeu reprend un moteur qui tourne :
+        // contact mis (cle sur "ACC on", Starter.ACC), Drivetrain actif au regime recu ; l'automate Starter, en
+        // "ACC", voit plus de 200 tr/min et passe de lui-meme a "Running" (comme un demarrage a la poussette).
+        static Car hotCar;
+        static float hotUntil, hotRpm, hotAt;
+
+        static void HotStart(Car c)
+        {
+            hotCar = c;
+            hotRpm = Mathf.Max(c.Rpm, 700f);
+            hotAt = Time.realtimeSinceStartup;
+            hotUntil = hotAt + 4f;
+            // Tout de suite (pas a l'image suivante) : regime nul une seule image, et le Starter (souvent deja en
+            // "Running" sur la copie) passait a l'arret.
+            if (c.Dt != null) { c.Dt.enabled = true; c.Dt.rpm = hotRpm; }
+            PlayMakerFSM key = null;
+            foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Use" && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState("Motor starting") != null) { key = f; break; }
+            string ks = key != null ? key.ActiveStateName : "?";
+            if (key != null && (ks == "Wait1" || ks == "Wait ACC" || ks == "Motor OFF")) Game.SetState(key, "ACC on");
+            Log.Info("moteur repris en marche : " + c.Key + " (regime recu " + c.Rpm.ToString("F0") + ", cle " + ks + ")");
+        }
+
+        static void HotTick()
+        {
+            if (hotCar == null) return;
+            Car c = hotCar;
+            PlayMakerFSM starter = null;
+            if (c.Dt != null && c.T != null)
+                foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                    if (f.FsmName == "Starter" && f.Fsm.GetState("Running") != null) { starter = f; break; }
+            string st = starter != null ? starter.ActiveStateName : "";
+            float now = Time.realtimeSinceStartup;
+            // Fini : Starter en marche avec un vrai regime, au moins une seconde apres la prise (sur la copie, il pouvait
+            // etre en "Running" a regime nul) ; ou 4 s passees (le moteur fait ensuite ce que fait le jeu).
+            bool running = st == "Running" && c.Dt != null && c.Dt.rpm > 200f && now - hotAt > 1f;
+            if (c.Dt == null || c.Index != LocalDriving || running || now > hotUntil)
+            {
+                Log.Info("moteur repris : " + c.Key + " -> " + (st == "Running" ? "en marche" : "demarreur " + (st.Length > 0 ? st : "?")) + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?"));
+                hotCar = null;
+                return;
+            }
+            c.Dt.enabled = true;
+            if (c.Dt.rpm < hotRpm) c.Dt.rpm = hotRpm;
         }
 
         // Essais : allume les sons moteur de la voiture locale (comme le contact quand le moteur tourne).

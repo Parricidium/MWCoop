@@ -221,7 +221,8 @@ namespace MWCoop
         }
 
         // Zone du conducteur coupee pour le joueur d'ici (son automate 'PlayerTrigger' arrete, icone du volant eteinte) :
-        //  - voiture conduite par un autre joueur : le jeu proposait quand meme la place (retour de JD, 06/10) ;
+        //  - voiture conduite par un autre joueur, assis au volant : le jeu proposait quand meme la place (retour de
+        //    JD, 06/10). Un moteur laisse tournant, conducteur sorti, ne coupe rien : on reprend le volant (06/10 soir) ;
         //  - voiture ou l'on est assis en passager : la zone deborde sur la place avant, et l'icone du volant passait
         //    par-dessus les commandes du tableau de bord.
         // Rendue (automate rallume, en attente du joueur) des que ce n'est plus le cas. Jamais celle ou l'on conduit.
@@ -232,7 +233,7 @@ namespace MWCoop
                 PlayMakerFSM f = z.Key;
                 if (f == null || z.Value == null) continue;
                 bool off = f.ActiveStateName != "Player in car"
-                           && ((current != null && current.CarT == z.Value) || VehicleSync.RemotelyDriven(z.Value));
+                           && ((current != null && current.CarT == z.Value) || VehicleSync.RemotelySeated(z.Value));
                 if (off && !zonesOff.Contains(f))
                 {
                     if (f.ActiveStateName == "Press return") Game.SetGlobalBool("GUIdrive", false);
