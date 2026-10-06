@@ -48,6 +48,9 @@ pouvoir le faire, et les autres doivent le voir.
 - [x] Corrections du 06/10 : prise du chauffage moteur (0.26.4) ; paie des boulots une seule fois (enveloppes des
       clients retirées chez les autres dès que l'un la prend), état du corps de l'invité (faim, soif, fatigue…) gardé
       d'une session à l'autre (0.27.0). Fendeuse en retard chez l'invité : déjà rattrapée (vérifié).
+- [x] Jeu par Steam (0.30) : salon, invitations, pair-à-pair, avatars ; invité qui ne se reconnectait plus corrigé.
+      Retours de la partie du 06/10 (0.30.1) : portes du garage des parents (poussées) suivies par l'angle de celui qui
+      pousse, écran noir après une mort par le monoxyde (paupières rouvertes, son rendu).
 - [~] Courses (rallye, course sur glace), demande de JD du 06/10 : tout ce qu'un joueur peut voir, et chaque joueur
       peut courir avec son temps au classement.
       Fait (0.28) : voitures IA du rallye (3 voitures, 9 pilotes) et de la glace (16) dictées par l'hôte, pilote et
