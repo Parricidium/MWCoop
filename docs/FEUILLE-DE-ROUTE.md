@@ -45,6 +45,9 @@ pouvoir le faire, et les autres doivent le voir.
       chargeur, boîte à gants, fusibles, kilju, gains uniques, prix de la brocante, téléphone, PNJ, police, bus, gestes.
       À vérifier en vraie partie : luge de Teimo renversée, PNJ qui sert un invité, bagarre, retrait d'un fusible par
       un invité, jus.
+- [x] Corrections du 06/10 : prise du chauffage moteur (0.26.4) ; paie des boulots une seule fois (enveloppes des
+      clients retirées chez les autres dès que l'un la prend), état du corps de l'invité (faim, soif, fatigue…) gardé
+      d'une session à l'autre (0.27.0). Fendeuse en retard chez l'invité : déjà rattrapée (vérifié).
 - [ ] Plus tard : mods (MSCLoader géré par le lanceur, onglet MODS, comparaison des mods dans le salon).
 
 ## Quêtes et argent

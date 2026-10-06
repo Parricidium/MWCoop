@@ -93,10 +93,71 @@ namespace MWCoop
 
         static string StorePath { get { return System.IO.Path.Combine(Log.DataDir, "porte-monnaie.ini"); } }
 
+        // Etat du corps de l'invite, garde comme son porte-monnaie (etat-joueur.ini, une ligne par monde) : la
+        // sauvegarde recue a chaque connexion est celle de l'hote, et ces globales y sont les SIENNES -- l'invite
+        // reprenait sinon la faim, la soif, la fatigue, l'ivresse... de l'hote a chaque session. Les cles de vehicules,
+        // amendes, nom et adresse restent ceux de la partie (communs).
+        static readonly string[] SelfFloats = { "PlayerHunger", "PlayerThirst", "PlayerFatigue", "PlayerStress", "PlayerDirtiness", "PlayerUrine",
+            "PlayerDrunk", "PlayerDrunkAdjusted", "PlayerAlcoholism", "PlayerSweat", "PlayerTemp", "PlayerWeight", "PlayerBurns", "PlayerAllergy",
+            "PlayerBerryPickSkill" };
+        static readonly string[] SelfInts = { "PlayerCigarettes" };
+        static string SelfPath { get { return System.IO.Path.Combine(Log.DataDir, "etat-joueur.ini"); } }
+        static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+        static string SelfLine()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (string n in SelfFloats)
+            {
+                FsmFloat v = FsmVariables.GlobalVariables.FindFsmFloat(n);
+                if (v != null) sb.Append(sb.Length > 0 ? ";" : "").Append(n).Append(':').Append(v.Value.ToString("R", Inv));
+            }
+            foreach (string n in SelfInts)
+            {
+                FsmInt v = FsmVariables.GlobalVariables.FindFsmInt(n);
+                if (v != null) sb.Append(sb.Length > 0 ? ";" : "").Append(n).Append(':').Append(v.Value.ToString(Inv));
+            }
+            return sb.ToString();
+        }
+
+        static void RestoreSelf()
+        {
+            if (Session.IsHost || world.Length == 0 || !System.IO.File.Exists(SelfPath)) return;
+            foreach (string l in System.IO.File.ReadAllLines(SelfPath))
+            {
+                int eq = l.IndexOf('=');
+                if (eq <= 0 || l.Substring(0, eq) != world) continue;
+                int n = 0;
+                foreach (string kv in l.Substring(eq + 1).Split(';'))
+                {
+                    int c = kv.IndexOf(':');
+                    if (c <= 0) continue;
+                    string name = kv.Substring(0, c), val = kv.Substring(c + 1);
+                    float f; int i;
+                    FsmFloat vf = System.Array.IndexOf(SelfFloats, name) >= 0 ? FsmVariables.GlobalVariables.FindFsmFloat(name) : null;
+                    FsmInt vi = System.Array.IndexOf(SelfInts, name) >= 0 ? FsmVariables.GlobalVariables.FindFsmInt(name) : null;
+                    if (vf != null && float.TryParse(val, System.Globalization.NumberStyles.Float, Inv, out f)) { vf.Value = f; n++; }
+                    else if (vi != null && int.TryParse(val, System.Globalization.NumberStyles.Integer, Inv, out i)) { vi.Value = i; n++; }
+                }
+                Log.Info("joueur : etat du corps retrouve pour ce monde (" + n + " valeurs : faim, soif, fatigue...)");
+            }
+        }
+
+        static void StoreSelf()
+        {
+            if (Session.IsHost || world == null || world.Length == 0) return;
+            var lines = new List<string>();
+            if (System.IO.File.Exists(SelfPath))
+                foreach (string l in System.IO.File.ReadAllLines(SelfPath)) if (!l.StartsWith(world + "=")) lines.Add(l);
+            lines.Add(world + "=" + SelfLine());
+            try { System.IO.File.WriteAllLines(SelfPath, lines.ToArray()); } catch { }
+        }
+
         static void Restore()
         {
             FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID");
             world = pid != null ? pid.Value.ToString("F0") : "";
+            RestoreSelf();
             if (Session.IsHost || world.Length == 0 || !System.IO.File.Exists(StorePath)) return;
             foreach (string l in System.IO.File.ReadAllLines(StorePath))
             {
@@ -122,6 +183,7 @@ namespace MWCoop
                 foreach (string l in System.IO.File.ReadAllLines(StorePath)) if (!l.StartsWith(world + "=")) lines.Add(l);
             lines.Add(world + "=" + cash.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ";" + bank.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
             try { System.IO.File.WriteAllLines(StorePath, lines.ToArray()); } catch { }
+            StoreSelf();
         }
         static bool ready;
 
@@ -135,6 +197,7 @@ namespace MWCoop
             testStep = 0; remoteSince = -1;
             UnmuteTrigs();
             foreach (Trig g in Trigs) { g.F = null; g.Hooked = false; }
+            envs.Clear(); envIncomeUntil = 0; recentIn.Clear();
             claimAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 4f : -1;
             saleLogic = saleSell = null; saleHooked = saleOpen = sellOffLogged = false; sellers.Clear();
             trigLocal = trigOther = 0;
@@ -287,6 +350,7 @@ namespace MWCoop
             var sb = new System.Text.StringBuilder("argent : reserves a ce module :");
             foreach (Pay p in Pays) if (p.Own) sb.Append(' ').Append(ClaimAt(p.Path, p.Fsm));
             foreach (Trig g in Trigs) sb.Append(' ').Append(ClaimAt(g.Path, g.Fsm));
+            sb.Append(", ").Append(ClaimEnvelopes());
             Log.Info(sb.ToString());
         }
 
@@ -541,6 +605,7 @@ namespace MWCoop
             }
             HookPays();
             HookTrigs();
+            HookEnvelopes();
             FleaStep();
             foreach (Pay p in Pays) if (p.Open) PayEnd(p);   // fin d'etat pas vue (etat quitte avant la fin de ses actions)
             if (Time.realtimeSinceStartup >= nextStore) { nextStore = Time.realtimeSinceStartup + 10f; Store(); }
@@ -555,9 +620,22 @@ namespace MWCoop
             float inB = dB > 0 ? dB - (dC < 0 ? transfer : 0) : 0;
             lastCash = cash.Value; lastBank = bank.Value;
             if (inC < 0.005f && inB < 0.005f) return;
-            if (Time.realtimeSinceStartup < suppressUntil)
+            float nowU = Time.realtimeSinceStartup;
+            if (nowU < suppressUntil && nowU >= envIncomeUntil)
             {
-                suppressed.Add(new KeyValuePair<float, float>(Time.realtimeSinceStartup, inC + inB));
+                // Le meme revenu deja recu de celui qui a fait le boulot (son annonce arrivee AVANT que le boulot
+                // rejoue ici ne paie) : cette copie est en trop, retiree. Sinon gardee, et l'annonce a venir l'usera.
+                recentIn.RemoveAll(x => nowU - x.Key > 20f);
+                int got = recentIn.FindIndex(x => Mathf.Abs(x.Value - (inC + inB)) < 0.5f);
+                if (got >= 0)
+                {
+                    recentIn.RemoveAt(got);
+                    cash.Value -= inC; bank.Value -= inB;
+                    lastCash = cash.Value; lastBank = bank.Value;
+                    Log.Info("argent : revenu " + (inC + inB) + " du boulot rejoue deja recu de celui qui l'a fait : retire");
+                    return;
+                }
+                suppressed.Add(new KeyValuePair<float, float>(nowU, inC + inB));
                 Log.Info("argent : revenu " + (inC + inB) + " venu d'un boulot rejoue, garde pour soi");
                 return;
             }
@@ -588,8 +666,141 @@ namespace MWCoop
             if (hit >= 0) { suppressed.RemoveAt(hit); Log.Info("argent : revenu " + (inC + inB) + " deja verse par le boulot rejoue"); return; }
             cash.Value += inC; bank.Value += inB;
             lastCash += inC; lastBank += inB;   // pas de renvoi
+            recentIn.Add(new KeyValuePair<float, float>(Time.realtimeSinceStartup, inC + inB));
             Hud.Toast("+" + Mathf.RoundToInt(inC + inB) + Lang.T(" mk (revenu de ", " mk (income from ") + name + ")");
             Log.Info("argent : +" + inC + " liquide, +" + inB + " banque, de " + name);
+        }
+
+        // ---------------------------------------------------------------- enveloppes de paie
+        // Le client d'un boulot (fosses septiques HouseShit*, livraisons de bois HouseWood*, fermier) ou l'organisateur
+        // d'une course (PriceMoney*) tend une enveloppe : PayMoney / PriceMoney* :: Use. Clic -> "State 1" (PlayerMoney +=
+        // Money, animation), puis "State 3" (Money a 0, enveloppe cachee) ; le bois passe aussi par "Pay for car" -> "State 3".
+        // Le boulot est rejoue chez tous : chacun a SA copie de l'enveloppe, pleine. Le monde (WorldFsms) ne l'aurait
+        // suivie qu'a son releve suivant (etale : jusqu'a une minute apres son apparition) ; prise par l'un avant, elle
+        // restait pleine chez l'autre, qui la prenait aussi, et chaque prise etant un revenu partage, chacun touchait la
+        // paie DEUX fois. Reservees ici des le chargement (inactives comprises) : prise par un joueur (entree en "State 3"),
+        // elle est retiree chez les autres ("State 3" : ni argent ni son), meme si leur copie n'apparait qu'apres (60 s).
+        // La paie reste un revenu ordinaire du preneur (Update : jamais pris pour celle d'un boulot rejoue), recu une
+        // fois par chacun. Pas l'enveloppe de Jokke (gain d'objet, voir Pays).
+        class Env { public string Key; public PlayMakerFSM F; public bool Hooked; public float RetireUntil = -1; }
+        static readonly List<Env> envs = new List<Env>();
+        static readonly List<KeyValuePair<float, float>> recentIn = new List<KeyValuePair<float, float>>();   // revenus ordinaires recus (heure, montant)
+        static float nextEnvHook, envIncomeUntil;
+        static bool envApplying;
+
+        class EnvHook : ModHook
+        {
+            public override string Module { get { return "argent"; } }
+            public Env E; public bool Take;
+            public override void OnEnter()
+            {
+                try
+                {
+                    if (Session.Active && !envApplying && Replay.Depth == 0)
+                    {
+                        if (Take) envIncomeUntil = Time.realtimeSinceStartup + 3f;   // la paie qui suit est a nous : partagee
+                        else EnvTaken(E);
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        static bool IsEnvelope(PlayMakerFSM f)
+        {
+            if (f.FsmName != "Use" || f.hideFlags != HideFlags.None) return false;
+            string n = f.gameObject.name;
+            return n == "PayMoney" || n.StartsWith("PriceMoney");
+        }
+
+        static string ClaimEnvelopes()
+        {
+            envs.Clear();
+            var keys = new HashSet<string>();
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = (PlayMakerFSM)o;
+                if (!IsEnvelope(f) || !f.transform.root.gameObject.activeInHierarchy) continue;   // (modeles : racine inactive)
+                string key = Recon.Path(f.transform);
+                if (key == JokkePay || !keys.Add(key)) continue;
+                if (!Replay.Claim(f, "argent")) { Log.Warn("argent : enveloppe " + key + " deja a " + Replay.Owner(f)); continue; }
+                envs.Add(new Env { Key = key, F = f });
+            }
+            return envs.Count + " enveloppes de paie";
+        }
+
+        // Accrochees a leur premiere apparition (automate demarre : etats charges) ; retrait en attente applique.
+        static void HookEnvelopes()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < nextEnvHook) return;
+            nextEnvHook = now + 0.25f;
+            foreach (Env e in envs)
+            {
+                if (e.F == null || !e.F.gameObject.activeInHierarchy) continue;
+                if (!e.Hooked)
+                {
+                    try
+                    {
+                        FsmState take = e.F.Fsm.GetState("State 1"), end = e.F.Fsm.GetState("State 3");
+                        if (take == null || end == null) { e.Hooked = true; Log.Warn("argent : enveloppe " + e.Key + " sans State 1/State 3"); continue; }
+                        if (!take.IsInitialized || !end.IsInitialized) continue;
+                        var l1 = new List<FsmStateAction>(take.Actions); l1.Insert(0, new EnvHook { E = e, Take = true }); take.Actions = l1.ToArray();
+                        var l3 = new List<FsmStateAction>(end.Actions); l3.Insert(0, new EnvHook { E = e }); end.Actions = l3.ToArray();
+                        e.Hooked = true;
+                        Log.Info("argent : enveloppe " + e.Key + " tendue ici");
+                    }
+                    catch { continue; }   // automate pas encore pret
+                }
+                if (e.RetireUntil > 0)
+                {
+                    if (now > e.RetireUntil) e.RetireUntil = -1;
+                    else Retire(e);
+                }
+            }
+        }
+
+        // Prise ici (ou achat de la voiture du client du bois) : retiree chez les autres.
+        static void EnvTaken(Env e)
+        {
+            Log.Info("argent : enveloppe " + e.Key + " prise ici");
+            Session.SendAll(new NetWriter(Msg.Payout).U8(Session.LocalId).Str(e.Key), true);
+        }
+
+        static void Retire(Env e)
+        {
+            e.RetireUntil = -1;
+            string st = e.F.ActiveStateName;
+            if (st == "State 3" || st == "State 5") return;
+            envApplying = true; Replay.Depth++;
+            try { Game.SetState(e.F, "State 3"); }
+            finally { envApplying = false; Replay.Depth--; }
+            Log.Info("argent : enveloppe " + e.Key + " retiree ici (" + st + " -> " + e.F.ActiveStateName + ")");
+        }
+
+        public static void OnPayout(Peer from, NetReader r)
+        {
+            int who = r.U8();
+            if (Session.IsHost) who = from.Id;
+            string key = r.Str();
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Payout).U8(who).Str(key), true, who);
+            Env e = envs.Find(x => x.Key == key);
+            if (e == null || e.F == null) { Log.Warn("argent : enveloppe " + key + " prise par #" + who + ", introuvable ici"); return; }
+            PlayerInfo pi;
+            Log.Info("argent : enveloppe " + key + " prise par " + (Session.Players.TryGetValue(who, out pi) ? pi.Name : "#" + who));
+            if (e.F.gameObject.activeInHierarchy && e.Hooked) Retire(e);
+            else e.RetireUntil = Time.realtimeSinceStartup + 60f;   // pas encore tendue ici : retiree a son apparition
+        }
+
+        // Essais (Autotest=paie) : enveloppe sortie de sous son PNJ, suivie comme les autres sous son nouveau chemin.
+        public static string TestEnvelope(PlayMakerFSM f)
+        {
+            if (f == null) return "pas d'automate";
+            Env e = envs.Find(x => x.F == f);
+            if (e == null) { e = new Env { F = f }; envs.Add(e); }
+            e.Key = Recon.Path(f.transform);
+            return "enveloppe d'essai " + e.Key + " suivie (" + (Replay.Owner(f) ?? "libre") + ")";
         }
 
         // Essais (Autotest) 'revenu' : a 25 s, etat ; a 30 s (l'hote attend en plus un invite en partie depuis
