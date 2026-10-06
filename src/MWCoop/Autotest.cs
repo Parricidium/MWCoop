@@ -37,7 +37,7 @@ namespace MWCoop
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t);
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
-            VehicleSync.Test(mode, t); Jobs.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t);
+            VehicleSync.Test(mode, t); Jobs.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); PushDoors.Test(mode, t);
             MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {
@@ -608,6 +608,76 @@ namespace MWCoop
                 foreach (FsmBool x in g.BoolVariables) sb.Append(" b:").Append(x.Name).Append('=').Append(x.Value);
                 foreach (FsmString x in g.StringVariables) sb.Append(" s:").Append(x.Name).Append('=').Append(x.Value);
                 Log.Info("autotest : globales" + sb);
+            }
+            // [Test] Autotest=releveco : automates dont une variable ou une action parle de monoxyde (Carbon*, CO), et
+            // effets d'image de la camera du joueur (dumps/co.txt, avec parametres).
+            // [Test] Autotest=co : a 30 s, mort par le monoxyde comme dans le jeu (PassoutEyes allume, 'Logic' en "Close eyes 2" :
+            // paupieres fermees, son baisse, puis Systems/Death). Avec [Test] TestReapparition=n, la reapparition est
+            // choisie seule ; a 45 s, etat des paupieres et du son (captures : [Test] Captures=46).
+            if (mode == "co" && t > 30f && step == 0)
+            {
+                step = 1;
+                GameObject pe = Game.FindAny("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Carbon/PassoutEyes");
+                if (pe != null)
+                {
+                    pe.SetActive(true);
+                    PlayMakerFSM l = Game.FsmOn(pe, "Logic");
+                    if (l != null) Game.SetState(l, "Close eyes 2");
+                    Log.Info("autotest : co : paupieres qui se ferment (" + (l != null ? l.ActiveStateName : "?") + ")");
+                }
+                else Log.Info("autotest : co : PassoutEyes introuvable");
+            }
+            if (mode == "co" && t > 45f && step == 1)
+            {
+                step = 2;
+                GameObject pe = Game.FindAny("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Carbon/PassoutEyes");
+                FsmFloat vol = FsmVariables.GlobalVariables.FindFsmFloat("GameVolume");
+                Log.Info("autotest : co : paupieres " + (pe != null && pe.activeInHierarchy ? "FERMEES (allumees)" : "rouvertes") + ", son " + (vol != null ? vol.Value.ToString("F2") : "?"));
+            }
+            if (mode == "relevebattantes" && t > 40f && !done)
+            {
+                done = true;
+                var sb = new System.Text.StringBuilder();
+                int n = 0;
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                {
+                    if (f.hideFlags != HideFlags.None || !f.transform.root.gameObject.activeInHierarchy) continue;
+                    try
+                    {
+                        if (f.Fsm.States.Length > 0 && !f.Fsm.States[0].IsInitialized) f.Fsm.InitData();
+                        int torque = 0; bool up = false;
+                        foreach (FsmState st in f.Fsm.States)
+                            foreach (FsmStateAction a2 in st.Actions)
+                            {
+                                if (a2 == null) continue;
+                                string tn = a2.GetType().Name;
+                                if (tn == "AddTorque") torque++;
+                                if (tn == "GetMouseButtonUp") up = true;
+                            }
+                        if (torque == 0) continue;
+                        n++;
+                        sb.Append(" | ").Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append(" couples ").Append(torque).Append(up ? " (bouton tenu)" : "").Append(" [").Append(Replay.Owner(f) ?? "libre").Append("]");
+                    }
+                    catch { }
+                }
+                Log.Info("autotest : battantes : " + n + sb);
+            }
+            if (mode == "releveco" && t > 40f && !done)
+            {
+                done = true;
+                var hits = new System.Collections.Generic.List<string>();
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                {
+                    if (f.hideFlags != HideFlags.None) continue;
+                    bool hit = false;
+                    foreach (NamedVariable v in f.FsmVariables.GetAllNamedVariables()) if (v.Name.Contains("Carbon") || v.Name == "CO") hit = true;
+                    if (!hit) foreach (FsmFloat v in FsmVariables.GlobalVariables.FloatVariables) { }
+                    if (hit) hits.Add(Recon.Path(f.transform));
+                }
+                var cam = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+                var sb = new System.Text.StringBuilder();
+                if (cam != null) foreach (MonoBehaviour m in cam.GetComponents<MonoBehaviour>()) sb.Append(' ').Append(m.GetType().Name).Append(m.enabled ? "+" : "-");
+                Log.Info("autotest : releveco : " + hits.Count + " automates ; camera :" + sb + " ; " + Recon.DumpTargets(string.Join(";", hits.ToArray())));
             }
             if (mode == "releveracine" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpRoot(Config.Get("Test", "RacineReleve", "RACES"))); }
             if (mode == "releveargent" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpMoney()); }

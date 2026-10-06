@@ -161,6 +161,7 @@ namespace MWCoop
             VehicleSync.ExitLocal();
             if (pl.transform.parent != null) pl.transform.parent = null;
             foreach (KeyValuePair<Behaviour, bool> kv in overlays) if (kv.Key != null) kv.Key.enabled = kv.Value;
+            OpenEyes(pl);
             Game.SetGlobalBool("PlayerStop", false);
             var cc = pl.GetComponent<CharacterController>();
             foreach (Behaviour b in pl.GetComponents<Behaviour>())
@@ -177,6 +178,29 @@ namespace MWCoop
             Log.Info("reapparition : a " + place.Name + " en " + to.ToString("F2"));
             Hud.Toast(Lang.T("De retour \u00E0 " + place.Name, "Back at " + place.NameEn));
             if (Session.Active) Chat.Send("* revient a " + place.Name + " *");
+        }
+
+        // Paupieres : l'intoxication au monoxyde (FPSCamera/Carbon/PassoutEyes) ferme deux barres noires devant la
+        // camera (animation sleep_on) et baisse le son du jeu (GameVolume -> 0), PUIS active Systems/Death. La mort
+        // arretee ici, les paupieres restaient fermees : ecran noir pour toujours apres la reapparition (vraie partie
+        // du 06/10). Toute animation d'yeux encore allumee sous la camera est eteinte (comme son etat "State 4"), et
+        // le son rendu.
+        static void OpenEyes(GameObject pl)
+        {
+            int n = 0;
+            foreach (Animation an in pl.GetComponentsInChildren<Animation>(true))
+            {
+                GameObject g = an.gameObject;
+                if (!g.activeSelf || !g.name.Contains("Eyes")) continue;
+                PlayMakerFSM f = Game.FsmOn(g, "Logic");
+                if (f != null) f.enabled = false;
+                g.SetActive(false);
+                if (f != null) f.enabled = true;
+                n++;
+                Log.Info("reapparition : paupieres " + Recon.Path(g.transform) + " rouvertes");
+            }
+            FsmFloat vol = FsmVariables.GlobalVariables.FindFsmFloat("GameVolume");
+            if (vol != null && vol.Value < 0.99f) { Log.Info("reapparition : son du jeu rendu (" + vol.Value.ToString("F2") + " -> 1)"); vol.Value = 1f; }
         }
 
         // Point au sol sous le lieu (premier obstacle solide sous la hauteur choisie), pieds du joueur dessus.
