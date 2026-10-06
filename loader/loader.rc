@@ -1,10 +1,6 @@
-// MWCoop.exe : icone, manifeste (styles Windows, PPP), fonds de la fenetre (make-art.ps1), informations de version
-// (MWV_NUM / MWV_STR : build\mwversion.h, ecrit par build.cmd depuis src\MWCoop\Version.cs)
+// version.dll : informations de version (sans elles, une version.dll inconnue a cote d'un jeu ressemble a un
+// chargement lateral malveillant pour les antivirus). MWV_NUM / MWV_STR : build\mwversion.h (build.cmd).
 #include "mwversion.h"
-1 ICON "mwcoop.ico"
-1 24 "launcher.manifest"
-2 RCDATA "launcher.png"
-3 RCDATA "launcher-sombre.png"
 
 1 VERSIONINFO
 FILEVERSION MWV_NUM
@@ -12,7 +8,7 @@ PRODUCTVERSION MWV_NUM
 FILEFLAGSMASK 0x3F
 FILEFLAGS 0x0
 FILEOS 0x40004
-FILETYPE 0x1
+FILETYPE 0x2
 FILESUBTYPE 0x0
 BEGIN
   BLOCK "StringFileInfo"
@@ -20,11 +16,11 @@ BEGIN
     BLOCK "040904B0"
     BEGIN
       VALUE "CompanyName", "Parricidium (MWCoop, open source)"
-      VALUE "FileDescription", "MWCoop launcher: installs, updates and starts the MWCoop co-op mod"
+      VALUE "FileDescription", "MWCoop loader (proxy of version.dll): loads the MWCoop co-op mod into My Winter Car"
       VALUE "FileVersion", MWV_STR
-      VALUE "InternalName", "MWCoopLauncher"
+      VALUE "InternalName", "MWCoopLoader"
       VALUE "LegalCopyright", "Open source: https://github.com/Parricidium/MWCoop"
-      VALUE "OriginalFilename", "MWCoop.exe"
+      VALUE "OriginalFilename", "version.dll"
       VALUE "ProductName", "MWCoop - co-op mod for My Winter Car"
       VALUE "ProductVersion", MWV_STR
       VALUE "Comments", "Fan-made co-op mod for My Winter Car (Amistech Games), not affiliated. Source code and releases: https://github.com/Parricidium/MWCoop"
