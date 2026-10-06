@@ -28,7 +28,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1017,15 +1017,19 @@ enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
 static bool g_steamNet = false;
-static bool g_steamInfoHot;                          // encart "par Steam" survole (clic : option de lancement Steam)
+static bool g_steamInfoHot;                          // encart "par Steam" survole (clic : guide Steam)
+static bool g_guide;                                 // guide "Jouer par Steam" ouvert (par-dessus tout le lanceur)
+static int g_guideHot;                               // 1 copier, 2 compris, 3 ne plus afficher, 4 fermer
+static bool g_guideNoMore;
+static DWORD g_guideCopiedT;
 struct Button { RectF r; float hover; bool visible, enabled; };
 static Button g_btn[B_COUNT];
 static int g_hot = -1, g_pressed = -1;
 
 static void Layout()
 {
-    g_fields[0].r = RectF(76, 276, 304, 36); g_fields[0].maxLen = 23; g_fields[0].address = false;
-    g_fields[1].r = RectF(76, 338, 304, 36); g_fields[1].maxLen = 63; g_fields[1].address = true;
+    g_fields[0].r = RectF(76, 272, 304, 36); g_fields[0].maxLen = 23; g_fields[0].address = false;
+    g_fields[1].r = RectF(76, 346, 304, 36); g_fields[1].maxLen = 63; g_fields[1].address = true;
     g_btn[B_HOST].r = RectF(76, 390, 148, 46);
     g_btn[B_JOIN].r = RectF(232, 390, 148, 46);
     g_btn[B_SOLO].r = RectF(76, 444, 304, 26);
@@ -1040,8 +1044,8 @@ static void Layout()
     g_btn[B_LOGZIP].r = RectF(760, 122, 176, 26);
     g_btn[B_GITHUB].r = RectF(142, 152, 82, 24);  // sous le logo, au-dessus de PRE-ALPHA : liens de JD
     g_btn[B_KOFI].r = RectF(232, 152, 82, 24);
-    g_btn[B_NETIP].r = RectF(262, 318, 56, 17);    // a droite du titre du 2e champ : IP | STEAM
-    g_btn[B_NETSTEAM].r = RectF(320, 318, 60, 17);
+    g_btn[B_NETIP].r = RectF(76, 315, 152, 26);    // entre les deux champs : IP / VPN | STEAM
+    g_btn[B_NETSTEAM].r = RectF(228, 315, 152, 26);
 }
 
 static void UpdateButtons()
@@ -1182,18 +1186,27 @@ static void DrawButton(Graphics &g, int id, const wchar_t *label, bool primary)
 }
 
 // Petit bouton (Jouer en solo) : pilule discrete, accent au survol.
+// Choix du reseau : barre a deux segments (le choisi en degrade).
 static void DrawNetChoice(Graphics &g)
 {
+    if (!g_btn[B_NETIP].visible) return;
+    RectF a = g_btn[B_NETIP].r, b2 = g_btn[B_NETSTEAM].r, track(a.X, a.Y, b2.X + b2.Width - a.X, a.Height);
+    GraphicsPath tp;
+    RoundRect(tp, track, track.Height / 2);
+    SolidBrush tb(TH(field));
+    g.FillPath(&tb, &tp);
+    Pen tpen(TH(fieldBorder), 1.2f);
+    g.DrawPath(&tpen, &tp);
     for (int id = B_NETIP; id <= B_NETSTEAM; id++) {
         Button &b = g_btn[id];
-        if (!b.visible) continue;
         bool on = (id == B_NETSTEAM) == g_steamNet;
+        RectF r = b.r;
+        r.Inflate(-3, -3);
         GraphicsPath p;
-        RoundRect(p, b.r, b.r.Height / 2);
-        SolidBrush fill(on ? kAcc : Mix(WithA(TH(btn2), 0.75f), TH(btn2Hot), b.hover));
-        g.FillPath(&fill, &p);
-        if (!on) { Pen pen(WithA(Mix(kGrey, kAcc, b.hover), 0.7f), 1.0f); g.DrawPath(&pen, &p); }
-        Text(g, id == B_NETIP ? T(L"IP / VPN", L"IP / VPN") : L"STEAM", b.r, 10, FontStyleBold, on ? Color(255, 255, 255, 255) : Mix(kGrey, kAcc, b.hover));
+        RoundRect(p, r, r.Height / 2);
+        if (on) { LinearGradientBrush lg(r, kAcc, kAcc2, LinearGradientModeHorizontal); g.FillPath(&lg, &p); }
+        else if (b.hover > 0.01f) { SolidBrush hb(WithA(kAcc, 0.2f * b.hover)); g.FillPath(&hb, &p); }
+        Text(g, id == B_NETIP ? L"IP / VPN" : L"STEAM", r, 12, FontStyleBold, on ? kOnAcc : Mix(kInk, kAcc, b.hover));
     }
 }
 
@@ -2962,18 +2975,30 @@ static void DrawUI(Graphics &g)
         Text(g, status, RectF(60, 212, 336, 22), 13, FontStyleBold, sc);
         if (prog != -1.0f) DrawBar(g, RectF(96, 238, 264, 5), prog);
         DrawField(g, 0, T(L"PSEUDO", L"NICKNAME"));
-        if (!g_steamNet) DrawField(g, 1, T(L"ADRESSE DE L'H\u00D4TE", L"HOST ADDRESS"));
+        bool netBar = g_btn[B_NETIP].visible;   // (la barre IP / STEAM tient lieu de titre du 2e champ)
+        if (!g_steamNet) DrawField(g, 1, netBar ? L"" : T(L"ADRESSE DE L'H\u00D4TE", L"HOST ADDRESS"));
         else {
             Field &f = g_fields[1];
-            Text(g, T(L"PAR STEAM", L"THROUGH STEAM"), RectF(f.r.X + 2, f.r.Y - 18, f.r.Width, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
             GraphicsPath fp; RoundRect(fp, f.r, 9);
-            SolidBrush ff(WithA(TH(field), 0.6f));
-            g.FillPath(&ff, &fp);
-            if (g_steamInfoHot) { Pen hp(WithA(kAcc, 0.8f), 1.2f); g.DrawPath(&hp, &fp); }
-            Para(g, g_lobby != LB_NONE ? T(L"Salon Steam : joueurs et invitations dans le panneau de droite.", L"Steam lobby: players and invites in the right panel.")
-                                       : T(L"H\u00C9BERGER : salon et invitations Steam ici. Clique ici : option de lancement Steam.",
-                                           L"HOST: lobby and Steam invites right here. Click here: Steam launch option."),
-                 RectF(f.r.X + 10, f.r.Y + 2, f.r.Width - 20, f.r.Height - 4), 11, g_steamInfoHot ? kAcc : kGrey);
+            if (!netBar) {   // (pendant un salon)
+                Text(g, T(L"PAR STEAM", L"THROUGH STEAM"), RectF(f.r.X + 2, f.r.Y - 18, f.r.Width, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+                SolidBrush ff(WithA(TH(field), 0.6f));
+                g.FillPath(&ff, &fp);
+                Para(g, T(L"Salon Steam : joueurs et invitations dans le panneau de droite.", L"Steam lobby: players and invites in the right panel."),
+                     RectF(f.r.X + 10, f.r.Y + 2, f.r.Width - 20, f.r.Height - 4), 11, kGrey);
+            } else {   // option de lancement Steam : encart a l'accent, bouton GUIDE
+                SolidBrush ff(WithA(kAcc, g_steamInfoHot ? 0.22f : 0.12f));
+                g.FillPath(&ff, &fp);
+                Pen hp(WithA(kAcc, g_steamInfoHot ? 1.0f : 0.7f), 1.4f);
+                g.DrawPath(&hp, &fp);
+                RectF pill(f.r.X + f.r.Width - 80, f.r.Y + 7, 72, 22);
+                GraphicsPath pp; RoundRect(pp, pill, 11);
+                LinearGradientBrush lg(pill, kAcc, kAcc2, LinearGradientModeHorizontal);
+                g.FillPath(&lg, &pp);
+                Text(g, T(L"GUIDE", L"GUIDE"), pill, 11, FontStyleBold, kOnAcc);
+                Text(g, T(L"Option de lancement Steam", L"Steam launch option"), RectF(f.r.X + 12, f.r.Y + 3, f.r.Width - 100, 17), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+                Text(g, T(L"Pour qu'une invitation ouvre MWCoop", L"So that an invite opens MWCoop"), RectF(f.r.X + 12, f.r.Y + 19, f.r.Width - 100, 15), 11, FontStyleRegular, kGrey, StringAlignmentNear);
+            }
         }
         DrawNetChoice(g);
         const wchar_t *hostLabel = T(L"H\u00C9BERGER", L"HOST"), *joinLabel = g_joinFallback ? T(L"REJOINDRE EN JEU", L"JOIN IN GAME") : T(L"REJOINDRE", L"JOIN");
@@ -3156,6 +3181,146 @@ static void DrawScene(Graphics &g)
     g.ResetClip();
 }
 
+// ---------------------------------------------------------------- guide "Jouer par Steam"
+// Ouvert au clic sur STEAM (sauf "ne plus afficher" : [Lanceur] GuideSteam=0) et sur l'encart de l'option de
+// lancement : comment inviter, et l'option de lancement Steam  "<MWCoop.exe>" %command%  a copier (sans elle, une
+// invitation acceptee MWCoop ferme lance le jeu sans le mod).
+static const RectF kGuideCard(214, 112, 572, 436);
+static const RectF kGuideCopy(244, 470, 236, 40), kGuideOk(492, 470, 264, 40), kGuideNoMore(244, 518, 300, 20), kGuideClose(748, 124, 26, 26);
+static std::wstring SteamLaunchLine() { return L"\"" + g_self + L"\" %command%"; }
+static bool CopyText(const std::wstring &t)
+{
+    if (!OpenClipboard(g_wnd)) return false;
+    EmptyClipboard();
+    size_t bytes = (t.size() + 1) * sizeof(wchar_t);
+    HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    bool ok = false;
+    if (hg) {
+        memcpy(GlobalLock(hg), t.c_str(), bytes);
+        GlobalUnlock(hg);
+        ok = SetClipboardData(CF_UNICODETEXT, hg) != NULL;
+        if (!ok) GlobalFree(hg);
+    }
+    CloseClipboard();
+    return ok;
+}
+static void SteamGuideOpen() { g_guide = true; g_guideHot = 0; g_guideNoMore = false; g_guideCopiedT = 0; g_focus = -1; }
+static void SteamGuideClose()
+{
+    g_guide = false;
+    g_guideHot = 0;
+    if (g_guideNoMore) WritePrivateProfileStringW(L"Lanceur", L"GuideSteam", L"0", g_iniLauncher.c_str());
+}
+static int SteamGuideHit(float x, float y)
+{
+    if (kGuideCopy.Contains(x, y)) return 1;
+    if (kGuideOk.Contains(x, y)) return 2;
+    if (kGuideNoMore.Contains(x, y)) return 3;
+    if (kGuideClose.Contains(x, y)) return 4;
+    return kGuideCard.Contains(x, y) ? 0 : -1;
+}
+static void SteamGuideClick(float x, float y)
+{
+    int h = SteamGuideHit(x, y);
+    if (h == 1) {
+        if (CopyText(SteamLaunchLine())) {
+            g_guideCopiedT = GetTickCount() | 1;
+            SetStatus(K_OK, T(L"Option de lancement copi\u00E9e : colle-la dans Steam", L"Launch option copied: paste it in Steam"));
+        }
+    } else if (h == 3) g_guideNoMore = !g_guideNoMore;
+    else if (h == 2 || h == 4 || h < 0) SteamGuideClose();
+}
+static void DrawSteamGuide(Graphics &g)
+{
+    if (!g_guide) return;
+    GraphicsPath dim;   // (forme de la fenetre : le reste est transparent)
+    RoundRect(dim, RectF(20, 60, 960, 540), 26);
+    SolidBrush db(Color(150, 0, 0, 0));
+    g.FillPath(&db, &dim);
+    RectF c = kGuideCard;
+    GraphicsPath cp;
+    RoundRect(cp, c, 18);
+    SolidBrush cb(TH(card));
+    g.FillPath(&cb, &cp);
+    SolidBrush cb2(WithA(TH(field), 0.55f));
+    g.FillPath(&cb2, &cp);
+    Pen cpen(WithA(kAcc, 0.85f), 1.6f);
+    g.DrawPath(&cpen, &cp);
+    Text(g, T(L"Jouer par Steam", L"Playing through Steam"), RectF(c.X + 30, c.Y + 18, 400, 30), 21, FontStyleBold, kInk, StringAlignmentNear);
+    {   // fermer
+        RectF r = kGuideClose;
+        Pen xp(g_guideHot == 4 ? kAcc : kGrey, 2.0f);
+        g.DrawLine(&xp, r.X + 8, r.Y + 8, r.X + r.Width - 8, r.Y + r.Height - 8);
+        g.DrawLine(&xp, r.X + r.Width - 8, r.Y + 8, r.X + 8, r.Y + r.Height - 8);
+    }
+    const wchar_t *steps[3] = {
+        T(L"H\u00C9BERGER ouvre un salon Steam r\u00E9serv\u00E9 \u00E0 tes amis : invite-les depuis la liste qui s'affiche.",
+          L"HOST opens a Steam lobby for your friends only: invite them from the list that shows up."),
+        T(L"Tes amis acceptent l'invitation dans Steam (ou cliquent REJOINDRE dans MWCoop, mode STEAM) ; LANCER d\u00E9marre le jeu de chacun.",
+          L"Your friends accept the invite in Steam (or click JOIN in MWCoop, STEAM mode); START launches everyone's game."),
+        T(L"Pour qu'une invitation accept\u00E9e MWCoop ferm\u00E9 ouvre MWCoop (et pas le jeu sans le mod), chacun ajoute cette option de lancement :",
+          L"So that an invite accepted with MWCoop closed opens MWCoop (not the game without the mod), everyone adds this launch option:") };
+    float y = c.Y + 62;
+    for (int i = 0; i < 3; i++) {
+        RectF dot(c.X + 30, y + 1, 24, 24);
+        SolidBrush ob(kAcc);
+        g.FillEllipse(&ob, dot);
+        Text(g, std::to_wstring(i + 1), dot, 12.5f, FontStyleBold, kOnAcc);
+        Para(g, steps[i], RectF(c.X + 64, y, c.Width - 94, 40), 13, kInk);
+        y += 46;
+    }
+    // ou coller la ligne
+    Para(g, T(L"Steam > Biblioth\u00E8que > clic droit sur My Winter Car > Propri\u00E9t\u00E9s > G\u00E9n\u00E9ral > Options de lancement",
+              L"Steam > Library > right-click My Winter Car > Properties > General > Launch options"),
+         RectF(c.X + 64, y - 4, c.Width - 94, 34), 12, kAcc);
+    RectF code(c.X + 30, y + 30, c.Width - 60, 50);
+    {
+        GraphicsPath kp;
+        RoundRect(kp, code, 10);
+        SolidBrush kb(TH(field));
+        g.FillPath(&kb, &kp);
+        Pen kpen(TH(fieldBorder), 1.2f);
+        g.DrawPath(&kpen, &kp);
+        FontFamily mono(L"Consolas");
+        Font mf(&mono, 13, FontStyleRegular, UnitPixel);
+        StringFormat sf;
+        sf.SetLineAlignment(StringAlignmentCenter);
+        sf.SetTrimming(StringTrimmingEllipsisPath);
+        SolidBrush tb(kInk);
+        std::wstring line = SteamLaunchLine();
+        g.DrawString(line.c_str(), -1, &mf, RectF(code.X + 12, code.Y + 4, code.Width - 24, code.Height - 8), &sf, &tb);
+    }
+    Para(g, T(L"Le bouton JOUER de Steam ouvrira alors MWCoop. Pour retrouver le jeu sans le mod, efface la ligne.",
+              L"Steam's PLAY button will then open MWCoop. To get the game without the mod back, clear the line."),
+         RectF(c.X + 30, code.Y + code.Height + 8, c.Width - 60, 36), 11.5f, kGrey);
+    // boutons
+    bool copied = g_guideCopiedT && GetTickCount() - g_guideCopiedT < 4000;
+    {
+        RectF r = kGuideCopy;
+        GraphicsPath p; RoundRect(p, r, r.Height / 2);
+        LinearGradientBrush lg(r, Mix(kAcc, Color(255, 255, 255, 255), g_guideHot == 1 ? 0.15f : 0.0f), kAcc2, LinearGradientModeHorizontal);
+        g.FillPath(&lg, &p);
+        Text(g, copied ? T(L"LIGNE COPI\u00C9E \u2713", L"LINE COPIED \u2713") : T(L"COPIER LA LIGNE", L"COPY THE LINE"), r, 14, FontStyleBold, kOnAcc);
+    }
+    {
+        RectF r = kGuideOk;
+        GraphicsPath p; RoundRect(p, r, r.Height / 2);
+        SolidBrush fb(g_guideHot == 2 ? TH(cardSel) : TH(card));
+        g.FillPath(&fb, &p);
+        Pen pp(g_guideHot == 2 ? kAcc : TH(choiceBorder), 1.4f);
+        g.DrawPath(&pp, &p);
+        Text(g, T(L"COMPRIS", L"GOT IT"), r, 14, FontStyleBold, g_guideHot == 2 ? kAcc : kInk);
+    }
+    {   // ne plus afficher (au clic sur STEAM)
+        RectF box(kGuideNoMore.X, kGuideNoMore.Y + 2, 16, 16);
+        GraphicsPath bp; RoundRect(bp, box, 4);
+        if (g_guideNoMore) { SolidBrush on(kAcc); g.FillPath(&on, &bp); Text(g, L"\u2713", box, 12, FontStyleBold, kOnAcc); }
+        else { Pen bpen(g_guideHot == 3 ? kAcc : kGrey, 1.4f); g.DrawPath(&bpen, &bp); }
+        Text(g, T(L"Ne plus afficher en choisissant STEAM", L"Don't show again when choosing STEAM"), RectF(box.X + 24, kGuideNoMore.Y, 280, 20), 12,
+             FontStyleRegular, g_guideHot == 3 ? kAcc : kGrey, StringAlignmentNear);
+    }
+}
+
 static void RenderTo(Bitmap &target, float scale)
 {
     g_skinBudget = g_wnd ? 6 : 100000;   // portraits lus par image (capture : tous)
@@ -3193,6 +3358,7 @@ static void RenderTo(Bitmap &target, float scale)
         g.FillPath(&lg, &p);
     }
     DrawUI(g);
+    DrawSteamGuide(g);
 }
 
 static void Present()
@@ -4899,14 +5065,17 @@ static void OnButton(int id)
         else if (g_steamNet) SteamJoinClick();   // Steam : l'invitation recue, sinon le salon d'un ami
         else LobbyJoin();
         break;
-    case B_NETIP: case B_NETSTEAM:
+    case B_NETIP: case B_NETSTEAM: {
+        bool wasSteam = g_steamNet;
         g_steamNet = id == B_NETSTEAM;
         WritePrivateProfileStringW(L"Lanceur", L"Reseau", g_steamNet ? L"steam" : L"ip", g_iniLauncher.c_str());
         if (g_steamNet && g_focus == 1) g_focus = -1;
         if (!g_steamNet) SteamDown();
+        else if (!wasSteam && GetPrivateProfileIntW(L"Lanceur", L"GuideSteam", 1, g_iniLauncher.c_str()) != 0) SteamGuideOpen();
         SetStatus(K_NORMAL, g_steamNet ? T(L"Partie par Steam : salon et invitations ici", L"Game through Steam: lobby and invites right here")
                                         : T(L"Partie par adresse IP (local, Radmin, Hamachi...)", L"Game through IP address (LAN, Radmin, Hamachi...)"));
         break;
+    }
     case B_SOLO: Launch(MODE_SOLO); break;
     case B_EXE: ChooseExe(); break;
     case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
@@ -5059,6 +5228,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         float x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
         if (g_carDrag) { CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
         if (g_skinDrag) { SkinDragTo(x); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
+        if (g_guide) {   // (guide Steam ouvert : lui seul repond)
+            g_hot = -1; g_tabHot = -1; g_optHot = -1; g_lobbyHot = -1; g_steamInfoHot = false;
+            g_guideHot = SteamGuideHit(x, y);
+            SetCursor(LoadCursor(NULL, g_guideHot > 0 ? IDC_HAND : IDC_ARROW));
+            return 0;
+        }
         g_hot = HitButton(x, y);
         g_tabHot = HitTab(x, y);
         HitOption(x, y, &g_optHot, &g_optPart);
@@ -5079,10 +5254,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     }
     case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; g_steamInfoHot = false; return 0;
     case WM_KEYDOWN:   // onglet TENUE : fleches gauche / droite (hors des champs)
+        if (g_guide && (wp == VK_ESCAPE || wp == VK_RETURN)) { SteamGuideClose(); return 0; }
         if ((wp == VK_LEFT || wp == VK_RIGHT) && g_tab == TAB_SKIN && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
         break;
     case WM_MOUSEWHEEL:
-        if (g_tab >= 0) {
+        if (g_tab >= 0 && !g_guide) {
             float step = -(short)HIWORD(wp) / 120.0f * kRowH * 1.5f;
             g_scroll[g_tab] = min(max(g_scroll[g_tab] + step, 0.0f), MaxScroll(g_tab));
             POINT pt = { (short)LOWORD(lp), (short)HIWORD(lp) };
@@ -5093,11 +5269,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_SETCURSOR: return TRUE;
     case WM_LBUTTONDOWN: {
         float x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
+        if (g_guide) { SteamGuideClick(x, y); return 0; }
         int b = HitButton(x, y), f = HitField(x, y);
         if (b >= 0) { g_pressed = b; SetCapture(h); return 0; }
         if (f >= 0) { g_focus = f; g_time = 0; return 0; }
         g_focus = -1;
-        if (SteamInfoAt(x, y)) { SteamLaunchOptionHelp(); return 0; }
+        if (SteamInfoAt(x, y)) { SteamGuideOpen(); return 0; }
         int t = HitTab(x, y);
         if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); if (g_tab == TAB_LOGS) LogsScan(); return 0; }   // un 2e clic referme
         if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
@@ -5127,7 +5304,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_CHAR:
-        if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait) return 0;
+        if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait || g_guide) return 0;
         if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
         if (wp == 8) { if (g_focus >= 0 && !g_fields[g_focus].text.empty()) g_fields[g_focus].text.pop_back(); }
         else if (wp == 127) { if (g_focus >= 0) g_fields[g_focus].text.clear(); }   // Ctrl+Retour arriere
@@ -5349,6 +5526,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_launchInfo = info;
         }
         else if (st == L"menu-steam") g_steamNet = true;
+        else if (st == L"guide-steam") { g_steamNet = true; SteamGuideOpen(); g_guideHot = 1; }
         else if (st == L"menu-ip") g_steamNet = false;
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop") { g_tab = TAB_COOP; g_optHot = TabRows(TAB_COOP)[1]; g_optPart = 1; }
