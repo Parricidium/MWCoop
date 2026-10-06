@@ -27,7 +27,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 28;
+        public const int NetVersion = 29;
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;

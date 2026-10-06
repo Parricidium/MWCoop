@@ -53,7 +53,11 @@ pouvoir le faire, et les autres doivent le voir.
       Fait (0.28) : voitures IA du rallye (3 voitures, 9 pilotes) et de la glace (16) dictées par l'hôte, pilote et
       livrée compris ; classement télé du rallye identique ; course de la semaine (rallye ou glace) comme chez l'hôte ;
       inscription, chrono, feux de départ, parc fermé et contrôle technique personnels (plus rejoués chez les autres).
-      Reste : plusieurs pilotes humains au classement du rallye avec des adversaires communs (0.29), course sur glace
+      Fait (0.29) : rallye à plusieurs pilotes humains : adversaires communs (graine de l'hôte gardée pour la semaine),
+      temps de chaque pilote au classement de tous (podium et prix de chacun en tiennent compte), heures de départ
+      distinctes données par l'hôte (une seule CORRIS), voitures IA retenues pendant qu'un invité court, participation
+      de l'invité gardée d'une session à l'autre, prix des courses personnels.
+      Reste : course sur glace
       complète (grille, manches, résultats, pilotes humains) (0.30), spectateurs qui remettent une voiture IA sur ses
       roues, kiosque et vendeur de pièces.
 - [ ] Plus tard : mods (MSCLoader géré par le lanceur, onglet MODS, comparaison des mods dans le salon).
