@@ -41,7 +41,7 @@ Everybody in a party must run the [b]same version[/b] (the launcher updates it f
 [*]A guest who joins after a restaurant order does not see the trays already on the counter.
 [*]Some NPC reactions (fights, services) are only checked between test instances so far.
 [/list]
-Windows Defender sometimes flags [b]MWCoop.exe[/b] (a machine-learning guess, "Wacatac.B!ml"): the executables are freshly built and unsigned. Allow it, or add an exclusion on the game folder.
+[b]Antivirus warning[/b]: a few engines sometimes flag [b]MWCoop.exe[/b] (Windows Defender "Wacatac.B!ml", CrowdStrike, DeepInstinct). These are machine-learning guesses, not a known virus: the launcher is new, unsigned, and downloads the mod's updates from GitHub, so it "looks like" a downloader. Most engines (about 67 of 71 on VirusTotal) find nothing. Everything is open source; every release on GitHub comes with a SHA256SUMS file to check your files. Since 0.26.2 the launcher no longer starts any hidden helper (no tar.exe, no cmd.exe). If Defender quarantines it: Windows Security > Virus & threat protection > Protection history > Allow.
 
 Source code, documentation and releases: [url=https://github.com/Parricidium/MWCoop]github.com/Parricidium/MWCoop[/url]. Made with Claude (Anthropic), directed and tested by a human. My Winter Car belongs to Amistech Games; this project is not affiliated with them.
 If you enjoy it: [url=https://ko-fi.com/parricidium]Ko-fi[/url] ❤️
@@ -91,7 +91,7 @@ Tous les joueurs d'une partie doivent avoir la [b]même version[/b] (le lanceur 
 [*]Un invité qui arrive après une commande au restaurant ne voit pas les plateaux déjà posés.
 [*]Certaines réactions des PNJ (bagarres, services) ne sont vérifiées qu'entre instances de test pour l'instant.
 [/list]
-Windows Defender signale parfois [b]MWCoop.exe[/b] (supposition de son apprentissage automatique, « Wacatac.B!ml ») : les exécutables sont fraîchement compilés et non signés. Autorisez-le, ou ajoutez une exclusion sur le dossier du jeu.
+[b]Alerte d'antivirus[/b] : quelques moteurs signalent parfois [b]MWCoop.exe[/b] (Windows Defender « Wacatac.B!ml », CrowdStrike, DeepInstinct). Ce sont des suppositions de leur apprentissage automatique, pas un virus connu : le lanceur est récent, non signé, et télécharge les mises à jour du mod sur GitHub, donc il « ressemble » à un téléchargeur. La plupart des moteurs (environ 67 sur 71 sur VirusTotal) ne trouvent rien. Tout le code est ouvert ; chaque version sur GitHub a un fichier SHA256SUMS pour vérifier ses fichiers. Depuis la 0.26.2, le lanceur ne démarre plus aucun programme caché (ni tar.exe, ni cmd.exe). Si Defender le met en quarantaine : Sécurité Windows > Protection contre les virus et menaces > Historique de protection > Autoriser.
 
 Code source, documentation et versions : [url=https://github.com/Parricidium/MWCoop]github.com/Parricidium/MWCoop[/url]. Fait avec Claude (Anthropic), dirigé et testé par un humain. My Winter Car appartient à Amistech Games ; ce projet n'a aucun lien avec eux.
 Si le mod vous plaît : [url=https://ko-fi.com/parricidium]Ko-fi[/url] ❤️

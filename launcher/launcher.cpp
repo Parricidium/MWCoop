@@ -7,7 +7,7 @@
 //    bibliotheques Steam (registre + steamapps\libraryfolders.vdf), sinon l'exe choisi par le joueur. Jeu reconnu :
 //    mywintercar.exe + mywintercar_Data\Managed\Assembly-CSharp.dll. Version du jeu : 1re ligne de changelog.txt.
 //  - A chaque lancement : derniere version publiee sur GitHub (Parricidium/MWCoop, pre-versions comprises). Plus
-//    recente que MWCoop\version.txt (ou mod absent) : telechargement du zip, extraction (tar.exe de Windows), copie
+//    recente que MWCoop\version.txt (ou mod absent) : telechargement du zip, extraction (Unzip, ici meme), copie
 //    dans le dossier du jeu. MWCoop\mwcoop.ini garde les valeurs du joueur (seules les cles nouvelles sont ajoutees) ;
 //    version.txt est copie en dernier. Le lanceur se remplace lui-meme (renomme en .old) puis se relance. Depot sans
 //    release (ou pas encore public) : rien a installer, pas d'erreur.
@@ -35,13 +35,15 @@
 //            127.0.0.1 seulement. /sansudp : l'hote ne repond pas aux sondes UDP (port UDP "pas redirige").
 //   /maj <dossier du jeu> <journal> [/depot proprietaire/depot] : mise a jour sans fenetre, journal = etat final ;
 //   /jeu <journal> : jeu trouve (dossier, version) ;
-//   /zip <fichier.zip> : le zip des journaux (bouton de la page JOURNAUX), ecrit la ou on le demande, sans explorateur.
+//   /zip <fichier.zip> : le zip des journaux (bouton de la page JOURNAUX), ecrit la ou on le demande, sans explorateur ;
+//   /dezip <fichier.zip> <dossier> <journal> : extraction d'un paquet comme pendant une mise a jour.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <winioctl.h>
 #include <mmsystem.h>
 #include <shlwapi.h>
 #include <tlhelp32.h>
@@ -456,18 +458,235 @@ static std::string JsonField(const std::string &json, const char *key, size_t fr
 }
 
 // ---------------------------------------------------------------- installation
-static bool RunHidden(const std::wstring &cmd, DWORD *exitCode)
+// Pas de processus caches (tar.exe, cmd.exe) : les antivirus a apprentissage automatique (Defender "Wacatac.B!ml",
+// CrowdStrike...) classaient le lanceur en "dropper" a cause d'eux. Zip et jonctions sont donc faits ici.
+
+// Inflate (RFC 1951) : blocs stockes, Huffman fixe et dynamique ; meme decoupage que puff.c de zlib.
+struct Inflate {
+    const unsigned char *in; size_t len, pos = 0;
+    unsigned buf = 0; int cnt = 0; bool bad = false;
+    std::vector<unsigned char> &out;
+    struct Huff { short count[16]; short symbol[288]; };
+    Inflate(const unsigned char *d, size_t n, std::vector<unsigned char> &o) : in(d), len(n), out(o) {}
+    int Bits(int need)
+    {
+        unsigned v = buf;
+        while (cnt < need) {
+            if (pos >= len) { bad = true; return 0; }
+            v |= (unsigned)in[pos++] << cnt;
+            cnt += 8;
+        }
+        buf = v >> need;
+        cnt -= need;
+        return (int)(v & ((1u << need) - 1));
+    }
+    static int Build(Huff &h, const short *lengths, int n)
+    {
+        for (int l = 0; l < 16; l++) h.count[l] = 0;
+        for (int i = 0; i < n; i++) h.count[lengths[i]]++;
+        if (h.count[0] == n) return 0;
+        int left = 1;
+        for (int l = 1; l < 16; l++) { left <<= 1; left -= h.count[l]; if (left < 0) return left; }
+        short offs[16];
+        offs[1] = 0;
+        for (int l = 1; l < 15; l++) offs[l + 1] = offs[l] + h.count[l];
+        for (int i = 0; i < n; i++) if (lengths[i]) h.symbol[offs[lengths[i]]++] = (short)i;
+        return left;
+    }
+    int Decode(const Huff &h)
+    {
+        int code = 0, first = 0, index = 0;
+        for (int l = 1; l < 16; l++) {
+            code |= Bits(1);
+            int count = h.count[l];
+            if (code - count < first) return h.symbol[index + (code - first)];
+            index += count; first += count;
+            first <<= 1; code <<= 1;
+        }
+        return -1;
+    }
+    bool Codes(const Huff &lc, const Huff &dc)
+    {
+        static const short lbase[29] = { 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258 };
+        static const short lext[29] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 };
+        static const short dbase[30] = { 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 };
+        static const short dext[30] = { 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 };
+        for (;;) {
+            int sym = Decode(lc);
+            if (bad || sym < 0) return false;
+            if (sym < 256) { out.push_back((unsigned char)sym); continue; }
+            if (sym == 256) return true;
+            sym -= 257;
+            if (sym >= 29) return false;
+            int n = lbase[sym] + Bits(lext[sym]);
+            int d = Decode(dc);
+            if (bad || d < 0 || d >= 30) return false;
+            size_t dist = dbase[d] + Bits(dext[d]);
+            if (bad || dist > out.size()) return false;
+            size_t from = out.size() - dist;
+            for (int i = 0; i < n; i++) out.push_back(out[from + i]);
+        }
+    }
+    bool Stored()
+    {
+        buf = 0; cnt = 0;   // aligne sur l'octet
+        if (pos + 4 > len) return false;
+        unsigned n = in[pos] | in[pos + 1] << 8, nn = in[pos + 2] | in[pos + 3] << 8;
+        pos += 4;
+        if (n != (~nn & 0xFFFF) || pos + n > len) return false;
+        out.insert(out.end(), in + pos, in + pos + n);
+        pos += n;
+        return true;
+    }
+    bool Fixed()
+    {
+        static Huff lc, dc;
+        static bool built = false;
+        if (!built) {
+            short l[288];
+            int i = 0;
+            for (; i < 144; i++) l[i] = 8;
+            for (; i < 256; i++) l[i] = 9;
+            for (; i < 280; i++) l[i] = 7;
+            for (; i < 288; i++) l[i] = 8;
+            Build(lc, l, 288);
+            for (i = 0; i < 30; i++) l[i] = 5;
+            Build(dc, l, 30);
+            built = true;
+        }
+        return Codes(lc, dc);
+    }
+    bool Dynamic()
+    {
+        static const short order[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
+        short l[320];
+        int nlen = Bits(5) + 257, ndist = Bits(5) + 1, ncode = Bits(4) + 4;
+        if (bad || nlen > 286 || ndist > 30) return false;
+        int i = 0;
+        for (; i < ncode; i++) l[order[i]] = (short)Bits(3);
+        for (; i < 19; i++) l[order[i]] = 0;
+        Huff lc, dc;
+        if (bad || Build(lc, l, 19) != 0) return false;
+        for (i = 0; i < nlen + ndist;) {
+            int sym = Decode(lc);
+            if (bad || sym < 0) return false;
+            if (sym < 16) { l[i++] = (short)sym; continue; }
+            short v = 0;
+            int rep;
+            if (sym == 16) { if (!i) return false; v = l[i - 1]; rep = 3 + Bits(2); }
+            else if (sym == 17) rep = 3 + Bits(3);
+            else rep = 11 + Bits(7);
+            if (bad || i + rep > nlen + ndist) return false;
+            while (rep--) l[i++] = v;
+        }
+        if (!l[256]) return false;
+        int e = Build(lc, l, nlen);
+        if (e < 0 || (e > 0 && nlen - lc.count[0] != 1)) return false;
+        e = Build(dc, l + nlen, ndist);
+        if (e < 0 || (e > 0 && ndist - dc.count[0] != 1)) return false;
+        return Codes(lc, dc);
+    }
+    bool Run()
+    {
+        for (int last = 0; !last;) {
+            last = Bits(1);
+            int type = Bits(2);
+            bool ok = bad ? false : type == 0 ? Stored() : type == 1 ? Fixed() : type == 2 ? Dynamic() : false;
+            if (!ok || bad) return false;
+        }
+        return true;
+    }
+};
+
+static unsigned Crc32(const unsigned char *d, size_t n)
 {
-    STARTUPINFOW si = { sizeof(si) };
-    PROCESS_INFORMATION pi;
-    std::vector<wchar_t> c(cmd.begin(), cmd.end());
-    c.push_back(0);
-    if (!CreateProcessW(NULL, c.data(), NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) return false;
-    WaitForSingleObject(pi.hProcess, 120000);
-    GetExitCodeProcess(pi.hProcess, exitCode);
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
+    static unsigned table[256];
+    if (!table[1]) for (unsigned i = 0; i < 256; i++) {
+        unsigned c = i;
+        for (int k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+        table[i] = c;
+    }
+    unsigned c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < n; i++) c = table[(c ^ d[i]) & 0xFF] ^ (c >> 8);
+    return ~c;
+}
+
+// Extrait le zip dans dir (repertoire central, methodes 0 et 8, CRC verifie ; chemins en ".." ou absolus refuses).
+// Faux au premier probleme ; *why dit lequel.
+static bool Unzip(const std::wstring &zip, const std::wstring &dir, std::string *why)
+{
+    std::vector<unsigned char> z;
+    if (!ReadAll(zip, z) || z.size() < 22) { *why = "lecture"; return false; }
+    auto u16 = [&](size_t o) { return (unsigned)(z[o] | z[o + 1] << 8); };
+    auto u32 = [&](size_t o) { return (unsigned)(z[o] | z[o + 1] << 8 | z[o + 2] << 16 | (unsigned)z[o + 3] << 24); };
+    size_t eocd = std::string::npos;
+    for (size_t o = z.size() - 22; ; o--) {
+        if (u32(o) == 0x06054b50) { eocd = o; break; }
+        if (o == 0 || z.size() - o > 22 + 65535) break;
+    }
+    if (eocd == std::string::npos) { *why = "fin de zip introuvable"; return false; }
+    unsigned count = u16(eocd + 10);
+    size_t cd = u32(eocd + 16);
+    for (unsigned k = 0; k < count; k++) {
+        if (cd + 46 > z.size() || u32(cd) != 0x02014b50) { *why = "repertoire central"; return false; }
+        unsigned method = u16(cd + 10), crc = u32(cd + 16), csize = u32(cd + 20), usize = u32(cd + 24);
+        unsigned nlen = u16(cd + 28), xlen = u16(cd + 30), clen = u16(cd + 32);
+        size_t lh = u32(cd + 42);
+        if (cd + 46 + nlen > z.size()) { *why = "nom"; return false; }
+        std::string name((const char *)&z[cd + 46], nlen);
+        cd += 46 + nlen + xlen + clen;
+        for (auto &c : name) if (c == '\\') c = '/';
+        if (name.empty() || name[0] == '/' || name.find(':') != std::string::npos || name.find("..") != std::string::npos) { *why = "chemin refuse : " + name; return false; }
+        std::wstring path = dir + L"\\" + Widen(name);
+        for (auto &c : path) if (c == L'/') c = L'\\';
+        if (name.back() == '/') { SHCreateDirectoryExW(NULL, path.substr(0, path.size() - 1).c_str(), NULL); continue; }
+        if (lh + 30 > z.size() || u32(lh) != 0x04034b50) { *why = "entete local : " + name; return false; }
+        size_t data = lh + 30 + u16(lh + 26) + u16(lh + 28);
+        if (data + csize > z.size()) { *why = "donnees tronquees : " + name; return false; }
+        std::vector<unsigned char> out;
+        if (method == 0) out.assign(z.begin() + data, z.begin() + data + csize);
+        else if (method == 8) {
+            out.reserve(usize);
+            Inflate inf(&z[data], csize, out);
+            if (!inf.Run()) { *why = "decompression : " + name; return false; }
+        } else { *why = "methode " + std::to_string(method) + " : " + name; return false; }
+        if (out.size() != usize || Crc32(out.data(), out.size()) != crc) { *why = "CRC : " + name; return false; }
+        size_t slash = path.find_last_of(L'\\');
+        SHCreateDirectoryExW(NULL, path.substr(0, slash).c_str(), NULL);
+        HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (f == INVALID_HANDLE_VALUE) { *why = "ecriture : " + name; return false; }
+        DWORD w = 0;
+        BOOL ok = out.empty() || WriteFile(f, out.data(), (DWORD)out.size(), &w, NULL);
+        CloseHandle(f);
+        if (!ok || w != out.size()) { *why = "ecriture : " + name; return false; }
+    }
     return true;
+}
+
+// Jonction de repertoire (comme mklink /J, sans cmd.exe) : point de montage "\??\cible" pose sur un dossier vide.
+static bool MakeJunction(const std::wstring &link, const std::wstring &target)
+{
+    if (!CreateDirectoryW(link.c_str(), NULL)) return false;
+    HANDLE h = CreateFileW(link.c_str(), GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    if (h == INVALID_HANDLE_VALUE) { RemoveDirectoryW(link.c_str()); return false; }
+    std::wstring sub = L"\\??\\" + target;
+    size_t names = (sub.size() + 1 + target.size() + 1) * sizeof(wchar_t);
+    std::vector<unsigned char> b(16 + names);
+    auto put16 = [&](size_t o, size_t v) { b[o] = (unsigned char)v; b[o + 1] = (unsigned char)(v >> 8); };
+    DWORD tag = IO_REPARSE_TAG_MOUNT_POINT;
+    memcpy(&b[0], &tag, 4);
+    put16(4, 8 + names);                                  // ReparseDataLength
+    put16(8, 0);                                          // SubstituteNameOffset
+    put16(10, sub.size() * sizeof(wchar_t));              // SubstituteNameLength
+    put16(12, (sub.size() + 1) * sizeof(wchar_t));        // PrintNameOffset
+    put16(14, target.size() * sizeof(wchar_t));           // PrintNameLength
+    memcpy(&b[16], sub.c_str(), (sub.size() + 1) * sizeof(wchar_t));
+    memcpy(&b[16 + (sub.size() + 1) * sizeof(wchar_t)], target.c_str(), (target.size() + 1) * sizeof(wchar_t));
+    DWORD n = 0;
+    BOOL ok = DeviceIoControl(h, FSCTL_SET_REPARSE_POINT, b.data(), (DWORD)b.size(), NULL, 0, &n, NULL);
+    CloseHandle(h);
+    if (!ok) RemoveDirectoryW(link.c_str());
+    return ok != FALSE;
 }
 
 static void DeleteTree(const std::wstring &dir)
@@ -707,11 +926,9 @@ static DWORD WINAPI UpdateThread(void *)
     SetStatus(K_NORMAL, T(L"Installation de MWCoop %s\u2026", L"Installing MWCoop %s\u2026"), remote.c_str());
     g_progress = -2;
     CreateDirectoryW(ext.c_str(), NULL);
-    wchar_t sys[MAX_PATH];
-    GetSystemDirectoryW(sys, MAX_PATH);
-    DWORD code = 1;
-    std::wstring cmd = L"\"" + std::wstring(sys) + L"\\tar.exe\" -xf \"" + zip + L"\" -C \"" + ext + L"\"";
-    if (!RunHidden(cmd, &code) || code != 0) {
+    std::string why;
+    if (!Unzip(zip, ext, &why)) {
+        TestLog("mise a jour : zip illisible (%s)", why.c_str());
         g_progress = -1;
         SetStatus(K_ERR, T(L"Mise \u00E0 jour impossible (archive)", L"Update failed (archive)"));
         DeleteTree(work);
@@ -3022,9 +3239,7 @@ static bool PrepareMirror(const std::wstring &m)
     for (const wchar_t *d : dirs) {
         std::wstring src = g_gameDir + d, dst = m + d;
         if (GetFileAttributesW(src.c_str()) == INVALID_FILE_ATTRIBUTES || GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) continue;
-        DWORD code = 1;
-        RunHidden(L"cmd.exe /c mklink /J \"" + dst + L"\" \"" + src + L"\"", &code);
-        if (GetFileAttributesW(dst.c_str()) == INVALID_FILE_ATTRIBUTES) { TestLog("copie de lancement : jonction %ls impossible", d); return false; }
+        if (!MakeJunction(dst, src)) { TestLog("copie de lancement : jonction %ls impossible (erreur %lu)", d, GetLastError()); return false; }
     }
     TestLog("copie de lancement prete : %ls", m.c_str());
     return true;
@@ -4701,6 +4916,21 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         int n = 0;
         bool ok = WriteZip(argv[2], ZipFiles(), &n);
         delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
+
+    // /dezip <zip> <dossier> <journal> : extraction d'un paquet (celle de la mise a jour) ; /jonction <lien> <cible>
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/dezip")) {
+        std::string why;
+        bool ok = Unzip(argv[2], argv[3], &why);
+        FILE *f = _wfopen(argv[4], L"w");
+        if (f) { fprintf(f, "%s %s\n", ok ? "ok" : "echec", why.c_str()); fclose(f); }
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/jonction")) {
+        bool ok = MakeJunction(argv[2], argv[3]);
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }

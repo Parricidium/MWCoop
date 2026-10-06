@@ -118,7 +118,23 @@ outfit portrait, version, ping and a UDP check; the host picks *Continue* or *Ne
 
 No other loader is needed (MWCoop does not use MSCLoader). From a Steam install, the launcher starts the game from a
 copy in `%LOCALAPPDATA%\MWCoop\jeu` (same data, linked folders): Steam would otherwise load Windows' `version.dll`
-before the mod's. Windows Defender sometimes flags `MWCoop.exe` (machine-learning guess, `Wacatac.B!ml`): allow it.
+before the mod's.
+
+### Antivirus warning
+
+A few antivirus engines sometimes flag `MWCoop.exe` (Windows Defender `Wacatac.B!ml`, CrowdStrike, DeepInstinct…).
+These are **machine-learning guesses**, not a known virus: the `!ml` / `confidence` part of the name means the
+engine only thinks the file *looks like* a downloader, because the launcher is a new, unsigned program that
+downloads the mod's updates from GitHub and starts the game. No virus signature matches it, and most engines
+(around 67 of 71 on VirusTotal) find nothing.
+
+- Everything is open source in this repository; you can read the code and build it yourself (see *Building*).
+- Every release has a `SHA256SUMS-<version>.txt` file: compare it with your files
+  (`Get-FileHash MWCoop.exe` in PowerShell), and look the hash up on [VirusTotal](https://www.virustotal.com).
+- Since 0.26.2 the launcher no longer starts any hidden helper (no `tar.exe`, no `cmd.exe`): the update zip and the
+  Steam folder links are handled inside the launcher, and both executables carry full version information.
+- If Defender quarantines it: *Windows Security* > *Virus & threat protection* > *Protection history* > *Allow*, or add
+  an exclusion for the game folder.
 
 ## Playing
 
@@ -242,8 +258,24 @@ l'écran d'attente des invités et l'écran de mort ; tout existe aussi en fran�
 
 Aucun autre chargeur n'est nécessaire (MWCoop n'utilise pas MSCLoader). Depuis une installation Steam, le lanceur
 démarre le jeu depuis une copie dans `%LOCALAPPDATA%\MWCoop\jeu` (mêmes données, dossiers liés) : sinon Steam fait
-charger la `version.dll` de Windows avant celle du mod. Windows Defender signale parfois `MWCoop.exe` (supposition de
-son apprentissage automatique, `Wacatac.B!ml`) : autorisez-le.
+charger la `version.dll` de Windows avant celle du mod.
+
+### Alerte d'antivirus
+
+Quelques antivirus signalent parfois `MWCoop.exe` (Windows Defender `Wacatac.B!ml`, CrowdStrike, DeepInstinct…). Ce
+sont des **suppositions de leur apprentissage automatique**, pas un virus connu : le `!ml` / `confidence` du nom veut
+dire que le moteur trouve seulement que le fichier *ressemble* à un téléchargeur, parce que le lanceur est un programme
+récent, non signé, qui télécharge les mises à jour du mod sur GitHub et lance le jeu. Aucune signature de virus ne
+correspond, et la grande majorité des moteurs (environ 67 sur 71 sur VirusTotal) ne trouvent rien.
+
+- Tout le code est ouvert dans ce dépôt : on peut le lire et le compiler soi-même (voir *Compiler*).
+- Chaque version publie un fichier `SHA256SUMS-<version>.txt` : comparez-le à vos fichiers
+  (`Get-FileHash MWCoop.exe` dans PowerShell) et cherchez l'empreinte sur [VirusTotal](https://www.virustotal.com).
+- Depuis la 0.26.2, le lanceur ne démarre plus aucun programme caché (ni `tar.exe`, ni `cmd.exe`) : le zip de mise à
+  jour et les liens de dossiers pour Steam sont gérés par le lanceur lui-même, et les deux exécutables portent leurs
+  informations de version complètes.
+- Si Defender le met en quarantaine : *Sécurité Windows* > *Protection contre les virus et menaces* > *Historique de
+  protection* > *Autoriser*, ou ajoutez une exclusion sur le dossier du jeu.
 
 ## Jouer
 

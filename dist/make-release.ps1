@@ -28,6 +28,16 @@ foreach ($f in Get-ChildItem $stage -File -Recurse) {
 }
 $z.Dispose()
 "Ecrit : $zip ($([math]::Round((Get-Item $zip).Length / 1KB)) Ko)"
+# Empreintes SHA-256 publiees a cote du zip : chacun peut verifier ses fichiers (et les chercher sur VirusTotal)
+# quand un antivirus a apprentissage automatique s'inquiete d'un exe non signe.
+$sums = "$PSScriptRoot\out\SHA256SUMS-$Version.txt"
+$lines = foreach ($f in @($zip, "$stage\MWCoop.exe", "$stage\version.dll", "$stage\MWCoop\MWCoop.dll")) {
+    $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+    $n = if ($f -eq $zip) { Split-Path $zip -Leaf } else { $f.Substring($stage.Length + 1).Replace('\', '/') }
+    "$h  $n"
+}
+[System.IO.File]::WriteAllText($sums, ($lines -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding $false))
+$lines
 if ($Publier) {
     if (-not $Notes) { $Notes = "MWCoop $Version" }
     $nf = [System.IO.Path]::GetTempFileName()
@@ -36,7 +46,7 @@ if ($Publier) {
     $head = (git -C $root rev-parse HEAD).Trim()
     $po = cmd /c "git -C `"$root`" push origin HEAD:main 2>&1"   # par cmd : git ecrit sur stderr, ce qui arreterait le script
     if ($LASTEXITCODE -ne 0) { Remove-Item $nf; throw "echec du push de main" }
-    gh release create "v$Version" $zip --repo Parricidium/MWCoop --title "MWCoop $Version (pre-alpha)" --notes-file $nf --prerelease --target $head
+    gh release create "v$Version" $zip $sums --repo Parricidium/MWCoop --title "MWCoop $Version (pre-alpha)" --notes-file $nf --prerelease --target $head
     $rc = $LASTEXITCODE
     Remove-Item $nf
     if ($rc -ne 0) { throw "echec de la publication GitHub" }

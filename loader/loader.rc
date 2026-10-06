@@ -1,0 +1,33 @@
+// version.dll : informations de version (sans elles, une version.dll inconnue a cote d'un jeu ressemble a un
+// chargement lateral malveillant pour les antivirus). MWV_NUM / MWV_STR : build\mwversion.h (build.cmd).
+#include "mwversion.h"
+
+1 VERSIONINFO
+FILEVERSION MWV_NUM
+PRODUCTVERSION MWV_NUM
+FILEFLAGSMASK 0x3F
+FILEFLAGS 0x0
+FILEOS 0x40004
+FILETYPE 0x2
+FILESUBTYPE 0x0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "Parricidium (MWCoop, open source)"
+      VALUE "FileDescription", "MWCoop loader (proxy of version.dll): loads the MWCoop co-op mod into My Winter Car"
+      VALUE "FileVersion", MWV_STR
+      VALUE "InternalName", "MWCoopLoader"
+      VALUE "LegalCopyright", "Open source: https://github.com/Parricidium/MWCoop"
+      VALUE "OriginalFilename", "version.dll"
+      VALUE "ProductName", "MWCoop - co-op mod for My Winter Car"
+      VALUE "ProductVersion", MWV_STR
+      VALUE "Comments", "Fan-made co-op mod for My Winter Car (Amistech Games), not affiliated. Source code and releases: https://github.com/Parricidium/MWCoop"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1200
+  END
+END

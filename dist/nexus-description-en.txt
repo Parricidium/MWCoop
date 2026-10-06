@@ -41,7 +41,7 @@ Everybody in a party must run the [b]same version[/b] (the launcher updates it f
 [*]A guest who joins after a restaurant order does not see the trays already on the counter.
 [*]Some NPC reactions (fights, services) are only checked between test instances so far.
 [/list]
-Windows Defender sometimes flags [b]MWCoop.exe[/b] (a machine-learning guess, "Wacatac.B!ml"): the executables are freshly built and unsigned. Allow it, or add an exclusion on the game folder.
+[b]Antivirus warning[/b]: a few engines sometimes flag [b]MWCoop.exe[/b] (Windows Defender "Wacatac.B!ml", CrowdStrike, DeepInstinct). These are machine-learning guesses, not a known virus: the launcher is new, unsigned, and downloads the mod's updates from GitHub, so it "looks like" a downloader. Most engines (about 67 of 71 on VirusTotal) find nothing. Everything is open source; every release on GitHub comes with a SHA256SUMS file to check your files. Since 0.26.2 the launcher no longer starts any hidden helper (no tar.exe, no cmd.exe). If Defender quarantines it: Windows Security > Virus & threat protection > Protection history > Allow.
 
 Source code, documentation and releases: [url=https://github.com/Parricidium/MWCoop]github.com/Parricidium/MWCoop[/url]. Made with Claude (Anthropic), directed and tested by a human. My Winter Car belongs to Amistech Games; this project is not affiliated with them.
 If you enjoy it: [url=https://ko-fi.com/parricidium]Ko-fi[/url] ❤️
