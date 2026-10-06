@@ -140,10 +140,15 @@ downloads the mod's updates from GitHub and starts the game. No virus signature 
 
 Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
 
-- **Through Steam** (everyone needs the Steam version of the game): the host clicks HOST, then in game opens **F10 >
-  Invite Steam friends** (or Shift+Tab) and invites them. Each friend clicks **JOIN** in MWCoop.exe (Steam selected)
-  and accepts the invite in game; a friend who is already hosting is found automatically. No port to open, no
-  firewall, no address: the traffic goes through Steam's relays. Steam avatars show next to the nicknames.
+- **Through Steam** (everyone needs the Steam version of the game): the host clicks HOST. The launcher opens a
+  **Steam lobby** (friends only) and lists the host's online Steam friends: click **INVITE**. A friend accepts the
+  invite in Steam (or clicks **JOIN** in MWCoop.exe, Steam selected) and lands in the same lobby as over IP: outfits,
+  versions, READY, *Continue* / *New game*, then START launches everyone's game. No port to open, no firewall, no
+  address: the traffic goes through Steam's relays. Steam avatars show in the lobby and next to the nicknames in game.
+  So that an invite accepted while MWCoop is **closed** opens MWCoop (not the game without the mod), click the
+  *Through Steam* box under the nickname: it copies the Steam launch option (`"...\MWCoop.exe" %command%`) to paste
+  in *Properties > General > Launch options*. Once the game is running, more friends can still be invited in game
+  (**F10 > Invite Steam friends**, or Shift+Tab).
 - **Host** (IP / VPN): click HOST. The launcher opens a **lobby** where friends show up with their outfit, version and ping.
   Pick *Continue my game* or *New game*, then START: everyone's game starts. Forward port **7870** in **UDP and TCP**
   on your router, or use a VPN (Radmin VPN, ZeroTier…) and share your VPN address.
@@ -288,10 +293,15 @@ correspond, et la grande majorité des moteurs (environ 67 sur 71 sur VirusTotal
 
 Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) ou **IP / VPN**.
 
-- **Par Steam** (tout le monde a la version Steam du jeu) : l'hôte clique HÉBERGER, puis en jeu ouvre **F10 > Inviter
-  des amis Steam** (ou Maj+Tab) et les invite. Chaque ami clique **REJOINDRE** dans MWCoop.exe (Steam choisi) et accepte
-  l'invitation en jeu ; un ami qui héberge déjà est trouvé tout seul. Ni port à ouvrir, ni pare-feu, ni adresse : le
-  trafic passe par les relais de Steam. Les avatars Steam s'affichent à côté des pseudos.
+- **Par Steam** (tout le monde a la version Steam du jeu) : l'hôte clique HÉBERGER. Le lanceur ouvre un **salon
+  Steam** (amis seulement) et liste ses amis Steam en ligne : cliquez sur **INVITER**. L'ami accepte l'invitation dans
+  Steam (ou clique **REJOINDRE** dans MWCoop.exe, Steam choisi) et arrive dans le même salon que par IP : tenues,
+  versions, PRÊT, *Continuer* / *Nouvelle partie*, puis LANCER démarre le jeu de chacun. Ni port à ouvrir, ni pare-feu,
+  ni adresse : le trafic passe par les relais de Steam. Les avatars Steam s'affichent dans le salon et à côté des
+  pseudos en jeu. Pour qu'une invitation acceptée MWCoop **fermé** ouvre MWCoop (et pas le jeu sans le mod), cliquez
+  sur l'encart *Par Steam* sous le pseudo : il copie l'option de lancement Steam (`"...\MWCoop.exe" %command%`) à
+  coller dans *Propriétés > Général > Options de lancement*. Une fois en jeu, on peut encore inviter des amis
+  (**F10 > Inviter des amis Steam**, ou Maj+Tab).
 - **Héberger** (IP / VPN) : cliquez sur HÉBERGER. Le lanceur ouvre un **salon** où vos amis apparaissent avec leur tenue, leur
   version et leur ping. Choisissez *Continuer ma partie* ou *Nouvelle partie*, puis LANCER : le jeu de chacun démarre.
   Ouvrez le port **7870** en **UDP et TCP** sur votre box, ou utilisez un VPN (Radmin VPN, ZeroTier…) et donnez votre

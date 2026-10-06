@@ -44,11 +44,15 @@ namespace MWCoop.Net
 
         // Reseau choisi dans le lanceur ([Coop] Reseau) : "ip" (adresse:port, UDP) ou "steam" (salon et pair-a-pair Steam).
         public static bool Steam;
+        // Invite parti du salon Steam du lanceur ([Coop] HoteSteam, lancement.ini) : compte de l'hote, joint directement.
+        static ulong hostSteam;
 
         public static void Start()
         {
             string mode = Config.Get("Coop", "Mode", "solo").ToLowerInvariant();
             Steam = Config.Get("Coop", "Reseau", "ip").ToLowerInvariant() == "steam";
+            if (!ulong.TryParse(Config.Get("Coop", "HoteSteam", ""), out hostSteam)) hostSteam = 0;
+            SteamNet.DirectHost = hostSteam;
             port = Config.GetInt("Coop", "Port", 7870);
             Me = new PlayerInfo { Local = true, Name = Config.Get("Coop", "Pseudo", Environment.UserName),
                                   Skin = Config.Get("Coop", "Apparence", "char_shirt21") };
@@ -58,7 +62,8 @@ namespace MWCoop.Net
             else if (mode == "hote" || mode == "host") StartHost();
             else if (mode == "invite" || mode == "client")
             {
-                if (Steam) { Active = true; IsHost = false; Status = "attente d'une invitation Steam"; Log.Info("invite par Steam : attente d'une invitation ou du salon d'un ami"); }
+                if (Steam && hostSteam != 0) { Active = true; IsHost = false; Status = "connexion a l'hote Steam"; Log.Info("invite par Steam : hote " + hostSteam + " (salon du lanceur)"); }
+                else if (Steam) { Active = true; IsHost = false; Status = "attente d'une invitation Steam"; Log.Info("invite par Steam : attente d'une invitation ou du salon d'un ami"); }
                 else { address = Config.Get("Coop", "Adresse", "127.0.0.1"); StartClient(); }
             }
         }
@@ -131,7 +136,8 @@ namespace MWCoop.Net
                 // Invite : connexion au proprietaire du salon Steam rejoint (l'hote).
                 if (!IsHost && hostPeer == null && now >= retryAt)
                 {
-                    if (SteamNet.LobbyOwner != 0) StartClientSteam(SteamNet.LobbyOwner);
+                    ulong owner = SteamNet.LobbyOwner != 0 ? SteamNet.LobbyOwner : hostSteam;
+                    if (owner != 0 && SteamNet.Ready) StartClientSteam(owner);
                     else if (!Status.StartsWith("deconnecte") && !Status.StartsWith("refuse")) Status = "attente d'une invitation Steam";
                 }
             }
