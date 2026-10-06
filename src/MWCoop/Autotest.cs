@@ -687,6 +687,7 @@ namespace MWCoop
             if (mode == "releveicones" && t > 40f && !done)
             {
                 done = true;
+                string[] iconVars = Config.Get("Test", "ReleveVar", "GUIpassenger;GUIdrive").Split(';');
                 var sb = new System.Text.StringBuilder();
                 foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
                 {
@@ -702,7 +703,7 @@ namespace MWCoop
                                 foreach (System.Reflection.FieldInfo fi in a2.GetType().GetFields())
                                 {
                                     var nv = fi.GetValue(a2) as NamedVariable;
-                                    if (nv != null && nv.UseVariable && (nv.Name == "GUIpassenger" || nv.Name == "GUIdrive")) hit.Add(nv.Name + "@" + st.Name);
+                                    if (nv != null && nv.UseVariable && System.Array.IndexOf(iconVars, nv.Name) >= 0) hit.Add(nv.Name + "@" + st.Name);
                                 }
                             }
                         if (hit.Count > 0) sb.Append(" | ").Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append(" ").Append(string.Join(",", new System.Collections.Generic.List<string>(hit).ToArray()));

@@ -99,6 +99,7 @@ namespace MWCoop
             return false;
         }
 
+        static float sleepLogAt;
         static void SendLocal()
         {
             var st = new PlayerState();
@@ -130,6 +131,16 @@ namespace MWCoop
                 if (seatedNow) st.Flags |= F_Seated;
                 if (Game.GlobalBool("PlayerSleeps")) st.Flags |= F_Sleep;
                 if (Game.GlobalBool("PlayerSleeps") && World.BedCounting()) st.Flags |= F_SleepFast;
+                // Au lit, le jeu couche le joueur avec le pivot du lit (AnimPivotSleep, animation sleep_bed_in) : son « haut »
+                // pointe vers la tete du lit. Le cap envoye est alors celui des pieds : l'avatar se couche dans l'axe du lit
+                // (le regard, lui, ne le donne pas : corps a travers le mur).
+                if ((st.Flags & F_Sleep) != 0)
+                {
+                    Vector3 up = player.up;
+                    Vector3 feet = new Vector3(-up.x, 0f, -up.z);
+                    if (feet.sqrMagnitude > 0.25f) st.Yaw = Quaternion.LookRotation(feet).eulerAngles.y;
+                    if (Time.realtimeSinceStartup >= sleepLogAt) { sleepLogAt = Time.realtimeSinceStartup + 30f; Log.Info("sommeil : haut du joueur " + up.ToString("F2") + ", regard " + cam.forward.ToString("F2") + ", cap des pieds " + st.Yaw.ToString("F0") + ", camera " + cam.position.ToString("F2") + ", joueur " + player.position.ToString("F2") + (player.parent != null ? ", pivot " + player.parent.name + " " + player.parent.position.ToString("F2") : "")); }
+                }
                 if (smoking != null && smoking.gameObject.activeInHierarchy)
                 {
                     st.Flags |= F_Smoke;
