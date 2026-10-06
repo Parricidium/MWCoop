@@ -91,8 +91,9 @@ namespace MWCoop
             public HashSet<string> RandomStates = new HashSet<string>();                     // etats qui tirent au sort
             public HashSet<string> ClickStates = new HashSet<string>();                      // etats qui attendent un clic
             public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();  // transitions prises ici
+            public bool FromReplay;                                                          // cle : derniere position recue d'un autre
         }
-        const int K_PLAIN = 0, K_LOGTRIGGER = 1, K_FEEDLOG = 2;
+        const int K_PLAIN = 0, K_LOGTRIGGER = 1, K_FEEDLOG = 2, K_IGNITION = 3;
         static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach",
                                                                              "Latch", "Assemble" };   // loquet du capot ; branchements du cablage
 
@@ -259,6 +260,7 @@ namespace MWCoop
                     // Vehicules : molettes, boutons ; le taxi garde la regle des boulots pour ses automates a sauvegarde.
                     var j = new Job { Key = key, F = f, Control = controlF || (vehicle && !jobCar) };
                     if (path.EndsWith("/LogTrigger::Logic")) j.Kind = K_LOGTRIGGER;
+                    else if (IgnitionLike(f)) j.Kind = K_IGNITION;
                     if (!InjectAll(j))
                     {
                         // Automate pas encore charge (objet jamais actif : boite a gants d'un tableau de bord pas
@@ -345,6 +347,7 @@ namespace MWCoop
             FsmTransition tr = j.F.Fsm.LastTransition;
             if (tr == null || tr.ToState != state) return;
             FsmState from = j.F.Fsm.PreviousActiveState;
+            if (j.Kind == K_IGNITION) { OnIgnition(j, from, tr.EventName, state); return; }
             // Clic rendu par FINISHED (boite a gants : "Mouse over 1" -FINISHED-> "Open door") : une vraie action.
             bool click = tr.EventName == "FINISHED" && j.Control && from != null && j.ClickStates.Contains(from.Name) && (state == "Open door" || state == "Close door");
             if (Ignore.Contains(tr.EventName) && !click) return;
@@ -375,6 +378,55 @@ namespace MWCoop
             WriteVars(j.F, w);
             Log.Info("quete : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + tr.EventName + "-> " + state);
             Session.SendAll(w, true);
+        }
+
+        // ---------------------------------------------------------------- cle de contact
+        // Automate 'Use' de la cle (IGNITIONx* : SORBET, CORRIS, KEKMET, GIFU, BACHGLOTZ, taxi) : un clic met le
+        // contact (Wait ACC -> Check key -> "ACC on") ; ensuite un clic COURT coupe tout ("State 1" -FINISHED->
+        // "Motor OFF", souris relachee avant 0,1 s) et un clic TENU lance le demarreur ("State 1" -START-> "Motor
+        // starting", Starter.Starting) tant qu'il est tenu (relache : -FINISHED-> "Shut off"). Rejoue comme une
+        // commande ordinaire, chez l'autre la souris n'est pas tenue : son automate, mis en "State 1", lancait le
+        // demarreur tout seul au bout de 0,1 s (et le renvoyait : le demarreur repartait chez le conducteur), et les
+        // FINISHED (relacher, couper) ne partaient jamais -- moteur coupe chez l'un, en marche chez l'autre (retour de
+        // JD et GG, 06/10 soir). Maintenant seules les positions de la cle partent ("ACC on", "Motor starting",
+        // "Shut off", "Motor OFF"), et seulement si l'enchainement est parti d'un clic d'ici ; elles sont posees
+        // telles quelles chez les autres, et ce que leur automate fait ensuite tout seul n'est pas renvoye.
+        static readonly HashSet<string> IgnitionStates = new HashSet<string> { "ACC on", "Motor starting", "Shut off", "Motor OFF" };
+        // Positions ou la cle est deja (memes effets) : rien a refaire.
+        static readonly Dictionary<string, string[]> IgnitionAlready = new Dictionary<string, string[]> {
+            { "ACC on", new[] { "ACC on", "Wait2", "Wait START" } },
+            { "Shut off", new[] { "Shut off", "Wait2", "Wait START" } },
+            { "Motor OFF", new[] { "Motor OFF", "Wait1", "Wait ACC" } },
+            { "Motor starting", new[] { "Motor starting" } } };
+
+        static bool IgnitionLike(PlayMakerFSM f)
+        {
+            if (f.FsmName != "Use") return false;
+            Fsm m = f.Fsm;
+            return m.GetState("Motor starting") != null && m.GetState("State 1") != null && m.GetState("ACC on") != null
+                   && m.GetState("Motor OFF") != null && m.GetState("Shut off") != null && m.GetState("Wait2") != null;
+        }
+
+        static void OnIgnition(Job j, FsmState from, string ev, string state)
+        {
+            if (from != null && j.ClickStates.Contains(from.Name) && ev != "FINISHED") j.FromReplay = false;   // clic du joueur d'ici
+            if (j.FromReplay || !IgnitionStates.Contains(state)) return;
+            var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(from != null ? from.Name : "").Str(ev).Str(state);
+            WriteVars(j.F, w);
+            Log.Info("cle : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + ev + "-> " + state);
+            Session.SendAll(w, true);
+        }
+
+        static void ApplyIgnition(Job j, int who, string key, string state)
+        {
+            string[] already;
+            if (!IgnitionAlready.TryGetValue(state, out already)) { Log.Info("cle de #" + who + " : " + key + " -> " + state + " ignore (passage)"); return; }
+            j.FromReplay = true;
+            if (System.Array.IndexOf(already, j.F.ActiveStateName) >= 0) return;
+            applying = true; Replay.Depth++;
+            try { Game.SetState(j.F, state); }
+            finally { applying = false; Replay.Depth--; }
+            Log.Info("cle de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
         }
 
         static bool Skip(string n) { return n.StartsWith("UT") || n.StartsWith("UniqueTag"); }
@@ -417,6 +469,7 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("quete " + key + " introuvable ici"); }
                 return;
             }
+            if (j.Kind == K_IGNITION) { ApplyIgnition(j, who, key, state); return; }
             // Fendeuse arretee ici (mise en marche pas recue : arrivee en cours de buche) : seule la fin de la
             // buche est reprise (rend le declencheur), une etape rejouee sur l'automate inactif ne mene a rien.
             if (j.Kind == K_FEEDLOG && !j.F.gameObject.activeInHierarchy && state != "State 1")
@@ -1346,8 +1399,60 @@ namespace MWCoop
         static float testAt;
         static bool testBefore, testClick2;
 
+        // Essai "cle" (SORBET, [Test] TestVoiture) : l'hote au volant a 22 s ; contact a 32 s (ACC depuis Wait1), demarreur
+        // a 34 s (START depuis Wait2) tenu 3 s, relache a 37 s (FINISHED), coupe a 40 s (OFF depuis Wait2) -- comme
+        // les boutons du clavier. Les deux notent la cle et le Starter chaque seconde de 31 a 44 s : l'invite doit
+        // suivre (ACC on, Motor starting, Shut off, Motor OFF) sans jamais rien renvoyer ("cle de #1" absent chez l'hote).
+        static int keyStep;
+        static float keyLog;
+
+        static PlayMakerFSM KeyOf(string car, string fsm, string stateNeeded)
+        {
+            GameObject root = Game.FindAny(car);
+            if (root == null) return null;
+            foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == fsm && f.Fsm.GetState(stateNeeded) != null) return f;
+            return null;
+        }
+
+        static void TestKey(float t)
+        {
+            string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            PlayMakerFSM key = KeyOf(car, "Use", "Motor starting"), starter = KeyOf(car, "Starter", "Running");
+            if (t > 31f && t < 45f && t >= keyLog)
+            {
+                keyLog = Mathf.Floor(t) + 1f;
+                Log.Info("autotest : cle " + (key != null ? key.ActiveStateName : "?") + ", starter " + (starter != null ? starter.ActiveStateName : "?")
+                         + (key != null ? ", origine " + (jobs.ContainsKey(KeyName(key)) && jobs[KeyName(key)].FromReplay ? "recue" : "ici") : ""));
+            }
+            if (!Session.IsHost && key != null && Config.GetInt("Test", "CleReprise", 0) != 0)
+            {
+                if (t > 45f && keyStep == 0) { keyStep = 1; Log.Info("autotest : cle, invite a cote -> " + VehicleSync.TestEnter(car, false)); }
+                if (t > 46f && keyStep == 1) { keyStep = 2; Log.Info("autotest : cle, invite volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (t > 47f && keyStep == 2) { keyStep = 3; Log.Info("autotest : cle, invite volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (t > 44f && t < 62f && t >= keyLog) { keyLog = Mathf.Floor(t) + 1f; Log.Info("autotest : cle (invite) " + key.ActiveStateName + ", starter " + (starter != null ? starter.ActiveStateName : "?")); }
+            }
+            if (!Session.IsHost || key == null) return;
+            if (t > 22f && keyStep == 0) { keyStep = 1; Log.Info("autotest : cle, volant -> " + VehicleSync.TestEnter(car, false) + " / " + VehicleSync.TestEnter(car, true)); }
+            if (t > 23f && keyStep == 1) { keyStep = 2; Log.Info("autotest : cle, volant -> " + VehicleSync.TestEnter(car, true)); }
+            if (t > 32f && keyStep == 2) { keyStep = 3; Game.SetState(key, "Wait1"); key.SendEvent("ACC"); Log.Info("autotest : cle, contact -> " + key.ActiveStateName); }
+            if (t > 34f && keyStep == 3) { keyStep = 4; key.SendEvent("START"); Log.Info("autotest : cle, demarreur -> " + key.ActiveStateName); }
+            if (t > 37f && keyStep == 4) { keyStep = 5; key.SendEvent("FINISHED"); Log.Info("autotest : cle, relache -> " + key.ActiveStateName); }
+            // [Test] CleReprise=1 : l'hote sort moteur tournant a 40 s ; l'invite prend le volant a 46 s (sa montre) :
+            // le moteur doit continuer chez lui (starter Running), pas caler.
+            bool reprise = Config.GetInt("Test", "CleReprise", 0) != 0;
+            if (t > 40f && keyStep == 5) { keyStep = 6; if (reprise) Log.Info("autotest : cle, sortie moteur tournant -> " + VehicleSync.TestExit(car)); else { key.SendEvent("OFF"); Log.Info("autotest : cle, coupe -> " + key.ActiveStateName); } }
+        }
+
+        static string KeyName(PlayMakerFSM f)
+        {
+            foreach (Job j in jobs.Values) if (j.F == f) return j.Key;
+            return "";
+        }
+
         public static void Test(string mode, float t)
         {
+            if (mode == "cle") { TestKey(t); return; }
             if (mode == "fendeuse" || mode == "fendeuse2" || mode == "benne" || mode == "benne2" || mode == "taxi-commandes" || mode == "boitegants")
             {
                 if (t > 28f && !testBefore) { testBefore = true; Log.Info("autotest : " + mode + ", avant : " + MoreState(mode)); }

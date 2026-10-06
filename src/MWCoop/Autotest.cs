@@ -671,10 +671,11 @@ namespace MWCoop
             {
                 done = true;
                 string[] keys = Config.Get("Test", "ReleveNom", "").Split(';');
+                bool inactive = Config.GetInt("Test", "ReleveInactifs", 0) != 0;   // (aussi sous une racine inactive)
                 var paths = new System.Collections.Generic.List<string>();
                 foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
                 {
-                    if (f.hideFlags != HideFlags.None || !f.transform.root.gameObject.activeInHierarchy) continue;
+                    if (f.hideFlags != HideFlags.None || (!inactive && !f.transform.root.gameObject.activeInHierarchy)) continue;
                     foreach (string k in keys)
                         if (k.Length > 0 && f.gameObject.name.IndexOf(k, System.StringComparison.OrdinalIgnoreCase) >= 0)
                         {
