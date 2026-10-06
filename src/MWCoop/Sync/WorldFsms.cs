@@ -782,9 +782,14 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("monde : " + key + " introuvable ici"); }
                 return;
             }
-            // Deja fait ici a l'instant (la meme logique a tourne chez les deux) : pas une 2e fois.
+            // Deja fait ici a l'instant (la meme logique a tourne chez les deux) : pas une 2e fois. Jamais pour un clic de
+            // joueur (evenement d'une action de commande de l'etat de depart) : chaque clic est une action a part -- un
+            // robinet ouvert ici puis ferme par l'autre dans les 10 s ne se fermait pas ici (meme passage "Wait button
+            // -USE-> Position"), l'eau continuait de couler (retour de JD, 06/10).
+            HashSet<string> inEv;
+            bool click = prev != null && j.InputEvents.TryGetValue(prev, out inEv) && inEv.Contains(ev);
             float done, now = Time.realtimeSinceStartup;
-            if (global < 2 && (j.LocalRecent.TryGetValue(prev + "|" + ev + "|" + state, out done) && now - done < 10f
+            if (global < 2 && !click && (j.LocalRecent.TryGetValue(prev + "|" + ev + "|" + state, out done) && now - done < 10f
                                || global == 1 && j.LocalRecent.TryGetValue("g|" + ev, out done) && now - done < 10f))
             {
                 Log.Info("monde de #" + who + " : " + key + " -" + ev + "-> deja fait ici");

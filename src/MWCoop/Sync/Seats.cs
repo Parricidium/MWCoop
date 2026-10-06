@@ -23,6 +23,10 @@ namespace MWCoop
         class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; }
         class Remote { public string Car; public int Index; public Vector3 Head; }
         static readonly List<PlayMakerFSM> driveTriggers = new List<PlayMakerFSM>();
+        // Zone du conducteur de chaque voiture (toutes, une place comprise) et voiture qui la porte.
+        static readonly List<KeyValuePair<PlayMakerFSM, Transform>> driverZones = new List<KeyValuePair<PlayMakerFSM, Transform>>();
+        static readonly HashSet<PlayMakerFSM> zonesOff = new HashSet<PlayMakerFSM>();
+        static float nextZones;
         static bool iconOn;
 
         static readonly List<Seat> seats = new List<Seat>();
@@ -41,6 +45,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
+            zonesOff.Clear(); driverZones.Clear();
             seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
@@ -51,12 +56,15 @@ namespace MWCoop
             Seat was = current;
             seats.Clear();
             driveTriggers.Clear();
+            driverZones.Clear();
             gen = VehicleSync.Generation;
             for (int ci = 0; ci < VehicleSync.LocalCount; ci++)
             {
                 Rigidbody rb = VehicleSync.LocalBody(ci);
                 if (rb == null) continue;
                 string n = VehicleSync.LocalKey(ci);
+                foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true))
+                    if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) driverZones.Add(new KeyValuePair<PlayMakerFSM, Transform>(f, rb.transform));
                 if (n.StartsWith("KEKMET") || n.StartsWith("JONNEZ") || n.StartsWith("FLATBED")) continue;   // une seule place
                 foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) driveTriggers.Add(f);
@@ -105,6 +113,7 @@ namespace MWCoop
             // Liste des voitures changee apres le premier releve (taxi active) : releve tout de suite.
             if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
             if (!FindPlayer()) return;
+            if (now >= nextZones) { nextZones = now + 0.2f; DriverZones(); }
             if (current != null) TrackSpeed(current.CarT);
             if (current != null)
             {
@@ -209,6 +218,44 @@ namespace MWCoop
                 if (d < bestD) { bestD = d; best = s; }
             }
             return best;
+        }
+
+        // Zone du conducteur coupee pour le joueur d'ici (son automate 'PlayerTrigger' arrete, icone du volant eteinte) :
+        //  - voiture conduite par un autre joueur : le jeu proposait quand meme la place (retour de JD, 06/10) ;
+        //  - voiture ou l'on est assis en passager : la zone deborde sur la place avant, et l'icone du volant passait
+        //    par-dessus les commandes du tableau de bord.
+        // Rendue (automate rallume, en attente du joueur) des que ce n'est plus le cas. Jamais celle ou l'on conduit.
+        static void DriverZones()
+        {
+            foreach (KeyValuePair<PlayMakerFSM, Transform> z in driverZones)
+            {
+                PlayMakerFSM f = z.Key;
+                if (f == null || z.Value == null) continue;
+                bool off = f.ActiveStateName != "Player in car"
+                           && ((current != null && current.CarT == z.Value) || VehicleSync.RemotelyDriven(z.Value));
+                if (off && !zonesOff.Contains(f))
+                {
+                    if (f.ActiveStateName == "Press return") Game.SetGlobalBool("GUIdrive", false);
+                    f.enabled = false;
+                    zonesOff.Add(f);
+                    Log.Info("passager : zone du conducteur de " + z.Value.name + " coupee ici (" + (current != null && current.CarT == z.Value ? "assis en passager" : "conduite par un autre") + ")");
+                }
+                else if (!off && zonesOff.Contains(f))
+                {
+                    zonesOff.Remove(f);
+                    f.enabled = true;
+                    if (f.Fsm.GetState("Wait for player") != null) Game.SetState(f, "Wait for player");
+                    Log.Info("passager : zone du conducteur de " + z.Value.name + " rendue");
+                }
+            }
+            // (une icone du volant laissee allumee par une zone coupee en cours de route)
+            if (zonesOff.Count > 0 && VehicleSync.LocalDriving < 0 && Game.GlobalBool("GUIdrive"))
+            {
+                bool any = false;
+                foreach (KeyValuePair<PlayMakerFSM, Transform> z in driverZones)
+                    if (z.Key != null && z.Key.enabled && z.Key.ActiveStateName == "Press return") any = true;
+                if (!any) Game.SetGlobalBool("GUIdrive", false);
+            }
         }
 
         // Le jeu s'apprete a faire conduire le joueur (zone du conducteur, attente d'ENTREE) ?
