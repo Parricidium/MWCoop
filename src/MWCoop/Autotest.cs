@@ -1,4 +1,4 @@
-using HutongGames.PlayMaker;
+﻿using HutongGames.PlayMaker;
 using UnityEngine;
 
 namespace MWCoop
@@ -138,6 +138,7 @@ namespace MWCoop
             else if (Config.Get("Test", "RegarderPos", "").Length > 0 && t > 9f) FacePoint(Config.Get("Test", "RegarderPos", ""));
             if (mode == "cd") TestCd(t);
             if (mode == "prise") TestPlug(t);
+            if (mode == "paie") TestPay(t);
             if (mode == "teletexte") TestTeletext(t);
             if (mode == "nuages" && !MWCoop.Net.Session.IsHost && t > 30f && step == 0)
             {
@@ -577,6 +578,38 @@ namespace MWCoop
             }
             if (mode == "interactifs" && t > 40f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpInteractive()); }
             if (mode == "monde" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpWorldFsms()); }
+            // [Test] Autotest=corps : etat du corps de l'invite garde d'une session a l'autre. Chacun note faim, soif, ivresse
+            // a 25 et 50 s ; avec [Test] CorpsPoser=1, l'invite pose faim 77, soif 66, ivresse 1,5 a 30 s (gardes a 40 s).
+            if (mode == "corps")
+            {
+                if ((t > 25f && step == 0) || (t > 50f && step == 2))
+                {
+                    step++;
+                    Log.Info("autotest : corps t=" + t.ToString("F0") + " : faim " + Game.GlobalFloat("PlayerHunger").ToString("F1") + ", soif " + Game.GlobalFloat("PlayerThirst").ToString("F1")
+                             + ", ivresse " + Game.GlobalFloat("PlayerDrunk").ToString("F2") + ", fatigue " + Game.GlobalFloat("PlayerFatigue").ToString("F1"));
+                }
+                if (t > 30f && step == 1)
+                {
+                    step = 2;
+                    if (!MWCoop.Net.Session.IsHost && Config.GetInt("Test", "CorpsPoser", 0) != 0)
+                    {
+                        Game.SetGlobalFloat("PlayerHunger", 77f); Game.SetGlobalFloat("PlayerThirst", 66f); Game.SetGlobalFloat("PlayerDrunk", 1.5f);
+                        Log.Info("autotest : corps : faim 77, soif 66, ivresse 1,5 posees ici");
+                    }
+                }
+            }
+            if (mode == "globales" && t > 35f && !done)
+            {
+                done = true;
+                var sb = new System.Text.StringBuilder();
+                FsmVariables g = FsmVariables.GlobalVariables;
+                foreach (FsmFloat x in g.FloatVariables) sb.Append(" f:").Append(x.Name).Append('=').Append(x.Value.ToString("F2"));
+                foreach (FsmInt x in g.IntVariables) sb.Append(" i:").Append(x.Name).Append('=').Append(x.Value);
+                foreach (FsmBool x in g.BoolVariables) sb.Append(" b:").Append(x.Name).Append('=').Append(x.Value);
+                foreach (FsmString x in g.StringVariables) sb.Append(" s:").Append(x.Name).Append('=').Append(x.Value);
+                Log.Info("autotest : globales" + sb);
+            }
+            if (mode == "releveargent" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpMoney()); }
             if (mode == "menu" && t > 70f && !done)
             {
                 // L'hote revient au menu (puis Continuer=1 le relance) : les invites doivent suivre.
@@ -720,6 +753,75 @@ namespace MWCoop
             Log.Info("autotest : prise " + ut + " introuvable");
         }
         static int plugStep;
+
+        // [Test] Autotest=paie : enveloppe de paie d'un boulot ([Test] TestEnveloppe, defaut : livraison de bois 1),
+        // allumee chez chacun a 25 s avec Money = 123 (comme le boulot rejoue l'aurait fait) ; a 27 s, vidage de son
+        // automate ; a 36 s l'hote la prend (etat [Test] TestPrendre, defaut 'State 1', comme le clic) ; argent note
+        // a 30, 45 et 60 s. Attendu : +123 chez l'hote, +123 chez l'invite (revenu partage), pas 246.
+        static int payStep;
+        static float payTrace;
+        static GameObject payEnv;
+        static int payPrep;
+        static string payTraceK;
+        static string PayPath { get { return Config.Get("Test", "TestEnveloppe", "JOBS/HouseWood1/LOD/CarPos/NPCWood/WoodCaller1/skeleton/pelvis/spine_middle/spine_upper/collar_right/shoulder_right/arm_right/hand_right/PayMoney"); } }
+        static string Money()
+        {
+            FsmFloat c = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney"), b = FsmVariables.GlobalVariables.FindFsmFloat("PlayerBankAccount");
+            return "liquide " + (c != null ? c.Value.ToString("F2") : "?") + ", banque " + (b != null ? b.Value.ToString("F2") : "?");
+        }
+        static void TestPay(float t)
+        {
+            GameObject env = payEnv != null ? payEnv : Game.FindAny(PayPath);
+            // Preparee a 20 s chez tous (montant, sortie de sous le PNJ, nom fixe) mais encore eteinte ; allumee a 25 s.
+            // [Test] PaieRetard=n : chez l'invite, allumee n s plus tard (prise par l'hote avant qu'elle n'apparaisse).
+            if (payPrep == 0 && t >= 20f)
+            {
+                payPrep = 1;
+                if (env == null) { Log.Info("autotest : paie : enveloppe introuvable " + PayPath); payStep = 9; return; }
+                // Montant pose AVANT l'allumage : au demarrage l'automate le compare a 0 et s'eteint s'il est nul.
+                PlayMakerFSM u = Game.FsmOn(env, "Use");
+                FsmFloat m = u != null ? u.FsmVariables.FindFsmFloat("Money") : null;
+                if (m != null) m.Value = 123f;
+                // Sortie de sous le PNJ (le boulot eteint le client tant qu'il n'est pas en cours), meme place chez tous.
+                env.SetActive(false);
+                env.transform.parent = null;
+                env.name = "EssaiPaie";   // (pas "MWCoop..." : racines sautees par WorldFsms)
+                payEnv = env;
+                Log.Info("autotest : paie : " + Wallet.TestEnvelope(u));
+            }
+            if (payStep == 0 && payPrep == 1 && t >= 25f + (MWCoop.Net.Session.IsHost ? 0 : Config.GetInt("Test", "PaieRetard", 0)))
+            {
+                payStep = 1;
+                env.SetActive(true);
+                PlayMakerFSM u = Game.FsmOn(env, "Use");
+                Log.Info("autotest : paie : enveloppe allumee (" + (u != null ? u.ActiveStateName : "pas d'automate") + ") ; " + Money());
+            }
+            if (payStep >= 1 && payStep < 4 && env != null && t >= payTrace)
+            {
+                payTrace = t + 0.5f;
+                Transform off = null;
+                for (Transform p = env.transform; p != null; p = p.parent) if (!p.gameObject.activeSelf) off = p;
+                PlayMakerFSM u = Game.FsmOn(env, "Use");
+                string k = (off != null ? "coupee a " + Recon.Path(off) : "allumee") + ", etat " + (u != null ? u.ActiveStateName : "?");
+                if (k != payTraceK) { payTraceK = k; Log.Info("autotest : paie t=" + t.ToString("F1") + " : enveloppe " + k); }
+            }
+            if (payStep == 1 && t >= 27f) { payStep = 2; if (env != null) Log.Info("autotest : paie : vidage " + Recon.DumpTargets(Recon.Path(env.transform))); }
+            if (payStep == 2 && t >= 30f) { payStep = 3; Log.Info("autotest : paie t=30 : " + Money()); }
+            if (payStep == 3 && t >= 36f)
+            {
+                payStep = 4;
+                if (MWCoop.Net.Session.IsHost && env != null)
+                {
+                    // Comme le clic (Wait button -USE-> State 1) : pas un rejeu.
+                    PlayMakerFSM u = Game.FsmOn(env, "Use");
+                    string before = u != null ? u.ActiveStateName : "?";
+                    if (u != null) Game.SetState(u, Config.Get("Test", "TestPrendre", "State 1"));
+                    Log.Info("autotest : paie : prise (" + before + " -> " + (u != null ? u.ActiveStateName : "?") + ") ; " + Money());
+                }
+            }
+            if (payStep == 4 && t >= 45f) { payStep = 5; Log.Info("autotest : paie t=45 : " + Money() + (env != null ? ", enveloppe " + (env.activeInHierarchy ? "visible" : "cachee") : "")); }
+            if (payStep == 5 && t >= 60f) { payStep = 6; Log.Info("autotest : paie t=60 : " + Money()); }
+        }
 
         static void TestCd(float t)
         {

@@ -86,6 +86,51 @@ namespace MWCoop
             return file + " (" + lines.Count + " a regarder)";
         }
 
+        // Releve de l'argent : chaque etat d'automate (inactifs compris) dont une action touche PlayerMoney ou
+        // PlayerBankAccount, avec l'action, le champ, la valeur ajoutee et le module qui tient l'automate.
+        // dumps/argent.txt.
+        public static string DumpMoney()
+        {
+            var lines = new List<string>();
+            foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = (PlayMakerFSM)o;
+                if (f.hideFlags != HideFlags.None) continue;
+                try
+                {
+                    FsmState[] states = f.Fsm.States;
+                    if (states.Length > 0 && !states[0].IsInitialized) f.Fsm.InitData();
+                    foreach (FsmState st in f.Fsm.States)
+                        foreach (FsmStateAction a in st.Actions)
+                        {
+                            if (a == null) continue;
+                            var hits = new List<string>();
+                            string other = "";
+                            foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+                            {
+                                object v = fi.GetValue(a);
+                                var nv = v as NamedVariable;
+                                if (nv != null && nv.UseVariable && (nv.Name == "PlayerMoney" || nv.Name == "PlayerBankAccount") && !Game.LocalVar(f, nv.Name))
+                                    hits.Add(fi.Name + "=" + nv.Name);
+                                else if (v is FsmFloat) { var ff = (FsmFloat)v; other += " " + fi.Name + "=" + (ff.UseVariable ? "{" + ff.Name + "}" : "") + ff.Value; }
+                            }
+                            if (hits.Count == 0) continue;
+                            string owner = Replay.Owner(f);
+                            lines.Add(f.transform.root.name + " | " + Path(f.transform) + " :: " + f.FsmName + " / " + st.Name + " : " + a.GetType().Name
+                                      + "(" + string.Join(", ", hits.ToArray()) + other + ")" + (owner != null ? " [" + owner + "]" : " [libre]")
+                                      + (f.gameObject.activeInHierarchy ? "" : " (inactif)"));
+                        }
+                }
+                catch (System.Exception e) { lines.Add(Path(f.transform) + " :: " + f.FsmName + " : illisible (" + e.GetType().Name + ")"); }
+            }
+            lines.Sort(string.CompareOrdinal);
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            Directory.CreateDirectory(dir);
+            string file = System.IO.Path.Combine(dir, "argent.txt");
+            File.WriteAllText(file, string.Join("\n", lines.ToArray()) + "\n");
+            return file + " (" + lines.Count + " actions)";
+        }
+
         // Releve des objets cliquables (MousePickEvent / bouton Use) et de qui les suit deja :
         // dumps/interactifs.txt, les non suivis d'abord, regroupes par nom d'objet et d'automate.
         public static string DumpInteractive()
