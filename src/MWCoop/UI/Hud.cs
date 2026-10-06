@@ -59,11 +59,22 @@ namespace MWCoop
                 Vector3 sp = cam.WorldToScreenPoint(a.HeadPosition);
                 if (sp.z <= 0.5f || sp.z > 120f) continue;
                 string n = a.Player.Name;
-                float nw = Style.Width(n, 15) + Style.Px(22), nh = Style.Px(26);
+                // Avatar Steam a gauche du pseudo (joueurs passes par Steam, ou dont le compte est connu).
+                Texture2D av = MWCoop.Net.SteamNet.Avatar(a.Player.SteamId);
+                float nh = Style.Px(26), isz = av != null ? nh - Style.Px(6) : 0f;
+                float nw = Style.Width(n, 15) + Style.Px(22) + (av != null ? isz + Style.Px(4) : 0f);
                 var r = new Rect(Mathf.Round(sp.x - nw / 2), Mathf.Round(Screen.height - sp.y - nh), nw, nh);
                 Style.Alpha = Mathf.Clamp01(1f - (sp.z - 60f) / 60f);
                 Style.Round(r, nh / 2, pill);
-                Style.Text(r, n, 15, TextAnchor.MiddleCenter, Style.White);
+                if (av != null)
+                {
+                    Color gc = GUI.color;
+                    GUI.color = new Color(1f, 1f, 1f, Style.Alpha);
+                    GUI.DrawTexture(new Rect(r.x + Style.Px(4), r.y + Style.Px(3), isz, isz), av);
+                    GUI.color = gc;
+                    Style.Text(new Rect(r.x + isz + Style.Px(4), r.y, r.width - isz - Style.Px(4), nh), n, 15, TextAnchor.MiddleCenter, Style.White);
+                }
+                else Style.Text(r, n, 15, TextAnchor.MiddleCenter, Style.White);
             }
             Style.Alpha = 1f;
         }

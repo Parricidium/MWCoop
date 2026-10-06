@@ -77,6 +77,16 @@ namespace MWCoop
 
             Error = "";
             if (refusal.Length > 0) Error = L("Refusé par l'hôte : ", "Refused by the host: ") + refusal;
+            else if (!connected && Session.Steam && MWCoop.Net.SteamNet.LobbyOwner == 0)
+                Error = !MWCoop.Net.SteamNet.Ready
+                    ? L("Steam n'est pas disponible : lance Steam, et le jeu Steam (pas une autre copie).", "Steam is not available: start Steam, and the Steam version of the game.")
+                    : L("En attente de l'hôte : il t'invite par Steam (F10 > Inviter des amis Steam, ou Maj+Tab), puis accepte l'invitation ici. "
+                        + "Si un ami héberge déjà, sa partie est rejointe toute seule.",
+                        "Waiting for the host: they invite you through Steam (F10 > Invite Steam friends, or Shift+Tab), then accept the invite here. "
+                        + "If a friend is already hosting, their game is joined automatically.");
+            else if (!connected && Session.Steam && lostSince > 0 && (silent || now - lostSince >= 30f))
+                Error = L("Aucune réponse du jeu de l'hôte par Steam depuis " + (int)(now - lostSince) + " s. Nouvel essai en continu...",
+                          "No answer from the host's game through Steam for " + (int)(now - lostSince) + " s. Retrying...");
             else if (!connected && lostSince > 0 && (silent || now - lostSince >= 30f))
                 Error = L("Aucune réponse du jeu de l'hôte depuis " + (int)(now - lostSince) + " s. Le plus souvent : le pare-feu Windows de l'hôte "
                           + "bloque My Winter Car (MWCoop.exe le propose en cliquant HÉBERGER ; Radmin VPN compte souvent comme réseau public). "

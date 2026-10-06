@@ -316,8 +316,12 @@ namespace MWCoop
         static bool Visible(Rect r) { return r.yMax > 0 && r.y < viewH; }
 
         // Ligne choisissable : 0 rien, -1/+1 valeur changee (choice), 2 validee (Entree ou clic).
+        // Image a gauche du libelle de la prochaine ligne (avatar Steam d'un joueur), remise a zero par Item.
+        static Texture nextIcon;
+
         static int Item(string label, string value, bool choice, string help, bool wrap)
         {
+            Texture icon = nextIcon; nextIcon = null;
             int me = idx++;
             lines++;
             float ip = Style.Px(12), h = Style.Px(38);
@@ -355,6 +359,15 @@ namespace MWCoop
             float rr = Style.Px(10);
             if (selected) { Style.Round(r, rr, selFill); Style.Ring(r, rr, selEdge); }
             Color tc = selected ? Style.White : rowText;
+            if (icon != null && !wrap)
+            {
+                float isz = h - Style.Px(10);
+                Color gc = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, Style.Alpha);
+                GUI.DrawTexture(new Rect(r.x + ip, r.y + (h - isz) / 2, isz, isz), icon);
+                GUI.color = gc;
+                r.x += isz + Style.Px(8); r.width -= isz + Style.Px(8);
+            }
             if (wrap) Style.Text(new Rect(r.x + ip, r.y + Style.Px(5), r.width - 2 * ip, h - Style.Px(10)), label, 19, TextAnchor.UpperLeft, tc, false, true);
             else Style.Text(new Rect(r.x + ip, r.y, (value != null ? r.width * 0.6f : r.width) - 2 * ip, h), label, 20, TextAnchor.MiddleLeft, tc, false);
             if (value == null) return res;
@@ -430,8 +443,14 @@ namespace MWCoop
             {
                 PlayerInfo pi = prows[i].P;
                 bool canGo = !pi.Local && pi.Level == 1 && PlayerSync.InGame;
+                nextIcon = MWCoop.Net.SteamNet.Avatar(pi.SteamId);
                 if (Item(prows[i].Label, prows[i].Value, false, canGo ? Lang.T("Entr\u00E9e ou clic : aller vers ce joueur", "Enter or click: go to this player") : null, false) == 2 && canGo) GoTo(pi);
             }
+            // Partie par Steam : invitation d'amis (overlay Steam) depuis le menu.
+            if (Session.Active && Session.Steam && Item(Lang.T("Inviter des amis Steam", "Invite Steam friends"), MWCoop.Net.SteamNet.Lobby != 0 ? "" : Lang.T("salon en cours...", "lobby starting..."), false,
+                     Lang.T("Ouvre la fen\u00EAtre d'invitation de Steam (aussi : Maj+Tab). Ils lancent MWCoop.exe > REJOINDRE (Steam) et acceptent.",
+                            "Opens Steam's invite window (also: Shift+Tab). They start MWCoop.exe > JOIN (Steam) and accept."), false) == 2)
+                MWCoop.Net.SteamNet.InviteDialog();
         }
 
         static void GoTo(PlayerInfo pi)

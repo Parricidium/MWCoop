@@ -12,6 +12,7 @@ namespace MWCoop.Net
         public bool Local;
         public int Level;              // 0 menu, 1 en partie
         public PlayerState State;      // dernier etat recu
+        public ulong SteamId;          // compte Steam (0 : inconnu) : avatar a cote du pseudo
         public float StateTime;
     }
 
@@ -27,7 +28,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 29;
+        public const int NetVersion = 30;
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;
@@ -41,19 +42,33 @@ namespace MWCoop.Net
 
         public static event Action<PlayerInfo> PlayerLeft;
 
+        // Reseau choisi dans le lanceur ([Coop] Reseau) : "ip" (adresse:port, UDP) ou "steam" (salon et pair-a-pair Steam).
+        public static bool Steam;
+
         public static void Start()
         {
             string mode = Config.Get("Coop", "Mode", "solo").ToLowerInvariant();
+            Steam = Config.Get("Coop", "Reseau", "ip").ToLowerInvariant() == "steam";
             port = Config.GetInt("Coop", "Port", 7870);
             Me = new PlayerInfo { Local = true, Name = Config.Get("Coop", "Pseudo", Environment.UserName),
                                   Skin = Config.Get("Coop", "Apparence", "char_shirt21") };
-            if (mode == "hote" || mode == "host") StartHost();
-            else if (mode == "invite" || mode == "client") { address = Config.Get("Coop", "Adresse", "127.0.0.1"); StartClient(); }
+            // Essais : [Test] HoteRetard=s -- l'hote n'ecoute qu'apres s secondes (invite arrive avant lui).
+            int late = Config.GetInt("Test", "HoteRetard", 0);
+            if ((mode == "hote" || mode == "host") && late > 0) { hostLateAt = Time.realtimeSinceStartup + late; Log.Info("essai : hote dans " + late + " s"); }
+            else if (mode == "hote" || mode == "host") StartHost();
+            else if (mode == "invite" || mode == "client")
+            {
+                if (Steam) { Active = true; IsHost = false; Status = "attente d'une invitation Steam"; Log.Info("invite par Steam : attente d'une invitation ou du salon d'un ami"); }
+                else { address = Config.Get("Coop", "Adresse", "127.0.0.1"); StartClient(); }
+            }
         }
 
         static Transport NewTransport()
         {
-            var t = new Transport { NetVersion = NetVersion };
+            // Horloge du transport a l'heure du jeu des sa creation : sinon le pair ajoute par Connect (LastHeard = 0) etait
+            // juge muet depuis plus de 15 s au premier Update, et chaque nouvel essai de l'invite abandonne en quelques
+            // millisecondes -- un invite dont le 1er essai echouait (hote pas encore pret) ne se connectait plus jamais.
+            var t = new Transport { NetVersion = NetVersion, Now = Time.realtimeSinceStartup };
             t.OnConnected += Connected;
             t.OnDisconnected += Disconnected;
             t.OnMessage += Message;
@@ -62,8 +77,9 @@ namespace MWCoop.Net
                 // "delai depasse" avant toute reponse : l'hote n'a rien recu (adresse, pare-feu de son jeu, box), ce
                 // n'est pas un refus. On reessaie tout de suite.
                 bool silent = r == "delai depasse";
-                Status = silent ? "sans reponse de " + address + ":" + port : "refuse : " + r;
-                Log.Warn(silent ? "aucune reponse de l'hote " + address + ":" + port + " (pare-feu du jeu de l'hote ? adresse ?)" : "connexion refusee : " + r);
+                string where = Steam ? address : address + ":" + port;
+                Status = silent ? "sans reponse de " + where : "refuse : " + r;
+                Log.Warn(silent ? "aucune reponse de l'hote " + where + (Steam ? " (Steam)" : " (pare-feu du jeu de l'hote ? adresse ?)") : "connexion refusee : " + r);
                 hostPeer = null;
                 retryAt = Time.realtimeSinceStartup + (silent ? 0.5f : 5f);
             };
@@ -75,12 +91,13 @@ namespace MWCoop.Net
             try
             {
                 T = NewTransport();
-                T.Host(port);
+                if (Steam) { T.Host(new SteamLink(true)); SteamNet.Host(); }
+                else T.Host(port);
                 Active = IsHost = true;
                 LocalId = Me.Id = 0;
                 Players[0] = Me;
-                Status = "hote, port " + port;
-                Log.Info("hote sur le port UDP " + port);
+                Status = Steam ? "hote Steam" : "hote, port " + port;
+                Log.Info(Steam ? "hote par Steam (salon et pair-a-pair)" : "hote sur le port UDP " + port);
             }
             catch (Exception e) { Status = "erreur : " + e.Message; Log.Error("hote : " + e); }
         }
@@ -100,16 +117,45 @@ namespace MWCoop.Net
             catch (Exception e) { Status = "erreur : " + e.Message; Log.Error("invite : " + e); retryAt = Time.realtimeSinceStartup + 5f; }
         }
 
+        static float hostLateAt = -1;
+
         public static void Update()
         {
+            if (hostLateAt > 0 && Time.realtimeSinceStartup >= hostLateAt) { hostLateAt = -1; StartHost(); }
             if (!Active) return;
             float now = Time.realtimeSinceStartup;
-            if (!IsHost && hostPeer == null && now >= retryAt) StartClient();
+            if (Me != null && Me.SteamId == 0) { Me.SteamId = SteamNet.MyId; if (Me.SteamId != 0) RosterIfSteamKnown(); }
+            if (Steam)
+            {
+                SteamNet.Update();
+                // Invite : connexion au proprietaire du salon Steam rejoint (l'hote).
+                if (!IsHost && hostPeer == null && now >= retryAt)
+                {
+                    if (SteamNet.LobbyOwner != 0) StartClientSteam(SteamNet.LobbyOwner);
+                    else if (!Status.StartsWith("deconnecte") && !Status.StartsWith("refuse")) Status = "attente d'une invitation Steam";
+                }
+            }
+            else if (!IsHost && hostPeer == null && now >= retryAt) StartClient();
             if (T != null) T.Update(now);
+        }
+
+        static void StartClientSteam(ulong owner)
+        {
+            try
+            {
+                if (T != null) T.Close();
+                T = NewTransport();
+                address = SteamNet.Name(owner);
+                hostPeer = T.Connect(new SteamLink(false), (object)owner);
+                Status = "connexion a " + address + " (Steam)...";
+                Log.Info("connexion par Steam a " + address + " (" + owner + ")");
+            }
+            catch (Exception e) { Status = "erreur : " + e.Message; Log.Error("invite Steam : " + e); retryAt = Time.realtimeSinceStartup + 5f; }
         }
 
         public static void Stop()
         {
+            if (Steam) SteamNet.Leave();
             if (T != null) T.Close();
             T = null;
             Active = false;
@@ -156,7 +202,7 @@ namespace MWCoop.Net
             Players[LocalId] = Me;
             Status = "connecte a " + address;
             Log.Info("accepte par l'hote, numero " + LocalId);
-            SendToHost(new NetWriter(Msg.Hello).Str(Me.Name).Str(Me.Skin).Str(Version.Text), true);
+            SendToHost(new NetWriter(Msg.Hello).Str(Me.Name).Str(Me.Skin).Str(Version.Text).Str(SteamNet.MyId.ToString()), true);
         }
 
         static void Disconnected(Peer p, string reason)
@@ -187,7 +233,7 @@ namespace MWCoop.Net
         public static void SendRoster()
         {
             var w = new NetWriter(Msg.Roster).U8(Players.Count);
-            foreach (PlayerInfo pi in Players.Values) w.U8(pi.Id).Str(pi.Name).Str(pi.Skin).U8(pi.Level);
+            foreach (PlayerInfo pi in Players.Values) w.U8(pi.Id).Str(pi.Name).Str(pi.Skin).U8(pi.Level).Str(pi.SteamId.ToString());
             Broadcast(w, true);
         }
 
@@ -256,6 +302,9 @@ namespace MWCoop.Net
             pi.Name = Clean(r.Str(), 24);
             pi.Skin = Clean(r.Str(), 40);
             string ver = r.Str();
+            ulong sid;
+            if (r.More && ulong.TryParse(r.Str(), out sid)) pi.SteamId = sid;
+            if (from.End is ulong) pi.SteamId = (ulong)from.End;   // (Steam : l'adresse meme du pair)
             Log.Info("bonjour de " + pi.Name + " (#" + pi.Id + ", MWCoop " + ver + ", apparence " + pi.Skin + ")");
             if (ver != Version.Text)
             {
@@ -295,6 +344,7 @@ namespace MWCoop.Net
                 int id = r.U8();
                 string name = r.Str(), skin = r.Str();
                 int level = r.U8();
+                ulong sid; ulong.TryParse(r.Str(), out sid);
                 seen.Add(id);
                 PlayerInfo pi;
                 if (!Players.TryGetValue(id, out pi))
@@ -304,7 +354,7 @@ namespace MWCoop.Net
                     if (id != LocalId) Hud.Toast(name + Lang.T(" est dans la partie", " is in the game"));
                 }
                 if (pi.Local) continue;
-                pi.Name = name; pi.Skin = skin; pi.Level = level;
+                pi.Name = name; pi.Skin = skin; pi.Level = level; pi.SteamId = sid;
             }
             foreach (PlayerInfo pi in new List<PlayerInfo>(Players.Values))
                 if (!pi.Local && !seen.Contains(pi.Id))
@@ -313,6 +363,15 @@ namespace MWCoop.Net
                     Hud.Toast(pi.Name + Lang.T(" a quitt\u00E9 la partie", " left the game"));
                     if (PlayerLeft != null) PlayerLeft(pi);
                 }
+        }
+
+        // Hote : son identifiant Steam (pas connu au lancement) dans la liste des qu'il l'est.
+        static bool steamIdSent;
+        public static void RosterIfSteamKnown()
+        {
+            if (!IsHost || steamIdSent || Me == null || Me.SteamId == 0) return;
+            steamIdSent = true;
+            SendRoster();
         }
 
         public static string Clean(string s, int max)
