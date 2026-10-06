@@ -48,6 +48,14 @@ pouvoir le faire, et les autres doivent le voir.
 - [x] Corrections du 06/10 : prise du chauffage moteur (0.26.4) ; paie des boulots une seule fois (enveloppes des
       clients retirées chez les autres dès que l'un la prend), état du corps de l'invité (faim, soif, fatigue…) gardé
       d'une session à l'autre (0.27.0). Fendeuse en retard chez l'invité : déjà rattrapée (vérifié).
+- [~] Courses (rallye, course sur glace), demande de JD du 06/10 : tout ce qu'un joueur peut voir, et chaque joueur
+      peut courir avec son temps au classement.
+      Fait (0.28) : voitures IA du rallye (3 voitures, 9 pilotes) et de la glace (16) dictées par l'hôte, pilote et
+      livrée compris ; classement télé du rallye identique ; course de la semaine (rallye ou glace) comme chez l'hôte ;
+      inscription, chrono, feux de départ, parc fermé et contrôle technique personnels (plus rejoués chez les autres).
+      Reste : plusieurs pilotes humains au classement du rallye avec des adversaires communs (0.29), course sur glace
+      complète (grille, manches, résultats, pilotes humains) (0.30), spectateurs qui remettent une voiture IA sur ses
+      roues, kiosque et vendeur de pièces.
 - [ ] Plus tard : mods (MSCLoader géré par le lanceur, onglet MODS, comparaison des mods dans le salon).
 
 ## Quêtes et argent

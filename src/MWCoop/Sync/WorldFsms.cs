@@ -38,7 +38,12 @@ namespace MWCoop
         // Pompes a essence (FuelPumps_*) : Machines en recopie ce qu'on voit. Rejouees ici, la prise du pistolet
         // (FuelTrigger*::Use, Check hand) le mettait dans la main du joueur de chaque client, puis il disparaissait ;
         // le clavier et le terminal (argent) tournaient aussi chez les autres (vrai partie du 05/10).
-        static readonly string[] SkipParents = { "VideoPoker", "SlotMachine", "FuelPumps_" };
+        // Courses : la participation de chaque pilote est a lui (Races) -- inscription et resultats du week-end
+        // (ResultsWeekend : REGISTER, SS1-3, RESET), controle technique de SA voiture (RacingInspection), chrono et feux
+        // des speciales (TimingSSn, RallyTree), parc ferme, inscription a la glace (LINEUPS). Rejoues, l'inscription
+        // d'un invite inscrivait l'hote (autocollants sur sa CORRIS, ses heures de depart retirees).
+        static readonly string[] SkipParents = { "VideoPoker", "SlotMachine", "FuelPumps_",
+                                                 "ResultsWeekend", "RacingInspection", "TimingSS", "RallyTree", "ParcFerme", "LINEUPS" };
         // "Buy" : prendre un article en rayon le met dans SON panier ; c'est la caisse qui est synchronisee (Shop).
         static readonly HashSet<string> SkipFsmNames = new HashSet<string> { "Paint", "LOD", "Death", "HeadForce", "Coldness", "Strafe", "Buy" };
         // Automates de PNJ provoques par un joueur (colere quand on lui urine dessus ou lui fait un doigt, coup de

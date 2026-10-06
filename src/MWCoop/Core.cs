@@ -100,6 +100,7 @@ namespace MWCoop
             Step("voitures garees", Parked.Update);
             Step("monde (automates)", WorldFsms.Update);
             Step("trafic", Traffic.Update);
+            Step("courses", Races.Update);
             Step("couleur", CarColor.Update);
             Step("tenues", Studio.Update);
             Step("quetes", Jobs.Update);
@@ -168,6 +169,7 @@ namespace MWCoop
             Parked.OnLevelLoaded();
             WorldFsms.OnLevelLoaded();
             Traffic.OnLevelLoaded();
+            Races.OnLevelLoaded();
             CarColor.OnLevelLoaded();
             Studio.OnLevelLoaded();
             Jobs.OnLevelLoaded();
