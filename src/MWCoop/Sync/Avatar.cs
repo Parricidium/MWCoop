@@ -61,6 +61,8 @@ namespace MWCoop
         bool anchorSet;
         Vector3 leanOff;                     // ecart camera - ancre (repere voiture) : se pencher
         Vector3 eyesRest = new Vector3(0f, 1.2f, 0.1f);   // yeux / avatar, pose de conduite sans penche
+        const float SleepEyes = 1.55f;
+        float sleepDiag;                     // yeux / pieds, debout (pose couchee du dormeur)
         string anchorCar;
         bool passenger;                      // assis a une place passager (pose assise, pas de volant)
         string carName;
@@ -873,6 +875,27 @@ namespace MWCoop
                 Root.transform.position = pos;
                 Root.transform.rotation = Quaternion.Euler(0, yaw, 0);
             }
+            // Dort (lit, chalet, cabine du camion) : couche sur le dos, la tete a la place de la camera du dormeur (envoyee),
+            // les pieds dans la direction de son regard, bras le long du corps (la pose « a terre », ancree a la tete). Avant :
+            // pose assise au pied du lit (retour de JD, 06/10).
+            bool sleep = !inCar && !down && (f & PlayerSync.F_Sleep) != 0;
+            if (sleep)
+            {
+                Vector3 fwd = Quaternion.Euler(0f, st.Yaw, 0f) * Vector3.forward;
+                pos = st.Head + fwd * SleepEyes - Vector3.up * 0.3f;   // (pieds ; la pose couchee remonte le corps de 0,14 m : un peu dans la couette)
+                yaw = st.Yaw;
+                Root.transform.position = pos;
+                Root.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                if (Time.realtimeSinceStartup >= sleepDiag && headBone != null)
+                {
+                    sleepDiag = Time.realtimeSinceStartup + 10f;
+                    Vector3 hb = headBone.position;
+                    RaycastHit wall;
+                    bool through = Physics.Linecast(st.Head, pos + Vector3.up * 0.3f, out wall) && !wall.collider.isTrigger;
+                    Log.Info("avatar " + Player.Name + " couche : tete (os) " + hb.ToString("F2") + ", camera recue " + st.Head.ToString("F2") + ", pieds " + pos.ToString("F2") + ", cap " + yaw.ToString("F0")
+                             + (through ? ", ENTRE TETE ET PIEDS : " + Recon.Path(wall.collider.transform) : ", rien entre tete et pieds"));
+                }
+            }
             // Assis sur un siege du jeu (chaise, canape, banc, sauna) : pose sur le siege envoye, dans son sens, le
             // bassin (mesure dans la pose assise, LatePose) au-dessus du milieu du siege ; les pieds au sol du meuble.
             chair = !inCar && (f & PlayerSync.F_Seated) != 0 && g != null && (g.Bits & Gestures.G_Seat) != 0 && !down;
@@ -905,7 +928,7 @@ namespace MWCoop
             }
             else sitMeasured = false;
             // A terre (evanoui, assomme) : le corps tombe en arriere, pivot aux pieds, et reste allonge sur le dos.
-            lieW = Mathf.MoveTowards(lieW, down && !inCar ? 1f : 0f, Time.deltaTime * (down ? 1.2f : 2f));
+            lieW = sleep ? 1f : Mathf.MoveTowards(lieW, down && !inCar ? 1f : 0f, Time.deltaTime * (down ? 1.2f : 2f));
             if (lieW > 0.001f && !inCar)
             {
                 Root.transform.rotation = Root.transform.rotation * Quaternion.Euler(-90f * Mathf.SmoothStep(0f, 1f, lieW), 0f, 0f);
@@ -913,7 +936,7 @@ namespace MWCoop
             }
             // Assis (vehicule, chaise), couche : pose assise ; accroupi : pose debout pliee (LatePose). A terre : debout raide.
             bool crouch = (f & PlayerSync.F_Crouch) != 0 && (f & (PlayerSync.F_Seated | PlayerSync.F_Sleep)) == 0 && !down;
-            bool sit = (f & (PlayerSync.F_Seated | PlayerSync.F_Sleep)) != 0 && !down;
+            bool sit = (f & PlayerSync.F_Seated) != 0 && !down && !sleep;
             crouching = crouch;
             // Profondeur : hauteur de camera de l'automate Crouch du joueur (1,4 debout -> 0,3 au ras du sol).
             // Anciennes versions (hauteur du corps envoyee, > 1,4) : accroupi simple.
