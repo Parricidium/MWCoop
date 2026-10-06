@@ -238,6 +238,7 @@ namespace MWCoop
         public static void OnMessage(Peer from, NetReader r)
         {
             int kind = r.U8();
+            if (kind >= 10) { Rally.OnMessage(kind, from, r); return; }   // rallye a plusieurs pilotes
             if (kind == K_HASH)
             {
                 if (!Session.IsHost) return;
@@ -458,7 +459,7 @@ namespace MWCoop
         static int testSec = -1;
         public static void Test(string mode, float t)
         {
-            if ((mode != "rallye" && mode != "glace") || !built) return;
+            if ((mode != "rallye" && mode != "glace" && mode != "rallye3") || !built) return;
             // [Test] Autotest=glace : semaine de la course sur glace (GlobalWeeksPassed impair, RACES 'SwapDates' WAKEUP),
             // vendredi 10 h (essais libres : le jeu lance des voitures IA au hasard sur la piste).
             if (Session.IsHost && testStep == 0 && t > 20f && mode == "glace")
@@ -487,7 +488,7 @@ namespace MWCoop
             if (t < 25f || sec % 5 != 0 || sec == testSec) return;
             testSec = sec;
             var sb = new System.Text.StringBuilder("autotest : " + mode + " " + System.DateTime.Now.ToString("mm:ss") + " :");
-            if (mode == "rallye")
+            if (mode != "glace")
             {
                 PlayMakerFSM reset = Game.FindFsm("RACES/RALLY", "Reset");
                 sb.Append(" Reset ").Append(reset != null ? reset.ActiveStateName : "?");
@@ -503,7 +504,10 @@ namespace MWCoop
             {
                 if (c.T == null || !c.T.gameObject.activeInHierarchy) continue;
                 FsmString dn = c.Skin != null ? c.Skin.FsmVariables.FindFsmString("DriverName") : null;
-                sb.Append(" | ").Append(c.T.name).Append(' ').Append(c.T.position.ToString("F0")).Append(' ')
+                PlayMakerFSM nav = null;
+                Transform nt = c.T.Find("Navigation");
+                if (nt != null) nav = Game.FsmOn(nt.gameObject, "Navigation");
+                sb.Append(" | ").Append(c.T.name).Append(Session.IsHost && nav != null ? "[" + nav.ActiveStateName + "]" : "").Append(' ').Append(c.T.position.ToString("F0")).Append(' ')
                   .Append(dn != null ? dn.Value : "?").Append(" v").Append((Session.IsHost ? c.Body.velocity.magnitude : c.Vel.magnitude).ToString("F0"));
             }
             if (results != null)

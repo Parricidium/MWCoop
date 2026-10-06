@@ -37,7 +37,7 @@ namespace MWCoop
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t);
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
-            VehicleSync.Test(mode, t); Jobs.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t);
+            VehicleSync.Test(mode, t); Jobs.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t);
             MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {

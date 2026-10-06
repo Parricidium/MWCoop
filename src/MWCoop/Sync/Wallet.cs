@@ -70,6 +70,9 @@ namespace MWCoop
             new Pay("FleaMarket/LOD/OpenHours/MoneyFlea", "Use", "State 1", "ventes aux puces", false, true),
             new Pay(JokkePay, "Use", "State 1", "kilju vendu a Jokke", false, true),
             new Pay(LottoPath, "Logic", "Bank", "gains du loto", false),
+            // Prix des courses (podium de CE joueur, calcule chez lui) : a lui, gardes pour soi.
+            new Pay("RACES/RALLY/SS3/FinishArea/Stuff/PriceMoneyRally", "Use", "State 1", "prix du rallye", false, true),
+            new Pay("RACES/ICERACE/TentContents/Prices/PriceMoneyRace", "Use", "State 1", "prix de la course sur glace", false, true),
         };
         const string JokkePay = "JOBS/JOKKEHOME/HouseDrunkNew/KiljuBuyer/Char/skeleton/pelvis/spine_middle/spine_upper/collar_left/shoulder_left/arm_left/hand_left/PayMoney";
         const string ScrapPath = "REPAIRSHOP/Scrapmetal/GarbageTrigger", LottoPath = "PERAPORTTI/Building/LOD100/Store/VoittousArea/TrashTrigger";
@@ -673,7 +676,7 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- enveloppes de paie
         // Le client d'un boulot (fosses septiques HouseShit*, livraisons de bois HouseWood*, fermier) ou l'organisateur
-        // d'une course (PriceMoney*) tend une enveloppe : PayMoney / PriceMoney* :: Use. Clic -> "State 1" (PlayerMoney +=
+        // (pas les prix des courses, PriceMoney* : podium de chacun, voir Pays) tend une enveloppe : PayMoney :: Use. Clic -> "State 1" (PlayerMoney +=
         // Money, animation), puis "State 3" (Money a 0, enveloppe cachee) ; le bois passe aussi par "Pay for car" -> "State 3".
         // Le boulot est rejoue chez tous : chacun a SA copie de l'enveloppe, pleine. Le monde (WorldFsms) ne l'aurait
         // suivie qu'a son releve suivant (etale : jusqu'a une minute apres son apparition) ; prise par l'un avant, elle
@@ -711,7 +714,7 @@ namespace MWCoop
         {
             if (f.FsmName != "Use" || f.hideFlags != HideFlags.None) return false;
             string n = f.gameObject.name;
-            return n == "PayMoney" || n.StartsWith("PriceMoney");
+            return n == "PayMoney";   // (PriceMoney* : prix des courses, personnels -- voir Pays)
         }
 
         static string ClaimEnvelopes()
