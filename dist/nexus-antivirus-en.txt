@@ -1,0 +1,36 @@
+[size=4][b]About the antivirus warning (false positive)[/b][/size]
+
+Some of you saw an antivirus warning on [b]MWCoop.exe[/b] (the launcher). Here is exactly what is going on.
+
+[b]What was flagged[/b]
+[list]
+[*][b]MWCoop.exe[/b]: 4 engines out of 71 on VirusTotal — Windows Defender "Wacatac.B!ml", CrowdStrike ("malicious_confidence_60%"), DeepInstinct and Trapmine.
+[*][b]version.dll[/b] (the mod loader): 0 out of 71.
+[*]The other 67 engines found nothing.
+[/list]
+
+[b]Why it happens[/b]
+These are [b]machine-learning guesses[/b], not a known virus: the "!ml" and "confidence" in the names mean the engine only thinks the file [i]looks like[/i] a downloader. The launcher is a new, unsigned program that downloads the mod's updates from GitHub and starts the game, which is the kind of behaviour those models are trained to be suspicious of. No virus signature matches it.
+
+[b]What changed in 0.26.2[/b]
+[list]
+[*]The launcher no longer starts any hidden helper program (no tar.exe, no cmd.exe): the update zip and the folder links needed for Steam installs are now handled inside the launcher itself.
+[*]MWCoop.exe and version.dll now carry full version information (version, publisher, link to the source code).
+[*]Every release on GitHub now comes with a [b]SHA256SUMS[/b] file, so you can check that your files are the official ones.
+[/list]
+
+[b]How to check for yourself[/b]
+[list]
+[*]The whole mod is open source: [url=https://github.com/Parricidium/MWCoop]github.com/Parricidium/MWCoop[/url] — you can read the code and build it yourself.
+[*]In PowerShell, run [i]Get-FileHash MWCoop.exe[/i] and compare the result with the SHA256SUMS file of the release, or search that hash on [url=https://www.virustotal.com]VirusTotal[/url].
+[/list]
+
+0.26.2 SHA-256:
+[code]bb0f2ddbeab1e8749e0dc22c576f06ecaa0955211d89f350b4c411dc9f0aae9a  MWCoop.exe
+959db0dbbdf079f474535c8b47f6f4b0b1c7a6dd5cf979385264f95003488ae4  version.dll
+ef8e0fdb5182b2ef5db12a6d1d34f2fd1dcc1238b076cc8d6f57039eb6b13449  MWCoop/MWCoop.dll[/code]
+
+[b]If Defender quarantines it[/b]
+Windows Security > Virus & threat protection > Protection history > select the MWCoop entry > [b]Allow on device[/b]. You can also add an exclusion for the game folder.
+
+Code signing is being looked into to get rid of these warnings for good. Thanks for your patience, and don't hesitate to ask if you have any doubt ❤️

@@ -36,7 +36,9 @@
 //   /maj <dossier du jeu> <journal> [/depot proprietaire/depot] : mise a jour sans fenetre, journal = etat final ;
 //   /jeu <journal> : jeu trouve (dossier, version) ;
 //   /zip <fichier.zip> : le zip des journaux (bouton de la page JOURNAUX), ecrit la ou on le demande, sans explorateur ;
-//   /dezip <fichier.zip> <dossier> <journal> : extraction d'un paquet comme pendant une mise a jour.
+//   /dezip <fichier.zip> <dossier> <journal> : extraction d'un paquet comme pendant une mise a jour ;
+//   /parefeu-etat <journal> <exe>... : etat du pare-feu Windows pour ces exe (lecture seule) ;
+//   /parefeu <exe>... : (lance en administrateur par le lanceur, apres accord du joueur) autorise ces exe en entree.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -56,6 +58,7 @@ using std::max;
 #include <commdlg.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <netfw.h>
 #include <string>
 #include <vector>
 #include <map>
@@ -3782,6 +3785,174 @@ static DWORD WINAPI UdpProbeThread(void *param)
     return 0;
 }
 
+// ---------------------------------------------------------------- pare-feu Windows
+// Le salon passe par MWCoop.exe (deja autorise), mais le jeu recoit les invites en UDP : mywintercar.exe, ou sa copie
+// de lancement pour Steam (%LOCALAPPDATA%\MWCoop\jeu, un autre exe pour Windows). Sans regle qui l'autorise sur le
+// reseau actif (Radmin VPN est souvent un reseau "Public"), ou avec les regles de BLOCAGE que Windows cree quand sa
+// fenetre de question est refusee ou reste cachee derriere le jeu en plein ecran, l'invite n'a aucune reponse :
+// "delai depasse" chez lui (Nexus, 06/10). Les instances de test passent par 127.0.0.1 : jamais filtre, jamais vu.
+enum { FW_OK, FW_MISSING, FW_BLOCKED, FW_UNKNOWN };
+
+static INetFwPolicy2 *FwPolicy()
+{
+    INetFwPolicy2 *pol = NULL;
+    if (FAILED(CoCreateInstance(__uuidof(NetFwPolicy2), NULL, CLSCTX_INPROC_SERVER, __uuidof(INetFwPolicy2), (void **)&pol))) return NULL;
+    return pol;
+}
+
+// Appelle f(regle) pour chaque regle d'entree active (ou non, si all) de cet exe, en UDP ou tout protocole.
+template <class F> static void FwEachRule(INetFwPolicy2 *pol, const std::wstring &app, bool all, F f)
+{
+    INetFwRules *rules = NULL;
+    if (FAILED(pol->get_Rules(&rules)) || !rules) return;
+    IUnknown *u = NULL;
+    IEnumVARIANT *ev = NULL;
+    if (SUCCEEDED(rules->get__NewEnum(&u)) && u && SUCCEEDED(u->QueryInterface(__uuidof(IEnumVARIANT), (void **)&ev)) && ev) {
+        VARIANT v;
+        VariantInit(&v);
+        while (ev->Next(1, &v, NULL) == S_OK) {
+            INetFwRule *r = NULL;
+            if (v.vt == VT_DISPATCH && v.pdispVal && SUCCEEDED(v.pdispVal->QueryInterface(__uuidof(INetFwRule), (void **)&r)) && r) {
+                BSTR a = NULL;
+                VARIANT_BOOL en = VARIANT_FALSE;
+                NET_FW_RULE_DIRECTION d = NET_FW_RULE_DIR_OUT;
+                long proto = 0;
+                if (SUCCEEDED(r->get_ApplicationName(&a)) && a && !_wcsicmp(a, app.c_str()) && SUCCEEDED(r->get_Enabled(&en))
+                    && SUCCEEDED(r->get_Direction(&d)) && SUCCEEDED(r->get_Protocol(&proto))
+                    && (all || en) && d == NET_FW_RULE_DIR_IN && (proto == NET_FW_IP_PROTOCOL_UDP || proto == NET_FW_IP_PROTOCOL_ANY))
+                    f(r);
+                if (a) SysFreeString(a);
+                r->Release();
+            }
+            VariantClear(&v);
+        }
+        ev->Release();
+    }
+    if (u) u->Release();
+    rules->Release();
+}
+
+// Le jeu (ou le lanceur) peut-il recevoir de l'UDP sur les reseaux actifs ? (Pare-feu coupe : oui.)
+static int FirewallState(const std::wstring &app)
+{
+    HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    int st = FW_UNKNOWN;
+    if (INetFwPolicy2 *pol = FwPolicy()) {
+        long cur = 0, on = 0;
+        pol->get_CurrentProfileTypes(&cur);
+        for (long b : { (long)NET_FW_PROFILE2_DOMAIN, (long)NET_FW_PROFILE2_PRIVATE, (long)NET_FW_PROFILE2_PUBLIC }) {
+            VARIANT_BOOL e = VARIANT_FALSE;
+            if ((cur & b) && SUCCEEDED(pol->get_FirewallEnabled((NET_FW_PROFILE_TYPE2)b, &e)) && e) on |= b;
+        }
+        long allowed = 0;
+        bool blocked = false;
+        FwEachRule(pol, app, false, [&](INetFwRule *r) {
+            NET_FW_ACTION act = NET_FW_ACTION_ALLOW;
+            long prof = 0;
+            r->get_Action(&act);
+            r->get_Profiles(&prof);
+            if (!(prof & on)) return;
+            if (act == NET_FW_ACTION_BLOCK) blocked = true;
+            else allowed |= prof;
+        });
+        st = !on ? FW_OK : blocked ? FW_BLOCKED : (allowed & on) == on ? FW_OK : FW_MISSING;
+        pol->Release();
+    }
+    if (SUCCEEDED(co)) CoUninitialize();
+    return st;
+}
+
+// En administrateur (/parefeu) : regles de blocage de ces exe desactivees (pas supprimees), puis une regle
+// "MWCoop : <exe>" qui les autorise en entree, UDP et TCP, sur tous les reseaux. Vrai si tout est passe.
+static bool FirewallAllow(const std::vector<std::wstring> &apps)
+{
+    HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool ok = false;
+    if (INetFwPolicy2 *pol = FwPolicy()) {
+        INetFwRules *rules = NULL;
+        ok = SUCCEEDED(pol->get_Rules(&rules)) && rules;
+        for (const std::wstring &app : apps) {
+            if (!ok) break;
+            FwEachRule(pol, app, false, [&](INetFwRule *r) {
+                NET_FW_ACTION act = NET_FW_ACTION_ALLOW;
+                if (SUCCEEDED(r->get_Action(&act)) && act == NET_FW_ACTION_BLOCK) r->put_Enabled(VARIANT_FALSE);
+            });
+            for (long proto : { (long)NET_FW_IP_PROTOCOL_UDP, (long)NET_FW_IP_PROTOCOL_TCP }) {
+                std::wstring name = L"MWCoop : " + app + (proto == NET_FW_IP_PROTOCOL_UDP ? L" (UDP)" : L" (TCP)");
+                BSTR bn = SysAllocString(name.c_str());
+                rules->Remove(bn);   // la notre d'une fois precedente (meme nom) : pas de doublon
+                INetFwRule *r = NULL;
+                if (FAILED(CoCreateInstance(__uuidof(NetFwRule), NULL, CLSCTX_INPROC_SERVER, __uuidof(INetFwRule), (void **)&r)) || !r) { SysFreeString(bn); ok = false; break; }
+                BSTR ba = SysAllocString(app.c_str());
+                BSTR bd = SysAllocString(L"My Winter Car co-op (MWCoop): lets your friends join the game you host.");
+                BSTR bg = SysAllocString(L"MWCoop");
+                r->put_Name(bn);
+                r->put_Description(bd);
+                r->put_ApplicationName(ba);
+                r->put_Protocol(proto);
+                r->put_Direction(NET_FW_RULE_DIR_IN);
+                r->put_Action(NET_FW_ACTION_ALLOW);
+                r->put_Profiles(NET_FW_PROFILE2_ALL);
+                r->put_Grouping(bg);
+                r->put_Enabled(VARIANT_TRUE);
+                if (FAILED(rules->Add(r))) ok = false;
+                r->Release();
+                SysFreeString(bn); SysFreeString(ba); SysFreeString(bd); SysFreeString(bg);
+            }
+        }
+        if (rules) rules->Release();
+        pol->Release();
+    }
+    if (SUCCEEDED(co)) CoUninitialize();
+    return ok;
+}
+
+// Avant d'heberger : si le pare-feu va bloquer les invites, le dire et proposer de corriger (une fois par lancement
+// du lanceur, demande de Windows en administrateur). Faux seulement si le joueur annule l'hebergement.
+static bool g_fwAsked;
+static bool FirewallBeforeHosting()
+{
+    if (g_fwAsked || g_gameDir.empty()) return true;
+    std::vector<std::wstring> apps = { GameExe(), g_self }, bad;
+    bool blocked = false;
+    for (const std::wstring &a : apps) {
+        int st = FirewallState(a);
+        if (st == FW_MISSING || st == FW_BLOCKED) { bad.push_back(a); blocked |= st == FW_BLOCKED; }
+    }
+    if (bad.empty()) return true;
+    g_fwAsked = true;
+    std::wstring msg = blocked
+        ? T(L"Le pare-feu Windows BLOQUE My Winter Car (sa question a \u00E9t\u00E9 refus\u00E9e ou est rest\u00E9e cach\u00E9e derri\u00E8re le jeu).",
+            L"Windows Firewall is BLOCKING My Winter Car (its question was refused, or stayed hidden behind the game).")
+        : T(L"Le pare-feu Windows n'autorise pas encore My Winter Car sur ce r\u00E9seau (Radmin VPN compte souvent comme un r\u00E9seau public).",
+            L"Windows Firewall does not allow My Winter Car on this network yet (Radmin VPN often counts as a public network).");
+    msg += T(L"\n\nTes amis entreraient dans le salon, mais pas dans la partie (\u00AB d\u00E9lai d\u00E9pass\u00E9 \u00BB).\n\nAutoriser My Winter Car et MWCoop dans le pare-feu ? Windows va demander l'accord administrateur.",
+             L"\n\nYour friends would get into the lobby, but not into the game (\"timed out\").\n\nAllow My Winter Car and MWCoop in the firewall? Windows will ask for administrator approval.");
+    int r = MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_YESNOCANCEL | MB_ICONWARNING);
+    if (r == IDCANCEL) return false;
+    if (r != IDYES) return true;
+    std::wstring args = L"/parefeu";
+    for (const std::wstring &a : bad) args += L" \"" + a + L"\"";
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.hwnd = g_wnd;
+    sei.lpVerb = L"runas";
+    sei.lpFile = g_self.c_str();
+    sei.lpParameters = args.c_str();
+    sei.nShow = SW_HIDE;
+    DWORD code = 1;
+    if (ShellExecuteExW(&sei) && sei.hProcess) {
+        WaitForSingleObject(sei.hProcess, 60000);
+        GetExitCodeProcess(sei.hProcess, &code);
+        CloseHandle(sei.hProcess);
+    }
+    bool fixed = code == 0;
+    for (const std::wstring &a : bad) fixed = fixed && FirewallState(a) == FW_OK;
+    if (fixed) SetStatus(K_OK, T(L"Pare-feu : My Winter Car autoris\u00E9", L"Firewall: My Winter Car allowed"));
+    else SetStatus(K_WARN, T(L"Pare-feu non modifi\u00E9 : tes amis risquent de ne pas pouvoir entrer en jeu", L"Firewall unchanged: your friends may not get into the game"));
+    return true;
+}
+
 static void LobbyHost()
 {
     SavePlayer();
@@ -4547,7 +4718,7 @@ static void OnButton(int id)
     case B_HOST:
         if (g_lobby == LB_HOST) HostStart();
         else if (g_lobby == LB_GUEST) GuestToggleReady();
-        else if (g_lobby == LB_NONE) LobbyHost();
+        else if (g_lobby == LB_NONE && FirewallBeforeHosting()) LobbyHost();
         break;
     case B_JOIN:
         if (g_lobby != LB_NONE) {
@@ -4926,6 +5097,20 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         bool ok = Unzip(argv[2], argv[3], &why);
         FILE *f = _wfopen(argv[4], L"w");
         if (f) { fprintf(f, "%s %s\n", ok ? "ok" : "echec", why.c_str()); fclose(f); }
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/parefeu-etat")) {
+        FILE *f = _wfopen(argv[2], L"w, ccs=UTF-8");
+        for (int i = 3; i < argc && f; i++) fwprintf(f, L"%d %s\n", FirewallState(argv[i]), argv[i]);
+        if (f) fclose(f);
+        GdiplusShutdown(gtok);
+        return 0;
+    }
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/parefeu")) {
+        std::vector<std::wstring> apps;
+        for (int i = 2; i < argc; i++) apps.push_back(argv[i]);
+        bool ok = FirewallAllow(apps);
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }

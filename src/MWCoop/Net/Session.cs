@@ -57,7 +57,16 @@ namespace MWCoop.Net
             t.OnConnected += Connected;
             t.OnDisconnected += Disconnected;
             t.OnMessage += Message;
-            t.OnRejected += r => { Status = "refuse : " + r; Log.Warn("connexion refusee : " + r); hostPeer = null; retryAt = Time.realtimeSinceStartup + 5f; };
+            t.OnRejected += r =>
+            {
+                // "delai depasse" avant toute reponse : l'hote n'a rien recu (adresse, pare-feu de son jeu, box), ce
+                // n'est pas un refus. On reessaie tout de suite.
+                bool silent = r == "delai depasse";
+                Status = silent ? "sans reponse de " + address + ":" + port : "refuse : " + r;
+                Log.Warn(silent ? "aucune reponse de l'hote " + address + ":" + port + " (pare-feu du jeu de l'hote ? adresse ?)" : "connexion refusee : " + r);
+                hostPeer = null;
+                retryAt = Time.realtimeSinceStartup + (silent ? 0.5f : 5f);
+            };
             return t;
         }
 

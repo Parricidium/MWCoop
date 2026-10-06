@@ -38,6 +38,7 @@ namespace MWCoop
             if (s.StartsWith("connecte a ")) return "connected to " + s.Substring(11);
             if (s.StartsWith("deconnecte (")) return "disconnected (" + s.Substring(12).Replace("nouvel essai", "retrying");
             if (s.StartsWith("refuse : ")) return "refused: " + s.Substring(9);
+            if (s.StartsWith("sans reponse de ")) return "no answer from " + s.Substring(16);
             if (s.StartsWith("erreur : ")) return "error: " + s.Substring(9);
             return s;
         }
