@@ -137,6 +137,7 @@ namespace MWCoop
             else if (look != 0) LookAtNearestAvatar();
             else if (Config.Get("Test", "RegarderPos", "").Length > 0 && t > 9f) FacePoint(Config.Get("Test", "RegarderPos", ""));
             if (mode == "cd") TestCd(t);
+            if (mode == "prise") TestPlug(t);
             if (mode == "teletexte") TestTeletext(t);
             if (mode == "nuages" && !MWCoop.Net.Session.IsHost && t > 30f && step == 0)
             {
@@ -672,6 +673,53 @@ namespace MWCoop
                 Log.Info("autotest : teletexte " + (tt == null ? "absent" : tt.activeSelf ? "allume" : "eteint") + ", page " + (pn != null ? pn.Value.ToString() : "?"));
             }
         }
+
+        // [Test] Autotest=prise : chacun note toutes les 3 s (16-90 s) les prises du chauffage moteur (cable plug) :
+        // etat de 'Data', corps, position ; a 20 s, vidage de leurs parents et de leur prise de voiture (cibles.txt).
+        static float plugLog;
+        static bool plugDumped;
+        static void TestPlug(float t)
+        {
+            if (t < 16f || t > 90f || t < plugLog) return;
+            plugLog = t + 3f;
+            var sb = new System.Text.StringBuilder();
+            var dump = new System.Collections.Generic.List<string>();
+            foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                if (f.hideFlags != HideFlags.None || !f.gameObject.name.StartsWith("cable plug")) continue;
+                FsmGameObject sock = f.FsmVariables.FindFsmGameObject("Socket");
+                sb.Append(" | ").Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append(' ').Append(f.ActiveStateName)
+                  .Append(f.gameObject.activeInHierarchy ? "" : " (inactif)").Append(f.GetComponent<Rigidbody>() != null ? " corps" : " sans corps")
+                  .Append(" en ").Append(f.transform.position.ToString("F1"))
+                  .Append(sock != null && sock.Value != null ? " prise " + Recon.Path(sock.Value.transform) : "")
+                  .Append(Replay.Owner(f) != null ? " [" + Replay.Owner(f) + "]" : "");
+                if (!plugDumped)
+                {
+                    dump.Add(Recon.Path(f.transform.parent != null ? f.transform.parent : f.transform));
+                    if (sock != null && sock.Value != null) dump.Add(Recon.Path(sock.Value.transform));
+                }
+            }
+            Log.Info("autotest : prises t=" + t.ToString("F0") + (sb.Length > 0 ? sb.ToString() : " aucune"));
+            if (!plugDumped && t >= 20f && dump.Count > 0 && Config.GetInt("Test", "VidagePrises", 0) != 0) { plugDumped = true; Log.Info("autotest : vidage prises " + Recon.DumpTargets(string.Join(";", dump.ToArray()))); }
+            // Hote : debranche la prise de la maison ([Test] TestPrise, UT de son automate) a 34 s, la rebranche a 55 s.
+            if (!MWCoop.Net.Session.IsHost) return;
+            int want = t >= 34f && plugStep == 0 ? 1 : t >= 55f && plugStep == 1 ? 2 : 0;
+            if (want == 0) return;
+            plugStep = want;
+            string ut = Config.Get("Test", "TestPrise", "HeaterCable1On");
+            foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                if (f.hideFlags != HideFlags.None || f.FsmName != "Data" || !f.gameObject.name.StartsWith("cable plug")) continue;
+                FsmString u = f.FsmVariables.FindFsmString("UT");
+                if (u == null || u.Value != ut) continue;
+                string before = f.ActiveStateName;
+                Game.SetState(f, want == 1 ? "Heater off" : "Heater on");
+                Log.Info("autotest : prise " + ut + (want == 1 ? " debranchee" : " rebranchee") + " ici (" + before + " -> " + f.ActiveStateName + ")");
+                return;
+            }
+            Log.Info("autotest : prise " + ut + " introuvable");
+        }
+        static int plugStep;
 
         static void TestCd(float t)
         {

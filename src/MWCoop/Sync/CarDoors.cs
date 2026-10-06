@@ -73,6 +73,7 @@ namespace MWCoop
             public bool RestSet; public Quaternion RestRot;   // pose fermee (repere du parent)
             public float TestOffset;   // essais : degres ajoutes a l'angle envoye
             public bool Held;          // fermee sur la copie d'une voiture conduite ailleurs : figee sur la caisse (Hold)
+            public FsmBool PlugOn;     // prise du chauffage : 'On' du jeu (branchee), l'etat vrai (l'automate ne reste qu'1 s dans "Heater on")
         }
 
         static readonly Dictionary<string, Door> byKey = new Dictionary<string, Door>();
@@ -167,21 +168,31 @@ namespace MWCoop
                 }
             }
             // Prises du chauffage moteur (cable plug) : "Heater on" = branchee sur la voiture, "Heater off"
-            // = debranchee. Partout dans la scene (debranchee, elle pend au poteau de la maison) ; cle :
-            // la prise de la voiture (Socket).
+            // = debranchee. Partout dans la scene (debranchee, elle pend a son poteau). Deux prises, maison
+            // (HOMENEW) et usine (JOBS/FACTORY), visent la MEME prise de voiture (Socket, SORBET) : cle = l'UT
+            // de sauvegarde de la prise (HeaterCable1On, HeaterCable2On). Avec Socket pour cle, l'une ecrasait
+            // l'autre et la prise de la maison n'etait plus rejouee chez les autres.
             foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
             {
                 if (f.FsmName != "Data" || hooked.Contains(f) || !f.gameObject.name.StartsWith("cable plug")) continue;
-                if (f.Fsm.GetState("Heater on") == null || f.Fsm.GetState("Heater off") == null || !Replay.Claim(f, "portieres")) continue;
-                FsmGameObject sock = f.FsmVariables.FindFsmGameObject("Socket");
-                if (sock == null || sock.Value == null) continue;
-                var d = new Door { Key = "prise:" + Recon.Path(sock.Value.transform), Fsm = f, Open = "Heater on", Close = "Heater off" };
-                d.State = f.ActiveStateName == "Heater on" ? DoorState.Open : DoorState.Closed;
+                if (f.Fsm.GetState("Heater on") == null || f.Fsm.GetState("Heater off") == null) continue;
+                string pk = PlugKey(f);
+                if (pk == null || byKey.ContainsKey(pk) || !Replay.Claim(f, "portieres")) continue;
+                var d = new Door { Key = pk, Fsm = f, Open = "Heater on", Close = "Heater off", PlugOn = f.FsmVariables.FindFsmBool("On") };
+                PlugState(d);
                 if (!Inject(d, d.Open, K_OPEN) || !Inject(d, d.Close, K_CLOSED)) continue;
                 hooked.Add(f);
                 byKey[d.Key] = d;
             }
             if (byKey.Count != before) Log.Info("portieres : " + byKey.Count + " suivies (portes, coffres, hayons, prises)");
+        }
+
+        // Cle d'une prise du chauffage moteur : "prise:" + UT de son automate 'Data' (null : pas une prise reconnue).
+        public static string PlugKey(PlayMakerFSM data)
+        {
+            if (data == null) return null;
+            FsmString ut = data.FsmVariables.FindFsmString("UT");
+            return ut != null && !string.IsNullOrEmpty(ut.Value) ? "prise:" + ut.Value : null;
         }
 
         // Action ajoutee en tete de l'etat (atEnd : en fin, apres les actions du jeu).
@@ -581,10 +592,19 @@ namespace MWCoop
             return kind == K_OPEN ? "ouverte" : kind == K_CLOSED ? "fermee" : kind == K_GRAB ? "saisie" : kind == K_LOCK ? "verrouillee" : "?";
         }
 
+        // Prise : branchee ou non selon le jeu ('On'), pas selon l'etat de l'automate (branchee, il attend le
+        // joueur dans "Wait player" : lue comme debranchee, son debranchement par un autre etait saute ici).
+        static void PlugState(Door d)
+        {
+            if (d.PlugOn != null) d.State = d.PlugOn.Value ? DoorState.Open : DoorState.Closed;
+            else if (d.Fsm != null && d.Fsm.ActiveStateName == "Heater on") d.State = DoorState.Open;
+        }
+
         // Evenement dans l'ordre de l'hote : le jeu est mene au meme etat (s'il n'y est pas deja).
         static void Apply(Door d, int kind, int who)
         {
             bool me = who == Session.LocalId;
+            if (d.PlugOn != null) PlugState(d);
             Trace(d);
             if (kind == K_OPEN || kind == K_GRAB) EndClosing(d, false);
             // Maniee par un autre : un verrou pose ici la souderait (copie d'une voiture conduite ailleurs).
