@@ -86,6 +86,75 @@ namespace MWCoop
             return file + " (" + lines.Count + " a regarder)";
         }
 
+        // Releve d'une racine ([Test] RacineReleve, defaut RACES) : arbre sur 5 niveaux (actif ou non, composants),
+        // puis chaque corps physique (composants : voiture, IA...) et chaque automate (etat, module qui le tient,
+        // P persistant / I commande du joueur, etats et evenements). dumps/racine-<nom>.txt.
+        public static string DumpRoot(string rootName)
+        {
+            GameObject root = Game.FindAny(rootName);
+            if (root == null) return rootName + " introuvable";
+            var sb = new StringBuilder("ARBRE " + rootName + "\n");
+            Tree(sb, root.transform, 0, 5);
+            sb.Append("\nCORPS PHYSIQUES\n");
+            foreach (Rigidbody rb in root.GetComponentsInChildren<Rigidbody>(true))
+            {
+                sb.Append(Path(rb.transform)).Append(rb.gameObject.activeInHierarchy ? "" : " (inactif)").Append(rb.isKinematic ? " cinematique" : "").Append(" :");
+                foreach (Component c in rb.GetComponents<Component>()) if (c != null) sb.Append(' ').Append(c.GetType().Name);
+                sb.Append('\n');
+            }
+            sb.Append("\nAUTOMATES\n");
+            foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                string owner = Replay.Owner(f);
+                bool persist = false, input = false;
+                foreach (FsmString s in f.FsmVariables.StringVariables) if (s.Name.StartsWith("UniqueTag") || s.Name.StartsWith("UT")) persist = true;
+                var states = new List<string>();
+                try
+                {
+                    if (f.Fsm.States.Length > 0 && !f.Fsm.States[0].IsInitialized) f.Fsm.InitData();
+                    foreach (FsmState st in f.Fsm.States)
+                    {
+                        var tr = new List<string>();
+                        foreach (FsmTransition t in st.Transitions) tr.Add(t.EventName + ">" + t.ToState);
+                        states.Add(st.Name + (tr.Count > 0 ? "[" + string.Join(",", tr.ToArray()) + "]" : ""));
+                        foreach (FsmStateAction a in st.Actions)
+                        {
+                            string tn = a != null ? a.GetType().Name : "";
+                            if (tn == "MousePickEvent" || tn == "GetButtonDown" || tn == "GetMouseButtonDown" || tn == "GetKeyDown") input = true;
+                        }
+                    }
+                }
+                catch { states.Add("(illisible)"); }
+                var globals = new List<string>();
+                foreach (FsmTransition t in f.Fsm.GlobalTransitions) globals.Add(t.EventName + ">" + t.ToState);
+                sb.Append(Path(f.transform)).Append(" :: ").Append(f.FsmName).Append(" [").Append(f.ActiveStateName).Append("]")
+                  .Append(f.gameObject.activeInHierarchy ? "" : " (inactif)").Append(persist ? " P" : "").Append(input ? " I" : "")
+                  .Append(" <").Append(owner ?? "libre").Append(">")
+                  .Append(globals.Count > 0 ? " globaux " + string.Join(",", globals.ToArray()) : "")
+                  .Append(" : ").Append(string.Join(" | ", states.ToArray())).Append('\n');
+            }
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            Directory.CreateDirectory(dir);
+            string file = System.IO.Path.Combine(dir, "racine-" + rootName + ".txt");
+            File.WriteAllText(file, sb.ToString());
+            return file;
+        }
+
+        static void Tree(StringBuilder sb, Transform t, int depth, int max)
+        {
+            sb.Append(new string(' ', depth * 2)).Append(t.name).Append(t.gameObject.activeSelf ? "" : " (off)");
+            foreach (Component c in t.GetComponents<Component>())
+            {
+                if (c == null || c is Transform) continue;
+                string n = c.GetType().Name;
+                if (n == "MeshFilter" || n == "MeshRenderer" || n.EndsWith("Collider")) continue;
+                sb.Append(" <").Append(n == "PlayMakerFSM" ? "FSM:" + ((PlayMakerFSM)c).FsmName : n).Append('>');
+            }
+            sb.Append('\n');
+            if (depth >= max) { if (t.childCount > 0) sb.Append(new string(' ', depth * 2 + 2)).Append("... ").Append(t.childCount).Append(" enfants\n"); return; }
+            for (int i = 0; i < t.childCount; i++) Tree(sb, t.GetChild(i), depth + 1, max);
+        }
+
         // Releve de l'argent : chaque etat d'automate (inactifs compris) dont une action touche PlayerMoney ou
         // PlayerBankAccount, avec l'action, le champ, la valeur ajoutee et le module qui tient l'automate.
         // dumps/argent.txt.

@@ -102,5 +102,6 @@ namespace MWCoop.Net
         Gesture = 44,     // gestes du joueur : coup, doigt, pouce, pipi, montre, pencher, ivresse, assis (a remplir : lot 4)
         Thrown = 45,      // bouteille vide jetee par un joueur qui a bu (etat de l'automate Drink, pose, vitesse)
         Payout = 46,      // enveloppe de paie d'un boulot prise par un joueur : retiree chez les autres
+        Race = 47,        // courses : voitures IA (hote), table des resultats du rallye, empreinte de la liste
     }
 }
