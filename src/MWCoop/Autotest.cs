@@ -634,6 +634,83 @@ namespace MWCoop
                 FsmFloat vol = FsmVariables.GlobalVariables.FindFsmFloat("GameVolume");
                 Log.Info("autotest : co : paupieres " + (pe != null && pe.activeInHierarchy ? "FERMEES (allumees)" : "rouvertes") + ", son " + (vol != null ? vol.Value.ToString("F2") : "?"));
             }
+            // [Test] Autotest=relevenom, ReleveNom=a;b : vidage (avec parametres) de chaque objet de la scene portant un
+            // automate dont le nom d'objet contient a ou b (dumps/cibles.txt), et la liste dans le journal.
+            // [Test] Autotest=robinet : l'hote ouvre le robinet ([Test] Robinet, defaut la cuisine des parents) a 30 s, le
+            // ferme a 40 s (comme le clic : "Position") ; chacun note toutes les 2 s si l'eau coule (objet [Test] Eau).
+            if (mode == "robinet")
+            {
+                string tap = Config.Get("Test", "Robinet", "KitchenWaterTap/Trigger::Use");
+                GameObject water = Game.FindAny(Config.Get("Test", "Eau", "YARD/Building/KITCHEN/KitchenWaterTap/ParticleDrink"));
+                if (t > 10f && t < 60f && t >= tapLog)
+                {
+                    tapLog = t + 2f;
+                    Log.Info("autotest : robinet t=" + t.ToString("F0") + " : eau " + (water != null && water.activeInHierarchy ? "COULE" : "coupee"));
+                }
+                // RobinetActeur=croise : l'hote ouvre a 30 s, l'invite (parti ~10 s apres) ferme a ses 25 s, 5 s apres.
+                string who = Config.Get("Test", "RobinetActeur", "hote");
+                bool host = MWCoop.Net.Session.IsHost;
+                bool actor = who == "invite" ? !host : who == "croise" ? true : host;
+                bool now2 = who == "croise" ? (host ? t > 30f && step == 0 : t > 25f && step == 0) : (t > 30f && step == 0) || (t > 40f && step == 1);
+                if (actor && now2)
+                {
+                    step++;
+                    // Comme un vrai clic sur le robinet vise : "Wait button" (sa detection de la souris coupee le temps du clic), USE.
+                    PlayMakerFSM tf = null;
+                    int cut = tap.IndexOf("::");
+                    GameObject tg = Game.FindAny(cut > 0 ? tap.Substring(0, cut) : tap);
+                    if (tg != null) tf = Game.FsmOn(tg, "Use");
+                    var off = new System.Collections.Generic.List<FsmStateAction>();
+                    FsmState wb = tf != null ? tf.Fsm.GetState("Wait button") : null;
+                    if (wb != null) foreach (FsmStateAction a2 in wb.Actions) if (a2 is HutongGames.PlayMaker.Actions.MousePickEvent && a2.Enabled) { a2.Enabled = false; off.Add(a2); }
+                    try { WorldFsms.TestClick(tap, "Wait button"); Log.Info("autotest : robinet " + (step == 1 ? "ouvert" : "ferme") + " : " + WorldFsms.TestEvent(tap, "USE")); }
+                    finally { foreach (FsmStateAction a2 in off) a2.Enabled = true; }
+                }
+            }
+            if (mode == "relevenom" && t > 40f && !done)
+            {
+                done = true;
+                string[] keys = Config.Get("Test", "ReleveNom", "").Split(';');
+                var paths = new System.Collections.Generic.List<string>();
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                {
+                    if (f.hideFlags != HideFlags.None || !f.transform.root.gameObject.activeInHierarchy) continue;
+                    foreach (string k in keys)
+                        if (k.Length > 0 && f.gameObject.name.IndexOf(k, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            string pth = Recon.Path(f.transform);
+                            if (!paths.Contains(pth)) paths.Add(pth);
+                        }
+                }
+                Log.Info("autotest : relevenom : " + paths.Count + " objets : " + string.Join(" | ", paths.ToArray()) + " ; " + Recon.DumpTargets(string.Join(";", paths.ToArray())));
+            }
+            if (mode == "releveicones" && t > 40f && !done)
+            {
+                done = true;
+                var sb = new System.Text.StringBuilder();
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+                {
+                    if (f.hideFlags != HideFlags.None || !f.transform.root.gameObject.activeInHierarchy) continue;
+                    try
+                    {
+                        if (f.Fsm.States.Length > 0 && !f.Fsm.States[0].IsInitialized) f.Fsm.InitData();
+                        var hit = new System.Collections.Generic.HashSet<string>();
+                        foreach (FsmState st in f.Fsm.States)
+                            foreach (FsmStateAction a2 in st.Actions)
+                            {
+                                if (a2 == null) continue;
+                                foreach (System.Reflection.FieldInfo fi in a2.GetType().GetFields())
+                                {
+                                    var nv = fi.GetValue(a2) as NamedVariable;
+                                    if (nv != null && nv.UseVariable && (nv.Name == "GUIpassenger" || nv.Name == "GUIdrive")) hit.Add(nv.Name + "@" + st.Name);
+                                }
+                            }
+                        if (hit.Count > 0) sb.Append(" | ").Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append(" ").Append(string.Join(",", new System.Collections.Generic.List<string>(hit).ToArray()));
+                    }
+                    catch { }
+                }
+                Log.Info("autotest : icones :" + sb);
+            }
             if (mode == "relevebattantes" && t > 40f && !done)
             {
                 done = true;
@@ -729,7 +806,7 @@ namespace MWCoop
         }
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
-        static float cdLog, fluLog, fluSum, fluSq;
+        static float cdLog, fluLog, fluSum, fluSq, tapLog;
         static int fluN, fluStill;
         static Vector3 fluLast;
         static readonly System.Collections.Generic.Dictionary<Transform, float[]> fluParts = new System.Collections.Generic.Dictionary<Transform, float[]>();
