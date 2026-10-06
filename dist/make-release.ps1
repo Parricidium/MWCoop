@@ -39,6 +39,8 @@ $lines = foreach ($f in @($zip, "$stage\MWCoop.exe", "$stage\version.dll", "$sta
 [System.IO.File]::WriteAllText($sums, ($lines -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding $false))
 $lines
 if ($Publier) {
+    # Rien de non commite : le tag doit pointer sur le code du zip (0.26.3 : commit rate, release partie quand meme).
+    if (git -C $root status --porcelain) { throw "modifications non commitees : committer avant de publier" }
     if (-not $Notes) { $Notes = "MWCoop $Version" }
     $nf = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($nf, $Notes, (New-Object System.Text.UTF8Encoding $false))
