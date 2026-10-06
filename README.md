@@ -138,7 +138,13 @@ downloads the mod's updates from GitHub and starts the game. No virus signature 
 
 ## Playing
 
-- **Host**: click HOST. The launcher opens a **lobby** where friends show up with their outfit, version and ping.
+Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
+
+- **Through Steam** (everyone needs the Steam version of the game): the host clicks HOST, then in game opens **F10 >
+  Invite Steam friends** (or Shift+Tab) and invites them. Each friend clicks **JOIN** in MWCoop.exe (Steam selected)
+  and accepts the invite in game; a friend who is already hosting is found automatically. No port to open, no
+  firewall, no address: the traffic goes through Steam's relays. Steam avatars show next to the nicknames.
+- **Host** (IP / VPN): click HOST. The launcher opens a **lobby** where friends show up with their outfit, version and ping.
   Pick *Continue my game* or *New game*, then START: everyone's game starts. Forward port **7870** in **UDP and TCP**
   on your router, or use a VPN (Radmin VPN, ZeroTier…) and share your VPN address.
 - **Join**: enter the host's address, click READY in the lobby (or JOIN IN GAME if the host is already playing). Your
@@ -191,7 +197,8 @@ The detailed list, version by version, is in [docs/FEUILLE-DE-ROUTE.md](docs/FEU
 
 ## Network
 
-The host's game listens on **UDP 7870** (the game) and the launcher on **TCP 7870** (the lobby). Both must be reachable:
+Through **Steam**: Steam's peer-to-peer networking (Valve relays), with the game's own Steam app id; nothing to open.
+Through **IP / VPN**: the host's game listens on **UDP 7870** (the game) and the launcher on **TCP 7870** (the lobby). Both must be reachable:
 the lobby shows *UDP blocked* for a guest whose UDP test fails. Up to 8 players per lobby.
 
 ## Known issues
@@ -279,7 +286,13 @@ correspond, et la grande majorité des moteurs (environ 67 sur 71 sur VirusTotal
 
 ## Jouer
 
-- **Héberger** : cliquez sur HÉBERGER. Le lanceur ouvre un **salon** où vos amis apparaissent avec leur tenue, leur
+Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) ou **IP / VPN**.
+
+- **Par Steam** (tout le monde a la version Steam du jeu) : l'hôte clique HÉBERGER, puis en jeu ouvre **F10 > Inviter
+  des amis Steam** (ou Maj+Tab) et les invite. Chaque ami clique **REJOINDRE** dans MWCoop.exe (Steam choisi) et accepte
+  l'invitation en jeu ; un ami qui héberge déjà est trouvé tout seul. Ni port à ouvrir, ni pare-feu, ni adresse : le
+  trafic passe par les relais de Steam. Les avatars Steam s'affichent à côté des pseudos.
+- **Héberger** (IP / VPN) : cliquez sur HÉBERGER. Le lanceur ouvre un **salon** où vos amis apparaissent avec leur tenue, leur
   version et leur ping. Choisissez *Continuer ma partie* ou *Nouvelle partie*, puis LANCER : le jeu de chacun démarre.
   Ouvrez le port **7870** en **UDP et TCP** sur votre box, ou utilisez un VPN (Radmin VPN, ZeroTier…) et donnez votre
   adresse VPN.
@@ -338,7 +351,8 @@ La liste détaillée, version par version : [docs/FEUILLE-DE-ROUTE.md](docs/FEUI
 
 ## Réseau
 
-Le jeu de l'hôte écoute en **UDP 7870** (la partie) et le lanceur en **TCP 7870** (le salon). Les deux doivent être
+Par **Steam** : le réseau pair-à-pair de Steam (relais de Valve), sous l'identifiant Steam du jeu ; rien à ouvrir.
+Par **IP / VPN** : le jeu de l'hôte écoute en **UDP 7870** (la partie) et le lanceur en **TCP 7870** (le salon). Les deux doivent être
 joignables : le salon affiche *UDP bloqué* pour un invité dont le test UDP échoue. Jusqu'à 8 joueurs par salon.
 
 ## Bugs connus

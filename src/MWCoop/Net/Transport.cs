@@ -5,7 +5,8 @@ using System.Net.Sockets;
 
 namespace MWCoop.Net
 {
-    // UDP sans fil d'execution (sonde a chaque image depuis Core). Deux canaux par pair :
+    // Sans fil d'execution (sonde a chaque image depuis Core), sur un lien de datagrammes : UDP (adresse IP) ou
+    // Steam (pair-a-pair par les relais de Valve, SteamLink). Deux canaux par pair :
     //  - non fiable : etats frequents (positions), le plus recent gagne ;
     //  - fiable et ordonne : evenements, numerotes, acquittes, renvoyes toutes les 200 ms.
     // En-tete : 'M' 'W' type. Un message applicatif tient dans un paquet (<= MaxPayload) ;
@@ -13,7 +14,8 @@ namespace MWCoop.Net
     public class Peer
     {
         public int Id;
-        public IPEndPoint End;
+        public object End;            // adresse sur le lien (IPEndPoint, ou identifiant Steam)
+        internal string Key;          // cle de l'adresse (table des pairs)
         public bool Accepted;
         public float LastHeard, LastPingSent, Rtt = 0.1f;
         internal ushort sendSeq, recvSeq;
@@ -22,7 +24,7 @@ namespace MWCoop.Net
         internal readonly Dictionary<ushort, byte[]> early = new Dictionary<ushort, byte[]>();
         public int InFlight { get { return unacked.Count + waiting.Count; } }
         internal class Pending { public byte[] Packet; public float SentAt; public int Tries; }
-        public override string ToString() { return "#" + Id + " " + End; }
+        public override string ToString() { return "#" + Id + " " + End; }   // (SteamId.ToString : l'identifiant)
     }
 
     public class Transport
@@ -32,7 +34,7 @@ namespace MWCoop.Net
         const int Window = 192;
         public const float Timeout = 15f;
 
-        Socket sock;
+        ILink link;
         readonly byte[] buf = new byte[2048];
         readonly Dictionary<string, Peer> byEnd = new Dictionary<string, Peer>();
         public readonly List<Peer> Peers = new List<Peer>();
@@ -48,16 +50,16 @@ namespace MWCoop.Net
         public event Action<Peer, byte[], int, int> OnMessage; // pair, donnees, debut, longueur
         public event Action<string> OnRejected;
 
-        public void Host(int port)
+        public void Host(int port) { Host(new UdpLink(port)); }
+
+        public void Host(ILink l)
         {
             IsHost = true;
-            Open(port);
+            link = l;
         }
 
         public Peer Connect(string address, int port)
         {
-            IsHost = false;
-            Open(0);
             IPAddress ip;
             if (!IPAddress.TryParse(address, out ip))
             {
@@ -66,44 +68,44 @@ namespace MWCoop.Net
                     if (a.AddressFamily == AddressFamily.InterNetwork) { ip = a; break; }
                 if (ip == null) throw new Exception("adresse introuvable : " + address);
             }
-            Peer p = AddPeer(new IPEndPoint(ip, port));
+            return Connect(new UdpLink(0), new IPEndPoint(ip, port));
+        }
+
+        public Peer Connect(ILink l, object hostAddr)
+        {
+            IsHost = false;
+            link = l;
+            Peer p = AddPeer(hostAddr);
             p.Id = 0;   // l'hote est toujours le joueur 0
             SendRaw(p, Build(T_CONNECT, BitConverter.GetBytes(NetVersion)));
             return p;
         }
 
-        void Open(int port)
-        {
-            sock = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            sock.Blocking = false;
-            // Sans cela, un ICMP « port injoignable » ferme la reception sous Windows (WSAECONNRESET).
-            try { sock.IOControl(-1744830452, new byte[] { 0 }, null); } catch { }
-            sock.Bind(new IPEndPoint(IPAddress.Any, port));
-        }
-
         public void Close()
         {
-            if (sock == null) return;
+            if (link == null) return;
             foreach (Peer p in Peers) SendRaw(p, Build(T_BYE, null));
-            sock.Close();
-            sock = null;
+            link.Close();
+            link = null;
             Peers.Clear();
             byEnd.Clear();
         }
 
-        public bool IsOpen { get { return sock != null; } }
+        public bool IsOpen { get { return link != null; } }
+        public ILink Link { get { return link; } }
 
-        Peer AddPeer(IPEndPoint ep)
+        Peer AddPeer(object ep)
         {
-            var p = new Peer { End = ep, LastHeard = Now };
-            byEnd[ep.ToString()] = p;
+            var p = new Peer { End = ep, Key = link.KeyOf(ep), LastHeard = Now };
+            byEnd[p.Key] = p;
             Peers.Add(p);
             return p;
         }
 
         void DropPeer(Peer p, string reason)
         {
-            byEnd.Remove(p.End.ToString());
+            byEnd.Remove(p.Key);
+            if (link != null) link.Forget(p.End);
             Peers.Remove(p);
             if (p.Accepted && OnDisconnected != null) OnDisconnected(p, reason);
             else if (!IsHost && OnRejected != null) OnRejected(reason);
@@ -126,8 +128,8 @@ namespace MWCoop.Net
 
         void SendRaw(Peer p, byte[] packet)
         {
-            if (sock == null) return;
-            try { sock.SendTo(packet, p.End); BytesOut += packet.Length; } catch (SocketException) { }
+            if (link == null) return;
+            if (link.Send(p.End, packet, packet.Length)) BytesOut += packet.Length;
         }
 
         public void SendUnreliable(Peer p, byte[] msg)
@@ -156,7 +158,7 @@ namespace MWCoop.Net
         public void Update(float now)
         {
             Now = now;
-            if (sock == null) return;
+            if (link == null) return;
             Receive();
             foreach (Peer p in Peers.ToArray())
             {
@@ -176,22 +178,19 @@ namespace MWCoop.Net
 
         void Receive()
         {
-            while (sock != null && sock.Available > 0)
+            object ep;
+            int n;
+            for (int guard = 0; link != null && guard < 4096 && link.Receive(buf, out n, out ep); guard++)
             {
-                EndPoint from = new IPEndPoint(IPAddress.Any, 0);
-                int n;
-                try { n = sock.ReceiveFrom(buf, ref from); }
-                catch (SocketException) { continue; }
                 BytesIn += n;
                 if (n < 3 || buf[0] != 'M' || buf[1] != 'W') continue;
-                var ep = (IPEndPoint)from;
                 Peer p;
-                byEnd.TryGetValue(ep.ToString(), out p);
+                byEnd.TryGetValue(link.KeyOf(ep), out p);
                 Handle(p, ep, buf[2], n);
             }
         }
 
-        void Handle(Peer p, IPEndPoint ep, byte type, int n)
+        void Handle(Peer p, object ep, byte type, int n)
         {
             if (type == T_CONNECT)
             {
@@ -258,5 +257,58 @@ namespace MWCoop.Net
             p.recvSeq++;
             if (OnMessage != null) OnMessage(p, msg, 0, msg.Length);
         }
+    }
+}
+
+namespace MWCoop.Net
+{
+    // Lien de datagrammes sous le transport : envoi a une adresse, reception sans attente.
+    public interface ILink
+    {
+        bool Send(object to, byte[] data, int len);
+        bool Receive(byte[] buf, out int len, out object from);   // faux : plus rien a lire
+        string KeyOf(object addr);
+        void Forget(object addr);                                  // pair retire (Steam : session fermee)
+        void Close();
+        string Describe(object addr);
+    }
+
+    public class UdpLink : ILink
+    {
+        Socket sock;
+
+        public UdpLink(int port)
+        {
+            sock = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            sock.Blocking = false;
+            // Sans cela, un ICMP « port injoignable » ferme la reception sous Windows (WSAECONNRESET).
+            try { sock.IOControl(-1744830452, new byte[] { 0 }, null); } catch { }
+            sock.Bind(new IPEndPoint(IPAddress.Any, port));
+        }
+
+        public bool Send(object to, byte[] data, int len)
+        {
+            if (sock == null) return false;
+            try { sock.SendTo(data, len, SocketFlags.None, (EndPoint)to); return true; } catch (SocketException) { return false; }
+        }
+
+        public bool Receive(byte[] buf, out int len, out object from)
+        {
+            len = 0; from = null;
+            while (sock != null && sock.Available > 0)
+            {
+                EndPoint ep = new IPEndPoint(IPAddress.Any, 0);
+                try { len = sock.ReceiveFrom(buf, ref ep); }
+                catch (SocketException) { continue; }
+                from = ep;
+                return true;
+            }
+            return false;
+        }
+
+        public string KeyOf(object addr) { return addr != null ? addr.ToString() : ""; }
+        public void Forget(object addr) { }
+        public string Describe(object addr) { return KeyOf(addr); }
+        public void Close() { if (sock != null) { sock.Close(); sock = null; } }
     }
 }

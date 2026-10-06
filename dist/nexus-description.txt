@@ -9,7 +9,8 @@ One player hosts their world, friends join [b]that[/b] world: same save, same ti
 [*][b]The launcher[/b]: HOST or JOIN, a [b]lobby[/b] with every player's outfit portrait, version, ping and a UDP check; the host picks [i]Continue my game[/i] or [i]New game[/i], then everyone's game starts and enters the session by itself.
 [*][b]Your own save is never touched[/b]: guests play in a separate profile and receive the host's save.
 [*][b]Waiting screens[/b] instead of the main menu: the host sees the game starting, guests see the connection, the save download and the loading.
-[*][b]Up to 8 players[/b] per lobby. Internet (port [b]7870 UDP and TCP[/b] opened on the host's router) or a VPN (Radmin VPN, ZeroTier…).
+[*][b]Play through Steam[/b] (Steam version of the game): the host invites friends in game (F10 or Shift+Tab), they click JOIN and accept — no port, no firewall, no address; Steam avatars next to the nicknames.
+[*][b]Up to 8 players[/b] per lobby. Or by IP: Internet (port [b]7870 UDP and TCP[/b] opened on the host's router) or a VPN (Radmin VPN, ZeroTier…).
 [*][b]F10 menu[/b] (mouse or keyboard): players and ping, go to a player, outfit with a live 3D preview, chat, sync audit. [b]T[/b] opens the chat.
 [/list]
 
@@ -59,7 +60,8 @@ Un joueur héberge son monde, ses amis rejoignent [b]ce[/b] monde : même sauveg
 [*][b]Le lanceur[/b] : HÉBERGER ou REJOINDRE, un [b]salon[/b] avec le portrait de la tenue de chaque joueur, sa version, son ping et un test UDP ; l'hôte choisit [i]Continuer ma partie[/i] ou [i]Nouvelle partie[/i], puis le jeu de chacun démarre et entre dans la partie tout seul.
 [*][b]Votre propre sauvegarde n'est jamais touchée[/b] : les invités jouent dans un profil à part et reçoivent la sauvegarde de l'hôte.
 [*][b]Écrans d'attente[/b] à la place du menu principal : l'hôte voit le démarrage de la partie, les invités la connexion, le téléchargement de la sauvegarde et le chargement.
-[*][b]Jusqu'à 8 joueurs[/b] par salon. Internet (port [b]7870 en UDP et TCP[/b] ouvert sur la box de l'hôte) ou un VPN (Radmin VPN, ZeroTier…).
+[*][b]Jouer par Steam[/b] (version Steam du jeu) : l'hôte invite ses amis en jeu (F10 ou Maj+Tab), ils cliquent REJOINDRE et acceptent — ni port, ni pare-feu, ni adresse ; avatars Steam à côté des pseudos.
+[*][b]Jusqu'à 8 joueurs[/b] par salon. Ou par IP : Internet (port [b]7870 en UDP et TCP[/b] ouvert sur la box de l'hôte) ou un VPN (Radmin VPN, ZeroTier…).
 [*][b]Menu F10[/b] (souris ou clavier) : joueurs et ping, aller vers un joueur, tenue avec aperçu 3D en direct, tchat, audit de la synchro. [b]T[/b] ouvre le tchat.
 [/list]
 

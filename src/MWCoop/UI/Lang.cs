@@ -34,6 +34,8 @@ namespace MWCoop
             if (Fr || string.IsNullOrEmpty(s)) return s;
             if (s == "solo") return "solo";
             if (s.StartsWith("hote, port ")) return "host, port " + s.Substring(11);
+            if (s == "hote Steam") return "Steam host";
+            if (s == "attente d'une invitation Steam") return "waiting for a Steam invite";
             if (s.StartsWith("connexion a ")) return "connecting to " + s.Substring(12);
             if (s.StartsWith("connecte a ")) return "connected to " + s.Substring(11);
             if (s.StartsWith("deconnecte (")) return "disconnected (" + s.Substring(12).Replace("nouvel essai", "retrying");

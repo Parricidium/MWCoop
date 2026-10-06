@@ -1005,7 +1005,11 @@ static void StartUpdate()
 enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_SKIN, TAB_COUNT };
 static int g_tab = -1;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_COUNT };
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_COUNT };
+// Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
+// jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
+// lancement.ini (Reseau=).
+static bool g_steamNet = false;
 struct Button { RectF r; float hover; bool visible, enabled; };
 static Button g_btn[B_COUNT];
 static int g_hot = -1, g_pressed = -1;
@@ -1028,6 +1032,8 @@ static void Layout()
     g_btn[B_LOGZIP].r = RectF(760, 122, 176, 26);
     g_btn[B_GITHUB].r = RectF(142, 152, 82, 24);  // sous le logo, au-dessus de PRE-ALPHA : liens de JD
     g_btn[B_KOFI].r = RectF(232, 152, 82, 24);
+    g_btn[B_NETIP].r = RectF(262, 318, 56, 17);    // a droite du titre du 2e champ : IP | STEAM
+    g_btn[B_NETSTEAM].r = RectF(320, 318, 60, 17);
 }
 
 static void UpdateButtons()
@@ -1050,7 +1056,10 @@ static void UpdateButtons()
     g_btn[B_COLOR].enabled = true;
     g_btn[B_LOGDIR].visible = g_btn[B_LOGZIP].visible = menu && game && g_tab == TAB_LOGS;
     g_btn[B_LOGDIR].enabled = g_btn[B_LOGZIP].enabled = true;
+    g_btn[B_NETIP].visible = g_btn[B_NETSTEAM].visible = menu && lobby == LB_NONE && !g_goWait;
+    g_btn[B_NETIP].enabled = g_btn[B_NETSTEAM].enabled = !busy;
 }
+
 
 // ---------------------------------------------------------------- dessin
 static void RoundRect(GraphicsPath &p, RectF r, float rad)
@@ -1165,6 +1174,21 @@ static void DrawButton(Graphics &g, int id, const wchar_t *label, bool primary)
 }
 
 // Petit bouton (Jouer en solo) : pilule discrete, accent au survol.
+static void DrawNetChoice(Graphics &g)
+{
+    for (int id = B_NETIP; id <= B_NETSTEAM; id++) {
+        Button &b = g_btn[id];
+        if (!b.visible) continue;
+        bool on = (id == B_NETSTEAM) == g_steamNet;
+        GraphicsPath p;
+        RoundRect(p, b.r, b.r.Height / 2);
+        SolidBrush fill(on ? kAcc : Mix(WithA(TH(btn2), 0.75f), TH(btn2Hot), b.hover));
+        g.FillPath(&fill, &p);
+        if (!on) { Pen pen(WithA(Mix(kGrey, kAcc, b.hover), 0.7f), 1.0f); g.DrawPath(&pen, &p); }
+        Text(g, id == B_NETIP ? T(L"IP / VPN", L"IP / VPN") : L"STEAM", b.r, 10, FontStyleBold, on ? Color(255, 255, 255, 255) : Mix(kGrey, kAcc, b.hover));
+    }
+}
+
 static void DrawSmallButton(Graphics &g, int id, const wchar_t *label)
 {
     Button &b = g_btn[id];
@@ -1445,13 +1469,17 @@ static void DrawOptions(Graphics &g)
         Pen sep(TH(sep), 1);
         g.DrawLine(&sep, kOptPanel.X + 18, y, kOptPanel.X + kOptPanel.Width - 18, y);
         Text(g, T(L"JOUER ENSEMBLE", L"PLAYING TOGETHER"), RectF(kOptList.X + 12, y + 12, 300, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
-        Para(g, T(L"\u2022 H\u00C9BERGER : ouvre un salon ; quand tout le monde est pr\u00EAt, LANCER d\u00E9marre le jeu de chacun. "
+        Para(g, T(L"\u2022 STEAM (choix au-dessus de l'adresse) : le plus simple. H\u00C9BERGER lance le jeu ; en jeu, F10 > Inviter des amis "
+                  L"Steam (ou Maj+Tab). L'ami clique REJOINDRE (Steam) et accepte l'invitation. Ni port, ni pare-feu, ni adresse.\n\n"
+                  L"\u2022 IP / VPN - H\u00C9BERGER : ouvre un salon ; quand tout le monde est pr\u00EAt, LANCER d\u00E9marre le jeu de chacun. "
                   L"Ouvre le port ci-dessus sur ta box (UDP et TCP) et donne ton adresse IP publique.\n\n"
                   L"\u2022 REJOINDRE : entre l'adresse IP de l'h\u00F4te \u00E0 gauche (adresse:port si l'h\u00F4te a chang\u00E9 de port).\n\n"
                   L"\u2022 L'invit\u00E9 joue dans un profil \u00E0 part qui re\u00E7oit la sauvegarde de l'h\u00F4te : sa propre sauvegarde "
                   L"n'est pas touch\u00E9e.\n\n"
                   L"\u2022 JOUER EN SOLO : le jeu normal, avec MWCoop charg\u00E9 mais sans r\u00E9seau.",
-                  L"\u2022 HOST: opens a lobby; once everyone is ready, START launches everyone's game. "
+                  L"\u2022 STEAM (choice above the address): the easiest. HOST starts the game; in game, F10 > Invite Steam friends "
+                  L"(or Shift+Tab). The friend clicks JOIN (Steam) and accepts the invite. No port, no firewall, no address.\n\n"
+                  L"\u2022 IP / VPN - HOST: opens a lobby; once everyone is ready, START launches everyone's game. "
                   L"Open the port above on your router (UDP and TCP) and share your public IP address.\n\n"
                   L"\u2022 JOIN: enter the host's IP address on the left (address:port if the host changed the port).\n\n"
                   L"\u2022 The guest plays in a separate profile that receives the host's save: their own save is left untouched.\n\n"
@@ -2926,7 +2954,18 @@ static void DrawUI(Graphics &g)
         Text(g, status, RectF(60, 212, 336, 22), 13, FontStyleBold, sc);
         if (prog != -1.0f) DrawBar(g, RectF(96, 238, 264, 5), prog);
         DrawField(g, 0, T(L"PSEUDO", L"NICKNAME"));
-        DrawField(g, 1, T(L"ADRESSE DE L'H\u00D4TE", L"HOST ADDRESS"));
+        if (!g_steamNet) DrawField(g, 1, T(L"ADRESSE DE L'H\u00D4TE", L"HOST ADDRESS"));
+        else {
+            Field &f = g_fields[1];
+            Text(g, T(L"PAR STEAM", L"THROUGH STEAM"), RectF(f.r.X + 2, f.r.Y - 18, f.r.Width, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+            GraphicsPath fp; RoundRect(fp, f.r, 9);
+            SolidBrush ff(WithA(TH(field), 0.6f));
+            g.FillPath(&ff, &fp);
+            Para(g, T(L"L'h\u00F4te invite en jeu (F10 ou Maj+Tab) ; l'invit\u00E9 clique REJOINDRE puis accepte.",
+                      L"The host invites in game (F10 or Shift+Tab); the guest clicks JOIN and accepts."),
+                 RectF(f.r.X + 10, f.r.Y + 2, f.r.Width - 20, f.r.Height - 4), 11, kGrey);
+        }
+        DrawNetChoice(g);
         const wchar_t *hostLabel = T(L"H\u00C9BERGER", L"HOST"), *joinLabel = g_joinFallback ? T(L"REJOINDRE EN JEU", L"JOIN IN GAME") : T(L"REJOINDRE", L"JOIN");
         int lobby = g_lobby;
         if (lobby == LB_HOST) { hostLabel = T(L"LANCER", L"START"); joinLabel = T(L"FERMER LE SALON", L"CLOSE LOBBY"); }
@@ -3300,6 +3339,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     std::string t = "[Lancement]\r\n";
     t += std::string("Mode=") + modes[mode] + "\r\n";
     if (mode == MODE_GUEST) t += "Adresse=" + Narrow(addr, CP_UTF8) + "\r\n";
+    if (mode != MODE_SOLO) t += std::string("Reseau=") + (g_steamNet ? "steam" : "ip") + "\r\n";
     t += "Port=" + std::to_string(port) + "\r\n";
     t += "Pseudo=" + Narrow(PlayerName(), CP_UTF8) + "\r\n";
     t += "Apparence=" + skin + "\r\n";
@@ -3325,7 +3365,7 @@ static void Launch(int mode, const char *partie = NULL)
     std::wstring addr = Trim(g_fields[1].text);
     const Opt *po = OptByKey("Port");
     int port = po ? OptGet(*po) : 7870;
-    if (mode == MODE_GUEST) {
+    if (mode == MODE_GUEST && !g_steamNet) {
         if (addr.empty()) {
             SetStatus(K_ERR, T(L"Entre l'adresse de l'h\u00F4te", L"Enter the host address"));
             g_focus = 1;
@@ -3337,7 +3377,7 @@ static void Launch(int mode, const char *partie = NULL)
             if (p > 0 && p < 65536) port = p;
             addr = addr.substr(0, colon);
         }
-    } else if (g_testSalon.empty() && GameProcessRunning()) {   // (instance unique : un 2e jeu hors profil se fermerait aussitot)
+    } else if (mode != MODE_GUEST && g_testSalon.empty() && GameProcessRunning()) {   // (instance unique : un 2e jeu hors profil se fermerait aussitot)
         SetStatus(K_ERR, T(L"My Winter Car est d\u00E9j\u00E0 lanc\u00E9 : ferme-le d'abord", L"My Winter Car is already running: close it first"));
         return;
     }
@@ -4718,6 +4758,7 @@ static void OnButton(int id)
     case B_HOST:
         if (g_lobby == LB_HOST) HostStart();
         else if (g_lobby == LB_GUEST) GuestToggleReady();
+        else if (g_lobby == LB_NONE && g_steamNet) Launch(MODE_HOST);   // Steam : salon et invitations en jeu, pas de pare-feu
         else if (g_lobby == LB_NONE && FirewallBeforeHosting()) LobbyHost();
         break;
     case B_JOIN:
@@ -4727,7 +4768,15 @@ static void OnButton(int id)
             SetStatus(K_NORMAL, host ? T(L"Salon ferm\u00E9 \u00B7 %s", L"Lobby closed \u00B7 %s") : T(L"Salon quitt\u00E9 \u00B7 %s", L"Left the lobby \u00B7 %s"), ModLabel().c_str());
         }
         else if (g_joinFallback) { g_joinFallback = false; g_launchWarn.clear(); Launch(MODE_GUEST); }
+        else if (g_steamNet) Launch(MODE_GUEST);   // Steam : l'invitation se prend en jeu
         else LobbyJoin();
+        break;
+    case B_NETIP: case B_NETSTEAM:
+        g_steamNet = id == B_NETSTEAM;
+        WritePrivateProfileStringW(L"Lanceur", L"Reseau", g_steamNet ? L"steam" : L"ip", g_iniLauncher.c_str());
+        if (g_steamNet && g_focus == 1) g_focus = -1;
+        SetStatus(K_NORMAL, g_steamNet ? T(L"Partie par Steam : invitations en jeu", L"Game through Steam: invites in game")
+                                        : T(L"Partie par adresse IP (local, Radmin, Hamachi...)", L"Game through IP address (LAN, Radmin, Hamachi...)"));
         break;
     case B_SOLO: Launch(MODE_SOLO); break;
     case B_EXE: ChooseExe(); break;
@@ -4796,7 +4845,7 @@ static int HitButton(float x, float y)
 static int HitField(float x, float y)
 {
     if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait) return -1;   // (pendant un salon : pseudo et adresse figes)
-    for (int i = 0; i < 2; i++) if (g_fields[i].r.Contains(x, y)) return i;
+    for (int i = 0; i < 2; i++) if (g_fields[i].r.Contains(x, y) && !(i == 1 && g_steamNet)) return i;   // (Steam : pas d'adresse)
     return -1;
 }
 
@@ -5021,6 +5070,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     {   // Theme : Theme=clair|sombre, sinon celui des applications de Windows
         wchar_t th[16] = L"";
         GetPrivateProfileStringW(L"Lanceur", L"Theme", L"", th, 16, g_iniLauncher.c_str());
+        {
+            wchar_t rn[16];
+            GetPrivateProfileStringW(L"Lanceur", L"Reseau", L"ip", rn, 16, g_iniLauncher.c_str());
+            g_steamNet = _wcsicmp(rn, L"steam") == 0;
+        }
         if (!_wcsicmp(th, L"sombre") || !_wcsicmp(th, L"dark")) g_dark = true;
         else if (!_wcsicmp(th, L"clair") || !_wcsicmp(th, L"light")) g_dark = false;
         else {
@@ -5135,6 +5189,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             swprintf_s(info, T(L"%s h\u00E9berge la partie (port %d)", L"%s is hosting (port %d)"), PlayerName().c_str(), 7870);
             g_launchInfo = info;
         }
+        else if (st == L"menu-steam") g_steamNet = true;
+        else if (st == L"menu-ip") g_steamNet = false;
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop") { g_tab = TAB_COOP; g_optHot = TabRows(TAB_COOP)[1]; g_optPart = 1; }
         else if (st == L"voiture") g_tab = TAB_CAR;   // couleur : CouleurVoiture du mwcoop.ini du jeu
