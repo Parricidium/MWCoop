@@ -731,32 +731,3 @@ static void DrawSteamFriends(Graphics &g)
         SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
     }
 }
-
-// Mode Steam, menu : l'encart sous le pseudo copie l'option de lancement Steam et explique ou la coller.
-static void SteamLaunchOptionHelp()
-{
-    std::wstring line = L"\"" + g_self + L"\" %command%";
-    if (OpenClipboard(g_wnd)) {
-        EmptyClipboard();
-        size_t bytes = (line.size() + 1) * sizeof(wchar_t);
-        HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, bytes);
-        if (hg) {
-            memcpy(GlobalLock(hg), line.c_str(), bytes);
-            GlobalUnlock(hg);
-            if (!SetClipboardData(CF_UNICODETEXT, hg)) GlobalFree(hg);
-        }
-        CloseClipboard();
-    }
-    std::wstring msg = std::wstring(T(L"Pour qu'une invitation Steam acceptée alors que MWCoop est fermé ouvre MWCoop (et pas le jeu sans le mod) :\n\n"
-                                      L"1. Steam > Bibliothèque > clic droit sur My Winter Car > Propriétés\n"
-                                      L"2. Général > Options de lancement : colle (Ctrl+V) cette ligne, déjà copiée :\n\n",
-                                      L"So that a Steam invite accepted while MWCoop is closed opens MWCoop (not the game without the mod):\n\n"
-                                      L"1. Steam > Library > right-click My Winter Car > Properties\n"
-                                      L"2. General > Launch options: paste (Ctrl+V) this line, already copied:\n\n"))
-                      + line
-                      + T(L"\n\nLe bouton JOUER de Steam ouvrira alors MWCoop. Pour retrouver le jeu sans le mod, efface cette ligne.\n\n"
-                          L"MWCoop déjà ouvert en mode Steam : rien à faire, l'invitation arrive directement dans le salon.",
-                          L"\n\nSteam's PLAY button will then open MWCoop. To get the game without the mod back, clear this line.\n\n"
-                          L"MWCoop already open in Steam mode: nothing to do, the invite goes straight to the lobby.");
-    MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_OK | MB_ICONINFORMATION);
-}
