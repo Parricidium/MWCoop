@@ -130,7 +130,12 @@ namespace MWCoop
             }
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
-            if (Config.GetInt("Test", "Regarder", 0) != 0) LookAtNearestAvatar();   // captures : la camera vise l'avatar le plus proche
+            // Captures : Regarder=1, la camera vise l'avatar le plus proche ; Regarder=2, le milieu du groupe d'avatars
+            // (photos a 3-4 joueurs) ; RegarderPos=x,y,z (sans Regarder) : le joueur se tourne vers ce point (pose).
+            int look = Config.GetInt("Test", "Regarder", 0);
+            if (look == 2) LookAtGroup();
+            else if (look != 0) LookAtNearestAvatar();
+            else if (Config.Get("Test", "RegarderPos", "").Length > 0 && t > 9f) FacePoint(Config.Get("Test", "RegarderPos", ""));
             if (mode == "cd") TestCd(t);
             if (mode == "teletexte") TestTeletext(t);
             if (mode == "nuages" && !MWCoop.Net.Session.IsHost && t > 30f && step == 0)
@@ -758,6 +763,37 @@ namespace MWCoop
         static float lastPeriodic;
 
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).
+        static void LookAtGroup()
+        {
+            GameObject p = GameObject.Find("PLAYER");
+            Transform cam = p != null ? p.transform.Find("Pivot/AnimPivot/Camera/FPSCamera") : null;
+            if (cam == null) return;
+            Vector3 sum = Vector3.zero;
+            int n = 0;
+            foreach (Avatar a in PlayerSync.Avatars) if (a.Root != null) { sum += a.Root.transform.position; n++; }
+            if (n == 0) return;
+            AimAt(p, cam, sum / n + Vector3.up * 1.0f);
+        }
+
+        static void FacePoint(string xyz)
+        {
+            GameObject p = GameObject.Find("PLAYER");
+            Transform cam = p != null ? p.transform.Find("Pivot/AnimPivot/Camera/FPSCamera") : null;
+            string[] c = xyz.Split(',');
+            if (cam == null || c.Length < 3) return;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            AimAt(p, cam, new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci)));
+        }
+
+        static void AimAt(GameObject p, Transform cam, Vector3 target)
+        {
+            foreach (Behaviour b in p.GetComponents<Behaviour>()) if (b.GetType().Name.Contains("MouseLook")) b.enabled = false;
+            foreach (Behaviour b in cam.GetComponents<Behaviour>()) if (b.GetType().Name.Contains("MouseLook")) b.enabled = false;
+            Vector3 to = target - cam.position;
+            p.transform.rotation = Quaternion.Euler(0, Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg, 0);
+            cam.localRotation = Quaternion.Euler(-Mathf.Atan2(to.y, new Vector2(to.x, to.z).magnitude) * Mathf.Rad2Deg, 0, 0);
+        }
+
         static void LookAtNearestAvatar()
         {
             GameObject p = GameObject.Find("PLAYER");
