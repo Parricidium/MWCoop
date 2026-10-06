@@ -9,7 +9,7 @@ One player hosts their world, friends join [b]that[/b] world: same save, same ti
 [*][b]The launcher[/b]: HOST or JOIN, a [b]lobby[/b] with every player's outfit portrait, version, ping and a UDP check; the host picks [i]Continue my game[/i] or [i]New game[/i], then everyone's game starts and enters the session by itself.
 [*][b]Your own save is never touched[/b]: guests play in a separate profile and receive the host's save.
 [*][b]Waiting screens[/b] instead of the main menu: the host sees the game starting, guests see the connection, the save download and the loading.
-[*][b]Play through Steam[/b] (Steam version of the game): the host invites friends in game (F10 or Shift+Tab), they click JOIN and accept — no port, no firewall, no address; Steam avatars next to the nicknames.
+[*][b]Play through Steam[/b] (Steam version of the game): the host opens a Steam lobby in the launcher and invites friends from their Steam friends list; they accept in Steam and land in the same lobby (outfits, READY, START launches everyone's game) — no port, no firewall, no address; Steam avatars in the lobby and next to the nicknames. Optional Steam launch option (copied by the launcher) so that an invite accepted with MWCoop closed opens MWCoop.
 [*][b]Up to 8 players[/b] per lobby. Or by IP: Internet (port [b]7870 UDP and TCP[/b] opened on the host's router) or a VPN (Radmin VPN, ZeroTier…).
 [*][b]F10 menu[/b] (mouse or keyboard): players and ping, go to a player, outfit with a live 3D preview, chat, sync audit. [b]T[/b] opens the chat.
 [/list]

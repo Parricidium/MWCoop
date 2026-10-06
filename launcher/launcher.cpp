@@ -14,7 +14,9 @@
 //  - Heberger ouvre un SALON (TCP sur le port de la partie ; le jeu, lui, est en UDP) : liste des joueurs, choix de
 //    la partie (continuer / nouvelle), puis LANCER : chaque lanceur demarre son jeu. Rejoindre entre dans le salon
 //    de l'adresse saisie (sinon, si l'hote joue deja, propose de rejoindre directement en jeu). Jouer en solo :
-//    lancement immediat.
+//    lancement immediat. Reseau STEAM : le meme salon sur un salon Steam "amis seulement", invitations depuis le
+//    lanceur (liste des amis Steam), avatars Steam ; voir steam.inc (+connect_lobby <salon> : invitation acceptee jeu
+//    ferme, avec l'option de lancement Steam  "<MWCoop.exe>" %command%  que l'encart "par Steam" copie).
 //  - Lancement : ecrit MWCoop\lancement.ini (lu par le chargeur et le mod, valable 3 minutes : Steam peut relancer
 //    le jeu sans sa ligne de commande), lance mywintercar.exe avec les memes reglages en arguments
 //    (-mwcoop-mode ...), puis reste en ecran d'attente jusqu'a la fenetre du jeu (UnityWndClass).
@@ -26,13 +28,15 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
 //            et lance des que l'invite est pret (et son test UDP fini) ; l'invite rejoint et se met pret. Chacun ecrit
 //            son lancement.ini et le recopie dans le journal, SANS lancer le jeu. Pas de mise a jour ; salon sur
 //            127.0.0.1 seulement. /sansudp : l'hote ne repond pas aux sondes UDP (port UDP "pas redirige").
+//            /steam <fichier> : le salon par Steam (Steam ouvert ; un seul compte suffit) ; l'hote ecrit le numero du
+//            salon dans <fichier>, l'invite le lit et y entre ;
 //   /maj <dossier du jeu> <journal> [/depot proprietaire/depot] : mise a jour sans fenetre, journal = etat final ;
 //   /jeu <journal> : jeu trouve (dossier, version) ;
 //   /zip <fichier.zip> : le zip des journaux (bouton de la page JOURNAUX), ecrit la ou on le demande, sans explorateur ;
@@ -120,7 +124,7 @@ enum { PARTIE_CONTINUER, PARTIE_NOUVELLE };
 static const int kLobbyMax = 8;                     // joueurs dans un salon (hote compris)
 // Test UDP du salon (le jeu passe en UDP sur le port du salon) : sans objet (ancien lanceur), en cours, recu, bloque.
 enum { UDP_NA, UDP_WAIT, UDP_OK, UDP_FAIL };
-struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; int udp; DWORD since; };
+struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; int udp; DWORD since; uint64_t sid; };   // sid : compte Steam (salon Steam)
 static std::atomic<int> g_lobby(LB_NONE);
 static CRITICAL_SECTION g_lcs;
 static std::vector<LobbyPeer> g_peers;
@@ -136,6 +140,9 @@ static bool g_testNoUdp;                            // /testsalon hote ... /sans
 static std::atomic<int> g_udpMine(UDP_NA);          // invite : reponse UDP de l'hote a ses sondes
 static std::atomic<bool> g_hostUdpTest(false);      // invite : l'hote fait le test UDP (sinon : ancien lanceur)
 static std::wstring g_launchWarn;                   // ecran d'attente : avertissement (UDP non confirme)
+static uint64_t g_sHost;                            // salon Steam : compte de l'hote (HoteSteam de lancement.ini ; steam.inc)
+static std::wstring g_sHostName;                    // ... et son nom Steam
+static void SteamDown();
 static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return g_fr ? fr : en; }
 
 static void SetStatus(int kind, const wchar_t *fmt, ...)
@@ -1010,6 +1017,7 @@ enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
 static bool g_steamNet = false;
+static bool g_steamInfoHot;                          // encart "par Steam" survole (clic : option de lancement Steam)
 struct Button { RectF r; float hover; bool visible, enabled; };
 static Button g_btn[B_COUNT];
 static int g_hot = -1, g_pressed = -1;
@@ -1469,16 +1477,16 @@ static void DrawOptions(Graphics &g)
         Pen sep(TH(sep), 1);
         g.DrawLine(&sep, kOptPanel.X + 18, y, kOptPanel.X + kOptPanel.Width - 18, y);
         Text(g, T(L"JOUER ENSEMBLE", L"PLAYING TOGETHER"), RectF(kOptList.X + 12, y + 12, 300, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
-        Para(g, T(L"\u2022 STEAM (choix au-dessus de l'adresse) : le plus simple. H\u00C9BERGER lance le jeu ; en jeu, F10 > Inviter des amis "
-                  L"Steam (ou Maj+Tab). L'ami clique REJOINDRE (Steam) et accepte l'invitation. Ni port, ni pare-feu, ni adresse.\n\n"
+        Para(g, T(L"\u2022 STEAM (choix au-dessus de l'adresse) : le plus simple. H\u00C9BERGER ouvre un salon Steam : invite tes amis "
+                  L"d'ici ; ils acceptent dans Steam (ou cliquent REJOINDRE) et arrivent dans le salon. Ni port, ni pare-feu, ni adresse.\n\n"
                   L"\u2022 IP / VPN - H\u00C9BERGER : ouvre un salon ; quand tout le monde est pr\u00EAt, LANCER d\u00E9marre le jeu de chacun. "
                   L"Ouvre le port ci-dessus sur ta box (UDP et TCP) et donne ton adresse IP publique.\n\n"
                   L"\u2022 REJOINDRE : entre l'adresse IP de l'h\u00F4te \u00E0 gauche (adresse:port si l'h\u00F4te a chang\u00E9 de port).\n\n"
                   L"\u2022 L'invit\u00E9 joue dans un profil \u00E0 part qui re\u00E7oit la sauvegarde de l'h\u00F4te : sa propre sauvegarde "
                   L"n'est pas touch\u00E9e.\n\n"
                   L"\u2022 JOUER EN SOLO : le jeu normal, avec MWCoop charg\u00E9 mais sans r\u00E9seau.",
-                  L"\u2022 STEAM (choice above the address): the easiest. HOST starts the game; in game, F10 > Invite Steam friends "
-                  L"(or Shift+Tab). The friend clicks JOIN (Steam) and accepts the invite. No port, no firewall, no address.\n\n"
+                  L"\u2022 STEAM (choice above the address): the easiest. HOST opens a Steam lobby: invite your friends from here; "
+                  L"they accept in Steam (or click JOIN) and land in the lobby. No port, no firewall, no address.\n\n"
                   L"\u2022 IP / VPN - HOST: opens a lobby; once everyone is ready, START launches everyone's game. "
                   L"Open the port above on your router (UDP and TCP) and share your public IP address.\n\n"
                   L"\u2022 JOIN: enter the host's IP address on the left (address:port if the host changed the port).\n\n"
@@ -2961,9 +2969,11 @@ static void DrawUI(Graphics &g)
             GraphicsPath fp; RoundRect(fp, f.r, 9);
             SolidBrush ff(WithA(TH(field), 0.6f));
             g.FillPath(&ff, &fp);
-            Para(g, T(L"L'h\u00F4te invite en jeu (F10 ou Maj+Tab) ; l'invit\u00E9 clique REJOINDRE puis accepte.",
-                      L"The host invites in game (F10 or Shift+Tab); the guest clicks JOIN and accepts."),
-                 RectF(f.r.X + 10, f.r.Y + 2, f.r.Width - 20, f.r.Height - 4), 11, kGrey);
+            if (g_steamInfoHot) { Pen hp(WithA(kAcc, 0.8f), 1.2f); g.DrawPath(&hp, &fp); }
+            Para(g, g_lobby != LB_NONE ? T(L"Salon Steam : joueurs et invitations dans le panneau de droite.", L"Steam lobby: players and invites in the right panel.")
+                                       : T(L"H\u00C9BERGER : salon et invitations Steam ici. Clique ici : option de lancement Steam.",
+                                           L"HOST: lobby and Steam invites right here. Click here: Steam launch option."),
+                 RectF(f.r.X + 10, f.r.Y + 2, f.r.Width - 20, f.r.Height - 4), 11, g_steamInfoHot ? kAcc : kGrey);
         }
         DrawNetChoice(g);
         const wchar_t *hostLabel = T(L"H\u00C9BERGER", L"HOST"), *joinLabel = g_joinFallback ? T(L"REJOINDRE EN JEU", L"JOIN IN GAME") : T(L"REJOINDRE", L"JOIN");
@@ -3340,6 +3350,11 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     t += std::string("Mode=") + modes[mode] + "\r\n";
     if (mode == MODE_GUEST) t += "Adresse=" + Narrow(addr, CP_UTF8) + "\r\n";
     if (mode != MODE_SOLO) t += std::string("Reseau=") + (g_steamNet ? "steam" : "ip") + "\r\n";
+    if (mode == MODE_GUEST && g_steamNet && g_sHost) {   // salon Steam du lanceur : le mod se connecte directement a l'hote
+        char hs[40];
+        sprintf_s(hs, "HoteSteam=%llu\r\n", (unsigned long long)g_sHost);
+        t += hs;
+    }
     t += "Port=" + std::to_string(port) + "\r\n";
     t += "Pseudo=" + Narrow(PlayerName(), CP_UTF8) + "\r\n";
     t += "Apparence=" + skin + "\r\n";
@@ -3377,6 +3392,8 @@ static void Launch(int mode, const char *partie = NULL)
             if (p > 0 && p < 65536) port = p;
             addr = addr.substr(0, colon);
         }
+    } else if (mode == MODE_GUEST) {
+        addr = g_sHostName.empty() ? std::wstring(L"Steam") : g_sHostName;   // (Steam : pour l'ecran d'attente)
     } else if (mode != MODE_GUEST && g_testSalon.empty() && GameProcessRunning()) {   // (instance unique : un 2e jeu hors profil se fermerait aussitot)
         SetStatus(K_ERR, T(L"My Winter Car est d\u00E9j\u00E0 lanc\u00E9 : ferme-le d'abord", L"My Winter Car is already running: close it first"));
         return;
@@ -3409,7 +3426,8 @@ static void Launch(int mode, const char *partie = NULL)
     }
     static const wchar_t *modes[] = { L"solo", L"hote", L"invite" };
     std::wstring args = std::wstring(L"-mwcoop-mode ") + modes[mode] + L" -mwcoop-port " + std::to_wstring(port);
-    if (mode == MODE_GUEST) args += L" -mwcoop-adresse " + addr + L" -mwcoop-profil invite";
+    if (mode == MODE_GUEST) args += (g_steamNet ? std::wstring() : L" -mwcoop-adresse " + addr) + L" -mwcoop-profil invite";
+    SteamDown();   // (le lanceur ne passe plus pour le jeu aupres de Steam)
     g_preWnds.clear();
     EnumWindows(ListUnityWindows, (LPARAM)&g_preWnds);
     // Lance comme un double-clic dans l'explorateur : un mode de compatibilite de l'exe peut exiger l'administrateur ;
@@ -3420,12 +3438,19 @@ static void Launch(int mode, const char *partie = NULL)
         if (PrepareMirror(mirror)) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
         else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de Steam (le mod risque de ne pas se charger)", L"Could not prepare the launch copy: starting from Steam (the mod may not load)"));
     }
+    // Lanceur demarre par Steam (option de lancement "<MWCoop.exe>" %command%) : l'overlay de Steam y est injecte et
+    // passerait au jeu lance d'ici, assez tot pour que la version.dll de Windows passe avant la notre (le mod ne se
+    // chargerait pas, cf. steam_appid.txt). Le jeu est alors lance par l'explorateur, hors de l'arbre de Steam ; ses
+    // reglages sont dans lancement.ini (pas de ligne de commande par ce chemin).
+    bool viaShell = GetModuleHandleW(L"gameoverlayrenderer64.dll") != NULL;
+    std::wstring shellArg = L"\"" + exe + L"\"";
+    if (viaShell) TestLog("lancement par l'explorateur (overlay de Steam dans le lanceur)");
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
     sei.hwnd = g_wnd;
     sei.lpVerb = L"open";
-    sei.lpFile = exe.c_str();
-    sei.lpParameters = args.c_str();
+    sei.lpFile = viaShell ? L"explorer.exe" : exe.c_str();
+    sei.lpParameters = viaShell ? shellArg.c_str() : args.c_str();
     sei.lpDirectory = runDir.c_str();
     sei.nShow = SW_SHOWNORMAL;
     if (!ShellExecuteExW(&sei) || !sei.hProcess) {
@@ -3440,7 +3465,8 @@ static void Launch(int mode, const char *partie = NULL)
     g_winSeenT = g_noProcT = 0;
     std::wstring name = PlayerName();
     wchar_t info[160];
-    if (mode == MODE_HOST) swprintf_s(info, T(L"%s h\u00E9berge la partie (port %d)", L"%s is hosting (port %d)"), name.c_str(), port);
+    if (mode == MODE_HOST && g_steamNet) swprintf_s(info, T(L"%s h\u00E9berge la partie (Steam)", L"%s is hosting (Steam)"), name.c_str());
+    else if (mode == MODE_HOST) swprintf_s(info, T(L"%s h\u00E9berge la partie (port %d)", L"%s is hosting (port %d)"), name.c_str(), port);
     else if (mode == MODE_GUEST) swprintf_s(info, T(L"%s rejoint %s", L"%s joins %s"), name.c_str(), addr.c_str());
     else swprintf_s(info, T(L"%s joue en solo", L"%s plays solo"), name.c_str());
     g_launchInfo = info;
@@ -3478,6 +3504,12 @@ static std::vector<Conn> g_conns;                   // hote : invites du salon (
 static std::atomic<bool> g_goSent(false);
 static std::atomic<int> g_lobbyGen(0);              // change a chaque ouverture/fermeture : messages perimes ignores
 static std::wstring g_lobbyAddr, g_myAddresses;
+static bool g_lobbySteam;                           // le salon en cours est un salon Steam (steam.inc)
+static void SteamLobbyLeave(bool host);
+static void SteamHostStart(int partie);
+static void SSetLobby(const char *k, const std::string &v);
+static void SSetMember(const char *k, const std::string &v);
+static void SteamDown();
 static int g_lobbyPort = 7870;
 static int g_lobbyHot = -1;                         // choix de partie survole (0 continuer, 1 nouvelle)
 static std::string g_mySkinSent;                    // derniere apparence annoncee au salon
@@ -4055,6 +4087,7 @@ static bool LobbyCanStart()
 
 static void LobbyClose()
 {
+    if (g_lobbySteam) SteamLobbyLeave(g_lobby == LB_HOST);
     g_lobbyGen++;
     g_lobby = LB_NONE;
     if (g_listen != INVALID_SOCKET) { closesocket(g_listen); g_listen = INVALID_SOCKET; }
@@ -4090,6 +4123,16 @@ static void HostStart()
                         L"%d of %d guest(s) not ready yet.\n\nStart anyway? Their game will start too."), notReady, guests);
         if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
         if (g_lobby != LB_HOST || g_goSent) return;   // (le salon a pu changer pendant la question)
+    }
+    if (g_lobbySteam) {   // salon Steam : go dans le salon, les invites lancent leur jeu en le voyant
+        int partie = g_partie;
+        g_goSent = true;
+        g_launchWarn.clear();
+        TestLog("salon steam : LANCER (%d invite(s), %d pas prets), partie=%s", guests, notReady, PartieName(partie));
+        SteamHostStart(partie);
+        LobbyClose();
+        Launch(MODE_HOST, PartieName(partie));
+        return;
     }
     // UDP pas confirme pour un invite : on lance quand meme, mais on le dit (son jeu risque de ne rien recevoir).
     std::string noUdp;
@@ -4149,7 +4192,8 @@ static void LobbySetPartie(int p)
     }
     g_partie = p;
     TestLog("salon : partie = %s", PartieName(p));
-    BroadcastState();
+    if (g_lobbySteam) SSetLobby("partie", PartieName(p));
+    else BroadcastState();
 }
 
 // --- invite
@@ -4318,12 +4362,15 @@ static void GuestToggleReady()
 {
     if (g_lobby != LB_GUEST) return;
     g_meReady = !g_meReady;
+    if (g_lobbySteam) { SSetMember("pret", g_meReady ? "1" : "0"); TestLog("salon steam : moi pret=%d", (int)g_meReady); return; }
     Wr w; w.u8(M_READY); w.u8(g_meReady ? 1 : 0);
     GuestSend(w);
     TestLog("salon : moi pret=%d", (int)g_meReady);
     if (g_meReady && g_udpMine == UDP_FAIL && g_hostUdpTest)
         SetStatus(K_WARN, T(L"Pr\u00EAt, mais UDP bloqu\u00E9 : l'h\u00F4te doit rediriger le port UDP %d", L"Ready, but UDP is blocked: the host must forward UDP port %d"), g_lobbyPort);
 }
+
+#include "steam.inc"
 
 // Toutes les 2 s, l'hote mesure le ping de chacun ; chaque seconde (aussitot apres un choix dans l'onglet TENUE),
 // l'apparence choisie (onglets COOP et TENUE) est annoncee si elle a change.
@@ -4338,7 +4385,8 @@ static void LobbyTick()
         std::string sk = MySkin();
         if (sk != g_mySkinSent) {
             g_mySkinSent = sk;
-            if (lobby == LB_HOST) {
+            if (g_lobbySteam) SSetMember("tenue", sk);
+            else if (lobby == LB_HOST) {
                 EnterCriticalSection(&g_lcs);
                 if (LobbyPeer *p = PeerById(0)) p->skin = sk;
                 LeaveCriticalSection(&g_lcs);
@@ -4346,7 +4394,7 @@ static void LobbyTick()
             } else { Wr w; w.u8(M_SKIN); w.str(sk); GuestSend(w); }
         }
     }
-    if (lobby != LB_HOST || now - lastPing < 2000) return;
+    if (lobby != LB_HOST || g_lobbySteam || now - lastPing < 2000) return;
     lastPing = now;
     EnterCriticalSection(&g_lcs);   // pas de sonde UDP de l'invite apres ~20 s : bloque (box de l'hote, le plus souvent)
     for (auto &p : g_peers)
@@ -4389,15 +4437,27 @@ static void LobbySoundsTick()
 // --- dessin du salon (panneau de droite)
 static float LobbyMaxScroll()
 {
+    if (g_lobbySteam && g_sFriendsView) return SteamFriendsMaxScroll();
     EnterCriticalSection(&g_lcs);
     int n = (int)g_peers.size();
     LeaveCriticalSection(&g_lcs);
     int rows = n + (n < kLobbyMax ? 1 : 0);
     return max(0.0f, rows * kLobbyRowH - kLobbyList.Height);
 }
+// 0/1 : partie ; salon Steam (hote) : 50 retour au salon, 51 "inviter des amis" (place libre), 100+i ami i.
 static int LobbyChoiceAt(float x, float y)
 {
     if (g_lobby != LB_HOST || g_goSent) return -1;
+    if (g_lobbySteam && g_sFriendsView) {
+        if (kFriendsBack.Contains(x, y)) return 50;
+        int i = SteamFriendAt(x, y);
+        if (i >= 0 && !SteamInLobby(g_sFriends[i].id)) return 100 + i;
+    } else if (g_lobbySteam && kLobbyList.Contains(x, y)) {
+        EnterCriticalSection(&g_lcs);
+        int n = (int)g_peers.size();
+        LeaveCriticalSection(&g_lcs);
+        if (n < kLobbyMax && (int)((y - kLobbyList.Y + g_scroll[TAB_LOBBY]) / kLobbyRowH) == n) return 51;
+    }
     for (int i = 0; i < 2; i++) if (kChoiceR[i].Contains(x, y)) return i;
     return -1;
 }
@@ -4412,97 +4472,109 @@ static void DrawLobby(Graphics &g)
     bool host = lobby == LB_HOST;
     DrawPanel(g);
     SkinsCheck();   // (portraits des joueurs)
-
-    wchar_t head[64];
-    swprintf_s(head, T(L"%d / %d joueurs", L"%d / %d players"), (int)peers.size(), kLobbyMax);
-    Text(g, T(L"SALON", L"LOBBY"), RectF(460, 124, 200, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
-    if (lobby != LB_CONNECTING) Text(g, head, RectF(700, 124, 232, 26), 12.5f, FontStyleBold, kGrey, StringAlignmentFar);
-    std::wstring sub;
-    if (host) sub = std::wstring(T(L"Port ", L"Port ")) + std::to_wstring(g_lobbyPort) + T(L" (UDP et TCP) \u00B7 adresse locale : ", L" (UDP and TCP) \u00B7 local address: ") + (g_myAddresses.empty() ? L"?" : g_myAddresses);
-    else sub = std::wstring(T(L"H\u00F4te : ", L"Host: ")) + g_lobbyAddr + L":" + std::to_wstring(g_lobbyPort);
-    // Test UDP : l'invite (sa sonde, ou l'hote qui dit l'avoir recue) ; l'hote, chaque invite (sous la colonne du ping)
     int myUdp = g_udpMine;
-    std::wstring udpLine;
-    Color udpC = kGrey;
-    if (lobby == LB_GUEST) {
-        if (myUdp == UDP_OK) { udpLine = T(L"UDP : OK \u2713", L"UDP: OK \u2713"); udpC = kAcc; }
-        else if (myUdp == UDP_FAIL && !g_hostUdpTest) udpLine = T(L"UDP : non v\u00E9rifi\u00E9 (lanceur de l'h\u00F4te ancien)", L"UDP: not checked (host has an old launcher)");
-        else if (myUdp == UDP_FAIL) { udpLine = T(L"UDP : bloqu\u00E9", L"UDP: blocked"); udpC = kRed; }
-        else if (myUdp == UDP_WAIT) udpLine = T(L"UDP : test en cours\u2026", L"UDP: testing\u2026");
-    }
-    float subW = 476;
-    if (!udpLine.empty()) {
-        Bitmap mb(1, 1);
-        Graphics mg(&mb);
-        float uw = MeasureW(mg, udpLine, 11.5f, FontStyleBold) + 4;
-        Text(g, udpLine, RectF(936 - uw, 148, uw, 20), 11.5f, FontStyleBold, udpC, StringAlignmentFar);
-        subW -= uw + 8;
-    }
-    Text(g, sub, RectF(460, 148, subW, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    if (host && g_lobbySteam && g_sFriendsView) DrawSteamFriends(g);
+    else {
+        wchar_t head[64];
+        swprintf_s(head, T(L"%d / %d joueurs", L"%d / %d players"), (int)peers.size(), kLobbyMax);
+        Text(g, T(L"SALON", L"LOBBY"), RectF(460, 124, 200, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
+        if (lobby != LB_CONNECTING) Text(g, head, RectF(700, 124, 232, 26), 12.5f, FontStyleBold, kGrey, StringAlignmentFar);
+        std::wstring sub;
+        if (g_lobbySteam) sub = host ? std::wstring(T(L"Salon Steam \u00B7 amis seulement \u00B7 jusqu'\u00E0 8 joueurs", L"Steam lobby \u00B7 friends only \u00B7 up to 8 players"))
+                                     : lobby == LB_CONNECTING ? std::wstring(T(L"Salon Steam", L"Steam lobby")) : std::wstring(T(L"Salon Steam de ", L"Steam lobby of ")) + g_sHostName;
+        else if (host) sub = std::wstring(T(L"Port ", L"Port ")) + std::to_wstring(g_lobbyPort) + T(L" (UDP et TCP) \u00B7 adresse locale : ", L" (UDP and TCP) \u00B7 local address: ") + (g_myAddresses.empty() ? L"?" : g_myAddresses);
+        else sub = std::wstring(T(L"H\u00F4te : ", L"Host: ")) + g_lobbyAddr + L":" + std::to_wstring(g_lobbyPort);
+        // Test UDP : l'invite (sa sonde, ou l'hote qui dit l'avoir recue) ; l'hote, chaque invite (sous la colonne du ping)
+        std::wstring udpLine;
+        Color udpC = kGrey;
+        if (lobby == LB_GUEST) {
+            if (myUdp == UDP_OK) { udpLine = T(L"UDP : OK \u2713", L"UDP: OK \u2713"); udpC = kAcc; }
+            else if (myUdp == UDP_FAIL && !g_hostUdpTest) udpLine = T(L"UDP : non v\u00E9rifi\u00E9 (lanceur de l'h\u00F4te ancien)", L"UDP: not checked (host has an old launcher)");
+            else if (myUdp == UDP_FAIL) { udpLine = T(L"UDP : bloqu\u00E9", L"UDP: blocked"); udpC = kRed; }
+            else if (myUdp == UDP_WAIT) udpLine = T(L"UDP : test en cours\u2026", L"UDP: testing\u2026");
+        }
+        float subW = 476;
+        if (!udpLine.empty()) {
+            Bitmap mb(1, 1);
+            Graphics mg(&mb);
+            float uw = MeasureW(mg, udpLine, 11.5f, FontStyleBold) + 4;
+            Text(g, udpLine, RectF(936 - uw, 148, uw, 20), 11.5f, FontStyleBold, udpC, StringAlignmentFar);
+            subW -= uw + 8;
+        }
+        Text(g, sub, RectF(460, 148, subW, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
 
-    if (lobby == LB_CONNECTING) {
-        Text(g, T(L"Connexion au salon\u2026", L"Connecting to the lobby\u2026"), RectF(460, 260, 476, 30), 16, FontStyleBold, kInk);
-        DrawBar(g, RectF(560, 300, 276, 5), -2);
-        Para(g, T(L"Si l'h\u00F4te joue d\u00E9j\u00E0 ou n'a pas de salon, tu pourras rejoindre directement en jeu.",
-                  L"If the host is already playing or has no lobby, you can join directly in game."),
-             RectF(480, 320, 436, 40), 12, kGrey, StringAlignmentCenter);
-    } else {
-        static const int pal[kLobbyMax] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89 };
-        float sc = g_scroll[TAB_LOBBY], ms = LobbyMaxScroll();
-        int rows = (int)peers.size() + ((int)peers.size() < kLobbyMax ? 1 : 0);
-        g.SetClip(kLobbyList);
-        for (int i = 0; i < rows; i++) {
-            RectF r(kLobbyList.X + 4, kLobbyList.Y + i * kLobbyRowH - sc, kLobbyList.Width - (ms > 0 ? 16 : 8), kLobbyRowH - 6);
-            if (r.Y + r.Height < kLobbyList.Y || r.Y > kLobbyList.Y + kLobbyList.Height) continue;
-            GraphicsPath rp;
-            RoundRect(rp, r, 11);
-            if (i >= (int)peers.size()) {   // place libre
-                Pen dash(WithA(kGrey, 0.55f), 1.3f);
-                dash.SetDashStyle(DashStyleDash);
-                g.DrawPath(&dash, &rp);
-                Text(g, T(L"En attente d'un joueur\u2026", L"Waiting for a player\u2026"), r, 12.5f, FontStyleRegular, WithA(kGrey, 0.85f));
-                continue;
-            }
-            const LobbyPeer &p = peers[i];
-            bool me = p.id == g_myId;
-            SolidBrush rb(me ? TH(cardSel) : TH(card));
-            g.FillPath(&rb, &rp);
-            Pen rpen(me ? kAcc : TH(choiceBorder), me ? 1.6f : 1.1f);
-            g.DrawPath(&rpen, &rp);
-            // pastille du joueur : portrait de sa tenue (onglet TENUE), sinon son initiale, sur sa couleur
-            std::wstring nm = Widen(p.name, CP_UTF8);
-            DrawSkinAvatar(g, RectF(r.X + 6, r.Y + 4, r.Height - 8, r.Height - 8), p.skin, CarRgb(pal[p.id % kLobbyMax]), nm);
-            if (me) nm += T(L"  (toi)", L"  (you)");
-            Text(g, nm, RectF(r.X + 60, r.Y + 6, 232, 20), 14, FontStyleBold, kInk, StringAlignmentNear);
-            std::wstring line = SkinLabel(p.skin) + L" \u00B7 " + (p.ver == "dev" ? std::wstring(L"dev") : L"v" + Widen(p.ver, CP_UTF8));
-            Text(g, line, RectF(r.X + 60, r.Y + 27, 232, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            // etat : HOTE, PRET, PAS PRET
-            const wchar_t *st = p.id == 0 ? T(L"H\u00D4TE", L"HOST") : p.ready ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PAS PR\u00CAT", L"NOT READY");
-            RectF pr(r.X + r.Width - 172, r.Y + (r.Height - 22) / 2, 96, 22);
-            GraphicsPath pp;
-            RoundRect(pp, pr, 11);
-            if (p.id != 0 && p.ready) { LinearGradientBrush lg(pr, kAcc, kAcc2, LinearGradientModeHorizontal); g.FillPath(&lg, &pp); }
-            else if (p.id == 0) { SolidBrush hb(WithA(kAcc, 0.22f)); g.FillPath(&hb, &pp); }
-            else { Pen np(WithA(kGrey, 0.8f), 1.2f); g.DrawPath(&np, &pp); }
-            Text(g, st, pr, 10.5f, FontStyleBold, p.id != 0 && p.ready ? kOnAcc : p.id == 0 ? kInk : kGrey);
-            if (p.id != 0) {
-                wchar_t pb[32];
-                swprintf_s(pb, L"%d ms", p.ping);
-                int udp = me && myUdp == UDP_OK ? UDP_OK : p.udp;   // (l'invite local : sa propre sonde compte)
-                if (me && udp != UDP_OK && myUdp == UDP_FAIL && g_hostUdpTest) udp = UDP_FAIL;
-                if (udp == UDP_NA) Text(g, pb, RectF(r.X + r.Width - 70, r.Y, 60, r.Height), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
-                else {
-                    Text(g, pb, RectF(r.X + r.Width - 74, r.Y + 3, 64, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
-                    const wchar_t *ul = udp == UDP_OK ? L"UDP \u2713" : udp == UDP_FAIL ? T(L"UDP bloqu\u00E9", L"UDP blocked") : L"UDP \u2026";
-                    Text(g, ul, RectF(r.X + r.Width - 94, r.Y + 22, 84, 18), 10.5f, FontStyleBold, udp == UDP_OK ? kAcc : udp == UDP_FAIL ? kRed : kGrey, StringAlignmentFar);
+        if (lobby == LB_CONNECTING) {
+            bool creating = g_lobbySteam && g_myId == 0;
+            Text(g, creating ? T(L"Cr\u00E9ation du salon Steam\u2026", L"Creating the Steam lobby\u2026") : T(L"Connexion au salon\u2026", L"Connecting to the lobby\u2026"),
+                 RectF(460, 260, 476, 30), 16, FontStyleBold, kInk);
+            DrawBar(g, RectF(560, 300, 276, 5), -2);
+            Para(g, creating ? T(L"Un salon r\u00E9serv\u00E9 \u00E0 tes amis Steam : tu pourras les inviter d'ici.", L"A lobby for your Steam friends only: you can invite them from here.")
+                             : T(L"Si l'h\u00F4te joue d\u00E9j\u00E0 ou n'a pas de salon, tu pourras rejoindre directement en jeu.",
+                                 L"If the host is already playing or has no lobby, you can join directly in game."),
+                 RectF(480, 320, 436, 40), 12, kGrey, StringAlignmentCenter);
+        } else {
+            static const int pal[kLobbyMax] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89 };
+            float sc = g_scroll[TAB_LOBBY], ms = LobbyMaxScroll();
+            int rows = (int)peers.size() + ((int)peers.size() < kLobbyMax ? 1 : 0);
+            g.SetClip(kLobbyList);
+            for (int i = 0; i < rows; i++) {
+                RectF r(kLobbyList.X + 4, kLobbyList.Y + i * kLobbyRowH - sc, kLobbyList.Width - (ms > 0 ? 16 : 8), kLobbyRowH - 6);
+                if (r.Y + r.Height < kLobbyList.Y || r.Y > kLobbyList.Y + kLobbyList.Height) continue;
+                GraphicsPath rp;
+                RoundRect(rp, r, 11);
+                if (i >= (int)peers.size()) {   // place libre (salon Steam, hote : inviter des amis)
+                    bool inv = host && g_lobbySteam, hot = inv && g_lobbyHot == 51;
+                    if (hot) { SolidBrush hb(TH(cardSel)); g.FillPath(&hb, &rp); }
+                    Pen dash(inv ? WithA(kAcc, hot ? 1.0f : 0.7f) : WithA(kGrey, 0.55f), 1.3f);
+                    dash.SetDashStyle(DashStyleDash);
+                    g.DrawPath(&dash, &rp);
+                    if (inv) Text(g, T(L"+  Inviter des amis Steam", L"+  Invite Steam friends"), r, 13, FontStyleBold, kAcc);
+                    else Text(g, T(L"En attente d'un joueur\u2026", L"Waiting for a player\u2026"), r, 12.5f, FontStyleRegular, WithA(kGrey, 0.85f));
+                    continue;
+                }
+                const LobbyPeer &p = peers[i];
+                bool me = p.id == g_myId;
+                SolidBrush rb(me ? TH(cardSel) : TH(card));
+                g.FillPath(&rb, &rp);
+                Pen rpen(me ? kAcc : TH(choiceBorder), me ? 1.6f : 1.1f);
+                g.DrawPath(&rpen, &rp);
+                // pastille du joueur : portrait de sa tenue (onglet TENUE), sinon son initiale, sur sa couleur
+                std::wstring nm = Widen(p.name, CP_UTF8);
+                DrawSkinAvatar(g, RectF(r.X + 6, r.Y + 4, r.Height - 8, r.Height - 8), p.skin, CarRgb(pal[p.id % kLobbyMax]), nm);
+                if (p.sid) DrawSteamAvatar(g, RectF(r.X + r.Height - 22, r.Y + r.Height - 24, 22, 22), p.sid);   // (avatar Steam en coin)
+                if (me) nm += T(L"  (toi)", L"  (you)");
+                Text(g, nm, RectF(r.X + 60, r.Y + 6, 232, 20), 14, FontStyleBold, kInk, StringAlignmentNear);
+                std::wstring line = SkinLabel(p.skin) + L" \u00B7 " + (p.ver == "dev" ? std::wstring(L"dev") : L"v" + Widen(p.ver, CP_UTF8));
+                Text(g, line, RectF(r.X + 60, r.Y + 27, 232, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+                // etat : HOTE, PRET, PAS PRET
+                const wchar_t *st = p.id == 0 ? T(L"H\u00D4TE", L"HOST") : p.ready ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PAS PR\u00CAT", L"NOT READY");
+                RectF pr(r.X + r.Width - 172, r.Y + (r.Height - 22) / 2, 96, 22);
+                GraphicsPath pp;
+                RoundRect(pp, pr, 11);
+                if (p.id != 0 && p.ready) { LinearGradientBrush lg(pr, kAcc, kAcc2, LinearGradientModeHorizontal); g.FillPath(&lg, &pp); }
+                else if (p.id == 0) { SolidBrush hb(WithA(kAcc, 0.22f)); g.FillPath(&hb, &pp); }
+                else { Pen np(WithA(kGrey, 0.8f), 1.2f); g.DrawPath(&np, &pp); }
+                Text(g, st, pr, 10.5f, FontStyleBold, p.id != 0 && p.ready ? kOnAcc : p.id == 0 ? kInk : kGrey);
+                if (p.id != 0 && g_lobbySteam) Text(g, L"Steam", RectF(r.X + r.Width - 70, r.Y, 60, r.Height), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+                else if (p.id != 0) {
+                    wchar_t pb[32];
+                    swprintf_s(pb, L"%d ms", p.ping);
+                    int udp = me && myUdp == UDP_OK ? UDP_OK : p.udp;   // (l'invite local : sa propre sonde compte)
+                    if (me && udp != UDP_OK && myUdp == UDP_FAIL && g_hostUdpTest) udp = UDP_FAIL;
+                    if (udp == UDP_NA) Text(g, pb, RectF(r.X + r.Width - 70, r.Y, 60, r.Height), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+                    else {
+                        Text(g, pb, RectF(r.X + r.Width - 74, r.Y + 3, 64, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+                        const wchar_t *ul = udp == UDP_OK ? L"UDP \u2713" : udp == UDP_FAIL ? T(L"UDP bloqu\u00E9", L"UDP blocked") : L"UDP \u2026";
+                        Text(g, ul, RectF(r.X + r.Width - 94, r.Y + 22, 84, 18), 10.5f, FontStyleBold, udp == UDP_OK ? kAcc : udp == UDP_FAIL ? kRed : kGrey, StringAlignmentFar);
+                    }
                 }
             }
-        }
-        g.ResetClip();
-        if (ms > 0) {
-            float h = kLobbyList.Height * kLobbyList.Height / (kLobbyList.Height + ms), y = kLobbyList.Y + (kLobbyList.Height - h) * sc / ms;
-            GraphicsPath sp; RoundRect(sp, RectF(kLobbyList.X + kLobbyList.Width - 6, y, 4, h), 2);
-            SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
+            g.ResetClip();
+            if (ms > 0) {
+                float h = kLobbyList.Height * kLobbyList.Height / (kLobbyList.Height + ms), y = kLobbyList.Y + (kLobbyList.Height - h) * sc / ms;
+                GraphicsPath sp; RoundRect(sp, RectF(kLobbyList.X + kLobbyList.Width - 6, y, 4, h), 2);
+                SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
+            }
         }
     }
 
@@ -4534,7 +4606,9 @@ static void DrawLobby(Graphics &g)
 
     Pen sep(TH(sep), 1);
     g.DrawLine(&sep, kOptPanel.X + 18, 532.0f, kOptPanel.X + kOptPanel.Width - 18, 532.0f);
-    const wchar_t *hint = host ? T(L"Quand tout le monde est pr\u00EAt, LANCER d\u00E9marre le jeu de chacun ; les invit\u00E9s suivent ta partie.",
+    const wchar_t *hint = host && g_lobbySteam ? T(L"Invite tes amis Steam. Quand tout le monde est pr\u00EAt, LANCER d\u00E9marre le jeu de chacun.",
+                                                 L"Invite your Steam friends. Once everyone is ready, START launches everyone's game.")
+                        : host ? T(L"Quand tout le monde est pr\u00EAt, LANCER d\u00E9marre le jeu de chacun ; les invit\u00E9s suivent ta partie.",
                                    L"Once everyone is ready, START launches everyone's game; the guests follow your game.")
                                : T(L"Clique sur PR\u00CAT. Ton jeu d\u00E9marre tout seul quand l'h\u00F4te lance la partie.",
                                    L"Click READY. Your game starts by itself when the host starts the session.");
@@ -4568,8 +4642,61 @@ static void DrawLobby(Graphics &g)
 static bool LobbyClick(float x, float y)
 {
     int c = LobbyChoiceAt(x, y);
+    if (c >= 100) { SteamInviteFriend(c - 100); return true; }
+    if (c == 50 || c == 51) { SteamShowFriends(c == 51); return true; }
     if (c >= 0) { LobbySetPartie(c); return true; }
     return kOptPanel.Contains(x, y);
+}
+
+// /testsalon hote|invite <journal> /steam <fichier> : le meme salon par Steam (Steam ouvert sur ce PC). L'hote cree le
+// salon et ecrit son numero dans <fichier> ; l'invite le lit, y entre et se met pret ; l'hote lance des qu'il le voit
+// (un seul compte pour les deux : l'invite est le meme membre du salon, son "pret" suffit).
+static void TestSteamStep(DWORD t)
+{
+    static bool tried, readied, avLogged, friendsLogged;
+    static DWORD readySince;
+    if (g_testSalon == L"hote") {
+        if (!tried && t > 500) {
+            tried = true;
+            DeleteFileW(g_testSteamFile.c_str());
+            SteamLobbyHost();
+            if (g_lobby == LB_NONE) { TestLog("test : fin (salon Steam impossible : %s)", Narrow(g_steamWhy, CP_UTF8).c_str()); DestroyWindow(g_wnd); }
+            return;
+        }
+        if (tried && g_lobby == LB_NONE) { TestLog("test : fin (salon Steam ferme)"); DestroyWindow(g_wnd); return; }
+        if (g_lobby != LB_HOST) return;
+        if (!friendsLogged) {
+            friendsLogged = true;
+            SteamFriendsRefresh();
+            int mwc = 0;
+            for (auto &f : g_sFriends) mwc += f.mwc;
+            TestLog("test : %d ami(s) en ligne (%d dans My Winter Car), %d hors ligne", (int)g_sFriends.size(), mwc, g_sOffline);
+        }
+        if (!avLogged) if (Bitmap *b = SteamAvatar(g_steamMe)) { avLogged = true; TestLog("test : mon avatar Steam %ux%u", b->GetWidth(), b->GetHeight()); }
+        int guests, notReady;
+        GuestCounts(&guests, &notReady);
+        bool can = SMemberData(g_steamMe, "pret") == "1" || (guests >= 1 && notReady == 0);
+        if (!can) readySince = 0;
+        else if (!readySince) { readySince = GetTickCount(); TestLog("test : invite pret (%d autre(s) membre(s))", guests); }
+        else if (GetTickCount() - readySince > 1500) { TestLog("test : LANCER"); HostStart(); }
+    } else {
+        if (!tried && t > 2000) {
+            unsigned long long id = 0;
+            FILE *f = _wfopen(g_testSteamFile.c_str(), L"rb");
+            if (f) { if (fscanf(f, "%llu", &id) != 1) id = 0; fclose(f); }
+            if (id) { tried = true; TestLog("test : salon %llu lu", id); SteamLobbyJoin(id); }
+            return;
+        }
+        if (tried && g_lobby == LB_NONE) {
+            EnterCriticalSection(&g_cs);
+            std::string st = Narrow(g_status, CP_UTF8);
+            LeaveCriticalSection(&g_cs);
+            TestLog("test : fin cote invite -> \"%s\" (rejoindre en jeu propose=%d)", st.c_str(), (int)g_joinFallback);
+            DestroyWindow(g_wnd);
+            return;
+        }
+        if (g_lobby == LB_GUEST && !readied && t > 4500) { readied = true; TestLog("test : clic sur PRET"); GuestToggleReady(); }
+    }
 }
 
 // /testsalon hote|invite : l'hote ouvre le salon et lance des que l'invite est pret ; l'invite rejoint et se met
@@ -4581,6 +4708,7 @@ static void TestSalonStep()
     DWORD t = GetTickCount() - start;
     if (g_state != ST_IDLE || g_goWait) return;
     if (t > 60000) { TestLog("test : abandon (60 s)"); DestroyWindow(g_wnd); return; }
+    if (!g_testSteamFile.empty()) { TestSteamStep(t); return; }
     if (g_testSalon == L"hote") {
         if (!tried && t > 500) {
             tried = true;
@@ -4758,7 +4886,7 @@ static void OnButton(int id)
     case B_HOST:
         if (g_lobby == LB_HOST) HostStart();
         else if (g_lobby == LB_GUEST) GuestToggleReady();
-        else if (g_lobby == LB_NONE && g_steamNet) Launch(MODE_HOST);   // Steam : salon et invitations en jeu, pas de pare-feu
+        else if (g_lobby == LB_NONE && g_steamNet) SteamLobbyHost();   // Steam : salon Steam, invitations d'ici, pas de pare-feu
         else if (g_lobby == LB_NONE && FirewallBeforeHosting()) LobbyHost();
         break;
     case B_JOIN:
@@ -4768,14 +4896,15 @@ static void OnButton(int id)
             SetStatus(K_NORMAL, host ? T(L"Salon ferm\u00E9 \u00B7 %s", L"Lobby closed \u00B7 %s") : T(L"Salon quitt\u00E9 \u00B7 %s", L"Left the lobby \u00B7 %s"), ModLabel().c_str());
         }
         else if (g_joinFallback) { g_joinFallback = false; g_launchWarn.clear(); Launch(MODE_GUEST); }
-        else if (g_steamNet) Launch(MODE_GUEST);   // Steam : l'invitation se prend en jeu
+        else if (g_steamNet) SteamJoinClick();   // Steam : l'invitation recue, sinon le salon d'un ami
         else LobbyJoin();
         break;
     case B_NETIP: case B_NETSTEAM:
         g_steamNet = id == B_NETSTEAM;
         WritePrivateProfileStringW(L"Lanceur", L"Reseau", g_steamNet ? L"steam" : L"ip", g_iniLauncher.c_str());
         if (g_steamNet && g_focus == 1) g_focus = -1;
-        SetStatus(K_NORMAL, g_steamNet ? T(L"Partie par Steam : invitations en jeu", L"Game through Steam: invites in game")
+        if (!g_steamNet) SteamDown();
+        SetStatus(K_NORMAL, g_steamNet ? T(L"Partie par Steam : salon et invitations ici", L"Game through Steam: lobby and invites right here")
                                         : T(L"Partie par adresse IP (local, Radmin, Hamachi...)", L"Game through IP address (LAN, Radmin, Hamachi...)"));
         break;
     case B_SOLO: Launch(MODE_SOLO); break;
@@ -4803,6 +4932,7 @@ static void Tick()
     g_sceneT += dt;
     LobbyTick();
     LobbySoundsTick();
+    SteamTick();
     if (!g_testSalon.empty()) { TestSalonStep(); return; }   // (mode d'essai : rien a dessiner)
     for (int i = 0; i < B_COUNT; i++) {
         float want = (g_hot == i && g_btn[i].enabled) ? 1.0f : 0.0f;
@@ -4848,6 +4978,9 @@ static int HitField(float x, float y)
     for (int i = 0; i < 2; i++) if (g_fields[i].r.Contains(x, y) && !(i == 1 && g_steamNet)) return i;   // (Steam : pas d'adresse)
     return -1;
 }
+
+// Mode Steam, menu : l'encart a la place de l'adresse (clic : option de lancement Steam).
+static bool SteamInfoAt(float x, float y) { return g_steamNet && g_state == ST_IDLE && g_lobby == LB_NONE && !g_goWait && g_fields[1].r.Contains(x, y); }
 
 static void TypeChar(wchar_t ch)
 {
@@ -4932,6 +5065,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         g_logRowHot = g_tab == TAB_LOGS ? LogRowAt(x, y, &g_logPart) : -1;
         g_carHot = g_tab == TAB_CAR && g_state == ST_IDLE ? CarSwatchAt(x, y) : -1;
         g_lobbyHot = g_tab == TAB_LOBBY && g_state == ST_IDLE ? LobbyChoiceAt(x, y) : -1;
+        g_steamInfoHot = SteamInfoAt(x, y);
         bool skinTab = g_tab == TAB_SKIN && g_state == ST_IDLE;
         g_skinHot = skinTab ? SkinCellAt(x, y) : -1;
         g_skinArrowHot = skinTab ? SkinArrowAt(x, y) : 0;
@@ -4939,11 +5073,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         TrackMouseEvent(&tme);
         bool carView = g_tab == TAB_CAR && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(x, y);
         bool skinView = skinTab && !g_skinArrowHot && kSkinView.Contains(x, y);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot) ? IDC_HAND
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot) ? IDC_HAND
                                    : carView || skinView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
-    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; return 0;
+    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; g_steamInfoHot = false; return 0;
     case WM_KEYDOWN:   // onglet TENUE : fleches gauche / droite (hors des champs)
         if ((wp == VK_LEFT || wp == VK_RIGHT) && g_tab == TAB_SKIN && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
         break;
@@ -4963,6 +5097,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (b >= 0) { g_pressed = b; SetCapture(h); return 0; }
         if (f >= 0) { g_focus = f; g_time = 0; return 0; }
         g_focus = -1;
+        if (SteamInfoAt(x, y)) { SteamLaunchOptionHelp(); return 0; }
         int t = HitTab(x, y);
         if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); if (g_tab == TAB_LOGS) LogsScan(); return 0; }   // un 2e clic referme
         if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
@@ -5007,10 +5142,20 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         else if (wp >= 32) TypeChar((wchar_t)wp);
         g_time = 0.2f;
         return 0;
+    case WM_COPYDATA: {   // un 2e lanceur (invitation acceptee jeu ferme, option de lancement Steam) : son salon
+        const COPYDATASTRUCT *cd = (const COPYDATASTRUCT *)lp;
+        if (!cd || cd->dwData != 0x4D57 || cd->cbData != sizeof(uint64_t)) return FALSE;
+        g_sConnect = *(const uint64_t *)cd->lpData;
+        TestLog("salon steam : salon %llu recu d'un autre lanceur", (unsigned long long)g_sConnect);
+        if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+        SetForegroundWindow(h);
+        return TRUE;
+    }
     case WM_APP_RELAUNCH: {
         STARTUPINFOW si = { sizeof(si) };
         PROCESS_INFORMATION pi;
         std::wstring cmd = L"\"" + g_self + L"\"";
+        if (g_sConnect) cmd += L" +connect_lobby " + std::to_wstring((unsigned long long)g_sConnect);   // (invitation pas encore prise)
         std::vector<wchar_t> c(cmd.begin(), cmd.end());
         c.push_back(0);
         if (CreateProcessW(g_self.c_str(), c.data(), NULL, NULL, FALSE, 0, NULL, g_dir.c_str(), &si, &pi)) {
@@ -5022,6 +5167,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_CLOSE: LobbyClose(); g_state = ST_CLOSING; return 0;
     case WM_DESTROY:
         LobbyClose();
+        SteamDown();
         PostQuitMessage(0);
         return 0;
     }
@@ -5096,6 +5242,19 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/temps")) g_sceneT = (float)_wtof(argv[i + 1]);   // captures : instant de la scene animee
         if (!_wcsicmp(argv[i], L"/images")) g_bench = _wtoi(argv[i + 1]);
         if (!_wcsicmp(argv[i], L"/skins")) g_skinsArg = WithSlash(argv[i + 1]);   // images des tenues de test
+        // Steam : invitation acceptee jeu ferme, lanceur demarre par l'option de lancement ("<MWCoop.exe>" %command%)
+        if (!_wcsicmp(argv[i], L"+connect_lobby")) { g_sConnect = _wcstoui64(argv[i + 1], NULL, 10); g_steamNet = true; }
+        if (!_wcsicmp(argv[i], L"/steam")) { g_testSteamFile = argv[i + 1]; g_steamNet = true; }   // essai : /testsalon ... /steam <fichier>
+    }
+    // Un lanceur deja ouvert prend le salon (un seul lanceur, Steam s'adresse a lui ensuite)
+    if (g_sConnect && g_testSalon.empty()) {
+        HWND other = FindWindowW(L"MWCoopLauncher", NULL);
+        if (other) {
+            COPYDATASTRUCT cd = { 0x4D57, sizeof(uint64_t), &g_sConnect };
+            DWORD_PTR res = 0;
+            SendMessageTimeoutW(other, WM_COPYDATA, 0, (LPARAM)&cd, SMTO_ABORTIFHUNG, 3000, &res);
+            if (res) { LocalFree(argv); return 0; }
+        }
     }
     if (!g_testSalonLog.empty()) {   // journal neuf ; role inconnu : rien
         FILE *f = _wfopen(g_testSalonLog.c_str(), L"wb");
@@ -5225,6 +5384,31 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (st == L"salon-udp") { g_udpMine = UDP_FAIL; g_peers[1].udp = UDP_WAIT; }
             g_hostUdpTest = true;
         }
+        else if (st == L"salon-steam" || st == L"salon-steam-amis" || st == L"salon-steam-invite") {   // salon Steam (faux)
+            bool host = st != L"salon-steam-invite";
+            std::string v = MyVersion();
+            g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0, UDP_NA, 0, 1 },
+                        { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 0, UDP_NA, 0, 2 },
+                        { 2, "Kalle", "char_shirt07", v, false, 0, UDP_NA, 0, 3 } };
+            g_myId = host ? 0 : 1;
+            g_lobby = host ? LB_HOST : LB_GUEST;
+            g_lobbySteam = true;
+            g_steamNet = true;
+            g_meReady = !host;
+            g_sHostName = L"Pekka";
+            g_partie = PARTIE_CONTINUER;
+            g_tab = TAB_LOBBY;
+            LayoutTabs();
+            if (st == L"salon-steam-amis") {
+                g_sFriendsView = true;
+                g_sFriends = { { 2, L"Teppo", 1, true }, { 4, L"Jouko", 1, true }, { 5, L"Arska", 1, false }, { 6, L"Fleetari", 3, false }, { 7, L"Suski", 2, false } };
+                g_sOffline = 14;
+                g_sInvited[4] = GetTickCount();
+                g_lobbyHot = 102;
+            } else if (host) g_lobbyHot = 51;
+            if (host) SetStatus(K_OK, T(L"Salon Steam ouvert : invite tes amis", L"Steam lobby open: invite your friends"));
+            else SetStatus(K_OK, T(L"Dans le salon Steam de %s", L"In %s's Steam lobby"), L"Pekka");
+        }
         else if (st == L"maj") { g_busy = true; g_progress = 0.42f; SetStatus(K_NORMAL, T(L"T\u00E9l\u00E9chargement de MWCoop %s\u2026", L"Downloading MWCoop %s\u2026"), L"0.1.1-prealpha"); g_focus = 0; g_time = 0.2f; }
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }
         int rc = 1;
@@ -5242,7 +5426,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             CLSID png;
             if (EncoderClsid(L"image/png", &png) && out.Save(argv[2], &png, NULL) == Ok) rc = 0;
         }   // (detruit avant GdiplusShutdown)
-        delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
+        delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree(); SteamAvFree();
         GdiplusShutdown(gtok);
         return rc;
     }
@@ -5318,7 +5502,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     if (g_proc) CloseHandle(g_proc);
-    delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
+    delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree(); SteamAvFree();
     GdiplusShutdown(gtok);
     return 0;
 }

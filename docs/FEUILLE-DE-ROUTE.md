@@ -49,6 +49,7 @@ pouvoir le faire, et les autres doivent le voir.
       clients retirées chez les autres dès que l'un la prend), état du corps de l'invité (faim, soif, fatigue…) gardé
       d'une session à l'autre (0.27.0). Fendeuse en retard chez l'invité : déjà rattrapée (vérifié).
 - [x] Jeu par Steam (0.30) : salon, invitations, pair-à-pair, avatars ; invité qui ne se reconnectait plus corrigé.
+- [x] Salon Steam dans le lanceur (0.31) : invitations depuis la liste d'amis Steam, même salon que par IP, +connect_lobby et option de lancement Steam.
       Retours de la partie du 06/10 (0.30.1) : portes du garage des parents (poussées) suivies par l'angle de celui qui
       pousse, écran noir après une mort par le monoxyde (paupières rouvertes, son rendu).
 - [~] Courses (rallye, course sur glace), demande de JD du 06/10 : tout ce qu'un joueur peut voir, et chaque joueur

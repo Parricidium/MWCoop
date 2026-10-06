@@ -53,6 +53,7 @@ namespace MWCoop.Net
 
         public static ulong Lobby;              // salon ou l'on est
         public static ulong LobbyOwner;         // son proprietaire (l'hote)
+        public static ulong DirectHost;         // hote donne par le salon Steam du lanceur : pas de recherche chez les amis
         static bool hosting, creating, joining, testWritten;
         static float nextSearch, nextCreate, nextPics;
         static readonly HashSet<ulong> asked = new HashSet<ulong>();
@@ -100,7 +101,7 @@ namespace MWCoop.Net
                 ulong tl;
                 if (!hosting && Lobby == 0 && !joining && System.IO.File.Exists(tf) && ulong.TryParse(System.IO.File.ReadAllText(tf).Trim(), out tl)) { Log.Info("essai : salon " + tl + " lu dans " + tf); Join(tl); }
             }
-            if (!hosting && Lobby == 0 && !joining && now >= nextSearch) { nextSearch = now + 3f; SearchFriends(); }
+            if (!hosting && DirectHost == 0 && Lobby == 0 && !joining && now >= nextSearch) { nextSearch = now + 3f; SearchFriends(); }
             // Avatars des joueurs charges d'avance (pseudos au-dessus des joueurs, liste F10).
             if (now >= nextPics) { nextPics = now + 2f; foreach (PlayerInfo pi in Session.Players.Values) Avatar(pi.SteamId); }
         }
