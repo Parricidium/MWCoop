@@ -21,6 +21,7 @@ namespace MWCoop
         static bool blocking;
         static float nextScan, lostSince = -1, nextTestLog;
         static string refusal = "", drop = "";
+        static bool silent;   // l'hote n'a jamais repondu (Session : "sans reponse de ...")
 
         static bool Enabled { get { return Config.GetInt("Coop", "EcranAttente", 1) != 0; } }
 
@@ -61,8 +62,9 @@ namespace MWCoop
             bool connected = Session.HostConnected;
             string st = Session.Status ?? "";
             if (st.StartsWith("refuse")) refusal = st.Substring(st.IndexOf(':') + 1).Trim();
+            if (st.StartsWith("sans reponse")) silent = true;
             if (st.StartsWith("deconnecte")) drop = st;
-            if (connected) { lostSince = -1; refusal = drop = ""; }
+            if (connected) { lostSince = -1; refusal = drop = ""; silent = false; }
             else if (lostSince < 0) lostSince = now;
 
             PlayerInfo host = Session.Host;
@@ -75,11 +77,13 @@ namespace MWCoop
 
             Error = "";
             if (refusal.Length > 0) Error = L("Refusé par l'hôte : ", "Refused by the host: ") + refusal;
-            else if (!connected && lostSince > 0 && now - lostSince >= 30f)
-                Error = L("Aucune réponse de l'hôte depuis " + (int)(now - lostSince) + " s : vérifie l'adresse, et que le port UDP "
-                          + Port + " est redirigé sur sa box (et autorisé par son pare-feu).",
-                          "No answer from the host for " + (int)(now - lostSince) + " s: check the address, and that UDP port "
-                          + Port + " is forwarded on the host's router (and allowed by the firewall).");
+            else if (!connected && lostSince > 0 && (silent || now - lostSince >= 30f))
+                Error = L("Aucune réponse du jeu de l'hôte depuis " + (int)(now - lostSince) + " s. Le plus souvent : le pare-feu Windows de l'hôte "
+                          + "bloque My Winter Car (MWCoop.exe le propose en cliquant HÉBERGER ; Radmin VPN compte souvent comme réseau public). "
+                          + "Sinon : vérifie l'adresse, et que le port UDP " + Port + " est redirigé sur sa box. Nouvel essai en continu...",
+                          "No answer from the host's game for " + (int)(now - lostSince) + " s. Most often: the host's Windows Firewall is blocking "
+                          + "My Winter Car (MWCoop.exe offers to fix it when clicking HOST; Radmin VPN often counts as a public network). "
+                          + "Otherwise: check the address, and that UDP port " + Port + " is forwarded on the host's router. Retrying...");
             else if (!connected && drop.Length > 0) Error = L("Connexion perdue, nouvel essai...", "Connection lost, retrying...");
             else if (SaveTransfer.Done && SaveTransfer.HostHasSave && !SaveTransfer.Received)
                 Error = L("La sauvegarde de l'hôte n'a pas pu être écrite (voir le journal MWCoop) : lance le jeu depuis MWCoop.exe.",
