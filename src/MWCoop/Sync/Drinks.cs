@@ -1,4 +1,4 @@
-using MWCoop.Net;
+﻿using MWCoop.Net;
 using UnityEngine;
 using HutongGames.PlayMaker;
 using HutongGames.PlayMaker.Actions;
@@ -161,6 +161,15 @@ namespace MWCoop
         }
 
         // Copie (pour l'avatar d'un autre) de l'objet en main de rang i, sans main animee ni logique ; hauteur ~h m.
+        // Essais : ce que contient la main du joueur local (objets de boisson).
+        public static string HandChildren()
+        {
+            if (!Find()) return "main du joueur introuvable";
+            var l = new System.Collections.Generic.List<string>();
+            foreach (Transform c in hand) l.Add(c.name);
+            return string.Join(", ", l.ToArray());
+        }
+
         public static GameObject Model(int i, Transform parent)
         {
             if (i <= 0 || i >= Names.Length || !Find()) return null;

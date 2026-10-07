@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -39,6 +39,13 @@ namespace MWCoop
             public bool Train;
             public GameObject Mesh;          // train : carrosserie (et collisions), cachee pendant l'attente
             public bool Police;              // voiture de police d'un barrage (Police.cs)
+            // Invite : roues qui tournent et pose au sol (la copie cinematique n'a plus ses Wheel actives).
+            public Wheel[] Wheels; public float[] WheelRot; public float Steer, Ride; public Vector3 Base; public bool BaseSet;
+            public float LastYaw;
+            // Choc avec un invite (passage de physique) : Owner = joueur qui en a la physique (-1 : l'hote, comme d'habitude).
+            public int Owner = -1; public float OwnSince, FarSince, OwnSent;
+            public List<Behaviour> HostOff;  // hote : logique coupee pendant que l'invite l'a
+            public bool Traffic;             // voiture de TRAFFIC/Vehicles* (seules celles-ci passent a l'invite)
         }
 
         // TRAIN : toute la racine (le train change de parent entre SpawnEast et SpawnWest ; c'en est le seul
@@ -51,6 +58,7 @@ namespace MWCoop
         static float buildAt = -1, nextSend, nextLog, nextSample, nextTrainLog, nextAsk;
         static uint listHash;
         const int Control = 0xFFFF, C_SAME = 1, C_ASK = 2, C_KEYS = 3;
+        const int C_CLAIM = 20, C_RELEASE = 21, C_REFUSE = 22, C_STATE = 23;   // chocs : prise, rendu, refus, etat (invite -> hote)
         static int[] remap;                 // invite : numero de l'hote -> rang ici (-1 : absente ici) ; null : memes listes
         static string[] hostKeys;           // invite : cles de l'hote en cours de reception
         static int hostKeysGot;
@@ -115,6 +123,8 @@ namespace MWCoop
             keys.TryGetValue(path, out k);
             keys[path] = k + 1;
             var e = new Ent { Key = path + "#" + k, T = t, Body = rb, Walker = walker, Pos = t.position, Rot = t.rotation, Police = path.StartsWith("TRAFFIC/Police/") };
+            e.Traffic = !walker && rb != null && path.StartsWith("TRAFFIC/Vehicles");
+            if (rb != null && !walker && rb.name != "TRAIN") { e.Wheels = t.GetComponentsInChildren<Wheel>(true); e.WheelRot = new float[e.Wheels.Length]; }
             ents.Add(e);
             return e;
         }
@@ -152,6 +162,7 @@ namespace MWCoop
             }
             if (Session.IsHost)
             {
+                HostFollowOwned();
                 if (now < nextSend || Session.RemoteCount == 0) return;
                 nextSend = now + 0.2f;
                 SendAll();
@@ -167,9 +178,11 @@ namespace MWCoop
             foreach (Ent e in ents)
             {
                 if (e.T == null || e.LastRecv <= 0) continue;
+                if (e.Owner == Session.LocalId) continue;   // physique ici (choc) : rien de l'hote
                 Follow(e);
                 if (e.Vel.sqrMagnitude > 0.5f) moving++;
             }
+            GuestContacts(now);
             if (now >= nextLog)
             {
                 nextLog = now + 15f;
@@ -220,13 +233,13 @@ namespace MWCoop
                 int li = remap == null ? i : i < remap.Length ? remap[i] : -1;
                 if (li < 0 || li >= ents.Count) continue;
                 Ent e = ents[li];
-                if (e.T == null) continue;
+                if (e.T == null || e.Owner == Session.LocalId) continue;   // (physique ici : la copie de l'hote nous suit)
                 Mute(e);
                 if (e.T.gameObject.activeSelf != on) e.T.gameObject.SetActive(on);
                 if (!on) continue;
                 if (!e.T.gameObject.activeInHierarchy) WakeParents(e);
                 if (e.Mesh != null && !e.Mesh.activeSelf) e.Mesh.SetActive(true);   // cachee par Move avant sa coupure
-                if (e.LastRecv <= 0 || (p - e.T.position).sqrMagnitude > 400f) { e.T.position = p; e.T.rotation = q; }
+                if (e.LastRecv <= 0 || (p - e.T.position).sqrMagnitude > 400f) { e.T.position = p; e.T.rotation = q; e.Base = p; e.BaseSet = true; e.Ride = 0f; }
                 e.Pos = p; e.Rot = q; e.Vel = v; e.LastRecv = now;
             }
         }
@@ -235,9 +248,10 @@ namespace MWCoop
         static void OnControl(Peer from, NetReader r)
         {
             int kind = r.U8();
-            // Barrages (10), bus (11, 12) : leurs propres messages.
+            // Barrages (10), bus (11, 12) : leurs propres messages. Chocs (20 a 23) : passage de physique.
             if (kind == 10) { Police.OnMessage(from, r); return; }
             if (kind == 11 || kind == 12) { Bus.OnMessage(kind, from, r); return; }
+            if (kind >= C_CLAIM && kind <= C_STATE) { OnOwnership(kind, from, r); return; }
             uint h = (uint)r.I32();
             if (Session.IsHost)
             {
@@ -367,6 +381,7 @@ namespace MWCoop
         {
             Police.Test(mode, t);
             Bus.Test(mode, t);
+            if (mode == "choc") TestChoc(t);
             // [Test] EteindreConteneur=chemin (invite, 25 s) : comme un declencheur de route du joueur local.
             string off = Config.Get("Test", "EteindreConteneur", "");
             if (off.Length > 0 && !Session.IsHost && t > 25f && !testOffDone)
@@ -387,6 +402,232 @@ namespace MWCoop
                      + (Session.IsHost ? "" : ", recu il y a " + (Time.realtimeSinceStartup - tr.LastRecv).ToString("F1") + " s"));
         }
 
+        // Copie d'une voiture (invite) : roues qui tournent a la vitesse recue, braquees d'apres son virage ; pres de la
+        // camera (150 m), les roues posees sur le sol d'ici (rayon sous chacune) : la caisse monte ou descend de l'ecart
+        // moyen, en douceur et dans +-0,6 m -- elle ne flotte plus ni ne s'enfonce (retour d'un joueur, 07/10).
+        static void WheelsAndGround(Ent e)
+        {
+            float fwd = Vector3.Dot(e.Vel, e.T.forward);
+            float yaw = e.T.eulerAngles.y, dyaw = Mathf.DeltaAngle(e.LastYaw, yaw);
+            e.LastYaw = yaw;
+            float rate = Time.deltaTime > 1e-4f ? dyaw / Time.deltaTime : 0f;   // deg/s
+            float want = Mathf.Abs(fwd) > 1f ? Mathf.Clamp(rate * 2.6f / Mathf.Abs(fwd) / 35f * Mathf.Sign(fwd), -1f, 1f) : 0f;
+            e.Steer = Mathf.Lerp(e.Steer, want, 1f - Mathf.Exp(-6f * Time.deltaTime));
+            for (int i = 0; i < e.Wheels.Length; i++)
+            {
+                Wheel w = e.Wheels[i];
+                if (w == null || w.model == null || w.radius <= 0f) continue;
+                e.WheelRot[i] += fwd / w.radius * Time.deltaTime;
+                w.model.transform.localRotation = Quaternion.Euler(0f, e.Steer * w.maxSteeringAngle, 0f) * Quaternion.AngleAxis(57.29578f * e.WheelRot[i], Vector3.right);
+            }
+            if (camT == null) { Camera c = Camera.main; if (c != null) camT = c.transform; }
+            if (camT == null || (camT.position - e.T.position).sqrMagnitude > 150f * 150f) return;
+            float sum = 0f;
+            int n = 0;
+            foreach (Wheel w in e.Wheels)
+            {
+                if (w == null || w.model == null || w.radius <= 0f) continue;
+                Vector3 c0 = w.model.transform.position;
+                RaycastHit[] hs = Physics.RaycastAll(c0 + Vector3.up * 1.2f, Vector3.down, 4f);
+                float best = float.MaxValue;
+                for (int h = 0; h < hs.Length; h++)
+                {
+                    if (hs[h].collider.isTrigger || hs[h].collider.transform.IsChildOf(e.T)) continue;   // (sa propre caisse)
+                    if (hs[h].distance < best) best = hs[h].distance;
+                }
+                if (best == float.MaxValue) continue;
+                float groundY = c0.y + 1.2f - best;
+                sum += groundY + w.radius - c0.y;
+                n++;
+            }
+            if (n < 2) return;
+            float err = Mathf.Clamp(e.Ride + sum / n, -0.6f, 0.6f);
+            e.Ride = Mathf.Lerp(e.Ride, err, 1f - Mathf.Exp(-4f * Time.deltaTime));
+        }
+
+        // ---------------------------------------------------------------- chocs : passage de physique
+        // L'invite qui conduit pres d'une voiture de la circulation (TRAFFIC/Vehicles*, moins de 9 m) en prend la
+        // physique ICI : elle repart de la vitesse recue, ses Wheel remises, et il envoie sa position 20 fois par seconde
+        // (C_STATE). L'hote (C_CLAIM) coupe son pilote (MobileCarController, automates), la rend cinematique et suit ;
+        // deja a un autre joueur : refus (C_REFUSE), l'invite la rend aussitot. Eloigne (plus de 14 m pendant 1,5 s, ou
+        // 25 s ecoulees) : l'invite la rend (C_RELEASE : position, rotation, vitesse) ; l'hote lui rend sa physique et son
+        // pilote a cet endroit. Les autres invites voient la copie de l'hote comme toujours.
+        static int HostIndexOf(int li)
+        {
+            if (remap == null) return li;
+            for (int i = 0; i < remap.Length; i++) if (remap[i] == li) return i;
+            return -1;
+        }
+        static Ent EntOfHostIndex(int hi)
+        {
+            int li = Session.IsHost || remap == null ? hi : hi < remap.Length ? remap[hi] : -1;
+            return li >= 0 && li < ents.Count ? ents[li] : null;
+        }
+
+        static void GuestContacts(float now)
+        {
+            Transform car = VehicleSync.LocalDrivingRoot;
+            int me = Session.LocalId;
+            for (int li = 0; li < ents.Count; li++)
+            {
+                Ent e = ents[li];
+                if (e.T == null || !e.Traffic || e.Body == null) continue;
+                bool mine = e.Owner == me;
+                float d2 = car != null && e.T.gameObject.activeInHierarchy ? (e.T.position - car.position).sqrMagnitude : float.MaxValue;
+                if (!mine)
+                {
+                    if (e.Owner < 0 && d2 < 81f && e.LastRecv > 0 && verified) Claim(e, li, now);
+                    continue;
+                }
+                if (now - e.OwnSent >= 0.05f)
+                {
+                    e.OwnSent = now;
+                    int hi = HostIndexOf(li);
+                    if (hi >= 0) Session.SendToHost(new NetWriter(Msg.Traffic).U16(Control).U8(C_STATE).U16(hi).Vec(e.T.position).Quat(e.T.rotation).Vec(e.Body.velocity), false);
+                }
+                bool far = d2 > 196f;
+                if (!far) e.FarSince = -1; else if (e.FarSince < 0) e.FarSince = now;
+                if ((far && now - e.FarSince > 1.5f) || (now - e.OwnSince > 25f && d2 > 64f) || car == null && now - e.OwnSince > 3f) Release(e, li, "eloignee");
+            }
+        }
+
+        static void Claim(Ent e, int li, float now)
+        {
+            int hi = HostIndexOf(li);
+            if (hi < 0) return;
+            e.Owner = Session.LocalId; e.OwnSince = now; e.FarSince = -1; e.OwnSent = 0;
+            e.Body.isKinematic = false;
+            e.Body.velocity = e.Vel;
+            e.Body.angularVelocity = Vector3.zero;
+            e.T.position = e.Base + Vector3.up * e.Ride;
+            e.Ride = 0f;
+            if (e.Wheels != null) foreach (Wheel w in e.Wheels) if (w != null) w.enabled = true;
+            Session.SendToHost(new NetWriter(Msg.Traffic).U16(Control).U8(C_CLAIM).U16(hi).Vec(e.T.position).Quat(e.T.rotation).Vec(e.Vel), true);
+            Log.Info("trafic : choc possible avec " + e.Key + " : physique ici (" + (e.Vel.magnitude * 3.6f).ToString("F0") + " km/h)");
+        }
+
+        static void Release(Ent e, int li, string why)
+        {
+            int hi = HostIndexOf(li);
+            Vector3 v = e.Body != null ? e.Body.velocity : Vector3.zero;
+            if (hi >= 0) Session.SendToHost(new NetWriter(Msg.Traffic).U16(Control).U8(C_RELEASE).U16(hi).Vec(e.T.position).Quat(e.T.rotation).Vec(v), true);
+            BackToCopy(e);
+            e.Pos = e.T.position; e.Rot = e.T.rotation; e.Vel = v; e.Base = e.T.position; e.BaseSet = true; e.LastRecv = Time.realtimeSinceStartup;
+            Log.Info("trafic : " + e.Key + " rendue a l'hote (" + why + ")");
+        }
+
+        static void BackToCopy(Ent e)   // invite : de nouveau la copie cinematique de l'hote
+        {
+            e.Owner = -1;
+            if (e.Body != null) e.Body.isKinematic = true;
+            if (e.Wheels != null) foreach (Wheel w in e.Wheels) if (w != null) w.enabled = false;
+        }
+
+        static void OnOwnership(int kind, Peer from, NetReader r)
+        {
+            int hi = r.U16();
+            Ent e = EntOfHostIndex(hi);
+            if (!Session.IsHost)
+            {
+                if (kind == C_REFUSE && e != null && e.Owner == Session.LocalId) { BackToCopy(e); Log.Info("trafic : " + e.Key + " deja a un autre joueur, rendue"); }
+                return;
+            }
+            Vector3 p = r.Vec(); Quaternion q = r.Quat(); Vector3 v = r.Vec();
+            if (e == null || e.T == null || e.Body == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (kind == C_CLAIM)
+            {
+                if (e.Owner >= 0 && e.Owner != from.Id)
+                {
+                    Session.T.SendReliable(from, new NetWriter(Msg.Traffic).U16(Control).U8(C_REFUSE).U16(hi).ToArray());
+                    return;
+                }
+                if (e.Owner != from.Id)
+                {
+                    e.Owner = from.Id;
+                    e.HostOff = new List<Behaviour>();
+                    foreach (MonoBehaviour m in e.T.GetComponents<MonoBehaviour>())
+                    {
+                        string n = m.GetType().Name;
+                        var f = m as PlayMakerFSM;
+                        if (f != null && f.FsmName == "LOD") continue;
+                        if ((f != null || n == "MobileCarController" || n == "AxisCarController") && m.enabled) { m.enabled = false; e.HostOff.Add(m); }
+                    }
+                    if (e.Wheels != null) foreach (Wheel w in e.Wheels) if (w != null && w.enabled) { w.enabled = false; e.HostOff.Add(w); }
+                    e.Body.isKinematic = true;
+                    Log.Info("trafic : " + e.Key + " : physique a " + from + " (choc possible), pilote en pause");
+                }
+            }
+            if (e.Owner != from.Id) return;
+            e.Pos = p; e.Rot = q; e.Vel = v; e.LastRecv = now;
+            if (kind == C_RELEASE)
+            {
+                e.T.position = p; e.T.rotation = q;
+                e.Body.isKinematic = false;
+                e.Body.velocity = v;
+                if (e.HostOff != null) foreach (Behaviour b in e.HostOff) if (b != null) b.enabled = true;
+                e.HostOff = null;
+                e.Owner = -1;
+                Log.Info("trafic : " + e.Key + " rendue par " + from + ", pilote repris (" + (v.magnitude * 3.6f).ToString("F0") + " km/h)");
+            }
+        }
+
+        // Hote : voitures dont un invite a la physique, suivies d'apres ses messages ; invite parti : reprises.
+        static void HostFollowOwned()
+        {
+            float now = Time.realtimeSinceStartup;
+            foreach (Ent e in ents)
+            {
+                if (e.Owner < 0 || e.T == null || e.Body == null) continue;
+                bool gone = !Session.Players.ContainsKey(e.Owner) || now - e.LastRecv > 3f;
+                if (gone)
+                {
+                    e.Body.isKinematic = false;
+                    if (e.HostOff != null) foreach (Behaviour b in e.HostOff) if (b != null) b.enabled = true;
+                    e.HostOff = null;
+                    Log.Info("trafic : " + e.Key + " reprise (joueur #" + e.Owner + " muet ou parti)");
+                    e.Owner = -1;
+                    continue;
+                }
+                float dt = Mathf.Min(now - e.LastRecv, 0.2f);
+                float k = 1f - Mathf.Exp(-15f * Time.deltaTime);
+                e.T.position = Vector3.Lerp(e.T.position, e.Pos + e.Vel * dt, k);
+                e.T.rotation = Quaternion.Slerp(e.T.rotation, e.Rot, k);
+            }
+        }
+
+        // Essai [Test] Autotest=choc (invite) : a 40 s, prend la physique de la voiture de la circulation active la plus
+        // proche (comme un choc), la pousse de cote ; la rend a 52 s. Attendu : "physique ici" puis "rendue" chez
+        // l'invite, "physique a #1" puis "rendue par #1, pilote repris" chez l'hote.
+        static int chocStep;
+        public static void TestChoc(float t)
+        {
+            if (Session.IsHost || !verified) return;
+            if (chocStep == 0 && t > 40f)
+            {
+                chocStep = 1;
+                Transform me = Camera.main != null ? Camera.main.transform : null;
+                int best = -1;
+                float bd = float.MaxValue;
+                for (int i = 0; i < ents.Count; i++)
+                {
+                    Ent e = ents[i];
+                    if (e.T == null || !e.Traffic || e.Body == null || !e.T.gameObject.activeInHierarchy || e.LastRecv <= 0) continue;
+                    float d = me != null ? (e.T.position - me.position).sqrMagnitude : 0f;
+                    if (d < bd) { bd = d; best = i; }
+                }
+                if (best < 0) { Log.Info("autotest : choc : aucune voiture de la circulation active ici"); return; }
+                Claim(ents[best], best, Time.realtimeSinceStartup);
+                ents[best].Body.AddForce(ents[best].T.right * ents[best].Body.mass * 4f, ForceMode.Impulse);
+                Log.Info("autotest : choc : " + ents[best].Key + " poussee a " + Mathf.Sqrt(bd).ToString("F0") + " m");
+            }
+            if (chocStep == 1 && t > 52f)
+            {
+                chocStep = 2;
+                for (int i = 0; i < ents.Count; i++) if (ents[i].Owner == Session.LocalId) Release(ents[i], i, "fin de l'essai");
+            }
+        }
+
         // Objet suivi ici d'apres l'hote (copie cinematique de la circulation) ?
         public static bool Follows(Transform t)
         {
@@ -395,14 +636,19 @@ namespace MWCoop
             return false;
         }
 
+        static Transform camT;
+
         static void Follow(Ent e)
         {
             if (!e.T.gameObject.activeInHierarchy) return;
             float dt = Mathf.Min(Time.realtimeSinceStartup - e.LastRecv, 0.4f);
             Vector3 target = e.Pos + e.Vel * dt;
             float k = 1f - Mathf.Exp(-10f * Time.deltaTime);
-            e.T.position = Vector3.Lerp(e.T.position, target, k);
+            if (!e.BaseSet) { e.Base = e.T.position; e.BaseSet = true; }
+            e.Base = Vector3.Lerp(e.Base, target, k);   // position de l'hote, sans la pose au sol d'ici
             e.T.rotation = Quaternion.Slerp(e.T.rotation, e.Rot, k);
+            e.T.position = e.Base + Vector3.up * e.Ride;
+            if (e.Wheels != null && e.Wheels.Length > 0) WheelsAndGround(e);
             if (e.Train && e.Body != null && !e.Body.isKinematic) e.Body.velocity = Vector3.zero;   // pas de derive apres un choc
             if (e.Anim != null)
             {

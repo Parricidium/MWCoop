@@ -86,6 +86,13 @@ namespace MWCoop
             }
         }
 
+        // Commande actionnee par ce joueur (Jobs) : son avatar y tend la main.
+        public static void ReachFor(int id, Vector3 at)
+        {
+            Avatar a;
+            if (avatars.TryGetValue(id, out a) && a != null && a.Root != null) a.ReachFor(at);
+        }
+
         // Apres les animations : poses calculees (conduite, buste et tete qui suivent le regard, bras).
         public static void LateUpdate()
         {
