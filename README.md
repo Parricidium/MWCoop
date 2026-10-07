@@ -123,7 +123,9 @@ before the mod's.
 **MSCLoader** (experimental): MWCoop and MSCLoader run side by side since 0.31.3. The launcher's **MODS** tab
 (0.32) installs MSCLoader from its official GitHub (its own installer refuses a game folder that already contains a
 `version.dll`), turns it on or off for the next launch, lists your mods and edits their options (gear icon; applied
-at the next game launch). Mods are not synced between players yet.
+at the next game launch). Since 0.36, the host's mods marked **Send** go to the lobby's guests (one **ACCEPT ALL**,
+then automatic): they are copied apart, in `%LOCALAPPDATA%\MWCoop\mods-invite`, and loaded only for the host's
+game (the guest's own mods and settings are never touched). A host without MSCLoader: guests play without it too.
 
 ### Antivirus warning
 
@@ -283,7 +285,10 @@ Windows avant celle du mod.
 **MSCLoader** (expérimental) : MWCoop et MSCLoader fonctionnent ensemble depuis la 0.31.3. L'onglet **MODS** du
 lanceur (0.32) installe MSCLoader depuis son GitHub officiel (son propre installateur refuse un dossier de jeu qui
 contient déjà une `version.dll`), l'active ou le coupe pour le prochain lancement, liste vos mods et règle leurs options
-(icône d'engrenage ; pris au prochain lancement du jeu). Les mods ne sont pas encore synchronisés entre joueurs.
+(icône d'engrenage ; pris au prochain lancement du jeu). Depuis la 0.36, les mods de l'hôte cochés **Envoyer** partent
+chez les invités du salon (un **TOUT ACCEPTER**, puis automatique) : copiés à part, dans `%LOCALAPPDATA%\MWCoop\mods-invite`,
+et chargés seulement pour la partie de l'hôte (les mods et réglages de l'invité ne sont jamais touchés). Hôte sans
+MSCLoader : les invités jouent sans aussi.
 
 ### Alerte d'antivirus
 

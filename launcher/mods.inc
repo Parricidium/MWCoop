@@ -26,6 +26,8 @@ static bool g_mscPageDisabled;
 static std::atomic<int> g_mscInstall(0);   // 0 rien, 1 en cours, 2 fini, 3 echec
 static std::string g_mscInstallWhy;
 static bool g_mscFake;                      // captures : liste factice, pas de releve
+static bool ModShared(const std::wstring &file);   // (modsync.inc : envoye aux invites)
+static void ModSetShared(const std::wstring &file, bool on);
 
 static std::wstring MscManaged() { return g_gameDir + L"mywintercar_Data\\Managed\\"; }
 static std::wstring MscIni() { return g_gameDir + L"doorstop_config.ini"; }
@@ -252,7 +254,18 @@ static DWORD WINAPI MscInstallThread(void *)
     }
     std::wstring root = g_gameDir.substr(0, g_gameDir.size() - 1), managed = MscManaged();
     managed.pop_back();
-    if (!Unzip(pkg + L"core64.pack", root, &why)) return fail("winhttp.dll / doorstop_config.ini : " + why);
+    // core64.pack (winhttp.dll, doorstop_config.ini) d'abord a part : une winhttp.dll deja la est chargee par ce
+    // lanceur s'il est dans le dossier du jeu (verrouillee) ; la garder si c'est la meme, et ne jamais laisser un
+    // doorstop_config.ini a moitie ecrit (celui du paquet vise mysummercar_Data).
+    SHCreateDirectoryExW(NULL, (tmp + L"core").c_str(), NULL);
+    if (!Unzip(pkg + L"core64.pack", tmp + L"core", &why)) return fail("core64.pack : " + why);
+    {
+        std::vector<unsigned char> a, b;
+        std::wstring wh = g_gameDir + L"winhttp.dll";
+        bool same = ReadAll(wh, a) && ReadAll(tmp + L"core\\winhttp.dll", b) && a == b;
+        if (!same && !CopyFileW((tmp + L"core\\winhttp.dll").c_str(), wh.c_str(), FALSE)) return fail("winhttp.dll : en cours d'utilisation (erreur " + std::to_string(GetLastError()) + ")");
+        if (!had && !CopyFileW((tmp + L"core\\doorstop_config.ini").c_str(), ini.c_str(), FALSE)) return fail("doorstop_config.ini : ecriture impossible");
+    }
     if (!Unzip(pkg + L"main_ref.pack", managed, &why)) return fail("bibliotheques : " + why);
     if (!Unzip(pkg + L"main_mwc.pack", tmp + L"mwc", &why)) return fail("main_mwc : " + why);
     if (!Unzip(tmp + L"mwc\\Managed.zip", managed, &why)) return fail("MSCLoader.dll : " + why);
@@ -276,9 +289,9 @@ static void MscInstall()
     if (g_mscInstall == 1 || g_gameDir.empty()) return;
     if (GameProcessRunning()) { SetStatus(K_ERR, T(L"Ferme My Winter Car avant d'installer MSCLoader", L"Close My Winter Car before installing MSCLoader")); return; }
     if (g_testSalon.empty() && MessageBoxW(g_wnd, T(L"Télécharger la dernière version officielle de MSCLoader (GitHub de piotrulos, environ 4 Mo) et l'installer dans le dossier du jeu ?\n\n"
-                                                      L"MSCLoader est un projet indépendant de MWCoop. Son support dans MWCoop est EXPÉRIMENTAL : les mods ne sont pas encore synchronisés entre joueurs.",
+                                                      L"MSCLoader est un projet indépendant de MWCoop. Son support dans MWCoop est EXPÉRIMENTAL.",
                                                       L"Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it in the game folder?\n\n"
-                                                      L"MSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL: mods are not synced between players yet."),
+                                                      L"MSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL."),
                                          L"MWCoop", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
     g_mscInstall = 1;
     g_progress = 0;
@@ -367,7 +380,10 @@ static int MscAt(float x, float y)
     if (g_mscInstalled && kMscOpenDir.Contains(x, y)) return 1004;
     if (!kMscList.Contains(x, y)) return -1;
     int i = (int)((y - kMscList.Y + g_scroll[TAB_MODS]) / kMscRowH);
-    return i >= 0 && i < (int)g_msc.size() && g_msc[i].known ? 2000 + i : -1;
+    if (i < 0 || i >= (int)g_msc.size()) return -1;
+    float right = kMscList.X + 4 + kMscList.Width - (MscMaxScroll() > 0 ? 16 : 8);
+    if (x > right - 176 && x < right - 64) return 4000 + i;   // Envoyer aux invites
+    return g_msc[i].known ? 2000 + i : -1;
 }
 
 static bool MscClick(float x, float y)
@@ -380,6 +396,12 @@ static bool MscClick(float x, float y)
     } else if (h == 1001) MscInstall();
     else if (h == 1004) ShellExecuteW(g_wnd, L"open", g_mscDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
     else if (h == 1002) { g_mscPage = -1; g_scroll[TAB_MODS] = 0; }
+    else if (h >= 4000) {
+        const MscMod &m = g_msc[h - 4000];
+        bool on = !ModShared(m.file);
+        ModSetShared(m.file, on);
+        SetStatus(K_NORMAL, on ? T(L"%s sera envoy\u00E9 aux invit\u00E9s du salon", L"%s will be sent to the lobby's guests") : T(L"%s reste chez toi (pas envoy\u00E9)", L"%s stays with you (not sent)"), m.name.c_str());
+    }
     else if (h >= 2000 && h < 3000) { g_mscPage = h - 2000; g_scroll[TAB_MODS] = 0; MscLoadPage(); }
     else if (h == 1003) { g_mscPageDisabled = !g_mscPageDisabled; if (!g_mscFake) MscSavePage(); }
     else if (h >= 3000) {
@@ -509,11 +531,14 @@ static void DrawMods(Graphics &g)
             SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
             Pen rpen(hot ? kAcc : TH(choiceBorder), 1.1f); g.DrawPath(&rpen, &rp);
             float a = m.disabled ? 0.5f : 1.0f;
-            Text(g, m.name, RectF(r.X + 14, r.Y + 3, r.Width - 140, 22), 13.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
+            Text(g, m.name, RectF(r.X + 14, r.Y + 3, r.Width - 196, 22), 13.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
             std::wstring line = m.known ? L"v" + m.ver + (m.author.empty() ? L"" : L" · " + m.author) + (m.disabled ? T(L" · désactivé", L" · disabled") : L"")
                                         : m.file + T(L" · lance le jeu une fois pour les détails", L" · start the game once for details");
-            Text(g, line, RectF(r.X + 14, r.Y + 23, r.Width - 80, 18), 11, FontStyleRegular, kGrey, StringAlignmentNear);
+            Text(g, line, RectF(r.X + 14, r.Y + 23, r.Width - 196, 18), 11, FontStyleRegular, kGrey, StringAlignmentNear);
             if (m.known) DrawGear(g, r.X + r.Width - 26, r.Y + r.Height / 2, hot ? kAcc : kGrey);
+            bool sh = ModShared(m.file), shHot = g_mscHot == 4000 + i;   // envoye aux invites du salon
+            Text(g, T(L"Envoyer", L"Send"), RectF(r.X + r.Width - 172, r.Y, 58, r.Height), 10.5f, FontStyleBold, shHot ? kAcc : sh ? kInk : kGrey, StringAlignmentFar);
+            DrawToggle(g, RectF(r.X + r.Width - 108, r.Y + (r.Height - 20) / 2, 40, 20), sh, shHot);
         }
         g.ResetClip();
         if (ms > 0) {
@@ -524,8 +549,8 @@ static void DrawMods(Graphics &g)
     }
     Pen sep(TH(sep), 1);
     g.DrawLine(&sep, kOptPanel.X + 18, 518.0f, kOptPanel.X + kOptPanel.Width - 18, 518.0f);
-    Para(g, T(L"Réglages pris au prochain lancement du jeu. Envoi des mods aux autres joueurs : bientôt.",
-              L"Settings apply at the next game launch. Sending mods to the other players: coming soon."),
+    Para(g, T(L"Réglages pris au prochain lancement du jeu. « Envoyer » : le mod est copié chez les invités de ton salon.",
+              L"Settings apply at the next game launch. \"Send\": the mod is copied to your lobby's guests."),
          RectF(kOptPanel.X + 20, 524, kOptPanel.Width - 40, 26), 11.5f, kGrey, StringAlignmentCenter);
     if (g_mscInstalled && g_mscPage < 0) {
         bool hot = g_mscHot == 1004;

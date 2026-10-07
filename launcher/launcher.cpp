@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1367,6 +1367,14 @@ static void BuildOptions()
         o.fr = L"Fermer le lanceur au lancement du jeu"; o.en = L"Close the launcher when the game starts"; o.suffix = L"";
         o.dFr = L"D\u00E9sactiv\u00E9 : le lanceur reste ouvert pendant la partie (joueurs, ping ; l'h\u00F4te peut faire venir ou exclure un joueur) et revient au menu quand le jeu se ferme.";
         o.dEn = L"Off: the launcher stays open during the game (players, ping; the host can bring a player over or kick them) and goes back to the menu when the game closes.";
+        g_opts.push_back(o);
+    }
+    {   // Mods de l'hote (modsync.inc) : TOUT ACCEPTER une fois l'allume
+        Opt o = {};
+        o.tab = TAB_COOP; o.key = "ModsAuto"; o.def = 0; o.kind = O_TOGGLE;
+        o.fr = L"Accepter les mods de l'h\u00F4te sans demander"; o.en = L"Accept the host's mods without asking"; o.suffix = L"";
+        o.dFr = L"Dans un salon, les mods MSCLoader de l'h\u00F4te sont copi\u00E9s \u00E0 part (les tiens ne sont pas touch\u00E9s) et charg\u00E9s pour sa partie. Coup\u00E9 : le salon demande d'abord (TOUT ACCEPTER).";
+        o.dEn = L"In a lobby, the host's MSCLoader mods are copied separately (yours are not touched) and loaded for their game. Off: the lobby asks first (ACCEPT ALL).";
         g_opts.push_back(o);
     }
     {   // Apparence : materiaux des corps des PNJ du jeu (Sync\Avatar.cs)
@@ -3817,7 +3825,7 @@ static bool GameProcessRunning()
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe = { sizeof(pe) };
-    std::wstring mine = g_gameDir + L"mywintercar.exe", mirror = GameExe();
+    std::wstring mine = g_gameDir + L"mywintercar.exe", mirror = GameExe(), guest = LocalDir() + L"invite\\My Winter Car\\mywintercar.exe";
     bool found = false;
     for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
         if (_wcsicmp(pe.szExeFile, L"mywintercar.exe")) continue;
@@ -3825,7 +3833,7 @@ static bool GameProcessRunning()
         if (!h) { found = true; break; }   // inconnu : prudence
         wchar_t path[MAX_PATH];
         DWORD n = MAX_PATH;
-        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str())) found = true;
+        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str())) found = true;
         CloseHandle(h);
     }
     CloseHandle(snap);
@@ -3886,6 +3894,10 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     return ok;
 }
 
+static int SyncLaunchKind();   // (modsync.inc)
+static std::wstring GuestCopyDir();
+static bool PrepareGuestCopy(const std::wstring &m, bool mods);
+static bool g_syncKeep;   // GO recu : la copie des mods sert au lancement (LobbyClose ne l'oublie pas)
 static void Launch(int mode, const char *partie = NULL)
 {
     if (mode == MODE_SOLO) g_launchWarn.clear();   // (avertissement UDP : salon seulement)
@@ -3917,7 +3929,13 @@ static void Launch(int mode, const char *partie = NULL)
         TestLog("lancement.ini : ecriture impossible");
         return;
     }
+    int syncKind = mode == MODE_GUEST ? SyncLaunchKind() : 0;   // mods de l'hote : 1 sans MSCLoader, 2 avec ses mods
+    g_syncKeep = false;
     if (!g_testSalon.empty()) {   // mode d'essai : le lancement.ini dans le journal, et JAMAIS le jeu
+        if (syncKind) {
+            std::wstring gc = GuestCopyDir();
+            TestLog("test : mods au lancement : %s, copie %s", syncKind == 2 ? "ceux de l'hote" : "sans MSCLoader", PrepareGuestCopy(gc, syncKind == 2) ? "prete" : "IMPOSSIBLE");
+        }
         std::vector<unsigned char> d;
         ReadAll(g_gameDir + L"MWCoop\\lancement.ini", d);
         std::string text(d.begin(), d.end());
@@ -3942,14 +3960,18 @@ static void Launch(int mode, const char *partie = NULL)
     if (mode == MODE_GUEST) args += (g_steamNet ? std::wstring() : L" -mwcoop-adresse " + addr) + L" -mwcoop-profil invite";
     SteamDown();   // (le lanceur ne passe plus pour le jeu aupres de Steam)
     // MSCLoader installe mais coupe dans l'onglet MODS : son prechargeur s'arrete tout de suite (rien n'est desinstalle).
-    if (!g_mscOn && FileExists(g_gameDir + L"winhttp.dll") && FileExists(g_gameDir + L"doorstop_config.ini")) { args += L" -mscloader-disable"; TestLog("lancement sans MSCLoader (-mscloader-disable)"); }
+    bool mscOff = syncKind ? syncKind == 1 : !g_mscOn;   // (salon : comme l'hote)
+    if (mscOff && FileExists(g_gameDir + L"winhttp.dll") && FileExists(g_gameDir + L"doorstop_config.ini")) { args += L" -mscloader-disable"; TestLog("lancement sans MSCLoader (-mscloader-disable)"); }
     g_preWnds.clear();
     EnumWindows(ListUnityWindows, (LPARAM)&g_preWnds);
     // Lance comme un double-clic dans l'explorateur : un mode de compatibilite de l'exe peut exiger l'administrateur ;
     // CreateProcess echoue alors (erreur 740), ShellExecuteEx affiche la demande de Windows.
     std::wstring exe = g_gameDir + L"mywintercar.exe", runDir = g_gameDir;
-    std::wstring mirror = MirrorDir();
-    if (!mirror.empty()) {
+    std::wstring mirror = syncKind ? GuestCopyDir() : MirrorDir();
+    if (syncKind && !mirror.empty()) {   // invite d'un salon : sa copie de lancement (Mods -> les mods de l'hote)
+        if (PrepareGuestCopy(mirror, syncKind == 2)) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
+        else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part sans les mods de l'h\u00F4te", L"Could not prepare the launch copy: the game starts without the host's mods"));
+    } else if (!mirror.empty()) {
         if (PrepareMirror(mirror)) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
         else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de Steam (le mod risque de ne pas se charger)", L"Could not prepare the launch copy: starting from Steam (the mod may not load)"));
     }
@@ -4015,6 +4037,7 @@ static void Launch(int mode, const char *partie = NULL)
 // ces octets en trop (et les sondes : il n'ecoute pas en UDP). La socket UDP de l'hote est fermee par LobbyClose(),
 // donc avant le lancement de son jeu (qui ouvre ce meme port UDP).
 enum { LB_PROTO = 1, M_HELLO = 1, M_WELCOME, M_REJECT, M_STATE, M_READY, M_GO, M_PING, M_PONG, M_SKIN };
+enum { M_MODS = 20, M_MODGET, M_MODDATA, M_MODSREQ };   // mods de l'hote (modsync.inc)
 static SOCKET g_listen = INVALID_SOCKET, g_guestSock = INVALID_SOCKET;
 static SOCKET g_udpHost = INVALID_SOCKET;           // hote : ecoute UDP du salon (sous g_lcs)
 static int g_udpHostErr;                            // hote : erreur de l'ouverture du port UDP (0 = ouvert)
@@ -4033,7 +4056,8 @@ static void SteamDown();
 static int g_lobbyPort = 7870;
 static int g_lobbyHot = -1;                         // choix de partie survole (0 continuer, 1 nouvelle)
 static std::string g_mySkinSent;                    // derniere apparence annoncee au salon
-static const RectF kLobbyList(452, 172, 488, 250), kChoiceR[2] = { RectF(456, 450, 236, 32), RectF(700, 450, 236, 32) };
+static RectF kLobbyList(452, 172, 488, 250);   // (moins haute sous la barre des mods : LobbyTick)
+static const RectF kChoiceR[2] = { RectF(456, 450, 236, 32), RectF(700, 450, 236, 32) };
 static const float kLobbyRowH = 58;
 static const RectF kLobbyCarBtn(862, 123, 28, 28), kLobbyGearBtn(898, 123, 28, 28);   // en-tete du salon : volet
 
@@ -4105,6 +4129,13 @@ static bool RecvAllS(SOCKET s, void *d, int n)
     while (n > 0) { int r = recv(s, p, n, 0); if (r <= 0) return false; p += r; n -= r; }
     return true;
 }
+static bool SendMsg(SOCKET s, const Wr &w);
+static void SyncOnOffer(const std::string &m);
+static void SyncOnData(const std::string &m);
+static bool SyncServe(const std::string &m, Wr &out);
+static void SyncWelcome(SOCKET s);
+static void SyncReset();
+static void SyncOfferReset();
 static bool SendMsg(SOCKET s, const Wr &w)
 {
     uint16_t n = (uint16_t)w.d.size();
@@ -4202,11 +4233,17 @@ static void LobbySession(SOCKET s)
     if (id < 0) { reject("full"); return; }
     TestLog("salon : %s arrive (joueur %d, version %s, apparence %s)", name.c_str(), id, ver.c_str(), skin.c_str());
     BroadcastState();
+    SyncWelcome(s);
     DWORD to = 60000;   // (l'invite repond aux pings toutes les 2 s)
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
     while (RecvMsg(s, m)) {
         Rd q(m);
         int t = q.u8();
+        if (t == M_MODGET) {   // (fichier lu hors du verrou)
+            Wr w;
+            if (SyncServe(m, w)) { EnterCriticalSection(&g_lcs); SendMsg(s, w); LeaveCriticalSection(&g_lcs); }
+            continue;
+        }
         EnterCriticalSection(&g_lcs);
         LobbyPeer *p = PeerById(id);
         if (p && t == M_READY) { p->ready = q.u8() != 0; TestLog("salon : %s (joueur %d) pret=%d", p->name.c_str(), id, (int)p->ready); }
@@ -4567,6 +4604,7 @@ static void LobbyHost()
     }
     g_lobbyGen++;
     g_listen = ls;
+    SyncOfferReset();
     EnterCriticalSection(&g_lcs);
     g_peers.clear();
     g_conns.clear();
@@ -4624,6 +4662,7 @@ static void LobbyClose()
     g_meReady = false;
     g_udpMine = UDP_NA;
     g_lobbyHot = -1;
+    if (!g_syncKeep) SyncReset();   // (GO : gardee pour le lancement)
     if (g_tab == TAB_LOBBY) g_tab = -1;
     LayoutTabs();
 }
@@ -4829,7 +4868,9 @@ static DWORD WINAPI GuestThread(void *param)
                 list += std::string(" ; partie=") + PartieName(g_partie);
                 if (list != lastList) { TestLog("salon : liste %s", list.c_str()); lastList = list; }
             }
-        } else if (type == M_PING) {
+        } else if (type == M_MODS) SyncOnOffer(m);
+        else if (type == M_MODDATA) SyncOnData(m);
+        else if (type == M_PING) {
             Wr w; w.u8(M_PONG); w.u32(q.u32());
             GuestSend(w);
         } else if (type == M_GO) {
@@ -4859,6 +4900,7 @@ static void LobbyJoin()
         if (p > 0 && p < 65536) g_lobbyPort = p;
     }
     SavePlayer();
+    SyncReset();
     g_meReady = false;
     g_joinFallback = false;
     g_myId = -1;
@@ -4893,6 +4935,7 @@ static void GuestToggleReady()
 
 #include "steam.inc"
 #include "mods.inc"
+#include "modsync.inc"
 #include "serveur.inc"
 
 // Toutes les 2 s, l'hote mesure le ping de chacun ; chaque seconde (aussitot apres un choix dans l'onglet TENUE),
@@ -4902,6 +4945,9 @@ static void LobbyTick()
     static DWORD lastPing, lastSkin;
     DWORD now = GetTickCount();
     int lobby = g_lobby;
+    kLobbyList.Height = SyncBarShown() ? 214.0f : 250.0f;
+    SyncTick();
+    SyncSteamTick();
     if ((lobby == LB_HOST || lobby == LB_GUEST) && (now - lastSkin >= 1000 || g_skinAnnounce)) {
         lastSkin = now;
         g_skinAnnounce = false;
@@ -4972,6 +5018,7 @@ static int LobbyChoiceAt(float x, float y)
 {
     // Tous : icones voiture (60) et engrenage (61) ; son propre personnage (62) : tenue. (Volet a droite.)
     if ((g_lobby == LB_HOST || g_lobby == LB_GUEST) && !(g_lobbySteam && g_sFriendsView)) {
+        if (int sb = SyncBtnAt(x, y)) return 69 + sb;   // 70 : TOUT ACCEPTER / REESSAYER, 71 : hote, onglet MODS
         if (kLobbyCarBtn.Contains(x, y)) return 60;
         if (kLobbyGearBtn.Contains(x, y)) return 61;
         if (kLobbyList.Contains(x, y)) {
@@ -5133,6 +5180,7 @@ static void DrawLobby(Graphics &g)
                 GraphicsPath sp; RoundRect(sp, RectF(kLobbyList.X + kLobbyList.Width - 6, y, 4, h), 2);
                 SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
             }
+            DrawSyncBar(g, g_lobbyHot == 70 ? 1 : g_lobbyHot == 71 ? 2 : 0);   // mods de l'hote
         }
     }
 
@@ -5202,6 +5250,8 @@ static bool LobbyClick(float x, float y)
     int c = LobbyChoiceAt(x, y);
     if (c >= 100) { SteamInviteFriend(c - 100); return true; }
     if (c == 50 || c == 51) { SteamShowFriends(c == 51); return true; }
+    if (c == 70) { if (g_sync == SY_FAIL) SyncRetry(); else SyncAccept(); return true; }
+    if (c == 71) { g_tab = TAB_MODS; g_mscPage = -1; g_scroll[TAB_MODS] = 0; MscScan(); return true; }
     if (c >= 60 && c <= 62) { int k = c == 60 ? DR_CAR : c == 61 ? DR_LOBBY : DR_SKIN; if (g_drawer == k) DrawerClose(true); else DrawerShow(k); return true; }
     if (c >= 0) { LobbySetPartie(c); return true; }
     return kOptPanel.Contains(x, y);
@@ -5288,7 +5338,9 @@ static void TestSalonStep()
         else if (GetTickCount() - allReadySince > 1500) { TestLog("test : LANCER"); HostStart(); }
     } else {
         if (!tried && t > 2000) { tried = true; LobbyJoin(); }
-        if (g_lobby == LB_GUEST && !readied && t > 4500) { readied = true; TestLog("test : clic sur PRET"); GuestToggleReady(); }
+        int sy = g_sync;   // mods de l'hote : tout accepter, pret une fois recus
+        if (g_lobby == LB_GUEST && sy == SY_ASK) { TestLog("test : clic sur TOUT ACCEPTER"); SyncAccept(); }
+        if (g_lobby == LB_GUEST && !readied && t > 4500 && sy != SY_ASK && sy != SY_CHECK && sy != SY_GET) { readied = true; TestLog("test : clic sur PRET"); GuestToggleReady(); }
     }
 }
 
@@ -5579,6 +5631,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if ((int)lp != g_lobbyGen) return 0;
     {
         bool udpOk = g_udpMine == UDP_OK;
+        g_syncKeep = true;
         LobbyClose();
         g_goWait = true;
         g_launchWarn.clear();
@@ -6060,7 +6113,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 g_mscPage = 0;
                 g_mscVals = { { "xenon", "true" }, { "range", "1.5" }, { "color", "1" }, { "angle", "2" } };
                 g_mscHot = 3000 + 2 * 4 + 2;
-            } else if (g_mscInstalled) g_mscHot = 2000;
+            } else if (g_mscInstalled) g_mscHot = 4001;   // (survol : Envoyer)
             else g_mscHot = 1001;
             g_tab = TAB_MODS;
             LayoutTabs();
@@ -6089,8 +6142,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_notesDone = true; g_relState = REL_OK; g_tab = TAB_NOTES;
         }
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; g_btn[B_LOGS].hover = 1; }
-        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options") {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
-            bool host = st == L"salon" || st == L"salon-options";   // (salon-udp : invite dont l'UDP est bloque)
+        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
+            bool host = st == L"salon" || st == L"salon-options" || st == L"salon-mods";   // (salon-udp : invite dont l'UDP est bloque)
             std::string v = MyVersion();
             g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0 },
                         { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38, UDP_OK },
@@ -6108,6 +6161,20 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (st == L"salon-udp") { g_udpMine = UDP_FAIL; g_peers[1].udp = UDP_WAIT; }
             if (wcsstr(argv[3], L"-options")) { g_drawer = g_drawerShown = DR_LOBBY; g_drawerT = 1; g_lobbyHot = 61; }
             g_hostUdpTest = true;
+            // mods de l'hote : salon-mods (hote), salon-mods-demande | -telechargement | -prets (invite)
+            std::vector<std::string> mods = { "BetterHeadlights.dll", "TrunkLight.dll", "CDPlayerEnhanced.dll" };
+            if (st == L"salon-mods") {
+                g_offer.msc = true; g_offer.mods = mods;
+                g_offer.files = { { "BetterHeadlights.dll", 412000, 1 }, { "TrunkLight.dll", 96000, 2 }, { "CDPlayerEnhanced.dll", 1830000, 3 } };
+                g_lobbyHot = 71;
+            } else if (!wcsncmp(st.c_str(), L"salon-mods-", 11)) {
+                g_hostOffer.msc = true; g_hostOffer.mods = mods;
+                g_sync = st == L"salon-mods-demande" ? SY_ASK : st == L"salon-mods-telechargement" ? SY_GET : SY_DONE;
+                g_syncTotal = 2338000; g_syncGot = 1052000;
+                g_meReady = g_sync == SY_DONE;
+                if (g_sync == SY_ASK) g_lobbyHot = 70;
+            }
+            kLobbyList.Height = SyncBarShown() ? 214.0f : 250.0f;
         }
         else if (st == L"salon-steam" || st == L"salon-steam-amis" || st == L"salon-steam-invite") {   // salon Steam (faux)
             bool host = st != L"salon-steam-invite";
