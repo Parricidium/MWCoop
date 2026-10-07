@@ -924,6 +924,7 @@ namespace MWCoop
             // les pieds dans la direction de son regard, bras le long du corps (la pose « a terre », ancree a la tete). Avant :
             // pose assise au pied du lit (retour de JD, 06/10).
             bool sleep = !inCar && !down && (f & PlayerSync.F_Sleep) != 0;
+            Blanket(sleep);
             if (sleep)
             {
                 Vector3 fwd = Quaternion.Euler(0f, st.Yaw, 0f) * Vector3.forward;
@@ -1285,6 +1286,30 @@ namespace MWCoop
             if (arr.Length > 2) arr[2] = FindMaterial(look.Face) ?? (defMats != null && defMats.Length > 2 ? defMats[2] : arr[2]);
             body.sharedMaterials = arr;
             Accessories(look);
+        }
+
+        // Couverture sur le dormeur (demande d'un joueur, 07/10) : un drap epais des pieds a la poitrine, dans le repere de
+        // la racine (couche sur le dos : +y vers la tete, +z vers le haut), matiere de literie du jeu.
+        GameObject blanket;
+        static readonly string[] BlanketMats = { "bed_blanket", "blanket", "bed_cover", "bed_white", "fabric_flower3", "curtain4" };
+        void Blanket(bool on)
+        {
+            if (on && blanket == null && Root != null)
+            {
+                Material mat = null;
+                foreach (string n in BlanketMats) { mat = FindMaterial(n); if (mat != null) break; }
+                blanket = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                blanket.name = "MWCoop-Couverture";
+                Object.DestroyImmediate(blanket.GetComponent<Collider>());
+                blanket.layer = Root.layer;
+                blanket.transform.parent = Root.transform;
+                blanket.transform.localPosition = new Vector3(0f, 0.6f, 0.11f);
+                blanket.transform.localRotation = Quaternion.identity;
+                blanket.transform.localScale = new Vector3(0.74f, 1.2f, 0.05f);
+                if (mat != null) blanket.GetComponent<Renderer>().sharedMaterial = mat;
+                Log.Info("avatar " + (Player != null ? Player.Name : "?") + " : couverture (" + (mat != null ? mat.name : "matiere par defaut") + ")");
+            }
+            if (blanket != null && blanket.activeSelf != on) blanket.SetActive(on);
         }
 
         // Chapeau, lunettes, cheveux : copies des objets des PNJ, sur l'os de la tete (pose relevee chez le PNJ).

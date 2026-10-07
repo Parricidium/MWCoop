@@ -132,6 +132,31 @@ namespace MWCoop
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
             // Captures : Regarder=1, la camera vise l'avatar le plus proche ; Regarder=2, le milieu du groupe d'avatars
             // (photos a 3-4 joueurs) ; RegarderPos=x,y,z (sans Regarder) : le joueur se tourne vers ce point (pose).
+            // [Test] CameraAvatar=dx,dy,dz : une camera d'essai (par-dessus celle du joueur) a ce decalage (m, repere du monde)
+            // de l'avatar distant le plus proche, qui le vise : captures d'un avatar ou qu'il soit (lit, voiture...).
+            string ca = Config.Get("Test", "CameraAvatar", "");
+            if (ca.Length > 0)
+            {
+                string[] c = ca.Split(',');
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                float dx = 0, dy = 0, dz = 0;
+                if (c.Length >= 3) { float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out dx); float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out dy); float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out dz); }
+                Avatar near = null;
+                foreach (Avatar a in PlayerSync.Avatars) if (a.Root != null) { near = a; break; }
+                if (near != null)
+                {
+                    if (testCam == null)
+                    {
+                        testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>();
+                        testCam.depth = 100;
+                        testCam.nearClipPlane = 0.05f;
+                        testCam.fieldOfView = 60;
+                    }
+                    Vector3 target = near.Root.transform.position + Vector3.up * 0.3f;
+                    testCam.transform.position = near.Root.transform.position + new Vector3(dx, dy, dz);
+                    testCam.transform.LookAt(target);
+                }
+            }
             int look = Config.GetInt("Test", "Regarder", 0);
             if (look == 2) LookAtGroup();
             else if (look != 0) LookAtNearestAvatar();
@@ -767,7 +792,7 @@ namespace MWCoop
                 Log.Info("autotest : retour au menu");
                 Application.LoadLevel("MainMenu");
             }
-            if (mode == "dormir" && t > 20f && !done)
+            if ((mode == "dormir" || (mode == "dormirseul" && MWCoop.Net.Session.IsHost)) && t > 20f && !done)
             {
                 // Le joueur se couche dans le lit le plus proche (fatigue montee pour qu'il dorme
                 // plusieurs heures) ; on suit l'heure et la fatigue chaque seconde.
@@ -780,7 +805,7 @@ namespace MWCoop
                 if (bed == null) { Log.Warn("autotest : aucun lit"); return; }
                 FsmFloat fat = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFatigue");
                 if (fat != null) fat.Value = 60f;
-                Log.Info("autotest : au lit " + Recon.Path(bed.transform) + " a " + (bed.transform.position - me).magnitude.ToString("F0") + " m");
+                Log.Info("autotest : au lit " + Recon.Path(bed.transform) + " a " + (bed.transform.position - me).magnitude.ToString("F0") + " m, releve " + Recon.DumpTargets(Recon.Path(bed.transform)));
                 Game.SetState(bed, "Get positions");
                 sleepWatch = true;
             }
@@ -808,6 +833,7 @@ namespace MWCoop
         }
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
+        static Camera testCam;
         static float cdLog, fluLog, fluSum, fluSq, tapLog;
         static int fluN, fluStill;
         static Vector3 fluLast;

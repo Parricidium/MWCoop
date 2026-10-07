@@ -520,6 +520,17 @@ namespace MWCoop
             if (me != lastSkin) { lastSkin = me; lastSkinLabel = SkinLabel(me); }
             int d = Item(Lang.T("Apparence", "Outfit"), cur >= 0 ? skinLabels[cur] : lastSkinLabel, true, Lang.T("Gauche/Droite : changer d'apparence", "Left/Right: change outfit"), false);
             if (d == 1 || d == -1) SetSkin(skins[((cur < 0 ? 0 : cur) + d + skins.Count) % skins.Count]);
+            // le reste de l'apparence (Looks) : corpulence, pantalon, visage, chapeau, lunettes, cheveux
+            Looks.Look look = Looks.Parse(Session.Me.Skin);
+            for (int f = 0; f < LookRows; f++)
+            {
+                string v = Looks.Get(look, f);
+                int dd = Item(Looks.PartName(f), Looks.Label(f, v), true, Lang.T("Gauche/Droite : changer (les autres le voient aussit\u00F4t)", "Left/Right: change (the others see it right away)"), false);
+                if (dd != 1 && dd != -1) continue;
+                List<string> ch = Looks.Choices(f);
+                int i = Mathf.Max(0, ch.IndexOf(v));
+                SetPart(f, ch[(i + dd + ch.Count) % ch.Count]);
+            }
             Header(Lang.T("TENUES", "OUTFITS"));
             for (int j = 0; j < skins.Count; j++)
                 if (Item(skinLabels[j], j == cur ? Lang.T("PORT\u00C9E", "WORN") : null, false, Lang.T("Entr\u00E9e ou clic : porter cette tenue", "Enter or click: wear this outfit"), false) == 2) SetSkin(skins[j]);
@@ -534,7 +545,7 @@ namespace MWCoop
         static void SkinPreview(Rect r, Event e)
         {
             string me = Looks.Parse(Session.Me.Skin).Shirt;
-            int k = sel - 1;   // lignes : 0 = « Apparence », 1.. = les tenues
+            int k = sel - 1 - LookRows;   // lignes : 0 = « Apparence », puis les parties (LookRows), puis les tenues
             string s = k >= 0 && k < skins.Count ? skins[k] : me;
             if (s != pvSkin) { pvSkin = s; pvLabel = s.Length > 0 ? SkinLabel(s).ToUpperInvariant() : Lang.T("PAR D\u00C9FAUT", "DEFAULT"); }
             Texture tex = Studio.Live(Looks.WithShirt(Session.Me.Skin, s), (int)r.width, (int)r.height);   // (le reste de l'apparence avec)
@@ -595,6 +606,16 @@ namespace MWCoop
                 case "inspector_shirt": return Lang.T("Inspecteur", "Inspector");
             }
             return s;
+        }
+
+        const int LookRows = 6;
+        static void SetPart(int f, string v)
+        {
+            Looks.Look l = Looks.Parse(Session.Me.Skin);
+            Looks.Set(l, f, v);
+            Session.Me.Skin = Looks.Compose(l);
+            Config.Save("Coop", Looks.PartKeys[f], v);
+            Session.SendProfile();
         }
 
         static void SetSkin(string s)

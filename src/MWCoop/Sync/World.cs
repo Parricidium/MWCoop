@@ -36,6 +36,9 @@ namespace MWCoop
         static bool found;
         const float SleepScale = 0.5f, NormalScale = 300f;
         const float PassOutWait = 30f;
+        const float BedHourEvery = 8f;   // dormir seul : une heure de repos toutes les 8 s (pour soi, l'heure commune ne bouge pas)
+        static float bedAloneNext = -1;
+        public static bool WakeRequested;   // menu F10 > Se reveiller
         static bool phase;            // hote : tout le monde dort, le temps file
         static bool hostFast;         // invite : l'hote dit que le temps file
         static float waitToastAt, nextBedScan;
@@ -101,8 +104,52 @@ namespace MWCoop
         {
             if (fast || Session.RemoteCount == 0 || !Game.GlobalBool("PlayerSleeps") || Time.realtimeSinceStartup < waitToastAt) return;
             waitToastAt = Time.realtimeSinceStartup + 30f;
-            Hud.Toast(Lang.T("Le temps passera quand tout le monde dormira", "Time will pass once everyone is asleep"));
+            Hud.Toast(Lang.T("Tu dors seul : tu te reposes, l'heure ne bouge pas pour les autres. Espace : se r\u00E9veiller",
+                             "Sleeping alone: you rest, the clock does not move for the others. Space: wake up"));
         }
+
+        // Dormir dans un lit alors que les autres sont eveilles (demande d'un joueur, 07/10) : le jeu compterait les
+        // heures au rythme normal (300 s chacune). Ici, une heure de "Sleep time" pour ce joueur seul toutes les
+        // BedHourEvery s (fatigue -FatigueRemovalRate, Rate +10, comme le lit), sans toucher a l'heure commune ; reveil
+        // tout seul une fois repose (fatigue a 0), ou tout de suite avec Espace (ou F10) : ABORT -> "Calc rates" (faim,
+        // soif... d'apres Rate) -> reveil, comme le jeu.
+        static void BedAlone(bool fast)
+        {
+            PlayMakerFSM bed = null;
+            foreach (PlayMakerFSM f in beds)
+            {
+                if (f == null || f == passOut) continue;
+                string st = f.ActiveStateName;
+                if (st == "Day change" || st == "Sleep time") { bed = f; break; }
+            }
+            if (bed == null || fast || Session.RemoteCount == 0) { bedAloneNext = -1; WakeRequested = false; return; }
+            float now = Time.realtimeSinceStartup;
+            FsmFloat fatigue = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFatigue");
+            if (bedAloneNext < 0)
+            {
+                bedAloneNext = now + BedHourEvery;
+                waitToastAt = 0;
+                Log.Info("monde : dort seul (les autres sont eveilles) : une heure de repos toutes les " + BedHourEvery + " s, Espace pour se reveiller");
+                return;
+            }
+            FsmVariables v = bed.FsmVariables;
+            if (now >= bedAloneNext)
+            {
+                bedAloneNext = now + BedHourEvery;
+                FsmFloat rate = v.FindFsmFloat("Rate"), removal = v.FindFsmFloat("FatigueRemovalRate");
+                if (fatigue != null && removal != null) fatigue.Value = fatigue.Value - removal.Value;
+                if (rate != null) rate.Value += 10f;
+            }
+            bool wake = WakeRequested || Input.GetKeyDown(KeyCode.Space) || (fatigue != null && fatigue.Value <= 0f);
+            if (!wake) return;
+            if (fatigue != null && fatigue.Value < 0f) fatigue.Value = 0f;
+            Log.Info("monde : reveil (dormi seul" + (WakeRequested ? ", menu" : fatigue != null && fatigue.Value <= 0f ? ", repose" : ", Espace") + "), fatigue "
+                     + (fatigue != null ? fatigue.Value.ToString("F1") : "?") + ", l'heure commune n'a pas bouge");
+            WakeRequested = false;
+            bedAloneNext = -1;
+            bed.SendEvent("ABORT");
+        }
+        public static bool SleepingAlone { get { return bedAloneNext >= 0; } }
 
         static bool Find()
         {
@@ -139,11 +186,13 @@ namespace MWCoop
                 if (sc != null && !hostFast && sc.Value < 1f) sc.Value = NormalScale;
                 WaitToast(hostFast);
                 PassOutAlone(hostFast);
+                BedAlone(hostFast);
             }
             if (Session.IsHost)
             {
                 bool fast = HostSleep();
                 PassOutAlone(fast);
+                BedAlone(fast);
                 if (Time.realtimeSinceStartup < nextSend) return;
                 nextSend = Time.realtimeSinceStartup + (fast ? 0.1f : 1f);
                 if (Session.RemoteCount == 0) return;
