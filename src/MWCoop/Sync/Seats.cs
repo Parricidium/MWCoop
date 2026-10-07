@@ -23,13 +23,23 @@ namespace MWCoop
     //    on vise la boucle (celle du conducteur, en miroir) et on clique, comme le conducteur. Bouclee : une copie
     //    en miroir de la ceinture bouclee du conducteur (Fastened_mesh, ou Seatbelts/Close), la ceinture du
     //    passager rangee (PassengerBelt, ou Seatbelts/Passenger) cachee ; chez tous (envoyee avec la place).
+    //  - Ceinture du CONDUCTEUR (retour de JD, 07/10 : les autres ne la voyaient pas) : le jeu ne montre la ceinture bouclee
+    //    (Fastened_mesh) qu'a celui qui la porte (PlayerSeatbeltsOn, a chaque joueur). Ses automates (Seatbelts/...) ne
+    //    sont plus rejoues par Jobs (le rejeu bouclait la ceinture... du joueur d'en face, et un clic du passager sur sa
+    //    boucle detachait celle du conducteur) : le conducteur envoie son etat (Msg.Seat, place 0xFF), les autres voient
+    //    une copie de la ceinture bouclee sur son avatar (un peu en avant, comme le passager) et la sangle pendante
+    //    (DriverBelt/HandleUpPivot) cachee.
     public static class Seats
     {
         class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; }
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
         // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
         // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
-        class Belt { public GameObject Fastened, Open, Copy; public Vector3 Buckle; public bool OpenHidden; }
+        class Belt { public GameObject Fastened, Open, Copy; public Vector3 Buckle; public bool OpenHidden; public GameObject DriverOpen, DriverCopy; public bool DriverOpenHidden; }
+        static readonly Dictionary<int, bool> driverBelt = new Dictionary<int, bool>();   // conducteurs distants : ceinture bouclee
+        static bool driverBeltSent;
+        static float driverBeltResend;
+        const int DriverBeltIndex = 0xFF;
         static readonly Dictionary<Transform, Belt> belts = new Dictionary<Transform, Belt>();
         static bool beltOn, beltHint;
         const float BeltForward = 0.17f;
@@ -58,7 +68,7 @@ namespace MWCoop
         {
             zonesOff.Clear(); driverZones.Clear();
             seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
-            belts.Clear(); beltOn = beltHint = false;
+            belts.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -125,6 +135,7 @@ namespace MWCoop
             // Liste des voitures changee apres le premier releve (taxi active) : releve tout de suite.
             if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
             if (!FindPlayer()) return;
+            DriverBeltSend(now);
             if (now >= nextZones) { nextZones = now + 0.2f; DriverZones(); }
             if (current != null) TrackSpeed(current.CarT);
             if (current != null)
@@ -372,7 +383,25 @@ namespace MWCoop
             Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(car).U8(index + 1).Vec(head).U8(beltOn && index == 0 ? 1 : 0), true);
         }
 
-        // ---- ceinture du passager avant
+        // ---- ceintures
+        // Automate d'une ceinture du conducteur (sous un objet 'Seatbelts') : reserve ici, jamais rejoue.
+        public static bool IsBeltFsm(PlayMakerFSM f)
+        {
+            for (Transform t = f.transform; t != null; t = t.parent)
+                if (t.name == "Seatbelts") { Replay.Claim(f, "ceinture"); return true; }
+            return false;
+        }
+
+        // Conducteur ici : ceinture bouclee (variable du jeu) envoyee a chaque changement, et toutes les 5 s bouclee.
+        static void DriverBeltSend(float now)
+        {
+            bool on = VehicleSync.LocalDriving >= 0 && Game.GlobalBool("PlayerSeatbeltsOn");
+            if (on == driverBeltSent && (!on || now < driverBeltResend)) return;
+            if (on != driverBeltSent) Log.Info("ceinture conducteur : " + (on ? "bouclee" : "detachee") + " (" + VehicleSync.LocalDrivingName + ")");
+            driverBeltSent = on;
+            driverBeltResend = now + 5f;
+            Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(VehicleSync.LocalDrivingName ?? "").U8(DriverBeltIndex).U8(on ? 1 : 0), true);
+        }
         static Transform FindUnder(Transform t, string name, string parent)
         {
             if (t.name == name && (parent == null || (t.parent != null && t.parent.name == parent))) return t;
@@ -386,11 +415,12 @@ namespace MWCoop
             if (belts.TryGetValue(car, out b)) return b;
             Transform f = FindUnder(car, "Fastened_mesh", null) ?? FindUnder(car, "Close", "Seatbelts");
             Transform o = FindUnder(car, "PassengerBelt", null) ?? FindUnder(car, "Passenger", "Seatbelts");
+            Transform dov = FindUnder(car, "HandleUpPivot", "DriverBelt");
             Transform k = FindUnder(car, "SeatbeltLock", null) ?? FindUnder(car, "BuckleUp", null) ?? FindUnder(car, "HandleDownPivot", null);
             b = null;
             if (f != null && f.GetComponent<MeshFilter>() != null)
             {
-                b = new Belt { Fastened = f.gameObject, Open = o != null ? o.gameObject : null };
+                b = new Belt { Fastened = f.gameObject, Open = o != null ? o.gameObject : null, DriverOpen = dov != null ? dov.gameObject : null };
                 Vector3 kp = k != null ? car.InverseTransformPoint(k.position) : new Vector3(-0.2f, 0.45f, 0f);
                 b.Buckle = new Vector3(-kp.x, kp.y, kp.z);   // (cote passager : en miroir)
                 Log.Info("ceinture passager : " + car.name + " (bouclee " + f.name + ", rangee " + (o != null ? o.name : "-") + ")");
@@ -434,36 +464,52 @@ namespace MWCoop
             foreach (Remote r in remote.Values)
                 if (r.Index == 0 && r.Belt)
                     foreach (Seat s in seats) if (s.Car == r.Car && s.Index == 0 && s.CarT != null) want.Add(s.CarT);
+            var wantDriver = new HashSet<Transform>();
+            foreach (KeyValuePair<int, bool> kv in driverBelt)
+                if (kv.Value) { Transform t = VehicleSync.RemoteCarTransform(kv.Key); if (t != null) wantDriver.Add(t); }
             foreach (Transform car in want) BeltOf(car);
+            foreach (Transform car in wantDriver) BeltOf(car);
             foreach (KeyValuePair<Transform, Belt> kv in belts)
             {
                 Belt b = kv.Value;
                 if (b == null) continue;
                 bool on = kv.Key != null && want.Contains(kv.Key);
-                if (on && b.Copy == null && b.Fastened != null)
-                {
-                    Transform src = b.Fastened.transform, car = kv.Key;
-                    GameObject c = new GameObject("MWCoop-CeinturePassager");
-                    c.layer = b.Fastened.layer;
-                    c.transform.parent = car;
-                    // miroir par le plan median de la voiture (x -> -x) : position, rotation, echelle
-                    Vector3 p = car.InverseTransformPoint(src.position);
-                    Quaternion q = Quaternion.Inverse(car.rotation) * src.rotation;
-                    // (un peu en avant : les avatars, des PNJ, ont le torse plus en avant que le corps du joueur ; [Test] CeintureAvance)
-                    float fwd; if (!float.TryParse(Config.Get("Test", "CeintureAvance", ""), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fwd)) fwd = BeltForward;
-                    c.transform.localPosition = new Vector3(-p.x, p.y, p.z + fwd);
-                    c.transform.localRotation = new Quaternion(q.x, -q.y, -q.z, q.w);
-                    Vector3 sc = src.lossyScale, cs = car.lossyScale;
-                    c.transform.localScale = new Vector3(-sc.x / cs.x, sc.y / cs.y, sc.z / cs.z);
-                    c.AddComponent<MeshFilter>().sharedMesh = src.GetComponent<MeshFilter>().sharedMesh;
-                    MeshRenderer mr = src.GetComponent<MeshRenderer>();
-                    MeshRenderer cr = c.AddComponent<MeshRenderer>();
-                    if (mr != null) cr.sharedMaterials = mr.sharedMaterials;
-                    b.Copy = c;
-                }
+                if (on && b.Copy == null && b.Fastened != null) b.Copy = BeltCopy(b, kv.Key, true);
                 else if (!on && b.Copy != null) { Object.Destroy(b.Copy); b.Copy = null; }
                 if (b.Open != null && on != b.OpenHidden) { b.Open.SetActive(!on); b.OpenHidden = on; }
+                // Conducteur distant boucle : copie (sans miroir) et sangle pendante cachee (rendue si c'est nous qui l'avions cachee).
+                bool don = kv.Key != null && wantDriver.Contains(kv.Key);
+                if (don && b.DriverCopy == null && b.Fastened != null) b.DriverCopy = BeltCopy(b, kv.Key, false);
+                else if (!don && b.DriverCopy != null) { Object.Destroy(b.DriverCopy); b.DriverCopy = null; }
+                if (b.DriverOpen != null)
+                {
+                    if (don && !b.DriverOpenHidden && b.DriverOpen.activeSelf) { b.DriverOpen.SetActive(false); b.DriverOpenHidden = true; }
+                    else if (!don && b.DriverOpenHidden) { b.DriverOpen.SetActive(true); b.DriverOpenHidden = false; }
+                }
             }
+        }
+
+        // Copie de la ceinture bouclee du conducteur (Fastened_mesh) : en miroir par le plan median de la voiture (x -> -x)
+        // pour le passager, telle quelle pour le conducteur ; un peu en avant (les avatars, des PNJ, ont le torse plus en
+        // avant que le corps du joueur ; [Test] CeintureAvance).
+        static GameObject BeltCopy(Belt b, Transform car, bool mirror)
+        {
+            Transform src = b.Fastened.transform;
+            GameObject c = new GameObject(mirror ? "MWCoop-CeinturePassager" : "MWCoop-CeintureConducteur");
+            c.layer = b.Fastened.layer;
+            c.transform.parent = car;
+            Vector3 p = car.InverseTransformPoint(src.position);
+            Quaternion q = Quaternion.Inverse(car.rotation) * src.rotation;
+            float fwd; if (!float.TryParse(Config.Get("Test", "CeintureAvance", ""), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fwd)) fwd = BeltForward;
+            Vector3 sc = src.lossyScale, cs = car.lossyScale;
+            c.transform.localPosition = new Vector3(mirror ? -p.x : p.x, p.y, p.z + fwd);
+            c.transform.localRotation = mirror ? new Quaternion(q.x, -q.y, -q.z, q.w) : q;
+            c.transform.localScale = new Vector3((mirror ? -sc.x : sc.x) / cs.x, sc.y / cs.y, sc.z / cs.z);
+            c.AddComponent<MeshFilter>().sharedMesh = src.GetComponent<MeshFilter>().sharedMesh;
+            MeshRenderer mr = src.GetComponent<MeshRenderer>();
+            MeshRenderer cr = c.AddComponent<MeshRenderer>();
+            if (mr != null) cr.sharedMaterials = mr.sharedMaterials;
+            return c;
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -471,7 +517,17 @@ namespace MWCoop
             int who = r.U8();
             if (Session.IsHost) who = from.Id;
             string car = r.Str();
-            int index = r.U8() - 1;
+            int raw = r.U8();
+            if (raw == DriverBeltIndex)
+            {
+                bool db = r.U8() != 0;
+                if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Seat).U8(who).Str(car).U8(DriverBeltIndex).U8(db ? 1 : 0), true, who);
+                bool was;
+                if (!driverBelt.TryGetValue(who, out was) || was != db) Log.Info("ceinture conducteur : #" + who + (db ? " bouclee" : " detachee") + " (" + car + ")");
+                driverBelt[who] = db;
+                return;
+            }
+            int index = raw - 1;
             Vector3 head = r.Vec();
             bool belt = r.More && r.U8() != 0;
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Seat).U8(who).Str(car).U8(index + 1).Vec(head).U8(belt ? 1 : 0), true, who);
@@ -483,7 +539,7 @@ namespace MWCoop
             if (had && old.Belt != belt) Log.Info("ceinture passager : #" + who + (belt ? " attache" : " detache"));
         }
 
-        public static void PlayerLeft(int id) { remote.Remove(id); }
+        public static void PlayerLeft(int id) { remote.Remove(id); driverBelt.Remove(id); }
 
         // Avatar d'un autre joueur assis en passager : voiture locale et place de sa tete (repere voiture).
         public static bool RemoteSeat(int id, out Transform car, out Vector3 head, out string carName)
@@ -599,6 +655,18 @@ namespace MWCoop
                         + " ; tete " + current.Head.ToString("F2") + " ; echelle " + b.Copy.transform.localScale.ToString("F2");
             }
             return "ceinture " + (beltOn ? "attachee" : "detachee") + ", copie " + (b.Copy != null) + ", rangee cachee " + b.OpenHidden + where;
+        }
+
+        // Essais : copies de ceinture montrees ici (passager, conducteur) et sangle du conducteur cachee.
+        public static string BeltState()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (KeyValuePair<int, bool> kv in driverBelt) sb.Append("#").Append(kv.Key).Append(kv.Value ? " boucle" : " detache").Append(", ");
+            foreach (KeyValuePair<Transform, Belt> kv in belts)
+                if (kv.Key != null && kv.Value != null)
+                    sb.Append(kv.Key.name).Append(" : passager ").Append(kv.Value.Copy != null).Append(", conducteur ").Append(kv.Value.DriverCopy != null)
+                      .Append(" (sangle cachee ").Append(kv.Value.DriverOpenHidden).Append(", copie a ").Append(kv.Value.DriverCopy != null ? kv.Key.InverseTransformPoint(kv.Value.DriverCopy.GetComponent<Renderer>().bounds.center).ToString("F2") : "-").Append("), ");
+            return sb.Length > 0 ? sb.ToString() : "aucune";
         }
 
         // Essais : places passagers de la voiture de cle 'car'.

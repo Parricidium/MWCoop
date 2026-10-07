@@ -70,7 +70,7 @@ namespace MWCoop
             public bool LockSpurious;                  // verrou d'ouverture (359 degres) ou rejoue : retire une fois pose
             public float LockCheckUntil;               // ouverture rejouee : l'automate ne doit pas rester au verrou
             public float TraceUntil, NextTrace;        // essais : [Test] TracePortiere
-            public bool RestSet; public Quaternion RestRot;   // pose fermee (repere du parent)
+            public bool RestSet; public Quaternion RestRot; public Vector3 RestPos;   // pose fermee (repere du parent)
             public float TestOffset;   // essais : degres ajoutes a l'angle envoye
             public bool Held;          // fermee sur la copie d'une voiture conduite ailleurs : figee sur la caisse (Hold)
             public FsmBool PlugOn;     // prise du chauffage : 'On' du jeu (branchee), l'etat vrai (l'automate ne reste qu'1 s dans "Heater on")
@@ -236,7 +236,7 @@ namespace MWCoop
         static void NoteRest(Door d)
         {
             if (d.RestSet || d.Hinge == null || d.Body == null || d.Springing || d.State != DoorState.Closed || OpenVar(d)) return;
-            d.RestSet = true; d.RestRot = d.Body.transform.localRotation;
+            d.RestSet = true; d.RestRot = d.Body.transform.localRotation; d.RestPos = d.Body.transform.localPosition;
         }
 
         // Angle (degres) autour de l'axe de la charniere depuis la pose fermee : le repere des butees du jeu.
@@ -340,6 +340,9 @@ namespace MWCoop
         // Fermee et copie : posee fermee et rendue cinematique (enfant de la caisse, elle la suit exactement ; une
         // charniere entre deux corps cinematiques ne tire rien). Rendue des qu'elle s'ouvre ou que la voiture redevient
         // locale (sinon un corps cinematique accroche a une voiture qui roule la tirerait).
+        // Posee a sa pose fermee EXACTE (position comprise) : Snap garde la charniere ou elle est, et une charniere qui avait
+        // glisse de quelques centimetres pendant que la copie roulait figeait le hayon enfonce dans la caisse (retour de JD,
+        // 07/10, hayon de la SORBET chez l'invite).
         static void Hold(Door d)
         {
             if (d.Body == null || d.Hinge == null) { d.Held = false; return; }
@@ -348,7 +351,11 @@ namespace MWCoop
             if (hold)
             {
                 if (d.Body.isKinematic) return;   // (deja figee par le jeu : rien a faire)
-                Snap(d);
+                Transform b = d.Body.transform;
+                b.localRotation = d.RestRot;
+                b.localPosition = d.RestPos;
+                d.Body.rotation = b.rotation; d.Body.position = b.position;
+                d.Body.velocity = Vector3.zero; d.Body.angularVelocity = Vector3.zero;
                 d.Body.isKinematic = true;
                 d.Held = true;
                 if (holdLogs++ < 20) Log.Info("portieres : " + d.Key + " fermee, figee sur la copie de la voiture");

@@ -24,7 +24,10 @@ namespace MWCoop
     //    du jeu (DriveTrigger, SetParent du joueur sous le bus) il est accroche par le jeu lui-meme.
     // Messages : controle de Traffic, genre 11 (invite -> hote : [U8 1 ticket | 2 sonnette 1 | 3 sonnette 2]) et
     // genre 12 (hote -> invites, a chaque changement et toutes les 5 s : [U8 1 porte ouverte | 2 sonnettes allumees |
-    // 4 ticket au repos]).
+    // 4 ticket au repos | 8 Markku assis | 16 Signe assise | 32 passagers connus]).
+    //  - Passagers (LOD/Passengers::Activate tire au sort Markku, Signe, les deux ou personne, a chaque allumage de
+    //    l'interieur) : chez l'invite ce tirage est coupe et les passagers de l'hote montres (retour de JD, 07/10 : il ne
+    //    voyait que le chauffeur).
     public static class Bus
     {
         const int K_ACT = 11, K_STATE = 12;
@@ -45,7 +48,8 @@ namespace MWCoop
         static PlayMakerFSM ticket, door;
         static readonly PlayMakerFSM[] rings = new PlayMakerFSM[2];
         static readonly bool[] ringHooked = new bool[2];
-        static GameObject lod, stopButtons;
+        static GameObject lod, stopButtons, markku, signe;
+        static PlayMakerFSM paxFsm;
         static BoxCollider inside;
         static bool built, ticketHooked, retargeted, mutedLogic, riding, platformChecked;
         static float buildAt = -1, nextTry, nextState, nextFull, ticketAt = -100;
@@ -60,7 +64,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             bus = null; ticket = door = null; rings[0] = rings[1] = null; ringHooked[0] = ringHooked[1] = false;
-            lod = stopButtons = null; inside = null; player = null; proxy = null; proxyWho = ""; retargetDone.Clear();
+            lod = stopButtons = markku = signe = null; paxFsm = null; inside = null; player = null; proxy = null; proxyWho = ""; retargetDone.Clear();
             built = ticketHooked = retargeted = mutedLogic = riding = prevOk = platformChecked = false;
             platform = null; platformOn = null;
             lastFlags = -1; acts = states = retargets = 0; ticketAt = -100; step = 0;
@@ -91,12 +95,20 @@ namespace MWCoop
                 }
                 Transform pt = l.Find("PlayerTrigger");
                 inside = pt != null ? pt.GetComponent<BoxCollider>() : null;
+                Transform pax = l.Find("Passengers");
+                if (pax != null)
+                {
+                    Transform m = pax.Find("Markku"), s = pax.Find("Signe");
+                    markku = m != null ? m.gameObject : null; signe = s != null ? s.gameObject : null;
+                    paxFsm = Game.FsmOn(pax.gameObject, "Activate");
+                    if (!Own(paxFsm)) paxFsm = null;
+                }
             }
             // Ticket et sonnettes : a ce module (personne d'autre ne suit NPC_CARS).
             ticketHooked = !Own(ticket);
             for (int i = 0; i < 2; i++) ringHooked[i] = !Own(rings[i]);
             Log.Info("bus : " + Recon.Path(bus) + ", ticket " + (ticket != null) + ", porte " + (door != null) + ", sonnettes " + (rings[0] != null) + "/" + (rings[1] != null)
-                     + ", interieur " + (inside != null));
+                     + ", interieur " + (inside != null) + ", passagers " + (markku != null) + "/" + (signe != null));
         }
 
         static bool Own(PlayMakerFSM f)
@@ -222,6 +234,7 @@ namespace MWCoop
             if (open != null && open.Value) flags |= 1;
             if (stopButtons != null && stopButtons.activeSelf) flags |= 2;
             if (ticket != null && (ticket.ActiveStateName == "Wait" || ticket.ActiveStateName == "Wait for click")) flags |= 4;
+            if (markku != null && signe != null) flags |= 32 | (markku.activeSelf ? 8 : 0) | (signe.activeSelf ? 16 : 0);
             if (flags == lastFlags && now < nextFull) return;
             lastFlags = flags; nextFull = now + 5f;
             Session.Broadcast(new NetWriter(Msg.Traffic).U16(0xFFFF).U8(K_STATE).U8(flags), true);
@@ -278,6 +291,7 @@ namespace MWCoop
                     if (f.FsmName != "Door" && f.enabled) { f.enabled = false; n++; }
             if (nav != null)
                 foreach (PlayMakerFSM f in nav.GetComponents<PlayMakerFSM>()) if (f.enabled) { f.enabled = false; n++; }
+            if (paxFsm != null && paxFsm.enabled) { paxFsm.enabled = false; n++; }   // (passagers : ceux de l'hote)
             Log.Info("bus : logique du bus coupee ici (" + n + " automates), porte et sonnettes de l'hote");
         }
 
@@ -357,6 +371,16 @@ namespace MWCoop
             int flags = r.U8();
             states++;
             if (stopButtons != null && stopButtons.activeSelf != ((flags & 2) != 0)) stopButtons.SetActive((flags & 2) != 0);
+            if ((flags & 32) != 0 && markku != null && signe != null)
+            {
+                if (paxFsm != null && paxFsm.enabled) paxFsm.enabled = false;   // (avant meme le suivi de la copie)
+                bool m = (flags & 8) != 0, s = (flags & 16) != 0;
+                if (markku.activeSelf != m || signe.activeSelf != s)
+                {
+                    markku.SetActive(m); signe.SetActive(s);
+                    Log.Info("bus : passagers de l'hote : " + (m && s ? "Markku et Signe" : m ? "Markku" : s ? "Signe" : "personne"));
+                }
+            }
             // Porte : au repos ici (State 2) et differente de celle de l'hote -> ouverture ou fermeture du jeu.
             FsmBool open = door != null ? door.FsmVariables.FindFsmBool("DoorOpen") : null;
             bool hostOpen = (flags & 1) != 0;

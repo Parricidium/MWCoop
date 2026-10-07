@@ -107,5 +107,6 @@ namespace MWCoop.Net
         Summon = 49,      // hote -> un invite : viens a moi (position, cap) ; menu F10 ou lanceur (Admin)
         Radio = 50,       // hote -> invites : morceau, position et lecture de chaque canal radio (Radio)
         ModData = 51,     // donnees d'un autre mod (CoopApi) : canal, morceaux ; l'hote relaie
+        Knob = 52,        // commande tenue d'un vehicule (starter, frein a main) : valeur de celui qui la tient (Knobs)
     }
 }

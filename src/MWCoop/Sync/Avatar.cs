@@ -695,11 +695,10 @@ namespace MWCoop
                     ArmDown("shoulder_right", "hand_right", 1f, 1f);
                     ArmDown("shoulder_left", "hand_left", -1f, 1f);
                 }
-                else DriverHands();
-                ReachPose();
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
                 if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - Root.transform.position) + EyeOffset;
-                // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite).
+                // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite). Avant les
+                // mains : elles se posent ensuite sur le volant depuis le buste penche.
                 float side = Mathf.Atan2(leanOff.x, 0.55f) * Mathf.Rad2Deg, fwdLean = Mathf.Atan2(leanOff.z, 0.55f) * Mathf.Rad2Deg;
                 foreach (string sp in new[] { "spine_middle", "spine_upper" })
                 {
@@ -707,6 +706,8 @@ namespace MWCoop
                     if (b == null) continue;
                     b.rotation = Quaternion.AngleAxis(-side * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdLean * 0.5f, Root.transform.right) * b.rotation;
                 }
+                if (!passenger) DriverHands();
+                ReachPose();
                 // Tete : regard relatif a la voiture, sans limite (tour complet accepte), quelle que soit
                 // l'inclinaison du dossier.
                 Transform hp = Bone("HeadPivot") ?? headBone;
@@ -813,7 +814,11 @@ namespace MWCoop
                 foreach (MonoBehaviour m in car.GetComponentsInChildren<MonoBehaviour>(true))
                     if (m != null && m.GetType().Name == "SteeringWheel") { steerT = m.transform; break; }
                 foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
+                {
                     if (t.name == "GearLever" || t.name == "gearlever") { gearT = t; break; }
+                    // SORBET : Gearstick/Pivot (qui tourne), le pommeau au bout de sa tige
+                    if (t.name == "Pivot" && t.parent != null && t.parent.name == "Gearstick") { gearT = t; break; }
+                }
                 if (steerT != null)
                 {
                     Vector3 axis = (steerT.position - headBone.position).normalized;   // colonne : du conducteur vers le tableau de bord
@@ -833,20 +838,56 @@ namespace MWCoop
             if (steerT != null)   // (jante hors de portee -- siege loin du volant : la pose du conducteur PNJ reste, bras pas etires)
             {
                 Vector3 pr = steerT.TransformPoint(gripR), pl = steerT.TransformPoint(gripL);
+                LeanToWheel(pr, pl);
                 ArmTo(true, pr, (1f - wShift) * Reachable(true, pr));
                 ArmTo(false, pl, Reachable(false, pl));
+                Transform hr = Bone("hand_right"), hl = Bone("hand_left");
+                handErrR = hr != null ? (hr.position - pr).magnitude : -1f; handErrL = hl != null ? (hl.position - pl).magnitude : -1f;
             }
             if (gearT != null && wShift > 0.001f) ArmTo(true, gearT.position + car.up * 0.1f, wShift);
         }
 
-        // Dosage selon la portee : 1 jusqu'a 95 % de la longueur du bras, 0 au-dela de 115 %.
+        float handErrR = -1f, handErrL = -1f, leanDeg;
+        // Essais : mains au volant (ecart main - prise), penche vers le volant, levier trouve.
+        public string HandsState()
+        {
+            return Player.Name + " : volant " + (steerT != null ? steerT.name : "-") + ", main D a " + handErrR.ToString("F2") + " m de sa prise, G a " + handErrL.ToString("F2")
+                   + " m, penche " + leanDeg.ToString("F0") + " deg, levier " + (gearT != null ? gearT.parent.name + "/" + gearT.name : "-");
+        }
+
+        // Dosage selon la portee : 1 jusqu'a 105 % de la longueur du bras, 0 au-dela de 130 % (le bras, tendu, s'arrete a
+        // sa longueur : la main au bord de la jante).
         float Reachable(bool right, Vector3 at)
         {
             string s = right ? "_right" : "_left";
             Transform sh = Bone("shoulder" + s), el = Bone("arm" + s), ha = Bone("hand" + s);
             if (sh == null || el == null || ha == null) return 0f;
-            float len = (el.position - sh.position).magnitude + (ha.position - el.position).magnitude;
-            return Mathf.Clamp01((1.15f * len - (at - sh.position).magnitude) / (0.2f * len));
+            float len = ArmLen(sh, el, ha);
+            return Mathf.Clamp01((1.3f * len - (at - sh.position).magnitude) / (0.25f * len));
+        }
+        static float ArmLen(Transform sh, Transform el, Transform ha) { return (el.position - sh.position).magnitude + (ha.position - el.position).magnitude; }
+
+        // Volant loin des epaules (SORBET : 0,9 m pour des bras de 0,6 -- retour de JD, 07/10 : pas de mains au volant) :
+        // le buste se penche vers lui (spine_middle et spine_upper, autour de la droite de l'avatar), jusqu'a 28 degres,
+        // pour que la prise la plus loin tombe a 95 % de la longueur du bras.
+        void LeanToWheel(Vector3 pr, Vector3 pl)
+        {
+            Transform shR = Bone("shoulder_right"), elR = Bone("arm_right"), haR = Bone("hand_right"), sm = Bone("spine_middle");
+            if (shR == null || elR == null || haR == null || sm == null) return;
+            Transform shL = Bone("shoulder_left");
+            float len = ArmLen(shR, elR, haR);
+            float far = Mathf.Max((pr - shR.position).magnitude, shL != null ? (pl - shL.position).magnitude : 0f);
+            float excess = far - 0.95f * len;
+            leanDeg = 0f;
+            if (excess <= 0f) return;
+            float h = Mathf.Max(0.2f, (shR.position - sm.position).magnitude);
+            float ang = Mathf.Min(28f, Mathf.Asin(Mathf.Clamp01(excess / h)) * Mathf.Rad2Deg * 1.3f);
+            leanDeg = ang;
+            foreach (string sp in new[] { "spine_middle", "spine_upper" })
+            {
+                Transform b = Bone(sp);
+                if (b != null) b.rotation = Quaternion.AngleAxis(ang * 0.5f, Root.transform.right) * b.rotation;
+            }
         }
 
         // Main droite vers une commande que ce joueur vient d'actionner (bouton, clef, molette), pendant 0,8 s.
