@@ -14,6 +14,10 @@ namespace MWCoop
     //  - En plus (reglages du moteur, que le jeu ne propose pas) : limite d'images, synchro verticale, distance et finesse
     //    des ombres, niveau de detail, textures, filtrage des textures. Au chargement de chaque niveau.
     //  - mwcoop.ini relu des qu'il change (lanceur ouvert pendant la partie, menu F10) : applique tout de suite.
+    //  - Ecran (comme les GTA, pas la petite fenetre Unity) : QualiteUnity (niveau du moteur : 0 basse, 1 moyenne, 3 bonne,
+    //    5 Golden Eye -- les niveaux sans synchro, SyncVerticale la regle), Resolution (largeur * 10000 + hauteur),
+    //    ModeEcran (0 fenetre, 1 plein ecran, 2 fenetre sans bordure, a la taille de l'ecran). Appliques des le menu
+    //    principal, par le mod (le lanceur demarre par Steam lance le jeu par l'explorateur : pas de ligne de commande).
     // Rien n'est envoye aux autres : chacun son affichage.
     public static class Gfx
     {
@@ -51,17 +55,83 @@ namespace MWCoop
         static bool gameApplied;
         // Reglages du moteur du niveau d'origine (choisi dans la fenetre Unity) : rendus quand une cle est retiree.
         static float baseShadow = -1, baseLod; static int baseCascades, baseTex, baseVsync, baseFps; static AnisotropicFiltering baseAniso;
+        static int baseQuality = -1, appliedQuality = -1;
+        static float borderlessAt = -1;
+
+        static void CaptureBase()
+        {
+            baseShadow = QualitySettings.shadowDistance; baseLod = QualitySettings.lodBias; baseCascades = QualitySettings.shadowCascades;
+            baseTex = QualitySettings.masterTextureLimit; baseVsync = QualitySettings.vSyncCount; baseFps = Application.targetFrameRate; baseAniso = QualitySettings.anisotropicFiltering;
+        }
+
+        // Niveau de qualite du moteur : pose (puis ses valeurs deviennent la base des reglages en plus), ou rendu.
+        static void ApplyQuality()
+        {
+            if (baseQuality < 0) baseQuality = QualitySettings.GetQualityLevel();
+            int v, want = Has("QualiteUnity", out v) ? Mathf.Clamp(v, 0, QualitySettings.names.Length - 1) : baseQuality;
+            if (want == appliedQuality && want == QualitySettings.GetQualityLevel()) return;
+            if (want != QualitySettings.GetQualityLevel()) QualitySettings.SetQualityLevel(want, true);
+            appliedQuality = want;
+            CaptureBase();
+            Log.Info("graphismes : qualite du moteur " + QualitySettings.names[want]);
+        }
+
+        // Resolution et mode d'affichage (cles absentes : ceux choisis dans la fenetre Unity).
+        static void ApplyScreen()
+        {
+            int v, w = Screen.width, h = Screen.height, mode = -1;
+            if (Has("Resolution", out v) && v > 10000) { w = v / 10000; h = v % 10000; }
+            if (Has("ModeEcran", out v)) mode = v;
+            bool full = mode < 0 ? Screen.fullScreen : mode == 1;
+            if (mode == 2) { Resolution d = Screen.currentResolution; if (!Has("Resolution", out v)) { w = d.width; h = d.height; } }
+            if (w != Screen.width || h != Screen.height || full != Screen.fullScreen)
+            {
+                Screen.SetResolution(w, h, full);
+                Log.Info("graphismes : ecran " + w + "x" + h + (full ? " plein ecran" : mode == 2 ? " sans bordure" : " fenetre"));
+            }
+            borderlessAt = mode == 2 ? Time.realtimeSinceStartup + 0.6f : -1;   // (style de la fenetre : apres le changement de taille)
+        }
+
+        delegate bool EnumProc(System.IntPtr h, System.IntPtr lp);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool EnumThreadWindows(uint thread, EnumProc cb, System.IntPtr lp);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] static extern int GetClassName(System.IntPtr h, System.Text.StringBuilder sb, int max);
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+        static System.IntPtr gameWnd;
+        static bool FindGameWnd(System.IntPtr h, System.IntPtr lp)
+        {
+            var sb = new System.Text.StringBuilder(64);
+            GetClassName(h, sb, 64);
+            if (sb.ToString() != "UnityWndClass") return true;
+            gameWnd = h;
+            return false;
+        }
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern int SetWindowLong(System.IntPtr h, int index, uint style);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetWindowPos(System.IntPtr h, System.IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+        // Fenetre sans bordure : style popup, posee en haut a gauche de l'ecran.
+        static void Borderless()
+        {
+            borderlessAt = -1;
+            // (fenetre du jeu : celle de ce fil, la boucle principale de Unity -- pas une autre instance du jeu)
+            gameWnd = System.IntPtr.Zero;
+            EnumThreadWindows(GetCurrentThreadId(), FindGameWnd, System.IntPtr.Zero);
+            System.IntPtr hw = gameWnd;
+            if (hw == System.IntPtr.Zero || Screen.fullScreen) { Log.Info("graphismes : sans bordure impossible (fenetre " + (hw != System.IntPtr.Zero) + ", plein ecran " + Screen.fullScreen + ")"); return; }
+            const int GWL_STYLE = -16; const uint WS_POPUP = 0x80000000, WS_VISIBLE = 0x10000000, SWP_FRAMECHANGED = 0x20, SWP_SHOWWINDOW = 0x40;
+            SetWindowLong(hw, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+            SetWindowPos(hw, System.IntPtr.Zero, 0, 0, Screen.width, Screen.height, SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+            Log.Info("graphismes : fenetre sans bordure " + Screen.width + "x" + Screen.height);
+        }
 
         public static void OnLevelLoaded()
         {
             gfx = null; gameApplied = false; applied.Clear();
             gfxAt = Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + 3f : -1;
-            if (baseShadow < 0)
-            {
-                baseShadow = QualitySettings.shadowDistance; baseLod = QualitySettings.lodBias; baseCascades = QualitySettings.shadowCascades;
-                baseTex = QualitySettings.masterTextureLimit; baseVsync = QualitySettings.vSyncCount; baseFps = Application.targetFrameRate; baseAniso = QualitySettings.anisotropicFiltering;
-            }
+            bool first = baseShadow < 0;
+            if (first) CaptureBase();
             ReadIni(true);
+            ApplyQuality();
+            if (first) ApplyScreen();
             ApplyEngine();
         }
 
@@ -69,8 +139,9 @@ namespace MWCoop
         {
             float now = Time.realtimeSinceStartup;
             if (now < nextCheck) return;
+            if (borderlessAt > 0 && now >= borderlessAt) Borderless();
             nextCheck = now + 1f;
-            if (ReadIni(false)) { ApplyEngine(); if (gameApplied) ApplyGame(false); }
+            if (ReadIni(false)) { ApplyQuality(); ApplyScreen(); ApplyEngine(); if (gameApplied) ApplyGame(false); }
             if (gfxAt > 0 && now >= gfxAt && gfx == null)
             {
                 GameObject db = Game.FindAny("Systems/OptionsDB");
@@ -234,6 +305,8 @@ namespace MWCoop
             }
             if (keep.Count > 0) SaveMany(keep);
             try { iniTime = File.GetLastWriteTimeUtc(Config.IniPath); } catch { }
+            ApplyQuality();
+            foreach (KeyValuePair<string, int> kv in kvs) if (kv.Key == "Resolution" || kv.Key == "ModeEcran") { ApplyScreen(); break; }
             ApplyEngine();
             if (gameApplied) ApplyGame(false);
         }
@@ -244,7 +317,24 @@ namespace MWCoop
         static Row S(string k, string fr, string en, int def, int group, int[] vals, string[] lf, string[] le, bool heavy = false)
         { return new Row { Key = k, Fr = fr, En = en, Def = def, Group = group, Vals = vals, Lf = lf, Le = le ?? lf, Heavy = heavy }; }
         static readonly string[] fov = { "50\u00B0", "55\u00B0", "60\u00B0", "65\u00B0", "70\u00B0", "75\u00B0", "80\u00B0", "85\u00B0", "90\u00B0" };
-        public static readonly Row[] Rows = {
+        static Row[] rows;
+        public static Row[] Rows { get { if (rows == null) rows = BuildRows(); return rows; } }
+        static Row[] BuildRows()
+        {
+            var list = new List<Row>(BaseRows);
+            var rv = new List<int> { -1 }; var rl = new List<string> { "Jeu" }; var re = new List<string> { "Game" };
+            foreach (Resolution r in Screen.resolutions)
+            {
+                int code = r.width * 10000 + r.height;
+                if (r.width < 800 || rv.Contains(code)) continue;
+                rv.Add(code); rl.Add(r.width + " x " + r.height); re.Add(r.width + " x " + r.height);
+            }
+            list.Insert(0, S("Resolution", "R\u00E9solution", "Resolution", -1, 5, rv.ToArray(), rl.ToArray(), re.ToArray()));
+            list.Insert(1, S("ModeEcran", "Affichage", "Display mode", -1, 5, new[] { -1, 0, 1, 2 }, new[] { "Jeu", "Fen\u00EAtr\u00E9", "Plein \u00E9cran", "Sans bordure" }, new[] { "Game", "Windowed", "Fullscreen", "Borderless" }));
+            list.Insert(2, S("QualiteUnity", "Qualit\u00E9 du moteur", "Engine quality", -1, 5, new[] { -1, 0, 1, 3, 5 }, new[] { "Jeu", "Basse", "Moyenne", "Bonne", "Golden Eye" }, new[] { "Game", "Low", "Medium", "Good", "Golden Eye" }, true));
+            return list.ToArray();
+        }
+        static readonly Row[] BaseRows = {
             R("Anticrenelage", "Anticr\u00E9nelage", "Anti-aliasing", 1, 0),
             R("HDR", "HDR (lumi\u00E8re riche)", "HDR (rich light)", 1, 0),
             R("Bloom", "Halo lumineux (bloom)", "Bloom", 0, 0),
@@ -334,6 +424,7 @@ namespace MWCoop
               .Append(", synchro ").Append(QualitySettings.vSyncCount);
             Camera c = Camera.main;
             if (c != null) sb.Append(", camera loin ").Append(c.farClipPlane).Append(" fov ").Append(c.fieldOfView.ToString("F0"));
+            sb.Append(", ecran ").Append(Screen.width).Append('x').Append(Screen.height).Append(Screen.fullScreen ? " plein ecran" : " fenetre").Append(", qualite ").Append(QualitySettings.names[QualitySettings.GetQualityLevel()]);
             return sb.ToString();
         }
     }

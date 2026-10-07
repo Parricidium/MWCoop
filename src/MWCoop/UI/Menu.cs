@@ -655,8 +655,8 @@ namespace MWCoop
             int d = Item(Lang.T("Pr\u00E9r\u00E9glage", "Preset"), on >= 0 ? (Lang.Fr ? Gfx.Presets[on].Fr : Gfx.Presets[on].En) : Lang.T("Personnalis\u00E9", "Custom"), true,
                          Lang.T("Gauche/Droite : Performance, \u00C9quilibr\u00E9, Beau, Ultra", "Left/Right: Performance, Balanced, Pretty, Ultra"), false);
             if (d == -1 || d == 1) Gfx.ApplyPreset(on < 0 ? (d > 0 ? 0 : Gfx.Presets.Length - 1) : Mathf.Clamp(on + d, 0, Gfx.Presets.Length - 1));
-            string[] heads = { Lang.T("IMAGE", "IMAGE"), Lang.T("OMBRES", "SHADOWS"), Lang.T("DISTANCE ET D\u00C9TAILS", "DISTANCE AND DETAIL"), Lang.T("JEU ET CONFORT", "GAME AND COMFORT"), Lang.T("LUMI\u00C8RES", "LIGHTS") };
-            foreach (int g in new[] { 0, 1, 4, 2, 3 })
+            string[] heads = { Lang.T("IMAGE", "IMAGE"), Lang.T("OMBRES", "SHADOWS"), Lang.T("DISTANCE ET D\u00C9TAILS", "DISTANCE AND DETAIL"), Lang.T("JEU ET CONFORT", "GAME AND COMFORT"), Lang.T("LUMI\u00C8RES", "LIGHTS"), Lang.T("\u00C9CRAN", "SCREEN") };
+            foreach (int g in new[] { 5, 0, 1, 4, 2, 3 })
             {
                 Header(heads[g]);
                 foreach (Gfx.Row r in Gfx.Rows)
