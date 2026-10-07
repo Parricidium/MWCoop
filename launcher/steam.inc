@@ -139,6 +139,7 @@ static uint64_t g_sCall;              // creation (513) ou entree (504) en cours
 static int g_sCallKind;
 static bool g_sCallStale;             // ... abandonnee entre-temps : salon quitte des qu'il arrive
 static SteamId g_sInvite;             // invitation recue lanceur ouvert : REJOINDRE la prend
+static std::wstring g_sInviteName;    // ... et qui l'envoie
 static SteamId g_sConnect;            // salon a rejoindre des que possible (+connect_lobby, invitation acceptee)
 static std::map<SteamId, int> g_sIds; // numero de chaque membre dans le salon (couleur, sons)
 static int g_sNextId;
@@ -321,7 +322,6 @@ static void SteamLobbyHost()
     g_tab = TAB_LOBBY;
     g_scroll[TAB_LOBBY] = 0;
     g_focus = -1;
-    LayoutTabs();
     g_sCall = sapi::CreateLobby(sapi::mm, 1 /* amis seulement */, kLobbyMax);
     g_sCallKind = 513;
     g_sCallStale = false;
@@ -360,7 +360,6 @@ static void SteamLobbyJoin(SteamId lobby)
     g_tab = TAB_LOBBY;
     g_scroll[TAB_LOBBY] = 0;
     g_focus = -1;
-    LayoutTabs();
     g_sCall = sapi::JoinLobby(sapi::mm, lobby);
     g_sCallKind = 504;
     g_sCallStale = false;
@@ -641,6 +640,7 @@ static void OnSteamInvite(const void *p)
     const SLobbyInvite *r = (const SLobbyInvite *)p;
     if ((r->game & 0xFFFFFF) != kSteamApp || g_lobby != LB_NONE) return;
     g_sInvite = r->lobby;
+    g_sInviteName = SteamName(r->user);
     g_joinFallback = false;
     SetStatus(K_OK, T(L"%s t'invite : clique REJOINDRE", L"%s invites you: click JOIN"), SteamName(r->user).c_str());
     if (g_testSalon.empty()) LobbySound(SND_JOIN);
@@ -686,8 +686,8 @@ static void SteamTick()
 }
 
 // ---- dessin : liste des amis (hote, a la place des joueurs)
-static const float kFriendRowH = 46;
-static const RectF kFriendsBack(756, 124, 180, 26);
+static const float kFriendRowH = 66;
+static const RectF kFriendsBack(0, 0, 0, 0);   // (le retour est dans l'en-tete du salon)
 static float SteamFriendsMaxScroll() { return max(0.0f, g_sFriends.size() * kFriendRowH - kLobbyList.Height); }
 static int SteamFriendAt(float x, float y)
 {
@@ -697,58 +697,56 @@ static int SteamFriendAt(float x, float y)
 }
 static void DrawSteamFriends(Graphics &g)
 {
-    Text(g, T(L"INVITER DES AMIS", L"INVITE FRIENDS"), RectF(460, 124, 300, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
-    bool backHot = g_lobbyHot == 50;
-    Text(g, T(L"← Retour au salon", L"← Back to the lobby"), kFriendsBack, 12.5f, backHot ? FontStyleBold | FontStyleUnderline : FontStyleBold,
-         backHot ? kAcc : kGrey, StringAlignmentFar);
+    Title(g, T(L"Inviter des amis", L"Invite friends"), RectF(kLobbyCard.X + 22, kLobbyCard.Y + 18, 300, 26), 17, kInk);
     wchar_t sub[160];
     if (g_sFriends.empty()) swprintf_s(sub, T(L"Aucun ami Steam en ligne (%d hors ligne)", L"No Steam friend online (%d offline)"), g_sOffline);
     else swprintf_s(sub, T(L"Amis Steam en ligne : %d · %d hors ligne", L"Steam friends online: %d · %d offline"), (int)g_sFriends.size(), g_sOffline);
-    Text(g, sub, RectF(460, 148, 476, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    Text(g, sub, RectF(kLobbyCard.X + 22, kLobbyCard.Y + 40, 400, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     if (g_sFriends.empty()) {
         Para(g, T(L"Tes amis Steam apparaîtront ici dès qu'ils sont en ligne. Ils peuvent aussi rejoindre depuis Steam (« Rejoindre la partie »).",
                   L"Your Steam friends show up here as soon as they are online. They can also join from Steam (\"Join game\")."),
-             RectF(480, 250, 436, 60), 12, kGrey, StringAlignmentCenter);
+             RectF(kLobbyList.X + 80, kLobbyList.Y + 120, kLobbyList.Width - 160, 60), 13, kGrey, StringAlignmentCenter);
         return;
     }
     float sc = g_scroll[TAB_LOBBY], ms = SteamFriendsMaxScroll();
     DWORD now = GetTickCount();
-    g.SetClip(kLobbyList);
+    GraphicsState gst = g.Save();
+    g.SetClip(kLobbyList, CombineModeIntersect);
     for (int i = 0; i < (int)g_sFriends.size(); i++) {
         const SteamFriend &f = g_sFriends[i];
-        RectF r(kLobbyList.X + 4, kLobbyList.Y + i * kFriendRowH - sc, kLobbyList.Width - (ms > 0 ? 16 : 8), kFriendRowH - 6);
+        RectF r(kLobbyList.X, kLobbyList.Y + i * kFriendRowH - sc, kLobbyList.Width - (ms > 0 ? 12 : 0), kFriendRowH - 8);
         if (r.Y + r.Height < kLobbyList.Y || r.Y > kLobbyList.Y + kLobbyList.Height) continue;
         bool in = SteamInLobby(f.id);
         auto inv = g_sInvited.find(f.id);
         bool invited = inv != g_sInvited.end() && now - inv->second < 60000;
         bool hot = g_lobbyHot == 100 + i && !in;
         GraphicsPath rp;
-        RoundRect(rp, r, 10);
+        RoundRect(rp, r, 16);
         SolidBrush rb(hot ? TH(cardSel) : TH(card));
         g.FillPath(&rb, &rp);
-        Pen rpen(hot ? kAcc : TH(choiceBorder), 1.1f);
+        Pen rpen(hot ? WithA(kAcc, 0.7f) : TH(choiceBorder), 1.0f);
         g.DrawPath(&rpen, &rp);
-        RectF av(r.X + 6, r.Y + 4, r.Height - 8, r.Height - 8);
+        RectF av(r.X + 12, r.Y + 10, r.Height - 20, r.Height - 20);
         if (!DrawSteamAvatar(g, av, f.id)) {
             GraphicsPath ap; ap.AddEllipse(av);
             SolidBrush ab(WithA(kGrey, 0.35f)); g.FillPath(&ab, &ap);
             Text(g, f.name.substr(0, 1), av, 13, FontStyleBold, kInk);
         }
-        Text(g, f.name, RectF(r.X + 50, r.Y + 3, 260, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, f.name, RectF(r.X + 70, r.Y + 10, 300, 22), 15, FontStyleBold, kInk, StringAlignmentNear);
         const wchar_t *st = f.mwc ? T(L"Joue à My Winter Car", L"Playing My Winter Car")
                           : f.state == 2 ? T(L"Occupé", L"Busy") : f.state == 3 ? T(L"Absent", L"Away") : f.state == 4 ? T(L"Endormi", L"Snooze")
                           : T(L"En ligne", L"Online");
-        Text(g, st, RectF(r.X + 50, r.Y + 21, 260, 16), 11, FontStyleRegular, f.mwc ? kAcc : kGrey, StringAlignmentNear);
-        RectF br(r.X + r.Width - 118, r.Y + (r.Height - 24) / 2, 108, 24);
+        Text(g, st, RectF(r.X + 70, r.Y + 32, 300, 18), 12, FontStyleRegular, f.mwc ? kOk : kGrey, StringAlignmentNear);
+        RectF br(r.X + r.Width - 140, r.Y + (r.Height - 34) / 2, 124, 34);
         GraphicsPath bp;
-        RoundRect(bp, br, 12);
+        RoundRect(bp, br, 17);
         const wchar_t *bl;
         if (in) { bl = T(L"DANS LE SALON", L"IN THE LOBBY"); SolidBrush hb(WithA(kAcc, 0.22f)); g.FillPath(&hb, &bp); }
         else if (invited && !hot) { bl = T(L"INVITÉ ✓", L"INVITED ✓"); Pen np(WithA(kAcc, 0.9f), 1.2f); g.DrawPath(&np, &bp); }
-        else { bl = invited ? T(L"RÉINVITER", L"INVITE AGAIN") : T(L"INVITER", L"INVITE"); LinearGradientBrush lg(br, kAcc, kAcc2, LinearGradientModeHorizontal); g.FillPath(&lg, &bp); }
-        Text(g, bl, br, 10.5f, FontStyleBold, in ? kInk : invited && !hot ? kAcc : kOnAcc);
+        else { bl = invited ? T(L"RÉINVITER", L"INVITE AGAIN") : T(L"INVITER", L"INVITE"); SolidBrush lg(kAcc); g.FillPath(&lg, &bp); }
+        Text(g, bl, br, 11.5f, FontStyleBold, in ? kInk : invited && !hot ? kAcc : kOnAcc);
     }
-    g.ResetClip();
+    g.Restore(gst);
     if (ms > 0) {
         float h = kLobbyList.Height * kLobbyList.Height / (kLobbyList.Height + ms), y = kLobbyList.Y + (kLobbyList.Height - h) * sc / ms;
         GraphicsPath sp; RoundRect(sp, RectF(kLobbyList.X + kLobbyList.Width - 6, y, 4, h), 2);

@@ -70,7 +70,7 @@ static void RunStart(int mode)
     g_srvFresh = false;
     g_srvReadT = g_runCheckT = 0;
     g_kickArmed = -1;
-    g_tab = -1;
+    g_tab = TAB_HOME;
     LaunchLog("jeu demarre : le lanceur reste ouvert (mode %d)", mode);
 }
 
@@ -86,18 +86,17 @@ static void RunTick()
     // jeu ferme : retour au menu
     g_state = ST_IDLE;
     g_srv.clear();
-    LayoutTabs();
     CrashCheck();
     if (g_crashT) SetStatus(K_WARN, T(L"Arrêt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
     else SetStatus(K_NORMAL, T(L"Partie terminée · %s", L"Game over · %s"), ModLabel().c_str());
     LaunchLog("jeu ferme : retour au menu (arret brutal %d)", (int)(g_crashT != 0));
 }
 
-// ---- dessin et clics
-static const RectF kSrvList(452, 176, 488, 330);
-static const float kSrvRowH = 60;
-static RectF SrvBtn(RectF r, int k) { return k == 0 ? RectF(r.X + r.Width - 214, r.Y + (r.Height - 26) / 2, 106, 26) : RectF(r.X + r.Width - 102, r.Y + (r.Height - 26) / 2, 94, 26); }
-static RectF SrvRow(int i) { return RectF(kSrvList.X + 4, kSrvList.Y + i * kSrvRowH, kSrvList.Width - 8, kSrvRowH - 6); }
+// ---- dessin et clics (partie en cours : a gauche la partie, a droite les joueurs)
+static const RectF kSrvCard(620, 88, 644, 656), kSrvList(640, 148, 604, 500);
+static const float kSrvRowH = 86;
+static RectF SrvBtn(RectF r, int k) { return k == 0 ? RectF(r.X + r.Width - 16 - 112 - 10 - 132, r.Y + (r.Height - 38) / 2, 132, 38) : RectF(r.X + r.Width - 16 - 112, r.Y + (r.Height - 38) / 2, 112, 38); }
+static RectF SrvRow(int i) { return RectF(kSrvList.X, kSrvList.Y + i * kSrvRowH, kSrvList.Width, kSrvRowH - 8); }
 
 // 1000+i*2+k : bouton k (0 faire venir, 1 exclure) du joueur i
 static int SrvAt(float x, float y)
@@ -115,7 +114,7 @@ static int SrvAt(float x, float y)
 static bool SrvClick(float x, float y)
 {
     int h = SrvAt(x, y);
-    if (h < 0) return g_state == ST_RUNNING && kOptPanel.Contains(x, y);
+    if (h < 0) return false;
     const SrvPlayer &p = g_srv[(h - 1000) / 2];
     if ((h - 1000) % 2 == 0) { SrvCommand("venir", p.id); SetStatus(K_OK, T(L"%s arrive près de toi", L"%s is coming to you"), p.name.c_str()); }
     else if (g_kickArmed == p.id && GetTickCount() - g_kickArmedT < 4000) { SrvCommand("kick", p.id); g_kickArmed = -1; SetStatus(K_WARN, T(L"%s exclu de la partie", L"%s kicked from the game"), p.name.c_str()); }
@@ -125,54 +124,72 @@ static bool SrvClick(float x, float y)
 
 static void DrawServer(Graphics &g)
 {
-    DrawPanel(g);
     SkinsCheck();
-    const wchar_t *title = !g_srvFresh ? T(L"PARTIE", L"GAME") : g_srvHost ? T(L"SERVEUR", L"SERVER") : T(L"PARTIE", L"GAME");
-    Text(g, title, RectF(460, 124, 300, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
+    RectF lc(264, 88, 340, 656);
+    Glass(lc);
+    Glass(kSrvCard);
+    // a gauche : la partie
+    RectF ic(lc.X + 24, lc.Y + 28, 64, 64);
+    GraphicsPath ip; RoundRect(ip, ic, 20);
+    SolidBrush ib(WithA(kOk, 0.16f)); g.FillPath(&ib, &ip);
+    Icon(g, IC_PLAY, ic.X + 32, ic.Y + 32, 28, kOk, 2.0f);
+    Title(g, T(L"Partie en cours", L"Game running"), RectF(lc.X + 24, lc.Y + 108, lc.Width - 48, 34), 24, kInk);
+    Para(g, g_launchInfo, RectF(lc.X + 24, lc.Y + 146, lc.Width - 48, 44), 14, kGrey);
     if (g_srvFresh) {
-        wchar_t head[64];
-        swprintf_s(head, T(L"%d joueur(s)", L"%d player(s)"), (int)g_srv.size());
-        Text(g, head, RectF(700, 124, 232, 26), 12.5f, FontStyleBold, kGrey, StringAlignmentFar);
-        std::wstring sub = g_srvStatus + (g_srvSteam ? T(L" · par Steam", L" · through Steam") : L"");
-        Text(g, sub, RectF(460, 150, 476, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-    } else {
-        Text(g, T(L"En attente des informations du jeu…", L"Waiting for the game's information…"), RectF(460, 260, 476, 30), 15, FontStyleBold, kInk);
-        DrawBar(g, RectF(560, 300, 276, 5), -2);
-        Para(g, T(L"Elles arrivent une fois le mod chargé (menu du jeu).", L"They show up once the mod is loaded (game menu)."), RectF(480, 316, 436, 40), 12, kGrey, StringAlignmentCenter);
+        std::wstring st = g_srvStatus + (g_srvSteam ? T(L" \u00B7 par Steam", L" \u00B7 through Steam") : L"");
+        RectF sr(lc.X + 24, lc.Y + 204, lc.Width - 48, 44);
+        GraphicsPath sp; RoundRect(sp, sr, 14);
+        SolidBrush sb(TH(card)); g.FillPath(&sb, &sp);
+        SolidBrush dot(kOk); g.FillEllipse(&dot, sr.X + 16, sr.Y + 18, 8.0f, 8.0f);
+        Text(g, st, RectF(sr.X + 32, sr.Y, sr.Width - 40, sr.Height), 13, FontStyleBold, kInk, StringAlignmentNear);
+    }
+    Para(g, T(L"Le lanceur reste ouvert pendant la partie et revient au menu quand le jeu se ferme. Pour qu'il se ferme au lancement : R\u00E9glages.",
+              L"The launcher stays open during the game and goes back to the menu when the game closes. To close it at launch: Settings."),
+         RectF(lc.X + 24, lc.Y + lc.Height - 120, lc.Width - 48, 96), 12.5f, kGrey);
+    // a droite : les joueurs
+    RectF c = kSrvCard;
+    const wchar_t *title = g_srvFresh && g_srvHost ? T(L"Serveur", L"Server") : T(L"Joueurs", L"Players");
+    Title(g, title, RectF(c.X + 22, c.Y + 18, 300, 28), 18, kInk);
+    if (!g_srvFresh) {
+        float cy = c.Y + c.Height / 2 - 60;
+        Title(g, T(L"En attente des informations du jeu\u2026", L"Waiting for the game's information\u2026"), RectF(c.X, cy, c.Width, 34), 20, kInk, StringAlignmentCenter);
+        DrawBar(g, RectF(c.X + 170, cy + 50, c.Width - 340, 5), -2);
+        Para(g, T(L"Elles arrivent une fois le mod charg\u00E9 (menu du jeu).", L"They show up once the mod is loaded (game menu)."), RectF(c.X + 100, cy + 70, c.Width - 200, 40), 13, kGrey, StringAlignmentCenter);
         return;
     }
+    wchar_t head[64];
+    swprintf_s(head, T(L"%d joueur(s)", L"%d player(s)"), (int)g_srv.size());
+    Text(g, head, RectF(c.X + c.Width - 240, c.Y + 18, 216, 28), 13, FontStyleBold, kGrey, StringAlignmentFar);
     static const int pal[8] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89 };
     bool armedLive = g_kickArmed >= 0 && GetTickCount() - g_kickArmedT < 4000;
     for (int i = 0; i < (int)g_srv.size(); i++) {
         const SrvPlayer &p = g_srv[i];
         RectF r = SrvRow(i);
         if (r.Y + r.Height > kSrvList.Y + kSrvList.Height) break;
-        GraphicsPath rp; RoundRect(rp, r, 11);
-        SolidBrush rb(p.me ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
-        Pen rpen(p.me ? kAcc : TH(choiceBorder), p.me ? 1.6f : 1.1f); g.DrawPath(&rpen, &rp);
-        DrawSkinAvatar(g, RectF(r.X + 6, r.Y + 4, r.Height - 8, r.Height - 8), p.skin, CarRgb(pal[p.id % 8]), p.name);
-        std::wstring nm = p.name + (p.me ? T(L"  (toi)", L"  (you)") : L"") + (p.id == 0 ? T(L"  · hôte", L"  · host") : L"");
-        Text(g, nm, RectF(r.X + 62, r.Y + 7, 220, 20), 14, FontStyleBold, kInk, StringAlignmentNear);
+        GraphicsPath rp; RoundRect(rp, r, 18);
+        SolidBrush rb(p.me ? WithA(kAcc, 0.10f) : TH(card)); g.FillPath(&rb, &rp);
+        Pen rpen(p.me ? kAcc : TH(choiceBorder), p.me ? 1.5f : 1.0f); g.DrawPath(&rpen, &rp);
+        DrawSkinAvatar(g, RectF(r.X + 12, r.Y + (r.Height - 54) / 2, 54, 54), p.skin, CarRgb(pal[p.id % 8]), p.name);
+        std::wstring nm = p.name + (p.me ? T(L"  (toi)", L"  (you)") : L"") + (p.id == 0 ? T(L"  \u00B7 h\u00F4te", L"  \u00B7 host") : L"");
+        Text(g, nm, RectF(r.X + 80, r.Y + 14, 240, 24), 16, FontStyleBold, kInk, StringAlignmentNear);
         std::wstring line = p.inGame ? T(L"en partie", L"in game") : T(L"au menu", L"at the menu");
-        if (p.ping >= 0) line += L" · " + std::to_wstring(p.ping) + L" ms";
-        Text(g, line, RectF(r.X + 62, r.Y + 28, 220, 18), 11.5f, FontStyleRegular, p.ping > 250 ? Color(255, 205, 120, 30) : kGrey, StringAlignmentNear);
+        if (p.ping >= 0) line += L" \u00B7 " + std::to_wstring(p.ping) + L" ms";
+        Text(g, line, RectF(r.X + 80, r.Y + 40, 240, 20), 12.5f, FontStyleRegular, p.ping > 250 ? kWarn : kGrey, StringAlignmentNear);
         if (!g_srvHost || p.me) continue;
         for (int k = 0; k < 2; k++) {
             RectF br = SrvBtn(r, k);
             bool hot = g_srvHot == 1000 + i * 2 + k, armed = k == 1 && armedLive && g_kickArmed == p.id, off = k == 0 && !p.inGame;
-            GraphicsPath bp; RoundRect(bp, br, 13);
-            Color c = k == 1 ? kRed : kAcc;
-            if (armed) { SolidBrush ab(c); g.FillPath(&ab, &bp); }
-            else if (hot) { SolidBrush hb(WithA(c, 0.2f)); g.FillPath(&hb, &bp); }
-            Pen bpen(WithA(c, off ? 0.3f : 0.9f), 1.3f); g.DrawPath(&bpen, &bp);
+            GraphicsPath bp; RoundRect(bp, br, 12);
+            Color col = k == 1 ? kRed : kAcc;
+            if (armed) { SolidBrush ab(col); g.FillPath(&ab, &bp); }
+            else if (hot) { SolidBrush hb(WithA(col, 0.2f)); g.FillPath(&hb, &bp); }
+            Pen bpen(WithA(col, off ? 0.3f : 0.9f), 1.3f); g.DrawPath(&bpen, &bp);
             const wchar_t *lab = k == 0 ? T(L"FAIRE VENIR", L"BRING HERE") : armed ? T(L"CONFIRMER ?", L"CONFIRM?") : T(L"EXCLURE", L"KICK");
-            Text(g, lab, br, 10.5f, FontStyleBold, armed ? Color(255, 255, 255, 255) : WithA(c, off ? 0.35f : 1.0f));
+            Text(g, lab, br, 11.5f, FontStyleBold, armed ? Color(255, 255, 255, 255) : WithA(col, off ? 0.35f : 1.0f));
         }
     }
-    Pen sep(TH(sep), 1);
-    g.DrawLine(&sep, kOptPanel.X + 18, 518.0f, kOptPanel.X + kOptPanel.Width - 18, 518.0f);
-    Para(g, g_srvHost ? T(L"FAIRE VENIR : le joueur arrive près de toi (s'il n'est pas dans un véhicule). EXCLURE : deux clics.",
-                          L"BRING HERE: the player comes next to you (unless in a vehicle). KICK: two clicks.")
-                      : T(L"Le lanceur reste ouvert pendant la partie ; il revient au menu quand le jeu se ferme.", L"The launcher stays open during the game; it goes back to the menu when the game closes."),
-         RectF(kOptPanel.X + 20, 526, kOptPanel.Width - 40, 44), 11.5f, kGrey, StringAlignmentCenter);
+    if (g_srvHost)
+        Para(g, T(L"FAIRE VENIR : le joueur arrive pr\u00E8s de toi (s'il n'est pas dans un v\u00E9hicule). EXCLURE : deux clics.",
+                  L"BRING HERE: the player comes next to you (unless in a vehicle). KICK: two clicks."),
+             RectF(c.X + 24, c.Y + c.Height - 70, c.Width - 48, 50), 12.5f, kGrey, StringAlignmentCenter);
 }

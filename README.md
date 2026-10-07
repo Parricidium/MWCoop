@@ -29,7 +29,7 @@ The mod and its launcher speak **English and French** (the launcher follows Wind
 
 > [!WARNING]
 > **PRE-ALPHA.** Almost everything is tested between two game instances on one PC; real games between friends have
-> only just started. Expect bugs and send your logs: launcher, **LOGS** tab, *Create a zip to send*.
+> only just started. Expect bugs and send your logs: launcher, **Logs** page, *Create a zip to send*.
 
 *[Version française plus bas.](#version-française)*
 
@@ -38,28 +38,38 @@ The mod and its launcher speak **English and French** (the launcher follows Wind
 ### The launcher
 
 `MWCoop.exe` installs the mod, offers its updates (one click), checks your game, and runs the **lobby**: players with their
-outfit portrait, version, ping and a UDP check; the host picks *Continue* or *New game*, then everyone's game starts.
+3D portrait, version, ping and a UDP check; the host picks *Continue* or *New game*, then everyone's game starts.
+Since 0.42 it is a bigger, frosted-glass window over a northern-lights night: every page is one click away in the bar
+on the left (lobby, outfit, car, sent content, mods, what's new, logs, settings).
 
 <p align="center">
-  <img src="docs/img/lanceur-salon.png" width="100%" alt="Launcher lobby">
+  <img src="docs/img/lanceur-accueil.png" width="100%" alt="Launcher home page">
 </p>
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/img/lanceur-tenue.png" alt="Outfit side panel"></td>
-    <td width="50%"><img src="docs/img/lanceur-voiture.png" alt="Car color side panel"></td>
+    <td width="50%"><img src="docs/img/lanceur-salon.png" alt="Lobby page"></td>
+    <td width="50%"><img src="docs/img/lanceur-tenue.png" alt="Outfit page"></td>
   </tr>
   <tr>
-    <td align="center"><b>Outfit</b> (click your character in the lobby, or CO-OP > Appearance): pick how the others see you, turning 3D preview and portraits read from your own game, in a panel that slides out of the launcher</td>
-    <td align="center"><b>Car color</b> (car icon in the lobby, or CO-OP > Car color): the CORRIS colour for a new game, previewed in 3D</td>
+    <td align="center"><b>Lobby</b>: players, game choice, what the host sends, START; the gear holds the lobby options</td>
+    <td align="center"><b>Outfit</b> (or click yourself in the lobby): your full look in 3D, one row per part, head to toe</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/img/lanceur-journaux.png" alt="Logs tab"></td>
+    <td width="50%"><img src="docs/img/lanceur-voiture.png" alt="Car page"></td>
+    <td width="50%"><img src="docs/img/lanceur-contenu.png" alt="Sent content page"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Car</b>: the CORRIS colour for a new game, previewed in 3D</td>
+    <td align="center"><b>Sent content</b>: CDs, paint, flag, posters… copied apart to your guests</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/img/lanceur-journaux.png" alt="Logs page"></td>
     <td width="50%"><img src="docs/img/lanceur-clair.png" alt="Light theme"></td>
   </tr>
   <tr>
     <td align="center"><b>Logs</b>: every log, one click to zip them for a bug report</td>
-    <td align="center">Light or dark theme, English or French, animated winter scene</td>
+    <td align="center">Light or dark theme, English or French, falling snow</td>
   </tr>
 </table>
 
@@ -120,14 +130,14 @@ No other loader is needed. From a Steam install, the launcher starts the game fr
 `%LOCALAPPDATA%\MWCoop\My Winter Car` (same data, linked folders): Steam would otherwise load Windows' `version.dll`
 before the mod's.
 
-**MSCLoader** (experimental): MWCoop and MSCLoader run side by side since 0.31.3. The launcher's **MODS** tab
+**MSCLoader** (experimental): MWCoop and MSCLoader run side by side since 0.31.3. The launcher's **Mods** page
 (0.32) installs MSCLoader from its official GitHub (its own installer refuses a game folder that already contains a
 `version.dll`), turns it on or off for the next launch, lists your mods and edits their options (gear icon; applied
 at the next game launch). Since 0.36, the host's mods marked **Send** go to the lobby's guests (one **ACCEPT ALL**,
 then automatic): they are copied apart, in `%LOCALAPPDATA%\MWCoop\mods-invite`, and loaded only for the host's
 game (the guest's own mods and settings are never touched). A host without MSCLoader: guests play without it too.
 Since 0.37 the host's **CDs** (music and covers), **radio**, **CORRIS and moped paint**, **garage flag**, **posters**,
-**window sticker**, **fabric** and **hockey teams** go the same way (CO-OP > *Sent to guests*, a checklist; the ID photo
+**window sticker**, **fabric** and **hockey teams** go the same way (*Sent content* page, a checklist; the ID photo
 is off by default), into `%LOCALAPPDATA%\MWCoop\contenu-invite`.
 
 ### Antivirus warning
@@ -167,8 +177,8 @@ Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
   a separate profile (`MWCoop\profils\invite`).
 - In game: **F10** opens the co-op menu (mouse or arrows), **T** the chat, **Esc** closes them. Everyone can go to
   another player (F10 > PLAYERS); the host can also bring a player over or kick them.
-- The launcher stays open while you play (option in the CO-OP tab): players, ping, and for the host BRING HERE and
-  KICK; it goes back to the menu when the game closes. A red "!" on the logs icon means the last game stopped abruptly.
+- The launcher stays open while you play (option in Settings): players, ping, and for the host BRING HERE and
+  KICK; it goes back to the menu when the game closes. A red "!" on *Logs* means the last game stopped abruptly.
 
 ## Features
 
@@ -224,7 +234,7 @@ the lobby shows *UDP blocked* for a guest whose UDP test fails. Up to 8 players 
 - Items held in the hand are carried at their real place, not glued to the avatar's hand.
 - A guest who joins after a restaurant order does not see the trays already on the counter.
 - Some NPC reactions (fights, services) are only checked between test instances so far.
-- Your feedback from real games is what drives the next versions: send the zip from the LOGS tab.
+- Your feedback from real games is what drives the next versions: send the zip from the Logs page.
 
 ## How it works
 
@@ -261,7 +271,7 @@ Le mod et son lanceur parlent **français et anglais** (le lanceur suit Windows,
 
 > [!WARNING]
 > **PRÉ-ALPHA.** Presque tout est testé entre deux instances du jeu sur un même PC ; les vraies parties entre amis
-> commencent tout juste. Attendez-vous à des bugs et envoyez vos journaux : lanceur, onglet **JOURNAUX**, *Créer un
+> commencent tout juste. Attendez-vous à des bugs et envoyez vos journaux : lanceur, page **Journaux**, *Créer un
 > zip à envoyer*.
 
 ## Captures
@@ -269,9 +279,9 @@ Le mod et son lanceur parlent **français et anglais** (le lanceur suit Windows,
 <p align="center">
   <img src="docs/img/lanceur-anime.webp" width="80%" alt="Le lanceur MWCoop">
 </p>
-<p align="center"><i>Le lanceur : héberger, rejoindre ou jouer seul ; une nouvelle version : un clic pour la mettre à jour. Neige, fumée et lueur du feu animées.</i></p>
+<p align="center"><i>Le lanceur (0.42) : une grande fenêtre en verre dépoli sur une nuit d'aurore boréale ; toutes les pages à gauche, héberger, rejoindre ou jouer seul ; une nouvelle version : un clic pour la mettre à jour.</i></p>
 
-Les captures ci-dessus (en anglais) montrent le salon, les volets TENUE et COULEUR DE LA VOITURE (clic sur son personnage ou icône voiture du salon, ou onglet COOP), la page JOURNAUX, le menu F10, le tchat,
+Les captures ci-dessus (en anglais) montrent l'accueil, le salon, les pages TENUE, VOITURE, CONTENU ENVOYÉ et JOURNAUX, le thème clair, le menu F10, le tchat,
 l'écran d'attente des invités et l'écran de mort ; tout existe aussi en français.
 
 ## Installation
@@ -285,7 +295,7 @@ Aucun autre chargeur n'est nécessaire. Depuis une installation Steam, le lanceu
 `%LOCALAPPDATA%\MWCoop\My Winter Car` (mêmes données, dossiers liés) : sinon Steam fait charger la `version.dll` de
 Windows avant celle du mod.
 
-**MSCLoader** (expérimental) : MWCoop et MSCLoader fonctionnent ensemble depuis la 0.31.3. L'onglet **MODS** du
+**MSCLoader** (expérimental) : MWCoop et MSCLoader fonctionnent ensemble depuis la 0.31.3. La page **Mods** du
 lanceur (0.32) installe MSCLoader depuis son GitHub officiel (son propre installateur refuse un dossier de jeu qui
 contient déjà une `version.dll`), l'active ou le coupe pour le prochain lancement, liste vos mods et règle leurs options
 (icône d'engrenage ; pris au prochain lancement du jeu). Depuis la 0.36, les mods de l'hôte cochés **Envoyer** partent
@@ -294,7 +304,7 @@ et chargés seulement pour la partie de l'hôte (les mods et réglages de l'invi
 MSCLoader : les invités jouent sans aussi.
 Depuis la 0.37, les **CD** de l'hôte (musiques et jaquettes), sa **radio**, la **peinture de la CORRIS** et de la
 mobylette, le **drapeau du garage**, les **posters**, l'**autocollant**, le **tissu** et les **équipes de hockey** suivent le
-même chemin (COOP > *Envoyé aux invités*, une liste à cocher ; la photo d'identité est décochée au départ), dans
+même chemin (page *Contenu envoyé*, une liste à cocher ; la photo d'identité est décochée au départ), dans
 `%LOCALAPPDATA%\MWCoop\contenu-invite`.
 
 ### Alerte d'antivirus
@@ -336,13 +346,13 @@ Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) 
   jamais touchée** : l'invité joue dans un profil à part (`MWCoop\profils\invite`).
 - En jeu : **F10** ouvre le menu coop (souris ou flèches), **T** le tchat, **Échap** les ferme. Chacun peut aller vers
   un autre joueur (F10 > JOUEURS) ; l'hôte peut aussi faire venir un joueur ou l'exclure.
-- Le lanceur reste ouvert pendant la partie (option dans l'onglet COOP) : joueurs, ping, et pour l'hôte FAIRE VENIR et
-  EXCLURE ; il revient au menu quand le jeu se ferme. Un « ! » rouge sur l'icône des journaux : la dernière partie
-  s'est arrêtée brutalement.
-- Au premier lancement, une **visite guidée** présente chaque bouton et onglet en quelques bulles (à revoir depuis
-  l'onglet COOP) ; après une mise à jour, seuls les nouveaux boutons ont leur bulle, marquée NOUVEAU.
+- Le lanceur reste ouvert pendant la partie (option dans Réglages) : joueurs, ping, et pour l'hôte FAIRE VENIR et
+  EXCLURE ; il revient au menu quand le jeu se ferme. Un « ! » rouge sur *Journaux* : la dernière partie s'est
+  arrêtée brutalement.
+- Au premier lancement, une **visite guidée** présente chaque bouton et page en quelques bulles (à revoir depuis
+  Réglages) ; après une mise à jour, seuls les nouveaux boutons ont leur bulle, marquée NOUVEAU.
 - **Apparence complète** (0.38) : en plus du haut, corpulence, pantalon, visage, chapeau, lunettes et cheveux, pris chez les
-  habitants du jeu ; volet TENUE avec aperçu 3D (clic sur ton personnage dans le salon).
+  habitants du jeu ; page TENUE avec aperçu 3D (ou clic sur ton personnage dans le salon).
 
 ## Fonctionnalités
 
@@ -403,7 +413,7 @@ joignables : le salon affiche *UDP bloqué* pour un invité dont le test UDP éc
 - Les objets tenus en main sont portés à leur vraie place, pas collés à la main de l'avatar.
 - Un invité qui arrive après une commande au restaurant ne voit pas les plateaux déjà posés.
 - Certaines réactions de PNJ (bagarres, services) ne sont vérifiées qu'entre instances de test pour l'instant.
-- Vos retours de vraies parties guident les prochaines versions : envoyez le zip de l'onglet JOURNAUX.
+- Vos retours de vraies parties guident les prochaines versions : envoyez le zip de la page Journaux.
 
 ## Compiler
 

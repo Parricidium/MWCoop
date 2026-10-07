@@ -497,21 +497,23 @@ static Bitmap *PersoPortrait(const std::string &skin, int W, int H)
     return out;
 }
 
-// ---- lignes du volet (a droite de l'apercu) : tete en haut, jambes en bas
+// ---- lignes de la page TENUE (a droite de l'apercu) : tete en haut, jambes en bas
 static const int kPersoRows[] = { PF_HAT, PF_GLASSES, PF_HAIR, PF_FACE, PF_SHIRT, PF_PANTS, PF_BODY };
 static const int kPersoRowN = 7;
+static const int kPersoZone[] = { 0, 0, 0, 0, 1, 2, 3 };   // zone de chaque ligne (tete, torse, jambes, silhouette)
 static RectF PersoRowRect(int i)
 {
-    static const float ys[] = { 150, 186, 222, 258, 310, 362, 414 };   // groupes : tete, torse, jambes, silhouette
-    return RectF(685, ys[i], 252, 32);
+    static const float ys[] = { 134, 190, 246, 302, 388, 474, 560 };
+    return RectF(744, ys[i], 496, 50);
 }
+static RectF PersoArrowRect(const RectF &r, int s) { return RectF(r.X + r.Width - (s ? 48 : 96), r.Y + 5, 40, 40); }
 static int PersoRowAt(float x, float y)
 {
     if (g_perso.state != 1) return -1;
     for (int i = 0; i < kPersoRowN; i++) {
         RectF r = PersoRowRect(i);
         if (!r.Contains(x, y)) continue;
-        return i * 2 + (x < r.X + 40 ? 0 : x > r.X + r.Width - 40 ? 1 : 1);
+        return i * 2 + (PersoArrowRect(r, 0).Contains(x, y) ? 0 : 1);
     }
     return -1;
 }
@@ -526,29 +528,44 @@ static void PersoStep(int row, int dir)
     i = (i + dir + (int)v.size()) % (int)v.size();
     PersoSet(f, v[i]);
     g_skinChangeT = GetTickCount();
+    g_lookZone = kPersoZone[row];
 }
 static void DrawPersoRows(Graphics &g)
 {
-    static const wchar_t *grpFr[] = { L"TÊTE", L"TORSE", L"JAMBES", L"SILHOUETTE" }, *grpEn[] = { L"HEAD", L"TORSO", L"LEGS", L"BUILD" };
-    static const float gy[] = { 132, 294, 346, 398 };
-    for (int k = 0; k < 4; k++) Text(g, g_fr ? grpFr[k] : grpEn[k], RectF(688, gy[k], 200, 16), 10, FontStyleBold, kGrey, StringAlignmentNear);
+    static const wchar_t *grpFr[] = { L"T\u00CATE", L"TORSE", L"JAMBES", L"SILHOUETTE" }, *grpEn[] = { L"HEAD", L"TORSO", L"LEGS", L"BUILD" };
+    static const float gy[] = { 104, 358, 444, 530 }, gh[] = { 254, 82, 82, 82 };
+    for (int k = 0; k < 4; k++) {
+        RectF zr(732, gy[k], 520, gh[k] + (k == 0 ? 0 : 0));
+        if (g_lookZone == k) {   // zone mise en avant (repere de l'apercu, ou derniere changee)
+            GraphicsPath zp; RoundRect(zp, zr, 18);
+            SolidBrush zb(WithA(kAcc, 0.10f)); g.FillPath(&zb, &zp);
+            Pen zpen(WithA(kAcc, 0.45f), 1); g.DrawPath(&zpen, &zp);
+        }
+        Text(g, g_fr ? grpFr[k] : grpEn[k], RectF(748, gy[k] + 6, 300, 22), 11, FontStyleBold, g_lookZone == k ? kAcc : kGrey, StringAlignmentNear);
+    }
     static const wchar_t *labFr[] = { L"Chapeau", L"Lunettes", L"Cheveux", L"Visage", L"Haut", L"Pantalon", L"Corpulence" }, *labEn[] = { L"Hat", L"Glasses", L"Hair", L"Face", L"Top", L"Pants", L"Build" };
     for (int i = 0; i < kPersoRowN; i++) {
         int f = kPersoRows[i];
         RectF r = PersoRowRect(i);
         bool hot = g_skinRowHot / 2 == i && g_skinRowHot >= 0;
-        GraphicsPath rp; RoundRect(rp, r, 9);
+        GraphicsPath rp; RoundRect(rp, r, 14);
         SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
-        Pen rpen(hot ? WithA(kAcc, 0.7f) : TH(choiceBorder), 1.0f); g.DrawPath(&rpen, &rp);
+        Pen rpen(TH(choiceBorder), 1.0f); g.DrawPath(&rpen, &rp);
         for (int s = 0; s < 2; s++) {
-            RectF a(s ? r.X + r.Width - 30 : r.X + 4, r.Y + 4, 26, r.Height - 8);
+            RectF a = PersoArrowRect(r, s);
             bool ah = g_skinRowHot == i * 2 + s;
-            GraphicsPath ap; RoundRect(ap, a, 7);
-            SolidBrush ab(ah ? WithA(kAcc, 0.25f) : TH(field)); g.FillPath(&ab, &ap);
-            Text(g, s ? L"›" : L"‹", RectF(a.X, a.Y - 2, a.Width, a.Height), 16, FontStyleBold, ah ? kAcc : kInk);
+            GraphicsPath ap; RoundRect(ap, a, 11);
+            SolidBrush ab(ah ? WithA(kAcc, 0.25f) : TH(btn2)); g.FillPath(&ab, &ap);
+            Icon(g, s ? IC_CHEVR : IC_CHEVL, a.X + 20, a.Y + 20, 16, ah ? kAcc : kInk, 2.3f);
         }
-        Text(g, g_fr ? labFr[i] : labEn[i], RectF(r.X + 36, r.Y + 1, 180, 13), 9.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-        std::wstring v = PersoLabel(f, PersoGet(f));
-        Text(g, v, RectF(r.X + 36, r.Y + 12, r.Width - 72, 19), 12, FontStyleBold, kInk, StringAlignmentNear);
+        std::vector<std::string> ch = PersoChoices(f);
+        std::string cur = PersoGet(f);
+        int at = 0;
+        for (int k2 = 0; k2 < (int)ch.size(); k2++) if (ch[k2] == cur) at = k2;
+        wchar_t cnt[32]; swprintf_s(cnt, L"%d / %d", at + 1, (int)ch.size());
+        Text(g, cnt, RectF(r.X + r.Width - 196, r.Y, 92, r.Height), 12, FontStyleBold, kGrey, StringAlignmentFar);
+        Text(g, g_fr ? labFr[i] : labEn[i], RectF(r.X + 16, r.Y + 5, 200, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        std::wstring v = PersoLabel(f, cur);
+        Text(g, v, RectF(r.X + 16, r.Y + 22, r.Width - 220, 24), 15, FontStyleBold, kInk, StringAlignmentNear);
     }
 }

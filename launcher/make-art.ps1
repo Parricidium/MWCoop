@@ -1,4 +1,6 @@
-﻿# Compose les fonds du lanceur (launcher\launcher.png et launcher-sombre.png, 1000x620 en double resolution, avec
+﻿# Depuis 0.42 (lanceur 2026) la scene est dessinee par le lanceur lui-meme (ui.inc) : seule l'icone (mwcoop.ico) sert
+# encore ; les fonds ecrits plus bas ne sont plus integres.
+# Compose les fonds du lanceur (launcher\launcher.png et launcher-sombre.png, 1000x620 en double resolution, avec
 # transparence ; integres a MWCoop.exe par launcher.rc) et son icone (launcher\mwcoop.ico) : carte arrondie + ombre
 # douce, nuit d'hiver en Finlande dessinee ici (ciel, collines, sapins, maison en bois eclairee, vieille voiture
 # sous la neige), panneau depoli a gauche, logo qui depasse de la carte.
