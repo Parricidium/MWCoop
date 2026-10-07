@@ -25,10 +25,12 @@
 //    logiciel).
 //  - Onglet TENUE : l'Apparence choisie facon GTA (personnage qui tourne, fleches, galerie de portraits) ; images
 //    pre-rendues par le mod dans MWCoop\cache\skins (portraits repris dans le salon).
+//  - Onglet MODS (EXPERIMENTAL) : MSCLoader installe / active / coupe, liste des mods et leurs options (mods.inc).
+//  - Journaux : l'icone de la feuille (plus d'onglet) ; "!" rouge si le dernier jeu s'est arrete brutalement.
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1010,7 +1012,7 @@ static void StartUpdate()
 
 // ---------------------------------------------------------------- boutons
 // Onglets du panneau de droite (TAB_LOGS : page du bouton journaux, pas d'onglet ; TAB_LOBBY : pendant un salon)
-enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_SKIN, TAB_COUNT };
+enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_SKIN, TAB_MODS, TAB_COUNT };
 static int g_tab = -1;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_COUNT };
@@ -1018,6 +1020,7 @@ enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
 static bool g_steamNet = false;
+static bool g_mscOn = true;                          // [Lanceur] MSCLoader : le charger au lancement (onglet MODS, mods.inc)
 static bool g_steamInfoHot;                          // encart "par Steam" survole (clic : guide Steam)
 static bool g_guide;                                 // guide "Jouer par Steam" ouvert (par-dessus tout le lanceur)
 static int g_guideHot;                               // 1 copier, 2 compris, 3 ne plus afficher, 4 fermer
@@ -1354,23 +1357,27 @@ static const Opt *OptByKey(const char *key) { for (auto &o : g_opts) if (!strcmp
 
 static const wchar_t *TabName(int t)
 {
-    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE", L"SALON", L"TENUE" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR", L"LOBBY", L"OUTFIT" };
+    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE", L"SALON", L"TENUE", L"MODS" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR", L"LOBBY", L"OUTFIT", L"MODS" };
     return g_fr ? fr[t] : en[t];
 }
-// JOURNAUX : onglet aussi (l'icone seule, les amis de JD ne la trouvaient pas).
-static bool TabVisible(int t) { return t == TAB_LOBBY ? g_lobby != LB_NONE : true; }
+// JOURNAUX : l'icone de la feuille seule (plus d'onglet depuis 0.32 : place pour MODS ; un "!" rouge apres un crash).
+static bool TabVisible(int t) { return t == TAB_LOBBY ? g_lobby != LB_NONE : t != TAB_LOGS; }
 static void LayoutTabs()
 {
-    static const int order[] = { TAB_LOBBY, TAB_COOP, TAB_SKIN, TAB_CAR, TAB_NOTES, TAB_LOGS };
-    float x = 440, pad = 12, gap = 6;
+    static const int order[] = { TAB_LOBBY, TAB_COOP, TAB_SKIN, TAB_CAR, TAB_MODS, TAB_NOTES, TAB_LOGS };
     Bitmap bm(1, 1);
     Graphics mg(&bm);
-    for (int t = 0; t < TAB_COUNT; t++) g_tabR[t] = RectF(0, 0, 0, 0);
-    for (int t : order) {
-        if (!TabVisible(t)) continue;
-        float w = pad + MeasureW(mg, TabName(t), 11.5f, FontStyleBold);
-        g_tabR[t] = RectF(x, 78, w, 26);
-        x += w + gap;
+    // Barre trop longue (salon ouvert : 7 onglets) : marges resserrees, pour s'arreter avant le bouton reduire (904).
+    for (float pad = 12, gap = 6; ; pad = 7, gap = 3) {
+        float x = 440;
+        for (int t = 0; t < TAB_COUNT; t++) g_tabR[t] = RectF(0, 0, 0, 0);
+        for (int t : order) {
+            if (!TabVisible(t)) continue;
+            float w = pad + MeasureW(mg, TabName(t), 11.5f, FontStyleBold);
+            g_tabR[t] = RectF(x, 78, w, 26);
+            x += w + gap;
+        }
+        if (x <= 900 || pad < 10) break;
     }
 }
 static std::vector<int> TabRows(int t)
@@ -1382,7 +1389,9 @@ static std::vector<int> TabRows(int t)
 static float NotesMaxScroll();
 static float LogsMaxScroll();
 static float LobbyMaxScroll();
-static float MaxScroll(int t) { return t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : max(0.0f, TabRows(t).size() * kRowH - kOptList.Height); }
+static float MscMaxScroll();
+static void DrawMods(Graphics &g);
+static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : max(0.0f, TabRows(t).size() * kRowH - kOptList.Height); }
 
 static int ValueIndex(const Opt &o, int v)
 {
@@ -1453,6 +1462,7 @@ static void DrawOptions(Graphics &g)
     if (g_tab == TAB_LOBBY) { DrawLobby(g); return; }
     if (g_tab == TAB_SKIN) { DrawSkins(g); return; }
     if (g_tab == TAB_CAR) { DrawCar(g); return; }
+    if (g_tab == TAB_MODS) { DrawMods(g); return; }
     if (g_tab == TAB_NOTES) { DrawNotes(g); return; }
     if (g_tab == TAB_LOGS) { DrawLogs(g); return; }
     DrawPanel(g);
@@ -1520,7 +1530,7 @@ static void DrawOptions(Graphics &g)
 static void HitOption(float x, float y, int *row, int *part)
 {
     *row = -1; *part = 0;
-    if (g_tab < 0 || g_tab == TAB_NOTES || g_tab == TAB_LOGS || g_tab == TAB_CAR || g_tab == TAB_LOBBY || g_tab == TAB_SKIN || !kOptList.Contains(x, y)) return;
+    if (g_tab < 0 || g_tab == TAB_NOTES || g_tab == TAB_LOGS || g_tab == TAB_CAR || g_tab == TAB_LOBBY || g_tab == TAB_SKIN || g_tab == TAB_MODS || !kOptList.Contains(x, y)) return;
     std::vector<int> rows = TabRows(g_tab);
     int k = (int)((y - kOptList.Y + g_scroll[g_tab]) / kRowH);
     if (k < 0 || k >= (int)rows.size()) return;
@@ -1678,6 +1688,59 @@ static bool LastLaunchWithoutMod()
     if (!LocalDir().empty()) look(LocalDir() + L"dernier-lancement.txt");
     for (const std::wstring &pr : Profiles()) look(g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\chargeur.log");
     return newest < t - 5;
+}
+
+// Fin anormale du dernier jeu (crash, processus tue) : depuis 0.32 le mod finit son journal par "jeu ferme
+// normalement" (OnApplicationQuit). Le mwcoop.log le plus recent (joueur, profils, secours LOCALAPPDATA) sans cette
+// ligne, ecrit par une 0.32 ou plus (les anciens ne l'ont jamais) -> "!" rouge sur l'icone des journaux, jusqu'a ce
+// qu'on les ouvre ([Lanceur] CrashVu = heure de ce journal).
+static long long g_crashT;
+static long long FileUnixTime(const std::wstring &p)
+{
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a)) return 0;
+    ULARGE_INTEGER u; u.LowPart = a.ftLastWriteTime.dwLowDateTime; u.HighPart = a.ftLastWriteTime.dwHighDateTime;
+    return (long long)(u.QuadPart / 10000000ULL) - 11644473600LL;
+}
+static bool GameProcessRunning();
+static void CrashCheck()
+{
+    g_crashT = 0;
+    if (g_gameDir.empty() || GameProcessRunning()) return;
+    std::vector<std::wstring> logs = { LogsDir() + L"mwcoop.log" };
+    for (const std::wstring &pr : Profiles()) logs.push_back(g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\mwcoop.log");
+    if (!LocalDir().empty()) logs.push_back(LocalDir() + L"logs\\mwcoop.log");
+    std::wstring newest;
+    long long nt = 0;
+    for (auto &l : logs) { long long t = FileUnixTime(l); if (t > nt) { nt = t; newest = l; } }
+    if (newest.empty() || (long long)_time64(NULL) - nt > 14 * 86400) return;
+    HANDLE f = CreateFileW(newest.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return;
+    char head[160] = {}, tail[4096] = {};
+    DWORD n = 0;
+    ReadFile(f, head, sizeof(head) - 1, &n, NULL);
+    LARGE_INTEGER sz = {};
+    GetFileSizeEx(f, &sz);
+    LARGE_INTEGER at; at.QuadPart = max(0LL, sz.QuadPart - (long long)sizeof(tail) + 1);
+    SetFilePointerEx(f, at, NULL, FILE_BEGIN);
+    ReadFile(f, tail, sizeof(tail) - 1, &n, NULL);
+    CloseHandle(f);
+    // 1re ligne : "hh:mm:ss.mmm MWCoop 0.32.0-prealpha - Unity ..."
+    const char *v = strstr(head, "MWCoop ");
+    int a = 0, b = 0;
+    if (!v || sscanf_s(v + 7, "%d.%d", &a, &b) != 2 || (a == 0 && b < 32)) return;
+    if (strstr(tail, "jeu ferme normalement")) return;
+    wchar_t seen[32] = L"0";
+    GetPrivateProfileStringW(L"Lanceur", L"CrashVu", L"0", seen, 32, g_iniLauncher.c_str());
+    if (nt <= _wtoi64(seen)) return;
+    g_crashT = nt;
+    TestLog("journaux : le dernier jeu s'est arrete brutalement (%s)", Narrow(newest, CP_UTF8).c_str());
+}
+static void CrashSeen()
+{
+    if (!g_crashT) return;
+    WritePrivateProfileStringW(L"Lanceur", L"CrashVu", std::to_wstring(g_crashT).c_str(), g_iniLauncher.c_str());
+    g_crashT = 0;
 }
 
 // Lignes d'erreur du journal (ERREUR, exception) ; au-dela de 4 Mo, les 4 derniers seulement.
@@ -2905,7 +2968,23 @@ static void DrawUI(Graphics &g)
         RoundRect(sheet, RectF(cx - 5.5f, cy - 7.0f, 11.0f, 14.0f), 2.0f);
         g.DrawPath(&pen, &sheet);
         for (int k = 0; k < 3; k++) g.DrawLine(&pen, cx - 3.0f, cy - 3.5f + k * 3.5f, k == 2 ? cx + 1.0f : cx + 3.0f, cy - 3.5f + k * 3.5f);
-        if (b.hover > 0.02f && !on) Text(g, T(L"Journaux", L"Logs"), RectF(b.r.X - 84, b.r.Y, 78, b.r.Height), 11.5f, FontStyleBold, WithA(kInk, b.hover), StringAlignmentFar);
+        if (b.hover > 0.02f && !on) {
+            if (g_crashT) {   // etiquette pleine sous l'icone (du texte seul, sur le logo, ne se lisait pas)
+                RectF tip(b.r.X + b.r.Width - 268, b.r.Y + b.r.Height + 4, 268, 22);
+                GraphicsPath tp; RoundRect(tp, tip, 11);
+                SolidBrush tb(Color((BYTE)(240 * b.hover), 196, 40, 40)); g.FillPath(&tb, &tp);
+                Text(g, T(L"Le jeu s'est arr\u00EAt\u00E9 brutalement : clique ici", L"The game stopped abruptly: click here"), tip, 11.5f, FontStyleBold, WithA(Color(255, 255, 255, 255), b.hover));
+            }
+            else Text(g, T(L"Journaux", L"Logs"), RectF(b.r.X - 84, b.r.Y, 78, b.r.Height), 11.5f, FontStyleBold, WithA(kInk, b.hover), StringAlignmentFar);
+        }
+        if (g_crashT && !on) {   // fin anormale du dernier jeu : "!" sur un rond rouge
+            RectF dot(b.r.X + b.r.Width - 9, b.r.Y - 3, 14, 14);
+            SolidBrush rb(Color(255, 214, 48, 48));
+            g.FillEllipse(&rb, dot);
+            Pen ring(TH(panel), 1.5f);
+            g.DrawEllipse(&ring, dot);
+            Text(g, L"!", dot, 10.5f, FontStyleBold, Color(255, 255, 255, 255));
+        }
     }
     for (int id : { B_MIN, B_CLOSE }) {
         Button &b = g_btn[id];
@@ -3619,6 +3698,8 @@ static void Launch(int mode, const char *partie = NULL)
     std::wstring args = std::wstring(L"-mwcoop-mode ") + modes[mode] + L" -mwcoop-port " + std::to_wstring(port);
     if (mode == MODE_GUEST) args += (g_steamNet ? std::wstring() : L" -mwcoop-adresse " + addr) + L" -mwcoop-profil invite";
     SteamDown();   // (le lanceur ne passe plus pour le jeu aupres de Steam)
+    // MSCLoader installe mais coupe dans l'onglet MODS : son prechargeur s'arrete tout de suite (rien n'est desinstalle).
+    if (!g_mscOn && FileExists(g_gameDir + L"winhttp.dll") && FileExists(g_gameDir + L"doorstop_config.ini")) { args += L" -mscloader-disable"; TestLog("lancement sans MSCLoader (-mscloader-disable)"); }
     g_preWnds.clear();
     EnumWindows(ListUnityWindows, (LPARAM)&g_preWnds);
     // Lance comme un double-clic dans l'explorateur : un mode de compatibilite de l'exe peut exiger l'administrateur ;
@@ -4562,6 +4643,7 @@ static void GuestToggleReady()
 }
 
 #include "steam.inc"
+#include "mods.inc"
 
 // Toutes les 2 s, l'hote mesure le ping de chacun ; chaque seconde (aussitot apres un choix dans l'onglet TENUE),
 // l'apparence choisie (onglets COOP et TENUE) est annoncee si elle a change.
@@ -5105,7 +5187,7 @@ static void OnButton(int id)
     case B_EXE: ChooseExe(); break;
     case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
-    case B_LOGS: g_tab = g_tab == TAB_LOGS ? -1 : TAB_LOGS; g_optHot = -1; if (g_tab == TAB_LOGS) LogsScan(); break;
+    case B_LOGS: g_tab = g_tab == TAB_LOGS ? -1 : TAB_LOGS; g_optHot = -1; if (g_tab == TAB_LOGS) { LogsScan(); CrashSeen(); } break;
     case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
@@ -5127,6 +5209,7 @@ static void Tick()
     LobbyTick();
     LobbySoundsTick();
     SteamTick();
+    MscTick();
     if (!g_testSalon.empty()) { TestSalonStep(); return; }   // (mode d'essai : rien a dessiner)
     for (int i = 0; i < B_COUNT; i++) {
         float want = (g_hot == i && g_btn[i].enabled) ? 1.0f : 0.0f;
@@ -5266,6 +5349,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         g_carHot = g_tab == TAB_CAR && g_state == ST_IDLE ? CarSwatchAt(x, y) : -1;
         g_lobbyHot = g_tab == TAB_LOBBY && g_state == ST_IDLE ? LobbyChoiceAt(x, y) : -1;
         g_steamInfoHot = SteamInfoAt(x, y);
+        g_mscHot = g_tab == TAB_MODS && g_state == ST_IDLE ? MscAt(x, y) : -1;
         bool skinTab = g_tab == TAB_SKIN && g_state == ST_IDLE;
         g_skinHot = skinTab ? SkinCellAt(x, y) : -1;
         g_skinArrowHot = skinTab ? SkinArrowAt(x, y) : 0;
@@ -5273,11 +5357,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         TrackMouseEvent(&tme);
         bool carView = g_tab == TAB_CAR && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(x, y);
         bool skinView = skinTab && !g_skinArrowHot && kSkinView.Contains(x, y);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot) ? IDC_HAND
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot || g_mscHot >= 0) ? IDC_HAND
                                    : carView || skinView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
-    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; g_steamInfoHot = false; return 0;
+    case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; g_steamInfoHot = false; g_mscHot = -1; return 0;
     case WM_KEYDOWN:   // onglet TENUE : fleches gauche / droite (hors des champs)
         if (g_guide && (wp == VK_ESCAPE || wp == VK_RETURN)) { SteamGuideClose(); return 0; }
         if ((wp == VK_LEFT || wp == VK_RIGHT) && g_tab == TAB_SKIN && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
@@ -5303,6 +5387,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         int t = HitTab(x, y);
         if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); if (g_tab == TAB_LOGS) LogsScan(); return 0; }   // un 2e clic referme
         if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
+        if (g_tab == TAB_MODS && MscClick(x, y)) return 0;
         if (g_tab == TAB_LOGS && LogsMouseDown(x, y)) return 0;
         if (g_tab == TAB_CAR && CarMouseDown(x, y)) return 0;
         if (g_tab == TAB_SKIN && SkinMouseDown(x, y)) return 0;
@@ -5422,6 +5507,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             wchar_t rn[16];
             GetPrivateProfileStringW(L"Lanceur", L"Reseau", L"ip", rn, 16, g_iniLauncher.c_str());
             g_steamNet = _wcsicmp(rn, L"steam") == 0;
+            g_mscOn = GetPrivateProfileIntW(L"Lanceur", L"MSCLoader", 1, g_iniLauncher.c_str()) != 0;
         }
         if (!_wcsicmp(th, L"sombre") || !_wcsicmp(th, L"dark")) g_dark = true;
         else if (!_wcsicmp(th, L"clair") || !_wcsicmp(th, L"light")) g_dark = false;
@@ -5482,6 +5568,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     g_bg = LoadPngRes(2);
     g_bgDark = LoadPngRes(3);
     if (g_gameDir.empty()) SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe"));
+    else if ((CrashCheck(), g_crashT != 0)) SetStatus(K_WARN, T(L"Arr\u00EAt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
     else if (LastLaunchWithoutMod()) SetStatus(K_WARN, T(L"Le dernier lancement s'est fait SANS le mod (antivirus ? version.dll ?) : voir JOURNAUX", L"The last launch ran WITHOUT the mod (antivirus? version.dll?): see LOGS"));
     else SetStatus(K_NORMAL, L"%s", ModLabel().c_str());
 
@@ -5534,6 +5621,37 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
+    // /mscl installer|reglages <dossier du jeu> <journal> : installe MSCLoader dans ce jeu, ou change deux options du 1er
+    // mod connu (case inversee, curseur +1 pas) et ecrit son settings.json (essais, sans fenetre)
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/mscl")) {
+        g_testSalonLog = argv[4];
+        FILE *f = _wfopen(argv[4], L"wb");
+        if (f) fclose(f);
+        SetGame(WithSlash(argv[3]));
+        bool ok = false;
+        if (!g_gameDir.empty() && !_wcsicmp(argv[2], L"installer")) {
+            MscInstallThread(NULL);
+            ok = g_mscInstall == 2;
+            MscScan();
+            TestLog("mscl : installe=%d, dossier des mods %s", (int)g_mscInstalled, Narrow(g_mscDir, CP_UTF8).c_str());
+        } else if (!g_gameDir.empty()) {
+            MscScan();
+            TestLog("mscl : installe=%d, version %s, %d mod(s)", (int)g_mscInstalled, Narrow(g_mscVer).c_str(), (int)g_msc.size());
+            for (int i = 0; i < (int)g_msc.size(); i++) {
+                TestLog("mscl : mod %s (%s) connu=%d, %d option(s)", Narrow(g_msc[i].name, CP_UTF8).c_str(), Narrow(g_msc[i].file, CP_UTF8).c_str(), (int)g_msc[i].known, (int)g_msc[i].sets.size());
+                if (!g_msc[i].known || ok) continue;
+                g_mscPage = i;
+                MscLoadPage();
+                for (const MscSet &s : g_msc[i].sets) if (s.type == "CheckBox" || s.type == "Slider") MscStep(s, 1);
+                ok = MscSavePage();
+                std::vector<unsigned char> d;
+                ReadAll(MscSettingsPath(g_msc[i]), d);
+                TestLog("mscl : settings.json ecrit :\n%s", std::string(d.begin(), d.end()).c_str());
+            }
+        }
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
     // /miroir <dossier du jeu> <copie> <journal> : copie de lancement de ce jeu dans ce dossier (essais)
     if (argc >= 5 && !_wcsicmp(argv[1], L"/miroir")) {
         g_testSalonLog = argv[4];
@@ -5563,6 +5681,32 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"menu-steam") g_steamNet = true;
         else if (st == L"guide-steam") { g_steamNet = true; SteamGuideOpen(); g_guideHot = 1; }
+        else if (st == L"crash" || st == L"crash-survol") {
+            g_crashT = 1;
+            SetStatus(K_WARN, T(L"Arr\u00EAt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
+            if (st == L"crash-survol") { g_hot = B_LOGS; g_btn[B_LOGS].hover = 1; }
+        }
+        else if (st == L"mods" || st == L"mods-page" || st == L"mods-absent") {   // onglet MODS (faux mods)
+            g_mscFake = true;
+            g_mscInstalled = st != L"mods-absent";
+            g_mscVer = L"1.4.2"; g_mscDirKind = L"GF";
+            MscMod a, b, c;
+            a.file = L"BetterHeadlights.dll"; a.id = L"BetterHeadlights"; a.name = L"Better Headlights"; a.ver = L"1.3"; a.author = L"Fleetari"; a.known = true;
+            a.sets = { { "HeaderGroup", "", L"Phares", "", "", "", "", "", {} }, { "CheckBox", "xenon", L"Ampoules x\u00E9non", "1", "0", "", "", "", {} },
+                       { "Slider", "range", L"Port\u00E9e", "1.5", "1", "0.5", "3", "2", {} }, { "DropDown", "color", L"Teinte", "1", "0", "", "", "", { L"Blanc", L"Jaune", L"Bleut\u00E9" } },
+                       { "SliderInt", "angle", L"Inclinaison", "2", "0", "0", "5", "0", {} }, { "Text", "", L"Les r\u00E9glages s'appliquent apr\u00E8s un passage au garage.", "", "", "", "", "", {} } };
+            b.file = L"TrunkLight.dll"; b.id = L"TrunkLight"; b.name = L"Trunk Light"; b.ver = L"2.0"; b.author = L"Suski"; b.known = true; b.disabled = true;
+            c.file = L"NewMod.dll"; c.name = L"NewMod";
+            g_msc = { a, b, c };
+            if (st == L"mods-page") {
+                g_mscPage = 0;
+                g_mscVals = { { "xenon", "true" }, { "range", "1.5" }, { "color", "1" }, { "angle", "2" } };
+                g_mscHot = 3000 + 2 * 4 + 2;
+            } else if (g_mscInstalled) g_mscHot = 2000;
+            else g_mscHot = 1001;
+            g_tab = TAB_MODS;
+            LayoutTabs();
+        }
         else if (st == L"menu-ip") g_steamNet = false;
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop") { g_tab = TAB_COOP; g_optHot = TabRows(TAB_COOP)[1]; g_optPart = 1; }

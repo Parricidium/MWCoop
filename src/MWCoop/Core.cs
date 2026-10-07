@@ -64,6 +64,7 @@ namespace MWCoop
             Step("session", Session.Update);
             Step("sauvegarde en jeu", Game.Update);
             Step("menu", Menu.Update);
+            Step("mscloader", MscMods.Update);
             Step("joueurs", PlayerSync.Update);
             Step("monde", World.Update);
             Step("interactions", Interactions.Update);
@@ -194,6 +195,9 @@ namespace MWCoop
         void OnApplicationQuit()
         {
             Session.Stop();
+            // Le lanceur cherche cette ligne : absente a la fin du journal, le jeu s'est arrete brutalement (crash,
+            // processus tue) et l'icone des journaux porte un "!" rouge.
+            Log.Info("jeu ferme normalement");
         }
     }
 }

@@ -34,7 +34,7 @@ One player hosts their world, friends join [b]that[/b] world: same save, same ti
 [*]Copy everything from the zip next to [b]mywintercar.exe[/b]: [b]version.dll[/b], [b]MWCoop.exe[/b] and the [b]MWCoop[/b] folder.
 [*]Start [b]MWCoop.exe[/b]. It updates the mod by itself on every start.
 [/list]
-Everybody in a party must run the [b]same version[/b] (the launcher updates it for you). From a Steam install, the launcher starts the game from a copy in %LOCALAPPDATA%\MWCoop\My Winter Car (same data, linked folders) so that the mod loads. [b]MSCLoader[/b] (experimental): works alongside MWCoop since 0.31.3; install MSCLoader [b]first[/b], then MWCoop (its installer refuses a folder that already has a version.dll). MSCLoader mods are not synced between players yet.
+Everybody in a party must run the [b]same version[/b] (the launcher updates it for you). From a Steam install, the launcher starts the game from a copy in %LOCALAPPDATA%\MWCoop\My Winter Car (same data, linked folders) so that the mod loads. [b]MSCLoader[/b] (experimental): works alongside MWCoop since 0.31.3; the launcher's MODS tab installs it, turns it on or off, lists your mods and edits their options. MSCLoader mods are not synced between players yet.
 
 [size=4][b]Known issues[/b][/size]
 [list]
@@ -85,7 +85,7 @@ Un joueur héberge son monde, ses amis rejoignent [b]ce[/b] monde : même sauveg
 [*]Copiez tout le contenu du zip à côté de [b]mywintercar.exe[/b] : [b]version.dll[/b], [b]MWCoop.exe[/b] et le dossier [b]MWCoop[/b].
 [*]Lancez [b]MWCoop.exe[/b]. Il met le mod à jour tout seul à chaque démarrage.
 [/list]
-Tous les joueurs d'une partie doivent avoir la [b]même version[/b] (le lanceur s'en charge). Depuis une installation Steam, le lanceur démarre le jeu depuis une copie dans %LOCALAPPDATA%\MWCoop\My Winter Car (mêmes données, dossiers liés) pour que le mod se charge. [b]MSCLoader[/b] (expérimental) : fonctionne avec MWCoop depuis la 0.31.3 ; installez MSCLoader [b]d'abord[/b], puis MWCoop (son installateur refuse un dossier qui contient déjà une version.dll). Les mods MSCLoader ne sont pas encore synchronisés entre joueurs.
+Tous les joueurs d'une partie doivent avoir la [b]même version[/b] (le lanceur s'en charge). Depuis une installation Steam, le lanceur démarre le jeu depuis une copie dans %LOCALAPPDATA%\MWCoop\My Winter Car (mêmes données, dossiers liés) pour que le mod se charge. [b]MSCLoader[/b] (expérimental) : fonctionne avec MWCoop depuis la 0.31.3 ; l'onglet MODS du lanceur l'installe, l'active ou le coupe, liste vos mods et règle leurs options. Les mods MSCLoader ne sont pas encore synchronisés entre joueurs.
 
 [size=4][b]Bugs connus[/b][/size]
 [list]
