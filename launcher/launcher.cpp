@@ -41,6 +41,7 @@
 //   /jeu <journal> : jeu trouve (dossier, version) ;
 //   /zip <fichier.zip> : le zip des journaux (bouton de la page JOURNAUX), ecrit la ou on le demande, sans explorateur ;
 //   /dezip <fichier.zip> <dossier> <journal> : extraction d'un paquet comme pendant une mise a jour ;
+//   /miroir <dossier du jeu> <copie> <journal> : copie de lancement (installation Steam) de ce jeu dans ce dossier ;
 //   /parefeu-etat <journal> <exe>... : etat du pare-feu Windows pour ces exe (lecture seule) ;
 //   /parefeu <exe>... : (lance en administrateur par le lanceur, apres accord du joueur) autorise ces exe en entree.
 
@@ -3429,7 +3430,9 @@ static std::wstring MirrorDir()
     std::wstring low = g_gameDir;
     for (auto &c : low) c = towlower(c);
     if (low.find(L"\\steamapps\\") == std::wstring::npos || LocalDir().empty()) return L"";
-    return LocalDir() + L"jeu\\";
+    // "My Winter Car" dans le chemin : le prechargeur de MSCLoader reconnait le jeu a son dossier (sinon il se croit
+    // dans My Summer Car). Avant 0.31.3 : %LOCALAPPDATA%\MWCoop\jeu (laisse en place, plus utilise).
+    return LocalDir() + L"My Winter Car\\";
 }
 
 static std::wstring GameExe() { std::wstring m = MirrorDir(); return (m.empty() ? g_gameDir : m) + L"mywintercar.exe"; }
@@ -3442,23 +3445,45 @@ static bool SameFile(const std::wstring &a, const std::wstring &b)
 }
 
 // Prepare la copie (fichiers recopies s'ils ont change, jonctions creees si absentes). Faux si impossible.
+// Tout ce qui est pose a cote du jeu suit : l'exe, toutes les DLL et tous les .ini (MSCLoader : winhttp.dll de
+// UnityDoorstop et doorstop_config.ini ; BepInEx...), et chaque dossier en jonction (Mods, Updates de MSCLoader...).
+// Une DLL ou un .ini retire du jeu (MSCLoader desinstalle) est retire de la copie.
+static bool CopyKind(const std::wstring &n)
+{
+    size_t dot = n.find_last_of(L'.');
+    std::wstring ext = dot == std::wstring::npos ? L"" : n.substr(dot);
+    for (auto &c : ext) c = towlower(c);
+    return ext == L".dll" || ext == L".ini" || !_wcsicmp(n.c_str(), L"mywintercar.exe") || !_wcsicmp(n.c_str(), L"changelog.txt");
+}
 static bool PrepareMirror(const std::wstring &m)
 {
     SHCreateDirectoryExW(NULL, m.c_str(), NULL);
-    const wchar_t *files[] = { L"mywintercar.exe", L"steam_api64.dll", L"version.dll", L"changelog.txt" };
-    for (const wchar_t *f : files) {
-        std::wstring src = g_gameDir + f, dst = m + f;
-        if (GetFileAttributesW(src.c_str()) == INVALID_FILE_ATTRIBUTES || SameFile(src, dst)) continue;
-        if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { TestLog("copie de lancement : %ls impossible (erreur %lu)", f, GetLastError()); return false; }
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((g_gameDir + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) { TestLog("copie de lancement : dossier du jeu illisible (erreur %lu)", GetLastError()); return false; }
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L"..") continue;
+        std::wstring src = g_gameDir + n, dst = m + n;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) continue;
+            if (!MakeJunction(dst, src)) { TestLog("copie de lancement : jonction %ls impossible (erreur %lu)", n.c_str(), GetLastError()); FindClose(h); return false; }
+        } else if (CopyKind(n) && !SameFile(src, dst)) {
+            if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { TestLog("copie de lancement : %ls impossible (erreur %lu)", n.c_str(), GetLastError()); FindClose(h); return false; }
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    h = FindFirstFileW((m + L"*").c_str(), &fd);   // retires du jeu
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring n = fd.cFileName;
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !CopyKind(n)) continue;
+            if (GetFileAttributesW((g_gameDir + n).c_str()) == INVALID_FILE_ATTRIBUTES) { DeleteFileW((m + n).c_str()); TestLog("copie de lancement : %ls retire", n.c_str()); }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
     }
     HANDLE a = CreateFileW((m + L"steam_appid.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (a != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(a, "4164420", 7, &n, NULL); CloseHandle(a); }
-    const wchar_t *dirs[] = { L"mywintercar_Data", L"MWCoop", L"CD1", L"CD2", L"CD3", L"Extra", L"Images", L"Radio" };
-    for (const wchar_t *d : dirs) {
-        std::wstring src = g_gameDir + d, dst = m + d;
-        if (GetFileAttributesW(src.c_str()) == INVALID_FILE_ATTRIBUTES || GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) continue;
-        if (!MakeJunction(dst, src)) { TestLog("copie de lancement : jonction %ls impossible (erreur %lu)", d, GetLastError()); return false; }
-    }
     TestLog("copie de lancement prete : %ls", m.c_str());
     return true;
 }
@@ -5506,6 +5531,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     }
     if (argc >= 4 && !_wcsicmp(argv[1], L"/jonction")) {
         bool ok = MakeJunction(argv[2], argv[3]);
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
+    // /miroir <dossier du jeu> <copie> <journal> : copie de lancement de ce jeu dans ce dossier (essais)
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/miroir")) {
+        g_testSalonLog = argv[4];
+        FILE *f = _wfopen(argv[4], L"wb");
+        if (f) fclose(f);
+        SetGame(WithSlash(argv[2]));
+        bool ok = !g_gameDir.empty() && PrepareMirror(WithSlash(argv[3]));
+        TestLog("miroir : %s", ok ? "ok" : "ECHEC");
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }

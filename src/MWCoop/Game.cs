@@ -97,7 +97,14 @@ namespace MWCoop
         public static PlayMakerFSM FindFsm(string objectName, string fsmName)
         {
             GameObject go = GameObject.Find(objectName);
-            return go != null ? FsmOn(go, fsmName) : null;
+            PlayMakerFSM f = go != null ? FsmOn(go, fsmName) : null;
+            if (f != null || go == null) return f;
+            // Un homonyme sans l'automate est passe devant (interface de MSCLoader : ses objets "Button" cachaient celui
+            // du jeu, l'intro n'etait plus passee, 07/10) : l'automate lui-meme, sur un objet de ce nom et de ce chemin.
+            string last = objectName.Substring(objectName.LastIndexOf('/') + 1);
+            foreach (PlayMakerFSM x in Object.FindObjectsOfType<PlayMakerFSM>())
+                if (x.FsmName == fsmName && x.gameObject.name == last && (objectName.IndexOf('/') < 0 || Recon.Path(x.transform).EndsWith(objectName))) return x;
+            return null;
         }
 
         static List<GameObject> roots;
