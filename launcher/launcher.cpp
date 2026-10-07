@@ -2873,7 +2873,7 @@ static void DrawSkins(Graphics &g)
     // --- a droite
     RectF pn = kSkinPanel;
     if (perso) DrawPersoRows(g);
-    if (PersoStale()) {   // export d'une ancienne version (corps des PNJ dans leur pose : la grand-mere assise...)
+    if (perso && PersoStale()) {   // export d'une ancienne version (corps des PNJ dans leur pose : la grand-mere assise...)
         RectF r(pn.X + 24, pn.Y + 532, pn.Width - 48, 0);
         r.Y = PersoRowRect(kPersoRowN - 1).Y + 58; r.Height = pn.Y + pn.Height - 80 - r.Y;
         GraphicsPath p; RoundRect(p, r, 14);
@@ -2884,7 +2884,7 @@ static void DrawSkins(Graphics &g)
                   L"Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone (standing bodies)."),
              RectF(r.X + 42, r.Y + 6, r.Width - 54, r.Height - 8), 12, kInk, StringAlignmentCenter);
     }
-    else {
+    if (!perso) {   // (pas d'apparence complete : la galerie des hauts)
         Title(g, T(L"Hauts", L"Tops"), RectF(pn.X + 24, pn.Y + 20, 200, 26), 17, kInk);
         std::wstring shown = g_skinHot >= 0 && g_skinHot < n ? lab[g_skinHot] : lab[sel];
         Text(g, shown, RectF(pn.X + 200, pn.Y + 20, pn.Width - 224, 26), 14, FontStyleBold, g_skinHot >= 0 ? kAcc : kInk, StringAlignmentFar);
@@ -2901,8 +2901,6 @@ static void DrawSkins(Graphics &g)
             }
             Pen edge(on ? kAcc : hot ? WithA(kAcc, 0.5f) : TH(choiceBorder), on ? 2.0f : 1.0f); g.DrawPath(&edge, &cp);
         }
-        // arrows : tenue precedente / suivante
-        for (int s = -1; s <= 1; s += 2) (void)s;
         RectF nr(pn.X + 24, SkinCellRect(n - 1).Y + kSkinCell + 30, pn.Width - 48, 96);
         GraphicsPath np; RoundRect(np, nr, 16);
         SolidBrush nb(WithA(kAcc, 0.12f)); g.FillPath(&nb, &np);
