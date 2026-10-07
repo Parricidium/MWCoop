@@ -250,7 +250,7 @@ namespace MWCoop
             R("Bloom", "Halo lumineux (bloom)", "Bloom", 0, 0),
             R("Contraste", "Contraste renforc\u00E9", "Contrast boost", 0, 0),
             R("RayonsSoleil", "Rayons du soleil", "Sun shafts", 0, 0),
-            S("ChampVision", "Champ de vision", "Field of view", 60, 0, new[] { 50, 55, 60, 65, 70, 75, 80, 85, 90 }, fov, null),
+
             S("ImagesMax", "Images par seconde max.", "Max frames per second", -1, 0, new[] { -1, 30, 60, 75, 120, 144, 165, 240, 0 },
               new[] { "Jeu", "30", "60", "75", "120", "144", "165", "240", "Illimit\u00E9es" }, new[] { "Game", "30", "60", "75", "120", "144", "165", "240", "Unlimited" }),
             S("SyncVerticale", "Synchro verticale", "V-sync", -1, 0, new[] { -1, 0, 1 }, new[] { "Jeu", "Non", "Oui" }, new[] { "Game", "Off", "On" }),
@@ -266,6 +266,11 @@ namespace MWCoop
               new[] { "Jeu", "Bas", "Normal", "\u00C9lev\u00E9", "Tr\u00E8s \u00E9lev\u00E9", "Max" }, new[] { "Game", "Low", "Normal", "High", "Very high", "Max" }),
             S("Textures", "Textures", "Textures", -1, 2, new[] { -1, 2, 1, 0 }, new[] { "Jeu", "Quart", "Moiti\u00E9", "Pleines" }, new[] { "Game", "Quarter", "Half", "Full" }),
             S("Filtrage", "Filtrage des textures", "Texture filtering", -1, 2, new[] { -1, 0, 1, 2 }, new[] { "Jeu", "Non", "Oui", "Forc\u00E9" }, new[] { "Game", "Off", "On", "Forced" }),
+            S("OmbresPhares", "Ombres des phares", "Headlight shadows", 0, 4, new[] { 0, 2, 4, 8 }, new[] { "Non", "2 phares", "4 phares", "8 phares" }, new[] { "Off", "2 lights", "4 lights", "8 lights" }, true),
+            S("OmbresLampadaires", "Ombres des lampadaires", "Street light shadows", 0, 4, new[] { 0, 1, 2, 4 }, new[] { "Non", "1", "2", "4" }, new[] { "Off", "1", "2", "4" }, true),
+            S("Halos", "Halos lumineux (fa\u00E7on GTA)", "Light coronas (GTA style)", 0, 4, new[] { 0, 1, 2 }, new[] { "Non", "Discrets", "Marqu\u00E9s" }, new[] { "Off", "Subtle", "Strong" }),
+            S("PorteePhares", "Port\u00E9e des phares", "Headlight range", 0, 4, new[] { 0, 1 }, new[] { "Normale", "Longue" }, new[] { "Normal", "Long" }),
+            S("ChampVision", "Champ de vision", "Field of view", 60, 3, new[] { 50, 55, 60, 65, 70, 75, 80, 85, 90 }, fov, null),
             S("Retroviseurs", "R\u00E9troviseurs", "Mirrors", 1, 3, new[] { 0, 1, 2 }, new[] { "Coup\u00E9s", "Simples", "Complets" }, new[] { "Off", "Simple", "Full" }),
             R("Balancement", "T\u00EAte qui balance \u00E0 pied", "Head bob on foot", 1, 3),
             S("BalancementVoiture", "T\u00EAte qui balance en voiture", "Head bob in cars", 2, 3, new[] { 0, 1, 2 }, new[] { "Non", "50 %", "Oui" }, new[] { "Off", "50 %", "On" }),
@@ -278,12 +283,12 @@ namespace MWCoop
         public class Preset { public string Fr, En; public int[] V; }
         // (meme ordre que PresetKeys ; comme dans le lanceur)
         public static readonly string[] PresetKeys = { "Anticrenelage", "HDR", "Bloom", "RayonsSoleil", "OmbresSoleil", "OmbresLune", "OmbresMaisons", "OmbresDistance", "OmbresCascades",
-                                                       "Distance", "Details", "Textures", "Filtrage", "Retroviseurs", "PoussiereTrafic", "TracesTrafic" };
+                                                       "Distance", "Details", "Textures", "Filtrage", "Retroviseurs", "PoussiereTrafic", "TracesTrafic", "OmbresPhares", "OmbresLampadaires", "Halos" };
         public static readonly Preset[] Presets = {
-            new Preset { Fr = "Performance", En = "Performance", V = new[] { 0, 0, 0, 0, 1, 0, 0, 30, 1, 1500, 70, 1, 0, 1, 0, 0 } },
-            new Preset { Fr = "\u00C9quilibr\u00E9", En = "Balanced", V = new[] { 1, 1, 0, 0, 1, 0, 1, 60, 2, 3000, 100, 0, 1, 1, 1, 0 } },
-            new Preset { Fr = "Beau", En = "Pretty", V = new[] { 1, 1, 1, 1, 1, 1, 1, 150, 2, 4500, 150, 0, 1, 2, 1, 1 } },
-            new Preset { Fr = "Ultra", En = "Ultra", V = new[] { 1, 1, 1, 1, 1, 1, 1, 400, 4, 9000, 300, 0, 2, 2, 1, 1 } },
+            new Preset { Fr = "Performance", En = "Performance", V = new[] { 0, 0, 0, 0, 1, 0, 0, 30, 1, 1500, 70, 1, 0, 1, 0, 0, 0, 0, 0 } },
+            new Preset { Fr = "\u00C9quilibr\u00E9", En = "Balanced", V = new[] { 1, 1, 0, 0, 1, 0, 1, 60, 2, 3000, 100, 0, 1, 1, 1, 0, 0, 0, 1 } },
+            new Preset { Fr = "Beau", En = "Pretty", V = new[] { 1, 1, 1, 1, 1, 1, 1, 150, 2, 4500, 150, 0, 1, 2, 1, 1, 2, 1, 1 } },
+            new Preset { Fr = "Ultra", En = "Ultra", V = new[] { 1, 1, 1, 1, 1, 1, 1, 400, 4, 9000, 300, 0, 2, 2, 1, 1, 4, 2, 2 } },
         };
 
         public static int Value(Row r) { int v; return ini.TryGetValue(r.Key, out v) ? v : r.Vals == null || r.Def != -1 ? GameValue(r.Key, r.Def) : -1; }

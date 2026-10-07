@@ -132,6 +132,97 @@ namespace MWCoop
             if (mode == "graphismes" && t > 25f && step == 0) { step = 1; Log.Info("autotest : graphismes " + Gfx.Describe()); }
             if (mode == "graphismes" && t > 28f && step == 1) { step = 2; Gfx.ApplyPreset(Config.GetInt("Test", "TestPrereglage", 3)); }
             if (mode == "graphismes" && t > 32f && step == 2) { step = 3; Log.Info("autotest : graphismes apres prereglage " + Gfx.Describe()); }
+            // [Test] Autotest=sondelumieres : toutes les lumieres de la scene (inactives comprises) et les objets qui ressemblent
+            // a des lampadaires, dans dumps\lumieres.txt.
+            if (mode == "sondelumieres" && t > 20f && !done)
+            {
+                done = true;
+                var sb = new System.Text.StringBuilder();
+                int n = 0;
+                foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Light)))
+                {
+                    var l = (Light)o;
+                    if (l.hideFlags != HideFlags.None || l.gameObject.hideFlags != HideFlags.None) continue;
+                    n++;
+                    sb.Append(l.type).Append('\t').Append(l.gameObject.activeInHierarchy ? "actif" : "inactif").Append(l.enabled ? "" : " (coupee)")
+                      .Append('\t').Append(l.shadows).Append('\t').Append(l.range.ToString("F0")).Append('\t').Append(l.intensity.ToString("F2")).Append('\t').Append(l.spotAngle.ToString("F0"))
+                      .Append('\t').Append(l.color).Append('\t').Append(l.renderMode).Append('\t').Append(l.cullingMask).Append('\t').Append(Recon.Path(l.transform)).Append('\n');
+                }
+                sb.Append("\n---- objets nommes comme des lampes\n");
+                var seen = new System.Collections.Generic.Dictionary<string, int>();
+                foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Transform)))
+                {
+                    var tr = (Transform)o;
+                    if (tr.hideFlags != HideFlags.None || tr.gameObject.hideFlags != HideFlags.None) continue;
+                    string nm = tr.name.ToLowerInvariant();
+                    if (!(nm.Contains("lamp") || nm.Contains("streetl") || nm.Contains("valo") || nm.Contains("pylv") || nm.Contains("pole") || nm.Contains("bulb") || nm.Contains("light"))) continue;
+                    string key = tr.name + " <- " + (tr.parent != null ? tr.parent.name : "-");
+                    int c; seen.TryGetValue(key, out c); seen[key] = c + 1;
+                }
+                foreach (var kv in seen) sb.Append(kv.Value).Append('\t').Append(kv.Key).Append('\n');
+                string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+                System.IO.Directory.CreateDirectory(dir);
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "lumieres.txt"), sb.ToString());
+                Log.Info("autotest : lumieres : " + n + " lumieres, " + seen.Count + " noms de lampes, dumps\\lumieres.txt ; qualite " + QualitySettings.GetQualityLevel() + ", ombres " + QualitySettings.shadowDistance);
+            }
+            // [Test] Autotest=lumieres : nuit (TestHeure, 23 h) a 15 s ; a 22 s, devant la SORBET phares allumes ([Test]
+            // LumieresLieu=voiture) ou pres des lampadaires (rue) ; etat a 30 s et 40 s (captures : Captures=...).
+            if (mode == "lumieres")
+            {
+                if (t > 15f && step == 0)
+                {
+                    step = 1;
+                    PlayMakerFSM c = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
+                    if (c != null) { c.FsmVariables.GetFsmInt("Time").Value = Config.GetInt("Test", "TestHeure", 23); c.SendEvent("TIMESKIP"); }
+                    Log.Info("autotest : lumieres : nuit");
+                }
+                if (t > 22f && step == 1)
+                {
+                    step = 2;
+                    GameObject pl = GameObject.Find("PLAYER");
+                    Vector3 at = Vector3.zero, toward = Vector3.zero;
+                    if (Config.Get("Test", "LumieresLieu", "voiture") == "rue")
+                    {
+                        GameObject sl = Game.FindAny("MAP/StreetLights/1");
+                        if (sl != null) { toward = sl.transform.position; at = toward + new Vector3(18f, 1f, 6f); }
+                    }
+                    else
+                    {
+                        Rigidbody car = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"));
+                        if (car != null)
+                        {
+                            foreach (Light li in car.GetComponentsInChildren<Light>(true))
+                                if (li.type == LightType.Spot && li.name.Contains("Short"))
+                                    for (Transform p = li.transform; p != null && p != car.transform; p = p.parent) p.gameObject.SetActive(true);
+                            toward = car.position;
+                            at = car.transform.TransformPoint(new Vector3(1.5f, 0.5f, 9f));
+                        }
+                    }
+                    if (pl != null && at != Vector3.zero)
+                    {
+                        var cc = pl.GetComponent<CharacterController>();
+                        if (cc != null) cc.enabled = false;
+                        pl.transform.position = at;
+                        Vector3 d = toward - at; d.y = 0;
+                        pl.transform.rotation = Quaternion.LookRotation(d);
+                        if (cc != null) cc.enabled = true;
+                    }
+                    Log.Info("autotest : lumieres : joueur en " + at.ToString("F0") + " vers " + toward.ToString("F0"));
+                }
+                // (phares de la voiture : rallumes a chaque image, contact coupe le jeu les eteint)
+                if (step >= 2 && Config.Get("Test", "LumieresLieu", "voiture") != "rue")
+                {
+                    Rigidbody car = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"));
+                    if (car != null)
+                        foreach (Light li in car.GetComponentsInChildren<Light>(true))
+                            if (li.type == LightType.Spot && li.name.Contains("Short"))
+                            {
+                                li.enabled = true;
+                                for (Transform p = li.transform; p != null && p != car.transform; p = p.parent) if (!p.gameObject.activeSelf) p.gameObject.SetActive(true);
+                            }
+                }
+                if ((t > 30f && step == 2) || (t > 40f && step == 3)) { step++; Log.Info("autotest : lumieres " + Lights.Describe()); }
+            }
             if (mode == "sondegfx" && t > 20f && !done)
             {
                 done = true;
