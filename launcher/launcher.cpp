@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|contenu> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|contenu|tenue-perso [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -69,6 +69,7 @@ using std::max;
 #include <string>
 #include <vector>
 #include <map>
+#include <array>
 #include <atomic>
 #include <stdio.h>
 #include <math.h>
@@ -2814,9 +2815,10 @@ static std::wstring SkinsDir() { return !g_skinsArg.empty() ? g_skinsArg : g_gam
 // Nom de tenue sur (il vient aussi du reseau et finit dans un chemin) : lettres, chiffres, _ et -, en minuscules.
 static std::string SkinKey(const std::string &skin)
 {
-    if (skin.empty() || skin.size() > 64) return "";
-    std::string k;
-    for (char c : skin) {
+    if (skin.empty()) return "";
+    std::string k, top = skin.substr(0, skin.find('|'));   // (apparence complete : "haut|pantalon|...")
+    if (top.size() > 64) return "";
+    for (char c : top) {
         if (!isalnum((unsigned char)c) && c != '_' && c != '-') return "";
         k += (char)tolower((unsigned char)c);
     }
@@ -3006,6 +3008,10 @@ static void SkinStep(int dir)
     SkinSelect((OptGet(*SkinOpt()) + dir + n) % n, dir);
 }
 
+static std::string MySkin();
+static std::wstring SkinLabel(const std::string &skin);
+#include "perso.inc"
+
 // Silhouette neutre (pas d'image) : tete et buste.
 static void DrawSkinGhost(Graphics &g, float cx, float top, float k)
 {
@@ -3045,11 +3051,28 @@ static void DrawSkins(Graphics &g)
         g.DrawPath(&pen, &cp);
     }
     float cx = view.X + view.Width / 2, top = view.Y + 8, figH = view.Height - 30, figW = figH / 2;
-    Bitmap *strip = SkinStrip(skin), *portrait = strip ? NULL : SkinPortrait(skin);
+    PersoCheck();
+    bool perso = g_perso.state == 1;   // apparence complete : apercu 3D et lignes par partie (perso.inc)
+    Bitmap *strip = perso ? NULL : SkinStrip(skin), *portrait = perso || strip ? NULL : SkinPortrait(skin);
     // changement de tenue : glisse et apparait (180 ms)
     float k = min((GetTickCount() - g_skinChangeT) / 180.0f, 1.0f);
     k = 1 - (1 - k) * (1 - k);
-    if (strip) {
+    if (perso) {
+        {   // ombre au sol
+            RectF sr(cx - figW * 0.42f, top + figH - 14, figW * 0.84f, 16);
+            GraphicsPath sp;
+            sp.AddEllipse(sr);
+            PathGradientBrush pb(&sp);
+            pb.SetCenterColor(Color(g_dark ? 150 : 80, 0, 0, 0));
+            Color edge(0, 0, 0, 0);
+            int one = 1;
+            pb.SetSurroundColors(&edge, &one);
+            g.FillPath(&pb, &sp);
+        }
+        RectF dst(view.X + 2, view.Y + 2, view.Width - 4, view.Height - 22);
+        if (Bitmap *pb = PersoImage(dst, g_skinYaw * 6.2831853f / 16)) DrawPixels(g, pb, dst);
+        Text(g, T(L"Glisse pour tourner", L"Drag to rotate"), RectF(view.X + 8, view.Y + view.Height - 22, view.Width - 16, 16), 10.5f, FontStyleRegular, WithA(kGrey, 0.85f));
+    } else if (strip) {
         {   // ombre au sol
             RectF sr(cx - figW * 0.42f, top + figH - 14, figW * 0.84f, 16);
             GraphicsPath sp;
@@ -3095,8 +3118,8 @@ static void DrawSkins(Graphics &g)
                                                   L"Outfit previews appear after a first game (30 s in game) with this version.");
         Para(g, msg, RectF(view.X + 18, view.Y + 196, view.Width - 36, view.Height - 206), 12.5f, kGrey);
     }
-    // fleches : tenue precedente / suivante
-    for (int s = -1; s <= 1; s += 2) {
+    // fleches : tenue precedente / suivante (apercu 3D : les lignes a droite)
+    for (int s = -1; s <= 1 && !perso; s += 2) {
         RectF r = SkinArrowRect(s);
         bool hot = g_skinArrowHot == s;
         SolidBrush cb(hot ? TH(circleHot) : TH(circle));
@@ -3111,6 +3134,15 @@ static void DrawSkins(Graphics &g)
     swprintf_s(rank, L"%s \u00B7 %d / %d", ap->svals[sel].compare(0, 10, "char_shirt") ? T(L"Uniforme", L"Uniform") : T(L"Habitant", L"Local"), sel + 1, n);
     Text(g, rank, RectF(view.X, view.Y + view.Height + 36, view.Width, 18), 11.5f, FontStyleRegular, kGrey);
 
+    if (perso) {   // une ligne par partie, a la hauteur de sa zone
+        DrawPersoRows(g);
+        Pen sep(TH(sep), 1);
+        g.DrawLine(&sep, kOptPanel.X + 18, 532.0f, kOptPanel.X + kOptPanel.Width - 18, 532.0f);
+        Para(g, T(L"Ce que les autres joueurs voient. Les fl\u00E8ches de chaque ligne changent cette partie ; tout vient des habitants du jeu.",
+                  L"What the other players see. Each row's arrows change that part; everything comes from the game's locals."),
+             RectF(kOptPanel.X + 20, 536, kOptPanel.Width - 40, 44), 12, kGrey, StringAlignmentCenter);
+        return;
+    }
     // galerie : un portrait par tenue (sinon le numero ou l'initiale)
     Text(g, T(L"TENUES", L"OUTFITS"), RectF(686, 128, 100, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
     if (g_skinHot >= 0 && g_skinHot < n) Text(g, lab[g_skinHot], RectF(760, 128, 178, 18), 12, FontStyleBold, kInk, StringAlignmentFar);
@@ -3141,6 +3173,9 @@ static void DrawSkins(Graphics &g)
 // Clic dans l'onglet : un portrait, une fleche, ou l'apercu (debut du glisser).
 static bool SkinMouseDown(float x, float y)
 {
+    int pr = PersoRowAt(x, y);   // apercu 3D : fleches des lignes
+    if (pr >= 0) { PersoStep(pr / 2, pr % 2 ? 1 : -1); return true; }
+    if (g_perso.state == 1 && x > 680) return kOptPanel.Contains(x, y);
     int c = SkinCellAt(x, y);
     if (c >= 0) { const Opt *ap = SkinOpt(); SkinSelect(c, ap && c < OptGet(*ap) ? -1 : 1); return true; }
     int a = SkinArrowAt(x, y);
@@ -6132,10 +6167,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"coop") { g_tab = TAB_COOP; g_optHot = TabRows(TAB_COOP)[1]; g_optPart = 1; }
         else if (st == L"contenu") { g_drawer = g_drawerShown = DR_CONTENT; g_drawerT = 1; g_contentHot = 5004; MscScan(); }   // volet du contenu envoye
         else if (st == L"voiture") { g_drawer = g_drawerShown = DR_CAR; g_drawerT = 1; }   // couleur : CouleurVoiture du mwcoop.ini du jeu (volet)
-        else if (st == L"tenue" || st == L"tenue-survol") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s)
+        else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s)
             g_drawer = g_drawerShown = DR_SKIN; g_drawerT = 1;   // (volet)
             g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);
             if (st == L"tenue-survol") { g_skinHot = 29; g_skinArrowHot = 1; }
+            if (st == L"tenue-perso") { g_skinRowHot = 1; g_skinYaw = (float)_wtof(argv[argc - 1]); }   // (dernier argument : la vue 0..16)
         }
         else if (st == L"notes") {   // notes d'exemple (le depot n'a pas encore de release)
             g_notes = { { L"0.1.1-prealpha", L"09/10/2026", L"\u2022 Exemple de note de version (capture).\n\u2022 Deuxi\u00E8me ligne : une correction.", L"\u2022 Sample release note (capture).\n\u2022 Second line: a fix.", L"" },

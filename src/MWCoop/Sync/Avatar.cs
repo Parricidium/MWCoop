@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -24,7 +24,9 @@ namespace MWCoop
     //    celui du joueur local.
     public class Avatar
     {
-        static GameObject template;          // copie inactive, sans logique
+        static GameObject template;          // copie inactive, sans logique (corps du premier marcheur)
+        static string defaultBody = "";      // sa cle de corps (Looks.BodyKey)
+        static Dictionary<string, GameObject> bodyTemplates = new Dictionary<string, GameObject>();   // autres corps (Looks)
         static Vector3 charOffset;           // position de Char par rapport aux pieds du marcheur
         static Quaternion charRotation = Quaternion.identity;
         static Vector3 charScale = Vector3.one;    // echelle globale de Char (ses parents sont mis a l'echelle)
@@ -108,6 +110,9 @@ namespace MWCoop
         {
             if (template != null) Object.Destroy(template);
             template = null;
+            foreach (GameObject t in bodyTemplates.Values) if (t != null) Object.Destroy(t);
+            bodyTemplates.Clear();
+            Looks.Reset();
             materials = null;
             clips = null;
         }
@@ -128,10 +133,45 @@ namespace MWCoop
                 template.name = "MWCoop-AvatarModele";
                 template.SetActive(false);
                 Strip(template);
+                StripExtras(template);
+                SkinnedMeshRenderer[] bms = template.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                SkinnedMeshRenderer bm = bms.Length > 0 ? bms[0] : null;
+                defaultBody = bm != null ? Looks.BodyKey(bm.sharedMesh) : "";
                 Log.Info("modele d'avatar : " + Recon.Path(ch) + ", decalage " + charOffset + ", echelle " + charScale);
                 return true;
             }
             return false;
+        }
+
+        // Modele d'un autre corps (Looks) : copie de son PNJ, avec son squelette ; le modele de base sinon.
+        static GameObject TemplateFor(string key)
+        {
+            if (!BuildTemplate()) return null;
+            if (string.IsNullOrEmpty(key) || key == defaultBody) return template;
+            GameObject t;
+            if (bodyTemplates.TryGetValue(key, out t) && t != null) return t;
+            Looks.BodyInfo b = Looks.Body(key);
+            if (b == null) return template;
+            t = (GameObject)Object.Instantiate(b.Char.gameObject);
+            t.name = "MWCoop-AvatarModele-" + key;
+            t.SetActive(false);
+            Strip(t);
+            StripExtras(t);
+            bodyTemplates[key] = t;
+            Log.Info("modele d'avatar " + key + " : " + Recon.Path(b.Char));
+            return t;
+        }
+
+        // Rien que le corps : les accessoires du PNJ copie (chapeau, lunettes, cigarette...) sont retires.
+        static void StripExtras(GameObject go)
+        {
+            foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))
+            {
+                var s = r as SkinnedMeshRenderer;
+                if (s != null && s.bones != null && s.bones.Length >= 10) continue;
+                if (r.transform.childCount == 0) Object.DestroyImmediate(r.gameObject);
+                else { MeshFilter mf = r.GetComponent<MeshFilter>(); Object.DestroyImmediate(r); if (mf != null) Object.DestroyImmediate(mf); }
+            }
         }
 
         // Ne garde que l'affichage et l'animation.
@@ -178,16 +218,21 @@ namespace MWCoop
         {
             if (!BuildTemplate()) return null;
             var a = new Avatar { Player = pi };
-            a.Build("MWCoop-Joueur-" + pi.Id);
+            a.Build("MWCoop-Joueur-" + pi.Id, Looks.Parse(pi.Skin).Body);
             Log.Info("avatar cree pour " + pi.Name + " (#" + pi.Id + ")");
             return a;
         }
 
-        // Copie du modele sous une nouvelle racine 'name', animations pretes.
-        void Build(string name)
+        public string Body = "";             // corps demande (Looks : vide = celui du modele de base)
+        Material[] defMats;                  // matieres du modele (haut, pantalon, visage) : champ vide de l'apparence
+        public SkinnedMeshRenderer BodyRenderer { get { return body; } }
+
+        // Copie du modele (celui du corps 'bodyKey') sous une nouvelle racine 'name', animations pretes.
+        void Build(string name, string bodyKey)
         {
+            Body = bodyKey ?? "";
             Root = new GameObject(name);
-            GameObject ch = (GameObject)Object.Instantiate(template);
+            GameObject ch = (GameObject)Object.Instantiate(TemplateFor(Body) ?? template);
             ch.name = "Char";
             ch.transform.parent = Root.transform;
             ch.transform.localPosition = charOffset;
@@ -207,7 +252,7 @@ namespace MWCoop
             }
             charT = ch.transform;
             body = ch.GetComponentInChildren<SkinnedMeshRenderer>();
-            if (body != null) { body.updateWhenOffscreen = true; body.enabled = true; }
+            if (body != null) { body.updateWhenOffscreen = true; body.enabled = true; defMats = body.sharedMaterials; }
         }
 
         // ---------------------------------------------------------------- apercu des tenues (Studio)
@@ -218,11 +263,11 @@ namespace MWCoop
         Quaternion[] restRot;
         Vector3[] restPos;
 
-        public static Avatar CreatePreview(string name, int layer)
+        public static Avatar CreatePreview(string name, int layer, string bodyKey = null)
         {
             if (!BuildTemplate()) return null;
             var a = new Avatar();
-            a.Build(name);
+            a.Build(name, bodyKey);
             if (a.anim == null || a.body == null || a.bones == null) { a.Destroy(); return null; }
             a.anim.playAutomatically = false;
             a.anim.Stop();
@@ -277,7 +322,7 @@ namespace MWCoop
             if (previewDefault == null) previewDefault = body.sharedMaterial;
             skin = s;
             clothFlags = 0;
-            if (FindMaterial(s) == null) { baseMat = null; body.sharedMaterial = previewDefault; return; }
+            if (FindMaterial(Looks.Parse(s).Shirt) == null) baseMat = previewDefault;
             ApplyMaterial();
         }
 
@@ -1214,7 +1259,8 @@ namespace MWCoop
 
         void ApplyMaterial()
         {
-            Material m = FindMaterial(skin) ?? baseMat ?? body.sharedMaterial;
+            Looks.Look look = Looks.Parse(skin);
+            Material m = FindMaterial(look.Shirt) ?? baseMat ?? body.sharedMaterial;
             baseMat = m;
             if (clothMat != null) { Object.Destroy(clothMat); clothMat = null; }
             int kind = (clothFlags & PlayerSync.F_Coverall) != 0 ? 2 : (clothFlags & PlayerSync.F_Jacket) != 0 ? 1 : 0;
@@ -1232,7 +1278,40 @@ namespace MWCoop
                     m = clothMat;
                 }
             }
-            if (m != null) body.sharedMaterial = m;
+            // haut, pantalon, visage (sous-maillages du corps ; champ vide : ceux du modele)
+            Material[] arr = body.sharedMaterials;
+            if (arr.Length > 0 && m != null) arr[0] = m;
+            if (arr.Length > 1) arr[1] = FindMaterial(look.Pants) ?? (defMats != null && defMats.Length > 1 ? defMats[1] : arr[1]);
+            if (arr.Length > 2) arr[2] = FindMaterial(look.Face) ?? (defMats != null && defMats.Length > 2 ? defMats[2] : arr[2]);
+            body.sharedMaterials = arr;
+            Accessories(look);
+        }
+
+        // Chapeau, lunettes, cheveux : copies des objets des PNJ, sur l'os de la tete (pose relevee chez le PNJ).
+        readonly GameObject[] acc = new GameObject[3];
+        readonly string[] accKey = { "", "", "" };
+        void Accessories(Looks.Look l)
+        {
+            string[] want = { l.Hat ?? "", l.Glasses ?? "", l.Hair ?? "" };
+            for (int k = 0; k < 3; k++)
+            {
+                if (want[k] == accKey[k]) continue;
+                if (acc[k] != null) Object.Destroy(acc[k]);
+                acc[k] = null;
+                accKey[k] = want[k];
+                Looks.AccInfo ai = Looks.Acc(want[k]);
+                if (ai == null || headBone == null) continue;
+                var g = new GameObject("MWCoop-Accessoire-" + ai.Key);
+                g.layer = headBone.gameObject.layer;
+                g.transform.parent = headBone;
+                g.transform.localPosition = ai.Pos;
+                g.transform.localRotation = ai.Rot;
+                g.transform.localScale = ai.Scale;
+                g.AddComponent<MeshFilter>().sharedMesh = ai.Mesh;
+                g.AddComponent<MeshRenderer>().sharedMaterials = ai.Mats;
+                acc[k] = g;
+            }
+            if (acc[0] != null) acc[0].SetActive(helmet == null || !helmet.activeSelf);
         }
 
         static Color ParseColor(string s)
@@ -1251,6 +1330,7 @@ namespace MWCoop
         {
             if (on && helmet == null && Time.realtimeSinceStartup >= nextHelmetTry) BuildHelmet();
             if (helmet != null && helmet.activeSelf != on) helmet.SetActive(on);
+            if (acc[0] != null && acc[0].activeSelf == (helmet != null && helmet.activeSelf)) acc[0].SetActive(!(helmet != null && helmet.activeSelf));   // (chapeau sous le casque : cache)
         }
 
         void BuildHelmet()

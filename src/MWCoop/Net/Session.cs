@@ -28,7 +28,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 32;
+        public const int NetVersion = 33;
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;
@@ -55,7 +55,7 @@ namespace MWCoop.Net
             SteamNet.DirectHost = hostSteam;
             port = Config.GetInt("Coop", "Port", 7870);
             Me = new PlayerInfo { Local = true, Name = Config.Get("Coop", "Pseudo", Environment.UserName),
-                                  Skin = Config.Get("Coop", "Apparence", "char_shirt21") };
+                                  Skin = Looks.FromConfig() };
             // Essais : [Test] HoteRetard=s -- l'hote n'ecoute qu'apres s secondes (invite arrive avant lui).
             int late = Config.GetInt("Test", "HoteRetard", 0);
             if ((mode == "hote" || mode == "host") && late > 0) { hostLateAt = Time.realtimeSinceStartup + late; Log.Info("essai : hote dans " + late + " s"); }
@@ -320,7 +320,7 @@ namespace MWCoop.Net
             PlayerInfo pi;
             if (!Players.TryGetValue(from.Id, out pi)) return;
             pi.Name = Clean(r.Str(), 24);
-            pi.Skin = Clean(r.Str(), 40);
+            pi.Skin = Clean(r.Str(), 200);
             string ver = r.Str();
             ulong sid;
             if (r.More && ulong.TryParse(r.Str(), out sid)) pi.SteamId = sid;
@@ -350,7 +350,7 @@ namespace MWCoop.Net
             PlayerInfo pi;
             if (!IsHost || !Players.TryGetValue(from.Id, out pi)) return;
             pi.Name = Clean(r.Str(), 24);
-            pi.Skin = Clean(r.Str(), 40);
+            pi.Skin = Clean(r.Str(), 200);
             SendRoster();
         }
 
