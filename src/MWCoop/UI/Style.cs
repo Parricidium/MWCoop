@@ -122,7 +122,9 @@ namespace MWCoop
         {
             Init();
             if (!Painting || r.width < 1 || r.height < 1) return;
-            int rad = Mathf.Clamp(Mathf.RoundToInt(radius), 0, Mathf.FloorToInt(Mathf.Min(r.width, r.height) / 2f));
+            // (au plus la demi-hauteur moins 1 : les bords decoupes font rad + 1 ; une pilule a la demi-hauteur pile faisait
+            // se chevaucher ses moities haute et basse -- un trait au milieu des onglets, vu par JD le 07/10)
+            int rad = Mathf.Clamp(Mathf.RoundToInt(radius), 0, Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(r.width, r.height) / 2f) - 1));
             if (rad < 1 && kind == 0) { Fill(r, c); return; }
             int ring = kind == 1 ? Mathf.Max(1, Mathf.RoundToInt(S)) : 0;
             int spread = kind >= 2 ? kind / 1000 : 0;

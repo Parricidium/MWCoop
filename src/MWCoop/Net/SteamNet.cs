@@ -229,6 +229,16 @@ namespace MWCoop.Net
                 var flip = new byte[raw.Length];
                 int row = (int)w * 4;
                 for (int y = 0; y < h; y++) System.Buffer.BlockCopy(raw, y * row, flip, ((int)h - 1 - y) * row, row);
+                // En rond (demande de JD, 07/10) : hors du cercle inscrit, transparent ; bord adouci sur un pixel.
+                float cx = w / 2f, cy = h / 2f, rad = Mathf.Min(w, h) / 2f - 0.5f;
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+                        float a = Mathf.Clamp01(rad - Mathf.Sqrt(dx * dx + dy * dy) + 0.5f);
+                        int k = (y * (int)w + x) * 4 + 3;
+                        flip[k] = (byte)(flip[k] * a);
+                    }
                 var t = new Texture2D((int)w, (int)h, TextureFormat.RGBA32, false);
                 t.LoadRawTextureData(flip);
                 t.Apply();

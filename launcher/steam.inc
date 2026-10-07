@@ -241,7 +241,7 @@ static bool DrawSteamAvatar(Graphics &g, RectF r, SteamId id)
     Bitmap *b = SteamAvatar(id);
     if (!b) return false;
     GraphicsPath p;
-    RoundRect(p, r, r.Width * 0.22f);
+    p.AddEllipse(r);   // en rond, comme en jeu (demande de JD, 07/10)
     Region old;
     g.GetClip(&old);   // (la liste a deja sa propre zone)
     g.SetClip(&p, CombineModeIntersect);
@@ -706,7 +706,7 @@ static void DrawSteamFriends(Graphics &g)
         g.DrawPath(&rpen, &rp);
         RectF av(r.X + 6, r.Y + 4, r.Height - 8, r.Height - 8);
         if (!DrawSteamAvatar(g, av, f.id)) {
-            GraphicsPath ap; RoundRect(ap, av, av.Width * 0.22f);
+            GraphicsPath ap; ap.AddEllipse(av);
             SolidBrush ab(WithA(kGrey, 0.35f)); g.FillPath(&ab, &ap);
             Text(g, f.name.substr(0, 1), av, 13, FontStyleBold, kInk);
         }

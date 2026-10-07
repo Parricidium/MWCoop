@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -83,7 +83,7 @@ static const wchar_t *kStoreUrl = L"https://store.steampowered.com/app/4164420/"
 static const float kImgW = 1000, kImgH = 620;   // mise en page (coordonnees de launcher.png)
 
 // ---------------------------------------------------------------- etat
-enum { ST_IDLE, ST_LAUNCH, ST_CLOSING };
+enum { ST_IDLE, ST_LAUNCH, ST_CLOSING, ST_RUNNING };   // ST_RUNNING : jeu lance, lanceur reste ouvert (serveur.inc)
 enum { K_NORMAL, K_OK, K_WARN, K_ERR };
 enum { MODE_SOLO, MODE_HOST, MODE_GUEST };
 enum { REL_OFFLINE = -1, REL_NONE = 0, REL_OK = 1 };   // reponse de GitHub
@@ -116,6 +116,7 @@ static HANDLE g_proc;
 static DWORD g_pid, g_launchT, g_winSeenT, g_noProcT;
 static std::vector<HWND> g_preWnds;                 // fenetres Unity deja la au lancement (un autre jeu sur ce PC)
 static std::wstring g_launchInfo;
+static int g_lastLaunchMode;                        // mode du dernier lancement (partie en cours : serveur.inc)
 
 #define WM_APP_RELAUNCH (WM_APP + 1)
 #define WM_APP_GO (WM_APP + 2)          // invite : l'hote a lance la partie
@@ -1325,6 +1326,14 @@ static void BuildOptions()
         o.dEn = L"Session port (7870 by default): UDP for the game, TCP for the lobby. The host opens it on their router (UDP and TCP); guests use the same one.";
         g_opts.push_back(o);
     }
+    {   // Lanceur ferme quand le jeu demarre (sinon : partie en cours, etat du serveur ; demande de JD du 07/10)
+        Opt o = {};
+        o.tab = TAB_COOP; o.key = "FermerLanceur"; o.def = 0; o.kind = O_TOGGLE;
+        o.fr = L"Fermer le lanceur au lancement du jeu"; o.en = L"Close the launcher when the game starts"; o.suffix = L"";
+        o.dFr = L"D\u00E9sactiv\u00E9 : le lanceur reste ouvert pendant la partie (joueurs, ping ; l'h\u00F4te peut faire venir ou exclure un joueur) et revient au menu quand le jeu se ferme.";
+        o.dEn = L"Off: the launcher stays open during the game (players, ping; the host can bring a player over or kick them) and goes back to the menu when the game closes.";
+        g_opts.push_back(o);
+    }
     {   // Apparence : materiaux des corps des PNJ du jeu (Sync\Avatar.cs)
         Opt o = {};
         o.tab = TAB_COOP; o.key = "Apparence"; o.kind = O_CHOICE;
@@ -1408,6 +1417,7 @@ static float LogsMaxScroll();
 static float LobbyMaxScroll();
 static float MscMaxScroll();
 static void DrawMods(Graphics &g);
+static void DrawServer(Graphics &g);
 static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : max(0.0f, TabRows(t).size() * kRowH - kOptList.Height); }
 
 static int ValueIndex(const Opt &o, int v)
@@ -3054,7 +3064,14 @@ static void DrawUI(Graphics &g)
         Text(g, L"PRE-ALPHA", pr, 11, FontStyleBold, Color(255, 255, 255, 255));
     }
 
-    if (g_state == ST_LAUNCH || g_state == ST_CLOSING) {
+    if (g_state == ST_RUNNING) {   // partie en cours, lanceur reste ouvert
+        Text(g, T(L"Partie en cours", L"Game running"), RectF(60, 300, 336, 40), 22, FontStyleBold, kInk);
+        Text(g, g_launchInfo, RectF(60, 340, 336, 26), 14, FontStyleRegular, kGrey);
+        Para(g, T(L"Le lanceur reste ouvert et revient au menu quand le jeu se ferme. Pour qu'il se ferme au lancement : option dans l'onglet COOP.",
+                  L"The launcher stays open and goes back to the menu when the game closes. To close it at launch: option in the CO-OP tab."),
+             RectF(76, 384, 304, 60), 11.5f, WithA(kGrey, 0.9f), StringAlignmentCenter);
+        DrawServer(g);
+    } else if (g_state == ST_LAUNCH || g_state == ST_CLOSING) {
         int dots = (int)(g_time * 2.5f) % 4;
         std::wstring title = T(L"My Winter Car se lance", L"My Winter Car is starting");
         title += std::wstring(dots, L'.') + std::wstring(3 - dots, L' ');
@@ -3755,6 +3772,7 @@ static void Launch(int mode, const char *partie = NULL)
     g_proc = sei.hProcess;
     g_pid = GetProcessId(sei.hProcess);
     g_launchT = GetTickCount();
+    g_lastLaunchMode = mode;
     g_winSeenT = g_noProcT = 0;
     std::wstring name = PlayerName();
     wchar_t info[160];
@@ -4665,6 +4683,7 @@ static void GuestToggleReady()
 
 #include "steam.inc"
 #include "mods.inc"
+#include "serveur.inc"
 
 // Toutes les 2 s, l'hote mesure le ping de chacun ; chaque seconde (aussitot apres un choix dans l'onglet TENUE),
 // l'apparence choisie (onglets COOP et TENUE) est annoncee si elle a change.
@@ -5260,7 +5279,12 @@ static void Tick()
             SetStatus(K_ERR, T(L"Le jeu s'est ferm\u00E9 au d\u00E9marrage (voir les journaux)", L"The game closed on startup (see the logs)"));
         }
     }
-    if (g_state == ST_LAUNCH && ((g_winSeenT && now - g_winSeenT > 1200) || now - g_launchT > 300000)) g_state = ST_CLOSING;
+    if (g_state == ST_LAUNCH && ((g_winSeenT && now - g_winSeenT > 1200) || now - g_launchT > 300000)) {
+        const Opt *fo = OptByKey("FermerLanceur");
+        if (fo && OptGet(*fo)) g_state = ST_CLOSING;
+        else RunStart(g_lastLaunchMode);
+    }
+    RunTick();
     if (!IsIconic(g_wnd)) Present();   // (reduit : rien a dessiner)
 }
 
@@ -5372,6 +5396,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         g_lobbyHot = g_tab == TAB_LOBBY && g_state == ST_IDLE ? LobbyChoiceAt(x, y) : -1;
         g_steamInfoHot = SteamInfoAt(x, y);
         g_mscHot = g_tab == TAB_MODS && g_state == ST_IDLE ? MscAt(x, y) : -1;
+        g_srvHot = SrvAt(x, y);
         bool skinTab = g_tab == TAB_SKIN && g_state == ST_IDLE;
         g_skinHot = skinTab ? SkinCellAt(x, y) : -1;
         g_skinArrowHot = skinTab ? SkinArrowAt(x, y) : 0;
@@ -5379,7 +5404,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         TrackMouseEvent(&tme);
         bool carView = g_tab == TAB_CAR && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(x, y);
         bool skinView = skinTab && !g_skinArrowHot && kSkinView.Contains(x, y);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot || g_mscHot >= 0) ? IDC_HAND
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot || g_mscHot >= 0 || g_srvHot >= 0) ? IDC_HAND
                                    : carView || skinView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
@@ -5406,6 +5431,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (f >= 0) { g_focus = f; g_time = 0; return 0; }
         g_focus = -1;
         if (SteamInfoAt(x, y)) { SteamGuideOpen(); return 0; }
+        if (g_state == ST_RUNNING && SrvClick(x, y)) return 0;
         int t = HitTab(x, y);
         if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); if (g_tab == TAB_LOGS) LogsScan(); return 0; }   // un 2e clic referme
         if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
@@ -5728,6 +5754,20 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"menu-steam") g_steamNet = true;
         else if (st == L"guide-steam") { g_steamNet = true; SteamGuideOpen(); g_guideHot = 1; }
+        else if (st == L"serveur" || st == L"partie-invite") {   // partie en cours, lanceur ouvert (faux joueurs)
+            bool host = st == L"serveur";
+            g_state = ST_RUNNING;
+            g_srvFresh = true; g_srvHost = host; g_srvSteam = true;
+            g_srvStatus = host ? T(L"h\u00F4te Steam", L"Steam host") : T(L"connect\u00E9 \u00E0 Pekka (Steam)", L"connected to Pekka (Steam)");
+            g_srv = { { 0, host ? Widen(MyName()) : L"Pekka", host ? MySkin() : "cop_shirt", -1, true, host },
+                      { 1, host ? L"Teppo" : Widen(MyName()), host ? "rally_shirt" : MySkin(), host ? 42 : -1, true, !host },
+                      { 2, L"Kalle", "char_shirt07", 87, false, false } };
+            if (!host) g_srv[0].ping = 42;
+            wchar_t info[160];
+            swprintf_s(info, T(L"%s h\u00E9berge la partie (Steam)", L"%s is hosting (Steam)"), PlayerName().c_str());
+            g_launchInfo = host ? info : T(L"JD rejoint Pekka", L"JD joins Pekka");
+            if (host) { g_kickArmed = 2; g_kickArmedT = GetTickCount(); g_srvHot = 1000 + 1 * 2 + 0; }
+        }
         else if (st == L"crash" || st == L"crash-survol") {
             g_crashT = 1;
             SetStatus(K_WARN, T(L"Arr\u00EAt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
