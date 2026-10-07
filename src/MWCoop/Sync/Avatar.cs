@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -27,6 +27,7 @@ namespace MWCoop
         static GameObject template;          // copie inactive, sans logique (corps du premier marcheur)
         static string defaultBody = "";      // sa cle de corps (Looks.BodyKey)
         static Dictionary<string, GameObject> bodyTemplates = new Dictionary<string, GameObject>();   // autres corps (Looks)
+        static Dictionary<string, float> bodyHead = new Dictionary<string, float>();                 // ... tete plus haute (+) ou plus basse (-) que l'os de base (m)
         static Vector3 charOffset;           // position de Char par rapport aux pieds du marcheur
         static Quaternion charRotation = Quaternion.identity;
         static Vector3 charScale = Vector3.one;    // echelle globale de Char (ses parents sont mis a l'echelle)
@@ -112,6 +113,7 @@ namespace MWCoop
             template = null;
             foreach (GameObject t in bodyTemplates.Values) if (t != null) Object.Destroy(t);
             bodyTemplates.Clear();
+            bodyHead.Clear();
             Looks.Reset();
             materials = null;
             clips = null;
@@ -143,7 +145,10 @@ namespace MWCoop
             return false;
         }
 
-        // Modele d'un autre corps (Looks) : copie de son PNJ, avec son squelette ; le modele de base sinon.
+        // Modele d'un autre corps (Looks) : le squelette DE BASE (le notre : ses animations seulement ; retour de JD, 08/10 :
+        // copie du PNJ, la grand-mere restait assise en l'air, le corps fin marchait sur place avec les clips de son PNJ),
+        // avec le maillage de ce corps (os remis dans l'ordre de SON maillage, par leur nom) et ses longueurs d'os (prises
+        // de ses poses de liaison, ramenees au repere des os de base) ; jambes plus courtes : modele descendu d'autant.
         static GameObject TemplateFor(string key)
         {
             if (!BuildTemplate()) return null;
@@ -151,15 +156,91 @@ namespace MWCoop
             GameObject t;
             if (bodyTemplates.TryGetValue(key, out t) && t != null) return t;
             Looks.BodyInfo b = Looks.Body(key);
-            if (b == null) return template;
-            t = (GameObject)Object.Instantiate(b.Char.gameObject);
+            if (b == null || b.Smr == null) return template;
+            t = (GameObject)Object.Instantiate(template);
             t.name = "MWCoop-AvatarModele-" + key;
             t.SetActive(false);
-            Strip(t);
-            StripExtras(t);
+            SkinnedMeshRenderer smr = null;
+            foreach (SkinnedMeshRenderer s in t.GetComponentsInChildren<SkinnedMeshRenderer>(true)) if (s.bones != null && s.bones.Length >= 10) { smr = s; break; }
+            string why = smr == null ? "corps de base introuvable" : null;
+            if (smr != null)
+            {
+                // un PNJ de ce corps dont tous les os existent chez nous (essai sur une copie du rendu de base a chaque fois)
+                why = "aucun PNJ de ce corps compatible";
+                var tried = new List<SkinnedMeshRenderer>(b.All);
+                tried.Sort((x, y) => string.CompareOrdinal(Recon.Path(x.transform), Recon.Path(y.transform)));   // (meme choix chez tous)
+                foreach (SkinnedMeshRenderer cand in tried)
+                {
+                    if (cand == null) continue;
+                    string w = Compatible(smr, cand);
+                    if (w != null) { why = w; continue; }
+                    why = Reshape(smr, cand, key);
+                    if (why == null) break;
+                }
+            }
+            if (why != null)
+            {
+                Object.Destroy(t);
+                Log.Warn("modele d'avatar " + key + " : " + why + " ; corps de base garde");
+                bodyTemplates[key] = template;
+                return template;
+            }
             bodyTemplates[key] = t;
-            Log.Info("modele d'avatar " + key + " : " + Recon.Path(b.Char));
             return t;
+        }
+
+        // Tous les os de 'src' existent-ils dans le squelette de 'dst' ? null si oui.
+        static string Compatible(SkinnedMeshRenderer dst, SkinnedMeshRenderer src)
+        {
+            if (src.sharedMesh == null || src.bones == null || src.sharedMesh.bindposes.Length != src.bones.Length) return "poses de liaison incompletes";
+            var names = new HashSet<string>();
+            foreach (Transform x in dst.bones) if (x != null) names.Add(x.name);
+            foreach (Transform bb in src.bones) if (bb == null || !names.Contains(bb.name)) return "os " + (bb != null ? bb.name : "?") + " absent du squelette de base";
+            return null;
+        }
+
+        // Pose 'src' (maillage d'un PNJ) sur le squelette de 'dst' ; null si c'est fait, sinon pourquoi pas.
+        // Les os ne bougent pas (en les deplacant, le cou s'etirait) : une copie du maillage recoit les poses de liaison
+        // des os DE BASE (meme nom) ; au repos il garde exactement sa forme (petit, fin, rond...), les animations de base
+        // le font bouger. Sa tete n'est pas a la hauteur de l'os "head" de base : l'ecart (bodyHead) decale chapeaux et
+        // lunettes, et l'apercu du lanceur.
+        static string Reshape(SkinnedMeshRenderer dst, SkinnedMeshRenderer src, string key)
+        {
+            Mesh mb = dst.sharedMesh, mv = src.sharedMesh;
+            if (mb == null || mv == null) return "maillage absent";
+            Matrix4x4[] bpB = mb.bindposes, bpV = mv.bindposes;
+            Transform[] bonesB = dst.bones, bonesV = src.bones;
+            var idxB = new Dictionary<string, int>();
+            for (int i = 0; i < bonesB.Length; i++) if (bonesB[i] != null) idxB[bonesB[i].name] = i;
+            var nb = new Transform[bonesV.Length];
+            var nbp = new Matrix4x4[bonesV.Length];
+            for (int i = 0; i < bonesV.Length; i++)
+            {
+                int j;
+                if (bonesV[i] == null || !idxB.TryGetValue(bonesV[i].name, out j)) return "os " + (bonesV[i] != null ? bonesV[i].name : "?") + " absent du squelette de base";
+                nb[i] = bonesB[j];
+                nbp[i] = bpB[j];
+            }
+            Mesh m;
+            try { m = (Mesh)Object.Instantiate(mv); m.name = mv.name; m.bindposes = nbp; }
+            catch (System.Exception e) { return "maillage illisible (" + e.Message + ")"; }
+            // ecart de hauteur de la tete (poses de liaison inverses : positions dans le repere du maillage), le long de
+            // l'axe bassin -> tete du maillage de base (son "haut", quels que soient les reperes) ; metres
+            float head = 0f;
+            int hv = -1, hb, pb;
+            for (int i = 0; i < bonesV.Length; i++) if (bonesV[i] != null && bonesV[i].name == "head") hv = i;
+            if (hv >= 0 && idxB.TryGetValue("head", out hb) && idxB.TryGetValue("pelvis", out pb))
+            {
+                Vector3 hB = bpB[hb].inverse.GetColumn(3), pB = bpB[pb].inverse.GetColumn(3), hV = bpV[hv].inverse.GetColumn(3);
+                Vector3 up = (hB - pB).normalized;
+                head = Vector3.Dot(hV - hB, up);
+            }
+            dst.sharedMesh = m;
+            dst.bones = nb;
+            dst.sharedMaterials = src.sharedMaterials;
+            bodyHead[key] = head;
+            Log.Info("modele d'avatar " + key + " : maillage de " + Recon.Path(src.transform) + " sur le squelette de base, tete " + (head >= 0 ? "+" : "") + (head * 100f).ToString("F0") + " cm");
+            return null;
         }
 
         // Rien que le corps : les accessoires du PNJ copie (chapeau, lunettes, cigarette...) sont retires.
@@ -226,6 +307,8 @@ namespace MWCoop
         public string Body = "";             // corps demande (Looks : vide = celui du modele de base)
         Material[] defMats;                  // matieres du modele (haut, pantalon, visage) : champ vide de l'apparence
         public SkinnedMeshRenderer BodyRenderer { get { return body; } }
+        // Ecart (monde) entre la tete de ce corps et l'os "head" de base (corps plus petits : plus bas).
+        public Vector3 HeadDelta { get { float h; return Root != null && bodyHead.TryGetValue(Body, out h) ? Root.transform.up * h : Vector3.zero; } }
 
         // Copie du modele (celui du corps 'bodyKey') sous une nouvelle racine 'name', animations pretes.
         void Build(string name, string bodyKey)
@@ -1431,6 +1514,8 @@ namespace MWCoop
                 g.transform.localPosition = ai.Pos;
                 g.transform.localRotation = ai.Rot;
                 g.transform.localScale = ai.Scale;
+                Vector3 hd = HeadDelta;
+                if (hd.sqrMagnitude > 1e-6f) g.transform.position += hd;   // (tete de ce corps plus basse ou plus haute que l'os)
                 g.AddComponent<MeshFilter>().sharedMesh = ai.Mesh;
                 g.AddComponent<MeshRenderer>().sharedMaterials = ai.Mats;
                 acc[k] = g;

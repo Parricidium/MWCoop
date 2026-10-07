@@ -37,7 +37,7 @@ The mod and its launcher speak **English and French** (the launcher follows Wind
 
 ### The launcher
 
-`MWCoop.exe` installs and updates the mod by itself, checks your game, and runs the **lobby**: players with their
+`MWCoop.exe` installs the mod, offers its updates (one click), checks your game, and runs the **lobby**: players with their
 outfit portrait, version, ping and a UDP check; the host picks *Continue* or *New game*, then everyone's game starts.
 
 <p align="center">
@@ -114,7 +114,7 @@ outfit portrait, version, ping and a UDP check; the host picks *Continue* or *Ne
 1. Open the game folder (Steam: right-click *My Winter Car* > *Manage* > *Browse local files*).
 2. Copy everything from the [latest release](https://github.com/Parricidium/MWCoop/releases) zip next to
    `mywintercar.exe`: `version.dll`, `MWCoop.exe` and the `MWCoop` folder.
-3. Start `MWCoop.exe`. It updates the mod by itself on every start.
+3. Start `MWCoop.exe`. When a new version is out, a **NEW VERSION · UPDATE** button shows up under the logo: one click.
 
 No other loader is needed. From a Steam install, the launcher starts the game from a copy in
 `%LOCALAPPDATA%\MWCoop\My Winter Car` (same data, linked folders): Steam would otherwise load Windows' `version.dll`
@@ -269,7 +269,7 @@ Le mod et son lanceur parlent **français et anglais** (le lanceur suit Windows,
 <p align="center">
   <img src="docs/img/lanceur-anime.webp" width="80%" alt="Le lanceur MWCoop">
 </p>
-<p align="center"><i>Le lanceur : héberger, rejoindre ou jouer seul ; il tient le mod à jour tout seul. Neige, fumée et lueur du feu animées.</i></p>
+<p align="center"><i>Le lanceur : héberger, rejoindre ou jouer seul ; une nouvelle version : un clic pour la mettre à jour. Neige, fumée et lueur du feu animées.</i></p>
 
 Les captures ci-dessus (en anglais) montrent le salon, les volets TENUE et COULEUR DE LA VOITURE (clic sur son personnage ou icône voiture du salon, ou onglet COOP), la page JOURNAUX, le menu F10, le tchat,
 l'écran d'attente des invités et l'écran de mort ; tout existe aussi en français.
@@ -279,7 +279,7 @@ l'écran d'attente des invités et l'écran de mort ; tout existe aussi en fran�
 1. Ouvrez le dossier du jeu (Steam : clic droit sur *My Winter Car* > *Gérer* > *Parcourir les fichiers locaux*).
 2. Copiez-y tout le contenu du zip de la [dernière version](https://github.com/Parricidium/MWCoop/releases), à côté de
    `mywintercar.exe` : `version.dll`, `MWCoop.exe` et le dossier `MWCoop`.
-3. Lancez `MWCoop.exe`. Il met le mod à jour tout seul à chaque démarrage.
+3. Lancez `MWCoop.exe`. Quand une nouvelle version sort, un bouton **NOUVELLE VERSION · METTRE À JOUR** apparaît sous le logo : un clic.
 
 Aucun autre chargeur n'est nécessaire. Depuis une installation Steam, le lanceur démarre le jeu depuis une copie dans
 `%LOCALAPPDATA%\MWCoop\My Winter Car` (mêmes données, dossiers liés) : sinon Steam fait charger la `version.dll` de
