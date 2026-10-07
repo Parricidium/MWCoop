@@ -588,7 +588,7 @@ static void DrawHome(Graphics &g)
         GraphicsPath p; RoundRect(p, b.r, 16);
         SolidBrush fb(on ? WithA(kAcc, 0.16f) : Mix(TH(card), TH(cardSel), b.hover)); g.FillPath(&fb, &p);
         Pen pen(on ? kAcc : TH(choiceBorder), on ? 1.6f : 1.0f); g.DrawPath(&pen, &p);
-        Icon(g, steam ? IC_GLOBE : IC_WIFI, b.r.X + 28, b.r.Y + 32, 24, on ? kAcc : kInk, 1.8f);
+        Icon(g, steam ? IC_STEAM : IC_WIFI, b.r.X + 28, b.r.Y + 32, 24, on ? kAcc : kInk, 1.8f);
         Text(g, steam ? L"STEAM" : L"IP / VPN", RectF(b.r.X + 54, b.r.Y + 11, 160, 22), 15, FontStyleBold, kInk, StringAlignmentNear);
         if (steam) { Graphics &mg = MeasureG(); float sw = MeasureW(mg, L"STEAM", 15, FontStyleBold); Text(g, T(L"conseillé", L"recommended"), RectF(b.r.X + 58 + sw, b.r.Y + 13, 120, 20), 11.5f, FontStyleBold, kOk, StringAlignmentNear); }
         Text(g, steam ? T(L"Invitations, sans port ni pare-feu", L"Invites, no port or firewall") : T(L"Réseau local, Radmin, Hamachi…", L"LAN, Radmin, Hamachi…"),
@@ -740,6 +740,14 @@ static void DrawHomeLook(Graphics &g, RectF stage)
             Para(g, T(L"L'aperçu 3D apparaît après une première partie (~30 s en jeu) avec cette version.", L"The 3D preview shows up after a first game (~30 s in game) with this version."),
                  RectF(stage.X + 24, top + 250, stage.Width - 48, 60), 12.5f, kGrey, StringAlignmentNear);
         }
+    }
+    if (PersoStale()) {   // apercu d'une ancienne version : le dire a la place des etiquettes
+        RectF r(stage.X + 14, stage.Y + stage.Height - 46, stage.Width - 28, 34);
+        GraphicsPath p; RoundRect(p, r, 17);
+        SolidBrush b(g_dark ? Color(215, 40, 30, 8) : Color(235, 255, 244, 220)); g.FillPath(&b, &p);
+        Pen pen(WithA(kWarn, 0.7f), 1); g.DrawPath(&pen, &p);
+        Text(g, T(L"Aperçu à refaire : lance une partie (~30 s)", L"Preview to redo: start a game (~30 s)"), r, 12, FontStyleBold, kWarn);
+        return;
     }
     // etiquettes : haut, corpulence, chapeau
     std::vector<std::wstring> chips;

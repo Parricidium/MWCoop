@@ -2873,6 +2873,17 @@ static void DrawSkins(Graphics &g)
     // --- a droite
     RectF pn = kSkinPanel;
     if (perso) DrawPersoRows(g);
+    if (PersoStale()) {   // export d'une ancienne version (corps des PNJ dans leur pose : la grand-mere assise...)
+        RectF r(pn.X + 24, pn.Y + 532, pn.Width - 48, 0);
+        r.Y = PersoRowRect(kPersoRowN - 1).Y + 58; r.Height = pn.Y + pn.Height - 80 - r.Y;
+        GraphicsPath p; RoundRect(p, r, 14);
+        SolidBrush b(WithA(kWarn, 0.14f)); g.FillPath(&b, &p);
+        Pen pen(WithA(kWarn, 0.5f), 1); g.DrawPath(&pen, &p);
+        Icon(g, IC_ALERT, r.X + 22, r.Y + r.Height / 2, 18, kWarn, 2.0f);
+        Para(g, T(L"Aperçu fait par une ancienne version : lance une partie (solo suffit) et reste ~30 s en jeu, il sera refait (corps debout).",
+                  L"Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone (standing bodies)."),
+             RectF(r.X + 42, r.Y + 6, r.Width - 54, r.Height - 8), 12, kInk, StringAlignmentCenter);
+    }
     else {
         Title(g, T(L"Hauts", L"Tops"), RectF(pn.X + 24, pn.Y + 20, 200, 26), 17, kInk);
         std::wstring shown = g_skinHot >= 0 && g_skinHot < n ? lab[g_skinHot] : lab[sel];
@@ -3021,7 +3032,8 @@ static void DrawSteamGuide(Graphics &g)
     g.FillPath(&db, CardPath());
     RectF c = kGuideCard;
     GlassLive(g, c, 24);
-    Title(g, T(L"Jouer par Steam", L"Playing through Steam"), RectF(c.X + 40, c.Y + 28, 500, 34), 24, kInk);
+    Icon(g, IC_STEAM, c.X + 56, c.Y + 45, 32, kAcc);
+    Title(g, T(L"Jouer par Steam", L"Playing through Steam"), RectF(c.X + 82, c.Y + 28, 500, 34), 24, kInk);
     {   // fermer
         RectF r = kGuideClose;
         GraphicsPath p; RoundRect(p, r, 14);

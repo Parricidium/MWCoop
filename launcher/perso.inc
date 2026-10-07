@@ -20,6 +20,7 @@ static struct {
     std::vector<PersoAcc> accs;
     std::map<std::string, PersoTex> tex;
     std::map<std::string, std::array<float, 3>> colors;
+    std::string ver;                   // version du mod qui a fait l'export
 } g_perso;
 static std::vector<uint32_t> g_persoBig, g_persoPix;
 static std::vector<float> g_persoZ;
@@ -56,6 +57,7 @@ static bool PersoParse(const std::vector<unsigned char> &d)
     uint32_t ver = 0;
     std::string modVer;
     if (!get(magic, 4) || memcmp(magic, "MWCP", 4) || !get(&ver, 4) || ver != 1 || !str(modVer)) return false;
+    g_perso.ver = modVer;
     for (auto &l : g_perso.lists) {
         uint32_t n = 0;
         if (!get(&n, 4) || n > 4096) return false;
@@ -82,6 +84,9 @@ static bool PersoParse(const std::vector<unsigned char> &d)
 }
 
 static std::wstring PersoDir() { return g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\cache\\"; }
+// Export fait par une autre version du mod que celle installee (avant 0.41 : les corps des PNJ gardaient leur pose,
+// la grand-mere restait assise) : il sera refait a la prochaine partie (~30 s en jeu).
+static bool PersoStale() { return g_perso.state == 1 && !g_localVer.empty() && g_perso.ver != Narrow(g_localVer, CP_UTF8); }
 
 // Relit perso.mesh s'il a change ; au plus toutes les 2 s.
 static void PersoCheck()
