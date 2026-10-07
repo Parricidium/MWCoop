@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1030,7 +1030,7 @@ static void StartUpdate()
 
 // ---------------------------------------------------------------- boutons
 // Onglets du panneau de droite (TAB_LOGS : page du bouton journaux, pas d'onglet ; TAB_LOBBY : pendant un salon)
-enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_SKIN, TAB_MODS, TAB_COUNT };
+enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_SKIN, TAB_MODS, TAB_LOBBYOPT, TAB_COUNT };   // TAB_LOBBYOPT : options du salon (volet)
 static int g_tab = -1;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_COUNT };
@@ -1300,7 +1300,8 @@ static void DrawBar(Graphics &g, RectF r, float p)
 
 // ---------------------------------------------------------------- options (MWCoop\mwcoop.ini, [Coop])
 // Memes cles et valeurs par defaut que le mod (Net\Session.cs) ; ecrites tout de suite, prises au prochain lancement.
-enum { O_TOGGLE, O_CHOICE };
+enum { O_TOGGLE, O_CHOICE, O_ACTION };   // O_ACTION : ouvre le volet (action = DR_*)
+enum { DR_NONE, DR_SKIN, DR_CAR, DR_LOBBY };   // contenu du volet a droite (drawer.inc)
 struct Opt {
     int tab; const char *key; int def; int kind; std::vector<int> vals;
     std::vector<std::string> svals;              // valeurs texte (Apparence) : vals = 0..n-1, def = index
@@ -1308,6 +1309,7 @@ struct Opt {
     std::vector<std::wstring> labFr, labEn;      // vide : la valeur + suffixe
     const wchar_t *suffix;
     const wchar_t *dFr, *dEn;
+    int action;                                  // O_ACTION : volet ouvert (DR_*)
 };
 static std::vector<Opt> g_opts;
 static int g_optHot = -1, g_optPart = 0, g_tabHot = -1;
@@ -1336,7 +1338,7 @@ static void BuildOptions()
     }
     {   // Apparence : materiaux des corps des PNJ du jeu (Sync\Avatar.cs)
         Opt o = {};
-        o.tab = TAB_COOP; o.key = "Apparence"; o.kind = O_CHOICE;
+        o.tab = TAB_COOP; o.key = "Apparence"; o.kind = O_ACTION; o.action = DR_SKIN;
         // Tenues qui existent vraiment dans le jeu (Avatar.SkinNames, releve du 05/10 : pas de 05, 06, 08, 14, 15, 27).
         const int shirts[] = { 1, 2, 3, 4, 7, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28 };
         for (int i : shirts) {
@@ -1353,8 +1355,16 @@ static void BuildOptions()
         o.def = 0;
         for (int i = 0; i < (int)o.svals.size(); i++) if (o.svals[i] == "char_shirt21") o.def = i;   // defaut du mod
         o.fr = L"Apparence"; o.en = L"Appearance"; o.suffix = L"";
-        o.dFr = L"Le personnage que les autres joueurs voient : la tenue d'un habitant, ou celle du policier, du pilote de rallye\u2026 Aper\u00E7u en 3D : onglet TENUE.";
-        o.dEn = L"The character the other players see: a local's outfit, or the police officer's, the rally driver's\u2026 3D preview: OUTFIT tab.";
+        o.dFr = L"Le personnage que les autres joueurs voient : la tenue d'un habitant, ou celle du policier, du pilote de rallye\u2026 Clic : choix en 3D dans le volet.";
+        o.dEn = L"The character the other players see: a local's outfit, or the police officer's, the rally driver's\u2026 Click: 3D picker in the side panel.";
+        g_opts.push_back(o);
+    }
+    {   // Couleur de la CORRIS d'une nouvelle partie (volet)
+        Opt o = {};
+        o.tab = TAB_COOP; o.key = "CouleurVoiture"; o.kind = O_ACTION; o.action = DR_CAR;
+        o.fr = L"Couleur de la voiture"; o.en = L"Car color"; o.suffix = L"";
+        o.dFr = L"Couleur de la CORRIS pour une nouvelle partie (l'h\u00F4te la donne aux invit\u00E9s). Clic : aper\u00E7u en 3D dans le volet.";
+        o.dEn = L"CORRIS color for a new game (the host gives it to the guests). Click: 3D preview in the side panel.";
         g_opts.push_back(o);
     }
 }
@@ -1383,11 +1393,12 @@ static const Opt *OptByKey(const char *key) { for (auto &o : g_opts) if (!strcmp
 
 static const wchar_t *TabName(int t)
 {
-    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE", L"SALON", L"TENUE", L"MODS" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR", L"LOBBY", L"OUTFIT", L"MODS" };
+    static const wchar_t *fr[] = { L"COOP", L"NOUVEAUT\u00C9S", L"JOURNAUX", L"VOITURE", L"SALON", L"TENUE", L"MODS", L"OPTIONS" }, *en[] = { L"CO-OP", L"UPDATES", L"LOGS", L"CAR", L"LOBBY", L"OUTFIT", L"MODS", L"OPTIONS" };
     return g_fr ? fr[t] : en[t];
 }
 // JOURNAUX : l'icone de la feuille seule (plus d'onglet depuis 0.32 : place pour MODS ; un "!" rouge apres un crash).
-static bool TabVisible(int t) { return t == TAB_LOBBY ? g_lobby != LB_NONE : t != TAB_LOGS; }
+// TENUE et VOITURE : dans le volet (drawer.inc) depuis 0.34 ; options du salon : volet aussi.
+static bool TabVisible(int t) { return t == TAB_LOBBY ? g_lobby != LB_NONE : t != TAB_LOGS && t != TAB_SKIN && t != TAB_CAR && t != TAB_LOBBYOPT; }
 static void LayoutTabs()
 {
     static const int order[] = { TAB_LOBBY, TAB_COOP, TAB_SKIN, TAB_CAR, TAB_MODS, TAB_NOTES, TAB_LOGS };
@@ -1409,7 +1420,8 @@ static void LayoutTabs()
 static std::vector<int> TabRows(int t)
 {
     std::vector<int> r;
-    for (int i = 0; i < (int)g_opts.size(); i++) if (g_opts[i].tab == t) r.push_back(i);
+    for (int i = 0; i < (int)g_opts.size(); i++)
+        if (t == TAB_LOBBYOPT ? !strcmp(g_opts[i].key, "Port") || !strcmp(g_opts[i].key, "FermerLanceur") : g_opts[i].tab == t) r.push_back(i);
     return r;
 }
 static float NotesMaxScroll();
@@ -1435,9 +1447,12 @@ static std::wstring ValueText(const Opt &o, int v)
     swprintf_s(b, L"%d%s", v, o.suffix);
     return b;
 }
+static void DrawerShow(int kind);
+static std::wstring CarColorName();
 static void OptStep(int idx, int dir)
 {
     const Opt &o = g_opts[idx];
+    if (o.kind == O_ACTION) { DrawerShow(o.action); return; }
     int v = OptGet(o);
     if (o.kind == O_TOGGLE) { OptSet(o, v ? 0 : 1); return; }
     int i = ValueIndex(o, v);
@@ -1511,6 +1526,14 @@ static void DrawOptions(Graphics &g)
             else { SolidBrush ob(TH(toggleOff)); g.FillPath(&ob, &tp); }
             SolidBrush knob(v ? kOnAcc : Color(255, 255, 255, 255));
             g.FillEllipse(&knob, v ? tr.X + 24 : tr.X + 2, tr.Y + 2, 16.0f, 16.0f);
+        } else if (o.kind == O_ACTION) {   // ouvre le volet : valeur actuelle et chevron
+            RectF cr(r.X + r.Width - 190, r.Y + 5, 178, 24);
+            GraphicsPath cp; RoundRect(cp, cr, 12);
+            SolidBrush cb(hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &cp);
+            Pen cpen(hot ? kAcc : TH(choiceBorder), 1.2f); g.DrawPath(&cpen, &cp);
+            std::wstring val = o.action == DR_CAR ? CarColorName() : ValueText(o, v);
+            Text(g, val, RectF(cr.X + 10, cr.Y, cr.Width - 34, cr.Height), 12.5f, FontStyleBold, kInk);
+            Text(g, L"\u203A", RectF(cr.X + cr.Width - 22, cr.Y - 2, 18, cr.Height), 18, FontStyleBold, hot ? kAcc : WithA(kAcc, 0.78f));
         } else {
             RectF cr(r.X + r.Width - 190, r.Y + 5, 178, 24);
             GraphicsPath cp; RoundRect(cp, cr, 12);
@@ -3435,11 +3458,22 @@ static void DrawSteamGuide(Graphics &g)
     }
 }
 
+#include "drawer.inc"
+
 static void RenderTo(Bitmap &target, float scale)
 {
     g_skinBudget = g_wnd ? 6 : 100000;   // portraits lus par image (capture : tous)
     Graphics g(&target);
     g.Clear(Color(0, 0, 0, 0));
+    if (g_drawerShown != DR_NONE && g_drawerT > 0) {   // volet : AVANT le fond, il sort de dessous la fenetre
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        g.SetPixelOffsetMode(PixelOffsetModeHalf);
+        g.ScaleTransform(scale, scale);
+        DrawDrawer(g);
+        g.ResetTransform();
+    }
     Bitmap *bgi = (g_dark && g_bgDark) ? g_bgDark : g_bg;
     if (bgi) {
         int w = (int)target.GetWidth(), h = (int)target.GetHeight();
@@ -3454,10 +3488,9 @@ static void RenderTo(Bitmap &target, float scale)
             cg.ScaleTransform(scale, scale);
             cg.DrawImage(bgi, RectF(0, 0, kImgW, kImgH));
         }
-        g.SetCompositingMode(CompositingModeSourceCopy);   // (copie telle quelle, a la meme taille)
+        // (par-dessus le volet : SourceCopy l'effacait ; a la meme taille, pas d'interpolation)
         g.SetInterpolationMode(InterpolationModeNearestNeighbor);
         g.DrawImage(g_bgCache, 0, 0, w, h);
-        g.SetCompositingMode(CompositingModeSourceOver);
     }
     g.SetSmoothingMode(SmoothingModeAntiAlias);
     g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
@@ -3826,6 +3859,7 @@ static int g_lobbyHot = -1;                         // choix de partie survole (
 static std::string g_mySkinSent;                    // derniere apparence annoncee au salon
 static const RectF kLobbyList(452, 172, 488, 250), kChoiceR[2] = { RectF(456, 450, 236, 32), RectF(700, 450, 236, 32) };
 static const float kLobbyRowH = 58;
+static const RectF kLobbyCarBtn(862, 123, 28, 28), kLobbyGearBtn(898, 123, 28, 28);   // en-tete du salon : volet
 
 // Sons du salon (repris de SACoop) : arrivee, depart, pret, plus pret. Petites notes synthetisees (WAV en memoire).
 enum { SND_JOIN, SND_LEAVE, SND_READY, SND_UNREADY, SND_COUNT };
@@ -4495,9 +4529,9 @@ static void LobbySetPartie(int p)
     if (g_lobby != LB_HOST || g_goSent || p == g_partie) return;
     if (p == PARTIE_NOUVELLE && g_testSalon.empty()) {
         std::wstring q = std::wstring(T(L"Commencer une NOUVELLE partie ?\n\nElle remplace ta sauvegarde actuelle de My Winter Car "
-                                        L"(la partie en cours sera perdue).\n\nCouleur de la CORRIS (onglet VOITURE) : ",
+                                        L"(la partie en cours sera perdue).\n\nCouleur de la CORRIS (ic\u00F4ne voiture du salon) : ",
                                         L"Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\n"
-                                        L"CORRIS color (CAR tab): ")) + CarColorName() + L".";
+                                        L"CORRIS color (car icon in the lobby): ")) + CarColorName() + L".";
         if (MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
         if (g_lobby != LB_HOST || g_goSent) return;
     }
@@ -4760,6 +4794,18 @@ static float LobbyMaxScroll()
 // 0/1 : partie ; salon Steam (hote) : 50 retour au salon, 51 "inviter des amis" (place libre), 100+i ami i.
 static int LobbyChoiceAt(float x, float y)
 {
+    // Tous : icones voiture (60) et engrenage (61) ; son propre personnage (62) : tenue. (Volet a droite.)
+    if ((g_lobby == LB_HOST || g_lobby == LB_GUEST) && !(g_lobbySteam && g_sFriendsView)) {
+        if (kLobbyCarBtn.Contains(x, y)) return 60;
+        if (kLobbyGearBtn.Contains(x, y)) return 61;
+        if (kLobbyList.Contains(x, y)) {
+            int row = (int)((y - kLobbyList.Y + g_scroll[TAB_LOBBY]) / kLobbyRowH);
+            EnterCriticalSection(&g_lcs);
+            bool me = row >= 0 && row < (int)g_peers.size() && g_peers[row].id == g_myId;
+            LeaveCriticalSection(&g_lcs);
+            if (me) return 62;
+        }
+    }
     if (g_lobby != LB_HOST || g_goSent) return -1;
     if (g_lobbySteam && g_sFriendsView) {
         if (kFriendsBack.Contains(x, y)) return 50;
@@ -4791,7 +4837,29 @@ static void DrawLobby(Graphics &g)
         wchar_t head[64];
         swprintf_s(head, T(L"%d / %d joueurs", L"%d / %d players"), (int)peers.size(), kLobbyMax);
         Text(g, T(L"SALON", L"LOBBY"), RectF(460, 124, 200, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
-        if (lobby != LB_CONNECTING) Text(g, head, RectF(700, 124, 232, 26), 12.5f, FontStyleBold, kGrey, StringAlignmentFar);
+        if (lobby != LB_CONNECTING) {
+            Text(g, head, RectF(620, 124, 230, 26), 12.5f, FontStyleBold, kGrey, StringAlignmentFar);
+            // couleur de la voiture, options du salon : volet
+            for (int k = 0; k < 2; k++) {
+                RectF ir = k == 0 ? kLobbyCarBtn : kLobbyGearBtn;
+                bool hot = g_lobbyHot == 60 + k || (g_drawer == (k == 0 ? DR_CAR : DR_LOBBY));
+                SolidBrush ib(hot ? WithA(kAcc, 0.22f) : TH(card)); g.FillEllipse(&ib, ir);
+                Pen ip(hot ? kAcc : TH(choiceBorder), 1.2f); g.DrawEllipse(&ip, ir);
+                Color c = hot ? kAcc : kInk;
+                float cx = ir.X + ir.Width / 2, cy = ir.Y + ir.Height / 2;
+                if (k == 1) DrawGear(g, cx, cy, c);
+                else {   // petite voiture : caisse, toit, deux roues
+                    Pen cpen(c, 1.6f);
+                    cpen.SetLineJoin(LineJoinRound);
+                    PointF body[] = { PointF(cx - 8, cy + 3), PointF(cx - 8, cy), PointF(cx - 5, cy - 1), PointF(cx - 3, cy - 5), PointF(cx + 3, cy - 5), PointF(cx + 5, cy - 1),
+                                      PointF(cx + 8, cy), PointF(cx + 8, cy + 3) };
+                    g.DrawLines(&cpen, body, 8);
+                    SolidBrush wb(c);
+                    g.FillEllipse(&wb, cx - 6.5f, cy + 1.5f, 4.0f, 4.0f);
+                    g.FillEllipse(&wb, cx + 2.5f, cy + 1.5f, 4.0f, 4.0f);
+                }
+            }
+        }
         std::wstring sub;
         if (g_lobbySteam) sub = host ? std::wstring(T(L"Salon Steam \u00B7 amis seulement \u00B7 jusqu'\u00E0 8 joueurs", L"Steam lobby \u00B7 friends only \u00B7 up to 8 players"))
                                      : lobby == LB_CONNECTING ? std::wstring(T(L"Salon Steam", L"Steam lobby")) : std::wstring(T(L"Salon Steam de ", L"Steam lobby of ")) + g_sHostName;
@@ -4847,9 +4915,10 @@ static void DrawLobby(Graphics &g)
                 }
                 const LobbyPeer &p = peers[i];
                 bool me = p.id == g_myId;
+                bool meHot = me && g_lobbyHot == 62;
                 SolidBrush rb(me ? TH(cardSel) : TH(card));
                 g.FillPath(&rb, &rp);
-                Pen rpen(me ? kAcc : TH(choiceBorder), me ? 1.6f : 1.1f);
+                Pen rpen(me ? kAcc : TH(choiceBorder), meHot ? 2.4f : me ? 1.6f : 1.1f);
                 g.DrawPath(&rpen, &rp);
                 // pastille du joueur : portrait de sa tenue (onglet TENUE), sinon son initiale, sur sa couleur
                 std::wstring nm = Widen(p.name, CP_UTF8);
@@ -4910,7 +4979,7 @@ static void DrawLobby(Graphics &g)
     }
     std::wstring note;
     if (partie == PARTIE_NOUVELLE)
-        note = host ? std::wstring(T(L"Remplace ta sauvegarde. Couleur de la CORRIS (onglet VOITURE) : ", L"Replaces your save. CORRIS color (CAR tab): ")) + CarColorName() + L"."
+        note = host ? std::wstring(T(L"Remplace ta sauvegarde. Couleur de la CORRIS (ic\u00F4ne voiture du salon) : ", L"Replaces your save. CORRIS color (car icon in the lobby): ")) + CarColorName() + L"."
                     : T(L"L'h\u00F4te commence une nouvelle partie ; tu la rejoins d\u00E8s qu'il est en jeu.", L"The host starts a new game; you join as soon as they are in game.");
     else
         note = host ? T(L"Tu reprends ta sauvegarde ; les invit\u00E9s la re\u00E7oivent en arrivant.", L"You resume your save; guests receive it when they arrive.")
@@ -4957,6 +5026,7 @@ static bool LobbyClick(float x, float y)
     int c = LobbyChoiceAt(x, y);
     if (c >= 100) { SteamInviteFriend(c - 100); return true; }
     if (c == 50 || c == 51) { SteamShowFriends(c == 51); return true; }
+    if (c >= 60 && c <= 62) { int k = c == 60 ? DR_CAR : c == 61 ? DR_LOBBY : DR_SKIN; if (g_drawer == k) DrawerClose(true); else DrawerShow(k); return true; }
     if (c >= 0) { LobbySetPartie(c); return true; }
     return kOptPanel.Contains(x, y);
 }
@@ -5247,6 +5317,7 @@ static void Tick()
     last = now;
     g_time += dt;
     g_sceneT += dt;
+    DrawerTick(dt);
     LobbyTick();
     LobbySoundsTick();
     SteamTick();
@@ -5261,9 +5332,9 @@ static void Tick()
         if (g_alpha <= 0) { DestroyWindow(g_wnd); return; }
     } else if (g_alpha < 1) g_alpha = min(g_alpha + dt * 5, 1.0f);
     // Apercu de la voiture : rotation lente, arretee pendant un glisser et 2,5 s apres
-    if (g_tab == TAB_CAR && g_state == ST_IDLE && !g_carDrag && now - g_carIdleT > 2500) g_carYaw = fmodf(g_carYaw + dt * 0.45f, 6.2831853f);
+    if ((g_tab == TAB_CAR || g_drawerShown == DR_CAR) && g_state == ST_IDLE && !g_carDrag && now - g_carIdleT > 2500) g_carYaw = fmodf(g_carYaw + dt * 0.45f, 6.2831853f);
     // Tenue : un tour en 10 s ; arretee pendant un glisser, et 1,5 s apres (ou apres un changement : de face)
-    if (g_tab == TAB_SKIN && g_state == ST_IDLE && !g_skinDrag && now - g_skinIdleT > 1500) g_skinYaw = fmodf(g_skinYaw + dt * 1.6f, 16.0f);
+    if ((g_tab == TAB_SKIN || g_drawerShown == DR_SKIN) && g_state == ST_IDLE && !g_skinDrag && now - g_skinIdleT > 1500) g_skinYaw = fmodf(g_skinYaw + dt * 1.6f, 16.0f);
 
     // Ecran d'attente : jusqu'a la fenetre du jeu. Le processus lance peut se fermer tout de suite si Steam relance
     // le jeu lui-meme : on ne conclut a un echec qu'apres 15 s sans aucun mywintercar.exe.
@@ -5380,8 +5451,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     }
     case WM_MOUSEMOVE: {
         float x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
-        if (g_carDrag) { CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
-        if (g_skinDrag) { SkinDragTo(x); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
+        // (volet : le glisser a commence dans son repere)
+        if (g_carDrag) { if (g_drawerShown == DR_CAR) CarDragTo(x - kDrawerDx, y - kDrawerDy); else CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
+        if (g_skinDrag) { SkinDragTo(g_drawerShown == DR_SKIN ? x - kDrawerDx : x); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
         if (g_guide) {   // (guide Steam ouvert : lui seul repond)
             g_hot = -1; g_tabHot = -1; g_optHot = -1; g_lobbyHot = -1; g_steamInfoHot = false;
             g_guideHot = SteamGuideHit(x, y);
@@ -5402,16 +5474,19 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         g_skinArrowHot = skinTab ? SkinArrowAt(x, y) : 0;
         TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, h, 0 };
         TrackMouseEvent(&tme);
-        bool carView = g_tab == TAB_CAR && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(x, y);
-        bool skinView = skinTab && !g_skinArrowHot && kSkinView.Contains(x, y);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot || g_mscHot >= 0 || g_srvHot >= 0) ? IDC_HAND
+        DrawerMouseMove(x, y);
+        bool inDr = InDrawer(x, y);
+        float qx = inDr ? x - kDrawerDx : x, qy = inDr ? y - kDrawerDy : y;
+        bool carView = ((g_tab == TAB_CAR && !inDr) || (inDr && g_drawerShown == DR_CAR)) && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(qx, qy);
+        bool skinView = ((skinTab && !inDr) || (inDr && g_drawerShown == DR_SKIN)) && !g_skinArrowHot && kSkinView.Contains(qx, qy);
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot || g_mscHot >= 0 || g_srvHot >= 0 || DrawerHand()) ? IDC_HAND
                                    : carView || skinView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
     case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; g_steamInfoHot = false; g_mscHot = -1; return 0;
     case WM_KEYDOWN:   // onglet TENUE : fleches gauche / droite (hors des champs)
         if (g_guide && (wp == VK_ESCAPE || wp == VK_RETURN)) { SteamGuideClose(); return 0; }
-        if ((wp == VK_LEFT || wp == VK_RIGHT) && g_tab == TAB_SKIN && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
+        if ((wp == VK_LEFT || wp == VK_RIGHT) && (g_tab == TAB_SKIN || g_drawerShown == DR_SKIN) && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
         break;
     case WM_MOUSEWHEEL:
         if (g_tab >= 0 && !g_guide) {
@@ -5426,6 +5501,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_LBUTTONDOWN: {
         float x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
         if (g_guide) { SteamGuideClick(x, y); return 0; }
+        if (DrawerMouseDown(x, y)) return 0;
         int b = HitButton(x, y), f = HitField(x, y);
         if (b >= 0) { g_pressed = b; SetCapture(h); return 0; }
         if (f >= 0) { g_focus = f; g_time = 0; return 0; }
@@ -5797,9 +5873,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"menu-ip") g_steamNet = false;
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop") { g_tab = TAB_COOP; g_optHot = TabRows(TAB_COOP)[1]; g_optPart = 1; }
-        else if (st == L"voiture") g_tab = TAB_CAR;   // couleur : CouleurVoiture du mwcoop.ini du jeu
+        else if (st == L"voiture") { g_drawer = g_drawerShown = DR_CAR; g_drawerT = 1; }   // couleur : CouleurVoiture du mwcoop.ini du jeu (volet)
         else if (st == L"tenue" || st == L"tenue-survol") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s)
-            g_tab = TAB_SKIN;
+            g_drawer = g_drawerShown = DR_SKIN; g_drawerT = 1;   // (volet)
             g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);
             if (st == L"tenue-survol") { g_skinHot = 29; g_skinArrowHot = 1; }
         }
@@ -5810,8 +5886,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; g_btn[B_LOGS].hover = 1; }
-        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp") {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
-            bool host = st == L"salon";   // (salon-udp : invite dont l'UDP est bloque)
+        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options") {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
+            bool host = st == L"salon" || st == L"salon-options";   // (salon-udp : invite dont l'UDP est bloque)
             std::string v = MyVersion();
             g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0 },
                         { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38, UDP_OK },
@@ -5827,6 +5903,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (host) { SetStatus(K_OK, T(L"Salon ouvert \u00B7 port %d", L"Lobby open \u00B7 port %d"), 7870); g_lobbyHot = 1; }
             else SetStatus(K_OK, T(L"Dans le salon de %s", L"In %s's lobby"), L"192.168.1.20");
             if (st == L"salon-udp") { g_udpMine = UDP_FAIL; g_peers[1].udp = UDP_WAIT; }
+            if (wcsstr(argv[3], L"-options")) { g_drawer = g_drawerShown = DR_LOBBY; g_drawerT = 1; g_lobbyHot = 61; }
             g_hostUdpTest = true;
         }
         else if (st == L"salon-steam" || st == L"salon-steam-amis" || st == L"salon-steam-invite") {   // salon Steam (faux)
@@ -5858,7 +5935,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }
         int rc = 1;
         {
-            Bitmap out((INT)(kImgW * g_scale), (INT)(kImgH * g_scale), PixelFormat32bppPARGB);
+            Bitmap out((INT)((kImgW + (g_drawerShown != DR_NONE ? kDrawerW : 0)) * g_scale), (INT)(kImgH * g_scale), PixelFormat32bppPARGB);   // (volet ouvert : plus large)
             RenderTo(out, g_scale);
             if (g_bench > 0) {
                 LARGE_INTEGER f, a, z;
@@ -5910,7 +5987,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
     float fit = min((work.right - work.left) * 0.9f / kImgW, (work.bottom - work.top) * 0.9f / kImgH);
     g_scale = max(0.5f, min(g_scale, fit));
-    g_winW = (int)(kImgW * g_scale);
+    g_winW = (int)((kImgW + kDrawerW) * g_scale);   // + volet a droite (transparent quand il est replie)
     g_winH = (int)(kImgH * g_scale);
 
     WNDCLASSEXW wc = { sizeof(wc) };
@@ -5921,7 +5998,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     wc.hIconSm = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, 16, 16, 0);
     wc.lpszClassName = L"MWCoopLauncher";
     RegisterClassExW(&wc);
-    int x = work.left + (work.right - work.left - g_winW) / 2, y = work.top + (work.bottom - work.top - g_winH) / 2;
+    int x = work.left + (work.right - work.left - (int)(kImgW * g_scale)) / 2, y = work.top + (work.bottom - work.top - g_winH) / 2;
     g_wnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_APPWINDOW, wc.lpszClassName, L"MWCoop", WS_POPUP | WS_MINIMIZEBOX | WS_SYSMENU,
                             x, y, g_winW, g_winH, NULL, NULL, inst, NULL);
 
