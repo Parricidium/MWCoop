@@ -3165,6 +3165,16 @@ static void DrawSkins(Graphics &g)
 
     Pen sep(TH(sep), 1);
     g.DrawLine(&sep, kOptPanel.X + 18, 532.0f, kOptPanel.X + kOptPanel.Width - 18, 532.0f);
+    if (g_perso.state != 1) {   // apparence complete pas encore exportee par le jeu (perso.inc) : dire comment l'avoir
+        RectF nr(kOptPanel.X + 16, 536, kOptPanel.Width - 32, 46);
+        GraphicsPath np; RoundRect(np, nr, 10);
+        SolidBrush nb(WithA(kAcc, 0.14f)); g.FillPath(&nb, &np);
+        Pen npen(WithA(kAcc, 0.6f), 1.1f); g.DrawPath(&npen, &np);
+        Para(g, T(L"Corpulence, pantalon, visage, chapeau, lunettes, cheveux : lance une partie (solo suffit) et reste ~30 s en jeu avec cette version, ils appara\u00EEtront ici.",
+                  L"Build, pants, face, hat, glasses, hair: start a game (solo is fine) and stay ~30 s in game with this version, they will show up here."),
+             RectF(nr.X + 10, nr.Y + 4, nr.Width - 20, nr.Height - 6), 11.5f, kInk, StringAlignmentCenter);
+        return;
+    }
     Para(g, T(L"Ce que les autres joueurs voient. Fl\u00E8ches \u2190 \u2192 ou un portrait pour changer ; dans un salon, les autres le voient aussit\u00F4t.",
               L"What the other players see. Arrow keys \u2190 \u2192 or a portrait to change; in a lobby, the others see it right away."),
          RectF(kOptPanel.X + 20, 536, kOptPanel.Width - 40, 44), 12, kGrey, StringAlignmentCenter);
