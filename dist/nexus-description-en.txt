@@ -1,48 +1,80 @@
 [size=5][b]MWCoop — My Winter Car in co-op[/b][/size]
 
-One player hosts their world, friends join [b]that[/b] world: same save, same time of day, same snow, the same CORRIS rebuilt bolt by bolt, the same shops, NPCs, jobs and bills — with a wallet each. Its own loader (no MSCLoader needed) and a launcher that installs and updates the mod by itself. English and French.
+One player hosts their world, friends join [b]that[/b] world: same save, same time of day, same snow, the same CORRIS rebuilt bolt by bolt, the same shops, NPCs, traffic, radio, jobs and bills — with a wallet each. Up to 8 players, through Steam or by IP. Its own loader (no MSCLoader needed, but MSCLoader mods work and are shared) and a 2026 launcher with a lobby, your character in 3D and one-click updates. English and French.
 
-[b]PRE-ALPHA[/b]: almost everything is tested between two game instances on one PC; real games between friends have only just started. Expect bugs, and send your logs (launcher > [b]LOGS[/b] > [i]Create a zip to send[/i]).
+[b]PRE-ALPHA[/b]: almost everything is tested between game instances on one PC; real games between friends have only just started. Expect bugs, and send your logs (launcher > [b]Logs[/b] > [i]Create a zip to send[/i]).
+
+[size=4][b]Latest[/b][/size]
+[list]
+[*][b]0.43[/b] — MSCLoader mod saves travel with the host's save; an [b]API for mod authors[/b]; rear bench in the BACHGLOTZ; passenger seatbelt.
+[*][b]0.42[/b] — [b]brand new launcher[/b]: bigger, frosted glass over a northern-lights night (or a winter morning), falling snow, every page in a side bar.
+[*][b]0.41[/b] — updates on click; every body type now walks on the player's skeleton.
+[*][b]0.40[/b] — traffic wheels and crashes with traffic, [b]shared radio[/b], hands on the wheel, drinking and smoking at the mouth.
+[*][b]0.38–0.39[/b] — [b]full character look[/b] (build, face, pants, hat, glasses, hair), sleeping alone, blanket.
+[*][b]0.36–0.37[/b] — the host's [b]MSCLoader mods[/b] and [b]custom content[/b] (CDs, radio, paint, posters…) go to the guests.
+[/list]
 
 [size=4][b]Playing together[/b][/size]
 [list]
-[*][b]The launcher[/b]: HOST or JOIN, a [b]lobby[/b] with every player's outfit portrait, version, ping and a UDP check; the host picks [i]Continue my game[/i] or [i]New game[/i], then everyone's game starts and enters the session by itself.
-[*][b]Your own save is never touched[/b]: guests play in a separate profile and receive the host's save.
-[*][b]Waiting screens[/b] instead of the main menu: the host sees the game starting, guests see the connection, the save download and the loading.
-[*][b]Play through Steam[/b] (Steam version of the game): the host opens a Steam lobby in the launcher and invites friends from their Steam friends list; they accept in Steam and land in the same lobby (outfits, READY, START launches everyone's game) — no port, no firewall, no address; Steam avatars in the lobby and next to the nicknames. Optional Steam launch option (copied by the launcher) so that an invite accepted with MWCoop closed opens MWCoop.
-[*][b]Up to 8 players[/b] per lobby. Or by IP: Internet (port [b]7870 UDP and TCP[/b] opened on the host's router) or a VPN (Radmin VPN, ZeroTier…).
-[*][b]F10 menu[/b] (mouse or keyboard): players and ping, go to a player, outfit with a live 3D preview, chat, sync audit. [b]T[/b] opens the chat.
+[*][b]The launcher[/b]: Home with your character in 3D, big HOST and JOIN tiles, solo, and the latest news. Pages on the left: Home, Lobby, Outfit, Car, Sent content, Mods, What's new, Logs, Settings. Dark or light theme, French or English, a guided tour on first start (and a bubble on each new button after an update).
+[*][b]The lobby[/b]: every player's 3D badge (full look), version, ping and a UDP check; the host picks [i]Continue my game[/i] or [i]New game[/i], sees what is sent to the guests, and START launches everyone's game, which enters the session by itself.
+[*][b]Play through Steam[/b] (Steam version of the game): HOST opens a friends-only Steam lobby; invite your online friends in one click; they accept in Steam and land in the same lobby — no port, no firewall, no address. Steam avatars in the lobby, above the players and in the F10 list. Optional Steam launch option (copied by the launcher) so that an invite accepted with MWCoop closed opens MWCoop.
+[*][b]Or by IP[/b]: Internet (port [b]7870 UDP and TCP[/b] opened on the host's router, can be changed) or a VPN (Radmin VPN, ZeroTier…).
+[*][b]Your own save is never touched[/b]: guests play in a separate profile and receive the host's save. [b]Waiting screens[/b] instead of the main menu (connection, save download, loading).
+[*][b]The launcher stays open while you play[/b]: players and ping; the host can [b]bring a player here[/b] or [b]kick[/b] them (also from the F10 menu).
+[*][b]F10 menu[/b] (mouse or keyboard): players and ping, go to a player, appearance with a live 3D preview, chat, sync audit. [b]T[/b] opens the chat.
+[/list]
+
+[size=4][b]Your character[/b][/size]
+[list]
+[*]Pick your look among the game's own locals: [b]top[/b], [b]pants[/b], [b]face[/b] (13, women's faces included), [b]build[/b] (thin, slim, stout, short… and even the pig), [b]hat[/b] (beanie, caps, fur hat, fishing hat, flat cap, helmet…), [b]glasses[/b] and [b]hair[/b] (ponytail, mullet).
+[*]Outfit page: rotating 3D preview with Head / Torso / Legs / Build markers, one row per part, [i]Random[/i] and [i]As before[/i]. Also changeable in game (F10 > Appearance).
+[*]Every body walks, sits and drives on the player's skeleton, so all animations follow. The full look unlocks by itself after ~30 s in your first game (solo is fine).
+[*]Your car colour, chosen in the launcher.
 [/list]
 
 [size=4][b]What is shared[/b][/size]
 [list]
-[*][b]Players[/b]: everyone sees the others with the outfit they picked among the game's NPC clothes and a name tag; walking, crouching, sitting, smoking, drinking (bottle in hand), carrying, waving, punching, the finger, drunk sway, passing out; the head follows the camera, even at the wheel.
-[*][b]One world[/b]: the host's time, day, weather, clouds, snow and temperature. Time only fast-forwards when [b]every[/b] player sleeps.
-[*][b]Vehicles[/b]: the driver sits at the wheel for everyone with engine sound, turning wheels, lights, wipers and dashboard; smooth for passengers; doors, hoods and tailgates that really swing; [b]passenger seats[/b] (ENTER near a seat, only when the car is stopped) from which you can use the key, handbrake, windows, heater… Taxi, towing rope, window frost and scraping, crash damage, fires.
+[*][b]Players[/b]: name tags, walking, crouching, sitting, carrying, waving, punching, the finger, drunk sway, passing out; [b]drinking[/b] with the bottle at the lips and [b]smoking[/b] with the hand at the mouth; the head follows the camera, even at the wheel.
+[*][b]One world[/b]: the host's time, day, weather, clouds, snow and temperature. Time fast-forwards when [b]everyone[/b] sleeps; [b]sleeping alone[/b] still rests you (your own clock only) and a [b]blanket[/b] covers sleeping players.
+[*][b]Vehicles[/b]: the driver sits at the wheel for everyone, [b]hands on the wheel[/b], gear lever and controls; engine sound, turning wheels, lights, wipers and dashboard, a smooth steering wheel and needles; doors, hoods and tailgates that really swing. Taxi, towing rope, window frost and scraping, crash damage, fires.
+[*][b]Passenger seats[/b]: front passenger in every car, [b]rear bench[/b] in the SORBET, CORRIS, BACHGLOTZ and the taxi. From a seat you can use the key, handbrake, windows, heater… and [b]buckle your seatbelt[/b] (aim at the buckle and click; the others see it).
 [*][b]Car building[/b]: parts installed and removed, every bolt turn, parts carried and dropped, paint, carburettor and knob adjustments, wiring, fluids and wear, jacks, lift and engine hoist.
 [*][b]Money and shops[/b]: income shared, [b]a wallet each[/b] (only the buyer pays); shopping seen by everyone (bags, shelves emptying live), pub, flea market, inspection, coffee, bus, gas pump terminal, restaurant trays and plates.
-[*][b]Traffic and NPCs[/b]: cars, bus, train and passers-by driven by the host; the same people in the same places with the same gestures; their lines heard by everyone, and stopped for everyone when they hang up or get interrupted.
+[*][b]Traffic and NPCs[/b]: cars, bus, train and passers-by driven by the host; wheels that spin and steer on the guest's side; [b]crashes with traffic[/b] (no more immovable "wall"); the same people in the same places with the same gestures, their lines heard by everyone.
+[*][b]Shared radio[/b]: everyone hears the same song at the same moment, on the local radio and the folk radio — the host's custom songs included. CDs too.
 [*][b]Everyday life[/b]: bills (paid by one, power back for all), mailbox, phone calls (a guest can answer), catalogue orders and parcels, lottery, fuses, stove, sauna, cooking, wood fires and firewood, kilju, septic tanks, TV and teletext, jobs shared without double pay, slot machines one player at a time.
 [*][b]Death[/b]: in co-op, dying no longer ends the game — pick the apartment or the parents' house and the game goes on.
 [*][b]Co-op save[/b] at the toilet without kicking the guests (a guest can ask for it); the host going back to the menu takes everyone along.
 [/list]
+
+[size=4][b]The host's mods and content[/b][/size]
+[list]
+[*][b]MSCLoader[/b] (optional): the Mods page installs it in one click (official release), turns it on or off, lists your mods and edits their options.
+[*][b]The host's mods go to the guests[/b]: "Send" on each mod; guests click ACCEPT ALL once in the lobby. Mods, their assets and settings are copied, stored apart and loaded only for the host's game: the guests' own mods are never touched. Host without MSCLoader: guests play without it too.
+[*][b]Mod saves[/b]: MSCLoader mod data travels with the host's save, so everyone's mods start from the same values.
+[*][b]The host's content[/b]: CDs, radio songs, CORRIS and moped paint, garage flag, posters, window sticker, fabric, hockey teams — a checklist with thumbnails in the launcher.
+[/list]
+
+[size=4][b]For mod authors[/b][/size]
+A small public API ([b]MWCoop.CoopApi[/b], in English) lets your mod sync its own state: send and receive data between players (reliable or not), know who hosts, follow players joining and leaving. Use it through reflection, so your mod still works without MWCoop. Docs and examples: [url=https://github.com/Parricidium/MWCoop/blob/main/docs/API.md]docs/API.md[/url].
 
 [size=4][b]Install[/b][/size]
 [list=1]
 [*]You need your own copy of [url=https://store.steampowered.com/app/4164420/]My Winter Car on Steam[/url]. No game data is included.
 [*]Open the game folder (Steam: right-click [i]My Winter Car[/i] > [i]Manage[/i] > [i]Browse local files[/i]).
 [*]Copy everything from the zip next to [b]mywintercar.exe[/b]: [b]version.dll[/b], [b]MWCoop.exe[/b] and the [b]MWCoop[/b] folder.
-[*]Start [b]MWCoop.exe[/b]. It updates the mod by itself on every start.
+[*]Start [b]MWCoop.exe[/b]. When a new version is out, an [b]Update[/b] button shows up under the logo: one click and it is done.
 [/list]
-Everybody in a party must run the [b]same version[/b] (the launcher updates it for you). From a Steam install, the launcher starts the game from a copy in %LOCALAPPDATA%\MWCoop\My Winter Car (same data, linked folders) so that the mod loads. [b]MSCLoader[/b] (experimental): works alongside MWCoop since 0.31.3; the launcher's MODS tab installs it, turns it on or off, lists your mods and edits their options. Since 0.36 the host's MSCLoader mods (marked "Send") are copied to the lobby's guests after one ACCEPT ALL, kept apart from their own mods. Since 0.37 also the host's CDs, radio, CORRIS paint, garage flag, posters and more (a checklist in the launcher).
+Everybody in a party must run the [b]same version[/b]. From a Steam install, the launcher starts the game from a copy in %LOCALAPPDATA%\MWCoop\My Winter Car (same data, linked folders) so that the mod loads.
 
 [size=4][b]Known issues[/b][/size]
 [list]
 [*]Items held in the hand are carried at their real place, not glued to the avatar's hand.
 [*]A guest who joins after a restaurant order does not see the trays already on the counter.
-[*]Some NPC reactions (fights, services) are only checked between test instances so far.
+[*]Steam games between two different accounts and popular MSCLoader mods are still being tested: tell us what you find.
 [/list]
-[b]Antivirus warning[/b]: a few engines sometimes flag [b]MWCoop.exe[/b] (Windows Defender "Wacatac.B!ml", CrowdStrike, DeepInstinct). These are machine-learning guesses, not a known virus: the launcher is new, unsigned, and downloads the mod's updates from GitHub, so it "looks like" a downloader. Most engines (about 67 of 71 on VirusTotal) find nothing. Everything is open source; every release on GitHub comes with a SHA256SUMS file to check your files. Since 0.26.2 the launcher no longer starts any hidden helper (no tar.exe, no cmd.exe). If Defender quarantines it: Windows Security > Virus & threat protection > Protection history > Allow.
+[b]Antivirus warning[/b]: a few engines sometimes flag [b]MWCoop.exe[/b] (Windows Defender "Wacatac.B!ml", CrowdStrike, DeepInstinct). These are machine-learning guesses, not a known virus: the launcher is new, unsigned, and downloads the mod's updates from GitHub, so it "looks like" a downloader. Most engines (about 67 of 71 on VirusTotal) find nothing. Everything is open source; every release on GitHub comes with a SHA256SUMS file to check your files. The launcher starts no hidden helper (no tar.exe, no cmd.exe). If Defender quarantines it: Windows Security > Virus & threat protection > Protection history > Allow.
 
 Source code, documentation and releases: [url=https://github.com/Parricidium/MWCoop]github.com/Parricidium/MWCoop[/url]. Made with Claude (Anthropic), directed and tested by a human. My Winter Car belongs to Amistech Games; this project is not affiliated with them.
 If you enjoy it: [url=https://ko-fi.com/parricidium]Ko-fi[/url] ❤️
