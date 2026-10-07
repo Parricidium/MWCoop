@@ -162,7 +162,7 @@ static bool SteamUp()
     if (g_gameDir.empty()) { g_steamWhy = T(L"My Winter Car introuvable", L"My Winter Car not found"); return false; }
     if (!sapi::dll) {
         std::wstring p = g_gameDir + L"steam_api64.dll";
-        sapi::dll = LoadLibraryExW(p.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+        sapi::dll = LoadLibraryExW(p.c_str(), NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);   // (chemin complet ; ses dependances : son dossier, System32)
         if (!sapi::dll) {
             g_steamWhy = T(L"steam_api64.dll introuvable dans le dossier du jeu", L"steam_api64.dll not found in the game folder");
             TestLog("steam : %s introuvable (erreur %lu)", Narrow(p, CP_UTF8).c_str(), GetLastError());
@@ -219,10 +219,14 @@ static void SteamDown()
     TestLog("steam : arrete");
 }
 
+// Canaux pair-a-pair des mods : 5. Essai avec un seul compte Steam (/testsalon ... /steam : hote et invite ont le meme
+// SteamID, un paquet vers soi-meme arrive au premier qui lit) : l'hote lit le 5 et repond sur le 6, l'invite lit le 6.
+static int P2PRecvChannel() { return !g_testSteamFile.empty() && g_lobby != LB_HOST ? 6 : 5; }
+static int P2PSendChannel() { return !g_testSteamFile.empty() && g_lobby == LB_HOST ? 6 : 5; }
 static void SteamSendP2P(SteamId to, const std::string &d)
 {
     if (g_steamUp != 1 || !sapi::nw || !to || d.empty()) return;
-    if (!sapi::SendP2PPacket(sapi::nw, to, d.data(), (uint32_t)d.size(), 2 /* fiable */, 5 /* kSyncChannel */)) TestLog("steam : envoi pair-a-pair impossible (%u octets)", (unsigned)d.size());
+    if (!sapi::SendP2PPacket(sapi::nw, to, d.data(), (uint32_t)d.size(), 2 /* fiable */, P2PSendChannel())) TestLog("steam : envoi pair-a-pair impossible (%u octets)", (unsigned)d.size());
 }
 
 static void SteamAvFree() { for (auto &a : g_steamAv) delete a.second; g_steamAv.clear(); }

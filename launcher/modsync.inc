@@ -848,11 +848,12 @@ static void SyncSteamTick()
         for (int i = 0; i < n && i < 32; i++) { SteamId u = sapi::GetLobbyMemberByIndex(sapi::mm, g_sLobby, i); if (u && u != g_steamMe) sapi::AcceptP2PSessionWithUser(sapi::nw, u); }
     }
     uint32_t size = 0;
-    for (int k = 0; k < 64 && sapi::IsP2PPacketAvailable(sapi::nw, &size, kSyncChannel); k++) {
+    int ch = P2PRecvChannel();
+    for (int k = 0; k < 64 && sapi::IsP2PPacketAvailable(sapi::nw, &size, ch); k++) {
         std::string m(size, '\0');
         uint32_t got = 0;
         SteamId from = 0;
-        if (!sapi::ReadP2PPacket(sapi::nw, size ? &m[0] : NULL, size, &got, &from, kSyncChannel)) break;
+        if (!sapi::ReadP2PPacket(sapi::nw, size ? &m[0] : NULL, size, &got, &from, ch)) break;
         m.resize(got);
         if (m.empty()) continue;
         int t = (uint8_t)m[0];

@@ -63,6 +63,7 @@ namespace MWCoop
                 catch (System.Exception e) { Log.Error("vidage : " + e); }
             }
             Step("session", Session.Update);
+            Step("api", CoopApi.Update);
             Step("sauvegarde en jeu", Game.Update);
             Step("menu", Menu.Update);
             Step("mscloader", MscMods.Update);

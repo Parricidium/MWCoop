@@ -5424,6 +5424,12 @@ static Bitmap *LoadPngRes(int id)
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 {
+    // DLL de Windows seulement depuis System32 : le lanceur est pose dans le dossier du jeu, ou MSCLoader met son
+    // winhttp.dll (UnityDoorstop) et MWCoop son version.dll. Charges par erreur dans le lanceur, ils y restaient
+    // verrouilles (une reinstallation de MSCLoader echouait). winhttp et winmm sont charges a la demande (/DELAYLOAD),
+    // donc apres ceci.
+    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
+    SetDllDirectoryW(L"");
     InitializeCriticalSection(&g_cs);
     InitializeCriticalSection(&g_lcs);
     WSADATA wsa;
@@ -5542,7 +5548,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         SetGame(IsGameDir(d) ? d : L"");
         if (!g_gameDir.empty()) { g_busy = true; UpdateThread(NULL); }
         FILE *f = _wfopen(argv[3], L"w, ccs=UTF-8");
-        if (f) { fwprintf(f, L"jeu=%s mod=%d local=%s releases=%d\n%s\n", g_gameDir.c_str(), (int)g_modOk, g_localVer.c_str(), (int)g_relState, g_status.c_str()); fclose(f); }
+        wchar_t wh[MAX_PATH] = L"(pas charge)";
+        if (HMODULE m = GetModuleHandleW(L"winhttp.dll")) GetModuleFileNameW(m, wh, MAX_PATH);
+        if (f) { fwprintf(f, L"jeu=%s mod=%d local=%s releases=%d winhttp=%s\n%s\n", g_gameDir.c_str(), (int)g_modOk, g_localVer.c_str(), (int)g_relState, wh, g_status.c_str()); fclose(f); }
         delete g_bg; delete g_bgDark; delete g_bgCache; SkinsFree();
         GdiplusShutdown(gtok);
         return 0;
