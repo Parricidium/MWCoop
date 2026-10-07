@@ -33,6 +33,8 @@ enum {
     UI_SET_AUTO = 220, UI_SET_CHECK, UI_SET_DARK, UI_SET_LIGHT, UI_SET_FR, UI_SET_EN, UI_SET_CLOSE, UI_SET_GUIDE,
     UI_SET_STEAM, UI_SET_IP, UI_SET_PORTM, UI_SET_PORTP, UI_SET_FOLDER, UI_SET_BUY, UI_SET_MODSAUTO,
     UI_API_DOC = 240, UI_API_SRC, UI_API_DIR, UI_API_COPY, UI_API_EX0, UI_API_EX1,
+    UI_GFX_PRESET = 2590,         // + prereglage
+    UI_GFX = 2600,                // + ligne * 3 + (0 ligne, 1 fleche gauche, 2 fleche droite)
     UI_NOTE = 300,                // + i : version i de la liste
     UI_NOTE_UPDATE = 290,
     UI_LOOKPIN = 400,             // + zone (0 tete, 1 torse, 2 jambes, 3 silhouette)
@@ -43,7 +45,7 @@ enum {
 // ---- icones (traits, dans une boite de 24, comme celles de la maquette)
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
-       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES };
+       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -139,6 +141,13 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
         break;
     }
     case IC_CODE: poly({ 8, 8, 4, 12, 8, 16 }, false); poly({ 16, 8, 20, 12, 16, 16 }, false); break;
+    case IC_SLIDERS: {   // trois curseurs : les graphismes
+        line(4, 7, 20, 7); line(4, 12, 20, 12); line(4, 17, 20, 17);
+        SolidBrush kb(c);
+        const float kx[3] = { 15, 8, 13 }, ky[3] = { 7, 12, 17 };
+        for (int i = 0; i < 3; i++) g.FillEllipse(&kb, cx + (kx[i] - 12 - 2.6f) * k, cy + (ky[i] - 12 - 2.6f) * k, 5.2f * k, 5.2f * k);
+        break;
+    }
     case IC_BRACES: {   // { } : l'API
         GraphicsPath p1; bez(p1, 9, 4, 6, 4, 7, 6, 7, 9); bez(p1, 7, 9, 7, 11, 6, 12, 4, 12); g.DrawPath(&pen, &p1);
         GraphicsPath p2; bez(p2, 4, 12, 6, 12, 7, 13, 7, 15); bez(p2, 7, 15, 7, 18, 6, 20, 9, 20); g.DrawPath(&pen, &p2);

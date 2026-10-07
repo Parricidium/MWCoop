@@ -322,6 +322,7 @@ static void GoPage(int p)
     if (p == TAB_LOGS) { LogsScan(); CrashSeen(); }
     if (p == TAB_MODS || p == TAB_CONTENT) MscScan();
     if (p == TAB_SKIN) g_skinIdleT = GetTickCount();
+    if (p == TAB_GFX) GfxLoad();
 }
 static void PageCancel()
 {
@@ -343,10 +344,11 @@ static const NavItem kNav[] = {
     { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" },
     { TAB_SKIN, IC_SHIRT, L"Tenue", L"Outfit" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" },
     { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
-    { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" } };
+    { TAB_GFX, IC_SLIDERS, L"Graphismes", L"Graphics" }, { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" } };
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
-static const int kNavGroupN[] = { 2, 2, 2, 1 };   // pages de chaque groupe, dans l'ordre de kNav
-static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"INFO" };
+static const int kNavGroupN[] = { 2, 2, 2, 1, 1 };   // pages de chaque groupe, dans l'ordre de kNav
+static const int kNavGroups = 5;
+static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"JEU", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"GAME", L"INFO" };
 static Bitmap *g_logo;
 static int MscModCount();   // (mods.inc)
 static RectF g_navR[TAB_COUNT];   // (bulles de la visite)
@@ -422,9 +424,9 @@ static void DrawRail(Graphics &g)
     // groupes jusqu'a Reglages (674) : lignes de 44 px, ou de 40 quand le bouton de mise a jour prend de la place
     const int nItems = (int)(sizeof(kNav) / sizeof(kNav[0]));
     float avail = 666 - y0, lab = 26, step = 46;
-    if (avail - 4 * lab - nItems * step < 6) { lab = 24; step = 42; }
-    float gap = min(20.0f, max(0.0f, (avail - 4 * lab - nItems * step) / 3)), y = y0;
-    for (int k = 0, i = 0; k < 4; k++) {
+    if (avail - kNavGroups * lab - nItems * step < 6) { lab = 24; step = 42; }
+    float gap = min(20.0f, max(0.0f, (avail - kNavGroups * lab - nItems * step) / (kNavGroups - 1))), y = y0;
+    for (int k = 0, i = 0; k < kNavGroups; k++) {
         SmallLabel(g, g_fr ? kNavGroupFr[k] : kNavGroupEn[k], RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
         y += lab;
         for (int j = 0; j < kNavGroupN[k]; j++, i++) {
@@ -501,6 +503,7 @@ static void DrawHeader(Graphics &g)
     case TAB_NOTES: title = T(L"Nouveautés", L"What's new"); sub = T(L"Ce qui change à chaque version", L"What changes in each version"); break;
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: title = T(L"Réglages", L"Settings"); sub = T(L"Gardés dans mwcoop-lanceur.ini et MWCoop\\mwcoop.ini", L"Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini"); break;
+    case TAB_GFX: title = T(L"Graphismes", L"Graphics"); sub = T(L"Ton affichage à toi : les autres joueurs ne voient aucune différence", L"Your own display: the other players see no difference"); break;
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     }
     // commandes de droite : fermer, reduire, theme, langue, puis celles de la page
@@ -1160,6 +1163,7 @@ static void DrawUI(Graphics &g)
     case TAB_LOGS: DrawLogsPage(g); break;
     case TAB_COOP: DrawSettings(g); break;
     case TAB_API: DrawApiPage(g); break;
+    case TAB_GFX: DrawGfxPage(g); break;
     default: DrawHome(g); break;
     }
     DrawHeader(g);
@@ -1220,5 +1224,6 @@ static bool UiClick(int id)
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
+    if (id >= UI_GFX_PRESET && GfxClick(id)) return true;
     return false;
 }

@@ -17,7 +17,7 @@ namespace MWCoop
         static readonly List<string> skinLabels = new List<string>();
         static readonly List<Behaviour> blocked = new List<Behaviour>();
         static bool focusChat, testDone;
-        static readonly string[] tabsFr = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO" }, tabsEn = { "PLAYERS", "APPEARANCE", "CHAT", "SYNC" };
+        static readonly string[] tabsFr = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO", "GRAPHISMES" }, tabsEn = { "PLAYERS", "APPEARANCE", "CHAT", "SYNC", "GRAPHICS" };
         static string[] tabs { get { return Lang.Fr ? tabsFr : tabsEn; } }
         const int TabChat = 2;
         const string ChatField = "mwcoop-chat2";
@@ -211,7 +211,8 @@ namespace MWCoop
             if (tab == 0) Players();
             else if (tab == 1) Skins();
             else if (tab == TabChat) ChatTab();
-            else SyncTab();
+            else if (tab == 3) SyncTab();
+            else GfxTab();
             GUI.EndGroup();
             contentH = cy;
             items = idx;
@@ -643,6 +644,35 @@ namespace MWCoop
             foreach (string l in Audit.Desyncs) Item(l, null, false, null, true);
             Header(Lang.T("VOS ACTIONS QUI NE PARTENT PAS CHEZ LES AUTRES", "YOUR ACTIONS NOT SHARED WITH THE OTHERS"));
             foreach (string l in Audit.Unshared) Item(l, null, false, null, true);
+        }
+
+        // Graphismes (comme la page du lanceur) : prereglage, puis chaque option ; applique tout de suite, garde dans mwcoop.ini.
+        static void GfxTab()
+        {
+            Para(Lang.T("Pour vous seul : les autres joueurs ne voient aucune diff\u00E9rence. Gard\u00E9 pour les prochaines parties (aussi dans le lanceur).",
+                        "Just for you: the other players see no difference. Kept for your next games (also in the launcher)."), Style.Dim);
+            int on = Gfx.PresetOn();
+            int d = Item(Lang.T("Pr\u00E9r\u00E9glage", "Preset"), on >= 0 ? (Lang.Fr ? Gfx.Presets[on].Fr : Gfx.Presets[on].En) : Lang.T("Personnalis\u00E9", "Custom"), true,
+                         Lang.T("Gauche/Droite : Performance, \u00C9quilibr\u00E9, Beau, Ultra", "Left/Right: Performance, Balanced, Pretty, Ultra"), false);
+            if (d == -1 || d == 1) Gfx.ApplyPreset(on < 0 ? (d > 0 ? 0 : Gfx.Presets.Length - 1) : Mathf.Clamp(on + d, 0, Gfx.Presets.Length - 1));
+            string[] heads = { Lang.T("IMAGE", "IMAGE"), Lang.T("OMBRES", "SHADOWS"), Lang.T("DISTANCE ET D\u00C9TAILS", "DISTANCE AND DETAIL"), Lang.T("JEU ET CONFORT", "GAME AND COMFORT") };
+            for (int g = 0; g < 4; g++)
+            {
+                Header(heads[g]);
+                foreach (Gfx.Row r in Gfx.Rows)
+                {
+                    if (r.Group != g) continue;
+                    int v = Gfx.Value(r);
+                    string val;
+                    int k = 0;
+                    if (r.Vals == null) val = v == 1 ? Lang.T("Oui", "On") : Lang.T("Non", "Off");
+                    else { for (int i = 0; i < r.Vals.Length; i++) if (r.Vals[i] == v) k = i; val = Lang.Fr ? r.Lf[k] : r.Le[k]; }
+                    int res = Item(Lang.Fr ? r.Fr : r.En, val, true, r.Heavy ? Lang.T("Lourd pour les images par seconde", "Heavy on the frame rate") : null, false);
+                    if (res != -1 && res != 1) continue;
+                    if (r.Vals == null) Gfx.Set(r.Key, v == 1 ? 0 : 1);
+                    else { int nk = Mathf.Clamp(k + res, 0, r.Vals.Length - 1); if (nk != k) Gfx.Set(r.Key, r.Vals[nk]); }
+                }
+            }
         }
 
         static void ChatTab()

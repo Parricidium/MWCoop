@@ -108,6 +108,7 @@ namespace MWCoop
             Step("courses", Races.Update);
             Step("portes poussees", PushDoors.Update);
             Step("molettes", Knobs.Update);
+            Step("graphismes", Gfx.Update);
             Step("rallye", Rally.Update);
             Step("couleur", CarColor.Update);
             Step("tenues", Studio.Update);
@@ -181,6 +182,7 @@ namespace MWCoop
             Races.OnLevelLoaded();
             PushDoors.OnLevelLoaded();
             Knobs.OnLevelLoaded();
+            Gfx.OnLevelLoaded();
             Rally.OnLevelLoaded();
             CarColor.OnLevelLoaded();
             Studio.OnLevelLoaded();

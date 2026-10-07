@@ -1,4 +1,4 @@
-using HutongGames.PlayMaker;
+﻿using HutongGames.PlayMaker;
 using UnityEngine;
 
 namespace MWCoop
@@ -127,6 +127,26 @@ namespace MWCoop
                     if (b.angularVelocity.magnitude > maxRot) { maxRot = b.angularVelocity.magnitude; if (maxRot > 1f) Log.Info("autotest : rotation max " + maxRot.ToString("F2") + " rad/s"); }
                     if (b.velocity.y > maxUp) { maxUp = b.velocity.y; Log.Info("autotest : vitesse verticale max " + maxUp.ToString("F2") + " m/s, rotation " + b.angularVelocity.magnitude.ToString("F2") + " rad/s en " + b.position.ToString("F1")); }
                 }
+            }
+            // [Test] Autotest=graphismes : etat des reglages a 25 s (journal).
+            if (mode == "graphismes" && t > 25f && step == 0) { step = 1; Log.Info("autotest : graphismes " + Gfx.Describe()); }
+            if (mode == "graphismes" && t > 28f && step == 1) { step = 2; Gfx.ApplyPreset(Config.GetInt("Test", "TestPrereglage", 3)); }
+            if (mode == "graphismes" && t > 32f && step == 2) { step = 3; Log.Info("autotest : graphismes apres prereglage " + Gfx.Describe()); }
+            if (mode == "sondegfx" && t > 20f && !done)
+            {
+                done = true;
+                var sb = new System.Text.StringBuilder("autotest : graphismes : qualite " + QualitySettings.GetQualityLevel() + "/" + string.Join(",", QualitySettings.names));
+                sb.Append(", ombres ").Append(QualitySettings.shadowDistance).Append(" m cascades ").Append(QualitySettings.shadowCascades).Append(" projection ").Append(QualitySettings.shadowProjection);
+                sb.Append(", lodBias ").Append(QualitySettings.lodBias).Append(" maxLOD ").Append(QualitySettings.maximumLODLevel).Append(", textures ").Append(QualitySettings.masterTextureLimit);
+                sb.Append(", aniso ").Append(QualitySettings.anisotropicFiltering).Append(", lumieres ").Append(QualitySettings.pixelLightCount).Append(", msaa ").Append(QualitySettings.antiAliasing);
+                sb.Append(", vsync ").Append(QualitySettings.vSyncCount).Append(", images max ").Append(Application.targetFrameRate).Append(", particules douces ").Append(QualitySettings.softVegetation);
+                Camera c = Camera.main;
+                if (c != null) sb.Append(", camera ").Append(c.name).Append(" ").Append(c.renderingPath).Append(" hdr ").Append(c.hdr).Append(" loin ").Append(c.farClipPlane).Append(" fov ").Append(c.fieldOfView);
+                Terrain[] ts = Object.FindObjectsOfType<Terrain>();
+                sb.Append(", terrains ").Append(ts.Length);
+                foreach (Terrain tr in ts) sb.Append(" [").Append(tr.name).Append(" herbe ").Append(tr.detailObjectDistance).Append("/").Append(tr.detailObjectDensity).Append(" arbres ").Append(tr.treeDistance).Append(" erreur ").Append(tr.heightmapPixelError).Append("]");
+                foreach (Light l in Object.FindObjectsOfType<Light>()) if (l.type == LightType.Directional) sb.Append(", lumiere ").Append(l.name).Append(" ombres ").Append(l.shadows).Append(" force ").Append(l.shadowStrength);
+                Log.Info(sb.ToString());
             }
             if (mode == "cabine")
             {
