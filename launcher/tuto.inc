@@ -20,18 +20,18 @@ static const TutoStep kTuto[] = {
       L"JOIN", L"Enters a friend's lobby (through Steam: their invite, or their lobby found by itself; by IP: their address just above).", "0.42.0" },
     { L"JOUER EN SOLO", L"Le jeu normal, avec MWCoop chargé mais sans réseau. Ta sauvegarde n'est jamais touchée par les parties des autres.",
       L"PLAY SOLO", L"The regular game, with MWCoop loaded but no network. Your save is never touched by other people's games.", "0.42.0" },
-    { L"Toutes les pages, à gauche", L"Le salon, ton personnage, ce que tu partages, les nouveautés et les journaux : un clic, sans fenêtre qui s'ouvre par-dessus.",
-      L"Every page, on the left", L"The lobby, your character, what you share, the updates and the logs: one click, no window popping over.", "0.42.0" },
+    { L"Toutes les pages, à gauche", L"Le salon, ton personnage, ce que tu partages et les nouveautés : un clic, sans fenêtre qui s'ouvre par-dessus.",
+      L"Every page, on the left", L"The lobby, your character, what you share and the updates: one click, no window popping over.", "0.42.0" },
     { L"Tenue et voiture", L"Ton apparence complète (corps, chapeau, lunettes, cheveux, visage, haut, pantalon) en 3D, et la couleur de ta CORRIS.",
       L"Outfit and car", L"Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your CORRIS color.", "0.42.0" },
     { L"Contenu et mods", L"Ce que tu envoies à tes invités : CD, peinture, drapeau, posters… et tes mods MSCLoader (expérimental), copiés à part chez eux.",
       L"Content and mods", L"What you send to your guests: CDs, paint, flag, posters… and your MSCLoader mods (experimental), copied apart on their side.", "0.42.0" },
     { L"Nouveautés", L"Ce qui change à chaque version. Quand une nouvelle version sort, un bouton « Mettre à jour » apparaît sous le logo : la mise à jour se fait quand tu cliques.",
       L"What's new", L"What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.", "0.42.0" },
-    { L"Journaux", L"En cas de souci, crée ici un zip à envoyer. Un « ! » rouge s'y affiche si la dernière partie s'est arrêtée brutalement.",
-      L"Logs", L"If something goes wrong, make a zip to send from here. A red \"!\" shows on it if the last game stopped abruptly.", "0.42.0" },
-    { L"API moddeurs", L"Tu fais des mods ? Ce que l'API de MWCoop permet, un exemple à copier, la DLL et la documentation sur GitHub.",
-      L"Modding API", L"Making mods? What MWCoop's API does, an example to copy, the DLL and the documentation on GitHub.", "0.44.0" },
+    { L"Journaux", L"Maintenant ici, en haut. En cas de souci, crée un zip à envoyer. Un « ! » rouge s'y affiche si la dernière partie s'est arrêtée brutalement.",
+      L"Logs", L"Now up here. If something goes wrong, make a zip to send. A red \"!\" shows on it if the last game stopped abruptly.", "0.46.0" },
+    { L"API moddeurs", L"Aussi en haut maintenant. Tu fais des mods ? Ce que l'API de MWCoop permet, un exemple à copier, la DLL et la doc sur GitHub.",
+      L"Modding API", L"Also up here now. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.", "0.46.0" },
     { L"Réglages", L"Mise à jour, thème, langue, port, dossier du jeu, envoi de l'hôte chez un ami… et ce guide.",
       L"Settings", L"Updates, theme, language, port, game folder, a host's files at a friend's… and this guide.", "0.42.0" },
     { L"Thème et langue", L"Sombre ou clair, français ou anglais, d'un clic.", L"Theme and language", L"Dark or light, French or English, in one click.", "0.42.0" },
@@ -50,7 +50,7 @@ static RectF TutoTarget(int i)
     case 3: return g_btn[B_HOST].r;
     case 4: return g_btn[B_JOIN].r;
     case 5: return g_btn[B_SOLO].r;
-    case 6: return join(g_navR[TAB_HOME], g_navR[TAB_API]);
+    case 6: return join(g_navR[TAB_HOME], g_navR[TAB_NOTES]);
     case 7: return join(g_navR[TAB_SKIN], g_navR[TAB_CAR]);
     case 8: return join(g_navR[TAB_CONTENT], g_navR[TAB_MODS]);
     case 9: return g_navR[TAB_NOTES];
