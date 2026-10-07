@@ -223,6 +223,21 @@ namespace MWCoop
                 }
                 if ((t > 30f && step == 2) || (t > 40f && step == 3)) { step++; Log.Info("autotest : lumieres " + Lights.Describe()); }
             }
+            // [Test] Autotest=racines : a 40 s, racines de la scene (actives ou non) et les corps a CarDynamics (actifs ou non).
+            if (mode == "racines" && t > 40f && !done)
+            {
+                done = true;
+                var sb = new System.Text.StringBuilder("autotest : racines :");
+                foreach (GameObject r in Recon.SceneRoots()) sb.Append(' ').Append(r.activeSelf ? "" : "[off]").Append(r.name);
+                sb.Append(" ; voitures :");
+                foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Rigidbody)))
+                {
+                    var rb = (Rigidbody)o;
+                    if (rb.hideFlags != HideFlags.None || rb.GetComponent("CarDynamics") == null) continue;
+                    sb.Append(' ').Append(Recon.Path(rb.transform)).Append(rb.gameObject.activeInHierarchy ? "" : "[off]").Append(rb.GetComponent<AxisCarController>() != null ? "(axis)" : "");
+                }
+                Log.Info(sb.ToString());
+            }
             if (mode == "sondegfx" && t > 20f && !done)
             {
                 done = true;
@@ -245,6 +260,7 @@ namespace MWCoop
                 // de 27 a 40 s ; starter tire (1,8) a 30 s, frein a main relache (0) a 32 s. Invite : a 36 s et 44 s, ce qu'il
                 // voit (valeurs des commandes tenues, ceinture du conducteur, mains au volant, portieres figees).
                 string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                t -= Config.GetInt("Test", "CabineDecalage", 0);   // (voiture d'un mod : apparait plus tard)
                 if (Net.Session.IsHost)
                 {
                     if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }

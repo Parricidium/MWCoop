@@ -10,7 +10,7 @@ struct GfxRow
     std::vector<int> vals;                     // vide : interrupteur 0/1
     std::vector<const wchar_t *> lf, le;       // noms des valeurs (vals)
     int impact;                                // sur les images par seconde : 0 aucun, 1 leger, 2 moyen, 3 fort
-    int group;                                 // 0 Image, 1 Ombres, 2 Distance et details, 3 Jeu et confort, 4 Lumieres
+    int group;                                 // 0 Image, 1 Ombres, 2 Distance et details, 3 Jeu et confort, 4 Lumieres, 5 Ecran
 };
 static const std::vector<GfxRow> &GfxRows()
 {
@@ -51,6 +51,28 @@ static const std::vector<GfxRow> &GfxRows()
         { "PoussiereTrafic", L"Poussière de la circulation", L"Traffic dust", 1, {}, {}, {}, 1, 3 },
         { "TracesTrafic", L"Traces de pneus de la circulation", L"Traffic skid marks", 0, {}, {}, {}, 1, 3 },
     };
+    // Ecran (comme les GTA, a la place de la petite fenetre Unity) : resolutions de l'ecran principal (Windows),
+    // mode d'affichage, niveau de qualite du moteur. Appliques par le mod au demarrage du jeu (MWCoop\Gfx.cs).
+    static std::vector<std::wstring> resLabels;
+    std::vector<int> rv = { -1 };
+    std::vector<std::pair<int, int>> modes;
+    DEVMODEW dm = { sizeof(dm) };
+    for (DWORD i = 0; EnumDisplaySettingsW(NULL, i, &dm); i++)
+        if (dm.dmPelsWidth >= 800 && dm.dmPelsHeight >= 600) {
+            std::pair<int, int> m((int)dm.dmPelsWidth, (int)dm.dmPelsHeight);
+            if (std::find(modes.begin(), modes.end(), m) == modes.end()) modes.push_back(m);
+        }
+    std::sort(modes.begin(), modes.end());
+    resLabels.clear();
+    resLabels.reserve(modes.size() + 1);
+    for (auto &m : modes) { rv.push_back(m.first * 10000 + m.second); resLabels.push_back(std::to_wstring(m.first) + L" × " + std::to_wstring(m.second)); }
+    GfxRow res = { "Resolution", L"Résolution", L"Resolution", -1, rv, { L"Jeu" }, { L"Game" }, 0, 5 };
+    for (auto &l : resLabels) { res.lf.push_back(l.c_str()); res.le.push_back(l.c_str()); }
+    rows.insert(rows.begin(), {
+        res,
+        { "ModeEcran", L"Affichage", L"Display mode", -1, { -1, 0, 1, 2 }, { L"Jeu", L"Fenêtré", L"Plein écran", L"Sans bordure" }, { L"Game", L"Windowed", L"Fullscreen", L"Borderless" }, 0, 5 },
+        { "QualiteUnity", L"Qualité du moteur", L"Engine quality", -1, { -1, 0, 1, 3, 5 }, { L"Jeu", L"Basse", L"Moyenne", L"Bonne", L"Golden Eye" }, { L"Game", L"Low", L"Medium", L"Good", L"Golden Eye" }, 3, 5 },
+    });
     return rows;
 }
 
@@ -197,11 +219,11 @@ static void DrawGfxPage(Graphics &g)
     DrawGfxGroup(g, 1, L"OMBRES", L"SHADOWS", kGfxLeft.X + 24, y, kGfxLeft.Width - 48);
     DrawGfxGroup(g, 4, L"LUMIÈRES", L"LIGHTS", kGfxLeft.X + 24, y, kGfxLeft.Width - 48);
     y = kGfxRight.Y + 10;
+    DrawGfxGroup(g, 5, L"ÉCRAN", L"SCREEN", kGfxRight.X + 24, y, kGfxRight.Width - 48);
     DrawGfxGroup(g, 2, L"DISTANCE ET DÉTAILS", L"DISTANCE AND DETAIL", kGfxRight.X + 24, y, kGfxRight.Width - 48);
     DrawGfxGroup(g, 3, L"JEU ET CONFORT", L"GAME AND COMFORT", kGfxRight.X + 24, y, kGfxRight.Width - 48);
-    Para(g, T(L"Pour toi seul : les autres joueurs ne voient aucune différence. Appliqué au lancement du jeu ; en partie, menu F10 > Graphismes.",
-              L"Just for you: the other players see no difference. Applied when the game starts; in game, F10 menu > Graphics."),
-         RectF(kGfxRight.X + 24, kGfxRight.Y + kGfxRight.Height - 56, kGfxRight.Width - 48, 40), 12, kGrey);
+    Text(g, T(L"Pour toi seul · appliqué au lancement du jeu · en partie : menu F10 > Graphismes", L"Just for you · applied when the game starts · in game: F10 menu > Graphics"),
+         RectF(kGfxRight.X + 24, kGfxRight.Y + kGfxRight.Height - 32, kGfxRight.Width - 48, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
 }
 
 static bool GfxClick(int id)
