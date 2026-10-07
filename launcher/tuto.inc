@@ -30,6 +30,8 @@ static const TutoStep kTuto[] = {
       L"What's new", L"What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.", "0.42.0" },
     { L"Journaux", L"En cas de souci, crée ici un zip à envoyer. Un « ! » rouge s'y affiche si la dernière partie s'est arrêtée brutalement.",
       L"Logs", L"If something goes wrong, make a zip to send from here. A red \"!\" shows on it if the last game stopped abruptly.", "0.42.0" },
+    { L"API moddeurs", L"Tu fais des mods ? Ce que l'API de MWCoop permet, un exemple à copier, la DLL et la documentation sur GitHub.",
+      L"Modding API", L"Making mods? What MWCoop's API does, an example to copy, the DLL and the documentation on GitHub.", "0.44.0" },
     { L"Réglages", L"Mise à jour, thème, langue, port, dossier du jeu, envoi de l'hôte chez un ami… et ce guide.",
       L"Settings", L"Updates, theme, language, port, game folder, a host's files at a friend's… and this guide.", "0.42.0" },
     { L"Thème et langue", L"Sombre ou clair, français ou anglais, d'un clic.", L"Theme and language", L"Dark or light, French or English, in one click.", "0.42.0" },
@@ -48,13 +50,14 @@ static RectF TutoTarget(int i)
     case 3: return g_btn[B_HOST].r;
     case 4: return g_btn[B_JOIN].r;
     case 5: return g_btn[B_SOLO].r;
-    case 6: return join(g_navR[TAB_HOME], g_navR[TAB_LOGS]);
+    case 6: return join(g_navR[TAB_HOME], g_navR[TAB_API]);
     case 7: return join(g_navR[TAB_SKIN], g_navR[TAB_CAR]);
     case 8: return join(g_navR[TAB_CONTENT], g_navR[TAB_MODS]);
     case 9: return g_navR[TAB_NOTES];
     case 10: return g_navR[TAB_LOGS];
-    case 11: return g_navR[TAB_COOP];
-    case 12: return join(g_btn[B_LANG].r, g_btn[B_THEME].r);
+    case 11: return g_navR[TAB_API];
+    case 12: return g_navR[TAB_COOP];
+    case 13: return join(g_btn[B_LANG].r, g_btn[B_THEME].r);
     }
     return RectF(0, 0, 0, 0);
 }
