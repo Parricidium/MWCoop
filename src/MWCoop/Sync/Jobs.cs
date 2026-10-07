@@ -230,6 +230,9 @@ namespace MWCoop
                     if (!vehicle && UnderJobCar(f.transform)) continue;   // taxi : vu comme vehicule
                     if (reserved.Contains(f)) continue;                   // bois, fosses, fendeuse (meme attelee)
                     if (f.FsmName == "Use" && f.gameObject.name == "FeedLog") { ReserveFeed(f); continue; }   // (fendeuse deja attelee au 1er releve)
+                    // Ceintures du conducteur : l'etat de CHAQUE joueur (PlayerSeatbeltsOn), jamais rejoue (Seats montre
+                    // celle du conducteur distant) ; commandes tenues (starter, frein a main) : Knobs.
+                    if (vehicle && !classified.ContainsKey(f) && (Seats.IsBeltFsm(f) || Knobs.Adopt(f, Recon.Path(f.transform) + "::" + f.FsmName))) { classified[f] = new Classified(); continue; }
                     // Tri fait une fois par automate (le releve revient toutes les 30 s sans tout refaire).
                     Classified c;
                     if (!classified.TryGetValue(f, out c))

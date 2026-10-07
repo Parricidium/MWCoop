@@ -128,6 +128,33 @@ namespace MWCoop
                     if (b.velocity.y > maxUp) { maxUp = b.velocity.y; Log.Info("autotest : vitesse verticale max " + maxUp.ToString("F2") + " m/s, rotation " + b.angularVelocity.magnitude.ToString("F2") + " rad/s en " + b.position.ToString("F1")); }
                 }
             }
+            if (mode == "cabine")
+            {
+                // Hote : au volant de [Test] TestVoiture (SORBET) a 15 s, ceinture bouclee a 24 s (variable du jeu), roule
+                // de 27 a 40 s ; starter tire (1,8) a 30 s, frein a main relache (0) a 32 s. Invite : a 36 s et 44 s, ce qu'il
+                // voit (valeurs des commandes tenues, ceinture du conducteur, mains au volant, portieres figees).
+                string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                if (Net.Session.IsHost)
+                {
+                    if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                    if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                    if (t > 24f && step == 2) { step = 3; Game.SetGlobalBool("PlayerSeatbeltsOn", true); Log.Info("autotest : ceinture bouclee (variable)"); }
+                    Rigidbody b = VehicleSync.Body(car);
+                    VehicleSync.TestEngine(t > 26f && t < 41f ? 1800f : -1f, 0.4f);
+                    if (b != null && t > 27f && t < 40f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 6f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                    if (t > 30f && step == 3) { step = 4; Log.Info("autotest : starter " + Knobs.TestHold("Choke", 1.8f)); }
+                    if (t > 32f && step == 4) { step = 5; Log.Info("autotest : frein a main " + Knobs.TestHold("HandBrake", 0f)); }
+                    if (t > 36f && step == 5) { step = 6; Log.Info("autotest : commandes " + Knobs.Describe()); }
+                }
+                else if ((t > 36f && step == 0) || (t > 44f && step == 1))
+                {
+                    step++;
+                    Log.Info("autotest : commandes " + Knobs.Describe());
+                    Log.Info("autotest : ceintures " + Seats.BeltState());
+                    foreach (Avatar a in PlayerSync.Avatars) Log.Info("autotest : mains " + a.HandsState());
+                    Log.Info("autotest : hayon " + CarDoors.StateOf(car, "Hatch"));
+                }
+            }
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
             // Captures : Regarder=1, la camera vise l'avatar le plus proche ; Regarder=2, le milieu du groupe d'avatars

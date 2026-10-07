@@ -41,6 +41,7 @@ namespace MWCoop
             public bool Police;              // voiture de police d'un barrage (Police.cs)
             // Invite : roues qui tournent et pose au sol (la copie cinematique n'a plus ses Wheel actives).
             public Wheel[] Wheels; public float[] WheelRot; public float Steer, Ride; public Vector3 Base; public bool BaseSet;
+            public Transform[] WheelVis; public float[] WheelR;   // roue visible (Wheel.model, sinon son enfant Wheel/Tire/tire) et rayon
             public float LastYaw;
             // Choc avec un invite (passage de physique) : Owner = joueur qui en a la physique (-1 : l'hote, comme d'habitude).
             public int Owner = -1; public float OwnSince, FarSince, OwnSent;
@@ -53,6 +54,7 @@ namespace MWCoop
         static readonly string[] Containers = { "TRAFFIC/VehiclesHighway", "TRAFFIC/VehiclesDirtRoad", "TRAIN", "NPC_CARS", "TRAFFIC/Police" };
         const string WalkersPath = "HUMANS/Randomizer/Walkers";
         static readonly List<Ent> ents = new List<Ent>();
+        static readonly List<string> wheelNotes = new List<string>();
         static readonly List<PlayMakerFSM> mutedSpawners = new List<PlayMakerFSM>();
         static bool built, verified;
         static float buildAt = -1, nextSend, nextLog, nextSample, nextTrainLog, nextAsk;
@@ -65,7 +67,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            ents.Clear(); mutedSpawners.Clear(); wokenLogged.Clear(); triggersMuted = false;
+            ents.Clear(); mutedSpawners.Clear(); wokenLogged.Clear(); triggersMuted = false; cousinMuted = false;
             built = false; verified = false; remap = null; hostKeys = null; hostKeysGot = 0; nextAsk = 0;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 6f : -1;
             Police.OnLevelLoaded();
@@ -110,7 +112,9 @@ namespace MWCoop
                 if (e.Train) hasTrain = true;
             }
             listHash = h;
-            Log.Info("trafic : " + ents.Count + " vehicules et passants suivis (train " + (hasTrain ? "oui" : "non") + ", empreinte " + h.ToString("x8") + ")");
+            Log.Info("trafic : " + ents.Count + " vehicules et passants suivis (train " + (hasTrain ? "oui" : "non") + ", empreinte " + h.ToString("x8") + ")"
+                     + (wheelNotes.Count > 0 ? ", roues sans modele (enfant tourne) : " + string.Join(", ", wheelNotes.ToArray()) : ""));
+            wheelNotes.Clear();
         }
 
         static Ent Add(Dictionary<string, int> keys, Transform t, Rigidbody rb, bool walker)
@@ -124,7 +128,24 @@ namespace MWCoop
             keys[path] = k + 1;
             var e = new Ent { Key = path + "#" + k, T = t, Body = rb, Walker = walker, Pos = t.position, Rot = t.rotation, Police = path.StartsWith("TRAFFIC/Police/") };
             e.Traffic = !walker && rb != null && path.StartsWith("TRAFFIC/Vehicles");
-            if (rb != null && !walker && rb.name != "TRAIN") { e.Wheels = t.GetComponentsInChildren<Wheel>(true); e.WheelRot = new float[e.Wheels.Length]; }
+            if (rb != null && !walker && rb.name != "TRAIN")
+            {
+                e.Wheels = t.GetComponentsInChildren<Wheel>(true); e.WheelRot = new float[e.Wheels.Length];
+                // Voitures de la route (LAMORE, VICTRO...) : leur Wheel n'a pas de 'model' (c'est leur pilote, coupe chez
+                // l'invite, qui tourne les roues) -- on tourne alors l'enfant visible de la roue.
+                e.WheelVis = new Transform[e.Wheels.Length]; e.WheelR = new float[e.Wheels.Length];
+                int noModel = 0;
+                for (int i = 0; i < e.Wheels.Length; i++)
+                {
+                    Wheel w = e.Wheels[i];
+                    if (w == null) continue;
+                    Transform vis = w.model != null ? w.model.transform : w.transform.Find("Wheel") ?? w.transform.Find("Tire") ?? w.transform.Find("tire");
+                    if (w.model == null) noModel++;
+                    e.WheelVis[i] = vis;
+                    e.WheelR[i] = w.radius > 0.05f ? w.radius : 0.32f;
+                }
+                if (noModel > 0) wheelNotes.Add(t.name + " " + noModel + "/" + e.Wheels.Length);
+            }
             ents.Add(e);
             return e;
         }
@@ -156,7 +177,14 @@ namespace MWCoop
                         sb.Append(' ').Append(e.T.name).Append(e.T.position.ToString("F0")).Append(" cap ").Append(e.T.eulerAngles.y.ToString("F0"))
                           .Append(e.Body != null ? " v" + e.Body.velocity.magnitude.ToString("F0") : "").Append(vis ? " rendu" : " SANS RENDU");
                         Transform lod = e.T.Find("LOD");
-                        sb.Append(lod != null ? (lod.gameObject.activeSelf ? " lod on" : " lod off") : "").Append(';');
+                        sb.Append(lod != null ? (lod.gameObject.activeSelf ? " lod on" : " lod off") : "");
+                        if (e.Wheels != null && e.Wheels.Length > 0)
+                        {
+                            Wheel w0 = e.Wheels[0];
+                            sb.Append(" roue ").Append(w0 == null ? "?" : w0.model == null ? "sans modele" : w0.model.name + " r" + w0.radius.ToString("F2") + " rot " + w0.model.transform.localEulerAngles.ToString("F0") + (w0.enabled ? " ACTIVE" : ""))
+                              .Append(" (").Append(e.Wheels.Length).Append(", tour ").Append(e.WheelRot != null && e.WheelRot.Length > 0 ? e.WheelRot[0].ToString("F0") : "-").Append(')');
+                        }
+                        sb.Append(';');
                     }
                 Log.Info(sb.ToString());
             }
@@ -366,6 +394,7 @@ namespace MWCoop
             // joueur : Player ne tuerait plus l'invite sur la voie.
             if (e.Body != null && !e.Train) e.Body.isKinematic = true;
             foreach (Wheel wh in e.T.GetComponentsInChildren<Wheel>(true)) wh.enabled = false;
+            if (!e.Walker && !e.Train) MuteCrash(e);
             if (e.Walker)
                 foreach (PlayMakerFSM f in e.T.GetComponentsInChildren<PlayMakerFSM>(true)) f.enabled = false;
             // Police : pas ses parents (Cops::SpeakDB fait parler les agents ; l'automate Police est coupe par Police.cs).
@@ -374,6 +403,27 @@ namespace MWCoop
                 foreach (PlayMakerFSM f in p.GetComponents<PlayMakerFSM>())
                     if (!mutedSpawners.Contains(f)) { f.enabled = false; mutedSpawners.Add(f); }
         }
+
+        // Accident d'une voiture de PNJ (pick-up du cousin TRAFFIC/VehiclesDirtRoad/Rally/HEPPA ; KYLAJANI, AMIS2, EDM) :
+        // <voiture>/CrashEvent::Crash attend que casse l'attache (FixedJoint) de CrashEvent/DeathForce -- resistance 500
+        // quand le joueur LOCAL est a moins de 300 m (DeathForce::PlayerDistance). Chez l'invite la copie est deplacee a
+        // la main : l'attache cassait, le pilote sortait en pantin, du sang au sol, voiture vide qui roulait (vraie partie
+        // du 07/10), et l'automate pouvait compter un homicide routier a l'invite (Systems/PlayerWanted). Coupes ici,
+        // attache incassable. CousinSpawns (repose le pick-up et lui rend sa physique au reveil) : coupe aussi.
+        static void MuteCrash(Ent e)
+        {
+            int n = 0;
+            foreach (PlayMakerFSM f in e.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                if ((f.FsmName == "Crash" || f.FsmName == "PlayerDistance") && f.enabled) { f.enabled = false; n++; }
+            foreach (FixedJoint j in e.T.GetComponentsInChildren<FixedJoint>(true))
+                if (j.name == "DeathForce") { j.breakForce = Mathf.Infinity; j.breakTorque = Mathf.Infinity; n++; }
+            if (n > 0) Log.Info("trafic : " + e.Key + " : accident du pilote coupe ici (" + n + ")");
+            if (cousinMuted) return;
+            cousinMuted = true;
+            GameObject cs = Game.FindAny("TRAFFIC/CousinSpawns");
+            if (cs != null) foreach (PlayMakerFSM f in cs.GetComponents<PlayMakerFSM>()) f.enabled = false;
+        }
+        static bool cousinMuted;
 
         // Essais (Autotest) 'train' : position du train toutes les 2 s des deux cotes (a comparer a la meme
         // heure des journaux : l'invite doit suivre l'hote a quelques metres pres).
@@ -416,18 +466,21 @@ namespace MWCoop
             for (int i = 0; i < e.Wheels.Length; i++)
             {
                 Wheel w = e.Wheels[i];
-                if (w == null || w.model == null || w.radius <= 0f) continue;
-                e.WheelRot[i] += fwd / w.radius * Time.deltaTime;
-                w.model.transform.localRotation = Quaternion.Euler(0f, e.Steer * w.maxSteeringAngle, 0f) * Quaternion.AngleAxis(57.29578f * e.WheelRot[i], Vector3.right);
+                Transform vis = e.WheelVis != null ? e.WheelVis[i] : null;
+                if (w == null || vis == null) continue;
+                e.WheelRot[i] += fwd / e.WheelR[i] * Time.deltaTime;
+                vis.localRotation = Quaternion.Euler(0f, e.Steer * w.maxSteeringAngle, 0f) * Quaternion.AngleAxis(57.29578f * e.WheelRot[i], Vector3.right);
             }
             if (camT == null) { Camera c = Camera.main; if (c != null) camT = c.transform; }
             if (camT == null || (camT.position - e.T.position).sqrMagnitude > 150f * 150f) return;
             float sum = 0f;
             int n = 0;
-            foreach (Wheel w in e.Wheels)
+            for (int wi = 0; wi < e.Wheels.Length; wi++)
             {
-                if (w == null || w.model == null || w.radius <= 0f) continue;
-                Vector3 c0 = w.model.transform.position;
+                Wheel w = e.Wheels[wi];
+                Transform vis = e.WheelVis != null ? e.WheelVis[wi] : null;
+                if (w == null || vis == null) continue;
+                Vector3 c0 = vis.position;
                 RaycastHit[] hs = Physics.RaycastAll(c0 + Vector3.up * 1.2f, Vector3.down, 4f);
                 float best = float.MaxValue;
                 for (int h = 0; h < hs.Length; h++)
@@ -437,7 +490,7 @@ namespace MWCoop
                 }
                 if (best == float.MaxValue) continue;
                 float groundY = c0.y + 1.2f - best;
-                sum += groundY + w.radius - c0.y;
+                sum += groundY + e.WheelR[wi] - c0.y;
                 n++;
             }
             if (n < 2) return;

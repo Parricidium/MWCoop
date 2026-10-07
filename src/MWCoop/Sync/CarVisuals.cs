@@ -65,6 +65,8 @@ namespace MWCoop
                     string n = t.name.ToLowerInvariant();
                     if (Has(n, SkipWords)) continue;
                     bool pose = Has(n, PoseWords), show = Has(n, ShowWords) || ShowNames.Contains(n) || t.GetComponent<Light>() != null;   // toute lampe
+                    // Levier de vitesses de la SORBET : c'est Gearstick/Pivot qui tourne (son automate Movemement), pas Gearstick.
+                    if (!pose && n == "pivot" && t.parent != null && t.parent.name.ToLowerInvariant().Contains("gear")) pose = true;
                     if (!pose && !show) continue;
                     string rel = VehicleSync.RelPath(rb.transform, t);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
