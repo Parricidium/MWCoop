@@ -925,10 +925,25 @@ static int FetchReleases(std::string &json)
 }
 
 // ---------------------------------------------------------------- mise a jour
-static DWORD WINAPI UpdateThread(void *)
+// Demande de JD (07/10) : plus de mise a jour toute seule. Au demarrage (et toutes les 30 min, sans bruit), on regarde
+// seulement : une version plus recente -> bouton "NOUVELLE VERSION x \u00B7 METTRE A JOUR" a la place de la ligne d'etat
+// (B_UPDATE), l'installation au clic. Sauf mod absent (premiere installation) ou [Lanceur] MajAuto=1 : installee d'office.
+enum { UPD_CHECK, UPD_INSTALL, UPD_QUIET };   // parametre du fil : regarder, installer, regarder sans rien afficher
+static std::wstring g_updVer;                 // version plus recente proposee (vide : rien), sous g_cs
+static volatile bool g_updChecking;
+static DWORD g_updCheckT;
+static std::wstring UpdAvail() { EnterCriticalSection(&g_cs); std::wstring v = g_updVer; LeaveCriticalSection(&g_cs); return v; }
+static void UpdSet(const std::wstring &v) { EnterCriticalSection(&g_cs); g_updVer = v; LeaveCriticalSection(&g_cs); }
+
+static DWORD WINAPI UpdateThread(void *param)
 {
-    SetStatus(K_NORMAL, T(L"Recherche de mises \u00E0 jour\u2026", L"Checking for updates\u2026"));
-    g_progress = -2;
+    int mode = (int)(INT_PTR)param;
+    bool quiet = mode == UPD_QUIET;
+    struct Done { bool q; ~Done() { if (q) g_updChecking = false; } } done = { quiet };
+    if (!quiet) {
+        SetStatus(K_NORMAL, T(L"Recherche de mises \u00E0 jour\u2026", L"Checking for updates\u2026"));
+        g_progress = -2;
+    }
     std::string json;
     std::wstring local = g_localVer, label = ModLabel();
     bool mod = g_modOk;
@@ -939,6 +954,15 @@ static DWORD WINAPI UpdateThread(void *)
     LeaveCriticalSection(&g_cs);
     g_relState = rs;
     g_notesDone = true;
+    if (quiet) {   // (verification periodique : seulement le bouton, s'il y a du nouveau)
+        std::wstring remote;
+        for (const Note &n : rel) if (!n.zip.empty()) { remote = n.ver; break; }
+        if (rs != REL_OFFLINE && !remote.empty() && !local.empty() && CmpVer(remote, local) > 0 && UpdAvail() != remote) {
+            UpdSet(remote);
+            SetStatus(K_WARN, T(L"%s \u00B7 nouvelle version %s disponible", L"%s \u00B7 new version %s available"), label.c_str(), remote.c_str());
+        }
+        return 0;
+    }
     if (rs == REL_OFFLINE) {
         g_progress = -1;
         if (!mod) SetStatus(K_ERR, T(L"Hors ligne : MWCoop n'est pas install\u00E9 ici", L"Offline: MWCoop is not installed here"));
@@ -957,10 +981,19 @@ static DWORD WINAPI UpdateThread(void *)
     }
     if (!local.empty() && CmpVer(remote, local) <= 0) {
         g_progress = -1;
+        UpdSet(L"");
         SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), label.c_str());
         g_busy = false;
         return 0;
     }
+    if (mode == UPD_CHECK && !local.empty()) {   // deja installe : on propose, le joueur choisit quand
+        g_progress = -1;
+        UpdSet(remote);
+        SetStatus(K_WARN, T(L"%s \u00B7 nouvelle version %s disponible", L"%s \u00B7 new version %s available"), label.c_str(), remote.c_str());
+        g_busy = false;
+        return 0;
+    }
+    UpdSet(L"");
 
     wchar_t tmp[MAX_PATH];
     GetTempPathW(MAX_PATH, tmp);
@@ -1033,7 +1066,7 @@ static DWORD WINAPI UpdateThread(void *)
     return 0;
 }
 
-// Sans jeu, ou mise a jour coupee (MajAuto=0 dans mwcoop-lanceur.ini) : les notes quand meme.
+// Sans jeu : les notes quand meme.
 static DWORD WINAPI NotesOnlyThread(void *)
 {
     std::string json;
@@ -1047,19 +1080,26 @@ static DWORD WINAPI NotesOnlyThread(void *)
     return 0;
 }
 
-static void StartUpdate()
+// install : bouton METTRE A JOUR ; sinon regarder seulement (installer d'office si [Lanceur] MajAuto=1).
+static void StartUpdate(bool install = false)
 {
     if (g_gameDir.empty() || g_busy) return;
-    bool autoUpdate = GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 1, g_iniLauncher.c_str()) != 0;
-    if (!autoUpdate) {
-        SetStatus(K_NORMAL, T(L"%s \u00B7 mise \u00E0 jour automatique coup\u00E9e", L"%s \u00B7 automatic update disabled"), ModLabel().c_str());
-        HANDLE nt = CreateThread(NULL, 0, NotesOnlyThread, NULL, 0, NULL);
-        if (nt) CloseHandle(nt);
-        return;
-    }
+    if (!install && GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0) install = true;
     g_busy = true;
-    HANDLE t = CreateThread(NULL, 0, UpdateThread, NULL, 0, NULL);
+    g_updCheckT = GetTickCount();
+    if (install) UpdSet(L"");
+    HANDLE t = CreateThread(NULL, 0, UpdateThread, (void *)(INT_PTR)(install ? UPD_INSTALL : UPD_CHECK), 0, NULL);
     if (t) CloseHandle(t); else g_busy = false;
+}
+
+// Toutes les 30 min, lanceur au menu : regarder sans bruit (le bouton apparait s'il sort une version entre-temps).
+static void UpdateTick()
+{
+    if (g_gameDir.empty() || g_busy || g_updChecking || GetTickCount() - g_updCheckT < 30u * 60u * 1000u) return;
+    g_updCheckT = GetTickCount();
+    g_updChecking = true;
+    HANDLE t = CreateThread(NULL, 0, UpdateThread, (void *)(INT_PTR)UPD_QUIET, 0, NULL);
+    if (t) CloseHandle(t); else g_updChecking = false;
 }
 
 // ---------------------------------------------------------------- boutons
@@ -1067,7 +1107,7 @@ static void StartUpdate()
 enum { TAB_COOP, TAB_NOTES, TAB_LOGS, TAB_CAR, TAB_LOBBY, TAB_SKIN, TAB_MODS, TAB_LOBBYOPT, TAB_COUNT };   // TAB_LOBBYOPT : options du salon (volet)
 static int g_tab = -1;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_COUNT };
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_COUNT };
 // Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
@@ -1102,6 +1142,7 @@ static void Layout()
     g_btn[B_KOFI].r = RectF(232, 152, 82, 24);
     g_btn[B_NETIP].r = RectF(76, 315, 152, 26);    // entre les deux champs : IP / VPN | STEAM
     g_btn[B_NETSTEAM].r = RectF(228, 315, 152, 26);
+    g_btn[B_UPDATE].r = RectF(76, 208, 304, 28);    // a la place de la ligne d'etat
 }
 
 static void UpdateButtons()
@@ -1126,6 +1167,8 @@ static void UpdateButtons()
     g_btn[B_LOGDIR].enabled = g_btn[B_LOGZIP].enabled = true;
     g_btn[B_NETIP].visible = g_btn[B_NETSTEAM].visible = menu && lobby == LB_NONE && !g_goWait;
     g_btn[B_NETIP].enabled = g_btn[B_NETSTEAM].enabled = !busy;
+    g_btn[B_UPDATE].visible = menu && game && !busy && !g_goWait && !UpdAvail().empty();
+    g_btn[B_UPDATE].enabled = lobby == LB_NONE;   // (pendant un salon : on finit d'abord la partie)
 }
 
 
@@ -3207,6 +3250,40 @@ static void SkinDragTo(float x)
     g_skinDragX = x;
 }
 
+// Bouton de mise a jour : pilule en degrade, fleche vers le bas, la version proposee.
+static void DrawUpdateButton(Graphics &g)
+{
+    Button &b = g_btn[B_UPDATE];
+    float a = b.enabled ? 1.0f : 0.45f;
+    RectF r = b.r;
+    if (g_pressed == B_UPDATE && g_hot == B_UPDATE) r.Offset(0, 1);
+    float pulse = b.enabled ? 0.5f + 0.5f * sinf(g_time * 3.0f) : 0.0f;   // (discret : qu'on le remarque)
+    GraphicsPath gp; RoundRect(gp, RectF(r.X - 3, r.Y - 3, r.Width + 6, r.Height + 6), (r.Height + 6) / 2);
+    SolidBrush glow(WithA(kAcc, 0.10f + 0.12f * pulse * (1 - b.hover)));
+    g.FillPath(&glow, &gp);
+    GraphicsPath p; RoundRect(p, r, r.Height / 2);
+    LinearGradientBrush lg(r, WithA(kAcc, a), WithA(kAcc2, a), LinearGradientModeHorizontal);
+    g.FillPath(&lg, &p);
+    SolidBrush hi(Color((BYTE)(60 * b.hover * a), 255, 255, 255));
+    g.FillPath(&hi, &p);
+    float ix = r.X + 18, iy = r.Y + r.Height / 2;   // fleche vers le bas sur un trait
+    Pen ar(WithA(kOnAcc, a), 2.0f);
+    ar.SetStartCap(LineCapRound); ar.SetEndCap(LineCapRound);
+    g.DrawLine(&ar, ix, iy - 6, ix, iy + 3);
+    g.DrawLine(&ar, ix - 4, iy - 1, ix, iy + 3);
+    g.DrawLine(&ar, ix + 4, iy - 1, ix, iy + 3);
+    g.DrawLine(&ar, ix - 5, iy + 6, ix + 5, iy + 6);
+    wchar_t lab[128];
+    std::wstring v = UpdAvail();
+    size_t dash = v.find(L'-');   // (0.41.0, sans -prealpha : plus lisible)
+    if (dash != std::wstring::npos) v.resize(dash);
+    swprintf_s(lab, T(L"NOUVELLE VERSION %s \u00B7 METTRE \u00C0 JOUR", L"NEW VERSION %s \u00B7 UPDATE"), v.c_str());
+    RectF tr(r.X + 30, r.Y, r.Width - 38, r.Height);
+    float px = 12.5f;
+    while (px > 9.5f && MeasureW(g, lab, px, FontStyleBold) > tr.Width) px -= 0.5f;
+    Text(g, lab, tr, px, FontStyleBold, WithA(kOnAcc, a));
+}
+
 // ---------------------------------------------------------------- interface
 static void DrawUI(Graphics &g)
 {
@@ -3346,7 +3423,8 @@ static void DrawUI(Graphics &g)
     } else {
         DrawTabs(g);
         DrawOptions(g);
-        Text(g, status, RectF(60, 212, 336, 22), 13, FontStyleBold, sc);
+        if (g_btn[B_UPDATE].visible) DrawUpdateButton(g);
+        else Text(g, status, RectF(60, 212, 336, 22), 13, FontStyleBold, sc);
         if (prog != -1.0f) DrawBar(g, RectF(96, 238, 264, 5), prog);
         DrawField(g, 0, T(L"PSEUDO", L"NICKNAME"));
         bool netBar = g_btn[B_NETIP].visible;   // (la barre IP / STEAM tient lieu de titre du 2e champ)
@@ -5591,6 +5669,7 @@ static void OnButton(int id)
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
     case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
+    case B_UPDATE: StartUpdate(true); break;
     case B_COLOR: CarPickColor(); break;
     case B_LOGDIR: LogsOpenFolder(); break;
     case B_LOGZIP: LogsZip(); break;
@@ -5610,6 +5689,7 @@ static void Tick()
     LobbySoundsTick();
     SteamTick();
     MscTick();
+    if (g_state == ST_IDLE) UpdateTick();
     if (!g_testSalon.empty()) { TestSalonStep(); return; }   // (mode d'essai : rien a dessiner)
     for (int i = 0; i < B_COUNT; i++) {
         float want = (g_hot == i && g_btn[i].enabled) ? 1.0f : 0.0f;
@@ -6262,6 +6342,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             } else if (host) g_lobbyHot = 51;
             if (host) SetStatus(K_OK, T(L"Salon Steam ouvert : invite tes amis", L"Steam lobby open: invite your friends"));
             else SetStatus(K_OK, T(L"Dans le salon Steam de %s", L"In %s's Steam lobby"), L"Pekka");
+        }
+        else if (st == L"nouvelle-maj" || st == L"nouvelle-maj-survol") {   // version plus recente proposee (bouton)
+            UpdSet(L"0.41.0-prealpha");
+            if (st == L"nouvelle-maj-survol") { g_hot = B_UPDATE; g_btn[B_UPDATE].hover = 1; }
         }
         else if (st == L"maj") { g_busy = true; g_progress = 0.42f; SetStatus(K_NORMAL, T(L"T\u00E9l\u00E9chargement de MWCoop %s\u2026", L"Downloading MWCoop %s\u2026"), L"0.1.1-prealpha"); g_focus = 0; g_time = 0.2f; }
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }

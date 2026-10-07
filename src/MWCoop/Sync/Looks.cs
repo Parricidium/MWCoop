@@ -159,7 +159,8 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- catalogue (pris dans la scene)
-        public class BodyInfo { public string Key; public Transform Char; public Mesh Mesh; public Material[] Mats; }
+        public class BodyInfo { public string Key; public Transform Char; public Mesh Mesh; public Material[] Mats; public SkinnedMeshRenderer Smr;
+            public List<SkinnedMeshRenderer> All = new List<SkinnedMeshRenderer>(); }   // tous les PNJ de ce corps (squelettes nommes parfois autrement)
         public class AccInfo { public string Key; public int Kind; public Mesh Mesh; public Material[] Mats; public Vector3 Pos; public Quaternion Rot; public Vector3 Scale; }
 
         static Dictionary<string, BodyInfo> bodies;
@@ -219,11 +220,12 @@ namespace MWCoop
                 }
                 if (m.name.Contains("kid") || m.vertexCount < 1200) continue;
                 string key = BodyKey(m);
+                // (seul son maillage sert : pose sur le squelette de base de l'avatar, Avatar.TemplateFor)
                 BodyInfo b;
-                bool usable = ch.Find("skeleton") != null && ch.GetComponentsInChildren<Animation>(true).Length > 0;
-                if (!usable) continue;
-                if (bodies.TryGetValue(key, out b) && (b.Char.gameObject.activeInHierarchy || !ch.gameObject.activeInHierarchy)) continue;
-                bodies[key] = new BodyInfo { Key = key, Char = ch, Mesh = m, Mats = mats };
+                if (bodies.TryGetValue(key, out b)) { b.All.Add(smr); if (b.Char.gameObject.activeInHierarchy || !ch.gameObject.activeInHierarchy) continue; }
+                var nbi = new BodyInfo { Key = key, Char = ch, Mesh = m, Mats = mats, Smr = smr };
+                if (b != null) nbi.All = b.All; else nbi.All.Add(smr);
+                bodies[key] = nbi;
             }
             foreach (Transform ch in chars)
             {
@@ -410,7 +412,7 @@ namespace MWCoop
                     skinned.Add(new KeyValuePair<Vector3[], Vector3[]>(p, n));
                     meshes.Add(smr.sharedMesh);
                     defs.Add(smr.sharedMaterials);
-                    heads.Add(a.HeadBone != null ? a.Root.transform.worldToLocalMatrix * a.HeadBone.localToWorldMatrix : Matrix4x4.identity);
+                    heads.Add(a.HeadBone != null ? a.Root.transform.worldToLocalMatrix * Matrix4x4.TRS(a.HeadDelta, Quaternion.identity, Vector3.one) * a.HeadBone.localToWorldMatrix : Matrix4x4.identity);
                     models.Add(a);
                 }
                 w.Write((uint)models.Count);

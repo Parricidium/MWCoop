@@ -5,7 +5,7 @@ Installation
 ------------
 1. Ouvrez le dossier du jeu (Steam : clic droit sur My Winter Car > Gerer > Parcourir les fichiers locaux).
 2. Copiez-y TOUT le contenu de ce zip (version.dll, MWCoop.exe et le dossier MWCoop) a cote de mywintercar.exe.
-3. Lancez MWCoop.exe. Il se met a jour tout seul a chaque demarrage.
+3. Lancez MWCoop.exe. Quand une nouvelle version sort, cliquez sur NOUVELLE VERSION - METTRE A JOUR (sous le logo).
 
 Jouer
 -----

@@ -5,7 +5,7 @@ Install
 -------
 1. Open the game folder (Steam: right-click My Winter Car > Manage > Browse local files).
 2. Copy EVERYTHING from this zip (version.dll, MWCoop.exe and the MWCoop folder) next to mywintercar.exe.
-3. Start MWCoop.exe. It updates itself on every start.
+3. Start MWCoop.exe. When a new version is out, click NEW VERSION - UPDATE (under the logo).
 
 Playing
 -------
