@@ -31,6 +31,8 @@ namespace MWCoop
         {
             try { PlayerSync.LateUpdate(); CarVisuals.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
+            try { Lights.LateUpdate(); }
+            catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("lumieres : " + e.Message); }
             try { Studio.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("tenues (pose) : " + e.Message); }
         }
@@ -183,6 +185,7 @@ namespace MWCoop
             PushDoors.OnLevelLoaded();
             Knobs.OnLevelLoaded();
             Gfx.OnLevelLoaded();
+            Lights.OnLevelLoaded();
             Rally.OnLevelLoaded();
             CarColor.OnLevelLoaded();
             Studio.OnLevelLoaded();
