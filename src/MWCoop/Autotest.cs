@@ -238,6 +238,26 @@ namespace MWCoop
                 }
                 Log.Info(sb.ToString());
             }
+            // [Test] Autotest=evenements : l'hote passe a un jour de match (GlobalDay 3) a 20 h (fete chez Jokke) a 20 s ;
+            // a 45 s et 60 s, les deux notent l'evenement et la fete (a comparer).
+            if (mode == "evenements")
+            {
+                if (Net.Session.IsHost && t > 20f && step == 0)
+                {
+                    step = 1;
+                    FsmInt day = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay");
+                    if (day != null) day.Value = Config.GetInt("Test", "TestJour", 3);
+                    PlayMakerFSM c = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
+                    if (c != null) { c.FsmVariables.GetFsmInt("Time").Value = Config.GetInt("Test", "TestHeure", 20); c.SendEvent("TIMESKIP"); }
+                    Log.Info("autotest : evenements : jour " + (day != null ? day.Value : -1) + ", " + Config.GetInt("Test", "TestHeure", 20) + " h");
+                }
+                if ((t > 45f && step <= 1 && !Net.Session.IsHost) || (t > 45f && step == 1 && Net.Session.IsHost) || (t > 60f && step == 2))
+                {
+                    step = step <= 1 ? 2 : 3;
+                    GameObject party = Game.FindAny("JOBS/JOKKEHOME/HouseDrunkNew/LOD1/DrunkParty");
+                    Log.Info("autotest : evenements " + Events.Describe("JOKKEHOME") + " ; fete " + (party != null ? party.activeSelf.ToString() : "?") + ", heure " + FsmVariables.GlobalVariables.FindFsmInt("GlobalHour").Value + ", jour " + FsmVariables.GlobalVariables.FindFsmInt("GlobalDay").Value);
+                }
+            }
             if (mode == "sondegfx" && t > 20f && !done)
             {
                 done = true;
