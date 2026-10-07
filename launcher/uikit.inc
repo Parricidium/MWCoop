@@ -42,7 +42,7 @@ enum {
 // ---- icones (traits, dans une boite de 24, comme celles de la maquette)
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
-       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS };
+       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -152,6 +152,27 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
     case IC_USER: { circ(12, 8, 4); GraphicsPath p; bez(p, 4, 21, 5, 16.8f, 8, 14.5f, 12, 14.5f); bez(p, 12, 14.5f, 16, 14.5f, 19, 16.8f, 20, 21); g.DrawPath(&pen, &p); break; }
     case IC_HASH: line(9, 3, 7, 21); line(17, 3, 15, 21); line(4, 9, 21, 9); line(3, 15, 20, 15); break;
     case IC_FLAG: line(5, 21, 5, 4); poly({ 5, 4, 16, 4, 14, 8, 16, 12, 5, 12 }, false); break;
+    case IC_STEAM: {   // logo de Steam (plein) : disque, piston en creux (grande roue, petite roue, bras), moyeux pleins
+        auto disc = [&](float x, float y, float r) { GraphicsPath *p = new GraphicsPath(); p->AddEllipse(cx + (x - r - 12) * k, cy + (y - r - 12) * k, 2 * r * k, 2 * r * k); return p; };
+        GraphicsPath *d = disc(12, 12, 10), *bo = disc(15.2f, 8.8f, 4.4f), *bi = disc(15.2f, 8.8f, 2.6f), *so = disc(8.3f, 15.7f, 2.7f), *si = disc(8.3f, 15.7f, 1.5f);
+        Region rg(d);
+        rg.Exclude(bo);
+        rg.Exclude(so);
+        GraphicsPath arm;
+        PointF a[] = { P(7.2f, 14.6f), P(13.4f, 7.0f), P(17.0f, 10.6f), P(9.4f, 16.8f) };
+        arm.AddPolygon(a, 4);
+        rg.Exclude(&arm);
+        GraphicsPath tail;   // (le bas a gauche du disque, coupe en biais)
+        PointF t[] = { P(1, 13.2f), P(7.6f, 15.9f), P(6.2f, 23), P(1, 23) };
+        tail.AddPolygon(t, 4);
+        rg.Exclude(&tail);
+        rg.Union(bi);
+        rg.Union(si);
+        SolidBrush b(c);
+        g.FillRegion(&b, &rg);
+        delete d; delete bo; delete bi; delete so; delete si;
+        break;
+    }
     }
 }
 
