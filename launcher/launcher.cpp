@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -809,11 +809,44 @@ static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
 static float g_notesH;
 
-// Markdown simple : titres, gras et code retires ; puces "- " -> "\u2022".
+// Ligne image d'une note : ![texte](url) (markdown) ou <img ... src="url"> (image glissee dans l'editeur de GitHub).
+static std::wstring NoteImageUrl(const std::wstring &line)
+{
+    size_t b = line.find_first_not_of(L" \t");
+    if (b == std::wstring::npos) return L"";
+    std::wstring u;
+    if (!line.compare(b, 2, L"![")) {
+        size_t c = line.find(L"](", b), e = c == std::wstring::npos ? c : line.find(L')', c);
+        if (e != std::wstring::npos) u = line.substr(c + 2, e - c - 2);
+        size_t sp = u.find(L' ');   // ![x](url "titre")
+        if (sp != std::wstring::npos) u.erase(sp);
+    } else if (!_wcsnicmp(line.c_str() + b, L"<img", 4)) {
+        size_t q = line.find(L"src=");
+        if (q != std::wstring::npos && q + 5 < line.size()) {
+            wchar_t d = line[q + 4];
+            size_t e = line.find(d, q + 5);
+            if ((d == L'"' || d == L'\'') && e != std::wstring::npos) u = line.substr(q + 5, e - q - 5);
+        }
+    }
+    return !_wcsnicmp(u.c_str(), L"https://", 8) ? u : L"";
+}
+
+// Markdown simple : titres, gras et code retires ; puces "- " -> "\u2022" ; images -> ligne "\x01<url>" (dessinees).
 static std::wstring CleanNote(const std::wstring &s)
 {
     std::wstring o;
     for (size_t i = 0; i < s.size(); i++) {
+        bool atLine = i == 0 || s[i - 1] == L'\n';
+        if (atLine) {
+            size_t e = s.find(L'\n', i);
+            std::wstring url = NoteImageUrl(s.substr(i, e == std::wstring::npos ? std::wstring::npos : e - i));
+            if (!url.empty()) {
+                o += L'\x01'; o += url; o += L'\n';
+                if (e == std::wstring::npos) break;
+                i = e;
+                continue;
+            }
+        }
         bool lineStart = i == 0 || s[i - 1] == L'\n';
         if (s[i] == L'`') continue;
         if (s[i] == L'*' && i + 1 < s.size() && s[i + 1] == L'*') { i++; continue; }
@@ -1627,7 +1660,88 @@ static void NotesMarkSeen()
     if (!v.empty()) WritePrivateProfileStringW(L"Lanceur", L"NotesVues", v.c_str(), g_iniLauncher.c_str());
 }
 
+// ---------------------------------------------------------------- images des notes
+// Telechargees a la premiere ouverture de l'onglet, gardees dans %LOCALAPPDATA%\MWCoop\cache\notes\ (hors ligne ensuite).
+enum { NI_WAIT, NI_LOAD, NI_OK, NI_FAIL };
+struct NoteImg { int state; Bitmap *bmp; };
+static std::map<std::wstring, NoteImg> g_noteImgs;   // (sous g_cs)
+static std::wstring LocalDir();
+static Bitmap *LoadPngMem(const void *p, size_t n, UINT maxW, UINT maxH);
+
+static std::wstring NoteImgFile(const std::wstring &url)
+{
+    unsigned long long h = 1469598103934665603ULL;
+    for (wchar_t c : url) { h ^= (unsigned)c; h *= 1099511628211ULL; }
+    wchar_t n[32];
+    swprintf_s(n, L"%016llx.img", h);
+    std::wstring dir = LocalDir();
+    if (dir.empty()) return L"";
+    CreateDirectoryW(dir.c_str(), NULL);
+    CreateDirectoryW((dir + L"cache").c_str(), NULL);
+    CreateDirectoryW((dir + L"cache\\notes").c_str(), NULL);
+    return dir + L"cache\\notes\\" + n;
+}
+static void NoteImgFetch(const std::wstring &url)
+{
+    std::wstring file = NoteImgFile(url);
+    Bitmap *b = NULL;
+    if (!file.empty()) {
+        if (!FileExists(file)) {
+            std::wstring part = file + L".part";
+            if (HttpGet(url, NULL, part, false)) MoveFileExW(part.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING);
+            else DeleteFileW(part.c_str());
+        }
+        HANDLE f = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            DWORD size = GetFileSize(f, NULL), r = 0;
+            std::vector<char> d;
+            if (size != INVALID_FILE_SIZE && size > 0 && size < 16u << 20) { d.resize(size); ReadFile(f, d.data(), size, &r, NULL); d.resize(r); }
+            CloseHandle(f);
+            if (!d.empty()) b = LoadPngMem(d.data(), d.size(), 8192, 8192);
+            if (!b) DeleteFileW(file.c_str());   // (illisible : on reessaiera au prochain lancement)
+        }
+    }
+    TestLog("note : image %s : %s", Narrow(url).c_str(), b ? "ok" : "illisible ou introuvable");
+    EnterCriticalSection(&g_cs);
+    NoteImg &ni = g_noteImgs[url];
+    ni.bmp = b;
+    ni.state = b ? NI_OK : NI_FAIL;
+    LeaveCriticalSection(&g_cs);
+}
+static DWORD WINAPI NoteImgThread(void *p)
+{
+    std::wstring *url = (std::wstring *)p;
+    NoteImgFetch(*url);
+    delete url;
+    return 0;
+}
+// Etat de l'image (et la lance si besoin) ; *bmp : l'image prete.
+static int NoteImgGet(const std::wstring &url, Bitmap **bmp)
+{
+    EnterCriticalSection(&g_cs);
+    auto it = g_noteImgs.find(url);
+    if (it == g_noteImgs.end()) it = g_noteImgs.insert(std::make_pair(url, NoteImg{ NI_WAIT, NULL })).first;
+    int st = it->second.state;
+    *bmp = it->second.bmp;
+    if (st == NI_WAIT) it->second.state = NI_LOAD;
+    LeaveCriticalSection(&g_cs);
+    if (st == NI_WAIT) {
+        HANDLE t = CreateThread(NULL, 0, NoteImgThread, new std::wstring(url), 0, NULL);
+        if (t) CloseHandle(t);
+        st = NI_LOAD;
+    }
+    return st;
+}
+
 static RectF NotesArea() { return RectF(kOptList.X, kOptList.Y, kOptList.Width, kOptPanel.Y + kOptPanel.Height - 14 - kOptList.Y); }
+// Images montrees (dernier dessin) : un clic ouvre l'image en grand dans le navigateur.
+static std::vector<std::pair<RectF, std::wstring>> g_noteImgHits;
+static std::wstring NoteImgAt(float x, float y)
+{
+    if (g_tab != TAB_NOTES || !NotesArea().Contains(x, y)) return L"";
+    for (const auto &h : g_noteImgHits) if (h.first.Contains(x, y)) return h.second;
+    return L"";
+}
 static float NotesMaxScroll() { return max(0.0f, g_notesH - NotesArea().Height); }
 
 static void DrawNotes(Graphics &g)
@@ -1652,12 +1766,41 @@ static void DrawNotes(Graphics &g)
     Pen sep(TH(sep), 1);
     float sc = g_scroll[TAB_NOTES], y = area.Y - sc, w = area.Width - 14;
     g.SetClip(area);
+    g_noteImgHits.clear();
     for (size_t i = 0; i < notes.size(); i++) {
         const Note &n = notes[i];
         const std::wstring &body = g_fr ? n.fr : n.en;
-        RectF box;
-        g.MeasureString(body.c_str(), -1, &fb, RectF(0, 0, w - 16, 100000), &sf, &box);
-        float h = 26 + (body.empty() ? 0 : box.Height) + 16;
+        // morceaux : texte, ou image (ligne "\x01<url>") ; hauteur de chacun
+        struct Seg { std::wstring s; bool img; float h; Bitmap *bmp; int st; };
+        std::vector<Seg> segs;
+        for (size_t at = 0; at < body.size();) {
+            size_t e = body.find(L'\n', at);
+            std::wstring line = body.substr(at, e == std::wstring::npos ? std::wstring::npos : e - at);
+            at = e == std::wstring::npos ? body.size() : e + 1;
+            bool img = !line.empty() && line[0] == L'\x01';
+            if (img) segs.push_back(Seg{ line.substr(1), true, 0, NULL, 0 });
+            else if (segs.empty() || segs.back().img) segs.push_back(Seg{ line, false, 0, NULL, 0 });
+            else segs.back().s += L"\n" + line;
+        }
+        float h = 26;
+        for (Seg &sg : segs) {
+            if (sg.img) {
+                sg.st = NoteImgGet(sg.s, &sg.bmp);
+                if (sg.st == NI_OK) {
+                    float iw = (float)sg.bmp->GetWidth(), ih = (float)sg.bmp->GetHeight(), k = min(1.0f, min((w - 16) / iw, 300 / ih));
+                    sg.h = ih * k + 10;
+                } else sg.h = sg.st == NI_FAIL ? 0 : 90;
+            } else {
+                size_t b = sg.s.find_first_not_of(L"\n "), e = sg.s.find_last_not_of(L"\n ");
+                sg.s = b == std::wstring::npos ? L"" : sg.s.substr(b, e - b + 1);
+                if (sg.s.empty()) continue;
+                RectF box;
+                g.MeasureString(sg.s.c_str(), -1, &fb, RectF(0, 0, w - 16, 100000), &sf, &box);
+                sg.h = box.Height + 4;
+            }
+            h += sg.h;
+        }
+        h += 12;
         if (y + h >= area.Y && y <= area.Y + area.Height) {
             std::wstring title = L"MWCoop " + n.ver;
             g.DrawString(title.c_str(), -1, &fh, PointF(area.X + 6, y), &acc);
@@ -1672,7 +1815,28 @@ static void DrawNotes(Graphics &g)
                 g.FillPath(&bb, &bp);
                 Text(g, lab, br, 9.5f, FontStyleBold, kInk);
             }
-            if (!body.empty()) g.DrawString(body.c_str(), -1, &fb, RectF(area.X + 10, y + 26, w - 16, box.Height + 4), &sf, &ink);
+            float sy = y + 26;
+            for (const Seg &sg : segs) {
+                if (!sg.img) { if (!sg.s.empty()) g.DrawString(sg.s.c_str(), -1, &fb, RectF(area.X + 10, sy, w - 16, sg.h), &sf, &ink); }
+                else if (sg.h > 0) {
+                    RectF ir(area.X + 10, sy + 4, w - 16, sg.h - 10);
+                    if (sg.st == NI_OK) { ir.Width = sg.bmp->GetWidth() * (ir.Height / sg.bmp->GetHeight()); ir.X = area.X + 10 + (w - 16 - ir.Width) / 2; }
+                    GraphicsPath ip; RoundRect(ip, ir, 8);
+                    if (sg.st == NI_OK) {
+                        Region old; g.GetClip(&old);
+                        g.SetClip(&ip, CombineModeIntersect);
+                        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+                        g.DrawImage(sg.bmp, ir);
+                        g.SetClip(&old);
+                        Pen ib(WithA(kInk, 0.15f), 1); g.DrawPath(&ib, &ip);
+                        g_noteImgHits.push_back(std::make_pair(ir, sg.s));
+                    } else {
+                        SolidBrush pb(WithA(kInk, 0.06f)); g.FillPath(&pb, &ip);
+                        Text(g, T(L"Chargement de l'image\u2026", L"Loading image\u2026"), ir, 11.5f, FontStyleRegular, kGrey);
+                    }
+                }
+                sy += sg.h;
+            }
             if (i + 1 < notes.size()) g.DrawLine(&sep, area.X + 6, y + h - 8, area.X + w, y + h - 8);
         }
         y += h;
@@ -5487,6 +5651,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         g_steamInfoHot = SteamInfoAt(x, y);
         g_mscHot = g_tab == TAB_MODS && g_state == ST_IDLE ? MscAt(x, y) : -1;
         g_srvHot = SrvAt(x, y);
+        bool noteImg = !NoteImgAt(x, y).empty();
         bool skinTab = g_tab == TAB_SKIN && g_state == ST_IDLE;
         g_skinHot = skinTab ? SkinCellAt(x, y) : -1;
         g_skinArrowHot = skinTab ? SkinArrowAt(x, y) : 0;
@@ -5497,7 +5662,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         float qx = inDr ? x - kDrawerDx : x, qy = inDr ? y - kDrawerDy : y;
         bool carView = ((g_tab == TAB_CAR && !inDr) || (inDr && g_drawerShown == DR_CAR)) && g_state == ST_IDLE && g_car.state == 1 && kCarView.Contains(qx, qy);
         bool skinView = ((skinTab && !inDr) || (inDr && g_drawerShown == DR_SKIN)) && !g_skinArrowHot && kSkinView.Contains(qx, qy);
-        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot || g_mscHot >= 0 || g_srvHot >= 0 || DrawerHand()) ? IDC_HAND
+        SetCursor(LoadCursor(NULL, ((g_hot >= 0 && g_btn[g_hot].enabled) || g_tabHot >= 0 || g_optHot >= 0 || g_logRowHot >= 0 || g_carHot >= 0 || g_lobbyHot >= 0 || g_skinHot >= 0 || g_skinArrowHot || g_steamInfoHot || g_mscHot >= 0 || g_srvHot >= 0 || noteImg || DrawerHand()) ? IDC_HAND
                                    : carView || skinView ? IDC_SIZEALL : HitField(x, y) >= 0 ? IDC_IBEAM : IDC_ARROW));
         return 0;
     }
@@ -5532,6 +5697,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (t >= 0) { g_tab = g_tab == t ? -1 : t; g_optHot = -1; if (g_tab == TAB_NOTES) NotesMarkSeen(); if (g_tab == TAB_LOGS) LogsScan(); return 0; }   // un 2e clic referme
         if (g_tab == TAB_LOBBY && LobbyClick(x, y)) return 0;
         if (g_tab == TAB_MODS && MscClick(x, y)) return 0;
+        if (g_tab == TAB_NOTES) { std::wstring u = NoteImgAt(x, y); if (!u.empty()) { ShellExecuteW(NULL, L"open", u.c_str(), NULL, NULL, SW_SHOWNORMAL); return 0; } }
         if (g_tab == TAB_LOGS && LogsMouseDown(x, y)) return 0;
         if (g_tab == TAB_CAR && CarMouseDown(x, y)) return 0;
         if (g_tab == TAB_SKIN && SkinMouseDown(x, y)) return 0;
@@ -5914,6 +6080,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_notesDone = true; g_relState = REL_OK; g_tab = TAB_NOTES;
         }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }
+        else if (st == L"notes-image") {   // une note avec une image (telechargee ici, avant la capture)
+            std::wstring url = L"https://raw.githubusercontent.com/" + g_repo + L"/main/docs/img/lanceur-tenue.png";
+            std::wstring fr = CleanNote(L"- Volet de droite pour la tenue :\n![tenue](" + url + L")\n- Et une ligne apr\u00E8s l'image.");
+            g_notes = { { L"0.36.0-prealpha", L"08/10/2026", fr, fr, L"" },
+                        { L"0.1.0-prealpha", L"02/10/2026", L"\u2022 Premi\u00E8re version.", L"\u2022 First version.", L"" } };
+            NoteImgFetch(url);
+            g_notesDone = true; g_relState = REL_OK; g_tab = TAB_NOTES;
+        }
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; g_btn[B_LOGS].hover = 1; }
         else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options") {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
             bool host = st == L"salon" || st == L"salon-options";   // (salon-udp : invite dont l'UDP est bloque)

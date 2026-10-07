@@ -159,6 +159,14 @@ static void DrawTuto(Graphics &g)
     if (tg.Width > 0) { hole.Inflate(6, 6); RoundRect(veil, hole, min(14.0f, hole.Height / 2)); }
     SolidBrush vb(Color(165, 4, 8, 18));
     g.FillPath(&vb, &veil);
+    // le haut du logo depasse de la carte (fond, au-dessus de y = 60) : redessine assombri, transparence gardee
+    if (Bitmap *bgi = (g_dark && g_bgDark) ? g_bgDark : g_bg) {
+        ColorMatrix cm = { { { 0.35f, 0, 0, 0, 0 }, { 0, 0.35f, 0, 0, 0 }, { 0, 0, 0.35f, 0, 0 }, { 0, 0, 0, 1, 0 }, { 0, 0, 0, 0, 1 } } };
+        ImageAttributes ia;
+        ia.SetColorMatrix(&cm);
+        float sh = bgi->GetHeight() * 60.0f / kImgH;
+        g.DrawImage(bgi, RectF(0, 0, kImgW, 60), 0, 0, (REAL)bgi->GetWidth(), sh, UnitPixel, &ia);
+    }
     if (tg.Width > 0) {
         GraphicsPath hp; RoundRect(hp, hole, min(14.0f, hole.Height / 2));
         Pen ring(kAcc, 2.4f); g.DrawPath(&ring, &hp);
