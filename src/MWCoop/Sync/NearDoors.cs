@@ -67,32 +67,42 @@ namespace MWCoop
                 bool open = false;
                 foreach (FsmState st in states) if (st.Name.StartsWith("Open")) open = true;
                 if (!open) { seen.Add(f); continue; }
-                bool loaded = true;
-                Probe probe = null;
-                foreach (FsmState st in states)
-                {
-                    FsmStateAction[] acts;
-                    try { acts = st.Actions; } catch { loaded = false; break; }
-                    foreach (FsmStateAction a in acts)
-                    {
-                        if (a == null || a.GetType().Name != "GetDistance") continue;
-                        FieldInfo tf = a.GetType().GetField("target"), gf = a.GetType().GetField("gameObject");
-                        var tgt = tf != null ? tf.GetValue(a) as FsmGameObject : null;
-                        if (tgt == null || tgt.Value == null || tgt.Value.name != "PLAYER") continue;
-                        if (probe == null)
-                        {
-                            var od = gf != null ? gf.GetValue(a) as FsmOwnerDefault : null;
-                            Transform r = od == null || od.OwnerOption == OwnerDefaultOption.UseOwner || od.GameObject.Value == null ? f.transform : od.GameObject.Value.transform;
-                            probe = new Probe { Ref = r, Proxy = new GameObject("MWCoop-JoueurProche").transform };
-                            probe.Proxy.position = tgt.Value.transform.position;
-                            probes.Add(probe);
-                        }
-                        tf.SetValue(a, new FsmGameObject { Value = probe.Proxy.gameObject });
-                    }
-                }
-                if (loaded) seen.Add(f);
+                if (Retarget(f, states) >= 0) seen.Add(f);
             }
             if (probes.Count != before) Log.Info("portes automatiques : " + probes.Count + " suivent le joueur le plus proche");
+        }
+
+        // Les mesures de distance au joueur (GetDistance vers PLAYER) de cet automate visent le joueur le plus proche
+        // (Events : evenements decides par l'hote). Nombre d'actions redirigees ; -1 : actions pas encore chargees.
+        public static int Retarget(PlayMakerFSM f) { try { return Retarget(f, f.Fsm.States); } catch { return -1; } }
+
+        static int Retarget(PlayMakerFSM f, FsmState[] states)
+        {
+            Probe probe = null;
+            int n = 0;
+            foreach (FsmState st in states)
+            {
+                FsmStateAction[] acts;
+                try { acts = st.Actions; } catch { return -1; }
+                foreach (FsmStateAction a in acts)
+                {
+                    if (a == null || a.GetType().Name != "GetDistance") continue;
+                    FieldInfo tf = a.GetType().GetField("target"), gf = a.GetType().GetField("gameObject");
+                    var tgt = tf != null ? tf.GetValue(a) as FsmGameObject : null;
+                    if (tgt == null || tgt.Value == null || tgt.Value.name != "PLAYER") continue;
+                    if (probe == null)
+                    {
+                        var od = gf != null ? gf.GetValue(a) as FsmOwnerDefault : null;
+                        Transform r = od == null || od.OwnerOption == OwnerDefaultOption.UseOwner || od.GameObject.Value == null ? f.transform : od.GameObject.Value.transform;
+                        probe = new Probe { Ref = r, Proxy = new GameObject("MWCoop-JoueurProche").transform };
+                        probe.Proxy.position = tgt.Value.transform.position;
+                        probes.Add(probe);
+                    }
+                    tf.SetValue(a, new FsmGameObject { Value = probe.Proxy.gameObject });
+                    n++;
+                }
+            }
+            return n;
         }
     }
 }
