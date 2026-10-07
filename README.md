@@ -116,9 +116,14 @@ outfit portrait, version, ping and a UDP check; the host picks *Continue* or *Ne
    `mywintercar.exe`: `version.dll`, `MWCoop.exe` and the `MWCoop` folder.
 3. Start `MWCoop.exe`. It updates the mod by itself on every start.
 
-No other loader is needed (MWCoop does not use MSCLoader). From a Steam install, the launcher starts the game from a
-copy in `%LOCALAPPDATA%\MWCoop\jeu` (same data, linked folders): Steam would otherwise load Windows' `version.dll`
+No other loader is needed. From a Steam install, the launcher starts the game from a copy in
+`%LOCALAPPDATA%\MWCoop\My Winter Car` (same data, linked folders): Steam would otherwise load Windows' `version.dll`
 before the mod's.
+
+**MSCLoader** (experimental): MWCoop and MSCLoader run side by side since 0.31.3 (before, MWCoop kept MSCLoader from
+starting). MSCLoader's installer refuses a game folder that contains a `version.dll`: install **MSCLoader first**, then
+MWCoop (or move MWCoop's `version.dll` away while installing MSCLoader, then put it back). Mods made for MSCLoader
+are not synced between players yet.
 
 ### Antivirus warning
 
@@ -268,9 +273,14 @@ l'écran d'attente des invités et l'écran de mort ; tout existe aussi en fran�
    `mywintercar.exe` : `version.dll`, `MWCoop.exe` et le dossier `MWCoop`.
 3. Lancez `MWCoop.exe`. Il met le mod à jour tout seul à chaque démarrage.
 
-Aucun autre chargeur n'est nécessaire (MWCoop n'utilise pas MSCLoader). Depuis une installation Steam, le lanceur
-démarre le jeu depuis une copie dans `%LOCALAPPDATA%\MWCoop\jeu` (mêmes données, dossiers liés) : sinon Steam fait
-charger la `version.dll` de Windows avant celle du mod.
+Aucun autre chargeur n'est nécessaire. Depuis une installation Steam, le lanceur démarre le jeu depuis une copie dans
+`%LOCALAPPDATA%\MWCoop\My Winter Car` (mêmes données, dossiers liés) : sinon Steam fait charger la `version.dll` de
+Windows avant celle du mod.
+
+**MSCLoader** (expérimental) : MWCoop et MSCLoader fonctionnent ensemble depuis la 0.31.3 (avant, MWCoop empêchait
+MSCLoader de démarrer). L'installateur de MSCLoader refuse un dossier de jeu qui contient une `version.dll` : installez
+**MSCLoader d'abord**, puis MWCoop (ou mettez la `version.dll` de MWCoop de côté le temps d'installer MSCLoader, puis
+remettez-la). Les mods faits pour MSCLoader ne sont pas encore synchronisés entre joueurs.
 
 ### Alerte d'antivirus
 

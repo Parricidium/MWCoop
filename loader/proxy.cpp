@@ -165,8 +165,50 @@ static HRESULT WINAPI h_SHGetFolderPathW(HWND w, int csidl, HANDLE tok, DWORD fl
     return r;
 }
 
+// GetProcAddress tel qu'il etait branche avant nous : un autre chargeur (UnityDoorstop de MSCLoader, winhttp.dll)
+// a pu l'intercepter avant nous pour attraper Mono a son tour. On lui passe la main au lieu d'appeler celui de
+// Windows : sinon il ne voyait plus rien passer et ses mods ne se chargeaient plus (retour Nexus, 06/10).
+typedef FARPROC (WINAPI* GetProcAddress_t)(HMODULE, LPCSTR);
+static GetProcAddress_t o_GetProcAddress;
+
+static FARPROC WINAPI h_GetProcAddress(HMODULE m, LPCSTR name);
+static bool g_doorstop, g_gpaHooked;
+
+// Accroche de GetProcAddress (une fois), derriere celui qui y serait deja (Doorstop de MSCLoader).
+static void HookGetProcAddress() {
+    if (g_gpaHooked) return;
+    g_gpaHooked = true;
+    HMODULE exe = GetModuleHandleW(NULL);
+    void* prev = HookIat(exe, "KERNEL32.dll", "GetProcAddress", (void*)h_GetProcAddress);
+    HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
+    void* real = k32 ? (void*)GetProcAddress(k32, "GetProcAddress") : NULL;
+    // (deja intercepte : on enchaine ; jamais sur nous-memes, si le jeu recharge le chargeur)
+    if (prev && prev != (void*)h_GetProcAddress) o_GetProcAddress = (GetProcAddress_t)prev;
+    if (prev && prev != real) {
+        HMODULE owner = NULL;
+        wchar_t on[MAX_PATH] = L"?";
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)prev, &owner)) GetModuleFileNameW(owner, on, MAX_PATH);
+        Log("GetProcAddress deja intercepte par %ls : on lui passe la main", on);
+    } else Log("GetProcAddress accroche%s", g_doorstop ? " (Doorstop ne s'y etait pas accroche)" : "");
+}
+
+typedef HMODULE (WINAPI* LoadLibraryW_t)(LPCWSTR);
+typedef HMODULE (WINAPI* LoadLibraryA_t)(LPCSTR);
+static LoadLibraryW_t o_LoadLibraryW;
+static LoadLibraryA_t o_LoadLibraryA;
+static HMODULE WINAPI h_LoadLibraryW(LPCWSTR n) {
+    HMODULE r = o_LoadLibraryW ? o_LoadLibraryW(n) : LoadLibraryW(n);
+    HookGetProcAddress();
+    return r;
+}
+static HMODULE WINAPI h_LoadLibraryA(LPCSTR n) {
+    HMODULE r = o_LoadLibraryA ? o_LoadLibraryA(n) : LoadLibraryA(n);
+    HookGetProcAddress();
+    return r;
+}
+
 static FARPROC WINAPI h_GetProcAddress(HMODULE m, LPCSTR name) {
-    FARPROC p = GetProcAddress(m, name);
+    FARPROC p = o_GetProcAddress ? o_GetProcAddress(m, name) : GetProcAddress(m, name);
     if (!p || IS_INTRESOURCE(name)) return p;
     if (!strcmp(name, "mono_runtime_invoke") && !o_invoke) {
         g_mono = m; o_invoke = (mono_runtime_invoke_t)p;
@@ -377,7 +419,22 @@ static void Init() {
     SetEnvironmentVariableW(L"MWCOOP_ARRIEREPLAN", g_arrierePlan ? L"1" : L"0");
 
     HMODULE exe = GetModuleHandleW(NULL);
-    HookIat(exe, "KERNEL32.dll", "GetProcAddress", (void*)h_GetProcAddress);
+    // MSCLoader (UnityDoorstop 4, winhttp.dll + doorstop_config.ini a cote du jeu) : le jeu charge VERSION.dll (nous)
+    // avant WINHTTP.dll, et Doorstop ne s'accroche a GetProcAddress que s'il y trouve encore celui de Windows (il
+    // cherche l'entree par sa valeur) -- accroches les premiers, nous l'empechions de demarrer, sans un mot (essai
+    // du 07/10 : pas de MSCLoader_Preloader.txt). Avec Doorstop, on attend donc le premier LoadLibrary du jeu
+    // (celui de mono.dll, apres l'initialisation de toutes les DLL) pour s'accrocher derriere lui.
+    {
+        wchar_t ds1[MAX_PATH], ds2[MAX_PATH];
+        swprintf(ds1, MAX_PATH, L"%s\\winhttp.dll", g_gameDir);
+        swprintf(ds2, MAX_PATH, L"%s\\doorstop_config.ini", g_gameDir);
+        g_doorstop = GetFileAttributesW(ds1) != INVALID_FILE_ATTRIBUTES && GetFileAttributesW(ds2) != INVALID_FILE_ATTRIBUTES;
+    }
+    if (g_doorstop) {
+        Log("UnityDoorstop (MSCLoader ?) a cote du jeu : accroche de GetProcAddress au premier LoadLibrary");
+        o_LoadLibraryW = (LoadLibraryW_t)HookIat(exe, "KERNEL32.dll", "LoadLibraryW", (void*)h_LoadLibraryW);
+        o_LoadLibraryA = (LoadLibraryA_t)HookIat(exe, "KERNEL32.dll", "LoadLibraryA", (void*)h_LoadLibraryA);
+    } else HookGetProcAddress();
     if (g_profil[0]) {
         HookIat(exe, "SHELL32.dll", "SHGetFolderPathW", (void*)h_SHGetFolderPathW);
         HookIat(exe, "ADVAPI32.dll", "RegCreateKeyExW", (void*)h_RegCreateKeyExW);

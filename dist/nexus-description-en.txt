@@ -34,7 +34,7 @@ One player hosts their world, friends join [b]that[/b] world: same save, same ti
 [*]Copy everything from the zip next to [b]mywintercar.exe[/b]: [b]version.dll[/b], [b]MWCoop.exe[/b] and the [b]MWCoop[/b] folder.
 [*]Start [b]MWCoop.exe[/b]. It updates the mod by itself on every start.
 [/list]
-Everybody in a party must run the [b]same version[/b] (the launcher updates it for you). From a Steam install, the launcher starts the game from a copy in %LOCALAPPDATA%\MWCoop\jeu (same data, linked folders) so that the mod loads.
+Everybody in a party must run the [b]same version[/b] (the launcher updates it for you). From a Steam install, the launcher starts the game from a copy in %LOCALAPPDATA%\MWCoop\My Winter Car (same data, linked folders) so that the mod loads. [b]MSCLoader[/b] (experimental): works alongside MWCoop since 0.31.3; install MSCLoader [b]first[/b], then MWCoop (its installer refuses a folder that already has a version.dll). MSCLoader mods are not synced between players yet.
 
 [size=4][b]Known issues[/b][/size]
 [list]
