@@ -58,6 +58,13 @@ static bool (*GetImageRGBA)(intptr_t, int, uint8_t *, int);
 static bool (*IsAPICallCompleted)(intptr_t, uint64_t, bool *);
 static bool (*GetAPICallResult)(intptr_t, uint64_t, void *, int, int, bool *);
 static uint64_t (*GetSteamID)(intptr_t);
+// pair-a-pair (mods de l'hote, modsync.inc) : facultatif
+static intptr_t nw;
+static intptr_t (*GetNetworking)(intptr_t, int, int, const char *);
+static bool (*SendP2PPacket)(intptr_t, uint64_t, const void *, uint32_t, int, int);
+static bool (*IsP2PPacketAvailable)(intptr_t, uint32_t *, int);
+static bool (*ReadP2PPacket)(intptr_t, void *, uint32_t, uint32_t *, uint64_t *, int);
+static bool (*AcceptP2PSessionWithUser)(intptr_t, uint64_t);
 }
 
 template <class F> static bool SteamSym(F &f, const char *n) { f = (F)GetProcAddress(sapi::dll, n); if (!f) TestLog("steam : %s absente", n); return f != NULL; }
@@ -86,6 +93,12 @@ static bool SteamBind()
     STEAM_SYM(IsAPICallCompleted, "SteamAPI_ISteamUtils_IsAPICallCompleted"); STEAM_SYM(GetAPICallResult, "SteamAPI_ISteamUtils_GetAPICallResult");
     STEAM_SYM(GetSteamID, "SteamAPI_ISteamUser_GetSteamID");
 #undef STEAM_SYM
+    bool p2p = SteamSym(GetNetworking, "SteamAPI_ISteamClient_GetISteamNetworking");   // (sans : pas de mods par Steam)
+    p2p = SteamSym(SendP2PPacket, "SteamAPI_ISteamNetworking_SendP2PPacket") && p2p;
+    p2p = SteamSym(IsP2PPacketAvailable, "SteamAPI_ISteamNetworking_IsP2PPacketAvailable") && p2p;
+    p2p = SteamSym(ReadP2PPacket, "SteamAPI_ISteamNetworking_ReadP2PPacket") && p2p;
+    p2p = SteamSym(AcceptP2PSessionWithUser, "SteamAPI_ISteamNetworking_AcceptP2PSessionWithUser") && p2p;
+    if (!p2p) GetNetworking = NULL;
     return ok;
 }
 
@@ -175,6 +188,8 @@ static bool SteamUp()
     sapi::mm = c ? sapi::GetMatchmaking(c, u, pipe, "SteamMatchMaking009") : 0;
     sapi::us = c ? sapi::GetUser(c, u, pipe, "SteamUser019") : 0;
     sapi::ut = c ? sapi::GetUtils(c, pipe, "SteamUtils008") : 0;
+    sapi::nw = c && sapi::GetNetworking ? sapi::GetNetworking(c, u, pipe, "SteamNetworking005") : 0;
+    if (!sapi::nw) TestLog("steam : pas de pair-a-pair (SteamNetworking005) : pas de mods de l'hote par Steam");
     if (!sapi::fr || !sapi::mm || !sapi::us || !sapi::ut) {
         sapi::Shutdown();
         g_steamWhy = T(L"Interfaces Steam introuvables", L"Steam interfaces not found");
@@ -201,6 +216,12 @@ static void SteamDown()
     g_steamUp = 0;
     g_sCall = 0;
     TestLog("steam : arrete");
+}
+
+static void SteamSendP2P(SteamId to, const std::string &d)
+{
+    if (g_steamUp != 1 || !sapi::nw || !to || d.empty()) return;
+    if (!sapi::SendP2PPacket(sapi::nw, to, d.data(), (uint32_t)d.size(), 2 /* fiable */, 5 /* kSyncChannel */)) TestLog("steam : envoi pair-a-pair impossible (%u octets)", (unsigned)d.size());
 }
 
 static void SteamAvFree() { for (auto &a : g_steamAv) delete a.second; g_steamAv.clear(); }
@@ -288,6 +309,7 @@ static void SteamLobbyHost()
     g_sIds[g_steamMe] = 0;
     g_sNextId = 1;
     g_sHost = g_steamMe;
+    SyncOfferReset();
     g_sInvited.clear();
     g_mySkinSent = MySkin();
     g_partie = PARTIE_CONTINUER;
@@ -320,6 +342,7 @@ static void SteamLobbyJoin(SteamId lobby)
         WritePrivateProfileStringW(L"Lanceur", L"Reseau", L"steam", g_iniLauncher.c_str());
     }
     SavePlayer();
+    SyncReset();
     g_lobbyGen++;
     g_meReady = false;
     g_joinFallback = false;
@@ -446,6 +469,7 @@ static void SteamGo(const std::string &go)
 {
     int partie = go == "nouvelle" ? PARTIE_NOUVELLE : PARTIE_CONTINUER;
     TestLog("salon steam : GO recu (%s), hote %llu", go.c_str(), (unsigned long long)g_sHost);
+    g_syncKeep = true;
     LobbyClose();
     g_partie = partie;
     g_goWait = true;
