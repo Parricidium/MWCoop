@@ -65,6 +65,7 @@ namespace MWCoop
             Step("sauvegarde en jeu", Game.Update);
             Step("menu", Menu.Update);
             Step("mscloader", MscMods.Update);
+            Step("lanceur", MWCoop.Net.Admin.Update);
             Step("joueurs", PlayerSync.Update);
             Step("monde", World.Update);
             Step("interactions", Interactions.Update);
@@ -197,7 +198,15 @@ namespace MWCoop
             Session.Stop();
             // Le lanceur cherche cette ligne : absente a la fin du journal, le jeu s'est arrete brutalement (crash,
             // processus tue) et l'icone des journaux porte un "!" rouge.
-            Log.Info("jeu ferme normalement");
+            if (!closed) { closed = true; Log.Info("jeu ferme normalement"); }
+        }
+
+        // (aussi a la destruction de ce module, qui ne survient qu'a la fermeture du jeu : au cas ou Unity sauterait
+        // OnApplicationQuit selon la facon de quitter -- pas de fausse alerte d'arret brutal dans le lanceur)
+        static bool closed;
+        void OnDestroy()
+        {
+            if (!closed) { closed = true; Log.Info("jeu ferme normalement"); }
         }
     }
 }

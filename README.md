@@ -160,7 +160,10 @@ Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
 - **Join**: enter the host's address, click READY in the lobby (or JOIN IN GAME if the host is already playing). Your
   game receives the host's save and enters their game by itself. **Your own save is never touched**: guests play in
   a separate profile (`MWCoop\profils\invite`).
-- In game: **F10** opens the co-op menu (mouse or arrows), **T** the chat, **Esc** closes them.
+- In game: **F10** opens the co-op menu (mouse or arrows), **T** the chat, **Esc** closes them. Everyone can go to
+  another player (F10 > PLAYERS); the host can also bring a player over or kick them.
+- The launcher stays open while you play (option in the CO-OP tab): players, ping, and for the host BRING HERE and
+  KICK; it goes back to the menu when the game closes. A red "!" on the logs icon means the last game stopped abruptly.
 
 ## Features
 
@@ -319,7 +322,11 @@ Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) 
 - **Rejoindre** : entrez l'adresse de l'hôte, cliquez sur PRÊT dans le salon (ou REJOINDRE EN JEU si l'hôte joue
   déjà). Votre jeu reçoit la sauvegarde de l'hôte et entre dans sa partie tout seul. **Votre propre sauvegarde n'est
   jamais touchée** : l'invité joue dans un profil à part (`MWCoop\profils\invite`).
-- En jeu : **F10** ouvre le menu coop (souris ou flèches), **T** le tchat, **Échap** les ferme.
+- En jeu : **F10** ouvre le menu coop (souris ou flèches), **T** le tchat, **Échap** les ferme. Chacun peut aller vers
+  un autre joueur (F10 > JOUEURS) ; l'hôte peut aussi faire venir un joueur ou l'exclure.
+- Le lanceur reste ouvert pendant la partie (option dans l'onglet COOP) : joueurs, ping, et pour l'hôte FAIRE VENIR et
+  EXCLURE ; il revient au menu quand le jeu se ferme. Un « ! » rouge sur l'icône des journaux : la dernière partie
+  s'est arrêtée brutalement.
 
 ## Fonctionnalités
 

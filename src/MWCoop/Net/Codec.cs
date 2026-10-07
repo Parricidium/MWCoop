@@ -104,5 +104,6 @@ namespace MWCoop.Net
         Payout = 46,      // enveloppe de paie d'un boulot prise par un joueur : retiree chez les autres
         Race = 47,        // courses : voitures IA (hote), table des resultats du rallye, empreinte de la liste
         PushDoor = 48,    // porte poussee hors vehicule (garage) : angle de celui qui pousse
+        Summon = 49,      // hote -> un invite : viens a moi (position, cap) ; menu F10 ou lanceur (Admin)
     }
 }

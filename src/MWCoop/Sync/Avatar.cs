@@ -1073,6 +1073,9 @@ namespace MWCoop
         // dans la main droite (clip « boire »), ramenee a une taille de bouteille ; retiree quand il a fini.
         GameObject drinkGo;
         int drinkIdx;
+        Vector3 drinkAxis = Vector3.up;   // axe long du modele, du cul vers le goulot (repere de l'objet)
+        float drinkHalf = 0.12f;           // demi-longueur une fois a l'echelle (m)
+        float drinkLogAt;
 
         void DrinkInHand(int i)
         {
@@ -1090,7 +1093,58 @@ namespace MWCoop
             float want = n.Contains("Coffee") || n.Contains("Glass") ? 0.11f : 0.24f;
             float size = any ? Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z)) : 0f;
             if (size > 0.01f) drinkGo.transform.localScale *= want / size;
+            drinkHalf = want / 2f;
+            DrinkAxis();
             Log.Info("avatar " + Player.Name + " : boit (" + n + ", " + (size > 0f ? (size * 100f).ToString("F0") + " cm ramenes a " + (want * 100f).ToString("F0") : "taille ?") + ")");
+        }
+
+        // Axe long du modele (dans son repere : boites des maillages ramenees a l'objet) et sens du goulot : le bout le plus
+        // fin (rayon moyen des sommets des 20 % extremes), si les sommets se lisent ; sinon vers +axe. Avant, la bouteille
+        // etait tournee comme si son axe etait toujours Y, goulot en haut : couchee ou a l'envers selon le modele, et a la
+        // bouche elle partait de travers (retour de JD, 07/10).
+        void DrinkAxis()
+        {
+            drinkAxis = Vector3.up;
+            Transform t0 = drinkGo.transform;
+            bool any = false;
+            Bounds lb = new Bounds();
+            var mfs = drinkGo.GetComponentsInChildren<MeshFilter>();
+            foreach (MeshFilter mf in mfs)
+            {
+                if (mf.sharedMesh == null) continue;
+                Bounds mb = mf.sharedMesh.bounds;
+                for (int k = 0; k < 8; k++)
+                {
+                    Vector3 corner = mb.center + Vector3.Scale(mb.extents, new Vector3((k & 1) != 0 ? 1 : -1, (k & 2) != 0 ? 1 : -1, (k & 4) != 0 ? 1 : -1));
+                    Vector3 lp = t0.InverseTransformPoint(mf.transform.TransformPoint(corner));
+                    if (!any) { lb = new Bounds(lp, Vector3.zero); any = true; } else lb.Encapsulate(lp);
+                }
+            }
+            if (!any) return;
+            Vector3 sz = lb.size;
+            int ax = sz.x >= sz.y && sz.x >= sz.z ? 0 : sz.y >= sz.z ? 1 : 2;
+            Vector3 axis = ax == 0 ? Vector3.right : ax == 1 ? Vector3.up : Vector3.forward;
+            float lo = lb.min[ax], hi = lb.max[ax], len = hi - lo;
+            float rLo = 0f, rHi = 0f; int nLo = 0, nHi = 0;
+            try
+            {
+                foreach (MeshFilter mf in mfs)
+                {
+                    if (mf.sharedMesh == null) continue;
+                    foreach (Vector3 v in mf.sharedMesh.vertices)
+                    {
+                        Vector3 lp = t0.InverseTransformPoint(mf.transform.TransformPoint(v));
+                        float along = lp[ax];
+                        Vector3 rel = lp - lb.center; rel[ax] = 0f;
+                        if (along < lo + len * 0.2f) { rLo += rel.magnitude; nLo++; }
+                        else if (along > hi - len * 0.2f) { rHi += rel.magnitude; nHi++; }
+                    }
+                }
+            }
+            catch (System.Exception) { nLo = nHi = 0; }   // (maillage non lisible : axe seul)
+            bool neckHigh = nLo == 0 || nHi == 0 || rHi / nHi <= rLo / nLo;
+            drinkAxis = neckHigh ? axis : -axis;
+            Log.Info("avatar " + Player.Name + " : boisson, axe " + "XYZ"[ax] + (neckHigh ? "+" : "-") + (nLo > 0 && nHi > 0 ? " (goulot d'apres les sommets)" : ""));
         }
 
         void PlaceDrink()
@@ -1098,17 +1152,33 @@ namespace MWCoop
             if (drinkGo == null || !drinkGo.activeSelf) return;
             Transform hand = Bone("hand_right"), finger = Bone("finger_right");
             if (hand == null) return;
-            // Dans le poing : entre le poignet et le bout des doigts ; debout dans la main, penchee vers la bouche
-            // quand la main y monte (axe de la bouteille : du poing vers la tete, moitie avec la verticale).
-            Vector3 at = finger != null ? Vector3.Lerp(hand.position, finger.position, 0.55f) : hand.position;
-            Vector3 up = Root.transform.up;
-            if (headBone != null) up = Vector3.Slerp(up, (headBone.position - at).normalized, 0.5f);
-            drinkGo.transform.rotation = Quaternion.FromToRotation(Vector3.up, up) * Quaternion.Euler(0f, Root.transform.eulerAngles.y, 0f);
+            // Toujours dans le poing (entre le poignet et le bout des doigts) : debout, la main un peu sous le milieu. Quand la
+            // main monte a la bouche (clip "boire"), elle bascule du poing VERS la bouche, un peu goulot en bas (cul en l'air) :
+            // la main reste sur l'axe et le goulot arrive aux levres. (Avant, elle glissait vers un point fixe devant la
+            // bouche et quittait la main a mi-chemin.)
+            Vector3 fist = finger != null ? Vector3.Lerp(hand.position, finger.position, 0.55f) : hand.position;
+            Vector3 up = Root.transform.up, fwd = Root.transform.forward;
+            Vector3 mouth = headBone != null ? headBone.position + fwd * 0.09f - up * 0.07f : fist;
+            float dist = Vector3.Distance(fist, mouth);
+            float t = headBone != null ? Mathf.Clamp01(1f - (dist - 0.12f) / 0.20f) : 0f;
+            Vector3 toMouth = dist > 0.01f ? (mouth - fist) / dist : -fwd;
+            Vector3 dir = Vector3.Slerp(up, (toMouth - up * 0.45f).normalized, t).normalized;   // du cul vers le goulot
+            if (Time.realtimeSinceStartup >= drinkLogAt && Config.GetInt("Test", "JournalBoisson", 0) != 0)
+            {
+                drinkLogAt = Time.realtimeSinceStartup + 1f;
+                Log.Info("boisson : poing-bouche " + Vector3.Distance(fist, mouth).ToString("F2") + " m, bascule " + t.ToString("F2") + ", poing " + Root.transform.InverseTransformPoint(fist).ToString("F2")
+                         + ", tete " + (headBone != null ? Root.transform.InverseTransformPoint(headBone.position).ToString("F2") : "?") + ", axe " + drinkAxis);
+            }
+            drinkGo.transform.rotation = Quaternion.FromToRotation(drinkAxis, dir);
+            // Centre de la bouteille sur son axe, depuis le poing : un peu au-dessus en la tenant ; en buvant, de sorte que le
+            // goulot (centre + demi-longueur) touche la bouche, sans que la main quitte la bouteille.
+            float along = Mathf.Lerp(0.2f, Mathf.Clamp(dist / drinkHalf - 0.95f, -0.6f, 0.6f), t);
+            Vector3 target = fist + dir * drinkHalf * along;
             // Le centre des rendus est pose la (l'origine du modele du jeu n'est pas forcement en son milieu).
             Vector3 c = drinkGo.transform.position;
             bool any = false; Bounds b = new Bounds();
             foreach (Renderer r in drinkGo.GetComponentsInChildren<Renderer>()) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
-            drinkGo.transform.position = any ? at + (c - b.center) : at;
+            drinkGo.transform.position = any ? target + (c - b.center) : target;
         }
 
         // Apres la pose : la cigarette entre les doigts, la fumee devant la bouche.

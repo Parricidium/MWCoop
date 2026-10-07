@@ -28,7 +28,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 31;
+        public const int NetVersion = 32;
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;
@@ -226,6 +226,18 @@ namespace MWCoop.Net
                 }
                 return;
             }
+            if (reason.StartsWith("exclu"))   // exclu par l'hote (Admin.Kick) : pas de nouvel essai tout seul
+            {
+                Log.Warn("exclu par l'hote");
+                Hud.Toast(Lang.T("Vous avez \u00E9t\u00E9 exclu de la partie par l'h\u00F4te", "You were kicked from the game by the host"));
+                foreach (PlayerInfo pk in new List<PlayerInfo>(Players.Values))
+                    if (!pk.Local && PlayerLeft != null) PlayerLeft(pk);
+                Players.Clear();
+                Status = "exclu par l'hote";
+                hostPeer = null;
+                retryAt = float.MaxValue;
+                return;
+            }
             Log.Warn("deconnecte de l'hote : " + reason);
             Hud.Toast(Lang.T("D\u00E9connect\u00E9 de l'h\u00F4te : ", "Disconnected from the host: ") + reason);
             foreach (PlayerInfo pi in new List<PlayerInfo>(Players.Values))
@@ -262,6 +274,7 @@ namespace MWCoop.Net
                     case Msg.Payout: Wallet.OnPayout(from, r); break;
                     case Msg.Race: Races.OnMessage(from, r); break;
                     case Msg.PushDoor: PushDoors.OnMessage(from, r); break;
+                    case Msg.Summon: Admin.OnSummon(from, r); break;
                     case Msg.Purchase: Shop.OnMessage(from, r); break;
                     case Msg.Paint: Paint.OnMessage(from, r); break;
                     case Msg.Setting: Settings.OnMessage(from, r); break;
@@ -392,5 +405,7 @@ namespace MWCoop.Net
 
         // Invite : accepte par l'hote (connexion etablie).
         public static bool HostConnected { get { return !IsHost && hostPeer != null && hostPeer.Accepted; } }
+        // Invite : aller-retour avec l'hote, en ms (-1 : pas connecte).
+        public static int HostPing { get { return HostConnected ? Mathf.RoundToInt(hostPeer.Rtt * 1000) : -1; } }
     }
 }

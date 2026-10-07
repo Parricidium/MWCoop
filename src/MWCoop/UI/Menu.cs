@@ -446,6 +446,27 @@ namespace MWCoop
                 nextIcon = MWCoop.Net.SteamNet.Avatar(pi.SteamId);
                 if (Item(prows[i].Label, prows[i].Value, false, canGo ? Lang.T("Entr\u00E9e ou clic : aller vers ce joueur", "Enter or click: go to this player") : null, false) == 2 && canGo) GoTo(pi);
             }
+            // Hote : faire venir un joueur a soi, ou l'exclure (demandes de JD, 07/10).
+            if (Session.Active && Session.IsHost && Session.RemoteCount > 0)
+            {
+                Header(Lang.T("H\u00D4TE", "HOST"));
+                for (int i = 0; i < prows.Count; i++)
+                {
+                    PlayerInfo pi = prows[i].P;
+                    if (pi.Local) continue;
+                    bool canBring = pi.Level == 1 && PlayerSync.InGame;
+                    if (Item(Lang.T("Faire venir ", "Bring here: ") + pi.Name, canBring ? null : Lang.T("pas en partie", "not in game"), false,
+                             Lang.T("Entr\u00E9e ou clic : ce joueur arrive pr\u00E8s de vous", "Enter or click: this player comes next to you"), false) == 2 && canBring)
+                    { MWCoop.Net.Admin.Summon(pi.Id); Open = false; }
+                    bool armed = kickArmed == pi.Id && Time.realtimeSinceStartup - kickArmedAt < 4f;
+                    if (Item(Lang.T("Exclure ", "Kick ") + pi.Name, armed ? Lang.T("cliquez encore pour confirmer", "click again to confirm") : null, false,
+                             Lang.T("Deux clics : ce joueur est d\u00E9connect\u00E9 de la partie", "Two clicks: this player is disconnected from the game"), false) == 2)
+                    {
+                        if (armed) { MWCoop.Net.Admin.Kick(pi.Id, "menu F10"); kickArmed = -1; }
+                        else { kickArmed = pi.Id; kickArmedAt = Time.realtimeSinceStartup; }
+                    }
+                }
+            }
             // Partie par Steam : invitation d'amis (overlay Steam) depuis le menu.
             if (Session.Active && Session.Steam && Item(Lang.T("Inviter des amis Steam", "Invite Steam friends"), MWCoop.Net.SteamNet.Lobby != 0 ? "" : Lang.T("salon en cours...", "lobby starting..."), false,
                      Lang.T("Ouvre la fen\u00EAtre d'invitation de Steam (aussi : Maj+Tab). Ils lancent MWCoop.exe > REJOINDRE (Steam) et acceptent.",
@@ -455,16 +476,27 @@ namespace MWCoop
 
         static void GoTo(PlayerInfo pi)
         {
+            if (VehicleSync.LocalDriving >= 0 || Seats.Seated) { Hud.Toast(Lang.T("Sortez d'abord du v\u00E9hicule", "Get out of the vehicle first")); return; }
+            TeleportTo(pi.State.Feet, pi.State.Yaw, pi.Name);
+        }
+
+        // Pres de quelqu'un (pieds, cap) : 1,5 m derriere lui, un peu au-dessus du sol (la gravite fait le reste).
+        public static void TeleportTo(Vector3 feet, float yaw, string who)
+        {
             GameObject p = GameObject.Find("PLAYER");
             if (p == null) return;
-            Vector3 target = pi.State.Feet + Quaternion.Euler(0, pi.State.Yaw, 0) * new Vector3(0, 0, -1.5f) + Vector3.up * 1.0f;
+            Vector3 target = feet + Quaternion.Euler(0, yaw, 0) * new Vector3(0, 0, -1.5f) + Vector3.up * 1.0f;
             var cc = p.GetComponent<CharacterController>();
             if (cc != null) cc.enabled = false;
             p.transform.position = target;
             if (cc != null) cc.enabled = true;
-            Log.Info("teleporte vers " + pi.Name);
+            Log.Info("teleporte vers " + who);
             Open = false;
         }
+
+        // Hote : exclure demande deux clics (le 2e dans les 4 s) ; le 1er le dit dans la ligne.
+        static int kickArmed = -1;
+        static float kickArmedAt;
 
         static string lastSkin, lastSkinLabel;
 

@@ -156,6 +156,7 @@ namespace MWCoop
                 if (Props.Holding) st.Flags |= F_Carry;
                 st.Flags |= Wear.LocalFlags;
                 st.Flags |= Config.GetInt("Test", "TestFlags", 0) | Autotest.PoseFlags;   // essais : postures forcees
+                if ((st.Flags & F_Drink) != 0 && st.Drink == 0) st.Drink = Config.GetInt("Test", "TestBoisson", 0);   // (essais : quelle boisson)
             }
             Session.Me.State = st;
             var w = new NetWriter(Msg.PlayerState).U8(Session.LocalId).U8(Session.Me.Level)
