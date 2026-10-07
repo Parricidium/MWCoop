@@ -9,9 +9,9 @@
 static int g_drawer = DR_NONE, g_drawerShown = DR_NONE;   // demande / montre (garde pendant le repli)
 static float g_drawerT;                                     // 0 replie .. 1 deplie
 static const float kDrawerW = 552;
-static const RectF kDrawerCard(986, 90, 540, 526);
-static const float kDrawerDx = 996 - 440, kDrawerDy = 98 - 116;   // panneau des onglets (440,116) -> (996,98)
-static const RectF kDrawerOk(1388, 578, 124, 30), kDrawerCancel(1256, 578, 124, 30);
+static const RectF kDrawerCard(986, 60, 540, 540);   // meme hauteur que la carte du lanceur (20, 60, 960, 540)
+static const float kDrawerDx = 996 - 440, kDrawerDy = 72 - 116;   // panneau des onglets (440,116) -> (996,72)
+static const RectF kDrawerOk(1388, 556, 124, 30), kDrawerCancel(1256, 556, 124, 30);
 static int g_drawerHot;                                     // 1 valider, 2 annuler
 static int g_drSkin = -1, g_drCar = -1, g_drPort = -1, g_drClose = -1;   // valeurs a l'ouverture (ANNULER)
 
@@ -60,10 +60,10 @@ static void DrawDrawer(Graphics &g)
     RectF card = kDrawerCard;
     card.X += s;
     {   // ombre, carte
-        GraphicsPath sp; RoundRect(sp, RectF(card.X + 3, card.Y + 6, card.Width, card.Height), 24);
+        GraphicsPath sp; RoundRect(sp, RectF(card.X + 3, card.Y + 6, card.Width, card.Height), 26);
         SolidBrush sb(Color(70, 0, 0, 0)); g.FillPath(&sb, &sp);
     }
-    GraphicsPath cp; RoundRect(cp, card, 24);
+    GraphicsPath cp; RoundRect(cp, card, 26);
     LinearGradientBrush cb(card, TH(fallA), TH(fallB), LinearGradientModeVertical);
     g.FillPath(&cb, &cp);
     Pen cpen(TH(panelBorder), 1.5f);
