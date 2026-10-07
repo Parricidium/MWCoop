@@ -747,7 +747,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
 }
 
 // ---- dessin et clics (salon)
-static const RectF kSyncBar(456, 392, 480, 30), kSyncBtn(782, 395, 150, 24);
+static RectF kSyncBtn(0, 0, 0, 0);   // (place par DrawSyncCard)
 static bool SyncBarShown()
 {
     if (g_lobby == LB_HOST) return true;
@@ -756,7 +756,7 @@ static bool SyncBarShown()
 }
 static int SyncBtnAt(float x, float y)   // 1 : TOUT ACCEPTER / REESSAYER ; 2 : hote, ouvrir l'onglet MODS
 {
-    if (!SyncBarShown() || !kSyncBtn.Contains(x, y)) return 0;
+    if (!SyncBarShown() || kSyncBtn.Width <= 0 || !kSyncBtn.Contains(x, y)) return 0;
     if (g_lobby == LB_HOST) return 2;
     int s = g_sync;
     return s == SY_ASK || s == SY_FAIL ? 1 : 0;
@@ -769,16 +769,17 @@ static std::wstring SizeText(uint64_t b)
     if (g_fr) for (wchar_t *c = t; *c; c++) if (*c == L'.') *c = L',';   // (2,2 Mo)
     return t;
 }
-static void DrawSyncBar(Graphics &g, int hot)
+// Carte "Envoye aux invites" (hote) ou "Envoi de l'hote" (invite), page du salon.
+static void DrawSyncCard(Graphics &g, RectF c, int hot)
 {
-    if (!SyncBarShown()) return;
-    GraphicsPath bp; RoundRect(bp, kSyncBar, 10);
-    SolidBrush bb(TH(card)); g.FillPath(&bb, &bp);
-    Pen bpen(TH(choiceBorder), 1.0f); g.DrawPath(&bpen, &bp);
+    kSyncBtn = RectF(0, 0, 0, 0);
+    bool host = g_lobby == LB_HOST;
+    Title(g, host ? T(L"Envoy\u00E9 aux invit\u00E9s", L"Sent to guests") : T(L"Envoi de l'h\u00F4te", L"Host's files"), RectF(c.X + 20, c.Y + 16, c.Width - 40, 24), 17, kInk);
+    if (!SyncBarShown()) { Text(g, T(L"Rien pour l'instant", L"Nothing for now"), RectF(c.X + 20, c.Y + 52, c.Width - 40, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear); return; }
     std::wstring line, btn;
-    Color c = kGrey;
+    Color col = kGrey;
     float prog = -1;
-    if (g_lobby == LB_HOST) {
+    if (host) {
         EnterCriticalSection(&g_lcs);
         bool msc = g_offer.msc;
         int n = (int)g_offer.mods.size(), nc = (int)g_offer.cats.size();
@@ -786,44 +787,44 @@ static void DrawSyncBar(Graphics &g, int hot)
         for (auto &f : g_offer.files) bytes += f.size;
         LeaveCriticalSection(&g_lcs);
         wchar_t b[200];
-        if (!n && !nc) swprintf_s(b, L"%s", msc ? T(L"Rien n'est envoy\u00E9 aux invit\u00E9s", L"Nothing is sent to guests") : T(L"Rien n'est envoy\u00E9 (MSCLoader coup\u00E9 : invit\u00E9s sans mods)", L"Nothing is sent (MSCLoader off: guests without mods)"));
-        else swprintf_s(b, T(L"Envoy\u00E9 aux invit\u00E9s : %d mod(s) \u00B7 %d contenu(s) \u00B7 %s", L"Sent to guests: %d mod(s) \u00B7 %d item(s) \u00B7 %s"), n, nc, SizeText(bytes).c_str());
+        if (!n && !nc) swprintf_s(b, L"%s", msc ? T(L"Rien n'est envoy\u00E9", L"Nothing is sent") : T(L"Rien (MSCLoader coup\u00E9 : invit\u00E9s sans mods)", L"Nothing (MSCLoader off: guests without mods)"));
+        else swprintf_s(b, T(L"%d mod(s) \u00B7 %d contenu(s) \u00B7 %s", L"%d mod(s) \u00B7 %d item(s) \u00B7 %s"), n, nc, SizeText(bytes).c_str());
         line = b;
-        c = n || nc ? kInk : kGrey;
-        btn = T(L"CHOISIR", L"CHOOSE");
+        col = n || nc ? kInk : kGrey;
+        btn = T(L"Choisir", L"Choose");
     } else {
         std::lock_guard<std::mutex> lk(g_syncMx);
         int s = g_sync, n = (int)g_hostOffer.mods.size(), nc = (int)g_hostOffer.cats.size();
         wchar_t b[200];
-        if (s == SY_CHECK) line = T(L"Envoi de l'h\u00F4te : v\u00E9rification\u2026", L"Host's files: checking\u2026");
+        if (s == SY_CHECK) line = T(L"V\u00E9rification\u2026", L"Checking\u2026");
         else if (s == SY_ASK) {
-            swprintf_s(b, T(L"L'h\u00F4te envoie %d mod(s) \u00B7 %d contenu(s) \u00B7 %s", L"The host sends %d mod(s) \u00B7 %d item(s) \u00B7 %s"), n, nc, SizeText(g_syncTotal).c_str());
-            line = b; c = kInk; btn = T(L"TOUT ACCEPTER", L"ACCEPT ALL");
+            swprintf_s(b, T(L"%d mod(s) \u00B7 %d contenu(s) \u00B7 %s", L"%d mod(s) \u00B7 %d item(s) \u00B7 %s"), n, nc, SizeText(g_syncTotal).c_str());
+            line = b; col = kInk; btn = T(L"TOUT ACCEPTER", L"ACCEPT ALL");
         } else if (s == SY_GET) {
             uint64_t t = g_syncTotal, got = g_syncGot;
             prog = t ? (float)((double)got / t) : 0;
-            swprintf_s(b, T(L"T\u00E9l\u00E9chargement de l'envoi de l'h\u00F4te\u2026 %d %% (%s)", L"Downloading the host's files\u2026 %d%% (%s)"), (int)(prog * 100), SizeText(t).c_str());
-            line = b; c = kInk;
+            swprintf_s(b, T(L"T\u00E9l\u00E9chargement\u2026 %d %% (%s)", L"Downloading\u2026 %d%% (%s)"), (int)(prog * 100), SizeText(t).c_str());
+            line = b; col = kInk;
         } else if (s == SY_DONE) {
-            if (n || nc) swprintf_s(b, T(L"Envoi de l'h\u00F4te pr\u00EAt \u2713  %d mod(s) \u00B7 %d contenu(s)", L"Host's files ready \u2713  %d mod(s) \u00B7 %d item(s)"), n, nc);
+            if (n || nc) swprintf_s(b, T(L"Pr\u00EAt \u2713  %d mod(s) \u00B7 %d contenu(s)", L"Ready \u2713  %d mod(s) \u00B7 %d item(s)"), n, nc);
             else swprintf_s(b, L"%s", T(L"L'h\u00F4te n'envoie rien \u2713", L"The host sends nothing \u2713"));
-            line = b; c = kAcc;
+            line = b; col = kOk;
             if (!g_hostOffer.msc) line += T(L" \u00B7 sans MSCLoader", L" \u00B7 no MSCLoader");
-            if (g_mscInstall == 1) line += T(L" · installation de MSCLoader…", L" · installing MSCLoader…");
+            if (g_mscInstall == 1) line += T(L" \u00B7 installation de MSCLoader\u2026", L" \u00B7 installing MSCLoader\u2026");
         } else if (s == SY_FAIL) {
-            line = std::wstring(T(L"Envoi de l'h\u00F4te : \u00E9chec (", L"Host's files: failed (")) + Widen(g_syncWhy, CP_UTF8) + L")";
-            c = kRed; btn = T(L"RÉESSAYER", L"RETRY");
+            line = std::wstring(T(L"\u00C9chec (", L"Failed (")) + Widen(g_syncWhy, CP_UTF8) + L")";
+            col = kRed; btn = T(L"R\u00C9ESSAYER", L"RETRY");
         }
     }
-    float tw = btn.empty() ? kSyncBar.Width - 24 : kSyncBtn.X - kSyncBar.X - 18;
-    Text(g, line, RectF(kSyncBar.X + 12, kSyncBar.Y, tw, prog >= 0 ? kSyncBar.Height - 6 : kSyncBar.Height), 11.5f, FontStyleBold, c, StringAlignmentNear);
-    if (prog >= 0) DrawBar(g, RectF(kSyncBar.X + 12, kSyncBar.Y + kSyncBar.Height - 8, kSyncBar.Width - 24, 3), prog);
+    Para(g, line, RectF(c.X + 20, c.Y + 48, c.Width - 40, 40), 13, col);
+    if (prog >= 0) DrawBar(g, RectF(c.X + 20, c.Y + 96, c.Width - 40, 5), prog);
     if (!btn.empty()) {
-        GraphicsPath p; RoundRect(p, kSyncBtn, kSyncBtn.Height / 2);
+        kSyncBtn = RectF(c.X + 20, c.Y + c.Height - 54, c.Width - 40, 40);
+        GraphicsPath p; RoundRect(p, kSyncBtn, 12);
         bool h = hot == 1 || hot == 2;
-        if (g_lobby == LB_HOST) { SolidBrush hb(h ? WithA(kAcc, 0.22f) : TH(field)); g.FillPath(&hb, &p); Pen pp(h ? kAcc : TH(choiceBorder), 1.1f); g.DrawPath(&pp, &p); }
-        else { LinearGradientBrush lg(kSyncBtn, Mix(kAcc, Color(255, 255, 255, 255), h ? 0.15f : 0.0f), kAcc2, LinearGradientModeHorizontal); g.FillPath(&lg, &p); }
-        Text(g, btn, kSyncBtn, 11, FontStyleBold, g_lobby == LB_HOST ? (h ? kAcc : kInk) : kOnAcc);
+        if (host) { SolidBrush hb(h ? TH(btn2Hot) : TH(btn2)); g.FillPath(&hb, &p); Pen pp(TH(fieldBorder), 1); g.DrawPath(&pp, &p); }
+        else { SolidBrush lg(kAcc); g.FillPath(&lg, &p); if (h) { SolidBrush hb(Color(55, 255, 255, 255)); g.FillPath(&hb, &p); } }
+        Text(g, btn, kSyncBtn, 13, FontStyleBold, host ? kInk : kOnAcc);
     }
 }
 
@@ -892,8 +893,12 @@ static DWORD g_contentScanT;
 // (g_contentHot : drawer.inc)
 static std::vector<int> g_drContent;                 // a l'ouverture du volet (ANNULER)
 static std::map<std::wstring, Bitmap *> g_contentThumb;
-static const float kContentRowH = 31;
-static const RectF kContentList(452, 168, 488, kContentN * kContentRowH);
+static const float kContentRowH = 72;   // pas des tuiles (deux colonnes)
+static RectF ContentTileRect(int i)
+{
+    float w = (kMain.Width - 48 - 12) / 2;
+    return RectF(kMain.X + 24 + (i % 2) * (w + 12), kMain.Y + 84 + (i / 2) * kContentRowH, w, kContentRowH - 10);
+}
 
 static void ContentScan()
 {
@@ -934,62 +939,80 @@ static Bitmap *ContentThumb(int i)
     g_contentThumb[f[0]] = b;
     return b;
 }
-static RectF ContentModsRow() { return RectF(kContentList.X + 4, kContentList.Y + kContentList.Height + 8, kContentList.Width - 8, 30); }
-// 5000+i : categorie i (la ligne entiere) ; 5100 : ligne des mods (onglet MODS).
+static RectF ContentModsRow() { RectF last = ContentTileRect(kContentN - 1); return RectF(kMain.X + 24, last.Y + last.Height + 14, kMain.Width - 48, 52); }
+// 5000+i : categorie i (la tuile entiere) ; 5100 : ligne des mods (page MODS).
 static int ContentAt(float x, float y)
 {
-    if (kContentList.Contains(x, y)) { int i = (int)((y - kContentList.Y) / kContentRowH); return i >= 0 && i < kContentN ? 5000 + i : -1; }
+    for (int i = 0; i < kContentN; i++) if (ContentTileRect(i).Contains(x, y)) return 5000 + i;
     return ContentModsRow().Contains(x, y) ? 5100 : -1;
 }
 static void ContentClick(float x, float y)
 {
     int h = ContentAt(x, y);
     if (h >= 5000 && h < 5100) { int i = h - 5000; ContentSet(i, !ContentOn(i)); }
-    else if (h == 5100) { DrawerClose(true); g_tab = TAB_MODS; g_mscPage = -1; g_scroll[TAB_MODS] = 0; MscScan(); }
+    else if (h == 5100) { g_tab = TAB_MODS; g_mscPage = -1; g_scroll[TAB_MODS] = 0; MscScan(); }
 }
+// Page CONTENU : une tuile par categorie (miniature, taille, interrupteur), puis les mods, puis ANNULER / VALIDER.
 static void DrawContent(Graphics &g)
 {
     if (GetTickCount() - g_contentScanT > 2000) ContentScan();
-    Text(g, T(L"CONTENU ENVOY\u00C9 AUX INVIT\u00C9S", L"CONTENT SENT TO GUESTS"), RectF(460, 120, 476, 26), 16, FontStyleBold, kInk, StringAlignmentNear);
-    Text(g, T(L"Copi\u00E9 chez tes invit\u00E9s pour ta partie, \u00E0 part de leurs fichiers.", L"Copied to your guests for your game, apart from their own files."),
-         RectF(460, 144, 476, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    RectF c = kMain;
+    Glass(c);
+    Title(g, T(L"Contenu envoy\u00E9 aux invit\u00E9s", L"Content sent to guests"), RectF(c.X + 24, c.Y + 20, 600, 28), 18, kInk);
+    Text(g, T(L"Tes CD, ta peinture, ton drapeau\u2026 tels que tu les as dans ton jeu, copi\u00E9s \u00E0 part chez les invit\u00E9s de ton salon.",
+              L"Your CDs, paint, flag\u2026 as you have them in your game, copied apart to your lobby's guests."),
+         RectF(c.X + 24, c.Y + 48, c.Width - 48, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
+    int on_ = 0;
     for (int i = 0; i < kContentN; i++) {
-        RectF r(kContentList.X + 4, kContentList.Y + i * kContentRowH, kContentList.Width - 8, kContentRowH - 4);
+        RectF r = ContentTileRect(i);
         bool on = ContentOn(i), hot = g_contentHot == 5000 + i;
+        on_ += on;
         const ContentInfo &ci = g_contentInfo[i];
-        GraphicsPath rp; RoundRect(rp, r, 8);
+        GraphicsPath rp; RoundRect(rp, r, 16);
         SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
-        float x = r.X + 10;
+        Pen rpen(TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
+        float a = on ? 1.0f : 0.55f;
+        RectF tr(r.X + 10, r.Y + 9, 44, 44);
+        GraphicsPath tp; RoundRect(tp, tr, 12);
         if (Bitmap *b = ContentThumb(i)) {   // miniature (images)
-            RectF tr(x, r.Y + 3, 34, r.Height - 6);
-            GraphicsPath tp; RoundRect(tp, tr, 4);
             GraphicsState st = g.Save();
             g.SetClip(&tp, CombineModeIntersect);
             g.DrawImage(b, tr);
             g.Restore(st);
-        } else {   // CD, radio, hockey : une pastille
-            SolidBrush pb(WithA(kAcc, on ? 0.35f : 0.15f));
-            g.FillEllipse(&pb, x + 8, r.Y + r.Height / 2 - 9, 18.0f, 18.0f);
-            Text(g, !wcsncmp(kContent[i].root, L"CD", 2) ? L"\u266A" : !wcscmp(kContent[i].root, L"Radio") ? L"\u2248" : L"#", RectF(x + 8, r.Y + r.Height / 2 - 9, 18, 18), 10, FontStyleBold, kInk);
+        } else {   // CD, radio, hockey : une icone
+            SolidBrush pb(WithA(kAcc, 0.22f)); g.FillPath(&pb, &tp);
+            int ic = !wcsncmp(kContent[i].root, L"CD", 2) ? IC_MUSIC : !wcscmp(kContent[i].root, L"Radio") ? IC_RADIO : IC_HASH;
+            Icon(g, ic, tr.X + 22, tr.Y + 22, 20, WithA(kInk, a), 1.9f);
         }
-        x += 44;
-        Text(g, g_fr ? kContent[i].fr : kContent[i].en, RectF(x, r.Y, 200, r.Height), 12.5f, FontStyleBold, on ? kInk : WithA(kInk, 0.55f), StringAlignmentNear);
+        Text(g, g_fr ? kContent[i].fr : kContent[i].en, RectF(r.X + 66, r.Y + 9, r.Width - 150, 24), 14.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
         std::wstring det;
         if (!ci.n) det = T(L"rien dans le jeu", L"nothing in the game");
         else if (!kContent[i].files) { wchar_t b[64]; swprintf_s(b, T(L"%d fichier(s) \u00B7 %s", L"%d file(s) \u00B7 %s"), ci.n, SizeText(ci.bytes).c_str()); det = b; }
         else det = SizeText(ci.bytes);
-        Text(g, det, RectF(r.X + 250, r.Y, 150, r.Height), 11, FontStyleRegular, kGrey, StringAlignmentFar);
-        DrawToggle(g, RectF(r.X + r.Width - 50, r.Y + (r.Height - 18) / 2, 38, 18), on, hot);
+        Text(g, det, RectF(r.X + 66, r.Y + 32, r.Width - 150, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        UiToggle(g, RectF(r.X + r.Width - 66, r.Y + (r.Height - 28) / 2, 50, 28), on, hot);
     }
     RectF mr = ContentModsRow();
     bool mh = g_contentHot == 5100;
-    GraphicsPath mp; RoundRect(mp, mr, 8);
-    Pen mpen(mh ? kAcc : TH(choiceBorder), 1.1f); g.DrawPath(&mpen, &mp);
+    GraphicsPath mp; RoundRect(mp, mr, 16);
+    SolidBrush mb_(mh ? TH(cardSel) : TH(card)); g.FillPath(&mb_, &mp);
+    Pen mpen(mh ? WithA(kAcc, 0.7f) : TH(choiceBorder), 1); g.DrawPath(&mpen, &mp);
+    Icon(g, IC_PUZZLE, mr.X + 30, mr.Y + mr.Height / 2, 20, kAcc, 1.9f);
     int shared = 0;
     for (auto &m : g_msc) shared += ModShared(m.file);
     wchar_t mb[160];
-    if (!g_mscInstalled) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : non install\u00E9  \u203A", L"MSCLoader mods: not installed  \u203A"));
-    else if (!g_mscOn) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : coup\u00E9 (invit\u00E9s sans mods)  \u203A", L"MSCLoader mods: off (guests without mods)  \u203A"));
-    else swprintf_s(mb, T(L"Mods MSCLoader : %d envoy\u00E9(s) sur %d \u00B7 onglet MODS  \u203A", L"MSCLoader mods: %d sent of %d \u00B7 MODS tab  \u203A"), shared, (int)g_msc.size());
-    Text(g, mb, RectF(mr.X + 12, mr.Y, mr.Width - 24, mr.Height), 12, FontStyleBold, mh ? kAcc : kInk, StringAlignmentNear);
+    if (!g_mscInstalled) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : non install\u00E9", L"MSCLoader mods: not installed"));
+    else if (!g_mscOn) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : coup\u00E9 (invit\u00E9s sans mods)", L"MSCLoader mods: off (guests without mods)"));
+    else swprintf_s(mb, T(L"Mods MSCLoader : %d envoy\u00E9(s) sur %d", L"MSCLoader mods: %d sent of %d"), shared, (int)g_msc.size());
+    Text(g, mb, RectF(mr.X + 54, mr.Y, mr.Width - 100, mr.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
+    Icon(g, IC_CHEVR, mr.X + mr.Width - 28, mr.Y + mr.Height / 2, 18, kInk, 2.2f);
+    // bas : resume, annuler / valider
+    float by = c.Y + c.Height - 66;
+    Pen sep(TH(sep), 1); g.DrawLine(&sep, c.X + 24, by - 10, c.X + c.Width - 24, by - 10);
+    Icon(g, IC_CHECK, c.X + 36, by + 24, 18, kOk, 2.4f);
+    wchar_t sum[160];
+    swprintf_s(sum, T(L"%d / %d \u00E9l\u00E9ments envoy\u00E9s \u00B7 copi\u00E9s \u00E0 part chez tes invit\u00E9s", L"%d / %d items sent \u00B7 copied apart to your guests"), on_, kContentN);
+    Text(g, sum, RectF(c.X + 56, by, 520, 48), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+    UiButton(g, RectF(c.X + c.Width - 24 - 300, by, 140, 48), T(L"ANNULER", L"CANCEL"), UI_PAGE_CANCEL, false);
+    UiButton(g, RectF(c.X + c.Width - 24 - 148, by, 148, 48), T(L"VALIDER", L"OK"), UI_PAGE_OK, true);
 }

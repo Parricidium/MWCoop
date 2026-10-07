@@ -310,40 +310,22 @@ static void MscTick()
         else SetStatus(K_ERR, T(L"MSCLoader non installé : %s", L"MSCLoader not installed: %s"), Widen(g_mscInstallWhy, CP_UTF8).c_str());
         MscScan();
     }
-    if (g_tab == TAB_MODS && GetTickCount() - g_mscScanT > 3000) MscScan();
+    if ((g_tab == TAB_MODS || g_tab == TAB_CONTENT) && GetTickCount() - g_mscScanT > 3000) MscScan();
 }
 
-// ---- dessin
-static const RectF kMscToggle(856, 176, 52, 24), kMscInstall(712, 172, 220, 32), kMscList(452, 214, 488, 296), kMscBack(756, 124, 180, 26), kMscOpenDir(452, 552, 160, 22);
-static const float kMscRowH = 48, kMscSetH = 40;
+// ---- dessin (page MODS, dans kMain)
+static int MscModCount() { return g_mscInstalled ? (int)g_msc.size() : 0; }
+static const RectF kMscToggle(690, 188, 50, 28), kMscAuto(1172, 188, 50, 28), kMscInstall(300, 179, 300, 46), kMscList(288, 282, 952, 390),
+                   kMscBack(1000, 108, 240, 30), kMscOpenDir(288, 694, 260, 30);
+static const float kMscRowH = 76, kMscSetH = 54;
 
-static void DrawToggle(Graphics &g, RectF r, bool on, bool hot)
-{
-    GraphicsPath p;
-    RoundRect(p, r, r.Height / 2);
-    if (on) { LinearGradientBrush lg(r, kAcc, kAcc2, LinearGradientModeHorizontal); g.FillPath(&lg, &p); }
-    else { SolidBrush b(TH(field)); g.FillPath(&b, &p); }
-    Pen pen(hot ? kAcc : on ? WithA(kAcc, 0.0f) : TH(fieldBorder), 1.3f);
-    g.DrawPath(&pen, &p);
-    float d = r.Height - 6, x = on ? r.X + r.Width - d - 3 : r.X + 3;
-    SolidBrush k(on ? Color(255, 255, 255, 255) : WithA(kGrey, 0.9f));
-    g.FillEllipse(&k, x, r.Y + 3, d, d);
-}
-static void DrawGear(Graphics &g, float cx, float cy, Color c)
-{
-    Pen p(c, 2.2f);
-    p.SetStartCap(LineCapRound); p.SetEndCap(LineCapRound);
-    for (int i = 0; i < 8; i++) { float a = i * 3.14159265f / 4; g.DrawLine(&p, cx + cosf(a) * 5.5f, cy + sinf(a) * 5.5f, cx + cosf(a) * 8.5f, cy + sinf(a) * 8.5f); }
-    Pen r(c, 2.4f);
-    g.DrawEllipse(&r, cx - 5.2f, cy - 5.2f, 10.4f, 10.4f);
-}
+static void DrawToggle(Graphics &g, RectF r, bool on, bool hot) { UiToggle(g, r, on, hot); }
+static void DrawGear(Graphics &g, float cx, float cy, Color c) { Icon(g, IC_GEAR, cx, cy, 20, c, 1.9f); }
 static void DrawExperimental(Graphics &g, float x, float y)
 {
-    RectF pr(x, y, 96, 18);
-    GraphicsPath pp; RoundRect(pp, pr, 9);
-    SolidBrush pb(Color(235, 214, 128, 32));
-    g.FillPath(&pb, &pp);
-    Text(g, T(L"EXPÉRIMENTAL", L"EXPERIMENTAL"), pr, 9.5f, FontStyleBold, Color(255, 255, 255, 255));
+    const wchar_t *s = T(L"EXP\u00C9RIMENTAL", L"EXPERIMENTAL");
+    float w = PillW(s, 10.5f);
+    Pill(g, RectF(x, y, w, 22), WithA(kWarn, 0.22f), s, kWarn, 10.5f);
 }
 
 static float MscMaxScroll()
@@ -352,9 +334,12 @@ static float MscMaxScroll()
     float h = g_mscPage >= 0 ? kMscSetH : kMscRowH;
     return max(0.0f, rows * h - kMscList.Height);
 }
+static RectF MscRowRect(int i) { float ms = MscMaxScroll(); return RectF(kMscList.X, kMscList.Y + i * kMscRowH - g_scroll[TAB_MODS], kMscList.Width - (ms > 0 ? 12 : 0), kMscRowH - 10); }
+static RectF MscGearRect(const RectF &r) { return RectF(r.X + r.Width - 60, r.Y + (r.Height - 44) / 2, 44, 44); }
+static RectF MscSendRect(const RectF &r) { return RectF(r.X + r.Width - 60 - 16 - 50, r.Y + (r.Height - 28) / 2, 50, 28); }
 
 // Element sous la souris : 1000 interrupteur, 1001 installer, 1002 retour, 1003 mod active (page), 1004 dossier,
-// 2000+i ouvrir le mod i, 3000+i*4+k option i (k : 0 case, 1 moins, 2 plus).
+// 1005 accepter les mods de l'hote, 2000+i ouvrir le mod i, 3000+i*4+k option i (k : 0 case, 1 moins, 2 plus), 4000+i envoyer.
 static int MscAt(float x, float y)
 {
     if (g_state != ST_IDLE) return -1;
@@ -363,26 +348,27 @@ static int MscAt(float x, float y)
         if (kMscBack.Contains(x, y)) return 1002;
         if (!kMscList.Contains(x, y)) return -1;
         int i = (int)((y - kMscList.Y + g_scroll[TAB_MODS]) / kMscSetH);
-        if (i == 0) return x > kMscList.X + kMscList.Width - 80 ? 1003 : -1;
+        float right = kMscList.X + kMscList.Width - 16;
+        if (i == 0) return x > right - 80 ? 1003 : -1;
         const auto &sets = g_msc[g_mscPage].sets;
         if (--i < 0 || i >= (int)sets.size()) return -1;
         const MscSet &s = sets[i];
-        float right = kMscList.X + kMscList.Width - 12;
         if (s.type == "CheckBox" || s.type == "CheckBoxGroup") return x > right - 64 ? 3000 + i * 4 : -1;
         if (s.type == "Slider" || s.type == "SliderInt" || s.type == "DropDown") {
-            if (x > right - 30) return 3000 + i * 4 + 2;
-            if (x > right - 190 && x < right - 160) return 3000 + i * 4 + 1;
+            if (x > right - 40) return 3000 + i * 4 + 2;
+            if (x > right - 220 && x < right - 180) return 3000 + i * 4 + 1;
         }
         return -1;
     }
-    if (g_mscInstalled && kMscToggle.Contains(x, y)) return 1000;
+    if (g_mscInstalled && RectF(kMscToggle.X - 8, kMscToggle.Y - 8, kMscToggle.Width + 16, kMscToggle.Height + 16).Contains(x, y)) return 1000;
+    if (RectF(kMscAuto.X - 8, kMscAuto.Y - 8, kMscAuto.Width + 16, kMscAuto.Height + 16).Contains(x, y)) return 1005;
     if (!g_mscInstalled && kMscInstall.Contains(x, y)) return 1001;
     if (g_mscInstalled && kMscOpenDir.Contains(x, y)) return 1004;
     if (!kMscList.Contains(x, y)) return -1;
     int i = (int)((y - kMscList.Y + g_scroll[TAB_MODS]) / kMscRowH);
     if (i < 0 || i >= (int)g_msc.size()) return -1;
-    float right = kMscList.X + 4 + kMscList.Width - (MscMaxScroll() > 0 ? 16 : 8);
-    if (x > right - 176 && x < right - 64) return 4000 + i;   // Envoyer aux invites
+    RectF r = MscRowRect(i), sr = MscSendRect(r);
+    if (x > sr.X - 80 && x < sr.X + sr.Width + 8) return 4000 + i;   // Envoyer aux invites
     return g_msc[i].known ? 2000 + i : -1;
 }
 
@@ -392,8 +378,9 @@ static bool MscClick(float x, float y)
     if (h == 1000) {
         g_mscOn = !g_mscOn;
         WritePrivateProfileStringW(L"Lanceur", L"MSCLoader", g_mscOn ? L"1" : L"0", g_iniLauncher.c_str());
-        SetStatus(K_NORMAL, g_mscOn ? T(L"MSCLoader sera chargé au lancement", L"MSCLoader will load at launch") : T(L"MSCLoader ne sera pas chargé (rien n'est désinstallé)", L"MSCLoader will not load (nothing is uninstalled)"));
-    } else if (h == 1001) MscInstall();
+        SetStatus(K_NORMAL, g_mscOn ? T(L"MSCLoader sera charg\u00E9 au lancement", L"MSCLoader will load at launch") : T(L"MSCLoader ne sera pas charg\u00E9 (rien n'est d\u00E9sinstall\u00E9)", L"MSCLoader will not load (nothing is uninstalled)"));
+    } else if (h == 1005) { if (const Opt *o = OptByKey("ModsAuto")) OptSet(*o, OptGet(*o) ? 0 : 1); }
+    else if (h == 1001) MscInstall();
     else if (h == 1004) ShellExecuteW(g_wnd, L"open", g_mscDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
     else if (h == 1002) { g_mscPage = -1; g_scroll[TAB_MODS] = 0; }
     else if (h >= 4000) {
@@ -408,152 +395,174 @@ static bool MscClick(float x, float y)
         int i = (h - 3000) / 4, k = (h - 3000) % 4;
         MscStep(g_msc[g_mscPage].sets[i], k == 1 ? -1 : 1);
         if (!g_mscFake) MscSavePage();
-    } else return kOptPanel.Contains(x, y);
+    } else return false;
     return true;
+}
+
+static void DrawScrollBar(Graphics &g, RectF area, float sc, float ms)
+{
+    if (ms <= 0) return;
+    float h = area.Height * area.Height / (area.Height + ms), y = area.Y + (area.Height - h) * sc / ms;
+    GraphicsPath sp; RoundRect(sp, RectF(area.X + area.Width - 5, y, 4, h), 2);
+    SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
 }
 
 static void DrawModsPage(Graphics &g)
 {
     const MscMod &m = g_msc[g_mscPage];
-    Text(g, m.name, RectF(460, 124, 290, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
+    RectF c = kMain;
+    Title(g, m.name, RectF(c.X + 24, c.Y + 20, 600, 28), 18, kInk);
     bool backHot = g_mscHot == 1002;
-    Text(g, T(L"← Retour aux mods", L"← Back to mods"), kMscBack, 12.5f, backHot ? FontStyleBold | FontStyleUnderline : FontStyleBold, backHot ? kAcc : kGrey, StringAlignmentFar);
-    std::wstring sub = L"v" + m.ver + (m.author.empty() ? L"" : L" · " + m.author) + L" · " + m.file;
-    Text(g, sub, RectF(460, 148, 476, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-    float sc = g_scroll[TAB_MODS], ms = MscMaxScroll(), right = kMscList.X + kMscList.Width - 12;
-    g.SetClip(kMscList);
+    Text(g, T(L"\u2190 Retour aux mods", L"\u2190 Back to mods"), kMscBack, 13, backHot ? FontStyleBold | FontStyleUnderline : FontStyleBold, backHot ? kAcc : kGrey, StringAlignmentFar);
+    std::wstring sub = L"v" + m.ver + (m.author.empty() ? L"" : L" \u00B7 " + m.author) + L" \u00B7 " + m.file;
+    Text(g, sub, RectF(c.X + 24, c.Y + 48, c.Width - 48, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
+    float sc = g_scroll[TAB_MODS], ms = MscMaxScroll(), right = kMscList.X + kMscList.Width - 16;
+    GraphicsState st = g.Save();
+    g.SetClip(kMscList, CombineModeIntersect);
     for (int i = -1; i < (int)m.sets.size(); i++) {
-        RectF r(kMscList.X + 4, kMscList.Y + (i + 1) * kMscSetH - sc, kMscList.Width - (ms > 0 ? 16 : 8), kMscSetH - 4);
+        RectF r(kMscList.X, kMscList.Y + (i + 1) * kMscSetH - sc, kMscList.Width - (ms > 0 ? 12 : 0), kMscSetH - 6);
         if (r.Y + r.Height < kMscList.Y || r.Y > kMscList.Y + kMscList.Height) continue;
         if (i < 0) {   // le mod lui-meme : active ou non (isDisabled de MSCLoader)
-            GraphicsPath rp; RoundRect(rp, r, 9);
+            GraphicsPath rp; RoundRect(rp, r, 14);
             SolidBrush rb(TH(card)); g.FillPath(&rb, &rp);
-            Text(g, T(L"Mod activé", L"Mod enabled"), RectF(r.X + 12, r.Y, 300, r.Height), 13, FontStyleBold, kInk, StringAlignmentNear);
-            DrawToggle(g, RectF(right - 56, r.Y + (r.Height - 24) / 2, 52, 24), !g_mscPageDisabled, g_mscHot == 1003);
+            Text(g, T(L"Mod activ\u00E9", L"Mod enabled"), RectF(r.X + 16, r.Y, 300, r.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
+            DrawToggle(g, RectF(right - 58, r.Y + (r.Height - 28) / 2, 50, 28), !g_mscPageDisabled, g_mscHot == 1003);
             continue;
         }
         const MscSet &s = m.sets[i];
         bool hdr = s.type == "HeaderGroup" || s.type == "Header";
-        if (hdr) { Text(g, s.name, RectF(r.X + 4, r.Y + 6, r.Width - 8, r.Height - 6), 12.5f, FontStyleBold, kAcc, StringAlignmentNear); continue; }
-        if (s.type == "Text") { Para(g, s.name, RectF(r.X + 8, r.Y + 4, r.Width - 16, r.Height - 4), 11.5f, kGrey); continue; }
+        if (hdr) { Text(g, s.name, RectF(r.X + 6, r.Y + 8, r.Width - 12, r.Height - 8), 13.5f, FontStyleBold, kAcc, StringAlignmentNear); continue; }
+        if (s.type == "Text") { Para(g, s.name, RectF(r.X + 10, r.Y + 6, r.Width - 20, r.Height - 6), 12.5f, kGrey); continue; }
         if (s.type == "Button" || s.type == "RButton" || s.type == "LayoutGroup" || s.type == "LayoutGroupEnd") {
-            Text(g, s.name + T(L"  (bouton : en jeu)", L"  (button: in game)"), RectF(r.X + 12, r.Y, r.Width - 24, r.Height), 11.5f, FontStyleRegular, WithA(kGrey, 0.8f), StringAlignmentNear);
+            Text(g, s.name + T(L"  (bouton : en jeu)", L"  (button: in game)"), RectF(r.X + 16, r.Y, r.Width - 32, r.Height), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             continue;
         }
-        GraphicsPath rp; RoundRect(rp, r, 9);
+        GraphicsPath rp; RoundRect(rp, r, 14);
         SolidBrush rb(TH(card)); g.FillPath(&rb, &rp);
-        Text(g, s.name, RectF(r.X + 12, r.Y, r.Width - 220, r.Height), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
+        Text(g, s.name, RectF(r.X + 16, r.Y, r.Width - 260, r.Height), 13.5f, FontStyleRegular, kInk, StringAlignmentNear);
         std::string *v = MscVal(s.id);
         std::string val = v ? *v : s.val;
         int base = 3000 + i * 4;
-        if (s.type == "CheckBox" || s.type == "CheckBoxGroup") { DrawToggle(g, RectF(right - 56, r.Y + (r.Height - 24) / 2, 52, 24), val == "true" || val == "1", g_mscHot == base); continue; }
+        if (s.type == "CheckBox" || s.type == "CheckBoxGroup") { DrawToggle(g, RectF(right - 58, r.Y + (r.Height - 28) / 2, 50, 28), val == "true" || val == "1", g_mscHot == base); continue; }
         std::wstring shown;
         bool arrows = s.type == "Slider" || s.type == "SliderInt" || s.type == "DropDown";
         if (s.type == "DropDown") { int k = atoi(val.c_str()); shown = k >= 0 && k < (int)s.items.size() ? s.items[k] : Widen(val); }
         else if (s.type == "SliderInt") { int k = atoi(val.c_str()) - atoi(s.mn.c_str()); shown = k >= 0 && k < (int)s.items.size() ? s.items[k] : Widen(val); }
         else if (s.type == "Slider") shown = Widen(Num(atof(val.c_str()), max(atoi(s.dec.c_str()), 0)));
         else if (s.type == "ColorPicker") {
-            int c[4] = { 0, 0, 0, 255 };
-            sscanf_s(val.c_str(), "\"%d,%d,%d,%d", &c[0], &c[1], &c[2], &c[3]);
-            RectF sw(right - 70, r.Y + 8, 26, r.Height - 16);
-            GraphicsPath sp; RoundRect(sp, sw, 5);
-            SolidBrush sb(Color(255, (BYTE)c[0], (BYTE)c[1], (BYTE)c[2])); g.FillPath(&sb, &sp);
-            Text(g, T(L"en jeu", L"in game"), RectF(right - 40, r.Y, 40, r.Height), 10.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+            int col[4] = { 0, 0, 0, 255 };
+            sscanf_s(val.c_str(), "\"%d,%d,%d,%d", &col[0], &col[1], &col[2], &col[3]);
+            RectF sw(right - 90, r.Y + 10, 30, r.Height - 20);
+            GraphicsPath sp; RoundRect(sp, sw, 6);
+            SolidBrush sb(Color(255, (BYTE)col[0], (BYTE)col[1], (BYTE)col[2])); g.FillPath(&sb, &sp);
+            Text(g, T(L"en jeu", L"in game"), RectF(right - 52, r.Y, 52, r.Height), 12, FontStyleRegular, kGrey, StringAlignmentFar);
             continue;
         } else {   // textes
             std::string t = val.size() >= 2 && val[0] == '"' ? JsonDecode(val, 0) : val;
             shown = Widen(t, CP_UTF8) + T(L"  (en jeu)", L"  (in game)");
-            Text(g, shown, RectF(right - 200, r.Y, 200, r.Height), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+            Text(g, shown, RectF(right - 240, r.Y, 240, r.Height), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
             continue;
         }
         if (arrows) {
             for (int k = 1; k <= 2; k++) {
-                RectF ar = k == 1 ? RectF(right - 190, r.Y + 7, 26, r.Height - 14) : RectF(right - 26, r.Y + 7, 26, r.Height - 14);
-                GraphicsPath ap; RoundRect(ap, ar, 7);
+                RectF ar = k == 1 ? RectF(right - 220, r.Y + 7, 40, r.Height - 14) : RectF(right - 40, r.Y + 7, 40, r.Height - 14);
+                GraphicsPath ap; RoundRect(ap, ar, 11);
                 bool hot = g_mscHot == base + k;
-                SolidBrush ab(hot ? WithA(kAcc, 0.25f) : TH(field)); g.FillPath(&ab, &ap);
-                Text(g, k == 1 ? L"‹" : L"›", ar, 15, FontStyleBold, hot ? kAcc : kInk);
+                SolidBrush ab(hot ? WithA(kAcc, 0.25f) : TH(btn2)); g.FillPath(&ab, &ap);
+                Icon(g, k == 1 ? IC_CHEVL : IC_CHEVR, ar.X + 20, ar.Y + ar.Height / 2, 16, hot ? kAcc : kInk, 2.3f);
             }
-            Text(g, shown, RectF(right - 160, r.Y, 130, r.Height), 12.5f, FontStyleBold, kInk);
+            Text(g, shown, RectF(right - 180, r.Y, 140, r.Height), 13.5f, FontStyleBold, kInk);
         }
     }
-    g.ResetClip();
-    if (ms > 0) {
-        float h = kMscList.Height * kMscList.Height / (kMscList.Height + ms), y = kMscList.Y + (kMscList.Height - h) * sc / ms;
-        GraphicsPath sp; RoundRect(sp, RectF(kMscList.X + kMscList.Width - 6, y, 4, h), 2);
-        SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
-    }
+    g.Restore(st);
+    DrawScrollBar(g, kMscList, sc, ms);
 }
 
 static void DrawMods(Graphics &g)
 {
-    DrawPanel(g);
-    if (g_mscPage >= 0 && g_mscPage < (int)g_msc.size()) {
-        DrawModsPage(g);
-    } else {
-        Text(g, T(L"MODS · MSCLOADER", L"MODS · MSCLOADER"), RectF(460, 124, 300, 26), 17, FontStyleBold, kInk, StringAlignmentNear);
-        Bitmap mb(1, 1);
-        Graphics mg(&mb);
-        DrawExperimental(g, 460 + MeasureW(mg, T(L"MODS · MSCLOADER", L"MODS · MSCLOADER"), 17, FontStyleBold) + 14, 128);
+    RectF c = kMain;
+    Glass(c);
+    if (g_mscPage >= 0 && g_mscPage < (int)g_msc.size()) DrawModsPage(g);
+    else {
+        Graphics &mg = MeasureG();
+        Title(g, L"Mods \u00B7 MSCLoader", RectF(c.X + 24, c.Y + 20, 400, 28), 18, kInk);
+        DrawExperimental(g, c.X + 24 + MeasureW(mg, L"Mods \u00B7 MSCLoader", 18, FontStyleBold) + 18, c.Y + 24);
         std::wstring sub;
-        if (g_mscInstall == 1) sub = T(L"Installation de MSCLoader…", L"Installing MSCLoader…");
-        else if (!g_mscInstalled) sub = T(L"MSCLoader n'est pas installé.", L"MSCLoader is not installed.");
+        if (g_mscInstall == 1) sub = T(L"Installation de MSCLoader\u2026", L"Installing MSCLoader\u2026");
+        else if (!g_mscInstalled) sub = T(L"MSCLoader, le chargeur de mods de la communaut\u00E9 (projet ind\u00E9pendant), n'est pas install\u00E9.", L"MSCLoader, the community mod loader (independent project), is not installed.");
         else {
             wchar_t b[200];
-            swprintf_s(b, T(L"MSCLoader %s · %d mod(s) · dossier %s", L"MSCLoader %s · %d mod(s) · %s folder"), g_mscVer.empty() ? L"" : g_mscVer.c_str(), (int)g_msc.size(),
+            swprintf_s(b, T(L"MSCLoader %s \u00B7 %d mod(s) \u00B7 dossier %s", L"MSCLoader %s \u00B7 %d mod(s) \u00B7 %s folder"), g_mscVer.empty() ? L"" : g_mscVer.c_str(), (int)g_msc.size(),
                        g_mscDirKind == L"MD" ? T(L"Documents", L"Documents") : g_mscDirKind == L"AD" ? L"LocalLow" : T(L"du jeu", L"game"));
             sub = b;
         }
-        Text(g, sub, RectF(460, 150, 476, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        Text(g, sub, RectF(c.X + 24, c.Y + 48, c.Width - 48, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
+        // deux tuiles : charger MSCLoader (ou l'installer), accepter les mods de l'hote
+        float tw = (c.Width - 48 - 12) / 2;
+        RectF t1(c.X + 24, c.Y + 80, tw, 68), t2(c.X + 36 + tw, c.Y + 80, tw, 68);
+        for (int k = 0; k < 2; k++) {
+            RectF t = k ? t2 : t1;
+            GraphicsPath p; RoundRect(p, t, 16);
+            SolidBrush b(TH(card)); g.FillPath(&b, &p);
+            Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
+        }
         if (g_mscInstalled) {
-            Text(g, T(L"Charger MSCLoader au lancement", L"Load MSCLoader at launch"), RectF(460, 176, 380, 24), 13, FontStyleBold, kInk, StringAlignmentNear);
+            SetRowText(g, RectF(t1.X + 18, t1.Y, t1.Width - 100, t1.Height), T(L"Charger MSCLoader", L"Load MSCLoader"), T(L"Tes mods dans tes parties MWCoop", L"Your mods in your MWCoop games"));
             DrawToggle(g, kMscToggle, g_mscOn, g_mscHot == 1000);
         } else {
-            GraphicsPath bp; RoundRect(bp, kMscInstall, kMscInstall.Height / 2);
+            GraphicsPath bp; RoundRect(bp, kMscInstall, 14);
             float a = g_mscInstall == 1 ? 0.5f : 1.0f;
-            LinearGradientBrush lg(kMscInstall, WithA(Mix(kAcc, Color(255, 255, 255, 255), g_mscHot == 1001 ? 0.15f : 0.0f), a), WithA(kAcc2, a), LinearGradientModeHorizontal);
-            g.FillPath(&lg, &bp);
-            Text(g, g_mscInstall == 1 ? T(L"INSTALLATION…", L"INSTALLING…") : T(L"INSTALLER MSCLOADER", L"INSTALL MSCLOADER"), kMscInstall, 13, FontStyleBold, kOnAcc);
-            Para(g, T(L"Le chargeur de mods de la communauté (projet indépendant).", L"The community mod loader (independent project)."), RectF(460, 176, 240, 34), 11, kGrey);
+            SolidBrush lg(WithA(kAcc, a)); g.FillPath(&lg, &bp);
+            if (g_mscHot == 1001) { SolidBrush hb(Color(55, 255, 255, 255)); g.FillPath(&hb, &bp); }
+            Icon(g, IC_DOWNLOAD, kMscInstall.X + 28, kMscInstall.Y + 23, 18, kOnAcc, 2.2f);
+            Text(g, g_mscInstall == 1 ? T(L"INSTALLATION\u2026", L"INSTALLING\u2026") : T(L"INSTALLER MSCLOADER", L"INSTALL MSCLOADER"), RectF(kMscInstall.X + 44, kMscInstall.Y, kMscInstall.Width - 52, kMscInstall.Height), 13.5f, FontStyleBold, kOnAcc, StringAlignmentNear);
         }
+        if (const Opt *ma = OptByKey("ModsAuto")) {
+            SetRowText(g, RectF(t2.X + 18, t2.Y, t2.Width - 100, t2.Height), T(L"Accepter l'envoi de l'h\u00F4te", L"Accept the host's files"), T(L"Plus de TOUT ACCEPTER dans le salon d'un ami", L"No more ACCEPT ALL in a friend's lobby"));
+            DrawToggle(g, kMscAuto, OptGet(*ma) != 0, g_mscHot == 1005);
+        }
+        Title(g, T(L"Tes mods", L"Your mods"), RectF(c.X + 24, c.Y + 160, 300, 26), 16, kInk);
         float sc = g_scroll[TAB_MODS], ms = MscMaxScroll();
         if (g_mscInstalled && g_msc.empty())
-            Para(g, T(L"Aucun mod dans le dossier Mods. Ajoute les DLL des mods MSCLoader (version My Winter Car) puis lance le jeu une fois : leurs noms et leurs options apparaîtront ici.",
+            Para(g, T(L"Aucun mod dans le dossier Mods. Ajoute les DLL des mods MSCLoader (version My Winter Car) puis lance le jeu une fois : leurs noms et leurs options appara\u00EEtront ici.",
                       L"No mod in the Mods folder. Add MSCLoader mods (My Winter Car version), then start the game once: their names and options will show up here."),
-                 RectF(480, 250, 436, 80), 12, kGrey, StringAlignmentCenter);
-        g.SetClip(kMscList);
+                 RectF(kMscList.X + 140, kMscList.Y + 80, kMscList.Width - 280, 80), 13.5f, kGrey, StringAlignmentCenter);
+        GraphicsState st = g.Save();
+        g.SetClip(kMscList, CombineModeIntersect);
         for (int i = 0; i < (int)g_msc.size(); i++) {
             const MscMod &m = g_msc[i];
-            RectF r(kMscList.X + 4, kMscList.Y + i * kMscRowH - sc, kMscList.Width - (ms > 0 ? 16 : 8), kMscRowH - 6);
+            RectF r = MscRowRect(i);
             if (r.Y + r.Height < kMscList.Y || r.Y > kMscList.Y + kMscList.Height) continue;
             bool hot = g_mscHot == 2000 + i;
-            GraphicsPath rp; RoundRect(rp, r, 10);
+            GraphicsPath rp; RoundRect(rp, r, 16);
             SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
-            Pen rpen(hot ? kAcc : TH(choiceBorder), 1.1f); g.DrawPath(&rpen, &rp);
+            Pen rpen(hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
             float a = m.disabled ? 0.5f : 1.0f;
-            Text(g, m.name, RectF(r.X + 14, r.Y + 3, r.Width - 196, 22), 13.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
-            std::wstring line = m.known ? L"v" + m.ver + (m.author.empty() ? L"" : L" · " + m.author) + (m.disabled ? T(L" · désactivé", L" · disabled") : L"")
-                                        : m.file + T(L" · lance le jeu une fois pour les détails", L" · start the game once for details");
-            Text(g, line, RectF(r.X + 14, r.Y + 23, r.Width - 196, 18), 11, FontStyleRegular, kGrey, StringAlignmentNear);
-            if (m.known) DrawGear(g, r.X + r.Width - 26, r.Y + r.Height / 2, hot ? kAcc : kGrey);
+            Text(g, m.name, RectF(r.X + 18, r.Y + 10, r.Width - 260, 24), 15, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
+            std::wstring line = m.known ? L"v" + m.ver + (m.author.empty() ? L"" : L" \u00B7 " + m.author) + (m.disabled ? T(L" \u00B7 d\u00E9sactiv\u00E9", L" \u00B7 disabled") : L"")
+                                        : m.file + T(L" \u00B7 lance le jeu une fois pour les d\u00E9tails", L" \u00B7 start the game once for details");
+            Text(g, line, RectF(r.X + 18, r.Y + 34, r.Width - 260, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            RectF sr = MscSendRect(r), gr = MscGearRect(r);
             bool sh = ModShared(m.file), shHot = g_mscHot == 4000 + i;   // envoye aux invites du salon
-            Text(g, T(L"Envoyer", L"Send"), RectF(r.X + r.Width - 172, r.Y, 58, r.Height), 10.5f, FontStyleBold, shHot ? kAcc : sh ? kInk : kGrey, StringAlignmentFar);
-            DrawToggle(g, RectF(r.X + r.Width - 108, r.Y + (r.Height - 20) / 2, 40, 20), sh, shHot);
+            Text(g, T(L"Envoyer", L"Send"), RectF(sr.X - 84, r.Y, 76, r.Height), 12.5f, FontStyleBold, shHot ? kAcc : sh ? kInk : kGrey, StringAlignmentFar);
+            DrawToggle(g, sr, sh, shHot);
+            if (m.known) {
+                GraphicsPath gp; RoundRect(gp, gr, 12);
+                SolidBrush gb(hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&gb, &gp);
+                DrawGear(g, gr.X + 22, gr.Y + 22, hot ? kAcc : kInk);
+            }
         }
-        g.ResetClip();
-        if (ms > 0) {
-            float h = kMscList.Height * kMscList.Height / (kMscList.Height + ms), y = kMscList.Y + (kMscList.Height - h) * sc / ms;
-            GraphicsPath sp; RoundRect(sp, RectF(kMscList.X + kMscList.Width - 6, y, 4, h), 2);
-            SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
-        }
+        g.Restore(st);
+        DrawScrollBar(g, kMscList, sc, ms);
     }
     Pen sep(TH(sep), 1);
-    g.DrawLine(&sep, kOptPanel.X + 18, 518.0f, kOptPanel.X + kOptPanel.Width - 18, 518.0f);
-    Para(g, T(L"Réglages pris au prochain lancement du jeu. « Envoyer » : le mod est copié chez les invités de ton salon.",
-              L"Settings apply at the next game launch. \"Send\": the mod is copied to your lobby's guests."),
-         RectF(kOptPanel.X + 20, 524, kOptPanel.Width - 40, 26), 11.5f, kGrey, StringAlignmentCenter);
+    g.DrawLine(&sep, c.X + 24, c.Y + c.Height - 62, c.X + c.Width - 24, c.Y + c.Height - 62);
+    Para(g, T(L"R\u00E9glages pris au prochain lancement du jeu. \u00AB Envoyer \u00BB : le mod est copi\u00E9 chez les invit\u00E9s de ton salon, dans un dossier \u00E0 part.",
+              L"Settings apply at the next game launch. \"Send\": the mod is copied to your lobby's guests, in a separate folder."),
+         RectF(c.X + 300, c.Y + c.Height - 52, c.Width - 324, 40), 12.5f, kGrey, StringAlignmentCenter);
     if (g_mscInstalled && g_mscPage < 0) {
         bool hot = g_mscHot == 1004;
-        Text(g, T(L"Ouvrir le dossier Mods", L"Open the Mods folder"), kMscOpenDir, 11.5f, hot ? FontStyleBold | FontStyleUnderline : FontStyleUnderline, hot ? kAcc : kGrey, StringAlignmentNear);
+        Icon(g, IC_FOLDER, kMscOpenDir.X + 10, kMscOpenDir.Y + 15, 17, hot ? kAcc : kInk, 1.9f);
+        Text(g, T(L"Ouvrir le dossier Mods", L"Open the Mods folder"), RectF(kMscOpenDir.X + 26, kMscOpenDir.Y, kMscOpenDir.Width - 26, kMscOpenDir.Height), 13, hot ? FontStyleBold | FontStyleUnderline : FontStyleUnderline, hot ? kAcc : kInk, StringAlignmentNear);
     }
 }
