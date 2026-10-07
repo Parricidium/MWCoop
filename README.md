@@ -327,6 +327,8 @@ Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) 
 - Le lanceur reste ouvert pendant la partie (option dans l'onglet COOP) : joueurs, ping, et pour l'hôte FAIRE VENIR et
   EXCLURE ; il revient au menu quand le jeu se ferme. Un « ! » rouge sur l'icône des journaux : la dernière partie
   s'est arrêtée brutalement.
+- Au premier lancement, une **visite guidée** présente chaque bouton et onglet en quelques bulles (à revoir depuis
+  l'onglet COOP) ; après une mise à jour, seuls les nouveaux boutons ont leur bulle, marquée NOUVEAU.
 
 ## Fonctionnalités
 

@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1359,6 +1359,14 @@ static void BuildOptions()
         o.dEn = L"The character the other players see: a local's outfit, or the police officer's, the rally driver's\u2026 Click: 3D picker in the side panel.";
         g_opts.push_back(o);
     }
+    {   // Visite guidee (tuto.inc) : a revoir
+        Opt o = {};
+        o.tab = TAB_COOP; o.key = "RevoirGuide"; o.kind = O_ACTION; o.action = 100;
+        o.fr = L"Revoir le guide de d\u00E9marrage"; o.en = L"See the starting guide again"; o.suffix = L"";
+        o.dFr = L"La visite du lanceur en quelques bulles, comme au premier lancement.";
+        o.dEn = L"The launcher tour in a few bubbles, as on the first start.";
+        g_opts.push_back(o);
+    }
     {   // Couleur de la CORRIS d'une nouvelle partie (volet)
         Opt o = {};
         o.tab = TAB_COOP; o.key = "CouleurVoiture"; o.kind = O_ACTION; o.action = DR_CAR;
@@ -1448,11 +1456,12 @@ static std::wstring ValueText(const Opt &o, int v)
     return b;
 }
 static void DrawerShow(int kind);
+static void TutoStart(bool all);
 static std::wstring CarColorName();
 static void OptStep(int idx, int dir)
 {
     const Opt &o = g_opts[idx];
-    if (o.kind == O_ACTION) { DrawerShow(o.action); return; }
+    if (o.kind == O_ACTION) { if (o.action == 100) TutoStart(true); else DrawerShow(o.action); return; }
     int v = OptGet(o);
     if (o.kind == O_TOGGLE) { OptSet(o, v ? 0 : 1); return; }
     int i = ValueIndex(o, v);
@@ -1531,7 +1540,7 @@ static void DrawOptions(Graphics &g)
             GraphicsPath cp; RoundRect(cp, cr, 12);
             SolidBrush cb(hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &cp);
             Pen cpen(hot ? kAcc : TH(choiceBorder), 1.2f); g.DrawPath(&cpen, &cp);
-            std::wstring val = o.action == DR_CAR ? CarColorName() : ValueText(o, v);
+            std::wstring val = o.action == DR_CAR ? CarColorName() : o.action == 100 ? std::wstring(T(L"Voir", L"Show")) : ValueText(o, v);
             Text(g, val, RectF(cr.X + 10, cr.Y, cr.Width - 34, cr.Height), 12.5f, FontStyleBold, kInk);
             Text(g, L"\u203A", RectF(cr.X + cr.Width - 22, cr.Y - 2, 18, cr.Height), 18, FontStyleBold, hot ? kAcc : WithA(kAcc, 0.78f));
         } else {
@@ -3459,6 +3468,8 @@ static void DrawSteamGuide(Graphics &g)
 }
 
 #include "drawer.inc"
+static std::string MyVersion();
+#include "tuto.inc"
 
 static void RenderTo(Bitmap &target, float scale)
 {
@@ -3506,6 +3517,7 @@ static void RenderTo(Bitmap &target, float scale)
     }
     DrawUI(g);
     DrawSteamGuide(g);
+    DrawTuto(g);
 }
 
 static void Present()
@@ -5454,6 +5466,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         // (volet : le glisser a commence dans son repere)
         if (g_carDrag) { if (g_drawerShown == DR_CAR) CarDragTo(x - kDrawerDx, y - kDrawerDy); else CarDragTo(x, y); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
         if (g_skinDrag) { SkinDragTo(g_drawerShown == DR_SKIN ? x - kDrawerDx : x); SetCursor(LoadCursor(NULL, IDC_SIZEALL)); return 0; }
+        if (g_tuto >= 0) {   // (visite guidee : elle seule repond)
+            g_hot = -1; g_tabHot = -1; g_optHot = -1; g_lobbyHot = -1;
+            g_tutoHot = TutoHit(x, y);
+            SetCursor(LoadCursor(NULL, g_tutoHot ? IDC_HAND : IDC_ARROW));
+            return 0;
+        }
         if (g_guide) {   // (guide Steam ouvert : lui seul repond)
             g_hot = -1; g_tabHot = -1; g_optHot = -1; g_lobbyHot = -1; g_steamInfoHot = false;
             g_guideHot = SteamGuideHit(x, y);
@@ -5485,11 +5503,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     }
     case WM_MOUSELEAVE: g_hot = -1; g_tabHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; g_steamInfoHot = false; g_mscHot = -1; return 0;
     case WM_KEYDOWN:   // onglet TENUE : fleches gauche / droite (hors des champs)
+        if (TutoKey(wp)) return 0;
         if (g_guide && (wp == VK_ESCAPE || wp == VK_RETURN)) { SteamGuideClose(); return 0; }
         if ((wp == VK_LEFT || wp == VK_RIGHT) && (g_tab == TAB_SKIN || g_drawerShown == DR_SKIN) && g_state == ST_IDLE && g_focus < 0) { SkinStep(wp == VK_LEFT ? -1 : 1); return 0; }
         break;
     case WM_MOUSEWHEEL:
-        if (g_tab >= 0 && !g_guide) {
+        if (g_tab >= 0 && !g_guide && g_tuto < 0) {
             float step = -(short)HIWORD(wp) / 120.0f * kRowH * 1.5f;
             g_scroll[g_tab] = min(max(g_scroll[g_tab] + step, 0.0f), MaxScroll(g_tab));
             POINT pt = { (short)LOWORD(lp), (short)HIWORD(lp) };
@@ -5500,6 +5519,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_SETCURSOR: return TRUE;
     case WM_LBUTTONDOWN: {
         float x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
+        if (g_tuto >= 0) { TutoClick(x, y); return 0; }
         if (g_guide) { SteamGuideClick(x, y); return 0; }
         if (DrawerMouseDown(x, y)) return 0;
         int b = HitButton(x, y), f = HitField(x, y);
@@ -5538,7 +5558,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_CHAR:
-        if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait || g_guide) return 0;
+        if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait || g_guide || g_tuto >= 0) return 0;
         if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
         if (wp == 8) { if (g_focus >= 0 && !g_fields[g_focus].text.empty()) g_fields[g_focus].text.pop_back(); }
         else if (wp == 127) { if (g_focus >= 0) g_fields[g_focus].text.clear(); }   // Ctrl+Retour arriere
@@ -5844,6 +5864,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_launchInfo = host ? info : T(L"JD rejoint Pekka", L"JD joins Pekka");
             if (host) { g_kickArmed = 2; g_kickArmedT = GetTickCount(); g_srvHot = 1000 + 1 * 2 + 0; }
         }
+        else if (!wcsncmp(st.c_str(), L"tuto-", 5)) {   // visite guidee : etape n (tuto-maj : apres une mise a jour)
+            bool maj = st == L"tuto-maj";
+            g_tutoList.clear();
+            for (int i = 0; i < kTutoN; i++) if (!maj || i == 7 || i == 9) g_tutoList.push_back(i);
+            g_tutoAll = !maj;
+            g_tutoTabWas = -1;
+            TutoGo(maj ? 0 : _wtoi(st.c_str() + 5));
+            g_tutoHot = 1;
+        }
         else if (st == L"crash" || st == L"crash-survol") {
             g_crashT = 1;
             SetStatus(K_WARN, T(L"Arr\u00EAt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
@@ -6015,6 +6044,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     Present();
     ShowWindow(g_wnd, SW_SHOW);
     SetTimer(g_wnd, 1, 16, NULL);
+    if (!g_gameDir.empty() && !g_sConnect) TutoAtStartup();   // visite guidee : complete la 1re fois, puis les nouveautes
     if (!g_gameDir.empty()) StartUpdate();
     else {
         HANDLE nt = CreateThread(NULL, 0, NotesOnlyThread, NULL, 0, NULL);
