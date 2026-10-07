@@ -26,6 +26,8 @@ static const TutoStep kTuto[] = {
       L"Outfit and car", L"Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your CORRIS color.", "0.42.0" },
     { L"Contenu et mods", L"Ce que tu envoies à tes invités : CD, peinture, drapeau, posters… et tes mods MSCLoader (expérimental), copiés à part chez eux.",
       L"Content and mods", L"What you send to your guests: CDs, paint, flag, posters… and your MSCLoader mods (experimental), copied apart on their side.", "0.42.0" },
+    { L"Graphismes", L"Ombres, distance d'affichage, détails, textures, images par seconde… avec des préréglages en un clic. Aussi en jeu : menu F10.",
+      L"Graphics", L"Shadows, draw distance, detail, textures, frame rate… with one-click presets. Also in game: F10 menu.", "0.47.0" },
     { L"Nouveautés", L"Ce qui change à chaque version. Quand une nouvelle version sort, un bouton « Mettre à jour » apparaît sous le logo : la mise à jour se fait quand tu cliques.",
       L"What's new", L"What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.", "0.42.0" },
     { L"Journaux", L"Maintenant ici, en haut. En cas de souci, crée un zip à envoyer. Un « ! » rouge s'y affiche si la dernière partie s'est arrêtée brutalement.",
@@ -53,11 +55,12 @@ static RectF TutoTarget(int i)
     case 6: return join(g_navR[TAB_HOME], g_navR[TAB_NOTES]);
     case 7: return join(g_navR[TAB_SKIN], g_navR[TAB_CAR]);
     case 8: return join(g_navR[TAB_CONTENT], g_navR[TAB_MODS]);
-    case 9: return g_navR[TAB_NOTES];
-    case 10: return g_navR[TAB_LOGS];
-    case 11: return g_navR[TAB_API];
-    case 12: return g_navR[TAB_COOP];
-    case 13: return join(g_btn[B_LANG].r, g_btn[B_THEME].r);
+    case 9: return g_navR[TAB_GFX];
+    case 10: return g_navR[TAB_NOTES];
+    case 11: return g_navR[TAB_LOGS];
+    case 12: return g_navR[TAB_API];
+    case 13: return g_navR[TAB_COOP];
+    case 14: return join(g_btn[B_LANG].r, g_btn[B_THEME].r);
     }
     return RectF(0, 0, 0, 0);
 }
