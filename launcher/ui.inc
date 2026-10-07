@@ -343,9 +343,9 @@ static const NavItem kNav[] = {
     { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" },
     { TAB_SKIN, IC_SHIRT, L"Tenue", L"Outfit" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" },
     { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
-    { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" }, { TAB_LOGS, IC_FILE, L"Journaux", L"Logs" },
-    { TAB_API, IC_BRACES, L"API moddeurs", L"Modding API" } };
-static const int kNavGroupN[] = { 2, 2, 2, 3 };   // pages de chaque groupe, dans l'ordre de kNav
+    { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" } };
+// Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
+static const int kNavGroupN[] = { 2, 2, 2, 1 };   // pages de chaque groupe, dans l'ordre de kNav
 static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"INFO" };
 static Bitmap *g_logo;
 static int MscModCount();   // (mods.inc)
@@ -384,10 +384,6 @@ static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t 
         const wchar_t *s = T(L"NOUV.", L"NEW");
         float w = PillW(s, 10);
         Pill(g, RectF(rx - w, r.Y + (r.Height - 20) / 2, w, 20), kAcc, s, kOnAcc, 10);
-    } else if (page == TAB_LOGS && g_crashT && !on) {
-        RectF d(rx - 18, r.Y + (r.Height - 18) / 2, 18, 18);
-        SolidBrush rb(kRed); g.FillEllipse(&rb, d);
-        Text(g, L"!", d, 11.5f, FontStyleBold, Color(255, 255, 255, 255));
     }
     if (on && page != TAB_LOBBY && page != TAB_MODS && page != TAB_CAR) { SolidBrush db(kAcc); g.FillEllipse(&db, rx - 6, r.Y + r.Height / 2 - 3, 6.0f, 6.0f); }
     if (en) HotZone(r, UI_NAV + page);
@@ -459,6 +455,23 @@ static std::wstring Greeting()
     return std::wstring(T(L"Bonsoir, ", L"Good evening, ")) + n;
 }
 static void DrawLobbyHeadControls(Graphics &g, float &right);   // (salon, plus bas)
+
+// Page ouverte par un bouton de l'en-tete (Journaux, API moddeurs) : comme ceux de la fenetre, contour colore si ouverte.
+static void HeadPage(Graphics &g, RectF r, int page, int icon)
+{
+    bool en = PageEnabled(page), on = g_tab == page && g_state == ST_IDLE, hot = en && g_uiHot == UI_NAV + page;
+    g_navR[page] = r;
+    GraphicsPath p; RoundRect(p, r, 14);
+    SolidBrush fb(on ? TH(cardSel) : Mix(TH(btn2), TH(btn2Hot), hot ? 1.0f : 0.0f)); g.FillPath(&fb, &p);
+    Pen pen(on ? WithA(kAcc, 0.8f) : TH(fieldBorder), on ? 1.4f : 1.0f); g.DrawPath(&pen, &p);
+    Icon(g, icon, r.X + r.Width / 2, r.Y + r.Height / 2, 18, WithA(on ? kAcc : kInk, en ? 1.0f : 0.4f), 2.0f);
+    if (page == TAB_LOGS && g_crashT && !on) {
+        RectF d(r.X + r.Width - 13, r.Y - 3, 16, 16);
+        SolidBrush rb(kRed); g.FillEllipse(&rb, d);
+        Text(g, L"!", d, 10.5f, FontStyleBold, Color(255, 255, 255, 255));
+    }
+    if (en) HotZone(r, UI_NAV + page);
+}
 static void DrawHeader(Graphics &g)
 {
     std::wstring title, sub;
@@ -497,6 +510,16 @@ static void DrawHeader(Graphics &g)
     HeadButton(g, B_MIN, IC_MIN);
     HeadButton(g, B_THEME, g_dark ? IC_SUN : IC_MOON);
     HeadButton(g, B_LANG, 0, g_fr ? L"FR" : L"EN");
+    // | puis API moddeurs et Journaux (pastille rouge : la derniere partie s'est arretee brutalement)
+    {
+        Pen sp(TH(fieldBorder), 1.4f);
+        g.DrawLine(&sp, right - 2, 32.0f, right - 2, 56.0f);
+        right -= 14;
+        HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_API, IC_BRACES);
+        right -= 54;
+        HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_LOGS, IC_FILE);
+        right -= 54;
+    }
     if (g_state == ST_IDLE) {
         if (g_tab == TAB_SKIN || g_tab == TAB_CAR || g_tab == TAB_CONTENT || g_tab == TAB_MODS) {
             bool look = g_tab == TAB_SKIN || g_tab == TAB_CAR;
