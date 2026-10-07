@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
@@ -58,6 +58,105 @@ namespace MWCoop
         }
 
         public static string WithShirt(string look, string shirt) { Look l = Parse(look); l.Shirt = shirt; return Compose(l); }
+
+        // Parties reglables en plus du haut (menu F10 > APPARENCE) : 0 corps, 1 pantalon, 2 visage, 3 chapeau, 4 lunettes,
+        // 5 cheveux ; cle du mwcoop.ini [Coop].
+        public static readonly string[] PartKeys = { "Corps", "Pantalon", "Visage", "Chapeau", "Lunettes", "Cheveux" };
+        public static string Get(Look l, int f) { return f == 0 ? l.Body : f == 1 ? l.Pants : f == 2 ? l.Face : f == 3 ? l.Hat : f == 4 ? l.Glasses : l.Hair; }
+        public static void Set(Look l, int f, string v)
+        {
+            if (f == 0) l.Body = v; else if (f == 1) l.Pants = v; else if (f == 2) l.Face = v; else if (f == 3) l.Hat = v; else if (f == 4) l.Glasses = v; else l.Hair = v;
+        }
+        public static string PartName(int f)
+        {
+            switch (f)
+            {
+                case 0: return Lang.T("Corpulence", "Build");
+                case 1: return Lang.T("Pantalon", "Pants");
+                case 2: return Lang.T("Visage", "Face");
+                case 3: return Lang.T("Chapeau", "Hat");
+                case 4: return Lang.T("Lunettes", "Glasses");
+                default: return Lang.T("Cheveux", "Hair");
+            }
+        }
+        // Valeurs dans l'ordre des fleches ("" : celle du modele, ou aucun accessoire).
+        public static List<string> Choices(int f)
+        {
+            var v = new List<string> { "" };
+            if (f == 1) v.AddRange(Pants());
+            else if (f == 2) v.AddRange(Faces());
+            else if (f >= 3) v.AddRange(Accessories(f == 3 ? KHat : f == 4 ? KGlasses : KHair));
+            else
+            {
+                var ks = new List<string>();
+                foreach (string k in Bodies()) if (k != "1712-37") ks.Add(k);
+                ks.Sort((a, b) => BodyRank(a).CompareTo(BodyRank(b)));
+                v.AddRange(ks);
+            }
+            return v;
+        }
+        static int BodyRank(string k) { int d = k.LastIndexOf('-'); int w; int.TryParse(d >= 0 ? k.Substring(d + 1) : k, out w); return (k.StartsWith("pig-") ? 1000 : 0) + w; }
+
+        public static string Label(int f, string v)
+        {
+            if (string.IsNullOrEmpty(v)) return f == 0 ? Lang.T("Normal", "Regular") : f <= 2 ? Lang.T("D'origine", "Default") : f == 4 ? Lang.T("Aucunes", "None") : Lang.T("Aucun", "None");
+            if (f == 0)
+            {
+                switch (v)
+                {
+                    case "1714-32": return Lang.T("Mince", "Thin");
+                    case "1709-34": return Lang.T("Svelte", "Slim");
+                    case "1712-48": return Lang.T("Costaud", "Stout");
+                    case "1697-42": return Lang.T("Petit et rond", "Short and round");
+                    case "1789-29": return Lang.T("Petit et fin", "Short and slim");
+                }
+                return v.StartsWith("pig-") ? Lang.T("Cochon", "Pig") : v;
+            }
+            if (f == 1 || f == 2)
+            {
+                switch (v)
+                {
+                    case "cop_pants": return Lang.T("Police", "Police");
+                    case "inspector_pants": return Lang.T("Inspecteur", "Inspector");
+                    case "psk_pants": return "PSK";
+                    case "rally_pants": return Lang.T("Rallye", "Rally");
+                }
+                string pre = f == 1 ? "char_pants" : "char_face";
+                if (v.StartsWith(pre))
+                {
+                    string n = v.Substring(pre.Length);
+                    int us = n.IndexOf('_');
+                    if (us >= 0) n = n.Substring(0, us);
+                    return (f == 1 ? Lang.T("Pantalon ", "Pants ") : Lang.T("Visage ", "Face ")) + n.TrimStart('0') + (v.Contains("woman") ? Lang.T(" (femme)", " (woman)") : "");
+                }
+                return v;
+            }
+            int at = v.IndexOf('@');
+            string mesh = at >= 0 ? v.Substring(0, at) : v, mat = at >= 0 ? v.Substring(at + 1) : "";
+            string name = mesh;
+            switch (mesh)
+            {
+                case "hat_beanie1": name = Lang.T("Bonnet", "Beanie"); break;
+                case "hat_cap": name = Lang.T("Casquette", "Cap"); break;
+                case "hat_cap2": name = Lang.T("Casquette \u00E0 filet", "Trucker cap"); break;
+                case "cop_hat": name = Lang.T("Casquette de police", "Police cap"); break;
+                case "hat_karvalakki": name = Lang.T("Chapka", "Fur hat"); break;
+                case "fish_hat": name = Lang.T("Bob de p\u00EAche", "Fishing hat"); break;
+                case "busdriver_hat": name = Lang.T("Casquette de chauffeur", "Bus driver cap"); break;
+                case "teimo_hat": name = Lang.T("Chapeau de Teimo", "Teimo's hat"); break;
+                case "gifu_hat": name = Lang.T("Casquette Gifu", "Gifu cap"); break;
+                case "latsa": name = Lang.T("B\u00E9ret", "Flat cap"); break;
+                case "npc_helmet": name = Lang.T("Casque", "Helmet"); break;
+                case "eye_glasses": name = Lang.T("Lunettes", "Glasses"); break;
+                case "eye_glasses2": name = Lang.T("Lunettes rondes", "Round glasses"); break;
+                case "eye_glasses_dsl": name = Lang.T("Lunettes de soleil", "Sunglasses"); break;
+                case "bodymesh_ponytail": name = Lang.T("Queue de cheval", "Ponytail"); break;
+                case "hyppyritukka": name = Lang.T("Coupe mulet", "Mullet"); break;
+            }
+            int same = 0;
+            foreach (string k in Accessories(f == 3 ? KHat : f == 4 ? KGlasses : KHair)) if (k.StartsWith(mesh + "@")) same++;
+            return same > 1 && mat.Length > 0 ? name + " (" + mat + ")" : name;
+        }
 
         // ---------------------------------------------------------------- catalogue (pris dans la scene)
         public class BodyInfo { public string Key; public Transform Char; public Mesh Mesh; public Material[] Mats; }

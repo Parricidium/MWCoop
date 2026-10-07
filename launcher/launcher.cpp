@@ -2960,9 +2960,11 @@ static void DrawPixels(Graphics &g, Bitmap *b, RectF r)
 }
 
 // Pastille d'un joueur (salon) : son portrait dans un cercle borde de sa couleur, sinon l'initiale sur sa couleur.
+static Bitmap *PersoPortrait(const std::string &skin, int W, int H);   // (perso.inc : apparence complete en 3D)
 static void DrawSkinAvatar(Graphics &g, RectF c, const std::string &skin, Color col, const std::wstring &name)
 {
-    Bitmap *th = SkinThumb(skin, 1, c.Width, c.Height);
+    Bitmap *th = PersoPortrait(skin, max(8, (int)(c.Width * g_scale + 0.5f)), max(8, (int)(c.Height * g_scale + 0.5f)));
+    if (!th) th = SkinThumb(skin, 1, c.Width, c.Height);
     if (!th) {
         SolidBrush ab(col);
         g.FillEllipse(&ab, c);
@@ -3008,7 +3010,7 @@ static void SkinStep(int dir)
     SkinSelect((OptGet(*SkinOpt()) + dir + n) % n, dir);
 }
 
-static std::string MySkin();
+static std::string MyShirt();
 static std::wstring SkinLabel(const std::string &skin);
 #include "perso.inc"
 
@@ -4204,12 +4206,15 @@ static bool RecvMsg(SOCKET s, std::string &out)
 }
 
 static int LobbyPort() { const Opt *po = OptByKey("Port"); return po ? OptGet(*po) : 7870; }
-static std::string MySkin() { const Opt *ap = OptByKey("Apparence"); return ap ? ap->svals[OptGet(*ap)] : "char_shirt21"; }
+static std::string MyShirt() { const Opt *ap = OptByKey("Apparence"); return ap ? ap->svals[OptGet(*ap)] : "char_shirt21"; }
+// Apparence annoncee au salon : complete ("haut|pantalon|visage|corps|chapeau|lunettes|cheveux", comme le mod).
+static std::string MySkin() { return PersoLookString(); }
 static std::string MyName() { return Narrow(PlayerName(), CP_UTF8); }
 static std::string MyVersion() { return g_localVer.empty() ? "dev" : Narrow(g_localVer, CP_UTF8); }   // MWCoop\version.txt
 // Apparence lisible ("Tenue 21", "Policier") : libelle de l'onglet COOP, sinon le nom brut.
-static std::wstring SkinLabel(const std::string &skin)
+static std::wstring SkinLabel(const std::string &look)
 {
+    std::string skin = look.substr(0, look.find('|'));   // (apparence complete : le haut)
     if (const Opt *ap = OptByKey("Apparence"))
         for (size_t i = 0; i < ap->svals.size(); i++)
             if (!_stricmp(ap->svals[i].c_str(), skin.c_str())) return (g_fr ? ap->labFr : ap->labEn)[i];
@@ -5108,6 +5113,7 @@ static void DrawLobby(Graphics &g)
     bool host = lobby == LB_HOST;
     DrawPanel(g);
     SkinsCheck();   // (portraits des joueurs)
+    PersoCheck();
     int myUdp = g_udpMine;
     if (host && g_lobbySteam && g_sFriendsView) DrawSteamFriends(g);
     else {

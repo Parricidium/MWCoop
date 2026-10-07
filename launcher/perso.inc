@@ -147,7 +147,7 @@ static PersoTex &PersoTexFor(const std::string &mat)
 // ---- reglages
 static std::string PersoGet(int f)
 {
-    if (f == PF_SHIRT) return MySkin();
+    if (f == PF_SHIRT) return MyShirt();
     char v[160] = "";
     GetPrivateProfileStringA("Coop", kPersoKey[f], "", v, sizeof(v), ModIniA().c_str());
     return v;
@@ -315,21 +315,41 @@ static const PersoBody *PersoBodyFor(const std::string &key)
     return g_perso.bodies.empty() ? NULL : &g_perso.bodies[0];
 }
 
-// Rendu W x H (pixels de l'ecran), personnage tourne de 'yaw' (radians, 0 : de face).
-static void PersoRender(int W, int H, float yaw)
+// Apparence complete "haut|pantalon|visage|corps|chapeau|lunettes|cheveux" (comme le mod) <-> parties PF_*.
+static void PersoParseLook(const std::string &s, std::string look[PF_COUNT])
+{
+    static const int order[] = { PF_SHIRT, PF_PANTS, PF_FACE, PF_BODY, PF_HAT, PF_GLASSES, PF_HAIR };
+    for (int f = 0; f < PF_COUNT; f++) look[f].clear();
+    size_t a = 0;
+    for (int k = 0; k < 7 && a <= s.size(); k++) {
+        size_t e = s.find('|', a);
+        look[order[k]] = s.substr(a, e == std::string::npos ? std::string::npos : e - a);
+        if (e == std::string::npos) break;
+        a = e + 1;
+    }
+}
+static std::string PersoLookString()
+{
+    std::string s = PersoGet(PF_SHIRT);
+    for (int f : { PF_PANTS, PF_FACE, PF_BODY, PF_HAT, PF_GLASSES, PF_HAIR }) s += "|" + PersoGet(f);
+    while (!s.empty() && s.back() == '|') s.pop_back();
+    return s;
+}
+
+// Rendu W x H (pixels de l'ecran) de l'apparence 'look', tournee de 'yaw' (radians, 0 : de face) ; portrait : tete et
+// epaules, sinon le personnage entier.
+static void PersoRender(int W, int H, float yaw, const std::string look[PF_COUNT], bool portrait = false)
 {
     const int S = 2, BW = W * S, BH = H * S;
     g_persoBig.assign((size_t)BW * BH, 0);
     g_persoZ.assign((size_t)BW * BH, 0.0f);
     g_persoPix.assign((size_t)W * H, 0);
-    std::string look[PF_COUNT];
-    for (int f = 0; f < PF_COUNT; f++) look[f] = PersoGet(f);
     const PersoBody *body = PersoBodyFor(look[PF_BODY]);
     if (!body) return;
     // camera : personnage debout de face (il regarde +z ; la camera est devant lui, regard vers -z), un peu en
-    // plongee ; 2,05 m de haut dans l'image
-    const float dist = 5.0f, cy0 = 0.98f, pitch = 0.08f;
-    float f = BH * 0.95f * dist / 2.05f;
+    // plongee ; 2,05 m de haut dans l'image (portrait : 0,62 m autour de la tete, plus pres)
+    const float dist = portrait ? 2.6f : 5.0f, cy0 = portrait ? body->head[13] - 0.02f : 0.98f, pitch = portrait ? 0.04f : 0.08f;
+    float f = BH * 0.95f * dist / (portrait ? 0.62f : 2.05f);
     float cyaw = cosf(yaw + 3.14159265f), syaw = sinf(yaw + 3.14159265f), cp = cosf(pitch), sp = sinf(pitch);
     auto xf = [&](float x, float y, float z, float &X, float &Y, float &Z) {
         float x1 = x * cyaw + z * syaw, z1 = -x * syaw + z * cyaw;
@@ -426,7 +446,9 @@ static Bitmap *PersoImage(RectF dst, float yaw)
     sprintf_s(b, "%d|%d|%d", (int)(yaw * 100), W, H);
     key += b;
     if (key == g_persoDrawn && g_persoBmp) return g_persoBmp;
-    PersoRender(W, H, yaw);
+    std::string look[PF_COUNT];
+    for (int f = 0; f < PF_COUNT; f++) look[f] = PersoGet(f);
+    PersoRender(W, H, yaw, look);
     delete g_persoBmp;
     g_persoBmp = new Bitmap(W, H, PixelFormat32bppPARGB);
     BitmapData bd;
@@ -437,6 +459,42 @@ static Bitmap *PersoImage(RectF dst, float yaw)
     }
     g_persoDrawn = key;
     return g_persoBmp;
+}
+
+// Pastille d'un joueur (salon, etat du serveur) : portrait 3D de SON apparence complete, dans un cercle ; NULL sans
+// export (ou pour une apparence "haut seul" : les portraits d'images suffisent). Gardees par apparence et taille.
+static std::map<std::string, Bitmap *> g_persoPortraits;
+static Bitmap *PersoPortrait(const std::string &skin, int W, int H)
+{
+    if (g_perso.state != 1 || skin.find('|') == std::string::npos || W < 8 || H < 8) return NULL;
+    char b[32];
+    sprintf_s(b, "#%dx%d", W, H);
+    std::string key = skin + b;
+    auto it = g_persoPortraits.find(key);
+    if (it != g_persoPortraits.end()) return it->second;
+    if (g_persoPortraits.size() > 40) { for (auto &kv : g_persoPortraits) delete kv.second; g_persoPortraits.clear(); }
+    std::string look[PF_COUNT];
+    PersoParseLook(skin, look);
+    PersoRender(W, H, 0.3f, look, true);
+    Bitmap tmp(W, H, PixelFormat32bppPARGB), *out = new Bitmap(W, H, PixelFormat32bppPARGB);
+    BitmapData bd;
+    Rect r(0, 0, W, H);
+    if (tmp.LockBits(&r, ImageLockModeWrite, PixelFormat32bppPARGB, &bd) == Ok) {
+        for (int y = 0; y < H; y++) memcpy((BYTE *)bd.Scan0 + (size_t)y * bd.Stride, &g_persoPix[(size_t)y * W], (size_t)W * 4);
+        tmp.UnlockBits(&bd);
+    }
+    {
+        Graphics g(out);
+        g.Clear(Color(0, 0, 0, 0));
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        GraphicsPath mask;
+        mask.AddEllipse(RectF(0, 0, (float)W, (float)H));
+        TextureBrush tb(&tmp, WrapModeClamp);
+        g.FillPath(&tb, &mask);
+    }
+    g_persoDrawn.clear();   // (g_persoPix reutilise : l'apercu du volet sera refait)
+    g_persoPortraits[key] = out;
+    return out;
 }
 
 // ---- lignes du volet (a droite de l'apercu) : tete en haut, jambes en bas

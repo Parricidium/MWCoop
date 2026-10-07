@@ -32,6 +32,7 @@ namespace MWCoop
             public Vector3 Pos; public Quaternion Rot; public bool Active;           // dernier connu (envoye ou recu)
             public bool Held; public Vector3 HeldPos; public Quaternion HeldRot; public bool HeldActive; public bool HeldShow;
             public float HeldAt;
+            public bool Shown; public Vector3 ShowPos; public Quaternion ShowRot;   // pose montree : glisse vers la recue
         }
         class Car { public string Name; public Transform Root; public List<Item> Items = new List<Item>(); public Dictionary<string, Item> ByKey = new Dictionary<string, Item>(); }
 
@@ -98,7 +99,9 @@ namespace MWCoop
             if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
             if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
             if (now < nextSend || Session.RemoteCount == 0) return;
-            nextSend = now + 0.1f;
+            // 20 fois par seconde pour la voiture qu'on conduit (volant, aiguilles : retour d'un joueur, "le volant tourne
+            // avec du retard"), 10 sinon ; chez les autres, chaque pose recue est rejointe en douceur (LateUpdate).
+            nextSend = now + (VehicleSync.LocalDrivingRoot != null ? 0.05f : 0.1f);
             foreach (Car c in cars.Values)
             {
                 if (c.Root == null || !c.Root.gameObject.activeInHierarchy || !Sender(c)) continue;
@@ -135,8 +138,19 @@ namespace MWCoop
                 foreach (Item it in c.Items)
                 {
                     if (!it.Held || it.T == null) continue;
-                    if (!driven && now - it.HeldAt > 3f) { it.Held = false; it.Active = it.T.gameObject.activeSelf; it.Pos = it.T.localPosition; it.Rot = it.T.localRotation; continue; }
-                    if (it.Pose) { it.T.localPosition = it.HeldPos; it.T.localRotation = it.HeldRot; }
+                    if (!driven && now - it.HeldAt > 3f) { it.Held = false; it.Shown = false; it.Active = it.T.gameObject.activeSelf; it.Pos = it.T.localPosition; it.Rot = it.T.localRotation; continue; }
+                    if (it.Pose)
+                    {
+                        // ~60 ms pour rejoindre la pose recue (envoyee toutes les 50 a 100 ms) : plus de saccades
+                        if (!it.Shown) { it.Shown = true; it.ShowPos = it.HeldPos; it.ShowRot = it.HeldRot; }
+                        else
+                        {
+                            float k = 1f - Mathf.Exp(-Time.deltaTime * 16f);
+                            it.ShowPos = Vector3.Lerp(it.ShowPos, it.HeldPos, k);
+                            it.ShowRot = Quaternion.Slerp(it.ShowRot, it.HeldRot, k);
+                        }
+                        it.T.localPosition = it.ShowPos; it.T.localRotation = it.ShowRot;
+                    }
                     if (it.HeldShow && it.T.gameObject.activeSelf != it.HeldActive) it.T.gameObject.SetActive(it.HeldActive);
                 }
             }
