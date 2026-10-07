@@ -302,7 +302,7 @@ static bool PageSnap(int p) { return p == TAB_SKIN || p == TAB_CAR || p == TAB_C
 static bool PageEnabled(int p)
 {
     if (g_state != ST_IDLE) return false;
-    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP;
+    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
 }
@@ -343,9 +343,10 @@ static const NavItem kNav[] = {
     { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" },
     { TAB_SKIN, IC_SHIRT, L"Tenue", L"Outfit" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" },
     { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
-    { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" }, { TAB_LOGS, IC_FILE, L"Journaux", L"Logs" } };
+    { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" }, { TAB_LOGS, IC_FILE, L"Journaux", L"Logs" },
+    { TAB_API, IC_BRACES, L"API moddeurs", L"Modding API" } };
+static const int kNavGroupN[] = { 2, 2, 2, 3 };   // pages de chaque groupe, dans l'ordre de kNav
 static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"INFO" };
-static RectF NavRect(int i, float y0) { return RectF(28, y0 + (i / 2) * 122 + 26 + (i % 2) * 46, 208, 44); }
 static Bitmap *g_logo;
 static int MscModCount();   // (mods.inc)
 static RectF g_navR[TAB_COUNT];   // (bulles de la visite)
@@ -370,21 +371,21 @@ static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t 
         LeaveCriticalSection(&g_lcs);
         wchar_t b[16]; swprintf_s(b, L"%d/%d", n, kLobbyMax);
         float w = PillW(b, 10.5f);
-        Pill(g, RectF(rx - w, r.Y + 12, w, 20), WithA(kOk, 0.2f), b, kOk, 10.5f);
+        Pill(g, RectF(rx - w, r.Y + (r.Height - 20) / 2, w, 20), WithA(kOk, 0.2f), b, kOk, 10.5f);
     } else if (page == TAB_CAR) {
-        RectF d(rx - 15, r.Y + 15, 14, 14);
+        RectF d(rx - 15, r.Y + (r.Height - 14) / 2, 14, 14);
         if (g_carColor >= 0) { SolidBrush cb(CarRgb(g_carColor)); g.FillEllipse(&cb, d); }
         else DrawCarWheel(g, d);
         Pen e(Color(90, 255, 255, 255), 1.2f); g.DrawEllipse(&e, d);
     } else if (page == TAB_MODS && en) {
         int n = MscModCount();
-        if (n > 0) { std::wstring s = std::to_wstring(n); float w = PillW(s, 10.5f); Pill(g, RectF(rx - w, r.Y + 12, w, 20), TH(cardSel), s, kInk, 10.5f); }
+        if (n > 0) { std::wstring s = std::to_wstring(n); float w = PillW(s, 10.5f); Pill(g, RectF(rx - w, r.Y + (r.Height - 20) / 2, w, 20), TH(cardSel), s, kInk, 10.5f); }
     } else if (page == TAB_NOTES && NotesUnseen() && !on) {
         const wchar_t *s = T(L"NOUV.", L"NEW");
         float w = PillW(s, 10);
-        Pill(g, RectF(rx - w, r.Y + 12, w, 20), kAcc, s, kOnAcc, 10);
+        Pill(g, RectF(rx - w, r.Y + (r.Height - 20) / 2, w, 20), kAcc, s, kOnAcc, 10);
     } else if (page == TAB_LOGS && g_crashT && !on) {
-        RectF d(rx - 18, r.Y + 13, 18, 18);
+        RectF d(rx - 18, r.Y + (r.Height - 18) / 2, 18, 18);
         SolidBrush rb(kRed); g.FillEllipse(&rb, d);
         Text(g, L"!", d, 11.5f, FontStyleBold, Color(255, 255, 255, 255));
     }
@@ -422,12 +423,20 @@ static void DrawRail(Graphics &g)
         Text(g, std::wstring(T(L"Mettre à jour · ", L"Update · ")) + v, RectF(b.r.X + 34, b.r.Y, b.r.Width - 40, b.r.Height), 13, FontStyleBold, kOnAcc, StringAlignmentNear);
         y0 = 180;
     }
-    for (int k = 0; k < 4; k++) {
-        SmallLabel(g, g_fr ? kNavGroupFr[k] : kNavGroupEn[k], RectF(40, y0 + k * 122 + 2, 190, 20), WithA(kGrey, 0.9f));
-        for (int j = 0; j < 2; j++) {
-            const NavItem &it = kNav[k * 2 + j];
-            DrawNavItem(g, NavRect(k * 2 + j, y0), it.page, it.icon, g_fr ? it.fr : it.en);
+    // groupes jusqu'a Reglages (674) : lignes de 44 px, ou de 40 quand le bouton de mise a jour prend de la place
+    const int nItems = (int)(sizeof(kNav) / sizeof(kNav[0]));
+    float avail = 666 - y0, lab = 26, step = 46;
+    if (avail - 4 * lab - nItems * step < 6) { lab = 24; step = 42; }
+    float gap = min(20.0f, max(0.0f, (avail - 4 * lab - nItems * step) / 3)), y = y0;
+    for (int k = 0, i = 0; k < 4; k++) {
+        SmallLabel(g, g_fr ? kNavGroupFr[k] : kNavGroupEn[k], RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
+        y += lab;
+        for (int j = 0; j < kNavGroupN[k]; j++, i++) {
+            const NavItem &it = kNav[i];
+            DrawNavItem(g, RectF(28, y, 208, step - 2), it.page, it.icon, g_fr ? it.fr : it.en);
+            y += step;
         }
+        y += gap;
     }
     DrawNavItem(g, RectF(28, 674, 208, 44), TAB_COOP, IC_GEAR, T(L"Réglages", L"Settings"));
     for (int id : { B_GITHUB, B_KOFI }) {
@@ -479,6 +488,7 @@ static void DrawHeader(Graphics &g)
     case TAB_NOTES: title = T(L"Nouveautés", L"What's new"); sub = T(L"Ce qui change à chaque version", L"What changes in each version"); break;
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: title = T(L"Réglages", L"Settings"); sub = T(L"Gardés dans mwcoop-lanceur.ini et MWCoop\\mwcoop.ini", L"Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini"); break;
+    case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     }
     // commandes de droite : fermer, reduire, theme, langue, puis celles de la page
     float right = 1264;
@@ -1126,6 +1136,7 @@ static void DrawUI(Graphics &g)
     case TAB_NOTES: DrawNotesPage(g); break;
     case TAB_LOGS: DrawLogsPage(g); break;
     case TAB_COOP: DrawSettings(g); break;
+    case TAB_API: DrawApiPage(g); break;
     default: DrawHome(g); break;
     }
     DrawHeader(g);
@@ -1185,5 +1196,6 @@ static bool UiClick(int id)
     if (id == UI_LOOKRAND) { LookRandom(); return true; }
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
+    if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
     return false;
 }

@@ -32,6 +32,7 @@ enum {
     UI_LOBBY_ME_LOOK, UI_LOBBY_ME_CAR,
     UI_SET_AUTO = 220, UI_SET_CHECK, UI_SET_DARK, UI_SET_LIGHT, UI_SET_FR, UI_SET_EN, UI_SET_CLOSE, UI_SET_GUIDE,
     UI_SET_STEAM, UI_SET_IP, UI_SET_PORTM, UI_SET_PORTP, UI_SET_FOLDER, UI_SET_BUY, UI_SET_MODSAUTO,
+    UI_API_DOC = 240, UI_API_SRC, UI_API_DIR, UI_API_COPY, UI_API_EX0, UI_API_EX1,
     UI_NOTE = 300,                // + i : version i de la liste
     UI_NOTE_UPDATE = 290,
     UI_LOOKPIN = 400,             // + zone (0 tete, 1 torse, 2 jambes, 3 silhouette)
@@ -42,7 +43,7 @@ enum {
 // ---- icones (traits, dans une boite de 24, comme celles de la maquette)
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
-       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM };
+       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -138,6 +139,13 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
         break;
     }
     case IC_CODE: poly({ 8, 8, 4, 12, 8, 16 }, false); poly({ 16, 8, 20, 12, 16, 16 }, false); break;
+    case IC_BRACES: {   // { } : l'API
+        GraphicsPath p1; bez(p1, 9, 4, 6, 4, 7, 6, 7, 9); bez(p1, 7, 9, 7, 11, 6, 12, 4, 12); g.DrawPath(&pen, &p1);
+        GraphicsPath p2; bez(p2, 4, 12, 6, 12, 7, 13, 7, 15); bez(p2, 7, 15, 7, 18, 6, 20, 9, 20); g.DrawPath(&pen, &p2);
+        GraphicsPath p3; bez(p3, 15, 4, 18, 4, 17, 6, 17, 9); bez(p3, 17, 9, 17, 11, 18, 12, 20, 12); g.DrawPath(&pen, &p3);
+        GraphicsPath p4; bez(p4, 20, 12, 18, 12, 17, 13, 17, 15); bez(p4, 17, 15, 17, 18, 18, 20, 15, 20); g.DrawPath(&pen, &p4);
+        break;
+    }
     case IC_SHUFFLE: {
         GraphicsPath p; p.AddLine(P(4, 7), P(7, 7)); bez(p, 7, 7, 11, 7, 13, 17, 17, 17); p.AddLine(P(17, 17), P(20, 17)); g.DrawPath(&pen, &p);
         GraphicsPath q; q.AddLine(P(4, 17), P(7, 17)); bez(q, 7, 17, 8.6f, 17, 9.8f, 15.4f, 10.8f, 13.4f); g.DrawPath(&pen, &q);
