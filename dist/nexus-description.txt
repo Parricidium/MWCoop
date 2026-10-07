@@ -85,7 +85,7 @@ Un joueur héberge son monde, ses amis rejoignent [b]ce[/b] monde : même sauveg
 [*]Copiez tout le contenu du zip à côté de [b]mywintercar.exe[/b] : [b]version.dll[/b], [b]MWCoop.exe[/b] et le dossier [b]MWCoop[/b].
 [*]Lancez [b]MWCoop.exe[/b]. Il met le mod à jour tout seul à chaque démarrage.
 [/list]
-Tous les joueurs d'une partie doivent avoir la [b]même version[/b] (le lanceur s'en charge). Depuis une installation Steam, le lanceur démarre le jeu depuis une copie dans %LOCALAPPDATA%\MWCoop\My Winter Car (mêmes données, dossiers liés) pour que le mod se charge. [b]MSCLoader[/b] (expérimental) : fonctionne avec MWCoop depuis la 0.31.3 ; l'onglet MODS du lanceur l'installe, l'active ou le coupe, liste vos mods et règle leurs options. Depuis la 0.36, les mods MSCLoader de l'hôte (cochés « Envoyer ») sont copiés chez les invités du salon après un TOUT ACCEPTER, à part de leurs propres mods.
+Tous les joueurs d'une partie doivent avoir la [b]même version[/b] (le lanceur s'en charge). Depuis une installation Steam, le lanceur démarre le jeu depuis une copie dans %LOCALAPPDATA%\MWCoop\My Winter Car (mêmes données, dossiers liés) pour que le mod se charge. [b]MSCLoader[/b] (expérimental) : fonctionne avec MWCoop depuis la 0.31.3 ; l'onglet MODS du lanceur l'installe, l'active ou le coupe, liste vos mods et règle leurs options. Depuis la 0.36, les mods MSCLoader de l'hôte (cochés « Envoyer ») sont copiés chez les invités du salon après un TOUT ACCEPTER, à part de leurs propres mods. Depuis la 0.37, aussi les CD de l'hôte, sa radio, la peinture de la CORRIS, le drapeau du garage, les posters… (une liste à cocher dans le lanceur).
 
 [size=4][b]Bugs connus[/b][/size]
 [list]

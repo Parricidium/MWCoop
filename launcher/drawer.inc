@@ -15,6 +15,11 @@ static const RectF kDrawerOk(1388, 556, 124, 30), kDrawerCancel(1256, 556, 124, 
 static int g_drawerHot;                                     // 1 valider, 2 annuler
 static int g_drSkin = -1, g_drCar = -1, g_drPort = -1, g_drClose = -1;   // valeurs a l'ouverture (ANNULER)
 
+static void ContentSnapshot(bool restore);   // (modsync.inc : volet du contenu envoye)
+static void DrawContent(Graphics &g);
+static int ContentAt(float x, float y);
+static void ContentClick(float x, float y);
+static int g_contentHot = -1;          // survol du volet du contenu (5000+i, 5100)
 static float DrawerEase() { float t = min(max(g_drawerT, 0.0f), 1.0f); return t * t * (3 - 2 * t); }
 static float DrawerSlide() { return (1 - DrawerEase()) * -(kDrawerCard.X + kDrawerCard.Width - 960); }
 static bool DrawerOpen() { return g_drawer != DR_NONE && g_drawerT > 0.97f; }
@@ -25,6 +30,7 @@ static void DrawerShow(int kind)
     if (g_drawer == DR_NONE) {   // valeurs a rendre si on annule
         const Opt *ap = OptByKey("Apparence"), *po = OptByKey("Port"), *fl = OptByKey("FermerLanceur");
         g_drSkin = ap ? OptGet(*ap) : -1; g_drCar = g_carColor; g_drPort = po ? OptGet(*po) : -1; g_drClose = fl ? OptGet(*fl) : -1;
+        ContentSnapshot(false);
     }
     g_drawer = g_drawerShown = kind;
     g_drawerHot = 0;
@@ -40,6 +46,7 @@ static void DrawerClose(bool keep)
         if (g_drCar != g_carColor) CarSetColor(g_drCar);
         if (po && g_drPort >= 0) OptSet(*po, g_drPort);
         if (fl && g_drClose >= 0) OptSet(*fl, g_drClose);
+        ContentSnapshot(true);
         g_skinAnnounce = true;   // (salon : l'apparence rendue est annoncee tout de suite)
     }
     g_drawer = DR_NONE;
@@ -73,9 +80,11 @@ static void DrawDrawer(Graphics &g)
     g.TranslateTransform(kDrawerDx + s, kDrawerDy);
     if (g_drawerShown == DR_SKIN) DrawSkins(g);
     else if (g_drawerShown == DR_CAR) DrawCar(g);
+    else if (g_drawerShown == DR_CONTENT) DrawContent(g);
     else { int keep = g_tab; g_tab = TAB_LOBBYOPT; DrawOptions(g); g_tab = keep; }
     g.Restore(st);
-    const wchar_t *title = g_drawerShown == DR_SKIN ? T(L"TENUE", L"OUTFIT") : g_drawerShown == DR_CAR ? T(L"COULEUR DE LA VOITURE", L"CAR COLOR") : T(L"OPTIONS DU SALON", L"LOBBY OPTIONS");
+    const wchar_t *title = g_drawerShown == DR_SKIN ? T(L"TENUE", L"OUTFIT") : g_drawerShown == DR_CAR ? T(L"COULEUR DE LA VOITURE", L"CAR COLOR")
+                        : g_drawerShown == DR_CONTENT ? T(L"CD, IMAGES, MODS", L"CDS, IMAGES, MODS") : T(L"OPTIONS DU SALON", L"LOBBY OPTIONS");
     Text(g, title, RectF(card.X + 22, kDrawerOk.Y, 240, kDrawerOk.Height), 13, FontStyleBold, kInk, StringAlignmentNear);
     for (int k = 1; k <= 2; k++) {
         RectF r = k == 1 ? kDrawerOk : kDrawerCancel;
@@ -92,13 +101,15 @@ static void DrawDrawer(Graphics &g)
 static void DrawerMouseMove(float x, float y)
 {
     g_drawerHot = !DrawerOpen() ? 0 : kDrawerOk.Contains(x, y) ? 1 : kDrawerCancel.Contains(x, y) ? 2 : 0;
+    g_contentHot = -1;
     if (!InDrawer(x, y)) return;
     float px = x - kDrawerDx, py = y - kDrawerDy;
     if (g_drawerShown == DR_SKIN) { g_skinHot = SkinCellAt(px, py); g_skinArrowHot = SkinArrowAt(px, py); }
     else if (g_drawerShown == DR_CAR) { g_carHot = CarSwatchAt(px, py); if (g_btn[B_COLOR].r.Contains(px, py)) g_hot = B_COLOR; }
+    else if (g_drawerShown == DR_CONTENT) g_contentHot = ContentAt(px, py);
     else { int keep = g_tab; g_tab = TAB_LOBBYOPT; HitOption(px, py, &g_optHot, &g_optPart); g_tab = keep; }
 }
-static bool DrawerHand() { return g_drawerHot != 0; }
+static bool DrawerHand() { return g_drawerHot != 0 || (g_drawerShown == DR_CONTENT && g_contentHot >= 0); }
 static bool DrawerMouseDown(float x, float y)
 {
     if (!DrawerOpen()) return false;
@@ -108,6 +119,7 @@ static bool DrawerMouseDown(float x, float y)
     float px = x - kDrawerDx, py = y - kDrawerDy;
     if (g_drawerShown == DR_SKIN) SkinMouseDown(px, py);
     else if (g_drawerShown == DR_CAR) { if (g_btn[B_COLOR].r.Contains(px, py)) CarPickColor(); else CarMouseDown(px, py); }
+    else if (g_drawerShown == DR_CONTENT) ContentClick(px, py);
     else {
         int keep = g_tab, row, part;
         g_tab = TAB_LOBBYOPT;

@@ -15,13 +15,19 @@
 //  - Transport : salon IP, des messages du salon (M_MODS la liste, M_MODGET un morceau demande, M_MODDATA le
 //    morceau) ; salon Steam, les memes en pair-a-pair Steam (canal 5, fiable), la liste demandee (M_MODSREQ) quand
 //    la donnee "mods" du salon (empreinte de la liste) change.
+//  - Contenu personnalisable du jeu (0.37, demande de JD) : CD1-3 (musiques, jaquette), Radio, Images (peinture de la
+//    CORRIS car.png, mobylette, drapeau du garage, posters, autocollant, tissu, photo d'identite) et Extra (hockey).
+//    L'hote coche ce qu'il envoie (volet "Contenu envoye aux invites" : COOP, ou CHOISIR dans le salon ; [Contenu]
+//    de mwcoop-lanceur.ini). Meme liste que les mods, chemins "<dossier>\..." ("Mods\..." pour les mods). L'invite
+//    les recoit dans %LOCALAPPDATA%\MWCoop\contenu-invite\ ; sa copie de lancement relie CD1-3, Radio et Extra a ceux
+//    de l'hote, et Images a un dossier ou les images envoyees remplacent les siennes (le reste : les siennes).
 #include <mutex>
 
 // (M_MODS, M_MODGET, M_MODDATA, M_MODSREQ : avec les autres messages du salon)
 static const uint32_t kSyncChunk = 48 * 1024;
 static const int kSyncWindow = 8, kSyncChannel = 5;
 struct SyncFile { std::string path; uint32_t size; uint64_t hash; };
-struct SyncOffer { bool msc = false; std::string mscVer; std::vector<std::string> mods; std::vector<SyncFile> files; uint64_t key = 0; };
+struct SyncOffer { bool msc = false; std::string mscVer; std::vector<std::string> mods, cats; std::vector<SyncFile> files; uint64_t key = 0; };
 
 static uint64_t Fnv(const void *p, size_t n, uint64_t h = 1469598103934665603ULL)
 {
@@ -45,6 +51,24 @@ static bool FileFnv(const std::wstring &f, uint64_t *h, uint32_t *size)
     *size = (uint32_t)total;
     return sz.QuadPart < 0xFFFFFFF0LL && total == (uint64_t)sz.QuadPart;
 }
+// Meme chose, sans relire un fichier inchange (taille et date) : les CD font vite des centaines de Mo.
+static std::mutex g_fnvMx;
+static std::map<std::wstring, std::pair<uint64_t, uint64_t>> g_fnvCache;   // chemin -> (taille ^ date, empreinte)
+static bool FileFnvCached(const std::wstring &f, uint64_t *h, uint32_t *size)
+{
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (!GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return false;
+    uint64_t stamp = ((uint64_t)a.nFileSizeHigh << 32 | a.nFileSizeLow) * 1000003ULL ^ ((uint64_t)a.ftLastWriteTime.dwHighDateTime << 32 | a.ftLastWriteTime.dwLowDateTime);
+    {
+        std::lock_guard<std::mutex> lk(g_fnvMx);
+        auto it = g_fnvCache.find(f);
+        if (it != g_fnvCache.end() && it->second.first == stamp && !a.nFileSizeHigh) { *h = it->second.second; *size = a.nFileSizeLow; return true; }
+    }
+    if (!FileFnv(f, h, size)) return false;
+    std::lock_guard<std::mutex> lk(g_fnvMx);
+    g_fnvCache[f] = std::make_pair(stamp, *h);
+    return true;
+}
 
 static std::string OfferBlob(const SyncOffer &o)
 {
@@ -54,6 +78,8 @@ static std::string OfferBlob(const SyncOffer &o)
     w.str(o.mscVer);
     w.u16((int)o.mods.size());
     for (auto &m : o.mods) w.str(m);
+    w.u16((int)o.cats.size());
+    for (auto &c : o.cats) w.str(c);
     w.u16((int)o.files.size());
     for (auto &f : o.files) { w.str(f.path); w.u32(f.size); w.u32((uint32_t)f.hash); w.u32((uint32_t)(f.hash >> 32)); }
     return w.d;
@@ -74,6 +100,8 @@ static bool OfferParse(const std::string &m, SyncOffer &o)
     o.mscVer = r.str();
     int nm = r.u16();
     for (int i = 0; i < nm && r.ok; i++) o.mods.push_back(r.str());
+    int nc = r.u16();
+    for (int i = 0; i < nc && r.ok; i++) o.cats.push_back(r.str());
     int nf = r.u16();
     for (int i = 0; i < nf && r.ok; i++) {
         SyncFile f;
@@ -93,6 +121,7 @@ static bool OfferParse(const std::string &m, SyncOffer &o)
 static SyncOffer g_offer;                 // (sous g_lcs)
 static std::string g_offerBlob;           // (sous g_lcs) message M_MODS pret a envoyer
 static std::wstring g_offerDir;           // (sous g_lcs) dossier Mods de l'hote
+static std::wstring g_offerGame;          // (sous g_lcs) dossier du jeu de l'hote (contenu)
 static std::atomic<int> g_offerBusy(0);
 static std::atomic<bool> g_offerNew(false);
 static std::string g_offerSig;            // ce sur quoi la liste a ete faite (fil de la fenetre)
@@ -123,20 +152,73 @@ static void ModSetShared(const std::wstring &file, bool on)
     WritePrivateProfileStringW(L"Lanceur", L"ModsPrives", out.c_str(), g_iniLauncher.c_str());
 }
 
-struct OfferJob { std::wstring dir; bool msc; std::string ver; std::vector<std::pair<std::wstring, std::wstring>> mods; };   // (fichier, ID)
-static void OfferAddTree(const std::wstring &dir, const std::wstring &rel, std::vector<SyncFile> &out, uint64_t &total)
+// ---- contenu personnalisable du jeu
+struct ContentCat { const char *key; const wchar_t *fr, *en, *root, *files; bool def; };   // files : "a.png|b.png" (NULL : tout le dossier)
+static const ContentCat kContent[] = {
+    { "cd1", L"CD 1", L"CD 1", L"CD1", NULL, true },
+    { "cd2", L"CD 2", L"CD 2", L"CD2", NULL, true },
+    { "cd3", L"CD 3", L"CD 3", L"CD3", NULL, true },
+    { "radio", L"Radio", L"Radio", L"Radio", NULL, true },
+    { "peinture", L"Peinture de la CORRIS", L"CORRIS paint", L"Images", L"car.png", true },
+    { "mobylette", L"Peinture de la mobylette", L"Moped paint", L"Images", L"jonnez_template.png", true },
+    { "drapeau", L"Drapeau du garage", L"Garage flag", L"Images", L"flag_garage.png", true },
+    { "posters", L"Posters", L"Posters", L"Images", L"poster1.png|poster2.png|poster3.png", true },
+    { "autocollant", L"Autocollant de vitre", L"Window sticker", L"Images", L"window_sticker.png", true },
+    { "tissu", L"Tissu", L"Fabric", L"Images", L"fabric.png", true },
+    { "photo", L"Photo d'identit\u00E9", L"ID photo", L"Images", L"mugshot.png", false },
+    { "hockey", L"\u00C9quipes de hockey", L"Hockey teams", L"Extra", NULL, true },
+};
+static const int kContentN = (int)(sizeof(kContent) / sizeof(kContent[0]));
+static bool ContentOn(int i) { return GetPrivateProfileIntW(L"Contenu", Widen(kContent[i].key).c_str(), kContent[i].def ? 1 : 0, g_iniLauncher.c_str()) != 0; }
+static void ContentSet(int i, bool on) { WritePrivateProfileStringW(L"Contenu", Widen(kContent[i].key).c_str(), on ? L"1" : L"0", g_iniLauncher.c_str()); }
+static int ContentCatOf(const std::string &key) { for (int i = 0; i < kContentN; i++) if (key == kContent[i].key) return i; return -1; }
+// Fichiers presents d'une categorie, chemins "<dossier>\<fichier>" (dossier du jeu : game, avec \ final).
+static void ContentFilesTree(const std::wstring &base, const std::wstring &rel, std::vector<std::wstring> &out)
 {
     WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((dir + rel + L"\\*").c_str(), &fd);
+    HANDLE h = FindFirstFileW((base + rel + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L"..") continue;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ContentFilesTree(base, rel + L"\\" + n, out);
+        else if (out.size() < 2000) out.push_back(rel + L"\\" + n);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+static std::vector<std::wstring> ContentFiles(int i, const std::wstring &game)
+{
+    std::vector<std::wstring> out;
+    const ContentCat &c = kContent[i];
+    if (!c.files) ContentFilesTree(game, c.root, out);
+    else {
+        std::wstring all = c.files;
+        for (size_t a = 0; a <= all.size();) {
+            size_t e = all.find(L'|', a);
+            std::wstring f = std::wstring(c.root) + L"\\" + all.substr(a, e == std::wstring::npos ? std::wstring::npos : e - a);
+            if (FileExists(game + f)) out.push_back(f);
+            if (e == std::wstring::npos) break;
+            a = e + 1;
+        }
+    }
+    return out;
+}
+
+struct OfferJob { std::wstring dir, game; bool msc; std::string ver; std::vector<std::pair<std::wstring, std::wstring>> mods; std::vector<int> cats; };   // mods : (fichier, ID)
+// Fichiers de base + rel (rel vide ou "\X\Y"), chemins dans la liste : prefix + "X\Y\<fichier>".
+static void OfferAddTree(const std::wstring &base, const std::wstring &rel, const std::string &prefix, std::vector<SyncFile> &out, uint64_t &total)
+{
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((base + rel + L"\\*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return;
     do {
         std::wstring n = fd.cFileName;
         if (n == L"." || n == L"..") continue;
         std::wstring r = rel + L"\\" + n;
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { OfferAddTree(dir, r, out, total); continue; }
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { OfferAddTree(base, r, prefix, out, total); continue; }
         SyncFile f;
-        f.path = Narrow(r.substr(1), CP_UTF8);   // (sans le \ de tete)
-        if (out.size() >= 3000 || total > (1ull << 30) || !SyncPathOk(f.path) || !FileFnv(dir + r, &f.hash, &f.size)) continue;
+        f.path = prefix + Narrow(r.substr(1), CP_UTF8);   // (sans le \ de tete)
+        if (out.size() >= 3000 || total > (2ull << 30) || !SyncPathOk(f.path) || !FileFnvCached(base + r, &f.hash, &f.size)) continue;
         total += f.size;
         out.push_back(f);
     } while (FindNextFileW(h, &fd));
@@ -154,19 +236,30 @@ static DWORD WINAPI OfferThread(void *p)
         for (auto &m : job->mods) {
             o.mods.push_back(Narrow(m.first, CP_UTF8));
             SyncFile f;
-            f.path = Narrow(m.first, CP_UTF8);
-            if (SyncPathOk(f.path) && FileFnv(job->dir + m.first, &f.hash, &f.size)) { o.files.push_back(f); total += f.size; }
-            OfferAddTree(d, L"\\Assets\\" + m.second, o.files, total);
-            OfferAddTree(d, L"\\Config\\Mod Settings\\" + m.second, o.files, total);
+            f.path = "Mods\\" + Narrow(m.first, CP_UTF8);
+            if (SyncPathOk(f.path) && FileFnvCached(job->dir + m.first, &f.hash, &f.size)) { o.files.push_back(f); total += f.size; }
+            OfferAddTree(d, L"\\Assets\\" + m.second, "Mods\\", o.files, total);
+            OfferAddTree(d, L"\\Config\\Mod Settings\\" + m.second, "Mods\\", o.files, total);
         }
-        if (!job->mods.empty()) OfferAddTree(d, L"\\References", o.files, total);
+        if (!job->mods.empty()) OfferAddTree(d, L"\\References", "Mods\\", o.files, total);
         WIN32_FIND_DATAW fd;   // MSCLoader lui-meme (console, page des reglages)
         HANDLE h = FindFirstFileW((job->dir + L"Assets\\MSCLoader_*").c_str(), &fd);
         if (h != INVALID_HANDLE_VALUE) {
-            do if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) OfferAddTree(d, std::wstring(L"\\Assets\\") + fd.cFileName, o.files, total);
+            do if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) OfferAddTree(d, std::wstring(L"\\Assets\\") + fd.cFileName, "Mods\\", o.files, total);
             while (FindNextFileW(h, &fd));
             FindClose(h);
         }
+    }
+    for (int i : job->cats) {   // contenu du jeu coche
+        size_t before = o.files.size();
+        for (const std::wstring &rel : ContentFiles(i, job->game)) {
+            SyncFile f;
+            f.path = Narrow(rel, CP_UTF8);
+            if (o.files.size() >= 3000 || !SyncPathOk(f.path) || !FileFnvCached(job->game + rel, &f.hash, &f.size)) continue;
+            total += f.size;
+            o.files.push_back(f);
+        }
+        if (o.files.size() > before) o.cats.push_back(kContent[i].key);
     }
     std::string blob = OfferBlob(o);
     while (blob.size() > 60000 && !o.files.empty()) { o.files.pop_back(); blob = OfferBlob(o); }   // (un message du salon : 64 Ko au plus)
@@ -175,9 +268,10 @@ static DWORD WINAPI OfferThread(void *p)
     g_offer = o;
     g_offerBlob = blob;
     g_offerDir = job->dir;
+    g_offerGame = job->game;
     LeaveCriticalSection(&g_lcs);
-    TestLog("mods : liste de l'hote prete (MSCLoader %d, %d mod(s), %d fichier(s), %llu octets, empreinte %016llx)", (int)o.msc, (int)o.mods.size(), (int)o.files.size(),
-            (unsigned long long)total, (unsigned long long)o.key);
+    TestLog("mods : liste de l'hote prete (MSCLoader %d, %d mod(s), %d contenu(s), %d fichier(s), %llu octets, empreinte %016llx)", (int)o.msc, (int)o.mods.size(), (int)o.cats.size(),
+            (int)o.files.size(), (unsigned long long)total, (unsigned long long)o.key);
     delete job;
     g_offerNew = true;
     g_offerBusy = 0;
@@ -211,7 +305,20 @@ static void SyncHostTick()
     std::string sig = msc ? "1" + Narrow(g_mscDir, CP_UTF8) : "0";
     OfferJob *job = new OfferJob;
     job->dir = g_mscDir;
+    job->game = g_gameDir;
     job->msc = msc;
+    for (int i = 0; i < kContentN; i++) {   // contenu coche : ses fichiers (taille, date)
+        if (!ContentOn(i)) continue;
+        job->cats.push_back(i);
+        sig += std::string("#") + kContent[i].key;
+        for (const std::wstring &rel : ContentFiles(i, g_gameDir)) {
+            WIN32_FILE_ATTRIBUTE_DATA a;
+            if (!GetFileAttributesExW((g_gameDir + rel).c_str(), GetFileExInfoStandard, &a)) continue;
+            char b[64];
+            sprintf_s(b, "|%lu.%lu.%lu", a.nFileSizeLow, a.ftLastWriteTime.dwLowDateTime, a.ftLastWriteTime.dwHighDateTime);
+            sig += Narrow(rel, CP_UTF8) + b;
+        }
+    }
     job->ver = Narrow(g_mscVer, CP_UTF8);
     if (msc) {
         for (auto &m : g_msc) {
@@ -249,16 +356,18 @@ static bool SyncServe(const std::string &m, Wr &out)
     EnterCriticalSection(&g_lcs);
     bool ok = key == g_offer.key && idx < (int)g_offer.files.size();
     SyncFile f = ok ? g_offer.files[idx] : SyncFile();
-    std::wstring path = g_offerDir + Widen(f.path, CP_UTF8);
+    std::wstring path = !f.path.compare(0, 5, "Mods\\") ? g_offerDir + Widen(f.path.substr(5), CP_UTF8) : g_offerGame + Widen(f.path, CP_UTF8);
     LeaveCriticalSection(&g_lcs);
-    if (!ok || off > f.size) return false;
+    static int served;
+    if (!ok || off > f.size) { TestLog("mods : demande refusee (fichier %d, position %u, liste %s)", idx, off, key == g_offer.key ? "la meme" : "autre"); return false; }
+    if (!served++) TestLog("mods : premiere demande servie (%s)", f.path.c_str());
     uint32_t n = min(kSyncChunk, f.size - off);
     out.u8(M_MODDATA);
     out.u16(idx);
     out.u32(off);
     if (!n) return true;
     HANDLE fh = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
-    if (fh == INVALID_HANDLE_VALUE) return false;
+    if (fh == INVALID_HANDLE_VALUE) { TestLog("mods : %s illisible (erreur %lu)", Narrow(path, CP_UTF8).c_str(), GetLastError()); return false; }
     LARGE_INTEGER li; li.QuadPart = off;
     SetFilePointerEx(fh, li, NULL, FILE_BEGIN);
     size_t at = out.d.size();
@@ -288,6 +397,15 @@ static std::string g_syncWhy;
 static uint64_t g_syncAskedKey;           // Steam : liste demandee pour cette empreinte
 
 static std::wstring CoopModsDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"mods-invite\\"; }
+static std::wstring ContentDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"contenu-invite\\"; }
+// Ou un fichier de la liste va chez l'invite : "Mods\..." dans mods-invite, le reste dans contenu-invite.
+static std::wstring SyncLocal(const std::string &p) { return !p.compare(0, 5, "Mods\\") ? CoopModsDir() + Widen(p.substr(5), CP_UTF8) : ContentDir() + Widen(p, CP_UTF8); }
+static bool OfferHasRoot(const SyncOffer &o, const std::wstring &root)
+{
+    std::string r = Narrow(root, CP_UTF8) + "\\";
+    for (auto &f : o.files) if (!_strnicmp(f.path.c_str(), r.c_str(), r.size())) return true;
+    return false;
+}
 static bool ModsAuto() { const Opt *o = OptByKey("ModsAuto"); return o && OptGet(*o); }
 
 static void SyncSendHost(const Wr &w)
@@ -333,22 +451,28 @@ static void SyncPumpLocked()
     }
 }
 
-// Fin : DLL que l'hote n'a plus retirees de la copie (le reste ne gene pas MSCLoader).
+// Fin : ce que l'hote n'a plus est retire de la copie (DLL des mods ; fichiers des CD, de la radio, du hockey).
+static void SyncPrune(const std::wstring &dir, const std::string &prefix, const wchar_t *pattern)
+{
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + pattern).c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        std::string p = prefix + Narrow(fd.cFileName, CP_UTF8);
+        bool keep = false;
+        for (auto &f : g_hostOffer.files) keep |= !_stricmp(f.path.c_str(), p.c_str());
+        if (!keep) { DeleteFileW((dir + fd.cFileName).c_str()); TestLog("mods : %s retire de la copie (plus chez l'hote)", p.c_str()); }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
 static void SyncFinishLocked()
 {
-    std::wstring dir = CoopModsDir();
-    WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((dir + L"*.dll").c_str(), &fd);
-    if (h != INVALID_HANDLE_VALUE) {
-        do {
-            bool keep = false;
-            for (auto &f : g_hostOffer.files) keep |= !_wcsicmp(Widen(f.path, CP_UTF8).c_str(), fd.cFileName);
-            if (!keep) { DeleteFileW((dir + fd.cFileName).c_str()); TestLog("mods : %s retire de la copie (plus chez l'hote)", Narrow(fd.cFileName, CP_UTF8).c_str()); }
-        } while (FindNextFileW(h, &fd));
-        FindClose(h);
-    }
+    SyncPrune(CoopModsDir(), "Mods\\", L"*.dll");
+    for (const wchar_t *r : { L"CD1", L"CD2", L"CD3", L"Radio", L"Extra" })
+        if (OfferHasRoot(g_hostOffer, r)) SyncPrune(ContentDir() + r + L"\\", Narrow(r) + "\\", L"*");
     g_sync = SY_DONE;
-    TestLog("mods : copie des mods de l'hote a jour (%d mod(s))", (int)g_hostOffer.mods.size());
+    TestLog("mods : copie de l'hote a jour (%d mod(s), %d contenu(s))", (int)g_hostOffer.mods.size(), (int)g_hostOffer.cats.size());
 }
 
 static void SyncStartLocked()
@@ -366,9 +490,8 @@ static void SyncStartLocked()
     g_sync = SY_GET;
     TestLog("mods : telechargement de %d fichier(s), %llu octets", (int)g_syncNeed.size(), (unsigned long long)total);
     // fichiers vides : rien a demander
-    std::wstring dir = CoopModsDir();
     for (int i : g_syncNeed) if (!g_hostOffer.files[i].size) {
-        std::wstring p = dir + Widen(g_hostOffer.files[i].path, CP_UTF8);
+        std::wstring p = SyncLocal(g_hostOffer.files[i].path);
         SHCreateDirectoryExW(NULL, DirOf(p).c_str(), NULL);
         HANDLE fh = CreateFileW(p.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
         if (fh != INVALID_HANDLE_VALUE) CloseHandle(fh);
@@ -390,13 +513,12 @@ static DWORD WINAPI SyncCheckThread(void *p)
         if (gen != g_syncGen) return 0;
         o = g_hostOffer;
     }
-    std::wstring dir = CoopModsDir();
     std::vector<int> need;
     uint64_t bytes = 0;
     for (int i = 0; i < (int)o.files.size(); i++) {
         uint64_t h = 0;
         uint32_t sz = 0;
-        if (FileFnv(dir + Widen(o.files[i].path, CP_UTF8), &h, &sz) && sz == o.files[i].size && h == o.files[i].hash) continue;
+        if (FileFnvCached(SyncLocal(o.files[i].path), &h, &sz) && sz == o.files[i].size && h == o.files[i].hash) continue;
         need.push_back(i);
         bytes += o.files[i].size;
     }
@@ -422,7 +544,7 @@ static void SyncOnOffer(const std::string &m)
     g_hostOffer = o;
     g_syncGen++;
     g_syncInflight = 0;
-    if (!o.msc) { g_sync = SY_OFF; TestLog("mods : l'hote joue sans MSCLoader"); return; }
+    if (!o.msc) TestLog("mods : l'hote joue sans MSCLoader");
     g_sync = SY_CHECK;
     HANDLE t = CreateThread(NULL, 0, SyncCheckThread, (void *)(intptr_t)(int)g_syncGen, 0, NULL);
     if (t) CloseHandle(t);
@@ -443,7 +565,7 @@ static void SyncOnData(const std::string &m)
     if ((uint64_t)off + n > f.size) return;
     g_syncLastT = GetTickCount();
     if (g_syncInflight > 0) g_syncInflight--;
-    std::wstring dir = CoopModsDir(), path = dir + Widen(f.path, CP_UTF8), part = path + L".part";
+    std::wstring path = SyncLocal(f.path), part = path + L".part";
     HANDLE &fh = g_syncParts[idx];
     if (!fh) {
         SHCreateDirectoryExW(NULL, DirOf(path).c_str(), NULL);
@@ -535,7 +657,9 @@ static int SyncLaunchKind()
     int s = g_sync;
     if (s == SY_NONE) return 0;
     bool installed = FileExists(g_gameDir + L"winhttp.dll") && FileExists(g_gameDir + L"doorstop_config.ini") && FileExists(MscManaged() + L"MSCLoader.Preloader.dll");
-    return s == SY_DONE && installed ? 2 : 1;
+    bool msc;
+    { std::lock_guard<std::mutex> lk(g_syncMx); msc = g_hostOffer.msc; }
+    return s == SY_DONE && msc && installed ? 2 : 1;
 }
 
 // Copie de lancement de l'invite : comme PrepareMirror, mais Mods -> la copie des mods de l'hote (avec), et
@@ -545,8 +669,33 @@ static std::wstring GuestCopyDir() { std::wstring l = LocalDir(); return l.empty
 static bool PrepareGuestCopy(const std::wstring &m, bool mods)
 {
     SHCreateDirectoryExW(NULL, m.c_str(), NULL);
-    std::wstring coop = CoopModsDir();
+    std::wstring coop = CoopModsDir(), cont = ContentDir();
     if (mods) SHCreateDirectoryExW(NULL, coop.c_str(), NULL);
+    // contenu de l'hote recu : dossiers a relier a contenu-invite ; Images : les siennes la ou l'hote n'envoie rien
+    std::vector<std::wstring> roots;
+    std::vector<std::string> sentImages;
+    if (g_sync == SY_DONE) {
+        std::lock_guard<std::mutex> lk(g_syncMx);
+        for (const wchar_t *r : { L"CD1", L"CD2", L"CD3", L"Radio", L"Extra", L"Images" }) if (OfferHasRoot(g_hostOffer, r)) roots.push_back(r);
+        for (auto &f : g_hostOffer.files) if (!_strnicmp(f.path.c_str(), "Images\\", 7)) sentImages.push_back(f.path.substr(7));
+    }
+    auto hostRoot = [&](const std::wstring &n) { for (auto &r : roots) if (!_wcsicmp(r.c_str(), n.c_str())) return true; return false; };
+    if (hostRoot(L"Images")) {
+        std::wstring di = cont + L"Images\\";
+        SHCreateDirectoryExW(NULL, di.c_str(), NULL);
+        WIN32_FIND_DATAW fi;
+        HANDLE hi = FindFirstFileW((g_gameDir + L"Images\\*.png").c_str(), &fi);
+        if (hi != INVALID_HANDLE_VALUE) {
+            do {
+                bool sent = false;
+                for (auto &s : sentImages) sent |= !_wcsicmp(Widen(s, CP_UTF8).c_str(), fi.cFileName);
+                std::wstring src = g_gameDir + L"Images\\" + fi.cFileName, dst = di + fi.cFileName;
+                if (!sent && !SameFile(src, dst)) CopyFileW(src.c_str(), dst.c_str(), FALSE);
+            } while (FindNextFileW(hi, &fi));
+            FindClose(hi);
+        }
+    }
+    for (auto &r : roots) SHCreateDirectoryExW(NULL, (cont + r).c_str(), NULL);
     auto link = [&](const std::wstring &n, const std::wstring &target) {
         std::wstring dst = m + n;
         if (IsJunction(dst)) RemoveDirectoryW(dst.c_str());   // (la jonction seule ; jamais ce qu'elle montre)
@@ -566,7 +715,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             bool isMods = !_wcsicmp(n.c_str(), L"Mods");
             hadMods |= isMods;
-            std::wstring target = isMods && mods ? coop.substr(0, coop.size() - 1) : src;
+            std::wstring target = isMods && mods ? coop.substr(0, coop.size() - 1) : hostRoot(n) ? cont + n : src;
             ok = link(n, target) && ok;
         } else if (CopyKind(n) && !SameFile(src, dst)) {
             if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { TestLog("copie de l'invite : %ls impossible (erreur %lu)", n.c_str(), GetLastError()); ok = false; }
@@ -574,6 +723,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     if (mods && !hadMods) ok = link(L"Mods", coop.substr(0, coop.size() - 1)) && ok;
+    for (auto &r : roots) if (GetFileAttributesW((g_gameDir + r).c_str()) == INVALID_FILE_ATTRIBUTES) ok = link(r, cont + r) && ok;   // (absent du jeu)
     h = FindFirstFileW((m + L"*").c_str(), &fd);   // retires du jeu
     if (h != INVALID_HANDLE_VALUE) {
         do {
@@ -590,7 +740,9 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
         WritePrivateProfileStringW(L"General", L"enabled", mods ? L"true" : L"false", ini.c_str());
         WritePrivateProfileStringW(L"MSCLoader", L"mods", L"GF", ini.c_str());
     }
-    TestLog("copie de l'invite prete : %ls (%s)", m.c_str(), mods ? "mods de l'hote" : "sans MSCLoader");
+    std::string rl;
+    for (auto &r : roots) rl += " " + Narrow(r);
+    TestLog("copie de l'invite prete : %ls (%s ; contenu de l'hote :%s)", m.c_str(), mods ? "mods de l'hote" : "sans MSCLoader", rl.empty() ? " aucun" : rl.c_str());
     return ok;
 }
 
@@ -629,37 +781,37 @@ static void DrawSyncBar(Graphics &g, int hot)
     if (g_lobby == LB_HOST) {
         EnterCriticalSection(&g_lcs);
         bool msc = g_offer.msc;
-        int n = (int)g_offer.mods.size();
+        int n = (int)g_offer.mods.size(), nc = (int)g_offer.cats.size();
         uint64_t bytes = 0;
         for (auto &f : g_offer.files) bytes += f.size;
         LeaveCriticalSection(&g_lcs);
-        wchar_t b[160];
-        if (!msc) swprintf_s(b, L"%s", T(L"Mods : MSCLoader coupé, les invités jouent sans mods", L"Mods: MSCLoader off, guests play without mods"));
-        else swprintf_s(b, T(L"Mods envoyés aux invités : %d (%s)", L"Mods sent to guests: %d (%s)"), n, SizeText(bytes).c_str());
+        wchar_t b[200];
+        if (!n && !nc) swprintf_s(b, L"%s", msc ? T(L"Rien n'est envoy\u00E9 aux invit\u00E9s", L"Nothing is sent to guests") : T(L"Rien n'est envoy\u00E9 (MSCLoader coup\u00E9 : invit\u00E9s sans mods)", L"Nothing is sent (MSCLoader off: guests without mods)"));
+        else swprintf_s(b, T(L"Envoy\u00E9 aux invit\u00E9s : %d mod(s) \u00B7 %d contenu(s) \u00B7 %s", L"Sent to guests: %d mod(s) \u00B7 %d item(s) \u00B7 %s"), n, nc, SizeText(bytes).c_str());
         line = b;
-        c = msc && n ? kInk : kGrey;
+        c = n || nc ? kInk : kGrey;
         btn = T(L"CHOISIR", L"CHOOSE");
     } else {
         std::lock_guard<std::mutex> lk(g_syncMx);
-        int s = g_sync, n = (int)g_hostOffer.mods.size();
+        int s = g_sync, n = (int)g_hostOffer.mods.size(), nc = (int)g_hostOffer.cats.size();
         wchar_t b[200];
-        if (s == SY_OFF) { line = T(L"L'hôte joue sans mods : MSCLoader coupé pour cette partie", L"The host plays without mods: MSCLoader off for this game"); }
-        else if (s == SY_CHECK) line = T(L"Mods de l'hôte : vérification…", L"Host's mods: checking…");
+        if (s == SY_CHECK) line = T(L"Envoi de l'h\u00F4te : v\u00E9rification\u2026", L"Host's files: checking\u2026");
         else if (s == SY_ASK) {
-            swprintf_s(b, T(L"Mods de l'hôte : %d · %s à télécharger", L"Host's mods: %d · %s to download"), n, SizeText(g_syncTotal).c_str());
+            swprintf_s(b, T(L"L'h\u00F4te envoie %d mod(s) \u00B7 %d contenu(s) \u00B7 %s", L"The host sends %d mod(s) \u00B7 %d item(s) \u00B7 %s"), n, nc, SizeText(g_syncTotal).c_str());
             line = b; c = kInk; btn = T(L"TOUT ACCEPTER", L"ACCEPT ALL");
         } else if (s == SY_GET) {
             uint64_t t = g_syncTotal, got = g_syncGot;
             prog = t ? (float)((double)got / t) : 0;
-            swprintf_s(b, T(L"Téléchargement des mods de l'hôte… %d %%", L"Downloading the host's mods… %d%%"), (int)(prog * 100));
+            swprintf_s(b, T(L"T\u00E9l\u00E9chargement de l'envoi de l'h\u00F4te\u2026 %d %% (%s)", L"Downloading the host's files\u2026 %d%% (%s)"), (int)(prog * 100), SizeText(t).c_str());
             line = b; c = kInk;
         } else if (s == SY_DONE) {
-            if (n) swprintf_s(b, T(L"Mods de l'hôte : %d prêt(s) ✓", L"Host's mods: %d ready ✓"), n);
-            else swprintf_s(b, L"%s", T(L"L'hôte n'envoie aucun mod ✓", L"The host sends no mods ✓"));
+            if (n || nc) swprintf_s(b, T(L"Envoi de l'h\u00F4te pr\u00EAt \u2713  %d mod(s) \u00B7 %d contenu(s)", L"Host's files ready \u2713  %d mod(s) \u00B7 %d item(s)"), n, nc);
+            else swprintf_s(b, L"%s", T(L"L'h\u00F4te n'envoie rien \u2713", L"The host sends nothing \u2713"));
             line = b; c = kAcc;
+            if (!g_hostOffer.msc) line += T(L" \u00B7 sans MSCLoader", L" \u00B7 no MSCLoader");
             if (g_mscInstall == 1) line += T(L" · installation de MSCLoader…", L" · installing MSCLoader…");
         } else if (s == SY_FAIL) {
-            line = std::wstring(T(L"Mods de l'hôte : échec (", L"Host's mods: failed (")) + Widen(g_syncWhy, CP_UTF8) + L")";
+            line = std::wstring(T(L"Envoi de l'h\u00F4te : \u00E9chec (", L"Host's files: failed (")) + Widen(g_syncWhy, CP_UTF8) + L")";
             c = kRed; btn = T(L"RÉESSAYER", L"RETRY");
         }
     }
@@ -732,4 +884,112 @@ static void SyncSteamTick()
             SteamSendP2P(g_sHost, w.d);
         }
     }
+}
+// ---- volet "Contenu envoye aux invites" (coordonnees du panneau des onglets, comme les autres volets)
+struct ContentInfo { int n; uint64_t bytes; };
+static ContentInfo g_contentInfo[16];
+static DWORD g_contentScanT;
+// (g_contentHot : drawer.inc)
+static std::vector<int> g_drContent;                 // a l'ouverture du volet (ANNULER)
+static std::map<std::wstring, Bitmap *> g_contentThumb;
+static const float kContentRowH = 31;
+static const RectF kContentList(452, 168, 488, kContentN * kContentRowH);
+
+static void ContentScan()
+{
+    g_contentScanT = GetTickCount();
+    for (int i = 0; i < kContentN && i < 16; i++) {
+        ContentInfo ci = { 0, 0 };
+        if (!g_gameDir.empty())
+            for (const std::wstring &rel : ContentFiles(i, g_gameDir)) {
+                WIN32_FILE_ATTRIBUTE_DATA a;
+                if (GetFileAttributesExW((g_gameDir + rel).c_str(), GetFileExInfoStandard, &a)) { ci.n++; ci.bytes += a.nFileSizeLow; }
+            }
+        g_contentInfo[i] = ci;
+    }
+}
+static std::wstring ContentSummary()
+{
+    int on = 0;
+    for (int i = 0; i < kContentN; i++) on += ContentOn(i);
+    wchar_t b[32];
+    swprintf_s(b, L"%d / %d", on, kContentN);
+    return b;
+}
+static void ContentSnapshot(bool restore)
+{
+    if (!restore) { g_drContent.clear(); for (int i = 0; i < kContentN; i++) g_drContent.push_back(ContentOn(i)); return; }
+    for (int i = 0; i < (int)g_drContent.size() && i < kContentN; i++) if (ContentOn(i) != (g_drContent[i] != 0)) ContentSet(i, g_drContent[i] != 0);
+}
+// Miniature d'une image du jeu (premiere image de la categorie), lue une fois.
+static Bitmap *ContentThumb(int i)
+{
+    if (kContent[i].files == NULL || wcscmp(kContent[i].root, L"Images")) return NULL;
+    std::vector<std::wstring> f = ContentFiles(i, g_gameDir);
+    if (f.empty()) return NULL;
+    auto it = g_contentThumb.find(f[0]);
+    if (it != g_contentThumb.end()) return it->second;
+    std::vector<unsigned char> d;
+    Bitmap *b = ReadAll(g_gameDir + f[0], d) ? LoadPngMem(d.data(), d.size(), 8192, 8192) : NULL;
+    g_contentThumb[f[0]] = b;
+    return b;
+}
+static RectF ContentModsRow() { return RectF(kContentList.X + 4, kContentList.Y + kContentList.Height + 8, kContentList.Width - 8, 30); }
+// 5000+i : categorie i (la ligne entiere) ; 5100 : ligne des mods (onglet MODS).
+static int ContentAt(float x, float y)
+{
+    if (kContentList.Contains(x, y)) { int i = (int)((y - kContentList.Y) / kContentRowH); return i >= 0 && i < kContentN ? 5000 + i : -1; }
+    return ContentModsRow().Contains(x, y) ? 5100 : -1;
+}
+static void ContentClick(float x, float y)
+{
+    int h = ContentAt(x, y);
+    if (h >= 5000 && h < 5100) { int i = h - 5000; ContentSet(i, !ContentOn(i)); }
+    else if (h == 5100) { DrawerClose(true); g_tab = TAB_MODS; g_mscPage = -1; g_scroll[TAB_MODS] = 0; MscScan(); }
+}
+static void DrawContent(Graphics &g)
+{
+    if (GetTickCount() - g_contentScanT > 2000) ContentScan();
+    Text(g, T(L"CONTENU ENVOY\u00C9 AUX INVIT\u00C9S", L"CONTENT SENT TO GUESTS"), RectF(460, 120, 476, 26), 16, FontStyleBold, kInk, StringAlignmentNear);
+    Text(g, T(L"Copi\u00E9 chez tes invit\u00E9s pour ta partie, \u00E0 part de leurs fichiers.", L"Copied to your guests for your game, apart from their own files."),
+         RectF(460, 144, 476, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    for (int i = 0; i < kContentN; i++) {
+        RectF r(kContentList.X + 4, kContentList.Y + i * kContentRowH, kContentList.Width - 8, kContentRowH - 4);
+        bool on = ContentOn(i), hot = g_contentHot == 5000 + i;
+        const ContentInfo &ci = g_contentInfo[i];
+        GraphicsPath rp; RoundRect(rp, r, 8);
+        SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
+        float x = r.X + 10;
+        if (Bitmap *b = ContentThumb(i)) {   // miniature (images)
+            RectF tr(x, r.Y + 3, 34, r.Height - 6);
+            GraphicsPath tp; RoundRect(tp, tr, 4);
+            GraphicsState st = g.Save();
+            g.SetClip(&tp, CombineModeIntersect);
+            g.DrawImage(b, tr);
+            g.Restore(st);
+        } else {   // CD, radio, hockey : une pastille
+            SolidBrush pb(WithA(kAcc, on ? 0.35f : 0.15f));
+            g.FillEllipse(&pb, x + 8, r.Y + r.Height / 2 - 9, 18.0f, 18.0f);
+            Text(g, !wcsncmp(kContent[i].root, L"CD", 2) ? L"\u266A" : !wcscmp(kContent[i].root, L"Radio") ? L"\u2248" : L"#", RectF(x + 8, r.Y + r.Height / 2 - 9, 18, 18), 10, FontStyleBold, kInk);
+        }
+        x += 44;
+        Text(g, g_fr ? kContent[i].fr : kContent[i].en, RectF(x, r.Y, 200, r.Height), 12.5f, FontStyleBold, on ? kInk : WithA(kInk, 0.55f), StringAlignmentNear);
+        std::wstring det;
+        if (!ci.n) det = T(L"rien dans le jeu", L"nothing in the game");
+        else if (!kContent[i].files) { wchar_t b[64]; swprintf_s(b, T(L"%d fichier(s) \u00B7 %s", L"%d file(s) \u00B7 %s"), ci.n, SizeText(ci.bytes).c_str()); det = b; }
+        else det = SizeText(ci.bytes);
+        Text(g, det, RectF(r.X + 250, r.Y, 150, r.Height), 11, FontStyleRegular, kGrey, StringAlignmentFar);
+        DrawToggle(g, RectF(r.X + r.Width - 50, r.Y + (r.Height - 18) / 2, 38, 18), on, hot);
+    }
+    RectF mr = ContentModsRow();
+    bool mh = g_contentHot == 5100;
+    GraphicsPath mp; RoundRect(mp, mr, 8);
+    Pen mpen(mh ? kAcc : TH(choiceBorder), 1.1f); g.DrawPath(&mpen, &mp);
+    int shared = 0;
+    for (auto &m : g_msc) shared += ModShared(m.file);
+    wchar_t mb[160];
+    if (!g_mscInstalled) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : non install\u00E9  \u203A", L"MSCLoader mods: not installed  \u203A"));
+    else if (!g_mscOn) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : coup\u00E9 (invit\u00E9s sans mods)  \u203A", L"MSCLoader mods: off (guests without mods)  \u203A"));
+    else swprintf_s(mb, T(L"Mods MSCLoader : %d envoy\u00E9(s) sur %d \u00B7 onglet MODS  \u203A", L"MSCLoader mods: %d sent of %d \u00B7 MODS tab  \u203A"), shared, (int)g_msc.size());
+    Text(g, mb, RectF(mr.X + 12, mr.Y, mr.Width - 24, mr.Height), 12, FontStyleBold, mh ? kAcc : kInk, StringAlignmentNear);
 }

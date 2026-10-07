@@ -34,7 +34,7 @@ One player hosts their world, friends join [b]that[/b] world: same save, same ti
 [*]Copy everything from the zip next to [b]mywintercar.exe[/b]: [b]version.dll[/b], [b]MWCoop.exe[/b] and the [b]MWCoop[/b] folder.
 [*]Start [b]MWCoop.exe[/b]. It updates the mod by itself on every start.
 [/list]
-Everybody in a party must run the [b]same version[/b] (the launcher updates it for you). From a Steam install, the launcher starts the game from a copy in %LOCALAPPDATA%\MWCoop\My Winter Car (same data, linked folders) so that the mod loads. [b]MSCLoader[/b] (experimental): works alongside MWCoop since 0.31.3; the launcher's MODS tab installs it, turns it on or off, lists your mods and edits their options. Since 0.36 the host's MSCLoader mods (marked "Send") are copied to the lobby's guests after one ACCEPT ALL, kept apart from their own mods.
+Everybody in a party must run the [b]same version[/b] (the launcher updates it for you). From a Steam install, the launcher starts the game from a copy in %LOCALAPPDATA%\MWCoop\My Winter Car (same data, linked folders) so that the mod loads. [b]MSCLoader[/b] (experimental): works alongside MWCoop since 0.31.3; the launcher's MODS tab installs it, turns it on or off, lists your mods and edits their options. Since 0.36 the host's MSCLoader mods (marked "Send") are copied to the lobby's guests after one ACCEPT ALL, kept apart from their own mods. Since 0.37 also the host's CDs, radio, CORRIS paint, garage flag, posters and more (a checklist in the launcher).
 
 [size=4][b]Known issues[/b][/size]
 [list]
