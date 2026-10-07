@@ -341,6 +341,8 @@ Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) 
   s'est arrêtée brutalement.
 - Au premier lancement, une **visite guidée** présente chaque bouton et onglet en quelques bulles (à revoir depuis
   l'onglet COOP) ; après une mise à jour, seuls les nouveaux boutons ont leur bulle, marquée NOUVEAU.
+- **Apparence complète** (0.38) : en plus du haut, corpulence, pantalon, visage, chapeau, lunettes et cheveux, pris chez les
+  habitants du jeu ; volet TENUE avec aperçu 3D (clic sur ton personnage dans le salon).
 
 ## Fonctionnalités
 

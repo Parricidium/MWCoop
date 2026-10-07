@@ -31,6 +31,7 @@ static void DrawerShow(int kind)
         const Opt *ap = OptByKey("Apparence"), *po = OptByKey("Port"), *fl = OptByKey("FermerLanceur");
         g_drSkin = ap ? OptGet(*ap) : -1; g_drCar = g_carColor; g_drPort = po ? OptGet(*po) : -1; g_drClose = fl ? OptGet(*fl) : -1;
         ContentSnapshot(false);
+        PersoSnapshot(false);
     }
     g_drawer = g_drawerShown = kind;
     g_drawerHot = 0;
@@ -47,6 +48,7 @@ static void DrawerClose(bool keep)
         if (po && g_drPort >= 0) OptSet(*po, g_drPort);
         if (fl && g_drClose >= 0) OptSet(*fl, g_drClose);
         ContentSnapshot(true);
+        PersoSnapshot(true);
         g_skinAnnounce = true;   // (salon : l'apparence rendue est annoncee tout de suite)
     }
     g_drawer = DR_NONE;
@@ -104,12 +106,13 @@ static void DrawerMouseMove(float x, float y)
     g_contentHot = -1;
     if (!InDrawer(x, y)) return;
     float px = x - kDrawerDx, py = y - kDrawerDy;
-    if (g_drawerShown == DR_SKIN) { g_skinHot = SkinCellAt(px, py); g_skinArrowHot = SkinArrowAt(px, py); }
+    g_skinRowHot = -1;
+    if (g_drawerShown == DR_SKIN) { g_skinRowHot = PersoRowAt(px, py); g_skinHot = g_perso.state == 1 ? -1 : SkinCellAt(px, py); g_skinArrowHot = g_perso.state == 1 ? 0 : SkinArrowAt(px, py); }
     else if (g_drawerShown == DR_CAR) { g_carHot = CarSwatchAt(px, py); if (g_btn[B_COLOR].r.Contains(px, py)) g_hot = B_COLOR; }
     else if (g_drawerShown == DR_CONTENT) g_contentHot = ContentAt(px, py);
     else { int keep = g_tab; g_tab = TAB_LOBBYOPT; HitOption(px, py, &g_optHot, &g_optPart); g_tab = keep; }
 }
-static bool DrawerHand() { return g_drawerHot != 0 || (g_drawerShown == DR_CONTENT && g_contentHot >= 0); }
+static bool DrawerHand() { return g_drawerHot != 0 || (g_drawerShown == DR_CONTENT && g_contentHot >= 0) || (g_drawerShown == DR_SKIN && g_skinRowHot >= 0); }
 static bool DrawerMouseDown(float x, float y)
 {
     if (!DrawerOpen()) return false;

@@ -98,6 +98,12 @@ namespace MWCoop
             if (todo != null) return;
             bool forced = force || Config.GetInt("Test", "RefaireTenues", 0) != 0;
             forcePending = force;
+            if (forced || !Looks.PreviewFresh())   // corps, accessoires et matieres pour l'apercu 3D du lanceur (volet TENUE)
+            {
+                if (layer < 0) layer = PickLayer();
+                try { Log.Info("apparences : apercu du lanceur exporte, " + Looks.Export(layer)); }
+                catch (System.Exception e) { Log.Warn("apparences : export de l'apercu : " + e); }
+            }
             if (!forced && Config.GetInt("Coop", "ApercuTenues", 1) == 0) { Log.Info("tenues : apercus du lanceur desactives ([Coop] ApercuTenues=0)"); return; }
             var list = new List<string>();
             char[] bad = Path.GetInvalidFileNameChars();
@@ -299,6 +305,13 @@ namespace MWCoop
 
         static void Pose(Model m, string skin, float yaw, float animTime)
         {
+            string bodyKey = Looks.Parse(skin).Body;
+            if (m.A.Body != bodyKey)   // autre corps : autre modele (son squelette), meme place
+            {
+                Avatar old = m.A;
+                Avatar a = Avatar.CreatePreview(old.Root.name, layer, bodyKey);
+                if (a != null) { a.Root.transform.position = old.Root.transform.position; old.Destroy(); m.A = a; m.Skin = null; m.Measured = false; }
+            }
             if (m.Skin != skin) { m.A.PreviewSkin(skin); m.Skin = skin; }
             Quaternion r = Quaternion.Euler(0f, yaw, 0f);
             Transform t = m.A.Root.transform;

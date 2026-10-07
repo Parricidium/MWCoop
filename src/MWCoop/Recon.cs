@@ -469,6 +469,79 @@ namespace MWCoop
             return path;
         }
 
+        // Apparences des personnages (corpulence, accessoires pour les avatars) : maillages de corps distincts
+        // (sommets, taille, os), puis tout ce qui est accroche aux squelettes des PNJ en plus du corps (chapeaux,
+        // cheveux, lunettes...) : maillage, os porteur, matiere, combien de PNJ. dumps/apparences.txt.
+        public static string DumpLooks()
+        {
+            var sb = new StringBuilder("CORPS (SkinnedMeshRenderer a 10 os ou plus, par maillage)\n");
+            var bodies = new Dictionary<Mesh, List<SkinnedMeshRenderer>>();
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(SkinnedMeshRenderer)))
+            {
+                var smr = (SkinnedMeshRenderer)o;
+                if (smr.hideFlags != HideFlags.None || smr.sharedMesh == null || smr.bones == null || smr.bones.Length < 10) continue;
+                List<SkinnedMeshRenderer> l;
+                if (!bodies.TryGetValue(smr.sharedMesh, out l)) bodies[smr.sharedMesh] = l = new List<SkinnedMeshRenderer>();
+                l.Add(smr);
+            }
+            var chars = new HashSet<Transform>();
+            foreach (KeyValuePair<Mesh, List<SkinnedMeshRenderer>> kv in bodies)
+            {
+                Mesh m = kv.Key;
+                var mats = new HashSet<string>();
+                foreach (SkinnedMeshRenderer s in kv.Value) if (s.sharedMaterial != null) mats.Add(s.sharedMaterial.name.Replace(" (Instance)", ""));
+                sb.Append(m.name).Append(" #").Append(m.GetInstanceID()).Append(" : ").Append(m.vertexCount).Append(" sommets, taille ").Append(m.bounds.size.ToString("F2"))
+                  .Append(", ").Append(kv.Value[0].bones.Length).Append(" os, ").Append(m.blendShapeCount).Append(" formes, ").Append(kv.Value.Count).Append(" PNJ\n");
+                for (int i = 0; i < kv.Value.Count && i < 6; i++) sb.Append("    ").Append(Path(kv.Value[i].transform)).Append('\n');
+                sb.Append("    matieres : ").Append(string.Join(", ", new List<string>(mats).ToArray())).Append('\n');
+                var sets = new HashSet<string>();   // toutes les matieres de chaque PNJ (sous-maillages : chemise, pantalon, visage ?)
+                foreach (SkinnedMeshRenderer s in kv.Value)
+                {
+                    var names = new List<string>();
+                    foreach (Material x in s.sharedMaterials) names.Add(x != null ? x.name.Replace(" (Instance)", "") : "-");
+                    sets.Add(string.Join("+", names.ToArray()));
+                }
+                sb.Append("    sous-maillages ").Append(m.subMeshCount).Append(", jeux : ").Append(string.Join(" ; ", new List<string>(sets).ToArray())).Append('\n');
+                foreach (SkinnedMeshRenderer s in kv.Value) if (s.transform.parent != null) chars.Add(s.transform.parent);
+            }
+            sb.Append("\nACCROCHE AUX PERSONNAGES (hors corps), par maillage et os porteur\n");
+            var acc = new SortedDictionary<string, List<string>>();
+            foreach (Transform ch in chars)
+                foreach (Renderer r in ch.GetComponentsInChildren<Renderer>(true))
+                {
+                    var smr = r as SkinnedMeshRenderer;
+                    if (smr != null && smr.bones != null && smr.bones.Length >= 10) continue;
+                    MeshFilter mf = r.GetComponent<MeshFilter>();
+                    Mesh mesh = smr != null ? smr.sharedMesh : mf != null ? mf.sharedMesh : null;
+                    string bone = r.transform.parent != null ? r.transform.parent.name : "-";
+                    string key = (mesh != null ? mesh.name + " (" + mesh.vertexCount + " sommets)" : r.GetType().Name) + " sur " + bone + " | " + r.gameObject.name
+                               + " | " + (r.sharedMaterial != null ? r.sharedMaterial.name.Replace(" (Instance)", "") : "-");
+                    List<string> l;
+                    if (!acc.TryGetValue(key, out l)) acc[key] = l = new List<string>();
+                    l.Add(Path(ch) + (r.gameObject.activeInHierarchy ? "" : " (inactif)"));
+                }
+            foreach (KeyValuePair<string, List<string>> kv in acc)
+            {
+                sb.Append(kv.Key).Append(" : ").Append(kv.Value.Count).Append('\n');
+                for (int i = 0; i < kv.Value.Count && i < 4; i++) sb.Append("    ").Append(kv.Value[i]).Append('\n');
+            }
+            sb.Append("\nMATIERES char_* (texture, taille)\n");
+            var seen = new SortedDictionary<string, string>();
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Material)))
+            {
+                var mt = (Material)o;
+                if (!mt.name.StartsWith("char_") || mt.name.Contains("(Instance)")) continue;
+                Texture tx = mt.mainTexture;
+                seen[mt.name] = tx != null ? tx.name + " " + tx.width + "x" + tx.height : "-";
+            }
+            foreach (KeyValuePair<string, string> kv in seen) sb.Append(kv.Key).Append(" : ").Append(kv.Value).Append('\n');
+            string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
+            Directory.CreateDirectory(dir);
+            string path = System.IO.Path.Combine(dir, "apparences.txt");
+            File.WriteAllText(path, sb.ToString());
+            return path;
+        }
+
         // Tous les clips d'animation charges : nom, duree, boucle. Pour choisir ceux des avatars.
         public static string DumpClips()
         {

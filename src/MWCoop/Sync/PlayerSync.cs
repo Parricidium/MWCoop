@@ -81,6 +81,7 @@ namespace MWCoop
                     avatars[pi.Id] = a;
                 }
                 if (!want) { RemoveAvatar(pi.Id); continue; }
+                if (a.Body != Looks.Parse(pi.Skin).Body) { RemoveAvatar(pi.Id); continue; }   // autre corps : refait a l'image suivante
                 a.Apply(pi);
             }
         }

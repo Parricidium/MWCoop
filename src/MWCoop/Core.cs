@@ -57,6 +57,7 @@ namespace MWCoop
                     if (Config.GetInt("Test", "Vidage", 0) == 1) Recon.DumpLevel("auto", Application.loadedLevelName != "GAME");
                     Log.Info("globales : " + Recon.DumpGlobals());
                     Log.Info("personnages : " + Recon.DumpCharacters());
+                    if (Application.loadedLevelName == "GAME") Log.Info("apparences : " + Recon.DumpLooks());
                     Log.Info("clips : " + Recon.DumpClips());
                 }
                 catch (System.Exception e) { Log.Error("vidage : " + e); }

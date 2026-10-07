@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -515,7 +515,7 @@ namespace MWCoop
             LoadSkins();
             if (skins == null || skins.Count == 0) { Para(Lang.T("Les apparences se choisissent en partie.", "Outfits are picked in game."), Style.Dim); return; }
             Para(Lang.T("Votre apparence vue par les autres joueurs.", "Your outfit, as the other players see it."), Style.Dim);
-            string me = Session.Me.Skin ?? "";
+            string me = Looks.Parse(Session.Me.Skin).Shirt;   // (le haut ; le reste : lanceur, volet TENUE)
             int cur = skins.IndexOf(me);
             if (me != lastSkin) { lastSkin = me; lastSkinLabel = SkinLabel(me); }
             int d = Item(Lang.T("Apparence", "Outfit"), cur >= 0 ? skinLabels[cur] : lastSkinLabel, true, Lang.T("Gauche/Droite : changer d'apparence", "Left/Right: change outfit"), false);
@@ -533,11 +533,11 @@ namespace MWCoop
         // glisser a la souris pour la tourner. Son nom dessous, facon GTA.
         static void SkinPreview(Rect r, Event e)
         {
-            string me = Session.Me.Skin ?? "";
+            string me = Looks.Parse(Session.Me.Skin).Shirt;
             int k = sel - 1;   // lignes : 0 = « Apparence », 1.. = les tenues
             string s = k >= 0 && k < skins.Count ? skins[k] : me;
             if (s != pvSkin) { pvSkin = s; pvLabel = s.Length > 0 ? SkinLabel(s).ToUpperInvariant() : Lang.T("PAR D\u00C9FAUT", "DEFAULT"); }
-            Texture tex = Studio.Live(s, (int)r.width, (int)r.height);
+            Texture tex = Studio.Live(Looks.WithShirt(Session.Me.Skin, s), (int)r.width, (int)r.height);   // (le reste de l'apparence avec)
             if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition)) { dragging = true; e.Use(); }
             else if (e.type == EventType.MouseDrag && dragging) { Studio.Drag(e.delta.x); e.Use(); }
             else if (e.rawType == EventType.MouseUp && dragging) { dragging = false; e.Use(); }
@@ -599,7 +599,7 @@ namespace MWCoop
 
         static void SetSkin(string s)
         {
-            Session.Me.Skin = s;
+            Session.Me.Skin = Looks.WithShirt(Session.Me.Skin, s);
             Config.Save("Coop", "Apparence", s);
             Session.SendProfile();
         }
