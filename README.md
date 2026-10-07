@@ -46,12 +46,12 @@ outfit portrait, version, ping and a UDP check; the host picks *Continue* or *Ne
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/img/lanceur-tenue.png" alt="Outfit tab"></td>
-    <td width="50%"><img src="docs/img/lanceur-voiture.png" alt="Car tab"></td>
+    <td width="50%"><img src="docs/img/lanceur-tenue.png" alt="Outfit side panel"></td>
+    <td width="50%"><img src="docs/img/lanceur-voiture.png" alt="Car color side panel"></td>
   </tr>
   <tr>
-    <td align="center"><b>Outfit</b>: pick how the others see you, turning 3D preview and portraits read from your own game</td>
-    <td align="center"><b>Car</b>: the CORRIS colour for a new game, previewed in 3D</td>
+    <td align="center"><b>Outfit</b> (click your character in the lobby, or CO-OP > Appearance): pick how the others see you, turning 3D preview and portraits read from your own game, in a panel that slides out of the launcher</td>
+    <td align="center"><b>Car color</b> (car icon in the lobby, or CO-OP > Car color): the CORRIS colour for a new game, previewed in 3D</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/img/lanceur-journaux.png" alt="Logs tab"></td>
@@ -266,7 +266,7 @@ Le mod et son lanceur parlent **français et anglais** (le lanceur suit Windows,
 </p>
 <p align="center"><i>Le lanceur : héberger, rejoindre ou jouer seul ; il tient le mod à jour tout seul. Neige, fumée et lueur du feu animées.</i></p>
 
-Les captures ci-dessus (en anglais) montrent le salon, les onglets TENUE, VOITURE et JOURNAUX, le menu F10, le tchat,
+Les captures ci-dessus (en anglais) montrent le salon, les volets TENUE et COULEUR DE LA VOITURE (clic sur son personnage ou icône voiture du salon, ou onglet COOP), la page JOURNAUX, le menu F10, le tchat,
 l'écran d'attente des invités et l'écran de mort ; tout existe aussi en français.
 
 ## Installation
