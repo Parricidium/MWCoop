@@ -1,4 +1,4 @@
-using MWCoop.Net;
+﻿using MWCoop.Net;
 using UnityEngine;
 
 namespace MWCoop
@@ -69,6 +69,7 @@ namespace MWCoop
             Step("lanceur", MWCoop.Net.Admin.Update);
             Step("joueurs", PlayerSync.Update);
             Step("monde", World.Update);
+            Step("radio", Radio.Update);
             Step("interactions", Interactions.Update);
             Step("voitures", VehicleSync.Update);
             Step("pieces", Parts.Update);
@@ -141,6 +142,7 @@ namespace MWCoop
             Replay.OnLevelLoaded();
             PlayerSync.OnLevelLoaded();
             World.OnLevelLoaded();
+            Radio.OnLevelLoaded();
             Interactions.OnLevelLoaded();
             VehicleSync.OnLevelLoaded();
             Parts.OnLevelLoaded();

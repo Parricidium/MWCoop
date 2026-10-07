@@ -469,6 +469,7 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("quete " + key + " introuvable ici"); }
                 return;
             }
+            if (j.Control) PlayerSync.ReachFor(who, j.F.transform.position);   // (son avatar tend la main vers la commande)
             if (j.Kind == K_IGNITION) { ApplyIgnition(j, who, key, state); return; }
             // Fendeuse arretee ici (mise en marche pas recue : arrivee en cours de buche) : seule la fin de la
             // buche est reprise (rend le declencheur), une etape rejouee sur l'automate inactif ne mene a rien.

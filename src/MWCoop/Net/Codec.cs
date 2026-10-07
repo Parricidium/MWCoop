@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -105,5 +105,6 @@ namespace MWCoop.Net
         Race = 47,        // courses : voitures IA (hote), table des resultats du rallye, empreinte de la liste
         PushDoor = 48,    // porte poussee hors vehicule (garage) : angle de celui qui pousse
         Summon = 49,      // hote -> un invite : viens a moi (position, cap) ; menu F10 ou lanceur (Admin)
+        Radio = 50,       // hote -> invites : morceau, position et lecture de chaque canal radio (Radio)
     }
 }

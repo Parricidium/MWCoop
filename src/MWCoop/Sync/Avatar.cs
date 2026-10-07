@@ -612,6 +612,8 @@ namespace MWCoop
                     ArmDown("shoulder_right", "hand_right", 1f, 1f);
                     ArmDown("shoulder_left", "hand_left", -1f, 1f);
                 }
+                else DriverHands();
+                ReachPose();
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
                 if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - Root.transform.position) + EyeOffset;
                 // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite).
@@ -707,6 +709,80 @@ namespace MWCoop
         }
 
         static void Ease(ref float w, bool on, float rate) { w = Mathf.MoveTowards(w, on ? 1f : 0f, rate); }
+        float wDrink;
+
+        // ---------------------------------------------------------------- mains du conducteur, gestes vers les commandes
+        // Demande d'un joueur (07/10) : mains sur le volant (qui tourne : CarVisuals, lisse), main droite au levier quand
+        // il bouge, main vers le bouton / la clef / la molette quand ce joueur s'en sert (Jobs : commande rejouee).
+        Transform steerT, gearT, steerCar;
+        Vector3 gripR, gripL;              // prises sur la jante, dans le repere du volant (a 10 h 10)
+        Quaternion gearLast;
+        float gearUntil, wShift, reachUntil, wReach;
+        Vector3 reachAt;
+
+        void DriverHands()
+        {
+            Transform car = VehicleSync.RemoteCarTransform(Player.Id);
+            if (car == null || headBone == null) return;
+            if (car != steerCar)
+            {
+                steerCar = car; steerT = gearT = null;
+                foreach (MonoBehaviour m in car.GetComponentsInChildren<MonoBehaviour>(true))
+                    if (m != null && m.GetType().Name == "SteeringWheel") { steerT = m.transform; break; }
+                foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
+                    if (t.name == "GearLever" || t.name == "gearlever") { gearT = t; break; }
+                if (steerT != null)
+                {
+                    Vector3 axis = (steerT.position - headBone.position).normalized;   // colonne : du conducteur vers le tableau de bord
+                    Vector3 right = Vector3.ProjectOnPlane(car.right, axis).normalized, up = Vector3.Cross(axis, right).normalized;
+                    if (Vector3.Dot(up, car.up) < 0f) up = -up;
+                    const float R = 0.17f;
+                    gripR = steerT.InverseTransformPoint(steerT.position + right * R * 0.9f + up * R * 0.42f);
+                    gripL = steerT.InverseTransformPoint(steerT.position - right * R * 0.9f + up * R * 0.42f);
+                }
+                if (gearT != null) gearLast = gearT.localRotation;
+                Transform shR = Bone("shoulder_right"), shL = Bone("shoulder_left");
+                Log.Info("avatar " + Player.Name + " : mains au volant (" + (steerT != null ? steerT.name + " a " + Root.transform.InverseTransformPoint(steerT.position).ToString("F2") + ", prises D " + (shR != null ? (steerT.TransformPoint(gripR) - shR.position).magnitude.ToString("F2") : "?") + " m G " + (shL != null ? (steerT.TransformPoint(gripL) - shL.position).magnitude.ToString("F2") : "?") + " m de l'epaule, tete " + Root.transform.InverseTransformPoint(headBone.position).ToString("F2") : "volant introuvable") + ", levier " + (gearT != null ? "oui" : "non") + ")");
+            }
+            float now = Time.realtimeSinceStartup;
+            if (gearT != null && Quaternion.Angle(gearT.localRotation, gearLast) > 1.5f) { gearLast = gearT.localRotation; gearUntil = now + 0.9f; }
+            Ease(ref wShift, now < gearUntil, Time.deltaTime * 6f);
+            if (steerT != null)   // (jante hors de portee -- siege loin du volant : la pose du conducteur PNJ reste, bras pas etires)
+            {
+                Vector3 pr = steerT.TransformPoint(gripR), pl = steerT.TransformPoint(gripL);
+                ArmTo(true, pr, (1f - wShift) * Reachable(true, pr));
+                ArmTo(false, pl, Reachable(false, pl));
+            }
+            if (gearT != null && wShift > 0.001f) ArmTo(true, gearT.position + car.up * 0.1f, wShift);
+        }
+
+        // Dosage selon la portee : 1 jusqu'a 95 % de la longueur du bras, 0 au-dela de 115 %.
+        float Reachable(bool right, Vector3 at)
+        {
+            string s = right ? "_right" : "_left";
+            Transform sh = Bone("shoulder" + s), el = Bone("arm" + s), ha = Bone("hand" + s);
+            if (sh == null || el == null || ha == null) return 0f;
+            float len = (el.position - sh.position).magnitude + (ha.position - el.position).magnitude;
+            return Mathf.Clamp01((1.15f * len - (at - sh.position).magnitude) / (0.2f * len));
+        }
+
+        // Main droite vers une commande que ce joueur vient d'actionner (bouton, clef, molette), pendant 0,8 s.
+        public void ReachFor(Vector3 at)
+        {
+            Transform sh = Bone("shoulder_right");
+            if (sh == null || (at - sh.position).sqrMagnitude > 1.2f * 1.2f) return;   // trop loin : pas lui
+            reachAt = at;
+            reachUntil = Time.realtimeSinceStartup + 0.8f;
+        }
+        void ReachPose()
+        {
+            Ease(ref wReach, Time.realtimeSinceStartup < reachUntil, Time.deltaTime * 6f);
+            if (wReach > 0.001f) ArmTo(true, reachAt, wReach * Reachable(true, reachAt));
+        }
+        // Bouche (devant et sous l'os de la tete) ; sens de la bouteille quand on boit : du cul vers le goulot, vers le
+        // visage et vers le bas (le cul plus haut que le goulot).
+        Vector3 Mouth() { Transform r = Root.transform; return headBone.position + r.forward * 0.11f - r.up * 0.09f; }
+        Vector3 DrinkDir() { Transform r = Root.transform; return (-r.forward * 0.75f - r.up * 0.62f).normalized; }
 
         // Bras vers leur cible, du moins prioritaire au plus prioritaire (chacun part de la pose laissee par le
         // precedent) ; poids lisses ; le coup suit une courbe (aller 0,12 s, retour 0,4 s).
@@ -727,6 +803,17 @@ namespace MWCoop
             Ease(ref wR[3], piss, rate); Ease(ref wR[4], carry, rate);
             Ease(ref wL[0], (gb & Gestures.G_Watch) != 0, rate); Ease(ref wL[1], push, rate); Ease(ref wL[2], piss, rate);
             Ease(ref wL[3], gestL == "porte", rate);
+            // Boire, fumer : la main va VRAIMENT a la bouche (retour d'un joueur, 07/10) -- les clips des PNJ ne la montent
+            // pas jusque-la. Boire : main droite sous la bouche tant qu'il boit (la bouteille bascule, goulot aux levres,
+            // PlaceDrink) ; fumer : main gauche a la bouche quand il tire (smokeRaise), cigarette aux levres.
+            Ease(ref wDrink, (f & PlayerSync.F_Drink) != 0 && st.Drink > 0, Time.deltaTime * 3f);
+            if (headBone != null)
+            {
+                Vector3 mouth = Mouth();
+                // la main tient la bouteille en son milieu, la bouteille du goulot (aux levres) vers l'avant et le haut
+                ArmTo(true, mouth - DrinkDir() * drinkHalf * 1.1f - r.up * 0.03f + r.right * 0.02f, wDrink);
+                if ((f & PlayerSync.F_Smoke) != 0) ArmTo(false, mouth - r.up * 0.03f - r.right * 0.05f, smokeRaise);
+            }
             // Objet tenu : place recue (repere de sa camera) ou devant lui ; deux mains de part et d'autre s'il est large.
             if (wR[4] > 0.001f || wL[3] > 0.001f)
             {
@@ -756,6 +843,7 @@ namespace MWCoop
             ArmTo(true, sR.position + r.forward * 0.45f + r.up * 0.25f - r.right * 0.05f, wR[0]);
             // Coup de poing : bras tendu droit devant.
             ArmTo(true, sR.position + r.forward * 0.7f - r.right * 0.12f, punch);
+            ReachPose();
         }
 
         // IK a deux os du bras (epaule -> coude -> poignet) : la main va vers 'target' (dosage w, depuis sa place
@@ -1130,7 +1218,12 @@ namespace MWCoop
             if (drinkGo != null) { Object.Destroy(drinkGo); drinkGo = null; }
             if (i <= 0) return;
             drinkGo = Drinks.Model(i, Root.transform);
-            if (drinkGo == null) return;
+            if (drinkGo == null)   // (main du joueur local pas encore prete au chargement : on reessaie, sinon elle restait invisible)
+            {
+                if (Time.realtimeSinceStartup >= drinkLogAt) { drinkLogAt = Time.realtimeSinceStartup + 30f; Log.Warn("avatar " + Player.Name + " : boisson " + (i < Drinks.Names.Length ? Drinks.Names[i] : i.ToString()) + " pas encore disponible (" + Drinks.HandChildren() + "), nouvel essai"); }
+                drinkIdx = -1;
+                return;
+            }
             // Taille : la plus grande dimension de ses rendus ramenee a 24 cm (bouteilles) ou 11 cm (tasses, verres).
             Bounds b = new Bounds(drinkGo.transform.position, Vector3.zero);
             bool any = false;
@@ -1206,7 +1299,7 @@ namespace MWCoop
             Vector3 up = Root.transform.up, fwd = Root.transform.forward;
             Vector3 mouth = headBone != null ? headBone.position + fwd * 0.09f - up * 0.07f : fist;
             float dist = Vector3.Distance(fist, mouth);
-            float t = headBone != null ? Mathf.Clamp01(1f - (dist - 0.12f) / 0.20f) : 0f;
+            float t = headBone != null ? Mathf.Max(Mathf.Clamp01(1f - (dist - 0.12f) / 0.20f), wDrink) : 0f;   // (en buvant : basculee, goulot aux levres)
             Vector3 toMouth = dist > 0.01f ? (mouth - fist) / dist : -fwd;
             Vector3 dir = Vector3.Slerp(up, (toMouth - up * 0.45f).normalized, t).normalized;   // du cul vers le goulot
             if (Time.realtimeSinceStartup >= drinkLogAt && Config.GetInt("Test", "JournalBoisson", 0) != 0)
@@ -1215,11 +1308,17 @@ namespace MWCoop
                 Log.Info("boisson : poing-bouche " + Vector3.Distance(fist, mouth).ToString("F2") + " m, bascule " + t.ToString("F2") + ", poing " + Root.transform.InverseTransformPoint(fist).ToString("F2")
                          + ", tete " + (headBone != null ? Root.transform.InverseTransformPoint(headBone.position).ToString("F2") : "?") + ", axe " + drinkAxis);
             }
+            if (wDrink > 0.001f)   // en buvant : goulot aux levres, cul releve vers l'avant (la main suit, GesturePose)
+            {
+                Vector3 dd = DrinkDir();
+                dir = Vector3.Slerp(dir, dd, wDrink).normalized;
+            }
             drinkGo.transform.rotation = Quaternion.FromToRotation(drinkAxis, dir);
             // Centre de la bouteille sur son axe, depuis le poing : un peu au-dessus en la tenant ; en buvant, de sorte que le
             // goulot (centre + demi-longueur) touche la bouche, sans que la main quitte la bouteille.
             float along = Mathf.Lerp(0.2f, Mathf.Clamp(dist / drinkHalf - 0.95f, -0.6f, 0.6f), t);
             Vector3 target = fist + dir * drinkHalf * along;
+            if (wDrink > 0.001f && headBone != null) target = Vector3.Lerp(target, Mouth() - dir * drinkHalf, wDrink);   // goulot sur la bouche
             // Le centre des rendus est pose la (l'origine du modele du jeu n'est pas forcement en son milieu).
             Vector3 c = drinkGo.transform.position;
             bool any = false; Bounds b = new Bounds();

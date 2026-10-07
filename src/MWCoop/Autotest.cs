@@ -152,8 +152,11 @@ namespace MWCoop
                         testCam.nearClipPlane = 0.05f;
                         testCam.fieldOfView = 60;
                     }
-                    Vector3 target = near.Root.transform.position + Vector3.up * 0.3f;
-                    testCam.transform.position = near.Root.transform.position + new Vector3(dx, dy, dz);
+                    float hh = float.Parse(Config.Get("Test", "CameraHauteur", "0.3"), System.Globalization.CultureInfo.InvariantCulture);
+                    bool local = Config.GetInt("Test", "CameraLocale", 0) != 0;   // (decalage dans le repere de l'avatar : en voiture, celui de la voiture)
+                    Transform ar = near.Root.transform;
+                    Vector3 target = local ? ar.TransformPoint(new Vector3(0f, hh, 0f)) : ar.position + Vector3.up * hh;
+                    testCam.transform.position = local ? ar.TransformPoint(new Vector3(dx, dy, dz)) : ar.position + new Vector3(dx, dy, dz);
                     testCam.transform.LookAt(target);
                 }
             }
