@@ -126,6 +126,9 @@ before the mod's.
 at the next game launch). Since 0.36, the host's mods marked **Send** go to the lobby's guests (one **ACCEPT ALL**,
 then automatic): they are copied apart, in `%LOCALAPPDATA%\MWCoop\mods-invite`, and loaded only for the host's
 game (the guest's own mods and settings are never touched). A host without MSCLoader: guests play without it too.
+Since 0.37 the host's **CDs** (music and covers), **radio**, **CORRIS and moped paint**, **garage flag**, **posters**,
+**window sticker**, **fabric** and **hockey teams** go the same way (CO-OP > *Sent to guests*, a checklist; the ID photo
+is off by default), into `%LOCALAPPDATA%\MWCoop\contenu-invite`.
 
 ### Antivirus warning
 
@@ -289,6 +292,10 @@ contient déjà une `version.dll`), l'active ou le coupe pour le prochain lancem
 chez les invités du salon (un **TOUT ACCEPTER**, puis automatique) : copiés à part, dans `%LOCALAPPDATA%\MWCoop\mods-invite`,
 et chargés seulement pour la partie de l'hôte (les mods et réglages de l'invité ne sont jamais touchés). Hôte sans
 MSCLoader : les invités jouent sans aussi.
+Depuis la 0.37, les **CD** de l'hôte (musiques et jaquettes), sa **radio**, la **peinture de la CORRIS** et de la
+mobylette, le **drapeau du garage**, les **posters**, l'**autocollant**, le **tissu** et les **équipes de hockey** suivent le
+même chemin (COOP > *Envoyé aux invités*, une liste à cocher ; la photo d'identité est décochée au départ), dans
+`%LOCALAPPDATA%\MWCoop\contenu-invite`.
 
 ### Alerte d'antivirus
 

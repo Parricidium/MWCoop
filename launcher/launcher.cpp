@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|contenu> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -1334,7 +1334,7 @@ static void DrawBar(Graphics &g, RectF r, float p)
 // ---------------------------------------------------------------- options (MWCoop\mwcoop.ini, [Coop])
 // Memes cles et valeurs par defaut que le mod (Net\Session.cs) ; ecrites tout de suite, prises au prochain lancement.
 enum { O_TOGGLE, O_CHOICE, O_ACTION };   // O_ACTION : ouvre le volet (action = DR_*)
-enum { DR_NONE, DR_SKIN, DR_CAR, DR_LOBBY };   // contenu du volet a droite (drawer.inc)
+enum { DR_NONE, DR_SKIN, DR_CAR, DR_LOBBY, DR_CONTENT };   // contenu du volet a droite (drawer.inc)
 struct Opt {
     int tab; const char *key; int def; int kind; std::vector<int> vals;
     std::vector<std::string> svals;              // valeurs texte (Apparence) : vals = 0..n-1, def = index
@@ -1369,12 +1369,20 @@ static void BuildOptions()
         o.dEn = L"Off: the launcher stays open during the game (players, ping; the host can bring a player over or kick them) and goes back to the menu when the game closes.";
         g_opts.push_back(o);
     }
+    {   // Contenu envoye aux invites (modsync.inc) : volet a cocher
+        Opt o = {};
+        o.tab = TAB_COOP; o.key = "ContenuEnvoye"; o.kind = O_ACTION; o.action = DR_CONTENT;
+        o.fr = L"Envoy\u00E9 aux invit\u00E9s (CD, images\u2026)"; o.en = L"Sent to guests (CDs, images\u2026)"; o.suffix = L"";
+        o.dFr = L"Tes CD, ta radio, la peinture de ta CORRIS, ton drapeau, tes posters\u2026 copi\u00E9s chez les invit\u00E9s de ton salon pour ta partie.";
+        o.dEn = L"Your CDs, radio, CORRIS paint, flag, posters\u2026 copied to your lobby's guests for your game.";
+        g_opts.push_back(o);
+    }
     {   // Mods de l'hote (modsync.inc) : TOUT ACCEPTER une fois l'allume
         Opt o = {};
         o.tab = TAB_COOP; o.key = "ModsAuto"; o.def = 0; o.kind = O_TOGGLE;
-        o.fr = L"Accepter les mods de l'h\u00F4te sans demander"; o.en = L"Accept the host's mods without asking"; o.suffix = L"";
-        o.dFr = L"Dans un salon, les mods MSCLoader de l'h\u00F4te sont copi\u00E9s \u00E0 part (les tiens ne sont pas touch\u00E9s) et charg\u00E9s pour sa partie. Coup\u00E9 : le salon demande d'abord (TOUT ACCEPTER).";
-        o.dEn = L"In a lobby, the host's MSCLoader mods are copied separately (yours are not touched) and loaded for their game. Off: the lobby asks first (ACCEPT ALL).";
+        o.fr = L"Accepter l'envoi de l'h\u00F4te sans demander"; o.en = L"Accept the host's files without asking"; o.suffix = L"";
+        o.dFr = L"Dans un salon, les mods MSCLoader, CD et images de l'h\u00F4te sont copi\u00E9s \u00E0 part (les tiens ne sont pas touch\u00E9s) et utilis\u00E9s pour sa partie. Coup\u00E9 : le salon demande d'abord (TOUT ACCEPTER).";
+        o.dEn = L"In a lobby, the host's MSCLoader mods, CDs and images are copied separately (yours are not touched) and used for their game. Off: the lobby asks first (ACCEPT ALL).";
         g_opts.push_back(o);
     }
     {   // Apparence : materiaux des corps des PNJ du jeu (Sync\Avatar.cs)
@@ -1498,6 +1506,7 @@ static std::wstring ValueText(const Opt &o, int v)
 }
 static void DrawerShow(int kind);
 static void TutoStart(bool all);
+static std::wstring ContentSummary();   // (modsync.inc)
 static std::wstring CarColorName();
 static void OptStep(int idx, int dir)
 {
@@ -1581,7 +1590,7 @@ static void DrawOptions(Graphics &g)
             GraphicsPath cp; RoundRect(cp, cr, 12);
             SolidBrush cb(hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &cp);
             Pen cpen(hot ? kAcc : TH(choiceBorder), 1.2f); g.DrawPath(&cpen, &cp);
-            std::wstring val = o.action == DR_CAR ? CarColorName() : o.action == 100 ? std::wstring(T(L"Voir", L"Show")) : ValueText(o, v);
+            std::wstring val = o.action == DR_CAR ? CarColorName() : o.action == DR_CONTENT ? ContentSummary() : o.action == 100 ? std::wstring(T(L"Voir", L"Show")) : ValueText(o, v);
             Text(g, val, RectF(cr.X + 10, cr.Y, cr.Width - 34, cr.Height), 12.5f, FontStyleBold, kInk);
             Text(g, L"\u203A", RectF(cr.X + cr.Width - 22, cr.Y - 2, 18, cr.Height), 18, FontStyleBold, hot ? kAcc : WithA(kAcc, 0.78f));
         } else {
@@ -5251,7 +5260,7 @@ static bool LobbyClick(float x, float y)
     if (c >= 100) { SteamInviteFriend(c - 100); return true; }
     if (c == 50 || c == 51) { SteamShowFriends(c == 51); return true; }
     if (c == 70) { if (g_sync == SY_FAIL) SyncRetry(); else SyncAccept(); return true; }
-    if (c == 71) { g_tab = TAB_MODS; g_mscPage = -1; g_scroll[TAB_MODS] = 0; MscScan(); return true; }
+    if (c == 71) { if (g_drawer == DR_CONTENT) DrawerClose(true); else DrawerShow(DR_CONTENT); return true; }
     if (c >= 60 && c <= 62) { int k = c == 60 ? DR_CAR : c == 61 ? DR_LOBBY : DR_SKIN; if (g_drawer == k) DrawerClose(true); else DrawerShow(k); return true; }
     if (c >= 0) { LobbySetPartie(c); return true; }
     return kOptPanel.Contains(x, y);
@@ -6121,6 +6130,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"menu-ip") g_steamNet = false;
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop") { g_tab = TAB_COOP; g_optHot = TabRows(TAB_COOP)[1]; g_optPart = 1; }
+        else if (st == L"contenu") { g_drawer = g_drawerShown = DR_CONTENT; g_drawerT = 1; g_contentHot = 5004; MscScan(); }   // volet du contenu envoye
         else if (st == L"voiture") { g_drawer = g_drawerShown = DR_CAR; g_drawerT = 1; }   // couleur : CouleurVoiture du mwcoop.ini du jeu (volet)
         else if (st == L"tenue" || st == L"tenue-survol") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s)
             g_drawer = g_drawerShown = DR_SKIN; g_drawerT = 1;   // (volet)
@@ -6164,11 +6174,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             // mods de l'hote : salon-mods (hote), salon-mods-demande | -telechargement | -prets (invite)
             std::vector<std::string> mods = { "BetterHeadlights.dll", "TrunkLight.dll", "CDPlayerEnhanced.dll" };
             if (st == L"salon-mods") {
-                g_offer.msc = true; g_offer.mods = mods;
+                g_offer.msc = true; g_offer.mods = mods; g_offer.cats = { "cd1", "peinture", "drapeau", "posters" };
                 g_offer.files = { { "BetterHeadlights.dll", 412000, 1 }, { "TrunkLight.dll", 96000, 2 }, { "CDPlayerEnhanced.dll", 1830000, 3 } };
                 g_lobbyHot = 71;
             } else if (!wcsncmp(st.c_str(), L"salon-mods-", 11)) {
-                g_hostOffer.msc = true; g_hostOffer.mods = mods;
+                g_hostOffer.msc = true; g_hostOffer.mods = mods; g_hostOffer.cats = { "cd1", "peinture", "drapeau", "posters" };
                 g_sync = st == L"salon-mods-demande" ? SY_ASK : st == L"salon-mods-telechargement" ? SY_GET : SY_DONE;
                 g_syncTotal = 2338000; g_syncGot = 1052000;
                 g_meReady = g_sync == SY_DONE;
