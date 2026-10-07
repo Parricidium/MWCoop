@@ -47,7 +47,9 @@ static void DrawerClose(bool keep)
 static void DrawerTick(float dt)
 {
     float want = g_drawer != DR_NONE ? 1.0f : 0.0f;
-    g_drawerT = want > g_drawerT ? min(g_drawerT + dt * 4.5f, 1.0f) : max(g_drawerT - dt * 4.5f, 0.0f);
+    // (arrive : on n'y touche plus -- avant, ouvert a 1, il repartait vers 0 une image sur deux : le volet tremblait)
+    if (want > g_drawerT) g_drawerT = min(g_drawerT + dt * 4.5f, 1.0f);
+    else if (want < g_drawerT) g_drawerT = max(g_drawerT - dt * 4.5f, 0.0f);
     if (g_drawer == DR_NONE && g_drawerT <= 0) g_drawerShown = DR_NONE;
 }
 
