@@ -174,6 +174,23 @@ static void TestLog(const char *fmt, ...)
     if (f) { fprintf(f, "[%lu] %s\r\n", GetTickCount(), b); fclose(f); }
 }
 
+// Journal du lanceur (%LOCALAPPDATA%\MWCoop\lanceur.log, refait a chaque demarrage de la fenetre) : comment il a ete
+// demarre et comment il lance le jeu -- un lancement par Steam qui ne charge pas le mod s'y relit (zip des journaux).
+static std::wstring g_launcherLog;
+static bool g_fromSteam;   // demarre par Steam (option de lancement "<MWCoop.exe>" %command%)
+static void LaunchLog(const char *fmt, ...)
+{
+    char b[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    _vsnprintf_s(b, _countof(b), _TRUNCATE, fmt, ap);
+    va_end(ap);
+    TestLog("%s", b);
+    if (g_launcherLog.empty()) return;
+    FILE *f = _wfopen(g_launcherLog.c_str(), L"ab");
+    if (f) { SYSTEMTIME t; GetLocalTime(&t); fprintf(f, "%02d:%02d:%02d %s\r\n", t.wHour, t.wMinute, t.wSecond, b); fclose(f); }
+}
+
 // ---------------------------------------------------------------- utilitaires
 static std::wstring Widen(const std::string &s, UINT cp = CP_UTF8)
 {
@@ -3714,7 +3731,11 @@ static void Launch(int mode, const char *partie = NULL)
     // passerait au jeu lance d'ici, assez tot pour que la version.dll de Windows passe avant la notre (le mod ne se
     // chargerait pas, cf. steam_appid.txt). Le jeu est alors lance par l'explorateur, hors de l'arbre de Steam ; ses
     // reglages sont dans lancement.ini (pas de ligne de commande par ce chemin).
-    bool viaShell = GetModuleHandleW(L"gameoverlayrenderer64.dll") != NULL;
+    // Demarre par Steam (vu au demarrage : ses variables, ou le chemin du jeu en argument) ou overlay deja la : le
+    // 07/10 l'overlay n'a pas ete vu dans le lanceur demarre par Steam, le jeu est parti de lui et le mod ne s'est pas charge.
+    bool overlay = GetModuleHandleW(L"gameoverlayrenderer64.dll") != NULL;
+    bool viaShell = g_fromSteam || overlay;
+    LaunchLog("lancement (mode %d) : %s par %s (demarre par Steam %d, overlay %d)", mode, Narrow(exe, CP_UTF8).c_str(), viaShell ? "l'explorateur" : "le lanceur", (int)g_fromSteam, (int)overlay);
     std::wstring shellArg = L"\"" + exe + L"\"";
     if (viaShell) TestLog("lancement par l'explorateur (overlay de Steam dans le lanceur)");
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
@@ -5125,6 +5146,7 @@ static std::vector<std::wstring> ZipFiles()
     };
     for (auto &e : g_logList) add(e.path);
     if (!g_gameDir.empty()) { add(g_gameDir + L"MWCoop\\mwcoop.ini"); add(g_gameDir + L"MWCoop\\lancement.ini"); }
+    if (!g_launcherLog.empty()) add(g_launcherLog);
     return files;
 }
 // Bouton "Creer un zip a envoyer" : MWCoop-journaux-<date>.zip sur le Bureau, montre dans l'explorateur.
@@ -5494,6 +5516,31 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     g_self = self;
     g_dir = DirOf(g_self);
     g_iniLauncher = g_dir + L"mwcoop-lanceur.ini";
+    {   // Steam met ses variables dans l'environnement du programme qu'il lance (avant tout SteamAPI_Init d'ici)
+        wchar_t v[64];
+        const wchar_t *vars[] = { L"SteamGameId", L"SteamOverlayGameId", L"SteamClientLaunch", L"SteamAppId" };
+        for (const wchar_t *n : vars) if (GetEnvironmentVariableW(n, v, 64)) g_fromSteam = true;
+        int ac = 0;
+        wchar_t **av = CommandLineToArgvW(GetCommandLineW(), &ac);
+        bool cli = ac >= 2 && av[1][0] == L'/';
+        for (int i = 1; i < ac; i++) {   // %command% : le chemin de mywintercar.exe en argument
+            size_t n = wcslen(av[i]);
+            if (n >= 15 && !_wcsicmp(av[i] + n - 15, L"mywintercar.exe")) g_fromSteam = true;
+        }
+        if (!cli) {
+            wchar_t l[MAX_PATH] = L"";
+            GetEnvironmentVariableW(L"LOCALAPPDATA", l, MAX_PATH);
+            if (l[0]) {
+                std::wstring d = std::wstring(l) + L"\\MWCoop\\";
+                SHCreateDirectoryExW(NULL, d.c_str(), NULL);
+                g_launcherLog = d + L"lanceur.log";
+                FILE *f = _wfopen(g_launcherLog.c_str(), L"wb");
+                if (f) fclose(f);
+                LaunchLog("MWCoop.exe %s (%s), demarre par Steam : %d, ligne : %s", Narrow(g_self, CP_UTF8).c_str(), __DATE__, (int)g_fromSteam, Narrow(GetCommandLineW(), CP_UTF8).c_str());
+            }
+        }
+        LocalFree(av);
+    }
     DeleteFileW((g_self + L".old").c_str());   // reste d'une mise a jour du lanceur
     // Langue : francais si Windows est en francais, anglais pour toute autre langue ; Langue=fr|en pour forcer.
     wchar_t lang[8] = L"";
@@ -5561,7 +5608,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // /jeu <journal> : jeu trouve (dossier, version, mod)
     if (argc >= 3 && !_wcsicmp(argv[1], L"/jeu")) {
         FILE *f = _wfopen(argv[2], L"w, ccs=UTF-8");
-        if (f) { fwprintf(f, L"jeu=%s\nversion=%s\nmod=%d local=%s\n", g_gameDir.c_str(), g_gameVer.c_str(), (int)g_modOk, g_localVer.c_str()); fclose(f); }
+        if (f) { fwprintf(f, L"jeu=%s\nversion=%s\nmod=%d local=%s\nsteam=%d\n", g_gameDir.c_str(), g_gameVer.c_str(), (int)g_modOk, g_localVer.c_str(), (int)g_fromSteam); fclose(f); }
         GdiplusShutdown(gtok);
         return g_gameDir.empty() ? 1 : 0;
     }
