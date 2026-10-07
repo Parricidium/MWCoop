@@ -120,10 +120,10 @@ No other loader is needed. From a Steam install, the launcher starts the game fr
 `%LOCALAPPDATA%\MWCoop\My Winter Car` (same data, linked folders): Steam would otherwise load Windows' `version.dll`
 before the mod's.
 
-**MSCLoader** (experimental): MWCoop and MSCLoader run side by side since 0.31.3 (before, MWCoop kept MSCLoader from
-starting). MSCLoader's installer refuses a game folder that contains a `version.dll`: install **MSCLoader first**, then
-MWCoop (or move MWCoop's `version.dll` away while installing MSCLoader, then put it back). Mods made for MSCLoader
-are not synced between players yet.
+**MSCLoader** (experimental): MWCoop and MSCLoader run side by side since 0.31.3. The launcher's **MODS** tab
+(0.32) installs MSCLoader from its official GitHub (its own installer refuses a game folder that already contains a
+`version.dll`), turns it on or off for the next launch, lists your mods and edits their options (gear icon; applied
+at the next game launch). Mods are not synced between players yet.
 
 ### Antivirus warning
 
@@ -277,10 +277,10 @@ Aucun autre chargeur n'est nécessaire. Depuis une installation Steam, le lanceu
 `%LOCALAPPDATA%\MWCoop\My Winter Car` (mêmes données, dossiers liés) : sinon Steam fait charger la `version.dll` de
 Windows avant celle du mod.
 
-**MSCLoader** (expérimental) : MWCoop et MSCLoader fonctionnent ensemble depuis la 0.31.3 (avant, MWCoop empêchait
-MSCLoader de démarrer). L'installateur de MSCLoader refuse un dossier de jeu qui contient une `version.dll` : installez
-**MSCLoader d'abord**, puis MWCoop (ou mettez la `version.dll` de MWCoop de côté le temps d'installer MSCLoader, puis
-remettez-la). Les mods faits pour MSCLoader ne sont pas encore synchronisés entre joueurs.
+**MSCLoader** (expérimental) : MWCoop et MSCLoader fonctionnent ensemble depuis la 0.31.3. L'onglet **MODS** du
+lanceur (0.32) installe MSCLoader depuis son GitHub officiel (son propre installateur refuse un dossier de jeu qui
+contient déjà une `version.dll`), l'active ou le coupe pour le prochain lancement, liste vos mods et règle leurs options
+(icône d'engrenage ; pris au prochain lancement du jeu). Les mods ne sont pas encore synchronisés entre joueurs.
 
 ### Alerte d'antivirus
 
