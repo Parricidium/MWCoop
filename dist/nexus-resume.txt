@@ -1,20 +1,24 @@
 Brief overview (Nexus "Summary", 350 characters max):
 
-Co-op for My Winter Car: one player hosts, friends join the same world — same save, time, weather and car, built bolt by bolt together, with a wallet each. Shared traffic, NPCs, shops, jobs and bills. Own loader (no MSCLoader) and an auto-updating launcher with a lobby. English and French. Pre-alpha.
+Co-op for My Winter Car, up to 8 players via Steam or IP: one world, same save, time, weather, traffic and radio, cars built bolt by bolt together, a wallet each. Full character look, passenger seats. The host's MSCLoader mods, mod saves and content go to guests. Auto-updating launcher with lobby. English, French. Pre-alpha.
 
 Résumé (champ « Summary » de Nexus, 350 caractères maximum) :
 
-Coop pour My Winter Car : un joueur héberge, ses amis rejoignent le même monde — même sauvegarde, heure, météo et voiture, remontée vis par vis ensemble, avec chacun son porte-monnaie. Circulation, PNJ, magasins, boulots et factures partagés. Chargeur maison (sans MSCLoader), lanceur avec salon. Français, anglais. Pré-alpha.
+Coop pour My Winter Car, jusqu'à 8 joueurs par Steam ou IP : un seul monde, même sauvegarde, heure, météo, circulation et radio, voitures montées vis par vis ensemble, un porte-monnaie chacun. Apparence complète, places passagers. Mods MSCLoader, sauvegardes des mods et contenu de l'hôte partagés. Lanceur avec salon. Pré-alpha.
 
 Images suggested for the gallery (docs/img), in this order:
-1. jeu-duo.jpg        — the host seen by a guest in the farm yard (main image)
-2. lanceur-salon.png  — the launcher lobby
-3. jeu-conduite.jpg   — the host driving past a guest
-4. jeu-menu.jpg       — F10 menu, outfit with 3D preview
-5. lanceur-tenue.png  — launcher outfit tab
-6. jeu-attente.jpg    — guest waiting screen
-7. lanceur-voiture.png — launcher car colour
-8. jeu-tchat.jpg      — chat and name tags
-9. jeu-mort.jpg       — death screen
-10. lanceur-clair.png — light theme
+1. jeu-duo.jpg             — the host seen by a guest in the farm yard (main image)
+2. lanceur-accueil.png     — the new launcher's home page (0.42)
+3. lanceur-salon.png       — the lobby
+4. lanceur-tenue.png       — outfit page, full look with 3D preview
+5. jeu-conduite.jpg        — the host driving past a guest
+6. lanceur-mods-salon.png  — the host's mods sent to the guests
+7. lanceur-contenu.png     — content sent to the guests (CDs, paint, posters…)
+8. jeu-menu.jpg            — F10 menu
+9. lanceur-voiture.png     — car colour
+10. jeu-attente.jpg        — guest waiting screen
+11. jeu-tchat.jpg          — chat and name tags
+12. jeu-mort.jpg           — death screen
+13. lanceur-clair.png      — light theme
+Animated: lanceur-anime.webp (Nexus galleries take images only: use it on GitHub, or convert to a short GIF)
 Logo: docs/img/logo-titre.png
