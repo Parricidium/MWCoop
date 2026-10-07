@@ -1,4 +1,4 @@
-﻿using HutongGames.PlayMaker;
+using HutongGames.PlayMaker;
 using UnityEngine;
 
 namespace MWCoop
@@ -550,6 +550,27 @@ namespace MWCoop
             if (mode == "passager2" && t > 50f && step == 2) { step = 3; Log.Info("autotest : " + Seats.TestLeave()); }
             if (mode == "passager2" && Time.frameCount % 120 == 0 && t > 26f) Log.Info("autotest : place " + Seats.PlaceDans(Config.Get("Test", "TestVoiture", "SORBET")));
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "TestPlace", 0))); }
+            // [Test] Autotest=ceinture : l'invite s'assoit a l'avant de [Test] TestVoiture, attache sa ceinture a 36 s ;
+            // l'hote le regarde (CameraAvatar) et voit la ceinture bouclee (journal + captures).
+            if (mode == "ceinture" && !Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), 0)); }
+            if (mode == "ceinture" && !Net.Session.IsHost && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
+            // [Test] Autotest=apimods : (avec MSCLoader et MWCoopTestMod) l'hote sauvegarde sur place a 20 s : son Mods.txt
+            // (compteur du mod d'essai) partira avec la sauvegarde a la partie suivante.
+            if (mode == "apimods" && Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest : sauvegarde de l'hote"); Game.SaveInPlace(); }
+            if (mode == "ceinture" && Net.Session.IsHost && t > 30f)
+            {
+                // camera d'essai a la place du conducteur, vers le passager avant
+                Transform car; Vector3 head; string cn;
+                for (int id = 1; id < 8; id++)
+                    if (Seats.RemoteSeat(id, out car, out head, out cn) && car != null)
+                    {
+                        if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
+                        bool front = Config.Get("Test", "CameraCeinture", "") == "avant";   // (de face, depuis le tableau de bord)
+                        testCam.transform.position = car.TransformPoint(front ? head + new Vector3(-0.12f, 0.0f, 0.42f) : new Vector3(-head.x * 0.7f, head.y + 0.05f, head.z + 0.25f));
+                        testCam.transform.LookAt(car.TransformPoint(head + new Vector3(0f, -0.3f, 0f)), car.up);
+                        break;
+                    }
+            }
             if (mode == "passager" && t > 60f && step == 1 && Config.GetInt("Test", "TestSortie", 1) != 0) { step = 2; Log.Info("autotest : " + Seats.TestLeave()); }
             if (mode == "tableau" && t > 35f && !done)
             {

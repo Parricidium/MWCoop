@@ -19,7 +19,15 @@ namespace MWCoop.Net
     public static class SaveTransfer
     {
         const int Chunk = 1000;
-        static readonly string[] Skip = { "options.txt", "steam_autocloud.vdf", "Mods.txt" };
+        static readonly string[] Skip = { "options.txt", "steam_autocloud.vdf" };
+        // Mods.txt : la sauvegarde des mods MSCLoader (SaveLoad, ecrite avec celle du jeu). Envoyee depuis 0.43 quand
+        // l'hote joue avec MSCLoader : ses invites ont ses mods (copie a part, 0.36), ils doivent avoir leurs donnees
+        // aussi (demande de JD, 08/10). Sans MSCLoader chez l'hote, ses invites jouent sans : rien a envoyer.
+        static bool HostMods()
+        {
+            foreach (System.Reflection.Assembly a in AppDomain.CurrentDomain.GetAssemblies()) if (a.GetName().Name == "MSCLoader") return true;
+            return false;
+        }
 
         public static bool Done;              // invite : transfert termine (meme vide ou refuse)
         public static bool Received;          // invite : sauvegarde de l'hote recue et ecrite
@@ -162,8 +170,14 @@ namespace MWCoop.Net
         {
             var list = new List<string>();
             if (!Directory.Exists(SaveDir)) return list;
+            bool mods = HostMods();
             foreach (string f in Directory.GetFiles(SaveDir, "*.txt"))
-                if (Array.IndexOf(Skip, Path.GetFileName(f)) < 0) list.Add(f);
+            {
+                string n = Path.GetFileName(f);
+                if (Array.IndexOf(Skip, n) >= 0) continue;
+                if (n.Equals("Mods.txt", StringComparison.OrdinalIgnoreCase) && !mods) continue;
+                list.Add(f);
+            }
             return list;
         }
 

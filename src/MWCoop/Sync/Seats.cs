@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -7,8 +7,9 @@ namespace MWCoop
 {
     // Places passagers (le jeu n'a qu'une place, celle du conducteur), faites comme la sienne :
     //  - places : d'apres les yeux du conducteur (DriverHeadPivot + 27 cm vers l'avant, mesure au volant
-    //    de la SORBET) : avant droite en symetrique ; banquette a l'arriere pour SORBET, CORRIS et le taxi
-    //    (MACHTWAGEN, sous JOBS/TAXIJOB : voitures de VehicleSync, par leur cle) ;
+    //    de la SORBET) : avant droite en symetrique ; banquette a l'arriere pour SORBET, CORRIS, BACHGLOTZ
+    //    (demande de JD, 08/10 : une voiture, banquette a 85 cm comme les autres, devant l'essieu arriere) et le
+    //    taxi (MACHTWAGEN, sous JOBS/TAXIJOB : voitures de VehicleSync, par leur cle) ; GIFU : le passager seul ;
     //  - on entre dans l'habitacle jusqu'au siege (pieds sur le plancher, a moins de 38 cm de cote et
     //    50 cm en long de la place) : l'icone passager du jeu s'affiche (GUIpassenger, comme le volant) ;
     //  - ENTREE : le joueur est accroche a la voiture LA OU IL EST (pas de teleportation), tourne vers
@@ -18,10 +19,20 @@ namespace MWCoop
     // Jamais quand le jeu s'apprete a faire conduire (zone du conducteur en attente d'ENTREE). Les autres
     // voient l'avatar assis, la tete a la place reelle de sa camera (envoyee), qui suit son regard. Les
     // commandes du vehicule restent accessibles et sont rejouees chez tous (Jobs).
+    //  - Ceinture du passager avant (pour le decor, demande de JD, 08/10 : le jeu n'en a que pour le conducteur) :
+    //    on vise la boucle (celle du conducteur, en miroir) et on clique, comme le conducteur. Bouclee : une copie
+    //    en miroir de la ceinture bouclee du conducteur (Fastened_mesh, ou Seatbelts/Close), la ceinture du
+    //    passager rangee (PassengerBelt, ou Seatbelts/Passenger) cachee ; chez tous (envoyee avec la place).
     public static class Seats
     {
         class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; }
-        class Remote { public string Car; public int Index; public Vector3 Head; }
+        class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
+        // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
+        // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
+        class Belt { public GameObject Fastened, Open, Copy; public Vector3 Buckle; public bool OpenHidden; }
+        static readonly Dictionary<Transform, Belt> belts = new Dictionary<Transform, Belt>();
+        static bool beltOn, beltHint;
+        const float BeltForward = 0.17f;
         static readonly List<PlayMakerFSM> driveTriggers = new List<PlayMakerFSM>();
         // Zone du conducteur de chaque voiture (toutes, une place comprise) et voiture qui la porte.
         static readonly List<KeyValuePair<PlayMakerFSM, Transform>> driverZones = new List<KeyValuePair<PlayMakerFSM, Transform>>();
@@ -47,6 +58,7 @@ namespace MWCoop
         {
             zonesOff.Clear(); driverZones.Clear();
             seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
+            belts.Clear(); beltOn = beltHint = false;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -72,7 +84,7 @@ namespace MWCoop
                 if (dhp == null) continue;
                 Vector3 d = rb.transform.InverseTransformPoint(dhp.position) + EyeFromPivot;
                 seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-d.x, d.y, d.z) });
-                if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("MACHTWAGEN"))
+                if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("BACHGLOTZ") || n.StartsWith("MACHTWAGEN"))
                 {
                     // Banquette : 85 cm derriere, un peu plus haute.
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + 0.06f, d.z - 0.85f) });
@@ -145,6 +157,8 @@ namespace MWCoop
                     headLocal = current.CarT.InverseTransformPoint(cam.position);
                     SendSeat(current.Car, current.Index, headLocal);
                 }
+                BeltInput();
+                UpdateBelts();
                 return;
             }
             // Sorti dans l'habitacle : une fois la camera relevee par le jeu, accroupi si le toit est au-dessus.
@@ -153,6 +167,7 @@ namespace MWCoop
                 crouchCheckAt = -1;
                 if (crouch != null && crouch.ActiveStateName == "Wait key" && UnderRoof()) Game.SetState(crouch, "Move down 1");
             }
+            UpdateBelts();
             Seat best = null;
             if (VehicleSync.LocalDriving < 0 && !Game.GlobalBool("PlayerSeated") && !InDriverZone()) best = InZone();
             if (best != null) TrackSpeed(best.CarT);
@@ -317,6 +332,8 @@ namespace MWCoop
         static void Leave()
         {
             current = null;
+            beltOn = false;
+            BeltHint(false);
             if (player != null)
             {
                 player.parent = null;                   // sur place, dans l'habitacle
@@ -352,7 +369,101 @@ namespace MWCoop
         static void SendSeat(string car, int index, Vector3 head)
         {
             if (!Session.Active) return;
-            Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(car).U8(index + 1).Vec(head), true);
+            Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(car).U8(index + 1).Vec(head).U8(beltOn && index == 0 ? 1 : 0), true);
+        }
+
+        // ---- ceinture du passager avant
+        static Transform FindUnder(Transform t, string name, string parent)
+        {
+            if (t.name == name && (parent == null || (t.parent != null && t.parent.name == parent))) return t;
+            foreach (Transform c in t) { Transform r = FindUnder(c, name, parent); if (r != null) return r; }
+            return null;
+        }
+        static Belt BeltOf(Transform car)
+        {
+            Belt b;
+            if (car == null) return null;
+            if (belts.TryGetValue(car, out b)) return b;
+            Transform f = FindUnder(car, "Fastened_mesh", null) ?? FindUnder(car, "Close", "Seatbelts");
+            Transform o = FindUnder(car, "PassengerBelt", null) ?? FindUnder(car, "Passenger", "Seatbelts");
+            Transform k = FindUnder(car, "SeatbeltLock", null) ?? FindUnder(car, "BuckleUp", null) ?? FindUnder(car, "HandleDownPivot", null);
+            b = null;
+            if (f != null && f.GetComponent<MeshFilter>() != null)
+            {
+                b = new Belt { Fastened = f.gameObject, Open = o != null ? o.gameObject : null };
+                Vector3 kp = k != null ? car.InverseTransformPoint(k.position) : new Vector3(-0.2f, 0.45f, 0f);
+                b.Buckle = new Vector3(-kp.x, kp.y, kp.z);   // (cote passager : en miroir)
+                Log.Info("ceinture passager : " + car.name + " (bouclee " + f.name + ", rangee " + (o != null ? o.name : "-") + ")");
+            }
+            belts[car] = b;
+            return b;
+        }
+
+        // Assis a l'avant : viser la boucle et cliquer l'attache ou la detache (texte du jeu, comme le conducteur).
+        static void BeltInput()
+        {
+            Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
+            bool aim = false;
+            if (b != null && cam != null)
+            {
+                Vector3 bp = current.CarT.TransformPoint(b.Buckle);
+                Vector3 d = bp - cam.position;
+                aim = d.magnitude < 1.3f && Vector3.Angle(cam.forward, d) < 16f;
+            }
+            BeltHint(aim);
+            if (aim && Input.GetMouseButtonDown(0))
+            {
+                beltOn = !beltOn;
+                Log.Info("ceinture passager : " + (beltOn ? "attachee" : "detachee") + " (" + current.Car + ")");
+                SendSeat(current.Car, current.Index, headLocal);
+            }
+        }
+        static void BeltHint(bool on)
+        {
+            if (on == beltHint) return;
+            beltHint = on;
+            Game.SetGlobalBool("GUIuse", on);
+            Game.SetGlobal("GUIinteraction", on ? (beltOn ? Lang.T("DÉTACHER LA CEINTURE", "UNBUCKLE") : Lang.T("ATTACHER LA CEINTURE", "BUCKLE UP")) : "");
+        }
+
+        // Montre la ceinture bouclee (copie en miroir) des voitures dont le passager avant est attache, ici ou ailleurs.
+        static void UpdateBelts()
+        {
+            var want = new HashSet<Transform>();
+            if (current != null && current.Index == 0 && beltOn) want.Add(current.CarT);
+            foreach (Remote r in remote.Values)
+                if (r.Index == 0 && r.Belt)
+                    foreach (Seat s in seats) if (s.Car == r.Car && s.Index == 0 && s.CarT != null) want.Add(s.CarT);
+            foreach (Transform car in want) BeltOf(car);
+            foreach (KeyValuePair<Transform, Belt> kv in belts)
+            {
+                Belt b = kv.Value;
+                if (b == null) continue;
+                bool on = kv.Key != null && want.Contains(kv.Key);
+                if (on && b.Copy == null && b.Fastened != null)
+                {
+                    Transform src = b.Fastened.transform, car = kv.Key;
+                    GameObject c = new GameObject("MWCoop-CeinturePassager");
+                    c.layer = b.Fastened.layer;
+                    c.transform.parent = car;
+                    // miroir par le plan median de la voiture (x -> -x) : position, rotation, echelle
+                    Vector3 p = car.InverseTransformPoint(src.position);
+                    Quaternion q = Quaternion.Inverse(car.rotation) * src.rotation;
+                    // (un peu en avant : les avatars, des PNJ, ont le torse plus en avant que le corps du joueur ; [Test] CeintureAvance)
+                    float fwd; if (!float.TryParse(Config.Get("Test", "CeintureAvance", ""), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out fwd)) fwd = BeltForward;
+                    c.transform.localPosition = new Vector3(-p.x, p.y, p.z + fwd);
+                    c.transform.localRotation = new Quaternion(q.x, -q.y, -q.z, q.w);
+                    Vector3 sc = src.lossyScale, cs = car.lossyScale;
+                    c.transform.localScale = new Vector3(-sc.x / cs.x, sc.y / cs.y, sc.z / cs.z);
+                    c.AddComponent<MeshFilter>().sharedMesh = src.GetComponent<MeshFilter>().sharedMesh;
+                    MeshRenderer mr = src.GetComponent<MeshRenderer>();
+                    MeshRenderer cr = c.AddComponent<MeshRenderer>();
+                    if (mr != null) cr.sharedMaterials = mr.sharedMaterials;
+                    b.Copy = c;
+                }
+                else if (!on && b.Copy != null) { Object.Destroy(b.Copy); b.Copy = null; }
+                if (b.Open != null && on != b.OpenHidden) { b.Open.SetActive(!on); b.OpenHidden = on; }
+            }
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -362,12 +473,14 @@ namespace MWCoop
             string car = r.Str();
             int index = r.U8() - 1;
             Vector3 head = r.Vec();
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Seat).U8(who).Str(car).U8(index + 1).Vec(head), true, who);
+            bool belt = r.More && r.U8() != 0;
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Seat).U8(who).Str(car).U8(index + 1).Vec(head).U8(belt ? 1 : 0), true, who);
             Remote old;
             bool had = remote.TryGetValue(who, out old);
             if (index < 0) { remote.Remove(who); if (had) Log.Info("passager : #" + who + " est sorti de " + old.Car); return; }
-            remote[who] = new Remote { Car = car, Index = index, Head = head };
+            remote[who] = new Remote { Car = car, Index = index, Head = head, Belt = belt };
             if (!had || old.Car != car || old.Index != index) Log.Info("passager : #" + who + " assis dans " + car + " (place " + index + ")");
+            if (had && old.Belt != belt) Log.Info("ceinture passager : #" + who + (belt ? " attache" : " detache"));
         }
 
         public static void PlayerLeft(int id) { remote.Remove(id); }
@@ -466,6 +579,27 @@ namespace MWCoop
         }
 
         public static string TestLeave() { if (current == null) return "pas assis"; Leave(); return "sorti"; }
+
+        // Essais : attache / detache la ceinture du passager (comme un clic sur la boucle).
+        public static string TestBelt()
+        {
+            if (current == null) return "pas assis";
+            Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
+            if (b == null) return "pas de ceinture ici";
+            beltOn = !beltOn;
+            SendSeat(current.Car, current.Index, headLocal);
+            UpdateBelts();
+            string where = "";
+            if (b.Copy != null)
+            {
+                Renderer cr = b.Copy.GetComponent<Renderer>(), fr = b.Fastened.GetComponent<Renderer>();
+                Transform car = current.CarT;
+                where = ", copie centre " + car.InverseTransformPoint(cr.bounds.center).ToString("F2") + " taille " + cr.bounds.size.ToString("F2")
+                        + " ; modele centre " + car.InverseTransformPoint(fr.bounds.center).ToString("F2") + " actif " + b.Fastened.activeInHierarchy
+                        + " ; tete " + current.Head.ToString("F2") + " ; echelle " + b.Copy.transform.localScale.ToString("F2");
+            }
+            return "ceinture " + (beltOn ? "attachee" : "detachee") + ", copie " + (b.Copy != null) + ", rangee cachee " + b.OpenHidden + where;
+        }
 
         // Essais : places passagers de la voiture de cle 'car'.
         public static int CountFor(string car)
