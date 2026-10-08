@@ -404,9 +404,13 @@ static int CmpVer(std::wstring a, std::wstring b)
 // ---------------------------------------------------------------- HTTP (WinHTTP)
 // GET sur une URL https ; corps dans out (ou dans le fichier toFile), progression 0..1 si progress ; status : code HTTP
 // (0 = pas de reponse).
+// Derniere erreur WinHTTP d'une requete sans reponse (12007 nom introuvable, 12029 connexion impossible, 12002 delai...).
+static DWORD g_httpErr;
+
 static bool HttpGet(const std::wstring &url, std::string *out, const std::wstring &toFile, bool progress, DWORD *status = NULL)
 {
     if (status) *status = 0;
+    g_httpErr = 0;
     URL_COMPONENTS uc = { sizeof(uc) };
     wchar_t host[256] = {}, path[2048] = {};
     uc.lpszHostName = host; uc.dwHostNameLength = _countof(host);
@@ -451,6 +455,7 @@ static bool HttpGet(const std::wstring &url, std::string *out, const std::wstrin
             if (ok && total && got != total) ok = false;
         }
     }
+    if (!ok && !(status && *status)) g_httpErr = GetLastError();
     if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
     if (r) WinHttpCloseHandle(r);
     if (c) WinHttpCloseHandle(c);
@@ -899,12 +904,17 @@ static std::vector<Note> ParseReleases(const std::string &json)
 }
 
 // REL_OK : liste recue ; REL_NONE : GitHub repond, mais aucune release (ou depot pas encore public : 404) ;
-// REL_OFFLINE : pas de reponse (json : le cache, pour les notes seulement).
+// REL_OFFLINE : pas de reponse (json : le cache, pour les notes seulement). g_relCode / g_relErr : code HTTP (403 ou
+// 429 : GitHub limite les demandes par adresse, ce n'est pas une coupure) et erreur WinHTTP, notes au journal du
+// lanceur (retour d'un joueur, 07/10 : « hors ligne » alors que Steam etait connecte).
+static DWORD g_relCode, g_relErr;
 static int FetchReleases(std::string &json)
 {
     std::wstring cache = g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\notes-maj.json";
     DWORD code = 0;
     bool got = HttpGet(L"https://api.github.com/repos/" + g_repo + L"/releases?per_page=40", &json, L"", false, &code);
+    g_relCode = code; g_relErr = got ? 0 : g_httpErr;
+    LaunchLog("versions sur GitHub : %s (code HTTP %lu, erreur WinHTTP %lu)", got ? "recues" : "pas de reponse", code, g_relErr);
     if (got && json.find("\"tag_name\"") != std::string::npos) {
         if (!cache.empty()) {
             EnsureModDir();
@@ -968,7 +978,9 @@ static DWORD WINAPI UpdateThread(void *param)
     if (rs == REL_OFFLINE) {
         g_progress = -1;
         if (!mod) SetStatus(K_ERR, T(L"Hors ligne : MWCoop n'est pas install\u00E9 ici", L"Offline: MWCoop is not installed here"));
-        else SetStatus(K_WARN, T(L"Hors ligne \u00B7 %s", L"Offline \u00B7 %s"), label.c_str());
+        else if (g_relCode == 403 || g_relCode == 429) SetStatus(K_WARN, T(L"GitHub limite les demandes : r\u00E9essaie dans quelques minutes \u00B7 %s", L"GitHub rate limit: try again in a few minutes \u00B7 %s"), label.c_str());
+        else if (g_relCode) SetStatus(K_WARN, T(L"GitHub r\u00E9pond mal (code %lu) \u00B7 %s", L"GitHub error (code %lu) \u00B7 %s"), g_relCode, label.c_str());
+        else SetStatus(K_WARN, T(L"Hors ligne (GitHub injoignable, erreur %lu) \u00B7 %s", L"Offline (GitHub unreachable, error %lu) \u00B7 %s"), g_relErr, label.c_str());
         g_busy = false;
         return 0;
     }
