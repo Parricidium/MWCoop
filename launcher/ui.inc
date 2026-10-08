@@ -1041,6 +1041,19 @@ static void DrawLogsPage(Graphics &g)
         Text(g, zip ? T(L"Créer un zip à envoyer", L"Create a zip to send") : T(L"Ouvrir le dossier", L"Open folder"), RectF(b.r.X + 42, b.r.Y, b.r.Width - 50, b.r.Height), 13, FontStyleBold, ink, StringAlignmentNear);
     }
     float y = c.Y + 84;
+    {   // mode debogage (kLogsDebugRow : c.X + 24, c.Y + 84)
+        RectF row = kLogsDebugRow;
+        GraphicsPath p; RoundRect(p, row, 14);
+        SolidBrush fb(g_debug ? WithA(kAcc, 0.12f) : TH(card)); g.FillPath(&fb, &p);
+        Pen pen(g_debug ? WithA(kAcc, 0.5f) : TH(choiceBorder), 1); g.DrawPath(&pen, &p);
+        Text(g, T(L"Mode débogage", L"Debug mode"), RectF(row.X + 18, row.Y + 4, 220, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, T(L"Journal détaillé du lanceur : chaque étape, Steam, fichiers, DLL chargées dans le jeu, antivirus. À activer si MWCoop ne se charge pas, puis zip.",
+                  L"Detailed launcher log: every step, Steam, files, DLLs loaded in the game, antivirus. Turn on if MWCoop doesn't load, then zip."),
+             RectF(row.X + 18, row.Y + 24, row.Width - 100, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        UiToggle(g, RectF(row.X + row.Width - 66, row.Y + 10, 50, 28), g_debug, g_uiHot == UI_LOG_DEBUG);
+        HotZone(row, UI_LOG_DEBUG);
+        y += 58;
+    }
     if (g_crashT) {
         RectF a(c.X + 24, y, c.Width - 48, 56);
         GraphicsPath p; RoundRect(p, a, 14);
@@ -1355,6 +1368,13 @@ static bool UiClick(int id)
     case UI_SET_FOLDER: ChooseExe(); return true;
     case UI_SET_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); return true;
     case UI_SET_UNINST: Uninstall(); return true;
+    case UI_LOG_DEBUG:
+        g_debug = !g_debug;
+        WritePrivateProfileStringW(L"Lanceur", L"Debug", g_debug ? L"1" : L"0", g_iniLauncher.c_str());
+        LaunchLog("mode debogage %s", g_debug ? "active" : "coupe");
+        if (g_debug) DebugSys();
+        SetStatus(K_NORMAL, g_debug ? T(L"Mode débogage activé : lance ta partie, puis crée le zip", L"Debug mode on: start your game, then create the zip") : T(L"Mode débogage coupé", L"Debug mode off"));
+        return true;
     }
     if (id >= UI_NOTE && id < UI_NOTE + 90) { g_noteSel = id - UI_NOTE; g_scroll[TAB_NOTES] = 0; return true; }
     if (id >= UI_LOOKPIN && id < UI_LOOKPIN + 4) { g_lookZone = id - UI_LOOKPIN; return true; }

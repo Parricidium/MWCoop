@@ -200,6 +200,19 @@ static void LaunchLog(const char *fmt, ...)
     FILE *f = _wfopen(g_launcherLog.c_str(), L"ab");
     if (f) { SYSTEMTIME t; GetLocalTime(&t); fprintf(f, "%02d:%02d:%02d %s\r\n", t.wHour, t.wMinute, t.wSecond, b); fclose(f); }
 }
+// Mode debogage (page JOURNAUX, [Lanceur] Debug ; demande d'un joueur, 08/10) : journal detaille du lanceur -- requetes et
+// reponses, Steam, fichiers et reglages au depart du jeu, toutes les DLL du jeu a 5, 15 et 30 s, antivirus declares.
+static bool g_debug;
+static void DebugLog(const char *fmt, ...)
+{
+    if (!g_debug) return;
+    char b[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    _vsnprintf_s(b, _countof(b), _TRUNCATE, fmt, ap);
+    va_end(ap);
+    LaunchLog("[debug] %s", b);
+}
 
 // ---------------------------------------------------------------- utilitaires
 static std::wstring Widen(const std::string &s, UINT cp = CP_UTF8)
@@ -498,6 +511,7 @@ static bool HttpGet(const std::wstring &url, std::string *out, const std::wstrin
     if (r) WinHttpCloseHandle(r);
     if (c) WinHttpCloseHandle(c);
     WinHttpCloseHandle(s);
+    DebugLog("http %s : %s, statut %lu, erreur %lu", Narrow(url, CP_UTF8).c_str(), ok ? "ok" : "ECHEC", status ? *status : 0, g_httpErr);
     return ok;
 }
 
@@ -3672,6 +3686,40 @@ static bool PrepareMirror(const std::wstring &m)
     return true;
 }
 
+// Mode debogage : Windows, Smart App Control (bloque les DLL non signees, comme notre version.dll), antivirus declares
+// a Windows (Securite Windows : root/SecurityCenter2, par PowerShell, fil a part).
+static DWORD WINAPI DebugSysThread(void *)
+{
+    DWORD sac = 99, sz = sizeof(sac);
+    RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\CI\\Policy", L"VerifiedAndReputablePolicyState", RRF_RT_REG_DWORD, NULL, &sac, &sz);
+    wchar_t build[64] = L"?"; DWORD bs = sizeof(build);
+    RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"CurrentBuild", RRF_RT_REG_SZ, NULL, build, &bs);
+    DebugLog("Windows build %s, Smart App Control %s, lanceur %s, jeu %s", Narrow(build).c_str(), sac == 0 ? "coupe" : sac == 1 ? "ACTIF" : sac == 2 ? "en evaluation" : "?", Narrow(g_self, CP_UTF8).c_str(), Narrow(g_gameDir, CP_UTF8).c_str());
+    wchar_t sys[MAX_PATH]; GetSystemDirectoryW(sys, MAX_PATH);
+    std::wstring cmd = std::wstring(L"\"") + sys + L"\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile -NonInteractive -Command \"Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct | ForEach-Object { $_.displayName + ' (etat ' + $_.productState + ')' }\"";
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
+    HANDLE rd = NULL, wr = NULL;
+    if (!CreatePipe(&rd, &wr, &sa, 0)) return 0;
+    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFOW si = { sizeof(si) }; si.dwFlags = STARTF_USESTDHANDLES; si.hStdOutput = wr; si.hStdError = wr;
+    PROCESS_INFORMATION pi = {};
+    std::vector<wchar_t> cb(cmd.begin(), cmd.end()); cb.push_back(0);
+    BOOL ok = CreateProcessW(NULL, cb.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    CloseHandle(wr);
+    std::string out;
+    if (ok) {
+        char b[512]; DWORD n;
+        while (ReadFile(rd, b, sizeof(b), &n, NULL) && n) out.append(b, n);
+        WaitForSingleObject(pi.hProcess, 15000);
+        CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+    }
+    CloseHandle(rd);
+    while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
+    DebugLog("antivirus declares : %s", out.empty() ? "(aucun, ou illisible)" : out.c_str());
+    return 0;
+}
+static void DebugSys() { HANDLE t = CreateThread(NULL, 0, DebugSysThread, NULL, 0, NULL); if (t) CloseHandle(t); }
+
 // Lance un programme par le bureau de Windows (IShellDispatch2::ShellExecute du processus explorer du bureau, la methode
 // documentee) : ce n'est plus le lanceur qui cree le jeu. Lanceur demarre par Steam, overlay de Steam dans le lanceur :
 // le explorer.exe qu'il lancait pouvait demarrer le jeu lui-meme, overlay compris -- la version.dll de Windows passait
@@ -3735,7 +3783,7 @@ static bool ShellRunFromDesktop(const std::wstring &file, const std::wstring &ar
 }
 
 // Jeux en cours : leur version.dll (la notre ?), winhttp.dll (Doorstop de MSCLoader), overlay de Steam, et leur parent.
-static void LogGameModules()
+static void LogGameModules(bool full = false)   // (full : toutes les DLL, mode debogage)
 {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return;
@@ -3759,7 +3807,7 @@ static void LogGameModules()
                 wchar_t m[MAX_PATH];
                 if (!K32GetModuleFileNameExW(h, mods[i], m, MAX_PATH)) continue;
                 const wchar_t *b = wcsrchr(m, L'\\'); b = b ? b + 1 : m;
-                if (!_wcsicmp(b, L"version.dll") || !_wcsicmp(b, L"winhttp.dll") || !_wcsnicmp(b, L"gameoverlayrenderer", 19)) found += " " + Narrow(m, CP_UTF8);
+                if (full || !_wcsicmp(b, L"version.dll") || !_wcsicmp(b, L"winhttp.dll") || !_wcsnicmp(b, L"gameoverlayrenderer", 19)) found += (full ? "\r\n    " : " ") + Narrow(m, CP_UTF8);
             }
         LaunchLog("jeu %lu %s (parent %s) :%s", p.th32ProcessID, Narrow(exe, CP_UTF8).c_str(), Narrow(parent, CP_UTF8).c_str(), found.empty() ? " aucun de version.dll / winhttp.dll / overlay" : found.c_str());
         CloseHandle(h);
@@ -3952,6 +4000,10 @@ static void Launch(int mode, const char *partie = NULL)
         g_proc = NULL;
         g_pid = 0;
         done();
+        // Le lanceur se ferme : tant qu'il vit, Steam le prend pour le jeu deja lance (connecte sous son identite) et ne
+        // demarre pas le vrai (deux joueurs, 08/10 : « seulement si je ferme le lanceur apres avoir heberge »).
+        LaunchLog("lanceur ferme : Steam demarre le jeu");
+        g_state = ST_CLOSING;
         return;
     }
     // Lance comme un double-clic dans l'explorateur : un mode de compatibilite de l'exe peut exiger l'administrateur ;
@@ -3990,17 +4042,31 @@ static void Launch(int mode, const char *partie = NULL)
     bool viaShell = g_fromSteam || overlay;
     LaunchLog("lancement (mode %d) : %s par %s (demarre par Steam %d, overlay %d)", mode, Narrow(exe, CP_UTF8).c_str(), viaShell ? "l'explorateur" : "le lanceur", (int)g_fromSteam, (int)overlay);
     std::wstring shellArg = L"\"" + exe + L"\"";
-    if (viaShell) TestLog("lancement par l'explorateur (overlay de Steam dans le lanceur)");
-    if (viaShell) {
-        if (ShellRunFromDesktop(exe, args, runDir)) {
-            LaunchLog("jeu lance par le bureau de Windows, avec ses arguments");
-            g_proc = NULL;
-            g_pid = 0;
-            done();
-            return;
-        }
-        LaunchLog("repli : explorer.exe");
+    // Toujours par le bureau de Windows (0.62) : le lanceur s'est connecte a Steam sous l'identite du jeu (salons), Steam y a
+    // mis sa surcouche, qu'un jeu lance par lui heritait des son demarrage -- la version.dll de Windows passait avant la notre,
+    // MWCoop absent (deux joueurs, 08/10 : « ca ne marche que si je ferme le lanceur apres avoir heberge »). Avant : seulement
+    // quand la surcouche etait vue dans le lanceur.
+    if (g_debug) {
+        wchar_t v[64];
+        std::string env;
+        for (const wchar_t *n : { L"SteamAppId", L"SteamGameId", L"SteamOverlayGameId", L"SteamClientLaunch" }) if (GetEnvironmentVariableW(n, v, 64)) env += " " + Narrow(n) + "=" + Narrow(v);
+        DebugLog("depart : dossier %s, arguments %s, environnement Steam%s", Narrow(runDir, CP_UTF8).c_str(), Narrow(args, CP_UTF8).c_str(), env.empty() ? " (aucun)" : env.c_str());
+        std::vector<unsigned char> d;
+        if (ReadAll(runDir + L"doorstop_config.ini", d)) DebugLog("doorstop_config.ini du depart :\r\n%s", std::string(d.begin(), d.end()).c_str());
+        WIN32_FIND_DATAW fd;
+        HANDLE fh = FindFirstFileW((runDir + L"*.dll").c_str(), &fd);
+        std::string dlls;
+        if (fh != INVALID_HANDLE_VALUE) { do { dlls += " " + Narrow(fd.cFileName, CP_UTF8) + "(" + std::to_string(fd.nFileSizeLow) + ")"; } while (FindNextFileW(fh, &fd)); FindClose(fh); }
+        DebugLog("DLL du depart :%s", dlls.c_str());
     }
+    if (ShellRunFromDesktop(exe, args, runDir)) {
+        LaunchLog("jeu lance par le bureau de Windows, avec ses arguments");
+        g_proc = NULL;
+        g_pid = 0;
+        done();
+        return;
+    }
+    LaunchLog("bureau de Windows indisponible : %s", viaShell ? "explorer.exe" : "lancement direct");
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
     sei.hwnd = g_wnd;
@@ -5894,6 +5960,12 @@ static void Tick()
     LobbySoundsTick();
     SteamTick();
     MscTick();
+    if (g_debug && (g_state == ST_LAUNCH || g_state == ST_RUNNING) && g_launchT) {   // (DLL du jeu a 5 et 15 s ; 30 s : RunTick)
+        static DWORD doneFor, step;
+        if (doneFor != g_launchT) { doneFor = g_launchT; step = 0; }
+        DWORD el = now - g_launchT;
+        if ((step == 0 && el > 5000) || (step == 1 && el > 15000)) { step++; DebugLog("DLL du jeu a %lu s :", el / 1000); LogGameModules(true); }
+    }
     if (g_tenuesState == 2) {   // tenues offertes recues (fil) : choix de tenue, textures de l'apercu
         g_tenuesState = 0;
         TenuesAddShirts();
@@ -6294,6 +6366,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             GetPrivateProfileStringW(L"Lanceur", L"Reseau", L"ip", rn, 16, g_iniLauncher.c_str());
             g_steamNet = _wcsicmp(rn, L"steam") == 0;
             g_mscOn = GetPrivateProfileIntW(L"Lanceur", L"MSCLoader", 1, g_iniLauncher.c_str()) != 0;
+            g_debug = GetPrivateProfileIntW(L"Lanceur", L"Debug", 0, g_iniLauncher.c_str()) != 0;
+            if (g_debug) DebugSys();
             g_mscOwnPref = GetPrivateProfileIntW(L"Lanceur", L"MSCLoaderMWCoop", -1, g_iniLauncher.c_str());
         }
         if (!_wcsicmp(th, L"sombre") || !_wcsicmp(th, L"dark")) g_dark = true;
@@ -6444,6 +6518,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
+    }
+    // /debugsys <journal> : releve du mode debogage (Windows, Smart App Control, antivirus), essais
+    if (argc >= 3 && !_wcsicmp(argv[1], L"/debugsys")) {
+        g_testSalonLog = argv[2];
+        FILE *f = _wfopen(argv[2], L"wb");
+        if (f) fclose(f);
+        g_debug = true;
+        DebugSysThread(NULL);
+        GdiplusShutdown(gtok);
+        return 0;
     }
     // /desinstaller <dossier du jeu> <journal> : desinstallation sans questions, sans le registre ni le lanceur lui-meme
     // (essais : LOCALAPPDATA d'essai, jeu factice)
