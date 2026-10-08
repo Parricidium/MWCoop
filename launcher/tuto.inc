@@ -37,8 +37,10 @@ static const TutoStep kTuto[] = {
     { L"Réglages", L"Mise à jour, thème, langue, port, dossier du jeu, envoi de l'hôte chez un ami… et ce guide.",
       L"Settings", L"Updates, theme, language, port, game folder, a host's files at a friend's… and this guide.", "0.42.0" },
     { L"Thème et langue", L"Sombre ou clair, français ou anglais, d'un clic.", L"Theme and language", L"Dark or light, French or English, in one click.", "0.42.0" },
-    { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le GitHub du mod.",
-      L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the mod's GitHub.", "0.42.0" },
+    { L"Discord", L"La communauté MWCoop : de l'aide, les bugs à signaler, les nouveautés et des joueurs pour faire équipe. GitHub et Ko-fi juste à côté.",
+      L"Discord", L"The MWCoop community: help, bug reports, news and players to team up with. GitHub and Ko-fi right next to it.", "0.51.0" },
+    { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
+      L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
 static const int kTutoN = (int)(sizeof(kTuto) / sizeof(kTuto[0]));
 
@@ -61,6 +63,7 @@ static RectF TutoTarget(int i)
     case 12: return g_navR[TAB_API];
     case 13: return g_navR[TAB_COOP];
     case 14: return join(g_btn[B_LANG].r, g_btn[B_THEME].r);
+    case 15: return g_btn[B_DISCORD].r;
     }
     return RectF(0, 0, 0, 0);
 }
@@ -89,6 +92,7 @@ static void TutoGo(int i)
         g_tab = g_tutoTabWas >= 0 ? g_tutoTabWas : TAB_HOME;
         WritePrivateProfileStringW(L"Lanceur", L"TutoVu", L"1", g_iniLauncher.c_str());
         WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", Widen(MyVersion()).c_str(), g_iniLauncher.c_str());
+        DiscordAskMaybe();   // (premier lancement : l'invitation au Discord vient apres la visite)
         return;
     }
     g_tuto = i;
