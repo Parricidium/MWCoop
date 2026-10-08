@@ -3843,6 +3843,10 @@ static void Launch(int mode, const char *partie = NULL)
     g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && !MirrorDir().empty();
     if (g_steamLaunch) {
         Sleep(800);   // (SteamDown ci-dessus : que Steam ne voie plus le lanceur comme le jeu en cours)
+        if (!LocalDir().empty()) {   // (si Steam nous relance par l'option de lancement : demarrer le jeu, wWinMain)
+            HANDLE rq = CreateFileW((LocalDir() + L"lancer-par-steam.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (rq != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(rq, "1", 1, &n, NULL); CloseHandle(rq); }
+        }
         HINSTANCE r = ShellExecuteW(g_wnd, L"open", L"steam://rungameid/4164420", NULL, NULL, SW_SHOWNORMAL);
         LaunchLog("lancement (mode %d) par Steam (steam://rungameid/4164420) : %s", mode, (INT_PTR)r > 32 ? "demande" : "ECHEC");
         if ((INT_PTR)r <= 32) { SetStatus(K_ERR, T(L"Steam n'a pas pu lancer le jeu (Steam est-il ouvert ?)", L"Steam could not start the game (is Steam open?)")); return; }
@@ -3873,6 +3877,16 @@ static void Launch(int mode, const char *partie = NULL)
     // reglages sont dans lancement.ini (pas de ligne de commande par ce chemin).
     // Demarre par Steam (vu au demarrage : ses variables, ou le chemin du jeu en argument) ou overlay deja la : le
     // 07/10 l'overlay n'a pas ete vu dans le lanceur demarre par Steam, le jeu est parti de lui et le mod ne s'est pas charge.
+    {   // notre chargeur, la ou le jeu part (absent ou change : antivirus ?)
+        auto info = [](const std::wstring &p) -> std::string {
+            WIN32_FILE_ATTRIBUTE_DATA a;
+            if (!GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &a)) return "ABSENTE";
+            SYSTEMTIME st; FILETIME lt; FileTimeToLocalFileTime(&a.ftLastWriteTime, &lt); FileTimeToSystemTime(&lt, &st);
+            char b[64]; sprintf_s(b, "%lu octets, %02d/%02d %02d:%02d", a.nFileSizeLow, st.wDay, st.wMonth, st.wHour, st.wMinute);
+            return b;
+        };
+        LaunchLog("version.dll : jeu %s ; depart %s", info(g_gameDir + L"version.dll").c_str(), info(runDir + L"version.dll").c_str());
+    }
     bool overlay = GetModuleHandleW(L"gameoverlayrenderer64.dll") != NULL;
     bool viaShell = g_fromSteam || overlay;
     LaunchLog("lancement (mode %d) : %s par %s (demarre par Steam %d, overlay %d)", mode, Narrow(exe, CP_UTF8).c_str(), viaShell ? "l'explorateur" : "le lanceur", (int)g_fromSteam, (int)overlay);
@@ -5528,6 +5542,7 @@ static std::vector<std::wstring> ZipFiles()
     for (auto &e : g_logList) if (e.group == 0 && !g_logGroups.empty() && g_logGroups[0].key == L"*") add(e.path);
     if (!g_gameDir.empty()) { add(g_gameDir + L"MWCoop\\mwcoop.ini"); add(g_gameDir + L"MWCoop\\lancement.ini"); }
     if (!g_launcherLog.empty()) add(g_launcherLog);
+    if (!LocalDir().empty()) add(LocalDir() + L"lanceur-precedent.log");
     // Les 2 parties rangees les plus recentes : un joueur relance souvent le jeu avant de faire le zip (retour du 08/10 :
     // la partie ou MSCLoader ne trouvait aucun mod n'y etait plus).
     std::vector<int> older;
@@ -6113,6 +6128,36 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             size_t n = wcslen(av[i]);
             if (n >= 15 && !_wcsicmp(av[i] + n - 15, L"mywintercar.exe")) g_fromSteam = true;
         }
+        // Lancer par Steam (Reglages > Jeu) avec l'option de lancement "<MWCoop.exe>" %command% : Steam relance le lanceur au
+        // lieu du jeu (retour d'un joueur, 08/10 : "Running" dans Steam, un 2e lanceur, rien ne demarrait). Demande toute
+        // fraiche du lanceur ouvert (lancer-par-steam.txt, moins de 90 s) : on demarre le jeu que Steam nous passe, comme
+        // Steam l'aurait fait (son environnement), et on s'efface.
+        if (!cli) {
+            int gi = -1;
+            for (int i = 1; i < ac && gi < 0; i++) { size_t n = wcslen(av[i]); if (n >= 15 && !_wcsicmp(av[i] + n - 15, L"mywintercar.exe")) gi = i; }
+            wchar_t l[MAX_PATH] = L"";
+            GetEnvironmentVariableW(L"LOCALAPPDATA", l, MAX_PATH);
+            std::wstring req = l[0] ? std::wstring(l) + L"\\MWCoop\\lancer-par-steam.txt" : L"";
+            WIN32_FILE_ATTRIBUTE_DATA ra;
+            if (gi > 0 && !req.empty() && GetFileAttributesExW(req.c_str(), GetFileExInfoStandard, &ra)) {
+                FILETIME ft; GetSystemTimeAsFileTime(&ft);
+                ULONGLONG age = ((((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime) - (((ULONGLONG)ra.ftLastWriteTime.dwHighDateTime << 32) | ra.ftLastWriteTime.dwLowDateTime)) / 10000000ULL;
+                DeleteFileW(req.c_str());
+                if (age < 90) {
+                    std::wstring cmd = L"\"" + std::wstring(av[gi]) + L"\"";
+                    for (int i = gi + 1; i < ac; i++) cmd += L" \"" + std::wstring(av[i]) + L"\"";
+                    std::wstring dir = av[gi];
+                    dir = dir.substr(0, dir.find_last_of(L'\\'));
+                    STARTUPINFOW si = { sizeof(si) }; PROCESS_INFORMATION pi = {};
+                    std::vector<wchar_t> cb(cmd.begin(), cmd.end()); cb.push_back(0);
+                    BOOL started = CreateProcessW(av[gi], cb.data(), NULL, NULL, FALSE, 0, NULL, dir.c_str(), &si, &pi);
+                    DWORD err = started ? 0 : GetLastError();
+                    FILE *f = _wfopen((std::wstring(l) + L"\\MWCoop\\lanceur.log").c_str(), L"ab");
+                    if (f) { SYSTEMTIME t; GetLocalTime(&t); fprintf(f, "%02d:%02d:%02d lanceur relance par Steam (Lancer par Steam, demande de %llu s) : %s demarre %s\r\n", t.wHour, t.wMinute, t.wSecond, age, Narrow(av[gi], CP_UTF8).c_str(), started ? "" : ("ECHEC " + std::to_string(err)).c_str()); fclose(f); }
+                    if (started) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); LocalFree(av); return 0; }
+                }
+            }
+        }
         if (!cli) {
             wchar_t l[MAX_PATH] = L"";
             GetEnvironmentVariableW(L"LOCALAPPDATA", l, MAX_PATH);
@@ -6120,6 +6165,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 std::wstring d = std::wstring(l) + L"\\MWCoop\\";
                 SHCreateDirectoryExW(NULL, d.c_str(), NULL);
                 g_launcherLog = d + L"lanceur.log";
+                // (le journal d'avant garde la partie d'avant : un joueur relance souvent le lanceur avant de faire le zip)
+                MoveFileExW(g_launcherLog.c_str(), (d + L"lanceur-precedent.log").c_str(), MOVEFILE_REPLACE_EXISTING);
                 FILE *f = _wfopen(g_launcherLog.c_str(), L"wb");
                 if (f) fclose(f);
                 LaunchLog("MWCoop.exe %s (%s), demarre par Steam : %d, ligne : %s", Narrow(g_self, CP_UTF8).c_str(), __DATE__, (int)g_fromSteam, Narrow(GetCommandLineW(), CP_UTF8).c_str());
