@@ -144,6 +144,9 @@ namespace MWCoop
                     playerLook = Time.realtimeSinceStartup + 2f;
                     GameObject g = GameObject.Find("PLAYER");
                     playerT = g != null && g.transform.Find("Pivot") != null ? g.transform : null;
+                    // (un autre objet nomme PLAYER trouve d'abord : remonte depuis la camera du joueur)
+                    for (Transform t = playerT == null ? PlayerSync.LocalCamera : null; t != null; t = t.parent)
+                        if (t.name == "PLAYER" && t.Find("Pivot") != null) { playerT = t; break; }
                 }
                 return playerT;
             }
