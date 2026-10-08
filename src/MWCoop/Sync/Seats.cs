@@ -465,23 +465,52 @@ namespace MWCoop
         }
 
         // Assis a l'avant : viser la boucle et cliquer l'attache ou la detache (texte du jeu, comme le conducteur).
+        // Ceinture du passager avant, comme celle du conducteur (demande d'un joueur, 08/10) : pour l'attacher on vise la
+        // ceinture rangee (montant de la portiere) ou la boucle et on TIENT le clic (0,6 s : on la tire) ; un clic sur la
+        // boucle la detache. Avant : un seul clic sur la boucle.
+        const float BeltPull = 0.6f;
+        static float beltHold;
         static void BeltInput()
         {
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
-            bool aim = false;
+            bool aimBuckle = false, aimStrap = false;
             if (b != null && cam != null)
             {
                 Vector3 bp = current.CarT.TransformPoint(b.Buckle);
                 Vector3 d = bp - cam.position;
-                aim = d.magnitude < 1.3f && Vector3.Angle(cam.forward, d) < 16f;
+                aimBuckle = d.magnitude < 1.3f && Vector3.Angle(cam.forward, d) < 16f;
+                Renderer or = b.Open != null ? b.Open.GetComponentInChildren<Renderer>() : null;
+                if (!beltOn && or != null)
+                {
+                    Vector3 sd = or.bounds.center - cam.position;
+                    aimStrap = sd.magnitude < 1.3f && Vector3.Angle(cam.forward, sd) < 18f;
+                }
             }
-            BeltHint(aim);
-            if (aim && Input.GetMouseButtonDown(0))
+            bool aim = aimBuckle || aimStrap;
+            BeltHint(aim || beltHold > 0f);
+            if (beltOn)
             {
-                beltOn = !beltOn;
-                Log.Info("ceinture passager : " + (beltOn ? "attachee" : "detachee") + " (" + current.Car + ")");
-                SendSeat(current.Car, current.Index, headLocal);
+                if (aimBuckle && Input.GetMouseButtonDown(0))
+                {
+                    beltOn = false;
+                    Log.Info("ceinture passager : detachee (" + current.Car + ")");
+                    SendSeat(current.Car, current.Index, headLocal);
+                }
+                beltHold = 0f;
+                return;
             }
+            if ((aim || beltHold > 0f) && Input.GetMouseButton(0))
+            {
+                beltHold += Time.deltaTime;
+                if (beltHold >= BeltPull)
+                {
+                    beltHold = 0f;
+                    beltOn = true;
+                    Log.Info("ceinture passager : attachee (" + current.Car + ")");
+                    SendSeat(current.Car, current.Index, headLocal);
+                }
+            }
+            else beltHold = 0f;
         }
         static void BeltHint(bool on)
         {
