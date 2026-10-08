@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -33,7 +33,15 @@ namespace MWCoop
             public bool Held; public Vector3 HeldPos; public Quaternion HeldRot; public bool HeldActive; public bool HeldShow;
             public float HeldAt;
             public bool Shown; public Vector3 ShowPos; public Quaternion ShowRot;   // pose montree : glisse vers la recue
+            public bool Gear;                                                     // levier de vitesses : passage anime
+            public float ShiftAt = -1f; public Quaternion ShiftFrom, ShiftTo;      // passage en cours (debut, de, vers)
         }
+        // Levier de vitesses distant : un rapport recu ne fait plus sauter le levier (avant : ~60 ms, « pas d'animation »,
+        // retour d'un joueur 08/10). La main de l'avatar part vers le pommeau tout de suite (LastShift), le levier attend
+        // 0,15 s puis glisse vers le nouveau rapport en 0,35 s.
+        const float ShiftDelay = 0.15f, ShiftTime = 0.35f;
+        static readonly Dictionary<Transform, float> lastShift = new Dictionary<Transform, float>();
+        public static float LastShift(Transform carRoot) { float t; return carRoot != null && lastShift.TryGetValue(carRoot, out t) ? t : -1f; }
         class Car { public string Name; public Transform Root; public List<Item> Items = new List<Item>(); public Dictionary<string, Item> ByKey = new Dictionary<string, Item>(); }
 
         static readonly Dictionary<string, Car> cars = new Dictionary<string, Car>();
@@ -70,7 +78,8 @@ namespace MWCoop
                     if (!pose && !show) continue;
                     string rel = VehicleSync.RelPath(rb.transform, t);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
-                    var it = new Item { Key = rel + "#" + k, T = t, Pose = pose, Show = show, Pos = t.localPosition, Rot = t.localRotation, Active = t.gameObject.activeSelf };
+                    var it = new Item { Key = rel + "#" + k, T = t, Pose = pose, Show = show, Pos = t.localPosition, Rot = t.localRotation, Active = t.gameObject.activeSelf,
+                                        Gear = pose && (n.Contains("gear") || (n == "pivot" && t.parent != null && t.parent.name.ToLowerInvariant().Contains("gear"))) };
                     c.Items.Add(it);
                     c.ByKey[it.Key] = it;
                 }
@@ -144,7 +153,26 @@ namespace MWCoop
                     if (it.Pose)
                     {
                         // ~60 ms pour rejoindre la pose recue (envoyee toutes les 50 a 100 ms) : plus de saccades
-                        if (!it.Shown) { it.Shown = true; it.ShowPos = it.HeldPos; it.ShowRot = it.HeldRot; }
+                        // (Levier : part de sa pose du moment, le premier rapport recu est anime lui aussi.)
+                        if (!it.Shown) { it.Shown = true; it.ShowPos = it.Gear ? it.T.localPosition : it.HeldPos; it.ShowRot = it.Gear ? it.T.localRotation : it.HeldRot; }
+                        if (it.Gear)
+                        {
+                            // Nouveau rapport : passage minute (la main d'abord, puis le levier).
+                            if (Quaternion.Angle(it.HeldRot, it.ShiftAt >= 0f ? it.ShiftTo : it.ShowRot) > 3f)
+                            {
+                                it.ShiftFrom = it.ShowRot; it.ShiftTo = it.HeldRot; it.ShiftAt = now;
+                                lastShift[c.Root] = now;
+                            }
+                            if (it.ShiftAt >= 0f)
+                            {
+                                float u = Mathf.Clamp01((now - it.ShiftAt - ShiftDelay) / ShiftTime);
+                                u = u * u * (3f - 2f * u);
+                                it.ShowRot = Quaternion.Slerp(it.ShiftFrom, it.ShiftTo, u);
+                                if (u >= 1f) it.ShiftAt = -1f;
+                            }
+                            else it.ShowRot = Quaternion.Slerp(it.ShowRot, it.HeldRot, 1f - Mathf.Exp(-Time.deltaTime * 16f));
+                            it.ShowPos = Vector3.Lerp(it.ShowPos, it.HeldPos, 1f - Mathf.Exp(-Time.deltaTime * 16f));
+                        }
                         else
                         {
                             float k = 1f - Mathf.Exp(-Time.deltaTime * 16f);

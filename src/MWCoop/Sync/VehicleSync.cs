@@ -134,6 +134,11 @@ namespace MWCoop
         static FsmString curVehicle;
         public static int LocalDriving = -1;    // rang local de la voiture conduite ici
         static int owned = -1, ownedTick;        // voiture quittee moteur tournant : on en garde la main
+        // Voiture garee poussee par le joueur local (main "Hand Push") : on en prend la main (owned) tant qu'on pousse et
+        // qu'elle roule encore (8 s au plus apres la poussee), puis on la rend. Avant : seul l'hote pouvait pousser ; chez
+        // un invite, l'hote la recalait toutes les 2 s (voiture qui se teleporte en arriere ; retour d'un joueur, 08/10).
+        static int pushCar = -1;
+        static float pushUntil;
         public static string LocalDrivingName { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].Name : null; } }
         public static Transform LocalDrivingRoot { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].T : null; } }
 
@@ -433,13 +438,15 @@ namespace MWCoop
             if (now >= nextFast)
             {
                 nextFast = now + 0.05f;
+                if (LocalDriving < 0) PushTick(now);
                 if (LocalDriving >= 0) Send(cars[LocalDriving], 1);
                 else if (owned >= 0 && (++ownedTick & 1) == 0)   // 10 fois/s
                 {
                     Car o = cars[owned];
-                    if (o.RemoteBy >= 0 && o.RemoteBy != Session.LocalId) owned = -1;     // un autre l'a prise
-                    else if (EngineRunning(o)) Send(o, 2);
-                    else { Release(o, now); Log.Info("moteur coupe : " + o.Key + " rendue"); owned = -1; }
+                    bool pushed = o.Index == pushCar && o.Body != null && (now < pushUntil || (o.Body.velocity.sqrMagnitude > 0.09f && now < pushUntil + 8f));
+                    if (o.RemoteBy >= 0 && o.RemoteBy != Session.LocalId) { owned = -1; pushCar = -1; }     // un autre l'a prise
+                    else if (EngineRunning(o) || pushed) Send(o, 2);
+                    else { Release(o, now); Log.Info((o.Index == pushCar ? "poussee finie : " : "moteur coupe : ") + o.Key + " rendue"); owned = -1; pushCar = -1; }
                 }
             }
             // Etat de la simulation de ce qu'on fait rouler : une fois par seconde.
@@ -479,6 +486,30 @@ namespace MWCoop
                     if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Key + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + ", chaleur " + (c.Heat != null ? c.Heat.Value.ToString("F1") : "?") + " (recue " + c.RemoteHeat.ToString("F1") + ")" +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
                 }
             }
+        }
+
+        // Poussee : la voiture la plus proche du joueur (a moins de 1,5 m de sa carrosserie), garee ici (pas une copie).
+        static void PushTick(float now)
+        {
+            if (!Gestures.Pushing) return;
+            GameObject pl = GameObject.Find("PLAYER");
+            if (pl == null) return;
+            Vector3 p = pl.transform.position + Vector3.up * 0.8f;
+            Car best = null;
+            float bd = 1.5f * 1.5f;
+            foreach (Car c in cars)
+            {
+                if (c.Body == null || c.Kinematic || !c.Body.gameObject.activeInHierarchy) continue;
+                float d = (c.Body.ClosestPointOnBounds(p) - p).sqrMagnitude;
+                if (d < bd) { bd = d; best = c; }
+            }
+            if (best == null) return;
+            pushUntil = now + 1.5f;
+            if (pushCar == best.Index && owned == best.Index) return;
+            if (owned >= 0 && owned != best.Index) return;   // (on garde deja une autre voiture : moteur tournant)
+            pushCar = best.Index;
+            owned = best.Index;
+            Log.Info("poussee : " + best.Key + " suit notre poussee chez les autres");
         }
 
         // Voiture rendue (conducteur sorti moteur arrete, ou moteur coupe) : derniere pose et etat de la simulation
@@ -532,6 +563,15 @@ namespace MWCoop
             return -1;
         }
         public static Rigidbody CarBody(int index) { Car c = ByNet(index); return c != null ? c.Body : null; }
+
+        // Voiture ou se trouve le joueur local (au volant, ou assis en passager) ; null : a pied.
+        public static Rigidbody LocalRideBody()
+        {
+            if (LocalDriving >= 0 && LocalDriving < cars.Count) return cars[LocalDriving].Body;
+            Transform st = Seats.SeatedCar;
+            if (st != null) foreach (Car c in cars) if (c.T == st) return c.Body;
+            return null;
+        }
 
         // Conduite ici, ou quittee moteur tournant (on en garde la main) : on fait autorite dessus.
         public static bool DrivenHere(int index) { Car c = ByNet(index); return c != null && (c.Index == LocalDriving || c.Index == owned); }
@@ -825,9 +865,14 @@ namespace MWCoop
         }
 
         // Son du moteur et roues de la copie conduite ailleurs.
+        // Braquage du controleur (CarController.steering) : le volant du jeu (SteeringWheel) le lit pour tourner. Sur la copie
+        // le controleur est coupe : sans cela le volant restait fige, et les mains du conducteur avec (retour d'un joueur, 08/10).
+        static readonly System.Reflection.FieldInfo fSteering = typeof(AxisCarController).BaseType != null ? typeof(AxisCarController).BaseType.GetField("steering", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
+
         static void Animate(Car c)
         {
             if (c.Dt != null) { c.Dt.rpm = c.Rpm; c.Dt.throttle = c.Throttle; }
+            if (c.Axis != null && fSteering != null) try { fSteering.SetValue(c.Axis, Mathf.Clamp(c.Steer, -1f, 1f)); } catch { }
             for (int i = 0; i < c.SoundObjs.Length; i++)
             {
                 bool want = (c.SoundMask & (1 << i)) != 0;
@@ -901,6 +946,44 @@ namespace MWCoop
         static float testRpm = -1f, testThr;
         static bool testHorn;
         public static void TestHorn(bool on) { testHorn = on; }
+        static float testSteer = float.NaN;
+        public static string TestGear(string name, int gear)
+        {
+            Car c = Named(name);
+            if (c == null || c.Dt == null) return "?";
+            System.Reflection.FieldInfo fi = c.Dt.GetType().GetField("gear");
+            if (fi == null) return "pas de champ gear";
+            fi.SetValue(c.Dt, gear);
+            return "rapport " + gear;
+        }
+        public static string GearState(string name)
+        {
+            Car c = Named(name);
+            if (c == null || c.Body == null) return "?";
+            foreach (Transform t in c.Body.GetComponentsInChildren<Transform>(true))
+                if (t.name == "Pivot" && t.parent != null && t.parent.name == "Gearstick")
+                {
+                    if (!wheelRest.ContainsKey(t)) wheelRest[t] = t.localRotation;
+                    return "levier " + Quaternion.Angle(wheelRest[t], t.localRotation).ToString("F1") + " deg";
+                }
+            return "pas de levier";
+        }
+        public static void TestSteer(float s) { testSteer = s; }
+        // Essais : angle du volant (SteeringWheel) de la voiture par rapport a sa pose au premier appel.
+        static readonly Dictionary<Transform, Quaternion> wheelRest = new Dictionary<Transform, Quaternion>();
+        public static string WheelState(string name)
+        {
+            Car c = Named(name);
+            if (c == null || c.Body == null) return "?";
+            foreach (MonoBehaviour m in c.Body.GetComponentsInChildren<MonoBehaviour>(true))
+                if (m != null && m.GetType().Name == "SteeringWheel")
+                {
+                    Transform t = m.transform;
+                    if (!wheelRest.ContainsKey(t)) wheelRest[t] = t.localRotation;
+                    return "volant " + Quaternion.Angle(wheelRest[t], t.localRotation).ToString("F0") + " deg (braquage recu " + c.Steer.ToString("F2") + ")";
+                }
+            return "pas de volant";
+        }
         public static string HornState(string name)
         {
             Car c = Named(name);
@@ -1063,7 +1146,7 @@ namespace MWCoop
                 for (int i = 0; i < c.SoundObjs.Length; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;
                 if ((c.Starter != null && c.Starter.ActiveStateName == "Running") || testRpm > 0f) mask |= 0x8000;   // (essais : faux moteur en marche)
                 if ((c.Horn != null && c.Horn.activeInHierarchy) || testHorn) mask |= 0x4000;
-                w.F32(rpm).F32(thr).F32(SteerOf(c)).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
+                w.F32(rpm).F32(thr).F32(float.IsNaN(testSteer) ? SteerOf(c) : testSteer).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
                 for (int i = 0; i < c.SoundObjs.Length; i++)
                     if ((mask & (1 << i)) != 0)
                     {
@@ -1142,6 +1225,13 @@ namespace MWCoop
         {
             foreach (Car c in cars) if (c.RemoteDriver == player) return c.Name;
             return null;
+        }
+
+        // Vitesse de la voiture que ce joueur conduit (0 : il ne conduit pas ici).
+        public static float RemoteSpeed(int player)
+        {
+            foreach (Car c in cars) if (c.RemoteDriver == player && c.Body != null) return c.Vel.magnitude;
+            return 0f;
         }
 
         public static bool SeatPose(int player, Vector3 feet, out Vector3 pos, out Quaternion rot)

@@ -181,6 +181,7 @@ namespace MWCoop
             try { Game.SetState(e.Fsm, state); }
             finally { applying = false; Replay.Depth--; }
             checks.Add(new KeyValuePair<float, Entry>(Time.realtimeSinceStartup + 2f, e));
+            PlayerSync.ReachFor(who, e.Fsm.transform);   // (son avatar appuie : interrupteur, porte, robinet...)
             Log.Info("interaction de #" + who + " : " + id + " -> " + state + (e.Fsm.gameObject.activeInHierarchy ? "" : " (objet inactif)"));
         }
 

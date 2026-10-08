@@ -92,6 +92,11 @@ namespace MWCoop
             Avatar a;
             if (avatars.TryGetValue(id, out a) && a != null && a.Root != null) a.ReachFor(at);
         }
+        public static void ReachFor(int id, Transform t)
+        {
+            Avatar a;
+            if (avatars.TryGetValue(id, out a) && a != null && a.Root != null) a.ReachFor(t);
+        }
 
         // Apres les animations : poses calculees (conduite, buste et tete qui suivent le regard, bras).
         public static void LateUpdate()

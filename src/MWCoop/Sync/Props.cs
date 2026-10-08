@@ -41,6 +41,8 @@ namespace MWCoop
             public Quaternion Rot;
             public bool Kinematic, WasKinematic;
             public int RideCar = -1;              // recu : numero de la voiture ou l'objet est colle ici
+            public int RelCar = -1;               // tenu / lache par un autre assis dans cette voiture : pose dans son repere
+            public Vector3 RelPos; public Quaternion RelRot;
             public Vector3 RideLocal, RideCur;    // pose recue dans la voiture, pose affichee (rattrape)
             public Quaternion RideLocalRot, RideCurRot;
             public int RideOut = -1, RidePass;    // envoye : voiture ou on le transporte (autorite ici)
@@ -259,7 +261,7 @@ namespace MWCoop
             }
             if (h != held)
             {
-                if (held != null) { held.SettleUntil = now + 5f; if (!settling.Contains(held)) settling.Add(held); }
+                if (held != null && !DropInCopy(held)) { held.SettleUntil = now + 5f; if (!settling.Contains(held)) settling.Add(held); }
                 if (h != null)
                 {
                     settling.Remove(h); Unride(h); h.RemoteBy = -1; SetKinematic(h, false); Log.Info("piece prise : " + h.Id);
@@ -355,9 +357,22 @@ namespace MWCoop
             if (p.LayerWas < 0 && p.Body.gameObject.layer != HeldLayer) HeldLook(p, true);
             Transform t = p.Body.transform;
             float k = 1f - Mathf.Exp(-20f * Time.deltaTime);
-            if ((p.Pos - t.position).sqrMagnitude > 9f) { t.position = p.Pos; t.rotation = p.Rot; return; }
-            t.position = Vector3.Lerp(t.position, p.Pos, k);
-            t.rotation = Quaternion.Slerp(t.rotation, p.Rot, k);
+            Vector3 tp = p.Pos; Quaternion tr = p.Rot;
+            Rigidbody rc = p.RelCar >= 0 ? VehicleSync.CarBody(p.RelCar) : null;
+            if (rc != null)
+            {
+                // Tenu dans une voiture : la cible suit cette voiture ici ; on rattrape le seul ecart dans la voiture.
+                Transform ct = rc.transform;
+                tp = ct.position + ct.rotation * p.RelPos; tr = ct.rotation * p.RelRot;
+                Vector3 cur = Quaternion.Inverse(ct.rotation) * (t.position - ct.position);
+                if ((cur - p.RelPos).sqrMagnitude > 4f) { t.position = tp; t.rotation = tr; return; }
+                t.position = ct.position + ct.rotation * Vector3.Lerp(cur, p.RelPos, k);
+                t.rotation = Quaternion.Slerp(t.rotation, tr, k);
+                return;
+            }
+            if ((tp - t.position).sqrMagnitude > 9f) { t.position = tp; t.rotation = tr; return; }
+            t.position = Vector3.Lerp(t.position, tp, k);
+            t.rotation = Quaternion.Slerp(t.rotation, tr, k);
         }
 
         static void Send(Prop p, int state, bool reliable = false)
@@ -367,7 +382,43 @@ namespace MWCoop
             var w = new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(state)
                 .Vec(p.Body.position).Quat(p.Body.rotation).Vec(p.Body.velocity);
             if (state == 0) InCarPose(p, w);
+            else if (state == 1 || state == 2) RidePose(p, w);
             Session.SendAll(w, reliable);
+        }
+
+        // Lache en passager dans la copie d'une voiture conduite ailleurs : pas de chute ici (la copie, deplacee a chaque
+        // image, ne l'emporterait pas) ; colle a la voiture, et sa pose dans la voiture part (fiable) : le conducteur le
+        // pose sur la vraie voiture, le laisse retomber et le transporte (Ride) -- comme ce qui est deja dans le coffre.
+        static bool DropInCopy(Prop p)
+        {
+            if (p.Body == null || !Session.Active) return false;
+            Rigidbody rc = VehicleSync.LocalRideBody();
+            int rci = VehicleSync.CarIndex(rc);
+            if (rci < 0 || !VehicleSync.IsCopy(rci)) return false;
+            Transform ct = rc.transform;
+            Quaternion inv = Quaternion.Inverse(ct.rotation);
+            Vector3 lp = inv * (p.Body.position - ct.position);
+            Quaternion lr = inv * p.Body.rotation;
+            p.LastSentPos = p.Body.position;
+            Session.SendAll(new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(0).Vec(p.Body.position).Quat(p.Body.rotation).Vec(Vector3.zero)
+                .U8(rci).Vec(lp).Quat(lr), true);
+            Glue(p, VehicleSync.Authority(rc), rci, lp, lr, Vector3.zero);
+            Log.Info("objet " + p.Id + " lache dans la copie de " + rc.name + " : pose envoyee au conducteur");
+            return true;
+        }
+
+        // Tenu ou lache par le joueur local assis dans une voiture (conducteur ou passager) : numero de la voiture, pose dans
+        // son repere, a la suite. Chez les autres, l'objet suit LEUR voiture a chaque image : en roulant, la pose du monde
+        // (prise sur une copie en retard) le montrait derriere la voiture, et le conducteur le lachait la -- objets qui
+        // sortaient de la voiture ou passaient a travers (retour d'un joueur, 08/10).
+        static void RidePose(Prop p, NetWriter w)
+        {
+            Rigidbody car = VehicleSync.LocalRideBody();
+            int ci = VehicleSync.CarIndex(car);
+            if (ci < 0) return;
+            Transform ct = car.transform;
+            Quaternion inv = Quaternion.Inverse(ct.rotation);
+            w.U8(ci).Vec(inv * (p.Body.position - ct.position)).Quat(inv * p.Body.rotation);
         }
 
         // Au repos dans une voiture : numero de la voiture, position et rotation dans son repere, a la suite.
@@ -596,14 +647,15 @@ namespace MWCoop
             int car = state == 3 ? r.U8() : -1;   // transporte : pos et rot sont dans la voiture 'car'
             // Au repos dans une voiture : sa pose dans la voiture 'car' suit (InCarPose).
             bool inCar = state == 0 && r.More;
+            bool rel = (state == 1 || state == 2) && r.More;   // tenu / lache depuis une voiture : pose dans son repere
             Vector3 lp = Vector3.zero;
             Quaternion lr = Quaternion.identity;
-            if (inCar) { car = r.U8(); lp = r.Vec(); lr = r.Quat(); }
+            if (inCar || rel) { car = r.U8(); lp = r.Vec(); lr = r.Quat(); }
             if (Session.IsHost)
             {
                 var w = new NetWriter(Msg.Prop).U8(who).Str(id).U8(state).Vec(pos).Quat(rot).Vec(vel);
                 if (state == 3) w.U8(car);
-                if (inCar) w.U8(car).Vec(lp).Quat(lr);
+                if (inCar || rel) w.U8(car).Vec(lp).Quat(lr);
                 Session.Broadcast(w, state == 0, who);
             }
             Prop p;
@@ -621,6 +673,8 @@ namespace MWCoop
             if (state == 3) { Glue(p, who, car, pos, rot, vel); return; }
             Unride(p);
             p.Pos = pos; p.Rot = rot; p.Vel = vel;
+            p.RelCar = rel && VehicleSync.CarBody(car) != null ? car : -1;
+            p.RelPos = lp; p.RelRot = lr;
             if (state != 0)
             {
                 if (p.RemoteBy != who) Log.Info("piece " + id + " deplacee par #" + who);
@@ -634,7 +688,13 @@ namespace MWCoop
             int ci = inCar ? car : VehicleSync.CarIndex(VehicleSync.CarUnder(p.Body));
             if (VehicleSync.DrivenHere(ci))
             {
-                if (p.RemoteBy == who) { p.RemoteBy = -1; p.Vel = VehicleSync.CarVelocity(ci); SetKinematic(p, false); }
+                if (p.RemoteBy == who)
+                {
+                    // Pose dans la voiture recue (repere de la voiture) : posee la sur la vraie voiture, a sa vitesse.
+                    Rigidbody dc = inCar ? VehicleSync.CarBody(car) : null;
+                    if (dc != null) { Transform dt = dc.transform; p.Body.transform.position = dt.position + dt.rotation * lp; p.Body.transform.rotation = dt.rotation * lr; }
+                    p.RemoteBy = -1; p.Vel = VehicleSync.CarVelocity(ci); SetKinematic(p, false);
+                }
                 return;
             }
             // Pose dans une voiture : sur notre voiture, ou qu'elle soit ici (son recalage l'emmenera ensuite).

@@ -369,6 +369,53 @@ namespace MWCoop
                 if (!Net.Session.IsHost && t > 45f && step == 2) { step = 3; Log.Info("autotest : banquette, releve " + CarDoors.TestGrab(car, "RearSeat")); }
                 if (t > 55f && !watchLogged) { watchLogged = true; Log.Info("autotest : banquette a 55 s : " + CarDoors.StateOf(car, "RearSeat")); }
             }
+            // [Test] Autotest=pousse : l'invite, contre la SORBET, la pousse (main forcee, 1,2 m/s vers l'avant) de 30 a 36 s ;
+            // chacun note la position de la voiture chaque seconde de 25 a 50 s (attendu : la meme, sans retour en arriere).
+            if (mode == "pousse")
+            {
+                string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                Rigidbody b = VehicleSync.Body(car);
+                if (!Net.Session.IsHost && b != null)
+                {
+                    if (t > 28f && step == 0)
+                    {
+                        step = 1;
+                        GameObject pl = GameObject.Find("PLAYER");
+                        var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                        if (cc != null) { cc.enabled = false; pl.transform.position = b.transform.TransformPoint(new Vector3(0f, 0f, -3.2f)); cc.enabled = true; }
+                        Log.Info("autotest : pousse, derriere la voiture");
+                    }
+                    Gestures.TestPush = t > 30f && t < 36f;
+                    if (t > 30f && t < 36f && !b.isKinematic) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 1.2f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                }
+                if (b != null && t > 25f && t < 50f && Time.realtimeSinceStartup >= rivLog)
+                {
+                    rivLog = Time.realtimeSinceStartup + 1f;
+                    Log.Info("autotest : pousse, voiture " + (b.isKinematic ? "copie" : "locale") + " en " + b.position.ToString("F2") + " v " + b.velocity.magnitude.ToString("F2"));
+                }
+            }
+            // [Test] Autotest=sondevolant : champs du volant (SteeringWheel) et du controleur de la voiture TestVoiture.
+            if (mode == "sondevolant" && t > 25f && !done)
+            {
+                done = true;
+                Rigidbody b = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"));
+                var sb = new System.Text.StringBuilder("autotest : sonde volant :");
+                if (b != null)
+                    foreach (MonoBehaviour m in b.GetComponentsInChildren<MonoBehaviour>(true))
+                    {
+                        if (m == null) continue;
+                        string tn = m.GetType().Name;
+                        if (tn != "SteeringWheel" && tn != "AxisCarController" && tn != "CarController") continue;
+                        sb.Append("\n  ").Append(tn).Append(" sur ").Append(Recon.Path(m.transform)).Append(" :");
+                        for (System.Type ty = m.GetType(); ty != null && ty != typeof(MonoBehaviour); ty = ty.BaseType)
+                            foreach (System.Reflection.FieldInfo fi in ty.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly))
+                            {
+                                object v = null; try { v = fi.GetValue(m); } catch { }
+                                sb.Append(' ').Append(ty.Name).Append('.').Append(fi.Name).Append('=').Append(v is float ? ((float)v).ToString("F2") : v is UnityEngine.Object ? ((UnityEngine.Object)v).name : v != null ? v.ToString() : "null");
+                            }
+                    }
+                Log.Info(sb.ToString());
+            }
             if (mode == "sondegfx" && t > 20f && !done)
             {
                 done = true;
@@ -403,7 +450,10 @@ namespace MWCoop
                     if (t > 30f && step == 3) { step = 4; Log.Info("autotest : starter " + Knobs.TestHold("Choke", 1.8f)); }
                     if (t > 32f && step == 4) { step = 5; Log.Info("autotest : frein a main " + Knobs.TestHold("HandBrake", 0f)); }
                     if (t > 36f && step == 5) { step = 6; Log.Info("autotest : commandes " + Knobs.Describe()); }
-                    VehicleSync.TestHorn(t > 45f && t < 52f);   // (klaxon annonce de 45 a 52 s : l'invite, ~15 s de retard, le voit de 30 a 37 s)
+                    VehicleSync.TestHorn(t > 45f && t < 52f);
+                    VehicleSync.TestSteer(t > 30f && t < 38f ? 0.6f : float.NaN);   // (braquage annonce : l'invite le voit vers 15-23 s)
+                    if (t > 40f && step == 6) { step = 7; Log.Info("autotest : " + VehicleSync.TestGear(car, 2)); }
+                    if (t > 42f && step == 7) { step = 8; Log.Info("autotest : " + VehicleSync.TestGear(car, 3)); }   // (klaxon annonce de 45 a 52 s : l'invite, ~15 s de retard, le voit de 30 a 37 s)
                 }
                 else
                 {
@@ -415,6 +465,28 @@ namespace MWCoop
                         Rigidbody b = VehicleSync.Body(car);
                         if (t > 20f && !teleported) { teleported = true; Log.Info("autotest : passager " + Seats.TestSit(car, 0)); }
                         if (b != null && t > 28f && t < 40f) cabGap = Mathf.Max(cabGap, (b.position - b.transform.position).magnitude);
+                        // Avatar du conducteur dans le repere de la voiture : etendue de ses positions en roulant (sauts).
+                        if (b != null && t > 12f && t < 26f)
+                            foreach (Avatar a in PlayerSync.Avatars)
+                                if (a.Root != null)
+                                {
+                                    Vector3 lp = b.transform.InverseTransformPoint(a.Root.transform.position);
+                                    if (!cabAv) { cabAv = true; cabMin = cabMax = lp; } else { cabMin = Vector3.Min(cabMin, lp); cabMax = Vector3.Max(cabMax, lp); }
+                                    if (Time.realtimeSinceStartup >= cabLogAt) { cabLogAt = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : passager, avatar " + lp.ToString("F2") + ", voiture v " + VehicleSync.RemoteSpeed(a.Player.Id).ToString("F1")); }
+                                }
+                        if (t > 17f && t < 26f && Time.realtimeSinceStartup >= cabWheelAt)
+                        {
+                            cabWheelAt = Time.realtimeSinceStartup + 1f;
+                            string hands = ""; foreach (Avatar a in PlayerSync.Avatars) hands = a.HandsState();
+                            Log.Info("autotest : passager, " + VehicleSync.WheelState(car) + " ; " + hands);
+                        }
+                        if (t > 24f && t < 30f && Time.realtimeSinceStartup >= cabGearAt)
+                        {
+                            cabGearAt = Time.realtimeSinceStartup + 0.1f;
+                            string hands = ""; foreach (Avatar a in PlayerSync.Avatars) hands = a.HandsState();
+                            Log.Info("autotest : passager, " + VehicleSync.GearState(car) + " ; " + hands);
+                        }
+                        if (t > 26f && !cabAvLogged) { cabAvLogged = true; Log.Info("autotest : passager, avatar du conducteur dans la voiture (en roulant) : etendue " + (cabMax - cabMin).ToString("F3") + " m, de " + cabMin.ToString("F2") + " a " + cabMax.ToString("F2")); }
                         if (t > 34f && !sleepWatch) { sleepWatch = true; Log.Info("autotest : passager, " + VehicleSync.HornState(car)); }
                         if (t > 41f && !foodMade) { foodMade = true; Log.Info("autotest : passager, apres : " + VehicleSync.HornState(car)); }
                         if (t > 40f && !watchLogged) { watchLogged = true; Log.Info("autotest : passager, ecart pose physique / affichee max " + (cabGap * 100f).ToString("F1") + " cm, assis " + Seats.Seated + ", voiture " + (b != null ? (b.isKinematic ? "copie " : "locale ") + b.interpolation : "?")); }
@@ -850,6 +922,7 @@ namespace MWCoop
             if (mode == "passager2" && t > 31f && step == 1) { step = 2; Log.Info("autotest : entree " + Seats.TestEnter()); }
             if (mode == "passager2" && t > 50f && step == 2) { step = 3; Log.Info("autotest : " + Seats.TestLeave()); }
             if (mode == "passager2" && Time.frameCount % 120 == 0 && t > 26f) Log.Info("autotest : place " + Seats.PlaceDans(Config.Get("Test", "TestVoiture", "SORBET")));
+            if (mode == "sondeplaces" && t > 30f && !done) { done = true; Log.Info("autotest : places" + Seats.ProbeSeats(Config.Get("Test", "TestVoiture", "GIFU"))); Log.Info("autotest : coupe" + Seats.ProbeGrid(Config.Get("Test", "TestVoiture", "GIFU"))); }
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "TestPlace", 0))); }
             // [Test] Autotest=ceinture : l'invite s'assoit a l'avant de [Test] TestVoiture, attache sa ceinture a 36 s ;
             // l'hote le regarde (CameraAvatar) et voit la ceinture bouclee (journal + captures).
@@ -1160,6 +1233,9 @@ namespace MWCoop
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
         static float rivLog, cabGap;
+        static bool cabAv, cabAvLogged;
+        static float cabLogAt, cabWheelAt, cabGearAt;
+        static Vector3 cabMin, cabMax;
         static int rivStep, rivPush;
         static readonly float[] RivAt = { 36f, 37f, 40f, 44f, 45f, 48f, 52f, 60f, 66f, 74f };
         static readonly string[] RivPart = { "DoorLeft", "DoorLeft", "DoorLeft", "DoorRight", "DoorRight", "DoorRight", "Bootlid", "Bootlid", "Hood", "Hood" };
