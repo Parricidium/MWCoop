@@ -56,9 +56,9 @@ namespace MWCoop
         static void Scan()
         {
             int before = probes.Count;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || seen.Contains(f) || !f.transform.root.gameObject.activeInHierarchy) continue;
                 string root = f.transform.root.name;
                 if (root == "PLAYER" || root == "GUI" || root.StartsWith("MWCoop")) continue;

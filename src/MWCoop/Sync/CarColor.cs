@@ -167,9 +167,9 @@ namespace MWCoop
         static Dictionary<Transform, GameObject> StockParts(Transform root)
         {
             var map = new Dictionary<Transform, GameObject>();
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.FsmName != "Spawn" || f.hideFlags != HideFlags.None) continue;
                 FsmGameObject pre = f.FsmVariables.FindFsmGameObject("Prefab"), vinp = f.FsmVariables.FindFsmGameObject("VINP");
                 if (pre == null || vinp == null || pre.Value == null || vinp.Value == null || !pre.Value.name.StartsWith("VIN")) continue;
@@ -331,9 +331,9 @@ namespace MWCoop
         {
             var points = new HashSet<Transform>();
             var diag = new System.Text.StringBuilder();
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Data") continue;
                 FsmGameObject ip = f.FsmVariables.FindFsmGameObject("InstallPoint");
                 FsmString id = f.FsmVariables.FindFsmString("ID");

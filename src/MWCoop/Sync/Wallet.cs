@@ -721,9 +721,9 @@ namespace MWCoop
         {
             envs.Clear();
             var keys = new HashSet<string>();
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (!IsEnvelope(f) || !f.transform.root.gameObject.activeInHierarchy) continue;   // (modeles : racine inactive)
                 string key = Recon.Path(f.transform);
                 if (key == JokkePay || !keys.Add(key)) continue;

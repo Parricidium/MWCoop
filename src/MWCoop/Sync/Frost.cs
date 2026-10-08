@@ -91,9 +91,9 @@ namespace MWCoop
         {
             int before = cars.Count;
             var scrapes = new List<PlayMakerFSM>();
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 string fn = f.FsmName;
                 if (fn != "Freezing" && fn != "GlassFrosting" && fn != "Scrape") continue;
                 if (f.hideFlags != HideFlags.None || !f.transform.root.gameObject.activeInHierarchy) continue;   // modeles (prefabs)

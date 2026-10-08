@@ -368,6 +368,9 @@ namespace MWCoop
             R("IndicateurRapport", "Rapport engag\u00E9 \u00E0 l'\u00E9cran", "Gear on screen", 1, 3),
             R("PoussiereTrafic", "Poussi\u00E8re de la circulation", "Traffic dust", 1, 3),
             R("TracesTrafic", "Traces de pneus de la circulation", "Traffic skid marks", 0, 3),
+            // Pseudos des autres joueurs (Hud) : caches, ou montres jusqu'a cette distance (demande d'un joueur, 08/10).
+            S("Pseudos", "Pseudos des joueurs", "Player names", 120, 3, new[] { 0, 30, 60, 120, 250 },
+              new[] { "Cach\u00E9s", "30 m", "60 m", "120 m", "250 m" }, new[] { "Hidden", "30 m", "60 m", "120 m", "250 m" }),
         };
 
         public class Preset { public string Fr, En; public int[] V; }

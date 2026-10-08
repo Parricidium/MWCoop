@@ -332,6 +332,43 @@ namespace MWCoop
                     Log.Info(sb.ToString());
                 }
             }
+            // [Test] Autotest=klaxon : objets "horn" de la scene (chemin, automates et leurs etats, sources audio).
+            if (mode == "klaxon" && t > 25f && !done)
+            {
+                done = true;
+                var sb = new System.Text.StringBuilder("autotest : klaxons :");
+                foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Transform)))
+                {
+                    var tr = (Transform)o;
+                    if (tr.hideFlags != HideFlags.None || tr.name.ToLowerInvariant().IndexOf("horn") < 0) continue;
+                    sb.Append("\n  ").Append(Recon.Path(tr)).Append(tr.gameObject.activeInHierarchy ? "" : " [off]");
+                    foreach (PlayMakerFSM f in tr.GetComponents<PlayMakerFSM>())
+                    {
+                        sb.Append("\n    FSM ").Append(f.FsmName).Append(" etat=").Append(f.ActiveStateName).Append(" :");
+                        try { foreach (HutongGames.PlayMaker.FsmState st in f.FsmStates)
+                        {
+                            sb.Append(" [").Append(st.Name);
+                            foreach (HutongGames.PlayMaker.FsmTransition x in st.Transitions) sb.Append(' ').Append(x.EventName).Append("->").Append(x.ToState);
+                            sb.Append(" |");
+                            foreach (HutongGames.PlayMaker.FsmStateAction ac in st.Actions) sb.Append(' ').Append(ac.GetType().Name);
+                            sb.Append(']');
+                        } } catch (System.Exception) { sb.Append(' ').Append('?'); }
+                    }
+                    foreach (AudioSource au in tr.GetComponents<AudioSource>()) sb.Append("\n    audio ").Append(au.clip != null ? au.clip.name : "-").Append(au.loop ? " boucle" : "").Append(" 3D ").Append(au.spatialBlend.ToString("F1"));
+                }
+                Log.Info(sb.ToString());
+            }
+            // [Test] Autotest=banquette : banquette rabattable de la SORBET suivie pareil chez les deux (CarDoors), l'invite la
+            // rabat a 30 s et la releve a 45 s ; chacun note son etat a 25, 40 et 55 s.
+            if (mode == "banquette")
+            {
+                string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                if (t > 25f && step == 0) { step = 1; Log.Info("autotest : banquette, suivis : " + CarDoors.ListFor(car) + " ; " + CarDoors.StateOf(car, "RearSeat")); }
+                if (!Net.Session.IsHost && t > 30f && step == 1) { step = 2; Log.Info("autotest : banquette, rabat " + CarDoors.TestOpen(car, true, "RearSeat")); }
+                if (t > 40f && step <= 2 && !done) { done = true; Log.Info("autotest : banquette a 40 s : " + CarDoors.StateOf(car, "RearSeat")); }
+                if (!Net.Session.IsHost && t > 45f && step == 2) { step = 3; Log.Info("autotest : banquette, releve " + CarDoors.TestGrab(car, "RearSeat")); }
+                if (t > 55f && !watchLogged) { watchLogged = true; Log.Info("autotest : banquette a 55 s : " + CarDoors.StateOf(car, "RearSeat")); }
+            }
             if (mode == "sondegfx" && t > 20f && !done)
             {
                 done = true;
@@ -366,8 +403,24 @@ namespace MWCoop
                     if (t > 30f && step == 3) { step = 4; Log.Info("autotest : starter " + Knobs.TestHold("Choke", 1.8f)); }
                     if (t > 32f && step == 4) { step = 5; Log.Info("autotest : frein a main " + Knobs.TestHold("HandBrake", 0f)); }
                     if (t > 36f && step == 5) { step = 6; Log.Info("autotest : commandes " + Knobs.Describe()); }
+                    VehicleSync.TestHorn(t > 45f && t < 52f);   // (klaxon annonce de 45 a 52 s : l'invite, ~15 s de retard, le voit de 30 a 37 s)
                 }
-                else if ((t > 36f && step == 0) || (t > 44f && step == 1))
+                else
+                {
+                    // [Test] CabinePassager=1 : l'invite s'assoit a l'avant a 20 s ; de 28 a 40 s (voiture qui roule), ecart
+                    // maximal entre la pose physique de la copie et sa pose affichee (camera du passager) -- 0 attendu
+                    // depuis 0.54 (copie deplacee a chaque image), jusqu'a vitesse x 20 ms avant.
+                    if (Config.GetInt("Test", "CabinePassager", 0) != 0)
+                    {
+                        Rigidbody b = VehicleSync.Body(car);
+                        if (t > 20f && !teleported) { teleported = true; Log.Info("autotest : passager " + Seats.TestSit(car, 0)); }
+                        if (b != null && t > 28f && t < 40f) cabGap = Mathf.Max(cabGap, (b.position - b.transform.position).magnitude);
+                        if (t > 34f && !sleepWatch) { sleepWatch = true; Log.Info("autotest : passager, " + VehicleSync.HornState(car)); }
+                        if (t > 41f && !foodMade) { foodMade = true; Log.Info("autotest : passager, apres : " + VehicleSync.HornState(car)); }
+                        if (t > 40f && !watchLogged) { watchLogged = true; Log.Info("autotest : passager, ecart pose physique / affichee max " + (cabGap * 100f).ToString("F1") + " cm, assis " + Seats.Seated + ", voiture " + (b != null ? (b.isKinematic ? "copie " : "locale ") + b.interpolation : "?")); }
+                    }
+                }
+                if (!Net.Session.IsHost && ((t > 36f && step == 0) || (t > 44f && step == 1)))
                 {
                     step++;
                     Log.Info("autotest : commandes " + Knobs.Describe());
@@ -1106,7 +1159,7 @@ namespace MWCoop
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
-        static float rivLog;
+        static float rivLog, cabGap;
         static int rivStep, rivPush;
         static readonly float[] RivAt = { 36f, 37f, 40f, 44f, 45f, 48f, 52f, 60f, 66f, 74f };
         static readonly string[] RivPart = { "DoorLeft", "DoorLeft", "DoorLeft", "DoorRight", "DoorRight", "DoorRight", "Bootlid", "Bootlid", "Hood", "Hood" };

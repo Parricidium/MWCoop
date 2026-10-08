@@ -34,6 +34,7 @@ enum {
     UI_SET_STEAM, UI_SET_IP, UI_SET_PORTM, UI_SET_PORTP, UI_SET_FOLDER, UI_SET_BUY, UI_SET_MODSAUTO,
     UI_API_DOC = 240, UI_API_SRC, UI_API_DIR, UI_API_COPY, UI_API_EX0, UI_API_EX1,
     UI_LOG_CLEAR = 250,           // JOURNAUX : tout supprimer (parties rangees)
+    UI_GFX_GROUP = 2580,          // + groupe : plier / deplier une categorie de GRAPHISMES
     UI_GFX_PRESET = 2590,         // + prereglage
     UI_GFX = 2600,                // + ligne * 3 + (0 ligne, 1 fleche gauche, 2 fleche droite)
     UI_NOTE = 300,                // + i : version i de la liste

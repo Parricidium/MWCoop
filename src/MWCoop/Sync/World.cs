@@ -62,9 +62,9 @@ namespace MWCoop
             nextBedScan = Time.realtimeSinceStartup + 20f;
             beds.Clear();
             passOut = null;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Activate") continue;
                 bool bed = f.gameObject.name == "SleepTrigger", pass = f.gameObject.name == "PassOut";
                 if ((bed || pass) && f.FsmVariables.FindFsmFloat("TimeScaleSleep") != null)

@@ -29,9 +29,9 @@ namespace MWCoop
 
         static void Scan()
         {
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || seen.Contains(f) || f.FsmName == "Data" || f.FsmName == "Paint") continue;
                 string id = PartIdOf(f.transform);
                 if (id.Length == 0) continue;

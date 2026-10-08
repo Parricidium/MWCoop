@@ -509,7 +509,7 @@ static void DrawHeader(Graphics &g)
     case TAB_NOTES: title = T(L"Nouveautés", L"What's new"); sub = T(L"Ce qui change à chaque version", L"What changes in each version"); break;
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: title = T(L"Réglages", L"Settings"); sub = T(L"Gardés dans mwcoop-lanceur.ini et MWCoop\\mwcoop.ini", L"Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini"); break;
-    case TAB_GFX: title = T(L"Graphismes", L"Graphics"); sub = T(L"Ton affichage à toi : les autres joueurs ne voient aucune différence", L"Your own display: the other players see no difference"); break;
+    case TAB_GFX: title = T(L"Graphismes", L"Graphics"); sub = T(L"Pour toi seul · en partie : menu F10 > Graphismes", L"Just for you · in game: F10 menu > Graphics"); break;
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     }
     // commandes de droite : fermer, reduire, theme, langue, puis celles de la page
@@ -1314,6 +1314,7 @@ static bool UiClick(int id)
         else { g_logDelKey = L"**"; g_logDelT = GetTickCount(); SetStatus(K_WARN, T(L"Clique encore pour mettre toutes les parties rangées à la corbeille", L"Click again to move every stored session to the Recycle Bin")); }
         return true;
     }
+    if (id >= UI_GFX_GROUP && id < UI_GFX_GROUP + 10) { GfxToggleGroup(id - UI_GFX_GROUP); return true; }
     if (id >= UI_GFX_PRESET && GfxClick(id)) return true;
     return false;
 }

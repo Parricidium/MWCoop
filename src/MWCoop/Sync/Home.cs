@@ -279,9 +279,9 @@ namespace MWCoop
         static void ScanHolders()
         {
             int added = 0;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Use" || !f.gameObject.name.StartsWith("fuse holder")) continue;
                 if (!f.transform.root.gameObject.activeInHierarchy) continue;   // modeles (prefabs)
                 bool known = false;
@@ -434,9 +434,9 @@ namespace MWCoop
 
         static void ScanStatus()
         {
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Status" || f.gameObject.name != "HouseElectricity") continue;
                 if (!f.transform.root.gameObject.activeInHierarchy) continue;
                 statuses.Add(new Status { Key = Recon.Path(f.transform), F = f });

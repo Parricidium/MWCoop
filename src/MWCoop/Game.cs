@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace MWCoop
@@ -107,21 +107,48 @@ namespace MWCoop
             return null;
         }
 
+        // Tous les automates (actifs ou non), releve partage par les modules qui balaient tout periodiquement : un seul
+        // Resources.FindObjectsOfTypeAll toutes les 3 s au plus (70-90 ms chacun sur une grande scene ; une douzaine de
+        // modules le faisaient chacun de leur cote). Un automate detruit depuis le releve vaut null (a sauter).
+        static Object[] allFsms;
+        static float allFsmsAt = -100f;
+        static int allFsmsLevel = -1, allFsmsLogs;
+        public static Object[] AllFsms()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (allFsms == null || now - allFsmsAt > 3f || now < allFsmsAt || allFsmsLevel != Application.loadedLevel)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                allFsms = Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)); allFsmsAt = now; allFsmsLevel = Application.loadedLevel;
+                if (sw.ElapsedMilliseconds > 15 && allFsmsLogs++ < 5) Log.Info("automates : releve complet " + allFsms.Length + " en " + sw.ElapsedMilliseconds + " ms");
+            }
+            return allFsms;
+        }
+
         static List<GameObject> roots;
         static int rootsFrame = -1;
+        static float rootsAt = -100f;
 
         // Objet par chemin "Racine/Enfant/...", actif ou non (GameObject.Find ne voit que les actifs).
         public static GameObject FindAny(string path)
         {
             string[] parts = path.Split('/');
-            // Racines relevees une fois par image (un message peut demander des dizaines d'objets).
-            if (rootsFrame != Time.frameCount || roots == null) { roots = Recon.SceneRoots(); rootsFrame = Time.frameCount; }
-            foreach (GameObject root in roots)
+            // Racines (Resources.FindObjectsOfTypeAll : toute la memoire, couteux) gardees 10 s ; relevees de nouveau
+            // (une fois par image au plus) quand l'objet n'est pas trouve -- racine creee ou detruite entre-temps. Avant :
+            // relevees a chaque image d'appel, plusieurs fois par seconde en partie (courses, garages, messages).
+            for (int pass = 0; pass < 2; pass++)
             {
-                if (root == null || root.name != parts[0]) continue;
-                Transform t = root.transform;
-                for (int i = 1; i < parts.Length && t != null; i++) t = t.Find(parts[i]);
-                if (t != null) return t.gameObject;
+                float now = Time.realtimeSinceStartup;
+                if (roots == null || now - rootsAt > 10f || (pass == 1 && rootsFrame != Time.frameCount))
+                { roots = Recon.SceneRoots(); rootsFrame = Time.frameCount; rootsAt = now; }
+                else if (pass == 1) break;
+                foreach (GameObject root in roots)
+                {
+                    if (root == null || root.name != parts[0]) continue;
+                    Transform t = root.transform;
+                    for (int i = 1; i < parts.Length && t != null; i++) t = t.Find(parts[i]);
+                    if (t != null) return t.gameObject;
+                }
             }
             return null;
         }

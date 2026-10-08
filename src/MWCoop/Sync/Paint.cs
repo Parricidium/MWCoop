@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -19,6 +19,7 @@ namespace MWCoop
     public static class Paint
     {
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
+        static readonly HashSet<PlayMakerFSM> rejected = new HashSet<PlayMakerFSM>();   // automates Paint sans REPAINT : plus revus
         static float nextScan = -1, loadedAt;
         static bool applying;
 
@@ -35,7 +36,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            hooked.Clear();
+            hooked.Clear(); rejected.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 9f : -1;
         }
@@ -43,16 +44,20 @@ namespace MWCoop
         public static void Update()
         {
             if (nextScan < 0 || Time.realtimeSinceStartup < nextScan) return;
-            nextScan = Time.realtimeSinceStartup + 15f;
+            // (Toutes les 15 s les 2 premieres minutes, puis 45 s : le releve de tous les automates coutait 70-90 ms.)
+            nextScan = Time.realtimeSinceStartup + (Time.realtimeSinceStartup - loadedAt < 120f ? 15f : 45f);
             int n = 0;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
-                if (f.hideFlags != HideFlags.None || f.FsmName != "Paint" || hooked.Contains(f)) continue;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
+                if (f.FsmName != "Paint" || f.hideFlags != HideFlags.None || hooked.Contains(f) || rejected.Contains(f)) continue;
                 FsmState s = null;
                 foreach (FsmTransition tr in f.Fsm.GlobalTransitions)
                     if (tr.EventName == "REPAINT") s = f.Fsm.GetState(tr.ToState);
-                if (s == null) continue;
+                if (s == null) { rejected.Add(f); continue; }
+                // (Objet jamais actif : ses actions ne sont pas chargees -- les lire les chargeait a grands frais puis
+                // echouait, a chaque releve, pour chaque piece en carton : 65-80 ms. Accroche des que l'objet a vecu.)
+                if (!s.IsInitialized) continue;
                 try
                 {
                     var list = new List<FsmStateAction>(s.Actions);

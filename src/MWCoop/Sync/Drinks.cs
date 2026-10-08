@@ -177,7 +177,9 @@ namespace MWCoop
             if (src == null) return null;
             GameObject go = (GameObject)Object.Instantiate(src.gameObject);
             go.name = "MWCoop-Boisson-" + Names[i];
-            foreach (SkinnedMeshRenderer s in go.GetComponentsInChildren<SkinnedMeshRenderer>(true)) Object.Destroy(s.gameObject == go ? (Object)s : s.gameObject);
+            // (DestroyImmediate : l'avatar mesure la bouteille tout de suite ; avec Destroy, la main animee comptait encore dans sa taille
+            // et son axe -- bouteille trop petite, decalee ou de travers a la bouche, retour d'un joueur 08/10.)
+            foreach (SkinnedMeshRenderer s in go.GetComponentsInChildren<SkinnedMeshRenderer>(true)) if (s != null) Object.DestroyImmediate(s.gameObject == go ? (Object)s : s.gameObject);
             foreach (Animation a in go.GetComponentsInChildren<Animation>(true)) Object.Destroy(a);
             foreach (Collider c in go.GetComponentsInChildren<Collider>(true)) Object.Destroy(c);
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true)) Object.Destroy(f);

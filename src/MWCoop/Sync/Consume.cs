@@ -463,9 +463,9 @@ namespace MWCoop
             int n = 0;
             GameObject sp = GameObject.Find("/Spawner");   // la racine (un autre objet porte ce nom plus bas)
             Transform spawner = sp != null ? sp.transform : null;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None) continue;
                 // Createurs d'objets a observer : les distributeurs (Spawner/...) tout de suite, les autres peu a
                 // peu. Objet inactif : ses actions ne sont pas chargees ; observe quand il s'active.

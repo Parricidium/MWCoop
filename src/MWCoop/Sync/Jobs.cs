@@ -118,7 +118,7 @@ namespace MWCoop
         {
             if (f.FsmName != "Use") return false;
             Fsm m = f.Fsm;
-            return m.GetState("Open door") != null && m.GetState("Open door 2") != null && m.GetState("Close door") != null
+            return m.GetState("Open door") != null && (m.GetState("Open door 2") != null || m.GetState("Open door 3") != null) && m.GetState("Close door") != null
                    || m.GetState("Open hood") != null && m.GetState("Close hood") != null;
         }
 
@@ -220,6 +220,11 @@ namespace MWCoop
             if (!specialsScanned) ScanSpecials();
             int added = 0;
             var seen = new Dictionary<string, int>();
+            // Joueur assis : PLAYER est range sous la voiture. Ses automates a lui (vetements, boire, fumer...) ne sont
+            // pas ceux de la voiture : jamais suivis -- rejoues chez les autres, ils jouaient l'animation et le fondu
+            // d'ecran du changement de vetements chez TOUS (retour d'un joueur, 08/10 : Clothing::Logic sous SORBET/...).
+            GameObject plGo = GameObject.Find("PLAYER");
+            Transform playerT = plGo != null ? plGo.transform : null;
             foreach (KeyValuePair<GameObject, bool> root in RootsNow())
             {
                 GameObject r = root.Key;
@@ -228,6 +233,7 @@ namespace MWCoop
                 foreach (PlayMakerFSM f in r.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
                     if (!vehicle && UnderJobCar(f.transform)) continue;   // taxi : vu comme vehicule
+                    if (playerT != null && f.transform.IsChildOf(playerT)) continue;
                     if (reserved.Contains(f)) continue;                   // bois, fosses, fendeuse (meme attelee)
                     if (f.FsmName == "Use" && f.gameObject.name == "FeedLog") { ReserveFeed(f); continue; }   // (fendeuse deja attelee au 1er releve)
                     // Ceintures du conducteur : l'etat de CHAQUE joueur (PlayerSeatbeltsOn), jamais rejoue (Seats montre
@@ -246,7 +252,11 @@ namespace MWCoop
                             continue;
                         }
                         string on = f.gameObject.name;
-                        bool keep = !((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || (!Persistent(f) && !control))
+                        // (Vehicule : ce que CarDoors prend lui revient TOUJOURS, sauvegarde ou non -- la banquette rabattable
+                        // de la SORBET, sauvegardee, etait prise ici chez l'un et par CarDoors chez l'autre selon l'ordre des
+                        // releves : jamais retrouvee chez l'autre, rabattue chez certains seulement ; retour d'un joueur, 08/10.)
+                        bool keep = !((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || (!Persistent(f) && !control)
+                                      || (vehicle && (CarDoorsLike(f) || CarDoors.Tracks(f))))
                                     && !Interactions.Tracks(f) && !Interactions.Wants(f)
                                     && !(on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r));   // objets : Props/Interactions
                         c = new Classified { Path = keep ? Recon.Path(f.transform) + "::" + f.FsmName : null, Control = control };
@@ -452,6 +462,7 @@ namespace MWCoop
             string key = r.Str();
             if (key.Length > 0 && key[0] == '@') { OnSpecial(who, key, r); return; }   // bois, fosses (voir plus bas)
             string prev = r.Str(), ev = r.Str(), state = r.Str();
+            if (key.Contains("/PLAYER/")) return;   // (automate personnel d'un joueur assis, envoye par une version d'avant : ni relaye ni rejoue)
             var ints = new List<KeyValuePair<string, int>>();
             var floats = new List<KeyValuePair<string, float>>();
             var bools = new List<KeyValuePair<string, bool>>();
@@ -1424,6 +1435,7 @@ namespace MWCoop
             string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
             PlayMakerFSM key = KeyOf(car, "Use", "Motor starting"), starter = KeyOf(car, "Starter", "Running");
             int hold = Config.GetInt("Test", "CleTenue", 3);   // secondes de demarreur (CORRIS froide : plus)
+            if (t > 31f && t < 45f + hold + 20f && t >= keyLog)
             {
                 keyLog = Mathf.Floor(t) + 1f;
                 Log.Info("autotest : cle " + (key != null ? key.ActiveStateName : "?") + ", starter " + (starter != null ? starter.ActiveStateName : "?")
@@ -1434,7 +1446,13 @@ namespace MWCoop
                 if (t > 45f && keyStep == 0) { keyStep = 1; Log.Info("autotest : cle, invite a cote -> " + VehicleSync.TestEnter(car, false)); }
                 if (t > 46f && keyStep == 1) { keyStep = 2; Log.Info("autotest : cle, invite volant -> " + VehicleSync.TestEnter(car, true)); }
                 if (t > 47f && keyStep == 2) { keyStep = 3; Log.Info("autotest : cle, invite volant -> " + VehicleSync.TestEnter(car, true)); }
-                if (t > 44f && t < 62f && t >= keyLog) { keyLog = Mathf.Floor(t) + 1f; Log.Info("autotest : cle (invite) " + key.ActiveStateName + ", starter " + (starter != null ? starter.ActiveStateName : "?")); }
+                if (t > 44f && t < 62f && t >= keyLog)
+                {
+                    keyLog = Mathf.Floor(t) + 1f;
+                    Rigidbody vb = VehicleSync.Body(car);
+                    Log.Info("autotest : cle (invite) " + key.ActiveStateName + ", starter " + (starter != null ? starter.ActiveStateName : "?")
+                             + (vb != null ? ", voiture " + (vb.isKinematic ? "copie" : "locale") + " v " + vb.velocity.magnitude.ToString("F2") + " vy " + vb.velocity.y.ToString("F2") + " rot " + vb.angularVelocity.magnitude.ToString("F2") + " y " + vb.position.y.ToString("F2") : ""));
+                }
             }
             if (!Session.IsHost || key == null) return;
             if (t > 22f && keyStep == 0) { keyStep = 1; Log.Info("autotest : cle, volant -> " + VehicleSync.TestEnter(car, false) + " / " + VehicleSync.TestEnter(car, true)); }

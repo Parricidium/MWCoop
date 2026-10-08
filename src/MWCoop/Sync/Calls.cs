@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -84,7 +84,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            for (int i = 0; i < lines.Length; i++) lines[i] = null;
+            for (int i = 0; i < lines.Length; i++) lines[i] = null; ringCapped = false; ringNext = 0f;
             spawners[0] = spawners[1] = null;
             spawnerHooked[0] = spawnerHooked[1] = false;
             amisList = postBox = null; numbers = null;
@@ -556,6 +556,36 @@ namespace MWCoop
             public float HostSeen = -1, WarnAt;
             public string HostState = "";
         }
+
+        // Sonnerie : MasterAudio, groupe HouseFoley, variation phone_ring, jouee a l'emplacement du telephone par 'Ring'
+        // (RingingNEW / RingingOLD). Dans le jeu seul, la logique du telephone s'eteint quand on s'eloigne ; en coop elle
+        // tourne pour qui est pres (et chez l'hote toujours), et la sonnerie s'entendait de tres loin (retour d'un
+        // joueur, 08/10). Ses sources (variations sous MasterAudio) : son en 3D, baisse lineaire, plus rien au-dela de
+        // 35 m. Cherchees une fois (et revues tant qu'aucune n'est trouvee).
+        const float RingRange = 35f;
+        static bool ringCapped;
+        static float ringNext;
+        static void CapRing(Phone p)
+        {
+            if (ringCapped || Time.realtimeSinceStartup < ringNext) return;
+            ringNext = Time.realtimeSinceStartup + 20f;
+            int n = 0;
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(AudioSource)))
+            {
+                var a = (AudioSource)o;
+                if (a.hideFlags != HideFlags.None) continue;
+                string nm = a.gameObject.name.ToLowerInvariant(), cn = a.clip != null ? a.clip.name.ToLowerInvariant() : "";
+                if (nm.IndexOf("phone_ring") < 0 && cn.IndexOf("phone_ring") < 0) continue;
+                a.spatialBlend = 1f;
+                a.rolloffMode = AudioRolloffMode.Linear;
+                a.minDistance = Mathf.Min(a.minDistance, 2f);
+                a.maxDistance = RingRange;
+                n++;
+            }
+            if (n == 0) return;
+            ringCapped = true;
+            Log.Info("appels : sonnerie des telephones bornee a " + RingRange + " m (" + n + " sources)");
+        }
         static readonly Phone[] phones = new Phone[2];
         static float nextPhone, nextPhoneSend;
         static string phoneSig = "";
@@ -609,6 +639,7 @@ namespace MWCoop
                 {
                     Phone p = PhoneAt(i);
                     if (p == null) continue;
+                    CapRing(p);
                     if (p.Go.activeInHierarchy && p.Ring != null && !p.Ring.enabled)
                     {
                         // Objet allume, automate arrete (par une autre logique) : la logique de l'hote tourne quelle que soit la distance.
@@ -646,6 +677,7 @@ namespace MWCoop
             {
                 Phone p = PhoneAt(i);
                 if (p == null || p.Ring == null) continue;
+                CapRing(p);
                 float d = LocalDistance(p.Go.transform.position);
                 bool want = !p.HostRuns && p.Go.activeInHierarchy && d < (p.RunsHere ? KeepDist : TakeDist);
                 if (want != p.RunsHere)

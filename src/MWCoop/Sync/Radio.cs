@@ -28,9 +28,9 @@ namespace MWCoop
             if (found) return ch != null;
             if (Time.realtimeSinceStartup < nextFind) return false;
             nextFind = Time.realtimeSinceStartup + 5f;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Fetch" || f.gameObject.name != "RadioChannels") continue;
                 Transform t = f.transform;
                 Transform c1 = t.Find("Channel1"), fk = t.Find("Folk");
