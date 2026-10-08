@@ -9,7 +9,8 @@ namespace MWCoop
     //  - places : d'apres les yeux du conducteur (DriverHeadPivot + 27 cm vers l'avant, mesure au volant
     //    de la SORBET) : avant droite en symetrique ; banquette a l'arriere pour SORBET, CORRIS, BACHGLOTZ
     //    (demande de JD, 08/10 : une voiture, banquette a 85 cm comme les autres, devant l'essieu arriere) et le
-    //    taxi (MACHTWAGEN, sous JOBS/TAXIJOB : voitures de VehicleSync, par leur cle) ; GIFU : le passager seul ;
+    //    taxi (MACHTWAGEN, sous JOBS/TAXIJOB : voitures de VehicleSync, par leur cle) ; GIFU : le passager et trois
+    //    places sur la couchette de la cabine (08/10) ;
     //  - on entre dans l'habitacle jusqu'au siege (pieds sur le plancher, a moins de 38 cm de cote et
     //    50 cm en long de la place) : l'icone passager du jeu s'affiche (GUIpassenger, comme le volant) ;
     //  - ENTREE : le joueur est accroche a la voiture LA OU IL EST (pas de teleportation), tourne vers
@@ -31,7 +32,7 @@ namespace MWCoop
     //    (DriverBelt/HandleUpPivot) cachee.
     public static class Seats
     {
-        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; }
+        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f; }
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
         // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
         // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
@@ -102,14 +103,46 @@ namespace MWCoop
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + 0.06f, d.z - 0.85f) });
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-d.x, d.y + 0.06f, d.z - 0.85f) });
                 }
+                if (n.StartsWith("GIFU"))
+                {
+                    // Couchette de la cabine (derriere les sieges) : trois places assises cote a cote (demande d'un joueur, 08/10).
+                    float bz = d.z + GifuBed.z, by = d.y + GifuBed.y;
+                    // (On ne tient pas debout derriere les sieges : zone large, depuis les portieres ; la place avant, plus
+                    // proche, passe d'abord tant qu'elle est libre.)
+                    for (int k = 0; k < 3; k++) seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1 + k, Head = new Vector3((k - 1) * GifuBed.x, by, bz), ZoneX = 1.1f, ZoneZ = 1.1f });
+                }
             }
             if (was != null)
                 foreach (Seat x in seats) if (x.Car == was.Car && x.Index == was.Index) { current = x; break; }
             Log.Info("places passagers : " + seats.Count);
         }
 
+        // Couchette de la GIFU par rapport aux yeux du conducteur : ecart entre les places (x), hauteur (y), recul (z). Coupe de\r\n        // la cabine (essai sondeplaces) : couchette a 1,75 m (repere du camion), toit 2,60, paroi arriere z 1,9, yeux du\r\n        // conducteur 2,05 / z 2,99. Dessous du toit a 2,42 : 67 cm seulement au-dessus de la couchette -> yeux juste sous le toit\r\n        // (2,28), dos a la paroi ; assis tasse (le corps s'enfonce un peu dans la couchette).
+        static Vector3 GifuBed { get { return ParseV(Config.Get("Test", "GifuCouchette", ""), new Vector3(0.5f, 0.23f, -0.80f)); } }
+        static Vector3 ParseV(string s, Vector3 def)
+        {
+            string[] c = s.Split(',');
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            float x, y, z;
+            if (c.Length == 3 && float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out x) && float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out y) && float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out z)) return new Vector3(x, y, z);
+            return def;
+        }
+
         // Yeux du conducteur par rapport a DriverHeadPivot (repere voiture), mesures au volant de la SORBET.
         static readonly Vector3 EyeFromPivot = new Vector3(0f, -0.03f, 0.27f);
+
+        // Yeux du conducteur au repos (repere de la voiture 'car'), d'apres son DriverHeadPivot ; faux sans pivot.
+        static readonly Dictionary<Transform, Transform> headPivots = new Dictionary<Transform, Transform>();
+        public static bool DriverHead(Transform car, out Vector3 local)
+        {
+            local = Vector3.zero;
+            if (car == null) return false;
+            Transform dhp;
+            if (!headPivots.TryGetValue(car, out dhp) || (dhp == null && !ReferenceEquals(dhp, null))) { dhp = Find(car, "DriverHeadPivot"); headPivots[car] = dhp; }
+            if (dhp == null) return false;
+            local = car.InverseTransformPoint(dhp.position) + EyeFromPivot;
+            return true;
+        }
 
         static Transform Find(Transform t, string name)
         {
@@ -233,7 +266,7 @@ namespace MWCoop
         static Seat InZone()
         {
             Seat best = null;
-            float bestD = 1f;
+            float bestD = 10f;   // (zones bornees par place ; couchette de la GIFU : jusqu'a 1,1 m)
             foreach (Seat s in seats)
             {
                 if (s.CarT == null || SeatTaken(s)) continue;
@@ -241,7 +274,7 @@ namespace MWCoop
                 Vector3 p = s.CarT.InverseTransformPoint(player.position);
                 if (p.y < -0.3f || p.y > s.Head.y) continue;
                 float dx = Mathf.Abs(p.x - s.Head.x), dz = Mathf.Abs(p.z - (s.Head.z - 0.1f));
-                if (dx > 0.38f || dz > 0.5f) continue;
+                if (dx > s.ZoneX || dz > s.ZoneZ) continue;
                 float d = dx * dx + dz * dz;
                 if (d < bestD) { bestD = d; best = s; }
             }
@@ -567,6 +600,51 @@ namespace MWCoop
         }
 
         // Essais : assoit le joueur local a la place 'index' de 'car' (debout dans l'habitacle, puis ENTREE).
+        // Essais : autour de chaque place de la voiture 'car' : surface sous la tete (distance, objet), parois devant,
+        // derriere, a gauche, a droite (rayons depuis la tete).
+        public static string ProbeSeats(string car)
+        {
+            if (seats.Count == 0) Scan();
+            var sb = new System.Text.StringBuilder();
+            foreach (Seat s in seats)
+            {
+                if (!s.Car.StartsWith(car) || s.CarT == null) continue;
+                Vector3 h = s.CarT.TransformPoint(s.Head);
+                sb.Append(" | place ").Append(s.Index).Append(' ').Append(s.Head.ToString("F2")).Append(" :");
+                Vector3[] dirs = { -s.CarT.up, s.CarT.up, s.CarT.forward, -s.CarT.forward, -s.CarT.right, s.CarT.right };
+                string[] nm = { "bas", "haut", "avant", "arriere", "gauche", "droite" };
+                for (int k = 0; k < dirs.Length; k++)
+                {
+                    RaycastHit hit = new RaycastHit(); bool any = false;
+                    foreach (RaycastHit x in Physics.RaycastAll(h, dirs[k], 3f)) if (!x.collider.isTrigger && x.collider.transform.root.name != "PLAYER" && (!any || x.distance < hit.distance)) { hit = x; any = true; }
+                    if (any) sb.Append(' ').Append(nm[k]).Append(' ').Append(hit.distance.ToString("F2")).Append(" (").Append(hit.collider.name).Append(')');
+                    else sb.Append(' ').Append(nm[k]).Append(" -");
+                }
+            }
+            return sb.ToString();
+        }
+
+        // Essais : coupe de la cabine (repere de la voiture) : pour x et z donnes, toutes les surfaces traversees par un rayon
+        // vertical descendant depuis 3 m (hauteur locale, objet).
+        public static string ProbeGrid(string car)
+        {
+            if (seats.Count == 0) Scan();
+            Transform ct = null;
+            foreach (Seat s in seats) if (s.Car.StartsWith(car) && s.CarT != null) { ct = s.CarT; break; }
+            if (ct == null) return "voiture absente";
+            var sb = new System.Text.StringBuilder();
+            for (float z = 3.2f; z >= 1.2f; z -= 0.2f)
+                for (float x = -0.5f; x <= 0.51f; x += 0.5f)
+                {
+                    Vector3 o = ct.TransformPoint(new Vector3(x, 3.5f, z));
+                    var hits = Physics.RaycastAll(o, -ct.up, 4f);
+                    System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+                    sb.Append(" | x ").Append(x.ToString("F1")).Append(" z ").Append(z.ToString("F1")).Append(" :");
+                    foreach (RaycastHit h in hits) if (!h.collider.isTrigger && h.collider.transform.root == ct) sb.Append(' ').Append(ct.InverseTransformPoint(h.point).y.ToString("F2")).Append('(').Append(h.collider.name).Append(')');
+                }
+            return sb.ToString();
+        }
+
         public static string TestSit(string car, int index)
         {
             if (!FindPlayer()) return "pas de joueur";

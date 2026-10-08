@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -833,8 +833,12 @@ namespace MWCoop
                 Log.Info("avatar " + Player.Name + " : mains au volant (" + (steerT != null ? steerT.name + " a " + Root.transform.InverseTransformPoint(steerT.position).ToString("F2") + ", prises D " + (shR != null ? (steerT.TransformPoint(gripR) - shR.position).magnitude.ToString("F2") : "?") + " m G " + (shL != null ? (steerT.TransformPoint(gripL) - shL.position).magnitude.ToString("F2") : "?") + " m de l'epaule, tete " + Root.transform.InverseTransformPoint(headBone.position).ToString("F2") : "volant introuvable") + ", levier " + (gearT != null ? "oui" : "non") + ")");
             }
             float now = Time.realtimeSinceStartup;
-            if (gearT != null && Quaternion.Angle(gearT.localRotation, gearLast) > 1.5f) { gearLast = gearT.localRotation; gearUntil = now + 0.9f; }
-            Ease(ref wShift, now < gearUntil, Time.deltaTime * 6f);
+            if (gearT != null && Quaternion.Angle(gearT.localRotation, gearLast) > 1.5f) { gearLast = gearT.localRotation; gearUntil = Mathf.Max(gearUntil, now + 0.6f); }
+            // Passage recu (CarVisuals) : la main part vers le pommeau avant que le levier ne bouge (0,15 s), y reste le temps
+            // du passage, puis revient au volant.
+            float shift = CarVisuals.LastShift(car);
+            if (shift > gearSeen) { gearSeen = shift; gearUntil = Mathf.Max(gearUntil, shift + 0.75f); }
+            Ease(ref wShift, now < gearUntil, Time.deltaTime * 9f);
             if (steerT != null)   // (jante hors de portee -- siege loin du volant : la pose du conducteur PNJ reste, bras pas etires)
             {
                 Vector3 pr = steerT.TransformPoint(gripR), pl = steerT.TransformPoint(gripL);
@@ -852,7 +856,7 @@ namespace MWCoop
         public string HandsState()
         {
             return Player.Name + " : volant " + (steerT != null ? steerT.name : "-") + ", main D a " + handErrR.ToString("F2") + " m de sa prise, G a " + handErrL.ToString("F2")
-                   + " m, penche " + leanDeg.ToString("F0") + " deg, levier " + (gearT != null ? gearT.parent.name + "/" + gearT.name : "-");
+                   + " m, penche " + leanDeg.ToString("F0") + " deg, levier " + (gearT != null ? gearT.parent.name + "/" + gearT.name : "-") + ", main au levier " + wShift.ToString("F2");
         }
 
         // Dosage selon la portee : 1 jusqu'a 105 % de la longueur du bras, 0 au-dela de 130 % (le bras, tendu, s'arrete a
@@ -890,18 +894,41 @@ namespace MWCoop
             }
         }
 
-        // Main droite vers une commande que ce joueur vient d'actionner (bouton, clef, molette), pendant 0,8 s.
+        // Main droite vers une commande que ce joueur vient d'actionner (bouton, clef, molette, interrupteur, porte) : un
+        // vrai appui (demande d'un joueur, 08/10) -- le bras se tend (0,18 s), le doigt enfonce de 4 cm vers la commande,
+        // tient, puis revient (0,7 s en tout). Visee : le milieu de ce qu'on voit de la commande, pas le pivot de son automate.
         public void ReachFor(Vector3 at)
         {
             Transform sh = Bone("shoulder_right");
             if (sh == null || (at - sh.position).sqrMagnitude > 1.2f * 1.2f) return;   // trop loin : pas lui
             reachAt = at;
-            reachUntil = Time.realtimeSinceStartup + 0.8f;
+            reachStart = Time.realtimeSinceStartup;
+            reachUntil = reachStart + 0.7f;
+            if (pressLogs++ < 5) Log.Info("avatar " + (Player != null ? Player.Name : "?") + " : appuie a " + (at - sh.position).magnitude.ToString("F2") + " m de l'epaule");
         }
+        public void ReachFor(Transform t)
+        {
+            if (t == null) return;
+            Vector3 at = t.position;
+            Renderer best = null;
+            foreach (Renderer r in t.GetComponentsInChildren<Renderer>())
+                if (r.enabled && (best == null || r.bounds.size.sqrMagnitude < best.bounds.size.sqrMagnitude)) best = r;
+            if (best != null && best.bounds.size.magnitude < 1.5f) at = best.bounds.center;
+            else { Collider c = t.GetComponent<Collider>(); if (c != null) at = c.bounds.center; }
+            ReachFor(at);
+        }
+        float reachStart;
+        static int pressLogs;
         void ReachPose()
         {
-            Ease(ref wReach, Time.realtimeSinceStartup < reachUntil, Time.deltaTime * 6f);
-            if (wReach > 0.001f) ArmTo(true, reachAt, wReach * Reachable(true, reachAt));
+            float e = Time.realtimeSinceStartup - reachStart;
+            if (e < 0f || e > 0.7f) { wReach = 0f; return; }
+            float w = e < 0.18f ? e / 0.18f : e > 0.45f ? 1f - (e - 0.45f) / 0.25f : 1f;
+            wReach = Mathf.Clamp01(w * w * (3f - 2f * w));
+            Transform sh = Bone("shoulder_right");
+            Vector3 dir = sh != null ? (reachAt - sh.position).normalized : Root.transform.forward;
+            float poke = e > 0.15f && e < 0.45f ? Mathf.Sin(Mathf.PI * (e - 0.15f) / 0.3f) * 0.04f : 0f;
+            if (wReach > 0.001f) ArmTo(true, reachAt + dir * (poke - 0.02f), wReach * Reachable(true, reachAt));
         }
         // Bouche (devant et sous l'os de la tete) ; sens de la bouteille quand on boit : du cul vers le goulot, vers le
         // visage et vers le bas (le cul plus haut que le goulot).
@@ -1107,10 +1134,22 @@ namespace MWCoop
                 Root.transform.rotation = seatRot;
                 Transform carT = VehicleSync.RemoteCarTransform(pi.Id);
                 Vector3 headLocal = carT != null ? carT.InverseTransformPoint(seatPos) : Vector3.zero;
-                if (!anchorSet || anchorCar != carName) { seatAnchor = headLocal; anchorSet = true; anchorCar = carName; }
+                // Ancre : la place du conducteur de la voiture (DriverHeadPivot), plus le premier echantillon de la tete --
+                // la tete (PlayerSync) et la voiture (VehicleSync) arrivent par deux messages pas synchronises : a 90 km/h
+                // l'ecart d'appariement fait plus d'un metre, l'ancre prise dessus decalait tout le corps (avatar qui
+                // « saute » en avant en conduisant, retour d'un joueur, 08/10). L'ecart a la tete ne fait plus que pencher
+                // le buste, lisse, et de moins en moins avec la vitesse (rien au-dela de ~40 km/h).
+                Vector3 rest;
+                if (!anchorSet || anchorCar != carName)
+                {
+                    seatAnchor = Seats.DriverHead(carT, out rest) ? rest : headLocal;
+                    anchorSet = true; anchorCar = carName; leanSmooth = Vector3.zero;
+                }
                 Vector3 off = headLocal - seatAnchor;
-                if (off.sqrMagnitude < 0.05f * 0.05f) seatAnchor = Vector3.Lerp(seatAnchor, headLocal, Time.deltaTime * 0.5f);
-                leanOff = Vector3.ClampMagnitude(headLocal - seatAnchor, 0.6f);
+                float speed = VehicleSync.RemoteSpeed(pi.Id);
+                float maxLean = Mathf.Lerp(0.6f, 0f, (speed - 2f) / 9f);
+                leanSmooth = Vector3.Lerp(leanSmooth, Vector3.ClampMagnitude(off, maxLean), Time.deltaTime * 6f);
+                leanOff = leanSmooth;
                 Vector3 anchorWorld = carT != null ? carT.TransformPoint(seatAnchor) : seatPos;
                 pos = anchorWorld - seatRot * eyesRest;
                 yaw = seatRot.eulerAngles.y;
@@ -1331,6 +1370,8 @@ namespace MWCoop
         // dans la main droite (clip « boire »), ramenee a une taille de bouteille ; retiree quand il a fini.
         GameObject drinkGo;
         int drinkIdx;
+        Vector3 leanSmooth;   // conducteur : penche du buste, lisse
+        float gearSeen = -1f; // dernier passage de vitesse recu (CarVisuals.LastShift) deja suivi par la main
         Vector3 drinkAxis = Vector3.up;   // axe long du modele, du cul vers le goulot (repere de l'objet)
         float drinkHalf = 0.12f;           // demi-longueur une fois a l'echelle (m)
         float drinkLogAt;
@@ -1521,18 +1562,58 @@ namespace MWCoop
             {
                 Material mat = null;
                 foreach (string n in BlanketMats) { mat = FindMaterial(n); if (mat != null) break; }
-                blanket = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                blanket.name = "MWCoop-Couverture";
-                Object.DestroyImmediate(blanket.GetComponent<Collider>());
+                // Drap drape (avant : un cube, retour d'un joueur 08/10) : bombe sur le corps, retombant sur les cotes,
+                // repli a la poitrine ; les deux faces (vu de cote, pas de trou).
+                blanket = new GameObject("MWCoop-Couverture");
                 blanket.layer = Root.layer;
                 blanket.transform.parent = Root.transform;
-                blanket.transform.localPosition = new Vector3(0f, 0.6f, 0.11f);
+                blanket.transform.localPosition = new Vector3(0f, -0.12f, 0f);
                 blanket.transform.localRotation = Quaternion.identity;
-                blanket.transform.localScale = new Vector3(0.74f, 1.2f, 0.05f);
-                if (mat != null) blanket.GetComponent<Renderer>().sharedMaterial = mat;
+                blanket.transform.localScale = Vector3.one;
+                blanket.AddComponent<MeshFilter>().sharedMesh = BlanketMesh();
+                var mr = blanket.AddComponent<MeshRenderer>();
+                if (mat != null) mr.sharedMaterial = mat;
+                else mr.sharedMaterial = new Material(Shader.Find("Diffuse")) { color = new Color(0.55f, 0.6f, 0.68f) };
                 Log.Info("avatar " + (Player != null ? Player.Name : "?") + " : couverture (" + (mat != null ? mat.name : "matiere par defaut") + ")");
             }
             if (blanket != null && blanket.activeSelf != on) blanket.SetActive(on);
+        }
+
+        // Maillage de la couverture (repere de la racine couchee : x en travers, y des pieds vers la tete, z vers le haut).
+        static Mesh blanketMesh;
+        static Mesh BlanketMesh()
+        {
+            if (blanketMesh != null) return blanketMesh;
+            const int nx = 14, ny = 18;
+            const float W = 0.92f, L = 1.34f;
+            int n = (nx + 1) * (ny + 1);
+            var v = new Vector3[n * 2];   // (dessus, puis dessous : sommets separes, normales opposees)
+            var uv = new Vector2[n * 2];
+            for (int j = 0; j <= ny; j++)
+                for (int i = 0; i <= nx; i++)
+                {
+                    float x = (i / (float)nx - 0.5f) * W, y = j / (float)ny * L;
+                    float a = Mathf.Clamp01(Mathf.Abs(x) / (W * 0.5f));
+                    float body = Mathf.Pow(Mathf.Clamp01(1f - a * a), 0.6f);            // bombe sur le corps
+                    float z = -0.03f + 0.19f * body;
+                    z += 0.05f * Mathf.Clamp01(1f - Mathf.Abs(y - 0.16f) / 0.14f) * body;   // pieds (orteils dresses)
+                    if (y > L - 0.16f) z += 0.02f;                                        // repli a la poitrine
+                    z -= 0.015f * Mathf.Sin(y * 9f) * a;                                  // plis sur les cotes
+                    v[j * (nx + 1) + i] = v[n + j * (nx + 1) + i] = new Vector3(x, y, z);
+                    uv[j * (nx + 1) + i] = uv[n + j * (nx + 1) + i] = new Vector2(i / (float)nx, j / (float)ny * 1.4f);
+                }
+            var tri = new System.Collections.Generic.List<int>();
+            for (int j = 0; j < ny; j++)
+                for (int i = 0; i < nx; i++)
+                {
+                    int a0 = j * (nx + 1) + i, a1 = a0 + 1, b0 = a0 + nx + 1, b1 = b0 + 1;
+                    tri.AddRange(new[] { a0, b0, a1, a1, b0, b1 });   // dessus
+                    tri.AddRange(new[] { n + a0, n + a1, n + b0, n + a1, n + b1, n + b0 });   // dessous
+                }
+            blanketMesh = new Mesh { name = "MWCoop-Couverture", vertices = v, uv = uv, triangles = tri.ToArray() };
+            blanketMesh.RecalculateNormals();
+            blanketMesh.RecalculateBounds();
+            return blanketMesh;
         }
 
         // Chapeau, lunettes, cheveux : copies des objets des PNJ, sur l'os de la tete (pose relevee chez le PNJ).

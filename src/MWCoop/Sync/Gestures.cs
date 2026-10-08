@@ -149,6 +149,10 @@ namespace MWCoop
             Stains(now);
         }
 
+        // Le joueur local pousse (main "Hand Push" du jeu) ; essais : [Test] force.
+        public static bool TestPush;
+        public static bool Pushing { get { return TestPush || Active(push); } }
+
         // Etats du joueur local.
         static void Read(float now)
         {
