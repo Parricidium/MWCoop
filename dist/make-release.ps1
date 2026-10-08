@@ -1,7 +1,10 @@
 # Compile MWCoop puis assemble dist\out\MWCoop-<version>.zip (sans aucune donnee du jeu).
 # -Publier : cree la release v<Version> sur GitHub (Parricidium/MWCoop) avec le zip. -Notes : texte de la
 # release (puces en francais, une ligne ---, les memes puces en anglais : le lanceur les affiche).
-param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '')
+# -AFaire : seulement quand les joueurs ont une manipulation a faire apres le correctif (meme format : francais, ---,
+# anglais ; une ligne par consigne). Mis en tete des notes ("A faire : ..." / "To do: ...") et en encadre
+# "What you need to do" dans l'annonce Discord.
+param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '')
 $root = Split-Path $PSScriptRoot
 $code = Get-Content "$root\src\MWCoop\Version.cs" -Raw
 if ($code -notmatch "Text = `"$([regex]::Escape($Version))`"") { throw "src\MWCoop\Version.cs ne dit pas $Version" }
@@ -42,6 +45,16 @@ if ($Publier) {
     # Rien de non commite : le tag doit pointer sur le code du zip (0.26.3 : commit rate, release partie quand meme).
     if (git -C $root status --porcelain) { throw "modifications non commitees : committer avant de publier" }
     if (-not $Notes) { $Notes = "MWCoop $Version" }
+    $todoEn = ''
+    if ($AFaire.Trim()) {
+        $tp = @($AFaire -split '(?m)^\s*---+\s*$')
+        $np = @($Notes -split '(?m)^\s*---+\s*$')
+        $lines = { param($t, $pre) (@($t -split "`r?`n" | ForEach-Object { $_.Trim() -replace '^- *', '' } | Where-Object { $_ }) | ForEach-Object { "- $pre$_" }) -join "`n" }
+        $fr = & $lines $tp[0] ("$([char]0xC0) faire : ")
+        $todoEn = (@($tp[-1] -split "`r?`n" | ForEach-Object { $_.Trim() -replace '^- *', '' } | Where-Object { $_ }) | ForEach-Object { "- $_" }) -join "`n"
+        $en = & $lines $tp[-1] 'To do: '
+        if ($np.Count -ge 2) { $Notes = "$fr`n$($np[0].Trim())`n---`n$en`n$($np[-1].Trim())" } else { $Notes = "$fr`n$en`n$($Notes.Trim())" }
+    }
     $nf = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($nf, $Notes, (New-Object System.Text.UTF8Encoding $false))
     # Le tag est cree sur GitHub : le code doit y etre avant (sinon il pointe sur l'ancien main).
@@ -61,14 +74,22 @@ if ($Publier) {
         try {
             $w = @(Get-Content $wf -Encoding UTF8 | Where-Object { $_.Trim() })
             $en = ($Notes -split '(?m)^\s*---+\s*$')[-1].Trim()
+            if ($todoEn) { $en = (@($en -split "`n") | Where-Object { $_ -notmatch '^- To do: ' }) -join "`n" }   # (dans l'encadre)
             if ($en.Length -gt 3900) { $en = $en.Substring(0, 3900) + '...' }
+            $embed = @{
+                title = "MWCoop $Version (pre-alpha)"; url = $url; color = 7912959; description = $en
+                footer = @{ text = 'Update from the launcher: NEW VERSION - UPDATE' }
+            }
+            $head = "<@&$($w[1].Trim())> **MWCoop $Version is out!**"
+            if ($todoEn) {   # (consignes : encadre a part, et un mot dans le message)
+                if ($todoEn.Length -gt 1000) { $todoEn = $todoEn.Substring(0, 1000) + '...' }
+                $embed.fields = @(@{ name = "$([char]0x26A0)$([char]0xFE0F) What you need to do"; value = $todoEn })
+                $head += ' **Action needed after updating: see below.**'
+            }
             $msg = @{
-                content          = "<@&$($w[1].Trim())> **MWCoop $Version is out!**"
+                content          = $head
                 allowed_mentions = @{ roles = @($w[1].Trim()) }
-                embeds           = @(@{
-                    title = "MWCoop $Version (pre-alpha)"; url = $url; color = 7912959; description = $en
-                    footer = @{ text = 'Update from the launcher: NEW VERSION - UPDATE' }
-                })
+                embeds           = @($embed)
             }
             $body = [System.Text.Encoding]::UTF8.GetBytes(($msg | ConvertTo-Json -Depth 6))
             Invoke-RestMethod -Method Post -Uri $w[0].Trim() -Body $body -ContentType 'application/json; charset=utf-8' | Out-Null
