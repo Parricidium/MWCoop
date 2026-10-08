@@ -32,6 +32,51 @@ static void ModSetShared(const std::wstring &file, bool on);
 static std::wstring MscManaged() { return g_gameDir + L"mywintercar_Data\\Managed\\"; }
 static std::wstring MscIni() { return g_gameDir + L"doorstop_config.ini"; }
 
+// MSCLoader de MWCoop (demande de JD, 08/10 : un joueur dont le MSCLoader officiel ne chargeait aucun mod, meme apres une
+// reinstallation propre ; chez d'autres il marche). Le meme MSCLoader officiel, telecharge par le lanceur dans
+// %LOCALAPPDATA%\MWCoop\mscloader-mwcoop\ (winhttp.dll de Doorstop, Managed\ : MSCLoader et ses bibliotheques) : rien
+// n'est ecrit dans le jeu (ni winhttp.dll ni Managed). Le jeu part d'une copie de lancement (MscCopyDir, ou celle de
+// l'invite) avec ce winhttp.dll et un doorstop_config.ini qui vise ce dossier (cible absolue ; [UnityMono]
+// dll_search_path_override : Mono y cherche d'abord, devant un MSCLoader officiel range dans Managed). Les mods restent
+// dans le dossier Mods du jeu (ou celui choisi pour l'officiel : [MSCLoader] mods= de son doorstop_config.ini). Essai a
+// la main du 08/10 : MSCLoader charge depuis ce dossier, 11 mods trouves par la jonction Mods de la copie.
+// Choix dans l'onglet MODS ([Lanceur] MSCLoaderMWCoop) : par defaut l'officiel s'il est installe, sinon celui de MWCoop.
+static std::wstring MscPackDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"mscloader-mwcoop\\"; }
+static std::wstring MscCopyDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"jeu-mscloader\\My Winter Car\\"; }
+static bool MscOfficialInstalled() { return !g_gameDir.empty() && FileExists(MscManaged() + L"MSCLoader.Preloader.dll") && FileExists(g_gameDir + L"winhttp.dll") && FileExists(MscIni()); }
+static bool MscOwnInstalled() { std::wstring p = MscPackDir(); return !p.empty() && FileExists(p + L"winhttp.dll") && FileExists(p + L"Managed\\MSCLoader.Preloader.dll"); }
+static bool MscOwn() { return g_mscOwnPref >= 0 ? g_mscOwnPref == 1 : !MscOfficialInstalled(); }
+static std::wstring MscModsDir();
+// Doorstop d'une copie de lancement : notre winhttp.dll, et un doorstop_config.ini vers notre dossier. guest : la copie de
+// l'invite (Mods de la copie : ceux de l'hote) ; sinon le dossier des mods de l'officiel (GF : la jonction Mods de la copie).
+static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
+{
+    std::wstring pack = MscPackDir(), dll = m + L"winhttp.dll";
+    SetFileAttributesW(dll.c_str(), FILE_ATTRIBUTE_NORMAL);
+    if (!CopyFileW((pack + L"winhttp.dll").c_str(), dll.c_str(), FALSE)) { TestLog("mscloader de MWCoop : winhttp.dll impossible dans la copie (erreur %lu)", GetLastError()); return false; }
+    wchar_t kind[16] = L"GF", intro[16] = L"false", cfg[16] = L"false";
+    if (FileExists(MscIni())) {
+        if (!guest) GetPrivateProfileStringW(L"MSCLoader", L"mods", L"GF", kind, 16, MscIni().c_str());
+        GetPrivateProfileStringW(L"MSCLoader", L"skipIntro", L"false", intro, 16, MscIni().c_str());
+        GetPrivateProfileStringW(L"MSCLoader", L"skipConfigScreen", L"false", cfg, 16, MscIni().c_str());
+    }
+    if (!guest && !_wcsicmp(kind, L"GF")) {   // Mods du jeu, relie par la copie (cree ici, apres la copie : jonction a faire)
+        SHCreateDirectoryExW(NULL, (g_gameDir + L"Mods").c_str(), NULL);
+        if (GetFileAttributesW((m + L"Mods").c_str()) == INVALID_FILE_ATTRIBUTES && !MakeJunction(m + L"Mods", g_gameDir + L"Mods"))
+            TestLog("mscloader de MWCoop : jonction Mods impossible (erreur %lu)", GetLastError());
+    }
+    std::wstring ini = m + L"doorstop_config.ini", managed = pack + L"Managed";
+    std::string t = "[General]\r\nenabled=" + std::string(enabled ? "true" : "false") + "\r\ntarget_assembly=" + Narrow(managed + L"\\MSCLoader.Preloader.dll", CP_UTF8)
+                  + "\r\nredirect_output_log=true\r\nignore_disable_switch=true\r\n\r\n[UnityMono]\r\ndll_search_path_override=" + Narrow(managed, CP_UTF8)
+                  + "\r\n\r\n[MSCLoader]\r\nmods=" + Narrow(kind) + "\r\nskipIntro=" + Narrow(intro) + "\r\nskipConfigScreen=" + Narrow(cfg) + "\r\n";
+    SetFileAttributesW(ini.c_str(), FILE_ATTRIBUTE_NORMAL);
+    HANDLE f = CreateFileW(ini.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) { TestLog("mscloader de MWCoop : doorstop_config.ini impossible (erreur %lu)", GetLastError()); return false; }
+    DWORD n; WriteFile(f, t.data(), (DWORD)t.size(), &n, NULL); CloseHandle(f);
+    TestLog("mscloader de MWCoop : copie %ls, %s, mods %ls", m.c_str(), enabled ? "active" : "coupe", kind);
+    return true;
+}
+
 static std::wstring MscModsDir()
 {
     wchar_t k[16] = L"GF";
@@ -67,7 +112,7 @@ static void MscScan()
 {
     g_mscScanT = GetTickCount();
     if (g_mscFake || g_gameDir.empty()) return;
-    g_mscInstalled = FileExists(MscManaged() + L"MSCLoader.Preloader.dll") && FileExists(g_gameDir + L"winhttp.dll") && FileExists(MscIni());
+    g_mscInstalled = MscOwn() ? MscOwnInstalled() : MscOfficialInstalled();
     g_mscDir = g_mscInstalled ? MscModsDir() : L"";
     std::vector<MscMod> cache;
     std::wstring loaderVer;
@@ -224,8 +269,9 @@ static void MscStep(const MscSet &s, int dir)
 
 // ---- installation (fil a part)
 static std::wstring MscTmp() { return LocalDir() + L"mscloader\\"; }
-static DWORD WINAPI MscInstallThread(void *)
+static DWORD WINAPI MscInstallThread(void *param)
 {
+    bool own = param != NULL;   // MSCLoader de MWCoop (MscPackDir) ; sinon l'officiel, dans le jeu
     auto fail = [](const std::string &w) { g_mscInstallWhy = w; TestLog("mods : installation de MSCLoader impossible : %s", w.c_str()); g_mscInstall = 3; return (DWORD)0; };
     std::string json;
     DWORD code = 0;
@@ -243,6 +289,30 @@ static DWORD WINAPI MscInstallThread(void *)
     if (!Unzip(zip, tmp + L"pkg", &why)) return fail("zip : " + why);
     std::wstring pkg = tmp + L"pkg\\";
     if (!FileExists(pkg + L"core64.pack") || !FileExists(pkg + L"main_ref.pack") || !FileExists(pkg + L"main_mwc.pack")) return fail("paquet incomplet (core64 / main_ref / main_mwc)");
+    if (own) {   // tout dans notre dossier ; seul le dossier Mods (le meme que l'officiel) recoit ses dossiers de base
+        std::wstring pack = MscPackDir();
+        if (pack.empty()) return fail("dossier %LOCALAPPDATA%\\MWCoop introuvable");
+        SHCreateDirectoryExW(NULL, (pack + L"Managed").c_str(), NULL);
+        SHCreateDirectoryExW(NULL, (tmp + L"core").c_str(), NULL);
+        if (!Unzip(pkg + L"core64.pack", tmp + L"core", &why)) return fail("core64.pack : " + why);
+        SetFileAttributesW((pack + L"winhttp.dll").c_str(), FILE_ATTRIBUTE_NORMAL);
+        if (!CopyFileW((tmp + L"core\\winhttp.dll").c_str(), (pack + L"winhttp.dll").c_str(), FALSE)) return fail("winhttp.dll : en cours d'utilisation (erreur " + std::to_string(GetLastError()) + ")");
+        if (!Unzip(pkg + L"main_ref.pack", pack + L"Managed", &why)) return fail("bibliotheques : " + why);
+        if (!Unzip(pkg + L"main_mwc.pack", tmp + L"mwc", &why)) return fail("main_mwc : " + why);
+        if (!Unzip(tmp + L"mwc\\Managed.zip", pack + L"Managed", &why)) return fail("MSCLoader.dll : " + why);
+        std::wstring md = MscModsDir();
+        md.pop_back();
+        SHCreateDirectoryExW(NULL, md.c_str(), NULL);
+        if (!Unzip(tmp + L"mwc\\Mods.zip", md, &why)) return fail("dossier Mods : " + why);
+        CreateDirectoryW((md + L"\\References").c_str(), NULL);
+        CreateDirectoryW((md + L"\\Config").c_str(), NULL);
+        HANDLE vf = CreateFileW((pack + L"version.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (vf != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(vf, tag.data(), (DWORD)tag.size(), &n, NULL); CloseHandle(vf); }
+        TestLog("mods : MSCLoader %s de MWCoop installe (%s ; mods : %s)", tag.c_str(), Narrow(pack, CP_UTF8).c_str(), Narrow(md, CP_UTF8).c_str());
+        g_mscInstallWhy = tag;
+        g_mscInstall = 2;
+        return 0;
+    }
     // Reglages deja choisis (reinstallation) : dossier des mods, intro, ecran de configuration.
     wchar_t mods[16] = L"GF", intro[16] = L"false", cfg[16] = L"false";
     std::wstring ini = MscIni();
@@ -284,10 +354,33 @@ static DWORD WINAPI MscInstallThread(void *)
     return 0;
 }
 
-static void MscInstall()
+// Installer (ou reinstaller : demande de JD, 08/10) le MSCLoader choisi dans l'onglet : celui de MWCoop (a part) ou
+// l'officiel (dans le jeu ; ses reglages gardes).
+static void MscInstall(bool reinstall = false)
 {
     if (g_mscInstall == 1 || g_gameDir.empty()) return;
     if (GameProcessRunning()) { SetStatus(K_ERR, T(L"Ferme My Winter Car avant d'installer MSCLoader", L"Close My Winter Car before installing MSCLoader")); return; }
+    bool own = MscOwn();
+    if (own || reinstall) {
+        std::wstring q = own
+            ? T(L"Télécharger la dernière version officielle de MSCLoader (GitHub de piotrulos, environ 4 Mo) et l'installer POUR MWCOOP, à part (%LOCALAPPDATA%\\MWCoop) ?\n\n"
+                L"Le dossier du jeu n'est pas modifié (sauf le dossier Mods, s'il manque). Tes mods restent dans le dossier Mods du jeu. Un MSCLoader officiel déjà installé n'est pas touché.\n\n"
+                L"MSCLoader est un projet indépendant de MWCoop. Son support dans MWCoop est EXPÉRIMENTAL.",
+                L"Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it FOR MWCOOP, apart (%LOCALAPPDATA%\\MWCoop)?\n\n"
+                L"The game folder is not changed (except the Mods folder, if missing). Your mods stay in the game's Mods folder. An official MSCLoader already installed is not touched.\n\n"
+                L"MSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL.")
+            : T(L"Télécharger la dernière version officielle de MSCLoader (GitHub de piotrulos, environ 4 Mo) et la réinstaller dans le dossier du jeu ? Tes mods et leurs réglages sont gardés.",
+                L"Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and reinstall it in the game folder? Your mods and their settings are kept.");
+        if (reinstall && own) q = std::wstring(T(L"RÉINSTALLER MSCLoader (tes mods et leurs réglages sont gardés).\n\n", L"REINSTALL MSCLoader (your mods and their settings are kept).\n\n")) + q;
+        if (g_testSalon.empty() && MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+        g_mscInstall = 1;
+        g_progress = 0;
+        SetStatus(K_NORMAL, T(L"Installation de MSCLoader…", L"Installing MSCLoader…"));
+        TestLog("mods : %s de MSCLoader %s", reinstall ? "reinstallation" : "installation", own ? "de MWCoop" : "officiel");
+        HANDLE t = CreateThread(NULL, 0, MscInstallThread, own ? (void *)1 : NULL, 0, NULL);
+        if (t) CloseHandle(t);
+        return;
+    }
     if (g_testSalon.empty() && MessageBoxW(g_wnd, T(L"Télécharger la dernière version officielle de MSCLoader (GitHub de piotrulos, environ 4 Mo) et l'installer dans le dossier du jeu ?\n\n"
                                                       L"MSCLoader est un projet indépendant de MWCoop. Son support dans MWCoop est EXPÉRIMENTAL.",
                                                       L"Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it in the game folder?\n\n"
@@ -316,7 +409,8 @@ static void MscTick()
 // ---- dessin (page MODS, dans kMain)
 static int MscModCount() { return g_mscInstalled ? (int)g_msc.size() : 0; }
 static const RectF kMscToggle(690, 188, 50, 28), kMscAuto(1172, 188, 50, 28), kMscInstall(300, 179, 300, 46), kMscList(288, 282, 952, 390),
-                   kMscBack(1000, 108, 240, 30), kMscOpenDir(288, 694, 260, 30);
+                   kMscBack(1000, 108, 240, 30), kMscOpenDir(288, 694, 260, 30),
+                   kMscSrcOff(838, 102, 112, 30), kMscSrcOwn(954, 102, 112, 30), kMscReinst(1078, 102, 162, 30);   // officiel / MWCoop, reinstaller
 static const float kMscRowH = 76, kMscSetH = 54;
 
 static void DrawToggle(Graphics &g, RectF r, bool on, bool hot) { UiToggle(g, r, on, hot); }
@@ -360,6 +454,9 @@ static int MscAt(float x, float y)
         }
         return -1;
     }
+    if (kMscSrcOff.Contains(x, y)) return 1006;
+    if (kMscSrcOwn.Contains(x, y)) return 1007;
+    if (g_mscInstalled && g_mscInstall != 1 && kMscReinst.Contains(x, y)) return 1008;
     if (g_mscInstalled && RectF(kMscToggle.X - 8, kMscToggle.Y - 8, kMscToggle.Width + 16, kMscToggle.Height + 16).Contains(x, y)) return 1000;
     if (RectF(kMscAuto.X - 8, kMscAuto.Y - 8, kMscAuto.Width + 16, kMscAuto.Height + 16).Contains(x, y)) return 1005;
     if (!g_mscInstalled && kMscInstall.Contains(x, y)) return 1001;
@@ -381,6 +478,16 @@ static bool MscClick(float x, float y)
         SetStatus(K_NORMAL, g_mscOn ? T(L"MSCLoader sera charg\u00E9 au lancement", L"MSCLoader will load at launch") : T(L"MSCLoader ne sera pas charg\u00E9 (rien n'est d\u00E9sinstall\u00E9)", L"MSCLoader will not load (nothing is uninstalled)"));
     } else if (h == 1005) { if (const Opt *o = OptByKey("ModsAuto")) OptSet(*o, OptGet(*o) ? 0 : 1); }
     else if (h == 1001) MscInstall();
+    else if (h == 1008) MscInstall(true);
+    else if (h == 1006 || h == 1007) {
+        g_mscOwnPref = h == 1007 ? 1 : 0;
+        WritePrivateProfileStringW(L"Lanceur", L"MSCLoaderMWCoop", g_mscOwnPref ? L"1" : L"0", g_iniLauncher.c_str());
+        MscScan();
+        if (g_mscOwnPref) SetStatus(K_NORMAL, MscOwnInstalled() ? T(L"MSCLoader de MWCoop : install\u00E9 \u00E0 part, le jeu n'est pas modifi\u00E9", L"MWCoop's MSCLoader: installed apart, the game is not changed")
+                                                                : T(L"MSCLoader de MWCoop : clique INSTALLER MSCLOADER (install\u00E9 \u00E0 part, le jeu n'est pas modifi\u00E9)", L"MWCoop's MSCLoader: click INSTALL MSCLOADER (installed apart, the game is not changed)"));
+        else SetStatus(K_NORMAL, MscOfficialInstalled() ? T(L"MSCLoader officiel : celui install\u00E9 dans le jeu", L"Official MSCLoader: the one installed in the game")
+                                                         : T(L"MSCLoader officiel : pas install\u00E9 dans le jeu (INSTALLER MSCLOADER)", L"Official MSCLoader: not installed in the game (INSTALL MSCLOADER)"));
+    }
     else if (h == 1004) ShellExecuteW(g_wnd, L"open", g_mscDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
     else if (h == 1002) { g_mscPage = -1; g_scroll[TAB_MODS] = 0; }
     else if (h >= 4000) {
@@ -487,12 +594,32 @@ static void DrawMods(Graphics &g)
         Graphics &mg = MeasureG();
         Title(g, L"Mods \u00B7 MSCLoader", RectF(c.X + 24, c.Y + 20, 400, 28), 18, kInk);
         DrawExperimental(g, c.X + 24 + MeasureW(mg, L"Mods \u00B7 MSCLoader", 18, FontStyleBold) + 18, c.Y + 24);
+        {   // MSCLoader : officiel (dans le jeu) ou celui de MWCoop (a part) ; reinstaller
+            bool own = MscOwn();
+            for (int k = 0; k < 2; k++) {
+                RectF r = k ? kMscSrcOwn : kMscSrcOff;
+                bool sel = (k == 1) == own, hot = g_mscHot == 1006 + k;
+                GraphicsPath p; RoundRect(p, r, 15);
+                SolidBrush b(sel ? kAcc : hot ? TH(cardSel) : TH(card)); g.FillPath(&b, &p);
+                Pen pen(sel ? kAcc : TH(choiceBorder), 1); g.DrawPath(&pen, &p);
+                Text(g, k ? L"MWCOOP" : T(L"OFFICIEL", L"OFFICIAL"), r, 12, FontStyleBold, sel ? kOnAcc : hot ? kAcc : kInk, StringAlignmentCenter);
+            }
+            Text(g, L"MSCLoader", RectF(kMscSrcOff.X - 110, kMscSrcOff.Y, 102, kMscSrcOff.Height), 12, FontStyleBold, kGrey, StringAlignmentFar);
+            if (g_mscInstalled) {
+                bool rh = g_mscHot == 1008, busy = g_mscInstall == 1;
+                GraphicsPath p; RoundRect(p, kMscReinst, 15);
+                SolidBrush b(rh ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
+                Icon(g, IC_DOWNLOAD, kMscReinst.X + 20, kMscReinst.Y + 15, 14, busy ? kGrey : rh ? kAcc : kInk, 2.0f);
+                Text(g, T(L"R\u00C9INSTALLER", L"REINSTALL"), RectF(kMscReinst.X + 32, kMscReinst.Y, kMscReinst.Width - 38, kMscReinst.Height), 12, FontStyleBold, busy ? kGrey : rh ? kAcc : kInk, StringAlignmentCenter);
+            }
+        }
         std::wstring sub;
         if (g_mscInstall == 1) sub = T(L"Installation de MSCLoader\u2026", L"Installing MSCLoader\u2026");
         else if (!g_mscInstalled) sub = T(L"MSCLoader, le chargeur de mods de la communaut\u00E9 (projet ind\u00E9pendant), n'est pas install\u00E9.", L"MSCLoader, the community mod loader (independent project), is not installed.");
         else {
             wchar_t b[200];
-            swprintf_s(b, T(L"MSCLoader %s \u00B7 %d mod(s) \u00B7 dossier %s", L"MSCLoader %s \u00B7 %d mod(s) \u00B7 %s folder"), g_mscVer.empty() ? L"" : g_mscVer.c_str(), (int)g_msc.size(),
+            swprintf_s(b, T(L"MSCLoader %s%s \u00B7 %d mod(s) \u00B7 dossier %s", L"MSCLoader %s%s \u00B7 %d mod(s) \u00B7 %s folder"), g_mscVer.empty() ? L"" : g_mscVer.c_str(),
+                       MscOwn() ? T(L" de MWCoop (\u00E0 part, le jeu n'est pas modifi\u00E9)", L" by MWCoop (apart, the game is not changed)") : T(L" officiel", L" (official)"), (int)g_msc.size(),
                        g_mscDirKind == L"MD" ? T(L"Documents", L"Documents") : g_mscDirKind == L"AD" ? L"LocalLow" : T(L"du jeu", L"game"));
             sub = b;
         }

@@ -534,7 +534,8 @@ static void Init() {
         GetPrivateProfileStringW(L"General", L"enabled", L"(absent)", en, 32, ini);
         GetPrivateProfileStringW(L"General", L"target_assembly", L"", ta, MAX_PATH, ini);
         if (!ta[0]) GetPrivateProfileStringW(L"UnityDoorstop", L"targetAssembly", L"", ta, MAX_PATH, ini);
-        swprintf(full, MAX_PATH, L"%s\\%s", g_gameDir, ta);
+        if ((ta[0] && ta[1] == L':') || (ta[0] == L'\\' && ta[1] == L'\\')) wcscpy(full, ta);   // (cible absolue : MSCLoader de MWCoop)
+        else swprintf(full, MAX_PATH, L"%s\\%s", g_gameDir, ta);
         Log("doorstop_config.ini : enabled=%ls, cible %ls (%ls)%ls", en, ta[0] ? ta : L"?", GetFileAttributesW(full) != INVALID_FILE_ATTRIBUTES ? L"presente" : L"ABSENTE",
             wcsstr(GetCommandLineW(), L"-mscloader-disable") ? L", lance avec -mscloader-disable (MSCLoader coupe dans le lanceur)" : L"");
         o_LoadLibraryW = (LoadLibraryW_t)HookIat(exe, "KERNEL32.dll", "LoadLibraryW", (void*)h_LoadLibraryW);

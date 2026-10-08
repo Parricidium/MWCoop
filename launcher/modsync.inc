@@ -618,7 +618,7 @@ static void SyncAccept()
     if (!g_mscInstalled && g_mscInstall != 1 && !g_gameDir.empty() && !GameProcessRunning()) {
         g_mscInstall = 1;
         TestLog("mods : MSCLoader absent, installation pour les mods de l'hote");
-        HANDLE t = CreateThread(NULL, 0, MscInstallThread, NULL, 0, NULL);
+        HANDLE t = CreateThread(NULL, 0, MscInstallThread, MscOwn() ? (void *)1 : NULL, 0, NULL);   // (MSCLoader de MWCoop : rien dans le jeu)
         if (t) CloseHandle(t);
     }
     std::lock_guard<std::mutex> lk(g_syncMx);

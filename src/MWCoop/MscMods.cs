@@ -77,6 +77,8 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        static string LoaderPath(Type ml) { try { return ml.Assembly.Location; } catch { return "?"; } }
+
         static void Export()
         {
             Type ml = FindType("MSCLoader.ModLoader");
@@ -135,7 +137,7 @@ namespace MWCoop
                 if (v != null) folder = Path.GetFullPath(v.ToString());
             }
             catch { }
-            Log.Info("mscloader : " + n + " mod(s) releve(s) pour le lanceur (" + Application.loadedLevelName + "), dossier des mods " + folder);
+            Log.Info("mscloader : " + n + " mod(s) releve(s) pour le lanceur (" + Application.loadedLevelName + "), dossier des mods " + folder + ", MSCLoader " + LoaderPath(ml));
         }
     }
 }

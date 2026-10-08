@@ -1166,6 +1166,11 @@ enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_
 // lancement.ini (Reseau=).
 static bool g_steamNet = false;
 static bool g_mscOn = true;                          // [Lanceur] MSCLoader : le charger au lancement (onglet MODS, mods.inc)
+static int g_mscOwnPref = -1;                        // [Lanceur] MSCLoaderMWCoop : 1 celui de MWCoop, 0 l'officiel, -1 pas choisi (mods.inc)
+static bool MscOwn();
+static bool MscOwnInstalled();
+static std::wstring MscCopyDir();
+static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest);
 static bool g_guide;                                 // guide "Jouer par Steam" ouvert (par-dessus tout le lanceur)
 static int g_guideHot;                               // 1 copier, 2 compris, 3 ne plus afficher, 4 fermer
 static bool g_guideNoMore;
@@ -3444,7 +3449,8 @@ static std::wstring MirrorDir()
     return LocalDir() + L"My Winter Car\\";
 }
 
-static std::wstring GameExe() { std::wstring m = MirrorDir(); return (m.empty() ? g_gameDir : m) + L"mywintercar.exe"; }
+// Avec le MSCLoader de MWCoop actif : sa copie de lancement (pare-feu, jeu deja lance).
+static std::wstring GameExe() { std::wstring m = MirrorDir(); if (g_mscOn && MscOwn() && MscOwnInstalled()) m = MscCopyDir(); return (m.empty() ? g_gameDir : m) + L"mywintercar.exe"; }
 
 static bool SameFile(const std::wstring &a, const std::wstring &b)
 {
@@ -3546,7 +3552,7 @@ static bool GameProcessRunning()
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe = { sizeof(pe) };
-    std::wstring mine = g_gameDir + L"mywintercar.exe", mirror = GameExe(), guest = LocalDir() + L"invite\\My Winter Car\\mywintercar.exe";
+    std::wstring mine = g_gameDir + L"mywintercar.exe", mirror = GameExe(), guest = LocalDir() + L"invite\\My Winter Car\\mywintercar.exe", own = MscCopyDir() + L"mywintercar.exe";
     bool found = false;
     for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
         if (_wcsicmp(pe.szExeFile, L"mywintercar.exe")) continue;
@@ -3554,7 +3560,7 @@ static bool GameProcessRunning()
         if (!h) { found = true; break; }   // inconnu : prudence
         wchar_t path[MAX_PATH];
         DWORD n = MAX_PATH;
-        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str())) found = true;
+        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str()) || !_wcsicmp(path, own.c_str())) found = true;
         CloseHandle(h);
     }
     CloseHandle(snap);
@@ -3689,12 +3695,16 @@ static void Launch(int mode, const char *partie = NULL)
     // CreateProcess echoue alors (erreur 740), ShellExecuteEx affiche la demande de Windows.
     std::wstring exe = g_gameDir + L"mywintercar.exe", runDir = g_gameDir;
     std::wstring mirror = syncKind ? GuestCopyDir() : MirrorDir();
+    // MSCLoader de MWCoop (onglet MODS) : toujours une copie de lancement, avec son Doorstop (jeu Steam ou non).
+    bool ownMsc = MscOwn() && MscOwnInstalled();
+    if (!syncKind && ownMsc && g_mscOn) mirror = MscCopyDir();
+    else ownMsc = ownMsc && syncKind;
     if (syncKind && !mirror.empty()) {   // invite d'un salon : sa copie de lancement (Mods -> les mods de l'hote)
-        if (PrepareGuestCopy(mirror, syncKind == 2)) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
+        if (PrepareGuestCopy(mirror, syncKind == 2) && (!ownMsc || MscOwnApply(mirror, syncKind == 2, true))) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
         else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part sans les mods de l'h\u00F4te", L"Could not prepare the launch copy: the game starts without the host's mods"));
     } else if (!mirror.empty()) {
-        if (PrepareMirror(mirror)) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
-        else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de Steam (le mod risque de ne pas se charger)", L"Could not prepare the launch copy: starting from Steam (the mod may not load)"));
+        if (PrepareMirror(mirror) && (!ownMsc || MscOwnApply(mirror, true, false))) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
+        else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de son dossier (le mod ou MSCLoader risquent de ne pas se charger)", L"Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)"));
     }
     // Lanceur demarre par Steam (option de lancement "<MWCoop.exe>" %command%) : l'overlay de Steam y est injecte et
     // passerait au jeu lance d'ici, assez tot pour que la version.dll de Windows passe avant la notre (le mod ne se
@@ -5876,6 +5886,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             GetPrivateProfileStringW(L"Lanceur", L"Reseau", L"ip", rn, 16, g_iniLauncher.c_str());
             g_steamNet = _wcsicmp(rn, L"steam") == 0;
             g_mscOn = GetPrivateProfileIntW(L"Lanceur", L"MSCLoader", 1, g_iniLauncher.c_str()) != 0;
+            g_mscOwnPref = GetPrivateProfileIntW(L"Lanceur", L"MSCLoaderMWCoop", -1, g_iniLauncher.c_str());
         }
         if (!_wcsicmp(th, L"sombre") || !_wcsicmp(th, L"dark")) g_dark = true;
         else if (!_wcsicmp(th, L"clair") || !_wcsicmp(th, L"light")) g_dark = false;
@@ -5990,7 +6001,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
-    // /mscl installer|reglages <dossier du jeu> <journal> : installe MSCLoader dans ce jeu, ou change deux options du 1er
+    // /mscl installer|reglages|mwcoop <dossier du jeu> <journal> : installe MSCLoader dans ce jeu, ou change deux options du 1er
     // mod connu (case inversee, curseur +1 pas) et ecrit son settings.json (essais, sans fenetre)
     if (argc >= 5 && !_wcsicmp(argv[1], L"/mscl")) {
         g_testSalonLog = argv[4];
@@ -5998,7 +6009,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (f) fclose(f);
         SetGame(WithSlash(argv[3]));
         bool ok = false;
-        if (!g_gameDir.empty() && !_wcsicmp(argv[2], L"installer")) {
+        if (!g_gameDir.empty() && !_wcsicmp(argv[2], L"mwcoop")) {   // copie de lancement du MSCLoader de MWCoop (jeu non lance)
+            g_mscOn = true;
+            std::wstring m = MscCopyDir();
+            TestLog("mscl : own=%d installe=%d officiel=%d, copie %s, exe %s", (int)MscOwn(), (int)MscOwnInstalled(), (int)MscOfficialInstalled(), Narrow(m, CP_UTF8).c_str(), Narrow(GameExe(), CP_UTF8).c_str());
+            ok = MscOwnInstalled() && PrepareMirror(m) && MscOwnApply(m, true, false);
+        } else if (!g_gameDir.empty() && !_wcsicmp(argv[2], L"installer")) {
             MscInstallThread(NULL);
             ok = g_mscInstall == 2;
             MscScan();
