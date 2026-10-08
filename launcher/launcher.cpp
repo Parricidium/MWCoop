@@ -117,6 +117,7 @@ static std::atomic<int> g_relState(REL_OFFLINE);
 
 static HANDLE g_proc;
 static DWORD g_pid, g_launchT, g_winSeenT, g_noProcT;
+static bool g_modChecked;   // partie lancee : trace du chargeur verifiee (serveur.inc, RunTick)
 static std::vector<HWND> g_preWnds;                 // fenetres Unity deja la au lancement (un autre jeu sur ce PC)
 static std::wstring g_launchInfo;
 static int g_lastLaunchMode;                        // mode du dernier lancement (partie en cours : serveur.inc)
@@ -3573,6 +3574,12 @@ static bool GameProcessRunning()
         wchar_t path[MAX_PATH];
         DWORD n = MAX_PATH;
         if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str()) || !_wcsicmp(path, own.c_str())) found = true;
+        else {
+            // Jeu d'un autre dossier (autre installation, relance par Steam ailleurs...) : note une fois. Retour d'un joueur
+            // (08/10) : « Game over » aussitot, le jeu ouvert sans MWCoop -- il tournait d'un dossier inconnu du lanceur.
+            static std::vector<std::wstring> told;
+            if (std::find(told.begin(), told.end(), std::wstring(path)) == told.end()) { told.push_back(path); LaunchLog("mywintercar.exe d'un autre dossier en cours : %s (dossier du jeu choisi : %s)", Narrow(path, CP_UTF8).c_str(), Narrow(g_gameDir, CP_UTF8).c_str()); }
+        }
         CloseHandle(h);
     }
     CloseHandle(snap);
@@ -3749,6 +3756,7 @@ static void Launch(int mode, const char *partie = NULL)
     g_launchT = GetTickCount();
     g_lastLaunchMode = mode;
     g_winSeenT = g_noProcT = 0;
+    g_modChecked = false;
     std::wstring name = PlayerName();
     wchar_t info[160];
     if (mode == MODE_HOST && g_steamNet) swprintf_s(info, T(L"%s h\u00E9berge la partie (Steam)", L"%s is hosting (Steam)"), name.c_str());
