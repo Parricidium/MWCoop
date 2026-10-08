@@ -11,6 +11,7 @@
 // une image (g_glassCache), refaite quand la mise en page change (RenderTo redessine alors l'image dans la foulee).
 // Clics : zones declarees pendant le dessin (HotZone, identifiants UI_*), plus les boutons g_btn (B_*).
 static const RectF kRail(16, 16, 232, 768), kMain(264, 88, 1000, 656), kFooter(264, 752, 1000, 32);
+static const RectF kSetSteamRow(792, 466, 452, 52);   // Reglages > Jeu : "Lancer le jeu par Steam" (ui.inc, bulle du guide)
 
 // ---- zones cliquables (refaites a chaque image)
 struct HotRect { RectF r; int id; };
@@ -31,7 +32,7 @@ enum {
     UI_LOBBY_GEAR = 190, UI_LOBBY_INVITE, UI_POP_PORTM, UI_POP_PORTP, UI_POP_CLOSE, UI_POP_CONTENT, UI_POP_X, UI_POP_LOOK,
     UI_LOBBY_ME_LOOK, UI_LOBBY_ME_CAR,
     UI_SET_AUTO = 220, UI_SET_CHECK, UI_SET_DARK, UI_SET_LIGHT, UI_SET_FR, UI_SET_EN, UI_SET_CLOSE, UI_SET_GUIDE,
-    UI_SET_STEAM, UI_SET_IP, UI_SET_PORTM, UI_SET_PORTP, UI_SET_FOLDER, UI_SET_BUY, UI_SET_MODSAUTO,
+    UI_SET_STEAM, UI_SET_IP, UI_SET_PORTM, UI_SET_PORTP, UI_SET_FOLDER, UI_SET_BUY, UI_SET_MODSAUTO, UI_SET_STEAMRUN,
     UI_API_DOC = 240, UI_API_SRC, UI_API_DIR, UI_API_COPY, UI_API_EX0, UI_API_EX1,
     UI_LOG_CLEAR = 250,           // JOURNAUX : tout supprimer (parties rangees)
     UI_GFX_GROUP = 2580,          // + groupe : plier / deplier une categorie de GRAPHISMES
