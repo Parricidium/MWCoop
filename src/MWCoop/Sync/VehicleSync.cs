@@ -1361,6 +1361,12 @@ namespace MWCoop
         }
 
         // Vitesse de la voiture que ce joueur conduit (0 : il ne conduit pas ici).
+        public static Vector3 RemoteVelocity(int player)
+        {
+            foreach (Car c in cars) if (c.RemoteDriver == player && c.Body != null) return c.Vel;
+            return Vector3.zero;
+        }
+
         public static float RemoteSpeed(int player)
         {
             foreach (Car c in cars) if (c.RemoteDriver == player && c.Body != null) return c.Vel.magnitude;
