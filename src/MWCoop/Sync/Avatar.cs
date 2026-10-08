@@ -683,7 +683,7 @@ namespace MWCoop
             if (inCar || Config.GetInt("Test", "TestPoseConduite", 0) != 0)
             {
                 // Passager : jambes allongees et buste du conducteur, mais pas ses bras (pas de volant).
-                Dictionary<string, Quaternion> pose = DriverPose(passenger ? "voiture" : carName);
+                Dictionary<string, Quaternion> pose = DriverPose(carName);   // (passager : la pose du vehicule aussi -- camion assis droit dans la GIFU ; avant, jambes allongees de voiture, a moitie couche)
                 if (pose != null)
                     foreach (KeyValuePair<string, Quaternion> kv in pose)
                     {
