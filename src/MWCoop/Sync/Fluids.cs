@@ -97,7 +97,7 @@ namespace MWCoop
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || seen.Contains(f) || SkipFsm.Contains(f.FsmName)) continue;
                 Transform t = f.transform;
-                string root = t.root.name;
+                string root = Game.RootName(t);
                 if (root == "GUI" || root == "PLAYER" || t.name.StartsWith("CapTrigger")) continue;
                 seen.Add(f);
                 string owner = KeyOf(t);

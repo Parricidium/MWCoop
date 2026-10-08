@@ -42,6 +42,9 @@ namespace MWCoop
             public bool Kinematic, WasKinematic;
             public int RideCar = -1;              // recu : numero de la voiture ou l'objet est colle ici
             public int RelCar = -1;               // tenu / lache par un autre assis dans cette voiture : pose dans son repere
+            public int HeadBy = -1;               // tenu par ce joueur a pied : pose dans le repere de sa tete (HeadPos/HeadRot)
+            public Vector3 HeadPos; public Quaternion HeadRot;
+            public bool Hidden;                   // range par un autre (inventaire d'un mod) : cache ici, corps garde
             public Vector3 RelPos; public Quaternion RelRot;
             public Vector3 RideLocal, RideCur;    // pose recue dans la voiture, pose affichee (rattrape)
             public Quaternion RideLocalRot, RideCurRot;
@@ -53,6 +56,14 @@ namespace MWCoop
         }
 
         static readonly Dictionary<string, Prop> props = new Dictionary<string, Prop>();
+        // Objets ranges (etat 4) : un mod d'inventaire (YAIM...) range l'objet tenu en l'eteignant (SetActive false). Avant,
+        // il restait visible chez les autres, qui pouvaient le prendre aussi (objet double). Celui qui le range l'annonce ;
+        // chez les autres il est cache (corps garde), et reparait au premier message suivant (ressorti dans la main). L'hote
+        // garde la liste et la renvoie toutes les 10 s (joueur arrive entre-temps).
+        const int STORED = 4;
+        static readonly HashSet<string> stored = new HashSet<string>();
+        static float nextStored, nextOut;
+        static readonly Dictionary<string, Rigidbody> storedHere = new Dictionary<string, Rigidbody>();   // ranges ici : ressortis ?
         static readonly Dictionary<Rigidbody, Prop> byBody = new Dictionary<Rigidbody, Prop>();
         static PlayMakerFSM hand;
         static Prop held;
@@ -67,7 +78,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            props.Clear(); byBody.Clear(); settling.Clear(); worldKeys.Clear(); worldLogged = false;
+            props.Clear(); byBody.Clear(); settling.Clear(); worldKeys.Clear(); worldLogged = false; stored.Clear(); storedHere.Clear();
             ridingIn.Clear(); ridingOut.Clear(); vanished.Clear(); unknown.Clear();
             hand = null; held = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
@@ -180,12 +191,17 @@ namespace MWCoop
             // la table est refaite a chaque passage, seuls les objets physiques actifs y sont.
             float now = Time.realtimeSinceStartup;
             byBody.Clear();
-            foreach (Prop p in props.Values) { if (Destroyed(p.Body)) Gone(p, now); p.Body = null; }
+            foreach (Prop p in props.Values)
+            {
+                if (Destroyed(p.Body)) Gone(p, now);
+                if (p.Hidden && p.Body != null && !Destroyed(p.Body)) byBody[p.Body] = p;   // cache ici (range par un autre) : garde
+                else p.Body = null;
+            }
             bool census = Config.GetInt("Test", "JournalSansId", 0) != 0 && !censusDone;
             var noId = census ? new Dictionary<string, int>() : null;
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
-                if (rb.transform.root.name == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
+                if (Game.RootName(rb.transform) == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
                 if (Garage.Owns(rb)) continue;   // levage d'un cric (corps rajoute par le jeu) : Garage, pas Props (recalage de l'hote sinon)
                 PlayMakerFSM use;
                 string id = ItemId(rb.gameObject, out use);
@@ -195,7 +211,7 @@ namespace MWCoop
                 {
                     if (census && !rb.isKinematic && rb.GetComponent("CarDynamics") == null)
                     {
-                        string k = rb.transform.root == rb.transform ? rb.name : rb.transform.root.name + "/.../" + rb.name;
+                        string k = rb.transform.root == rb.transform ? rb.name : Game.RootName(rb.transform) + "/.../" + rb.name;
                         int c; noId.TryGetValue(k, out c); noId[k] = c + 1;
                     }
                     continue;
@@ -216,7 +232,7 @@ namespace MWCoop
             }
             if (hand == null)
             {
-                GameObject h = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                GameObject h = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
                 if (h != null) hand = Game.FsmOn(h, "PickUp");
             }
         }
@@ -251,6 +267,7 @@ namespace MWCoop
             if (hand != null)
             {
                 GameObject go = hand.FsmVariables.GetFsmGameObject("PickedObject").Value;
+                if (go != null && !go.activeInHierarchy) go = null;   // (eteint en main : range par un mod d'inventaire)
                 Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
                 if (rb != null && !byBody.TryGetValue(rb, out h) && Time.realtimeSinceStartup - lastForced > 1f)
                 {
@@ -263,7 +280,14 @@ namespace MWCoop
             }
             if (h != held)
             {
-                if (held != null && !DropInCopy(held)) { held.SettleUntil = now + 5f; if (!settling.Contains(held)) settling.Add(held); }
+                if (held != null && held.Body != null && !Destroyed(held.Body) && !held.Body.gameObject.activeInHierarchy)
+                {
+                    Send(held, STORED, true);
+                    stored.Add(held.Id);
+                    storedHere[held.Id] = held.Body;
+                    Log.Info("objet " + held.Id + " range (eteint en main) : cache chez les autres");
+                }
+                else if (held != null && !DropInCopy(held)) { held.SettleUntil = now + 5f; if (!settling.Contains(held)) settling.Add(held); }
                 if (h != null)
                 {
                     settling.Remove(h); Unride(h); h.RemoteBy = -1; SetKinematic(h, false); Log.Info("piece prise : " + h.Id);
@@ -287,12 +311,40 @@ namespace MWCoop
             }
             if (now >= nextRide) { nextRide = now + 0.125f; Ride(now); }
 
+            // Range ici puis ressorti autrement qu'en main (pose au sol par le mod) : sa pose part, il reparait chez les autres.
+            if (storedHere.Count > 0 && now >= nextOut)
+            {
+                nextOut = now + 0.5f;
+                string back = null;
+                foreach (KeyValuePair<string, Rigidbody> kv in storedHere)
+                    if (kv.Value == null || kv.Value.gameObject.activeInHierarchy) { back = kv.Key; break; }
+                if (back != null)
+                {
+                    Rigidbody rb = storedHere[back];
+                    storedHere.Remove(back);
+                    Prop sp;
+                    if (rb != null && props.TryGetValue(back, out sp) && sp != held)
+                    {
+                        sp.Body = rb; byBody[rb] = sp;
+                        sp.SettleUntil = now + 5f;
+                        if (!settling.Contains(sp)) settling.Add(sp);
+                        Send(sp, 2, true);
+                        Log.Info("objet " + back + " ressorti ici : montre aux autres");
+                    }
+                }
+            }
+            if (Session.IsHost && stored.Count > 0 && now >= nextStored && Session.RemoteCount > 0)
+            {
+                nextStored = now + 10f;
+                foreach (string sid in stored)
+                    Session.Broadcast(new NetWriter(Msg.Prop).U8(Session.LocalId).Str(sid).U8(STORED).Vec(Vector3.zero).Quat(Quaternion.identity).Vec(Vector3.zero), true);
+            }
             if (Session.IsHost && now >= nextHost && Session.RemoteCount > 0)
             {
                 nextHost = now + 2f;
                 foreach (Prop p in props.Values)
                 {
-                    if (p.Body == null || p == held || p.RemoteBy >= 0 || p.RideOut >= 0 || settling.Contains(p)) continue;
+                    if (p.Body == null || p == held || p.RemoteBy >= 0 || p.RideOut >= 0 || settling.Contains(p) || !p.Body.gameObject.activeInHierarchy) continue;
                     if ((p.Body.position - p.LastSentPos).sqrMagnitude < 0.04f) continue;
                     // Piece montee sur un vehicule (portiere, capot...) : elle suit la voiture, pas de recalage.
                     Transform root = VehicleSync.CarRoot(p.Body.transform);
@@ -372,6 +424,18 @@ namespace MWCoop
                 t.rotation = Quaternion.Slerp(t.rotation, tr, k);
                 return;
             }
+            // Tenu par un joueur a pied : colle a son avatar (repere de sa tete affichee), pas a la pose recue qui avance
+            // par a-coups devant un avatar lisse -- l'objet flottait devant ou derriere lui en marchant (retour d'un joueur).
+            Vector3 hp; Quaternion hr;
+            if (p.HeadBy >= 0 && PlayerSync.HeadFrame(p.HeadBy, true, out hp, out hr))
+            {
+                tp = hp + hr * p.HeadPos; tr = hr * p.HeadRot;
+                if ((tp - t.position).sqrMagnitude > 9f) { t.position = tp; t.rotation = tr; return; }
+                float kk = 1f - Mathf.Exp(-40f * Time.deltaTime);
+                t.position = Vector3.Lerp(t.position, tp, kk);
+                t.rotation = Quaternion.Slerp(t.rotation, tr, kk);
+                return;
+            }
             if ((tp - t.position).sqrMagnitude > 9f) { t.position = tp; t.rotation = tr; return; }
             t.position = Vector3.Lerp(t.position, tp, k);
             t.rotation = Quaternion.Slerp(t.rotation, tr, k);
@@ -383,6 +447,7 @@ namespace MWCoop
             p.LastSentPos = p.Body.position;
             var w = new NetWriter(Msg.Prop).U8(Session.LocalId).Str(p.Id).U8(state)
                 .Vec(p.Body.position).Quat(p.Body.rotation).Vec(p.Body.velocity);
+            if (state != STORED) stored.Remove(p.Id);
             if (state == 0) InCarPose(p, w);
             else if (state == 1 || state == 2) RidePose(p, w);
             Session.SendAll(w, reliable);
@@ -658,7 +723,7 @@ namespace MWCoop
                 var w = new NetWriter(Msg.Prop).U8(who).Str(id).U8(state).Vec(pos).Quat(rot).Vec(vel);
                 if (state == 3) w.U8(car);
                 if (inCar || rel) w.U8(car).Vec(lp).Quat(lr);
-                Session.Broadcast(w, state == 0, who);
+                Session.Broadcast(w, state == 0 || state == STORED, who);
             }
             Prop p;
             float now = Time.realtimeSinceStartup, until;
@@ -670,13 +735,37 @@ namespace MWCoop
                 // Toujours inconnu (objet absent ici) : pas d'autre releve force pour lui avant 10 s (messages a 8-15/s).
                 if (p == null || p.Body == null) unknown[id] = now + 10f;
             }
+            if (state == STORED) stored.Add(id); else stored.Remove(id);
             if (p == null || p.Body == null || p == held) return;
             p.RemoteAt = now;
+            if (state == STORED)
+            {
+                if (!p.Hidden) Log.Info("objet " + id + " range par #" + who + " : cache ici");
+                Unride(p); settling.Remove(p);
+                p.RemoteBy = -1; p.HeadBy = -1; p.Hidden = true;
+                p.Body.gameObject.SetActive(false);
+                byBody[p.Body] = p;
+                return;
+            }
+            if (p.Hidden)
+            {
+                p.Hidden = false;
+                p.Body.gameObject.SetActive(true);
+                Log.Info("objet " + id + " ressorti par #" + who);
+            }
             if (state == 3) { Glue(p, who, car, pos, rot, vel); return; }
             Unride(p);
             p.Pos = pos; p.Rot = rot; p.Vel = vel;
             p.RelCar = rel && VehicleSync.CarBody(car) != null ? car : -1;
             p.RelPos = lp; p.RelRot = lr;
+            p.HeadBy = -1;
+            Vector3 nh; Quaternion nr;
+            if (state == 1 && p.RelCar < 0 && Config.GetInt("Test", "TenirAncien", 0) == 0 && PlayerSync.HeadFrame(who, false, out nh, out nr))   // (essais : TenirAncien=1, comme avant)
+            {
+                Quaternion inv = Quaternion.Inverse(nr);
+                p.HeadPos = inv * (pos - nh); p.HeadRot = inv * rot;
+                if (p.HeadPos.sqrMagnitude < 9f) p.HeadBy = who;   // (etat du joueur pas encore recu, ou loin : pose recue)
+            }
             if (state != 0)
             {
                 if (p.RemoteBy != who) Log.Info("piece " + id + " deplacee par #" + who);
@@ -727,6 +816,25 @@ namespace MWCoop
             p.Body.isKinematic = false;
             return p.Id + " en " + p.Body.position.ToString("F2");
         }
+
+        // Essais : le joueur local "tient" l'objet 'id' (variable PickedObject de la main, comme le jeu), pose devant sa
+        // camera ; null : lache. Retourne son corps.
+        public static Rigidbody TestHold(string id, Transform cam)
+        {
+            Prop p;
+            if (hand == null || !props.TryGetValue(id, out p) || p.Body == null) return null;
+            hand.FsmVariables.GetFsmGameObject("PickedObject").Value = cam != null ? p.Body.gameObject : null;
+            if (cam != null)
+            {
+                p.Body.isKinematic = true;
+                p.Body.transform.position = cam.position + cam.forward * 0.7f - cam.up * 0.25f;
+                p.Body.transform.rotation = cam.rotation;
+            }
+            else p.Body.isKinematic = false;
+            return p.Body;
+        }
+
+        public static Rigidbody BodyOf(string id) { Prop p; return props.TryGetValue(id, out p) ? p.Body : null; }
 
         // Essais : pose l'objet 'id' dans la voiture, a 'local' (repere de la voiture), immobile par rapport a elle.
         public static string TestPlace(string id, Rigidbody car, Vector3 local)
@@ -824,7 +932,7 @@ namespace MWCoop
         {
             var sb = new System.Text.StringBuilder();
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
-                if ((rb.position - pos).sqrMagnitude < radius * radius && rb.transform.root.name != "PLAYER")
+                if ((rb.position - pos).sqrMagnitude < radius * radius && Game.RootName(rb.transform) != "PLAYER")
                     sb.Append(rb.name).Append('[').Append(ItemId(rb.gameObject)).Append(']').Append(rb.position.ToString("F2")).Append("  ");
             return sb.ToString();
         }

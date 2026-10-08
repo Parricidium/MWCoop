@@ -11,6 +11,24 @@ namespace MWCoop
         static float t0 = -1;
         static System.Collections.Generic.List<float> captureTimes;
 
+        // [Test] BoissonDefile=1 (hote) : de 60 s, chaque boisson de Drinks.Names 8 s a tour de role, en buvant ;
+        // [Test] CaptureBoisson=1 (invite, avec CameraAvatar) : capture dumps\ecran-boisson-<nom>.png 3 s apres chaque
+        // nouvelle boisson dans la main de l'avatar.
+        public static int DrinkCycle
+        {
+            get
+            {
+                if (t0 < 0 || Config.GetInt("Test", "BoissonDefile", 0) == 0) return 0;
+                float t = Time.realtimeSinceStartup - t0 - 60f;
+                if (t < 0f) return 0;
+                int i = 1 + (int)(t / 8f);
+                return i < Drinks.Names.Length ? i : 0;
+            }
+        }
+        static string capName;
+        static float capAt;
+        public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
+
         public static void Update()
         {
             string mode = Config.Get("Test", "Autotest", "");
@@ -28,6 +46,13 @@ namespace MWCoop
                 Application.CaptureScreenshot(png);
                 Log.Info("autotest : capture " + png + " (" + Application.loadedLevelName + ")");
                 captureTimes.RemoveAt(0);
+            }
+            if (capName != null && Time.realtimeSinceStartup >= capAt)
+            {
+                string png = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "ecran-" + capName + ".png");
+                Application.CaptureScreenshot(png);
+                Log.Info("autotest : capture " + png);
+                capName = null;
             }
             if (Application.loadedLevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
@@ -794,6 +819,115 @@ namespace MWCoop
                 string k = watchKey.StartsWith("~") ? Props.FindKey(watchKey.Substring(1)) : watchKey;
                 Log.Info("autotest : " + k + " est en " + Props.Where(k));
             }
+            // [Test] Autotest=tenir (TestPiece, ~sandbag(item1) par defaut) : l'hote tient l'objet devant lui en marchant en
+            // rond de 40 a 70 s ; l'invite note 2 fois/s sa position dans le repere de l'avatar de l'hote (pieds, cap) et,
+            // a 85 s, l'ecart type de cette position : un objet colle a l'avatar ne bouge pas dans son repere.
+            if (mode == "tenir")
+            {
+                string id = Config.Get("Test", "TestPiece", "~sandbag(item1)");
+                if (id.StartsWith("~")) id = Props.FindKey(id.Substring(1)) ?? id;
+                if (Net.Session.IsHost)
+                {
+                    Transform cam = PlayerSync.LocalCamera;
+                    if (t > 40f && t < 70f && cam != null)
+                    {
+                        GameObject pl = GameObject.Find("PLAYER");
+                        var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                        if (cc != null) { pl.transform.Rotate(0, 30f * Time.deltaTime, 0); cc.SimpleMove(pl.transform.forward * 1.8f); }
+                        Rigidbody hb = Props.TestHold(id, cam);
+                        if (step == 0) { step = 1; Log.Info("autotest : tenir " + id + (hb != null ? "" : " (absent)")); }
+                    }
+                    if (t > 70f && step == 1) { step = 2; Props.TestHold(id, null); Log.Info("autotest : tenir, lache"); }
+                }
+                else
+                {
+                    Avatar av = null;
+                    foreach (Avatar a in PlayerSync.Avatars) if (a.Root != null) { av = a; break; }
+                    Rigidbody b = Props.BodyOf(id);
+                    if (av != null && b != null && b.isKinematic && (av.Player.State.Flags & PlayerSync.F_Carry) != 0 && t >= holdLog && t < 120f)
+                    {
+                        holdLog = t + 0.5f;
+                        Vector3 lp = av.Root.transform.InverseTransformPoint(b.position);
+                        holdN++; holdSum += lp; holdSq += Vector3.Scale(lp, lp);
+                        if (holdN % 6 == 1) Log.Info("autotest : tenir, objet dans le repere de l'avatar " + lp.ToString("F2"));
+                    }
+                    if (t > 125f && holdN > 0 && !done)
+                    {
+                        done = true;
+                        Vector3 m = holdSum / holdN, v = holdSq / holdN - Vector3.Scale(m, m);
+                        Log.Info("autotest : tenir, " + holdN + " mesures, moyenne " + m.ToString("F2") + ", ecart type " + new Vector3(Mathf.Sqrt(Mathf.Max(v.x, 0)), Mathf.Sqrt(Mathf.Max(v.y, 0)), Mathf.Sqrt(Mathf.Max(v.z, 0))).ToString("F3"));
+                    }
+                }
+            }
+            // [Test] Autotest=ranger (TestPiece, ~sandbag(item1)) : comme un mod d'inventaire (YAIM). L'hote tient l'objet de
+            // 40 a 50 s, l'eteint en main a 50 s (range), le rallume pose 1,5 m devant lui a 70 s (sorti au sol). L'invite note
+            // toutes les 2 s s'il le voit (actif) et ou. Attendu : cache chez l'invite apres 50 s (horloge de l'hote), revu
+            // pose devant l'hote apres 70 s.
+            if (mode == "ranger")
+            {
+                string id = Config.Get("Test", "TestPiece", "~sandbag(item1)");
+                if (id.StartsWith("~")) id = Props.FindKey(id.Substring(1)) ?? id;
+                if (Net.Session.IsHost)
+                {
+                    Transform cam = PlayerSync.LocalCamera;
+                    if (t > 40f && t < 50f && cam != null) { Props.TestHold(id, cam); if (step == 0) { step = 1; Log.Info("autotest : ranger, tient " + id); } }
+                    if (t > 50f && step == 1) { step = 2; Rigidbody rb = Props.BodyOf(id); if (rb != null) { rangeGo = rb.gameObject; rangeGo.SetActive(false); } Log.Info("autotest : ranger, eteint en main"); }
+                    if (t > 52f && step == 2) { step = 3; Props.TestHold(id, null); }
+                    if (t > 70f && step == 3 && rangeGo != null && cam != null)
+                    {
+                        step = 4;
+                        Vector3 f = cam.forward; f.y = 0;
+                        rangeGo.transform.position = cam.position + f.normalized * 1.5f;
+                        rangeGo.SetActive(true);
+                        Rigidbody rb = rangeGo.GetComponent<Rigidbody>(); if (rb != null) rb.isKinematic = false;
+                        Log.Info("autotest : ranger, ressorti en " + rangeGo.transform.position.ToString("F1"));
+                    }
+                }
+                else if (t >= holdLog && t < 140f)
+                {
+                    holdLog = t + 2f;
+
+                    Rigidbody rb = Props.BodyOf(id);
+                    Log.Info("autotest : ranger, objet " + (rb == null ? "sans corps ici" : (rb.gameObject.activeInHierarchy ? "visible en " + rb.position.ToString("F1") : "cache")));
+                }
+            }
+            // [Test] Autotest=poro (instances avec le mod Okkelmo Poro) : l'hote monte sur la motoneige a 60 s comme le mod
+            // (joueur range sous PORO, PlayerCurrentVehicle "Poro"), la pousse a 4 m/s de 65 a 80 s, descend a 90 s.
+            // Chacun note toutes les 2 s la position de PORO et si c'est une copie.
+            if (mode == "poro")
+            {
+                GameObject poro = GameObject.Find("PORO");
+                Rigidbody pb = poro != null ? poro.GetComponent<Rigidbody>() : null;
+                if (Net.Session.IsHost && pb != null)
+                {
+                    Transform pl = Game.PlayerT;
+                    if (t > 60f && step == 0 && pl != null)
+                    {
+                        step = 1;
+                        var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                        pl.position = poro.transform.TransformPoint(new Vector3(0f, 0.9f, -0.3f));
+                        pl.parent = poro.transform;
+                        Game.SetGlobal("PlayerCurrentVehicle", "Poro");
+                        Log.Info("autotest : poro, monte");
+                    }
+                    if (t > 65f && t < 80f) { Vector3 f = poro.transform.forward; f.y = 0; pb.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(pb.velocity.y, 0f); }
+                    if (t > 90f && step == 1 && pl != null)
+                    {
+                        step = 2;
+                        pl.parent = null;
+                        pl.position += Vector3.up * 0.3f + poro.transform.right * 1.2f;
+                        var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = true;
+                        Game.SetGlobal("PlayerCurrentVehicle", "");
+                        Log.Info("autotest : poro, descendu");
+                    }
+                }
+                if (pb != null && t > 20f && t < 160f && Time.realtimeSinceStartup >= rivLog)
+                {
+                    rivLog = Time.realtimeSinceStartup + 2f;
+                    Log.Info("autotest : poro en " + pb.position.ToString("F1") + (pb.isKinematic ? " (copie)" : " (locale)") + " v " + pb.velocity.magnitude.ToString("F1"));
+                }
+                if (pb == null && t > 20f && step == 0) { step = 9; Log.Info("autotest : poro, pas de PORO ici"); }
+            }
             if (mode == "porter")
             {
                 // [Test] TestPiece promenee de 30 a 36 s (comme tenue en main), position a 45 s.
@@ -1327,7 +1461,10 @@ namespace MWCoop
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
-        static float rivLog, cabGap;
+        static float rivLog, cabGap, holdLog;
+        static int holdN;
+        static GameObject rangeGo;
+        static Vector3 holdSum, holdSq;
         static bool tcOn;
         static float tcAt;
         static GameObject tcWalker, tcCust;

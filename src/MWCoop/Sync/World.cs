@@ -363,7 +363,7 @@ namespace MWCoop
                 cloudObjects.gameObject.SetActive(snowing);
                 Log.Info("monde : nuages " + (snowing ? "affiches" : "caches") + " (hote)");
             }
-            if (playerRain == null) { GameObject pr = GameObject.Find("PLAYER/Rain"); if (pr != null) playerRain = Game.FsmOn(pr, "Rain"); }
+            if (playerRain == null) { GameObject pr = Game.PlayerPart("Rain"); if (pr != null) playerRain = Game.FsmOn(pr, "Rain"); }
             FsmBool rainYes = playerRain != null ? playerRain.FsmVariables.FindFsmBool("RainYes") : null;
             if (rainYes != null) rainYes.Value = snowing;
         }

@@ -101,7 +101,7 @@ namespace MWCoop
                 }
             }
             // Voile noir que la mort allume (ScreenOverlay de la camera) : etat normal note.
-            GameObject cam = Game.FindAny("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+            GameObject cam = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
             if (cam != null) foreach (Behaviour b in cam.GetComponents<Behaviour>()) if (b.GetType().Name == "ScreenOverlay") overlays.Add(new KeyValuePair<Behaviour, bool>(b, b.enabled));
             Log.Info("reapparition : prete (" + heads.Count + " tetes de conducteur)");
         }
@@ -208,7 +208,7 @@ namespace MWCoop
         {
             float best = float.NegativeInfinity;
             foreach (RaycastHit h in Physics.RaycastAll(place.Top, Vector3.down, 6f))
-                if (h.collider != null && !h.collider.isTrigger && h.collider.transform.root.name != "PLAYER" && h.point.y > best) best = h.point.y;
+                if (h.collider != null && !h.collider.isTrigger && Game.RootName(h.collider.transform) != "PLAYER" && h.point.y > best) best = h.point.y;
             float floor = best > float.NegativeInfinity ? best : place.Top.y - 1.2f;
             float feet = cc != null ? cc.center.y - cc.height / 2f : -0.9f;
             return new Vector3(place.Top.x, floor + 0.05f - feet, place.Top.z);

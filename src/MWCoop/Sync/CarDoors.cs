@@ -695,6 +695,11 @@ namespace MWCoop
         {
             applying = true; Replay.Depth++;
             try { Game.SetState(d.Fsm, state); }
+            catch (System.Exception e)
+            {
+                System.Exception x = e.InnerException ?? e;
+                Log.Warn("portiere " + d.Key + " -> " + state + " : " + x.GetType().Name + " dans " + d.Fsm.FsmName + " (etat " + d.Fsm.ActiveStateName + ")" + (x.StackTrace != null ? " " + x.StackTrace.Split('\n')[0].Trim() : ""));
+            }
             finally { applying = false; Replay.Depth--; }
         }
 

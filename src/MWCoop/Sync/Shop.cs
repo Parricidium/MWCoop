@@ -534,7 +534,7 @@ namespace MWCoop
             {
                 kind = "cafe"; label = "un cafe"; states = new[] { "Purchase" }; wait = 20f;
             }
-            else if (fsm == "Button" && n == "Ticket" && parent != null && parent.name == "BUS" && f.transform.root.name == "NPC_CARS"
+            else if (fsm == "Button" && n == "Ticket" && parent != null && parent.name == "BUS" && Game.RootName(f.transform) == "NPC_CARS"
                      && f.Fsm.GetState("Pay trip") != null)
             {
                 // Le bus change de parent (point de depart) : cle sans le chemin au-dessus de BUS (racine NPC_CARS :
@@ -1930,7 +1930,7 @@ namespace MWCoop
                     if (od.OwnerOption != OwnerDefaultOption.UseOwner && !Moving(f, od.GameObject, written)) go = od.GameObject.Value;
                 }
                 if (go == null) continue;
-                string root = go.transform.root.name;
+                string root = Game.RootName(go.transform);
                 if (go.name == "Statistics" || root == "PLAYER" || root == "GUI") return true;
             }
             return false;
@@ -2449,12 +2449,12 @@ namespace MWCoop
                 if (c.Fsm == null || (c.Kind != "tasse" && c.Kind != "cafe") || c.Kind == "cafe" && !c.Fsm.gameObject.activeInHierarchy) continue;
                 if (c.Kind == "tasse" && string.IsNullOrEmpty(c.Fsm.ActiveStateName)) continue;   // jamais prise
                 if (c.Kind == "tasse")
-                    sb.Append("tasse ").Append(c.Fsm.transform.root.name).Append(" Coffee=").Append(c.Fsm.FsmVariables.FindFsmFloat("Coffee").Value.ToString("0.000"))
+                    sb.Append("tasse ").Append(Game.RootName(c.Fsm.transform)).Append(" Coffee=").Append(c.Fsm.FsmVariables.FindFsmFloat("Coffee").Value.ToString("0.000"))
                       .Append(" [").Append(c.Fsm.ActiveStateName).Append("] sous ").Append(c.Fsm.transform.parent != null ? c.Fsm.transform.parent.name : "rien").Append(" ; ");
                 else
                 {
                     PlayMakerFSM pf = FsmOnVar(c.Fsm, "Pan", "Data");
-                    sb.Append("bouton ").Append(c.Fsm.transform.root.name).Append(" [").Append(c.Fsm.ActiveStateName).Append("] verseur ")
+                    sb.Append("bouton ").Append(Game.RootName(c.Fsm.transform)).Append(" [").Append(c.Fsm.ActiveStateName).Append("] verseur ")
                       .Append(pf != null ? pf.ActiveStateName + " (" + (Replay.Owner(pf) ?? "personne") + ")" : "?").Append(" ; ");
                 }
             }

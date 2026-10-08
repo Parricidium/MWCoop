@@ -170,7 +170,7 @@ namespace MWCoop
         static bool Ok(GameObject go)
         {
             if (go == null) return false;
-            string r = go.transform.root.name;
+            string r = Game.RootName(go.transform);
             return r != "PLAYER" && r != "GUI" && !r.StartsWith("MWCoop");
         }
 
