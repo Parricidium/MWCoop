@@ -121,6 +121,8 @@ namespace MWCoop
         static readonly HashSet<string> WorldRoots = new HashSet<string> { "EQUIPMENTS", "Systems", "YARD", "COTTAGE", "CABIN", "MISC",
             "JOBS", "STORE_AREA", "SOCCER", "MAP", "PERAJARVI", "HOMENEW" };   // plaques de puits, mobilier du pub, buts, abribus...
 
+        public static string WorldKeyOf(Rigidbody rb) { return WorldKey(rb); }   // (Fluids : bidons)
+
         static string WorldKey(Rigidbody rb)
         {
             string k;

@@ -100,7 +100,9 @@ namespace MWCoop
                 string root = Game.RootName(t);
                 if (root == "GUI" || root == "PLAYER" || t.name.StartsWith("CapTrigger")) continue;
                 seen.Add(f);
-                string owner = KeyOf(t);
+                bool later;
+                string owner = KeyOf(t, out later);
+                if (later) seen.Remove(f);   // bidon tenu ou range : cle au prochain releve
                 if (owner == null) continue;
                 foreach (FsmFloat v in f.FsmVariables.FloatVariables)
                 {
@@ -127,14 +129,25 @@ namespace MWCoop
 
         // Cle stable : ID de la piece porteuse (lui-meme ou jusqu'a 4 parents) + chemin relatif, sinon
         // chemin complet. Les objets clones sans ID ((Clone), (itemx) sans ID) sont ignores.
-        static string KeyOf(Transform t)
+        // Bidons d'essence et de gazole (EQUIPMENTS/gasoline(itemx), diesel(itemx)) : pas d'ID, leur niveau
+        // (FluidTrigger 'Data'.Fluid) etait ignore -- rempli chez l'un, vide chez l'autre (retour d'un joueur,
+        // 08/10). Cle d'objet du monde de Props (la meme chez chacun, prise au chargement). Pas les seaux ni la
+        // casserole : plusieurs copies de travail de Water, recalculees par le jeu.
+        static string KeyOf(Transform t, out bool later)
         {
+            later = false;
             string rel = "";
             Transform p = t;
             for (int i = 0; p != null && i < 5; i++, p = p.parent)
             {
                 string id = Props.ItemId(p.gameObject);
                 if (id.Length > 0) return id + (rel.Length > 0 ? "/" + rel : "");
+                if (t.name == "FluidTrigger" && p.name.EndsWith("(itemx)") && p.GetComponent<Rigidbody>() != null)
+                {
+                    string wk = Props.WorldKeyOf(p.GetComponent<Rigidbody>());
+                    if (wk == null) { later = true; return null; }
+                    return wk + "/" + rel;
+                }
                 rel = rel.Length > 0 ? p.name + "/" + rel : p.name;
             }
             string path = Recon.Path(t);
@@ -235,6 +248,23 @@ namespace MWCoop
             if (best == null) return "aucune valeur " + name + " (" + watches.Count + " suivies)";
             best.Var.Value += 3f;
             return best.Key + " = " + best.Var.Value + " a " + Mathf.Sqrt(bd).ToString("F0") + " m (" + watches.Count + " suivies)";
+        }
+
+        // Essais : ajoute 'delta' a la 1re valeur suivie dont la cle contient 'part' (bidon rempli a la pompe).
+        public static string TestBump(string part, float delta)
+        {
+            foreach (Watch x in watches)
+                if (x.Fsm != null && x.Key.Contains(part)) { x.Var.Value += delta; return x.Key + " = " + x.Var.Value.ToString("F2"); }
+            return "aucune valeur '" + part + "'";
+        }
+
+        // Essais : valeurs suivies dont la cle contient 'part' (cle = valeur).
+        public static string TestState(string part)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Watch x in watches)
+                if (x.Fsm != null && x.Key.Contains(part)) sb.Append(sb.Length > 0 ? " ; " : "").Append(x.Key).Append(" = ").Append(x.Var.Value.ToString("F2"));
+            return sb.Length > 0 ? sb.ToString() : "aucune valeur '" + part + "' (" + watches.Count + " suivies)";
         }
 
         // Essais (Jobs, [Test] Autotest=fosse) : fosses (par cle) et citerne suivies.
