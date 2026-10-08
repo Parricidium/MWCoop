@@ -1269,8 +1269,12 @@ namespace MWCoop
             if (mode == "liquide" && t > 40f && !done)
             {
                 done = true;
-                Log.Info("autotest : liquide " + Fluids.TestNearest(Config.Get("Test", "TestLiquide", "Fluid")));
+                string bump = Config.Get("Test", "LiquideCle", "");   // ([Test] LiquideCle=gasoline : +10 a cette valeur)
+                Log.Info("autotest : liquide " + (bump.Length > 0 ? Fluids.TestBump(bump, 10f) : Fluids.TestNearest(Config.Get("Test", "TestLiquide", "Fluid"))));
             }
+            // [Test] SuivreLiquide=gasoline : valeurs suivies dont la cle contient ce texte, a 35 et 60 s.
+            string fluidWatch = Config.Get("Test", "SuivreLiquide", "");
+            if (fluidWatch.Length > 0 && ((t > 35f && step == 0) || (t > 60f && step == 1))) { step++; Log.Info("autotest : liquide t=" + t.ToString("F0") + " " + Fluids.TestState(fluidWatch)); }
             if (mode == "interactifs" && t > 40f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpInteractive()); }
             if (mode == "monde" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpWorldFsms()); }
             // [Test] Autotest=corps : etat du corps de l'invite garde d'une session a l'autre. Chacun note faim, soif, ivresse
