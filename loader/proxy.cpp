@@ -456,6 +456,15 @@ static void Init() {
     HMODULE real = LoadLibraryW(sys);
     for (int i = 0; i < 17; i++) g_real[i] = real ? GetProcAddress(real, kExports[i]) : NULL;
 
+    // Charge par un autre programme que le jeu (lanceur MWCoop 0.59.4-0.59.7, outil pose dans le dossier du jeu...) :
+    // simple relais vers la version.dll de Windows -- ni crochets, ni journal, ni rangement des journaux de la partie
+    // (le lanceur 0.59.7 rangeait ceux du jeu a son ouverture : le zip des journaux d'un joueur n'en contenait aucun).
+    {
+        wchar_t exe[MAX_PATH]; GetModuleFileNameW(NULL, exe, MAX_PATH);
+        const wchar_t* base = wcsrchr(exe, L'\\');
+        if (_wcsicmp(base ? base + 1 : exe, L"mywintercar.exe")) return;
+    }
+
     // Dossier du jeu en lecture seule (droits, antivirus) : profils et journaux dans %LOCALAPPDATA%\MWCoop.
     // Sans cela rien ne s'ecrit, le mod ne demarre pas et le jeu reste sur l'avertissement « I understand ».
     wcscpy(g_dataRoot, g_modDir);
