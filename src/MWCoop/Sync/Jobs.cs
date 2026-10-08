@@ -74,7 +74,7 @@ namespace MWCoop
         // Vehicule conduisible range sous JOBS (MACHTWAGEN du taxi).
         static bool JobCar(Rigidbody rb)
         {
-            return rb.transform.parent != null && rb.transform.root.name == "JOBS" && rb.GetComponent("CarDynamics") != null && rb.GetComponent<AxisCarController>() != null;
+            return rb.transform.parent != null && Game.RootName(rb.transform) == "JOBS" && rb.GetComponent("CarDynamics") != null && rb.GetComponent<AxisCarController>() != null;
         }
 
         static bool UnderJobCar(Transform t)
@@ -96,6 +96,7 @@ namespace MWCoop
             public Dictionary<string, int> Loops = new Dictionary<string, int>();            // commande : transitions sans geste, sur 10 s
             public HashSet<string> Quiet = new HashSet<string>();                            // ... qui bouclent : plus envoyees
             public float LoopStart, LastClick = -100f;
+            public float KeyClickAt = -100f;                                                 // cle : dernier clic d'ici
         }
         const int K_PLAIN = 0, K_LOGTRIGGER = 1, K_FEEDLOG = 2, K_IGNITION = 3;
         static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach",
@@ -446,12 +447,21 @@ namespace MWCoop
 
         static void OnIgnition(Job j, FsmState from, string ev, string state)
         {
-            if (from != null && j.ClickStates.Contains(from.Name) && ev != "FINISHED") j.FromReplay = false;   // clic du joueur d'ici
+            if (from != null && j.ClickStates.Contains(from.Name) && ev != "FINISHED") { j.FromReplay = false; j.KeyClickAt = Time.realtimeSinceStartup; }   // clic du joueur d'ici
             if (j.FromReplay || !IgnitionStates.Contains(state)) return;
             var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(from != null ? from.Name : "").Str(ev).Str(state);
             WriteVars(j.F, w);
             Log.Info("cle : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + ev + "-> " + state);
             Session.SendAll(w, true);
+        }
+
+        // VehicleSync : la cle de cette voiture a ete tournee ici (pas rejouee d'un autre) depuis moins de 'within' s.
+        public static bool KeyTurnedHere(Transform car, float within)
+        {
+            float now = Time.realtimeSinceStartup;
+            foreach (Job j in jobs.Values)
+                if (j.Kind == K_IGNITION && j.F != null && !j.FromReplay && now - j.KeyClickAt < within && j.F.transform.IsChildOf(car)) return true;
+            return false;
         }
 
         static void ApplyIgnition(Job j, int who, string key, string state)
@@ -810,7 +820,7 @@ namespace MWCoop
                 else if (v is FsmOwnerDefault) go = OwnerGo((FsmOwnerDefault)v);
                 else if (v is FsmEventTarget) go = OwnerGo(((FsmEventTarget)v).gameObject);
                 if (go == null) continue;
-                string rn = go.transform.root.name;
+                string rn = Game.RootName(go.transform);
                 if (rn == "PLAYER" || rn == "GUI") return true;
             }
             return false;
@@ -1611,8 +1621,11 @@ namespace MWCoop
                 }
             }
             if (!Session.IsHost || key == null) return;
-            if (t > 22f && keyStep == 0) { keyStep = 1; Log.Info("autotest : cle, volant -> " + VehicleSync.TestEnter(car, false) + " / " + VehicleSync.TestEnter(car, true)); }
-            if (t > 23f && keyStep == 1) { keyStep = 2; Log.Info("autotest : cle, volant -> " + VehicleSync.TestEnter(car, true)); }
+            // [Test] CleDehors=1 : l'hote reste a cote de la voiture (cle tournee sans etre au volant) : il doit en garder la
+            // main ("moteur demarre ici sans conducteur"), l'invite voir le moteur tourner chez #0.
+            bool dehors = Config.GetInt("Test", "CleDehors", 0) != 0;
+            if (t > 22f && keyStep == 0) { keyStep = 1; Log.Info("autotest : cle, volant -> " + VehicleSync.TestEnter(car, false) + (dehors ? " (reste dehors)" : " / " + VehicleSync.TestEnter(car, true))); }
+            if (t > 23f && keyStep == 1) { keyStep = 2; if (!dehors) Log.Info("autotest : cle, volant -> " + VehicleSync.TestEnter(car, true)); }
             if (t > 32f && keyStep == 2) { keyStep = 3; Game.SetState(key, "Wait1"); key.SendEvent("ACC"); Log.Info("autotest : cle, contact -> " + key.ActiveStateName); }
             if (t > 34f && keyStep == 3) { keyStep = 4; key.SendEvent("START"); Log.Info("autotest : cle, demarreur -> " + key.ActiveStateName); }
             // [Test] CleForce=1 : demarreur pas parti (moteur froid de la sauvegarde) -> "Running" pose a la main ; et les sources

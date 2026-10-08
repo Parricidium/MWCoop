@@ -645,7 +645,7 @@ namespace MWCoop
                 for (int k = 0; k < dirs.Length; k++)
                 {
                     RaycastHit hit = new RaycastHit(); bool any = false;
-                    foreach (RaycastHit x in Physics.RaycastAll(h, dirs[k], 3f)) if (!x.collider.isTrigger && x.collider.transform.root.name != "PLAYER" && (!any || x.distance < hit.distance)) { hit = x; any = true; }
+                    foreach (RaycastHit x in Physics.RaycastAll(h, dirs[k], 3f)) if (!x.collider.isTrigger && Game.RootName(x.collider.transform) != "PLAYER" && (!any || x.distance < hit.distance)) { hit = x; any = true; }
                     if (any) sb.Append(' ').Append(nm[k]).Append(' ').Append(hit.distance.ToString("F2")).Append(" (").Append(hit.collider.name).Append(')');
                     else sb.Append(' ').Append(nm[k]).Append(" -");
                 }

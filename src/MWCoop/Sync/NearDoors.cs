@@ -60,7 +60,7 @@ namespace MWCoop
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || seen.Contains(f) || !f.transform.root.gameObject.activeInHierarchy) continue;
-                string root = f.transform.root.name;
+                string root = Game.RootName(f.transform);
                 if (root == "PLAYER" || root == "GUI" || root.StartsWith("MWCoop")) continue;
                 FsmState[] states;
                 try { states = f.Fsm.States; } catch { continue; }

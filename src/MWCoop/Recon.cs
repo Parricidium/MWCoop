@@ -38,7 +38,7 @@ namespace MWCoop
             {
                 var f = (PlayMakerFSM)o;
                 if (f.hideFlags != HideFlags.None) continue;
-                string root = f.transform.root.name;
+                string root = Game.RootName(f.transform);
                 if (root == "PLAYER" || root == "GUI" || root.StartsWith("MWCoop")) continue;
                 if (Interactions.Tracks(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) continue;
                 bool persist = false, input = false, personal = false, money = false, playerGlobal = false;
@@ -57,7 +57,7 @@ namespace MWCoop
                                 GameObject go = null;
                                 if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
                                 else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; go = od.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : od.GameObject.Value; }
-                                if (go != null && go.transform.root.name == "PLAYER") personal = true;
+                                if (go != null && Game.RootName(go.transform) == "PLAYER") personal = true;
                                 var nv = v as NamedVariable;
                                 if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && !Game.LocalVar(f, nv.Name))
                                 {
@@ -185,7 +185,7 @@ namespace MWCoop
                             }
                             if (hits.Count == 0) continue;
                             string owner = Replay.Owner(f);
-                            lines.Add(f.transform.root.name + " | " + Path(f.transform) + " :: " + f.FsmName + " / " + st.Name + " : " + a.GetType().Name
+                            lines.Add(Game.RootName(f.transform) + " | " + Path(f.transform) + " :: " + f.FsmName + " / " + st.Name + " : " + a.GetType().Name
                                       + "(" + string.Join(", ", hits.ToArray()) + other + ")" + (owner != null ? " [" + owner + "]" : " [libre]")
                                       + (f.gameObject.activeInHierarchy ? "" : " (inactif)"));
                         }
@@ -208,7 +208,7 @@ namespace MWCoop
             var tracked = new SortedDictionary<string, int>();
             foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
             {
-                string root = f.transform.root.name;
+                string root = Game.RootName(f.transform);
                 if (root == "PLAYER" || root == "GUI") continue;
                 bool clicky = false;
                 try
@@ -262,7 +262,7 @@ namespace MWCoop
                     float rad = float.Parse(path.Substring(path.IndexOf(':') + 1), System.Globalization.CultureInfo.InvariantCulture);
                     Vector3 c = GameObject.Find("PLAYER").transform.position;
                     foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
-                        if ((rb.position - c).sqrMagnitude < rad * rad && rb.transform.root.name != "PLAYER")
+                        if ((rb.position - c).sqrMagnitude < rad * rad && Game.RootName(rb.transform) != "PLAYER")
                         {
                             sb.Append("===== ").Append(Path(rb.transform)).Append('\n');
                             Walk(sb, rb.transform, 0, withParams);

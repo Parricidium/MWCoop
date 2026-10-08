@@ -364,7 +364,7 @@ namespace MWCoop
                     if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
                     else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
                     if (go == null) continue;
-                    string root = go.transform.root.name;
+                    string root = Game.RootName(go.transform);
                     if (root == "PLAYER" || root == "GUI") return true;
                 }
             }

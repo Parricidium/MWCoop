@@ -236,7 +236,7 @@ namespace MWCoop
             {
                 if (now < nextHand) return;
                 nextHand = now + 2f;
-                GameObject h = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                GameObject h = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
                 hand = h != null ? Game.FsmOn(h, "PickUp") : null;
                 if (hand == null) return;
             }

@@ -82,6 +82,7 @@ namespace MWCoop
             public Drivetrain Dt;
             public Wheel[] Wheels;
             public AxisCarController Axis;
+            public bool Mod;                  // vehicule de mod sans CarDynamics (IsModVehicle)
             public SoundController Sound;     // coupe par le jeu quand le joueur local n'est pas au volant
             public bool SoundWasOn;
             public GameObject[] SoundObjs;
@@ -138,6 +139,7 @@ namespace MWCoop
         // qu'elle roule encore (8 s au plus apres la poussee), puis on la rend. Avant : seul l'hote pouvait pousser ; chez
         // un invite, l'hote la recalait toutes les 2 s (voiture qui se teleporte en arriere ; retour d'un joueur, 08/10).
         static int pushCar = -1;
+        static float nextKeyLook;
         static float pushUntil;
         // Remorques attelees (FLATBED au KEKMET...) : un joint relie deux voitures (hors cordes de Tow). Celui qui conduit
         // le vehicule de tete envoie la remorque 10 fois/s (etat 2) : ailleurs elle suit en copie, l'hote ne la recale
@@ -226,8 +228,26 @@ namespace MWCoop
         // circulation, menee par MobileCarController) rangee sous une autre racine (taxi sous JOBS/TAXIJOB).
         public static bool IsCarBody(Rigidbody rb)
         {
-            if (rb == null || rb.GetComponent("CarDynamics") == null) return false;
+            if (rb == null) return false;
+            if (rb.GetComponent("CarDynamics") == null) return IsModVehicle(rb);
             return rb.transform.parent == null || rb.GetComponent<AxisCarController>() != null;
+        }
+
+        // Vehicules de mods a physique maison (pas de CarDynamics) : motoneige Okkelmo Poro (racine "PORO" : Rigidbody, skis
+        // relies par ConfigurableJoint ; le mod range le joueur sous la racine et met PlayerCurrentVehicle a "Poro"). Avant,
+        // jamais suivis : chacun voyait le sien a sa place, immobile chez les autres. Suivis comme les voitures (conducteur
+        // qui envoie, copie cinematique ailleurs, recalage de l'hote garee) ; au volant : joueur range sous la racine avec
+        // un vehicule courant. Autres : [Coop] VehiculesMods=NOM1,NOM2 (noms des objets racine).
+        static HashSet<string> modNames;
+        static bool IsModVehicle(Rigidbody rb)
+        {
+            if (rb.transform.parent != null) return false;
+            if (modNames == null)
+            {
+                modNames = new HashSet<string> { "PORO" };
+                foreach (string n in Config.Get("Coop", "VehiculesMods", "").Split(',')) if (n.Trim().Length > 0) modNames.Add(n.Trim());
+            }
+            return modNames.Contains(rb.name);
         }
 
         // Voiture qui porte 't' (lui-meme ou un parent) : celles connues d'abord (sans GetComponent), sinon en
@@ -338,7 +358,8 @@ namespace MWCoop
             GameObject go = rb.gameObject;
             var car = new Car { Name = go.name, T = go.transform, Body = rb,
                                 Dt = go.GetComponent<Drivetrain>(), Wheels = go.GetComponentsInChildren<Wheel>(true),
-                                Axis = go.GetComponent<AxisCarController>(), Sound = go.GetComponent<SoundController>() };
+                                Axis = go.GetComponent<AxisCarController>(), Sound = go.GetComponent<SoundController>(),
+                                Mod = go.GetComponent("CarDynamics") == null };
             car.WheelRot = new float[car.Wheels.Length];
             var snd = new List<GameObject>();
             foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
@@ -488,6 +509,13 @@ namespace MWCoop
             int driving = -1;
             foreach (Car c in cars)
                 if (c.Drive != null && c.Drive.ActiveStateName == "Player in car") { driving = c.Index; break; }
+            if (driving < 0 && inCar)
+            {
+                Transform pl = Game.PlayerT;
+                if (pl != null && pl.parent != null)
+                    foreach (Car c in cars)
+                        if (c.Mod && c.Body != null && pl.IsChildOf(c.T)) { driving = c.Index; break; }
+            }
             if (driving != LocalDriving)
             {
                 Log.Info(driving >= 0 ? "au volant de " + cars[driving].Key + (cars[driving].Net < 0 ? " (absente de la table de l'hote : non suivie)" : "") : "sorti de " + cars[LocalDriving].Key);
@@ -499,6 +527,17 @@ namespace MWCoop
                 }
                 if (driving >= 0) owned = -1;
                 LocalDriving = driving;
+            }
+            // Moteur demarre ici sans etre au volant (cle tournee par un passager, ou de l'exterieur) : personne ne la
+            // menait, chacun faisait tourner son moteur (melange, batterie, regime a lui) et il calait chez l'un, tournait
+            // chez l'autre. Celui qui a tourne la cle en garde la main comme un moteur laisse tournant (etat 2).
+            if (LocalDriving < 0 && owned < 0 && now >= nextKeyLook)
+            {
+                nextKeyLook = now + 0.5f;
+                foreach (Car c in cars)
+                    if (c.Body != null && ((c.Starter != null && c.Starter.ActiveStateName == "Running") || EngineRunning(c)) && !Remote(c, now) && c.RemoteBy < 0
+                        && c.Net >= 0 && Jobs.KeyTurnedHere(c.T, 30f))
+                    { owned = c.Index; Log.Info("moteur demarre ici sans conducteur : " + c.Key + " reste a nous"); break; }
             }
 
             if (now >= nextFast)

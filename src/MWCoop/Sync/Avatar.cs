@@ -1377,6 +1377,18 @@ namespace MWCoop
         float drinkHalf = 0.12f;           // demi-longueur une fois a l'echelle (m)
         float drinkLogAt;
 
+        // Boisson par boisson (verifie en captures, essai BoissonDefile / CaptureBoisson, 08/10) : taille une fois en main
+        // (plus grande dimension, m) et sens du goulot quand les sommets le donnent faux (+1 : goulot vers +axe trouve,
+        // -1 : inverse, 0 : d'apres les sommets). La canette EnergyDrink etait a l'envers et doublee (11 cm ramenes a 24).
+        static readonly System.Collections.Generic.Dictionary<string, System.Collections.Generic.KeyValuePair<float, int>> DrinkTable = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.KeyValuePair<float, int>> {
+            { "BeerBottle", new System.Collections.Generic.KeyValuePair<float, int>(0.23f, 0) }, { "BoozeBottle", new System.Collections.Generic.KeyValuePair<float, int>(0.27f, 0) },
+            { "SpiritBottle", new System.Collections.Generic.KeyValuePair<float, int>(0.25f, 0) }, { "Milk", new System.Collections.Generic.KeyValuePair<float, int>(0.22f, 0) },
+            { "MilkGlass", new System.Collections.Generic.KeyValuePair<float, int>(0.11f, 0) }, { "SodaPSK", new System.Collections.Generic.KeyValuePair<float, int>(0.22f, 0) },
+            { "EnergyDrink", new System.Collections.Generic.KeyValuePair<float, int>(0.12f, -1) }, { "ShotGlass", new System.Collections.Generic.KeyValuePair<float, int>(0.06f, 0) },
+            { "Coffee", new System.Collections.Generic.KeyValuePair<float, int>(0.10f, 0) }, { "CoffeePaper", new System.Collections.Generic.KeyValuePair<float, int>(0.11f, 0) },
+            { "CoffeeGranny", new System.Collections.Generic.KeyValuePair<float, int>(0.09f, 0) }, { "HandJuice", new System.Collections.Generic.KeyValuePair<float, int>(0.22f, 0) },
+            { "HandMilk", new System.Collections.Generic.KeyValuePair<float, int>(0.22f, 0) }, { "HandCoffeeHome", new System.Collections.Generic.KeyValuePair<float, int>(0.10f, 0) } };
+
         void DrinkInHand(int i)
         {
             if (i == drinkIdx) { if (drinkGo != null && drinkGo.activeSelf != (i > 0)) drinkGo.SetActive(i > 0); return; }
@@ -1390,17 +1402,21 @@ namespace MWCoop
                 drinkIdx = -1;
                 return;
             }
-            // Taille : la plus grande dimension de ses rendus ramenee a 24 cm (bouteilles) ou 11 cm (tasses, verres).
+            // Taille : la plus grande dimension de ses rendus ramenee a celle du tableau (sinon 24 cm, ou 11 cm pour tasses et verres).
             Bounds b = new Bounds(drinkGo.transform.position, Vector3.zero);
             bool any = false;
             foreach (Renderer r in drinkGo.GetComponentsInChildren<Renderer>()) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
             string n = Drinks.Names[i];
-            float want = n.Contains("Coffee") || n.Contains("Glass") ? 0.11f : 0.24f;
+            System.Collections.Generic.KeyValuePair<float, int> row;
+            bool known = DrinkTable.TryGetValue(n, out row);
+            float want = known ? row.Key : n.Contains("Coffee") || n.Contains("Glass") ? 0.11f : 0.24f;
             float size = any ? Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z)) : 0f;
             if (size > 0.01f) drinkGo.transform.localScale *= want / size;
             drinkHalf = want / 2f;
             DrinkAxis();
+            if (known && row.Value < 0) drinkAxis = -drinkAxis;
             Log.Info("avatar " + Player.Name + " : boit (" + n + ", " + (size > 0f ? (size * 100f).ToString("F0") + " cm ramenes a " + (want * 100f).ToString("F0") : "taille ?") + ")");
+            if (Config.GetInt("Test", "CaptureBoisson", 0) != 0) Autotest.CaptureSoon("boisson-" + n, 3f);
         }
 
         // Axe long du modele (dans son repere : boites des maillages ramenees a l'objet) et sens du goulot : le bout le plus

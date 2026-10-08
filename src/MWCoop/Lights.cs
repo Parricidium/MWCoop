@@ -263,7 +263,7 @@ namespace MWCoop
             {
                 if (h.collider == null || h.collider.isTrigger) continue;
                 if (own != null && h.collider.transform.IsChildOf(own)) continue;
-                if (h.collider.transform.root.name == "PLAYER") continue;
+                if (Game.RootName(h.collider.transform) == "PLAYER") continue;
                 return true;
             }
             return false;

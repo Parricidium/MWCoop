@@ -130,6 +130,45 @@ namespace MWCoop
         static float rootsAt = -100f;
 
         // Objet par chemin "Racine/Enfant/...", actif ou non (GameObject.Find ne voit que les actifs).
+        // Joueur local (PLAYER). Assis dans une voiture, il est range sous le siege : sa racine est alors la voiture, les
+        // tests "root.name == PLAYER" ne le reconnaissaient plus (ses automates et objets passaient pour ceux de la voiture,
+        // GameObject.Find("PLAYER/...") ne trouvait plus rien).
+        static Transform playerT;
+        static float playerLook;
+        public static Transform PlayerT
+        {
+            get
+            {
+                if (playerT == null && Time.realtimeSinceStartup >= playerLook)
+                {
+                    playerLook = Time.realtimeSinceStartup + 2f;
+                    GameObject g = GameObject.Find("PLAYER");
+                    playerT = g != null && g.transform.Find("Pivot") != null ? g.transform : null;
+                }
+                return playerT;
+            }
+        }
+
+        // Racine "logique" de t : "PLAYER" pour tout ce qui est sous le joueur, meme assis ; sinon sa vraie racine.
+        public static string RootName(Transform t)
+        {
+            if (t == null) return "";
+            Transform r = t.root;
+            if (r.name == "PLAYER") return "PLAYER";
+            Transform p = PlayerT;
+            return p != null && p.parent != null && t.IsChildOf(p) ? "PLAYER" : r.name;
+        }
+
+        public static bool UnderPlayer(Transform t) { return RootName(t) == "PLAYER"; }
+
+        // Objet sous le joueur par son chemin relatif ("Pivot/AnimPivot/..."), assis ou non.
+        public static GameObject PlayerPart(string rel)
+        {
+            Transform p = PlayerT;
+            Transform t = p != null ? p.Find(rel) : null;
+            return t != null ? t.gameObject : null;
+        }
+
         public static GameObject FindAny(string path)
         {
             string[] parts = path.Split('/');

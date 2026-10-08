@@ -193,7 +193,7 @@ namespace MWCoop
         {
             Transform root = f.transform.root;
             if (!root.gameObject.activeInHierarchy) return true;                        // modeles (prefabs)
-            if (SkipRoots.Contains(root.name) || root.name.StartsWith("MWCoop")) return true;
+            if (SkipRoots.Contains(root.name) || root.name.StartsWith("MWCoop") || Game.UnderPlayer(f.transform)) return true;
             // Vehicules : Jobs, CarDoors... Sauf le lecteur CD (DiscTriggerPlayer* :: Data, point d'insertion du CD).
             if (root.GetComponent("CarDynamics") != null && !(f.gameObject.name.StartsWith("DiscTrigger") && f.FsmName == "Data")) return true;
             if (SkipFsmNames.Contains(f.FsmName)) return true;
@@ -271,7 +271,7 @@ namespace MWCoop
                         // Point d'insertion d'un CD : 'Find correct part' LIT la main du joueur (GetChild de ItemPivot) ;
                         // ce n'est pas agir sur lui, et sans cela la pose du CD (ASSEMBLE) n'etait jamais envoyee.
                         bool reads = f.gameObject.name.StartsWith("DiscTrigger") && a.GetType().Name.StartsWith("Get");
-                        if (go != null && PersonalRoots.Contains(go.transform.root.name) && !reads) w.PersonalStates.Add(st.Name);
+                        if (go != null && PersonalRoots.Contains(Game.RootName(go.transform)) && !reads) w.PersonalStates.Add(st.Name);
                         var nv = v as NamedVariable;
                         if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && !Game.LocalVar(f, nv.Name)
                             && (v is FsmGameObject || nv.Name == "PlayerStop" || nv.Name == "PlayerInMenu" || nv.Name == "PlayerSeated" || nv.Name == "PlayerSleeps"))
@@ -508,7 +508,7 @@ namespace MWCoop
             FsmEventData ed = Fsm.EventData;
             Fsm from = ed != null ? ed.SentByFsm : null;
             if (from == null || from == j.F.Fsm || from.Owner == null) return false;
-            if (PersonalRoots.Contains(from.Owner.transform.root.name)) return false;   // feuille, ecran, main du joueur
+            if (PersonalRoots.Contains(Game.RootName(from.Owner.transform))) return false;   // feuille, ecran, main du joueur
             bool r;
             if (worldLogic.TryGetValue(from, out r)) return r;
             r = true;
@@ -597,7 +597,7 @@ namespace MWCoop
                         GameObject go = null;
                         if (v is FsmGameObject) go = ((FsmGameObject)v).Value;
                         else if (v is FsmOwnerDefault) { var od = (FsmOwnerDefault)v; if (od.OwnerOption != OwnerDefaultOption.UseOwner) go = od.GameObject.Value; }
-                        if (go != null && PersonalRoots.Contains(go.transform.root.name)) personal = true;
+                        if (go != null && PersonalRoots.Contains(Game.RootName(go.transform))) personal = true;
                         var nv = v as NamedVariable;
                         if (nv != null && nv.UseVariable && (nv.Name.StartsWith("GUI") || nv.Name.StartsWith("Player")) && !Game.LocalVar(j.F, nv.Name)) personal = true;
                     }

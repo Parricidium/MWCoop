@@ -86,7 +86,7 @@ namespace MWCoop
         {
             if (hand == null)
             {
-                GameObject h = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+                GameObject h = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
                 if (h != null) hand = Game.FsmOn(h, "PickUp");
                 if (hand == null) return null;
             }

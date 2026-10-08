@@ -92,6 +92,22 @@ namespace MWCoop
             Avatar a;
             if (avatars.TryGetValue(id, out a) && a != null && a.Root != null) a.ReachFor(at);
         }
+        // Repere de la tete (camera) du joueur 'id' : tel que recu (net), ou sur son avatar affiche (pieds lisses, cap
+        // de l'avatar, meme inclinaison). Props : un objet tenu par lui est pose dans ce repere, colle a l'avatar.
+        public static bool HeadFrame(int id, bool displayed, out Vector3 pos, out Quaternion rot)
+        {
+            pos = Vector3.zero; rot = Quaternion.identity;
+            PlayerInfo pi;
+            if (!Session.Players.TryGetValue(id, out pi) || pi.Local) return false;
+            PlayerState st = pi.State;
+            if (!displayed) { pos = st.Head; rot = Quaternion.Euler(st.Pitch, st.Yaw, 0f); return true; }
+            Avatar a;
+            if (!avatars.TryGetValue(id, out a) || a == null || a.Root == null) return false;
+            pos = st.Head + (a.Root.transform.position - st.Feet);
+            rot = Quaternion.Euler(st.Pitch, a.Root.transform.eulerAngles.y, 0f);
+            return true;
+        }
+
         public static Transform HandOf(int id)
         {
             Avatar a;
@@ -176,6 +192,7 @@ namespace MWCoop
                 st.Flags |= Wear.LocalFlags;
                 st.Flags |= Config.GetInt("Test", "TestFlags", 0) | Autotest.PoseFlags;   // essais : postures forcees
                 if ((st.Flags & F_Drink) != 0 && st.Drink == 0) st.Drink = Config.GetInt("Test", "TestBoisson", 0);   // (essais : quelle boisson)
+                if (Autotest.DrinkCycle > 0) { st.Flags |= F_Drink; st.Drink = Autotest.DrinkCycle; }
             }
             Session.Me.State = st;
             var w = new NetWriter(Msg.PlayerState).U8(Session.LocalId).U8(Session.Me.Level)
