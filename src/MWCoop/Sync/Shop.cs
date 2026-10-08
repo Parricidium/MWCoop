@@ -1087,7 +1087,7 @@ namespace MWCoop
             foreach (KeyValuePair<string, float> kv in floats) desc.Append(kv.Key).Append(' ').Append(kv.Value).Append(' ');
             Hud.Toast(PlayerName(who) + Lang.T(" a fait des courses : ", " went shopping: ") + desc);
             var bm = new BagMsg { Who = who, Key = key, BagStuff = bagStuff, Keys = keys, Qtys = qtys, Floats = floats, Desc = desc.ToString(), Until = Time.realtimeSinceStartup + 20f };
-            if (!ApplyBag(bm)) { bagWait.Add(bm); Log.Info("magasin : achat de " + PlayerName(who) + " en attente : la caisse sert le joueur d'ici"); }
+            if (!ApplyBag(bm)) { bagWait.Add(bm); Log.Info("magasin : achat de " + PlayerName(who) + " en attente : la caisse sert le joueur d'ici (" + RegState(bm.Key) + ")"); }
         }
 
         // Achat d'un autre en attente : la caisse d'ici etait en plein passage du joueur local (paiement, sac en
@@ -1103,7 +1103,11 @@ namespace MWCoop
             if (!registers.TryGetValue(key, out reg) || reg.Fsm == null) { Scan(); registers.TryGetValue(key, out reg); }
             string name = PlayerName(bm.Who);
             if (reg == null || reg.Fsm == null) { Log.Warn("magasin : caisse " + key + " introuvable ici"); return true; }
-            bool localBusy = reg.Fsm.gameObject.activeInHierarchy && !AtRest(reg.Fsm) && !pending.Exists(x => x.R == reg);
+            // Occupee : hors repos ET un panier du joueur d'ici en cours (total a payer). Seul devant la caisse, il n'achetait
+            // rien et l'achat de l'autre attendait pourtant 20 s (la caisse guettait sa distance, etat "hors repos").
+            FsmFloat localTotal = reg.Fsm.FsmVariables.FindFsmFloat("PriceTotal");
+            bool localBusy = reg.Fsm.gameObject.activeInHierarchy && !AtRest(reg.Fsm) && !pending.Exists(x => x.R == reg)
+                             && (localTotal == null || localTotal.Value > 0.01f);
             if (localBusy && Time.realtimeSinceStartup < bm.Until) return false;
             if (!reg.Fsm.gameObject.activeInHierarchy)
             {
@@ -1977,6 +1981,14 @@ namespace MWCoop
         }
 
         // Au repos : l'etat attend le joueur (clic, touche) ou n'a pas de suite (bar entre deux commandes).
+        static string RegState(string key)
+        {
+            Register r;
+            if (!registers.TryGetValue(key, out r) || r.Fsm == null) return "?";
+            FsmFloat pt = r.Fsm.FsmVariables.FindFsmFloat("PriceTotal");
+            return r.Fsm.ActiveStateName + (pt != null ? ", total " + pt.Value.ToString("F0") : "");
+        }
+
         static bool AtRest(PlayMakerFSM f)
         {
             FsmState s = f.Fsm.ActiveState;
@@ -2207,9 +2219,11 @@ namespace MWCoop
             foreach (Counter x in counters.Values) if (x.Kind == "resto" && x.Fsm != null) c = x;
             if (c == null) { if (testStep == 0 && t > 30f) { testStep = 9; Log.Info("autotest : resto (" + who + ") comptoir burger introuvable (" + counters.Count + " comptoirs)"); } return; }
             bool on = c.Fsm.gameObject.activeInHierarchy;
-            if (Session.IsHost && testStep == 0 && t > 35f)
+            // (comme en vrai : on commande quand Keijo a salue -- caisse en "Hello!", qui attend PURCHASE ; avant, la commande
+            // tombait pendant que Keijo faisait autre chose et il ne servait jamais l'hote)
+            if (Session.IsHost && testStep == 0 && t > 35f && GuestIn(t, 15f) && (!on || c.Fsm.ActiveStateName == "Hello!" || t > 170f))
             {
-                testStep = 1;
+                testStep = 1; restoAt = t;
                 if (!on)
                 {
                     testStep = 9;
@@ -2238,7 +2252,7 @@ namespace MWCoop
                              + before + " -> " + c.Fsm.ActiveStateName + ", Event=" + StrVar(c.Fsm, "Event") + " PriceTotal=" + c.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value + " ; " + Wallet.State());
                 }
             }
-            if (Session.IsHost && testStep == 1 && t > 37f)
+            if (Session.IsHost && testStep == 1 && t > restoAt + 2f)
             {
                 testStep = 2;
                 Game.SetState(c.Fsm, "Check money");   // = clic sur la caisse (Wait button : USE)
@@ -2246,7 +2260,7 @@ namespace MWCoop
             }
             // ([Test] TestMangeur=invite : c'est l'invite qui mange, sur le plateau servi chez lui.)
             bool eater = Config.Get("Test", "TestMangeur", "hote") == (Session.IsHost ? "hote" : "invite");
-            if (eater && (testStep == 2 || (!Session.IsHost && testStep == 0)) && t > 55f)
+            if (eater && (testStep == 2 || (!Session.IsHost && testStep == 0)) && t > (Session.IsHost ? restoAt + 20f : 55f))
             {
                 GameObject tray = null;
                 for (int i = servedOrder.Count - 1; i >= 0 && tray == null; i--) { GameObject g = Live(servedOrder[i]); if (g != null && g.name.StartsWith("Tray")) tray = g; }
@@ -2290,7 +2304,7 @@ namespace MWCoop
                     Log.Info("autotest : resto (hote) le clic n'a pas abouti (" + was + ") : State 3 force -> " + bf.ActiveStateName);
                 }
             }
-            if (t > 30f && t < 111f && t - testLog >= 2f)
+            if (t > 30f && t < 181f && t - testLog >= 2f)
             {
                 testLog = t;
                 PlayMakerFSM k = c.Waiter;
@@ -2461,14 +2475,26 @@ namespace MWCoop
             return sb.Length > 0 ? sb.ToString() : "aucune machine active";
         }
 
+        static float bagOtherAt = -1f, bagBuyAt, restoAt;
+
+        // Essais : un autre joueur est en jeu depuis 'since' s (horloge de l'essai 't').
+        static bool GuestIn(float t, float since)
+        {
+            bool other = false;
+            foreach (PlayerInfo pi in Session.Players.Values) if (!pi.Local && pi.Level == 1) other = true;
+            if (!other) bagOtherAt = -1f; else if (bagOtherAt < 0f) bagOtherAt = t;
+            return bagOtherAt >= 0f && t - bagOtherAt > since;
+        }
+
         static void TestBags(float t)
         {
-            if (Session.IsHost && testStep == 0 && t > 32f)
+            // (l'invite arrive en jeu ~30 s apres l'hote : l'achat attend qu'il y soit depuis 15 s, sinon il ne le voyait pas)
+            if (Session.IsHost && testStep == 0 && t > 32f && GuestIn(t, 15f))
             {
-                testStep = 1;
+                testStep = 1; bagBuyAt = t;
                 Log.Info("autotest : " + TestBuy(Config.Get("Test", "TestProduit", "Sausages"), 2));
             }
-            if (t > 25f && t < 61f && t - testLog >= 5f)
+            if (t > 25f && t < 120f && t - testLog >= 5f)
             {
                 testLog = t;
                 int n = 0;
