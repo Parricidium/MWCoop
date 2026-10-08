@@ -124,7 +124,18 @@ namespace MWCoop
             File.WriteAllText(tmp, text, new UTF8Encoding(false));
             if (File.Exists(path)) File.Delete(path);
             File.Move(tmp, path);
-            Log.Info("mscloader : " + n + " mod(s) releve(s) pour le lanceur (" + Application.loadedLevelName + ")");
+            // (ou MSCLoader cherche les mods : 0 mod alors que le lanceur en liste = autre dossier ; retour d'un joueur, 08/10)
+            string folder = "?";
+            try
+            {
+                const BindingFlags st = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+                FieldInfo ff = ml.GetField("ModsFolder", st);
+                PropertyInfo fp = ff == null ? ml.GetProperty("ModsFolder", st) : null;
+                object v = ff != null ? ff.GetValue(null) : fp != null ? fp.GetValue(null, null) : null;
+                if (v != null) folder = Path.GetFullPath(v.ToString());
+            }
+            catch { }
+            Log.Info("mscloader : " + n + " mod(s) releve(s) pour le lanceur (" + Application.loadedLevelName + "), dossier des mods " + folder);
         }
     }
 }

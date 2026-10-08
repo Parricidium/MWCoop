@@ -3438,6 +3438,32 @@ static bool CopyKind(const std::wstring &n)
     for (auto &c : ext) c = towlower(c);
     return ext == L".dll" || ext == L".ini" || !_wcsicmp(n.c_str(), L"mywintercar.exe") || !_wcsicmp(n.c_str(), L"changelog.txt");
 }
+// Deux chemins menent-ils au meme dossier (jonction suivie) ?
+static std::wstring FinalDir(const std::wstring &p)
+{
+    HANDLE h = CreateFileW(p.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (h == INVALID_HANDLE_VALUE) return L"";
+    wchar_t buf[1024];
+    DWORD n = GetFinalPathNameByHandleW(h, buf, 1024, 0);
+    CloseHandle(h);
+    return n && n < 1024 ? std::wstring(buf, n) : L"";
+}
+static bool SameDirTarget(const std::wstring &a, const std::wstring &b)
+{
+    std::wstring x = FinalDir(a), y = FinalDir(b);
+    return !x.empty() && !_wcsicmp(x.c_str(), y.c_str());
+}
+static bool DirEmptyW(const std::wstring &d)
+{
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((d + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return true;
+    bool empty = true;
+    do { if (wcscmp(fd.cFileName, L".") && wcscmp(fd.cFileName, L"..")) { empty = false; break; } } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return empty;
+}
+
 static bool PrepareMirror(const std::wstring &m)
 {
     SHCreateDirectoryExW(NULL, m.c_str(), NULL);
@@ -3449,7 +3475,23 @@ static bool PrepareMirror(const std::wstring &m)
         if (n == L"." || n == L"..") continue;
         std::wstring src = g_gameDir + n, dst = m + n;
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            if (GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) continue;
+            DWORD at = GetFileAttributesW(dst.c_str());
+            if (at != INVALID_FILE_ATTRIBUTES) {
+                // Deja la : seulement si c'est bien le dossier du jeu. Une copie restee d'une installation precedente (jeu
+                // desinstalle, deplace, MSCLoader installe avant MWCoop) pouvait avoir un vrai dossier Mods vide, cree par
+                // MSCLoader la, ou une jonction vers l'ancien jeu : MSCLoader n'y trouvait aucun mod, alors que le lanceur
+                // listait ceux du jeu (retour d'un joueur, 08/10 : « 0 mod »). Jonction refaite ; un vrai dossier vide
+                // retire, non vide renomme (jamais efface).
+                if (SameDirTarget(dst, src)) continue;
+                if (at & FILE_ATTRIBUTE_REPARSE_POINT) { RemoveDirectoryW(dst.c_str()); TestLog("copie de lancement : jonction %ls refaite (visait un autre dossier)", n.c_str()); }
+                else if (DirEmptyW(dst)) { RemoveDirectoryW(dst.c_str()); TestLog("copie de lancement : dossier vide %ls remplace par la jonction", n.c_str()); }
+                else {
+                    wchar_t stamp[32]; SYSTEMTIME st; GetLocalTime(&st);
+                    swprintf_s(stamp, L".ancien-%04d%02d%02d-%02d%02d%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                    if (!MoveFileW(dst.c_str(), (dst + stamp).c_str())) { TestLog("copie de lancement : %ls n'est pas celui du jeu et ne peut etre renomme (erreur %lu)", n.c_str(), GetLastError()); continue; }
+                    TestLog("copie de lancement : %ls n'etait pas celui du jeu, renomme %ls%ls", n.c_str(), n.c_str(), stamp);
+                }
+            }
             if (!MakeJunction(dst, src)) { TestLog("copie de lancement : jonction %ls impossible (erreur %lu)", n.c_str(), GetLastError()); FindClose(h); return false; }
         } else if (CopyKind(n) && !SameFile(src, dst)) {
             if (!CopyFileW(src.c_str(), dst.c_str(), FALSE)) { TestLog("copie de lancement : %ls impossible (erreur %lu)", n.c_str(), GetLastError()); FindClose(h); return false; }
