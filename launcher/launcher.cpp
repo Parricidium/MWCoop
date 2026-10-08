@@ -123,6 +123,8 @@ static DWORD g_pid, g_launchT, g_winSeenT, g_noProcT;
 static bool g_modChecked;   // partie lancee : trace du chargeur verifiee (serveur.inc, RunTick)
 static bool g_launchedFromCopy;   // partie lancee depuis la copie de lancement Steam (%LOCALAPPDATA%\MWCoop\My Winter Car)
 static bool g_modMissing;   // ... et absente : proposer le lancement par Steam a la fermeture du jeu
+static void AfterGameModCheck();   // (serveur.inc)
+static void ModTraceCheck();
 static bool g_steamLaunch;  // partie lancee par Steam (steam://rungameid) : Steam peut mettre du temps a demarrer le jeu
 static std::vector<HWND> g_preWnds;                 // fenetres Unity deja la au lancement (un autre jeu sur ce PC)
 static std::wstring g_launchInfo;
@@ -6026,6 +6028,8 @@ static void Tick()
         if (g_noProcT && now - g_noProcT > (g_steamLaunch ? 60000u : 15000u)) {
             g_state = ST_IDLE;
             SetStatus(K_ERR, T(L"Le jeu s'est ferm\u00E9 au d\u00E9marrage (voir les journaux)", L"The game closed on startup (see the logs)"));
+            LaunchLog("jeu ferme au demarrage");
+            AfterGameModCheck();
         }
     }
     if (g_state == ST_LAUNCH && ((g_winSeenT && now - g_winSeenT > 1200) || now - g_launchT > 300000)) {

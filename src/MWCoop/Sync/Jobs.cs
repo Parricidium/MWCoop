@@ -1187,6 +1187,7 @@ namespace MWCoop
         // du suivi, l'automate est arrete et la charniere libre (moteur, ressort, butees coupes), puis rendus.
         static PlayMakerFSM bedLift;
         static bool bedFollow, bedLiftWas, bedMotorWas, bedLimitsWas, bedSpringWas;
+        static JointLimits bedLimitsSaved; static JointSpring bedSpringSaved; static JointMotor bedMotorSaved;
 
         static void FindBed()
         {
@@ -1221,22 +1222,19 @@ namespace MWCoop
             if (on)
             {
                 bedMotorWas = bedHinge.useMotor; bedLimitsWas = bedHinge.useLimits; bedSpringWas = bedHinge.useSpring;
+                bedLimitsSaved = bedHinge.limits; bedSpringSaved = bedHinge.spring; bedMotorSaved = bedHinge.motor;
+                if (Time.realtimeSinceStartup - bedTargetAt > 5f) bedTarget = BedAngle();   // (pas encore d'angle recu : la tenir la ou elle est)
                 bedLiftWas = bedLift != null && bedLift.enabled;
                 if (bedLift != null) bedLift.enabled = false;
                 bedHinge.useMotor = false; bedHinge.useSpring = false; bedHinge.useLimits = false;
                 Log.Info("bois : benne suivie (charniere libre le temps du suivi)");
                 return;
             }
-            // Rendue a sa charniere : tenue a l'angle atteint (la cible du ressort, les butees d'avant l'auraient ramenee).
-            float ang = bedHinge.angle;
-            if (bedSpringWas) { JointSpring s = bedHinge.spring; s.targetPosition = ang; bedHinge.spring = s; }
-            if (bedLimitsWas)
-            {
-                JointLimits l = bedHinge.limits;
-                if (ang < l.min) l.min = ang; if (ang > l.max) l.max = ang;
-                bedHinge.limits = l;
-            }
-            if (bedMotorWas) { JointMotor m = bedHinge.motor; m.targetVelocity = 0f; bedHinge.motor = m; }
+            // Rendue a sa charniere TELLE QU'AVANT (butees, ressort, moteur d'origine). Avant : butees elargies a l'angle de
+            // la charniere (HingeJoint.angle, qui saute a 356,7 : butee haute supprimee) et charniere recreee a la pose du
+            // moment, toutes les 3 s -- la benne s'affaissait peu a peu (retour d'un joueur, 08/10 : remorque « a moitie
+            // enfoncee »). Le suivi ne s'arrete plus qu'au changement d'autorite.
+            bedHinge.limits = bedLimitsSaved; bedHinge.spring = bedSpringSaved; bedHinge.motor = bedMotorSaved;
             bedHinge.useMotor = bedMotorWas; bedHinge.useLimits = bedLimitsWas; bedHinge.useSpring = bedSpringWas;
             if (bedLift != null) bedLift.enabled = bedLiftWas;
             Log.Info("bois : benne rendue a sa charniere (" + HingeState() + ")");
@@ -1259,13 +1257,13 @@ namespace MWCoop
             if (bed == null || bedHinge == null) return;
             bool active = Session.Active && Session.RemoteCount > 0;
             bool authority = BedAuthority() == Session.LocalId;
-            BedFollow(active && !authority && now - bedTargetAt < 2f && !bed.isKinematic);
+            BedFollow(active && !authority && !bed.isKinematic);   // (continu : plus d'aller-retour toutes les 3 s)
             if (!active) return;
             if (authority)
             {
                 if (now < nextBedSend) return;
                 float a = BedAngle();
-                if (!float.IsNaN(bedSent) && Mathf.Abs(a - bedSent) < 0.3f && now - bedSentAt < 3f) return;
+                if (!float.IsNaN(bedSent) && Mathf.Abs(a - bedSent) < 0.3f && now - bedSentAt < 1f) return;
                 nextBedSend = now + 0.25f;
                 bedSent = a; bedSentAt = now;
                 Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@benne").F32(a), false);
@@ -1290,6 +1288,87 @@ namespace MWCoop
         }
 
         static void OnBed(float a) { bedTarget = Mathf.Clamp(a, -10f, 90f); bedTargetAt = Time.realtimeSinceStartup; }
+
+        // ---------------------------------------------------------------- attelage du plateau au KEKMET
+        // Le jeu accroche le plateau tout seul, par la distance : KEKMET/Trailer/Hook::Distance tourne en boucle (Feel
+        // trailer -> Sound -> Attach trailer : SendEvent TRAILERATTACH au plateau, qui se met en place et se relie au
+        // tracteur) ; on le detache en cliquant KEKMET/Trailer/Remove (Use : Close door). Chacun le faisait chez lui : le
+        // tracteur de l'autre (copie) n'etant jamais exactement au meme endroit, le plateau etait attele chez l'un et pose
+        // chez l'autre, et l'attelage se battait avec les poses recues (retour d'un joueur, 08/10 : remorque « tres buguee »).
+        // Maintenant l'autorite du KEKMET (son conducteur, celui qui a laisse son moteur tourner, sinon l'hote) decide seule :
+        // elle envoie l'etat (fiable, a chaque changement et toutes les 3 s) ; ailleurs la detection est arretee et l'etat
+        // recu rejoue (Attach trailer, ou Close door de Remove). Le clic sur Remove reste rejoue chez tous (quetes).
+        static PlayMakerFSM hitchHook, hitchRemove, hitchDetach;   // (hitchDetach : FLATBED::Detach, State 5 attele / State 2 detele)
+        static Rigidbody hitchTractor;
+        static HutongGames.PlayMaker.FsmStateAction hitchFeel;   // "Feel trailer" : FloatCompare (crochet a moins de 0,3 m -> attele)
+        static float nextHitchFind, nextHitchSend;
+        static int hitchSentState = -1;
+
+        static void FindHitch()
+        {
+            if (hitchHook != null || Time.realtimeSinceStartup < nextHitchFind) return;
+            nextHitchFind = Time.realtimeSinceStartup + 5f;
+            foreach (Object o in Game.AllFsms())
+            {
+                var f = (PlayMakerFSM)o;
+                if (f == null || f.hideFlags != HideFlags.None || f.transform.parent == null || f.transform.parent.name != "Trailer") continue;
+                if (f.FsmName == "Distance" && f.gameObject.name == "Hook") hitchHook = f;
+                else if (f.FsmName == "Use" && f.gameObject.name == "Remove") hitchRemove = f;
+            }
+            if (hitchHook == null) return;
+            hitchTractor = hitchHook.transform.root.GetComponent<Rigidbody>();
+            GameObject fb = Game.FindAny("FLATBED");
+            hitchDetach = fb != null ? Game.FsmOn(fb, "Detach") : null;
+            foreach (HutongGames.PlayMaker.FsmState st in hitchHook.Fsm.States)
+                if (st.Name == "Feel trailer")
+                    foreach (HutongGames.PlayMaker.FsmStateAction a in st.Actions) if (a != null && a.GetType().Name == "FloatCompare") hitchFeel = a;
+            Log.Info("attelage du plateau : " + Recon.Path(hitchHook.transform) + " [" + hitchHook.ActiveStateName + "], detelage " + (hitchRemove != null ? "trouve" : "absent"));
+        }
+
+        // (l'etat du plateau fait foi : le crochet de l'invite peut rester sur Initialize)
+        static bool HitchAttached() { return hitchDetach != null ? hitchDetach.ActiveStateName == "State 5" : hitchHook.ActiveStateName == "State 3"; }
+
+        static void HitchUpdate(float now)
+        {
+            FindHitch();
+            if (hitchHook == null || hitchTractor == null || !Session.Active) return;
+            bool alone = Session.RemoteCount == 0;
+            bool mine = alone || VehicleSync.Authority(hitchTractor) == Session.LocalId;
+            // Ailleurs : pas de detection par la distance -- la comparaison de "Feel trailer" coupee (l'automate reste actif :
+            // PlayMaker le redemarre depuis le debut quand on le rallume, chargement et 8 s d'attente compris).
+            if (hitchFeel != null && hitchFeel.Enabled != mine) hitchFeel.Enabled = mine;
+            if (!hitchHook.enabled) hitchHook.enabled = true;
+            if (!mine || alone) { hitchSentState = -1; return; }
+            int att = HitchAttached() ? 1 : 0;
+            if (att == hitchSentState && now < nextHitchSend) return;
+            if (att != hitchSentState) Log.Info("attelage du plateau : " + (att == 1 ? "attele" : "detele") + " ici, envoye");
+            hitchSentState = att;
+            nextHitchSend = now + 3f;
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@attelage").U8((byte)att), true);
+        }
+
+        static void OnHitch(int who, int att)
+        {
+            FindHitch();
+            if (hitchHook == null || hitchTractor == null) return;
+            if (VehicleSync.Authority(hitchTractor) == Session.LocalId) return;   // (c'est nous qui decidons)
+            bool here = HitchAttached();
+            if (att == 1 && !here)
+            {
+                // plateau relie au tracteur (Detach State 5 : en place, joint relie) ; crochet tenu attele (State 3 : son
+                // detelage Remove allume), sans repasser par la detection
+                if (hitchDetach != null) Game.SetState(hitchDetach, "State 5");
+                Game.SetState(hitchHook, hitchDetach != null ? "State 3" : "Attach trailer");
+                Log.Info("attelage du plateau : attele comme chez #" + who);
+            }
+            else if (att == 0 && here)
+            {
+                if (hitchRemove != null && hitchRemove.gameObject.activeInHierarchy) Game.SetState(hitchRemove, "Close door");
+                if (hitchDetach != null && hitchDetach.ActiveStateName == "State 5") Game.SetState(hitchDetach, "State 2");
+                if (hitchHook.ActiveStateName == "State 3") Game.SetState(hitchHook, "State 2");
+                Log.Info("attelage du plateau : detele comme chez #" + who);
+            }
+        }
 
         // Declencheur du plateau : seulement chez l'autorite (sinon chacun comptait la buche tombee chez lui).
         static void LogTriggerAuthority()
@@ -1397,6 +1476,7 @@ namespace MWCoop
                     break;
                 }
                 case "@benne": OnBed(r.F32()); break;
+                case "@attelage": OnHitch(who, r.U8()); break;
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":
@@ -1439,6 +1519,7 @@ namespace MWCoop
             CheckGone(now);
             if (now >= nextAuthority) { nextAuthority = now + 1f; LogTriggerAuthority(); }
             BedUpdate(now);
+            HitchUpdate(now);
             LuggageUpdate(now);
         }
 
@@ -1657,9 +1738,80 @@ namespace MWCoop
             return "";
         }
 
+        // [Test] Autotest=atteler : le conducteur ([Test] AttelerInvite=1 : l'invite, sinon l'hote) prend le KEKMET (15/22 s),
+        // pose son crochet sur celui du plateau a 26 s (l'attelage du jeu, par la distance) ; a 44 s le detele (Close door de
+        // Remove). Chacun note a 34 et 52 s l'etat de l'attelage, du plateau (Detach) et l'ecart crochet / plateau.
+        static int attStep, attLog;
+        static bool attProbe;
+        static void TestAtteler(float t)
+        {
+            bool driver = Session.IsHost != (Config.GetInt("Test", "AttelerInvite", 0) != 0);
+            string car = "KEKMET(350-400psi)";
+            if (driver)
+            {
+                if (t > 15f && attStep == 0) { attStep = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > 22f && attStep == 1) { attStep = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (t > 26f && attStep == 2)
+                {
+                    attStep = 3;
+                    FindHitch();
+                    GameObject fb = GameObject.Find("FLATBED");
+                    Transform target = fb != null ? fb.transform.Find("HookTarget") : null;
+                    if (hitchHook == null || hitchTractor == null || target == null) { Log.Info("autotest : atteler : crochet ou plateau introuvable"); return; }
+                    Vector3 d = target.position - hitchHook.transform.position;
+                    hitchTractor.position += d; hitchTractor.transform.position += d;
+                    hitchTractor.velocity = Vector3.zero; hitchTractor.angularVelocity = Vector3.zero;
+                    Log.Info("autotest : atteler : tracteur deplace de " + d.magnitude.ToString("F1") + " m, crochet sur le plateau");
+                }
+                if (t > 44f && attStep == 3)
+                {
+                    attStep = 4;
+                    if (hitchRemove != null && hitchRemove.gameObject.activeInHierarchy) { Game.SetState(hitchRemove, "Close door"); Log.Info("autotest : atteler : detele (Close door)"); }
+                    else Log.Info("autotest : atteler : Remove inactif (pas attele ?)");
+                }
+            }
+            if (t > 20f && attLog == 0 && attProbe == false && hitchHook != null)
+            {   // parametres des comparaisons de distance du crochet (seuils du jeu)
+                attProbe = true;
+                var sb = new System.Text.StringBuilder("autotest : atteler, crochet :");
+                foreach (HutongGames.PlayMaker.FsmState st in hitchHook.Fsm.States)
+                {
+                    if (st.Name != "State 2" && st.Name != "Feel trailer" && st.Name != "Initialize") continue;
+                    foreach (HutongGames.PlayMaker.FsmStateAction a in st.Actions)
+                    {
+                        if (a == null || a is ModHook) continue;
+                        sb.Append(" | ").Append(st.Name).Append('.').Append(a.GetType().Name).Append(' ');
+                        foreach (System.Reflection.FieldInfo fi in a.GetType().GetFields())
+                        {
+                            object v = fi.GetValue(a);
+                            string vs = v is HutongGames.PlayMaker.FsmFloat ? ((HutongGames.PlayMaker.FsmFloat)v).Name + "=" + ((HutongGames.PlayMaker.FsmFloat)v).Value
+                                      : v is HutongGames.PlayMaker.FsmEvent ? "ev " + ((HutongGames.PlayMaker.FsmEvent)v).Name
+                                      : v is bool || v is float ? v.ToString() : null;
+                            if (vs != null) sb.Append(fi.Name).Append('=').Append(vs).Append(' ');
+                        }
+                    }
+                }
+                Log.Info(sb.ToString());
+            }
+            if ((t > 34f && attLog == 0) || (t > 52f && attLog == 1))
+            {
+                attLog++;
+                FindHitch();
+                GameObject fb = GameObject.Find("FLATBED");
+                PlayMakerFSM det = fb != null ? Game.FsmOn(fb, "Detach") : null;
+                Transform target = fb != null ? fb.transform.Find("HookTarget") : null;
+                float gap = hitchHook != null && target != null ? (target.position - hitchHook.transform.position).magnitude : -1f;
+                Log.Info("autotest : atteler t=" + t.ToString("F0") + " : crochet " + (hitchHook != null ? hitchHook.ActiveStateName + (hitchHook.enabled ? "" : " (arrete)") : "?")
+                         + ", plateau " + (det != null ? det.ActiveStateName : "?") + ", ecart " + gap.ToString("F2") + " m, autorite KEKMET #" + (hitchTractor != null ? VehicleSync.Authority(hitchTractor) : -1)
+                         + ", KEKMET en " + (hitchTractor != null ? hitchTractor.position.ToString("F1") + (hitchTractor.isKinematic ? " (copie)" : "") : "?")
+                         + ", plateau en " + (fb != null ? fb.transform.position.ToString("F1") : "?"));
+            }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "cle") { TestKey(t); return; }
+            if (mode == "atteler") { TestAtteler(t); return; }
             if (mode == "fendeuse" || mode == "fendeuse2" || mode == "benne" || mode == "benne2" || mode == "taxi-commandes" || mode == "boitegants")
             {
                 if (t > 28f && !testBefore) { testBefore = true; Log.Info("autotest : " + mode + ", avant : " + MoreState(mode)); }

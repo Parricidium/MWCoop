@@ -695,7 +695,7 @@ namespace MWCoop
         }
 
         // Conduite ici, ou quittee moteur tournant (on en garde la main) : on fait autorite dessus.
-        public static bool DrivenHere(int index) { Car c = ByNet(index); return c != null && (c.Index == LocalDriving || c.Index == owned); }
+        public static bool DrivenHere(int index) { Car c = ByNet(index); return c != null && (c.Index == LocalDriving || c.Index == owned || hitchSent.Contains(c.Index)); }   // (remorque tiree d'ici comprise)
 
         // Copie ici d'une voiture qu'un autre fait rouler.
         public static bool IsCopy(int index) { Car c = ByNet(index); return c != null && Remote(c, Time.realtimeSinceStartup); }
@@ -706,7 +706,9 @@ namespace MWCoop
         {
             Car c = ByNet(index);
             if (c == null) return 0;
-            if (c.Index == LocalDriving || c.Index == owned) return Session.LocalId;
+            // (remorque attelee au vehicule qu'on conduit : a nous aussi -- benne, bois, compteur ; avant : a l'hote, et quand un
+            // invite tirait le plateau, personne n'avait la benne ni le compteur de bois)
+            if (c.Index == LocalDriving || c.Index == owned || hitchSent.Contains(c.Index)) return Session.LocalId;
             return Remote(c, Time.realtimeSinceStartup) ? c.RemoteBy : 0;
         }
         public static int Authority(Rigidbody car) { return Authority(CarIndex(car)); }
