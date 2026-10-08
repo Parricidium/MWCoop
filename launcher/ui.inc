@@ -1151,7 +1151,9 @@ static void DrawSettings(Graphics &g)
     Para(g, T(L"Mod non officiel et non commercial, non affilié à Amistech Games. Nécessite une copie légale de My Winter Car.",
               L"Unofficial, non-commercial mod, not affiliated with Amistech Games. Requires a legal copy of My Winter Car."),
          RectF(ab.X + 20, ab.Y + 48, ab.Width - 40, 40), 12.5f, kGrey);
-    UiButton(g, RectF(ab.X + 20, ab.Y + ab.Height - 60, ab.Width - 40, 44), T(L"Acheter My Winter Car sur Steam", L"Buy My Winter Car on Steam"), UI_SET_BUY, false);
+    // (kSetBuy, kSetUninst : ab.X + 20 / + 248, ab.Y + ab.Height - 60)
+    UiButton(g, kSetBuy, T(L"Acheter le jeu sur Steam", L"Buy the game on Steam"), UI_SET_BUY, false);
+    UiButton(g, kSetUninst, T(L"Désinstaller MWCoop", L"Uninstall MWCoop"), UI_SET_UNINST, false, IC_TRASH);
 
     // Reseau
     RectF ne(rx, kMain.Y, cw, 196);
@@ -1313,6 +1315,7 @@ static bool UiClick(int id)
     case UI_SET_PORTM: case UI_SET_PORTP: for (int i = 0; i < (int)g_opts.size(); i++) if (!strcmp(g_opts[i].key, "Port")) OptStep(i, id == UI_SET_PORTP ? 1 : -1); return true;
     case UI_SET_FOLDER: ChooseExe(); return true;
     case UI_SET_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); return true;
+    case UI_SET_UNINST: Uninstall(); return true;
     }
     if (id >= UI_NOTE && id < UI_NOTE + 90) { g_noteSel = id - UI_NOTE; g_scroll[TAB_NOTES] = 0; return true; }
     if (id >= UI_LOOKPIN && id < UI_LOOKPIN + 4) { g_lookZone = id - UI_LOOKPIN; return true; }

@@ -43,6 +43,8 @@ static const TutoStep kTuto[] = {
       L"MWCoop's MSCLoader", L"In the Mods tab: OFFICIAL (the one installed in the game) or MWCOOP (installed apart, the game is not changed). If your mods don't load, try MWCOOP, or REINSTALL.", "0.60.0" },
     { L"Lancer par Steam", L"Dans Réglages > Jeu. Si MWCoop ne se charge pas quand le lanceur démarre le jeu, active-le : le jeu part par Steam, comme son bouton JOUER. Le lanceur te le propose aussi tout seul.",
       L"Start through Steam", L"In Settings > Game. If MWCoop doesn't load when the launcher starts the game, turn this on: the game starts through Steam, like its PLAY button. The launcher also suggests it by itself.", "0.60.5" },
+    { L"Désinstaller", L"Dans Réglages > À propos : retire tout MWCoop (dossiers compris) et le MSCLoader de MWCoop, à la Corbeille. Ta sauvegarde, tes mods et le MSCLoader officiel restent.",
+      L"Uninstall", L"In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.", "0.60.8" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -70,10 +72,11 @@ static RectF TutoTarget(int i)
     case 15: return g_btn[B_DISCORD].r;
     case 16: { RectF a = kMscSrcOff, b = kMscReinst; return RectF(a.X - 110, a.Y, b.X + b.Width - a.X + 110, a.Height); }
     case 17: return kSetSteamRow;
+    case 18: return kSetUninst;
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 ? TAB_COOP : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17 : Reglages)
+static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 ? TAB_COOP : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

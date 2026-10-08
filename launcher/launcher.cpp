@@ -1174,6 +1174,7 @@ static bool g_steamNet = false;
 static bool g_mscOn = true;                          // [Lanceur] MSCLoader : le charger au lancement (onglet MODS, mods.inc)
 static int g_mscOwnPref = -1;                        // [Lanceur] MSCLoaderMWCoop : 1 celui de MWCoop, 0 l'officiel, -1 pas choisi (mods.inc)
 static bool MscOwn();
+static void Uninstall();   // (Reglages > A propos)
 static bool MscOwnInstalled();
 static std::wstring MscCopyDir();
 static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest);
@@ -5582,6 +5583,91 @@ static bool ToRecycleBin(const std::vector<std::wstring> &paths)
     return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted;
 }
 
+// ---------------------------------------------------------------- desinstallation
+// Reglages > A propos (demande d'un joueur, 08/10 : « une option pour tout desinstaller, dossiers compris ») : tout
+// MWCoop part a la Corbeille -- dans le dossier du jeu (version.dll, dossier MWCoop : profils, journaux, contenu recu ;
+// le lanceur et ses fichiers), tout %LOCALAPPDATA%\MWCoop (copies de lancement, MSCLoader de MWCoop, caches) -- et les
+// reglages des profils dans le registre (HKCU\Software\MWCoop-Profils). Jamais : le MSCLoader officiel (demande de JD),
+// le dossier Mods, la sauvegarde du jeu. Les copies de lancement ont des jonctions vers le vrai dossier du jeu
+// (mywintercar_Data, Mods...) : retirees une a une d'abord, sans jamais entrer dedans.
+static int RemoveJunctionsIn(const std::wstring &dir)
+{
+    int n = 0;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    do {
+        std::wstring name = fd.cFileName;
+        if (name == L"." || name == L".." || !(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        std::wstring p = dir + name;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+            if (RemoveDirectoryW(p.c_str())) n++;   // (le lien seulement : sa cible n'est pas touchee)
+            else LaunchLog("desinstallation : lien %s impossible a retirer (erreur %lu)", Narrow(p, CP_UTF8).c_str(), GetLastError());
+        } else n += RemoveJunctionsIn(p + L"\\");
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return n;
+}
+
+// Ce qui part (chemins existants) ; registry : aussi les reglages des profils. Faux si quelque chose est reste.
+static bool UninstallCore(bool registry, std::wstring *left)
+{
+    std::vector<std::wstring> paths;
+    auto add = [&](const std::wstring &p) { if (!p.empty() && GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) { for (auto &q : paths) if (!_wcsicmp(q.c_str(), p.c_str())) return; paths.push_back(p); } };
+    if (!g_gameDir.empty()) {
+        const wchar_t *files[] = { L"version.dll", L"version.dll.old", L"MWCoop.exe", L"MWCoop.exe.old", L"mwcoop-lanceur.ini", L"LISEZMOI.txt", L"README.txt", L"steam_appid.txt" };
+        for (const wchar_t *f : files) add(g_gameDir + f);
+        add(g_gameDir + L"MWCoop");
+    }
+    add(g_iniLauncher);
+    add(g_self);
+    add(g_self + L".old");
+    std::wstring ld = LocalDir();
+    int links = 0;
+    if (!ld.empty() && GetFileAttributesW(ld.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        links = RemoveJunctionsIn(ld);
+        add(ld.substr(0, ld.size() - 1));
+    }
+    LaunchLog("desinstallation : %d lien(s) retire(s), %d element(s) a la Corbeille", links, (int)paths.size());
+    g_launcherLog.clear();   // (son dossier part : plus rien n'y est ecrit)
+    for (auto &p : paths) ToRecycleBin({ p });   // (un par un : un echec, le lanceur en cours par exemple, n'arrete pas les autres)
+    if (registry) RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\MWCoop-Profils");
+    bool ok = true;
+    for (auto &p : paths) {
+        if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+        if (!_wcsicmp(p.c_str(), g_self.c_str())) continue;   // (le lanceur en cours : apres sa fermeture, ci-dessous)
+        ok = false;
+        if (left) *left += L"\n" + p;
+    }
+    return ok;
+}
+
+static void Uninstall()
+{
+    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Le jeu tourne : ferme-le avant de d\u00E9sinstaller MWCoop", L"The game is running: close it before uninstalling MWCoop")); return; }
+    int r = MessageBoxW(g_wnd, T(L"D\u00E9sinstaller compl\u00E8tement MWCoop ?\n\nPart \u00E0 la Corbeille : tout MWCoop dans le dossier du jeu (version.dll, dossier MWCoop avec ses profils, journaux et contenus re\u00E7us, ce lanceur), tout %LOCALAPPDATA%\\MWCoop (copies de lancement, MSCLoader de MWCoop, caches), et les r\u00E9glages du profil invit\u00E9.\n\nGard\u00E9s : ta sauvegarde, tes mods (dossier Mods) et le MSCLoader officiel.\n\nPour rejouer en coop, il faudra ret\u00E9l\u00E9charger MWCoop.",
+                                 L"Completely uninstall MWCoop?\n\nMoved to the Recycle Bin: everything MWCoop in the game folder (version.dll, the MWCoop folder with its profiles, logs and received content, this launcher), all of %LOCALAPPDATA%\\MWCoop (launch copies, MWCoop's MSCLoader, caches), and the guest profile settings.\n\nKept: your save, your mods (Mods folder) and the official MSCLoader.\n\nTo play co-op again, you will need to download MWCoop again."),
+                         L"MWCoop", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+    if (r != IDYES) return;
+    LobbyClose();
+    std::wstring left;
+    bool ok = UninstallCore(true, &left);
+    bool selfLeft = GetFileAttributesW(g_self.c_str()) != INVALID_FILE_ATTRIBUTES;
+    if (selfLeft) {   // lanceur en cours non deplace : efface 3 s apres sa fermeture
+        wchar_t sys[MAX_PATH]; GetSystemDirectoryW(sys, MAX_PATH);
+        std::wstring cmd = std::wstring(L"\"") + sys + L"\\cmd.exe\" /c ping 127.0.0.1 -n 4 >nul & del /f /q \"" + g_self + L"\"";
+        STARTUPINFOW si = { sizeof(si) }; PROCESS_INFORMATION pi = {};
+        std::vector<wchar_t> buf(cmd.begin(), cmd.end()); buf.push_back(0);
+        if (CreateProcessW(NULL, buf.data(), NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, sys, &si, &pi)) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
+    }
+    std::wstring msg = ok ? std::wstring(T(L"MWCoop est d\u00E9sinstall\u00E9 (tout est dans la Corbeille).", L"MWCoop is uninstalled (everything is in the Recycle Bin)."))
+                          : std::wstring(T(L"MWCoop est d\u00E9sinstall\u00E9, sauf ces \u00E9l\u00E9ments (ouverts par un autre programme ?) :", L"MWCoop is uninstalled, except these items (open in another program?):")) + left;
+    msg += T(L"\n\nSi tu avais mis MWCoop dans les options de lancement de Steam (Propri\u00E9t\u00E9s du jeu > G\u00E9n\u00E9ral), retire-les : sinon le jeu ne d\u00E9marrera plus depuis Steam.\n\nPour r\u00E9installer : t\u00E9l\u00E9charge MWCoop et lance MWCoop.exe.",
+             L"\n\nIf you had put MWCoop in Steam's launch options (game Properties > General), remove it: otherwise the game won't start from Steam anymore.\n\nTo reinstall: download MWCoop and run MWCoop.exe.");
+    MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
+    DestroyWindow(g_wnd);
+}
+
 // Corbeille pour une partie : son dossier (partie rangee), ou ses journaux (la derniere partie, jeu ferme).
 static bool LogsGroupDelete(int gi)
 {
@@ -6204,6 +6290,21 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 TestLog("mscl : settings.json ecrit :\n%s", std::string(d.begin(), d.end()).c_str());
             }
         }
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
+    // /desinstaller <dossier du jeu> <journal> : desinstallation sans questions, sans le registre ni le lanceur lui-meme
+    // (essais : LOCALAPPDATA d'essai, jeu factice)
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/desinstaller")) {
+        g_testSalonLog = argv[3];
+        FILE *f = _wfopen(argv[3], L"wb");
+        if (f) fclose(f);
+        SetGame(WithSlash(argv[2]));
+        g_self = g_gameDir + L"MWCoop.exe";   // (pas le lanceur d'essai : celui du jeu factice)
+        g_iniLauncher = g_gameDir + L"mwcoop-lanceur.ini";
+        std::wstring left;
+        bool ok = !g_gameDir.empty() && UninstallCore(false, &left);
+        TestLog("desinstaller : %s%s", ok ? "ok" : "RESTE :", Narrow(left, CP_UTF8).c_str());
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
