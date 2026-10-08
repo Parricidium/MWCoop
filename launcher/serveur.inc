@@ -81,10 +81,28 @@ static void RunTick()
     if (now - g_srvReadT >= 1000) SrvRead();
     if (now - g_runCheckT < 1500) return;
     g_runCheckT = now;
-    // 30 s apres le lancement : le chargeur MWCoop a-t-il ecrit sa trace (dernier-lancement.txt) pour cette partie ? Sinon
-    // le jeu tourne sans le mod (retour d'un joueur, 08/10 : menu du jeu sans MWCoop, sans aucun journal) : dit ici et
-    // note avec les jeux en cours, pour le zip des journaux.
-    if (!g_modChecked && now - g_launchT > 30000 && !LocalDir().empty()) {
+    if (!g_modChecked && now - g_launchT > 30000) ModTraceCheck();
+    if (g_proc && WaitForSingleObject(g_proc, 0) == WAIT_OBJECT_0) { CloseHandle(g_proc); g_proc = NULL; }
+    if (g_proc || GameProcessRunning()) return;
+    // jeu ferme : retour au menu
+    g_state = ST_IDLE;
+    g_srv.clear();
+    CrashCheck();
+    if (g_crashT) SetStatus(K_WARN, T(L"Arrêt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
+    else SetStatus(K_NORMAL, T(L"Partie terminée · %s", L"Game over · %s"), ModLabel().c_str());
+    LaunchLog("jeu ferme : retour au menu (arret brutal %d)", (int)(g_crashT != 0));
+    AfterGameModCheck();
+}
+
+// Le chargeur MWCoop a-t-il ecrit sa trace (dernier-lancement.txt) pour cette partie ? Sinon le jeu tourne sans le mod
+// (retour d'un joueur, 08/10 : menu du jeu sans MWCoop, sans aucun journal) : dit ici et note avec les jeux en cours, pour
+// le zip des journaux. 30 s apres le lancement, ou des que le jeu se ferme (avant : seulement a 30 s, jamais atteint par un
+// joueur qui fermait le jeu sans MWCoop tout de suite -- la bascule vers le dossier du jeu ne se faisait pas).
+static void ModTraceCheck()
+{
+    DWORD now = GetTickCount();
+    if (g_modChecked || LocalDir().empty() || !g_launchT) return;
+    {
         g_modChecked = true;
         WIN32_FILE_ATTRIBUTE_DATA a;
         FILETIME ft; GetSystemTimeAsFileTime(&ft);
@@ -100,15 +118,12 @@ static void RunTick()
                                 L"MWCoop did not load in the game: close it, then send the logs (zip) without closing the launcher"));
         } else LaunchLog("chargeur MWCoop vu pour cette partie");
     }
-    if (g_proc && WaitForSingleObject(g_proc, 0) == WAIT_OBJECT_0) { CloseHandle(g_proc); g_proc = NULL; }
-    if (g_proc || GameProcessRunning()) return;
-    // jeu ferme : retour au menu
-    g_state = ST_IDLE;
-    g_srv.clear();
-    CrashCheck();
-    if (g_crashT) SetStatus(K_WARN, T(L"Arrêt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
-    else SetStatus(K_NORMAL, T(L"Partie terminée · %s", L"Game over · %s"), ModLabel().c_str());
-    LaunchLog("jeu ferme : retour au menu (arret brutal %d)", (int)(g_crashT != 0));
+}
+
+// Jeu ferme (ou ferme au demarrage) : trace verifiee si ce n'etait pas fait, puis ce qu'on fait si MWCoop manquait.
+static void AfterGameModCheck()
+{
+    ModTraceCheck();
     // MWCoop pas charge dans cette partie. Partie lancee de la copie : la suivante part du dossier du jeu, retenu pour ce PC
     // ([Lanceur] SansCopie). Sinon : proposer le lancement par Steam (une fois par partie).
     const Opt *vs = OptByKey("LancerSteam");

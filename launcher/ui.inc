@@ -1210,9 +1210,11 @@ static void DrawSettings(Graphics &g)
     }
     if (const Opt *ls = OptByKey("LancerSteam")) {   // (kSetSteamRow : ga.X + 20, ga.Y + 166)
         RectF row = kSetSteamRow;
-        SetRowText(g, RectF(row.X, row.Y, row.Width - 70, row.Height), T(L"Lancer le jeu par Steam", L"Start the game through Steam"), T(L"Si MWCoop ne se charge pas depuis le lanceur", L"If MWCoop doesn't load from the launcher"));
-        UiToggle(g, RectF(row.X + row.Width - 50, row.Y + 12, 50, 28), OptGet(*ls) != 0, g_uiHot == UI_SET_STEAMRUN);
-        HotZone(row, UI_SET_STEAMRUN);
+        // Demarrer le jeu : copie de lancement (Steam, sinon le dossier du jeu), dossier du jeu ([Lanceur] SansCopie), Steam
+        // ([Coop] LancerSteam). Chez certains joueurs une seule marche (08/10).
+        int how = OptGet(*ls) ? 2 : GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) ? 1 : 0;
+        SetRowText(g, RectF(row.X, row.Y, row.Width - 250, row.Height), T(L"Démarrer le jeu", L"Start the game"), T(L"Si MWCoop ne se charge pas", L"If MWCoop doesn't load"));
+        UiSeg(g, RectF(row.X + row.Width - 240, row.Y + 8, 240, 36), { T(L"Copie", L"Copy"), T(L"Dossier", L"Folder"), L"Steam" }, how, UI_SET_START, 12);
     }
     // Invite : envoi de l'hote
     RectF iv(rx, ga.Y + ga.Height + 16, cw, kMain.Y + kMain.Height - (ga.Y + ga.Height + 16));
@@ -1358,6 +1360,17 @@ static bool UiClick(int id)
         WritePrivateProfileStringW(L"Lanceur", L"Langue", g_fr ? L"fr" : L"en", g_iniLauncher.c_str());
         return true;
     case UI_SET_CLOSE: if (const Opt *o = OptByKey("FermerLanceur")) OptSet(*o, OptGet(*o) ? 0 : 1); return true;
+    case UI_SET_START: case UI_SET_START1: case UI_SET_START2:
+        if (const Opt *o = OptByKey("LancerSteam")) {
+            int k = id - UI_SET_START;
+            OptSet(*o, k == 2 ? 1 : 0);
+            WritePrivateProfileStringW(L"Lanceur", L"SansCopie", k == 1 ? L"1" : L"0", g_iniLauncher.c_str());
+            LaunchLog("demarrage du jeu choisi : %s", k == 0 ? "copie de lancement" : k == 1 ? "dossier du jeu" : "Steam");
+            SetStatus(K_NORMAL, k == 0 ? T(L"Le jeu partira de la copie de lancement (r\u00E9glage d'origine)", L"The game will start from the launch copy (default)")
+                              : k == 1 ? T(L"Le jeu partira directement de son dossier", L"The game will start straight from its folder")
+                                       : T(L"Le jeu sera lanc\u00E9 par Steam (le lanceur se ferme)", L"The game will be started through Steam (the launcher closes)"));
+        }
+        return true;
     case UI_SET_STEAMRUN:
         if (const Opt *o = OptByKey("LancerSteam")) {
             OptSet(*o, OptGet(*o) ? 0 : 1);
