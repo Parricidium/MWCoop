@@ -183,6 +183,16 @@ namespace MWCoop
                             Wheel w0 = e.Wheels[0];
                             sb.Append(" roue ").Append(w0 == null ? "?" : w0.model == null ? "sans modele" : w0.model.name + " r" + w0.radius.ToString("F2") + " rot " + w0.model.transform.localEulerAngles.ToString("F0") + (w0.enabled ? " ACTIVE" : ""))
                               .Append(" (").Append(e.Wheels.Length).Append(", tour ").Append(e.WheelRot != null && e.WheelRot.Length > 0 ? e.WheelRot[0].ToString("F0") : "-").Append(')');
+                            // Hauteur du centre de la roue (modele) au-dessus du sol d'ici, et ecart de la caisse applique (invite).
+                            Transform v0 = e.WheelVis != null && e.WheelVis.Length > 0 ? e.WheelVis[0] : (w0 != null && w0.model != null ? w0.model.transform : null);
+                            if (v0 != null)
+                            {
+                                float best = float.MaxValue; Collider bc = null;
+                                foreach (RaycastHit h in Physics.RaycastAll(v0.position + Vector3.up * 1.2f, Vector3.down, 4f))
+                                    if (!h.collider.isTrigger && !h.collider.transform.IsChildOf(e.T) && h.distance < best) { best = h.distance; bc = h.collider; }
+                                if (best < float.MaxValue) sb.Append(" centre roue a ").Append((1.2f - best).ToString("F2")).Append(" m du sol (r ").Append((e.WheelR != null && e.WheelR.Length > 0 ? e.WheelR[0] : 0f).ToString("F2")).Append(", sol ").Append(Recon.Path(bc.transform)).Append(", roue ").Append(Recon.Path(v0)).Append(")");
+                            }
+                            if (!Session.IsHost) sb.Append(" ecart caisse ").Append(e.Ride.ToString("F2"));
                         }
                         sb.Append(';');
                     }
@@ -427,8 +437,41 @@ namespace MWCoop
 
         // Essais (Autotest) 'train' : position du train toutes les 2 s des deux cotes (a comparer a la meme
         // heure des journaux : l'invite doit suivre l'hote a quelques metres pres).
+        // Essais : [Test] CameraTrafic=<nom> (HEPPA...) : camera d'essai a 5 m sur le cote de ce vehicule, qui le vise, et
+        // une fois par seconde son ecart au sol (pivot de la roue avant, sol sous elle, ecart applique, caisse/racine).
+        static Camera trafCam;
+        static float trafLog;
+        static void TestCamera()
+        {
+            string name = Config.Get("Test", "CameraTrafic", "");
+            if (name.Length == 0) return;
+            Ent e = null;
+            foreach (Ent x in ents) if (x.T != null && x.T.name == name && x.T.gameObject.activeInHierarchy) { e = x; break; }
+            if (e == null) return;
+            if (trafCam == null) { trafCam = new GameObject("MWCoop-CameraTrafic").AddComponent<Camera>(); trafCam.depth = 100; trafCam.nearClipPlane = 0.05f; trafCam.fieldOfView = 55; }
+            trafCam.transform.position = e.T.position + e.T.right * 5f + Vector3.up * 0.6f;
+            trafCam.transform.LookAt(e.T.position + Vector3.up * 0.4f);
+            camT = trafCam.transform;   // (le calage au sol se fait pres de cette camera)
+            if (Time.realtimeSinceStartup < trafLog) return;
+            trafLog = Time.realtimeSinceStartup + 1f;
+            var sb = new System.Text.StringBuilder("autotest : trafic " + name + " en " + e.T.position.ToString("F2") + ", ecart " + e.Ride.ToString("F2") + (e.Body != null ? ", caisse-racine " + (e.Body.position - e.T.position).ToString("F2") : ""));
+            for (int i = 0; e.WheelVis != null && i < e.WheelVis.Length; i++)
+            {
+                Transform v = e.WheelVis[i];
+                if (v == null) continue;
+                float best = float.MaxValue;
+                foreach (RaycastHit h in Physics.RaycastAll(v.position + Vector3.up * 1.2f, Vector3.down, 4f))
+                    if (!h.collider.isTrigger && !h.collider.transform.IsChildOf(e.T) && h.distance < best) best = h.distance;
+                Renderer rr = v.GetComponentInChildren<Renderer>();
+                sb.Append(" | roue ").Append(i).Append(" pivot ").Append(best < float.MaxValue ? (1.2f - best).ToString("F2") : "?").Append(" m du sol")
+                  .Append(rr != null ? ", bas du rendu " + (rr.bounds.min.y - (v.position.y - (1.2f - best))).ToString("F2") + " m du sol" : "");
+            }
+            Log.Info(sb.ToString());
+        }
+
         public static void Test(string mode, float t)
         {
+            TestCamera();
             Police.Test(mode, t);
             Bus.Test(mode, t);
             if (mode == "choc") TestChoc(t);
@@ -471,6 +514,11 @@ namespace MWCoop
                 e.WheelRot[i] += fwd / e.WheelR[i] * Time.deltaTime;
                 vis.localRotation = Quaternion.Euler(0f, e.Steer * w.maxSteeringAngle, 0f) * Quaternion.AngleAxis(57.29578f * e.WheelRot[i], Vector3.right);
             }
+            // Calage au sol (0.40) coupe par defaut depuis 0.56 : la pose de l'hote est juste (meme hauteur des deux cotes,
+            // mesure et capture, 08/10) ; le rayon sous les roues touchait un collisionneur de route ~0,6 m au-dessus de la
+            // chaussee visible et decalait les voitures proches de la camera (« voitures enfoncees », retour d'un joueur).
+            // [Test] CalageTrafic=1 le remet.
+            if (Config.GetInt("Test", "CalageTrafic", 0) == 0) { e.Ride = 0f; return; }
             if (camT == null) { Camera c = Camera.main; if (c != null) camT = c.transform; }
             if (camT == null || (camT.position - e.T.position).sqrMagnitude > 150f * 150f) return;
             float sum = 0f;

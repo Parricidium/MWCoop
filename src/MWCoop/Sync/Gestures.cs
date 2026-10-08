@@ -545,7 +545,13 @@ namespace MWCoop
                 PlayMakerFSM best = null;
                 foreach (PlayMakerFSM f in triggers)
                     if (f != null && f.gameObject.activeInHierarchy && Recon.Path(f.transform).StartsWith(want)) { best = f; break; }
-                if (best == null) { Log.Warn("autotest : assis-chaise : aucun declencheur actif sous " + want); return; }
+                if (best == null)
+                {
+                    var l = new List<string>();
+                    foreach (PlayMakerFSM f in triggers) if (f != null && Recon.Path(f.transform).Contains(want.Split('/')[0]) && l.Count < 30) l.Add(Recon.Path(f.transform) + (f.gameObject.activeInHierarchy ? "" : " [off]"));
+                    Log.Warn("autotest : assis-chaise : aucun declencheur actif sous " + want + " ; sous " + want.Split('/')[0] + " : " + string.Join(" ; ", l.ToArray()));
+                    return;
+                }
                 Teleport(best.transform.position + Vector3.up * 0.1f);
                 Log.Info("autotest : assis-chaise : acteur : pose dans " + Recon.Path(best.transform) + " en " + best.transform.position.ToString("F2"));
                 testTrigger = best;

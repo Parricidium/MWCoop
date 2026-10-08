@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
@@ -865,7 +865,7 @@ namespace MWCoop
                     MakeServed(m);
                 }
             }
-            if (now >= nextEatCheck && (eatObjs.Count > 0 || eatPending.Count > 0 || eatMuted.Count > 0))
+            if (now >= nextEatCheck && (eatObjs.Count > 0 || eatPending.Count > 0 || eatMuted.Count > 0 || eatLocked.Count > 0))
             {
                 nextEatCheck = now + 0.25f;
                 for (int i = eatObjs.Count - 1; i >= 0; i--) { if (eatObjs[i].Go == null) eatObjs.RemoveAt(i); else HookEats(eatObjs[i]); }
@@ -878,6 +878,8 @@ namespace MWCoop
                 }
                 for (int i = eatMuted.Count - 1; i >= 0; i--)
                     if (now > eatMuted[i].Key) { Unmute(eatMuted[i].Value); eatMuted.RemoveAt(i); }
+                for (int i = eatLocked.Count - 1; i >= 0; i--)
+                    if (now > eatLocked[i].Key) { if (eatLocked[i].Value != null) eatLocked[i].Value.enabled = true; eatLocked.RemoveAt(i); }
             }
         }
 
@@ -895,6 +897,8 @@ namespace MWCoop
             HookEats(eo);
         }
 
+        static readonly List<KeyValuePair<float, PlayMakerFSM>> eatLocked = new List<KeyValuePair<float, PlayMakerFSM>>();   // boutons verrouilles (gorgee d'un autre)
+
         static void HookEats(EatObj e)
         {
             foreach (PlayMakerFSM f in e.Go.GetComponentsInChildren<PlayMakerFSM>(true))
@@ -906,7 +910,8 @@ namespace MWCoop
                 {
                     foreach (FsmState s in f.Fsm.States)
                     {
-                        if (!s.Name.StartsWith("State ") || System.Array.Exists(s.Actions, a => a is EatHook)) continue;
+                        // (+ "Play anim" : le debut d'une gorgee / bouchee, annonce pour verrouiller le bouton chez les autres.)
+                        if (!(s.Name.StartsWith("State ") || s.Name == "Play anim") || System.Array.Exists(s.Actions, a => a is EatHook)) continue;
                         var l = new List<FsmStateAction>(s.Actions);
                         l.Insert(0, new EatHook { Id = e.Id, Path = path, StateName = s.Name });
                         s.Actions = l.ToArray();
@@ -960,6 +965,15 @@ namespace MWCoop
             PlayMakerFSM f = t != null ? Game.FsmOn(t.gameObject, "Button") : null;
             if (f == null || !t.gameObject.activeInHierarchy || string.IsNullOrEmpty(f.ActiveStateName)) return false;
             string was = f.ActiveStateName;
+            // Un autre commence a boire / manger ce bouton : verrouille ici le temps de sa gorgee (le jeu laissait deux
+            // joueurs boire le meme soda en meme temps, retour d'un joueur 08/10) ; rendu a son etat suivant, 6 s au plus.
+            if (m.State == "Play anim")
+            {
+                if (f.enabled) { f.enabled = false; eatLocked.Add(new KeyValuePair<float, PlayMakerFSM>(Time.realtimeSinceStartup + 6f, f)); }
+                Log.Info("magasin : " + m.Id + "/" + (m.Path.Length > 0 ? m.Path : go.name) + " pris par " + PlayerName(m.Who) + " : verrouille ici");
+                return true;
+            }
+            for (int i = eatLocked.Count - 1; i >= 0; i--) if (eatLocked[i].Value == f) { eatLocked.RemoveAt(i); f.enabled = true; }
             if (was == m.State) { Log.Info("magasin : repas " + m.Id + "/" + m.Path + " deja " + m.State + " ici"); return true; }
             foreach (KeyValuePair<string, int> kv in m.Ints) { FsmInt v = f.FsmVariables.FindFsmInt(kv.Key); if (v != null) v.Value = kv.Value; }
             List<FsmStateAction> muted = MuteFsm(f);
@@ -2179,7 +2193,14 @@ namespace MWCoop
             if (Session.IsHost && testStep == 0 && t > 35f)
             {
                 testStep = 1;
-                if (!on) { testStep = 9; Log.Info("autotest : resto (hote) caisse burger eteinte ici (TestPos devant WaitingPointBurger)"); }
+                if (!on)
+                {
+                    testStep = 9;
+                    string wp = "?";
+                    foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Transform)))
+                        if (((Transform)o).name == "WaitingPointBurger" && o.hideFlags == HideFlags.None) { Transform w = (Transform)o; wp = Recon.Path(w) + " en " + w.position.ToString("F1") + (w.gameObject.activeInHierarchy ? "" : " (inactif)"); }
+                    Log.Info("autotest : resto (hote) caisse burger eteinte ici (TestPos devant WaitingPointBurger : " + wp + ", heure " + FsmVariables.GlobalVariables.FindFsmInt("GlobalHour").Value + ")");
+                }
                 else
                 {
                     if (!c.Hooked) HookCounter(c);
@@ -2206,20 +2227,41 @@ namespace MWCoop
                 Game.SetState(c.Fsm, "Check money");   // = clic sur la caisse (Wait button : USE)
                 Log.Info("autotest : resto (hote) paie -> caisse " + c.Fsm.ActiveStateName + " ; " + Wallet.State());
             }
-            if (Session.IsHost && testStep == 2 && t > 55f)
+            // ([Test] TestMangeur=invite : c'est l'invite qui mange, sur le plateau servi chez lui.)
+            bool eater = Config.Get("Test", "TestMangeur", "hote") == (Session.IsHost ? "hote" : "invite");
+            if (eater && (testStep == 2 || (!Session.IsHost && testStep == 0)) && t > 55f)
             {
                 GameObject tray = null;
                 for (int i = servedOrder.Count - 1; i >= 0 && tray == null; i--) { GameObject g = Live(servedOrder[i]); if (g != null && g.name.StartsWith("Tray")) tray = g; }
-                if (tray == null) { if (t > 100f) { testStep = 9; Log.Info("autotest : resto (hote) aucun plateau a manger"); } }
+                if (tray == null) { if (t > 150f) { testStep = 9; Log.Info("autotest : resto (hote) aucun plateau a manger"); } }
                 else
                 {
                     testStep = 3; testEatAt = t; testBag = Props.ItemId(tray);
                     PlayMakerFSM bf = TestEatFsm(tray);
+                    if (bf != null)
+                    {
+                        // (Essais : structure de l'automate du bouton -- etats, transitions, types d'actions.)
+                        var sb = new System.Text.StringBuilder("autotest : resto, automate " + bf.gameObject.name + " :");
+                        try
+                        {
+                            foreach (FsmState st in bf.Fsm.States)
+                            {
+                                sb.Append(" [").Append(st.Name);
+                                foreach (FsmTransition x in st.Transitions) sb.Append(' ').Append(x.EventName).Append("->").Append(x.ToState);
+                                sb.Append(" |");
+                                foreach (FsmStateAction ac in st.Actions) sb.Append(' ').Append(ac.GetType().Name);
+                                sb.Append(']');
+                            }
+                            foreach (FsmInt v in bf.FsmVariables.IntVariables) sb.Append(" int ").Append(v.Name).Append('=').Append(v.Value);
+                        }
+                        catch (System.Exception e) { sb.Append(" ? ").Append(e.GetType().Name); }
+                        Log.Info(sb.ToString());
+                    }
                     if (bf != null) Game.SetState(bf, "Play anim");   // = CLICK sur le bouton
                     Log.Info("autotest : resto (hote) mange " + testBag + "/" + Config.Get("Test", "TestManger", "EatFries") + " -> " + (bf != null ? bf.ActiveStateName : "bouton introuvable ou eteint"));
                 }
             }
-            if (Session.IsHost && testStep == 3 && t > testEatAt + 2f)
+            if (eater && testStep == 3 && t > testEatAt + 2f)
             {
                 testStep = 4;
                 GameObject tray = Live(testBag);
