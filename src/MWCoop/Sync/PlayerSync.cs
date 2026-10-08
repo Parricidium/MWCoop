@@ -92,6 +92,12 @@ namespace MWCoop
             Avatar a;
             if (avatars.TryGetValue(id, out a) && a != null && a.Root != null) a.ReachFor(at);
         }
+        public static Transform HandOf(int id)
+        {
+            Avatar a;
+            return avatars.TryGetValue(id, out a) && a != null && a.Root != null ? a.HandRight : null;
+        }
+
         public static void ReachFor(int id, Transform t)
         {
             Avatar a;

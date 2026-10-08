@@ -366,6 +366,7 @@ namespace MWCoop
             {
                 if (TryApply(queue[i], now)) queue.RemoveAt(i); else i++;
             }
+            for (int i = 0; i < bagWait.Count; ) { if (ApplyBag(bagWait[i])) bagWait.RemoveAt(i); else i++; }   // (achats d'autres en attente, dans l'ordre)
             for (int i = mutedCounters.Count - 1; i >= 0; i--)
             {
                 Counter c = mutedCounters[i];
@@ -1084,19 +1085,34 @@ namespace MWCoop
             var floats = new List<KeyValuePair<string, float>>();
             if (r.More) for (int i = 0, m = r.U8(); i < m; i++) floats.Add(new KeyValuePair<string, float>(r.Str(), r.F32()));
             foreach (KeyValuePair<string, float> kv in floats) desc.Append(kv.Key).Append(' ').Append(kv.Value).Append(' ');
+            Hud.Toast(PlayerName(who) + Lang.T(" a fait des courses : ", " went shopping: ") + desc);
+            var bm = new BagMsg { Who = who, Key = key, BagStuff = bagStuff, Keys = keys, Qtys = qtys, Floats = floats, Desc = desc.ToString(), Until = Time.realtimeSinceStartup + 20f };
+            if (!ApplyBag(bm)) { bagWait.Add(bm); Log.Info("magasin : achat de " + PlayerName(who) + " en attente : la caisse sert le joueur d'ici"); }
+        }
+
+        // Achat d'un autre en attente : la caisse d'ici etait en plein passage du joueur local (paiement, sac en
+        // creation). Le rejouer la detournait -- son panier remplace, son sac parti chez l'autre ou perdu (retour d'un
+        // joueur, 08/10 : sac de l'invite qui disparait). Rejoue des que la caisse revient au repos, 20 s au plus.
+        class BagMsg { public int Who; public string Key, Desc; public int BagStuff; public List<string> Keys; public List<int> Qtys; public List<KeyValuePair<string, float>> Floats; public float Until; }
+        static readonly List<BagMsg> bagWait = new List<BagMsg>();
+
+        static bool ApplyBag(BagMsg bm)
+        {
+            string key = bm.Key; int bagStuff = bm.BagStuff; var keys = bm.Keys; var qtys = bm.Qtys; var floats = bm.Floats; string desc = bm.Desc;
             Register reg;
             if (!registers.TryGetValue(key, out reg) || reg.Fsm == null) { Scan(); registers.TryGetValue(key, out reg); }
-            string name = PlayerName(who);
-            Hud.Toast(name + Lang.T(" a fait des courses : ", " went shopping: ") + desc);
-            if (reg == null || reg.Fsm == null) { Log.Warn("magasin : caisse " + key + " introuvable ici"); return; }
+            string name = PlayerName(bm.Who);
+            if (reg == null || reg.Fsm == null) { Log.Warn("magasin : caisse " + key + " introuvable ici"); return true; }
+            bool localBusy = reg.Fsm.gameObject.activeInHierarchy && !AtRest(reg.Fsm) && !pending.Exists(x => x.R == reg);
+            if (localBusy && Time.realtimeSinceStartup < bm.Until) return false;
             if (!reg.Fsm.gameObject.activeInHierarchy)
             {
                 EmulateBag(reg, keys, qtys, bagStuff, floats);
                 Log.Info("magasin : achat de " + name + " refait sur les distributeurs, caisse eteinte ici (" + desc + ")");
-                return;
+                return true;
             }
             Hashtable carried = CarriedOf(reg.Fsm);
-            if (carried == null) return;
+            if (carried == null) return true;
             FsmVariables fv = reg.Fsm.FsmVariables;
             // Rejeu precedent pas fini a cette caisse (deux achats coup sur coup) : la table tient le panier du
             // premier acheteur, pas celui du joueur local -- c'est la sauvegarde du premier qui sera remise.
@@ -1136,6 +1152,7 @@ namespace MWCoop
             finally { applying = false; Replay.Depth--; }
             pending.Add(keep);
             Log.Info("magasin : achat de " + name + " rejoue (" + desc + ")");
+            return true;
         }
 
         // Caisse eteinte ici : ce que ferait la chaine, directement sur les distributeurs (toujours actifs).

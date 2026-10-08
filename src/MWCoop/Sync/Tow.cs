@@ -42,6 +42,14 @@ namespace MWCoop
     {
         const string Module = "remorquage";
         const int DETACH = 0, ATTACH = 1, REMOVE = 2, BROKEN = 3;   // Msg.Tow
+        // Corde tenue : 1er bout accroche, l'autre dans la main du joueur (avant, rien chez les autres tant que le 2e bout
+        // n'etait pas accroche ; retour d'un joueur, 08/10). Annoncee (chemin du crochet) au debut puis toutes les 2 s ;
+        // chez les autres, une corde visible du crochet a la main droite de son avatar. Finie par ATTACH ou DETACH.
+        const int HELD = 4;
+        class Held { public Transform Hook; public GameObject Visual; public Transform End2; public float Seen; public string Path; }
+        static readonly Dictionary<int, Held> held = new Dictionary<int, Held>();
+        static string heldSent;
+        static float heldNext;
 
         class Rope
         {
@@ -83,6 +91,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
+            held.Clear(); heldSent = null;
             local = null; mirrors.Clear(); all.Clear(); hooks.Clear();
             ropeGo = template = prevHook1 = null; ropeFsm = null;
             rAttached = null; rHook1 = rHook2 = null; rSpring = null; rBreak = null;
@@ -96,6 +105,7 @@ namespace MWCoop
             if (!Session.Active || scanAt < 0) return;
             float now = Time.realtimeSinceStartup;
             if (now >= scanAt) { Scan(); scanAt = ropeFsm == null ? now + 20f : float.MaxValue; }   // corde introuvable : on reessaie
+            KeepHeld(now);   // (chaque image : le bout suit la main de l'avatar)
             if (now < nextPoll) return;
             nextPoll = now + 0.1f;
             if (template == null && ropeGo != null && now >= nextTemplate) { nextTemplate = now + 5f; MakeTemplate(); }
@@ -203,6 +213,51 @@ namespace MWCoop
                 }
             }
             prevHook1 = rAttached.Value ? h1 : null;
+
+            string holding = rAttached.Value && h1 != null && h2 == null && MirrorAt(h1.transform) == null ? Recon.Path(h1.transform) : null;
+            if (holding != heldSent || (holding != null && now >= heldNext))
+            {
+                if (holding != null) Session.SendAll(new NetWriter(Msg.Tow).U8(HELD).U8(Session.LocalId).Str(holding), true);
+                else if (heldSent != null && local == null) Session.SendAll(new NetWriter(Msg.Tow).U8(DETACH).U8(Session.LocalId), true);
+                heldSent = holding;
+                heldNext = now + 2f;
+            }
+        }
+
+        // Corde tenue par un autre : visible du crochet a sa main ; retiree a sa fin, ou sans nouvelle depuis 6 s.
+        static void KeepHeld(float now)
+        {
+            if (held.Count == 0) return;
+            var gone = new List<int>();
+            foreach (KeyValuePair<int, Held> kv in held)
+            {
+                Held h = kv.Value;
+                Transform hand = PlayerSync.HandOf(kv.Key);
+                if (now - h.Seen > 6f || h.Hook == null) { gone.Add(kv.Key); continue; }
+                if (h.Visual == null && template != null && hand != null)
+                {
+                    var g = (GameObject)Object.Instantiate(template);
+                    g.name = "MWCoop-CordeTenue-" + kv.Key;
+                    Transform a = g.transform.Find("RopeFirst"), b = g.transform.Find("RopeSecond");
+                    if (a == null || b == null) { Object.Destroy(g); continue; }
+                    Pin(a, h.Hook);
+                    b.parent = null;
+                    foreach (SkinnedMeshRenderer s in g.GetComponentsInChildren<SkinnedMeshRenderer>(true)) s.updateWhenOffscreen = true;
+                    g.SetActive(true);
+                    h.Visual = g; h.End2 = b;
+                }
+                if (h.End2 != null && hand != null) { h.End2.position = hand.position; h.End2.rotation = hand.rotation; }
+            }
+            foreach (int id in gone) DropHeld(id);
+        }
+
+        static void DropHeld(int id)
+        {
+            Held h;
+            if (!held.TryGetValue(id, out h)) return;
+            if (h.End2 != null) Object.Destroy(h.End2.gameObject);
+            if (h.Visual != null) Object.Destroy(h.Visual);
+            held.Remove(id);
         }
 
         static Rope FromGame(SpringJoint j, Transform h1, Transform h2)
@@ -256,6 +311,21 @@ namespace MWCoop
                 Session.Broadcast(new NetWriter(Msg.Tow).U8(kind).U8(owner).Raw(r.Rest()), true, from.Id);
             }
             if (owner == Session.LocalId) return;
+            if (kind == HELD)
+            {
+                string hp = r.Str();
+                Held h;
+                if (!held.TryGetValue(owner, out h) || h.Path != hp)
+                {
+                    DropHeld(owner);
+                    h = new Held { Path = hp, Hook = HookAt(hp) };
+                    held[owner] = h;
+                    Log.Info("remorquage : " + Name(owner) + " tient sa corde, accrochee a " + hp);
+                }
+                h.Seen = Time.realtimeSinceStartup;
+                return;
+            }
+            DropHeld(owner);   // (accrochee des deux bouts, ou decrochee : plus tenue)
             Rope m;
             mirrors.TryGetValue(owner, out m);
             if (kind == DETACH)

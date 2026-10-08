@@ -497,6 +497,7 @@ namespace MWCoop
         }
 
         Transform Bone(string n) { Transform t; return bones != null && bones.TryGetValue(n, out t) ? t : null; }
+        public Transform HandRight { get { return Bone("hand_right"); } }
 
         // Rotation monde autour d'axes de l'avatar, ajoutee a la pose courante de l'os.
         void Turn(Transform b, float yaw, float pitch)
