@@ -1481,7 +1481,7 @@ namespace MWCoop
                 if (cam != null) foreach (MonoBehaviour m in cam.GetComponents<MonoBehaviour>()) sb.Append(' ').Append(m.GetType().Name).Append(m.enabled ? "+" : "-");
                 Log.Info("autotest : releveco : " + hits.Count + " automates ; camera :" + sb + " ; " + Recon.DumpTargets(string.Join(";", hits.ToArray())));
             }
-            if (mode == "releveracine" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpRoot(Config.Get("Test", "RacineReleve", "RACES"))); }
+            if (mode == "releveracine" && t > 45f && !done) { done = true; foreach (string rr in Config.Get("Test", "RacineReleve", "RACES").Split(';')) Log.Info("autotest : releve " + Recon.DumpRoot(rr.Trim())); }   // (plusieurs : a;b;c)
             if (mode == "releveargent" && t > 45f && !done) { done = true; Log.Info("autotest : releve " + Recon.DumpMoney()); }
             if (mode == "menu" && t > 70f && !done)
             {

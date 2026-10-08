@@ -1068,7 +1068,10 @@ static void DrawLogsPage(Graphics &g)
     }
     kLogsR = RectF(c.X + 24, y, c.Width - 48, c.Y + c.Height - 18 - y);
     if (g_logRows.empty())
-        Para(g, T(L"Aucun journal pour l'instant : le jeu en écrit à chaque lancement avec MWCoop.", L"No logs yet: the game writes them every time it starts with MWCoop."),
+        // (le journal du lanceur, mode debogage compris, est quand meme dans le zip : un joueur dont MWCoop ne se chargeait
+        // pas croyait n'avoir rien a envoyer, 08/10)
+        Para(g, T(L"Aucun journal du jeu : MWCoop ne s'est encore jamais chargé en jeu. Le journal du lanceur (et du mode débogage) est quand même dans le zip : crée-le et envoie-le.",
+                  L"No game logs: MWCoop hasn't loaded in game yet. The launcher's log (and debug mode's) is still in the zip: create it and send it."),
              RectF(kLogsR.X + 100, kLogsR.Y + 60, kLogsR.Width - 200, 60), 14, kGrey, StringAlignmentCenter);
     float sc = g_scroll[TAB_LOGS];
     GraphicsState st = g.Save();
@@ -1229,8 +1232,8 @@ static void DrawSettings(Graphics &g)
 struct Credit { const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; };
 static const Credit kCredits[] = {
     { L"Dom", L"Tenues", L"Outfits",
-      L"Un pack de 157 tenues pour ton personnage : 86 hauts, 27 pantalons et 44 visages. Dans l'onglet Tenue, à la suite de celles du jeu (« Tenue Dom 12 »…).",
-      L"A pack of 157 outfits for your character: 86 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026" },
+      L"Un pack de 155 tenues pour ton personnage : 84 hauts, 27 pantalons et 44 visages. Dans l'onglet Tenue, à la suite de celles du jeu (« Tenue Dom 12 »…).",
+      L"A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026" },
 };
 static void DrawCreditsPage(Graphics &g)
 {
