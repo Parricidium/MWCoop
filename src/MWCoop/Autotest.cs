@@ -908,7 +908,7 @@ namespace MWCoop
                         pl.position = poro.transform.TransformPoint(new Vector3(0f, 0.9f, -0.3f));
                         pl.parent = poro.transform;
                         Game.SetGlobal("PlayerCurrentVehicle", "Poro");
-                        Log.Info("autotest : poro, monte");
+                        Log.Info("autotest : poro, monte ; moteur " + VehicleSync.ModEngine("PORO", true));
                     }
                     if (t > 65f && t < 80f) { Vector3 f = poro.transform.forward; f.y = 0; pb.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(pb.velocity.y, 0f); }
                     if (t > 90f && step == 1 && pl != null)
@@ -924,7 +924,7 @@ namespace MWCoop
                 if (pb != null && t > 20f && t < 160f && Time.realtimeSinceStartup >= rivLog)
                 {
                     rivLog = Time.realtimeSinceStartup + 2f;
-                    Log.Info("autotest : poro en " + pb.position.ToString("F1") + (pb.isKinematic ? " (copie)" : " (locale)") + " v " + pb.velocity.magnitude.ToString("F1"));
+                    Log.Info("autotest : poro en " + pb.position.ToString("F1") + (pb.isKinematic ? " (copie)" : " (locale)") + " v " + pb.velocity.magnitude.ToString("F1") + ", " + VehicleSync.ModEngine("PORO", false));
                 }
                 if (pb == null && t > 20f && step == 0) { step = 9; Log.Info("autotest : poro, pas de PORO ici"); }
             }

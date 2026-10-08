@@ -83,6 +83,9 @@ namespace MWCoop
             public Wheel[] Wheels;
             public AxisCarController Axis;
             public bool Mod;                  // vehicule de mod sans CarDynamics (IsModVehicle)
+            // Moteur d'un vehicule de mod (Poro : SnowmobileDrivetrain, proprietes CurrRpm et IsRunning ; son bruit les lit) et
+            // son controleur (SnowmobileController : recalcule le regime a chaque pas physique) coupe sur la copie.
+            public Component ModDt; public System.Reflection.PropertyInfo ModRpm, ModRun; public Behaviour ModCtrl; public bool ModCtrlWas;
             public SoundController Sound;     // coupe par le jeu quand le joueur local n'est pas au volant
             public bool SoundWasOn;
             public GameObject[] SoundObjs;
@@ -360,6 +363,17 @@ namespace MWCoop
                                 Dt = go.GetComponent<Drivetrain>(), Wheels = go.GetComponentsInChildren<Wheel>(true),
                                 Axis = go.GetComponent<AxisCarController>(), Sound = go.GetComponent<SoundController>(),
                                 Mod = go.GetComponent("CarDynamics") == null };
+            if (car.Mod)
+            {
+                car.ModDt = go.GetComponent("SnowmobileDrivetrain");
+                if (car.ModDt != null)
+                {
+                    var bf = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                    car.ModRpm = car.ModDt.GetType().GetProperty("CurrRpm", bf);
+                    car.ModRun = car.ModDt.GetType().GetProperty("IsRunning", bf);
+                }
+                car.ModCtrl = go.GetComponent("SnowmobileController") as Behaviour;
+            }
             car.WheelRot = new float[car.Wheels.Length];
             var snd = new List<GameObject>();
             foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
@@ -815,6 +829,7 @@ namespace MWCoop
                 }
             }
             if (c.Axis != null) { if (on) { c.AxisWas = c.Axis.enabled; c.Axis.enabled = false; } else c.Axis.enabled = c.AxisWas; }
+            if (c.ModCtrl != null) { if (on) { c.ModCtrlWas = c.ModCtrl.enabled; c.ModCtrl.enabled = false; } else c.ModCtrl.enabled = c.ModCtrlWas; }
             if (c.Sound != null)
             {
                 if (on) { c.SoundWasOn = c.Sound.enabled; c.Sound.enabled = true; }
@@ -976,9 +991,19 @@ namespace MWCoop
         // le controleur est coupe : sans cela le volant restait fige, et les mains du conducteur avec (retour d'un joueur, 08/10).
         static readonly System.Reflection.FieldInfo fSteering = typeof(AxisCarController).BaseType != null ? typeof(AxisCarController).BaseType.GetField("steering", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
 
+        static float ModFloat(Component o, System.Reflection.PropertyInfo p) { try { return o != null && p != null ? (float)p.GetValue(o, null) : 0f; } catch { return 0f; } }
+        static bool ModBool(Component o, System.Reflection.PropertyInfo p) { try { return o != null && p != null && (bool)p.GetValue(o, null); } catch { return false; } }
+
         static void Animate(Car c)
         {
             if (c.Dt != null) { c.Dt.rpm = c.Rpm; c.Dt.throttle = c.Throttle; }
+            if (c.ModDt != null)
+                try
+                {
+                    if (c.ModRpm != null) c.ModRpm.SetValue(c.ModDt, c.Rpm, null);
+                    if (c.ModRun != null) c.ModRun.SetValue(c.ModDt, c.RemoteRunning, null);
+                }
+                catch { }
             if (c.Axis != null && fSteering != null) try { fSteering.SetValue(c.Axis, Mathf.Clamp(c.Steer, -1f, 1f)); } catch { }
             for (int i = 0; i < c.SoundObjs.Length; i++)
             {
@@ -1235,6 +1260,7 @@ namespace MWCoop
         {
             if (c.Body == null) return false;
             if (c.Dt != null && c.Dt.enabled && c.Dt.rpm > 150f) return true;
+            if (c.ModDt != null && ModBool(c.ModDt, c.ModRun) && ModFloat(c.ModDt, c.ModRpm) > 40f) return true;
             foreach (GameObject g in c.SoundObjs) if (g != null && g.activeSelf) return true;
             return false;
         }
@@ -1247,11 +1273,11 @@ namespace MWCoop
                 .Vec(c.Body.position).Quat(c.Body.rotation).Vec(c.Body.velocity).Vec(c.Body.angularVelocity);
             if (driven)
             {
-                float rpm = testRpm >= 0f ? testRpm : c.Dt != null ? c.Dt.rpm : 0f;
+                float rpm = testRpm >= 0f ? testRpm : c.Dt != null ? c.Dt.rpm : ModFloat(c.ModDt, c.ModRpm);
                 float thr = testRpm >= 0f ? testThr : c.Dt != null ? c.Dt.throttle : 0f;
                 int mask = 0;
                 for (int i = 0; i < c.SoundObjs.Length; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;
-                if ((c.Starter != null && c.Starter.ActiveStateName == "Running") || testRpm > 0f) mask |= 0x8000;   // (essais : faux moteur en marche)
+                if ((c.Starter != null && c.Starter.ActiveStateName == "Running") || testRpm > 0f || ModBool(c.ModDt, c.ModRun)) mask |= 0x8000;   // (essais : faux moteur en marche)
                 if ((c.Horn != null && c.Horn.activeInHierarchy) || testHorn) mask |= 0x4000;
                 w.F32(rpm).F32(thr).F32(float.IsNaN(testSteer) ? SteerOf(c) : testSteer).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
                 for (int i = 0; i < c.SoundObjs.Length; i++)
@@ -1461,6 +1487,15 @@ namespace MWCoop
             if (c.Drive.ActiveStateName == "Press return") c.Drive.SendEvent("Key DOWN");
             else Game.SetState(c.Drive, "Check seat");
             return c.Drive.ActiveStateName;
+        }
+
+        // Essais : moteur d'un vehicule de mod (Poro) : regime, en marche ; 'start' : le met en marche.
+        public static string ModEngine(string name, bool start)
+        {
+            Car c = Named(name);
+            if (c == null || c.ModDt == null) return "pas de moteur de mod";
+            if (start && c.ModRun != null) try { c.ModRun.SetValue(c.ModDt, true, null); } catch { }
+            return "regime " + ModFloat(c.ModDt, c.ModRpm).ToString("F0") + (ModBool(c.ModDt, c.ModRun) ? " en marche" : " arrete") + (c.ModCtrl != null ? (c.ModCtrl.enabled ? ", controleur actif" : ", controleur coupe") : "");
         }
 
         public static Rigidbody Body(string name)
