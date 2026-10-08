@@ -598,6 +598,7 @@ namespace MWCoop
         public static string SkinLabel(string s)
         {
             if (s.StartsWith("char_shirt")) return Lang.T("Tenue ", "Outfit ") + s.Substring(10).TrimStart('0');
+            if (Tenues.Has(s)) return Lang.T("Tenue ", "Outfit ") + Tenues.Label(s);
             switch (s)
             {
                 case "cop_shirt": return Lang.T("Policier", "Police officer");

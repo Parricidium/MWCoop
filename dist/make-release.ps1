@@ -4,7 +4,8 @@
 # -AFaire : seulement quand les joueurs ont une manipulation a faire apres le correctif (meme format : francais, ---,
 # anglais ; une ligne par consigne). Mis en tete des notes ("A faire : ..." / "To do: ...") et en encadre
 # "What you need to do" dans l'annonce Discord.
-param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '')
+# -Merci : remerciement ajoute a l'annonce Discord (anglais), mentions <@id> comprises (la personne est notifiee).
+param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '')
 $root = Split-Path $PSScriptRoot
 $code = Get-Content "$root\src\MWCoop\Version.cs" -Raw
 if ($code -notmatch "Text = `"$([regex]::Escape($Version))`"") { throw "src\MWCoop\Version.cs ne dit pas $Version" }
@@ -86,9 +87,14 @@ if ($Publier) {
                 $embed.fields = @(@{ name = "$([char]0x26A0)$([char]0xFE0F) What you need to do"; value = $todoEn })
                 $head += ' **Action needed after updating: see below.**'
             }
+            $users = @()
+            if ($Merci.Trim()) {
+                $head += "`n$($Merci.Trim())"
+                $users = @([regex]::Matches($Merci, '<@!?(\d+)>') | ForEach-Object { $_.Groups[1].Value })
+            }
             $msg = @{
                 content          = $head
-                allowed_mentions = @{ roles = @($w[1].Trim()) }
+                allowed_mentions = @{ roles = @($w[1].Trim()); users = $users }
                 embeds           = @($embed)
             }
             $body = [System.Text.Encoding]::UTF8.GetBytes(($msg | ConvertTo-Json -Depth 6))
