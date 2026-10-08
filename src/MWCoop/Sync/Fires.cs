@@ -315,9 +315,9 @@ namespace MWCoop
         static void FindRuled()
         {
             int added = 0;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || ruledFsms.Contains(f) || !f.transform.root.gameObject.activeInHierarchy) continue;
                 int kind = -1;
                 Transform p = f.transform.parent;
@@ -487,9 +487,9 @@ namespace MWCoop
         static void FindPlaces()
         {
             var found = new List<Place>();
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || placeFsms.Contains(f) || !f.transform.root.gameObject.activeInHierarchy) continue;
                 Place p = null;
                 if (f.FsmName == "Trigger" && f.gameObject.name == "WoodTrigger" && Game.LocalVar(f, "Woods"))

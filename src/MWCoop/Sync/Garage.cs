@@ -148,9 +148,9 @@ namespace MWCoop
         {
             var roots = new HashSet<GameObject>(Recon.SceneRoots());
             int added = 0;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f == null || f.hideFlags != HideFlags.None || liftKnown.Contains(f)) continue;
                 Transform p = f.transform.parent;
                 if (p == null) continue;

@@ -30,6 +30,10 @@ namespace MWCoop
     // l'autre, sans son (ses bruits de moteur sont sous Simulation/ExhaustCorris, allume par "Start engine", pas sous
     // un conteneur 'Sounds') ; retour d'un joueur, 08/10. Un ecart qui dure 1,5 s est corrige : "Start engine" (puis
     // "Crank up" -> "Running" au regime recu), ou "Stall engine" si le moteur est coupe chez le conducteur.
+    // Klaxon : objet CarHorn de la voiture (source en boucle, active tant qu'on klaxonne : touche du jeu, ou bouton
+    // ButtonHorn de la GIFU / du BACHGLOTZ). Le conducteur envoie s'il est actif (bit 14 du masque des sons) ; la copie
+    // l'allume ou l'eteint, apres la logique du jeu (LateUpdate). Avant : jamais entendu chez les autres (retour d'un
+    // joueur, 08/10).
     // Moteur laisse tournant : celui qui sort de la voiture en garde la main (etat 2) tant que son moteur
     // tourne et que personne d'autre ne la prend : les autres entendent toujours ce moteur, sans
     // conducteur assis. A la fin de la copie, moteur, commandes et roues reprennent l'etat d'AVANT
@@ -70,6 +74,10 @@ namespace MWCoop
             public bool Kinematic;
             public bool WasKinematic;
             public Dictionary<Rigidbody, RigidbodyInterpolation> InterpWas;   // copie : interpolation de la voiture et de ses pieces
+            public bool Framewise;              // copie ou le joueur local est passager : deplacee a chaque image (Ride)
+            public float SettleUntil;           // reprise d'une copie (voiture redevenue physique ici) : bridee jusque-la
+            public Vector3 SettleVel, SettleAng;
+            public Dictionary<Joint, Vector2> JointsLater;   // attaches rendues cassables a SettleUntil seulement
             public float NextLog;
             public Drivetrain Dt;
             public Wheel[] Wheels;
@@ -85,6 +93,8 @@ namespace MWCoop
             public PlayMakerFSM Starter;        // automate 'Starter' (etat "Running" : moteur en marche)
             public bool RemoteRunning;          // moteur en marche chez celui qui la fait rouler
             public float StarterOff;            // copie : debut de l'ecart entre son Starter et celui du conducteur (0 : aucun)
+            public GameObject Horn;             // klaxon (CarHorn) ; HornRemote : allume chez celui qui la fait rouler
+            public bool HornRemote, HornWas, HornSet;
             public float[] WheelRot;
             public Sim[] Sims = new Sim[0];     // etat de la simulation (SimVars)
             public float AuthorityUntil;        // on vient de la rendre : l'instantane de l'hote (voiture garee) attend
@@ -262,7 +272,7 @@ namespace MWCoop
             var snd = new List<GameObject>();
             foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
                 if (t.name == "Sounds")
-                    foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 15) snd.Add(s.gameObject);   // (bit 15 : moteur en marche)
+                    foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 14) snd.Add(s.gameObject);   // (bits 14-15 : klaxon, moteur en marche)
             car.SoundObjs = snd.ToArray();
             car.SoundObjsWas = new bool[snd.Count];
             car.SoundPitch = new float[snd.Count];
@@ -271,6 +281,8 @@ namespace MWCoop
                 if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { car.Drive = f; break; }
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
                 if (f.FsmName == "Starter" && f.Fsm.GetState("Running") != null) { car.Starter = f; break; }
+            foreach (AudioSource a in go.GetComponentsInChildren<AudioSource>(true))
+                if (a.gameObject.name == "CarHorn") { car.Horn = a.gameObject; break; }
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
                 if (f.FsmName == "Data" && f.gameObject.name.StartsWith("HeatSource")) { car.Heat = f.FsmVariables.FindFsmFloat("Temperature"); break; }
             FindSims(car);
@@ -458,8 +470,10 @@ namespace MWCoop
                 bool remote = Remote(c, now);
                 if (!remote && c.RemoteBy >= 0 && now - c.LastRemote >= 1.5f) { c.RemoteBy = -1; c.RemoteDriver = -1; }
                 SetKinematic(c, remote);
+                Ride(c, remote && Seats.SeatedCar == c.T);
                 if (remote)
                 {
+                    if (c.Framewise && c.Body.gameObject.activeInHierarchy) FollowFrame(c);
                     if (now >= c.NextJoints) ProtectJoints(c);   // pieces montees entre-temps
                     Animate(c);
                     if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Key + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + ", chaleur " + (c.Heat != null ? c.Heat.Value.ToString("F1") : "?") + " (recue " + c.RemoteHeat.ToString("F1") + ")" +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
@@ -484,6 +498,18 @@ namespace MWCoop
             foreach (Car c in cars)
                 if (c.Heat != null && !float.IsNaN(c.RemoteHeat) && c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving)
                     c.Heat.Value = c.RemoteHeat;
+            // Klaxon de la copie : celui du conducteur (apres la logique du jeu) ; rendu a son etat d'avant ensuite.
+            foreach (Car c in cars)
+            {
+                if (c.Horn == null) continue;
+                bool copy = c.Kinematic && Remote(c, now);
+                if (copy)
+                {
+                    if (!c.HornSet) { c.HornSet = true; c.HornWas = c.Horn.activeSelf; }
+                    if (c.Horn.activeSelf != c.HornRemote) c.Horn.SetActive(c.HornRemote);
+                }
+                else if (c.HornSet) { c.HornSet = false; c.Horn.SetActive(c.HornWas); }
+            }
             // Objets transportes dans une copie : places sur la pose affichee de la voiture (apres sa physique).
             Props.LateUpdate();
         }
@@ -669,18 +695,29 @@ namespace MWCoop
                     c.InterpWas[rb] = rb.interpolation;
                     rb.interpolation = RigidbodyInterpolation.Interpolate;
                 }
+                // (Redevenue copie pendant sa reprise : ses vraies limites de casse sont celles d'avant, pas l'infini du moment.)
+                if (c.JointsLater != null) { c.JointsWas = c.JointsLater; c.JointsLater = null; }
+                c.SettleUntil = 0f;
                 ProtectJoints(c);
             }
             else
             {
-                if (c.JointsWas != null)
-                {
-                    foreach (KeyValuePair<Joint, Vector2> kv in c.JointsWas)
-                        if (kv.Key != null) { kv.Key.breakForce = kv.Value.x; kv.Key.breakTorque = kv.Value.y; }
-                    c.JointsWas = null;
-                }
+                // Reprise en douceur (retour d'un joueur, 08/10 : voiture envolee en prenant le volant) : les pieces
+                // articulees (portieres, pieces montees) ont derive sur la copie -- cinematique, deplacee par a-coups,
+                // attaches incassables ; redevenue physique, le moteur physique corrigeait tout d'un coup. Pendant 1,5 s :
+                // attaches encore incassables, pieces a la vitesse de la voiture, vitesse verticale et rotation bridees a
+                // celles recues (+ une marge) ; ensuite les limites de casse d'avant.
+                float now0 = Time.realtimeSinceStartup;
+                if (c.JointsWas != null) { c.JointsLater = c.JointsWas; c.JointsWas = null; }
                 c.Body.isKinematic = c.WasKinematic;
-                if (!c.Body.isKinematic) { c.Body.velocity = c.Vel; c.Body.angularVelocity = c.AngVel; }
+                if (!c.Body.isKinematic)
+                {
+                    c.Body.velocity = c.Vel; c.Body.angularVelocity = c.AngVel;
+                    foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>())
+                        if (rb != c.Body && !rb.isKinematic) { rb.velocity = c.Vel; rb.angularVelocity = c.AngVel; }
+                    c.SettleUntil = now0 + 1.5f; c.SettleVel = c.Vel; c.SettleAng = c.AngVel;
+                }
+                else c.SettleUntil = now0;
                 if (c.InterpWas != null)
                 {
                     foreach (KeyValuePair<Rigidbody, RigidbodyInterpolation> kv in c.InterpWas) if (kv.Key != null) kv.Key.interpolation = kv.Value;
@@ -712,7 +749,61 @@ namespace MWCoop
         {
             if (!scanned) return;
             foreach (Car c in cars)
-                if (c.Body != null && c.Kinematic && c.Body.gameObject.activeInHierarchy) Follow(c);
+                if (c.Body != null && c.Kinematic && c.Body.gameObject.activeInHierarchy && !c.Framewise) Follow(c);
+                else if (c.Body != null && !c.Kinematic && c.SettleUntil > 0f) Settle(c);
+        }
+
+        // Voiture tout juste reprise (voir SetKinematic) : vitesse verticale et rotation bridees ; puis attaches rendues.
+        static int settleLogs;
+        static void Settle(Car c)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now >= c.SettleUntil)
+            {
+                c.SettleUntil = 0f;
+                if (c.JointsLater != null)
+                {
+                    foreach (KeyValuePair<Joint, Vector2> kv in c.JointsLater)
+                        if (kv.Key != null) { kv.Key.breakForce = kv.Value.x; kv.Key.breakTorque = kv.Value.y; }
+                    c.JointsLater = null;
+                }
+                return;
+            }
+            if (c.Body.isKinematic) return;
+            Vector3 v = c.Body.velocity, w = c.Body.angularVelocity;
+            float vyMax = Mathf.Max(c.SettleVel.y, 0f) + 1.5f, wMax = c.SettleAng.magnitude + 1.5f;
+            bool clamped = false;
+            if (v.y > vyMax) { v.y = vyMax; c.Body.velocity = v; clamped = true; }
+            if (w.magnitude > wMax) { c.Body.angularVelocity = w.normalized * wMax; clamped = true; }
+            if (clamped && settleLogs++ < 20) Log.Info("voiture " + c.Key + " reprise : elan bride (montee " + v.y.ToString("F1") + " m/s, rotation " + w.magnitude.ToString("F1") + " rad/s)");
+        }
+
+        // Copie ou le joueur local est assis (passager) : deplacee a chaque image par son transform, sans interpolation
+        // (ni la sienne ni celle de ses pieces). Au pas de physique avec interpolation, la camera du passager suivait la
+        // pose interpolee et les collisionneurs des boutons la pose physique : jusqu'a vitesse x 20 ms d'ecart, variable
+        // d'une image a l'autre -- l'icone de la main clignotait, impossible de cliquer en roulant (retour d'un joueur,
+        // 08/10). Le transform pose ici met aussi a jour les collisionneurs tout de suite (Unity 5.0).
+        static void Ride(Car c, bool on)
+        {
+            if (on == c.Framewise) return;
+            c.Framewise = on;
+            if (c.InterpWas == null) return;
+            foreach (Rigidbody rb in c.InterpWas.Keys)
+                if (rb != null) rb.interpolation = on ? RigidbodyInterpolation.None : RigidbodyInterpolation.Interpolate;
+        }
+
+        static void FollowFrame(Car c)
+        {
+            float dt = Mathf.Min(Time.realtimeSinceStartup - c.LastRemote, 0.3f);
+            Vector3 target = c.Pos + c.Vel * dt;
+            Quaternion rot = c.Rot;
+            if (c.AngVel.sqrMagnitude > 1e-4f)
+                rot = Quaternion.AngleAxis(c.AngVel.magnitude * dt * Mathf.Rad2Deg, c.AngVel.normalized) * c.Rot;
+            Transform t = c.Body.transform;
+            float k = 1f - Mathf.Exp(-15f * Time.deltaTime);
+            if ((target - t.position).sqrMagnitude > 25f) { MoveCargo(c, target, rot, c.Vel); t.position = target; t.rotation = rot; return; }
+            t.position = Vector3.Lerp(t.position, target, k);
+            t.rotation = Quaternion.Slerp(t.rotation, rot, k);
         }
 
         static void Follow(Car c)
@@ -806,8 +897,16 @@ namespace MWCoop
             return sb.ToString();
         }
 
-        // Essais : regime et accelerateur envoyes a la place de ceux du moteur local (< 0 : les vrais).
+        // Essais : regime et accelerateur envoyes a la place de ceux du moteur local (< 0 : les vrais) ; klaxon annonce.
         static float testRpm = -1f, testThr;
+        static bool testHorn;
+        public static void TestHorn(bool on) { testHorn = on; }
+        public static string HornState(string name)
+        {
+            Car c = Named(name);
+            if (c == null) return "?";
+            return c.Horn == null ? "pas de CarHorn" : "klaxon " + (c.Horn.activeInHierarchy ? "allume" : "eteint") + (c.Kinematic ? " (copie, conducteur : " + (c.HornRemote ? "allume" : "eteint") + ")" : "");
+        }
 
         // L'objet appartient-il a une voiture qu'un autre joueur conduit en ce moment ?
         public static bool RemotelyDriven(Transform t)
@@ -963,6 +1062,7 @@ namespace MWCoop
                 int mask = 0;
                 for (int i = 0; i < c.SoundObjs.Length; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;
                 if ((c.Starter != null && c.Starter.ActiveStateName == "Running") || testRpm > 0f) mask |= 0x8000;   // (essais : faux moteur en marche)
+                if ((c.Horn != null && c.Horn.activeInHierarchy) || testHorn) mask |= 0x4000;
                 w.F32(rpm).F32(thr).F32(SteerOf(c)).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
                 for (int i = 0; i < c.SoundObjs.Length; i++)
                     if ((mask & (1 << i)) != 0)
@@ -1102,7 +1202,7 @@ namespace MWCoop
             if (driven)
             {
                 rpm = r.F32(); thr = r.F32(); steer = r.F32(); heat = r.F32(); smask = r.U16();
-                for (int i = 0; i < 15; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
+                for (int i = 0; i < 14; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
             }
             if (Session.IsHost)
             {
@@ -1122,7 +1222,8 @@ namespace MWCoop
                 c.RemoteDriver = mode == 1 ? who : -1;
                 c.LastRemote = Time.realtimeSinceStartup;
                 c.Pos = pos; c.Rot = rot; c.Vel = vel; c.AngVel = ang;
-                c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask & 0x7FFF; c.RemoteHeat = heat;
+                c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask & 0x3FFF; c.RemoteHeat = heat;
+                c.HornRemote = (smask & 0x4000) != 0;
                 c.RemoteRunning = (smask & 0x8000) != 0;
                 for (int i = 0, k = 0; i < c.SoundObjs.Length && i < 16; i++)
                     if ((smask & (1 << i)) != 0 && k + 1 < spitch.Count) { c.SoundPitch[i] = spitch[k]; c.SoundVol[i] = spitch[k + 1]; k += 2; }

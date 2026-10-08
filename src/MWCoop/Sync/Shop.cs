@@ -429,9 +429,9 @@ namespace MWCoop
         static void Scan()
         {
             ignored.RemoveWhere(x => x == null);
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || ignored.Contains(f) || registerOf.ContainsKey(f) || counterOf.ContainsKey(f)) continue;
                 string fsm = f.FsmName;
                 if (fsm != "Data" && fsm != "Buy" && fsm != "Button" && fsm != "Use") { ignored.Add(f); continue; }

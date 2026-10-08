@@ -127,9 +127,9 @@ namespace MWCoop
         static void Scan()
         {
             int claimed = 0;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms())
             {
-                var f = (PlayMakerFSM)o;
+                var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.FsmName != "Logic" || f.hideFlags != HideFlags.None || !f.transform.root.gameObject.activeInHierarchy) continue;
                 FsmGameObject rope = f.FsmVariables.FindFsmGameObject("Rope");
                 if (rope == null || f.FsmVariables.FindFsmGameObject("ThisCar") == null) continue;

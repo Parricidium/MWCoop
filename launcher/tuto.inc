@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- visite guidee du premier lancement - inclus par launcher.cpp
+﻿// ---------------------------------------------------------------- visite guidee du premier lancement - inclus par launcher.cpp
 // Demande de JD (07/10), comme certains lanceurs : au premier lancement ([Lanceur] TutoVu absent), une suite de bulles.
 // La fenetre s'assombrit sauf l'element montre (entoure), une bulle a fleche dit a quoi il sert ; SUIVANT (Entree,
 // fleche droite), RETOUR (fleche gauche), PASSER (Echap). Les onglets montres s'ouvrent derriere la bulle. A revoir :
@@ -26,8 +26,8 @@ static const TutoStep kTuto[] = {
       L"Outfit and car", L"Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your CORRIS color.", "0.42.0" },
     { L"Contenu et mods", L"Ce que tu envoies à tes invités : CD, peinture, drapeau, posters… et tes mods MSCLoader (expérimental), copiés à part chez eux.",
       L"Content and mods", L"What you send to your guests: CDs, paint, flag, posters… and your MSCLoader mods (experimental), copied apart on their side.", "0.42.0" },
-    { L"Graphismes", L"Ombres, distance d'affichage, détails, textures, images par seconde… avec des préréglages en un clic. Aussi en jeu : menu F10.",
-      L"Graphics", L"Shadows, draw distance, detail, textures, frame rate… with one-click presets. Also in game: F10 menu.", "0.47.0" },
+    { L"Graphismes", L"Rangés par catégories à déplier : ombres, distance, détails, textures, images par seconde… et maintenant les pseudos des joueurs (distance, ou cachés). Préréglages en un clic ; en jeu : menu F10.",
+      L"Graphics", L"Sorted into categories you expand: shadows, distance, detail, textures, frame rate… and now player names (distance, or hidden). One-click presets; in game: F10 menu.", "0.54.0" },
     { L"Nouveautés", L"Ce qui change à chaque version. Quand une nouvelle version sort, un bouton « Mettre à jour » apparaît sous le logo : la mise à jour se fait quand tu cliques.",
       L"What's new", L"What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.", "0.42.0" },
     { L"Journaux", L"Chaque partie garde maintenant ses journaux, rangés par date : déplie celle qui a posé problème, crée son zip ou supprime les vieilles. Un « ! » rouge s'affiche si la dernière partie s'est arrêtée brutalement.",

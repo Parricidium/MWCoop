@@ -1552,11 +1552,12 @@ static std::vector<int> TabRows(int t)
 }
 static float NotesMaxScroll();
 static float LogsMaxScroll();
+static float GfxMaxScroll();
 static float LobbyMaxScroll();
 static float MscMaxScroll();
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
-static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : 0.0f; }
+static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : 0.0f; }
 
 static int ValueIndex(const Opt &o, int v)
 {

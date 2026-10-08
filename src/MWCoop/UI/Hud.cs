@@ -50,21 +50,23 @@ namespace MWCoop
             }
             Style.Alpha = 1f;
 
-            // Pseudos au-dessus des joueurs : pilule sombre, effacee au-dela de 60 m.
+            // Pseudos au-dessus des joueurs : pilule sombre, effacee sur la derniere moitie de la distance choisie
+            // ([Graphismes] Pseudos : 0 caches, sinon la distance en metres ; 120 par defaut).
             Camera cam = Camera.main;
-            if (cam == null) return;
+            float far = Gfx.Get("Pseudos", 120);
+            if (cam == null || far <= 0f) return;
             foreach (Avatar a in PlayerSync.Avatars)
             {
                 if (a.Root == null) continue;
                 Vector3 sp = cam.WorldToScreenPoint(a.HeadPosition);
-                if (sp.z <= 0.5f || sp.z > 120f) continue;
+                if (sp.z <= 0.5f || sp.z > far) continue;
                 string n = a.Player.Name;
                 // Avatar Steam a gauche du pseudo (joueurs passes par Steam, ou dont le compte est connu).
                 Texture2D av = MWCoop.Net.SteamNet.Avatar(a.Player.SteamId);
                 float nh = Style.Px(26), isz = av != null ? nh - Style.Px(6) : 0f;
                 float nw = Style.Width(n, 15) + Style.Px(22) + (av != null ? isz + Style.Px(4) : 0f);
                 var r = new Rect(Mathf.Round(sp.x - nw / 2), Mathf.Round(Screen.height - sp.y - nh), nw, nh);
-                Style.Alpha = Mathf.Clamp01(1f - (sp.z - 60f) / 60f);
+                Style.Alpha = Mathf.Clamp01(2f - 2f * sp.z / far);
                 Style.Round(r, nh / 2, pill);
                 if (av != null)
                 {

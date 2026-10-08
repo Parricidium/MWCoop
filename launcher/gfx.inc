@@ -50,6 +50,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "IndicateurRapport", L"Rapport engagé à l'écran", L"Gear on screen", 1, {}, {}, {}, 0, 3 },
         { "PoussiereTrafic", L"Poussière de la circulation", L"Traffic dust", 1, {}, {}, {}, 1, 3 },
         { "TracesTrafic", L"Traces de pneus de la circulation", L"Traffic skid marks", 0, {}, {}, {}, 1, 3 },
+        { "Pseudos", L"Pseudos des joueurs", L"Player names", 120, { 0, 30, 60, 120, 250 },
+          { L"Cachés", L"30 m", L"60 m", L"120 m", L"250 m" }, { L"Hidden", L"30 m", L"60 m", L"120 m", L"250 m" }, 0, 3 },
     };
     // Ecran (comme les GTA, a la place de la petite fenetre Unity) : resolutions de l'ecran principal (Windows),
     // mode d'affichage, niveau de qualite du moteur. Appliques par le mod au demarrage du jeu (MWCoop\Gfx.cs).
@@ -128,8 +130,33 @@ static int GfxPresetOn()
     return -1;
 }
 
-static const RectF kGfxTop(264, 88, 1000, 84), kGfxLeft(264, 184, 492, 560), kGfxRight(772, 184, 492, 560);
-static const float kGfxRowH = 27;
+static const RectF kGfxTop(264, 88, 1000, 84), kGfxArea(264, 184, 1000, 560);
+static const float kGfxRowH = 27, kGfxHeadH = 44;
+// Categories (demande de JD, 08/10) : en-tetes repliables comme les journaux, reglages sur deux colonnes dessous ;
+// ascenseur quand tout ne tient pas. Deplies : [Lanceur] GfxOuverts (numeros de groupe ; toutes par defaut).
+static const int kGfxOrder[] = { 5, 0, 1, 4, 2, 3 };
+static bool g_gfxOpen[6] = { true, true, true, true, true, true };
+static bool g_gfxOpenRead;
+static float g_gfxContentH;
+static bool g_gfxZones = true;   // (ligne hors de la zone visible : pas de zone cliquable)
+static void GfxOpenRead()
+{
+    if (g_gfxOpenRead) return;
+    g_gfxOpenRead = true;
+    wchar_t b[64] = {};
+    GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts", L"*", b, 64, g_iniLauncher.c_str());
+    if (!wcscmp(b, L"*")) return;
+    for (int i = 0; i < 6; i++) g_gfxOpen[i] = wcschr(b, L'0' + i) != NULL;
+}
+static void GfxToggleGroup(int gi)
+{
+    if (gi < 0 || gi >= 6) return;
+    g_gfxOpen[gi] = !g_gfxOpen[gi];
+    std::wstring s;
+    for (int i = 0; i < 6; i++) if (g_gfxOpen[i]) { if (!s.empty()) s += L","; s += (wchar_t)(L'0' + i); }
+    WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
+}
+static float GfxMaxScroll() { return max(0.0f, g_gfxContentH - (kGfxArea.Height - 20)); }
 
 static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
 {
@@ -149,7 +176,7 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
     int v = GfxGet(r.key);
     if (r.vals.empty()) {
         UiToggle(g, RectF(row.X + row.Width - 44, row.Y + (row.Height - 22) / 2, 44, 22), v == 1, hot);
-        HotZone(row, id);
+        if (g_gfxZones) HotZone(row, id);
         return;
     }
     // ◀ valeur ▶
@@ -165,22 +192,48 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
     Icon(g, IC_CHEVR, rgt.X + 15, rgt.Y + rgt.Height / 2, 14, WithA(g_uiHot == id + 2 ? kAcc : kInk, canR ? 1.0f : 0.25f), 2.2f);
     bool game = r.vals[k] == -1;
     Text(g, g_fr ? r.lf[k] : r.le[k], RectF(lft.X + lft.Width, val.Y, val.Width - 60, val.Height), 12.5f, FontStyleBold, game ? kGrey : kInk);
+    if (!g_gfxZones) return;
     HotZone(row, UI_NONE);
     if (canL) HotZone(lft, id + 1);
     if (canR) HotZone(rgt, id + 2);
 }
 
-static void DrawGfxGroup(Graphics &g, int group, const wchar_t *fr, const wchar_t *en, float x, float &y, float w)
+// Une categorie : en-tete (chevron, nom, nombre de reglages), puis ses reglages sur deux colonnes s'il est deplie.
+// 'y' : position dans le contenu (avant defilement) ; dessine seulement ce qui croise la zone visible.
+static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, float top, float bottom)
 {
-    SmallLabel(g, g_fr ? fr : en, RectF(x, y + 4, w, 20), WithA(kGrey, 0.9f));
-    y += 26;
+    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et détails", L"Jeu et confort", L"Lumières", L"Écran" };
+    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and detail", L"Game and comfort", L"Lights", L"Screen" };
     const auto &rows = GfxRows();
-    for (int i = 0; i < (int)rows.size(); i++) {
-        if (rows[i].group != group) continue;
-        DrawGfxRow(g, rows[i], i, RectF(x, y, w, kGfxRowH));
-        y += kGfxRowH + 1;
+    std::vector<int> mine;
+    for (int i = 0; i < (int)rows.size(); i++) if (rows[i].group == group) mine.push_back(i);
+    float sy = top + y - g_scroll[TAB_GFX];
+    RectF hr(x, sy, w, kGfxHeadH - 6);
+    if (hr.Y + hr.Height > top && hr.Y < bottom) {
+        bool open = g_gfxOpen[group], hot = g_uiHot == UI_GFX_GROUP + group;
+        GraphicsPath p; RoundRect(p, hr, 12);
+        SolidBrush fb(hot ? TH(cardSel) : TH(card)); g.FillPath(&fb, &p);
+        Pen pen(hot ? WithA(kAcc, 0.7f) : TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
+        Icon(g, open ? IC_CHEVD : IC_CHEVR, hr.X + 22, hr.Y + hr.Height / 2, 16, hot ? kAcc : kInk, 2.3f);
+        Text(g, g_fr ? kFr[group] : kEn[group], RectF(hr.X + 44, hr.Y, 300, hr.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
+        wchar_t n[48];
+        swprintf_s(n, T(L"%d réglages", L"%d settings"), (int)mine.size());
+        Text(g, n, RectF(hr.X + hr.Width - 220, hr.Y, 204, hr.Height), 12, FontStyleRegular, kGrey, StringAlignmentFar);
+        if (hr.Y >= top - 1 && hr.Y + hr.Height <= bottom + 1) HotZone(hr, UI_GFX_GROUP + group);
     }
-    y += 4;
+    y += kGfxHeadH;
+    if (!g_gfxOpen[group]) { y += 4; return; }
+    int half = ((int)mine.size() + 1) / 2;
+    float colW = (w - 40) / 2;
+    for (int k = 0; k < (int)mine.size(); k++) {
+        int col = k < half ? 0 : 1, line = col ? k - half : k;
+        RectF row(x + 14 + col * (colW + 20), top + y + line * (kGfxRowH + 1) - g_scroll[TAB_GFX], colW - 14, kGfxRowH);
+        if (row.Y + row.Height < top || row.Y > bottom) continue;
+        g_gfxZones = row.Y >= top - 1 && row.Y + row.Height <= bottom + 1;
+        DrawGfxRow(g, rows[mine[k]], mine[k], row);
+        g_gfxZones = true;
+    }
+    y += half * (kGfxRowH + 1) + 10;
 }
 
 static void DrawGfxPage(Graphics &g)
@@ -211,19 +264,24 @@ static void DrawGfxPage(Graphics &g)
         }
         HotZone(r, UI_GFX_PRESET + i);
     }
-    // options
-    Glass(kGfxLeft);
-    Glass(kGfxRight);
-    float y = kGfxLeft.Y + 10;
-    DrawGfxGroup(g, 0, L"IMAGE", L"IMAGE", kGfxLeft.X + 24, y, kGfxLeft.Width - 48);
-    DrawGfxGroup(g, 1, L"OMBRES", L"SHADOWS", kGfxLeft.X + 24, y, kGfxLeft.Width - 48);
-    DrawGfxGroup(g, 4, L"LUMIÈRES", L"LIGHTS", kGfxLeft.X + 24, y, kGfxLeft.Width - 48);
-    y = kGfxRight.Y + 10;
-    DrawGfxGroup(g, 5, L"ÉCRAN", L"SCREEN", kGfxRight.X + 24, y, kGfxRight.Width - 48);
-    DrawGfxGroup(g, 2, L"DISTANCE ET DÉTAILS", L"DISTANCE AND DETAIL", kGfxRight.X + 24, y, kGfxRight.Width - 48);
-    DrawGfxGroup(g, 3, L"JEU ET CONFORT", L"GAME AND COMFORT", kGfxRight.X + 24, y, kGfxRight.Width - 48);
-    Text(g, T(L"Pour toi seul · appliqué au lancement du jeu · en partie : menu F10 > Graphismes", L"Just for you · applied when the game starts · in game: F10 menu > Graphics"),
-         RectF(kGfxRight.X + 24, kGfxRight.Y + kGfxRight.Height - 32, kGfxRight.Width - 48, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    // options : categories repliables, ascenseur si besoin
+    GfxOpenRead();
+    RectF a = kGfxArea;
+    Glass(a);
+    float top = a.Y + 10, bottom = a.Y + a.Height - 10;
+    g_scroll[TAB_GFX] = min(max(g_scroll[TAB_GFX], 0.0f), GfxMaxScroll());
+    GraphicsState st = g.Save();
+    g.SetClip(RectF(a.X, top, a.Width, bottom - top), CombineModeIntersect);
+    float y = 0;
+    for (int gi : kGfxOrder) DrawGfxGroup(g, gi, a.X + 20, y, a.Width - 48, top, bottom);
+    g.Restore(st);
+    g_gfxContentH = y;
+    float ms = GfxMaxScroll();
+    if (ms > 0) {
+        float view = bottom - top, h = view * view / (view + ms), yy = top + (view - h) * g_scroll[TAB_GFX] / ms;
+        GraphicsPath sp; RoundRect(sp, RectF(a.X + a.Width - 14, yy, 5, h), 2.5f);
+        SolidBrush sb(WithA(kAcc, 0.55f)); g.FillPath(&sb, &sp);
+    }
 }
 
 static bool GfxClick(int id)
