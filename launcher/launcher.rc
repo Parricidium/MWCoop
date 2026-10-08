@@ -4,6 +4,8 @@
 1 ICON "mwcoop.ico"
 1 24 "launcher.manifest"
 4 RCDATA "logo-titre.png"
+// 5 : le chargeur (build\version.dll) de la meme compilation -- reference pour verifier celui du jeu (LoaderEnsure)
+5 RCDATA "build\\version.dll"
 
 1 VERSIONINFO
 FILEVERSION MWV_NUM

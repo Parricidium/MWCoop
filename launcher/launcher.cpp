@@ -72,6 +72,7 @@ using std::max;
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <array>
 #include <atomic>
 #include <stdio.h>
@@ -1182,7 +1183,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_COUNT };
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_COUNT };
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };
@@ -1634,9 +1635,10 @@ static float LogsMaxScroll();
 static float GfxMaxScroll();
 static float LobbyMaxScroll();
 static float MscMaxScroll();
+static float WikiMaxScroll();   // (wiki.inc)
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
-static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : 0.0f; }
+static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : 0.0f; }
 
 static int ValueIndex(const Opt &o, int v)
 {
@@ -3917,6 +3919,83 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     return ok;
 }
 
+// Chargeur du jeu (version.dll) verifie avant chaque lancement, la ou le jeu part (demande de JD, 08/10 : chez un joueur,
+// rien ne chargeait MWCoop depuis une installation alors que les memes fichiers marchaient sur une autre). Reference :
+// celui de la meme compilation que le lanceur (ressource 5). Absent, ancien MWCoop ou abime -> remis ; plus recent (lanceur
+// pas a jour) -> laisse ; une version.dll d'un autre programme (ReShade...) -> mise de cote (version.dll.autre), la notre
+// a sa place. Le journal dit ce qui a ete trouve.
+static std::wstring VerString(const std::wstring &path, const wchar_t *key)
+{
+    typedef DWORD (WINAPI *SizeFn)(LPCWSTR, LPDWORD);
+    typedef BOOL (WINAPI *InfoFn)(LPCWSTR, DWORD, DWORD, LPVOID);
+    typedef BOOL (WINAPI *QueryFn)(LPCVOID, LPCWSTR, LPVOID *, PUINT);
+    wchar_t sys[MAX_PATH] = L"";
+    GetSystemDirectoryW(sys, MAX_PATH);
+    HMODULE ver = LoadLibraryExW((std::wstring(sys) + L"\\version.dll").c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (!ver) return L"";
+    SizeFn size = (SizeFn)GetProcAddress(ver, "GetFileVersionInfoSizeW");
+    InfoFn info = (InfoFn)GetProcAddress(ver, "GetFileVersionInfoW");
+    QueryFn query = (QueryFn)GetProcAddress(ver, "VerQueryValueW");
+    if (!size || !info || !query) return L"";
+    DWORD h = 0, n = size(path.c_str(), &h);
+    if (!n) return L"";
+    std::vector<char> buf(n);
+    if (!info(path.c_str(), 0, n, buf.data())) return L"";
+    struct { WORD lang, cp; } *tr = NULL;
+    UINT len = 0;
+    wchar_t sub[96];
+    if (query(buf.data(), L"\\VarFileInfo\\Translation", (void **)&tr, &len) && tr && len >= 4) swprintf_s(sub, L"\\StringFileInfo\\%04x%04x\\%s", tr->lang, tr->cp, key);
+    else swprintf_s(sub, L"\\StringFileInfo\\040904B0\\%s", key);
+    wchar_t *v = NULL;
+    if (!query(buf.data(), sub, (void **)&v, &len) || !v) return L"";
+    return v;
+}
+static std::string VerText(unsigned long long v)
+{
+    char b[48]; sprintf_s(b, "%u.%u.%u", (unsigned)(v >> 48), (unsigned)((v >> 32) & 0xFFFF), (unsigned)((v >> 16) & 0xFFFF));
+    return b;
+}
+static void LoaderEnsure(const std::wstring &dir, const char *where)
+{
+    HRSRC r = FindResourceW(NULL, MAKEINTRESOURCEW(5), RT_RCDATA);
+    HGLOBAL hg = r ? LoadResource(NULL, r) : NULL;
+    const BYTE *ref = hg ? (const BYTE *)LockResource(hg) : NULL;
+    DWORD refN = ref ? SizeofResource(NULL, r) : 0;
+    if (!refN || dir.empty()) return;
+    std::wstring p = dir + L"version.dll";
+    std::vector<unsigned char> cur;
+    bool present = FileExists(p);
+    if (present && ReadAll(p, cur) && cur.size() == refN && !memcmp(cur.data(), ref, refN)) return;   // la notre, a jour
+    wchar_t self[MAX_PATH] = L"";
+    GetModuleFileNameW(NULL, self, MAX_PATH);
+    unsigned long long mine = ExeVersion(self), theirs = present ? ExeVersion(p) : 0;
+    std::wstring internal = present ? VerString(p, L"InternalName") : L"", product = present ? VerString(p, L"ProductName") : L"";
+    bool ours = internal == L"MWCoopLoader" || (present && cur.size() > 0 && internal.empty() && product.empty() && cur.size() < 400000 && theirs == 0);   // (chargeurs d'avant la 0.59 : sans informations de version)
+    std::string what = !present ? "absente" : ours ? "MWCoop " + (theirs ? VerText(theirs) : std::string("sans version")) + " (" + std::to_string(cur.size()) + " octets)"
+                                            : "AUTRE PROGRAMME : " + Narrow(product.empty() ? L"(sans nom)" : product, CP_UTF8) + " " + (theirs ? VerText(theirs) : std::string("")) + " (" + std::to_string(cur.size()) + " octets)";
+    if (present && ours && theirs > mine && mine) { LaunchLog("chargeur (%s) : %s, plus recent que ce lanceur (%s) : laisse", where, what.c_str(), VerText(mine).c_str()); return; }
+    if (present && !ours) {
+        std::wstring keep = dir + L"version.dll.autre";
+        DeleteFileW(keep.c_str());
+        if (!MoveFileExW(p.c_str(), keep.c_str(), MOVEFILE_REPLACE_EXISTING)) { LaunchLog("chargeur (%s) : %s, mise de cote impossible (erreur %lu)", where, what.c_str(), GetLastError()); return; }
+    }
+    // ecrit a cote puis remplace (verrouille par un jeu ouvert : l'ancien renomme .old, comme les mises a jour)
+    std::wstring tmp = dir + L"version.dll.mwcoop-tmp";
+    HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    DWORD wr = 0;
+    bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, ref, refN, &wr, NULL) && wr == refN;
+    if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
+    if (ok && !MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        std::wstring old = p + L".old";
+        DeleteFileW(old.c_str());
+        ok = MoveFileExW(p.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING) && MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING);
+    }
+    if (!ok) { DWORD e = GetLastError(); DeleteFileW(tmp.c_str()); LaunchLog("chargeur (%s) : %s, remplacement IMPOSSIBLE (erreur %lu)", where, what.c_str(), e); return; }
+    LaunchLog("chargeur (%s) : %s -> remplace par celui du lanceur (%s)%s", where, what.c_str(), VerText(mine).c_str(), present && !ours ? ", l'autre garde en version.dll.autre" : "");
+    if (present && !ours)
+        SetStatus(K_WARN, T(L"Une version.dll d'un autre programme \u00E9tait dans le dossier du jeu : mise de c\u00F4t\u00E9 (version.dll.autre)", L"A version.dll from another program was in the game folder: set aside (version.dll.autre)"));
+}
+
 static int SyncLaunchKind();   // (modsync.inc)
 static std::wstring GuestCopyDir();
 static bool PrepareGuestCopy(const std::wstring &m, bool mods);
@@ -4007,6 +4086,7 @@ static void Launch(int mode, const char *partie = NULL)
     // Lancer par Steam (Reglages > Jeu, ou propose quand MWCoop ne s'est pas charge) : comme son bouton JOUER, qui lance le
     // jeu de son dossier ; MWCoop y lit lancement.ini. Pas pour l'invite d'un salon avec les mods de l'hote (sa copie), ni
     // hors de Steam. (MSCLoader coupe : pas de -mscloader-disable par ce chemin.)
+    LoaderEnsure(g_gameDir, "dossier du jeu");
     const Opt *viaSteam = OptByKey("LancerSteam");
     g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && !MirrorDir().empty();
     if (g_steamLaunch) {
@@ -4056,6 +4136,7 @@ static void Launch(int mode, const char *partie = NULL)
     // reglages sont dans lancement.ini (pas de ligne de commande par ce chemin).
     // Demarre par Steam (vu au demarrage : ses variables, ou le chemin du jeu en argument) ou overlay deja la : le
     // 07/10 l'overlay n'a pas ete vu dans le lanceur demarre par Steam, le jeu est parti de lui et le mod ne s'est pas charge.
+    if (_wcsicmp(runDir.c_str(), g_gameDir.c_str())) LoaderEnsure(runDir, "copie de lancement");
     {   // notre chargeur, la ou le jeu part (absent ou change : antivirus ?)
         auto info = [](const std::wstring &p) -> std::string {
             WIN32_FILE_ATTRIBUTE_DATA a;
@@ -5041,6 +5122,7 @@ static void OnButton(int id);
 #include "api.inc"
 #include "gfx.inc"
 #include "ui.inc"
+#include "wiki.inc"
 #include "tuto.inc"
 
 // Image de la fenetre : la scene et ses cartes de verre (gardees), l'animation, puis l'interface. Mise en page changee
@@ -6191,6 +6273,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             float x = pt.x / g_scale - kM, y = pt.y / g_scale - kM;
             float step = -(short)HIWORD(wp) / 120.0f * 64;
             if (g_tab == TAB_NOTES && kNotesList.Contains(x, y)) g_noteListScroll += step;
+            else if (g_tab == TAB_WIKI && kWikiList.Contains(x, y)) g_wikiListScroll += step;
             else g_scroll[g_tab] = min(max(g_scroll[g_tab] + step, 0.0f), MaxScroll(g_tab));
         }
         return 0;
@@ -6585,6 +6668,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
+    // /chargeur <dossier> <journal> : verification du chargeur (version.dll) de ce dossier, comme avant un lancement
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/chargeur")) {
+        g_testSalonLog = argv[3];
+        FILE *f = _wfopen(argv[3], L"wb");
+        if (f) fclose(f);
+        LoaderEnsure(WithSlash(argv[2]), "essai");
+        TestLog("chargeur : fin");
+        GdiplusShutdown(gtok);
+        return 0;
+    }
     // /miroir <dossier du jeu> <copie> <journal> [coupe] : copie de lancement de ce jeu dans ce dossier (essais) ;
     // coupe : MSCLoader coupe (winhttp.dll retire de la copie)
     if (argc >= 5 && !_wcsicmp(argv[1], L"/miroir")) {
@@ -6693,6 +6786,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; }
         else if (st == L"api") g_tab = TAB_API;   // page API des moddeurs
         else if (st == L"credits") g_tab = TAB_CREDITS;
+        else if (!wcsncmp(st.c_str(), L"guide", 5) && st != L"guide-steam") {   // guide : guide-<article>-<defilement>
+            g_tab = TAB_WIKI;
+            int art = 0, sc = 0;
+            swscanf_s(st.c_str(), L"guide-%d-%d", &art, &sc);
+            g_wikiSel = art;
+            g_wikiClosed &= ~(1u << kWikiArt[art].cat);
+            g_scroll[TAB_WIKI] = (float)sc;
+        }
         else if (st == L"graphismes") { g_tab = TAB_GFX; GfxLoad(); }
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
         else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite

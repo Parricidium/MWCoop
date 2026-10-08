@@ -46,12 +46,17 @@ enum {
     UI_LOOKPIN = 400,             // + zone (0 tete, 1 torse, 2 jambes, 3 silhouette)
     UI_LOOKROT = 410,             // + 0 / 1 : tourner
     UI_LOOKRAND = 415, UI_LOOKRESET,
+    UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)
+    UI_WIKI_ART = 8040,           // + article
+    UI_WIKI_SEC = 8300,           // + bloc : section pliable de l'article
+    UI_WIKI_GO = 8550,            // + bloc : bouton vers une page ou un article
+    UI_WIKI_FIG = 8800,           // (elements des figures : sans action)
 };
 
 // ---- icones (traits, dans une boite de 24, comme celles de la maquette)
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
-       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR };
+       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR, IC_BOOK };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -142,6 +147,12 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
     case IC_FOLDER: poly({ 3, 6, 9, 6, 11, 8, 21, 8, 21, 19, 3, 19 }, true); break;
     case IC_ZIP: poly({ 3, 4, 21, 4, 21, 9, 3, 9 }, true); poly({ 5, 9, 5, 19, 19, 19, 19, 9 }, false); line(10, 13, 14, 13); break;
     case IC_ALERT: poly({ 12, 3, 21.5f, 20, 2.5f, 20 }, true); line(12, 10, 12, 14); line(12, 17, 12, 17.4f); break;
+    case IC_BOOK: {   // livre ouvert : le guide
+        GraphicsPath l; bez(l, 12, 6.5f, 9.5f, 4.6f, 6, 4.4f, 3, 5); l.AddLine(P(3, 5), P(3, 18.5f)); bez(l, 3, 18.5f, 6, 17.9f, 9.5f, 18.2f, 12, 20); g.DrawPath(&pen, &l);
+        GraphicsPath r; bez(r, 12, 6.5f, 14.5f, 4.6f, 18, 4.4f, 21, 5); r.AddLine(P(21, 5), P(21, 18.5f)); bez(r, 21, 18.5f, 18, 17.9f, 14.5f, 18.2f, 12, 20); g.DrawPath(&pen, &r);
+        line(12, 6.5f, 12, 20);
+        break;
+    }
     case IC_STAR: poly({ 12, 3.5f, 14.35f, 9.26f, 20.56f, 9.72f, 15.8f, 13.74f, 17.29f, 19.78f, 12, 16.5f, 6.71f, 19.78f, 8.2f, 13.74f, 3.44f, 9.72f, 9.65f, 9.26f }, true); break;
     case IC_HEART: {
         GraphicsPath p;
