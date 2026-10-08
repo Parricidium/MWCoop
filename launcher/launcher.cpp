@@ -5391,6 +5391,19 @@ static std::vector<std::wstring> ZipFiles()
     for (auto &e : g_logList) if (e.group == 0 && !g_logGroups.empty() && g_logGroups[0].key == L"*") add(e.path);
     if (!g_gameDir.empty()) { add(g_gameDir + L"MWCoop\\mwcoop.ini"); add(g_gameDir + L"MWCoop\\lancement.ini"); }
     if (!g_launcherLog.empty()) add(g_launcherLog);
+    // Les 2 parties rangees les plus recentes : un joueur relance souvent le jeu avant de faire le zip (retour du 08/10 :
+    // la partie ou MSCLoader ne trouvait aucun mod n'y etait plus).
+    std::vector<int> older;
+    for (int i = 0; i < (int)g_logGroups.size(); i++) if (g_logGroups[i].key != L"*") older.push_back(i);
+    std::sort(older.begin(), older.end(), [](int x, int y) { return CompareFileTime(&g_logGroups[x].end, &g_logGroups[y].end) > 0; });
+    for (int k = 0; k < (int)older.size() && k < 2; k++)
+        for (auto &e : g_logList) if (e.group == older[k]) add(e.path);
+    // MSCLoader : reglages du lanceur (MSCLoader officiel ou de MWCoop, coupe), Doorstop et journal du prechargeur, dans
+    // le jeu et dans chaque copie de lancement.
+    if (!g_iniLauncher.empty()) add(g_iniLauncher);
+    std::vector<std::wstring> dirs = { g_gameDir, MirrorDir(), MscCopyDir(), GuestCopyDir() };
+    for (const std::wstring &d : dirs) if (!d.empty()) { add(d + L"doorstop_config.ini"); add(d + L"MSCLoader_Preloader.txt"); }
+    if (!LocalDir().empty()) add(LocalDir() + L"mscloader-mwcoop\\version.txt");
     return files;
 }
 // Zip sur le Bureau (sinon %LOCALAPPDATA%\MWCoop), montre dans l'explorateur. 'tag' : suffixe du nom (date de la partie).
