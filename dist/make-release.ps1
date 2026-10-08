@@ -46,6 +46,10 @@ if ($Publier) {
     # Rien de non commite : le tag doit pointer sur le code du zip (0.26.3 : commit rate, release partie quand meme).
     if (git -C $root status --porcelain) { throw "modifications non commitees : committer avant de publier" }
     if (-not $Notes) { $Notes = "MWCoop $Version" }
+    # " --- " au milieu d'une ligne vaut une ligne --- (0.63.0 : tout etait reste colle, francais et anglais, dans les
+    # notes du lanceur comme dans l'annonce Discord, qui ne doit avoir que l'anglais)
+    $Notes = $Notes -replace '[ \t]+---+[ \t]+', "`n---`n"
+    $AFaire = $AFaire -replace '[ \t]+---+[ \t]+', "`n---`n"
     $todoEn = ''
     if ($AFaire.Trim()) {
         $tp = @($AFaire -split '(?m)^\s*---+\s*$')

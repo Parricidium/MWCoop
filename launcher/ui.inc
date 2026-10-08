@@ -302,7 +302,7 @@ static bool PageSnap(int p) { return p == TAB_SKIN || p == TAB_CAR || p == TAB_C
 static bool PageEnabled(int p)
 {
     if (g_state != ST_IDLE) return false;
-    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS;
+    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
 }
@@ -344,9 +344,10 @@ static const NavItem kNav[] = {
     { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" },
     { TAB_SKIN, IC_SHIRT, L"Tenue", L"Outfit" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" },
     { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
-    { TAB_GFX, IC_SLIDERS, L"Graphismes", L"Graphics" }, { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" } };
+    { TAB_GFX, IC_SLIDERS, L"Graphismes", L"Graphics" }, { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" },
+    { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" } };   // (guide des joueurs, wiki.inc)
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
-static const int kNavGroupN[] = { 2, 2, 2, 1, 1 };   // pages de chaque groupe, dans l'ordre de kNav
+static const int kNavGroupN[] = { 2, 2, 2, 1, 2 };   // pages de chaque groupe, dans l'ordre de kNav
 static const int kNavGroups = 5;
 static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"JEU", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"GAME", L"INFO" };
 static Bitmap *g_logo;
@@ -425,6 +426,7 @@ static void DrawRail(Graphics &g)
     const int nItems = (int)(sizeof(kNav) / sizeof(kNav[0]));
     float avail = 666 - y0, lab = 26, step = 46;
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 24; step = 42; }
+    if (avail - kNavGroups * lab - nItems * step < 6) { lab = 22; step = 40; }   // (bouton de mise a jour + 9 pages)
     float gap = min(20.0f, max(0.0f, (avail - kNavGroups * lab - nItems * step) / (kNavGroups - 1))), y = y0;
     for (int k = 0, i = 0; k < kNavGroups; k++) {
         SmallLabel(g, g_fr ? kNavGroupFr[k] : kNavGroupEn[k], RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
@@ -512,6 +514,7 @@ static void DrawHeader(Graphics &g)
     case TAB_GFX: title = T(L"Graphismes", L"Graphics"); sub = T(L"Pour toi seul · en partie : menu F10 > Graphismes", L"Just for you · in game: F10 menu > Graphics"); break;
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
+    case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Tout pour jouer sans souci : installation, salons, mods, réglages, solutions", L"Everything to play trouble-free: install, lobbies, mods, settings, fixes"); break;
     }
     // commandes de droite : fermer, reduire, theme, langue, puis celles de la page
     float right = 1264;
@@ -1285,6 +1288,8 @@ static void DrawLaunchPage(Graphics &g)
 
 // ---- interface
 static void DrawLobby(Graphics &g);
+static void DrawWikiPage(Graphics &g);   // (wiki.inc)
+static bool WikiClick(int id);
 static void DrawSkins(Graphics &g);
 static void DrawCar(Graphics &g);
 static void DrawContent(Graphics &g);
@@ -1314,6 +1319,7 @@ static void DrawUI(Graphics &g)
     case TAB_API: DrawApiPage(g); break;
     case TAB_GFX: DrawGfxPage(g); break;
     case TAB_CREDITS: DrawCreditsPage(g); break;
+    case TAB_WIKI: DrawWikiPage(g); break;
     default: DrawHome(g); break;
     }
     DrawHeader(g);
@@ -1392,6 +1398,7 @@ static bool UiClick(int id)
         SetStatus(K_NORMAL, g_debug ? T(L"Mode débogage activé : lance ta partie, puis crée le zip", L"Debug mode on: start your game, then create the zip") : T(L"Mode débogage coupé", L"Debug mode off"));
         return true;
     }
+    if (id >= UI_WIKI_CAT && id <= UI_WIKI_FIG) return WikiClick(id);
     if (id >= UI_NOTE && id < UI_NOTE + 90) { g_noteSel = id - UI_NOTE; g_scroll[TAB_NOTES] = 0; return true; }
     if (id >= UI_LOOKPIN && id < UI_LOOKPIN + 4) { g_lookZone = id - UI_LOOKPIN; return true; }
     if (id == UI_LOOKROT || id == UI_LOOKROT + 1) { g_skinYaw = fmodf(g_skinYaw + (id == UI_LOOKROT ? 2.0f : -2.0f) + 16, 16.0f); g_skinIdleT = GetTickCount(); return true; }
