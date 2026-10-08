@@ -122,7 +122,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); hooked.Clear(); snapshots.Clear(); lockJoints.Clear();
+            byKey.Clear(); hooked.Clear(); snapshots.Clear(); lockJoints.Clear(); plugWait.Clear();
             plColls = new Collider[0]; plCollsAt = -10f; plCc = null; ccWasOn = false; gen = -1;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 12f : -1;
         }
@@ -278,6 +278,12 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             // Liste des voitures changee apres le premier releve (taxi active, cyclomoteur recree) : releve tout de suite.
             if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
+            if (plugWait.Count > 0 && PlugReady())
+            {
+                var waiting = new List<KeyValuePair<Door, string>>(plugWait);
+                plugWait.Clear();
+                foreach (KeyValuePair<Door, string> kv in waiting) if (kv.Key.Fsm != null) { Drive(kv.Key, kv.Value); Log.Info("prise " + kv.Key.Key + " -> " + kv.Value + " (joueur pret)"); }
+            }
             // Arrivee d'un joueur : les portieres, capots et prises deja ouverts/branches chez l'hote.
             for (int i = snapshots.Count - 1; i >= 0; i--)
             {
@@ -601,6 +607,9 @@ namespace MWCoop
                 case K_LOCK: d.State = DoorState.Locked; break;   // (on continue d'envoyer son angle : figee par l'attache)
             }
             if (!Session.Active) return;
+            // Prise : son chargement (Load -> "Heater on", puis "Heater off") rejoue sa sauvegarde a l'arrivee, avant que le
+            // joueur soit pret -- pas un geste : il allait chez l'hote et rebranchait sa prise. L'etat de l'hote suit (plugWait).
+            if (d.PlugOn != null && !PlugReady()) { Log.Info("portiere " + d.Key + " " + KindName(kind) + " ici au chargement : pas envoyee"); return; }
             Log.Info("portiere " + d.Key + " " + KindName(kind) + " ici");
             var w = new NetWriter(Msg.CarDoor).U8(Session.LocalId).Str(d.Key).U8(kind);
             if (Session.IsHost) Session.Broadcast(w, true);
@@ -691,16 +700,60 @@ namespace MWCoop
             Log.Info("portiere " + d.Key + " " + KindName(kind) + " par #" + who);
         }
 
+        static readonly Dictionary<Door, string> plugWait = new Dictionary<Door, string>();
+        static float plugLogAt;
+
+        static bool PlugReady()
+        {
+            FsmGameObject ip = FsmVariables.GlobalVariables.FindFsmGameObject("ItemPivot");
+            if (ip == null) return true;   // (pas de globale : rien a attendre)
+            if (ip.Value == null) ip.Value = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/ItemPivot");
+            if (ip.Value == null && Time.realtimeSinceStartup >= plugLogAt)
+            {
+                plugLogAt = Time.realtimeSinceStartup + 10f;
+                Transform pt = Game.PlayerT;
+                Log.Info("prise : en attente du joueur (" + (pt == null ? "introuvable" : "1Hand_Assemble " + (pt.Find("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble") != null ? "trouve" : "absent")) + ")");
+            }
+            return ip.Value != null;
+        }
+
         static void Drive(Door d, string state)
         {
+            // Prise du chauffage : "Check parent" (apres "Heater off") teste si la prise est dans la main (globale ItemPivot).
+            // A l'arrivee d'un invite (etat des prises de l'hote), la globale est encore vide et le joueur introuvable :
+            // NullReferenceException au milieu de la transition, automate bloque. Rejoue des que le joueur est la.
+            if (d.PlugOn != null && !PlugReady())
+            {
+                plugWait[d] = state;
+                return;
+            }
             applying = true; Replay.Depth++;
             try { Game.SetState(d.Fsm, state); }
             catch (System.Exception e)
             {
                 System.Exception x = e.InnerException ?? e;
-                Log.Warn("portiere " + d.Key + " -> " + state + " : " + x.GetType().Name + " dans " + d.Fsm.FsmName + " (etat " + d.Fsm.ActiveStateName + ")" + (x.StackTrace != null ? " " + x.StackTrace.Split('\n')[0].Trim() : ""));
+                Log.Warn("portiere " + d.Key + " -> " + state + " : " + x.GetType().Name + " dans " + d.Fsm.FsmName + " (etat " + d.Fsm.ActiveStateName + ", " + ObjectArgs(d.Fsm) + ")" + (x.StackTrace != null ? " " + x.StackTrace.Split('\n')[0].Trim() : ""));
             }
             finally { applying = false; Replay.Depth--; }
+        }
+
+        // Diagnostic : objets que visent les actions de l'etat courant (champ = valeur ou "null").
+        static string ObjectArgs(PlayMakerFSM f)
+        {
+            var sb = new System.Text.StringBuilder();
+            try
+            {
+                FsmState st = f.Fsm.GetState(f.ActiveStateName);
+                if (st != null)
+                    foreach (FsmStateAction a in st.Actions)
+                        foreach (System.Reflection.FieldInfo fi in a.GetType().GetFields())
+                        {
+                            var g = fi.GetValue(a) as FsmGameObject;
+                            if (g != null) sb.Append(a.GetType().Name).Append('.').Append(fi.Name).Append('=').Append(g.Value != null ? g.Value.name : "null").Append(g.UseVariable ? "{" + g.Name + "}" : "").Append(' ');
+                        }
+            }
+            catch { }
+            return sb.ToString().Trim();
         }
 
         public static void OnMessage(Peer from, NetReader r)
