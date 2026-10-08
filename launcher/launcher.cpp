@@ -66,6 +66,9 @@ using std::max;
 #include <shellapi.h>
 #include <shlobj.h>
 #include <netfw.h>
+#include <exdisp.h>
+#include <shldisp.h>
+#include <psapi.h>
 #include <string>
 #include <vector>
 #include <map>
@@ -3569,6 +3572,100 @@ static bool PrepareMirror(const std::wstring &m)
     return true;
 }
 
+// Lance un programme par le bureau de Windows (IShellDispatch2::ShellExecute du processus explorer du bureau, la methode
+// documentee) : ce n'est plus le lanceur qui cree le jeu. Lanceur demarre par Steam, overlay de Steam dans le lanceur :
+// le explorer.exe qu'il lancait pouvait demarrer le jeu lui-meme, overlay compris -- la version.dll de Windows passait
+// avant la notre, MSCLoader (winhttp.dll) se chargeait mais pas MWCoop (retour d'un joueur, 08/10, 18:59). Et les
+// arguments passent (-mscloader-disable, mode...), ce que explorer.exe ne permettait pas.
+static bool ShellRunFromDesktop(const std::wstring &file, const std::wstring &args, const std::wstring &dir)
+{
+    HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool ok = false;
+    HRESULT why = E_FAIL;
+    IShellWindows *sw = NULL;
+    if (SUCCEEDED(why = CoCreateInstance(__uuidof(ShellWindows), NULL, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&sw)))) {
+        VARIANT loc; VariantInit(&loc); loc.vt = VT_I4; loc.lVal = CSIDL_DESKTOP;
+        VARIANT empty; VariantInit(&empty);
+        long hwnd = 0;
+        IDispatch *disp = NULL;
+        if ((why = sw->FindWindowSW(&loc, &empty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &disp)) == S_OK && disp) {
+            IServiceProvider *sp = NULL;
+            if (SUCCEEDED(why = disp->QueryInterface(IID_PPV_ARGS(&sp)))) {
+                IShellBrowser *sb = NULL;
+                if (SUCCEEDED(why = sp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&sb)))) {
+                    IShellView *sv = NULL;
+                    if (SUCCEEDED(why = sb->QueryActiveShellView(&sv))) {
+                        IDispatch *bg = NULL;
+                        if (SUCCEEDED(why = sv->GetItemObject(SVGIO_BACKGROUND, IID_PPV_ARGS(&bg)))) {
+                            IShellFolderViewDual *fv = NULL;
+                            if (SUCCEEDED(why = bg->QueryInterface(IID_PPV_ARGS(&fv)))) {
+                                IDispatch *app = NULL;
+                                if (SUCCEEDED(why = fv->get_Application(&app))) {
+                                    IShellDispatch2 *sd = NULL;
+                                    if (SUCCEEDED(why = app->QueryInterface(IID_PPV_ARGS(&sd)))) {
+                                        BSTR f = SysAllocString(file.c_str());
+                                        VARIANT a, d, op, show;
+                                        VariantInit(&a); a.vt = VT_BSTR; a.bstrVal = SysAllocString(args.c_str());
+                                        VariantInit(&d); d.vt = VT_BSTR; d.bstrVal = SysAllocString(dir.c_str());
+                                        VariantInit(&op); op.vt = VT_BSTR; op.bstrVal = SysAllocString(L"open");
+                                        VariantInit(&show); show.vt = VT_I4; show.lVal = SW_SHOWNORMAL;
+                                        ok = SUCCEEDED(why = sd->ShellExecute(f, a, d, op, show));
+                                        SysFreeString(f); VariantClear(&a); VariantClear(&d); VariantClear(&op);
+                                        sd->Release();
+                                    }
+                                    app->Release();
+                                }
+                                fv->Release();
+                            }
+                            bg->Release();
+                        }
+                        sv->Release();
+                    }
+                    sb->Release();
+                }
+                sp->Release();
+            }
+            disp->Release();
+        }
+        sw->Release();
+    }
+    if (!ok) LaunchLog("bureau de Windows : lancement impossible (0x%08lx)", (unsigned long)why);
+    if (SUCCEEDED(co)) CoUninitialize();
+    return ok;
+}
+
+// Jeux en cours : leur version.dll (la notre ?), winhttp.dll (Doorstop de MSCLoader), overlay de Steam, et leur parent.
+static void LogGameModules()
+{
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return;
+    std::vector<PROCESSENTRY32W> all;
+    PROCESSENTRY32W pe = { sizeof(pe) };
+    for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) all.push_back(pe);
+    CloseHandle(snap);
+    for (const PROCESSENTRY32W &p : all) {
+        if (_wcsicmp(p.szExeFile, L"mywintercar.exe")) continue;
+        std::wstring parent = L"?";
+        for (const PROCESSENTRY32W &q : all) if (q.th32ProcessID == p.th32ParentProcessID) parent = q.szExeFile;
+        HANDLE h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, p.th32ProcessID);
+        if (!h) { LaunchLog("jeu %lu (parent %s) : modules illisibles (erreur %lu)", p.th32ProcessID, Narrow(parent, CP_UTF8).c_str(), GetLastError()); continue; }
+        wchar_t exe[MAX_PATH] = L""; DWORD n = MAX_PATH;
+        QueryFullProcessImageNameW(h, 0, exe, &n);
+        std::string found;
+        static HMODULE mods[2048];
+        DWORD need = 0;
+        if (K32EnumProcessModulesEx(h, mods, sizeof(mods), &need, LIST_MODULES_ALL))
+            for (DWORD i = 0; i < need / sizeof(HMODULE) && i < 2048; i++) {
+                wchar_t m[MAX_PATH];
+                if (!K32GetModuleFileNameExW(h, mods[i], m, MAX_PATH)) continue;
+                const wchar_t *b = wcsrchr(m, L'\\'); b = b ? b + 1 : m;
+                if (!_wcsicmp(b, L"version.dll") || !_wcsicmp(b, L"winhttp.dll") || !_wcsnicmp(b, L"gameoverlayrenderer", 19)) found += " " + Narrow(m, CP_UTF8);
+            }
+        LaunchLog("jeu %lu %s (parent %s) :%s", p.th32ProcessID, Narrow(exe, CP_UTF8).c_str(), Narrow(parent, CP_UTF8).c_str(), found.empty() ? " aucun de version.dll / winhttp.dll / overlay" : found.c_str());
+        CloseHandle(h);
+    }
+}
+
 // Le jeu de CE dossier tourne-t-il deja ? Les jeux d'autres dossiers (copies pour jouer a deux sur
 // un PC, instances de test) ont leur propre profil MWCoop, donc leur propre verrou d'instance unique.
 static bool GameProcessRunning()
@@ -3780,6 +3877,16 @@ static void Launch(int mode, const char *partie = NULL)
     LaunchLog("lancement (mode %d) : %s par %s (demarre par Steam %d, overlay %d)", mode, Narrow(exe, CP_UTF8).c_str(), viaShell ? "l'explorateur" : "le lanceur", (int)g_fromSteam, (int)overlay);
     std::wstring shellArg = L"\"" + exe + L"\"";
     if (viaShell) TestLog("lancement par l'explorateur (overlay de Steam dans le lanceur)");
+    if (viaShell) {
+        if (ShellRunFromDesktop(exe, args, runDir)) {
+            LaunchLog("jeu lance par le bureau de Windows, avec ses arguments");
+            g_proc = NULL;
+            g_pid = 0;
+            done();
+            return;
+        }
+        LaunchLog("repli : explorer.exe");
+    }
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
     sei.hwnd = g_wnd;
@@ -5431,7 +5538,7 @@ static std::vector<std::wstring> ZipFiles()
     // le jeu et dans chaque copie de lancement.
     if (!g_iniLauncher.empty()) add(g_iniLauncher);
     std::vector<std::wstring> dirs = { g_gameDir, MirrorDir(), MscCopyDir(), GuestCopyDir() };
-    for (const std::wstring &d : dirs) if (!d.empty()) { add(d + L"doorstop_config.ini"); add(d + L"MSCLoader_Preloader.txt"); }
+    for (const std::wstring &d : dirs) if (!d.empty()) { add(d + L"doorstop_config.ini"); add(d + L"MSCLoader_Preloader.txt"); add(d + L"output_log.txt"); }   // (output_log : MSCLoader le met a cote de l'exe, -logFile)
     if (!LocalDir().empty()) add(LocalDir() + L"mscloader-mwcoop\\version.txt");
     return files;
 }
@@ -6097,6 +6204,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 TestLog("mscl : settings.json ecrit :\n%s", std::string(d.begin(), d.end()).c_str());
             }
         }
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
+    // /bureau <exe> <dossier> <journal> [arguments] : lance par le bureau de Windows, puis 25 s apres, les modules des jeux
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/bureau")) {
+        g_testSalonLog = argv[4];
+        FILE *f = _wfopen(argv[4], L"wb");
+        if (f) fclose(f);
+        bool ok = ShellRunFromDesktop(argv[2], argc >= 6 ? argv[5] : L"", argv[3]);
+        TestLog("bureau : %s", ok ? "lance" : "ECHEC");
+        if (ok) { Sleep(25000); LogGameModules(); }
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
