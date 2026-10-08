@@ -8,3 +8,6 @@ run/*.png
 # Jamais de fichiers du jeu dans le depot (propriete d'Amistech)
 *.assets
 *.resource
+
+# Webhook Discord des annonces (secret)
+dist/discord-webhook.txt

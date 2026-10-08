@@ -52,5 +52,27 @@ if ($Publier) {
     $rc = $LASTEXITCODE
     Remove-Item $nf
     if ($rc -ne 0) { throw "echec de la publication GitHub" }
-    "Publie : https://github.com/Parricidium/MWCoop/releases/tag/v$Version"
+    $url = "https://github.com/Parricidium/MWCoop/releases/tag/v$Version"
+    "Publie : $url"
+    # Annonce Discord (#announcements) si dist\discord-webhook.txt existe (hors depot, ecrit par
+    # MWCoopDiscord\setup_server.py) : ligne 1 = webhook, ligne 2 = role Update Pings. Partie anglaise des notes.
+    $wf = "$PSScriptRoot\discord-webhook.txt"
+    if (Test-Path $wf) {
+        try {
+            $w = @(Get-Content $wf -Encoding UTF8 | Where-Object { $_.Trim() })
+            $en = ($Notes -split '(?m)^\s*---+\s*$')[-1].Trim()
+            if ($en.Length -gt 3900) { $en = $en.Substring(0, 3900) + '...' }
+            $msg = @{
+                content          = "<@&$($w[1].Trim())> **MWCoop $Version is out!**"
+                allowed_mentions = @{ roles = @($w[1].Trim()) }
+                embeds           = @(@{
+                    title = "MWCoop $Version (pre-alpha)"; url = $url; color = 7912959; description = $en
+                    footer = @{ text = 'Update from the launcher: NEW VERSION - UPDATE' }
+                })
+            }
+            $body = [System.Text.Encoding]::UTF8.GetBytes(($msg | ConvertTo-Json -Depth 6))
+            Invoke-RestMethod -Method Post -Uri $w[0].Trim() -Body $body -ContentType 'application/json; charset=utf-8' | Out-Null
+            "Annonce Discord envoyee"
+        } catch { Write-Warning "annonce Discord ratee : $_" }
+    }
 }
