@@ -371,16 +371,33 @@ static std::wstring ModLabel()
     return g_modOk ? L"MWCoop (dev)" : L"MWCoop";
 }
 
-// Version d'un exe (ressource FILEVERSION : MWV_NUM), 0 si illisible.
+// Version d'un exe (ressource FILEVERSION : MWV_NUM), 0 si illisible. VERSION.dll de Windows charge par son chemin
+// (System32) : lie au lanceur (0.59.4), Windows prenait celle du dossier du lanceur -- le chargeur du mod, quand le
+// lanceur est dans le dossier du jeu : verrouillee par le lanceur lui-meme, la mise a jour ne pouvait plus la remplacer
+// ("version.dll en cours d'utilisation"), et le chargeur demarrait dans le lanceur.
 static unsigned long long ExeVersion(const std::wstring &path)
 {
-    DWORD h = 0, n = GetFileVersionInfoSizeW(path.c_str(), &h);
+    typedef DWORD (WINAPI *SizeFn)(LPCWSTR, LPDWORD);
+    typedef BOOL (WINAPI *InfoFn)(LPCWSTR, DWORD, DWORD, LPVOID);
+    typedef BOOL (WINAPI *QueryFn)(LPCVOID, LPCWSTR, LPVOID *, PUINT);
+    static HMODULE ver = NULL;
+    if (!ver) {
+        wchar_t sys[MAX_PATH] = L"";
+        GetSystemDirectoryW(sys, MAX_PATH);
+        ver = LoadLibraryExW((std::wstring(sys) + L"\\version.dll").c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+        if (!ver) return 0;
+    }
+    SizeFn size = (SizeFn)GetProcAddress(ver, "GetFileVersionInfoSizeW");
+    InfoFn info = (InfoFn)GetProcAddress(ver, "GetFileVersionInfoW");
+    QueryFn query = (QueryFn)GetProcAddress(ver, "VerQueryValueW");
+    if (!size || !info || !query) return 0;
+    DWORD h = 0, n = size(path.c_str(), &h);
     if (!n) return 0;
     std::vector<char> buf(n);
-    if (!GetFileVersionInfoW(path.c_str(), 0, n, buf.data())) return 0;
+    if (!info(path.c_str(), 0, n, buf.data())) return 0;
     VS_FIXEDFILEINFO *fi = NULL;
     UINT len = 0;
-    if (!VerQueryValueW(buf.data(), L"\\", (void **)&fi, &len) || !fi) return 0;
+    if (!query(buf.data(), L"\\", (void **)&fi, &len) || !fi) return 0;
     return ((unsigned long long)fi->dwFileVersionMS << 32) | fi->dwFileVersionLS;
 }
 
@@ -806,7 +823,16 @@ static bool CopyTree(const std::wstring &src, const std::wstring &dst, bool *sel
             *selfReplaced = true;
         }
         SetFileAttributesW(d.c_str(), FILE_ATTRIBUTE_NORMAL);
-        if (!CopyFileW(s.c_str(), d.c_str(), FALSE)) { g_copyError = GetLastError(); ok = false; *failed = n; }
+        if (!CopyFileW(s.c_str(), d.c_str(), FALSE)) {
+            // Fichier verrouille (DLL chargee : jeu ouvert, ou version.dll prise par un lanceur 0.59.4-0.59.7) : Windows
+            // permet de le renommer ; l'ancien est mis de cote (.old, efface au prochain demarrage), le nouveau copie.
+            DWORD e = GetLastError();
+            std::wstring old = d + L".old";
+            DeleteFileW(old.c_str());
+            if ((e == ERROR_SHARING_VIOLATION || e == ERROR_ACCESS_DENIED || e == ERROR_LOCK_VIOLATION) && MoveFileExW(d.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING)
+                && CopyFileW(s.c_str(), d.c_str(), FALSE)) TestLog("mise a jour : %ls verrouille, l'ancien mis de cote (.old)", n.c_str());
+            else { g_copyError = e; ok = false; *failed = n; }
+        }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     return ok;
@@ -5836,6 +5862,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         LocalFree(av);
     }
     DeleteFileW((g_self + L".old").c_str());   // reste d'une mise a jour du lanceur
+    DeleteFileW((g_dir + L"version.dll.old").c_str());   // (chargeur verrouille pendant une mise a jour : plus utilise, sauf jeu ouvert)
     // Langue : francais si Windows est en francais, anglais pour toute autre langue ; Langue=fr|en pour forcer.
     wchar_t lang[8] = L"";
     GetPrivateProfileStringW(L"Lanceur", L"Langue", L"", lang, 8, g_iniLauncher.c_str());
