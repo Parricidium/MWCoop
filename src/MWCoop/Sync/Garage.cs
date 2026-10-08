@@ -43,7 +43,10 @@ namespace MWCoop
     //  - trains tordus (transforms *DamagePivot* : FL/FR/RL/RR de Calculations les tournent au hasard au choc) :
     //    rotation locale envoyee quand elle change.
     //  Chacun envoie ce qui change chez lui : la voiture conduite casse chez son conducteur, la voiture garee
-    //  heurtee chez celui ou le choc a eu lieu.
+    //  heurtee chez celui ou le choc a eu lieu. Copie d'une voiture conduite ailleurs : ses toles et ses trains
+    //  bouges ici (copie cinematique qui suit par a-coups, joueur ou voiture locale qui la heurte : le conducteur a
+    //  son propre choc) sont remis comme recus, rien n'est envoye -- la portiere de la CORRIS se cabossait chez
+    //  l'invite et partait chez le conducteur (08/10).
     //
     // CHARGEUR AVANT (KEKMET .../NewHydraulics/FrontHydArm et FrontHydLoader 'Use' : ArmRot, SetRotation du bras
     // Frontloader/ArmPivot/Arm et du godet .../LoaderPivot/Loader) : l'etat INCREASE/DECREASE tourne tant que le
@@ -543,15 +546,43 @@ namespace MWCoop
                 }
                 g.Had = has;
             }
+            bool copy = VehicleSync.RemotelyDriven(c.Root);
             foreach (Bend b in c.Bends)
             {
                 if (b.T == null || Quaternion.Angle(b.T.localRotation, b.Snap) < 0.25f) continue;
+                if (copy) { b.T.localRotation = b.Snap; continue; }
                 b.Snap = b.T.localRotation;
                 Log.Info("atelier : train " + c.Car + b.Key + " tordu ici (" + b.Snap.eulerAngles.ToString("F1") + ")");
                 if (Session.RemoteCount > 0) Session.SendAll(new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_BEND | RELIABLE).Str(c.Car).Str(b.Key).Quat(b.Snap), true);
             }
-            foreach (Dent d in c.Dents) budget = PollDent(c, d, remote, budget);
+            foreach (Dent d in c.Dents) budget = copy ? UndoDent(c, d) : PollDent(c, d, remote, budget);
         }
+
+        // Copie conduite ailleurs : sommets bouges ici remis a leur derniere valeur connue (recue ou d'avant la copie).
+        static int UndoDent(CarDmg c, Dent d)
+        {
+            if (d.D == null || fVerts == null || fBase == null) return 0;
+            var v = fVerts.GetValue(d.D) as Vector3[];
+            var bs = fBase.GetValue(d.D) as Vector3[];
+            if (v == null || bs == null || bs.Length != v.Length) return 0;
+            if (d.Snap == null || !ReferenceEquals(d.Arr, v) || d.Snap.Length != v.Length) { d.Arr = v; d.Snap = (Vector3[])v.Clone(); return 0; }
+            var cols = fColors != null ? fColors.GetValue(d.D) as Color32[] : null;
+            var bcols = fBaseColors != null ? fBaseColors.GetValue(d.D) as Color32[] : null;
+            bool tint = cols != null && bcols != null && cols.Length == v.Length && bcols.Length == v.Length && d.D.MaxVertexMov > 0f;
+            int n = 0;
+            for (int i = 0; i < v.Length; i++)
+            {
+                if ((v[i] - d.Snap[i]).sqrMagnitude <= 1e-8f) continue;
+                v[i] = d.Snap[i];
+                if (tint) cols[i] = Color.Lerp(bcols[i], d.D.DeformedVertexColor, (v[i] - bs[i]).magnitude / d.D.MaxVertexMov);
+                n++;
+            }
+            if (n == 0) return 0;
+            try { if (mUpdateMesh != null) mUpdateMesh.Invoke(d.D, null); } catch (System.Exception) { }
+            if (undoLogs++ < 10) Log.Info("atelier : tole " + c.Car + d.Key + " cabossee sur la copie (" + n + " sommets) : remise comme chez le conducteur");
+            return 0;
+        }
+        static int undoLogs;
 
         static int PollDent(CarDmg c, Dent d, bool remote, int budget)
         {

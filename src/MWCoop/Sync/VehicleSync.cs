@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -24,6 +24,12 @@ namespace MWCoop
     // a AudioSource sous un conteneur 'Sounds' (KEKMET/LOD/Sounds/SoundKekmet...), allumes par le
     // contact quand le moteur tourne : le conducteur envoie lesquels sont actifs, avec leur hauteur
     // et leur volume (leur automate les calcule d'apres le vehicule conduit LOCALEMENT : coupe ici).
+    // Moteur en marche ou non : le conducteur l'envoie (bit 15 du masque des sons : son automate Starter en "Running").
+    // Sur la copie, l'automate Starter rejoue la cle et refait sa propre simulation (melange, batterie, regime) : il
+    // pouvait finir "Stall engine" alors que le moteur tournait chez le conducteur -- CORRIS « moteur coupe » chez
+    // l'autre, sans son (ses bruits de moteur sont sous Simulation/ExhaustCorris, allume par "Start engine", pas sous
+    // un conteneur 'Sounds') ; retour d'un joueur, 08/10. Un ecart qui dure 1,5 s est corrige : "Start engine" (puis
+    // "Crank up" -> "Running" au regime recu), ou "Stall engine" si le moteur est coupe chez le conducteur.
     // Moteur laisse tournant : celui qui sort de la voiture en garde la main (etat 2) tant que son moteur
     // tourne et que personne d'autre ne la prend : les autres entendent toujours ce moteur, sans
     // conducteur assis. A la fin de la copie, moteur, commandes et roues reprennent l'etat d'AVANT
@@ -76,6 +82,9 @@ namespace MWCoop
             public float[] SoundPitch, SoundVol;
             public float Rpm, Throttle, Steer;
             public FsmFloat Heat; public float RemoteHeat = float.NaN;   // temperature de la source de chaleur
+            public PlayMakerFSM Starter;        // automate 'Starter' (etat "Running" : moteur en marche)
+            public bool RemoteRunning;          // moteur en marche chez celui qui la fait rouler
+            public float StarterOff;            // copie : debut de l'ecart entre son Starter et celui du conducteur (0 : aucun)
             public float[] WheelRot;
             public Sim[] Sims = new Sim[0];     // etat de la simulation (SimVars)
             public float AuthorityUntil;        // on vient de la rendre : l'instantane de l'hote (voiture garee) attend
@@ -253,13 +262,15 @@ namespace MWCoop
             var snd = new List<GameObject>();
             foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
                 if (t.name == "Sounds")
-                    foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 16) snd.Add(s.gameObject);
+                    foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 15) snd.Add(s.gameObject);   // (bit 15 : moteur en marche)
             car.SoundObjs = snd.ToArray();
             car.SoundObjsWas = new bool[snd.Count];
             car.SoundPitch = new float[snd.Count];
             car.SoundVol = new float[snd.Count];
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
                 if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { car.Drive = f; break; }
+            foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
+                if (f.FsmName == "Starter" && f.Fsm.GetState("Running") != null) { car.Starter = f; break; }
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
                 if (f.FsmName == "Data" && f.gameObject.name.StartsWith("HeatSource")) { car.Heat = f.FsmVariables.FindFsmFloat("Temperature"); break; }
             FindSims(car);
@@ -738,6 +749,7 @@ namespace MWCoop
                 a.volume = c.SoundVol[i];
                 if (!a.isPlaying && a.loop) a.Play();
             }
+            StarterFollow(c);
             float fwd = Vector3.Dot(c.Vel, c.Body.transform.forward);
             for (int i = 0; i < c.Wheels.Length; i++)
             {
@@ -747,6 +759,37 @@ namespace MWCoop
                 float steer = w.maxSteeringAngle * c.Steer;
                 w.model.transform.localRotation = Quaternion.Euler(0f, steer, 0f) * Quaternion.AngleAxis(57.29578f * c.WheelRot[i], Vector3.right);
             }
+        }
+
+        // Copie : son automate Starter mene a l'etat du moteur du conducteur quand ils divergent depuis 1,5 s (le temps
+        // d'un demarrage rejoue normal : contact, demarreur, "Crank up").
+        static void StarterFollow(Car c)
+        {
+            PlayMakerFSM s = c.Starter;
+            if (s == null || !s.enabled || !s.gameObject.activeInHierarchy) return;
+            string st = s.ActiveStateName;
+            bool on = st == "Running" || st == "Crank up" || st == "Start engine";
+            bool off = c.RemoteRunning ? !on : st == "Running";
+            float now = Time.realtimeSinceStartup;
+            if (!off) { c.StarterOff = 0f; return; }
+            if (c.StarterOff <= 0f) { c.StarterOff = now; return; }
+            if (now - c.StarterOff < 1.5f) return;
+            c.StarterOff = 0f;
+            string to = c.RemoteRunning ? (s.Fsm.GetState("Start engine") != null ? "Start engine" : "Running") : (s.Fsm.GetState("Stall engine") != null ? "Stall engine" : null);
+            if (to == null) return;
+            Replay.Depth++;
+            try { Game.SetState(s, to); }
+            finally { Replay.Depth--; }
+            if (starterLogs++ < 20) Log.Info("moteur " + c.Key + " : " + (c.RemoteRunning ? "en marche" : "coupe") + " chez #" + c.RemoteBy + ", demarreur d'ici " + st + " -> " + to);
+        }
+        static int starterLogs;
+
+        // Essais : etat du demarreur de la voiture et moteur annonce par celui qui la fait rouler.
+        public static string StarterState(string name)
+        {
+            Car c = Named(name);
+            if (c == null) return "?";
+            return "demarreur " + (c.Starter != null ? c.Starter.ActiveStateName : "-") + (c.Kinematic ? ", conducteur : " + (c.RemoteRunning ? "en marche" : "coupe") : "");
         }
 
         static string SoundDiag(Car c)
@@ -919,6 +962,7 @@ namespace MWCoop
                 float thr = testRpm >= 0f ? testThr : c.Dt != null ? c.Dt.throttle : 0f;
                 int mask = 0;
                 for (int i = 0; i < c.SoundObjs.Length; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;
+                if ((c.Starter != null && c.Starter.ActiveStateName == "Running") || testRpm > 0f) mask |= 0x8000;   // (essais : faux moteur en marche)
                 w.F32(rpm).F32(thr).F32(SteerOf(c)).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
                 for (int i = 0; i < c.SoundObjs.Length; i++)
                     if ((mask & (1 << i)) != 0)
@@ -1058,7 +1102,7 @@ namespace MWCoop
             if (driven)
             {
                 rpm = r.F32(); thr = r.F32(); steer = r.F32(); heat = r.F32(); smask = r.U16();
-                for (int i = 0; i < 16; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
+                for (int i = 0; i < 15; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
             }
             if (Session.IsHost)
             {
@@ -1078,7 +1122,8 @@ namespace MWCoop
                 c.RemoteDriver = mode == 1 ? who : -1;
                 c.LastRemote = Time.realtimeSinceStartup;
                 c.Pos = pos; c.Rot = rot; c.Vel = vel; c.AngVel = ang;
-                c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask; c.RemoteHeat = heat;
+                c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask & 0x7FFF; c.RemoteHeat = heat;
+                c.RemoteRunning = (smask & 0x8000) != 0;
                 for (int i = 0, k = 0; i < c.SoundObjs.Length && i < 16; i++)
                     if ((smask & (1 << i)) != 0 && k + 1 < spitch.Count) { c.SoundPitch[i] = spitch[k]; c.SoundVol[i] = spitch[k + 1]; k += 2; }
                 return;
