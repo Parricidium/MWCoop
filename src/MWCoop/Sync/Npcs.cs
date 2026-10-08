@@ -59,6 +59,7 @@ namespace MWCoop
         class Snap
         {
             public float T; public bool HasRoot; public Vector3 Pos, RootPos; public Quaternion Rot, RootRot; public uint Props;
+            public int Car = -1;   // Pos/Rot dans le repere de cette voiture (numero reseau) ; -1 : dans le monde
             public int Layers;
             public readonly int[] Count = new int[MaxLayers];
             public readonly bool[] Hold = new bool[MaxLayers];
@@ -74,6 +75,7 @@ namespace MWCoop
         class Rule
         {
             public string Part, Fsm, Top = ""; public string[] Rest = new string[0]; public float Range; public bool Whole;
+            public string Drives;   // seulement si le joueur local mene cette voiture (au volant, ou moteur laisse tournant)
         }
 
         // Etats lus dans le vidage de la scene (GAME-auto.txt).
@@ -96,6 +98,13 @@ namespace MWCoop
             new Rule { Part = "HouseRintamaCrazy/Watcher/Oldman/", Range = 40f, Whole = true, Top = "Watcher" },
             // Policiers a domicile (racine COPS, allumee chez le joueur recherche) : montres a qui est a 80 m.
             new Rule { Part = "COPS/", Range = 80f, Whole = true },
+            // Client du taxi (TaxiWalker::Logic) : des que le chauffeur arrive (Distance 2), monte, roule, paie, descend, c'est
+            // la machine du CHAUFFEUR qui le mene (son vehicule decide de la montee : PlayerCurrentVehicle == Taxi) -- pas
+            // celle d'un passager ou d'un pieton a cote. Avant, tout le monde voyait la pose de l'hote : client reste sur le
+            // trottoir quand un invite conduisait le taxi (retour d'un joueur, 08/10). Sa pose part dans le repere du taxi.
+            new Rule { Part = "TAXIJOB/Customer1/", Fsm = "Logic", Rest = new[] { "Idle", "Check Jokke", "Reset customer", "Randomize loca", "ID", "Call", "State 11",
+                "New location", "Activate", "Load", "Save?", "State 12", "Start walking", "Set mass 2", "Leave", "No pay", "State 13" }, Range = 30f,
+                Drives = "MACHTWAGEN" },
         };
 
         // Logique qu'une voiture qui renverse le PNJ declenche (ragdoll, magasin ferme) : rejouee chez tous.
@@ -297,7 +306,7 @@ namespace MWCoop
             if (hitPending.Count > 0 && now >= nextHit) { nextHit = now + 1f; InjectHits(); }
             if (now >= nextScan) { nextScan = now + 45f; Scan(); }
             if (now >= nextEngage) { nextEngage = now + 0.2f; Engage(now); }
-            if (Session.IsHost && owners.Count > 0 && now >= nextOwners) { nextOwners = now + 5f; SendOwners(); }   // (invite arrive, liste perdue)
+            if (Session.IsHost && (owners.Count > 0 || HostEngaged()) && now >= nextOwners) { nextOwners = now + 5f; SendOwners(); }   // (invite arrive, liste perdue)
             if (now < nextSend) return;
             nextSend = now + 0.1f;
             if (Session.IsHost) SendHost(now); else SendGuest(now);
@@ -362,10 +371,18 @@ namespace MWCoop
 
         // [I32 id][U8 1 present | 2 objet deplace joint][Vec Quat corps]([Vec Quat objet deplace])[I32 objets tenus]
         // [U8 couches] puis par couche [U8 etats | 0x80 tenu] et par etat [I32 clip][F32 instant][U8 poids].
+        // PNJ assis dans une voiture (client du taxi, range sous GetInPivotTaxi) : pose dans le repere de la voiture,
+        // posee chez les autres sur LEUR voiture (copie du taxi d'un autre conducteur) -- en coordonnees du monde, il
+        // trainait derriere la copie qui avance (pose rejouee 0,25 s apres) ; retour d'un joueur, 08/10.
         static void Write(NetWriter w, Npc n)
         {
             bool root = n.Moved != null;
-            w.I32(n.Id).U8(root ? 3 : 1).Vec(n.Char.position).Quat(n.Char.rotation);
+            Transform car = VehicleSync.CarRoot(n.Char);
+            int ci = car != null ? VehicleSync.CarIndex(car.GetComponent<Rigidbody>()) : -1;
+            if (ci > 255) ci = -1;
+            w.I32(n.Id).U8((root ? 3 : 1) | (ci >= 0 ? 4 : 0));
+            if (ci >= 0) w.Vec(car.InverseTransformPoint(n.Char.position)).Quat(Quaternion.Inverse(car.rotation) * n.Char.rotation).U8(ci);
+            else w.Vec(n.Char.position).Quat(n.Char.rotation);
             if (root) w.Vec(n.Moved.position).Quat(n.Moved.rotation);
             uint bits = 0;
             for (int i = 0; i < n.Props.Length; i++) if (n.Props[i] != null && n.Props[i].activeSelf) bits |= 1u << i;
@@ -445,6 +462,7 @@ namespace MWCoop
                     n.Engaged = on;
                     if (++claims <= 60) Log.Info("PNJ : " + Name(n) + (on ? " engage avec le joueur local (" + EngageWhy(n) + ")" : " n'est plus engage ici"));
                     if (!Session.IsHost) SendClaim(n, on, now);
+                    else SendOwners();   // (l'hote annonce aussi les siens : Jobs, LedElsewhere)
                 }
                 else if (on && !Session.IsHost && Owner(n) != Session.LocalId && now >= n.ClaimAt) SendClaim(n, true, now);   // refus, perte : redemande
             }
@@ -459,6 +477,7 @@ namespace MWCoop
             {
                 Rule r = n.Rules[i];
                 if ((at - mp).sqrMagnitude > r.Range * r.Range) continue;
+                if (r.Drives != null) { Transform lead = VehicleSync.LocalLeadRoot; if (lead == null || lead.name != r.Drives) continue; }
                 if (r.Fsm == null) return true;
                 PlayMakerFSM f = n.RuleFsms[i];
                 if (f == null || !f.enabled || !f.gameObject.activeInHierarchy) continue;
@@ -514,14 +533,39 @@ namespace MWCoop
             }
         }
 
-        // [U8 nombre] puis [I32 id][U8 joueur] : liste complete (absente : l'hote).
+        // [U8 nombre] puis [I32 id][U8 joueur] : liste complete (absente : l'hote). Joueur 0 : engage avec l'hote (un
+        // invite ne peut alors pas le prendre ; sa logique d'ici ne fait pas autorite, voir LedElsewhere).
         static void SendOwners()
         {
+            var list = new List<KeyValuePair<int, int>>(owners);
+            foreach (Npc x in all) if (x.Rules != null && x.Engaged && !owners.ContainsKey(x.Id)) list.Add(new KeyValuePair<int, int>(x.Id, 0));
             var w = new NetWriter(Msg.Npc).U8(K_OWNERS);
-            int n = Mathf.Min(owners.Count, 150), i = 0;
+            int n = Mathf.Min(list.Count, 150);
             w.U8(n);
-            foreach (KeyValuePair<int, int> kv in owners) { if (i++ >= n) break; w.I32(kv.Key).U8(kv.Value); }
+            for (int i = 0; i < n; i++) w.I32(list[i].Key).U8(list[i].Value);
             Session.Broadcast(w, true);
+        }
+
+        static bool HostEngaged()
+        {
+            foreach (Npc x in all) if (x.Rules != null && x.Engaged) return true;
+            return false;
+        }
+
+        // Jobs : automate (ou ce qui est dessous) d'un PNJ engage qu'un AUTRE joueur mene en ce moment (confie a un invite,
+        // ou engage avec l'hote) : sa logique d'ici ne fait pas autorite, ses transitions ne partent pas. Client du taxi :
+        // l'hote passager voyait son client a 4 m et le faisait repartir en "Distance 2" chez le chauffeur, en pleine course.
+        public static bool LedElsewhere(Transform t)
+        {
+            if (owners.Count == 0 || t == null) return false;
+            for (int k = 0; k < all.Count; k++)
+            {
+                Npc n = all[k];
+                if (n.Rules == null || n.Root == null || (t != n.Root && !t.IsChildOf(n.Root))) continue;
+                int o;
+                return owners.TryGetValue(n.Id, out o) && o != Session.LocalId;
+            }
+            return false;
         }
 
         static void OnOwners(NetReader r)
@@ -725,6 +769,7 @@ namespace MWCoop
         static void Read(NetReader r, Snap s, int flags)
         {
             s.Pos = r.Vec(); s.Rot = r.Quat();
+            s.Car = (flags & 4) != 0 ? r.U8() : -1;
             s.HasRoot = (flags & 2) != 0;
             if (s.HasRoot) { s.RootPos = r.Vec(); s.RootRot = r.Quat(); }
             s.Props = (uint)r.I32();
@@ -947,7 +992,7 @@ namespace MWCoop
                 if (rt - last.T > 0.02f) { if (!n.Dry) { n.Dry = true; n.Extrap++; } } else n.Dry = false;
                 Snap p = n.Count >= 2 ? At(n, n.Count - 2) : null;
                 float span = p != null ? last.T - p.T : 0f;
-                if (span > 0.01f && span < 1f && (last.Pos - p.Pos).sqrMagnitude < 25f)
+                if (span > 0.01f && span < 1f && last.Car == p.Car && (last.Pos - p.Pos).sqrMagnitude < 25f)
                 {
                     vel = (last.Pos - p.Pos) / span;
                     if (last.HasRoot && p.HasRoot) rvel = (last.RootPos - p.RootPos) / span;
@@ -964,12 +1009,20 @@ namespace MWCoop
                     if (rt >= s0.T) { a = s0; b = s1; u = (rt - s0.T) / Mathf.Max(s1.T - s0.T, 0.001f); }
                     break;
                 }
-                // Grand saut chez l'auteur (teleporte) : pas de glissade a travers les murs.
-                if (b != null && (b.Pos - a.Pos).sqrMagnitude > 25f) { if (u >= 0.5f) a = b; b = null; u = 0f; }
+                // Grand saut chez l'auteur (teleporte), ou monte / descendu de voiture (autre repere) : pas de glissade
+                // a travers les murs.
+                if (b != null && (b.Car != a.Car || (b.Pos - a.Pos).sqrMagnitude > 25f)) { if (u >= 0.5f) a = b; b = null; u = 0f; }
             }
             Vector3 pos; Quaternion rot;
             if (b != null) { pos = Vector3.Lerp(a.Pos, b.Pos, u); rot = Quaternion.Slerp(a.Rot, b.Rot, u); }
             else { pos = a.Pos + vel * ex; rot = a.Rot; }
+            bool place = true;
+            if (a.Car >= 0)
+            {
+                Rigidbody cb = VehicleSync.CarBody(a.Car);
+                if (cb != null) { pos = cb.transform.TransformPoint(pos); rot = cb.transform.rotation * rot; }
+                else place = false;   // voiture inconnue ici : le corps reste ou il est
+            }
             // Objet deplace avec le corps (client : tout son objet ; Teimo : la luge), avant le corps qui est dessous.
             if (n.Moved != null && a.HasRoot)
             {
@@ -980,7 +1033,7 @@ namespace MWCoop
             // celle du parent d'un corps hors Char deplace le corps.
             float at = b != null ? rt : a.T + ex;
             for (int l = 0; l < n.Layers.Length; l++) ApplyLayer(n.Layers[l], l, a, b, u, at);
-            n.Char.position = pos; n.Char.rotation = rot;
+            if (place) { n.Char.position = pos; n.Char.rotation = rot; }
             uint bits = (b != null && u >= 0.5f ? b : a).Props;
             for (int i = 0; i < n.Props.Length; i++)
             {
