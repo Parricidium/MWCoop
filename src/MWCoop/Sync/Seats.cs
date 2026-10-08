@@ -32,7 +32,7 @@ namespace MWCoop
     //    (DriverBelt/HandleUpPivot) cachee.
     public static class Seats
     {
-        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f; }
+        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f; }
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
         // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
         // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
@@ -109,7 +109,7 @@ namespace MWCoop
                     float bz = d.z + GifuBed.z, by = d.y + GifuBed.y;
                     // (On ne tient pas debout derriere les sieges : zone large, depuis les portieres ; la place avant, plus
                     // proche, passe d'abord tant qu'elle est libre.)
-                    for (int k = 0; k < 3; k++) seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1 + k, Head = new Vector3((k - 1) * GifuBed.x, by, bz), ZoneX = 1.1f, ZoneZ = 1.1f });
+                    for (int k = 0; k < 3; k++) seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1 + k, Head = new Vector3((k - 1) * GifuBed.x, by, bz), ZoneX = 1.1f, ZoneZ = 1.1f, MaxX = 1.05f });   // (parois de la cabine a +-1,0 m)
                 }
             }
             if (was != null)
@@ -117,7 +117,10 @@ namespace MWCoop
             Log.Info("places passagers : " + seats.Count);
         }
 
-        // Couchette de la GIFU par rapport aux yeux du conducteur : ecart entre les places (x), hauteur (y), recul (z). Coupe de\r\n        // la cabine (essai sondeplaces) : couchette a 1,75 m (repere du camion), toit 2,60, paroi arriere z 1,9, yeux du\r\n        // conducteur 2,05 / z 2,99. Dessous du toit a 2,42 : 67 cm seulement au-dessus de la couchette -> yeux juste sous le toit\r\n        // (2,28), dos a la paroi ; assis tasse (le corps s'enfonce un peu dans la couchette).
+        // Couchette de la GIFU par rapport aux yeux du conducteur : ecart entre les places (x), hauteur (y), recul (z). Coupe de
+        // la cabine (essai sondeplaces) : couchette a 1,75 m (repere du camion), toit 2,60, paroi arriere z 1,9, yeux du
+        // conducteur 2,05 / z 2,99. Dessous du toit a 2,42 : 67 cm seulement au-dessus de la couchette -> yeux juste sous le toit
+        // (2,28), dos a la paroi ; assis tasse (le corps s'enfonce un peu dans la couchette).
         static Vector3 GifuBed { get { return ParseV(Config.Get("Test", "GifuCouchette", ""), new Vector3(0.5f, 0.23f, -0.80f)); } }
         static Vector3 ParseV(string s, Vector3 def)
         {
@@ -272,13 +275,21 @@ namespace MWCoop
                 if (s.CarT == null || SeatTaken(s)) continue;
                 if ((s.CarT.position - player.position).sqrMagnitude > 25f || !s.CarT.gameObject.activeInHierarchy) continue;   // (taxi range : inactif)
                 Vector3 p = s.CarT.InverseTransformPoint(player.position);
-                if (p.y < -0.3f || p.y > s.Head.y) continue;
+                if (!InSeatZone(s, p)) continue;
                 float dx = Mathf.Abs(p.x - s.Head.x), dz = Mathf.Abs(p.z - (s.Head.z - 0.1f));
-                if (dx > s.ZoneX || dz > s.ZoneZ) continue;
                 float d = dx * dx + dz * dz;
                 if (d < bestD) { bestD = d; best = s; }
             }
             return best;
+        }
+
+        // p : ancre du joueur (25 cm au-dessus de ses pieds) dans le repere de la voiture. Pieds a moins de 1,6 m sous les yeux de
+        // la place assise : sinon, debout par terre a cote de la cabine haute de la GIFU, on s'asseyait dehors, sous la cabine
+        // (retour de JD, 08/10 ; sol a -0,15, ancre a +0,10 : passait le seul seuil de -0,3). Couchette : dans la cabine (MaxX).
+        static bool InSeatZone(Seat s, Vector3 p)
+        {
+            if (p.y < Mathf.Max(-0.3f, s.Head.y - 1.6f) || p.y > s.Head.y || Mathf.Abs(p.x) > s.MaxX) return false;
+            return Mathf.Abs(p.x - s.Head.x) <= s.ZoneX && Mathf.Abs(p.z - (s.Head.z - 0.1f)) <= s.ZoneZ;
         }
 
         // Zone du conducteur coupee pour le joueur d'ici (son automate 'PlayerTrigger' arrete, icone du volant eteinte) :
@@ -671,6 +682,33 @@ namespace MWCoop
                     if (any) sb.Append(' ').Append(nm[k]).Append(' ').Append(hit.distance.ToString("F2")).Append(" (").Append(hit.collider.name).Append(')');
                     else sb.Append(' ').Append(nm[k]).Append(" -");
                 }
+            }
+            // Ancre du joueur (PLAYER) par rapport a ses pieds, et sol a cote de la cabine (repere de la voiture) : la zone d'une
+            // place doit exclure un joueur debout par terre (retour de JD, 08/10 : assis sous la cabine de la GIFU).
+            // Points types (ancre du joueur, repere de la voiture) : places dont la zone les accepte.
+            Vector3[] pts = { new Vector3(-1.4f, 0.10f, 2.19f), new Vector3(-1.2f, 0.9f, 2.4f), new Vector3(-0.5f, 1.35f, 2.4f), new Vector3(0.7f, 1.35f, 2.9f) };
+            string[] pn = { "par terre a gauche", "marchepied gauche", "plancher de la cabine", "debout a la place avant" };
+            for (int i = 0; i < pts.Length; i++)
+            {
+                sb.Append(" | ").Append(pn[i]).Append(" :");
+                bool any = false;
+                foreach (Seat s in seats) if (s.Car.StartsWith(car) && InSeatZone(s, pts[i])) { sb.Append(" place ").Append(s.Index); any = true; }
+                if (!any) sb.Append(" aucune");
+            }
+            GameObject pl = GameObject.Find("PLAYER");
+            CharacterController cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+            if (cc != null) sb.Append(" | joueur : pieds a ").Append((cc.center.y - cc.height / 2f).ToString("F2")).Append(" m de son ancre");
+            foreach (Seat s in seats)
+            {
+                if (!s.Car.StartsWith(car) || s.CarT == null) continue;
+                foreach (float sx in new[] { -1.7f, 1.7f })
+                {
+                    Vector3 o = s.CarT.TransformPoint(new Vector3(sx, 3.5f, s.Head.z));
+                    float best = float.MaxValue;
+                    foreach (RaycastHit x in Physics.RaycastAll(o, -s.CarT.up, 8f)) if (!x.collider.isTrigger && x.collider.transform.root != s.CarT.root && x.distance < best) best = x.distance;
+                    sb.Append(" | sol a x ").Append(sx.ToString("F1")).Append(" z ").Append(s.Head.z.ToString("F2")).Append(" : ").Append(best < float.MaxValue ? (3.5f - best).ToString("F2") : "?");
+                }
+                break;
             }
             return sb.ToString();
         }
