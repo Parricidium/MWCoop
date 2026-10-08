@@ -3047,27 +3047,38 @@ static void TenuesStart()
     HANDLE t = CreateThread(NULL, 0, TenuesThread, NULL, 0, NULL);
     if (t) CloseHandle(t); else g_tenuesState = 0;
 }
-// Hauts offerts dans le choix de tenue, apres ceux du jeu ("Tenue Dom 5"). Pantalons et visages : listes de l'export du mod.
-static void TenuesAddShirts()
+// Tenues offertes presentes (noms, tries) : hauts, pantalons, visages.
+static std::vector<std::string> g_tenueNames[3];
+static std::vector<std::string> TenuesFind(const wchar_t *pattern)
 {
-    Opt *ap = NULL;
-    for (auto &o : g_opts) if (!strcmp(o.key, "Apparence")) ap = &o;
-    if (!ap || TenuesDir().empty()) return;
     std::vector<std::string> names;
+    if (TenuesDir().empty()) return names;
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((TenuesDir() + L"*").c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) return;
+    if (h == INVALID_HANDLE_VALUE) return names;
     do {
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
         WIN32_FIND_DATAW f2;
-        HANDLE h2 = FindFirstFileW((TenuesDir() + fd.cFileName + L"\\*_haut_*.jpg").c_str(), &f2);
+        HANDLE h2 = FindFirstFileW((TenuesDir() + fd.cFileName + L"\\" + pattern).c_str(), &f2);
         if (h2 == INVALID_HANDLE_VALUE) continue;
         do { std::wstring n = f2.cFileName; names.push_back(Narrow(n.substr(0, n.size() - 4), CP_UTF8)); } while (FindNextFileW(h2, &f2));
         FindClose(h2);
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     std::sort(names.begin(), names.end());
-    for (auto &n : names) {
+    return names;
+}
+// Hauts offerts dans le choix de tenue, apres ceux du jeu ("Tenue Dom 5") ; pantalons et visages gardes pour PersoChoices
+// (sans attendre que le jeu refasse son export : retour de JD, 08/10, 14 visages seulement juste apres le telechargement).
+static void TenuesAddShirts()
+{
+    g_tenueNames[0] = TenuesFind(L"*_haut_*.jpg");
+    g_tenueNames[1] = TenuesFind(L"*_pantalon_*.jpg");
+    g_tenueNames[2] = TenuesFind(L"*_visage_*.jpg");
+    Opt *ap = NULL;
+    for (auto &o : g_opts) if (!strcmp(o.key, "Apparence")) ap = &o;
+    if (!ap) return;
+    for (auto &n : g_tenueNames[0]) {
         if (std::find(ap->svals.begin(), ap->svals.end(), n) != ap->svals.end()) continue;
         std::wstring lab = TenueLabel(n);
         ap->vals.push_back((int)ap->svals.size());

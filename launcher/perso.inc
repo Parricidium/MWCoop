@@ -178,7 +178,11 @@ static std::vector<std::string> PersoChoices(int f)
     std::vector<std::string> v;
     if (f == PF_SHIRT) { if (const Opt *ap = OptByKey("Apparence")) v = ap->svals; return v; }
     v.push_back("");
-    if (f == PF_PANTS || f == PF_FACE) { for (auto &s : g_perso.lists[f == PF_PANTS ? 1 : 2]) v.push_back(s); return v; }
+    if (f == PF_PANTS || f == PF_FACE) {
+        for (auto &s : g_perso.lists[f == PF_PANTS ? 1 : 2]) v.push_back(s);
+        for (auto &s : g_tenueNames[f == PF_PANTS ? 1 : 2]) if (std::find(v.begin(), v.end(), s) == v.end()) v.push_back(s);   // (tenues offertes)
+        return v;
+    }
     if (f == PF_BODY) {
         std::vector<std::string> ks;
         for (auto &b : g_perso.bodies) if (b.key != "1712-37") ks.push_back(b.key);   // (le modele de base : "")
