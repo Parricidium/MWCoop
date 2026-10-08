@@ -45,6 +45,8 @@ static const TutoStep kTuto[] = {
       L"Start through Steam", L"In Settings > Game. If MWCoop doesn't load when the launcher starts the game, turn this on: the game starts through Steam, like its PLAY button. The launcher also suggests it by itself.", "0.60.5" },
     { L"Désinstaller", L"Dans Réglages > À propos : retire tout MWCoop (dossiers compris) et le MSCLoader de MWCoop, à la Corbeille. Ta sauvegarde, tes mods et le MSCLoader officiel restent.",
       L"Uninstall", L"In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.", "0.60.8" },
+    { L"Crédits", L"L'étoile en haut : ceux qui donnent quelque chose pour améliorer MWCoop. Merci à Dom pour ses 157 tenues, dans l'onglet Tenue !",
+      L"Credits", L"The star at the top: the people who give something to make MWCoop better. Thanks to Dom for 157 outfits, in the Outfit tab!", "0.61.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -73,6 +75,7 @@ static RectF TutoTarget(int i)
     case 16: { RectF a = kMscSrcOff, b = kMscReinst; return RectF(a.X - 110, a.Y, b.X + b.Width - a.X + 110, a.Height); }
     case 17: return kSetSteamRow;
     case 18: return kSetUninst;
+    case 19: return g_navR[TAB_CREDITS];
     }
     return RectF(0, 0, 0, 0);
 }

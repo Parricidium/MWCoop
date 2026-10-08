@@ -114,6 +114,7 @@ namespace MWCoop
             }
             if (f == 1 || f == 2)
             {
+                if (Tenues.Has(v)) return (f == 1 ? Lang.T("Pantalon ", "Pants ") : Lang.T("Visage ", "Face ")) + Tenues.Label(v);
                 switch (v)
                 {
                     case "cop_pants": return Lang.T("Police", "Police");
@@ -254,11 +255,20 @@ namespace MWCoop
             shirts = new List<string>(sh.Keys);
             pants = new List<string>(pa.Keys);
             faces = new List<string>(fa.Keys);
+            shirts.AddRange(Tenues.List(Tenues.Shirt));   // (tenues offertes, apres celles du jeu)
+            pants.AddRange(Tenues.List(Tenues.Pants));
+            faces.AddRange(Tenues.List(Tenues.Face));
             var bl = new List<string>(bodies.Keys);
             var al = new List<string>(accs.Keys);
             Log.Info("apparences : " + bodies.Count + " corps (" + string.Join(", ", bl.ToArray()) + "), " + accs.Count + " accessoires, "
                      + shirts.Count + " hauts, " + pants.Count + " pantalons, " + faces.Count + " visages");
             Log.Info("apparences : accessoires " + string.Join(", ", al.ToArray()));
+            foreach (string mn in new[] { shirts.Count > 0 ? shirts[0] : "", pants.Count > 0 ? pants[0] : "", faces.Count > 0 ? faces[0] : "" })
+            {
+                Material mm = Avatar.FindMaterial(mn);
+                Texture2D tx = mm != null ? mm.mainTexture as Texture2D : null;
+                if (mm != null) Log.Info("apparences : " + mn + " : shader " + mm.shader.name + ", texture " + (tx != null ? tx.width + "x" + tx.height + " " + tx.format : "?"));
+            }
         }
 
         public static BodyInfo Body(string key) { Scan(); BodyInfo b; return !string.IsNullOrEmpty(key) && bodies.TryGetValue(key, out b) && b.Char != null ? b : null; }
@@ -282,6 +292,8 @@ namespace MWCoop
         public static string PreviewPath { get { return Path.Combine(Path.Combine(System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", "cache"), "perso.mesh"); } }
         static string TexDir { get { return Path.Combine(Path.GetDirectoryName(PreviewPath), "perso"); } }
 
+        // Version du mod + nombre de tenues offertes ("0.61.0-prealpha+tenues157") : export refait quand un pack arrive.
+        static string PreviewTag { get { int n = Tenues.List(Tenues.Shirt).Count + Tenues.List(Tenues.Pants).Count + Tenues.List(Tenues.Face).Count; return n > 0 ? Version.Text + "+tenues" + n : Version.Text; } }
         public static bool PreviewFresh()
         {
             try
@@ -291,7 +303,7 @@ namespace MWCoop
                 {
                     if (new string(r.ReadChars(4)) != "MWCP" || r.ReadUInt32() != 1) return false;
                     int n = r.ReadUInt16();
-                    return System.Text.Encoding.UTF8.GetString(r.ReadBytes(n)) == Version.Text;
+                    return System.Text.Encoding.UTF8.GetString(r.ReadBytes(n)) == PreviewTag;
                 }
             }
             catch { return false; }
@@ -388,11 +400,11 @@ namespace MWCoop
             {
                 w.Write(new[] { (byte)'M', (byte)'W', (byte)'C', (byte)'P' });
                 w.Write((uint)1);
-                Str(w, Version.Text);
+                Str(w, PreviewTag);
                 foreach (List<string> l in new[] { shirts, pants, faces })
                 {
                     w.Write((uint)l.Count);
-                    foreach (string s in l) { Str(w, s); SaveTexture(Avatar.FindMaterial(s), done, colors); }
+                    foreach (string s in l) { Str(w, s); if (!Tenues.Has(s)) SaveTexture(Avatar.FindMaterial(s), done, colors); }   // (offertes : le lanceur lit leur image)
                 }
                 var keys = new List<string>();
                 foreach (string k in bodies.Keys) keys.Add(k);

@@ -277,7 +277,7 @@ namespace MWCoop
                     if (o.name.Length > 0 && !materials.ContainsKey(o.name)) materials[o.name] = (Material)o;
             }
             Material m;
-            return materials.TryGetValue(name, out m) ? m : null;
+            return materials.TryGetValue(name, out m) ? m : Tenues.Make(name);   // (tenue offerte : creee a la demande)
         }
 
         // Apparences proposees : materiaux des corps des PNJ (char_shirtNN, cop_shirt...).
@@ -292,7 +292,9 @@ namespace MWCoop
                 if (n.Contains("(Instance)") || n.Contains("ghost")) continue;
                 set[n] = true;
             }
-            return new List<string>(set.Keys);
+            var all = new List<string>(set.Keys);
+            all.AddRange(Tenues.List(Tenues.Shirt));   // (tenues offertes, apres celles du jeu)
+            return all;
         }
 
         public static Avatar Create(PlayerInfo pi)

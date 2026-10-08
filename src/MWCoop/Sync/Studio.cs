@@ -107,7 +107,7 @@ namespace MWCoop
             if (!forced && Config.GetInt("Coop", "ApercuTenues", 1) == 0) { Log.Info("tenues : apercus du lanceur desactives ([Coop] ApercuTenues=0)"); return; }
             var list = new List<string>();
             char[] bad = Path.GetInvalidFileNameChars();
-            foreach (string s in Avatar.SkinNames()) if (s.IndexOfAny(bad) < 0) list.Add(s);
+            foreach (string s in Avatar.SkinNames()) if (s.IndexOfAny(bad) < 0 && !Tenues.Has(s)) list.Add(s);   // (tenues offertes : l'apercu 3D du lanceur suffit)
             if (list.Count == 0) { Retry("aucune tenue trouvee"); return; }
             if (!forced && Fresh(list)) { Log.Info("tenues : apercus a jour (" + list.Count + ", " + Dir + ")"); return; }
             if (!EnsureStudio()) { Retry("studio impossible"); return; }

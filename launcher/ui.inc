@@ -302,7 +302,7 @@ static bool PageSnap(int p) { return p == TAB_SKIN || p == TAB_CAR || p == TAB_C
 static bool PageEnabled(int p)
 {
     if (g_state != ST_IDLE) return false;
-    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API;
+    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
 }
@@ -511,6 +511,7 @@ static void DrawHeader(Graphics &g)
     case TAB_COOP: title = T(L"Réglages", L"Settings"); sub = T(L"Gardés dans mwcoop-lanceur.ini et MWCoop\\mwcoop.ini", L"Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini"); break;
     case TAB_GFX: title = T(L"Graphismes", L"Graphics"); sub = T(L"Pour toi seul · en partie : menu F10 > Graphismes", L"Just for you · in game: F10 menu > Graphics"); break;
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
+    case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
     }
     // commandes de droite : fermer, reduire, theme, langue, puis celles de la page
     float right = 1264;
@@ -527,6 +528,8 @@ static void DrawHeader(Graphics &g)
         HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_API, IC_BRACES);
         right -= 54;
         HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_LOGS, IC_FILE);
+        right -= 54;
+        HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_CREDITS, IC_STAR);
         right -= 54;
     }
     if (g_state == ST_IDLE) {
@@ -1209,6 +1212,41 @@ static void DrawSettings(Graphics &g)
          RectF(iv.X + 20, iv.Y + 120, iv.Width - 40, 40), 12, kGrey);
 }
 
+// ---- credits (demande de JD, 08/10 : ceux qui donnent quelque chose pour ameliorer MWCoop). Le plus recent en haut.
+struct Credit { const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; };
+static const Credit kCredits[] = {
+    { L"Dom", L"Tenues", L"Outfits",
+      L"Un pack de 157 tenues pour ton personnage : 86 hauts, 27 pantalons et 44 visages. Dans l'onglet Tenue, à la suite de celles du jeu (« Tenue Dom 12 »…).",
+      L"A pack of 157 outfits for your character: 86 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026" },
+};
+static void DrawCreditsPage(Graphics &g)
+{
+    RectF c(kMain.X, kMain.Y, kMain.Width, kMain.Height);
+    Glass(c);
+    Title(g, T(L"Merci !", L"Thank you!"), RectF(c.X + 28, c.Y + 22, 400, 30), 22, kInk);
+    Para(g, T(L"MWCoop grandit aussi grâce à vous. Chaque personne qui donne quelque chose au mod (tenues, traductions, idées devenues fonctions, tests…) est créditée ici.",
+              L"MWCoop also grows thanks to you. Everyone who gives something to the mod (outfits, translations, ideas turned into features, testing…) is credited here."),
+         RectF(c.X + 28, c.Y + 60, c.Width - 56, 44), 13, kGrey);
+    float y = c.Y + 120;
+    for (const Credit &k : kCredits) {
+        RectF row(c.X + 24, y, c.Width - 48, 104);
+        GraphicsPath rp; RoundRect(rp, row, 16);
+        SolidBrush rb(TH(card)); g.FillPath(&rb, &rp);
+        Pen rpen(TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
+        RectF av(row.X + 20, row.Y + 22, 60, 60);
+        SolidBrush ab(WithA(kAcc, 0.85f)); g.FillEllipse(&ab, av);
+        Text(g, std::wstring(1, k.name[0]), av, 26, FontStyleBold, Color(255, 255, 255, 255));
+        Text(g, k.name, RectF(row.X + 100, row.Y + 16, 300, 28), 19, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, g_fr ? k.roleFr : k.roleEn, RectF(row.X + 100, row.Y + 44, 300, 20), 13, FontStyleBold, kAcc, StringAlignmentNear);
+        Text(g, k.date, RectF(row.X + row.Width - 220, row.Y + 16, 200, 28), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+        Para(g, g_fr ? k.fr : k.en, RectF(row.X + 100, row.Y + 66, row.Width - 124, 36), 12.5f, kGrey);
+        y += 116;
+    }
+    Para(g, T(L"Tu as fait quelque chose pour MWCoop ? Partage-le sur le Discord (bouton en bas à gauche) : tu seras crédité ici et dans les notes de version.",
+              L"Made something for MWCoop? Share it on the Discord (button at the bottom left): you'll be credited here and in the release notes."),
+         RectF(c.X + 28, c.Y + c.Height - 56, c.Width - 56, 40), 12.5f, kGrey);
+}
+
 // ---- lancement, partie en cours
 static void DrawLaunchPage(Graphics &g)
 {
@@ -1257,6 +1295,7 @@ static void DrawUI(Graphics &g)
     case TAB_COOP: DrawSettings(g); break;
     case TAB_API: DrawApiPage(g); break;
     case TAB_GFX: DrawGfxPage(g); break;
+    case TAB_CREDITS: DrawCreditsPage(g); break;
     default: DrawHome(g); break;
     }
     DrawHeader(g);

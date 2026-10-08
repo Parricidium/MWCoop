@@ -407,12 +407,14 @@ static unsigned long long ExeVersion(const std::wstring &path)
     return ((unsigned long long)fi->dwFileVersionMS << 32) | fi->dwFileVersionLS;
 }
 
+static void TenuesAddShirts();   // (tenues offertes : plus bas)
 static void SetGame(const std::wstring &dir)
 {
     g_gameDir = dir;
     g_gameVer = ReadGameVersion();
     LoadLocalVersion();
     if (!g_gameDir.empty()) LoadPlayer();
+    TenuesAddShirts();
 }
 
 // "0.1.0-prealpha" : nombres compares un a un, puis le suffixe (a egalite, sans suffixe = plus recent).
@@ -1163,7 +1165,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_COUNT };
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_COUNT };
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };
@@ -2989,6 +2991,92 @@ static void SkinStep(int dir)
 
 static std::string MyShirt();
 static std::wstring SkinLabel(const std::string &skin);
+// ---------------------------------------------------------------- tenues offertes (credits : onglet CREDITS)
+// Pack de Dom (08/10/2026, demande de JD) : 157 tenues (86 hauts, 27 pantalons, 44 visages) sur le patron des vetements
+// des PNJ. Telecharge une fois (8,7 Mo) depuis le depot (assets/tenues), a part des mises a jour du mod, dans
+// MWCoop\tenues\<auteur>\ : lu par le mod (Sync\Tenues.cs) et par l'apercu 3D d'ici. Noms a part (dom_haut_NN...) :
+// jamais a la place des textures du jeu. Pack absent chez un joueur : la tenue d'origine.
+struct TenuePack { const char *id; const char *ver; const wchar_t *zip; };
+static const TenuePack kTenuePacks[] = { { "dom", "1", L"tenues-dom-1.zip" } };
+static std::atomic<int> g_tenuesState(0);   // 0 rien, 1 en cours, 2 recu (listes a completer), 3 echec
+static std::wstring TenuesDir() { return g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\tenues\\"; }
+static bool IsTenue(const std::string &n) { return n.find("_haut_") != std::string::npos || n.find("_pantalon_") != std::string::npos || n.find("_visage_") != std::string::npos; }
+// "dom_haut_05" -> "Dom 5"
+static std::wstring TenueLabel(const std::string &n)
+{
+    size_t a = n.find('_'), b = n.rfind('_');
+    if (a == std::string::npos || a == 0 || b == a) return Widen(n);
+    std::wstring who = Widen(n.substr(0, a));
+    who[0] = towupper(who[0]);
+    return who + L" " + std::to_wstring(atoi(n.c_str() + b + 1));
+}
+static std::wstring TenueFile(const std::string &n) { size_t a = n.find('_'); return a == std::string::npos || TenuesDir().empty() ? L"" : TenuesDir() + Widen(n.substr(0, a)) + L"\\" + Widen(n) + L".jpg"; }
+static bool TenuePackHere(const TenuePack &p)
+{
+    std::vector<unsigned char> d;
+    if (!ReadAll(TenuesDir() + Widen(p.id) + L"\\version.txt", d)) return false;
+    return std::string(d.begin(), d.end()).find(p.ver) == 0;
+}
+static DWORD WINAPI TenuesThread(void *)
+{
+    bool any = false, fail = false;
+    for (const TenuePack &p : kTenuePacks) {
+        if (TenuePackHere(p)) continue;
+        std::wstring url = L"https://raw.githubusercontent.com/" + g_repo + L"/main/assets/tenues/" + p.zip;
+        wchar_t tmp[MAX_PATH] = L"";
+        GetTempPathW(MAX_PATH, tmp);
+        std::wstring zf = std::wstring(tmp) + L"mwcoop-" + p.zip;
+        DWORD st = 0;
+        std::string why;
+        if (!HttpGet(url, NULL, zf, false, &st) || st != 200) { LaunchLog("tenues offertes : %s : telechargement impossible (HTTP %lu)", p.id, st); fail = true; DeleteFileW(zf.c_str()); continue; }
+        SHCreateDirectoryExW(NULL, TenuesDir().c_str(), NULL);
+        if (!Unzip(zf, TenuesDir(), &why)) { LaunchLog("tenues offertes : %s : %s", p.id, why.c_str()); fail = true; }
+        else { LaunchLog("tenues offertes : pack %s (version %s) recu", p.id, p.ver); any = true; }
+        DeleteFileW(zf.c_str());
+    }
+    g_tenuesState = fail ? 3 : any ? 2 : 0;
+    return 0;
+}
+static void TenuesStart()
+{
+    if (g_gameDir.empty() || g_tenuesState == 1 || !g_testSalon.empty()) return;
+    bool need = false;
+    for (const TenuePack &p : kTenuePacks) need |= !TenuePackHere(p);
+    if (!need) return;
+    g_tenuesState = 1;
+    HANDLE t = CreateThread(NULL, 0, TenuesThread, NULL, 0, NULL);
+    if (t) CloseHandle(t); else g_tenuesState = 0;
+}
+// Hauts offerts dans le choix de tenue, apres ceux du jeu ("Tenue Dom 5"). Pantalons et visages : listes de l'export du mod.
+static void TenuesAddShirts()
+{
+    Opt *ap = NULL;
+    for (auto &o : g_opts) if (!strcmp(o.key, "Apparence")) ap = &o;
+    if (!ap || TenuesDir().empty()) return;
+    std::vector<std::string> names;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((TenuesDir() + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
+        WIN32_FIND_DATAW f2;
+        HANDLE h2 = FindFirstFileW((TenuesDir() + fd.cFileName + L"\\*_haut_*.jpg").c_str(), &f2);
+        if (h2 == INVALID_HANDLE_VALUE) continue;
+        do { std::wstring n = f2.cFileName; names.push_back(Narrow(n.substr(0, n.size() - 4), CP_UTF8)); } while (FindNextFileW(h2, &f2));
+        FindClose(h2);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(names.begin(), names.end());
+    for (auto &n : names) {
+        if (std::find(ap->svals.begin(), ap->svals.end(), n) != ap->svals.end()) continue;
+        std::wstring lab = TenueLabel(n);
+        ap->vals.push_back((int)ap->svals.size());
+        ap->svals.push_back(n);
+        ap->labFr.push_back(L"Tenue " + lab);
+        ap->labEn.push_back(L"Outfit " + lab);
+    }
+}
+
 #include "perso.inc"
 
 // Silhouette neutre (pas d'image) : tete et buste.
@@ -5795,6 +5883,12 @@ static void Tick()
     LobbySoundsTick();
     SteamTick();
     MscTick();
+    if (g_tenuesState == 2) {   // tenues offertes recues (fil) : choix de tenue, textures de l'apercu
+        g_tenuesState = 0;
+        TenuesAddShirts();
+        for (auto &kv : g_perso.tex) if (kv.second.px.empty()) kv.second.tried = false;
+        SetStatus(K_OK, T(L"Nouvelles tenues offertes par Dom : onglet Tenue (cr\u00E9dits : \u00E9toile en haut)", L"New outfits by Dom: Outfit tab (credits: star at the top)"));
+    }
     if (g_state == ST_IDLE) UpdateTick();
     if (!g_testSalon.empty()) { TestSalonStep(); return; }   // (mode d'essai : rien a dessiner)
     for (int i = 0; i < B_COUNT; i++) {
@@ -6473,6 +6567,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; }
         else if (st == L"api") g_tab = TAB_API;   // page API des moddeurs
+        else if (st == L"credits") g_tab = TAB_CREDITS;
         else if (st == L"graphismes") { g_tab = TAB_GFX; GfxLoad(); }
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
         else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
@@ -6677,6 +6772,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         HANDLE nt = CreateThread(NULL, 0, NotesOnlyThread, NULL, 0, NULL);
         if (nt) CloseHandle(nt);
     }
+    TenuesStart();   // (tenues offertes : une fois, a part des mises a jour)
 
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
