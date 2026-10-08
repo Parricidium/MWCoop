@@ -437,14 +437,20 @@ static void DrawRail(Graphics &g)
         y += gap;
     }
     DrawNavItem(g, RectF(28, 674, 208, 44), TAB_COOP, IC_GEAR, T(L"Réglages", L"Settings"));
-    for (int id : { B_GITHUB, B_KOFI }) {
+    for (int id : { B_DISCORD, B_GITHUB, B_KOFI }) {
         Button &b = g_btn[id];
         GraphicsPath p; RoundRect(p, b.r, 12);
+        if (id == B_DISCORD) {   // Discord : bleu Discord, logo et nom
+            SolidBrush fb(kDiscordBlue); g.FillPath(&fb, &p);
+            if (b.hover > 0.01f) { SolidBrush hb(Color((BYTE)(55 * b.hover), 255, 255, 255)); g.FillPath(&hb, &p); }
+            Icon(g, IC_DISCORD, b.r.X + 24, b.r.Y + b.r.Height / 2, 20, Color(255, 255, 255, 255));
+            Text(g, L"Discord", RectF(b.r.X + 40, b.r.Y, b.r.Width - 44, b.r.Height), 13, FontStyleBold, Color(255, 255, 255, 255), StringAlignmentNear);
+            continue;
+        }
         SolidBrush fb(Mix(TH(card), TH(cardSel), b.hover)); g.FillPath(&fb, &p);
         Pen pen(TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
         bool gh = id == B_GITHUB;
-        Icon(g, gh ? IC_CODE : IC_HEART, b.r.X + 26, b.r.Y + b.r.Height / 2, 16, gh ? kInk : Color(255, 255, 143, 163), 2.1f);
-        Text(g, gh ? L"GitHub" : L"Ko-fi", RectF(b.r.X + 38, b.r.Y, b.r.Width - 44, b.r.Height), 13, FontStyleBold, kInk, StringAlignmentNear);
+        Icon(g, gh ? IC_CODE : IC_HEART, b.r.X + b.r.Width / 2, b.r.Y + b.r.Height / 2, 18, gh ? kInk : Color(255, 255, 143, 163), 2.1f);
     }
 }
 

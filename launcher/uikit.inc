@@ -45,7 +45,7 @@ enum {
 // ---- icones (traits, dans une boite de 24, comme celles de la maquette)
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
-       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS };
+       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -190,8 +190,34 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
         delete d; delete bo; delete bi; delete so; delete si;
         break;
     }
+    case IC_DISCORD: {   // logo de Discord (plein) : la manette souriante, yeux en creux
+        GraphicsPath body;
+        body.StartFigure();
+        bez(body, 7.0f, 5.2f, 5.3f, 5.7f, 3.9f, 6.3f, 3.3f, 7.4f);
+        bez(body, 3.3f, 7.4f, 1.9f, 10.4f, 1.6f, 13.4f, 1.9f, 16.2f);
+        bez(body, 1.9f, 16.2f, 3.4f, 17.8f, 5.3f, 18.8f, 7.3f, 19.3f);
+        body.AddLine(P(7.3f, 19.3f), P(8.6f, 17.3f));
+        bez(body, 8.6f, 17.3f, 10.8f, 17.9f, 13.2f, 17.9f, 15.4f, 17.3f);
+        body.AddLine(P(15.4f, 17.3f), P(16.7f, 19.3f));
+        bez(body, 16.7f, 19.3f, 18.7f, 18.8f, 20.6f, 17.8f, 22.1f, 16.2f);
+        bez(body, 22.1f, 16.2f, 22.5f, 12.9f, 21.8f, 9.9f, 20.7f, 7.4f);
+        bez(body, 20.7f, 7.4f, 20.1f, 6.3f, 18.7f, 5.7f, 17.0f, 5.2f);
+        body.AddLine(P(17.0f, 5.2f), P(16.4f, 6.4f));
+        bez(body, 16.4f, 6.4f, 13.5f, 5.9f, 10.5f, 5.9f, 7.6f, 6.4f);
+        body.CloseFigure();
+        Region rg(&body);
+        GraphicsPath e1, e2;
+        e1.AddEllipse(cx + (8.6f - 1.8f - 12) * k, cy + (12.4f - 2.0f - 12) * k, 3.6f * k, 4.0f * k);
+        e2.AddEllipse(cx + (15.4f - 1.8f - 12) * k, cy + (12.4f - 2.0f - 12) * k, 3.6f * k, 4.0f * k);
+        rg.Exclude(&e1);
+        rg.Exclude(&e2);
+        SolidBrush b(c);
+        g.FillRegion(&b, &rg);
+        break;
+    }
     }
 }
+static const Color kDiscordBlue(255, 88, 101, 242);
 
 // ---- scene (dessinee une fois par taille / theme) et verre
 static Bitmap *g_scene, *g_sceneBlur, *g_glassCache;

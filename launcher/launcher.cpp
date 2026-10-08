@@ -1,4 +1,4 @@
-// MWCoop - lanceur (MWCoop.exe, a poser dans le dossier du jeu, livre dans le paquet). Porte de celui de SACoop.
+﻿// MWCoop - lanceur (MWCoop.exe, a poser dans le dossier du jeu, livre dans le paquet). Porte de celui de SACoop.
 //
 //  - Fenetre sans cadre ("layered", alpha par pixel) de 1280 x 800 : depuis 0.42 (lanceur 2026, ui.inc / uikit.inc),
 //    une scene d'aurore boreale dessinee au demarrage, des cartes de verre depoli, une barre de navigation a gauche
@@ -1109,7 +1109,7 @@ static void UpdateTick()
 enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_COUNT };
 static int g_tab = TAB_HOME;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_COUNT };
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };
 // Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
@@ -1128,8 +1128,9 @@ static void Layout()
     g_fields[0].maxLen = 23; g_fields[0].address = false;
     g_fields[1].maxLen = 63; g_fields[1].address = true;
     // (les autres boutons sont places par leur page en se dessinant : ui.inc)
-    g_btn[B_GITHUB].r = RectF(28, 726, 102, 44);
-    g_btn[B_KOFI].r = RectF(134, 726, 102, 44);
+    g_btn[B_DISCORD].r = RectF(28, 726, 104, 44);   // Discord (nom et logo), GitHub et Ko-fi (logos)
+    g_btn[B_GITHUB].r = RectF(136, 726, 48, 44);
+    g_btn[B_KOFI].r = RectF(188, 726, 48, 44);
 }
 
 static void UpdateButtons()
@@ -1143,7 +1144,7 @@ static void UpdateButtons()
     g_btn[B_SOLO].enabled = can;
     g_btn[B_EXE].enabled = menu && !busy;
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = g_btn[B_LANG].enabled = true;
-    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = true;
+    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = true;
     g_btn[B_BUY].visible = false;
     g_btn[B_LOGS].visible = false;
     bool home = g_tab == TAB_HOME;
@@ -2997,15 +2998,75 @@ static bool CopyText(const std::wstring &t)
     CloseClipboard();
     return ok;
 }
-static void SteamGuideOpen() { g_guide = true; g_guideHot = 0; g_guideNoMore = false; g_guideCopiedT = 0; g_focus = -1; }
+// ---------------------------------------------------------------- invitation au Discord
+// Demande de JD (08/10) : bouton Discord dans la barre de gauche, et au premier lancement (apres la visite guidee) une
+// fenetre propose de rejoindre le serveur ([Lanceur] DiscordPropose=1 ensuite : une seule fois). Meme mecanique que le
+// guide Steam (g_guide), autre contenu (g_guideKind 1).
+static const wchar_t *kDiscordUrl = L"https://discord.gg/H7NXpWHwgY";
+static const RectF kDiscCard(390, 166, 500, 476), kDiscJoin(430, 486, 420, 54), kDiscLater(430, 552, 420, 44), kDiscClose(836, 182, 40, 40);
+static int g_guideKind;   // 0 guide Steam, 1 invitation au Discord
+static void DiscordAskOpen() { g_guide = true; g_guideKind = 1; g_guideHot = 0; g_focus = -1; }
+static void DiscordAskMaybe()
+{
+    if (g_guide || g_state != ST_IDLE || GetPrivateProfileIntW(L"Lanceur", L"DiscordPropose", 0, g_iniLauncher.c_str()) != 0) return;
+    DiscordAskOpen();
+}
+static int DiscordHit(float x, float y)
+{
+    if (kDiscJoin.Contains(x, y)) return 1;
+    if (kDiscLater.Contains(x, y)) return 2;
+    if (kDiscClose.Contains(x, y)) return 4;
+    return kDiscCard.Contains(x, y) ? 0 : -1;
+}
+static void DrawDiscordAsk(Graphics &g)
+{
+    SolidBrush db(Color(g_dark ? 150 : 110, 2, 6, 18));
+    g.FillPath(&db, CardPath());
+    RectF c = kDiscCard;
+    GlassLive(g, c, 24);
+    {   // fermer
+        RectF r = kDiscClose;
+        GraphicsPath p; RoundRect(p, r, 13);
+        SolidBrush b(g_guideHot == 4 ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
+        Icon(g, IC_CLOSE, r.X + 20, r.Y + 20, 17, kInk, 2.2f);
+    }
+    RectF logo(c.X + c.Width / 2 - 44, c.Y + 44, 88, 88);
+    SolidBrush lb(kDiscordBlue); g.FillEllipse(&lb, logo);
+    Icon(g, IC_DISCORD, logo.X + 44, logo.Y + 46, 50, Color(255, 255, 255, 255));
+    Title(g, T(L"Rejoins-nous sur Discord !", L"Join us on Discord!"), RectF(c.X, c.Y + 150, c.Width, 36), 25, kInk, StringAlignmentCenter);
+    Para(g, T(L"De l'aide, les bugs à signaler, les nouveautés en avant-première et des joueurs pour faire équipe. Salons en anglais, plus un salon en français.",
+              L"Help, bug reports, early news and players to team up with. English channels, plus a French one."),
+         RectF(c.X + 44, c.Y + 200, c.Width - 88, 70), 14, kGrey, StringAlignmentNear);
+    Para(g, T(L"Pour un souci en jeu : envoie tes journaux (bouton Journaux, en haut) dans #bug-reports.", L"Trouble in game? Send your logs (Logs button, top right) in #bug-reports."),
+         RectF(c.X + 44, c.Y + 270, c.Width - 88, 44), 12.5f, kGrey, StringAlignmentNear);
+    {
+        RectF r = kDiscJoin;
+        GraphicsPath p; RoundRect(p, r, 16);
+        SolidBrush fb(kDiscordBlue); g.FillPath(&fb, &p);
+        if (g_guideHot == 1) { SolidBrush hb(Color(50, 255, 255, 255)); g.FillPath(&hb, &p); }
+        Icon(g, IC_DISCORD, r.X + 120, r.Y + r.Height / 2, 24, Color(255, 255, 255, 255));
+        Text(g, T(L"REJOINDRE LE DISCORD", L"JOIN THE DISCORD"), RectF(r.X + 140, r.Y, r.Width - 150, r.Height), 15, FontStyleBold, Color(255, 255, 255, 255), StringAlignmentNear);
+    }
+    {
+        RectF r = kDiscLater;
+        GraphicsPath p; RoundRect(p, r, 14);
+        SolidBrush fb(g_guideHot == 2 ? TH(btn2Hot) : TH(btn2)); g.FillPath(&fb, &p);
+        Text(g, T(L"Plus tard", L"Later"), r, 14, FontStyleBold, kInk);
+    }
+    Text(g, T(L"Toujours à portée : le bouton Discord en bas à gauche.", L"Always one click away: the Discord button, bottom left."), RectF(c.X, c.Y + c.Height - 32, c.Width, 20), 12, FontStyleRegular, kGrey);
+}
+
+static void SteamGuideOpen() { g_guide = true; g_guideKind = 0; g_guideHot = 0; g_guideNoMore = false; g_guideCopiedT = 0; g_focus = -1; }
 static void SteamGuideClose()
 {
     g_guide = false;
     g_guideHot = 0;
-    if (g_guideNoMore) WritePrivateProfileStringW(L"Lanceur", L"GuideSteam", L"0", g_iniLauncher.c_str());
+    if (g_guideKind == 1) WritePrivateProfileStringW(L"Lanceur", L"DiscordPropose", L"1", g_iniLauncher.c_str());   // (proposee : plus jamais d'elle-meme)
+    else if (g_guideNoMore) WritePrivateProfileStringW(L"Lanceur", L"GuideSteam", L"0", g_iniLauncher.c_str());
 }
 static int SteamGuideHit(float x, float y)
 {
+    if (g_guideKind == 1) return DiscordHit(x, y);
     if (kGuideCopy.Contains(x, y)) return 1;
     if (kGuideOk.Contains(x, y)) return 2;
     if (kGuideNoMore.Contains(x, y)) return 3;
@@ -3015,6 +3076,11 @@ static int SteamGuideHit(float x, float y)
 static void SteamGuideClick(float x, float y)
 {
     int h = SteamGuideHit(x, y);
+    if (g_guideKind == 1) {   // invitation au Discord
+        if (h == 1) ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL);
+        if (h == 1 || h == 2 || h == 4 || h < 0) SteamGuideClose();
+        return;
+    }
     if (h == 1) {
         if (CopyText(SteamLaunchLine())) {
             g_guideCopiedT = GetTickCount() | 1;
@@ -3026,6 +3092,7 @@ static void SteamGuideClick(float x, float y)
 static void DrawSteamGuide(Graphics &g)
 {
     if (!g_guide) return;
+    if (g_guideKind == 1) { DrawDiscordAsk(g); return; }
     SolidBrush db(Color(g_dark ? 150 : 110, 2, 6, 18));
     g.FillPath(&db, CardPath());
     RectF c = kGuideCard;
@@ -5100,6 +5167,7 @@ static void OnButton(int id)
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
     case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
+    case B_DISCORD: ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_UPDATE: StartUpdate(true); break;
     case B_COLOR: CarPickColor(); break;
     case B_LOGDIR: LogsOpenFolder(); break;
@@ -5655,6 +5723,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"menu-steam") g_steamNet = true;
         else if (st == L"guide-steam") { g_steamNet = true; SteamGuideOpen(); g_guideHot = 1; }
+        else if (st == L"discord") { DiscordAskOpen(); g_guideHot = 1; }
         else if (st == L"serveur" || st == L"partie-invite") {   // partie en cours, lanceur ouvert (faux joueurs)
             bool host = st == L"serveur";
             g_state = ST_RUNNING;
@@ -5906,6 +5975,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     ShowWindow(g_wnd, SW_SHOW);
     SetTimer(g_wnd, 1, 16, NULL);
     if (!g_gameDir.empty() && !g_sConnect) TutoAtStartup();   // visite guidee : complete la 1re fois, puis les nouveautes
+    if (!g_sConnect && g_tuto < 0) DiscordAskMaybe();          // invitation au Discord (une fois ; sinon a la fin de la visite)
     if (!g_gameDir.empty()) StartUpdate();
     else {
         HANDLE nt = CreateThread(NULL, 0, NotesOnlyThread, NULL, 0, NULL);
