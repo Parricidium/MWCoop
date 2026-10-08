@@ -621,6 +621,30 @@ namespace MWCoop
                     Log.Info("autotest : hayon " + CarDoors.StateOf(car, "Hatch"));
                 }
             }
+            // [Test] Autotest=detacher (retour d'un joueur, 08/10 : « driver cant unbuckle seatbelt ») : l'hote au volant de
+            // [Test] TestVoiture a 15/22 s, boucle par l'automate du jeu a 26 s, etat toutes les 2 s, detache a 40 s.
+            // [Test] DetacherPassager=1 : l'invite s'assoit a l'avant a 20 s.
+            if (mode == "detacher")
+            {
+                string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                // ([Test] DetacherConducteur=invite : l'invite au volant, l'hote passager)
+                if (Net.Session.IsHost != (Config.Get("Test", "DetacherConducteur", "hote") == "invite"))
+                {
+                    if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                    if (t > 18f && step == 1) { step = 10; Log.Info("autotest : debout " + Seats.TestDriverBelt(car, 0)); }
+                    if (t > 22f && step == 10) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                    if (t > 24f && step == 2) { step = 11; Log.Info("autotest : assis " + Seats.TestDriverBelt(car, 0)); }
+                    if (t > 26f && step == 11) { step = 3; Log.Info("autotest : " + Seats.TestDriverBelt(car, 1)); cabLogAt = Time.realtimeSinceStartup + 1f; }
+                    if (step == 3 && t < 40f && Time.realtimeSinceStartup >= cabLogAt) { cabLogAt = Time.realtimeSinceStartup + 2f; Log.Info("autotest : " + Seats.TestDriverBelt(car, 0)); }
+                    if (t > 40f && step == 3) { step = 4; Log.Info("autotest : " + Seats.TestDriverBelt(car, 2)); }
+                    if (t > 43f && step == 4) { step = 5; Log.Info("autotest : apres " + Seats.TestDriverBelt(car, 0)); }
+                }
+                else
+                {
+                    if (Config.GetInt("Test", "DetacherPassager", 0) != 0 && t > 20f && step == 0) { step = 1; Log.Info("autotest : passager " + Seats.TestSit(car, 0)); }
+                    if (t > 34f && step < 2) { step = 2; Log.Info("autotest : ceintures " + Seats.BeltState()); }
+                }
+            }
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
             // Captures : Regarder=1, la camera vise l'avatar le plus proche ; Regarder=2, le milieu du groupe d'avatars

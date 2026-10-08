@@ -837,6 +837,42 @@ namespace MWCoop
             return sb.Length > 0 ? sb.ToString() : "aucune";
         }
 
+        // Essais ([Test] Autotest=detacher) : ceinture du conducteur de 'car' par les automates du jeu. action 1 : boucler
+        // (SeatbeltHandle 'Use' -> State 2), 2 : detacher (SeatbeltLock 'Use' -> State 2), 0 : etat seulement -- boucle
+        // visible, etat de son automate, et ce que croise le regard du joueur vers elle (ce qui prendrait le clic).
+        public static string TestDriverBelt(string car, int action)
+        {
+            Rigidbody b = VehicleSync.Body(car);
+            if (b == null) return "voiture " + car + " introuvable";
+            Transform lk = FindUnder(b.transform, "SeatbeltLock", null), hd = FindUnder(b.transform, "SeatbeltHandle", null);
+            PlayMakerFSM lu = lk != null ? Game.FsmOn(lk.gameObject, "Use") : null, hu = hd != null ? Game.FsmOn(hd.gameObject, "Use") : null;
+            if (action == 1 && hu != null) { if (lk != null) lk.gameObject.SetActive(true); Game.SetState(hu, "State 2"); }   // (comme 'Wait lock' : boucle montree en tirant)
+            if (action == 2 && lu != null) Game.SetState(lu, "State 2");
+            var sb = new System.Text.StringBuilder("ceinture conducteur " + car + (action == 1 ? " (boucler)" : action == 2 ? " (detacher)" : "") + " : PlayerSeatbeltsOn " + Game.GlobalBool("PlayerSeatbeltsOn"));
+            if (lk != null)
+            {
+                Collider c = lk.GetComponent<Collider>();
+                sb.Append(", boucle ").Append(lk.gameObject.activeInHierarchy ? "visible" : "cachee").Append(" (").Append(lu != null ? lu.ActiveStateName : "?").Append(", collisionneur ").Append(c != null && c.enabled).Append(')');
+                Transform cm = PlayerSync.LocalCamera;
+                if (cm != null && c != null)
+                {
+                    Vector3 d = c.bounds.center - cm.position;
+                    RaycastHit[] hits = Physics.RaycastAll(cm.position, d.normalized, d.magnitude + 0.1f);
+                    System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
+                    sb.Append(", regard ").Append(d.magnitude.ToString("F2")).Append(" m :");
+                    foreach (RaycastHit h in hits) sb.Append(' ').Append(Recon.Path(h.collider.transform)).Append(h.collider.isTrigger ? "(decl)" : "").Append('@').Append(h.distance.ToString("F2"));
+                }
+            }
+            else sb.Append(", pas de SeatbeltLock");
+            if (hd != null) sb.Append(", poignee ").Append(hd.gameObject.activeInHierarchy ? "visible" : "cachee").Append(" (").Append(hu != null ? hu.ActiveStateName : "?").Append(')');
+            foreach (Transform x in new[] { lk, hd })
+                if (x != null && !x.gameObject.activeInHierarchy)
+                    for (Transform p = x; p != null && p != b.transform; p = p.parent)
+                        if (!p.gameObject.activeSelf) { sb.Append(", ").Append(x.name).Append(" eteint par ").Append(VehicleSync.RelPath(b.transform, p)); break; }
+            sb.Append(" | ").Append(CarVisuals.State(car, "SeatbeltLock")).Append(" | ").Append(CarVisuals.State(car, "SeatbeltHandle"));
+            return sb.ToString();
+        }
+
         // Essais : places passagers de la voiture de cle 'car'.
         public static int CountFor(string car)
         {

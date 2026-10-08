@@ -3485,6 +3485,18 @@ static bool SameDirTarget(const std::wstring &a, const std::wstring &b)
     std::wstring x = FinalDir(a), y = FinalDir(b);
     return !x.empty() && !_wcsicmp(x.c_str(), y.c_str());
 }
+// MSCLoader coupe (onglet MODS, ou salon sans mods) : son winhttp.dll retire de la copie de lancement (jamais du jeu :
+// rien si la copie est le jeu). -mscloader-disable ne suffit pas : lance par l'explorateur (lanceur demarre par Steam),
+// le jeu n'a pas de ligne de commande -- MSCLoader et ses mods se chargeaient, interrupteur coupe (JD, 08/10).
+static void MscOffInCopy(const std::wstring &copy)
+{
+    std::wstring a = FinalDir(copy), g = FinalDir(g_gameDir);
+    if (a.empty() || g.empty() || !_wcsicmp(a.c_str(), g.c_str())) return;
+    std::wstring dll = copy + L"winhttp.dll";
+    SetFileAttributesW(dll.c_str(), FILE_ATTRIBUTE_NORMAL);
+    if (DeleteFileW(dll.c_str())) TestLog("MSCLoader coupe : winhttp.dll retire de la copie de lancement");
+    else if (GetLastError() != ERROR_FILE_NOT_FOUND) TestLog("MSCLoader coupe : winhttp.dll de la copie impossible a retirer (erreur %lu)", GetLastError());
+}
 static bool DirEmptyW(const std::wstring &d)
 {
     WIN32_FIND_DATAW fd;
@@ -3706,6 +3718,7 @@ static void Launch(int mode, const char *partie = NULL)
         if (PrepareMirror(mirror) && (!ownMsc || MscOwnApply(mirror, true, false))) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
         else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de son dossier (le mod ou MSCLoader risquent de ne pas se charger)", L"Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)"));
     }
+    if (mscOff) MscOffInCopy(runDir);
     // Lanceur demarre par Steam (option de lancement "<MWCoop.exe>" %command%) : l'overlay de Steam y est injecte et
     // passerait au jeu lance d'ici, assez tot pour que la version.dll de Windows passe avant la notre (le mod ne se
     // chargerait pas, cf. steam_appid.txt). Le jeu est alors lance par l'explorateur, hors de l'arbre de Steam ; ses
@@ -6037,13 +6050,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
-    // /miroir <dossier du jeu> <copie> <journal> : copie de lancement de ce jeu dans ce dossier (essais)
+    // /miroir <dossier du jeu> <copie> <journal> [coupe] : copie de lancement de ce jeu dans ce dossier (essais) ;
+    // coupe : MSCLoader coupe (winhttp.dll retire de la copie)
     if (argc >= 5 && !_wcsicmp(argv[1], L"/miroir")) {
         g_testSalonLog = argv[4];
         FILE *f = _wfopen(argv[4], L"wb");
         if (f) fclose(f);
         SetGame(WithSlash(argv[2]));
         bool ok = !g_gameDir.empty() && PrepareMirror(WithSlash(argv[3]));
+        if (ok && argc >= 6 && !_wcsicmp(argv[5], L"coupe")) MscOffInCopy(WithSlash(argv[3]));
         TestLog("miroir : %s", ok ? "ok" : "ECHEC");
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
