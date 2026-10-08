@@ -118,6 +118,8 @@ static std::atomic<int> g_relState(REL_OFFLINE);
 static HANDLE g_proc;
 static DWORD g_pid, g_launchT, g_winSeenT, g_noProcT;
 static bool g_modChecked;   // partie lancee : trace du chargeur verifiee (serveur.inc, RunTick)
+static bool g_modMissing;   // ... et absente : proposer le lancement par Steam a la fermeture du jeu
+static bool g_steamLaunch;  // partie lancee par Steam (steam://rungameid) : Steam peut mettre du temps a demarrer le jeu
 static std::vector<HWND> g_preWnds;                 // fenetres Unity deja la au lancement (un autre jeu sur ce PC)
 static std::wstring g_launchInfo;
 static int g_lastLaunchMode;                        // mode du dernier lancement (partie en cours : serveur.inc)
@@ -1507,6 +1509,15 @@ static void BuildOptions()
         o.fr = L"Fermer le lanceur au lancement du jeu"; o.en = L"Close the launcher when the game starts"; o.suffix = L"";
         o.dFr = L"D\u00E9sactiv\u00E9 : le lanceur reste ouvert pendant la partie (joueurs, ping ; l'h\u00F4te peut faire venir ou exclure un joueur) et revient au menu quand le jeu se ferme.";
         o.dEn = L"Off: the launcher stays open during the game (players, ping; the host can bring a player over or kick them) and goes back to the menu when the game closes.";
+        g_opts.push_back(o);
+    }
+    {   // Lancer le jeu par Steam (steam://rungameid) au lieu de la copie de lancement : chez un joueur (08/10), MWCoop ne se
+        // chargeait que par le bouton JOUER de Steam (jeu lance de la copie : menu sans MWCoop, aucun journal du chargeur).
+        Opt o = {};
+        o.tab = TAB_COOP; o.key = "LancerSteam"; o.def = 0; o.kind = O_TOGGLE;
+        o.fr = L"Lancer le jeu par Steam"; o.en = L"Start the game through Steam"; o.suffix = L"";
+        o.dFr = L"Comme le bouton JOUER de Steam, avec les r\u00E9glages de la partie. Si MWCoop ne se charge pas depuis le lanceur.";
+        o.dEn = L"Like Steam's PLAY button, with the session settings. If MWCoop doesn't load from the launcher.";
         g_opts.push_back(o);
     }
     {   // Contenu envoye aux invites (modsync.inc) : volet a cocher
@@ -3710,6 +3721,38 @@ static void Launch(int mode, const char *partie = NULL)
     if (mscOff && FileExists(g_gameDir + L"winhttp.dll") && FileExists(g_gameDir + L"doorstop_config.ini")) { args += L" -mscloader-disable"; TestLog("lancement sans MSCLoader (-mscloader-disable)"); }
     g_preWnds.clear();
     EnumWindows(ListUnityWindows, (LPARAM)&g_preWnds);
+    auto done = [&]() {
+        g_launchT = GetTickCount();
+        g_lastLaunchMode = mode;
+        g_winSeenT = g_noProcT = 0;
+        g_modChecked = g_modMissing = false;
+        std::wstring name = PlayerName();
+        wchar_t info[160];
+        if (mode == MODE_HOST && g_steamNet) swprintf_s(info, T(L"%s h\u00E9berge la partie (Steam)", L"%s is hosting (Steam)"), name.c_str());
+        else if (mode == MODE_HOST) swprintf_s(info, T(L"%s h\u00E9berge la partie (port %d)", L"%s is hosting (port %d)"), name.c_str(), port);
+        else if (mode == MODE_GUEST) swprintf_s(info, T(L"%s rejoint %s", L"%s joins %s"), name.c_str(), addr.c_str());
+        else swprintf_s(info, T(L"%s joue en solo", L"%s plays solo"), name.c_str());
+        g_launchInfo = info;
+        g_focus = -1;
+        g_tab = TAB_HOME;
+        g_lobbyOpts = false;
+        g_state = ST_LAUNCH;
+    };
+    // Lancer par Steam (Reglages > Jeu, ou propose quand MWCoop ne s'est pas charge) : comme son bouton JOUER, qui lance le
+    // jeu de son dossier ; MWCoop y lit lancement.ini. Pas pour l'invite d'un salon avec les mods de l'hote (sa copie), ni
+    // hors de Steam. (MSCLoader coupe : pas de -mscloader-disable par ce chemin.)
+    const Opt *viaSteam = OptByKey("LancerSteam");
+    g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && !MirrorDir().empty();
+    if (g_steamLaunch) {
+        Sleep(800);   // (SteamDown ci-dessus : que Steam ne voie plus le lanceur comme le jeu en cours)
+        HINSTANCE r = ShellExecuteW(g_wnd, L"open", L"steam://rungameid/4164420", NULL, NULL, SW_SHOWNORMAL);
+        LaunchLog("lancement (mode %d) par Steam (steam://rungameid/4164420) : %s", mode, (INT_PTR)r > 32 ? "demande" : "ECHEC");
+        if ((INT_PTR)r <= 32) { SetStatus(K_ERR, T(L"Steam n'a pas pu lancer le jeu (Steam est-il ouvert ?)", L"Steam could not start the game (is Steam open?)")); return; }
+        g_proc = NULL;
+        g_pid = 0;
+        done();
+        return;
+    }
     // Lance comme un double-clic dans l'explorateur : un mode de compatibilite de l'exe peut exiger l'administrateur ;
     // CreateProcess echoue alors (erreur 740), ShellExecuteEx affiche la demande de Windows.
     std::wstring exe = g_gameDir + L"mywintercar.exe", runDir = g_gameDir;
@@ -3753,21 +3796,7 @@ static void Launch(int mode, const char *partie = NULL)
     }
     g_proc = sei.hProcess;
     g_pid = GetProcessId(sei.hProcess);
-    g_launchT = GetTickCount();
-    g_lastLaunchMode = mode;
-    g_winSeenT = g_noProcT = 0;
-    g_modChecked = false;
-    std::wstring name = PlayerName();
-    wchar_t info[160];
-    if (mode == MODE_HOST && g_steamNet) swprintf_s(info, T(L"%s h\u00E9berge la partie (Steam)", L"%s is hosting (Steam)"), name.c_str());
-    else if (mode == MODE_HOST) swprintf_s(info, T(L"%s h\u00E9berge la partie (port %d)", L"%s is hosting (port %d)"), name.c_str(), port);
-    else if (mode == MODE_GUEST) swprintf_s(info, T(L"%s rejoint %s", L"%s joins %s"), name.c_str(), addr.c_str());
-    else swprintf_s(info, T(L"%s joue en solo", L"%s plays solo"), name.c_str());
-    g_launchInfo = info;
-    g_focus = -1;
-    g_tab = TAB_HOME;
-    g_lobbyOpts = false;
-    g_state = ST_LAUNCH;
+    done();
 }
 
 // ---------------------------------------------------------------- salon
@@ -5583,7 +5612,7 @@ static void Tick()
         bool running = g_proc || GameProcessRunning();
         if (running) g_noProcT = 0;
         else if (!g_noProcT) g_noProcT = now;
-        if (g_noProcT && now - g_noProcT > 15000) {
+        if (g_noProcT && now - g_noProcT > (g_steamLaunch ? 60000u : 15000u)) {
             g_state = ST_IDLE;
             SetStatus(K_ERR, T(L"Le jeu s'est ferm\u00E9 au d\u00E9marrage (voir les journaux)", L"The game closed on startup (see the logs)"));
         }

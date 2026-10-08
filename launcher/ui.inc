@@ -1175,7 +1175,7 @@ static void DrawSettings(Graphics &g)
         Text(g, std::to_wstring(OptGet(*po)), RectF(m.X + m.Width, row.Y, p.X - m.X - m.Width, row.Height), 15, FontStyleBold, kInk);
     }
     // Jeu
-    RectF ga(rx, ne.Y + ne.Height + 16, cw, 172);
+    RectF ga(rx, ne.Y + ne.Height + 16, cw, 234);
     Glass(ga);
     Title(g, T(L"Jeu", L"Game"), RectF(ga.X + 20, ga.Y + 16, 300, 24), 17, kInk);
     {
@@ -1186,6 +1186,12 @@ static void DrawSettings(Graphics &g)
         FontFamily fam(L"Segoe UI"); Font f(&fam, 12, FontStyleRegular, UnitPixel); SolidBrush gb(kGrey);
         g.DrawString(g_gameDir.c_str(), -1, &f, RectF(ga.X + 20, ga.Y + 82, ga.Width - 40, 20), &sf, &gb);
         UiButton(g, RectF(ga.X + 20, ga.Y + 112, ga.Width - 40, 44), ok ? T(L"Changer de dossier", L"Change folder") : T(L"Choisir l'exe…", L"Choose exe…"), UI_SET_FOLDER, false, IC_FOLDER);
+    }
+    if (const Opt *ls = OptByKey("LancerSteam")) {   // (kSetSteamRow : ga.X + 20, ga.Y + 166)
+        RectF row = kSetSteamRow;
+        SetRowText(g, RectF(row.X, row.Y, row.Width - 70, row.Height), T(L"Lancer le jeu par Steam", L"Start the game through Steam"), T(L"Si MWCoop ne se charge pas depuis le lanceur", L"If MWCoop doesn't load from the launcher"));
+        UiToggle(g, RectF(row.X + row.Width - 50, row.Y + 12, 50, 28), OptGet(*ls) != 0, g_uiHot == UI_SET_STEAMRUN);
+        HotZone(row, UI_SET_STEAMRUN);
     }
     // Invite : envoi de l'hote
     RectF iv(rx, ga.Y + ga.Height + 16, cw, kMain.Y + kMain.Height - (ga.Y + ga.Height + 16));
@@ -1295,6 +1301,12 @@ static bool UiClick(int id)
         WritePrivateProfileStringW(L"Lanceur", L"Langue", g_fr ? L"fr" : L"en", g_iniLauncher.c_str());
         return true;
     case UI_SET_CLOSE: if (const Opt *o = OptByKey("FermerLanceur")) OptSet(*o, OptGet(*o) ? 0 : 1); return true;
+    case UI_SET_STEAMRUN:
+        if (const Opt *o = OptByKey("LancerSteam")) {
+            OptSet(*o, OptGet(*o) ? 0 : 1);
+            SetStatus(K_NORMAL, OptGet(*o) ? T(L"Le jeu sera lanc\u00E9 par Steam (comme son bouton JOUER)", L"The game will be started through Steam (like its PLAY button)") : T(L"Le jeu sera lanc\u00E9 par le lanceur", L"The game will be started by the launcher"));
+        }
+        return true;
     case UI_SET_MODSAUTO: if (const Opt *o = OptByKey("ModsAuto")) OptSet(*o, OptGet(*o) ? 0 : 1); return true;
     case UI_SET_GUIDE: TutoStart(true); return true;
     case UI_SET_STEAM: case UI_SET_IP: if ((id == UI_SET_STEAM) != g_steamNet && g_lobby == LB_NONE) OnButton(id == UI_SET_STEAM ? B_NETSTEAM : B_NETIP); return true;

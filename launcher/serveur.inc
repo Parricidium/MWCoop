@@ -94,6 +94,7 @@ static void RunTick()
         if (ageMs > (ULONGLONG)(now - g_launchT) + 5000) {
             LaunchLog("ATTENTION : pas de trace du chargeur MWCoop pour cette partie (dernier-lancement.txt %s) : le jeu tourne sans le mod", ageMs == ~0ULL ? "absent" : "plus ancien");
             GameProcessRunning();   // (note les jeux d'autres dossiers)
+            g_modMissing = true;
             SetStatus(K_WARN, T(L"MWCoop ne s'est pas charg\u00E9 dans le jeu : ferme-le, puis envoie les journaux (zip) sans fermer le lanceur",
                                 L"MWCoop did not load in the game: close it, then send the logs (zip) without closing the launcher"));
         } else LaunchLog("chargeur MWCoop vu pour cette partie");
@@ -107,6 +108,16 @@ static void RunTick()
     if (g_crashT) SetStatus(K_WARN, T(L"Arrêt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
     else SetStatus(K_NORMAL, T(L"Partie terminée · %s", L"Game over · %s"), ModLabel().c_str());
     LaunchLog("jeu ferme : retour au menu (arret brutal %d)", (int)(g_crashT != 0));
+    // MWCoop pas charge dans cette partie, lancee par la copie : proposer le lancement par Steam (une fois par partie).
+    const Opt *vs = OptByKey("LancerSteam");
+    if (g_modMissing && vs && !OptGet(*vs) && !MirrorDir().empty()) {
+        g_modMissing = false;
+        int r = MessageBoxW(g_wnd, T(L"MWCoop ne s'est pas charg\u00E9 dans le jeu.\n\nChez certains joueurs, il ne se charge que si le jeu est lanc\u00E9 par Steam (comme son bouton JOUER).\n\nActiver \u00AB Lancer le jeu par Steam \u00BB (R\u00E9glages > Jeu) et relancer ta partie ?",
+                                     L"MWCoop did not load in the game.\n\nFor some players it only loads when the game is started through Steam (like its PLAY button).\n\nTurn on \"Start the game through Steam\" (Settings > Game) and start your game again?"),
+                             L"MWCoop", MB_YESNO | MB_ICONQUESTION);
+        LaunchLog("lancement par Steam propose : %s", r == IDYES ? "accepte" : "refuse");
+        if (r == IDYES) { OptSet(*vs, 1); SetStatus(K_OK, T(L"Lancement par Steam activ\u00E9 : relance ta partie", L"Start through Steam turned on: start your game again")); }
+    }
 }
 
 // ---- dessin et clics (partie en cours : a gauche la partie, a droite les joueurs)
