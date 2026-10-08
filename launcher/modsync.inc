@@ -610,10 +610,9 @@ static void SyncOnData(const std::string &m)
     SyncPumpLocked();
 }
 
-// TOUT ACCEPTER (et la prochaine fois sans demander). MSCLoader absent : installe aussi.
-static void SyncAccept()
+// Invite : MSCLoader absent ici (celui choisi dans l'onglet MODS) : installe pour les mods de l'hote.
+static void SyncEnsureMsc()
 {
-    if (const Opt *o = OptByKey("ModsAuto")) if (!OptGet(*o)) OptSet(*o, 1);
     MscScan();   // (MSCLoader installe ? releve a jour)
     if (!g_mscInstalled && g_mscInstall != 1 && !g_gameDir.empty() && !GameProcessRunning()) {
         g_mscInstall = 1;
@@ -621,6 +620,13 @@ static void SyncAccept()
         HANDLE t = CreateThread(NULL, 0, MscInstallThread, MscOwn() ? (void *)1 : NULL, 0, NULL);   // (MSCLoader de MWCoop : rien dans le jeu)
         if (t) CloseHandle(t);
     }
+}
+
+// TOUT ACCEPTER (et la prochaine fois sans demander). MSCLoader absent : installe aussi.
+static void SyncAccept()
+{
+    if (const Opt *o = OptByKey("ModsAuto")) if (!OptGet(*o)) OptSet(*o, 1);
+    SyncEnsureMsc();
     std::lock_guard<std::mutex> lk(g_syncMx);
     g_syncAccepted = true;
     TestLog("mods : TOUT ACCEPTER");
@@ -640,6 +646,15 @@ static void SyncRetry()
 // Fil de la fenetre : plus rien de l'hote depuis 20 s pendant un telechargement -> echec (REESSAYER).
 static void SyncTick()
 {
+    // Invite, mods de l'hote acceptes d'office (case "Accepter l'envoi de l'hote", ModsAuto) : MSCLoader installe ici aussi,
+    // une fois par liste de l'hote. Avant : seulement par TOUT ACCEPTER, que la case cochee ne montre jamais (retour d'un
+    // joueur, 08/10 : « les mods ne se synchronisent pas, j'ai coche l'envoi de l'hote »).
+    if ((g_sync == SY_GET || g_sync == SY_DONE) && (g_syncAccepted || ModsAuto())) {
+        static uint64_t mscFor;
+        uint64_t key; bool msc;
+        { std::lock_guard<std::mutex> lk(g_syncMx); key = g_hostOffer.key; msc = g_hostOffer.msc; }
+        if (msc && key != mscFor) { mscFor = key; SyncEnsureMsc(); }
+    }
     if (g_sync == SY_GET && GetTickCount() - g_syncLastT > 20000) {
         std::lock_guard<std::mutex> lk(g_syncMx);
         if (g_sync == SY_GET) { SyncCloseParts(); g_syncWhy = "l'hote ne repond plus"; g_sync = SY_FAIL; TestLog("mods : %s", g_syncWhy.c_str()); }
@@ -656,7 +671,9 @@ static int SyncLaunchKind()
 {
     int s = g_sync;
     if (s == SY_NONE) return 0;
-    bool installed = FileExists(g_gameDir + L"winhttp.dll") && FileExists(g_gameDir + L"doorstop_config.ini") && FileExists(MscManaged() + L"MSCLoader.Preloader.dll");
+    // (celui choisi dans l'onglet MODS : avant, seul l'officiel comptait -- un invite avec le MSCLoader de MWCoop partait sans
+    // MSCLoader, les mods recus de l'hote jamais charges)
+    bool installed = MscOwn() ? MscOwnInstalled() : MscOfficialInstalled();
     bool msc;
     { std::lock_guard<std::mutex> lk(g_syncMx); msc = g_hostOffer.msc; }
     return s == SY_DONE && msc && installed ? 2 : 1;
