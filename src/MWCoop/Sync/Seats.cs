@@ -71,7 +71,7 @@ namespace MWCoop
         {
             zonesOff.Clear(); driverZones.Clear();
             seats.Clear(); current = null; pivot = null; player = cam = null; controller = null; crouch = null; remote.Clear(); gen = -1;
-            belts.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false;
+            belts.Clear(); beltOn = beltHint = false; driverBelt.Clear(); driverBeltSent = false; blockedHandle = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
         }
 
@@ -379,6 +379,7 @@ namespace MWCoop
         {
             current = null;
             beltOn = false;
+            BlockHandle(false);
             BeltHint(false);
             if (player != null)
             {
@@ -487,6 +488,7 @@ namespace MWCoop
                 }
             }
             bool aim = aimBuckle || aimStrap;
+            BlockHandle(aim || beltHold > 0f);
             BeltHint(aim || beltHold > 0f);
             if (beltOn)
             {
@@ -512,12 +514,32 @@ namespace MWCoop
             }
             else beltHold = 0f;
         }
+        // (pose a chaque image tant qu'on vise : les objets du jeu sous le regard -- poignee de la portiere arriere, juste
+        // derriere la ceinture rangee -- effacent le texte a chaque image ; il ne restait que la main, sans "BUCKLE UP")
+        // La ceinture n'a pas de collisionneur : sous le regard, c'est la poignee de la portiere arriere, juste derriere
+        // (SORBET : DoorRear(right)/.../PlayerColl/Handle a 0,39 m, la ceinture a 0,32), qui prenait le clic tenu pour
+        // tirer la ceinture -- portiere arriere ouverte. Coupee le temps de viser la ceinture.
+        static Collider blockedHandle;
+        static int handleLogs;
+        static void BlockHandle(bool on)
+        {
+            if (!on || current == null || cam == null)
+            {
+                if (blockedHandle != null) blockedHandle.enabled = true;
+                blockedHandle = null;
+                return;
+            }
+            if (blockedHandle != null) return;
+            foreach (RaycastHit h in Physics.RaycastAll(cam.position, cam.forward, 0.8f))
+                if (h.collider.name == "Handle" && h.collider.enabled && h.collider.transform.IsChildOf(current.CarT)) { blockedHandle = h.collider; blockedHandle.enabled = false; if (handleLogs++ < 5) Log.Info("ceinture passager : poignee " + Recon.Path(h.collider.transform) + " coupee le temps de viser"); break; }
+        }
+
         static void BeltHint(bool on)
         {
-            if (on == beltHint) return;
+            if (!on && !beltHint) return;
             beltHint = on;
             Game.SetGlobalBool("GUIuse", on);
-            Game.SetGlobal("GUIinteraction", on ? (beltOn ? Lang.T("DÉTACHER LA CEINTURE", "UNBUCKLE") : Lang.T("ATTACHER LA CEINTURE", "BUCKLE UP")) : "");
+            Game.SetGlobal("GUIinteraction", on ? (beltOn ? Lang.T("DÉTACHER LA CEINTURE", "UNBUCKLE") : beltHold > 0f ? Lang.T("TIRE LA CEINTURE...", "PULLING THE BELT...") : Lang.T("ATTACHER LA CEINTURE (TENIR LE CLIC)", "BUCKLE UP (HOLD CLICK)")) : "");
         }
 
         // Montre la ceinture bouclee (copie en miroir) des voitures dont le passager avant est attache, ici ou ailleurs.
@@ -746,6 +768,43 @@ namespace MWCoop
         public static string TestLeave() { if (current == null) return "pas assis"; Leave(); return "sorti"; }
 
         // Essais : attache / detache la ceinture du passager (comme un clic sur la boucle).
+        // Essais : ce que voit la ceinture du passager avant depuis la camera (repere de la voiture) : camera, ceinture rangee
+        // (centre et taille de ses rendus), boucle, distances et angles au regard, et ce que touche un rayon vers la ceinture.
+        public static string TestBeltAim()
+        {
+            if (current == null || cam == null) return "pas assis";
+            Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
+            if (b == null) return "pas de ceinture ici";
+            Transform car = current.CarT;
+            var sb = new System.Text.StringBuilder("ceinture passager : camera " + car.InverseTransformPoint(cam.position).ToString("F2"));
+            Vector3 bp = car.TransformPoint(b.Buckle);
+            sb.Append(", boucle ").Append(b.Buckle.ToString("F2")).Append(" a ").Append((bp - cam.position).magnitude.ToString("F2")).Append(" m ")
+              .Append(Vector3.Angle(cam.forward, bp - cam.position).ToString("F0")).Append(" deg");
+            Renderer or = b.Open != null ? b.Open.GetComponentInChildren<Renderer>() : null;
+            if (or == null) sb.Append(", ceinture rangee : aucun rendu (" + (b.Open != null ? b.Open.name : "-") + ")");
+            else
+            {
+                Vector3 c = or.bounds.center;
+                sb.Append(", ceinture rangee ").Append(or.name).Append(" centre ").Append(car.InverseTransformPoint(c).ToString("F2")).Append(" taille ").Append(or.bounds.size.ToString("F2"))
+                  .Append(" a ").Append((c - cam.position).magnitude.ToString("F2")).Append(" m ").Append(Vector3.Angle(cam.forward, c - cam.position).ToString("F0")).Append(" deg");
+                foreach (RaycastHit h in Physics.RaycastAll(cam.position, (c - cam.position).normalized, 2f))
+                    sb.Append(" | rayon : ").Append(Recon.Path(h.collider.transform)).Append(" a ").Append(h.distance.ToString("F2")).Append(h.collider.isTrigger ? " (declencheur)" : "");
+            }
+            return sb.ToString();
+        }
+
+        // Essais : tourne le regard (camera de la tete) vers la ceinture rangee du passager (0) ou vers la boucle (1).
+        public static string TestBeltLook(int what)
+        {
+            if (current == null || cam == null) return "pas assis";
+            Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
+            if (b == null) return "pas de ceinture";
+            Renderer or = b.Open != null ? b.Open.GetComponentInChildren<Renderer>() : null;
+            Vector3 target = what == 0 && or != null ? or.bounds.center : current.CarT.TransformPoint(b.Buckle);
+            cam.rotation = Quaternion.LookRotation(target - cam.position);
+            return "regard vers " + (what == 0 ? "la ceinture rangee" : "la boucle");
+        }
+
         public static string TestBelt()
         {
             if (current == null) return "pas assis";
