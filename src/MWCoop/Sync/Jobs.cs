@@ -92,6 +92,10 @@ namespace MWCoop
             public HashSet<string> ClickStates = new HashSet<string>();                      // etats qui attendent un clic
             public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();  // transitions prises ici
             public bool FromReplay;                                                          // cle : derniere position recue d'un autre
+            public HashSet<string> InputStates = new HashSet<string>();                      // etats qui lisent la souris ou le clavier
+            public Dictionary<string, int> Loops = new Dictionary<string, int>();            // commande : transitions sans geste, sur 10 s
+            public HashSet<string> Quiet = new HashSet<string>();                            // ... qui bouclent : plus envoyees
+            public float LoopStart, LastClick = -100f;
         }
         const int K_PLAIN = 0, K_LOGTRIGGER = 1, K_FEEDLOG = 2, K_IGNITION = 3;
         static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach",
@@ -190,6 +194,7 @@ namespace MWCoop
             bed = flatbed = null; bedHinge = null; bedTargetAt = -100; bedSent = float.NaN; bedLift = null; bedFollow = false;
             feedStep2 = false; feedStageSeen = -1; feedCaughtUp = 0; jobGen = -1; fastWaitUntil = 0;
             chopped = null; lastId = null; testStep = testLogs = 0; testBefore = false; otherSince = -1; testClick2 = false;
+            lugFsm = null; lugItems = null; lugPivots = null; lugWas = ""; lugWanted = null; nextLug = 0f;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 10f : -1;
         }
@@ -344,6 +349,7 @@ namespace MWCoop
                         string tn = a.GetType().Name;
                         if (RandomActions.Contains(tn)) j.RandomStates.Add(s.Name);
                         if (ClickActions.Contains(tn)) j.ClickStates.Add(s.Name);
+                        foreach (string p in InputActions) if (tn.StartsWith(p)) j.InputStates.Add(s.Name);
                     }
                     var list = new List<FsmStateAction>(s.Actions);
                     list.Insert(0, new Hook { J = j, State = s.Name });
@@ -365,9 +371,25 @@ namespace MWCoop
             bool click = tr.EventName == "FINISHED" && j.Control && from != null && j.ClickStates.Contains(from.Name) && (state == "Open door" || state == "Close door");
             if (Ignore.Contains(tr.EventName) && !click) return;
             if (j.Control && DoorEvents.Contains(tr.EventName)) return;   // (lumiere de l'habitacle : la portiere rejouee la mene deja chez les autres)
+            if (!j.Control && Npcs.LedElsewhere(j.F.transform)) return;   // PNJ mene par un autre joueur (client du taxi) : sa logique fait foi
             // Cablage : seul le branchement (clic -> "Sound") part ; l'approche du fil (ASSEMBLE au survol) non.
             if (j.F.FsmName == "Assemble" && state != "Sound") return;
             j.LocalRecent[(from != null ? from.Name : "") + "|" + tr.EventName + "|" + state] = Time.realtimeSinceStartup;
+            // Commande qui boucle toute seule, sans geste du joueur (terminal de paiement du taxi : "Check duty" -PROCEED->
+            // "Cost?" chaque seconde, chez chacun) : partait sur le reseau a chaque tour, de chaque cote, sans jamais
+            // depasser le garde-fou des commandes. Au-dela de 3 fois en 10 s depuis un etat qui ne lit ni souris ni
+            // clavier, sans clic depuis 10 s, cette transition n'est plus envoyee (elle tourne de toute facon chez
+            // chacun) -- jusqu'au prochain clic sur cette commande.
+            if (j.Control && from != null && j.ClickStates.Contains(from.Name) && tr.EventName != "FINISHED") { j.LastClick = Time.realtimeSinceStartup; j.Quiet.Clear(); }
+            else if (j.Control && from != null && !j.InputStates.Contains(from.Name) && Time.realtimeSinceStartup - j.LastClick > 10f)
+            {
+                string lk = from.Name + "|" + tr.EventName;
+                if (j.Quiet.Contains(lk)) return;
+                float t = Time.realtimeSinceStartup;
+                if (t - j.LoopStart > 10f) { j.LoopStart = t; j.Loops.Clear(); }
+                int c; j.Loops.TryGetValue(lk, out c); j.Loops[lk] = ++c;
+                if (c > 3) { j.Quiet.Add(lk); Log.Info("quete : " + j.Key + " " + from.Name + " -" + tr.EventName + "-> boucle seule, plus envoye"); return; }
+            }
             // Fendeuse : la fin de la buche (State 4 -STOP-> State 1) n'est annoncee que par celui dont c'etait
             // l'etape ; chez les autres elle suit l'etape rejouee (sinon renvoyee en retard sur la buche suivante).
             if (j.Kind == K_FEEDLOG && tr.EventName == "STOP" && !feedStageLocal) return;
@@ -389,6 +411,8 @@ namespace MWCoop
             }
             var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(from != null ? from.Name : "").Str(tr.EventName).Str(state);
             WriteVars(j.F, w);
+            int size = w.ToArray().Length;
+            if (size > Net.Transport.MaxPayload - 40) { Log.Warn("quete : " + j.Key + " -" + tr.EventName + "-> " + state + " trop long (" + size + " octets), pas envoye"); return; }
             Log.Info("quete : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + tr.EventName + "-> " + state);
             Session.SendAll(w, true);
         }
@@ -444,6 +468,23 @@ namespace MWCoop
 
         static bool Skip(string n) { return n.StartsWith("UT") || n.StartsWith("UniqueTag"); }
 
+        // Client du taxi (TaxiWalker::Logic) : son lieu de prise en charge et sa destination sont tires au sort
+        // ("Randomize loca" : ArrayListGetRandom -> PickupPoint, DropOffPoint, objets) et son identite ("ID" : textes des
+        // animations, sous-titres). Chacun tirait les siens : le client attendait a un autre endroit chez chaque
+        // joueur, l'invite allait chercher celui qu'il voyait (pose de l'hote) et son propre client ne montait jamais
+        // (retour d'un joueur, 08/10). Pour lui, ces deux objets (par leur chemin) et ses textes (hors sous-titres) partent
+        // aussi avec l'etape -- pas tous ses objets : le message fiable doit tenir dans un paquet (Transport.MaxPayload,
+        // 1150 octets ; au-dela il etait perdu sans bruit).
+        static bool ObjectVars(PlayMakerFSM f) { return f.FsmName == "Logic" && f.name == "TaxiWalker"; }
+        static readonly HashSet<string> TaxiObjects = new HashSet<string> { "PickupPoint", "DropOffPoint" };
+
+        static string GoPath(GameObject g)
+        {
+            if (g == null) return "";
+            string p = Recon.Path(g.transform);
+            return p.StartsWith("PLAYER") || p.StartsWith("MWCoop") || p.Contains("(Clone)") ? null : p;
+        }
+
         static void WriteVars(PlayMakerFSM f, NetWriter w)
         {
             FsmVariables v = f.FsmVariables;
@@ -453,6 +494,19 @@ namespace MWCoop
             w.U8(ints.Count); foreach (FsmInt x in ints) w.Str(x.Name).I32(x.Value);
             w.U8(floats.Count); foreach (FsmFloat x in floats) w.Str(x.Name).F32(x.Value);
             w.U8(bools.Count); foreach (FsmBool x in bools) w.Str(x.Name).Bool(x.Value);
+            var strs = new List<FsmString>(); var gos = new List<KeyValuePair<string, string>>();
+            if (ObjectVars(f))
+            {
+                foreach (FsmString x in v.StringVariables) if (!Skip(x.Name) && !x.Name.StartsWith("Subtitle") && (x.Value ?? "").Length <= 40) strs.Add(x);
+                foreach (FsmGameObject x in v.GameObjectVariables)
+                {
+                    if (!TaxiObjects.Contains(x.Name)) continue;
+                    string p = GoPath(x.Value);
+                    if (p != null) gos.Add(new KeyValuePair<string, string>(x.Name, p));
+                }
+            }
+            w.U8(strs.Count); foreach (FsmString x in strs) w.Str(x.Name).Str(x.Value ?? "");
+            w.U8(gos.Count); foreach (var x in gos) w.Str(x.Key).Str(x.Value);
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -469,12 +523,18 @@ namespace MWCoop
             for (int i = 0, n = r.U8(); i < n; i++) ints.Add(new KeyValuePair<string, int>(r.Str(), r.I32()));
             for (int i = 0, n = r.U8(); i < n; i++) floats.Add(new KeyValuePair<string, float>(r.Str(), r.F32()));
             for (int i = 0, n = r.U8(); i < n; i++) bools.Add(new KeyValuePair<string, bool>(r.Str(), r.Bool()));
+            var strs = new List<KeyValuePair<string, string>>();
+            var gos = new List<KeyValuePair<string, string>>();
+            for (int i = 0, n = r.U8(); i < n; i++) strs.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
+            for (int i = 0, n = r.U8(); i < n; i++) gos.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
             if (Session.IsHost)
             {
                 var w = new NetWriter(Msg.Job).U8(who).Str(key).Str(prev).Str(ev).Str(state);
                 w.U8(ints.Count); foreach (var x in ints) w.Str(x.Key).I32(x.Value);
                 w.U8(floats.Count); foreach (var x in floats) w.Str(x.Key).F32(x.Value);
                 w.U8(bools.Count); foreach (var x in bools) w.Str(x.Key).Bool(x.Value);
+                w.U8(strs.Count); foreach (var x in strs) w.Str(x.Key).Str(x.Value);
+                w.U8(gos.Count); foreach (var x in gos) w.Str(x.Key).Str(x.Value);
                 Session.Broadcast(w, true, who);
             }
             Job j;
@@ -509,6 +569,14 @@ namespace MWCoop
                 foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
                 foreach (var x in floats) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
                 foreach (var x in bools) { FsmBool t = v.FindFsmBool(x.Key); if (t != null) t.Value = x.Value; }
+                foreach (var x in strs) { FsmString t = v.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
+                foreach (var x in gos)
+                {
+                    FsmGameObject t = v.FindFsmGameObject(x.Key);
+                    if (t == null) continue;
+                    GameObject g = x.Value.Length > 0 ? Game.FindAny(x.Value) : null;
+                    if (g != null || x.Value.Length == 0) t.Value = g;
+                }
             }
             // Plateau a bois : la buche comptee chez l'autre est detruite ici par son propre message (@parti) ;
             // l'objet que "Destroy Wood" detruirait ici (variable Log, d'un ancien passage) n'est pas le bon.
@@ -1319,6 +1387,7 @@ namespace MWCoop
                     break;
                 }
                 case "@benne": OnBed(r.F32()); break;
+                case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":
                 {
@@ -1360,6 +1429,93 @@ namespace MWCoop
             CheckGone(now);
             if (now >= nextAuthority) { nextAuthority = now + 1f; LogTriggerAuthority(); }
             BedUpdate(now);
+            LuggageUpdate(now);
+        }
+
+        // ---------------------------------------------------------------- bagages du client du taxi
+        // TaxiWalker::Suitcases tire au sort les bagages du client (combien et lesquels : "State 2" puis "State 4" en boucle,
+        // ArrayListGetRandom) et sort les elus de leur pivot (SetParent : a la racine de la scene, ou ils deviennent des
+        // objets a porter). Chacun tirait les siens : trois valises chez l'un, un casier de biere chez l'autre (retour d'un
+        // joueur, 08/10 : « synchroniser les valises du taxi »). L'hote fait foi : son tirage fini (automate revenu en
+        // "State 1"), il envoie la liste des bagages sortis (par leur pivot) ; chez les autres, hors tirage en cours, ceux
+        // de la liste sont sortis a la place de leur pivot et les autres remis dessous. Sortis, Props les suit par une
+        // cle fixe (LuggageKey) : a la racine, ils n'en avaient aucune.
+        static PlayMakerFSM lugFsm;
+        static List<Transform> lugItems, lugPivots;
+        static List<Vector3> lugPos;
+        static List<Quaternion> lugRot;
+        static string lugWas = "", lugWanted;
+        static float lugWaitLog;
+        static float nextLug;
+
+        static bool LuggageInit()
+        {
+            if (lugFsm != null && lugItems != null) return true;
+            // (automate sur le marcheur, bagages sous Customer1 ; marcheur pris au chargement, avant qu'il monte en taxi)
+            GameObject cust = Game.FindAny("JOBS/TAXIJOB/Customer1"), walker = Game.FindAny("JOBS/TAXIJOB/Customer1/TaxiWalker");
+            PlayMakerFSM f = walker != null ? Game.FsmOn(walker, "Suitcases") : null;
+            if (f == null || cust == null) return false;
+            lugItems = new List<Transform>(); lugPivots = new List<Transform>(); lugPos = new List<Vector3>(); lugRot = new List<Quaternion>();
+            foreach (Transform piv in cust.transform)
+                foreach (Transform it in piv)
+                    if (it.name.EndsWith("(lugga)")) { lugPivots.Add(piv); lugItems.Add(it); lugPos.Add(it.localPosition); lugRot.Add(it.localRotation); }
+            lugFsm = f;
+            Log.Info("taxi : " + lugItems.Count + " bagages du client suivis");
+            return true;
+        }
+
+        // Props : cle d'un bagage du client ("w:bagage:Suitcase2Pivot"), ou qu'il soit ; null : pas un bagage connu.
+        public static string LuggageKey(GameObject g)
+        {
+            if (lugItems == null) return null;
+            for (int i = 0; i < lugItems.Count; i++) if (lugItems[i] != null && lugItems[i].gameObject == g) return "w:bagage:" + lugPivots[i].name;
+            return null;
+        }
+
+        static string LuggageOut()
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < lugItems.Count; i++)
+                if (lugItems[i] != null && lugItems[i].parent != lugPivots[i]) sb.Append(sb.Length > 0 ? "," : "").Append(lugPivots[i].name);
+            return sb.ToString();
+        }
+
+        static void LuggageUpdate(float now)
+        {
+            if (now < nextLug || !Session.Active) return;
+            nextLug = now + 0.5f;
+            if (!LuggageInit()) { nextLug = now + 10f; return; }
+            if (!string.IsNullOrEmpty(lugFsm.ActiveStateName) && lugFsm.ActiveStateName != "State 1")   // tirage en cours
+            {
+                if (lugWanted != null && now >= lugWaitLog) { lugWaitLog = now + 10f; Log.Info("taxi : bagages de l'hote en attente (Suitcases " + lugFsm.ActiveStateName + ")"); }
+                return;
+            }
+            string cur = LuggageOut();
+            if (Session.IsHost)
+            {
+                if (cur == lugWas) return;
+                lugWas = cur;
+                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@bagages").Str(cur), true);
+                Log.Info("taxi : bagages du client " + (cur.Length > 0 ? cur : "aucun") + " (envoye)");
+                return;
+            }
+            if (lugWanted == null || cur == lugWanted) return;
+            var want = new HashSet<string>(lugWanted.Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries));
+            for (int i = 0; i < lugItems.Count; i++)
+            {
+                Transform it = lugItems[i];
+                if (it == null) continue;
+                bool isOut = it.parent != lugPivots[i], wantOut = want.Contains(lugPivots[i].name);
+                if (wantOut && !isOut) { it.parent = null; it.gameObject.SetActive(true); }
+                else if (!wantOut && isOut && it.parent == null)
+                {
+                    it.parent = lugPivots[i]; it.localPosition = lugPos[i]; it.localRotation = lugRot[i];
+                    Rigidbody rb = it.GetComponent<Rigidbody>();
+                    if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+                }
+            }
+            Log.Info("taxi : bagages du client recales sur l'hote : " + (lugWanted.Length > 0 ? lugWanted : "aucun") + " (ici " + (cur.Length > 0 ? cur : "aucun") + ")");
+            Props.SoonScan();
         }
 
         // ================================================================ essais

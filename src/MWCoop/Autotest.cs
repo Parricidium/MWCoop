@@ -416,6 +416,101 @@ namespace MWCoop
                     }
                 Log.Info(sb.ToString());
             }
+            // [Test] Autotest=attelage : l'hote au volant du KEKMET (15-22 s), la FLATBED posee 4,5 m derriere et reliee par
+            // un joint fixe a 25 s (comme un attelage), le tracteur avance a 3 m/s de 28 a 40 s ; chacun note chaque seconde
+            // de 24 a 60 s la remorque (position, distance au tracteur, copie ou locale).
+            if (mode == "attelage")
+            {
+                Rigidbody k = VehicleSync.Body("KEKMET"), fb = VehicleSync.Body("FLATBED");
+                if (Net.Session.IsHost && k != null && fb != null)
+                {
+                    if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter("KEKMET", false)); }
+                    if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter("KEKMET", true)); }
+                    if (t > 25f && step == 2)
+                    {
+                        step = 3;
+                        fb.transform.position = k.transform.TransformPoint(new Vector3(0f, 0.3f, -4.5f));
+                        fb.transform.rotation = k.transform.rotation;
+                        fb.velocity = Vector3.zero; fb.angularVelocity = Vector3.zero;
+                        var fj = fb.gameObject.AddComponent<FixedJoint>();
+                        fj.connectedBody = k;
+                        Log.Info("autotest : attelage, FLATBED reliee au KEKMET");
+                    }
+                    if (t > 28f && t < 40f) { Vector3 f = k.transform.forward; f.y = 0; k.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(k.velocity.y, 0f); }
+                }
+                if (k != null && fb != null && t > 24f && t < 60f && Time.realtimeSinceStartup >= rivLog)
+                {
+                    rivLog = Time.realtimeSinceStartup + 1f;
+                    Log.Info("autotest : attelage, remorque " + (fb.isKinematic ? "copie" : "locale") + " en " + fb.position.ToString("F1") + ", a " + (fb.position - k.position).magnitude.ToString("F1") + " m du tracteur " + (k.isKinematic ? "(copie)" : "(local)") + " en " + k.position.ToString("F1"));
+                }
+            }
+            // [Test] Autotest=taxiclient : taxi active des deux cotes (8 s) ; l'invite au volant (15-22 s) ; l'hote lance une
+            // course (NEWJOB a 26 s, l'appel decroche : SUCCESS des que Logic est sur 'Call'). L'invite amene le taxi a
+            // 2,5 m de SON client quand celui-ci attend (Distance 1/2), puis roule a 5 m/s de 75 a 85 s. Chacun note toutes
+            // les 2 s de 26 a 100 s : etat de Logic, lieu de prise en charge, client (marcheur, corps, dans le repere de
+            // sa copie du taxi), bagages actifs et le suivi du PNJ (Npcs).
+            if (mode == "taxiclient")
+            {
+                bool host = Net.Session.IsHost;
+                if (tcWalker == null) { tcWalker = Game.FindAny("JOBS/TAXIJOB/Customer1/TaxiWalker"); tcCust = Game.FindAny("JOBS/TAXIJOB/Customer1"); }
+                GameObject walker = tcWalker;
+                PlayMakerFSM logic = walker != null ? Game.FsmOn(walker, "Logic") : null;
+                Rigidbody tx = VehicleSync.Body("MACHTWAGEN");
+                if (t > 8f && step == 0)
+                {
+                    step = 1;
+                    GameObject taxi = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN");
+                    if (taxi != null && !taxi.activeSelf) taxi.SetActive(true);
+                    Log.Info("autotest : taxiclient, taxi " + (taxi == null ? "introuvable" : "actif") + ", client " + (logic == null ? "sans Logic" : logic.ActiveStateName));
+                }
+                if (t > 24f && !tcOn && walker != null)
+                {
+                    tcOn = true;
+                    for (Transform x = walker.transform; x != null && x.name != "JOBS"; x = x.parent) x.gameObject.SetActive(true);
+                    Log.Info("autotest : taxiclient, client active, Logic " + (logic != null ? logic.ActiveStateName : "?"));
+                }
+                if (!host && t > 15f && step == 1) { step = 2; Log.Info("autotest : taxiclient " + VehicleSync.TestEnter("MACHTWAGEN", false)); }
+                if (!host && t > 22f && step == 2) { step = 3; Log.Info("autotest : taxiclient volant -> " + VehicleSync.TestEnter("MACHTWAGEN", true)); }
+                if (host && t > 70f && step == 1 && logic != null) { step = 2; logic.SendEvent("NEWJOB"); Log.Info("autotest : taxiclient NEWJOB -> " + logic.ActiveStateName); }
+                if (host && step == 2 && logic != null && logic.ActiveStateName == "Call") { step = 3; logic.SendEvent("SUCCESS"); Log.Info("autotest : taxiclient appel decroche -> " + logic.ActiveStateName); }
+                if (!host && step == 3 && t > 30f && logic != null && tx != null && (logic.ActiveStateName == "Distance 1" || logic.ActiveStateName == "Distance 2"))
+                {
+                    step = 4;
+                    Vector3 side = walker.transform.right; side.y = 0;
+                    tx.transform.position = walker.transform.position + side.normalized * 2.5f + Vector3.up * 0.6f;
+                    tx.transform.rotation = Quaternion.LookRotation(Vector3.Cross(side.normalized, Vector3.up));
+                    tx.velocity = Vector3.zero; tx.angularVelocity = Vector3.zero;
+                    tcAt = t;
+                    Log.Info("autotest : taxiclient, taxi amene pres du client en " + tx.position.ToString("F1"));
+                }
+                if (!host && tx != null && step == 4 && t < tcAt + 3f) { tx.velocity = Vector3.zero; tx.angularVelocity = Vector3.zero; }
+                if (!host && step == 4 && logic != null && (logic.ActiveStateName == "Randomize anim" || logic.ActiveStateName == "State 6" || logic.ActiveStateName == "State 7" || t > tcAt + 70f))
+                { step = 5; tcAt = t; Log.Info("autotest : taxiclient, depart (client " + logic.ActiveStateName + ")"); }
+                if (!host && tx != null && step == 5 && t < tcAt + 10f) { Vector3 f = tx.transform.forward; f.y = 0; tx.velocity = f.normalized * 5f + Vector3.up * Mathf.Min(tx.velocity.y, 0f); }
+                if (t > 26f && Time.realtimeSinceStartup >= rivLog && logic != null)
+                {
+                    rivLog = Time.realtimeSinceStartup + 2f;
+                    PlayMakerFSM suit = Game.FsmOn(walker, "Suitcases");
+                    var sb = new System.Text.StringBuilder("autotest : taxiclient Logic=" + logic.ActiveStateName + " Suitcases=" + (suit != null ? suit.ActiveStateName : "?"));
+                    GameObject pp = logic.FsmVariables.GetFsmGameObject("PickupPoint").Value;
+                    sb.Append(", prise ").Append(pp != null ? pp.name : "null").Append(", ID ").Append(logic.FsmVariables.GetFsmString("ID").Value);
+                    sb.Append(", marcheur en ").Append(walker.transform.position.ToString("F1")).Append(" sous ").Append(walker.transform.parent != null ? walker.transform.parent.name : "-");
+                    Transform ch = walker.transform.Find("Char");
+                    if (ch != null && tx != null) sb.Append(", corps dans le taxi ").Append(tx.transform.InverseTransformPoint(ch.position).ToString("F2")).Append(tx.isKinematic ? " (copie)" : " (local)");
+                    sb.Append(", bagages");
+                    if (tcLug == null && tcCust != null)
+                    {
+                        tcLug = new System.Collections.Generic.List<Transform>();
+                        foreach (Transform x in tcCust.GetComponentsInChildren<Transform>(true)) if (x.name.EndsWith("(lugga)")) tcLug.Add(x);
+                    }
+                    if (tcLug != null)
+                        foreach (Transform x in tcLug)
+                            if (x != null && x.gameObject.activeInHierarchy)
+                                sb.Append(' ').Append(x.name).Append('@').Append(x.parent != null ? x.parent.name : "-").Append(tx != null ? tx.transform.InverseTransformPoint(x.position).ToString("F1") : "");
+                    Log.Info(sb.ToString());
+                    Log.Info("autotest : taxiclient PNJ " + Npcs.State("TAXIJOB/Customer1/"));
+                }
+            }
             if (mode == "sondegfx" && t > 20f && !done)
             {
                 done = true;
@@ -1233,6 +1328,10 @@ namespace MWCoop
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
         static float rivLog, cabGap;
+        static bool tcOn;
+        static float tcAt;
+        static GameObject tcWalker, tcCust;
+        static System.Collections.Generic.List<Transform> tcLug;
         static bool cabAv, cabAvLogged;
         static float cabLogAt, cabWheelAt, cabGearAt;
         static Vector3 cabMin, cabMax;

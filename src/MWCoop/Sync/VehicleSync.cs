@@ -139,8 +139,74 @@ namespace MWCoop
         // un invite, l'hote la recalait toutes les 2 s (voiture qui se teleporte en arriere ; retour d'un joueur, 08/10).
         static int pushCar = -1;
         static float pushUntil;
+        // Remorques attelees (FLATBED au KEKMET...) : un joint relie deux voitures (hors cordes de Tow). Celui qui conduit
+        // le vehicule de tete envoie la remorque 10 fois/s (etat 2) : ailleurs elle suit en copie, l'hote ne la recale
+        // plus. Avant : l'hote la recalait toutes les 2 s alors qu'elle etait attelee au tracteur d'un invite (a-coups,
+        // sauts), et chez les autres elle etait trainee par une copie en retard (retour d'un joueur, 08/10 : « la
+        // remorque a bois est buguee »). Detelee (ou plus conduite ici) : derniere pose fiable, rendue.
+        static readonly List<KeyValuePair<int, int>> hitches = new List<KeyValuePair<int, int>>();   // (voiture, voiture) relies, rangs locaux
+        static readonly HashSet<int> hitchSent = new HashSet<int>();   // remorques envoyees d'ici (rangs locaux)
+        static float nextHitchScan;
+        public static bool HitchCarried(int index) { return hitchSent.Contains(index); }
+
+        static void HitchScan(float now)
+        {
+            if (now < nextHitchScan) return;
+            nextHitchScan = now + 1f;
+            var found = new List<KeyValuePair<int, int>>();
+            foreach (Car a in cars)
+            {
+                if (a.Body == null || !a.Body.gameObject.activeInHierarchy) continue;
+                foreach (Joint j in a.Body.GetComponentsInChildren<Joint>())
+                {
+                    if (j == null || j.connectedBody == null || j is SpringJoint || Tow.IsRope(j)) continue;
+                    Car b = null;
+                    foreach (Car x in cars) if (x != a && x.Body != null && (x.Body == j.connectedBody || j.connectedBody.transform.IsChildOf(x.T))) { b = x; break; }
+                    if (b == null) continue;
+                    bool dup = false;
+                    foreach (KeyValuePair<int, int> kv in found) if ((kv.Key == a.Index && kv.Value == b.Index) || (kv.Key == b.Index && kv.Value == a.Index)) dup = true;
+                    if (!dup) found.Add(new KeyValuePair<int, int>(a.Index, b.Index));
+                }
+            }
+            foreach (KeyValuePair<int, int> kv in found)
+            {
+                bool known = false;
+                foreach (KeyValuePair<int, int> h in hitches) if (h.Key == kv.Key && h.Value == kv.Value) known = true;
+                if (!known) Log.Info("attelage : " + cars[kv.Key].Key + " <-> " + cars[kv.Value].Key);
+            }
+            foreach (KeyValuePair<int, int> h in hitches)
+            {
+                bool still = false;
+                foreach (KeyValuePair<int, int> kv in found) if (h.Key == kv.Key && h.Value == kv.Value) still = true;
+                if (!still) Log.Info("attelage defait : " + cars[h.Key].Key + " <-> " + cars[h.Value].Key);
+            }
+            hitches.Clear();
+            hitches.AddRange(found);
+        }
+
+        // 20 fois/s : la remorque attelee au vehicule qu'on conduit (sauf si un autre la conduit).
+        static void HitchTick(float now)
+        {
+            var want = new HashSet<int>();
+            if (LocalDriving >= 0)
+                foreach (KeyValuePair<int, int> h in hitches)
+                {
+                    int other = h.Key == LocalDriving ? h.Value : h.Value == LocalDriving ? h.Key : -1;
+                    if (other < 0 || other == owned) continue;
+                    Car t = cars[other];
+                    if (t.Body == null || Remote(t, now) || t.Net < 0) continue;
+                    want.Add(other);
+                }
+            foreach (int i in want) Send(cars[i], 2);
+            foreach (int i in hitchSent)
+                if (!want.Contains(i) && cars[i].Body != null) { Send(cars[i], 0); cars[i].AuthorityUntil = now + 5f; Log.Info("attelage : " + cars[i].Key + " rendue"); }
+            hitchSent.Clear();
+            foreach (int i in want) hitchSent.Add(i);
+        }
         public static string LocalDrivingName { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].Name : null; } }
         public static Transform LocalDrivingRoot { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].T : null; } }
+        // Voiture menee d'ici : conduite, ou quittee moteur tournant (on en garde la main).
+        public static Transform LocalLeadRoot { get { int i = LocalDriving >= 0 ? LocalDriving : owned; return i >= 0 && i < cars.Count ? cars[i].T : null; } }
 
         // Change quand la liste des voitures d'ici change (voiture trouvee, corps recree) : CarDoors, CarVisuals et
         // Seats relevent alors la leur.
@@ -439,6 +505,8 @@ namespace MWCoop
             {
                 nextFast = now + 0.05f;
                 if (LocalDriving < 0) PushTick(now);
+                HitchScan(now);
+                HitchTick(now);
                 if (LocalDriving >= 0) Send(cars[LocalDriving], 1);
                 else if (owned >= 0 && (++ownedTick & 1) == 0)   // 10 fois/s
                 {
@@ -460,7 +528,7 @@ namespace MWCoop
             {
                 nextSlow = now + 2f;
                 foreach (Car c in cars)
-                    if (c.Index != LocalDriving && c.Index != owned && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy && !Tow.Carries(c.Index)) Send(c, 0);
+                    if (c.Index != LocalDriving && c.Index != owned && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy && !Tow.Carries(c.Index) && !hitchSent.Contains(c.Index)) Send(c, 0);
             }
             // Hote : etat de la simulation des voitures garees (personne ne les fait rouler), toutes les 10 s.
             if (Session.IsHost && now >= nextParkedSim && Session.RemoteCount > 0)

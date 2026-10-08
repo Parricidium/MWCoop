@@ -126,6 +126,14 @@ namespace MWCoop
         // l'exclure de son recalage de l'hote toutes les 2 s (branchement du lot 2) : sinon, l'hote qui tire
         // envoie aussi l'etat 0 de cette voiture, et chez les invites la copie est rendue physique (et recalee
         // si elle a plus de 1 m de retard) a chaque fois, a-coup et attaches cassables rendues pendant 0,1 s.
+        // Joint d'une corde (la notre ou la copie d'une autre) : pas un attelage (VehicleSync.Hitch).
+        public static bool IsRope(Joint j)
+        {
+            if (j == null) return false;
+            for (int i = 0; i < all.Count; i++) if (all[i].Joint == j) return true;
+            return false;
+        }
+
         public static bool Carries(int car)
         {
             if (car < 0) return false;

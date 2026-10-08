@@ -127,6 +127,8 @@ namespace MWCoop
             // CD sorti de son boitier (ou d'un lecteur) : 'Remove part' le detache de PivotCD et lui rend un corps,
             // hors de toute racine du monde. Cle fixe par son nom de disque (Data.ThisCD : CD1, CD2...).
             if (k == null && tn == "cd(itemx)") k = CdKey(t.gameObject);
+            // Bagage du client du taxi : sorti de son pivot, il est a la racine de la scene (Jobs, bagages).
+            if (k == null && tn.EndsWith("(lugga)")) k = Jobs.LuggageKey(t.gameObject);
             if (k != null) { worldKeys[rb.gameObject] = k; return k; }
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement. Cle
             // par son UT (maison, usine), pas par l'endroit : tenue en main, elle est sous PLAYER pour les deux.
