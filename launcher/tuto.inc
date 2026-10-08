@@ -47,6 +47,8 @@ static const TutoStep kTuto[] = {
       L"Uninstall", L"In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.", "0.60.8" },
     { L"Crédits", L"L'étoile en haut : ceux qui donnent quelque chose pour améliorer MWCoop. Merci à Dom pour ses 157 tenues, dans l'onglet Tenue !",
       L"Credits", L"The star at the top: the people who give something to make MWCoop better. Thanks to Dom for 157 outfits, in the Outfit tab!", "0.61.0" },
+    { L"Mode débogage", L"Dans Journaux : si MWCoop ne se charge pas, active-le, lance ta partie puis crée le zip. Il note tout ce que fait le lanceur et ce que le jeu a vraiment chargé.",
+      L"Debug mode", L"In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.", "0.62.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -76,10 +78,11 @@ static RectF TutoTarget(int i)
     case 17: return kSetSteamRow;
     case 18: return kSetUninst;
     case 19: return g_navR[TAB_CREDITS];
+    case 20: return kLogsDebugRow;
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 ? TAB_COOP : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 ? TAB_COOP : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

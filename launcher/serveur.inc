@@ -91,7 +91,7 @@ static void RunTick()
         ULONGLONG nowFt = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime, ageMs = ~0ULL;
         if (GetFileAttributesExW((LocalDir() + L"dernier-lancement.txt").c_str(), GetFileExInfoStandard, &a))
             ageMs = (nowFt - (((ULONGLONG)a.ftLastWriteTime.dwHighDateTime << 32) | a.ftLastWriteTime.dwLowDateTime)) / 10000;
-        LogGameModules();
+        LogGameModules(g_debug);
         if (ageMs > (ULONGLONG)(now - g_launchT) + 5000) {
             LaunchLog("ATTENTION : pas de trace du chargeur MWCoop pour cette partie (dernier-lancement.txt %s) : le jeu tourne sans le mod", ageMs == ~0ULL ? "absent" : "plus ancien");
             GameProcessRunning();   // (note les jeux d'autres dossiers)
