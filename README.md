@@ -5,6 +5,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/status-PRE--ALPHA-red?style=for-the-badge" alt="Pre-alpha">
   <a href="https://github.com/Parricidium/MWCoop/releases"><img src="https://img.shields.io/github/v/release/Parricidium/MWCoop?include_prereleases&label=Download&style=for-the-badge" alt="Download"></a>
+  <a href="https://discord.gg/H7NXpWHwgY"><img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
@@ -30,6 +31,7 @@ The mod and its launcher speak **English and French** (the launcher follows Wind
 > [!WARNING]
 > **PRE-ALPHA.** Almost everything is tested between two game instances on one PC; real games between friends have
 > only just started. Expect bugs and send your logs: launcher, **Logs** page, *Create a zip to send*.
+> Help, bug reports and players to team up with: **[Discord](https://discord.gg/H7NXpWHwgY)**.
 
 *[Version française plus bas.](#version-française)*
 
@@ -234,7 +236,8 @@ the lobby shows *UDP blocked* for a guest whose UDP test fails. Up to 8 players 
 - Items held in the hand are carried at their real place, not glued to the avatar's hand.
 - A guest who joins after a restaurant order does not see the trays already on the counter.
 - Some NPC reactions (fights, services) are only checked between test instances so far.
-- Your feedback from real games is what drives the next versions: send the zip from the Logs page.
+- Your feedback from real games is what drives the next versions: send the zip from the Logs page, on
+  [Discord](https://discord.gg/H7NXpWHwgY) (#bug-reports) or in a GitHub issue.
 
 ## How it works
 
@@ -272,7 +275,7 @@ Le mod et son lanceur parlent **français et anglais** (le lanceur suit Windows,
 > [!WARNING]
 > **PRÉ-ALPHA.** Presque tout est testé entre deux instances du jeu sur un même PC ; les vraies parties entre amis
 > commencent tout juste. Attendez-vous à des bugs et envoyez vos journaux : lanceur, page **Journaux**, *Créer un
-> zip à envoyer*.
+> zip à envoyer*. Aide, bugs et coéquipiers : **[Discord](https://discord.gg/H7NXpWHwgY)** (salons en anglais, plus un salon en français).
 
 ## Captures
 
@@ -413,7 +416,8 @@ joignables : le salon affiche *UDP bloqué* pour un invité dont le test UDP éc
 - Les objets tenus en main sont portés à leur vraie place, pas collés à la main de l'avatar.
 - Un invité qui arrive après une commande au restaurant ne voit pas les plateaux déjà posés.
 - Certaines réactions de PNJ (bagarres, services) ne sont vérifiées qu'entre instances de test pour l'instant.
-- Vos retours de vraies parties guident les prochaines versions : envoyez le zip de la page Journaux.
+- Vos retours de vraies parties guident les prochaines versions : envoyez le zip de la page Journaux, sur
+  [Discord](https://discord.gg/H7NXpWHwgY) (#bug-reports) ou dans une issue GitHub.
 
 ## Compiler
 
