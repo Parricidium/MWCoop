@@ -519,6 +519,15 @@ static void Init() {
     }
     if (g_doorstop) {
         Log("UnityDoorstop (MSCLoader ?) a cote du jeu : accroche de GetProcAddress au premier LoadLibrary");
+        // (diagnostic : Doorstop qui ne s'accroche pas = MSCLoader absent du jeu ; retour d'un joueur, 08/10)
+        wchar_t ini[MAX_PATH], en[32] = L"", ta[MAX_PATH] = L"", full[MAX_PATH];
+        swprintf(ini, MAX_PATH, L"%s\\doorstop_config.ini", g_gameDir);
+        GetPrivateProfileStringW(L"General", L"enabled", L"(absent)", en, 32, ini);
+        GetPrivateProfileStringW(L"General", L"target_assembly", L"", ta, MAX_PATH, ini);
+        if (!ta[0]) GetPrivateProfileStringW(L"UnityDoorstop", L"targetAssembly", L"", ta, MAX_PATH, ini);
+        swprintf(full, MAX_PATH, L"%s\\%s", g_gameDir, ta);
+        Log("doorstop_config.ini : enabled=%ls, cible %ls (%ls)%ls", en, ta[0] ? ta : L"?", GetFileAttributesW(full) != INVALID_FILE_ATTRIBUTES ? L"presente" : L"ABSENTE",
+            wcsstr(GetCommandLineW(), L"-mscloader-disable") ? L", lance avec -mscloader-disable (MSCLoader coupe dans le lanceur)" : L"");
         o_LoadLibraryW = (LoadLibraryW_t)HookIat(exe, "KERNEL32.dll", "LoadLibraryW", (void*)h_LoadLibraryW);
         o_LoadLibraryA = (LoadLibraryA_t)HookIat(exe, "KERNEL32.dll", "LoadLibraryA", (void*)h_LoadLibraryA);
     } else HookGetProcAddress();

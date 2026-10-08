@@ -371,6 +371,19 @@ static std::wstring ModLabel()
     return g_modOk ? L"MWCoop (dev)" : L"MWCoop";
 }
 
+// Version d'un exe (ressource FILEVERSION : MWV_NUM), 0 si illisible.
+static unsigned long long ExeVersion(const std::wstring &path)
+{
+    DWORD h = 0, n = GetFileVersionInfoSizeW(path.c_str(), &h);
+    if (!n) return 0;
+    std::vector<char> buf(n);
+    if (!GetFileVersionInfoW(path.c_str(), 0, n, buf.data())) return 0;
+    VS_FIXEDFILEINFO *fi = NULL;
+    UINT len = 0;
+    if (!VerQueryValueW(buf.data(), L"\\", (void **)&fi, &len) || !fi) return 0;
+    return ((unsigned long long)fi->dwFileVersionMS << 32) | fi->dwFileVersionLS;
+}
+
 static void SetGame(const std::wstring &dir)
 {
     g_gameDir = dir;
@@ -6181,6 +6194,28 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         WSACleanup();
         return rc;
+    }
+
+    // Lanceur lance hors du dossier du jeu (copie sur le bureau, dossier d'une ancienne version...) : les mises a jour
+    // remplacent le MWCoop.exe du dossier du jeu, pas celui-ci, qui restait a sa version (retour d'un joueur, 08/10 :
+    // lanceur 0.44 sur le bureau, mod en 0.59 ; salon et partage avec les amis d'une autre version). Celui du dossier du
+    // jeu est plus recent : il est lance a notre place, avec la meme ligne de commande.
+    if (!g_gameDir.empty() && _wcsicmp(g_gameDir.c_str(), g_dir.c_str())) {
+        std::wstring there = g_gameDir + L"MWCoop.exe";
+        unsigned long long mine = ExeVersion(g_self), theirs = FileExists(there) ? ExeVersion(there) : 0;
+        if (theirs > mine && mine) {
+            std::wstring cmd = L"\"" + there + L"\" " + PathGetArgsW(GetCommandLineW());
+            STARTUPINFOW si = { sizeof(si) };
+            PROCESS_INFORMATION pi = {};
+            LaunchLog("lanceur plus recent dans le dossier du jeu (%s) : lance a la place de celui-ci", Narrow(there, CP_UTF8).c_str());
+            if (CreateProcessW(there.c_str(), &cmd[0], NULL, NULL, FALSE, 0, NULL, g_gameDir.c_str(), &si, &pi)) {
+                CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+                GdiplusShutdown(gtok);
+                WSACleanup();
+                return 0;
+            }
+            LaunchLog("lancement impossible (erreur %lu) : on continue avec celui-ci", GetLastError());
+        }
     }
 
     // Taille : l'image a l'echelle de l'ecran (PPP), sans depasser 94 % de la zone de travail.
