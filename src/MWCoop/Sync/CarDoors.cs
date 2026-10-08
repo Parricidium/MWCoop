@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -10,7 +10,11 @@ namespace MWCoop
     //    "Open door 2" (la pousse vers la fermeture tant que le bouton est tenu ; relachee avant, elle reste
     //    ouverte), arrivee fermee -> "Sound" -> "Close door" (claque, verrouillee). Refermee en la poussant
     //    pendant l'ouverture : "Reset 2" (verrou) ;
-    //  - hayons, capots : "Open hood", "State 2" (pousse vers la fermeture), "Sound" -> "Close hood".
+    //    Portiere droite de la CORRIS : "Open door 3" au lieu de "Open door 2" (elle n'etait pas suivie du tout) ;
+    //  - hayons, capots : "Open hood", "State 2" (pousse vers la fermeture), "Sound" -> "Close hood". Coffre et capot
+    //    de la CORRIS : ouverts, ils sont tenus par leurs butees ("State 1" : -65..-64) ; on les rabat par "Drop"
+    //    (butees -65..0 : il retombe) -- leur "State 2" (attente 1 s puis "Close hood", butees 0..0 posees coffre
+    //    grand ouvert) les claquait de force a la fermeture rejouee (retour d'un joueur, 08/10 : coffre tombe).
     // Evenements (actions ajoutees en tete des etats) : 1 ouverte, 3 saisie (pousse vers la fermeture),
     // 0 fermee pour de bon (Sound : pas au clic, qui peut etre relache avant), 4 verrouillee.
     // L'hote est l'arbitre : il applique les evenements dans l'ordre d'arrivee et les renvoie a TOUS, auteur
@@ -138,10 +142,16 @@ namespace MWCoop
                     if (f.FsmName != "Use") continue;
                     string open = null, grab = null, close = null;
                     bool isDoor = false;
-                    if (f.Fsm.GetState("Open door") != null && f.Fsm.GetState("Open door 2") != null && f.Fsm.GetState("Close door") != null)
-                    { open = "Open door"; grab = "Open door 2"; close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close door"; isDoor = true; }
+                    string push = f.Fsm.GetState("Open door 2") != null ? "Open door 2" : f.Fsm.GetState("Open door 3") != null ? "Open door 3" : null;
+                    if (f.Fsm.GetState("Open door") != null && push != null && f.Fsm.GetState("Close door") != null)
+                    { open = "Open door"; grab = push; close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close door"; isDoor = true; }
                     else if (f.Fsm.GetState("Open hood") != null && f.Fsm.GetState("Close hood") != null)
-                    { open = "Open hood"; grab = f.Fsm.GetState("State 2") != null ? "State 2" : null; close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close hood"; }
+                    {
+                        open = "Open hood";
+                        // (CORRIS : "State 2" existe mais rien n'y mene ; sa fermeture a la main passe par "Drop".)
+                        grab = Reached(f, "State 2") ? "State 2" : f.Fsm.GetState("Drop") != null ? "Drop" : f.Fsm.GetState("State 2") != null ? "State 2" : null;
+                        close = f.Fsm.GetState("Sound") != null ? "Sound" : "Close hood";
+                    }
                     if (open == null) continue;
                     string rel = VehicleSync.RelPath(car.transform, f.transform);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;   // compte aussi les portieres deja suivies
@@ -218,6 +228,18 @@ namespace MWCoop
         }
 
         // (Automate jamais demarre : ses actions ne se chargent pas -- le getter de PlayMaker leve une exception.)
+        // Un etat de l'automate y mene-t-il (transition vers 'state') ?
+        static bool Reached(PlayMakerFSM f, string state)
+        {
+            if (f.Fsm.GetState(state) == null) return false;
+            foreach (FsmState s in f.FsmStates)
+                foreach (FsmTransition tr in s.Transitions)
+                    if (tr.ToState == state) return true;
+            foreach (FsmTransition tr in f.FsmGlobalTransitions)
+                if (tr.ToState == state) return true;
+            return false;
+        }
+
         static bool HasAction(FsmState s, string type)
         {
             if (s == null || !s.IsInitialized) return false;
@@ -648,7 +670,7 @@ namespace MWCoop
                     if (d.Body != null && d.Hinge != null && d.RestSet && Mathf.Abs(Angle(d)) >= 2.5f)
                     {
                         // Ramenee a 0, claquee par Update une fois fermee. Un capot ouvert est tenu a 60-65 par ses
-                        // butees : son etat de fermeture ("State 2") les leve, comme quand on le rabat a la main.
+                        // butees : son etat de fermeture ("State 2", "Drop" sur la CORRIS) les leve, comme a la main.
                         d.Closing = true; d.ClosingSince = Time.realtimeSinceStartup; d.TargetAngle = 0f;
                         if (!d.IsDoor && d.Grab != null) Drive(d, d.Grab);
                         Follow(d);
@@ -819,6 +841,15 @@ namespace MWCoop
             if (d == null || d.Grab == null) return "rien a saisir";
             Game.SetState(d.Fsm, d.Grab);
             return d.Key + " -> " + d.Grab;
+        }
+
+        // Essais : cles des portieres, coffres et capots suivis sur la voiture 'car'.
+        public static string ListFor(string car)
+        {
+            Scan();
+            var l = new List<string>();
+            foreach (Door d in byKey.Values) if (d.Fsm != null && d.Key.StartsWith(car)) l.Add(d.Key.Substring(car.Length) + " (" + d.Grab + ")" + (d.Hinge != null ? "" : " (sans charniere)") + (d.Body != null && d.Body.isKinematic ? " [cin]" : ""));
+            return string.Join(", ", l.ToArray());
         }
 
         // Essais : portieres, coffres et capots suivis sur la voiture de cle 'car'.

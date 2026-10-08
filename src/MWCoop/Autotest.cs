@@ -258,6 +258,80 @@ namespace MWCoop
                     Log.Info("autotest : evenements " + Events.Describe("JOKKEHOME") + " ; fete " + (party != null ? party.activeSelf.ToString() : "?") + ", heure " + FsmVariables.GlobalVariables.FindFsmInt("GlobalHour").Value + ", jour " + FsmVariables.GlobalVariables.FindFsmInt("GlobalDay").Value);
                 }
             }
+            // [Test] Autotest=rivett (retour d'un joueur, 08/10 : sur la Rivett, coffre qui tombe, voiture en orbite en claquant
+            // une portiere, contact du joueur qui la casse, moteur coupe chez l'autre). Sauvegarde avec la CORRIS montee.
+            // TestScenario : hote (l'hote conduit, l'invite manie), invite (l'inverse), garee (personne au volant, l'invite
+            // manie). Conducteur : au volant a 15-22 s, moteur (1800 tr/min, sons, annonce en marche) de 24 a 90 s.
+            // L'autre, par les automates 'Use' du jeu (comme ses clics) : portiere gauche ouverte 36 s, lachee 37, claquee
+            // 40 ; droite 44 / 45 / 48 ; coffre ouvert 52, rabattu ("Drop") 60 ; capot 66 / 74 ; colle contre la portiere
+            // gauche et pousse de 78 a 82 s ; court dans l'avant a 84-86 s. Les deux : chaque seconde, la voiture (vitesse,
+            // rotation) et chaque ouvrant (angle, etat, attaches, tombe ou non).
+            if (mode == "rivett")
+            {
+                string car = Config.Get("Test", "TestVoiture", "CORRIS");
+                string scen = Config.Get("Test", "TestScenario", "hote");
+                bool host = Net.Session.IsHost;
+                bool driver = scen == "hote" ? host : scen == "invite" ? !host : false;
+                bool actor = scen == "garee" ? !host : !driver;
+                Rigidbody b = VehicleSync.Body(car);
+                if (b != null && rivParts == null)
+                {
+                    rivParts = new System.Collections.Generic.List<Rigidbody>();
+                    foreach (Rigidbody rb in b.GetComponentsInChildren<Rigidbody>(true))
+                    {
+                        string n = rb.name.ToLowerInvariant();
+                        if (rb != b && (n.Contains("door") || n.Contains("bootlid") || n.Contains("hood"))) rivParts.Add(rb);
+                    }
+                    Log.Info("autotest : rivett (" + scen + ", " + (driver ? "conducteur" : actor ? "manie" : "regarde") + ") : " + rivParts.Count + " ouvrants ; suivis : " + CarDoors.ListFor(car) + " ; SORBET : " + CarDoors.ListFor("SORBET"));
+                }
+                if (driver)
+                {
+                    if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                    if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                    if (t > 24f && step == 2) { step = 3; Log.Info("autotest : moteur " + VehicleSync.TestSounds(car, true)); }
+                    VehicleSync.TestEngine(t > 24f && t < 90f ? 1800f : -1f, 0.3f);
+               }
+                if (actor)
+                {
+                    if (scen != "garee" && t > 30f && step == 0) { step = 1; Log.Info("autotest : rivett : moteur entendu " + VehicleSync.AudioState(car) + " ; " + VehicleSync.StarterState(car)); }
+                    while (rivStep < RivAt.Length && t > RivAt[rivStep])
+                    {
+                        Log.Info("autotest : rivett : " + RivSet(car, RivPart[rivStep], RivState[rivStep]));
+                        rivStep++;
+                    }
+                    GameObject pl = GameObject.Find("PLAYER");
+                    var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null && b != null && t > 78f && t < 82f)
+                    {
+                        if (rivPush == 0) { rivPush = 1; cc.enabled = false; pl.transform.position = b.transform.TransformPoint(new Vector3(-1.6f, 0.2f, 0f)); cc.enabled = true; Log.Info("autotest : rivett : contre la portiere gauche"); }
+                        cc.Move(b.transform.right * 2.5f * Time.deltaTime);
+                    }
+                    if (cc != null && b != null && t > 84f && t < 86f)
+                    {
+                        if (rivPush == 1) { rivPush = 2; cc.enabled = false; pl.transform.position = b.transform.TransformPoint(new Vector3(0f, 0.2f, 5f)); cc.enabled = true; Log.Info("autotest : rivett : court dans l'avant"); }
+                        cc.Move(-b.transform.forward * 6f * Time.deltaTime);
+                    }
+                }
+                if (b != null && t > 20f && Time.realtimeSinceStartup >= rivLog)
+                {
+                    rivLog = Time.realtimeSinceStartup + 1f;
+                    var sb = new System.Text.StringBuilder("autotest : rivett " + (b.isKinematic ? "copie" : "locale") + " v " + b.velocity.magnitude.ToString("F1") + " rot " + b.angularVelocity.magnitude.ToString("F2") + " en " + b.position.ToString("F1") + " ;");
+                    if (rivParts != null)
+                        foreach (Rigidbody rb in rivParts)
+                        {
+                            if (rb == null) { sb.Append(" (detruite);"); continue; }
+                            bool under = rb.transform.IsChildOf(b.transform);
+                            string pn = rb.transform.parent != null ? rb.transform.parent.name.Replace("VINP_", "") : rb.name;
+                            PlayMakerFSM use = null;
+                            foreach (PlayMakerFSM f in rb.GetComponents<PlayMakerFSM>()) if (f.FsmName == "Use") use = f;
+                            sb.Append(' ').Append(pn).Append(under ? "" : " TOMBEE " + (rb.position - b.position).magnitude.ToString("F1") + "m")
+                              .Append(' ').Append(Quaternion.Angle(rb.transform.localRotation, Quaternion.identity).ToString("F0")).Append("deg")
+                              .Append(use != null ? " [" + use.ActiveStateName + "]" : "").Append(" j").Append(rb.GetComponents<Joint>().Length)
+                              .Append(rb.isKinematic ? " cin" : "").Append(rb.velocity.magnitude > 2f ? " v" + rb.velocity.magnitude.ToString("F0") : "").Append(';');
+                        }
+                    Log.Info(sb.ToString());
+                }
+            }
             if (mode == "sondegfx" && t > 20f && !done)
             {
                 done = true;
@@ -1031,6 +1105,28 @@ namespace MWCoop
         }
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
+        static System.Collections.Generic.List<Rigidbody> rivParts;
+        static float rivLog;
+        static int rivStep, rivPush;
+        static readonly float[] RivAt = { 36f, 37f, 40f, 44f, 45f, 48f, 52f, 60f, 66f, 74f };
+        static readonly string[] RivPart = { "DoorLeft", "DoorLeft", "DoorLeft", "DoorRight", "DoorRight", "DoorRight", "Bootlid", "Bootlid", "Hood", "Hood" };
+        static readonly string[] RivState = { "Open door", "Mouse off", "~fermer", "Open door", "Mouse off", "~fermer", "Open hood", "~fermer", "Open hood", "~fermer" };
+
+        // Essais (rivett) : met l'automate 'Use' de l'ouvrant VINP_<point> de 'car' dans 'state' ("~fermer" : son etat
+        // de fermeture, celui du second clic -- "Open door 2"/"Open door 3" des portieres, "Drop" ou "State 2" des capots).
+        static string RivSet(string car, string point, string state)
+        {
+            GameObject g = Game.FindAny(car + "/Assemblies/VINP_" + point);
+            PlayMakerFSM use = null;
+            if (g != null) foreach (PlayMakerFSM f in g.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "Use") { use = f; break; }
+            if (use == null) return point + " : pas d'automate Use";
+            if (state == "~fermer")
+                foreach (string s in new[] { "Open door 2", "Open door 3", "Drop", "State 2" })
+                    if (use.Fsm.GetState(s) != null) { state = s; break; }
+            if (use.Fsm.GetState(state) == null) return point + " : pas d'etat " + state;
+            Game.SetState(use, state);
+            return point + " -> " + state;
+        }
         static Camera testCam;
         static float cdLog, fluLog, fluSum, fluSq, tapLog;
         static int fluN, fluStill;

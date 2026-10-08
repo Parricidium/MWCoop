@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -1423,11 +1423,11 @@ namespace MWCoop
         {
             string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
             PlayMakerFSM key = KeyOf(car, "Use", "Motor starting"), starter = KeyOf(car, "Starter", "Running");
-            if (t > 31f && t < 45f && t >= keyLog)
+            int hold = Config.GetInt("Test", "CleTenue", 3);   // secondes de demarreur (CORRIS froide : plus)
             {
                 keyLog = Mathf.Floor(t) + 1f;
                 Log.Info("autotest : cle " + (key != null ? key.ActiveStateName : "?") + ", starter " + (starter != null ? starter.ActiveStateName : "?")
-                         + (key != null ? ", origine " + (jobs.ContainsKey(KeyName(key)) && jobs[KeyName(key)].FromReplay ? "recue" : "ici") : ""));
+                         + (key != null ? ", origine " + (jobs.ContainsKey(KeyName(key)) && jobs[KeyName(key)].FromReplay ? "recue" : "ici") : "") + " | " + VehicleSync.AudioState(car));
             }
             if (!Session.IsHost && key != null && Config.GetInt("Test", "CleReprise", 0) != 0)
             {
@@ -1441,11 +1441,27 @@ namespace MWCoop
             if (t > 23f && keyStep == 1) { keyStep = 2; Log.Info("autotest : cle, volant -> " + VehicleSync.TestEnter(car, true)); }
             if (t > 32f && keyStep == 2) { keyStep = 3; Game.SetState(key, "Wait1"); key.SendEvent("ACC"); Log.Info("autotest : cle, contact -> " + key.ActiveStateName); }
             if (t > 34f && keyStep == 3) { keyStep = 4; key.SendEvent("START"); Log.Info("autotest : cle, demarreur -> " + key.ActiveStateName); }
-            if (t > 37f && keyStep == 4) { keyStep = 5; key.SendEvent("FINISHED"); Log.Info("autotest : cle, relache -> " + key.ActiveStateName); }
+            // [Test] CleForce=1 : demarreur pas parti (moteur froid de la sauvegarde) -> "Running" pose a la main ; et les sources
+            // audio de la voiture (chemin, clip, active, joue) notees une fois.
+            if (t > 33f + hold && keyStep == 4 && Config.GetInt("Test", "CleForce", 0) != 0 && starter != null && starter.ActiveStateName != "Running" && !testClick2)
+            {
+                testClick2 = true;
+                Log.Info("autotest : cle, starter " + Recon.Path(starter.transform) + " force Running (etait " + starter.ActiveStateName + ")");
+                Game.SetState(starter, "Running");
+            }
+            if (t > 36f + hold && keyStep >= 4 && !testBefore)
+            {
+                testBefore = true;
+                var sb = new System.Text.StringBuilder("autotest : cle, sources audio :");
+                GameObject root = Game.FindAny(car);
+                if (root != null) foreach (AudioSource a in root.GetComponentsInChildren<AudioSource>(true))
+                    sb.Append("\n  ").Append(Recon.Path(a.transform)).Append(" clip=").Append(a.clip != null ? a.clip.name : "-").Append(a.gameObject.activeInHierarchy ? " actif" : " inactif").Append(a.enabled ? "" : " coupe").Append(a.isPlaying ? " JOUE v" + a.volume.ToString("F2") + " h" + a.pitch.ToString("F2") : "");
+                Log.Info(sb.ToString());
+            }            if (t > 34f + hold && keyStep == 4) { keyStep = 5; key.SendEvent("FINISHED"); Log.Info("autotest : cle, relache -> " + key.ActiveStateName); }
             // [Test] CleReprise=1 : l'hote sort moteur tournant a 40 s ; l'invite prend le volant a 46 s (sa montre) :
             // le moteur doit continuer chez lui (starter Running), pas caler.
             bool reprise = Config.GetInt("Test", "CleReprise", 0) != 0;
-            if (t > 40f && keyStep == 5) { keyStep = 6; if (reprise) Log.Info("autotest : cle, sortie moteur tournant -> " + VehicleSync.TestExit(car)); else { key.SendEvent("OFF"); Log.Info("autotest : cle, coupe -> " + key.ActiveStateName); } }
+            if (t > 37f + hold + Config.GetInt("Test", "CleMarche", 0) && keyStep == 5) { keyStep = 6; if (reprise) Log.Info("autotest : cle, sortie moteur tournant -> " + VehicleSync.TestExit(car)); else { key.SendEvent("OFF"); Log.Info("autotest : cle, coupe -> " + key.ActiveStateName); } }
         }
 
         static string KeyName(PlayMakerFSM f)
