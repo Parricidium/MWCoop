@@ -81,6 +81,23 @@ static void RunTick()
     if (now - g_srvReadT >= 1000) SrvRead();
     if (now - g_runCheckT < 1500) return;
     g_runCheckT = now;
+    // 30 s apres le lancement : le chargeur MWCoop a-t-il ecrit sa trace (dernier-lancement.txt) pour cette partie ? Sinon
+    // le jeu tourne sans le mod (retour d'un joueur, 08/10 : menu du jeu sans MWCoop, sans aucun journal) : dit ici et
+    // note avec les jeux en cours, pour le zip des journaux.
+    if (!g_modChecked && now - g_launchT > 30000 && !LocalDir().empty()) {
+        g_modChecked = true;
+        WIN32_FILE_ATTRIBUTE_DATA a;
+        FILETIME ft; GetSystemTimeAsFileTime(&ft);
+        ULONGLONG nowFt = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime, ageMs = ~0ULL;
+        if (GetFileAttributesExW((LocalDir() + L"dernier-lancement.txt").c_str(), GetFileExInfoStandard, &a))
+            ageMs = (nowFt - (((ULONGLONG)a.ftLastWriteTime.dwHighDateTime << 32) | a.ftLastWriteTime.dwLowDateTime)) / 10000;
+        if (ageMs > (ULONGLONG)(now - g_launchT) + 5000) {
+            LaunchLog("ATTENTION : pas de trace du chargeur MWCoop pour cette partie (dernier-lancement.txt %s) : le jeu tourne sans le mod", ageMs == ~0ULL ? "absent" : "plus ancien");
+            GameProcessRunning();   // (note les jeux d'autres dossiers)
+            SetStatus(K_WARN, T(L"MWCoop ne s'est pas charg\u00E9 dans le jeu : ferme-le, puis envoie les journaux (zip) sans fermer le lanceur",
+                                L"MWCoop did not load in the game: close it, then send the logs (zip) without closing the launcher"));
+        } else LaunchLog("chargeur MWCoop vu pour cette partie");
+    }
     if (g_proc && WaitForSingleObject(g_proc, 0) == WAIT_OBJECT_0) { CloseHandle(g_proc); g_proc = NULL; }
     if (g_proc || GameProcessRunning()) return;
     // jeu ferme : retour au menu
