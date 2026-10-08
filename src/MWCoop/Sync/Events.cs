@@ -109,6 +109,12 @@ namespace MWCoop
             ev = null;
             FsmState[] states;
             try { states = f.Fsm.States; } catch { return false; }
+            // Evenements globaux envoyes d'ailleurs (PAID : l'argent donne au vendeur de la Rivett, UNLOADED : le bois
+            // decharge, GREETINGS : le salut) : des gestes du joueur. Arrete chez l'invite, l'automate les perdait : la
+            // Rivett achetee par un invite restait a vendre (pas de cles, flechette restee sur la carte des parents --
+            // retour d'un joueur, 08/10). Laisse au monde (WorldFsms), qui rejoue ses transitions chez tous.
+            try { foreach (FsmTransition g in f.Fsm.GlobalTransitions) if (g.EventName != "SAVEGAME") return true; }
+            catch { return false; }
             bool near = false, activates = false;
             var targets = new List<Target>();
             foreach (FsmState st in states)

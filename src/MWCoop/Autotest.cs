@@ -928,6 +928,40 @@ namespace MWCoop
                 }
                 if (pb == null && t > 20f && step == 0) { step = 9; Log.Info("autotest : poro, pas de PORO ici"); }
             }
+            // [Test] Autotest=rivettvente (TestPos pres de JOBS/HouseWood1) : la Rivett a vendre. A 40 s chacun allume la
+            // flechette YARD/Building/MAP/Darts/Wood1Car (annonce en cours) ; l'acheteur ([Test] Acheteur=invite|hote,
+            // invite par defaut) paie le vendeur a 60 s de SA montre (PAID sur WoodCaller1::Animations, comme l'argent
+            // donne). Chacun note toutes les 3 s : flechettes, etat du vendeur et de WoodJob1Point::Logic.
+            if (mode == "rivettvente")
+            {
+                GameObject dart = Game.FindAny("YARD/Building/MAP/Darts/Wood1Car"), dartW = Game.FindAny("YARD/Building/MAP/Darts/Wood1");
+                GameObject seller = Game.FindAny("JOBS/HouseWood1/LOD/CarPos/NPCWood/WoodCaller1"), job = Game.FindAny("JOBS/HouseWood1/WoodJob1Point");
+                PlayMakerFSM anim = seller != null ? Game.FsmOn(seller, "Animations") : null, logic = job != null ? Game.FsmOn(job, "Logic") : null;
+                bool buyer = Config.Get("Test", "Acheteur", "invite") == (Net.Session.IsHost ? "hote" : "invite");
+                if (t > 40f && step == 0)
+                {
+                    step = 1;
+                    if (dart != null) dart.SetActive(true);
+                    GameObject npc0 = Game.FindAny("JOBS/HouseWood1/LOD/CarPos/NPCWood");
+                    // (vendeur eteint hors annonce : son automate ne demarrait pas ; la chaine de ses parents aussi, LOD de la maison)
+                    for (Transform x = npc0 != null ? npc0.transform : null; x != null; x = x.parent) if (!x.gameObject.activeSelf) { Log.Info("autotest : rivettvente, allume " + x.name); x.gameObject.SetActive(true); }
+                    Log.Info("autotest : rivettvente, flechette allumee" + (dart == null ? " (introuvable)" : "") + ", vendeur " + (npc0 != null ? "allume" : "introuvable"));
+                }
+                if (buyer && t > 60f && step == 1)
+                {
+                    step = 2;
+                    GameObject npc = Game.FindAny("JOBS/HouseWood1/LOD/CarPos/NPCWood");
+                    if (npc != null && !npc.activeSelf) npc.SetActive(true);
+                    if (anim != null) anim.SendEvent("PAID");
+                    Log.Info("autotest : rivettvente, paie le vendeur -> " + (anim != null ? anim.ActiveStateName : "vendeur introuvable"));
+                }
+                if (t > 30f && t < 140f && Time.realtimeSinceStartup >= rivLog)
+                {
+                    rivLog = Time.realtimeSinceStartup + 3f;
+                    Log.Info("autotest : rivettvente, flechette voiture " + (dart == null ? "?" : dart.activeSelf ? "ALLUMEE" : "eteinte") + ", bois " + (dartW == null ? "?" : dartW.activeSelf ? "allumee" : "eteinte")
+                             + ", vendeur " + (anim != null ? anim.ActiveStateName + (anim.enabled ? "" : " (coupe)") + (anim.gameObject.activeInHierarchy ? "" : " (eteint)") : "?") + ", WoodJob1Point " + (logic != null ? logic.ActiveStateName : "?"));
+                }
+            }
             if (mode == "porter")
             {
                 // [Test] TestPiece promenee de 30 a 36 s (comme tenue en main), position a 45 s.
