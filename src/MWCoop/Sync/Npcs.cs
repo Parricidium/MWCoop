@@ -454,7 +454,8 @@ namespace MWCoop
             {
                 Npc n = all[k];
                 if (n.Rules == null || n.Char == null) continue;
-                bool e = !(n.Whole && n.Held) && Check(n, mp);
+                // (agents a domicile chez un joueur recherche : toujours a lui, ou qu'il soit -- les autres les voient)
+                bool e = (HomeCop(n) && Police.WantedAtHome() && n.Char.gameObject.activeInHierarchy) || (!(n.Whole && n.Held) && Check(n, mp));
                 if (e) n.EngagedAt = now;
                 bool on = e || n.Engaged && now - n.EngagedAt < 2f;
                 if (on != n.Engaged)
@@ -466,6 +467,12 @@ namespace MWCoop
                 }
                 else if (on && !Session.IsHost && Owner(n) != Session.LocalId && now >= n.ClaimAt) SendClaim(n, true, now);   // refus, perte : redemande
             }
+        }
+
+        static bool HomeCop(Npc n)
+        {
+            if (n.Rules != null) foreach (Rule r in n.Rules) if (r.Part == "COPS/") return true;
+            return false;
         }
 
         static bool Check(Npc n, Vector3 mp)
@@ -735,6 +742,7 @@ namespace MWCoop
                 Npc n;
                 if (!byId.TryGetValue(id, out n) || n.Char == null) n = null;
                 if (n != null && Owner(n) != sender) n = null;      // pas (ou plus) son auteur : paquet en retard
+                if (n != null && HomeCop(n) && Police.WantedAtHome()) n = null;   // (recherche ici : nos agents, notre logique)
                 if ((flags & 1) == 0) { if (n != null && sender == 0) Absent(n); continue; }
                 if (n != null && n.Sender != sender) { n.Sender = sender; n.Count = 0; }
                 Snap s = n != null ? Slot(n, t) : null;

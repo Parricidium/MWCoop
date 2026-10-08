@@ -1477,6 +1477,7 @@ namespace MWCoop
                 }
                 case "@benne": OnBed(r.F32()); break;
                 case "@attelage": OnHitch(who, r.U8()); break;
+                case "@arrestation": Police.OnArrest(who, r.Vec()); break;
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":

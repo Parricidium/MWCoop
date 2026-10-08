@@ -171,6 +171,9 @@ namespace MWCoop
             }
             Entry e;
             if (!byId.TryGetValue(id, out e) || e.Fsm == null) { if (state != "=etat") Log.Warn("interaction inconnue : " + id); return; }
+            // "Police a la porte" (CopsAtHome des poignees) : a chacun le sien (Police) -- la porte ouverte par un joueur pas
+            // recherche effacait celui du joueur recherche, qui ne pouvait plus etre arrete de la session.
+            for (int i = 0; i < n; i++) if (names[i] == "CopsAtHome") { FsmBool lb = e.Fsm.FsmVariables.GetFsmBool(names[i]); if (lb != null) vals[i] = lb.Value; }
             if (state == "=etat") { if (!Session.IsHost) ApplySnapshot(e, names, vals); return; }
             for (int i = 0; i < n; i++)
             {
