@@ -109,8 +109,16 @@ static void RunTick()
     if (g_crashT) SetStatus(K_WARN, T(L"Arrêt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
     else SetStatus(K_NORMAL, T(L"Partie terminée · %s", L"Game over · %s"), ModLabel().c_str());
     LaunchLog("jeu ferme : retour au menu (arret brutal %d)", (int)(g_crashT != 0));
-    // MWCoop pas charge dans cette partie, lancee par la copie : proposer le lancement par Steam (une fois par partie).
+    // MWCoop pas charge dans cette partie. Partie lancee de la copie : la suivante part du dossier du jeu, retenu pour ce PC
+    // ([Lanceur] SansCopie). Sinon : proposer le lancement par Steam (une fois par partie).
     const Opt *vs = OptByKey("LancerSteam");
+    if (g_modMissing && g_launchedFromCopy) {
+        g_modMissing = false;
+        WritePrivateProfileStringW(L"Lanceur", L"SansCopie", L"1", g_iniLauncher.c_str());
+        LaunchLog("MWCoop absent depuis la copie de lancement : les prochaines parties partiront du dossier du jeu (SansCopie=1)");
+        SetStatus(K_WARN, T(L"MWCoop ne s'est pas charg\u00E9 depuis la copie de lancement : relance ta partie, elle partira du dossier du jeu",
+                            L"MWCoop did not load from the launch copy: start your game again, it will now start from the game folder"));
+    }
     if (g_modMissing && vs && !OptGet(*vs) && !MirrorDir().empty()) {
         g_modMissing = false;
         int r = MessageBoxW(g_wnd, T(L"MWCoop ne s'est pas charg\u00E9 dans le jeu.\n\nChez certains joueurs, il ne se charge que si le jeu est lanc\u00E9 par Steam (comme son bouton JOUER).\n\nActiver \u00AB Lancer le jeu par Steam \u00BB (R\u00E9glages > Jeu) et relancer ta partie ?",

@@ -121,6 +121,7 @@ static std::atomic<int> g_relState(REL_OFFLINE);
 static HANDLE g_proc;
 static DWORD g_pid, g_launchT, g_winSeenT, g_noProcT;
 static bool g_modChecked;   // partie lancee : trace du chargeur verifiee (serveur.inc, RunTick)
+static bool g_launchedFromCopy;   // partie lancee depuis la copie de lancement Steam (%LOCALAPPDATA%\MWCoop\My Winter Car)
 static bool g_modMissing;   // ... et absente : proposer le lancement par Steam a la fermeture du jeu
 static bool g_steamLaunch;  // partie lancee par Steam (steam://rungameid) : Steam peut mettre du temps a demarrer le jeu
 static std::vector<HWND> g_preWnds;                 // fenetres Unity deja la au lancement (un autre jeu sur ce PC)
@@ -3006,12 +3007,13 @@ static void SkinStep(int dir)
 static std::string MyShirt();
 static std::wstring SkinLabel(const std::string &skin);
 // ---------------------------------------------------------------- tenues offertes (credits : onglet CREDITS)
-// Pack de Dom (08/10/2026, demande de JD) : 157 tenues (86 hauts, 27 pantalons, 44 visages) sur le patron des vetements
+// Pack de Dom (08/10/2026, demande de JD) : 155 tenues (84 hauts, 27 pantalons, 44 visages) sur le patron des vetements
 // des PNJ. Telecharge une fois (8,7 Mo) depuis le depot (assets/tenues), a part des mises a jour du mod, dans
 // MWCoop\tenues\<auteur>\ : lu par le mod (Sync\Tenues.cs) et par l'apercu 3D d'ici. Noms a part (dom_haut_NN...) :
 // jamais a la place des textures du jeu. Pack absent chez un joueur : la tenue d'origine.
 struct TenuePack { const char *id; const char *ver; const wchar_t *zip; };
-static const TenuePack kTenuePacks[] = { { "dom", "1", L"tenues-dom-1.zip" } };
+// (dom 2, 08/10 : sans dom_haut_77 ni dom_haut_83, retires a la demande de JD ; pas de renumerotation)
+static const TenuePack kTenuePacks[] = { { "dom", "2", L"tenues-dom-2.zip" } };
 static std::atomic<int> g_tenuesState(0);   // 0 rien, 1 en cours, 2 recu (listes a completer), 3 echec
 static std::wstring TenuesDir() { return g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\tenues\\"; }
 static bool IsTenue(const std::string &n) { return n.find("_haut_") != std::string::npos || n.find("_pantalon_") != std::string::npos || n.find("_visage_") != std::string::npos; }
@@ -3044,6 +3046,17 @@ static DWORD WINAPI TenuesThread(void *)
         std::string why;
         if (!HttpGet(url, NULL, zf, false, &st) || st != 200) { LaunchLog("tenues offertes : %s : telechargement impossible (HTTP %lu)", p.id, st); fail = true; DeleteFileW(zf.c_str()); continue; }
         SHCreateDirectoryExW(NULL, TenuesDir().c_str(), NULL);
+        {   // version precedente : ses fichiers retires d'abord (une tenue enlevee du pack ne doit pas rester)
+            std::wstring pd = TenuesDir() + Widen(p.id) + L"\\";
+            WIN32_FIND_DATAW fd;
+            HANDLE h = FindFirstFileW((pd + L"*").c_str(), &fd);
+            int n = 0;
+            if (h != INVALID_HANDLE_VALUE) {
+                do { if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && DeleteFileW((pd + fd.cFileName).c_str())) n++; } while (FindNextFileW(h, &fd));
+                FindClose(h);
+            }
+            if (n) LaunchLog("tenues offertes : %s : %d fichier(s) de la version precedente retires", p.id, n);
+        }
         if (!Unzip(zf, TenuesDir(), &why)) { LaunchLog("tenues offertes : %s : %s", p.id, why.c_str()); fail = true; }
         else { LaunchLog("tenues offertes : pack %s (version %s) recu", p.id, p.ver); any = true; }
         DeleteFileW(zf.c_str());
@@ -3579,7 +3592,13 @@ static std::wstring MirrorDir()
 }
 
 // Avec le MSCLoader de MWCoop actif : sa copie de lancement (pare-feu, jeu deja lance).
-static std::wstring GameExe() { std::wstring m = MirrorDir(); if (g_mscOn && MscOwn() && MscOwnInstalled()) m = MscCopyDir(); return (m.empty() ? g_gameDir : m) + L"mywintercar.exe"; }
+static std::wstring GameExe()
+{
+    std::wstring m = MirrorDir();
+    if (GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) != 0) m.clear();   // (depart du dossier du jeu)
+    if (g_mscOn && MscOwn() && MscOwnInstalled()) m = MscCopyDir();
+    return (m.empty() ? g_gameDir : m) + L"mywintercar.exe";
+}
 
 static bool SameFile(const std::wstring &a, const std::wstring &b)
 {
@@ -4009,7 +4028,14 @@ static void Launch(int mode, const char *partie = NULL)
     // Lance comme un double-clic dans l'explorateur : un mode de compatibilite de l'exe peut exiger l'administrateur ;
     // CreateProcess echoue alors (erreur 740), ShellExecuteEx affiche la demande de Windows.
     std::wstring exe = g_gameDir + L"mywintercar.exe", runDir = g_gameDir;
+    g_launchedFromCopy = false;
     std::wstring mirror = syncKind ? GuestCopyDir() : MirrorDir();
+    // Dossier du jeu plutot que la copie de lancement ([Lanceur] SansCopie, pris tout seul quand MWCoop ne s'est pas charge
+    // depuis la copie) : chez un joueur (08/10), le jeu parti de la copie dans AppData ne chargeait jamais MWCoop -- notre
+    // version.dll y etait bloquee --, alors que parti du dossier du jeu, si. Chez d'autres, c'est l'inverse (copie creee
+    // pour ca, 05/10) : chacun garde ce qui marche chez lui.
+    bool noCopy = !syncKind && GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) != 0;
+    if (noCopy && !mirror.empty()) { mirror.clear(); LaunchLog("depart du dossier du jeu (SansCopie : MWCoop ne se chargeait pas depuis la copie)"); }
     // MSCLoader de MWCoop (onglet MODS) : toujours une copie de lancement, avec son Doorstop (jeu Steam ou non).
     bool ownMsc = MscOwn() && MscOwnInstalled();
     if (!syncKind && ownMsc && g_mscOn) mirror = MscCopyDir();
@@ -4018,7 +4044,7 @@ static void Launch(int mode, const char *partie = NULL)
         if (PrepareGuestCopy(mirror, syncKind == 2) && (!ownMsc || MscOwnApply(mirror, syncKind == 2, true))) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
         else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part sans les mods de l'h\u00F4te", L"Could not prepare the launch copy: the game starts without the host's mods"));
     } else if (!mirror.empty()) {
-        if (PrepareMirror(mirror) && (!ownMsc || MscOwnApply(mirror, true, false))) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
+        if (PrepareMirror(mirror) && (!ownMsc || MscOwnApply(mirror, true, false))) { exe = mirror + L"mywintercar.exe"; runDir = mirror; g_launchedFromCopy = !ownMsc && mirror == MirrorDir(); }
         else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de son dossier (le mod ou MSCLoader risquent de ne pas se charger)", L"Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)"));
     }
     if (mscOff) MscOffInCopy(runDir);
