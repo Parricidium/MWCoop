@@ -1190,7 +1190,16 @@ namespace MWCoop
             // [Test] Autotest=ceinture : l'invite s'assoit a l'avant de [Test] TestVoiture, attache sa ceinture a 36 s ;
             // l'hote le regarde (CameraAvatar) et voit la ceinture bouclee (journal + captures).
             if (mode == "ceinture" && !Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), 0)); }
-            if (mode == "ceinture" && !Net.Session.IsHost && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
+            // [Test] CeintureVisee=1 : avant d'attacher, le regard vers la ceinture rangee (37-41 s) puis la boucle (42-46 s),
+            // ce que voit la visee note chaque seconde, et captures (ecran-ceinture-*).
+            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) != 0 && step >= 1 && step < 9 && t > 37f && t < 47f)
+            {
+                Log.Info("autotest : " + Seats.TestBeltLook(t < 42f ? 0 : 1));
+                if (Time.realtimeSinceStartup >= rivLog) { rivLog = Time.realtimeSinceStartup + 1f; Log.Info("autotest : " + Seats.TestBeltAim()); }
+                if (step == 1 && t > 39f) { step = 3; CaptureSoon("ceinture-rangee", 0.1f); }
+                if (step == 3 && t > 44f) { step = 4; CaptureSoon("ceinture-boucle", 0.1f); }
+            }
+            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) == 0 && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
             // [Test] Autotest=apimods : (avec MSCLoader et MWCoopTestMod) l'hote sauvegarde sur place a 20 s : son Mods.txt
             // (compteur du mod d'essai) partira avec la sauvegarde a la partie suivante.
             if (mode == "apimods" && Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest : sauvegarde de l'hote"); Game.SaveInPlace(); }
