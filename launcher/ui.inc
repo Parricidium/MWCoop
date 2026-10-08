@@ -940,15 +940,93 @@ static void DrawNotesPage(Graphics &g)
 }
 
 // ---- page JOURNAUX
+static std::wstring LogDay(const FILETIME &ft, std::wstring *hm)
+{
+    FILETIME lt; SYSTEMTIME st;
+    FileTimeToLocalFileTime(&ft, &lt);
+    FileTimeToSystemTime(&lt, &st);
+    wchar_t b[40], h[16];
+    if (g_fr) swprintf_s(b, L"%02d/%02d/%04d", st.wDay, st.wMonth, st.wYear); else swprintf_s(b, L"%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
+    swprintf_s(h, g_fr ? L"%02dh%02d" : L"%02d:%02d", st.wHour, st.wMinute);
+    if (hm) *hm = h;
+    return b;
+}
+
+// En-tete d'un groupe (une partie) : chevron, date et heures, version / mode / profil / taille, pastilles, boutons
+// dossier, zip, corbeille (rouge quand la suppression attend son second clic).
+static void DrawLogHead(Graphics &g, const LogGroup &gr, RectF r, int hotPart)
+{
+    bool open = LogGroupOpen(gr), cur = gr.key == L"*";
+    GraphicsPath rp; RoundRect(rp, r, 14);
+    SolidBrush rb(hotPart == 0 ? TH(cardSel) : cur ? WithA(kAcc, 0.10f) : TH(card)); g.FillPath(&rb, &rp);
+    Pen rpen(hotPart >= 0 ? WithA(kAcc, 0.7f) : cur ? WithA(kAcc, 0.45f) : TH(choiceBorder), 1.0f); g.DrawPath(&rpen, &rp);
+    Icon(g, open ? IC_CHEVD : IC_CHEVR, r.X + 24, r.Y + r.Height / 2, 18, hotPart == 0 ? kAcc : kInk, 2.3f);
+    std::wstring endHM, day = LogDay(gr.end, &endHM), title;
+    if (cur) title = std::wstring(gr.live ? T(L"Partie en cours", L"Current session") : T(L"Dernière partie", L"Last session")) + L" \u00B7 " + day;
+    else title = std::wstring(T(L"Partie du ", L"Session of ")) + day;
+    if (!gr.startHM.empty()) {
+        std::wstring s = gr.startHM;
+        if (!g_fr && s.size() == 5) s[2] = L':';
+        title += L" \u00B7 " + s + (gr.live ? L"" : L" \u2192 " + endHM);
+    } else if (!gr.live) title += L" \u00B7 " + endHM;
+    std::wstring sub;
+    auto part = [&](const std::wstring &s) { if (s.empty()) return; if (!sub.empty()) sub += L" \u00B7 "; sub += s; };
+    if (!gr.version.empty()) part(L"MWCoop " + gr.version);
+    part(gr.mode);
+    if (!gr.profile.empty()) part((gr.profile[0] == L'(' || gr.profile.find(L' ') != std::wstring::npos ? L"" : std::wstring(T(L"profil ", L"profile "))) + gr.profile);
+    wchar_t nb[64];
+    if (gr.bytes < 1048576) swprintf_s(nb, T(L"%d journaux, %.0f Ko", L"%d logs, %.0f KB"), gr.files, gr.bytes / 1024.0);
+    else swprintf_s(nb, T(L"%d journaux, %.1f Mo", L"%d logs, %.1f MB"), gr.files, gr.bytes / 1048576.0);
+    part(nb);
+    float textW = r.Width - 52 - 3 * 46 - 24;
+    // Pastilles a droite du texte, avant les boutons.
+    float px = LogHeadBtn(r, 1).X - 12;
+    auto pill = [&](const wchar_t *lab) {
+        float lw = PillW(lab, 10.5f);
+        px -= lw;
+        Pill(g, RectF(px, r.Y + (r.Height - 22) / 2, lw, 22), WithA(kRed, 0.18f), lab, kRed, 10.5f);
+        px -= 8;
+    };
+    if (gr.crash) pill(T(L"ARRÊT BRUTAL", L"ABRUPT STOP"));
+    if (gr.errors > 0) {
+        wchar_t lab[48];
+        swprintf_s(lab, gr.errors == 1 ? T(L"1 ERREUR", L"1 ERROR") : T(L"%d ERREURS", L"%d ERRORS"), gr.errors);
+        pill(lab);
+    }
+    textW = min(textW, px - (r.X + 48) - 6);
+    Text(g, title, RectF(r.X + 48, r.Y + 9, textW, 22), 14, FontStyleBold, kInk, StringAlignmentNear);
+    Text(g, sub, RectF(r.X + 48, r.Y + 31, textW, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+    bool armed = g_logDelKey == gr.key && GetTickCount() - g_logDelT < 4000;
+    for (int p = 1; p <= 3; p++) {
+        RectF b = LogHeadBtn(r, p);
+        bool h = hotPart == p, red = p == 3 && armed;
+        GraphicsPath bp; RoundRect(bp, b, 10);
+        SolidBrush bb(red ? WithA(kRed, 0.85f) : h ? TH(cardSel) : TH(card)); g.FillPath(&bb, &bp);
+        if (h || red) { Pen bpen(red ? kRed : WithA(kAcc, 0.7f), 1.0f); g.DrawPath(&bpen, &bp); }
+        int ic = p == 1 ? IC_FOLDER : p == 2 ? IC_ZIP : IC_TRASH;
+        Color ink = red ? Color(255, 255, 255, 255) : h ? (p == 3 ? kRed : kAcc) : kInk;
+        Icon(g, ic, b.X + b.Width / 2, b.Y + b.Height / 2, 17, ink, 1.9f);
+    }
+}
+
 static void DrawLogsPage(Graphics &g)
 {
     RectF c = kMain;
     Glass(c);
     Title(g, T(L"Les journaux du jeu et du mod", L"The game's and the mod's logs"), RectF(c.X + 24, c.Y + 20, 500, 26), 17, kInk);
-    Text(g, T(L"Remplacés à chaque lancement : crée le zip juste après la partie qui a posé problème.", L"Replaced at every launch: make the zip right after the session that went wrong."),
-         RectF(c.X + 24, c.Y + 46, 560, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     g_btn[B_LOGZIP].r = RectF(c.X + c.Width - 24 - 232, c.Y + 22, 232, 44);
     g_btn[B_LOGDIR].r = RectF(g_btn[B_LOGZIP].r.X - 12 - 196, c.Y + 22, 196, 44);
+    bool archived = false;
+    for (auto &gr : g_logGroups) if (gr.key != L"*") archived = true;
+    float subW = g_btn[B_LOGDIR].r.X - (c.X + 24) - 16;
+    if (archived) {
+        bool armed = g_logDelKey == L"**" && GetTickCount() - g_logDelT < 4000;
+        RectF cr(g_btn[B_LOGDIR].r.X - 12 - 176, c.Y + 22, 176, 44);
+        UiButton(g, cr, armed ? T(L"Confirmer ?", L"Confirm?") : T(L"Tout supprimer", L"Delete all"), UI_LOG_CLEAR, false, IC_TRASH);
+        subW = cr.X - (c.X + 24) - 16;
+    }
+    Text(g, T(L"Chaque partie garde ses journaux (les 30 dernières).", L"Every session keeps its own logs (the last 30)."),
+         RectF(c.X + 24, c.Y + 46, subW, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     for (int id : { B_LOGDIR, B_LOGZIP }) {
         Button &b = g_btn[id];
         bool zip = id == B_LOGZIP;
@@ -973,17 +1051,18 @@ static void DrawLogsPage(Graphics &g)
         y += 70;
     }
     kLogsR = RectF(c.X + 24, y, c.Width - 48, c.Y + c.Height - 18 - y);
-    if (g_logList.empty())
+    if (g_logRows.empty())
         Para(g, T(L"Aucun journal pour l'instant : le jeu en écrit à chaque lancement avec MWCoop.", L"No logs yet: the game writes them every time it starts with MWCoop."),
              RectF(kLogsR.X + 100, kLogsR.Y + 60, kLogsR.Width - 200, 60), 14, kGrey, StringAlignmentCenter);
     float sc = g_scroll[TAB_LOGS];
     GraphicsState st = g.Save();
     g.SetClip(kLogsR, CombineModeIntersect);
-    for (int i = 0; i < (int)g_logList.size(); i++) {
-        const LogEntry &e = g_logList[i];
+    for (int i = 0; i < (int)g_logRows.size(); i++) {
         RectF r = LogRowRect(i);
         if (r.Y + r.Height < kLogsR.Y || r.Y > kLogsR.Y + kLogsR.Height) continue;
         bool hot = i == g_logRowHot;
+        if (g_logRows[i].entry < 0) { DrawLogHead(g, g_logGroups[g_logRows[i].group], r, hot ? g_logPart : -1); continue; }
+        const LogEntry &e = g_logList[g_logRows[i].entry];
         GraphicsPath rp; RoundRect(rp, r, 14);
         SolidBrush rb(hot && g_logPart == 0 ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
         Pen rpen(hot ? WithA(kAcc, 0.7f) : TH(choiceBorder), 1.0f); g.DrawPath(&rpen, &rp);
@@ -1230,6 +1309,11 @@ static bool UiClick(int id)
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
+    if (id == UI_LOG_CLEAR) {   // second clic dans les 4 s : les parties rangees a la corbeille
+        if (g_logDelKey == L"**" && GetTickCount() - g_logDelT < 4000) { g_logDelKey.clear(); LogsDeleteAll(); }
+        else { g_logDelKey = L"**"; g_logDelT = GetTickCount(); SetStatus(K_WARN, T(L"Clique encore pour mettre toutes les parties rangées à la corbeille", L"Click again to move every stored session to the Recycle Bin")); }
+        return true;
+    }
     if (id >= UI_GFX_PRESET && GfxClick(id)) return true;
     return false;
 }

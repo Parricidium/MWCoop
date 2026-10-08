@@ -360,6 +360,90 @@ static void ReadConfig() {
     }
 }
 
+// Journaux de la partie precedente (chargeur.log, mwcoop.log, et une copie du journal de Unity s'il est de cette
+// partie) ranges dans logs\sessions\<fin de la partie : AAAA-MM-JJ_HHhMMmSS>\ avant d'en ouvrir de nouveaux : chaque
+// partie garde les siens, le lanceur les montre par partie (demande de JD, 08/10). Les kKeepSessions plus recentes.
+static const int kKeepSessions = 30;
+static bool FileTimeOf(const wchar_t* p, FILETIME* ft) {
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (!GetFileAttributesExW(p, GetFileExInfoStandard, &a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return false;
+    *ft = a.ftLastWriteTime;
+    return true;
+}
+static void DeleteTree(const wchar_t* dir) {
+    wchar_t pat[MAX_PATH], p[MAX_PATH];
+    swprintf(pat, MAX_PATH, L"%s\\*", dir);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pat, &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
+            swprintf(p, MAX_PATH, L"%s\\%s", dir, fd.cFileName);
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) DeleteTree(p);
+            else { SetFileAttributesW(p, FILE_ATTRIBUTE_NORMAL); DeleteFileW(p); }
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    RemoveDirectoryW(dir);
+}
+static int g_archived;   // (journal : 1 = partie precedente rangee, -1 = echec)
+static wchar_t g_archiveDir[MAX_PATH];
+static void ArchiveLogs(const wchar_t* logs) {
+    wchar_t ml[MAX_PATH], cl[MAX_PATH], sessions[MAX_PATH];
+    swprintf(ml, MAX_PATH, L"%s\\mwcoop.log", logs);
+    swprintf(cl, MAX_PATH, L"%s\\chargeur.log", logs);
+    swprintf(sessions, MAX_PATH, L"%s\\sessions", logs);
+    FILETIME end = {}, start = {};
+    bool hasM = FileTimeOf(ml, &end), hasC = FileTimeOf(cl, &start);
+    if (!hasM && !hasC) return;
+    if (!hasM) end = start;
+    if (!hasC) start = end;
+    if (CompareFileTime(&start, &end) > 0) end = start;
+    FILETIME lt; SYSTEMTIME st;
+    FileTimeToLocalFileTime(&end, &lt);
+    FileTimeToSystemTime(&lt, &st);
+    SHCreateDirectoryExW(NULL, sessions, NULL);
+    wchar_t dir[MAX_PATH];
+    swprintf(dir, MAX_PATH, L"%s\\%04d-%02d-%02d_%02dh%02dm%02d", sessions, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    for (int k = 2; GetFileAttributesW(dir) != INVALID_FILE_ATTRIBUTES && k < 50; k++)
+        swprintf(dir, MAX_PATH, L"%s\\%04d-%02d-%02d_%02dh%02dm%02d-%d", sessions, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, k);
+    if (!CreateDirectoryW(dir, NULL)) { g_archived = -1; return; }
+    wchar_t to[MAX_PATH];
+    bool ok = true;
+    if (hasM) { swprintf(to, MAX_PATH, L"%s\\mwcoop.log", dir); ok = MoveFileExW(ml, to, MOVEFILE_COPY_ALLOWED) && ok; }
+    if (hasC) { swprintf(to, MAX_PATH, L"%s\\chargeur.log", dir); ok = MoveFileExW(cl, to, MOVEFILE_COPY_ALLOWED) && ok; }
+    // Journal de Unity (dossier du jeu, remplace a chaque lancement) : copie, s'il a ete ecrit pendant cette partie
+    // (jusqu'a 2 min avant le chargeur) et pas demesure.
+    wchar_t ul[MAX_PATH];
+    swprintf(ul, MAX_PATH, L"%s\\mywintercar_Data\\output_log.txt", g_gameDir);
+    WIN32_FILE_ATTRIBUTE_DATA ua;
+    if (GetFileAttributesExW(ul, GetFileExInfoStandard, &ua) && ua.nFileSizeHigh == 0 && ua.nFileSizeLow < (64u << 20)) {
+        ULARGE_INTEGER a, b; a.LowPart = ua.ftLastWriteTime.dwLowDateTime; a.HighPart = ua.ftLastWriteTime.dwHighDateTime;
+        b.LowPart = start.dwLowDateTime; b.HighPart = start.dwHighDateTime;
+        if (a.QuadPart + 1200000000ULL >= b.QuadPart) { swprintf(to, MAX_PATH, L"%s\\output_log.txt", dir); CopyFileW(ul, to, FALSE); }
+    }
+    g_archived = ok ? 1 : -1;
+    wcscpy(g_archiveDir, dir);
+    // Les plus anciennes au-dela de kKeepSessions (noms dates : le plus petit est le plus vieux).
+    for (int guard = 0; guard < 200; guard++) {
+        wchar_t pat[MAX_PATH], oldest[MAX_PATH] = L"";
+        swprintf(pat, MAX_PATH, L"%s\\*", sessions);
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW(pat, &fd);
+        int n = 0;
+        if (h == INVALID_HANDLE_VALUE) break;
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
+            n++;
+            if (!oldest[0] || wcscmp(fd.cFileName, oldest) < 0) wcscpy(oldest, fd.cFileName);
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+        if (n <= kKeepSessions || !oldest[0]) break;
+        swprintf(pat, MAX_PATH, L"%s\\%s", sessions, oldest);
+        DeleteTree(pat);
+    }
+}
+
 static void Init() {
     InitializeCriticalSection(&g_logLock);
     g_mainTid = GetCurrentThreadId();
@@ -393,9 +477,12 @@ static void Init() {
     wchar_t logs[MAX_PATH], lp[MAX_PATH];
     swprintf(logs, MAX_PATH, L"%s\\logs", g_profil[0] ? g_profilDir : g_dataRoot);
     SHCreateDirectoryExW(NULL, logs, NULL);
+    ArchiveLogs(logs);
     swprintf(lp, MAX_PATH, L"%s\\chargeur.log", logs);
     g_log = _wfopen(lp, L"w");
     Log("MWCoop chargeur - jeu : %ls", g_gameDir);
+    if (g_archived > 0) Log("partie precedente rangee dans %ls", g_archiveDir);
+    else if (g_archived < 0) Log("ATTENTION : journaux de la partie precedente pas tous ranges (%ls)", g_archiveDir[0] ? g_archiveDir : L"dossier impossible");
     Log("profil : %ls, arriere-plan : %d", g_profil[0] ? g_profil : L"(normal)", g_arrierePlan);
     if (!g_gameWritable) Log("ATTENTION : dossier du jeu en lecture seule, donnees dans %ls", g_dataRoot);
     // Trace de chargement, toujours au meme endroit (le lanceur la lit : le mod a-t-il ete charge ?).

@@ -15,7 +15,7 @@ for ($i = 1; $i -le $Players; $i++) {
     Copy-Item "$root\build\version.dll" $d -Force
     Copy-Item "$root\build\MWCoop.dll" "$d\MWCoop" -Force
     $p = "$d\MWCoop\profils\Joueur$i"
-    Remove-Item "$p\logs\*" -ErrorAction SilentlyContinue
+    Remove-Item "$p\logs\*.log" -ErrorAction SilentlyContinue   # (pas logs\sessions : les parties rangees par le chargeur)
     $w, $h = $Taille.Split('x')
     $args = "-screen-fullscreen 0 -screen-width $w -screen-height $h"
     $procs += Start-Process "$d\mywintercar.exe" -ArgumentList $args -WorkingDirectory $d -PassThru

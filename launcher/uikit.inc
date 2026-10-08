@@ -33,6 +33,7 @@ enum {
     UI_SET_AUTO = 220, UI_SET_CHECK, UI_SET_DARK, UI_SET_LIGHT, UI_SET_FR, UI_SET_EN, UI_SET_CLOSE, UI_SET_GUIDE,
     UI_SET_STEAM, UI_SET_IP, UI_SET_PORTM, UI_SET_PORTP, UI_SET_FOLDER, UI_SET_BUY, UI_SET_MODSAUTO,
     UI_API_DOC = 240, UI_API_SRC, UI_API_DIR, UI_API_COPY, UI_API_EX0, UI_API_EX1,
+    UI_LOG_CLEAR = 250,           // JOURNAUX : tout supprimer (parties rangees)
     UI_GFX_PRESET = 2590,         // + prereglage
     UI_GFX = 2600,                // + ligne * 3 + (0 ligne, 1 fleche gauche, 2 fleche droite)
     UI_NOTE = 300,                // + i : version i de la liste
@@ -45,7 +46,7 @@ enum {
 // ---- icones (traits, dans une boite de 24, comme celles de la maquette)
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
-       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD };
+       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -120,6 +121,9 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
     case IC_CHECK: poly({ 5, 12.5f, 9.5f, 17, 19, 7.5f }, false); break;
     case IC_CHEVR: poly({ 9, 6, 15, 12, 9, 18 }, false); break;
     case IC_CHEVL: poly({ 15, 6, 9, 12, 15, 18 }, false); break;
+    case IC_CHEVD: poly({ 6, 9, 12, 15, 18, 9 }, false); break;
+    case IC_TRASH: line(4, 6.5f, 20, 6.5f); poly({ 9, 6.5f, 9, 4, 15, 4, 15, 6.5f }, false); poly({ 6, 6.5f, 7.2f, 20, 16.8f, 20, 18, 6.5f }, false);
+                   line(10.2f, 10, 10.5f, 16.5f); line(13.8f, 10, 13.5f, 16.5f); break;
     case IC_PLAY: poly({ 7, 4, 20, 12, 7, 20 }, true); break;
     case IC_LOGIN: poly({ 10, 4, 18, 4, 18, 20, 10, 20 }, false); line(3, 12, 14, 12); poly({ 10, 8, 14, 12, 10, 16 }, false); break;
     case IC_GLOBE: circ(12, 12, 9); line(3, 12, 21, 12); g.DrawEllipse(&pen, cx - 3.8f * k, cy - 9 * k, 7.6f * k, 18 * k); break;
