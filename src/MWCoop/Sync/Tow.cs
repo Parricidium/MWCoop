@@ -46,7 +46,7 @@ namespace MWCoop
         // n'etait pas accroche ; retour d'un joueur, 08/10). Annoncee (chemin du crochet) au debut puis toutes les 2 s ;
         // chez les autres, une corde visible du crochet a la main droite de son avatar. Finie par ATTACH ou DETACH.
         const int HELD = 4;
-        class Held { public Transform Hook; public GameObject Visual; public Transform End2; public float Seen; public string Path; }
+        class Held { public Transform Hook; public GameObject Visual; public Transform End1, End2; public float Seen; public string Path; }
         static readonly Dictionary<int, Held> held = new Dictionary<int, Held>();
         static string heldSent;
         static float heldNext;
@@ -252,7 +252,7 @@ namespace MWCoop
                     b.parent = null;
                     foreach (SkinnedMeshRenderer s in g.GetComponentsInChildren<SkinnedMeshRenderer>(true)) s.updateWhenOffscreen = true;
                     g.SetActive(true);
-                    h.Visual = g; h.End2 = b;
+                    h.Visual = g; h.End1 = a; h.End2 = b;
                 }
                 if (h.End2 != null && hand != null) { h.End2.position = hand.position; h.End2.rotation = hand.rotation; }
             }
@@ -263,6 +263,9 @@ namespace MWCoop
         {
             Held h;
             if (!held.TryGetValue(id, out h)) return;
+            // (les deux bouts ont quitte la corde : le 1er range sous le crochet de la voiture, le 2e a la racine. Le 1er
+            // restait accroche au crochet a chaque reprise de la corde : corde etiree depuis la voiture, retour d'un joueur.)
+            if (h.End1 != null) Object.Destroy(h.End1.gameObject);
             if (h.End2 != null) Object.Destroy(h.End2.gameObject);
             if (h.Visual != null) Object.Destroy(h.Visual);
             held.Remove(id);
@@ -637,10 +640,16 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode != "remorque") return;
-            if (t >= 16f && t < 80f && t >= testLog)
+            // [Test] RemorqueTenir=1 : un seul crochet clique (corde tenue en main), retiree a 75 s ; chacun note aussi les bouts
+            // de corde restes sous un crochet de voiture (RopeFirst hors de la corde : corde etiree, retour d'un joueur).
+            bool tenir = Config.GetInt("Test", "RemorqueTenir", 0) != 0;
+            if (t >= 16f && t < (tenir ? 110f : 80f) && t >= testLog)
             {
                 testLog = t + 2f;
-                Log.Info("autotest : remorque t=" + t.ToString("F0") + " : " + State()
+                int orphans = 0;
+                foreach (Transform x in Object.FindObjectsOfType<Transform>())
+                    if (x.name == "RopeFirst" && x.parent != null && x.parent.name.StartsWith("Hook") && VehicleSync.CarRoot(x) != null) orphans++;
+                Log.Info("autotest : remorque t=" + t.ToString("F0") + " : " + State() + ", bouts sous crochet " + orphans + ", cordes tenues vues " + held.Count
                          + (testA != null && testB != null ? " ; voitures en " + testA.position.ToString("F1") + " v " + testA.velocity.magnitude.ToString("F1")
                             + " / " + testB.position.ToString("F1") + " v " + testB.velocity.magnitude.ToString("F1") : ""));
             }
@@ -649,7 +658,8 @@ namespace MWCoop
             if (testStep == 1 && t >= 29f) { testStep = 2; Log.Info("autotest : remorque : " + TestWalk()); }
             if (testStep == 2 && t >= 30f) { testStep = 3; Log.Info("autotest : remorque : clic " + TestClick(testH1, "State 3")); }
             // 2e clic une fois la corde en attente du 2e crochet, comme un vrai joueur (plus tot, le jeu ne le voit pas changer).
-            if (testStep == 3 && t >= 34f && (ropeFsm == null || ropeFsm.ActiveStateName == "Check distance")) { testStep = 4; testTraceEnd = t + 3f; Log.Info("autotest : remorque : clic " + TestClick(testH2, "State 3")); }
+            if (tenir && testStep == 3 && t >= 75f) { testStep = 5; Log.Info("autotest : remorque : retrait (corde tenue) " + TestClick(testH1, "Remove rope")); }
+            if (!tenir && testStep == 3 && t >= 34f && (ropeFsm == null || ropeFsm.ActiveStateName == "Check distance")) { testStep = 4; testTraceEnd = t + 3f; Log.Info("autotest : remorque : clic " + TestClick(testH2, "State 3")); }
             // Trace de la corde image par image juste apres le 2e clic (joint pose, casse, corde rangee...).
             if (testStep == 4 && t < testTraceEnd && ropeFsm != null)
             {
