@@ -72,6 +72,46 @@ namespace MWCoop
                 p.transform.Rotate(0, 40f * Time.deltaTime, 0);
                 cc.SimpleMove(p.transform.forward * 1.5f);
             }
+            // [Test] Autotest=moto : l'invite monte sur la Jonnez (15 s a cote, 22 s au guidon ; [Test] MotoPassager=1 : place
+            // arriere, Seats) ; l'hote le regarde (camera vers l'avatar le plus proche), capture moto-<t> a 35, 45 s ; a 40 s
+            // l'avatar fait le kick (comme la commande Kickstart rejouee), capture a 40,3 s.
+            if (mode == "moto")
+            {
+                string jn = "JONNEZ ES(Clone)";
+                bool rearSeat = Config.GetInt("Test", "MotoPassager", 0) != 0;
+                if (!Net.Session.IsHost)
+                {
+                    if (rearSeat) { if (t > 20f && step == 0) { step = 1; Log.Info("autotest : moto, place arriere -> " + Seats.TestSit(jn, 1)); } }
+                    else
+                    {
+                        if (t > 15f && step == 0) { step = 1; Log.Info("autotest : moto -> " + VehicleSync.TestEnter(jn, false)); }
+                        if (t > 22f && step == 1) { step = 2; Log.Info("autotest : moto, guidon -> " + VehicleSync.TestEnter(jn, true)); }
+                    }
+                }
+                else if (t > 25f)
+                {
+                    // camera d'essai de profil, a 1,6 m ([Test] MotoCam=x,y,z dans le repere de la moto)
+                    GameObject mo = Game.FindAny(jn);
+                    if (mo != null)
+                    {
+                        if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 60; }
+                        string mc = Config.Get("Test", "MotoCam", "-1.6,0.55,0.1"); string[] mp = mc.Split(',');
+                        var ci = System.Globalization.CultureInfo.InvariantCulture;
+                        testCam.transform.position = mo.transform.TransformPoint(new Vector3(float.Parse(mp[0], ci), float.Parse(mp[1], ci), float.Parse(mp[2], ci)));
+                        testCam.transform.LookAt(mo.transform.TransformPoint(new Vector3(0f, 0.45f, 0f)));
+                    }
+                    if (t > 35f && step == 0) { step = 1; CaptureSoon("moto-35", 0.05f); }
+                    if (t > 40f && step == 1)
+                    {
+                        step = 2;
+                        GameObject ks = Game.FindAny(jn + "/LOD/Dashboard/Kickstart");
+                        foreach (Avatar a in PlayerSync.Avatars) if (ks != null) a.ReachFor(ks.transform);
+                        CaptureSoon("moto-kick", 0.3f);
+                        Log.Info("autotest : moto, kick " + (ks != null ? "montre" : "kickstart introuvable"));
+                    }
+                    if (t > 45f && step == 2) { step = 3; CaptureSoon("moto-45", 0.05f); }
+                }
+            }
             if (mode == "regarde" && t > 3f)
             {
                 // [Test] TestClips=clip@t;clip@t... : a partir de 20 s, un clip toutes les 4 s, capture a +2,5 s.

@@ -169,7 +169,8 @@ namespace MWCoop
             // Penche : rotation de Camera (au-dessus du regard, sous Pivot/AnimPivot) par rapport au joueur ; ou, si
             // le jeu deplace la camera sans la tourner, son decalage vu a 0,9 m (le dandinement de la marche reste sous 4 deg).
             leanSide = leanFwd = 0f;
-            if (camBase != null && !inCar && (b & G_Down) == 0)
+            // (passager assis compris : il se penche aussi -- le conducteur, lui, par le decalage de sa tete, Avatar.leanOff)
+            if (camBase != null && (!inCar || (Seats.Seated && VehicleSync.LocalDriving < 0)) && (b & G_Down) == 0)
             {
                 Vector3 e = (Quaternion.Inverse(player.rotation) * camBase.rotation).eulerAngles;
                 Vector3 p = player.InverseTransformPoint(camBase.position);

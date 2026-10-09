@@ -3,6 +3,83 @@
 // [Graphismes] du mwcoop.ini du jeu (MWCoop\Gfx.cs les applique au chargement, et tout de suite si le jeu tourne) ;
 // cle absente : le jeu decide ("Jeu" pour les reglages du moteur). Options du jeu (son menu) et reglages du moteur en
 // plus ; prereglages Performance / Equilibre / Beau / Ultra en un clic.
+// ---- touches en jeu (Options du jeu > Touches) : section [Touches] de mwcoop.ini, noms des KeyCode de Unity
+struct GameKey { const char *ini, *def; const wchar_t *fr, *en; };
+static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "PorteMonnaie", "N", L"Argent", L"Wallet" }, { "Vocal", "V", L"Vocal", L"Voice" } };
+static const int kGameKeysN = 3;
+static int g_keyCapture = -1;   // pastille en attente d'une touche
+static int GameKeyIndex(const char *rowKey) { const char *n = strchr(rowKey, ':'); n = n ? n + 1 : rowKey; for (int i = 0; i < 3; i++) if (!strcmp(n, kGameKeys[i].ini)) return i; return -1; }
+static std::string GameKeyGet(int k)
+{
+    char buf[64] = {};
+    GetPrivateProfileStringA("Touches", kGameKeys[k].ini, kGameKeys[k].def, buf, sizeof(buf), ModIniA().c_str());
+    return buf[0] ? buf : kGameKeys[k].def;
+}
+static std::wstring GameKeyLabel(const std::string &n)
+{
+    if (n.rfind("Alpha", 0) == 0) return Widen(n.substr(5));
+    if (n.rfind("Keypad", 0) == 0) return std::wstring(T(L"Pavé ", L"Num ")) + Widen(n.substr(6));
+    if (n == "LeftShift") return T(L"Maj gauche", L"Left Shift");
+    if (n == "RightShift") return T(L"Maj droite", L"Right Shift");
+    if (n == "LeftControl") return T(L"Ctrl gauche", L"Left Ctrl");
+    if (n == "RightControl") return T(L"Ctrl droite", L"Right Ctrl");
+    if (n == "LeftAlt") return L"Alt";
+    if (n == "CapsLock") return T(L"Verr. maj", L"Caps Lock");
+    if (n == "Mouse3") return T(L"Souris 4", L"Mouse 4");
+    if (n == "Mouse4") return T(L"Souris 5", L"Mouse 5");
+    return Widen(n);
+}
+// Touche Windows -> nom de KeyCode de Unity ("" : pas prise). 'ext' : bit "etendue" du message (Ctrl, Alt droits).
+static std::string UnityKeyName(WPARAM vk, LPARAM lp)
+{
+    bool ext = (lp & (1 << 24)) != 0;
+    if (vk >= 'A' && vk <= 'Z') return std::string(1, (char)vk);
+    if (vk >= '0' && vk <= '9') return "Alpha" + std::string(1, (char)vk);
+    if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) return "Keypad" + std::to_string((int)(vk - VK_NUMPAD0));
+    if (vk >= VK_F1 && vk <= VK_F12) return "F" + std::to_string((int)(vk - VK_F1 + 1));
+    switch (vk) {
+    case VK_SHIFT: return MapVirtualKeyW((lp >> 16) & 0xFF, MAPVK_VSC_TO_VK_EX) == VK_RSHIFT ? "RightShift" : "LeftShift";
+    case VK_CONTROL: return ext ? "RightControl" : "LeftControl";
+    case VK_MENU: return ext ? "RightAlt" : "LeftAlt";
+    case VK_SPACE: return "Space";
+    case VK_TAB: return "Tab";
+    case VK_RETURN: return ext ? "KeypadEnter" : "Return";
+    case VK_BACK: return "Backspace";
+    case VK_CAPITAL: return "CapsLock";
+    case VK_INSERT: return "Insert";
+    case VK_DELETE: return "Delete";
+    case VK_HOME: return "Home";
+    case VK_END: return "End";
+    case VK_PRIOR: return "PageUp";
+    case VK_NEXT: return "PageDown";
+    case VK_UP: return "UpArrow";
+    case VK_DOWN: return "DownArrow";
+    case VK_LEFT: return "LeftArrow";
+    case VK_RIGHT: return "RightArrow";
+    case VK_ADD: return "KeypadPlus";
+    case VK_SUBTRACT: return "KeypadMinus";
+    case VK_MULTIPLY: return "KeypadMultiply";
+    case VK_DIVIDE: return "KeypadDivide";
+    case VK_DECIMAL: return "KeypadPeriod";
+    case VK_XBUTTON1: return "Mouse3";
+    case VK_XBUTTON2: return "Mouse4";
+    }
+    return "";
+}
+// Touche choisie pour la pastille en attente (Echap : annule). Vrai si prise.
+static bool GameKeyCapture(WPARAM vk, LPARAM lp)
+{
+    if (g_keyCapture < 0) return false;
+    if (vk == VK_ESCAPE) { g_keyCapture = -1; InvalidateRect(g_wnd, NULL, FALSE); return true; }
+    std::string n = UnityKeyName(vk, lp);
+    if (n.empty()) return true;   // (touche pas prise en charge : on attend une autre)
+    WritePrivateProfileStringA("Touches", kGameKeys[g_keyCapture].ini, n.c_str(), ModIniA().c_str());
+    LaunchLog("touche en jeu : %s = %s", kGameKeys[g_keyCapture].ini, n.c_str());
+    g_keyCapture = -1;
+    InvalidateRect(g_wnd, NULL, FALSE);
+    return true;
+}
+
 struct GfxRow
 {
     const char *key; const wchar_t *fr, *en;
@@ -10,7 +87,7 @@ struct GfxRow
     std::vector<int> vals;                     // vide : interrupteur 0/1
     std::vector<const wchar_t *> lf, le;       // noms des valeurs (vals)
     int impact;                                // sur les images par seconde : 0 aucun, 1 leger, 2 moyen, 3 fort
-    int group;                                 // 0 Image, 1 Ombres, 2 Distance et details, 3 Jeu et confort, 4 Lumieres, 5 Ecran, 6 Coop
+    int group;                                 // 0 Image, 1 Ombres, 2 Distance et details, 3 Jeu et confort, 4 Lumieres, 5 Ecran, 6 Voix, 7 Visages, 8 Partie et partage, 9 Touches
     const char *sec;                           // section du mwcoop.ini (absente : Graphismes)
 };
 // Options du mod gardees dans [Coop] (demande de JD, 10/10 : « une section pour ces options du .ini ») : categorie Coop.
@@ -54,14 +131,19 @@ static const std::vector<GfxRow> &GfxRows()
         { "TracesTrafic", L"Traces de pneus de la circulation", L"Traffic skid marks", 0, {}, {}, {}, 1, 3 },
         { "Pseudos", L"Pseudos des joueurs", L"Player names", 120, { 0, 30, 60, 120, 250 },
           { L"Cachés", L"30 m", L"60 m", L"120 m", L"250 m" }, { L"Hidden", L"30 m", L"60 m", L"120 m", L"250 m" }, 0, 3 },
-        { "Vocal", L"Vocal de proximité (touche V)", L"Proximity voice (V key)", 1, {}, {}, {}, 0, 6, "Coop" },
+        // Coop, rangees par type (demande de JD, 10/10) : 6 voix, 7 visages, 8 partie et partage, 9 touches.
+        { "Vocal", L"Vocal de proximité", L"Proximity voice", 1, {}, {}, {}, 0, 6, "Coop" },
         { "VocalPortee", L"Portée de la voix", L"Voice range", 35, { 15, 25, 35, 50, 80 },
           { L"15 m", L"25 m", L"35 m", L"50 m", L"80 m" }, { L"15 m", L"25 m", L"35 m", L"50 m", L"80 m" }, 0, 6, "Coop" },
         { "VolumeVocal", L"Volume des voix", L"Voice volume", 100, { 25, 50, 75, 100 },
           { L"25 %", L"50 %", L"75 %", L"100 %" }, { L"25 %", L"50 %", L"75 %", L"100 %" }, 0, 6, "Coop" },
-        { "VisagePerso", L"Montrer mon visage importé", L"Show my imported face", 1, {}, {}, {}, 0, 6, "Coop" },
-        { "VoirVisages", L"Voir les visages importés des autres", L"See the others' imported faces", 1, {}, {}, {}, 0, 6, "Coop" },
-        { "ArgentDepart", L"Nouvel invité : argent de départ (hôte)", L"New guest: starting money (host)", 1, {}, {}, {}, 0, 6, "Coop" },
+        { "VisagePerso", L"Montrer mon visage importé", L"Show my imported face", 1, {}, {}, {}, 0, 7, "Coop" },
+        { "VoirVisages", L"Voir les visages importés des autres", L"See the others' imported faces", 1, {}, {}, {}, 0, 7, "Coop" },
+        { "ModsAuto", L"Accepter les fichiers de l'hôte", L"Accept the host's files", 0, {}, {}, {}, 0, 8, "Opt" },
+        { "ArgentDepart", L"Argent de départ des invités", L"Guests' starting money", 1, {}, {}, {}, 0, 8, "Coop" },
+        { "Touche:Tchat", L"Écrire aux autres (tchat)", L"Write to the others (chat)", 0, {}, {}, {}, 0, 9, "Touches" },
+        { "Touche:PorteMonnaie", L"Porte-monnaie (donner de l'argent)", L"Wallet (give money)", 0, {}, {}, {}, 0, 9, "Touches" },
+        { "Touche:Vocal", L"Parler (vocal, touche tenue)", L"Talk (voice, hold the key)", 0, {}, {}, {}, 0, 9, "Touches" },
     };
     // Ecran (comme les GTA, a la place de la petite fenetre Unity) : resolutions de l'ecran principal (Windows),
     // mode d'affichage, niveau de qualite du moteur. Appliques par le mod au demarrage du jeu (MWCoop\Gfx.cs).
@@ -116,6 +198,8 @@ static void GfxLoad()
     g_gfxVal.clear();
     std::wstring ini = ModIni();
     for (const GfxRow &r : GfxRows()) {
+        if (r.sec && !strcmp(r.sec, "Touches")) continue;   // (lues a l'affichage : GameKeyGet)
+        if (r.sec && !strcmp(r.sec, "Opt")) { const Opt *o = OptByKey(r.key); g_gfxVal[r.key] = o ? OptGet(*o) : r.def; continue; }   // (option du lanceur)
         wchar_t b[32] = {};
         GetPrivateProfileStringW(r.sec ? Widen(r.sec).c_str() : L"Graphismes", Widen(r.key).c_str(), L"", b, 32, ini.c_str());
         g_gfxVal[r.key] = b[0] ? _wtoi(b) : r.def;
@@ -127,6 +211,7 @@ static void GfxSet(const char *k, int v)
 {
     g_gfxVal[k] = v;
     std::wstring s = std::to_wstring(v);
+    for (const GfxRow &r : GfxRows()) if (!strcmp(r.key, k) && r.sec && !strcmp(r.sec, "Opt")) { if (const Opt *o = OptByKey(k)) OptSet(*o, v); return; }
     std::wstring sec = L"Graphismes";
     for (const GfxRow &r : GfxRows()) if (!strcmp(r.key, k) && r.sec) sec = Widen(r.sec);
     WritePrivateProfileStringW(sec.c_str(), Widen(k).c_str(), v == -1 ? NULL : s.c_str(), ModIni().c_str());   // (-1 : la cle est retiree, le jeu decide)
@@ -146,8 +231,8 @@ static const RectF kGfxTop(264, 88, 1000, 84), kGfxArea(264, 184, 1000, 560);
 static const float kGfxRowH = 27, kGfxHeadH = 44;
 // Categories (demande de JD, 08/10) : en-tetes repliables comme les journaux, reglages sur deux colonnes dessous ;
 // ascenseur quand tout ne tient pas. Deplies : [Lanceur] GfxOuverts (numeros de groupe ; toutes par defaut).
-static const int kGfxOrder[] = { 6, 5, 0, 1, 4, 2, 3 };
-static bool g_gfxOpen[7] = { true, true, true, true, true, true, true };
+static const int kGfxOrder[] = { 6, 7, 8, 9, 5, 0, 1, 4, 2, 3 };
+static bool g_gfxOpen[10] = { true, true, true, true, true, true, true, true, true, true };
 static bool g_gfxOpenRead;
 static float g_gfxContentH;
 static bool g_gfxZones = true;   // (ligne hors de la zone visible : pas de zone cliquable)
@@ -158,14 +243,14 @@ static void GfxOpenRead()
     wchar_t b[64] = {};
     GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts", L"*", b, 64, g_iniLauncher.c_str());
     if (!wcscmp(b, L"*")) return;
-    for (int i = 0; i < 7; i++) g_gfxOpen[i] = wcschr(b, L'0' + i) != NULL;
+    for (int i = 0; i < 10; i++) g_gfxOpen[i] = wcschr(b, L'0' + i) != NULL;
 }
 static void GfxToggleGroup(int gi)
 {
-    if (gi < 0 || gi >= 7) return;
+    if (gi < 0 || gi >= 10) return;
     g_gfxOpen[gi] = !g_gfxOpen[gi];
     std::wstring s;
-    for (int i = 0; i < 7; i++) if (g_gfxOpen[i]) { if (!s.empty()) s += L","; s += (wchar_t)(L'0' + i); }
+    for (int i = 0; i < 10; i++) if (g_gfxOpen[i]) { if (!s.empty()) s += L","; s += (wchar_t)(L'0' + i); }
     WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
 }
 static float GfxMaxScroll() { return max(0.0f, g_gfxContentH - (kGfxArea.Height - 20)); }
@@ -184,6 +269,17 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
         float pw = PillW(il, 9.5f);
         Color ic = r.impact >= 3 ? kRed : kWarn;
         Pill(g, RectF(row.X + w + 10, row.Y + (row.Height - 18) / 2, pw, 18), WithA(ic, 0.16f), il, ic, 9.5f);
+    }
+    if (r.sec && !strcmp(r.sec, "Touches")) {   // pastille de la touche ; clic : la prochaine touche appuyee
+        int k = GameKeyIndex(r.key);
+        bool cap = k >= 0 && g_keyCapture == k;
+        RectF pr(row.X + row.Width - 172, row.Y + 2, 172, row.Height - 4);
+        GraphicsPath pp; RoundRect(pp, pr, 10);
+        SolidBrush pb(cap ? WithA(kAcc, 0.25f) : TH(btn2)); g.FillPath(&pb, &pp);
+        Pen ppen(cap ? kAcc : TH(fieldBorder), cap ? 2.0f : 1.0f); g.DrawPath(&ppen, &pp);
+        Text(g, cap ? std::wstring(T(L"Appuie sur une touche…", L"Press a key…")) : k >= 0 ? GameKeyLabel(GameKeyGet(k)) : std::wstring(L"?"), pr, 12.5f, FontStyleBold, cap ? kAcc : kInk);
+        if (g_gfxZones) HotZone(row, id);
+        return;
     }
     int v = GfxGet(r.key);
     if (r.vals.empty()) {
@@ -214,8 +310,8 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
 // 'y' : position dans le contenu (avant defilement) ; dessine seulement ce qui croise la zone visible.
 static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, float top, float bottom)
 {
-    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et détails", L"Jeu et confort", L"Lumières", L"Écran", L"Coop : joueurs" };
-    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and detail", L"Game and comfort", L"Lights", L"Screen", L"Co-op: players" };
+    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et détails", L"Jeu et confort", L"Lumières", L"Écran", L"Voix", L"Visages", L"Partie et partage", L"Touches" };
+    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and detail", L"Game and comfort", L"Lights", L"Screen", L"Voice", L"Faces", L"Game and sharing", L"Keys" };
     const auto &rows = GfxRows();
     std::vector<int> mine;
     for (int i = 0; i < (int)rows.size(); i++) if (rows[i].group == group) mine.push_back(i);
@@ -305,6 +401,7 @@ static bool GfxClick(int id)
     const auto &rows = GfxRows();
     if (id < UI_GFX || id >= UI_GFX + (int)rows.size() * 3) return false;
     const GfxRow &r = rows[(id - UI_GFX) / 3];
+    if (r.sec && !strcmp(r.sec, "Touches")) { int k = GameKeyIndex(r.key); g_keyCapture = g_keyCapture == k ? -1 : k; return true; }
     int part = (id - UI_GFX) % 3, v = GfxGet(r.key);
     if (r.vals.empty()) { if (part == 0) GfxSet(r.key, v == 1 ? 0 : 1); return true; }
     int k = 0;

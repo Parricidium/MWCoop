@@ -182,16 +182,16 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
         Para(g, T(L"Envoyés au salon, copiés à part chez toi : ta sauvegarde, tes mods et tes réglages ne bougent pas.", L"Sent in the lobby, copied apart on your side: your save, mods and settings don't move."), RectF(x, y + 136, w, 24), 12, kGrey);
         return 170;
     }
-    case WF_ACCEPT: {   // Reglages > Chez un ami : accepter l'envoi de l'hote
+    case WF_ACCEPT: {   // Options du jeu > Partie et partage : accepter l'envoi de l'hote
         if (!draw) return 96;
         RectF row(x, y, w, 60);
         WikiCard(g, row);
         bool on = false;
         if (const Opt *ma = OptByKey("ModsAuto")) on = OptGet(*ma) != 0;
-        SetRowText(g, RectF(row.X + 16, row.Y, row.Width - 90, row.Height), T(L"Accepter l'envoi de l'hôte", L"Accept the host's files"), T(L"Ses mods, CD et images, copiés à part, sans demander", L"Their mods, CDs and images, copied apart, without asking"));
+        SetRowText(g, RectF(row.X + 16, row.Y, row.Width - 90, row.Height), T(L"Accepter les fichiers de l'hôte", L"Accept the host's files"), T(L"Ses mods, CD et images, copiés à part, sans demander", L"Their mods, CDs and images, copied apart, without asking"));
         UiToggle(g, RectF(row.X + row.Width - 66, row.Y + 16, 50, 28), on, false);
         HotZone(row, Z);
-        Text(g, T(L"Réglages > Chez un ami (ton réglage actuel)", L"Settings > At a friend's (your current setting)"), RectF(x, y + 66, w, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        Text(g, T(L"Options du jeu > Partie et partage (ton réglage actuel)", L"Game options > Game and sharing (your current setting)"), RectF(x, y + 66, w, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
         return 96;
     }
     case WF_LOGS: {   // journaux : mode debogage, zip

@@ -15,7 +15,7 @@ enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SA
 struct WikiKey { const wchar_t *key, *fr, *en; };
 static const WikiKey kWikiKeys[] = {
     { L"F10", L"Menu coop : joueurs, apparence, discussion, graphismes", L"Co-op menu: players, appearance, chat, graphics" },
-    { L"T", L"Écrire aux autres joueurs (discussion) — touche réglable : Réglages > Chez un ami", L"Write to the other players (chat) — key can be changed: Settings > At a friend's" },
+    { L"T", L"Écrire aux autres joueurs (discussion) — touche réglable : Options du jeu > Touches", L"Write to the other players (chat) — key can be changed: Game options > Keys" },
     { L"N", L"Porte-monnaie : donner de l'argent à un autre joueur (touche réglable)", L"Wallet: give money to another player (key can be changed)" },
     { L"V (tenue)", L"Parler aux joueurs proches (vocal de Steam, la voix baisse avec la distance) — touche réglable", L"Talk to nearby players (Steam voice, fades with distance) — key can be changed" },
     { L"Échap", L"Fermer le menu coop", L"Close the co-op menu" },
@@ -214,7 +214,7 @@ static const WikiBlock kW_Mods[] = {
     { WB_S, L"Héberge comme d'habitude : l'envoi se fait dans le salon.", L"Host as usual: sending happens in the lobby." },
     { WB_H, L"Côté invité", L"Guest side" },
     { WB_S, L"Dans le salon, clique TOUT ACCEPTER une fois.", L"In the lobby, click ACCEPT ALL once." },
-    { WB_S, L"C'est retenu : « Accepter l'envoi de l'hôte » s'allume, les fois suivantes c'est automatique.", L"It's remembered: \"Accept the host's files\" turns on, next times it's automatic." },
+    { WB_S, L"C'est retenu : « Accepter les fichiers de l'hôte » (Options du jeu > Partie et partage) s'allume, les fois suivantes c'est automatique.", L"It's remembered: \"Accept the host's files\" (Game options > Game and sharing) turns on, next times it's automatic." },
     { WB_S, L"MSCLoader est installé chez toi s'il manque. Ton jeu part d'une copie où les mods sont ceux de l'hôte.", L"MSCLoader is installed on your side if missing. Your game starts from a copy where the mods are the host's." },
     { WB_FIG, NULL, NULL, WF_ACCEPT },
     { WB_TIP, L"Envoyés : la DLL du mod, ses fichiers (Assets) et ses réglages. Les données de mods de la sauvegarde suivent avec la sauvegarde de l'hôte.",
@@ -281,8 +281,8 @@ static const WikiBlock kW_Settings[] = {
     { WB_B, L"Retirer les modes de compatibilité (allumé d'origine) : enlève ceux que Windows ajoute au jeu après un plantage, sinon MWCoop ne se charge plus. À couper seulement si tu as besoin d'un mode de compatibilité.",
             L"Remove compatibility modes (on by default): removes the ones Windows adds to the game after a crash, otherwise MWCoop stops loading. Only turn off if you need a compatibility mode." },
     { WB_GO, L"Copie, Dossier ou Steam ?", L"Copy, Folder or Steam?", 1000 + WA_START },
-    { WB_H, L"Chez un ami", L"At a friend's" },
-    { WB_B, L"« Accepter l'envoi de l'hôte » : ses mods, CD et images, copiés à part, sans demander.", L"\"Accept the host's files\": their mods, CDs and images, copied apart, without asking." },
+    { WB_B, L"Les touches en jeu et « Accepter les fichiers de l'hôte » sont maintenant dans Options du jeu (catégories Touches, Partie et partage).",
+            L"The in-game keys and \"Accept the host's files\" are now in Game options (Keys, Game and sharing categories)." },
     { WB_H, L"À propos", L"About" },
     { WB_B, L"Acheter le jeu sur Steam.", L"Buy the game on Steam." },
     { WB_B, L"Désinstaller MWCoop : tout MWCoop part à la Corbeille. Ta sauvegarde, tes mods et le MSCLoader officiel restent. Pense à retirer l'option de lancement Steam si tu l'avais mise.",
@@ -306,8 +306,12 @@ static const WikiBlock kW_Look[] = {
     { WB_H, L"Options du jeu", L"Game options" },
     { WB_P, L"Préréglages (Performance, Équilibré, Joli, Ultra) et réglages par catégorie : image, ombres, distance, confort (champ de vision, pseudos des joueurs), lumières, écran. Pour toi seul : les autres ne voient aucune différence.",
             L"Presets (Performance, Balanced, Pretty, Ultra) and settings by category: picture, shadows, distance, comfort (field of view, player names), lights, screen. Just for you: the others see no difference." },
-    { WB_P, L"La catégorie « Coop : joueurs » regroupe les options de la coop : vocal (oui ou non, portée, volume), ton visage importé, les visages des autres, l'argent de départ des nouveaux invités (hôte).",
-            L"The \"Co-op: players\" category holds the co-op options: voice (on or off, range, volume), your imported face, the others' faces, the new guests' starting money (host)." },
+    { WB_P, L"Les options de la coop sont rangées par type, en haut de la page :", L"The co-op options are sorted by type, at the top of the page:" },
+    { WB_B, L"Voix : vocal de proximité (oui ou non), portée, volume des voix.", L"Voice: proximity voice (on or off), range, voices volume." },
+    { WB_B, L"Visages : montrer ton visage importé, voir ceux des autres.", L"Faces: show your imported face, see the others'." },
+    { WB_B, L"Partie et partage : accepter les fichiers de l'hôte (mods, CD, images) sans demander ; argent de départ des nouveaux invités (hôte).",
+            L"Game and sharing: accept the host's files (mods, CDs, images) without asking; new guests' starting money (host)." },
+    { WB_B, L"Touches : tchat, porte-monnaie, vocal. Clique sur une pastille puis appuie sur la touche voulue.", L"Keys: chat, wallet, voice. Click a pill then press the key you want." },
     { WB_GO, L"Ouvrir Options du jeu", L"Open Game options", TAB_GFX },
 };
 

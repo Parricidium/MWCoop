@@ -1189,82 +1189,6 @@ static void DrawLogsPage(Graphics &g)
 }
 
 // ---- page REGLAGES
-// ---- touches en jeu (Reglages > Chez un ami) : section [Touches] de mwcoop.ini, noms des KeyCode de Unity
-struct GameKey { const char *ini, *def; const wchar_t *fr, *en; };
-static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "PorteMonnaie", "N", L"Argent", L"Wallet" }, { "Vocal", "V", L"Vocal", L"Voice" } };
-static const int kGameKeysN = 3;
-static int g_keyCapture = -1;   // pastille en attente d'une touche
-static std::string GameKeyGet(int k)
-{
-    char buf[64] = {};
-    GetPrivateProfileStringA("Touches", kGameKeys[k].ini, kGameKeys[k].def, buf, sizeof(buf), ModIniA().c_str());
-    return buf[0] ? buf : kGameKeys[k].def;
-}
-static std::wstring GameKeyLabel(const std::string &n)
-{
-    if (n.rfind("Alpha", 0) == 0) return Widen(n.substr(5));
-    if (n.rfind("Keypad", 0) == 0) return std::wstring(T(L"Pavé ", L"Num ")) + Widen(n.substr(6));
-    if (n == "LeftShift") return T(L"Maj gauche", L"Left Shift");
-    if (n == "RightShift") return T(L"Maj droite", L"Right Shift");
-    if (n == "LeftControl") return T(L"Ctrl gauche", L"Left Ctrl");
-    if (n == "RightControl") return T(L"Ctrl droite", L"Right Ctrl");
-    if (n == "LeftAlt") return L"Alt";
-    if (n == "CapsLock") return T(L"Verr. maj", L"Caps Lock");
-    if (n == "Mouse3") return T(L"Souris 4", L"Mouse 4");
-    if (n == "Mouse4") return T(L"Souris 5", L"Mouse 5");
-    return Widen(n);
-}
-// Touche Windows -> nom de KeyCode de Unity ("" : pas prise). 'ext' : bit "etendue" du message (Ctrl, Alt droits).
-static std::string UnityKeyName(WPARAM vk, LPARAM lp)
-{
-    bool ext = (lp & (1 << 24)) != 0;
-    if (vk >= 'A' && vk <= 'Z') return std::string(1, (char)vk);
-    if (vk >= '0' && vk <= '9') return "Alpha" + std::string(1, (char)vk);
-    if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) return "Keypad" + std::to_string((int)(vk - VK_NUMPAD0));
-    if (vk >= VK_F1 && vk <= VK_F12) return "F" + std::to_string((int)(vk - VK_F1 + 1));
-    switch (vk) {
-    case VK_SHIFT: return MapVirtualKeyW((lp >> 16) & 0xFF, MAPVK_VSC_TO_VK_EX) == VK_RSHIFT ? "RightShift" : "LeftShift";
-    case VK_CONTROL: return ext ? "RightControl" : "LeftControl";
-    case VK_MENU: return ext ? "RightAlt" : "LeftAlt";
-    case VK_SPACE: return "Space";
-    case VK_TAB: return "Tab";
-    case VK_RETURN: return ext ? "KeypadEnter" : "Return";
-    case VK_BACK: return "Backspace";
-    case VK_CAPITAL: return "CapsLock";
-    case VK_INSERT: return "Insert";
-    case VK_DELETE: return "Delete";
-    case VK_HOME: return "Home";
-    case VK_END: return "End";
-    case VK_PRIOR: return "PageUp";
-    case VK_NEXT: return "PageDown";
-    case VK_UP: return "UpArrow";
-    case VK_DOWN: return "DownArrow";
-    case VK_LEFT: return "LeftArrow";
-    case VK_RIGHT: return "RightArrow";
-    case VK_ADD: return "KeypadPlus";
-    case VK_SUBTRACT: return "KeypadMinus";
-    case VK_MULTIPLY: return "KeypadMultiply";
-    case VK_DIVIDE: return "KeypadDivide";
-    case VK_DECIMAL: return "KeypadPeriod";
-    case VK_XBUTTON1: return "Mouse3";
-    case VK_XBUTTON2: return "Mouse4";
-    }
-    return "";
-}
-// Touche choisie pour la pastille en attente (Echap : annule). Vrai si prise.
-static bool GameKeyCapture(WPARAM vk, LPARAM lp)
-{
-    if (g_keyCapture < 0) return false;
-    if (vk == VK_ESCAPE) { g_keyCapture = -1; InvalidateRect(g_wnd, NULL, FALSE); return true; }
-    std::string n = UnityKeyName(vk, lp);
-    if (n.empty()) return true;   // (touche pas prise en charge : on attend une autre)
-    WritePrivateProfileStringA("Touches", kGameKeys[g_keyCapture].ini, n.c_str(), ModIniA().c_str());
-    LaunchLog("touche en jeu : %s = %s", kGameKeys[g_keyCapture].ini, n.c_str());
-    g_keyCapture = -1;
-    InvalidateRect(g_wnd, NULL, FALSE);
-    return true;
-}
-
 static void DrawSettings(Graphics &g)
 {
     float cw = (kMain.Width - 16) / 2, lx = kMain.X, rx = kMain.X + cw + 16;
@@ -1373,34 +1297,7 @@ static void DrawSettings(Graphics &g)
         UiToggle(g, RectF(row.X + row.Width - 50, row.Y + 10, 50, 28), CompatAuto(), g_uiHot == UI_SET_COMPAT);
         HotZone(row, UI_SET_COMPAT);
     }
-    // Invite : envoi de l'hote
-    RectF iv(rx, ga.Y + ga.Height + 16, cw, kMain.Y + kMain.Height - (ga.Y + ga.Height + 16));
-    Glass(iv);
-    Title(g, T(L"Chez un ami", L"At a friend's"), RectF(iv.X + 20, iv.Y + 16, 300, 24), 17, kInk);
-    if (const Opt *ma = OptByKey("ModsAuto")) {
-        RectF row(iv.X + 20, iv.Y + 44, iv.Width - 40, 52);
-        SetRowText(g, RectF(row.X, row.Y, row.Width - 70, row.Height), T(L"Accepter l'envoi de l'hôte", L"Accept the host's files"), T(L"Ses mods, CD et images, copiés à part, sans demander", L"Their mods, CDs and images, copied apart, without asking"));
-        UiToggle(g, RectF(row.X + row.Width - 50, row.Y + 12, 50, 28), OptGet(*ma) != 0, g_uiHot == UI_SET_MODSAUTO);
-        HotZone(row, UI_SET_MODSAUTO);
-    }
-    // Touches en jeu (mwcoop.ini [Touches], noms des touches de Unity) : clic sur une pastille, puis la touche voulue.
-    {
-        RectF row = kSetKeysRow;
-        float pw = (row.Width - 16) / 3;
-        for (int k = 0; k < kGameKeysN; k++) {
-            RectF r(row.X + k * (pw + 8), row.Y, pw, row.Height);
-            bool cap = g_keyCapture == k, hot = g_uiHot == UI_SET_KEY + k;
-            GraphicsPath p; RoundRect(p, r, row.Height / 2);
-            SolidBrush b(cap ? WithA(kAcc, 0.25f) : hot ? TH(cardSel) : TH(card)); g.FillPath(&b, &p);
-            Pen pen(cap ? kAcc : TH(choiceBorder), cap ? 2.0f : 1.0f); g.DrawPath(&pen, &p);
-            std::wstring label = std::wstring(g_fr ? kGameKeys[k].fr : kGameKeys[k].en) + L"  ";
-            Text(g, label + (cap ? std::wstring(T(L"…", L"…")) : GameKeyLabel(GameKeyGet(k))), RectF(r.X + 8, r.Y, r.Width - 16, r.Height), 12.5f, FontStyleBold, cap ? kAcc : kInk);
-            HotZone(r, UI_SET_KEY + k);
-        }
-        Text(g, g_keyCapture >= 0 ? std::wstring(T(L"Appuie sur la touche voulue (Échap : annuler)", L"Press the key you want (Esc: cancel)"))
-                                  : std::wstring(T(L"Touches en jeu : clique pour changer", L"In-game keys: click to change")),
-             RectF(row.X, row.Y - 22, row.Width, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
-    }
+    // (« Chez un ami » : envoi de l'hote et touches en jeu dans Options du jeu, categories Partie et partage, Touches -- demande de JD, 10/10)
 }
 
 // ---- credits (demande de JD, 08/10 : ceux qui donnent quelque chose pour ameliorer MWCoop). Le plus recent en haut.
