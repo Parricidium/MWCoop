@@ -73,6 +73,8 @@ namespace MWCoop
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 6f : -1;
             Police.OnLevelLoaded();
             Contenu.OnLevelLoaded();
+            Windshields.OnLevelLoaded();
+            Packages.OnLevelLoaded();
             Bus.OnLevelLoaded();
         }
 
@@ -157,6 +159,8 @@ namespace MWCoop
             if (!Session.Active || !PlayerSync.InGame) return;
             Police.Update();
             Contenu.Update();
+            Windshields.Update();
+            Packages.Update();
             UpdateTraffic();
             Bus.Update();   // apres le suivi : la copie du bus est a sa place de cette image
         }

@@ -71,6 +71,12 @@ namespace MWCoop
             return int.TryParse(Get(section, key, null), out v) ? v : def;
         }
 
+        public static float GetFloat(string section, string key, float def)
+        {
+            float v;
+            return float.TryParse(Get(section, key, null), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v) ? v : def;
+        }
+
         // Ecrit Section/Cle dans mwcoop.ini (en gardant le reste du fichier).
         public static void Save(string section, string key, string value)
         {
