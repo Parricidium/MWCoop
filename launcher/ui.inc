@@ -1537,6 +1537,7 @@ static bool UiClick(int id)
         return true;
     case UI_SET_MODSAUTO: if (const Opt *o = OptByKey("ModsAuto")) OptSet(*o, OptGet(*o) ? 0 : 1); return true;
     case UI_FACE_IMPORT: FaceImport(); return true;
+    case UI_CAR_TRIM: case UI_CAR_TRIM + 1: case UI_CAR_TRIM + 2: case UI_CAR_TRIM + 3: case UI_CAR_TRIM + 4: CarTrimSet(id - UI_CAR_TRIM); return true;
     case UI_FACE_TPL: FaceTemplate(); return true;
     case UI_FACE_DEL: FaceRemove(); return true;
     case UI_SET_KEY: case UI_SET_KEY + 1: case UI_SET_KEY + 2: g_keyCapture = g_keyCapture == id - UI_SET_KEY ? -1 : id - UI_SET_KEY; return true;
