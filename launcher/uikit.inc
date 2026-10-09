@@ -11,7 +11,8 @@
 // une image (g_glassCache), refaite quand la mise en page change (RenderTo redessine alors l'image dans la foulee).
 // Clics : zones declarees pendant le dessin (HotZone, identifiants UI_*), plus les boutons g_btn (B_*).
 static const RectF kRail(16, 16, 232, 768), kMain(264, 88, 1000, 656), kFooter(264, 752, 1000, 32);
-static const RectF kSetSteamRow(792, 450, 452, 48), kSetCompatRow(792, 504, 452, 48);   // Reglages > Jeu : demarrer le jeu, modes de compatibilite
+static const RectF kSetSteamRow(792, 450, 452, 48), kSetCompatRow(792, 504, 452, 48);
+static const RectF kSetKeysRow(792, 704, 452, 34);   // Reglages > Chez un ami : touches en jeu (tchat, porte-monnaie, vocal)   // Reglages > Jeu : demarrer le jeu, modes de compatibilite
 static const RectF kLogsDebugRow(288, 172, 952, 48);   // JOURNAUX : mode debogage (ui.inc, bulle du guide)
 static const RectF kSetBuy(284, 684, 220, 44), kSetUninst(512, 684, 224, 44);   // Reglages > A propos (ui.inc, bulle du guide)   // Reglages > Jeu : "Lancer le jeu par Steam" (ui.inc, bulle du guide)
 
@@ -39,6 +40,7 @@ enum {
     UI_LOG_CLEAR = 250,           // JOURNAUX : tout supprimer (parties rangees)
     UI_LOG_DEBUG = 251,           // JOURNAUX : mode debogage
     UI_SET_COMPAT = 252,          // Reglages > Jeu : retirer les modes de compatibilite de Windows
+    UI_SET_KEY = 253,             // + k (0 tchat, 1 porte-monnaie, 2 vocal) : touche en jeu a choisir (253-255)
     UI_GFX_GROUP = 2580,          // + groupe : plier / deplier une categorie de GRAPHISMES
     UI_GFX_PRESET = 2590,         // + prereglage
     UI_GFX = 2600,                // + ligne * 3 + (0 ligne, 1 fleche gauche, 2 fleche droite)

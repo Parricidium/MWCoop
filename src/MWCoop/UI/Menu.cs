@@ -49,20 +49,20 @@ namespace MWCoop
             bool inGame = PlayerSync.InGame;
             int test = Config.GetInt("Test", "TestMenu", 0);   // essais : menu ouvert sur l'onglet test-1
             if (test > 0 && inGame && !testDone && Time.timeSinceLevelLoad > 8f) { testDone = true; Open = true; tab = test - 1; }
-            if (Input.GetKeyDown(KeyCode.F10)) { Open = !Open; ChatOpen = false; }
+            if (Input.GetKeyDown(KeyCode.F10)) { Open = !Open; ChatOpen = false; WalletPanel.Open = false; }
             else if (Input.GetKeyDown(KeyCode.Escape) && (Open || ChatOpen)) { Open = ChatOpen = false; }
-            else if (inGame && !Open && !ChatOpen && Session.Active && Input.GetKeyDown(KeyCode.T))
+            else if (inGame && !Open && !ChatOpen && !WalletPanel.Open && Session.Active && Input.GetKeyDown(Keys.Chat))   // (touche reglable dans le lanceur)
             {
                 ChatOpen = true;
                 focusChat = true;
                 chatText = "";
             }
-            Block(inGame && (Open || ChatOpen || Respawn.Choosing));
+            Block(inGame && (Open || ChatOpen || Respawn.Choosing || WalletPanel.Open));
         }
 
         // Curseur du mod (Core le dessine en dernier) : menu ouvert ou choix de reapparition, en partie.
         // [Test] CurseurTest=x,y : dessine a ce point sans lire la souris (captures des instances d'essai).
-        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing); } }
+        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing || WalletPanel.Open); } }
 
         public static Vector2 CursorPos()
         {

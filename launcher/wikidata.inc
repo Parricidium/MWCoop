@@ -15,7 +15,8 @@ enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SA
 struct WikiKey { const wchar_t *key, *fr, *en; };
 static const WikiKey kWikiKeys[] = {
     { L"F10", L"Menu coop : joueurs, apparence, discussion, graphismes", L"Co-op menu: players, appearance, chat, graphics" },
-    { L"T", L"Écrire aux autres joueurs (discussion)", L"Write to the other players (chat)" },
+    { L"T", L"Écrire aux autres joueurs (discussion) — touche réglable : Réglages > Chez un ami", L"Write to the other players (chat) — key can be changed: Settings > At a friend's" },
+    { L"N", L"Porte-monnaie : donner de l'argent à un autre joueur (touche réglable)", L"Wallet: give money to another player (key can be changed)" },
     { L"Échap", L"Fermer le menu coop", L"Close the co-op menu" },
     { L"Tab · Q / E", L"Changer d'onglet dans le menu coop", L"Switch tabs in the co-op menu" },
     { L"Entrée", L"S'asseoir sur une place passager (près du siège)", L"Sit in a passenger seat (near the seat)" },

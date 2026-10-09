@@ -559,14 +559,14 @@ namespace MWCoop
         // Languette prise : rattachee a la camera, a la pose ou elle est (le jeu : SetParent sans remise a zero).
         static bool testHold;   // (essais : clic maintenu simule)
         static Transform heldHandle, heldPivot;
-        static Vector3 heldPos; static Quaternion heldRot;
+        static Vector3 heldPos, heldScale; static Quaternion heldRot;   // (echelle comprise : rattachee a la camera puis reposee, elle revenait aplatie)
         static void Grab(Belt b)
         {
             Transform h = b != null && b.Open != null ? FindUnder(b.Open.transform, "SeatbeltHandle", null) : null;
             Transform view = Camera.main != null ? Camera.main.transform : cam;
             if (h == null || view == null) return;
             if (!b.Open.activeSelf) { b.Open.SetActive(true); b.OpenHidden = false; }
-            heldHandle = h; heldPivot = h.parent; heldPos = h.localPosition; heldRot = h.localRotation;
+            heldHandle = h; heldPivot = h.parent; heldPos = h.localPosition; heldRot = h.localRotation; heldScale = h.localScale;
             h.SetParent(view, true);
             beltHold = 0.01f;
         }
@@ -575,7 +575,7 @@ namespace MWCoop
             beltHold = 0f;
             if (heldHandle == null) return;
             if (heldPivot != null) heldHandle.SetParent(heldPivot, false);
-            heldHandle.localPosition = heldPos; heldHandle.localRotation = heldRot;
+            heldHandle.localPosition = heldPos; heldHandle.localRotation = heldRot; heldHandle.localScale = heldScale;
             heldHandle = null; heldPivot = null;
         }
 

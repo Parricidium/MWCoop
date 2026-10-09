@@ -53,6 +53,8 @@ static const TutoStep kTuto[] = {
       L"Compatibility modes", L"In Settings > Game. After a crash, Windows sometimes adds a compatibility mode to the game, and MWCoop stops loading: the launcher removes it before every game.", "0.64.1" },
     { L"Guide", L"Tout pour jouer sans souci, rangé par catégories à déplier : installer, héberger, rejoindre, partager ses mods, Copie / Dossier / Steam… et les solutions aux problèmes courants, avec des images.",
       L"Guide", L"Everything to play trouble-free, sorted into categories you expand: install, host, join, share your mods, Copy / Folder / Steam… and fixes for common problems, with pictures.", "0.64.0" },
+    { L"Touches en jeu", L"Dans Réglages > Chez un ami : clique sur une pastille puis appuie sur la touche voulue. Tchat (T), porte-monnaie pour donner de l'argent aux autres (N), vocal (V).",
+      L"In-game keys", L"In Settings > At a friend's: click a pill then press the key you want. Chat (T), wallet to give money to others (N), voice (V).", "0.67.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -85,10 +87,11 @@ static RectF TutoTarget(int i)
     case 20: return kLogsDebugRow;
     case 21: return kSetCompatRow;
     case 22: return g_navR[TAB_WIKI];
+    case 23: return kSetKeysRow;
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 || i == 23 ? TAB_COOP : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la
