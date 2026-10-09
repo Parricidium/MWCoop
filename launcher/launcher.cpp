@@ -2584,6 +2584,24 @@ static int CarSwatchAt(float x, float y)
 }
 static Color CarRgb(int rgb, BYTE a = 255) { return Color(a, (BYTE)(rgb >> 16), (BYTE)(rgb >> 8), (BYTE)rgb); }
 
+// Finition de la CORRIS pour une nouvelle partie ([Coop] FinitionVoiture) : 0 au hasard, 1 L, 2 LX, 3 SLX, 4 GT.
+static const char *kTrims[] = { "", "L", "LX", "SLX", "GT" };
+static RectF g_trimRect;   // (bulle du guide)
+static int CarTrimGet()
+{
+    if (g_gameDir.empty()) return 0;
+    char v[16] = "";
+    GetPrivateProfileStringA("Coop", "FinitionVoiture", "", v, sizeof(v), ModIniA().c_str());
+    for (int i = 1; i < 5; i++) if (!_stricmp(v, kTrims[i])) return i;
+    return 0;
+}
+static void CarTrimSet(int k)
+{
+    if (g_gameDir.empty() || k < 0 || k > 4) return;
+    EnsureModDir();
+    WritePrivateProfileStringA("Coop", "FinitionVoiture", k ? kTrims[k] : NULL, ModIniA().c_str());
+}
+
 static void CarSetColor(int rgb)
 {
     g_carColor = rgb;
@@ -2669,7 +2687,7 @@ static void DrawCar(Graphics &g)
         g.SetInterpolationMode(im);
     }
     Title(g, T(L"Ta CORRIS", L"Your CORRIS"), RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 100, 400, 32), 22, kInk);
-    Text(g, T(L"Cette couleur pour une nouvelle partie ; l'h\u00F4te la donne \u00E0 ses invit\u00E9s.", L"This color for a new game; the host gives it to their guests."),
+    Text(g, T(L"Couleur et finition pour une nouvelle partie ; l'h\u00F4te les donne \u00E0 ses invit\u00E9s.", L"Color and trim for a new game; the host gives them to their guests."),
          RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 66, 460, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
     if (g_car.state == 1) Text(g, T(L"Glisse pour tourner", L"Drag to rotate"), RectF(kCarCard.X + kCarCard.Width - 224, kCarCard.Y + kCarCard.Height - 66, 200, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
 
@@ -2718,6 +2736,13 @@ static void DrawCar(Graphics &g)
         RectF dot(b.r.X + 14, b.r.Y + 11, 24, 24);
         if (sel < 0) { SolidBrush db(CarRgb(g_carColor)); g.FillEllipse(&db, dot); } else DrawCarWheel(g, dot);
         Text(g, T(L"Autre couleur\u2026", L"Other color\u2026"), RectF(dot.X + 34, b.r.Y, b.r.Width - 60, b.r.Height), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+    }
+    {   // Finition ([Coop] FinitionVoiture : L, LX, SLX, GT ; vide : au hasard) : imposee au tirage d'une nouvelle partie (Vin.cs)
+        float ty = ny + 128;
+        Title(g, T(L"Finition", L"Trim"), RectF(pn.X + 24, ty, 200, 24), 17, kInk);
+        Text(g, T(L"nouvelle partie", L"new game"), RectF(pn.X + 120, ty, pn.Width - 144, 24), 12, FontStyleRegular, kGrey, StringAlignmentFar);
+        g_trimRect = RectF(pn.X + 24, ty, pn.Width - 48, 70);
+        UiSeg(g, RectF(pn.X + 24, ty + 32, pn.Width - 48, 38), { T(L"Hasard", L"Random"), L"L", L"LX", L"SLX", L"GT" }, CarTrimGet(), UI_CAR_TRIM, 12);
     }
     float bw = (pn.Width - 60) / 2;
     UiButton(g, RectF(pn.X + 24, pn.Y + pn.Height - 68, bw, 48), T(L"ANNULER", L"CANCEL"), UI_PAGE_CANCEL, false);

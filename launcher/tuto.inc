@@ -57,6 +57,8 @@ static const TutoStep kTuto[] = {
       L"In-game keys", L"In Settings > At a friend's: click a pill then press the key you want. Chat (T), wallet to give money to others (N), voice (V).", "0.67.0" },
     { L"Visage importé", L"Dans Tenue : ton propre visage. Gabarit ouvre l'image du visage du jeu avec ses coutures : peins par-dessus, puis Importer. Les autres le voient en jeu.",
       L"Imported face", L"In Outfit: your own face. Template opens the game's face image with its seams: paint over it, then Import. Others see it in game.", "0.69.0" },
+    { L"Finition de la voiture", L"Dans Voiture : en plus de la couleur, la finition de la CORRIS (L, LX, SLX, GT) pour une nouvelle partie. L'hôte la donne à ses invités.",
+      L"Car trim", L"In Car: besides the color, the CORRIS trim (L, LX, SLX, GT) for a new game. The host gives it to their guests.", "0.69.1" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -91,10 +93,11 @@ static RectF TutoTarget(int i)
     case 22: return g_navR[TAB_WIKI];
     case 23: return kSetKeysRow;
     case 24: return g_faceRect;
+    case 25: return g_trimRect;
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 || i == 23 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 || i == 23 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la
