@@ -745,7 +745,7 @@ namespace MWCoop
             {
                 // [Test] TestCause (booleen de Systems/Death) a 30 s ; TestReapparition=1/2 choisit 3 s apres.
                 if (t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Respawn.TestDie(Config.Get("Test", "TestCause", "Hunger"))); }
-                if (t > 31f && Time.frameCount % 90 == 0 && t < 45f) Log.Info("autotest : " + Respawn.State());
+                if (t > 31f && Time.frameCount % 90 == 0 && t < 45f) Log.Info("autotest : " + Respawn.State() + " ; " + Respawn.FxDiff());
                 if (t > 38f && step == 1)
                 {
                     step = 2;
@@ -754,6 +754,22 @@ namespace MWCoop
                     Log.Info("autotest : capture " + png);
                 }
             }
+            if (mode == "souleve")
+            {
+                // Hote : a cote de la mobylette a 30 s, la deplace a la main (1 m/s, 4 s), monte dessus a 45 s ; chacun note sa
+                // position (l'invite la voit-elle bouger ? revient-elle a sa place quand on monte ?).
+                string car = Config.Get("Test", "TestVoiture", "JONNEZ ES(Clone)");
+                Rigidbody b = VehicleSync.Body(car);
+                if (Net.Session.IsHost)
+                {
+                    if (t > 30f && step == 0) { step = 1; Log.Info("autotest : souleve " + VehicleSync.TestEnter(car, false) + (b != null ? ", " + car + " en " + b.position.ToString("F2") : ", introuvable")); }
+                    if (b != null && t > 33f && t < 37f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 1f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                    if (t > 40f && step == 1) { step = 2; Log.Info("autotest : souleve, deplacee en " + (b != null ? b.position.ToString("F2") : "?")); }
+                    if (t > 45f && step == 2) { step = 3; Log.Info("autotest : souleve, monte -> " + VehicleSync.TestEnter(car, true)); }
+                    if (t > 52f && step == 3) { step = 4; Log.Info("autotest : souleve, apres montee en " + (b != null ? b.position.ToString("F2") : "?")); }
+                }
+                else if (b != null && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : souleve, vue ici en " + b.position.ToString("F2") + (b.isKinematic ? " (copie)" : ""));
+            }
             if (mode == "accident")
             {
                 // Au volant (mode conduite), la tete du conducteur se detache a 30 s, en roulant.
@@ -761,8 +777,9 @@ namespace MWCoop
                 if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
                 if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
                 Rigidbody b = VehicleSync.Body(car);
-                if (b != null && t > 25f && t < 31f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
-                if (t > 30f && step == 2) { step = 3; Log.Info("autotest : choc " + Respawn.TestCrash(car)); }
+                float choc = Config.GetInt("Test", "TestChoc", 30);   // (passager a bord : plus tard)
+                if (b != null && t > choc - 5f && t < choc + 1f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                if (t > choc && step == 2) { step = 3; Log.Info("autotest : choc " + Respawn.TestCrash(car)); }
                 if (t > 30.5f && Time.frameCount % 90 == 0 && t < 46f) Log.Info("autotest : " + Respawn.State());
                 if (t > 46f && step == 3) { step = 4; Log.Info("autotest : remonte " + VehicleSync.TestEnter(car, false)); }
                 if (t > 52f && step == 4) { step = 5; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }

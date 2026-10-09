@@ -466,6 +466,41 @@ static std::wstring Greeting()
 }
 static void DrawLobbyHeadControls(Graphics &g, float &right);   // (salon, plus bas)
 
+// Couleur de l'arc-en-ciel (teinte h en degres).
+static Color Hue(float h, BYTE a = 255)
+{
+    h = fmodf(h, 360.0f); if (h < 0) h += 360.0f;
+    float x = 1.0f - fabsf(fmodf(h / 60.0f, 2.0f) - 1.0f), r = 0, gg = 0, b = 0;
+    int k = (int)(h / 60.0f);
+    if (k == 0) { r = 1; gg = x; } else if (k == 1) { r = x; gg = 1; } else if (k == 2) { gg = 1; b = x; }
+    else if (k == 3) { gg = x; b = 1; } else if (k == 4) { r = x; b = 1; } else { r = 1; b = x; }
+    return Color(a, (BYTE)(55 + 200 * r), (BYTE)(55 + 200 * gg), (BYTE)(55 + 200 * b));   // (pastel : lisible sur le verre clair comme sombre)
+}
+
+// Etoile des credits (demande de JD, 09/10 : « un effet RGB moderne ») : halo qui change de teinte, contour en degrade
+// arc-en-ciel qui tourne, du meme dessin que IC_STAR.
+static void RgbStar(Graphics &g, float cx, float cy, float size, float t, bool on)
+{
+    float hue = t * 70.0f;
+    GraphicsPath glow; glow.AddEllipse(cx - size * 0.95f, cy - size * 0.95f, size * 1.9f, size * 1.9f);
+    PathGradientBrush gb(&glow);
+    gb.SetCenterColor(Hue(hue, (BYTE)(on ? 120 : 80)));
+    Color edge(0, 0, 0, 0); int ne = 1; gb.SetSurroundColors(&edge, &ne);
+    g.FillPath(&gb, &glow);
+    float k = size / 24.0f;
+    static const float sp[] = { 12, 3.5f, 14.35f, 9.26f, 20.56f, 9.72f, 15.8f, 13.74f, 17.29f, 19.78f, 12, 16.5f, 6.71f, 19.78f, 8.2f, 13.74f, 3.44f, 9.72f, 9.65f, 9.26f };
+    PointF pts[10];
+    for (int i = 0; i < 10; i++) pts[i] = PointF(cx + (sp[2 * i] - 12) * k, cy + (sp[2 * i + 1] - 12.2f) * k);
+    LinearGradientBrush lb(RectF(cx - size / 2, cy - size / 2, size, size), Hue(hue), Hue(hue + 180), fmodf(t * 90.0f, 360.0f));
+    Color cols[5] = { Hue(hue), Hue(hue + 90), Hue(hue + 180), Hue(hue + 270), Hue(hue + 360) };
+    REAL pos[5] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
+    lb.SetInterpolationColors(cols, pos, 5);
+    SolidBrush fill(Hue(hue + 40, 60)); g.FillPolygon(&fill, pts, 10);
+    Pen pen(&lb, 2.2f * k);
+    pen.SetLineJoin(LineJoinRound);
+    g.DrawPolygon(&pen, pts, 10);
+}
+
 // Page ouverte par un bouton de l'en-tete (Journaux, API moddeurs) : comme ceux de la fenetre, contour colore si ouverte.
 static void HeadPage(Graphics &g, RectF r, int page, int icon)
 {
@@ -474,7 +509,10 @@ static void HeadPage(Graphics &g, RectF r, int page, int icon)
     GraphicsPath p; RoundRect(p, r, 14);
     SolidBrush fb(on ? TH(cardSel) : Mix(TH(btn2), TH(btn2Hot), hot ? 1.0f : 0.0f)); g.FillPath(&fb, &p);
     Pen pen(on ? WithA(kAcc, 0.8f) : TH(fieldBorder), on ? 1.4f : 1.0f); g.DrawPath(&pen, &p);
-    Icon(g, icon, r.X + r.Width / 2, r.Y + r.Height / 2, 18, WithA(on ? kAcc : kInk, en ? 1.0f : 0.4f), 2.0f);
+    if (page == TAB_CREDITS) {   // contributeurs : etoile RGB, contour de la meme teinte
+        Pen rp(Hue(g_time * 70.0f + 120.0f, (BYTE)(on || hot ? 200 : 110)), on ? 1.6f : 1.2f); g.DrawPath(&rp, &p);
+        RgbStar(g, r.X + r.Width / 2, r.Y + r.Height / 2, 20, g_time, on || hot);
+    } else Icon(g, icon, r.X + r.Width / 2, r.Y + r.Height / 2, 18, WithA(on ? kAcc : kInk, en ? 1.0f : 0.4f), 2.0f);
     if (page == TAB_LOGS && g_crashT && !on) {
         RectF d(r.X + r.Width - 13, r.Y - 3, 16, 16);
         SolidBrush rb(kRed); g.FillEllipse(&rb, d);
@@ -1241,11 +1279,12 @@ static void DrawSettings(Graphics &g)
 }
 
 // ---- credits (demande de JD, 08/10 : ceux qui donnent quelque chose pour ameliorer MWCoop). Le plus recent en haut.
-struct Credit { const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; };
+struct Credit { const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
+static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
     { L"Dom", L"Tenues", L"Outfits",
       L"Un pack de 155 tenues pour ton personnage : 84 hauts, 27 pantalons et 44 visages. Dans l'onglet Tenue, à la suite de celles du jeu (« Tenue Dom 12 »…).",
-      L"A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026" },
+      L"A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026", 6 },
 };
 static void DrawCreditsPage(Graphics &g)
 {
@@ -1262,8 +1301,22 @@ static void DrawCreditsPage(Graphics &g)
         SolidBrush rb(TH(card)); g.FillPath(&rb, &rp);
         Pen rpen(TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
         RectF av(row.X + 20, row.Y + 22, 60, 60);
-        SolidBrush ab(WithA(kAcc, 0.85f)); g.FillEllipse(&ab, av);
-        Text(g, std::wstring(1, k.name[0]), av, 26, FontStyleBold, Color(255, 255, 255, 255));
+        static std::map<int, Bitmap *> imgs;   // (images des contributeurs : chargees une fois)
+        Bitmap *im = NULL;
+        if (k.img) { auto it = imgs.find(k.img); if (it == imgs.end()) im = imgs[k.img] = LoadPngRes(k.img); else im = it->second; }
+        if (im) {   // photo ronde, cadrage carre au centre, anneau aux couleurs de l'etoile
+            GraphicsPath cp; cp.AddEllipse(av);
+            GraphicsState gs = g.Save();
+            g.SetClip(&cp, CombineModeIntersect);
+            g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+            float iw = (float)im->GetWidth(), ih = (float)im->GetHeight(), side = min(iw, ih);
+            g.DrawImage(im, av, (iw - side) / 2, (ih - side) / 2, side, side, UnitPixel);
+            g.Restore(gs);
+            Pen ring(Hue(g_time * 70.0f), 2.4f); g.DrawEllipse(&ring, av);
+        } else {
+            SolidBrush ab(WithA(kAcc, 0.85f)); g.FillEllipse(&ab, av);
+            Text(g, std::wstring(1, k.name[0]), av, 26, FontStyleBold, Color(255, 255, 255, 255));
+        }
         Text(g, k.name, RectF(row.X + 100, row.Y + 16, 300, 28), 19, FontStyleBold, kInk, StringAlignmentNear);
         Text(g, g_fr ? k.roleFr : k.roleEn, RectF(row.X + 100, row.Y + 44, 300, 20), 13, FontStyleBold, kAcc, StringAlignmentNear);
         Text(g, k.date, RectF(row.X + row.Width - 220, row.Y + 16, 200, 28), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);

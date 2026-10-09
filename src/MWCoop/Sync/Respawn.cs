@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -39,6 +40,11 @@ namespace MWCoop
         }
         static readonly List<Head> heads = new List<Head>();
         static readonly List<KeyValuePair<Behaviour, bool>> overlays = new List<KeyValuePair<Behaviour, bool>>();
+        // Effets d'image de la camera (ScreenOverlay, vignette...) : reglages au chargement. L'accident envoie DEATH a
+        // l'automate 'Death' de la camera, qui pose le sang sur un ScreenOverlay (texture, intensite) ; la mort du jeu
+        // rechargeait le menu, la reapparition le laissait a l'ecran (retour d'un joueur, 09/10 : « le sang reste »).
+        static readonly List<KeyValuePair<Behaviour, Dictionary<System.Reflection.FieldInfo, object>>> camFx = new List<KeyValuePair<Behaviour, Dictionary<System.Reflection.FieldInfo, object>>>();
+        static PlayMakerFSM camDeath;
 
         // Pose sur Systems/Death : son OnEnable passe a l'activation, avant le Start de l'automate du jeu.
         public class Guard : MonoBehaviour
@@ -52,7 +58,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            Choosing = false; deathFsm = null; heads.Clear(); overlays.Clear();
+            Choosing = false; deathFsm = null; heads.Clear(); overlays.Clear(); camFx.Clear(); camDeath = null;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
         }
 
@@ -103,6 +109,19 @@ namespace MWCoop
             // Voile noir que la mort allume (ScreenOverlay de la camera) : etat normal note.
             GameObject cam = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
             if (cam != null) foreach (Behaviour b in cam.GetComponents<Behaviour>()) if (b.GetType().Name == "ScreenOverlay") overlays.Add(new KeyValuePair<Behaviour, bool>(b, b.enabled));
+            if (cam != null)
+            {
+                foreach (Behaviour b in cam.GetComponents<Behaviour>())
+                {
+                    string tn = b.GetType().Name;
+                    if (tn != "ScreenOverlay" && !tn.StartsWith("Vignette")) continue;
+                    var fields = new Dictionary<System.Reflection.FieldInfo, object>();
+                    foreach (System.Reflection.FieldInfo fi in b.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                        if (fi.FieldType.IsValueType || typeof(Texture).IsAssignableFrom(fi.FieldType)) fields[fi] = fi.GetValue(b);
+                    camFx.Add(new KeyValuePair<Behaviour, Dictionary<System.Reflection.FieldInfo, object>>(b, fields));
+                }
+                camDeath = Game.FsmOn(cam, "Death");
+            }
             Log.Info("reapparition : prete (" + heads.Count + " tetes de conducteur)");
         }
 
@@ -112,14 +131,20 @@ namespace MWCoop
             if (!Enabled || deathFsm == null) return false;
             if (Choosing) return true;   // (deja en train de choisir)
             var causes = new List<string>();
+            bool crash = false;
             foreach (FsmBool b in deathFsm.FsmVariables.BoolVariables)
-                if (b.Value && b.Name != "Smoking") { causes.Add(CauseName(b.Name)); b.Value = false; }
+                if (b.Value && b.Name != "Smoking") { causes.Add(CauseName(b.Name)); crash |= b.Name == "Crash"; b.Value = false; }
             cause = causes.Count > 0 ? string.Join(", ", causes.ToArray()) : "inconnue";
             Log.Info("reapparition : mort (" + cause + "), mort du jeu arretee");
             Needs();
             restoreAt = Time.realtimeSinceStartup + 0.3f;   // (apres son "State 3" : Wait 0,1 puis "State 1")
             Choosing = true;
             if (Session.Active) Chat.Send(Lang.T("* mort (", "* died (") + cause + ") *");
+            // Accident au volant : les passagers de cette voiture meurent aussi (le jeu n'a pas de passager : seul le
+            // conducteur mourait, retour d'un joueur, 09/10 : « seul l'hote meurt dans l'accident »).
+            string car = VehicleSync.LocalDrivingKey;
+            if (crash && car != null && Session.Active && Session.RemoteCount > 0)
+                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@accident").Str(car), true);
             if (Config.GetInt("Test", "TestReapparition", 0) > 0) testChoiceAt = Time.realtimeSinceStartup + 3f;
             return true;
         }
@@ -161,6 +186,14 @@ namespace MWCoop
             VehicleSync.ExitLocal();
             if (pl.transform.parent != null) pl.transform.parent = null;
             foreach (KeyValuePair<Behaviour, bool> kv in overlays) if (kv.Key != null) kv.Key.enabled = kv.Value;
+            int fx = 0;
+            foreach (var kv in camFx)
+            {
+                if (kv.Key == null) continue;
+                foreach (var f in kv.Value) { try { if (!Equals(f.Key.GetValue(kv.Key), f.Value)) { f.Key.SetValue(kv.Key, f.Value); fx++; } } catch { } }
+            }
+            if (camDeath != null && camDeath.Fsm.GetState("State 2") != null) Game.SetState(camDeath, "State 2");
+            if (fx > 0) Log.Info("reapparition : effets d'ecran remis (" + fx + " reglages : le sang de l'accident)");
             OpenEyes(pl);
             Game.SetGlobalBool("PlayerStop", false);
             var cc = pl.GetComponent<CharacterController>();
@@ -284,6 +317,14 @@ namespace MWCoop
             Style.Text(new Rect(x + pad, by + bh + Style.Px(22), w - 2 * pad, Style.Px(24)), Lang.T("La partie continue pour les autres joueurs.", "The game goes on for the other players."), 15, TextAnchor.MiddleCenter, Style.Dim, false);
         }
 
+        // Le conducteur 'who' est mort dans un accident de la voiture 'car' : passager de cette voiture ici -> mort aussi.
+        public static void OnAccident(int who, string car)
+        {
+            if (Choosing || !Seats.Seated || Seats.SeatedCarKey != car) return;
+            Log.Info("reapparition : accident de " + car + " (conducteur #" + who + "), passager ici : mort aussi");
+            TestDie("Crash");
+        }
+
         // ------------------------------------------------------------ essais
         // Meurt comme le jeu le fait : un booleen de cause, puis Systems/Death active.
         public static string TestDie(string why)
@@ -292,6 +333,7 @@ namespace MWCoop
             FsmBool b = deathFsm.FsmVariables.FindFsmBool(why);
             if (b == null) return "cause inconnue : " + why;
             b.Value = true;
+            if (why == "Crash" && camDeath != null) camDeath.SendEvent("DEATH");   // (le sang de l'accident, comme le jeu)
             deathFsm.gameObject.SetActive(true);
             return "mort par " + why + (Choosing ? " : arretee, choix ouvert" : " : PAS arretee");
         }
@@ -308,6 +350,24 @@ namespace MWCoop
                     return "tete de " + h.Car + " detachee";
                 }
             return "pas de tete pour " + car;
+        }
+
+        // Essais : reglages des effets d'ecran differents de ceux du chargement.
+        public static string FxDiff()
+        {
+            var sb = new System.Text.StringBuilder("effets d'ecran changes :" + (camDeath != null ? " (camera::Death [" + camDeath.ActiveStateName + "] " + Jobs.DumpActions(camDeath, "State 1") + ")" : " (pas d'automate Death)"));
+            foreach (KeyValuePair<Behaviour, bool> kv in overlays) if (kv.Key != null) sb.Append(" ; ScreenOverlay allume ").Append(kv.Key.enabled).Append(" (chargement ").Append(kv.Value).Append(')');
+            if (camDeath != null)
+                foreach (FsmStateAction a in camDeath.Fsm.GetState("State 1").Actions)
+                {
+                    FieldInfo pf = a != null ? a.GetType().GetField("targetProperty") : null;
+                    FsmProperty fp = pf != null ? pf.GetValue(a) as FsmProperty : null;
+                    if (fp != null) sb.Append(" ; SetProperty ").Append(fp.TargetObject != null && fp.TargetObject.Value != null ? fp.TargetObject.Value.GetType().Name + " " + fp.TargetObject.Value.name : "?").Append('.').Append(fp.PropertyName).Append(" = ").Append(fp.BoolParameter != null ? fp.BoolParameter.Value.ToString() : "").Append(fp.FloatParameter != null ? "/" + fp.FloatParameter.Value : "");
+                }
+            foreach (var kv in camFx)
+                if (kv.Key != null)
+                    foreach (var f in kv.Value) { object v = f.Key.GetValue(kv.Key); if (!Equals(v, f.Value)) sb.Append(' ').Append(kv.Key.GetType().Name).Append('.').Append(f.Key.Name).Append('=').Append(v); }
+            return sb.ToString();
         }
 
         public static string State()

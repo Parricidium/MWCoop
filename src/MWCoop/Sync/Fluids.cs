@@ -107,7 +107,10 @@ namespace MWCoop
                 foreach (FsmFloat v in f.FsmVariables.FloatVariables)
                 {
                     bool septic = SepticVar(f, v);
-                    if (!Names.Contains(v.Name) && !septic) continue;
+                    // (charge des batteries, 'Data'.Charge : le chargeur du garage la remplit chez celui ou il tourne -- les autres
+                    // voyaient la batterie vide ou pleine, retour d'un joueur, 09/10)
+                    bool battery = v.Name == "Charge" && f.FsmName == "Data";
+                    if (!Names.Contains(v.Name) && !septic && !battery) continue;
                     if (septic && f.FsmName == "Waste") gifu = f.transform.root.GetComponent<Rigidbody>();
                     string key = owner + ":" + f.FsmName + "." + v.Name;
                     // Homonymes : l'ordre de decouverte differe d'une machine a l'autre, la cle est abandonnee.
