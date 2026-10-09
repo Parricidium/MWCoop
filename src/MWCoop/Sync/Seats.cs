@@ -36,7 +36,7 @@ namespace MWCoop
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
         // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
         // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
-        class Belt { public GameObject Fastened, Open, Copy; public Vector3 Buckle, DriverBuckle, Top, Floor; public bool Anchors; public bool OpenHidden; public GameObject DriverOpen, DriverCopy; public bool DriverOpenHidden; }
+        class Belt { public GameObject Fastened, Open, Copy; public Vector3 Buckle, DriverBuckle, Top, Floor; public bool Anchors; public bool OpenHidden; public GameObject DriverOpen, DriverCopy; public bool DriverOpenHidden; public Mesh Bulged; }
         static readonly Dictionary<int, bool> driverBelt = new Dictionary<int, bool>();   // conducteurs distants : ceinture bouclee
         static bool driverBeltSent;
         static float driverBeltResend;
@@ -550,39 +550,31 @@ namespace MWCoop
             }
         }
 
-        // Sangle tenue : du haut du montant (attache du conducteur en miroir) a la main, devant la camera, un peu affaissee.
-        static LineRenderer pullStrap;
+        // Ceinture tenue : celle du jeu (PassengerBelt, meme montage que celle du conducteur : sangles a os -- seatbelt_upper /
+        // seatbelt_lower -- tendues jusqu'a la poignee SeatbeltHandle, languette au bout). Comme le jeu le fait pour le
+        // conducteur, la poignee suit la main : la sangle s'etire du montant, la languette dans la main (demande de JD, 09/10 :
+        // « la meme animation que la place conducteur »). Lachee : poignee remise a sa place.
         static bool testHold;   // (essais : clic maintenu simule)
+        static Transform pullHandle;
+        static Vector3 pullHandlePos; static Quaternion pullHandleRot;
         static void DrawPull(Belt b)
         {
-            if (b == null || cam == null || current == null) return;
-            if (pullStrap == null)
+            if (b == null || cam == null || current == null || b.Open == null) return;
+            if (pullHandle == null)
             {
-                GameObject g = new GameObject("MWCoop-CeintureTenue");
-                if (b.Fastened != null) g.layer = b.Fastened.layer;   // (calque dessine par la camera du joueur)
-                pullStrap = g.AddComponent<LineRenderer>();
-                pullStrap.useWorldSpace = false;   // (repere de la voiture, comme les brins bouclee : en coordonnees du monde, jamais dessinee)
-                pullStrap.SetWidth(0.05f, 0.05f);
-                pullStrap.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                MeshRenderer mr = b.Fastened != null ? b.Fastened.GetComponent<MeshRenderer>() : null;
-                if (mr != null) pullStrap.sharedMaterial = mr.sharedMaterial;
-                pullStrap.SetVertexCount(3);
+                pullHandle = FindUnder(b.Open.transform, "SeatbeltHandle", null);
+                if (pullHandle == null) return;
+                pullHandlePos = pullHandle.localPosition; pullHandleRot = pullHandle.localRotation;
             }
-            pullStrap.gameObject.SetActive(true);
-            Vector3 top = current.CarT.TransformPoint(b.Anchors ? new Vector3(-b.Top.x, b.Top.y, b.Top.z) : current.Head + new Vector3(0.25f, 0.1f, -0.25f));
+            if (!b.Open.activeSelf) { b.Open.SetActive(true); b.OpenHidden = false; }
             Transform v = Camera.main != null ? Camera.main.transform : cam;   // (la vraie camera : son parent FPSCamera, meme position, n'a pas l'orientation du regard)
-            Vector3 hand = v.position + v.forward * 0.45f + v.right * 0.12f - v.up * 0.15f;
-            Transform pt = pullStrap.transform;
-            if (pt.parent != current.CarT) { pt.parent = current.CarT; pt.localPosition = Vector3.zero; pt.localRotation = Quaternion.identity; pt.localScale = Vector3.one; }
-            pullStrap.SetPosition(0, current.CarT.InverseTransformPoint(top));
-            pullStrap.SetPosition(1, current.CarT.InverseTransformPoint(Vector3.Lerp(top, hand, 0.55f) - current.CarT.up * 0.04f));
-            pullStrap.SetPosition(2, current.CarT.InverseTransformPoint(hand));
-            if (b.Open != null && b.Open.activeSelf) { b.Open.SetActive(false); b.OpenHidden = true; }
+            // Sur le viseur, comme celle du conducteur (demande de JD, 09/10) : dans l'axe du regard, au centre de l'ecran.
+            pullHandle.position = v.position + v.forward * Config.GetFloat("Test", "LanguetteDist", 0.4f);
+            pullHandle.rotation = Quaternion.LookRotation(v.forward, v.up) * Quaternion.Euler(Config.GetFloat("Test", "LanguetteX", 0f), Config.GetFloat("Test", "LanguetteY", 0f), Config.GetFloat("Test", "LanguetteZ", 0f));
         }
         static void HidePull(Belt b)
         {
-            if (pullStrap != null) pullStrap.gameObject.SetActive(false);
-            if (b != null && b.Open != null && !beltOn && b.OpenHidden) { b.Open.SetActive(true); b.OpenHidden = false; }
+            if (pullHandle != null) { pullHandle.localPosition = pullHandlePos; pullHandle.localRotation = pullHandleRot; pullHandle = null; }
         }
         // (pose a chaque image tant qu'on vise : les objets du jeu sous le regard -- poignee de la portiere arriere, juste
         // derriere la ceinture rangee -- effacent le texte a chaque image ; il ne restait que la main, sans "BUCKLE UP")
@@ -645,50 +637,13 @@ namespace MWCoop
             }
         }
 
-        // Ceinture bouclee montree (passager, ou conducteur distant) : une sangle tendue d'une attache a l'autre, comme la corde
-        // (demande de JD, 09/10 : « la sangle d'un bout a l'autre reliee a ses attaches » ; avant : copie du modele du jeu,
-        // decalee de 17 cm vers l'avant pour sortir du torse des avatars -- elle flottait, ses bouts loin des attaches).
-        // Deux brins dans la matiere de la ceinture du jeu : du haut du montant, par l'epaule et la poitrine, jusqu'a la boucle ;
-        // de la boucle, sur les cuisses, a l'attache du plancher. Points du corps d'apres la tete assise (repere voiture).
-        static GameObject BeltCopy(Belt b, Transform car, bool mirror)
-        {
-            if (!b.Anchors || Config.GetInt("Test", "CeintureModele", 0) != 0) return BeltMeshCopy(b, car, mirror);
-            Vector3 head = mirror ? SeatHead(SeatKeyOf(car), 0) : (Seats.DriverHead(car, out head) ? head : Vector3.zero);
-            if (head == Vector3.zero) return BeltMeshCopy(b, car, mirror);
-            Vector3 top = mirror ? new Vector3(-b.Top.x, b.Top.y, b.Top.z) : b.Top, floor = mirror ? new Vector3(-b.Floor.x, b.Floor.y, b.Floor.z) : b.Floor;
-            Vector3 buckle = mirror ? b.Buckle : b.DriverBuckle;
-            float o = Mathf.Sign(top.x - head.x);   // (cote portiere)
-            float fz = Config.GetFloat("Test", "CeintureAvant", 0f);   // (essais : brins plus en avant)
-            Vector3 shoulder = head + new Vector3(o * 0.17f, -0.24f, 0.07f + fz), chest = head + new Vector3(-o * 0.03f, -0.42f, 0.13f + fz);
-            Vector3 lap = head + new Vector3(o * 0.05f, -0.66f, 0.20f + fz);
-            GameObject c = new GameObject(mirror ? "MWCoop-CeinturePassager" : "MWCoop-CeintureConducteur");
-            c.layer = b.Fastened.layer;
-            c.transform.parent = car;
-            c.transform.localPosition = Vector3.zero; c.transform.localRotation = Quaternion.identity; c.transform.localScale = Vector3.one;
-            Material mat = b.Fastened.GetComponent<MeshRenderer>() != null ? b.Fastened.GetComponent<MeshRenderer>().sharedMaterial : null;
-            Strand(c, "diagonale", mat, top, shoulder, chest, buckle);
-            Strand(c, "ventrale", mat, buckle, lap, floor);
-            return c;
-        }
+        // Ceinture bouclee montree (passager, ou conducteur distant) : le modele de la ceinture bouclee du jeu (Fastened_mesh :
+        // sangle droite, boucle au bout), en miroir pour le passager, a sa place exacte -- ses bouts sur leurs attaches, quitte a
+        // traverser le torse de l'avatar (demande de JD, 09/10). (Avant : decalee de 17 cm vers l'avant, elle flottait ; puis
+        // des brins dessines, refuses : « la meme que la place conducteur ».)
+        static GameObject BeltCopy(Belt b, Transform car, bool mirror) { return BeltMeshCopy(b, car, mirror); }
 
-        static void Strand(GameObject parent, string name, Material mat, params Vector3[] pts)
-        {
-            GameObject g = new GameObject(name);
-            g.layer = parent.layer;
-            g.transform.parent = parent.transform;
-            g.transform.localPosition = Vector3.zero; g.transform.localRotation = Quaternion.identity; g.transform.localScale = Vector3.one;
-            LineRenderer lr = g.AddComponent<LineRenderer>();
-            lr.useWorldSpace = false;
-            lr.SetVertexCount(pts.Length);
-            for (int i = 0; i < pts.Length; i++) lr.SetPosition(i, pts[i]);
-            lr.SetWidth(0.045f, 0.045f);
-            if (mat != null) lr.sharedMaterial = mat;
-            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        }
-
-        static string SeatKeyOf(Transform car) { foreach (Seat s in seats) if (s.CarT == car) return s.Car; return null; }
-
-        // (ancienne copie du modele du jeu, gardee en secours : modele illisible, ou [Test] CeintureModele=1)
+        // Copie du modele : en miroir par le plan median de la voiture (x -> -x) pour le passager, telle quelle pour le conducteur.
         static GameObject BeltMeshCopy(Belt b, Transform car, bool mirror)
         {
             Transform src = b.Fastened.transform;
@@ -702,11 +657,44 @@ namespace MWCoop
             c.transform.localPosition = new Vector3(mirror ? -p.x : p.x, p.y, p.z + fwd);
             c.transform.localRotation = mirror ? new Quaternion(q.x, -q.y, -q.z, q.w) : q;
             c.transform.localScale = new Vector3((mirror ? -sc.x : sc.x) / cs.x, sc.y / cs.y, sc.z / cs.z);
-            c.AddComponent<MeshFilter>().sharedMesh = src.GetComponent<MeshFilter>().sharedMesh;
+            c.AddComponent<MeshFilter>().sharedMesh = BulgedMesh(b, car, src);
             MeshRenderer mr = src.GetComponent<MeshRenderer>();
             MeshRenderer cr = c.AddComponent<MeshRenderer>();
             if (mr != null) cr.sharedMaterials = mr.sharedMaterials;
             return c;
+        }
+
+        // Le modele deforme au milieu de chaque sangle, pas a ses bouts (haut du montant, plancher et boucle restent sur leurs
+        // attaches) : l'avatar est plus epais que le joueur du jeu et la cachait toute entiere, et la diagonale du jeu descend
+        // raide le long du cote portiere du torse. Diagonale : avancee devant la poitrine et ramenee vers le milieu (de l'epaule
+        // a la boucle) ; sangle du bassin : a peine avancee. Calcule une fois par voiture (memes poids pour la copie en miroir).
+        // Modele illisible : tel quel.
+        static Mesh BulgedMesh(Belt b, Transform car, Transform src)
+        {
+            Mesh m = src.GetComponent<MeshFilter>().sharedMesh;
+            if (b.Bulged != null) return b.Bulged;
+            float bulge = Config.GetFloat("Test", "CeintureBombe", 0.26f), lap = Config.GetFloat("Test", "CeintureBassin", 0.1f),
+                  inward = Config.GetFloat("Test", "CeintureMilieu", 0.1f), radius = Config.GetFloat("Test", "CeintureRayon", 0.3f);
+            if (!b.Anchors || bulge <= 0f) return m;
+            try
+            {
+                Vector3[] v = m.vertices;
+                Vector3 fwd = src.InverseTransformVector(car.TransformVector(Vector3.forward));
+                Vector3 side = src.InverseTransformVector(car.TransformVector(Vector3.right * Mathf.Sign(b.Buckle.x - b.Top.x)));
+                for (int i = 0; i < v.Length; i++)
+                {
+                    Vector3 cp = car.InverseTransformPoint(src.TransformPoint(v[i]));
+                    float d = Mathf.Min(Vector3.Distance(cp, b.Top), Mathf.Min(Vector3.Distance(cp, b.Floor), Vector3.Distance(cp, b.Buckle)));
+                    float w = Mathf.SmoothStep(0f, 1f, d / radius), t = Mathf.Clamp01((cp.y - b.Buckle.y - 0.05f) / 0.15f);   // t : 1 sur la diagonale, 0 sur la sangle du bassin
+                    v[i] += fwd * (Mathf.Lerp(lap, bulge, t) * w) + side * (inward * t * w);
+                }
+                Mesh n = Object.Instantiate(m);
+                n.vertices = v;
+                n.RecalculateBounds();
+                b.Bulged = n;
+                return n;
+            }
+            catch (System.Exception e) { Log.Info("ceinture : modele non bombe (" + e.Message + ")"); return m; }
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -956,7 +944,7 @@ namespace MWCoop
             {
                 beltHold = Mathf.Max(beltHold, 0.01f); DrawPull(b);
                 Camera c = cam != null ? cam.GetComponent<Camera>() : null;
-                return "ceinture tenue" + (pullStrap != null ? " : actif " + pullStrap.gameObject.activeInHierarchy + ", calque " + pullStrap.gameObject.layer + ", camera " + (c != null ? c.name + " masque " + c.cullingMask + " (calque vu " + ((c.cullingMask & (1 << pullStrap.gameObject.layer)) != 0) + ") proche " + c.nearClipPlane : "?") + ", visible " + pullStrap.isVisible + ", matiere " + (pullStrap.sharedMaterial != null ? pullStrap.sharedMaterial.name + "/" + pullStrap.sharedMaterial.shader.name : "aucune") : "");
+                return "ceinture tenue" + (pullHandle != null ? " : poignee " + Recon.Path(pullHandle) + " en " + pullHandle.position.ToString("F2") : " : pas de poignee");
             }
             beltHold = 0f; HidePull(b);
             return "ceinture lachee";
