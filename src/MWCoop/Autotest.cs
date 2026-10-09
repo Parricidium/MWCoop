@@ -754,6 +754,32 @@ namespace MWCoop
                     Log.Info("autotest : capture " + png);
                 }
             }
+            if (mode == "parebrise")
+            {
+                // Hote : casse le pare-brise de [Test] TestVoiture (CORRIS) a 30 s ; chacun note son etat a 25 et 70 s.
+                string car = Config.Get("Test", "TestVoiture", "CORRIS");
+                if (Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Windshields.TestBreak(car)); }
+                if ((t > 25f && step2 == 0) || (t > 70f && step2 == 1)) { step2++; Log.Info("autotest : t=" + t.ToString("F0") + " " + Windshields.State(car)); }
+            }
+            if (mode == "couchette")
+            {
+                // Invite assis sur la couchette de la GIFU (place [Test] TestPlace, 2 : milieu) a 20 s ; l'hote le filme
+                // (camera d'essai devant la couchette) a 40 s.
+                if (!Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest : couchette " + Seats.TestSit("GIFU", Config.GetInt("Test", "TestPlace", 2))); }
+                if (Net.Session.IsHost && t > 30f)
+                {
+                    Transform car; Vector3 head; string cn;
+                    for (int id = 1; id < 8; id++)
+                        if (Seats.RemoteSeat(id, out car, out head, out cn) && car != null)
+                        {
+                            if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
+                            testCam.transform.position = car.TransformPoint(head + (Config.Get("Test", "CouchetteVue", "") == "cote" ? new Vector3(0.95f, -0.05f, 0.35f) : new Vector3(0.55f, -0.1f, 1.1f)));
+                            testCam.transform.LookAt(car.TransformPoint(head + new Vector3(0f, -0.35f, 0f)), car.up);
+                            if (step == 0 && t > 70f) { step = 1; CaptureSoon("couchette", 0.1f); }
+                            break;
+                        }
+                }
+            }
             if (mode == "souleve")
             {
                 // Hote : a cote de la mobylette a 30 s, la deplace a la main (1 m/s, 4 s), monte dessus a 45 s ; chacun note sa
@@ -1120,7 +1146,7 @@ namespace MWCoop
                 // l'hote paie au guichet : le colis doit apparaitre chez les deux.
                 bool host = MWCoop.Net.Session.IsHost;
                 if (host && t > 35f && step == 0) { step = 1; Log.Info("autotest : " + WorldFsms.TestEvent("OrdersSpawnerAMIS", "SPAWNITEM")); }
-                if (!host && t > 35f && step == 0) step = 1;
+                if (!host && t > 35f && step == 0) { step = 1; if (Config.GetInt("Test", "ColisOuvrir", 0) != 0) Log.Info("autotest : " + WorldFsms.TestEvent("OrdersSpawnerAMIS", "SPAWNITEM")); }   // (ouverture : la meme commande chez l'invite)
                 if (t > 50f && step == 1)
                 {
                     step = 2;
@@ -1146,6 +1172,16 @@ namespace MWCoop
                         pf.enabled = true;
                     }
                     Log.Info("autotest : " + WorldFsms.TestState("NotificationsPile::Use", "Wait button") + " ; " + WorldFsms.TestEvent("NotificationsPile::Use", "PAY"));
+                }
+            }
+            if (mode == "colis")
+            {
+                // ... puis l'hote l'ouvre a 85 s (comme un clic) : il doit s'ouvrir chez les deux ([Test] ColisOuvrir=1).
+                if (Config.GetInt("Test", "ColisOuvrir", 0) != 0)
+                {
+                    if (t > 70f && step2 == 0) { step2 = 1; Log.Info("autotest : colis cree " + WorldFsms.TestState("OrderAMIS1::Data", "Spawn package")); }
+                    if (MWCoop.Net.Session.IsHost && t > 85f && step2 == 1) { step2 = 2; Log.Info("autotest : " + Packages.TestOpen()); }
+                    if (t > 80f && Time.frameCount % 300 == 0 && t < 130f) Log.Info("autotest : " + Packages.State());
                 }
             }
             if (mode == "monde_evt" && t > 35f && !done)

@@ -1123,6 +1123,14 @@ namespace MWCoop
                 Root.transform.rotation = pCar.rotation;
                 leanOff = Vector3.zero;
                 pos = pCar.TransformPoint(pHead) - pCar.rotation * eyesRest;
+                // Couchette de la GIFU : 67 cm seulement sous le toit, la tete (camera) juste dessous ; assis droit, le corps
+                // s'enfoncait de ~22 cm dans la couchette (retour d'un joueur, 09/10). Assis dessus, voute en avant : la tete
+                // reste sous le toit.
+                if (pName != null && pName.StartsWith("GIFU") && Seats.RemoteSeatIndex(pi.Id) >= 1)
+                {
+                    pos += pCar.up * Config.GetFloat("Test", "CouchetteLeve", 0.22f) + pCar.forward * Config.GetFloat("Test", "CouchetteAvance", 0.1f);   // (dos contre la paroi, pas dedans)
+                    leanOff = new Vector3(0f, 0f, Config.GetFloat("Test", "CouchetteVoute", 0.5f));
+                }
                 yaw = pCar.eulerAngles.y;
                 placed = true;
                 Root.transform.position = pos;

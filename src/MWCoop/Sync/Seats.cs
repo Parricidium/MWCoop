@@ -656,6 +656,9 @@ namespace MWCoop
             return false;
         }
 
+        // Place d'un autre joueur assis (rang ; -1 : pas assis).
+        public static int RemoteSeatIndex(int id) { Remote rs; return remote.TryGetValue(id, out rs) ? rs.Index : -1; }
+
         static Vector3 SeatHead(string car, int index)
         {
             foreach (Seat s in seats) if (s.Car == car && s.Index == index) return s.Head;

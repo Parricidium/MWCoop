@@ -1479,6 +1479,8 @@ namespace MWCoop
                 case "@attelage": OnHitch(who, r.U8()); break;
                 case "@arrestation": Police.OnArrest(who, r.Vec()); break;
                 case "@accident": Respawn.OnAccident(who, r.Str()); break;
+                case "@vitre": Windshields.OnRemote(who, r.Str(), r.U8()); break;
+                case "@colis": Packages.OnRemote(who, r.Str()); break;
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":
