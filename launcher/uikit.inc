@@ -49,6 +49,7 @@ enum {
     UI_LOOKPIN = 400,             // + zone (0 tete, 1 torse, 2 jambes, 3 silhouette)
     UI_LOOKROT = 410,             // + 0 / 1 : tourner
     UI_LOOKRAND = 415, UI_LOOKRESET,
+    UI_FACE_IMPORT = 420, UI_FACE_TPL, UI_FACE_DEL,   // TENUE : visage importe (importer, gabarit, retirer)
     UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)
     UI_WIKI_ART = 8040,           // + article
     UI_WIKI_SEC = 8300,           // + bloc : section pliable de l'article

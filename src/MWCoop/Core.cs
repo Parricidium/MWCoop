@@ -70,6 +70,7 @@ namespace MWCoop
             Step("sauvegarde en jeu", Game.Update);
             Step("porte-monnaie", WalletPanel.Update);
             Step("vocal", Voice.Update);
+            Step("visage perso", CustomFace.Update);
             Step("menu", Menu.Update);
             Step("mscloader", MscMods.Update);
             Step("lanceur", MWCoop.Net.Admin.Update);
@@ -167,6 +168,7 @@ namespace MWCoop
             CarVisuals.OnLevelLoaded();
             Seats.OnLevelLoaded();
             Voice.OnLevelLoaded();
+            CustomFace.OnLevelLoaded();
             Respawn.OnLevelLoaded();
             Audit.OnLevelLoaded();
             NearDoors.OnLevelLoaded();

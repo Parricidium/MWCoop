@@ -1536,6 +1536,9 @@ static bool UiClick(int id)
         }
         return true;
     case UI_SET_MODSAUTO: if (const Opt *o = OptByKey("ModsAuto")) OptSet(*o, OptGet(*o) ? 0 : 1); return true;
+    case UI_FACE_IMPORT: FaceImport(); return true;
+    case UI_FACE_TPL: FaceTemplate(); return true;
+    case UI_FACE_DEL: FaceRemove(); return true;
     case UI_SET_KEY: case UI_SET_KEY + 1: case UI_SET_KEY + 2: g_keyCapture = g_keyCapture == id - UI_SET_KEY ? -1 : id - UI_SET_KEY; return true;
     case UI_SET_GUIDE: TutoStart(true); return true;
     case UI_SET_STEAM: case UI_SET_IP: if ((id == UI_SET_STEAM) != g_steamNet && g_lobby == LB_NONE) OnButton(id == UI_SET_STEAM ? B_NETSTEAM : B_NETIP); return true;
