@@ -1486,6 +1486,7 @@ namespace MWCoop
                 case "@colis": Packages.OnRemote(who, r.Str()); break;
                 case "@vin?": Vin.OnAsk(who); break;
                 case "@vin": Vin.OnTable(who, r); break;
+                case "@vente": CarSale.OnRemote(who, r.U8()); break;
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":
