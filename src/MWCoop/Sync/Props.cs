@@ -346,17 +346,17 @@ namespace MWCoop
             {
                 nextHost = now + 2f;
                 foreach (Prop p in props.Values)
-                {
-                    if (p.Body == null || p == held || p.RemoteBy >= 0 || p.RideOut >= 0 || settling.Contains(p) || !p.Body.gameObject.activeInHierarchy) continue;
-                    if ((p.Body.position - p.LastSentPos).sqrMagnitude < 0.04f) continue;
-                    // Piece montee sur un vehicule (portiere, capot...) : elle suit la voiture, pas de recalage.
-                    Transform root = VehicleSync.CarRoot(p.Body.transform);
-                    if (root != null && root != p.Body.transform) continue;
-                    // Posee dans une voiture qu'un autre fait rouler : c'est lui qui la transporte.
-                    Rigidbody car = VehicleSync.CarUnder(p.Body);
-                    if (car != null && VehicleSync.Authority(car) != Session.LocalId) continue;
-                    Send(p, 0);
-                }
+                    if (HostResends(p) && (p.Body.position - p.LastSentPos).sqrMagnitude >= 0.04f) Send(p, 0);
+            }
+            // Invite arrive en jeu : la pose de tout ce qui est au repos, une fois, en fiable. Le premier recalage partait des
+            // la connexion, pendant son chargement (perdu), et ne repartait plus (« deja envoye ») : objets deplaces avant son
+            // arrivee restes a leur place de la sauvegarde chez lui (retour d'un joueur, 10/10 : sacs de sable).
+            if (Session.IsHost && resendAt > 0f && now >= resendAt)
+            {
+                resendAt = 0f;
+                int n = 0;
+                foreach (Prop p in props.Values) if (HostResends(p)) { Send(p, 0, true); n++; }
+                Log.Info("objets : pose de " + n + " objets au repos renvoyee (invite arrive en jeu)");
             }
 
             foreach (Prop p in props.Values)
@@ -385,6 +385,22 @@ namespace MWCoop
                 p.GoneAt = -1f;
                 if (!Consume.Done(p.Id)) Consume.SendGone(p.Id, Consume.GoneState(p.Use));
             }
+        }
+
+        // Hote : invite arrive en jeu -> 20 s plus tard (ses objets sont releves), la pose de tout ce qui est au repos.
+        static float resendAt;
+        public static void ScheduleSnapshot() { if (Session.IsHost) resendAt = Time.realtimeSinceStartup + 20f; }
+
+        // Objet au repos dont l'hote fait foi (ni tenu, ni deplace par un autre, ni transporte par un autre).
+        static bool HostResends(Prop p)
+        {
+            if (p.Body == null || p == held || p.RemoteBy >= 0 || p.RideOut >= 0 || p.Hidden || settling.Contains(p) || !p.Body.gameObject.activeInHierarchy) return false;
+            // Piece montee sur un vehicule (portiere, capot...) : elle suit la voiture, pas de recalage.
+            Transform root = VehicleSync.CarRoot(p.Body.transform);
+            if (root != null && root != p.Body.transform) return false;
+            // Posee dans une voiture qu'un autre fait rouler : c'est lui qui la transporte.
+            Rigidbody car = VehicleSync.CarUnder(p.Body);
+            return car == null || VehicleSync.Authority(car) == Session.LocalId;
         }
 
         // Calque d'un objet tenu en main (automate PickUp du jeu : SetLayer 16 a la prise, 19 au lacher) : il ne
@@ -885,8 +901,30 @@ namespace MWCoop
         static float testLog;
         static bool testPlaced;
 
+        // sacs : l'hote, l'invite encore en chargement, pose sandbag(item1) 1,5 m plus loin (comme un joueur l'aurait deplace avant l'arrivee
+        // de l'invite), puis a 45 s pose sandbag(item2) 1,5 m plus loin (en cours de partie). Chacun note a 40 et 55 s les
+        // sacs (cle, position). Attendu : memes cles, memes positions des deux cotes.
+        static void TestSandbags(float t)
+        {
+            if (Session.IsHost && testStep == 0 && nextScan >= 0 && props.Count > 0) TestMoveBag("sandbag(item1)", ref testStep);   // (des le premier releve : invite encore en chargement)
+            if (Session.IsHost && testStep == 1 && t > 45f) TestMoveBag("sandbag(item2)", ref testStep);
+            if ((t > 40f && testLog == 0f) || (t > 55f && testLog < 50f)) { testLog = t; Log.Info("autotest : sacs : " + Ids("w:EQUIPMENTS/sandbag")); }
+        }
+
+        static void TestMoveBag(string part, ref int step)
+        {
+            step++;
+            Prop p = null;
+            foreach (Prop x in props.Values) if (x.Id.Contains(part) && x.Body != null) p = x;
+            if (p == null) { Log.Info("autotest : sacs : " + part + " introuvable"); return; }
+            p.Body.position += Vector3.right * 1.5f; p.Body.transform.position = p.Body.position;
+            Send(p, 0, true);
+            Log.Info("autotest : sacs : " + p.Id + " deplace en " + p.Body.position.ToString("F1") + " (" + Session.RemoteCount + " invite(s))");
+        }
+
         public static void Test(string mode, float t)
         {
+            if (mode == "sacs") { TestSandbags(t); return; }
             bool push = mode == "coffre-pousse";
             if (mode != "coffre-objets" && mode != "coffre-objets-invite" && !push) return;
             string name = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");

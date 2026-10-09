@@ -1180,14 +1180,18 @@ namespace MWCoop
         static Rigidbody bed, flatbed;
         static HingeJoint bedHinge;
         static Quaternion bedRest;
-        static float bedTarget, bedTargetAt = -100, bedSent = float.NaN, bedSentAt, nextBedSend, bedLastFixed = -1;
+        static float bedTarget, bedTargetAt = -100, bedSent = float.NaN, bedSentAt, nextBedSend;
         // La benne monte par sa charniere : automate 'Lift' de FLATBED/Bed (evenements globaux HYD_UP -> "UP",
         // HYD_DOWN -> "UP 2", HYD_OFF -> "UP 3", tenue "UP 4" : SetHingeJointProperties = moteur / butees de la
-        // charniere). Chez celui qui suit, ce moteur et ces butees tenaient la benne contre la correction : le temps
-        // du suivi, l'automate est arrete et la charniere libre (moteur, ressort, butees coupes), puis rendus.
+        // charniere). Chez celui qui suit, la benne est cinematique, posee a l'angle recu autour de l'axe de sa charniere
+        // (automate 'Lift' arrete), puis rendue. Avant : charniere liberee (moteur, ressort, butees coupes) et couple de
+        // correction -- modifier la charniere pendant que le plateau est attele au tracteur faisait planter le jeu (pile
+        // native en boucle, Behaviour::Transfer<RemapPPtrTransfer>), chez l'hote et chez l'invite, des qu'un invite
+        // attelait le plateau (retour d'un joueur, 09/10 : « le jeu plante quand mon ami monte dans le tracteur »).
         static PlayMakerFSM bedLift;
-        static bool bedFollow, bedLiftWas, bedMotorWas, bedLimitsWas, bedSpringWas;
-        static JointLimits bedLimitsSaved; static JointSpring bedSpringSaved; static JointMotor bedMotorSaved;
+        static bool bedFollow, bedLiftWas, bedKinWas;
+        static RigidbodyInterpolation bedInterpWas;
+        static Vector3 bedRestPos;
 
         static void FindBed()
         {
@@ -1199,6 +1203,7 @@ namespace MWCoop
             bedHinge = b.GetComponent<HingeJoint>();
             flatbed = b.transform.root.GetComponent<Rigidbody>();
             bedRest = b.transform.localRotation;   // (benne baissee au chargement : la sauvegarde ne garde que le plateau)
+            bedRestPos = b.transform.localPosition;
             ltCollider = logTrigger.F.GetComponent<Collider>();
             bedLift = Game.FsmOn(b.gameObject, "Lift");
             if (bedLift != null && !Replay.Claim(bedLift, "quetes")) { Log.Warn("bois : 'Lift' de la benne deja a " + Replay.Owner(bedLift)); bedLift = null; }
@@ -1221,23 +1226,29 @@ namespace MWCoop
             bedFollow = on;
             if (on)
             {
-                bedMotorWas = bedHinge.useMotor; bedLimitsWas = bedHinge.useLimits; bedSpringWas = bedHinge.useSpring;
-                bedLimitsSaved = bedHinge.limits; bedSpringSaved = bedHinge.spring; bedMotorSaved = bedHinge.motor;
                 if (Time.realtimeSinceStartup - bedTargetAt > 5f) bedTarget = BedAngle();   // (pas encore d'angle recu : la tenir la ou elle est)
                 bedLiftWas = bedLift != null && bedLift.enabled;
                 if (bedLift != null) bedLift.enabled = false;
-                bedHinge.useMotor = false; bedHinge.useSpring = false; bedHinge.useLimits = false;
-                Log.Info("bois : benne suivie (charniere libre le temps du suivi)");
+                bedKinWas = bed.isKinematic; bedInterpWas = bed.interpolation;
+                bed.isKinematic = true;
+                Log.Info("bois : benne suivie (cinematique, posee a l'angle recu)");
                 return;
             }
-            // Rendue a sa charniere TELLE QU'AVANT (butees, ressort, moteur d'origine). Avant : butees elargies a l'angle de
-            // la charniere (HingeJoint.angle, qui saute a 356,7 : butee haute supprimee) et charniere recreee a la pose du
-            // moment, toutes les 3 s -- la benne s'affaissait peu a peu (retour d'un joueur, 08/10 : remorque « a moitie
-            // enfoncee »). Le suivi ne s'arrete plus qu'au changement d'autorite.
-            bedHinge.limits = bedLimitsSaved; bedHinge.spring = bedSpringSaved; bedHinge.motor = bedMotorSaved;
-            bedHinge.useMotor = bedMotorWas; bedHinge.useLimits = bedLimitsWas; bedHinge.useSpring = bedSpringWas;
+            // Rendue telle qu'avant ; sa charniere n'a pas ete touchee.
+            bed.isKinematic = bedKinWas; bed.interpolation = bedInterpWas;
+            if (!bed.isKinematic) { bed.velocity = flatbed != null ? flatbed.velocity : Vector3.zero; bed.angularVelocity = Vector3.zero; }
             if (bedLift != null) bedLift.enabled = bedLiftWas;
             Log.Info("bois : benne rendue a sa charniere (" + HingeState() + ")");
+        }
+
+        // Pose de la benne suivie a l'angle a (degres depuis la pose baissee), autour de l'ancre de sa charniere.
+        static void BedPose(float a)
+        {
+            Transform t = bed.transform;
+            Vector3 anchor = Vector3.Scale(t.localScale, bedHinge.anchor);
+            Quaternion q = bedRest * Quaternion.AngleAxis(a, bedHinge.axis);
+            t.localPosition = bedRestPos + bedRest * anchor - q * anchor;
+            t.localRotation = q;
         }
 
         static int BedAuthority() { return flatbed != null ? VehicleSync.Authority(flatbed) : 0; }
@@ -1257,7 +1268,7 @@ namespace MWCoop
             if (bed == null || bedHinge == null) return;
             bool active = Session.Active && Session.RemoteCount > 0;
             bool authority = BedAuthority() == Session.LocalId;
-            BedFollow(active && !authority && !bed.isKinematic);   // (continu : plus d'aller-retour toutes les 3 s)
+            BedFollow(active && !authority && (bedFollow || !bed.isKinematic));   // (continu : plus d'aller-retour toutes les 3 s)
             if (!active) return;
             if (authority)
             {
@@ -1270,24 +1281,16 @@ namespace MWCoop
                 return;
             }
             if (!bedFollow) return;
-            // Une correction par pas de physique : les VelocityChange s'additionnent jusqu'au pas suivant et
-            // angularVelocity ne bouge pas entre deux images sans pas -- a 100-144 i/s (2-3 images par pas de
-            // 50 Hz) la correction etait appliquee 2-3 fois et la benne oscillait contre ses butees.
-            if (Time.fixedTime == bedLastFixed) return;
-            bedLastFixed = Time.fixedTime;
-            float err = Mathf.DeltaAngle(BedAngle(), bedTarget);
-            Vector3 axis = bed.transform.TransformDirection(bedHinge.axis).normalized;
-            Rigidbody car = bedHinge.connectedBody;
-            Vector3 rel = bed.angularVelocity - (car != null ? car.angularVelocity : Vector3.zero);
-            float w = Vector3.Dot(rel, axis) * Mathf.Rad2Deg;
-            // (charniere libre : sans correction a chaque pas, la benne retomberait sous son poids)
-            if (Mathf.Abs(err) < 0.05f && Mathf.Abs(w) < 0.5f) return;
-            float want = Mathf.Clamp(err * 4f, -25f, 25f);
-            bed.AddTorque(axis * ((want - w) * Mathf.Deg2Rad), ForceMode.VelocityChange);
-            if (bed.IsSleeping()) bed.WakeUp();
+            // Vers l'angle recu, 25 deg/s au plus (comme la benne du jeu) ; a chaque image, portee par le plateau.
+            if (bed.interpolation != RigidbodyInterpolation.None) bed.interpolation = RigidbodyInterpolation.None;   // (sinon la pose physique interpolee ecrase celle-ci)
+            float cur = BedAngle(), err = Mathf.DeltaAngle(cur, bedTarget);
+            if (Mathf.Abs(err) < 0.02f) return;
+            BedPose(cur + Mathf.Clamp(err * 4f, -25f, 25f) * Mathf.Clamp(Time.deltaTime, 0f, 0.1f) + (Mathf.Abs(err) < 0.3f ? err : 0f));
         }
 
-        static void OnBed(float a) { bedTarget = Mathf.Clamp(a, -10f, 90f); bedTargetAt = Time.realtimeSinceStartup; }
+        // (la benne monte vers les angles negatifs -- butees du jeu [-41 ; 0] : avant, bornee a [-10 ; 90], elle ne montait
+        // jamais plus de 10 deg chez les autres)
+        static void OnBed(float a) { bedTarget = Mathf.Clamp(a, -90f, 90f); bedTargetAt = Time.realtimeSinceStartup; }
 
         // ---------------------------------------------------------------- attelage du plateau au KEKMET
         // Le jeu accroche le plateau tout seul, par la distance : KEKMET/Trailer/Hook::Distance tourne en boucle (Feel
@@ -1748,11 +1751,21 @@ namespace MWCoop
         // pose son crochet sur celui du plateau a 26 s (l'attelage du jeu, par la distance) ; a 44 s le detele (Close door de
         // Remove). Chacun note a 34 et 52 s l'etat de l'attelage, du plateau (Detach) et l'ecart crochet / plateau.
         static int attStep, attLog;
-        static bool attProbe;
+        static bool attProbe, attLoaded;
         static void TestAtteler(float t)
         {
             bool driver = Session.IsHost != (Config.GetInt("Test", "AttelerInvite", 0) != 0);
             string car = "KEKMET(350-400psi)";
+            // [Test] AttelerBois=n : plateau charge de n buches fendues a 12 s, chez chacun (comme une partie chargee).
+            int load = Config.GetInt("Test", "AttelerBois", 0);
+            if (load > 0 && t > 12f && !attLoaded && logTrigger != null && logTrigger.F != null)
+            {
+                attLoaded = true;
+                FsmFloat fw = logTrigger.F.FsmVariables.FindFsmFloat("Firewood");
+                if (fw != null) fw.Value = load;
+                Game.SetState(logTrigger.F, "Add scale");
+                Log.Info("autotest : atteler : plateau charge de " + load + " buches -> " + logTrigger.F.ActiveStateName + ", masse " + (bed != null ? bed.mass.ToString("F0") : "?"));
+            }
             if (driver)
             {
                 if (t > 15f && attStep == 0) { attStep = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
