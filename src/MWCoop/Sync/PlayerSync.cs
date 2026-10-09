@@ -227,6 +227,7 @@ namespace MWCoop
                     Consume.ScheduleSnapshot(from);
                     WorldFsms.ScheduleSnapshot(from);
                     CarDoors.ScheduleSnapshot(from);
+                    Props.ScheduleSnapshot();
                 }
             }
         }
