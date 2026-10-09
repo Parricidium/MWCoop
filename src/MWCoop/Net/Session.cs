@@ -279,6 +279,7 @@ namespace MWCoop.Net
                     case Msg.ModData: CoopApi.OnMessage(from, r); break;
                     case Msg.Knob: Knobs.OnMessage(from, r); break;
                     case Msg.Event: Events.OnMessage(from, r); break;
+                case Msg.Talk: Voice.OnMessage(from, r); break;
                     case Msg.Purchase: Shop.OnMessage(from, r); break;
                     case Msg.Paint: Paint.OnMessage(from, r); break;
                     case Msg.Setting: Settings.OnMessage(from, r); break;

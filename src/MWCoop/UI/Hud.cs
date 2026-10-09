@@ -50,6 +50,17 @@ namespace MWCoop
             }
             Style.Alpha = 1f;
 
+            // Micro ouvert (vocal) : temoin en bas a gauche.
+            if (Voice.Talking)
+            {
+                string mic = Lang.T("MICRO", "MIC");
+                float mw = Style.Width(mic, 15) + Style.Px(34), mh = Style.Px(30);
+                var mr = new Rect(Style.Px(20), Screen.height - mh - Style.Px(20), mw, mh);
+                Style.Round(mr, mh / 2, pill);
+                Style.Round(new Rect(mr.x + Style.Px(10), mr.y + mh / 2 - Style.Px(5), Style.Px(10), Style.Px(10)), Style.Px(5), Style.Good);
+                Style.Text(new Rect(mr.x + Style.Px(24), mr.y, mw - Style.Px(28), mh), mic, 15, TextAnchor.MiddleCenter, Style.White);
+            }
+
             // Pseudos au-dessus des joueurs : pilule sombre, effacee sur la derniere moitie de la distance choisie
             // ([Graphismes] Pseudos : 0 caches, sinon la distance en metres ; 120 par defaut).
             Camera cam = Camera.main;
@@ -68,6 +79,7 @@ namespace MWCoop
                 var r = new Rect(Mathf.Round(sp.x - nw / 2), Mathf.Round(Screen.height - sp.y - nh), nw, nh);
                 Style.Alpha = Mathf.Clamp01(2f - 2f * sp.z / far);
                 Style.Round(r, nh / 2, pill);
+                if (Voice.Speaking(a.Player.Id)) Style.Ring(new Rect(r.x - 2, r.y - 2, r.width + 4, r.height + 4), nh / 2 + 2, Style.Good);   // (parle : vocal)
                 if (av != null)
                 {
                     Color gc = GUI.color;

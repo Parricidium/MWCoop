@@ -69,6 +69,7 @@ namespace MWCoop
             Step("api", CoopApi.Update);
             Step("sauvegarde en jeu", Game.Update);
             Step("porte-monnaie", WalletPanel.Update);
+            Step("vocal", Voice.Update);
             Step("menu", Menu.Update);
             Step("mscloader", MscMods.Update);
             Step("lanceur", MWCoop.Net.Admin.Update);
@@ -165,6 +166,7 @@ namespace MWCoop
             CarDoors.OnLevelLoaded();
             CarVisuals.OnLevelLoaded();
             Seats.OnLevelLoaded();
+            Voice.OnLevelLoaded();
             Respawn.OnLevelLoaded();
             Audit.OnLevelLoaded();
             NearDoors.OnLevelLoaded();

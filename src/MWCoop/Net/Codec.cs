@@ -108,6 +108,7 @@ namespace MWCoop.Net
         Radio = 50,       // hote -> invites : morceau, position et lecture de chaque canal radio (Radio)
         ModData = 51,     // donnees d'un autre mod (CoopApi) : canal, morceaux ; l'hote relaie
         Event = 53,       // evenement du monde decide par l'hote : objets allumes, valeurs reglees (Events)
+        Talk = 54,        // vocal de proximite : paquet de voix compresse par Steam (Voice) ; l'hote relaie
         Knob = 52,        // commande tenue d'un vehicule (starter, frein a main) : valeur de celui qui la tient (Knobs)
     }
 }
