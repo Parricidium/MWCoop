@@ -77,6 +77,7 @@ namespace MWCoop
             Packages.OnLevelLoaded();
             Vin.OnLevelLoaded();
             CarSale.OnLevelLoaded();
+            TaxiCustomer.OnLevelLoaded();
             Bus.OnLevelLoaded();
         }
 
@@ -165,6 +166,7 @@ namespace MWCoop
             Packages.Update();
             Vin.Update();
             CarSale.Update();
+            TaxiCustomer.Update();
             UpdateTraffic();
             Bus.Update();   // apres le suivi : la copie du bus est a sa place de cette image
         }

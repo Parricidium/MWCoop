@@ -228,6 +228,7 @@ namespace MWCoop
                     WorldFsms.ScheduleSnapshot(from);
                     CarDoors.ScheduleSnapshot(from);
                     Props.ScheduleSnapshot();
+                    TaxiCustomer.ScheduleSnapshot(from);
                 }
             }
         }

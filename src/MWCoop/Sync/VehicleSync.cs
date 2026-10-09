@@ -98,6 +98,7 @@ namespace MWCoop
             public PlayMakerFSM Starter;        // automate 'Starter' (etat "Running" : moteur en marche)
             public bool RemoteRunning;          // moteur en marche chez celui qui la fait rouler
             public float StarterOff;            // copie : debut de l'ecart entre son Starter et celui du conducteur (0 : aucun)
+            public PlayMakerFSM KeyFsm; public bool KeyLooked; public float KeyCrankSince, LatchSince;   // cle de contact (StarterLatch)
             public GameObject Horn;             // klaxon (CarHorn) ; HornRemote : allume chez celui qui la fait rouler
             public bool HornRemote, HornWas, HornSet;
             public float[] WheelRot;
@@ -1045,6 +1046,7 @@ namespace MWCoop
         {
             PlayMakerFSM s = c.Starter;
             if (s == null || !s.enabled || !s.gameObject.activeInHierarchy) return;
+            StarterLatch(c, s);
             string st = s.ActiveStateName;
             bool on = st == "Running" || st == "Crank up" || st == "Start engine";
             bool off = c.RemoteRunning ? !on : st == "Running";
@@ -1061,6 +1063,42 @@ namespace MWCoop
             if (starterLogs++ < 20) Log.Info("moteur " + c.Key + " : " + (c.RemoteRunning ? "en marche" : "coupe") + " chez #" + c.RemoteBy + ", demarreur d'ici " + st + " -> " + to);
         }
         static int starterLogs;
+
+        // Copie : le demarreur tourne (son StarterSound en boucle, "Fuel Mixture") tant que Starter.Starting est vrai -- mis par
+        // la cle rejouee ("Motor starting"), remis a faux par son relachement ("Shut off"). Relachement perdu ou arrive dans le
+        // desordre : demarreur en boucle chez les autres, jusqu'a vider la batterie de la copie (retour d'un joueur, 10/10 :
+        // « des sons qui se jouent en boucle, comme le starter »). Cle plus sur "Motor starting" : Starting remis a faux ;
+        // cle restee 10 s sur "Motor starting" : relachee ("Shut off").
+        static void StarterLatch(Car c, PlayMakerFSM s)
+        {
+            FsmBool starting = s.FsmVariables.FindFsmBool("Starting");
+            if (starting == null) return;
+            if (c.KeyFsm == null && !c.KeyLooked)
+            {
+                c.KeyLooked = true;
+                foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
+                    if (f.FsmName == "Use" && f.Fsm.GetState("Motor starting") != null && f.Fsm.GetState("Shut off") != null) { c.KeyFsm = f; break; }
+            }
+            float now = Time.realtimeSinceStartup;
+            bool cranking = c.KeyFsm != null && c.KeyFsm.ActiveStateName == "Motor starting";
+            if (!cranking) c.KeyCrankSince = 0f;
+            else if (c.KeyCrankSince <= 0f) c.KeyCrankSince = now;
+            if (cranking && now - c.KeyCrankSince > 10f)
+            {
+                c.KeyCrankSince = 0f;
+                Replay.Depth++;
+                try { Game.SetState(c.KeyFsm, "Shut off"); } finally { Replay.Depth--; }
+                if (starterLogs++ < 20) Log.Info("moteur " + c.Key + " : cle restee sur le demarreur 10 s (relachement pas recu), relachee ici");
+            }
+            else if (!cranking && c.KeyFsm != null && starting.Value)
+            {
+                if (c.LatchSince <= 0f) { c.LatchSince = now; return; }
+                if (now - c.LatchSince < 0.5f) return;
+                starting.Value = false;
+                if (starterLogs++ < 20) Log.Info("moteur " + c.Key + " : demarreur arrete ici (cle " + c.KeyFsm.ActiveStateName + ")");
+            }
+            c.LatchSince = 0f;
+        }
 
         // Essais : etat du demarreur de la voiture et moteur annonce par celui qui la fait rouler.
         public static string StarterState(string name)

@@ -392,7 +392,8 @@ namespace MWCoop
             current = null;
             beltOn = false;
             BlockHandle(false);
-            BeltHint(false);
+            BeltHint(null);
+            Drop(null);
             if (player != null)
             {
                 player.parent = null;                   // sur place, dans l'habitacle
@@ -492,90 +493,103 @@ namespace MWCoop
             return b;
         }
 
-        // Assis a l'avant : viser la boucle et cliquer l'attache ou la detache (texte du jeu, comme le conducteur).
-        // Ceinture du passager avant, comme celle du conducteur (demande d'un joueur, 08/10) : pour l'attacher on vise la
-        // ceinture rangee (montant de la portiere) ou la boucle et on TIENT le clic (0,6 s : on la tire) ; un clic sur la
-        // boucle la detache. Avant : un seul clic sur la boucle.
-        const float BeltPull = 0.6f;
+        // Ceinture du passager avant, exactement comme celle du conducteur (automate 'Use' du jeu sur DriverBelt/.../
+        // SeatbeltHandle et SeatbeltLock ; demande d'un joueur, 09/10 -- « les textes, la languette qui tourne, les sons ») :
+        //  - viser la languette rangee (SeatbeltHandle de PassengerBelt) : "TAKE SEATBELT" ; clic tenu : elle est prise, rattachee
+        //    a la camera la ou elle est (comme SetParent du jeu, pose gardee : elle ne tourne plus avec le regard), la sangle du
+        //    jeu s'etire ; ni texte ni main pendant qu'on la tient ;
+        //  - en la tenant, viser la boucle : "FASTEN SEATBELT" ; lacher la : bouclee (son seatbelt_fasten) ; lachee ailleurs, ou
+        //    tiree a plus de 1,5 m du montant : elle se range (seatbelt_retract) ;
+        //  - bouclee, viser la boucle : "UNFASTEN SEATBELT" ; clic : detachee (seatbelt_unfasten).
         static float beltHold;
         static void BeltInput()
         {
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
-            bool aimBuckle = false, aimStrap = false;
-            if (b != null && cam != null)
+            bool aimBuckle = false, aimHandle = false;
+            Transform handle = b != null && b.Open != null ? (heldHandle ?? FindUnder(b.Open.transform, "SeatbeltHandle", null)) : null;
+            Transform view = Camera.main != null ? Camera.main.transform : cam;
+            if (b != null && view != null)
             {
-                Vector3 bp = current.CarT.TransformPoint(b.Buckle);
-                Vector3 d = bp - cam.position;
-                aimBuckle = d.magnitude < 1.3f && Vector3.Angle(cam.forward, d) < 16f;
-                Renderer or = b.Open != null ? b.Open.GetComponentInChildren<Renderer>() : null;
-                if (!beltOn && or != null)
+                Vector3 d = current.CarT.TransformPoint(b.Buckle) - view.position;
+                aimBuckle = d.magnitude < 1.3f && Vector3.Angle(view.forward, d) < 16f;
+                if (!beltOn && beltHold <= 0f && handle != null && handle.gameObject.activeInHierarchy)
                 {
-                    Vector3 sd = or.bounds.center - cam.position;
-                    aimStrap = sd.magnitude < 1.3f && Vector3.Angle(cam.forward, sd) < 18f;
+                    Vector3 hd = handle.position - view.position;
+                    aimHandle = hd.magnitude < 1.3f && Vector3.Angle(view.forward, hd) < 14f;
                 }
             }
-            bool aim = aimBuckle || aimStrap;
-            BlockHandle(aim || beltHold > 0f);
-            BeltHint(aim || beltHold > 0f);
+            bool holding = beltHold > 0f;
+            BlockHandle(aimHandle || aimBuckle || holding);
+            BeltHint(beltOn ? (aimBuckle ? "UNFASTEN SEATBELT" : null) : holding ? (aimBuckle ? "FASTEN SEATBELT" : null) : aimHandle ? "TAKE SEATBELT" : null);
             if (beltOn)
             {
+                if (heldHandle != null) Drop(b);   // (bouclee autrement : languette reposee)
                 if (aimBuckle && Input.GetMouseButtonDown(0))
                 {
                     beltOn = false;
+                    Foley("seatbelt_unfasten", current.CarT.TransformPoint(b.Buckle));
                     Log.Info("ceinture passager : detachee (" + current.Car + ")");
                     SendSeat(current.Car, current.Index, headLocal);
                 }
                 beltHold = 0f;
                 return;
             }
-            // Comme la ceinture du conducteur (demande d'un joueur, 09/10) : clic sur la ceinture rangee (ou la boucle) -> on la
-            // tient, la sangle s'etire du haut du montant jusqu'a la main et suit le regard ; relachee en visant la boucle :
-            // bouclee ; ailleurs : elle se range.
-            if (beltHold <= 0f && aim && Input.GetMouseButtonDown(0)) { beltHold = 0.01f; Log.Info("ceinture passager : tiree (" + current.Car + ")"); }
-            if (beltHold > 0f)
+            if (!holding && aimHandle && Input.GetMouseButtonDown(0)) { Grab(b); Log.Info("ceinture passager : prise (" + current.Car + ")"); return; }
+            if (!holding) return;
+            Transform pivot = heldHandle != null ? heldPivot : null;
+            bool tooFar = pivot != null && (heldHandle.position - pivot.position).magnitude > 1.5f;
+            if ((Input.GetMouseButton(0) || testHold) && !tooFar) { beltHold += Time.deltaTime; return; }
+            bool fasten = aimBuckle && !tooFar;
+            Vector3 at = heldHandle != null ? heldHandle.position : current.CarT.TransformPoint(b.Buckle);
+            Drop(b);
+            if (fasten)
             {
-                if (Input.GetMouseButton(0) || testHold) { beltHold += Time.deltaTime; DrawPull(b); }
-                else
-                {
-                    beltHold = 0f;
-                    HidePull(b);
-                    if (aimBuckle)
-                    {
-                        beltOn = true;
-                        Log.Info("ceinture passager : attachee (" + current.Car + ")");
-                        SendSeat(current.Car, current.Index, headLocal);
-                    }
-                    else Log.Info("ceinture passager : lachee hors de la boucle, rangee");
-                }
+                beltOn = true;
+                Foley("seatbelt_fasten", current.CarT.TransformPoint(b.Buckle));
+                Log.Info("ceinture passager : attachee (" + current.Car + ")");
+                SendSeat(current.Car, current.Index, headLocal);
+            }
+            else
+            {
+                Foley("seatbelt_retract", at);
+                Log.Info("ceinture passager : lachee " + (tooFar ? "trop loin du montant" : "hors de la boucle") + ", rangee");
             }
         }
 
-        // Ceinture tenue : celle du jeu (PassengerBelt, meme montage que celle du conducteur : sangles a os -- seatbelt_upper /
-        // seatbelt_lower -- tendues jusqu'a la poignee SeatbeltHandle, languette au bout). Comme le jeu le fait pour le
-        // conducteur, la poignee suit la main : la sangle s'etire du montant, la languette dans la main (demande de JD, 09/10 :
-        // « la meme animation que la place conducteur »). Lachee : poignee remise a sa place.
+        // Languette prise : rattachee a la camera, a la pose ou elle est (le jeu : SetParent sans remise a zero).
         static bool testHold;   // (essais : clic maintenu simule)
-        static Transform pullHandle;
-        static Vector3 pullHandlePos; static Quaternion pullHandleRot;
-        static void DrawPull(Belt b)
+        static Transform heldHandle, heldPivot;
+        static Vector3 heldPos; static Quaternion heldRot;
+        static void Grab(Belt b)
         {
-            if (b == null || cam == null || current == null || b.Open == null) return;
-            if (pullHandle == null)
-            {
-                pullHandle = FindUnder(b.Open.transform, "SeatbeltHandle", null);
-                if (pullHandle == null) return;
-                pullHandlePos = pullHandle.localPosition; pullHandleRot = pullHandle.localRotation;
-            }
+            Transform h = b != null && b.Open != null ? FindUnder(b.Open.transform, "SeatbeltHandle", null) : null;
+            Transform view = Camera.main != null ? Camera.main.transform : cam;
+            if (h == null || view == null) return;
             if (!b.Open.activeSelf) { b.Open.SetActive(true); b.OpenHidden = false; }
-            Transform v = Camera.main != null ? Camera.main.transform : cam;   // (la vraie camera : son parent FPSCamera, meme position, n'a pas l'orientation du regard)
-            // Sur le viseur, comme celle du conducteur (demande de JD, 09/10) : dans l'axe du regard, au centre de l'ecran.
-            pullHandle.position = v.position + v.forward * Config.GetFloat("Test", "LanguetteDist", 0.4f);
-            pullHandle.rotation = Quaternion.LookRotation(v.forward, v.up) * Quaternion.Euler(Config.GetFloat("Test", "LanguetteX", 0f), Config.GetFloat("Test", "LanguetteY", 0f), Config.GetFloat("Test", "LanguetteZ", 0f));
+            heldHandle = h; heldPivot = h.parent; heldPos = h.localPosition; heldRot = h.localRotation;
+            h.SetParent(view, true);
+            beltHold = 0.01f;
         }
-        static void HidePull(Belt b)
+        static void Drop(Belt b)
         {
-            if (pullHandle != null) { pullHandle.localPosition = pullHandlePos; pullHandle.localRotation = pullHandleRot; pullHandle = null; }
+            beltHold = 0f;
+            if (heldHandle == null) return;
+            if (heldPivot != null) heldHandle.SetParent(heldPivot, false);
+            heldHandle.localPosition = heldPos; heldHandle.localRotation = heldRot;
+            heldHandle = null; heldPivot = null;
         }
+
+        // Son du jeu (groupe MasterAudio CarFoley, comme les automates de la ceinture du conducteur), a l'endroit donne.
+        static readonly HashSet<string> foleyLogged = new HashSet<string>();
+        static void Foley(string variation, Vector3 at)
+        {
+            GameObject g = GameObject.Find("MasterAudio/CarFoley/" + variation);
+            AudioSource src = g != null ? g.GetComponent<AudioSource>() : null;
+            if (src == null || src.clip == null) { Log.Info("ceinture : son CarFoley/" + variation + " introuvable"); return; }
+            AudioSource.PlayClipAtPoint(src.clip, at, src.volume > 0f ? src.volume : 1f);
+            if (foleyLogged.Add(variation)) Log.Info("ceinture : son CarFoley/" + variation + " joue");
+        }
+
         // (pose a chaque image tant qu'on vise : les objets du jeu sous le regard -- poignee de la portiere arriere, juste
         // derriere la ceinture rangee -- effacent le texte a chaque image ; il ne restait que la main, sans "BUCKLE UP")
         // La ceinture n'a pas de collisionneur : sous le regard, c'est la poignee de la portiere arriere, juste derriere
@@ -596,12 +610,13 @@ namespace MWCoop
                 if (h.collider.name == "Handle" && h.collider.enabled && h.collider.transform.IsChildOf(current.CarT)) { blockedHandle = h.collider; blockedHandle.enabled = false; if (handleLogs++ < 5) Log.Info("ceinture passager : poignee " + Recon.Path(h.collider.transform) + " coupee le temps de viser"); break; }
         }
 
-        static void BeltHint(bool on)
+        static void BeltHint(string text)
         {
+            bool on = text != null;
             if (!on && !beltHint) return;
             beltHint = on;
             Game.SetGlobalBool("GUIuse", on);
-            Game.SetGlobal("GUIinteraction", on ? (beltOn ? Lang.T("DÉTACHER LA CEINTURE", "UNBUCKLE") : beltHold > 0f ? Lang.T("RELÂCHE SUR LA BOUCLE", "RELEASE ON THE BUCKLE") : Lang.T("TIRER LA CEINTURE (MAINTENIR LE CLIC)", "PULL THE BELT (HOLD CLICK)")) : "");
+            Game.SetGlobal("GUIinteraction", on ? text : "");
         }
 
         // Montre la ceinture bouclee (copie en miroir) des voitures dont le passager avant est attache, ici ou ailleurs.
@@ -942,12 +957,10 @@ namespace MWCoop
             testHold = hold;
             if (hold)
             {
-                beltHold = Mathf.Max(beltHold, 0.01f); DrawPull(b);
-                Camera c = cam != null ? cam.GetComponent<Camera>() : null;
-                return "ceinture tenue" + (pullHandle != null ? " : poignee " + Recon.Path(pullHandle) + " en " + pullHandle.position.ToString("F2") : " : pas de poignee");
+                if (beltHold <= 0f) Grab(b);
+                return "ceinture tenue" + (heldHandle != null ? " : languette " + Recon.Path(heldHandle) + " en " + heldHandle.position.ToString("F2") : " : pas de languette");
             }
-            beltHold = 0f; HidePull(b);
-            return "ceinture lachee";
+            return "ceinture lachee";   // (BeltInput la lache a l'image suivante : bouclee si on vise la boucle)
         }
 
         public static string TestBelt()
