@@ -60,6 +60,7 @@ namespace MWCoop
                 if (st != "1" || (was != "Wait button" && was != "Wait player")) continue;
                 if (remoteOpened.Remove(b.Key)) continue;   // (ouverture recue : pas renvoyee)
                 Log.Info("colis : " + b.Key + " ouvert ici");
+                Paint.ScanSoon();   // (pieces neuves : leur peinture suivie vite)
                 if (Session.Active && Session.RemoteCount > 0)
                     Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@colis").Str(b.Key), true);
             }
@@ -81,6 +82,7 @@ namespace MWCoop
                 remoteOpened.Add(key);
                 b.Last = "Wait button";
                 Game.SetState(b.Use, "1");
+                Paint.ScanSoon();
                 Log.Info("colis : " + key + " ouvert ailleurs, ouvert ici aussi");
                 return true;
             }
@@ -91,9 +93,40 @@ namespace MWCoop
         public static string TestOpen()
         {
             Scan();
-            foreach (Box b in boxes) if (b.Use != null) { Game.SetState(b.Use, "1"); return "colis " + b.Key + " ouvert"; }
+            foreach (Box b in boxes)
+                if (b.Use != null)
+                {
+                    foreach (string s in new[] { "Get list", "Regular", "Random", "State 3" }) Log.Info("colis : " + Jobs.DumpActions(b.Use, s));
+                    FsmGameObject ord = b.Use.FsmVariables.FindFsmGameObject("ThisOrder");
+                    if (ord != null && ord.Value != null)
+                        foreach (PlayMakerArrayListProxy l in ord.Value.GetComponents<PlayMakerArrayListProxy>())
+                        {
+                            var items = new List<string>();
+                            if (l.arrayList != null) foreach (object it in l.arrayList) items.Add(it == null ? "null" : it.ToString());
+                            Log.Info("colis : liste " + l.referenceName + " = " + string.Join(", ", items.ToArray()));
+                        }
+                    Game.SetState(b.Use, "1");
+                    return "colis " + b.Key + " ouvert";
+                }
             return "aucun colis (" + boxes.Count + ")";
         }
+        // Essais : les automates 'Spawn' des distributeurs de pieces (MinimumWear) qui ont un etat de couleur ou de hasard.
+        public static void DumpSpawners()
+        {
+            int n = 0;
+            foreach (Object o in Game.AllFsms())
+            {
+                PlayMakerFSM f = o as PlayMakerFSM;
+                if (f == null || f.FsmName != "Spawn" || f.FsmVariables.FindFsmFloat("MinimumWear") == null) continue;
+                n++;
+                if (n > 3 && !Recon.Path(f.transform).Contains(Config.Get("Test", "ColisDistributeur", "seat"))) continue;
+                Log.Info("colis : distributeur " + Recon.Path(f.transform));
+                foreach (FsmState s in f.Fsm.States) Log.Info("colis :    " + Jobs.DumpActions(f, s.Name));
+                foreach (NamedVariable v in f.FsmVariables.GetAllNamedVariables()) Log.Info("colis :    var " + v.Name + "=" + v.ToString());
+            }
+            Log.Info("colis : " + n + " distributeurs");
+        }
+
         public static string State()
         {
             var sb = new System.Text.StringBuilder("colis :");
