@@ -643,9 +643,40 @@ static void SyncRetry()
     if (t) CloseHandle(t);
 }
 
+// Envoi de l'hote en cours de verification ou de telechargement (accepte) : l'invite n'est pas encore pret.
+static bool SyncBusy() { int s = g_sync; return s == SY_CHECK || s == SY_GET; }
+
+// lancement.ini de l'invite : le contenu recu de l'hote (dossier, categories, images), lu directement par le jeu
+// (Contenu.cs : les lecteurs du jeu pointes sur ce dossier), quelle que soit la facon dont le jeu demarre.
+static std::string ContentLaunchLines()
+{
+    if (g_sync != SY_DONE || ContentDir().empty()) return "";
+    std::string roots, images;
+    {
+        std::lock_guard<std::mutex> lk(g_syncMx);
+        for (const wchar_t *r : { L"CD1", L"CD2", L"CD3", L"Radio", L"Extra", L"Images" })
+            if (OfferHasRoot(g_hostOffer, r)) roots += (roots.empty() ? "" : ",") + Narrow(r);
+        for (auto &f : g_hostOffer.files) if (!_strnicmp(f.path.c_str(), "Images\\", 7)) images += (images.empty() ? "" : ",") + f.path.substr(7);
+    }
+    if (roots.empty()) return "";
+    LaunchLog("contenu de l'hote recu : %s%s%s", roots.c_str(), images.empty() ? "" : " ; images ", images.c_str());
+    return "ContenuDossier=" + Narrow(ContentDir(), CP_UTF8) + "\r\nContenuRecu=" + roots + "\r\nContenuImages=" + images + "\r\n";
+}
+
 // Fil de la fenetre : plus rien de l'hote depuis 20 s pendant un telechargement -> echec (REESSAYER).
 static void SyncTick()
 {
+    // Invite : PRET demande pendant l'envoi -> pret une fois recu ; envoi qui reprend (l'hote a change ses fichiers) alors
+    // qu'il etait pret -> plus pret, jusqu'a la fin.
+    if (g_lobby != LB_GUEST) g_wantReady = false;   // (salon quitte : rien a garder pour le suivant)
+    else {
+        if (g_meReady && SyncBusy()) { GuestToggleReady(); g_wantReady = true; SetStatus(K_NORMAL, T(L"L'h\u00F4te envoie de nouveaux fichiers : pr\u00EAt d\u00E8s qu'ils sont re\u00E7us", L"The host is sending new files: ready as soon as they're received")); }
+        else if (g_wantReady && !g_meReady && !SyncBusy()) {
+            int s = g_sync;
+            if (s == SY_FAIL) { g_wantReady = false; SetStatus(K_WARN, T(L"Envoi de l'h\u00F4te rat\u00E9 : R\u00C9ESSAYER, puis PR\u00CAT", L"Host's files failed: RETRY, then READY")); }
+            else if (s != SY_ASK) { g_wantReady = false; GuestToggleReady(); SetStatus(K_OK, T(L"Envoi de l'h\u00F4te re\u00E7u : tu es pr\u00EAt", L"Host's files received: you're ready")); }
+        }
+    }
     // Invite, mods de l'hote acceptes d'office (case "Accepter l'envoi de l'hote", ModsAuto) : MSCLoader installe ici aussi,
     // une fois par liste de l'hote. Avant : seulement par TOUT ACCEPTER, que la case cochee ne montre jamais (retour d'un
     // joueur, 08/10 : « les mods ne se synchronisent pas, j'ai coche l'envoi de l'hote »).
@@ -759,7 +790,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
     }
     std::string rl;
     for (auto &r : roots) rl += " " + Narrow(r);
-    TestLog("copie de l'invite prete : %ls (%s ; contenu de l'hote :%s)", m.c_str(), mods ? "mods de l'hote" : "sans MSCLoader", rl.empty() ? " aucun" : rl.c_str());
+    LaunchLog("copie de l'invite prete : %s (%s ; contenu de l'hote :%s)", Narrow(m, CP_UTF8).c_str(), mods ? "mods de l'hote" : "sans MSCLoader", rl.empty() ? " aucun" : rl.c_str());
     return ok;
 }
 

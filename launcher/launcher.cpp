@@ -3887,6 +3887,7 @@ static bool GameWindowShown()
 
 // MWCoop\lancement.ini (contrat avec le chargeur et le mod), ecrit d'un coup (fichier temporaire puis renomme).
 // partie (hote lance depuis le salon) : "continuer" | "nouvelle" -> Partie=..., le jeu entre en partie tout seul.
+static std::string ContentLaunchLines();   // (modsync.inc)
 static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const char *partie)
 {
     const Opt *ap = OptByKey("Apparence");
@@ -3906,6 +3907,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     t += "Apparence=" + skin + "\r\n";
     t += std::string("Profil=") + (mode == MODE_GUEST ? "invite" : "") + "\r\n";
     if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
+    if (mode == MODE_GUEST) t += ContentLaunchLines();
     t += "Horodatage=" + std::to_string((long long)_time64(NULL)) + "\r\n";
     EnsureModDir();
     std::wstring path = g_gameDir + L"MWCoop\\lancement.ini", tmp = path + L".tmp";
@@ -5155,9 +5157,20 @@ static void LobbyJoin()
     HANDLE t = CreateThread(NULL, 0, GuestThread, (void *)(intptr_t)gen, 0, NULL);
     if (t) CloseHandle(t);
 }
+// Invite : PRET pendant que l'envoi de l'hote (mods, CD, images) se telecharge -> pret des qu'il est recu (SyncTick).
+// Avant : pret tout de suite ; l'hote pouvait lancer, le GO fermait le salon et coupait le telechargement, et le jeu de
+// l'invite partait sans le contenu de l'hote (retours de joueurs, 09/10 : « ca telecharge, mais en jeu on ne voit rien »).
+static bool g_wantReady;
+static bool SyncBusy();   // (modsync.inc)
 static void GuestToggleReady()
 {
     if (g_lobby != LB_GUEST) return;
+    if (!g_meReady && SyncBusy()) {
+        g_wantReady = !g_wantReady;
+        if (g_wantReady) SetStatus(K_NORMAL, T(L"Tu seras pr\u00EAt d\u00E8s que l'envoi de l'h\u00F4te est re\u00E7u", L"You'll be ready as soon as the host's files are received"));
+        return;
+    }
+    g_wantReady = false;
     g_meReady = !g_meReady;
     if (g_lobbySteam) { SSetMember("pret", g_meReady ? "1" : "0"); TestLog("salon steam : moi pret=%d", (int)g_meReady); return; }
     Wr w; w.u8(M_READY); w.u8(g_meReady ? 1 : 0);
@@ -5536,7 +5549,8 @@ static void DrawLobby(Graphics &g)
                 if (!guests) swprintf_s(b2, L"%s", T(L"Seul pour l'instant", L"Alone for now"));
                 else swprintf_s(b2, T(L"%d / %d pr\u00EAt(s)", L"%d / %d ready"), guests - notReady, guests);
                 l2 = b2;
-            } else if (lobby == LB_GUEST) { l1 = g_meReady ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PR\u00CAT ?", L"READY?"); l2 = g_meReady ? T(L"Clique pour annuler", L"Click to cancel") : T(L"Clique quand tu es pr\u00EAt", L"Click when you're ready"); }
+            } else if (lobby == LB_GUEST && g_wantReady && !g_meReady) { l1 = T(L"PR\u00CAT APR\u00C8S L'ENVOI", L"READY AFTER FILES"); l2 = T(L"Re\u00E7ois l'envoi de l'h\u00F4te\u2026 (clique pour annuler)", L"Getting the host's files\u2026 (click to cancel)"); }
+            else if (lobby == LB_GUEST) { l1 = g_meReady ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PR\u00CAT ?", L"READY?"); l2 = g_meReady ? T(L"Clique pour annuler", L"Click to cancel") : T(L"Clique quand tu es pr\u00EAt", L"Click when you're ready"); }
             else l1 = T(L"CONNEXION\u2026", L"CONNECTING\u2026");
             bool ready = lobby == LB_GUEST && g_meReady;
             SolidBrush fb(WithA(ready ? kOk : kAcc, a)); g.FillPath(&fb, &p);
