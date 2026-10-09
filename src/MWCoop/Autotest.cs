@@ -58,7 +58,7 @@ namespace MWCoop
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
-            CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); Consume.Test(mode, t);
+            CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); TaxiCustomer.Test(mode, t); Consume.Test(mode, t);
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t);
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
@@ -1336,7 +1336,8 @@ namespace MWCoop
                 if (Config.GetInt("Test", "CeintureRegard", 0) != 0) Seats.TestBeltLook(1);
                 if (t < 44f) { string tenue = Seats.TestPull(true); if (Time.frameCount % 120 == 0) Log.Info("autotest : " + tenue); }
                 if (step == 1 && t > 41f) { step = 3; CaptureSoon("ceinture-tenue", 0.05f); }
-                if (step == 3 && t > 44f) { step = 4; Log.Info("autotest : " + Seats.TestPull(false) + " ; " + Seats.TestBelt()); }
+                if (step == 3 && t > 44f) { step = 4; Log.Info("autotest : " + Seats.TestPull(false)); }
+                if (step == 4 && t > 45f) { step = 5; Log.Info("autotest : " + Seats.TestBelt()); }
                 if (step == 4 && t > 47f) { step = 5; CaptureSoon("ceinture-bouclee-invite", 0.05f); }
             }
             if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) == 0 && Config.GetInt("Test", "CeintureTenue", 0) == 0 && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }

@@ -605,6 +605,24 @@ namespace MWCoop
             Log.Info("quete de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
         }
 
+        // Hote : etat courant (et variables) des automates suivis dont la cle contient 'keyPart', envoye a un invite arrive en
+        // cours de partie (sans evenement : recale chez lui sur l'etat). Les boulots ne partent qu'a leurs changements ;
+        // client du taxi deja pris en charge : absent chez l'arrivant (retour d'un joueur, 09/10).
+        public static int SnapshotTo(Peer p, string keyPart)
+        {
+            int n = 0;
+            foreach (Job j in jobs.Values)
+            {
+                if (j.F == null || !j.Key.Contains(keyPart) || j.F.ActiveStateName == null || j.F.ActiveStateName.Length == 0) continue;
+                var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str("(instantane)").Str("").Str(j.F.ActiveStateName);
+                WriteVars(j.F, w);
+                if (w.ToArray().Length > Net.Transport.MaxPayload - 40) continue;
+                Session.T.SendReliable(p, w.ToArray());
+                n++;
+            }
+            return n;
+        }
+
         // Essais : comme un joueur qui actionne la commande : l'automate passe de 'prev' a 'state' par
         // 'ev' ici (actions jouees), et le message part comme en vrai.
         public static string TestSend(string part, string prev, string ev, string state)
@@ -1268,7 +1286,10 @@ namespace MWCoop
             if (bed == null || bedHinge == null) return;
             bool active = Session.Active && Session.RemoteCount > 0;
             bool authority = BedAuthority() == Session.LocalId;
-            BedFollow(active && !authority && (bedFollow || !bed.isKinematic));   // (continu : plus d'aller-retour toutes les 3 s)
+            // Seulement sur un plateau copie (cinematique ici : tire par le tracteur d'un autre). Plateau physique ici (gare) :
+            // la benne cinematique, reliee par sa charniere, le tenait comme un mur -- plateau renverse au chargement chez un
+            // invite, qui ne se remettait plus sur ses roues ni ne s'attelait (retour d'un joueur, 10/10, 0.66.4).
+            BedFollow(active && !authority && flatbed != null && flatbed.isKinematic && (bedFollow || !bed.isKinematic));
             if (!active) return;
             if (authority)
             {
@@ -1487,6 +1508,7 @@ namespace MWCoop
                 case "@vin?": Vin.OnAsk(who); break;
                 case "@vin": Vin.OnTable(who, r); break;
                 case "@vente": CarSale.OnRemote(who, r.U8()); break;
+                case "@client": TaxiCustomer.OnRemote(who, r.Str()); break;
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":
@@ -1692,11 +1714,20 @@ namespace MWCoop
             string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
             PlayMakerFSM key = KeyOf(car, "Use", "Motor starting"), starter = KeyOf(car, "Starter", "Running");
             int hold = Config.GetInt("Test", "CleTenue", 3);   // secondes de demarreur (CORRIS froide : plus)
-            if (t > 31f && t < 45f + hold + 20f && t >= keyLog)
+            if (t > (Session.IsHost ? 31f : 12f) && t < 45f + hold + 20f && t >= keyLog)
             {
                 keyLog = Mathf.Floor(t) + 1f;
-                Log.Info("autotest : cle " + (key != null ? key.ActiveStateName : "?") + ", starter " + (starter != null ? starter.ActiveStateName : "?")
+                Log.Info("autotest : cle " + (key != null ? key.ActiveStateName : "?") + ", starter " + (starter != null ? starter.ActiveStateName + (starter.enabled ? "" : " (COUPE)") + " ACC " + (starter.FsmVariables.FindFsmBool("ACC") != null && starter.FsmVariables.FindFsmBool("ACC").Value) + " Starting " + (starter.FsmVariables.FindFsmBool("Starting") != null && starter.FsmVariables.FindFsmBool("Starting").Value) + " module " + Replay.Owner(starter) : "?")
                          + (key != null ? ", origine " + (jobs.ContainsKey(KeyName(key)) && jobs[KeyName(key)].FromReplay ? "recue" : "ici") : "") + " | " + VehicleSync.AudioState(car));
+            }
+            // [Test] DemarreurColle=1 : chez l'invite (copie conduite par l'hote), cle de la copie mise sur "Motor starting" a 40 s
+            // sans relachement (comme un message perdu) : VehicleSync.StarterLatch doit la relacher vers 50 s.
+            if (!Session.IsHost && key != null && Config.GetInt("Test", "DemarreurColle", 0) != 0 && t > 40f && keyStep == 0)
+            {
+                keyStep = 9;
+                Replay.Depth++;
+                try { Game.SetState(key, "Motor starting"); } finally { Replay.Depth--; }
+                Log.Info("autotest : cle, copie collee sur le demarreur -> " + key.ActiveStateName + ", starter " + (starter != null ? starter.ActiveStateName : "?"));
             }
             if (!Session.IsHost && key != null && Config.GetInt("Test", "CleReprise", 0) != 0)
             {
