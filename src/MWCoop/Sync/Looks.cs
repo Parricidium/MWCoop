@@ -51,7 +51,7 @@ namespace MWCoop
         {
             var l = new Look
             {
-                Shirt = Config.Get("Coop", "Apparence", "char_shirt21"), Pants = Config.Get("Coop", "Pantalon", ""), Face = Config.Get("Coop", "Visage", ""),
+                Shirt = Config.Get("Coop", "Apparence", "char_shirt21"), Pants = Config.Get("Coop", "Pantalon", ""), Face = CustomFace.MyKey ?? Config.Get("Coop", "Visage", ""),
                 Body = Config.Get("Coop", "Corps", ""), Hat = Config.Get("Coop", "Chapeau", ""), Glasses = Config.Get("Coop", "Lunettes", ""), Hair = Config.Get("Coop", "Cheveux", "")
             };
             return Compose(l);

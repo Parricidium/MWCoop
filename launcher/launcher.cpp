@@ -3140,6 +3140,91 @@ static RectF LookPinRect(int z)
 }
 
 // Page TENUE : apercu a gauche (3D, ou la vue de la tenue), parties a droite (ou la galerie des hauts).
+// ---- visage importe (onglet TENUE) : %LOCALAPPDATA%\MWCoop\visage.jpg, 512x256 comme les visages des PNJ ; le mod le montre
+// aux autres (CustomFace). Gabarit : ecrit par le mod au 1er passage en jeu de chaque version (gabarit-visage.png).
+static bool EncoderClsid(const wchar_t *mime, CLSID *out);
+static std::wstring FaceFile() { return LocalDir() + L"visage.jpg"; }
+static Bitmap *g_faceThumb = NULL;
+static bool g_faceLooked = false;
+static RectF g_faceRect;   // bloc dessine (bulle du guide)
+static Bitmap *FaceThumb()
+{
+    if (!g_faceLooked) {
+        g_faceLooked = true;
+        delete g_faceThumb; g_faceThumb = NULL;
+        if (FileExists(FaceFile())) {
+            Bitmap *b = Bitmap::FromFile(FaceFile().c_str());
+            if (b && b->GetLastStatus() == Ok) { g_faceThumb = b->Clone(0, 0, b->GetWidth(), b->GetHeight(), PixelFormat32bppARGB); }
+            delete b;
+        }
+    }
+    return g_faceThumb;
+}
+static void FaceImport()
+{
+    wchar_t file[MAX_PATH] = L"";
+    OPENFILENAMEW of = { sizeof(of) };
+    of.hwndOwner = g_wnd;
+    of.lpstrFilter = L"Images (*.png, *.jpg, *.bmp)\0*.png;*.jpg;*.jpeg;*.bmp\0";
+    of.lpstrFile = file;
+    of.nMaxFile = MAX_PATH;
+    std::wstring init = LocalDir();
+    of.lpstrInitialDir = init.c_str();
+    of.lpstrTitle = T(L"Choisir l'image du visage (sur le gabarit, 512 x 256)", L"Choose the face image (on the template, 512 x 256)");
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    if (!GetOpenFileNameW(&of)) return;
+    Bitmap *src = Bitmap::FromFile(file);
+    bool ok = false;
+    if (src && src->GetLastStatus() == Ok) {
+        Bitmap dst(512, 256, PixelFormat24bppRGB);
+        {
+            Graphics dg(&dst);
+            dg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+            dg.SetPixelOffsetMode(PixelOffsetModeHalf);
+            dg.DrawImage(src, RectF(0, 0, 512, 256));
+        }
+        CLSID jpg;
+        EncoderParameters ep; ULONG q = 90;
+        ep.Count = 1; ep.Parameter[0].Guid = EncoderQuality; ep.Parameter[0].Type = EncoderParameterValueTypeLong; ep.Parameter[0].NumberOfValues = 1; ep.Parameter[0].Value = &q;
+        CreateDirectoryW(LocalDir().c_str(), NULL);
+        ok = EncoderClsid(L"image/jpeg", &jpg) && dst.Save(FaceFile().c_str(), &jpg, &ep) == Ok;
+    }
+    delete src;
+    g_faceLooked = false;
+    LaunchLog("visage importe : %s", ok ? "ok" : "echec");
+    if (!ok) MessageBoxW(g_wnd, T(L"Cette image n'a pas pu être lue.", L"This image could not be read."), L"MWCoop", MB_ICONWARNING | MB_OK);
+}
+static void FaceTemplate()
+{
+    std::wstring t = LocalDir() + L"gabarit-visage.png";
+    if (FileExists(t)) { std::wstring a = L"/select,\"" + t + L"\""; ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL); return; }
+    MessageBoxW(g_wnd, T(L"Le gabarit est créé par le mod : lance une partie (solo suffit) et reste ~20 s en jeu avec cette version, puis reviens ici.\n\n"
+                         L"Il montre la texture du visage du jeu avec ses coutures : peins ton visage par-dessus (512 x 256), puis Importer.",
+                         L"The template is made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\n"
+                         L"It shows the game's face texture with its seams: paint your face over it (512 x 256), then Import."),
+                L"MWCoop", MB_ICONINFORMATION | MB_OK);
+}
+static void FaceRemove() { DeleteFileW(FaceFile().c_str()); g_faceLooked = false; LaunchLog("visage importe retire"); }
+
+// Rangee du visage importe (entre les fleches de rotation de l'apercu) : Mon visage (importer), Gabarit, Retirer ; vignette de
+// l'image importee en bas a gauche de l'apercu.
+static void DrawFaceRow(Graphics &g, RectF r, RectF view)
+{
+    g_faceRect = r;
+    Bitmap *th = FaceThumb();
+    float gap = 6, bw = (r.Width - 2 * gap) / 3;
+    UiButton(g, RectF(r.X, r.Y + 4, bw + 16, 36), T(L"Mon visage…", L"My face…"), UI_FACE_IMPORT, th == NULL);
+    UiButton(g, RectF(r.X + bw + 16 + gap, r.Y + 4, bw - 8, 36), T(L"Gabarit", L"Template"), UI_FACE_TPL, false);
+    UiButton(g, RectF(r.X + 2 * bw + 8 + 2 * gap, r.Y + 4, bw - 8, 36), T(L"Retirer", L"Remove"), UI_FACE_DEL, false, -1, th != NULL);
+    if (th) {
+        RectF ti(view.X + 14, view.Y + view.Height - 62, 96, 48);
+        GraphicsPath p; RoundRect(p, RectF(ti.X - 4, ti.Y - 4, ti.Width + 8, ti.Height + 22), 8);
+        SolidBrush b(TH(card)); g.FillPath(&b, &p);
+        DrawPixels(g, th, ti);
+        Text(g, T(L"visage importé", L"imported face"), RectF(ti.X - 4, ti.Y + ti.Height, ti.Width + 8, 18), 10.5f, FontStyleRegular, kGrey);
+    }
+}
+
 static void DrawSkins(Graphics &g)
 {
     SkinsCheck();
@@ -3233,8 +3318,9 @@ static void DrawSkins(Graphics &g)
                 Icon(g, s ? IC_CHEVR : IC_CHEVL, r.X + 22, r.Y + 22, 18, kInk, 2.2f);
                 HotZone(r, id);
             }
-            Text(g, perso || strip ? T(L"Glisse pour tourner", L"Drag to rotate") : L"", RectF(kSkinCard.X + 70, by, kSkinCard.Width - 140, 44), 12.5f, FontStyleRegular, kGrey);
         }
+        // (avant : « Glisse pour tourner » ; le glisser se devine, la rangee sert au visage importe)
+        DrawFaceRow(g, RectF(kSkinCard.X + 74, by, kSkinCard.Width - 148, 44), view);
         float bw = (kSkinCard.Width - 50) / 2;
         UiButton(g, RectF(kSkinCard.X + 20, by + 56, bw, 44), T(L"Al\u00E9atoire", L"Random"), UI_LOOKRAND, false, IC_SHUFFLE);
         UiButton(g, RectF(kSkinCard.X + 30 + bw, by + 56, bw, 44), T(L"Comme avant", L"As before"), UI_LOOKRESET, false, IC_UNDO);

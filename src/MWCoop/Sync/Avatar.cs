@@ -277,7 +277,8 @@ namespace MWCoop
                     if (o.name.Length > 0 && !materials.ContainsKey(o.name)) materials[o.name] = (Material)o;
             }
             Material m;
-            return materials.TryGetValue(name, out m) ? m : Tenues.Make(name);   // (tenue offerte : creee a la demande)
+            if (materials.TryGetValue(name, out m)) return m;
+            return name.StartsWith("perso_") ? CustomFace.Make(name) : Tenues.Make(name);   // (visage importe ; tenue offerte : creee a la demande)
         }
 
         // Apparences proposees : materiaux des corps des PNJ (char_shirtNN, cop_shirt...).
@@ -1097,13 +1098,15 @@ namespace MWCoop
             else { s.speed = 0f; s.normalizedTime = Mathf.MoveTowards(s.normalizedTime % 1f, 0.25f, Time.deltaTime); }
         }
 
+        int faceGen;
         public void Apply(PlayerInfo pi)
         {
             PlayerState st = pi.State;
             int f = st.Flags;
             int cloth = f & (PlayerSync.F_Jacket | PlayerSync.F_Coverall);
-            if ((skin != pi.Skin || cloth != clothFlags) && body != null)
+            if ((skin != pi.Skin || cloth != clothFlags || faceGen != CustomFace.Generation) && body != null)
             {
+                faceGen = CustomFace.Generation;   // (visage importe recu entre-temps : repris)
                 skin = pi.Skin;
                 clothFlags = cloth;
                 ApplyMaterial();
