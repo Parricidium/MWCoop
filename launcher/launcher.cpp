@@ -6327,7 +6327,14 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_MOUSELEAVE: g_hot = -1; g_uiHot = -1; g_optHot = -1; g_logRowHot = -1; g_carHot = -1; g_lobbyHot = -1; g_skinHot = -1; g_skinArrowHot = 0; g_skinRowHot = -1; g_mscHot = -1; g_contentHot = -1; return 0;
+    case WM_SYSKEYDOWN:   // (Alt, F10 : touches en jeu)
+        if (GameKeyCapture(wp, lp)) return 0;
+        break;
+    case WM_XBUTTONDOWN:   // (boutons 4 et 5 de la souris : touches en jeu)
+        if (g_keyCapture >= 0 && GameKeyCapture(GET_XBUTTON_WPARAM(wp) == XBUTTON1 ? VK_XBUTTON1 : VK_XBUTTON2, 0)) return TRUE;
+        break;
     case WM_KEYDOWN:   // page TENUE : fleches gauche / droite (hors des champs)
+        if (GameKeyCapture(wp, lp)) return 0;
         if (TutoKey(wp)) return 0;
         if (g_guide && (wp == VK_ESCAPE || wp == VK_RETURN)) { SteamGuideClose(); return 0; }
         if (wp == VK_ESCAPE && g_lobbyOpts) { g_lobbyOpts = false; return 0; }

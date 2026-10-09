@@ -68,6 +68,7 @@ namespace MWCoop
             Step("session", Session.Update);
             Step("api", CoopApi.Update);
             Step("sauvegarde en jeu", Game.Update);
+            Step("porte-monnaie", WalletPanel.Update);
             Step("menu", Menu.Update);
             Step("mscloader", MscMods.Update);
             Step("lanceur", MWCoop.Net.Admin.Update);
@@ -201,7 +202,7 @@ namespace MWCoop
         {
             try
             {
-                Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); Respawn.Draw();
+                Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); Respawn.Draw();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }
             catch (System.Exception e) { Style.Alpha = 1f; Log.Error("hud : " + e); }

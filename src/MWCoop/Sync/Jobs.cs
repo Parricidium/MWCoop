@@ -1509,6 +1509,7 @@ namespace MWCoop
                 case "@vin": Vin.OnTable(who, r); break;
                 case "@vente": CarSale.OnRemote(who, r.U8()); break;
                 case "@client": TaxiCustomer.OnRemote(who, r.Str()); break;
+                case "@don": { int to = r.U8(); Wallet.OnGift(who, to, r.I32()); break; }
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":

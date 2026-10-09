@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -96,6 +96,39 @@ namespace MWCoop
 
         static string StorePath { get { return System.IO.Path.Combine(Log.DataDir, "porte-monnaie.ini"); } }
 
+        // ---------------------------------------------------------------- don entre joueurs (porte-monnaie, WalletPanel)
+        // Le donneur retire la somme de son liquide, le receveur l'ajoute au sien ; ni l'un ni l'autre n'est un revenu
+        // ou une depense pour le releve (pas renvoye aux autres comme une paie).
+        public static bool Ready { get { return ready && cash != null; } }
+        public static float Cash { get { return cash != null ? cash.Value : 0f; } }
+
+        public static string Give(int to, int amount)
+        {
+            if (!Ready || !Session.Active) return Lang.T("Porte-monnaie pas pr\u00EAt", "Wallet not ready");
+            PlayerInfo pi;
+            if (!Session.Players.TryGetValue(to, out pi) || pi.Local) return Lang.T("Joueur introuvable", "Player not found");
+            if (amount <= 0) return Lang.T("Montant nul", "Nothing to give");
+            if (cash.Value < amount) return Lang.T("Pas assez de liquide", "Not enough cash");
+            cash.Value -= amount; lastCash -= amount;
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@don").U8((byte)to).I32(amount), true);
+            Log.Info("argent : " + amount + " mk donnes a " + pi.Name + " (#" + to + ")");
+            Store();
+            return null;
+        }
+
+        public static void OnGift(int who, int to, int amount)
+        {
+            if (to != Session.LocalId || amount <= 0 || amount > 1000000) return;
+            PlayerInfo pi;
+            string name = Session.Players.TryGetValue(who, out pi) ? pi.Name : "#" + who;
+            if (!Ready) { pendingGift += amount; pendingFrom = name; Log.Info("argent : " + amount + " mk recus de " + name + " (porte-monnaie pas pret : en attente)"); return; }
+            cash.Value += amount; lastCash += amount;
+            Log.Info("argent : " + amount + " mk recus de " + name);
+            Hud.Toast(name + Lang.T(" vous a donn\u00E9 ", " gave you ") + amount + " mk");
+            Store();
+        }
+        static int pendingGift; static string pendingFrom;
+
         // Etat du corps de l'invite, garde comme son porte-monnaie (etat-joueur.ini, une ligne par monde) : la
         // sauvegarde recue a chaque connexion est celle de l'hote, et ces globales y sont les SIENNES -- l'invite
         // reprenait sinon la faim, la soif, la fatigue, l'ivresse... de l'hote a chaque session. Les cles de vehicules,
@@ -161,8 +194,8 @@ namespace MWCoop
             FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID");
             world = pid != null ? pid.Value.ToString("F0") : "";
             RestoreSelf();
-            if (Session.IsHost || world.Length == 0 || !System.IO.File.Exists(StorePath)) return;
-            foreach (string l in System.IO.File.ReadAllLines(StorePath))
+            if (Session.IsHost || world.Length == 0) return;
+            if (System.IO.File.Exists(StorePath)) foreach (string l in System.IO.File.ReadAllLines(StorePath))
             {
                 string[] f = l.Split('=');
                 if (f.Length != 2 || f[0] != world) continue;
@@ -174,8 +207,24 @@ namespace MWCoop
                     cash.Value = c; bank.Value = b;
                     Log.Info("argent : porte-monnaie retrouve pour ce monde (" + world + ")");
                     Hud.Toast(Lang.T("Votre porte-monnaie : ", "Your wallet: ") + Mathf.RoundToInt(c) + " mk");
+                    return;
                 }
             }
+            FirstVisit();
+        }
+
+        // Premiere venue d'un invite dans ce monde : l'argent d'une nouvelle partie, pas celui de l'hote a cet instant
+        // (demande de JD, 10/10). Valeurs relevees au menu principal (globales du jeu avant tout chargement) ; [Coop]
+        // ArgentDepart=0 : comme avant (l'argent de la sauvegarde de l'hote).
+        static float startCash = -1, startBank = -1;
+        static void FirstVisit()
+        {
+            if (Session.IsHost || Config.GetInt("Coop", "ArgentDepart", 1) == 0) return;
+            float c = Config.GetFloat("Coop", "ArgentDepartLiquide", startCash), b = Config.GetFloat("Coop", "ArgentDepartBanque", startBank);
+            if (c < 0 || b < 0) { Log.Info("argent : premiere venue dans ce monde, argent de depart inconnu : celui de la sauvegarde"); return; }
+            Log.Info("argent : premiere venue dans ce monde (" + world + ") : argent de depart " + c + " liquide, " + b + " banque (au lieu de " + cash.Value + " / " + bank.Value + ")");
+            cash.Value = c; bank.Value = b;
+            Hud.Toast(Lang.T("Premi\u00E8re venue : ", "First visit: ") + Mathf.RoundToInt(c + b) + Lang.T(" mk pour commencer", " mk to start with"));
         }
 
         static void Store()
@@ -192,6 +241,11 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
+            if (Application.loadedLevelName == "MainMenu" && startCash < 0)
+            {
+                FsmFloat mc = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney"), mb = FsmVariables.GlobalVariables.FindFsmFloat("PlayerBankAccount");
+                if (mc != null && mb != null) { startCash = mc.Value; startBank = mb.Value; Log.Info("argent : au menu (nouvelle partie) " + startCash + " liquide, " + startBank + " banque"); }
+            }
             cash = bank = null;
             ready = false;
             readyAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;   // apres le chargement de la sauvegarde
@@ -602,6 +656,7 @@ namespace MWCoop
                 bank = FsmVariables.GlobalVariables.FindFsmFloat("PlayerBankAccount");
                 if (cash == null || bank == null) { readyAt = -1; Log.Warn("argent : globales absentes"); return; }
                 Restore();
+                if (pendingGift > 0) { cash.Value += pendingGift; Hud.Toast(pendingFrom + Lang.T(" vous a donn\u00E9 ", " gave you ") + pendingGift + " mk"); pendingGift = 0; }
                 lastCash = cash.Value; lastBank = bank.Value;
                 ready = true;
                 Log.Info("argent : liquide " + lastCash + ", banque " + lastBank);
