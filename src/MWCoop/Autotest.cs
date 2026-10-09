@@ -1019,38 +1019,67 @@ namespace MWCoop
                 }
                 if (pb == null && t > 20f && step == 0) { step = 9; Log.Info("autotest : poro, pas de PORO ici"); }
             }
-            // [Test] Autotest=rivettvente (TestPos pres de JOBS/HouseWood1) : la Rivett a vendre. A 40 s chacun allume la
-            // flechette YARD/Building/MAP/Darts/Wood1Car (annonce en cours) ; l'acheteur ([Test] Acheteur=invite|hote,
-            // invite par defaut) paie le vendeur a 60 s de SA montre (PAID sur WoodCaller1::Animations, comme l'argent
-            // donne). Chacun note toutes les 3 s : flechettes, etat du vendeur et de WoodJob1Point::Logic.
+            // [Test] Autotest=rivettvente (TestPos pres de JOBS/HouseWood1) : l'achat de la Rivett, par le vrai chemin. A 40 s
+            // l'hote appelle Reijo (CALLED sur CARPARTS/PARTSYSTEM/PhoneNumbers/08609553::Data -> SELLCAR -> WoodJob1Point
+            // "State 1" : flechette Wood1Car, vendeur) ; a 60 s de SA montre l'acheteur ([Test] Acheteur=invite|hote, invite par
+            // defaut) paie ("Pay for car" de PayMoney::Use, comme le clic : -500 mk, PAID -> Give keys -> ORDERTAKEN ->
+            // WoodJob1Point "Activate order" : flechette eteinte). Chacun note toutes les 3 s flechettes, vendeur, PayMoney,
+            // WoodJob1Point (Car, Order), etape du numero.
             if (mode == "rivettvente")
             {
                 GameObject dart = Game.FindAny("YARD/Building/MAP/Darts/Wood1Car"), dartW = Game.FindAny("YARD/Building/MAP/Darts/Wood1");
                 GameObject seller = Game.FindAny("JOBS/HouseWood1/LOD/CarPos/NPCWood/WoodCaller1"), job = Game.FindAny("JOBS/HouseWood1/WoodJob1Point");
+                GameObject payGo = Game.FindAny(PayPath);
                 PlayMakerFSM anim = seller != null ? Game.FsmOn(seller, "Animations") : null, logic = job != null ? Game.FsmOn(job, "Logic") : null;
+                PlayMakerFSM pay = payGo != null ? Game.FsmOn(payGo, "Use") : null;
                 bool buyer = Config.Get("Test", "Acheteur", "invite") == (Net.Session.IsHost ? "hote" : "invite");
-                if (t > 40f && step == 0)
+                if (Net.Session.IsHost && t > 40f && step == 0)
                 {
                     step = 1;
-                    if (dart != null) dart.SetActive(true);
-                    GameObject npc0 = Game.FindAny("JOBS/HouseWood1/LOD/CarPos/NPCWood");
-                    // (vendeur eteint hors annonce : son automate ne demarrait pas ; la chaine de ses parents aussi, LOD de la maison)
-                    for (Transform x = npc0 != null ? npc0.transform : null; x != null; x = x.parent) if (!x.gameObject.activeSelf) { Log.Info("autotest : rivettvente, allume " + x.name); x.gameObject.SetActive(true); }
-                    Log.Info("autotest : rivettvente, flechette allumee" + (dart == null ? " (introuvable)" : "") + ", vendeur " + (npc0 != null ? "allume" : "introuvable"));
+                    PlayMakerFSM num = null;
+                    foreach (Object o in Game.AllFsms())
+                    {
+                        var f = (PlayMakerFSM)o;
+                        if (f != null && f.FsmName == "Data" && f.transform.parent != null && f.transform.parent.name == "PhoneNumbers" && (f.gameObject.name == "08609553" || f.gameObject.name == "numberdisabled"))
+                        {
+                            FsmString nb = f.FsmVariables.FindFsmString("Number");
+                            if (nb != null && nb.Value == "08609553") num = f;
+                        }
+                    }
+                    if (num != null) num.SendEvent("CALLED");
+                    Log.Info("autotest : rivettvente, appel de Reijo -> " + (num != null ? num.gameObject.name + " " + num.ActiveStateName : "numero introuvable"));
                 }
-                if (buyer && t > 60f && step == 1)
+                // [Test] VentePres=x,y,z : l'acheteur y va a 52 s (pres du vendeur ; TestPos a plus de 50 m de lui : le jeu ne
+                // l'allume qu'a un joueur parti a plus de 50 m, de 8 a 20 h). VenteForcer=0 : vendeur pas allume de force.
+                // [Test] VenteTemoin=x,y,z : l'autre joueur y va aussi (a quelques metres : voit la scene sans la declencher).
+                string near = Config.Get("Test", buyer ? "VentePres" : "VenteTemoin", "");
+                if (near.Length > 0 && t > 52f && !rivNear)
+                {
+                    rivNear = true;
+                    string[] c = near.Split(',');
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    GameObject pl = GameObject.Find("PLAYER");
+                    var cc = pl.GetComponent<CharacterController>();
+                    cc.enabled = false; pl.transform.position = new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci)); cc.enabled = true;
+                    Log.Info("autotest : rivettvente, " + (buyer ? "acheteur" : "temoin") + " pres du vendeur (" + near + ")");
+                }
+                if (buyer && t > Config.GetFloat("Test", "VentePaie", 60f) && (step == 0 || step == 1))
                 {
                     step = 2;
-                    GameObject npc = Game.FindAny("JOBS/HouseWood1/LOD/CarPos/NPCWood");
-                    if (npc != null && !npc.activeSelf) npc.SetActive(true);
-                    if (anim != null) anim.SendEvent("PAID");
-                    Log.Info("autotest : rivettvente, paie le vendeur -> " + (anim != null ? anim.ActiveStateName : "vendeur introuvable"));
+                    if (Config.GetInt("Test", "VenteForcer", 1) != 0)
+                        for (Transform x = seller != null ? seller.transform : null; x != null; x = x.parent) if (!x.gameObject.activeSelf) { Log.Info("autotest : rivettvente, allume " + x.name); x.gameObject.SetActive(true); }
+                    if (payGo != null && !payGo.activeSelf) payGo.SetActive(true);
+                    if (pay != null) Game.SetState(pay, "Pay for car");
+                    Log.Info("autotest : rivettvente, paie le vendeur -> PayMoney " + (pay != null ? pay.ActiveStateName : "introuvable") + ", vendeur " + (anim != null ? anim.ActiveStateName : "?"));
                 }
-                if (t > 30f && t < 140f && Time.realtimeSinceStartup >= rivLog)
+                if (t > 30f && t < 300f && Time.realtimeSinceStartup >= rivLog)
                 {
                     rivLog = Time.realtimeSinceStartup + 3f;
+                    FsmBool car = logic != null ? logic.FsmVariables.FindFsmBool("Car") : null, order = logic != null ? logic.FsmVariables.FindFsmBool("Order") : null;
                     Log.Info("autotest : rivettvente, flechette voiture " + (dart == null ? "?" : dart.activeSelf ? "ALLUMEE" : "eteinte") + ", bois " + (dartW == null ? "?" : dartW.activeSelf ? "allumee" : "eteinte")
-                             + ", vendeur " + (anim != null ? anim.ActiveStateName + (anim.enabled ? "" : " (coupe)") + (anim.gameObject.activeInHierarchy ? "" : " (eteint)") : "?") + ", WoodJob1Point " + (logic != null ? logic.ActiveStateName : "?"));
+                             + ", vendeur " + (anim != null ? anim.ActiveStateName + (anim.enabled ? "" : " (coupe)") + (anim.gameObject.activeInHierarchy ? "" : " (eteint)") : "?")
+                             + ", PayMoney " + (pay != null ? pay.ActiveStateName + (payGo.activeInHierarchy ? "" : " (eteint)") : "?")
+                             + ", WoodJob1Point " + (logic != null ? logic.ActiveStateName : "?") + " Car " + (car != null && car.Value) + " Order " + (order != null && order.Value));
                 }
             }
             if (mode == "porter")
@@ -1620,7 +1649,7 @@ namespace MWCoop
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
-        static float rivLog, cabGap, holdLog;
+        static bool rivNear; static float rivLog, cabGap, holdLog;
         static int holdN;
         static GameObject rangeGo;
         static Vector3 holdSum, holdSq;
