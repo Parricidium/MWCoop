@@ -49,6 +49,8 @@ static const TutoStep kTuto[] = {
       L"Credits", L"The star at the top: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in the Outfit tab!", "0.61.0" },
     { L"Mode débogage", L"Dans Journaux : si MWCoop ne se charge pas, active-le, lance ta partie puis crée le zip. Il note tout ce que fait le lanceur et ce que le jeu a vraiment chargé.",
       L"Debug mode", L"In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.", "0.62.0" },
+    { L"Modes de compatibilité", L"Dans Réglages > Jeu. Après un plantage, Windows ajoute parfois un mode de compatibilité au jeu, et MWCoop ne se charge plus : le lanceur le retire avant chaque partie.",
+      L"Compatibility modes", L"In Settings > Game. After a crash, Windows sometimes adds a compatibility mode to the game, and MWCoop stops loading: the launcher removes it before every game.", "0.64.1" },
     { L"Guide", L"Tout pour jouer sans souci, rangé par catégories à déplier : installer, héberger, rejoindre, partager ses mods, Copie / Dossier / Steam… et les solutions aux problèmes courants, avec des images.",
       L"Guide", L"Everything to play trouble-free, sorted into categories you expand: install, host, join, share your mods, Copy / Folder / Steam… and fixes for common problems, with pictures.", "0.64.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
@@ -81,11 +83,12 @@ static RectF TutoTarget(int i)
     case 18: return kSetUninst;
     case 19: return g_navR[TAB_CREDITS];
     case 20: return kLogsDebugRow;
-    case 21: return g_navR[TAB_WIKI];
+    case 21: return kSetCompatRow;
+    case 22: return g_navR[TAB_WIKI];
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 ? TAB_COOP : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

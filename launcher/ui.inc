@@ -1199,7 +1199,7 @@ static void DrawSettings(Graphics &g)
         Text(g, std::to_wstring(OptGet(*po)), RectF(m.X + m.Width, row.Y, p.X - m.X - m.Width, row.Height), 15, FontStyleBold, kInk);
     }
     // Jeu
-    RectF ga(rx, ne.Y + ne.Height + 16, cw, 234);
+    RectF ga(rx, ne.Y + ne.Height + 16, cw, 264);
     Glass(ga);
     Title(g, T(L"Jeu", L"Game"), RectF(ga.X + 20, ga.Y + 16, 300, 24), 17, kInk);
     {
@@ -1209,15 +1209,22 @@ static void DrawSettings(Graphics &g)
         StringFormat sf; sf.SetTrimming(StringTrimmingEllipsisPath); sf.SetFormatFlags(StringFormatFlagsNoWrap); sf.SetLineAlignment(StringAlignmentCenter);
         FontFamily fam(L"Segoe UI"); Font f(&fam, 12, FontStyleRegular, UnitPixel); SolidBrush gb(kGrey);
         g.DrawString(g_gameDir.c_str(), -1, &f, RectF(ga.X + 20, ga.Y + 82, ga.Width - 40, 20), &sf, &gb);
-        UiButton(g, RectF(ga.X + 20, ga.Y + 112, ga.Width - 40, 44), ok ? T(L"Changer de dossier", L"Change folder") : T(L"Choisir l'exe…", L"Choose exe…"), UI_SET_FOLDER, false, IC_FOLDER);
+        UiButton(g, RectF(ga.X + 20, ga.Y + 104, ga.Width - 40, 38), ok ? T(L"Changer de dossier", L"Change folder") : T(L"Choisir l'exe…", L"Choose exe…"), UI_SET_FOLDER, false, IC_FOLDER);
     }
-    if (const Opt *ls = OptByKey("LancerSteam")) {   // (kSetSteamRow : ga.X + 20, ga.Y + 166)
+    if (const Opt *ls = OptByKey("LancerSteam")) {   // (kSetSteamRow : ga.X + 20, ga.Y + 150)
         RectF row = kSetSteamRow;
         // Demarrer le jeu : copie de lancement (Steam, sinon le dossier du jeu), dossier du jeu ([Lanceur] SansCopie), Steam
         // ([Coop] LancerSteam). Chez certains joueurs une seule marche (08/10).
         int how = OptGet(*ls) ? 2 : GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) ? 1 : 0;
         SetRowText(g, RectF(row.X, row.Y, row.Width - 250, row.Height), T(L"Démarrer le jeu", L"Start the game"), T(L"Si MWCoop ne se charge pas", L"If MWCoop doesn't load"));
-        UiSeg(g, RectF(row.X + row.Width - 240, row.Y + 8, 240, 36), { T(L"Copie", L"Copy"), T(L"Dossier", L"Folder"), L"Steam" }, how, UI_SET_START, 12);
+        UiSeg(g, RectF(row.X + row.Width - 240, row.Y + 6, 240, 36), { T(L"Copie", L"Copy"), T(L"Dossier", L"Folder"), L"Steam" }, how, UI_SET_START, 12);
+    }
+    {   // modes de compatibilite de Windows (kSetCompatRow : ga.X + 20, ga.Y + 204) : retires avant chaque lancement
+        RectF row = kSetCompatRow;
+        SetRowText(g, RectF(row.X, row.Y, row.Width - 70, row.Height), T(L"Retirer les modes de compatibilité", L"Remove compatibility modes"),
+                   T(L"Windows en ajoute après un plantage : MWCoop ne se charge plus", L"Windows adds some after a crash: MWCoop stops loading"));
+        UiToggle(g, RectF(row.X + row.Width - 50, row.Y + 10, 50, 28), CompatAuto(), g_uiHot == UI_SET_COMPAT);
+        HotZone(row, UI_SET_COMPAT);
     }
     // Invite : envoi de l'hote
     RectF iv(rx, ga.Y + ga.Height + 16, cw, kMain.Y + kMain.Height - (ga.Y + ga.Height + 16));
@@ -1390,6 +1397,15 @@ static bool UiClick(int id)
     case UI_SET_FOLDER: ChooseExe(); return true;
     case UI_SET_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); return true;
     case UI_SET_UNINST: Uninstall(); return true;
+    case UI_SET_COMPAT: {
+        bool on = !CompatAuto();
+        WritePrivateProfileStringW(L"Lanceur", L"RetirerCompat", on ? L"1" : L"0", g_iniLauncher.c_str());
+        LaunchLog("retrait des modes de compatibilite %s", on ? "active" : "coupe");
+        if (on) CompatCleanAll("reglage");
+        SetStatus(K_NORMAL, on ? T(L"Les modes de compatibilit\u00E9 de Windows seront retir\u00E9s avant chaque partie", L"Windows compatibility modes will be removed before every game")
+                               : T(L"Modes de compatibilit\u00E9 gard\u00E9s : MWCoop risque de ne pas se charger", L"Compatibility modes kept: MWCoop may not load"));
+        return true;
+    }
     case UI_LOG_DEBUG:
         g_debug = !g_debug;
         WritePrivateProfileStringW(L"Lanceur", L"Debug", g_debug ? L"1" : L"0", g_iniLauncher.c_str());

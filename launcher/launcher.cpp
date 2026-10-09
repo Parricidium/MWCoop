@@ -194,7 +194,7 @@ static std::wstring g_launcherLog;
 static bool g_fromSteam;   // demarre par Steam (option de lancement "<MWCoop.exe>" %command%)
 static void LaunchLog(const char *fmt, ...)
 {
-    char b[1024];
+    static char b[16384];   // (liste des DLL du jeu, mode debogage)
     va_list ap;
     va_start(ap, fmt);
     _vsnprintf_s(b, _countof(b), _TRUNCATE, fmt, ap);
@@ -3924,6 +3924,58 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
 // celui de la meme compilation que le lanceur (ressource 5). Absent, ancien MWCoop ou abime -> remis ; plus recent (lanceur
 // pas a jour) -> laisse ; une version.dll d'un autre programme (ReShade...) -> mise de cote (version.dll.autre), la notre
 // a sa place. Le journal dit ce qui a ete trouve.
+// Correctifs de compatibilite de Windows sur mywintercar.exe (cause des « MWCoop ne se charge pas », 09/10) : apres un
+// plantage du jeu a la fermeture, Windows ajoute tout seul "$ IgnoreFreeLibrary<d3d11>" pour CE chemin
+// (HKCU\...\AppCompatFlags\Layers). Le jeu demarre alors avec le moteur de compatibilite (apphelp, AcGenral), qui charge
+// la version.dll de Windows avant la notre : MWCoop n'est jamais charge. Verifie sur une instance de test (avec : VERSION.dll
+// de System32 ; sans : la notre). D'ou « ca a marche une fois puis plus jamais », la copie AppData qui lache a son tour,
+// Windows 10 qui marche et Windows 11 non (registres differents). Retires avant chaque lancement, au demarrage et a la
+// fermeture du jeu, pour le jeu et ses copies de lancement. Ceux de tous les utilisateurs (HKLM : droits administrateur)
+// sont seulement signales.
+static std::wstring GuestCopyDir();
+static int CompatClean(const std::wstring &exe, const char *where)
+{
+    static const wchar_t *kLayers = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers";
+    int removed = 0;
+    for (int hk = 0; hk < 2; hk++) {
+        HKEY k;
+        if (RegOpenKeyExW(hk ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER, kLayers, 0, hk ? KEY_QUERY_VALUE : KEY_QUERY_VALUE | KEY_SET_VALUE, &k) != ERROR_SUCCESS) continue;
+        std::vector<std::wstring> hits;
+        std::vector<std::wstring> vals;
+        for (DWORD i = 0;; i++) {
+            wchar_t name[1024], data[512];
+            DWORD nl = 1024, dl = sizeof(data), type = 0;
+            LONG r = RegEnumValueW(k, i, name, &nl, NULL, &type, (BYTE *)data, &dl);
+            if (r == ERROR_NO_MORE_ITEMS) break;
+            if (r != ERROR_SUCCESS) continue;
+            if (_wcsicmp(name, exe.c_str())) continue;
+            hits.push_back(name);
+            vals.push_back(type == REG_SZ ? std::wstring(data, wcsnlen(data, dl / sizeof(wchar_t))) : L"?");
+        }
+        for (size_t i = 0; i < hits.size(); i++) {
+            if (hk) {
+                LaunchLog("compatibilite (%s) : %s = [%s] pour TOUS les utilisateurs : MWCoop ne se chargera pas (Proprietes du jeu > Compatibilite > Modifier les parametres pour tous les utilisateurs)", where, Narrow(exe, CP_UTF8).c_str(), Narrow(vals[i], CP_UTF8).c_str());
+                SetStatus(K_WARN, T(L"Un mode de compatibilité Windows empêche MWCoop de se charger : mywintercar.exe > Propriétés > Compatibilité > pour tous les utilisateurs, tout décocher",
+                                    L"A Windows compatibility mode stops MWCoop from loading: mywintercar.exe > Properties > Compatibility > for all users, untick everything"));
+                continue;
+            }
+            bool ok = RegDeleteValueW(k, hits[i].c_str()) == ERROR_SUCCESS;
+            LaunchLog("compatibilite (%s) : %s = [%s] -> %s", where, Narrow(exe, CP_UTF8).c_str(), Narrow(vals[i], CP_UTF8).c_str(), ok ? "retire (sinon la version.dll de Windows passe avant celle de MWCoop)" : "RETRAIT IMPOSSIBLE");
+            if (ok) removed++;
+        }
+        RegCloseKey(k);
+    }
+    return removed;
+}
+static bool CompatAuto() { return GetPrivateProfileIntW(L"Lanceur", L"RetirerCompat", 1, g_iniLauncher.c_str()) != 0; }   // (Reglages > Jeu)
+static void CompatCleanAll(const char *where)
+{
+    if (g_gameDir.empty()) return;
+    if (!CompatAuto()) { LaunchLog("compatibilite (%s) : retrait coupe dans les reglages", where); return; }
+    std::vector<std::wstring> dirs = { g_gameDir, MirrorDir(), GuestCopyDir(), MscCopyDir() };
+    for (const std::wstring &d : dirs) if (!d.empty()) CompatClean(d + L"mywintercar.exe", where);
+}
+
 static std::wstring VerString(const std::wstring &path, const wchar_t *key)
 {
     typedef DWORD (WINAPI *SizeFn)(LPCWSTR, LPDWORD);
@@ -4086,6 +4138,7 @@ static void Launch(int mode, const char *partie = NULL)
     // Lancer par Steam (Reglages > Jeu, ou propose quand MWCoop ne s'est pas charge) : comme son bouton JOUER, qui lance le
     // jeu de son dossier ; MWCoop y lit lancement.ini. Pas pour l'invite d'un salon avec les mods de l'hote (sa copie), ni
     // hors de Steam. (MSCLoader coupe : pas de -mscloader-disable par ce chemin.)
+    CompatCleanAll("lancement");
     LoaderEnsure(g_gameDir, "dossier du jeu");
     const Opt *viaSteam = OptByKey("LancerSteam");
     g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && !MirrorDir().empty();
@@ -6668,6 +6721,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
+    // /compat <exe> <journal> : retrait des correctifs de compatibilite de Windows pour cet exe (comme avant un lancement)
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/compat")) {
+        g_testSalonLog = argv[3];
+        FILE *f = _wfopen(argv[3], L"wb");
+        if (f) fclose(f);
+        int n = CompatClean(argv[2], "essai");
+        TestLog("compat : %d retire(s)", n);
+        GdiplusShutdown(gtok);
+        return 0;
+    }
     // /chargeur <dossier> <journal> : verification du chargeur (version.dll) de ce dossier, comme avant un lancement
     if (argc >= 4 && !_wcsicmp(argv[1], L"/chargeur")) {
         g_testSalonLog = argv[3];
@@ -6999,6 +7062,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (nt) CloseHandle(nt);
     }
     TenuesStart();   // (tenues offertes : une fois, a part des mises a jour)
+    CompatCleanAll("demarrage");
 
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }

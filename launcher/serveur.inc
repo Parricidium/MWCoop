@@ -91,6 +91,7 @@ static void RunTick()
     if (g_crashT) SetStatus(K_WARN, T(L"Arrêt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
     else SetStatus(K_NORMAL, T(L"Partie terminée · %s", L"Game over · %s"), ModLabel().c_str());
     LaunchLog("jeu ferme : retour au menu (arret brutal %d)", (int)(g_crashT != 0));
+    CompatCleanAll("jeu ferme");   // (Windows en ajoute un apres un plantage a la fermeture)
     AfterGameModCheck();
 }
 
