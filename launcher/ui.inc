@@ -344,13 +344,37 @@ static const NavItem kNav[] = {
     { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" },
     { TAB_SKIN, IC_SHIRT, L"Tenue", L"Outfit" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" },
     { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
-    { TAB_GFX, IC_SLIDERS, L"Graphismes", L"Graphics" }, { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" },
+    { TAB_GFX, IC_SLIDERS, L"Options du jeu", L"Game options" }, { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" },
     { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" } };   // (guide des joueurs, wiki.inc)
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
 static const int kNavGroupN[] = { 2, 2, 2, 1, 2 };   // pages de chaque groupe, dans l'ordre de kNav
 static const int kNavGroups = 5;
 static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"JEU", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"GAME", L"INFO" };
 static Bitmap *g_logo;
+// Groupes pliables (demande de JD, 10/10) : MON PERSONNAGE, PARTAGE, JEU (pas JOUER ni INFOS). Plies : [Lanceur] RailPlie
+// (numeros de groupe). La page ouverte reste montree meme dans un groupe plie ; tout est deplie pendant la visite guidee.
+static bool TutoActive();   // (tuto.inc)
+static int g_railFold = -1;   // bits des groupes plies (-1 : pas encore lu)
+static bool RailFoldable(int k) { return k >= 1 && k <= 3; }
+static bool RailFolded(int k)
+{
+    if (g_railFold < 0) {
+        g_railFold = 0;
+        wchar_t b[32] = {};
+        GetPrivateProfileStringW(L"Lanceur", L"RailPlie", L"", b, 32, g_iniLauncher.c_str());
+        for (int i = 1; i <= 3; i++) if (wcschr(b, L'0' + i)) g_railFold |= 1 << i;
+    }
+    return RailFoldable(k) && (g_railFold & (1 << k)) != 0 && !TutoActive();
+}
+static void RailToggle(int k)
+{
+    if (!RailFoldable(k)) return;
+    RailFolded(k);
+    g_railFold ^= 1 << k;
+    std::wstring s;
+    for (int i = 1; i <= 3; i++) if (g_railFold & (1 << i)) s += (wchar_t)(L'0' + i);
+    WritePrivateProfileStringW(L"Lanceur", L"RailPlie", s.empty() ? NULL : s.c_str(), g_iniLauncher.c_str());
+}
 static int MscModCount();   // (mods.inc)
 static RectF g_navR[TAB_COUNT];   // (bulles de la visite)
 
@@ -423,16 +447,25 @@ static void DrawRail(Graphics &g)
         y0 = 180;
     }
     // groupes jusqu'a Reglages (674) : lignes de 44 px, ou de 40 quand le bouton de mise a jour prend de la place
-    const int nItems = (int)(sizeof(kNav) / sizeof(kNav[0]));
+    int nItems = 0;
+    for (int k = 0, i = 0; k < kNavGroups; k++)
+        for (int j = 0; j < kNavGroupN[k]; j++, i++) if (!RailFolded(k) || kNav[i].page == g_tab) nItems++;
     float avail = 666 - y0, lab = 26, step = 46;
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 24; step = 42; }
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 22; step = 40; }   // (bouton de mise a jour + 9 pages)
     float gap = min(20.0f, max(0.0f, (avail - kNavGroups * lab - nItems * step) / (kNavGroups - 1))), y = y0;
     for (int k = 0, i = 0; k < kNavGroups; k++) {
         SmallLabel(g, g_fr ? kNavGroupFr[k] : kNavGroupEn[k], RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
+        if (RailFoldable(k)) {   // chevron a droite du titre ; clic sur la ligne du titre : plier / deplier
+            RectF hr(28, y, 208, lab);
+            bool hot = g_uiHot == UI_NAV_GROUP + k;
+            Icon(g, RailFolded(k) ? IC_CHEVR : IC_CHEVD, 220, y + 12, 12, WithA(hot ? kAcc : kGrey, 0.9f), 2.0f);
+            HotZone(hr, UI_NAV_GROUP + k);
+        }
         y += lab;
         for (int j = 0; j < kNavGroupN[k]; j++, i++) {
             const NavItem &it = kNav[i];
+            if (RailFolded(k) && it.page != g_tab) continue;
             DrawNavItem(g, RectF(28, y, 208, step - 2), it.page, it.icon, g_fr ? it.fr : it.en);
             y += step;
         }
@@ -549,7 +582,7 @@ static void DrawHeader(Graphics &g)
     case TAB_NOTES: title = T(L"Nouveautés", L"What's new"); sub = T(L"Ce qui change à chaque version", L"What changes in each version"); break;
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: title = T(L"Réglages", L"Settings"); sub = T(L"Gardés dans mwcoop-lanceur.ini et MWCoop\\mwcoop.ini", L"Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini"); break;
-    case TAB_GFX: title = T(L"Graphismes", L"Graphics"); sub = T(L"Pour toi seul · en partie : menu F10 > Graphismes", L"Just for you · in game: F10 menu > Graphics"); break;
+    case TAB_GFX: title = T(L"Options du jeu", L"Game options"); sub = T(L"Graphismes et coop, pour toi seul · en partie : menu F10 > Graphismes", L"Graphics and co-op, just for you · in game: F10 menu > Graphics"); break;
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
     case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Tout pour jouer sans souci : installation, salons, mods, réglages, solutions", L"Everything to play trouble-free: install, lobbies, mods, settings, fixes"); break;
@@ -1485,6 +1518,7 @@ static bool UiClick(int id)
 {
     if (id == UI_NONE) return true;
     if (id >= UI_NAV && id < UI_NAV + TAB_COUNT) { int p = id - UI_NAV; if (PageEnabled(p)) GoPage(p); return true; }
+    if (id >= UI_NAV_GROUP && id < UI_NAV_GROUP + 5) { RailToggle(id - UI_NAV_GROUP); return true; }
     if (id == UI_SEG || id == UI_SEG + 1) {
         bool look = g_tab == TAB_SKIN || g_tab == TAB_CAR;
         int p = look ? (id == UI_SEG ? TAB_SKIN : TAB_CAR) : (id == UI_SEG ? TAB_CONTENT : TAB_MODS);

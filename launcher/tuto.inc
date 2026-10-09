@@ -3,7 +3,8 @@
 // La fenetre s'assombrit sauf l'element montre (entoure), une bulle a fleche dit a quoi il sert ; SUIVANT (Entree,
 // fleche droite), RETOUR (fleche gauche), PASSER (Echap). Les onglets montres s'ouvrent derriere la bulle. A revoir :
 // COOP > Revoir le guide de demarrage.
-static int g_tuto = -1, g_tutoHot;   // rang dans la visite (-1 : pas de visite) ; survol : 1 suivant, 2 passer, 3 retour
+static int g_tuto = -1, g_tutoHot;
+static bool TutoActive() { return g_tuto >= 0; }   // rang dans la visite (-1 : pas de visite) ; survol : 1 suivant, 2 passer, 3 retour
 static int g_tutoTabWas = -1;
 
 struct TutoStep { const wchar_t *tFr, *dFr, *tEn, *dEn; const char *since; };   // since : version ou l'element est apparu
@@ -59,6 +60,8 @@ static const TutoStep kTuto[] = {
       L"Imported face", L"In Outfit: your own face. Template opens the game's face image with its seams: paint over it, then Import. Others see it in game.", "0.69.0" },
     { L"Finition de la voiture", L"Dans Voiture : en plus de la couleur, la finition de la CORRIS (L, LX, SLX, GT) pour une nouvelle partie. L'hôte la donne à ses invités.",
       L"Car trim", L"In Car: besides the color, the CORRIS trim (L, LX, SLX, GT) for a new game. The host gives it to their guests.", "0.69.1" },
+    { L"Options du jeu", L"Graphismes et options de la coop (vocal, visages, argent de départ) réunis ici. Les groupes de cette barre se plient d'un clic sur leur titre.",
+      L"Game options", L"Graphics and co-op options (voice, faces, starting money) gathered here. The groups of this bar fold with a click on their title.", "0.69.2" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -94,6 +97,7 @@ static RectF TutoTarget(int i)
     case 23: return kSetKeysRow;
     case 24: return g_faceRect;
     case 25: return g_trimRect;
+    case 26: return g_navR[TAB_GFX];
     }
     return RectF(0, 0, 0, 0);
 }

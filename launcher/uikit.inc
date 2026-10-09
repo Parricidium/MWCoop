@@ -29,6 +29,7 @@ static int ZoneAt(float x, float y)
 enum {
     UI_NONE = 1,                  // (zone qui arrete la souris, sans action : un menu par-dessus)
     UI_NAV = 100,                 // + page
+    UI_NAV_GROUP = 140,           // + groupe de la barre (1-3 pliables)
     UI_SEG = 150,                 // + k : onglets de l'en-tete (tenue / voiture ; contenu / mods)
     UI_HOME_LOOK = 170, UI_HOME_CAR, UI_HOME_NOTES, UI_HOME_LOBBY, UI_HOME_STEAMOPT,
     UI_PAGE_OK = 180, UI_PAGE_CANCEL,
