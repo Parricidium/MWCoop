@@ -18,6 +18,7 @@ for ($i = 1; $i -le $Players; $i++) {
     Remove-Item "$p\logs\*.log" -ErrorAction SilentlyContinue   # (pas logs\sessions : les parties rangees par le chargeur)
     $w, $h = $Taille.Split('x')
     $args = "-screen-fullscreen 0 -screen-width $w -screen-height $h"
+    if ($env:MWC_SANSMSC -eq "1") { $args += " -mscloader-disable" }   # (captures sans les fenetres de MSCLoader)
     $procs += Start-Process "$d\mywintercar.exe" -ArgumentList $args -WorkingDirectory $d -PassThru
     if ($i -lt $Players) { Start-Sleep 4 }
 }

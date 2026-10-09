@@ -16,8 +16,18 @@ namespace MWCoop
     //    aurait sa couleur pour la meme piece neuve) ;
     //  - ailleurs : variables recopiees puis REPAINT, comme la bombe.
     // Piece designee par son ID (Data/Use) ou, a defaut (carrosserie), par son chemin.
+    // Pieces toutes neuves (colis : retour d'un joueur, 09/10, « la couleur aussi ») : la peinture de l'hote arrivait avant
+    // que la piece de l'invite soit suivie ("introuvable ici" : perdue), ou l'invite tirait la sienne apres l'avoir recue.
+    // Gardee 1 min : posee des que la piece est suivie (releve rapproche tant qu'il en attend), et reposee apres un tirage
+    // local de l'invite.
     public static class Paint
     {
+        class Vars { public List<KeyValuePair<string, int>> I; public List<KeyValuePair<string, float>> F; public List<KeyValuePair<string, Color>> C; public List<KeyValuePair<string, string>> S; public int Who; public float At; public bool Done; }
+        static readonly Dictionary<string, Vars> received = new Dictionary<string, Vars>();
+        static readonly List<string> reapply = new List<string>();
+
+        // Releve bientot (colis ouvert : pieces neuves a suivre).
+        public static void ScanSoon() { if (nextScan > 0) nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1.5f); }
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
         static readonly HashSet<PlayMakerFSM> rejected = new HashSet<PlayMakerFSM>();   // automates Paint sans REPAINT : plus revus
         static float nextScan = -1, loadedAt;
@@ -36,16 +46,25 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            hooked.Clear(); rejected.Clear();
+            hooked.Clear(); rejected.Clear(); received.Clear(); reapply.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 9f : -1;
         }
 
         public static void Update()
         {
+            if (reapply.Count > 0)
+            {
+                foreach (string id in reapply) { Vars v; if (received.TryGetValue(id, out v)) Apply(id, v, true); }
+                reapply.Clear();
+            }
             if (nextScan < 0 || Time.realtimeSinceStartup < nextScan) return;
-            // (Toutes les 15 s les 2 premieres minutes, puis 45 s : le releve de tous les automates coutait 70-90 ms.)
-            nextScan = Time.realtimeSinceStartup + (Time.realtimeSinceStartup - loadedAt < 120f ? 15f : 45f);
+            // (Toutes les 15 s les 2 premieres minutes, puis 45 s : le releve de tous les automates coutait 70-90 ms ; 2 s
+            // tant qu'une peinture recue attend sa piece.)
+            float now0 = Time.realtimeSinceStartup;
+            bool waiting = false;
+            foreach (string k in new List<string>(received.Keys)) { if (now0 - received[k].At > 60f) received.Remove(k); else if (!received[k].Done) waiting = true; }
+            nextScan = now0 + (waiting ? 2f : now0 - loadedAt < 120f ? 15f : 45f);
             int n = 0;
             foreach (Object o in Game.AllFsms())
             {
@@ -69,6 +88,7 @@ namespace MWCoop
                 n++;
             }
             if (n > 0) Log.Info("peinture : " + n + " pieces suivies (" + hooked.Count + " en tout)");
+            foreach (KeyValuePair<string, Vars> kv in new List<KeyValuePair<string, Vars>>(received)) if (!kv.Value.Done) Apply(kv.Key, kv.Value, false);
         }
 
         static void OnLocal(PlayMakerFSM f)
@@ -77,6 +97,8 @@ namespace MWCoop
             FsmTransition tr = f.Fsm.LastTransition;
             bool sprayed = tr != null && tr.EventName == "REPAINT";
             bool random = f.Fsm.PreviousActiveState != null && f.Fsm.PreviousActiveState.Name == "Save color";
+            // Invite qui tire la couleur d'une piece dont il a deja la peinture de l'hote : reposee juste apres.
+            if (random && !Session.IsHost) { string rid = KeyOf(f); if (received.ContainsKey(rid)) reapply.Add(rid); return; }
             if (!sprayed && !(random && Session.IsHost && Time.realtimeSinceStartup - loadedAt > 20f)) return;
             string id = KeyOf(f);
             var w = new NetWriter(Msg.Paint).U8(Session.LocalId).Str(id);
@@ -135,18 +157,27 @@ namespace MWCoop
                 w.U8(strs.Count); foreach (var x in strs) w.Str(x.Key).Str(x.Value);
                 Session.Broadcast(w, true, who);
             }
+            var got = new Vars { I = ints, F = floats, C = colors, S = strs, Who = who, At = Time.realtimeSinceStartup };
+            received[id] = got;
+            if (!Apply(id, got, false)) { Log.Info("peinture : " + id + " de #" + who + " recue, piece pas encore suivie ici (posee des qu'elle l'est)"); ScanSoon(); }
+        }
+
+        static bool Apply(string id, Vars g, bool again)
+        {
             PlayMakerFSM f = null;
             foreach (PlayMakerFSM h in hooked) if (h != null && KeyOf(h) == id) { f = h; break; }
-            if (f == null) { Log.Warn("peinture : " + id + " introuvable ici"); return; }
+            if (f == null) return false;
             FsmVariables v = f.FsmVariables;
-            foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
-            foreach (var x in floats) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
-            foreach (var x in colors) { FsmColor t = v.FindFsmColor(x.Key); if (t != null) t.Value = x.Value; }
-            foreach (var x in strs) { FsmString t = v.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
+            foreach (var x in g.I) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
+            foreach (var x in g.F) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
+            foreach (var x in g.C) { FsmColor t = v.FindFsmColor(x.Key); if (t != null) t.Value = x.Value; }
+            foreach (var x in g.S) { FsmString t = v.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
             applying = true; Replay.Depth++;
             try { f.SendEvent("REPAINT"); }
             finally { applying = false; Replay.Depth--; }
-            Log.Info("peinture : " + id + " repeinte (joueur #" + who + ")");
+            g.Done = true;
+            Log.Info("peinture : " + id + " repeinte (joueur #" + g.Who + ")" + (again ? " apres le tirage d'ici" : ""));
+            return true;
         }
 
         static PlayMakerFSM Find(string part)

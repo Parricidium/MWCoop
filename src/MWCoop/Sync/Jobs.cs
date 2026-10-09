@@ -1481,6 +1481,8 @@ namespace MWCoop
                 case "@accident": Respawn.OnAccident(who, r.Str()); break;
                 case "@vitre": Windshields.OnRemote(who, r.Str(), r.U8()); break;
                 case "@colis": Packages.OnRemote(who, r.Str()); break;
+                case "@vin?": Vin.OnAsk(who); break;
+                case "@vin": Vin.OnTable(who, r); break;
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
                 case "@tuyau":

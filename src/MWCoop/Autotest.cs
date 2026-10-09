@@ -754,6 +754,30 @@ namespace MWCoop
                     Log.Info("autotest : capture " + png);
                 }
             }
+            // [Test] Autotest=peinture : chacun fait apparaitre la meme piece neuve (distributeur [Test] PeintureDistributeur,
+            // Prefab VIN405 : pare-chocs) a 40 s ; sa peinture a 50 et 90 s (l'invite doit avoir celle de l'hote).
+            if (mode == "peinture")
+            {
+                string pf = Config.Get("Test", "PeintureDistributeur", "VIN405");
+                if (t > 40f && step == 0)
+                {
+                    step = 1;
+                    foreach (Object o in Game.AllFsms())
+                    {
+                        PlayMakerFSM f = o as PlayMakerFSM;
+                        FsmGameObject pv = f != null && f.FsmName == "Spawn" ? f.FsmVariables.FindFsmGameObject("Prefab") : null;
+                        if (Config.GetInt("Test", "PeintureRetirer", 0) != 0 && f != null && f.FsmName == "Paint" && f.FsmVariables.FindFsmString("ID") != null && f.FsmVariables.FindFsmString("ID").Value == pf + "C1") { Game.SetState(f, "Random type"); Log.Info("autotest : peinture, " + pf + "C1 retiree au hasard ici"); break; }
+                        if (pv == null || pv.Value == null || pv.Value.name != pf) continue;
+                        Log.Info("autotest : peinture, distributeur " + Recon.Path(f.transform) + " [" + f.ActiveStateName + "] allume " + f.enabled + " actif " + f.gameObject.activeInHierarchy);
+                        f.SendEvent("SPAWNITEM");   // (comme un colis : numero suivant, peinture tiree)
+                        Log.Info("autotest : peinture, " + pf + " demande -> [" + f.ActiveStateName + "]");
+                        break;
+                    }
+                }
+                if ((t > 50f && step2 == 0) || (t > 90f && step2 == 1)) { step2++; Log.Info("autotest : peinture " + pf + "C1 : " + Paint.State(pf + "C1")); }
+            }
+            // [Test] Autotest=vin : table de la plaque VIN a 30 s et 70 s (chacun).
+            if (mode == "vin" && ((t > 30f && step == 0) || (t > 70f && step == 1))) { step++; Log.Info("autotest : " + Vin.Describe()); }
             if (mode == "parebrise")
             {
                 // Hote : casse le pare-brise de [Test] TestVoiture (CORRIS) a 30 s ; chacun note son etat a 25 et 70 s.
@@ -1177,6 +1201,7 @@ namespace MWCoop
             if (mode == "colis")
             {
                 // ... puis l'hote l'ouvre a 85 s (comme un clic) : il doit s'ouvrir chez les deux ([Test] ColisOuvrir=1).
+                if (Config.GetInt("Test", "ColisDistributeurs", 0) != 0 && t > 40f && step2 == 0) { step2 = 9; Packages.DumpSpawners(); }
                 if (Config.GetInt("Test", "ColisOuvrir", 0) != 0)
                 {
                     if (t > 70f && step2 == 0) { step2 = 1; Log.Info("autotest : colis cree " + WorldFsms.TestState("OrderAMIS1::Data", "Spawn package")); }
@@ -1276,7 +1301,16 @@ namespace MWCoop
                 if (step == 1 && t > 39f) { step = 3; CaptureSoon("ceinture-rangee", 0.1f); }
                 if (step == 3 && t > 44f) { step = 4; CaptureSoon("ceinture-boucle", 0.1f); }
             }
-            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) == 0 && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
+            // [Test] CeintureTenue=1 : ceinture tenue de 36 a 44 s (regard vers la boucle), capture ecran-ceinture-tenue, puis bouclee.
+            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureTenue", 0) != 0 && step >= 1 && step < 5 && t > 36f)
+            {
+                if (Config.GetInt("Test", "CeintureRegard", 0) != 0) Seats.TestBeltLook(1);
+                if (t < 44f) { string tenue = Seats.TestPull(true); if (Time.frameCount % 120 == 0) Log.Info("autotest : " + tenue); }
+                if (step == 1 && t > 41f) { step = 3; CaptureSoon("ceinture-tenue", 0.05f); }
+                if (step == 3 && t > 44f) { step = 4; Log.Info("autotest : " + Seats.TestPull(false) + " ; " + Seats.TestBelt()); }
+                if (step == 4 && t > 47f) { step = 5; CaptureSoon("ceinture-bouclee-invite", 0.05f); }
+            }
+            if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) == 0 && Config.GetInt("Test", "CeintureTenue", 0) == 0 && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
             // [Test] Autotest=apimods : (avec MSCLoader et MWCoopTestMod) l'hote sauvegarde sur place a 20 s : son Mods.txt
             // (compteur du mod d'essai) partira avec la sauvegarde a la partie suivante.
             if (mode == "apimods" && Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest : sauvegarde de l'hote"); Game.SaveInPlace(); }
@@ -1289,8 +1323,9 @@ namespace MWCoop
                     {
                         if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
                         bool front = Config.Get("Test", "CameraCeinture", "") == "avant";   // (de face, depuis le tableau de bord)
-                        testCam.transform.position = car.TransformPoint(front ? head + new Vector3(-0.12f, 0.0f, 0.42f) : new Vector3(-head.x * 0.7f, head.y + 0.05f, head.z + 0.25f));
-                        testCam.transform.LookAt(car.TransformPoint(head + new Vector3(0f, -0.3f, 0f)), car.up);
+                        testCam.transform.position = car.TransformPoint(front ? head + new Vector3(Config.GetFloat("Test", "CeintureCamX", -0.12f), Config.GetFloat("Test", "CeintureCamY", 0f), Config.GetFloat("Test", "CeintureCamZ", 0.42f)) : new Vector3(-head.x * 0.7f, head.y + 0.05f, head.z + 0.25f));
+                        testCam.transform.LookAt(car.TransformPoint(head + new Vector3(Config.GetFloat("Test", "CeintureViseX", 0f), Config.GetFloat("Test", "CeintureViseY", -0.3f), 0f)), car.up);
+                        if (step == 0 && t > Config.GetInt("Test", "CeintureCapture", 110)) { step = 1; CaptureSoon("ceinture-hote", 0.1f); }
                         break;
                     }
             }
