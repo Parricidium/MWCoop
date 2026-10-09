@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -693,14 +693,28 @@ namespace MWCoop
                         if (passenger && (kv.Key.Contains("collar") || kv.Key.Contains("shoulder") || kv.Key.Contains("arm") || kv.Key.Contains("hand") || kv.Key.Contains("finger"))) continue;
                         Transform b = Bone(kv.Key); if (b != null) b.localRotation = kv.Value;
                     }
-                if (passenger)
+                motoRaise = Vector3.zero;
+                bool moto = carName != null && carName.StartsWith("JONNEZ");
+                if (moto) MotoPose(passenger);
+                else if (passenger)
                 {
                     // Bras poses sur les cuisses.
                     ArmDown("shoulder_right", "hand_right", 1f, 1f);
                     ArmDown("shoulder_left", "hand_left", -1f, 1f);
+                    // Se pencher (demande de JD, 10/10) : la touche de penche du jeu (camera tournee), mesuree chez lui
+                    // (Gestures) ; buste et tete comme a pied.
+                    Gestures.Remote pg = Gestures.Of(Player.Id);
+                    sideS = Mathf.MoveTowards(sideS, pg != null ? Mathf.Clamp(pg.LeanSide, -30f, 30f) : 0f, Time.deltaTime * 90f);
+                    fwdS = Mathf.MoveTowards(fwdS, pg != null ? Mathf.Clamp(pg.LeanFwd, -30f, 40f) : 0f, Time.deltaTime * 90f);
+                    if (Mathf.Abs(sideS) > 0.05f || Mathf.Abs(fwdS) > 0.05f)
+                        foreach (string sp in new[] { "spine_middle", "spine_upper" })
+                        {
+                            Transform b = Bone(sp);
+                            if (b != null) b.rotation = Quaternion.AngleAxis(-sideS * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdS * 0.5f, Root.transform.right) * b.rotation;
+                        }
                 }
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
-                if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - Root.transform.position) + EyeOffset;
+                if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - motoRaise - Root.transform.position) + EyeOffset;   // (sans la remontee de la Jonnez : sinon l'ancrage la defait)
                 // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite). Avant les
                 // mains : elles se posent ensuite sur le volant depuis le buste penche.
                 float side = Mathf.Atan2(leanOff.x, 0.55f) * Mathf.Rad2Deg, fwdLean = Mathf.Atan2(leanOff.z, 0.55f) * Mathf.Rad2Deg;
@@ -710,7 +724,18 @@ namespace MWCoop
                     if (b == null) continue;
                     b.rotation = Quaternion.AngleAxis(-side * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdLean * 0.5f, Root.transform.right) * b.rotation;
                 }
-                if (!passenger) DriverHands();
+                if (!passenger && !moto) DriverHands();
+                // Fumer, boire en voiture (demande de JD, 10/10) : comme a pied, la main va a la bouche -- gauche (cigarette)
+                // quand il tire, droite (boisson) tant qu'il boit -- depuis le volant ; un passage de vitesse prime sur la
+                // boisson (la main droite va au levier, wShift). Avant : les mains restaient au volant.
+                Ease(ref wDrink, (f & PlayerSync.F_Drink) != 0 && st.Drink > 0, Time.deltaTime * 3f);
+                if (headBone != null)
+                {
+                    Vector3 mouth = Mouth();
+                    Transform rr = Root.transform;
+                    ArmTo(true, mouth - DrinkDir() * drinkHalf * 1.1f - rr.up * 0.03f + rr.right * 0.02f, wDrink * (1f - wShift));
+                    if ((f & PlayerSync.F_Smoke) != 0) ArmTo(false, mouth - rr.up * 0.03f - rr.right * 0.05f, smokeRaise);
+                }
                 ReachPose();
                 // Tete : regard relatif a la voiture, sans limite (tour complet accepte), quelle que soit
                 // l'inclinaison du dossier.
@@ -856,6 +881,105 @@ namespace MWCoop
         }
 
         float handErrR = -1f, handErrL = -1f, leanDeg;
+
+        // ---------------------------------------------------------------- Jonnez (mobylette)
+        // Demande de JD (10/10) : sur la Jonnez, l'avatar etait assis comme en voiture (jambes en avant a travers la moto, bras
+        // ballants). Ici : buste un peu en avant, cuisses de part et d'autre de la selle, pieds au niveau du kick (repose-pieds),
+        // mains aux poignees (gaz a droite : Throttle, embrayage a gauche : Clutch -- elles tournent avec le guidon). Kick (la
+        // commande Kickstart rejouee, ReachFor) : le pied droit monte sur la pedale et l'enfonce (0,7 s). Passager (place
+        // arriere, Seats) : meme assise, plus en arriere, les mains derriere lui sur les cotes du porte-bagages (rack).
+        Transform vehicleT, motoCar, motoThrottle, motoClutch, motoCrank;
+        Renderer motoSeat, motoRack;
+        float kickAt = -10f, motoLog;
+        Vector3 motoRaise;   // remontee du squelette sur la selle (monde), cette image
+        void MotoFind(Transform car)
+        {
+            if (car == motoCar) return;
+            motoCar = car; motoThrottle = motoClutch = motoCrank = null; motoSeat = motoRack = null;
+            if (car == null) return;
+            foreach (Transform t in car.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name == "Throttle" && motoThrottle == null) motoThrottle = t;
+                else if (t.name == "Clutch" && motoClutch == null) motoClutch = t;
+                else if (t.name == "Crank" && motoCrank == null) motoCrank = t;
+                else if (t.name == "seat" && motoSeat == null) motoSeat = t.GetComponent<Renderer>();
+                else if (t.name == "rack" && motoRack == null && t.GetComponent<Renderer>() != null) motoRack = t.GetComponent<Renderer>();
+            }
+            Log.Info("avatar " + Player.Name + " : sur la Jonnez (gaz " + (motoThrottle != null) + ", embrayage " + (motoClutch != null) + ", kick " + (motoCrank != null) + ", selle " + (motoSeat != null) + ", porte-bagages " + (motoRack != null) + ")");
+        }
+
+        void MotoPose(bool rear)
+        {
+            Transform car = vehicleT;
+            MotoFind(car);
+            if (car == null) return;
+            Transform r = Root.transform;
+            // Bassin sur le dessus de la selle (retour de JD, 10/10 : « les fesses dans la moto ») : la tete suit la camera du
+            // jeu, basse sur la Jonnez -- tout le squelette est remonte (comme Crouch le descend), avant les jambes et les bras.
+            Transform pelvis = Bone("pelvis");
+            if (pelvis != null && motoSeat != null)
+            {
+                // bassin pose sur la selle : au-dessus, a l'avant de la selle (conducteur) ou au bout (passager), sur l'axe
+                Vector3 sc = car.InverseTransformPoint(motoSeat.bounds.center), pc = car.InverseTransformPoint(pelvis.position);
+                float top = car.InverseTransformPoint(motoSeat.bounds.center + Vector3.up * motoSeat.bounds.extents.y).y + Config.GetFloat("Test", "MotoBassin", 0.09f);
+                float half = car.InverseTransformVector(motoSeat.bounds.extents).z;
+                Vector3 want = new Vector3(sc.x, top, sc.z + Mathf.Abs(half) * (rear ? -0.55f : 0.45f));
+                Vector3 d = want - pc;
+                if (d.sqrMagnitude < 2.25f) { motoRaise = car.TransformVector(d); anim.transform.position += motoRaise; }
+            }
+            // buste un peu en avant (conducteur), droit (passager)
+            Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "MotoBuste", rear ? 14f : 32f));   // (la pose de voiture est couchee en arriere)
+            Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "MotoBuste2", rear ? 8f : 14f));
+            // pieds : repose-pieds au niveau du kick, de part et d'autre de la selle
+            Vector3 mid = motoSeat != null ? motoSeat.bounds.center : car.position;
+            Vector3 peg = motoCrank != null ? motoCrank.position : mid - car.up * 0.35f;
+            Vector3 pegC = car.InverseTransformPoint(peg), midC = car.InverseTransformPoint(mid);
+            Vector3 baseC = new Vector3(midC.x, pegC.y + 0.04f, pegC.z + (rear ? -0.28f : 0.04f));
+            Vector3 footR = car.TransformPoint(baseC + new Vector3(0.18f, 0f, 0f)), footL = car.TransformPoint(baseC + new Vector3(-0.18f, 0f, 0f));
+            float k = Time.realtimeSinceStartup - kickAt;
+            if (!rear && k >= 0f && k < 0.7f && motoCrank != null)
+            {
+                // kick : pied leve au-dessus de la pedale (0-0,25 s), enfonce (0,25-0,5), revient (0,5-0,7)
+                Vector3 up = motoCrank.position + car.up * 0.2f + car.right * 0.16f, down = motoCrank.position - car.up * 0.06f + car.right * 0.16f;
+                footR = k < 0.25f ? Vector3.Lerp(footR, up, k / 0.25f) : k < 0.5f ? Vector3.Lerp(up, down, (k - 0.25f) / 0.25f) : Vector3.Lerp(down, footR, (k - 0.5f) / 0.2f);
+            }
+            Leg("thig_right", "knee_right", "ankle_right", footR);
+            Leg("thig_left", "knee_left", "ankle_left", footL);
+            if (!rear)
+            {
+                if (motoThrottle != null) ArmTo(true, motoThrottle.position, Reachable(true, motoThrottle.position));
+                if (motoClutch != null) ArmTo(false, motoClutch.position, Reachable(false, motoClutch.position));
+                MotoJournal(car);
+                return;
+            }
+            // passager : mains derriere lui, sur les cotes du porte-bagages
+            if (motoRack != null)
+            {
+                Vector3 c = motoRack.bounds.center;
+                Vector3 hr = c + car.right * 0.13f + car.up * 0.03f, hl = c - car.right * 0.13f + car.up * 0.03f;
+                ArmTo(true, hr, Reachable(true, hr));
+                ArmTo(false, hl, Reachable(false, hl));
+            }
+            else { ArmDown("shoulder_right", "hand_right", 1f, 1f); ArmDown("shoulder_left", "hand_left", -1f, 1f); }
+            MotoJournal(car);
+        }
+        // Essais ([Test] JournalMoto=1) : os et pieces de la Jonnez dans le repere de la moto, toutes les 3 s.
+        void MotoJournal(Transform car)
+        {
+            Transform r = Root.transform;
+            if (Time.realtimeSinceStartup >= motoLog && Config.GetInt("Test", "JournalMoto", 0) != 0)
+            {
+                motoLog = Time.realtimeSinceStartup + 3f;
+                var sb = new System.Text.StringBuilder("moto " + Player.Name + " (repere moto) : racine " + car.InverseTransformPoint(r.position).ToString("F2") + " yaw racine/moto " + Mathf.DeltaAngle(car.eulerAngles.y, r.eulerAngles.y).ToString("F0"));
+                if (motoSeat != null) sb.Append(" selle ").Append(car.InverseTransformPoint(motoSeat.bounds.center).ToString("F2")).Append(" taille ").Append(motoSeat.bounds.size.ToString("F2"));
+                if (motoThrottle != null) sb.Append(" gaz ").Append(car.InverseTransformPoint(motoThrottle.position).ToString("F2"));
+                if (motoClutch != null) sb.Append(" embr ").Append(car.InverseTransformPoint(motoClutch.position).ToString("F2"));
+                if (motoCrank != null) sb.Append(" kick ").Append(car.InverseTransformPoint(motoCrank.position).ToString("F2"));
+                foreach (string bn in new[] { "pelvis", "head", "hand_right", "hand_left", "knee_right", "ankle_right", "ankle_left" })
+                { Transform bt = Bone(bn); if (bt != null) sb.Append(' ').Append(bn).Append(car.InverseTransformPoint(bt.position).ToString("F2")); }
+                Log.Info(sb.ToString());
+            }
+        }
         // Essais : mains au volant (ecart main - prise), penche vers le volant, levier trouve.
         public string HandsState()
         {
@@ -903,7 +1027,10 @@ namespace MWCoop
         // tient, puis revient (0,7 s en tout). Visee : le milieu de ce qu'on voit de la commande, pas le pivot de son automate.
         public void ReachFor(Vector3 at)
         {
-            Transform sh = Bone("shoulder_right");
+            // Main du cote de la commande (passager a droite : tableau de bord a sa gauche -> main gauche ; avant : toujours
+            // la droite, bras en travers du corps).
+            reachRight = Root == null || Root.transform.InverseTransformPoint(at).x >= -0.08f;
+            Transform sh = Bone(reachRight ? "shoulder_right" : "shoulder_left");
             if (sh == null || (at - sh.position).sqrMagnitude > 1.2f * 1.2f) return;   // trop loin : pas lui
             reachAt = at;
             reachStart = Time.realtimeSinceStartup;
@@ -913,6 +1040,7 @@ namespace MWCoop
         public void ReachFor(Transform t)
         {
             if (t == null) return;
+            if (t.name == "Kickstart") { kickAt = Time.realtimeSinceStartup; return; }   // (Jonnez : le pied sur le kick, MotoPose)
             Vector3 at = t.position;
             Renderer best = null;
             foreach (Renderer r in t.GetComponentsInChildren<Renderer>())
@@ -922,6 +1050,7 @@ namespace MWCoop
             ReachFor(at);
         }
         float reachStart;
+        bool reachRight = true;
         static int pressLogs;
         void ReachPose()
         {
@@ -929,10 +1058,10 @@ namespace MWCoop
             if (e < 0f || e > 0.7f) { wReach = 0f; return; }
             float w = e < 0.18f ? e / 0.18f : e > 0.45f ? 1f - (e - 0.45f) / 0.25f : 1f;
             wReach = Mathf.Clamp01(w * w * (3f - 2f * w));
-            Transform sh = Bone("shoulder_right");
+            Transform sh = Bone(reachRight ? "shoulder_right" : "shoulder_left");
             Vector3 dir = sh != null ? (reachAt - sh.position).normalized : Root.transform.forward;
             float poke = e > 0.15f && e < 0.45f ? Mathf.Sin(Mathf.PI * (e - 0.15f) / 0.3f) * 0.04f : 0f;
-            if (wReach > 0.001f) ArmTo(true, reachAt + dir * (poke - 0.02f), wReach * Reachable(true, reachAt));
+            if (wReach > 0.001f) ArmTo(reachRight, reachAt + dir * (poke - 0.02f), wReach * Reachable(reachRight, reachAt));
         }
         // Bouche (devant et sous l'os de la tete) ; sens de la bouteille quand on boit : du cul vers le goulot, vers le
         // visage et vers le bas (le cul plus haut que le goulot).
@@ -1123,6 +1252,7 @@ namespace MWCoop
                 // Passager : la place fixe de la voiture locale, assis, la tete suit son regard.
                 inCar = true;
                 carName = pName;
+                vehicleT = pCar;
                 Root.transform.rotation = pCar.rotation;
                 leanOff = Vector3.zero;
                 pos = pCar.TransformPoint(pHead) - pCar.rotation * eyesRest;
@@ -1147,6 +1277,7 @@ namespace MWCoop
                 // tourner la tete), c'est le buste qui se penche, pas tout le corps qui glisse.
                 Root.transform.rotation = seatRot;
                 Transform carT = VehicleSync.RemoteCarTransform(pi.Id);
+                vehicleT = carT;
                 // (tete envoyee avec la voiture, repere voiture : exacte ; sinon celle de PlayerSync, decalee en roulant)
                 Vector3 sentHead;
                 bool exact = VehicleSync.RemoteHeadLocal(pi.Id, out sentHead);

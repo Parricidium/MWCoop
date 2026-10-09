@@ -91,7 +91,19 @@ namespace MWCoop
                 string n = VehicleSync.LocalKey(ci);
                 foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) driverZones.Add(new KeyValuePair<PlayMakerFSM, Transform>(f, rb.transform));
-                if (n.StartsWith("KEKMET") || n.StartsWith("JONNEZ") || n.StartsWith("FLATBED")) continue;   // une seule place
+                if (n.StartsWith("JONNEZ"))
+                {
+                    // Jonnez : une place derriere le conducteur, au bout de la selle (demande de JD, 10/10) ; rang 1 (pas de
+                    // ceinture). Zone serree : la moto est etroite.
+                    Transform jh = Find(rb.transform, "DriverHeadPivot");
+                    if (jh != null)
+                    {
+                        Vector3 jd = rb.transform.InverseTransformPoint(jh.position) + EyeFromPivot;
+                        seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(jd.x, jd.y + Config.GetFloat("Test", "JonnezLeve", 0.04f), jd.z - Config.GetFloat("Test", "JonnezRecul", 0.38f)), ZoneX = 0.45f, ZoneZ = 0.45f, MaxX = 0.6f });
+                    }
+                    continue;
+                }
+                if (n.StartsWith("KEKMET") || n.StartsWith("FLATBED")) continue;   // une seule place
                 foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) driveTriggers.Add(f);
                 Transform dhp = Find(rb.transform, "DriverHeadPivot");
