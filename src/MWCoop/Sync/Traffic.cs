@@ -72,6 +72,7 @@ namespace MWCoop
             built = false; verified = false; remap = null; hostKeys = null; hostKeysGot = 0; nextAsk = 0;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 6f : -1;
             Police.OnLevelLoaded();
+            Contenu.OnLevelLoaded();
             Bus.OnLevelLoaded();
         }
 
@@ -155,6 +156,7 @@ namespace MWCoop
         {
             if (!Session.Active || !PlayerSync.InGame) return;
             Police.Update();
+            Contenu.Update();
             UpdateTraffic();
             Bus.Update();   // apres le suivi : la copie du bus est a sa place de cette image
         }
@@ -475,6 +477,7 @@ namespace MWCoop
         {
             TestCamera();
             Police.Test(mode, t);
+            Contenu.Test(mode, t);
             Bus.Test(mode, t);
             if (mode == "choc") TestChoc(t);
             if (mode == "frontal") TestFrontal(t);
