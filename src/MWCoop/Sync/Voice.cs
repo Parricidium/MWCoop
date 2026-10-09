@@ -137,7 +137,7 @@ namespace MWCoop
             s.Src.minDistance = 1.5f;
             s.Src.maxDistance = Config.GetFloat("Coop", "VocalPortee", 35f);
             s.Src.dopplerLevel = 0f;
-            s.Src.volume = Mathf.Clamp01(Config.GetFloat("Coop", "VocalVolume", 1f));
+            s.Src.volume = Mathf.Clamp01(Config.GetFloat("Coop", "VolumeVocal", 100f) / 100f);   // (lanceur : Options du jeu > Coop)
             s.Src.Play();
             speakers[id] = s;
             Log.Info("vocal : voix de #" + id + " ecoutee (portee " + s.Src.maxDistance + " m)");

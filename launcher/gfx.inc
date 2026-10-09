@@ -10,8 +10,10 @@ struct GfxRow
     std::vector<int> vals;                     // vide : interrupteur 0/1
     std::vector<const wchar_t *> lf, le;       // noms des valeurs (vals)
     int impact;                                // sur les images par seconde : 0 aucun, 1 leger, 2 moyen, 3 fort
-    int group;                                 // 0 Image, 1 Ombres, 2 Distance et details, 3 Jeu et confort, 4 Lumieres, 5 Ecran
+    int group;                                 // 0 Image, 1 Ombres, 2 Distance et details, 3 Jeu et confort, 4 Lumieres, 5 Ecran, 6 Coop
+    const char *sec;                           // section du mwcoop.ini (absente : Graphismes)
 };
+// Options du mod gardees dans [Coop] (demande de JD, 10/10 : « une section pour ces options du .ini ») : categorie Coop.
 static const std::vector<GfxRow> &GfxRows()
 {
     static std::vector<GfxRow> rows;
@@ -52,6 +54,14 @@ static const std::vector<GfxRow> &GfxRows()
         { "TracesTrafic", L"Traces de pneus de la circulation", L"Traffic skid marks", 0, {}, {}, {}, 1, 3 },
         { "Pseudos", L"Pseudos des joueurs", L"Player names", 120, { 0, 30, 60, 120, 250 },
           { L"Cachés", L"30 m", L"60 m", L"120 m", L"250 m" }, { L"Hidden", L"30 m", L"60 m", L"120 m", L"250 m" }, 0, 3 },
+        { "Vocal", L"Vocal de proximité (touche V)", L"Proximity voice (V key)", 1, {}, {}, {}, 0, 6, "Coop" },
+        { "VocalPortee", L"Portée de la voix", L"Voice range", 35, { 15, 25, 35, 50, 80 },
+          { L"15 m", L"25 m", L"35 m", L"50 m", L"80 m" }, { L"15 m", L"25 m", L"35 m", L"50 m", L"80 m" }, 0, 6, "Coop" },
+        { "VolumeVocal", L"Volume des voix", L"Voice volume", 100, { 25, 50, 75, 100 },
+          { L"25 %", L"50 %", L"75 %", L"100 %" }, { L"25 %", L"50 %", L"75 %", L"100 %" }, 0, 6, "Coop" },
+        { "VisagePerso", L"Montrer mon visage importé", L"Show my imported face", 1, {}, {}, {}, 0, 6, "Coop" },
+        { "VoirVisages", L"Voir les visages importés des autres", L"See the others' imported faces", 1, {}, {}, {}, 0, 6, "Coop" },
+        { "ArgentDepart", L"Nouvel invité : argent de départ (hôte)", L"New guest: starting money (host)", 1, {}, {}, {}, 0, 6, "Coop" },
     };
     // Ecran (comme les GTA, a la place de la petite fenetre Unity) : resolutions de l'ecran principal (Windows),
     // mode d'affichage, niveau de qualite du moteur. Appliques par le mod au demarrage du jeu (MWCoop\Gfx.cs).
@@ -107,7 +117,7 @@ static void GfxLoad()
     std::wstring ini = ModIni();
     for (const GfxRow &r : GfxRows()) {
         wchar_t b[32] = {};
-        GetPrivateProfileStringW(L"Graphismes", Widen(r.key).c_str(), L"", b, 32, ini.c_str());
+        GetPrivateProfileStringW(r.sec ? Widen(r.sec).c_str() : L"Graphismes", Widen(r.key).c_str(), L"", b, 32, ini.c_str());
         g_gfxVal[r.key] = b[0] ? _wtoi(b) : r.def;
     }
     g_gfxReadT = GetTickCount();
@@ -117,7 +127,9 @@ static void GfxSet(const char *k, int v)
 {
     g_gfxVal[k] = v;
     std::wstring s = std::to_wstring(v);
-    WritePrivateProfileStringW(L"Graphismes", Widen(k).c_str(), v == -1 ? NULL : s.c_str(), ModIni().c_str());   // (-1 : la cle est retiree, le jeu decide)
+    std::wstring sec = L"Graphismes";
+    for (const GfxRow &r : GfxRows()) if (!strcmp(r.key, k) && r.sec) sec = Widen(r.sec);
+    WritePrivateProfileStringW(sec.c_str(), Widen(k).c_str(), v == -1 ? NULL : s.c_str(), ModIni().c_str());   // (-1 : la cle est retiree, le jeu decide)
 }
 static int GfxPresetOn()
 {
@@ -134,8 +146,8 @@ static const RectF kGfxTop(264, 88, 1000, 84), kGfxArea(264, 184, 1000, 560);
 static const float kGfxRowH = 27, kGfxHeadH = 44;
 // Categories (demande de JD, 08/10) : en-tetes repliables comme les journaux, reglages sur deux colonnes dessous ;
 // ascenseur quand tout ne tient pas. Deplies : [Lanceur] GfxOuverts (numeros de groupe ; toutes par defaut).
-static const int kGfxOrder[] = { 5, 0, 1, 4, 2, 3 };
-static bool g_gfxOpen[6] = { true, true, true, true, true, true };
+static const int kGfxOrder[] = { 6, 5, 0, 1, 4, 2, 3 };
+static bool g_gfxOpen[7] = { true, true, true, true, true, true, true };
 static bool g_gfxOpenRead;
 static float g_gfxContentH;
 static bool g_gfxZones = true;   // (ligne hors de la zone visible : pas de zone cliquable)
@@ -146,14 +158,14 @@ static void GfxOpenRead()
     wchar_t b[64] = {};
     GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts", L"*", b, 64, g_iniLauncher.c_str());
     if (!wcscmp(b, L"*")) return;
-    for (int i = 0; i < 6; i++) g_gfxOpen[i] = wcschr(b, L'0' + i) != NULL;
+    for (int i = 0; i < 7; i++) g_gfxOpen[i] = wcschr(b, L'0' + i) != NULL;
 }
 static void GfxToggleGroup(int gi)
 {
-    if (gi < 0 || gi >= 6) return;
+    if (gi < 0 || gi >= 7) return;
     g_gfxOpen[gi] = !g_gfxOpen[gi];
     std::wstring s;
-    for (int i = 0; i < 6; i++) if (g_gfxOpen[i]) { if (!s.empty()) s += L","; s += (wchar_t)(L'0' + i); }
+    for (int i = 0; i < 7; i++) if (g_gfxOpen[i]) { if (!s.empty()) s += L","; s += (wchar_t)(L'0' + i); }
     WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
 }
 static float GfxMaxScroll() { return max(0.0f, g_gfxContentH - (kGfxArea.Height - 20)); }
@@ -202,8 +214,8 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
 // 'y' : position dans le contenu (avant defilement) ; dessine seulement ce qui croise la zone visible.
 static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, float top, float bottom)
 {
-    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et détails", L"Jeu et confort", L"Lumières", L"Écran" };
-    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and detail", L"Game and comfort", L"Lights", L"Screen" };
+    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et détails", L"Jeu et confort", L"Lumières", L"Écran", L"Coop : joueurs" };
+    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and detail", L"Game and comfort", L"Lights", L"Screen", L"Co-op: players" };
     const auto &rows = GfxRows();
     std::vector<int> mine;
     for (int i = 0; i < (int)rows.size(); i++) if (rows[i].group == group) mine.push_back(i);

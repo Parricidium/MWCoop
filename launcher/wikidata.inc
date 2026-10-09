@@ -106,7 +106,7 @@ static const WikiBlock kW_Tour[] = {
     { WB_B, L"Salon : les joueurs, PRÊT et LANCER, l'engrenage des options.", L"Lobby: the players, READY and START, the options gear." },
     { WB_B, L"Tenue et Voiture : ce que les autres voient de toi.", L"Outfit and Car: what the others see of you." },
     { WB_B, L"Contenu envoyé et Mods : ce que tu partages avec tes invités.", L"Sent content and Mods: what you share with your guests." },
-    { WB_B, L"Graphismes : tes réglages d'image, pour toi seul.", L"Graphics: your picture settings, just for you." },
+    { WB_B, L"Options du jeu : tes réglages d'image et les options de la coop (vocal, visages…), pour toi seul.", L"Game options: your picture settings and the co-op options (voice, faces…), just for you." },
     { WB_B, L"Nouveautés, Guide (ici), Réglages.", L"What's new, Guide (here), Settings." },
     { WB_TIP, L"La visite du premier démarrage se revoit dans Réglages > Revoir le guide de démarrage.", L"The first-start tour can be seen again in Settings > See the starting guide again." },
     { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
@@ -303,10 +303,12 @@ static const WikiBlock kW_Look[] = {
     { WB_H, L"Voiture", L"Car" },
     { WB_P, L"La couleur de la CORRIS pour une NOUVELLE partie (la couleur de l'hôte est donnée aux invités).", L"The CORRIS color for a NEW game (the host's color is given to the guests)." },
     { WB_GO, L"Ouvrir Voiture", L"Open Car", TAB_CAR },
-    { WB_H, L"Graphismes", L"Graphics" },
+    { WB_H, L"Options du jeu", L"Game options" },
     { WB_P, L"Préréglages (Performance, Équilibré, Joli, Ultra) et réglages par catégorie : image, ombres, distance, confort (champ de vision, pseudos des joueurs), lumières, écran. Pour toi seul : les autres ne voient aucune différence.",
             L"Presets (Performance, Balanced, Pretty, Ultra) and settings by category: picture, shadows, distance, comfort (field of view, player names), lights, screen. Just for you: the others see no difference." },
-    { WB_GO, L"Ouvrir Graphismes", L"Open Graphics", TAB_GFX },
+    { WB_P, L"La catégorie « Coop : joueurs » regroupe les options de la coop : vocal (oui ou non, portée, volume), ton visage importé, les visages des autres, l'argent de départ des nouveaux invités (hôte).",
+            L"The \"Co-op: players\" category holds the co-op options: voice (on or off, range, volume), your imported face, the others' faces, the new guests' starting money (host)." },
+    { WB_GO, L"Ouvrir Options du jeu", L"Open Game options", TAB_GFX },
 };
 
 // ---- Problemes et solutions
