@@ -64,6 +64,7 @@ namespace MWCoop
             public Rigidbody Body;
             public PlayMakerFSM Drive;
             public int RemoteDriver = -1;       // joueur qui la conduit chez lui (-1 : personne)
+            public Vector3 RemoteHead;          // sa camera, repere de la voiture (envoyee avec la voiture : meme instant)
             public int RemoteBy = -1;           // joueur qui la fait avancer et tourner chez lui (conducteur ou moteur laisse tournant)
             public bool DtWas, AxisWas; public bool[] WheelsWas;
             public Dictionary<Joint, Vector2> JointsWas;   // attaches rendues incassables sur la copie
@@ -137,13 +138,14 @@ namespace MWCoop
         static int generation;
         static FsmString curVehicle;
         public static int LocalDriving = -1;    // rang local de la voiture conduite ici
+        public static string LocalDrivingKey { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].Key : null; } }
         static int owned = -1, ownedTick;        // voiture quittee moteur tournant : on en garde la main
         // Voiture garee poussee par le joueur local (main "Hand Push") : on en prend la main (owned) tant qu'on pousse et
         // qu'elle roule encore (8 s au plus apres la poussee), puis on la rend. Avant : seul l'hote pouvait pousser ; chez
         // un invite, l'hote la recalait toutes les 2 s (voiture qui se teleporte en arriere ; retour d'un joueur, 08/10).
         static int pushCar = -1;
         static float nextKeyLook;
-        static float pushUntil;
+        static float pushUntil, nextMoveLook;
         // Remorques attelees (FLATBED au KEKMET...) : un joint relie deux voitures (hors cordes de Tow). Celui qui conduit
         // le vehicule de tete envoie la remorque 10 fois/s (etat 2) : ailleurs elle suit en copie, l'hote ne la recale
         // plus. Avant : l'hote la recalait toutes les 2 s alors qu'elle etait attelee au tracteur d'un invite (a-coups,
@@ -610,9 +612,14 @@ namespace MWCoop
         }
 
         // Poussee : la voiture la plus proche du joueur (a moins de 1,5 m de sa carrosserie), garee ici (pas une copie).
+        // Aussi sans le geste de poussee : un vehicule gare qui bouge a cote du joueur (mobylette soulevee ou tiree a la main,
+        // retour d'un joueur, 09/10 : « je deplace la Jonnez, je monte dessus, elle revient a sa place ») -- c'est nous qui le
+        // bougeons, les autres suivent ; sa derniere pose part quand il s'arrete (Release).
         static void PushTick(float now)
         {
-            if (!Gestures.Pushing) return;
+            bool gesture = Gestures.Pushing;
+            if (!gesture && now < nextMoveLook) return;
+            if (!gesture) nextMoveLook = now + 0.25f;
             GameObject pl = GameObject.Find("PLAYER");
             if (pl == null) return;
             Vector3 p = pl.transform.position + Vector3.up * 0.8f;
@@ -621,6 +628,7 @@ namespace MWCoop
             foreach (Car c in cars)
             {
                 if (c.Body == null || c.Kinematic || !c.Body.gameObject.activeInHierarchy) continue;
+                if (!gesture && (c.Body.velocity.sqrMagnitude < 0.16f || c.RemoteBy >= 0)) continue;   // (sans geste : seulement ce qui bouge, a personne)
                 float d = (c.Body.ClosestPointOnBounds(p) - p).sqrMagnitude;
                 if (d < bd) { bd = d; best = c; }
             }
@@ -1278,16 +1286,20 @@ namespace MWCoop
                 float rpm = testRpm >= 0f ? testRpm : c.Dt != null ? c.Dt.rpm : ModFloat(c.ModDt, c.ModRpm);
                 float thr = testRpm >= 0f ? testThr : c.Dt != null ? c.Dt.throttle : 0f;
                 int mask = 0;
-                for (int i = 0; i < c.SoundObjs.Length; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;
+                for (int i = 0; i < c.SoundObjs.Length && i < 14; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;   // (14 au plus : 0x4000 klaxon, 0x8000 moteur)
                 if ((c.Starter != null && c.Starter.ActiveStateName == "Running") || testRpm > 0f || ModBool(c.ModDt, c.ModRun)) mask |= 0x8000;   // (essais : faux moteur en marche)
                 if ((c.Horn != null && c.Horn.activeInHierarchy) || testHorn) mask |= 0x4000;
                 w.F32(rpm).F32(thr).F32(float.IsNaN(testSteer) ? SteerOf(c) : testSteer).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
-                for (int i = 0; i < c.SoundObjs.Length; i++)
+                for (int i = 0; i < c.SoundObjs.Length && i < 14; i++)
                     if ((mask & (1 << i)) != 0)
                     {
                         AudioSource a = c.SoundObjs[i].GetComponent<AudioSource>();
                         w.F32(a.pitch).F32(a.volume);
                     }
+                // Conducteur : sa camera dans le repere de la voiture, au meme instant que la voiture (la tete de PlayerSync
+                // arrive par un autre message : en accelerant, l'ecart d'appariement penchait l'avatar hors du siege,
+                // retour d'un joueur, 09/10 : « le conducteur bugue quand la voiture accelere »).
+                if (mode == 1) { Transform cam = PlayerSync.LocalCamera; w.Vec(cam != null ? c.Body.transform.InverseTransformPoint(cam.position) : Vector3.zero); }
             }
             Session.SendAll(w, false);
         }
@@ -1375,6 +1387,14 @@ namespace MWCoop
             return 0f;
         }
 
+        // Camera du conducteur 'player' dans le repere de sa voiture (envoyee avec elle) ; faux si inconnue.
+        public static bool RemoteHeadLocal(int player, out Vector3 head)
+        {
+            foreach (Car c in cars) if (c.RemoteDriver == player && c.RemoteHead != Vector3.zero) { head = c.RemoteHead; return true; }
+            head = Vector3.zero;
+            return false;
+        }
+
         public static bool SeatPose(int player, Vector3 feet, out Vector3 pos, out Quaternion rot)
         {
             foreach (Car c in cars)
@@ -1435,10 +1455,11 @@ namespace MWCoop
                 rpm = r.F32(); thr = r.F32(); steer = r.F32(); heat = r.F32(); smask = r.U16();
                 for (int i = 0; i < 14; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
             }
+            Vector3 dhead = mode == 1 && r.More ? r.Vec() : Vector3.zero;
             if (Session.IsHost)
             {
                 var fw = new NetWriter(Msg.Vehicle).U8(who).U8(idx).U8(mode).Vec(pos).Quat(rot).Vec(vel).Vec(ang);
-                if (driven) { fw.F32(rpm).F32(thr).F32(steer).F32(heat).U16(smask); foreach (float v in spitch) fw.F32(v); }
+                if (driven) { fw.F32(rpm).F32(thr).F32(steer).F32(heat).U16(smask); foreach (float v in spitch) fw.F32(v); if (mode == 1) fw.Vec(dhead); }
                 Session.Broadcast(fw, false, who);
             }
             if (!scanned) return;
@@ -1451,6 +1472,7 @@ namespace MWCoop
             {
                 c.RemoteBy = who;
                 c.RemoteDriver = mode == 1 ? who : -1;
+                c.RemoteHead = dhead;
                 c.LastRemote = Time.realtimeSinceStartup;
                 c.Pos = pos; c.Rot = rot; c.Vel = vel; c.AngVel = ang;
                 c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask & 0x3FFF; c.RemoteHeat = heat;

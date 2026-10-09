@@ -64,6 +64,7 @@ namespace MWCoop
         static float crouchCheckAt = -1;
 
         public static bool Seated { get { return current != null; } }
+        public static string SeatedCarKey { get { return current != null ? current.Car : null; } }   // (cle VehicleSync de la voiture)
         // Voiture ou le joueur local est assis en passager (null : aucune).
         public static Transform SeatedCar { get { return current != null ? current.CarT : null; } }
 

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -1136,7 +1136,10 @@ namespace MWCoop
                 // tourner la tete), c'est le buste qui se penche, pas tout le corps qui glisse.
                 Root.transform.rotation = seatRot;
                 Transform carT = VehicleSync.RemoteCarTransform(pi.Id);
-                Vector3 headLocal = carT != null ? carT.InverseTransformPoint(seatPos) : Vector3.zero;
+                // (tete envoyee avec la voiture, repere voiture : exacte ; sinon celle de PlayerSync, decalee en roulant)
+                Vector3 sentHead;
+                bool exact = VehicleSync.RemoteHeadLocal(pi.Id, out sentHead);
+                Vector3 headLocal = exact ? sentHead : carT != null ? carT.InverseTransformPoint(seatPos) : Vector3.zero;
                 // Ancre : la place du conducteur de la voiture (DriverHeadPivot), plus le premier echantillon de la tete --
                 // la tete (PlayerSync) et la voiture (VehicleSync) arrivent par deux messages pas synchronises : a 90 km/h
                 // l'ecart d'appariement fait plus d'un metre, l'ancre prise dessus decalait tout le corps (avatar qui
@@ -1150,9 +1153,11 @@ namespace MWCoop
                 }
                 Vector3 off = headLocal - seatAnchor;
                 float speed = VehicleSync.RemoteSpeed(pi.Id);
-                float maxLean = Mathf.Lerp(0.6f, 0f, (speed - 2f) / 9f);
+                float maxLean = exact ? 0.45f : Mathf.Lerp(0.6f, 0f, (speed - 2f) / 9f);
                 leanSmooth = Vector3.Lerp(leanSmooth, Vector3.ClampMagnitude(off, maxLean), Time.deltaTime * 6f);
                 leanOff = leanSmooth;
+                if (Config.GetInt("Test", "SuivreConducteur", 0) != 0 && Time.frameCount % 30 == 0)
+                    Log.Info("autotest : conducteur " + Player.Name + " penche " + leanSmooth.magnitude.ToString("F2") + " m (ecart " + off.magnitude.ToString("F2") + ", ancien calcul " + (carT != null ? (carT.InverseTransformPoint(seatPos) - seatAnchor).magnitude.ToString("F2") : "?") + ", " + (exact ? "tete envoyee avec la voiture" : "tete de PlayerSync") + ", " + (speed * 3.6f).ToString("F0") + " km/h)");
                 Vector3 anchorWorld = carT != null ? carT.TransformPoint(seatAnchor) : seatPos;
                 pos = anchorWorld - seatRot * eyesRest;
                 yaw = seatRot.eulerAngles.y;
