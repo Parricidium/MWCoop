@@ -20,7 +20,7 @@ namespace MWCoop
             if (!PlayerSync.InGame || !Session.Active) { Open = false; return; }
             if (Menu.Open || Menu.ChatOpen) return;
             if (Open && Input.GetKeyDown(KeyCode.Escape)) { Open = false; return; }
-            if (Input.GetKeyDown(Keys.Wallet)) { Open = !Open; if (Open) { openedAt = Time.realtimeSinceStartup; note = null; } }
+            if (Input.GetKeyDown(Keys.Wallet)) { Open = !Open; if (Open) { openedAt = Time.realtimeSinceStartup; note = null; CheatPanel.Open = false; } }
         }
 
         static void Note(string s, bool bad) { note = s; noteBad = bad; noteUntil = Time.realtimeSinceStartup + 4f; }

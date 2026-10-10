@@ -1511,6 +1511,8 @@ namespace MWCoop
                 case "@client": TaxiCustomer.OnRemote(who, r.Str()); break;
                 case "@don": { int to = r.U8(); Wallet.OnGift(who, to, r.I32()); break; }
                 case "@visage?": CustomFace.OnAsk(who, r.Str()); break;
+                case "@triches": if (!Session.IsHost) Cheats.OnAllowed(r.Bool()); break;
+                case "@triche": Cheats.OnRemote(who, r.Str()); break;
                 case "@visagep": { string h = r.Str(); int i = r.U16(), n = r.U16(); CustomFace.OnPart(who, h, i, n, r.Bytes()); break; }
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;

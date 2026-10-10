@@ -62,6 +62,8 @@ static const TutoStep kTuto[] = {
       L"Car trim", L"In Car: besides the color, the CORRIS trim (L, LX, SLX, GT) for a new game. The host gives it to their guests.", "0.69.1" },
     { L"Options du jeu", L"Graphismes et options de la coop rangées par type : Voix, Visages, Partie et partage (fichiers de l'hôte, argent de départ), Touches. Les groupes de cette barre se plient d'un clic sur leur titre.",
       L"Game options", L"Graphics and co-op options sorted by type: Voice, Faces, Game and sharing (host's files, starting money), Keys. The groups of this bar fold with a click on their title.", "0.70.0" },
+    { L"Triches", L"L'hôte peut autoriser les triches (Options du jeu > Partie et partage). En jeu : panneau (F7, réglable dans Touches) ou commandes du tchat (/aide) : aller à un joueur, lieux, argent, soin, heure, neige. Chaque triche est annoncée à tous.",
+      L"Cheats", L"The host can allow cheats (Game options > Game and sharing). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.", "0.72.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -98,6 +100,7 @@ static RectF TutoTarget(int i)
     case 24: return g_faceRect;
     case 25: return g_trimRect;
     case 26: return g_navR[TAB_GFX];
+    case 27: return g_navR[TAB_GFX];
     }
     return RectF(0, 0, 0, 0);
 }

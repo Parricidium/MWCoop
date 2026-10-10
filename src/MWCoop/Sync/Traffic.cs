@@ -488,6 +488,7 @@ namespace MWCoop
             TestCamera();
             Police.Test(mode, t);
             Contenu.Test(mode, t);
+            CheatsProbe.Test(mode, t);
             Bus.Test(mode, t);
             if (mode == "choc") TestChoc(t);
             if (mode == "frontal") TestFrontal(t);
