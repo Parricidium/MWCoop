@@ -381,7 +381,7 @@ namespace MWCoop
             car.WheelRot = new float[car.Wheels.Length];
             var snd = new List<GameObject>();
             foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
-                if (t.name == "Sounds")
+                if (t.name == "Sounds" || t.name.StartsWith("AudioEngine"))   // (GIFU : LOD/AudioEngineGifu -- Coast, Low, Med, High : son moteur muet chez les autres, retour d'un joueur, 10/10)
                     foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 14) snd.Add(s.gameObject);   // (bits 14-15 : klaxon, moteur en marche)
             car.SoundObjs = snd.ToArray();
             car.SoundObjsWas = new bool[snd.Count];
@@ -511,8 +511,36 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- boucle
+        // Limiteur de regime (retour de joueurs, 10/10 : « au point mort, en accelerant, le regime de la SORBET monte sans
+        // fin : le jeu plante en solo, la voiture se coupe en coop » -- coupee par le garde-fou des valeurs non finies) :
+        // la voiture conduite ici, en solo comme en coop, ne depasse pas son regime maximal (Drivetrain.maxRPM) de plus de
+        // 1500 tr/min -- ramenee a ce maximum, le moteur continue de tourner.
+        static Drivetrain limitDt; static Transform limitFrom; static System.Reflection.FieldInfo maxRpmField; static float limitLogAt;
+        public static void RevLimiter()
+        {
+            if (!PlayerSync.InGame) return;
+            Transform pl = Game.PlayerT;
+            if (pl == null) return;
+            Transform par = pl.parent;
+            if (par != limitFrom)
+            {
+                limitFrom = par; limitDt = par != null ? par.GetComponentInParent<Drivetrain>() : null;
+                if (limitDt != null) Log.Info("voitures : limiteur de regime sur " + limitDt.name);
+            }
+            if (limitDt == null) return;
+            if (maxRpmField == null) maxRpmField = typeof(Drivetrain).GetField("maxRPM");
+            float max = maxRpmField != null ? (float)maxRpmField.GetValue(limitDt) : 7000f;
+            if (max < 1000f || !Finite(max)) max = 7000f;
+            if (Config.GetInt("Test", "RegimeFou", 0) != 0 && Time.frameCount % 600 == 0) limitDt.rpm = 250000f;   // (essais : regime emballe force)
+            float rpm = limitDt.rpm;
+            if (Finite(rpm) && rpm <= max + 1500f) return;
+            limitDt.rpm = Finite(rpm) ? max : 800f;
+            if (Time.realtimeSinceStartup >= limitLogAt) { limitLogAt = Time.realtimeSinceStartup + 5f; Log.Warn("voitures : regime emballe (" + rpm.ToString("F0") + " tr/min) ramene a " + limitDt.rpm.ToString("F0") + " (" + limitDt.name + ")"); }
+        }
+
         public static void Update()
         {
+            RevLimiter();
             if (!Session.Active || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             Sanitize();
@@ -879,6 +907,9 @@ namespace MWCoop
                 if (on) c.SoundObjsWas[i] = c.SoundObjs[i].activeSelf;
                 else c.SoundObjs[i].SetActive(c.SoundObjsWas[i]);
                 foreach (PlayMakerFSM f in c.SoundObjs[i].GetComponents<PlayMakerFSM>()) f.enabled = !on;
+                // (GIFU : ses automates de son sont sur AudioEngineGifu, le parent des sources)
+                Transform par = c.SoundObjs[i].transform.parent;
+                if (par != null && par.name.StartsWith("AudioEngine")) foreach (PlayMakerFSM f in par.GetComponents<PlayMakerFSM>()) f.enabled = !on;
             }
             if (on) { c.WheelsWas = new bool[c.Wheels.Length]; for (int i = 0; i < c.Wheels.Length; i++) if (c.Wheels[i] != null) { c.WheelsWas[i] = c.Wheels[i].enabled; c.Wheels[i].enabled = false; } }
             else for (int i = 0; i < c.Wheels.Length; i++) if (c.Wheels[i] != null) c.Wheels[i].enabled = c.WheelsWas == null || c.WheelsWas[i];

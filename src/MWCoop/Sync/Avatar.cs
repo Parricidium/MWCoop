@@ -1027,7 +1027,27 @@ namespace MWCoop
         // adapte les jambes ») : le bassin pose au-dessus du dessus de l'assise (collisionneur Colliders/Cabin/Seats le plus
         // proche, le plus bas des deux : assise, pas dossier), contre le dossier ; tout le squelette deplace (comme la
         // Jonnez, hors de l'ancrage aux yeux), les pieds laisses au plancher (jambes refaites). Conducteur et passager avant.
-        Transform seatCar; readonly List<Collider> seatCols = new List<Collider>();
+        Transform seatCar; readonly List<Collider> seatCols = new List<Collider>(); readonly List<Bounds> seatBox = new List<Bounds>();
+
+        // Boite d'un collisionneur dans le repere du vehicule, d'apres sa forme (pas c.bounds : boite alignee sur le MONDE,
+        // qui grandit quand le vehicule tourne -- l'assise semblait monter et reculer selon le cap, l'avatar glissait sur
+        // son siege en roulant ; retour d'un joueur, 10/10).
+        static Bounds LocalBox(Collider c, Transform car)
+        {
+            Bounds lb; bool ok = true;
+            BoxCollider bc = c as BoxCollider; MeshCollider mc = c as MeshCollider;
+            if (bc != null) lb = new Bounds(bc.center, bc.size);
+            else if (mc != null && mc.sharedMesh != null) lb = mc.sharedMesh.bounds;
+            else { lb = new Bounds(); ok = false; }
+            if (!ok) { Bounds w = c.bounds; Bounds r = new Bounds(car.InverseTransformPoint(w.center), Vector3.zero); r.Encapsulate(car.InverseTransformPoint(w.min)); r.Encapsulate(car.InverseTransformPoint(w.max)); return r; }
+            Bounds res = new Bounds(car.InverseTransformPoint(c.transform.TransformPoint(lb.center)), Vector3.zero);
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 p = new Vector3((i & 1) != 0 ? lb.max.x : lb.min.x, (i & 2) != 0 ? lb.max.y : lb.min.y, (i & 4) != 0 ? lb.max.z : lb.min.z);
+                res.Encapsulate(car.InverseTransformPoint(c.transform.TransformPoint(p)));
+            }
+            return res;
+        }
         void SeatFit(bool rear)
         {
             if (carName == null || !carName.StartsWith("GIFU") || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
@@ -1037,22 +1057,21 @@ namespace MWCoop
             if (pelvis == null) return;
             if (seatCar != car)
             {
-                seatCar = car; seatCols.Clear();
-                foreach (Collider c in car.GetComponentsInChildren<Collider>(true)) if (!c.isTrigger && c.name == "Seats") seatCols.Add(c);
+                seatCar = car; seatCols.Clear(); seatBox.Clear();
+                foreach (Collider c in car.GetComponentsInChildren<Collider>(true)) if (!c.isTrigger && c.name == "Seats") { seatCols.Add(c); seatBox.Add(LocalBox(c, car)); }
             }
             Vector3 pl = car.InverseTransformPoint(pelvis.position);
-            Collider cushion = null; float best = float.MaxValue;
-            foreach (Collider c in seatCols)
+            int cushion = -1; float best = float.MaxValue;
+            for (int i = 0; i < seatCols.Count; i++)
             {
-                if (c == null) continue;
-                Vector3 cc = car.InverseTransformPoint(c.bounds.center);
+                if (seatCols[i] == null) continue;
+                Vector3 cc = seatBox[i].center;
                 if (Mathf.Abs(cc.x - pl.x) > 0.5f) continue;
                 float score = cc.y;   // (l'assise : la plus basse des deux pieces de ce cote)
-                if (score < best) { best = score; cushion = c; }
+                if (score < best) { best = score; cushion = i; }
             }
-            if (cushion == null) return;
-            Vector3 a = car.InverseTransformPoint(cushion.bounds.min), b = car.InverseTransformPoint(cushion.bounds.max);
-            float top = Mathf.Max(a.y, b.y), back = Mathf.Min(a.z, b.z);
+            if (cushion < 0) return;
+            float top = seatBox[cushion].max.y, back = seatBox[cushion].min.z;
             if (pl.z < back - 0.4f) return;   // (assis sur la couchette, derriere les sieges)
             Vector3 want = new Vector3(pl.x, top + Config.GetFloat("Test", "SiegeBassin", 0.02f), back + Config.GetFloat("Test", "SiegeRecul", 0.12f));
             Vector3 d = want - pl; d.x = 0f;
