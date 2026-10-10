@@ -79,6 +79,8 @@ namespace MWCoop
             Step("api", CoopApi.Update);
             Step("sauvegarde en jeu", Game.Update);
             Step("porte-monnaie", WalletPanel.Update);
+            Step("triches", Cheats.Update);
+            Step("panneau des triches", CheatPanel.Update);
             Step("vocal", Voice.Update);
             Step("visage perso", CustomFace.Update);
             Step("musiques (menu)", Contenu.MenuUpdate);
@@ -219,7 +221,7 @@ namespace MWCoop
             Perf.Begin();
             try
             {
-                Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); Respawn.Draw();
+                Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); Respawn.Draw();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }
             catch (System.Exception e) { Style.Alpha = 1f; Log.Error("hud : " + e); }

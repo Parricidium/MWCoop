@@ -14,9 +14,13 @@ namespace MWCoop
             if (History.Count > 30) History.RemoveAt(0);
         }
 
+        // Ligne du systeme (triches, aide) : dans l'historique et en bulle, pas envoyee.
+        public static void System(string line) { Add(line); }
+
         public static void Send(string text)
         {
             text = Session.Clean(text, 200);
+            if (text.StartsWith("/")) { Cheats.Command(text); return; }   // (commandes : Cheats)
             if (text.Length == 0 || !Session.Active) return;
             Add(Session.Me.Name + " : " + text);
             Session.SendAll(new NetWriter(Msg.Chat).U8(Session.LocalId).Str(text), true);

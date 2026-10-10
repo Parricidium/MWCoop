@@ -18,6 +18,7 @@ static const WikiKey kWikiKeys[] = {
     { L"T", L"Écrire aux autres joueurs (discussion) — touche réglable : Options du jeu > Touches", L"Write to the other players (chat) — key can be changed: Game options > Keys" },
     { L"N", L"Porte-monnaie : donner de l'argent à un autre joueur (touche réglable)", L"Wallet: give money to another player (key can be changed)" },
     { L"V (tenue)", L"Parler aux joueurs proches (vocal de Steam, la voix baisse avec la distance) — touche réglable", L"Talk to nearby players (Steam voice, fades with distance) — key can be changed" },
+    { L"F7", L"Panneau des triches, si l'hôte les autorise (touche réglable). Dans le tchat : /aide", L"Cheat panel, if the host allows cheats (key can be changed). In the chat: /help" },
     { L"Échap", L"Fermer le menu coop", L"Close the co-op menu" },
     { L"Tab · Q / E", L"Changer d'onglet dans le menu coop", L"Switch tabs in the co-op menu" },
     { L"Entrée", L"S'asseoir sur une place passager (près du siège)", L"Sit in a passenger seat (near the seat)" },
@@ -317,7 +318,14 @@ static const WikiBlock kW_Look[] = {
     { WB_B, L"Visages et habits : voir les visages et habits importés des autres.", L"Faces and clothes: see the others' imported faces and clothes." },
     { WB_B, L"Partie et partage : accepter les fichiers de l'hôte (mods, CD, images) sans demander ; argent de départ des nouveaux invités (hôte).",
             L"Game and sharing: accept the host's files (mods, CDs, images) without asking; new guests' starting money (host)." },
-    { WB_B, L"Touches : tchat, porte-monnaie, vocal. Clique sur une pastille puis appuie sur la touche voulue.", L"Keys: chat, wallet, voice. Click a pill then press the key you want." },
+    { WB_B, L"Touches : tchat, porte-monnaie, vocal, panneau des triches. Clique sur une pastille puis appuie sur la touche voulue.", L"Keys: chat, wallet, voice, cheat panel. Click a pill then press the key you want." },
+    { WB_H, L"Triches", L"Cheats" },
+    { WB_P, L"Coupées d'origine. L'hôte les autorise dans Partie et partage (« Autoriser les triches ») ; ses invités suivent son choix. Chaque triche est annoncée à tous dans le tchat.",
+            L"Off by default. The host allows them in Game and sharing (\"Allow cheats\"); their guests follow that choice. Every cheat is announced to everyone in the chat." },
+    { WB_B, L"Panneau (F7) ou tchat : /tp <joueur>, /amener <joueur>, /lieu <nom> (appartement, maison, pub, ville, port, garage, inspection, decharge, danse, cabane, chalet).",
+            L"Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin)." },
+    { WB_B, L"/argent <montant>, /soin (faim, soif, fatigue, stress… à zéro), /liberer (plus recherché, sorti de prison).", L"/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail)." },
+    { WB_B, L"Pour tous : /heure <0-24>, /neige oui|non (faits par l'hôte, le monde suit).", L"For everyone: /time <0-24>, /snow on|off (done by the host, the world follows)." },
     { WB_GO, L"Ouvrir Options du jeu", L"Open Game options", TAB_GFX },
 };
 

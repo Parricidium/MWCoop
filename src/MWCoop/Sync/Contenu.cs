@@ -283,7 +283,7 @@ namespace MWCoop
             return null;
         }
 
-        static string Dump(FsmState s)
+        public static string Dump(FsmState s)
         {
             var sb = new System.Text.StringBuilder(s.Name + " :");
             FsmStateAction[] acts = null;
