@@ -22,9 +22,13 @@ namespace MWCoop
             if (!PlayerSync.InGame) { Open = false; return; }
             if (Menu.Open || Menu.ChatOpen) return;
             if (Open && Input.GetKeyDown(KeyCode.Escape)) { Open = false; return; }
-            if (Input.GetKeyDown(Keys.Map))
+            // [Coop] CarteMaintenir=1 (lanceur) : ouverte tant que la touche est tenue ; sinon un appui ouvre, un autre ferme
+            bool hold = Config.GetInt("Coop", "CarteMaintenir", 0) != 0;
+            bool want = hold ? Input.GetKey(Keys.Map) : (Input.GetKeyDown(Keys.Map) ? !Open : Open);
+            if (hold && testHold) want = true;
+            if (want != Open)
             {
-                Open = !Open;
+                Open = want;
                 if (Open) { openedAt = Time.realtimeSinceStartup; WalletPanel.Open = false; CheatPanel.Open = false; CenterOnMe(); }
             }
             if (Open && Input.GetKeyDown(KeyCode.C)) CenterOnMe();
@@ -54,7 +58,7 @@ namespace MWCoop
             Style.Text(new Rect(panel.x + pad, panel.y + Style.Px(8), panel.width - 2 * pad, Style.Px(40)),
                        Lang.T("Molette : zoom · glisser : déplacer · C : moi · ", "Wheel: zoom · drag: move · C: me · ") + Keys.Label(Keys.Map) + Lang.T(" / Échap : fermer", " / Esc: close"), 14, TextAnchor.MiddleRight, Style.Dim, false);
             var view = new Rect(panel.x + pad, panel.y + Style.Px(52), panel.width - 2 * pad, panel.height - Style.Px(52) - pad);
-            Style.Round(view, Style.Px(12), new Color(0.08f, 0.1f, 0.14f, 0.95f));
+            // (hors de la carte : le verre du panneau, demande de JD)
             if (!MapRender.Ready)
             {
                 string pct = MapRender.Progress >= 0f ? " " + Mathf.FloorToInt(MapRender.Progress * 100f) + " %" : "";
@@ -170,6 +174,7 @@ namespace MWCoop
 
         // [Test] Autotest=carte : a [Test] CarteOuvre (90 s) la carte s'ouvre (zoom [Test] CarteZoom), capture a +2 s.
         static int testStep;
+        static bool testHold;
         public static void Test(string mode, float t)
         {
             if (mode != "carte") return;
