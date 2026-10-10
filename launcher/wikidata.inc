@@ -222,6 +222,8 @@ static const WikiBlock kW_Mods[] = {
     { WB_TIP, L"Envoyés : la DLL du mod, ses fichiers (Assets) et ses réglages. Les données de mods de la sauvegarde suivent avec la sauvegarde de l'hôte.",
               L"Sent: the mod's DLL, its files (Assets) and its settings. The mods' save data comes along with the host's save." },
     { WB_WARN, L"L'envoi de mods est expérimental : un mod qui n'est pas prévu pour le multijoueur peut se désynchroniser.", L"Mod sending is experimental: a mod not made for multiplayer can get out of sync." },
+    { WB_TIP, L"Rendus compatibles : Second Machtwagen (achat chez Fleetari, couleurs, plaque et préparation pareils chez tous ; seul l'acheteur paie).",
+              L"Made compatible: Second Machtwagen (purchase at Fleetari, colors, plate and tuning the same for everyone; only the buyer pays)." },
 };
 static const WikiBlock kW_Content[] = {
     { WB_P, L"Tes CD, ta radio, tes posters, ta peinture… Ce que tu mets dans ton jeu, tes invités le voient et l'entendent aussi.",

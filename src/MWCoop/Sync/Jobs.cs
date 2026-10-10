@@ -1513,6 +1513,7 @@ namespace MWCoop
                 case "@visage?": CustomFace.OnAsk(who, r.Str()); break;
                 case "@triches": if (!Session.IsHost) Cheats.OnAllowed(r.Bool()); break;
                 case "@triche": Cheats.OnRemote(who, r.Str()); break;
+                case "@mw2": ModSecondMachtwagen.OnMessage(who, r); break;
                 case "@visagep": { string h = r.Str(); int i = r.U16(), n = r.U16(); CustomFace.OnPart(who, h, i, n, r.Bytes()); break; }
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;

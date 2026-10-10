@@ -55,14 +55,47 @@ namespace MWCoop
             foreach (AudioSource a in ch)
             {
                 AudioClip c = a != null ? a.clip : null;
-                w.Str(c != null ? c.name : "").F32(c != null ? a.time : 0f).Bool(a != null && a.isPlaying);
+                w.Str(ClipKey(c)).F32(c != null ? a.time : 0f).Bool(a != null && a.isPlaying);
             }
             Session.Broadcast(w, false);
+        }
+
+        // Morceaux importes (dossier Radio : Toivoradio) : charges depuis les fichiers, SANS NOM -- l'hote envoyait un nom vide,
+        // et l'invite coupait le canal (retour d'un joueur, 10/10 : « la radio perso ne marche que pour l'hote »). Ils sont
+        // designes par leur rang dans la liste du jeu (Radio/Folk, ArrayList "Songs" : track1, track2... dans l'ordre, la
+        // meme chez l'invite qui a recu les fichiers de l'hote) : "#chanson:<rang>".
+        static string ClipKey(AudioClip c)
+        {
+            if (c == null) return "";
+            if (c.name.Length > 0) return c.name;
+            System.Collections.ArrayList songs = Songs();
+            int i = songs != null ? songs.IndexOf(c) : -1;
+            return i >= 0 ? "#chanson:" + i : "";
+        }
+
+        static System.Collections.ArrayList Songs()
+        {
+            GameObject folk = GameObject.Find("Radio/Folk");
+            if (folk == null) return null;
+            foreach (Component comp in folk.GetComponents<Component>())
+            {
+                if (comp == null || comp.GetType().Name != "PlayMakerArrayListProxy") continue;
+                var rn = comp.GetType().GetField("referenceName");
+                if (rn != null && (rn.GetValue(comp) as string) != "Songs") continue;
+                var al = comp.GetType().GetField("_arrayList", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                return al != null ? al.GetValue(comp) as System.Collections.ArrayList : null;
+            }
+            return null;
         }
 
         static AudioClip ClipNamed(string n)
         {
             AudioClip c;
+            if (n.StartsWith("#chanson:"))
+            {
+                int i; System.Collections.ArrayList songs = Songs();
+                return int.TryParse(n.Substring(9), out i) && songs != null && i >= 0 && i < songs.Count ? songs[i] as AudioClip : null;
+            }
             if (clips != null && clips.TryGetValue(n, out c) && c != null) return c;
             if (clips != null && Time.realtimeSinceStartup < nextClips) return null;
             nextClips = Time.realtimeSinceStartup + 5f;   // (morceaux du dossier Radio : charges en cours de partie)
@@ -91,7 +124,7 @@ namespace MWCoop
                 try
                 {
                     if (name.Length == 0) { if (a.isPlaying) a.Stop(); continue; }
-                    bool swap = a.clip == null || a.clip.name != name;
+                    bool swap = a.clip == null || ClipKey(a.clip) != name;
                     if (swap)
                     {
                         AudioClip c = ClipNamed(name);

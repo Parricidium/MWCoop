@@ -730,6 +730,7 @@ namespace MWCoop
                             if (b != null) b.rotation = Quaternion.AngleAxis(-sideS * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdS * 0.5f, Root.transform.right) * b.rotation;
                         }
                 }
+                if (!moto) SeatFit(passenger);
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
                 if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - motoRaise - Root.transform.position) + EyeOffset;   // (sans la remontee de la Jonnez : sinon l'ancrage la defait)
                 // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite). Avant les
@@ -742,6 +743,7 @@ namespace MWCoop
                     b.rotation = Quaternion.AngleAxis(-side * 0.5f, Root.transform.forward) * Quaternion.AngleAxis(fwdLean * 0.5f, Root.transform.right) * b.rotation;
                 }
                 if (!passenger && !moto) DriverHands();
+                if (!moto) SeatLog();
                 // Fumer, boire en voiture (demande de JD, 10/10) : comme a pied, la main va a la bouche -- gauche (cigarette)
                 // quand il tire, droite (boisson) tant qu'il boit -- depuis le volant ; un passage de vitesse prime sur la
                 // boisson (la main droite va au levier, wShift). Avant : les mains restaient au volant.
@@ -997,6 +999,75 @@ namespace MWCoop
                 Log.Info(sb.ToString());
             }
         }
+        // Assis sur l'assise du siege (demande de JD, 10/10, GIFU : « le corps enfonce dans le fauteuil, remonte-le et
+        // adapte les jambes ») : le bassin pose au-dessus du dessus de l'assise (collisionneur Colliders/Cabin/Seats le plus
+        // proche, le plus bas des deux : assise, pas dossier), contre le dossier ; tout le squelette deplace (comme la
+        // Jonnez, hors de l'ancrage aux yeux), les pieds laisses au plancher (jambes refaites). Conducteur et passager avant.
+        Transform seatCar; readonly List<Collider> seatCols = new List<Collider>();
+        void SeatFit(bool rear)
+        {
+            if (carName == null || !carName.StartsWith("GIFU") || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
+            if (passenger && Seats.RemoteSeatIndex(Player.Id) >= 1) return;   // (couchette : a part)
+            Transform car = vehicleT, pelvis = Bone("pelvis");
+            if (pelvis == null) return;
+            if (seatCar != car)
+            {
+                seatCar = car; seatCols.Clear();
+                foreach (Collider c in car.GetComponentsInChildren<Collider>(true)) if (!c.isTrigger && c.name == "Seats") seatCols.Add(c);
+            }
+            Vector3 pl = car.InverseTransformPoint(pelvis.position);
+            Collider cushion = null; float best = float.MaxValue;
+            foreach (Collider c in seatCols)
+            {
+                if (c == null) continue;
+                Vector3 cc = car.InverseTransformPoint(c.bounds.center);
+                if (Mathf.Abs(cc.x - pl.x) > 0.5f) continue;
+                float score = cc.y;   // (l'assise : la plus basse des deux pieces de ce cote)
+                if (score < best) { best = score; cushion = c; }
+            }
+            if (cushion == null) return;
+            Vector3 a = car.InverseTransformPoint(cushion.bounds.min), b = car.InverseTransformPoint(cushion.bounds.max);
+            float top = Mathf.Max(a.y, b.y), back = Mathf.Min(a.z, b.z);
+            Vector3 want = new Vector3(pl.x, top + Config.GetFloat("Test", "SiegeBassin", 0.12f), back + Config.GetFloat("Test", "SiegeRecul", 0.15f));
+            Vector3 d = want - pl; d.x = 0f;
+            if (d.sqrMagnitude > 0.25f) return;   // (plus de 50 cm : pas ce siege)
+            Transform ar = Bone("ankle_right"), al = Bone("ankle_left");
+            motoRaise = car.TransformVector(d);
+            anim.transform.position += motoRaise;
+            // pieds au plancher (juste sous le bas de l'assise), un peu devant le bassin : genoux plies
+            float floorY = Mathf.Min(a.y, b.y) + Config.GetFloat("Test", "SiegeCheville", 0.06f), footZ = want.z + Config.GetFloat("Test", "SiegePieds", 0.5f);
+            if (ar != null) { Vector3 l = car.InverseTransformPoint(ar.position); Leg("thig_right", "knee_right", "ankle_right", car.TransformPoint(new Vector3(l.x, floorY, footZ))); }
+            if (al != null) { Vector3 l = car.InverseTransformPoint(al.position); Leg("thig_left", "knee_left", "ankle_left", car.TransformPoint(new Vector3(l.x, floorY, footZ))); }
+        }
+
+        // [Test] JournalSiege=1 : os de l'avatar assis et sieges du vehicule, dans le repere du vehicule, toutes les 3 s.
+        float seatLog;
+        void SeatLog()
+        {
+            if (Time.realtimeSinceStartup < seatLog || Config.GetInt("Test", "JournalSiege", 0) == 0 || vehicleT == null) return;
+            seatLog = Time.realtimeSinceStartup + 3f;
+            Transform car = vehicleT;
+            var sb = new System.Text.StringBuilder("siege " + Player.Name + " dans " + carName + " :");
+            foreach (string bn in new[] { "pelvis", "thig_right", "knee_right", "ankle_right", "spine_upper", "head" })
+            { Transform bt = Bone(bn); if (bt != null) sb.Append(' ').Append(bn).Append(car.InverseTransformPoint(bt.position).ToString("F2")); }
+            Vector3 dh; if (Seats.DriverHead(car, out dh)) sb.Append(" tete-conducteur").Append(dh.ToString("F2"));
+            foreach (Renderer r in car.GetComponentsInChildren<Renderer>())
+            {
+                string n = r.name.ToLowerInvariant();
+                if (!n.Contains("seat") && !n.Contains("chair") && !n.Contains("pedal")) continue;
+                Bounds bb = r.bounds;
+                sb.Append(" | ").Append(r.name).Append(" centre").Append(car.InverseTransformPoint(bb.center).ToString("F2")).Append(" haut ").Append(car.InverseTransformPoint(bb.center + Vector3.up * bb.extents.y).y.ToString("F2"));
+            }
+            foreach (Collider c in car.GetComponentsInChildren<Collider>())
+            {
+                string n = c.name.ToLowerInvariant();
+                if (!n.Contains("seat") || c.isTrigger) continue;
+                Bounds bb = c.bounds;
+                sb.Append(" | col ").Append(c.name).Append(" min").Append(car.InverseTransformPoint(bb.min).ToString("F2")).Append(" max").Append(car.InverseTransformPoint(bb.max).ToString("F2"));
+            }
+            Log.Info(sb.ToString());
+        }
+
         // Essais : mains au volant (ecart main - prise), penche vers le volant, levier trouve.
         public string HandsState()
         {

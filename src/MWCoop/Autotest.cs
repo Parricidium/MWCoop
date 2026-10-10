@@ -84,7 +84,7 @@ namespace MWCoop
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
-            CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); Consume.Test(mode, t);
+            CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t);
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t);
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
@@ -103,7 +103,8 @@ namespace MWCoop
             // l'avatar fait le kick (comme la commande Kickstart rejouee), capture a 40,3 s.
             if (mode == "moto")
             {
-                string jn = "JONNEZ ES(Clone)";
+                string jn = Config.Get("Test", "MotoVoiture", "JONNEZ ES(Clone)");   // ([Test] MotoVoiture : un autre vehicule, camera pres du conducteur)
+                bool other = !jn.StartsWith("JONNEZ");
                 bool rearSeat = Config.GetInt("Test", "MotoPassager", 0) != 0;
                 if (!Net.Session.IsHost)
                 {
@@ -117,14 +118,26 @@ namespace MWCoop
                 else if (t > 25f)
                 {
                     // camera d'essai de profil, a 1,6 m ([Test] MotoCam=x,y,z dans le repere de la moto)
-                    GameObject mo = Game.FindAny(jn);
+                    Rigidbody mob = other ? VehicleSync.Body(jn.Split('(')[0]) : null;   // (nom avec « / » : pas un chemin)
+                    GameObject mo = mob != null ? mob.gameObject : Game.FindAny(jn);
+                    // (autre vehicule : l'hote vient a 6 m, sinon le jeu ne montre pas l'interieur de la cabine)
+                    if (other && mo != null && !teleported) { teleported = true; Menu.TeleportTo(mo.transform.TransformPoint(new Vector3(4f, -0.8f, 2f)), 0f, "essai"); }
                     if (mo != null)
                     {
                         if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 60; }
                         string mc = Config.Get("Test", "MotoCam", "-1.6,0.55,0.1"); string[] mp = mc.Split(',');
                         var ci = System.Globalization.CultureInfo.InvariantCulture;
-                        testCam.transform.position = mo.transform.TransformPoint(new Vector3(float.Parse(mp[0], ci), float.Parse(mp[1], ci), float.Parse(mp[2], ci)));
-                        testCam.transform.LookAt(mo.transform.TransformPoint(new Vector3(0f, 0.45f, 0f)));
+                        Vector3 off = new Vector3(float.Parse(mp[0], ci), float.Parse(mp[1], ci), float.Parse(mp[2], ci)), dh;
+                        if (other && Seats.DriverHead(mo.transform, out dh))
+                        {   // (repere : la tete du conducteur ; on vise sa poitrine)
+                            testCam.transform.position = mo.transform.TransformPoint(dh + off);
+                            testCam.transform.LookAt(mo.transform.TransformPoint(dh + new Vector3(0f, -0.45f, 0.1f)));
+                        }
+                        else
+                        {
+                            testCam.transform.position = mo.transform.TransformPoint(off);
+                            testCam.transform.LookAt(mo.transform.TransformPoint(new Vector3(0f, 0.45f, 0f)));
+                        }
                     }
                     if (t > 35f && step == 0) { step = 1; CaptureSoon("moto-35", 0.05f); }
                     if (t > 40f && step == 1)
@@ -533,6 +546,39 @@ namespace MWCoop
                 {
                     rivLog = Time.realtimeSinceStartup + 1f;
                     Log.Info("autotest : attelage, remorque " + (fb.isKinematic ? "copie" : "locale") + " en " + fb.position.ToString("F1") + ", a " + (fb.position - k.position).magnitude.ToString("F1") + " m du tracteur " + (k.isKinematic ? "(copie)" : "(local)") + " en " + k.position.ToString("F1"));
+                }
+            }
+            // [Test] Autotest=fendeuse (retour d'un joueur, 10/10 : « attelee par un invite, la fendeuse s'envole ») : l'invite
+            // au volant du KEKMET (15-22 s) ; a 25 s chacun pose la fendeuse (Cutter) 2,6 m derriere le tracteur et l'y relie
+            // (joint fixe, comme le relevage) ; l'invite roule a 4 m/s de 28 a 40 s ; chacun note toutes les 0,5 s la pose de
+            // la fendeuse dans le repere du tracteur, et son etendue.
+            if (mode == "fendeuse")
+            {
+                Rigidbody k = VehicleSync.Body("KEKMET");
+                GameObject cg = Game.FindAny("Cutter");
+                Rigidbody cb = cg != null ? (cg.GetComponent<Rigidbody>() ?? cg.GetComponentInChildren<Rigidbody>()) : null;
+                if (!Net.Session.IsHost && k != null)
+                {
+                    if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter("KEKMET", false)); }
+                    if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter("KEKMET", true)); }
+                    if (t > 28f && t < 40f) { Vector3 f = k.transform.forward; f.y = 0; k.velocity = f.normalized * 4f + Vector3.up * Mathf.Min(k.velocity.y, 0f); }
+                }
+                if (k != null && cb != null && t > 25f && !teleported)
+                {
+                    teleported = true;
+                    cb.transform.position = k.transform.TransformPoint(new Vector3(0f, 0.6f, -2.6f));
+                    cb.transform.rotation = k.transform.rotation;
+                    cb.velocity = Vector3.zero; cb.angularVelocity = Vector3.zero;
+                    var fj = cb.gameObject.AddComponent<FixedJoint>();
+                    fj.connectedBody = k;
+                    Log.Info("autotest : fendeuse " + cb.name + " reliee au KEKMET");
+                }
+                if (k != null && cb != null && teleported && t < 50f && Time.realtimeSinceStartup >= rivLog)
+                {
+                    rivLog = Time.realtimeSinceStartup + 0.5f;
+                    Vector3 lp = k.transform.InverseTransformPoint(cb.position);
+                    if (!cabAv) { cabAv = true; cabMin = cabMax = lp; } else { cabMin = Vector3.Min(cabMin, lp); cabMax = Vector3.Max(cabMax, lp); }
+                    Log.Info("autotest : fendeuse dans le repere du tracteur " + lp.ToString("F2") + " (" + (cb.isKinematic ? "cinematique" : "physique") + "), tracteur " + (k.isKinematic ? "copie" : "local") + " a " + k.velocity.magnitude.ToString("F1") + " m/s ; etendue " + (cabMax - cabMin).ToString("F2"));
                 }
             }
             // [Test] Autotest=taxiclient : taxi active des deux cotes (8 s) ; l'invite au volant (15-22 s) ; l'hote lance une

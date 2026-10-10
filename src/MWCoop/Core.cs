@@ -84,6 +84,7 @@ namespace MWCoop
             Step("panneau des triches", CheatPanel.Update);
             Step("carte", MapRender.Update);
             Step("panneau carte", MapPanel.Update);
+            Step("mods (compatibilite)", ModSecondMachtwagen.Update);
             Step("vocal", Voice.Update);
             Step("visage perso", CustomFace.Update);
             Step("musiques (menu)", Contenu.MenuUpdate);
@@ -187,6 +188,7 @@ namespace MWCoop
             Voice.OnLevelLoaded();
             CustomFace.OnLevelLoaded();
             MapRender.OnLevelLoaded();
+            ModSecondMachtwagen.OnLevelLoaded();
             Respawn.OnLevelLoaded();
             Audit.OnLevelLoaded();
             NearDoors.OnLevelLoaded();

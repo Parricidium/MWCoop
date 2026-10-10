@@ -789,6 +789,12 @@ namespace MWCoop
             if (!near) return null;
             Car own = CarOf(item.transform);
             if (own != null && own.Body != null && !ReferenceEquals(own.Body, item)) { u.Own = own; u.Car = own.Body; return UnderFor(u); }
+            // Attele a une voiture par une articulation (fendeuse au relevage du KEKMET...) : comme pose dedans -- c'est
+            // celui qui la conduit qui le transporte (Props.Ride), l'hote ne le recale plus. Retour d'un joueur, 10/10 :
+            // « attelee par un invite, la fendeuse rentre dans la remorque et s'envole » (l'hote la recalait a sa pose,
+            // prise sur sa copie du tracteur en retard, contre l'articulation).
+            Car jc = JointCar(item, at);
+            if (jc != null) { u.Car = jc.Body; return u.Car; }
             float best = float.MaxValue;
             foreach (RaycastHit h in Physics.RaycastAll(item.worldCenterOfMass + Vector3.up * 0.25f, Vector3.down, 0.85f, ~0))
             {
@@ -800,6 +806,25 @@ namespace MWCoop
                 if (hc != null && hc.Body != null) { best = h.distance; u.Car = hc.Body; }
             }
             return u.Car;
+        }
+
+        // Voiture reliee a l'objet par une articulation (pas une corde de Tow), dans un sens ou dans l'autre.
+        static Car JointCar(Rigidbody item, Vector3 at)
+        {
+            if (Config.GetInt("Test", "SansAttelageObjets", 0) != 0) return null;   // (essais : comme avant)
+            foreach (Joint j in item.GetComponents<Joint>())
+            {
+                if (j == null || j.connectedBody == null || Tow.IsRope(j)) continue;
+                Car c = CarOf(j.connectedBody.transform);
+                if (c != null && c.Body != null && !ReferenceEquals(c.Body, item)) return c;
+            }
+            foreach (Car c in cars)
+            {
+                if (c.Body == null || ReferenceEquals(c.Body, item) || (c.Body.position - at).sqrMagnitude > 100f) continue;
+                foreach (Joint j in c.Body.GetComponentsInChildren<Joint>())
+                    if (j != null && ReferenceEquals(j.connectedBody, item) && !Tow.IsRope(j)) return c;
+            }
+            return null;
         }
 
         // Piece de la voiture : pas un chargement de celle qu'on fait rouler ici, ni de celle qu'on replace (hors cache :
