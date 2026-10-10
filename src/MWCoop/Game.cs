@@ -80,10 +80,14 @@ namespace MWCoop
         public static void Update()
         {
             if (restore == null || Time.realtimeSinceStartup < restoreAt) return;
-            int n = 0;
+            int n = 0, kept = 0;
             foreach (KeyValuePair<PlayMakerFSM, string> kv in restore)
             {
                 if (kv.Key == null || kv.Key.ActiveStateName == kv.Value) continue;
+                // Etat d'avant terminal et sans action par image (« State 1 » du numero de Reijo : renomme, etape 2,
+                // SELLCAR) : y revenir ne ferait que rejouer ses actions -- la vente de la Rivett relancee a chaque
+                // sauvegarde (retour d'un joueur, 10/10). Rester dans l'etat de sauvegarde (terminal aussi) revient au meme.
+                if (OneShot(kv.Key, kv.Value)) { kept++; continue; }
                 // Parti ailleurs entre-temps (action d'un joueur rejouee pendant l'ecriture) : on le laisse.
                 string saved;
                 if (afterSave != null && afterSave.TryGetValue(kv.Key, out saved) && kv.Key.ActiveStateName != saved) continue;
@@ -91,7 +95,34 @@ namespace MWCoop
                 catch (System.Exception e) { Log.Warn("sauvegarde en jeu : " + kv.Key.name + " -> " + kv.Value + " : " + e.Message); }
             }
             restore = null; afterSave = null;
-            Log.Info("sauvegarde en jeu : " + n + " automates remis dans leur etat d'avant");
+            Log.Info("sauvegarde en jeu : " + n + " automates remis dans leur etat d'avant" + (kept > 0 ? ", " + kept + " laisses (etat d'avant terminal : ses actions ne sont pas rejouees)" : ""));
+        }
+
+        // Etat sans transition ni action repetee a chaque image (une fois ses actions faites, il ne fait plus rien) et
+        // qui envoie un evenement a d'autres automates (y revenir relancerait ce qu'il a declenche). Les autres sont remis.
+        static bool OneShot(PlayMakerFSM f, string state)
+        {
+            HutongGames.PlayMaker.FsmState st = f.Fsm.GetState(state);
+            if (st == null || st.Transitions == null || st.Transitions.Length > 0 || st.Actions == null) return false;
+            bool sends = false;
+            foreach (HutongGames.PlayMaker.FsmStateAction a in st.Actions)
+            {
+                if (a == null) continue;
+                string tn = a.GetType().Name;
+                if (tn.StartsWith("Send") || tn.StartsWith("Broadcast")) sends = true;
+            }
+            if (!sends) return false;
+            if (st.Actions != null)
+                foreach (HutongGames.PlayMaker.FsmStateAction a in st.Actions)
+                {
+                    if (a == null) continue;
+                    foreach (string fn in new[] { "everyFrame", "everySecond", "perSecond" })
+                    {
+                        System.Reflection.FieldInfo fi = a.GetType().GetField(fn);
+                        if (fi != null && fi.FieldType == typeof(bool) && (bool)fi.GetValue(a)) return false;
+                    }
+                }
+            return true;
         }
         // Premier automate 'fsmName' porte par un objet actif nomme 'objectName'.
         public static PlayMakerFSM FindFsm(string objectName, string fsmName)

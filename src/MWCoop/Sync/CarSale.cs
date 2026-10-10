@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -40,7 +40,54 @@ namespace MWCoop
             }
         }
 
-        public static void OnLevelLoaded() { anim = null; pay = null; hooked = false; sold = false; applying = false; nextLook = 0f; }
+        public static void OnLevelLoaded() { anim = null; pay = null; hooked = false; sold = false; applying = false; nextLook = 0f; repairAt = Time.realtimeSinceStartup + 8f; repaired = false; testStep = 0; }
+
+        // Sauvegardes abimees (retour d'un joueur, 10/10 : « la punaise reste, le vendeur redemande 500 mk a chaque
+        // livraison de bois ») : jusqu'a 0.75.2, la sauvegarde coop en jeu remettait le numero de Reijo dans son etat
+        // « appele » (State 1 : etape 2, SELLCAR) apres l'avoir ecrit a l'etape 3 -- la vente repartait, et l'etape 2 etait
+        // ensuite sauvee. Au chargement : si la Rivett a deja ses cles (PlayerKeySatsuma) mais que la vente a ete relancee
+        // (numero a l'etape 2), elle est annulee comme le jeu l'aurait fait avec l'etape 3 : numero detruit ("Destroy"),
+        // flechette Wood1Car eteinte, Car de WoodJob1Point a faux et retour a sa boucle, vendeur au repos.
+        static float repairAt; static bool repaired;
+        static void Repair()
+        {
+            if (repaired || Time.realtimeSinceStartup < repairAt) return;
+            repaired = true;
+            FsmInt key = FsmVariables.GlobalVariables.FindFsmInt("PlayerKeySatsuma");
+            PlayMakerFSM data = null;
+            foreach (Object o in Game.AllFsms())
+            {
+                var f = (PlayMakerFSM)o;
+                if (f == null || f.FsmName != "Data" || f.transform.parent == null || f.transform.parent.name != "PhoneNumbers") continue;
+                FsmString nb = f.FsmVariables.FindFsmString("Number");
+                if (nb != null && nb.Value == Number) { data = f; break; }
+            }
+            FsmInt stage = data != null ? data.FsmVariables.FindFsmInt("Stage") : null;
+            bool keys = key != null && key.Value > 0 || Config.GetInt("Test", "VenteCles", 0) != 0;
+            Log.Info("vente : au chargement, cles de la Rivett " + (key != null ? key.Value.ToString() : "?") + ", numero de Reijo " + (stage != null ? "etape " + stage.Value + " (" + data.ActiveStateName + ")" : "absent (vente finie)"));
+            if (!keys || stage == null || stage.Value != 2) return;
+            Cancel(data, stage, "cles deja la, vente relancee par une sauvegarde");
+        }
+
+        static void Cancel(PlayMakerFSM data, FsmInt stage, string why)
+        {
+            sold = true;
+            stage.Value = 3;
+            if (data != null && data.gameObject.activeInHierarchy && data.Fsm.GetState("Destroy") != null) Set(data, "Destroy");
+            GameObject wj = Game.FindAny("JOBS/HouseWood1/WoodJob1Point");
+            PlayMakerFSM logic = wj != null ? Game.FsmOn(wj, "Logic") : null;
+            string was = logic != null ? logic.ActiveStateName : "?";
+            if (logic != null)
+            {
+                FsmBool car = logic.FsmVariables.FindFsmBool("Car");
+                if (car != null) car.Value = false;
+                FsmGameObject dart = logic.FsmVariables.FindFsmGameObject("DartCar");
+                if (dart != null && dart.Value != null) dart.Value.SetActive(false);
+                if (was == "State 1" && logic.Fsm.GetState("Calc rate") != null) Set(logic, "Calc rate");
+            }
+            Log.Info("vente : Rivett deja vendue (" + why + ") : numero de Reijo a l'etape 3, flechette eteinte, WoodJob1Point " + was + " -> " + (logic != null ? logic.ActiveStateName : "?"));
+            Settle();
+        }
 
         static bool Find()
         {
@@ -136,9 +183,44 @@ namespace MWCoop
         {
             if (!PlayerSync.InGame || Time.realtimeSinceStartup < nextLook) return;
             nextLook = Time.realtimeSinceStartup + 1f;
+            Repair();
             if (!Find()) return;
             Hook();
             Settle();
+        }
+
+        // [Test] Autotest=vente-sauve (hote) : 25 s, Reijo « appele » (numero en State 1 : etape 2, SELLCAR) ; 28 s, la Rivett
+        // achetee par un autre (@vente 1) ; 31 s, sauvegarde coop en jeu ; 38 s, etat (attendu : etape 3, WoodJob1Point pas
+        // en State 1 apres la sauvegarde). 42 s : sauvegarde abimee simulee (etape 2, numero en State 1, cles) et reparation.
+        static int testStep;
+        public static void Test(string mode, float t)
+        {
+            if (mode != "vente-sauve" || !Session.IsHost) return;
+            PlayMakerFSM data = null;
+            foreach (Object o in Game.AllFsms())
+            {
+                var f = (PlayMakerFSM)o;
+                if (f == null || f.FsmName != "Data" || f.transform.parent == null || f.transform.parent.name != "PhoneNumbers") continue;
+                FsmString nb = f.FsmVariables.FindFsmString("Number");
+                if (nb != null && nb.Value == Number) { data = f; break; }
+            }
+            GameObject wj = Game.FindAny("JOBS/HouseWood1/WoodJob1Point");
+            PlayMakerFSM logic = wj != null ? Game.FsmOn(wj, "Logic") : null;
+            FsmInt stage = data != null ? data.FsmVariables.FindFsmInt("Stage") : null;
+            System.Func<string> st = () => "numero " + (data != null ? data.ActiveStateName + " etape " + (stage != null ? stage.Value : -1) : "absent") + ", WoodJob1Point " + (logic != null ? logic.ActiveStateName + " Car " + logic.FsmVariables.FindFsmBool("Car").Value : "?");
+            if (t > 25f && testStep == 0) { testStep = 1; if (data != null) Game.SetState(data, "State 1"); Log.Info("autotest : vente, Reijo appele : " + st()); }
+            if (t > 28f && testStep == 1) { testStep = 2; OnRemote(1, 1); Log.Info("autotest : vente, achetee par #1 : " + st()); }
+            if (t > 31f && testStep == 2) { testStep = 3; Game.SaveInPlace(); }
+            if (t > 38f && testStep == 3) { testStep = 4; Log.Info("autotest : vente, apres la sauvegarde : " + st()); }
+            if (t > 42f && testStep == 4)
+            {
+                testStep = 5;
+                if (data != null && stage != null) { Game.SetState(data, "State 1"); stage.Value = 2; }
+                FsmInt key = FsmVariables.GlobalVariables.FindFsmInt("PlayerKeySatsuma"); if (key != null) key.Value = 1;
+                sold = false; repaired = false; repairAt = 0f;
+                Log.Info("autotest : vente, sauvegarde abimee simulee : " + st());
+            }
+            if (t > 46f && testStep == 5) { testStep = 6; Log.Info("autotest : vente, apres reparation : " + st() + ", " + Describe()); }
         }
 
         public static string Describe()
