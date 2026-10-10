@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -43,7 +43,10 @@ namespace MWCoop
         // des speciales (TimingSSn, RallyTree), parc ferme, inscription a la glace (LINEUPS). Rejoues, l'inscription
         // d'un invite inscrivait l'hote (autocollants sur sa CORRIS, ses heures de depart retirees).
         static readonly string[] SkipParents = { "VideoPoker", "SlotMachine", "FuelPumps_",
-                                                 "ResultsWeekend", "RacingInspection", "TimingSS", "RallyTree", "ParcFerme", "LINEUPS" };
+                                                 "ResultsWeekend", "RacingInspection", "TimingSS", "RallyTree", "ParcFerme", "LINEUPS",
+                                                 // Menu d'options du jeu (Systems/OptionsMenu : commandes de conduite, souris, graphismes...) : a chacun
+                                                 // les siennes. Rejoues, les clics d'un joueur changeaient les reglages des autres (retour de joueurs, 10/10).
+                                                 "OptionsMenu" };
         // "Buy" : prendre un article en rayon le met dans SON panier ; c'est la caisse qui est synchronisee (Shop).
         static readonly HashSet<string> SkipFsmNames = new HashSet<string> { "Paint", "LOD", "Death", "HeadForce", "Coldness", "Strafe", "Buy" };
         // Automates de PNJ provoques par un joueur (colere quand on lui urine dessus ou lui fait un doigt, coup de

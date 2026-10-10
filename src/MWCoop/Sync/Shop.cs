@@ -2006,6 +2006,19 @@ namespace MWCoop
         // ---------------------------------------------------------------- essais
         // Essais : met des produits dans le panier de la caisse 'key' et paie comme le joueur.
         public static string TestBuy(string product, int qty) { return TestBuy(product, qty, null, 0); }
+        // Deux produits du sac (BagStuff = total) : essai « sac-un » (tirage d'un article au hasard).
+        public static string TestBuyTwo(string a, int qa, string b, int qb)
+        {
+            Register r = StoreRegister();
+            if (r == null) return "aucune caisse de magasin";
+            Hashtable carried = CarriedOf(r.Fsm);
+            if (carried == null) return "pas de panier";
+            carried[a] = qa; carried[b] = qb;
+            r.Fsm.FsmVariables.GetFsmInt("BagStuff").Value = qa + qb;
+            r.Fsm.FsmVariables.GetFsmFloat("PriceTotal").Value = 10f * (qa + qb);
+            Game.SetState(r.Fsm, "Check money");
+            return "achat de " + a + " x" + qa + " et " + b + " x" + qb + " a " + r.Key;
+        }
 
         // 'extra' : un 2e produit dans le meme panier (gros article : caisse de biere...), hors BagStuff.
         static string TestBuy(string product, int qty, string extra, int extraQty)
