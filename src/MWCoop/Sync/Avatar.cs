@@ -745,11 +745,19 @@ namespace MWCoop
                 // SiegeTete : tete redressee d'autant (regarde la route, pas le volant).
                 if (seatFitted)
                 {
-                    if (carName.StartsWith("GIFU"))   // (dos arrondi : la GIFU seulement, demande de JD ; la famille du taxi reste droite)
+                    if (carName.StartsWith("GIFU"))   // (dos arrondi : la GIFU seulement, demande de JD)
                     {
                         Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "SiegeDos", 18f));
                         Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "SiegeDos2", 24f));
                         if (headBone != null) Turn(headBone, 0f, -Config.GetFloat("Test", "SiegeTete", 25f));
+                    }
+                    else if (carName.ToUpperInvariant().Contains("MACHTWAGEN"))
+                    {
+                        // Famille du taxi (300D...) : buste un peu renverse contre le dossier, tete redressee -- les tetes depassaient
+                        // du toit (capture de JD, 11/10 : « descendre a peine le torse »).
+                        Turn(Bone("spine_middle"), 0f, -Config.GetFloat("Test", "TaxiDos", 10f));
+                        Turn(Bone("spine_upper"), 0f, -Config.GetFloat("Test", "TaxiDos2", 8f));
+                        if (headBone != null) Turn(headBone, 0f, Config.GetFloat("Test", "TaxiTete", 18f));
                     }
                     if (passenger)
                     {   // mains posees sur les cuisses (a mi-chemin du genou), coudes plies
@@ -1088,7 +1096,7 @@ namespace MWCoop
             // l'avatar avait la tete dans le toit et se penchait vers un volant trop loin (captures de Menos, 10/10). Monte de
             // 10 cm au plus (enfoncement reduit de moitie), sans recul.
             float lostY = 0f;   // (montee retiree : les pieds restent au plancher)
-            if (taxi) { float full = d.y; d.y = Mathf.Clamp(d.y, -0.05f, Config.GetFloat("Test", "TaxiMonte", 0.10f)); lostY = Mathf.Max(0f, full - d.y); d.z = 0f; }
+            if (taxi) { float full = d.y; d.y = Mathf.Clamp(d.y, -0.05f, Config.GetFloat("Test", "TaxiMonte", 0f)); lostY = Mathf.Max(0f, full - d.y); d.z = 0f; }
             if (Config.GetInt("Test", "JournalSiege", 0) != 0 && Time.frameCount % 300 < 6) Log.Info("siege : image " + Time.frameCount + " colonne " + (Bone("spine_middle") != null ? Bone("spine_middle").localEulerAngles.ToString("F1") : "?") + " racine " + vehicleT.InverseTransformPoint(Root.transform.position).ToString("F2") + " bassin " + pl.ToString("F2") + " voulu " + want.ToString("F2") + " ecart " + d.ToString("F2") + (d.sqrMagnitude > 0.64f ? " TROP LOIN" : ""));
             if (d.sqrMagnitude > 0.64f) return;   // (plus de 80 cm : pas ce siege)
             Transform ar = Bone("ankle_right"), al = Bone("ankle_left");
