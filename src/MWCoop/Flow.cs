@@ -36,7 +36,8 @@ namespace MWCoop
             }
         }
 
-        static bool AutoSkip
+        // Le mod passe lui-meme les ecrans et entre en partie (invite, lancement par le salon, essais).
+        public static bool AutoSkip
         {
             get { return Config.GetInt("Test", "PasserIntro", 0) != 0 || Config.HasArg("auto") || (Session.Active && !Session.IsHost) || LaunchChoice != null; }
         }
@@ -75,6 +76,7 @@ namespace MWCoop
             if (menuSince < 0) menuSince = Time.realtimeSinceStartup;
             if (pending == null) pending = Decide();
             if (pending == null || Time.realtimeSinceStartup - menuSince < 2f) return;
+            if (Contenu.MenuBusy) return;   // (import des musiques en cours : CD vides = CD absents de la partie)
             if (pending == "continuer") Continue(); else NewGame();
         }
 

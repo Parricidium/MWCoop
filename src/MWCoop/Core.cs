@@ -71,6 +71,7 @@ namespace MWCoop
             Step("porte-monnaie", WalletPanel.Update);
             Step("vocal", Voice.Update);
             Step("visage perso", CustomFace.Update);
+            Step("musiques (menu)", Contenu.MenuUpdate);
             Step("menu", Menu.Update);
             Step("mscloader", MscMods.Update);
             Step("lanceur", MWCoop.Net.Admin.Update);

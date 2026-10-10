@@ -33,6 +33,7 @@ namespace MWCoop
         {
             string mode = Config.Get("Test", "Autotest", "");
             WaitScreen.Test(mode, Time.realtimeSinceStartup);   // au menu : avant le filtre GAME
+            Contenu.MenuTest(mode);
             // [Test] Captures=s1,s2... : capture d'ecran a ces secondes depuis le lancement (menu compris), dumps\ecran-<s>.png.
             if (captureTimes == null)
             {

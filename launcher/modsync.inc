@@ -936,7 +936,9 @@ static void SyncSteamTick()
     }
 }
 // ---- volet "Contenu envoye aux invites" (coordonnees du panneau des onglets, comme les autres volets)
-struct ContentInfo { int n; uint64_t bytes; };
+// songs / ignored : CD et radio -- le jeu ne lit que track1.ogg, track2.ogg... a la suite (OGG Vorbis), les autres
+// fichiers audio sont ignores (retour d'un joueur, 10/10 : « ma musique ne s'importe pas chez les invites »).
+struct ContentInfo { int n; uint64_t bytes; int songs, ignored; };
 static ContentInfo g_contentInfo[16];
 static DWORD g_contentScanT;
 // (g_contentHot : drawer.inc)
@@ -953,12 +955,21 @@ static void ContentScan()
 {
     g_contentScanT = GetTickCount();
     for (int i = 0; i < kContentN && i < 16; i++) {
-        ContentInfo ci = { 0, 0 };
-        if (!g_gameDir.empty())
+        ContentInfo ci = { 0, 0, 0, 0 };
+        bool music = !wcsncmp(kContent[i].root, L"CD", 2) || !wcscmp(kContent[i].root, L"Radio");
+        if (!g_gameDir.empty()) {
+            int audio = 0;
             for (const std::wstring &rel : ContentFiles(i, g_gameDir)) {
                 WIN32_FILE_ATTRIBUTE_DATA a;
                 if (GetFileAttributesExW((g_gameDir + rel).c_str(), GetFileExInfoStandard, &a)) { ci.n++; ci.bytes += a.nFileSizeLow; }
+                const wchar_t *ext = wcsrchr(rel.c_str(), L'.');
+                if (music && ext) for (const wchar_t *e : { L".ogg", L".mp3", L".wav", L".flac", L".m4a", L".wma", L".aac", L".opus" }) if (!_wcsicmp(ext, e)) audio++;
             }
+            if (music) {
+                while (ci.songs < 999 && FileExists(g_gameDir + kContent[i].root + L"\\track" + std::to_wstring(ci.songs + 1) + L".ogg")) ci.songs++;
+                ci.ignored = audio - ci.songs;
+            }
+        }
         g_contentInfo[i] = ci;
     }
 }
@@ -1036,9 +1047,11 @@ static void DrawContent(Graphics &g)
         Text(g, g_fr ? kContent[i].fr : kContent[i].en, RectF(r.X + 66, r.Y + 9, r.Width - 150, 24), 14.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
         std::wstring det;
         if (!ci.n) det = T(L"rien dans le jeu", L"nothing in the game");
+        else if (ci.ignored > 0) { wchar_t b[96]; swprintf_s(b, T(L"%d lue(s) par le jeu \u00B7 %d ignor\u00E9e(s) (track1.ogg\u2026)", L"%d read by the game \u00B7 %d ignored (track1.ogg\u2026)"), ci.songs, ci.ignored); det = b; }
+        else if (ci.songs > 0) { wchar_t b[64]; swprintf_s(b, T(L"%d musique(s) \u00B7 %s", L"%d song(s) \u00B7 %s"), ci.songs, SizeText(ci.bytes).c_str()); det = b; }
         else if (!kContent[i].files) { wchar_t b[64]; swprintf_s(b, T(L"%d fichier(s) \u00B7 %s", L"%d file(s) \u00B7 %s"), ci.n, SizeText(ci.bytes).c_str()); det = b; }
         else det = SizeText(ci.bytes);
-        Text(g, det, RectF(r.X + 66, r.Y + 32, r.Width - 150, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        Text(g, det, RectF(r.X + 66, r.Y + 32, r.Width - 150, 20), 12, FontStyleRegular, ci.ignored > 0 ? kWarn : kGrey, StringAlignmentNear);
         UiToggle(g, RectF(r.X + r.Width - 66, r.Y + (r.Height - 28) / 2, 50, 28), on, hot);
     }
     RectF mr = ContentModsRow();
