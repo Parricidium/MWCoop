@@ -17,6 +17,15 @@ namespace MWCoop
     // (ou {FolderName} "CD1/", "Radio/", "Extra/"). Pour ce que l'hote a envoye (lancement.ini : ContenuDossier,
     // ContenuRecu, ContenuImages), GetAppPath est coupe et la variable pointe sur le dossier recu ; puis l'automate est
     // relance : les images (Get, ImportPNG, hockey) se rechargent, les musiques deja importees sont reimportees.
+    //
+    // Musiques (retour d'un joueur, 10/10 : « les invites telechargent ma musique, mais elle ne s'importe pas ») : le jeu
+    // n'importe les musiques qu'au menu principal (bouton IMPORT MUSIC FILES, coupe d'origine : Interface/Songs/Button
+    // -> Radio/Folk::LoadSongs, puis CD::Playlist allume CD1-3 et leurs LoadSongs), et seulement des fichiers
+    // CDn/track1.ogg, track2.ogg... (OGG Vorbis). Avant : le mod ne pointait les lecteurs qu'en jeu -- la radio etait
+    // reimportee, mais pas les CD (deja importes, non reconnus) ; et l'invite, entre en partie tout seul 2 s apres
+    // l'hote, n'avait jamais le temps de cliquer le bouton. Maintenant, au menu : lecteurs pointes sur le contenu recu,
+    // et quand le mod entre lui-meme en partie (Flow.AutoSkip) avec des musiques a lire (recues de l'hote, ou dans ses
+    // propres dossiers), l'import est lance comme par le bouton ; Flow attend sa fin (30 s au plus).
     public static class Contenu
     {
         static float applyAt = -1, reapplyAt = -1;
@@ -43,7 +52,7 @@ namespace MWCoop
         {
             float now = Time.realtimeSinceStartup;
             if (applyAt > 0 && now >= applyAt) { applyAt = -1; Apply("chargement"); }
-            if (reapplyAt > 0 && now >= reapplyAt) { reapplyAt = -1; Apply("relecture"); Report(); }   // (automates crees ou allumes plus tard)
+            if (reapplyAt > 0 && now >= reapplyAt) { reapplyAt = -1; Apply("relecture"); Report(); Log.Info("musiques en jeu : " + Songs()); }   // (automates crees ou allumes plus tard)
             WatchCds();
         }
 
@@ -136,16 +145,110 @@ namespace MWCoop
             FsmString var = rf != null ? rf.GetValue(getPath) as FsmString : null;
             if (var == null) return false;
             done.Add(f);
+            bool already = !getPath.Enabled && var.Value == dir;   // (pointe au menu : deja lu dans le dossier recu)
             getPath.Enabled = false;
             var.Value = dir;
+            if (already) return true;
             // relance : rechargement avec le dossier recu
-            FsmString path = f.FsmVariables.FindFsmString("Path");
             bool songs = f.FsmName == "LoadSongs";
-            bool imported = songs && path != null && path.Value != null && path.Value.Contains("IMPORTED") && path.Value != "NOT IMPORTED";
-            if (songs && !imported) return true;   // (pas encore importees : le seront depuis le dossier recu)
+            if (songs && !Imported(f)) return true;   // (pas encore importees : le seront depuis le dossier recu)
+            if (songs && !f.gameObject.activeSelf) f.gameObject.SetActive(true);   // (CD1-3 : eteints hors import)
             if (!f.enabled) f.enabled = true;   // (PlayMaker repart du debut ; objet eteint : a son allumage)
             else if (f.gameObject.activeInHierarchy && f.Fsm.StartState != null) Game.SetState(f, songs ? "Init" : f.Fsm.StartState);
             return true;
+        }
+
+        // Musiques deja importees ? Radio (Folk) : son Path ; CD1-3 : celui de CD::Playlist (leur Path est le dernier fichier).
+        static bool Imported(PlayMakerFSM f)
+        {
+            if (f == null) return false;
+            FsmString path = f.FsmVariables.FindFsmString("Path");
+            if (f.FsmName == "LoadSongs" && f.gameObject.name.StartsWith("CD")) return Imported(Fsm("CD", "Playlist"));
+            if (f.FsmName == "Playlist") return path != null && path.Value == "CD'S IMPORTED";
+            return path != null && path.Value != null && path.Value.Contains("IMPORTED") && path.Value != "NOT IMPORTED";
+        }
+
+        static PlayMakerFSM Fsm(string obj, string name)
+        {
+            foreach (UnityEngine.Object o in Game.AllFsms())
+            {
+                PlayMakerFSM f = o as PlayMakerFSM;
+                if (f != null && f.FsmName == name && f.gameObject.name == obj) return f;
+            }
+            return null;
+        }
+
+        // ---- menu principal : lecteurs pointes, import des musiques quand le mod entre lui-meme en partie
+        static float menuAt = -1, importUntil;
+        static bool menuDone;
+        public static bool MenuBusy { get { return importUntil > Time.realtimeSinceStartup; } }
+
+        public static void MenuUpdate()
+        {
+            if (Application.loadedLevelName != "MainMenu") { menuAt = -1; menuDone = false; importUntil = 0; return; }
+            float now = Time.realtimeSinceStartup;
+            if (menuAt < 0) { menuAt = now + 1f; done.Clear(); cds = null; roots = null; }
+            if (!menuDone && now >= menuAt)
+            {
+                menuDone = true;
+                Apply("menu");
+                if (Flow.AutoSkip) MenuImport();
+            }
+            WatchCds();
+            if (importUntil > 0 && (Imported(Fsm("CD", "Playlist")) || now >= importUntil))
+            {
+                Log.Info("musiques : " + (now >= importUntil ? "import pas fini apres 30 s" : "import fini") + " -- " + Songs());
+                importUntil = 0;
+            }
+        }
+
+        static bool HasMusic(string root)
+        {
+            if (roots != null && roots.Contains(root)) return true;   // (recue de l'hote)
+            try { return File.Exists(Path.Combine(Path.Combine(Path.GetDirectoryName(Application.dataPath), root.TrimEnd('/')), "track1.ogg")); } catch { return false; }
+        }
+
+        static void MenuImport()
+        {
+            if (!HasMusic("CD1/") && !HasMusic("CD2/") && !HasMusic("CD3/") && !HasMusic("Radio/")) return;
+            PlayMakerFSM folk = Fsm("Folk", "LoadSongs"), button = Fsm("Button", "Button");
+            if (folk == null) { Log.Warn("musiques : Radio/Folk::LoadSongs introuvable, pas d'import"); return; }
+            importUntil = Time.realtimeSinceStartup + 30f;
+            FsmString p = folk.FsmVariables.FindFsmString("Path");
+            if (folk.enabled || (p != null && p.Value == "RADIO IMPORTED")) { Log.Info("musiques : import deja lance"); return; }
+            FsmBool si = button != null ? button.FsmVariables.FindFsmBool("SongImported") : null;
+            if (si != null) si.Value = true;
+            folk.enabled = true;
+            Log.Info("musiques : import lance au menu (comme IMPORT MUSIC FILES)" + (roots != null && roots.Count > 0 ? ", contenu de l'hote : " + string.Join(",", new List<string>(roots).ToArray()) : ""));
+        }
+
+        // Nombre de musiques chargees (listes ArrayList du jeu) : radio, CD1-3.
+        static string Songs()
+        {
+            var sb = new System.Text.StringBuilder();
+            PlayMakerFSM folk = Fsm("Folk", "LoadSongs");
+            sb.Append("radio ").Append(folk != null ? Count(folk.transform, "Songs") : -1);
+            foreach (string cd in new[] { "CD1", "CD2", "CD3" })
+            {
+                PlayMakerFSM f = Fsm(cd, "LoadSongs");
+                sb.Append(", ").Append(cd).Append(' ').Append(f != null ? Count(f.transform, cd) : -1);
+            }
+            return sb.ToString() + " musique(s)";
+        }
+
+        static int Count(Transform t, string reference)
+        {
+            for (Transform x = t; x != null; x = x.parent)
+                foreach (Component c in x.GetComponents<Component>())
+                {
+                    if (c == null || c.GetType().Name != "PlayMakerArrayListProxy") continue;
+                    FieldInfo rn = c.GetType().GetField("referenceName");
+                    if (rn != null && (rn.GetValue(c) as string) != reference) continue;
+                    FieldInfo al = c.GetType().GetField("_arrayList", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);   // (ArrayMaker)
+                    System.Collections.ArrayList list = al != null ? al.GetValue(c) as System.Collections.ArrayList : null;
+                    return list != null ? list.Count : -1;
+                }
+            return -1;
         }
 
         // Ce que lisent les lecteurs pointes (journal : adresse, et l'image chargee).
@@ -199,6 +302,32 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // [Test] Autotest=contenumenu : au menu principal, les automates de l'import des musiques (bouton, CD, radio).
+        static bool menuDumped;
+        public static void MenuTest(string mode)
+        {
+            if (mode != "contenumenu" || menuDumped || Application.loadedLevelName != "MainMenu" || Time.realtimeSinceStartup < 25f) return;
+            menuDumped = true;
+            int n = 0;
+            foreach (UnityEngine.Object o in Game.AllFsms())
+            {
+                PlayMakerFSM f = o as PlayMakerFSM;
+                if (f == null || f.Fsm == null || f.Fsm.States == null) continue;
+                n++;
+                var sb = new System.Text.StringBuilder();
+                foreach (FsmState s in f.Fsm.States) sb.Append(" | ").Append(Dump(s));
+                string all = sb.ToString();
+                bool hit = f.FsmName == "LoadSongs" || f.FsmName == "Playlist" || all.IndexOf("Playlist", StringComparison.OrdinalIgnoreCase) >= 0
+                           || all.IndexOf("IMPORT", StringComparison.OrdinalIgnoreCase) >= 0 || all.IndexOf("Radio", StringComparison.OrdinalIgnoreCase) >= 0
+                           || f.FsmVariables.FindFsmBool("Import") != null;
+                if (!hit) continue;
+                Log.Info("autotest : contenumenu, " + Recon.Path(f.transform) + "::" + f.FsmName + " [" + f.ActiveStateName + "] actif " + f.gameObject.activeInHierarchy + "/" + f.enabled);
+                foreach (FsmState s in f.Fsm.States) Log.Info("autotest : contenumenu,    " + Dump(s));
+                foreach (FsmTransition tr in f.Fsm.GlobalTransitions) Log.Info("autotest : contenumenu,    global " + tr.EventName + " -> " + tr.ToState);
+            }
+            Log.Info("autotest : contenumenu, " + n + " automates au menu");
+        }
+
         static int cdStep;
         public static void Test(string mode, float t)
         {
@@ -214,6 +343,7 @@ namespace MWCoop
                         PlayMakerFSM f = go != null ? Game.FsmOn(go, "LoadSongs") : null;
                         FsmString p = f != null ? f.FsmVariables.FindFsmString("Path") : null;
                         Log.Info("autotest : contenucd, " + cn + " " + (f != null && done.Contains(f) ? "POINTE" : "jeu") + " : " + (p != null ? p.Value : "?"));
+                        if (f != null && cn == "CD1") foreach (FsmState st in f.Fsm.States) Log.Info("autotest : contenucd,    " + Dump(st));
                     }
                 }
                 return;
