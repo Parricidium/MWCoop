@@ -35,8 +35,18 @@ namespace MWCoop
         // de la voiture ou l'invite est assis, pendant qu'elle roule : etendue de ses positions (0 attendu ; avant le
         // correctif du 10/10, vitesse x duree d'image vers l'arriere).
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
+        public static int BeltLookLate = -1;   // (essais : regard force en fin d'image vers la ceinture : 0 rangee, 1 boucle)
         public static void LateMeasure()
         {
+            Vector3 blt;
+            // (camera d'essai aux yeux du joueur, meme reglage que la sienne : le jeu replace la camera du passager)
+            if (BeltLookLate >= 0 && PlayerSync.LocalCamera != null && Seats.TestBeltTarget(BeltLookLate, out blt))
+            {
+                Camera src = PlayerSync.LocalCamera.GetComponent<Camera>();
+                if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = src != null ? src.nearClipPlane : 0.03f; testCam.fieldOfView = src != null ? src.fieldOfView : 60f; }
+                testCam.transform.position = PlayerSync.LocalCamera.position;
+                testCam.transform.rotation = Quaternion.LookRotation(blt - PlayerSync.LocalCamera.position, PlayerSync.LocalCamera.up);
+            }
             if (Config.GetInt("Test", "JournalSiege", 0) != 0 && Time.frameCount % 300 < 3)
                 foreach (Avatar a in PlayerSync.Avatars)
                 {
@@ -1462,6 +1472,8 @@ namespace MWCoop
                 if (step == 4 && t > 47f) { step = 5; CaptureSoon("ceinture-bouclee-invite", 0.05f); }
             }
             if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) == 0 && Config.GetInt("Test", "CeintureTenue", 0) == 0 && t > 36f && step == 1) { step = 2; Log.Info("autotest : " + Seats.TestBelt()); }
+            // (puis la vue du passager vers sa ceinture bouclee : ecran-ceinture-vue-passager)
+            if (mode == "ceinture" && !Net.Session.IsHost && step >= 2 && step < 4 && t > 38f) { BeltLookLate = Config.GetInt("Test", "CeintureVueRegard", 1); if (step == 2 && t > 41f) { step = 3; CaptureSoon("ceinture-vue-passager", 0.05f); Log.Info("autotest : " + Seats.TestBeltCopy()); } }
             // [Test] Autotest=apimods : (avec MSCLoader et MWCoopTestMod) l'hote sauvegarde sur place a 20 s : son Mods.txt
             // (compteur du mod d'essai) partira avec la sauvegarde a la partie suivante.
             if (mode == "apimods" && Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest : sauvegarde de l'hote"); Game.SaveInPlace(); }
