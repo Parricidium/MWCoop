@@ -23,11 +23,21 @@ namespace MWCoop
 
         void FixedUpdate()
         {
+            Perf.Begin();
             try { VehicleSync.FixedUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("voitures (physique) : " + e.Message); }
+            Perf.End("(physique)");
         }
 
         void LateUpdate()
+        {
+            Perf.Begin();
+            LateUpdateBody();
+            Perf.End("(poses)");
+            Perf.Frame();
+        }
+
+        void LateUpdateBody()
         {
             // (CarVisuals d'abord : volant et levier de vitesse poses, puis les mains des avatars dessus -- elles avaient une image de retard.)
             try { CarVisuals.LateUpdate(); PlayerSync.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); }
@@ -136,6 +146,7 @@ namespace MWCoop
             watch.Reset(); watch.Start();
             try { a(); } catch (System.Exception e) { Log.Error(what + " : " + e); }
             watch.Stop();
+            Perf.Add(what, watch.Elapsed.TotalMilliseconds);
             if (watch.ElapsedMilliseconds > 30)
             {
                 float last;
@@ -205,12 +216,14 @@ namespace MWCoop
 
         void OnGUI()
         {
+            Perf.Begin();
             try
             {
                 Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); Respawn.Draw();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }
             catch (System.Exception e) { Style.Alpha = 1f; Log.Error("hud : " + e); }
+            Perf.End("(interface)");
         }
 
         void OnApplicationQuit()

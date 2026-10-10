@@ -56,12 +56,13 @@ namespace MWCoop
         // Reglages du moteur du niveau d'origine (choisi dans la fenetre Unity) : rendus quand une cle est retiree.
         static float baseShadow = -1, baseLod; static int baseCascades, baseTex, baseVsync, baseFps; static AnisotropicFiltering baseAniso;
         static int baseQuality = -1, appliedQuality = -1;
+        static bool vsyncSet, fpsSet;
         static float borderlessAt = -1;
 
         static void CaptureBase()
         {
             baseShadow = QualitySettings.shadowDistance; baseLod = QualitySettings.lodBias; baseCascades = QualitySettings.shadowCascades;
-            baseTex = QualitySettings.masterTextureLimit; baseVsync = QualitySettings.vSyncCount; baseFps = Application.targetFrameRate; baseAniso = QualitySettings.anisotropicFiltering;
+            baseTex = QualitySettings.masterTextureLimit; baseAniso = QualitySettings.anisotropicFiltering;   // (synchro, limite d'images : ApplyEngine)
         }
 
         // Niveau de qualite du moteur : pose (puis ses valeurs deviennent la base des reglages en plus), ou rendu.
@@ -195,8 +196,14 @@ namespace MWCoop
         static void ApplyEngine()
         {
             int v;
-            QualitySettings.vSyncCount = Has("SyncVerticale", out v) ? (v != 0 ? 1 : 0) : baseVsync;
-            Application.targetFrameRate = Has("ImagesMax", out v) ? (v <= 0 ? -1 : v) : baseFps;
+            // Synchro et limite d'images : posees seulement si reglees ([Coop] SyncVerticale / ImagesMax), et rendues
+            // seulement si le mod les avait changees. (Avant : la valeur « d'origine » relevee au menu -- chez un invite,
+            // pendant que MSCLoader y force la synchro (MSCLoader_forceMenuVsync) -- etait remise en partie : synchro
+            // allumee, 60 puis 30 ou 20 images/s ; retour d'un joueur, 10/10 : « MSCLoader fait perdre des FPS ».)
+            if (Has("SyncVerticale", out v)) { if (!vsyncSet) { vsyncSet = true; baseVsync = QualitySettings.vSyncCount; } QualitySettings.vSyncCount = v != 0 ? 1 : 0; }
+            else if (vsyncSet) { vsyncSet = false; QualitySettings.vSyncCount = baseVsync; }
+            if (Has("ImagesMax", out v)) { if (!fpsSet) { fpsSet = true; baseFps = Application.targetFrameRate; } Application.targetFrameRate = v <= 0 ? -1 : v; }
+            else if (fpsSet) { fpsSet = false; Application.targetFrameRate = baseFps; }
             QualitySettings.shadowDistance = Has("OmbresDistance", out v) ? Mathf.Clamp(v, 10, 1000) : baseShadow;
             QualitySettings.shadowCascades = Has("OmbresCascades", out v) ? (v >= 4 ? 4 : v >= 2 ? 2 : 1) : baseCascades;
             QualitySettings.lodBias = Has("Details", out v) ? Mathf.Clamp(v, 30, 500) / 100f : baseLod;

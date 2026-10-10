@@ -290,7 +290,7 @@ namespace MWCoop
         {
             if (obs.Count == 0) return;
             foreach (Obs o in inputs) Look(o, now);
-            int budget = Mathf.Min(400, obs.Count);
+            int budget = Mathf.Min(150, obs.Count);   // (400 avant : ~0,2 ms par image pour un releve de diagnostic)
             for (int i = 0; i < budget; i++)
             {
                 if (pollIndex >= obs.Count) pollIndex = 0;

@@ -67,14 +67,14 @@ namespace MWCoop
                 bool open = false;
                 foreach (FsmState st in states) if (st.Name.StartsWith("Open")) open = true;
                 if (!open) { seen.Add(f); continue; }
-                if (Retarget(f, states) >= 0) seen.Add(f);
+                if (f.Fsm.Initialized && Retarget(f, states) >= 0) seen.Add(f);   // (pas initialise : plus tard, sans avertissement)
             }
             if (probes.Count != before) Log.Info("portes automatiques : " + probes.Count + " suivent le joueur le plus proche");
         }
 
         // Les mesures de distance au joueur (GetDistance vers PLAYER) de cet automate visent le joueur le plus proche
         // (Events : evenements decides par l'hote). Nombre d'actions redirigees ; -1 : actions pas encore chargees.
-        public static int Retarget(PlayMakerFSM f) { try { return Retarget(f, f.Fsm.States); } catch { return -1; } }
+        public static int Retarget(PlayMakerFSM f) { try { return f.Fsm == null || !f.Fsm.Initialized ? -1 : Retarget(f, f.Fsm.States); } catch { return -1; } }
 
         static int Retarget(PlayMakerFSM f, FsmState[] states)
         {
