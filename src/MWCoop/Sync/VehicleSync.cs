@@ -554,7 +554,9 @@ namespace MWCoop
             if (Config.GetInt("Test", "RegimeFou", 0) != 0 && Time.frameCount % 600 == 0) w = 250000f * k;   // (essais : regime emballe force)
             float maxW = maxRpm * k, idleW = Mathf.Max(d.minRPM, 600f) * k;
             string why = null;
-            if (!Finite(w) || w > maxW * 1.02f) { w = maxW * 0.9f; why = "au-dela du maximum"; }
+            // (le jeu laisse le moteur depasser maxRPM -- le diesel du mod 300D a maxRPM vers 3800 et monte a 5-6000 : plafonne a
+            // maxRPM, il ne depassait plus 3500, retour d'un joueur, 10/10. Seul un vrai emballement est ramene.)
+            if (!Finite(w) || w > maxW * 1.6f + 1000f * k) { w = maxW; why = "emballe"; }
             else if (d.ratio == 0f && d.throttle < 0.05f && w > idleW * 1.3f && lastW > 0f && w > lastW)
             { w = Mathf.Max(idleW, lastW * (1f - 1.5f * Time.fixedDeltaTime)); why = "monte sans gaz au point mort"; }
             if (why != null)
