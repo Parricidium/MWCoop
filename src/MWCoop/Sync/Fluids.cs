@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -34,7 +34,16 @@ namespace MWCoop
             public float Last, NextSend;
             public int Sends, Recvs; public float WindowStart; public bool Contested;
             public bool Septic;   // fosse ou citerne : envoyee par l'autorite de la GIFU seulement
+            public float Pending, NextDelta;   // remplissage fait ici, pas encore envoye (valeur que l'on n'envoie pas)
         }
+
+        // Plein fait par un invite (retour d'un joueur, 10/10 : « l'argent part, l'essence n'arrive pas ») : le niveau
+        // d'essence est recalcule des deux cotes (consommation), donc dispute -- seul l'hote l'envoie -- et la valeur
+        // recue ecrasait celle versee ici. Un niveau a remplir ne monte que si on le remplit : ce qui monte ici sur une
+        // valeur que l'on n'envoie pas part en AJOUT (« +cle », volume), garde ici d'ici la, ajoute chez les autres.
+        static readonly HashSet<string> FillNames = new HashSet<string> {
+            "FuelLevel", "Fuel", "Oil", "OilLevel", "Fluid", "WaterLevel", "Water", "Coolant", "BrakeFluidF", "BrakeFluidR" };
+        static bool Fill(Watch x) { return !x.Septic && FillNames.Contains(x.Var.Name); }
 
         static Rigidbody gifu;   // corps de la GIFU (racine de la citerne)
 
@@ -51,6 +60,7 @@ namespace MWCoop
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
         static readonly HashSet<string> ambiguous = new HashSet<string>();
         static float nextScan = -1, nextPoll, nextWarn;
+        static int fills, fillsIn;
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
 
         // Hote : invite arrive en jeu -> 20 s plus tard (ses automates sont trouves), toutes les valeurs.
@@ -174,6 +184,14 @@ namespace MWCoop
                 if (x.Fsm == null) continue;
                 float v = x.Var.Value;
                 if (x.Contested && now - x.WindowStart > 30f) x.Contested = false;   // plus de conflit depuis 30 s
+                if (x.Pending > 0.02f && now >= x.NextDelta && !alone)
+                {
+                    if (w != null && w.Length + 6 + System.Text.Encoding.UTF8.GetByteCount(x.Key) > 1000) { Session.SendAll(w, true); w = null; }
+                    if (w == null) w = new NetWriter(Msg.Fluid).U8(Session.LocalId);
+                    w.Str("+" + x.Key).F32(x.Pending);
+                    if (++fills % 20 == 1) Log.Info("liquides et usure : " + x.Key + " rempli ici de " + x.Pending.ToString("F2") + ", envoye en ajout");
+                    x.Pending = 0f; x.NextDelta = now + 0.5f;
+                }
                 if (Mathf.Abs(v - x.Last) <= 0.005f + 0.001f * Mathf.Abs(v)) continue;
                 if (alone) { x.Last = v; continue; }   // personne a prevenir : l'arrivant recevra l'instantane
                 if (x.Septic)
@@ -184,6 +202,8 @@ namespace MWCoop
                 }
                 else if (VehicleSync.RemotelyDriven(x.Fsm.transform) || (x.Contested && !Session.IsHost) || now < x.NextSend)
                 {
+                    bool notOurs = VehicleSync.RemotelyDriven(x.Fsm.transform) || (x.Contested && !Session.IsHost);
+                    if (notOurs && Fill(x) && v > x.Last) { x.Pending += v - x.Last; x.Last = v; continue; }   // rempli ici : en ajout
                     if (now >= x.NextSend) x.Last = v;   // derive locale ignoree
                     continue;
                 }
@@ -223,18 +243,51 @@ namespace MWCoop
                 float v = r.F32();
                 if (relay != null) relay.Str(key).F32(v);
                 Watch x;
+                bool add = key.Length > 1 && key[0] == '+';
+                if (add) key = key.Substring(1);
                 if (!byKey.TryGetValue(key, out x) || x.Fsm == null)
                 {
                     if (now >= nextWarn) { nextWarn = now + 10f; Log.Warn("liquides et usure : " + key + " introuvable ici"); }
                     continue;
                 }
-                x.Var.Value = v;
-                x.Last = v;
+                if (add)
+                {
+                    // Rempli par un autre : ajoute a la valeur d'ici (pas un releve : ne compte pas comme dispute).
+                    x.Var.Value += v; x.Last += v;
+                    if (++fillsIn % 20 == 1) Log.Info("liquides et usure : " + key + " rempli de " + v.ToString("F2") + " par le joueur #" + who + " -> " + x.Var.Value.ToString("F2"));
+                    continue;
+                }
+                // (remplissage fait ici depuis le dernier releve, pas encore parti : garde par-dessus la valeur recue)
+                if (Fill(x) && x.Var.Value > x.Last && (VehicleSync.RemotelyDriven(x.Fsm.transform) || x.Contested && !Session.IsHost)) x.Pending += x.Var.Value - x.Last;
+                x.Var.Value = v + (Fill(x) ? x.Pending : 0f);
+                x.Last = x.Var.Value;
                 Tally(x, false, now);
                 if (++applied % 200 == 1) Log.Info("liquides et usure : " + applied + " valeurs recues (" + key + " = " + v + ", joueur #" + who + ")");
             }
             if (relay != null) Session.Broadcast(relay, true, who);
         }
+
+        // [Test] Autotest=plein : l'hote au volant de la SORBET (15/20 s, moteur tenu a 1500 tr/min) ; l'invite verse 5 l dans
+        // son reservoir de 30 a 35 s (0,25 l toutes les 0,25 s, comme le pistolet) ; chacun note le niveau a 28 et 45 s.
+        static int fuelStep; static float fuelNext;
+        public static void TestFill(string mode, float t)
+        {
+            if (mode != "plein") return;
+            const string Part = "FuelTankSorbett:Data.FuelLevel";
+            if (Session.IsHost)
+            {
+                if (t > 15f && fuelStep == 0) { fuelStep = 1; Log.Info("autotest : plein, " + VehicleSync.TestEnter("SORBET(190-200psi)", false)); }
+                if (t > 20f && fuelStep == 1) { fuelStep = 2; Log.Info("autotest : plein, volant -> " + VehicleSync.TestEnter("SORBET(190-200psi)", true)); }
+                VehicleSync.TestEngine(t > 21f && t < 70f ? 1500f : -1f, 0.2f);
+            }
+            else if (t > 30f && t < 35f && Time.realtimeSinceStartup >= fuelNext) { fuelNext = Time.realtimeSinceStartup + 0.25f; TestBump(Part, 0.25f); }
+            if (t > 28f && fuelLog == 0 || t > (Session.IsHost ? 60f : 45f) && fuelLog == 1)
+            {
+                fuelLog++;
+                foreach (Watch x in watches) if (x.Fsm != null && x.Key.Contains(Part)) Log.Info("autotest : plein, " + x.Key + " = " + x.Var.Value.ToString("F2") + (x.Contested ? " (disputee)" : "") + (VehicleSync.RemotelyDriven(x.Fsm.transform) ? " (conduite par un autre)" : ""));
+            }
+        }
+        static int fuelLog;
 
         // Essais : ajoute 3 a la premiere valeur Fluid/FuelLevel non nulle la plus proche du joueur.
         public static string TestNearest(string name)
