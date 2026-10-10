@@ -82,6 +82,7 @@ namespace MWCoop
             public float NextLog;
             public Drivetrain Dt;
             public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
+            public MonoBehaviour[] SanComps; public float SanNext;                      // garde-fou : Drivetrain, roues..., releve suivant
             public Wheel[] Wheels;
             public AxisCarController Axis;
             public bool Mod;                  // vehicule de mod sans CarDynamics (IsModVehicle)
@@ -193,15 +194,21 @@ namespace MWCoop
             hitches.AddRange(found);
         }
 
-        // 20 fois/s : la remorque attelee au vehicule qu'on conduit (sauf si un autre la conduit).
+        // 20 fois/s : la remorque attelee au vehicule qu'on mene (conduit, ou quitte moteur tournant / pousse) -- sauf si un
+        // autre la conduit. (Avant : seulement conduit. Conducteur descendu moteur tournant : le tracteur restait a lui, la
+        // remorque rendue a l'hote -- deux joueurs tiraient sur l'attelage, remorque projetee, valeurs folles, plantage ;
+        // retours du 10/10, plateau du KEKMET : « elle s'envole quand on vide les buches », « tout s'est mis a voler ».)
+        static readonly HashSet<int> hitchWant = new HashSet<int>();
         static void HitchTick(float now)
         {
-            var want = new HashSet<int>();
-            if (LocalDriving >= 0)
+            var want = hitchWant;
+            want.Clear();
+            int lead = LocalDriving >= 0 ? LocalDriving : owned;
+            if (lead >= 0)
                 foreach (KeyValuePair<int, int> h in hitches)
                 {
-                    int other = h.Key == LocalDriving ? h.Value : h.Value == LocalDriving ? h.Key : -1;
-                    if (other < 0 || other == owned) continue;
+                    int other = h.Key == lead ? h.Value : h.Value == lead ? h.Key : -1;
+                    if (other < 0 || (LocalDriving >= 0 && other == owned)) continue;
                     Car t = cars[other];
                     if (t.Body == null || Remote(t, now) || t.Net < 0) continue;
                     want.Add(other);
@@ -558,10 +565,12 @@ namespace MWCoop
             string why = null;
             // (le jeu laisse le moteur depasser maxRPM -- le diesel du mod 300D a maxRPM vers 3800 et monte a 5-6000 : plafonne a
             // maxRPM, il ne depassait plus 3500, retour d'un joueur, 10/10. Seul un vrai emballement est ramene.)
-            if (!Finite(w) || w > maxW * 1.6f + 1000f * k) { w = maxW; why = "emballe"; }
+            // (emballement ramene : la SORBET seulement, comme la regle du point mort ; ailleurs seul le non fini -- le 300D
+            // retombait de son regime maximal, « il revient en arriere », Menos 10/10)
+            if (neutralFor != d) { neutralFor = d; neutralRule = d.name.StartsWith("SORBET"); }
+            if (!Finite(w) || neutralRule && w > maxW * 1.6f + 1000f * k) { w = maxW; why = !Finite(w0) ? "non fini" : "emballe"; }
             // Regle du point mort : la SORBET seulement (son emballement, retour de Spagy). Ailleurs elle genait : la boite
             // automatique du mod 300D passe par le point mort, son ralenti monte (« regime tres bugge », Menos, 10/10).
-            if (neutralFor != d) { neutralFor = d; neutralRule = d.name.StartsWith("SORBET"); }
             if (why == null && neutralRule && d.ratio == 0f && d.throttle < 0.05f && w > idleW * 1.3f && lastW > 0f && w > lastW)
             { w = Mathf.Max(idleW, lastW * (1f - 1.5f * Time.fixedDeltaTime)); why = "monte sans gaz au point mort"; }
             if (why != null)
@@ -1295,6 +1304,7 @@ namespace MWCoop
         // Garde-fou : la voiture que l'on conduit (ou dont on garde le moteur) avec une valeur non finie -- regime du
         // Drivetrain, vitesses des roues, corps -- est remise d'aplomb avant que la physique ne s'emballe (retour d'un
         // joueur, 10/10 : regime NaN apres « moteur repris en marche », jeu fige chez l'hote et chez son passager).
+        static readonly MonoBehaviour[] NoComps = new MonoBehaviour[0];
         static void Sanitize()
         {
             foreach (Car c in cars)
@@ -1305,12 +1315,25 @@ namespace MWCoop
                 int fixedF = 0;
                 if (c.Dt != null && !Finite(c.Dt.rpm)) { c.Dt.rpm = 800f; fixedF++; }
                 // (champs des roues et de la transmission : seulement la voiture conduite ici, celle reprise en marche, ou deja abimee)
-                bool deep = c.Index == LocalDriving || c == hotCar || bad || fixedF > 0;
-                foreach (MonoBehaviour m in deep && c.Dt != null ? c.Dt.GetComponentsInChildren<MonoBehaviour>(true) : new MonoBehaviour[0])
+                // (voiture conduite : 4 fois par seconde -- a chaque image avant, composants recherches et champs lus par
+                // reflexion : 0,5-1 ms par image au volant)
+                bool deep = c == hotCar || bad || fixedF > 0 || c.Index == LocalDriving && now0 >= c.SanNext;
+                if (!deep || c.Dt == null) { if (!bad) { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; } if (!bad && fixedF == 0) continue; }
+                c.SanNext = now0 + 0.25f;
+                if (deep && c.Dt != null && (c.SanComps == null || System.Array.IndexOf(c.SanComps, null) >= 0))
+                {
+                    var keep = new List<MonoBehaviour>();
+                    foreach (MonoBehaviour m in c.Dt.GetComponentsInChildren<MonoBehaviour>(true))
+                    {
+                        if (m == null) continue;
+                        string tn = m.GetType().Name;
+                        if (tn == "Drivetrain" || tn == "Wheel" || tn == "CarDynamics" || tn == "Axles") keep.Add(m);
+                    }
+                    c.SanComps = keep.ToArray();
+                }
+                foreach (MonoBehaviour m in deep && c.SanComps != null ? c.SanComps : NoComps)
                 {
                     if (m == null) continue;
-                    string tn = m.GetType().Name;
-                    if (tn != "Drivetrain" && tn != "Wheel" && tn != "CarDynamics" && tn != "Axles") continue;
                     System.Reflection.FieldInfo[] fs;
                     if (!floatFields.TryGetValue(m.GetType(), out fs))
                     {
@@ -1464,11 +1487,31 @@ namespace MWCoop
         }
 
         // Essais : sort le joueur local de la voiture comme la touche ENTREE.
+        // Essais : moteur tenu en marche (Drivetrain a 1400 tr/min).
+        public static void TestKeepRunning(string name)
+        {
+            Car c = Named(name);
+            if (c == null || c.Dt == null) return;
+            testRunCar = c.Index; testRunUntil = Time.realtimeSinceStartup + 0.5f;
+            c.Dt.enabled = true;
+            if (c.Dt.rpm < 1400f) c.Dt.rpm = 1400f;
+            if (fEngineW == null) fEngineW = typeof(Drivetrain).GetField("engineAngularVelo", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (fEngineW != null && c.Dt.RPM2angularVelo > 0f) fEngineW.SetValue(c.Dt, 1400f * c.Dt.RPM2angularVelo);
+        }
+
+        // Essais : comme un moteur laisse tournant (on en garde la main sans etre au volant).
+        public static void TestOwn(string name)
+        {
+            Car c = Named(name);
+            if (c != null && LocalDriving < 0 && owned != c.Index) { owned = c.Index; Log.Info("autotest : " + c.Key + " gardee comme moteur laisse tournant"); }
+        }
+
         public static string TestExit(string name)
         {
             Car c = Named(name);
             if (c == null || c.Drive == null) return "?";
             if (c.Drive.ActiveStateName == "Player in car") c.Drive.SendEvent("Key DOWN");
+            if (Config.GetInt("Test", "AttelageSortie", 0) != 0) Log.Info("autotest : sortie, " + c.Key + " Drivetrain " + (c.Dt != null ? (c.Dt.enabled ? "actif" : "coupe") + " " + c.Dt.rpm.ToString("F0") + " tr/min" : "absent") + ", en marche " + EngineRunning(c));
             return c.Drive.ActiveStateName;
         }
 
@@ -1480,9 +1523,11 @@ namespace MWCoop
         }
 
         // Moteur en marche ici (regime, ou un son moteur allume par le jeu).
+        static int testRunCar = -1; static float testRunUntil;   // (essais : moteur tenu pour en marche)
         static bool EngineRunning(Car c)
         {
             if (c.Body == null) return false;
+            if (c.Index == testRunCar && Time.realtimeSinceStartup < testRunUntil) return true;
             if (c.Dt != null && c.Dt.enabled && c.Dt.rpm > 150f) return true;
             if (c.ModDt != null && ModBool(c.ModDt, c.ModRun) && ModFloat(c.ModDt, c.ModRpm) > 40f) return true;
             foreach (GameObject g in c.SoundObjs) if (g != null && g.activeSelf) return true;
@@ -1685,9 +1730,12 @@ namespace MWCoop
             Vector3 dhead = mode == 1 && r.More ? r.Vec() : Vector3.zero;
             // Valeurs non finies (NaN, infini) : jamais appliquees ni relayees -- un regime NaN recu faisait partir la
             // physique de la copie en valeurs infinies et figeait le jeu (retour d'un joueur, 10/10).
-            if (!Finite(pos) || !Finite(vel) || !Finite(ang) || !Finite(rot.x + rot.y + rot.z + rot.w) || !Finite(rpm) || !Finite(thr) || !Finite(steer) || !Finite(dhead))
+            // Valeurs finies mais folles aussi (a plus de 50 km, plus de 500 m/s : une remorque projetee chez l'autre, des
+            // milliards de metres -- l'hote les prenait et plantait, retour du 10/10).
+            if (!Finite(pos) || !Finite(vel) || !Finite(ang) || !Finite(rot.x + rot.y + rot.z + rot.w) || !Finite(rpm) || !Finite(thr) || !Finite(steer) || !Finite(dhead)
+                || pos.sqrMagnitude > 2.5e9f || vel.sqrMagnitude > 250000f || ang.sqrMagnitude > 10000f)
             {
-                if (now0 >= nanLogAt) { nanLogAt = now0 + 5f; Log.Warn("voitures : etat non fini recu de #" + who + " (numero " + idx + ", regime " + rpm + ", position " + pos + ") : ignore"); }
+                if (now0 >= nanLogAt) { nanLogAt = now0 + 5f; Log.Warn("voitures : etat non fini ou aberrant recu de #" + who + " (numero " + idx + ", regime " + rpm + ", position " + pos + ", vitesse " + vel.magnitude.ToString("F0") + ") : ignore"); }
                 return;
             }
             for (int i = 0; i < spitch.Count; i++) if (!Finite(spitch[i])) spitch[i] = 1f;

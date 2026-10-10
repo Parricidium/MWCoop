@@ -111,7 +111,9 @@ namespace MWCoop
                 if (dhp == null) continue;
                 Vector3 d = rb.transform.InverseTransformPoint(dhp.position) + EyeFromPivot;
                 seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-d.x, d.y, d.z) });
-                if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("BACHGLOTZ") || n.StartsWith("MACHTWAGEN"))
+                // (taxi et ses copies -- mods Machtwagen300D, SECONDMACHTWAGEN : noms en minuscules ou prefixes, sans banquette
+                // avant, retour de Menos 10/10 : « on ne peut pas s'asseoir a l'arriere »)
+                if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("BACHGLOTZ") || n.ToUpperInvariant().Contains("MACHTWAGEN"))
                 {
                     // Banquette : 85 cm derriere, un peu plus haute.
                     seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + 0.06f, d.z - 0.85f) });
