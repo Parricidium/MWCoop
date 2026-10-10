@@ -567,9 +567,26 @@ namespace MWCoop
             k.rotation = Quaternion.FromToRotation(a.position - k.position, foot - k.position) * k.rotation;
         }
 
+        // Retour d'un joueur (10/10, apres 0.66 : « vus d'un passager, le conducteur et les autres glissent en arriere de
+        // leur siege et tremblent ») : les avatars sont places a l'etape « joueurs » (Update), la voiture ou le passager
+        // local est assis est deplacee ensuite, a l'etape « voitures » (FollowFrame) -- les avatars assis avaient une
+        // image de retard sur elle (vitesse x duree d'image : ~30 cm a 70 km/h, variable d'une image a l'autre).
+        // Leur place dans la voiture (Apply) est donc reposee ici, sur la voiture a sa pose de cette image.
+        bool riding;
+        static int noLateAnchor = -1;
+        Vector3 rideLocalPos;
+        Quaternion rideLocalRot = Quaternion.identity;
+
         public void LatePose()
         {
             if (anim == null || bones == null || Root == null) return;
+            if (noLateAnchor < 0) noLateAnchor = Config.GetInt("Test", "SansAncrageFin", 0);   // (essais : comme avant)
+            if (riding && vehicleT != null && noLateAnchor == 0)
+            {
+                Root.transform.position = vehicleT.TransformPoint(rideLocalPos);
+                Root.transform.rotation = vehicleT.rotation * rideLocalRot;
+                pos = Root.transform.position;
+            }
             if (boneList == null)
             {
                 boneList = new List<Transform>(bones.Values).ToArray();
@@ -1390,6 +1407,9 @@ namespace MWCoop
             crouchDepth = !crouch ? 0f : st.Height > 1.45f ? 0.5f : Mathf.Clamp01((1.4f - st.Height) / 1.1f);
             sitting = sit || crouch;
             Root.transform.localScale = Vector3.one;
+            // Dans un vehicule : la place dans la voiture, reposee en fin d'image (LatePose) sur la voiture deja deplacee.
+            riding = inCar && vehicleT != null;
+            if (riding) { rideLocalPos = vehicleT.InverseTransformPoint(Root.transform.position); rideLocalRot = Quaternion.Inverse(vehicleT.rotation) * Root.transform.rotation; }
             if (Time.realtimeSinceStartup >= nextDiag && body != null)
             {
                 nextDiag = Time.realtimeSinceStartup + 10f;

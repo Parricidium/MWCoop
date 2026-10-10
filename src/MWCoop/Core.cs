@@ -34,6 +34,7 @@ namespace MWCoop
             Perf.Begin();
             LateUpdateBody();
             Perf.End("(poses)");
+            Autotest.LateMeasure();
             Perf.Frame();
         }
 
