@@ -124,6 +124,7 @@ namespace MWCoop
             Step("gestes", Gestures.Update);
             Step("outils en main", HandTools.Update);
             Step("tas de bois des remorques", LogPiles.Update);
+            Step("porte du garage", GarageDoor.Update);
             Step("vue (troisieme personne)", ThirdPerson.Update);
             Step("boissons", Drinks.Update);
             Step("rayons", Stock.Update);
@@ -207,6 +208,7 @@ namespace MWCoop
             Gestures.OnLevelLoaded();
             HandTools.OnLevelLoaded();
             LogPiles.OnLevelLoaded();
+            GarageDoor.OnLevelLoaded();
             ThirdPerson.OnLevelLoaded();
             Drinks.OnLevelLoaded();
             Stock.OnLevelLoaded();
