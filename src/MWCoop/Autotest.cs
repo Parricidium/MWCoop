@@ -35,6 +35,12 @@ namespace MWCoop
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
         public static void LateMeasure()
         {
+            if (Config.GetInt("Test", "JournalSiege", 0) != 0 && Time.frameCount % 300 < 3)
+                foreach (Avatar a in PlayerSync.Avatars)
+                {
+                    Transform pv = a.PelvisBone, car = a.VehicleT;
+                    if (pv != null && car != null) Log.Info("siege : fin d'image " + Time.frameCount + " bassin " + car.InverseTransformPoint(pv.position).ToString("F2") + " racine " + car.InverseTransformPoint(a.Root.transform.position).ToString("F2"));
+                }
             if (Config.Get("Test", "Autotest", "") != "cabine" || Config.GetInt("Test", "CabinePassager", 0) == 0 || Net.Session.IsHost || !Seats.Seated) return;
             Rigidbody b = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"));
             if (b == null) return;
@@ -108,7 +114,7 @@ namespace MWCoop
                 bool rearSeat = Config.GetInt("Test", "MotoPassager", 0) != 0;
                 if (!Net.Session.IsHost)
                 {
-                    if (rearSeat) { if (t > 20f && step == 0) { step = 1; Log.Info("autotest : moto, place arriere -> " + Seats.TestSit(jn, 1)); } }
+                    if (rearSeat) { if (t > 20f && step == 0) { step = 1; Log.Info("autotest : moto, place " + Config.GetInt("Test", "MotoPlace", 1) + " -> " + Seats.TestSit(jn, Config.GetInt("Test", "MotoPlace", 1))); } }
                     else
                     {
                         if (t > 15f && step == 0) { step = 1; Log.Info("autotest : moto -> " + VehicleSync.TestEnter(jn, false)); }
@@ -131,7 +137,8 @@ namespace MWCoop
                         if (other && Seats.DriverHead(mo.transform, out dh))
                         {   // (repere : la tete du conducteur ; on vise sa poitrine)
                             testCam.transform.position = mo.transform.TransformPoint(dh + off);
-                            testCam.transform.LookAt(mo.transform.TransformPoint(dh + new Vector3(0f, -0.45f, 0.1f)));
+                            Vector3 aim = dh + new Vector3(Config.GetFloat("Test", "MotoViseX", 0f), Config.GetFloat("Test", "MotoViseY", -0.45f), 0.1f);   // ([Test] MotoViseX : decale la visee, ex. vers le passager)
+                            testCam.transform.LookAt(mo.transform.TransformPoint(aim));
                         }
                         else
                         {
