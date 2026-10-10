@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace MWCoop
 {
@@ -11,6 +11,7 @@ namespace MWCoop
         public static KeyCode Voice { get { return Get("Vocal", KeyCode.V); } }
         public static KeyCode Cheats { get { return Get("Triches", KeyCode.F7); } }
         public static KeyCode Map { get { return Get("Carte", KeyCode.M); } }
+        public static KeyCode View { get { return Get("Vue", KeyCode.F5); } }
 
         static KeyCode Get(string name, KeyCode def)
         {

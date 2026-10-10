@@ -27,6 +27,8 @@ namespace MWCoop
         }
         static string capName;
         static float capAt;
+        // [Test] Autotest=pantin : le joueur 2 est « mort » (pantin chez les autres) de 30 a 45 s, en marchant ; captures.
+        public static bool TestDead;
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
 
         // [Test] Autotest=cabine, CabinePassager=1 : en fin d'image (ce qui est rendu), l'avatar du conducteur dans le repere
@@ -91,7 +93,7 @@ namespace MWCoop
             float t = Time.realtimeSinceStartup - t0;
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t);
-            Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t);
+            Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t);
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
             VehicleSync.Test(mode, t); Jobs.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); PushDoors.Test(mode, t);

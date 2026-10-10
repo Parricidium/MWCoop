@@ -501,6 +501,9 @@ namespace MWCoop
 
         Transform Bone(string n) { Transform t; return bones != null && bones.TryGetValue(n, out t) ? t : null; }
         public Transform HandRight { get { return Bone("hand_right"); } }
+        public bool InVehicle { get { return inCar; } }
+        // Outil en main (HandTools) : prises du manche (monde), dosage ; main gauche aussi pour un outil long.
+        public float ToolW; public Vector3 ToolGripR, ToolGripL; public bool ToolTwo;
         public Transform PelvisBone { get { return Bone("pelvis"); } }
         public Transform VehicleT { get { return inCar ? vehicleT : null; } }
 
@@ -581,7 +584,7 @@ namespace MWCoop
 
         public void LatePose()
         {
-            if (anim == null || bones == null || Root == null) return;
+            if (anim == null || bones == null || Root == null || ragdoll) return;
             if (noLateAnchor < 0) noLateAnchor = Config.GetInt("Test", "SansAncrageFin", 0);   // (essais : comme avant)
             if (riding && vehicleT != null && noLateAnchor == 0)
             {
@@ -616,6 +619,7 @@ namespace MWCoop
             FixFacing();
             Helmet((Player.State.Flags & PlayerSync.F_Helmet) != 0);
             Pose();
+            if (deadSeated) SlumpPose();
             PlaceCigarette();
             PlaceDrink();
             PlacePee();
@@ -1245,6 +1249,12 @@ namespace MWCoop
             ArmTo(true, sR.position + r.forward * 0.45f + r.up * 0.25f - r.right * 0.05f, wR[0]);
             // Coup de poing : bras tendu droit devant.
             ArmTo(true, sR.position + r.forward * 0.7f - r.right * 0.12f, punch);
+            // Outil en main (hache, masse, lampe, pistolet de la pompe...) : main droite au manche, gauche plus loin dessus.
+            if (ToolW > 0.001f)
+            {
+                ArmTo(true, ToolGripR, ToolW);
+                if (ToolTwo) ArmTo(false, ToolGripL, ToolW);
+            }
             ReachPose();
         }
 
@@ -1350,6 +1360,13 @@ namespace MWCoop
         {
             PlayerState st = pi.State;
             int f = st.Flags;
+            // Mort (en train de choisir ou revenir) : a pied, pantin qui tombe ; au volant ou passager, affale sur le siege
+            // (LatePose). Pendant le pantin, plus rien ne le deplace ni ne le pose. [Coop] Pantin=0 : comme avant.
+            bool dead = (f & PlayerSync.F_Dead) != 0 && Config.GetInt("Coop", "Pantin", 1) != 0;
+            if (dead && !ragdoll && !inCar) RagdollOn(st);
+            else if (!dead && ragdoll) RagdollOff();
+            deadSeated = dead && inCar;
+            if (ragdoll) return;
             int cloth = f & (PlayerSync.F_Jacket | PlayerSync.F_Coverall);
             if ((skin != pi.Skin || cloth != clothFlags || faceGen != CustomFace.Generation) && body != null)
             {
@@ -1994,6 +2011,129 @@ namespace MWCoop
             return Player.Name + " : " + ((clothFlags & PlayerSync.F_Coverall) != 0 ? "combinaison" : (clothFlags & PlayerSync.F_Jacket) != 0 ? "veste" : "sans veste")
                    + (clothMat != null ? " (teinte " + clothMat.color + ")" : "")
                    + (helmet != null && helmet.activeSelf ? ", casque" : ", sans casque");
+        }
+
+        // ---------------------------------------------------------------- mort : pantin (demande de JD, 10/10)
+        // A pied : corps rigides et collisionneurs sur les os du squelette (bassin, dos, poitrine, tete, bras, avant-bras,
+        // cuisses, jambes), articulations entre eux (CharacterJoint, bornes moderees), animations coupees : le corps
+        // s'effondre la ou il est, avec son elan. A la reapparition : tout est retire, os remis, animations reprises.
+        bool ragdoll, deadSeated;
+        readonly List<Component> ragParts = new List<Component>();
+        Transform[] ragBones; Vector3[] ragPos; Quaternion[] ragRot;
+        public bool Ragdolled { get { return ragdoll; } }
+        public Transform PelvisT { get { return Bone("pelvis"); } }
+
+        void RagdollOn(PlayerState st)
+        {
+            if (anim == null || bones == null) return;
+            ragdoll = true;
+            ragBones = new List<Transform>(bones.Values).ToArray();
+            ragPos = new Vector3[ragBones.Length]; ragRot = new Quaternion[ragBones.Length];
+            for (int i = 0; i < ragBones.Length; i++) { ragPos[i] = ragBones[i].localPosition; ragRot[i] = ragBones[i].localRotation; }
+            anim.enabled = false;
+            if (armR != null) armR.enabled = false;
+            if (armL != null) armL.enabled = false;
+            Transform r = Root.transform;
+            Vector3 vel = Quaternion.Euler(0f, st.Yaw, 0f) * Vector3.forward * Mathf.Min(st.Speed, 8f) + Vector3.up * 0.3f + r.forward * 0.6f;
+            var cols = new List<Collider>();
+            Rigidbody pelvisRb = Part("pelvis", "spine_middle", 0.14f, 12f, null, 0f, 0f, vel, cols);
+            Rigidbody mid = Part("spine_middle", "spine_upper", 0.14f, 10f, pelvisRb, 20f, 25f, vel, cols);
+            Rigidbody chest = Part("spine_upper", "head", 0.16f, 10f, mid ?? pelvisRb, 20f, 25f, vel, cols);
+            Rigidbody head = headBone != null ? Part(headBone.name, null, 0.11f, 5f, chest, 30f, 40f, vel, cols) : null;
+            foreach (string s in new[] { "_right", "_left" })
+            {
+                Rigidbody up = Part("shoulder" + s, "arm" + s, 0.055f, 2.5f, chest, 60f, 80f, vel, cols);
+                Part("arm" + s, "hand" + s, 0.045f, 1.8f, up, 70f, 10f, vel, cols);
+                Rigidbody th = Part("thig" + s, "knee" + s, 0.08f, 8f, pelvisRb, 40f, 50f, vel, cols);
+                Part("knee" + s, "ankle" + s, 0.06f, 5f, th, 70f, 10f, vel, cols);
+            }
+            // (les morceaux ne se heurtent pas entre eux, ni le joueur d'ici)
+            CharacterController cc = PlayerSync.LocalController;
+            for (int i = 0; i < cols.Count; i++)
+            {
+                if (cc != null) Physics.IgnoreCollision(cols[i], cc);
+                for (int j = i + 1; j < cols.Count; j++) Physics.IgnoreCollision(cols[i], cols[j]);
+            }
+            Log.Info("avatar " + Player.Name + " : mort, pantin (" + cols.Count + " morceaux" + (head != null ? "" : ", sans tete") + ")");
+        }
+
+        // Morceau du pantin : os 'bone' jusqu'a 'child' (capsule de rayon 'radius' ; sans enfant : sphere), corps de
+        // masse 'mass', lie a 'parent' (torsion +-twist, balancement swing).
+        Rigidbody Part(string bone, string child, float radius, float mass, Rigidbody parent, float twist, float swing, Vector3 vel, List<Collider> cols)
+        {
+            Transform b = Bone(bone);
+            if (b == null) return null;
+            Transform c = child != null ? Bone(child) : null;
+            Vector3 ls = b.lossyScale;
+            float sc = Mathf.Max(Mathf.Abs(ls.x), Mathf.Abs(ls.y), Mathf.Abs(ls.z));
+            if (sc < 1e-4f) sc = 1f;
+            Collider col;
+            if (c != null)
+            {
+                Vector3 lc = b.InverseTransformPoint(c.position);
+                var cap = b.gameObject.AddComponent<CapsuleCollider>();
+                Vector3 a = new Vector3(Mathf.Abs(lc.x), Mathf.Abs(lc.y), Mathf.Abs(lc.z));
+                cap.direction = a.x >= a.y && a.x >= a.z ? 0 : a.y >= a.z ? 1 : 2;
+                cap.center = lc * 0.5f;
+                cap.radius = radius / sc;
+                cap.height = lc.magnitude + radius * 2f / sc;
+                col = cap;
+            }
+            else
+            {
+                var sp = b.gameObject.AddComponent<SphereCollider>();
+                sp.radius = radius / sc;
+                sp.center = b.InverseTransformDirection(Root.transform.up) * (0.08f / sc);
+                col = sp;
+            }
+            var rb = b.gameObject.AddComponent<Rigidbody>();
+            rb.mass = mass;
+            rb.drag = 0.05f; rb.angularDrag = 0.5f;
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.velocity = vel;
+            cols.Add(col);
+            if (parent != null)
+            {
+                var j = b.gameObject.AddComponent<CharacterJoint>();
+                j.connectedBody = parent;
+                j.axis = Vector3.right; j.swingAxis = Vector3.forward;
+                SoftJointLimit lo = j.lowTwistLimit; lo.limit = -twist; j.lowTwistLimit = lo;
+                SoftJointLimit hi = j.highTwistLimit; hi.limit = twist; j.highTwistLimit = hi;
+                SoftJointLimit s1 = j.swing1Limit; s1.limit = swing; j.swing1Limit = s1;
+                SoftJointLimit s2 = j.swing2Limit; s2.limit = swing; j.swing2Limit = s2;
+                ragParts.Add(j);
+            }
+            ragParts.Add(col);
+            ragParts.Add(rb);
+            return rb;
+        }
+
+        void RagdollOff()
+        {
+            ragdoll = false;
+            // (articulations d'abord, puis collisionneurs et corps)
+            foreach (Component k in ragParts) if (k is Joint) Object.DestroyImmediate(k);
+            foreach (Component k in ragParts) if (k != null && !(k is Joint) && !(k is Rigidbody)) Object.DestroyImmediate(k);
+            foreach (Component k in ragParts) if (k != null && k is Rigidbody) Object.DestroyImmediate(k);
+            ragParts.Clear();
+            if (ragBones != null)
+                for (int i = 0; i < ragBones.Length; i++) if (ragBones[i] != null) { ragBones[i].localPosition = ragPos[i]; ragBones[i].localRotation = ragRot[i]; }
+            ragBones = null;
+            if (anim != null) anim.enabled = true;
+            if (armR != null) armR.enabled = true;
+            if (armL != null) armL.enabled = true;
+            boneList = null;   // (poses de base reprises de l'animation)
+            Log.Info("avatar " + Player.Name + " : reapparu, pantin retire");
+        }
+
+        // Mort au volant ou en passager : affale, tete tombee sur la poitrine, bras ballants.
+        void SlumpPose()
+        {
+            Turn(Bone("spine_middle"), 0f, 18f);
+            Turn(Bone("spine_upper"), 0f, 22f);
+            Turn(Bone("HeadPivot") ?? headBone, 8f, 40f);
+            ArmDown("shoulder_right", "hand_right", 1f, 1f);
+            ArmDown("shoulder_left", "hand_left", -1f, 1f);
         }
 
         public void Destroy()
