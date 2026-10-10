@@ -7098,6 +7098,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_scroll[TAB_WIKI] = (float)sc;
         }
         else if (st == L"graphismes") { g_tab = TAB_GFX; GfxLoad(); }
+        else if (st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_scroll[TAB_GFX] = GfxMaxScroll(); }   // (bas de la page : touches)
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
         else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
             bool host = st == L"salon" || st == L"salon-options" || st == L"salon-mods";   // (salon-udp : invite dont l'UDP est bloque)

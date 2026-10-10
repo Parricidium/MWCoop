@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -51,7 +51,7 @@ namespace MWCoop
         static Animation fingerAnim, fistAnim;
         static PlayMakerFSM functions, crouch, hand, passOut, knockOut, pissFsm;
         static float nextFind, nextSend, lastSend, loadedAt;
-        static bool fingerWas, fistWas, found;
+        static bool fingerWas, fistWas, found, fingerWas0, fistWas0;
         static int bits;
         static float drunk, leanSide, leanFwd, heldSize, seatYaw;
         static Vector3 heldOff, seatPos;
@@ -145,6 +145,17 @@ namespace MWCoop
             fistWas = fistNow; fingerWas = fingerNow;
             if (fistNow) bits |= G_Fist;
             if (fingerNow) bits |= G_Finger;
+            // Vue a la troisieme personne : l'avatar du joueur local lit ses gestes comme ceux d'un autre.
+            if (ThirdPerson.Active)
+            {
+                Remote me;
+                if (!remote.TryGetValue(Session.LocalId, out me)) remote[Session.LocalId] = me = new Remote();
+                me.Time = now; me.Bits = bits; me.Drunk = drunk; me.LeanSide = leanSide; me.LeanFwd = leanFwd;
+                me.Held = heldOff; me.HeldSize = heldSize; me.Seat = seatPos; me.SeatYaw = seatYaw;
+                if (fistNow && !fistWas0) me.PunchAt = now;
+                if (fingerNow && !fingerWas0) me.FingerAt = now;
+            }
+            fistWas0 = fistNow; fingerWas0 = fingerNow;
             SendState(now);
             Stains(now);
         }

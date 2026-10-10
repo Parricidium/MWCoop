@@ -41,7 +41,7 @@ namespace MWCoop
         void LateUpdateBody()
         {
             // (CarVisuals d'abord : volant et levier de vitesse poses, puis les mains des avatars dessus -- elles avaient une image de retard.)
-            try { CarVisuals.LateUpdate(); PlayerSync.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); }
+            try { CarVisuals.LateUpdate(); HandTools.LateUpdate(); PlayerSync.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
             try { Lights.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("lumieres : " + e.Message); }
@@ -122,6 +122,8 @@ namespace MWCoop
             Step("atelier", Garage.Update);
             Step("maison", Home.Update);
             Step("gestes", Gestures.Update);
+            Step("outils en main", HandTools.Update);
+            Step("vue (troisieme personne)", ThirdPerson.Update);
             Step("boissons", Drinks.Update);
             Step("rayons", Stock.Update);
             Step("PNJ", Npcs.Update);
@@ -202,6 +204,8 @@ namespace MWCoop
             Garage.OnLevelLoaded();
             Home.OnLevelLoaded();
             Gestures.OnLevelLoaded();
+            HandTools.OnLevelLoaded();
+            ThirdPerson.OnLevelLoaded();
             Drinks.OnLevelLoaded();
             Stock.OnLevelLoaded();
             Npcs.OnLevelLoaded();

@@ -1424,8 +1424,12 @@ namespace MWCoop
 
         // Avatar d'un joueur qui conduit chez lui : position et rotation dans la copie locale de la
         // voiture (calculees par rapport a l'etat de la voiture envoye en meme temps : pas de tremblement).
+        // (joueur local au volant -- son avatar a la troisieme personne : la voiture conduite ici)
+        static Car LocalCar(int player) { return player == Session.LocalId && LocalDriving >= 0 && LocalDriving < cars.Count && cars[LocalDriving].Body != null ? cars[LocalDriving] : null; }
+
         public static Transform RemoteCarTransform(int player)
         {
+            Car lc = LocalCar(player); if (lc != null) return lc.Body.transform;
             foreach (Car c in cars) if (c.RemoteDriver == player && c.Body != null) return c.Body.transform;
             return null;
         }
@@ -1433,6 +1437,7 @@ namespace MWCoop
         // Nom de la voiture que 'player' conduit chez lui (null : aucune).
         public static string RemoteCarName(int player)
         {
+            Car lc = LocalCar(player); if (lc != null) return lc.Name;
             foreach (Car c in cars) if (c.RemoteDriver == player) return c.Name;
             return null;
         }
@@ -1440,12 +1445,14 @@ namespace MWCoop
         // Vitesse de la voiture que ce joueur conduit (0 : il ne conduit pas ici).
         public static Vector3 RemoteVelocity(int player)
         {
+            Car lc = LocalCar(player); if (lc != null) return lc.Body.velocity;
             foreach (Car c in cars) if (c.RemoteDriver == player && c.Body != null) return c.Vel;
             return Vector3.zero;
         }
 
         public static float RemoteSpeed(int player)
         {
+            Car lc = LocalCar(player); if (lc != null) return lc.Body.velocity.magnitude;
             foreach (Car c in cars) if (c.RemoteDriver == player && c.Body != null) return c.Vel.magnitude;
             return 0f;
         }
@@ -1453,6 +1460,8 @@ namespace MWCoop
         // Camera du conducteur 'player' dans le repere de sa voiture (envoyee avec elle) ; faux si inconnue.
         public static bool RemoteHeadLocal(int player, out Vector3 head)
         {
+            Car lc = LocalCar(player);
+            if (lc != null && PlayerSync.LocalCamera != null) { head = lc.Body.transform.InverseTransformPoint(ThirdPerson.EyePosition); return true; }
             foreach (Car c in cars) if (c.RemoteDriver == player && c.RemoteHead != Vector3.zero) { head = c.RemoteHead; return true; }
             head = Vector3.zero;
             return false;
@@ -1460,6 +1469,8 @@ namespace MWCoop
 
         public static bool SeatPose(int player, Vector3 feet, out Vector3 pos, out Quaternion rot)
         {
+            Car lc = LocalCar(player);
+            if (lc != null) { pos = feet; rot = lc.Body.transform.rotation; return true; }
             foreach (Car c in cars)
             {
                 if (c.RemoteDriver != player || c.Body == null) continue;

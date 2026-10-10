@@ -64,6 +64,7 @@ namespace MWCoop
         static float crouchCheckAt = -1;
 
         public static bool Seated { get { return current != null; } }
+        public static Transform LocalCar { get { return current != null ? current.CarT : null; } }
         public static string SeatedCarKey { get { return current != null ? current.Car : null; } }   // (cle VehicleSync de la voiture)
         // Voiture ou le joueur local est assis en passager (null : aucune).
         public static Transform SeatedCar { get { return current != null ? current.CarT : null; } }
@@ -757,6 +758,13 @@ namespace MWCoop
         public static bool RemoteSeat(int id, out Transform car, out Vector3 head, out string carName)
         {
             car = null; head = Vector3.zero; carName = null;
+            // (joueur local -- son avatar a la troisieme personne : sa place d'ici)
+            if (id == Net.Session.LocalId)
+            {
+                if (current == null || current.CarT == null) return false;
+                car = current.CarT; carName = current.Car; head = current.Head;
+                return true;
+            }
             Remote rs;
             if (!remote.TryGetValue(id, out rs)) return false;
             // (Voiture inactive ici -- taxi range : l'avatar reste a la place envoyee.)
@@ -771,7 +779,7 @@ namespace MWCoop
         }
 
         // Place d'un autre joueur assis (rang ; -1 : pas assis).
-        public static int RemoteSeatIndex(int id) { Remote rs; return remote.TryGetValue(id, out rs) ? rs.Index : -1; }
+        public static int RemoteSeatIndex(int id) { if (id == Net.Session.LocalId) return current != null ? current.Index : -1; Remote rs; return remote.TryGetValue(id, out rs) ? rs.Index : -1; }
 
         static Vector3 SeatHead(string car, int index)
         {

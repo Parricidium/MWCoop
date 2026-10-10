@@ -43,6 +43,7 @@ namespace MWCoop
             public Wheel[] Wheels; public float[] WheelRot; public float Steer, Ride; public Vector3 Base; public bool BaseSet;
             public Transform[] WheelVis; public float[] WheelR;   // roue visible (Wheel.model, sinon son enfant Wheel/Tire/tire) et rayon
             public float LastYaw;
+            public Vector3 LastBase, MoveVel; public bool MoveSet;   // invite : vitesse d'apres le deplacement affiche (roues)
             // Choc avec un invite (passage de physique) : Owner = joueur qui en a la physique (-1 : l'hote, comme d'habitude).
             public int Owner = -1; public float OwnSince, FarSince, OwnSent;
             public List<Behaviour> HostOff;  // hote : logique coupee pendant que l'invite l'a
@@ -261,6 +262,9 @@ namespace MWCoop
                     // saut : retour au point de depart apres l'attente, cache entre-temps).
                     Vector3 d = e.T.position - e.Pos;
                     Vector3 v = e.Body != null && !e.Body.isKinematic && !e.Train ? e.Body.velocity : d.sqrMagnitude > 400f ? Vector3.zero : d / 0.2f;
+                    // (loin du joueur, le pilote deplace la voiture sans sa physique : corps a l'arret qui avance -- vitesse
+                    // nulle envoyee, roues figees chez l'invite ; retour de JD, 10/10) : vitesse d'apres le deplacement
+                    if (v.sqrMagnitude < 0.25f && d.sqrMagnitude > 0.04f && d.sqrMagnitude < 400f) v = d / 0.2f;
                     e.Pos = e.T.position;
                     w.Vec(e.T.position).Quat(e.T.rotation).Vec(v);
                 }
@@ -483,6 +487,47 @@ namespace MWCoop
             Log.Info(sb.ToString());
         }
 
+        // [Test] Autotest=roues : de 30 a 60 s, chacun note toutes les 0,5 s les roues de la premiere voiture de la circulation
+        // en mouvement (meme cle des deux cotes) : composant Wheel actif, modele, rotation locale, parent.
+        static float wheelsNext; static string wheelsKey;
+        static void TestWheels(float t)
+        {
+            if (t < 30f || t > 60f || Time.realtimeSinceStartup < wheelsNext) return;
+            wheelsNext = Time.realtimeSinceStartup + 0.5f;
+            Ent e = null;
+            foreach (Ent x in ents)
+            {
+                if (x.T == null || x.Walker || x.Train || x.Wheels == null || x.Wheels.Length == 0 || !x.T.gameObject.activeInHierarchy) continue;
+                if (wheelsKey != null ? x.Key == wheelsKey : (x.Body != null && x.Traffic && (Session.IsHost ? Mathf.Max(x.Body.velocity.magnitude, x.Vel.magnitude) : x.Vel.magnitude) > 3f)) { e = x; break; }
+            }
+            if (e == null) { Log.Info("autotest : roues : aucune voiture en mouvement" + (wheelsKey != null ? " (" + wheelsKey + ")" : "")); return; }
+            if (wheelsKey == null) { wheelsKey = e.Key; Log.Info("autotest : roues : suivie " + e.Key); }
+            float v = Session.IsHost && e.Body != null ? e.Body.velocity.magnitude : e.Vel.magnitude;
+            var sb = new System.Text.StringBuilder("autotest : roues " + e.Key + " " + (v * 3.6f).ToString("F0") + " km/h");
+            Transform cam = Camera.main != null ? Camera.main.transform : null;
+            if (cam != null) sb.Append(" a ").Append((cam.position - e.T.position).magnitude.ToString("F0")).Append(" m");
+            if (!Session.IsHost) sb.Append(" (recue ").Append((e.Vel.magnitude * 3.6f).ToString("F0")).Append(", affichee ").Append((e.MoveVel.magnitude * 3.6f).ToString("F0")).Append(" km/h)");
+            for (int i = 0; i < e.Wheels.Length; i++)
+            {
+                Wheel w = e.Wheels[i];
+                Transform vis = e.WheelVis != null ? e.WheelVis[i] : null;
+                if (w == null) continue;
+                sb.Append(" | ").Append(w.name).Append(w.enabled ? " actif" : " coupe");
+                if (vis != null) sb.Append(" ").Append(vis.name).Append(vis.gameObject.activeInHierarchy ? "" : " CACHE").Append(" sous ").Append(vis.parent != null ? vis.parent.name : "-").Append(" rot").Append(vis.localEulerAngles.ToString("F0")).Append(" ech").Append(vis.localScale.ToString("F1"));
+                if (i == 0)
+                {
+                    // autres roues visibles de la voiture (meshes « wheel »/« tire » hors des Wheel)
+                    foreach (MeshRenderer mr in e.T.GetComponentsInChildren<MeshRenderer>(false))
+                    {
+                        string n = mr.name.ToLowerInvariant();
+                        if ((n.Contains("wheel") || n.Contains("tire") || n.Contains("rim")) && (vis == null || !mr.transform.IsChildOf(vis)))
+                            sb.Append(" [maillage ").Append(Recon.Path(mr.transform).Replace(Recon.Path(e.T), "")).Append(" rot").Append(mr.transform.localEulerAngles.ToString("F0")).Append("]");
+                    }
+                }
+            }
+            Log.Info(sb.ToString());
+        }
+
         public static void Test(string mode, float t)
         {
             TestCamera();
@@ -492,6 +537,7 @@ namespace MWCoop
             Bus.Test(mode, t);
             if (mode == "choc") TestChoc(t);
             if (mode == "frontal") TestFrontal(t);
+            if (mode == "roues") TestWheels(t);
             // [Test] EteindreConteneur=chemin (invite, 25 s) : comme un declencheur de route du joueur local.
             string off = Config.Get("Test", "EteindreConteneur", "");
             if (off.Length > 0 && !Session.IsHost && t > 25f && !testOffDone)
@@ -517,7 +563,16 @@ namespace MWCoop
         // moyen, en douceur et dans +-0,6 m -- elle ne flotte plus ni ne s'enfonce (retour d'un joueur, 07/10).
         static void WheelsAndGround(Ent e)
         {
-            float fwd = Vector3.Dot(e.Vel, e.T.forward);
+            // Roues a la vitesse du deplacement affiche ici (et non de la vitesse recue : nulle quand l'hote deplace la
+            // voiture sans sa physique, roues figees -- « la rotation n'est pas synchro », retour de JD, 10/10).
+            if (e.MoveSet && Time.deltaTime > 1e-4f)
+            {
+                Vector3 mv = (e.Base - e.LastBase) / Time.deltaTime;
+                if (mv.sqrMagnitude > 60f * 60f) mv = e.Vel;   // (saut)
+                e.MoveVel = Vector3.Lerp(e.MoveVel, mv, 1f - Mathf.Exp(-8f * Time.deltaTime));
+            }
+            e.LastBase = e.Base; e.MoveSet = true;
+            float fwd = Vector3.Dot(e.MoveVel, e.T.forward);
             float yaw = e.T.eulerAngles.y, dyaw = Mathf.DeltaAngle(e.LastYaw, yaw);
             e.LastYaw = yaw;
             float rate = Time.deltaTime > 1e-4f ? dyaw / Time.deltaTime : 0f;   // deg/s

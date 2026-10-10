@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -12,11 +12,13 @@ namespace MWCoop
         public const int F_Crouch = 1, F_Seated = 2, F_Smoke = 4, F_Drink = 8, F_Carry = 16, F_Hello = 32, F_Sleep = 64,
             F_SleepFast = 128,                      // le lit compte les heures : quand tous l'ont, l'hote accelere
             F_Inhale = 256, F_Exhale = 512,         // cigarette : tire (main a la bouche), souffle (fumee)
-            F_Jacket = 1024, F_Coverall = 2048, F_Helmet = 4096;   // vetements portes (Wear) : caches chez les autres, montres par l'avatar
+            F_Jacket = 1024, F_Coverall = 2048, F_Helmet = 4096,   // vetements portes (Wear) : caches chez les autres, montres par l'avatar
+            F_Dead = 8192;                          // mort, en train de choisir ou revenir (Respawn) : avatar en pantin (ragdoll)
         const float SendRate = 1f / 20f;
         static float nextSend;
         static Transform player, cam, smoking, drinking, hello;
         public static Transform LocalCamera { get { return cam; } }
+        public static CharacterController LocalController { get { return controller; } }
         // Pieds du joueur local (dernier etat envoye).
         public static Vector3 LocalFeet { get { return Session.Me != null ? Session.Me.State.Feet : Vector3.zero; } }
         static CharacterController controller;
@@ -25,7 +27,7 @@ namespace MWCoop
 
         static PlayerSync()
         {
-            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); Gestures.PlayerLeft(pi.Id); Stock.PlayerLeft(pi.Id); CarDoors.PlayerLeft(pi.Id); Voice.PlayerLeft(pi.Id); };
+            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); Gestures.PlayerLeft(pi.Id); HandTools.PlayerLeft(pi.Id); Stock.PlayerLeft(pi.Id); CarDoors.PlayerLeft(pi.Id); Voice.PlayerLeft(pi.Id); };
         }
 
         public static bool InGame { get { return Application.loadedLevelName == "GAME"; } }
@@ -125,6 +127,7 @@ namespace MWCoop
         {
             if (!InGame) return;
             foreach (Avatar a in avatars.Values) a.LatePose();
+            ThirdPerson.LatePose();
         }
 
         static bool AnyChildActive(Transform t)
@@ -137,13 +140,23 @@ namespace MWCoop
         static float sleepLogAt;
         static void SendLocal()
         {
+            PlayerState st = BuildLocal();
+            Session.Me.State = st;
+            var w = new NetWriter(Msg.PlayerState).U8(Session.LocalId).U8(Session.Me.Level)
+                .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags).U8(st.Drink);
+            Session.SendAll(w, false);
+        }
+
+        // Etat du joueur local (envoye 20 fois/s ; a chaque image pour son avatar a la troisieme personne).
+        public static PlayerState BuildLocal()
+        {
             var st = new PlayerState();
             if (InGame && FindPlayer())
             {
                 float h = controller != null ? controller.height : 1.8f;
                 Vector3 center = controller != null ? player.TransformPoint(controller.center) : player.position;
                 st.Feet = center - Vector3.up * h * 0.5f;
-                st.Head = cam.position;
+                st.Head = ThirdPerson.EyeOf(cam);   // (troisieme personne : la camera n'est reculee que pendant le rendu)
                 // Regard : direction de la camera (le corps du joueur ne tourne pas toujours avec elle).
                 Vector3 fw = cam.forward;
                 Vector3 flat = new Vector3(fw.x, 0f, fw.z);
@@ -189,15 +202,13 @@ namespace MWCoop
                 st.Drink = (st.Flags & F_Drink) != 0 ? Drinks.LocalIndex() : 0;
                 if (hello != null && hello.gameObject.activeInHierarchy) st.Flags |= F_Hello;
                 if (Props.Holding) st.Flags |= F_Carry;
+                if (Respawn.Choosing || Autotest.TestDead) st.Flags |= F_Dead;
                 st.Flags |= Wear.LocalFlags;
                 st.Flags |= Config.GetInt("Test", "TestFlags", 0) | Autotest.PoseFlags;   // essais : postures forcees
                 if ((st.Flags & F_Drink) != 0 && st.Drink == 0) st.Drink = Config.GetInt("Test", "TestBoisson", 0);   // (essais : quelle boisson)
                 if (Autotest.DrinkCycle > 0) { st.Flags |= F_Drink; st.Drink = Autotest.DrinkCycle; }
             }
-            Session.Me.State = st;
-            var w = new NetWriter(Msg.PlayerState).U8(Session.LocalId).U8(Session.Me.Level)
-                .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags).U8(st.Drink);
-            Session.SendAll(w, false);
+            return st;
         }
 
         public static void OnState(Peer from, NetReader r, byte[] raw, int off, int len)

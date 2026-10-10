@@ -66,6 +66,8 @@ static const TutoStep kTuto[] = {
       L"Cheats", L"The host can allow cheats (Game options > Game and sharing). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.", "0.72.0" },
     { L"Carte", L"En jeu, M (réglable dans Options du jeu > Touches) ouvre la carte : les autres joueurs en direct, les lieux, molette pour zoomer, glisser pour se déplacer.",
       L"Map", L"In game, M (set in Game options > Keys) opens the map: the other players live, places, wheel to zoom, drag to move.", "0.73.0" },
+    { L"Vue à la 3e personne", L"En jeu, F5 (réglable dans Options du jeu > Touches) passe à la troisième personne : ton personnage vu de dos à pied, ton véhicule vu de derrière en conduisant. Viser et prendre marchent comme d'habitude.",
+      L"Third-person view", L"In game, F5 (set in Game options > Keys) switches to third person: your character seen from behind on foot, your vehicle seen from behind while driving. Aiming and picking up work as usual.", "0.75.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -104,6 +106,7 @@ static RectF TutoTarget(int i)
     case 26: return g_navR[TAB_GFX];
     case 27: return g_navR[TAB_GFX];
     case 28: return g_navR[TAB_GFX];
+    case 29: return g_navR[TAB_GFX];
     }
     return RectF(0, 0, 0, 0);
 }
