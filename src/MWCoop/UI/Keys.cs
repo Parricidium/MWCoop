@@ -10,6 +10,7 @@ namespace MWCoop
         public static KeyCode Wallet { get { return Get("PorteMonnaie", KeyCode.N); } }
         public static KeyCode Voice { get { return Get("Vocal", KeyCode.V); } }
         public static KeyCode Cheats { get { return Get("Triches", KeyCode.F7); } }
+        public static KeyCode Map { get { return Get("Carte", KeyCode.M); } }
 
         static KeyCode Get(string name, KeyCode def)
         {

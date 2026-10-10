@@ -18,7 +18,7 @@ namespace MWCoop
             if (!PlayerSync.InGame) { Open = false; return; }
             if (Menu.Open || Menu.ChatOpen) return;
             if (Open && Input.GetKeyDown(KeyCode.Escape)) { Open = false; return; }
-            if (Input.GetKeyDown(Keys.Cheats)) { Open = !Open; if (Open) { openedAt = Time.realtimeSinceStartup; note = null; WalletPanel.Open = false; } }
+            if (Input.GetKeyDown(Keys.Cheats)) { Open = !Open; if (Open) { openedAt = Time.realtimeSinceStartup; note = null; WalletPanel.Open = false; MapPanel.Open = false; } }
         }
 
         static bool Button(Rect r, string label, bool accent, Event e, bool enabled = true)

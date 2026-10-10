@@ -64,6 +64,8 @@ static const TutoStep kTuto[] = {
       L"Game options", L"Graphics and co-op options sorted by type: Voice, Faces, Game and sharing (host's files, starting money), Keys. The groups of this bar fold with a click on their title.", "0.70.0" },
     { L"Triches", L"L'hôte peut autoriser les triches (Options du jeu > Partie et partage). En jeu : panneau (F7, réglable dans Touches) ou commandes du tchat (/aide) : aller à un joueur, lieux, argent, soin, heure, neige. Chaque triche est annoncée à tous.",
       L"Cheats", L"The host can allow cheats (Game options > Game and sharing). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.", "0.72.0" },
+    { L"Carte", L"En jeu, M (réglable dans Options du jeu > Touches) ouvre la carte : les autres joueurs en direct, les lieux, molette pour zoomer, glisser pour se déplacer.",
+      L"Map", L"In game, M (set in Game options > Keys) opens the map: the other players live, places, wheel to zoom, drag to move.", "0.73.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -101,6 +103,7 @@ static RectF TutoTarget(int i)
     case 25: return g_trimRect;
     case 26: return g_navR[TAB_GFX];
     case 27: return g_navR[TAB_GFX];
+    case 28: return g_navR[TAB_GFX];
     }
     return RectF(0, 0, 0, 0);
 }
