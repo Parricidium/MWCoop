@@ -70,7 +70,7 @@ namespace MWCoop
         static void Apply(string why)
         {
             string dir = Folder();
-            if (dir.Length == 0 || Session.IsHost) return;   // (l'hote lit le sien)
+            if (dir.Length == 0 || (Session.IsHost && Config.GetInt("Test", "ContenuHote", 0) == 0)) return;   // (l'hote lit le sien ; essais : ContenuHote=1)
             roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string r in Config.Get("Coop", "ContenuRecu", "").Split(',')) if (r.Trim().Length > 0) roots.Add(r.Trim().TrimEnd('/', '\\') + "/");
             images = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -192,7 +192,10 @@ namespace MWCoop
             {
                 menuDone = true;
                 Apply("menu");
-                if (Flow.AutoSkip) MenuImport();
+                // Des musiques a lire : l'import, comme le bouton. (0.70.1 : seulement si le mod entrait lui-meme en partie,
+                // Flow.AutoSkip -- faux chez l'hote des la premiere demi-seconde, le choix du salon deja pris : ses musiques
+                // jamais importees, et la radio des invites, qui suit la sienne, muette. Retour d'un joueur, 10/10.)
+                MenuImport();
             }
             WatchCds();
             if (importUntil > 0 && (Imported(Fsm("CD", "Playlist")) || now >= importUntil))
@@ -210,7 +213,11 @@ namespace MWCoop
 
         static void MenuImport()
         {
-            if (!HasMusic("CD1/") && !HasMusic("CD2/") && !HasMusic("CD3/") && !HasMusic("Radio/")) return;
+            if (!HasMusic("CD1/") && !HasMusic("CD2/") && !HasMusic("CD3/") && !HasMusic("Radio/"))
+            {
+                Log.Info("musiques : rien a importer (pas de track1.ogg dans CD1, CD2, CD3 ni Radio de " + Path.GetDirectoryName(Application.dataPath) + (roots != null && roots.Count > 0 ? ", ni de musiques recues" : "") + ")");
+                return;
+            }
             PlayMakerFSM folk = Fsm("Folk", "LoadSongs"), button = Fsm("Button", "Button");
             if (folk == null) { Log.Warn("musiques : Radio/Folk::LoadSongs introuvable, pas d'import"); return; }
             importUntil = Time.realtimeSinceStartup + 30f;
