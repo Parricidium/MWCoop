@@ -146,6 +146,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "Touche:Vocal", L"Parler (vocal, touche tenue)", L"Talk (voice, hold the key)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Triches", L"Panneau des triches", L"Cheat panel", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Carte", L"Carte (joueurs en direct)", L"Map (live players)", 0, {}, {}, {}, 0, 9, "Touches" },
+        { "CarteMaintenir", L"Carte : appuyer ou maintenir", L"Map: press or hold", 0, { 0, 1 }, { L"Appuyer", L"Maintenir" }, { L"Press", L"Hold" }, 0, 9, "Coop" },   // (appuyer : ouvre / ferme ; maintenir : tant que la touche est tenue)
     };
     // Ecran (comme les GTA, a la place de la petite fenetre Unity) : resolutions de l'ecran principal (Windows),
     // mode d'affichage, niveau de qualite du moteur. Appliques par le mod au demarrage du jeu (MWCoop\Gfx.cs).

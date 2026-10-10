@@ -28,6 +28,7 @@ namespace MWCoop
 
         // une couleur et une hauteur (ordre de dessin : plus haut = par-dessus) par sorte
         struct Kind { public Color32 C; public float Y; public Kind(byte r, byte g, byte b, float y) { C = new Color32(r, g, b, 255); Y = y; } }
+        static readonly Kind ForestK = new Kind(74, 104, 84, -1f);
         static readonly Kind Snow = new Kind(238, 242, 246, 0f), Lake = new Kind(170, 205, 235, 0.5f), Pavement = new Kind(196, 200, 208, 1f), Dirt = new Kind(214, 184, 140, 2f),
             IceRoad = new Kind(120, 166, 214, 2.2f), AsphaltEdge = new Kind(170, 120, 40, 3f), Asphalt = new Kind(248, 200, 84, 3.5f), Rail = new Kind(84, 84, 92, 4f),
             Structure = new Kind(170, 172, 180, 4.5f), Building = new Kind(200, 112, 86, 5f);
@@ -84,6 +85,7 @@ namespace MWCoop
                 todo.Add(c);
             }
             todoAt = 0; buf = new Buf(); meshCount = 0; triCount = 0;
+            covered = new bool[G * G];
             Progress = 0f;
             Log.Info("carte : construction (" + todo.Count + " collisionneurs), sol " + b.min.ToString("F0") + " - " + b.max.ToString("F0") + ", shader " + (sh != null ? sh.name : "?"));
         }
@@ -174,10 +176,117 @@ namespace MWCoop
             }
         }
 
+        // Forets : les trous du sol enfermes par lui (autour des collines, ou rien n'est praticable) ; le reste du vide est
+        // hors de la carte (demande de JD, 10/10 : fond du panneau, seules les forets en vert). Grille de couverture du sol
+        // (cellules de ~3 m) : cases vides reliees au bord = dehors (remplissage), les autres = foret.
+        const int G = 2048;   // (cases de ~3 m : bords des forets fins)
+        static bool[] covered;
+        static void Cover(Vector3 a, Vector3 b, Vector3 c)
+        {
+            float cell = Size / G;
+            float ax = (a.x - MinX) / cell, az = (a.z - MinZ) / cell, bx = (b.x - MinX) / cell, bz = (b.z - MinZ) / cell, cx = (c.x - MinX) / cell, cz = (c.z - MinZ) / cell;
+            int x0 = Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(ax, Mathf.Min(bx, cx)))), x1 = Mathf.Min(G - 1, Mathf.CeilToInt(Mathf.Max(ax, Mathf.Max(bx, cx))));
+            int z0 = Mathf.Max(0, Mathf.FloorToInt(Mathf.Min(az, Mathf.Min(bz, cz)))), z1 = Mathf.Min(G - 1, Mathf.CeilToInt(Mathf.Max(az, Mathf.Max(bz, cz))));
+            float d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+            if (Mathf.Abs(d) < 1e-6f) return;
+            for (int z = z0; z <= z1; z++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    float px = x + 0.5f, pz = z + 0.5f;
+                    float l1 = ((bz - cz) * (px - cx) + (cx - bx) * (pz - cz)) / d, l2 = ((cz - az) * (px - cx) + (ax - cx) * (pz - cz)) / d;
+                    if (l1 >= -0.02f && l2 >= -0.02f && l1 + l2 <= 1.02f) covered[z * G + x] = true;
+                }
+            covered[Mathf.Clamp((int)az, 0, G - 1) * G + Mathf.Clamp((int)ax, 0, G - 1)] = true;
+        }
+
+        static void Forests()
+        {
+            var outside = new bool[G * G];
+            var q = new Queue<int>();
+            for (int i = 0; i < G; i++)
+                foreach (int k in new[] { i, (G - 1) * G + i, i * G, i * G + G - 1 })
+                    if (!covered[k] && !outside[k]) { outside[k] = true; q.Enqueue(k); }
+            while (q.Count > 0)
+            {
+                int k = q.Dequeue(), x = k % G, z = k / G;
+                if (x > 0) Visit(k - 1, outside, q); if (x < G - 1) Visit(k + 1, outside, q);
+                if (z > 0) Visit(k - G, outside, q); if (z < G - 1) Visit(k + G, outside, q);
+            }
+            // foret = vide pas dehors ; elargie d'une case sous le sol (bords sans jour), pas sur le dehors
+            var forest = new bool[G * G];
+            int cells = 0;
+            for (int z = 0; z < G; z++)
+                for (int x = 0; x < G; x++)
+                {
+                    int k = z * G + x;
+                    if (outside[k]) continue;
+                    bool f = !covered[k];
+                    if (!f)
+                        for (int dz = -1; dz <= 1 && !f; dz++)
+                            for (int dx = -1; dx <= 1 && !f; dx++)
+                            {
+                                int nx = x + dx, nz = z + dz;
+                                if (nx >= 0 && nz >= 0 && nx < G && nz < G && !covered[nz * G + nx] && !outside[nz * G + nx]) f = true;
+                            }
+                    if (f) { forest[k] = true; cells++; }
+                }
+            // contour lisse (marching squares sur les centres des cases) ; l'interieur plein en bandes par ligne
+            float cell = Size / G;
+            noCover = true;
+            for (int zz = 0; zz < G - 1; zz++)
+            {
+                int runStart = -1;
+                for (int xx = 0; xx < G - 1; xx++)
+                {
+                    int c0 = forest[zz * G + xx] ? 1 : 0, c1 = forest[zz * G + xx + 1] ? 2 : 0, c2 = forest[(zz + 1) * G + xx + 1] ? 4 : 0, c3 = forest[(zz + 1) * G + xx] ? 8 : 0;
+                    int cs = c0 | c1 | c2 | c3;
+                    if (cs == 15) { if (runStart < 0) runStart = xx; continue; }
+                    if (runStart >= 0) { Quad(runStart, xx, zz, cell); runStart = -1; }
+                    if (cs != 0) Marching(cs, xx, zz, cell);
+                }
+                if (runStart >= 0) Quad(runStart, G - 1, zz, cell);
+            }
+            noCover = false;
+            Log.Info("carte : forets " + cells + " cases de " + cell.ToString("F1") + " m");
+        }
+        // (points : centres des cases)
+        static Vector3 P(float x, float z, float cell) { return new Vector3(MinX + (x + 0.5f) * cell, 0f, MinZ + (z + 0.5f) * cell); }
+        static void Quad(int x0, int x1, int z, float cell)
+        {
+            Vector3 a = P(x0, z, cell), b = P(x1, z, cell), c = P(x1, z + 1, cell), d = P(x0, z + 1, cell);
+            Tri(a, b, c, ForestK); Tri(a, c, d, ForestK);
+        }
+        // coins : 1 bas-gauche, 2 bas-droite, 4 haut-droite, 8 haut-gauche ; milieux : b(as), d(roite), h(aut), g(auche)
+        static readonly string[] Cases = { "", "0bg", "b1d", "01dg", "d2h", "0bd2hg", "b12h", "012hg", "h3g", "0bh3", "b1dh3g", "01dh3", "d23g", "0bd23", "b123g", "0123" };
+        static void Marching(int cs, int x, int z, float cell)
+        {
+            string poly = Cases[cs];
+            var pts = new Vector3[poly.Length];
+            for (int i = 0; i < poly.Length; i++)
+            {
+                switch (poly[i])
+                {
+                    case '0': pts[i] = P(x, z, cell); break;
+                    case '1': pts[i] = P(x + 1, z, cell); break;
+                    case '2': pts[i] = P(x + 1, z + 1, cell); break;
+                    case '3': pts[i] = P(x, z + 1, cell); break;
+                    case 'b': pts[i] = P(x + 0.5f, z, cell); break;
+                    case 'd': pts[i] = P(x + 1, z + 0.5f, cell); break;
+                    case 'h': pts[i] = P(x + 0.5f, z + 1, cell); break;
+                    default: pts[i] = P(x, z + 0.5f, cell); break;
+                }
+            }
+            for (int i = 1; i + 1 < pts.Length; i++) Tri(pts[0], pts[i], pts[i + 1], ForestK);
+        }
+
+        static void Visit(int k, bool[] outside, Queue<int> q) { if (!covered[k] && !outside[k]) { outside[k] = true; q.Enqueue(k); } }
+        static bool noCover;
+
         static void Tri(Vector3 a, Vector3 b, Vector3 c, Kind k)
         {
             // (triangles immenses et fins du bord du sol : des traits en travers de la carte)
-            if (Flat(a, b) > 1000f || Flat(b, c) > 1000f || Flat(c, a) > 1000f) return;
+            if (!noCover && (Flat(a, b) > 1000f || Flat(b, c) > 1000f || Flat(c, a) > 1000f)) return;
+            if (!noCover && covered != null && k.Y <= Asphalt.Y) Cover(a, b, c);   // (sol, routes : pas les batiments)
             if (buf.V.Count > 59990) Flush();
             int n = buf.V.Count;
             buf.V.Add(new Vector3(a.x, Depth + k.Y, a.z)); buf.V.Add(new Vector3(b.x, Depth + k.Y, b.z)); buf.V.Add(new Vector3(c.x, Depth + k.Y, c.z));
@@ -208,6 +317,8 @@ namespace MWCoop
 
         static void Finish()
         {
+            Forests();
+            covered = null;
             Flush();
             todo = null; buf = null;
             Ready = true; Progress = -1f;
@@ -221,7 +332,7 @@ namespace MWCoop
             if (rt == null || rt.width != w || rt.height != h)
             {
                 if (rt != null) { rt.Release(); Object.Destroy(rt); }
-                rt = new RenderTexture(w, h, 16, RenderTextureFormat.ARGB32);
+                rt = new RenderTexture(w, h, 16, RenderTextureFormat.ARGB32);   // (fond transparent : celui du panneau)
                 rt.antiAliasing = Mathf.Clamp(Config.GetInt("Test", "CarteAA", 4), 1, 8);
             }
             if (cam == null)
@@ -236,7 +347,7 @@ namespace MWCoop
                 cam.transform.rotation = Quaternion.Euler(90f, 0f, 0f);   // vers le bas, le nord (+z) en haut
                 cam.nearClipPlane = 1f; cam.farClipPlane = 100f;
             }
-            cam.backgroundColor = background;
+            cam.backgroundColor = new Color32(background.r, background.g, background.b, 0);
             cam.orthographicSize = h * metersPerPixel / 2f;
             cam.aspect = (float)w / h;
             cam.transform.position = new Vector3(center.x, Depth + 50f, center.y);
