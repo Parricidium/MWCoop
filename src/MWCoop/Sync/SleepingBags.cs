@@ -134,8 +134,14 @@ namespace MWCoop
             var go = new GameObject("sleeping bag(itemx)");
             go.transform.position = pos; go.transform.rotation = rot;
             var b = new Bag { Id = id, Go = go };
-            b.Mf = go.AddComponent<MeshFilter>();
-            go.AddComponent<MeshRenderer>().sharedMaterial = mat;
+            // Modele sur un enfant toujours dessine (couche 0) : deplie, la racine passe sur « Ignore Raycast » (2), que la camera
+            // du joueur (FPSCamera) ne dessine pas -- le sac deplie etait invisible en jeu (retour de JD, 10/10 ; les captures
+            // d'essai passaient par une camera qui voit tout).
+            var model = new GameObject("Model");
+            model.layer = 0;
+            model.transform.SetParent(go.transform, false);
+            b.Mf = model.AddComponent<MeshFilter>();
+            model.AddComponent<MeshRenderer>().sharedMaterial = mat;
             b.Col = go.AddComponent<BoxCollider>();
             b.Rb = go.AddComponent<Rigidbody>();
             b.Rb.mass = 2.5f;
@@ -520,7 +526,12 @@ namespace MWCoop
                 }
                 else if (t > 45f && testStep == 2) { testStep = 3; SetState(b, true, b.Go.transform.position + Vector3.up * 0.25f, b.Go.transform.rotation, true); }
             }
-            if (t > 38f && (testStep == 1 || !Session.IsHost && testStep == 0)) { testStep = 2; Log.Info("autotest : sacs " + Describe()); }
+            if (t > 38f && (testStep == 1 || !Session.IsHost && testStep == 0))
+            {
+                testStep = 2; Log.Info("autotest : sacs " + Describe());
+                Camera mc = Camera.main;
+                if (mc != null) Log.Info("autotest : sacs, camera du joueur " + mc.name + " : couches 0 " + ((mc.cullingMask & 1) != 0) + ", 2 " + ((mc.cullingMask & 4) != 0) + ", 19 " + ((mc.cullingMask & (1 << 19)) != 0));
+            }
             if (t > 52f && testStep == 3 || !Session.IsHost && t > 60f && testStep == 2) { testStep = 4; Log.Info("autotest : sacs " + Describe()); }
         }
 
