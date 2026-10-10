@@ -85,6 +85,7 @@ namespace MWCoop
             Step("carte", MapRender.Update);
             Step("panneau carte", MapPanel.Update);
             Step("mods (compatibilite)", ModSecondMachtwagen.Update);
+            Step("mods (300D)", ModMachtwagen300D.Update);
             Step("vocal", Voice.Update);
             Step("visage perso", CustomFace.Update);
             Step("musiques (menu)", Contenu.MenuUpdate);
@@ -193,6 +194,7 @@ namespace MWCoop
             CustomFace.OnLevelLoaded();
             MapRender.OnLevelLoaded();
             ModSecondMachtwagen.OnLevelLoaded();
+            ModMachtwagen300D.OnLevelLoaded();
             Respawn.OnLevelLoaded();
             Audit.OnLevelLoaded();
             NearDoors.OnLevelLoaded();

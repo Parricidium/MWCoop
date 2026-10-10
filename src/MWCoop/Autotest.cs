@@ -1545,6 +1545,22 @@ namespace MWCoop
                 // Portiere [Test] TestVoiture / TestPorte. chemin : l'invite debout dans sa course, l'hote l'ouvre
                 // (bouton tenu 0,6 s) ; spam : les deux cliquent au hasard tres vite, puis on compare.
                 string vc = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), vp = Config.Get("Test", "TestPorte", "DoorRear(right)");
+                // [Test] Deverrouiller=1 : verrouillage centralise d'un mod (CentralLocking.UnlockDoors) ouvert a 20 s chez chacun.
+                // (Deverrouiller=2 : l'hote seulement -- l'invite doit le recevoir)
+                if (mode == "chemin" && (Config.GetInt("Test", "Deverrouiller", 0) == 1 || Config.GetInt("Test", "Deverrouiller", 0) == 2 && MWCoop.Net.Session.IsHost) && t > 20f && step2 == 0)
+                {
+                    step2 = 1;
+                    GameObject vcar = GameObject.Find(vc);
+                    Component cl = null;
+                    if (vcar != null) foreach (MonoBehaviour m in vcar.GetComponentsInChildren<MonoBehaviour>(true)) if (m != null && m.GetType().Name == "CentralLocking") { cl = m; break; }
+                    var um = cl != null ? cl.GetType().GetMethod("UnlockDoors") : null;
+                    if (um != null) um.Invoke(cl, new object[] { false });
+                    Log.Info("autotest : verrouillage de " + vc + " : " + (cl == null ? "aucun" : "ouvert"));
+                }
+                // [Test] AcheterMW2=1 : l'hote achete la Second Machtwagen a 18 s (poignees et contact rallumes)
+                if (mode == "chemin" && MWCoop.Net.Session.IsHost && Config.GetInt("Test", "AcheterMW2", 0) != 0 && t > 18f && step2 < 5) { step2 = 5; Log.Info("autotest : second machtwagen " + ModSecondMachtwagen.TestBuyNow()); }
+                // [Test] FermeInvite=1 : c'est l'invite qui referme (a 50 s) la portiere ouverte par l'hote.
+                if (mode == "chemin" && !MWCoop.Net.Session.IsHost && Config.GetInt("Test", "FermeInvite", 0) != 0 && t > 40f && step == 1) { step = 3; Log.Info("autotest : invite pousse vers la fermeture " + CarDoors.TestGrab(vc, vp)); }
                 if (mode == "chemin" && !MWCoop.Net.Session.IsHost && t > 15f && step == 0) { step = 1; Log.Info("autotest : " + CarDoors.TestStandInPath(vc, vp)); }
                 if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + CarDoors.TestOpen(vc, true, vp)); }
                 if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 40.6f && step == 1) { step = 2; Log.Info("autotest : relache " + CarDoors.TestState(vc, "Mouse off", vp)); }
@@ -1552,7 +1568,7 @@ namespace MWCoop
                 if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 46f && step == 2 && Config.GetInt("Test", "TestRelache", 0) != 0) { step = 30; Log.Info("autotest : appuie pour fermer " + CarDoors.TestGrab(vc, vp)); }
                 if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 46.12f && step == 30) { step = 31; Log.Info("autotest : relache tout de suite " + CarDoors.TestState(vc, "Check position", vp) + " " + CarDoors.StateOf(vc, vp)); }
                 if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 45f && step == 2 && Config.GetInt("Test", "TestPousse", 0) != 0) { step = 22; Log.Info("autotest : refermee en poussant " + CarDoors.TestState(vc, "Reset 2", vp)); }
-                if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 50f && (step == 2 || step == 22)) { step = 3; Log.Info("autotest : pousse vers la fermeture " + CarDoors.TestGrab(vc, vp)); }
+                if (mode == "chemin" && MWCoop.Net.Session.IsHost && t > 50f && (step == 2 || step == 22) && Config.GetInt("Test", "FermeInvite", 0) == 0) { step = 3; Log.Info("autotest : pousse vers la fermeture " + CarDoors.TestGrab(vc, vp)); }
                 // (fenetre a l'horloge du PC : les deux s'arretent a la meme seconde, en plein echange)
                 int sec = System.DateTime.Now.Second;
                 if (mode == "spam" && t > 25f && sec >= 5 && sec < 45) { string w = CarDoors.TestRace(vc, vp); if (w != null) Log.Info("autotest : " + w); }
