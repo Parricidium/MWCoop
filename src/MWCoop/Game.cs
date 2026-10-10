@@ -151,14 +151,60 @@ namespace MWCoop
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 allFsms = Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)); allFsmsAt = now; allFsmsLevel = Application.loadedLevel;
+                FsmScans++; FsmScanMs += sw.Elapsed.TotalMilliseconds;
                 if (sw.ElapsedMilliseconds > 15 && allFsmsLogs++ < 5) Log.Info("automates : releve complet " + allFsms.Length + " en " + sw.ElapsedMilliseconds + " ms");
             }
             return allFsms;
         }
 
-        static List<GameObject> roots;
-        static int rootsFrame = -1;
+        // Racines de la scene par nom (Resources.FindObjectsOfTypeAll(GameObject) : 10-40 ms sur la scene du jeu, plus sur un
+        // PC modeste -- les a-coups reguliers en coop, retour de joueurs 10/10). Gardees tant qu'elles restent des racines ;
+        // nouveau releve seulement quand un chemin n'est pas trouve, au plus une fois par seconde, et pour un meme chemin
+        // absent toutes les 5 s au plus (avant : toutes les 10 s quoi qu'il arrive, et a chaque image d'un chemin absent).
+        static Dictionary<string, List<GameObject>> rootsByName;
+        static int rootsFrame = -1, rootsLevel = -1;
         static float rootsAt = -100f;
+        static readonly Dictionary<string, float> rootMiss = new Dictionary<string, float>();
+        public static int RootScans, rootMissLogs, FsmScans; public static double FsmScanMs; public static double RootScanMs;
+
+        static void ScanRoots()
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            rootsByName = new Dictionary<string, List<GameObject>>();
+            foreach (GameObject root in Recon.SceneRoots())
+            {
+                List<GameObject> l;
+                if (!rootsByName.TryGetValue(root.name, out l)) rootsByName[root.name] = l = new List<GameObject>(1);
+                l.Add(root);
+            }
+            rootsFrame = Time.frameCount; rootsAt = Time.realtimeSinceStartup; rootsLevel = Application.loadedLevel;
+            RootScans++; RootScanMs += sw.Elapsed.TotalMilliseconds;
+        }
+
+        // Racines de la scene (releve garde ; rescan=true : nouveau releve).
+        public static HashSet<Transform> RootSet(bool rescan)
+        {
+            if (rescan || rootsByName == null || rootsLevel != Application.loadedLevel) ScanRoots();
+            var set = new HashSet<Transform>();
+            foreach (List<GameObject> l in rootsByName.Values)
+                foreach (GameObject g in l) if (g != null && g.transform.parent == null) set.Add(g.transform);
+            return set;
+        }
+
+        static GameObject FindIn(string rootName, string rest)
+        {
+            List<GameObject> l;
+            if (!rootsByName.TryGetValue(rootName, out l)) return null;
+            foreach (GameObject root in l)
+            {
+                if (root == null) continue;
+                Transform t = root.transform;
+                if (t.parent != null) continue;   // (plus une racine)
+                if (rest != null) t = t.Find(rest);
+                if (t != null) return t.gameObject;
+            }
+            return null;
+        }
 
         // Objet par chemin "Racine/Enfant/...", actif ou non (GameObject.Find ne voit que les actifs).
         // Joueur local (PLAYER). Assis dans une voiture, il est range sous le siege : sa racine est alors la voiture, les
@@ -205,25 +251,20 @@ namespace MWCoop
 
         public static GameObject FindAny(string path)
         {
-            string[] parts = path.Split('/');
-            // Racines (Resources.FindObjectsOfTypeAll : toute la memoire, couteux) gardees 10 s ; relevees de nouveau
-            // (une fois par image au plus) quand l'objet n'est pas trouve -- racine creee ou detruite entre-temps. Avant :
-            // relevees a chaque image d'appel, plusieurs fois par seconde en partie (courses, garages, messages).
-            for (int pass = 0; pass < 2; pass++)
-            {
-                float now = Time.realtimeSinceStartup;
-                if (roots == null || now - rootsAt > 10f || (pass == 1 && rootsFrame != Time.frameCount))
-                { roots = Recon.SceneRoots(); rootsFrame = Time.frameCount; rootsAt = now; }
-                else if (pass == 1) break;
-                foreach (GameObject root in roots)
-                {
-                    if (root == null || root.name != parts[0]) continue;
-                    Transform t = root.transform;
-                    for (int i = 1; i < parts.Length && t != null; i++) t = t.Find(parts[i]);
-                    if (t != null) return t.gameObject;
-                }
-            }
-            return null;
+            int slash = path.IndexOf('/');
+            string rootName = slash < 0 ? path : path.Substring(0, slash), rest = slash < 0 ? null : path.Substring(slash + 1);
+            if (rootsByName == null || rootsLevel != Application.loadedLevel) { rootMiss.Clear(); rootMissLogs = 0; ScanRoots(); }
+            GameObject g = FindIn(rootName, rest);
+            if (g != null) return g;
+            // Absent : racine creee (ou remplacee) depuis le releve ?
+            float now = Time.realtimeSinceStartup, last;
+            if (rootsFrame == Time.frameCount || now - rootsAt < 1f) return null;
+            if (rootMiss.TryGetValue(path, out last) && now - last < 5f) return null;
+            rootMiss[path] = now;
+            ScanRoots();
+            g = FindIn(rootName, rest);
+            if (g == null && rootMissLogs++ < 15) Log.Info("objets : " + path + " introuvable (racines relevees de nouveau ; au plus toutes les 5 s)");
+            return g;
         }
 
         public static void SetGlobal(string name, string value)

@@ -23,10 +23,12 @@ namespace MWCoop
 
         void FixedUpdate()
         {
+            Perf.FixedStart();
             Perf.Begin();
             try { VehicleSync.RevLimiterFixed(); VehicleSync.FixedUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("voitures (physique) : " + e.Message); }
             Perf.End("(physique)");
+            Perf.FixedEnd();
         }
 
         void LateUpdate()
@@ -41,7 +43,16 @@ namespace MWCoop
         void LateUpdateBody()
         {
             // (CarVisuals d'abord : volant et levier de vitesse poses, puis les mains des avatars dessus -- elles avaient une image de retard.)
-            try { CarVisuals.LateUpdate(); HandTools.LateUpdate(); PlayerSync.LateUpdate(); Machines.LateUpdate(); Npcs.LateUpdate(); VehicleSync.LateUpdate(); }
+            try
+            {
+                Perf.MarkStart();
+                CarVisuals.LateUpdate(); Perf.Mark("[poses volants]");
+                HandTools.LateUpdate(); Perf.Mark("[poses outils]");
+                PlayerSync.LateUpdate(); Perf.Mark("[poses avatars]");
+                Machines.LateUpdate(); Perf.Mark("[poses machines]");
+                Npcs.LateUpdate(); Perf.Mark("[poses PNJ]");
+                VehicleSync.LateUpdate(); Perf.Mark("[poses voitures]");
+            }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
             try { Lights.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("lumieres : " + e.Message); }
@@ -51,6 +62,7 @@ namespace MWCoop
 
         void Update()
         {
+            Perf.UpdateStart();
             if (Time.realtimeSinceStartup >= nextBeat)
             {
                 nextBeat = Time.realtimeSinceStartup + 10f;
@@ -76,88 +88,107 @@ namespace MWCoop
                 }
                 catch (System.Exception e) { Log.Error("vidage : " + e); }
             }
-            Step("session", Session.Update);
-            Step("api", CoopApi.Update);
-            Step("sauvegarde en jeu", Game.Update);
-            Step("porte-monnaie", WalletPanel.Update);
-            Step("triches", Cheats.Update);
-            Step("panneau des triches", CheatPanel.Update);
-            Step("carte", MapRender.Update);
-            Step("panneau carte", MapPanel.Update);
-            Step("mods (compatibilite)", ModSecondMachtwagen.Update);
-            Step("mods (300D)", ModMachtwagen300D.Update);
-            Step("vocal", Voice.Update);
-            Step("visage perso", CustomFace.Update);
-            Step("musiques (menu)", Contenu.MenuUpdate);
-            Step("menu", Menu.Update);
-            Step("mscloader", MscMods.Update);
-            Step("lanceur", MWCoop.Net.Admin.Update);
-            Step("joueurs", PlayerSync.Update);
-            Step("monde", World.Update);
-            Step("radio", Radio.Update);
-            Step("interactions", Interactions.Update);
-            Step("voitures", VehicleSync.Update);
-            Step("pieces", Parts.Update);
-            Step("objets", Props.Update);
-            Step("argent", Wallet.Update);
-            Step("magasin", Shop.Update);
-            Step("peinture", Paint.Update);
-            Step("reglages", Settings.Update);
-            Step("liquides", Fluids.Update);
-            Step("sauvegarde", SaveTransfer.Update);
-            Step("consommables", Consume.Update);
-            Step("voix", Voices.Update);
-            Step("portieres", CarDoors.Update);
-            Step("tableaux de bord", CarVisuals.Update);
-            Step("passagers", Seats.Update);
-            Step("reapparition", Respawn.Update);
-            Step("audit", Audit.Update);
-            Step("portes automatiques", NearDoors.Update);
-            Step("machines", Machines.Update);
-            Step("givre", Frost.Update);
-            Step("remorquage", Tow.Update);
-            Step("appels", Calls.Update);
-            Step("vetements", Wear.Update);
-            Step("cuisine", Cooking.Update);
-            Step("feux", Fires.Update);
-            Step("atelier", Garage.Update);
-            Step("maison", Home.Update);
-            Step("gestes", Gestures.Update);
-            Step("outils en main", HandTools.Update);
-            Step("tas de bois des remorques", LogPiles.Update);
-            Step("porte du garage", GarageDoor.Update);
-            Step("vue (troisieme personne)", ThirdPerson.Update);
-            Step("boissons", Drinks.Update);
-            Step("rayons", Stock.Update);
-            Step("PNJ", Npcs.Update);
-            Step("voitures garees", Parked.Update);
-            Step("monde (automates)", WorldFsms.Update);
-            Step("trafic", Traffic.Update);
-            Step("courses", Races.Update);
-            Step("portes poussees", PushDoors.Update);
-            Step("molettes", Knobs.Update);
-            Step("evenements", Events.Update);
-            Step("graphismes", Gfx.Update);
-            Step("rallye", Rally.Update);
-            Step("couleur", CarColor.Update);
-            Step("tenues", Studio.Update);
-            Step("quetes", Jobs.Update);
-            Step("trace", Trace.Update);
-            Step("deroule", Flow.Update);
-            Step("ecran d'attente", WaitScreen.Update);
-            Step("autotest", Autotest.Update);
+            foreach (Mod m in mods) Step(m.Name, m.Run);
         }
+
+        // Modules de la boucle, dans l'ordre ; delegues crees une fois (un par module et par image sinon : allocations).
+        struct Mod { public readonly string Name; public readonly System.Action Run; public Mod(string n, System.Action r) { Name = n; Run = r; } }
+        static readonly Mod[] mods =
+        {
+            new Mod("session", Session.Update),
+            new Mod("api", CoopApi.Update),
+            new Mod("sauvegarde en jeu", Game.Update),
+            new Mod("porte-monnaie", WalletPanel.Update),
+            new Mod("triches", Cheats.Update),
+            new Mod("panneau des triches", CheatPanel.Update),
+            new Mod("carte", MapRender.Update),
+            new Mod("panneau carte", MapPanel.Update),
+            new Mod("mods (compatibilite)", ModSecondMachtwagen.Update),
+            new Mod("mods (300D)", ModMachtwagen300D.Update),
+            new Mod("vocal", Voice.Update),
+            new Mod("visage perso", CustomFace.Update),
+            new Mod("musiques (menu)", Contenu.MenuUpdate),
+            new Mod("menu", Menu.Update),
+            new Mod("mscloader", MscMods.Update),
+            new Mod("lanceur", MWCoop.Net.Admin.Update),
+            new Mod("joueurs", PlayerSync.Update),
+            new Mod("monde", World.Update),
+            new Mod("radio", Radio.Update),
+            new Mod("interactions", Interactions.Update),
+            new Mod("voitures", VehicleSync.Update),
+            new Mod("pieces", Parts.Update),
+            new Mod("objets", Props.Update),
+            new Mod("argent", Wallet.Update),
+            new Mod("magasin", Shop.Update),
+            new Mod("peinture", Paint.Update),
+            new Mod("reglages", Settings.Update),
+            new Mod("liquides", Fluids.Update),
+            new Mod("sauvegarde", SaveTransfer.Update),
+            new Mod("consommables", Consume.Update),
+            new Mod("voix", Voices.Update),
+            new Mod("portieres", CarDoors.Update),
+            new Mod("tableaux de bord", CarVisuals.Update),
+            new Mod("passagers", Seats.Update),
+            new Mod("reapparition", Respawn.Update),
+            new Mod("audit", Audit.Update),
+            new Mod("portes automatiques", NearDoors.Update),
+            new Mod("machines", Machines.Update),
+            new Mod("givre", Frost.Update),
+            new Mod("remorquage", Tow.Update),
+            new Mod("appels", Calls.Update),
+            new Mod("vetements", Wear.Update),
+            new Mod("cuisine", Cooking.Update),
+            new Mod("feux", Fires.Update),
+            new Mod("atelier", Garage.Update),
+            new Mod("maison", Home.Update),
+            new Mod("gestes", Gestures.Update),
+            new Mod("outils en main", HandTools.Update),
+            new Mod("tas de bois des remorques", LogPiles.Update),
+            new Mod("porte du garage", GarageDoor.Update),
+            new Mod("vue (troisieme personne)", ThirdPerson.Update),
+            new Mod("boissons", Drinks.Update),
+            new Mod("rayons", Stock.Update),
+            new Mod("PNJ", Npcs.Update),
+            new Mod("voitures garees", Parked.Update),
+            new Mod("monde (automates)", WorldFsms.Update),
+            new Mod("trafic", Traffic.Update),
+            new Mod("courses", Races.Update),
+            new Mod("portes poussees", PushDoors.Update),
+            new Mod("molettes", Knobs.Update),
+            new Mod("evenements", Events.Update),
+            new Mod("graphismes", Gfx.Update),
+            new Mod("rallye", Rally.Update),
+            new Mod("couleur", CarColor.Update),
+            new Mod("tenues", Studio.Update),
+            new Mod("quetes", Jobs.Update),
+            new Mod("trace", Trace.Update),
+            new Mod("deroule", Flow.Update),
+            new Mod("ecran d'attente", WaitScreen.Update),
+            new Mod("autotest", Autotest.Update),
+        };
 
         // Chaque module, chronometre : un passage de plus de 30 ms (a-coup visible) est note, 1 fois / 10 s par module.
         static readonly System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
         static readonly System.Collections.Generic.Dictionary<string, float> slowLogged = new System.Collections.Generic.Dictionary<string, float>();
 
+        // [Test] SautModules=a,b,... : ces modules ne tournent plus apres 60 s de jeu ("*" : tous sauf session, joueurs, deroule, autotest) -- mesures.
+        static System.Collections.Generic.HashSet<string> skip;
+        static bool skipAll;
         static void Step(string what, System.Action a)
         {
+            if (skip == null)
+            {
+                skip = new System.Collections.Generic.HashSet<string>();
+                foreach (string s in Config.Get("Test", "SautModules", "").Split(',')) if (s.Trim().Length > 0) skip.Add(s.Trim());
+                skipAll = skip.Contains("*");
+            }
+            if (skip.Count > 0 && PlayerSync.InGame && Time.timeSinceLevelLoad > 60f && (skip.Contains(what) || skipAll && what != "session" && what != "joueurs" && what != "deroule" && what != "autotest")) return;
+            long mem = Perf.MemNow();
             watch.Reset(); watch.Start();
             try { a(); } catch (System.Exception e) { Log.Error(what + " : " + e); }
             watch.Stop();
             Perf.Add(what, watch.Elapsed.TotalMilliseconds);
+            Perf.AddAlloc(what, mem);
             if (watch.ElapsedMilliseconds > 30)
             {
                 float last;

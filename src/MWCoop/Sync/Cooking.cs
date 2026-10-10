@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -215,16 +215,21 @@ namespace MWCoop
             return f;
         }
 
+        // Corps qui ne sont pas des aliments : ecartes jusqu'au prochain grand releve (2 min ; 13 ms toutes les 15 s sinon).
+        static readonly HashSet<Rigidbody> notFood = new HashSet<Rigidbody>();
+        static float notFoodClear;
         static void ScanFoods()
         {
             int n = 0;
+            if (Time.realtimeSinceStartup >= notFoodClear) { notFoodClear = Time.realtimeSinceStartup + 120f; notFood.Clear(); }
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
+                if (notFood.Contains(rb)) continue;
                 GameObject go = rb.gameObject;
                 PlayMakerFSM fire = Game.FsmOn(go, "Fire"), use = Game.FsmOn(go, "Use");
                 bool cook = fire != null && fire.FsmVariables.FindFsmFloat("GrillingTime") != null;
                 bool spoil = use != null && use.FsmVariables.FindFsmFloat("SpoilingRate") != null && use.FsmVariables.FindFsmFloat("Condition") != null;
-                if (!cook && !spoil) continue;
+                if (!cook && !spoil) { notFood.Add(rb); continue; }
                 string id = Props.ItemId(go);
                 if (id.Length == 0) continue;
                 Food f;
@@ -424,7 +429,7 @@ namespace MWCoop
         // ================================================================ cycle
         public static void OnLevelLoaded()
         {
-            grills.Clear(); grillFsms.Clear(); foods.Clear(); levels.Clear(); levelFsms.Clear(); packages.Clear();
+            grills.Clear(); grillFsms.Clear(); foods.Clear(); notFood.Clear(); notFoodClear = 0f; levels.Clear(); levelFsms.Clear(); packages.Clear();
             joinLevels.Clear(); due.Clear();
             testStep = 0; testLog = 0; testing = false; testAuth = -1; testGrill = null;
             loadedAt = PlayerSync.InGame ? Time.realtimeSinceStartup : -1;

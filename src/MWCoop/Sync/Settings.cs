@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -18,23 +18,28 @@ namespace MWCoop
         class Watch { public string Id; public PlayMakerFSM Fsm; public FsmFloat Var; public float Last, NextSend; }
         static readonly List<Watch> watches = new List<Watch>();
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
+        // Automates hors des pieces : ecartes jusqu'au prochain grand releve (toutes les 2 min) -- le releve de toute la
+        // scene toutes les 20 s coutait 15 ms (a-coup ; retour de joueurs, 10/10).
+        static readonly HashSet<PlayMakerFSM> noPart = new HashSet<PlayMakerFSM>();
+        static float noPartClear;
         static float nextScan = -1, nextPoll;
         static Transform player;
 
         public static void OnLevelLoaded()
         {
-            watches.Clear(); seen.Clear(); player = null;
+            watches.Clear(); seen.Clear(); noPart.Clear(); player = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 12f : -1;
         }
 
         static void Scan()
         {
+            if (Time.realtimeSinceStartup >= noPartClear) { noPartClear = Time.realtimeSinceStartup + 120f; noPart.Clear(); }
             foreach (Object o in Game.AllFsms())
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
-                if (f.hideFlags != HideFlags.None || seen.Contains(f) || f.FsmName == "Data" || f.FsmName == "Paint") continue;
+                if (seen.Contains(f) || noPart.Contains(f) || f.hideFlags != HideFlags.None || f.FsmName == "Data" || f.FsmName == "Paint") continue;
                 string id = PartIdOf(f.transform);
-                if (id.Length == 0) continue;
+                if (id.Length == 0) { noPart.Add(f); continue; }
                 seen.Add(f);
                 foreach (string n in Names)
                 {

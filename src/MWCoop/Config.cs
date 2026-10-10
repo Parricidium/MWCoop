@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -14,6 +14,7 @@ namespace MWCoop
 
         public static void Load()
         {
+            resolved.Clear();
             string dir = Environment.GetEnvironmentVariable("MWCOOP_DIR");
             if (string.IsNullOrEmpty(dir)) dir = Path.Combine(Environment.CurrentDirectory, "MWCoop");
             IniPath = Path.Combine(dir, "mwcoop.ini");
@@ -57,12 +58,21 @@ namespace MWCoop
         }
 
         // L'argument -mwcoop-cle passe devant "Section.Cle" ; une valeur vide vaut 'def'.
+        // Valeurs resolues gardees par section puis cle : sans les deux chaines assemblees a chaque appel (des centaines
+        // d'appels par image dans les boucles -- allocations, ramasse-miettes plus frequent ; retour de joueurs 10/10).
+        static readonly Dictionary<string, Dictionary<string, string>> resolved = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
         public static string Get(string section, string key, string def)
         {
+            Dictionary<string, string> sec;
+            if (!resolved.TryGetValue(section, out sec)) resolved[section] = sec = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             string v;
-            if (values.TryGetValue("Arg." + key, out v) && v.Length > 0) return v;
-            if (values.TryGetValue(section + "." + key, out v) && v.Length > 0) return v;
-            return def;
+            if (!sec.TryGetValue(key, out v))
+            {
+                if (!(values.TryGetValue("Arg." + key, out v) && v.Length > 0) && !(values.TryGetValue(section + "." + key, out v) && v.Length > 0)) v = null;
+                sec[key] = v;
+            }
+            return v ?? def;
         }
 
         public static int GetInt(string section, string key, int def)
@@ -82,6 +92,7 @@ namespace MWCoop
         {
             values[section + "." + key] = value;
             values.Remove("Arg." + key);
+            resolved.Clear();
             var lines = new List<string>(File.Exists(IniPath) ? File.ReadAllLines(IniPath) : new string[0]);
             int sec = -1, end = lines.Count;
             for (int i = 0; i < lines.Count; i++)
