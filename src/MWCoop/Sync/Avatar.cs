@@ -501,6 +501,8 @@ namespace MWCoop
 
         Transform Bone(string n) { Transform t; return bones != null && bones.TryGetValue(n, out t) ? t : null; }
         public Transform HandRight { get { return Bone("hand_right"); } }
+        public Transform PelvisBone { get { return Bone("pelvis"); } }
+        public Transform VehicleT { get { return inCar ? vehicleT : null; } }
 
         // Rotation monde autour d'axes de l'avatar, ajoutee a la pose courante de l'os.
         void Turn(Transform b, float yaw, float pitch)
@@ -711,6 +713,7 @@ namespace MWCoop
                         Transform b = Bone(kv.Key); if (b != null) b.localRotation = kv.Value;
                     }
                 motoRaise = Vector3.zero;
+                seatFitted = false;
                 bool moto = carName != null && carName.StartsWith("JONNEZ");
                 if (moto) MotoPose(passenger);
                 else if (passenger)
@@ -732,7 +735,24 @@ namespace MWCoop
                 }
                 if (!moto) SeatFit(passenger);
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
-                if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - motoRaise - Root.transform.position) + EyeOffset;   // (sans la remontee de la Jonnez : sinon l'ancrage la defait)
+                if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - motoRaise - Root.transform.position) + EyeOffset;   // (sans la remontee : sinon l'ancrage la defait)
+                // Dos arrondi vers le volant, tete vers le retroviseur (dessin de JD) : apres les yeux au repos (la courbure ne
+                // deplace pas le corps a l'image suivante). [Test] SiegeDos / SiegeDos2 en degres (negatif : vers le dossier) ;
+                // SiegeTete : tete redressee d'autant (regarde la route, pas le volant).
+                if (seatFitted)
+                {
+                    Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "SiegeDos", 18f));
+                    Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "SiegeDos2", 24f));
+                    if (headBone != null) Turn(headBone, 0f, -Config.GetFloat("Test", "SiegeTete", 25f));
+                    if (passenger)
+                    {   // mains posees sur les cuisses (a mi-chemin du genou), coudes plies
+                        foreach (bool right in new[] { true, false })
+                        {
+                            Transform th = Bone(right ? "thig_right" : "thig_left"), kn = Bone(right ? "knee_right" : "knee_left");
+                            if (th != null && kn != null) ArmTo(right, Vector3.Lerp(th.position, kn.position, 0.6f) + vehicleT.up * 0.08f, 1f);
+                        }
+                    }
+                }
                 // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite). Avant les
                 // mains : elles se posent ensuite sur le volant depuis le buste penche.
                 float side = Mathf.Atan2(leanOff.x, 0.55f) * Mathf.Rad2Deg, fwdLean = Mathf.Atan2(leanOff.z, 0.55f) * Mathf.Rad2Deg;
@@ -1007,7 +1027,8 @@ namespace MWCoop
         void SeatFit(bool rear)
         {
             if (carName == null || !carName.StartsWith("GIFU") || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
-            if (passenger && Seats.RemoteSeatIndex(Player.Id) >= 1) return;   // (couchette : a part)
+            // (passager avant : enfonce de 30 cm dans le fauteuil sans ca -- assis comme le conducteur, dos arrondi, mains sur
+            // les cuisses ; la couchette n'a pas de « Seats » : rien a faire)
             Transform car = vehicleT, pelvis = Bone("pelvis");
             if (pelvis == null) return;
             if (seatCar != car)
@@ -1028,16 +1049,21 @@ namespace MWCoop
             if (cushion == null) return;
             Vector3 a = car.InverseTransformPoint(cushion.bounds.min), b = car.InverseTransformPoint(cushion.bounds.max);
             float top = Mathf.Max(a.y, b.y), back = Mathf.Min(a.z, b.z);
-            Vector3 want = new Vector3(pl.x, top + Config.GetFloat("Test", "SiegeBassin", 0.12f), back + Config.GetFloat("Test", "SiegeRecul", 0.15f));
+            if (pl.z < back - 0.4f) return;   // (assis sur la couchette, derriere les sieges)
+            Vector3 want = new Vector3(pl.x, top + Config.GetFloat("Test", "SiegeBassin", 0.02f), back + Config.GetFloat("Test", "SiegeRecul", 0.12f));
             Vector3 d = want - pl; d.x = 0f;
-            if (d.sqrMagnitude > 0.25f) return;   // (plus de 50 cm : pas ce siege)
+            if (Config.GetInt("Test", "JournalSiege", 0) != 0 && Time.frameCount % 300 < 6) Log.Info("siege : image " + Time.frameCount + " colonne " + (Bone("spine_middle") != null ? Bone("spine_middle").localEulerAngles.ToString("F1") : "?") + " racine " + vehicleT.InverseTransformPoint(Root.transform.position).ToString("F2") + " bassin " + pl.ToString("F2") + " voulu " + want.ToString("F2") + " ecart " + d.ToString("F2") + (d.sqrMagnitude > 0.64f ? " TROP LOIN" : ""));
+            if (d.sqrMagnitude > 0.64f) return;   // (plus de 80 cm : pas ce siege)
             Transform ar = Bone("ankle_right"), al = Bone("ankle_left");
             motoRaise = car.TransformVector(d);
             anim.transform.position += motoRaise;
-            // pieds au plancher (juste sous le bas de l'assise), un peu devant le bassin : genoux plies
-            float floorY = Mathf.Min(a.y, b.y) + Config.GetFloat("Test", "SiegeCheville", 0.06f), footZ = want.z + Config.GetFloat("Test", "SiegePieds", 0.5f);
-            if (ar != null) { Vector3 l = car.InverseTransformPoint(ar.position); Leg("thig_right", "knee_right", "ankle_right", car.TransformPoint(new Vector3(l.x, floorY, footZ))); }
-            if (al != null) { Vector3 l = car.InverseTransformPoint(al.position); Leg("thig_left", "knee_left", "ankle_left", car.TransformPoint(new Vector3(l.x, floorY, footZ))); }
+            seatFitted = true;
+            // (dos contre le dossier : buste incline apres la mesure des yeux au repos, dans le corps de la pose)
+            // Cuisses sur l'assise, genoux plies, pieds aux pedales : chaque pied devant et sous sa hanche
+            float fwd = Config.GetFloat("Test", "SiegePieds", 0.55f), down = Config.GetFloat("Test", "SiegeChute", 0.5f);
+            Transform hr = Bone("thig_right"), hl = Bone("thig_left");
+            if (ar != null && hr != null) Leg("thig_right", "knee_right", "ankle_right", hr.position + car.forward * fwd - car.up * down + car.right * 0.04f);
+            if (al != null && hl != null) Leg("thig_left", "knee_left", "ankle_left", hl.position + car.forward * fwd - car.up * down - car.right * 0.04f);
         }
 
         // [Test] JournalSiege=1 : os de l'avatar assis et sieges du vehicule, dans le repere du vehicule, toutes les 3 s.
@@ -1047,10 +1073,12 @@ namespace MWCoop
             if (Time.realtimeSinceStartup < seatLog || Config.GetInt("Test", "JournalSiege", 0) == 0 || vehicleT == null) return;
             seatLog = Time.realtimeSinceStartup + 3f;
             Transform car = vehicleT;
-            var sb = new System.Text.StringBuilder("siege " + Player.Name + " dans " + carName + " :");
+            var sb = new System.Text.StringBuilder("siege " + Player.Name + " dans " + carName + " : racine" + car.InverseTransformPoint(Root.transform.position).ToString("F2") + " yeux-repos" + eyesRest.ToString("F2"));
             foreach (string bn in new[] { "pelvis", "thig_right", "knee_right", "ankle_right", "spine_upper", "head" })
             { Transform bt = Bone(bn); if (bt != null) sb.Append(' ').Append(bn).Append(car.InverseTransformPoint(bt.position).ToString("F2")); }
             Vector3 dh; if (Seats.DriverHead(car, out dh)) sb.Append(" tete-conducteur").Append(dh.ToString("F2"));
+            sb.Append(" camera-du-joueur").Append(car.InverseTransformPoint(Player.State.Head).ToString("F2"));
+            if (headBone != null) sb.Append(" yeux-avatar").Append(car.InverseTransformPoint(headBone.position + Root.transform.rotation * EyeOffset).ToString("F2"));
             foreach (Renderer r in car.GetComponentsInChildren<Renderer>())
             {
                 string n = r.name.ToLowerInvariant();
@@ -1077,8 +1105,10 @@ namespace MWCoop
 
         // Dosage selon la portee : 1 jusqu'a 105 % de la longueur du bras, 0 au-dela de 130 % (le bras, tendu, s'arrete a
         // sa longueur : la main au bord de la jante).
+        bool seatFitted;   // (assis contre le dossier : bras tendus jusqu'au volant, dessin de JD)
         float Reachable(bool right, Vector3 at)
         {
+            if (seatFitted) return 1f;
             string s = right ? "_right" : "_left";
             Transform sh = Bone("shoulder" + s), el = Bone("arm" + s), ha = Bone("hand" + s);
             if (sh == null || el == null || ha == null) return 0f;
