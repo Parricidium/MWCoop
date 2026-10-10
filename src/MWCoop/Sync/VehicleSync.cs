@@ -1547,7 +1547,12 @@ namespace MWCoop
             if (c.Index == testRunCar && Time.realtimeSinceStartup < testRunUntil) return true;
             if (c.Dt != null && c.Dt.enabled && c.Dt.rpm > 150f) return true;
             if (c.ModDt != null && ModBool(c.ModDt, c.ModRun) && ModFloat(c.ModDt, c.ModRpm) > 40f) return true;
-            foreach (GameObject g in c.SoundObjs) if (g != null && g.activeSelf) return true;
+            // (son moteur : seulement s'il joue vraiment -- un objet de son reste allume moteur coupe faisait garder la voiture
+            // indefiniment, regime 0 : CORRIS en montage, 300D laisse « tournant » ; retours de HowardCS et gamereggo, 11/10)
+            foreach (GameObject g in c.SoundObjs)
+                if (g != null && g.activeInHierarchy)
+                    foreach (AudioSource a in g.GetComponentsInChildren<AudioSource>())
+                        if (a != null && a.enabled && a.isPlaying && a.volume > 0.01f) return true;
             return false;
         }
 
