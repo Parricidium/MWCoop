@@ -69,6 +69,7 @@ using std::max;
 #include <exdisp.h>
 #include <shldisp.h>
 #include <psapi.h>
+#include <wincodec.h>
 #include <string>
 #include <vector>
 #include <map>
@@ -1575,6 +1576,7 @@ static void BuildOptions()
         const wchar_t *fr[] = { L"Policier", L"Policier 2", L"Pilote de rallye", L"Employ\u00E9 PSK", L"Inspecteur" };
         const wchar_t *en[] = { L"Police officer", L"Police officer 2", L"Rally driver", L"PSK employee", L"Inspector" };
         for (int i = 0; i < 5; i++) { o.svals.push_back(extra[i]); o.labFr.push_back(fr[i]); o.labEn.push_back(en[i]); }
+        o.svals.push_back("perso"); o.labFr.push_back(L"Haut perso"); o.labEn.push_back(L"Custom top");   // (image importee : perso.inc)
         for (int i = 0; i < (int)o.svals.size(); i++) o.vals.push_back(i);
         o.def = 0;
         for (int i = 0; i < (int)o.svals.size(); i++) if (o.svals[i] == "char_shirt21") o.def = i;   // defaut du mod
@@ -3165,88 +3167,183 @@ static RectF LookPinRect(int z)
 }
 
 // Page TENUE : apercu a gauche (3D, ou la vue de la tenue), parties a droite (ou la galerie des hauts).
-// ---- visage importe (onglet TENUE) : %LOCALAPPDATA%\MWCoop\visage.jpg, 512x256 comme les visages des PNJ ; le mod le montre
-// aux autres (CustomFace). Gabarit : ecrit par le mod au 1er passage en jeu de chaque version (gabarit-visage.png).
+// ---- images importees (onglet TENUE) : %LOCALAPPDATA%\MWCoop\visage.jpg, haut.jpg, pantalon.jpg, a la taille de la texture du
+// jeu (gabarit) ; choisies dans la liste de leur partie ("perso", perso.inc), montrees aux autres par le mod (CustomFace).
+// Gabarits : ecrits par le mod au 1er passage en jeu de chaque version (gabarit-visage.png, gabarit-haut.png, gabarit-pantalon.png).
+// La rangee sous l'apercu suit la zone choisie (tete : visage, torse : haut, jambes : pantalon).
 static bool EncoderClsid(const wchar_t *mime, CLSID *out);
-static std::wstring FaceFile() { return LocalDir() + L"visage.jpg"; }
-static Bitmap *g_faceThumb = NULL;
-static bool g_faceLooked = false;
+static Bitmap *g_persoThumb[3];
+static bool g_persoThumbLooked[3];
 static RectF g_faceRect;   // bloc dessine (bulle du guide)
-static Bitmap *FaceThumb()
+static int PersoImgZone() { return g_lookZone == 1 ? PI_SHIRT : g_lookZone == 2 ? PI_PANTS : PI_FACE; }
+static void PersoImgChanged(int k)
 {
-    if (!g_faceLooked) {
-        g_faceLooked = true;
-        delete g_faceThumb; g_faceThumb = NULL;
-        if (FileExists(FaceFile())) {
-            Bitmap *b = Bitmap::FromFile(FaceFile().c_str());
-            if (b && b->GetLastStatus() == Ok) { g_faceThumb = b->Clone(0, 0, b->GetWidth(), b->GetHeight(), PixelFormat32bppARGB); }
-            delete b;
+    g_persoThumbLooked[k] = false;
+    g_perso.tex.erase(std::string("#perso-") + (char)('0' + k));
+    g_persoDrawn.clear();
+    for (auto &kv : g_persoPortraits) delete kv.second;
+    g_persoPortraits.clear();
+}
+// Image d'un fichier : GDI+ (PNG, JPG, BMP, GIF, TIFF), sinon le decodeur d'images de Windows (WIC : WebP, HEIC... --
+// retour d'un joueur, 10/10 : « la deuxieme image ne se charge pas »). Lue en memoire : le fichier n'est pas bloque.
+static Bitmap *LoadAnyImage(const std::wstring &file, std::wstring *why)
+{
+    std::vector<unsigned char> data;
+    if (!ReadAll(file, data) || data.empty()) { if (why) *why = T(L"fichier illisible", L"file can't be read"); return NULL; }
+    Bitmap *out = NULL;
+    if (IStream *st = SHCreateMemStream(data.data(), (UINT)data.size())) {
+        Bitmap *tmp = Bitmap::FromStream(st);
+        if (tmp && tmp->GetLastStatus() == Ok && tmp->GetWidth() > 0) out = tmp->Clone(0, 0, (INT)tmp->GetWidth(), (INT)tmp->GetHeight(), PixelFormat32bppPARGB);
+        delete tmp;
+        st->Release();
+        if (out && out->GetLastStatus() != Ok) { delete out; out = NULL; }
+    }
+    if (out) return out;
+    static const GUID kClsidWic = { 0xcacaf262, 0x9370, 0x4615, { 0xa1, 0x3b, 0x9f, 0x55, 0x39, 0xda, 0x4c, 0x0a } };
+    static const GUID kPbgra = { 0x6fddc324, 0x4e03, 0x4bfe, { 0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x10 } };
+    HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    IWICImagingFactory *f = NULL; IWICStream *ws = NULL; IWICBitmapDecoder *d = NULL; IWICBitmapFrameDecode *fr = NULL; IWICFormatConverter *cv = NULL;
+    if (SUCCEEDED(CoCreateInstance(kClsidWic, NULL, CLSCTX_INPROC_SERVER, __uuidof(IWICImagingFactory), (void **)&f))
+        && SUCCEEDED(f->CreateStream(&ws)) && SUCCEEDED(ws->InitializeFromMemory(data.data(), (DWORD)data.size()))
+        && SUCCEEDED(f->CreateDecoderFromStream(ws, NULL, WICDecodeMetadataCacheOnDemand, &d))
+        && SUCCEEDED(d->GetFrame(0, &fr)) && SUCCEEDED(f->CreateFormatConverter(&cv))
+        && SUCCEEDED(cv->Initialize(fr, kPbgra, WICBitmapDitherTypeNone, NULL, 0, WICBitmapPaletteTypeCustom))) {
+        UINT w = 0, h = 0;
+        cv->GetSize(&w, &h);
+        if (w > 0 && h > 0 && w <= 16384 && h <= 16384) {
+            out = new Bitmap((INT)w, (INT)h, PixelFormat32bppPARGB);
+            BitmapData bd;
+            Rect r(0, 0, (INT)w, (INT)h);
+            if (out->LockBits(&r, ImageLockModeWrite, PixelFormat32bppPARGB, &bd) == Ok) {
+                HRESULT hr = cv->CopyPixels(NULL, (UINT)bd.Stride, (UINT)bd.Stride * h, (BYTE *)bd.Scan0);
+                out->UnlockBits(&bd);
+                if (FAILED(hr)) { delete out; out = NULL; }
+            } else { delete out; out = NULL; }
         }
     }
-    return g_faceThumb;
+    if (cv) cv->Release();
+    if (fr) fr->Release();
+    if (d) d->Release();
+    if (ws) ws->Release();
+    if (f) f->Release();
+    if (SUCCEEDED(co)) CoUninitialize();
+    if (!out && why) *why = T(L"format d'image non reconnu par Windows (essaie PNG ou JPG)", L"image format not recognized by Windows (try PNG or JPG)");
+    return out;
+}
+static Bitmap *PersoThumb(int k)
+{
+    if (!g_persoThumbLooked[k]) {
+        g_persoThumbLooked[k] = true;
+        delete g_persoThumb[k]; g_persoThumb[k] = NULL;
+        if (PersoImgHas(k)) g_persoThumb[k] = LoadAnyImage(PersoImgFile(k), NULL);
+    }
+    return g_persoThumb[k];
 }
 static void FaceImport()
 {
+    int k = PersoImgZone();
     wchar_t file[MAX_PATH] = L"";
     OPENFILENAMEW of = { sizeof(of) };
     of.hwndOwner = g_wnd;
-    of.lpstrFilter = L"Images (*.png, *.jpg, *.bmp)\0*.png;*.jpg;*.jpeg;*.bmp\0";
+    of.lpstrFilter = L"Images\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp;*.heic;*.heif;*.avif;*.jfif\0*.*\0*.*\0";
     of.lpstrFile = file;
     of.nMaxFile = MAX_PATH;
     std::wstring init = LocalDir();
     of.lpstrInitialDir = init.c_str();
-    of.lpstrTitle = T(L"Choisir l'image du visage (sur le gabarit, 512 x 256)", L"Choose the face image (on the template, 512 x 256)");
+    static const wchar_t *titFr[3] = { L"Choisir l'image du visage (peinte sur le gabarit)", L"Choisir l'image du haut (peinte sur le gabarit)", L"Choisir l'image du pantalon (peinte sur le gabarit)" };
+    static const wchar_t *titEn[3] = { L"Choose the face image (painted on the template)", L"Choose the top image (painted on the template)", L"Choose the pants image (painted on the template)" };
+    of.lpstrTitle = g_fr ? titFr[k] : titEn[k];
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
     if (!GetOpenFileNameW(&of)) return;
-    Bitmap *src = Bitmap::FromFile(file);
+    std::wstring why;
+    Bitmap *src = LoadAnyImage(file, &why);
     bool ok = false;
-    if (src && src->GetLastStatus() == Ok) {
-        Bitmap dst(512, 256, PixelFormat24bppRGB);
+    if (src) {
+        // taille de la texture du jeu (gabarit ecrit par le mod), sinon celle des PNJ (visage 512 x 256)
+        int W = 512, H = k == PI_FACE ? 256 : 512;
+        Bitmap *game = LoadAnyImage(LocalDir() + kPersoImg[k] + L"-jeu.png", NULL);
+        if (Bitmap *tpl = game ? game : LoadAnyImage(LocalDir() + L"gabarit-" + kPersoImg[k] + L".png", NULL)) {
+            W = (int)tpl->GetWidth(); H = (int)tpl->GetHeight();
+            if (tpl != game) delete tpl;
+        }
+        Bitmap dst(W, H, PixelFormat24bppRGB);
         {
             Graphics dg(&dst);
             dg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
             dg.SetPixelOffsetMode(PixelOffsetModeHalf);
-            dg.DrawImage(src, RectF(0, 0, 512, 256));
+            if (game) dg.DrawImage(game, RectF(0, 0, (REAL)W, (REAL)H));   // (parties transparentes : la texture du jeu)
+            else dg.Clear(Color(255, 128, 128, 128));
+            dg.DrawImage(src, RectF(0, 0, (REAL)W, (REAL)H));
         }
+        delete game;
         CLSID jpg;
         EncoderParameters ep; ULONG q = 90;
         ep.Count = 1; ep.Parameter[0].Guid = EncoderQuality; ep.Parameter[0].Type = EncoderParameterValueTypeLong; ep.Parameter[0].NumberOfValues = 1; ep.Parameter[0].Value = &q;
         CreateDirectoryW(LocalDir().c_str(), NULL);
-        ok = EncoderClsid(L"image/jpeg", &jpg) && dst.Save(FaceFile().c_str(), &jpg, &ep) == Ok;
+        ok = EncoderClsid(L"image/jpeg", &jpg) && dst.Save(PersoImgFile(k).c_str(), &jpg, &ep) == Ok;
+        if (!ok) why = T(L"enregistrement impossible", L"can't save it");
+        LaunchLog("image perso importee (%ls) : %dx%d", kPersoImg[k], W, H);
     }
     delete src;
-    g_faceLooked = false;
-    LaunchLog("visage importe : %s", ok ? "ok" : "echec");
-    if (!ok) MessageBoxW(g_wnd, T(L"Cette image n'a pas pu être lue.", L"This image could not be read."), L"MWCoop", MB_ICONWARNING | MB_OK);
+    PersoImgChanged(k);
+    if (ok) { PersoSet(PersoPartOf(k), "perso"); g_skinAnnounce = true; g_skinChangeT = GetTickCount(); }   // (choisie : montree en direct)
+    else {
+        LaunchLog("image perso : echec (%ls)", why.c_str());
+        std::wstring msg = std::wstring(T(L"Cette image n'a pas pu être lue : ", L"This image could not be read: ")) + why + L".";
+        MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
+    }
 }
 static void FaceTemplate()
 {
-    std::wstring t = LocalDir() + L"gabarit-visage.png";
+    int k = PersoImgZone();
+    std::wstring t = LocalDir() + L"gabarit-" + kPersoImg[k] + L".png";
     if (FileExists(t)) { std::wstring a = L"/select,\"" + t + L"\""; ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL); return; }
-    MessageBoxW(g_wnd, T(L"Le gabarit est créé par le mod : lance une partie (solo suffit) et reste ~20 s en jeu avec cette version, puis reviens ici.\n\n"
-                         L"Il montre la texture du visage du jeu avec ses coutures : peins ton visage par-dessus (512 x 256), puis Importer.",
-                         L"The template is made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\n"
-                         L"It shows the game's face texture with its seams: paint your face over it (512 x 256), then Import."),
+    MessageBoxW(g_wnd, T(L"Les gabarits sont créés par le mod : lance une partie (solo suffit) et reste ~20 s en jeu avec cette version, puis reviens ici.\n\n"
+                         L"Chacun montre la texture du jeu (visage, haut ou pantalon) avec ses coutures : peins par-dessus en gardant la taille, puis importe.",
+                         L"The templates are made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\n"
+                         L"Each shows the game's texture (face, top or pants) with its seams: paint over it keeping the size, then import."),
                 L"MWCoop", MB_ICONINFORMATION | MB_OK);
 }
-static void FaceRemove() { DeleteFileW(FaceFile().c_str()); g_faceLooked = false; LaunchLog("visage importe retire"); }
+static void FaceRemove()
+{
+    int k = PersoImgZone(), f = PersoPartOf(k);
+    DeleteFileW(PersoImgFile(k).c_str());
+    if (PersoGet(f) == "perso") PersoSet(f, f == PF_SHIRT ? "char_shirt21" : "");
+    PersoImgChanged(k);
+    g_skinAnnounce = true;
+    LaunchLog("image perso retiree (%ls)", kPersoImg[k]);
+}
+// Visage importe en 0.69-0.70 (montre d'office, [Coop] VisagePerso) : maintenant choisi dans la liste -- repris une fois.
+static void PersoMigrate()
+{
+    if (GetPrivateProfileIntW(L"Lanceur", L"PersoListe", 0, g_iniLauncher.c_str())) return;
+    WritePrivateProfileStringW(L"Lanceur", L"PersoListe", L"1", g_iniLauncher.c_str());
+    if (!PersoImgHas(PI_FACE) || GetPrivateProfileIntA("Coop", "VisagePerso", 1, ModIniA().c_str()) == 0 || !PersoGet(PF_FACE).empty()) return;
+    PersoSet(PF_FACE, "perso");
+    LaunchLog("visage importe : choisi dans la liste (Visage perso)");
+}
 
-// Rangee du visage importe (entre les fleches de rotation de l'apercu) : Mon visage (importer), Gabarit, Retirer ; vignette de
-// l'image importee en bas a gauche de l'apercu.
+// Rangee de l'image importee de la zone choisie (entre les fleches de rotation de l'apercu) : Mon visage / haut /
+// pantalon (importer), Gabarit, Retirer ; vignette de l'image en bas a gauche de l'apercu.
 static void DrawFaceRow(Graphics &g, RectF r, RectF view)
 {
     g_faceRect = r;
-    Bitmap *th = FaceThumb();
+    int k = PersoImgZone();
+    Bitmap *th = PersoThumb(k);
+    static const wchar_t *impFr[3] = { L"Mon visage…", L"Mon haut…", L"Mon pantalon…" }, *impEn[3] = { L"My face…", L"My top…", L"My pants…" };
     float gap = 6, bw = (r.Width - 2 * gap) / 3;
-    UiButton(g, RectF(r.X, r.Y + 4, bw + 16, 36), T(L"Mon visage…", L"My face…"), UI_FACE_IMPORT, th == NULL);
+    UiButton(g, RectF(r.X, r.Y + 4, bw + 16, 36), g_fr ? impFr[k] : impEn[k], UI_FACE_IMPORT, th == NULL);
     UiButton(g, RectF(r.X + bw + 16 + gap, r.Y + 4, bw - 8, 36), T(L"Gabarit", L"Template"), UI_FACE_TPL, false);
     UiButton(g, RectF(r.X + 2 * bw + 8 + 2 * gap, r.Y + 4, bw - 8, 36), T(L"Retirer", L"Remove"), UI_FACE_DEL, false, -1, th != NULL);
     if (th) {
-        RectF ti(view.X + 14, view.Y + view.Height - 62, 96, 48);
+        static const wchar_t *capFr[3] = { L"visage importé", L"haut importé", L"pantalon importé" }, *capEn[3] = { L"imported face", L"imported top", L"imported pants" };
+        float tw = 96, thh = k == PI_FACE ? 48 : 96 * th->GetHeight() / (float)max(1u, th->GetWidth());
+        thh = min(thh, 96.0f);
+        RectF ti(view.X + 14, view.Y + view.Height - 14 - thh, tw, thh);
         GraphicsPath p; RoundRect(p, RectF(ti.X - 4, ti.Y - 4, ti.Width + 8, ti.Height + 22), 8);
         SolidBrush b(TH(card)); g.FillPath(&b, &p);
         DrawPixels(g, th, ti);
-        Text(g, T(L"visage importé", L"imported face"), RectF(ti.X - 4, ti.Y + ti.Height, ti.Width + 8, 18), 10.5f, FontStyleRegular, kGrey);
+        Text(g, g_fr ? capFr[k] : capEn[k], RectF(ti.X - 4, ti.Y + ti.Height, ti.Width + 8, 18), 10.5f, FontStyleRegular, kGrey);
     }
 }
 
@@ -6717,6 +6814,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     BuildOptions();
 
     SetGame(FindGame());
+    if (!g_gameDir.empty()) PersoMigrate();
+    // /lireimage <image> <journal> : lecture d'une image comme l'import du visage (essais : GDI+, puis WIC)
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/lireimage")) {
+        std::wstring why;
+        Bitmap *b = LoadAnyImage(argv[2], &why);
+        FILE *f = _wfopen(argv[3], L"w, ccs=UTF-8");
+        if (f) { if (b) fwprintf(f, L"ok %ux%u\n", b->GetWidth(), b->GetHeight()); else fwprintf(f, L"echec : %s\n", why.c_str()); fclose(f); }
+        delete b;
+        GdiplusShutdown(gtok);
+        return b ? 0 : 1;
+    }
     // /jeu <journal> : jeu trouve (dossier, version, mod)
     if (argc >= 3 && !_wcsicmp(argv[1], L"/jeu")) {
         FILE *f = _wfopen(argv[2], L"w, ccs=UTF-8");

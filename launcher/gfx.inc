@@ -137,8 +137,7 @@ static const std::vector<GfxRow> &GfxRows()
           { L"15 m", L"25 m", L"35 m", L"50 m", L"80 m" }, { L"15 m", L"25 m", L"35 m", L"50 m", L"80 m" }, 0, 6, "Coop" },
         { "VolumeVocal", L"Volume des voix", L"Voice volume", 100, { 25, 50, 75, 100 },
           { L"25 %", L"50 %", L"75 %", L"100 %" }, { L"25 %", L"50 %", L"75 %", L"100 %" }, 0, 6, "Coop" },
-        { "VisagePerso", L"Montrer mon visage importé", L"Show my imported face", 1, {}, {}, {}, 0, 7, "Coop" },
-        { "VoirVisages", L"Voir les visages importés des autres", L"See the others' imported faces", 1, {}, {}, {}, 0, 7, "Coop" },
+        { "VoirVisages", L"Voir les visages et habits importés des autres", L"See the others' imported faces and clothes", 1, {}, {}, {}, 0, 7, "Coop" },
         { "ModsAuto", L"Accepter les fichiers de l'hôte", L"Accept the host's files", 0, {}, {}, {}, 0, 8, "Opt" },
         { "ArgentDepart", L"Argent de départ des invités", L"Guests' starting money", 1, {}, {}, {}, 0, 8, "Coop" },
         { "Touche:Tchat", L"Écrire aux autres (tchat)", L"Write to the others (chat)", 0, {}, {}, {}, 0, 9, "Touches" },
@@ -310,8 +309,8 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
 // 'y' : position dans le contenu (avant defilement) ; dessine seulement ce qui croise la zone visible.
 static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, float top, float bottom)
 {
-    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et détails", L"Jeu et confort", L"Lumières", L"Écran", L"Voix", L"Visages", L"Partie et partage", L"Touches" };
-    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and detail", L"Game and comfort", L"Lights", L"Screen", L"Voice", L"Faces", L"Game and sharing", L"Keys" };
+    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et détails", L"Jeu et confort", L"Lumières", L"Écran", L"Voix", L"Visages et habits", L"Partie et partage", L"Touches" };
+    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and detail", L"Game and comfort", L"Lights", L"Screen", L"Voice", L"Faces and clothes", L"Game and sharing", L"Keys" };
     const auto &rows = GfxRows();
     std::vector<int> mine;
     for (int i = 0; i < (int)rows.size(); i++) if (rows[i].group == group) mine.push_back(i);

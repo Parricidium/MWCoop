@@ -278,7 +278,7 @@ namespace MWCoop
             }
             Material m;
             if (materials.TryGetValue(name, out m)) return m;
-            return name.StartsWith("perso_") ? CustomFace.Make(name) : Tenues.Make(name);   // (visage importe ; tenue offerte : creee a la demande)
+            return CustomFace.IsCustom(name) ? CustomFace.Make(name) : Tenues.Make(name);   // (image importee ; tenue offerte : creee a la demande)
         }
 
         // Apparences proposees : materiaux des corps des PNJ (char_shirtNN, cop_shirt...).
