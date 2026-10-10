@@ -22,7 +22,7 @@ namespace MWCoop
         static float nextLook, nextHost;
         static bool last, known, applying;
 
-        public static void OnLevelLoaded() { locking = null; known = false; nextLook = 0f; parts.Clear(); partsAt = 0f; keysSent = false; nextParts = 0f; testStep = 0; glides.Clear(); ign = null; ignCol = null; keyInWas = false; ignLook = 0f; }
+        public static void OnLevelLoaded() { locking = null; known = false; nextLook = 0f; parts.Clear(); partsAt = 0f; keysSent = false; nextParts = 0f; testStep = 0; glides.Clear(); ign = null; ignCol = null; keyInWas = false; ignLook = 0f; keyHolder = -1; nextKeyAnnounce = 0f; }
 
         // ---------------------------------------------------------------- equipements (retour de Menos, 10/10 : toit ouvrant,
         // boite automatique, boite a gants, compartiments, vitres non synchronises ; la cle « partagee »).
@@ -58,7 +58,7 @@ namespace MWCoop
         }
 
         static readonly string[] PartTypes = { "SaveVars", "ElectricSunroof", "PowerWindow", "OpenableCompartment", "Machtmatic", "AutoAC",
-                                               "Sunvisor", "InteriorLight", "FrontFogSwitch", "RecircSwitch", "DefrosterSwitch", "RearDomeLightSwitch", "HornToneSwitch" };
+                                               "Sunvisor", "InteriorLight", "FrontFogSwitch", "RecircSwitch", "DefrosterSwitch", "RearDomeLightSwitch", "HornToneSwitch", "HornButton" };
         // Interrupteurs a deux positions (SwitchOn ; retour de Menos, 10/10 : pare-soleil et le reste non synchronises).
         static bool IsSwitch(string t) { return t == "FrontFogSwitch" || t == "RecircSwitch" || t == "DefrosterSwitch" || t == "RearDomeLightSwitch" || t == "HornToneSwitch"; }
 
@@ -108,6 +108,7 @@ namespace MWCoop
                         return st != null ? Get<float>(st, "State") : float.NaN;
                     }
                 case "Sunvisor": return Get<float>(p.C, "currentPos");
+                case "HornButton": { AudioSource hs = Get<AudioSource>(p.C, "hornsound"); return hs != null && hs.isPlaying ? 1f : 0f; }   // (klaxon du tableau de bord : retour de Menos 10/10)
                 case "InteriorLight": return Get<int>(p.C, "LightState");
                 case "FrontFogSwitch": case "RecircSwitch": case "DefrosterSwitch": case "RearDomeLightSwitch": case "HornToneSwitch":
                     return Get<bool>(p.C, "SwitchOn") ? 1f : 0f;
@@ -214,6 +215,7 @@ namespace MWCoop
                     StartGlide(p, v);
                     break;
                 case "Sunvisor": CallM(p.C, "SetVisorPos", v); break;
+                case "HornButton": { AudioSource hs = Get<AudioSource>(p.C, "hornsound"); if (hs != null) { if (v > 0.5f && !hs.isPlaying) hs.Play(); else if (v < 0.5f && hs.isPlaying) hs.Stop(); } break; }
                 case "InteriorLight": CallM(p.C, "LoadLightState", (int)v); break;
                 case "FrontFogSwitch": case "RecircSwitch": case "DefrosterSwitch": case "RearDomeLightSwitch": case "HornToneSwitch":
                     {
@@ -290,10 +292,18 @@ namespace MWCoop
                 if (k && (!keysWas || Session.IsHost && !keysSent))
                 {
                     keysSent = true;
+                    keyHolder = Session.LocalId;
                     Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@300k"), true);
                     Log.Info("mods : 300D, la cle est ici");
                 }
                 keysWas = k;
+                // Hote : le porteur redit toutes les 10 s (« la cle est partagee », Menos 10/10 : un invite qui chargeait le mod
+                // apres l'annonce de l'hote gardait la cle de la sauvegarde -- deux porteurs).
+                if (Session.IsHost && keyHolder >= 0 && Time.realtimeSinceStartup >= nextKeyAnnounce)
+                {
+                    nextKeyAnnounce = Time.realtimeSinceStartup + 10f;
+                    Session.SendAll(new NetWriter(Msg.Job).U8((byte)keyHolder).Str("@300k"), true);
+                }
             }
         }
 
@@ -357,6 +367,7 @@ namespace MWCoop
                     if (p.Type == "OpenableCompartment" && !comp) { comp = true; CallM(p.C, "OpenGlovebox"); }
                     if (p.Type == "PowerWindow" && !win) { win = true; CallM(p.C, "SetWindowState", 30f); }
                     if (p.Type == "ElectricSunroof" && !roof) { roof = true; CallM(p.C, "SetWindowState", 40f); }
+                    if (p.Type == "HornButton") { AudioSource hs = Get<AudioSource>(p.C, "hornsound"); if (hs != null) hs.Play(); }
                     if (p.Type == "Sunvisor" && !vis) { vis = true; CallM(p.C, "SetVisorPos", 90f); }
                     if (p.Type == "FrontFogSwitch" && !fog) { fog = true; CallM(p.C, "LoadSwitchOn"); }
                     if (p.Type == "AutoAC" && !ac) { ac = true; CallM(p.C, "SetMinFan"); CallM(p.C, "SetDefrost"); }
@@ -373,10 +384,15 @@ namespace MWCoop
             }
         }
 
+        static int keyHolder = -1;
+        static float nextKeyAnnounce;
         public static void OnKeys(int who)
         {
+            keyHolder = who;
+            if (who == Session.LocalId) return;   // (rappel de l'hote : c'est nous)
             if (saveVars == null) ScanParts();
             if (saveVars == null) return;
+            if (!Get<bool>(saveVars, "keysGot") && !keysWas) return;   // (deja sans cle : rien a dire)
             SetF(saveVars, "keysGot", false);
             keysWas = false;
             // (la cle posee a prendre, s'il y en a une ici : prise par l'autre)
