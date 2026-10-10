@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -188,12 +188,155 @@ namespace MWCoop
             watchedStates = 0;
             Boxes.OnLevelLoaded();
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 11f : -1;
+            spawnersHooked = false; nextSpawnerLook = 0f; pickStep = 0; pickBag = null; pickBefore = null;
+        }
+
+        // ---------------------------------------------------------------- article sorti d'un sac (« Spawn one »)
+        // Retour de joueurs (10/10 : « quand un ami deballe le sac, les articles ne sont visibles que chez l'hote, chacun
+        // doit le vider de son cote ») : « Spawn one » envoie SPAWNRANDOM au distributeur (Spawner/BagContentsStore, ou
+        // BagContentsFleetari pour les pieces) qui TIRE AU HASARD une case du sac (Items : ArrayListGetRandom -> RandomIndex,
+        // Product), puis State 7 en retire un et fait sortir l'article. Rejoue chez les autres, le tirage y donnait un autre
+        // article (Mikol : boxpistons01 chez lui, boxwaterpump01 chez l'hote) : des articles differents, d'ID differents.
+        // Maintenant : celui qui sort l'article envoie la case tiree (@sacitem, accroche en tete de State 7) ; les autres ne
+        // rejouent plus « Spawn one » au hasard, mais State 7 sur ce sac avec cette case : le meme article, le meme ID.
+        static readonly string[] SpawnerPaths = { "Spawner/BagContentsStore", "Spawner/BagContentsFleetari" };
+        static bool spawnersHooked;
+        static float nextSpawnerLook;
+
+        class PickHook : ModHook
+        {
+            public override string Module { get { return "consommables"; } }
+            public string Path;
+            public override void OnEnter()
+            {
+                try { if (!Applying && Replay.Depth == 0) OnLocalPick(Fsm, Path); }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        static void HookSpawners()
+        {
+            if (spawnersHooked || Time.realtimeSinceStartup < nextSpawnerLook) return;
+            nextSpawnerLook = Time.realtimeSinceStartup + 5f;
+            int n = 0;
+            foreach (string p in SpawnerPaths)
+            {
+                GameObject g = Game.FindAny(p);
+                PlayMakerFSM f = g != null ? Game.FsmOn(g, "Logic") : null;
+                FsmState s7 = f != null ? f.Fsm.GetState("State 7") : null;
+                if (s7 == null || !s7.IsInitialized) continue;
+                bool has = false;
+                foreach (FsmStateAction a in s7.Actions) if (a is PickHook) has = true;
+                if (!has) { var l = new List<FsmStateAction>(s7.Actions); l.Insert(0, new PickHook { Path = p }); s7.Actions = l.ToArray(); }
+                n++;
+            }
+            if (n == SpawnerPaths.Length) { spawnersHooked = true; Log.Info("consommables : articles sortis des sacs suivis (" + n + " distributeurs)"); }
+        }
+
+        static string BagIdOf(GameObject bag)
+        {
+            if (bag == null) return null;
+            foreach (KeyValuePair<string, PlayMakerFSM> kv in byId) if (kv.Value != null && kv.Value.gameObject == bag) return kv.Key;
+            return null;
+        }
+
+        static void OnLocalPick(Fsm fsm, string path)
+        {
+            FsmGameObject bag = fsm.Variables.FindFsmGameObject("CurrentBag");
+            FsmInt idx = fsm.Variables.FindFsmInt("RandomIndex");
+            string id = BagIdOf(bag != null ? bag.Value : null);
+            if (id == null || idx == null) { Log.Info("consommables : article sorti d'un sac non suivi (" + path + ")"); return; }
+            if (!Session.Active || Session.RemoteCount == 0) return;
+            // (par le nom du produit : les listes du sac n'ont pas le meme ordre chez tous -- une case de decalage vue)
+            List<object> keys = BagList(bag.Value, "Keys");
+            string product = keys != null && idx.Value >= 0 && idx.Value < keys.Count && keys[idx.Value] != null ? keys[idx.Value].ToString() : "";
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@sacitem").Str(path).Str(id).Str(product), true);
+            List<int> vals = BagValues(bag.Value);
+            var nz = new System.Text.StringBuilder();
+            if (vals != null) for (int i = 0; i < vals.Count; i++) if (vals[i] != 0) nz.Append(' ').Append(i).Append('=').Append(vals[i]);
+            FsmInt prod = fsm.Variables.FindFsmInt("Product");
+            Log.Info("consommables : sac " + id + ", article " + product + " (case " + idx.Value + ") sorti ici (quantite " + (prod != null ? prod.Value : -1) + ", cases non vides :" + nz + ")");
+        }
+
+        static List<object> BagList(GameObject bag, string name)
+        {
+            if (bag == null) return null;
+            foreach (PlayMakerArrayListProxy p in bag.GetComponents<PlayMakerArrayListProxy>())
+                if (p.referenceName == name && p.arrayList != null) return new List<object>(p.arrayList.ToArray());
+            return null;
+        }
+
+        static List<int> BagValues(GameObject bag)
+        {
+            foreach (PlayMakerArrayListProxy p in bag.GetComponents<PlayMakerArrayListProxy>())
+                if (p.referenceName == "Values" && p.arrayList != null)
+                {
+                    var l = new List<int>();
+                    foreach (object o in p.arrayList) { int v = 0; try { v = System.Convert.ToInt32(o); } catch { } l.Add(v); }
+                    return l;
+                }
+            return null;
+        }
+
+        // [Test] Autotest=sac-un : l'hote achete Cigarettes x2 et Sausages x2 (meme sac) a 30 s ; l'invite, des que ce sac
+        // neuf est suivi chez lui, en sort un article 3 fois (Confirm puis « Spawn one », 2 s d'ecart). Chacun journalise ses
+        // articles crees (« suivi des sa creation ») : memes noms des deux cotes attendus.
+        static int pickStep; static float pickAt; static string pickBag; static HashSet<string> pickBefore;
+        public static void TestPick(string mode, float t)
+        {
+            if (mode != "sac-un") return;
+            if (pickBefore == null && t > 5f) { pickBefore = new HashSet<string>(byId.Keys); }
+            if (Session.IsHost) { if (t > 30f && pickStep == 0) { pickStep = 1; Log.Info("autotest : sac-un, " + Shop.TestBuyTwo("Cigarettes", 2, "Sausages", 2)); } return; }
+            if (pickBefore == null) return;
+            if (pickBag == null)
+                foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
+                    if (!pickBefore.Contains(kv.Key) && kv.Value != null && kv.Value.Fsm.GetState("Spawn one") != null) { pickBag = kv.Key; pickAt = Time.realtimeSinceStartup + 2f; Log.Info("autotest : sac-un, sac neuf " + pickBag); break; }
+            PlayMakerFSM bag;
+            if (pickBag == null || pickStep >= 3 || Time.realtimeSinceStartup < pickAt || !byId.TryGetValue(pickBag, out bag) || bag == null) return;
+            pickStep++; pickAt = Time.realtimeSinceStartup + 2f;
+            if (bag.Fsm.GetState("Confirm") != null) Game.SetState(bag, "Confirm");
+            Game.SetState(bag, "Spawn one");
+            Log.Info("autotest : sac-un, article " + pickStep + " sorti ici");
+        }
+
+        public static void OnRemotePick(int who, string path, string id, string product)
+        {
+            int index = -1;
+            PlayMakerFSM bagF;
+            GameObject g = Game.FindAny(path);
+            PlayMakerFSM sp = g != null ? Game.FsmOn(g, "Logic") : null;
+            if (!byId.TryGetValue(id, out bagF) || bagF == null || sp == null) { Log.Warn("consommables : article du sac " + id + " (case " + index + ") de #" + who + " : sac ou distributeur introuvable ici"); return; }
+            List<object> keys = BagList(bagF.gameObject, "Keys");
+            if (keys != null) for (int i = 0; i < keys.Count; i++) if (keys[i] != null && keys[i].ToString() == product) { index = i; break; }
+            List<int> vals = BagValues(bagF.gameObject);
+            int count = vals != null && index >= 0 && index < vals.Count ? vals[index] : -1;
+            if (count <= 0)
+            {
+                var nz = new System.Text.StringBuilder();
+                if (vals != null) for (int i = 0; i < vals.Count; i++) if (vals[i] != 0) nz.Append(' ').Append(i).Append('=').Append(vals[i]);
+                Log.Warn("consommables : sac " + id + " de #" + who + " : " + product + " (case " + index + ") absent ici (" + (vals != null ? vals.Count + " cases, non vides :" + nz : "pas de liste") + ")");
+                return;
+            }
+            FsmGameObject cur = sp.FsmVariables.FindFsmGameObject("CurrentBag");
+            FsmInt ri = sp.FsmVariables.FindFsmInt("RandomIndex"), prod = sp.FsmVariables.FindFsmInt("Product");
+            if (cur == null || ri == null || prod == null) return;
+            Applying = true; Replay.Depth++;
+            try
+            {
+                cur.Value = bagF.gameObject; ri.Value = index; prod.Value = count;
+                Game.SetState(sp, "State 7");
+            }
+            finally { Applying = false; Replay.Depth--; }
+            SoonScan();
+            Log.Info("consommables : sac " + id + " : " + product + " (case " + index + ") sorti comme chez #" + who + " (" + (count - 1) + " restant(s) dans la case)");
         }
 
         public static void Update()
         {
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
+            HookSpawners();
             for (int i = snapshots.Count - 1; i >= 0; i--)
             {
                 if (now < snapshots[i].Key) continue;
@@ -967,6 +1110,8 @@ namespace MWCoop
             if (gone) done.Add(id);
             // Deja la (meme fin atteinte des deux cotes, sac deja vide) : pas une 2e fois.
             if ((end || state == "Spawn all") && f.ActiveStateName == state) { if (!snapshot) Log.Info("consommables : " + id + " deja " + state + " ici"); return; }
+            // Article sorti au hasard : vient avec sa case (@sacitem, OnRemotePick), pas rejoue ici.
+            if (state == "Spawn one" && spawnersHooked) { Log.Info("consommables : sac " + id + " ouvert par le joueur #" + who + " (Spawn one : l'article suit)"); return; }
             // Deja jete ou mange ici : un "vide" arrive apres coup ne le ramene pas en arriere.
             if (end && !gone && EndKind(f.Fsm.ActiveState) == 2) return;
             Applying = true; Replay.Depth++;

@@ -103,7 +103,36 @@ namespace MWCoop
             float t = Time.realtimeSinceStartup - t0;
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t);
-            Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t);
+            Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t); Consume.TestPick(mode, t);
+            if (mode == "sondesac" && t > 20f && step == 0)
+            {
+                step = 1;
+                foreach (string sp in new[] { "Spawner/BagContentsFleetari", "Spawner/BagContentsStore" })
+                {
+                    GameObject g = Game.FindAny(sp);
+                    PlayMakerFSM f = g != null ? Game.FsmOn(g, "Logic") : null;
+                    if (f == null) continue;
+                    foreach (string sn in new[] { "Items", "State 7", "State 15", "State 4", "State 16", "Check empty" })
+                    {
+                        HutongGames.PlayMaker.FsmState s = f.Fsm.GetState(sn);
+                        if (s == null || s.Actions == null) continue;
+                        foreach (var a in s.Actions) Log.Info("autotest : sac " + sp + "/" + sn + " : " + Recon.Describe(a));
+                    }
+                }
+            }
+            if (mode == "sondeoptions" && t > 20f && step == 0)
+            {
+                step = 1;
+                GameObject db = Game.FindAny("Systems/OptionsDB");
+                if (db != null)
+                    foreach (PlayMakerFSM f in db.GetComponents<PlayMakerFSM>())
+                        foreach (string sn in new[] { "Save data 2", "Load 2", "Save data", "Load", "State 3" })
+                        {
+                            HutongGames.PlayMaker.FsmState s = f.Fsm.GetState(sn);
+                            if (s == null || s.Actions == null) continue;
+                            for (int i = 0; i < s.Actions.Length && i < 40; i++) Log.Info("autotest : options " + f.FsmName + "/" + sn + " : " + Recon.Describe(s.Actions[i]));
+                        }
+            }
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
             VehicleSync.Test(mode, t); Jobs.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); PushDoors.Test(mode, t);
