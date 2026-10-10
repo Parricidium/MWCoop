@@ -200,6 +200,10 @@ namespace MWCoop
                     Leave();
                     return;
                 }
+                // Endormi a sa place (couchette de la GIFU, retour d'un joueur, 10/10 : « l'avatar reste debout, flotte au
+                // reveil, puis on ne peut plus s'asseoir, le jeu croit qu'on l'est ») : le jeu couche le joueur lui-meme ;
+                // la place est rendue sans toucher au joueur (ni position, ni commandes : le jeu les reprend au reveil).
+                if (Game.GlobalBool("PlayerSleeps")) { LeaveForSleep(); return; }
                 if (debugFrames > 0)
                 {
                     debugFrames--;
@@ -398,6 +402,22 @@ namespace MWCoop
             headLocal = s.Head;
             Log.Info("passager : assis dans " + s.Car + " (place " + s.Index + ") en " + s.CarT.InverseTransformPoint(player.position).ToString("F2"));
             SendSeat(s.Car, s.Index, s.Head);
+        }
+
+        static void LeaveForSleep()
+        {
+            string car = current != null ? current.Car : "?";
+            current = null;
+            beltOn = false;
+            BlockHandle(false);
+            BeltHint(null);
+            Drop(null);
+            if (player != null && pivot != null && player.parent == pivot) player.parent = null;
+            InCar(false);
+            if (pivot != null) Object.Destroy(pivot.gameObject);
+            pivot = null;
+            Log.Info("passager : endormi dans " + car + ", place rendue (le jeu couche le joueur)");
+            SendSeat("", -1, Vector3.zero);
         }
 
         static void Leave()

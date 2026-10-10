@@ -727,6 +727,9 @@ namespace MWCoop
                     Rigidbody b = VehicleSync.Body(car);
                     VehicleSync.TestEngine(t > 26f && t < 41f ? 1800f : -1f, 0.4f);
                     if (b != null && t > 27f && t < 40f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * Config.GetFloat("Test", "CabineVitesse", 6f) + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                    // [Test] CabineTourne=deg/s : le vehicule tourne sur lui-meme pendant ce temps (siege qui glisse selon le cap ?)
+                    float turn = Config.GetFloat("Test", "CabineTourne", 0f);
+                    if (b != null && turn != 0f && t > 27f && t < 40f) b.transform.rotation = Quaternion.Euler(0f, turn * Time.deltaTime, 0f) * b.transform.rotation;
                     if (t > 30f && step == 3) { step = 4; Log.Info("autotest : starter " + Knobs.TestHold("Choke", 1.8f)); }
                     if (t > 32f && step == 4) { step = 5; Log.Info("autotest : frein a main " + Knobs.TestHold("HandBrake", 0f)); }
                     if (t > 36f && step == 5) { step = 6; Log.Info("autotest : commandes " + Knobs.Describe()); }
