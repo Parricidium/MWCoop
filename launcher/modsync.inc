@@ -527,6 +527,10 @@ static DWORD WINAPI SyncCheckThread(void *p)
     g_syncNeed = need;
     g_syncTotal = bytes;
     TestLog("mods : %d mod(s) chez l'hote, %d fichier(s) a recevoir (%llu octets)", (int)o.mods.size(), (int)need.size(), (unsigned long long)bytes);
+    // Mods de l'hote : acceptes d'office (demande de JD, 10/10 : « si quelqu'un rejoint une partie avec des mods, que ca lui
+    // installe MSCLoader et lui prenne les mods » ; retour de Menos : un ami sans les mods entrait quand meme). Seul ce qui
+    // n'est que du contenu (CD, images) demande encore TOUT ACCEPTER, sauf ModsAuto.
+    if (!o.mods.empty()) g_syncAccepted = true;
     if (need.empty()) SyncFinishLocked();
     else if (g_syncAccepted || ModsAuto()) { g_syncAccepted = true; SyncStartLocked(); }
     else g_sync = SY_ASK;
@@ -646,6 +650,18 @@ static void SyncRetry()
 // Envoi de l'hote en cours de verification ou de telechargement (accepte) : l'invite n'est pas encore pret.
 static bool SyncBusy() { int s = g_sync; return s == SY_CHECK || s == SY_GET; }
 
+// Lancement en invite a retenir : l'hote envoie des mods et ils ne sont pas encore la (verification, reception, MSCLoader
+// en cours d'installation). Le jeu partirait sans eux ; il part a la fin de la reception (SyncTick, g_launchAfterSync).
+static bool SyncLaunchPending()
+{
+    int s = g_sync;
+    if (s == SY_NONE || s == SY_OFF || s == SY_FAIL) return false;
+    bool mods, msc;
+    { std::lock_guard<std::mutex> lk(g_syncMx); mods = !g_hostOffer.mods.empty(); msc = g_hostOffer.msc; }
+    if (!mods) return false;
+    return s != SY_DONE || (msc && g_mscInstall == 1);
+}
+
 // lancement.ini de l'invite : le contenu recu de l'hote (dossier, categories, images), lu directement par le jeu
 // (Contenu.cs : les lecteurs du jeu pointes sur ce dossier), quelle que soit la facon dont le jeu demarre.
 static std::string ContentLaunchLines()
@@ -685,6 +701,11 @@ static void SyncTick()
         uint64_t key; bool msc;
         { std::lock_guard<std::mutex> lk(g_syncMx); key = g_hostOffer.key; msc = g_hostOffer.msc; }
         if (msc && key != mscFor) { mscFor = key; SyncEnsureMsc(); }
+    }
+    if (g_launchAfterSync && g_lobby == LB_GUEST && !SyncLaunchPending()) {
+        g_launchAfterSync = false;
+        if (g_sync == SY_FAIL) SetStatus(K_WARN, T(L"Mods de l'hôte pas reçus : RÉESSAYER, puis rejoindre", L"Host's mods not received: RETRY, then join"));
+        else { TestLog("mods : mods de l'hote recus, lancement de l'invite"); Launch(MODE_GUEST); }
     }
     if (g_sync == SY_GET && GetTickCount() - g_syncLastT > 20000) {
         std::lock_guard<std::mutex> lk(g_syncMx);
