@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -83,7 +83,10 @@ namespace MWCoop
         {
             // Service : Virpi (MARKET/POST -> Move, Cashing...), Keijo (commande de burger), Jouni (ORDER -> plat a la
             // table), l'inspecteur (GLOBALEVENT -> controle), Fleetari (accueil, encaissement), agents des barrages.
-            new Rule { Part = "/Virpi/", Fsm = "Work", Rest = new[] { "Delay", "Move random" }, Range = 12f },
+            // (Virpi : 4,5 m -- caisse et guichet de la poste a moins de 12 m l'un de l'autre : l'hote a la caisse la gardait
+            // pendant qu'elle servait un invite au guichet, elle y attendait la fin d'un echange qui se passait chez l'invite,
+            // figee de longues minutes ; retour de gamereggo, 10/10 « la vendeuse du PSK ne bouge plus »)
+            new Rule { Part = "/Virpi/", Fsm = "Work", Rest = new[] { "Delay", "Move random" }, Range = 4.5f },
             new Rule { Part = "/Keijo/", Fsm = "Work", Rest = new[] { "Delay", "Move 3", "Cashing 3", "Talk to Virpi", "Move 6", "State 2" }, Range = 12f },
             new Rule { Part = "/Jouni/", Fsm = "Work", Rest = new[] { "State 1" }, Range = 15f },
             new Rule { Part = "INSPECTION/LOD/Officer/", Fsm = "Animations", Rest = new[] { "Lean in", "State 1" }, Range = 25f },
