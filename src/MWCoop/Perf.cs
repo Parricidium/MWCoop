@@ -156,7 +156,7 @@ namespace MWCoop
             var sb = new StringBuilder("perf : " + (frames / (now - since)).ToString("F0") + " images/s (plus longue " + (worst * 1000f).ToString("F0") + " ms), mod "
                                        + (total / frames).ToString("F2") + " ms/image" + (Application.targetFrameRate > 0 ? ", limite " + Application.targetFrameRate : "")
                                        + (QualitySettings.vSyncCount > 0 ? ", vsync " + QualitySettings.vSyncCount : "")
-                                       + ", physique du jeu " + (physMs / frames).ToString("F2") + " ms/image, GC " + gcFrames + " (tas " + (System.GC.GetTotalMemory(false) >> 20) + " Mo)"
+                                       + ", physique du jeu " + (physMs / frames).ToString("F2") + " ms/image (pas " + (Time.fixedDeltaTime * 1000f).ToString("F1") + " ms), GC " + gcFrames + " (tas " + (System.GC.GetTotalMemory(false) >> 20) + " Mo)"
                                        + ", a-coups > 50 ms : " + slowGc + " avec GC, " + slowOther + " sans"
                                        + (Game.RootScans > 0 ? ", racines relevees " + Game.RootScans + " fois (" + Game.RootScanMs.ToString("F0") + " ms)" : "")
                                        + (PlayerSync.InGame ? Bodies() : ""));
