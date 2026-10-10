@@ -82,6 +82,8 @@ namespace MWCoop
             Step("porte-monnaie", WalletPanel.Update);
             Step("triches", Cheats.Update);
             Step("panneau des triches", CheatPanel.Update);
+            Step("carte", MapRender.Update);
+            Step("panneau carte", MapPanel.Update);
             Step("vocal", Voice.Update);
             Step("visage perso", CustomFace.Update);
             Step("musiques (menu)", Contenu.MenuUpdate);
@@ -184,6 +186,7 @@ namespace MWCoop
             Seats.OnLevelLoaded();
             Voice.OnLevelLoaded();
             CustomFace.OnLevelLoaded();
+            MapRender.OnLevelLoaded();
             Respawn.OnLevelLoaded();
             Audit.OnLevelLoaded();
             NearDoors.OnLevelLoaded();
@@ -222,7 +225,7 @@ namespace MWCoop
             Perf.Begin();
             try
             {
-                Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); Respawn.Draw();
+                Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); MapPanel.Draw(); Respawn.Draw();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }
             catch (System.Exception e) { Style.Alpha = 1f; Log.Error("hud : " + e); }
