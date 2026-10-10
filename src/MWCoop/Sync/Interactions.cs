@@ -127,6 +127,7 @@ namespace MWCoop
 
         static bool Inject(Entry e, string stateName)
         {
+            if (e.Fsm.Fsm == null || !e.Fsm.Fsm.Initialized) return false;   // (pas encore charge : au prochain passage, sans l'avertissement de PlayMaker a chaque essai)
             FsmState s = e.Fsm.Fsm.GetState(stateName);
             if (s == null) return false;
             try

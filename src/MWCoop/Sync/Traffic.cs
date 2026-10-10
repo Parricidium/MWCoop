@@ -160,15 +160,15 @@ namespace MWCoop
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame) return;
-            Police.Update();
-            Contenu.Update();
-            Windshields.Update();
-            Packages.Update();
-            Vin.Update();
-            CarSale.Update();
-            TaxiCustomer.Update();
-            UpdateTraffic();
-            Bus.Update();   // apres le suivi : la copie du bus est a sa place de cette image
+            Perf.Sub("police", Police.Update);
+            Perf.Sub("contenu", Contenu.Update);
+            Perf.Sub("pare-brise", Windshields.Update);
+            Perf.Sub("colis", Packages.Update);
+            Perf.Sub("vin", Vin.Update);
+            Perf.Sub("vente", CarSale.Update);
+            Perf.Sub("taxi", TaxiCustomer.Update);
+            Perf.Sub("trafic seul", UpdateTraffic);
+            Perf.Sub("bus", Bus.Update);   // apres le suivi : la copie du bus est a sa place de cette image
         }
 
         static void UpdateTraffic()

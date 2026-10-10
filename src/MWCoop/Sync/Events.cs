@@ -107,6 +107,9 @@ namespace MWCoop
         static bool Read(PlayMakerFSM f, out Ev ev)
         {
             ev = null;
+            // (pas encore initialise : rien a lire, et chaque lecture valait un avertissement de PlayMaker dans le journal
+            // d'Unity -- des dizaines par seconde, couteux surtout avec la console de MSCLoader)
+            if (f.Fsm == null || !f.Fsm.Initialized) return false;
             FsmState[] states;
             try { states = f.Fsm.States; } catch { return false; }
             // Evenements globaux envoyes d'ailleurs (PAID : l'argent donne au vendeur de la Rivett, UNLOADED : le bois
