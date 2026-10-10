@@ -745,9 +745,12 @@ namespace MWCoop
                 // SiegeTete : tete redressee d'autant (regarde la route, pas le volant).
                 if (seatFitted)
                 {
-                    Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "SiegeDos", 18f));
-                    Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "SiegeDos2", 24f));
-                    if (headBone != null) Turn(headBone, 0f, -Config.GetFloat("Test", "SiegeTete", 25f));
+                    if (carName.StartsWith("GIFU"))   // (dos arrondi : la GIFU seulement, demande de JD ; la famille du taxi reste droite)
+                    {
+                        Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "SiegeDos", 18f));
+                        Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "SiegeDos2", 24f));
+                        if (headBone != null) Turn(headBone, 0f, -Config.GetFloat("Test", "SiegeTete", 25f));
+                    }
                     if (passenger)
                     {   // mains posees sur les cuisses (a mi-chemin du genou), coudes plies
                         foreach (bool right in new[] { true, false })
@@ -1050,7 +1053,11 @@ namespace MWCoop
         }
         void SeatFit(bool rear)
         {
-            if (carName == null || !carName.StartsWith("GIFU") || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
+            // (GIFU ; et la famille du taxi -- MACHTWAGEN, mods Machtwagen300D et SECONDMACHTWAGEN, copies du taxi : interieur
+            // bas, l'avatar s'enfoncait de 20 cm dans la banquette, retour de Menos, 10/10)
+            bool gifu = carName != null && carName.StartsWith("GIFU");
+            bool taxi = carName != null && carName.ToUpperInvariant().Contains("MACHTWAGEN");
+            if (carName == null || !gifu && !taxi || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
             // (passager avant : enfonce de 30 cm dans le fauteuil sans ca -- assis comme le conducteur, dos arrondi, mains sur
             // les cuisses ; la couchette n'a pas de « Seats » : rien a faire)
             Transform car = vehicleT, pelvis = Bone("pelvis");
@@ -1058,7 +1065,8 @@ namespace MWCoop
             if (seatCar != car)
             {
                 seatCar = car; seatCols.Clear(); seatBox.Clear();
-                foreach (Collider c in car.GetComponentsInChildren<Collider>(true)) if (!c.isTrigger && c.name == "Seats") { seatCols.Add(c); seatBox.Add(LocalBox(c, car)); }
+                foreach (Collider c in car.GetComponentsInChildren<Collider>(true))
+                    if (!c.isTrigger && (gifu ? c.name == "Seats" : c.name.ToLowerInvariant().Contains("seat") && !c.name.ToLowerInvariant().Contains("belt"))) { seatCols.Add(c); seatBox.Add(LocalBox(c, car)); }
             }
             Vector3 pl = car.InverseTransformPoint(pelvis.position);
             int cushion = -1; float best = float.MaxValue;
@@ -1067,6 +1075,7 @@ namespace MWCoop
                 if (seatCols[i] == null) continue;
                 Vector3 cc = seatBox[i].center;
                 if (Mathf.Abs(cc.x - pl.x) > 0.5f) continue;
+                if (Mathf.Abs(cc.z - pl.z) > 0.5f) continue;   // (meme rang : pas la banquette arriere)
                 float score = cc.y;   // (l'assise : la plus basse des deux pieces de ce cote)
                 if (score < best) { best = score; cushion = i; }
             }
