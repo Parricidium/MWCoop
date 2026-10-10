@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -282,7 +282,7 @@ namespace MWCoop.Net
         //    QuitWindow s qui suivent = sauver et quitter comme le jeu (les invites suivent au menu, puis
         //    reviennent avec l'hote et sa sauvegarde neuve) ;
         //  - invite : demande cette meme sauvegarde a l'hote et reste en jeu ;
-        //  - seul (hote sans invite, invite sans hote) : comme le jeu (etat d'origine du clic).
+        //  - hote seul : comme l'hote en coop (sauvegarde en jeu, 2e clic pour quitter) ; invite sans hote : comme le jeu.
         // Le texte du survol le dit. Ce qu'un invite a change et que l'hote n'a pas sera perdu a la prochaine
         // session (sa sauvegarde est la seule envoyee) : avant d'ecrire, l'hote note les ecarts durables de
         // l'audit ; chaque invite lui dit ses actions non partagees, puis (profil isole) sauve aussi chez lui
@@ -507,7 +507,6 @@ namespace MWCoop.Net
         {
             if (Session.IsHost)
             {
-                if (Session.RemoteCount == 0) return OrigLabel;
                 return now < quitUntil ? "RECLIQUER : SAUVER ET QUITTER AU MENU" : "SAUVEGARDER (COOP, ON RESTE EN JEU)";
             }
             return Session.Host == null ? OrigLabel : "SAUVEGARDER (CHEZ L'HOTE)";
@@ -522,7 +521,8 @@ namespace MWCoop.Net
             string where = b.F.transform.root.name;
             if (Session.IsHost)
             {
-                if (Session.RemoteCount == 0) { Log.Info("toilettes (" + where + ") : aucun invite, sauver et quitter comme le jeu"); proceed = b; return; }
+                // (hote seul aussi : sauvegarde en jeu, 2e clic pour quitter -- avant, seul, « sauver et quitter » du jeu
+                // ramenait au menu a chaque sauvegarde, retour de JD 10/10)
                 if (coopPhase != 0) { Hud.Toast(Lang.T("Sauvegarde en cours...", "Saving...")); return; }
                 if (now < quitUntil)
                 {
