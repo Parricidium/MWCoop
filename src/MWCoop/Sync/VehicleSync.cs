@@ -531,11 +531,39 @@ namespace MWCoop
             if (maxRpmField == null) maxRpmField = typeof(Drivetrain).GetField("maxRPM");
             float max = maxRpmField != null ? (float)maxRpmField.GetValue(limitDt) : 7000f;
             if (max < 1000f || !Finite(max)) max = 7000f;
-            if (Config.GetInt("Test", "RegimeFou", 0) != 0 && Time.frameCount % 600 == 0) limitDt.rpm = 250000f;   // (essais : regime emballe force)
-            float rpm = limitDt.rpm;
-            if (Finite(rpm) && rpm <= max + 1500f) return;
-            limitDt.rpm = Finite(rpm) ? max : 800f;
-            if (Time.realtimeSinceStartup >= limitLogAt) { limitLogAt = Time.realtimeSinceStartup + 5f; Log.Warn("voitures : regime emballe (" + rpm.ToString("F0") + " tr/min) ramene a " + limitDt.rpm.ToString("F0") + " (" + limitDt.name + ")"); }
+        }
+
+        // Au pas de physique (Core.FixedUpdate). Le regime du Drivetrain n'est qu'une copie : a chaque pas le jeu le recalcule
+        // de engineAngularVelo (prive), integre pas a pas (couple net x duree / inertie). Avec une petite inertie le pas devient
+        // instable : au point mort, gaz relache, la vitesse oscille et grimpe au lieu de redescendre (retour de Spagy, 10/10 :
+        // « le regime reste en haut et s'emballe »). Ici, sur la voiture conduite : au-dela du regime maximal (ou valeur non
+        // finie), ramenee a 90 % du maximum ; au point mort sans gaz, elle ne peut que redescendre vers le ralenti.
+        static System.Reflection.FieldInfo fEngineW;
+        static float lastW = -1f;
+        public static void RevLimiterFixed()
+        {
+            Drivetrain d = limitDt;
+            if (d == null || !d.enabled && Config.GetInt("Test", "RegimeFou", 0) == 0) { lastW = -1f; return; }
+            if (fEngineW == null) fEngineW = typeof(Drivetrain).GetField("engineAngularVelo", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (fEngineW == null) return;
+            if (maxRpmField == null) maxRpmField = typeof(Drivetrain).GetField("maxRPM");
+            float maxRpm = maxRpmField != null ? (float)maxRpmField.GetValue(d) : 7000f;
+            if (maxRpm < 1000f || !Finite(maxRpm)) maxRpm = 7000f;
+            float k = d.RPM2angularVelo > 0f && Finite(d.RPM2angularVelo) ? d.RPM2angularVelo : Mathf.PI / 30f;
+            float w = (float)fEngineW.GetValue(d), w0 = w;
+            if (Config.GetInt("Test", "RegimeFou", 0) != 0 && Time.frameCount % 600 == 0) w = 250000f * k;   // (essais : regime emballe force)
+            float maxW = maxRpm * k, idleW = Mathf.Max(d.minRPM, 600f) * k;
+            string why = null;
+            if (!Finite(w) || w > maxW * 1.02f) { w = maxW * 0.9f; why = "au-dela du maximum"; }
+            else if (d.ratio == 0f && d.throttle < 0.05f && w > idleW * 1.3f && lastW > 0f && w > lastW)
+            { w = Mathf.Max(idleW, lastW * (1f - 1.5f * Time.fixedDeltaTime)); why = "monte sans gaz au point mort"; }
+            if (why != null)
+            {
+                fEngineW.SetValue(d, w);
+                d.rpm = w / k;
+                if (Time.realtimeSinceStartup >= limitLogAt) { limitLogAt = Time.realtimeSinceStartup + 5f; Log.Warn("voitures : regime " + (Finite(w0) ? (w0 / k).ToString("F0") : "non fini") + " tr/min " + why + " -> " + d.rpm.ToString("F0") + " (" + d.name + ")"); }
+            }
+            lastW = w;
         }
 
         public static void Update()

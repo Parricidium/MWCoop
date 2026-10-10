@@ -24,7 +24,7 @@ namespace MWCoop
         void FixedUpdate()
         {
             Perf.Begin();
-            try { VehicleSync.FixedUpdate(); }
+            try { VehicleSync.RevLimiterFixed(); VehicleSync.FixedUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("voitures (physique) : " + e.Message); }
             Perf.End("(physique)");
         }
