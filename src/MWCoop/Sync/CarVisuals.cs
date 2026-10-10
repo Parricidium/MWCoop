@@ -61,10 +61,16 @@ namespace MWCoop
         {
             int total = 0;
             gen = VehicleSync.Generation;
-            for (int ci = 0; ci < VehicleSync.LocalCount; ci++)
+            for (int ci = 0; ci < VehicleSync.LocalCount; ci++) total += ScanCar(ci);
+            Log.Info("tableaux de bord et equipements : " + total + " elements suivis sur " + cars.Count + " vehicules");
+        }
+
+        // Releve d'une voiture (le releve periodique, pieces montees depuis, en fait une par image : 10 ms d'un coup sinon).
+        static int ScanCar(int ci)
+        {
             {
                 Rigidbody rb = VehicleSync.LocalBody(ci);
-                if (rb == null) continue;
+                if (rb == null) return 0;
                 var c = new Car { Name = VehicleSync.LocalKey(ci), Root = rb.transform };
                 var seen = new Dictionary<string, int>();
                 foreach (Transform t in rb.GetComponentsInChildren<Transform>(true))
@@ -88,10 +94,10 @@ namespace MWCoop
                 if (cars.TryGetValue(c.Name, out old))
                     foreach (Item it in c.Items) { Item o; if (old.ByKey.TryGetValue(it.Key, out o) && o.T == it.T) { it.Held = o.Held; it.HeldPos = o.HeldPos; it.HeldRot = o.HeldRot; it.HeldActive = o.HeldActive; it.HeldShow = o.HeldShow; it.HeldAt = o.HeldAt; } }
                 cars[c.Name] = c;
-                total += c.Items.Count;
+                return c.Items.Count;
             }
-            Log.Info("tableaux de bord et equipements : " + total + " elements suivis sur " + cars.Count + " vehicules");
         }
+        static int scanNext = -1;
 
         // Ce joueur doit-il envoyer l'etat de cette voiture ? Il la conduit, ou personne ne la conduit
         // et il est a moins de 6 m.
@@ -107,7 +113,9 @@ namespace MWCoop
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
             // Liste des voitures changee (voiture activee, corps recree) apres le premier releve : releve tout de suite.
-            if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
+            if (gen < 0 ? now >= nextScan : gen != VehicleSync.Generation) { nextScan = now + 30f; scanNext = -1; Scan(); }
+            else if (now >= nextScan) { nextScan = now + 30f; scanNext = 0; }
+            if (scanNext >= 0) { if (scanNext < VehicleSync.LocalCount) ScanCar(scanNext++); else scanNext = -1; }
             if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
             if (now < nextSend || Session.RemoteCount == 0) return;
             // 20 fois par seconde pour la voiture qu'on conduit (volant, aiguilles : retour d'un joueur, "le volant tourne

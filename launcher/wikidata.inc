@@ -194,8 +194,8 @@ static const WikiBlock kW_InGame[] = {
             L"On death, the character collapses (ragdoll) until the player comes back; at the wheel, it slumps in the seat." },
     { WB_H, L"Pas encore", L"Not yet" },
     { WB_B, L"Les plateaux du restaurant ne sont pas vus par ceux qui arrivent en cours de partie.", L"Restaurant trays aren't seen by players who join mid-game." },
-    { WB_TIP, L"Quelque chose ne colle pas ? F10 > Synchro fait un état des lieux ; envoie ensuite le zip des journaux sur le Discord.",
-              L"Something's off? F10 > Sync takes stock; then send the logs zip on the Discord." },
+    { WB_TIP, L"Quelque chose ne colle pas ? Envoie le zip des journaux sur le Discord. L'audit de F10 > Synchro est coupé par défaut (performances) : Audit=1 sous [Coop] dans mwcoop.ini pour l'activer.",
+              L"Something's off? Send the logs zip on the Discord. The F10 > Sync audit is off by default (performance): Audit=1 under [Coop] in mwcoop.ini turns it on." },
 };
 
 // ---- Mods et partage

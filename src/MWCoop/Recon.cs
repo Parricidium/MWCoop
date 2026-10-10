@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -419,9 +419,13 @@ namespace MWCoop
 
         public static string Path(Transform t)
         {
-            string p = t.name;
-            for (Transform c = t.parent; c != null; c = c.parent) p = c.name + "/" + p;
-            return p;
+            // (une seule chaine assemblee, pas une par niveau : appele dans des releves de milliers d'objets)
+            int n = 0;
+            for (Transform c = t; c != null; c = c.parent) n++;
+            if (n == 1) return t.name;
+            string[] names = new string[n];
+            for (Transform c = t; c != null; c = c.parent) names[--n] = c.name;
+            return string.Join("/", names);
         }
 
         static void AppendVars(StringBuilder sb, string pad, FsmVariables v)

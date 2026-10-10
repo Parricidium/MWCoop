@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using HutongGames.PlayMaker;
@@ -19,7 +19,8 @@ namespace MWCoop
     //  - enregistreur : un automate qui change d'etat juste apres un clic ou une touche du joueur local, a
     //    moins de 4 m de lui, est une ACTION -> dumps/actions.txt, avec le contexte (a pied, au volant,
     //    passager) et son module, ou NON SUIVI : ce qui ne part pas chez les autres.
-    // [Coop] Audit=0 coupe tout.
+    // Outil de mise au point, coupe par defaut (retour de joueurs 10/10 : performances en coop -- espions dans les automates,
+    // releve de toute la scene, 0,2 ms et 200 Ko par image) : [Coop] Audit=1 le met en marche.
     public static class Audit
     {
         class Obs
@@ -55,6 +56,7 @@ namespace MWCoop
         static float scanAt = -1, rescanAt, censusAt = -1, lastInputAt = -100, nextSnap;
         static int snapN;
         static bool enabled;
+        public static bool Enabled { get { return enabled; } }
         static StreamWriter actions;
 
         // Hote : etat de chaque invite (cle hachee -> valeur), empreintes en cours, ecarts.
@@ -76,7 +78,7 @@ namespace MWCoop
             Desyncs.Clear(); Unshared.Clear(); Summary = "";
             scanRoots = null; scanIndex = -1; pollIndex = 0; snapN = 0; scanStack.Clear(); fresh = true;
             if (!subscribed) { subscribed = true; Session.PlayerLeft += pi => peers.Remove(pi.Id); }
-            enabled = Config.GetInt("Coop", "Audit", 1) != 0;
+            enabled = Config.GetInt("Coop", "Audit", 0) != 0;
             scanAt = enabled && PlayerSync.InGame ? Time.realtimeSinceStartup + 20f : -1;
             censusAt = scanAt > 0 ? scanAt + 45f : -1;
             nextSnap = Time.realtimeSinceStartup + 40f;
@@ -376,6 +378,7 @@ namespace MWCoop
         public static void OnMessage(Peer from, NetReader r)
         {
             int kind = r.U8();
+            if (!enabled) return;
             if (kind == 0 && !Session.IsHost)
             {
                 // Hote : « SNAP n » -> nos changements depuis la derniere empreinte, par paquets.

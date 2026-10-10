@@ -43,6 +43,7 @@ namespace MWCoop
             public Wheel[] Wheels; public float[] WheelRot; public float Steer, Ride; public Vector3 Base; public bool BaseSet;
             public Transform[] WheelVis; public float[] WheelR;   // roue visible (Wheel.model, sinon son enfant Wheel/Tire/tire) et rayon
             public float LastYaw;
+            public float SkipDt;             // invite : temps saute (voiture lointaine, posee une image sur 3)
             public Vector3 LastBase, MoveVel; public bool MoveSet;   // invite : vitesse d'apres le deplacement affiche (roues)
             // Choc avec un invite (passage de physique) : Owner = joueur qui en a la physique (-1 : l'hote, comme d'habitude).
             public int Owner = -1; public float OwnSince, FarSince, OwnSent;
@@ -158,18 +159,15 @@ namespace MWCoop
             return e;
         }
 
+        // (delegues crees une fois : un par appel et par image sinon)
+        static readonly string[] subNames = { "police", "contenu", "pare-brise", "colis", "vin", "vente", "taxi", "trafic seul", "bus" };
+        static readonly System.Action[] subs = { Police.Update, Contenu.Update, Windshields.Update, Packages.Update, Vin.Update, CarSale.Update, TaxiCustomer.Update, UpdateTraffic,
+                                                 Bus.Update };   // (bus apres le suivi : la copie du bus est a sa place de cette image)
+
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame) return;
-            Perf.Sub("police", Police.Update);
-            Perf.Sub("contenu", Contenu.Update);
-            Perf.Sub("pare-brise", Windshields.Update);
-            Perf.Sub("colis", Packages.Update);
-            Perf.Sub("vin", Vin.Update);
-            Perf.Sub("vente", CarSale.Update);
-            Perf.Sub("taxi", TaxiCustomer.Update);
-            Perf.Sub("trafic seul", UpdateTraffic);
-            Perf.Sub("bus", Bus.Update);   // apres le suivi : la copie du bus est a sa place de cette image
+            for (int i = 0; i < subs.Length; i++) Perf.Sub(subNames[i], subs[i]);
         }
 
         static void UpdateTraffic()
@@ -228,14 +226,22 @@ namespace MWCoop
                 Session.SendToHost(new NetWriter(Msg.Traffic).U16(Control).U8(C_ASK).I32((int)listHash).U16(ents.Count), true);
             }
             int moving = 0;
+            Perf.MarkStart();
             foreach (Ent e in ents)
             {
                 if (e.T == null || e.LastRecv <= 0) continue;
                 if (e.Owner == Session.LocalId) continue;   // physique ici (choc) : rien de l'hote
+                // Loin de la camera (plus de 120 m) : posee une image sur 3, avec le temps cumule (0,4 ms par image pour
+                // 9 voitures sinon ; retour de joueurs 10/10, performances).
+                if (camT == null) { Camera c = Camera.main; if (c != null) camT = c.transform; }
+                if (camT != null && (e.T.position - camT.position).sqrMagnitude > 120f * 120f && (Time.frameCount + ++far) % 3 != 0) { e.SkipDt += Time.deltaTime; continue; }
+                fdt = Time.deltaTime + e.SkipDt; e.SkipDt = 0f;
                 Follow(e);
                 if (e.Vel.sqrMagnitude > 0.5f) moving++;
             }
+            Perf.Mark("[trafic suivi]");
             GuestContacts(now);
+            Perf.Mark("[trafic contacts]");
             if (now >= nextLog)
             {
                 nextLog = now + 15f;
@@ -565,25 +571,25 @@ namespace MWCoop
         {
             // Roues a la vitesse du deplacement affiche ici (et non de la vitesse recue : nulle quand l'hote deplace la
             // voiture sans sa physique, roues figees -- « la rotation n'est pas synchro », retour de JD, 10/10).
-            if (e.MoveSet && Time.deltaTime > 1e-4f)
+            if (e.MoveSet && fdt > 1e-4f)
             {
-                Vector3 mv = (e.Base - e.LastBase) / Time.deltaTime;
+                Vector3 mv = (e.Base - e.LastBase) / fdt;
                 if (mv.sqrMagnitude > 60f * 60f) mv = e.Vel;   // (saut)
-                e.MoveVel = Vector3.Lerp(e.MoveVel, mv, 1f - Mathf.Exp(-8f * Time.deltaTime));
+                e.MoveVel = Vector3.Lerp(e.MoveVel, mv, 1f - Mathf.Exp(-8f * fdt));
             }
             e.LastBase = e.Base; e.MoveSet = true;
             float fwd = Vector3.Dot(e.MoveVel, e.T.forward);
             float yaw = e.T.eulerAngles.y, dyaw = Mathf.DeltaAngle(e.LastYaw, yaw);
             e.LastYaw = yaw;
-            float rate = Time.deltaTime > 1e-4f ? dyaw / Time.deltaTime : 0f;   // deg/s
+            float rate = fdt > 1e-4f ? dyaw / fdt : 0f;   // deg/s
             float want = Mathf.Abs(fwd) > 1f ? Mathf.Clamp(rate * 2.6f / Mathf.Abs(fwd) / 35f * Mathf.Sign(fwd), -1f, 1f) : 0f;
-            e.Steer = Mathf.Lerp(e.Steer, want, 1f - Mathf.Exp(-6f * Time.deltaTime));
+            e.Steer = Mathf.Lerp(e.Steer, want, 1f - Mathf.Exp(-6f * fdt));
             for (int i = 0; i < e.Wheels.Length; i++)
             {
                 Wheel w = e.Wheels[i];
                 Transform vis = e.WheelVis != null ? e.WheelVis[i] : null;
                 if (w == null || vis == null) continue;
-                e.WheelRot[i] += fwd / e.WheelR[i] * Time.deltaTime;
+                e.WheelRot[i] += fwd / e.WheelR[i] * fdt;
                 vis.localRotation = Quaternion.Euler(0f, e.Steer * w.maxSteeringAngle, 0f) * Quaternion.AngleAxis(57.29578f * e.WheelRot[i], Vector3.right);
             }
             // Calage au sol (0.40) coupe par defaut depuis 0.56 : la pose de l'hote est juste (meme hauteur des deux cotes,
@@ -615,7 +621,7 @@ namespace MWCoop
             }
             if (n < 2) return;
             float err = Mathf.Clamp(e.Ride + sum / n, -0.6f, 0.6f);
-            e.Ride = Mathf.Lerp(e.Ride, err, 1f - Mathf.Exp(-4f * Time.deltaTime));
+            e.Ride = Mathf.Lerp(e.Ride, err, 1f - Mathf.Exp(-4f * fdt));
         }
 
         // ---------------------------------------------------------------- chocs : passage de physique
@@ -948,13 +954,15 @@ namespace MWCoop
         }
 
         static Transform camT;
+        static float fdt;   // temps depuis la derniere pose de cette entite
+        static int far;
 
         static void Follow(Ent e)
         {
             if (!e.T.gameObject.activeInHierarchy) return;
             float dt = Mathf.Min(Time.realtimeSinceStartup - e.LastRecv, 0.4f);
             Vector3 target = e.Pos + e.Vel * dt;
-            float k = 1f - Mathf.Exp(-10f * Time.deltaTime);
+            float k = 1f - Mathf.Exp(-10f * fdt);
             if (!e.BaseSet) { e.Base = e.T.position; e.BaseSet = true; }
             e.Base = Vector3.Lerp(e.Base, target, k);   // position de l'hote, sans la pose au sol d'ici
             e.T.rotation = Quaternion.Slerp(e.T.rotation, e.Rot, k);

@@ -638,7 +638,9 @@ namespace MWCoop
             if (Time.realtimeSinceStartup >= syncAt)
             {
                 syncAt = Time.realtimeSinceStartup + 0.5f;
-                syncHead = Audit.State() + (Audit.Summary.Length > 0 ? "\n" + Audit.Summary : "");
+                syncHead = !Audit.Enabled ? Lang.T("Audit coup\u00E9 par d\u00E9faut (performances). Pour l'activer : Audit=1 sous [Coop] dans MWCoop\\mwcoop.ini, puis relancer.",
+                                                   "Audit is off by default (performance). To turn it on: Audit=1 under [Coop] in MWCoop\\mwcoop.ini, then restart.")
+                          : Audit.State() + (Audit.Summary.Length > 0 ? "\n" + Audit.Summary : "");
             }
             Para(syncHead, Style.Dim);
             if (Item(Lang.T("\u00C9crire le recensement (dumps/recensement.txt)", "Write the census (dumps/recensement.txt)"), null, false, Lang.T("Entr\u00E9e ou clic : \u00E9crire le recensement", "Enter or click: write the census"), false) == 2) Audit.Census();

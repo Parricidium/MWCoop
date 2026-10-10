@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -90,6 +90,7 @@ namespace MWCoop
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Use") continue;
                 string n = f.gameObject.name;
                 if (n.Contains("(Clone)") || n.Contains("(itemx)")) continue;   // objets crees en jeu : ids differents
+                if (!NameAllowed(n)) continue;   // (avant le chemin : releve de 10 ms sinon ; meme chemin = meme nom, rangs inchanges)
                 all.Add(f);
             }
             // Ordre stable des deux cotes : chemin, puis rang parmi les homonymes.
@@ -109,6 +110,16 @@ namespace MWCoop
                 if (Inject(e, target)) { byId[e.Id] = e; tracked.Add(e.Fsm); hooked++; }
             }
             if (hooked > 0) Log.Info("interactions : " + hooked + " objets de plus suivis (portes, interrupteurs...), " + byId.Count + " en tout");
+        }
+
+        static bool NameAllowed(string obj)
+        {
+            for (int i = 0; i < Allowed.GetLength(0); i++)
+            {
+                string pat = Allowed[i, 0];
+                if (pat.EndsWith("*") ? obj.StartsWith(pat.Substring(0, pat.Length - 1)) : pat == obj) return true;
+            }
+            return false;
         }
 
         static string AllowedTarget(PlayMakerFSM f)

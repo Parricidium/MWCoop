@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace MWCoop
@@ -40,12 +40,12 @@ namespace MWCoop
             scanAt = Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + 12f : -1;
         }
 
-        static void Scan()
+        static void Scan(bool newCars)
         {
             var known = new Dictionary<Light, L>();
             foreach (L l in all) if (l.Li != null) known[l.Li] = l;
-            var roots = new HashSet<Transform>();
-            foreach (GameObject r in Recon.SceneRoots()) roots.Add(r.transform);
+            // (racines gardees par Game ; nouveau releve seulement quand une voiture apparait -- 30-40 ms chaque minute sinon)
+            HashSet<Transform> roots = Game.RootSet(newCars);
             all.Clear();
             int beams = 0, tails = 0, streets = 0;
             foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Light)))
@@ -85,7 +85,7 @@ namespace MWCoop
             if (scanAt < 0) return;
             float now = Time.realtimeSinceStartup;
             // (releve : 12 s apres le chargement, puis chaque minute ou des qu'une voiture apparait -- FindObjectsOfTypeAll coute)
-            if (now >= scanAt && (now >= nextScan || scanGen != VehicleSync.Generation)) { nextScan = now + 60f; scanGen = VehicleSync.Generation; Scan(); }
+            if (now >= scanAt && (now >= nextScan || scanGen != VehicleSync.Generation)) { nextScan = now + 60f; bool newCars = scanGen != VehicleSync.Generation; scanGen = VehicleSync.Generation; Scan(newCars); }
             if (all.Count == 0) return;
             Camera cam = Camera.main;
             if (cam == null) return;
