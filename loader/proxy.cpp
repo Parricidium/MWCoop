@@ -514,6 +514,22 @@ static void Init() {
     SetEnvironmentVariableW(L"MWCOOP_DATA", g_profil[0] ? g_profilDir : g_dataRoot);
     SetEnvironmentVariableW(L"MWCOOP_ARRIEREPLAN", g_arrierePlan ? L"1" : L"0");
 
+    // JOUER EN SOLO dans le lanceur (demande de JD, 10/10 : « comme si le jeu se lancait en vanilla, sans HUD ni
+    // overlay ») : lancement.ini recent avec Mode=solo -> MWCoop n'est pas injecte (ni mod, ni pastille, ni interface).
+    // Le fichier est consomme comme le ferait le mod (un relancement par Steam ensuite repart normalement). MSCLoader,
+    // lui, reste au choix du joueur (Doorstop, a part).
+    {
+        wchar_t launch[MAX_PATH], mode[16] = L"";
+        swprintf(launch, MAX_PATH, L"%s\\lancement.ini", g_modDir);
+        if (FreshLaunchFile(launch)) GetPrivateProfileStringW(L"Lancement", L"Mode", L"", mode, 16, launch);
+        if (!_wcsicmp(mode, L"solo")) {
+            wchar_t used[MAX_PATH]; swprintf(used, MAX_PATH, L"%s\\lancement.lu", g_modDir);
+            CopyFileW(launch, used, FALSE);
+            DeleteFileW(launch);
+            Log("solo : MWCoop pas charge (jeu vanilla)");
+            return;
+        }
+    }
     HMODULE exe = GetModuleHandleW(NULL);
     // MSCLoader (UnityDoorstop 4, winhttp.dll + doorstop_config.ini a cote du jeu) : le jeu charge VERSION.dll (nous)
     // avant WINHTTP.dll, et Doorstop ne s'accroche a GetProcAddress que s'il y trouve encore celui de Windows (il
