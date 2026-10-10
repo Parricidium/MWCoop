@@ -1084,6 +1084,11 @@ namespace MWCoop
             if (pl.z < back - 0.4f) return;   // (assis sur la couchette, derriere les sieges)
             Vector3 want = new Vector3(pl.x, top + Config.GetFloat("Test", "SiegeBassin", 0.02f), back + Config.GetFloat("Test", "SiegeRecul", 0.12f));
             Vector3 d = want - pl; d.x = 0f;
+            // Famille du taxi : la camera du joueur y est basse -- assis sur le coussin (+23 cm) et contre le dossier (-24 cm),
+            // l'avatar avait la tete dans le toit et se penchait vers un volant trop loin (captures de Menos, 10/10). Monte de
+            // 10 cm au plus (enfoncement reduit de moitie), sans recul.
+            float lostY = 0f;   // (montee retiree : les pieds restent au plancher)
+            if (taxi) { float full = d.y; d.y = Mathf.Clamp(d.y, -0.05f, Config.GetFloat("Test", "TaxiMonte", 0.10f)); lostY = Mathf.Max(0f, full - d.y); d.z = 0f; }
             if (Config.GetInt("Test", "JournalSiege", 0) != 0 && Time.frameCount % 300 < 6) Log.Info("siege : image " + Time.frameCount + " colonne " + (Bone("spine_middle") != null ? Bone("spine_middle").localEulerAngles.ToString("F1") : "?") + " racine " + vehicleT.InverseTransformPoint(Root.transform.position).ToString("F2") + " bassin " + pl.ToString("F2") + " voulu " + want.ToString("F2") + " ecart " + d.ToString("F2") + (d.sqrMagnitude > 0.64f ? " TROP LOIN" : ""));
             if (d.sqrMagnitude > 0.64f) return;   // (plus de 80 cm : pas ce siege)
             Transform ar = Bone("ankle_right"), al = Bone("ankle_left");
@@ -1092,7 +1097,7 @@ namespace MWCoop
             seatFitted = true;
             // (dos contre le dossier : buste incline apres la mesure des yeux au repos, dans le corps de la pose)
             // Cuisses sur l'assise, genoux plies, pieds aux pedales : chaque pied devant et sous sa hanche
-            float fwd = Config.GetFloat("Test", "SiegePieds", 0.55f), down = Config.GetFloat("Test", "SiegeChute", 0.5f);
+            float fwd = Config.GetFloat("Test", "SiegePieds", 0.55f), down = Mathf.Max(0.2f, Config.GetFloat("Test", "SiegeChute", 0.5f) - lostY);
             Transform hr = Bone("thig_right"), hl = Bone("thig_left");
             if (ar != null && hr != null) Leg("thig_right", "knee_right", "ankle_right", hr.position + car.forward * fwd - car.up * down + car.right * 0.04f);
             if (al != null && hl != null) Leg("thig_left", "knee_left", "ankle_left", hl.position + car.forward * fwd - car.up * down - car.right * 0.04f);

@@ -573,6 +573,7 @@ namespace MWCoop
             // de 24 a 60 s la remorque (position, distance au tracteur, copie ou locale).
             if (mode == "attelage")
             {
+                if (t < 1f) { attTry = 0f; attExitAt = 1e9f; }
                 Rigidbody k = VehicleSync.Body("KEKMET"), fb = VehicleSync.Body("FLATBED");
                 if (Net.Session.IsHost && k != null && fb != null)
                 {
@@ -589,6 +590,21 @@ namespace MWCoop
                         Log.Info("autotest : attelage, FLATBED reliee au KEKMET");
                     }
                     if (t > 28f && t < 40f) { Vector3 f = k.transform.forward; f.y = 0; k.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(k.velocity.y, 0f); }
+                    // [Test] AttelageSortie=1 : moteur tenu en marche, l'hote descend a 42 s (moteur laisse tournant) : la remorque
+                    // doit lui rester (pas « rendue ») et suivre chez l'invite.
+                    if (Config.GetInt("Test", "AttelageSortie", 0) != 0)
+                    {
+                        // (le jeu ne laisse pas descendre moteur force en marche : sortie moteur arrete, puis la main reprise
+                        // comme un moteur laisse tournant, de 45 a 58 s)
+                        if (step == 9 && t < attExitAt + 12f) { VehicleSync.TestKeepRunning("KEKMET"); VehicleSync.TestOwn("KEKMET"); }
+                        if (step == 9 && t >= attExitAt + 12f) { step = 10; Log.Info("autotest : attelage, moteur relache"); }
+                        if (t > 42f && step >= 3 && step < 9 && t > attTry)
+                        {
+                            attTry = t + 1f;
+                            string st = VehicleSync.TestExit("KEKMET");
+                            if (st != "Player in car") { step = 9; attExitAt = t + 1f; Log.Info("autotest : attelage, sorti du tracteur -> " + st); }
+                        }
+                    }
                 }
                 if (k != null && fb != null && t > 24f && t < 60f && Time.realtimeSinceStartup >= rivLog)
                 {
@@ -1831,7 +1847,7 @@ namespace MWCoop
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
-        static bool rivNear; static float rivLog, cabGap, holdLog;
+        static bool rivNear; static float rivLog, cabGap, holdLog, attTry, attExitAt = 1e9f;
         static int holdN;
         static GameObject rangeGo;
         static Vector3 holdSum, holdSq;

@@ -57,7 +57,10 @@ namespace MWCoop
             return modAsm.GetType("Machtwagen300D_MWC." + name, false);
         }
 
-        static readonly string[] PartTypes = { "SaveVars", "ElectricSunroof", "PowerWindow", "OpenableCompartment", "Machtmatic", "AutoAC" };
+        static readonly string[] PartTypes = { "SaveVars", "ElectricSunroof", "PowerWindow", "OpenableCompartment", "Machtmatic", "AutoAC",
+                                               "Sunvisor", "InteriorLight", "FrontFogSwitch", "RecircSwitch", "DefrosterSwitch", "RearDomeLightSwitch", "HornToneSwitch" };
+        // Interrupteurs a deux positions (SwitchOn ; retour de Menos, 10/10 : pare-soleil et le reste non synchronises).
+        static bool IsSwitch(string t) { return t == "FrontFogSwitch" || t == "RecircSwitch" || t == "DefrosterSwitch" || t == "RearDomeLightSwitch" || t == "HornToneSwitch"; }
 
         static void ScanParts()
         {
@@ -104,6 +107,10 @@ namespace MWCoop
                         object st = Get<object>(p.C, "StateM");
                         return st != null ? Get<float>(st, "State") : float.NaN;
                     }
+                case "Sunvisor": return Get<float>(p.C, "currentPos");
+                case "InteriorLight": return Get<int>(p.C, "LightState");
+                case "FrontFogSwitch": case "RecircSwitch": case "DefrosterSwitch": case "RearDomeLightSwitch": case "HornToneSwitch":
+                    return Get<bool>(p.C, "SwitchOn") ? 1f : 0f;
                 case "AutoAC":
                     {
                         // ventilation (1 auto, 2 mini, 3 maxi, 4 arret) x 10 + direction (1 degivrage, 2 normal, 3 haut-bas)
@@ -206,6 +213,29 @@ namespace MWCoop
                 case "PowerWindow":
                     StartGlide(p, v);
                     break;
+                case "Sunvisor": CallM(p.C, "SetVisorPos", v); break;
+                case "InteriorLight": CallM(p.C, "LoadLightState", (int)v); break;
+                case "FrontFogSwitch": case "RecircSwitch": case "DefrosterSwitch": case "RearDomeLightSwitch": case "HornToneSwitch":
+                    {
+                        bool on = v > 0.5f;
+                        if (Get<bool>(p.C, "SwitchOn") == on) break;
+                        Transform sw = Get<Transform>(p.C, "switchTransform");
+                        if (sw != null) sw.localEulerAngles = new Vector3(on ? -25f : 0f, 0f, 0f);
+                        SetF(p.C, "SwitchOn", on);
+                        GameObject fx = Get<GameObject>(p.C, p.Type == "FrontFogSwitch" ? "fogs" : "light");
+                        if (fx != null && (p.Type == "FrontFogSwitch" || p.Type == "RearDomeLightSwitch")) fx.SetActive(on);
+                        if (p.Type == "DefrosterSwitch") { FsmBool b = Get<FsmBool>(p.C, "defrosterBool"); if (b != null) b.Value = on; }
+                        if (p.Type == "HornToneSwitch")
+                        {
+                            if (on) CallM(p.C, "SetHorn1");
+                            else
+                            {
+                                AudioSource hs = Get<AudioSource>(p.C, "hornSnd"); AudioClip h0 = Get<AudioClip>(p.C, "horn0");
+                                if (hs != null) { if (h0 != null) hs.clip = h0; hs.volume = 1f; hs.pitch = 0.9f; }
+                            }
+                        }
+                        break;
+                    }
                 case "AutoAC":
                     {
                         int fan = (int)v / 10, dir = (int)v % 10;
@@ -321,12 +351,14 @@ namespace MWCoop
             if (Session.IsHost && t > 40f && testStep == 0)
             {
                 testStep = 1;
-                bool comp = false, win = false, roof = false, gear = false, ac = false;
+                bool comp = false, win = false, roof = false, gear = false, ac = false, vis = false, fog = false;
                 foreach (Part p in parts)
                 {
                     if (p.Type == "OpenableCompartment" && !comp) { comp = true; CallM(p.C, "OpenGlovebox"); }
                     if (p.Type == "PowerWindow" && !win) { win = true; CallM(p.C, "SetWindowState", 30f); }
                     if (p.Type == "ElectricSunroof" && !roof) { roof = true; CallM(p.C, "SetWindowState", 40f); }
+                    if (p.Type == "Sunvisor" && !vis) { vis = true; CallM(p.C, "SetVisorPos", 90f); }
+                    if (p.Type == "FrontFogSwitch" && !fog) { fog = true; CallM(p.C, "LoadSwitchOn"); }
                     if (p.Type == "AutoAC" && !ac) { ac = true; CallM(p.C, "SetMinFan"); CallM(p.C, "SetDefrost"); }
                     if (p.Type == "Machtmatic" && !gear) { gear = true; SetF(p.C, "ATGear", 3); CallM(p.C, "MoveShifterPos"); }
                 }
