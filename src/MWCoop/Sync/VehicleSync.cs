@@ -81,6 +81,7 @@ namespace MWCoop
             public Dictionary<Joint, Vector2> JointsLater;   // attaches rendues cassables a SettleUntil seulement
             public float NextLog;
             public Drivetrain Dt;
+            public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
             public Wheel[] Wheels;
             public AxisCarController Axis;
             public bool Mod;                  // vehicule de mod sans CarDynamics (IsModVehicle)
@@ -514,6 +515,7 @@ namespace MWCoop
         {
             if (!Session.Active || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
+            Sanitize();
             if (!scanned) { if (scanAt > 0 && now >= scanAt) Scan(); return; }
             // Joueur monte dans une voiture que la liste ne connait pas encore (taxi tout juste active) : releve.
             if (!curVehicleLooked) { curVehicleLooked = true; curVehicle = FsmVariables.GlobalVariables.FindFsmString("PlayerCurrentVehicle"); }
@@ -1218,6 +1220,55 @@ namespace MWCoop
         static Car hotCar;
         static float hotUntil, hotRpm, hotAt;
 
+        static bool Finite(float f) { return !float.IsNaN(f) && !float.IsInfinity(f); }
+        static bool Finite(Vector3 v) { return Finite(v.x) && Finite(v.y) && Finite(v.z); }
+        static float nanLogAt;
+        static float now0 { get { return Time.realtimeSinceStartup; } }
+        static readonly Dictionary<System.Type, System.Reflection.FieldInfo[]> floatFields = new Dictionary<System.Type, System.Reflection.FieldInfo[]>();
+
+        // Garde-fou : la voiture que l'on conduit (ou dont on garde le moteur) avec une valeur non finie -- regime du
+        // Drivetrain, vitesses des roues, corps -- est remise d'aplomb avant que la physique ne s'emballe (retour d'un
+        // joueur, 10/10 : regime NaN apres « moteur repris en marche », jeu fige chez l'hote et chez son passager).
+        static void Sanitize()
+        {
+            foreach (Car c in cars)
+            {
+                if (c.Body == null || c.Kinematic && c.Index != LocalDriving) continue;
+                Rigidbody b = c.Body;
+                bool bad = !Finite(b.position) || !Finite(b.velocity) || !Finite(b.angularVelocity);
+                int fixedF = 0;
+                if (c.Dt != null && !Finite(c.Dt.rpm)) { c.Dt.rpm = 800f; fixedF++; }
+                // (champs des roues et de la transmission : seulement la voiture conduite ici, celle reprise en marche, ou deja abimee)
+                bool deep = c.Index == LocalDriving || c == hotCar || bad || fixedF > 0;
+                foreach (MonoBehaviour m in deep && c.Dt != null ? c.Dt.GetComponentsInChildren<MonoBehaviour>(true) : new MonoBehaviour[0])
+                {
+                    if (m == null) continue;
+                    string tn = m.GetType().Name;
+                    if (tn != "Drivetrain" && tn != "Wheel" && tn != "CarDynamics" && tn != "Axles") continue;
+                    System.Reflection.FieldInfo[] fs;
+                    if (!floatFields.TryGetValue(m.GetType(), out fs))
+                    {
+                        var l = new List<System.Reflection.FieldInfo>();
+                        foreach (System.Reflection.FieldInfo fi in m.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                            if (fi.FieldType == typeof(float)) l.Add(fi);
+                        floatFields[m.GetType()] = fs = l.ToArray();
+                    }
+                    foreach (System.Reflection.FieldInfo fi in fs)
+                    {
+                        float v = (float)fi.GetValue(m);
+                        if (!Finite(v)) { fi.SetValue(m, fi.Name == "rpm" ? 800f : 0f); fixedF++; }
+                    }
+                }
+                if (bad)
+                {
+                    if (c.GoodSet) { b.position = c.GoodPos; b.rotation = c.GoodRot; c.T.position = c.GoodPos; c.T.rotation = c.GoodRot; }
+                    b.velocity = Vector3.zero; b.angularVelocity = Vector3.zero;
+                }
+                else { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; }
+                if ((bad || fixedF > 0) && now0 >= nanLogAt) { nanLogAt = now0 + 5f; Log.Warn("voitures : " + c.Key + " valeurs non finies corrigees (" + fixedF + " reglages" + (bad ? ", corps remis a sa derniere pose valide" : "") + ")"); }
+            }
+        }
+
         static void HotStart(Car c)
         {
             hotCar = c;
@@ -1274,6 +1325,40 @@ namespace MWCoop
             return SoundDiag(c);
         }
         public static void TestEngine(float rpm, float thr) { testRpm = rpm; testThr = thr; }
+
+        // [Test] Autotest=relais (TestVoiture, SORBET par defaut) : l'invite monte au volant (15/20 s), moteur tenu en marche
+        // (Drivetrain a 1400 tr/min) de 21 a 30 s, sort (30 s, moteur laisse tournant) puis s'assoit en passager (31,5 s) ;
+        // l'hote, des que la voiture n'a plus de conducteur mais tourne chez l'invite, prend le volant 1 s apres. Chacun
+        // note le regime et la vitesse du corps 4 fois par seconde pendant 6 s.
+        static int relaisStep; static float relaisAt, relaisLog;
+        public static void TestRelais(string mode, float t)
+        {
+            if (mode != "relais") return;
+            string name = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            Car c = Named(name);
+            if (c == null || c.Body == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (!Session.IsHost)
+            {
+                if (t > 15f && relaisStep == 0) { relaisStep = 1; Log.Info("autotest : relais, " + TestEnter(name, false)); }
+                if (t > 20f && relaisStep == 1) { relaisStep = 2; Log.Info("autotest : relais, volant -> " + TestEnter(name, true)); }
+                if (t > 21f && t < 30f && c.Dt != null) { c.Dt.enabled = true; if (c.Dt.rpm < 1400f) c.Dt.rpm = 1400f; }
+                if (t > 30f && relaisStep == 2) { relaisStep = 3; Log.Info("autotest : relais, sortie -> " + TestExit(name) + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?")); relaisAt = now; }
+                if (relaisStep == 3 && now > relaisAt + 1.5f) { relaisStep = 4; Log.Info("autotest : relais, passager -> " + Seats.TestSit(name.Split('(')[0], 0)); relaisAt = now; }
+            }
+            else
+            {
+                bool hot = c.RemoteBy >= 0 && c.RemoteDriver < 0 && Remote(c, now);
+                if (relaisStep == 0 && hot) { relaisStep = 1; relaisAt = now; Log.Info("autotest : relais, moteur tournant chez #" + c.RemoteBy + ", regime recu " + c.Rpm.ToString("F0")); }
+                if (relaisStep == 1 && now > relaisAt + 0.5f) { relaisStep = 2; Log.Info("autotest : relais, hote " + TestEnter(name, false)); }
+                if (relaisStep == 2 && now > relaisAt + 1.5f) { relaisStep = 3; Log.Info("autotest : relais, hote volant -> " + TestEnter(name, true)); relaisAt = now; }
+            }
+            if (relaisAt > 0f && now - relaisAt < 6f && now >= relaisLog && (Session.IsHost ? relaisStep >= 3 : relaisStep >= 4))
+            {
+                relaisLog = now + 0.25f;
+                Log.Info("autotest : relais, regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") + (c.Dt.enabled ? "" : " (coupe)") : "?") + ", vitesse " + c.Body.velocity.magnitude.ToString("F2") + ", rotation " + c.Body.angularVelocity.magnitude.ToString("F2") + ", cinematique " + c.Body.isKinematic + ", local " + (c.Index == LocalDriving));
+            }
+        }
 
         // Essais : toutes les sources audio de la voiture (clip, joue, volume, hauteur) et son etat.
         public static string AudioState(string name)
@@ -1348,6 +1433,8 @@ namespace MWCoop
             {
                 float rpm = testRpm >= 0f ? testRpm : c.Dt != null ? c.Dt.rpm : ModFloat(c.ModDt, c.ModRpm);
                 float thr = testRpm >= 0f ? testThr : c.Dt != null ? c.Dt.throttle : 0f;
+                if (!Finite(rpm)) rpm = 0f;
+                if (!Finite(thr)) thr = 0f;
                 int mask = 0;
                 for (int i = 0; i < c.SoundObjs.Length && i < 14; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;   // (14 au plus : 0x4000 klaxon, 0x8000 moteur)
                 if ((c.Starter != null && c.Starter.ActiveStateName == "Running") || testRpm > 0f || ModBool(c.ModDt, c.ModRun)) mask |= 0x8000;   // (essais : faux moteur en marche)
@@ -1530,6 +1617,14 @@ namespace MWCoop
                 for (int i = 0; i < 14; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
             }
             Vector3 dhead = mode == 1 && r.More ? r.Vec() : Vector3.zero;
+            // Valeurs non finies (NaN, infini) : jamais appliquees ni relayees -- un regime NaN recu faisait partir la
+            // physique de la copie en valeurs infinies et figeait le jeu (retour d'un joueur, 10/10).
+            if (!Finite(pos) || !Finite(vel) || !Finite(ang) || !Finite(rot.x + rot.y + rot.z + rot.w) || !Finite(rpm) || !Finite(thr) || !Finite(steer) || !Finite(dhead))
+            {
+                if (now0 >= nanLogAt) { nanLogAt = now0 + 5f; Log.Warn("voitures : etat non fini recu de #" + who + " (numero " + idx + ", regime " + rpm + ", position " + pos + ") : ignore"); }
+                return;
+            }
+            for (int i = 0; i < spitch.Count; i++) if (!Finite(spitch[i])) spitch[i] = 1f;
             if (Session.IsHost)
             {
                 var fw = new NetWriter(Msg.Vehicle).U8(who).U8(idx).U8(mode).Vec(pos).Quat(rot).Vec(vel).Vec(ang);
