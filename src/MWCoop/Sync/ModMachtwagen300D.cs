@@ -22,7 +22,7 @@ namespace MWCoop
         static float nextLook, nextHost;
         static bool last, known, applying;
 
-        public static void OnLevelLoaded() { locking = null; known = false; nextLook = 0f; parts.Clear(); partsAt = 0f; keysSent = false; nextParts = 0f; testStep = 0; }
+        public static void OnLevelLoaded() { locking = null; known = false; nextLook = 0f; parts.Clear(); partsAt = 0f; keysSent = false; nextParts = 0f; testStep = 0; glides.Clear(); ign = null; ignCol = null; keyInWas = false; ignLook = 0f; }
 
         // ---------------------------------------------------------------- equipements (retour de Menos, 10/10 : toit ouvrant,
         // boite automatique, boite a gants, compartiments, vitres non synchronises ; la cle « partagee »).
@@ -36,40 +36,81 @@ namespace MWCoop
         static Component saveVars; static bool keysWas, keysSent;
         static readonly BindingFlags Any = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
+        // Types du mod, cherches dans son assembly (charge par MSCLoader) : avant, tous les scripts de la scene etaient passes
+        // en revue toutes les 5 s, chez tout le monde, mod installe ou non (retour de joueurs 10/10 : performances).
+        static Assembly modAsm;
+        static float asmLook;
+        static Type ModType(string name)
+        {
+            if (modAsm == null)
+            {
+                if (Time.realtimeSinceStartup < asmLook) return null;
+                asmLook = Time.realtimeSinceStartup + 30f;
+                foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    Type t = null;
+                    try { t = a.GetType("Machtwagen300D_MWC.CentralLocking", false); } catch { }
+                    if (t != null) { modAsm = a; break; }
+                }
+                if (modAsm == null) return null;
+            }
+            return modAsm.GetType("Machtwagen300D_MWC." + name, false);
+        }
+
+        static readonly string[] PartTypes = { "SaveVars", "ElectricSunroof", "PowerWindow", "OpenableCompartment", "Machtmatic", "AutoAC" };
+
         static void ScanParts()
         {
-            parts.Clear(); saveVars = null;
+            parts.Clear(); saveVars = null; glides.Clear();
             // (objets inactifs compris : la boite automatique n'est active qu'au volant ; pas les modeles des AssetBundles)
-            foreach (MonoBehaviour m in Resources.FindObjectsOfTypeAll<MonoBehaviour>())
+            foreach (string tn in PartTypes)
             {
-                if (m == null || m.GetType().Namespace != "Machtwagen300D_MWC" || m.hideFlags != HideFlags.None) continue;
-                if (!m.transform.root.gameObject.activeInHierarchy && m.transform.root.name != "Machtwagen300D") continue;
-                string tn = m.GetType().Name;
-                if (tn == "SaveVars") { saveVars = m; continue; }
-                if (tn == "ElectricSunroof" || tn == "PowerWindow" || tn == "OpenableCompartment" || tn == "Machtmatic")
+                Type t = ModType(tn);
+                if (t == null) continue;
+                foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(t))
+                {
+                    var m = o as MonoBehaviour;
+                    if (m == null || m.hideFlags != HideFlags.None) continue;
+                    if (!m.transform.root.gameObject.activeInHierarchy && m.transform.root.name != "Machtwagen300D") continue;
+                    if (tn == "SaveVars") { saveVars = m; continue; }
                     parts.Add(new Part { Type = tn, Path = Recon.Path(m.transform), C = m });
+                }
             }
             if (saveVars != null) keysWas = Get<bool>(saveVars, "keysGot");
-            Log.Info("mods : Machtwagen 300D, " + parts.Count + " equipements suivis (toit, vitres, compartiments, boite auto) et la cle");
+            Log.Info("mods : Machtwagen 300D, " + parts.Count + " equipements suivis (toit, vitres, compartiments, boite auto, climatisation) et la cle");
         }
 
         static T Get<T>(object o, string f) { FieldInfo fi = o.GetType().GetField(f, Any); object v = fi != null ? fi.GetValue(o) : null; return v is T ? (T)v : default(T); }
         static void SetF(object o, string f, object v) { FieldInfo fi = o.GetType().GetField(f, Any); if (fi != null) fi.SetValue(o, v); }
         static void CallM(object o, string m, params object[] a) { MethodInfo mi = o.GetType().GetMethod(m, Any); if (mi != null) try { mi.Invoke(o, a); } catch (Exception e) { Log.Warn("mods : 300D " + m + " : " + (e.InnerException ?? e).Message); } }
 
-        // Valeur d'etat (stable : rien en mouvement), NaN si en mouvement.
+        // Valeur d'etat ; toit et vitres : aussi pendant le mouvement (position de l'animation), suivie chez les autres qui
+        // l'animent a la meme vitesse (« l'animation du toit ne marche pas », Menos, 10/10 : il sautait a sa place finale).
         static float StateOf(Part p)
         {
             switch (p.Type)
             {
                 case "ElectricSunroof":
-                    if (Get<bool>(p.C, "moving") || Get<bool>(p.C, "movingTilt")) return float.NaN;
-                    float tilt = Get<float>(p.C, "TiltState");
-                    return tilt > 0f ? -tilt : Get<float>(p.C, "WindowState");   // (negatif : entrebaille)
+                    {
+                        Animation a = Get<Animation>(p.C, "anim");
+                        if (Get<bool>(p.C, "moving")) return ClipTime(a, Get<string>(p.C, "animname")) * 60f;
+                        if (Get<bool>(p.C, "movingTilt")) return -ClipTime(a, Get<string>(p.C, "animnameTilt")) * 60f;
+                        float tilt = Get<float>(p.C, "TiltState");
+                        return tilt > 0f ? -tilt : Get<float>(p.C, "WindowState");   // (negatif : entrebaille)
+                    }
                 case "PowerWindow":
-                    if (Get<bool>(p.C, "moving")) return float.NaN;
-                    object st = Get<object>(p.C, "StateM");
-                    return st != null ? Get<float>(st, "State") : float.NaN;
+                    {
+                        if (Get<bool>(p.C, "moving")) return ClipTime(Get<Animation>(p.C, "anim"), Get<string>(p.C, "animname")) * 60f;
+                        object st = Get<object>(p.C, "StateM");
+                        return st != null ? Get<float>(st, "State") : float.NaN;
+                    }
+                case "AutoAC":
+                    {
+                        // ventilation (1 auto, 2 mini, 3 maxi, 4 arret) x 10 + direction (1 degivrage, 2 normal, 3 haut-bas)
+                        int fan = Get<bool>(p.C, "OFF") ? 4 : Get<bool>(p.C, "AutoMode") ? 1 : Get<bool>(p.C, "MinFan") ? 2 : Get<bool>(p.C, "MaxFan") ? 3 : 0;
+                        int dir = Get<bool>(p.C, "Defrost") ? 1 : Get<bool>(p.C, "Normal") ? 2 : Get<bool>(p.C, "UpDown") ? 3 : 0;
+                        return fan * 10 + dir;
+                    }
                 case "OpenableCompartment":
                     Animation an = Get<Animation>(p.C, "anim");
                     if (an != null && an.isPlaying) return float.NaN;
@@ -80,20 +121,99 @@ namespace MWCoop
             return float.NaN;
         }
 
+        static float ClipTime(Animation a, string clip) { return a != null && clip != null && a[clip] != null ? a[clip].time : 0f; }
+
+        // Pose finale (toit : negatif = entrebaille).
+        static void Pose(Part p, float v)
+        {
+            if (p.Type == "PowerWindow") { CallM(p.C, "SetWindowState", v); return; }
+            if (v < 0f)
+            {
+                Animation a = Get<Animation>(p.C, "anim"); string clip = Get<string>(p.C, "animnameTilt");
+                SetF(p.C, "WindowState", 0f); SetF(p.C, "TiltState", -v);
+                if (a != null && clip != null && a[clip] != null) { a.Play(clip); a[clip].time = -v / 60f; a[clip].speed = 0f; }
+            }
+            else { SetF(p.C, "TiltState", 0f); CallM(p.C, "SetWindowState", v); }
+        }
+
+        // Toit et vitres recus : animes jusqu'a la valeur recue, a la vitesse du mod (avec un peu d'avance pour rattraper), avec
+        // le bruit du moteur electrique ; la valeur peut changer en route (positions envoyees pendant le mouvement).
+        class Glide { public Part P; public float Cur, Target; public AudioSource Snd; }
+        static readonly System.Collections.Generic.Dictionary<Part, Glide> glides = new System.Collections.Generic.Dictionary<Part, Glide>();
+
+        static float Current(Part p)
+        {
+            if (p.Type == "PowerWindow") { object st = Get<object>(p.C, "StateM"); return st != null ? Get<float>(st, "State") : 0f; }
+            float tilt = Get<float>(p.C, "TiltState");
+            return tilt > 0f ? -tilt : Get<float>(p.C, "WindowState");
+        }
+
+        static void StartGlide(Part p, float v)
+        {
+            Glide g;
+            if (!glides.TryGetValue(p, out g))
+            {
+                g = new Glide { P = p, Cur = Current(p) };
+                if (Mathf.Abs(g.Cur - v) < 0.5f) { Pose(p, v); return; }
+                g.Snd = Get<AudioSource>(p.C, p.Type == "ElectricSunroof" && (v < 0f || g.Cur < 0f) ? "tiltSnd" : "sound");
+                if (g.Snd != null && !g.Snd.isPlaying) g.Snd.Play();
+                glides[p] = g;
+            }
+            g.Target = v;
+        }
+
+        static readonly System.Collections.Generic.List<Glide> glideDone = new System.Collections.Generic.List<Glide>();
+        static void UpdateGlides()
+        {
+            if (glides.Count == 0) return;
+            glideDone.Clear();
+            foreach (Glide g in glides.Values)
+            {
+                Part p = g.P;
+                if (p.C == null) { glideDone.Add(g); continue; }
+                // (vitesses du mod : toit 0,4 et entrebaillement 0,35 de clip par seconde, soit 24 et 21 crans/s ; vitres de meme)
+                float rate = (p.Type == "ElectricSunroof" && (g.Target < 0f || g.Cur < 0f) ? 21f : 24f) * 1.15f;
+                // Du toit ouvert a l'entrebaille (ou l'inverse) : par la position fermee.
+                float goal = p.Type == "ElectricSunroof" && g.Cur * g.Target < 0f ? 0f : g.Target;
+                g.Cur = Mathf.MoveTowards(g.Cur, goal, rate * Time.deltaTime);
+                Animation a = Get<Animation>(p.C, "anim");
+                string clip = p.Type == "ElectricSunroof" && g.Cur < 0f ? Get<string>(p.C, "animnameTilt") : Get<string>(p.C, "animname");
+                if (a != null && clip != null && a[clip] != null)
+                {
+                    if (!a.IsPlaying(clip)) a.Play(clip);
+                    a[clip].time = Mathf.Abs(g.Cur) / 60f; a[clip].speed = 0f;
+                }
+                if (Mathf.Abs(g.Cur - g.Target) < 0.01f) glideDone.Add(g);
+            }
+            foreach (Glide g in glideDone)
+            {
+                glides.Remove(g.P);
+                if (g.P.C == null) continue;
+                applying = true;
+                try { Pose(g.P, g.Target); } finally { applying = false; }
+                g.P.Last = g.Target;
+                if (g.Snd != null && g.Snd.isPlaying) g.Snd.Stop();
+                AudioSource fin = Get<AudioSource>(g.P.C, "fin");
+                if (fin != null && (Mathf.Abs(g.Target) < 0.05f || Mathf.Abs(g.Target) > 59.9f)) fin.Play();
+            }
+        }
+
         static void ApplyState(Part p, float v)
         {
             switch (p.Type)
             {
                 case "ElectricSunroof":
-                    if (v < 0f)
-                    {
-                        Animation a = Get<Animation>(p.C, "anim"); string clip = Get<string>(p.C, "animnameTilt");
-                        SetF(p.C, "WindowState", 0f); SetF(p.C, "TiltState", -v);
-                        if (a != null && clip != null && a[clip] != null) { a.Play(clip); a[clip].time = -v / 60f; a[clip].speed = 0f; }
-                    }
-                    else { SetF(p.C, "TiltState", 0f); CallM(p.C, "SetWindowState", v); }
+                case "PowerWindow":
+                    StartGlide(p, v);
                     break;
-                case "PowerWindow": CallM(p.C, "SetWindowState", v); break;
+                case "AutoAC":
+                    {
+                        int fan = (int)v / 10, dir = (int)v % 10;
+                        if (fan == 4) { CallM(p.C, "setOFF"); break; }
+                        if (fan == 1) CallM(p.C, "SetAuto"); else if (fan == 2) CallM(p.C, "SetMinFan"); else if (fan == 3) CallM(p.C, "SetMaxFan");
+                        if (dir == 1) CallM(p.C, "SetDefrost"); else if (dir == 2) CallM(p.C, "SetNormal"); else if (dir == 3) CallM(p.C, "SetUpDown");
+                        break;
+                    }
                 case "OpenableCompartment":
                     {
                         bool open = (((int)v) & 1) != 0, locked = (((int)v) & 2) != 0;
@@ -124,7 +244,7 @@ namespace MWCoop
             if (parts.Count == 0 || saveVars == null) { if (now >= partsAt) { partsAt = now + 10f; ScanParts(); } if (parts.Count == 0) return; }
             foreach (Part p in parts)
             {
-                if (p.C == null) continue;
+                if (p.C == null || glides.ContainsKey(p)) continue;   // (anime ici d'apres un autre)
                 float v = StateOf(p);
                 if (float.IsNaN(v)) continue;
                 if (float.IsNaN(p.Last)) { p.Last = v; continue; }   // (premier releve : etat du chargement, le meme chez tous)
@@ -135,6 +255,7 @@ namespace MWCoop
             }
             if (saveVars != null)
             {
+                Ignition();
                 bool k = Get<bool>(saveVars, "keysGot");
                 if (k && (!keysWas || Session.IsHost && !keysSent))
                 {
@@ -144,6 +265,36 @@ namespace MWCoop
                 }
                 keysWas = k;
             }
+        }
+
+        // Cle sur le contact (retour de Menos, 10/10 : « mon ami ne peut pas prendre la cle quand elle est sur le contact ») : le
+        // mod n'allume le contact (collisionneur IGNITIONx...) que chez le porteur de la cle. Cle sur le contact : contact allume
+        // chez tous -- chacun peut la tourner ou la retirer ; celui qui la retire (clic d'ici) en devient le porteur (@300k).
+        static PlayMakerFSM ign;
+        static Collider ignCol;
+        static bool keyInWas;
+        static float ignLook;
+        static readonly System.Collections.Generic.HashSet<string> KeyIn = new System.Collections.Generic.HashSet<string> { "ACC on", "Wait2", "Wait START", "Motor starting", "Shut off", "State 1" };
+        static void Ignition()
+        {
+            if (ign == null)
+            {
+                if (locking == null || Time.realtimeSinceStartup < ignLook) return;
+                ignLook = Time.realtimeSinceStartup + 10f;
+                foreach (Transform t in locking.transform.root.GetComponentsInChildren<Transform>(true))
+                    if (t.name == "IGNITIONxMachtwagen300D") { ign = Game.FsmOn(t.gameObject, "Use"); ignCol = t.GetComponent<Collider>(); break; }
+                if (ign == null) return;
+                Log.Info("mods : 300D, contact trouve (" + Recon.Path(ign.transform) + ", etat " + ign.ActiveStateName + ")");
+            }
+            bool holder = Get<bool>(saveVars, "keysGot");
+            bool keyIn = KeyIn.Contains(ign.ActiveStateName);
+            if (ignCol != null && ignCol.enabled != (holder || keyIn)) ignCol.enabled = holder || keyIn;
+            if (keyInWas && !keyIn && !holder && Jobs.KeyTurnedHere(ign.transform, 3f))
+            {
+                SetF(saveVars, "keysGot", true);
+                Log.Info("mods : 300D, cle retiree du contact ici : elle est ici");
+            }
+            keyInWas = keyIn;
         }
 
         public static void OnPart(int who, string type, string path, float v)
@@ -170,12 +321,13 @@ namespace MWCoop
             if (Session.IsHost && t > 40f && testStep == 0)
             {
                 testStep = 1;
-                bool comp = false, win = false, roof = false, gear = false;
+                bool comp = false, win = false, roof = false, gear = false, ac = false;
                 foreach (Part p in parts)
                 {
                     if (p.Type == "OpenableCompartment" && !comp) { comp = true; CallM(p.C, "OpenGlovebox"); }
                     if (p.Type == "PowerWindow" && !win) { win = true; CallM(p.C, "SetWindowState", 30f); }
                     if (p.Type == "ElectricSunroof" && !roof) { roof = true; CallM(p.C, "SetWindowState", 40f); }
+                    if (p.Type == "AutoAC" && !ac) { ac = true; CallM(p.C, "SetMinFan"); CallM(p.C, "SetDefrost"); }
                     if (p.Type == "Machtmatic" && !gear) { gear = true; SetF(p.C, "ATGear", 3); CallM(p.C, "MoveShifterPos"); }
                 }
                 Log.Info("autotest : 300d, equipements changes ici");
@@ -207,8 +359,9 @@ namespace MWCoop
             if (locking != null) return true;
             if (Time.realtimeSinceStartup < nextLook) return false;
             nextLook = Time.realtimeSinceStartup + 5f;
-            foreach (MonoBehaviour m in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
-                if (m != null && m.GetType().Name == "CentralLocking" && m.GetType().Namespace == "Machtwagen300D_MWC") { locking = m; break; }
+            Type lt = ModType("CentralLocking");
+            if (lt == null) return false;
+            foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(lt)) { locking = o as Component; if (locking != null) break; }
             if (locking == null) return false;
             fLocked = locking.GetType().GetField("doorsLocked");
             Log.Info("mods : Machtwagen 300D present, verrouillage centralise synchronise");
@@ -243,6 +396,7 @@ namespace MWCoop
         {
             if (!Session.Active || !PlayerSync.InGame || !Find()) return;
             UpdateParts();
+            UpdateGlides();
             bool l = Locked;
             float now = Time.realtimeSinceStartup;
             if (!known || l != last)

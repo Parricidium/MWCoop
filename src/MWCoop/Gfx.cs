@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using HutongGames.PlayMaker;
@@ -56,7 +56,7 @@ namespace MWCoop
         // Reglages du moteur du niveau d'origine (choisi dans la fenetre Unity) : rendus quand une cle est retiree.
         static float baseShadow = -1, baseLod; static int baseCascades, baseTex, baseVsync, baseFps; static AnisotropicFiltering baseAniso;
         static int baseQuality = -1, appliedQuality = -1;
-        static bool vsyncSet, fpsSet;
+        static bool vsyncSet, fpsSet, shadowSet, cascSet, lodSet, texSet, anisoSet;
         static float borderlessAt = -1;
 
         static void CaptureBase()
@@ -204,11 +204,18 @@ namespace MWCoop
             else if (vsyncSet) { vsyncSet = false; QualitySettings.vSyncCount = baseVsync; }
             if (Has("ImagesMax", out v)) { if (!fpsSet) { fpsSet = true; baseFps = Application.targetFrameRate; } Application.targetFrameRate = v <= 0 ? -1 : v; }
             else if (fpsSet) { fpsSet = false; Application.targetFrameRate = baseFps; }
-            QualitySettings.shadowDistance = Has("OmbresDistance", out v) ? Mathf.Clamp(v, 10, 1000) : baseShadow;
-            QualitySettings.shadowCascades = Has("OmbresCascades", out v) ? (v >= 4 ? 4 : v >= 2 ? 2 : 1) : baseCascades;
-            QualitySettings.lodBias = Has("Details", out v) ? Mathf.Clamp(v, 30, 500) / 100f : baseLod;
-            QualitySettings.masterTextureLimit = Has("Textures", out v) ? Mathf.Clamp(v, 0, 3) : baseTex;
-            QualitySettings.anisotropicFiltering = Has("Filtrage", out v) ? (v >= 2 ? AnisotropicFiltering.ForceEnable : v == 1 ? AnisotropicFiltering.Enable : AnisotropicFiltering.Disable) : baseAniso;
+            // Le reste de meme : pose seulement si regle, rendu seulement si le mod l'avait change. (Avant : la valeur de
+            // base reposee a chaque chargement -- elle effacait celle d'un mod d'optimisation, NOP : distance des ombres.)
+            if (Has("OmbresDistance", out v)) { shadowSet = true; QualitySettings.shadowDistance = Mathf.Clamp(v, 10, 1000); }
+            else if (shadowSet) { shadowSet = false; QualitySettings.shadowDistance = baseShadow; }
+            if (Has("OmbresCascades", out v)) { cascSet = true; QualitySettings.shadowCascades = v >= 4 ? 4 : v >= 2 ? 2 : 1; }
+            else if (cascSet) { cascSet = false; QualitySettings.shadowCascades = baseCascades; }
+            if (Has("Details", out v)) { lodSet = true; QualitySettings.lodBias = Mathf.Clamp(v, 30, 500) / 100f; }
+            else if (lodSet) { lodSet = false; QualitySettings.lodBias = baseLod; }
+            if (Has("Textures", out v)) { texSet = true; QualitySettings.masterTextureLimit = Mathf.Clamp(v, 0, 3); }
+            else if (texSet) { texSet = false; QualitySettings.masterTextureLimit = baseTex; }
+            if (Has("Filtrage", out v)) { anisoSet = true; QualitySettings.anisotropicFiltering = v >= 2 ? AnisotropicFiltering.ForceEnable : v == 1 ? AnisotropicFiltering.Enable : AnisotropicFiltering.Disable; }
+            else if (anisoSet) { anisoSet = false; QualitySettings.anisotropicFiltering = baseAniso; }
         }
 
         // Options du jeu : variables de GFX posees, puis "Save data" (sauve dans options.txt, relit et applique).

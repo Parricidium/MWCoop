@@ -540,6 +540,8 @@ namespace MWCoop
         // finie), ramenee a 90 % du maximum ; au point mort sans gaz, elle ne peut que redescendre vers le ralenti.
         static System.Reflection.FieldInfo fEngineW;
         static float lastW = -1f;
+        static Drivetrain neutralFor;
+        static bool neutralRule;
         public static void RevLimiterFixed()
         {
             Drivetrain d = limitDt;
@@ -557,7 +559,10 @@ namespace MWCoop
             // (le jeu laisse le moteur depasser maxRPM -- le diesel du mod 300D a maxRPM vers 3800 et monte a 5-6000 : plafonne a
             // maxRPM, il ne depassait plus 3500, retour d'un joueur, 10/10. Seul un vrai emballement est ramene.)
             if (!Finite(w) || w > maxW * 1.6f + 1000f * k) { w = maxW; why = "emballe"; }
-            else if (d.ratio == 0f && d.throttle < 0.05f && w > idleW * 1.3f && lastW > 0f && w > lastW)
+            // Regle du point mort : la SORBET seulement (son emballement, retour de Spagy). Ailleurs elle genait : la boite
+            // automatique du mod 300D passe par le point mort, son ralenti monte (« regime tres bugge », Menos, 10/10).
+            if (neutralFor != d) { neutralFor = d; neutralRule = d.name.StartsWith("SORBET"); }
+            if (why == null && neutralRule && d.ratio == 0f && d.throttle < 0.05f && w > idleW * 1.3f && lastW > 0f && w > lastW)
             { w = Mathf.Max(idleW, lastW * (1f - 1.5f * Time.fixedDeltaTime)); why = "monte sans gaz au point mort"; }
             if (why != null)
             {
