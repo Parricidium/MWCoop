@@ -37,7 +37,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            bags.Clear(); sleepTpl = null; prepared = false; shot = 0; testStep = 0; listed = false; looked = null; fBag = null; fDownAt = -1;
+            bags.Clear(); sleepTpl = null; prepared = false; shot = 0; testStep = 0; pickStep = 0; hand = null; listed = false; looked = null; fBag = null; fDownAt = -1;
             startAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;
         }
 
@@ -272,9 +272,12 @@ namespace MWCoop
             if (hit != null && guiUse != null)
             {
                 guiUse.Value = true;
-                guiText.Value = hit.Folded ? Lang.T("SAC DE COUCHAGE (F : DEPLIER)", "SLEEPING BAG (F: UNFOLD)") : Lang.T("F : REPLIER - TENIR F : DORMIR", "F: FOLD - HOLD F: SLEEP");
+                // (plie : le clic gauche le prend comme tout objet du jeu -- la main du jeu, etiquette PART ; F le deplie)
+                guiText.Value = hit.Folded ? Lang.T("SAC DE COUCHAGE - CLIC : PRENDRE - F : DEPLIER", "SLEEPING BAG - CLICK: PICK UP - F: UNROLL")
+                                           : Lang.T("F : REPLIER - TENIR F : DORMIR", "F: ROLL UP - HOLD F: SLEEP");
             }
             if (KeyDown() && hit != null) { fDownAt = now; fBag = hit; }
+            PickAssist(hit, now);
             if (fBag != null && fBag.Folded && fDownAt >= 0)
             {
                 // Plie : deplie tout de suite (au sol, a l'arret, pas dans une voiture).
@@ -293,6 +296,27 @@ namespace MWCoop
                 if (held < 0.35f && !Game.GlobalBool("PlayerSleeps") && (b.Fsm == null || !Sleeping(b.Fsm)))
                     SetState(b, true, b.Go.transform.position + Vector3.up * 0.25f, b.Go.transform.rotation, true);
             }
+        }
+
+        // Clic gauche sur le sac plie : la main du jeu ne prend qu'a 1 m (MousePick) -- un sac par terre, vise debout, est
+        // plus loin (retour de JD, 10/10 : « je n'arrive pas a le soulever »). Si elle ne l'a pas pris a l'image suivante, sa
+        // prise est lancee sur le sac (RaycastHitObject puis « State 1 » : le meme enchainement que pour un objet du jeu).
+        static PlayMakerFSM hand;
+        static Bag clickBag;
+        static int clickFrame = -1;
+        static void PickAssist(Bag hit, float now)
+        {
+            if (Input.GetMouseButtonDown(0) && hit != null && hit.Folded) { clickBag = hit; clickFrame = Time.frameCount; return; }
+            if (clickBag == null || Time.frameCount <= clickFrame) return;
+            Bag b = clickBag; clickBag = null;
+            if (Time.frameCount > clickFrame + 3 || b.Go == null || b.Go.transform.parent != null) return;   // (deja pris)
+            if (hand == null) { GameObject h = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand"); if (h != null) hand = Game.FsmOn(h, "PickUp"); }
+            if (hand == null || hand.ActiveStateName != "Look for object") return;
+            FsmGameObject rh = hand.FsmVariables.FindFsmGameObject("RaycastHitObject");
+            if (rh == null) return;
+            rh.Value = b.Go;
+            Game.SetState(hand, "State 1");
+            Log.Info("sac de couchage " + b.Id + " pris en main (prise du jeu lancee : " + hand.ActiveStateName + ")");
         }
 
         static readonly HashSet<string> Awake = new HashSet<string> { "State 1", "Conditions?", "Wait click", "Confirm", "State 3" };
@@ -442,9 +466,16 @@ namespace MWCoop
         static int testStep;
         static Camera testCam;
         static int shot;
+        static int pickStep;
         public static void Test(string mode, float t)
         {
             if (mode != "sac") return;
+            // [Test] SacPrendre=1 : a 50 s l'hote lance la prise du jeu sur sac2 (comme un clic), a 53 s note ou il est.
+            if (Session.IsHost && Config.GetInt("Test", "SacPrendre", 0) != 0 && bags.Count > 1)
+            {
+                if (t > 50f && pickStep == 0) { pickStep = 1; clickBag = bags[1]; clickFrame = Time.frameCount - 1; PickAssist(null, Time.realtimeSinceStartup); }
+                if (t > 53f && pickStep == 1) { pickStep = 2; Transform p = bags[1].Go.transform.parent; Log.Info("autotest : sac, sac2 " + (p != null ? "dans la main (" + p.name + ")" : "pas pris") + ", main " + (hand != null ? hand.ActiveStateName : "?")); }
+            }
             // (captures : camera d'essai qui vise le premier sac, plie a 27 s, deplie a 40 s -- dumps\sac-*.png)
             if (Session.IsHost && bags.Count > 0 && t > 20f && t < 44f)
             {

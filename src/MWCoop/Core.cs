@@ -145,6 +145,7 @@ namespace MWCoop
             new Mod("outils en main", HandTools.Update),
             new Mod("tas de bois des remorques", LogPiles.Update),
             new Mod("sacs de couchage", SleepingBags.Update),
+            new Mod("mods (Cheatbox++)", ModCheatbox.Update),
             new Mod("porte du garage", GarageDoor.Update),
             new Mod("vue (troisieme personne)", ThirdPerson.Update),
             new Mod("boissons", Drinks.Update),
@@ -243,6 +244,7 @@ namespace MWCoop
             HandTools.OnLevelLoaded();
             LogPiles.OnLevelLoaded();
             SleepingBags.OnLevelLoaded();
+            ModCheatbox.OnLevelLoaded();
             GarageDoor.OnLevelLoaded();
             ThirdPerson.OnLevelLoaded();
             Drinks.OnLevelLoaded();
