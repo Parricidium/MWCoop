@@ -19,7 +19,14 @@ namespace MWCoop
         static string meSkin;
         static Camera cam, handCam;
         static bool handCamWas;
-        static Vector3 eye; static Quaternion eyeRot; static bool moved;
+        static Vector3 eye, eyeLocal; static Quaternion eyeLocalRot; static bool moved;
+        // (remise aux yeux en position LOCALE -- par rapport au parent, qui suit la voiture : remise en monde, une remise
+        // tardive la laissait la ou la voiture etait, la vue restait sur place puis revenait d'un coup)
+        static void PutBack()
+        {
+            if (moved && cam != null) { cam.transform.localPosition = eyeLocal; cam.transform.localRotation = eyeLocalRot; }
+            moved = false;
+        }
         static float dist = -1f;
         static bool hooked;
         static int lastFrame = -1;
@@ -80,12 +87,36 @@ namespace MWCoop
         }
         public static Avatar Me { get { return Active ? me : null; } }
 
+        static Transform boxCar; static Bounds carBox; static Vector3 lastCamInCar; static float camLogAt;
+        static Bounds CarBox(Transform car)
+        {
+            Bounds b = new Bounds(Vector3.zero, Vector3.zero);
+            bool any = false;
+            foreach (MeshFilter mf in car.GetComponentsInChildren<MeshFilter>())
+            {
+                if (mf.sharedMesh == null) continue;
+                Renderer r = mf.GetComponent<Renderer>();
+                if (r == null || !r.enabled) continue;
+                Bounds lb = mf.sharedMesh.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 p = car.InverseTransformPoint(mf.transform.TransformPoint(new Vector3((i & 1) != 0 ? lb.max.x : lb.min.x, (i & 2) != 0 ? lb.max.y : lb.min.y, (i & 4) != 0 ? lb.max.z : lb.min.z)));
+                    if (p.sqrMagnitude > 400f) continue;   // (piece eloignee : pas le vehicule)
+                    if (!any) { b = new Bounds(p, Vector3.zero); any = true; } else b.Encapsulate(p);
+                }
+            }
+            if (!any) b = new Bounds(Vector3.up * 0.8f, new Vector3(1.8f, 1.5f, 4.2f));
+            Log.Info("vue : vehicule " + car.name + ", boite " + b.size.ToString("F1") + " centre " + b.center.ToString("F1"));
+            return b;
+        }
+
         // Rendu de la camera du joueur : reculee le temps de l'image, remise aux yeux a la fin de l'image.
         static void PreCull(Camera c)
         {
-            if (!Active || c == null || c != cam || moved || Time.frameCount == lastFrame) return;
+            if (!Active || c == null || c != cam || Time.frameCount == lastFrame) return;
+            if (moved) PutBack();   // (remise de l'image d'avant pas faite : d'abord aux yeux)
             Transform t = c.transform;
-            eye = t.position; eyeRot = t.rotation;
+            eye = t.position; eyeLocal = t.localPosition; eyeLocalRot = t.localRotation;
             Vector3 fwd = t.forward;
             Vector3 pivot, want;
             Transform car = VehicleSync.LocalDrivingRoot ?? Seats.LocalCar;
@@ -94,15 +125,12 @@ namespace MWCoop
             if (car != null)
             {
                 // Vehicule : autour de son centre, a une distance selon sa taille.
-                Bounds b = new Bounds(car.position, Vector3.zero);
-                bool any = false;
-                foreach (Renderer r in car.GetComponentsInChildren<Renderer>())
-                {
-                    if (!r.enabled || r.bounds.size.sqrMagnitude > 400f) continue;
-                    if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
-                }
-                pivot = b.center + Vector3.up * (b.extents.y * 0.6f);
-                target = Mathf.Clamp(b.extents.magnitude * 1.7f, 4.5f, 14f) * Config.GetFloat("Coop", "VueDistanceVehicule", 1f);
+                // Taille du vehicule dans SON repere, une fois (maillages seulement) : avant, la boite de tous ses rendus a
+                // chaque image -- la fumee d'echappement (particules laissees sur place) l'etirait vers l'arriere, la camera
+                // restait en arriere puis revenait d'un coup (retour de JD, 10/10).
+                if (car != boxCar) { boxCar = car; carBox = CarBox(car); }
+                pivot = car.TransformPoint(carBox.center) + Vector3.up * (carBox.extents.y * 0.6f);
+                target = Mathf.Clamp(carBox.extents.magnitude * 1.7f, 4.5f, 14f) * Config.GetFloat("Coop", "VueDistanceVehicule", 1f);
                 want = pivot - fwd * target + Vector3.up * 0.4f;
             }
             else
@@ -129,14 +157,14 @@ namespace MWCoop
             }
             moved = true;
             lastFrame = Time.frameCount;
+            if (car != null) lastCamInCar = car.InverseTransformPoint(t.position);
             if (Core.I != null) Core.I.StartCoroutine(Restore());
         }
 
         static IEnumerator Restore()
         {
             yield return new WaitForEndOfFrame();
-            if (moved && cam != null) { cam.transform.position = eye; cam.transform.rotation = eyeRot; }
-            moved = false;
+            PutBack();
         }
 
         // [Test] Autotest=vue : troisieme personne a 25 s (captures a pied), en voiture si TestVoiture et le joueur y monte.
@@ -173,6 +201,11 @@ namespace MWCoop
             {
                 if (t > 34f && testCar == 0) { testCar = 1; Log.Info("autotest : vue, voiture -> " + VehicleSync.TestEnter(car, false)); }
                 if (t > 38f && testCar == 1) { testCar = 2; Log.Info("autotest : vue, volant -> " + VehicleSync.TestEnter(car, true)); }
+                // (vue en roulant : voiture poussee a 12 m/s de 48 a 58 s, camera notee dans le repere de la voiture)
+                Transform drv = VehicleSync.LocalDrivingRoot;
+                Rigidbody rb = drv != null ? drv.GetComponent<Rigidbody>() : null;
+                if (rb != null && t > 48f && t < 58f) { Vector3 f = drv.forward; f.y = 0; rb.velocity = f.normalized * 12f + Vector3.up * Mathf.Min(rb.velocity.y, 0f); }
+                if (rb != null && t > 48f && t < 60f && Time.realtimeSinceStartup >= camLogAt) { camLogAt = Time.realtimeSinceStartup + 0.5f; Log.Info("autotest : vue en roulant, camera dans la voiture " + lastCamInCar.ToString("F2") + ", vitesse " + rb.velocity.magnitude.ToString("F1")); }
                 if (t > 46f && testCar == 2) { testCar = 3; Autotest.CaptureSoon("vue-voiture", 0.05f); Transform vc = VehicleSync.LocalDrivingRoot; Vector3 dh;
                     Log.Info("autotest : vue, avatar local " + (me != null && me.Root != null ? "a " + me.Root.transform.position.ToString("F1") : "ABSENT") + ", voiture " + (vc != null ? vc.name : "aucune")
                              + (vc != null && me != null && me.Root != null ? ", repere voiture : racine " + vc.InverseTransformPoint(me.Root.transform.position).ToString("F2") + " bassin " + (me.PelvisT != null ? vc.InverseTransformPoint(me.PelvisT.position).ToString("F2") : "?") + " yeux " + vc.InverseTransformPoint(EyePosition).ToString("F2") + (Seats.DriverHead(vc, out dh) ? " tete-conducteur " + dh.ToString("F2") : "") + ", main droite a " + (me.HandRight != null ? vc.InverseTransformPoint(me.HandRight.position).ToString("F2") : "?") : "")); }
