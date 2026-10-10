@@ -267,22 +267,40 @@ namespace MWCoop
             {
                 if (!any) { bb = r.bounds; any = true; } else bb.Encapsulate(r.bounds);
             }
+            bool loose = false;
             if (!any || bb.size.x > 4f || bb.size.z > 4f)
             {
-                // Pas de meuble a sa mesure (abri, batiment) : le volume du declencheur.
+                // Pas de meuble a sa mesure (abri, batiment, banquettes du restaurant du PSK -- declencheurs ranges
+                // ensemble sous PERAPORTTI/ActiveFunctions/CrouchTriggers) : le volume du declencheur.
                 Collider c = t.GetComponent<Collider>();
                 bb = c != null ? c.bounds : new Bounds(t.position, Vector3.one * 0.6f);
                 furn = t;
+                loose = true;
             }
             Vector3 center = bb.center;
             float floor = Mathf.Abs(bb.min.y - feet.y) < 0.6f ? bb.min.y : feet.y;
+            // Sans meuble : le sol pris au bas du declencheur ou aux pieds du joueur assis tombait 30 cm trop bas ou
+            // trop haut (retour d'un joueur, 10/10 : avatar enfonce dans la banquette du PSK ; en essai, flottant
+            // dessus). Le sol : le plus bas de rayons tires vers le bas au milieu et autour du siege (70 cm).
+            if (loose)
+            {
+                float low = float.MaxValue;
+                for (int k = 0; k < 9; k++)
+                {
+                    Vector3 o = center + (k == 0 ? Vector3.zero : Quaternion.Euler(0f, k * 45f, 0f) * Vector3.forward * 0.7f) + Vector3.up * 0.6f;
+                    foreach (RaycastHit h in Physics.RaycastAll(o, Vector3.down, 2.5f))
+                        if (h.collider != null && !h.collider.isTrigger && !Game.UnderPlayer(h.collider.transform) && h.point.y < low) low = h.point.y;
+                }
+                if (low < float.MaxValue && Mathf.Abs(low - center.y) < 2f) floor = low;
+            }
             Vector3[] dirs = { Flat(furn.forward), -Flat(furn.forward), Flat(furn.right), -Flat(furn.right) };
-            Vector3 origin = new Vector3(center.x, floor + 0.75f, center.z);
+            // (sans meuble : dossier cherche sur tout obstacle solide, a 90 cm du sol -- au-dessus des tables)
+            Vector3 origin = new Vector3(center.x, floor + (loose ? 0.9f : 0.75f), center.z);
             int back = -1;
             float bestHit = 0.8f;
             for (int i = 0; i < 4; i++)
                 foreach (RaycastHit h in Physics.RaycastAll(origin, dirs[i], 0.8f))
-                    if (h.collider != null && !h.collider.isTrigger && h.collider.transform.IsChildOf(furn) && h.distance < bestHit) { bestHit = h.distance; back = i; }
+                    if (h.collider != null && !h.collider.isTrigger && (loose ? !Game.UnderPlayer(h.collider.transform) : h.collider.transform.IsChildOf(furn)) && h.distance < bestHit) { bestHit = h.distance; back = i; }
             Vector3 fwd;
             if (back >= 0) fwd = -dirs[back];
             else
