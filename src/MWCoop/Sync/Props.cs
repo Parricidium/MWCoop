@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -206,6 +206,8 @@ namespace MWCoop
             {
                 if (Game.RootName(rb.transform) == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
                 if (Garage.Owns(rb)) continue;   // levage d'un cric (corps rajoute par le jeu) : Garage, pas Props (recalage de l'hote sinon)
+                string bagKey = SleepingBags.KeyOf(rb);   // (sacs de couchage de MWCoop)
+                if (bagKey != null) { Register(rb, bagKey, null); continue; }
                 PlayMakerFSM use;
                 string id = ItemId(rb.gameObject, out use);
                 if (id.Length == 0) id = PackageKey(rb.gameObject);

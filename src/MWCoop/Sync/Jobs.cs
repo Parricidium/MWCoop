@@ -1518,6 +1518,8 @@ namespace MWCoop
                 case "@300f": { string ty = r.Str(), pa = r.Str(); ModMachtwagen300D.OnPart(who, ty, pa, r.F32()); break; }
                 case "@300k": ModMachtwagen300D.OnKeys(who); break;
                 case "@outil": { int t = r.U8(); HandTools.OnRemote(who, t, r.U8()); break; }
+                case "@sac": { string sid = r.Str(); bool fo = r.Bool(); Vector3 sp2 = r.Vec(); SleepingBags.OnState(who, sid, fo, sp2, r.Quat()); break; }
+                case "@sacs": SleepingBags.OnList(r); break;
                 case "@sacitem": { string sp = r.Str(), bid = r.Str(); Consume.OnRemotePick(who, sp, bid, r.Str()); break; }
                 case "@tas": { string k = r.Str(); float fw = r.F32(), lg = r.F32(); Vector3 sc = r.Vec(); LogPiles.OnRemote(who, k, fw, lg, sc, r.Bool()); break; }
                 case "@visagep": { string h = r.Str(); int i = r.U16(), n = r.U16(); CustomFace.OnPart(who, h, i, n, r.Bytes()); break; }

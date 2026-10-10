@@ -1304,6 +1304,9 @@ static void DrawSettings(Graphics &g)
 struct Credit { const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
+    { L"WillBarrow", L"Modèles 3D", L"3D models",
+      L"Les modèles du sac de couchage (plié et déplié), sur Sketchfab : sketchfab.com/WillBarrow. Un sac par joueur, dans la chambre du départ.",
+      L"The sleeping bag models (rolled and unrolled), on Sketchfab: sketchfab.com/WillBarrow. One bag per player, in the starting bedroom.", L"10/10/2026", 0 },
     { L"Dom", L"Tenues", L"Outfits",
       L"Un pack de 155 tenues pour ton personnage : 84 hauts, 27 pantalons et 44 visages. Dans l'onglet Tenue, à la suite de celles du jeu (« Tenue Dom 12 »…).",
       L"A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026", 6 },

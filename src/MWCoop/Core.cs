@@ -144,6 +144,7 @@ namespace MWCoop
             new Mod("gestes", Gestures.Update),
             new Mod("outils en main", HandTools.Update),
             new Mod("tas de bois des remorques", LogPiles.Update),
+            new Mod("sacs de couchage", SleepingBags.Update),
             new Mod("porte du garage", GarageDoor.Update),
             new Mod("vue (troisieme personne)", ThirdPerson.Update),
             new Mod("boissons", Drinks.Update),
@@ -241,6 +242,7 @@ namespace MWCoop
             Gestures.OnLevelLoaded();
             HandTools.OnLevelLoaded();
             LogPiles.OnLevelLoaded();
+            SleepingBags.OnLevelLoaded();
             GarageDoor.OnLevelLoaded();
             ThirdPerson.OnLevelLoaded();
             Drinks.OnLevelLoaded();
