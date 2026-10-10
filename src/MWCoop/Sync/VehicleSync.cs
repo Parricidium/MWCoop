@@ -616,6 +616,10 @@ namespace MWCoop
                     if (EngineRunning(was)) { owned = LocalDriving; Log.Info("moteur laisse tournant : " + was.Key + " reste a nous"); }
                     else Release(was, now);   // derniere position et etat du moteur, sans conducteur
                 }
+                // Voiture gardee (moteur laisse tournant, poussee) quand on prend le volant d'une autre : rendue proprement
+                // (derniere pose, etat 0). Avant : lachee d'un coup -- chez les autres la copie repassait brutalement sous la
+                // physique et le jeu arrachait toutes ses pieces (CORRIS demontee « toute seule », retour de HowardCS, 11/10).
+                if (driving >= 0 && owned >= 0 && owned != driving && owned < cars.Count) { Release(cars[owned], now); Log.Info("au volant d'une autre : " + cars[owned].Key + " rendue"); pushCar = -1; }
                 if (driving >= 0) owned = -1;
                 LocalDriving = driving;
             }
@@ -643,7 +647,10 @@ namespace MWCoop
                     Car o = cars[owned];
                     bool pushed = o.Index == pushCar && o.Body != null && (now < pushUntil || (o.Body.velocity.sqrMagnitude > 0.09f && now < pushUntil + 8f));
                     if (o.RemoteBy >= 0 && o.RemoteBy != Session.LocalId) { owned = -1; pushCar = -1; }     // un autre l'a prise
-                    else if (EngineRunning(o) || pushed) Send(o, 2);
+                    // (poussee : rendue a la fin de la poussee, sauf moteur vraiment en marche -- un son de moteur allume a tort
+                    // gardait une CORRIS en montage 10 minutes chez l'hote : copie figee chez l'invite, les pieces qu'il touchait
+                    // s'envolaient ; retour de HowardCS, 11/10)
+                    else if ((o.Index == pushCar ? EngineRunningStrict(o) : EngineRunning(o)) || pushed) Send(o, 2);
                     else { Release(o, now); Log.Info((o.Index == pushCar ? "poussee finie : " : "moteur coupe : ") + o.Key + " rendue"); owned = -1; pushCar = -1; }
                 }
             }
@@ -1524,6 +1531,16 @@ namespace MWCoop
 
         // Moteur en marche ici (regime, ou un son moteur allume par le jeu).
         static int testRunCar = -1; static float testRunUntil;   // (essais : moteur tenu pour en marche)
+        // Moteur en marche d'apres le regime seulement (pas les sons) : voiture gardee apres une poussee.
+        static bool EngineRunningStrict(Car c)
+        {
+            if (c.Body == null) return false;
+            if (c.Index == testRunCar && Time.realtimeSinceStartup < testRunUntil) return true;
+            if (c.Dt != null) return c.Dt.enabled && c.Dt.rpm > 150f;
+            if (c.ModDt != null) return ModBool(c.ModDt, c.ModRun) && ModFloat(c.ModDt, c.ModRpm) > 40f;
+            return EngineRunning(c);
+        }
+
         static bool EngineRunning(Car c)
         {
             if (c.Body == null) return false;

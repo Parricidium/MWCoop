@@ -191,6 +191,14 @@ namespace MWCoop
             return set;
         }
 
+        static bool HasRoot(string rootName)
+        {
+            List<GameObject> l;
+            if (!rootsByName.TryGetValue(rootName, out l)) return false;
+            foreach (GameObject g in l) if (g != null && g.transform.parent == null) return true;
+            return false;
+        }
+
         static GameObject FindIn(string rootName, string rest)
         {
             List<GameObject> l;
@@ -256,7 +264,10 @@ namespace MWCoop
             if (rootsByName == null || rootsLevel != Application.loadedLevel) { rootMiss.Clear(); rootMissLogs = 0; ScanRoots(); }
             GameObject g = FindIn(rootName, rest);
             if (g != null) return g;
-            // Absent : racine creee (ou remplacee) depuis le releve ?
+            // Absent : racine creee (ou remplacee) depuis le releve ? Seulement si la racine elle-meme manque : racine la mais
+            // objet absent dessous (un PNJ pas encore cree, JOBS/HouseWood1/.../WoodCaller1), un nouveau releve n'y change
+            // rien -- il revenait toutes les 5 s, 24 releves par minute (journaux de HowardCS, 11/10).
+            if (HasRoot(rootName)) return null;
             float now = Time.realtimeSinceStartup, last;
             if (rootsFrame == Time.frameCount || now - rootsAt < 1f) return null;
             if (rootMiss.TryGetValue(path, out last) && now - last < 5f) return null;
