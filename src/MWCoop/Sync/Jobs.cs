@@ -1520,6 +1520,7 @@ namespace MWCoop
                 case "@outil": { int t = r.U8(); HandTools.OnRemote(who, t, r.U8()); break; }
                 case "@sac": { string sid = r.Str(); bool fo = r.Bool(); Vector3 sp2 = r.Vec(); SleepingBags.OnState(who, sid, fo, sp2, r.Quat()); break; }
                 case "@sacs": SleepingBags.OnList(r); break;
+                case "@fuite": CarLeaks.OnRemote(who, r); break;
                 case "@cbx": { string ck = r.Str(); Vector3 cp = r.Vec(); ModCheatbox.OnRemote(who, ck, cp, r.Quat()); break; }
                 case "@sacitem": { string sp = r.Str(), bid = r.Str(); Consume.OnRemotePick(who, sp, bid, r.Str()); break; }
                 case "@tas": { string k = r.Str(); float fw = r.F32(), lg = r.F32(); Vector3 sc = r.Vec(); LogPiles.OnRemote(who, k, fw, lg, sc, r.Bool()); break; }
