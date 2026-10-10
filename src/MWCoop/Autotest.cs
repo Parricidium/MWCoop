@@ -29,6 +29,31 @@ namespace MWCoop
         static float capAt;
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
 
+        // [Test] Autotest=cabine, CabinePassager=1 : en fin d'image (ce qui est rendu), l'avatar du conducteur dans le repere
+        // de la voiture ou l'invite est assis, pendant qu'elle roule : etendue de ses positions (0 attendu ; avant le
+        // correctif du 10/10, vitesse x duree d'image vers l'arriere).
+        static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
+        public static void LateMeasure()
+        {
+            if (Config.Get("Test", "Autotest", "") != "cabine" || Config.GetInt("Test", "CabinePassager", 0) == 0 || Net.Session.IsHost || !Seats.Seated) return;
+            Rigidbody b = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"));
+            if (b == null) return;
+            foreach (Avatar a in PlayerSync.Avatars)
+            {
+                if (a.Root == null) continue;
+                float v = VehicleSync.RemoteSpeed(a.Player.Id);
+                if (v < 3f) continue;
+                Vector3 lp = b.transform.InverseTransformPoint(a.Root.transform.position);
+                if (!lateAv) { lateAv = true; lateMin = lateMax = lp; } else { lateMin = Vector3.Min(lateMin, lp); lateMax = Vector3.Max(lateMax, lp); }
+                lateN++;
+                if (Time.realtimeSinceStartup >= lateLogAt)
+                {
+                    lateLogAt = Time.realtimeSinceStartup + 1f;
+                    Log.Info("autotest : fin d'image, conducteur dans la voiture " + lp.ToString("F3") + " a " + (v * 3.6f).ToString("F0") + " km/h ; etendue " + (lateMax - lateMin).ToString("F3") + " m sur " + lateN + " images");
+                }
+            }
+        }
+
         public static void Update()
         {
             string mode = Config.Get("Test", "Autotest", "");
@@ -607,7 +632,7 @@ namespace MWCoop
                     if (t > 24f && step == 2) { step = 3; Game.SetGlobalBool("PlayerSeatbeltsOn", true); Log.Info("autotest : ceinture bouclee (variable)"); }
                     Rigidbody b = VehicleSync.Body(car);
                     VehicleSync.TestEngine(t > 26f && t < 41f ? 1800f : -1f, 0.4f);
-                    if (b != null && t > 27f && t < 40f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 6f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                    if (b != null && t > 27f && t < 40f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * Config.GetFloat("Test", "CabineVitesse", 6f) + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
                     if (t > 30f && step == 3) { step = 4; Log.Info("autotest : starter " + Knobs.TestHold("Choke", 1.8f)); }
                     if (t > 32f && step == 4) { step = 5; Log.Info("autotest : frein a main " + Knobs.TestHold("HandBrake", 0f)); }
                     if (t > 36f && step == 5) { step = 6; Log.Info("autotest : commandes " + Knobs.Describe()); }
