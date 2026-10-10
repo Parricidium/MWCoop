@@ -529,7 +529,7 @@ namespace MWCoop
                 int dd = Item(Looks.PartName(f), Looks.Label(f, v), true, Lang.T("Gauche/Droite : changer (les autres le voient aussit\u00F4t)", "Left/Right: change (the others see it right away)"), false);
                 if (dd != 1 && dd != -1) continue;
                 List<string> ch = Looks.Choices(f);
-                int i = Mathf.Max(0, ch.IndexOf(v));
+                int i = Mathf.Max(0, ch.IndexOf(CustomFace.IsCustom(v) ? "perso" : v));
                 SetPart(f, ch[(i + dd + ch.Count) % ch.Count]);
             }
             Header(Lang.T("TENUES", "OUTFITS"));
@@ -598,6 +598,7 @@ namespace MWCoop
         public static string SkinLabel(string s)
         {
             if (s.StartsWith("char_shirt")) return Lang.T("Tenue ", "Outfit ") + s.Substring(10).TrimStart('0');
+            if (CustomFace.IsCustom(s)) return Lang.T("Haut perso", "Custom top");
             if (Tenues.Has(s)) return Lang.T("Tenue ", "Outfit ") + Tenues.Label(s);
             switch (s)
             {
@@ -614,9 +615,10 @@ namespace MWCoop
         static void SetPart(int f, string v)
         {
             Looks.Look l = Looks.Parse(Session.Me.Skin);
+            Config.Save("Coop", Looks.PartKeys[f], v);
+            if (v == "perso") { CustomFace.Forget(); v = CustomFace.MyKeyOf(f == 1 ? CustomFace.Pants : CustomFace.Face) ?? ""; }   // (image importee)
             Looks.Set(l, f, v);
             Session.Me.Skin = Looks.Compose(l);
-            Config.Save("Coop", Looks.PartKeys[f], v);
             Session.SendProfile();
         }
 

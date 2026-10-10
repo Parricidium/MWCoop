@@ -5,28 +5,46 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Visage personnalise (demande de JD, 10/10 -- « comme Arx Fatalis ») : le joueur importe une image dans le lanceur (onglet
-    // TENUE : %LOCALAPPDATA%\MWCoop\visage.jpg, au format du visage des PNJ, 512x256). Son visage dans la chaine d'apparence
-    // devient "perso_<empreinte>" ; chez les autres, l'image est demandee (@visage?) a qui l'a, recue par morceaux (@visagep,
-    // fiables, 900 octets), gardee en cache (%LOCALAPPDATA%\MWCoop\visages\<empreinte>.jpg) et posee sur une copie de la
-    // matiere du visage du jeu. [Coop] VisagePerso=0 : le sien n'est pas montre ; VoirVisages=0 : ceux des autres non plus.
-    // Gabarit (Export) : la texture du visage du jeu, et la meme avec le trace des coutures (UV) du visage du corps des PNJ,
-    // ecrites dans %LOCALAPPDATA%\MWCoop (gabarit-visage.png, visage-jeu.png) : on peint par-dessus, on importe.
+    // Images importees (demande de JD, 10/10 -- « comme Arx Fatalis ») : le joueur importe une image dans le lanceur (onglet
+    // TENUE : %LOCALAPPDATA%\MWCoop\visage.jpg, haut.jpg, pantalon.jpg, peintes sur le gabarit de la texture du jeu) et
+    // choisit « Visage perso » / « Haut perso » / « Pantalon perso » dans la liste ([Coop] Visage / Apparence / Pantalon =
+    // "perso"). Dans la chaine d'apparence la partie devient "perso_<empreinte>" (visage), "persoh_" (haut), "persop_"
+    // (pantalon) ; chez les autres, l'image est demandee (@visage?) a qui l'a, recue par morceaux (@visagep, fiables, 900
+    // octets), gardee en cache (%LOCALAPPDATA%\MWCoop\visages\<empreinte>.jpg) et posee sur une copie de la matiere du jeu
+    // (char_face01, char_shirt01, char_pants01, comme les tenues offertes). [Coop] VoirVisages=0 : celles des autres non.
+    // Gabarits (ExportTemplate) : la texture du jeu, et la meme avec le trace des coutures (UV) de la partie du corps des
+    // PNJ, ecrites dans %LOCALAPPDATA%\MWCoop (gabarit-visage.png, gabarit-haut.png, gabarit-pantalon.png, et *-jeu.png).
     public static class CustomFace
     {
+        public const int Face = 0, Shirt = 1, Pants = 2;
+        static readonly string[] Prefix = { "perso_", "persoh_", "persop_" };
+        static readonly string[] FileName = { "visage", "haut", "pantalon" };
+        static readonly string[] Template = { "char_face01", "char_shirt01", "char_pants01" };
+        static readonly string[] CfgKey = { "Visage", "Apparence", "Pantalon" };
+        static readonly string[] MatPrefix = { "char_face", "char_shirt", "char_pants" };
+
         public static int Generation;   // change quand une image arrive : les avatars reprennent leur apparence
         const int Chunk = 900;
         static readonly Dictionary<string, Material> made = new Dictionary<string, Material>();
         static readonly Dictionary<string, float> asked = new Dictionary<string, float>(), sentAt = new Dictionary<string, float>();
         class Parts { public byte[][] P; public int Got; }
         static readonly Dictionary<string, Parts> incoming = new Dictionary<string, Parts>();
-        static string myKey; static bool myLooked;
+        static readonly string[] myKey = new string[3];
+        static readonly bool[] myLooked = new bool[3];
 
         // ([Test] RacineVisages : un dossier par instance d'essai, qui partagent sinon le meme LOCALAPPDATA)
         static string Root { get { string o = Config.Get("Test", "RacineVisages", ""); return o.Length > 0 ? o : Path.Combine(System.Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? ".", "MWCoop"); } }
         static string CacheDir { get { return Path.Combine(Root, "visages"); } }
-        static string MyFile { get { return Path.Combine(Root, "visage.jpg"); } }
+        static string MyFile(int k) { return Path.Combine(Root, FileName[k] + ".jpg"); }
         static string CacheFile(string hash) { return Path.Combine(CacheDir, hash + ".jpg"); }
+
+        public static int KindOf(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return -1;
+            for (int k = 0; k < 3; k++) if (name.StartsWith(Prefix[k])) return k;
+            return -1;
+        }
+        public static bool IsCustom(string name) { return KindOf(name) >= 0; }
 
         static string Hash(byte[] b)
         {
@@ -39,49 +57,57 @@ namespace MWCoop
             }
         }
 
-        // Cle du visage du joueur local ("perso_<empreinte>"), ou null (pas d'image, ou option coupee).
-        public static string MyKey
+        // La partie k reglee sur "perso" ([Coop] Visage / Apparence / Pantalon) ?
+        public static bool Chosen(int k) { return Config.Get("Coop", CfgKey[k], "") == "perso"; }
+
+        // Cle de l'image du joueur local pour la partie k ("perso_<empreinte>"...), ou null (pas choisie, pas d'image).
+        public static string MyKeyOf(int k)
         {
-            get
+            if (!Chosen(k)) return null;
+            if (myLooked[k]) return myKey[k];
+            myLooked[k] = true;
+            myKey[k] = null;
+            try
             {
-                if (myLooked) return myKey;
-                myLooked = true;
-                try
-                {
-                    if (Config.GetInt("Coop", "VisagePerso", 1) == 0 || !File.Exists(MyFile)) return null;
-                    byte[] b = File.ReadAllBytes(MyFile);
-                    if (b.Length < 100 || b.Length > 600000) { Log.Warn("visage perso : image refusee (" + b.Length + " octets)"); return null; }
-                    string h = Hash(b);
-                    Directory.CreateDirectory(CacheDir);
-                    if (!File.Exists(CacheFile(h))) File.WriteAllBytes(CacheFile(h), b);
-                    myKey = "perso_" + h;
-                    Log.Info("visage perso : " + myKey + " (" + b.Length + " octets)");
-                }
-                catch (System.Exception e) { Log.Warn("visage perso : " + e.Message); }
-                return myKey;
+                if (!File.Exists(MyFile(k))) { Log.Warn(FileName[k] + " perso : choisi, mais pas d'image (" + MyFile(k) + ")"); return null; }
+                byte[] b = File.ReadAllBytes(MyFile(k));
+                if (b.Length < 100 || b.Length > 2000000) { Log.Warn(FileName[k] + " perso : image refusee (" + b.Length + " octets)"); return null; }
+                string h = Hash(b);
+                Directory.CreateDirectory(CacheDir);
+                if (!File.Exists(CacheFile(h))) File.WriteAllBytes(CacheFile(h), b);
+                myKey[k] = Prefix[k] + h;
+                Log.Info(FileName[k] + " perso : " + myKey[k] + " (" + b.Length + " octets)");
             }
+            catch (System.Exception e) { Log.Warn(FileName[k] + " perso : " + e.Message); }
+            return myKey[k];
         }
+
+        public static bool HasImage(int k) { try { return File.Exists(MyFile(k)); } catch { return false; } }
+        public static void Forget() { for (int k = 0; k < 3; k++) myLooked[k] = false; }
+
+        static bool Mine(string name) { for (int k = 0; k < 3; k++) if (MyKeyOf(k) == name) return true; return false; }
 
         public static Material Make(string name)
         {
-            if (!name.StartsWith("perso_")) return null;
+            int k = KindOf(name);
+            if (k < 0) return null;
             Material m;
             if (made.TryGetValue(name, out m) && m != null) return m;
-            if (Config.GetInt("Coop", "VoirVisages", 1) == 0 && name != MyKey) return null;
-            string h = name.Substring(6), f = CacheFile(h);
+            if (Config.GetInt("Coop", "VoirVisages", 1) == 0 && !Mine(name)) return null;
+            string h = name.Substring(Prefix[k].Length), f = CacheFile(h);
             if (!File.Exists(f)) { Ask(h); return null; }
-            Material tpl = Avatar.FindMaterial("char_face01");
+            Material tpl = Avatar.FindMaterial(Template[k]);
             if (tpl == null) return null;
             try
             {
                 var tex = new Texture2D(2, 2, TextureFormat.RGB24, true);
-                if (!tex.LoadImage(File.ReadAllBytes(f))) { Object.Destroy(tex); Log.Warn("visage perso : " + h + " illisible"); return null; }
+                if (!tex.LoadImage(File.ReadAllBytes(f))) { Object.Destroy(tex); Log.Warn(FileName[k] + " perso : " + h + " illisible"); return null; }
                 tex.name = name;
                 m = new Material(tpl) { name = name, mainTexture = tex };
                 made[name] = m;
-                Log.Info("visage perso : " + name + " pose (" + tex.width + "x" + tex.height + ")");
+                Log.Info(FileName[k] + " perso : " + name + " pose (" + tex.width + "x" + tex.height + ")");
             }
-            catch (System.Exception e) { Log.Warn("visage perso : " + e.Message); }
+            catch (System.Exception e) { Log.Warn(FileName[k] + " perso : " + e.Message); }
             return m;
         }
 
@@ -91,7 +117,7 @@ namespace MWCoop
             if (!Session.Active || (asked.TryGetValue(h, out t) && Time.realtimeSinceStartup - t < 30f)) return;
             asked[h] = Time.realtimeSinceStartup;
             Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@visage?").Str(h), true);
-            Log.Info("visage perso : " + h + " demande");
+            Log.Info("image perso : " + h + " demandee");
         }
 
         public static void OnAsk(int who, string h)
@@ -99,18 +125,20 @@ namespace MWCoop
             float t;
             string f = CacheFile(h);
             if (!File.Exists(f) || (sentAt.TryGetValue(h, out t) && Time.realtimeSinceStartup - t < 20f)) return;
-            if (!Session.IsHost && MyKey != "perso_" + h) return;   // (seul celui qui l'a importee repond, et l'hote qui l'a en cache)
+            bool mine = false;
+            for (int k = 0; k < 3; k++) if (MyKeyOf(k) == Prefix[k] + h) mine = true;
+            if (!Session.IsHost && !mine) return;   // (seul celui qui l'a importee repond, et l'hote qui l'a en cache)
             sentAt[h] = Time.realtimeSinceStartup;
             byte[] b = File.ReadAllBytes(f);
             int n = (b.Length + Chunk - 1) / Chunk;
             for (int i = 0; i < n; i++)
                 Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@visagep").Str(h).U16(i).U16(n).Bytes(b, i * Chunk, Mathf.Min(Chunk, b.Length - i * Chunk)), true);
-            Log.Info("visage perso : " + h + " envoye a la demande de #" + who + " (" + n + " morceaux)");
+            Log.Info("image perso : " + h + " envoyee a la demande de #" + who + " (" + n + " morceaux)");
         }
 
         public static void OnPart(int who, string h, int i, int n, byte[] data)
         {
-            if (File.Exists(CacheFile(h)) || n <= 0 || n > 800 || i >= n) return;
+            if (File.Exists(CacheFile(h)) || n <= 0 || n > 2500 || i >= n) return;
             Parts p;
             if (!incoming.TryGetValue(h, out p) || p.P.Length != n) incoming[h] = p = new Parts { P = new byte[n][] };
             if (p.P[i] != null) return;
@@ -120,26 +148,34 @@ namespace MWCoop
             var all = new List<byte>();
             foreach (byte[] x in p.P) all.AddRange(x);
             byte[] b = all.ToArray();
-            if (Hash(b) != h) { Log.Warn("visage perso : " + h + " recu abime"); return; }
-            try { Directory.CreateDirectory(CacheDir); File.WriteAllBytes(CacheFile(h), b); } catch (System.Exception e) { Log.Warn("visage perso : " + e.Message); return; }
-            made.Remove("perso_" + h);
+            if (Hash(b) != h) { Log.Warn("image perso : " + h + " recue abimee"); return; }
+            try { Directory.CreateDirectory(CacheDir); File.WriteAllBytes(CacheFile(h), b); } catch (System.Exception e) { Log.Warn("image perso : " + e.Message); return; }
+            foreach (string pre in Prefix) made.Remove(pre + h);
             Generation++;
-            Log.Info("visage perso : " + h + " recu de #" + who + " (" + b.Length + " octets)");
+            Log.Info("image perso : " + h + " recue de #" + who + " (" + b.Length + " octets)");
         }
 
-        // ---------------------------------------------------------------- gabarit
-        // Une fois par version du mod : la texture du visage des PNJ (visage-jeu.png) et la meme avec le trace des
-        // triangles du visage (sous-maillage 2 du corps des PNJ, en rouge : gabarit-visage.png).
+        // ---------------------------------------------------------------- gabarits
+        // Une fois par version du mod : pour le visage, le haut et le pantalon, la texture du jeu (<partie>-jeu.png) et la
+        // meme avec le trace des triangles de cette partie du corps des PNJ, en rouge (gabarit-<partie>.png).
         public static void ExportTemplate()
         {
-            string tag = Path.Combine(Root, "gabarit-visage.version");
+            string tag = Path.Combine(Root, "gabarits.version");
             try { if (File.Exists(tag) && File.ReadAllText(tag) == Version.Text) return; } catch { }
-            Material face = Avatar.FindMaterial("char_face01");
-            Texture src = face != null ? face.mainTexture : null;
             SkinnedMeshRenderer body = null;
             foreach (SkinnedMeshRenderer s in Resources.FindObjectsOfTypeAll(typeof(SkinnedMeshRenderer)))
                 if (s.name == "bodymesh" && s.sharedMesh != null && s.sharedMesh.subMeshCount > 2 && s.sharedMesh.isReadable) { body = s; break; }
-            if (src == null) { Log.Info("visage perso : gabarit pas encore possible (visage du jeu introuvable)"); return; }
+            int done = 0;
+            for (int k = 0; k < 3; k++) if (ExportOne(k, body)) done++;
+            if (done < 3) { Log.Info("image perso : gabarits pas encore tous possibles (" + done + "/3)"); return; }
+            try { File.WriteAllText(tag, Version.Text); } catch { }
+        }
+
+        static bool ExportOne(int k, SkinnedMeshRenderer body)
+        {
+            Material mat = Avatar.FindMaterial(Template[k]);
+            Texture src = mat != null ? mat.mainTexture : null;
+            if (src == null) return false;
             int w = src.width, h = src.height;
             var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32);
             RenderTexture prev = RenderTexture.active;
@@ -150,26 +186,33 @@ namespace MWCoop
             tex.Apply();
             RenderTexture.active = prev;
             RenderTexture.ReleaseTemporary(rt);
+            bool ok = false;
             try
             {
                 Directory.CreateDirectory(Root);
-                File.WriteAllBytes(Path.Combine(Root, "visage-jeu.png"), tex.EncodeToPNG());
-                int tris = 0;
+                File.WriteAllBytes(Path.Combine(Root, FileName[k] + "-jeu.png"), tex.EncodeToPNG());
+                int tris = 0, sub = -1;
                 if (body != null)
                 {
+                    // sous-maillage de cette partie : celui dont la matiere est un visage / haut / pantalon de PNJ
+                    Material[] ms = body.sharedMaterials;
+                    for (int i = 0; i < ms.Length && i < body.sharedMesh.subMeshCount; i++)
+                        if (ms[i] != null && ms[i].name.StartsWith(MatPrefix[k])) { sub = i; break; }
+                    if (sub < 0) sub = k == Face ? 2 : k == Shirt ? 0 : 1;
                     Vector2[] uv = body.sharedMesh.uv;
-                    int[] t = body.sharedMesh.GetTriangles(2);
+                    int[] t = body.sharedMesh.GetTriangles(sub);
                     Color red = new Color(1f, 0.15f, 0.1f);
                     for (int i = 0; i + 2 < t.Length; i += 3, tris++)
-                        for (int k = 0; k < 3; k++) Line(tex, uv[t[i + k]], uv[t[i + (k + 1) % 3]], red);
+                        for (int j = 0; j < 3; j++) Line(tex, uv[t[i + j]], uv[t[i + (j + 1) % 3]], red);
                     tex.Apply();
                 }
-                File.WriteAllBytes(Path.Combine(Root, "gabarit-visage.png"), tex.EncodeToPNG());
-                File.WriteAllText(tag, Version.Text);
-                Log.Info("visage perso : gabarit ecrit (" + w + "x" + h + ", " + tris + " triangles) dans " + Root);
+                File.WriteAllBytes(Path.Combine(Root, "gabarit-" + FileName[k] + ".png"), tex.EncodeToPNG());
+                Log.Info(FileName[k] + " perso : gabarit ecrit (" + w + "x" + h + ", sous-maillage " + sub + ", " + tris + " triangles) dans " + Root);
+                ok = true;
             }
-            catch (System.Exception e) { Log.Warn("visage perso : gabarit : " + e.Message); }
+            catch (System.Exception e) { Log.Warn(FileName[k] + " perso : gabarit : " + e.Message); }
             Object.Destroy(tex);
+            return ok;
         }
 
         static void Line(Texture2D t, Vector2 a, Vector2 b, Color c)
@@ -182,7 +225,11 @@ namespace MWCoop
         static float Frac(float v) { v = v - Mathf.Floor(v); return v; }
 
         static float exportAt = -1;
-        public static void OnLevelLoaded() { exportAt = Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + 20f : -1; myLooked = false; }
+        public static void OnLevelLoaded()
+        {
+            exportAt = Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + 20f : -1;
+            for (int k = 0; k < 3; k++) myLooked[k] = false;
+        }
         public static void Update()
         {
             if (exportAt > 0 && Time.realtimeSinceStartup >= exportAt) { exportAt = -1; ExportTemplate(); }

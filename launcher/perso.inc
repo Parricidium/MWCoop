@@ -31,6 +31,16 @@ static int g_skinRowHot = -1;          // ligne survolee * 2 + (0 fleche gauche,
 enum { PF_HAT, PF_GLASSES, PF_HAIR, PF_FACE, PF_SHIRT, PF_PANTS, PF_BODY, PF_COUNT };
 static const char *kPersoKey[PF_COUNT] = { "Chapeau", "Lunettes", "Cheveux", "Visage", "Apparence", "Pantalon", "Corps" };
 
+// Images importees (demande de JD, 10/10) : %LOCALAPPDATA%\MWCoop\visage.jpg, haut.jpg, pantalon.jpg ; choisies dans la
+// liste de leur partie ("perso" : « Visage perso », « Haut perso », « Pantalon perso »), montrees en direct par l'apercu
+// (matiere "#perso-<n>"), et par le mod aux autres joueurs (Sync\CustomFace.cs).
+enum { PI_FACE, PI_SHIRT, PI_PANTS };
+static const wchar_t *kPersoImg[3] = { L"visage", L"haut", L"pantalon" };
+static std::wstring PersoImgFile(int k) { return LocalDir() + kPersoImg[k] + L".jpg"; }
+static bool PersoImgHas(int k) { return FileExists(PersoImgFile(k)); }
+static int PersoImgOf(int f) { return f == PF_FACE ? PI_FACE : f == PF_SHIRT ? PI_SHIRT : f == PF_PANTS ? PI_PANTS : -1; }
+static int PersoPartOf(int k) { return k == PI_FACE ? PF_FACE : k == PI_SHIRT ? PF_SHIRT : PF_PANTS; }
+
 static bool PersoParse(const std::vector<unsigned char> &d)
 {
     size_t p = 0;
@@ -134,9 +144,15 @@ static PersoTex &PersoTexFor(const std::string &mat)
     auto c = g_perso.colors.find(mat);
     if (c != g_perso.colors.end()) for (int k = 0; k < 3; k++) t.col[k] = min(max(c->second[k], 0.0f), 1.5f);
     std::vector<unsigned char> d;
+    if (!mat.compare(0, 7, "#perso-") && mat.size() == 8) {   // image importee (la sienne)
+        int k = mat[7] - '0';
+        if (k < 0 || k > 2 || !ReadAll(PersoImgFile(k), d)) return t;
+        for (int c2 = 0; c2 < 3; c2++) t.col[c2] = 1;
+    } else {
     if (mat.empty() || mat.find_first_of("\\/:") != std::string::npos) return t;
     // (tenue offerte : son image du pack, pas d'export du mod)
     if (!ReadAll(PersoDir() + L"perso\\" + Widen(mat, CP_UTF8) + L".png", d) && !(IsTenue(mat) && ReadAll(TenueFile(mat), d))) return t;
+    }
     Bitmap *b = LoadPngMem(d.data(), d.size(), 2048, 2048);
     if (!b) return t;
     BitmapData bd;
@@ -176,9 +192,10 @@ static void PersoSnapshot(bool restore)
 static std::vector<std::string> PersoChoices(int f)
 {
     std::vector<std::string> v;
-    if (f == PF_SHIRT) { if (const Opt *ap = OptByKey("Apparence")) v = ap->svals; return v; }
+    if (f == PF_SHIRT) { if (const Opt *ap = OptByKey("Apparence")) for (auto &s : ap->svals) if (s != "perso" || PersoImgHas(PI_SHIRT)) v.push_back(s); return v; }
     v.push_back("");
     if (f == PF_PANTS || f == PF_FACE) {
+        if (PersoImgHas(PersoImgOf(f))) v.push_back("perso");
         for (auto &s : g_perso.lists[f == PF_PANTS ? 1 : 2]) v.push_back(s);
         for (auto &s : g_tenueNames[f == PF_PANTS ? 1 : 2]) if (std::find(v.begin(), v.end(), s) == v.end()) v.push_back(s);   // (tenues offertes)
         return v;
@@ -214,6 +231,7 @@ static std::wstring PersoLabel(int f, const std::string &v)
         return Widen(v);
     }
     if (f == PF_PANTS || f == PF_FACE) {
+        if (v == "perso") return f == PF_PANTS ? T(L"Pantalon perso", L"Custom pants") : T(L"Visage perso", L"Custom face");
         static const struct { const char *k; const wchar_t *fr, *en; } kp[] = {
             { "cop_pants", L"Police", L"Police" }, { "inspector_pants", L"Inspecteur", L"Inspector" }, { "psk_pants", L"PSK", L"PSK" }, { "rally_pants", L"Rallye", L"Rally" } };
         for (auto &p : kp) if (v == p.k) return g_fr ? p.fr : p.en;
@@ -350,7 +368,7 @@ static std::string PersoLookString()
 
 // Rendu W x H (pixels de l'ecran) de l'apparence 'look', tournee de 'yaw' (radians, 0 : de face) ; portrait : tete et
 // epaules, sinon le personnage entier.
-static void PersoRender(int W, int H, float yaw, const std::string look[PF_COUNT], bool portrait = false)
+static void PersoRender(int W, int H, float yaw, const std::string look[PF_COUNT], bool portrait = false, bool own = false)
 {
     const int S = 2, BW = W * S, BH = H * S;
     g_persoBig.assign((size_t)BW * BH, 0);
@@ -418,7 +436,9 @@ static void PersoRender(int W, int H, float yaw, const std::string look[PF_COUNT
             }
         }
     };
-    std::vector<std::string> bm = { look[PF_SHIRT].empty() ? body->def[0] : look[PF_SHIRT], look[PF_PANTS].empty() ? body->def[1] : look[PF_PANTS], look[PF_FACE].empty() ? body->def[2] : look[PF_FACE] };
+    // "perso" : l'image importee (la sienne ; celle d'un autre joueur n'est pas ici : celle d'origine)
+    auto part = [&](int f2, const std::string &def) { const std::string &v = look[f2]; return v.empty() || (v == "perso" && !(own && PersoImgHas(PersoImgOf(f2)))) ? def : v == "perso" ? std::string("#perso-") + (char)('0' + PersoImgOf(f2)) : v; };
+    std::vector<std::string> bm = { part(PF_SHIRT, body->def[0]), part(PF_PANTS, body->def[1]), part(PF_FACE, body->def[2]) };
     std::vector<const PersoAcc *> acc;
     for (int f2 : { PF_HAT, PF_GLASSES, PF_HAIR })
         for (auto &a : g_perso.accs) if (!look[f2].empty() && a.key == look[f2]) acc.push_back(&a);
@@ -460,7 +480,7 @@ static Bitmap *PersoImage(RectF dst, float yaw)
     if (key == g_persoDrawn && g_persoBmp) return g_persoBmp;
     std::string look[PF_COUNT];
     for (int f = 0; f < PF_COUNT; f++) look[f] = PersoGet(f);
-    PersoRender(W, H, yaw, look);
+    PersoRender(W, H, yaw, look, false, true);
     delete g_persoBmp;
     g_persoBmp = new Bitmap(W, H, PixelFormat32bppPARGB);
     BitmapData bd;
@@ -487,7 +507,7 @@ static Bitmap *PersoPortrait(const std::string &skin, int W, int H)
     if (g_persoPortraits.size() > 40) { for (auto &kv : g_persoPortraits) delete kv.second; g_persoPortraits.clear(); }
     std::string look[PF_COUNT];
     PersoParseLook(skin, look);
-    PersoRender(W, H, 0.3f, look, true);
+    PersoRender(W, H, 0.3f, look, true, skin == PersoLookString());
     Bitmap tmp(W, H, PixelFormat32bppPARGB), *out = new Bitmap(W, H, PixelFormat32bppPARGB);
     BitmapData bd;
     Rect r(0, 0, W, H);

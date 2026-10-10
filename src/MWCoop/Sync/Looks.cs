@@ -51,7 +51,10 @@ namespace MWCoop
         {
             var l = new Look
             {
-                Shirt = Config.Get("Coop", "Apparence", "char_shirt21"), Pants = Config.Get("Coop", "Pantalon", ""), Face = CustomFace.MyKey ?? Config.Get("Coop", "Visage", ""),
+                // ("perso" : l'image importee dans le lanceur -- CustomFace ; sans image : celle d'origine)
+                Shirt = CustomFace.Chosen(CustomFace.Shirt) ? CustomFace.MyKeyOf(CustomFace.Shirt) ?? "char_shirt21" : Config.Get("Coop", "Apparence", "char_shirt21"),
+                Pants = CustomFace.Chosen(CustomFace.Pants) ? CustomFace.MyKeyOf(CustomFace.Pants) ?? "" : Config.Get("Coop", "Pantalon", ""),
+                Face = CustomFace.Chosen(CustomFace.Face) ? CustomFace.MyKeyOf(CustomFace.Face) ?? "" : Config.Get("Coop", "Visage", ""),
                 Body = Config.Get("Coop", "Corps", ""), Hat = Config.Get("Coop", "Chapeau", ""), Glasses = Config.Get("Coop", "Lunettes", ""), Hair = Config.Get("Coop", "Cheveux", "")
             };
             return Compose(l);
@@ -83,8 +86,8 @@ namespace MWCoop
         public static List<string> Choices(int f)
         {
             var v = new List<string> { "" };
-            if (f == 1) v.AddRange(Pants());
-            else if (f == 2) v.AddRange(Faces());
+            if (f == 1) { if (CustomFace.HasImage(CustomFace.Pants)) v.Add("perso"); v.AddRange(Pants()); }
+            else if (f == 2) { if (CustomFace.HasImage(CustomFace.Face)) v.Add("perso"); v.AddRange(Faces()); }
             else if (f >= 3) v.AddRange(Accessories(f == 3 ? KHat : f == 4 ? KGlasses : KHair));
             else
             {
@@ -114,6 +117,7 @@ namespace MWCoop
             }
             if (f == 1 || f == 2)
             {
+                if (v == "perso" || CustomFace.IsCustom(v)) return f == 1 ? Lang.T("Pantalon perso", "Custom pants") : Lang.T("Visage perso", "Custom face");
                 if (Tenues.Has(v)) return (f == 1 ? Lang.T("Pantalon ", "Pants ") : Lang.T("Visage ", "Face ")) + Tenues.Label(v);
                 switch (v)
                 {
