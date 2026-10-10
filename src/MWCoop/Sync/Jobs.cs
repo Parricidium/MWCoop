@@ -1514,6 +1514,7 @@ namespace MWCoop
                 case "@triches": if (!Session.IsHost) Cheats.OnAllowed(r.Bool()); break;
                 case "@triche": Cheats.OnRemote(who, r.Str()); break;
                 case "@mw2": ModSecondMachtwagen.OnMessage(who, r); break;
+                case "@300d": ModMachtwagen300D.OnRemote(who, r.Bool()); break;
                 case "@outil": { int t = r.U8(); HandTools.OnRemote(who, t, r.U8()); break; }
                 case "@sacitem": { string sp = r.Str(), bid = r.Str(); Consume.OnRemotePick(who, sp, bid, r.Str()); break; }
                 case "@tas": { string k = r.Str(); float fw = r.F32(), lg = r.F32(); Vector3 sc = r.Vec(); LogPiles.OnRemote(who, k, fw, lg, sc, r.Bool()); break; }

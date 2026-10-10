@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 using MWCoop.Net;
 using UnityEngine;
@@ -108,6 +108,16 @@ namespace MWCoop
                 Log.Info("autotest : mw2, " + Read() + ", feuille de vente " + (GameObject.Find("SALE(Clone)") != null ? "presente" : "absente") + ", preparation " + (GameObject.Find("TUNING(Clone)") != null ? "presente" : "absente")
                          + ", voiture suivie " + (VehicleSync.Body("SECONDMACHTWAGEN") != null));
             }
+        }
+
+        // Essais : achat ici (feuille detruite, KeyTrue), comme BuyCar.
+        public static string TestBuyNow()
+        {
+            if (Instance() == null) return "Second Machtwagen absent";
+            GameObject sale = GameObject.Find("SALE(Clone)");
+            if (sale != null) UnityEngine.Object.Destroy(sale);
+            Call("KeyTrue");
+            return "achetee ici";
         }
 
         public static void OnMessage(int who, NetReader r)
