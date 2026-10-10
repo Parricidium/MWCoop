@@ -347,6 +347,12 @@ namespace MWCoop
                     if (c.Length < 9) continue;
                     var p = new Vector3(float.Parse(c[2], ci), float.Parse(c[3], ci), float.Parse(c[4], ci));
                     var q = new Quaternion(float.Parse(c[5], ci), float.Parse(c[6], ci), float.Parse(c[7], ci), float.Parse(c[8], ci));
+                    Vector3 np;
+                    if (c[1] == "1" && (p - OldSpawn).sqrMagnitude < 4f && SpawnPoint(bags.Count, out np))
+                    {
+                        Log.Info("sacs de couchage : " + c[0] + " ramene de l'ancien point (maison du jardin) a la maison du depart");
+                        p = np; q = Quaternion.identity;
+                    }
                     Bag b = Create(c[0], p, q);
                     if (c[1] == "0") ApplyFolded(b, false, false);
                 }
@@ -371,29 +377,37 @@ namespace MWCoop
             try { File.WriteAllText(FilePath, sb.ToString()); } catch (Exception e) { Log.Warn("sacs de couchage : ecriture " + e.Message); }
         }
 
-        // Un sac par joueur au moins : ceux qui manquent poses par terre dans la chambre du depart (a cote du lit, demande de
-        // JD) ; sans elle, devant l'hote.
+        // Un sac par joueur au moins : ceux qui manquent poses par terre dans la maison du debut de partie (HOMENEW, couloir
+        // devant l'armoire -- capture de JD, 10/10) ; sans elle, devant l'hote.
+        static bool SpawnPoint(int k, out Vector3 at)
+        {
+            at = Vector3.zero;
+            GameObject home = Game.FindAny("HOMENEW");
+            if (home == null) return false;
+            at = home.transform.position + new Vector3(0.9f, 0.6f, 1.7f + k * 0.45f);   // (racine (-1285,6 ; 1,5 ; 1078,8), armoire (-1286,5 ; 1080,7))
+            Vector3 g = Ground(at);
+            if (g.y < at.y && at.y - g.y < 2.5f) at = g + Vector3.up * 0.25f;
+            return true;
+        }
+
+        // Ancien point (0.75.18 : chambre de la maison du jardin, YARD/Building/BEDROOM1) : un sac encore plie qui y est
+        // toujours est ramene au nouveau.
+        static readonly Vector3 OldSpawn = new Vector3(-10.1f, -0.6f, 11.8f);
+
         static void EnsureCount()
         {
             int want = Mathf.Max(1, Session.RemoteCount + 1);
             if (bags.Count >= want) return;
             Transform pl = Game.PlayerT;
-            GameObject bed = Game.FindAny("YARD/Building/BEDROOM1/LOD_bedroom1/Sleep 1");
-            if (pl == null && bed == null) return;
+            if (pl == null && Game.FindAny("HOMENEW") == null) return;
             while (bags.Count < want)
             {
                 int k = bags.Count;
-                Vector3 at; Quaternion q;
-                if (bed != null)
-                {
-                    // (entre le lit et la porte : rouleaux cote a cote)
-                    at = bed.transform.position + new Vector3(1.2f + k * 0.42f, 0.9f, -1.1f);
-                    Vector3 g = Ground(at); at = g.y < at.y && at.y - g.y < 2f ? g + Vector3.up * 0.25f : at;
-                    q = Quaternion.Euler(0f, 0f, 0f);
-                }
-                else { at = Ground(pl.position + pl.forward * 1.2f + pl.right * (k - 1) * 0.6f) + Vector3.up * 0.3f; q = Quaternion.Euler(0f, pl.eulerAngles.y + 90f, 0f); }
-                Bag b = Create("sac" + (k + 1), at, q);
-                Log.Info("sacs de couchage : sac" + (k + 1) + " pose " + (bed != null ? "dans la chambre" : "devant l'hote") + " en " + at.ToString("F1") + " (un par joueur)");
+                Vector3 at; Quaternion q = Quaternion.identity;
+                bool home = SpawnPoint(k, out at);
+                if (!home) { at = Ground(pl.position + pl.forward * 1.2f + pl.right * (k - 1) * 0.6f) + Vector3.up * 0.3f; q = Quaternion.Euler(0f, pl.eulerAngles.y + 90f, 0f); }
+                Create("sac" + (k + 1), at, q);
+                Log.Info("sacs de couchage : sac" + (k + 1) + " pose " + (home ? "dans la maison du depart" : "devant l'hote") + " en " + at.ToString("F1") + " (un par joueur)");
             }
             Save();
             SendList();
