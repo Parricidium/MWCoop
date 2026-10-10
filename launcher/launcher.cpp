@@ -1557,8 +1557,8 @@ static void BuildOptions()
         Opt o = {};
         o.tab = TAB_COOP; o.key = "ModsAuto"; o.def = 0; o.kind = O_TOGGLE;
         o.fr = L"Accepter l'envoi de l'h\u00F4te sans demander"; o.en = L"Accept the host's files without asking"; o.suffix = L"";
-        o.dFr = L"Dans un salon, les mods MSCLoader, CD et images de l'h\u00F4te sont copi\u00E9s \u00E0 part (les tiens ne sont pas touch\u00E9s) et utilis\u00E9s pour sa partie. Coup\u00E9 : le salon demande d'abord (TOUT ACCEPTER).";
-        o.dEn = L"In a lobby, the host's MSCLoader mods, CDs and images are copied separately (yours are not touched) and used for their game. Off: the lobby asks first (ACCEPT ALL).";
+        o.dFr = L"Les mods MSCLoader de l'h\u00F4te sont toujours re\u00E7us (copi\u00E9s \u00E0 part, les tiens ne sont pas touch\u00E9s ; MSCLoader install\u00E9 s'il manque) et le jeu attend de les avoir. Cette case : ses CD et images aussi, sans demander. Coup\u00E9 : le salon demande d'abord (TOUT ACCEPTER).";
+        o.dEn = L"The host's MSCLoader mods are always received (copied separately, yours are not touched; MSCLoader installed if missing) and the game waits for them. This box: their CDs and images too, without asking. Off: the lobby asks first (ACCEPT ALL).";
         g_opts.push_back(o);
     }
     {   // Apparence : materiaux des corps des PNJ du jeu (Sync\Avatar.cs)
@@ -4259,6 +4259,8 @@ static void LoaderEnsure(const std::wstring &dir, const char *where)
 }
 
 static int SyncLaunchKind();   // (modsync.inc)
+static bool SyncLaunchPending();
+static bool g_launchAfterSync;
 static std::wstring GuestCopyDir();
 static bool PrepareGuestCopy(const std::wstring &m, bool mods);
 static bool g_syncKeep;   // GO recu : la copie des mods sert au lancement (LobbyClose ne l'oublie pas)
@@ -4266,6 +4268,14 @@ static void Launch(int mode, const char *partie = NULL)
 {
     if (mode == MODE_SOLO) g_launchWarn.clear();   // (avertissement UDP : salon seulement)
     if (g_gameDir.empty() || g_busy || !g_modOk) { TestLog("lancement impossible (jeu=%d occupe=%d mod=%d)", (int)!g_gameDir.empty(), (int)g_busy, (int)g_modOk); return; }
+    // Invite : les mods de l'hote d'abord (le jeu partira tout seul a la fin de la reception) -- un invite sans eux entrait
+    // quand meme (retour de Menos, 10/10).
+    if (mode == MODE_GUEST && SyncLaunchPending()) {
+        g_launchAfterSync = true;
+        SetStatus(K_NORMAL, T(L"Réception des mods de l'hôte… le jeu se lancera tout seul ensuite", L"Receiving the host's mods… the game will start on its own afterwards"));
+        TestLog("lancement de l'invite retenu : mods de l'hote pas encore recus");
+        return;
+    }
     std::wstring addr = Trim(g_fields[1].text);
     const Opt *po = OptByKey("Port");
     int port = po ? OptGet(*po) : 7870;
