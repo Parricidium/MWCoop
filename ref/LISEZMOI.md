@@ -17,6 +17,7 @@ Le contenu de ce dossier vient du jeu (propriété d'Amistech) : **jamais dans l
 | `automates.tsv` | ligne, chemin, automate, actif, états |
 | `variables.tsv` | variable (G = globale) → automate, état, action qui l'utilisent |
 | `evenements.tsv` | événement → qui l'envoie (action), qui y réagit (transition) |
+| `csharp\` | le code C# du jeu décompilé (ilspycmd) : Assembly-CSharp (voitures : CarDynamics, Drivetrain, AxisCarController…), firstpass, UnityScript |
 
 ## Chercher
 
@@ -40,5 +41,6 @@ Attention : les automates déjà modifiés par MWCoop (actions injectées) y app
 1. Une instance à part (pas `MWCoop-Joueur*`, que `run\test.ps1` ferme) : `D:\Games\COOPTEST\My Winter Car\MWCoop-Ref`,
    `mwcoop.ini` : `[Coop] Mode=solo`, `[Test] Profil=Ref, ArrierePlan=1, PasserIntro=1, Continuer=1, Vidage=2, VidageDelai=45`.
 2. Lancer `mywintercar.exe -screen-fullscreen 0 -screen-width 960 -screen-height 540 -mscloader-disable`.
-3. Copier `profils\Ref\dumps\GAME-complet.txt` et `globals.txt` dans `ref\<version>\`, puis
+3. Code C# : `ilspycmd -p -o ref\<version>\csharp\<dll> <jeu>\mywintercar_Data\Managed\<dll>.dll` pour Assembly-CSharp, Assembly-CSharp-firstpass, Assembly-UnityScript, Assembly-UnityScript-firstpass.
+4. Copier `profils\Ref\dumps\GAME-complet.txt` et `globals.txt` dans `ref\<version>\`, puis
    `python run\ref-index.py ref\<version>`.
