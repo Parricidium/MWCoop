@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -11,6 +11,10 @@ namespace MWCoop
     // fait mesurer la distance au joueur le plus proche -- local, ou avatar d'un autre -- : elles
     // s'ouvrent et se referment pour tout le monde, partout, sans aucun message.
     // Concerne : les automates qui ont un etat « Open... » et une action GetDistance visant le joueur.
+    // Et tous ceux des boulots (racine JOBS ; demande de RullER, 11/10 : « un seul joueur pour lancer un boulot ») : leur
+    // site s'allume (LOD), l'usine reste ouverte (« Wait player » : ferme au-dela de 200 m), les PNJ attendent... d'apres
+    // la distance au joueur local -- l'hote loin, le boulot qu'un invite prenait a l'autre bout de la carte s'eteignait
+    // chez lui. Ils visent maintenant le joueur le plus proche, chez chacun (le regard des PNJ vers la camera reste local).
     public static class NearDoors
     {
         class Probe { public Transform Ref, Proxy; }
@@ -18,11 +22,12 @@ namespace MWCoop
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
         static float nextScan = -1;
         static Transform player;
+        static int jobProbes;
 
         public static void OnLevelLoaded()
         {
             foreach (Probe p in probes) if (p.Proxy != null) Object.Destroy(p.Proxy.gameObject);
-            probes.Clear(); seen.Clear(); player = null;
+            probes.Clear(); seen.Clear(); player = null; jobProbes = 0;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;
         }
 
@@ -53,6 +58,19 @@ namespace MWCoop
             }
         }
 
+        // Essais : pour les automates dont l'objet de reference est sous 'path', distance de la reference au joueur vise.
+        public static string Describe(string path)
+        {
+            var sb = new System.Text.StringBuilder();
+            int n = 0;
+            foreach (Probe p in probes)
+            {
+                if (p.Ref == null || p.Proxy == null || !Recon.Path(p.Ref).StartsWith(path)) continue;
+                if (n++ < 6) sb.Append(p.Ref.name).Append(' ').Append((p.Proxy.position - p.Ref.position).magnitude.ToString("F0")).Append(" m ; ");
+            }
+            return n + " automates : " + sb;
+        }
+
         static void Scan()
         {
             int before = probes.Count;
@@ -64,12 +82,13 @@ namespace MWCoop
                 if (root == "PLAYER" || root == "GUI" || root.StartsWith("MWCoop")) continue;
                 FsmState[] states;
                 try { states = f.Fsm.States; } catch { continue; }
-                bool open = false;
+                bool open = root == "JOBS" && VehicleSync.CarRoot(f.transform) == null;   // (pas le taxi range sous JOBS : vehicule)
                 foreach (FsmState st in states) if (st.Name.StartsWith("Open")) open = true;
                 if (!open) { seen.Add(f); continue; }
-                if (f.Fsm.Initialized && Retarget(f, states) >= 0) seen.Add(f);   // (pas initialise : plus tard, sans avertissement)
+                int n = f.Fsm.Initialized ? Retarget(f, states) : -1;
+                if (n >= 0) { seen.Add(f); if (n > 0 && root == "JOBS") jobProbes++; }   // (pas initialise : plus tard, sans avertissement)
             }
-            if (probes.Count != before) Log.Info("portes automatiques : " + probes.Count + " suivent le joueur le plus proche");
+            if (probes.Count != before) Log.Info("portes automatiques et boulots : " + probes.Count + " automates suivent le joueur le plus proche (" + jobProbes + " des boulots)");
         }
 
         // Les mesures de distance au joueur (GetDistance vers PLAYER) de cet automate visent le joueur le plus proche
@@ -89,16 +108,22 @@ namespace MWCoop
                     if (a == null || a.GetType().Name != "GetDistance") continue;
                     FieldInfo tf = a.GetType().GetField("target"), gf = a.GetType().GetField("gameObject");
                     var tgt = tf != null ? tf.GetValue(a) as FsmGameObject : null;
-                    if (tgt == null || tgt.Value == null || tgt.Value.name != "PLAYER") continue;
+                    var od = gf != null ? gf.GetValue(a) as FsmOwnerDefault : null;
+                    bool toPlayer = tgt != null && tgt.Value != null && tgt.Value.name == "PLAYER";
+                    // (sens inverse : du joueur vers un objet -- placards de l'usine, contrat sur la table du patron)
+                    bool fromPlayer = !toPlayer && od != null && od.OwnerOption != OwnerDefaultOption.UseOwner && od.GameObject != null && od.GameObject.Value != null
+                                      && od.GameObject.Value.name == "PLAYER" && tgt != null && tgt.Value != null;
+                    if (!toPlayer && !fromPlayer) continue;
                     if (probe == null)
                     {
-                        var od = gf != null ? gf.GetValue(a) as FsmOwnerDefault : null;
-                        Transform r = od == null || od.OwnerOption == OwnerDefaultOption.UseOwner || od.GameObject.Value == null ? f.transform : od.GameObject.Value.transform;
+                        Transform r = fromPlayer ? tgt.Value.transform
+                                    : od == null || od.OwnerOption == OwnerDefaultOption.UseOwner || od.GameObject.Value == null ? f.transform : od.GameObject.Value.transform;
                         probe = new Probe { Ref = r, Proxy = new GameObject("MWCoop-JoueurProche").transform };
-                        probe.Proxy.position = tgt.Value.transform.position;
+                        probe.Proxy.position = (toPlayer ? tgt.Value : od.GameObject.Value).transform.position;
                         probes.Add(probe);
                     }
-                    tf.SetValue(a, new FsmGameObject { Value = probe.Proxy.gameObject });
+                    if (toPlayer) tf.SetValue(a, new FsmGameObject { Value = probe.Proxy.gameObject });
+                    else gf.SetValue(a, new FsmOwnerDefault { OwnerOption = OwnerDefaultOption.SpecifyGameObject, GameObject = new FsmGameObject { Value = probe.Proxy.gameObject } });
                     n++;
                 }
             }

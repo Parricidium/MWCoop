@@ -608,6 +608,7 @@ namespace MWCoop
             if (j.Kind == K_LOGTRIGGER) { FsmGameObject lg = v.FindFsmGameObject("Log"); if (lg != null) lg.Value = null; }
             if (!j.Control) Wallet.Suppress(8f);   // la paie que le boulot rejoue ici n'est pas renvoyee aux autres
             applying = true; Replay.Depth++;
+            if (j.Control) Radio.BeforeRemote();   // (poste de radio d'un autre : sa copie ici, pas notre jeu de canaux)
             try
             {
                 // Meme etat de depart : meme evenement (memes actions). Sinon, ou si l'automate n'a
@@ -616,7 +617,7 @@ namespace MWCoop
                 if (j.F.ActiveStateName == prev) j.F.SendEvent(ev);
                 if (!j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
             }
-            finally { applying = false; Replay.Depth--; }
+            finally { applying = false; Replay.Depth--; if (j.Control) Radio.AfterRemote(j.F.transform, who, state); }
             Log.Info("quete de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
         }
 

@@ -1135,6 +1135,73 @@ namespace MWCoop
             // pose devant l'hote apres 70 s.
             // [Test] Rangeur=invite : l'invite range ; RessortirMain=1 : comme l'outil du jeu (grattoir, F puis F) -- l'objet
             // reste dans la main eteint, puis rallume dans la main a 70 s, tenu jusqu'a 76 s et lache. Le rangeur note aussi.
+            // [Test] Autotest=boulotloin : l'invite va a l'usine a 40 s (l'hote reste chez lui) ; a 60 et 75 s, chacun note la
+            // distance mesuree par l'usine (JOBS/FACTORY :: Database, Distance -- l'usine ferme au-dela de 200 m) et si son
+            // site est allume (OpeningTimes/LOD1). Attendu chez l'hote : distance de l'invite, site allume.
+            if (mode == "boulotloin")
+            {
+                if (!Net.Session.IsHost && t > 40f && step == 0)
+                {
+                    step = 1;
+                    GameObject pallet = Game.FindAny("JOBS/FACTORY/OpeningTimes/LOD1/JOB/NPClookPallet");
+                    GameObject pl = GameObject.Find("PLAYER");
+                    if (pallet != null && pl != null)
+                    {
+                        var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
+                        pl.transform.position = pallet.transform.position + Vector3.up * 1f; if (cc != null) cc.enabled = true;
+                        Log.Info("autotest : boulotloin, invite pose a l'usine en " + pl.transform.position.ToString("F0"));
+                    }
+                    else Log.Info("autotest : boulotloin, usine introuvable");
+                }
+                if ((t > 60f && step <= 1 && holdLog < 60f) || (t > 75f && holdLog < 75f))
+                {
+                    holdLog = t;
+                    GameObject fac = Game.FindAny("JOBS/FACTORY"), lod = Game.FindAny("JOBS/FACTORY/OpeningTimes/LOD1");
+                    PlayMakerFSM db = fac != null ? Game.FsmOn(fac, "Database") : null;
+                    HutongGames.PlayMaker.FsmFloat dist = db != null ? db.FsmVariables.FindFsmFloat("Distance") : null;
+                    Log.Info("autotest : boulotloin, usine : distance " + (dist != null ? dist.Value.ToString("F0") : "?") + " (etat " + (db != null ? db.ActiveStateName : "?") + "), site " + (lod != null ? (lod.activeInHierarchy ? "allume" : "eteint") : "?") + ", joueur vise : " + NearDoors.Describe("JOBS/FACTORY"));
+                }
+            }
+            // [Test] Autotest=radioautre : l'hote allume la radio du BACHGLOTZ ([Test] RadioBouton) a 40 s (bouton de volume, comme un clic : "Check
+            // tune", volume 0,6), l'eteint a 58 s ; chacun note toutes les 3 s ou est son vrai jeu de canaux et les copies.
+            // Attendu chez l'invite : une copie dans le BACHGLOTZ de 40 a 58 s, son vrai jeu de canaux pas deplace.
+            if (mode == "radioautre")
+            {
+                string part = Config.Get("Test", "RadioBouton", "BACHGLOTZ(1905kg)/RadioPivot/Radio/ButtonsRadio/RadioVolume::Knob");
+                if (Net.Session.IsHost && t > 40f && step == 0)
+                {
+                    step = 1;
+                    GameObject vb = Game.FindAny(part.Substring(0, part.IndexOf("::")));
+                    PlayMakerFSM kf = vb != null ? Game.FsmOn(vb, "Knob") : null;
+                    if (kf != null) { HutongGames.PlayMaker.FsmFloat vf = kf.FsmVariables.FindFsmFloat("Volume"); if (vf != null) vf.Value = 0.6f; }
+                    Log.Info("autotest : radioautre, " + Jobs.TestSend(part, "Mouse off 2", "ON", "Check tune"));
+                }
+                if (Net.Session.IsHost && t > 58f && step == 1) { step = 2; Log.Info("autotest : radioautre, " + Jobs.TestSend(part, "Decrease", "OFF", "Off")); }
+                if (t > 35f && t < 72f && t >= holdLog) { holdLog = t + 3f; Log.Info("autotest : radioautre, " + Radio.GhostState()); }
+            }
+            // [Test] Autotest=tenirvoiture (TestPiece, ~sandbag(item1) ; TestVoiture, SORBET) : l'hote « tient » l'objet de 40 a
+            // 55 s au milieu de l'habitacle de la voiture (comme une piece amenee a son support) ; chacun note toutes les
+            // secondes la pose de la voiture. Attendu : la voiture ne bouge pas chez l'invite (copie de l'objet tenu).
+            if (mode == "tenirvoiture")
+            {
+                string id = Config.Get("Test", "TestPiece", "~sandbag(item1)");
+                if (id.StartsWith("~")) id = Props.FindKey(id.Substring(1)) ?? id;
+                Rigidbody car = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"));
+                if (Net.Session.IsHost && car != null)
+                {
+                    if (t > 40f && t < 55f)
+                    {
+                        if (holdCam == null) holdCam = new GameObject("MWCoop-EssaiMain").transform;
+                        holdCam.rotation = car.rotation;
+                        holdCam.position = car.worldCenterOfMass + car.transform.up * 0.45f - car.transform.forward * 0.7f;   // (objet pose 0,7 m devant, 0,25 m sous : au centre)
+                        Rigidbody hb = Props.TestHold(id, holdCam);
+                        if (hb != null) hb.detectCollisions = false;   // (ici l'objet de l'essai est cinematique, pas tenu par la main du jeu : il pousserait la voiture de l'hote)
+                        if (step == 0) { step = 1; Log.Info("autotest : tenirvoiture, tient " + id + " dans " + car.name); }
+                    }
+                    if (t > 55f && step == 1) { step = 2; Rigidbody hb = Props.TestHold(id, null); if (hb != null) hb.detectCollisions = true; Log.Info("autotest : tenirvoiture, lache"); }
+                }
+                if (car != null && t > 35f && t < 70f && t >= holdLog) { holdLog = t + 1f; Log.Info("autotest : tenirvoiture, " + car.name + " en " + car.position.ToString("F2") + " rot " + car.rotation.eulerAngles.ToString("F0") + " v " + car.velocity.magnitude.ToString("F2")); }
+            }
             if (mode == "ranger")
             {
                 string id = Config.Get("Test", "TestPiece", "~sandbag(item1)");
@@ -1858,6 +1925,7 @@ namespace MWCoop
         static bool rivNear; static float rivLog, cabGap, holdLog, attTry, attExitAt = 1e9f;
         static int holdN;
         static GameObject rangeGo;
+        static Transform holdCam;
         static Vector3 holdSum, holdSq;
         static bool tcOn;
         static float tcAt;
