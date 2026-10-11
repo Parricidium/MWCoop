@@ -281,8 +281,51 @@ static DWORD WINAPI OfferThread(void *p)
         }
         if (o.files.size() > before) o.cats.push_back(kContent[i].key);
     }
+    // Ordre de la liste avant la coupe a 60 Ko (un message du salon : 64 Ko au plus). Retour de JD (11/10) : un mod prive de
+    // 2 000 fichiers (NDSerra) remplissait la liste ; la coupe, a la fin, enlevait la DLL de Peugeot205Rallye (rangee
+    // apres) sans rien dire, et l'invite la retirait meme de sa copie (« plus chez l'hote »). D'abord les DLL des mods,
+    // puis References et MSCLoader, puis les dossiers de chaque mod du plus petit au plus gros (les petits arrivent
+    // entiers), le contenu du jeu a la fin ; ce qui est coupe est ecrit dans le journal.
+    {
+        auto group = [](const std::string &p, int &prio) -> std::string {
+            const char *pre[] = { "Mods\\Assets\\", "Mods\\Config\\Mod Settings\\" };
+            if (!_strnicmp(p.c_str(), "Mods\\", 5) && p.find('\\', 5) == std::string::npos) { prio = 0; return ""; }
+            if (!_strnicmp(p.c_str(), "Mods\\References\\", 16)) { prio = 1; return ""; }
+            for (const char *x : pre) {
+                size_t n = strlen(x);
+                if (!_strnicmp(p.c_str(), x, n)) {
+                    size_t e = p.find('\\', n);
+                    std::string g = p.substr(n, e == std::string::npos ? std::string::npos : e - n);
+                    prio = !_strnicmp(g.c_str(), "MSCLoader_", 10) ? 1 : 2;
+                    return g;
+                }
+            }
+            prio = 3;
+            return "";
+        };
+        std::map<std::string, int> count;
+        for (auto &f : o.files) { int pr; std::string g = group(f.path, pr); if (pr == 2) count[g]++; }
+        std::stable_sort(o.files.begin(), o.files.end(), [&](const SyncFile &a, const SyncFile &b) {
+            int pa, pb;
+            std::string ga = group(a.path, pa), gb = group(b.path, pb);
+            if (pa != pb) return pa < pb;
+            if (pa != 2) return false;
+            int ca = count[ga], cb = count[gb];
+            return ca != cb ? ca < cb : _stricmp(ga.c_str(), gb.c_str()) < 0;
+        });
+    }
     std::string blob = OfferBlob(o);
-    while (blob.size() > 60000 && !o.files.empty()) { o.files.pop_back(); blob = OfferBlob(o); }   // (un message du salon : 64 Ko au plus)
+    size_t full = o.files.size();
+    std::vector<SyncFile> cut;
+    while (blob.size() > 60000 && !o.files.empty()) { cut.push_back(o.files.back()); o.files.pop_back(); blob = OfferBlob(o); }
+    if (!cut.empty()) {
+        std::map<std::string, int> lost;
+        for (auto &f : cut) { size_t a = f.path.find('\\', 5), b = a == std::string::npos ? a : f.path.find('\\', a + 1); lost[f.path.substr(0, b)]++; }
+        std::string what;
+        for (auto &l : lost) what += " " + l.first + " (" + std::to_string(l.second) + ")";
+        LaunchLog("mods : ATTENTION liste trop longue pour le salon : %d fichier(s) sur %d pas envoye(s), les invites ne les auront pas :%s"
+                  " -- garder ce mod pour soi (onglet Mods) s'il ne doit pas partir", (int)cut.size(), (int)full, what.c_str());
+    }
     o.key = Fnv(blob.data(), blob.size());
     EnterCriticalSection(&g_lcs);
     g_offer = o;
