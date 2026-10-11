@@ -33,6 +33,7 @@ static wchar_t g_profil[64];          // vide = profil normal du joueur
 static wchar_t g_profilDir[MAX_PATH]; // <jeu>\MWCoop\profils\<profil>
 static int g_arrierePlan, g_fenX = -3000, g_fenY = 100;
 static DWORD g_mainTid;
+static DWORD g_monoTid;   // fil qui a demande mono_runtime_invoke (celui de Unity qui demarre Mono)
 static HWND g_mainWnd;
 static FILE* g_log;
 static CRITICAL_SECTION g_logLock;
@@ -127,11 +128,19 @@ static void StartManaged() {
     else Log("MWCoop.Entry.Init appele");
 }
 
+// Retour d'un joueur (CoShaThx, 11/10) : « mono_runtime_invoke attrape » puis plus rien, le jeu part sans MWCoop. Le
+// premier appel n'etait accepte que sur le fil qui a charge cette DLL ; il l'est aussi sur celui qui a demande
+// mono_runtime_invoke (celui de Unity), et les premiers appels vus sont notes (image, fil) pour le diagnostic.
 static void* h_invoke(void* method, void* obj, void** params, void** exc) {
     void* r = o_invoke(method, obj, params, exc);
-    if (!g_started && GetCurrentThreadId() == g_mainTid) {
+    if (!g_started) {
+        static int seen;
+        DWORD tid = GetCurrentThreadId();
         const char* img = ImageOf(method);
-        if (img && (!strncmp(img, "Assembly-CSharp", 15) || !strcmp(img, "PlayMaker"))) {
+        bool mine = tid == g_mainTid || tid == g_monoTid;
+        if (seen < 6 || (seen < 2000 && seen % 500 == 0)) Log("appel mono %d : %s, fil %lu%s", seen, img ? img : "?", tid, mine ? "" : " (autre fil)");
+        seen++;
+        if (mine && img && (!strncmp(img, "Assembly-CSharp", 15) || !strcmp(img, "PlayMaker"))) {
             g_started = true;
             Log("premier appel du jeu (%s) : chargement de MWCoop.dll", img);
             StartManaged();
@@ -212,7 +221,8 @@ static FARPROC WINAPI h_GetProcAddress(HMODULE m, LPCSTR name) {
     if (!p || IS_INTRESOURCE(name)) return p;
     if (!strcmp(name, "mono_runtime_invoke") && !o_invoke) {
         g_mono = m; o_invoke = (mono_runtime_invoke_t)p;
-        Log("mono_runtime_invoke attrape");
+        g_monoTid = GetCurrentThreadId();
+        Log("mono_runtime_invoke attrape (fil %lu, DLL chargee sur le fil %lu)", g_monoTid, g_mainTid);
         return (FARPROC)h_invoke;
     }
     if (g_profil[0] && !strcmp(name, "SHGetKnownFolderPath")) return (FARPROC)h_SHGetKnownFolderPath;
