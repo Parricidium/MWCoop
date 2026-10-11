@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -99,6 +99,10 @@ namespace MWCoop
                     string rel = Recon.Path(c).Substring(key.Length);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
                     if (visible != null && !visible.Contains(c)) continue;
+                    // Pompe : zones cliquables invisibles (fente de la carte, billets, boutons de l'ecran : collider + automate,
+                    // pas de rendu) a la logique de chacun -- allumees / eteintes d'apres un autre joueur, la carte d'un invite
+                    // n'entrait plus (retour de Menor, 11/10 : l'hote a cote de lui, ses touches en faisaient « l'utilisateur »).
+                    if (!m.Lockable && c.GetComponent<Collider>() != null && c.GetComponent<Renderer>() == null && c.GetComponent<PlayMakerFSM>() != null) continue;
                     var p = new Part { Key = rel + "#" + k, T = c, Text = c.GetComponent<TextMesh>(), Active = c.gameObject.activeSelf, Pos = c.localPosition, Rot = c.localRotation };
                     if (p.Text != null) p.Txt = p.Text.text;
                     if (m.Lockable)
@@ -192,7 +196,7 @@ namespace MWCoop
             Computer(now);
             if (machines.Count == 0) return;
             if (player == null) { GameObject g = GameObject.Find("PLAYER"); if (g == null) return; player = g.transform; }
-            if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1)) lastInput = now;
+            if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || CodeKey()) lastInput = now;   // (pas les deplacements : se servir de la machine)
             UpdateLocks(now);
             if (now < nextSend || Session.RemoteCount == 0) return;
             nextSend = now + 0.2f;
@@ -223,6 +227,15 @@ namespace MWCoop
                 }
                 if (w != null) Session.SendAll(w, false);
             }
+        }
+
+        // Touche du code ou du montant (chiffres, Entree, effacer).
+        static bool CodeKey()
+        {
+            if (!Input.anyKeyDown) return false;
+            for (KeyCode k = KeyCode.Alpha0; k <= KeyCode.Alpha9; k++) if (Input.GetKeyDown(k)) return true;
+            for (KeyCode k = KeyCode.Keypad0; k <= KeyCode.Keypad9; k++) if (Input.GetKeyDown(k)) return true;
+            return Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Backspace);
         }
 
         static bool Near(Machine m)
@@ -260,10 +273,13 @@ namespace MWCoop
             if (Session.IsHost) who = from.Id;
             string key = r.Str();
             NetWriter relay = Session.IsHost ? new NetWriter(Msg.Machine).U8(who).Str(key) : null;
+            float now0 = Time.realtimeSinceStartup;
             Machine m;
             machines.TryGetValue(key, out m);
             // Machine a jeu : seulement ce qu'envoie celui qui la tient (un envoi en retard de l'ancien ne compte pas).
             bool take = m == null || !m.Lockable || !m.Spectating || who == m.L.Owner;
+            // Pompe dont le joueur d'ici se sert lui-meme (clic ou code dans les 15 s) : sa logique l'emporte ici.
+            if (m != null && !m.Lockable && now0 < m.OwnerUntil) take = false;
             if (take && m != null && m.Lockable && m.HeldFrom != who) { ClearHeld(m); m.HeldFrom = who; }
             float now = Time.realtimeSinceStartup;
             while (r.More)
@@ -295,7 +311,7 @@ namespace MWCoop
                 if ((fl & 2) != 0) p.HSpin = (fl & 128) != 0;
             }
             if (relay != null) Session.Broadcast(relay, false, who);
-            if (m != null) m.OwnerUntil = 0f;   // un autre s'en sert : on n'envoie pas en meme temps
+            if (m != null && take) m.OwnerUntil = 0f;   // un autre s'en sert : on n'envoie pas en meme temps
         }
 
         // ---------------------------------------------------------------- machines a jeu : verrou
