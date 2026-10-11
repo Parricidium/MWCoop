@@ -116,7 +116,12 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- postes des autres
-        class Ghost { public Transform K; public GameObject Go; public AudioSource[] Ch; public PlayMakerFSM Fetch; public int Who; }
+        class Ghost
+        {
+            public Transform K; public GameObject Go; public AudioSource[] Ch; public PlayMakerFSM Fetch; public int Who;
+            // Chanson importee (flux WWW) : un seul lecteur a la fois -- la copie charge son propre exemplaire.
+            public string[] SongKey = new string[2]; public WWW[] SongWww = new WWW[2]; public AudioClip[] SongClip = new AudioClip[2];
+        }
         struct Snap { public Transform Parent; public Vector3 LP; public Quaternion LR; public bool On, M1, MF, St; }
         static readonly List<Ghost> ghosts = new List<Ghost>();
         static Transform realT; static PlayMakerFSM fetch;
@@ -258,6 +263,17 @@ namespace MWCoop
                     AudioSource src = ch[c], dst = g.Ch[c];
                     if (src == null || dst == null) continue;
                     if (dst.gameObject.activeSelf != src.gameObject.activeSelf) dst.gameObject.SetActive(src.gameObject.activeSelf);
+                    // Chanson importee (Radio/trackN.ogg, lue en flux) : un seul lecteur a la fois -- la jouer aussi ici arretait
+                    // le vrai canal, que le jeu croyait fini : morceau suivant, et ainsi de suite jusqu'a une pub (retour d'un
+                    // joueur, 0.75.35 : « plusieurs radios allumees : que des pubs »). La copie joue son propre exemplaire,
+                    // charge depuis le fichier, depuis le debut (un flux ne se positionne pas).
+                    string key = src.clip != null && src.clip.name.Length == 0 ? ClipKey(src.clip) : null;
+                    if (key != null && key.StartsWith("#chanson:"))
+                    {
+                        OwnSong(g, c, key, src, dst);
+                        continue;
+                    }
+                    if (g.SongKey[c] != null) { g.SongKey[c] = null; g.SongWww[c] = null; g.SongClip[c] = null; }
                     if (dst.clip != src.clip) { dst.clip = src.clip; if (src.clip != null) dst.time = Mathf.Min(src.time, src.clip.length - 0.05f); }
                     if (src.isPlaying && !dst.isPlaying && dst.clip != null && dst.gameObject.activeInHierarchy) { dst.Play(); dst.time = src.time; }
                     else if (!src.isPlaying && dst.isPlaying) dst.Stop();
@@ -266,13 +282,75 @@ namespace MWCoop
             }
         }
 
+        static void OwnSong(Ghost g, int c, string key, AudioSource src, AudioSource dst)
+        {
+            if (g.SongKey[c] != key)
+            {
+                g.SongKey[c] = key; g.SongClip[c] = null; g.SongWww[c] = null;
+                int i;
+                string file = int.TryParse(key.Substring(9), out i) ? Contenu.SongFile(i) : null;
+                if (file != null) g.SongWww[c] = new WWW("file:///" + file);
+                else Log.Info("radio : copie de " + (g.K != null ? g.K.name : "?") + ", fichier de " + key + " introuvable : muette pendant ce morceau");
+                if (dst.isPlaying) dst.Stop();
+            }
+            if (g.SongWww[c] != null && g.SongWww[c].isDone)
+            {
+                try { g.SongClip[c] = g.SongWww[c].GetAudioClip(false, true, AudioType.OGGVORBIS); } catch (System.Exception e) { Log.Warn("radio : " + e.Message); }
+                g.SongWww[c] = null;
+            }
+            AudioClip own = g.SongClip[c];
+            if (own == null) return;
+            if (dst.clip != own) dst.clip = own;
+            if (src.isPlaying && !dst.isPlaying && dst.gameObject.activeInHierarchy) dst.Play();
+            else if (!src.isPlaying && dst.isPlaying) dst.Stop();
+        }
+
+        // Essai [Test] Autotest=radioflux : une chanson importee (Radio/trackN.ogg, flux WWW) jouee par une source A, puis a
+        // 45 s par une source B en meme temps (comme le vrai canal et la copie d'un poste) : A continue-t-elle ?
+        static AudioSource testA, testB; static float testLog;
+        static bool testFolk;
+        // Essai (radioautre, RadioFlux=1) : le vrai canal folk d'ici joue la chanson importee 0 (plus suivi par l'hote).
+        public static string TestFolkSong()
+        {
+            System.Collections.ArrayList songs = Songs();
+            AudioClip c = songs != null && songs.Count > 0 ? songs[0] as AudioClip : null;
+            if (c == null || ch == null || ch[1] == null) return "pas de chanson importee";
+            testFolk = true;
+            ch[1].clip = c; ch[1].Play();
+            return "canal folk d'ici : chanson importee 0";
+        }
+        public static void TestStream(float t)
+        {
+            if (t < 40f) return;
+            if (testA == null)
+            {
+                System.Collections.ArrayList songs = Songs();
+                AudioClip c = songs != null && songs.Count > 0 ? songs[0] as AudioClip : null;
+                if (c == null) { if (t >= testLog) { testLog = t + 5f; Log.Info("autotest : radioflux, pas de chanson importee (" + (songs != null ? songs.Count : -1) + ")"); } return; }
+                testA = new GameObject("MWCoop-TestFluxA").AddComponent<AudioSource>(); testA.clip = c; testA.Play();
+                Log.Info("autotest : radioflux, A joue la chanson 0 (" + c.loadType + ", " + c.length.ToString("F0") + " s)");
+            }
+            if (t >= 45f && testB == null) { testB = new GameObject("MWCoop-TestFluxB").AddComponent<AudioSource>(); testB.clip = testA.clip; testB.Play(); testB.time = testA.time; Log.Info("autotest : radioflux, B joue la meme chanson"); }
+            if (t < 58f && t >= testLog)
+            {
+                testLog = t + 1f;
+                Log.Info("autotest : radioflux, A " + (testA.isPlaying ? "joue" : "arrete") + " a " + testA.time.ToString("F1") + " s" + (testB != null ? ", B " + (testB.isPlaying ? "joue" : "arrete") + " a " + testB.time.ToString("F1") + " s" : ""));
+            }
+        }
+
         // Essais : postes joues ici par copie.
         public static string GhostState()
         {
             var sb = new System.Text.StringBuilder("vrai jeu de canaux sous " + (realT != null && realT.parent != null ? Recon.Path(realT.parent) : "-") + (fetch != null ? (fetch.enabled ? " (allume" : " (eteint") + ", locale " + (!FB("OnMuteChannel1")) + ", folk " + (!FB("OnMuteFolk")) + ")" : ""));
+            if (ch != null)
+                for (int c = 0; c < ch.Length; c++)
+                    if (ch[c] != null)
+                        sb.Append(c == 0 ? " ; local " : " ; folk ").Append(ch[c].clip != null ? "'" + ClipKey(ch[c].clip) + "' " + ch[c].clip.loadType + " " + ch[c].time.ToString("F1") + "/" + ch[c].clip.length.ToString("F0") + " s" : "-")
+                          .Append(ch[c].isPlaying ? " joue" : " arrete");
             foreach (Ghost g in ghosts)
                 sb.Append(" ; copie ").Append(g.K != null ? g.K.name : "?").Append(" de #").Append(g.Who).Append(" : ")
                   .Append(g.Ch[0] != null && g.Ch[0].clip != null ? g.Ch[0].clip.name + " a " + g.Ch[0].time.ToString("F0") + " s" : "-")
+                  .Append(g.Ch.Length > 1 && g.Ch[1] != null && g.Ch[1].clip != null ? " / folk '" + ClipKey(g.Ch[1].clip) + "' a " + g.Ch[1].time.ToString("F0") + " s" + (g.Ch[1].isPlaying ? " joue" : " arrete") : "")
                   .Append(g.Ch[0] != null ? (g.Ch[0].isPlaying ? " joue" : " arrete") + (g.Ch[0].mute ? " muet" : "") + " vol " + g.Ch[0].volume.ToString("F2") : "");
             return sb.ToString();
         }
@@ -292,7 +370,7 @@ namespace MWCoop
                 string name = r.Str();
                 float t = r.F32();
                 bool playing = r.Bool();
-                if (i >= ch.Length || ch[i] == null) continue;
+                if (i >= ch.Length || ch[i] == null || (i == 1 && testFolk)) continue;
                 AudioSource a = ch[i];
                 try
                 {
