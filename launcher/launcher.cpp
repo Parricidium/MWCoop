@@ -1300,11 +1300,43 @@ static Color Mix(Color a, Color b, float t)
 }
 static Color WithA(Color c, float a) { return Color((BYTE)(c.GetA() * a), c.GetR(), c.GetG(), c.GetB()); }
 
+// Famille de police utilisable, gardee : celle demandee si elle existe, sinon la premiere presente d'une liste de
+// remplacement. Sans Segoe UI (Linux / Steam Deck par Proton ou Wine, polices de Windows abimees), GDI+ ne dessinait
+// AUCUN texte, sans erreur visible (retour de Donskoy, 11/10 : lanceur sans une lettre). Essai : variable
+// MWCOOP_SANS_POLICES=1 (Segoe UI, Bahnschrift et Consolas comptees absentes).
+static bool FamilyOk(const FontFamily *f) { return f && f->GetLastStatus() == Ok && f->IsAvailable(); }
+static const FontFamily *UiFamily(const wchar_t *want)
+{
+    static std::map<std::wstring, FontFamily *> cache;
+    auto it = cache.find(want);
+    if (it != cache.end()) return it->second;
+    static int noWin = -1;
+    if (noWin < 0) { wchar_t v[8] = L""; GetEnvironmentVariableW(L"MWCOOP_SANS_POLICES", v, 8); noWin = v[0] == L'1'; }
+    bool mono = !wcscmp(want, L"Consolas");
+    static const wchar_t *sans[] = { L"Segoe UI", L"Tahoma", L"Arial", L"Microsoft Sans Serif", L"Liberation Sans", L"DejaVu Sans", L"Noto Sans" };
+    static const wchar_t *fixed[] = { L"Consolas", L"Courier New", L"Liberation Mono", L"DejaVu Sans Mono" };
+    std::vector<const wchar_t *> tries(1, want);
+    if (mono) tries.insert(tries.end(), fixed, fixed + _countof(fixed));
+    else tries.insert(tries.end(), sans, sans + _countof(sans));
+    FontFamily *got = NULL;
+    for (const wchar_t *n : tries) {
+        if (noWin && (!wcscmp(n, L"Segoe UI") || !wcscmp(n, L"Bahnschrift") || !wcscmp(n, L"Consolas"))) continue;
+        FontFamily *f = new FontFamily(n);
+        if (FamilyOk(f)) { got = f; break; }
+        delete f;
+    }
+    if (!got) got = (mono ? FontFamily::GenericMonospace() : FontFamily::GenericSansSerif())->Clone();
+    WCHAR name[LF_FACESIZE] = L"?";
+    if (got) got->GetFamilyName(name);
+    if (wcscmp(name, want)) LaunchLog("police : %ls absente, remplacee par %ls", want, name);
+    cache[want] = got;
+    return got;
+}
 // Police des titres : Bahnschrift (Windows 10 et plus, geometrique) si elle est la, sinon Segoe UI.
 static const wchar_t *TitleFont()
 {
     static int ok = -1;
-    if (ok < 0) { FontFamily f(L"Bahnschrift"); ok = f.IsAvailable() ? 1 : 0; }
+    if (ok < 0) { WCHAR n[LF_FACESIZE] = L""; UiFamily(L"Bahnschrift")->GetFamilyName(n); ok = !wcscmp(n, L"Bahnschrift"); }
     return ok ? L"Bahnschrift" : L"Segoe UI";
 }
 // Polices gardees (en creer une a chaque texte coutait l'essentiel du temps d'une image). Jamais liberees (fin du
@@ -1316,8 +1348,7 @@ static Font *FontOf(const wchar_t *family, float px, int style)
     swprintf_s(k, L"%s|%d|%d", family, (int)(px * 20 + 0.5f), style);
     auto it = cache.find(k);
     if (it != cache.end()) return it->second;
-    FontFamily fam(family);
-    Font *f = new Font(&fam, px, style, UnitPixel);
+    Font *f = new Font(UiFamily(family), px, style, UnitPixel);
     cache[k] = f;
     return f;
 }
@@ -1463,8 +1494,7 @@ static void DrawField(Graphics &g, int i, const wchar_t *label)
     if (placeholder) shown = f.address ? T(L"ex. 26.12.34.56 (adresse:port accept\u00E9)", L"e.g. 26.12.34.56 (address:port accepted)") : DefaultName();
     Text(g, shown, tr, placeholder && f.address ? 13.5f : 16.0f, placeholder ? FontStyleRegular : FontStyleBold, placeholder ? TH(placeholder) : kInk, StringAlignmentNear);
     if (g_focus == i && fmodf(g_time, 1.0f) < 0.55f) {
-        FontFamily fam(L"Segoe UI");
-        Font font(&fam, 16, FontStyleBold, UnitPixel);
+        Font font(UiFamily(L"Segoe UI"), 16, FontStyleBold, UnitPixel);
         StringFormat sf(StringFormat::GenericTypographic());
         sf.SetFormatFlags(StringFormatFlagsMeasureTrailingSpaces | StringFormatFlagsNoWrap);
         RectF box;
@@ -3709,8 +3739,7 @@ static void DrawSteamGuide(Graphics &g)
         g.FillPath(&kb, &kp);
         Pen kpen(TH(fieldBorder), 1);
         g.DrawPath(&kpen, &kp);
-        FontFamily mono(L"Consolas");
-        Font mf(&mono, 14, FontStyleRegular, UnitPixel);
+        Font mf(UiFamily(L"Consolas"), 14, FontStyleRegular, UnitPixel);
         StringFormat sf;
         sf.SetLineAlignment(StringAlignmentCenter);
         sf.SetTrimming(StringTrimmingEllipsisPath);

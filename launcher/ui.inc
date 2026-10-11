@@ -959,8 +959,7 @@ static void DrawNotesPage(Graphics &g)
     // corps : puces, paragraphes, images (defilement)
     RectF area = NotesArea();
     const std::wstring &body = g_fr ? n.fr : n.en;
-    FontFamily fam(L"Segoe UI");
-    Font fb(&fam, 14.5f, FontStyleRegular, UnitPixel);
+    Font fb(UiFamily(L"Segoe UI"), 14.5f, FontStyleRegular, UnitPixel);
     StringFormat sf;
     SolidBrush ink(kInk);
     float sc = g_scroll[TAB_NOTES], y = area.Y + 10 - sc, w = area.Width - 14;
@@ -1278,7 +1277,7 @@ static void DrawSettings(Graphics &g)
         if (ok) Icon(g, IC_CHECK, ga.X + 30, ga.Y + 70, 16, kOk, 2.6f);
         Text(g, ok ? L"My Winter Car " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), RectF(ga.X + (ok ? 44.0f : 20.0f), ga.Y + 58, ga.Width - 70, 24), 14, FontStyleBold, ok ? kInk : kRed, StringAlignmentNear);
         StringFormat sf; sf.SetTrimming(StringTrimmingEllipsisPath); sf.SetFormatFlags(StringFormatFlagsNoWrap); sf.SetLineAlignment(StringAlignmentCenter);
-        FontFamily fam(L"Segoe UI"); Font f(&fam, 12, FontStyleRegular, UnitPixel); SolidBrush gb(kGrey);
+        Font f(UiFamily(L"Segoe UI"), 12, FontStyleRegular, UnitPixel); SolidBrush gb(kGrey);
         g.DrawString(g_gameDir.c_str(), -1, &f, RectF(ga.X + 20, ga.Y + 82, ga.Width - 40, 20), &sf, &gb);
         UiButton(g, RectF(ga.X + 20, ga.Y + 104, ga.Width - 40, 38), ok ? T(L"Changer de dossier", L"Change folder") : T(L"Choisir l'exe…", L"Choose exe…"), UI_SET_FOLDER, false, IC_FOLDER);
     }
