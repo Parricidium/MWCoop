@@ -98,6 +98,7 @@ namespace MWCoop
             public float Rpm, Throttle, Steer;
             public FsmFloat Heat; public float RemoteHeat = float.NaN;   // temperature de la source de chaleur
             public PlayMakerFSM Starter;        // automate 'Starter' (etat "Running" : moteur en marche)
+            public string RunState = "Running"; // ... son etat moteur en marche ("Motor running" : KEKMET)
             public bool RemoteRunning;          // moteur en marche chez celui qui la fait rouler
             public float StarterOff;            // copie : debut de l'ecart entre son Starter et celui du conducteur (0 : aucun)
             public PlayMakerFSM KeyFsm; public bool KeyLooked; public float KeyCrankSince, LatchSince;   // cle de contact (StarterLatch)
@@ -147,6 +148,7 @@ namespace MWCoop
         // qu'elle roule encore (8 s au plus apres la poussee), puis on la rend. Avant : seul l'hote pouvait pousser ; chez
         // un invite, l'hote la recalait toutes les 2 s (voiture qui se teleporte en arriere ; retour d'un joueur, 08/10).
         static int pushCar = -1;
+        static float pushSkipLog = -100f;
         static float nextKeyLook;
         static float pushUntil, nextMoveLook;
         // Remorques attelees (FLATBED au KEKMET...) : un joint relie deux voitures (hors cordes de Tow). Celui qui conduit
@@ -397,7 +399,11 @@ namespace MWCoop
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
                 if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) { car.Drive = f; break; }
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
-                if (f.FsmName == "Starter" && f.Fsm.GetState("Running") != null) { car.Starter = f; break; }
+                // (KEKMET : "Motor running", demarre par "Start engine", coupe par "State 1" -- avant, pas d'automate de
+                // demarreur pour lui : moteur jamais repris en marche par un autre joueur, cale aussitot ; jamais coupe sur la
+                // copie, qui tournait sans fin ; retour de Hall0wMan, 11/10)
+                if (f.FsmName == "Starter" && (f.Fsm.GetState("Running") != null || f.Fsm.GetState("Motor running") != null))
+                { car.Starter = f; car.RunState = f.Fsm.GetState("Running") != null ? "Running" : "Motor running"; break; }
             foreach (AudioSource a in go.GetComponentsInChildren<AudioSource>(true))
                 if (a.gameObject.name == "CarHorn") { car.Horn = a.gameObject; break; }
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true))
@@ -630,7 +636,7 @@ namespace MWCoop
             {
                 nextKeyLook = now + 0.5f;
                 foreach (Car c in cars)
-                    if (c.Body != null && ((c.Starter != null && c.Starter.ActiveStateName == "Running") || EngineRunning(c)) && !Remote(c, now) && c.RemoteBy < 0
+                    if (c.Body != null && ((c.Starter != null && c.Starter.ActiveStateName == c.RunState) || EngineRunning(c)) && !Remote(c, now) && c.RemoteBy < 0
                         && c.Net >= 0 && Jobs.KeyTurnedHere(c.T, 30f))
                     { owned = c.Index; Log.Info("moteur demarre ici sans conducteur : " + c.Key + " reste a nous"); break; }
             }
@@ -715,6 +721,21 @@ namespace MWCoop
                 if (d < bd) { bd = d; best = c; }
             }
             if (best == null) return;
+            // Contre un vehicule mene par un autre (son tracteur la pousse, ou y est attele) : c'est lui qui la bouge, pas
+            // nous. Avant : le plateau pousse par le KEKMET de l'hote bougeait chez l'invite a cote, qui le prenait
+            // (« poussee ») -- copie figee chez l'hote, que son tracteur percutait : projete, conducteur tue (retour de
+            // Hall0wMan, 11/10).
+            Vector3 bc = best.Body.worldCenterOfMass;
+            foreach (Car o in cars)
+            {
+                if (o == best || o.Body == null || !Remote(o, now) || !o.Body.gameObject.activeInHierarchy) continue;
+                Vector3 near = best.Body.ClosestPointOnBounds(o.Body.worldCenterOfMass);
+                if ((o.Body.ClosestPointOnBounds(near) - near).sqrMagnitude < 1.5f * 1.5f || (o.Body.position - bc).sqrMagnitude < 36f)
+                {
+                    if (now - pushSkipLog > 10f) { pushSkipLog = now; Log.Info("poussee : " + best.Key + " contre " + o.Key + " (mene par #" + o.RemoteBy + ") : pas prise"); }
+                    return;
+                }
+            }
             pushUntil = now + 1.5f;
             if (pushCar == best.Index && owned == best.Index) return;
             if (owned >= 0 && owned != best.Index) return;   // (on garde deja une autre voiture : moteur tournant)
@@ -1156,15 +1177,19 @@ namespace MWCoop
             PlayMakerFSM s = c.Starter;
             if (s == null || !s.enabled || !s.gameObject.activeInHierarchy) return;
             StarterLatch(c, s);
+            // (KEKMET, "Motor running" : sur une copie il retombe de lui-meme a l'arret -- relance en boucle ; on ne le mene
+            // qu'a l'arret, quand le moteur est coupe chez le conducteur)
+            if (c.RemoteRunning && c.RunState != "Running") { c.StarterOff = 0f; return; }
             string st = s.ActiveStateName;
-            bool on = st == "Running" || st == "Crank up" || st == "Start engine";
-            bool off = c.RemoteRunning ? !on : st == "Running";
+            bool on = st == c.RunState || st == "Crank up" || st == "Start engine";
+            bool off = c.RemoteRunning ? !on : st == c.RunState;
             float now = Time.realtimeSinceStartup;
             if (!off) { c.StarterOff = 0f; return; }
             if (c.StarterOff <= 0f) { c.StarterOff = now; return; }
             if (now - c.StarterOff < 1.5f) return;
             c.StarterOff = 0f;
-            string to = c.RemoteRunning ? (s.Fsm.GetState("Start engine") != null ? "Start engine" : "Running") : (s.Fsm.GetState("Stall engine") != null ? "Stall engine" : null);
+            string to = c.RemoteRunning ? (s.Fsm.GetState("Start engine") != null ? "Start engine" : c.RunState)
+                : s.Fsm.GetState("Stall engine") != null ? "Stall engine" : c.RunState == "Motor running" && s.Fsm.GetState("State 1") != null ? "State 1" : null;
             if (to == null) return;
             Replay.Depth++;
             try { Game.SetState(s, to); }
@@ -1379,6 +1404,14 @@ namespace MWCoop
                 if (f.FsmName == "Use" && f.Fsm.GetState("ACC on") != null && f.Fsm.GetState("Motor starting") != null) { key = f; break; }
             string ks = key != null ? key.ActiveStateName : "?";
             if (key != null && (ks == "Wait1" || ks == "Wait ACC" || ks == "Motor OFF")) Game.SetState(key, "ACC on");
+            // Demarreur sans passage de lui-meme a "Running" au regime (KEKMET : "ACC" n'ecoute que la cle) : mis en marche.
+            PlayMakerFSM sf = c.Starter;
+            if (sf != null && c.RunState != "Running" && sf.ActiveStateName != c.RunState && sf.Fsm.GetState("Start engine") != null)
+            {
+                Replay.Depth++;
+                try { Game.SetState(sf, "Start engine"); }
+                finally { Replay.Depth--; }
+            }
             Log.Info("moteur repris en marche : " + c.Key + " (regime recu " + c.Rpm.ToString("F0") + ", cle " + ks + ")");
         }
 
@@ -1386,18 +1419,15 @@ namespace MWCoop
         {
             if (hotCar == null) return;
             Car c = hotCar;
-            PlayMakerFSM starter = null;
-            if (c.Dt != null && c.T != null)
-                foreach (PlayMakerFSM f in c.T.GetComponentsInChildren<PlayMakerFSM>(true))
-                    if (f.FsmName == "Starter" && f.Fsm.GetState("Running") != null) { starter = f; break; }
+            PlayMakerFSM starter = c.Starter;
             string st = starter != null ? starter.ActiveStateName : "";
             float now = Time.realtimeSinceStartup;
             // Fini : Starter en marche avec un vrai regime, au moins une seconde apres la prise (sur la copie, il pouvait
             // etre en "Running" a regime nul) ; ou 4 s passees (le moteur fait ensuite ce que fait le jeu).
-            bool running = st == "Running" && c.Dt != null && c.Dt.rpm > 200f && now - hotAt > 1f;
+            bool running = st == c.RunState && c.Dt != null && c.Dt.rpm > 200f && now - hotAt > 1f;
             if (c.Dt == null || c.Index != LocalDriving || running || now > hotUntil)
             {
-                Log.Info("moteur repris : " + c.Key + " -> " + (st == "Running" ? "en marche" : "demarreur " + (st.Length > 0 ? st : "?")) + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?"));
+                Log.Info("moteur repris : " + c.Key + " -> " + (st == c.RunState ? "en marche" : "demarreur " + (st.Length > 0 ? st : "?")) + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?"));
                 hotCar = null;
                 return;
             }
@@ -1570,7 +1600,7 @@ namespace MWCoop
                 if (!Finite(thr)) thr = 0f;
                 int mask = 0;
                 for (int i = 0; i < c.SoundObjs.Length && i < 14; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;   // (14 au plus : 0x4000 klaxon, 0x8000 moteur)
-                if ((c.Starter != null && c.Starter.ActiveStateName == "Running") || testRpm > 0f || ModBool(c.ModDt, c.ModRun)) mask |= 0x8000;   // (essais : faux moteur en marche)
+                if ((c.Starter != null && c.Starter.ActiveStateName == c.RunState) || testRpm > 0f || ModBool(c.ModDt, c.ModRun)) mask |= 0x8000;   // (essais : faux moteur en marche)
                 if ((c.Horn != null && c.Horn.activeInHierarchy) || testHorn) mask |= 0x4000;
                 w.F32(rpm).F32(thr).F32(float.IsNaN(testSteer) ? SteerOf(c) : testSteer).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
                 for (int i = 0; i < c.SoundObjs.Length && i < 14; i++)
@@ -1966,6 +1996,10 @@ namespace MWCoop
             {
                 if (t > 15f && tStep == 0) { tStep = 1; Log.Info("autotest : reprise " + TestEnter(name, false)); }
                 if (t > 22f && tStep == 1) { tStep = 2; Log.Info("autotest : reprise volant -> " + TestEnter(name, true)); }
+                // [Test] RepriseVraie=1 : vrai demarrage (automate Starter -> "Start engine"), pas de faux regime ; avec
+                // RepriseMoteur=1, laisse tournant a la sortie.
+                bool real = Config.GetInt("Test", "RepriseVraie", 0) != 0;
+                if (t > 24f && tStep == 2 && real) { tStep = 3; Car rc = Named(name); if (rc != null && rc.Starter != null) { Game.SetState(rc.Starter, "Start engine"); } Log.Info("autotest : reprise vrai demarrage, demarreur " + (rc != null && rc.Starter != null ? rc.Starter.ActiveStateName + " (en marche : " + rc.RunState + ")" : "absent")); }
                 if (t > 24f && tStep == 2) { tStep = 3; TestEngine(2000f, 0.3f); Log.Info("autotest : reprise moteur " + TestSounds(name, true)); }
                 if (t > 27f && tStep == 3) { tStep = 4; Log.Info("autotest : reprise valeurs posees : " + TestSetSim(name)); }
                 if (t > 33f && tStep == 4)
@@ -1982,7 +2016,7 @@ namespace MWCoop
                 if (t > 50f && tStep == 1) { tStep = 2; Log.Info("autotest : reprise volant -> " + TestEnter(name, true)); }
                 if (t > 65f && tStep == 2) { tStep = 3; Log.Info("autotest : reprise sortie -> " + TestExit(name)); }
             }
-            if (t > 20f && t < 80f && now >= tLog) { tLog = now + 5f; Log.Info("autotest : reprise (" + (host ? "hote" : "invite") + ") " + TaxiState(name)); }
+            if (t > 20f && t < 80f && now >= tLog) { tLog = now + 5f; Car sc = Named(name); Log.Info("autotest : reprise (" + (host ? "hote" : "invite") + ") " + TaxiState(name) + ", demarreur " + (sc != null && sc.Starter != null ? sc.Starter.ActiveStateName : "?")); }
         }
 
         // Essais : ce qu'on sait de la voiture 'name' ici.

@@ -219,6 +219,14 @@ namespace MWCoop
                     if (t != seatTrigger) { seatTrigger = t; SeatPose(); }
                 }
                 if (seatTrigger != null) b |= G_Seat;
+                // Place sans meuble : le joueur s'est retourne (plus de 100 degres de l'avatar depuis 1,5 s) -- revue.
+                if (seatTrigger != null && seatLoose && cam != null && Flat(cam.forward).sqrMagnitude > 0.5f)
+                {
+                    float turn = Mathf.Abs(Mathf.DeltaAngle(Quaternion.LookRotation(Flat(cam.forward)).eulerAngles.y, seatYaw));
+                    if (turn < 100f) seatTurnSince = -1f;
+                    else if (seatTurnSince < 0f) seatTurnSince = now;
+                    else if (now - seatTurnSince > 1.5f) { seatTurnSince = -1f; SeatPose(); }
+                }
             }
             else seatTrigger = null;
             bits = b;
@@ -293,16 +301,44 @@ namespace MWCoop
                 }
                 if (low < float.MaxValue && Mathf.Abs(low - center.y) < 2f) floor = low;
             }
-            Vector3[] dirs = { Flat(furn.forward), -Flat(furn.forward), Flat(furn.right), -Flat(furn.right) };
+            // Axes du meuble a plat. Declencheur couche (capsules du PSK : son « avant » est vertical, nul une fois a plat) :
+            // son « haut ». Avant : deux directions nulles, l'avatar ne pouvait regarder que le long de l'autre axe -- de
+            // profil sur les banquettes (retours de Menor et witefold, 11/10).
+            Vector3 ax = Flat(furn.forward);
+            if (ax.sqrMagnitude < 0.5f) ax = Flat(furn.up);
+            if (ax.sqrMagnitude < 0.5f) ax = Vector3.forward;
+            Vector3 ay = Vector3.Cross(Vector3.up, ax).normalized;
+            Vector3[] dirs = { ax, -ax, ay, -ay };
             // (sans meuble : dossier cherche sur tout obstacle solide, a 90 cm du sol -- au-dessus des tables)
             Vector3 origin = new Vector3(center.x, floor + (loose ? 0.9f : 0.75f), center.z);
+            Vector3 fwd0 = Vector3.zero;
+            seatLoose = loose;
             int back = -1;
             float bestHit = 0.8f;
+            float[] wallAt = { 9f, 9f, 9f, 9f };
             for (int i = 0; i < 4; i++)
                 foreach (RaycastHit h in Physics.RaycastAll(origin, dirs[i], 0.8f))
-                    if (h.collider != null && !h.collider.isTrigger && (loose ? !Game.UnderPlayer(h.collider.transform) : h.collider.transform.IsChildOf(furn)) && h.distance < bestHit) { bestHit = h.distance; back = i; }
+                    if (h.collider != null && !h.collider.isTrigger && (loose ? !Game.UnderPlayer(h.collider.transform) : h.collider.transform.IsChildOf(furn)))
+                    {
+                        if (h.distance < wallAt[i]) wallAt[i] = h.distance;
+                        if (h.distance < bestHit) { bestHit = h.distance; back = i; }
+                    }
+            // Sans meuble (banquettes du PSK : bancs et tables fusionnes en un maillage sans collisionneur, la table
+            // introuvable) : face a ou regarde le joueur, cale sur l'axe de la place -- sauf un mur juste devant. Avant : le
+            // premier obstacle a 90 cm etait pris pour le dossier, souvent le mur au bout du banc : avatar assis de profil
+            // (retours de Menor et witefold, 11/10). Revu s'il se retourne (Update).
+            bool facing = false;
+            if (loose && cam != null && Flat(cam.forward).sqrMagnitude > 0.5f)
+            {
+                Vector3 cf = Flat(cam.forward);
+                int bi = 0; float bdot = -9f;
+                for (int i = 0; i < 4; i++) { float dd = Vector3.Dot(cf, dirs[i]); if (dd > bdot) { bdot = dd; bi = i; } }
+                if (wallAt[bi] < 0.45f && wallAt[bi ^ 1] >= 0.45f) bi ^= 1;
+                fwd0 = dirs[bi]; facing = true;
+            }
             Vector3 fwd;
-            if (back >= 0) fwd = -dirs[back];
+            if (facing) { fwd = fwd0; back = -1; }
+            else if (back >= 0) fwd = -dirs[back];
             else
             {
                 Vector3 toP = Flat(feet - center);
@@ -317,8 +353,10 @@ namespace MWCoop
             Vector3 s = center + lat * along;
             seatPos = new Vector3(s.x, floor, s.z);
             seatYaw = Quaternion.LookRotation(fwd).eulerAngles.y;
-            Log.Info("gestes : assis sur " + Recon.Path(t) + " : siege " + seatPos.ToString("F2") + ", sens " + seatYaw.ToString("F0") + " (" + (back >= 0 ? "dossier a " + bestHit.ToString("F2") + " m" : "sans dossier") + ")");
+            Log.Info("gestes : assis sur " + Recon.Path(t) + " : siege " + seatPos.ToString("F2") + ", sens " + seatYaw.ToString("F0") + " (" + (facing ? "face au regard du joueur" : back >= 0 ? "dossier a " + bestHit.ToString("F2") + " m" : "sans dossier") + ")");
         }
+
+        static bool seatLoose; static float seatTurnSince = -1f;
 
         static Vector3 Flat(Vector3 v) { v.y = 0f; return v.sqrMagnitude > 1e-6f ? v.normalized : Vector3.zero; }
 
@@ -568,13 +606,24 @@ namespace MWCoop
         {
             if (testSeatAt < 0)
             {
+                if (t < testRetry) return;
                 testSeatAt = t;
                 string want = Config.Get("Test", "Siege", "HOMENEW/FurnitureDisable/sofa");
+                int nth = Config.GetInt("Test", "SiegeN", 0);   // ([Test] SiegeN : le n-ieme declencheur de ce chemin)
                 nextTriggerScan = 0;
                 FindSeat();
-                PlayMakerFSM best = null;
+                PlayMakerFSM best = null, off = null;
+                int k = 0;
                 foreach (PlayMakerFSM f in triggers)
-                    if (f != null && f.gameObject.activeInHierarchy && Recon.Path(f.transform).StartsWith(want)) { best = f; break; }
+                    if (f != null && Recon.Path(f.transform).StartsWith(want) && k++ == nth) { if (f.gameObject.activeInHierarchy) best = f; else off = f; break; }
+                // Declencheur coupe tant qu'on est loin (PSK : ActiveFunctions) : joueur pose a cote, nouvel essai dans 5 s.
+                if (best == null && off != null && testTries++ < 3)
+                {
+                    Teleport(off.transform.position + Vector3.up * 0.3f);
+                    Log.Info("autotest : assis-chaise : declencheur coupe, joueur pose a cote (" + off.transform.position.ToString("F1") + ")");
+                    testSeatAt = -1; testRetry = t + 5f;
+                    return;
+                }
                 if (best == null)
                 {
                     var l = new List<string>();
@@ -607,6 +656,7 @@ namespace MWCoop
         }
 
         static PlayMakerFSM testTrigger;
+        static float testRetry; static int testTries;
         static bool forced, leftSeat;
 
         static void Teleport(Vector3 p)

@@ -62,6 +62,11 @@ namespace MWCoop
         // garde la liste et la renvoie toutes les 10 s (joueur arrive entre-temps).
         const int STORED = 4;
         static readonly HashSet<string> stored = new HashSet<string>();
+        // Qui l'a range (hote) : la liste renvoyee toutes les 10 s part en son nom, pas a lui. Avant : au nom de l'hote et a
+        // tous -- celui qui l'avait range (grattoir mis en outil par F) le recevait aussi, « range par #0 », et le cachait
+        // chez lui ; l'objet ressorti pouvait etre re-eteint dans sa main et disparaitre (retour d'OpNoob et Menor, 11/10 :
+        // grattoir, veste).
+        static readonly Dictionary<string, int> storedBy = new Dictionary<string, int>();
         static float nextStored, nextOut;
         static readonly Dictionary<string, Rigidbody> storedHere = new Dictionary<string, Rigidbody>();   // ranges ici : ressortis ?
         static readonly Dictionary<Rigidbody, Prop> byBody = new Dictionary<Rigidbody, Prop>();
@@ -78,7 +83,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            props.Clear(); byBody.Clear(); settling.Clear(); worldKeys.Clear(); worldLogged = false; stored.Clear(); storedHere.Clear();
+            props.Clear(); byBody.Clear(); settling.Clear(); worldKeys.Clear(); worldLogged = false; stored.Clear(); storedBy.Clear(); storedHere.Clear();
             ridingIn.Clear(); ridingOut.Clear(); vanished.Clear(); unknown.Clear();
             hand = null; held = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
@@ -272,6 +277,19 @@ namespace MWCoop
             if (hand != null)
             {
                 GameObject go = hand.FsmVariables.GetFsmGameObject("PickedObject").Value;
+                // Dans la main, main du jeu en « objet pris », mais eteint et cache ici par un message d'un autre : il est a
+                // nous (ressorti de l'outil du jeu, F) -- rallume (sinon il tombait invisible au lacher).
+                if (go != null && !go.activeSelf && go.transform.parent != null && go.transform.parent.gameObject.activeInHierarchy)
+                {
+                    string hs = hand.ActiveStateName;
+                    Rigidbody hrb = (hs == "Item picked" || hs == "Part picked" || hs == "Tool picked") ? go.GetComponent<Rigidbody>() : null;
+                    Prop hp;
+                    if (hrb != null && byBody.TryGetValue(hrb, out hp) && hp.Hidden)
+                    {
+                        hp.Hidden = false; go.SetActive(true);
+                        Log.Info("objet " + hp.Id + " dans la main mais cache (message d'un autre) : rallume");
+                    }
+                }
                 if (go != null && !go.activeInHierarchy) go = null;   // (eteint en main : range par un mod d'inventaire)
                 Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
                 if (rb != null && !byBody.TryGetValue(rb, out h) && Time.realtimeSinceStartup - lastForced > 1f)
@@ -288,7 +306,7 @@ namespace MWCoop
                 if (held != null && held.Body != null && !Destroyed(held.Body) && !held.Body.gameObject.activeInHierarchy)
                 {
                     Send(held, STORED, true);
-                    stored.Add(held.Id);
+                    stored.Add(held.Id); storedBy[held.Id] = Session.LocalId;
                     storedHere[held.Id] = held.Body;
                     Log.Info("objet " + held.Id + " range (eteint en main) : cache chez les autres");
                 }
@@ -342,7 +360,11 @@ namespace MWCoop
             {
                 nextStored = now + 10f;
                 foreach (string sid in stored)
-                    Session.Broadcast(new NetWriter(Msg.Prop).U8(Session.LocalId).Str(sid).U8(STORED).Vec(Vector3.zero).Quat(Quaternion.identity).Vec(Vector3.zero), true);
+                {
+                    int by;
+                    if (!storedBy.TryGetValue(sid, out by)) by = Session.LocalId;
+                    Session.Broadcast(new NetWriter(Msg.Prop).U8(by).Str(sid).U8(STORED).Vec(Vector3.zero).Quat(Quaternion.identity).Vec(Vector3.zero), true, by);
+                }
             }
             if (Session.IsHost && now >= nextHost && Session.RemoteCount > 0)
             {
@@ -756,8 +778,10 @@ namespace MWCoop
                 // Toujours inconnu (objet absent ici) : pas d'autre releve force pour lui avant 10 s (messages a 8-15/s).
                 if (p == null || p.Body == null) unknown[id] = now + 10f;
             }
-            if (state == STORED) stored.Add(id); else stored.Remove(id);
+            if (state == STORED) { stored.Add(id); storedBy[id] = who; } else stored.Remove(id);
             if (p == null || p.Body == null || p == held) return;
+            // Range ici (ou dans notre main, eteint : outil du jeu) : c'est nous qui l'avons, pas a cacher.
+            if (state == STORED && (storedHere.ContainsKey(id) || (hand != null && hand.FsmVariables.GetFsmGameObject("PickedObject").Value == p.Body.gameObject))) return;
             p.RemoteAt = now;
             if (state == STORED)
             {
