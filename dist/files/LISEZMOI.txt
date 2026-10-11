@@ -1,4 +1,4 @@
-MWCoop - My Winter Car en cooperation (PRE-ALPHA)
+MWCoop - My Winter Car en cooperation
 =================================================
 
 Installation

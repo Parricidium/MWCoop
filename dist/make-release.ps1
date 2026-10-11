@@ -66,7 +66,7 @@ if ($Publier) {
     $head = (git -C $root rev-parse HEAD).Trim()
     $po = cmd /c "git -C `"$root`" push origin HEAD:main 2>&1"   # par cmd : git ecrit sur stderr, ce qui arreterait le script
     if ($LASTEXITCODE -ne 0) { Remove-Item $nf; throw "echec du push de main" }
-    gh release create "v$Version" $zip $sums --repo Parricidium/MWCoop --title "MWCoop $Version (pre-alpha)" --notes-file $nf --prerelease --target $head
+    gh release create "v$Version" $zip $sums --repo Parricidium/MWCoop --title "MWCoop $Version" --notes-file $nf --target $head
     $rc = $LASTEXITCODE
     Remove-Item $nf
     if ($rc -ne 0) { throw "echec de la publication GitHub" }
@@ -82,7 +82,7 @@ if ($Publier) {
             if ($todoEn) { $en = (@($en -split "`n") | Where-Object { $_ -notmatch '^- To do: ' }) -join "`n" }   # (dans l'encadre)
             if ($en.Length -gt 3900) { $en = $en.Substring(0, 3900) + '...' }
             $embed = @{
-                title = "MWCoop $Version (pre-alpha)"; url = $url; color = 7912959; description = $en
+                title = "MWCoop $Version"; url = $url; color = 7912959; description = $en
                 footer = @{ text = 'Update from the launcher: NEW VERSION - UPDATE' }
             }
             $head = "<@&$($w[1].Trim())> **MWCoop $Version is out!**"
