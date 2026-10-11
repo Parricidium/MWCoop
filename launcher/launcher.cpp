@@ -4417,6 +4417,31 @@ static BOOL CALLBACK ListUnityWindows(HWND h, LPARAM lp)
     if (GetClassNameW(h, cls, 64) && !wcscmp(cls, L"UnityWndClass")) ((std::vector<HWND> *)lp)->push_back(h);
     return TRUE;
 }
+// Fenetre de configuration d'Unity (« My Winter Car Configuration » : resolution, qualite, bouton Play!) : inutile, l'ecran
+// et la qualite se reglent dans le lanceur (Options du jeu) et le mod les applique au menu (demande de JD, 11/10 : « elle
+// pop toujours »). Sans MSCLoader (ou son skipConfigScreen coupe), elle s'ouvrait a chaque partie : le lanceur appuie sur
+// Play! pour le joueur.
+static BOOL CALLBACK SkipUnityDialogWnd(HWND h, LPARAM lp)
+{
+    wchar_t cls[16], title[128];
+    if (!GetClassNameW(h, cls, 16) || wcscmp(cls, L"#32770") || !IsWindowVisible(h)) return TRUE;
+    GetWindowTextW(h, title, 128);
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (!wcsstr(title, L"Configuration") || !IsGamePid(pid)) return TRUE;
+    HWND ok = GetDlgItem(h, IDOK);
+    PostMessageW(h, WM_COMMAND, MAKEWPARAM(IDOK, BN_CLICKED), (LPARAM)ok);
+    *(bool *)lp = true;
+    return TRUE;
+}
+static void SkipUnityDialog()
+{
+    static DWORD logged;
+    bool done = false;
+    EnumWindows(SkipUnityDialogWnd, (LPARAM)&done);
+    if (done && GetTickCount() - logged > 10000) { logged = GetTickCount(); LaunchLog("fenetre de configuration d'Unity passee (Play!)"); }
+}
+
 // Une fenetre Unity visible de mywintercar.exe, apparue depuis le lancement ?
 static bool GameWindowShown()
 {
@@ -6727,6 +6752,7 @@ static void Tick()
     if (g_state == ST_LAUNCH && now - lastScan >= 250) {
         lastScan = now;
         if (g_proc && WaitForSingleObject(g_proc, 0) == WAIT_OBJECT_0) { CloseHandle(g_proc); g_proc = NULL; }
+        SkipUnityDialog();
         if (!g_winSeenT && GameWindowShown()) g_winSeenT = now;
         bool running = g_proc || GameProcessRunning();
         if (running) g_noProcT = 0;
@@ -7448,6 +7474,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_scroll[TAB_WIKI] = (float)sc;
         }
         else if (st == L"graphismes") { g_tab = TAB_GFX; GfxLoad(); }
+        else if (st == L"graphismes-video") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi : { 6, 7, 8, 9, 0, 1, 2, 3 }) g_gfxOpen[gi] = false; g_gfxContentH = 3000; g_scroll[TAB_GFX] = (float)_wtof(argv[argc - 1]); }   // (blocs video : coop et jeu plies)
         else if (st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_scroll[TAB_GFX] = GfxMaxScroll(); }   // (bas de la page : touches)
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
         else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite

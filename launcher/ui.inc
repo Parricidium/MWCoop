@@ -1509,7 +1509,7 @@ static bool UiClick(int id)
         else { g_logDelKey = L"**"; g_logDelT = GetTickCount(); SetStatus(K_WARN, T(L"Clique encore pour mettre toutes les parties rangées à la corbeille", L"Click again to move every stored session to the Recycle Bin")); }
         return true;
     }
-    if (id >= UI_GFX_GROUP && id < UI_GFX_GROUP + 10) { GfxToggleGroup(id - UI_GFX_GROUP); return true; }
+    if (id >= UI_GFX_GROUP && id < UI_GFX_GROUP + kGfxGroups) { GfxToggleGroup(id - UI_GFX_GROUP); return true; }
     if (id >= UI_GFX_PRESET && GfxClick(id)) return true;
     return false;
 }
