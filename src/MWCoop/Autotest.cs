@@ -1241,6 +1241,26 @@ namespace MWCoop
             // tune", volume 0,6), l'eteint a 58 s ; chacun note toutes les 3 s ou est son vrai jeu de canaux et les copies.
             // Attendu chez l'invite : une copie dans le BACHGLOTZ de 40 a 58 s, son vrai jeu de canaux pas deplace.
             if (mode == "radioflux" && !Net.Session.IsHost) Radio.TestStream(t);
+            // [Test] Autotest=valise (mod Suitcase installe des deux cotes) : chacun note la valise toutes les 2 s de 30 a 85 s ;
+            // l'hote la tient devant lui de 40 a 50 s ; l'invite la fait reapparaitre devant lui a 62 s comme le mod (ancienne
+            // detruite, nouvelle a sa place). Attendu : memes poses des deux cotes apres chaque geste.
+            if (mode == "valise")
+            {
+                GameObject sc = GameObject.Find("Suitcase");
+                if (t > 30f && t < 85f && t >= holdLog) { holdLog = t + 2f; Log.Info("autotest : valise " + (sc != null ? sc.transform.position.ToString("F2") : "absente") + " | " + Props.Ids("w:mod:")); }
+                if (Net.Session.IsHost && t > 40f && t < 50f && PlayerSync.LocalCamera != null) { Props.TestHold(Props.FindKey("valise"), PlayerSync.LocalCamera); if (step == 0) { step = 1; Log.Info("autotest : valise tenue par l'hote"); } }
+                if (Net.Session.IsHost && t > 50f && step == 1) { step = 2; Props.TestHold(Props.FindKey("valise"), null); Log.Info("autotest : valise lachee par l'hote"); }
+                if (!Net.Session.IsHost && t > 62f && step == 0 && sc != null && PlayerSync.LocalCamera != null)
+                {
+                    step = 1;
+                    Transform cam = PlayerSync.LocalCamera;
+                    Vector3 f = cam.forward; f.y = 0f; f.Normalize();
+                    GameObject nc = (GameObject)Object.Instantiate(sc, cam.position + f * 1.5f - Vector3.up * 0.9f, Quaternion.LookRotation(-f, Vector3.up));
+                    nc.name = "Suitcase";
+                    Object.Destroy(sc);
+                    Log.Info("autotest : valise reapparue devant l'invite en " + nc.transform.position.ToString("F2"));
+                }
+            }
             if (mode == "radioautre")
             {
                 string part = Config.Get("Test", "RadioBouton", "BACHGLOTZ(1905kg)/RadioPivot/Radio/ButtonsRadio/RadioVolume::Knob");
