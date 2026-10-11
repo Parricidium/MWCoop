@@ -3902,7 +3902,24 @@ static bool CopyText(const std::wstring &t)
 // Demande de JD (08/10) : bouton Discord dans la barre de gauche, et au premier lancement (apres la visite guidee) une
 // fenetre propose de rejoindre le serveur ([Lanceur] DiscordPropose=1 ensuite : une seule fois). Meme mecanique que le
 // guide Steam (g_guide), autre contenu (g_guideKind 1).
-static const wchar_t *kDiscordUrl = L"https://discord.gg/H7NXpWHwgY";
+// Lien d'invitation : jamais dans le code public (robots qui fouillent GitHub, demande de JD, 11/10) -- son code est dans
+// launcher/discord.local.h (ignore par git, sur le PC qui compile), brouille. Sans ce fichier : la page GitHub du projet.
+#if __has_include("discord.local.h")
+#include "discord.local.h"
+#define MWC_HAS_DISCORD 1
+#endif
+static std::wstring DiscordUrlBuild()
+{
+#ifdef MWC_HAS_DISCORD
+    std::wstring code;
+    for (unsigned char c : kDiscordCodeX) code += (wchar_t)(c ^ 0x5A);
+    return L"https://discord" L".gg/" + code;
+#else
+    return L"https://github.com/Parricidium/MWCoop";
+#endif
+}
+static const std::wstring g_discordUrl = DiscordUrlBuild();
+static const wchar_t *kDiscordUrl = g_discordUrl.c_str();
 static const RectF kDiscCard(390, 166, 500, 476), kDiscJoin(430, 486, 420, 54), kDiscLater(430, 552, 420, 44), kDiscClose(836, 182, 40, 40);
 static int g_guideKind;   // 0 guide Steam, 1 invitation au Discord
 static void DiscordAskOpen() { g_guide = true; g_guideKind = 1; g_guideHot = 0; g_focus = -1; }
