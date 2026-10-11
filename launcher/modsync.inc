@@ -579,14 +579,30 @@ static DWORD WINAPI SyncCheckThread(void *p)
         o = g_hostOffer;
     }
     std::vector<int> need;
-    uint64_t bytes = 0;
+    uint64_t bytes = 0, reused = 0;
+    int reusedN = 0;
+    // Deja chez l'invite (demande de JD, 11/10 : « s'il a deja un mod que j'ai aussi, ca lui telecharge quand meme ») : un
+    // fichier identique a celui de l'hote (meme taille, meme empreinte : la meme version exacte) dans SES mods (son dossier
+    // Mods de MSCLoader) ou son jeu (CD, radio...) est recopie dans la copie de l'hote au lieu d'etre telecharge. Ses
+    // propres dossiers ne sont que lus ; un fichier d'une autre version vient de l'hote.
+    std::wstring ownMods = MscModsDir();
     for (int i = 0; i < (int)o.files.size(); i++) {
         uint64_t h = 0;
         uint32_t sz = 0;
-        if (FileFnvCached(SyncLocal(o.files[i].path), &h, &sz) && sz == o.files[i].size && h == o.files[i].hash) continue;
+        std::wstring dst = SyncLocal(o.files[i].path);
+        if (FileFnvCached(dst, &h, &sz) && sz == o.files[i].size && h == o.files[i].hash) continue;
+        std::wstring rel = Widen(o.files[i].path, CP_UTF8);
+        std::wstring own = !o.files[i].path.compare(0, 5, "Mods\\") ? ownMods + rel.substr(5) : g_gameDir + rel;
+        if (_wcsicmp(own.c_str(), dst.c_str()) && FileFnvCached(own, &h, &sz) && sz == o.files[i].size && h == o.files[i].hash) {
+            size_t sl = dst.find_last_of(L'\\');
+            if (sl != std::wstring::npos) SHCreateDirectoryExW(NULL, dst.substr(0, sl).c_str(), NULL);
+            SetFileAttributesW(dst.c_str(), FILE_ATTRIBUTE_NORMAL);
+            if (CopyFileW(own.c_str(), dst.c_str(), FALSE)) { reusedN++; reused += sz; continue; }
+        }
         need.push_back(i);
         bytes += o.files[i].size;
     }
+    if (reusedN) LaunchLog("mods : %d fichier(s) deja chez l'invite, a la meme version (%llu octets) : recopies de ses mods, pas telecharges", reusedN, (unsigned long long)reused);
     std::lock_guard<std::mutex> lk(g_syncMx);
     if (gen != g_syncGen) return 0;
     g_syncNeed = need;
