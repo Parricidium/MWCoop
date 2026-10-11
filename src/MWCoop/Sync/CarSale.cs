@@ -48,11 +48,15 @@ namespace MWCoop
         // ensuite sauvee. Au chargement : si la Rivett a deja ses cles (PlayerKeySatsuma) mais que la vente a ete relancee
         // (numero a l'etape 2), elle est annulee comme le jeu l'aurait fait avec l'etape 3 : numero detruit ("Destroy"),
         // flechette Wood1Car eteinte, Car de WoodJob1Point a faux et retour a sa boucle, vendeur au repos.
+        // COUPE depuis 0.75.49 ([Test] VenteReparation=1 pour la rallumer) : PlayerKeySatsuma vaut 1 des une nouvelle partie
+        // (PlayerKeys 'Reset') -- ce n'est pas la cle de la Rivett. Toute vente en cours (numero appele, etape 2) etait annulee
+        // au chargement suivant : le vendeur ne venait jamais (retour de Dr.Robi, 11/10 : « the guy is never there »).
         static float repairAt; static bool repaired;
         static void Repair()
         {
             if (repaired || Time.realtimeSinceStartup < repairAt) return;
             repaired = true;
+            if (Config.GetInt("Test", "VenteReparation", 0) == 0) return;
             FsmInt key = FsmVariables.GlobalVariables.FindFsmInt("PlayerKeySatsuma");
             PlayMakerFSM data = null;
             foreach (Object o in Game.AllFsms())
