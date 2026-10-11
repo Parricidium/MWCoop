@@ -372,6 +372,7 @@ namespace MWCoop
                 Counter c = mutedCounters[i];
                 if (c.Fsm == null || now > c.MutedUntil || (now - c.MutedAt > 0.5f && c.Fsm.gameObject.activeInHierarchy && Idle(c))) UnmuteCounter(c);
             }
+            SubtitlesTick(now);
             if (nextScan > 0) RestoUpdate(now);
             if (spawnSteps.Count > 0 && now >= nextSpawnStep)
             {
@@ -1334,7 +1335,7 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("magasin : comptoir " + key + " introuvable ici"); }
                 return;
             }
-            if (c.Kind != "tasse") Hud.Toast(PlayerName(who) + (c.Kind == "cafe" ? Lang.T(" a pris ", " took ") : Lang.T(" a pay\u00E9 ", " paid for ")) + c.Label);
+            if (c.Kind != "tasse") { Hud.Toast(PlayerName(who) + Said(c)); Log.Info("magasin : notification \"" + PlayerName(who) + Said(c) + "\""); }
             var item = new Replayed { C = c, State = state, Who = who, SerialWho = sw, Serial = serial, V = v, Lists = lists, Until = Time.realtimeSinceStartup + c.Wait };
             if (!TryApply(item, Time.realtimeSinceStartup))
             {
@@ -1344,6 +1345,23 @@ namespace MWCoop
         }
 
         // Cle de l'autre introuvable : par la fin du chemin (objet et parent), si elle est unique.
+        // Toast chez les autres, dans LEUR langue (retour de gamereggo, 11/10 : "a paye un repas au comptoir burger" en francais).
+        static string Said(Counter c)
+        {
+            switch (c.Kind)
+            {
+                case "cafe": return Lang.T(" a pris un caf\u00E9", " took a coffee");
+                case "carte": return Lang.T(" a pay\u00E9 un plat \u00E0 la carte", " paid for an \u00E0 la carte dish");
+                case "resto": return Lang.T(" a pay\u00E9 un repas au comptoir burger", " paid for a meal at the burger counter");
+                case "bus": return Lang.T(" a pay\u00E9 un ticket de bus", " paid for a bus ticket");
+                case "bar": return Lang.T(" a pay\u00E9 au bar", " paid at the bar");
+                case "puces": return Lang.T(" a pay\u00E9 au march\u00E9 aux puces", " paid at the flea market");
+            }
+            if (c.Label.Contains("epuration")) return Lang.T(" a pay\u00E9 \u00E0 la station d'\u00E9puration", " paid at the sewage plant");
+            if (c.Label.Contains("controle")) return Lang.T(" a pay\u00E9 au contr\u00F4le technique", " paid at the inspection");
+            return Lang.T(" a pay\u00E9 \u00E0 une caisse", " paid at a till");
+        }
+
         static Counter FindCounter(string key)
         {
             Counter c;
@@ -1393,7 +1411,7 @@ namespace MWCoop
             c.SerialWho = it.SerialWho; c.Serial = it.Serial; c.Made = 0;
             MuteCounter(c);
             if (c.Kind == "bar") HideOrders(c);
-            if (c.Kind == "resto") c.ReplayOrder = true;   // 'State 4' : Keijo mis au service s'il ne prend pas ORDER
+            if (c.Kind == "resto") { c.ReplayOrder = true; MuteSubtitles(c.Waiter); }   // 'State 4' : Keijo mis au service s'il ne prend pas ORDER
             applying = true; Replay.Depth++;
             try { Game.SetState(f, it.State); }
             finally { applying = false; Replay.Depth--; }
@@ -1965,6 +1983,33 @@ namespace MWCoop
             if (muted == null) return;
             foreach (FsmStateAction a in muted) a.Enabled = true;
             muted.Clear();
+        }
+
+        // Rejeu de l'achat d'un autre joueur : ce que dit le serveur ("Thank you for ordering!" dans GUIsubtitle, la ligne
+        // de dialogue en bas de l'ecran) s'affichait chez tous (retour de gamereggo, 11/10). Coupe jusqu'au retour de Keijo
+        // a son attente ('Delay'), ou 120 s au plus.
+        static readonly List<FsmStateAction> subMuted = new List<FsmStateAction>();
+        static PlayMakerFSM subFsm;
+        static float subAt;
+        static void MuteSubtitles(PlayMakerFSM f)
+        {
+            if (f == null) return;
+            foreach (FsmState s in f.Fsm.States)
+                foreach (FsmStateAction a in s.Actions)
+                {
+                    var sv = a as HutongGames.PlayMaker.Actions.SetStringValue;
+                    if (sv != null && a.Enabled && sv.stringVariable != null && sv.stringVariable.Name == "GUIsubtitle") { a.Enabled = false; subMuted.Add(a); }
+                }
+            subFsm = f; subAt = Time.realtimeSinceStartup;
+            Log.Info("magasin : " + subMuted.Count + " sous-titres de " + f.gameObject.name + " coupes le temps du service rejoue");
+        }
+        static void SubtitlesTick(float now)
+        {
+            if (subMuted.Count == 0) return;
+            if (subFsm != null && now - subAt < 120f && !(now - subAt > 2f && subFsm.ActiveStateName == "Delay")) return;
+            foreach (FsmStateAction a in subMuted) a.Enabled = true;
+            Log.Info("magasin : sous-titres de " + (subFsm != null ? subFsm.gameObject.name + " rendus (" + subFsm.ActiveStateName + ")" : "?") + ", GUIsubtitle \"" + (FsmVariables.GlobalVariables.FindFsmString("GUIsubtitle") != null ? FsmVariables.GlobalVariables.FindFsmString("GUIsubtitle").Value : "?") + "\"");
+            subMuted.Clear();
         }
 
         static void MuteCounter(Counter c)

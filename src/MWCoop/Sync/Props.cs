@@ -1072,6 +1072,14 @@ namespace MWCoop
         }
 
         public static bool Holding { get { return held != null; } }
+        // Objet dans la main du joueur d'ici (PickedObject, tout objet, suivi ou non).
+        public static bool HandFound { get { return hand != null; } }
+        public static GameObject LocalHeld()
+        {
+            if (hand == null) return null;
+            FsmGameObject g = hand.FsmVariables.FindFsmGameObject("PickedObject");
+            return g != null ? g.Value : null;
+        }
 
         public static string Where(string id)
         {
