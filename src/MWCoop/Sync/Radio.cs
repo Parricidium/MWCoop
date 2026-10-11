@@ -242,10 +242,28 @@ namespace MWCoop
             Restore(b);
         }
 
+        // Le vrai jeu de canaux lit volume et basses a chaque image sur la radio notee dans sa variable Parent (GetParent de
+        // son etat Fetch). Le geste d'un autre rejoue ici (allumer sa radio) le deplacait dans son poste et relancait Fetch :
+        // remis a sa place par RemoteChange, il gardait les reglages de l'autre poste -- les basses ou le volume d'un joueur
+        // passaient aux radios des autres (retour de witefold, 0.75.37 ; essai radioautre RadioLocale=18 : radio du KEKMET
+        // d'ici reglee sur la BACHGLOTZ de l'hote). Recale sur le poste ou il joue, et ses filtres relus (FETCH).
+        static float parentLog;
+        static void KeepParent(float now)
+        {
+            if (!fetch.enabled || realT.parent == null || Off(Take())) return;
+            FsmGameObject pv = fetch.FsmVariables.FindFsmGameObject("Parent");
+            if (pv == null || pv.Value == realT.parent.gameObject) return;
+            string was = pv.Value != null ? pv.Value.transform.root.name : "-";
+            pv.Value = realT.parent.gameObject;
+            fetch.SendEvent("FETCH");
+            if (now >= parentLog) { parentLog = now + 10f; Log.Info("radio : reglages relus sur " + Recon.Path(realT.parent) + " (ils venaient de " + was + ")"); }
+        }
+
         static void Watch(float now)
         {
             if (realT == null || fetch == null) return;
             if (!lastSet) { last = Take(); lastSet = true; }
+            KeepParent(now);
             Snap cur = Take();
             if (!Same(last, cur))
             {
@@ -342,6 +360,11 @@ namespace MWCoop
         public static string GhostState()
         {
             var sb = new System.Text.StringBuilder("vrai jeu de canaux sous " + (realT != null && realT.parent != null ? Recon.Path(realT.parent) : "-") + (fetch != null ? (fetch.enabled ? " (allume" : " (eteint") + ", locale " + (!FB("OnMuteChannel1")) + ", folk " + (!FB("OnMuteFolk")) + ")" : ""));
+            if (fetch != null)
+            {
+                FsmGameObject par = fetch.FsmVariables.FindFsmGameObject("Parent");
+                sb.Append(" ; reglages lus sur ").Append(par != null && par.Value != null ? Recon.Path(par.Value.transform) : "-").Append(" [").Append(fetch.ActiveStateName).Append("]");
+            }
             if (ch != null)
                 for (int c = 0; c < ch.Length; c++)
                     if (ch[c] != null)
