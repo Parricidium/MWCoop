@@ -24,7 +24,7 @@ namespace MWCoop
         static bool present, looked, replaying;
         static float nextScan;
 
-        public static void OnLevelLoaded() { hooked.Clear(); byKey.Clear(); pending.Clear(); nextScan = 0f; }
+        public static void OnLevelLoaded() { hooked.Clear(); byKey.Clear(); pending.Clear(); nextScan = 0f; extras.Clear(); extraKeys.Clear(); firstExtra = -1f; staleDone = false; }
 
         static bool Present()
         {
@@ -41,6 +41,46 @@ namespace MWCoop
         }
 
         static string KeyOf(PlayMakerFSM f) { return Recon.Path(f.transform) + "::" + f.FsmName; }
+
+        // Essai [Test] Autotest=cbxextra (retour de witefold, 11/10 : « bois et sacs de sable n'apparaissent pas ») : appelle
+        // Spawn() des objets du groupe « Extra » de Cheatbox++ (Firewood, Sandbag) comme son bouton, et note ce qui arrive.
+        public static string TestExtra()
+        {
+            const System.Reflection.BindingFlags A = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static;
+            Type cpp = null;
+            foreach (System.Reflection.Assembly a in AppDomain.CurrentDomain.GetAssemblies()) { try { cpp = a.GetType("CheatboxPlusPlus.Cpp", false); } catch { } if (cpp != null) break; }
+            if (cpp == null) return "Cheatbox++ absent";
+            object inst = cpp.GetField("instance", A).GetValue(null);
+            object its = inst != null ? cpp.GetField("itemSpawning", A).GetValue(inst) : null;
+            if (its == null) return "Cheatbox++ : itemSpawning nul";
+            its.GetType().GetMethod("Load", A).Invoke(its, null);
+            Array groups = its.GetType().GetField("shopItems", A).GetValue(its) as Array;
+            if (groups == null) return "Cheatbox++ : pas de groupes";
+            var sb = new System.Text.StringBuilder();
+            foreach (object grp in groups)
+            {
+                if ((string)grp.GetType().GetField("name", A).GetValue(grp) != "Extra") continue;
+                foreach (object it in (Array)grp.GetType().GetField("allItems", A).GetValue(grp))
+                {
+                    string n = (string)it.GetType().GetField("displayName", A).GetValue(it);
+                    object pf = it.GetType().GetField("displayPrefab", A).GetValue(it);
+                    int before = CountNamed(n == "Firewood" ? "firewood" : "sandbag(cheat)");
+                    string err = "";
+                    try { it.GetType().GetMethod("Spawn", A).Invoke(it, null); }
+                    catch (Exception e) { Exception x = e.InnerException ?? e; err = " ERREUR " + x.GetType().Name + ": " + x.Message; }
+                    sb.Append(n).Append(" (modele ").Append(pf != null && !pf.Equals(null) ? "ok" : "ABSENT").Append(") : ")
+                      .Append(before).Append(" -> ").Append(CountNamed(n == "Firewood" ? "firewood" : "sandbag(cheat)")).Append(err).Append(" ; ");
+                }
+            }
+            return sb.ToString();
+        }
+        public static string TestCount()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (KeyValuePair<GameObject, string> kv in extras) if (kv.Key != null) sb.Append(kv.Value).Append(" en ").Append(kv.Key.transform.position.ToString("F1")).Append(" ; ");
+            return "buches " + CountNamed("firewood(Clone)") + ", sacs " + CountNamed("sandbag(cheat)") + " | " + sb;
+        }
+        static int CountNamed(string n) { int c = 0; foreach (GameObject g in UnityEngine.Object.FindObjectsOfType<GameObject>()) if (g.name.StartsWith(n) && g.transform.parent == null) c++; return c; }
 
         class Hook : FsmStateAction
         {
@@ -96,6 +136,7 @@ namespace MWCoop
             if (!Session.Active || !PlayerSync.InGame || !Present()) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = now + (hooked.Count == 0 ? 5f : 60f); Scan(); }
+            ExtrasTick(now);
             if (pending.Count == 0) return;
             foreach (PlayMakerFSM f in pending)
             {
@@ -131,6 +172,107 @@ namespace MWCoop
             if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
             Props.Track(go);
             Log.Info("mods : Cheatbox++, " + go.name + " apparu chez #" + who + ", recree ici");
+        }
+
+        // ---------------------------------------------------------------- bois et sacs de sable (groupe « Extra »)
+        // Retour de witefold (11/10) : « le bois et les sacs de sable n'apparaissent pas ». Cheatbox++ les cree lui-meme
+        // (Instantiate du modele « firewood » ; sacs : copie de sandbag(item1) renommee sandbag(cheat), son automate retire),
+        // sans distributeur : ils n'existaient que chez celui qui les faisait apparaitre (essai cbxextra : 0 -> 1 chez chacun).
+        // Chaque nouveau (racine « firewood(Clone) » / « sandbag(cheat) ») recoit une cle, part aux autres (@cbxx), qui creent
+        // le meme au meme endroit ; Props le suit ensuite. Sacs : Cheatbox++ les sauve chez chacun -- ceux de l'hote font foi
+        // (renvoyes toutes les 30 s, ajoutes a sa liste s'ils viennent d'un invite) ; ceux qu'un invite recharge de SA
+        // sauvegarde sont retires a son arrivee.
+        static readonly Dictionary<GameObject, string> extras = new Dictionary<GameObject, string>();
+        static readonly HashSet<string> extraKeys = new HashSet<string>();
+        static int extraN; static float nextExtra, firstExtra = -1f, nextSnap; static bool staleDone;
+        static readonly string session = new System.Random().Next(0x1000, 0xffff).ToString("x");
+
+        static string ExtraKind(GameObject g)
+        {
+            if (g.transform.parent != null) return null;
+            return g.name == "sandbag(cheat)" ? "sac" : g.name == "firewood(Clone)" ? "bois" : null;
+        }
+
+        static void ExtrasTick(float now)
+        {
+            if (now < nextExtra) return;
+            nextExtra = now + 1f;
+            if (firstExtra < 0f) firstExtra = now;
+            int stale = 0;
+            foreach (Rigidbody rb in UnityEngine.Object.FindObjectsOfType<Rigidbody>())
+            {
+                GameObject g = rb.gameObject;
+                if (extras.ContainsKey(g)) continue;
+                string kind = ExtraKind(g);
+                if (kind == null) continue;
+                // (buches du jeu -- fendeuse, tas de grumes : memes « firewood(Clone) », deja marquees par Jobs a leur creation)
+                if (kind == "bois" && Props.ItemId(g).Length > 0) continue;
+                if (!Session.IsHost && !staleDone && kind == "sac") { UnityEngine.Object.Destroy(g); stale++; continue; }   // (de la sauvegarde de l'invite)
+                string key = "w:cbx:" + kind + ":" + Session.LocalId + ":" + session + ":" + (++extraN);
+                Adopt(g, key);
+                SendExtra(kind, key, g.transform);
+                Log.Info("mods : Cheatbox++, " + (kind == "sac" ? "sac de sable" : "buche") + " apparu ici, envoye (" + key + ")");
+            }
+            if (!staleDone) { staleDone = true; if (stale > 0) Log.Info("mods : Cheatbox++, " + stale + " sac(s) de sable de la sauvegarde de l'invite retire(s) (ceux de l'hote font foi)"); }
+            if (Session.IsHost && now >= nextSnap && Session.RemoteCount > 0)
+            {
+                nextSnap = now + 30f;
+                foreach (KeyValuePair<GameObject, string> kv in extras) if (kv.Key != null) SendExtra(kv.Value.Split(':')[2], kv.Value, kv.Key.transform);
+            }
+        }
+
+        static void Adopt(GameObject g, string key) { extras[g] = key; extraKeys.Add(key); Props.Adopt(g, key); }
+
+        static void SendExtra(string kind, string key, Transform t)
+        {
+            if (Session.RemoteCount == 0) return;
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@cbxx").Str(kind).Str(key).Vec(t.position).Quat(t.rotation), true);
+        }
+
+        public static void OnExtra(int who, string kind, string key, Vector3 pos, Quaternion rot)
+        {
+            if (extraKeys.Contains(key)) return;
+            GameObject go = null;
+            if (kind == "sac")
+            {
+                GameObject src = GameObject.Find("sandbag(item1)");
+                if (src == null) foreach (GameObject g in Resources.FindObjectsOfTypeAll<GameObject>()) if (g.hideFlags == HideFlags.None && g.name.StartsWith("sandbag(item")) { src = g; break; }
+                if (src != null)
+                {
+                    go = (GameObject)UnityEngine.Object.Instantiate(src);
+                    go.name = "sandbag(cheat)";
+                    PlayMakerFSM f = go.GetComponent<PlayMakerFSM>(); if (f != null) UnityEngine.Object.Destroy(f);
+                    if (!go.activeSelf) go.SetActive(true);
+                    if (Session.IsHost) AddToCheatboxSave(go.transform);
+                }
+            }
+            else
+            {
+                foreach (GameObject g in Resources.FindObjectsOfTypeAll<GameObject>())
+                    if (g.hideFlags == HideFlags.None && g.name == "firewood" && g.transform.parent == null && g.activeSelf && !g.activeInHierarchy) { go = (GameObject)UnityEngine.Object.Instantiate(g); break; }
+            }
+            if (go == null) { Log.Warn("mods : Cheatbox++, modele introuvable ici pour " + kind); return; }
+            go.transform.parent = null; go.transform.position = pos; go.transform.rotation = rot;
+            Rigidbody rb = go.GetComponent<Rigidbody>(); if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+            Adopt(go, key);
+            Log.Info("mods : Cheatbox++, " + (kind == "sac" ? "sac de sable" : "buche") + " de #" + who + " recree ici (" + key + ")");
+        }
+
+        // Hote : sac recu d'un invite ajoute a la liste de Cheatbox++ (CustomObjects.sandBags), sauvee avec sa partie.
+        static void AddToCheatboxSave(Transform t)
+        {
+            try
+            {
+                const System.Reflection.BindingFlags A = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static;
+                Type cpp = null;
+                foreach (System.Reflection.Assembly a in AppDomain.CurrentDomain.GetAssemblies()) { try { cpp = a.GetType("CheatboxPlusPlus.Cpp", false); } catch { } if (cpp != null) break; }
+                object inst = cpp != null ? cpp.GetField("instance", A).GetValue(null) : null;
+                object its = inst != null ? cpp.GetField("itemSpawning", A).GetValue(inst) : null;
+                object co = its != null ? its.GetType().GetField("customObjects", A).GetValue(its) : null;
+                var list = co != null ? co.GetType().GetField("sandBags", A).GetValue(co) as System.Collections.IList : null;
+                if (list != null) list.Add(t);
+            }
+            catch (Exception e) { Log.Warn("mods : Cheatbox++, sac non ajoute a sa sauvegarde : " + e.Message); }
         }
 
         // [Test] Autotest=cbx : l'hote fait apparaitre par Cheatbox++ (reflexion : SpawnerItem.UseSpawner) l'article [Test]

@@ -233,8 +233,9 @@ namespace MWCoop
                 if (Garage.Owns(rb)) continue;   // levage d'un cric (corps rajoute par le jeu) : Garage, pas Props (recalage de l'hote sinon)
                 string bagKey = SleepingBags.KeyOf(rb);   // (sacs de couchage de MWCoop)
                 if (bagKey != null) { Register(rb, bagKey, null); continue; }
-                PlayMakerFSM use;
-                string id = ItemId(rb.gameObject, out use);
+                PlayMakerFSM use = null;
+                string pre;
+                string id = worldKeys.TryGetValue(rb.gameObject, out pre) && pre.StartsWith("w:cbx:") ? pre : ItemId(rb.gameObject, out use);   // (objets de Cheatbox++ : leur cle)
                 if (id.Length == 0) id = PackageKey(rb.gameObject);
                 if (id.Length == 0) id = WorldKey(rb) ?? "";
                 if (id.Length == 0)
@@ -265,6 +266,15 @@ namespace MWCoop
                 GameObject h = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
                 if (h != null) hand = Game.FsmOn(h, "PickUp");
             }
+        }
+
+        // Objet d'un mod suivi sous une cle donnee (Cheatbox++ : bois et sacs de sable), tout de suite.
+        public static void Adopt(GameObject go, string id)
+        {
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            if (rb == null) return;
+            worldKeys[go] = id;
+            Register(rb, id, null);
         }
 
         // Objet tout juste cree (Consume, a sa creation) : suivi tout de suite, sans attendre le releve.

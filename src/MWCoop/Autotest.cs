@@ -1241,6 +1241,17 @@ namespace MWCoop
             // tune", volume 0,6), l'eteint a 58 s ; chacun note toutes les 3 s ou est son vrai jeu de canaux et les copies.
             // Attendu chez l'invite : une copie dans le BACHGLOTZ de 40 a 58 s, son vrai jeu de canaux pas deplace.
             if (mode == "radioflux" && !Net.Session.IsHost) Radio.TestStream(t);
+            // (l'hote fait apparaitre a 40 s ; chacun compte ensuite les buches et sacs de Cheatbox++ a 55 s)
+            // [Test] Autotest=fendattel : l'hote attelle la fendeuse au KEKMET a 40 s, la detelle a 55 s ; chacun note son etat
+            // toutes les 3 s de 35 a 70 s. Attendu : meme etat des deux cotes quelques dixiemes apres chaque geste.
+            if (mode == "fendattel")
+            {
+                if (Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + CutterHitch.TestSet(1)); }
+                if (Net.Session.IsHost && t > 55f && step == 1) { step = 2; Log.Info("autotest : " + CutterHitch.TestSet(0)); }
+                if (t > 35f && t < 70f && t >= holdLog) { holdLog = t + 3f; Log.Info("autotest : fendattel, " + CutterHitch.State()); }
+            }
+            if (mode == "cbxextra" && Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : cbxextra " + ModCheatbox.TestExtra()); }
+            if (mode == "cbxextra" && t > 55f && step2 == 0) { step2 = 1; Log.Info("autotest : cbxextra, ici " + ModCheatbox.TestCount()); }
             // [Test] Autotest=valise (mod Suitcase installe des deux cotes) : chacun note la valise toutes les 2 s de 30 a 85 s ;
             // l'hote la tient devant lui de 40 a 50 s ; l'invite la fait reapparaitre devant lui a 62 s comme le mod (ancienne
             // detruite, nouvelle a sa place). Attendu : memes poses des deux cotes apres chaque geste.
@@ -1274,6 +1285,16 @@ namespace MWCoop
                 }
                 if (Net.Session.IsHost && t > 58f && step == 1) { step = 2; Log.Info("autotest : radioautre, " + Jobs.TestSend(part, "Decrease", "OFF", "Off")); }
                 if (!Net.Session.IsHost && Config.GetInt("Test", "RadioFlux", 0) != 0 && t > 30f && step == 0) { step = 1; Log.Info("autotest : radioautre, " + Radio.TestFolkSong()); }
+                // ([Test] RadioLocale=s : l'invite allume ici la radio du KEKMET a s secondes, volume 0,3 -- ses reglages doivent rester les siens)
+                float rl = Config.GetFloat("Test", "RadioLocale", 0f);
+                if (!Net.Session.IsHost && rl > 0f && t > rl && step2 == 0)
+                {
+                    step2 = 1;
+                    GameObject kv = Game.FindAny("KEKMET(350-400psi)/RadioPivot/Radio/ButtonsRadio/RadioVolume");
+                    PlayMakerFSM kk = kv != null ? Game.FsmOn(kv, "Knob") : null;
+                    if (kk != null) { HutongGames.PlayMaker.FsmFloat vf = kk.FsmVariables.FindFsmFloat("Volume"); if (vf != null) vf.Value = 0.3f; Game.SetState(kk, "Check tune"); }
+                    Log.Info("autotest : radioautre, radio du KEKMET allumee ici " + (kk != null));
+                }
                 if (t > 35f && t < 72f && t >= holdLog) { holdLog = t + 3f; Log.Info("autotest : radioautre, " + Radio.GhostState()); }
             }
             // [Test] Autotest=tenirvoiture (TestPiece, ~sandbag(item1) ; TestVoiture, SORBET) : l'hote « tient » l'objet de 40 a
