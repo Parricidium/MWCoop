@@ -4,7 +4,6 @@
 
 <p align="center">
   <a href="https://github.com/Parricidium/MWCoop/releases"><img src="https://img.shields.io/github/v/release/Parricidium/MWCoop?include_prereleases&label=Download&style=for-the-badge" alt="Download"></a>
-  <a href="https://discord.gg/H7NXpWHwgY"><img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
@@ -29,7 +28,7 @@ The mod and its launcher speak **English and French** (the launcher follows Wind
 
 > [!NOTE]
 > Found a bug? Send your logs: launcher, **Logs** page, *Create a zip to send*.
-> Help, bug reports and players to team up with: **[Discord](https://discord.gg/H7NXpWHwgY)**.
+> Help, bug reports and players to team up with: the **Discord** button in the launcher.
 
 *[Version française plus bas.](#version-française)*
 
@@ -235,7 +234,7 @@ the lobby shows *UDP blocked* for a guest whose UDP test fails. Up to 8 players 
 - A guest who joins after a restaurant order does not see the trays already on the counter.
 - Some NPC reactions (fights, services) are only checked between test instances so far.
 - Your feedback from real games is what drives the next versions: send the zip from the Logs page, on
-  [Discord](https://discord.gg/H7NXpWHwgY) (#bug-reports) or in a GitHub issue.
+  Discord (**Discord** button in the launcher, #bug-reports) or in a GitHub issue.
 
 ## How it works
 
@@ -271,7 +270,7 @@ PNJ, boulots et factures — avec chacun son porte-monnaie.
 Le mod et son lanceur parlent **français et anglais** (le lanceur suit Windows, le jeu suit le lanceur).
 
 > [!NOTE]
-> Un bug ? Envoyez vos journaux : lanceur, page **Journaux**, *Créer un zip à envoyer*. Aide, bugs et coéquipiers : **[Discord](https://discord.gg/H7NXpWHwgY)** (salons en anglais, plus un salon en français).
+> Un bug ? Envoyez vos journaux : lanceur, page **Journaux**, *Créer un zip à envoyer*. Aide, bugs et coéquipiers : le bouton **Discord** du lanceur (salons en anglais, plus un salon en français).
 
 ## Captures
 
@@ -413,7 +412,7 @@ joignables : le salon affiche *UDP bloqué* pour un invité dont le test UDP éc
 - Un invité qui arrive après une commande au restaurant ne voit pas les plateaux déjà posés.
 - Certaines réactions de PNJ (bagarres, services) ne sont vérifiées qu'entre instances de test pour l'instant.
 - Vos retours de vraies parties guident les prochaines versions : envoyez le zip de la page Journaux, sur
-  [Discord](https://discord.gg/H7NXpWHwgY) (#bug-reports) ou dans une issue GitHub.
+  Discord (bouton **Discord** du lanceur, #bug-reports) ou dans une issue GitHub.
 
 ## Compiler
 
