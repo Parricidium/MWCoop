@@ -87,7 +87,8 @@ struct GfxRow
     std::vector<int> vals;                     // vide : interrupteur 0/1
     std::vector<const wchar_t *> lf, le;       // noms des valeurs (vals)
     int impact;                                // sur les images par seconde : 0 aucun, 1 leger, 2 moyen, 3 fort
-    int group;                                 // 0 Image, 1 Ombres, 2 Distance et details, 3 Jeu et confort, 4 Lumieres, 5 Ecran, 6 Voix, 7 Visages, 8 Partie et partage, 9 Touches
+    int group;                                 // jeu : 0 Image, 1 Ombres, 2 Distance et vue, 3 Confort ; MWCoop : 5 Ecran, 10 Fluidite, 11 Ombres
+                                               // avancees, 12 Details et textures, 4 Lumieres ; coop : 6 Voix, 7 Visages/habits/pseudos, 8 Partie, 9 Touches
     const char *sec;                           // section du mwcoop.ini (absente : Graphismes)
 };
 // Options du mod gardees dans [Coop] (demande de JD, 10/10 : « une section pour ces options du .ini ») : categorie Coop.
@@ -102,27 +103,27 @@ static const std::vector<GfxRow> &GfxRows()
         { "Contraste", L"Contraste renforcé", L"Contrast boost", 0, {}, {}, {}, 0, 0 },
         { "RayonsSoleil", L"Rayons du soleil", L"Sun shafts", 0, {}, {}, {}, 2, 0 },
         { "ImagesMax", L"Images par seconde max.", L"Max frames per second", -1, { -1, 30, 60, 75, 120, 144, 165, 240, 0 },
-          { L"Jeu", L"30", L"60", L"75", L"120", L"144", L"165", L"240", L"Illimitées" }, { L"Game", L"30", L"60", L"75", L"120", L"144", L"165", L"240", L"Unlimited" }, 0, 0 },
-        { "SyncVerticale", L"Synchro verticale", L"V-sync", -1, { -1, 0, 1 }, { L"Jeu", L"Non", L"Oui" }, { L"Game", L"Off", L"On" }, 0, 0 },
+          { L"Jeu", L"30", L"60", L"75", L"120", L"144", L"165", L"240", L"Illimitées" }, { L"Game", L"30", L"60", L"75", L"120", L"144", L"165", L"240", L"Unlimited" }, 0, 10 },
+        { "SyncVerticale", L"Synchro verticale", L"V-sync", -1, { -1, 0, 1 }, { L"Jeu", L"Non", L"Oui" }, { L"Game", L"Off", L"On" }, 0, 10 },
         { "OmbresSoleil", L"Ombres du soleil", L"Sun shadows", 1, {}, {}, {}, 3, 1 },
         { "OmbresLune", L"Ombres de la lune", L"Moon shadows", 0, {}, {}, {}, 2, 1 },
         { "OmbresMaisons", L"Ombres des maisons", L"House shadows", 1, {}, {}, {}, 2, 1 },
         { "OmbresDistance", L"Distance des ombres", L"Shadow distance", -1, { -1, 30, 60, 100, 150, 250, 400 },
-          { L"Jeu", L"30 m", L"60 m", L"100 m", L"150 m", L"250 m", L"400 m" }, { L"Game", L"30 m", L"60 m", L"100 m", L"150 m", L"250 m", L"400 m" }, 3, 1 },
-        { "OmbresCascades", L"Finesse des ombres", L"Shadow detail", -1, { -1, 1, 2, 4 }, { L"Jeu", L"Simple", L"Fine", L"Très fine" }, { L"Game", L"Basic", L"Fine", L"Very fine" }, 2, 1 },
+          { L"Jeu", L"30 m", L"60 m", L"100 m", L"150 m", L"250 m", L"400 m" }, { L"Game", L"30 m", L"60 m", L"100 m", L"150 m", L"250 m", L"400 m" }, 3, 11 },
+        { "OmbresCascades", L"Finesse des ombres", L"Shadow detail", -1, { -1, 1, 2, 4 }, { L"Jeu", L"Simple", L"Fine", L"Très fine" }, { L"Game", L"Basic", L"Fine", L"Very fine" }, 2, 11 },
         { "Distance", L"Distance d'affichage", L"Draw distance", 3000, { 500, 1000, 1500, 2000, 3000, 4500, 6000, 9000 },
           { L"500 m", L"1 km", L"1,5 km", L"2 km", L"3 km", L"4,5 km", L"6 km", L"9 km" }, { L"500 m", L"1 km", L"1.5 km", L"2 km", L"3 km", L"4.5 km", L"6 km", L"9 km" }, 3, 2 },
         { "Details", L"Niveau de détail", L"Level of detail", -1, { -1, 70, 100, 150, 200, 300 },
-          { L"Jeu", L"Bas", L"Normal", L"Élevé", L"Très élevé", L"Max" }, { L"Game", L"Low", L"Normal", L"High", L"Very high", L"Max" }, 2, 2 },
-        { "Textures", L"Textures", L"Textures", -1, { -1, 2, 1, 0 }, { L"Jeu", L"Quart", L"Moitié", L"Pleines" }, { L"Game", L"Quarter", L"Half", L"Full" }, 1, 2 },
-        { "Filtrage", L"Filtrage des textures", L"Texture filtering", -1, { -1, 0, 1, 2 }, { L"Jeu", L"Non", L"Oui", L"Forcé" }, { L"Game", L"Off", L"On", L"Forced" }, 1, 2 },
+          { L"Jeu", L"Bas", L"Normal", L"Élevé", L"Très élevé", L"Max" }, { L"Game", L"Low", L"Normal", L"High", L"Very high", L"Max" }, 2, 12 },
+        { "Textures", L"Textures", L"Textures", -1, { -1, 2, 1, 0 }, { L"Jeu", L"Quart", L"Moitié", L"Pleines" }, { L"Game", L"Quarter", L"Half", L"Full" }, 1, 12 },
+        { "Filtrage", L"Filtrage des textures", L"Texture filtering", -1, { -1, 0, 1, 2 }, { L"Jeu", L"Non", L"Oui", L"Forcé" }, { L"Game", L"Off", L"On", L"Forced" }, 1, 12 },
         { "OmbresPhares", L"Ombres des phares", L"Headlight shadows", 0, { 0, 2, 4, 8 }, { L"Non", L"2 phares", L"4 phares", L"8 phares" }, { L"Off", L"2 lights", L"4 lights", L"8 lights" }, 3, 4 },
         { "OmbresLampadaires", L"Ombres des lampadaires", L"Street light shadows", 0, { 0, 1, 2, 4 }, { L"Non", L"1", L"2", L"4" }, { L"Off", L"1", L"2", L"4" }, 3, 4 },
         { "Halos", L"Halos lumineux (façon GTA)", L"Light coronas (GTA style)", 0, { 0, 1, 2 }, { L"Non", L"Discrets", L"Marqués" }, { L"Off", L"Subtle", L"Strong" }, 1, 4 },
         { "PorteePhares", L"Portée des phares", L"Headlight range", 0, { 0, 1 }, { L"Normale", L"Longue" }, { L"Normal", L"Long" }, 1, 4 },
         { "ChampVision", L"Champ de vision", L"Field of view", 60, { 50, 55, 60, 65, 70, 75, 80, 85, 90 },
-          { L"50°", L"55°", L"60°", L"65°", L"70°", L"75°", L"80°", L"85°", L"90°" }, { L"50°", L"55°", L"60°", L"65°", L"70°", L"75°", L"80°", L"85°", L"90°" }, 0, 3 },
-        { "Retroviseurs", L"Rétroviseurs", L"Mirrors", 1, { 0, 1, 2 }, { L"Coupés", L"Simples", L"Complets" }, { L"Off", L"Simple", L"Full" }, 2, 3 },
+          { L"50°", L"55°", L"60°", L"65°", L"70°", L"75°", L"80°", L"85°", L"90°" }, { L"50°", L"55°", L"60°", L"65°", L"70°", L"75°", L"80°", L"85°", L"90°" }, 0, 2 },
+        { "Retroviseurs", L"Rétroviseurs", L"Mirrors", 1, { 0, 1, 2 }, { L"Coupés", L"Simples", L"Complets" }, { L"Off", L"Simple", L"Full" }, 2, 2 },
         { "Balancement", L"Tête qui balance à pied", L"Head bob on foot", 1, {}, {}, {}, 0, 3 },
         { "BalancementVoiture", L"Tête qui balance en voiture", L"Head bob in cars", 2, { 0, 1, 2 }, { L"Non", L"50 %", L"Oui" }, { L"Off", L"50 %", L"On" }, 0, 3 },
         { "CompteurImages", L"Compteur d'images", L"FPS counter", 0, {}, {}, {}, 0, 3 },
@@ -130,7 +131,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "PoussiereTrafic", L"Poussière de la circulation", L"Traffic dust", 1, {}, {}, {}, 1, 3 },
         { "TracesTrafic", L"Traces de pneus de la circulation", L"Traffic skid marks", 0, {}, {}, {}, 1, 3 },
         { "Pseudos", L"Pseudos des joueurs", L"Player names", 120, { 0, 30, 60, 120, 250 },
-          { L"Cachés", L"30 m", L"60 m", L"120 m", L"250 m" }, { L"Hidden", L"30 m", L"60 m", L"120 m", L"250 m" }, 0, 3 },
+          { L"Cachés", L"30 m", L"60 m", L"120 m", L"250 m" }, { L"Hidden", L"30 m", L"60 m", L"120 m", L"250 m" }, 0, 7 },
         // Coop, rangees par type (demande de JD, 10/10) : 6 voix, 7 visages, 8 partie et partage, 9 touches.
         { "Vocal", L"Vocal de proximité", L"Proximity voice", 1, {}, {}, {}, 0, 6, "Coop" },
         { "VocalPortee", L"Portée de la voix", L"Voice range", 35, { 15, 25, 35, 50, 80 },
@@ -234,9 +235,12 @@ static int GfxPresetOn()
 static const RectF kGfxTop(264, 88, 1000, 84), kGfxArea(264, 184, 1000, 560);
 static const float kGfxRowH = 27, kGfxHeadH = 44;
 // Categories (demande de JD, 08/10) : en-tetes repliables comme les journaux, reglages sur deux colonnes dessous ;
-// ascenseur quand tout ne tient pas. Deplies : [Lanceur] GfxOuverts (numeros de groupe ; toutes par defaut).
-static const int kGfxOrder[] = { 6, 7, 8, 9, 5, 0, 1, 4, 2, 3 };
-static bool g_gfxOpen[10] = { true, true, true, true, true, true, true, true, true, true };
+// ascenseur quand tout ne tient pas. Rangees en trois blocs titres (demande de JD, 11/10) : la coop, les options video du
+// jeu lui-meme (son menu Options), puis celles que MWCoop ajoute ; une icone par categorie. Valeurs negatives : titre de
+// bloc. Deplies : [Lanceur] GfxOuverts2 (lettres a.. : numeros de groupe ; toutes par defaut).
+static const int kGfxGroups = 13;
+static const int kGfxOrder[] = { -1, 6, 7, 8, 9, -2, 0, 1, 2, 3, -3, 5, 10, 11, 12, 4 };
+static bool g_gfxOpen[kGfxGroups] = { true, true, true, true, true, true, true, true, true, true, true, true, true };
 static bool g_gfxOpenRead;
 static float g_gfxContentH;
 static bool g_gfxZones = true;   // (ligne hors de la zone visible : pas de zone cliquable)
@@ -245,17 +249,17 @@ static void GfxOpenRead()
     if (g_gfxOpenRead) return;
     g_gfxOpenRead = true;
     wchar_t b[64] = {};
-    GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts", L"*", b, 64, g_iniLauncher.c_str());
+    GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts2", L"*", b, 64, g_iniLauncher.c_str());
     if (!wcscmp(b, L"*")) return;
-    for (int i = 0; i < 10; i++) g_gfxOpen[i] = wcschr(b, L'0' + i) != NULL;
+    for (int i = 0; i < kGfxGroups; i++) g_gfxOpen[i] = wcschr(b, L'a' + i) != NULL;
 }
 static void GfxToggleGroup(int gi)
 {
-    if (gi < 0 || gi >= 10) return;
+    if (gi < 0 || gi >= kGfxGroups) return;
     g_gfxOpen[gi] = !g_gfxOpen[gi];
     std::wstring s;
-    for (int i = 0; i < 10; i++) if (g_gfxOpen[i]) { if (!s.empty()) s += L","; s += (wchar_t)(L'0' + i); }
-    WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
+    for (int i = 0; i < kGfxGroups; i++) if (g_gfxOpen[i]) s += (wchar_t)(L'a' + i);
+    WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts2", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
 }
 static float GfxMaxScroll() { return max(0.0f, g_gfxContentH - (kGfxArea.Height - 20)); }
 
@@ -312,10 +316,31 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
 
 // Une categorie : en-tete (chevron, nom, nombre de reglages), puis ses reglages sur deux colonnes s'il est deplie.
 // 'y' : position dans le contenu (avant defilement) ; dessine seulement ce qui croise la zone visible.
+// Titre d'un bloc (pas repliable) : nom, ce qu'il contient, filet.
+static const float kGfxBlockH = 52;
+static void DrawGfxBlock(Graphics &g, int block, float x, float &y, float w, float top, float bottom)
+{
+    static const wchar_t *tFr[] = { L"Coop", L"Options vidéo de My Winter Car", L"Options vidéo améliorées MWCoop" };
+    static const wchar_t *tEn[] = { L"Co-op", L"My Winter Car video options", L"MWCoop enhanced video options" };
+    static const wchar_t *dFr[] = { L"Voix, joueurs, partage et touches du mod", L"Les réglages du jeu lui-même (son menu Options)", L"Ajoutés par MWCoop : écran, fluidité, ombres, détails, lumières" };
+    static const wchar_t *dEn[] = { L"Voice, players, sharing and the mod's keys", L"The game's own settings (its Options menu)", L"Added by MWCoop: screen, smoothness, shadows, detail, lights" };
+    float sy = top + y - g_scroll[TAB_GFX] + (y > 0 ? 8 : 0);
+    if (sy + kGfxBlockH > top && sy < bottom) {
+        Title(g, g_fr ? tFr[block] : tEn[block], RectF(x + 2, sy + 4, w - 4, 24), 15.5f, kAcc);
+        Text(g, g_fr ? dFr[block] : dEn[block], RectF(x + 2, sy + 26, w - 4, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        Pen ln(WithA(kAcc, 0.35f), 1.0f);
+        g.DrawLine(&ln, x + 2, sy + kGfxBlockH - 4, x + w - 2, sy + kGfxBlockH - 4);
+    }
+    y += kGfxBlockH + (y > 0 ? 8 : 0);
+}
+
 static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, float top, float bottom)
 {
-    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et détails", L"Jeu et confort", L"Lumières", L"Écran", L"Voix", L"Visages et habits", L"Partie et partage", L"Touches" };
-    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and detail", L"Game and comfort", L"Lights", L"Screen", L"Voice", L"Faces and clothes", L"Game and sharing", L"Keys" };
+    static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et vue", L"Confort", L"Lumières", L"Écran", L"Voix", L"Visages, habits et pseudos", L"Partie et partage", L"Touches",
+                                    L"Fluidité", L"Ombres avancées", L"Détails et textures" };
+    static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and view", L"Comfort", L"Lights", L"Screen", L"Voice", L"Faces, clothes and names", L"Game and sharing", L"Keys",
+                                    L"Smoothness", L"Advanced shadows", L"Detail and textures" };
+    static const int kIcon[] = { IC_IMAGE, IC_MOON, IC_EYE, IC_SLIDERS, IC_BULB, IC_MONITOR, IC_MIC, IC_SHIRT, IC_USERS, IC_KEYB, IC_GAUGE, IC_SUN, IC_LAYERS };
     const auto &rows = GfxRows();
     std::vector<int> mine;
     for (int i = 0; i < (int)rows.size(); i++) if (rows[i].group == group) mine.push_back(i);
@@ -327,7 +352,12 @@ static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, flo
         SolidBrush fb(hot ? TH(cardSel) : TH(card)); g.FillPath(&fb, &p);
         Pen pen(hot ? WithA(kAcc, 0.7f) : TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
         Icon(g, open ? IC_CHEVD : IC_CHEVR, hr.X + 22, hr.Y + hr.Height / 2, 16, hot ? kAcc : kInk, 2.3f);
-        Text(g, g_fr ? kFr[group] : kEn[group], RectF(hr.X + 44, hr.Y, 300, hr.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
+        // icone de la categorie dans une pastille (demande de JD, 11/10)
+        RectF ib(hr.X + 40, hr.Y + (hr.Height - 26) / 2, 26, 26);
+        GraphicsPath ip; RoundRect(ip, ib, 8);
+        SolidBrush ibb(WithA(kAcc, hot ? 0.28f : 0.16f)); g.FillPath(&ibb, &ip);
+        Icon(g, kIcon[group], ib.X + 13, ib.Y + 13, 17, kAcc, 2.0f);
+        Text(g, g_fr ? kFr[group] : kEn[group], RectF(hr.X + 76, hr.Y, 340, hr.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
         wchar_t n[48];
         swprintf_s(n, T(L"%d réglages", L"%d settings"), (int)mine.size());
         Text(g, n, RectF(hr.X + hr.Width - 220, hr.Y, 204, hr.Height), 12, FontStyleRegular, kGrey, StringAlignmentFar);
@@ -385,7 +415,7 @@ static void DrawGfxPage(Graphics &g)
     GraphicsState st = g.Save();
     g.SetClip(RectF(a.X, top, a.Width, bottom - top), CombineModeIntersect);
     float y = 0;
-    for (int gi : kGfxOrder) DrawGfxGroup(g, gi, a.X + 20, y, a.Width - 48, top, bottom);
+    for (int gi : kGfxOrder) { if (gi < 0) DrawGfxBlock(g, -gi - 1, a.X + 20, y, a.Width - 48, top, bottom); else DrawGfxGroup(g, gi, a.X + 20, y, a.Width - 48, top, bottom); }
     g.Restore(st);
     g_gfxContentH = y;
     float ms = GfxMaxScroll();

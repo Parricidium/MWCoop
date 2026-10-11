@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- lanceur 2026 : elements communs - inclus par launcher.cpp
+﻿// ---------------------------------------------------------------- lanceur 2026 : elements communs - inclus par launcher.cpp
 // Demande de JD (08/10) : un lanceur plus grand et plus ergonomique, "design moderne 2026, glassmorphism", d'apres la
 // maquette validee. Fenetre de 1280 x 800 (carte arrondie, ombre douce autour : image de kImgW x kImgH) :
 //  - scene : nuit d'aurore boreale (sombre) ou matin d'hiver (clair), dessinee ici une fois par taille (SceneBuild) ;
@@ -42,7 +42,7 @@ enum {
     UI_LOG_DEBUG = 251,           // JOURNAUX : mode debogage
     UI_SET_COMPAT = 252,          // Reglages > Jeu : retirer les modes de compatibilite de Windows
     UI_SET_KEY = 253,             // + k (0 tchat, 1 porte-monnaie, 2 vocal) : touche en jeu a choisir (253-255)
-    UI_GFX_GROUP = 2580,          // + groupe : plier / deplier une categorie de GRAPHISMES
+    UI_GFX_GROUP = 2560,          // + groupe (13) : plier / deplier une categorie des Options du jeu
     UI_GFX_PRESET = 2590,         // + prereglage
     UI_GFX = 2600,                // + ligne * 3 + (0 ligne, 1 fleche gauche, 2 fleche droite)
     UI_NOTE = 300,                // + i : version i de la liste
@@ -62,7 +62,8 @@ enum {
 // ---- icones (traits, dans une boite de 24, comme celles de la maquette)
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
-       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR, IC_BOOK };
+       IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR, IC_BOOK,
+       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -191,6 +192,32 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
     }
     case IC_UNDO: g.DrawArc(&pen, cx - 8 * k, cy - 8 * k, 16 * k, 16 * k, 225, 300); poly({ 4, 4, 4, 9, 9, 9 }, false); break;
     case IC_MUSIC: poly({ 9, 18, 9, 5, 20, 3, 20, 16 }, false); circ(6.5f, 18, 2.5f); circ(17.5f, 16, 2.5f); break;
+    // (categories des Options du jeu, 11/10)
+    case IC_MIC: {   // micro : la voix
+        GraphicsPath p; RoundRect(p, RectF(cx - 3 * k, cy - 9 * k, 6 * k, 12 * k), 3 * k); g.DrawPath(&pen, &p);
+        GraphicsPath q; bez(q, 6, 11, 6, 15, 8.7f, 17.5f, 12, 17.5f); bez(q, 12, 17.5f, 15.3f, 17.5f, 18, 15, 18, 11); g.DrawPath(&pen, &q);
+        line(12, 17.5f, 12, 21); line(9, 21, 15, 21); break;
+    }
+    case IC_KEYB: {   // clavier : les touches
+        GraphicsPath p; RoundRect(p, RectF(cx - 10 * k, cy - 6 * k, 20 * k, 12 * k), 2 * k); g.DrawPath(&pen, &p);
+        for (int i = 0; i < 4; i++) { line(5.5f + i * 4.2f, 9.5f, 6.3f + i * 4.2f, 9.5f); line(5.5f + i * 4.2f, 12.5f, 6.3f + i * 4.2f, 12.5f); }
+        line(8, 15.5f, 16, 15.5f); break;
+    }
+    case IC_MONITOR: { GraphicsPath p; RoundRect(p, RectF(cx - 9 * k, cy - 8 * k, 18 * k, 12 * k), 2 * k); g.DrawPath(&pen, &p); line(12, 16, 12, 20); line(8, 20, 16, 20); break; }
+    case IC_EYE: {
+        GraphicsPath p; bez(p, 2, 12, 5.5f, 6, 18.5f, 6, 22, 12); bez(p, 22, 12, 18.5f, 18, 5.5f, 18, 2, 12); g.DrawPath(&pen, &p);
+        circ(12, 12, 3); break;
+    }
+    case IC_BULB: {   // ampoule : les lumieres
+        GraphicsPath p; bez(p, 9.5f, 15, 6.5f, 13.2f, 5.5f, 10.5f, 6, 8.3f); bez(p, 6, 8.3f, 6.9f, 4.6f, 9.4f, 3, 12, 3); bez(p, 12, 3, 14.6f, 3, 17.1f, 4.6f, 18, 8.3f);
+        bez(p, 18, 8.3f, 18.5f, 10.5f, 17.5f, 13.2f, 14.5f, 15); g.DrawPath(&pen, &p);
+        line(9.5f, 15, 9.5f, 17.5f); line(14.5f, 15, 14.5f, 17.5f); line(9.5f, 17.5f, 14.5f, 17.5f); line(10.5f, 20.5f, 13.5f, 20.5f); break;
+    }
+    case IC_GAUGE: {   // compteur : la fluidite (images par seconde)
+        GraphicsPath p; bez(p, 3, 16, 3, 10.5f, 7, 6.5f, 12, 6.5f); bez(p, 12, 6.5f, 17, 6.5f, 21, 10.5f, 21, 16); g.DrawPath(&pen, &p);
+        line(12, 16, 16.5f, 10.5f); circ(12, 16, 1.3f); line(5.5f, 19.5f, 18.5f, 19.5f); break;
+    }
+    case IC_LAYERS: poly({ 12, 3, 21, 8, 12, 13, 3, 8 }, true); poly({ 3, 12, 12, 17, 21, 12 }, false); poly({ 3, 16, 12, 21, 21, 16 }, false); break;
     case IC_IMAGE: { GraphicsPath p; RoundRect(p, RectF(cx - 9 * k, cy - 8 * k, 18 * k, 16 * k), 2 * k); g.DrawPath(&pen, &p); circ(9, 10, 2); poly({ 21, 16, 16, 11, 7, 20 }, false); break; }
     case IC_RADIO: { GraphicsPath p; RoundRect(p, RectF(cx - 9 * k, cy - 4 * k, 18 * k, 12 * k), 2 * k); g.DrawPath(&pen, &p); line(7, 8, 17, 4); circ(15.5f, 14, 2.5f); line(6, 13, 10, 13); line(6, 16, 10, 16); break; }
     case IC_USER: { circ(12, 8, 4); GraphicsPath p; bez(p, 4, 21, 5, 16.8f, 8, 14.5f, 12, 14.5f); bez(p, 12, 14.5f, 16, 14.5f, 19, 16.8f, 20, 21); g.DrawPath(&pen, &p); break; }
