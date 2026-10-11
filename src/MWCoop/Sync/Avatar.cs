@@ -1065,11 +1065,26 @@ namespace MWCoop
             // bas, l'avatar s'enfoncait de 20 cm dans la banquette, retour de Menos, 10/10)
             bool gifu = carName != null && carName.StartsWith("GIFU");
             bool taxi = carName != null && carName.ToUpperInvariant().Contains("MACHTWAGEN");
-            if (carName == null || !gifu && !taxi || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
+            // (BACHGLOTZ : banquette avant, avatar enfonce, les cuisses dans l'assise -- retour de Menor, 11/10)
+            bool van = rear && carName != null && carName.StartsWith("BACHGLOTZ");   // (passagers ; conducteur pas verifie en essai)
+            if (carName == null || !gifu && !taxi && !van || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
             // (passager avant : enfonce de 30 cm dans le fauteuil sans ca -- assis comme le conducteur, dos arrondi, mains sur
             // les cuisses ; la couchette n'a pas de « Seats » : rien a faire)
             Transform car = vehicleT, pelvis = Bone("pelvis");
             if (pelvis == null) return;
+            if (van)
+            {
+                // Pas de collisionneur de siege (banquette dans le maillage de la cabine) : bassin monte d'une hauteur fixe,
+                // un peu recule ; la cabine est haute, la tete monte d'autant. [Test] FourgonMonte / FourgonRecul (m).
+                motoRaise = car.TransformVector(new Vector3(0f, Config.GetFloat("Test", "FourgonMonte", 0.16f), -Config.GetFloat("Test", "FourgonRecul", 0.04f)));
+                anim.transform.position += motoRaise;
+                seatFitted = true;
+                Transform vr = Bone("thig_right"), vl = Bone("thig_left");
+                float vf = Config.GetFloat("Test", "SiegePieds", 0.55f), vd = Config.GetFloat("Test", "SiegeChute", 0.5f);
+                if (vr != null && Bone("ankle_right") != null) Leg("thig_right", "knee_right", "ankle_right", vr.position + car.forward * vf - car.up * vd + car.right * 0.04f);
+                if (vl != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", vl.position + car.forward * vf - car.up * vd - car.right * 0.04f);
+                return;
+            }
             if (seatCar != car)
             {
                 seatCar = car; seatCols.Clear(); seatBox.Clear();
@@ -1228,8 +1243,17 @@ namespace MWCoop
         }
         // Bouche (devant et sous l'os de la tete) ; sens de la bouteille quand on boit : du cul vers le goulot, vers le
         // visage et vers le bas (le cul plus haut que le goulot).
-        Vector3 Mouth() { Transform r = Root.transform; return headBone.position + r.forward * 0.11f - r.up * 0.09f; }
-        Vector3 DrinkDir() { Transform r = Root.transform; return (-r.forward * 0.75f - r.up * 0.62f).normalized; }
+        // (aux levres : 4 cm plus haut qu'avant -- le goulot arrivait au menton, retour de Menor 11/10 : « biere, boisson
+        // energisante, soda mal tournes a la bouche »)
+        Vector3 Mouth() { Transform r = Root.transform; return headBone.position + r.forward * 0.11f - r.up * Config.GetFloat("Test", "BoucheBas", 0.05f); }
+        // (gobelet a paille du PSK : pas bascule comme une bouteille -- il etait a l'envers, paille en bas ; debout, un peu
+        // penche vers soi, la paille aux levres, la main dessous)
+        Vector3 DrinkDir()
+        {
+            Transform r = Root.transform;
+            if (drinkIdx > 0 && drinkIdx < Drinks.Names.Length && Drinks.Names[drinkIdx] == "SodaPSK") return (r.up * 0.92f - r.forward * 0.25f).normalized;
+            return (-r.forward * 0.75f - r.up * 0.62f).normalized;
+        }
 
         // Bras vers leur cible, du moins prioritaire au plus prioritaire (chacun part de la pose laissee par le
         // precedent) ; poids lisses ; le coup suit une courbe (aller 0,12 s, retour 0,4 s).
@@ -1501,7 +1525,7 @@ namespace MWCoop
             // les pieds dans la direction de son regard, bras le long du corps (la pose « a terre », ancree a la tete). Avant :
             // pose assise au pied du lit (retour de JD, 06/10).
             bool sleep = !inCar && !down && (f & PlayerSync.F_Sleep) != 0;
-            Blanket(sleep);
+            Blanket(sleep, st.Head);
             if (sleep)
             {
                 Vector3 fwd = Quaternion.Euler(0f, st.Yaw, 0f) * Vector3.forward;
@@ -1899,14 +1923,65 @@ namespace MWCoop
 
         // Couverture sur le dormeur (demande d'un joueur, 07/10) : un drap epais des pieds a la poitrine, dans le repere de
         // la racine (couche sur le dos : +y vers la tete, +z vers le haut), matiere de literie du jeu.
+        // Seulement dans un lit, et de la matiere de sa literie (retour de Menor, 11/10 : « dans la GIFU pas besoin de
+        // couverture, sur le canape non plus ; au lit il y en a deja une, prends sa texture ») : pas dans la cabine de la GIFU,
+        // sur un canape ni dans un sac de couchage (lieu de sommeil le plus proche de la tete, SleepTrigger du jeu).
         GameObject blanket;
+        bool blanketDecided, blanketWanted;
+        Material blanketBedMat;
         static readonly string[] BlanketMats = { "bed_blanket", "blanket", "bed_cover", "bed_white", "fabric_flower3", "curtain4" };
-        void Blanket(bool on)
+        static readonly List<Transform> sleepSpots = new List<Transform>();
+        static float sleepSpotsAt = -100f;
+
+        static Transform SleepSpot(Vector3 head)
         {
+            if (Time.realtimeSinceStartup - sleepSpotsAt > 60f)
+            {
+                sleepSpotsAt = Time.realtimeSinceStartup;
+                sleepSpots.Clear();
+                foreach (Object o in Game.AllFsms())
+                {
+                    var f = (PlayMakerFSM)o;
+                    if (f != null && f.hideFlags == HideFlags.None && f.FsmName == "Activate" && f.gameObject.name == "SleepTrigger") sleepSpots.Add(f.transform);
+                }
+            }
+            Transform best = null; float bd = 3.5f * 3.5f;
+            foreach (Transform t in sleepSpots)
+            {
+                if (t == null || !t.gameObject.activeInHierarchy) continue;
+                float d = (t.position - head).sqrMagnitude;
+                if (d < bd) { bd = d; best = t; }
+            }
+            return best;
+        }
+
+        void Blanket(bool on, Vector3 head)
+        {
+            if (!on) blanketDecided = false;
+            else if (!blanketDecided)
+            {
+                blanketDecided = true;
+                Transform spot = SleepSpot(head);
+                string path = spot != null ? Recon.Path(spot) : "";
+                string low = path.ToLowerInvariant();
+                blanketWanted = spot == null || !(low.Contains("sofa") || low.Contains("gifu") || low.Contains("sleeping bag") || low.Contains("couch"));
+                blanketBedMat = null;
+                if (blanketWanted && spot != null)
+                {
+                    // Literie du lit : une matiere de couverture sous le meme meuble (deux niveaux au-dessus du declencheur).
+                    Transform furn = spot.parent != null && spot.parent.parent != null ? spot.parent.parent : spot.parent ?? spot;
+                    foreach (Renderer r in furn.GetComponentsInChildren<Renderer>())
+                        foreach (Material m in r.sharedMaterials)
+                            if (m != null && blanketBedMat == null) { string mn = m.name.ToLowerInvariant(); if (mn.Contains("blanket") || mn.Contains("cover") || mn.Contains("sheet")) blanketBedMat = m; }
+                }
+                Log.Info("avatar " + (Player != null ? Player.Name : "?") + " dort " + (spot != null ? "a " + path : "(lieu inconnu)") + " : " + (blanketWanted ? "couverture" + (blanketBedMat != null ? " " + blanketBedMat.name : "") : "pas de couverture"));
+                if (blanket != null && blanketBedMat != null) blanket.GetComponent<MeshRenderer>().sharedMaterial = blanketBedMat;
+            }
+            if (on && !blanketWanted) on = false;
             if (on && blanket == null && Root != null)
             {
-                Material mat = null;
-                foreach (string n in BlanketMats) { mat = FindMaterial(n); if (mat != null) break; }
+                Material mat = blanketBedMat;
+                if (mat == null) foreach (string n in BlanketMats) { mat = FindMaterial(n); if (mat != null) break; }
                 // Drap drape (avant : un cube, retour d'un joueur 08/10) : bombe sur le corps, retombant sur les cotes,
                 // repli a la poitrine ; les deux faces (vu de cote, pas de trou).
                 blanket = new GameObject("MWCoop-Couverture");

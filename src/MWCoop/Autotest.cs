@@ -523,6 +523,43 @@ namespace MWCoop
             }
             // [Test] Autotest=pousse : l'invite, contre la SORBET, la pousse (main forcee, 1,2 m/s vers l'avant) de 30 a 36 s ;
             // chacun note la position de la voiture chaque seconde de 25 a 50 s (attendu : la meme, sans retour en arriere).
+            // [Test] Autotest=poussevolant : l'hote au volant de TestVoiture (SORBET) a 20 s ; l'invite derriere, tourne vers elle,
+            // pousse (geste du jeu) de 32 a 42 s. Chacun note la voiture chaque seconde de 25 a 50 s. Attendu : elle avance
+            // chez l'hote (la poussee lui est envoyee), et chez l'invite (copie).
+            if (mode == "poussevolant")
+            {
+                string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                Rigidbody b = VehicleSync.Body(car);
+                if (Net.Session.IsHost)
+                {
+                    if (t > 18f && step == 0) { step = 1; Log.Info("autotest : poussevolant " + VehicleSync.TestEnter(car, false)); }
+                    if (t > 22f && step == 1) { step = 2; Log.Info("autotest : poussevolant volant -> " + VehicleSync.TestEnter(car, true)); }
+                }
+                else if (b != null)
+                {
+                    if (t > 30f && step == 0)
+                    {
+                        step = 1;
+                        GameObject pl = GameObject.Find("PLAYER");
+                        var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                        if (cc != null)
+                        {
+                            cc.enabled = false;
+                            pl.transform.position = b.transform.TransformPoint(new Vector3(0f, 0f, -2.6f));
+                            Vector3 f = b.position - pl.transform.position; f.y = 0;
+                            pl.transform.rotation = Quaternion.LookRotation(f);
+                            cc.enabled = true;
+                        }
+                        Log.Info("autotest : poussevolant, derriere la voiture");
+                    }
+                    Gestures.TestPush = t > 32f && t < 42f;
+                }
+                if (b != null && t > 25f && t < 50f && Time.realtimeSinceStartup >= rivLog)
+                {
+                    rivLog = Time.realtimeSinceStartup + 1f;
+                    Log.Info("autotest : poussevolant, voiture " + (b.isKinematic ? "copie" : "locale") + " en " + b.position.ToString("F2") + " v " + b.velocity.magnitude.ToString("F2"));
+                }
+            }
             if (mode == "pousse")
             {
                 string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
@@ -738,6 +775,8 @@ namespace MWCoop
                 if (Net.Session.IsHost)
                 {
                     if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                    // (vehicule loin : son declencheur s'allume apres la 1re pose -- reposee a 19 s pour y entrer)
+                    if (t > 19f && step == 1 && !cabRetp) { cabRetp = true; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
                     if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
                     if (t > 24f && step == 2) { step = 3; Game.SetGlobalBool("PlayerSeatbeltsOn", true); Log.Info("autotest : ceinture bouclee (variable)"); }
                     Rigidbody b = VehicleSync.Body(car);
@@ -1926,6 +1965,7 @@ namespace MWCoop
         static int holdN;
         static GameObject rangeGo;
         static Transform holdCam;
+        static bool cabRetp;
         static Vector3 holdSum, holdSq;
         static bool tcOn;
         static float tcAt;

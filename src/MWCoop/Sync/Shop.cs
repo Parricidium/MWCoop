@@ -880,7 +880,7 @@ namespace MWCoop
                 for (int i = eatMuted.Count - 1; i >= 0; i--)
                     if (now > eatMuted[i].Key) { Unmute(eatMuted[i].Value); eatMuted.RemoveAt(i); }
                 for (int i = eatLocked.Count - 1; i >= 0; i--)
-                    if (now > eatLocked[i].Key) { if (eatLocked[i].Value != null) eatLocked[i].Value.enabled = true; eatLocked.RemoveAt(i); }
+                    if (now > eatLocked[i].Key) { if (eatLocked[i].Value != null) eatLocked[i].Value.enabled = true; SodaBack(eatLocked[i].Value, true); eatLocked.RemoveAt(i); }
             }
         }
 
@@ -899,6 +899,16 @@ namespace MWCoop
         }
 
         static readonly List<KeyValuePair<float, PlayMakerFSM>> eatLocked = new List<KeyValuePair<float, PlayMakerFSM>>();   // boutons verrouilles (gorgee d'un autre)
+        // Gobelet du plateau cache pendant la gorgee d'un autre (il l'a en main ; retour de Menor, 11/10 : « quand mon ami boit
+        // le soda, il reste sur le plateau »), rendu a la fin de sa gorgee -- sauf le soda fini (« State 1 »).
+        static readonly Dictionary<PlayMakerFSM, GameObject> sodaHidden = new Dictionary<PlayMakerFSM, GameObject>();
+        static void SodaBack(PlayMakerFSM f, bool show)
+        {
+            GameObject g;
+            if (f == null || !sodaHidden.TryGetValue(f, out g)) return;
+            sodaHidden.Remove(f);
+            if (show && g != null && !g.activeSelf) g.SetActive(true);
+        }
 
         static void HookEats(EatObj e)
         {
@@ -971,10 +981,13 @@ namespace MWCoop
             if (m.State == "Play anim")
             {
                 if (f.enabled) { f.enabled = false; eatLocked.Add(new KeyValuePair<float, PlayMakerFSM>(Time.realtimeSinceStartup + 6f, f)); }
+                Transform cup = t.name == "DrinkSoda" && t.parent != null ? t.parent.Find("Soda") : null;
+                if (cup != null && cup.gameObject.activeSelf && !sodaHidden.ContainsKey(f)) { cup.gameObject.SetActive(false); sodaHidden[f] = cup.gameObject; }
                 Log.Info("magasin : " + m.Id + "/" + (m.Path.Length > 0 ? m.Path : go.name) + " pris par " + PlayerName(m.Who) + " : verrouille ici");
                 return true;
             }
             for (int i = eatLocked.Count - 1; i >= 0; i--) if (eatLocked[i].Value == f) { eatLocked.RemoveAt(i); f.enabled = true; }
+            SodaBack(f, m.State != "State 1");
             if (was == m.State) { Log.Info("magasin : repas " + m.Id + "/" + m.Path + " deja " + m.State + " ici"); return true; }
             foreach (KeyValuePair<string, int> kv in m.Ints) { FsmInt v = f.FsmVariables.FindFsmInt(kv.Key); if (v != null) v.Value = kv.Value; }
             List<FsmStateAction> muted = MuteFsm(f);

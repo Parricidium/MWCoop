@@ -58,7 +58,8 @@ namespace MWCoop
         }
 
         static readonly string[] PartTypes = { "SaveVars", "ElectricSunroof", "PowerWindow", "OpenableCompartment", "Machtmatic", "AutoAC",
-                                               "Sunvisor", "InteriorLight", "FrontFogSwitch", "RecircSwitch", "DefrosterSwitch", "RearDomeLightSwitch", "HornToneSwitch", "HornButton" };
+                                               "Sunvisor", "InteriorLight", "FrontFogSwitch", "RecircSwitch", "DefrosterSwitch", "RearDomeLightSwitch", "HornToneSwitch", "HornButton",
+                                               "OpenableTrunk", "GloveboxLock" };
         // Interrupteurs a deux positions (SwitchOn ; retour de Menos, 10/10 : pare-soleil et le reste non synchronises).
         static bool IsSwitch(string t) { return t == "FrontFogSwitch" || t == "RecircSwitch" || t == "DefrosterSwitch" || t == "RearDomeLightSwitch" || t == "HornToneSwitch"; }
 
@@ -78,6 +79,14 @@ namespace MWCoop
                     if (tn == "SaveVars") { saveVars = m; continue; }
                     parts.Add(new Part { Type = tn, Path = Recon.Path(m.transform), C = m });
                 }
+            }
+            // Trappe a essence (automate du jeu, copie du taxi ; retour de Menor, 11/10 : pas synchronisee) : ouverte ou non.
+            foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = o as PlayMakerFSM;
+                if (f == null || f.hideFlags != HideFlags.None || f.FsmName != "Use" || f.transform.root.name != "Machtwagen300D") continue;
+                if (f.gameObject.name == "Trigger" && f.transform.parent != null && f.transform.parent.parent != null && f.transform.parent.parent.name == "FuelFiller")
+                    parts.Add(new Part { Type = "FuelCap", Path = Recon.Path(f.transform), C = f });
             }
             if (saveVars != null) keysWas = Get<bool>(saveVars, "keysGot");
             Log.Info("mods : Machtwagen 300D, " + parts.Count + " equipements suivis (toit, vitres, compartiments, boite auto, climatisation) et la cle");
@@ -125,6 +134,12 @@ namespace MWCoop
                     return (Get<bool>(p.C, "Opened") ? 1f : 0f) + (Get<bool>(p.C, "Locked") ? 2f : 0f);
                 case "Machtmatic":
                     return Get<int>(p.C, "ATGear");
+                // Coffre (retour de Menor, 11/10 : pas synchronise) : ouvert ou non ; pas pendant qu'il s'ouvre ou se ferme.
+                case "OpenableTrunk":
+                    if (Get<bool>(p.C, "isOpening") || Get<bool>(p.C, "isClosing")) return float.NaN;
+                    return Get<bool>(p.C, "tailgateopen") ? 1f : 0f;
+                case "GloveboxLock": return float.NaN;   // (serrure : coupee sans la cle, voir Ignition)
+                case "FuelCap": { FsmBool d = ((PlayMakerFSM)p.C).FsmVariables.FindFsmBool("DoorOpen"); return d != null ? (d.Value ? 1f : 0f) : float.NaN; }
             }
             return float.NaN;
         }
@@ -265,6 +280,32 @@ namespace MWCoop
                     SetF(p.C, "ATGear", (int)v);
                     CallM(p.C, "MoveShifterPos");
                     break;
+                case "FuelCap":
+                    {
+                        var ff = (PlayMakerFSM)p.C;
+                        FsmBool d = ff.FsmVariables.FindFsmBool("DoorOpen");
+                        if (d == null || d.Value == v > 0.5f || ff.Fsm == null || !ff.Fsm.Initialized) break;
+                        Replay.Depth++;
+                        try { Game.SetState(ff, v > 0.5f ? "Open door" : "Close door"); } finally { Replay.Depth--; }
+                        break;
+                    }
+                case "OpenableTrunk":
+                    {
+                        // Comme le mod au clic : ouvert -- butees ouvertes, couple d'ouverture jusqu'au cran (60 degres), lumiere ;
+                        // ferme -- butees ouvertes, il retombe, et le mod le verrouille ferme sous 2 degres.
+                        bool open = v > 0.5f;
+                        if (Get<bool>(p.C, "tailgateopen") == open) break;
+                        HingeJoint hj = Get<HingeJoint>(p.C, "hingejoint");
+                        if (hj != null) hj.limits = Get<JointLimits>(p.C, "openlimits");
+                        if (open)
+                        {
+                            SetF(p.C, "tailgateopen", true); SetF(p.C, "isOpening", true);
+                            GameObject lt = Get<GameObject>(p.C, "light"); if (lt != null) lt.SetActive(true);
+                        }
+                        else SetF(p.C, "isClosing", true);
+                        Rigidbody tr = Get<Rigidbody>(p.C, "rig"); if (tr != null) tr.WakeUp();
+                        break;
+                    }
             }
         }
 
@@ -329,6 +370,14 @@ namespace MWCoop
             bool holder = Get<bool>(saveVars, "keysGot");
             bool keyIn = KeyIn.Contains(ign.ActiveStateName);
             if (ignCol != null && ignCol.enabled != (holder || keyIn)) ignCol.enabled = holder || keyIn;
+            // Serrure de la boite a gants : seulement chez le porteur de la cle (retour de Menor, 11/10 : « mon ami a la cle,
+            // je ne peux rien deverrouiller, mais je peux encore verrouiller la boite a gants »).
+            foreach (Part p in parts)
+                if (p.Type == "GloveboxLock" && p.C != null)
+                {
+                    Collider lc = Get<Collider>(p.C, "col");
+                    if (lc != null && lc.enabled != holder) lc.enabled = holder;
+                }
             if (keyInWas && !keyIn && !holder && Jobs.KeyTurnedHere(ign.transform, 3f))
             {
                 SetF(saveVars, "keysGot", true);
@@ -346,6 +395,7 @@ namespace MWCoop
                     applying = true;
                     try { ApplyState(p, v); } finally { applying = false; }
                     p.Last = v;
+                    if (type != "Machtmatic" && type != "SaveVars") PlayerSync.ReachFor(who, p.C.transform);   // (son avatar appuie : retour de Menor, 11/10)
                     Log.Info("mods : 300D " + type + " " + v.ToString("F1") + " de #" + who);
                     return;
                 }
@@ -361,6 +411,7 @@ namespace MWCoop
             if (Session.IsHost && t > 40f && testStep == 0)
             {
                 testStep = 1;
+                if (Locked) { MethodInfo um = locking.GetType().GetMethod("UnlockDoors"); if (um != null) um.Invoke(locking, new object[] { true }); Log.Info("autotest : 300d, deverrouille"); }
                 bool comp = false, win = false, roof = false, gear = false, ac = false, vis = false, fog = false;
                 foreach (Part p in parts)
                 {
@@ -372,6 +423,8 @@ namespace MWCoop
                     if (p.Type == "FrontFogSwitch" && !fog) { fog = true; CallM(p.C, "LoadSwitchOn"); }
                     if (p.Type == "AutoAC" && !ac) { ac = true; CallM(p.C, "SetMinFan"); CallM(p.C, "SetDefrost"); }
                     if (p.Type == "Machtmatic" && !gear) { gear = true; SetF(p.C, "ATGear", 3); CallM(p.C, "MoveShifterPos"); }
+                    if (p.Type == "OpenableTrunk") ApplyState(p, 1f);   // (comme un clic : il s'ouvre, l'etat part une fois ouvert)
+                    if (p.Type == "FuelCap") { var ff = (PlayMakerFSM)p.C; if (ff.Fsm != null && ff.Fsm.Initialized) Game.SetState(ff, "Open door"); }
                 }
                 Log.Info("autotest : 300d, equipements changes ici");
             }
@@ -380,6 +433,10 @@ namespace MWCoop
                 testStep = 2;
                 var sb = new System.Text.StringBuilder("autotest : 300d, etats :");
                 foreach (Part p in parts) sb.Append(' ').Append(p.Type).Append('=').Append(StateOf(p).ToString("F1"));
+                // (trappe a essence : automates de LOD/FuelFiller, leur etat ; serrure de la boite a gants : active ou non)
+                foreach (Transform tf in locking != null ? locking.transform.root.GetComponentsInChildren<Transform>(true) : new Transform[0])
+                    if (tf.name == "FuelFiller") foreach (PlayMakerFSM f in tf.GetComponentsInChildren<PlayMakerFSM>(true)) sb.Append(" | trappe ").Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append(' ').Append(f.ActiveStateName);
+                foreach (Part p in parts) if (p.Type == "GloveboxLock") { Collider lc = Get<Collider>(p.C, "col"); sb.Append(" | serrure boite a gants ").Append(lc != null ? (lc.enabled ? "active" : "coupee") : "?"); }
                 Log.Info(sb.ToString());
             }
         }
