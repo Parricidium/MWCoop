@@ -1304,7 +1304,35 @@ static Color WithA(Color c, float a) { return Color((BYTE)(c.GetA() * a), c.GetR
 // remplacement. Sans Segoe UI (Linux / Steam Deck par Proton ou Wine, polices de Windows abimees), GDI+ ne dessinait
 // AUCUN texte, sans erreur visible (retour de Donskoy, 11/10 : lanceur sans une lettre). Essai : variable
 // MWCOOP_SANS_POLICES=1 (Segoe UI, Bahnschrift et Consolas comptees absentes).
-static bool FamilyOk(const FontFamily *f) { return f && f->GetLastStatus() == Ok && f->IsAvailable(); }
+// Le joueur etait sous Windows 7 SP1, qui a Segoe UI : une police peut etre declaree presente et ne rien dessiner
+// (fichier abime, Windows "allege", gestionnaire de polices). Chaque famille ecrit donc "Ag" dans une petite image,
+// avec le rendu de la fenetre ; aucun pixel = police suivante. Resultat dans lanceur.log.
+static bool FamilyOk(const FontFamily *f)
+{
+    WCHAR name[LF_FACESIZE] = L"?";
+    if (!f || f->GetLastStatus() != Ok || !f->IsAvailable()) return false;
+    f->GetFamilyName(name);
+    Font font(f, 16, FontStyleRegular, UnitPixel);
+    if (font.GetLastStatus() != Ok) { LaunchLog("police : %ls presente, Font refusee (statut %d)", name, (int)font.GetLastStatus()); return false; }
+    Bitmap b(48, 24, PixelFormat32bppPARGB);
+    int ink = 0;
+    Status st;
+    {
+        Graphics g(&b);
+        g.Clear(Color(0, 0, 0, 0));
+        g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+        SolidBrush w(Color(255, 255, 255, 255));
+        st = g.DrawString(L"Ag", -1, &font, PointF(2, 2), &w);
+    }
+    BitmapData bd;
+    Rect r(0, 0, 48, 24);
+    if (b.LockBits(&r, ImageLockModeRead, PixelFormat32bppPARGB, &bd) == Ok) {
+        for (int y = 0; y < 24; y++) for (int x = 0; x < 48; x++) if (((BYTE *)bd.Scan0)[y * bd.Stride + x * 4 + 3] > 40) ink++;
+        b.UnlockBits(&bd);
+    }
+    if (ink < 8) LaunchLog("police : %ls presente mais n'ecrit rien (DrawString %d, %d pixels)", name, (int)st, ink);
+    return ink >= 8;
+}
 static const FontFamily *UiFamily(const wchar_t *want)
 {
     static std::map<std::wstring, FontFamily *> cache;
