@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- page GUIDE : petit wiki des joueurs - inclus par launcher.cpp
+﻿// ---------------------------------------------------------------- page GUIDE : petit wiki des joueurs - inclus par launcher.cpp
 // Demande de JD (08/10) : tout ce qu'il faut pour jouer sans probleme (installation, MSCLoader officiel / de MWCoop,
 // partage des mods, options, Copie / Dossier / Steam...), range en categories pliables, avec des mini tutos en images.
 // A gauche les categories (clic : plier / deplier) et leurs articles ; a droite l'article : sections pliables, etapes
@@ -24,15 +24,15 @@ static float WikiMaxScroll() { return max(0.0f, g_wikiH - WikiArea().Height); }
 
 static float WikiTextH(Graphics &g, const std::wstring &t, float w, float px, int style)
 {
-    Font f(UiFamily(L"Segoe UI"), px, style, UnitPixel);
+    UiFont f(L"Segoe UI", px, style);
     StringFormat sf;
     RectF box;
-    g.MeasureString(t.c_str(), -1, &f, RectF(0, 0, w, 100000), &sf, &box);
+    MeasureStr(g, t.c_str(), -1, &f, RectF(0, 0, w, 100000), &sf, &box);
     return box.Height;
 }
 static void WikiText(Graphics &g, const std::wstring &t, RectF r, float px, int style, Color c)
 {
-    Font f(UiFamily(L"Segoe UI"), px, style, UnitPixel);
+    UiFont f(L"Segoe UI", px, style);
     StringFormat sf;
     SolidBrush b(c);
     DrawStr(g, t.c_str(), -1, &f, r, &sf, &b);

@@ -50,7 +50,7 @@ static void DrawApiPage(Graphics &g)
         { L"Listen", L"recevoir sur votre canal (ID du mod)", L"receive on your channel (mod ID)" },
         { L"IsHost · PlayerIds · PlayerName", L"qui héberge, qui joue", L"who hosts, who plays" },
         { L"PlayerJoined · PlayerLeft", L"arrivées et départs des joueurs", L"players joining and leaving" } };
-    Font fm(UiFamily(L"Consolas"), 13.5f, FontStyleBold, UnitPixel);
+    UiFont fm(L"Consolas", 13.5f, FontStyleBold);
     StringFormat sfl; sfl.SetLineAlignment(StringAlignmentCenter); sfl.SetFormatFlags(StringFormatFlagsNoWrap);
     float y = c.Y + 108;
     for (const Feat &f : feats) {
@@ -73,7 +73,7 @@ static void DrawApiPage(Graphics &g)
         SolidBrush fb(g_dark ? Color(150, 4, 8, 20) : Color(235, 244, 247, 252)); g.FillPath(&fb, &p);
         Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
     }
-    Font fc(UiFamily(L"Consolas"), 12.5f, FontStyleRegular, UnitPixel);
+    UiFont fc(L"Consolas", 12.5f, FontStyleRegular);
     SolidBrush ink(kInk), grey(WithA(kGrey, 0.95f)), str(kOk);
     StringFormat sf; sf.SetFormatFlags(StringFormatFlagsNoWrap | StringFormatFlagsMeasureTrailingSpaces);
     std::wstring ex = ApiExample(g_apiEx);
@@ -95,7 +95,7 @@ static void DrawApiPage(Graphics &g)
             else if (line[i] == L'"') { j = line.find(L'"', i + 1); j = j == std::wstring::npos ? line.size() : j + 1; br = &str; }
             else { j = line.find(L'"', i); if (j == std::wstring::npos) j = line.size(); br = &ink; }
             std::wstring part = line.substr(i, j - i);
-            RectF m; g.MeasureString(part.c_str(), -1, &fc, PointF(0, 0), &sf, &m);
+            RectF m; MeasureStr(g, part.c_str(), -1, &fc, PointF(0, 0), &sf, &m);
             DrawStr(g, part.c_str(), -1, &fc, PointF(x, ly), &sf, br);
             x += m.Width - 3.0f;   // (marges de GDI+ autour de chaque morceau)
             i = j;
@@ -124,7 +124,7 @@ static void DrawApiPage(Graphics &g)
         Icon(g, IC_CODE, r.X + 24, r.Y + r.Height / 2, 20, ok ? kAcc : kGrey, 2.0f);
         Text(g, L"MWCoop.dll", RectF(r.X + 46, r.Y + 8, r.Width - 56, 22), 14, FontStyleBold, kInk, StringAlignmentNear);
         StringFormat sp; sp.SetTrimming(StringTrimmingEllipsisPath); sp.SetFormatFlags(StringFormatFlagsNoWrap); sp.SetLineAlignment(StringAlignmentCenter);
-        Font f(UiFamily(L"Segoe UI"), 11.5f, FontStyleRegular, UnitPixel); SolidBrush gb(kGrey);
+        UiFont f(L"Segoe UI", 11.5f, FontStyleRegular); SolidBrush gb(kGrey);
         std::wstring sub = ok ? dll : std::wstring(T(L"Dans le dossier du jeu, sous MWCoop\\ (une fois installé)", L"In the game folder, under MWCoop\\ (once installed)"));
         DrawStr(g, sub.c_str(), -1, &f, RectF(r.X + 46, r.Y + 30, r.Width - 56, 18), &sp, &gb);
     }
@@ -149,10 +149,10 @@ static void DrawApiPage(Graphics &g)
         L"Already done for you: your files, settings and save data (Mods.txt) go to the guests with the host's.",
         L"The host decides: it saves the world. A message sent before the other player's mod listens is kept for it." };
     float ty = t.Y + 56;
-    Font tfont(UiFamily(L"Segoe UI"), 12.5f, FontStyleRegular, UnitPixel);
+    UiFont tfont(L"Segoe UI", 12.5f, FontStyleRegular);
     for (int i = 0; i < 4; i++) {
         const wchar_t *s = g_fr ? tipsFr[i] : tipsEn[i];
-        RectF m; g.MeasureString(s, -1, &tfont, RectF(0, 0, t.Width - 58, 400), &m);
+        RectF m; MeasureStr(g, s, -1, &tfont, RectF(0, 0, t.Width - 58, 400), &m);
         SolidBrush dot(kAcc); g.FillEllipse(&dot, t.X + 22, ty + 7, 7.0f, 7.0f);
         Para(g, s, RectF(t.X + 38, ty, t.Width - 58, m.Height + 4), 12.5f, kInk);
         ty += m.Height + 16;

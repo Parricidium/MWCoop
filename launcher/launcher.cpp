@@ -1311,6 +1311,38 @@ static Color WithA(Color c, float a) { return Color((BYTE)(c.GetA() * a), c.GetR
 // Journal : lanceur.log (« texte : ... »). Essai : MWCOOP_TEXTE=chemin force les formes vectorielles.
 static TextRenderingHint g_textHint = TextRenderingHintAntiAliasGridFit;
 static bool g_textPath;
+// Windows 7 SP1 de Donskoy (11/10, 0.75.34) : GDI+ n'y trouve AUCUNE famille de police (« Segoe UI absente, remplacee
+// par ? », DrawString -> 2 InvalidParameter, formes vectorielles vides : elles aussi passent par une famille GDI+). Paint
+// ecrit, lui, par GDI : dernier recours, chaque texte est ecrit par GDI (DrawTextW, police par son nom) dans une petite
+// image, collee ensuite dans la fenetre a la couleur voulue (g_textGdi). Essai : MWCOOP_TEXTE=gdi le force.
+static bool g_textGdi;
+static int GdiProbe()
+{
+    HDC dc = CreateCompatibleDC(NULL);
+    if (!dc) return 0;
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader); bi.bmiHeader.biWidth = 48; bi.bmiHeader.biHeight = -24;
+    bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+    void *bits = NULL;
+    HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    int ink = 0;
+    if (bmp && bits) {
+        memset(bits, 0, 48 * 24 * 4);
+        HGDIOBJ ob = SelectObject(dc, bmp);
+        HFONT f = CreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        HGDIOBJ of = SelectObject(dc, f);
+        SetBkMode(dc, TRANSPARENT); SetTextColor(dc, RGB(255, 255, 255));
+        RECT rr = { 2, 2, 46, 22 };
+        DrawTextW(dc, L"Ag", 2, &rr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+        GdiFlush();
+        for (int i = 0; i < 48 * 24; i++) { BYTE *p = (BYTE *)bits + i * 4; if (max(p[0], max(p[1], p[2])) > 40) ink++; }
+        SelectObject(dc, of); DeleteObject(f);
+        SelectObject(dc, ob);
+    }
+    if (bmp) DeleteObject(bmp);
+    DeleteDC(dc);
+    return ink;
+}
 static bool g_textProbed;
 static int ProbeDraw(const FontFamily *f, TextRenderingHint hint, bool path, Status *st)
 {
@@ -1358,6 +1390,7 @@ static void TextProbe()
     FontFamily seg(L"Segoe UI");
     const FontFamily *f = seg.GetLastStatus() == Ok && seg.IsAvailable() ? &seg : FontFamily::GenericSansSerif();
     if (!wcscmp(force, L"chemin")) { g_textPath = true; LaunchLog("texte : formes vectorielles forcees (MWCOOP_TEXTE)"); return; }
+    if (!wcscmp(force, L"gdi")) { g_textGdi = true; LaunchLog("texte : ecrit par GDI, force (MWCOOP_TEXTE, %d pixels)", GdiProbe()); return; }
     const TextRenderingHint hints[] = { TextRenderingHintAntiAliasGridFit, TextRenderingHintAntiAlias, TextRenderingHintClearTypeGridFit,
                                         TextRenderingHintSingleBitPerPixelGridFit, TextRenderingHintSystemDefault };
     for (TextRenderingHint h : hints) {
@@ -1375,10 +1408,147 @@ static void TextProbe()
     g_textPath = ink >= 8;
     LaunchLog(g_textPath ? "texte : DrawString muet, lettres en formes vectorielles (%d pixels)" : "texte : aucun rendu n'ecrit (formes : statut %d, %d pixels)",
               g_textPath ? ink : (int)st, ink);
+    if (g_textPath) return;
+    int gi = GdiProbe();
+    g_textGdi = gi >= 8;
+    LaunchLog(g_textGdi ? "texte : GDI+ muet, texte ecrit par GDI comme Paint (%d pixels)" : "texte : GDI n'ecrit rien non plus (%d pixels)", gi);
+}
+
+// Police demandee (nom, taille en pixels, style), gardee pour chaque Font du lanceur : en mode GDI, l'objet Font de GDI+
+// peut etre vide (aucune famille), on ecrit avec ces valeurs.
+struct FontSpec { std::wstring face; float px; int style; };
+static std::map<const Font *, FontSpec> g_fontSpecs;
+static FontSpec SpecOf(const Font *f)
+{
+    auto it = g_fontSpecs.find(f);
+    if (it != g_fontSpecs.end()) return it->second;
+    FontSpec s = { L"Segoe UI", 12, FontStyleRegular };
+    if (f && f->GetLastStatus() == Ok) { s.px = f->GetSize(); s.style = f->GetStyle(); }
+    return s;
+}
+static HFONT GdiFontFor(const FontSpec &sp, float scale)
+{
+    static std::map<std::wstring, HFONT> cache;
+    int h = -max(1, (int)(sp.px * scale + 0.5f));
+    wchar_t k[96];
+    swprintf_s(k, L"%s|%d|%d", sp.face.c_str(), h, sp.style);
+    auto it = cache.find(k);
+    if (it != cache.end()) return it->second;
+    HFONT f = CreateFontW(h, 0, 0, 0, (sp.style & FontStyleBold) ? FW_BOLD : FW_NORMAL, (sp.style & FontStyleItalic) != 0, (sp.style & FontStyleUnderline) != 0,
+                          (sp.style & FontStyleStrikeout) != 0, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, sp.face.c_str());
+    cache[k] = f;
+    return f;
+}
+// Drapeaux DrawTextW d'apres le StringFormat (alignement, une ligne, points de suspension) ; le vertical est fait a part.
+static UINT GdiFlags(const StringFormat *sf, bool layout)
+{
+    UINT f = DT_NOPREFIX;
+    StringAlignment h = sf ? sf->GetAlignment() : StringAlignmentNear;
+    f |= h == StringAlignmentCenter ? DT_CENTER : h == StringAlignmentFar ? DT_RIGHT : DT_LEFT;
+    bool noWrap = !layout || (sf && (sf->GetFormatFlags() & StringFormatFlagsNoWrap));
+    if (noWrap) f |= DT_SINGLELINE; else f |= DT_WORDBREAK;
+    StringTrimming t = sf ? sf->GetTrimming() : StringTrimmingNone;
+    if (layout && noWrap && (t == StringTrimmingEllipsisCharacter || t == StringTrimmingEllipsisWord || t == StringTrimmingEllipsisPath)) f |= DT_END_ELLIPSIS;
+    return f;
+}
+static HDC GdiDC() { static HDC dc = CreateCompatibleDC(NULL); return dc; }
+// Taille du texte en pixels de l'ecran (largeur maxi w ; 0 : sans limite, une ligne par saut de ligne du texte).
+static SIZE GdiExtent(const std::wstring &s, HFONT f, UINT flags, int w)
+{
+    HDC dc = GdiDC();
+    HGDIOBJ of = SelectObject(dc, f);
+    RECT r = { 0, 0, w > 0 ? w : 100000, 0 };
+    if (w <= 0 && s.find(L'\n') != std::wstring::npos) flags &= ~DT_SINGLELINE;
+    DrawTextW(dc, s.c_str(), (int)s.size(), &r, (flags & ~(DT_CENTER | DT_RIGHT | DT_END_ELLIPSIS)) | DT_CALCRECT);
+    SelectObject(dc, of);
+    SIZE z = { r.right - r.left, r.bottom - r.top };
+    return z;
+}
+// Texte ecrit par GDI dans une image (blanc sur noir = couverture), teinte a la couleur du pinceau ; images gardees
+// (le lanceur redessine tout a chaque image), videes au-dela de 400.
+struct GdiText { std::vector<BYTE> px; Bitmap *bmp; int w, h; };
+static Status GdiDraw(Graphics &g, const std::wstring &s, const Font *font, RectF r, const StringFormat *sf, const Brush *b, bool layout)
+{
+    static std::map<std::wstring, GdiText *> cache;
+    FontSpec sp = SpecOf(font);
+    Matrix m; g.GetTransform(&m);
+    REAL el[6]; m.GetElements(el);
+    float sc = fabsf(el[0]) > 0.05f ? min(fabsf(el[0]), 4.0f) : 1.0f;
+    HFONT hf = GdiFontFor(sp, sc);
+    UINT flags = GdiFlags(sf, layout);
+    Color c(255, 255, 255, 255);
+    if (b && b->GetType() == BrushTypeSolidColor) ((const SolidBrush *)b)->GetColor(&c);
+    int W, H, top = 0;
+    SIZE ext = GdiExtent(s, hf, flags, layout ? (int)(r.Width * sc + 0.5f) : 0);
+    if (!layout) {   // point d'origine : cadre a la taille du texte, place selon l'alignement
+        float w = ext.cx / sc, hh = ext.cy / sc;
+        StringAlignment ha = sf ? sf->GetAlignment() : StringAlignmentNear, va = sf ? sf->GetLineAlignment() : StringAlignmentNear;
+        r = RectF(r.X - (ha == StringAlignmentCenter ? w / 2 : ha == StringAlignmentFar ? w : 0), r.Y - (va == StringAlignmentCenter ? hh / 2 : va == StringAlignmentFar ? hh : 0), w, hh);
+        flags &= ~(DT_CENTER | DT_RIGHT);
+        if (s.find(L'\n') != std::wstring::npos) flags &= ~DT_SINGLELINE;
+    }
+    W = (int)ceilf(r.Width * sc); H = (int)ceilf(r.Height * sc);
+    if (W <= 0 || H <= 0 || W > 4096 || H > 4096 || s.empty()) return Ok;
+    StringAlignment va = sf ? sf->GetLineAlignment() : StringAlignmentNear;
+    if (layout && va != StringAlignmentNear) top = va == StringAlignmentCenter ? (H - min((int)ext.cy, H)) / 2 : H - min((int)ext.cy, H);
+    wchar_t k[200];
+    swprintf_s(k, L"|%s|%d|%d|%d|%d|%u|%d|%08x|", sp.face.c_str(), (int)(sp.px * sc * 10), sp.style, W, H, flags, top, (unsigned)c.GetValue());
+    std::wstring key = s + k;
+    GdiText *t;
+    auto it = cache.find(key);
+    if (it != cache.end()) t = it->second;
+    else {
+        if (cache.size() > 400) { for (auto &e : cache) { delete e.second->bmp; delete e.second; } cache.clear(); }
+        t = new GdiText(); t->w = W; t->h = H; t->bmp = NULL;
+        HDC dc = GdiDC();
+        BITMAPINFO bi = {};
+        bi.bmiHeader.biSize = sizeof(bi.bmiHeader); bi.bmiHeader.biWidth = W; bi.bmiHeader.biHeight = -H;
+        bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+        void *bits = NULL;
+        HBITMAP dib = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+        if (dib && bits) {
+            memset(bits, 0, (size_t)W * H * 4);
+            HGDIOBJ ob = SelectObject(dc, dib), of = SelectObject(dc, hf);
+            SetBkMode(dc, TRANSPARENT); SetTextColor(dc, RGB(255, 255, 255));
+            RECT rr = { 0, top, W, H };
+            DrawTextW(dc, s.c_str(), (int)s.size(), &rr, flags);
+            GdiFlush();
+            t->px.resize((size_t)W * H * 4);
+            const BYTE *src = (const BYTE *)bits;
+            BYTE *dst = &t->px[0];
+            for (size_t i = 0; i < (size_t)W * H; i++) {
+                int cov = max(src[i * 4], max(src[i * 4 + 1], src[i * 4 + 2]));
+                int a = cov * c.GetA() / 255;
+                dst[i * 4] = (BYTE)(c.GetB() * a / 255); dst[i * 4 + 1] = (BYTE)(c.GetG() * a / 255); dst[i * 4 + 2] = (BYTE)(c.GetR() * a / 255); dst[i * 4 + 3] = (BYTE)a;
+            }
+            SelectObject(dc, of); SelectObject(dc, ob);
+            t->bmp = new Bitmap(W, H, W * 4, PixelFormat32bppPARGB, &t->px[0]);
+        }
+        if (dib) DeleteObject(dib);
+        cache[key] = t;
+    }
+    if (!t->bmp) return GenericError;
+    InterpolationMode im = g.GetInterpolationMode();
+    g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+    Status st = g.DrawImage(t->bmp, RectF(r.X, r.Y, t->w / sc, t->h / sc));
+    g.SetInterpolationMode(im);
+    return st;
+}
+static RectF GdiMeasure(const WCHAR *s, INT n, const Font *font, RectF layout, const StringFormat *sf, bool hasLayout)
+{
+    std::wstring str(s, n < 0 ? wcslen(s) : (size_t)n);
+    FontSpec sp = SpecOf(font);
+    bool wrapBox = hasLayout && layout.Width > 0;
+    UINT flags = GdiFlags(sf, wrapBox);
+    SIZE z = GdiExtent(str, GdiFontFor(sp, 1.0f), flags, wrapBox ? (int)layout.Width : 0);
+    float h = (float)z.cy;
+    if (hasLayout && layout.Height > 0) h = min(h, layout.Height);
+    return RectF(layout.X, layout.Y, (float)z.cx, h);
 }
 // Ecriture de tout le texte du lanceur (DrawString, ou ses lettres en formes si DrawString est muet ici).
 static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, const RectF &r, const StringFormat *sf, const Brush *b)
 {
+    if (g_textGdi) return GdiDraw(g, std::wstring(s, n < 0 ? wcslen(s) : (size_t)n), font, r, sf, b, true);
     if (!g_textPath) return g.DrawString(s, n, font, r, sf, b);
     FontFamily ff;
     font->GetFamily(&ff);
@@ -1388,6 +1558,7 @@ static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, cons
 }
 static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, const PointF &o, const StringFormat *sf, const Brush *b)
 {
+    if (g_textGdi) return GdiDraw(g, std::wstring(s, n < 0 ? wcslen(s) : (size_t)n), font, RectF(o.X, o.Y, 0, 0), sf, b, false);
     if (!g_textPath) return g.DrawString(s, n, font, o, sf, b);
     FontFamily ff;
     font->GetFamily(&ff);
@@ -1395,6 +1566,19 @@ static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, cons
     p.AddString(s, n, &ff, font->GetStyle(), font->GetSize(), o, sf);
     return g.FillPath(b, &p);
 }
+// Mesure du texte (GDI+, ou GDI en mode GDI : memes dimensions que ce qui sera ecrit).
+static Status MeasureStr(Graphics &g, const WCHAR *s, INT n, const Font *f, const PointF &o, const StringFormat *sf, RectF *box)
+{
+    if (g_textGdi) { *box = GdiMeasure(s, n, f, RectF(o.X, o.Y, 0, 0), sf, false); return Ok; }
+    return g.MeasureString(s, n, f, o, sf, box);
+}
+static Status MeasureStr(Graphics &g, const WCHAR *s, INT n, const Font *f, const PointF &o, RectF *box) { return MeasureStr(g, s, n, f, o, NULL, box); }
+static Status MeasureStr(Graphics &g, const WCHAR *s, INT n, const Font *f, const RectF &l, const StringFormat *sf, RectF *box)
+{
+    if (g_textGdi) { *box = GdiMeasure(s, n, f, l, sf, true); return Ok; }
+    return g.MeasureString(s, n, f, l, sf, box);
+}
+static Status MeasureStr(Graphics &g, const WCHAR *s, INT n, const Font *f, const RectF &l, RectF *box) { return MeasureStr(g, s, n, f, l, NULL, box); }
 // Une police peut aussi etre declaree presente et ne rien ecrire (fichier abime, Windows "allege") : chaque famille
 // ecrit "Ag" avec le rendu retenu ; aucun pixel = police suivante.
 static bool FamilyOk(const FontFamily *f)
@@ -1435,6 +1619,12 @@ static const FontFamily *UiFamily(const wchar_t *want)
     cache[want] = got;
     return got;
 }
+// Police du lanceur : celle de UiFamily, avec son nom, sa taille et son style gardes pour le mode GDI.
+struct UiFont : Font
+{
+    UiFont(const wchar_t *face, float px, int style) : Font(UiFamily(face), px, style, UnitPixel) { FontSpec s = { face, px, style }; g_fontSpecs[this] = s; }
+    ~UiFont() { g_fontSpecs.erase(this); }
+};
 // Police des titres : Bahnschrift (Windows 10 et plus, geometrique) si elle est la, sinon Segoe UI.
 static const wchar_t *TitleFont()
 {
@@ -1451,7 +1641,7 @@ static Font *FontOf(const wchar_t *family, float px, int style)
     swprintf_s(k, L"%s|%d|%d", family, (int)(px * 20 + 0.5f), style);
     auto it = cache.find(k);
     if (it != cache.end()) return it->second;
-    Font *f = new Font(UiFamily(family), px, style, UnitPixel);
+    Font *f = new UiFont(family, px, style);
     cache[k] = f;
     return f;
 }
@@ -1506,7 +1696,7 @@ static float MeasureW(Graphics &g, const std::wstring &s, float px, int style)
 {
     Font &font = *FontOf(L"Segoe UI", px, style);
     RectF box;
-    g.MeasureString(s.c_str(), -1, &font, PointF(0, 0), &box);
+    MeasureStr(g, s.c_str(), -1, &font, PointF(0, 0), &box);
     return box.Width;
 }
 
@@ -1597,11 +1787,11 @@ static void DrawField(Graphics &g, int i, const wchar_t *label)
     if (placeholder) shown = f.address ? T(L"ex. 26.12.34.56 (adresse:port accept\u00E9)", L"e.g. 26.12.34.56 (address:port accepted)") : DefaultName();
     Text(g, shown, tr, placeholder && f.address ? 13.5f : 16.0f, placeholder ? FontStyleRegular : FontStyleBold, placeholder ? TH(placeholder) : kInk, StringAlignmentNear);
     if (g_focus == i && fmodf(g_time, 1.0f) < 0.55f) {
-        Font font(UiFamily(L"Segoe UI"), 16, FontStyleBold, UnitPixel);
+        UiFont font(L"Segoe UI", 16, FontStyleBold);
         StringFormat sf(StringFormat::GenericTypographic());
         sf.SetFormatFlags(StringFormatFlagsMeasureTrailingSpaces | StringFormatFlagsNoWrap);
         RectF box;
-        g.MeasureString(f.text.c_str(), -1, &font, PointF(0, 0), &sf, &box);
+        MeasureStr(g, f.text.c_str(), -1, &font, PointF(0, 0), &sf, &box);
         float x = min(tr.X + box.Width + 1, tr.X + tr.Width);
         Pen cp(kAcc, 1.6f);
         g.DrawLine(&cp, x, f.r.Y + 12, x, f.r.Y + f.r.Height - 12);
@@ -3842,7 +4032,7 @@ static void DrawSteamGuide(Graphics &g)
         g.FillPath(&kb, &kp);
         Pen kpen(TH(fieldBorder), 1);
         g.DrawPath(&kpen, &kp);
-        Font mf(UiFamily(L"Consolas"), 14, FontStyleRegular, UnitPixel);
+        UiFont mf(L"Consolas", 14, FontStyleRegular);
         StringFormat sf;
         sf.SetLineAlignment(StringAlignmentCenter);
         sf.SetTrimming(StringTrimmingEllipsisPath);
