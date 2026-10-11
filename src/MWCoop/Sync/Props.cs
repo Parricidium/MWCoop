@@ -292,6 +292,11 @@ namespace MWCoop
                 }
                 if (go != null && !go.activeInHierarchy) go = null;   // (eteint en main : range par un mod d'inventaire)
                 Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+                // Piece MONTEE sur une voiture (portiere, capot, coffre de la CORRIS : la main du jeu la prend pour l'ouvrir) :
+                // pas un objet tenu -- sa pose envoyee la tirait chez les autres, dont le jeu la demontait (« Bolted
+                // -UNINSTALL-> » : portieres, capot, coffre qui tombent des qu'on les touche, retour de witefold et
+                // mugshot, 11/10). CarDoors s'en charge ; demontee, elle n'est plus sous la voiture.
+                if (rb != null && rb.transform.parent != null && VehicleSync.CarRoot(rb.transform) != null) rb = null;
                 if (rb != null && !byBody.TryGetValue(rb, out h) && Time.realtimeSinceStartup - lastForced > 1f)
                 {
                     lastForced = Time.realtimeSinceStartup;
@@ -780,6 +785,7 @@ namespace MWCoop
             }
             if (state == STORED) { stored.Add(id); storedBy[id] = who; } else stored.Remove(id);
             if (p == null || p.Body == null || p == held) return;
+            if (state != STORED && p.Body.transform.parent != null && VehicleSync.CarRoot(p.Body.transform) != null) return;   // (montee ici : voir plus haut)
             // Range ici (ou dans notre main, eteint : outil du jeu) : c'est nous qui l'avons, pas a cacher.
             if (state == STORED && (storedHere.ContainsKey(id) || (hand != null && hand.FsmVariables.GetFsmGameObject("PickedObject").Value == p.Body.gameObject))) return;
             p.RemoteAt = now;
