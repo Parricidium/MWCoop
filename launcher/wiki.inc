@@ -24,8 +24,7 @@ static float WikiMaxScroll() { return max(0.0f, g_wikiH - WikiArea().Height); }
 
 static float WikiTextH(Graphics &g, const std::wstring &t, float w, float px, int style)
 {
-    FontFamily fam(L"Segoe UI");
-    Font f(&fam, px, style, UnitPixel);
+    Font f(UiFamily(L"Segoe UI"), px, style, UnitPixel);
     StringFormat sf;
     RectF box;
     g.MeasureString(t.c_str(), -1, &f, RectF(0, 0, w, 100000), &sf, &box);
@@ -33,8 +32,7 @@ static float WikiTextH(Graphics &g, const std::wstring &t, float w, float px, in
 }
 static void WikiText(Graphics &g, const std::wstring &t, RectF r, float px, int style, Color c)
 {
-    FontFamily fam(L"Segoe UI");
-    Font f(&fam, px, style, UnitPixel);
+    Font f(UiFamily(L"Segoe UI"), px, style, UnitPixel);
     StringFormat sf;
     SolidBrush b(c);
     g.DrawString(t.c_str(), -1, &f, r, &sf, &b);
