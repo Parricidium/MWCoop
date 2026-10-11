@@ -33,6 +33,7 @@ namespace MWCoop
         {
             public string Id;
             public Rigidbody Body;
+            public int LastInst;                  // objet Unity du dernier corps (valise du mod Suitcase : recreee a chaque reapparition)
             public PlayMakerFSM Use;              // automate 'Use' qui porte l'ID (articles) : voit qu'il a disparu
             public int RemoteBy = -1;
             public int LayerWas = -1;             // deplace par un autre : calque du jeu pour un objet tenu (16), le sien avant
@@ -152,6 +153,9 @@ namespace MWCoop
             // fixe, sinon le chemin differait d'un joueur a l'autre et le paquet pris par l'un restait au sol chez l'autre
             // (retour de witefold, 11/10).
             if (k == null && tn == "advert pile(itemx)") k = "w:tracts:paquet";
+            // Valise du mod « Suitcase » (Marshalx14, demande de JD, 11/10) : objet « Suitcase » a la racine de la scene, ses
+            // morceaux Part0... ; une seule par partie. Hors des racines du monde : jamais suivie, chacun avait la sienne ailleurs.
+            if (k == null && tn == "Suitcase" && t.parent == null && t.Find("Part0") != null) k = SuitcaseKey;
             if (k != null) { worldKeys[rb.gameObject] = k; return k; }
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement. Cle
             // par son UT (maison, usine), pas par l'endroit : tenue en main, elle est sous PLAYER pour les deux.
@@ -184,11 +188,23 @@ namespace MWCoop
             return n != null && !string.IsNullOrEmpty(n.Value) ? "w:cd:" + n.Value : null;
         }
 
+        const string SuitcaseKey = "w:mod:valise";
         static void Register(Rigidbody rb, string id, PlayMakerFSM use)
         {
             Prop p;
             if (!props.TryGetValue(id, out p)) { p = new Prop { Id = id }; props[id] = p; }
             p.Body = rb;
+            // Valise du mod Suitcase recreee ici (reapparition : touche, bouton du mod, chute sous la carte -- l'ancienne est
+            // detruite, la nouvelle posee devant le joueur) : sa pose part aux autres comme un objet lache.
+            int inst = rb.GetInstanceID();
+            if (id == SuitcaseKey && p.LastInst != 0 && p.LastInst != inst && p != held && p.RemoteBy < 0)
+            {
+                p.SettleUntil = Time.realtimeSinceStartup + 5f;
+                if (!settling.Contains(p)) settling.Add(p);
+                Send(p, 2, true);
+                Log.Info("objets : valise du mod Suitcase reapparue ici, montree aux autres");
+            }
+            p.LastInst = inst;
             p.GoneAt = 0f;
             if (use != null) p.Use = use;
             byBody[rb] = p;
