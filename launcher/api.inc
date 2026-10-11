@@ -58,7 +58,7 @@ static void DrawApiPage(Graphics &g)
         GraphicsPath p; RoundRect(p, r, 12);
         SolidBrush fb(TH(card)); g.FillPath(&fb, &p);
         SolidBrush ab(kAcc);
-        g.DrawString(f.code, -1, &fm, RectF(r.X + 14, r.Y, 260, r.Height), &sfl, &ab);
+        DrawStr(g, f.code, -1, &fm, RectF(r.X + 14, r.Y, 260, r.Height), &sfl, &ab);
         Text(g, g_fr ? f.fr : f.en, RectF(r.X + 274, r.Y, r.Width - 284, r.Height), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
         y += 46;
     }
@@ -96,7 +96,7 @@ static void DrawApiPage(Graphics &g)
             else { j = line.find(L'"', i); if (j == std::wstring::npos) j = line.size(); br = &ink; }
             std::wstring part = line.substr(i, j - i);
             RectF m; g.MeasureString(part.c_str(), -1, &fc, PointF(0, 0), &sf, &m);
-            g.DrawString(part.c_str(), -1, &fc, PointF(x, ly), &sf, br);
+            DrawStr(g, part.c_str(), -1, &fc, PointF(x, ly), &sf, br);
             x += m.Width - 3.0f;   // (marges de GDI+ autour de chaque morceau)
             i = j;
         }
@@ -126,7 +126,7 @@ static void DrawApiPage(Graphics &g)
         StringFormat sp; sp.SetTrimming(StringTrimmingEllipsisPath); sp.SetFormatFlags(StringFormatFlagsNoWrap); sp.SetLineAlignment(StringAlignmentCenter);
         Font f(UiFamily(L"Segoe UI"), 11.5f, FontStyleRegular, UnitPixel); SolidBrush gb(kGrey);
         std::wstring sub = ok ? dll : std::wstring(T(L"Dans le dossier du jeu, sous MWCoop\\ (une fois installé)", L"In the game folder, under MWCoop\\ (once installed)"));
-        g.DrawString(sub.c_str(), -1, &f, RectF(r.X + 46, r.Y + 30, r.Width - 56, 18), &sp, &gb);
+        DrawStr(g, sub.c_str(), -1, &f, RectF(r.X + 46, r.Y + 30, r.Width - 56, 18), &sp, &gb);
     }
     UiButton(g, RectF(w.X + 20, w.Y + 126, w.Width - 40, 46), T(L"Documentation (GitHub)", L"Documentation (GitHub)"), UI_API_DOC, true, IC_FILE);
     UiButton(g, RectF(w.X + 20, w.Y + 182, (w.Width - 50) / 2, 44), T(L"Code source", L"Source code"), UI_API_SRC, false, IC_CODE);

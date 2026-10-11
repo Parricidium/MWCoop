@@ -1001,7 +1001,7 @@ static void DrawNotesPage(Graphics &g)
         g.MeasureString(t.c_str(), -1, &fb, RectF(0, 0, w - (x - area.X), 100000), &sf, &box);
         if (y + box.Height >= area.Y && y <= area.Y + area.Height) {
             if (bullet) { SolidBrush dot(kAcc); g.FillEllipse(&dot, area.X + 6, y + 8, 7.0f, 7.0f); }
-            g.DrawString(t.c_str(), -1, &fb, RectF(x, y, w - (x - area.X), box.Height + 2), &sf, &ink);
+            DrawStr(g, t.c_str(), -1, &fb, RectF(x, y, w - (x - area.X), box.Height + 2), &sf, &ink);
         }
         y += box.Height + 10;
     }
@@ -1278,7 +1278,7 @@ static void DrawSettings(Graphics &g)
         Text(g, ok ? L"My Winter Car " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), RectF(ga.X + (ok ? 44.0f : 20.0f), ga.Y + 58, ga.Width - 70, 24), 14, FontStyleBold, ok ? kInk : kRed, StringAlignmentNear);
         StringFormat sf; sf.SetTrimming(StringTrimmingEllipsisPath); sf.SetFormatFlags(StringFormatFlagsNoWrap); sf.SetLineAlignment(StringAlignmentCenter);
         Font f(UiFamily(L"Segoe UI"), 12, FontStyleRegular, UnitPixel); SolidBrush gb(kGrey);
-        g.DrawString(g_gameDir.c_str(), -1, &f, RectF(ga.X + 20, ga.Y + 82, ga.Width - 40, 20), &sf, &gb);
+        DrawStr(g, g_gameDir.c_str(), -1, &f, RectF(ga.X + 20, ga.Y + 82, ga.Width - 40, 20), &sf, &gb);
         UiButton(g, RectF(ga.X + 20, ga.Y + 104, ga.Width - 40, 38), ok ? T(L"Changer de dossier", L"Change folder") : T(L"Choisir l'exe…", L"Choose exe…"), UI_SET_FOLDER, false, IC_FOLDER);
     }
     if (const Opt *ls = OptByKey("LancerSteam")) {   // (kSetSteamRow : ga.X + 20, ga.Y + 150)
