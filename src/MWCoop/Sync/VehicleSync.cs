@@ -1595,6 +1595,19 @@ namespace MWCoop
             return true;
         }
 
+        // Essais : commandes de chaque voiture (axes de son AxisCarController, etat de son automate de conduite).
+        public static string AxesState()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Car c in cars)
+            {
+                if (c.Axis == null) continue;
+                sb.Append(c.Key).Append(" [").Append(c.Axis.enabled ? "actif" : "coupe").Append(", frein '").Append(c.Axis.brakeAxis).Append("', gaz '").Append(c.Axis.throttleAxis)
+                  .Append("', conduite ").Append(c.Drive == null ? "-" : (c.Drive.gameObject.activeInHierarchy ? "" : "eteinte ") + c.Drive.ActiveStateName).Append("] ");
+            }
+            return sb.ToString();
+        }
+
         // Essais : sort le joueur local de la voiture comme la touche ENTREE.
         // Essais : moteur tenu en marche (Drivetrain a 1400 tr/min).
         public static void TestKeepRunning(string name)
