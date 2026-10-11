@@ -19,3 +19,6 @@ ref/*
 # Reglages locaux de Claude Code (permissions propres a ce PC)
 .claude/settings.local.json
 .claude/*.lock
+
+# Lien d invitation Discord du lanceur : seulement sur le PC qui compile (jamais sur GitHub)
+launcher/discord.local.h
