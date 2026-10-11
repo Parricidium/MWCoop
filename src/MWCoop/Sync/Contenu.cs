@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -203,6 +203,21 @@ namespace MWCoop
                 Log.Info("musiques : " + (now >= importUntil ? "import pas fini apres 30 s" : "import fini") + " -- " + Songs());
                 importUntil = 0;
             }
+        }
+
+        // Fichier de la chanson importee de rang i de la radio (liste "Songs" de Radio/Folk : LoadSongs lit track1..200.ogg
+        // dans l'ordre et saute les absents) : dossier recu de l'hote s'il a envoye sa radio, sinon celui du jeu. Pour les
+        // copies de postes (Radio.cs), qui chargent leur propre exemplaire.
+        static string songDir; static List<string> songFiles;
+        public static string SongFile(int i)
+        {
+            string dir = roots != null && roots.Contains("Radio/") && Folder().Length > 0 ? Folder() + "Radio/" : Path.Combine(Path.GetDirectoryName(Application.dataPath), "Radio").Replace('\\', '/') + "/";
+            if (songFiles == null || songDir != dir)
+            {
+                songDir = dir; songFiles = new List<string>();
+                for (int k = 1; k <= 200; k++) { string p = dir + "track" + k + ".ogg"; try { if (File.Exists(p)) songFiles.Add(p); } catch { } }
+            }
+            return i >= 0 && i < songFiles.Count ? songFiles[i] : null;
         }
 
         static bool HasMusic(string root)

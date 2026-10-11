@@ -1240,6 +1240,7 @@ namespace MWCoop
             // [Test] Autotest=radioautre : l'hote allume la radio du BACHGLOTZ ([Test] RadioBouton) a 40 s (bouton de volume, comme un clic : "Check
             // tune", volume 0,6), l'eteint a 58 s ; chacun note toutes les 3 s ou est son vrai jeu de canaux et les copies.
             // Attendu chez l'invite : une copie dans le BACHGLOTZ de 40 a 58 s, son vrai jeu de canaux pas deplace.
+            if (mode == "radioflux" && !Net.Session.IsHost) Radio.TestStream(t);
             if (mode == "radioautre")
             {
                 string part = Config.Get("Test", "RadioBouton", "BACHGLOTZ(1905kg)/RadioPivot/Radio/ButtonsRadio/RadioVolume::Knob");
@@ -1252,6 +1253,7 @@ namespace MWCoop
                     Log.Info("autotest : radioautre, " + Jobs.TestSend(part, "Mouse off 2", "ON", "Check tune"));
                 }
                 if (Net.Session.IsHost && t > 58f && step == 1) { step = 2; Log.Info("autotest : radioautre, " + Jobs.TestSend(part, "Decrease", "OFF", "Off")); }
+                if (!Net.Session.IsHost && Config.GetInt("Test", "RadioFlux", 0) != 0 && t > 30f && step == 0) { step = 1; Log.Info("autotest : radioautre, " + Radio.TestFolkSong()); }
                 if (t > 35f && t < 72f && t >= holdLog) { holdLog = t + 3f; Log.Info("autotest : radioautre, " + Radio.GhostState()); }
             }
             // [Test] Autotest=tenirvoiture (TestPiece, ~sandbag(item1) ; TestVoiture, SORBET) : l'hote « tient » l'objet de 40 a
