@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -115,6 +115,7 @@ namespace MWCoop
             Knob k;
             if (!byKey.TryGetValue(key, out k) || k.F == null || k.Mine || Holding(k)) return;
             if (Mathf.Abs(k.Var.Value - v) < 0.001f && final) return;
+            PlayerSync.ReachNearest(k.F.transform);   // (son avatar tient la commande : retour de Menor, 11/10)
             Set(k, v, final);
         }
 

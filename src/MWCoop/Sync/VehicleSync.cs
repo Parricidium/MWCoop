@@ -99,6 +99,7 @@ namespace MWCoop
             public FsmFloat Heat; public float RemoteHeat = float.NaN;   // temperature de la source de chaleur
             public PlayMakerFSM Starter;        // automate 'Starter' (etat "Running" : moteur en marche)
             public string RunState = "Running"; // ... son etat moteur en marche ("Motor running" : KEKMET)
+            public float PushUntil; public Vector3 PushPoint, PushDir;   // poussee d'un autre (repere de la voiture), a appliquer ici
             public bool RemoteRunning;          // moteur en marche chez celui qui la fait rouler
             public float StarterOff;            // copie : debut de l'ecart entre son Starter et celui du conducteur (0 : aucun)
             public PlayMakerFSM KeyFsm; public bool KeyLooked; public float KeyCrankSince, LatchSince;   // cle de contact (StarterLatch)
@@ -682,6 +683,14 @@ namespace MWCoop
             }
 
             HotTick();
+            PushRemote(now);
+            float pf = Config.GetFloat("Test", "PousseForce", 1500f);
+            foreach (Car c in cars)
+                if (c.PushUntil > now && c.Body != null && !c.Body.isKinematic)
+                {
+                    c.Body.WakeUp();
+                    c.Body.AddForceAtPosition(c.T.TransformDirection(c.PushDir) * pf * Time.deltaTime, c.T.TransformPoint(c.PushPoint), ForceMode.Impulse);
+                }
             foreach (Car c in cars)
             {
                 if (c.Body == null) continue;
@@ -697,6 +706,44 @@ namespace MWCoop
                     if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Key + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + ", chaleur " + (c.Heat != null ? c.Heat.Value.ToString("F1") : "?") + " (recue " + c.RemoteHeat.ToString("F1") + ")" +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
                 }
             }
+        }
+
+        // Pousser une voiture menee par un autre (conduite, moteur laisse tournant, deja poussee par un autre ; demande de
+        // Menor, 11/10 : « pousser a deux, ou avec quelqu'un au volant ») : ici c'est une copie figee, la main du jeu ne la
+        // bouge pas. Le geste part a celui qui la mene (10 fois/s : point et direction dans le repere de la voiture), qui
+        // applique la force (PousseForce, 1500 N par pousseur) a sa voiture.
+        static float pushSendAt, pushSendLog;
+        static void PushRemote(float now)
+        {
+            if (LocalDriving >= 0 || !Gestures.Pushing || now < pushSendAt || !Session.Active) return;
+            Transform pl = Game.PlayerT, cam = PlayerSync.LocalCamera;
+            if (pl == null || cam == null) return;
+            Vector3 p = pl.position + Vector3.up * 0.8f;
+            Car best = null; float bd = 1.5f * 1.5f;
+            foreach (Car c in cars)
+            {
+                if (c.Body == null || c.Net < 0 || !Remote(c, now) || !c.Body.gameObject.activeInHierarchy) continue;
+                float d = (c.Body.ClosestPointOnBounds(p) - p).sqrMagnitude;
+                if (d < bd) { bd = d; best = c; }
+            }
+            if (best == null) return;
+            pushSendAt = now + 0.1f;
+            Vector3 dir = cam.forward; dir.y = 0f;
+            if (dir.sqrMagnitude < 0.01f) return;
+            dir.Normalize();
+            Vector3 cp = best.Body.ClosestPointOnBounds(p);
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pousse").U8(best.Net).Vec(best.T.InverseTransformPoint(cp)).Vec(best.T.InverseTransformDirection(dir)), false);
+            if (now >= pushSendLog) { pushSendLog = now + 5f; Log.Info("poussee : " + best.Key + " menee par #" + best.RemoteBy + ", poussee envoyee"); }
+        }
+
+        static float pushRecvLog;
+        public static void OnRemotePush(int who, int net, Vector3 lp, Vector3 ld)
+        {
+            Car c = ByNet(net);
+            if (c == null || c.Body == null || (c.Index != LocalDriving && c.Index != owned)) return;   // (celui qui la mene seul applique)
+            float now = Time.realtimeSinceStartup;
+            c.PushUntil = now + 0.2f; c.PushPoint = lp; c.PushDir = ld;
+            if (now >= pushRecvLog) { pushRecvLog = now + 5f; Log.Info("poussee : " + c.Key + " poussee par #" + who); }
         }
 
         // Poussee : la voiture la plus proche du joueur (a moins de 1,5 m de sa carrosserie), garee ici (pas une copie).

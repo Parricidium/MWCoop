@@ -647,6 +647,7 @@ namespace MWCoop
             if (kind == K_OPEN || kind == K_GRAB) EndClosing(d, false);
             // Maniee par un autre : un verrou pose ici la souderait (copie d'une voiture conduite ailleurs).
             if (!me && kind != K_LOCK) DropLocks(d, KindName(kind) + " par #" + who);
+            if (!me && (kind == K_OPEN || kind == K_GRAB) && d.Fsm != null) PlayerSync.ReachFor(who, d.Fsm.transform);   // (son avatar tire la poignee)
             switch (kind)
             {
                 case K_OPEN:

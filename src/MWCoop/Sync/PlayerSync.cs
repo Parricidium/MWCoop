@@ -122,6 +122,26 @@ namespace MWCoop
             if (avatars.TryGetValue(id, out a) && a != null && a.Root != null) a.ReachFor(t);
         }
 
+        // Commande actionnee par un autre dont on ne sait pas qui (message relaye sans auteur : molettes) : l'avatar le plus
+        // proche, a moins de 2,5 m, y tend la main -- au plus une fois par demi-seconde pour la meme commande (la molette
+        // envoie sa valeur en continu).
+        static readonly Dictionary<Transform, float> reachNear = new Dictionary<Transform, float>();
+        public static void ReachNearest(Transform t)
+        {
+            if (t == null) return;
+            float now = Time.realtimeSinceStartup, at;
+            if (reachNear.TryGetValue(t, out at) && now - at < 0.5f) return;
+            reachNear[t] = now;
+            Avatar best = null; float bd = 2.5f * 2.5f;
+            foreach (Avatar a in avatars.Values)
+            {
+                if (a == null || a.Root == null) continue;
+                float d = (a.Root.transform.position + Vector3.up * 1.2f - t.position).sqrMagnitude;
+                if (d < bd) { bd = d; best = a; }
+            }
+            if (best != null) best.ReachFor(t);
+        }
+
         // Apres les animations : poses calculees (conduite, buste et tete qui suivent le regard, bras).
         public static void LateUpdate()
         {
