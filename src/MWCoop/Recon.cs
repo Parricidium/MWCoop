@@ -381,6 +381,18 @@ namespace MWCoop
                 return owner.OwnerOption == OwnerDefaultOption.UseOwner ? "(soi)" : Value(owner.GameObject);
             var ev = o as FsmEvent;
             if (ev != null) return "evt:" + ev.Name;
+            // Destinataire d'un SendEvent : Self, GameObject (objet + automate), FSMComponent, BroadcastAll...
+            var et = o as FsmEventTarget;
+            if (et != null)
+            {
+                string s = "cible:" + et.target;
+                if (et.target == FsmEventTarget.EventTarget.GameObject || et.target == FsmEventTarget.EventTarget.GameObjectFSM)
+                    s += " " + Value(et.gameObject);
+                if (et.fsmName != null && !string.IsNullOrEmpty(et.fsmName.Value)) s += " fsm=" + et.fsmName.Value;
+                if (et.fsmComponent != null) s += " " + Path(et.fsmComponent.transform) + "::" + et.fsmComponent.FsmName;
+                if (et.sendToChildren != null && et.sendToChildren.Value) s += " +enfants";
+                return s;
+            }
             var fp = o as FsmProperty;
             if (fp != null)
             {
