@@ -266,7 +266,11 @@ namespace MWCoop
                         bool keep = !((f.FsmName == "Use" && !vehicle) || f.FsmName == "LOD" || f.FsmName == "Paint" || (!Persistent(f) && !control)
                                       || (vehicle && (CarDoorsLike(f) || CarDoors.Tracks(f))))
                                     && !Interactions.Tracks(f) && !Interactions.Wants(f)
-                                    && !(on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r));   // objets : Props/Interactions
+                                    && !(on.Contains("(itemx)") || (on.Contains("(Clone)") && f.gameObject != r))   // objets : Props/Interactions
+                                    // Pieces et points de montage : Parts (comme WorldFsms). Une piece montee est sous la voiture : son
+                                    // automate Data (sauvegarde) etait suivi ici aussi -- clics de demontage / montage rejoues en double,
+                                    // la piece montee chez l'un restait en l'air chez l'autre (Hall0wMan, 11/10 : reservoir 19 L, siege).
+                                    && !(f.FsmName == "Data" && Parts.IdOf(f.gameObject).Length > 0) && !on.StartsWith("VINP");
                         c = new Classified { Path = keep ? Recon.Path(f.transform) + "::" + f.FsmName : null, Control = control };
                         classified[f] = c;
                     }
