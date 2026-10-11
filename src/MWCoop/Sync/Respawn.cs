@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -58,7 +58,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            Choosing = false; deathFsm = null; heads.Clear(); overlays.Clear(); camFx.Clear(); camDeath = null;
+            Choosing = false; VehicleSync.FreezeLocal(false); deathFsm = null; heads.Clear(); overlays.Clear(); camFx.Clear(); camDeath = null;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
         }
 
@@ -139,6 +139,7 @@ namespace MWCoop
             Needs();
             restoreAt = Time.realtimeSinceStartup + 0.3f;   // (apres son "State 3" : Wait 0,1 puis "State 1")
             Choosing = true;
+            VehicleSync.FreezeLocal(true);   // (mort au volant : plus de conduite pendant le choix)
             if (Session.Active) Chat.Send(Lang.T("* mort (", "* died (") + cause + ") *");
             // Accident au volant : les passagers de cette voiture meurent aussi (le jeu n'a pas de passager : seul le
             // conducteur mourait, retour d'un joueur, 09/10 : « seul l'hote meurt dans l'accident »).
@@ -184,6 +185,7 @@ namespace MWCoop
             foreach (Head h in heads) RestoreHead(h);
             if (Seats.Seated) Seats.TestLeave();
             VehicleSync.ExitLocal();
+            VehicleSync.FreezeLocal(false);
             if (pl.transform.parent != null) pl.transform.parent = null;
             foreach (KeyValuePair<Behaviour, bool> kv in overlays) if (kv.Key != null) kv.Key.enabled = kv.Value;
             int fx = 0;

@@ -67,7 +67,9 @@ namespace MWCoop
             int n = 0;
             foreach (string h in Holders)
             {
-                GameObject g = Game.FindAny(h);
+                // (distributeurs de pieces sous CARPARTS/PARTSYSTEM, pas a la racine : cherches par leur nom, comme le mod --
+                // avant, « SPAWNERS_VIN introuvable », pieces de Cheatbox++ jamais partagees, retour de witefold 11/10)
+                GameObject g = Game.FindAny(h) ?? Game.FindAny("CARPARTS/PARTSYSTEM/" + h) ?? GameObject.Find(h);
                 if (g == null) continue;
                 foreach (PlayMakerFSM f in g.GetComponentsInChildren<PlayMakerFSM>(true))
                 {
@@ -135,10 +137,46 @@ namespace MWCoop
         // CbxArticle (automate de Spawner/CreateItems, « Beer » par defaut) a 30 s ; chacun note les objets de ce nom pres de
         // l'hote a 40 s.
         static int testStep;
+        static PlayMakerFSM PartSpawner(string dist, string art)
+        {
+            GameObject g = Game.FindAny("CARPARTS/PARTSYSTEM/" + dist) ?? GameObject.Find(dist);
+            if (g == null) return null;
+            foreach (Transform c in g.transform)
+            {
+                PlayMakerFSM f = c.GetComponent<PlayMakerFSM>();
+                if (f != null && f.FsmVariables.FindFsmGameObject("New") != null && (art.Length == 0 || art == "Beer" || c.name == art)) return f;
+            }
+            return null;
+        }
+
+        static void TestPart(string dist, string art, float t)
+        {
+            PlayMakerFSM sp = PartSpawner(dist, art);
+            if (Session.IsHost && t > 30f && testStep == 0)
+            {
+                testStep = 1;
+                Type tt = null;
+                foreach (System.Reflection.Assembly a in AppDomain.CurrentDomain.GetAssemblies()) { try { tt = tt ?? a.GetType("CheatboxPlusPlus.SpawnerItem", false); } catch { } }
+                System.Reflection.MethodInfo m = tt != null ? tt.GetMethod("UseSpawner", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public) : null;
+                if (sp == null || m == null) Log.Info("autotest : cbx, " + (sp == null ? "pas de distributeur sous " + dist : "Cheatbox++ absent"));
+                else { m.Invoke(null, new object[] { sp, null }); Log.Info("autotest : cbx, piece de " + sp.gameObject.name + " demandee a Cheatbox++"); }
+            }
+            if (t > 40f && testStep == 1 || !Session.IsHost && t > 50f && testStep == 0)
+            {
+                testStep = 2;
+                FsmGameObject nv = sp != null ? sp.FsmVariables.FindFsmGameObject("New") : null;
+                GameObject go = nv != null ? nv.Value : null;
+                Log.Info("autotest : cbx, derniere piece de " + (sp != null ? sp.gameObject.name : "?") + " creee ici : " + (go != null ? go.name + " en " + go.transform.position.ToString("F1") : "aucune"));
+            }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode != "cbx") return;
             string art = Config.Get("Test", "CbxArticle", "Beer");
+            // [Test] CbxDistrib=SPAWNERS_VIN : un distributeur de pieces (enfant nomme CbxArticle, sinon le premier enfant).
+            string dist = Config.Get("Test", "CbxDistrib", "");
+            if (dist.Length > 0) { TestPart(dist, art, t); return; }
             if (Session.IsHost && t > 30f && testStep == 0)
             {
                 testStep = 1;

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -555,7 +555,26 @@ namespace MWCoop
                 Log.Info("atelier : train " + c.Car + b.Key + " tordu ici (" + b.Snap.eulerAngles.ToString("F1") + ")");
                 if (Session.RemoteCount > 0) Session.SendAll(new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_BEND | RELIABLE).Str(c.Car).Str(b.Key).Quat(b.Snap), true);
             }
-            foreach (Dent d in c.Dents) budget = copy ? UndoDent(c, d) : PollDent(c, d, remote, budget);
+            foreach (Dent d in c.Dents) budget = copy && !RepairedHere(d) ? UndoDent(c, d) : PollDent(c, d, remote, budget);
+        }
+
+        // Tole remise a neuf ici (Repair(1) : sommets d'origine ; Cheatbox++ « Repair mesh », retour de witefold, 11/10 :
+        // la reparation ne passait pas toujours) : envoyee comme un choc, meme sur la copie d'une voiture conduite ailleurs
+        // (sinon UndoDent la defaisait).
+        static bool RepairedHere(Dent d)
+        {
+            if (d.D == null || fVerts == null || fBase == null || d.Snap == null) return false;
+            var v = fVerts.GetValue(d.D) as Vector3[];
+            var bs = fBase.GetValue(d.D) as Vector3[];
+            if (v == null || bs == null || !ReferenceEquals(d.Arr, v) || v.Length != bs.Length || d.Snap.Length != v.Length) return false;
+            int n = 0;
+            for (int i = 0; i < v.Length; i++)
+            {
+                if ((v[i] - d.Snap[i]).sqrMagnitude <= 1e-8f) continue;
+                if ((v[i] - bs[i]).sqrMagnitude > 1e-8f) return false;
+                n++;
+            }
+            return n > 0;
         }
 
         // Copie conduite ailleurs : sommets bouges ici remis a leur derniere valeur connue (recue ou d'avant la copie).

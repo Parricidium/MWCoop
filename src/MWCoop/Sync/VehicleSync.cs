@@ -684,6 +684,7 @@ namespace MWCoop
 
             HotTick();
             PushRemote(now);
+            if (frozenCar != null && frozenCar.Dt != null) frozenCar.Dt.throttle = 0f;   // (mort au volant)
             float pf = Config.GetFloat("Test", "PousseForce", 1500f);
             foreach (Car c in cars)
                 if (c.PushUntil > now && c.Body != null && !c.Body.isKinematic)
@@ -1200,6 +1201,10 @@ namespace MWCoop
                 if (g == null) continue;
                 if (g.activeSelf != want) g.SetActive(want);
                 if (!want) continue;
+                // (GIFU : le parent LOD/AudioEngineGifu n'est allume que par le demarreur du jeu, qui ne tourne pas sur une
+                // copie -- sons du moteur muets chez les autres meme a cote, retour de Menor, 10/10)
+                Transform gp = g.transform.parent;
+                if (gp != null && gp.name.StartsWith("AudioEngine") && !gp.gameObject.activeSelf) gp.gameObject.SetActive(true);
                 AudioSource a = g.GetComponent<AudioSource>();
                 a.pitch = c.SoundPitch[i];
                 a.volume = c.SoundVol[i];
@@ -1560,6 +1565,26 @@ namespace MWCoop
         }
 
         // Sortie forcee du vehicule conduit ici (reapparition) : l'etat de sortie du jeu, quelle que soit la vitesse.
+        // Mort au volant (retour de Menor, 10/10 : « mort, on peut encore conduire ») : pendant le choix de la reapparition, les
+        // commandes de la voiture coupees (AxisCarController) et les gaz a zero ; rendues a la reapparition.
+        static AxisCarController frozenAxis;
+        static Car frozenCar;
+        public static void FreezeLocal(bool on)
+        {
+            if (on)
+            {
+                if (frozenCar != null || LocalDriving < 0 || LocalDriving >= cars.Count) return;
+                Car c = cars[LocalDriving];
+                frozenCar = c;
+                if (c.Axis != null && c.Axis.enabled) { c.Axis.enabled = false; frozenAxis = c.Axis; }
+                Log.Info("mort au volant : commandes de " + c.Key + " coupees");
+                return;
+            }
+            if (frozenAxis != null) frozenAxis.enabled = true;
+            if (frozenCar != null) Log.Info("mort au volant : commandes de " + frozenCar.Key + " rendues");
+            frozenAxis = null; frozenCar = null;
+        }
+
         public static bool ExitLocal()
         {
             if (LocalDriving < 0 || LocalDriving >= cars.Count) return false;
@@ -2059,8 +2084,11 @@ namespace MWCoop
             }
             else
             {
-                if (t > 45f && tStep == 0) { tStep = 1; Log.Info("autotest : reprise " + TestEnter(name, false)); }
-                if (t > 50f && tStep == 1) { tStep = 2; Log.Info("autotest : reprise volant -> " + TestEnter(name, true)); }
+                // ([Test] RepriseInviteA=s : l'invite vient a cote a s ; RepriseInviteVolant=0 : il reste a cote, sans conduire)
+                float ia = Config.GetInt("Test", "RepriseInviteA", 45);
+                if (t > ia && tStep == 0) { tStep = 1; Log.Info("autotest : reprise " + TestEnter(name, false)); }
+                if (t > ia + 4f && tStep == 1 && Config.GetInt("Test", "RepriseInviteVolant", 1) == 0) { tStep = 9; Log.Info("autotest : reprise " + TestEnter(name, false) + " (reste a cote)"); }
+                if (t > ia + 5f && tStep == 1) { tStep = 2; Log.Info("autotest : reprise volant -> " + TestEnter(name, true)); }
                 if (t > 65f && tStep == 2) { tStep = 3; Log.Info("autotest : reprise sortie -> " + TestExit(name)); }
             }
             if (t > 20f && t < 80f && now >= tLog) { tLog = now + 5f; Car sc = Named(name); Log.Info("autotest : reprise (" + (host ? "hote" : "invite") + ") " + TaxiState(name) + ", demarreur " + (sc != null && sc.Starter != null ? sc.Starter.ActiveStateName : "?")); }

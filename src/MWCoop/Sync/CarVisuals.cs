@@ -57,6 +57,14 @@ namespace MWCoop
 
         static bool Has(string n, string[] words) { foreach (string w in words) if (n.Contains(w)) return true; return false; }
 
+        static bool SeatbeltPart(Transform t, Transform root)
+        {
+            string n = t.name.ToLowerInvariant();
+            if (n.Contains("seatbelt") || n.Contains("buckle")) return true;
+            for (Transform p = t.parent; p != null && p != root; p = p.parent) if (p.name == "Seatbelts") return true;
+            return false;
+        }
+
         static void Scan()
         {
             int total = 0;
@@ -82,6 +90,10 @@ namespace MWCoop
                     // Levier de vitesses de la SORBET : c'est Gearstick/Pivot qui tourne (son automate Movemement), pas Gearstick.
                     if (!pose && n == "pivot" && t.parent != null && t.parent.name.ToLowerInvariant().Contains("gear")) pose = true;
                     if (!pose && !show) continue;
+                    // Ceintures : objets des automates du jeu (boucle, languette), a chaque joueur -- Seats montre celles des
+                    // autres. Recopiee d'un autre, la boucle du conducteur s'eteignait (ou se rallumait : automate reparti en
+                    // « FASTEN SEATBELT ») : ceinture impossible a detacher (retour de Mikol, 11/10).
+                    if (SeatbeltPart(t, rb.transform)) continue;
                     string rel = VehicleSync.RelPath(rb.transform, t);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
                     var it = new Item { Key = rel + "#" + k, T = t, Pose = pose, Show = show, Pos = t.localPosition, Rot = t.localRotation, Active = t.gameObject.activeSelf,
