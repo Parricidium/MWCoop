@@ -1,4 +1,4 @@
-MWCoop - My Winter Car co-op (PRE-ALPHA)
+MWCoop - My Winter Car co-op
 ========================================
 
 Install

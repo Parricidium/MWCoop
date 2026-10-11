@@ -15,3 +15,7 @@ dist/discord-webhook.txt
 # Reference hors jeu (contenu du jeu : jamais dans le depot)
 ref/*
 !ref/LISEZMOI.md
+
+# Reglages locaux de Claude Code (permissions propres a ce PC)
+.claude/settings.local.json
+.claude/*.lock

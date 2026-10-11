@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- lanceur 2026 : scene, navigation, pages - inclus par launcher.cpp
+﻿// ---------------------------------------------------------------- lanceur 2026 : scene, navigation, pages - inclus par launcher.cpp
 // (elements communs, zones, icones, verre : uikit.inc)
 static float Rnd01(int i, int k);
 static void SceneSpruce(Graphics &g, float x, float base, float h, Brush *ink, Brush *snow)
@@ -424,11 +424,10 @@ static void DrawRail(Graphics &g)
         g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
         g.DrawImage(g_logo, RectF(kRail.X + (kRail.Width - lw) / 2, 26, lw, lh));
     }
-    // version, PRE-ALPHA
+    // version (plus de pastille PRE-ALPHA depuis 0.75.35, demande de JD ; un ancien suffixe "-prealpha" n'est pas montre)
     std::wstring ver = g_localVer.empty() ? L"" : L"v" + g_localVer.substr(0, g_localVer.find(L'-'));
-    float vw = ver.empty() ? 0 : PillW(ver, 10.5f), pw = PillW(L"PRE-ALPHA", 10.5f), x = kRail.X + (kRail.Width - vw - pw - (vw > 0 ? 6 : 0)) / 2;
-    if (vw > 0) { Pill(g, RectF(x, 104, vw, 20), TH(cardSel), ver, kInk, 10.5f); x += vw + 6; }
-    Pill(g, RectF(x, 104, pw, 20), Color(255, 201, 54, 59), L"PRE-ALPHA", Color(255, 255, 255, 255), 10.5f);
+    float vw = ver.empty() ? 0 : PillW(ver, 10.5f), x = kRail.X + (kRail.Width - vw) / 2;
+    if (vw > 0) Pill(g, RectF(x, 104, vw, 20), TH(cardSel), ver, kInk, 10.5f);
     float y0 = 132;
     if (g_btn[B_UPDATE].visible) {   // mise a jour proposee : bouton sous la version
         Button &b = g_btn[B_UPDATE];

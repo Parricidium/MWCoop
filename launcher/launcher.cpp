@@ -388,7 +388,7 @@ static void LoadLocalVersion()
         g_localVer = Trim(Widen(std::string(d.begin(), d.end())));
 }
 
-// "MWCoop 0.1.0-prealpha", "MWCoop (dev)" (fichiers du mod sans version.txt), "MWCoop".
+// "MWCoop 0.1.0", "MWCoop (dev)" (fichiers du mod sans version.txt), "MWCoop".
 static std::wstring ModLabel()
 {
     if (!g_localVer.empty()) return L"MWCoop " + g_localVer;
@@ -435,7 +435,7 @@ static void SetGame(const std::wstring &dir)
     TenuesAddShirts();
 }
 
-// "0.1.0-prealpha" : nombres compares un a un, puis le suffixe (a egalite, sans suffixe = plus recent).
+// "0.75.35", ou ancien "0.1.0-prealpha" : nombres compares un a un, puis le suffixe (a egalite, sans suffixe = plus recent).
 static int CmpVer(std::wstring a, std::wstring b)
 {
     if (!a.empty() && (a[0] == L'v' || a[0] == L'V')) a.erase(0, 1);
@@ -7143,7 +7143,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         std::wstring st = argv[3];
         g_alpha = 1;
         g_time = 0.3f;
-        if (g_localVer.empty()) g_localVer = L"0.1.0-prealpha";
+        if (g_localVer.empty()) g_localVer = L"0.1.0";
         g_modOk = true;
         if (st == L"attente" || st == L"attente-udp") {
             g_state = ST_LAUNCH; g_time = 1.3f;
@@ -7216,16 +7216,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (st == L"tenue-perso") { g_skinRowHot = 1; g_skinYaw = (float)_wtof(argv[argc - 1]); }   // (dernier argument : la vue 0..16)
         }
         else if (st == L"notes") {   // notes d'exemple (le depot n'a pas encore de release)
-            g_notes = { { L"0.1.1-prealpha", L"09/10/2026", L"\u2022 Exemple de note de version (capture).\n\u2022 Deuxi\u00E8me ligne : une correction.", L"\u2022 Sample release note (capture).\n\u2022 Second line: a fix.", L"" },
-                        { L"0.1.0-prealpha", L"02/10/2026", L"\u2022 Premi\u00E8re version : chargeur, joueurs visibles.", L"\u2022 First version: loader, visible players.", L"" } };
+            g_notes = { { L"0.1.1", L"09/10/2026", L"\u2022 Exemple de note de version (capture).\n\u2022 Deuxi\u00E8me ligne : une correction.", L"\u2022 Sample release note (capture).\n\u2022 Second line: a fix.", L"" },
+                        { L"0.1.0", L"02/10/2026", L"\u2022 Premi\u00E8re version : chargeur, joueurs visibles.", L"\u2022 First version: loader, visible players.", L"" } };
             g_notesDone = true; g_relState = REL_OK; g_tab = TAB_NOTES;
         }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }
         else if (st == L"notes-image") {   // une note avec une image (telechargee ici, avant la capture)
             std::wstring url = L"https://raw.githubusercontent.com/" + g_repo + L"/main/docs/img/lanceur-tenue.png";
             std::wstring fr = CleanNote(L"- Volet de droite pour la tenue :\n![tenue](" + url + L")\n- Et une ligne apr\u00E8s l'image.");
-            g_notes = { { L"0.36.0-prealpha", L"08/10/2026", fr, fr, L"" },
-                        { L"0.1.0-prealpha", L"02/10/2026", L"\u2022 Premi\u00E8re version.", L"\u2022 First version.", L"" } };
+            g_notes = { { L"0.36.0", L"08/10/2026", fr, fr, L"" },
+                        { L"0.1.0", L"02/10/2026", L"\u2022 Premi\u00E8re version.", L"\u2022 First version.", L"" } };
             NoteImgFetch(url);
             g_notesDone = true; g_relState = REL_OK; g_tab = TAB_NOTES;
         }
@@ -7300,11 +7300,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             else SetStatus(K_OK, T(L"Dans le salon Steam de %s", L"In %s's Steam lobby"), L"Pekka");
         }
         else if (st == L"nouvelle-maj" || st == L"nouvelle-maj-survol" || st == L"nouvelle-maj-notes") {   // version plus recente proposee (bouton)
-            UpdSet(L"0.41.0-prealpha");
+            UpdSet(L"0.41.0");
             if (st == L"nouvelle-maj-survol") { g_hot = B_UPDATE; g_btn[B_UPDATE].hover = 1; }
             if (st == L"nouvelle-maj-notes") g_tab = TAB_NOTES;
         }
-        else if (st == L"maj") { g_busy = true; g_progress = 0.42f; SetStatus(K_NORMAL, T(L"T\u00E9l\u00E9chargement de MWCoop %s\u2026", L"Downloading MWCoop %s\u2026"), L"0.1.1-prealpha"); g_focus = 0; g_time = 0.2f; }
+        else if (st == L"maj") { g_busy = true; g_progress = 0.42f; SetStatus(K_NORMAL, T(L"T\u00E9l\u00E9chargement de MWCoop %s\u2026", L"Downloading MWCoop %s\u2026"), L"0.1.1"); g_focus = 0; g_time = 0.2f; }
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }
         if (g_tab == TAB_HOME) g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);   // (accueil : le personnage tourne avec /temps)
         // /clic x y (coordonnees de la carte, autant de fois qu'il faut) : clics simules avant la capture, dans une
