@@ -176,7 +176,7 @@ static const WikiBlock kW_Save[] = {
     { WB_B, L"L'hôte envoie sa sauvegarde aux invités au début de la partie.", L"The host sends their save to the guests at the start of the game." },
     { WB_B, L"Seul l'hôte sauvegarde le monde. Une sauvegarde coop est aussi possible aux toilettes, comme en solo.", L"Only the host saves the world. A co-op save is also possible at the toilet, like in solo." },
     { WB_B, L"L'invité joue dans un profil à part (MWCoop\\profils\\invite) : sa sauvegarde solo et ses réglages restent intacts.", L"The guest plays in a separate profile (MWCoop\\profils\\invite): their solo save and settings stay intact." },
-    { WB_B, L"L'argent : les gains sont partagés, chacun a son porte-monnaie. Les délits et la prison : à chacun les siens.", L"Money: earnings are shared, everyone has their own wallet. Crimes and jail: everyone has their own." },
+    { WB_B, L"L'argent : chacun a son porte-monnaie et garde sa paie (touche N pour donner de l'argent à un autre joueur). Les délits et la prison : à chacun les siens.", L"Money: everyone has their own wallet and keeps their own pay (N key to give money to another player). Crimes and jail: everyone has their own." },
 };
 static const WikiBlock kW_InGame[] = {
     { WB_P, L"En jeu, MWCoop ajoute quelques touches et un menu. En haut à gauche, une pastille montre l'état de la connexion et le nombre de joueurs.",
