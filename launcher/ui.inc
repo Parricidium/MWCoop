@@ -958,7 +958,7 @@ static void DrawNotesPage(Graphics &g)
     // corps : puces, paragraphes, images (defilement)
     RectF area = NotesArea();
     const std::wstring &body = g_fr ? n.fr : n.en;
-    Font fb(UiFamily(L"Segoe UI"), 14.5f, FontStyleRegular, UnitPixel);
+    UiFont fb(L"Segoe UI", 14.5f, FontStyleRegular);
     StringFormat sf;
     SolidBrush ink(kInk);
     float sc = g_scroll[TAB_NOTES], y = area.Y + 10 - sc, w = area.Width - 14;
@@ -997,7 +997,7 @@ static void DrawNotesPage(Graphics &g)
         std::wstring t = bullet ? line.substr(line.find_first_not_of(L"•-* ")) : line.substr(bpos);
         float x = bullet ? area.X + 22 : area.X + 4;
         RectF box;
-        g.MeasureString(t.c_str(), -1, &fb, RectF(0, 0, w - (x - area.X), 100000), &sf, &box);
+        MeasureStr(g, t.c_str(), -1, &fb, RectF(0, 0, w - (x - area.X), 100000), &sf, &box);
         if (y + box.Height >= area.Y && y <= area.Y + area.Height) {
             if (bullet) { SolidBrush dot(kAcc); g.FillEllipse(&dot, area.X + 6, y + 8, 7.0f, 7.0f); }
             DrawStr(g, t.c_str(), -1, &fb, RectF(x, y, w - (x - area.X), box.Height + 2), &sf, &ink);
@@ -1276,7 +1276,7 @@ static void DrawSettings(Graphics &g)
         if (ok) Icon(g, IC_CHECK, ga.X + 30, ga.Y + 70, 16, kOk, 2.6f);
         Text(g, ok ? L"My Winter Car " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), RectF(ga.X + (ok ? 44.0f : 20.0f), ga.Y + 58, ga.Width - 70, 24), 14, FontStyleBold, ok ? kInk : kRed, StringAlignmentNear);
         StringFormat sf; sf.SetTrimming(StringTrimmingEllipsisPath); sf.SetFormatFlags(StringFormatFlagsNoWrap); sf.SetLineAlignment(StringAlignmentCenter);
-        Font f(UiFamily(L"Segoe UI"), 12, FontStyleRegular, UnitPixel); SolidBrush gb(kGrey);
+        UiFont f(L"Segoe UI", 12, FontStyleRegular); SolidBrush gb(kGrey);
         DrawStr(g, g_gameDir.c_str(), -1, &f, RectF(ga.X + 20, ga.Y + 82, ga.Width - 40, 20), &sf, &gb);
         UiButton(g, RectF(ga.X + 20, ga.Y + 104, ga.Width - 40, 38), ok ? T(L"Changer de dossier", L"Change folder") : T(L"Choisir l'exe…", L"Choose exe…"), UI_SET_FOLDER, false, IC_FOLDER);
     }
