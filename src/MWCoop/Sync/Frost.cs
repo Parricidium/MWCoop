@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -182,7 +182,10 @@ namespace MWCoop
                     float x = v.Value, d = x - c.Last[i];
                     if (!c.Fix[i] && d < 0.0005f && d > -0.0005f) continue;
                     // Personne a prevenir (l'arrivant aura l'etat complet), chargement, saut (gel de 'Check roof') : pas un grattage.
-                    if (alone || quiet || d > 0.2f || d < -0.2f) { c.Last[i] = x; c.Fix[i] = false; continue; }
+                    // Saut vers une vitre degagee (Cheatbox++ « Defrost windows » : tous les seuils a 1 d'un coup ; retour de
+                    // witefold, 11/10 : pas partage) : envoye, les autres gardent le plus grand.
+                    bool cleared = d > 0.2f && x >= 0.999f;
+                    if (alone || quiet || (d > 0.2f && !cleared) || d < -0.2f) { c.Last[i] = x; c.Fix[i] = false; continue; }
                     if (now - c.SentAt[i] < 0.25f) continue;
                     if (!c.Fix[i] && d < 0.01f && d > -0.01f && now - c.SentAt[i] < 1f) continue;   // une passe isolee : groupee
                     c.Fix[i] = false;
@@ -209,10 +212,14 @@ namespace MWCoop
                 if (c.Frost == null) continue;
                 float x = c.Frost.Value;
                 if (x - c.FrostLast < 0.01f && x - c.FrostLast > -0.01f) continue;
+                // Buee effacee d'un coup (Cheatbox++ « Defrost windows ») : envoyee par qui que ce soit, et posee chez tous
+                // (bit INSIDE : meme chez celui qui est dedans) -- sinon celui qui fait autorite la remettait.
+                bool wiped = x < 0.001f && c.FrostLast - x > 0.2f;
                 c.FrostLast = x;
-                if (alone || VehicleSync.Authority(c.Index) != Session.LocalId) continue;   // pas a nous : derive locale
+                if (alone || (!wiped && VehicleSync.Authority(c.Index) != Session.LocalId)) continue;   // pas a nous : derive locale
                 vals[N] = x;
-                Add(ref w, c, FOG | (c.PlayerIn != null && c.PlayerIn.Value ? INSIDE : 0), LIVE, null);
+                Add(ref w, c, FOG | (wiped || (c.PlayerIn != null && c.PlayerIn.Value) ? INSIDE : 0), LIVE, null);
+                if (wiped) Log.Info("givre : buee de " + c.Name + " effacee ici, envoyee");
             }
             if (w != null) Flush(w, null);
         }
@@ -348,7 +355,20 @@ namespace MWCoop
                 if (!testWarned) { testWarned = true; Log.Info("autotest : givre : pas de voiture " + want + " (" + cars.Count + " suivies)"); }
                 return;
             }
-            if (Session.IsHost && t >= 30f && t < 40f && t >= testNext)
+            // [Test] GivreCheat=1 : l'hote met de la buee (0,8) a 20 s ; l'invite fait comme Cheatbox++ « Defrost windows » a 45 s
+            // (buee 0, tous les seuils a 1).
+            if (Config.GetInt("Test", "GivreCheat", 0) != 0)
+            {
+                if (Session.IsHost && t >= 20f && testStrokes == 0 && c.Frost != null) { testStrokes = -1; c.Frost.Value = 0.8f; Log.Info("autotest : givre : buee mise a 0,8 ici"); }
+                if (!Session.IsHost && t >= 45f && testStrokes == 0)
+                {
+                    testStrokes = -1;
+                    if (c.Frost != null) c.Frost.Value = 0f;
+                    for (int i = 0; i < N; i++) if (c.Cut[i] != null) c.Cut[i].Value = 1f;
+                    Log.Info("autotest : givre : degivrage comme Cheatbox++ ici -> " + Describe(c));
+                }
+            }
+            else if (Session.IsHost && t >= 30f && t < 40f && t >= testNext)
             {
                 testNext = t + 0.1f;
                 if (testStrokes == 0) Log.Info("autotest : givre : l'hote gratte le pare-brise de " + c.Name + " (" + Describe(c) + ")");

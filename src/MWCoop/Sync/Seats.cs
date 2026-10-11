@@ -190,6 +190,7 @@ namespace MWCoop
             if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation)) { nextScan = now + 30f; Scan(); }
             if (!FindPlayer()) return;
             DriverBeltSend(now);
+            DriverBeltHeal(now);
             if (now >= nextZones) { nextZones = now + 0.2f; DriverZones(); }
             if (current != null) TrackSpeed(current.CarT);
             if (current != null)
@@ -486,6 +487,54 @@ namespace MWCoop
             driverBeltResend = now + 5f;
             Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(VehicleSync.LocalDrivingName ?? "").U8(DriverBeltIndex).U8(on ? 1 : 0), true);
         }
+        // Ceinture du conducteur qu'on ne peut plus detacher (retour de Mikol, 11/10 : « parfois, dans toutes les voitures ») :
+        // bouclee (PlayerSeatbeltsOn, Locked de la languette du conducteur), mais la boucle (SeatbeltLock, automate 'Use' du
+        // jeu) eteinte, ou eteinte puis rallumee -- un automate rallume repart de son debut, "Wait player" : « FASTEN SEATBELT »,
+        // et le clic ne fait plus rien (on ne sort pas d'une voiture ceinture bouclee). Remise en « UNFASTEN SEATBELT »
+        // (Wait player 2) au bout d'une seconde.
+        static Transform healCar;
+        static PlayMakerFSM healLock, healHandle;
+        static float healSince = -1f;
+        static readonly HashSet<string> LockFastened = new HashSet<string> { "Wait player 2", "Wait button 2", "State 2", "State 3" };
+        static void DriverBeltHeal(float now)
+        {
+            Transform car = VehicleSync.LocalDrivingRoot;
+            if (car == null || !Game.GlobalBool("PlayerSeatbeltsOn")) { healSince = -1f; return; }
+            if (car != healCar)
+            {
+                healCar = car;
+                Transform lk = FindUnder(car, "SeatbeltLock", null), up = FindUnder(car, "HandleUpPivot", "DriverBelt");
+                Transform hd = up != null ? FindUnder(up, "SeatbeltHandle", null) : null;
+                healLock = lk != null ? Game.FsmOn(lk.gameObject, "Use") : null;
+                healHandle = hd != null ? Game.FsmOn(hd.gameObject, "Use") : null;
+            }
+            if (healLock == null || healHandle == null) return;
+            // (Locked : ceinture ordinaire bouclee -- pas le harnais de la CORRIS, ni les vehicules sans ceinture)
+            HutongGames.PlayMaker.FsmBool locked = healHandle.FsmVariables.GetFsmBool("Locked");
+            bool broken = locked != null && locked.Value && (!healLock.gameObject.activeInHierarchy || !healLock.enabled || !LockFastened.Contains(healLock.ActiveStateName));
+            if (!broken) { healSince = -1f; return; }
+            if (healSince < 0f) { healSince = now; return; }
+            if (now - healSince < 1f) return;
+            healSince = -1f;
+            string was = !healLock.gameObject.activeInHierarchy ? "eteinte" : !healLock.enabled ? "automate coupe" : healLock.ActiveStateName;
+            if (!healLock.gameObject.activeSelf) healLock.gameObject.SetActive(true);
+            if (!healLock.enabled) healLock.enabled = true;
+            if (!healLock.gameObject.activeInHierarchy) return;
+            Game.SetState(healLock, "Wait player 2");
+            Log.Info("ceinture conducteur : boucle de " + car.name + " remise a detacher (elle etait " + was + ")");
+        }
+
+        // Essais : boucle du conducteur eteinte puis rallumee (son automate repart en « FASTEN SEATBELT »).
+        public static string TestBreakLock(string car)
+        {
+            Rigidbody b = VehicleSync.Body(car);
+            Transform lk = b != null ? FindUnder(b.transform, "SeatbeltLock", null) : null;
+            if (lk == null) return "pas de SeatbeltLock";
+            lk.gameObject.SetActive(false); lk.gameObject.SetActive(true);
+            PlayMakerFSM lu = Game.FsmOn(lk.gameObject, "Use");
+            return "boucle eteinte puis rallumee : " + (lu != null ? lu.ActiveStateName : "?");
+        }
+
         static Transform FindUnder(Transform t, string name, string parent)
         {
             if (t.name == name && (parent == null || (t.parent != null && t.parent.name == parent))) return t;
@@ -1098,6 +1147,9 @@ namespace MWCoop
                     System.Array.Sort(hits, (x, y) => x.distance.CompareTo(y.distance));
                     sb.Append(", regard ").Append(d.magnitude.ToString("F2")).Append(" m :");
                     foreach (RaycastHit h in hits) sb.Append(' ').Append(Recon.Path(h.collider.transform)).Append(h.collider.isTrigger ? "(decl)" : "").Append('@').Append(h.distance.ToString("F2"));
+                    // (le clic du jeu : MousePickEvent, couche de la boucle seulement, 1 m)
+                    RaycastHit lh;
+                    sb.Append(", couche ").Append(lk.gameObject.layer).Append(" : ").Append(Physics.Raycast(cm.position, d.normalized, out lh, 1f, 1 << lk.gameObject.layer) ? Recon.Path(lh.collider.transform) + "@" + lh.distance.ToString("F2") : "rien a 1 m");
                 }
             }
             else sb.Append(", pas de SeatbeltLock");

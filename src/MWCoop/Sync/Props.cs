@@ -148,6 +148,10 @@ namespace MWCoop
             if (k == null && tn == "cd(itemx)") k = CdKey(t.gameObject);
             // Bagage du client du taxi : sorti de son pivot, il est a la racine de la scene (Jobs, bagages).
             if (k == null && tn.EndsWith("(lugga)")) k = Jobs.LuggageKey(t.gameObject);
+            // Paquet de tracts du boulot des pubs (JOBS/ADs) : le jeu le change de parent (« Set parent », chargement) -- cle
+            // fixe, sinon le chemin differait d'un joueur a l'autre et le paquet pris par l'un restait au sol chez l'autre
+            // (retour de witefold, 11/10).
+            if (k == null && tn == "advert pile(itemx)") k = "w:tracts:paquet";
             if (k != null) { worldKeys[rb.gameObject] = k; return k; }
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement. Cle
             // par son UT (maison, usine), pas par l'endroit : tenue en main, elle est sous PLAYER pour les deux.

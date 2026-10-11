@@ -854,12 +854,18 @@ namespace MWCoop
                     if (t > 24f && step == 2) { step = 11; Log.Info("autotest : assis " + Seats.TestDriverBelt(car, 0)); }
                     if (t > 26f && step == 11) { step = 3; Log.Info("autotest : " + Seats.TestDriverBelt(car, 1)); cabLogAt = Time.realtimeSinceStartup + 1f; }
                     if (step == 3 && t < 40f && Time.realtimeSinceStartup >= cabLogAt) { cabLogAt = Time.realtimeSinceStartup + 2f; Log.Info("autotest : " + Seats.TestDriverBelt(car, 0)); }
+                    // ([Test] DetacherCasser=1 : boucle eteinte puis rallumee a 30 s, comme recopiee d'un autre ; detacher par le clic)
+                    if (Config.GetInt("Test", "DetacherCasser", 0) != 0 && t > 30f && step == 3 && !brokeLock) { brokeLock = true; Log.Info("autotest : " + Seats.TestBreakLock(car)); }
                     if (t > 40f && step == 3) { step = 4; Log.Info("autotest : " + Seats.TestDriverBelt(car, 2)); }
                     if (t > 43f && step == 4) { step = 5; Log.Info("autotest : apres " + Seats.TestDriverBelt(car, 0)); }
                 }
                 else
                 {
                     if (Config.GetInt("Test", "DetacherPassager", 0) != 0 && t > 20f && step == 0) { step = 1; Log.Info("autotest : passager " + Seats.TestSit(car, 0)); }
+                    // ([Test] DetacherCeinture=s : le passager s'attache a s secondes)
+                    float dc = Config.GetFloat("Test", "DetacherCeinture", 0f);
+                    if (dc > 0f && t > dc && step == 1) { step = 6; Log.Info("autotest : passager " + Seats.TestBelt()); }
+                    if (step == 6 && t > 34f) step = 1;
                     if (t > 34f && step < 2) { step = 2; Log.Info("autotest : ceintures " + Seats.BeltState()); }
                 }
             }
@@ -1174,6 +1180,33 @@ namespace MWCoop
             // pose devant l'hote apres 70 s.
             // [Test] Rangeur=invite : l'invite range ; RessortirMain=1 : comme l'outil du jeu (grattoir, F puis F) -- l'objet
             // reste dans la main eteint, puis rallume dans la main a 70 s, tenu jusqu'a 76 s et lache. Le rangeur note aussi.
+            // [Test] Autotest=tracts : l'hote lance le boulot des tracts (JOBS/ADs :: Data -> "New job") a 30 s, tient le paquet
+            // de tracts de 45 a 55 s (Props.TestHold) ; chacun note toutes les 3 s de 28 a 70 s le paquet (actif, pose, parent,
+            // cle de Props) et l'etat de l'automate.
+            if (mode == "tracts")
+            {
+                GameObject ads = Game.FindAny("JOBS/ADs");
+                PlayMakerFSM data = ads != null ? Game.FsmOn(ads, "Data") : null;
+                // (vrai depart : l'appel aux pubs de Calls, Autotest=appel ; tenu ensuite de 65 a 75 s)
+                if (Config.GetInt("Test", "TractsForce", 0) == 0) Calls.Test("appel", t);
+                // ([Test] TractsForce=1 : "New job" pose chez CHACUN a 30 s, comme le jour du boulot venu ; l'invite tient le paquet
+                // de 80 a 88 s)
+                else if (t > 30f && step == 0 && data != null) { step = 1; Game.SetState(data, "New job"); Log.Info("autotest : tracts, New job ici -> " + data.ActiveStateName); }
+                if (!Net.Session.IsHost && Config.GetInt("Test", "TractsForce", 0) != 0 && t > 80f && t < 88f && PlayerSync.LocalCamera != null) { Rigidbody gh = Props.TestHold(Props.FindKey("advert pile"), PlayerSync.LocalCamera); if (step == 1) { step = 2; Log.Info("autotest : tracts, l'invite tient le paquet (" + (gh != null ? "ok" : "absent") + ")"); } }
+                if (!Net.Session.IsHost && t > 88f && step == 2) { step = 3; Props.TestHold(Props.FindKey("advert pile"), null); }
+                float h0 = 65f;
+                if (step == 0 && t > 32f && data != null && data.ActiveStateName != "Wait call") step = 1;
+                string pk = Props.FindKey("advert pile");
+                if (Net.Session.IsHost && t > h0 && t < h0 + 10f && PlayerSync.LocalCamera != null) { Rigidbody hb = Props.TestHold(pk, PlayerSync.LocalCamera); if (step == 1) { step = 2; Log.Info("autotest : tracts, paquet tenu (" + pk + ", " + (hb != null ? "ok" : "absent") + ")"); } }
+                if (Net.Session.IsHost && t > h0 + 10f && step == 2) { step = 3; Props.TestHold(pk, null); Log.Info("autotest : tracts, paquet lache"); }
+                if (t > 40f && t < 95f && t >= holdLog)
+                {
+                    holdLog = t + 3f;
+                    GameObject pile = null;
+                    foreach (Rigidbody rb in Resources.FindObjectsOfTypeAll(typeof(Rigidbody))) if (rb.name == "advert pile(itemx)" && rb.hideFlags == HideFlags.None) pile = rb.gameObject;
+                    Log.Info("autotest : tracts, automate " + (data != null ? data.ActiveStateName : "?") + ", paquet " + (pile == null ? "introuvable" : (pile.activeInHierarchy ? "actif" : "inactif") + " en " + pile.transform.position.ToString("F1") + " sous " + (pile.transform.parent != null ? Recon.Path(pile.transform.parent) : "racine")) + ", cle " + pk);
+                }
+            }
             // [Test] Autotest=boulotloin : l'invite va a l'usine a 40 s (l'hote reste chez lui) ; a 60 et 75 s, chacun note la
             // distance mesuree par l'usine (JOBS/FACTORY :: Database, Distance -- l'usine ferme au-dela de 200 m) et si son
             // site est allume (OpeningTimes/LOD1). Attendu chez l'hote : distance de l'invite, site allume.
@@ -2244,6 +2277,7 @@ namespace MWCoop
         static float shotAt = -1;
         static string bagId;
         static int step, step2, portiereMark, spamLogged = -1;
+        static bool brokeLock;
         static float maxUp = 0.5f, maxRot, coffreT;
         static bool coffreStartSet;
         static Vector3 coffreStart;
