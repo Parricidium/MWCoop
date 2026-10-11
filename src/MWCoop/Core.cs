@@ -81,6 +81,8 @@ namespace MWCoop
                     string targets = Config.Get("Test", "VidageCibles", "");
                     if (targets.Length > 0 && Application.loadedLevelName == "GAME") Log.Info("cibles : " + Recon.DumpTargets(targets) + ", pieces : " + Parts.DumpIds());
                     if (Config.GetInt("Test", "Vidage", 0) == 1) Recon.DumpLevel("auto", Application.loadedLevelName != "GAME");
+                    // Vidage=2 : niveau complet AVEC les parametres des actions (reference hors jeu, voir ref\LISEZMOI.md).
+                    if (Config.GetInt("Test", "Vidage", 0) == 2) Recon.DumpLevel("complet", true);
                     Log.Info("globales : " + Recon.DumpGlobals());
                     Log.Info("personnages : " + Recon.DumpCharacters());
                     if (Application.loadedLevelName == "GAME") Log.Info("apparences : " + Recon.DumpLooks());

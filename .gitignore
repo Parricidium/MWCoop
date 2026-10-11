@@ -11,3 +11,7 @@ run/*.png
 
 # Webhook Discord des annonces (secret)
 dist/discord-webhook.txt
+
+# Reference hors jeu (contenu du jeu : jamais dans le depot)
+ref/*
+!ref/LISEZMOI.md
