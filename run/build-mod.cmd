@@ -18,7 +18,7 @@ dotnet "%ProgramFiles%\dotnet\sdk\8.0.424\Roslyn\bincore\csc.dll" -nologo -nocon
    -nowarn:1701,1702 -out:build\MWCoop.dll ^
    -r:"%MANAGED%\mscorlib.dll" -r:"%MANAGED%\System.dll" -r:"%MANAGED%\System.Core.dll" ^
    -r:"%MANAGED%\UnityEngine.dll" -r:"%MANAGED%\PlayMaker.dll" -r:"%MANAGED%\Assembly-CSharp.dll" -r:"%MANAGED%\Assembly-CSharp-firstpass.dll" ^
-   -resource:launcher\logo-titre.png,MWCoop.logo-titre.png -resource:assets\sac\sac-plie.mwm,MWCoop.sac-plie.mwm -resource:assets\sac\sac-deplie.mwm,MWCoop.sac-deplie.mwm -resource:assets\sac\sac.jpg,MWCoop.sac.jpg -recurse:src\MWCoop\*.cs || exit /b 1
+   -resource:launcher\logo-titre.png,MWCoop.logo-titre.png -resource:assets\sac\sac-plie.mwm,MWCoop.sac-plie.mwm -resource:assets\sac\sac-deplie.mwm,MWCoop.sac-deplie.mwm -resource:assets\sac\sac.jpg,MWCoop.sac.jpg -resource:assets\drone\drone-corps.mwm,MWCoop.drone-corps.mwm -resource:assets\drone\drone-helice0.mwm,MWCoop.drone-helice0.mwm -resource:assets\drone\drone-helice1.mwm,MWCoop.drone-helice1.mwm -resource:assets\drone\drone-helice2.mwm,MWCoop.drone-helice2.mwm -resource:assets\drone\drone-helice3.mwm,MWCoop.drone-helice3.mwm -recurse:src\MWCoop\*.cs || exit /b 1
 echo OK build\MWCoop.dll
 exit /b 0
 

@@ -9,7 +9,7 @@ static const WikiCat kWikiCat[] = {
     { IC_GEAR, L"Réglages et options", L"Settings and options" },
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
-enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_MSC, WA_MODS, WA_CONTENT,
+enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_MSC, WA_MODS, WA_CONTENT,
        WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS };
 
 struct WikiKey { const wchar_t *key, *fr, *en; };
@@ -20,6 +20,7 @@ static const WikiKey kWikiKeys[] = {
     { L"V (tenue)", L"Parler aux joueurs proches (vocal de Steam, la voix baisse avec la distance) — touche réglable", L"Talk to nearby players (Steam voice, fades with distance) — key can be changed" },
     { L"M", L"Carte : les joueurs en direct, les lieux (molette : zoom, glisser : déplacer, C : soi) — touche réglable", L"Map: players live, places (wheel: zoom, drag: move, C: yourself) — key can be changed" },
     { L"F5", L"Vue à la 3e personne : à pied derrière ton personnage, en véhicule derrière lui (touche réglable)", L"Third-person view: behind your character on foot, behind your vehicle when driving (key can be changed)" },
+    { L"F8", L"Caméra drone : mode photo (viseur, zoom, pencher ; clic gauche : photo dans Images\\CoopPictures) — touches réglables", L"Drone camera: photo mode (viewfinder, zoom, tilt; left click: photo in Pictures\\CoopPictures) — keys can be changed" },
     { L"F7", L"Panneau des triches, si l'hôte les autorise (touche réglable). Dans le tchat : /aide", L"Cheat panel, if the host allows cheats (key can be changed). In the chat: /help" },
     { L"Échap", L"Fermer le menu coop", L"Close the co-op menu" },
     { L"Tab · Q / E", L"Changer d'onglet dans le menu coop", L"Switch tabs in the co-op menu" },
@@ -423,6 +424,25 @@ static const WikiBlock kW_Logs[] = {
     { WB_GO, L"Ouvrir les Journaux", L"Open Logs", TAB_LOGS },
 };
 
+// Camera drone (mode photo, 0.75.44).
+static const WikiBlock kW_Drone[] = {
+    { WB_P, L"F8 en jeu : ta caméra s'envole en petit drone pour prendre des photos, comme le mode photo d'Assetto Corsa. Ton personnage reste où il est, immobile : les autres le voient, et toi aussi dans le cadre.",
+            L"F8 in game: your camera flies off as a small drone to take photos, like Assetto Corsa's photo mode. Your character stays where it is, still: the others see it, and so do you in the frame." },
+    { WB_B, L"Déplacements : ZQSD (WASD en QWERTY), Espace pour monter, C pour descendre, Maj gauche tenue pour aller plus vite. La souris vise.",
+            L"Moving: WASD (ZQSD on AZERTY), Space to go up, C to go down, hold Left Shift to go faster. The mouse aims." },
+    { WB_B, L"Zoom : molette, ou R / F. Pencher l'image : A / E (Q / E en QWERTY). X recentre (penché et zoom).",
+            L"Zoom: wheel, or R / F. Tilt the picture: Q / E (A / E on AZERTY). X resets (tilt and zoom)." },
+    { WB_B, L"Viseur : grille des tiers et repère du centre (G), légende des touches à droite, focale et distance en bas ; H cache tout le viseur.",
+            L"Viewfinder: rule-of-thirds grid and centre marks (G), key legend on the right, focal length and distance at the bottom; H hides the whole viewfinder." },
+    { WB_B, L"Clic gauche : la photo, avec un flash et un déclic que les autres voient et entendent. Elle est enregistrée dans Images\\CoopPictures, avec le logo de MWCoop en haut à gauche.",
+            L"Left click: the photo, with a flash and a click the others see and hear. It is saved in Pictures\\CoopPictures, with the MWCoop logo at the top left." },
+    { WB_B, L"Les autres joueurs te voient en petit drone (hélices qui tournent, léger bourdonnement). Portée : 80 m autour de toi ; les murs et le sol arrêtent le drone.",
+            L"The other players see you as a small drone (spinning propellers, faint buzz). Range: 80 m around you; walls and the ground stop the drone." },
+    { WB_TIP, L"Toutes les touches se changent dans Options du jeu > Caméra drone (Suppr sur une pastille : touche par défaut). Pas de drone depuis la place du conducteur.",
+              L"Every key can be changed in Game options > Drone camera (Delete on a pill: default key). No drone from the driver's seat." },
+    { WB_GO, L"Ouvrir les Options du jeu", L"Open Game options", TAB_GFX },
+};
+
 #define WART(c, tf, te, sf, se, b) { c, tf, te, sf, se, b, (int)(sizeof(b) / sizeof(b[0])) }
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
@@ -434,6 +454,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"Steam ou IP / VPN", L"Steam or IP / VPN", L"Le réseau, le port, le pare-feu", L"The network, the port, the firewall", kW_Net),
     WART(1, L"Sauvegarde : hôte et invités", L"Save: host and guests", L"À qui est la partie", L"Whose game it is", kW_Save),
     WART(1, L"En jeu : touches et menu", L"In game: keys and menu", L"F10, discussion, places passager…", L"F10, chat, passenger seats…", kW_InGame),
+    WART(1, L"Caméra drone (photos)", L"Drone camera (photos)", L"F8 : viseur, zoom, flash", L"F8: viewfinder, zoom, flash", kW_Drone),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),
     WART(2, L"Contenu envoyé", L"Sent content", L"CD, radio, posters, peinture", L"CDs, radio, posters, paint", kW_Content),

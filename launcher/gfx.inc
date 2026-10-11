@@ -4,16 +4,30 @@
 // cle absente : le jeu decide ("Jeu" pour les reglages du moteur). Options du jeu (son menu) et reglages du moteur en
 // plus ; prereglages Performance / Equilibre / Beau / Ultra en un clic.
 // ---- touches en jeu (Options du jeu > Touches) : section [Touches] de mwcoop.ini, noms des KeyCode de Unity
-struct GameKey { const char *ini, *def; const wchar_t *fr, *en; };
-static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "PorteMonnaie", "N", L"Argent", L"Wallet" }, { "Vocal", "V", L"Vocal", L"Voice" }, { "Triches", "F7", L"Triches", L"Cheats" }, { "Carte", "M", L"Carte", L"Map" }, { "Vue", "F5", L"Vue", L"View" } };
+struct GameKey { const char *ini, *def; const wchar_t *fr, *en; const char *defAz = nullptr; };   // defAz : clavier AZERTY
+static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "PorteMonnaie", "N", L"Argent", L"Wallet" }, { "Vocal", "V", L"Vocal", L"Voice" }, { "Triches", "F7", L"Triches", L"Cheats" }, { "Carte", "M", L"Carte", L"Map" }, { "Vue", "F5", L"Vue", L"View" },
+    // Camera drone (mode photo, demande de JD, 11/10) : categorie Camera drone ; memes noms et defauts que MWCoop\UI\Keys.cs.
+    { "Drone", "F8", L"Drone", L"Drone" }, { "DroneAvant", "W", L"Avancer", L"Forward", "Z" }, { "DroneArriere", "S", L"Reculer", L"Back" },
+    { "DroneGauche", "A", L"Gauche", L"Left", "Q" }, { "DroneDroite", "D", L"Droite", L"Right" }, { "DroneMonter", "Space", L"Monter", L"Up" },
+    { "DroneDescendre", "C", L"Descendre", L"Down" }, { "DroneRapide", "LeftShift", L"Rapide", L"Fast" }, { "DroneZoomPlus", "R", L"Zoom +", L"Zoom +" },
+    { "DroneZoomMoins", "F", L"Zoom -", L"Zoom -" }, { "DronePencherG", "Q", L"Pencher à gauche", L"Tilt left", "A" }, { "DronePencherD", "E", L"Pencher à droite", L"Tilt right" },
+    { "DroneRecentrer", "X", L"Recentrer", L"Reset" }, { "DronePhoto", "Mouse0", L"Photo", L"Photo" }, { "DroneGrille", "G", L"Grille", L"Grid" },
+    { "DroneInterface", "H", L"Interface", L"Interface" } };
+// Clavier AZERTY (francais de France, de Belgique, du Luxembourg, de Monaco ; pas le canadien ni le suisse) : comme Keys.Azerty du mod.
+static bool KeyboardAzerty()
+{
+    int id = (int)((ULONG_PTR)GetKeyboardLayout(0) & 0xFFFF);
+    return id == 0x040C || id == 0x080C || id == 0x140C || id == 0x180C;
+}
+static const char *GameKeyDefault(int k) { return kGameKeys[k].defAz && KeyboardAzerty() ? kGameKeys[k].defAz : kGameKeys[k].def; }
 static const int kGameKeysN = (int)(sizeof(kGameKeys) / sizeof(kGameKeys[0]));
 static int g_keyCapture = -1;   // pastille en attente d'une touche
 static int GameKeyIndex(const char *rowKey) { const char *n = strchr(rowKey, ':'); n = n ? n + 1 : rowKey; for (int i = 0; i < kGameKeysN; i++) if (!strcmp(n, kGameKeys[i].ini)) return i; return -1; }
 static std::string GameKeyGet(int k)
 {
     char buf[64] = {};
-    GetPrivateProfileStringA("Touches", kGameKeys[k].ini, kGameKeys[k].def, buf, sizeof(buf), ModIniA().c_str());
-    return buf[0] ? buf : kGameKeys[k].def;
+    GetPrivateProfileStringA("Touches", kGameKeys[k].ini, GameKeyDefault(k), buf, sizeof(buf), ModIniA().c_str());
+    return buf[0] ? buf : GameKeyDefault(k);
 }
 static std::wstring GameKeyLabel(const std::string &n)
 {
@@ -25,6 +39,10 @@ static std::wstring GameKeyLabel(const std::string &n)
     if (n == "RightControl") return T(L"Ctrl droite", L"Right Ctrl");
     if (n == "LeftAlt") return L"Alt";
     if (n == "CapsLock") return T(L"Verr. maj", L"Caps Lock");
+    if (n == "Mouse0") return T(L"Clic gauche", L"Left click");
+    if (n == "Mouse1") return T(L"Clic droit", L"Right click");
+    if (n == "Mouse2") return T(L"Clic molette", L"Middle click");
+    if (n == "Space") return T(L"Espace", L"Space");
     if (n == "Mouse3") return T(L"Souris 4", L"Mouse 4");
     if (n == "Mouse4") return T(L"Souris 5", L"Mouse 5");
     return Widen(n);
@@ -71,6 +89,11 @@ static bool GameKeyCapture(WPARAM vk, LPARAM lp)
 {
     if (g_keyCapture < 0) return false;
     if (vk == VK_ESCAPE) { g_keyCapture = -1; InvalidateRect(g_wnd, NULL, FALSE); return true; }
+    if (vk == VK_DELETE) {   // Suppr : touche par defaut (ex. clic gauche de la photo du drone, qu'on ne peut pas « appuyer » ici)
+        WritePrivateProfileStringA("Touches", kGameKeys[g_keyCapture].ini, NULL, ModIniA().c_str());
+        LaunchLog("touche en jeu : %s par defaut", kGameKeys[g_keyCapture].ini);
+        g_keyCapture = -1; InvalidateRect(g_wnd, NULL, FALSE); return true;
+    }
     std::string n = UnityKeyName(vk, lp);
     if (n.empty()) return true;   // (touche pas prise en charge : on attend une autre)
     WritePrivateProfileStringA("Touches", kGameKeys[g_keyCapture].ini, n.c_str(), ModIniA().c_str());
@@ -148,6 +171,23 @@ static const std::vector<GfxRow> &GfxRows()
         { "Touche:Triches", L"Panneau des triches", L"Cheat panel", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Carte", L"Carte (joueurs en direct)", L"Map (live players)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Vue", L"Vue à la 3e personne (à pied, en véhicule)", L"Third-person view (on foot, in vehicles)", 0, {}, {}, {}, 0, 9, "Touches" },
+        // Camera drone (13) : une pastille par action.
+        { "Touche:Drone", L"Passer en drone / revenir (mode photo)", L"Drone on / off (photo mode)", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DronePhoto", L"Prendre la photo", L"Take the photo", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneAvant", L"Avancer", L"Move forward", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneArriere", L"Reculer", L"Move back", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneGauche", L"Aller à gauche", L"Move left", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneDroite", L"Aller à droite", L"Move right", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneMonter", L"Monter", L"Go up", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneDescendre", L"Descendre", L"Go down", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneRapide", L"Plus vite (touche tenue)", L"Faster (hold the key)", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneZoomPlus", L"Zoomer (aussi la molette)", L"Zoom in (also the wheel)", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneZoomMoins", L"Dézoomer", L"Zoom out", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DronePencherG", L"Pencher à gauche", L"Tilt left", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DronePencherD", L"Pencher à droite", L"Tilt right", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneRecentrer", L"Recentrer (penché et zoom)", L"Reset (tilt and zoom)", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneGrille", L"Grille du viseur", L"Viewfinder grid", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Touche:DroneInterface", L"Cacher le viseur", L"Hide the viewfinder", 0, {}, {}, {}, 0, 13, "Touches" },
         { "CarteMaintenir", L"Carte : appuyer ou maintenir", L"Map: press or hold", 0, { 0, 1 }, { L"Appuyer", L"Maintenir" }, { L"Press", L"Hold" }, 0, 9, "Coop" },   // (appuyer : ouvre / ferme ; maintenir : tant que la touche est tenue)
     };
     // Ecran (comme les GTA, a la place de la petite fenetre Unity) : resolutions de l'ecran principal (Windows),
@@ -237,10 +277,10 @@ static const float kGfxRowH = 27, kGfxHeadH = 44;
 // Categories (demande de JD, 08/10) : en-tetes repliables comme les journaux, reglages sur deux colonnes dessous ;
 // ascenseur quand tout ne tient pas. Rangees en trois blocs titres (demande de JD, 11/10) : la coop, les options video du
 // jeu lui-meme (son menu Options), puis celles que MWCoop ajoute ; une icone par categorie. Valeurs negatives : titre de
-// bloc. Deplies : [Lanceur] GfxOuverts2 (lettres a.. : numeros de groupe ; toutes par defaut).
-static const int kGfxGroups = 13;
-static const int kGfxOrder[] = { -1, 6, 7, 8, 9, -2, 0, 1, 2, 3, -3, 5, 10, 11, 12, 4 };
-static bool g_gfxOpen[kGfxGroups] = { true, true, true, true, true, true, true, true, true, true, true, true, true };
+// bloc. Deplies : [Lanceur] GfxOuverts3 (lettres a.. : numeros de groupe ; toutes par defaut).
+static const int kGfxGroups = 14;
+static const int kGfxOrder[] = { -1, 6, 7, 8, 9, 13, -2, 0, 1, 2, 3, -3, 5, 10, 11, 12, 4 };
+static bool g_gfxOpen[kGfxGroups] = { true, true, true, true, true, true, true, true, true, true, true, true, true, true };
 static bool g_gfxOpenRead;
 static float g_gfxContentH;
 static bool g_gfxZones = true;   // (ligne hors de la zone visible : pas de zone cliquable)
@@ -249,7 +289,7 @@ static void GfxOpenRead()
     if (g_gfxOpenRead) return;
     g_gfxOpenRead = true;
     wchar_t b[64] = {};
-    GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts2", L"*", b, 64, g_iniLauncher.c_str());
+    GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts3", L"*", b, 64, g_iniLauncher.c_str());
     if (!wcscmp(b, L"*")) return;
     for (int i = 0; i < kGfxGroups; i++) g_gfxOpen[i] = wcschr(b, L'a' + i) != NULL;
 }
@@ -259,7 +299,7 @@ static void GfxToggleGroup(int gi)
     g_gfxOpen[gi] = !g_gfxOpen[gi];
     std::wstring s;
     for (int i = 0; i < kGfxGroups; i++) if (g_gfxOpen[i]) s += (wchar_t)(L'a' + i);
-    WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts2", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
+    WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts3", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
 }
 static float GfxMaxScroll() { return max(0.0f, g_gfxContentH - (kGfxArea.Height - 20)); }
 
@@ -337,10 +377,10 @@ static void DrawGfxBlock(Graphics &g, int block, float x, float &y, float w, flo
 static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, float top, float bottom)
 {
     static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et vue", L"Confort", L"Lumières", L"Écran", L"Voix", L"Visages, habits et pseudos", L"Partie et partage", L"Touches",
-                                    L"Fluidité", L"Ombres avancées", L"Détails et textures" };
+                                    L"Fluidité", L"Ombres avancées", L"Détails et textures", L"Caméra drone" };
     static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and view", L"Comfort", L"Lights", L"Screen", L"Voice", L"Faces, clothes and names", L"Game and sharing", L"Keys",
-                                    L"Smoothness", L"Advanced shadows", L"Detail and textures" };
-    static const int kIcon[] = { IC_IMAGE, IC_MOON, IC_EYE, IC_SLIDERS, IC_BULB, IC_MONITOR, IC_MIC, IC_SHIRT, IC_USERS, IC_KEYB, IC_GAUGE, IC_SUN, IC_LAYERS };
+                                    L"Smoothness", L"Advanced shadows", L"Detail and textures", L"Drone camera" };
+    static const int kIcon[] = { IC_IMAGE, IC_MOON, IC_EYE, IC_SLIDERS, IC_BULB, IC_MONITOR, IC_MIC, IC_SHIRT, IC_USERS, IC_KEYB, IC_GAUGE, IC_SUN, IC_LAYERS, IC_DRONE };
     const auto &rows = GfxRows();
     std::vector<int> mine;
     for (int i = 0; i < (int)rows.size(); i++) if (rows[i].group == group) mine.push_back(i);

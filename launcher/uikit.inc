@@ -63,7 +63,7 @@ enum {
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
        IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR, IC_BOOK,
-       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS };
+       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -216,6 +216,11 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
     case IC_GAUGE: {   // compteur : la fluidite (images par seconde)
         GraphicsPath p; bez(p, 3, 16, 3, 10.5f, 7, 6.5f, 12, 6.5f); bez(p, 12, 6.5f, 17, 6.5f, 21, 10.5f, 21, 16); g.DrawPath(&pen, &p);
         line(12, 16, 16.5f, 10.5f); circ(12, 16, 1.3f); line(5.5f, 19.5f, 18.5f, 19.5f); break;
+    }
+    case IC_DRONE: {   // drone : la camera volante (mode photo)
+        GraphicsPath p; RoundRect(p, RectF(cx - 3 * k, cy - 2.5f * k, 6 * k, 5 * k), 1.5f * k); g.DrawPath(&pen, &p);
+        line(9, 10, 6.5f, 7.5f); line(15, 10, 17.5f, 7.5f); line(9, 14, 6.5f, 16.5f); line(15, 14, 17.5f, 16.5f);
+        circ(5.5f, 6.5f, 3); circ(18.5f, 6.5f, 3); circ(5.5f, 17.5f, 3); circ(18.5f, 17.5f, 3); break;
     }
     case IC_LAYERS: poly({ 12, 3, 21, 8, 12, 13, 3, 8 }, true); poly({ 3, 12, 12, 17, 21, 12 }, false); poly({ 3, 16, 12, 21, 21, 16 }, false); break;
     case IC_IMAGE: { GraphicsPath p; RoundRect(p, RectF(cx - 9 * k, cy - 8 * k, 18 * k, 16 * k), 2 * k); g.DrawPath(&pen, &p); circ(9, 10, 2); poly({ 21, 16, 16, 11, 7, 20 }, false); break; }

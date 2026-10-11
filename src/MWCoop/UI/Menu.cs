@@ -57,7 +57,8 @@ namespace MWCoop
                 focusChat = true;
                 chatText = "";
             }
-            Block(inGame && (Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open));
+            bool panel = Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open;
+            Block(inGame && (panel || DroneCam.Active), panel);   // (camera drone : joueur immobile, curseur garde par le jeu)
         }
 
         // Curseur du mod (Core le dessine en dernier) : menu ouvert ou choix de reapparition, en partie.
@@ -77,7 +78,7 @@ namespace MWCoop
         }
 
         // Coupe/rend la visee et les deplacements du joueur (et le verrouillage du curseur du jeu).
-        static void Block(bool on)
+        static void Block(bool on, bool freeCursor)
         {
             if (on && blocked.Count == 0)
             {
@@ -104,7 +105,8 @@ namespace MWCoop
                 blocked.Clear();
             }
             // Curseur libere ; le jeu le laisse invisible : Core dessine le notre (Style.DrawCursor) par-dessus.
-            if (on) { Screen.lockCursor = false; Cursor.visible = false; }
+            if (on && freeCursor) { Screen.lockCursor = false; Cursor.visible = false; }
+            else if (on && !Screen.lockCursor) Screen.lockCursor = true;   // (camera drone, menu referme : la souris revient au drone)
         }
 
         public static void Draw()

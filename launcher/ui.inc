@@ -1302,6 +1302,9 @@ static void DrawSettings(Graphics &g)
 struct Credit { const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
+    { L"GalaninaKira", L"Modèle 3D", L"3D model",
+      L"Le drone de la caméra drone (mode photo), par Kira sur Sketchfab : sketchfab.com/GalaninaKira, modèle « Drone », licence CC BY 4.0. Simplifié pour le jeu.",
+      L"The drone of the drone camera (photo mode), by Kira on Sketchfab: sketchfab.com/GalaninaKira, model \"Drone\", CC BY 4.0 license. Simplified for the game.", L"11/10/2026", 0 },
     { L"WillBarrow", L"Modèles 3D", L"3D models",
       L"Les modèles du sac de couchage (plié et déplié), sur Sketchfab : sketchfab.com/WillBarrow. Un sac par joueur, dans la chambre du départ.",
       L"The sleeping bag models (rolled and unrolled), on Sketchfab: sketchfab.com/WillBarrow. One bag per player, in the starting bedroom.", L"10/10/2026", 0 },
