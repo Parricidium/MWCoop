@@ -35,7 +35,7 @@ static void WikiText(Graphics &g, const std::wstring &t, RectF r, float px, int 
     Font f(UiFamily(L"Segoe UI"), px, style, UnitPixel);
     StringFormat sf;
     SolidBrush b(c);
-    g.DrawString(t.c_str(), -1, &f, r, &sf, &b);
+    DrawStr(g, t.c_str(), -1, &f, r, &sf, &b);
 }
 
 // ---- figures : petites maquettes avec les elements du lanceur (zones sans action : UI_WIKI_FIG)

@@ -1304,25 +1304,34 @@ static Color WithA(Color c, float a) { return Color((BYTE)(c.GetA() * a), c.GetR
 // remplacement. Sans Segoe UI (Linux / Steam Deck par Proton ou Wine, polices de Windows abimees), GDI+ ne dessinait
 // AUCUN texte, sans erreur visible (retour de Donskoy, 11/10 : lanceur sans une lettre). Essai : variable
 // MWCOOP_SANS_POLICES=1 (Segoe UI, Bahnschrift et Consolas comptees absentes).
-// Le joueur etait sous Windows 7 SP1, qui a Segoe UI : une police peut etre declaree presente et ne rien dessiner
-// (fichier abime, Windows "allege", gestionnaire de polices). Chaque famille ecrit donc "Ag" dans une petite image,
-// avec le rendu de la fenetre ; aucun pixel = police suivante. Resultat dans lanceur.log.
-static bool FamilyOk(const FontFamily *f)
+// Windows 7 SP1 du joueur : Segoe UI y marche dans Paint (GDI), donc la police va bien -- c'est l'ecriture par GDI+ qui
+// ne laisse rien. Au demarrage (TextProbe), le lanceur ecrit "Ag" dans une petite image reglee comme la fenetre, avec
+// chaque lissage du texte ; il garde le premier qui laisse des pixels (g_textHint). Aucun : les lettres sont dessinees en
+// formes vectorielles (GraphicsPath::AddString + FillPath, le moteur des icones, g_textPath). Tout passe par DrawStr.
+// Journal : lanceur.log (« texte : ... »). Essai : MWCOOP_TEXTE=chemin force les formes vectorielles.
+static TextRenderingHint g_textHint = TextRenderingHintAntiAliasGridFit;
+static bool g_textPath;
+static bool g_textProbed;
+static int ProbeDraw(const FontFamily *f, TextRenderingHint hint, bool path, Status *st)
 {
-    WCHAR name[LF_FACESIZE] = L"?";
-    if (!f || f->GetLastStatus() != Ok || !f->IsAvailable()) return false;
-    f->GetFamilyName(name);
-    Font font(f, 16, FontStyleRegular, UnitPixel);
-    if (font.GetLastStatus() != Ok) { LaunchLog("police : %ls presente, Font refusee (statut %d)", name, (int)font.GetLastStatus()); return false; }
     Bitmap b(48, 24, PixelFormat32bppPARGB);
     int ink = 0;
-    Status st;
+    Status s = GenericError;
     {
         Graphics g(&b);
         g.Clear(Color(0, 0, 0, 0));
-        g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(PixelOffsetModeHalf);
+        g.SetTextRenderingHint(hint);
         SolidBrush w(Color(255, 255, 255, 255));
-        st = g.DrawString(L"Ag", -1, &font, PointF(2, 2), &w);
+        if (path) {
+            GraphicsPath p;
+            p.AddString(L"Ag", -1, f, FontStyleRegular, 16, PointF(2, 2), NULL);
+            s = g.FillPath(&w, &p);
+        } else {
+            Font font(f, 16, FontStyleRegular, UnitPixel);
+            s = font.GetLastStatus() == Ok ? g.DrawString(L"Ag", -1, &font, PointF(2, 2), &w) : font.GetLastStatus();
+        }
     }
     BitmapData bd;
     Rect r(0, 0, 48, 24);
@@ -1330,7 +1339,73 @@ static bool FamilyOk(const FontFamily *f)
         for (int y = 0; y < 24; y++) for (int x = 0; x < 48; x++) if (((BYTE *)bd.Scan0)[y * bd.Stride + x * 4 + 3] > 40) ink++;
         b.UnlockBits(&bd);
     }
-    if (ink < 8) LaunchLog("police : %ls presente mais n'ecrit rien (DrawString %d, %d pixels)", name, (int)st, ink);
+    if (st) *st = s;
+    return ink;
+}
+static void TextProbe()
+{
+    if (g_textProbed) return;
+    g_textProbed = true;
+    // Windows et GDI+ charges (le chemin de gdiplus.dll dit sa version : WinSxS 1.0 / 1.1)
+    typedef LONG(WINAPI * RtlGetVersionF)(OSVERSIONINFOW *);
+    OSVERSIONINFOW ov = { sizeof(ov) };
+    if (RtlGetVersionF rgv = (RtlGetVersionF)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion")) rgv(&ov);
+    wchar_t gp[MAX_PATH] = L"?";
+    if (HMODULE m = GetModuleHandleW(L"gdiplus.dll")) GetModuleFileNameW(m, gp, MAX_PATH);
+    LaunchLog("texte : Windows %lu.%lu build %lu, %ls", ov.dwMajorVersion, ov.dwMinorVersion, ov.dwBuildNumber, gp);
+    wchar_t force[16] = L"";
+    GetEnvironmentVariableW(L"MWCOOP_TEXTE", force, 16);
+    FontFamily seg(L"Segoe UI");
+    const FontFamily *f = seg.GetLastStatus() == Ok && seg.IsAvailable() ? &seg : FontFamily::GenericSansSerif();
+    if (!wcscmp(force, L"chemin")) { g_textPath = true; LaunchLog("texte : formes vectorielles forcees (MWCOOP_TEXTE)"); return; }
+    const TextRenderingHint hints[] = { TextRenderingHintAntiAliasGridFit, TextRenderingHintAntiAlias, TextRenderingHintClearTypeGridFit,
+                                        TextRenderingHintSingleBitPerPixelGridFit, TextRenderingHintSystemDefault };
+    for (TextRenderingHint h : hints) {
+        Status st;
+        int ink = ProbeDraw(f, h, false, &st);
+        if (ink >= 8) {
+            if (h != TextRenderingHintAntiAliasGridFit) LaunchLog("texte : lissage %d retenu (%d pixels)", (int)h, ink);
+            g_textHint = h;
+            return;
+        }
+        LaunchLog("texte : lissage %d n'ecrit rien (DrawString %d, %d pixels)", (int)h, (int)st, ink);
+    }
+    Status st;
+    int ink = ProbeDraw(f, TextRenderingHintAntiAliasGridFit, true, &st);
+    g_textPath = ink >= 8;
+    LaunchLog(g_textPath ? "texte : DrawString muet, lettres en formes vectorielles (%d pixels)" : "texte : aucun rendu n'ecrit (formes : statut %d, %d pixels)",
+              g_textPath ? ink : (int)st, ink);
+}
+// Ecriture de tout le texte du lanceur (DrawString, ou ses lettres en formes si DrawString est muet ici).
+static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, const RectF &r, const StringFormat *sf, const Brush *b)
+{
+    if (!g_textPath) return g.DrawString(s, n, font, r, sf, b);
+    FontFamily ff;
+    font->GetFamily(&ff);
+    GraphicsPath p;
+    p.AddString(s, n, &ff, font->GetStyle(), font->GetSize(), r, sf);
+    return g.FillPath(b, &p);
+}
+static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, const PointF &o, const StringFormat *sf, const Brush *b)
+{
+    if (!g_textPath) return g.DrawString(s, n, font, o, sf, b);
+    FontFamily ff;
+    font->GetFamily(&ff);
+    GraphicsPath p;
+    p.AddString(s, n, &ff, font->GetStyle(), font->GetSize(), o, sf);
+    return g.FillPath(b, &p);
+}
+// Une police peut aussi etre declaree presente et ne rien ecrire (fichier abime, Windows "allege") : chaque famille
+// ecrit "Ag" avec le rendu retenu ; aucun pixel = police suivante.
+static bool FamilyOk(const FontFamily *f)
+{
+    WCHAR name[LF_FACESIZE] = L"?";
+    if (!f || f->GetLastStatus() != Ok || !f->IsAvailable()) return false;
+    f->GetFamilyName(name);
+    TextProbe();
+    Status st;
+    int ink = ProbeDraw(f, g_textHint, g_textPath, &st);
+    if (ink < 8) LaunchLog("police : %ls presente mais n'ecrit rien (statut %d, %d pixels)", name, (int)st, ink);
     return ink >= 8;
 }
 static const FontFamily *UiFamily(const wchar_t *want)
@@ -1389,7 +1464,7 @@ static void TextF(Graphics &g, const wchar_t *family, const std::wstring &s, Rec
     sf.SetTrimming(StringTrimmingEllipsisCharacter);
     sf.SetFormatFlags(StringFormatFlagsNoWrap);
     SolidBrush b(c);
-    g.DrawString(s.c_str(), -1, &font, r, &sf, &b);
+    DrawStr(g, s.c_str(), -1, &font, r, &sf, &b);
 }
 // Titre (police des titres, demi-gras).
 static void Title(Graphics &g, const std::wstring &s, RectF r, float px, Color c, StringAlignment h = StringAlignmentNear)
@@ -1405,7 +1480,7 @@ static void Text(Graphics &g, const std::wstring &s, RectF r, float px, int styl
     sf.SetTrimming(StringTrimmingEllipsisCharacter);
     sf.SetFormatFlags(StringFormatFlagsNoWrap);
     SolidBrush b(c);
-    g.DrawString(s.c_str(), -1, &font, r, &sf, &b);
+    DrawStr(g, s.c_str(), -1, &font, r, &sf, &b);
 }
 
 // Texte sur plusieurs lignes (coupe aux mots), en haut du cadre.
@@ -1416,7 +1491,7 @@ static void Para(Graphics &g, const std::wstring &s, RectF r, float px, Color c,
     sf.SetLineAlignment(v);
     sf.SetTrimming(StringTrimmingEllipsisWord);
     SolidBrush b(c);
-    g.DrawString(s.c_str(), -1, &font, r, &sf, &b);
+    DrawStr(g, s.c_str(), -1, &font, r, &sf, &b);
 }
 
 // Graphics de mesure (une image de 1 pixel, gardee).
@@ -3773,7 +3848,7 @@ static void DrawSteamGuide(Graphics &g)
         sf.SetTrimming(StringTrimmingEllipsisPath);
         SolidBrush tb(kInk);
         std::wstring line = SteamLaunchLine();
-        g.DrawString(line.c_str(), -1, &mf, RectF(code.X + 16, code.Y + 4, code.Width - 32, code.Height - 8), &sf, &tb);
+        DrawStr(g, line.c_str(), -1, &mf, RectF(code.X + 16, code.Y + 4, code.Width - 32, code.Height - 8), &sf, &tb);
     }
     Para(g, T(L"Le bouton JOUER de Steam ouvrira alors MWCoop. Pour retrouver le jeu sans le mod, efface la ligne.",
               L"Steam's PLAY button will then open MWCoop. To get the game without the mod back, clear the line."),
@@ -5479,7 +5554,7 @@ static void RenderTo(Bitmap &target, float scale)
         g.SetInterpolationMode(InterpolationModeNearestNeighbor);
         g.DrawImage(g_glassCache, 0, 0, w, h);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
-        g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+        g.SetTextRenderingHint(g_textHint);
         g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
         g.SetPixelOffsetMode(PixelOffsetModeHalf);
         g.ScaleTransform(scale, scale);
@@ -6877,6 +6952,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     GdiplusStartupInput gin;
     ULONG_PTR gtok;
     GdiplusStartup(&gtok, &gin, NULL);
+    TextProbe();
     Layout();
     BuildOptions();
 
