@@ -182,6 +182,7 @@ namespace MWCoop
                 Vector3 flat = new Vector3(fw.x, 0f, fw.z);
                 st.Yaw = flat.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(flat).eulerAngles.y : player.eulerAngles.y;
                 st.Pitch = -Mathf.Asin(Mathf.Clamp(fw.y, -1f, 1f)) * Mathf.Rad2Deg;
+                if (DroneCam.Active) { st.Yaw = DroneCam.BodyYaw; st.Pitch = DroneCam.BodyPitch; }   // (yeux au ciel pendant le drone : regard d'avant)
                 string forced = Config.Get("Test", "TestRegard", "");
                 if (forced.Length > 0) st.Pitch = float.Parse(forced, System.Globalization.CultureInfo.InvariantCulture);
                 // Hauteur de la camera voulue par l'automate Crouch du jeu (1,4 debout, 0,85 accroupi, 0,3 au

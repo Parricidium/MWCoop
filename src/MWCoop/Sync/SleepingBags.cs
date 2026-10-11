@@ -49,7 +49,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- modeles
-        static Mesh LoadMesh(string res, float scale, bool flip = false)
+        public static Mesh LoadMesh(string res, float scale, bool flip = false)
         {
             using (Stream s = typeof(SleepingBags).Assembly.GetManifestResourceStream(res))
             using (var r = new BinaryReader(s))

@@ -1497,7 +1497,7 @@ namespace MWCoop
         //  @etape  Stage atteint par la fendeuse      (fiable, U8)
         static void OnSpecial(int who, string kind, NetReader r)
         {
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), kind != "@benne" && kind != "@pousse", who);
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), kind != "@benne" && kind != "@pousse" && kind != "@drone", who);
             switch (kind)
             {
                 case "@cree":
@@ -1537,6 +1537,8 @@ namespace MWCoop
                 case "@sac": { string sid = r.Str(); bool fo = r.Bool(); Vector3 sp2 = r.Vec(); SleepingBags.OnState(who, sid, fo, sp2, r.Quat()); break; }
                 case "@sacs": SleepingBags.OnList(r); break;
                 case "@vet": Wear.OnList(r); break;
+                case "@drone": { int dn = r.U8(); Vector3 dp = r.Vec(); DroneCam.OnRemote(who, dn, dp, r.Quat()); break; }
+                case "@flash": DroneCam.OnFlash(who, r.Vec()); break;
                 case "@fendattel": { int fa = r.U8(); Vector3 fp = r.Vec(); CutterHitch.OnRemote(who, fa, fp, r.Quat()); break; }
                 case "@pousse": { int pn = r.U8(); Vector3 pp = r.Vec(); VehicleSync.OnRemotePush(who, pn, pp, r.Vec()); break; }
                 case "@fuite": CarLeaks.OnRemote(who, r); break;

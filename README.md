@@ -206,6 +206,8 @@ Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
 - **Interface**: frosted-glass panels in the launcher's colours, mouse cursor in the menus, guest waiting screen with
   the save download, sync audit (F10 > SYNC) that compares host and guests every 15 s and lists local actions not
   shared yet.
+- **Drone camera** (F8): photo mode — your character stays put while a small drone camera flies around (viewfinder,
+  zoom, tilt, flash); photos land in Pictures\CoopPictures with the MWCoop logo. The others see the drone and its flash.
 
 The detailed list, version by version, is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
 
@@ -253,6 +255,13 @@ build.cmd
 
 `build\version.dll`, `build\MWCoop.dll` and `build\MWCoop.exe`. Set `MWC_JEU` if the game is not in the default
 Steam folder. `run\make-testinstances.ps1` and `run\test.ps1` start isolated, off-screen test instances.
+
+## Credits
+
+- Drone model: "Drone" by Kira ([sketchfab.com/GalaninaKira](https://sketchfab.com/GalaninaKira)), licensed
+  [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/), simplified for the game.
+- Sleeping bag models: WillBarrow ([sketchfab.com/WillBarrow](https://sketchfab.com/WillBarrow)).
+- Outfit pack: Dom.
 
 ## Disclosure
 
@@ -384,6 +393,8 @@ Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) 
 - **Interface** : panneaux en verre aux couleurs du lanceur, curseur dans les menus, écran d'attente des invités avec
   le téléchargement de la sauvegarde, audit de la synchro (F10 > SYNCHRO) qui compare hôte et invités toutes les 15 s
   et liste les actions locales pas encore partagées.
+- **Caméra drone** (F8) : mode photo — ton personnage reste sur place pendant qu'un petit drone filme (viseur, zoom,
+  pencher, flash) ; les photos vont dans Images\CoopPictures avec le logo de MWCoop. Les autres voient le drone et son flash.
 
 La liste détaillée, version par version : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 
@@ -417,6 +428,9 @@ joignables : le salon affiche *UDP bloqué* pour un invité dont le test UDP éc
 ## Compiler
 
 Visual Studio 2022 Build Tools (C++ x64), SDK .NET 8 (seul son compilateur C# sert), le jeu installé : `build.cmd`.
+
+Crédits : modèle du drone « Drone » de Kira ([sketchfab.com/GalaninaKira](https://sketchfab.com/GalaninaKira)), licence
+[CC BY 4.0](http://creativecommons.org/licenses/by/4.0/), simplifié pour le jeu ; sacs de couchage de WillBarrow ; tenues de Dom.
 
 Développé avec l'aide d'une IA (Claude), dirigé et testé par un humain. My Winter Car appartient à Amistech Games ;
 ce projet n'a aucun lien avec eux.

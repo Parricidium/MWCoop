@@ -48,13 +48,18 @@ namespace MWCoop
         public static void Update()
         {
             if (!PlayerSync.InGame || !Session.Active) { if (Active) Off(); return; }
-            if (!Menu.Open && !Menu.ChatOpen && !MapPanel.Open && !CheatPanel.Open && !WalletPanel.Open && Input.GetKeyDown(Keys.View))
+            if (!Menu.Open && !Menu.ChatOpen && !MapPanel.Open && !CheatPanel.Open && !WalletPanel.Open && !DroneCam.Active && Input.GetKeyDown(Keys.View))
             {
                 if (Active) Off();
                 else if (Config.GetInt("Coop", "SansTroisiemePersonne", 0) == 0) { Active = true; Log.Info("vue : troisieme personne"); }
             }
             if (Config.GetInt("Test", "TroisiemePersonne", 0) != 0 && !Active) { Active = true; Log.Info("vue : troisieme personne (essai)"); }
-            if (!Active) return;
+            // Camera drone : l'avatar du joueur est montre aussi (il est dans le cadre), sans reculer la camera.
+            if (!Active && !DroneCam.Active)
+            {
+                if (me != null) { me.Destroy(); me = null; if (handCam != null) handCam.enabled = handCamWas; }
+                return;
+            }
             if (!hooked) { hooked = true; Camera.onPreCull += PreCull; }
             if (cam == null)
             {
@@ -65,7 +70,7 @@ namespace MWCoop
                 if (handCam != null) handCamWas = handCam.enabled;
                 if (cam == null) return;
             }
-            if (handCam != null && handCam.enabled) handCam.enabled = false;
+            if (handCam != null && handCam.enabled && Active) handCam.enabled = false;
             PlayerInfo pi = Session.Me;
             if (pi == null) return;
             if (me != null && (me.Root == null || meSkin != pi.Skin && me.Body != Looks.Parse(pi.Skin).Body)) { me.Destroy(); me = null; }
@@ -85,7 +90,7 @@ namespace MWCoop
         {
             if (Active && me != null && me.Root != null) me.LatePose();
         }
-        public static Avatar Me { get { return Active ? me : null; } }
+        public static Avatar Me { get { return Active || DroneCam.Active ? me : null; } }
 
         static Transform boxCar; static Bounds carBox; static Vector3 lastCamInCar; static float camLogAt;
         static Bounds CarBox(Transform car)
@@ -113,7 +118,7 @@ namespace MWCoop
         // Rendu de la camera du joueur : reculee le temps de l'image, remise aux yeux a la fin de l'image.
         static void PreCull(Camera c)
         {
-            if (!Active || c == null || c != cam || Time.frameCount == lastFrame) return;
+            if (!Active || DroneCam.Active || c == null || c != cam || Time.frameCount == lastFrame) return;
             if (moved) PutBack();   // (remise de l'image d'avant pas faite : d'abord aux yeux)
             Transform t = c.transform;
             eye = t.position; eyeLocal = t.localPosition; eyeLocalRot = t.localRotation;

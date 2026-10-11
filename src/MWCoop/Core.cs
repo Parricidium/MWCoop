@@ -154,6 +154,7 @@ namespace MWCoop
             new Mod("fuites et vapeur", CarLeaks.Update),
             new Mod("porte du garage", GarageDoor.Update),
             new Mod("vue (troisieme personne)", ThirdPerson.Update),
+            new Mod("camera drone", DroneCam.Update),
             new Mod("boissons", Drinks.Update),
             new Mod("rayons", Stock.Update),
             new Mod("PNJ", Npcs.Update),
@@ -256,6 +257,7 @@ namespace MWCoop
             CarLeaks.OnLevelLoaded();
             GarageDoor.OnLevelLoaded();
             ThirdPerson.OnLevelLoaded();
+            DroneCam.OnLevelLoaded();
             Drinks.OnLevelLoaded();
             Stock.OnLevelLoaded();
             Npcs.OnLevelLoaded();
@@ -281,7 +283,8 @@ namespace MWCoop
             Perf.Begin();
             try
             {
-                Hud.Draw(); WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); MapPanel.Draw(); Respawn.Draw();
+                if (DroneCam.Active) DroneCam.Draw(); else Hud.Draw();   // (drone : viseur seul, rien d'autre du mod sur la photo)
+                WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); MapPanel.Draw(); Respawn.Draw();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }
             catch (System.Exception e) { Style.Alpha = 1f; Log.Error("hud : " + e); }

@@ -1,0 +1,5 @@
+"Drone" by Kira (https://sketchfab.com/GalaninaKira)
+Source: https://sketchfab.com/3d-models/drone-eac2b4bc20f54b3ba8c3ddbcdf03c8d6
+License: CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/)
+Changes: converted from glTF and simplified (vertex clustering) to MWCoop .mwm meshes by run/glb2mwm.py;
+propellers split into four separate meshes so they can spin.
