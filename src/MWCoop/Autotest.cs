@@ -869,6 +869,9 @@ namespace MWCoop
                     if (t > 34f && step < 2) { step = 2; Log.Info("autotest : ceintures " + Seats.BeltState()); }
                 }
             }
+            // [Test] Autotest=axes : commandes des voitures garees (pedale de frein qui bouge quand un joueur recule a pied, retour
+            // de witefold, 11/10).
+            if (mode == "axes" && ((t > 30f && step == 0) || (t > 60f && step == 1))) { step++; Log.Info("autotest : axes " + VehicleSync.AxesState()); }
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
             // Captures : Regarder=1, la camera vise l'avatar le plus proche ; Regarder=2, le milieu du groupe d'avatars

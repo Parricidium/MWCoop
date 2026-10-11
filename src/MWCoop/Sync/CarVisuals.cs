@@ -34,6 +34,7 @@ namespace MWCoop
             public float HeldAt;
             public bool Shown; public Vector3 ShowPos; public Quaternion ShowRot;   // pose montree : glisse vers la recue
             public bool Gear;                                                     // levier de vitesses : passage anime
+            public bool Pedal;                                                    // pedale : envoyee par le conducteur seulement
             public float ShiftAt = -1f; public Quaternion ShiftFrom, ShiftTo;      // passage en cours (debut, de, vers)
         }
         // Levier de vitesses distant : un rapport recu ne fait plus sauter le levier (avant : ~60 ms, « pas d'animation »,
@@ -97,6 +98,7 @@ namespace MWCoop
                     string rel = VehicleSync.RelPath(rb.transform, t);
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
                     var it = new Item { Key = rel + "#" + k, T = t, Pose = pose, Show = show, Pos = t.localPosition, Rot = t.localRotation, Active = t.gameObject.activeSelf,
+                                        Pedal = n.Contains("pedal") || (n.StartsWith("pivot_") && t.parent != null && t.parent.name.ToLowerInvariant().Contains("pedal")),
                                         Gear = pose && (n.Contains("gear") || (n == "pivot" && t.parent != null && t.parent.name.ToLowerInvariant().Contains("gear"))) };
                     c.Items.Add(it);
                     c.ByKey[it.Key] = it;
@@ -136,10 +138,14 @@ namespace MWCoop
             foreach (Car c in cars.Values)
             {
                 if (c.Root == null || !c.Root.gameObject.activeInHierarchy || !Sender(c)) continue;
+                bool driving = ReferenceEquals(VehicleSync.LocalDrivingRoot, c.Root);
                 NetWriter w = null;
                 foreach (Item it in c.Items)
                 {
                     if (it.T == null || it.Held) continue;
+                    // Pedales : celles de la CORRIS (pedalier, automates Brake/Clutch) suivent les touches du joueur meme a pied --
+                    // reculer (S) enfoncait le frein d'une voiture garee, recopie chez les autres (retour de witefold, 11/10).
+                    if (it.Pedal && !driving) continue;
                     bool act = it.T.gameObject.activeSelf;
                     bool showCh = it.Show && act != it.Active;
                     bool poseCh = it.Pose && (Quaternion.Angle(it.T.localRotation, it.Rot) > 0.5f || (it.T.localPosition - it.Pos).sqrMagnitude > 4e-6f);
