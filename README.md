@@ -3,7 +3,6 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-PRE--ALPHA-red?style=for-the-badge" alt="Pre-alpha">
   <a href="https://github.com/Parricidium/MWCoop/releases"><img src="https://img.shields.io/github/v/release/Parricidium/MWCoop?include_prereleases&label=Download&style=for-the-badge" alt="Download"></a>
   <a href="https://discord.gg/H7NXpWHwgY"><img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
 </p>
@@ -28,9 +27,8 @@ the same shops, NPCs, jobs and bills — with a wallet each.
 
 The mod and its launcher speak **English and French** (the launcher follows Windows, the game follows the launcher).
 
-> [!WARNING]
-> **PRE-ALPHA.** Almost everything is tested between two game instances on one PC; real games between friends have
-> only just started. Expect bugs and send your logs: launcher, **Logs** page, *Create a zip to send*.
+> [!NOTE]
+> Found a bug? Send your logs: launcher, **Logs** page, *Create a zip to send*.
 > Help, bug reports and players to team up with: **[Discord](https://discord.gg/H7NXpWHwgY)**.
 
 *[Version française plus bas.](#version-française)*
@@ -272,10 +270,8 @@ PNJ, boulots et factures — avec chacun son porte-monnaie.
 
 Le mod et son lanceur parlent **français et anglais** (le lanceur suit Windows, le jeu suit le lanceur).
 
-> [!WARNING]
-> **PRÉ-ALPHA.** Presque tout est testé entre deux instances du jeu sur un même PC ; les vraies parties entre amis
-> commencent tout juste. Attendez-vous à des bugs et envoyez vos journaux : lanceur, page **Journaux**, *Créer un
-> zip à envoyer*. Aide, bugs et coéquipiers : **[Discord](https://discord.gg/H7NXpWHwgY)** (salons en anglais, plus un salon en français).
+> [!NOTE]
+> Un bug ? Envoyez vos journaux : lanceur, page **Journaux**, *Créer un zip à envoyer*. Aide, bugs et coéquipiers : **[Discord](https://discord.gg/H7NXpWHwgY)** (salons en anglais, plus un salon en français).
 
 ## Captures
 
