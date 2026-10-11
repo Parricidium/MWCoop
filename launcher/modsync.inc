@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- mods de l'hote chez les invites - inclus par launcher.cpp (apres mods.inc)
+﻿// ---------------------------------------------------------------- mods de l'hote chez les invites - inclus par launcher.cpp (apres mods.inc)
 // Demande de JD (07/10) : les invites recoivent les mods MSCLoader de l'hote, d'un seul accord ("tout accepter" : on
 // joue entre amis).
 //  - Hote : les mods de son dossier Mods coches "Envoyer" (onglet MODS ; [Lanceur] ModsPrives : ceux qu'il garde pour
@@ -735,6 +735,48 @@ static int SyncLaunchKind()
 // doorstop_config.ini a soi (mods=GF ; enabled=false sans). Jonctions refaites a chaque fois (dossier du jeu change...).
 static bool IsJunction(const std::wstring &p) { DWORD a = GetFileAttributesW(p.c_str()); return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) && (a & FILE_ATTRIBUTE_REPARSE_POINT); }
 static std::wstring GuestCopyDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"invite\\My Winter Car\\"; }
+// Fichiers de base de MSCLoader (Mods\Assets\MSCLoader_* : console, menu des mods...) dans la copie des mods de l'hote :
+// ceux de l'invite, faits pour SON MSCLoader. Avant, seuls ceux de l'hote y etaient -- absents chez lui, ou d'une autre
+// version (MSCLoader 1.4 cherche MSCLoader_Settings\settingsui.unity3d), l'invite avait « LoadBundle() Error: File not
+// found ... settingsui.unity3d » puis « Asset files for [INTERNAL] Mod Menu not found » (retour d'un joueur, 11/10).
+static int CopyTreeSimple(const std::wstring &src, const std::wstring &dst)
+{
+    SHCreateDirectoryExW(NULL, dst.c_str(), NULL);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((src + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    int n = 0;
+    do {
+        std::wstring f = fd.cFileName;
+        if (f == L"." || f == L"..") continue;
+        std::wstring s = src + L"\\" + f, d = dst + L"\\" + f;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue;   // (jamais a travers une jonction)
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { n += CopyTreeSimple(s, d); continue; }
+        if (SameFile(s, d)) continue;
+        SetFileAttributesW(d.c_str(), FILE_ATTRIBUTE_NORMAL);
+        if (CopyFileW(s.c_str(), d.c_str(), FALSE)) n++;
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return n;
+}
+static void GuestMscAssets(const std::wstring &coop)
+{
+    std::wstring src = MscModsDir() + L"Assets\\";
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((src + L"MSCLoader_*").c_str(), &fd);
+    int dirs = 0, files = 0;
+    if (h != INVALID_HANDLE_VALUE) {
+        do if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+            dirs++;
+            files += CopyTreeSimple(src + fd.cFileName, coop + L"Assets\\" + fd.cFileName);
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    bool menu = FileExists(coop + L"Assets\\MSCLoader_Settings\\settingsui.unity3d") || FileExists(coop + L"Assets\\MSCLoader_Settings\\settings.unity3d");
+    LaunchLog("copie de l'invite : fichiers de base de MSCLoader de l'invite (%s) : %d dossier(s), %d fichier(s) copies ; menu des mods %s",
+              Narrow(src, CP_UTF8).c_str(), dirs, files, menu ? "present" : "ABSENT (reinstaller MSCLoader dans l'onglet Mods)");
+    if (!menu) SetStatus(K_WARN, T(L"Fichiers de MSCLoader absents : réinstalle-le dans l'onglet Mods", L"MSCLoader files missing: reinstall it in the Mods tab"));
+}
 static bool PrepareGuestCopy(const std::wstring &m, bool mods)
 {
     SHCreateDirectoryExW(NULL, m.c_str(), NULL);
@@ -792,6 +834,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     if (mods && !hadMods) ok = link(L"Mods", coop.substr(0, coop.size() - 1)) && ok;
+    if (mods) GuestMscAssets(coop);
     for (auto &r : roots) if (GetFileAttributesW((g_gameDir + r).c_str()) == INVALID_FILE_ATTRIBUTES) ok = link(r, cont + r) && ok;   // (absent du jeu)
     h = FindFirstFileW((m + L"*").c_str(), &fd);   // retires du jeu
     if (h != INVALID_HANDLE_VALUE) {
