@@ -93,6 +93,8 @@ namespace MWCoop
             public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();  // transitions prises ici
             public bool FromReplay;                                                          // cle : derniere position recue d'un autre
             public HashSet<string> InputStates = new HashSet<string>();                      // etats qui lisent la souris ou le clavier
+            public HashSet<string> ClockStates = new HashSet<string>();                      // etats qui lisent l'heure du jeu (SUN 'Color' Hours)
+            public string ClockLast; public float ClockAt = -1000f;                          // derniere transition d'horloge envoyee
             public Dictionary<string, int> Loops = new Dictionary<string, int>();            // commande : transitions sans geste, sur 10 s
             public HashSet<string> Quiet = new HashSet<string>();                            // ... qui bouclent : plus envoyees
             public float LoopStart, LastClick = -100f;
@@ -351,6 +353,8 @@ namespace MWCoop
                         if (RandomActions.Contains(tn)) j.RandomStates.Add(s.Name);
                         if (ClickActions.Contains(tn)) j.ClickStates.Add(s.Name);
                         foreach (string p in InputActions) if (tn.StartsWith(p)) j.InputStates.Add(s.Name);
+                        var gf = a as HutongGames.PlayMaker.Actions.GetFsmFloat;
+                        if (gf != null && gf.variableName != null && (gf.variableName.Value == "Hours" || gf.variableName.Value == "Minutes")) j.ClockStates.Add(s.Name);
                     }
                     var list = new List<FsmStateAction>(s.Actions);
                     list.Insert(0, new Hook { J = j, State = s.Name });
@@ -398,6 +402,17 @@ namespace MWCoop
             if (from != null && j.RandomStates.Contains(from.Name) && !Session.IsHost) return;
             // Retour a l'attente (souris partie, fin de survol) : de la tenue de survol, pas une action.
             if (state == "Wait player" || state == "Mouse off" || state == "Mouse off 2" || state == "Wait button") return;
+            // Etat qui lit l'heure du jeu et repasse en boucle (usine : « Factory open » toutes les 10 s, -MEETING-> a 13 h,
+            // -LUNCH-> a 11 h, toute l'heure durant ; retour de Hall0wMan, 10/10) : l'heure est la meme partout, chacun
+            // prend la transition lui-meme. Envoyee la 1re fois, puis plus tant qu'elle revient (moins de 2 minutes d'ecart).
+            if (from != null && j.ClockStates.Contains(from.Name))
+            {
+                string ck = from.Name + "|" + tr.EventName + "|" + state;
+                float tc = Time.realtimeSinceStartup;
+                bool again = ck == j.ClockLast && tc - j.ClockAt < 120f;
+                j.ClockLast = ck; j.ClockAt = tc;
+                if (again) return;
+            }
             // Garde-fou : un automate qui boucle (plus de 5 changements en 10 s ; 40 pour les commandes des
             // vehicules, une molette tourne vite) n'est plus envoye -- jusqu'a 30 s de calme.
             float now = Time.realtimeSinceStartup;
@@ -1520,6 +1535,7 @@ namespace MWCoop
                 case "@outil": { int t = r.U8(); HandTools.OnRemote(who, t, r.U8()); break; }
                 case "@sac": { string sid = r.Str(); bool fo = r.Bool(); Vector3 sp2 = r.Vec(); SleepingBags.OnState(who, sid, fo, sp2, r.Quat()); break; }
                 case "@sacs": SleepingBags.OnList(r); break;
+                case "@vet": Wear.OnList(r); break;
                 case "@fuite": CarLeaks.OnRemote(who, r); break;
                 case "@cbx": { string ck = r.Str(); Vector3 cp = r.Vec(); ModCheatbox.OnRemote(who, ck, cp, r.Quat()); break; }
                 case "@sacitem": { string sp = r.Str(), bid = r.Str(); Consume.OnRemotePick(who, sp, bid, r.Str()); break; }

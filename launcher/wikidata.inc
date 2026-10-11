@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- page GUIDE : contenu (inclus par wiki.inc)
+﻿// ---------------------------------------------------------------- page GUIDE : contenu (inclus par wiki.inc)
 // Categories (pliables), puis articles : titre, sous-titre, blocs. WB_H ouvre une section pliable ; WB_S : etapes
 // numerotees (recomptees a chaque section) ; WB_FIG : figure de wiki.inc ; WB_GO : bouton vers une page (TAB_*) ou vers
 // un autre article (1000 + WA_*). Tenir a jour quand une fonction change.
@@ -188,6 +188,9 @@ static const WikiBlock kW_InGame[] = {
     { WB_H, L"Sac de couchage", L"Sleeping bag" },
     { WB_B, L"Un sac par joueur, dans la chambre du départ (à côté du lit). Plié, il se prend en main et se transporte comme un objet du jeu, même dans les voitures. Posé par terre : F pour le déplier, puis tiens F pour dormir dessus comme dans un lit ; un appui bref sur F le replie.",
             L"One bag per player, in the starting bedroom (next to the bed). Rolled up, you pick it up and carry it like any game item, cars included. On the ground: F to unroll it, then hold F to sleep on it like a bed; a short F press rolls it back up." },
+    { WB_H, L"Vestes et combinaisons", L"Jackets and coveralls" },
+    { WB_B, L"Une veste d'hiver et une combinaison par joueur : celles du jeu, et pour chaque joueur en plus une copie posée dans le couloir de la maison du départ. Celle que porte un autre disparaît chez toi tant qu'il la porte. Si ta partie se charge avec un vêtement déjà porté par l'hôte, tu le lui rends et tu enfiles une copie libre.",
+            L"One winter jacket and one coverall per player: the game's own, plus a copy for each extra player in the hallway of the starting house. One worn by someone else disappears on your side while they wear it. If your game loads with a piece already worn by the host, you hand it over and put on a free copy." },
     { WB_H, L"Vue et personnage", L"View and character" },
     { WB_B, L"F5 : vue à la troisième personne, à pied (derrière ton personnage) et en véhicule (derrière lui). Viser, prendre et ouvrir marchent comme à la première personne.",
             L"F5: third-person view, on foot (behind your character) and in vehicles (behind it). Aiming, picking up and opening work like in first person." },

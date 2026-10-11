@@ -1133,16 +1133,24 @@ namespace MWCoop
             // 40 a 50 s, l'eteint en main a 50 s (range), le rallume pose 1,5 m devant lui a 70 s (sorti au sol). L'invite note
             // toutes les 2 s s'il le voit (actif) et ou. Attendu : cache chez l'invite apres 50 s (horloge de l'hote), revu
             // pose devant l'hote apres 70 s.
+            // [Test] Rangeur=invite : l'invite range ; RessortirMain=1 : comme l'outil du jeu (grattoir, F puis F) -- l'objet
+            // reste dans la main eteint, puis rallume dans la main a 70 s, tenu jusqu'a 76 s et lache. Le rangeur note aussi.
             if (mode == "ranger")
             {
                 string id = Config.Get("Test", "TestPiece", "~sandbag(item1)");
                 if (id.StartsWith("~")) id = Props.FindKey(id.Substring(1)) ?? id;
-                if (Net.Session.IsHost)
+                bool storer = Net.Session.IsHost == (Config.Get("Test", "Rangeur", "hote") != "invite");
+                bool inHand = Config.GetInt("Test", "RessortirMain", 0) != 0;
+                if (storer)
                 {
                     Transform cam = PlayerSync.LocalCamera;
                     if (t > 40f && t < 50f && cam != null) { Props.TestHold(id, cam); if (step == 0) { step = 1; Log.Info("autotest : ranger, tient " + id); } }
                     if (t > 50f && step == 1) { step = 2; Rigidbody rb = Props.BodyOf(id); if (rb != null) { rangeGo = rb.gameObject; rangeGo.SetActive(false); } Log.Info("autotest : ranger, eteint en main"); }
-                    if (t > 52f && step == 2) { step = 3; Props.TestHold(id, null); }
+                    if (t > 52f && step == 2 && !inHand) { step = 3; Props.TestHold(id, null); }
+                    if (inHand && t > 70f && step == 2 && rangeGo != null && cam != null) { step = 5; rangeGo.SetActive(true); Log.Info("autotest : ranger, rallume dans la main"); }
+                    if (inHand && step == 5 && t < 76f && cam != null) Props.TestHold(id, cam);
+                    if (inHand && step == 5 && t >= 76f) { step = 6; Props.TestHold(id, null); Log.Info("autotest : ranger, lache"); }
+                    if (t >= holdLog && t > 44f && t < 100f) { holdLog = t + 2f; Rigidbody rb2 = Props.BodyOf(id); Log.Info("autotest : ranger, chez le rangeur " + (rb2 == null ? "sans corps" : (rb2.gameObject.activeInHierarchy ? "visible en " + rb2.position.ToString("F1") : "cache"))); }
                     if (t > 70f && step == 3 && rangeGo != null && cam != null)
                     {
                         step = 4;

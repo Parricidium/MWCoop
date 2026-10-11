@@ -1,27 +1,36 @@
+﻿using System.Collections.Generic;
+using System.IO;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
 namespace MWCoop
 {
-    // Vetements portes : veste d'hiver, combinaison, casque (un seul exemplaire de chacun dans le monde). Les
-    // mettre les range sous PLAYER (inactifs) chez celui qui les porte ; chez les autres ils restaient au crochet,
-    // prenables une 2e fois, et l'avatar ne montrait rien.
-    //  - qui porte quoi : 3 bits de l'etat du joueur (PlayerSync.F_Jacket, F_Coverall, F_Helmet), envoyes en
-    //    continu (arrivee en cours de partie, depart, perte) ; l'avatar les montre (Avatar).
-    //  - mettre / enlever : message fiable (vetement, porte ou non, pose la ou il a ete enleve).
-    //  - chez les autres, le vetement porte par un autre est cache (desactive : ni visible ni prenable) ; enleve,
-    //    il reapparait la ou il a ete enleve (a defaut la ou il etait, ex. joueur parti en le portant).
-    //  - porte par deux joueurs a la fois (sauvegarde de l'hote faite en le portant, chargee par un invite ; deux
-    //    clics croises) : le plus petit numero (l'hote d'abord) le garde, l'autre l'enleve (logique du jeu).
-    // Detection par sondage 4 fois/s (3 objets, sans allocation) : l'objet porte est sous PLAYER et inactif ;
-    // tenu en main il est sous PLAYER mais actif (ItemPivot). "Sous PLAYER" = descendant (IsChildOf), pas racine :
-    // au volant ou passager, PLAYER lui-meme est range sous la voiture.
+    // Vetements portes : veste d'hiver, combinaison, casque. Le jeu n'en a qu'un exemplaire de chacun ; les mettre les
+    // range sous PLAYER (inactifs) chez celui qui les porte ; chez les autres ils restaient au crochet, prenables une 2e
+    // fois, et l'avatar ne montrait rien.
+    //  - une veste et une combinaison par joueur (demande de JD, 11/10 : « X paires selon X joueurs » ; Jomppi en voulait
+    //    2) : l'hote copie la veste et la combinaison du jeu pour chaque joueur en plus (veste 2, combinaison 2...), posees
+    //    dans la maison du debut de partie ; leur nombre ne baisse pas pendant la partie. Liste et poses envoyees aux
+    //    invites (@vet), gardees a cote de la sauvegarde de l'hote (MWCoop-vetements.txt). Chaque copie a ses propres
+    //    etiquettes de sauvegarde du jeu (JacketPosMWC2...) : elle n'ecrase pas celles de l'originale.
+    //  - qui porte quoi : message fiable (vetement, porte ou non, pose la ou il a ete enleve), redit toutes les 5 s tant
+    //    qu'il est porte (arrivee en cours de partie, message perdu) ; perime apres 15 s ou au depart du joueur. Les bits
+    //    de l'etat du joueur (PlayerSync.F_Jacket, F_Coverall, F_Helmet) ne disent plus que le genre porte, pour l'avatar.
+    //  - chez les autres, le vetement porte par un autre est cache (desactive : ni visible ni prenable) ; enleve, il
+    //    reapparait la ou il a ete enleve (a defaut la ou il etait, ex. joueur parti en le portant).
+    //  - porte par deux joueurs a la fois (sauvegarde de l'hote faite en le portant, chargee par un invite ; deux clics
+    //    croises) : le plus petit numero (l'hote d'abord) le garde, l'autre l'enleve (logique du jeu).
+    // Detection par sondage 4 fois/s (sans allocation) : l'objet porte est sous PLAYER et inactif ; tenu en main il est
+    // sous PLAYER mais actif (ItemPivot). "Sous PLAYER" = descendant (IsChildOf), pas racine : au volant ou passager,
+    // PLAYER lui-meme est range sous la voiture.
     public static class Wear
     {
-        const int N = 3;
+        const int NBase = 3;
         static readonly string[] Paths = { "EQUIPMENTS/winter jacket(itemx)", "EQUIPMENTS/winter coverall(itemx)", "EQUIPMENTS/Helmet/helmet(itemx)" };
-        static readonly string[] Names = { "veste", "combinaison", "casque" };
+        static readonly string[] Kinds = { "veste", "combinaison", "casque" };
+        static readonly string[] CopyNames = { "winter jacket", "winter coverall" };
+        static readonly string[] UtPos = { "JacketPos", "CoverallPos" }, UtState = { "JacketState", "CoverallState" };
         static readonly int[] Bits = { PlayerSync.F_Jacket, PlayerSync.F_Coverall, PlayerSync.F_Helmet };
         // Depuis PLAYER : au volant ou passager, PLAYER est range sous la voiture (DriveTrigger 'Reset view', Seats) et
         // n'est plus une racine de la scene (Game.FindAny ne le trouverait pas).
@@ -30,32 +39,43 @@ namespace MWCoop
 
         class Item
         {
-            public GameObject Go;
+            public GameObject Go; public int Kind; public string Name, Key;
             public bool LocalWorn, Hidden, HidActive;
             public Transform HidParent; public Vector3 HidPos; public Quaternion HidRot; public float HidAt;
-            public int MsgWho = -1; public bool MsgWorn; public float MsgAt;      // dernier message recu
+            public int WornBy = -1; public float WornAt;                          // porte par un autre (message fiable, redit toutes les 5 s)
             public int OffWho = -1; public Vector3 OffPos; public Quaternion OffRot; public float OffAt = -1;  // pose ou un autre l'a enleve
-            public int LastWearer = -1; public float FreeSince = -1f;             // dernier porteur vu ; plus porte depuis
-            public float YieldAt = -100, HeldLog = -100;
+            public int LastWearer = -1;                                           // dernier porteur vu
+            public float YieldAt = -100, HeldLog = -100, SentAt;
         }
 
-        static readonly Item[] items = new Item[N];
+        // 0 veste, 1 combinaison, 2 casque, puis par paire k >= 2 : veste k, combinaison k.
+        static readonly List<Item> items = new List<Item>();
+        static int pairs = 1;
         static PlayMakerFSM clothLogic, helmetLogic;
         static Transform player;   // PLAYER (par reference : pas de nom lu 12 fois/s), garde une fois trouve
-        static float nextPoll, findAt = -1;
-        static bool found;
+        static float nextPoll, findAt = -1, nextList, nextSave;
+        static bool found, fileRead;
+        static readonly List<Vector3[]> filePoses = new List<Vector3[]>();   // (hote) poses des copies lues du fichier
+        static int swapKind = -1; static float swapAt, swapUntil;            // vetement rendu : une copie libre a mettre a la place
 
-        static Wear()
+        static Wear() { Reset(); }
+
+        static void Reset()
         {
-            for (int i = 0; i < N; i++) items[i] = new Item();
+            items.Clear();
+            for (int i = 0; i < NBase; i++) items.Add(new Item { Kind = i, Name = Kinds[i], Key = "w:vetement:" + Kinds[i] });
+            pairs = 1;
         }
 
         public static void OnLevelLoaded()
         {
-            for (int i = 0; i < N; i++) items[i] = new Item();
+            Reset();
             clothLogic = helmetLogic = null;
             player = null;
-            found = false;
+            found = fileRead = false;
+            filePoses.Clear();
+            nextList = nextSave = 0f;
+            swapKind = -1;
             step = seatStep = 0; testLog = 0; testSeat = null;
             // Tout de suite (avant que le jeu ne range sous PLAYER un vetement porte a la sauvegarde), puis 5 s plus
             // tard pour ce qui manquerait.
@@ -66,7 +86,7 @@ namespace MWCoop
         static void Find()
         {
             found = true;
-            for (int i = 0; i < N; i++)
+            for (int i = 0; i < NBase; i++)
             {
                 if (items[i].Go != null) continue;
                 items[i].Go = Game.FindAny(Paths[i]);
@@ -96,24 +116,163 @@ namespace MWCoop
         // Cle fixe des vetements pour Props (ils changent de parent : EQUIPMENTS, PLAYER, racine de la scene).
         public static string KeyOf(GameObject go)
         {
-            for (int i = 0; i < N; i++) if (items[i].Go != null && items[i].Go == go) return "w:vetement:" + Names[i];
+            foreach (Item it in items) if (it.Go != null && it.Go == go) return it.Key;
             return null;
         }
 
         // Objet du vetement i (0 veste, 1 combinaison, 2 casque), pour l'avatar (copie du casque).
-        public static GameObject ItemObject(int i) { return i >= 0 && i < N ? items[i].Go : null; }
+        public static GameObject ItemObject(int i) { return i >= 0 && i < items.Count ? items[i].Go : null; }
 
-        // Bits des vetements portes ici (etat du joueur).
+        // Bits des genres de vetements portes ici (etat du joueur, pour l'avatar).
         public static int LocalFlags
         {
             get
             {
                 int f = 0;
-                for (int i = 0; i < N; i++) if (items[i].LocalWorn) f |= Bits[i];
+                foreach (Item it in items) if (it.LocalWorn) f |= Bits[it.Kind];
                 return f;
             }
         }
 
+        // ---------------------------------------------------------------- copies (une paire par joueur)
+        // Point de la paire k (>= 2) dans la maison du debut de partie : couloir, pres de l'armoire (a cote des sacs de
+        // couchage) ; posees un peu en l'air, elles tombent au sol.
+        static bool SpawnPoint(int kind, int k, out Vector3 at)
+        {
+            at = Vector3.zero;
+            GameObject home = Game.FindAny("HOMENEW");
+            if (home == null) return false;
+            at = home.transform.position + new Vector3(0.45f + kind * 0.3f, 0.2f, 1.7f + (k - 2) * 0.45f);   // (racine (-1285,6 ; 1,5 ; 1078,8))
+            RaycastHit hit;
+            if (Physics.Raycast(at + Vector3.up * 0.5f, Vector3.down, out hit, 3f, ~(1 << 2))) at = hit.point + Vector3.up * 0.15f;
+            return true;
+        }
+
+        static Item MakeCopy(int kind, int k, Vector3 pos, Quaternion rot)
+        {
+            GameObject src = items[kind].Go;
+            if (src == null) return null;
+            var go = (GameObject)Object.Instantiate(src, pos, rot);
+            go.name = CopyNames[kind] + " " + k + "(itemx)";   // (« (itemx) » : la main du jeu le prend comme un objet)
+            go.transform.parent = null;
+            go.transform.position = pos; go.transform.rotation = rot;
+            go.transform.localScale = Vector3.one;   // (comme le chargement du jeu : SetScale 1)
+            go.layer = 19; go.tag = "PART";
+            go.SetActive(true);
+            Rigidbody rb = go.GetComponent<Rigidbody>();
+            if (rb != null) { rb.isKinematic = false; rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+            PlayMakerFSM use = Game.FsmOn(go, "Use");
+            if (use != null)
+            {
+                FsmGameObject o = use.FsmVariables.FindFsmGameObject("Owner"); if (o != null) o.Value = go;
+                FsmString up = use.FsmVariables.FindFsmString("UTPos"); if (up != null) up.Value = UtPos[kind] + "MWC" + k;
+                FsmString us = use.FsmVariables.FindFsmString("UTState"); if (us != null) us.Value = UtState[kind] + "MWC" + k;
+                FsmInt st = use.FsmVariables.FindFsmInt("State"); if (st != null) st.Value = 0;
+                FsmBool ld = use.FsmVariables.FindFsmBool("Loaded"); if (ld != null) ld.Value = true;
+            }
+            var it = new Item { Go = go, Kind = kind, Name = Kinds[kind] + " " + k, Key = "w:vetement:" + Kinds[kind] + k };
+            items.Add(it);
+            Props.SoonScan();
+            return it;
+        }
+
+        // Paires jusqu'a n (poses : veste, rotation, combinaison, rotation par paire k >= 2, sinon point de la maison).
+        static bool EnsurePairs(int n, List<Vector3[]> poses, string why)
+        {
+            if (items[0].Go == null || items[1].Go == null) return false;
+            int was = pairs;
+            while (pairs < n)
+            {
+                int k = pairs + 1;
+                Vector3[] ps = poses != null && k - 2 < poses.Count ? poses[k - 2] : null;
+                for (int kind = 0; kind < 2; kind++)
+                {
+                    Vector3 at; Quaternion q = Quaternion.identity;
+                    if (ps != null) { at = ps[kind * 2]; q = Quaternion.Euler(ps[kind * 2 + 1]); }
+                    else if (!SpawnPoint(kind, k, out at)) { Transform pl = Game.PlayerT; if (pl == null) return false; at = pl.position + pl.forward * 1.2f + pl.right * (kind - 0.5f) * 0.6f + Vector3.up * 0.3f; }
+                    if (MakeCopy(kind, k, at, q) == null) return false;
+                }
+                pairs = k;
+            }
+            if (pairs > was) Log.Info("vetements : " + pairs + " vestes et combinaisons (" + why + ")");
+            return true;
+        }
+
+        static string FilePath { get { return Path.Combine(Application.persistentDataPath, "MWCoop-vetements.txt"); } }
+
+        static void LoadFile()
+        {
+            fileRead = true;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            try
+            {
+                if (!File.Exists(FilePath)) return;
+                foreach (string l in File.ReadAllLines(FilePath))
+                {
+                    string[] c = l.Split(';');
+                    if (c.Length < 12) continue;
+                    var v = new Vector3[4];
+                    for (int j = 0; j < 4; j++) v[j] = new Vector3(float.Parse(c[j * 3], ci), float.Parse(c[j * 3 + 1], ci), float.Parse(c[j * 3 + 2], ci));
+                    filePoses.Add(v);
+                }
+            }
+            catch (System.Exception e) { Log.Warn("vetements : lecture " + e.Message); }
+        }
+
+        // Pose gardee d'une copie : la ou elle est, sauf portee ou cachee (porte par quelqu'un) : son point de la maison.
+        static void PoseOf(Item it, int k, out Vector3 p, out Vector3 e)
+        {
+            Transform t = it.Go != null ? it.Go.transform : null;
+            bool away = t == null || it.LocalWorn || it.Hidden || !it.Go.activeInHierarchy || (player != null && t.IsChildOf(player));
+            if (!away) { p = t.position; e = t.rotation.eulerAngles; return; }
+            e = Vector3.zero;
+            if (!SpawnPoint(it.Kind, k, out p)) p = t != null ? t.position : Vector3.zero;
+        }
+
+        static void SaveFile()
+        {
+            if (!Session.IsHost || pairs < 2) return;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new System.Text.StringBuilder();
+            for (int k = 2; k <= pairs; k++)
+            {
+                for (int kind = 0; kind < 2; kind++)
+                {
+                    Vector3 p, e;
+                    PoseOf(items[NBase + (k - 2) * 2 + kind], k, out p, out e);
+                    foreach (float f in new[] { p.x, p.y, p.z, e.x, e.y, e.z }) sb.Append(f.ToString("R", ci)).Append(';');
+                }
+                sb.Length--; sb.Append('\n');
+            }
+            try { File.WriteAllText(FilePath, sb.ToString()); } catch (System.Exception ex) { Log.Warn("vetements : ecriture " + ex.Message); }
+        }
+
+        static void SendList()
+        {
+            if (Session.RemoteCount == 0 || pairs < 2) return;
+            var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@vet").U8(pairs);
+            for (int k = 2; k <= pairs; k++)
+                for (int kind = 0; kind < 2; kind++)
+                {
+                    Item it = items[NBase + (k - 2) * 2 + kind];
+                    Vector3 p, e;
+                    PoseOf(it, k, out p, out e);
+                    w.Vec(p).Vec(e);
+                }
+            Session.SendAll(w, true);
+        }
+
+        // Invite : liste de l'hote (@vet) -- les copies qui manquent ici, a la pose de l'hote.
+        public static void OnList(NetReader r)
+        {
+            int n = r.U8();
+            var poses = new List<Vector3[]>();
+            for (int k = 2; k <= n; k++) poses.Add(new[] { r.Vec(), r.Vec(), r.Vec(), r.Vec() });
+            if (Session.IsHost || n <= pairs) return;
+            if (!EnsurePairs(n, poses, "liste de l'hote")) Log.Info("vetements : liste de l'hote (" + n + " paires) en attente, veste ou combinaison du jeu pas encore trouvee");
+        }
+
+        // ---------------------------------------------------------------- boucle
         public static void Update()
         {
             if (findAt < 0 || !PlayerSync.InGame) return;
@@ -122,7 +281,16 @@ namespace MWCoop
             if (now < nextPoll) return;
             nextPoll = now + 0.25f;
             if (found && player == null) { found = false; findAt = now; }   // PLAYER detruit : recherche a la prochaine image
-            for (int i = 0; i < N; i++)
+            if (Session.Active && Session.IsHost && items[0].Go != null && items[1].Go != null)
+            {
+                if (!fileRead) LoadFile();
+                int want = Mathf.Max(Session.RemoteCount + 1, filePoses.Count + 1);
+                if (want > pairs && EnsurePairs(want, filePoses, filePoses.Count + 1 >= want ? "reprises de la sauvegarde" : "une par joueur")) { SaveFile(); nextList = 0f; }
+                if (now >= nextList) { nextList = now + 10f; SendList(); }
+                if (now >= nextSave) { nextSave = now + 60f; SaveFile(); }
+            }
+            if (swapKind >= 0 && now >= swapAt) Swap(now);
+            for (int i = 0; i < items.Count; i++)
             {
                 Item it = items[i];
                 GameObject go = it.Go;
@@ -134,68 +302,61 @@ namespace MWCoop
                 {
                     it.LocalWorn = worn;
                     if (worn) it.Hidden = false;   // (cache ici, puis mis par ce joueur-ci : impossible, mais propre)
-                    if (Session.Active)
-                        Session.SendAll(new NetWriter(Msg.Wear).U8(Session.LocalId).U8(i).Bool(worn).Vec(t.position).Quat(t.rotation), true);
-                    Log.Info("vetements : " + Names[i] + (worn ? " mis(e)" : " enleve(e) en " + t.position.ToString("F1")));
+                    if (Session.Active) { SendWear(i, worn, t); it.SentAt = now; }
+                    Log.Info("vetements : " + it.Name + (worn ? " mis(e)" : " enleve(e) en " + t.position.ToString("F1")));
                 }
+                else if (worn && Session.Active && now - it.SentAt > 5f) { SendWear(i, true, t); it.SentAt = now; }   // (redit : arrivee, message perdu)
                 if (!Session.Active) continue;
-                int wearer = RemoteWearer(it, i, now);
+                int wearer = RemoteWearer(it, now);
                 if (worn)
                 {
-                    if (wearer >= 0 && wearer < Session.LocalId) Yield(it, i, wearer, now);
+                    if (wearer >= 0 && wearer < Session.LocalId) Yield(it, wearer, now);
                     continue;
                 }
                 if (wearer >= 0)
                 {
-                    it.LastWearer = wearer; it.FreeSince = -1f;
-                    if (!it.Hidden) Hide(it, i, wearer, now);
+                    it.LastWearer = wearer;
+                    if (!it.Hidden) Hide(it, wearer, now);
                 }
                 else if (it.Hidden)
                 {
-                    // Plus porte : a l'endroit ou celui qui le portait l'a enleve (son message fiable) ; l'etat du
-                    // joueur peut arriver avant ce message : 1,5 s de grace, sauf s'il est parti (a sa place d'avant).
+                    // Plus porte : a l'endroit ou celui qui le portait l'a enleve (son message fiable), sinon a sa place d'avant.
                     bool off = it.OffWho == it.LastWearer && it.OffAt >= it.HidAt;
-                    bool gone = it.LastWearer < 0 || !Session.Players.ContainsKey(it.LastWearer);
-                    if (it.FreeSince < 0f) it.FreeSince = now;
-                    if (off || gone || now - it.FreeSince > 1.5f) Unhide(it, i, off);
+                    Unhide(it, off);
                 }
             }
         }
 
-        // Joueur distant qui porte le vetement i (le plus petit numero), -1 : personne. Le message fiable fait foi
-        // 1 s (l'etat du joueur, non fiable, peut arriver avant ou apres lui).
-        static int RemoteWearer(Item it, int i, float now)
+        static void SendWear(int i, bool worn, Transform t)
         {
-            bool fresh = it.MsgWho >= 0 && now - it.MsgAt < 1f;
-            int best = -1;
-            foreach (PlayerInfo pi in Session.Players.Values)
-            {
-                if (pi.Local) continue;
-                bool on;
-                if (fresh && pi.Id == it.MsgWho) on = it.MsgWorn;
-                else on = pi.Level == 1 && now - pi.StateTime < 3f && (pi.State.Flags & Bits[i]) != 0;
-                if (on && (best < 0 || pi.Id < best)) best = pi.Id;
-            }
-            return best;
+            Session.SendAll(new NetWriter(Msg.Wear).U8(Session.LocalId).U8(i).Bool(worn).Vec(t.position).Quat(t.rotation), true);
         }
 
-        static void Hide(Item it, int i, int wearer, float now)
+        // Joueur distant qui porte le vetement, -1 : personne (message de moins de 15 s, joueur toujours la).
+        static int RemoteWearer(Item it, float now)
+        {
+            if (it.WornBy < 0 || it.WornBy == Session.LocalId) return -1;
+            if (!Session.Players.ContainsKey(it.WornBy) || now - it.WornAt > 15f) { it.WornBy = -1; return -1; }
+            return it.WornBy;
+        }
+
+        static void Hide(Item it, int wearer, float now)
         {
             Transform t = it.Go.transform;
             if (player != null && t.IsChildOf(player))
             {
                 // Tenu en main (ou porte) ici, meme assis dans une voiture : on attend qu'il soit lache.
-                if (now - it.HeldLog > 10f) { it.HeldLog = now; Log.Info("vetements : " + Names[i] + " porte(e) par #" + wearer + " mais tenu(e) ici"); }
+                if (now - it.HeldLog > 10f) { it.HeldLog = now; Log.Info("vetements : " + it.Name + " porte(e) par #" + wearer + " mais tenu(e) ici"); }
                 return;
             }
             Props.Release(it.Go);
             it.HidParent = t.parent; it.HidPos = t.position; it.HidRot = t.rotation; it.HidAt = now; it.HidActive = it.Go.activeSelf;
             it.Go.SetActive(false);
             it.Hidden = true;
-            Log.Info("vetements : " + Names[i] + " porte(e) par #" + wearer + ", cache(e) ici");
+            Log.Info("vetements : " + it.Name + " porte(e) par #" + wearer + ", cache(e) ici");
         }
 
-        static void Unhide(Item it, int i, bool off)
+        static void Unhide(Item it, bool off)
         {
             Transform t = it.Go.transform;
             if (off) { t.parent = null; t.position = it.OffPos; t.rotation = it.OffRot; }
@@ -205,22 +366,44 @@ namespace MWCoop
             if (rb != null && !rb.isKinematic) { rb.velocity = Vector3.zero; rb.WakeUp(); }
             it.Hidden = false;
             Props.SoonScan();
-            Log.Info("vetements : " + Names[i] + (off ? " enleve(e) par l'autre, reapparait en " : " plus porte(e), reapparait a sa place en ") + t.position.ToString("F1"));
+            Log.Info("vetements : " + it.Name + (off ? " enleve(e) par l'autre, reapparait en " : " plus porte(e), reapparait a sa place en ") + t.position.ToString("F1"));
         }
 
         // Porte ici ET par un joueur de plus petit numero : on l'enleve (etat stable de l'automate du jeu seulement,
         // pas en pleine animation), comme le joueur en regardant en bas ; il sera ensuite cache ici.
-        static void Yield(Item it, int i, int wearer, float now)
+        static void Yield(Item it, int wearer, float now)
         {
             if (now - it.YieldAt < 5f) return;
-            PlayMakerFSM logic = i == 2 ? helmetLogic : clothLogic;
+            PlayMakerFSM logic = it.Kind == 2 ? helmetLogic : clothLogic;
             if (logic == null) return;
             string s = logic.ActiveStateName;
             if (s != "State 1" && s != "Helmet ON") return;
-            if (GoVar(logic, i == 2 ? "Helmet" : "Cloth") != it.Go) return;
+            if (GoVar(logic, it.Kind == 2 ? "Helmet" : "Cloth") != it.Go) return;
             it.YieldAt = now;
-            Log.Info("vetements : " + Names[i] + " deja porte(e) par #" + wearer + " (numero plus petit) : enleve(e) ici");
+            Log.Info("vetements : " + it.Name + " deja porte(e) par #" + wearer + " (numero plus petit) : enleve(e) ici");
             Game.SetState(logic, "Anim off1");
+            // Veste ou combinaison : une copie libre est mise a la place une fois celle-ci enlevee (animation : ~1,5 s). Avant :
+            // l'invite qui chargeait la partie en la portant (sauvegarde de l'hote) la voyait s'enlever toute seule (retours de
+            // Hall0wMan et d'OpNoob, 11/10).
+            if (it.Kind < 2) { swapKind = it.Kind; swapAt = now + 2f; swapUntil = now + 30f; }
+        }
+
+        static void Swap(float now)
+        {
+            if (now > swapUntil) { Log.Info("vetements : pas de " + Kinds[swapKind] + " libre a mettre a la place"); swapKind = -1; return; }
+            swapAt = now + 1f;
+            if (clothLogic == null || clothLogic.ActiveStateName != "Wait") return;   // (animation pas finie)
+            foreach (Item c in items)
+            {
+                if (c.Kind != swapKind || c.Go == null || c.LocalWorn || c.Hidden || !c.Go.activeInHierarchy || RemoteWearer(c, now) >= 0) continue;
+                if (player != null && c.Go.transform.IsChildOf(player)) continue;
+                PlayMakerFSM use = Game.FsmOn(c.Go, "Use");
+                if (use == null) continue;
+                Game.SetState(use, "State 1");   // (mains libres ? -> Wear -> EQUIP a la logique du joueur)
+                Log.Info("vetements : " + c.Name + " mis(e) a la place");
+                swapKind = -1;
+                return;
+            }
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -232,33 +415,40 @@ namespace MWCoop
             Vector3 pos = r.Vec();
             Quaternion rot = r.Quat();
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Wear).U8(who).U8(i).Bool(worn).Vec(pos).Quat(rot), true, who);
-            if (i < 0 || i >= N) return;
+            if (i < 0 || i >= items.Count) return;   // (copie pas encore la : redit dans 5 s)
             Item it = items[i];
             float now = Time.realtimeSinceStartup;
-            it.MsgWho = who; it.MsgWorn = worn; it.MsgAt = now;
-            if (!worn) { it.OffWho = who; it.OffPos = pos; it.OffRot = rot; it.OffAt = now; }
-            Log.Info("vetements de #" + who + " : " + Names[i] + (worn ? " mis(e)" : " enleve(e) en " + pos.ToString("F1")));
+            bool was = it.WornBy == who;
+            if (worn) { it.WornBy = who; it.WornAt = now; }
+            else
+            {
+                if (it.WornBy == who) it.WornBy = -1;
+                it.OffWho = who; it.OffPos = pos; it.OffRot = rot; it.OffAt = now;
+            }
+            if (worn != was) Log.Info("vetements de #" + who + " : " + it.Name + (worn ? " mis(e)" : " enleve(e) en " + pos.ToString("F1")));
         }
 
         // Essais : etat d'un vetement ici (objet, porte, cache) et ce que montrent les avatars.
         public static string State(int i)
         {
-            if (i < 0 || i >= N) return "?";
+            if (i < 0 || i >= items.Count) return "vetement " + i + " absent (" + items.Count + " ici)";
             Item it = items[i];
-            var sb = new System.Text.StringBuilder(Names[i]);
+            var sb = new System.Text.StringBuilder(it.Name);
             if (it.Go == null) sb.Append(" absent(e)");
             else sb.Append(it.Go.activeSelf ? " visible en " + it.Go.transform.position.ToString("F2") : " inactif(ve)").Append(", sous ").Append(it.Go.transform.root.name);
             sb.Append(", porte(e) ici ").Append(it.LocalWorn).Append(", cache(e) ").Append(it.Hidden)
-              .Append(", par #").Append(Session.Active ? RemoteWearer(it, i, Time.realtimeSinceStartup) : -1);
+              .Append(", par #").Append(Session.Active ? RemoteWearer(it, Time.realtimeSinceStartup) : -1);
             foreach (Avatar a in PlayerSync.Avatars) sb.Append(" ; avatar ").Append(a.ClothesState());
             return sb.ToString();
         }
 
         // veste ([Test] Autotest=veste) : [Test] TestPorteur (invite par defaut, ou hote) met [Test] TestVetement
-        // (0 veste, 1 combinaison, 2 casque) a 40 s par l'automate Use de l'objet (comme un clic), l'enleve a 60 s
-        // (logique du jeu, comme en regardant en bas). Les deux notent toutes les 2 s de 30 a 75 s : chez l'autre,
-        // l'objet est cache de ~40 a ~60 s puis reapparait la ou il a ete enleve ; l'avatar montre la teinte (veste,
-        // combinaison) ou le casque pendant ce temps.
+        // (0 veste, 1 combinaison, 2 casque, 3 veste 2, 4 combinaison 2...) a 40 s par l'automate Use de l'objet (comme un
+        // clic), l'enleve a 60 s (logique du jeu, comme en regardant en bas). Les deux notent toutes les 2 s de 30 a 75 s :
+        // chez l'autre, l'objet est cache de ~40 a ~60 s puis reapparait la ou il a ete enleve ; l'avatar montre la teinte
+        // (veste, combinaison) ou le casque pendant ce temps.
+        // [Test] TestVetementAutre=j : l'autre joueur met le vetement j aux memes moments (TestVetementAutreA=s : le met a s) (deux vestes portees a la fois :
+        // TestVetement=0, TestVetementAutre=3) ; chacun note aussi j.
         // [Test] TestVetementAssis=1 : de 45 a 55 s, PLAYER du porteur est range sous un objet vide (comme au volant ou
         // passager : DriveTrigger 'Reset view', Seats) ; le vetement doit rester porte (pas de "enleve(e)" ici, toujours
         // cache chez l'autre), State montre "sous MWCoop-EssaiSiege".
@@ -270,8 +460,11 @@ namespace MWCoop
         {
             if (mode != "veste") return;
             bool wearer = Session.IsHost == (Config.Get("Test", "TestPorteur", "invite") == "hote");
-            int i = Mathf.Clamp(Config.GetInt("Test", "TestVetement", 0), 0, N - 1);
-            if (wearer && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + TestWear(i, true)); }
+            int i = Config.GetInt("Test", "TestVetement", 0);
+            int other = Config.GetInt("Test", "TestVetementAutre", -1);
+            int mine = wearer ? i : other;
+            float at = wearer ? 40f : Config.GetInt("Test", "TestVetementAutreA", 40);   // (TestVetementAutreA : moment de l'autre, s)
+            if (mine >= 0 && t > at && step == 0) { step = 1; Log.Info("autotest : " + TestWear(mine, true)); }
             if (wearer && Config.GetInt("Test", "TestVetementAssis", 0) != 0)
             {
                 if (t > 45f && seatStep == 0 && player != null)
@@ -291,27 +484,34 @@ namespace MWCoop
                     Log.Info("autotest : vetements, PLAYER rendu a la racine");
                 }
             }
-            if (wearer && t > 60f && step == 1) { step = 2; Log.Info("autotest : " + TestWear(i, false)); }
-            if (t > 30f && t < 75f && t - testLog >= 2f) { testLog = t; Log.Info("autotest : vetements, " + State(i)); }
+            if (mine >= 0 && t > 60f && step == 1) { step = 2; Log.Info("autotest : " + TestWear(mine, false)); }
+            if (t > 30f && t < 75f && t - testLog >= 2f)
+            {
+                testLog = t;
+                Log.Info("autotest : vetements, " + State(i) + (other >= 0 ? " | " + State(other) : "") + " | " + pairs + " paires");
+            }
         }
 
         static string TestWear(int i, bool on)
         {
+            if (i < 0 || i >= items.Count) return "vetement " + i + " absent (" + items.Count + " ici)";
             Item it = items[i];
-            if (it.Go == null) return Names[i] + " absent(e)";
+            if (it.Go == null) return it.Name + " absent(e)";
             if (on)
             {
                 PlayMakerFSM use = Game.FsmOn(it.Go, "Use");
-                if (use == null || !it.Go.activeInHierarchy) return Names[i] + " : automate Use absent ou objet inactif";
+                // [Test] TestForcer=1 : meme cache ici (porte par un autre), comme le chargement d'une sauvegarde ou il est porte.
+                if (use != null && it.Hidden && Config.GetInt("Test", "TestForcer", 0) != 0) { it.Go.SetActive(true); it.Hidden = false; }
+                if (use == null || !it.Go.activeInHierarchy) return it.Name + " : automate Use absent ou objet inactif";
                 // 'State 1' : mains libres ? -> Wear (veste, combinaison) / State 3 (casque) -> EQUIP a la logique du joueur.
                 Game.SetState(use, "State 1");
-                return Names[i] + " mis(e) par Use -> " + use.ActiveStateName;
+                return it.Name + " mis(e) par Use -> " + use.ActiveStateName;
             }
-            PlayMakerFSM logic = i == 2 ? helmetLogic : clothLogic;
-            if (logic == null) return Names[i] + " : logique du joueur absente";
+            PlayMakerFSM logic = it.Kind == 2 ? helmetLogic : clothLogic;
+            if (logic == null) return it.Name + " : logique du joueur absente";
             string before = logic.ActiveStateName;
             Game.SetState(logic, "Anim off1");
-            return Names[i] + " enleve(e) : " + before + " -> " + logic.ActiveStateName;
+            return it.Name + " enleve(e) : " + before + " -> " + logic.ActiveStateName;
         }
     }
 }
