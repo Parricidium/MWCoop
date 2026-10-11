@@ -5,10 +5,12 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Argent (demande de JD) : chaque joueur a son porte-monnaie (achats chacun de son cote), mais
-    // tout ce qui RENTRE (paie, ventes, recompenses) est recu par tous. Globales PlayerMoney (liquide)
+    // Argent (demande de JD) : chaque joueur a son porte-monnaie (achats chacun de son cote) et, depuis 0.75.42 (JD,
+    // 11/10, apres le retour de gamereggo), chacun garde sa paie : ce qui RENTRE chez un joueur (paie, ventes,
+    // recompenses) reste a lui. Avant, tout revenu etait recu par tous. Globales PlayerMoney (liquide)
     // et PlayerBankAccount (banque), comparees deux fois par seconde :
-    //  - une hausse de la richesse totale est un revenu, envoye aux autres (sur le meme compte) ;
+    //  - une hausse de la richesse totale est un revenu : garde par ce joueur (plus envoye) ; celle qu'un boulot d'un
+    //    autre, rejoue ici, verse a ce joueur n'est pas a lui : retiree ;
     //  - une baisse est une depense : elle reste locale ;
     //  - liquide <-> banque (distributeur, depot) est un transfert : rien a envoyer.
     //  - l'invite recoit la sauvegarde de l'hote a chaque connexion : son porte-monnaie est garde a
@@ -26,10 +28,8 @@ namespace MWCoop
     //    rejoue plus le clic d'un autre, qui vidait la sienne). Voir Trigs et Puces.
     public static class Wallet
     {
-        // Boulots rejoues (Jobs) : la paie qu'ils versent ici n'est pas renvoyee, et elle « consomme »
-        // le meme revenu annonce par le joueur qui a vraiment fait le boulot (pas de double paie).
+        // Boulots rejoues (Jobs) : la paie qu'ils versent ici est celle d'un autre joueur, retiree.
         static float suppressUntil;
-        static readonly System.Collections.Generic.List<KeyValuePair<float, float>> suppressed = new System.Collections.Generic.List<KeyValuePair<float, float>>();
 
         public static void Suppress(float seconds) { suppressUntil = Mathf.Max(suppressUntil, Time.realtimeSinceStartup + seconds); }
 
@@ -39,19 +39,19 @@ namespace MWCoop
 
         // Versements du monde, reperes par leur etat de paiement (crochet au debut et a la fin de l'etat :
         // ecart exact de liquide et de banque, hors du releve ordinaire) :
-        //  - partages (allocation, aide au logement, paies hebdomadaires des boulots) : chaque joueur envoie
+        //  - partages (allocation, aide au logement) : chaque joueur envoie
         //    le montant que sa logique a verse (avec son numero de source) ; chacun garde, UNE fois, le plus
         //    haut montant vu pour ce versement pendant PayWindow : copie locale en trop retiree (celle de
-        //    l'autre deja la, ou etat de paie rejoue une 2e fois par Jobs), ecart complete. Le plus haut :
-        //    celui qui a vraiment fait le boulot (taxi conduit, publicites distribuees) a toute la progression ;
-        //  - personnels (interets) : calcules sur le solde de chacun, gardes pour soi, jamais envoyes.
+        //    l'autre deja la, ou etat de paie rejoue une 2e fois par Jobs), ecart complete ;
+        //  - personnels (interets, paies des boulots depuis 0.75.42) : calcules chez chacun, gardes pour soi, jamais envoyes ;
+        //    une paie de boulot versee par un etat rejoue (boulot d'un autre) est retiree.
         // L'ordre de la liste est le numero de source envoye : le meme chez tous (meme version).
         class Pay
         {
             public readonly string Path, Fsm, State, Label;
             public readonly bool Shared, Own;                           // Own : enveloppe reservee a ce module (Claim)
             public PlayMakerFSM F;
-            public bool Hooked, Open;
+            public bool Hooked, Open, Replayed;                         // Replayed : etat entre pendant un rejeu
             public float C0, B0;                                        // releve au debut de l'etat
             public float At = -100, HaveC, HaveB, BestC, BestB, Sent;   // versement en cours : deja en poche, plus haut vu, envoye
             public Pay(string path, string fsm, string state, string label, bool shared, bool own = false) { Path = path; Fsm = fsm; State = state; Label = label; Shared = shared; Own = own; }
@@ -60,10 +60,12 @@ namespace MWCoop
         {
             new Pay("Systems/Expenses", "Kela", "Pay", "allocation chomage", true),                       // vendredi
             new Pay("Systems/Expenses", "Livingsupport", "Asumistuki", "aide au logement", true),          // vendredi
-            new Pay("JOBS/FACTORY", "PlayerData", "Base salary", "paie de l'usine", true),                 // chaque semaine
-            new Pay("JOBS/FACTORY", "PlayerData", "High salary", "paie de l'usine (heures sup)", true),
-            new Pay("JOBS/ADs", "Data", "Bank transfer 2", "paie des publicites", true),                   // mardi et vendredi
-            new Pay("JOBS/TAXIJOB/MACHTWAGEN/TaxiFunctions", "Payments", "Payment", "paie du taxi", true),  // mercredi
+            // Paies des boulots (0.75.42, chacun garde sa paie) : celle que la logique de CE joueur verse, d'apres SON
+            // travail ; plus completee par celle des autres (avant : chacun recevait la plus haute).
+            new Pay("JOBS/FACTORY", "PlayerData", "Base salary", "paie de l'usine", false),                // chaque semaine
+            new Pay("JOBS/FACTORY", "PlayerData", "High salary", "paie de l'usine (heures sup)", false),
+            new Pay("JOBS/ADs", "Data", "Bank transfer 2", "paie des publicites", false),                  // mardi et vendredi
+            new Pay("JOBS/TAXIJOB/MACHTWAGEN/TaxiFunctions", "Payments", "Payment", "paie du taxi", false), // mercredi
             new Pay("Systems/BankAccount", "Data", "Interest", "interets", false),                         // chaque jour
             // Gains d'un objet mis par ce joueur (voir Trigs) : touches par lui seul, gardes pour soi.
             new Pay("REPAIRSHOP/LOD/Office/Fleetari/ScrapMoney", "Use", "State 1", "rachat de ferraille", false, true),
@@ -264,7 +266,7 @@ namespace MWCoop
             testStep = 0; remoteSince = -1;
             UnmuteTrigs();
             foreach (Trig g in Trigs) { g.F = null; g.Hooked = false; }
-            envs.Clear(); envIncomeUntil = 0; recentIn.Clear();
+            envs.Clear(); envIncomeUntil = 0;
             claimAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 4f : -1;
             saleLogic = saleSell = null; saleHooked = saleOpen = sellOffLogged = false; sellers.Clear();
             trigLocal = trigOther = 0;
@@ -307,7 +309,7 @@ namespace MWCoop
         static void PayStart(Pay p)
         {
             if (!ready || !Session.Active) return;
-            p.C0 = cash.Value; p.B0 = bank.Value; p.Open = true;
+            p.C0 = cash.Value; p.B0 = bank.Value; p.Open = true; p.Replayed = Replay.Depth > 0;
         }
 
         // Fin de l'etat (apres ses actions ; sinon a la mise a jour suivante) : l'ecart est le versement.
@@ -323,6 +325,13 @@ namespace MWCoop
             dC = Mathf.Max(dC, 0f); dB = Mathf.Max(dB, 0f);
             if (dC < 0.005f && dB < 0.005f) return;   // rien de verse
             lastCash += dC; lastBank += dB;            // hors du releve ordinaire : jamais renvoye comme un revenu
+            if (!p.Shared && p.Replayed && System.Array.IndexOf(Pays, p) < FirstGain && System.Array.IndexOf(Pays, p) >= 2 && Session.RemoteCount > 0)
+            {
+                // Etat de paie d'un boulot rejoue ici depuis un autre joueur : sa paie, pas la notre.
+                Add(-dC, -dB);
+                Log.Info("argent : " + p.Label + " +" + (dC + dB) + " verse par un rejeu (boulot d'un autre joueur) : retire");
+                return;
+            }
             if (!p.Shared)
             {
                 bool gain = System.Array.IndexOf(Pays, p) >= FirstGain;
@@ -711,28 +720,17 @@ namespace MWCoop
             lastCash = cash.Value; lastBank = bank.Value;
             if (inC < 0.005f && inB < 0.005f) return;
             float nowU = Time.realtimeSinceStartup;
-            if (nowU < suppressUntil && nowU >= envIncomeUntil)
+            if (Machines.KeepsMoney) { Log.Info("argent : gain " + (inC + inB) + " d'une machine a jeu, garde pour soi"); return; }
+            if (ModCheatbox.MenuOpen()) { Log.Info("argent : +" + (inC + inB) + " tape dans le menu de Cheatbox++, garde pour soi"); return; }
+            if (nowU < suppressUntil && nowU >= envIncomeUntil && Session.RemoteCount > 0)
             {
-                // Le meme revenu deja recu de celui qui a fait le boulot (son annonce arrivee AVANT que le boulot
-                // rejoue ici ne paie) : cette copie est en trop, retiree. Sinon gardee, et l'annonce a venir l'usera.
-                recentIn.RemoveAll(x => nowU - x.Key > 20f);
-                int got = recentIn.FindIndex(x => Mathf.Abs(x.Value - (inC + inB)) < 0.5f);
-                if (got >= 0)
-                {
-                    recentIn.RemoveAt(got);
-                    cash.Value -= inC; bank.Value -= inB;
-                    lastCash = cash.Value; lastBank = bank.Value;
-                    Log.Info("argent : revenu " + (inC + inB) + " du boulot rejoue deja recu de celui qui l'a fait : retire");
-                    return;
-                }
-                suppressed.Add(new KeyValuePair<float, float>(nowU, inC + inB));
-                Log.Info("argent : revenu " + (inC + inB) + " venu d'un boulot rejoue, garde pour soi");
+                // Paie versee ici par le boulot d'un autre joueur, rejoue (Jobs) : la sienne, pas la notre.
+                cash.Value -= inC; bank.Value -= inB;
+                lastCash = cash.Value; lastBank = bank.Value;
+                Log.Info("argent : revenu " + (inC + inB) + " venu d'un boulot rejoue (celui d'un autre joueur) : retire");
                 return;
             }
-            if (Machines.KeepsMoney) { Log.Info("argent : gain " + (inC + inB) + " d'une machine a jeu, garde pour soi"); return; }   // encaissement, gain pris : pas un revenu a partager
-            if (ModCheatbox.MenuOpen()) { Log.Info("argent : +" + (inC + inB) + " tape dans le menu de Cheatbox++, garde pour soi"); return; }   // argent tape dans la triche : a soi seul
-            Log.Info("argent : revenu " + inC + " (liquide) + " + inB + " (banque), partage");
-            Session.SendAll(new NetWriter(Msg.Income).U8(Session.LocalId).F32(inC).F32(inB), true);
+            Log.Info("argent : revenu " + inC + " (liquide) + " + inB + " (banque), garde pour soi (chacun sa paie)");
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -751,15 +749,8 @@ namespace MWCoop
             PlayerInfo pi;
             string name = Session.Players.TryGetValue(who, out pi) ? pi.Name : "?";
             if (src > 0) { if (src <= Pays.Length && Pays[src - 1].Shared) WorldIn(Pays[src - 1], inC, inB, name); return; }
-            // Deja recu par le boulot rejoue ici ?
-            suppressed.RemoveAll(s => Time.realtimeSinceStartup - s.Key > 20f);
-            int hit = suppressed.FindIndex(s => Mathf.Abs(s.Value - (inC + inB)) < 0.5f);
-            if (hit >= 0) { suppressed.RemoveAt(hit); Log.Info("argent : revenu " + (inC + inB) + " deja verse par le boulot rejoue"); return; }
-            cash.Value += inC; bank.Value += inB;
-            lastCash += inC; lastBank += inB;   // pas de renvoi
-            recentIn.Add(new KeyValuePair<float, float>(Time.realtimeSinceStartup, inC + inB));
-            Hud.Toast("+" + Mathf.RoundToInt(inC + inB) + Lang.T(" mk (revenu de ", " mk (income from ") + name + ")");
-            Log.Info("argent : +" + inC + " liquide, +" + inB + " banque, de " + name);
+            // Revenu d'un joueur (versions avant 0.75.42) : a lui, chacun sa paie.
+            Log.Info("argent : revenu " + (inC + inB) + " annonce par " + name + " : a lui (chacun sa paie), rien ici");
         }
 
         // ---------------------------------------------------------------- enveloppes de paie
@@ -771,11 +762,10 @@ namespace MWCoop
         // restait pleine chez l'autre, qui la prenait aussi, et chaque prise etant un revenu partage, chacun touchait la
         // paie DEUX fois. Reservees ici des le chargement (inactives comprises) : prise par un joueur (entree en "State 3"),
         // elle est retiree chez les autres ("State 3" : ni argent ni son), meme si leur copie n'apparait qu'apres (60 s).
-        // La paie reste un revenu ordinaire du preneur (Update : jamais pris pour celle d'un boulot rejoue), recu une
-        // fois par chacun. Pas l'enveloppe de Jokke (gain d'objet, voir Pays).
+        // La paie est un revenu ordinaire du preneur (Update : jamais pris pour celle d'un boulot rejoue), gardee par lui
+        // seul (0.75.42). Pas l'enveloppe de Jokke (gain d'objet, voir Pays).
         class Env { public string Key; public PlayMakerFSM F; public bool Hooked; public float RetireUntil = -1; }
         static readonly List<Env> envs = new List<Env>();
-        static readonly List<KeyValuePair<float, float>> recentIn = new List<KeyValuePair<float, float>>();   // revenus ordinaires recus (heure, montant)
         static float nextEnvHook, envIncomeUntil;
         static bool envApplying;
 
@@ -789,7 +779,7 @@ namespace MWCoop
                 {
                     if (Session.Active && !envApplying && Replay.Depth == 0)
                     {
-                        if (Take) envIncomeUntil = Time.realtimeSinceStartup + 3f;   // la paie qui suit est a nous : partagee
+                        if (Take) envIncomeUntil = Time.realtimeSinceStartup + 3f;   // la paie qui suit est a nous (pas celle d'un boulot rejoue)
                         else EnvTaken(E);
                     }
                 }

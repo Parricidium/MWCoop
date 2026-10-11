@@ -193,7 +193,7 @@ Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
   crash damage (glass, dents, suspension), fires.
 - **Car building**: parts installed and removed, every bolt turn, parts carried and dropped, paint, carburettor and
   knob adjustments, wiring, fluids (fuel, oil, coolant, brake fluid) and wear, jacks, lift and engine hoist.
-- **Money and shops**: income shared, **a wallet each** (only the buyer pays); shopping seen by everyone (bags,
+- **Money and shops**: **a wallet each**, everyone keeps their own pay (only the buyer pays); shopping seen by everyone (bags,
   shelves emptying live), pub, flea market, inspection, coffee, bus, gas pump terminal, restaurant trays and plates.
 - **NPCs**: same people in the same places with the same gestures; customers, fights and police checkpoints followed
   by the player they deal with; their lines heard by everyone — and stopped for everyone when they hang up or get
@@ -368,7 +368,7 @@ Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) 
 - **Mécanique** : pièces montées et démontées, chaque cran de vis, pièces portées et lâchées, peinture, réglages du
   carburateur et des molettes, câblage, liquides (essence, huile, liquide de refroidissement, de frein) et usure,
   crics, pont et palan.
-- **Argent et magasins** : revenus partagés, **un porte-monnaie chacun** (seul l'acheteur paie) ; courses vues par
+- **Argent et magasins** : **un porte-monnaie chacun**, chacun garde sa paie (seul l'acheteur paie) ; courses vues par
   tous (sacs, rayons qui se vident en direct), bar, brocante, contrôle technique, café, bus, terminal de la pompe,
   plateaux et assiettes du restaurant.
 - **PNJ** : mêmes personnes aux mêmes endroits avec les mêmes gestes ; clients, bagarres et barrages de police suivis
