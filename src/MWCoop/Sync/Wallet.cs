@@ -340,12 +340,34 @@ namespace MWCoop
                      + (adj < -0.005f ? ", deja compte : " + (-adj) + " retire" : adj > 0.005f ? ", complete de " + adj : "") + " (une fois, au plus haut des joueurs)");
         }
 
+        // Libelle d'un versement dans la langue du joueur (les Label restent en francais sans accents pour le journal).
+        static string Shown(string label)
+        {
+            switch (label)
+            {
+                case "allocation chomage": return Lang.T("allocation ch\u00F4mage", "unemployment benefit");
+                case "aide au logement": return Lang.T("aide au logement", "housing support");
+                case "paie de l'usine": return Lang.T("paie de l'usine", "factory pay");
+                case "paie de l'usine (heures sup)": return Lang.T("paie de l'usine (heures sup)", "factory pay (overtime)");
+                case "paie des publicites": return Lang.T("paie des publicit\u00E9s", "ads pay");
+                case "paie du taxi": return Lang.T("paie du taxi", "taxi pay");
+                case "interets": return Lang.T("int\u00E9r\u00EAts", "interest");
+                case "rachat de ferraille": return Lang.T("rachat de ferraille", "scrap sale");
+                case "ventes aux puces": return Lang.T("ventes aux puces", "flea market sales");
+                case "kilju vendu a Jokke": return Lang.T("kilju vendu \u00E0 Jokke", "kilju sold to Jokke");
+                case "gains du loto": return Lang.T("gains du loto", "lottery win");
+                case "prix du rallye": return Lang.T("prix du rallye", "rally prize");
+                case "prix de la course sur glace": return Lang.T("prix de la course sur glace", "ice race prize");
+            }
+            return Lang.Fr ? label : "income";
+        }
+
         // Versement partage vu chez un autre joueur.
         static void WorldIn(Pay p, float c, float b, string name)
         {
             worldIn++;
             float adj = Merge(p, c, b, false);
-            if (adj >= 1f) Hud.Toast("+" + Mathf.RoundToInt(adj) + " mk (" + p.Label + ")");
+            if (adj >= 1f) Hud.Toast("+" + Mathf.RoundToInt(adj) + " mk (" + Shown(p.Label) + ")");
             Log.Info("argent : " + p.Label + " de " + name + " : " + (c + b) + (adj > 0.005f ? ", +" + adj + " ici" : ", deja compte ici"));
         }
 
@@ -708,6 +730,7 @@ namespace MWCoop
                 return;
             }
             if (Machines.KeepsMoney) { Log.Info("argent : gain " + (inC + inB) + " d'une machine a jeu, garde pour soi"); return; }   // encaissement, gain pris : pas un revenu a partager
+            if (ModCheatbox.MenuOpen()) { Log.Info("argent : +" + (inC + inB) + " tape dans le menu de Cheatbox++, garde pour soi"); return; }   // argent tape dans la triche : a soi seul
             Log.Info("argent : revenu " + inC + " (liquide) + " + inB + " (banque), partage");
             Session.SendAll(new NetWriter(Msg.Income).U8(Session.LocalId).F32(inC).F32(inB), true);
         }

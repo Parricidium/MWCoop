@@ -31,7 +31,12 @@ namespace MWCoop
         static readonly HashSet<string> PersonalRoots = new HashSet<string> { "PLAYER", "GUI", "Sheets", "COMPUTER" };
         static readonly string[] SkipObjects = { "OptionsDB", "InitializeControls", "Photomode", "Statistics", "Setup Game", "SAVEGAME", "BankAccount", "Expenses", "PlayerWanted",
                                                  "Cashier", "CashRegister", "INVENTORY",
-                                                 "PlayerDatabase" };   // simulation du joueur (faim, soif, fatigue, ivresse, cigarettes) : a chacun la sienne
+                                                 "PlayerDatabase",    // simulation du joueur (faim, soif, fatigue, ivresse, cigarettes) : a chacun la sienne
+                                                 // Cadran des telephones (KeypadPhone* : Input -> NUMBER a Calling) : composer reste a celui qui appelle
+                                                 // (Calls rejoue ce qui en decoule). Rejoue chez un autre dont le cadran etait actif, l'appel entier y
+                                                 // tournait sur SA camera -- voix entendue a l'autre bout de la carte, puis "Beep beep" sans fin
+                                                 // jusqu'a ce qu'il decroche un telephone (retour de gamereggo, 11/10).
+                                                 "KeypadPhone" };
         // Machines a sous et video-poker (station, bar : SlotMachinePub) : la partie reste a celui qui joue (son
         // argent, ses cartes et ses rouleaux tires au hasard). Rejouee chez l'autre, elle y tirait d'autres cartes
         // et creditait sa machine gratuitement (l'argent est force pendant un rejeu). Tout ce qui est dessous.

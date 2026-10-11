@@ -42,6 +42,30 @@ namespace MWCoop
 
         static string KeyOf(PlayMakerFSM f) { return Recon.Path(f.transform) + "::" + f.FsmName; }
 
+        // Menu de Cheatbox++ ouvert (Cpp.instance.open) : l'argent qu'on y tape (Cash, Bank) est a soi seul -- pris pour un
+        // revenu, il etait verse a tous (retour de gamereggo, 11/10). Voir Wallet.
+        static System.Reflection.FieldInfo openField, instField; static bool openLooked;
+        public static bool MenuOpen()
+        {
+            if (!Present()) return false;
+            if (!openLooked)
+            {
+                openLooked = true;
+                foreach (System.Reflection.Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    Type t = null; try { t = a.GetType("CheatboxPlusPlus.Cpp", false); } catch { }
+                    if (t != null)
+                    {
+                        const System.Reflection.BindingFlags A = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
+                        instField = t.GetField("instance", A | System.Reflection.BindingFlags.Static);
+                        openField = t.GetField("open", A | System.Reflection.BindingFlags.Instance);
+                        break;
+                    }
+                }
+            }
+            try { object inst = instField != null ? instField.GetValue(null) : null; return inst != null && openField != null && (bool)openField.GetValue(inst); } catch { return false; }
+        }
+
         // Essai [Test] Autotest=cbxextra (retour de witefold, 11/10 : « bois et sacs de sable n'apparaissent pas ») : appelle
         // Spawn() des objets du groupe « Extra » de Cheatbox++ (Firewood, Sandbag) comme son bouton, et note ce qui arrive.
         public static string TestExtra()

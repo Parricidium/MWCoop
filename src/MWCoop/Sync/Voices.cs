@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using MWCoop.Net;
 using UnityEngine;
@@ -285,6 +285,14 @@ namespace MWCoop
             s.minDistance = model.minDistance;
             s.maxDistance = model.maxDistance;
             s.dopplerLevel = 0f;
+            if (key.StartsWith("Callers/"))
+            {
+                // Voix au bout du fil, tonalites : dans le combine de l'autre, entendues de pres seulement (le reglage de la
+                // variante, faite pour l'oreille du joueur, portait loin -- retour de gamereggo, 11/10).
+                s.rolloffMode = AudioRolloffMode.Linear;
+                s.minDistance = 0.5f;
+                s.maxDistance = 4f;
+            }
             s.outputAudioMixerGroup = model.outputAudioMixerGroup;
             s.Play();
             Object.Destroy(go, model.clip.length / s.pitch + 0.2f);

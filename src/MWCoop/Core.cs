@@ -54,6 +54,8 @@ namespace MWCoop
                 VehicleSync.LateUpdate(); Perf.Mark("[poses voitures]");
             }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
+            try { AssembleIcon.LateUpdate(); }
+            catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("icone de montage : " + e.Message); }
             try { Lights.LateUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("lumieres : " + e.Message); }
             try { Studio.LateUpdate(); }
@@ -250,6 +252,7 @@ namespace MWCoop
             SleepingBags.OnLevelLoaded();
             ModCheatbox.OnLevelLoaded();
             CutterHitch.OnLevelLoaded();
+            AssembleIcon.OnLevelLoaded();
             CarLeaks.OnLevelLoaded();
             GarageDoor.OnLevelLoaded();
             ThirdPerson.OnLevelLoaded();
