@@ -363,6 +363,11 @@ namespace MWCoop
             R("OmbresMaisons", "Ombres des maisons", "House shadows", 1, 1),
             S("OmbresDistance", "Distance des ombres", "Shadow distance", -1, 1, new[] { -1, 30, 60, 100, 150, 250, 400 },
               new[] { "Jeu", "30 m", "60 m", "100 m", "150 m", "250 m", "400 m" }, new[] { "Game", "30 m", "60 m", "100 m", "150 m", "250 m", "400 m" }, true),
+            // Ray tracing (6) : comme la categorie du lanceur ; RayTracing au prochain lancement par le lanceur (-force-gfx-direct).
+            R("RayTracing", "Ombres du soleil en ray tracing", "Ray-traced sun shadows", 0, 6, true),
+            S("RTRayons", "Rayons par pixel", "Rays per pixel", 2, 6, new[] { 1, 2, 4, 8 }, new[] { "1", "2", "4", "8" }, null, true),
+            S("RTPortee", "Port\u00E9e des ombres", "Shadow range", 250, 6, new[] { 100, 150, 250, 400 }, new[] { "100 m", "150 m", "250 m", "400 m" }, null),
+            S("RTDouceur", "Bords des ombres", "Shadow edges", 1, 6, new[] { 0, 1, 2, 4 }, new[] { "Nets", "L\u00E9gers", "Doux", "Tr\u00E8s doux" }, new[] { "Sharp", "Light", "Soft", "Very soft" }),
             S("OmbresCascades", "Finesse des ombres", "Shadow detail", -1, 1, new[] { -1, 1, 2, 4 }, new[] { "Jeu", "Simple", "Fine", "Tr\u00E8s fine" }, new[] { "Game", "Basic", "Fine", "Very fine" }),
             S("Distance", "Distance d'affichage", "Draw distance", 3000, 2, new[] { 500, 1000, 1500, 2000, 3000, 4500, 6000, 9000 },
               new[] { "500 m", "1 km", "1,5 km", "2 km", "3 km", "4,5 km", "6 km", "9 km" }, new[] { "500 m", "1 km", "1.5 km", "2 km", "3 km", "4.5 km", "6 km", "9 km" }, true),

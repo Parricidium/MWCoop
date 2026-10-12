@@ -662,8 +662,9 @@ namespace MWCoop
             int d = Item(Lang.T("Pr\u00E9r\u00E9glage", "Preset"), on >= 0 ? (Lang.Fr ? Gfx.Presets[on].Fr : Gfx.Presets[on].En) : Lang.T("Personnalis\u00E9", "Custom"), true,
                          Lang.T("Gauche/Droite : Performance, \u00C9quilibr\u00E9, Beau, Ultra", "Left/Right: Performance, Balanced, Pretty, Ultra"), false);
             if (d == -1 || d == 1) Gfx.ApplyPreset(on < 0 ? (d > 0 ? 0 : Gfx.Presets.Length - 1) : Mathf.Clamp(on + d, 0, Gfx.Presets.Length - 1));
-            string[] heads = { Lang.T("IMAGE", "IMAGE"), Lang.T("OMBRES", "SHADOWS"), Lang.T("DISTANCE ET D\u00C9TAILS", "DISTANCE AND DETAIL"), Lang.T("JEU ET CONFORT", "GAME AND COMFORT"), Lang.T("LUMI\u00C8RES", "LIGHTS"), Lang.T("\u00C9CRAN", "SCREEN") };
-            foreach (int g in new[] { 5, 0, 1, 4, 2, 3 })
+            string[] heads = { Lang.T("IMAGE", "IMAGE"), Lang.T("OMBRES", "SHADOWS"), Lang.T("DISTANCE ET D\u00C9TAILS", "DISTANCE AND DETAIL"), Lang.T("JEU ET CONFORT", "GAME AND COMFORT"), Lang.T("LUMI\u00C8RES", "LIGHTS"), Lang.T("\u00C9CRAN", "SCREEN"),
+                               Lang.T("RAY TRACING (EN D\u00C9VELOPPEMENT)", "RAY TRACING (IN DEVELOPMENT)") };
+            foreach (int g in new[] { 5, 0, 1, 6, 4, 2, 3 })
             {
                 Header(heads[g]);
                 foreach (Gfx.Row r in Gfx.Rows)
@@ -674,7 +675,9 @@ namespace MWCoop
                     int k = 0;
                     if (r.Vals == null) val = v == 1 ? Lang.T("Oui", "On") : Lang.T("Non", "Off");
                     else { for (int i = 0; i < r.Vals.Length; i++) if (r.Vals[i] == v) k = i; val = Lang.Fr ? r.Lf[k] : r.Le[k]; }
-                    int res = Item(Lang.Fr ? r.Fr : r.En, val, true, r.Heavy ? Lang.T("Lourd pour les images par seconde", "Heavy on the frame rate") : null, false);
+                    string hint = r.Heavy ? Lang.T("Lourd pour les images par seconde", "Heavy on the frame rate") : null;
+                    if (r.Key == "RayTracing" && !RayTracing.Direct) hint = Lang.T("Actif au prochain lancement par le lanceur", "Active at the next launch from the launcher");
+                    int res = Item(Lang.Fr ? r.Fr : r.En, val, true, hint, false);
                     if (res != -1 && res != 1) continue;
                     if (r.Vals == null) Gfx.Set(r.Key, v == 1 ? 0 : 1);
                     else { int nk = Mathf.Clamp(k + res, 0, r.Vals.Length - 1); if (nk != k) Gfx.Set(r.Key, r.Vals[nk]); }

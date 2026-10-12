@@ -103,9 +103,10 @@ namespace MWCoop
 
         public static void Update()
         {
+            if (probeAt < 0 && PlayerSync.InGame && Wanted && Direct) probeAt = Time.realtimeSinceStartup + 1f;   // (allume en jeu, menu F10)
             if (probeAt < 0 || Time.realtimeSinceStartup < probeAt) return;
             if (!probed) { probed = true; Probe(); }
-            if (!ready) return;
+            if (!ready || !Wanted) return;
             Camera c = Camera.main;
             if (c != null && c != hooked)
             {
@@ -475,7 +476,12 @@ namespace MWCoop
         {
             if (sunCut && sun != null) sun.shadows = sunShadowsWas;
             sunCut = false;
+            if (distSet) { QualitySettings.shadowDistance = distWas; distSet = false; }
         }
+        // L'eclairage d'Unity estompe les ombres au-dela de SA distance d'ombre (retour de JD, 12/10 : plus d'ombres RT au
+        // loin avec le prereglage RT, qui la met a 30 m) : portee a celle du RT tant qu'il est actif.
+        static bool distSet;
+        static float distWas;
 
         // Cible du dessin retournee par rapport au G-buffer quand la camera dessine dans une texture (effets d'image :
         // « ImageEffects Temp ») ; [Test] RTRetourneComp force (0/1).
@@ -527,6 +533,8 @@ namespace MWCoop
                     if (!sunCut) { sunShadowsWas = l.shadows; sunCut = true; Log.Info("rt : ombres d'Unity de " + l.name + " rallumees (support des ombres RT)"); }
                     l.shadows = LightShadows.Soft;
                 }
+                if (!distSet) { distWas = QualitySettings.shadowDistance; distSet = true; Log.Info("rt : distance des ombres d'Unity " + distWas + " m -> " + Range + " m (portee du RT)"); }
+                if (QualitySettings.shadowDistance != Range && !capturing) QualitySettings.shadowDistance = Range;
             }
             else if (cut) RestoreShadows();
         }
@@ -538,6 +546,7 @@ namespace MWCoop
         {
             void OnPreRender()
             {
+                if (ready && !Wanted) { RestoreShadows(); return; }   // (coupe en jeu, menu F10 : ombres d'Unity rendues)
                 if (!ready || !Wanted) return;
                 if (captureNow)
                 {
@@ -547,7 +556,7 @@ namespace MWCoop
                     // distance des ombres d'Unity portee a celle du RT le temps de l'image : tout le decor a portee y est dessine
                     // (le prereglage RT la met a 30 m, le RT remplacant ses ombres)
                     capDistWas = QualitySettings.shadowDistance;
-                    if (QualitySettings.shadowDistance < Range) QualitySettings.shadowDistance = Range;
+                    if (Mode != 0 && QualitySettings.shadowDistance < Range) QualitySettings.shadowDistance = Range;   // (mode 0 : deja a la portee du RT)
                     RtCapture(1);
                 }
                 if (Mode == 0)
@@ -565,7 +574,7 @@ namespace MWCoop
                 if (!ready || !Wanted) return;
                 Camera cam = GetComponent<Camera>();
                 bool was = capturing;
-                if (capturing) { RtCapture(0); capturing = false; QualitySettings.shadowDistance = capDistWas; }
+                if (capturing) { RtCapture(0); capturing = false; if (Mode != 0) QualitySettings.shadowDistance = capDistWas; }
                 if (Mode == 0) { RtArm(0); RtPostRender(7); return; }   // (ombres deja dans la carte d'Unity ; lots releves traites)
                 if (was) { SendFrame(cam, false); RtPostRender(7); return; }
                 SendInstances();
