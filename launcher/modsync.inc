@@ -392,8 +392,9 @@ static void SyncHostTick()
     job->ver = Narrow(g_mscVer, CP_UTF8);
     if (msc) {
         for (auto &m : g_msc) {
-            if (m.off) continue;   // (mod coupe ici : ni charge ni envoye)
-            if (!ModShared(m.file)) { job->priv.push_back(m.file.substr(0, m.file.size() - 4)); if (m.known && !m.id.empty()) job->priv.push_back(m.id); continue; }
+            // (mod coupe ici : ni charge ni envoye -- et ses dossiers (Assets, reglages) gardes aussi : retour de JD, 12/10, NDSerra
+            // coupe partait quand meme, 1 Go d'Assets « pas au nom d'un mod »)
+            if (m.off || !ModShared(m.file)) { job->priv.push_back(m.file.substr(0, m.file.size() - 4)); if (m.known && !m.id.empty()) job->priv.push_back(m.id); continue; }
             std::wstring id = m.known && !m.id.empty() ? m.id : m.file.substr(0, m.file.size() - 4);
             job->mods.push_back({ m.file, id });
             WIN32_FILE_ATTRIBUTE_DATA a;   // (la DLL et ses reglages : date et taille)

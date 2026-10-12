@@ -200,6 +200,7 @@ namespace MWCoop
             bool beltAtCrash = Game.GlobalBool("PlayerSeatbeltsOn");   // (conducteur attache au moment du choc)
             if (crash && car != null && Session.Active && Session.RemoteCount > 0)
                 Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@accident").Str(car).Bool(beltAtCrash), true);
+            if (crash && Session.Active) CarHits.OnLocalCrash(beltAtCrash);   // (la voiture d'un autre joueur percutee : son conducteur aussi)
             if (Config.GetInt("Test", "TestReapparition", 0) > 0) testChoiceAt = Time.realtimeSinceStartup + 3f;
             return true;
         }
