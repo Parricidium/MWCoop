@@ -51,7 +51,7 @@ bool AlphaPass(uint inst, uint prim, float2 bary)
 bool Free(RayDesc ray)
 {
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
-    q.TraceRayInline(gScene, 0, 0xFF, ray);
+    q.TraceRayInline(gScene, 0, 0x01, ray);   // (masque 1 : pas le sol, qui ne fait pas d'ombre chez Unity non plus)
     while (q.Proceed())
         if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && AlphaPass(q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics()))
             q.CommitNonOpaqueTriangleHit();
