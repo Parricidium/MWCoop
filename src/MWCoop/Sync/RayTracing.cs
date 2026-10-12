@@ -48,7 +48,7 @@ namespace MWCoop
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInts(int[] data, int n);
         static DProbe fProbe; static DPtr fInit; static DInt fPostRender, fCapture, fArm; static DInputs fInputs; static DMesh fMesh;
         static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps; static DAmbient fAmbient; static DFloat fRefl;
-        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg; static DColorTex fColorTex; static DMeshParts fMeshParts; static DMask fMeshMask; static DForget fForget;
+        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg; static DColorTex fColorTex; static DMeshParts fMeshParts; static DMask fMeshMask; static DForget fForget; static DFloat fBounce;
         static T Fn<T>(System.IntPtr lib, string name) where T : class
         {
             System.IntPtr p = GetProcAddress(lib, name);
@@ -66,7 +66,7 @@ namespace MWCoop
             fAmbient = Fn<DAmbient>(lib, "RtAmbient");
             fRefl = Fn<DFloat>(lib, "RtReflections");
             fMeshColor = Fn<DColor>(lib, "RtMeshColor"); fStaticColor = Fn<DColor>(lib, "RtStaticColor"); fTexAvg = Fn<DTexAvg>(lib, "RtTexAverage");
-            fColorTex = Fn<DColorTex>(lib, "RtColorTexture"); fMeshParts = Fn<DMeshParts>(lib, "RtMeshParts"); fMeshMask = Fn<DMask>(lib, "RtMeshMask"); fForget = Fn<DForget>(lib, "RtForgetMesh");
+            fColorTex = Fn<DColorTex>(lib, "RtColorTexture"); fMeshParts = Fn<DMeshParts>(lib, "RtMeshParts"); fMeshMask = Fn<DMask>(lib, "RtMeshMask"); fForget = Fn<DForget>(lib, "RtForgetMesh"); fBounce = Fn<DFloat>(lib, "RtBounce");
         }
         static int RtProbe(string logPath) { return fProbe(logPath); }
         static int RtInit(System.IntPtr d3d11Resource) { return fInit(d3d11Resource); }
@@ -812,6 +812,10 @@ namespace MWCoop
                     RtAmbient(aoS, 1.5f, Config.GetInt("Test", "RTOcclusionRayons", 2));
                     float rfS = ReflStrength;
                     RtReflections(rfS);
+                    // Rebond de lumiere : [Graphismes] RTRebond (0 non, 50 leger, 100 normal ; 100 par defaut).
+                    float giS = Mathf.Clamp(Config.GetInt("Test", "RTRebond", Gfx.Get("RTRebond", 100)), 0, 3000) * 0.01f;
+                    fBounce(giS);
+                    if (giS > 0) flags |= 16;
                     if (SendLamps(transform.position) > 0 || aoS > 0 || rfS > 0) flags |= 16;
                     if (!dumped && Config.GetInt("Test", "RTVidage", 0) != 0 && Time.realtimeSinceStartup > Config.GetInt("Test", "RTVidage", 0)) { dumped = true; flags |= 2 | 4; }
                     RtArm(flags);

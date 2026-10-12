@@ -150,6 +150,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "RTCorps", L"Ton corps dans les reflets et les ombres", L"Your body in reflections and shadows", 1, {}, {}, {}, 1, 14 },
         { "RTReflets", L"Reflets (carrosseries, surfaces lisses)", L"Reflections (car paint, smooth surfaces)", 100, { 0, 50, 100 },
           { L"Non", L"Discrets", L"Normaux" }, { L"Off", L"Subtle", L"Normal" }, 2, 14 },
+        { "RTRebond", L"Rebond de lumière (illumination globale)", L"Light bounce (global illumination)", 100, { 0, 50, 100 },
+          { L"Non", L"Léger", L"Normal" }, { L"Off", L"Light", L"Normal" }, 2, 14 },
         { "RTOcclusion", L"Occlusion ambiante (coins, dessous)", L"Ambient occlusion (corners, underneath)", 100, { 0, 50, 100, 150 },
           { L"Non", L"Légère", L"Normale", L"Forte" }, { L"Off", L"Light", L"Normal", L"Strong" }, 2, 14 },
         { "RTLampes", L"Ombres des lampes (phares, lampadaires)", L"Lamp shadows (headlights, street lights)", 8, { 0, 4, 8, 16 },
