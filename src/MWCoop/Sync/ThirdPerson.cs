@@ -47,7 +47,8 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (!PlayerSync.InGame || !Session.Active) { if (Active) Off(); return; }
+            // (en solo : seulement pour un camescope pose qui filme -- on s'y voit aussi)
+            if (!PlayerSync.InGame || !Session.Active && !Kauppa.SelfBodyWanted) { if (Active || me != null) Off(); return; }
             if (!Menu.Open && !Menu.ChatOpen && !MapPanel.Open && !CheatPanel.Open && !WalletPanel.Open && !DroneCam.Active && Input.GetKeyDown(Keys.View))
             {
                 if (Active) Off();
@@ -56,7 +57,8 @@ namespace MWCoop
             if (Config.GetInt("Test", "TroisiemePersonne", 0) != 0 && !Active) { Active = true; Log.Info("vue : troisieme personne (essai)"); }
             // Camera drone : l'avatar du joueur est montre aussi (il est dans le cadre), sans reculer la camera.
             // Ray tracing a la premiere personne : l'avatar existe aussi, invisible a la camera (ombre seulement), pour les rayons.
-            bool rtBody = !Active && !DroneCam.Active && RayTracing.BodyWanted;
+            // (et pendant qu'un camescope pose filme : le joueur d'ici doit etre dans le film ; JD, 12/10 -- l'hote n'y etait pas)
+            bool rtBody = !Active && !DroneCam.Active && (RayTracing.BodyWanted || Kauppa.SelfBodyWanted);
             if (!Active && !DroneCam.Active && !rtBody)
             {
                 if (me != null) { me.Destroy(); me = null; if (handCam != null) handCam.enabled = handCamWas; }
@@ -65,6 +67,7 @@ namespace MWCoop
             if (!hooked) { hooked = true; Camera.onPreCull += PreCull; }
             if (cam == null)
             {
+                if (PlayerSync.LocalCamera == null) PlayerSync.BuildLocal();   // (solo : le joueur n'est cherche que la)
                 Transform c = PlayerSync.LocalCamera;
                 cam = c != null ? c.GetComponent<Camera>() : null;
                 Transform hc = c != null ? c.Find("HandCamera") : null;
@@ -97,6 +100,16 @@ namespace MWCoop
             shadowOnly = on; shadowRoot = me.Root; shadowCheck = Time.realtimeSinceStartup + 2f;   // (habits ajoutes ensuite : revu toutes les 2 s)
             foreach (Renderer r in me.Root.GetComponentsInChildren<Renderer>(true))
                 r.shadowCastingMode = on ? UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly : UnityEngine.Rendering.ShadowCastingMode.On;
+        }
+
+        // Rendu d'une camera a part (camescope) avec l'avatar du joueur d'ici visible le temps de ce rendu seulement (a
+        // la premiere personne, il n'est la que pour les ombres).
+        public static void RenderWithBody(Camera c)
+        {
+            Renderer[] rs = shadowOnly && me != null && me.Root != null ? me.Root.GetComponentsInChildren<Renderer>() : null;
+            if (rs != null) foreach (Renderer r in rs) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            try { c.Render(); }
+            finally { if (rs != null) foreach (Renderer r in rs) if (r != null) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly; }
         }
 
         // Apres les poses des autres avatars (PlayerSync.LateUpdate).

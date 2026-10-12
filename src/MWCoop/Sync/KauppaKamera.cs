@@ -497,7 +497,7 @@ namespace MWCoop
             recCam.nearClipPlane = 0.05f;
             recCam.targetTexture = recRT;
             recCam.aspect = (float)RecW / RecH;
-            try { recCam.Render(); }
+            try { if (inHand) recCam.Render(); else ThirdPerson.RenderWithBody(recCam); }   // (pose : le joueur d'ici dans le film)
             finally { if (own != null) foreach (Renderer x in own) if (x != null) x.enabled = x.name != "rec" || k.Data.EndsWith("|1"); }
             RenderTexture prev = RenderTexture.active;
             RenderTexture.active = recRT;
@@ -568,6 +568,8 @@ namespace MWCoop
         static readonly Queue<float> ownVoice = new Queue<float>();
         static double voiceAcc; static float voiceSum; static int voiceN;
         public static bool WantsOwnVoice { get { return rec != null && !rec.Paused; } }
+        // camescope pose qui filme chez nous : l'avatar du joueur d'ici doit exister (ThirdPerson, invisible pour lui)
+        public static bool SelfBodyWanted { get { return rec != null && rec.Cam.Go != null && !(rec.Cam.Go.transform.parent != null && Game.UnderPlayer(rec.Cam.Go.transform)); } }
         public static void OwnVoice(byte[] pcm, int bytes, int rate, float gain)
         {
             if (!WantsOwnVoice) return;
