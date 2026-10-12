@@ -43,10 +43,10 @@ To take the tape out: look at the camcorder (not in your hand) and **hold F**.
 
 **Camcorder in your hand:** press **F** to raise it to your eye, like the ice scraper. The others see you holding it to your eye, and you look through the viewfinder (4:3 VHS picture, REC, tape counter, battery). Then:
 
-- **Left click** = start recording / stop (the take ends and is sent to the others).
-- **R** = pause / resume, as often as you like: it stays the same take.
+- **Left click** = start filming. Left click again = pause, again = resume... as often as you like: it stays the same take.
 - **Mouse wheel** = zoom.
-- **Right click** = lower the camcorder (you keep it in your hand; recording pauses). A **second right click** throws it, like any object of the game.
+- **F** = lower the camcorder back into your hands: the take ends, is added to the tape and sent to the others.
+- Then a **right click** throws it, like any object of the game. (A right click while looking through the viewfinder also lowers it.)
 
 Camcorder in your hand without the viewfinder: **R** = start / stop recording.
 
@@ -155,10 +155,10 @@ Pour la ressortir : vise le caméscope (posé) et **tiens F**.
 
 **Caméscope en main :** appuie sur **F** pour le porter à l'œil, comme la raclette à givre. Les autres te voient le tenir contre ton œil, et tu regardes dans le viseur (image 4:3 façon VHS, REC, compteur, pile). Ensuite :
 
-- **Clic gauche** = lancer l'enregistrement / l'arrêter (la prise se termine et part chez les autres).
-- **R** = pause / reprise, autant de fois que tu veux : ça reste la même prise.
+- **Clic gauche** = filmer. Clic gauche à nouveau = pause, encore = reprise... autant de fois que tu veux : ça reste la même prise.
 - **Molette** = zoom.
-- **Clic droit** = baisser le caméscope (il reste en main ; l'enregistrement se met en pause). Un **2e clic droit** le jette, comme tout objet du jeu.
+- **F** = rebaisser le caméscope dans tes mains : la prise se termine, s'ajoute à la cassette et part chez les autres.
+- Ensuite un **clic droit** le jette, comme tout objet du jeu. (Un clic droit pendant la visée le rebaisse aussi.)
 
 Caméscope en main sans le viseur : **R** = lancer / arrêter l'enregistrement.
 

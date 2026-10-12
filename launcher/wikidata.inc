@@ -28,7 +28,7 @@ static const WikiKey kWikiKeys[] = {
     { L"1 · 2", L"Après une mort : revenir à l'appartement ou chez les parents", L"After dying: come back at the apartment or the parents' house" },
     { L"Espace", L"Se réveiller quand on dort seul (l'heure n'avance que si tout le monde dort)", L"Wake up when sleeping alone (time only moves on when everyone sleeps)" },
     { L"Maj + Tab", L"Surcouche Steam : inviter des amis pendant la partie", L"Steam overlay: invite friends during the game" },
-    { L"F · R", L"Caméscope en main : F = à l'œil (clic gauche : enregistrer, R : pause, clic droit : baisser) ; posé : R = enregistrer / arrêter", L"Camcorder in hand: F = to the eye (left click: record, R: pause, right click: lower); set down: R = record / stop" },
+    { L"F · R", L"Caméscope en main : F = à l'œil (clic gauche : filmer / pause ; F : baisser, fin de la prise) ; posé : R = enregistrer / arrêter", L"Camcorder in hand: F = to the eye (left click: film / pause; F: lower, end of take); set down: R = record / stop" },
     { L"/titre · /importer", L"Dans le tchat, cassette en main : écrire un titre sur la tranche, ou y mettre une de tes vidéos", L"In the chat, holding a tape: write a title on the spine, or put one of your videos on it (/title · /import)" },
 };
 static const int kWikiKeysN = (int)(sizeof(kWikiKeys) / sizeof(kWikiKeys[0]));
@@ -475,8 +475,8 @@ static const WikiBlock kW_Video[] = {
     { WB_S, L"Prends une cassette en main, vise l'appareil et fais un clic gauche : elle entre.", L"Pick up a tape, look at the device and left click: it goes in." },
     { WB_S, L"Pour la ressortir : vise l'appareil posé et tiens F.", L"To take it out: look at the device (set down) and hold F." },
     { WB_H, L"Filmer", L"Filming", 0 },
-    { WB_B, L"Caméscope en main : F le porte à l'œil (comme la raclette à givre ; les autres te voient filmer) et ouvre le viseur VHS. Clic gauche : enregistrer / arrêter la prise. R : pause / reprise. Molette : zoom. Clic droit : le baisser (en pause) ; un 2e clic droit le jette.",
-            L"Camcorder in hand: F raises it to your eye (like the ice scraper; the others see you filming) and opens the VHS viewfinder. Left click: record / stop the take. R: pause / resume. Wheel: zoom. Right click: lower it (paused); a second right click throws it." },
+    { WB_B, L"Caméscope en main : F le porte à l'œil (comme la raclette à givre ; les autres te voient filmer) et ouvre le viseur VHS. Clic gauche : filmer, puis pause, puis reprise. Molette : zoom. F : le rebaisser dans tes mains (fin de la prise) ; ensuite un clic droit le jette.",
+            L"Camcorder in hand: F raises it to your eye (like the ice scraper; the others see you filming) and opens the VHS viewfinder. Left click: film, then pause, then resume. Wheel: zoom. F: lower it back into your hands (end of the take); then a right click throws it." },
     { WB_B, L"Caméscope posé : vise-le, R lance l'enregistrement, R à nouveau l'arrête. Il filme droit devant lui ; quand tu le lâches, il se tourne vers là où tu regardais. Pratique pour se filmer à plusieurs.",
             L"Camcorder set down: look at it, R starts recording, R again stops it. It films straight ahead; when you drop it, it turns to where you were looking. Handy to film yourselves together." },
     { WB_B, L"Chaque prise s'ajoute à la suite des précédentes sur la cassette (40 au plus, 10 minutes chacune). Le son enregistré est ce que tu entends, voix des autres joueurs comprises, plus ta propre voix quand tu parles (V).",
