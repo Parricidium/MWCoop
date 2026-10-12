@@ -302,21 +302,37 @@ namespace MWCoop
             pussit.Remove(b);
         }
 
-        // Un article (ou tous) sort du sac, pose a cote ; vide, le sac disparait.
+        static float heldFDown = -1f;
+
+        // sac de courses dans la main du joueur d'ici
+        static Pussi HeldBag()
+        {
+            foreach (Pussi b in pussit) if (b.Go != null && b.Go.transform.parent != null && Game.UnderPlayer(b.Go.transform)) return b;
+            return null;
+        }
+
+        // Un article (ou tous) sort du sac, pose a cote (tenu en main : devant le joueur) ; vide, le sac disparait (tenu :
+        // une fois lache, pour ne pas detruire l'objet que tient la main du jeu).
         static void TakeOut(Pussi b, bool all)
         {
             int n = all ? b.Count : 1;
             Transform t = b.Go.transform;
+            bool held = t.parent != null;
+            Transform eye = held ? EyeT : null;
+            Vector3 fw = eye != null ? new Vector3(eye.forward.x, 0f, eye.forward.z) : Vector3.zero;
+            if (fw.sqrMagnitude < 1e-4f) fw = Vector3.forward;
+            fw.Normalize();
             for (int i = 0; i < n && b.Count > 0; i++)
             {
                 string kind = b.Items[0];
                 b.Items.RemoveAt(0);
-                Vector3 p = t.position + Vector3.up * (0.35f + 0.3f * i) + t.right * 0.35f;
-                SpawnKind(kind, p, Quaternion.Euler(0f, t.eulerAngles.y + 90f, 0f));
+                Vector3 p = eye != null ? eye.position + fw * 0.9f + Vector3.up * (-0.3f + 0.3f * i)
+                                        : t.position + Vector3.up * (0.35f + 0.3f * i) + t.right * 0.35f;
+                SpawnKind(kind, p, eye != null ? Quaternion.LookRotation(fw) : Quaternion.Euler(0f, t.eulerAngles.y + 90f, 0f));
             }
-            L("sac de courses " + b.Id + " : " + n + " article(s) sorti(s), reste " + b.Count);
+            L("sac de courses " + b.Id + " : " + n + " article(s) sorti(s)" + (held ? " (en main)" : "") + ", reste " + b.Count);
             SendBag(b);
-            if (b.Count <= 0) RemoveBag(b);
+            if (b.Count <= 0 && !held) RemoveBag(b);
             SaveBags();
         }
 
@@ -360,6 +376,9 @@ namespace MWCoop
 
         static void TickBags(float now)
         {
+            // sac vide sorti en main : retire une fois lache
+            for (int i = pussit.Count - 1; i >= 0; i--)
+                if (pussit[i].Count <= 0 && (pussit[i].Go == null || pussit[i].Go.transform.parent == null)) RemoveBag(pussit[i]);
             if (BagAuthority && pussit.Count > 0)
             {
                 if (Session.Active && Session.RemoteCount > 0 && now >= nextBagSync) { nextBagSync = now + 10f; foreach (Pussi b in pussit) SendBag(b); }
