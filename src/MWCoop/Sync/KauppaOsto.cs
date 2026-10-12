@@ -111,7 +111,8 @@ namespace MWCoop
             }
             money.Value -= basketTotal;   // (Wallet : une depense reste au joueur)
             int count = 0;
-            foreach (Offer o in offers) { count += o.Taken; o.Taken = 0; foreach (GameObject g in o.Shown) if (g != null) g.SetActive(true); }
+            var items = new List<string>();
+            foreach (Offer o in offers) { count += o.Taken; for (int k = 0; k < o.Taken; k++) items.Add(o.Item); o.Taken = 0; foreach (GameObject g in o.Shown) if (g != null) g.SetActive(true); }
             L("achat : " + count + " article(s), " + basketTotal.ToString("F2") + " mk, reste " + money.Value.ToString("F0") + " mk");
             basketTotal = 0f;
             ShowTotal();
@@ -120,7 +121,7 @@ namespace MWCoop
             // le sac de courses, sur le tapis du comptoir cote client
             Bounds cb = counterBounds.size.sqrMagnitude > 0f ? counterBounds : new Bounds(new Vector3(3.3f, 0.5f, -1.2f), new Vector3(3.4f, 1.05f, 1.6f));
             Vector3 p = root.transform.TransformPoint(new Vector3(cb.min.x + 0.8f, CounterTop + 0.3f, cb.max.z - 0.4f));
-            NewBag(p, root.transform.rotation * Quaternion.Euler(0f, 180f, 0f), count);
+            NewBag(p, root.transform.rotation * Quaternion.Euler(0f, 180f, 0f), items);
             Say("Myyjä : Kiitos ! Bonne nuit au chaud.", "Shopkeeper: Kiitos! Sleep warm.");
         }
 
@@ -139,7 +140,8 @@ namespace MWCoop
         public static void OnDoor(int who, bool open) { if (root != null) ToggleDoor(open, false); }
 
         // ---------------------------------------------------------------- sacs de courses
-        class Pussi { public string Id; public GameObject Go; public Rigidbody Rb; public BoxCollider Col; public int Count; }
+        // (Items : sorte de chaque article dans le sac, "makuupussi", "vhs", "nauhuri", "tv")
+        class Pussi { public string Id; public GameObject Go; public Rigidbody Rb; public BoxCollider Col; public readonly List<string> Items = new List<string>(); public int Count { get { return Items.Count; } } }
         static readonly List<Pussi> pussit = new List<Pussi>();
         static Mesh pussiMesh;
         static Quaternion pussiRot = Quaternion.identity;
@@ -220,7 +222,7 @@ namespace MWCoop
 
         static Pussi FindBag(string id) { foreach (Pussi b in pussit) if (b.Id == id) return b; return null; }
 
-        static Pussi CreateBag(string id, Vector3 pos, Quaternion rot, int count)
+        static Pussi CreateBag(string id, Vector3 pos, Quaternion rot, List<string> items)
         {
             if (!BagModel()) return null;
             var go = new GameObject("shopping bag osuuskauppa(itemx)");
@@ -238,7 +240,8 @@ namespace MWCoop
             Quaternion stand = Quaternion.FromToRotation(longAxis, Config.GetInt("Boutique", "SacRetourne", 0) != 0 ? Vector3.down : Vector3.up);
             model.transform.localRotation = stand * model.transform.localRotation;
             if (!pussiLogged) { pussiLogged = true; L("sac de courses : modele " + sz.ToString("F2") + ", redresse depuis l'axe " + longAxis); }
-            var b = new Pussi { Id = id, Go = go, Count = count };
+            var b = new Pussi { Id = id, Go = go };
+            b.Items.AddRange(items);
             Bounds mb = model.GetComponent<MeshRenderer>().bounds;
             b.Col = go.AddComponent<BoxCollider>(); b.Col.center = go.transform.InverseTransformPoint(mb.center); b.Col.size = mb.size;
             go.transform.rotation = rot;
@@ -249,30 +252,46 @@ namespace MWCoop
             return b;
         }
 
-        static void NewBag(Vector3 pos, Quaternion rot, int count)
+        static void NewBag(Vector3 pos, Quaternion rot, List<string> items)
         {
             string id = "p" + Session.LocalId + "-" + DateTime.Now.Ticks.ToString("x");
-            Pussi b = CreateBag(id, pos, rot, count);
-            if (b == null) { for (int i = 0; i < count; i++) SleepingBags.Purchase(pos + Vector3.up * 0.2f * i, rot); return; }   // (sans modele : sacs directs)
+            Pussi b = CreateBag(id, pos, rot, items);
+            if (b == null) { for (int i = 0; i < items.Count; i++) SpawnKind(items[i], pos + Vector3.up * 0.25f * i, rot); return; }   // (sans modele : articles directs)
             SendBag(b);
             SaveBags();
-            L("sac de courses " + id + " : " + count + " article(s)");
+            L("sac de courses " + id + " : " + string.Join(", ", items.ToArray()));
+        }
+
+        // un article sorti du sac (ou achete sans sac)
+        static void SpawnKind(string kind, Vector3 p, Quaternion q)
+        {
+            if (kind == "makuupussi") SleepingBags.Purchase(p, q);
+            else SpawnItem(kind, kind == KVhs ? "tyhja" : "", p, q);
+        }
+
+        static List<string> ParseItems(string s, int count)
+        {
+            var l = new List<string>();
+            if (!string.IsNullOrEmpty(s)) foreach (string k in s.Split(',')) if (k.Length > 0) l.Add(k);
+            while (l.Count < count) l.Add("makuupussi");   // (sacs d'avant 0.84 : seulement des sacs de couchage)
+            return l;
         }
 
         static void SendBag(Pussi b)
         {
             if (!Session.Active) return;
-            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@kassi").Str(b.Id).U8(b.Count).Vec(b.Go != null ? b.Go.transform.position : Vector3.zero).Quat(b.Go != null ? b.Go.transform.rotation : Quaternion.identity), true);
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@kassi").Str(b.Id).U8(b.Count).Vec(b.Go != null ? b.Go.transform.position : Vector3.zero).Quat(b.Go != null ? b.Go.transform.rotation : Quaternion.identity).Str(string.Join(",", b.Items.ToArray())), true);
         }
 
         public static void OnBag(int who, NetReader r)
         {
             string id = r.Str(); int count = r.U8(); Vector3 p = r.Vec(); Quaternion q = r.Quat();
+            List<string> items = ParseItems(r.More ? r.Str() : "", count);
             if (root == null) return;
             Pussi b = FindBag(id);
             if (count <= 0) { if (b != null) RemoveBag(b); }
-            else if (b == null) CreateBag(id, p, q, count);
-            else b.Count = count;
+            else if (b == null) CreateBag(id, p, q, items);
+            else { b.Items.Clear(); b.Items.AddRange(items); }
             SaveBags();
         }
 
@@ -290,9 +309,10 @@ namespace MWCoop
             Transform t = b.Go.transform;
             for (int i = 0; i < n && b.Count > 0; i++)
             {
-                b.Count--;
+                string kind = b.Items[0];
+                b.Items.RemoveAt(0);
                 Vector3 p = t.position + Vector3.up * (0.35f + 0.3f * i) + t.right * 0.35f;
-                SleepingBags.Purchase(p, Quaternion.Euler(0f, t.eulerAngles.y + 90f, 0f));
+                SpawnKind(kind, p, Quaternion.Euler(0f, t.eulerAngles.y + 90f, 0f));
             }
             L("sac de courses " + b.Id + " : " + n + " article(s) sorti(s), reste " + b.Count);
             SendBag(b);
@@ -314,6 +334,7 @@ namespace MWCoop
                 Vector3 p = b.Go.transform.position; Quaternion q = b.Go.transform.rotation;
                 sb.Append(b.Id).Append(';').Append(b.Count);
                 foreach (float f in new[] { p.x, p.y, p.z, q.x, q.y, q.z, q.w }) sb.Append(';').Append(f.ToString("R", ci));
+                sb.Append(';').Append(string.Join(",", b.Items.ToArray()));
                 sb.Append('\n');
             }
             try { File.WriteAllText(BagFile, sb.ToString()); } catch (Exception e) { L("sacs de courses : ecriture " + e.Message); }
@@ -330,7 +351,7 @@ namespace MWCoop
                     string[] c = l.Split(';');
                     if (c.Length < 9) continue;
                     CreateBag(c[0], new Vector3(float.Parse(c[2], ci), float.Parse(c[3], ci), float.Parse(c[4], ci)),
-                              new Quaternion(float.Parse(c[5], ci), float.Parse(c[6], ci), float.Parse(c[7], ci), float.Parse(c[8], ci)), int.Parse(c[1]));
+                              new Quaternion(float.Parse(c[5], ci), float.Parse(c[6], ci), float.Parse(c[7], ci), float.Parse(c[8], ci)), ParseItems(c.Length > 9 ? c[9] : "", int.Parse(c[1])));
                 }
                 if (pussit.Count > 0) L("sacs de courses : " + pussit.Count + " repris de la sauvegarde");
             }
@@ -348,6 +369,8 @@ namespace MWCoop
 
         static void ClearGui()
         {
+            FsmBool asm = FsmVariables.GlobalVariables.FindFsmBool("GUIassemble");
+            if (asm != null) asm.Value = false;
             if (guiBuy != null) guiBuy.Value = false;
             if (guiUse != null) guiUse.Value = false;
             if (guiText != null) guiText.Value = "";
