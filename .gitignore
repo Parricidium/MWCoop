@@ -22,3 +22,6 @@ ref/*
 
 # Lien d invitation Discord du lanceur : seulement sur le PC qui compile (jamais sur GitHub)
 launcher/discord.local.h
+
+# Captures de mise au point du ray tracing
+docs/rt/
