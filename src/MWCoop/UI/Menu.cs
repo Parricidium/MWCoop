@@ -58,7 +58,35 @@ namespace MWCoop
                 chatText = "";
             }
             bool panel = Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open;
-            Block(inGame && (panel || DroneCam.Active), panel);   // (camera drone : joueur immobile, curseur garde par le jeu)
+            // Menu pause du jeu ouvert : rien de bloque. Son automate 'Update Cursor' doit voir l'aller-retour du menu (il rend
+            // a la camera du joueur l'etiquette MainCamera que le menu donne a sa camera CAM) ; bloque, le menu referme laissait
+            // le jeu sans camera principale (OpNoob, 0.75.50 : apres la camera drone, Echap, plus aucun clic -- erreur
+            // WherePlayerIsLooking a chaque image, automate fige, MousePick sans camera).
+            if (gameMenu == null) gameMenu = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu");
+            bool inGameMenu = gameMenu != null && gameMenu.Value;
+            Block(inGame && !inGameMenu && (panel || DroneCam.Active), panel);   // (camera drone : joueur immobile, curseur garde par le jeu)
+            if (inGame && !inGameMenu) MainCameraGuard();
+        }
+        static HutongGames.PlayMaker.FsmBool gameMenu;
+        static float nextCamCheck;
+        static int camFixes;
+        static bool camLost;
+        // Garde-fou : en partie, hors menu du jeu, plus aucune camera principale (Camera.main nul) -- la camera du joueur la
+        // redevient (repare aussi une partie deja bloquee).
+        static void MainCameraGuard()
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < nextCamCheck) return;
+            nextCamCheck = now + 0.5f;
+            // [Test] CameraPerdue=<s> : a ce temps de jeu, la camera du joueur perd son etiquette (comme apres le drone + Echap).
+            int lose = Config.GetInt("Test", "CameraPerdue", 0);
+            if (lose > 0 && !camLost && Time.timeSinceLevelLoad > lose && PlayerSync.LocalCamera != null)
+            { camLost = true; PlayerSync.LocalCamera.gameObject.tag = "Untagged"; Log.Info("autotest : camera du joueur sans etiquette, Camera.main " + (Camera.main != null ? Camera.main.name : "nul")); }
+            if (Camera.main != null) return;
+            Transform c = PlayerSync.LocalCamera;
+            if (c == null || c.GetComponent<Camera>() == null || !c.gameObject.activeInHierarchy) return;
+            c.gameObject.tag = "MainCamera";
+            if (camFixes++ < 5) Log.Warn("interface : plus de camera principale (menu du jeu referme pendant un blocage ?) -- " + c.name + " la redevient");
         }
 
         // Curseur du mod (Core le dessine en dernier) : menu ouvert ou choix de reapparition, en partie.
