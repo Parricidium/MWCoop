@@ -196,10 +196,12 @@ namespace MWCoop
             if (eqCam == null || eqCam.Go == null || held != eqCam || !Viewfinder) { if (Viewfinder) ExitViewfinder(); else Unequip(); return; }
             if (eqStage == 1)
             {
-                // la touche Use du jeu fait un tour (Check item -> Hand -> Set pivot 2) : attendre « Item picked »
+                // la touche Use du jeu fait un tour (objet : Check item -> Hand -> Set pivot 2 ; piece, notre cas avec
+                // l'etiquette PART : State 4, une image) : attendre que la main tienne de nouveau (« Part picked » ou
+                // « Item picked » ; 0.86.0 n'attendait que le second : en vrai, sortie du viseur au bout d'une seconde)
                 PlayMakerFSM f = PickUpFsm();
                 if (f == null || Time.frameCount - eqSince > 60) { L("video : camescope pas equipe (main du jeu " + (f != null ? f.ActiveStateName : "introuvable") + ")"); ExitViewfinder(); return; }
-                if (f.ActiveStateName != "Item picked") return;
+                if (f.ActiveStateName != "Part picked" && f.ActiveStateName != "Item picked") return;
                 eqFsm = f; eqRestart = f.Fsm.RestartOnEnable;
                 f.Fsm.RestartOnEnable = false;   // (a la reprise : toujours « Item picked », l'objet en main)
                 f.enabled = false;
