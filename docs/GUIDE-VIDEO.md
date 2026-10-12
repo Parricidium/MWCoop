@@ -41,16 +41,20 @@ To take the tape out: look at the camcorder (not in your hand) and **hold F**.
 
 ### 4. Film
 
-**Camcorder in your hand:**
+**Camcorder in your hand:** press **F** to raise it to your eye, like the ice scraper. The others see you holding it to your eye, and you look through the viewfinder (4:3 VHS picture, REC, tape counter, battery). Then:
 
-- **F** = viewfinder: you look through the camcorder (4:3 VHS picture, REC, tape counter, battery). **Mouse wheel** = zoom. **F** again to leave the viewfinder.
-- **R** = start / stop recording.
+- **Left click** = start recording / stop (the take ends and is sent to the others).
+- **R** = pause / resume, as often as you like: it stays the same take.
+- **Mouse wheel** = zoom.
+- **Right click** = lower the camcorder (you keep it in your hand; recording pauses). A **second right click** throws it, like any object of the game.
+
+Camcorder in your hand without the viewfinder: **R** = start / stop recording.
 
 ![Viewfinder](img/video/viewfinder.jpg)
 
 **Camcorder set down** (on a tripod-like spot: a table, a shelf...):
 
-- Look at it and press **F** = start / stop recording. It films straight ahead.
+- Look at it and press **R** = start recording, **R** again = stop. It films straight ahead. **Hold F** to take the tape out.
 - When you drop it, it turns to face where you were looking. Handy to film yourself and your friends.
 
 ![Camcorder on a table](img/video/camcorder-on-table.jpg)
@@ -58,7 +62,7 @@ To take the tape out: look at the camcorder (not in your hand) and **hold F**.
 Good to know:
 
 - A red light blinks on the camcorder while it records — everybody sees it.
-- The sound recorded is what **you** hear (the game around you, the music, the cars...).
+- The sound recorded is what **you** hear: the game around you, the music, the cars, and the other players' voices (voice chat, louder when they're close). **Your own voice** is recorded too when you talk (V) while filming — if the camcorder is set down, it gets quieter the further you are from it.
 - **Every take is added after the previous ones** on the tape, like a real VHS you resume after a stop. Up to 40 takes per tape. One take lasts at most 10 minutes.
 - When you stop, the film is sent to the other players in the background (a few seconds per minute of film).
 
@@ -149,20 +153,24 @@ Pour la ressortir : vise le caméscope (posé) et **tiens F**.
 
 ### 4. Filmer
 
-**Caméscope en main :**
+**Caméscope en main :** appuie sur **F** pour le porter à l'œil, comme la raclette à givre. Les autres te voient le tenir contre ton œil, et tu regardes dans le viseur (image 4:3 façon VHS, REC, compteur, pile). Ensuite :
 
-- **F** = viseur : tu regardes à travers le caméscope (image 4:3 façon VHS, REC, compteur, pile). **Molette** = zoom. **F** pour sortir du viseur.
-- **R** = lancer / arrêter l'enregistrement.
+- **Clic gauche** = lancer l'enregistrement / l'arrêter (la prise se termine et part chez les autres).
+- **R** = pause / reprise, autant de fois que tu veux : ça reste la même prise.
+- **Molette** = zoom.
+- **Clic droit** = baisser le caméscope (il reste en main ; l'enregistrement se met en pause). Un **2e clic droit** le jette, comme tout objet du jeu.
+
+Caméscope en main sans le viseur : **R** = lancer / arrêter l'enregistrement.
 
 **Caméscope posé** (sur une table, une étagère...) :
 
-- Vise-le, **F** = lancer / arrêter l'enregistrement. Il filme droit devant lui.
+- Vise-le : **R** = lancer l'enregistrement, **R** à nouveau = l'arrêter. Il filme droit devant lui. **F tenu** pour sortir la cassette.
 - Quand tu le lâches, il se tourne vers là où tu regardais. Pratique pour te filmer avec tes amis.
 
 Bon à savoir :
 
 - Un voyant rouge clignote sur le caméscope pendant l'enregistrement : tout le monde le voit.
-- Le son enregistré est ce que **tu** entends (le jeu autour de toi, la musique, les voitures...).
+- Le son enregistré est ce que **tu** entends : le jeu autour de toi, la musique, les voitures, et la voix des autres joueurs (vocal, plus forte quand ils sont près). **Ta propre voix** est enregistrée aussi quand tu parles (V) en filmant — caméscope posé, elle baisse quand tu t'en éloignes.
 - **Chaque prise s'ajoute à la suite des précédentes** sur la cassette, comme une vraie VHS qu'on reprend après un arrêt. 40 prises au plus par cassette, 10 minutes au plus par prise.
 - À l'arrêt, le film part chez les autres joueurs en tâche de fond (quelques secondes par minute de film).
 
