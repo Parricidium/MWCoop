@@ -466,6 +466,12 @@ namespace MWCoop
             Flush();
             root = keepRoot;
             door = pivot.transform;
+            // collision de la porte (elle tourne avec) : fermee, elle bloque ; on clique dessus pour l'ouvrir
+            var dc = new GameObject("osuus_ovi_coll");
+            dc.transform.SetParent(pivot.transform, false);
+            dc.transform.localPosition = new Vector3(w / 2f, top / 2f, 0f);
+            var dbc = dc.AddComponent<BoxCollider>(); dbc.size = new Vector3(w, top, 0.06f);
+            doorCol = dbc;
         }
 
         static void TickDoor()
@@ -475,10 +481,8 @@ namespace MWCoop
             bool near = false;
             // (le joueur, les autres joueurs, la camera d'essai)
             Transform pl = Game.PlayerT;
-            if (pl != null && (pl.position - c).sqrMagnitude < 2.2f * 2.2f) near = true;
-            foreach (Avatar a in PlayerSync.Avatars) if (a.Root != null && (a.Root.transform.position - c).sqrMagnitude < 2.2f * 2.2f) near = true;
-            if (testCam != null && (testCam.transform.position - c).sqrMagnitude < 2.2f * 2.2f) near = true;
-            if (forceDoor) near = true;
+            // (porte ouverte a la main, clic sur la porte : KauppaOsto ; les essais l'ouvrent)
+            if (doorOpen || forceDoor) near = true;
             doorAngle = Mathf.MoveTowards(doorAngle, near ? 95f : 0f, Time.deltaTime * 160f);
             door.localRotation = Quaternion.Euler(0, doorAngle, 0);
         }

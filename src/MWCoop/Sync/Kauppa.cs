@@ -36,7 +36,9 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             root = null; door = null; doorAngle = 0f; built = false; vendor = null; looked = null; testCam = null;
-            gameMats = null; byName = null; guiText = null; guiUse = null; guiBuy = null; money = null;
+            gameMats = null; byName = null; guiText = null; guiUse = null; guiBuy = null; money = null; guiSub = null;
+            basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
+            pussit.Clear(); pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
             buildAt = Active && Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
         }
@@ -52,15 +54,18 @@ namespace MWCoop
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 try { Build(); } catch (Exception e) { L("construction : " + e); }
                 L("construite en " + sw.ElapsedMilliseconds + " ms");
-                gameMats = null; byName = null;   // (index liberes)
                 t0 = now;
                 LoadScript();
+                if (root != null) LoadBags();
+                gameMats = null; byName = null;   // (index liberes)
                 return;
             }
             if (root == null) return;
             TickDoor();
             Interact();
             Greet(now);
+            TickSay();
+            TickBags(now);
             RunScript(now);
             if (shotAt > 0f && now >= shotAt) { shotAt = -1f; TakeShot(); }
         }
@@ -92,7 +97,12 @@ namespace MWCoop
         static string ObjPath(Transform t) { string p = t.name; while (t.parent != null) { t = t.parent; p = t.name + "/" + p; } return p; }
 
         // ---------------------------------------------------------------- articles en rayon
-        class Offer { public string Item; public int Price; public string Fr, En; public Collider Col; }
+        class Offer
+        {
+            public string Item; public int Price; public string Fr, En; public Collider Col;
+            public readonly List<GameObject> Shown = new List<GameObject>();   // exposes en rayon (caches quand on les prend)
+            public int Taken;                                                  // pris, pas encore payes
+        }
         static readonly List<Offer> offers = new List<Offer>();
         static Bounds counterBounds;
 
@@ -104,9 +114,11 @@ namespace MWCoop
             // (gondole : StoreGondola(-2.7, -0.5, -0.55, 0.15, 1.45, 3) -- tablette 2, face avant de mid+0.02 a b1-0.02)
             float shelf = 0.14f + 2f * (1.45f - 0.2f) / 3.3f + 0.025f;
             float zMid = (-0.18f + 0.13f) / 2f;
+            var offer = new Offer { Item = "makuupussi", Price = SleepingBagPrice, Fr = "SAC DE COUCHAGE", En = "SLEEPING BAG" };
             foreach (float x in new[] { -2.2f, -1.6f, -1.0f })
             {
                 var g = new GameObject("osuus_myynnissa_makuupussi");
+                offer.Shown.Add(g);
                 g.transform.SetParent(root.transform, false);
                 g.AddComponent<MeshFilter>().sharedMesh = m;
                 g.AddComponent<MeshRenderer>().sharedMaterial = mat;
@@ -123,12 +135,14 @@ namespace MWCoop
             var bc = col.AddComponent<BoxCollider>();
             bc.isTrigger = true;
             bc.size = new Vector3(1.9f, 0.36f, 0.4f);
-            offers.Add(new Offer { Item = "makuupussi", Price = SleepingBagPrice, Fr = "MAKUUPUSSI (sac de couchage)", En = "MAKUUPUSSI (sleeping bag)", Col = bc });
+            offer.Col = bc;
+            offers.Add(offer);
             Plane("hintalappu", new Vector3(-1.6f, shelf - 0.075f, 0.152f), 0.18f, 0.09f, Vector3.forward);
             L("en rayon : sac de couchage " + SleepingBagPrice + " mk");
         }
 
-        static Offer looked;
+        static object looked;
+        static float notEnoughUntil;
         static FsmBool guiUse, guiBuy;
         static FsmString guiText;
         static FsmFloat money;
@@ -139,50 +153,71 @@ namespace MWCoop
             if (guiText == null)
             {
                 var gv = FsmVariables.GlobalVariables;
-                guiUse = gv.FindFsmBool("GUIuse"); guiBuy = gv.FindFsmBool("GUIbuy"); guiText = gv.FindFsmString("GUIinteraction"); money = gv.FindFsmFloat("PlayerMoney");
+                guiUse = gv.FindFsmBool("GUIuse"); guiBuy = gv.FindFsmBool("GUIbuy"); guiText = gv.FindFsmString("GUIinteraction");
+                money = gv.FindFsmFloat("PlayerMoney"); guiSub = gv.FindFsmString("GUIsubtitle");
             }
+            float now = Time.realtimeSinceStartup;
             Camera cam = Camera.main;
-            Offer hit = null;
-            if (cam != null && (cam.transform.position - root.transform.position).sqrMagnitude < 15f * 15f && !Game.GlobalBool("PlayerSleeps"))
+            object hit = null;
+            if (cam != null && (cam.transform.position - root.transform.position).sqrMagnitude < 40f * 40f && !Game.GlobalBool("PlayerSleeps"))
             {
                 var ray = new Ray(cam.transform.position, cam.transform.forward);
-                float best = 1.8f;
-                foreach (Offer o in offers)
-                {
-                    RaycastHit h;
-                    if (o.Col != null && o.Col.Raycast(ray, out h, best)) { best = h.distance; hit = o; }
-                }
+                float best = 1.6f;
+                RaycastHit h;
+                foreach (Offer o in offers) if (o.Col != null && o.Col.Raycast(ray, out h, best)) { best = h.distance; hit = o; }
+                if (registerCol != null && registerCol.Raycast(ray, out h, best)) { best = h.distance; hit = registerCol; }
+                if (doorCol != null && doorCol.Raycast(ray, out h, best)) { best = h.distance; hit = doorCol; }
+                foreach (Pussi b in pussit)
+                    if (b.Go != null && b.Go.transform.parent == null && b.Col.Raycast(ray, out h, best)) { best = h.distance; hit = b; }   // (pas tenu en main)
             }
             if (hit != looked)
             {
-                if (looked != null) { if (guiBuy != null) guiBuy.Value = false; if (guiText != null) guiText.Value = ""; }
+                if (looked != null) ClearGui();
                 looked = hit;
+                fDown = -1f;
             }
             if (hit == null) return;
-            if (guiBuy != null) guiBuy.Value = true;
-            if (guiText != null) guiText.Value = Lang.T(hit.Fr, hit.En) + " - " + hit.Price + " MK";
-            if (Input.GetMouseButtonDown(0)) Buy(hit);
-        }
 
-        static void Buy(Offer o)
-        {
-            float now = Time.realtimeSinceStartup;
-            if (now - lastBuy < 0.7f) return;
-            lastBuy = now;
-            if (money == null || money.Value < o.Price)
+            var offer = hit as Offer;
+            if (offer != null)
             {
-                Hud.Toast(Lang.T("Myyjä : pas assez d'argent, " + o.Price + " mk", "Shopkeeper: not enough money, " + o.Price + " mk"));
+                guiBuy.Value = true;
+                guiText.Value = Lang.T(offer.Fr, offer.En) + " " + offer.Price.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " MK";
+                if (Input.GetMouseButtonDown(0)) Take(offer);
+                else if (Input.GetMouseButtonDown(1)) PutBack(offer);
                 return;
             }
-            money.Value -= o.Price;   // (Wallet : une depense reste au joueur)
-            // pose sur le tapis du comptoir, cote client, un peu au-dessus (il tombe dessus)
-            Bounds cb = counterBounds.size.sqrMagnitude > 0f ? counterBounds : new Bounds(new Vector3(3.3f, 0.5f, -1.2f), new Vector3(3.4f, 1.05f, 1.6f));
-            Vector3 at = root.transform.TransformPoint(new Vector3(cb.min.x + 0.7f, cb.max.y + 0.3f, cb.max.z - 0.35f));
-            Quaternion rot = root.transform.rotation * Quaternion.Euler(0f, 90f, 0f);
-            try { MasterAudio.PlaySound3DAtVector3AndForget("Store", at, 1f, null, 0f, "cash_register_2"); } catch { }
-            SleepingBags.Purchase(at, rot);
-            Hud.Toast(Lang.T("Myyjä : Kiitos ! Ton sac de couchage est sur le comptoir.", "Shopkeeper: Kiitos! Your sleeping bag is on the counter."));
-            L("achat : " + o.Item + " " + o.Price + " mk, reste " + money.Value.ToString("F0") + " mk");
+            if (ReferenceEquals(hit, registerCol))
+            {
+                guiBuy.Value = true;
+                if (now < notEnoughUntil) guiText.Value = "NOT ENOUGH MONEY";
+                else guiText.Value = Lang.T("TOTAL ", "PRICE TOTAL ") + basketTotal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " MK";
+                if (Input.GetMouseButtonDown(0))
+                {
+                    if (basketTotal > 0f && (money == null || money.Value < basketTotal)) notEnoughUntil = now + 2f;
+                    Pay();
+                }
+                return;
+            }
+            if (ReferenceEquals(hit, doorCol))
+            {
+                guiUse.Value = true;
+                if (Input.GetMouseButtonDown(0)) ToggleDoor(!doorOpen, true);
+                return;
+            }
+            var bag = hit as Pussi;
+            if (bag != null)
+            {
+                guiUse.Value = true;
+                if (Input.GetKeyDown(KeyCode.F)) fDown = now;
+                if (fDown >= 0f)
+                {
+                    float held = now - fDown;
+                    if (held > 0.25f) guiText.Value = Lang.T("OUVERTURE DU SAC...", "OPENING THE BAG...");
+                    if (held >= 1.5f) { fDown = -1f; guiText.Value = ""; TakeOut(bag, true); }
+                    else if (Input.GetKeyUp(KeyCode.F)) { fDown = -1f; guiText.Value = ""; TakeOut(bag, false); }
+                }
+            }
         }
 
         // ---------------------------------------------------------------- accueil
@@ -198,7 +233,7 @@ namespace MWCoop
             if (inNow && !inside && now - lastHello > 30f)
             {
                 lastHello = now;
-                Hud.Toast(Lang.T("Myyjä : Tervetuloa ! Bienvenue à l'Osuuskauppa.", "Shopkeeper: Tervetuloa! Welcome to the Osuuskauppa."));
+                Say("Myyjä : Tervetuloa ! Bienvenue à l'Osuuskauppa.", "Shopkeeper: Tervetuloa! Welcome to the Osuuskauppa.");
             }
             inside = inNow;
         }
@@ -420,7 +455,11 @@ namespace MWCoop
                                 if (f.FsmName == "Color") { f.FsmVariables.GetFsmInt("Time").Value = int.Parse(a[2]); f.SendEvent("TIMESKIP"); }
                             break;
                         case "argent": if (money != null) money.Value = F(a[2]); L("essai : argent " + a[2]); break;
-                        case "osto": if (offers.Count > 0) { lastBuy = -10f; Buy(offers[0]); } break;
+                        case "tex": DumpTex(string.Join(" ", a, 2, a.Length - 2)); break;
+                        case "ota": if (offers.Count > 0) Take(offers[0]); break;
+                        case "maksa": lastBuy = -10f; Pay(); break;
+                        case "avaa": if (pussit.Count > 0) TakeOut(pussit[pussit.Count - 1], a.Length > 2 && a[2] == "kaikki"); break;
+                        case "pussi": if (pussit.Count > 0) { Pussi pb = pussit[pussit.Count - 1]; L("essai : sac de courses en " + root.transform.InverseTransformPoint(pb.Go.transform.position).ToString("F2") + ", " + pb.Count + " article(s)"); } break;
                         case "ovi": forceDoor = a[2] == "1"; break;
                         case "lieu":
                         {
