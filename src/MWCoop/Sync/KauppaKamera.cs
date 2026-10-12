@@ -11,10 +11,10 @@ namespace MWCoop
     //  - il faut une cassette : comme le magnetoscope (cassette en main + clic sur le camescope pose ; F tenu = ejecter).
     //  - tenu en main : F = l'equiper (comme la raclette a givre ; demande de JD, 12/10) : la main du jeu (PickUp) est
     //    mise en pause, le camescope monte a l'oeil (les autres le voient a l'oeil, les mains dessus : Gestures suit
-    //    l'objet tenu) et on regarde dans le viseur (image 4:3 facon VHS, compteur, REC ; molette = zoom). Equipe : clic
-    //    gauche = enregistrer / arreter la prise, R = pause / reprise, clic droit = sortir de l'objectif (le camescope
-    //    reste en main ; un 2e clic droit le jette, comme tout objet du jeu). En main sans viseur : R = enregistrer /
-    //    arreter. Pose : R = enregistrer / arreter, F tenu = ejecter ; il filme devant lui (pose sans etre lance, il se
+    //    l'objet tenu) et on regarde dans le viseur (image 4:3 facon VHS, compteur, REC ; molette = zoom). Equipe (regle
+    //    de JD, 12/10) : clic gauche = filmer, puis pause, puis reprise... (R pareil) ; F (ou clic droit) = le rebaisser
+    //    dans les mains, ce qui termine la prise ; ensuite un clic droit le jette, comme tout objet du jeu. En main sans
+    //    viseur : R = enregistrer / arreter. Pose : R = enregistrer / arreter, F tenu = ejecter ; il filme devant lui (pose sans etre lance, il se
     //    tourne vers la ou regardait le joueur). Touches : [Touches] CameraViseur (F), CameraEnregistrer (R).
     //  - enregistrement chez celui qui l'a lance : camera a part 256x192 a 10 images/s, effet VHS calcule sur l'image
     //    (couleurs qui bavent, neige, lignes, bas d'image qui tremble), JPEG ; son = ce qu'entend le joueur (sortie de
@@ -180,7 +180,7 @@ namespace MWCoop
             foreach (var kv in eqLayers) if (kv.Key != null) kv.Key.layer = kv.Value;
             eqLayers.Clear();
             if (eqStage == 2 && eqFsm != null) eqReenable = Time.frameCount + 1;
-            if (rec != null && rec.Cam == eqCam && !rec.Paused) Pause(true);
+            if (rec != null && rec.Cam == eqCam) StopRec("camescope baisse");   // (baisser termine la prise)
             eqStage = 0; eqCam = null;
         }
 
@@ -217,8 +217,7 @@ namespace MWCoop
                 return;
             }
             if (KameraBusy) return;
-            if (Input.GetMouseButtonDown(0)) { if (rec != null && rec.Cam == eqCam) StopRec("clic"); else StartRec(eqCam); }
-            else if (Input.GetKeyDown(Keys.CameraRec)) { if (rec != null && rec.Cam == eqCam) Pause(!rec.Paused); else StartRec(eqCam); }
+            if (Input.GetMouseButtonDown(0) || Input.GetKeyDown(Keys.CameraRec)) { if (rec != null && rec.Cam == eqCam) Pause(!rec.Paused); else StartRec(eqCam); }
             else if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(Keys.CameraViewfinder)) ExitViewfinder();
         }
 
@@ -366,7 +365,7 @@ namespace MWCoop
                 Style.Fill(new Rect(zx + f * zw - th * 2, zy - Style.Px(10), th * 4, Style.Px(22)), white);
             }
             // touches
-            string keys = Lang.T("CLIC GAUCHE : ENREGISTRER / ARRÊTER    ", "LEFT CLICK: RECORD / STOP    ") + Keys.Label(Keys.CameraRec) + Lang.T(" : PAUSE    CLIC DROIT : SORTIR    MOLETTE : ZOOM", ": PAUSE    RIGHT CLICK: EXIT    WHEEL: ZOOM");
+            string keys = Lang.T("CLIC GAUCHE : FILMER / PAUSE    ", "LEFT CLICK: FILM / PAUSE    ") + Keys.Label(Keys.CameraViewfinder) + Lang.T(" : BAISSER (FIN DE LA PRISE)    MOLETTE : ZOOM", ": LOWER (END OF TAKE)    WHEEL: ZOOM");
             Style.Text(new Rect(r.x, r.yMax - Style.Px(34), r.width, Style.Px(30)), keys, 20, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.7f));
         }
 
