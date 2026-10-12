@@ -493,6 +493,7 @@ namespace MWCoop
                         case "nauhuri": TestVcr(); break;
                         case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
                         case "filmi": TestFilm(); break;
+                        case "tuo": { Esine tp = esineet.FindLast(e => e.Kind == KVhs); if (tp != null && EyeT != null) { tp.Rb.isKinematic = true; tp.Go.transform.SetParent(EyeT, true); } ChatCommand("/importer " + string.Join(" ", a, 2, a.Length - 2)); if (tp != null) { tp.Go.transform.SetParent(null, true); tp.Rb.isKinematic = false; } break; }
                         case "kanna": if (pussit.Count > 0 && EyeT != null) { Transform bt = pussit[pussit.Count - 1].Go.transform; pussit[pussit.Count - 1].Rb.isKinematic = true; bt.SetParent(EyeT, true); bt.position = EyeT.position + EyeT.forward * 0.5f; L("essai : sac en main"); } break;
                         case "irti": foreach (Pussi pb in pussit) if (pb.Go != null && pb.Go.transform.parent != null) { pb.Go.transform.SetParent(null, true); pb.Rb.isKinematic = false; L("essai : sac lache"); } break;
                         case "ulos": { Esine k = esineet.Find(e => e.Kind == KKamera); if (k != null) Eject(k); break; }

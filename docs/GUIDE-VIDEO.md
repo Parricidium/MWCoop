@@ -2,7 +2,7 @@
 
 *Since MWCoop 0.84.0 — [Français plus bas](#français)*
 
-Film your co-op adventures with a 90s VHS camcorder and watch them together on a TV, with sound.
+Film your co-op adventures with a 90s VHS camcorder — or put your own videos on a tape — and watch them together on a TV, with sound.
 
 ## English
 
@@ -77,6 +77,25 @@ The film plays on the nearest TV with its sound, **for all players at the same t
 1. Pick up the tape.
 2. Open the chat (**T**) and type: `/title Summer 1996` (24 characters max).
 3. The title is written on the spine of the tape. `/title` alone wipes it.
+
+### 7. Put your own video on a tape
+
+You can put a real video (a clip filmed with your phone, a short film, a music video...) on a tape and watch it on a TV in the game, with your friends.
+
+1. Put the video file in the **`videot\importer`** folder of the mod, next to your films: `My Winter Car\MWCoop\videot\importer\` (the folder is created the first time you load a game with MWCoop 0.85 or newer). Any format Windows can play works: `.mp4`, `.wmv`, `.avi`, `.mov`, `.m4v`...
+2. In the game, **pick up a tape** (blank or not).
+3. Open the chat (**T**) and type: `/import MyVideo.mp4` (the beginning of the name is enough). `/import` alone lists the videos found in the folder.
+4. The conversion runs in the background — you can keep playing. Its progress shows up at the bottom of the screen.
+5. When it's done, the video is **added after the other takes** of the tape, and the tape gets the name of the file as its title (if it had none).
+6. Put the tape in a VCR next to a TV and press **F**: everybody sees your video, with its sound.
+
+Good to know:
+
+- The picture is converted to the VHS look of the game: 320×240, 12 images per second. It will look like an old tape on an old TV — that's the point!
+- At most **20 minutes** per video. Longer videos are cut.
+- The video is sent to the other players like a film made with the camcorder. Count about a minute of sending for each 5 minutes of video.
+- Settings in `mwcoop.ini`, section `[Boutique]`: `ImportMinutes=20`, `ImportLargeur=320`, `ImportHauteur=240`, `ImportImages=12`, `ImportQualite=50`.
+- Windows "N" editions don't have the video decoder: install Microsoft's "Media Feature Pack" first.
 
 ### Settings
 
@@ -160,6 +179,25 @@ Le film passe sur la TV la plus proche avec son son, **chez tous les joueurs en 
 1. Prends la cassette en main.
 2. Ouvre le tchat (**T**) et tape : `/titre Kesä 1996` (24 caractères au plus).
 3. Le titre s'écrit sur la tranche de la cassette. `/titre` seul l'efface.
+
+### 7. Mettre ta propre vidéo sur une cassette
+
+Tu peux mettre une vraie vidéo (un clip filmé avec ton téléphone, un court métrage, un clip musical...) sur une cassette et la regarder sur une TV du jeu, avec tes amis.
+
+1. Mets le fichier vidéo dans le dossier **`videot\importer`** du mod, à côté de tes films : `My Winter Car\MWCoop\videot\importer\` (le dossier est créé au premier chargement d'une partie avec MWCoop 0.85 ou plus récent). Tout ce que Windows sait lire marche : `.mp4`, `.wmv`, `.avi`, `.mov`, `.m4v`...
+2. En jeu, **prends une cassette en main** (vierge ou non).
+3. Ouvre le tchat (**T**) et tape : `/importer MaVideo.mp4` (le début du nom suffit). `/importer` seul liste les vidéos trouvées dans le dossier.
+4. La conversion se fait en tâche de fond : tu peux continuer à jouer. Son avancement s'affiche en bas de l'écran.
+5. À la fin, la vidéo **s'ajoute après les autres prises** de la cassette, et la cassette prend le nom du fichier comme titre (si elle n'en avait pas).
+6. Mets la cassette dans un magnétoscope à côté d'une TV et appuie sur **F** : tout le monde voit ta vidéo, avec le son.
+
+Bon à savoir :
+
+- L'image est convertie au rendu VHS du jeu : 320×240, 12 images par seconde. Ça ressemble à une vieille cassette sur une vieille télé — c'est voulu !
+- **20 minutes** au plus par vidéo. Au-delà, elle est coupée.
+- La vidéo part chez les autres joueurs comme un film du caméscope. Compte environ une minute d'envoi par tranche de 5 minutes de vidéo.
+- Réglages dans `mwcoop.ini`, section `[Boutique]` : `ImportMinutes=20`, `ImportLargeur=320`, `ImportHauteur=240`, `ImportImages=12`, `ImportQualite=50`.
+- Les éditions « N » de Windows n'ont pas le décodeur vidéo : installe d'abord le « Media Feature Pack » de Microsoft.
 
 ### Réglages
 
