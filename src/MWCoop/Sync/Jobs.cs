@@ -93,6 +93,9 @@ namespace MWCoop
             public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();  // transitions prises ici
             public bool FromReplay;                                                          // cle : derniere position recue d'un autre
             public HashSet<string> InputStates = new HashSet<string>();                      // etats qui lisent la souris ou le clavier
+            public HashSet<string> KeyStates = new HashSet<string>();                        // etats qui lisent une touche (GetButton*, GetKey*)
+            public HashSet<string> MouseStates = new HashSet<string>();                      // etats qui visent un objet a la souris (MousePick*, GetMouse*)
+            public Transform Vehicle;                                                        // vehicule de l'automate (null : aucun)
             public HashSet<string> ClockStates = new HashSet<string>();                      // etats qui lisent l'heure du jeu (SUN 'Color' Hours)
             public string ClockLast; public float ClockAt = -1000f;                          // derniere transition d'horloge envoyee
             public Dictionary<string, int> Loops = new Dictionary<string, int>();            // commande : transitions sans geste, sur 10 s
@@ -359,6 +362,8 @@ namespace MWCoop
                         if (RandomActions.Contains(tn)) j.RandomStates.Add(s.Name);
                         if (ClickActions.Contains(tn)) j.ClickStates.Add(s.Name);
                         foreach (string p in InputActions) if (tn.StartsWith(p)) j.InputStates.Add(s.Name);
+                        if (tn.StartsWith("GetButton") || tn.StartsWith("GetKey")) j.KeyStates.Add(s.Name);
+                        if (tn.StartsWith("MousePick") || tn.StartsWith("GetMouse")) j.MouseStates.Add(s.Name);
                         var gf = a as HutongGames.PlayMaker.Actions.GetFsmFloat;
                         if (gf != null && gf.variableName != null && (gf.variableName.Value == "Hours" || gf.variableName.Value == "Minutes")) j.ClockStates.Add(s.Name);
                     }
@@ -369,6 +374,17 @@ namespace MWCoop
                 return true;
             }
             catch { return false; }
+        }
+
+        // Racine du vehicule (corps avec CarDynamics) au-dessus de t, sinon null.
+        static Transform VehicleOf(Transform t)
+        {
+            for (Transform p = t; p != null; p = p.parent)
+            {
+                Rigidbody rb = p.GetComponent<Rigidbody>();
+                if (rb != null && p.GetComponent("CarDynamics") != null) return p;
+            }
+            return null;
         }
 
         static void OnLocal(Job j, string state)
@@ -385,6 +401,15 @@ namespace MWCoop
             if (!j.Control && Npcs.LedElsewhere(j.F.transform)) return;   // PNJ mene par un autre joueur (client du taxi) : sa logique fait foi
             // Cablage : seul le branchement (clic -> "Sound") part ; l'approche du fil (ASSEMBLE au survol) non.
             if (j.F.FsmName == "Assemble" && state != "Sound") return;
+            // Touche lue par l'automate d'un vehicule (boite de la GIFU : « Range » change la gamme et purge l'air, chez TOUS
+            // ceux qui appuient sur Range, meme dans un autre vehicule) : seul celui qui conduit ce vehicule l'envoie. Avant :
+            // l'hote changeait la gamme de son KEKMET, la GIFU de l'invite au volant perdait 20 d'air a chaque fois, freins
+            // serres, camion immobile (OpNoob, 0.82.2, 12/10).
+            if (from != null && j.KeyStates.Contains(from.Name) && !j.MouseStates.Contains(from.Name))
+            {
+                if (j.Vehicle == null) j.Vehicle = VehicleOf(j.F.transform);
+                if (j.Vehicle != null && VehicleSync.LocalDrivingRoot != j.Vehicle) return;
+            }
             j.LocalRecent[(from != null ? from.Name : "") + "|" + tr.EventName + "|" + state] = Time.realtimeSinceStartup;
             // Commande qui boucle toute seule, sans geste du joueur (terminal de paiement du taxi : "Check duty" -PROCEED->
             // "Cost?" chaque seconde, chez chacun) : partait sur le reseau a chaque tour, de chaque cote, sans jamais

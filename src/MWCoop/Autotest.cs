@@ -610,7 +610,7 @@ namespace MWCoop
             // de 24 a 60 s la remorque (position, distance au tracteur, copie ou locale).
             if (mode == "attelage")
             {
-                if (t < 1f) { attTry = 0f; attExitAt = 1e9f; }
+                if (t < 1f) { attTry = 0f; attExitAt = 1e9f; attVoisin = 0; attAir = 0; }
                 Rigidbody k = VehicleSync.Body("KEKMET"), fb = VehicleSync.Body("FLATBED");
                 if (Net.Session.IsHost && k != null && fb != null)
                 {
@@ -619,14 +619,14 @@ namespace MWCoop
                     if (t > 25f && step == 2)
                     {
                         step = 3;
-                        fb.transform.position = k.transform.TransformPoint(new Vector3(0f, 0.3f, -4.5f));
+                        fb.transform.position = k.transform.TransformPoint(new Vector3(0f, 0.3f, Config.GetInt("Test", "AttelageVoisin", 0) != 0 ? -6.5f : -4.5f));
                         fb.transform.rotation = k.transform.rotation;
                         fb.velocity = Vector3.zero; fb.angularVelocity = Vector3.zero;
                         var fj = fb.gameObject.AddComponent<FixedJoint>();
                         fj.connectedBody = k;
                         Log.Info("autotest : attelage, FLATBED reliee au KEKMET");
                     }
-                    if (t > 28f && t < 40f) { Vector3 f = k.transform.forward; f.y = 0; k.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(k.velocity.y, 0f); }
+                    if (t > 28f && t < (Config.GetInt("Test", "AttelageVoisin", 0) != 0 ? 58f : 40f)) { Vector3 f = k.transform.forward; f.y = 0; k.velocity = f.normalized * 3f + Vector3.up * Mathf.Min(k.velocity.y, 0f); }
                     // [Test] AttelageSortie=1 : moteur tenu en marche, l'hote descend a 42 s (moteur laisse tournant) : la remorque
                     // doit lui rester (pas « rendue ») et suivre chez l'invite.
                     if (Config.GetInt("Test", "AttelageSortie", 0) != 0)
@@ -641,6 +641,40 @@ namespace MWCoop
                             string st = VehicleSync.TestExit("KEKMET");
                             if (st != "Player in car") { step = 9; attExitAt = t + 1f; Log.Info("autotest : attelage, sorti du tracteur -> " + st); }
                         }
+                    }
+                }
+                // [Test] AttelageVoisin=1 : l'invite se pose a pied a 1,2 m de la remorque a 26 s (elle bouge a cote de lui des
+                // 28 s : il ne doit pas la prendre). A 32 s l'hote, au volant du KEKMET, « appuie » sur Range pour la boite de la
+                // GIFU (comme la touche) : rien ne doit partir ; l'invite note la pression d'air de la GIFU a 15 et 45 s (ses temps).
+                if (Config.GetInt("Test", "AttelageVoisin", 0) != 0)
+                {
+                    if (!Net.Session.IsHost && fb != null && t > 26f && attVoisin == 0)
+                    {
+                        attVoisin = 1;
+                        GameObject pl = GameObject.Find("PLAYER");
+                        var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                        if (cc != null) cc.enabled = false;
+                        if (pl != null) pl.transform.position = fb.position + fb.transform.right * 1.8f + Vector3.up * 0.5f;
+                        if (cc != null) cc.enabled = true;
+                        if (fb.GetComponent<FixedJoint>() == null && k != null) fb.gameObject.AddComponent<FixedJoint>().connectedBody = k;   // (l'attelage du jeu est rejoue ici aussi)
+                        Log.Info("autotest : attelage, invite a pied a cote de la remorque");
+                    }
+                    Rigidbody gifu = VehicleSync.Body("GIFU(750/450psi)");
+                    if (Net.Session.IsHost && gifu != null && t > 32f && attVoisin == 0)
+                    {
+                        attVoisin = 1;
+                        Transform tr = gifu.transform.Find("Simulation/Transmission");
+                        PlayMakerFSM ch = tr != null ? Game.FsmOn(tr.gameObject, "Change") : null;
+                        if (ch != null) { Game.SetState(ch, "Button"); ch.SendEvent("GEAR"); }
+                        Log.Info("autotest : attelage, Range de la GIFU appuye ici -> " + (ch != null ? ch.ActiveStateName : "?"));
+                    }
+                    if (!Net.Session.IsHost && gifu != null && (t > 15f && attAir == 0 || t > 45f && attAir == 1))
+                    {
+                        attAir++;
+                        Transform ab = gifu.transform.Find("Simulation/Airbrakes");
+                        PlayMakerFSM ap = ab != null ? Game.FsmOn(ab.gameObject, "Air Pressure") : null;
+                        HutongGames.PlayMaker.FsmFloat pr = ap != null ? ap.FsmVariables.FindFsmFloat("Pressure") : null;
+                        Log.Info("autotest : attelage, air de la GIFU ici " + (pr != null ? pr.Value.ToString("F1") : "?"));
                     }
                 }
                 if (k != null && fb != null && t > 24f && t < 60f && Time.realtimeSinceStartup >= rivLog)
@@ -2040,7 +2074,7 @@ namespace MWCoop
 
         static bool done, teleported, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
-        static bool rivNear; static float rivLog, cabGap, holdLog, attTry, attExitAt = 1e9f;
+        static bool rivNear; static int attVoisin, attAir; static float rivLog, cabGap, holdLog, attTry, attExitAt = 1e9f;
         static int holdN;
         static GameObject rangeGo;
         static Transform holdCam;
