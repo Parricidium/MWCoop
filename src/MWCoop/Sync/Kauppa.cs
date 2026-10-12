@@ -40,6 +40,7 @@ namespace MWCoop
             basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
             lippu = null; lippuBackMesh = null;
             pussit.Clear(); pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
+            OnLevelLoadedVideo();
             offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
             buildAt = Active && Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
         }
@@ -67,6 +68,7 @@ namespace MWCoop
             Greet(now);
             TickSay();
             TickBags(now);
+            TickItems(now);
             TickLippu();
             RunScript(now);
             if (shotAt > 0f && now >= shotAt) { shotAt = -1f; TakeShot(); }
@@ -139,6 +141,7 @@ namespace MWCoop
             bc.size = new Vector3(1.9f, 0.36f, 0.4f);
             offer.Col = bc;
             offers.Add(offer);
+            try { VideoOffers(); } catch (Exception e) { L("video : rayons " + e); }
             Plane("hintalappu", new Vector3(-1.6f, shelf - 0.075f, 0.152f), 0.18f, 0.09f, Vector3.forward);
             L("en rayon : sac de couchage " + SleepingBagPrice + " mk");
         }
@@ -178,7 +181,13 @@ namespace MWCoop
                 looked = hit;
                 fDown = -1f;
             }
-            if (hit == null) return;
+            if (hit == null)
+            {
+                // objets du coin video (magnetoscope...) : vises partout, pas seulement pres de la boutique
+                if (cam != null && !Game.GlobalBool("PlayerSleeps")) InteractItems(new Ray(cam.transform.position, cam.transform.forward), now);
+                return;
+            }
+            if (lookedItem != null) { ClearGui(); lookedItem = null; }
 
             var offer = hit as Offer;
             if (offer != null)
@@ -459,7 +468,8 @@ namespace MWCoop
                         case "argent": if (money != null) money.Value = F(a[2]); L("essai : argent " + a[2]); break;
                         case "tex": DumpTex(string.Join(" ", a, 2, a.Length - 2)); break;
                         case "lippu": LippuState(); break;
-                        case "ota": if (offers.Count > 0) Take(offers[0]); break;
+                        case "ota": { Offer o = a.Length > 2 ? offers.Find(x => x.Item == a[2]) : (offers.Count > 0 ? offers[0] : null); if (o != null) Take(o); break; }
+                        case "nauhuri": TestVcr(); break;
                         case "maksa": lastBuy = -10f; Pay(); break;
                         case "avaa": if (pussit.Count > 0) TakeOut(pussit[pussit.Count - 1], a.Length > 2 && a[2] == "kaikki"); break;
                         case "pussi": if (pussit.Count > 0) { Pussi pb = pussit[pussit.Count - 1]; L("essai : sac de courses en " + root.transform.InverseTransformPoint(pb.Go.transform.position).ToString("F2") + ", " + pb.Count + " article(s)"); } break;

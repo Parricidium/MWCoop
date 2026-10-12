@@ -101,6 +101,9 @@ namespace MWCoop
             OwnMat("horaires", "affiche-horaires.png");
             OwnMat("makuupussi", "affiche-makuupussi.png");
             OwnMat("hintalappu", "hintalappu-makuupussi.png");
+            OwnMat("hlvhs", "hintalappu-vhs.png");
+            OwnMat("hlnauhuri", "hintalappu-nauhuri.png");
+            OwnMat("hltv", "hintalappu-tv.png");
         }
 
         // ---------------------------------------------------------------- geometrie
