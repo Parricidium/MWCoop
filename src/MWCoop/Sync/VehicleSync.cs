@@ -147,6 +147,7 @@ namespace MWCoop
         // CORRIS poussee par la voiture de l'invite revenait a sa place -- l'hote la gardait ; seule la poussee a pied la
         // donnait) : on l'envoie (etat 2) tant qu'elle roule, puis derniere pose (etat 0) -- comme une poussee a la main.
         static int bumped = -1;
+        static float hitchClaimLog;
         static float bumpUntil, nextBumpLook;
         public static string LocalDrivingKey { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].Key : null; } }
         static int owned = -1, ownedTick;        // voiture quittee moteur tournant : on en garde la main
@@ -200,6 +201,27 @@ namespace MWCoop
             }
             hitches.Clear();
             hitches.AddRange(found);
+        }
+
+        // Vehicule attele a un autre (attelage releve, ou liaison posee depuis : HitchScan ne passe qu'une fois par seconde).
+        // Jamais pris par une poussee (a pied ou en voiture) : la remorque que le tracteur de l'hote venait d'atteler bougeait
+        // a cote de l'invite, qui la prenait (« poussee ») -- deux joueurs sur l'attelage, l'hote tue, tracteur et benne
+        // projetes (OpNoob, 0.82.2, 12/10).
+        static bool Hitched(Car c)
+        {
+            foreach (KeyValuePair<int, int> h in hitches) if (h.Key == c.Index || h.Value == c.Index) return true;
+            foreach (Car o in cars)
+            {
+                if (o == c || o.Body == null || !o.Body.gameObject.activeInHierarchy) continue;
+                foreach (Joint j in o.Body.GetComponentsInChildren<Joint>())
+                    if (j != null && j.connectedBody != null && !(j is SpringJoint) && !Tow.IsRope(j) && (j.connectedBody == c.Body || j.connectedBody.transform.IsChildOf(c.T))) return true;
+            }
+            foreach (Joint j in c.Body.GetComponentsInChildren<Joint>())
+            {
+                if (j == null || j.connectedBody == null || j is SpringJoint || Tow.IsRope(j)) continue;
+                foreach (Car o in cars) if (o != c && o.Body != null && (o.Body == j.connectedBody || j.connectedBody.transform.IsChildOf(o.T))) return true;
+            }
+            return false;
         }
 
         // 20 fois/s : la remorque attelee au vehicule qu'on mene (conduit, ou quitte moteur tournant / pousse) -- sauf si un
@@ -775,6 +797,11 @@ namespace MWCoop
                 if (d < bd) { bd = d; best = c; }
             }
             if (best == null) return;
+            if (Hitched(best))
+            {
+                if (now - pushSkipLog > 10f) { pushSkipLog = now; Log.Info("poussee : " + best.Key + " attelee : pas prise"); }
+                return;
+            }
             // Contre un vehicule mene par un autre (son tracteur la pousse, ou y est attele) : c'est lui qui la bouge, pas
             // nous. Avant : le plateau pousse par le KEKMET de l'hote bougeait chez l'invite a cote, qui le prenait
             // (« poussee ») -- copie figee chez l'hote, que son tracteur percutait : projete, conducteur tue (retour de
@@ -824,6 +851,7 @@ namespace MWCoop
                 if (c.Body.velocity.sqrMagnitude < 0.16f) continue;
                 Vector3 near = our.Body.ClosestPointOnBounds(c.Body.worldCenterOfMass);
                 if ((c.Body.ClosestPointOnBounds(near) - near).sqrMagnitude > 0.8f * 0.8f) continue;
+                if (Hitched(c)) continue;   // (remorque : l'attelage la mene)
                 best = c; break;
             }
             if (best == null) return;
@@ -1931,6 +1959,7 @@ namespace MWCoop
             if (c.Index == owned && mode != 1) return;        // mon moteur tourne : je garde la main
             if (c.Index == owned) { owned = -1; Log.Info(c.Key + " prise par #" + who); }
             if (c.Index == bumped && !driven) return;         // je la pousse avec ma voiture : je garde la main
+            if (hitchSent.Contains(c.Index) && mode != 1) { if (now0 >= hitchClaimLog) { hitchClaimLog = now0 + 5f; Log.Info("attelage : " + c.Key + " tiree d'ici, prise de #" + who + " ignoree"); } return; }   // (la remorque qu'on tire : a nous)
             if (c.Index == bumped) { bumped = -1; Log.Info("poussee en voiture : " + c.Key + " prise par #" + who); }
             if (driven)
             {
