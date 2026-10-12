@@ -41,12 +41,14 @@ namespace MWCoop
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DColor(int id, float r, float g, float b);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DTexAvg(System.IntPtr tex, float[] rgb);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DColorTex(int id, System.IntPtr tex, int maxSize);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DMask(int id, int mask);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DForget(int id);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DMeshParts(int id, float[] uvs, int nv, int n, int[] triStart, int[] texIds, float[] cols);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFrame(float[] p);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInts(int[] data, int n);
         static DProbe fProbe; static DPtr fInit; static DInt fPostRender, fCapture, fArm; static DInputs fInputs; static DMesh fMesh;
         static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps; static DAmbient fAmbient; static DFloat fRefl;
-        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg; static DColorTex fColorTex; static DMeshParts fMeshParts;
+        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg; static DColorTex fColorTex; static DMeshParts fMeshParts; static DMask fMeshMask; static DForget fForget;
         static T Fn<T>(System.IntPtr lib, string name) where T : class
         {
             System.IntPtr p = GetProcAddress(lib, name);
@@ -64,7 +66,7 @@ namespace MWCoop
             fAmbient = Fn<DAmbient>(lib, "RtAmbient");
             fRefl = Fn<DFloat>(lib, "RtReflections");
             fMeshColor = Fn<DColor>(lib, "RtMeshColor"); fStaticColor = Fn<DColor>(lib, "RtStaticColor"); fTexAvg = Fn<DTexAvg>(lib, "RtTexAverage");
-            fColorTex = Fn<DColorTex>(lib, "RtColorTexture"); fMeshParts = Fn<DMeshParts>(lib, "RtMeshParts");
+            fColorTex = Fn<DColorTex>(lib, "RtColorTexture"); fMeshParts = Fn<DMeshParts>(lib, "RtMeshParts"); fMeshMask = Fn<DMask>(lib, "RtMeshMask"); fForget = Fn<DForget>(lib, "RtForgetMesh");
         }
         static int RtProbe(string logPath) { return fProbe(logPath); }
         static int RtInit(System.IntPtr d3d11Resource) { return fInit(d3d11Resource); }
@@ -177,7 +179,7 @@ namespace MWCoop
             RestoreShadows();
             probed = false; hooked = null; ready = false;
             lastDepth = lastNormal = System.IntPtr.Zero;
-            tracked.Clear(); meshIds.Clear(); sentMeshes.Clear(); badMeshes.Clear(); toSend.Clear(); skins.Clear(); skinNear.Clear(); meshMat.Clear(); staticSum.Clear(); staticN.Clear(); staticColorSent.Clear(); queued.Clear(); cutMats.Clear(); texQueue.Clear(); texQueued.Clear();
+            tracked.Clear(); meshIds.Clear(); sentMeshes.Clear(); badMeshes.Clear(); toSend.Clear(); skins.Clear(); skinNear.Clear(); meshMat.Clear(); staticSum.Clear(); staticN.Clear(); staticColorSent.Clear(); groundIds.Clear(); groundMasked.Clear(); lastSeen.Clear(); queued.Clear(); cutMats.Clear(); texQueue.Clear(); texQueued.Clear();
             probeAt = PlayerSync.InGame && Wanted ? Time.realtimeSinceStartup + 8f : -1;
         }
 
@@ -246,6 +248,51 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- scene
         class Tracked { public Renderer R; public int Mesh; public bool Static, Skinned; }
+        // Sol (rendus sans ombre : MAP/MESH/TERRAIN_OBJ...) : leur collision a le maillage d'origine, lisible (le rendu est en
+        // lot statique, illisible, et absent de la carte d'ombres ou le decor est releve). Masque 2 : vu par l'occlusion
+        // ambiante et les reflets, pas par les ombres (pas plus que chez Unity). [Graphismes] RTSol (1).
+        static readonly HashSet<int> groundIds = new HashSet<int>(), groundMasked = new HashSet<int>();
+        // Memoire : maillages qui ne sont plus dans la scene depuis 60 s oublies (la DLL libere leurs tampons et leurs cases).
+        static readonly Dictionary<int, float> lastSeen = new Dictionary<int, float>();
+        static float nextForget;
+        static void ForgetOld()
+        {
+            float now = Time.realtimeSinceStartup, keep = Config.GetInt("Test", "RTOubli", 60);
+            foreach (Tracked t in tracked) lastSeen[t.Mesh] = now;
+            foreach (SkinnedMeshRenderer sm in skinNear) { SkinState ss; if (sm != null && skins.TryGetValue(sm, out ss)) lastSeen[ss.Id] = now; }
+            if (now < nextForget) return;
+            nextForget = now + Mathf.Min(10f, keep);
+            var goneSkins = new List<SkinnedMeshRenderer>();
+            foreach (var kv in skins)
+            {
+                float seen;
+                if (kv.Key != null && lastSeen.TryGetValue(kv.Value.Id, out seen) && now - seen < keep) continue;
+                goneSkins.Add(kv.Key);
+            }
+            foreach (SkinnedMeshRenderer sm in goneSkins)
+            {
+                SkinState ss = skins[sm];
+                if (ss.Sent) { try { fForget(ss.Id); } catch { } sentMeshes.Remove(ss.Id); }
+                lastSeen.Remove(ss.Id);
+                if (ss.Baked != null) Object.Destroy(ss.Baked);
+                skins.Remove(sm);
+            }
+            var gone = new List<Mesh>();
+            foreach (var kv in meshIds)
+            {
+                float seen;
+                if (!sentMeshes.Contains(kv.Value) || (lastSeen.TryGetValue(kv.Value, out seen) && now - seen < keep)) continue;
+                if (!lastSeen.ContainsKey(kv.Value)) { lastSeen[kv.Value] = now; continue; }
+                gone.Add(kv.Key);
+            }
+            foreach (Mesh m in gone)
+            {
+                int id = meshIds[m];
+                try { fForget(id); } catch { }
+                meshIds.Remove(m); sentMeshes.Remove(id); lastSeen.Remove(id); groundIds.Remove(id); groundMasked.Remove(id); cutMats.Remove(m); meshMat.Remove(m);
+            }
+            if (gone.Count + goneSkins.Count > 0) Log.Info("rt : " + gone.Count + " maillages et " + goneSkins.Count + " personnages oublies (plus dans la scene depuis " + keep + " s), " + sentMeshes.Count + " gardes");
+        }
         // Personnages (maillages animes : joueurs, PNJ) : pose relevee a chaque image (BakeMesh), au plus 8 a 40 m.
         class SkinState { public int Id; public Mesh Baked; public bool Sent; public float[] Buf; public string PartsSig; public float NextParts; }
         static readonly Dictionary<SkinnedMeshRenderer, SkinState> skins = new Dictionary<SkinnedMeshRenderer, SkinState>();
@@ -273,12 +320,30 @@ namespace MWCoop
             float r2 = Range * Range;
             tracked.Clear();
             var statics = new HashSet<Mesh>();
-            int total = 0, off = 0, noShadow = 0, far = 0, transp = 0, excl = 0, noMesh = 0, dup = 0, bad = 0, leaves = 0;
+            int total = 0, off = 0, noShadow = 0, far = 0, transp = 0, excl = 0, noMesh = 0, dup = 0, bad = 0, leaves = 0, grounds = 0;
             foreach (MeshRenderer mr in Object.FindObjectsOfType<MeshRenderer>())
             {
                 total++;
                 if (!mr.enabled) { off++; continue; }
-                if (mr.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off) { noShadow++; continue; }
+                if (mr.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off)
+                {
+                    noShadow++;
+                    if (Gfx.Get("RTSol", 1) == 0 || mr.bounds.SqrDistance(cp) > r2) continue;
+                    MeshCollider gc = mr.GetComponent<MeshCollider>();
+                    Material gm = mr.sharedMaterial;
+                    if (gc == null || gc.sharedMesh == null || gm == null || gm.renderQueue >= 2500) continue;
+                    string gr = mr.transform.root.name;
+                    if (gr == "PLAYER" || gr == "GUI" || gr.StartsWith("MWCoop")) continue;
+                    Mesh gmesh = gc.sharedMesh;
+                    int gid;
+                    if (!meshIds.TryGetValue(gmesh, out gid)) { gid = nextMeshId++; meshIds[gmesh] = gid; groundIds.Add(gid); }
+                    if (badMeshes.Contains(gid)) continue;
+                    if (!meshMat.ContainsKey(gmesh)) meshMat[gmesh] = gm;
+                    if (!sentMeshes.Contains(gid) && queued.Add(gmesh)) toSend.Enqueue(gmesh);
+                    tracked.Add(new Tracked { R = mr, Mesh = gid });
+                    grounds++;
+                    continue;
+                }
                 if (mr.bounds.SqrDistance(cp) > r2) { far++; continue; }
                 Material m = mr.sharedMaterial;
                 // Feuillages : shaders a decoupe (_Cutoff ; « Nature/Tree Soft Occlusion Leaves » est dans la file transparente)
@@ -312,6 +377,22 @@ namespace MWCoop
                 if (!meshMat.ContainsKey(mesh)) meshMat[mesh] = m;
                 if (!sentMeshes.Contains(id) && queued.Add(mesh)) toSend.Enqueue(mesh);
                 tracked.Add(new Tracked { R = mr, Mesh = id, Static = st });
+            }
+            if (Config.GetInt("Test", "RTSol", 0) != 0 && !groundLogged && Time.realtimeSinceStartup > 40)
+            {
+                groundLogged = true;
+                var gs = new System.Text.StringBuilder();
+                foreach (RaycastHit h in Physics.RaycastAll(cp + Vector3.up * 2f, Vector3.down, 50f))
+                {
+                    Transform ht = h.collider.transform;
+                    Renderer hr = ht.GetComponent<Renderer>();
+                    MeshFilter hf = ht.GetComponent<MeshFilter>();
+                    gs.Append(" | ").Append(Recon.Path(ht)).Append(' ').Append(h.collider.GetType().Name).Append(" a ").Append(h.distance.ToString("F1"))
+                      .Append(hr != null ? " rendu " + hr.GetType().Name + (hr.enabled ? "" : " coupe") + " ombres " + hr.shadowCastingMode + (hr.isPartOfStaticBatch ? " lot" : "") + " mat " + (hr.sharedMaterial != null ? hr.sharedMaterial.shader.name : "-") : " sans rendu")
+                      .Append(hf != null && hf.sharedMesh != null ? " sommets " + hf.sharedMesh.vertexCount : "");
+                }
+                foreach (Terrain te in Object.FindObjectsOfType<Terrain>()) gs.Append(" | TERRAIN ").Append(Recon.Path(te.transform)).Append(' ').Append(te.terrainData != null ? te.terrainData.size.ToString() : "");
+                Log.Info("rt : sol sous la camera :" + gs);
             }
             if (Config.GetInt("Test", "RTProches", 0) != 0 && !nearLogged && Time.realtimeSinceStartup > 40)
             {
@@ -387,11 +468,12 @@ namespace MWCoop
                 Log.Info("rt : rendus a 60 m :" + tsb + " ; arbres :" + near);
                 Log.Info("rt : lots statiques a portee " + stIn + " (avec collision " + stCol + ", lisible " + stColRead + "), autres " + plain + " (lisibles " + plainRead + ") :" + names);
             }
+            ForgetOld();
             if (Time.realtimeSinceStartup > nextScanLog)
             {
                 nextScanLog = Time.realtimeSinceStartup + 20f;
                 Log.Info("rt : scene a " + Range + " m : " + tracked.Count + " objets (sur " + total + " : coupes " + off + ", sans ombre " + noShadow + ", loin " + far + ", transparents " + transp
-                         + ", exclus " + excl + ", sans maillage " + noMesh + ", lot deja pris " + dup + ", illisibles " + bad + ", feuillages " + leaves + ", personnages " + skinNear.Count + "), " + sentMeshes.Count + " maillages envoyes, " + toSend.Count + " a envoyer");
+                         + ", exclus " + excl + ", sans maillage " + noMesh + ", lot deja pris " + dup + ", illisibles " + bad + ", feuillages " + leaves + ", sol " + grounds + ", personnages " + skinNear.Count + "), " + sentMeshes.Count + " maillages envoyes, " + toSend.Count + " a envoyer");
             }
         }
 
@@ -454,6 +536,7 @@ namespace MWCoop
                     }
                     else sent = RtMesh(id, f, v.Length, t, t.Length);
                     if (sent != 0) sentMeshes.Add(id); else badMeshes.Add(id);
+                    if (sent != 0 && groundIds.Contains(id)) { fMeshMask(id, 2); groundMasked.Add(id); }
                     Material mc;
                     if (sent != 0 && meshMat.TryGetValue(mesh, out mc)) { Color cc = MatColor(mc); fMeshColor(id, cc.r, cc.g, cc.b); }
                 }
@@ -700,7 +783,7 @@ namespace MWCoop
             if (c.name == "FPSCamera") return true;
             return c.actualRenderingPath == RenderingPath.DeferredShading && c.pixelWidth == Screen.width && c.pixelHeight == Screen.height;
         }
-        static bool dumped, nearLogged;
+        static bool dumped, nearLogged, groundLogged;
         static float capDistWas;
         class RtCamHook : MonoBehaviour
         {

@@ -50,15 +50,17 @@ bool AlphaPass(uint inst, uint prim, float2 bary)
     return al >= ii.cutoff;
 }
 
-bool Free(RayDesc ray)
+// masque : 1 = ce qui fait de l'ombre (pas le sol), 0xFF = tout (occlusion ambiante, reflets)
+bool FreeM(RayDesc ray, uint mask)
 {
     RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;
-    q.TraceRayInline(gScene, 0, 0xFF, ray);
+    q.TraceRayInline(gScene, 0, mask, ray);
     while (q.Proceed())
         if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && AlphaPass(q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics()))
             q.CommitNonOpaqueTriangleHit();
     return q.CommittedStatus() == COMMITTED_NOTHING;
 }
+bool Free(RayDesc ray) { return FreeM(ray, 0x01); }
 
 [numthreads(8, 8, 1)]
 void Main(uint3 id : SV_DispatchThreadID)
@@ -117,7 +119,7 @@ void Main(uint3 id : SV_DispatchThreadID)
             r.Direction = normalize(t * (rr * cos(u2)) + b * (rr * sin(u2)) + n * sqrt(1 - u1));   // (hemisphere, cosinus)
             r.TMin = 0.02;
             r.TMax = gF.params.x;
-            if (Free(r)) freeN += 1;
+            if (FreeM(r, 0xFF)) freeN += 1;
         }
         ao = freeN / rays;
     }

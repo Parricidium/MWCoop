@@ -112,7 +112,7 @@ static Shared g_pos, g_nrm, g_vis, g_lampVis, g_ao, g_refl;
 static UINT g_w, g_h;
 
 // Maillages (BLAS) et scene (TLAS)
-struct MeshAs { ID3D12Resource *vb, *ib, *uv, *blas, *sub; UINT nv, ni; bool built, alpha; int tex; float cutoff; UINT ibSlot, uvSlot, vbSlot, subSlot; float col[3]; };
+struct MeshAs { ID3D12Resource *vb, *ib, *uv, *blas, *sub; UINT nv, ni; bool built, alpha; int tex; float cutoff; UINT ibSlot, uvSlot, vbSlot, subSlot; float col[3]; UINT mask; };
 // Feuillages : alpha de la texture (un octet par texel), lu par les rayons (tableau de tampons gBufs).
 struct AlphaTex { ID3D12Resource *buf; UINT w, h, slot; };
 static std::unordered_map<int, AlphaTex> g_alphaTex;
@@ -867,10 +867,15 @@ static void ProcessBatches()
     }
 }
 
+// Cases liberees (maillages oublies) : rendues apres deux images, quand la carte ne s'en sert plus.
+static std::vector<UINT> g_freeSlots, g_pendingSlots[2];
+static void FreeSlot(UINT gbufIndex) { if (gbufIndex != 0xFFFFFFFFu) g_pendingSlots[g_frameNo & 1].push_back(gbufIndex + kFirstDyn); }
 static UINT RawView(ID3D12Resource *r, UINT64 bytes)
 {
-    if (g_nextSlot >= kHeapSize) return 0xFFFFFFFFu;   // (tas plein : pas de vue, le shader s'en passe)
-    UINT slot = g_nextSlot++;
+    UINT slot;
+    if (!g_freeSlots.empty()) { slot = g_freeSlots.back(); g_freeSlots.pop_back(); }
+    else if (g_nextSlot >= kHeapSize) return 0xFFFFFFFFu;   // (tas plein : pas de vue, le shader s'en passe)
+    else slot = g_nextSlot++;
     D3D12_SHADER_RESOURCE_VIEW_DESC sv = {}; sv.ViewDimension = D3D12_SRV_DIMENSION_BUFFER; sv.Format = DXGI_FORMAT_R32_TYPELESS;
     sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW; sv.Buffer.NumElements = (UINT)((bytes + 3) / 4);
     D3D12_CPU_DESCRIPTOR_HANDLE c = g_heap->GetCPUDescriptorHandleForHeapStart(); c.ptr += (SIZE_T)slot * g_heapInc;
@@ -896,9 +901,17 @@ extern "C" __declspec(dllexport) int RtMesh(int id, const float *verts, int nv, 
     m.vbSlot = RawView(m.vb, (UINT64)nv * 12); m.ibSlot = RawView(m.ib, (UINT64)ni * 4);   // (reflets : normale au point touche)
     m.col[0] = m.col[1] = m.col[2] = 0.6f;
     m.subSlot = 0xFFFFFFFFu;
+    m.mask = 0xFF;
     g_meshes[id] = m;
     g_pendingBuild.push_back(id);
     return 1;
+}
+// Masque d'un maillage : 0xFF partout ; le sol (rendus sans ombre, maillage de leur collision) : 2, vu par l'occlusion
+// ambiante et les reflets mais pas par les rayons d'ombre (masque 1).
+extern "C" __declspec(dllexport) void RtMeshMask(int id, int mask)
+{
+    auto it = g_meshes.find(id);
+    if (it != g_meshes.end()) it->second.mask = (UINT)mask & 0xFF;
 }
 // Couleur d'un maillage (matiere x moyenne de sa texture) : reflets hors de l'ecran.
 extern "C" __declspec(dllexport) void RtMeshColor(int id, float r, float g, float b)
@@ -1199,8 +1212,11 @@ extern "C" __declspec(dllexport) void RtForgetMesh(int id)
     auto it = g_meshes.find(id);
     if (it == g_meshes.end()) return;
     int a = g_frameNo & 1;
-    g_trash[a].push_back(it->second.vb); g_trash[a].push_back(it->second.ib); if (it->second.blas) g_trash[a].push_back(it->second.blas); if (it->second.uv) g_trash[a].push_back(it->second.uv);
+    MeshAs &m = it->second;
+    g_trash[a].push_back(m.vb); g_trash[a].push_back(m.ib); if (m.blas) g_trash[a].push_back(m.blas); if (m.uv) g_trash[a].push_back(m.uv); if (m.sub) g_trash[a].push_back(m.sub);
+    FreeSlot(m.vbSlot); FreeSlot(m.ibSlot); if (m.uv) FreeSlot(m.uvSlot); if (m.sub) FreeSlot(m.subSlot);
     g_meshes.erase(it);
+    static int forgot; if (forgot++ % 50 == 0) Log("maillages oublies : %d (encore %d)", forgot, (int)g_meshes.size());
 }
 // Instances de l'image : par instance 13 nombres (maillage, puis matrice objet -> monde 3x4 par lignes).
 extern "C" __declspec(dllexport) void RtInstances(const float *data, int n)
@@ -1262,8 +1278,8 @@ static bool BuildTlas()
         if (it == g_meshes.end() || !it->second.built) continue;
         D3D12_RAYTRACING_INSTANCE_DESC d = {};
         memcpy(d.Transform, i.m, 48);
-        d.InstanceMask = 0xFF; d.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE | D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE;
         const MeshAs &mm = it->second;
+        d.InstanceMask = mm.mask ? mm.mask : 0xFF; d.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE | D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE;
         InstInfo inf = { mm.ibSlot, mm.uvSlot, 0, 1, 1, 2.f, mm.vbSlot, mm.subSlot, mm.col[0], mm.col[1], mm.col[2], 0 };
         if (mm.alpha) {
             auto t = g_alphaTex.find(mm.tex);
@@ -1349,6 +1365,8 @@ static UINT64 TraceShadows(UINT64 wait, bool lamps = false)
         if (!(g_allocFenceL[a] && g_fence12->GetCompletedValue() < g_allocFenceL[a]) && !(g_allocFence[a] && g_fence12->GetCompletedValue() < g_allocFence[a])) {
             for (ID3D12Resource *r : g_trash[a]) r->Release();
             g_trash[a].clear();
+            g_freeSlots.insert(g_freeSlots.end(), g_pendingSlots[a].begin(), g_pendingSlots[a].end());
+            g_pendingSlots[a].clear();
         }
     }
     al->Reset();
