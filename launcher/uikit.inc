@@ -54,6 +54,7 @@ enum {
     UI_CAR_TRIM = 425,            // + k (0 au hasard, 1 L, 2 LX, 3 SLX, 4 GT) : VOITURE, finition de la CORRIS (425-429)
     UI_CAR_VIN = 430,             // VOITURE : options de la plaque VIN (montrer / cacher)
     UI_CAR_VINOPT = 431,          // + k : option k de la plaque (clic : valeur suivante ; 431-442)
+    UI_CAR_PAINT = 445, UI_CAR_PAINTIMP, UI_CAR_PAINTTPL, UI_CAR_PAINTUSE, UI_CAR_PAINTDEL,   // VOITURE : peinture perso (volet, importer, gabarit, utiliser, retirer)
     UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)
     UI_WIKI_ART = 8040,           // + article
     UI_WIKI_SEC = 8300,           // + bloc : section pliable de l'article

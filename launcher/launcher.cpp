@@ -3052,6 +3052,148 @@ static void DrawVinOptions(Graphics &g, RectF card)
     }
 }
 
+// ---- peinture perso de la CORRIS (suggestion de .nolly, 12/10 : « comme les visages, mais pour la Rivett, dans le
+// catalogue du garagiste comme une peinture perso »). Le jeu le fait deja : CORRIS/AssembyDatabase/PaintMaterials,
+// automate 'ImportPNG', lit <jeu>\Images\car.png (gabarit 2048 x 2048 livre avec le jeu, et son PSD en calques) dans
+// CAR_PAINT_DECAL, posee quand on achete « Custom paint made by artist » chez Fleetari. Le lanceur importe l'image du
+// joueur dans %LOCALAPPDATA%\MWCoop\peinture.png (le dossier du jeu n'est pas touche) ; [Coop] PeinturePerso=1 : le mod
+// la met a la place de car.png (hote ou solo, CustomPaint) et l'hote l'envoie a ses invites a la place de
+// Images\car.png (Contenu envoye > Peinture de la CORRIS, modsync.inc).
+static Bitmap *LoadAnyImage(const std::wstring &file, std::wstring *why);
+static bool EncoderClsid(const wchar_t *mime, CLSID *out);
+static bool g_paintView;
+static RectF g_paintBtnRect;   // (bulle du guide)
+static Bitmap *g_paintThumb;
+static std::wstring g_paintThumbOf;
+static std::wstring PaintFile() { return LocalDir() + L"peinture.png"; }
+static std::wstring PaintGame() { return g_gameDir + L"Images\\car.png"; }
+static bool PaintHas() { return FileExists(PaintFile()); }
+static bool PaintOn() { return !g_gameDir.empty() && GetPrivateProfileIntA("Coop", "PeinturePerso", 0, ModIniA().c_str()) != 0 && PaintHas(); }
+static void PaintUse(bool on)
+{
+    if (g_gameDir.empty()) return;
+    EnsureModDir();
+    WritePrivateProfileStringA("Coop", "PeinturePerso", on ? "1" : "0", ModIniA().c_str());
+    g_paintThumbOf.clear();
+}
+// Miniature (512 x 512) de la peinture en service : la sienne, ou celle du jeu.
+static Bitmap *PaintThumb()
+{
+    std::wstring f = PaintOn() ? PaintFile() : PaintGame();
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    std::wstring key = f;
+    if (GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &a)) key += L"|" + std::to_wstring(a.ftLastWriteTime.dwLowDateTime);
+    if (key == g_paintThumbOf) return g_paintThumb;
+    g_paintThumbOf = key;
+    delete g_paintThumb; g_paintThumb = NULL;
+    if (Bitmap *b = LoadAnyImage(f, NULL)) {
+        g_paintThumb = new Bitmap(512, 512, PixelFormat32bppPARGB);
+        Graphics tg(g_paintThumb);
+        tg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        tg.DrawImage(b, RectF(0, 0, 512, 512));
+        delete b;
+    }
+    return g_paintThumb;
+}
+static void PaintImport()
+{
+    wchar_t file[MAX_PATH] = L"";
+    OPENFILENAMEW of = { sizeof(of) };
+    of.hwndOwner = g_wnd;
+    of.lpstrFilter = L"Images\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp;*.heic;*.heif;*.avif;*.jfif\0*.*\0*.*\0";
+    of.lpstrFile = file;
+    of.nMaxFile = MAX_PATH;
+    std::wstring init = LocalDir();
+    of.lpstrInitialDir = init.c_str();
+    of.lpstrTitle = T(L"Choisir la peinture de la CORRIS (peinte sur le gabarit car.png)", L"Choose the CORRIS paint (painted on the car.png template)");
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    if (!GetOpenFileNameW(&of)) return;
+    std::wstring why;
+    Bitmap *src = LoadAnyImage(file, &why);
+    bool ok = false;
+    if (src) {
+        Bitmap *game = LoadAnyImage(PaintGame(), NULL);   // taille du gabarit du jeu (2048 x 2048)
+        int W = game ? (int)game->GetWidth() : 2048, H = game ? (int)game->GetHeight() : 2048;
+        Bitmap dst(W, H, PixelFormat24bppRGB);
+        {
+            Graphics dg(&dst);
+            dg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+            dg.SetPixelOffsetMode(PixelOffsetModeHalf);
+            if (game) dg.DrawImage(game, RectF(0, 0, (REAL)W, (REAL)H));   // (parties transparentes : la peinture du jeu)
+            else dg.Clear(Color(255, 200, 200, 200));
+            dg.DrawImage(src, RectF(0, 0, (REAL)W, (REAL)H));
+        }
+        delete game;
+        CLSID png;
+        CreateDirectoryW(LocalDir().c_str(), NULL);
+        ok = EncoderClsid(L"image/png", &png) && dst.Save(PaintFile().c_str(), &png, NULL) == Ok;
+        if (!ok) why = T(L"enregistrement impossible", L"can't save it");
+        LaunchLog("peinture perso importee : %dx%d", W, H);
+    }
+    delete src;
+    if (ok) PaintUse(true);
+    else {
+        LaunchLog("peinture perso : echec (%ls)", why.c_str());
+        std::wstring msg = std::wstring(T(L"Cette image n'a pas pu être lue : ", L"This image could not be read: ")) + why + L".";
+        MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
+    }
+}
+// Gabarit : une copie de Images\car.png du jeu (on peint sur la copie), montree dans l'Explorateur.
+static void PaintTemplate()
+{
+    std::wstring t = LocalDir() + L"gabarit-voiture.png";
+    CreateDirectoryW(LocalDir().c_str(), NULL);
+    if (!FileExists(t) && !CopyFileW(PaintGame().c_str(), t.c_str(), TRUE)) {
+        MessageBoxW(g_wnd, T(L"Images\\car.png est introuvable dans le dossier du jeu.", L"Images\\car.png was not found in the game folder."), L"MWCoop", MB_ICONWARNING | MB_OK);
+        return;
+    }
+    std::wstring a = L"/select,\"" + t + L"\"";
+    ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL);
+}
+static void PaintRemove()
+{
+    DeleteFileW(PaintFile().c_str());
+    PaintUse(false);
+    LaunchLog("peinture perso retiree");
+}
+static void DrawPaintView(Graphics &g, RectF card)
+{
+    GraphicsPath bp; RoundRect(bp, card, 20);
+    SolidBrush bb(TH(card)); g.FillPath(&bb, &bp);
+    Title(g, T(L"Peinture perso", L"Custom paint"), RectF(card.X + 24, card.Y + 20, 300, 30), 22, kInk);
+    Para(g, T(L"Ta propre peinture sur la CORRIS, peinte sur le gabarit du jeu. L'hôte l'envoie à ses invités.",
+              L"Your own paint on the CORRIS, painted on the game's template. The host sends it to their guests."),
+         RectF(card.X + 24, card.Y + 56, card.Width - 48, 40), 12.5f, kGrey);
+    bool has = PaintHas(), on = PaintOn();
+    RectF th(card.X + 24, card.Y + 104, 300, 300);
+    GraphicsPath tp; RoundRect(tp, th, 14);
+    SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
+    if (Bitmap *b = PaintThumb()) {
+        g.SetClip(&tp);
+        g.DrawImage(b, th);
+        g.ResetClip();
+    } else Icon(g, IC_IMAGE, th.X + th.Width / 2, th.Y + th.Height / 2, 48, WithA(kGrey, 0.6f), 1.4f);
+    Pen tpen(on ? kAcc : TH(fieldBorder), on ? 2.0f : 1.0f); g.DrawPath(&tpen, &tp);
+    Text(g, on ? T(L"Ta peinture", L"Your paint") : T(L"Peinture du jeu (Images\\car.png)", L"Game paint (Images\\car.png)"),
+         RectF(th.X, th.Y + th.Height + 6, th.Width, 22), 12.5f, FontStyleBold, on ? kInk : kGrey, StringAlignmentCenter);
+    float bx = th.X + th.Width + 24, bw = card.X + card.Width - 24 - bx, by = th.Y;
+    UiButton(g, RectF(bx, by, bw, 44), T(L"Gabarit", L"Template"), UI_CAR_PAINTTPL, false, IC_FOLDER); by += 56;
+    UiButton(g, RectF(bx, by, bw, 44), T(L"Mon image…", L"My image…"), UI_CAR_PAINTIMP, true, IC_IMAGE); by += 56;
+    if (has) {
+        UiButton(g, RectF(bx, by, bw, 44), on ? T(L"Utilisée : oui", L"In use: yes") : T(L"Utilisée : non", L"In use: no"), UI_CAR_PAINTUSE, false, on ? IC_CHECK : -1); by += 56;
+        UiButton(g, RectF(bx, by, bw, 44), T(L"Retirer", L"Remove"), UI_CAR_PAINTDEL, false, IC_TRASH); by += 56;
+    }
+    float sy = th.Y + th.Height + 44;
+    const wchar_t *steps[] = {
+        T(L"1. Gabarit : la carrosserie du jeu à plat (2048 x 2048). Le dossier Images du jeu a aussi corris_template_layered.psd, en calques.",
+          L"1. Template: the game's body laid flat (2048 x 2048). The game's Images folder also has corris_template_layered.psd, in layers."),
+        T(L"2. Peins par-dessus en gardant la taille, puis « Mon image… ».", L"2. Paint over it keeping the size, then \"My image…\"."),
+        T(L"3. En jeu, achète « Custom paint made by artist » chez Fleetari (réparation) : la CORRIS prend ta peinture.",
+          L"3. In game, buy \"Custom paint made by artist\" at Fleetari's (repair shop): the CORRIS takes your paint."),
+    };
+    for (const wchar_t *s : steps) { Para(g, s, RectF(card.X + 24, sy, card.Width - 48, 40), 13, kInk); sy += 42; }
+}
+
 static void CarSetColor(int rgb)
 {
     g_carColor = rgb;
@@ -3095,6 +3237,7 @@ static void DrawCar(Graphics &g)
     Glass(kCarPanel);
     RectF view = kCarView;
     if (g_vinView) DrawVinOptions(g, kCarCard);
+    else if (g_paintView) DrawPaintView(g, kCarCard);
     else if (g_car.state != 1) {
         const wchar_t *msg = g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\corris.mesh) : lance une partie pour le refaire.", L"Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.")
                                                : T(L"Lance une partie une fois pour voir l'aper\u00E7u de la voiture.", L"Start a game once to see the car preview.");
@@ -3137,12 +3280,14 @@ static void DrawCar(Graphics &g)
         g.DrawImage(&bm, view);
         g.SetInterpolationMode(im);
     }
-    if (!g_vinView) {
+    if (!g_vinView && !g_paintView) {
         Title(g, T(L"Ta CORRIS", L"Your CORRIS"), RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 100, 400, 32), 22, kInk);
         Text(g, T(L"Couleur et finition pour une nouvelle partie ; l'h\u00F4te les donne \u00E0 ses invit\u00E9s.", L"Color and trim for a new game; the host gives them to their guests."),
              RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 66, 460, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
         if (g_car.state == 1) Text(g, T(L"Glisse pour tourner", L"Drag to rotate"), RectF(kCarCard.X + kCarCard.Width - 224, kCarCard.Y + kCarCard.Height - 66, 200, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
     }
+    g_paintBtnRect = RectF(kCarCard.X + kCarCard.Width - 24 - 184, kCarCard.Y + 18, 184, 34);
+    UiButton(g, g_paintBtnRect, g_paintView ? T(L"Voir la voiture", L"Show the car") : T(L"Peinture perso…", L"Custom paint…"), UI_CAR_PAINT, g_paintView, g_paintView ? -1 : IC_IMAGE, true, 10);
 
     // Couleur : pastilles, nom, autre couleur
     RectF pn = kCarPanel;
@@ -3208,7 +3353,7 @@ static bool CarMouseDown(float x, float y)
 {
     int s = CarSwatchAt(x, y);
     if (s >= 0) { CarSetColor(CarSwatchColor(s)); return true; }
-    if (g_car.state == 1 && !g_vinView && kCarView.Contains(x, y)) {
+    if (g_car.state == 1 && !g_vinView && !g_paintView && kCarView.Contains(x, y) && !g_paintBtnRect.Contains(x, y)) {
         g_carDrag = true;
         g_carDragX = x; g_carDragY = y;
         SetCapture(g_wnd);
