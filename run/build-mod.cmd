@@ -16,7 +16,7 @@ echo OK build\version.dll
 rem Ray tracing : MWCoopRT.dll (plugin natif d'Unity, mywintercar_Data\Plugins), DXR par Direct3D 12
 "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\dxc.exe" -nologo -T cs_6_5 -E Main -Fh build\rt_shadow.h -Vn g_rtShadow rt\shadow.hlsl || exit /b 1
 "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\dxc.exe" -nologo -T cs_6_5 -E Main -Fh build\rt_lamps.h -Vn g_rtLamps rt\lamps.hlsl || exit /b 1
-cl /nologo /O2 /MT /W3 /EHsc /utf-8 /D_CRT_SECURE_NO_WARNINGS /I build /Fobuild\ rt\mwcrt.cpp /LD /Febuild\MWCoopRT.dll /link d3d11.lib d3d12.lib dxgi.lib d3dcompiler.lib || exit /b 1
+cl /nologo /O2 /MT /W3 /EHsc /utf-8 /D_CRT_SECURE_NO_WARNINGS /I build /Fobuild\ rt\mwcrt.cpp rt\mwcvideo.cpp /LD /Febuild\MWCoopRT.dll /link d3d11.lib d3d12.lib dxgi.lib d3dcompiler.lib mfplat.lib mfreadwrite.lib mfuuid.lib windowscodecs.lib ole32.lib oleaut32.lib delayimp.lib /DELAYLOAD:mfplat.dll /DELAYLOAD:mfreadwrite.dll || exit /b 1
 echo OK build\MWCoopRT.dll
 
 dotnet "%ProgramFiles%\dotnet\sdk\8.0.424\Roslyn\bincore\csc.dll" -nologo -noconfig -nostdlib -target:library -optimize -langversion:7.3 ^

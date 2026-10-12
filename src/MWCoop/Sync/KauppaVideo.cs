@@ -232,6 +232,7 @@ namespace MWCoop
 
         static void LoadItems()
         {
+            EnsureImportDir();   // (le dossier ou mettre ses videos, cree des le debut pour qu'on le trouve)
             if (!BagAuthority || !File.Exists(ItemFile)) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             try
@@ -463,7 +464,7 @@ namespace MWCoop
         // essais : TV et magnetoscope poses cote a cote dans la boutique (coin cafe), cassette inseree, lecture
         static void TestVcr()
         {
-            Esine tv = esineet.Find(e => e.Kind == KTv), vcr = esineet.Find(e => e.Kind == KNauhuri), tape = esineet.Find(e => e.Kind == KVhs);
+            Esine tv = esineet.Find(e => e.Kind == KTv), vcr = esineet.Find(e => e.Kind == KNauhuri), tape = esineet.FindLast(e => e.Kind == KVhs && TapeFilm(e.Data).Length > 0) ?? esineet.Find(e => e.Kind == KVhs);
             L("essai : objets video " + esineet.Count + " (tv " + (tv != null) + ", magnetoscope " + (vcr != null) + ", cassette " + (tape != null) + ")");
             if (tv == null || vcr == null) return;
             Quaternion r = root.transform.rotation;   // (facades vers -z, vers la camera d'essai)

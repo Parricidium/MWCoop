@@ -180,6 +180,7 @@ namespace MWCoop
         static void TickFilms(float now)
         {
             TickPlayStarts();
+            TickImport(now);
             if (filmOut.Count == 0) return;
             if (!Session.Active) { filmOut.Clear(); return; }
             int budget = Mathf.Clamp(Config.GetInt("Boutique", "FilmiVauhti", 3), 1, 20);
@@ -268,6 +269,7 @@ namespace MWCoop
         public static bool ChatCommand(string text)
         {
             string low = text.ToLowerInvariant();
+            if (Active && root != null && ImportCommand(text)) return true;
             if (!(low.StartsWith("/titre") || low.StartsWith("/title"))) return false;
             if (!Active || root == null) return false;
             string title = text.Length > 6 ? text.Substring(6).Trim() : "";
