@@ -192,6 +192,7 @@ namespace MWCoop
         {
             jobs.Clear(); hooked.Clear(); reserved.Clear(); classified.Clear(); jobCars.Clear(); waitingJobs.Clear(); waitingSet.Clear();
             creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
+            SewageHose.OnLevelLoaded();
             specialsScanned = false; logTrigger = null; ltCollider = null;
             feed = null; feedHand = null; feedMute = null; feedMuted.Clear(); feedClick = feedActivation = feedWasActive = false; feedStageLocal = true;
             bed = flatbed = null; bedHinge = null; bedTargetAt = -100; bedSent = float.NaN; bedLift = null; bedFollow = false;
@@ -219,6 +220,7 @@ namespace MWCoop
 
         public static void Update()
         {
+            SewageHose.Update();
             if (nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
             if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
@@ -1501,7 +1503,7 @@ namespace MWCoop
         //  @etape  Stage atteint par la fendeuse      (fiable, U8)
         static void OnSpecial(int who, string kind, NetReader r)
         {
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), kind != "@benne" && kind != "@pousse" && kind != "@drone", who);
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), kind != "@benne" && kind != "@pousse" && kind != "@drone" && kind != "@bout", who);
             switch (kind)
             {
                 case "@cree":
@@ -1520,6 +1522,7 @@ namespace MWCoop
                     break;
                 }
                 case "@benne": OnBed(r.F32()); break;
+                case "@bout": { Vector3 p = r.Vec(); Quaternion q = r.Quat(); SewageHose.OnRemote(who, p, q, r.Bool()); break; }
                 case "@attelage": OnHitch(who, r.U8()); break;
                 case "@arrestation": Police.OnArrest(who, r.Vec()); break;
                 case "@accident": Respawn.OnAccident(who, r.Str()); break;

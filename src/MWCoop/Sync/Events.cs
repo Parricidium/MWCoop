@@ -31,7 +31,10 @@ namespace MWCoop
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
         static readonly string[] Places = { "JOBS", "PERAJARVI", "STORE_AREA", "PERAPORTTI", "REPAIRSHOP", "DANCEHALL", "WATERFACILITY", "LANDFILL",
                                             "FleaMarket", "CABIN", "COTTAGE", "SOCCER" };
-        static readonly HashSet<string> SkipNames = new HashSet<string> { "LOD", "Paint", "Flicker", "Blink", "Death", "HeadForce" };
+        // (Anims : gestes d'un PNJ -- le proprio d'une fosse (JOBS/HouseShitN/LOD/ShitNPC/Man::Anims) mesure la distance au
+        // joueur et tend l'argent en allumant PayMoney ; decide par l'hote, il ne le tendait chez l'invite que si l'hote etait
+        // pres de la maison, l'invite qui avait vide la fosse n'etait jamais paye -- retour de gamereggo, 11/10)
+        static readonly HashSet<string> SkipNames = new HashSet<string> { "LOD", "Paint", "Flicker", "Blink", "Death", "HeadForce", "Anims" };
         static readonly HashSet<string> Input = new HashSet<string> { "MousePickEvent", "GetButtonDown", "GetButtonUp", "GetMouseButtonDown", "GetMouseButtonUp", "GetAxis", "GetKeyDown", "GetKey", "GetButton", "AnyKeyStoreString", "TriggerEvent", "CollisionEvent" };
         static float scanAt = -1, nextScan, nextSend, nextFull;
         static int scans;
