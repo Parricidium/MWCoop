@@ -155,6 +155,7 @@ namespace MWCoop
             new Mod("porte du garage", GarageDoor.Update),
             new Mod("vue (troisieme personne)", ThirdPerson.Update),
             new Mod("camera drone", DroneCam.Update),
+            new Mod("ray tracing", RayTracing.Update),
             new Mod("boissons", Drinks.Update),
             new Mod("rayons", Stock.Update),
             new Mod("PNJ", Npcs.Update),
@@ -258,6 +259,7 @@ namespace MWCoop
             GarageDoor.OnLevelLoaded();
             ThirdPerson.OnLevelLoaded();
             DroneCam.OnLevelLoaded();
+            RayTracing.OnLevelLoaded();
             Drinks.OnLevelLoaded();
             Stock.OnLevelLoaded();
             Npcs.OnLevelLoaded();

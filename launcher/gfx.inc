@@ -140,6 +140,13 @@ static const std::vector<GfxRow> &GfxRows()
           { L"Jeu", L"Bas", L"Normal", L"Élevé", L"Très élevé", L"Max" }, { L"Game", L"Low", L"Normal", L"High", L"Very high", L"Max" }, 2, 12 },
         { "Textures", L"Textures", L"Textures", -1, { -1, 2, 1, 0 }, { L"Jeu", L"Quart", L"Moitié", L"Pleines" }, { L"Game", L"Quarter", L"Half", L"Full" }, 1, 12 },
         { "Filtrage", L"Filtrage des textures", L"Texture filtering", -1, { -1, 0, 1, 2 }, { L"Jeu", L"Non", L"Oui", L"Forcé" }, { L"Game", L"Off", L"On", L"Forced" }, 1, 12 },
+        // Ray tracing (demande de JD, 11/10 : « comme GTAVC Coop ») : ombres du soleil par rayons (MWCoopRT.dll, carte DXR).
+        // Le jeu est alors lance avec -force-gfx-direct (Unity dessine sur un seul fil : le mod peut s'inserer dans son rendu).
+        { "RayTracing", L"Ombres du soleil en ray tracing", L"Ray-traced sun shadows", 0, {}, {}, {}, 2, 14 },
+        { "RTRayons", L"Rayons par pixel", L"Rays per pixel", 2, { 1, 2, 4, 8 }, { L"1", L"2", L"4", L"8" }, { L"1", L"2", L"4", L"8" }, 3, 14 },
+        { "RTPortee", L"Portée des ombres", L"Shadow range", 250, { 100, 150, 250, 400 },
+          { L"100 m", L"150 m", L"250 m", L"400 m" }, { L"100 m", L"150 m", L"250 m", L"400 m" }, 2, 14 },
+        { "RTDouceur", L"Bords des ombres", L"Shadow edges", 1, { 0, 1, 2, 4 }, { L"Nets", L"Légers", L"Doux", L"Très doux" }, { L"Sharp", L"Light", L"Soft", L"Very soft" }, 0, 14 },
         { "OmbresPhares", L"Ombres des phares", L"Headlight shadows", 0, { 0, 2, 4, 8 }, { L"Non", L"2 phares", L"4 phares", L"8 phares" }, { L"Off", L"2 lights", L"4 lights", L"8 lights" }, 3, 4 },
         { "OmbresLampadaires", L"Ombres des lampadaires", L"Street light shadows", 0, { 0, 1, 2, 4 }, { L"Non", L"1", L"2", L"4" }, { L"Off", L"1", L"2", L"4" }, 3, 4 },
         { "Halos", L"Halos lumineux (façon GTA)", L"Light coronas (GTA style)", 0, { 0, 1, 2 }, { L"Non", L"Discrets", L"Marqués" }, { L"Off", L"Subtle", L"Strong" }, 1, 4 },
@@ -225,17 +232,46 @@ static const std::vector<GfxPreset> &GfxPresets()
         return std::vector<std::pair<const char *, int>> { { "Anticrenelage", aa }, { "HDR", hdr }, { "Bloom", bloom }, { "RayonsSoleil", shafts }, { "OmbresSoleil", 1 },
             { "OmbresLune", moon }, { "OmbresMaisons", house }, { "OmbresDistance", sdist }, { "OmbresCascades", casc }, { "Distance", dist }, { "Details", det },
             { "Textures", tex }, { "Filtrage", filt }, { "Retroviseurs", mir }, { "PoussiereTrafic", dust }, { "TracesTrafic", skid },
-            { "OmbresPhares", hshad }, { "OmbresLampadaires", sshad }, { "Halos", halos } };
+            { "OmbresPhares", hshad }, { "OmbresLampadaires", sshad }, { "Halos", halos }, { "RayTracing", 0 } };
     };
+    // Vanilla (demande de JD, 11/10) : chaque option a la valeur du jeu (cle retiree pour les reglages du moteur), sans
+    // les ajouts de MWCoop ; RT : Ultra + ombres du soleil en ray tracing (carte d'ombres d'Unity au plus court : elle ne
+    // sert plus que de support), ombres de la lune laissees au ray tracing.
+    std::vector<std::pair<const char *, int>> van = mk(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    for (auto &kv : van) for (const GfxRow &r : GfxRows()) if (!strcmp(r.key, kv.first)) kv.second = r.def;
+    std::vector<std::pair<const char *, int>> rt = mk(1, 1, 1, 1, 0, 1, 30, 1, 9000, 300, 0, 2, 2, 1, 1, 4, 2, 2);
+    rt.back().second = 1;   // (RayTracing)
+    std::vector<std::pair<const char *, int>> ultra = mk(1, 1, 1, 1, 1, 1, 400, 4, 9000, 300, 0, 2, 2, 1, 1, 4, 2, 2);
     p = {
+        { L"Vanilla", L"Vanilla", L"Comme le jeu", L"Like the game", van },
         { L"Performance", L"Performance", L"Plus d'images", L"More frames", mk(0, 0, 0, 0, 0, 0, 30, 1, 1500, 70, 1, 0, 1, 0, 0, 0, 0, 0) },
         { L"Équilibré", L"Balanced", L"Le bon compromis", L"The sweet spot", mk(1, 1, 0, 0, 0, 1, 60, 2, 3000, 100, 0, 1, 1, 1, 0, 0, 0, 1) },
         { L"Beau", L"Pretty", L"Plus joli", L"Better looking", mk(1, 1, 1, 1, 1, 1, 150, 2, 4500, 150, 0, 1, 2, 1, 1, 2, 1, 1) },
-        { L"Ultra", L"Ultra", L"Tout au max", L"Everything maxed", mk(1, 1, 1, 1, 1, 1, 400, 4, 9000, 300, 0, 2, 2, 1, 1, 4, 2, 2) },
+        { L"Ultra", L"Ultra", L"Tout au max", L"Everything maxed", ultra },
+        { L"RT", L"RT", L"Ray tracing", L"Ray tracing", rt },
     };
     return p;
 }
 
+// Carte graphique compatible (DXR 1.1 : requetes de rayons), verifiee une fois : d3d12.dll chargee a la demande (pas
+// d'import : voir launcher-no-static-dll-imports).
+static int g_dxr = -1;
+static bool GfxDxr()
+{
+    if (g_dxr >= 0) return g_dxr == 1;
+    g_dxr = 0;
+    HMODULE m = LoadLibraryW(L"d3d12.dll");
+    typedef HRESULT (WINAPI *Create_t)(IUnknown *, D3D_FEATURE_LEVEL, REFIID, void **);
+    Create_t create = m ? (Create_t)GetProcAddress(m, "D3D12CreateDevice") : NULL;
+    ID3D12Device *d = NULL;
+    if (create && SUCCEEDED(create(NULL, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), (void **)&d)) && d) {
+        D3D12_FEATURE_DATA_D3D12_OPTIONS5 o5 = {};
+        if (SUCCEEDED(d->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &o5, sizeof(o5))) && o5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1) g_dxr = 1;
+        d->Release();
+    }
+    LaunchLog("ray tracing : carte %s (DXR 1.1)", g_dxr == 1 ? "compatible" : "NON compatible");
+    return g_dxr == 1;
+}
 static std::map<std::string, int> g_gfxVal;
 static DWORD g_gfxReadT;
 static void GfxLoad()
@@ -261,6 +297,16 @@ static void GfxSet(const char *k, int v)
     for (const GfxRow &r : GfxRows()) if (!strcmp(r.key, k) && r.sec) sec = Widen(r.sec);
     WritePrivateProfileStringW(sec.c_str(), Widen(k).c_str(), v == -1 ? NULL : s.c_str(), ModIni().c_str());   // (-1 : la cle est retiree, le jeu decide)
 }
+// Ligne sans effet : reglages RT sans carte compatible ou RT coupe ; ombres d'Unity remplacees quand le RT est actif.
+static bool GfxRowOff(const GfxRow &r, const wchar_t **why)
+{
+    bool rt = GfxGet("RayTracing") == 1 && GfxDxr();
+    if (r.group == 14 && !GfxDxr()) { *why = T(L"carte non compatible", L"GPU not supported"); return true; }
+    if (r.group == 14 && strcmp(r.key, "RayTracing") && !rt) { *why = T(L"RT coupé", L"RT off"); return true; }
+    if (rt && (!strcmp(r.key, "OmbresDistance") || !strcmp(r.key, "OmbresCascades") || !strcmp(r.key, "OmbresLune"))) { *why = T(L"ray tracing", L"ray tracing"); return true; }
+    return false;
+}
+static bool GfxPresetOff(int i) { return GfxPresets()[i].fr[0] == L'R' && GfxPresets()[i].fr[1] == L'T' && !GfxDxr(); }
 static int GfxPresetOn()
 {
     const auto &ps = GfxPresets();
@@ -277,10 +323,11 @@ static const float kGfxRowH = 27, kGfxHeadH = 44;
 // Categories (demande de JD, 08/10) : en-tetes repliables comme les journaux, reglages sur deux colonnes dessous ;
 // ascenseur quand tout ne tient pas. Rangees en trois blocs titres (demande de JD, 11/10) : la coop, les options video du
 // jeu lui-meme (son menu Options), puis celles que MWCoop ajoute ; une icone par categorie. Valeurs negatives : titre de
-// bloc. Deplies : [Lanceur] GfxOuverts3 (lettres a.. : numeros de groupe ; toutes par defaut).
-static const int kGfxGroups = 14;
-static const int kGfxOrder[] = { -1, 6, 7, 8, 9, 13, -2, 0, 1, 2, 3, -3, 5, 10, 11, 12, 4 };
-static bool g_gfxOpen[kGfxGroups] = { true, true, true, true, true, true, true, true, true, true, true, true, true, true };
+// bloc. Deplies : [Lanceur] GfxOuverts4 (lettres a.. : numeros de groupe ; aucune par defaut, demande de JD 12/10 --
+// nouvelle cle : chacun repart ferme).
+static const int kGfxGroups = 15;
+static const int kGfxOrder[] = { -1, 6, 7, 8, 9, 13, -2, 0, 1, 2, 3, -3, 5, 10, 14, 11, 12, 4 };
+static bool g_gfxOpen[kGfxGroups] = {};   // (toutes fermees par defaut : demande de JD, 12/10)
 static bool g_gfxOpenRead;
 static float g_gfxContentH;
 static bool g_gfxZones = true;   // (ligne hors de la zone visible : pas de zone cliquable)
@@ -289,7 +336,7 @@ static void GfxOpenRead()
     if (g_gfxOpenRead) return;
     g_gfxOpenRead = true;
     wchar_t b[64] = {};
-    GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts3", L"*", b, 64, g_iniLauncher.c_str());
+    GetPrivateProfileStringW(L"Lanceur", L"GfxOuverts4", L"*", b, 64, g_iniLauncher.c_str());
     if (!wcscmp(b, L"*")) return;
     for (int i = 0; i < kGfxGroups; i++) g_gfxOpen[i] = wcschr(b, L'a' + i) != NULL;
 }
@@ -299,7 +346,7 @@ static void GfxToggleGroup(int gi)
     g_gfxOpen[gi] = !g_gfxOpen[gi];
     std::wstring s;
     for (int i = 0; i < kGfxGroups; i++) if (g_gfxOpen[i]) s += (wchar_t)(L'a' + i);
-    WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts3", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
+    WritePrivateProfileStringW(L"Lanceur", L"GfxOuverts4", s.empty() ? L"-" : s.c_str(), g_iniLauncher.c_str());
 }
 static float GfxMaxScroll() { return max(0.0f, g_gfxContentH - (kGfxArea.Height - 20)); }
 
@@ -327,6 +374,14 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
         Pen ppen(cap ? kAcc : TH(fieldBorder), cap ? 2.0f : 1.0f); g.DrawPath(&ppen, &pp);
         Text(g, cap ? std::wstring(T(L"Appuie sur une touche…", L"Press a key…")) : k >= 0 ? GameKeyLabel(GameKeyGet(k)) : std::wstring(L"?"), pr, 12.5f, FontStyleBold, cap ? kAcc : kInk);
         if (g_gfxZones) HotZone(row, id);
+        return;
+    }
+    const wchar_t *why = NULL;
+    if (GfxRowOff(r, &why)) {   // (sans effet : valeur remplacee par la raison, pas de clic)
+        RectF val(row.X + row.Width - 172, row.Y + 2, 172, row.Height - 4);
+        GraphicsPath vp; RoundRect(vp, val, 10);
+        SolidBrush vb(WithA(TH(btn2), 0.5f)); g.FillPath(&vb, &vp);
+        Text(g, why, val, 12, FontStyleItalic, kGrey);
         return;
     }
     int v = GfxGet(r.key);
@@ -377,10 +432,10 @@ static void DrawGfxBlock(Graphics &g, int block, float x, float &y, float w, flo
 static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, float top, float bottom)
 {
     static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et vue", L"Confort", L"Lumières", L"Écran", L"Voix", L"Visages, habits et pseudos", L"Partie et partage", L"Touches",
-                                    L"Fluidité", L"Ombres avancées", L"Détails et textures", L"Caméra drone" };
+                                    L"Fluidité", L"Ombres avancées", L"Détails et textures", L"Caméra drone", L"Ray tracing" };
     static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and view", L"Comfort", L"Lights", L"Screen", L"Voice", L"Faces, clothes and names", L"Game and sharing", L"Keys",
-                                    L"Smoothness", L"Advanced shadows", L"Detail and textures", L"Drone camera" };
-    static const int kIcon[] = { IC_IMAGE, IC_MOON, IC_EYE, IC_SLIDERS, IC_BULB, IC_MONITOR, IC_MIC, IC_SHIRT, IC_USERS, IC_KEYB, IC_GAUGE, IC_SUN, IC_LAYERS, IC_DRONE };
+                                    L"Smoothness", L"Advanced shadows", L"Detail and textures", L"Drone camera", L"Ray tracing" };
+    static const int kIcon[] = { IC_IMAGE, IC_MOON, IC_EYE, IC_SLIDERS, IC_BULB, IC_MONITOR, IC_MIC, IC_SHIRT, IC_USERS, IC_KEYB, IC_GAUGE, IC_SUN, IC_LAYERS, IC_DRONE, IC_SPARK };
     const auto &rows = GfxRows();
     std::vector<int> mine;
     for (int i = 0; i < (int)rows.size(); i++) if (rows[i].group == group) mine.push_back(i);
@@ -398,6 +453,12 @@ static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, flo
         SolidBrush ibb(WithA(kAcc, hot ? 0.28f : 0.16f)); g.FillPath(&ibb, &ip);
         Icon(g, kIcon[group], ib.X + 13, ib.Y + 13, 17, kAcc, 2.0f);
         Text(g, g_fr ? kFr[group] : kEn[group], RectF(hr.X + 76, hr.Y, 340, hr.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
+        if (group == 14) {   // (demande de JD, 12/10 : etiquette tant que le ray tracing est en chantier)
+            Graphics &mg = MeasureG();
+            float nw = MeasureW(mg, g_fr ? kFr[group] : kEn[group], 14, FontStyleBold);
+            const wchar_t *tag = T(L"EN DÉVELOPPEMENT", L"IN DEVELOPMENT");
+            Pill(g, RectF(hr.X + 76 + nw + 12, hr.Y + (hr.Height - 20) / 2, PillW(tag, 10.0f), 20), WithA(kWarn, 0.18f), tag, kWarn, 10.0f);
+        }
         wchar_t n[48];
         swprintf_s(n, T(L"%d réglages", L"%d settings"), (int)mine.size());
         Text(g, n, RectF(hr.X + hr.Width - 220, hr.Y, 204, hr.Height), 12, FontStyleRegular, kGrey, StringAlignmentFar);
@@ -427,24 +488,25 @@ static void DrawGfxPage(Graphics &g)
     Title(g, T(L"Qualité d'image", L"Image quality"), RectF(t.X + 24, t.Y + 14, 300, 26), 17, kInk);
     int on = GfxPresetOn();
     Para(g, on >= 0 ? T(L"Un clic règle tout, puis ajuste ligne par ligne.", L"One click sets everything, then fine-tune below.") : T(L"Réglage personnalisé : choisis un préréglage pour repartir.", L"Custom settings: pick a preset to start over."),
-         RectF(t.X + 24, t.Y + 40, 300, 40), 12.5f, kGrey);
+         RectF(t.X + 24, t.Y + 40, 190, 40), 12, kGrey);
     const auto &ps = GfxPresets();
-    float tw = 148, gap = 10, x0 = t.X + t.Width - 20 - ((int)ps.size() * tw + ((int)ps.size() - 1) * gap);
+    float tw = 120, gap = 8, x0 = t.X + t.Width - 20 - ((int)ps.size() * tw + ((int)ps.size() - 1) * gap);
     for (int i = 0; i < (int)ps.size(); i++) {
         RectF r(x0 + i * (tw + gap), t.Y + 12, tw, t.Height - 24);
-        bool sel = i == on, hot = g_uiHot == UI_GFX_PRESET + i;
+        bool sel = i == on, hot = g_uiHot == UI_GFX_PRESET + i, off = GfxPresetOff(i);
         GraphicsPath p; RoundRect(p, r, 14);
         SolidBrush fb(sel ? kAcc : hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&fb, &p);
         if (!sel) { Pen pen(TH(fieldBorder), 1.0f); g.DrawPath(&pen, &p); }
-        Color ink = sel ? kOnAcc : kInk;
-        Text(g, g_fr ? ps[i].fr : ps[i].en, RectF(r.X + 14, r.Y + 7, r.Width - 20, 22), 14.5f, FontStyleBold, ink, StringAlignmentNear);
-        Text(g, g_fr ? ps[i].dFr : ps[i].dEn, RectF(r.X + 14, r.Y + 29, r.Width - 20, 18), 11.5f, FontStyleRegular, sel ? WithA(kOnAcc, 0.8f) : kGrey, StringAlignmentNear);
-        // barres de niveau (1 a 4)
+        Color ink = off ? kGrey : sel ? kOnAcc : kInk;
+        Text(g, g_fr ? ps[i].fr : ps[i].en, RectF(r.X + 12, r.Y + 7, r.Width - 34, 22), 12.5f, FontStyleBold, ink, StringAlignmentNear);
+        Text(g, off ? T(L"Carte non compatible", L"GPU not supported") : g_fr ? ps[i].dFr : ps[i].dEn, RectF(r.X + 12, r.Y + 29, r.Width - 16, 18), 11, FontStyleRegular, sel ? WithA(kOnAcc, 0.8f) : kGrey, StringAlignmentNear);
+        // barres de niveau (Vanilla aucune, Performance 1 ... Ultra et RT 4)
+        int lvl = min(i, 4);
         for (int b = 0; b <= 3; b++) {
-            RectF br(r.X + r.Width - 14 - (3 - b) * 7, r.Y + 19 - b * 4, 4, 6 + b * 4);
-            SolidBrush bb(b <= i ? (sel ? kOnAcc : kAcc) : WithA(ink, 0.18f)); g.FillRectangle(&bb, br);
+            RectF br(r.X + r.Width - 12 - (3 - b) * 6.0f, r.Y + 19 - b * 4.0f, 4.0f, 6 + b * 4.0f);
+            SolidBrush bb(b < lvl ? (sel ? kOnAcc : off ? kGrey : kAcc) : WithA(ink, 0.18f)); g.FillRectangle(&bb, br);
         }
-        HotZone(r, UI_GFX_PRESET + i);
+        if (!off) HotZone(r, UI_GFX_PRESET + i);
     }
     // options : categories repliables, ascenseur si besoin
     GfxOpenRead();
@@ -469,12 +531,16 @@ static void DrawGfxPage(Graphics &g)
 static bool GfxClick(int id)
 {
     if (id >= UI_GFX_PRESET && id < UI_GFX_PRESET + (int)GfxPresets().size()) {
+        if (GfxPresetOff(id - UI_GFX_PRESET)) return true;
         for (auto &kv : GfxPresets()[id - UI_GFX_PRESET].v) GfxSet(kv.first, kv.second);
+        if (GfxPresets()[id - UI_GFX_PRESET].v.back().first != std::string("RayTracing")) GfxSet("RayTracing", 0);   // (autres prereglages : RT coupe)
         return true;
     }
     const auto &rows = GfxRows();
     if (id < UI_GFX || id >= UI_GFX + (int)rows.size() * 3) return false;
     const GfxRow &r = rows[(id - UI_GFX) / 3];
+    const wchar_t *why = NULL;
+    if (GfxRowOff(r, &why)) return true;
     if (r.sec && !strcmp(r.sec, "Touches")) { int k = GameKeyIndex(r.key); g_keyCapture = g_keyCapture == k ? -1 : k; return true; }
     int part = (id - UI_GFX) % 3, v = GfxGet(r.key);
     if (r.vals.empty()) { if (part == 0) GfxSet(r.key, v == 1 ? 0 : 1); return true; }

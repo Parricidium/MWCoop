@@ -13,6 +13,10 @@ ml64 /nologo /c /Fobuild\exports.obj loader\exports.asm || exit /b 1
 cl /nologo /O2 /MT /W3 /utf-8 /D_CRT_SECURE_NO_WARNINGS /DUNICODE /D_UNICODE /Fobuild\ loader\proxy.cpp build\exports.obj ^
    /LD /Febuild\version.dll /link /DEF:loader\version.def user32.lib kernel32.lib advapi32.lib shell32.lib shlwapi.lib ole32.lib || exit /b 1
 echo OK build\version.dll
+rem Ray tracing : MWCoopRT.dll (plugin natif d'Unity, mywintercar_Data\Plugins), DXR par Direct3D 12
+"C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\dxc.exe" -nologo -T cs_6_5 -E Main -Fh build\rt_shadow.h -Vn g_rtShadow rt\shadow.hlsl || exit /b 1
+cl /nologo /O2 /MT /W3 /EHsc /utf-8 /D_CRT_SECURE_NO_WARNINGS /I build /Fobuild\ rt\mwcrt.cpp /LD /Febuild\MWCoopRT.dll /link d3d11.lib d3d12.lib dxgi.lib d3dcompiler.lib || exit /b 1
+echo OK build\MWCoopRT.dll
 
 dotnet "%ProgramFiles%\dotnet\sdk\8.0.424\Roslyn\bincore\csc.dll" -nologo -noconfig -nostdlib -target:library -optimize -langversion:7.3 ^
    -nowarn:1701,1702 -out:build\MWCoop.dll ^

@@ -1,0 +1,578 @@
+﻿using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using UnityEngine;
+
+namespace MWCoop
+{
+    // Ray tracing materiel (demande de JD, 11/10 : « comme sur GTAVC Coop ») : MWCoopRT.dll (rt\mwcrt.cpp, rt\shadow.hlsl).
+    // Etape 1 : ombres du soleil (et de la lune) par rayons, a la place des ombres d'Unity.
+    //  - Le device Direct3D 11 du jeu est tire d'une texture du mod (RtInit). Le jeu tourne avec -force-gfx-direct (Unity
+    //    dessine sur son fil principal) : le mod appelle la DLL depuis OnPostRender de la camera principale -- apres la
+    //    scene, avant les effets d'image (brouillard, tonemapping...) et l'interface.
+    //  - Entrees : textures internes d'Unity, trouvees par leur nom (les tampons de commandes des cameras ne s'executent
+    //    pas dans ce jeu) : « Deferred Depth » (profondeur) et « Deferred GBuffer » ARGB2101010 (normales du monde).
+    //  - Scene : maillages des rendus a moins de [Graphismes] RTPortee m (250) de la camera, qui projettent une ombre,
+    //    opaques ou a decoupe (feuillages : arbres, haies -- uv et alpha de la texture envoyes, test alpha par rayon) ;
+    //    envoyes une fois (positions, triangles), puis matrices a chaque image. Lots statiques : le maillage
+    //    combine (deja dans le monde) une fois. Personnages (maillages animes) : pas encore.
+    //  - Ombres : Unity 5.0 rassemble les ombres du soleil dans une carte a l'echelle de l'ecran (« Screenspace ShadowMap »)
+    //    juste avant son eclairage differe. La DLL remplace son contenu par les ombres RT a ce moment-la (crochet sur le
+    //    changement de cible) : l'eclairage reste celui d'Unity (ambiance, reflets, force). Les ombres d'Unity du soleil
+    //    restent donc allumees (rallumees si le joueur les a coupees, rendues a la sortie). Mode 14 : ancien melange.
+    // Rendu du jeu (sonde du 11/10) : DeferredShading en HDR, soleil MAP/Sun/PivotSun/SUN (ombres douces, force 0.8).
+    public static class RayTracing
+    {
+        // MWCoopRT.dll : chargee par son chemin (dossier MWCoop), fonctions prises par leur adresse -- un DllImport par nom ne
+        // la trouve pas quand le jeu part d'une copie de lancement (et MWCoop.dll, chargee depuis la memoire, n'a pas de dossier).
+        [DllImport("kernel32", CharSet = CharSet.Unicode, SetLastError = true)] static extern System.IntPtr LoadLibraryW(string path);
+        [DllImport("kernel32", CharSet = CharSet.Ansi)] static extern System.IntPtr GetProcAddress(System.IntPtr mod, string name);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Unicode)] delegate int DProbe(string logPath);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DPtr(System.IntPtr p);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInt(int v);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DInputs(System.IntPtr depth, System.IntPtr normal, int w, int h);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DMesh(int id, float[] verts, int nv, int[] idx, int ni);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DMeshAlpha(int id, float[] verts, int nv, int[] idx, int ni, float[] uvs, int tex, float cutoff);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DTexture(int id, System.IntPtr d3d11tex, int maxSize);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFloats(float[] data, int n);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DMeshUpdate(int id, float[] verts, int nv);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFrame(float[] p);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInts(int[] data, int n);
+        static DProbe fProbe; static DPtr fInit; static DInt fPostRender, fCapture, fArm; static DInputs fInputs; static DMesh fMesh;
+        static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate;
+        static T Fn<T>(System.IntPtr lib, string name) where T : class
+        {
+            System.IntPtr p = GetProcAddress(lib, name);
+            if (p == System.IntPtr.Zero) throw new System.EntryPointNotFoundException(name);
+            return Marshal.GetDelegateForFunctionPointer(p, typeof(T)) as T;
+        }
+        static void Bind(System.IntPtr lib)
+        {
+            fProbe = Fn<DProbe>(lib, "RtProbe"); fInit = Fn<DPtr>(lib, "RtInit"); fPostRender = Fn<DInt>(lib, "RtPostRender");
+            fInputs = Fn<DInputs>(lib, "RtSetInputs"); fMesh = Fn<DMesh>(lib, "RtMesh"); fMeshAlpha = Fn<DMeshAlpha>(lib, "RtMeshAlpha");
+            fTexture = Fn<DTexture>(lib, "RtTextureFrom"); fInstances = Fn<DFloats>(lib, "RtInstances"); fFrame = Fn<DFrame>(lib, "RtFrame");
+            fStaticCounts = Fn<DInts>(lib, "RtStaticCounts"); fCapture = Fn<DInt>(lib, "RtCapture"); fArm = Fn<DInt>(lib, "RtArm");
+            fMeshUpdate = Fn<DMeshUpdate>(lib, "RtMeshUpdate");
+        }
+        static int RtProbe(string logPath) { return fProbe(logPath); }
+        static int RtInit(System.IntPtr d3d11Resource) { return fInit(d3d11Resource); }
+        static void RtPostRender(int mode) { fPostRender(mode); }
+        static int RtSetInputs(System.IntPtr depth, System.IntPtr normal, int w, int h) { return fInputs(depth, normal, w, h); }
+        static int RtMesh(int id, float[] verts, int nv, int[] idx, int ni) { return fMesh(id, verts, nv, idx, ni); }
+        static int RtMeshAlpha(int id, float[] verts, int nv, int[] idx, int ni, float[] uvs, int tex, float cutoff) { return fMeshAlpha(id, verts, nv, idx, ni, uvs, tex, cutoff); }
+        static int RtTextureFrom(int id, System.IntPtr d3d11tex, int maxSize) { return fTexture(id, d3d11tex, maxSize); }
+        static void RtInstances(float[] data, int n) { fInstances(data, n); }
+        static void RtFrame(float[] p) { fFrame(p); }
+        static void RtStaticCounts(int[] counts, int n) { fStaticCounts(counts, n); }
+        static void RtCapture(int on) { fCapture(on); }
+        static void RtArm(int flags) { fArm(flags); }
+        static int RtMeshUpdate(int id, float[] verts, int nv) { return fMeshUpdate(id, verts, nv); }
+
+        // Lots statiques (decor regroupe par Unity, illisible) : releves sur la carte pendant une image de capture (ombres
+        // d'Unity rallumees pour elle) -- voir RtStaticCounts / RtCapture dans rt\mwcrt.cpp.
+        static readonly HashSet<int> staticCounts = new HashSet<int>();
+        static bool staticChanged, captureNow;
+        static float nextCapture;
+
+        static float probeAt = -1;
+        static bool probed, ready;
+        static Camera hooked;
+        static Texture2D devTex;
+
+        public static bool Wanted { get { return Config.GetInt("Test", "RT", 0) != 0 || Gfx.Get("RayTracing", 0) != 0; } }
+        static int Mode { get { return Config.GetInt("Test", "RTMode", 0); } }
+
+        // Jeu lance avec -force-gfx-direct : Unity dessine sur son fil principal, le mod peut appeler la DLL au bon moment.
+        static int direct = -1;
+        public static bool Direct
+        {
+            get
+            {
+                if (direct < 0) { direct = 0; foreach (string a in System.Environment.GetCommandLineArgs()) if (a.ToLowerInvariant() == "-force-gfx-direct") direct = 1; }
+                return direct == 1;
+            }
+        }
+
+        public static void OnLevelLoaded()
+        {
+            RestoreShadows();
+            probed = false; hooked = null; ready = false;
+            lastDepth = lastNormal = System.IntPtr.Zero;
+            tracked.Clear(); meshIds.Clear(); sentMeshes.Clear(); badMeshes.Clear(); toSend.Clear(); skins.Clear(); skinNear.Clear(); queued.Clear(); cutMats.Clear(); texQueue.Clear(); texQueued.Clear();
+            probeAt = PlayerSync.InGame && Wanted ? Time.realtimeSinceStartup + 8f : -1;
+        }
+
+        public static void Update()
+        {
+            if (probeAt < 0 || Time.realtimeSinceStartup < probeAt) return;
+            if (!probed) { probed = true; Probe(); }
+            if (!ready) return;
+            Camera c = Camera.main;
+            if (c != null && c != hooked)
+            {
+                if (c.GetComponent<RtCamHook>() == null) c.gameObject.AddComponent<RtCamHook>();
+                hooked = c;
+                Log.Info("rt : dessin accroche a la camera " + c.name);
+            }
+            if (hooked == null) return;
+            Inputs();
+            Scan(hooked);
+            ProcessTextures();   // (textures de feuillage lues par la DLL : possible hors rendu)
+            SendMeshes();
+        }
+
+        static void Probe()
+        {
+            try
+            {
+                // MWCoopRT.dll a cote du mwcoop.ini (dossier MWCoop du jeu)
+                string own = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Config.IniPath), "MWCoopRT.dll");
+                if (!System.IO.File.Exists(own)) own = "MWCoopRT.dll";   // (essais : a cote du jeu)
+                System.IntPtr h = LoadLibraryW(own);
+                if (h == System.IntPtr.Zero) throw new System.DllNotFoundException(own + " (erreur " + Marshal.GetLastWin32Error() + ")");
+                Bind(h);
+                RtProbe(System.IO.Path.Combine(Log.DataDir, "logs\\rt.log"));
+                if (devTex == null) { devTex = new Texture2D(4, 4, TextureFormat.ARGB32, false) { hideFlags = HideFlags.HideAndDontSave }; devTex.Apply(); }
+                int i = RtInit(devTex.GetNativeTexturePtr());
+                ready = (i & 1) != 0 && (i & 2) != 0 && Direct;
+                Log.Info("rt : device du jeu " + ((i & 1) != 0 ? "recupere" : "ABSENT") + ", DXR " + ((i & 2) != 0 ? "oui" : "non") + ", rendu sur un seul fil (-force-gfx-direct) "
+                         + (Direct ? "oui" : "NON : rien n'est dessine") + " (journal logs\\rt.log)");
+            }
+            catch (System.Exception e) { Log.Warn("rt : plugin MWCoopRT absent ou illisible (" + e.GetType().Name + " : " + e.Message + ")"); }
+        }
+
+        // ---------------------------------------------------------------- entrees (textures internes d'Unity)
+        static System.IntPtr lastDepth, lastNormal;
+        static float nextFind;
+        static void Inputs()
+        {
+            if (Time.realtimeSinceStartup < nextFind) return;
+            nextFind = Time.realtimeSinceStartup + 2f;
+            RenderTexture d = null, n = null;
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(RenderTexture)))
+            {
+                var r = (RenderTexture)o;
+                if (r.width != Screen.width || r.height != Screen.height || !r.IsCreated()) continue;
+                if (r.name == "Deferred Depth") d = r;
+                else if (r.name == "Deferred GBuffer" && r.format == RenderTextureFormat.ARGB2101010) n = r;
+            }
+            System.IntPtr dp = d != null ? d.GetNativeTexturePtr() : System.IntPtr.Zero, np = n != null ? n.GetNativeTexturePtr() : System.IntPtr.Zero;
+            if (dp == lastDepth && np == lastNormal) return;
+            lastDepth = dp; lastNormal = np;
+            int ok = RtSetInputs(dp, np, Screen.width, Screen.height);
+            Log.Info("rt : entrees " + Screen.width + "x" + Screen.height + " : profondeur " + (d != null ? "trouvee" : "ABSENTE") + ", normales " + (n != null ? "trouvees" : "ABSENTES") + (ok != 0 ? ", lues par la DLL" : ", PAS lues par la DLL"));
+        }
+
+        // ---------------------------------------------------------------- scene
+        class Tracked { public Renderer R; public int Mesh; public bool Static, Skinned; }
+        // Personnages (maillages animes : joueurs, PNJ) : pose relevee a chaque image (BakeMesh), au plus 8 a 40 m.
+        class SkinState { public int Id; public Mesh Baked; public bool Sent; public float[] Buf; }
+        static readonly Dictionary<SkinnedMeshRenderer, SkinState> skins = new Dictionary<SkinnedMeshRenderer, SkinState>();
+        static readonly List<SkinnedMeshRenderer> skinNear = new List<SkinnedMeshRenderer>();
+        static readonly List<Tracked> tracked = new List<Tracked>();
+        static readonly Dictionary<Mesh, int> meshIds = new Dictionary<Mesh, int>();
+        static readonly HashSet<int> sentMeshes = new HashSet<int>(), badMeshes = new HashSet<int>();
+        static readonly Queue<Mesh> toSend = new Queue<Mesh>();
+        static readonly HashSet<Mesh> queued = new HashSet<Mesh>();
+        static readonly Dictionary<Mesh, Material> cutMats = new Dictionary<Mesh, Material>();   // maillages a decoupe
+        static readonly HashSet<int> sentTex = new HashSet<int>(), badTex = new HashSet<int>();
+        static readonly Queue<Texture> texQueue = new Queue<Texture>();   // (lues pendant le rendu : OnPostRender)
+        static readonly HashSet<int> texQueued = new HashSet<int>();
+        static float nextScan, nextScanLog;
+        static bool lotsLogged;
+        static int nextMeshId = 1;
+
+        static float Range { get { return Mathf.Clamp(Gfx.Get("RTPortee", 250), 50, 1000); } }
+
+        static void Scan(Camera cam)
+        {
+            if (Time.realtimeSinceStartup < nextScan) return;
+            nextScan = Time.realtimeSinceStartup + 1.5f;
+            Vector3 cp = cam.transform.position;
+            float r2 = Range * Range;
+            tracked.Clear();
+            var statics = new HashSet<Mesh>();
+            int total = 0, off = 0, noShadow = 0, far = 0, transp = 0, excl = 0, noMesh = 0, dup = 0, bad = 0, leaves = 0;
+            foreach (MeshRenderer mr in Object.FindObjectsOfType<MeshRenderer>())
+            {
+                total++;
+                if (!mr.enabled) { off++; continue; }
+                if (mr.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off) { noShadow++; continue; }
+                if (mr.bounds.SqrDistance(cp) > r2) { far++; continue; }
+                Material m = mr.sharedMaterial;
+                // Feuillages : shaders a decoupe (_Cutoff ; « Nature/Tree Soft Occlusion Leaves » est dans la file transparente)
+                bool cut = m != null && Cutout(m) && mr.sharedMaterials.Length == 1 && !mr.isPartOfStaticBatch;
+                if (cut && Config.GetInt("Test", "RTSansFeuillage", 0) != 0) { transp++; continue; }   // (essais)
+                if (m == null || (m.renderQueue >= 2500 && !cut)) { transp++; continue; }    // transparents (vitres...) : pas d'ombre
+                Transform root = mr.transform.root;
+                if (root.name == "PLAYER" || root.name == "GUI" || root.name.StartsWith("MWCoop")) { excl++; continue; }
+                MeshFilter mf = mr.GetComponent<MeshFilter>();
+                Mesh mesh = mf != null ? mf.sharedMesh : null;
+                if (mesh == null) { noMesh++; continue; }
+                bool st = mr.isPartOfStaticBatch;
+                if (st && Config.GetInt("Test", "RTSansLots", 0) != 0) { dup++; continue; }   // (essais)
+                if (st)
+                {
+                    // (lot statique : releve sur la carte, pas lu ici)
+                    if (statics.Add(mesh) && staticCounts.Add(mesh.vertexCount)) staticChanged = true;
+                    dup++;
+                    continue;
+                }
+                int id;
+                if (!meshIds.TryGetValue(mesh, out id)) { id = nextMeshId++; meshIds[mesh] = id; }
+                if (badMeshes.Contains(id)) { bad++; continue; }
+                if (cut) { cutMats[mesh] = m; leaves++; }
+                if (!sentMeshes.Contains(id) && queued.Add(mesh)) toSend.Enqueue(mesh);
+                tracked.Add(new Tracked { R = mr, Mesh = id, Static = st });
+            }
+            if (Config.GetInt("Test", "RTProches", 0) != 0 && !nearLogged && Time.realtimeSinceStartup > 40)
+            {
+                nearLogged = true;
+                var sb = new System.Text.StringBuilder();
+                foreach (Renderer rr in Object.FindObjectsOfType<Renderer>())
+                {
+                    if (rr.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off || !rr.enabled || rr.bounds.SqrDistance(cp) > 15f * 15f) continue;
+                    sb.Append(" | ").Append(Recon.Path(rr.transform)).Append(' ').Append(rr.GetType().Name).Append(rr.isPartOfStaticBatch ? " lot" : "").Append(" mat");
+                    foreach (Material mm in rr.sharedMaterials) sb.Append(' ').Append(mm != null ? mm.shader.name + "/" + mm.renderQueue : "null");
+                    MeshFilter mf = rr.GetComponent<MeshFilter>();
+                    sb.Append(" sommets ").Append(mf != null && mf.sharedMesh != null ? mf.sharedMesh.vertexCount : -1);
+                    bool tr = false; foreach (Tracked t in tracked) if (t.R == rr) tr = true;
+                    sb.Append(tr ? " SUIVI" : "");
+                }
+                Log.Info("rt : objets a 15 m qui projettent une ombre :" + sb);
+            }
+            skinNear.Clear();
+            foreach (SkinnedMeshRenderer sm in Object.FindObjectsOfType<SkinnedMeshRenderer>())
+            {
+                if (skinNear.Count >= 8) break;
+                if (!sm.enabled || sm.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off || sm.sharedMesh == null) continue;
+                if (sm.bounds.SqrDistance(cp) > 40f * 40f || sm.transform.root.name == "GUI") continue;
+                skinNear.Add(sm);
+            }
+            if (staticChanged)
+            {
+                staticChanged = false;
+                var arr = new int[staticCounts.Count]; staticCounts.CopyTo(arr);
+                RtStaticCounts(arr, arr.Length);
+                captureNow = true;
+                Log.Info("rt : " + arr.Length + " lots statiques a relever");
+            }
+            if (Time.realtimeSinceStartup > nextCapture) { nextCapture = Time.realtimeSinceStartup + 10f; captureNow = true; }
+            if (Config.GetInt("Test", "RTLots", 0) != 0 && !lotsLogged)
+            {
+                lotsLogged = true;
+                int stIn = 0, stCol = 0, stColRead = 0, plainRead = 0, plain = 0;
+                var names = new System.Text.StringBuilder();
+                foreach (MeshRenderer mr in Object.FindObjectsOfType<MeshRenderer>())
+                {
+                    if (!mr.enabled || mr.bounds.SqrDistance(cp) > r2) continue;
+                    MeshFilter mf = mr.GetComponent<MeshFilter>();
+                    if (mr.isPartOfStaticBatch)
+                    {
+                        stIn++;
+                        MeshCollider mc = mr.GetComponent<MeshCollider>();
+                        if (mc != null && mc.sharedMesh != null) { stCol++; try { if (mc.sharedMesh.vertices.Length > 0) stColRead++; } catch { } }
+                        if (names.Length < 600) names.Append(' ').Append(mr.name).Append(mc != null ? "(col)" : "");
+                    }
+                    else if (mf != null && mf.sharedMesh != null) { plain++; try { if (mf.sharedMesh.vertices.Length > 0) plainRead++; } catch { } }
+                }
+                var types = new Dictionary<string, int>();
+                var near = new System.Text.StringBuilder();
+                foreach (Renderer rr in Object.FindObjectsOfType<Renderer>())
+                {
+                    if (rr.bounds.SqrDistance(cp) > 60f * 60f) continue;
+                    string tn = rr.GetType().Name + (rr.isPartOfStaticBatch ? "(lot)" : "") + (rr.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off ? "(sans ombre)" : "");
+                    int k; types.TryGetValue(tn, out k); types[tn] = k + 1;
+                    string ln = rr.name.ToLowerInvariant();
+                    if (near.Length < 1500 && (ln.Contains("tree") || ln.Contains("puu") || ln.Contains("kuusi") || ln.Contains("koivu") || ln.Contains("pine") || ln.Contains("spruce") || ln.Contains("birch") || ln.Contains("forest") || ln.Contains("metsa")))
+                        near.Append(" [").Append(Recon.Path(rr.transform)).Append(' ').Append(rr.GetType().Name).Append(rr.isPartOfStaticBatch ? " lot" : "").Append(' ').Append(rr.shadowCastingMode).Append(rr.sharedMaterial != null ? " " + rr.sharedMaterial.shader.name : "").Append(']');
+                }
+                var tsb = new System.Text.StringBuilder();
+                foreach (var kv in types) tsb.Append(' ').Append(kv.Key).Append('=').Append(kv.Value);
+                Log.Info("rt : rendus a 60 m :" + tsb + " ; arbres :" + near);
+                Log.Info("rt : lots statiques a portee " + stIn + " (avec collision " + stCol + ", lisible " + stColRead + "), autres " + plain + " (lisibles " + plainRead + ") :" + names);
+            }
+            if (Time.realtimeSinceStartup > nextScanLog)
+            {
+                nextScanLog = Time.realtimeSinceStartup + 20f;
+                Log.Info("rt : scene a " + Range + " m : " + tracked.Count + " objets (sur " + total + " : coupes " + off + ", sans ombre " + noShadow + ", loin " + far + ", transparents " + transp
+                         + ", exclus " + excl + ", sans maillage " + noMesh + ", lot deja pris " + dup + ", illisibles " + bad + ", feuillages " + leaves + ", personnages " + skinNear.Count + "), " + sentMeshes.Count + " maillages envoyes, " + toSend.Count + " a envoyer");
+            }
+        }
+
+        static void SendMeshes()
+        {
+            float budget = Time.realtimeSinceStartup + 0.004f;   // (au plus ~4 ms par image)
+            List<Mesh> wait = null;
+            while (toSend.Count > 0 && Time.realtimeSinceStartup < budget)
+            {
+                Mesh mesh = toSend.Dequeue();
+                if (mesh == null) continue;
+                int id = meshIds[mesh];
+                if (sentMeshes.Contains(id)) { queued.Remove(mesh); continue; }
+                Material wm;
+                if (cutMats.TryGetValue(mesh, out wm) && wm != null && wm.mainTexture != null)
+                {
+                    int tid = wm.mainTexture.GetInstanceID();
+                    if (badTex.Contains(tid)) { queued.Remove(mesh); badMeshes.Add(id); continue; }
+                    if (!sentTex.Contains(tid))
+                    {   // (texture d'alpha d'abord)
+                        if (texQueued.Add(tid)) texQueue.Enqueue(wm.mainTexture);
+                        if (wait == null) wait = new List<Mesh>();
+                        wait.Add(mesh);
+                        continue;
+                    }
+                }
+                queued.Remove(mesh);
+                try
+                {
+                    Vector3[] v = mesh.vertices;
+                    int[] t = mesh.triangles;
+                    if (v == null || v.Length == 0 || t == null || t.Length < 3) { badMeshes.Add(id); continue; }
+                    var f = new float[v.Length * 3];
+                    for (int i = 0; i < v.Length; i++) { f[i * 3] = v[i].x; f[i * 3 + 1] = v[i].y; f[i * 3 + 2] = v[i].z; }
+                    Material cm;
+                    int sent;
+                    if (cutMats.TryGetValue(mesh, out cm) && cm != null && cm.mainTexture != null && sentTex.Contains(cm.mainTexture.GetInstanceID()))
+                    {
+                        Vector2[] uv = mesh.uv;
+                        Vector2 sc = cm.mainTextureScale, of = cm.mainTextureOffset;
+                        var u = new float[v.Length * 2];
+                        bool flip = Config.GetInt("Test", "RTUvRetourne", 0) != 0;
+                        if (uv != null && uv.Length == v.Length)
+                            for (int i = 0; i < v.Length; i++) { u[i * 2] = uv[i].x * sc.x + of.x; u[i * 2 + 1] = uv[i].y * sc.y + of.y; if (flip) u[i * 2 + 1] = 1f - u[i * 2 + 1]; }
+                        float cutoff = Mathf.Clamp(cm.GetFloat("_Cutoff"), 0.01f, 0.99f);
+                        sent = RtMeshAlpha(id, f, v.Length, t, t.Length, u, cm.mainTexture.GetInstanceID(), cutoff);
+                        if (mesh.name.StartsWith("TREES1_MeshPart0"))
+                        {
+                            Vector4[] tg = mesh.tangents; Vector3[] nm = mesh.normals;
+                            var sb = new System.Text.StringBuilder();
+                            for (int i = 0; i < 8 && i < v.Length; i++)
+                                sb.Append(" [").Append(i).Append(" p ").Append(v[i].ToString("F2")).Append(" uv ").Append(uv[i].ToString("F3")).Append(" n ").Append(nm != null && nm.Length > i ? nm[i].ToString("F2") : "-").Append(" t ").Append(tg != null && tg.Length > i ? tg[i].ToString("F2") : "-").Append(']');
+                            sb.Append(" tri ").Append(t[0]).Append(',').Append(t[1]).Append(',').Append(t[2]).Append(' ').Append(t[3]).Append(',').Append(t[4]).Append(',').Append(t[5]);
+                            Log.Info("rt : sommets " + mesh.name + sb);
+                        }
+                        float u0 = 9, u1 = -9, v0 = 9, v1 = -9;
+                        for (int i = 0; i < v.Length; i++) { u0 = Mathf.Min(u0, u[i * 2]); u1 = Mathf.Max(u1, u[i * 2]); v0 = Mathf.Min(v0, u[i * 2 + 1]); v1 = Mathf.Max(v1, u[i * 2 + 1]); }
+                        Log.Info("rt : feuillage " + mesh.name + " (" + v.Length + " sommets, " + (t.Length / 3) + " triangles, texture " + cm.mainTexture.name + ", seuil " + cutoff.ToString("0.00")
+                                 + ", uv " + (uv != null ? uv.Length : -1) + " de " + u0.ToString("0.000") + "," + v0.ToString("0.000") + " a " + u1.ToString("0.000") + "," + v1.ToString("0.000") + ", echelle " + sc + " decalage " + of + ")");
+                    }
+                    else sent = RtMesh(id, f, v.Length, t, t.Length);
+                    if (sent != 0) sentMeshes.Add(id); else badMeshes.Add(id);
+                }
+                catch { badMeshes.Add(id); }
+            }
+            if (wait != null) foreach (Mesh m in wait) toSend.Enqueue(m);
+        }
+
+        // Une texture d'alpha par image, pendant le rendu (hors rendu, la copie par la carte ne lit rien).
+        static void ProcessTextures()
+        {
+            if (texQueue.Count == 0) return;
+            Texture tex = texQueue.Dequeue();
+            if (tex == null) return;
+            texQueued.Remove(tex.GetInstanceID());
+            if (!SendAlphaTexture(tex)) badTex.Add(tex.GetInstanceID());
+        }
+
+        // Matiere a decoupe : feuillages de Unity (« Leaves »), shaders « Cutout », Standard en mode decoupe.
+        static bool Cutout(Material m)
+        {
+            if (m.mainTexture == null || !m.HasProperty("_Cutoff")) return false;
+            string n = m.shader != null ? m.shader.name : "";
+            return n.Contains("Leaves") || n.Contains("Cutout") || m.IsKeywordEnabled("_ALPHATEST_ON");
+        }
+
+        // Alpha d'une texture de feuillage : lue par la DLL directement sur la carte (Unity ne recopie pas ces textures).
+        static bool SendAlphaTexture(Texture tex)
+        {
+            if (tex == null) return false;
+            int id = tex.GetInstanceID();
+            if (sentTex.Contains(id)) return true;
+            try
+            {
+                int ok = RtTextureFrom(id, tex.GetNativeTexturePtr(), Config.GetInt("Test", "RTAlphaTaille", 2048));
+                Log.Info("rt : texture de feuillage " + tex.name + " " + tex.width + "x" + tex.height + (ok != 0 ? " envoyee" : " NON LUE (laissee opaque, journal rt.log)"));
+                if (ok != 0) sentTex.Add(id);
+                return ok != 0;
+            }
+            catch (System.Exception e) { Log.Warn("rt : texture " + tex.name + " illisible (" + e.Message + ")"); return false; }
+        }
+
+        static Mesh bakeTmp;
+        static void UpdateSkins()
+        {
+            foreach (SkinnedMeshRenderer sm in skinNear)
+            {
+                if (sm == null || !sm.enabled || !sm.gameObject.activeInHierarchy) continue;
+                SkinState st;
+                if (!skins.TryGetValue(sm, out st)) { st = new SkinState { Id = nextMeshId++, Baked = new Mesh() }; skins[sm] = st; }
+                try
+                {
+                    sm.BakeMesh(st.Baked);
+                    Vector3[] v = st.Baked.vertices;
+                    if (v.Length == 0) continue;
+                    if (st.Buf == null || st.Buf.Length != v.Length * 3) st.Buf = new float[v.Length * 3];
+                    for (int i = 0; i < v.Length; i++) { st.Buf[i * 3] = v[i].x; st.Buf[i * 3 + 1] = v[i].y; st.Buf[i * 3 + 2] = v[i].z; }
+                    if (!st.Sent)
+                    {
+                        int[] t = st.Baked.triangles;
+                        st.Sent = RtMesh(st.Id, st.Buf, v.Length, t, t.Length) != 0;
+                        if (st.Sent) sentMeshes.Add(st.Id);
+                        Bounds b = st.Baked.bounds;
+                        Log.Info("rt : personnage " + Recon.Path(sm.transform) + " : " + v.Length + " sommets, " + (t.Length / 3) + " triangles, pose de " + b.min.ToString("F2") + " a " + b.max.ToString("F2")
+                                 + ", objet en " + sm.transform.position.ToString("F1") + " echelle " + sm.transform.lossyScale.ToString("F2") + (st.Sent ? "" : " REFUSE"));
+                    }
+                    else RtMeshUpdate(st.Id, st.Buf, v.Length);
+                }
+                catch { }
+            }
+        }
+
+        static float[] instBuf = new float[0];
+        static void SendInstances()
+        {
+            int n = 0;
+            if (instBuf.Length < (tracked.Count + skinNear.Count) * 13) instBuf = new float[(tracked.Count + skinNear.Count) * 13 + 1300];
+            foreach (Tracked t in tracked)
+            {
+                if (t.R == null || !sentMeshes.Contains(t.Mesh) || !t.R.enabled || !t.R.gameObject.activeInHierarchy) continue;
+                Matrix4x4 m = t.Static ? Matrix4x4.identity : t.R.localToWorldMatrix;
+                int o = n * 13;
+                instBuf[o] = t.Mesh;
+                for (int r = 0; r < 3; r++) for (int c = 0; c < 4; c++) instBuf[o + 1 + r * 4 + c] = m[r, c];
+                n++;
+            }
+            foreach (SkinnedMeshRenderer sm in skinNear)
+            {
+                SkinState st;
+                if (sm == null || !sm.enabled || !sm.gameObject.activeInHierarchy || !skins.TryGetValue(sm, out st) || !st.Sent) continue;
+                // (pose deja a l'echelle de l'objet : position et rotation seules)
+                Matrix4x4 m = Config.GetInt("Test", "RTPersoEchelle", 0) != 0 ? sm.transform.localToWorldMatrix : Matrix4x4.TRS(sm.transform.position, sm.transform.rotation, Vector3.one);
+                int o = n * 13;
+                instBuf[o] = st.Id;
+                for (int r = 0; r < 3; r++) for (int c = 0; c < 4; c++) instBuf[o + 1 + r * 4 + c] = m[r, c];
+                n++;
+            }
+            RtInstances(instBuf, n);
+        }
+
+        // ---------------------------------------------------------------- soleil, camera
+        static Light sun;
+        static LightShadows sunShadowsWas;
+        static bool sunCut;
+        static float nextSun;
+        static Light FindSun()
+        {
+            if (Time.realtimeSinceStartup < nextSun && sun != null) return sun;
+            nextSun = Time.realtimeSinceStartup + 2f;
+            Light best = null;
+            foreach (Light l in Object.FindObjectsOfType<Light>())
+                if (l.type == LightType.Directional && l.isActiveAndEnabled && (best == null || l.intensity > best.intensity)) best = l;
+            if (best != sun) { RestoreShadows(); sun = best; }
+            return sun;
+        }
+        static void RestoreShadows()
+        {
+            if (sunCut && sun != null) sun.shadows = sunShadowsWas;
+            sunCut = false;
+        }
+
+        // Cible du dessin retournee par rapport au G-buffer quand la camera dessine dans une texture (effets d'image :
+        // « ImageEffects Temp ») ; [Test] RTRetourneComp force (0/1).
+        static bool Flipped()
+        {
+            int f = Config.GetInt("Test", "RTRetourneComp", -1);
+            return f >= 0 ? f != 0 : RenderTexture.active != null;
+        }
+
+        static readonly float[] frame = new float[36];
+        static float nextFrameLog;
+        static void SendFrame(Camera cam, bool cut)
+        {
+            Light l = FindSun();
+            Matrix4x4 vp = GL.GetGPUProjectionMatrix(cam.projectionMatrix, Config.GetInt("Test", "RTRetourne", 1) != 0) * cam.worldToCameraMatrix;
+            Matrix4x4 inv = vp.inverse;
+            for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) frame[r * 4 + c] = inv[r, c];
+            Vector3 toSun = l != null ? -l.transform.forward : Vector3.up;
+            Color sc = l != null ? l.color * l.intensity : Color.black;
+            Color amb = RenderSettings.ambientLight * RenderSettings.ambientIntensity;
+            frame[16] = toSun.x; frame[17] = toSun.y; frame[18] = toSun.z; frame[19] = 0;
+            frame[20] = sc.r; frame[21] = sc.g; frame[22] = sc.b; frame[23] = Config.GetInt("Test", "RTRetourneMasque", 0);
+            frame[24] = amb.r; frame[25] = amb.g; frame[26] = amb.b; frame[27] = Flipped() ? 1 : 0;
+            frame[28] = l != null ? l.shadowStrength : 0.8f;               // force de l'ombre
+            frame[29] = Range + 50f;                                        // portee des rayons
+            frame[30] = Mathf.Clamp(Config.GetInt("Test", "RTRayons", Gfx.Get("RTRayons", 2)), 1, 16);          // rayons par pixel
+            frame[31] = Config.GetInt("Test", "RTDouceur", Gfx.Get("RTDouceur", 1)) * 0.001f;                   // demi-angle du soleil (radians)
+            Vector3 cpos = cam.transform.position;
+            frame[32] = cpos.x; frame[33] = cpos.y; frame[34] = cpos.z;
+            frame[35] = Mathf.Clamp(Config.GetInt("Test", "RTContraste", Gfx.Get("RTContraste", 25)), 5, 100) * 0.1f;   // gain du soleil face a l'ambiance (etalonne sur les ombres d'Unity)
+            if (Time.realtimeSinceStartup > nextFrameLog)
+            {
+                nextFrameLog = Time.realtimeSinceStartup + 20f;
+                Log.Info("rt : soleil " + (l != null ? l.name + " couleur " + l.color + " x " + l.intensity + ", hauteur " + toSun.y.ToString("0.00") : "absent") + ", ambiance " + RenderSettings.ambientMode + " " + RenderSettings.ambientLight + " x " + RenderSettings.ambientIntensity
+                         + ", ciel " + RenderSettings.ambientSkyColor + ", sol " + RenderSettings.ambientGroundColor);
+            }
+            RtFrame(frame);
+            // Ombres d'Unity de cette lumiere : allumees en mode 0 (leur carte a l'echelle de l'ecran recoit les ombres RT),
+            // coupees pour l'ancien melange (mode 14) ; rendues sinon.
+            if (l != null && cut && (Mode == 14 || Config.GetInt("Test", "RTCouper", 0) != 0))
+            {
+                if (!sunCut) { sunShadowsWas = l.shadows; sunCut = true; Log.Info("rt : ombres d'Unity de " + l.name + " coupees (" + sunShadowsWas + ")"); }
+                if (l.shadows != LightShadows.None) l.shadows = LightShadows.None;
+            }
+            else if (l != null && cut && Mode == 0)
+            {
+                if (l.shadows == LightShadows.None)
+                {
+                    if (!sunCut) { sunShadowsWas = l.shadows; sunCut = true; Log.Info("rt : ombres d'Unity de " + l.name + " rallumees (support des ombres RT)"); }
+                    l.shadows = LightShadows.Soft;
+                }
+            }
+            else if (cut) RestoreShadows();
+        }
+
+        static bool capturing;
+        static bool dumped, nearLogged;
+        static float capDistWas;
+        class RtCamHook : MonoBehaviour
+        {
+            void OnPreRender()
+            {
+                if (!ready || !Wanted) return;
+                if (captureNow)
+                {
+                    captureNow = false;
+                    capturing = true;
+                    if (Mode != 0) RestoreShadows();   // (carte d'ombres d'Unity pour cette image : c'est elle qu'on releve)
+                    // distance des ombres d'Unity portee a celle du RT le temps de l'image : tout le decor a portee y est dessine
+                    // (le prereglage RT la met a 30 m, le RT remplacant ses ombres)
+                    capDistWas = QualitySettings.shadowDistance;
+                    if (QualitySettings.shadowDistance < Range) QualitySettings.shadowDistance = Range;
+                    RtCapture(1);
+                }
+                if (Mode == 0)
+                {
+                    UpdateSkins();
+                    SendInstances();
+                    SendFrame(GetComponent<Camera>(), true);
+                    int flags = Config.GetInt("Test", "RTInjecter", 1) != 0 ? 1 : 0;
+                    if (!dumped && Config.GetInt("Test", "RTVidage", 0) != 0 && Time.realtimeSinceStartup > Config.GetInt("Test", "RTVidage", 0)) { dumped = true; flags |= 2 | 4; }
+                    RtArm(flags);
+                }
+            }
+            void OnPostRender()
+            {
+                if (!ready || !Wanted) return;
+                Camera cam = GetComponent<Camera>();
+                bool was = capturing;
+                if (capturing) { RtCapture(0); capturing = false; QualitySettings.shadowDistance = capDistWas; }
+                if (Mode == 0) { RtArm(0); RtPostRender(7); return; }   // (ombres deja dans la carte d'Unity ; lots releves traites)
+                if (was) { SendFrame(cam, false); RtPostRender(7); return; }
+                SendInstances();
+                SendFrame(cam, true);
+                RtPostRender(Mode);
+            }
+            void OnDisable() { RestoreShadows(); }
+        }
+    }
+}

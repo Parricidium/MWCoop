@@ -72,6 +72,8 @@ static const TutoStep kTuto[] = {
       L"Game options reorganized", L"Three blocks: Co-op, the game's video options, then MWCoop's enhanced ones. Each category has its icon. Unity's configuration window is now skipped: set your screen here.", "0.75.40" },
     { L"Caméra drone", L"En jeu, F8 : ta caméra devient un petit drone pour prendre des photos (viseur, zoom, pencher, flash). Les touches se règlent dans Options du jeu > Caméra drone.",
       L"Drone camera", L"In game, F8: your camera becomes a small drone to take photos (viewfinder, zoom, tilt, flash). Keys are set in Game options > Drone camera.", "0.75.44" },
+    { L"Vanilla et RT", L"Deux nouveaux préréglages : Vanilla remet les options du jeu d'origine, RT active les ombres du soleil en ray tracing (carte graphique compatible DXR, en développement). Ses réglages : catégorie Ray tracing.",
+      L"Vanilla and RT", L"Two new presets: Vanilla brings back the original game options, RT turns on ray-traced sun shadows (DXR-capable graphics card, in development). Its settings: Ray tracing category.", "0.76.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -113,10 +115,11 @@ static RectF TutoTarget(int i)
     case 29: return g_navR[TAB_GFX];
     case 30: return kGfxArea;
     case 31: return kGfxArea;
+    case 32: return kGfxTop;
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 ? TAB_GFX : i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la
