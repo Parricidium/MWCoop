@@ -208,6 +208,9 @@ Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
   shared yet.
 - **Drone camera** (F8): photo mode — your character stays put while a small drone camera flies around (viewfinder,
   zoom, tilt, flash); photos land in Pictures\CoopPictures with the MWCoop logo. The others see the drone and its flash.
+- **OSUUSKAUPPA 𝔰21 shop** (west of the PSK car park): a co-op-only village shop with its shopkeeper — sleeping bags and a
+  **video corner**: VHS tapes, VCRs, a TV and a 90s camcorder (VHS viewfinder, recording with sound); films are sent to
+  every player and play on the TV for everyone at once. Step-by-step guide: [docs/GUIDE-VIDEO.md](docs/GUIDE-VIDEO.md).
 
 The detailed list, version by version, is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
 
