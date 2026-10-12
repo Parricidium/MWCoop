@@ -59,6 +59,8 @@ namespace MWCoop
         {
             UpdateRemotes();
             if (!PlayerSync.InGame || !Session.Active) { if (Active) Exit(false); return; }
+            // Ajouts coop coupes (lanceur, Partie ; Menor, 12/10) : pas de camera drone ici (celles des autres restent visibles).
+            if (!Ajouts.On) { if (Active) Exit(true); return; }
             bool test = Config.GetInt("Test", "Drone", 0) != 0;
             if (!Busy && Input.GetKeyDown(Keys.Drone) || test && !Active && !testDone)
             {

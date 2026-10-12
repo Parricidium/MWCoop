@@ -206,6 +206,9 @@ namespace MWCoop
             if (log) Log.Info("sac de couchage " + b.Id + (folded ? " plie" : " deplie") + " en " + b.Go.transform.position.ToString("F1"));
         }
 
+        public static bool Wanted { get { return Ajouts.On; } }
+        static bool hiddenByOption;
+
         static Bag Find(string id) { foreach (Bag b in bags) if (b.Id == id) return b; return null; }
 
         // ---------------------------------------------------------------- boucle
@@ -228,6 +231,10 @@ namespace MWCoop
                 if (now >= nextSave) { nextSave = now + 60f; Save(); }
             }
             if (bags.Count == 0) return;
+            // Ajouts coop coupes (lanceur, Partie ; demande de Menor, 12/10 : « un jeu 100 % vanilla ») : sacs caches ici
+            // (la liste reste tenue et sauvegardee par l'hote, ils reviennent si on rallume).
+            if (!Wanted) { hiddenByOption = true; foreach (Bag b in bags) if (b.Go != null && b.Go.activeSelf) b.Go.SetActive(false); return; }
+            if (hiddenByOption) { hiddenByOption = false; foreach (Bag b in bags) if (b.Go != null) b.Go.SetActive(true); }
             bool park = now >= nextPark;
             if (park) nextPark = now + 1f;
             foreach (Bag b in bags)

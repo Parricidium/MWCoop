@@ -373,7 +373,8 @@ namespace MWCoop
             Offers();
             Flush();
             Lights();
-            try { Lippu(); } catch (Exception e) { L("drapeau : " + e.Message); }
+            // (drapeau corse en tissu physique retire, 0.83.1 : des joueurs avaient le jeu fige depuis la boutique ; JD : « on fera
+            // autrement ». KauppaLippu.cs garde le code, plus appele.)
             Door(door0);
             Shelter();
             Vendor();

@@ -20,14 +20,16 @@ namespace MWCoop
             public readonly float[] Ring = new float[Rate * 2];
             public int Write, Read, Count;
             public float LastHeard = -100f;
-            public void Push(byte[] pcm, int bytes)
+            public void Push(byte[] pcm, int bytes, float gain)
             {
                 lock (Ring)
                     for (int i = 0; i + 1 < bytes; i += 2)
                     {
                         short s = (short)(pcm[i] | pcm[i + 1] << 8);
                         if (Count == Ring.Length) { Read = (Read + 1) % Ring.Length; Count--; }   // (trop en retard : on jette le plus vieux)
-                        Ring[Write] = s / 32768f; Write = (Write + 1) % Ring.Length; Count++;
+                        float v = s / 32768f * gain;
+                        if (gain > 1f) v = v / (1f + Mathf.Abs(v) * 0.35f) * 1.35f;   // (ecretage doux : pas de saturation dure)
+                        Ring[Write] = Mathf.Clamp(v, -1f, 1f); Write = (Write + 1) % Ring.Length; Count++;
                     }
             }
             public void Fill(float[] data)
@@ -48,6 +50,7 @@ namespace MWCoop
         static float nextAvLog;
         public static bool Talking { get { return recording; } }
         public static bool Enabled { get { return Config.GetInt("Coop", "Vocal", 1) != 0; } }
+        static int MicGain { get { return Mathf.Clamp(Config.GetInt("Coop", "GainMicro", 100), 50, 400); } }
 
         public static void OnLevelLoaded()
         {
@@ -83,7 +86,8 @@ namespace MWCoop
                     EVoiceResult r = SteamUser.GetVoice(true, capture, (uint)capture.Length, out got, false, null, 0, out gotRaw, 0);
                     if (r == EVoiceResult.k_EVoiceResultOK && got > 0 && got < 1100)
                     {
-                        Session.SendAll(new NetWriter(Msg.Talk).U8(Session.LocalId).Bytes(capture, 0, (int)got), false);
+                        // (+ gain de son micro, en dizaines de % : [Coop] GainMicro, lanceur ; demande de Донской, 12/10 : « micro plus fort »)
+                        Session.SendAll(new NetWriter(Msg.Talk).U8(Session.LocalId).Bytes(capture, 0, (int)got).U8(MicGain / 10), false);
                         lastSent = Time.realtimeSinceStartup;
                         if (sentLogs++ < 5 || sentLogs % 50 == 0) Log.Info("vocal : paquet de " + got + " octets envoye (" + sentLogs + ")");
                     }
@@ -107,7 +111,8 @@ namespace MWCoop
             int id = r.U8();
             if (Session.IsHost) id = from.Id;
             byte[] data = r.Bytes();
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Talk).U8(id).Bytes(data, 0, data.Length), false, id);
+            int gain = r.More ? r.U8() * 10 : 100;   // (version sans gain : 100 %)
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Talk).U8(id).Bytes(data, 0, data.Length).U8(gain / 10), false, id);
             if (!Enabled || id == Session.LocalId || !PlayerSync.InGame) return;
             Speaker s = Get(id);
             if (s == null) return;
@@ -115,7 +120,7 @@ namespace MWCoop
             {
                 uint got;
                 EVoiceResult res = SteamUser.DecompressVoice(data, (uint)data.Length, pcm, (uint)pcm.Length, out got, Rate);
-                if (res == EVoiceResult.k_EVoiceResultOK && got > 0) { s.Push(pcm, (int)got); s.LastHeard = Time.realtimeSinceStartup; if (heardLogs++ < 5 || heardLogs % 50 == 0) Log.Info("vocal : " + got + " octets de voix de #" + id + " (" + heardLogs + "), source a " + s.Go.transform.position.ToString("F1")); }
+                if (res == EVoiceResult.k_EVoiceResultOK && got > 0) { s.Push(pcm, (int)got, Mathf.Clamp(gain, 50, 400) / 100f); s.LastHeard = Time.realtimeSinceStartup; if (heardLogs++ < 5 || heardLogs % 50 == 0) Log.Info("vocal : " + got + " octets de voix de #" + id + " (" + heardLogs + "), source a " + s.Go.transform.position.ToString("F1")); }
                 else if (heardLogs++ < 5) Log.Info("vocal : decompression " + res);
             }
             catch (System.Exception e) { if (Time.realtimeSinceStartup >= nextLog) { nextLog = Time.realtimeSinceStartup + 30f; Log.Warn("vocal : decompression impossible (" + e.Message + ")"); } }

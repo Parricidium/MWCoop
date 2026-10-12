@@ -23,7 +23,7 @@ namespace MWCoop
     {
         public const int SleepingBagPrice = 149;
 
-        public static bool Active { get { return Config.GetInt("Boutique", "Active", 1) != 0; } }
+        public static bool Active { get { return Ajouts.On && Config.GetInt("Boutique", "Active", 1) != 0; } }
 
         // Sacs poses d'office au debut de partie (sans boutique : oui).
         public static bool StarterBags { get { return !Active || Config.GetInt("Boutique", "SacsAuDepart", 0) != 0; } }
