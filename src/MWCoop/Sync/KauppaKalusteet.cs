@@ -180,7 +180,8 @@ namespace MWCoop
             return tops;
         }
 
-        static Vector3 vendorSpot = new Vector3(3.2f, 0, -2.45f);
+        static Vector3 vendorSpot = new Vector3(3.2f, 0, -2.55f);
+        const float CounterTop = 0.93f;   // dessus du tapis du comptoir de la PSK (repere boutique)
         static float fridgeYaw = -90f;   // portes vitrees vers l'interieur (+x)
 
         // hauteur (repere boutique) du dessus d'un meuble copie, mesuree sur l'original (ses collisions sont actives la ou
@@ -269,14 +270,17 @@ namespace MWCoop
                 if (counter != null)
                 {
                     Vector3 seat = root.transform.InverseTransformPoint(counter.transform.TransformPoint(tsrc.transform.InverseTransformPoint(cashier.transform.position)));
-                    Vector3 want = new Vector3(3.2f, 0, -2.45f);   // place du vendeur
+                    Vector3 want = new Vector3(3.2f, 0, -2.55f);   // place du vendeur
                     counter.transform.localPosition += new Vector3(want.x - seat.x, 0, want.z - seat.z);
+                    // comptoir contre le vendeur (JD, 12/10 : trop loin) : son bord arriere a 30 cm de lui
+                    Bounds cb0 = LocalBounds(counter);
+                    counter.transform.localPosition += new Vector3(0, 0, want.z + 0.3f - cb0.min.z);
                     Bounds cb = LocalBounds(counter);
                     counterBounds = cb;
                     // collisions : celles du comptoir d'origine (maillage de collision lisible du jeu), sinon sa boite
-                    var smc = tsrc.GetComponent<MeshCollider>();
-                    if (smc != null && smc.sharedMesh != null) counter.AddComponent<MeshCollider>().sharedMesh = smc.sharedMesh;
-                    else cols.Add(cb);
+                    // collision : une boite a la hauteur du tapis (le maillage de collision du comptoir de la PSK est
+                    // illisible : copie dans un MeshCollider, il ne bloquait rien et le sac de courses tombait au travers)
+                    cols.Add(new Bounds(new Vector3(cb.center.x, CounterTop / 2f, cb.center.z), new Vector3(cb.size.x, CounterTop, cb.size.z)));
                     vendorSpot = want;
                     L("comptoir : cap " + yaw.ToString("F0") + ", boite " + cb.min.ToString("F2") + " .. " + cb.max.ToString("F2"));
                 }
@@ -296,6 +300,7 @@ namespace MWCoop
                 reg.transform.position = counter.transform.TransformPoint(tsrc.transform.InverseTransformPoint(regSrc.transform.position));
                 reg.transform.rotation = counter.transform.rotation * Quaternion.Inverse(tsrc.transform.rotation) * regSrc.transform.rotation;
                 L("caisse posee en " + root.transform.InverseTransformPoint(reg.transform.position).ToString("F2"));
+                RegisterScreen(reg, regSrc);
             }
             else Clone("INSPECTION/LOD/inspection_desk/CashRegister/InspectionCashRegister", 0, new Vector3(cnt.center.x, cnt.max.y, cnt.min.z + 0.35f), 180, bottom, false);
             // derriere le comptoir : planches murales (vides pour l'instant : seulement des objets MWCoop plus tard)
@@ -325,9 +330,8 @@ namespace MWCoop
             // radiateurs sous les vitrines
             foreach (float x in new[] { -1.4f, 2.0f })
                 Clone("HOMENEW/Functions/ElectricThings/RadiatorsApartment/Radiator3", 0, new Vector3(x, 0.12f, D2 - Wall - 0.02f), 0, new Vector3(0, -1, 1), false);
-            // deco : horloge, porte-chapeaux, tableau d'affichage
+            // deco : horloge, tableau d'affichage
             Clone("HOMENEW/Functions/Clock", 0, new Vector3(3.0f, 2.72f, -D2 + Wall + 0.01f), -90, new Vector3(0, 0, -1), false);
-            Clone("HOMENEW/LOD/hat_shelf", 0, new Vector3(-4.95f, 1.75f, D2 - Wall - 0.01f), 0, new Vector3(0, 0, 1), false);
             Clone("PERAPORTTI/Building/LOD300/GFX/infoboard", 0, new Vector3(-2.2f, 1.55f, -D2 + Wall + 0.01f), 0, new Vector3(0, 0, -1), false);
             // dehors : table et chaise de jardin a droite de la facade
             Clone("COTTAGE/LOD/garden_table 1", 0, new Vector3(4.3f, float.NaN, D2 + 1.1f), 0, bottom);
