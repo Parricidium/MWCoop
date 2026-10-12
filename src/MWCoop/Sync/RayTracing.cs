@@ -115,6 +115,9 @@ namespace MWCoop
         // Ombres des lampes (phares, lampadaires) par rayons : [Graphismes] RTLampes = nombre de lampes (0 : non ; 8 par defaut).
         // Actives : le module Lumieres ne donne plus d'ombres d'Unity a ces lampes.
         public static bool LampsActive { get { return ready && Wanted && Direct && Mode == 0 && LampCount > 0; } }
+        // Corps du joueur local a la premiere personne (demande de JD, 12/10 : « la reflexion du joueur ») : son avatar existe,
+        // invisible a la camera (ombre seulement), pour les rayons -- reflets, ombres, occlusion. [Graphismes] RTCorps (1).
+        public static bool BodyWanted { get { return ready && Wanted && Direct && Mode == 0 && Gfx.Get("RTCorps", 1) != 0; } }
         static int LampCount { get { return Mathf.Clamp(Config.GetInt("Test", "RTLampes", Gfx.Get("RTLampes", 8)), 0, 16); } }
         static readonly List<Light> lampList = new List<Light>();
         static readonly float[] lampData = new float[16 * 12];
@@ -280,7 +283,7 @@ namespace MWCoop
                 if (cut && Config.GetInt("Test", "RTSansFeuillage", 0) != 0) { transp++; continue; }   // (essais)
                 if (m == null || (m.renderQueue >= 2500 && !cut)) { transp++; continue; }    // transparents (vitres...) : pas d'ombre
                 Transform root = mr.transform.root;
-                if (root.name == "PLAYER" || root.name == "GUI" || root.name.StartsWith("MWCoop")) { excl++; continue; }
+                if (root.name == "PLAYER" || root.name == "GUI" || (root.name.StartsWith("MWCoop") && !root.name.StartsWith("MWCoop-Joueur"))) { excl++; continue; }   // (avatars : chapeaux, accessoires compris)
                 MeshFilter mf = mr.GetComponent<MeshFilter>();
                 Mesh mesh = mf != null ? mf.sharedMesh : null;
                 if (mesh == null) { noMesh++; continue; }
