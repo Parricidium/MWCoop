@@ -1,4 +1,4 @@
-# Copie build\ dans les instances, lance -Players instances hors ecran, attend -Seconds, les ferme
+﻿# Copie build\ dans les instances, lance -Players instances hors ecran, attend -Seconds, les ferme
 # (sauf -KeepOpen) et affiche la fin des journaux. Chaque instance : profil isole + arriere-plan.
 param([int]$Players = 1, [int]$Seconds = 60, [switch]$KeepOpen, [switch]$NoBuild,
       [string]$Racine = 'D:\Games\COOPTEST\My Winter Car', [int]$Lignes = 25, [string]$Taille = '960x540')
@@ -14,11 +14,13 @@ for ($i = 1; $i -le $Players; $i++) {
     $d = Join-Path $Racine "MWCoop-Joueur$i"
     Copy-Item "$root\build\version.dll" $d -Force
     Copy-Item "$root\build\MWCoop.dll" "$d\MWCoop" -Force
+    Copy-Item "$root\build\MWCoopRT.dll" "$d\MWCoop" -Force
     $p = "$d\MWCoop\profils\Joueur$i"
     Remove-Item "$p\logs\*.log" -ErrorAction SilentlyContinue   # (pas logs\sessions : les parties rangees par le chargeur)
     $w, $h = $Taille.Split('x')
     $args = "-screen-fullscreen 0 -screen-width $w -screen-height $h"
     if ($env:MWC_SANSMSC -eq "1") { $args += " -mscloader-disable" }   # (captures sans les fenetres de MSCLoader)
+    if ($env:MWC_ARGS) { $args += " " + $env:MWC_ARGS }   # (options d'Unity en plus, ex. -force-gfx-direct pour le ray tracing)
     $procs += Start-Process "$d\mywintercar.exe" -ArgumentList $args -WorkingDirectory $d -PassThru
     if ($i -lt $Players) { Start-Sleep 4 }
 }

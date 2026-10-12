@@ -19,6 +19,7 @@ New-Item -ItemType Directory -Force "$stage\MWCoop" | Out-Null
 Copy-Item "$root\build\version.dll" $stage
 Copy-Item "$root\build\MWCoop.exe" $stage   # lanceur : mises a jour automatiques
 Copy-Item "$root\build\MWCoop.dll" "$stage\MWCoop"
+Copy-Item "$root\build\MWCoopRT.dll" "$stage\MWCoop"   # ray tracing (DXR), charge par le mod
 Copy-Item "$PSScriptRoot\files\*" $stage -Recurse -Force
 Set-Content "$stage\MWCoop\version.txt" $Version -NoNewline -Encoding ASCII
 
@@ -35,7 +36,7 @@ $z.Dispose()
 # Empreintes SHA-256 publiees a cote du zip : chacun peut verifier ses fichiers (et les chercher sur VirusTotal)
 # quand un antivirus a apprentissage automatique s'inquiete d'un exe non signe.
 $sums = "$PSScriptRoot\out\SHA256SUMS-$Version.txt"
-$lines = foreach ($f in @($zip, "$stage\MWCoop.exe", "$stage\version.dll", "$stage\MWCoop\MWCoop.dll")) {
+$lines = foreach ($f in @($zip, "$stage\MWCoop.exe", "$stage\version.dll", "$stage\MWCoop\MWCoop.dll", "$stage\MWCoop\MWCoopRT.dll")) {
     $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
     $n = if ($f -eq $zip) { Split-Path $zip -Leaf } else { $f.Substring($stage.Length + 1).Replace('\', '/') }
     "$h  $n"

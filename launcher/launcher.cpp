@@ -70,6 +70,7 @@ using std::max;
 #include <shldisp.h>
 #include <psapi.h>
 #include <wincodec.h>
+#include <d3d12.h>       // (ray tracing : carte compatible ? d3d12.dll chargee a la demande, pas d'import)
 #include <string>
 #include <vector>
 #include <map>
@@ -4696,6 +4697,8 @@ static void Launch(int mode, const char *partie = NULL)
     static const wchar_t *modes[] = { L"solo", L"hote", L"invite" };
     std::wstring args = std::wstring(L"-mwcoop-mode ") + modes[mode] + L" -mwcoop-port " + std::to_wstring(port);
     if (mode == MODE_GUEST) args += (g_steamNet ? std::wstring() : L" -mwcoop-adresse " + addr) + L" -mwcoop-profil invite";
+    // Ray tracing (MWCoopRT.dll) : Unity doit dessiner sur un seul fil pour que le mod s'insere dans son rendu.
+    if (GetPrivateProfileIntW(L"Graphismes", L"RayTracing", 0, ModIni().c_str()) == 1) { args += L" -force-gfx-direct"; LaunchLog("ray tracing demande : -force-gfx-direct"); }
     SteamDown();   // (le lanceur ne passe plus pour le jeu aupres de Steam)
     // MSCLoader installe mais coupe dans l'onglet MODS : son prechargeur s'arrete tout de suite (rien n'est desinstalle).
     bool mscOff = syncKind ? syncKind == 1 : !g_mscOn;   // (salon : comme l'hote)
@@ -7476,6 +7479,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"graphismes") { g_tab = TAB_GFX; GfxLoad(); }
         else if (st == L"graphismes-video") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi : { 6, 7, 8, 9, 0, 1, 2, 3 }) g_gfxOpen[gi] = false; g_gfxContentH = 3000; g_scroll[TAB_GFX] = (float)_wtof(argv[argc - 1]); }   // (blocs video : coop et jeu plies)
         else if (st == L"graphismes-drone") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 13; }   // (categorie Camera drone seule depliee)
+        else if (st == L"graphismes-rt") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 14 || gi == 1; g_gfxContentH = 3000; g_scroll[TAB_GFX] = 330; }   // (categories Ray tracing et Ombres depliees)
         else if (st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_scroll[TAB_GFX] = GfxMaxScroll(); }   // (bas de la page : touches)
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
         else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
