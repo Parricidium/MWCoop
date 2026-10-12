@@ -388,6 +388,15 @@ namespace MWCoop
             return null;
         }
 
+        static bool IsStalk(Transform t)
+        {
+            for (; t != null; t = t.parent)
+            {
+                string n = t.name.ToLowerInvariant();
+                if (n.Contains("blink") || n.Contains("turnsignal") || n.Contains("indicator") || n.Contains("wiper") || n.Contains("hazard") || n.Contains("flasher")) return true;
+            }
+            return false;
+        }
         static void OnLocal(Job j, string state)
         {
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 25f) return;
@@ -412,6 +421,9 @@ namespace MWCoop
                 if (j.Vehicle != null && VehicleSync.LocalDrivingRoot != j.Vehicle) return;
             }
             j.LocalRecent[(from != null ? from.Name : "") + "|" + tr.EventName + "|" + state] = Time.realtimeSinceStartup;
+            // Clignotant, essuie-glace, warning de la voiture qu'on conduit, actionnes ici : geste de la main au comodo (Gestures).
+            if (from != null && (j.ClickStates.Contains(from.Name) || j.KeyStates.Contains(from.Name)) && VehicleSync.LocalDrivingRoot != null
+                && j.F.transform.IsChildOf(VehicleSync.LocalDrivingRoot) && IsStalk(j.F.transform)) Gestures.LocalStalk();
             // Commande qui boucle toute seule, sans geste du joueur (terminal de paiement du taxi : "Check duty" -PROCEED->
             // "Cost?" chaque seconde, chez chacun) : partait sur le reseau a chaque tour, de chaque cote, sans jamais
             // depasser le garde-fou des commandes. Au-dela de 3 fois en 10 s depuis un etat qui ne lit ni souris ni

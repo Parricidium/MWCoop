@@ -928,13 +928,23 @@ namespace MWCoop
                 LeanToWheel(pr, pl);
                 ArmTo(true, pr, (1f - wShift) * Reachable(true, pr));
                 ArmTo(false, pl, Reachable(false, pl));
+                // Clignotant, essuie-glace (Gestures.E_Stalk) : la main gauche quitte la jante pour la manette du comodo, a
+                // gauche de la colonne juste derriere le volant, puis revient (0,8 s).
+                Gestures.Remote gs = Gestures.Of(Player.Id);
+                Ease(ref wStalk, gs != null && now - gs.StalkAt < 0.8f, Time.deltaTime * 8f);
+                if (wStalk > 0.001f && headBone != null)
+                {
+                    Vector3 rightW = (pr - pl).normalized, toDriver = (headBone.position - steerT.position).normalized;
+                    Vector3 stalk = steerT.position - rightW * 0.13f + toDriver * 0.07f - car.up * 0.04f;
+                    ArmTo(false, stalk, wStalk * Reachable(false, stalk));
+                }
                 Transform hr = Bone("hand_right"), hl = Bone("hand_left");
                 handErrR = hr != null ? (hr.position - pr).magnitude : -1f; handErrL = hl != null ? (hl.position - pl).magnitude : -1f;
             }
             if (gearT != null && wShift > 0.001f) ArmTo(true, gearT.position + car.up * 0.1f, wShift);
         }
 
-        float handErrR = -1f, handErrL = -1f, leanDeg;
+        float handErrR = -1f, handErrL = -1f, leanDeg, wStalk;
 
         // ---------------------------------------------------------------- Jonnez (mobylette)
         // Demande de JD (10/10) : sur la Jonnez, l'avatar etait assis comme en voiture (jambes en avant a travers la moto, bras
@@ -1245,7 +1255,8 @@ namespace MWCoop
         // visage et vers le bas (le cul plus haut que le goulot).
         // (aux levres : 4 cm plus haut qu'avant -- le goulot arrivait au menton, retour de Menor 11/10 : « biere, boisson
         // energisante, soda mal tournes a la bouche »)
-        Vector3 Mouth() { Transform r = Root.transform; return headBone.position + r.forward * 0.11f - r.up * Config.GetFloat("Test", "BoucheBas", 0.05f); }
+        // (13 cm sous l'os de la tete : a 5 cm, bouteilles et main arrivaient au front -- Menor, 12/10, captures BoissonDefile)
+        Vector3 Mouth() { Transform r = Root.transform; return headBone.position + r.forward * 0.11f - r.up * Config.GetFloat("Test", "BoucheBas", 0.13f); }
         // (gobelet a paille du PSK : pas bascule comme une bouteille -- il etait a l'envers, paille en bas ; debout, un peu
         // penche vers soi, la paille aux levres, la main dessous)
         Vector3 DrinkDir()
@@ -1314,6 +1325,10 @@ namespace MWCoop
             ArmTo(true, sR.position + r.forward * 0.45f + r.up * 0.25f - r.right * 0.05f, wR[0]);
             // Coup de poing : bras tendu droit devant.
             ArmTo(true, sR.position + r.forward * 0.7f - r.right * 0.12f, punch);
+            // Casque mis ou enleve (Gestures.E_Helmet) : la main droite monte au cote de la tete (0,3 s), y reste, redescend.
+            float th = g != null ? now - g.HelmetAt : 99f;
+            float helm = th < 0.3f ? th / 0.3f : th < 0.9f ? 1f : th < 1.3f ? 1f - (th - 0.9f) / 0.4f : 0f;
+            if (helm > 0.001f && headBone != null) ArmTo(true, headBone.position + r.right * 0.13f + r.up * 0.02f + r.forward * 0.06f, helm);   // (cote de la tete : plus haut, le bras passait derriere)
             // Outil en main (hache, masse, lampe, pistolet de la pompe...) : main droite au manche, gauche plus loin dessus.
             if (ToolW > 0.001f)
             {
@@ -1710,12 +1725,13 @@ namespace MWCoop
             if (cig != null && cig.activeSelf != on) cig.SetActive(on);
             if (smoke != null)
             {
-                var pe = smoke.GetComponent<ParticleEmitter>();
+                // (l'emetteur est sur l'enfant smokeparticle de BreathSmoke : GetComponent sur la racine ne le trouvait pas -- la
+                // bouffee n'etait jamais pilotee, Menor 12/10)
                 // Une bouffee : 1,2 s au debut de l'expiration, moins dense que chez le joueur (vue de pres).
-                if (exhale && !wasExhale) exhaleAt = Time.realtimeSinceStartup;
+                if (exhale && !wasExhale) { exhaleAt = Time.realtimeSinceStartup; if (Config.GetInt("Test", "CaptureFumee", 0) != 0) Autotest.CaptureSoon("fumee", 0.5f); }
                 wasExhale = exhale;
                 bool puff = on && exhale && Time.realtimeSinceStartup - exhaleAt < 1.2f;
-                if (pe != null) { pe.emit = puff; if (puff) pe.maxEmission = 4f; }
+                foreach (ParticleEmitter pe in smoke.GetComponentsInChildren<ParticleEmitter>(true)) { pe.emit = puff; if (puff) pe.maxEmission = 4f; }
             }
         }
 
@@ -1852,7 +1868,8 @@ namespace MWCoop
             // goulot (centre + demi-longueur) touche la bouche, sans que la main quitte la bouteille.
             float along = Mathf.Lerp(0.2f, Mathf.Clamp(dist / drinkHalf - 0.95f, -0.6f, 0.6f), t);
             Vector3 target = fist + dir * drinkHalf * along;
-            if (wDrink > 0.001f && headBone != null) target = Vector3.Lerp(target, Mouth() - dir * drinkHalf, wDrink);   // goulot sur la bouche
+            bool straw = drinkIdx > 0 && drinkIdx < Drinks.Names.Length && Drinks.Names[drinkIdx] == "SodaPSK";   // (gobelet : le haut de la paille aux levres)
+            if (wDrink > 0.001f && headBone != null) target = Vector3.Lerp(target, Mouth() - dir * drinkHalf * (straw ? 0.85f : 1f) + (straw ? Root.transform.up * 0.04f : Vector3.zero), wDrink);   // goulot sur la bouche
             // Le centre des rendus est pose la (l'origine du modele du jeu n'est pas forcement en son milieu).
             Vector3 c = drinkGo.transform.position;
             bool any = false; Bounds b = new Bounds();

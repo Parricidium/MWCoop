@@ -28,7 +28,7 @@ namespace MWCoop
     {
         public const int G_Thumb = 1, G_Watch = 2, G_Push = 4, G_Piss = 8, G_Down = 16, G_Held = 32, G_Seat = 64,
             G_Finger = 128, G_Fist = 256;
-        public const int E_Punch = 1, E_Finger = 2;
+        public const int E_Punch = 1, E_Finger = 2, E_Helmet = 3, E_Stalk = 4;   // (3 : casque mis ou enleve ; 4 : clignotant / essuie-glace au volant)
         const string Module = "gestes";
 
         // Etat recu d'un autre joueur (lu par son Avatar).
@@ -38,7 +38,7 @@ namespace MWCoop
             public float Drunk, LeanSide, LeanFwd;   // ivresse (PlayerDrunk), penche (degres : droite +, avant +)
             public Vector3 Held; public float HeldSize;   // objet tenu : repere camera (m), plus grande largeur (m)
             public Vector3 Seat; public float SeatYaw;   // assis : sol sous le siege (x, sol, z), sens du siege
-            public float PunchAt = -100f, FingerAt = -100f, Time;
+            public float PunchAt = -100f, FingerAt = -100f, HelmetAt = -100f, StalkAt = -100f, Time;
         }
 
         static readonly Dictionary<int, Remote> remote = new Dictionary<int, Remote>();
@@ -140,6 +140,10 @@ namespace MWCoop
             // Coup et doigt : evenements a l'instant ou leur animation demarre.
             bool fistNow = Active(fist) && (fistAnim == null || fistAnim.isPlaying) || FnState == "Fist";
             bool fingerNow = Active(middleFinger) && (fingerAnim == null || fingerAnim.isPlaying) || FnState == "Finger" || FnState == "Fuck singer";
+            // Casque mis ou enleve (globale PlayerHelmet du jeu) : la main a la tete (Menor, 12/10).
+            bool helm = Game.GlobalBool("PlayerHelmet");
+            if (helmSeen && helm != helmWas) { SendEvent(E_Helmet); if (ThirdPerson.Active) Mine().HelmetAt = now; }
+            helmWas = helm; helmSeen = true;
             if (fistNow && !fistWas) SendEvent(E_Punch);
             if (fingerNow && !fingerWas) SendEvent(E_Finger);
             fistWas = fistNow; fingerWas = fingerNow;
@@ -383,6 +387,19 @@ namespace MWCoop
             return w;
         }
 
+        static bool helmWas, helmSeen;
+        static float stalkSent;
+        static Remote Mine() { Remote me; if (!remote.TryGetValue(Session.LocalId, out me)) remote[Session.LocalId] = me = new Remote(); return me; }
+        // Commande du comodo actionnee au volant ici (Jobs : clignotant, essuie-glace, warning de la voiture conduite) : la main
+        // gauche de l'avatar va a la manette (Menor, 12/10).
+        public static void LocalStalk()
+        {
+            float now = UnityEngine.Time.realtimeSinceStartup;
+            if (!Session.Active || now - stalkSent < 0.4f) return;
+            stalkSent = now;
+            SendEvent(E_Stalk);
+            if (ThirdPerson.Active) Mine().StalkAt = now;
+        }
         static void SendEvent(int ev)
         {
             if (Config.GetInt("Test", "JournalGestes", 0) != 0) Log.Info("gestes : geste local " + (ev == E_Punch ? "coup" : "doigt"));
@@ -401,7 +418,8 @@ namespace MWCoop
             if (kind == 1)
             {
                 int ev = r.U8();
-                if (ev == E_Punch) g.PunchAt = g.Time; else if (ev == E_Finger) g.FingerAt = g.Time;
+                if (ev == E_Punch) g.PunchAt = g.Time; else if (ev == E_Finger) g.FingerAt = g.Time; else if (ev == E_Helmet) g.HelmetAt = g.Time; else if (ev == E_Stalk) g.StalkAt = g.Time;
+                if ((ev == E_Helmet || ev == E_Stalk) && Config.GetInt("Test", "CaptureGeste", 0) != 0) Autotest.CaptureSoon(ev == E_Helmet ? "geste-casque" : "geste-comodo", ev == E_Helmet ? 0.5f : 0.35f);
                 if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Gesture).U8(who).U8(1).U8(ev), true, who);
                 if (Logging) Log.Info("autotest : gestes : recu de #" + who + " : " + (ev == E_Punch ? "coup" : "doigt"));
                 return;
@@ -680,6 +698,19 @@ namespace MWCoop
                    + ((bits & G_Seat) != 0 ? ", siege " + seatPos.ToString("F2") + " sens " + seatYaw.ToString("F0") : "")
                    + ", pieds " + PlayerSync.LocalFeet.ToString("F2")
                    + (stains.Count > 0 ? ", flaques " + StainsText() : "");
+        }
+
+        // [Test] Autotest=gestes2 (2 joueurs) : l'hote au volant de la SORBET ; casque « mis » a 45 s (PlayerHelmet), comodo a 52 s.
+        // L'invite ([Test] CaptureGeste=1, CameraAvatar) capture ecran-geste-casque / ecran-geste-comodo.
+        static int g2;
+        public static void Test2(string mode, float t)
+        {
+            if (mode != "gestes2" || !Session.IsHost) return;
+            if (Config.GetInt("Test", "GesteDebout", 0) != 0) { if (g2 == 0 && t > 40f) { g2 = 9; Game.SetGlobalBool("PlayerHelmet", !Game.GlobalBool("PlayerHelmet")); Log.Info("autotest : gestes2, casque debout"); } return; }
+            if (g2 == 0 && t > 30f) { g2 = 1; Log.Info("autotest : gestes2, " + VehicleSync.TestEnter("SORBET(190-200psi)", false)); }
+            if (g2 == 1 && t > 36f) { g2 = 2; Log.Info("autotest : gestes2, volant " + VehicleSync.TestEnter("SORBET(190-200psi)", true)); }
+            if (g2 == 2 && t > 45f) { g2 = 3; Game.SetGlobalBool("PlayerHelmet", !Game.GlobalBool("PlayerHelmet")); Log.Info("autotest : gestes2, casque"); }
+            if (g2 == 3 && t > 52f) { g2 = 4; LocalStalk(); Log.Info("autotest : gestes2, comodo"); }
         }
     }
 }
