@@ -74,6 +74,8 @@ static const TutoStep kTuto[] = {
       L"Drone camera", L"In game, F8: your camera becomes a small drone to take photos (viewfinder, zoom, tilt, flash). Keys are set in Game options > Drone camera.", "0.75.44" },
     { L"Vanilla et RT", L"Deux nouveaux préréglages : Vanilla remet les options du jeu d'origine, RT active les ombres du soleil en ray tracing (carte graphique compatible DXR, en développement). Ses réglages : catégorie Ray tracing.",
       L"Vanilla and RT", L"Two new presets: Vanilla brings back the original game options, RT turns on ray-traced sun shadows (DXR-capable graphics card, in development). Its settings: Ray tracing category.", "0.76.0" },
+    { L"Plaque VIN de la Rivett", L"Dans Voiture, sous la finition : les options de la CORRIS pour une nouvelle partie (année, moteur, boîte, pare-brise, toit vinyle, roues, radio...), comme la plaque du jeu. L'hôte les donne à ses invités.",
+      L"Rivett VIN plate", L"In Car, under the trim: the CORRIS options for a new game (year, engine, gearbox, windshield, vinyl roof, wheels, radio...), like the game's plate. The host gives them to their guests.", "0.83.3" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -116,10 +118,11 @@ static RectF TutoTarget(int i)
     case 30: return kGfxArea;
     case 31: return kGfxArea;
     case 32: return kGfxTop;
+    case 33: return g_vinBtnRect;
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 || i == 33 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

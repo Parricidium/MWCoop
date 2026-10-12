@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -24,7 +24,74 @@ namespace MWCoop
         {
             logic = null; table = null; applied = false; nextFind = 0;
             askAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
-            if (PlayerSync.InGame) ForceTrim();
+            if (PlayerSync.InGame) { ExportOptions(); ForceTrim(); ForceOptions(); }
+        }
+
+        // Options de la plaque (configurateur du lanceur, demande de HowardCS, 12/10 : « choisir la version, l'annee... ») :
+        // chaque finition a ses listes (CARPARTS/VINPlate/Options<L|LX|SLX|GT>, PlayMakerArrayListProxy de nom Year,
+        // Engine, Suspension...) ou le jeu tire chaque option a la premiere partie. Exportees a chaque chargement (avant le
+        // tirage, listes intactes) dans MWCoop/cache/vin-options.txt (« finition;cle;v1,v2,... ») pour le lanceur ; la
+        // valeur choisie ([Coop] Vin<cle>) devient la seule de sa liste, si cette finition l'a (sinon tirage normal).
+        static readonly string[] Trims = { "L", "LX", "SLX", "GT" };
+        public static readonly string[] OptKeys = { "Year", "Engine", "Gearbox", "Suspension", "Windshield", "VinylRoof", "InteriorTrim", "Seats", "Wheels", "Radio", "InstrumentPanel", "PowerBrakes", "WindowHeater", "AxleRatio", "AxleLock" };
+        static string OptionsFile { get { return System.IO.Path.Combine(System.IO.Path.Combine(System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", "cache"), "vin-options.txt"); } }
+
+        static void ExportOptions()
+        {
+            try
+            {
+                GameObject v = Game.FindAny("CARPARTS/VINPlate");
+                if (v == null) return;
+                var sb = new System.Text.StringBuilder();
+                foreach (string tr in Trims)
+                {
+                    Transform o = v.transform.Find("Options" + tr);
+                    if (o == null) continue;
+                    foreach (PlayMakerArrayListProxy p in o.GetComponents<PlayMakerArrayListProxy>())
+                    {
+                        if (p == null || p.arrayList == null || string.IsNullOrEmpty(p.referenceName)) continue;
+                        var vals = new List<string>();
+                        foreach (object x in p.arrayList) { string sv = x != null ? x.ToString().Replace(";", "").Replace(",", "").Trim() : ""; if (sv.Length > 0 && !vals.Contains(sv)) vals.Add(sv); }
+                        sb.Append(tr).Append(';').Append(p.referenceName).Append(';').Append(string.Join(",", vals.ToArray())).Append((char)10);
+                    }
+                }
+                if (sb.Length == 0) return;
+                string f = OptionsFile, txt = sb.ToString();
+                if (System.IO.File.Exists(f) && System.IO.File.ReadAllText(f) == txt) return;
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(f));
+                System.IO.File.WriteAllText(f, txt);
+                Log.Info("vin : options des finitions exportees pour le lanceur (" + f + ")");
+            }
+            catch (System.Exception e) { Log.Warn("vin : export des options " + e.Message); }
+        }
+
+        static void ForceOptions()
+        {
+            if (Session.Active && !Session.IsHost) return;
+            GameObject v = Game.FindAny("CARPARTS/VINPlate");
+            if (v == null) return;
+            string trim = Config.Get("Coop", "FinitionVoiture", "").Trim().ToUpperInvariant();
+            foreach (string key in OptKeys)
+            {
+                string want = Config.Get("Coop", "Vin" + key, "").Trim();
+                if (want.Length == 0) continue;
+                int kept = 0, missing = 0;
+                foreach (string tr in Trims)
+                {
+                    if (trim.Length > 0 && tr != trim) continue;
+                    Transform o = v.transform.Find("Options" + tr);
+                    if (o == null) continue;
+                    foreach (PlayMakerArrayListProxy p in o.GetComponents<PlayMakerArrayListProxy>())
+                    {
+                        if (p == null || p.arrayList == null || p.referenceName != key) continue;
+                        object hit = null;
+                        foreach (object x in p.arrayList) if (x != null && x.ToString().Trim() == want) { hit = x; break; }
+                        if (hit == null) { missing++; continue; }
+                        p.arrayList.Clear(); p.arrayList.Add(hit); kept++;
+                    }
+                }
+                Log.Info("vin : " + key + " = " + want + (kept > 0 ? " impose (" + kept + " finition(s))" : "") + (missing > 0 ? ", absent de " + missing + " finition(s) : tirage normal" : ""));
+            }
         }
 
         // Finition de la CORRIS (la Rivett de Reijo) choisie dans le lanceur (demande de JD, 10/10 : « au meme titre que la

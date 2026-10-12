@@ -1473,6 +1473,7 @@ static bool UiClick(int id)
     case UI_SET_MODSAUTO: if (const Opt *o = OptByKey("ModsAuto")) OptSet(*o, OptGet(*o) ? 0 : 1); return true;
     case UI_FACE_IMPORT: FaceImport(); return true;
     case UI_CAR_TRIM: case UI_CAR_TRIM + 1: case UI_CAR_TRIM + 2: case UI_CAR_TRIM + 3: case UI_CAR_TRIM + 4: CarTrimSet(id - UI_CAR_TRIM); return true;
+    case UI_CAR_VIN: g_vinView = !g_vinView; return true;
     case UI_FACE_TPL: FaceTemplate(); return true;
     case UI_FACE_DEL: FaceRemove(); return true;
     case UI_SET_KEY: case UI_SET_KEY + 1: case UI_SET_KEY + 2: g_keyCapture = g_keyCapture == id - UI_SET_KEY ? -1 : id - UI_SET_KEY; return true;
@@ -1499,6 +1500,7 @@ static bool UiClick(int id)
         SetStatus(K_NORMAL, g_debug ? T(L"Mode débogage activé : lance ta partie, puis crée le zip", L"Debug mode on: start your game, then create the zip") : T(L"Mode débogage coupé", L"Debug mode off"));
         return true;
     }
+    if (id >= UI_CAR_VINOPT && id < UI_CAR_VINOPT + kVinKeyN) { VinCycle(id - UI_CAR_VINOPT); return true; }
     if (id >= UI_WIKI_CAT && id <= UI_WIKI_FIG) return WikiClick(id);
     if (id >= UI_NOTE && id < UI_NOTE + 90) { g_noteSel = id - UI_NOTE; g_scroll[TAB_NOTES] = 0; return true; }
     if (id >= UI_LOOKPIN && id < UI_LOOKPIN + 4) { g_lookZone = id - UI_LOOKPIN; return true; }
