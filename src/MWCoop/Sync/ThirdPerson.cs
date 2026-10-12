@@ -102,7 +102,7 @@ namespace MWCoop
         // Apres les poses des autres avatars (PlayerSync.LateUpdate).
         public static void LatePose()
         {
-            if (Active && me != null && me.Root != null) me.LatePose();
+            if ((Active || shadowOnly) && me != null && me.Root != null) me.LatePose();   // (corps pour le ray tracing : meme pose)
         }
         public static Avatar Me { get { return Active || DroneCam.Active ? me : null; } }
 
