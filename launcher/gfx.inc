@@ -147,6 +147,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "RTPortee", L"Portée des ombres", L"Shadow range", 250, { 100, 150, 250, 400 },
           { L"100 m", L"150 m", L"250 m", L"400 m" }, { L"100 m", L"150 m", L"250 m", L"400 m" }, 2, 14 },
         { "RTDouceur", L"Bords des ombres", L"Shadow edges", 1, { 0, 1, 2, 4 }, { L"Nets", L"Légers", L"Doux", L"Très doux" }, { L"Sharp", L"Light", L"Soft", L"Very soft" }, 0, 14 },
+        { "RTLampes", L"Ombres des lampes (phares, lampadaires)", L"Lamp shadows (headlights, street lights)", 8, { 0, 4, 8, 16 },
+          { L"Non", L"4 lampes", L"8 lampes", L"16 lampes" }, { L"Off", L"4 lamps", L"8 lamps", L"16 lamps" }, 2, 14 },
         { "OmbresPhares", L"Ombres des phares", L"Headlight shadows", 0, { 0, 2, 4, 8 }, { L"Non", L"2 phares", L"4 phares", L"8 phares" }, { L"Off", L"2 lights", L"4 lights", L"8 lights" }, 3, 4 },
         { "OmbresLampadaires", L"Ombres des lampadaires", L"Street light shadows", 0, { 0, 1, 2, 4 }, { L"Non", L"1", L"2", L"4" }, { L"Off", L"1", L"2", L"4" }, 3, 4 },
         { "Halos", L"Halos lumineux (façon GTA)", L"Light coronas (GTA style)", 0, { 0, 1, 2 }, { L"Non", L"Discrets", L"Marqués" }, { L"Off", L"Subtle", L"Strong" }, 1, 4 },
@@ -304,6 +306,7 @@ static bool GfxRowOff(const GfxRow &r, const wchar_t **why)
     if (r.group == 14 && !GfxDxr()) { *why = T(L"carte non compatible", L"GPU not supported"); return true; }
     if (r.group == 14 && strcmp(r.key, "RayTracing") && !rt) { *why = T(L"RT coupé", L"RT off"); return true; }
     if (rt && (!strcmp(r.key, "OmbresDistance") || !strcmp(r.key, "OmbresCascades") || !strcmp(r.key, "OmbresLune"))) { *why = T(L"ray tracing", L"ray tracing"); return true; }
+    if (rt && GfxGet("RTLampes") != 0 && (!strcmp(r.key, "OmbresPhares") || !strcmp(r.key, "OmbresLampadaires"))) { *why = T(L"ray tracing", L"ray tracing"); return true; }
     return false;
 }
 static bool GfxPresetOff(int i) { return GfxPresets()[i].fr[0] == L'R' && GfxPresets()[i].fr[1] == L'T' && !GfxDxr(); }

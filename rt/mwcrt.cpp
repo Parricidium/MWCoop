@@ -26,6 +26,7 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 #include "rt_shadow.h"   // (build\rt_shadow.h, dxc : g_rtShadow)
+#include "rt_lamps.h"    // (build\rt_lamps.h, dxc : g_rtLamps)
 
 // ---------------------------------------------------------------- journal
 static FILE *g_log;
@@ -64,7 +65,15 @@ static ID3D11SamplerState *g_sampPt, *g_sampLin;
 static ID3D11Buffer *g_cb11;
 static ID3D11DeviceContext *g_ctx0;
 static UINT g_inW, g_inH;           // taille des entrees (ecran)
-static ID3D11PixelShader *g_psHalf, *g_psMask, *g_psAccum;
+static ID3D11Resource *g_gb0, *g_hdrRes;   // (image en cours : couleur des surfaces du G-buffer, cible de l'eclairage)
+static ID3D11RenderTargetView *g_hdrRtv;
+static int g_lightPhase;
+static bool g_lampsArmed;
+static void LampPass(ID3D11RenderTargetView *target, bool flip);
+static void EarlyPrep();
+static ID3D11PixelShader *g_psHalf, *g_psMask, *g_psAccum, *g_psLamps;
+static ID3D11Buffer *g_cbLamps;
+static ID3D11BlendState *g_blendSub;
 static ID3D11ShaderResourceView *g_srvDepth, *g_srvNormal;   // textures internes d'Unity (profondeur, normales du G-buffer)
 static int g_devType = -1;
 static int g_dxr = -1;   // -1 pas encore teste, 0 non, 1 oui
@@ -74,21 +83,28 @@ static LUID g_luid;
 // ---------------------------------------------------------------- Direct3D 12 (les rayons)
 static ID3D12Device5 *g_d12;
 static ID3D12CommandQueue *g_queue;
-static ID3D12CommandAllocator *g_alloc[2];
+static ID3D12CommandAllocator *g_alloc[2], *g_allocL[2];   // (L : passe des lampes, sans attendre celle du soleil)
 static ID3D12GraphicsCommandList4 *g_cmd;
 static ID3D12Fence *g_fence12;          // barriere partagee (Direct3D 11 l'ouvre aussi)
 static ID3D11Fence *g_fence11;
-static UINT64 g_fenceVal, g_allocFence[2];
+static UINT64 g_fenceVal, g_allocFence[2], g_allocFenceL[2];
+static UINT g_tlasFrame = ~0u;   // (scene deja construite pour cette image : la passe des lampes la reprend)
 static HANDLE g_fenceEvent;
 static ID3D12RootSignature *g_rootSig;
-static ID3D12PipelineState *g_pso;
+static ID3D12PipelineState *g_pso, *g_psoLamps;
+// Lampes (phares, lampadaires) : au plus 16 par image, envoyees par le mod (RtLamps).
+struct LampIn { float pos[3], range, col[3], type, dir[3], cosHalf; };
+static LampIn g_lamps[16];
+static int g_nLamps;
+static float g_lampStrength = 1;
+static ID3D12Resource *g_lampBuf[2];
 static ID3D12DescriptorHeap *g_heap;
 static UINT g_heapInc;
 static bool g_d12Ok, g_d12Tried;
 
 // Textures partagees a la taille de l'image
 struct Shared { ID3D12Resource *r12; ID3D11Texture2D *t11; ID3D11RenderTargetView *rtv; ID3D11ShaderResourceView *srv; };
-static Shared g_pos, g_nrm, g_vis;
+static Shared g_pos, g_nrm, g_vis, g_lampVis;
 static UINT g_w, g_h;
 
 // Maillages (BLAS) et scene (TLAS)
@@ -96,7 +112,7 @@ struct MeshAs { ID3D12Resource *vb, *ib, *uv, *blas; UINT nv, ni; bool built, al
 // Feuillages : alpha de la texture (un octet par texel), lu par les rayons (tableau de tampons gBufs).
 struct AlphaTex { ID3D12Resource *buf; UINT w, h, slot; };
 static std::unordered_map<int, AlphaTex> g_alphaTex;
-static const UINT kHeapSize = 8192, kFirstDyn = 3;
+static const UINT kHeapSize = 8192, kFirstDyn = 4;   // (0 positions, 1 normales, 2 visibilite, 3 lampes)
 static UINT g_nextSlot = kFirstDyn;
 static ID3D12Resource *g_instInfo[2]; static UINT64 g_instInfoCap[2];
 static std::unordered_map<int, MeshAs> g_meshes;
@@ -172,6 +188,10 @@ Texture2D t0 : register(t0);
 Texture2D t1 : register(t1);
 Texture2D t2 : register(t2);
 Texture2D t3 : register(t3);
+Texture2D<uint> tLampVis : register(t4);
+Texture2D tAlbedo : register(t5);
+Texture2D tScene : register(t6);   // (copie de la cible, lampes : on ne retire jamais plus que ce qui est la)
+cbuffer Lmp : register(b1) { float4 lampA[16]; float4 lampB[16]; float4 lampC[16]; float4 lampN; };   // A : position, portee ; B : couleur, type ; C : direction, cos du demi-angle
 SamplerState sPt : register(s0);
 SamplerState sLin : register(s1);
 float4 PsHalf(V i) : SV_Target { return i.uv.y < 0.5 ? float4(0.3, 0.3, 0.3, 1) : float4(1, 1, 1, 1); }   // (controle : moitie haute assombrie)
@@ -237,6 +257,41 @@ float4 PsMask(V i) : SV_Target {
     float a = 1 - misc.x * (1 - FilteredVis(i.uv, 0.75));
     return float4(a, a, a, a);
 }
+// Lampes : part de chaque lampe bloquee (bit dans tLampVis), estimee comme l'eclairage differe d'Unity (couleur de la
+// surface x couleur x intensite x attenuation x n.l, cone des projecteurs) ; retiree de l'image (melange soustractif).
+float4 PsLamps(V i) : SV_Target {
+    if (lampN.z > 0.5) i.uv.y = 1 - i.uv.y;   // (cible de fin de rendu : retournee par le brouillard du jeu face au G-buffer)
+    float w0, h0; tLampVis.GetDimensions(w0, h0);
+    uint occ = tLampVis.Load(int3(min(i.uv * float2(w0, h0), float2(w0, h0) - 1), 0));
+    if (lampN.y < -1.5) return occ ? float4(2, 0, 0, 1) : tScene.Load(int3(i.p.xy, 0)) + float4(0, 0, 0.15, 0);   // (controle : rouge = lampe bloquee)
+    if (occ == 0) discard;
+    float4 p = t2.SampleLevel(sPt, i.uv, 0);
+    if (p.w < 0.5) discard;
+    float3 n = normalize(t1.SampleLevel(sPt, i.uv, 0).rgb * 2 - 1);
+    float3 alb = tAlbedo.SampleLevel(sPt, i.uv, 0).rgb;
+    float3 rem = 0;
+    uint cnt = min((uint)lampN.x, 16u);
+    for (uint k = 0; k < cnt; k++) {
+        if (((occ >> k) & 1u) == 0) continue;
+        float3 d = lampA[k].xyz - p.xyz;
+        float r2 = dot(d, d) / max(lampA[k].w * lampA[k].w, 1e-4);
+        if (r2 >= 1) continue;
+        float att = 1 / (1 + 25 * r2) * saturate((1 - r2) * 5);
+        float3 l = normalize(d);
+        float ndl = saturate(dot(n, l));
+        float spot = 1;
+        if (lampB[k].w > 0.5) {   // projecteur : disque doux comme le cookie par defaut d'Unity
+            float c = dot(-l, lampC[k].xyz), ch = lampC[k].w;
+            float tn = sqrt(saturate(1 - c * c)) / max(c, 1e-3), th = sqrt(saturate(1 - ch * ch)) / max(ch, 1e-3);
+            float rr = tn / max(th, 1e-3);
+            spot = saturate(1 - rr * rr);
+        }
+        rem += alb * lampB[k].rgb * att * ndl * spot;
+    }
+    if (lampN.y < -0.5) return float4(rem * 10, 1);   // (controle : part estimee x10)
+    float4 sc = tScene.Load(int3(i.p.xy, 0));
+    return float4(max(sc.rgb - rem * lampN.y, sc.rgb * 0.05), sc.a);
+}
 // (ancien melange, mode 14 : facteur multiplie a l'image apres coup)
 float4 PsComp(V i) : SV_Target {
     if (amb.w > 0.5) i.uv.y = 1 - i.uv.y;
@@ -291,7 +346,16 @@ extern "C" __declspec(dllexport) int RtInit(void *d3d11Resource)
     if (!Compile("VsFull", "vs_5_0", &b)) return 0;
     g_dev11->CreateVertexShader(b->GetBufferPointer(), b->GetBufferSize(), NULL, &g_vsFull); b->Release();
     g_psTest = Ps("PsTest"); g_psShowN = Ps("PsShowNormal"); g_psShowD = Ps("PsShowDepth"); g_psShowV = Ps("PsShowVis"); g_psShowP = Ps("PsShowPos");
-    g_psPrep = Ps("PsPrep"); g_psComp = Ps("PsComp"); g_psHalf = Ps("PsHalf"); g_psMask = Ps("PsMask"); g_psAccum = Ps("PsAccum");
+    g_psPrep = Ps("PsPrep"); g_psComp = Ps("PsComp"); g_psHalf = Ps("PsHalf"); g_psMask = Ps("PsMask"); g_psAccum = Ps("PsAccum"); g_psLamps = Ps("PsLamps");
+    {   // (lampes : constantes, melange soustractif dest - src)
+        D3D11_BUFFER_DESC lb = {}; lb.ByteWidth = 49 * 16; lb.Usage = D3D11_USAGE_DEFAULT; lb.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        g_dev11->CreateBuffer(&lb, NULL, &g_cbLamps);
+        D3D11_BLEND_DESC sb = {}; sb.RenderTarget[0].BlendEnable = TRUE;
+        sb.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; sb.RenderTarget[0].DestBlend = D3D11_BLEND_ONE; sb.RenderTarget[0].BlendOp = D3D11_BLEND_OP_REV_SUBTRACT;
+        sb.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO; sb.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE; sb.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        sb.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        g_dev11->CreateBlendState(&sb, &g_blendSub);
+    }
     D3D11_BLEND_DESC bd = {};
     bd.RenderTarget[0].BlendEnable = TRUE;
     bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ZERO; bd.RenderTarget[0].DestBlend = D3D11_BLEND_SRC_COLOR; bd.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
@@ -377,7 +441,10 @@ static bool InitD12()
     if (FAILED(hr)) { Log("DXR : device Direct3D 12 impossible (0x%08lx)", hr); return false; }
     D3D12_COMMAND_QUEUE_DESC qd = {}; qd.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     g_d12->CreateCommandQueue(&qd, __uuidof(ID3D12CommandQueue), (void **)&g_queue);
-    for (int i = 0; i < 2; i++) g_d12->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator), (void **)&g_alloc[i]);
+    for (int i = 0; i < 2; i++) {
+        g_d12->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator), (void **)&g_alloc[i]);
+        g_d12->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator), (void **)&g_allocL[i]);
+    }
     g_d12->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, g_alloc[0], NULL, __uuidof(ID3D12GraphicsCommandList4), (void **)&g_cmd);
     g_cmd->Close();
     // barriere partagee
@@ -391,14 +458,15 @@ static bool InitD12()
     // signature : b0 (constantes en racine), t0 (scene), table t1 t2 u0
     D3D12_DESCRIPTOR_RANGE ranges[3] = {};
     ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; ranges[0].NumDescriptors = 2; ranges[0].BaseShaderRegister = 1; ranges[0].OffsetInDescriptorsFromTableStart = 0;
-    ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV; ranges[1].NumDescriptors = 1; ranges[1].BaseShaderRegister = 0; ranges[1].OffsetInDescriptorsFromTableStart = 2;
+    ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV; ranges[1].NumDescriptors = 2; ranges[1].BaseShaderRegister = 0; ranges[1].OffsetInDescriptorsFromTableStart = 2;
     ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; ranges[2].NumDescriptors = kHeapSize - kFirstDyn; ranges[2].BaseShaderRegister = 0; ranges[2].RegisterSpace = 1; ranges[2].OffsetInDescriptorsFromTableStart = kFirstDyn;
-    D3D12_ROOT_PARAMETER rp[4] = {};
+    D3D12_ROOT_PARAMETER rp[5] = {};
     rp[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; rp[0].Constants.ShaderRegister = 0; rp[0].Constants.Num32BitValues = 16;
     rp[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV; rp[1].Descriptor.ShaderRegister = 0;
     rp[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; rp[2].DescriptorTable.NumDescriptorRanges = 3; rp[2].DescriptorTable.pDescriptorRanges = ranges;
     rp[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV; rp[3].Descriptor.ShaderRegister = 3;
-    D3D12_ROOT_SIGNATURE_DESC rsd = {}; rsd.NumParameters = 4; rsd.pParameters = rp;
+    rp[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV; rp[4].Descriptor.ShaderRegister = 4;   // (lampes)
+    D3D12_ROOT_SIGNATURE_DESC rsd = {}; rsd.NumParameters = 5; rsd.pParameters = rp;
     ID3DBlob *sig = NULL, *err = NULL;
     hr = D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err);
     if (FAILED(hr)) { Log("DXR : signature : %s", err ? (const char *)err->GetBufferPointer() : "?"); return false; }
@@ -407,6 +475,10 @@ static bool InitD12()
     D3D12_COMPUTE_PIPELINE_STATE_DESC pd = {}; pd.pRootSignature = g_rootSig; pd.CS.pShaderBytecode = g_rtShadow; pd.CS.BytecodeLength = sizeof g_rtShadow;
     hr = g_d12->CreateComputePipelineState(&pd, __uuidof(ID3D12PipelineState), (void **)&g_pso);
     if (FAILED(hr)) { Log("DXR : pipeline des ombres impossible (0x%08lx)", hr); return false; }
+    pd.CS.pShaderBytecode = g_rtLamps; pd.CS.BytecodeLength = sizeof g_rtLamps;
+    hr = g_d12->CreateComputePipelineState(&pd, __uuidof(ID3D12PipelineState), (void **)&g_psoLamps);
+    if (FAILED(hr)) Log("DXR : pipeline des lampes impossible (0x%08lx)", hr);
+    for (int i = 0; i < 2; i++) g_lampBuf[i] = Buffer(sizeof g_lamps, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
     D3D12_DESCRIPTOR_HEAP_DESC hd = {}; hd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; hd.NumDescriptors = kHeapSize; hd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     g_d12->CreateDescriptorHeap(&hd, __uuidof(ID3D12DescriptorHeap), (void **)&g_heap);
     g_heapInc = g_d12->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -477,14 +549,16 @@ static bool Resize(UINT w, UINT h)
     g_resizeFailed = true;
     g_w = w; g_h = h;
     bool ok = MakeShared(g_pos, DXGI_FORMAT_R32G32B32A32_FLOAT, true, false) && MakeShared(g_nrm, DXGI_FORMAT_R10G10B10A2_UNORM, true, false)
-              && MakeShared(g_vis, DXGI_FORMAT_R16_FLOAT, false, true);
+              && MakeShared(g_vis, DXGI_FORMAT_R16_FLOAT, false, true) && MakeShared(g_lampVis, DXGI_FORMAT_R32_UINT, false, true);
     if (!ok) return false;
     D3D12_CPU_DESCRIPTOR_HANDLE c = g_heap->GetCPUDescriptorHandleForHeapStart();
     D3D12_SHADER_RESOURCE_VIEW_DESC sv = {}; sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Texture2D.MipLevels = 1;
     sv.Format = DXGI_FORMAT_R32G32B32A32_FLOAT; g_d12->CreateShaderResourceView(g_pos.r12, &sv, c); c.ptr += g_heapInc;
     sv.Format = DXGI_FORMAT_R10G10B10A2_UNORM; g_d12->CreateShaderResourceView(g_nrm.r12, &sv, c); c.ptr += g_heapInc;
     D3D12_UNORDERED_ACCESS_VIEW_DESC uv = {}; uv.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D; uv.Format = DXGI_FORMAT_R16_FLOAT;
-    g_d12->CreateUnorderedAccessView(g_vis.r12, NULL, &uv, c);
+    g_d12->CreateUnorderedAccessView(g_vis.r12, NULL, &uv, c); c.ptr += g_heapInc;
+    uv.Format = DXGI_FORMAT_R32_UINT;
+    g_d12->CreateUnorderedAccessView(g_lampVis.r12, NULL, &uv, c);
     if (!MakeHist(w, h)) { Log("historique %ux%u impossible", w, h); return false; }
     g_resizeFailed = false;
     Log("textures partagees %ux%u pretes", w, h);
@@ -503,7 +577,7 @@ typedef void (STDMETHODCALLTYPE *SetVB_t)(ID3D11DeviceContext *, UINT, UINT, ID3
 typedef void (STDMETHODCALLTYPE *SetIB_t)(ID3D11DeviceContext *, ID3D11Buffer *, DXGI_FORMAT, UINT);
 // Le runtime change la table de fonctions du contexte quand on echange son etat (SwapDeviceContextState) : chaque table
 // vue est accrochee, avec ses propres fonctions d'origine (retrouvees par la table de l'objet appelant).
-struct VtHooks { void **vt; void *drawIdx, *setVB, *setIB, *setRT; };
+struct VtHooks { void **vt; void *drawIdx, *setVB, *setIB, *setRT, *setRTU, *psSRV; };
 static VtHooks g_vts[8];
 static int g_nvt;
 static VtHooks *VtOf(void *c)
@@ -581,6 +655,12 @@ static void Patch(void **vt, int i, void *hook, void **orig)
 // resultat la remplace : Unity eclaire avec (ambiance, reflets, force de l'ombre : les siens).
 typedef void (STDMETHODCALLTYPE *SetRT_t)(ID3D11DeviceContext *, UINT, ID3D11RenderTargetView *const *, ID3D11DepthStencilView *);
 #define o_SetRT ((SetRT_t)VtOf(c)->setRT)
+typedef void (STDMETHODCALLTYPE *SetRTU_t)(ID3D11DeviceContext *, UINT, ID3D11RenderTargetView *const *, ID3D11DepthStencilView *, UINT, UINT, ID3D11UnorderedAccessView *const *, const UINT *);
+static void STDMETHODCALLTYPE H_SetRT(ID3D11DeviceContext *c, UINT n, ID3D11RenderTargetView *const *v, ID3D11DepthStencilView *dsv);
+static bool g_viaU;
+// (variante avec vues d'acces non ordonne : meme suivi des cibles, sauf « garder les cibles »)
+static void STDMETHODCALLTYPE H_SetRTU(ID3D11DeviceContext *c, UINT n, ID3D11RenderTargetView *const *v, ID3D11DepthStencilView *dsv, UINT us, UINT un, ID3D11UnorderedAccessView *const *uv, const UINT *uc);
+
 struct SsView { ID3D11Resource *r; ID3D11RenderTargetView *rtv; };
 static SsView g_ssViews[4];
 static int g_ssNext;
@@ -609,18 +689,34 @@ static void STDMETHODCALLTYPE H_SetRT(ID3D11DeviceContext *c, UINT n, ID3D11Rend
             g_inSS = false;
             if (g_armed) { g_armed = false; g_inOwn = true; InjectMask(); g_inOwn = false; }
         }
+        // Lampes : G-buffer (3 ou 4 cibles a la taille de l'ecran : la 1re = couleur des surfaces), puis la cible HDR de
+        // l'eclairage (avec profondeur) ; au premier changement vers une autre cible (hors cartes d'ombres), l'eclairage est fini.
+        if (n >= 3 && r && d.Width == g_inW && d.Height == g_inH) { g_gb0 = r; g_lightPhase = 1; }
+        else if (g_lightPhase == 1 && r && n == 1 && dsv && d.Width == g_inW && d.Height == g_inH
+                 && (d.Format == DXGI_FORMAT_R16G16B16A16_FLOAT || d.Format == DXGI_FORMAT_R16G16B16A16_TYPELESS)) {
+            g_hdrRes = r; Rel(g_hdrRtv); g_hdrRtv = v[0]; g_hdrRtv->AddRef(); g_lightPhase = 2;
+            if (g_lampsArmed) { g_inOwn = true; EarlyPrep(); g_inOwn = false; }   // (positions des pixels tant que la profondeur est celle de l'image)
+        }
+        // (fin de l'eclairage : la passe des lampes est faite a la fin du rendu de la camera, RtPostRender ; les effets d'image
+        // viennent apres)
         if (isSS) { g_inSS = true; g_ssCur = r; }
         g_prevDepthOnly = (n == 0 || !v || !v[0]) && dsv;
         if (r) r->Release();
     }
-    o_SetRT(c, n, v, dsv);
+    if (c) o_SetRT(c, n, v, dsv);   // (c nul : appele par H_SetRTU, qui transmet lui-meme)
 }
+static void STDMETHODCALLTYPE H_SetRTU(ID3D11DeviceContext *c, UINT n, ID3D11RenderTargetView *const *v, ID3D11DepthStencilView *dsv, UINT us, UINT un, ID3D11UnorderedAccessView *const *uv, const UINT *uc)
+{
+    if (n != D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL && !g_inOwn) { g_viaU = true; H_SetRT(NULL, n, v, dsv); g_viaU = false; }
+    ((SetRTU_t)VtOf(c)->setRTU)(c, n, v, dsv, us, un, uv, uc);
+}
+
 
 static bool g_hookWanted;
 static int g_rehooks;
 static void HookTable(void **vt)
 {
-    if (vt[12] == (void *)H_DrawIndexed && vt[33] == (void *)H_SetRT) return;   // (deja accrochee)
+    if (vt[12] == (void *)H_DrawIndexed && vt[33] == (void *)H_SetRT && vt[34] == (void *)H_SetRTU) return;   // (deja accrochee)
     VtHooks *f = NULL;
     for (int i = 0; i < g_nvt; i++) if (g_vts[i].vt == vt) f = &g_vts[i];
     if (f) {   // entrees remises par le runtime (echange d'etat) : reposees
@@ -635,6 +731,7 @@ static void HookTable(void **vt)
     Patch(vt, 18, (void *)H_SetVB, &h.setVB);
     Patch(vt, 19, (void *)H_SetIB, &h.setIB);
     Patch(vt, 33, (void *)H_SetRT, &h.setRT);
+    Patch(vt, 34, (void *)H_SetRTU, &h.setRTU);
     if (g_rehooks == 0) Log("crochets poses sur la table %d du contexte (%p)", g_nvt, (void *)vt);
 }
 static void HookContext()
@@ -1003,19 +1100,27 @@ static bool g_ctrl;   // controle : rayons depuis la camera (mode 6)
 static DWORD g_nextStat;
 
 // Rayons de l'image (Direct3D 12) entre deux barrieres : attend `wait`, signale le retour.
-static UINT64 TraceShadows(UINT64 wait)
+static UINT64 TraceShadows(UINT64 wait, bool lamps = false)
 {
     int a = g_frameNo & 1;
-    if (g_allocFence[a] && g_fence12->GetCompletedValue() < g_allocFence[a]) {
-        g_fence12->SetEventOnCompletion(g_allocFence[a], g_fenceEvent);
+    UINT64 *af = lamps ? g_allocFenceL : g_allocFence;
+    ID3D12CommandAllocator *al = lamps ? g_allocL[a] : g_alloc[a];
+    if (af[a] && g_fence12->GetCompletedValue() < af[a]) {
+        g_fence12->SetEventOnCompletion(af[a], g_fenceEvent);
         WaitForSingleObject(g_fenceEvent, 2000);
     }
-    for (ID3D12Resource *r : g_trash[a]) r->Release();
-    g_trash[a].clear();
-    g_alloc[a]->Reset();
-    g_cmd->Reset(g_alloc[a], NULL);
-    BuildPending();
-    bool scene = BuildTlas();
+    bool reuse = lamps && g_tlasFrame == g_frameNo && g_tlas;   // (scene du soleil de cette image)
+    if (!reuse) {
+        // (ressources a liberer : quand les deux reserves de cette moitie de l'anneau sont revenues)
+        if (!(g_allocFenceL[a] && g_fence12->GetCompletedValue() < g_allocFenceL[a]) && !(g_allocFence[a] && g_fence12->GetCompletedValue() < g_allocFence[a])) {
+            for (ID3D12Resource *r : g_trash[a]) r->Release();
+            g_trash[a].clear();
+        }
+    }
+    al->Reset();
+    g_cmd->Reset(al, NULL);
+    bool scene = true;
+    if (!reuse) { BuildPending(); scene = BuildTlas(); if (scene) g_tlasFrame = g_frameNo; }
     if (scene) {
         g_cmd->SetComputeRootSignature(g_rootSig);
         ID3D12DescriptorHeap *hs[] = { g_heap };
@@ -1025,13 +1130,15 @@ static UINT64 TraceShadows(UINT64 wait)
         c.size[0] = g_w; c.size[1] = g_h; c.size[2] = g_frameNo; c.size[3] = (UINT)(g_frame.misc[2] > 0 ? g_frame.misc[2] : 1);
         c.params[0] = g_frame.misc[1] > 0 ? g_frame.misc[1] : 300.f; c.params[1] = 0.03f; c.params[2] = 0.02f; c.params[3] = g_ctrl ? 1.f : 0.f;
         memcpy(c.cam, g_frame.cam, 16);
+        if (lamps) { c.sun[3] = (float)g_nLamps; if (g_lampStrength < -2.5f) c.params[3] = 2; }
         g_cmd->SetComputeRoot32BitConstants(0, 16, &c, 0);
         g_cmd->SetComputeRootShaderResourceView(1, g_tlas->GetGPUVirtualAddress());
         g_cmd->SetComputeRootDescriptorTable(2, g_heap->GetGPUDescriptorHandleForHeapStart());
         g_cmd->SetComputeRootShaderResourceView(3, g_instInfo[g_frameNo & 1]->GetGPUVirtualAddress());
-        g_cmd->SetPipelineState(g_pso);
+        g_cmd->SetComputeRootShaderResourceView(4, g_lampBuf[g_frameNo & 1]->GetGPUVirtualAddress());
+        g_cmd->SetPipelineState(lamps ? g_psoLamps : g_pso);
         // (textures partagees : etat COMMON entre les deux devices ; sortie en UAV le temps des rayons)
-        D3D12_RESOURCE_BARRIER tb = {}; tb.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION; tb.Transition.pResource = g_vis.r12;
+        D3D12_RESOURCE_BARRIER tb = {}; tb.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION; tb.Transition.pResource = lamps ? g_lampVis.r12 : g_vis.r12;
         tb.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES; tb.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON; tb.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
         g_cmd->ResourceBarrier(1, &tb);
         g_cmd->Dispatch((g_w + 7) / 8, (g_h + 7) / 8, 1);
@@ -1044,7 +1151,7 @@ static UINT64 TraceShadows(UINT64 wait)
     g_queue->ExecuteCommandLists(1, lists);
     UINT64 done = ++g_fenceVal;
     g_queue->Signal(g_fence12, done);
-    g_allocFence[a] = done;
+    af[a] = done;
     if (GetTickCount() >= g_nextStat) {
         g_nextStat = GetTickCount() + 10000;
         Log("image %u : %d maillages, %d instances (%s)", g_frameNo, (int)g_meshes.size(), (int)g_inst.size(), scene ? "scene construite" : "SCENE VIDE");
@@ -1147,8 +1254,10 @@ static void ProbeOrientation(ID3D11RenderTargetView *rtv)
 
 // Preparation (positions, normales -> textures partagees), rayons (Direct3D 12), attente sur la carte. Etat du
 // contexte : le notre (vue, shaders plein ecran, constantes deja poses).
-static UINT64 Rays()
+static UINT64 g_prepFrame = ~0ull, g_prepFence;
+static UINT64 Prep()
 {
+    if (g_prepFrame == g_frameNo) return g_prepFence;   // (deja faite pour cette image : soleil puis lampes)
     ID3D11RenderTargetView *two[2] = { g_pos.rtv, g_nrm.rtv };
     g_ctx1->OMSetRenderTargets(2, two, NULL);
     ID3D11ShaderResourceView *in[2] = { g_srvDepth, g_srvNormal };
@@ -1161,7 +1270,12 @@ static UINT64 Rays()
     UINT64 prepDone = ++g_fenceVal;
     g_ctx4->Signal(g_fence11, prepDone);
     g_ctx1->Flush();
-    UINT64 ready = TraceShadows(prepDone);
+    g_prepFrame = g_frameNo; g_prepFence = prepDone;
+    return prepDone;
+}
+static UINT64 Rays()
+{
+    UINT64 ready = TraceShadows(Prep());
     if (ready) g_ctx4->Wait(g_fence11, ready);
     return ready;
 }
@@ -1234,9 +1348,154 @@ static void InjectMask()
     if (ssT) ssT->Release();
     if (g_masks++ % 600 == 0) Log("ombres RT dans la carte d'Unity : %d images, rayons %s", g_masks, ready ? "ok" : "ECHEC");
 }
+// Preparation (positions, normales) juste apres le G-buffer, pour les lampes (la nuit, sans passe du soleil ; en fin de
+// rendu, la profondeur d'Unity n'est plus celle de l'image).
+static void EarlyPrep()
+{
+    if (!g_srvDepth || !g_srvNormal || !InitD12() || !Resize(g_inW, g_inH)) return;
+    ID3DDeviceContextState *prev = NULL;
+    BeginOwn(g_inW, g_inH, &prev);
+    Prep();
+    g_ctx1->OMSetRenderTargets(0, NULL, NULL);
+    g_ctx1->SwapDeviceContextState(prev, NULL);
+    if (prev) prev->Release();
+    Rehook();
+}
+
+// Une colonne de pixels d'une texture (luminance), lue par la carte.
+static bool ReadColumn(ID3D11Resource *res, UINT x, std::vector<float> &out)
+{
+    ID3D11Texture2D *t = NULL;
+    if (FAILED(res->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&t))) return false;
+    D3D11_TEXTURE2D_DESC d; t->GetDesc(&d); t->Release();
+    bool half = d.Format == DXGI_FORMAT_R16G16B16A16_FLOAT || d.Format == DXGI_FORMAT_R16G16B16A16_TYPELESS;
+    bool byte8 = d.Format == DXGI_FORMAT_R8G8B8A8_TYPELESS || d.Format == DXGI_FORMAT_R8G8B8A8_UNORM || d.Format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    if (!half && !byte8) return false;
+    D3D11_TEXTURE2D_DESC sd = {}; sd.Width = 1; sd.Height = d.Height; sd.MipLevels = 1; sd.ArraySize = 1; sd.Format = d.Format; sd.SampleDesc.Count = 1;
+    sd.Usage = D3D11_USAGE_STAGING; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    ID3D11Texture2D *st = NULL;
+    if (FAILED(g_dev11->CreateTexture2D(&sd, NULL, &st))) return false;
+    D3D11_BOX box = { x, 0, 0, x + 1, d.Height, 1 };
+    g_ctx1->CopySubresourceRegion(st, 0, 0, 0, 0, res, 0, &box);
+    D3D11_MAPPED_SUBRESOURCE m;
+    bool ok = SUCCEEDED(g_ctx1->Map(st, 0, D3D11_MAP_READ, 0, &m));
+    if (ok) {
+        out.resize(d.Height);
+        for (UINT y = 0; y < d.Height; y++) {
+            const char *row = (const char *)m.pData + (size_t)y * m.RowPitch;
+            if (half) { const unsigned short *p = (const unsigned short *)row; out[y] = HalfToFloat(p[0]) + HalfToFloat(p[1]) + HalfToFloat(p[2]); }
+            else { const unsigned char *p = (const unsigned char *)row; out[y] = (p[0] + p[1] + p[2]) / 255.f; }
+        }
+        g_ctx1->Unmap(st, 0);
+    }
+    st->Release();
+    return ok;
+}
+
+// Orientation de l'image finale face au G-buffer : contours (ecarts d'une ligne a l'autre) de la couleur des surfaces
+// (G-buffer) et de l'image, sur 8 colonnes ; correlation a l'endroit et a l'envers. Mesuree toutes les 300 images.
+static bool GbufFlip(ID3D11Resource *gb, ID3D11Resource *img)
+{
+    static bool flip = true; static unsigned checks;
+    if (checks++ % 300 != 0) return flip;   // (l'image finale alterne entre deux textures : cadence au compteur seul)
+    std::vector<double> ea, eb;
+    for (int k = 1; k <= 8; k++) {
+        std::vector<float> a, b;
+        UINT x = g_inW * k / 9;
+        if (!ReadColumn(gb, x, a) || !ReadColumn(img, x, b) || a.size() != b.size() || a.size() < 4) return flip;
+        if (ea.empty()) { ea.assign(a.size() - 1, 0); eb.assign(a.size() - 1, 0); }
+        for (size_t y = 0; y + 1 < a.size(); y++) { ea[y] += fabs(a[y + 1] - a[y]); eb[y] += fabs(b[y + 1] - b[y]) / (fabs(b[y]) + fabs(b[y + 1]) + 0.05); }
+    }
+    size_t h = ea.size();
+    double ma = 0, mb = 0; for (size_t y = 0; y < h; y++) { ma += ea[y]; mb += eb[y]; } ma /= h; mb /= h;
+    double same = 0, inv = 0;
+    for (size_t y = 0; y < h; y++) { same += (ea[y] - ma) * (eb[y] - mb); inv += (ea[y] - ma) * (eb[h - 1 - y] - mb); }
+    bool f = inv > same;
+    if (f != flip || checks < 2) Log("lampes : image finale %s face au G-buffer (contours : a l'endroit %.2f, retournee %.2f)", f ? "retournee" : "a l'endroit", same, inv);
+    flip = f;
+    return flip;
+}
+
+// Lampes : rayons vers chacune, puis part des lampes bloquees retiree de la cible de l'eclairage (avant le brouillard).
+static int g_lampPasses;
+static void LampPass(ID3D11RenderTargetView *target, bool flip)
+{
+    if (!target || !g_gb0 || g_nLamps <= 0 || !g_psoLamps || !g_srvDepth || !g_srvNormal || !InitD12() || !Resize(g_inW, g_inH)) {
+        static int fails; if (fails++ < 3) Log("lampes : passe sautee (cible %p, G-buffer %p, %d lampes, pipeline %p)", (void *)g_hdrRtv, (void *)g_gb0, g_nLamps, (void *)g_psoLamps);
+        return;
+    }
+    static ID3D11Resource *gbRes; static ID3D11ShaderResourceView *gbSrv;
+    if (gbRes != g_gb0) {
+        Rel(gbSrv); gbRes = g_gb0;
+        D3D11_SHADER_RESOURCE_VIEW_DESC sd = {}; sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM; sd.Texture2D.MipLevels = 1;
+        if (FAILED(g_dev11->CreateShaderResourceView(g_gb0, &sd, &gbSrv))) { Log("lampes : couleur des surfaces illisible"); gbSrv = NULL; }
+    }
+    if (!gbSrv) return;
+    // constantes des lampes (Direct3D 12 : tampon de l'image ; 11 : b1) -- apres la fin de la passe qui s'en servait
+    {
+        int pa = g_frameNo & 1;
+        if (g_allocFenceL[pa] && g_fence12->GetCompletedValue() < g_allocFenceL[pa]) { g_fence12->SetEventOnCompletion(g_allocFenceL[pa], g_fenceEvent); WaitForSingleObject(g_fenceEvent, 2000); }
+        void *q = NULL; D3D12_RANGE nr = { 0, 0 };
+        if (SUCCEEDED(g_lampBuf[g_frameNo & 1]->Map(0, &nr, &q))) { memcpy(q, g_lamps, sizeof g_lamps); g_lampBuf[g_frameNo & 1]->Unmap(0, NULL); }
+    }
+    float cb[49 * 4] = {};
+    for (int k = 0; k < g_nLamps; k++) {
+        const LampIn &L = g_lamps[k];
+        float *a = cb + k * 4, *b = cb + (16 + k) * 4, *c = cb + (32 + k) * 4;
+        a[0] = L.pos[0]; a[1] = L.pos[1]; a[2] = L.pos[2]; a[3] = L.range;
+        b[0] = L.col[0]; b[1] = L.col[1]; b[2] = L.col[2]; b[3] = L.type;
+        c[0] = L.dir[0]; c[1] = L.dir[1]; c[2] = L.dir[2]; c[3] = L.cosHalf;
+    }
+    cb[48 * 4] = (float)g_nLamps; cb[48 * 4 + 1] = g_lampStrength; cb[48 * 4 + 2] = flip ? 1.f : 0.f;
+    g_ctx1->UpdateSubresource(g_cbLamps, 0, NULL, cb, 0, 0);
+    ID3DDeviceContextState *prev = NULL;
+    BeginOwn(g_inW, g_inH, &prev);
+    UINT64 ready = TraceShadows(Prep(), true);
+    if (ready) {
+        g_ctx4->Wait(g_fence11, ready);
+        // copie de la cible (le shader lit l'image actuelle : retire au plus 95 % de ce qui est la)
+        static ID3D11Texture2D *copy; static ID3D11ShaderResourceView *copySrv; static D3D11_TEXTURE2D_DESC copyDesc;
+        ID3D11Resource *tr = NULL; target->GetResource(&tr);
+        ID3D11Texture2D *tt = NULL; if (tr) tr->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&tt);
+        if (tt) {
+            D3D11_TEXTURE2D_DESC td; tt->GetDesc(&td);
+            if (!copy || td.Width != copyDesc.Width || td.Height != copyDesc.Height || td.Format != copyDesc.Format) {
+                Rel(copySrv); Rel(copy); copyDesc = td;
+                D3D11_TEXTURE2D_DESC cd = td; cd.BindFlags = D3D11_BIND_SHADER_RESOURCE; cd.MiscFlags = 0; cd.CPUAccessFlags = 0; cd.Usage = D3D11_USAGE_DEFAULT; cd.MipLevels = 1;
+                if (cd.Format == DXGI_FORMAT_R16G16B16A16_TYPELESS) cd.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+                if (SUCCEEDED(g_dev11->CreateTexture2D(&cd, NULL, &copy))) g_dev11->CreateShaderResourceView(copy, NULL, &copySrv);
+            }
+            if (copy) g_ctx1->CopyResource(copy, tt);
+            tt->Release();
+        }
+        if (tr) tr->Release();
+        g_ctx1->OMSetRenderTargets(1, &target, NULL);
+        ID3D11Buffer *cbs[2] = { g_cb11, g_cbLamps };
+        g_ctx1->PSSetConstantBuffers(0, 2, cbs);
+        ID3D11ShaderResourceView *sv[7] = { NULL, g_srvNormal, g_pos.srv, NULL, g_lampVis.srv, gbSrv, copySrv };
+        g_ctx1->PSSetShaderResources(0, 7, sv);
+        g_ctx1->PSSetShader(g_psLamps, NULL, 0);
+        g_ctx1->Draw(3, 0);
+        ID3D11ShaderResourceView *none[7] = {};
+        g_ctx1->PSSetShaderResources(0, 7, none);
+    }
+    g_ctx1->OMSetRenderTargets(0, NULL, NULL);
+    g_ctx1->SwapDeviceContextState(prev, NULL);
+    if (prev) prev->Release();
+    Rehook();
+    if (g_lampPasses++ % 1800 == 0) Log("lampes RT : %d images, %d lampes, rayons %s", g_lampPasses, g_nLamps, ready ? "ok" : "ECHEC");
+}
+// Lampes de l'image : par lampe 12 nombres (position, portee, couleur x intensite, type 0 point / 1 projecteur,
+// direction, cos du demi-angle) ; force : part retiree (1 = celle estimee).
+extern "C" __declspec(dllexport) void RtLamps(const float *data, int n, float strength)
+{
+    g_nLamps = n < 0 ? 0 : n > 16 ? 16 : n;
+    memcpy(g_lamps, data, (size_t)g_nLamps * sizeof(LampIn));
+    g_lampStrength = strength;
+}
 // A chaque image (avant le rendu) : remplacer la carte d'ombres d'Unity par les ombres RT (1), + vidage d'essai (2),
 // + journal des cibles (4).
-extern "C" __declspec(dllexport) void RtArm(int flags) { HookContext(); g_armed = (flags & 1) != 0; g_armFlags = flags; if (flags & 4) g_seqLog = 40; }
+extern "C" __declspec(dllexport) void RtArm(int flags) { HookContext(); g_armed = (flags & 1) != 0; g_lampsArmed = (flags & 16) != 0; g_armFlags = flags; if (flags & 4) g_seqLog = 40; }
 
 extern "C" __declspec(dllexport) void RtPostRender(int mode)
 {
@@ -1253,6 +1512,15 @@ extern "C" __declspec(dllexport) void RtPostRender(int mode)
         lastMode = mode;
     }
     if (!g_capturing) ProcessBatches();
+    if (g_lampsArmed && mode == 7) {
+        // Lampes, en fin de rendu de la camera : la cible courante est une copie de l'image (apres le brouillard du jeu), dont
+        // l'orientation face au G-buffer varie : mesuree (GbufFlip).
+        g_lampsArmed = false;
+        ID3D11Resource *cur = NULL; rtv->GetResource(&cur);
+        bool flip = g_gb0 && GbufFlip(g_gb0, cur);
+        if (cur) cur->Release();
+        g_inOwn = true; LampPass(rtv, flip); g_inOwn = false;
+    }
     g_frameNo++;
     bool probe = false;
     if (mode == 14) mode = 0;   // (ancien melange apres coup)
