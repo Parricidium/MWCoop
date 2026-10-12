@@ -472,6 +472,8 @@ namespace MWCoop
                         case "nauhuri": TestVcr(); break;
                         case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
                         case "filmi": TestFilm(); break;
+                        case "ulos": { Esine k = esineet.Find(e => e.Kind == KKamera); if (k != null) Eject(k); break; }
+                        case "nimi": { Esine tp = esineet.FindLast(e => e.Kind == KVhs); if (tp != null) { tp.Go.transform.rotation = root.transform.rotation * Quaternion.Euler(0f, 180f, 0f); string c0 = tp.Data.Split('~')[0]; SetData(tp, (c0.Length > 0 ? c0 : "tyhja") + "~" + string.Join(" ", a, 2, a.Length - 2)); L("essai : titre " + tp.Data); } break; }
                         case "viseur": if (a.Length > 2 && a[2] == "0") ExitViewfinder(); else { EnterViewfinder(); vfForced = true; } break;
                         case "kuva": shotName = a[2]; shotAt = now + (a.Length > 3 ? F(a[3]) : 1f); break;
                         case "maksa": lastBuy = -10f; Pay(); break;

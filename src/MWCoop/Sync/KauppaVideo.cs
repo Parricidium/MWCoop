@@ -102,8 +102,9 @@ namespace MWCoop
                         if (mf == null || mf.sharedMesh == null || mf.sharedMesh.name.StartsWith("Combined Mesh")) continue;
                         var c = new GameObject(r.name);
                         c.transform.SetParent(g.transform, false);
-                        c.transform.localPosition = src.transform.InverseTransformPoint(r.transform.position);
-                        c.transform.localRotation = Quaternion.Inverse(src.transform.rotation) * r.transform.rotation;
+                        // (orientation du monde, pas celle de JAIL/TV dont les axes sont couches : la TV etait sur le cote)
+                        c.transform.localPosition = r.transform.position - src.transform.position;
+                        c.transform.localRotation = r.transform.rotation;
                         c.transform.localScale = r.transform.lossyScale;
                         c.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
                         c.AddComponent<MeshRenderer>().sharedMaterials = r.sharedMaterials;
@@ -258,6 +259,8 @@ namespace MWCoop
             TickInsert();
             TickScreens(now);
             TickKamera(now);
+            TickFilms(now);
+            TickLabels();
         }
 
         // ---------------------------------------------------------------- magnetoscope et ecran
@@ -314,7 +317,7 @@ namespace MWCoop
             return best;
         }
 
-        class Showing { public Transform Screen; public Material[] Saved; public AudioSource Audio; public Esine Vcr; }
+        class Showing { public Transform Screen; public Material[] Saved; public AudioSource Audio; public Esine Vcr; public Film Film; public int Frame = -1; public Texture2D Tex; public Material Mat; }
         static readonly List<Showing> showing = new List<Showing>();
         static Texture2D noiseTex;
         static Material noiseMat;
@@ -336,7 +339,8 @@ namespace MWCoop
                 if (scr != null && s == null) StartShow(v, scr);
             }
             for (int i = showing.Count - 1; i >= 0; i--) if (showing[i].Vcr.Go == null || !esineet.Contains(showing[i].Vcr)) StopShow(showing[i]);
-            if (showing.Count > 0 && now >= nextNoise) { nextNoise = now + 0.04f; Noise(); }
+            foreach (Showing s in showing) ShowFilm(s, now);
+            if (showing.Exists(s => s.Film == null) && now >= nextNoise) { nextNoise = now + 0.04f; Noise(); }
         }
 
         static void StartShow(Esine vcr, Transform scr)
@@ -377,6 +381,8 @@ namespace MWCoop
                 if (r != null && s.Saved != null) r.sharedMaterials = s.Saved;
             }
             if (s.Audio != null) UnityEngine.Object.Destroy(s.Audio);
+            if (s.Mat != null) UnityEngine.Object.Destroy(s.Mat);
+            if (s.Tex != null) UnityEngine.Object.Destroy(s.Tex);
             showing.Remove(s);
         }
 
@@ -440,8 +446,9 @@ namespace MWCoop
                 return true;
             }
             bool tv = ScreenNear(hit.Go.transform.position) != null;
+            string title = TapeTitle(tape);
             if (tape.Length == 0) guiText.Value = Lang.T("MAGNÉTOSCOPE (VIDE)", "VCR (EMPTY)");
-            else guiText.Value = (Playing(hit) ? Lang.T("F : STOP", "F: STOP") : Lang.T("F : LECTURE", "F: PLAY")) + Lang.T(" - F TENU : ÉJECTER", " - HOLD F: EJECT")
+            else guiText.Value = (title.Length > 0 ? "« " + title.ToUpperInvariant() + " » " : "") + (Playing(hit) ? Lang.T("F : STOP", "F: STOP") : Lang.T("F : LECTURE", "F: PLAY")) + Lang.T(" - F TENU : ÉJECTER", " - HOLD F: EJECT")
                                  + (tv ? "" : Lang.T(" (PAS DE TV À CÔTÉ)", " (NO TV NEARBY)"));
             if (tape.Length == 0) return true;
             if (Input.GetKeyDown(KeyCode.F)) vcrFDown = now;
@@ -463,7 +470,7 @@ namespace MWCoop
             tv.Go.transform.position = root.transform.TransformPoint(new Vector3(0.6f, 0.3f, 2.3f)); tv.Go.transform.rotation = r;
             vcr.Go.transform.position = root.transform.TransformPoint(new Vector3(0.6f, 0.1f, 1.7f)); vcr.Go.transform.rotation = r;
             tv.Rb.velocity = vcr.Rb.velocity = Vector3.zero;
-            string content = tape != null ? tape.Data : "tyhja";
+            string content = tape != null ? tape.Data : Tape(vcr).Length > 0 ? Tape(vcr) : "tyhja";
             if (tape != null) RemoveItem(tape, true);
             SetData(vcr, content + "|1");
         }
@@ -539,6 +546,7 @@ namespace MWCoop
         public static void OnLevelLoadedVideo()
         {
             OnLevelLoadedKamera();
+            OnLevelLoadedFilms();
             esineet.Clear(); esineLoaded = false; showing.Clear(); gameScreens = null; lookedItem = null; pendingTape = null;
             texMats.Clear(); blackPlastic = null; greyMetal = null; plainMat = null; noiseMat = null; noiseTex = null;
         }

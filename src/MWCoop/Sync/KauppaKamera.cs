@@ -272,7 +272,18 @@ namespace MWCoop
         {
             if (Viewfinder || !Active || root == null || Event.current.type != EventType.Repaint) return;
             Esine k = HeldKamera();
-            if (k == null || KameraBusy) return;
+            if (k == null)
+            {
+                // cassette en main : son titre, et comment l'ecrire
+                Esine tp = esineet.Find(e => e.Kind == KVhs && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform));
+                if (tp == null || KameraBusy) return;
+                string ti = TapeTitle(tp.Data), fi = TapeFilm(tp.Data);
+                string hs = Lang.T("CASSETTE VHS", "VHS TAPE") + (ti.Length > 0 ? " « " + ti + " »" : "") + (fi.Length > 0 ? Lang.T(" (FILM)", " (FILM)") : Lang.T(" (VIERGE)", " (BLANK)"))
+                          + Lang.T("  -  TCHAT : /titre NOM pour écrire sur la tranche", "  -  CHAT: /title NAME to write on the spine");
+                Style.Text(new Rect(0, Screen.height - Style.Px(120), Screen.width, Style.Px(30)), hs, 20, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.85f));
+                return;
+            }
+            if (KameraBusy) return;
             string s = Lang.T("CAMÉSCOPE", "CAMCORDER") + (Tape(k).Length == 0 ? Lang.T(" (PAS DE CASSETTE)", " (NO TAPE)") : "") + "  -  "
                      + Keys.Label(Keys.CameraViewfinder) + Lang.T(" : VISEUR    ", ": VIEWFINDER    ") + Keys.Label(Keys.CameraRec) + (rec != null && rec.Cam == k ? Lang.T(" : ARRÊTER", ": STOP") : Lang.T(" : ENREGISTRER", ": RECORD"));
             float W = Screen.width, H = Screen.height;
@@ -326,6 +337,7 @@ namespace MWCoop
                 string title = TapeTitle(Tape(r.Cam));
                 SetData(r.Cam, (r.Frames > 0 ? r.Film + "~" + title : Tape(r.Cam)) + "|0");
             }
+            if (r.Frames > 0) SendFilm(r.Film);
         }
 
         static void WriteBlock(Rec r, int kind, float now, byte[] data)
