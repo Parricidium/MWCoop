@@ -13,6 +13,10 @@ namespace MWCoop
         public static KeyCode Map { get { return Get("Carte", KeyCode.M); } }
         public static KeyCode View { get { return Get("Vue", KeyCode.F5); } }
 
+        // Camescope de la boutique (tenu en main) : viseur, enregistrer.
+        public static KeyCode CameraViewfinder { get { return Get("CameraViseur", KeyCode.F); } }
+        public static KeyCode CameraRec { get { return Get("CameraEnregistrer", KeyCode.R); } }
+
         // Camera drone (mode photo, demande de JD, 11/10) : categorie « Camera drone » des Touches du lanceur. Lettres par
         // defaut selon le clavier (AZERTY : ZQSD, A/E pour pencher ; sinon WASD, Q/E).
         public static KeyCode Drone { get { return Get("Drone", KeyCode.F8); } }

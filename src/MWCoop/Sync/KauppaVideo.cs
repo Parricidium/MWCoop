@@ -88,6 +88,7 @@ namespace MWCoop
                     foreach (float z in new[] { -0.11f, 0.11f })
                         Piece(g, PrimitiveType.Cube, new Vector3(x, -size.y / 2 - 0.005f, z), Vector3.zero, new Vector3(0.03f, 0.01f, 0.03f), blackPlastic);
             }
+            else if (kind == KKamera) KameraModel(g, out size);
             else
             {
                 // television : copie des maillages de la TV de la prison (tv_14 + son ecran)
@@ -141,11 +142,11 @@ namespace MWCoop
         {
             Vector3 size; Transform screen;
             GameObject g = Model(kind, out size, out screen);
-            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : "television") + " osuuskauppa(itemx)";
+            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : "television") + " osuuskauppa(itemx)";
             g.transform.position = pos; g.transform.rotation = rot;
             var e = new Esine { Id = id, Kind = kind, Data = data ?? "", Go = g, Screen = screen };
             e.Col = g.AddComponent<BoxCollider>(); e.Col.size = size;
-            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : 9f;
+            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : 9f;
             g.layer = 19; g.tag = "PART";
             esineet.Add(e);
             Props.SoonScan();
@@ -256,6 +257,7 @@ namespace MWCoop
             }
             TickInsert();
             TickScreens(now);
+            TickKamera(now);
         }
 
         // ---------------------------------------------------------------- magnetoscope et ecran
@@ -286,6 +288,7 @@ namespace MWCoop
 
         static void Eject(Esine vcr)
         {
+            if (rec != null && rec.Cam == vcr) StopRec("ejection");
             string tape = Tape(vcr);
             if (tape.Length == 0) return;
             Transform t = vcr.Go.transform;
@@ -397,11 +400,12 @@ namespace MWCoop
         // Appele par Interact quand rien de la boutique n'est vise. Renvoie vrai si un objet video est vise.
         static bool InteractItems(Ray ray, float now)
         {
+            if (Viewfinder) { if (lookedItem != null) { ClearGui(); lookedItem = null; } return false; }
             Esine hit = null; float best = 1.6f; RaycastHit h;
             Esine held = null;
             foreach (Esine e in esineet) if (e.Kind == KVhs && Held(e)) held = e;
             foreach (Esine e in esineet)
-                if (e.Kind == KNauhuri && e.Go != null && !Held(e) && e.Col.Raycast(ray, out h, best)) { best = h.distance; hit = e; }
+                if ((e.Kind == KNauhuri || e.Kind == KKamera) && e.Go != null && !Held(e) && e.Col.Raycast(ray, out h, best)) { best = h.distance; hit = e; }
             if (hit != lookedItem) { if (lookedItem != null) ClearGui(); lookedItem = hit; vcrFDown = -1f; }
             if (hit == null) return false;
             FsmBool asm = FsmVariables.GlobalVariables.FindFsmBool("GUIassemble");
@@ -415,6 +419,26 @@ namespace MWCoop
             }
             if (asm != null) asm.Value = false;
             guiUse.Value = true;
+            if (hit.Kind == KKamera)
+            {
+                bool recording = hit.Data.EndsWith("|1");
+                if (tape.Length == 0) guiText.Value = Lang.T("CAMÉSCOPE (PAS DE CASSETTE)", "CAMCORDER (NO TAPE)");
+                else guiText.Value = (recording ? Lang.T("F : ARRÊTER", "F: STOP") : Lang.T("F : ENREGISTRER", "F: RECORD")) + Lang.T(" - F TENU : ÉJECTER", " - HOLD F: EJECT");
+                if (tape.Length == 0) return true;
+                if (Input.GetKeyDown(KeyCode.F)) vcrFDown = now;
+                if (vcrFDown >= 0f)
+                {
+                    if (now - vcrFDown >= 0.8f) { vcrFDown = -1f; Eject(hit); }
+                    else if (Input.GetKeyUp(KeyCode.F))
+                    {
+                        vcrFDown = -1f;
+                        if (rec != null && rec.Cam == hit) StopRec("touche");
+                        else if (recording) SetData(hit, tape + "|0");   // (filme chez un autre joueur : il s'arrete chez lui)
+                        else StartRec(hit);
+                    }
+                }
+                return true;
+            }
             bool tv = ScreenNear(hit.Go.transform.position) != null;
             if (tape.Length == 0) guiText.Value = Lang.T("MAGNÉTOSCOPE (VIDE)", "VCR (EMPTY)");
             else guiText.Value = (Playing(hit) ? Lang.T("F : STOP", "F: STOP") : Lang.T("F : LECTURE", "F: PLAY")) + Lang.T(" - F TENU : ÉJECTER", " - HOLD F: EJECT")
@@ -463,7 +487,13 @@ namespace MWCoop
             Display(tv, KTv, new Vector3(wx, 0.9f, 0.8f), -90f);
             OfferCol(tv, new Vector3(wx, 1.15f, 0.8f), new Vector3(0.5f, 0.5f, 0.6f));
             Plane("hltv", new Vector3(front, 0.83f, 0.8f), 0.18f, 0.09f, Vector3.right);
-            L("en rayon : cassettes 19 mk, magnetoscopes 390 mk, television 590 mk");
+            // camescopes : etagere haute de droite (troisieme planche), objectif vers la piece
+            float kt = 0.1f + 2f * (1.9f - 0.1f) / 4f + 0.025f;
+            var kam = new Offer { Item = KKamera, Price = 890, Fr = "CAMÉSCOPE", En = "CAMCORDER" };
+            foreach (float z in new[] { 1.78f, 2.27f }) Display(kam, KKamera, new Vector3(wx, kt, z), 90f);
+            OfferCol(kam, new Vector3(wx, kt + 0.12f, 2.02f), new Vector3(0.45f, 0.3f, 1.0f));
+            Plane("hlkamera", new Vector3(front, kt - 0.06f, 2.02f), 0.18f, 0.09f, Vector3.right);
+            L("en rayon : cassettes 19 mk, magnetoscopes 390 mk, television 590 mk, camescopes 890 mk");
         }
 
         // un article expose (sans physique), pose par le bas en "at" ; yaw NaN : ecran de la TV vers la piece (+x)
@@ -508,6 +538,7 @@ namespace MWCoop
 
         public static void OnLevelLoadedVideo()
         {
+            OnLevelLoadedKamera();
             esineet.Clear(); esineLoaded = false; showing.Clear(); gameScreens = null; lookedItem = null; pendingTape = null;
             texMats.Clear(); blackPlastic = null; greyMetal = null; plainMat = null; noiseMat = null; noiseTex = null;
         }

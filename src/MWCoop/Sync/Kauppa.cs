@@ -470,6 +470,10 @@ namespace MWCoop
                         case "lippu": LippuState(); break;
                         case "ota": { Offer o = a.Length > 2 ? offers.Find(x => x.Item == a[2]) : (offers.Count > 0 ? offers[0] : null); if (o != null) Take(o); break; }
                         case "nauhuri": TestVcr(); break;
+                        case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
+                        case "filmi": TestFilm(); break;
+                        case "viseur": if (a.Length > 2 && a[2] == "0") ExitViewfinder(); else { EnterViewfinder(); vfForced = true; } break;
+                        case "kuva": shotName = a[2]; shotAt = now + (a.Length > 3 ? F(a[3]) : 1f); break;
                         case "maksa": lastBuy = -10f; Pay(); break;
                         case "avaa": if (pussit.Count > 0) TakeOut(pussit[pussit.Count - 1], a.Length > 2 && a[2] == "kaikki"); break;
                         case "pussi": if (pussit.Count > 0) { Pussi pb = pussit[pussit.Count - 1]; L("essai : sac de courses en " + root.transform.InverseTransformPoint(pb.Go.transform.position).ToString("F2") + ", " + pb.Count + " article(s)"); } break;
