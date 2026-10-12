@@ -373,6 +373,7 @@ namespace MWCoop
             Offers();
             Flush();
             Lights();
+            try { Lippu(); } catch (Exception e) { L("drapeau : " + e.Message); }
             Door(door0);
             Shelter();
             Vendor();
