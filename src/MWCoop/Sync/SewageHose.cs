@@ -8,13 +8,20 @@ namespace MWCoop
     // GIFU/HOSE : un raccord fixe au camion et une chaine de segments Hose(xxxxx) ; le joueur tient le DERNIER segment
     // et le plonge dans la fosse. Ce bout n'etait suivi nulle part : chez les autres il pendait au bout de la copie du
     // camion (a-coups du reseau) et la chaine s'envolait (retour de gamereggo, 11/10 : « le tuyau bugue et vole partout »).
-    // Celui qui l'a eu en main en dernier envoie la pose du bout (10 fois/s tenu, 2 fois/s pose) ; ailleurs le bout
-    // devient cinematique a cette pose, le reste de la chaine pend entre le camion et lui. Rendu physique 3 s apres le
-    // dernier message, et quand le tuyau est range.
+    // Celui qui l'a eu en main en dernier envoie la pose du bout (10 fois/s tenu, 2 fois/s pose). Ailleurs TOUTE la chaine
+    // est cinematique et sans collision, posee en courbe du raccord du camion au bout recu. (0.82.2 : seul le bout etait
+    // cinematique, la chaine physique tiree entre lui et la copie du camion explosait en NaN au bout de 30 s -- jeu de
+    // l'hote plante, « Infinity or nan ... for collider » ; et ce tuyau-la entrait et sortait de la fosse chez l'hote,
+    // renvoye a l'invite qui ne pompait plus : OpNoob, 0.82.3.) Rendu physique au rangement, ou 3 s sans message.
     public static class SewageHose
     {
         static GameObject root;
         static Rigidbody end;
+        static Transform coupler;
+        static Rigidbody[] segs;
+        static Collider[] cols;
+        static bool following;
+        static float chainLen;
         static bool mine, wasOut;
         static int remoteBy = -1;
         static float nextSend, lastRemote, nextLook;
@@ -23,7 +30,7 @@ namespace MWCoop
 
         static Transform Gifu() { Rigidbody b = VehicleSync.Body("GIFU(750/450psi)"); return b != null ? b.transform : null; }
 
-        public static void OnLevelLoaded() { root = null; end = null; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; npcDone.Clear(); nextNpcLook = 0; }
+        public static void OnLevelLoaded() { root = null; end = null; coupler = null; segs = null; cols = null; following = false; mine = false; wasOut = false; remoteBy = -1; nextLook = 0; npcDone.Clear(); nextNpcLook = 0; }
 
         static bool Find()
         {
@@ -38,8 +45,10 @@ namespace MWCoop
             Transform c = root.transform.Find("hose coupler(xxxxx)");
             if (c == null) return false;
             Transform t = c;
-            for (int i = 0; i < 200; i++) { Transform n = t.Find("Hose(xxxxx)"); if (n == null) break; t = n; }
+            var l = new System.Collections.Generic.List<Rigidbody>();
+            for (int i = 0; i < 200; i++) { Transform n = t.Find("Hose(xxxxx)"); if (n == null) break; t = n; Rigidbody rb = n.GetComponent<Rigidbody>(); if (rb != null) l.Add(rb); }
             end = t != c ? t.GetComponent<Rigidbody>() : null;
+            coupler = c; segs = l.ToArray(); cols = root.GetComponentsInChildren<Collider>(true);
             if (end != null) Log.Info("tuyau de la GIFU : bout " + t.name + " (" + Recon.Path(t).Split('/').Length + " niveaux)");
             return end != null;
         }
@@ -77,12 +86,12 @@ namespace MWCoop
             bool isOut = root.activeInHierarchy;
             if (!isOut)
             {
-                if (wasOut) { if (remoteBy >= 0) end.isKinematic = false; mine = false; remoteBy = -1; wasOut = false; }
+                if (wasOut) { Release(); mine = false; remoteBy = -1; wasOut = false; }
                 return;
             }
             wasOut = true;
             bool held = FireTools.Held() == end.gameObject || testHeld;
-            if (held && !mine) { mine = true; if (remoteBy >= 0) { remoteBy = -1; if (!testHeld) end.isKinematic = false; } }
+            if (held && !mine) { mine = true; if (remoteBy >= 0) { remoteBy = -1; if (!testHeld) Release(); } }
             if (mine && Session.RemoteCount > 0 && now >= nextSend)
             {
                 nextSend = now + (held ? 0.1f : 0.5f);
@@ -90,11 +99,48 @@ namespace MWCoop
             }
             if (remoteBy >= 0)
             {
-                if (now - lastRemote > 3f) { end.isKinematic = false; remoteBy = -1; return; }
-                if (!end.isKinematic) end.isKinematic = true;
-                end.MovePosition(Vector3.Lerp(end.position, rp, 0.5f));
-                end.MoveRotation(Quaternion.Slerp(end.rotation, rq, 0.5f));
+                if (now - lastRemote > 3f) { Release(); remoteBy = -1; return; }
+                Follow();
             }
+        }
+
+        // Chaine posee sans physique : du raccord (sur le camion) au bout recu, en courbe (le mou pend).
+        static void Follow()
+        {
+            if (segs == null || segs.Length == 0 || coupler == null) return;
+            if (!following)
+            {
+                following = true;
+                chainLen = 0f;
+                Vector3 prev = coupler.position;
+                foreach (Rigidbody r in segs) { chainLen += (r.position - prev).magnitude; prev = r.position; }
+                if (!(chainLen > 1f && chainLen < 50f)) chainLen = segs.Length * 0.25f;
+                foreach (Rigidbody r in segs) { r.isKinematic = true; r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
+                foreach (Collider c in cols) if (c != null) c.enabled = false;
+            }
+            Vector3 a = coupler.position;
+            Vector3 b = Vector3.Lerp(segs[segs.Length - 1].position, rp, 0.5f);
+            float d = (b - a).magnitude, sag = Mathf.Max(0f, chainLen - d) * 0.5f;
+            int n = segs.Length;
+            for (int i = 0; i < n; i++)
+            {
+                float k = (i + 1f) / n;
+                Vector3 p = Vector3.Lerp(a, b, k) + Vector3.down * (sag * 4f * k * (1f - k));
+                float k2 = Mathf.Min(1f, (i + 2f) / n);
+                Vector3 q = Vector3.Lerp(a, b, k2) + Vector3.down * (sag * 4f * k2 * (1f - k2));
+                Transform t = segs[i].transform;
+                t.position = p;
+                if (i == n - 1) t.rotation = Quaternion.Slerp(t.rotation, rq, 0.5f);
+                else if ((q - p).sqrMagnitude > 1e-6f) t.rotation = Quaternion.LookRotation(q - p, Vector3.up);
+            }
+        }
+
+        static void Release()
+        {
+            if (!following) return;
+            following = false;
+            if (segs != null) foreach (Rigidbody r in segs) if (r != null) { r.isKinematic = false; r.velocity = Vector3.zero; r.angularVelocity = Vector3.zero; }
+            if (cols != null) foreach (Collider c in cols) if (c != null) c.enabled = true;
         }
 
         // [Test] Autotest=fossepaie (2 joueurs, places loin de HouseShit3 par TestPos) : 40 s apres l'arrivee de l'autre,
@@ -118,7 +164,7 @@ namespace MWCoop
             if (Session.IsHost && use != null)
             {
                 if (tStep == 1) { tStep = 2; Game.SetState(use, "Remove part"); }
-                if (tStep == 2 && now - tAt > 16f) { tStep = 3; Game.SetState(use, "Put hose back"); }
+                if (tStep == 2 && now - tAt > 50f) { tStep = 3; Game.SetState(use, "Put hose back"); }
             }
             if (!Session.IsHost)
             {
@@ -131,12 +177,12 @@ namespace MWCoop
                     end.MovePosition(basePos + new Vector3(Mathf.Sin(k) * 2f, 0.5f, Mathf.Cos(k) * 2f));
                     if (k > 10f) { tStep = 4; testHeld = false; end.isKinematic = false; }
                 }
-                if (tStep == 4 && now - tAt > 16f && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
+                if (tStep == 4 && now - tAt > 50f && use != null) { tStep = 5; Game.SetState(use, "Put hose back"); Log.Info("autotest : tuyau, range -> " + use.ActiveStateName); }
             }
-            if (Find() && now >= nextTestLog && now - tAt < 20f)
+            if (Find() && now >= nextTestLog && now - tAt < 56f)
             {
-                nextTestLog = now + 2f;
-                Log.Info("autotest : tuyau, " + (root.activeInHierarchy ? "sorti" : "range") + ", bout en " + end.position.ToString("F2") + (end.isKinematic ? " (cinematique)" : "") + (mine ? " a nous" : remoteBy >= 0 ? " suivi sur #" + remoteBy : ""));
+                nextTestLog = now + 4f;
+                Log.Info("autotest : tuyau, " + (root.activeInHierarchy ? "sorti" : "range") + ", bout en " + end.position.ToString("F2") + (end.isKinematic ? " (cinematique)" : "") + (mine ? " a nous" : remoteBy >= 0 ? " suivi sur #" + remoteBy : "") + (following ? ", chaine posee" : "") + (cols != null && cols.Length > 0 && cols[0] != null && !cols[0].enabled ? ", sans collision" : ""));
             }
         }
         static float nextTestLog;
@@ -191,8 +237,8 @@ namespace MWCoop
             if (!Find() || !root.activeInHierarchy) return;
             if (FireTools.Held() == end.gameObject) return;   // (on le tient ici : le notre fait foi)
             if (remoteBy != who && logs++ < 10) Log.Info("tuyau de la GIFU : bout suivi sur #" + who + (held ? " (en main)" : " (pose)"));
+            if (float.IsNaN(p.x + p.y + p.z) || float.IsInfinity(p.x + p.y + p.z) || (p - (coupler != null ? coupler.position : p)).sqrMagnitude > 900f) return;   // (rien de fou : 30 m au plus du camion)
             mine = false; remoteBy = who; rp = p; rq = q; lastRemote = Time.realtimeSinceStartup;
-            if ((end.position - p).sqrMagnitude > 25f) { end.isKinematic = true; end.position = p; end.rotation = q; }   // (loin : d'un coup)
         }
     }
 }
