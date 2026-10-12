@@ -149,6 +149,7 @@ namespace MWCoop
             new Mod("outils en main", HandTools.Update),
             new Mod("tas de bois des remorques", LogPiles.Update),
             new Mod("sacs de couchage", SleepingBags.Update),
+            new Mod("boutique", Kauppa.Update),
             new Mod("mods (Cheatbox++)", ModCheatbox.Update),
             new Mod("fendeuse (attelage)", CutterHitch.Update),
             new Mod("fuites et vapeur", CarLeaks.Update),
@@ -252,6 +253,7 @@ namespace MWCoop
             HandTools.OnLevelLoaded();
             LogPiles.OnLevelLoaded();
             SleepingBags.OnLevelLoaded();
+            Kauppa.OnLevelLoaded();
             ModCheatbox.OnLevelLoaded();
             CutterHitch.OnLevelLoaded();
             AssembleIcon.OnLevelLoaded();
