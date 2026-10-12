@@ -40,11 +40,13 @@ namespace MWCoop
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFloat(float v);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DColor(int id, float r, float g, float b);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DTexAvg(System.IntPtr tex, float[] rgb);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DColorTex(int id, System.IntPtr tex, int maxSize);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DMeshParts(int id, float[] uvs, int nv, int n, int[] triStart, int[] texIds, float[] cols);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFrame(float[] p);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInts(int[] data, int n);
         static DProbe fProbe; static DPtr fInit; static DInt fPostRender, fCapture, fArm; static DInputs fInputs; static DMesh fMesh;
         static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps; static DAmbient fAmbient; static DFloat fRefl;
-        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg;
+        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg; static DColorTex fColorTex; static DMeshParts fMeshParts;
         static T Fn<T>(System.IntPtr lib, string name) where T : class
         {
             System.IntPtr p = GetProcAddress(lib, name);
@@ -62,6 +64,7 @@ namespace MWCoop
             fAmbient = Fn<DAmbient>(lib, "RtAmbient");
             fRefl = Fn<DFloat>(lib, "RtReflections");
             fMeshColor = Fn<DColor>(lib, "RtMeshColor"); fStaticColor = Fn<DColor>(lib, "RtStaticColor"); fTexAvg = Fn<DTexAvg>(lib, "RtTexAverage");
+            fColorTex = Fn<DColorTex>(lib, "RtColorTexture"); fMeshParts = Fn<DMeshParts>(lib, "RtMeshParts");
         }
         static int RtProbe(string logPath) { return fProbe(logPath); }
         static int RtInit(System.IntPtr d3d11Resource) { return fInit(d3d11Resource); }
@@ -244,7 +247,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- scene
         class Tracked { public Renderer R; public int Mesh; public bool Static, Skinned; }
         // Personnages (maillages animes : joueurs, PNJ) : pose relevee a chaque image (BakeMesh), au plus 8 a 40 m.
-        class SkinState { public int Id; public Mesh Baked; public bool Sent; public float[] Buf; }
+        class SkinState { public int Id; public Mesh Baked; public bool Sent; public float[] Buf; public string PartsSig; public float NextParts; }
         static readonly Dictionary<SkinnedMeshRenderer, SkinState> skins = new Dictionary<SkinnedMeshRenderer, SkinState>();
         static readonly List<SkinnedMeshRenderer> skinNear = new List<SkinnedMeshRenderer>();
         static readonly List<Tracked> tracked = new List<Tracked>();
@@ -509,6 +512,42 @@ namespace MWCoop
             Log.Info("rt : cube d'essai en " + cube.transform.position);
         }
 
+        // Personnages : textures et couleurs de chaque partie (peau, habits) pour la couleur exacte dans les reflets ;
+        // renvoyees quand la tenue change (signature des textures, revue toutes les 2 s).
+        static void SendParts(SkinnedMeshRenderer sm, SkinState st)
+        {
+            Material[] mats = sm.sharedMaterials;
+            Mesh src = st.Baked;
+            int n = Mathf.Min(src.subMeshCount, Mathf.Min(mats.Length, 8));
+            if (n <= 0) return;
+            var sig = new System.Text.StringBuilder();
+            for (int k = 0; k < n; k++) { Material m = mats[k]; Texture t = m != null && m.HasProperty("_MainTex") ? m.mainTexture : null; sig.Append(t != null ? t.GetInstanceID() : 0).Append(m != null ? m.color.GetHashCode() : 0).Append(';'); }
+            string s = sig.ToString();
+            if (s == st.PartsSig) return;
+            var starts = new int[n]; var texIds = new int[n]; var cols = new float[n * 3];
+            int tri = 0;
+            for (int k = 0; k < n; k++)
+            {
+                starts[k] = tri;
+                tri += src.GetTriangles(k).Length / 3;
+                Material m = mats[k];
+                Color c = m != null && m.HasProperty("_Color") ? m.color : Color.white;
+                cols[k * 3] = c.r; cols[k * 3 + 1] = c.g; cols[k * 3 + 2] = c.b;
+                Texture t = m != null && m.HasProperty("_MainTex") ? m.mainTexture : null;
+                texIds[k] = -1;
+                if (t != null) { try { if (fColorTex(t.GetInstanceID(), t.GetNativeTexturePtr(), 256) != 0) texIds[k] = t.GetInstanceID(); } catch { } }
+            }
+            Vector2[] uv = src.uv;
+            if (uv == null || uv.Length != src.vertexCount) return;
+            var u = new float[uv.Length * 2];
+            for (int i = 0; i < uv.Length; i++) { u[i * 2] = uv[i].x; u[i * 2 + 1] = uv[i].y; }
+            if (fMeshParts(st.Id, u, uv.Length, n, starts, texIds, cols) != 0)
+            {
+                st.PartsSig = s;
+                Log.Info("rt : personnage " + sm.name + " : " + n + " parties colorees (" + s + ")");
+            }
+        }
+
         static Mesh bakeTmp;
         static void UpdateSkins()
         {
@@ -535,6 +574,7 @@ namespace MWCoop
                                  + ", objet en " + sm.transform.position.ToString("F1") + " echelle " + sm.transform.lossyScale.ToString("F2") + (st.Sent ? "" : " REFUSE"));
                     }
                     else RtMeshUpdate(st.Id, st.Buf, v.Length);
+                    if (st.Sent && Time.realtimeSinceStartup >= st.NextParts) { st.NextParts = Time.realtimeSinceStartup + 2f; SendParts(sm, st); }
                 }
                 catch { }
             }

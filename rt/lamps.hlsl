@@ -12,7 +12,7 @@ struct Frame {
     float4 params;
     float4 cam;      // position de la camera
 };
-struct InstInfo { uint ib, uv, tex, texW, texH; float cutoff; uint vb, pad0; float cr, cg, cb, pad1; };
+struct InstInfo { uint ib, uv, tex, texW, texH; float cutoff; uint vb, sub; float cr, cg, cb, pad1; };   // (sub : table des parties colorees par texture)
 struct Lamp { float3 pos; float range; float3 col; float type; float3 dir; float cosHalf; };   // type : 0 point, 1 projecteur
 
 ConstantBuffer<Frame> gF : register(b0);
@@ -168,7 +168,28 @@ void Main(uint3 id : SV_DispatchThreadID)
                     RayDesc sr; sr.Origin = hp + hn * 0.05; sr.Direction = L; sr.TMin = 0.02; sr.TMax = 300;
                     sv = Free(sr) ? 1 : 0;
                 }
-                hitCol = float3(ii.cr, ii.cg, ii.cb) * (env.col + env.pos * ndl * sv);
+                float3 baseCol = float3(ii.cr, ii.cg, ii.cb);
+                if (ii.sub != 0xFFFFFFFFu && ii.uv != 0xFFFFFFFFu && ii.ib != 0xFFFFFFFFu)
+                {   // personnages : couleur du texel touche (partie du triangle, uv aux barycentres)
+                    ByteAddressBuffer tb = gBufs[NonUniformResourceIndex(ii.sub)];
+                    uint n = tb.Load(0), prim = q.CommittedPrimitiveIndex(), k = 0;
+                    for (uint j = 1; j < n; j++) if (tb.Load((1 + j * 5) * 4) <= prim) k = j;
+                    uint4 e = tb.Load4((1 + k * 5 + 1) * 4); uint ec = tb.Load((1 + k * 5 + 4) * 4);
+                    float3 mc = float3(ec & 255u, (ec >> 8) & 255u, (ec >> 16) & 255u) / 255.0;
+                    baseCol = mc;
+                    if (e.x != 0xFFFFFFFFu)
+                    {
+                        uint3 t3 = gBufs[NonUniformResourceIndex(ii.ib)].Load3(prim * 12);
+                        ByteAddressBuffer uvb = gBufs[NonUniformResourceIndex(ii.uv)];
+                        float2 ua = asfloat(uvb.Load2(t3.x * 8)), ub = asfloat(uvb.Load2(t3.y * 8)), uc = asfloat(uvb.Load2(t3.z * 8));
+                        float2 bc = q.CommittedTriangleBarycentrics();
+                        float2 uv = ua * (1 - bc.x - bc.y) + ub * bc.x + uc * bc.y;
+                        uint x = min((uint)(frac(uv.x) * e.y), e.y - 1), y = min((uint)(frac(uv.y) * e.z), e.z - 1);
+                        uint tx = gBufs[NonUniformResourceIndex(e.x)].Load((y * e.y + x) * 4);
+                        baseCol = mc * float3(tx & 255u, (tx >> 8) & 255u, (tx >> 16) & 255u) / 255.0;
+                    }
+                }
+                hitCol = baseCol * (env.col + env.pos * ndl * sv);
             }
         }
     }

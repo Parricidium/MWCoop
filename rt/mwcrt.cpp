@@ -112,7 +112,7 @@ static Shared g_pos, g_nrm, g_vis, g_lampVis, g_ao, g_refl;
 static UINT g_w, g_h;
 
 // Maillages (BLAS) et scene (TLAS)
-struct MeshAs { ID3D12Resource *vb, *ib, *uv, *blas; UINT nv, ni; bool built, alpha; int tex; float cutoff; UINT ibSlot, uvSlot, vbSlot; float col[3]; };
+struct MeshAs { ID3D12Resource *vb, *ib, *uv, *blas, *sub; UINT nv, ni; bool built, alpha; int tex; float cutoff; UINT ibSlot, uvSlot, vbSlot, subSlot; float col[3]; };
 // Feuillages : alpha de la texture (un octet par texel), lu par les rayons (tableau de tampons gBufs).
 struct AlphaTex { ID3D12Resource *buf; UINT w, h, slot; };
 static std::unordered_map<int, AlphaTex> g_alphaTex;
@@ -895,6 +895,7 @@ extern "C" __declspec(dllexport) int RtMesh(int id, const float *verts, int nv, 
     if (SUCCEEDED(m.ib->Map(0, &none, &p))) { memcpy(p, idx, (size_t)ni * 4); m.ib->Unmap(0, NULL); }
     m.vbSlot = RawView(m.vb, (UINT64)nv * 12); m.ibSlot = RawView(m.ib, (UINT64)ni * 4);   // (reflets : normale au point touche)
     m.col[0] = m.col[1] = m.col[2] = 0.6f;
+    m.subSlot = 0xFFFFFFFFu;
     g_meshes[id] = m;
     g_pendingBuild.push_back(id);
     return 1;
@@ -905,6 +906,103 @@ extern "C" __declspec(dllexport) void RtMeshColor(int id, float r, float g, floa
     auto it = g_meshes.find(id);
     if (it != g_meshes.end()) { it->second.col[0] = r; it->second.col[1] = g; it->second.col[2] = b; }
 }
+// Textures de couleur (personnages : peau, habits) : RGBA 8 bits par texel, au plus 512 px de cote (lues sur la carte).
+struct ColorTex { ID3D12Resource *buf; UINT w, h, slot; };
+static std::unordered_map<int, ColorTex> g_colorTex;
+static void DecodeBc1Color(const unsigned char *b, unsigned out[16], bool bc1)
+{
+    unsigned c0 = b[0] | (b[1] << 8), c1 = b[2] | (b[3] << 8);
+    unsigned pr[4], pg[4], pb[4];
+    pr[0] = (c0 >> 11 & 31) * 255 / 31; pg[0] = (c0 >> 5 & 63) * 255 / 63; pb[0] = (c0 & 31) * 255 / 31;
+    pr[1] = (c1 >> 11 & 31) * 255 / 31; pg[1] = (c1 >> 5 & 63) * 255 / 63; pb[1] = (c1 & 31) * 255 / 31;
+    if (!bc1 || c0 > c1) { pr[2] = (2 * pr[0] + pr[1]) / 3; pg[2] = (2 * pg[0] + pg[1]) / 3; pb[2] = (2 * pb[0] + pb[1]) / 3; pr[3] = (pr[0] + 2 * pr[1]) / 3; pg[3] = (pg[0] + 2 * pg[1]) / 3; pb[3] = (pb[0] + 2 * pb[1]) / 3; }
+    else { pr[2] = (pr[0] + pr[1]) / 2; pg[2] = (pg[0] + pg[1]) / 2; pb[2] = (pb[0] + pb[1]) / 2; pr[3] = pg[3] = pb[3] = 0; }
+    unsigned idx = b[4] | (b[5] << 8) | (b[6] << 16) | ((unsigned)b[7] << 24);
+    for (int i = 0; i < 16; i++) { unsigned k = (idx >> (2 * i)) & 3; out[i] = pr[k] | (pg[k] << 8) | (pb[k] << 16) | 0xFF000000u; }
+}
+extern "C" __declspec(dllexport) int RtColorTexture(int id, void *d3d11tex, int maxSize)
+{
+    if (!InitD12() || !d3d11tex || !g_ctx1) return 0;
+    if (g_colorTex.count(id)) return 1;
+    ID3D11Texture2D *src = NULL;
+    if (FAILED(((IUnknown *)d3d11tex)->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&src))) return 0;
+    D3D11_TEXTURE2D_DESC d; src->GetDesc(&d);
+    UINT mip = 0;
+    while (mip + 1 < d.MipLevels && ((d.Width >> mip) > (UINT)maxSize || (d.Height >> mip) > (UINT)maxSize)) mip++;
+    UINT w = max(d.Width >> mip, 1u), h = max(d.Height >> mip, 1u);
+    int kind = 0;
+    switch (d.Format) {
+    case DXGI_FORMAT_BC1_UNORM: case DXGI_FORMAT_BC1_UNORM_SRGB: case DXGI_FORMAT_BC1_TYPELESS: kind = 1; break;
+    case DXGI_FORMAT_BC2_UNORM: case DXGI_FORMAT_BC2_UNORM_SRGB: case DXGI_FORMAT_BC2_TYPELESS:
+    case DXGI_FORMAT_BC3_UNORM: case DXGI_FORMAT_BC3_UNORM_SRGB: case DXGI_FORMAT_BC3_TYPELESS: kind = 2; break;
+    case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: case DXGI_FORMAT_R8G8B8A8_TYPELESS: kind = 3; break;
+    case DXGI_FORMAT_B8G8R8A8_UNORM: case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: case DXGI_FORMAT_B8G8R8A8_TYPELESS: kind = 4; break;
+    default: break;
+    }
+    if (!kind) { Log("texture de couleur %d : format %d non pris", id, (int)d.Format); src->Release(); return 0; }
+    D3D11_TEXTURE2D_DESC sd = d; sd.Width = w; sd.Height = h; sd.MipLevels = 1; sd.ArraySize = 1; sd.Usage = D3D11_USAGE_STAGING;
+    sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ; sd.MiscFlags = 0;
+    ID3D11Texture2D *st = NULL;
+    if (FAILED(g_dev11->CreateTexture2D(&sd, NULL, &st))) { src->Release(); return 0; }
+    g_ctx1->CopySubresourceRegion(st, 0, 0, 0, 0, src, D3D11CalcSubresource(mip, 0, d.MipLevels), NULL);
+    src->Release();
+    D3D11_MAPPED_SUBRESOURCE m;
+    if (FAILED(g_ctx1->Map(st, 0, D3D11_MAP_READ, 0, &m))) { st->Release(); return 0; }
+    std::vector<unsigned> px((size_t)w * h);
+    const unsigned char *base = (const unsigned char *)m.pData;
+    if (kind <= 2) {
+        UINT bw = (w + 3) / 4, bh = (h + 3) / 4, bs = kind == 1 ? 8 : 16;
+        for (UINT by = 0; by < bh; by++) for (UINT bx = 0; bx < bw; bx++) {
+            unsigned c[16];
+            DecodeBc1Color(base + (size_t)by * m.RowPitch + (size_t)bx * bs + (kind == 2 ? 8 : 0), c, kind == 1);
+            for (int i = 0; i < 16; i++) { UINT x = bx * 4 + (i & 3), y = by * 4 + (i >> 2); if (x < w && y < h) px[(size_t)y * w + x] = c[i]; }
+        }
+    } else {
+        for (UINT y = 0; y < h; y++) for (UINT x = 0; x < w; x++) {
+            const unsigned char *p = base + (size_t)y * m.RowPitch + x * 4;
+            px[(size_t)y * w + x] = kind == 3 ? (p[0] | (p[1] << 8) | (p[2] << 16) | 0xFF000000u) : (p[2] | (p[1] << 8) | (p[0] << 16) | 0xFF000000u);
+        }
+    }
+    g_ctx1->Unmap(st, 0);
+    st->Release();
+    ColorTex t = {}; t.w = w; t.h = h;
+    t.buf = Upload(px.data(), px.size() * 4);
+    if (!t.buf) return 0;
+    t.slot = RawView(t.buf, px.size() * 4);
+    g_colorTex[id] = t;
+    return 1;
+}
+// Parties d'un maillage colorees par texture : uv par sommet, et par partie (sous-maillage) son 1er triangle, sa
+// texture (deja envoyee par RtColorTexture, -1 : aucune) et la couleur de sa matiere. Remplace les precedentes.
+extern "C" __declspec(dllexport) int RtMeshParts(int id, const float *uvs, int nv, int n, const int *triStart, const int *texIds, const float *cols)
+{
+    auto it = g_meshes.find(id);
+    if (it == g_meshes.end() || (UINT)nv != it->second.nv || n <= 0 || n > 8) return 0;
+    MeshAs &mm = it->second;
+    if (!mm.uv) {
+        mm.uv = Buffer((UINT64)nv * 8, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        if (!mm.uv) return 0;
+        void *p = NULL; D3D12_RANGE none = { 0, 0 };
+        if (SUCCEEDED(mm.uv->Map(0, &none, &p))) { memcpy(p, uvs, (size_t)nv * 8); mm.uv->Unmap(0, NULL); }
+        mm.uvSlot = RawView(mm.uv, (UINT64)nv * 8);
+    }
+    // table : n, puis par partie : 1er triangle, case de la texture, largeur, hauteur, couleur (RGBA 8 bits)
+    std::vector<unsigned> tb(1 + 5 * 8, 0);
+    tb[0] = (unsigned)n;
+    for (int k = 0; k < n; k++) {
+        unsigned *e = &tb[1 + k * 5];
+        e[0] = (unsigned)triStart[k];
+        auto t = texIds[k] >= 0 ? g_colorTex.find(texIds[k]) : g_colorTex.end();
+        if (t != g_colorTex.end()) { e[1] = t->second.slot; e[2] = t->second.w; e[3] = t->second.h; } else { e[1] = 0xFFFFFFFFu; e[2] = e[3] = 1; }
+        unsigned r = (unsigned)(min(max(cols[k * 3], 0.f), 1.f) * 255), g = (unsigned)(min(max(cols[k * 3 + 1], 0.f), 1.f) * 255), b = (unsigned)(min(max(cols[k * 3 + 2], 0.f), 1.f) * 255);
+        e[4] = r | (g << 8) | (b << 16);
+    }
+    if (mm.sub) { g_trash[g_frameNo & 1].push_back(mm.sub); mm.sub = NULL; }
+    mm.sub = Upload(tb.data(), tb.size() * 4);
+    mm.subSlot = mm.sub ? RawView(mm.sub, tb.size() * 4) : 0xFFFFFFFFu;
+    return 1;
+}
+
 // Lots statiques : couleur moyenne de leurs objets, par nombre de sommets du lot (le mod la connait, la DLL releve le lot).
 static std::unordered_map<int, std::array<float, 3>> g_staticColor;
 extern "C" __declspec(dllexport) void RtStaticColor(int vertexCount, float r, float g, float b) { g_staticColor[vertexCount] = { r, g, b }; }
@@ -1166,7 +1264,7 @@ static bool BuildTlas()
         memcpy(d.Transform, i.m, 48);
         d.InstanceMask = 0xFF; d.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE | D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE;
         const MeshAs &mm = it->second;
-        InstInfo inf = { mm.ibSlot, 0, 0, 1, 1, 2.f, mm.vbSlot, 0, mm.col[0], mm.col[1], mm.col[2], 0 };
+        InstInfo inf = { mm.ibSlot, mm.uvSlot, 0, 1, 1, 2.f, mm.vbSlot, mm.subSlot, mm.col[0], mm.col[1], mm.col[2], 0 };
         if (mm.alpha) {
             auto t = g_alphaTex.find(mm.tex);
             if (t != g_alphaTex.end()) {
@@ -1187,7 +1285,7 @@ static bool BuildTlas()
         d.InstanceMask = 0xFF; d.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE | D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE;
         const MeshAs &sm = it->second;
         d.InstanceID = (UINT)infos.size();
-        infos.push_back({ sm.ibSlot, 0, 0, 1, 1, 2.f, sm.vbSlot, 0, sm.col[0], sm.col[1], sm.col[2], 0 });
+        infos.push_back({ sm.ibSlot, 0, 0, 1, 1, 2.f, sm.vbSlot, 0xFFFFFFFFu, sm.col[0], sm.col[1], sm.col[2], 0 });
         d.AccelerationStructure = it->second.blas->GetGPUVirtualAddress();
         descs.push_back(d);
     }
