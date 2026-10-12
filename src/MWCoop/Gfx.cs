@@ -371,6 +371,7 @@ namespace MWCoop
             R("RTCorps", "Ton corps dans les reflets et les ombres", "Your body in reflections and shadows", 1, 6),
             S("RTReflets", "Reflets (carrosseries, surfaces lisses)", "Reflections (car paint, smooth surfaces)", 100, 6, new[] { 0, 50, 100 },
               new[] { "Non", "Discrets", "Normaux" }, new[] { "Off", "Subtle", "Normal" }, true),
+            R("RTVitres", "Reflets des vitres", "Window reflections", 1, 6),
             S("RTRebond", "Rebond de lumi\u00E8re (illumination globale)", "Light bounce (global illumination)", 100, 6, new[] { 0, 50, 100 },
               new[] { "Non", "L\u00E9ger", "Normal" }, new[] { "Off", "Light", "Normal" }, true),
             S("RTOcclusion", "Occlusion ambiante (coins, dessous)", "Ambient occlusion (corners, underneath)", 100, 6, new[] { 0, 50, 100, 150 },

@@ -9,7 +9,7 @@
 struct Frame {
     float4 sunDir;   // xyz : vers le soleil ; w : demi-angle du disque (radians)
     uint4 size;      // largeur, hauteur, numero d'image, rayons par pixel
-    float4 params;   // x : portee des rayons (m), y : decalage le long de la normale (m), z : decalage vers le soleil (m), w : 1 controle
+    float4 params;   // x : portee des rayons (m), y : decalage le long de la normale (m), z : decalage vers le soleil (m)
     float4 cam;      // position de la camera (controle : rayons depuis la camera)
 };
 struct InstInfo { uint ib, uv, tex, texW, texH; float cutoff; uint vb, sub; float cr, cg, cb, pad1; };   // cases des tampons (tableau gBufs), couleur de l'objet
@@ -63,21 +63,6 @@ void Main(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= gF.size.x || id.y >= gF.size.y) return;
     float4 p = gPos[id.xy];
-    if (gF.params.w > 0.5)
-    {
-        // Controle : rayon de la camera vers le point du pixel ; sortie = distance au premier triangle de la scene DXR
-        // divisee par celle du pixel (1 : la scene DXR a la meme surface ; 0 : rien touche ; ciel : 0.5).
-        if (p.w < 0.5) { gVis[id.xy] = 0.5; return; }
-        float3 dv = p.xyz - gF.cam.xyz; float dist = length(dv);
-        RayDesc cr; cr.Origin = gF.cam.xyz; cr.Direction = dv / dist; cr.TMin = 0.0; cr.TMax = dist * 2;
-        RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> cq;
-        cq.TraceRayInline(gScene, 0, 0xFF, cr);
-        while (cq.Proceed())
-            if (cq.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && AlphaPass(cq.CandidateInstanceID(), cq.CandidatePrimitiveIndex(), cq.CandidateTriangleBarycentrics()))
-                cq.CommitNonOpaqueTriangleHit();
-        gVis[id.xy] = cq.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? saturate(cq.CommittedRayT() / dist) : 0;
-        return;
-    }
     if (p.w < 0.5) { gVis[id.xy] = 1; return; }                 // ciel
     float3 n = normalize(gNrm[id.xy].xyz * 2 - 1);
     float3 L = normalize(gF.sunDir.xyz);
