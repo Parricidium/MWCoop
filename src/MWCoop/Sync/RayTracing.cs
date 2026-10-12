@@ -36,10 +36,11 @@ namespace MWCoop
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFloats(float[] data, int n);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DMeshUpdate(int id, float[] verts, int nv);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DLamps(float[] data, int n, float strength);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DAmbient(float strength, float radius, int rays);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFrame(float[] p);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInts(int[] data, int n);
         static DProbe fProbe; static DPtr fInit; static DInt fPostRender, fCapture, fArm; static DInputs fInputs; static DMesh fMesh;
-        static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps;
+        static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps; static DAmbient fAmbient;
         static T Fn<T>(System.IntPtr lib, string name) where T : class
         {
             System.IntPtr p = GetProcAddress(lib, name);
@@ -54,6 +55,7 @@ namespace MWCoop
             fStaticCounts = Fn<DInts>(lib, "RtStaticCounts"); fCapture = Fn<DInt>(lib, "RtCapture"); fArm = Fn<DInt>(lib, "RtArm");
             fMeshUpdate = Fn<DMeshUpdate>(lib, "RtMeshUpdate");
             fLamps = Fn<DLamps>(lib, "RtLamps");
+            fAmbient = Fn<DAmbient>(lib, "RtAmbient");
         }
         static int RtProbe(string logPath) { return fProbe(logPath); }
         static int RtInit(System.IntPtr d3d11Resource) { return fInit(d3d11Resource); }
@@ -69,6 +71,10 @@ namespace MWCoop
         static void RtArm(int flags) { fArm(flags); }
         static int RtMeshUpdate(int id, float[] verts, int nv) { return fMeshUpdate(id, verts, nv); }
         static void RtLamps(float[] data, int n, float strength) { fLamps(data, n, strength); }
+        static void RtAmbient(float strength, float radius, int rays) { fAmbient(strength, radius, rays); }
+
+        // Occlusion ambiante : [Graphismes] RTOcclusion (0 non, 50 legere, 100 normale, 150 forte ; 100 par defaut).
+        static float AmbientStrength { get { return Mathf.Clamp(Config.GetInt("Test", "RTOcclusion", Gfx.Get("RTOcclusion", 100)), 0, 1000) * 0.01f; } }
 
         // Ombres des lampes (phares, lampadaires) par rayons : [Graphismes] RTLampes = nombre de lampes (0 : non ; 8 par defaut).
         // Actives : le module Lumieres ne donne plus d'ombres d'Unity a ces lampes.
@@ -614,7 +620,9 @@ namespace MWCoop
                     SendInstances();
                     SendFrame(GetComponent<Camera>(), true);
                     int flags = Config.GetInt("Test", "RTInjecter", 1) != 0 ? 1 : 0;
-                    if (SendLamps(transform.position) > 0) flags |= 16;
+                    float aoS = AmbientStrength;
+                    RtAmbient(aoS, 1.5f, Config.GetInt("Test", "RTOcclusionRayons", 2));
+                    if (SendLamps(transform.position) > 0 || aoS > 0) flags |= 16;
                     if (!dumped && Config.GetInt("Test", "RTVidage", 0) != 0 && Time.realtimeSinceStartup > Config.GetInt("Test", "RTVidage", 0)) { dumped = true; flags |= 2 | 4; }
                     RtArm(flags);
                 }

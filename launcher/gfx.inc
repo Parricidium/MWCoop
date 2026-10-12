@@ -147,6 +147,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "RTPortee", L"Portée des ombres", L"Shadow range", 250, { 100, 150, 250, 400 },
           { L"100 m", L"150 m", L"250 m", L"400 m" }, { L"100 m", L"150 m", L"250 m", L"400 m" }, 2, 14 },
         { "RTDouceur", L"Bords des ombres", L"Shadow edges", 1, { 0, 1, 2, 4 }, { L"Nets", L"Légers", L"Doux", L"Très doux" }, { L"Sharp", L"Light", L"Soft", L"Very soft" }, 0, 14 },
+        { "RTOcclusion", L"Occlusion ambiante (coins, dessous)", L"Ambient occlusion (corners, underneath)", 100, { 0, 50, 100, 150 },
+          { L"Non", L"Légère", L"Normale", L"Forte" }, { L"Off", L"Light", L"Normal", L"Strong" }, 2, 14 },
         { "RTLampes", L"Ombres des lampes (phares, lampadaires)", L"Lamp shadows (headlights, street lights)", 8, { 0, 4, 8, 16 },
           { L"Non", L"4 lampes", L"8 lampes", L"16 lampes" }, { L"Off", L"4 lamps", L"8 lamps", L"16 lamps" }, 2, 14 },
         { "OmbresPhares", L"Ombres des phares", L"Headlight shadows", 0, { 0, 2, 4, 8 }, { L"Non", L"2 phares", L"4 phares", L"8 phares" }, { L"Off", L"2 lights", L"4 lights", L"8 lights" }, 3, 4 },
