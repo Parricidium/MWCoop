@@ -148,6 +148,7 @@ namespace MWCoop
             var e = new Esine { Id = id, Kind = kind, Data = data ?? "", Go = g, Screen = screen };
             e.Col = g.AddComponent<BoxCollider>(); e.Col.size = size;
             e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : 9f;
+            e.Rb.collisionDetectionMode = CollisionDetectionMode.Continuous;   // (cassette fine : ne traverse pas le sol en tombant)
             g.layer = 19; g.tag = "PART";
             esineet.Add(e);
             Props.SoonScan();
@@ -297,7 +298,12 @@ namespace MWCoop
             if (tape.Length == 0) return;
             Transform t = vcr.Go.transform;
             SetData(vcr, "|0");
-            SpawnItem(KVhs, tape, t.position + t.rotation * new Vector3(0, 0.08f, -0.3f), t.rotation);
+            // sur le dessus de l'appareil : toujours libre (devant, elle naissait parfois dans un mur, une table ou le sol
+            // et passait au travers ; JD, 12/10)
+            Bounds b = vcr.Col != null ? vcr.Col.bounds : new Bounds(t.position, Vector3.one * 0.2f);
+            Vector3 fw = t.forward; fw.y = 0f;
+            Quaternion rot = fw.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(fw.normalized) : Quaternion.identity;
+            SpawnItem(KVhs, tape, new Vector3(b.center.x, b.max.y + 0.045f, b.center.z), rot);
             L("video : cassette ejectee de " + vcr.Id);
         }
 
@@ -428,21 +434,23 @@ namespace MWCoop
             guiUse.Value = true;
             if (hit.Kind == KKamera)
             {
-                bool recording = hit.Data.EndsWith("|1");
+                // pose : R = enregistrer / arreter (pour se filmer a plusieurs ; JD, 12/10), F tenu = ejecter
+                bool recording = hit.Data.EndsWith("|1") || hit.Data.EndsWith("|2");
+                string rk = Keys.Label(Keys.CameraRec);
                 if (tape.Length == 0) guiText.Value = Lang.T("CAMÉSCOPE (PAS DE CASSETTE)", "CAMCORDER (NO TAPE)");
-                else guiText.Value = (recording ? Lang.T("F : ARRÊTER", "F: STOP") : Lang.T("F : ENREGISTRER", "F: RECORD")) + Lang.T(" - F TENU : ÉJECTER", " - HOLD F: EJECT");
+                else guiText.Value = rk + (recording ? Lang.T(" : ARRÊTER", ": STOP") : Lang.T(" : ENREGISTRER", ": RECORD")) + Lang.T(" - F TENU : ÉJECTER", " - HOLD F: EJECT");
                 if (tape.Length == 0) return true;
+                if (Input.GetKeyDown(Keys.CameraRec))
+                {
+                    if (rec != null && rec.Cam == hit) StopRec("touche");
+                    else if (recording) SetData(hit, tape + "|0");   // (filme chez un autre joueur : il s'arrete chez lui)
+                    else StartRec(hit);
+                }
                 if (Input.GetKeyDown(KeyCode.F)) vcrFDown = now;
                 if (vcrFDown >= 0f)
                 {
                     if (now - vcrFDown >= 0.8f) { vcrFDown = -1f; Eject(hit); }
-                    else if (Input.GetKeyUp(KeyCode.F))
-                    {
-                        vcrFDown = -1f;
-                        if (rec != null && rec.Cam == hit) StopRec("touche");
-                        else if (recording) SetData(hit, tape + "|0");   // (filme chez un autre joueur : il s'arrete chez lui)
-                        else StartRec(hit);
-                    }
+                    else if (Input.GetKeyUp(KeyCode.F)) vcrFDown = -1f;
                 }
                 return true;
             }

@@ -44,7 +44,7 @@ namespace MWCoop
         }
         static readonly Dictionary<int, Speaker> speakers = new Dictionary<int, Speaker>();
         static bool recording, failed;
-        static readonly byte[] capture = new byte[8192], pcm = new byte[Rate * 2];
+        static readonly byte[] capture = new byte[8192], pcm = new byte[Rate * 2], ownPcm = new byte[Rate * 2];
         static float lastSent, nextLog;
         static int sentLogs, heardLogs, avLogs;
         static float nextAvLog;
@@ -90,6 +90,14 @@ namespace MWCoop
                         Session.SendAll(new NetWriter(Msg.Talk).U8(Session.LocalId).Bytes(capture, 0, (int)got).U8(MicGain / 10), false);
                         lastSent = Time.realtimeSinceStartup;
                         if (sentLogs++ < 5 || sentLogs % 50 == 0) Log.Info("vocal : paquet de " + got + " octets envoye (" + sentLogs + ")");
+                        // camescope en marche : sa propre voix va aussi dans la prise (on ne s'entend pas soi-meme : la
+                        // sortie du son ne l'a pas ; JD, 12/10)
+                        if (Kauppa.WantsOwnVoice)
+                        {
+                            uint own;
+                            if (SteamUser.DecompressVoice(capture, got, ownPcm, (uint)ownPcm.Length, out own, Rate) == EVoiceResult.k_EVoiceResultOK && own > 0)
+                                Kauppa.OwnVoice(ownPcm, (int)own, Rate, MicGain / 100f);
+                        }
                     }
                 }
                 else if (av == EVoiceResult.k_EVoiceResultNotInitialized || av == EVoiceResult.k_EVoiceResultNotRecording) { }

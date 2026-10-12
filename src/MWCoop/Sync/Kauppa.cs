@@ -494,8 +494,16 @@ namespace MWCoop
                         case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
                         case "filmi": TestFilm(); break;
                         case "tuo": { Esine tp = esineet.FindLast(e => e.Kind == KVhs); if (tp != null && EyeT != null) { tp.Rb.isKinematic = true; tp.Go.transform.SetParent(EyeT, true); } ChatCommand("/importer " + string.Join(" ", a, 2, a.Length - 2)); if (tp != null) { tp.Go.transform.SetParent(null, true); tp.Rb.isKinematic = false; } break; }
+                        case "prends": { Esine k = esineet.Find(e => e.Kind == KKamera); PlayMakerFSM pf = PickUpFsm(); if (k != null && pf != null) { if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, "Set pivot 2"); } L("essai : prise du camescope (" + (pf != null ? pf.ActiveStateName : "pas de main") + ")"); break; }
+                        case "equipe": { Esine k = HeldKamera(); L("essai : en main " + (k != null)); if (k != null) Equip(k); break; }
+                        case "rec": { Esine k = eqCam ?? HeldKamera(); if (k != null) { if (rec != null) StopRec("essai"); else StartRec(k); } break; }
+                        case "pause": Pause(rec != null && !rec.Paused); break;
+                        case "sors": ExitViewfinder(); break;
+                        case "etat": { PlayMakerFSM pf = PickUpFsm(); Esine k = esineet.Find(e => e.Kind == KKamera); L("essai : main " + (pf != null ? pf.ActiveStateName + (pf.enabled ? "" : " (en pause)") : "?") + ", camescope tenu " + (k != null && HeldKamera() == k) + ", equipe " + eqStage + ", viseur " + Viewfinder + ", rec " + (rec != null ? (rec.Paused ? "pause" : "oui") : "non") + ", data " + (k != null ? k.Data : "")); break; }
                         case "kanna": if (pussit.Count > 0 && EyeT != null) { Transform bt = pussit[pussit.Count - 1].Go.transform; pussit[pussit.Count - 1].Rb.isKinematic = true; bt.SetParent(EyeT, true); bt.position = EyeT.position + EyeT.forward * 0.5f; L("essai : sac en main"); } break;
                         case "irti": foreach (Pussi pb in pussit) if (pb.Go != null && pb.Go.transform.parent != null) { pb.Go.transform.SetParent(null, true); pb.Rb.isKinematic = false; L("essai : sac lache"); } break;
+                        case "ulosv": { Esine v = esineet.Find(e => e.Kind == KNauhuri && Tape(e).Length > 0); if (v != null) { Eject(v); L("essai : magnetoscope en " + v.Go.transform.position.ToString("F2")); } break; }
+                        case "ou": foreach (Esine e in esineet) if (e.Kind == KVhs && e.Go != null) L("essai : cassette " + e.Id + " en " + e.Go.transform.position.ToString("F2")); break;
                         case "ulos": { Esine k = esineet.Find(e => e.Kind == KKamera); if (k != null) Eject(k); break; }
                         case "nimi": { Esine tp = esineet.FindLast(e => e.Kind == KVhs); if (tp != null) { tp.Go.transform.rotation = root.transform.rotation * Quaternion.Euler(0f, 180f, 0f); string c0 = tp.Data.Split('~')[0]; SetData(tp, (c0.Length > 0 ? c0 : "tyhja") + "~" + string.Join(" ", a, 2, a.Length - 2)); L("essai : titre " + tp.Data); } break; }
                         case "viseur": if (a.Length > 2 && a[2] == "0") ExitViewfinder(); else { EnterViewfinder(); vfForced = true; } break;

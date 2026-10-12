@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -8,14 +9,18 @@ namespace MWCoop
 {
     // Camescope d'epaule (etape 3 du coin video, demande de JD, 12/10) : vendu a l'Osuuskauppa ("kamera").
     //  - il faut une cassette : comme le magnetoscope (cassette en main + clic sur le camescope pose ; F tenu = ejecter).
-    //  - tenu en main : F = viseur (l'oeil a la camera : image 4:3 facon VHS, compteur, REC ; molette = zoom), R =
-    //    enregistrer / arreter ([Touches] CameraViseur, CameraEnregistrer). Pose : F = enregistrer / arreter, il filme
-    //    devant lui (pose sans etre lance, il se tourne vers la ou regardait le joueur).
+    //  - tenu en main : F = l'equiper (comme la raclette a givre ; demande de JD, 12/10) : la main du jeu (PickUp) est
+    //    mise en pause, le camescope monte a l'oeil (les autres le voient a l'oeil, les mains dessus : Gestures suit
+    //    l'objet tenu) et on regarde dans le viseur (image 4:3 facon VHS, compteur, REC ; molette = zoom). Equipe : clic
+    //    gauche = enregistrer / arreter la prise, R = pause / reprise, clic droit = sortir de l'objectif (le camescope
+    //    reste en main ; un 2e clic droit le jette, comme tout objet du jeu). En main sans viseur : R = enregistrer /
+    //    arreter. Pose : R = enregistrer / arreter, F tenu = ejecter ; il filme devant lui (pose sans etre lance, il se
+    //    tourne vers la ou regardait le joueur). Touches : [Touches] CameraViseur (F), CameraEnregistrer (R).
     //  - enregistrement chez celui qui l'a lance : camera a part 256x192 a 10 images/s, effet VHS calcule sur l'image
     //    (couleurs qui bavent, neige, lignes, bas d'image qui tremble), JPEG ; son = ce qu'entend le joueur (sortie de
     //    l'AudioListener) en mono 11 025 Hz mu-law. Fichier <profil>\videot\<film>.mwv, au plus [Boutique] VideoMinutes
     //    (10) par prise. A l'arret, la cassette du camescope porte le film. Un autre joueur peut l'arreter (F).
-    //  - voyant rouge du camescope allume chez tous pendant l'enregistrement (Data "<cassette>|1").
+    //  - voyant rouge du camescope allume chez tous pendant l'enregistrement (Data "<cassette>|1" ; "|2" en pause).
     // Contenu d'une cassette : "tyhja" (vierge) ou "<film>~<titre>".
     // Fichier .mwv : "MWV1", u16 largeur, u16 hauteur, u8 images/s, u16 frequence du son ; puis des blocs : u8 sorte
     // (1 image JPEG, 2 son mu-law), u32 instant en ms, i32 longueur, octets.
@@ -101,9 +106,10 @@ namespace MWCoop
                 if (f.sqrMagnitude > 1e-4f) { lastHeldKamera.Go.transform.rotation = Quaternion.LookRotation(f.normalized); lastHeldKamera.Rb.angularVelocity = Vector3.zero; }
             }
             lastHeldKamera = held;
-            if (held != null && !KameraBusy && lookedItem == null && looked == null)
+            TickEquip(now, held);
+            if (held != null && eqStage == 0 && !KameraBusy && lookedItem == null && looked == null)
             {
-                if (Input.GetKeyDown(Keys.CameraViewfinder)) { if (Viewfinder) ExitViewfinder(); else EnterViewfinder(); }
+                if (Input.GetKeyDown(Keys.CameraViewfinder) && VehicleSync.LocalDrivingRoot == null) Equip(held);
                 else if (Input.GetKeyDown(Keys.CameraRec)) { if (rec != null && rec.Cam == held) StopRec("touche"); else StartRec(held); }
             }
             if (Viewfinder)
@@ -119,12 +125,13 @@ namespace MWCoop
             {
                 Esine k = rec.Cam;
                 if (k.Go == null || !esineet.Contains(k)) StopRec("camescope parti");
-                else if (!k.Data.EndsWith("|1")) StopRec("arrete par un autre joueur");
+                else if (!k.Data.EndsWith("|1") && !k.Data.EndsWith("|2")) StopRec("arrete par un autre joueur");
                 else
                 {
                     PollTap();
-                    if (now >= rec.NextFrame) { rec.NextFrame = Mathf.Max(rec.NextFrame + 1f / RecFps, now); RecFrame(now); }
-                    if (rec != null && now - rec.Start >= MaxRecSeconds) { StopRec("fin de bande"); Hud.Toast(Lang.T("Caméscope : fin de bande", "Camcorder: end of tape")); }
+                    if (rec.Paused) tapOut.Clear();   // (en pause : ni image ni son)
+                    else if (now >= rec.NextFrame) { rec.NextFrame = Mathf.Max(rec.NextFrame + 1f / RecFps, now); RecFrame(now); }
+                    if (rec != null && RecSeconds(rec, now) >= MaxRecSeconds) { StopRec("fin de bande"); Hud.Toast(Lang.T("Caméscope : fin de bande", "Camcorder: end of tape")); }
                 }
             }
             // voyants REC (chez tous)
@@ -133,9 +140,98 @@ namespace MWCoop
             {
                 if (e.Kind != KKamera || e.Go == null) continue;
                 Transform led = e.Go.transform.Find("rec");
-                if (led != null) { Renderer r = led.GetComponent<Renderer>(); bool on = e.Data.EndsWith("|1") && blink; if (r != null && r.enabled != on) r.enabled = on; }
+                if (led != null) { Renderer r = led.GetComponent<Renderer>(); bool on = e.Data.EndsWith("|1") && blink; if (r != null && r.enabled != on) r.enabled = on; }   // (eteint en pause : "|2")
             }
         }
+
+        // ---------------------------------------------------------------- equiper (camescope a l'oeil)
+        static Esine eqCam;
+        static int eqStage;              // 0 non, 1 en attente de la main du jeu, 2 equipe
+        static int eqSince, eqReenable = -1;
+        static PlayMakerFSM eqFsm;
+        static bool eqRestart, eqKin;
+        static Vector3 eqPos; static Quaternion eqRot;
+        static readonly List<KeyValuePair<GameObject, int>> eqLayers = new List<KeyValuePair<GameObject, int>>();
+
+        static PlayMakerFSM PickUpFsm()
+        {
+            GameObject h = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+            return h != null ? Game.FsmOn(h, "PickUp") : null;
+        }
+
+        static void Equip(Esine k)
+        {
+            eqCam = k; eqStage = 1; eqSince = Time.frameCount;
+            EnterViewfinder();
+            if (!Viewfinder) { eqStage = 0; eqCam = null; }
+        }
+
+        // Rendre le camescope a la main du jeu (pose d'avant, physique, couches) ; la main reprend l'image suivante
+        // (pas dans l'image du clic droit : elle le lancerait aussitot).
+        static void Unequip()
+        {
+            if (eqStage == 0) return;
+            if (eqStage == 2 && eqCam != null && eqCam.Go != null)
+            {
+                Transform t = eqCam.Go.transform;
+                t.localPosition = eqPos; t.localRotation = eqRot;
+                if (eqCam.Rb != null) eqCam.Rb.isKinematic = eqKin;
+            }
+            foreach (var kv in eqLayers) if (kv.Key != null) kv.Key.layer = kv.Value;
+            eqLayers.Clear();
+            if (eqStage == 2 && eqFsm != null) eqReenable = Time.frameCount + 1;
+            if (rec != null && rec.Cam == eqCam && !rec.Paused) Pause(true);
+            eqStage = 0; eqCam = null;
+        }
+
+        static void TickEquip(float now, Esine held)
+        {
+            if (eqReenable >= 0 && Time.frameCount >= eqReenable)
+            {
+                eqReenable = -1;
+                if (eqFsm != null) { eqFsm.enabled = true; eqFsm.Fsm.RestartOnEnable = eqRestart; }
+                eqFsm = null;
+            }
+            if (eqStage == 0) return;
+            if (eqCam == null || eqCam.Go == null || held != eqCam || !Viewfinder) { if (Viewfinder) ExitViewfinder(); else Unequip(); return; }
+            if (eqStage == 1)
+            {
+                // la touche Use du jeu fait un tour (Check item -> Hand -> Set pivot 2) : attendre « Item picked »
+                PlayMakerFSM f = PickUpFsm();
+                if (f == null || Time.frameCount - eqSince > 60) { L("video : camescope pas equipe (main du jeu " + (f != null ? f.ActiveStateName : "introuvable") + ")"); ExitViewfinder(); return; }
+                if (f.ActiveStateName != "Item picked") return;
+                eqFsm = f; eqRestart = f.Fsm.RestartOnEnable;
+                f.Fsm.RestartOnEnable = false;   // (a la reprise : toujours « Item picked », l'objet en main)
+                f.enabled = false;
+                Transform t = eqCam.Go.transform, eye = EyeT;
+                eqPos = t.localPosition; eqRot = t.localRotation;
+                if (eqCam.Rb != null) { eqKin = eqCam.Rb.isKinematic; eqCam.Rb.isKinematic = true; }
+                if (eye != null) { t.position = eye.position + eye.forward * 0.2f + eye.right * 0.04f - eye.up * 0.03f; t.rotation = eye.rotation; }
+                // (pieces sur la couche des objets tenus : la camera du jeu, qui dessine le viseur, ne les voit pas)
+                eqLayers.Clear();
+                foreach (Transform c in eqCam.Go.GetComponentsInChildren<Transform>(true)) { eqLayers.Add(new KeyValuePair<GameObject, int>(c.gameObject, c.gameObject.layer)); c.gameObject.layer = 16; }
+                eqStage = 2;
+                L("video : camescope equipe");
+                return;
+            }
+            if (KameraBusy) return;
+            if (Input.GetMouseButtonDown(0)) { if (rec != null && rec.Cam == eqCam) StopRec("clic"); else StartRec(eqCam); }
+            else if (Input.GetKeyDown(Keys.CameraRec)) { if (rec != null && rec.Cam == eqCam) Pause(!rec.Paused); else StartRec(eqCam); }
+            else if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(Keys.CameraViewfinder)) ExitViewfinder();
+        }
+
+        static void Pause(bool on)
+        {
+            if (rec == null || rec.Paused == on) return;
+            float now = Time.realtimeSinceStartup;
+            if (on) { rec.Paused = true; rec.PauseAt = now; }
+            else { rec.Paused = false; rec.PausedTotal += now - rec.PauseAt; rec.NextFrame = now; tapOut.Clear(); }
+            if (rec.Cam.Go != null && esineet.Contains(rec.Cam)) SetData(rec.Cam, Tape(rec.Cam) + (on ? "|2" : "|1"));
+            L("video : enregistrement " + (on ? "en pause" : "repris"));
+        }
+
+        // duree filmee (pauses retirees)
+        static float RecSeconds(Rec r, float now) { return now - r.Start - r.PausedTotal - (r.Paused ? now - r.PauseAt : 0f); }
 
         static float MaxRecSeconds { get { return Mathf.Clamp(Config.GetFloat("Boutique", "VideoMinutes", 10f), 0.2f, 60f) * 60f; } }
 
@@ -147,6 +243,7 @@ namespace MWCoop
         static bool vfHandWas, vfGuiWas, vfLayerWas, vfHooked;
         static RenderTexture vfRT;
         static float vfFovSaved, vfFov = 45f, vfZoomShown = -1f;
+        static int vfMask = -1;
         static Texture2D vfScan, vfNoise;
         static Color32[] vfNoisePx;
         static int vfNoiseFrame;
@@ -166,6 +263,8 @@ namespace MWCoop
             if (vfLayer != null) { vfLayerWas = vfLayer.enabled; vfLayer.enabled = false; }
             if (vfRT == null) { vfRT = new RenderTexture(480, 360, 24) { name = "kauppa_viseur", filterMode = FilterMode.Bilinear }; vfRT.Create(); }
             vfFovSaved = vfCam.fieldOfView;
+            vfMask = vfCam.cullingMask;
+            vfCam.cullingMask = vfMask & ~(1 << 16);   // (le camescope equipe, a l'oeil, est sur la couche des objets tenus)
             vfFov = 45f;
             if (!vfHooked) { vfHooked = true; Camera.onPreCull += VfPreCull; }
             Viewfinder = true;
@@ -175,8 +274,9 @@ namespace MWCoop
 
         static void ExitViewfinder()
         {
+            Unequip();
             Viewfinder = false; vfForced = false;
-            if (vfCam != null) { vfCam.targetTexture = null; vfCam.fieldOfView = vfFovSaved; }
+            if (vfCam != null) { vfCam.targetTexture = null; vfCam.fieldOfView = vfFovSaved; vfCam.cullingMask = vfMask; }
             if (vfHand != null) vfHand.enabled = vfHandWas;
             if (vfGui != null) vfGui.enabled = vfGuiWas;
             if (vfLayer != null) vfLayer.enabled = vfLayerWas;
@@ -237,7 +337,8 @@ namespace MWCoop
             float m = Style.Px(40);
             Color white = new Color(0.96f, 0.97f, 0.95f), red = new Color(1f, 0.15f, 0.1f), amber = new Color(1f, 0.75f, 0.2f);
             var tl = new Rect(r.x + m, r.y + m * 0.8f, r.width * 0.5f, Style.Px(50));
-            if (recording) { if (blink) Style.Text(tl, "● REC", big, TextAnchor.UpperLeft, red); }
+            if (recording && rec.Paused) { if (blink) Style.Text(tl, "❚❚ PAUSE", big, TextAnchor.UpperLeft, amber); }
+            else if (recording) { if (blink) Style.Text(tl, "● REC", big, TextAnchor.UpperLeft, red); }
             else if (k != null && tape.Length == 0) { if (blink) Style.Text(tl, Lang.T("PAS DE CASSETTE", "NO TAPE"), big, TextAnchor.UpperLeft, amber); }
             else Style.Text(tl, "STBY", big, TextAnchor.UpperLeft, white);
             // pile et vitesse de bande
@@ -249,7 +350,7 @@ namespace MWCoop
             Style.Fill(new Rect(bx + bw, by + bh * 0.3f, th * 2, bh * 0.4f), white);
             for (int i = 0; i < 3; i++) Style.Fill(new Rect(bx + th * 2 + i * (bw - th * 4) / 3f, by + th * 2, (bw - th * 4) / 3f - th, bh - th * 4), white);
             // compteur
-            float t = recording ? now - rec.Start : 0f;
+            float t = recording ? RecSeconds(rec, now) : 0f;
             string counter = string.Format("{0}:{1:00}:{2:00}", (int)(t / 3600), (int)(t / 60) % 60, (int)t % 60);
             Style.Text(new Rect(r.x + m, r.yMax - m - Style.Px(50), r.width * 0.5f, Style.Px(50)), counter, big, TextAnchor.LowerLeft, white);
             // zoom
@@ -263,7 +364,7 @@ namespace MWCoop
                 Style.Fill(new Rect(zx + f * zw - th * 2, zy - Style.Px(10), th * 4, Style.Px(22)), white);
             }
             // touches
-            string keys = Keys.Label(Keys.CameraRec) + Lang.T(" : ENREGISTRER    ", ": RECORD    ") + Keys.Label(Keys.CameraViewfinder) + Lang.T(" : SORTIR    MOLETTE : ZOOM", ": EXIT    WHEEL: ZOOM");
+            string keys = Lang.T("CLIC GAUCHE : ENREGISTRER / ARRÊTER    ", "LEFT CLICK: RECORD / STOP    ") + Keys.Label(Keys.CameraRec) + Lang.T(" : PAUSE    CLIC DROIT : SORTIR    MOLETTE : ZOOM", ": PAUSE    RIGHT CLICK: EXIT    WHEEL: ZOOM");
             Style.Text(new Rect(r.x, r.yMax - Style.Px(34), r.width, Style.Px(30)), keys, 20, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.7f));
         }
 
@@ -293,7 +394,7 @@ namespace MWCoop
             }
             if (KameraBusy) return;
             string s = Lang.T("CAMÉSCOPE", "CAMCORDER") + (Tape(k).Length == 0 ? Lang.T(" (PAS DE CASSETTE)", " (NO TAPE)") : "") + "  -  "
-                     + Keys.Label(Keys.CameraViewfinder) + Lang.T(" : VISEUR    ", ": VIEWFINDER    ") + Keys.Label(Keys.CameraRec) + (rec != null && rec.Cam == k ? Lang.T(" : ARRÊTER", ": STOP") : Lang.T(" : ENREGISTRER", ": RECORD"));
+                     + Keys.Label(Keys.CameraViewfinder) + Lang.T(" : À L'ŒIL (VISEUR)    ", ": TO THE EYE (VIEWFINDER)    ") + Keys.Label(Keys.CameraRec) + (rec != null && rec.Cam == k ? Lang.T(" : ARRÊTER", ": STOP") : Lang.T(" : ENREGISTRER", ": RECORD"));
             float W = Screen.width, H = Screen.height;
             Style.Text(new Rect(0, H - Style.Px(120), W, Style.Px(30)), s, 20, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.85f));
             if (rec != null && rec.Cam == k && Mathf.Repeat(Time.realtimeSinceStartup, 1f) < 0.6f)
@@ -301,7 +402,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- enregistrement
-        class Rec { public Esine Cam; public string Film; public BinaryWriter W; public float Start, NextFrame; public int Frames; public long Bytes, Sound; }
+        class Rec { public Esine Cam; public string Film; public BinaryWriter W; public float Start, NextFrame, PauseAt, PausedTotal; public bool Paused; public int Frames; public long Bytes, Sound; }
         static Rec rec;
         static Camera recCam;
         static RenderTexture recRT;
@@ -339,7 +440,7 @@ namespace MWCoop
             try { PollTap(); DrainSound(r); } catch { }
             StopTap();
             try { r.W.Close(); } catch { }
-            float dur = Time.realtimeSinceStartup - r.Start;
+            float dur = RecSeconds(r, Time.realtimeSinceStartup);
             L("video : film " + r.Film + " : " + dur.ToString("F1") + " s, " + r.Frames + " images, son " + r.Sound / 1024 + " Ko, " + r.Bytes / 1024 + " Ko (" + why + ")");
             if (r.Cam.Go != null && esineet.Contains(r.Cam))
             {
@@ -353,7 +454,7 @@ namespace MWCoop
         static void WriteBlock(Rec r, int kind, float now, byte[] data)
         {
             r.W.Write((byte)kind);
-            r.W.Write((uint)Mathf.Max(0f, (now - r.Start) * 1000f));
+            r.W.Write((uint)Mathf.Max(0f, RecSeconds(r, now) * 1000f));
             r.W.Write(data.Length);
             r.W.Write(data);
             r.Bytes += data.Length + 9;
@@ -377,7 +478,8 @@ namespace MWCoop
                 recSrc = new Color32[RecW * RecH];
             }
             bool inHand = k.Go.transform.parent != null && Game.UnderPlayer(k.Go.transform);
-            Renderer[] own = null;
+            Renderer[] own = k.Go.GetComponentsInChildren<Renderer>();
+            foreach (Renderer x in own) x.enabled = false;
             if (inHand && eye != null)
             {
                 recCam.transform.position = eye.position; recCam.transform.rotation = eye.rotation;
@@ -390,8 +492,6 @@ namespace MWCoop
                 recCam.transform.position = (lens != null ? lens.position : t.position) + t.forward * 0.03f;
                 recCam.transform.rotation = t.rotation;
                 recCam.fieldOfView = 45f;
-                own = k.Go.GetComponentsInChildren<Renderer>();
-                foreach (Renderer x in own) x.enabled = false;
             }
             recCam.nearClipPlane = 0.05f;
             recCam.targetTexture = recRT;
@@ -460,7 +560,33 @@ namespace MWCoop
             L("video : son de la sortie (" + tapRate + " Hz, " + AudioSettings.speakerMode + ")");
         }
 
-        static void StopTap() { tapOut.Clear(); }
+        static void StopTap() { tapOut.Clear(); ownVoice.Clear(); }
+
+        // Voix du joueur qui filme (Voice : decompressee ici, 24 kHz 16 bits) : ramenee a la frequence du film et melee
+        // au son de la sortie dans PollTap. Camescope pose : plus faible avec la distance (portee du vocal).
+        static readonly Queue<float> ownVoice = new Queue<float>();
+        static double voiceAcc; static float voiceSum; static int voiceN;
+        public static bool WantsOwnVoice { get { return rec != null && !rec.Paused; } }
+        public static void OwnVoice(byte[] pcm, int bytes, int rate, float gain)
+        {
+            if (!WantsOwnVoice) return;
+            Esine k = rec.Cam;
+            bool inHand = k.Go != null && k.Go.transform.parent != null && Game.UnderPlayer(k.Go.transform);
+            if (!inHand && k.Go != null && EyeT != null)
+            {
+                float d = Vector3.Distance(EyeT.position, k.Go.transform.position), range = Config.GetFloat("Coop", "VocalPortee", 35f);
+                gain *= Mathf.Clamp01(1f - d / Mathf.Max(1f, range));
+                if (gain <= 0.01f) return;
+            }
+            double step = Math.Max(1.0, rate / (double)RecRate);
+            for (int i = 0; i + 1 < bytes; i += 2)
+            {
+                short s = (short)(pcm[i] | pcm[i + 1] << 8);
+                voiceSum += s / 32768f * gain; voiceN++; voiceAcc += 1.0;
+                if (voiceAcc >= step) { voiceAcc -= step; ownVoice.Enqueue(voiceSum / voiceN); voiceSum = 0f; voiceN = 0; }
+            }
+            while (ownVoice.Count > RecRate * 2) ownVoice.Dequeue();   // (trop en retard : on jette le plus vieux)
+        }
 
         static void PollTap()
         {
@@ -475,7 +601,7 @@ namespace MWCoop
             {
                 tapSum += tapStereo ? (tapL[i] + tapR[i]) * 0.5f : tapL[i]; tapN++;
                 tapAcc += 1.0;
-                if (tapAcc >= tapStep) { tapAcc -= tapStep; tapOut.Add(tapSum / tapN); tapSum = 0f; tapN = 0; }
+                if (tapAcc >= tapStep) { tapAcc -= tapStep; float v = ownVoice.Count > 0 ? ownVoice.Dequeue() : 0f; tapOut.Add(Mathf.Clamp(tapSum / tapN + v, -1f, 1f)); tapSum = 0f; tapN = 0; }
             }
         }
 
@@ -560,6 +686,7 @@ namespace MWCoop
         {
             if (rec != null) StopRec("changement de niveau");
             if (Viewfinder) ExitViewfinder();
+            Unequip(); eqFsm = null; eqReenable = -1;
             lastHeldKamera = null; inMenu = null;
         }
     }
