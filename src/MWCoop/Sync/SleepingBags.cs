@@ -17,6 +17,8 @@ namespace MWCoop
     //  - deplie, F appuye brievement : il se replie (pas pendant qu'on dort).
     // L'hote garde la liste (MWCoop-sacs.txt a cote de la sauvegarde, ecrit a chaque sauvegarde du jeu) et l'envoie aux
     // invites (@sacs) ; plier / deplier part a tous (@sac).
+    // Boutique (Kauppa, 12/10) : les sacs s'y achetent (Purchase ; un invite envoie l'achat a l'hote, @sacosto) et ne
+    // sont plus poses d'office au debut ([Boutique] SacsAuDepart). En solo aussi : le joueur seul tient la liste.
     public static class SleepingBags
     {
         class Bag
@@ -209,9 +211,10 @@ namespace MWCoop
         // ---------------------------------------------------------------- boucle
         public static void Update()
         {
-            if (!Session.Active || !PlayerSync.InGame || startAt < 0 || Time.realtimeSinceStartup < startAt) return;
+            if (!PlayerSync.InGame || startAt < 0 || Time.realtimeSinceStartup < startAt) return;
+            if (!Session.Active && bags.Count == 0 && listed) return;   // (solo sans sac : rien a faire)
             float now = Time.realtimeSinceStartup;
-            if (Session.IsHost)
+            if (Authority)
             {
                 if (!listed)
                 {
@@ -220,8 +223,8 @@ namespace MWCoop
                     Load();
                 }
                 if (sleepTpl == null) return;
-                EnsureCount();
-                if (now >= nextHost) { nextHost = now + 10f; SendList(); }
+                if (Session.Active && Kauppa.StarterBags) EnsureCount();
+                if (Session.Active && now >= nextHost) { nextHost = now + 10f; SendList(); }
                 if (now >= nextSave) { nextSave = now + 60f; Save(); }
             }
             if (bags.Count == 0) return;
@@ -243,6 +246,9 @@ namespace MWCoop
         }
 
         static float nextPark;
+
+        // Tient la liste des sacs : l'hote, ou le joueur seul.
+        static bool Authority { get { return !Session.Active || Session.IsHost; } }
         static bool NearPlayer(Vector3 p, float r)
         {
             Camera cam = Camera.main;
@@ -368,8 +374,8 @@ namespace MWCoop
             b.Rb.velocity = Vector3.zero; b.Rb.angularVelocity = Vector3.zero;
             b.Parked = false;
             ApplyFolded(b, folded, true);
-            if (Session.IsHost) Save();
-            if (send) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@sac").Str(b.Id).Bool(folded).Vec(pos).Quat(rot), true);
+            if (Authority) Save();
+            if (send && Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@sac").Str(b.Id).Bool(folded).Vec(pos).Quat(rot), true);
         }
 
         public static void OnState(int who, string id, bool folded, Vector3 pos, Quaternion rot)
@@ -411,7 +417,7 @@ namespace MWCoop
 
         static void Save()
         {
-            if (!Session.IsHost || bags.Count == 0) return;
+            if (!Authority || bags.Count == 0) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             var sb = new System.Text.StringBuilder();
             foreach (Bag b in bags)
@@ -463,7 +469,7 @@ namespace MWCoop
 
         static void SendList()
         {
-            if (Session.RemoteCount == 0 || bags.Count == 0) return;
+            if (!Session.Active || Session.RemoteCount == 0 || bags.Count == 0) return;
             var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@sacs").U8(bags.Count);
             foreach (Bag b in bags) w.Str(b.Id).Bool(b.Folded).Vec(b.Go.transform.position).Quat(b.Go.transform.rotation);
             Session.SendAll(w, true);
@@ -480,6 +486,43 @@ namespace MWCoop
                 if (b == null) { b = Create(id, p, q); if (!folded) ApplyFolded(b, false, false); Log.Info("sac de couchage " + id + " recu de l'hote"); }
                 else if (b.Folded != folded) SetState(b, folded, p, q, false);
             }
+        }
+
+        // ---------------------------------------------------------------- boutique
+        // Modele plie et sa matiere, pour la vitrine.
+        public static bool DisplayModel(out Mesh m, out Material material)
+        {
+            m = null; material = null;
+            if (!Prepare() || mFold == null) return false;
+            m = mFold; material = mat;
+            return true;
+        }
+
+        // Sac achete : cree ici par l'hote ou le joueur seul, sinon demande a l'hote.
+        public static void Purchase(Vector3 pos, Quaternion rot)
+        {
+            if (Authority) { BuyHere(pos, rot, Session.LocalId); return; }
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@sacosto").Vec(pos).Quat(rot), true);
+            Log.Info("sac de couchage achete : demande envoyee a l'hote");
+        }
+
+        public static void OnBuyRequest(int who, Vector3 pos, Quaternion rot)
+        {
+            if (!Session.IsHost) return;
+            BuyHere(pos, rot, who);
+        }
+
+        static void BuyHere(Vector3 pos, Quaternion rot, int who)
+        {
+            if (!Prepare()) return;
+            listed = true;
+            int n = bags.Count + 1;
+            while (Find("sac" + n) != null) n++;
+            Bag b = Create("sac" + n, pos, rot);
+            b.Parked = false; b.Rb.isKinematic = false;
+            Save();
+            SendList();
+            Log.Info("sac de couchage sac" + n + " achete par #" + who + " (boutique), pose en " + pos.ToString("F1"));
         }
 
         // Sauvegarde du jeu : la liste aussi (WorldFsms / Game appellent a chaque SAVEGAME vu ici).
