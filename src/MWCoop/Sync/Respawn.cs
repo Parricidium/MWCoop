@@ -37,14 +37,21 @@ namespace MWCoop
             public string Car; public Rigidbody Pivot; public Transform PivotParent; public Vector3 PivotPos; public Quaternion PivotRot;
             public Dictionary<System.Reflection.PropertyInfo, object> Joint = new Dictionary<System.Reflection.PropertyInfo, object>();
             public PlayMakerFSM Fsm; public GameObject DeadBody; public Transform DeadParent; public Vector3 DeadPos; public Quaternion DeadRot;
+            public List<FsmObject> JointRefs = new List<FsmObject>();   // (variables d'automates qui visent la liaison : HeadForce, PlayerTrigger...)
         }
         static readonly List<Head> heads = new List<Head>();
         static readonly List<KeyValuePair<Behaviour, bool>> overlays = new List<KeyValuePair<Behaviour, bool>>();
         // Effets d'image de la camera (ScreenOverlay, vignette...) : reglages au chargement. L'accident envoie DEATH a
-        // l'automate 'Death' de la camera, qui pose le sang sur un ScreenOverlay (texture, intensite) ; la mort du jeu
-        // rechargeait le menu, la reapparition le laissait a l'ecran (retour d'un joueur, 09/10 : « le sang reste »).
+        // l'automate 'Death' de la camera, dont l'etat 1 allume un ScreenOverlay (SetProperty enabled = True : le sang) ;
+        // la mort du jeu rechargeait le menu, la reapparition le laissait a l'ecran (retour d'un joueur, 09/10 : « le sang
+        // reste » ; encore chez le conducteur en 0.75.50, Menor 12/10). Ce composant (bloodFx) est eteint explicitement a
+        // la reapparition, et tenu eteint ensuite hors de la mort (surveillance, journal).
         static readonly List<KeyValuePair<Behaviour, Dictionary<System.Reflection.FieldInfo, object>>> camFx = new List<KeyValuePair<Behaviour, Dictionary<System.Reflection.FieldInfo, object>>>();
         static PlayMakerFSM camDeath;
+        static readonly List<Behaviour> bloodFx = new List<Behaviour>();
+        static float nextBloodCheck, nextHeadLook;
+        static int bloodFixes;
+        static Transform headsLooked;
 
         // Pose sur Systems/Death : son OnEnable passe a l'activation, avant le Start de l'automate du jeu.
         public class Guard : MonoBehaviour
@@ -58,7 +65,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            Choosing = false; VehicleSync.FreezeLocal(false); deathFsm = null; heads.Clear(); overlays.Clear(); camFx.Clear(); camDeath = null;
+            Choosing = false; VehicleSync.FreezeLocal(false); deathFsm = null; heads.Clear(); overlays.Clear(); camFx.Clear(); camDeath = null; bloodFx.Clear(); headsLooked = null;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
         }
 
@@ -76,6 +83,10 @@ namespace MWCoop
             // Accident : la tete rattachee des que l'automate de la voiture a fini (sinon la vue tombe pendant le choix).
             if (restoreAt > 0 && now >= restoreAt) { restoreAt = -1; foreach (Head h in heads) RestoreHead(h); }
             TestUpdate();
+            if (now >= nextBloodCheck) { nextBloodCheck = now + 1f; BloodWatch(); }
+            // Voiture conduite ici dont la tete n'a pas ete relevee (voiture d'un mod creee apres le releve, 300D de
+            // Machtwagen : la mort au volant n'y etait pas rattrapee) : relevee en prenant le volant.
+            if (now >= nextHeadLook && deathFsm != null) { nextHeadLook = now + 1f; LookHeads(); }
             if (!Choosing) return;
             if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) Choose(0);
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2)) Choose(1);
@@ -89,23 +100,7 @@ namespace MWCoop
             if (death.GetComponent<Guard>() == null) death.AddComponent<Guard>();
             // Accident : tetes et mannequins des voitures.
             foreach (Rigidbody car in Object.FindObjectsOfType<Rigidbody>())
-            {
-                if (car.transform.parent != null || car.GetComponent("CarDynamics") == null) continue;
-                foreach (ConfigurableJoint j in car.GetComponentsInChildren<ConfigurableJoint>(true))
-                {
-                    if (j.gameObject.name != "DriverHeadPivot") continue;
-                    var h = new Head { Car = car.name, Pivot = j.GetComponent<Rigidbody>(), PivotParent = j.transform.parent, PivotPos = j.transform.localPosition, PivotRot = j.transform.localRotation };
-                    foreach (System.Reflection.PropertyInfo p in typeof(ConfigurableJoint).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
-                    {
-                        if (!p.CanRead || !p.CanWrite || p.DeclaringType == typeof(Component) || p.DeclaringType == typeof(Object) || p.GetIndexParameters().Length > 0) continue;
-                        try { h.Joint[p] = p.GetValue(j, null); } catch { }
-                    }
-                    h.Fsm = Game.FsmOn(j.gameObject, "Death");
-                    FsmGameObject db = h.Fsm != null ? h.Fsm.FsmVariables.FindFsmGameObject("DeadBody") : null;
-                    if (db != null && db.Value != null) { h.DeadBody = db.Value; h.DeadParent = db.Value.transform.parent; h.DeadPos = db.Value.transform.localPosition; h.DeadRot = db.Value.transform.localRotation; }
-                    heads.Add(h);
-                }
-            }
+                if (car.transform.parent == null && car.GetComponent("CarDynamics") != null) ScanCar(car.transform);
             // Voile noir que la mort allume (ScreenOverlay de la camera) : etat normal note.
             GameObject cam = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
             if (cam != null) foreach (Behaviour b in cam.GetComponents<Behaviour>()) if (b.GetType().Name == "ScreenOverlay") overlays.Add(new KeyValuePair<Behaviour, bool>(b, b.enabled));
@@ -122,7 +117,65 @@ namespace MWCoop
                 }
                 camDeath = Game.FsmOn(cam, "Death");
             }
-            Log.Info("reapparition : prete (" + heads.Count + " tetes de conducteur)");
+            if (camDeath != null && camDeath.Fsm.GetState("State 1") != null)
+                foreach (FsmStateAction a in camDeath.Fsm.GetState("State 1").Actions)
+                {
+                    FieldInfo pf = a != null ? a.GetType().GetField("targetProperty") : null;
+                    FsmProperty fp = pf != null ? pf.GetValue(a) as FsmProperty : null;
+                    Behaviour tb = fp != null && fp.PropertyName == "enabled" && fp.TargetObject != null ? fp.TargetObject.Value as Behaviour : null;
+                    if (tb != null && !bloodFx.Contains(tb)) bloodFx.Add(tb);
+                }
+            Log.Info("reapparition : prete (" + heads.Count + " tetes de conducteur, voile de sang : " + bloodFx.Count + " effet(s))");
+        }
+
+        // Tete (liaison DriverHeadPivot) et mannequin d'une voiture ; variables d'automates qui visent la liaison.
+        static void ScanCar(Transform car)
+        {
+            foreach (ConfigurableJoint j in car.GetComponentsInChildren<ConfigurableJoint>(true))
+            {
+                if (j.gameObject.name != "DriverHeadPivot") continue;
+                Rigidbody pv = j.GetComponent<Rigidbody>();
+                bool known = false;
+                foreach (Head k in heads) if (k.Pivot == pv) known = true;
+                if (known) continue;
+                var h = new Head { Car = car.name, Pivot = pv, PivotParent = j.transform.parent, PivotPos = j.transform.localPosition, PivotRot = j.transform.localRotation };
+                foreach (System.Reflection.PropertyInfo p in typeof(ConfigurableJoint).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                {
+                    if (!p.CanRead || !p.CanWrite || p.DeclaringType == typeof(Component) || p.DeclaringType == typeof(Object) || p.GetIndexParameters().Length > 0) continue;
+                    try { h.Joint[p] = p.GetValue(j, null); } catch { }
+                }
+                h.Fsm = Game.FsmOn(j.gameObject, "Death");
+                FsmGameObject db = h.Fsm != null ? h.Fsm.FsmVariables.FindFsmGameObject("DeadBody") : null;
+                if (db != null && db.Value != null) { h.DeadBody = db.Value; h.DeadParent = db.Value.transform.parent; h.DeadPos = db.Value.transform.localPosition; h.DeadRot = db.Value.transform.localRotation; }
+                // (la liaison recreee est un autre composant : HeadForce {Joint}, PlayerTrigger {DriverHeadPivotJoint} visaient
+                // encore l'ancienne, detruite -- la resistance au choc n'etait plus reglee, la voiture ne tuait plus)
+                foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+                    foreach (FsmObject o in f.FsmVariables.ObjectVariables)
+                        if (o.Value == j) h.JointRefs.Add(o);
+                heads.Add(h);
+            }
+        }
+
+        static void LookHeads()
+        {
+            Transform root = VehicleSync.LocalDrivingRoot;
+            if (root == null || root == headsLooked) return;
+            headsLooked = root;
+            int before = heads.Count;
+            ScanCar(root);
+            if (heads.Count > before) Log.Info("reapparition : tete du conducteur de " + root.name + " relevee (voiture arrivee apres le chargement)");
+        }
+
+        // Voile de sang allume hors de la mort (ni choix ouvert, ni Systems/Death actif) : eteint.
+        static void BloodWatch()
+        {
+            if (!Enabled || Choosing || bloodFx.Count == 0 || deathFsm != null && deathFsm.gameObject.activeSelf) return;
+            foreach (Behaviour b in bloodFx)
+                if (b != null && b.enabled)
+                {
+                    b.enabled = false;
+                    if (bloodFixes++ < 5) Log.Warn("reapparition : voile de sang " + b.GetType().Name + " encore allume hors de la mort : eteint (camera::Death [" + (camDeath != null ? camDeath.ActiveStateName : "?") + "])");
+                }
         }
 
         // La mort vient d'activer Systems/Death : on la garde pour nous si la coop est la.
@@ -161,6 +214,16 @@ namespace MWCoop
         {
             Set("PlayerFatigue", 10f); Set("PlayerHunger", 12f); Set("PlayerThirst", 8f); Set("PlayerDrunkAdjusted", 0f); Set("PlayerDrunk", 0f);
             Set("PlayerStress", 0f); Set("PlayerTemp", 75f); Set("PlayerUrine", 0f); Set("PlayerBurns", 0f); Set("PlayerAllergy", 0f);
+            // Soif : Database/PlayerDatabase la tient au-dessus de ThristMin (Simulation, chaque image ; Alcoholism la recalcule
+            // depuis la soif) -- remise seule, elle remontait aussitot (soif 103 apres la reapparition, journal de Menor).
+            GameObject db = Game.FindAny("Database/PlayerDatabase");
+            if (db != null)
+                foreach (string fn in new[] { "Simulation", "Alcoholism" })
+                {
+                    PlayMakerFSM f = Game.FsmOn(db, fn);
+                    FsmFloat tm = f != null ? f.FsmVariables.FindFsmFloat("ThristMin") : null;
+                    if (tm != null && tm.Value > 8f) tm.Value = 8f;
+                }
         }
 
         static void Set(string name, float v)
@@ -188,6 +251,11 @@ namespace MWCoop
             VehicleSync.FreezeLocal(false);
             if (pl.transform.parent != null) pl.transform.parent = null;
             foreach (KeyValuePair<Behaviour, bool> kv in overlays) if (kv.Key != null) kv.Key.enabled = kv.Value;
+            foreach (Behaviour b in bloodFx) if (b != null) { if (b.enabled) Log.Info("reapparition : voile de sang " + b.GetType().Name + " eteint"); b.enabled = false; }
+            // Mode photo du jeu (F9) : la mort par accident l'envoie dans son etat final (GLOBALEVENT -> State 2), sans retour.
+            GameObject pm = Game.FindAny("Systems/Photomode Cam");
+            PlayMakerFSM pmf = pm != null ? Game.FsmOn(pm, "SwitchCamera") : null;
+            if (pmf != null && pmf.ActiveStateName == "State 2" && pmf.Fsm.GetState("State 1") != null) { Game.SetState(pmf, "State 1"); Log.Info("reapparition : mode photo du jeu (F9) rendu"); }
             int fx = 0;
             foreach (var kv in camFx)
             {
@@ -258,6 +326,7 @@ namespace MWCoop
             h.Pivot.position = h.Pivot.transform.position; h.Pivot.rotation = h.Pivot.transform.rotation;
             h.Pivot.velocity = Vector3.zero; h.Pivot.angularVelocity = Vector3.zero;
             var j = h.Pivot.gameObject.AddComponent<ConfigurableJoint>();
+            foreach (FsmObject o in h.JointRefs) o.Value = j;
             System.Reflection.PropertyInfo cb = null;
             foreach (KeyValuePair<System.Reflection.PropertyInfo, object> kv in h.Joint)
             {
@@ -272,7 +341,7 @@ namespace MWCoop
                 h.DeadBody.transform.localPosition = h.DeadPos; h.DeadBody.transform.localRotation = h.DeadRot;
             }
             if (h.Fsm != null && h.Fsm.Fsm.GetState("Has joint") != null) Game.SetState(h.Fsm, "Has joint");
-            Log.Info("reapparition : tete du conducteur de " + h.Car + " rattachee");
+            Log.Info("reapparition : tete du conducteur de " + h.Car + " rattachee (" + h.JointRefs.Count + " automate(s) rebranche(s))");
         }
 
         static string CauseName(string v)
@@ -379,6 +448,9 @@ namespace MWCoop
             string s = "choix " + Choosing + ", mort active " + (deathFsm != null && deathFsm.gameObject.activeSelf) + ", joueur " + (pl != null ? pl.transform.position.ToString("F2") : "?")
                        + (pl != null && pl.transform.parent != null ? " dans " + pl.transform.parent.name : "") + ", controleur " + (cc != null ? (cc.enabled ? "actif" : "coupe") : "DETRUIT");
             foreach (Head h in heads) if (h.Pivot != null && h.Pivot.GetComponent<ConfigurableJoint>() == null) s += ", tete de " + h.Car + " detachee";
+            foreach (Behaviour bf in bloodFx) if (bf != null) s += ", sang " + (bf.enabled ? "ALLUME" : "eteint");
+            FsmFloat th = FsmVariables.GlobalVariables.FindFsmFloat("PlayerThirst");
+            if (th != null) s += ", soif " + th.Value.ToString("F0");
             return s;
         }
     }

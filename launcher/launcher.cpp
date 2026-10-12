@@ -2202,7 +2202,8 @@ static long long FileUnixTime(const std::wstring &p)
     ULARGE_INTEGER u; u.LowPart = a.ftLastWriteTime.dwLowDateTime; u.HighPart = a.ftLastWriteTime.dwHighDateTime;
     return (long long)(u.QuadPart / 10000000ULL) - 11644473600LL;
 }
-static bool GameProcessRunning();
+static bool GameProcessRunning(DWORD *pidOut = NULL);
+static bool GameRunningAsk();
 static void CrashCheck()
 {
     g_crashT = 0;
@@ -4387,7 +4388,7 @@ static void LogGameModules(bool full = false)   // (full : toutes les DLL, mode 
 
 // Le jeu de CE dossier tourne-t-il deja ? Les jeux d'autres dossiers (copies pour jouer a deux sur
 // un PC, instances de test) ont leur propre profil MWCoop, donc leur propre verrou d'instance unique.
-static bool GameProcessRunning()
+static bool GameProcessRunning(DWORD *pidOut)
 {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
@@ -4397,10 +4398,10 @@ static bool GameProcessRunning()
     for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
         if (_wcsicmp(pe.szExeFile, L"mywintercar.exe")) continue;
         HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
-        if (!h) { found = true; break; }   // inconnu : prudence
+        if (!h) { found = true; if (pidOut) *pidOut = pe.th32ProcessID; break; }   // inconnu : prudence
         wchar_t path[MAX_PATH];
         DWORD n = MAX_PATH;
-        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str()) || !_wcsicmp(path, own.c_str())) found = true;
+        if (!QueryFullProcessImageNameW(h, 0, path, &n) || !_wcsicmp(path, mine.c_str()) || !_wcsicmp(path, mirror.c_str()) || !_wcsicmp(path, guest.c_str()) || !_wcsicmp(path, own.c_str())) { found = true; if (pidOut) *pidOut = pe.th32ProcessID; }
         else {
             // Jeu d'un autre dossier (autre installation, relance par Steam ailleurs...) : note une fois. Retour d'un joueur
             // (08/10) : « Game over » aussitot, le jeu ouvert sans MWCoop -- il tournait d'un dossier inconnu du lanceur.
@@ -4411,6 +4412,52 @@ static bool GameProcessRunning()
     }
     CloseHandle(snap);
     return found;
+}
+// Jeu reste en memoire sans fenetre (retour de Matilda, 0.79.3 : « My Winter Car est deja lance » alors qu'il etait
+// ferme -- journal termine par « jeu ferme normalement », processus jamais sorti, Steam le montrait en cours) : le
+// lanceur propose de le fermer de force. Seulement s'il tourne depuis plus d'une minute (un jeu qui demarre n'a pas
+// encore de fenetre).
+struct WndFind { DWORD pid; bool found; };
+static BOOL CALLBACK FindPidWindow(HWND h, LPARAM lp)
+{
+    WndFind *f = (WndFind *)lp;
+    DWORD pid = 0; GetWindowThreadProcessId(h, &pid);
+    if (pid == f->pid && IsWindowVisible(h)) { f->found = true; return FALSE; }
+    return TRUE;
+}
+static bool GameRunningAsk()
+{
+    DWORD pid = 0;
+    if (!GameProcessRunning(&pid)) return false;
+    bool stuck = false;
+    if (pid) {
+        WndFind f = { pid, false };
+        EnumWindows(FindPidWindow, (LPARAM)&f);
+        HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (h && !f.found) {
+            FILETIME c, e, k, u, now;
+            if (GetProcessTimes(h, &c, &e, &k, &u)) {
+                GetSystemTimeAsFileTime(&now);
+                ULONGLONG age = (((ULONGLONG)now.dwHighDateTime << 32) | now.dwLowDateTime) - (((ULONGLONG)c.dwHighDateTime << 32) | c.dwLowDateTime);
+                stuck = age > 60ull * 10000000ull;
+            }
+        }
+        if (h) CloseHandle(h);
+    }
+    if (stuck) {
+        LaunchLog("jeu %lu en cours sans fenetre depuis plus d'une minute : fermeture proposee", pid);
+        if (MessageBoxW(g_wnd, T(L"My Winter Car tourne encore en arri\u00E8re-plan, sans fen\u00EAtre (rest\u00E9 bloqu\u00E9 apr\u00E8s sa fermeture ?).\n\nLe fermer de force pour pouvoir relancer ?",
+                                 L"My Winter Car is still running in the background, without a window (stuck after closing?).\n\nForce it to close so you can launch again?"),
+                        L"MWCoop", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+            HANDLE t = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
+            BOOL ok = t && TerminateProcess(t, 1);
+            if (t) { WaitForSingleObject(t, 5000); CloseHandle(t); }
+            LaunchLog("jeu %lu bloque : fermeture forcee %s", pid, ok ? "faite" : "IMPOSSIBLE");
+            if (!GameProcessRunning()) return false;
+        }
+    }
+    SetStatus(K_ERR, T(L"My Winter Car est d\u00E9j\u00E0 lanc\u00E9 : ferme-le d'abord", L"My Winter Car is already running: close it first"));
+    return true;
 }
 static BOOL CALLBACK ListUnityWindows(HWND h, LPARAM lp)
 {
@@ -4658,8 +4705,7 @@ static void Launch(int mode, const char *partie = NULL)
         }
     } else if (mode == MODE_GUEST) {
         addr = g_sHostName.empty() ? std::wstring(L"Steam") : g_sHostName;   // (Steam : pour l'ecran d'attente)
-    } else if (mode != MODE_GUEST && g_testSalon.empty() && GameProcessRunning()) {   // (instance unique : un 2e jeu hors profil se fermerait aussitot)
-        SetStatus(K_ERR, T(L"My Winter Car est d\u00E9j\u00E0 lanc\u00E9 : ferme-le d'abord", L"My Winter Car is already running: close it first"));
+    } else if (mode != MODE_GUEST && g_testSalon.empty() && GameRunningAsk()) {   // (instance unique : un 2e jeu hors profil se fermerait aussitot)
         return;
     }
     SavePlayer();
@@ -5493,10 +5539,7 @@ static void LobbyClose()
 static void HostStart()
 {
     if (g_lobby != LB_HOST || g_goSent) return;
-    if (g_testSalon.empty() && GameProcessRunning()) {
-        SetStatus(K_ERR, T(L"My Winter Car est d\u00E9j\u00E0 lanc\u00E9 : ferme-le d'abord", L"My Winter Car is already running: close it first"));
-        return;
-    }
+    if (g_testSalon.empty() && GameRunningAsk()) return;
     int guests, notReady;
     GuestCounts(&guests, &notReady);
     if (notReady && g_testSalon.empty()) {

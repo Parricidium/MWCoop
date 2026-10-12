@@ -292,6 +292,9 @@ namespace MWCoop
                 Vector3 p = Ground(b.Go.transform.position);
                 Vector3 fwd = cam.transform.forward; fwd.y = 0f;
                 Quaternion q = Quaternion.LookRotation(fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward, Vector3.up);
+                // Sol plat sous le sac deplie (au moins 2 coins a moins de 12 cm du centre) : sur un canape ou un lit, le modele rigide
+                // s'enfoncait dans les coussins et le dossier (Vaydon, 0.79.2 : « le sac est a l'envers »).
+                if (!Flat(p, q)) { Hint(Lang.T("Pose le sac sur un sol plat pour le deplier", "Put the bag on flat ground to unfold it")); return; }
                 SetState(b, false, p, q, true);
                 return;
             }
@@ -330,12 +333,27 @@ namespace MWCoop
 
         static void Hint(string s) { try { Hud.Toast(s); } catch { } }
 
-        static Vector3 Ground(Vector3 at)
+        static string flatInfo = "";
+        static bool Flat(Vector3 p, Quaternion q)
+        {
+            int off = 0; flatInfo = "";
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 c = p + q * new Vector3((i & 1) == 0 ? -0.35f : 0.35f, 0f, (i & 2) == 0 ? -0.9f : 0.9f);
+                float d = Ground(c, true).y - p.y;
+                flatInfo += " " + d.ToString("F2");
+                if (Mathf.Abs(d) > 0.12f) off++;
+            }
+            return off < 3;
+        }
+
+        static Vector3 Ground(Vector3 at, bool ignoreLoose = false)
         {
             float best = float.MaxValue; Vector3 p = at;
             foreach (RaycastHit h in Physics.RaycastAll(at + Vector3.up * 0.6f, Vector3.down, 3f))
             {
                 if (h.collider.isTrigger) continue;
+                if (ignoreLoose && (h.collider.attachedRigidbody != null && !h.collider.attachedRigidbody.isKinematic || Game.RootName(h.collider.transform) == "PLAYER")) continue;   // (objets par terre, joueur)
                 bool own = false;
                 foreach (Bag b in bags) if (b.Col == h.collider) own = true;
                 if (own) continue;
@@ -473,6 +491,7 @@ namespace MWCoop
         static Camera testCam;
         static int shot;
         static int pickStep;
+        static bool sofaPut;
         public static void Test(string mode, float t)
         {
             if (mode != "sac") return;
@@ -504,7 +523,15 @@ namespace MWCoop
             if (Session.IsHost && bags.Count > 0)
             {
                 Bag b = bags[0];
-                if (t > 30f && testStep == 0) { testStep = 1; Transform pl = Game.PlayerT; SetState(b, false, Ground(b.Go.transform.position), Quaternion.Euler(0f, pl != null ? pl.eulerAngles.y + 90f : 0f, 0f), true); }
+                // [Test] SacCanape=1 : sac plie pose sur le canape du jeu a 24 s (deplie dessus a 30 s ; Vaydon, 0.79.2 : « a l'envers »).
+                if (Config.GetInt("Test", "SacCanape", 0) != 0 && t > 24f && !sofaPut)
+                {
+                    sofaPut = true;
+                    GameObject sofa = Game.FindAny("EQUIPMENTS/sofa(itemx)");
+                    if (sofa != null) { b.Go.transform.position = sofa.transform.position + Vector3.up * 0.9f; if (b.Rb != null) b.Rb.velocity = Vector3.zero; }
+                    Log.Info("autotest : sac sur le canape " + (sofa != null ? sofa.transform.position.ToString("F2") : "introuvable"));
+                }
+                if (t > 30f && testStep == 0) { testStep = 1; Transform pl = Game.PlayerT; Log.Info("autotest : sac, sol plat " + Flat(Ground(b.Go.transform.position), Quaternion.Euler(0f, pl != null ? pl.eulerAngles.y + 90f : 0f, 0f)) + ", coins" + flatInfo + " (le joueur ne pourrait le deplier que si vrai)"); SetState(b, false, Ground(b.Go.transform.position), Quaternion.Euler(0f, pl != null ? pl.eulerAngles.y + 90f : 0f, 0f), true); Log.Info("autotest : sac deplie, haut du sac " + b.Go.transform.up.ToString("F2") + ", modele " + (b.Mf != null ? b.Mf.transform.up.ToString("F2") : "?")); }
                 // [Test] SacDormir=1 : l'hote s'endort sur le sac deplie a 32 s (fatigue posee, etat « Get positions » du lit),
                 // il reste deplie ; position du joueur notee.
                 if (Config.GetInt("Test", "SacDormir", 0) != 0)

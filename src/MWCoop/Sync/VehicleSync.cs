@@ -143,6 +143,11 @@ namespace MWCoop
         static int generation;
         static FsmString curVehicle;
         public static int LocalDriving = -1;    // rang local de la voiture conduite ici
+        // Voiture garee que NOTRE voiture fait bouger (poussee pare-chocs contre carrosserie, retour de Донской, 12/10 : la
+        // CORRIS poussee par la voiture de l'invite revenait a sa place -- l'hote la gardait ; seule la poussee a pied la
+        // donnait) : on l'envoie (etat 2) tant qu'elle roule, puis derniere pose (etat 0) -- comme une poussee a la main.
+        static int bumped = -1;
+        static float bumpUntil, nextBumpLook;
         public static string LocalDrivingKey { get { return LocalDriving >= 0 && LocalDriving < cars.Count ? cars[LocalDriving].Key : null; } }
         static int owned = -1, ownedTick;        // voiture quittee moteur tournant : on en garde la main
         // Voiture garee poussee par le joueur local (main "Hand Push") : on en prend la main (owned) tant qu'on pousse et
@@ -235,7 +240,7 @@ namespace MWCoop
         {
             cars.Clear(); under.Clear(); byNet.Clear(); netKeys.Clear(); missingLogged.Clear();
             scanned = false; tableSeen = false; inCarWas = false; curVehicle = null; curVehicleLooked = false;
-            LocalDriving = -1; owned = -1; moving = null;
+            LocalDriving = -1; owned = -1; moving = null; bumped = -1;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
             tStep = 0; tRec = 0;
         }
@@ -646,6 +651,7 @@ namespace MWCoop
             {
                 nextFast = now + 0.05f;
                 if (LocalDriving < 0) PushTick(now);
+                BumpTick(now);
                 HitchScan(now);
                 HitchTick(now);
                 if (LocalDriving >= 0) Send(cars[LocalDriving], 1);
@@ -672,14 +678,14 @@ namespace MWCoop
             {
                 nextSlow = now + 2f;
                 foreach (Car c in cars)
-                    if (c.Index != LocalDriving && c.Index != owned && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy && !Tow.Carries(c.Index) && !hitchSent.Contains(c.Index)) Send(c, 0);
+                    if (c.Index != LocalDriving && c.Index != owned && c.Index != bumped && c.RemoteBy < 0 && c.Body != null && c.Body.gameObject.activeInHierarchy && !Tow.Carries(c.Index) && !hitchSent.Contains(c.Index)) Send(c, 0);
             }
             // Hote : etat de la simulation des voitures garees (personne ne les fait rouler), toutes les 10 s.
             if (Session.IsHost && now >= nextParkedSim && Session.RemoteCount > 0)
             {
                 nextParkedSim = now + 10f;
                 foreach (Car c in cars)
-                    if (c.Index != LocalDriving && c.Index != owned && !Remote(c, now) && c.Body != null && c.Body.gameObject.activeInHierarchy) SendSim(c, SimParked, false);
+                    if (c.Index != LocalDriving && c.Index != owned && c.Index != bumped && !Remote(c, now) && c.Body != null && c.Body.gameObject.activeInHierarchy) SendSim(c, SimParked, false);
             }
 
             HotTick();
@@ -792,6 +798,42 @@ namespace MWCoop
             Log.Info("poussee : " + best.Key + " suit notre poussee chez les autres");
         }
 
+        // Poussee avec sa voiture : voiture garee (a personne, ni copie, ni au bout d'une corde) qui roule au contact de celle
+        // qu'on conduit (moins de 0,8 m entre les carrosseries). Tenue 2 s apres le dernier contact, puis tant qu'elle roule.
+        static void BumpTick(float now)
+        {
+            if (bumped >= 0)
+            {
+                Car b = bumped < cars.Count ? cars[bumped] : null;
+                if (b == null || b.Body == null || (b.RemoteBy >= 0 && b.RemoteBy != Session.LocalId && now - b.LastRemote < 1.5f)) { bumped = -1; return; }
+                if (now < bumpUntil || b.Body.velocity.sqrMagnitude > 0.09f)
+                {
+                    if ((++ownedTick & 1) == 0) Send(b, 2);
+                }
+                else { Release(b, now); Log.Info("poussee en voiture finie : " + b.Key + " rendue"); bumped = -1; return; }
+            }
+            if (LocalDriving < 0 || LocalDriving >= cars.Count || now < nextBumpLook) return;
+            nextBumpLook = now + 0.2f;
+            Car our = cars[LocalDriving];
+            if (our.Body == null) return;
+            Car best = null;
+            foreach (Car c in cars)
+            {
+                if (c == our || c.Body == null || c.Kinematic || !c.Body.gameObject.activeInHierarchy || c.Net < 0) continue;
+                if (c.Index == owned || c.RemoteBy >= 0 || Tow.Carries(c.Index) || hitchSent.Contains(c.Index)) continue;
+                if (c.Body.velocity.sqrMagnitude < 0.16f) continue;
+                Vector3 near = our.Body.ClosestPointOnBounds(c.Body.worldCenterOfMass);
+                if ((c.Body.ClosestPointOnBounds(near) - near).sqrMagnitude > 0.8f * 0.8f) continue;
+                best = c; break;
+            }
+            if (best == null) return;
+            bumpUntil = now + 2f;
+            if (bumped == best.Index) return;
+            if (bumped >= 0) { Car old = cars[bumped]; if (old.Body != null) Release(old, now); }
+            bumped = best.Index;
+            Log.Info("poussee en voiture : " + best.Key + " poussee par " + our.Key + ", suit chez les autres");
+        }
+
         // Voiture rendue (conducteur sorti moteur arrete, ou moteur coupe) : derniere pose et etat de la simulation
         // (fiable) ; l'instantane de l'hote ne l'ecrase pas tout de suite.
         static void Release(Car c, float now)
@@ -828,7 +870,7 @@ namespace MWCoop
         // Copie conduite ailleurs (cinematique ici, suit les messages de celui qui la fait rouler).
         static bool Remote(Car c, float now)
         {
-            return c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving && c.Index != owned;
+            return c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving && c.Index != owned && c.Index != bumped;
         }
 
         // ---------------------------------------------------------------- objets dans les voitures
@@ -1729,7 +1771,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             // On fait autorite (conduite ici, moteur tournant a nous) ; ou instantane de l'hote d'une voiture qu'un
             // autre fait rouler ici, ou qu'on vient de rendre (notre derniere valeur est en route).
-            bool skip = c == null || c.Index == LocalDriving || c.Index == owned
+            bool skip = c == null || c.Index == LocalDriving || c.Index == owned || c.Index == bumped
                         || ((flags & SimParked) != 0 && (Remote(c, now) || now < c.AuthorityUntil));
             for (int i = 0; i < n; i++)
             {
@@ -1888,6 +1930,8 @@ namespace MWCoop
             if (c.Index == LocalDriving) return;              // je la conduis : je garde la main
             if (c.Index == owned && mode != 1) return;        // mon moteur tourne : je garde la main
             if (c.Index == owned) { owned = -1; Log.Info(c.Key + " prise par #" + who); }
+            if (c.Index == bumped && !driven) return;         // je la pousse avec ma voiture : je garde la main
+            if (c.Index == bumped) { bumped = -1; Log.Info("poussee en voiture : " + c.Key + " prise par #" + who); }
             if (driven)
             {
                 c.RemoteBy = who;
@@ -1955,6 +1999,41 @@ namespace MWCoop
         }
 
         // ------------------------------------------------------------ essais automatiques (appeles par Autotest)
+        // pousservoiture : l'hote amene [Test] TestCible (CORRIS) 7 m devant [Test] TestVoiture (SORBET) a 12 s ;
+        // l'invite monte au volant a 15/20 s et avance dedans a 2,5 m/s de 27 a 33 s ; chacun note la pose de la cible a 22, 36 et 46 s
+        // (l'hote doit voir la cible poussee, pas recalee a sa place).
+        static int bStep;
+        static void TestBump(float t)
+        {
+            string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), target = Config.Get("Test", "TestCible", "CORRIS");
+            Rigidbody tb = Body(target), cb = Body(car);
+            if (bStep < 3 && (t > 22f && bStep == 0 || t > 36f && bStep == 1 || t > 46f && bStep == 2)) { bStep++; Log.Info("autotest : pousservoiture, " + target + " en " + (tb != null ? tb.position.ToString("F2") + (tb.isKinematic ? " (copie)" : "") + ", vitesse " + tb.velocity.magnitude.ToString("F1") : "?") + ", " + car + " en " + (cb != null ? cb.position.ToString("F2") : "?")); }
+            if (!Session.IsHost && cb != null && tb != null && t > 27f && t < 33f && Time.frameCount % 30 == 0) Log.Info("autotest : pousservoiture, ecart " + (tb.position - cb.position).magnitude.ToString("F2") + " m, vitesse " + cb.velocity.magnitude.ToString("F1") + " / cible " + tb.velocity.magnitude.ToString("F2") + (tb.isKinematic ? " cinematique" : "") + (tb.IsSleeping() ? " endormie" : ""));
+            if (Session.IsHost)
+            {
+                // (la cible amenee 7 m devant la voiture de l'invite, garee : c'est l'hote qui en a la main)
+                if (t > 12f && tStep == 0 && tb != null && cb != null)
+                {
+                    tStep = 1;
+                    Vector3 f = cb.transform.forward; f.y = 0; f.Normalize();
+                    bool kin = tb.isKinematic;
+                    tb.isKinematic = true;
+                    tb.transform.position = cb.position - f * 8f + Vector3.up * 1f; tb.transform.rotation = cb.rotation;
+                    tb.isKinematic = kin;
+                    tb.velocity = Vector3.zero; tb.angularVelocity = Vector3.zero; tb.WakeUp();
+                    Log.Info("autotest : pousservoiture, " + target + " amenee derriere " + car + " en " + tb.position.ToString("F2") + (kin ? " (etait cinematique)" : ""));
+                }
+                return;
+            }
+            if (t > 15f && tStep == 0) { tStep = 1; Log.Info("autotest : pousservoiture, monte " + TestEnter(car, false)); }
+            if (t > 20f && tStep == 1) { tStep = 2; Log.Info("autotest : pousservoiture, volant " + TestEnter(car, true)); }
+            if (cb != null && tb != null && t > 27f && t < 33f)
+            {
+                Vector3 d = tb.position - cb.position; d.y = 0;
+                cb.velocity = d.normalized * 2.5f + Vector3.up * Mathf.Min(cb.velocity.y, 0f);
+            }
+        }
+
         // taxi : [Test] TaxiActiver=1 (defaut) active JOBS/TAXIJOB/MACHTWAGEN des deux cotes a 8 s s'il dort, puis
         // releve a 9 s. Toutes les 5 s, chacun note la voiture (cle, rang, numero reseau, pose, copie ou non,
         // automate de conduite) et ce que les autres modules en suivent. Hote : monte a 20 s, au volant a 27 s,
@@ -1984,6 +2063,7 @@ namespace MWCoop
 
         public static void Test(string mode, float t)
         {
+            if (mode == "pousservoiture") { TestBump(t); return; }
             if (mode != "taxi" && mode != "reprise") return;
             bool host = Session.IsHost;
             string name = mode == "taxi" ? "MACHTWAGEN" : Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
