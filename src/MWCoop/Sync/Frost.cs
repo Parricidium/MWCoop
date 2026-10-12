@@ -145,6 +145,7 @@ namespace MWCoop
                     c.FrostLast = c.Frost.Value;
                 }
             }
+            Unshare();
             // Grattoirs : reserves ici, et la vitre de chaque evenement (le son d'une passe y est joue).
             int claimed = 0;
             foreach (PlayMakerFSM f in scrapes)
@@ -162,6 +163,46 @@ namespace MWCoop
                 sb.Append(' ').Append(c.Name).Append(" [pare-brise ").Append(c.Cut[5] != null ? c.Cut[5].Value.ToString("F2") : "-")
                   .Append(", buee ").Append(c.Frost != null ? c.Frost.Value.ToString("F2") : "-").Append(']');
             Log.Info(sb.ToString());
+        }
+
+        // Matieres de givre partagees entre deux voitures (retour de JD, 12/10 : l'invite degivre le pare-brise de la SORBET au
+        // grattoir, l'hote ne le voit pas). Une voiture de mod faite d'une copie de la SORBET (son Simulation/CarTempSorbet) garde
+        // les matieres du jeu (daily_frozen_windshield...) : son 'Freezing', dans Update toutes les 0,1 s, y repose SES seuils (0,
+        // jamais grattee) -- la SORBET, la vraie, restait gelee chez celui qui avait les deux (journal : « pare-brise 0.475
+        // (materiau 0.000) »). La voiture de mod (sinon la seconde) prend une copie de chaque matiere en double, sur ses
+        // automates et ses rendus.
+        static bool Vanilla(Car c) { return c.Name == "CORRIS" || c.Name.StartsWith("SORBET") || c.Name.Contains("TAXIJOB"); }
+        static void Unshare()
+        {
+            var seen = new Dictionary<Material, Car>();
+            foreach (Car c in cars)
+                foreach (PlayMakerFSM f in new[] { c.Freezing, c.Frosting })
+                {
+                    if (f == null) continue;
+                    foreach (FsmMaterial fm in f.FsmVariables.MaterialVariables)
+                    {
+                        Material m = fm != null ? fm.Value : null;
+                        if (m == null) continue;
+                        Car first;
+                        if (!seen.TryGetValue(m, out first)) { seen[m] = c; continue; }
+                        if (first == c) continue;
+                        Car own = Vanilla(c) && !Vanilla(first) ? first : c;   // celle qui prend la copie
+                        var copy = new Material(m) { name = m.name + " (" + own.Name + ")" };
+                        int n = 0;
+                        foreach (PlayMakerFSM g in new[] { own.Freezing, own.Frosting })
+                            if (g != null) foreach (FsmMaterial gm in g.FsmVariables.MaterialVariables) if (gm != null && gm.Value == m) gm.Value = copy;
+                        Transform root = (own.Freezing ?? own.Frosting).transform.root;
+                        foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
+                        {
+                            Material[] ms = r.sharedMaterials;
+                            bool hit = false;
+                            for (int k = 0; k < ms.Length; k++) if (ms[k] == m) { ms[k] = copy; hit = true; }
+                            if (hit) { r.sharedMaterials = ms; n++; }
+                        }
+                        if (own == first) seen[m] = c;   // (l'original reste a c)
+                        Log.Info("givre : matiere " + m.name + " partagee par " + first.Name + " et " + c.Name + " : copie pour " + own.Name + " (" + n + " rendus)");
+                    }
+                }
         }
 
         // ---------------------------------------------------------------- envoi

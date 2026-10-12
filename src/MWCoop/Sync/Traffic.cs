@@ -530,6 +530,7 @@ namespace MWCoop
                 Transform vis = e.WheelVis != null ? e.WheelVis[i] : null;
                 if (w == null) continue;
                 sb.Append(" | ").Append(w.name).Append(w.enabled ? " actif" : " coupe");
+                if (e.Body != null) sb.Append(" av ").Append(w.angularVelocity.ToString("F1")).Append(" (v/r ").Append((Vector3.Dot(e.Body.velocity, w.transform.forward) / (w.radius > 0.05f ? w.radius : 0.32f)).ToString("F1")).Append(")");
                 if (vis != null) sb.Append(" ").Append(vis.name).Append(vis.gameObject.activeInHierarchy ? "" : " CACHE").Append(" sous ").Append(vis.parent != null ? vis.parent.name : "-").Append(" rot").Append(vis.localEulerAngles.ToString("F0")).Append(" ech").Append(vis.localScale.ToString("F1"));
                 if (i == 0)
                 {
@@ -727,6 +728,7 @@ namespace MWCoop
             e.T.position = e.Base + Vector3.up * e.Ride;
             e.Ride = 0f;
             if (e.Wheels != null) foreach (Wheel w in e.Wheels) if (w != null) w.enabled = true;
+            SpinWheels(e, e.Vel);
             Session.SendToHost(new NetWriter(Msg.Traffic).U16(Control).U8(C_CLAIM).U16(hi).Vec(e.T.position).Quat(e.T.rotation).Vec(e.Vel), true);
             float od = OtherCarD2(e.T.position);
             Transform me = VehicleSync.LocalDrivingRoot;
@@ -797,6 +799,7 @@ namespace MWCoop
                 if (e.HostOff != null) foreach (Behaviour b in e.HostOff) if (b != null) b.enabled = true;
                 e.HostOff = null;
                 e.Owner = -1;
+                SpinWheels(e, v);
                 Log.Info("trafic : " + e.Key + " rendue par " + from + ", pilote repris (" + (v.magnitude * 3.6f).ToString("F0") + " km/h)");
             }
         }
@@ -850,6 +853,26 @@ namespace MWCoop
                 e.GuardUntil = -1f;
                 e.Body.isKinematic = false;
                 e.Body.velocity = e.GuardVel;
+                SpinWheels(e, e.GuardVel);
+            }
+        }
+
+        // Roues remises a la vitesse de la voiture quand elle redevient physique (retour de JD, 12/10 : chez l'invite qui conduit
+        // seul, les voitures de la circulation qu'il croise s'envolent). Leurs Wheel, coupees tant que la voiture etait une copie
+        // cinematique (ou mise en pause), gardaient leur vitesse de rotation d'avant (souvent 0) : rallumees a 60-75 km/h, glissement
+        // enorme des pneus, couple de freinage brutal -- la voiture partait en toupie (7 rad/s, le plafond de Unity) a la prise
+        // (journal : « choc possible ... ENVOL ... pres : » sans rien autour) comme au retour chez l'hote. Mesure (autotest roues) :
+        // angularVelocity = vitesse le long de la roue / rayon, en rad/s.
+        static readonly System.Reflection.FieldInfo oldAv = typeof(Wheel).GetField("oldAngularVelocity", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+        static void SpinWheels(Ent e, Vector3 v)
+        {
+            if (e.Wheels == null || Config.GetInt("Test", "SansRoues", 0) != 0) return;   // ([Test] SansRoues=1 : comme avant 0.83.4)
+            foreach (Wheel w in e.Wheels)
+            {
+                if (w == null) continue;
+                float av = Vector3.Dot(v, w.transform.forward) / (w.radius > 0.05f ? w.radius : 0.32f);
+                w.angularVelocity = av;
+                if (oldAv != null) oldAv.SetValue(w, av);   // (prive)
             }
         }
 

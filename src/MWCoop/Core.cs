@@ -170,6 +170,7 @@ namespace MWCoop
             new Mod("graphismes", Gfx.Update),
             new Mod("rallye", Rally.Update),
             new Mod("couleur", CarColor.Update),
+            new Mod("peinture", CustomPaint.Update),
             new Mod("tenues", Studio.Update),
             new Mod("quetes", Jobs.Update),
             new Mod("trace", Trace.Update),
@@ -276,6 +277,7 @@ namespace MWCoop
             Lights.OnLevelLoaded();
             Rally.OnLevelLoaded();
             CarColor.OnLevelLoaded();
+            CustomPaint.OnLevelLoaded();
             Studio.OnLevelLoaded();
             Jobs.OnLevelLoaded();
             WaitScreen.OnLevelLoaded();

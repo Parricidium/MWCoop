@@ -122,6 +122,8 @@ static SyncOffer g_offer;                 // (sous g_lcs)
 static std::string g_offerBlob;           // (sous g_lcs) message M_MODS pret a envoyer
 static std::wstring g_offerDir;           // (sous g_lcs) dossier Mods de l'hote
 static std::wstring g_offerGame;          // (sous g_lcs) dossier du jeu de l'hote (contenu)
+static std::wstring g_offerPaint;         // (sous g_lcs) peinture perso de la CORRIS envoyee a la place de Images\car.png (vide : celle du jeu)
+static bool IsCarPng(const std::wstring &rel) { return !_wcsicmp(rel.c_str(), L"Images\car.png"); }
 static std::atomic<int> g_offerBusy(0);
 static std::atomic<bool> g_offerNew(false);
 static std::string g_offerSig;            // ce sur quoi la liste a ete faite (fil de la fenetre)
@@ -204,7 +206,7 @@ static std::vector<std::wstring> ContentFiles(int i, const std::wstring &game)
     return out;
 }
 
-struct OfferJob { std::wstring dir, game; bool msc; std::string ver; std::vector<std::pair<std::wstring, std::wstring>> mods; std::vector<int> cats; std::vector<std::wstring> priv; };   // mods : (fichier, ID) ; priv : ID et noms des mods gardes pour soi
+struct OfferJob { std::wstring dir, game, paint; bool msc; std::string ver; std::vector<std::pair<std::wstring, std::wstring>> mods; std::vector<int> cats; std::vector<std::wstring> priv; };   // mods : (fichier, ID) ; priv : ID et noms des mods gardes pour soi
 // Fichiers de base + rel (rel vide ou "\X\Y"), chemins dans la liste : prefix + "X\Y\<fichier>".
 static void OfferAddTree(const std::wstring &base, const std::wstring &rel, const std::string &prefix, std::vector<SyncFile> &out, uint64_t &total)
 {
@@ -275,7 +277,8 @@ static DWORD WINAPI OfferThread(void *p)
         for (const std::wstring &rel : ContentFiles(i, job->game)) {
             SyncFile f;
             f.path = Narrow(rel, CP_UTF8);
-            if (o.files.size() >= 3000 || !SyncPathOk(f.path) || !FileFnvCached(job->game + rel, &f.hash, &f.size)) continue;
+            std::wstring src = !job->paint.empty() && IsCarPng(rel) ? job->paint : job->game + rel;
+            if (o.files.size() >= 3000 || !SyncPathOk(f.path) || !FileFnvCached(src, &f.hash, &f.size)) continue;
             total += f.size;
             o.files.push_back(f);
         }
@@ -332,6 +335,7 @@ static DWORD WINAPI OfferThread(void *p)
     g_offerBlob = blob;
     g_offerDir = job->dir;
     g_offerGame = job->game;
+    g_offerPaint = job->paint;
     LeaveCriticalSection(&g_lcs);
     std::string names;
     for (auto &m : o.mods) names += " " + m;
@@ -371,6 +375,7 @@ static void SyncHostTick()
     OfferJob *job = new OfferJob;
     job->dir = g_mscDir;
     job->game = g_gameDir;
+    job->paint = PaintOn() ? PaintFile() : L"";
     job->msc = msc;
     for (int i = 0; i < kContentN; i++) {   // contenu coche : ses fichiers (taille, date)
         if (!ContentOn(i)) continue;
@@ -378,7 +383,7 @@ static void SyncHostTick()
         sig += std::string("#") + kContent[i].key;
         for (const std::wstring &rel : ContentFiles(i, g_gameDir)) {
             WIN32_FILE_ATTRIBUTE_DATA a;
-            if (!GetFileAttributesExW((g_gameDir + rel).c_str(), GetFileExInfoStandard, &a)) continue;
+            if (!GetFileAttributesExW((!job->paint.empty() && IsCarPng(rel) ? job->paint : g_gameDir + rel).c_str(), GetFileExInfoStandard, &a)) continue;
             char b[64];
             sprintf_s(b, "|%lu.%lu.%lu", a.nFileSizeLow, a.ftLastWriteTime.dwLowDateTime, a.ftLastWriteTime.dwHighDateTime);
             sig += Narrow(rel, CP_UTF8) + b;
@@ -421,7 +426,8 @@ static bool SyncServe(const std::string &m, Wr &out)
     EnterCriticalSection(&g_lcs);
     bool ok = key == g_offer.key && idx < (int)g_offer.files.size();
     SyncFile f = ok ? g_offer.files[idx] : SyncFile();
-    std::wstring path = !f.path.compare(0, 5, "Mods\\") ? g_offerDir + Widen(f.path.substr(5), CP_UTF8) : g_offerGame + Widen(f.path, CP_UTF8);
+    std::wstring path = !f.path.compare(0, 5, "Mods\\") ? g_offerDir + Widen(f.path.substr(5), CP_UTF8)
+                      : !g_offerPaint.empty() && IsCarPng(Widen(f.path, CP_UTF8)) ? g_offerPaint : g_offerGame + Widen(f.path, CP_UTF8);
     LeaveCriticalSection(&g_lcs);
     static int served;
     if (!ok || off > f.size) { LaunchLog("mods : demande refusee (fichier %d, position %u, liste %s)", idx, off, key == g_offer.key ? "la meme" : "autre"); return false; }
@@ -697,14 +703,26 @@ static void SyncOnData(const std::string &m)
     SyncPumpLocked();
 }
 
-// Invite : MSCLoader absent ici (celui choisi dans l'onglet MODS) : installe pour les mods de l'hote.
-static void SyncEnsureMsc()
+// Invite : MSCLoader absent ici (celui choisi dans l'onglet MODS) : installe pour les mods de l'hote. ask : d'abord la question
+// (demande de JD, 12/10 : « Ce serveur utilise des mods, voulez-vous installer MSCLoader ? », Oui / Non ; oui : celui de MWCoop,
+// sans rien changer au jeu ; non : l'invite joue sans les mods, une seule question par liste de l'hote).
+static void SyncEnsureMsc(bool ask = false)
 {
     MscScan();   // (MSCLoader installe ? releve a jour)
     if (!g_mscInstalled && g_mscInstall != 1 && !g_gameDir.empty() && !GameProcessRunning()) {
+        bool own = MscOwn();
+        if (ask) {
+            int r = MessageBoxW(g_wnd, T(L"Ce salon utilise des mods (MSCLoader).\n\nInstaller MSCLoader (version Coop de MWCoop, install\u00E9e \u00E0 part) et recevoir les mods de l'h\u00F4te ?\n\nNon : tu rejoins sans les mods (des objets ou des voitures de l'h\u00F4te peuvent manquer).",
+                                         L"This lobby uses mods (MSCLoader).\n\nInstall MSCLoader (MWCoop's Coop version, installed apart) and get the host's mods?\n\nNo: you join without the mods (some of the host's items or cars may be missing)."),
+                                 L"MWCoop", MB_YESNO | MB_ICONQUESTION);
+            if (r != IDYES) { LaunchLog("mods : MSCLoader absent, installation refusee (l'invite joue sans les mods)"); SetStatus(K_WARN, T(L"Sans MSCLoader : tu joues sans les mods de l'h\u00F4te", L"Without MSCLoader: you play without the host's mods")); return; }
+            own = true;
+            if (g_mscOwnPref < 0) { g_mscOwnPref = 1; WritePrivateProfileStringW(L"Lanceur", L"MSCLoaderMWCoop", L"1", g_iniLauncher.c_str()); }
+        }
         g_mscInstall = 1;
-        LaunchLog("mods : MSCLoader absent, installation pour les mods de l'hote");
-        HANDLE t = CreateThread(NULL, 0, MscInstallThread, MscOwn() ? (void *)1 : NULL, 0, NULL);   // (MSCLoader de MWCoop : rien dans le jeu)
+        LaunchLog("mods : MSCLoader absent, installation pour les mods de l'hote%s", own ? " (version Coop)" : "");
+        SetStatus(K_NORMAL, T(L"Installation de MSCLoader (version Coop)\u2026", L"Installing MSCLoader (Coop version)\u2026"));
+        HANDLE t = CreateThread(NULL, 0, MscInstallThread, own ? (void *)1 : NULL, 0, NULL);   // (MSCLoader de MWCoop : rien dans le jeu)
         if (t) CloseHandle(t);
     }
 }
@@ -783,7 +801,7 @@ static void SyncTick()
         static uint64_t mscFor;
         uint64_t key; bool msc;
         { std::lock_guard<std::mutex> lk(g_syncMx); key = g_hostOffer.key; msc = g_hostOffer.msc; }
-        if (msc && key != mscFor) { mscFor = key; SyncEnsureMsc(); }
+        if (msc && key != mscFor) { mscFor = key; SyncEnsureMsc(true); }
     }
     if (g_launchAfterSync && g_lobby == LB_GUEST && !SyncLaunchPending()) {
         g_launchAfterSync = false;

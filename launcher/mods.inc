@@ -65,6 +65,15 @@ static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
         if (GetFileAttributesW((m + L"Mods").c_str()) == INVALID_FILE_ATTRIBUTES && !MakeJunction(m + L"Mods", g_gameDir + L"Mods"))
             TestLog("mscloader de MWCoop : jonction Mods impossible (erreur %lu)", GetLastError());
     }
+    // MSCLoader 1.4.2 (menu des mods, ModMenu.Mod_Settings) lit la version de <jeu>\mywintercar_Data\Managed\MSCLoader.Preloader.dll :
+    // absente (MSCLoader jamais installe dans le jeu), son Init s'arrete sur FileNotFoundException avant de charger le moindre mod
+    // (retour de JD, 12/10 : l'invite recoit la 205 de l'hote mais ne la voit pas). Ce seul fichier y est pose (Managed de la
+    // copie : jonction vers celui du jeu) ; le jeu ne le charge pas tout seul (seul doorstop_config.ini le vise).
+    std::wstring pre = m + L"mywintercar_Data\\Managed\\MSCLoader.Preloader.dll";
+    if (!FileExists(pre)) {
+        if (CopyFileW((pack + L"Managed\\MSCLoader.Preloader.dll").c_str(), pre.c_str(), TRUE)) TestLog("mscloader de MWCoop : MSCLoader.Preloader.dll pose dans Managed du jeu (lu par MSCLoader 1.4)");
+        else TestLog("mscloader de MWCoop : MSCLoader.Preloader.dll impossible dans Managed (erreur %lu) : MSCLoader 1.4 risque de ne charger aucun mod", GetLastError());
+    }
     std::wstring ini = m + L"doorstop_config.ini", managed = pack + L"Managed";
     std::string t = "[General]\r\nenabled=" + std::string(enabled ? "true" : "false") + "\r\ntarget_assembly=" + Narrow(managed + L"\\MSCLoader.Preloader.dll", CP_UTF8)
                   + "\r\nredirect_output_log=true\r\nignore_disable_switch=true\r\n\r\n[UnityMono]\r\ndll_search_path_override=" + Narrow(managed, CP_UTF8)
