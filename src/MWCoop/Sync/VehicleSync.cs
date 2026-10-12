@@ -829,13 +829,42 @@ namespace MWCoop
         }
 
         // Poussee avec sa voiture : voiture garee (a personne, ni copie, ni au bout d'une corde) qui roule au contact de celle
-        // qu'on conduit (moins de 0,8 m entre les carrosseries). Tenue 2 s apres le dernier contact, puis tant qu'elle roule.
+        // qu'on conduit, ou d'une remorque qu'on tire (moins de 0,8 m entre les carrosseries). Tenue 2 s apres le dernier
+        // contact, puis tant qu'elle roule.
+        // Portee (retour de « ...., » 12/10 : « la Rivett se teleporte quand on la transporte autrement qu'a la corde, sur une
+        // remorque ou sur les fourches ») : le contact n'etait revu que si elle roulait -- posee sur les fourches du KEKMET
+        // arrete, elle etait rendue a l'hote 2 s plus tard, ou elle reposait sur la COPIE du tracteur (glisse, projetee), puis
+        // reprise : « recalee sur l'hote », teleportee. Et sur une remorque, elle ne touchait jamais la voiture conduite :
+        // jamais prise. Maintenant le contact avec un porteur (la voiture conduite, une remorque tiree d'ici) la garde, meme
+        // immobile, tant qu'on conduit.
+        static bool TouchesCarrier(Car c)
+        {
+            if (c == null || c.Body == null || LocalDriving < 0 || LocalDriving >= cars.Count) return false;
+            Vector3 cc = c.Body.worldCenterOfMass;
+            foreach (Car k in Carriers())
+            {
+                if (k == c || k.Body == null) continue;
+                Vector3 near = k.Body.ClosestPointOnBounds(cc);
+                if ((c.Body.ClosestPointOnBounds(near) - near).sqrMagnitude <= 0.8f * 0.8f) return true;
+            }
+            return false;
+        }
+        static readonly List<Car> carriers = new List<Car>();
+        static List<Car> Carriers()
+        {
+            carriers.Clear();
+            if (LocalDriving >= 0 && LocalDriving < cars.Count) carriers.Add(cars[LocalDriving]);
+            foreach (int i in hitchSent) if (i >= 0 && i < cars.Count && i != LocalDriving) carriers.Add(cars[i]);
+            return carriers;
+        }
+        static float bumpHoldLook;
         static void BumpTick(float now)
         {
             if (bumped >= 0)
             {
                 Car b = bumped < cars.Count ? cars[bumped] : null;
                 if (b == null || b.Body == null || (b.RemoteBy >= 0 && b.RemoteBy != Session.LocalId && now - b.LastRemote < 1.5f)) { bumped = -1; return; }
+                if (now >= bumpHoldLook) { bumpHoldLook = now + 0.2f; if (TouchesCarrier(b)) bumpUntil = now + 2f; }   // (posee sur un porteur : gardee)
                 if (now < bumpUntil || b.Body.velocity.sqrMagnitude > 0.09f)
                 {
                     if ((++ownedTick & 1) == 0) Send(b, 2);
@@ -852,8 +881,7 @@ namespace MWCoop
                 if (c == our || c.Body == null || c.Kinematic || !c.Body.gameObject.activeInHierarchy || c.Net < 0) continue;
                 if (c.Index == owned || c.RemoteBy >= 0 || Tow.Carries(c.Index) || hitchSent.Contains(c.Index)) continue;
                 if (c.Body.velocity.sqrMagnitude < 0.16f) continue;
-                Vector3 near = our.Body.ClosestPointOnBounds(c.Body.worldCenterOfMass);
-                if ((c.Body.ClosestPointOnBounds(near) - near).sqrMagnitude > 0.8f * 0.8f) continue;
+                if (!TouchesCarrier(c)) continue;   // (la voiture conduite, ou une remorque tiree d'ici)
                 if (Hitched(c)) continue;   // (remorque : l'attelage la mene)
                 best = c; break;
             }
