@@ -20,6 +20,7 @@ namespace MWCoop
         public static void Send(string text)
         {
             text = Session.Clean(text, 200);
+            if (text.StartsWith("/") && Kauppa.ChatCommand(text)) return;   // (/titre : cassette en main)
             if (text.StartsWith("/")) { Cheats.Command(text); return; }   // (commandes : Cheats)
             if (text.Length == 0 || !Session.Active) return;
             Add(Session.Me.Name + " : " + text);

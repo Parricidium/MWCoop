@@ -1591,6 +1591,8 @@ namespace MWCoop
                 case "@kassi": Kauppa.OnBag(who, r); break;
                 case "@esine": Kauppa.OnItem(who, r); break;
                 case "@esineosto": Kauppa.OnSpawnRequest(who, r); break;
+                case "@filmi": Kauppa.OnFilmPart(who, r); break;
+                case "@filmi?": Kauppa.OnFilmAsk(who, r); break;
                 case "@vet": Wear.OnList(r); break;
                 case "@drone": { int dn = r.U8(); Vector3 dp = r.Vec(); DroneCam.OnRemote(who, dn, dp, r.Quat()); break; }
                 case "@flash": DroneCam.OnFlash(who, r.Vec()); break;
