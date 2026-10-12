@@ -132,9 +132,10 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (!Session.Active || !PlayerSync.InGame) return;
+            // (solo : seulement pour l'avatar du joueur filme par son propre camescope pose ; rien n'est envoye)
+            if (!(Session.Active || Kauppa.SelfBodyWanted) || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
-            if (!stainsClaimed && now - loadedAt > 4f) ClaimStains();
+            if (Session.Active && !stainsClaimed && now - loadedAt > 4f) ClaimStains();
             if (!FindLocal()) return;
             Read(now);
             // Coup et doigt : evenements a l'instant ou leur animation demarre.
@@ -142,15 +143,15 @@ namespace MWCoop
             bool fingerNow = Active(middleFinger) && (fingerAnim == null || fingerAnim.isPlaying) || FnState == "Finger" || FnState == "Fuck singer";
             // Casque mis ou enleve (globale PlayerHelmet du jeu) : la main a la tete (Menor, 12/10).
             bool helm = Game.GlobalBool("PlayerHelmet");
-            if (helmSeen && helm != helmWas) { SendEvent(E_Helmet); if (ThirdPerson.Active) Mine().HelmetAt = now; }
+            if (helmSeen && helm != helmWas) { SendEvent(E_Helmet); if (ThirdPerson.HasBody) Mine().HelmetAt = now; }
             helmWas = helm; helmSeen = true;
             if (fistNow && !fistWas) SendEvent(E_Punch);
             if (fingerNow && !fingerWas) SendEvent(E_Finger);
             fistWas = fistNow; fingerWas = fingerNow;
             if (fistNow) bits |= G_Fist;
             if (fingerNow) bits |= G_Finger;
-            // Vue a la troisieme personne : l'avatar du joueur local lit ses gestes comme ceux d'un autre.
-            if (ThirdPerson.Active)
+            // Avatar du joueur local (troisieme personne, drone, corps du camescope) : il lit ses gestes comme ceux d'un autre.
+            if (ThirdPerson.HasBody)
             {
                 Remote me;
                 if (!remote.TryGetValue(Session.LocalId, out me)) remote[Session.LocalId] = me = new Remote();
@@ -160,8 +161,7 @@ namespace MWCoop
                 if (fingerNow && !fingerWas0) me.FingerAt = now;
             }
             fistWas0 = fistNow; fingerWas0 = fingerNow;
-            SendState(now);
-            Stains(now);
+            if (Session.Active) { SendState(now); Stains(now); }
         }
 
         // Le joueur local pousse (main "Hand Push" du jeu) ; essais : [Test] force.
@@ -398,7 +398,7 @@ namespace MWCoop
             if (!Session.Active || now - stalkSent < 0.4f) return;
             stalkSent = now;
             SendEvent(E_Stalk);
-            if (ThirdPerson.Active) Mine().StalkAt = now;
+            if (ThirdPerson.HasBody) Mine().StalkAt = now;
         }
         static void SendEvent(int ev)
         {

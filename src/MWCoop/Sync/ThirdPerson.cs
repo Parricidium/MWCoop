@@ -97,7 +97,9 @@ namespace MWCoop
         {
             if (me == null || me.Root == null) return;
             if (on == shadowOnly && me.Root == shadowRoot && Time.realtimeSinceStartup < shadowCheck) return;
-            shadowOnly = on; shadowRoot = me.Root; shadowCheck = Time.realtimeSinceStartup + 2f;   // (habits ajoutes ensuite : revu toutes les 2 s)
+            // (invisible : revu a chaque image -- l'outil en main copie sur l'avatar ne doit pas apparaitre devant les yeux ;
+            // visible : toutes les 2 s, pour les habits ajoutes ensuite)
+            shadowOnly = on; shadowRoot = me.Root; shadowCheck = Time.realtimeSinceStartup + (on ? 0f : 2f);
             foreach (Renderer r in me.Root.GetComponentsInChildren<Renderer>(true))
                 r.shadowCastingMode = on ? UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly : UnityEngine.Rendering.ShadowCastingMode.On;
         }
@@ -117,7 +119,11 @@ namespace MWCoop
         {
             if ((Active || shadowOnly) && me != null && me.Root != null) me.LatePose();   // (corps pour le ray tracing : meme pose)
         }
-        public static Avatar Me { get { return Active || DroneCam.Active ? me : null; } }
+        // Avatar du joueur d'ici, des qu'il existe : troisieme personne, drone, ou corps invisible (ombres du ray tracing,
+        // camescope pose qui filme) -- il a alors aussi ses gestes et son outil en main (Gestures, HandTools), comme chez
+        // les autres (JD, 12/10 : « toutes mes actions visibles dans le film »).
+        public static Avatar Me { get { return me != null && me.Root != null ? me : null; } }
+        public static bool HasBody { get { return me != null && me.Root != null; } }
 
         static Transform boxCar; static Bounds carBox; static Vector3 lastCamInCar; static float camLogAt;
         static Bounds CarBox(Transform car)

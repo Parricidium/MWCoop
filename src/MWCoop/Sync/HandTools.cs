@@ -123,7 +123,7 @@ namespace MWCoop
         // [Test] OutilForce=n : outil n (1..) montre comme tenu (essais, sans le prendre en main).
         public static void Update()
         {
-            if (!Session.Active || !PlayerSync.InGame || !Find()) return;
+            if (!(Session.Active || Kauppa.SelfBodyWanted) || !PlayerSync.InGame || !Find()) return;   // (solo : camescope pose)
             int t = 0, fl = 0;
             int forced = testTool > 0 ? testTool : Config.GetInt("Test", "OutilForce", 0);
             if (forced > 0 && forced <= Table.Length) t = forced;
@@ -141,7 +141,7 @@ namespace MWCoop
                 }
             }
             tool = t; flags = fl;
-            if (ThirdPerson.Active) Local(t, fl); else if (remote.ContainsKey(Session.LocalId)) PlayerLeft(Session.LocalId);
+            if (ThirdPerson.HasBody) Local(t, fl); else if (remote.ContainsKey(Session.LocalId)) PlayerLeft(Session.LocalId);
             float now = Time.realtimeSinceStartup;
             if (t != sentTool || fl != sentFlags || now >= nextSend)
             {
