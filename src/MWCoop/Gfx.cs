@@ -368,6 +368,7 @@ namespace MWCoop
             S("RTRayons", "Rayons par pixel", "Rays per pixel", 2, 6, new[] { 1, 2, 4, 8 }, new[] { "1", "2", "4", "8" }, null, true),
             S("RTPortee", "Port\u00E9e des ombres", "Shadow range", 250, 6, new[] { 100, 150, 250, 400 }, new[] { "100 m", "150 m", "250 m", "400 m" }, null),
             S("RTDouceur", "Bords des ombres", "Shadow edges", 1, 6, new[] { 0, 1, 2, 4 }, new[] { "Nets", "L\u00E9gers", "Doux", "Tr\u00E8s doux" }, new[] { "Sharp", "Light", "Soft", "Very soft" }),
+            R("RTCorps", "Ton corps dans les reflets et les ombres", "Your body in reflections and shadows", 1, 6),
             S("RTReflets", "Reflets (carrosseries, surfaces lisses)", "Reflections (car paint, smooth surfaces)", 100, 6, new[] { 0, 50, 100 },
               new[] { "Non", "Discrets", "Normaux" }, new[] { "Off", "Subtle", "Normal" }, true),
             S("RTOcclusion", "Occlusion ambiante (coins, dessous)", "Ambient occlusion (corners, underneath)", 100, 6, new[] { 0, 50, 100, 150 },

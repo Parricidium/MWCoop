@@ -55,7 +55,9 @@ namespace MWCoop
             }
             if (Config.GetInt("Test", "TroisiemePersonne", 0) != 0 && !Active) { Active = true; Log.Info("vue : troisieme personne (essai)"); }
             // Camera drone : l'avatar du joueur est montre aussi (il est dans le cadre), sans reculer la camera.
-            if (!Active && !DroneCam.Active)
+            // Ray tracing a la premiere personne : l'avatar existe aussi, invisible a la camera (ombre seulement), pour les rayons.
+            bool rtBody = !Active && !DroneCam.Active && RayTracing.BodyWanted;
+            if (!Active && !DroneCam.Active && !rtBody)
             {
                 if (me != null) { me.Destroy(); me = null; if (handCam != null) handCam.enabled = handCamWas; }
                 return;
@@ -83,6 +85,18 @@ namespace MWCoop
             pi.State = PlayerSync.BuildLocal();
             pi.StateTime = Time.realtimeSinceStartup;
             me.Apply(pi);
+            ShadowsOnly(rtBody);
+        }
+
+        // Avatar local invisible a la camera mais present pour les ombres et les rayons (premiere personne + ray tracing).
+        static bool shadowOnly; static GameObject shadowRoot; static float shadowCheck;
+        static void ShadowsOnly(bool on)
+        {
+            if (me == null || me.Root == null) return;
+            if (on == shadowOnly && me.Root == shadowRoot && Time.realtimeSinceStartup < shadowCheck) return;
+            shadowOnly = on; shadowRoot = me.Root; shadowCheck = Time.realtimeSinceStartup + 2f;   // (habits ajoutes ensuite : revu toutes les 2 s)
+            foreach (Renderer r in me.Root.GetComponentsInChildren<Renderer>(true))
+                r.shadowCastingMode = on ? UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly : UnityEngine.Rendering.ShadowCastingMode.On;
         }
 
         // Apres les poses des autres avatars (PlayerSync.LateUpdate).

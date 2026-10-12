@@ -147,6 +147,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "RTPortee", L"Portée des ombres", L"Shadow range", 250, { 100, 150, 250, 400 },
           { L"100 m", L"150 m", L"250 m", L"400 m" }, { L"100 m", L"150 m", L"250 m", L"400 m" }, 2, 14 },
         { "RTDouceur", L"Bords des ombres", L"Shadow edges", 1, { 0, 1, 2, 4 }, { L"Nets", L"Légers", L"Doux", L"Très doux" }, { L"Sharp", L"Light", L"Soft", L"Very soft" }, 0, 14 },
+        { "RTCorps", L"Ton corps dans les reflets et les ombres", L"Your body in reflections and shadows", 1, {}, {}, {}, 1, 14 },
         { "RTReflets", L"Reflets (carrosseries, surfaces lisses)", L"Reflections (car paint, smooth surfaces)", 100, { 0, 50, 100 },
           { L"Non", L"Discrets", L"Normaux" }, { L"Off", L"Subtle", L"Normal" }, 2, 14 },
         { "RTOcclusion", L"Occlusion ambiante (coins, dessous)", L"Ambient occlusion (corners, underneath)", 100, { 0, 50, 100, 150 },
