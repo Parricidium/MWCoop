@@ -368,6 +368,8 @@ namespace MWCoop
             S("RTRayons", "Rayons par pixel", "Rays per pixel", 2, 6, new[] { 1, 2, 4, 8 }, new[] { "1", "2", "4", "8" }, null, true),
             S("RTPortee", "Port\u00E9e des ombres", "Shadow range", 250, 6, new[] { 100, 150, 250, 400 }, new[] { "100 m", "150 m", "250 m", "400 m" }, null),
             S("RTDouceur", "Bords des ombres", "Shadow edges", 1, 6, new[] { 0, 1, 2, 4 }, new[] { "Nets", "L\u00E9gers", "Doux", "Tr\u00E8s doux" }, new[] { "Sharp", "Light", "Soft", "Very soft" }),
+            S("RTOcclusion", "Occlusion ambiante (coins, dessous)", "Ambient occlusion (corners, underneath)", 100, 6, new[] { 0, 50, 100, 150 },
+              new[] { "Non", "L\u00E9g\u00E8re", "Normale", "Forte" }, new[] { "Off", "Light", "Normal", "Strong" }, true),
             S("RTLampes", "Ombres des lampes (phares, lampadaires)", "Lamp shadows (headlights, street lights)", 8, 6, new[] { 0, 4, 8, 16 },
               new[] { "Non", "4 lampes", "8 lampes", "16 lampes" }, new[] { "Off", "4 lamps", "8 lamps", "16 lamps" }, true),
             S("OmbresCascades", "Finesse des ombres", "Shadow detail", -1, 1, new[] { -1, 1, 2, 4 }, new[] { "Jeu", "Simple", "Fine", "Tr\u00E8s fine" }, new[] { "Game", "Basic", "Fine", "Very fine" }),

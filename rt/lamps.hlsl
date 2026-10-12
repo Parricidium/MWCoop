@@ -1,8 +1,10 @@
-// Ombres des lampes (phares, lampadaires) par rayons (DXR 1.1, RayQuery, cs_6_5). Compile par build.cmd :
+// Ombres des lampes (phares, lampadaires) et occlusion ambiante par rayons (DXR 1.1, RayQuery, cs_6_5). Compile par build.cmd :
 //   dxc -T cs_6_5 -E Main -Fh build\rt_lamps.h -Vn g_rtLamps rt\lamps.hlsl
 // Pour chaque pixel (positions et normales preparees comme pour le soleil) et chaque lampe proche (au plus 16) : un
 // rayon vers la lampe ; sortie : un bit par lampe dont la lumiere est bloquee. Le mod retire ensuite, apres l'eclairage
 // d'Unity, la part de ces lampes (Direct3D 11, PsLamps dans mwcrt.cpp). Feuillages : test alpha, comme shadow.hlsl.
+// Occlusion ambiante (params.z = 1) : quelques rayons courts (params.y rayons, params.x m) autour de la normale ; sortie :
+// part degagee (gAO, 0 a 1). Tirage fixe par pixel (pas de scintillement), adouci ensuite par le filtre du composite.
 
 struct Frame {
     float4 sunDir;   // w : nombre de lampes
@@ -20,6 +22,10 @@ Texture2D<float4> gNrm : register(t2);
 StructuredBuffer<InstInfo> gInst : register(t3);
 StructuredBuffer<Lamp> gLamps : register(t4);
 RWTexture2D<uint> gLampVis : register(u1);
+RWTexture2D<float> gAO : register(u2);
+
+uint Hash(uint x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
+float Rand(inout uint s) { s = Hash(s); return (s & 0xFFFFFF) / 16777216.0; }
 ByteAddressBuffer gBufs[] : register(t0, space1);
 
 bool AlphaPass(uint inst, uint prim, float2 bary)
@@ -92,4 +98,27 @@ void Main(uint3 id : SV_DispatchThreadID)
         }
     }
     gLampVis[id.xy] = occ;
+    float ao = 1;
+    if (gF.params.z > 0.5 && p.w > 0.5)
+    {
+        float3 n = normalize(gNrm[id.xy].xyz * 2 - 1);
+        float camDist = length(p.xyz - gF.cam.xyz);
+        float3 t = normalize(abs(n.y) < 0.99 ? cross(n, float3(0, 1, 0)) : cross(n, float3(1, 0, 0)));
+        float3 b = cross(n, t);
+        uint seed = Hash(id.x * 1973 + id.y * 9277);
+        uint rays = max((uint)gF.params.y, 1u);
+        float freeN = 0;
+        for (uint k = 0; k < rays; k++)
+        {
+            float u1 = Rand(seed), u2 = Rand(seed) * 6.2831853, rr = sqrt(u1);
+            RayDesc r;
+            r.Origin = p.xyz + n * (0.02 + 0.001 * camDist);
+            r.Direction = normalize(t * (rr * cos(u2)) + b * (rr * sin(u2)) + n * sqrt(1 - u1));   // (hemisphere, cosinus)
+            r.TMin = 0.02;
+            r.TMax = gF.params.x;
+            if (Free(r)) freeN += 1;
+        }
+        ao = freeN / rays;
+    }
+    gAO[id.xy] = ao;
 }
