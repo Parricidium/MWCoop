@@ -392,6 +392,7 @@ static void SyncHostTick()
     job->ver = Narrow(g_mscVer, CP_UTF8);
     if (msc) {
         for (auto &m : g_msc) {
+            if (m.off) continue;   // (mod coupe ici : ni charge ni envoye)
             if (!ModShared(m.file)) { job->priv.push_back(m.file.substr(0, m.file.size() - 4)); if (m.known && !m.id.empty()) job->priv.push_back(m.id); continue; }
             std::wstring id = m.known && !m.id.empty() ? m.id : m.file.substr(0, m.file.size() - 4);
             job->mods.push_back({ m.file, id });
@@ -1226,7 +1227,7 @@ static void DrawContent(Graphics &g)
     Pen mpen(mh ? WithA(kAcc, 0.7f) : TH(choiceBorder), 1); g.DrawPath(&mpen, &mp);
     Icon(g, IC_PUZZLE, mr.X + 30, mr.Y + mr.Height / 2, 20, kAcc, 1.9f);
     int shared = 0;
-    for (auto &m : g_msc) shared += ModShared(m.file);
+    for (auto &m : g_msc) shared += ModShared(m.file) && !m.off;
     wchar_t mb[160];
     if (!g_mscInstalled) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : non install\u00E9", L"MSCLoader mods: not installed"));
     else if (!g_mscOn) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : coup\u00E9 (invit\u00E9s sans mods)", L"MSCLoader mods: off (guests without mods)"));

@@ -15,7 +15,9 @@
 //    ({"isDisabled": .., "settings": [{"ID": .., "Value": ..}]}), relu et reecrit ici ; pris au prochain lancement.
 //    Cases, curseurs (fleches), listes (fleches), mod active ou non ; textes et couleurs : en jeu seulement.
 struct MscSet { std::string type, id; std::wstring name; std::string val, def, mn, mx, dec; std::vector<std::wstring> items; };
-struct MscMod { std::wstring file, id, name, ver, author, desc; bool disabled = false, known = false; std::vector<MscSet> sets; };
+// off : mod coupe par le lanceur (demande de JD, 12/10 : « activer / desactiver un mod, pas seulement le partager ») -- sa DLL
+// renommee <nom>.dll.off, que MSCLoader ne charge pas (il ne lit que les *.dll) ; file garde le nom en .dll.
+struct MscMod { std::wstring file, id, name, ver, author, desc; bool disabled = false, known = false, off = false; std::vector<MscSet> sets; };
 static std::vector<MscMod> g_msc;
 static bool g_mscInstalled;   // (g_mscOn : launcher.cpp)
 static std::wstring g_mscVer, g_mscDir, g_mscDirKind;
@@ -161,6 +163,23 @@ static void MscScan()
                 MscMod m;
                 for (auto &c : cache) if (!_wcsicmp(c.file.c_str(), fd.cFileName)) { m = c; break; }
                 if (!m.known) { m.file = fd.cFileName; m.name = m.file.substr(0, m.file.size() - 4); }
+                list.push_back(m);
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+        h = FindFirstFileW((g_mscDir + L"*.dll.off").c_str(), &fd);   // (mods coupes ici)
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                std::wstring f = fd.cFileName;
+                f.resize(f.size() - 4);   // (sans .off)
+                bool dup = false;
+                for (auto &x : list) dup |= !_wcsicmp(x.file.c_str(), f.c_str());
+                if (dup) continue;   // (les deux : la DLL l'emporte)
+                MscMod m;
+                for (auto &c : cache) if (!_wcsicmp(c.file.c_str(), f.c_str())) { m = c; break; }
+                if (!m.known) { m.file = f; m.name = f.substr(0, f.size() - 4); }
+                m.off = true;
                 list.push_back(m);
             } while (FindNextFileW(h, &fd));
             FindClose(h);
@@ -440,6 +459,21 @@ static float MscMaxScroll()
 static RectF MscRowRect(int i) { float ms = MscMaxScroll(); return RectF(kMscList.X, kMscList.Y + i * kMscRowH - g_scroll[TAB_MODS], kMscList.Width - (ms > 0 ? 12 : 0), kMscRowH - 10); }
 static RectF MscGearRect(const RectF &r) { return RectF(r.X + r.Width - 60, r.Y + (r.Height - 44) / 2, 44, 44); }
 static RectF MscSendRect(const RectF &r) { return RectF(r.X + r.Width - 60 - 16 - 50, r.Y + (r.Height - 28) / 2, 50, 28); }
+static RectF MscActiveRect(const RectF &r) { RectF s = MscSendRect(r); return RectF(s.X - 84 - 24 - 50, s.Y, 50, 28); }
+// Mod coupe / remis : sa DLL renommee <nom>.dll.off / <nom>.dll (le jeu ferme : sinon la DLL est verrouillee).
+static void MscSetActive(int i, bool on)
+{
+    if (i < 0 || i >= (int)g_msc.size() || g_mscDir.empty()) return;
+    MscMod m = g_msc[i];
+    std::wstring dll = g_mscDir + m.file, off = dll + L".off";
+    if (on == !m.off) return;
+    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Ferme le jeu pour activer ou d\u00E9sactiver un mod", L"Close the game to turn a mod on or off")); return; }
+    BOOL ok = on ? MoveFileExW(off.c_str(), dll.c_str(), 0) : MoveFileExW(dll.c_str(), off.c_str(), MOVEFILE_REPLACE_EXISTING);
+    if (!ok) { SetStatus(K_ERR, T(L"%s : renommage impossible (erreur %lu)", L"%s: can't rename (error %lu)"), m.name.c_str(), GetLastError()); return; }
+    TestLog("mods : %s %s", Narrow(m.file, CP_UTF8).c_str(), on ? "active (.dll)" : "desactive (.dll.off)");
+    SetStatus(K_NORMAL, on ? T(L"%s activ\u00E9 : charg\u00E9 au prochain lancement", L"%s on: loaded at the next launch") : T(L"%s d\u00E9sactiv\u00E9 : ni charg\u00E9 ni envoy\u00E9 (fichier .dll.off)", L"%s off: neither loaded nor sent (.dll.off file)"), m.name.c_str());
+    MscScan();
+}
 
 // Element sous la souris : 1000 interrupteur, 1001 installer, 1002 retour, 1003 mod active (page), 1004 dossier,
 // 1005 accepter les mods de l'hote, 2000+i ouvrir le mod i, 3000+i*4+k option i (k : 0 case, 1 moins, 2 plus), 4000+i envoyer.
@@ -473,7 +507,8 @@ static int MscAt(float x, float y)
     if (!kMscList.Contains(x, y)) return -1;
     int i = (int)((y - kMscList.Y + g_scroll[TAB_MODS]) / kMscRowH);
     if (i < 0 || i >= (int)g_msc.size()) return -1;
-    RectF r = MscRowRect(i), sr = MscSendRect(r);
+    RectF r = MscRowRect(i), sr = MscSendRect(r), ar = MscActiveRect(r);
+    if (x > ar.X - 80 && x < ar.X + ar.Width + 8) return 6000 + i;   // Actif (DLL renommee)
     if (x > sr.X - 80 && x < sr.X + sr.Width + 8) return 4000 + i;   // Envoyer aux invites
     return g_msc[i].known ? 2000 + i : -1;
 }
@@ -499,8 +534,10 @@ static bool MscClick(float x, float y)
     }
     else if (h == 1004) ShellExecuteW(g_wnd, L"open", g_mscDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
     else if (h == 1002) { g_mscPage = -1; g_scroll[TAB_MODS] = 0; }
+    else if (h >= 6000) MscSetActive(h - 6000, g_msc[h - 6000].off);
     else if (h >= 4000) {
         const MscMod &m = g_msc[h - 4000];
+        if (m.off) { SetStatus(K_NORMAL, T(L"%s est d\u00E9sactiv\u00E9 : il n'est pas envoy\u00E9", L"%s is off: it is not sent"), m.name.c_str()); return true; }
         bool on = !ModShared(m.file);
         ModSetShared(m.file, on);
         SetStatus(K_NORMAL, on ? T(L"%s sera envoy\u00E9 aux invit\u00E9s du salon", L"%s will be sent to the lobby's guests") : T(L"%s reste chez toi (pas envoy\u00E9)", L"%s stays with you (not sent)"), m.name.c_str());
@@ -673,13 +710,17 @@ static void DrawMods(Graphics &g)
             GraphicsPath rp; RoundRect(rp, r, 16);
             SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
             Pen rpen(hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
-            float a = m.disabled ? 0.5f : 1.0f;
-            Text(g, m.name, RectF(r.X + 18, r.Y + 10, r.Width - 260, 24), 15, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
-            std::wstring line = m.known ? L"v" + m.ver + (m.author.empty() ? L"" : L" \u00B7 " + m.author) + (m.disabled ? T(L" \u00B7 d\u00E9sactiv\u00E9", L" \u00B7 disabled") : L"")
+            float a = m.disabled || m.off ? 0.5f : 1.0f;
+            Text(g, m.name, RectF(r.X + 18, r.Y + 10, r.Width - 420, 24), 15, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
+            std::wstring line = m.off ? m.file + T(L".off \u00B7 d\u00E9sactiv\u00E9 : ni charg\u00E9 ni envoy\u00E9", L".off \u00B7 off: neither loaded nor sent")
+                              : m.known ? L"v" + m.ver + (m.author.empty() ? L"" : L" \u00B7 " + m.author) + (m.disabled ? T(L" \u00B7 d\u00E9sactiv\u00E9", L" \u00B7 disabled") : L"")
                                         : m.file + T(L" \u00B7 lance le jeu une fois pour les d\u00E9tails", L" \u00B7 start the game once for details");
-            Text(g, line, RectF(r.X + 18, r.Y + 34, r.Width - 260, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            RectF sr = MscSendRect(r), gr = MscGearRect(r);
-            bool sh = ModShared(m.file), shHot = g_mscHot == 4000 + i;   // envoye aux invites du salon
+            Text(g, line, RectF(r.X + 18, r.Y + 34, r.Width - 420, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            RectF sr = MscSendRect(r), gr = MscGearRect(r), ar = MscActiveRect(r);
+            bool acHot = g_mscHot == 6000 + i;
+            Text(g, T(L"Actif", L"On"), RectF(ar.X - 84, r.Y, 76, r.Height), 12.5f, FontStyleBold, acHot ? kAcc : !m.off ? kInk : kGrey, StringAlignmentFar);
+            DrawToggle(g, ar, !m.off, acHot);
+            bool sh = ModShared(m.file) && !m.off, shHot = g_mscHot == 4000 + i;   // envoye aux invites du salon
             Text(g, T(L"Envoyer", L"Send"), RectF(sr.X - 84, r.Y, 76, r.Height), 12.5f, FontStyleBold, shHot ? kAcc : sh ? kInk : kGrey, StringAlignmentFar);
             DrawToggle(g, sr, sh, shHot);
             if (m.known) {
@@ -693,8 +734,8 @@ static void DrawMods(Graphics &g)
     }
     Pen sep(TH(sep), 1);
     g.DrawLine(&sep, c.X + 24, c.Y + c.Height - 62, c.X + c.Width - 24, c.Y + c.Height - 62);
-    Para(g, T(L"R\u00E9glages pris au prochain lancement du jeu. \u00AB Envoyer \u00BB : le mod est copi\u00E9 chez les invit\u00E9s de ton salon, dans un dossier \u00E0 part.",
-              L"Settings apply at the next game launch. \"Send\": the mod is copied to your lobby's guests, in a separate folder."),
+    Para(g, T(L"R\u00E9glages pris au prochain lancement du jeu. \u00AB Actif \u00BB coup\u00E9 : le mod n'est plus charg\u00E9. \u00AB Envoyer \u00BB : il est copi\u00E9 chez les invit\u00E9s de ton salon.",
+              L"Settings apply at the next game launch. \"On\" off: the mod no longer loads. \"Send\": it is copied to your lobby's guests."),
          RectF(c.X + 300, c.Y + c.Height - 52, c.Width - 324, 40), 12.5f, kGrey, StringAlignmentCenter);
     if (g_mscInstalled && g_mscPage < 0) {
         bool hot = g_mscHot == 1004;

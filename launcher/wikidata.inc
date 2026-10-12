@@ -226,7 +226,7 @@ static const WikiBlock kW_Mods[] = {
             L"The host can send their mods to their guests for the game: they get them in a separate copy, without touching anything on their side." },
     { WB_FIG, NULL, NULL, WF_SHARE },
     { WB_H, L"Côté hôte", L"Host side" },
-    { WB_S, L"Onglet Mods : chaque mod a un interrupteur « Envoyer ». Coupe ceux que tu gardes pour toi.", L"Mods tab: each mod has a \"Send\" switch. Turn off the ones you keep for yourself." },
+    { WB_S, L"Onglet Mods : chaque mod a un interrupteur « Envoyer ». Coupe ceux que tu gardes pour toi. « Actif » coupé : le mod n'est plus chargé du tout (sa DLL devient .dll.off), ni envoyé ; remis, il revient au prochain lancement.", L"Mods tab: each mod has a \"Send\" switch. Turn off the ones you keep for yourself. \"On\" off: the mod is no longer loaded at all (its DLL becomes .dll.off), nor sent; back on, it returns at the next launch." },
     { WB_S, L"Héberge comme d'habitude : l'envoi se fait dans le salon.", L"Host as usual: sending happens in the lobby." },
     { WB_H, L"Côté invité", L"Guest side" },
     { WB_S, L"Dans le salon, clique TOUT ACCEPTER une fois.", L"In the lobby, click ACCEPT ALL once." },
