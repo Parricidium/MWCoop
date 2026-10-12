@@ -75,7 +75,7 @@ namespace MWCoop
         {
             Reset();
             clothLogic = helmetLogic = null;
-            helmetHooked.Clear();
+            helmetHooked.Clear(); cupSeen.Clear(); cupResend = 0f;
             player = null;
             found = fileRead = false;
             filePoses.Clear();
@@ -336,6 +336,83 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- boucle
+        // Cafe des tasses (suggestion de Crowbangus, 12/10 : « je verse du cafe dans la tasse et la tends a l'autre : il ne le
+        // voit pas »). Chaque tasse (celle du jeu et les copies par joueur, meme rang partout) garde son cafe dans 'Use' (Coffee,
+        // Caffeine ; Pour le remplit depuis la casserole, Play anim le vide quand on boit). Celui chez qui il change de plus de
+        // 0,004 l'envoie (@tasse, 4 fois/s au plus pendant qu'on verse) ; les autres le posent et repassent par l'etat Data du
+        // jeu, qui recalcule la surface du cafe (hauteur, couleur). L'hote renvoie toutes les tasses non vides toutes les 15 s
+        // (arrivants).
+        static readonly Dictionary<int, float> cupSeen = new Dictionary<int, float>();
+        static float cupResend;
+        static int cupLogs;
+        static PlayMakerFSM CupFsm(int i, out FsmFloat coffee, out FsmFloat caf)
+        {
+            coffee = caf = null;
+            if (i < 0 || i >= items.Count || items[i].Kind != 3 || items[i].Go == null) return null;
+            PlayMakerFSM f = Game.FsmOn(items[i].Go, "Use");
+            if (f == null) return null;
+            coffee = f.FsmVariables.FindFsmFloat("Coffee");
+            caf = f.FsmVariables.FindFsmFloat("Caffeine");
+            return coffee != null ? f : null;
+        }
+        static void CupTick(float now)
+        {
+            if (!Session.Active) return;
+            bool resend = Session.IsHost && now >= cupResend;
+            if (resend) cupResend = now + 15f;
+            for (int i = 0; i < items.Count; i++)
+            {
+                FsmFloat c, k;
+                if (CupFsm(i, out c, out k) == null) continue;
+                float last;
+                if (!cupSeen.TryGetValue(i, out last)) { cupSeen[i] = c.Value; continue; }
+                bool changed = Mathf.Abs(c.Value - last) >= 0.004f;
+                if (!changed && !(resend && c.Value > 0.01f)) continue;
+                cupSeen[i] = c.Value;
+                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@tasse").U8(i).F32(c.Value).F32(k != null ? k.Value : 0f), true);
+                if (changed && cupLogs++ < 10) Log.Info("tasse " + items[i].Name + " : cafe " + c.Value.ToString("F3") + " envoye");
+            }
+        }
+        // [Test] Autotest=tasse (2 joueurs) : a 45 s l'invite met 0,25 de cafe dans la tasse du jeu (rang 3) et repasse par Data ;
+        // a 52 s chacun note son cafe et la hauteur de sa surface.
+        static int cupStep;
+        public static void TestCup(string mode, float t)
+        {
+            if (mode != "tasse") return;
+            FsmFloat c, k;
+            PlayMakerFSM f = CupFsm(3, out c, out k);
+            if (f == null) return;
+            if (!Session.IsHost && cupStep == 0 && t > 45f)
+            {
+                cupStep = 1;
+                c.Value = 0.25f; if (k != null) k.Value = 0.8f;
+                Game.SetState(f, "Data");
+                Log.Info("autotest : tasse, cafe 0,25 verse ici");
+            }
+            if (cupStep < 2 && t > 52f)
+            {
+                cupStep = 2;
+                Transform surf = items[3].Go.transform.Find("mesh/Pivot/surface");
+                Log.Info("autotest : tasse, cafe " + c.Value.ToString("F3") + ", surface z " + (surf != null ? surf.localPosition.z.ToString("F4") : "?") + " [" + f.ActiveStateName + "]");
+            }
+        }
+        public static void OnCup(int who, NetReader r)
+        {
+            int i = r.U8();
+            float coffee = r.F32(), caf = r.F32();
+            FsmFloat c, k;
+            PlayMakerFSM f = CupFsm(i, out c, out k);
+            if (f == null) return;
+            if (Mathf.Abs(c.Value - coffee) < 0.0005f) { cupSeen[i] = c.Value; return; }
+            string st = f.ActiveStateName;
+            if (st == "Pour" || st == "Play anim") return;   // (on verse ou on boit ici : notre valeur partira)
+            c.Value = coffee;
+            if (k != null) k.Value = caf;
+            cupSeen[i] = coffee;
+            if (f.enabled && f.gameObject.activeInHierarchy) Game.SetState(f, "Data");   // (surface du cafe : hauteur et couleur)
+            if (cupLogs++ < 10) Log.Info("tasse " + items[i].Name + " : cafe " + coffee.ToString("F3") + " recu de #" + who);
+        }
+
         public static void Update()
         {
             if (findAt < 0 || !PlayerSync.InGame) return;
@@ -345,6 +422,7 @@ namespace MWCoop
             nextPoll = now + 0.25f;
             if (found && player == null) { found = false; findAt = now; }   // PLAYER detruit : recherche a la prochaine image
             HookHelmets();
+            CupTick(now);
             if (Session.Active && Session.IsHost && items[0].Go != null && items[1].Go != null && now - loadedAt > 12f)
             {
                 if (!fileRead) LoadFile();

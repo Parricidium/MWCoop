@@ -14,6 +14,7 @@ namespace MWCoop
         // place : a l'ouest du parking de la PSK, porte vers le parking (repere local +z = monde +x)
         static readonly Vector3 Place = new Vector3(-1786.6f, 0f, 963.5f);
         const float Yaw = 90f;
+        const float FloorY = 3.74f;   // hauteur du plancher, la meme chez tous (sol mesure 2,95..3,34 + 0,4)
         const float W2 = 5.5f, D2 = 3.5f, Wall = 0.2f, WallH = 3.4f, Ceil = 2.9f, Pitch = 25f;
 
         static GameObject root;
@@ -280,8 +281,13 @@ namespace MWCoop
                 }
             if (gMax == float.MinValue) { gMax = gMin = 3.2f; }
             gFront = nf > 0 ? gFront / nf : gMax;
-            float floorY = gMax + 0.4f;
-            L(string.Format("sol sous la boutique {0:F2}..{1:F2}, devant {2:F2} ; plancher a {3:F2}", gMin, gMax, gFront, floorY));
+            // Plancher a hauteur FIXE (retour de JD, 12/10, captures : l'invite voyait l'hote enfonce a mi-jambes dans le plancher,
+            // l'hote voyait l'invite flotter). Mesure chez l'un 2,95..3,34 (plancher 3,74), chez l'autre 2,95..4,06 (4,46) : un
+            // objet ou une voiture sous l'emprise a son chargement. Chacun marchait sur son plancher, 72 cm d'ecart. La mesure ne
+            // sert plus qu'au soubassement et aux marches.
+            float floorY = FloorY;
+            L(string.Format("sol sous la boutique {0:F2}..{1:F2}, devant {2:F2} ; plancher a {3:F2}{4}", gMin, gMax, gFront, floorY, Mathf.Abs(gMax + 0.4f - floorY) > 0.05f ? " (mesure " + (gMax + 0.4f).ToString("F2") + " ignoree)" : ""));
+            gMin = Mathf.Min(gMin, floorY - 0.8f);
             float down = floorY - gMin + 0.4f;          // profondeur du soubassement
             float frontDrop = floorY - gFront;           // marches a descendre devant
 
