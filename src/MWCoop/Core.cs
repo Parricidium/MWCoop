@@ -174,6 +174,7 @@ namespace MWCoop
             new Mod("carburant", FuelPrices.Update),
             new Mod("telephone", PhoneKeys.Update),
             new Mod("chocs", CarHits.Update),
+            new Mod("vitres", WindowCranks.Update),
             new Mod("tenues", Studio.Update),
             new Mod("quetes", Jobs.Update),
             new Mod("trace", Trace.Update),
@@ -284,6 +285,7 @@ namespace MWCoop
             FuelPrices.OnLevelLoaded();
             PhoneKeys.OnLevelLoaded();
             CarHits.OnLevelLoaded();
+            WindowCranks.OnLevelLoaded();
             Studio.OnLevelLoaded();
             Jobs.OnLevelLoaded();
             WaitScreen.OnLevelLoaded();
