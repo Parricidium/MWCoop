@@ -35,10 +35,11 @@ namespace MWCoop
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DTexture(int id, System.IntPtr d3d11tex, int maxSize);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFloats(float[] data, int n);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DMeshUpdate(int id, float[] verts, int nv);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DLamps(float[] data, int n, float strength);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFrame(float[] p);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInts(int[] data, int n);
         static DProbe fProbe; static DPtr fInit; static DInt fPostRender, fCapture, fArm; static DInputs fInputs; static DMesh fMesh;
-        static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate;
+        static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps;
         static T Fn<T>(System.IntPtr lib, string name) where T : class
         {
             System.IntPtr p = GetProcAddress(lib, name);
@@ -52,6 +53,7 @@ namespace MWCoop
             fTexture = Fn<DTexture>(lib, "RtTextureFrom"); fInstances = Fn<DFloats>(lib, "RtInstances"); fFrame = Fn<DFrame>(lib, "RtFrame");
             fStaticCounts = Fn<DInts>(lib, "RtStaticCounts"); fCapture = Fn<DInt>(lib, "RtCapture"); fArm = Fn<DInt>(lib, "RtArm");
             fMeshUpdate = Fn<DMeshUpdate>(lib, "RtMeshUpdate");
+            fLamps = Fn<DLamps>(lib, "RtLamps");
         }
         static int RtProbe(string logPath) { return fProbe(logPath); }
         static int RtInit(System.IntPtr d3d11Resource) { return fInit(d3d11Resource); }
@@ -66,6 +68,36 @@ namespace MWCoop
         static void RtCapture(int on) { fCapture(on); }
         static void RtArm(int flags) { fArm(flags); }
         static int RtMeshUpdate(int id, float[] verts, int nv) { return fMeshUpdate(id, verts, nv); }
+        static void RtLamps(float[] data, int n, float strength) { fLamps(data, n, strength); }
+
+        // Ombres des lampes (phares, lampadaires) par rayons : [Graphismes] RTLampes = nombre de lampes (0 : non ; 8 par defaut).
+        // Actives : le module Lumieres ne donne plus d'ombres d'Unity a ces lampes.
+        public static bool LampsActive { get { return ready && Wanted && Direct && Mode == 0 && LampCount > 0; } }
+        static int LampCount { get { return Mathf.Clamp(Config.GetInt("Test", "RTLampes", Gfx.Get("RTLampes", 8)), 0, 16); } }
+        static readonly List<Light> lampList = new List<Light>();
+        static readonly float[] lampData = new float[16 * 12];
+        static int lampLogs;
+        static int SendLamps(Vector3 cp)
+        {
+            int want = LampCount;
+            if (want <= 0) { RtLamps(lampData, 0, 0); return 0; }
+            Lights.CollectLamps(cp, want, lampList);
+            int n = 0;
+            foreach (Light li in lampList)
+            {
+                if (li == null) continue;
+                int o = n * 12;
+                Vector3 p = li.transform.position, f = li.transform.forward;
+                Color c = li.color * li.intensity;
+                lampData[o] = p.x; lampData[o + 1] = p.y; lampData[o + 2] = p.z; lampData[o + 3] = li.range;
+                lampData[o + 4] = c.r; lampData[o + 5] = c.g; lampData[o + 6] = c.b; lampData[o + 7] = li.type == LightType.Spot ? 1 : 0;
+                lampData[o + 8] = f.x; lampData[o + 9] = f.y; lampData[o + 10] = f.z; lampData[o + 11] = Mathf.Cos(li.spotAngle * 0.5f * Mathf.Deg2Rad);
+                n++;
+            }
+            RtLamps(lampData, n, Config.GetInt("Test", "RTLampesForce", 100) * 0.01f);
+            if (n > 0 && lampLogs++ < 3) Log.Info("rt : " + n + " lampes (plus proche : " + Recon.Path(lampList[0].transform) + ", " + lampList[0].type + ", portee " + lampList[0].range.ToString("F1") + ", intensite " + lampList[0].intensity.ToString("F2") + ")");
+            return n;
+        }
 
         // Lots statiques (decor regroupe par Unity, illisible) : releves sur la carte pendant une image de capture (ombres
         // d'Unity rallumees pour elle) -- voir RtStaticCounts / RtCapture dans rt\mwcrt.cpp.
@@ -116,6 +148,7 @@ namespace MWCoop
             }
             if (hooked == null) return;
             Inputs();
+            TestCube();
             Scan(hooked);
             ProcessTextures();   // (textures de feuillage lues par la DLL : possible hors rendu)
             SendMeshes();
@@ -399,6 +432,22 @@ namespace MWCoop
             catch (System.Exception e) { Log.Warn("rt : texture " + tex.name + " illisible (" + e.Message + ")"); return false; }
         }
 
+        // Essais : [Test] RTCube = x,y,z : un cube de 1 m (ombres) pose la, apres 30 s (obstacle pour les lampes).
+        static GameObject cube;
+        static void TestCube()
+        {
+            if (cube != null || Time.realtimeSinceStartup < 30) return;
+            string v = Config.Get("Test", "RTCube", "");
+            if (v.Length == 0) return;
+            string[] p = v.Split(',');
+            if (p.Length != 3) return;
+            cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "RTCube";
+            Object.Destroy(cube.GetComponent<Collider>());
+            cube.transform.position = new Vector3(float.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture), float.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture), float.Parse(p[2], System.Globalization.CultureInfo.InvariantCulture));
+            Log.Info("rt : cube d'essai en " + cube.transform.position);
+        }
+
         static Mesh bakeTmp;
         static void UpdateSkins()
         {
@@ -565,6 +614,7 @@ namespace MWCoop
                     SendInstances();
                     SendFrame(GetComponent<Camera>(), true);
                     int flags = Config.GetInt("Test", "RTInjecter", 1) != 0 ? 1 : 0;
+                    if (SendLamps(transform.position) > 0) flags |= 16;
                     if (!dumped && Config.GetInt("Test", "RTVidage", 0) != 0 && Time.realtimeSinceStartup > Config.GetInt("Test", "RTVidage", 0)) { dumped = true; flags |= 2 | 4; }
                     RtArm(flags);
                 }
@@ -575,7 +625,7 @@ namespace MWCoop
                 Camera cam = GetComponent<Camera>();
                 bool was = capturing;
                 if (capturing) { RtCapture(0); capturing = false; if (Mode != 0) QualitySettings.shadowDistance = capDistWas; }
-                if (Mode == 0) { RtArm(0); RtPostRender(7); return; }   // (ombres deja dans la carte d'Unity ; lots releves traites)
+                if (Mode == 0) { RtPostRender(7); RtArm(0); return; }   // (lampes : passe faite par RtPostRender, armee jusque-la)   // (ombres deja dans la carte d'Unity ; lots releves traites)
                 if (was) { SendFrame(cam, false); RtPostRender(7); return; }
                 SendInstances();
                 SendFrame(cam, true);

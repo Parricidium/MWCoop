@@ -91,6 +91,7 @@ namespace MWCoop
             if (cam == null) return;
             Vector3 cp = cam.transform.position;
             int nBeam = Gfx.Get("OmbresPhares", 0), nStreet = Gfx.Get("OmbresLampadaires", 0), halos = Gfx.Get("Halos", 0);
+            if (RayTracing.LampsActive) nBeam = nStreet = 0;   // (ombres des lampes par rayons : pas celles d'Unity)
             bool longBeams = Gfx.Get("PorteePhares", 0) == 1;
             Shadows(K_BEAM, nBeam, 120f, cp);
             Shadows(K_STREET, nStreet, 80f, cp);
@@ -127,6 +128,22 @@ namespace MWCoop
                 l.Li.shadows = want ? LightShadows.Soft : l.Orig;
                 if (want) { l.Li.shadowStrength = 0.85f; l.Li.shadowBias = 0.05f; }
             }
+        }
+
+        // Ray tracing : les n lampes allumees (phares, lampadaires) les plus proches de la camera, a moins de 120 / 80 m.
+        static readonly List<KeyValuePair<float, Light>> lampNear = new List<KeyValuePair<float, Light>>();
+        public static void CollectLamps(Vector3 cp, int n, List<Light> outl)
+        {
+            outl.Clear();
+            lampNear.Clear();
+            foreach (L l in all)
+            {
+                if ((l.Kind != K_BEAM && l.Kind != K_STREET) || !On(l.Li)) continue;
+                float max = l.Kind == K_BEAM ? 120f : 80f, d = (l.Li.transform.position - cp).sqrMagnitude;
+                if (d < max * max) lampNear.Add(new KeyValuePair<float, Light>(d, l.Li));
+            }
+            lampNear.Sort((a, b) => a.Key.CompareTo(b.Key));
+            for (int i = 0; i < lampNear.Count && i < n; i++) outl.Add(lampNear[i].Value);
         }
 
         // Portee longue : x1,5 (intensite x1,25) ; si le jeu change lui-meme la portee ou l'intensite, c'est sa nouvelle base.
