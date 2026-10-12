@@ -52,6 +52,8 @@ enum {
     UI_LOOKRAND = 415, UI_LOOKRESET,
     UI_FACE_IMPORT = 420, UI_FACE_TPL, UI_FACE_DEL,   // TENUE : visage importe (importer, gabarit, retirer)
     UI_CAR_TRIM = 425,            // + k (0 au hasard, 1 L, 2 LX, 3 SLX, 4 GT) : VOITURE, finition de la CORRIS (425-429)
+    UI_CAR_VIN = 430,             // VOITURE : options de la plaque VIN (montrer / cacher)
+    UI_CAR_VINOPT = 431,          // + k : option k de la plaque (clic : valeur suivante ; 431-442)
     UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)
     UI_WIKI_ART = 8040,           // + article
     UI_WIKI_SEC = 8300,           // + bloc : section pliable de l'article

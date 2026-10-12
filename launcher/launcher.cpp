@@ -2929,6 +2929,129 @@ static void CarTrimSet(int k)
     WritePrivateProfileStringA("Coop", "FinitionVoiture", k ? kTrims[k] : NULL, ModIniA().c_str());
 }
 
+// Options de la plaque VIN de la CORRIS pour une nouvelle partie (demande de HowardCS, 12/10 : « choisir la version GT,
+// l'annee... »). Valeurs possibles par finition exportees par le mod (Vin.ExportOptions : <jeu>\MWCoop\cache\vin-options.txt,
+// « finition;cle;v1,v2,... », listes du jeu) ; choix dans [Coop] Vin<cle> (vide : au hasard). Le mod ne garde que cette
+// valeur dans la liste ou le jeu tire l'option (si la finition l'a).
+static bool g_vinView;
+static RectF g_vinBtnRect;   // (bulle du guide)
+struct VinKey { const char *key; const wchar_t *fr, *en; };
+static const VinKey kVinKeys[] = {
+    { "Year", L"Ann\u00E9e (code)", L"Year (code)" }, { "Engine", L"Moteur", L"Engine" }, { "Gearbox", L"Bo\u00EEte", L"Gearbox" },
+    { "Suspension", L"Suspension", L"Suspension" }, { "Windshield", L"Pare-brise", L"Windshield" }, { "VinylRoof", L"Toit vinyle", L"Vinyl roof" },
+    { "InteriorTrim", L"Int\u00E9rieur", L"Interior" }, { "Wheels", L"Roues", L"Wheels" }, { "Radio", L"Radio", L"Radio" },
+    { "InstrumentPanel", L"Tableau de bord", L"Instrument panel" }, { "PowerBrakes", L"Servofrein", L"Power brakes" }, { "WindowHeater", L"Lunette d\u00E9givrante", L"Heated rear window" },
+};
+static const int kVinKeyN = (int)(sizeof(kVinKeys) / sizeof(kVinKeys[0]));
+static std::map<std::string, std::vector<std::string>> g_vinOpts;   // "finition|cle" -> valeurs
+static ULONGLONG g_vinStamp, g_vinNext;
+static void VinLoad()
+{
+    if (GetTickCount64() < g_vinNext) return;
+    g_vinNext = GetTickCount64() + 2000;
+    std::wstring path = g_gameDir + L"MWCoop\\cache\\vin-options.txt";
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a)) { g_vinOpts.clear(); g_vinStamp = 0; return; }
+    ULONGLONG st = ((ULONGLONG)a.ftLastWriteTime.dwHighDateTime << 32) | a.ftLastWriteTime.dwLowDateTime;
+    if (st == g_vinStamp) return;
+    g_vinStamp = st;
+    g_vinOpts.clear();
+    FILE *f = _wfopen(path.c_str(), L"rb");
+    if (!f) return;
+    char line[1024];
+    while (fgets(line, sizeof line, f)) {
+        std::string l = line;
+        while (!l.empty() && (l.back() == '\n' || l.back() == '\r')) l.pop_back();
+        size_t a1 = l.find(';'), a2 = a1 == std::string::npos ? a1 : l.find(';', a1 + 1);
+        if (a2 == std::string::npos) continue;
+        std::vector<std::string> vals;
+        std::string rest = l.substr(a2 + 1), cur;
+        for (char c : rest) { if (c == ',') { if (!cur.empty()) vals.push_back(cur); cur.clear(); } else cur += c; }
+        if (!cur.empty()) vals.push_back(cur);
+        g_vinOpts[l.substr(0, a1) + "|" + l.substr(a1 + 1, a2 - a1 - 1)] = vals;
+    }
+    fclose(f);
+}
+// Valeurs possibles de l'option k pour la finition choisie (au hasard : toutes les finitions).
+static std::vector<std::string> VinValues(int k)
+{
+    std::vector<std::string> out;
+    int t = CarTrimGet();
+    for (int i = 1; i < 5; i++) {
+        if (t && t != i) continue;
+        auto it = g_vinOpts.find(std::string(kTrims[i]) + "|" + kVinKeys[k].key);
+        if (it == g_vinOpts.end()) continue;
+        for (const std::string &v : it->second) if (std::find(out.begin(), out.end(), v) == out.end()) out.push_back(v);
+    }
+    return out;
+}
+static std::string VinGet(int k)
+{
+    char v[32] = "";
+    std::string key = std::string("Vin") + kVinKeys[k].key;
+    GetPrivateProfileStringA("Coop", key.c_str(), "", v, sizeof(v), ModIniA().c_str());
+    return v;
+}
+static void VinCycle(int k)
+{
+    if (k < 0 || k >= kVinKeyN || g_gameDir.empty()) return;
+    std::vector<std::string> vals = VinValues(k);
+    std::string cur = VinGet(k), next;
+    if (!vals.empty()) {
+        auto it = std::find(vals.begin(), vals.end(), cur);
+        if (cur.empty()) next = vals[0];
+        else if (it != vals.end() && it + 1 != vals.end()) next = *(it + 1);
+        else next = "";
+    }
+    EnsureModDir();
+    std::string key = std::string("Vin") + kVinKeys[k].key;
+    WritePrivateProfileStringA("Coop", key.c_str(), next.empty() ? NULL : next.c_str(), ModIniA().c_str());
+}
+// Sens connu de quelques codes (le reste : le code de la plaque, tel quel).
+static std::wstring VinMeaning(int k, const std::string &v)
+{
+    std::string key = kVinKeys[k].key;
+    std::wstring w = Widen(v);
+    if (v == "-") return T(L"aucun(e)", L"none");
+    if (key == "Gearbox") return v == "B" ? T(L"B \u00B7 manuelle", L"B \u00B7 manual") : v == "7" ? T(L"7 \u00B7 automatique", L"7 \u00B7 automatic") : w;
+    if (key == "Year") return (v == "P" || v == "R" || v == "S") ? w + T(L" \u00B7 restyl\u00E9e", L" \u00B7 facelift") : w;
+    if (key == "Radio" && v == "J") return T(L"J \u00B7 radio", L"J \u00B7 radio");
+    if (key == "PowerBrakes" && v == "B") return T(L"B \u00B7 servofrein", L"B \u00B7 power brakes");
+    if (key == "WindowHeater") return w + T(L" \u00B7 d\u00E9givrante", L" \u00B7 heated");
+    return w;
+}
+static void DrawVinOptions(Graphics &g, RectF card)
+{
+    VinLoad();
+    GraphicsPath bp; RoundRect(bp, card, 20);
+    SolidBrush bb(TH(card)); g.FillPath(&bb, &bp);
+    Title(g, T(L"Plaque VIN", L"VIN plate"), RectF(card.X + 24, card.Y + 20, 300, 30), 22, kInk);
+    Para(g, T(L"Options de la CORRIS pour une nouvelle partie. Clique pour passer \u00E0 la valeur suivante ; Hasard : comme le jeu.",
+              L"CORRIS options for a new game. Click for the next value; Random: like the game."),
+         RectF(card.X + 24, card.Y + 52, card.Width - 48, 40), 12.5f, kGrey);
+    if (g_vinOpts.empty()) {
+        Text(g, T(L"Lance une partie une fois : le mod relève alors les options possibles de chaque finition.", L"Start a game once: the mod then reads the possible options of each trim."),
+             RectF(card.X + 24, card.Y + 120, card.Width - 48, 60), 14, FontStyleBold, kInk, StringAlignmentNear);
+        return;
+    }
+    float cw = (card.Width - 48 - 16) / 2, ch = 64, y0 = card.Y + 100;
+    for (int k = 0; k < kVinKeyN; k++) {
+        RectF r(card.X + 24 + (k % 2) * (cw + 16), y0 + (k / 2) * (ch + 12), cw, ch);
+        std::vector<std::string> vals = VinValues(k);
+        std::string cur = VinGet(k);
+        bool fixed = vals.size() <= 1, hot = g_uiHot == UI_CAR_VINOPT + k;
+        bool absent = !cur.empty() && std::find(vals.begin(), vals.end(), cur) == vals.end();
+        GraphicsPath p; RoundRect(p, r, 14);
+        SolidBrush fb(hot && !fixed ? TH(cardSel) : TH(field)); g.FillPath(&fb, &p);
+        Pen pen(!cur.empty() ? kAcc : TH(fieldBorder), !cur.empty() ? 2.0f : 1.0f); g.DrawPath(&pen, &p);
+        Text(g, g_fr ? kVinKeys[k].fr : kVinKeys[k].en, RectF(r.X + 14, r.Y + 8, r.Width - 28, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        std::wstring val = cur.empty() ? (fixed ? (vals.empty() ? T(L"\u2014", L"\u2014") : VinMeaning(k, vals[0]) + T(L" (seule possible)", L" (only one)")) : T(L"Hasard", L"Random"))
+                                       : VinMeaning(k, cur) + (absent ? T(L" (pas pour cette finition)", L" (not for this trim)") : L"");
+        Text(g, val, RectF(r.X + 14, r.Y + 28, r.Width - 28, 26), 14.5f, FontStyleBold, absent ? kGrey : kInk, StringAlignmentNear);
+        if (!fixed || !cur.empty()) HotZone(r, UI_CAR_VINOPT + k);
+    }
+}
+
 static void CarSetColor(int rgb)
 {
     g_carColor = rgb;
@@ -2971,7 +3094,8 @@ static void DrawCar(Graphics &g)
     Glass(kCarCard);
     Glass(kCarPanel);
     RectF view = kCarView;
-    if (g_car.state != 1) {
+    if (g_vinView) DrawVinOptions(g, kCarCard);
+    else if (g_car.state != 1) {
         const wchar_t *msg = g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\corris.mesh) : lance une partie pour le refaire.", L"Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.")
                                                : T(L"Lance une partie une fois pour voir l'aper\u00E7u de la voiture.", L"Start a game once to see the car preview.");
         Icon(g, IC_CAR, view.X + view.Width / 2, view.Y + view.Height / 2 - 40, 64, WithA(kGrey, 0.6f), 1.4f);
@@ -3013,10 +3137,12 @@ static void DrawCar(Graphics &g)
         g.DrawImage(&bm, view);
         g.SetInterpolationMode(im);
     }
-    Title(g, T(L"Ta CORRIS", L"Your CORRIS"), RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 100, 400, 32), 22, kInk);
-    Text(g, T(L"Couleur et finition pour une nouvelle partie ; l'h\u00F4te les donne \u00E0 ses invit\u00E9s.", L"Color and trim for a new game; the host gives them to their guests."),
-         RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 66, 460, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
-    if (g_car.state == 1) Text(g, T(L"Glisse pour tourner", L"Drag to rotate"), RectF(kCarCard.X + kCarCard.Width - 224, kCarCard.Y + kCarCard.Height - 66, 200, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+    if (!g_vinView) {
+        Title(g, T(L"Ta CORRIS", L"Your CORRIS"), RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 100, 400, 32), 22, kInk);
+        Text(g, T(L"Couleur et finition pour une nouvelle partie ; l'h\u00F4te les donne \u00E0 ses invit\u00E9s.", L"Color and trim for a new game; the host gives them to their guests."),
+             RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 66, 460, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
+        if (g_car.state == 1) Text(g, T(L"Glisse pour tourner", L"Drag to rotate"), RectF(kCarCard.X + kCarCard.Width - 224, kCarCard.Y + kCarCard.Height - 66, 200, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+    }
 
     // Couleur : pastilles, nom, autre couleur
     RectF pn = kCarPanel;
@@ -3067,7 +3193,8 @@ static void DrawCar(Graphics &g)
     {   // Finition ([Coop] FinitionVoiture : L, LX, SLX, GT ; vide : au hasard) : imposee au tirage d'une nouvelle partie (Vin.cs)
         float ty = ny + 128;
         Title(g, T(L"Finition", L"Trim"), RectF(pn.X + 24, ty, 200, 24), 17, kInk);
-        Text(g, T(L"nouvelle partie", L"new game"), RectF(pn.X + 120, ty, pn.Width - 144, 24), 12, FontStyleRegular, kGrey, StringAlignmentFar);
+        g_vinBtnRect = RectF(pn.X + pn.Width - 24 - 168, ty - 5, 168, 32);   // (options de la plaque VIN : a droite du titre)
+        UiButton(g, g_vinBtnRect, g_vinView ? T(L"Voir la voiture", L"Show the car") : T(L"Plaque VIN\u2026", L"VIN plate\u2026"), UI_CAR_VIN, g_vinView, -1, true, 10);
         g_trimRect = RectF(pn.X + 24, ty, pn.Width - 48, 70);
         UiSeg(g, RectF(pn.X + 24, ty + 32, pn.Width - 48, 38), { T(L"Hasard", L"Random"), L"L", L"LX", L"SLX", L"GT" }, CarTrimGet(), UI_CAR_TRIM, 12);
     }
@@ -3081,7 +3208,7 @@ static bool CarMouseDown(float x, float y)
 {
     int s = CarSwatchAt(x, y);
     if (s >= 0) { CarSetColor(CarSwatchColor(s)); return true; }
-    if (g_car.state == 1 && kCarView.Contains(x, y)) {
+    if (g_car.state == 1 && !g_vinView && kCarView.Contains(x, y)) {
         g_carDrag = true;
         g_carDragX = x; g_carDragY = y;
         SetCapture(g_wnd);

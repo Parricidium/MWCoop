@@ -328,6 +328,8 @@ static const WikiBlock kW_Look[] = {
     { WB_GO, L"Ouvrir Tenue", L"Open Outfit", TAB_SKIN },
     { WB_H, L"Voiture", L"Car" },
     { WB_P, L"La couleur de la CORRIS pour une NOUVELLE partie (la couleur de l'hôte est donnée aux invités).", L"The CORRIS color for a NEW game (the host's color is given to the guests)." },
+    { WB_P, L"« Plaque VIN… » : les options de la plaque VIN (année, moteur, boîte, suspension, pare-brise, toit vinyle, intérieur, roues, radio, tableau de bord, servofrein, lunette dégivrante). Clique une case pour passer à la valeur suivante ; « Hasard » laisse le jeu tirer. Seules les valeurs possibles pour la finition choisie sont proposées : lance une partie une fois pour que le mod les relève. Comme la couleur, l'hôte décide pour tous.",
+            L"\"VIN plate…\": the VIN plate options (year, engine, gearbox, suspension, windshield, vinyl roof, interior, wheels, radio, instrument panel, power brakes, heated rear window). Click a box for the next value; \"Random\" lets the game pick. Only the values possible for the chosen trim are offered: start a game once so the mod reads them. Like the color, the host decides for everyone." },
     { WB_GO, L"Ouvrir Voiture", L"Open Car", TAB_CAR },
     { WB_H, L"Options du jeu", L"Game options" },
     { WB_P, L"Préréglages en haut (Vanilla, Performance, Équilibré, Beau, Ultra, RT), puis trois blocs. Vanilla remet les options du jeu d'origine, sans les ajouts de MWCoop. Chaque catégorie a son icône et se déplie d'un clic sur son titre (toutes fermées au départ). Pour toi seul : les autres ne voient aucune différence.",
