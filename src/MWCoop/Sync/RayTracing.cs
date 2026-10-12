@@ -37,10 +37,14 @@ namespace MWCoop
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DMeshUpdate(int id, float[] verts, int nv);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DLamps(float[] data, int n, float strength);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DAmbient(float strength, float radius, int rays);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFloat(float v);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DColor(int id, float r, float g, float b);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int DTexAvg(System.IntPtr tex, float[] rgb);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DFrame(float[] p);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInts(int[] data, int n);
         static DProbe fProbe; static DPtr fInit; static DInt fPostRender, fCapture, fArm; static DInputs fInputs; static DMesh fMesh;
-        static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps; static DAmbient fAmbient;
+        static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps; static DAmbient fAmbient; static DFloat fRefl;
+        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg;
         static T Fn<T>(System.IntPtr lib, string name) where T : class
         {
             System.IntPtr p = GetProcAddress(lib, name);
@@ -56,6 +60,8 @@ namespace MWCoop
             fMeshUpdate = Fn<DMeshUpdate>(lib, "RtMeshUpdate");
             fLamps = Fn<DLamps>(lib, "RtLamps");
             fAmbient = Fn<DAmbient>(lib, "RtAmbient");
+            fRefl = Fn<DFloat>(lib, "RtReflections");
+            fMeshColor = Fn<DColor>(lib, "RtMeshColor"); fStaticColor = Fn<DColor>(lib, "RtStaticColor"); fTexAvg = Fn<DTexAvg>(lib, "RtTexAverage");
         }
         static int RtProbe(string logPath) { return fProbe(logPath); }
         static int RtInit(System.IntPtr d3d11Resource) { return fInit(d3d11Resource); }
@@ -72,6 +78,36 @@ namespace MWCoop
         static int RtMeshUpdate(int id, float[] verts, int nv) { return fMeshUpdate(id, verts, nv); }
         static void RtLamps(float[] data, int n, float strength) { fLamps(data, n, strength); }
         static void RtAmbient(float strength, float radius, int rays) { fAmbient(strength, radius, rays); }
+        static void RtReflections(float strength) { fRefl(strength); }
+
+        // Couleur d'une matiere pour les reflets hors de l'ecran : _Color x moyenne de la texture (lue par la DLL, gardee).
+        static readonly Dictionary<int, Color> texAvg = new Dictionary<int, Color>();
+        static readonly float[] avgBuf = new float[3];
+        static Color MatColor(Material m)
+        {
+            if (m == null) return new Color(0.6f, 0.6f, 0.6f);
+            Color c = m.HasProperty("_Color") ? m.color : Color.white;
+            Texture t = m.HasProperty("_MainTex") ? m.mainTexture : null;
+            if (t != null)
+            {
+                int id = t.GetInstanceID();
+                Color a;
+                if (!texAvg.TryGetValue(id, out a))
+                {
+                    a = Color.white;
+                    try { if (fTexAvg(t.GetNativeTexturePtr(), avgBuf) != 0) a = new Color(avgBuf[0], avgBuf[1], avgBuf[2]); } catch { }
+                    texAvg[id] = a;
+                }
+                c *= a;
+            }
+            return new Color(Mathf.Clamp01(c.r), Mathf.Clamp01(c.g), Mathf.Clamp01(c.b));
+        }
+        static readonly Dictionary<Mesh, Material> meshMat = new Dictionary<Mesh, Material>();
+        static readonly Dictionary<int, Color> staticSum = new Dictionary<int, Color>();
+        static readonly Dictionary<int, int> staticN = new Dictionary<int, int>();
+        static readonly HashSet<int> staticColorSent = new HashSet<int>();
+        // Reflets : [Graphismes] RTReflets (0 non, 50 discrets, 100 normaux ; 100 par defaut).
+        static float ReflStrength { get { return Mathf.Clamp(Config.GetInt("Test", "RTReflets", Gfx.Get("RTReflets", 100)), 0, 3000) * 0.01f; } }
 
         // Occlusion ambiante : [Graphismes] RTOcclusion (0 non, 50 legere, 100 normale, 150 forte ; 100 par defaut).
         static float AmbientStrength { get { return Mathf.Clamp(Config.GetInt("Test", "RTOcclusion", Gfx.Get("RTOcclusion", 100)), 0, 1000) * 0.01f; } }
@@ -135,7 +171,7 @@ namespace MWCoop
             RestoreShadows();
             probed = false; hooked = null; ready = false;
             lastDepth = lastNormal = System.IntPtr.Zero;
-            tracked.Clear(); meshIds.Clear(); sentMeshes.Clear(); badMeshes.Clear(); toSend.Clear(); skins.Clear(); skinNear.Clear(); queued.Clear(); cutMats.Clear(); texQueue.Clear(); texQueued.Clear();
+            tracked.Clear(); meshIds.Clear(); sentMeshes.Clear(); badMeshes.Clear(); toSend.Clear(); skins.Clear(); skinNear.Clear(); meshMat.Clear(); staticSum.Clear(); staticN.Clear(); staticColorSent.Clear(); queued.Clear(); cutMats.Clear(); texQueue.Clear(); texQueued.Clear();
             probeAt = PlayerSync.InGame && Wanted ? Time.realtimeSinceStartup + 8f : -1;
         }
 
@@ -254,6 +290,12 @@ namespace MWCoop
                 {
                     // (lot statique : releve sur la carte, pas lu ici)
                     if (statics.Add(mesh) && staticCounts.Add(mesh.vertexCount)) staticChanged = true;
+                    if (!staticColorSent.Contains(mesh.vertexCount))
+                    {
+                        Color sc0; int sn0;
+                        staticSum.TryGetValue(mesh.vertexCount, out sc0); staticN.TryGetValue(mesh.vertexCount, out sn0);
+                        staticSum[mesh.vertexCount] = sc0 + MatColor(m); staticN[mesh.vertexCount] = sn0 + 1;
+                    }
                     dup++;
                     continue;
                 }
@@ -261,6 +303,7 @@ namespace MWCoop
                 if (!meshIds.TryGetValue(mesh, out id)) { id = nextMeshId++; meshIds[mesh] = id; }
                 if (badMeshes.Contains(id)) { bad++; continue; }
                 if (cut) { cutMats[mesh] = m; leaves++; }
+                if (!meshMat.ContainsKey(mesh)) meshMat[mesh] = m;
                 if (!sentMeshes.Contains(id) && queued.Add(mesh)) toSend.Enqueue(mesh);
                 tracked.Add(new Tracked { R = mr, Mesh = id, Static = st });
             }
@@ -288,6 +331,13 @@ namespace MWCoop
                 if (sm.bounds.SqrDistance(cp) > 40f * 40f || sm.transform.root.name == "GUI") continue;
                 skinNear.Add(sm);
             }
+            foreach (var kv in staticSum)   // (couleur moyenne de chaque lot, une fois)
+                if (!staticColorSent.Contains(kv.Key))
+                {
+                    staticColorSent.Add(kv.Key);
+                    Color avg = kv.Value * (1f / Mathf.Max(1, staticN[kv.Key]));
+                    try { fStaticColor(kv.Key, avg.r, avg.g, avg.b); } catch { }
+                }
             if (staticChanged)
             {
                 staticChanged = false;
@@ -398,6 +448,8 @@ namespace MWCoop
                     }
                     else sent = RtMesh(id, f, v.Length, t, t.Length);
                     if (sent != 0) sentMeshes.Add(id); else badMeshes.Add(id);
+                    Material mc;
+                    if (sent != 0 && meshMat.TryGetValue(mesh, out mc)) { Color cc = MatColor(mc); fMeshColor(id, cc.r, cc.g, cc.b); }
                 }
                 catch { badMeshes.Add(id); }
             }
@@ -473,6 +525,7 @@ namespace MWCoop
                     {
                         int[] t = st.Baked.triangles;
                         st.Sent = RtMesh(st.Id, st.Buf, v.Length, t, t.Length) != 0;
+                        if (st.Sent) { Color cc = MatColor(sm.sharedMaterial); fMeshColor(st.Id, cc.r, cc.g, cc.b); }
                         if (st.Sent) sentMeshes.Add(st.Id);
                         Bounds b = st.Baked.bounds;
                         Log.Info("rt : personnage " + Recon.Path(sm.transform) + " : " + v.Length + " sommets, " + (t.Length / 3) + " triangles, pose de " + b.min.ToString("F2") + " a " + b.max.ToString("F2")
@@ -622,7 +675,9 @@ namespace MWCoop
                     int flags = Config.GetInt("Test", "RTInjecter", 1) != 0 ? 1 : 0;
                     float aoS = AmbientStrength;
                     RtAmbient(aoS, 1.5f, Config.GetInt("Test", "RTOcclusionRayons", 2));
-                    if (SendLamps(transform.position) > 0 || aoS > 0) flags |= 16;
+                    float rfS = ReflStrength;
+                    RtReflections(rfS);
+                    if (SendLamps(transform.position) > 0 || aoS > 0 || rfS > 0) flags |= 16;
                     if (!dumped && Config.GetInt("Test", "RTVidage", 0) != 0 && Time.realtimeSinceStartup > Config.GetInt("Test", "RTVidage", 0)) { dumped = true; flags |= 2 | 4; }
                     RtArm(flags);
                 }

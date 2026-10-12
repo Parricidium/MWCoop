@@ -12,7 +12,7 @@ struct Frame {
     float4 params;   // x : portee des rayons (m), y : decalage le long de la normale (m), z : decalage vers le soleil (m), w : 1 controle
     float4 cam;      // position de la camera (controle : rayons depuis la camera)
 };
-struct InstInfo { uint ib, uv, tex, texW, texH; float cutoff; uint pad0, pad1; };   // cases des tampons (tableau gBufs)
+struct InstInfo { uint ib, uv, tex, texW, texH; float cutoff; uint vb, pad0; float cr, cg, cb, pad1; };   // cases des tampons (tableau gBufs), couleur de l'objet
 
 ConstantBuffer<Frame> gF : register(b0);
 RaytracingAccelerationStructure gScene : register(t0);

@@ -12,7 +12,7 @@ struct Frame {
     float4 params;
     float4 cam;      // position de la camera
 };
-struct InstInfo { uint ib, uv, tex, texW, texH; float cutoff; uint pad0, pad1; };
+struct InstInfo { uint ib, uv, tex, texW, texH; float cutoff; uint vb, pad0; float cr, cg, cb, pad1; };
 struct Lamp { float3 pos; float range; float3 col; float type; float3 dir; float cosHalf; };   // type : 0 point, 1 projecteur
 
 ConstantBuffer<Frame> gF : register(b0);
@@ -23,6 +23,7 @@ StructuredBuffer<InstInfo> gInst : register(t3);
 StructuredBuffer<Lamp> gLamps : register(t4);
 RWTexture2D<uint> gLampVis : register(u1);
 RWTexture2D<float> gAO : register(u2);
+RWTexture2D<float4> gRefl : register(u3);   // (reflets : rgb couleur estimee du point touche, a distance ; 0 : rien)
 
 uint Hash(uint x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
 float Rand(inout uint s) { s = Hash(s); return (s & 0xFFFFFF) / 16777216.0; }
@@ -121,4 +122,55 @@ void Main(uint3 id : SV_DispatchThreadID)
         ao = freeN / rays;
     }
     gAO[id.xy] = ao;
+    // Reflets (size.w = 1) : surfaces lisses (lisse dans pos.w - 1, prepare depuis le G-buffer), rayon reflechi parfait.
+    float hitT = 0;
+    float3 hitCol = 0;
+    if (gF.size.w == 1 && p.w > 1.3)
+    {
+        float3 n = normalize(gNrm[id.xy].xyz * 2 - 1);
+        float3 v = normalize(p.xyz - gF.cam.xyz);
+        float3 rd = reflect(v, n);
+        if (dot(rd, n) > 0.02)
+        {
+            float camDist = length(p.xyz - gF.cam.xyz);
+            RayDesc r;
+            r.Origin = p.xyz + n * (0.03 + 0.002 * camDist);
+            r.Direction = rd;
+            r.TMin = 0.03;
+            r.TMax = 80;
+            RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;   // (premier objet touche : le plus proche)
+            q.TraceRayInline(gScene, 0, 0xFF, r);
+            while (q.Proceed())
+                if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && AlphaPass(q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics()))
+                    q.CommitNonOpaqueTriangleHit();
+            if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+            {
+                hitT = q.CommittedRayT();
+                // couleur du point touche (utile hors de l'ecran) : couleur de l'objet x (ambiance + soleil x ombre)
+                InstInfo ii = gInst[q.CommittedInstanceID()];
+                float3 hp = r.Origin + rd * hitT, hn = -rd;
+                if (ii.vb != 0xFFFFFFFFu && ii.ib != 0xFFFFFFFFu)
+                {
+                    uint3 t = gBufs[NonUniformResourceIndex(ii.ib)].Load3(q.CommittedPrimitiveIndex() * 12);
+                    ByteAddressBuffer vbuf = gBufs[NonUniformResourceIndex(ii.vb)];
+                    float3 a = asfloat(vbuf.Load3(t.x * 12)), b = asfloat(vbuf.Load3(t.y * 12)), c = asfloat(vbuf.Load3(t.z * 12));
+                    float3 on = cross(b - a, c - a);
+                    float3x4 o2w = q.CommittedObjectToWorld3x4();
+                    float3 wn = float3(dot(o2w[0].xyz, on), dot(o2w[1].xyz, on), dot(o2w[2].xyz, on));
+                    if (dot(wn, wn) > 1e-12) hn = normalize(wn);
+                    if (dot(hn, rd) > 0) hn = -hn;
+                }
+                Lamp env = gLamps[16];   // (pos : couleur du soleil, col : ambiance)
+                float3 L = normalize(gF.sunDir.xyz);
+                float ndl = saturate(dot(hn, L)), sv = 0;
+                if (ndl > 0)
+                {
+                    RayDesc sr; sr.Origin = hp + hn * 0.05; sr.Direction = L; sr.TMin = 0.02; sr.TMax = 300;
+                    sv = Free(sr) ? 1 : 0;
+                }
+                hitCol = float3(ii.cr, ii.cg, ii.cb) * (env.col + env.pos * ndl * sv);
+            }
+        }
+    }
+    gRefl[id.xy] = float4(hitCol, hitT);
 }
