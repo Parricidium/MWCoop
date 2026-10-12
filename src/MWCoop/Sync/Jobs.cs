@@ -1549,6 +1549,8 @@ namespace MWCoop
                 }
                 case "@benne": OnBed(r.F32()); break;
                 case "@renverse": RunOver.OnMessage(who, r); break;
+                case "@tasse": Wear.OnCup(who, r); break;
+                case "@carbu": FuelPrices.OnMessage(who, r); break;
                 case "@bout": { Vector3 p = r.Vec(); Quaternion q = r.Quat(); SewageHose.OnRemote(who, p, q, r.Bool()); break; }
                 case "@attelage": OnHitch(who, r.U8()); break;
                 case "@arrestation": Police.OnArrest(who, r.Vec()); break;
