@@ -55,6 +55,30 @@ namespace MWCoop
             }
         }
 
+        // Voiture de la circulation dont l'INVITE a pris la physique (Traffic.Claim, pour un choc possible) : chez l'hote elle
+        // n'est plus testee (pas a lui), et chez l'invite l'automate du jeu qui tue au contact (Throttle) est coupe sur les
+        // copies -- personne ne voyait le choc (Menor, 12/10 : « the client don't get run over by npcs »). On teste ici le
+        // joueur LOCAL ; les autres recoivent @renverse pour l'elan du pantin.
+        public static void CheckLocal(Transform root, Rigidbody body, string carName)
+        {
+            if (!On || !Session.Active || root == null || body == null || body.isKinematic || Session.Me == null) return;
+            Vector3 v = body.velocity;
+            float kmh = v.magnitude * 3.6f;
+            if (kmh < MinKmh) return;
+            if (Respawn.Choosing || Seats.Seated || VehicleSync.LocalDriving >= 0) return;
+            PlayerState st = Session.Me.State;
+            if ((st.Flags & (PlayerSync.F_Dead | PlayerSync.F_Seated | PlayerSync.F_Sleep)) != 0) return;
+            Vector3 feet = st.Feet;
+            if ((feet - body.worldCenterOfMass).sqrMagnitude > 10f * 10f) return;
+            float now = Time.realtimeSinceStartup, last;
+            if (sent.TryGetValue(Session.LocalId, out last) && now - last < 5f) return;
+            if (!Touches(root, feet + Vector3.up * 0.55f, v) && !Touches(root, feet + Vector3.up * 1.2f, v)) return;
+            sent[Session.LocalId] = now;
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@renverse").U8(Session.LocalId).Str("RunOver").Vec(v).Str(carName ?? root.name), true);
+            Hit(Session.LocalId, v);
+            Log.Info("renverse ici par " + (carName ?? root.name) + " (physique prise, " + kmh.ToString("F0") + " km/h) : " + Respawn.TestDie("RunOver"));
+        }
+
         // Carrosserie de 'root' sur le point (ou passee dessus depuis la derniere mesure, 0,05 s : balayage a rebours).
         static bool Touches(Transform root, Vector3 p, Vector3 v)
         {

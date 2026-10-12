@@ -581,7 +581,10 @@ namespace MWCoop
             b = null;
             if (f != null && f.GetComponent<MeshFilter>() != null)
             {
-                b = new Belt { Fastened = f.gameObject, Open = o != null ? o.gameObject : null, DriverOpen = dov != null ? dov.gameObject : null };
+                // (BACHGLOTZ : ceinture ventrale du conducteur sans sangle a languette -- Seatbelts/Open, la defaite, cachee quand
+                // il est boucle chez les autres)
+                Transform dopen = dov ?? FindUnder(car, "Open", "Seatbelts");
+                b = new Belt { Fastened = f.gameObject, Open = o != null ? o.gameObject : null, DriverOpen = dopen != null ? dopen.gameObject : null };
                 Vector3 kp = k != null ? car.InverseTransformPoint(k.position) : new Vector3(-0.2f, 0.45f, 0f);
                 b.Buckle = new Vector3(-kp.x, kp.y, kp.z);   // (cote passager : en miroir)
                 b.DriverBuckle = kp;
@@ -638,18 +641,33 @@ namespace MWCoop
             }
             bool holding = beltHold > 0f;
             BlockHandle(aimHandle || aimBuckle || holding);
-            BeltHint(beltOn ? (aimBuckle ? "UNFASTEN SEATBELT" : null) : holding ? (aimBuckle ? "FASTEN SEATBELT" : null) : aimHandle ? "TAKE SEATBELT" : null);
+            bool lap = b != null && handle == null;
+            BeltHint(beltOn ? (aimBuckle ? (lap ? "UNBUCKLE LAP BELT" : "UNFASTEN SEATBELT") : null) : holding ? (aimBuckle ? "FASTEN SEATBELT" : null) : aimHandle ? "TAKE SEATBELT" : null);
             if (beltOn)
             {
                 if (heldHandle != null) Drop(b);   // (bouclee autrement : languette reposee)
                 if (aimBuckle && Input.GetMouseButtonDown(0))
                 {
                     beltOn = false;
-                    Foley("seatbelt_unfasten", current.CarT.TransformPoint(b.Buckle));
+                    Foley(lap ? "harness_lock" : "seatbelt_unfasten", current.CarT.TransformPoint(b.Buckle));
                     Log.Info("ceinture passager : detachee (" + current.Car + ")");
                     SendSeat(current.Car, current.Index, headLocal);
                 }
                 beltHold = 0f;
+                return;
+            }
+            // Ceinture ventrale sans languette (BACHGLOTZ, retour de Menor, 12/10 : « des ceintures pour le passager de la
+            // Bachglotz ») : comme celle du conducteur du jeu (BuckleUp), un clic sur la boucle la boucle.
+            if (!holding && b != null && handle == null && aimBuckle)
+            {
+                BeltHint("BUCKLE UP LAPBELT");
+                if (Input.GetMouseButtonDown(0))
+                {
+                    beltOn = true;
+                    Foley("harness_lock", current.CarT.TransformPoint(b.Buckle));
+                    Log.Info("ceinture passager : ventrale bouclee (" + current.Car + ")");
+                    SendSeat(current.Car, current.Index, headLocal);
+                }
                 return;
             }
             if (!holding && aimHandle && Input.GetMouseButtonDown(0)) { Grab(b); Log.Info("ceinture passager : prise (" + current.Car + ")"); return; }

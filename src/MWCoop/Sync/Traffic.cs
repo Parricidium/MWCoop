@@ -686,6 +686,7 @@ namespace MWCoop
                 if (now - e.OwnSent >= 0.05f)
                 {
                     e.OwnSent = now;
+                    RunOver.CheckLocal(e.T, e.Body, e.Key);   // (physique ici : le choc avec NOUS n'est teste nulle part ailleurs)
                     int hi = HostIndexOf(li);
                     if (hi >= 0) Session.SendToHost(new NetWriter(Msg.Traffic).U16(Control).U8(C_STATE).U16(hi).Vec(e.T.position).Quat(e.T.rotation).Vec(e.Body.velocity), false);
                 }
@@ -1068,7 +1069,19 @@ namespace MWCoop
                 Log.Info("autotest : choc : avant " + ChocState(chocEnt));
                 Claim(ents[best], best, Time.realtimeSinceStartup);
                 // ([Test] ChocPousse=0 : sans poussee -- la prise de physique seule, comme une voiture qui passe pres)
-                if (Config.GetInt("Test", "ChocPousse", 1) != 0) ents[best].Body.AddForce(ents[best].T.right * ents[best].Body.mass * 4f, ForceMode.Impulse);
+                // ([Test] ChocVictime=1 : la voiture lancee a 45 km/h droit sur l'invite, pose 7 m devant elle -- renverse ?)
+                if (Config.GetInt("Test", "ChocVictime", 0) != 0)
+                {
+                    Ent ve = ents[best];
+                    Vector3 fwd = ve.T.forward; fwd.y = 0f; fwd.Normalize();
+                    ve.Body.velocity = fwd * 12.5f;
+                    GameObject pl = GameObject.Find("PLAYER");
+                    var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) cc.enabled = false;
+                    if (pl != null) pl.transform.position = ve.T.position + fwd * 7f + Vector3.up * 1f;
+                    if (cc != null) cc.enabled = true;
+                }
+                else if (Config.GetInt("Test", "ChocPousse", 1) != 0) ents[best].Body.AddForce(ents[best].T.right * ents[best].Body.mass * 4f, ForceMode.Impulse);
                 Log.Info("autotest : choc : " + ents[best].Key + " poussee a " + Mathf.Sqrt(bd).ToString("F0") + " m");
             }
             if (chocStep == 1 && chocEnt != null && t < chocUntil && t >= chocNext) { chocNext = t + 0.25f; Log.Info("autotest : choc : " + ChocState(chocEnt)); }
