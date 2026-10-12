@@ -24,7 +24,8 @@ StructuredBuffer<Lamp> gLamps : register(t4);
 RWTexture2D<uint> gLampVis : register(u1);
 RWTexture2D<float> gAO : register(u2);
 RWTexture2D<float4> gRefl : register(u3);
-RWTexture2D<float4> gGI : register(u4);   // (rebond de lumiere : lumiere recue des surfaces voisines eclairees)   // (reflets : rgb couleur estimee du point touche, a distance ; 0 : rien)
+RWTexture2D<float4> gGI : register(u4);
+RWTexture2D<float4> gGlass : register(u5);   // (vitres : rgb couleur reflechie, a poids de Fresnel ; 0 : pas de vitre)   // (rebond de lumiere : lumiere recue des surfaces voisines eclairees)   // (reflets : rgb couleur estimee du point touche, a distance ; 0 : rien)
 
 uint Hash(uint x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
 float Rand(inout uint s) { s = Hash(s); return (s & 0xFFFFFF) / 16777216.0; }
@@ -177,7 +178,7 @@ void Main(uint3 id : SV_DispatchThreadID)
             r.Direction = normalize(t * (rr * cos(u2)) + b * (rr * sin(u2)) + n * sqrt(1 - u1));   // (hemisphere, cosinus)
             r.TMin = 0.02;
             r.TMax = gF.params.x;
-            if (FreeM(r, 0xFF)) freeN += 1;
+            if (FreeM(r, 0x03)) freeN += 1;
         }
         ao = freeN / rays;
     }
@@ -199,7 +200,7 @@ void Main(uint3 id : SV_DispatchThreadID)
             r.TMin = 0.03;
             r.TMax = 80;
             RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> q;   // (premier objet touche : le plus proche)
-            q.TraceRayInline(gScene, 0, 0xFF, r);
+            q.TraceRayInline(gScene, 0, 0x03, r);
             while (q.Proceed())
                 if (q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && AlphaPass(q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics()))
                     q.CommitNonOpaqueTriangleHit();
@@ -213,6 +214,45 @@ void Main(uint3 id : SV_DispatchThreadID)
     gRefl[id.xy] = float4(hitCol, hitT);
     // Rebond de lumiere (cam.w = 1) : un rayon dans l'hemisphere (cosinus), jusqu'a 15 m ; s'il touche une surface, sa
     // lumiere (couleur x eclairage direct) ; rien touche : le ciel, deja dans l'ambiance d'Unity. Tirage different a chaque image (accumule).
+    // Vitres (env.range > 0 : force) : rayon de la camera vers le point du pixel ; s'il traverse une vitre (masque 4), rayon
+    // reflechi depuis la vitre, lumiere du point touche ; poids de Fresnel (verre : 4 % de face, 100 % en rasant).
+    float4 glass = 0;
+    if (gLamps[16].range > 0 && p.w > 0.5)
+    {
+        float3 dv = p.xyz - gF.cam.xyz; float dd = length(dv);
+        RayDesc cr; cr.Origin = gF.cam.xyz; cr.Direction = dv / dd; cr.TMin = 0.05; cr.TMax = dd + 0.05;   // (vitre devant le point, ou le point lui-meme : givre dessine)
+        RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> gq;
+        gq.TraceRayInline(gScene, 0, 0x04, cr);
+        gq.Proceed();
+        if (gq.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+        {
+            InstInfo gi0 = gInst[gq.CommittedInstanceID()];
+            float3 hp = cr.Origin + cr.Direction * gq.CommittedRayT(), gn = -cr.Direction;
+            if (gi0.vb != 0xFFFFFFFFu && gi0.ib != 0xFFFFFFFFu)
+            {
+                uint3 t3 = gBufs[NonUniformResourceIndex(gi0.ib)].Load3(gq.CommittedPrimitiveIndex() * 12);
+                ByteAddressBuffer vbuf = gBufs[NonUniformResourceIndex(gi0.vb)];
+                float3 a = asfloat(vbuf.Load3(t3.x * 12)), b = asfloat(vbuf.Load3(t3.y * 12)), c = asfloat(vbuf.Load3(t3.z * 12));
+                float3 on = cross(b - a, c - a);
+                float3x4 o2w = gq.CommittedObjectToWorld3x4();
+                float3 wn = float3(dot(o2w[0].xyz, on), dot(o2w[1].xyz, on), dot(o2w[2].xyz, on));
+                if (dot(wn, wn) > 1e-12) gn = normalize(wn);
+                if (dot(gn, cr.Direction) > 0) gn = -gn;
+            }
+            float3 rd = reflect(cr.Direction, gn);
+            float cosv = saturate(dot(-cr.Direction, gn));
+            float fres = 0.04 + 0.96 * pow(1 - cosv, 5);
+            RayDesc rr; rr.Origin = hp + gn * 0.02; rr.Direction = rd; rr.TMin = 0.02; rr.TMax = 80;
+            RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> rq;
+            rq.TraceRayInline(gScene, 0, 0x03, rr);
+            rq.Proceed();
+            if (rq.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+                glass = float4(ShadeHit(rq.CommittedInstanceID(), rq.CommittedPrimitiveIndex(), rq.CommittedTriangleBarycentrics(), rq.CommittedObjectToWorld3x4(), rr.Origin + rd * rq.CommittedRayT(), rd, true), fres);
+            else
+                glass = float4(gLamps[16].col, fres);   // (rien touche : le ciel, couleur de l'ambiance)
+        }
+    }
+    gGlass[id.xy] = glass;
     float3 gi = 0;
     // (un pixel sur quatre par image, a tour de role : l'accumulation fait le reste ; les autres gardent leur valeur)
     if (gF.cam.w > 0.5 && ((id.x & 1) + (id.y & 1) * 2) != (gF.size.z & 3)) return;
@@ -230,7 +270,7 @@ void Main(uint3 id : SV_DispatchThreadID)
         r.TMin = 0.03;
         r.TMax = 10;
         RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> q;
-        q.TraceRayInline(gScene, 0, 0xFF, r);
+        q.TraceRayInline(gScene, 0, 0x03, r);
         q.Proceed();
         if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
             gi = ShadeHit(q.CommittedInstanceID(), q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), q.CommittedObjectToWorld3x4(), r.Origin + r.Direction * q.CommittedRayT(), r.Direction, true);

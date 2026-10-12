@@ -14,11 +14,12 @@ namespace MWCoop
     //  - Scene : maillages des rendus a moins de [Graphismes] RTPortee m (250) de la camera, qui projettent une ombre,
     //    opaques ou a decoupe (feuillages : arbres, haies -- uv et alpha de la texture envoyes, test alpha par rayon) ;
     //    envoyes une fois (positions, triangles), puis matrices a chaque image. Lots statiques : le maillage
-    //    combine (deja dans le monde) une fois. Personnages (maillages animes) : pas encore.
+    //    combine (deja dans le monde) une fois. Personnages (maillages animes) : pose recalculee a chaque image.
     //  - Ombres : Unity 5.0 rassemble les ombres du soleil dans une carte a l'echelle de l'ecran (« Screenspace ShadowMap »)
     //    juste avant son eclairage differe. La DLL remplace son contenu par les ombres RT a ce moment-la (crochet sur le
     //    changement de cible) : l'eclairage reste celui d'Unity (ambiance, reflets, force). Les ombres d'Unity du soleil
-    //    restent donc allumees (rallumees si le joueur les a coupees, rendues a la sortie). Mode 14 : ancien melange.
+    //    restent donc allumees (rallumees si le joueur les a coupees, rendues a la sortie).
+    //  - Passe tardive (fin du rendu de la camera) : ombres des lampes, occlusion ambiante, reflets, rebond, vitres.
     // Rendu du jeu (sonde du 11/10) : DeferredShading en HDR, soleil MAP/Sun/PivotSun/SUN (ombres douces, force 0.8).
     public static class RayTracing
     {
@@ -48,7 +49,7 @@ namespace MWCoop
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DInts(int[] data, int n);
         static DProbe fProbe; static DPtr fInit; static DInt fPostRender, fCapture, fArm; static DInputs fInputs; static DMesh fMesh;
         static DMeshAlpha fMeshAlpha; static DTexture fTexture; static DFloats fInstances; static DFrame fFrame; static DInts fStaticCounts; static DMeshUpdate fMeshUpdate; static DLamps fLamps; static DAmbient fAmbient; static DFloat fRefl;
-        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg; static DColorTex fColorTex; static DMeshParts fMeshParts; static DMask fMeshMask; static DForget fForget; static DFloat fBounce;
+        static DColor fMeshColor, fStaticColor; static DTexAvg fTexAvg; static DColorTex fColorTex; static DMeshParts fMeshParts; static DMask fMeshMask; static DForget fForget; static DFloat fBounce, fGlass;
         static T Fn<T>(System.IntPtr lib, string name) where T : class
         {
             System.IntPtr p = GetProcAddress(lib, name);
@@ -66,7 +67,7 @@ namespace MWCoop
             fAmbient = Fn<DAmbient>(lib, "RtAmbient");
             fRefl = Fn<DFloat>(lib, "RtReflections");
             fMeshColor = Fn<DColor>(lib, "RtMeshColor"); fStaticColor = Fn<DColor>(lib, "RtStaticColor"); fTexAvg = Fn<DTexAvg>(lib, "RtTexAverage");
-            fColorTex = Fn<DColorTex>(lib, "RtColorTexture"); fMeshParts = Fn<DMeshParts>(lib, "RtMeshParts"); fMeshMask = Fn<DMask>(lib, "RtMeshMask"); fForget = Fn<DForget>(lib, "RtForgetMesh"); fBounce = Fn<DFloat>(lib, "RtBounce");
+            fColorTex = Fn<DColorTex>(lib, "RtColorTexture"); fMeshParts = Fn<DMeshParts>(lib, "RtMeshParts"); fMeshMask = Fn<DMask>(lib, "RtMeshMask"); fForget = Fn<DForget>(lib, "RtForgetMesh"); fBounce = Fn<DFloat>(lib, "RtBounce"); fGlass = Fn<DFloat>(lib, "RtGlass");
         }
         static int RtProbe(string logPath) { return fProbe(logPath); }
         static int RtInit(System.IntPtr d3d11Resource) { return fInit(d3d11Resource); }
@@ -119,10 +120,10 @@ namespace MWCoop
 
         // Ombres des lampes (phares, lampadaires) par rayons : [Graphismes] RTLampes = nombre de lampes (0 : non ; 8 par defaut).
         // Actives : le module Lumieres ne donne plus d'ombres d'Unity a ces lampes.
-        public static bool LampsActive { get { return ready && Wanted && Direct && Mode == 0 && LampCount > 0; } }
+        public static bool LampsActive { get { return ready && Wanted && Direct && LampCount > 0; } }
         // Corps du joueur local a la premiere personne (demande de JD, 12/10 : « la reflexion du joueur ») : son avatar existe,
         // invisible a la camera (ombre seulement), pour les rayons -- reflets, ombres, occlusion. [Graphismes] RTCorps (1).
-        public static bool BodyWanted { get { return ready && Wanted && Direct && Mode == 0 && Gfx.Get("RTCorps", 1) != 0; } }
+        public static bool BodyWanted { get { return ready && Wanted && Direct && Gfx.Get("RTCorps", 1) != 0; } }
         static int LampCount { get { return Mathf.Clamp(Config.GetInt("Test", "RTLampes", Gfx.Get("RTLampes", 8)), 0, 16); } }
         static readonly List<Light> lampList = new List<Light>();
         static readonly float[] lampData = new float[16 * 12];
@@ -161,7 +162,6 @@ namespace MWCoop
         static Texture2D devTex;
 
         public static bool Wanted { get { return Config.GetInt("Test", "RT", 0) != 0 || Gfx.Get("RayTracing", 0) != 0; } }
-        static int Mode { get { return Config.GetInt("Test", "RTMode", 0); } }
 
         // Jeu lance avec -force-gfx-direct : Unity dessine sur son fil principal, le mod peut appeler la DLL au bon moment.
         static int direct = -1;
@@ -179,7 +179,7 @@ namespace MWCoop
             RestoreShadows();
             probed = false; hooked = null; ready = false;
             lastDepth = lastNormal = System.IntPtr.Zero;
-            tracked.Clear(); meshIds.Clear(); sentMeshes.Clear(); badMeshes.Clear(); toSend.Clear(); skins.Clear(); skinNear.Clear(); meshMat.Clear(); staticSum.Clear(); staticN.Clear(); staticColorSent.Clear(); groundIds.Clear(); groundMasked.Clear(); lastSeen.Clear(); queued.Clear(); cutMats.Clear(); texQueue.Clear(); texQueued.Clear();
+            tracked.Clear(); meshIds.Clear(); sentMeshes.Clear(); badMeshes.Clear(); toSend.Clear(); skins.Clear(); skinNear.Clear(); meshMat.Clear(); staticSum.Clear(); staticN.Clear(); staticColorSent.Clear(); groundIds.Clear(); groundMasked.Clear(); lastSeen.Clear(); glassIds.Clear(); queued.Clear(); cutMats.Clear(); texQueue.Clear(); texQueued.Clear();
             probeAt = PlayerSync.InGame && Wanted ? Time.realtimeSinceStartup + 8f : -1;
         }
 
@@ -198,7 +198,6 @@ namespace MWCoop
             }
             if (hooked == null) return;
             Inputs();
-            TestCube();
             Scan(hooked);
             ProcessTextures();   // (textures de feuillage lues par la DLL : possible hors rendu)
             SendMeshes();
@@ -307,7 +306,6 @@ namespace MWCoop
         static readonly Queue<Texture> texQueue = new Queue<Texture>();   // (lues pendant le rendu : OnPostRender)
         static readonly HashSet<int> texQueued = new HashSet<int>();
         static float nextScan, nextScanLog;
-        static bool lotsLogged;
         static int nextMeshId = 1;
 
         static float Range { get { return Mathf.Clamp(Gfx.Get("RTPortee", 250), 50, 1000); } }
@@ -320,7 +318,7 @@ namespace MWCoop
             float r2 = Range * Range;
             tracked.Clear();
             var statics = new HashSet<Mesh>();
-            int total = 0, off = 0, noShadow = 0, far = 0, transp = 0, excl = 0, noMesh = 0, dup = 0, bad = 0, leaves = 0, grounds = 0;
+            int total = 0, off = 0, noShadow = 0, far = 0, transp = 0, excl = 0, noMesh = 0, dup = 0, bad = 0, leaves = 0, grounds = 0, glasses = 0;
             foreach (MeshRenderer mr in Object.FindObjectsOfType<MeshRenderer>())
             {
                 total++;
@@ -347,8 +345,24 @@ namespace MWCoop
                 if (mr.bounds.SqrDistance(cp) > r2) { far++; continue; }
                 Material m = mr.sharedMaterial;
                 // Feuillages : shaders a decoupe (_Cutoff ; « Nature/Tree Soft Occlusion Leaves » est dans la file transparente)
+                // Vitres (nom du rendu ou de la matiere : glass, window, windshield) : leur propre masque (4), ni ombre ni occlusion,
+                // reflets calcules a part (rayon de la camera qui les traverse).
+                bool glass = m != null && !mr.isPartOfStaticBatch && IsGlass(mr, m);
+                if (glass)
+                {
+                    MeshFilter gf = mr.GetComponent<MeshFilter>();
+                    Mesh gmesh = gf != null ? gf.sharedMesh : null;
+                    if (gmesh == null) { noMesh++; continue; }
+                    int gid;
+                    if (!meshIds.TryGetValue(gmesh, out gid)) { gid = nextMeshId++; meshIds[gmesh] = gid; }
+                    glassIds.Add(gid);
+                    if (badMeshes.Contains(gid)) { bad++; continue; }
+                    if (!sentMeshes.Contains(gid) && queued.Add(gmesh)) toSend.Enqueue(gmesh);
+                    tracked.Add(new Tracked { R = mr, Mesh = gid });
+                    glasses++;
+                    continue;
+                }
                 bool cut = m != null && Cutout(m) && mr.sharedMaterials.Length == 1 && !mr.isPartOfStaticBatch;
-                if (cut && Config.GetInt("Test", "RTSansFeuillage", 0) != 0) { transp++; continue; }   // (essais)
                 if (m == null || (m.renderQueue >= 2500 && !cut)) { transp++; continue; }    // transparents (vitres...) : pas d'ombre
                 Transform root = mr.transform.root;
                 if (root.name == "PLAYER" || root.name == "GUI" || (root.name.StartsWith("MWCoop") && !root.name.StartsWith("MWCoop-Joueur"))) { excl++; continue; }   // (avatars : chapeaux, accessoires compris)
@@ -356,7 +370,6 @@ namespace MWCoop
                 Mesh mesh = mf != null ? mf.sharedMesh : null;
                 if (mesh == null) { noMesh++; continue; }
                 bool st = mr.isPartOfStaticBatch;
-                if (st && Config.GetInt("Test", "RTSansLots", 0) != 0) { dup++; continue; }   // (essais)
                 if (st)
                 {
                     // (lot statique : releve sur la carte, pas lu ici)
@@ -377,38 +390,6 @@ namespace MWCoop
                 if (!meshMat.ContainsKey(mesh)) meshMat[mesh] = m;
                 if (!sentMeshes.Contains(id) && queued.Add(mesh)) toSend.Enqueue(mesh);
                 tracked.Add(new Tracked { R = mr, Mesh = id, Static = st });
-            }
-            if (Config.GetInt("Test", "RTSol", 0) != 0 && !groundLogged && Time.realtimeSinceStartup > 40)
-            {
-                groundLogged = true;
-                var gs = new System.Text.StringBuilder();
-                foreach (RaycastHit h in Physics.RaycastAll(cp + Vector3.up * 2f, Vector3.down, 50f))
-                {
-                    Transform ht = h.collider.transform;
-                    Renderer hr = ht.GetComponent<Renderer>();
-                    MeshFilter hf = ht.GetComponent<MeshFilter>();
-                    gs.Append(" | ").Append(Recon.Path(ht)).Append(' ').Append(h.collider.GetType().Name).Append(" a ").Append(h.distance.ToString("F1"))
-                      .Append(hr != null ? " rendu " + hr.GetType().Name + (hr.enabled ? "" : " coupe") + " ombres " + hr.shadowCastingMode + (hr.isPartOfStaticBatch ? " lot" : "") + " mat " + (hr.sharedMaterial != null ? hr.sharedMaterial.shader.name : "-") : " sans rendu")
-                      .Append(hf != null && hf.sharedMesh != null ? " sommets " + hf.sharedMesh.vertexCount : "");
-                }
-                foreach (Terrain te in Object.FindObjectsOfType<Terrain>()) gs.Append(" | TERRAIN ").Append(Recon.Path(te.transform)).Append(' ').Append(te.terrainData != null ? te.terrainData.size.ToString() : "");
-                Log.Info("rt : sol sous la camera :" + gs);
-            }
-            if (Config.GetInt("Test", "RTProches", 0) != 0 && !nearLogged && Time.realtimeSinceStartup > 40)
-            {
-                nearLogged = true;
-                var sb = new System.Text.StringBuilder();
-                foreach (Renderer rr in Object.FindObjectsOfType<Renderer>())
-                {
-                    if (rr.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off || !rr.enabled || rr.bounds.SqrDistance(cp) > 15f * 15f) continue;
-                    sb.Append(" | ").Append(Recon.Path(rr.transform)).Append(' ').Append(rr.GetType().Name).Append(rr.isPartOfStaticBatch ? " lot" : "").Append(" mat");
-                    foreach (Material mm in rr.sharedMaterials) sb.Append(' ').Append(mm != null ? mm.shader.name + "/" + mm.renderQueue : "null");
-                    MeshFilter mf = rr.GetComponent<MeshFilter>();
-                    sb.Append(" sommets ").Append(mf != null && mf.sharedMesh != null ? mf.sharedMesh.vertexCount : -1);
-                    bool tr = false; foreach (Tracked t in tracked) if (t.R == rr) tr = true;
-                    sb.Append(tr ? " SUIVI" : "");
-                }
-                Log.Info("rt : objets a 15 m qui projettent une ombre :" + sb);
             }
             skinNear.Clear();
             foreach (SkinnedMeshRenderer sm in Object.FindObjectsOfType<SkinnedMeshRenderer>())
@@ -434,46 +415,12 @@ namespace MWCoop
                 Log.Info("rt : " + arr.Length + " lots statiques a relever");
             }
             if (Time.realtimeSinceStartup > nextCapture) { nextCapture = Time.realtimeSinceStartup + 10f; captureNow = true; }
-            if (Config.GetInt("Test", "RTLots", 0) != 0 && !lotsLogged)
-            {
-                lotsLogged = true;
-                int stIn = 0, stCol = 0, stColRead = 0, plainRead = 0, plain = 0;
-                var names = new System.Text.StringBuilder();
-                foreach (MeshRenderer mr in Object.FindObjectsOfType<MeshRenderer>())
-                {
-                    if (!mr.enabled || mr.bounds.SqrDistance(cp) > r2) continue;
-                    MeshFilter mf = mr.GetComponent<MeshFilter>();
-                    if (mr.isPartOfStaticBatch)
-                    {
-                        stIn++;
-                        MeshCollider mc = mr.GetComponent<MeshCollider>();
-                        if (mc != null && mc.sharedMesh != null) { stCol++; try { if (mc.sharedMesh.vertices.Length > 0) stColRead++; } catch { } }
-                        if (names.Length < 600) names.Append(' ').Append(mr.name).Append(mc != null ? "(col)" : "");
-                    }
-                    else if (mf != null && mf.sharedMesh != null) { plain++; try { if (mf.sharedMesh.vertices.Length > 0) plainRead++; } catch { } }
-                }
-                var types = new Dictionary<string, int>();
-                var near = new System.Text.StringBuilder();
-                foreach (Renderer rr in Object.FindObjectsOfType<Renderer>())
-                {
-                    if (rr.bounds.SqrDistance(cp) > 60f * 60f) continue;
-                    string tn = rr.GetType().Name + (rr.isPartOfStaticBatch ? "(lot)" : "") + (rr.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off ? "(sans ombre)" : "");
-                    int k; types.TryGetValue(tn, out k); types[tn] = k + 1;
-                    string ln = rr.name.ToLowerInvariant();
-                    if (near.Length < 1500 && (ln.Contains("tree") || ln.Contains("puu") || ln.Contains("kuusi") || ln.Contains("koivu") || ln.Contains("pine") || ln.Contains("spruce") || ln.Contains("birch") || ln.Contains("forest") || ln.Contains("metsa")))
-                        near.Append(" [").Append(Recon.Path(rr.transform)).Append(' ').Append(rr.GetType().Name).Append(rr.isPartOfStaticBatch ? " lot" : "").Append(' ').Append(rr.shadowCastingMode).Append(rr.sharedMaterial != null ? " " + rr.sharedMaterial.shader.name : "").Append(']');
-                }
-                var tsb = new System.Text.StringBuilder();
-                foreach (var kv in types) tsb.Append(' ').Append(kv.Key).Append('=').Append(kv.Value);
-                Log.Info("rt : rendus a 60 m :" + tsb + " ; arbres :" + near);
-                Log.Info("rt : lots statiques a portee " + stIn + " (avec collision " + stCol + ", lisible " + stColRead + "), autres " + plain + " (lisibles " + plainRead + ") :" + names);
-            }
             ForgetOld();
             if (Time.realtimeSinceStartup > nextScanLog)
             {
                 nextScanLog = Time.realtimeSinceStartup + 20f;
                 Log.Info("rt : scene a " + Range + " m : " + tracked.Count + " objets (sur " + total + " : coupes " + off + ", sans ombre " + noShadow + ", loin " + far + ", transparents " + transp
-                         + ", exclus " + excl + ", sans maillage " + noMesh + ", lot deja pris " + dup + ", illisibles " + bad + ", feuillages " + leaves + ", sol " + grounds + ", personnages " + skinNear.Count + "), " + sentMeshes.Count + " maillages envoyes, " + toSend.Count + " a envoyer");
+                         + ", exclus " + excl + ", sans maillage " + noMesh + ", lot deja pris " + dup + ", illisibles " + bad + ", feuillages " + leaves + ", sol " + grounds + ", vitres " + glasses + ", personnages " + skinNear.Count + "), " + sentMeshes.Count + " maillages envoyes, " + toSend.Count + " a envoyer");
             }
         }
 
@@ -515,20 +462,10 @@ namespace MWCoop
                         Vector2[] uv = mesh.uv;
                         Vector2 sc = cm.mainTextureScale, of = cm.mainTextureOffset;
                         var u = new float[v.Length * 2];
-                        bool flip = Config.GetInt("Test", "RTUvRetourne", 0) != 0;
                         if (uv != null && uv.Length == v.Length)
-                            for (int i = 0; i < v.Length; i++) { u[i * 2] = uv[i].x * sc.x + of.x; u[i * 2 + 1] = uv[i].y * sc.y + of.y; if (flip) u[i * 2 + 1] = 1f - u[i * 2 + 1]; }
+                            for (int i = 0; i < v.Length; i++) { u[i * 2] = uv[i].x * sc.x + of.x; u[i * 2 + 1] = uv[i].y * sc.y + of.y; }
                         float cutoff = Mathf.Clamp(cm.GetFloat("_Cutoff"), 0.01f, 0.99f);
                         sent = RtMeshAlpha(id, f, v.Length, t, t.Length, u, cm.mainTexture.GetInstanceID(), cutoff);
-                        if (mesh.name.StartsWith("TREES1_MeshPart0"))
-                        {
-                            Vector4[] tg = mesh.tangents; Vector3[] nm = mesh.normals;
-                            var sb = new System.Text.StringBuilder();
-                            for (int i = 0; i < 8 && i < v.Length; i++)
-                                sb.Append(" [").Append(i).Append(" p ").Append(v[i].ToString("F2")).Append(" uv ").Append(uv[i].ToString("F3")).Append(" n ").Append(nm != null && nm.Length > i ? nm[i].ToString("F2") : "-").Append(" t ").Append(tg != null && tg.Length > i ? tg[i].ToString("F2") : "-").Append(']');
-                            sb.Append(" tri ").Append(t[0]).Append(',').Append(t[1]).Append(',').Append(t[2]).Append(' ').Append(t[3]).Append(',').Append(t[4]).Append(',').Append(t[5]);
-                            Log.Info("rt : sommets " + mesh.name + sb);
-                        }
                         float u0 = 9, u1 = -9, v0 = 9, v1 = -9;
                         for (int i = 0; i < v.Length; i++) { u0 = Mathf.Min(u0, u[i * 2]); u1 = Mathf.Max(u1, u[i * 2]); v0 = Mathf.Min(v0, u[i * 2 + 1]); v1 = Mathf.Max(v1, u[i * 2 + 1]); }
                         Log.Info("rt : feuillage " + mesh.name + " (" + v.Length + " sommets, " + (t.Length / 3) + " triangles, texture " + cm.mainTexture.name + ", seuil " + cutoff.ToString("0.00")
@@ -537,6 +474,7 @@ namespace MWCoop
                     else sent = RtMesh(id, f, v.Length, t, t.Length);
                     if (sent != 0) sentMeshes.Add(id); else badMeshes.Add(id);
                     if (sent != 0 && groundIds.Contains(id)) { fMeshMask(id, 2); groundMasked.Add(id); }
+                    if (sent != 0 && glassIds.Contains(id)) fMeshMask(id, 4);
                     Material mc;
                     if (sent != 0 && meshMat.TryGetValue(mesh, out mc)) { Color cc = MatColor(mc); fMeshColor(id, cc.r, cc.g, cc.b); }
                 }
@@ -556,6 +494,12 @@ namespace MWCoop
         }
 
         // Matiere a decoupe : feuillages de Unity (« Leaves »), shaders « Cutout », Standard en mode decoupe.
+        static bool IsGlass(Renderer r, Material m)
+        {
+            string a = r.name.ToLowerInvariant(), b = m.name.ToLowerInvariant();
+            return a.Contains("glass") || a.Contains("window") || a.Contains("windshield") || b.Contains("glass") || b.Contains("window");
+        }
+        static readonly HashSet<int> glassIds = new HashSet<int>();
         static bool Cutout(Material m)
         {
             if (m.mainTexture == null || !m.HasProperty("_Cutoff")) return false;
@@ -577,22 +521,6 @@ namespace MWCoop
                 return ok != 0;
             }
             catch (System.Exception e) { Log.Warn("rt : texture " + tex.name + " illisible (" + e.Message + ")"); return false; }
-        }
-
-        // Essais : [Test] RTCube = x,y,z : un cube de 1 m (ombres) pose la, apres 30 s (obstacle pour les lampes).
-        static GameObject cube;
-        static void TestCube()
-        {
-            if (cube != null || Time.realtimeSinceStartup < 30) return;
-            string v = Config.Get("Test", "RTCube", "");
-            if (v.Length == 0) return;
-            string[] p = v.Split(',');
-            if (p.Length != 3) return;
-            cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            cube.name = "RTCube";
-            Object.Destroy(cube.GetComponent<Collider>());
-            cube.transform.position = new Vector3(float.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture), float.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture), float.Parse(p[2], System.Globalization.CultureInfo.InvariantCulture));
-            Log.Info("rt : cube d'essai en " + cube.transform.position);
         }
 
         // Personnages : textures et couleurs de chaque partie (peau, habits) pour la couleur exacte dans les reflets ;
@@ -682,7 +610,7 @@ namespace MWCoop
                 SkinState st;
                 if (sm == null || !sm.enabled || !sm.gameObject.activeInHierarchy || !skins.TryGetValue(sm, out st) || !st.Sent) continue;
                 // (pose deja a l'echelle de l'objet : position et rotation seules)
-                Matrix4x4 m = Config.GetInt("Test", "RTPersoEchelle", 0) != 0 ? sm.transform.localToWorldMatrix : Matrix4x4.TRS(sm.transform.position, sm.transform.rotation, Vector3.one);
+                Matrix4x4 m = Matrix4x4.TRS(sm.transform.position, sm.transform.rotation, Vector3.one);
                 int o = n * 13;
                 instBuf[o] = st.Id;
                 for (int r = 0; r < 3; r++) for (int c = 0; c < 4; c++) instBuf[o + 1 + r * 4 + c] = m[r, c];
@@ -717,35 +645,27 @@ namespace MWCoop
         static bool distSet;
         static float distWas;
 
-        // Cible du dessin retournee par rapport au G-buffer quand la camera dessine dans une texture (effets d'image :
-        // « ImageEffects Temp ») ; [Test] RTRetourneComp force (0/1).
-        static bool Flipped()
-        {
-            int f = Config.GetInt("Test", "RTRetourneComp", -1);
-            return f >= 0 ? f != 0 : RenderTexture.active != null;
-        }
-
         static readonly float[] frame = new float[36];
         static float nextFrameLog;
         static void SendFrame(Camera cam, bool cut)
         {
             Light l = FindSun();
-            Matrix4x4 vp = GL.GetGPUProjectionMatrix(cam.projectionMatrix, Config.GetInt("Test", "RTRetourne", 1) != 0) * cam.worldToCameraMatrix;
+            Matrix4x4 vp = GL.GetGPUProjectionMatrix(cam.projectionMatrix, true) * cam.worldToCameraMatrix;
             Matrix4x4 inv = vp.inverse;
             for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) frame[r * 4 + c] = inv[r, c];
             Vector3 toSun = l != null ? -l.transform.forward : Vector3.up;
             Color sc = l != null ? l.color * l.intensity : Color.black;
             Color amb = RenderSettings.ambientLight * RenderSettings.ambientIntensity;
             frame[16] = toSun.x; frame[17] = toSun.y; frame[18] = toSun.z; frame[19] = 0;
-            frame[20] = sc.r; frame[21] = sc.g; frame[22] = sc.b; frame[23] = Config.GetInt("Test", "RTRetourneMasque", 0);
-            frame[24] = amb.r; frame[25] = amb.g; frame[26] = amb.b; frame[27] = Flipped() ? 1 : 0;
+            frame[20] = sc.r; frame[21] = sc.g; frame[22] = sc.b; frame[23] = 0;
+            frame[24] = amb.r; frame[25] = amb.g; frame[26] = amb.b; frame[27] = 0;
             frame[28] = l != null ? l.shadowStrength : 0.8f;               // force de l'ombre
             frame[29] = Range + 50f;                                        // portee des rayons
             frame[30] = Mathf.Clamp(Config.GetInt("Test", "RTRayons", Gfx.Get("RTRayons", 2)), 1, 16);          // rayons par pixel
             frame[31] = Config.GetInt("Test", "RTDouceur", Gfx.Get("RTDouceur", 1)) * 0.001f;                   // demi-angle du soleil (radians)
             Vector3 cpos = cam.transform.position;
             frame[32] = cpos.x; frame[33] = cpos.y; frame[34] = cpos.z;
-            frame[35] = Mathf.Clamp(Config.GetInt("Test", "RTContraste", Gfx.Get("RTContraste", 25)), 5, 100) * 0.1f;   // gain du soleil face a l'ambiance (etalonne sur les ombres d'Unity)
+            frame[35] = 0;
             if (Time.realtimeSinceStartup > nextFrameLog)
             {
                 nextFrameLog = Time.realtimeSinceStartup + 20f;
@@ -753,14 +673,8 @@ namespace MWCoop
                          + ", ciel " + RenderSettings.ambientSkyColor + ", sol " + RenderSettings.ambientGroundColor);
             }
             RtFrame(frame);
-            // Ombres d'Unity de cette lumiere : allumees en mode 0 (leur carte a l'echelle de l'ecran recoit les ombres RT),
-            // coupees pour l'ancien melange (mode 14) ; rendues sinon.
-            if (l != null && cut && (Mode == 14 || Config.GetInt("Test", "RTCouper", 0) != 0))
-            {
-                if (!sunCut) { sunShadowsWas = l.shadows; sunCut = true; Log.Info("rt : ombres d'Unity de " + l.name + " coupees (" + sunShadowsWas + ")"); }
-                if (l.shadows != LightShadows.None) l.shadows = LightShadows.None;
-            }
-            else if (l != null && cut && Mode == 0)
+            // Ombres d'Unity de cette lumiere : allumees (leur carte a l'echelle de l'ecran recoit les ombres RT).
+            if (l != null && cut)
             {
                 if (l.shadows == LightShadows.None)
                 {
@@ -783,8 +697,6 @@ namespace MWCoop
             if (c.name == "FPSCamera") return true;
             return c.actualRenderingPath == RenderingPath.DeferredShading && c.pixelWidth == Screen.width && c.pixelHeight == Screen.height;
         }
-        static bool dumped, nearLogged, groundLogged;
-        static float capDistWas;
         class RtCamHook : MonoBehaviour
         {
             void OnPreRender()
@@ -795,19 +707,14 @@ namespace MWCoop
                 {
                     captureNow = false;
                     capturing = true;
-                    if (Mode != 0) RestoreShadows();   // (carte d'ombres d'Unity pour cette image : c'est elle qu'on releve)
-                    // distance des ombres d'Unity portee a celle du RT le temps de l'image : tout le decor a portee y est dessine
-                    // (le prereglage RT la met a 30 m, le RT remplacant ses ombres)
-                    capDistWas = QualitySettings.shadowDistance;
-                    if (Mode != 0 && QualitySettings.shadowDistance < Range) QualitySettings.shadowDistance = Range;   // (mode 0 : deja a la portee du RT)
+                    // (carte d'ombres d'Unity de cette image, a la portee du RT : c'est elle qu'on releve)
                     RtCapture(1);
                 }
-                if (Mode == 0)
                 {
                     UpdateSkins();
                     SendInstances();
                     SendFrame(GetComponent<Camera>(), true);
-                    int flags = Config.GetInt("Test", "RTInjecter", 1) != 0 ? 1 : 0;
+                    int flags = 1;
                     float aoS = AmbientStrength;
                     RtAmbient(aoS, 1.5f, Config.GetInt("Test", "RTOcclusionRayons", 2));
                     float rfS = ReflStrength;
@@ -816,22 +723,19 @@ namespace MWCoop
                     float giS = Mathf.Clamp(Config.GetInt("Test", "RTRebond", Gfx.Get("RTRebond", 100)), 0, 3000) * 0.01f;
                     fBounce(giS);
                     if (giS > 0) flags |= 16;
+                    // Reflets des vitres : [Graphismes] RTVitres (0 / 1, oui par defaut) ; [Test] RTVitres = force en % (1000 : controle).
+                    float glS = Config.GetInt("Test", "RTVitres", -1) >= 0 ? Mathf.Clamp(Config.GetInt("Test", "RTVitres", 100), 0, 3000) * 0.01f : (Gfx.Get("RTVitres", 1) != 0 ? 1f : 0f);
+                    fGlass(glS);
+                    if (glS > 0) flags |= 16;
                     if (SendLamps(transform.position) > 0 || aoS > 0 || rfS > 0) flags |= 16;
-                    if (!dumped && Config.GetInt("Test", "RTVidage", 0) != 0 && Time.realtimeSinceStartup > Config.GetInt("Test", "RTVidage", 0)) { dumped = true; flags |= 2 | 4; }
                     RtArm(flags);
                 }
             }
             void OnPostRender()
             {
                 if (!ready || !Wanted || !GameCam(GetComponent<Camera>())) { if (ready) RtArm(0); return; }
-                Camera cam = GetComponent<Camera>();
-                bool was = capturing;
-                if (capturing) { RtCapture(0); capturing = false; if (Mode != 0) QualitySettings.shadowDistance = capDistWas; }
-                if (Mode == 0) { RtPostRender(7); RtArm(0); return; }   // (lampes : passe faite par RtPostRender, armee jusque-la)   // (ombres deja dans la carte d'Unity ; lots releves traites)
-                if (was) { SendFrame(cam, false); RtPostRender(7); return; }
-                SendInstances();
-                SendFrame(cam, true);
-                RtPostRender(Mode);
+                if (capturing) { RtCapture(0); capturing = false; }
+                RtPostRender(7); RtArm(0);   // (lots releves traites ; passe tardive, armee jusque-la)
             }
             void OnDisable() { RestoreShadows(); }
         }
