@@ -184,6 +184,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "ModsAuto", L"Accepter les fichiers de l'hôte", L"Accept the host's files", 0, {}, {}, {}, 0, 8, "Opt" },
         { "ArgentDepart", L"Argent de départ des invités", L"Guests' starting money", 1, {}, {}, {}, 0, 8, "Coop" },
         { "Triches", L"Autoriser les triches (hôte)", L"Allow cheats (host)", 0, {}, {}, {}, 0, 8, "Coop" },
+        { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
         // Un seul interrupteur pour tout ce que MWCoop ajoute au jeu (demande de Menor, 12/10 : « un jeu 100 % vanilla » ;
         // JD : un bouton pour tous les ajouts, presents et a venir -- Sync/Ajouts.cs).
         { "SansAjouts", L"Désactiver les ajouts COOP (drone F8, sacs de couchage, boutique)", L"Disable the CO-OP additions (F8 drone, sleeping bags, shop)", 0, {}, {}, {}, 0, 8, "Coop" },

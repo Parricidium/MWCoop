@@ -196,6 +196,7 @@ namespace MWCoop
             jobs.Clear(); hooked.Clear(); reserved.Clear(); classified.Clear(); jobCars.Clear(); waitingJobs.Clear(); waitingSet.Clear();
             creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
             SewageHose.OnLevelLoaded();
+            RunOver.OnLevelLoaded();
             specialsScanned = false; logTrigger = null; ltCollider = null;
             feed = null; feedHand = null; feedMute = null; feedMuted.Clear(); feedClick = feedActivation = feedWasActive = false; feedStageLocal = true;
             bed = flatbed = null; bedHinge = null; bedTargetAt = -100; bedSent = float.NaN; bedLift = null; bedFollow = false;
@@ -1547,10 +1548,11 @@ namespace MWCoop
                     break;
                 }
                 case "@benne": OnBed(r.F32()); break;
+                case "@renverse": RunOver.OnMessage(who, r); break;
                 case "@bout": { Vector3 p = r.Vec(); Quaternion q = r.Quat(); SewageHose.OnRemote(who, p, q, r.Bool()); break; }
                 case "@attelage": OnHitch(who, r.U8()); break;
                 case "@arrestation": Police.OnArrest(who, r.Vec()); break;
-                case "@accident": Respawn.OnAccident(who, r.Str()); break;
+                case "@accident": { string ac = r.Str(); Respawn.OnAccident(who, ac, r.More && r.Bool()); break; }
                 case "@vitre": Windshields.OnRemote(who, r.Str(), r.U8()); break;
                 case "@colis": Packages.OnRemote(who, r.Str()); break;
                 case "@vin?": Vin.OnAsk(who); break;

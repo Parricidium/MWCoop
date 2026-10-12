@@ -2151,6 +2151,8 @@ namespace MWCoop
             if (armL != null) armL.enabled = false;
             Transform r = Root.transform;
             Vector3 vel = Quaternion.Euler(0f, st.Yaw, 0f) * Vector3.forward * Mathf.Min(st.Speed, 8f) + Vector3.up * 0.3f + r.forward * 0.6f;
+            Vector3 hitVel;
+            if (Player != null && RunOver.Impulse(Player.Id, out hitVel)) vel = hitVel;   // (renverse : l'elan de la voiture)
             var cols = new List<Collider>();
             Rigidbody pelvisRb = Part("pelvis", "spine_middle", 0.14f, 12f, null, 0f, 0f, vel, cols);
             Rigidbody mid = Part("spine_middle", "spine_upper", 0.14f, 10f, pelvisRb, 20f, 25f, vel, cols);

@@ -503,7 +503,7 @@ namespace MWCoop
             if (car != healCar)
             {
                 healCar = car;
-                Transform lk = FindUnder(car, "SeatbeltLock", null), up = FindUnder(car, "HandleUpPivot", "DriverBelt");
+                Transform lk = FindUnder(car, "SeatbeltLock", null), up = FindUnder(car, "HandleUpPivot", "DriverBelt") ?? FindUnder(car, "HandleUpPivot", "Seatbelts");   // (CORRIS, GIFU : sous Seatbelts)
                 Transform hd = up != null ? FindUnder(up, "SeatbeltHandle", null) : null;
                 healLock = lk != null ? Game.FsmOn(lk.gameObject, "Use") : null;
                 healHandle = hd != null ? Game.FsmOn(hd.gameObject, "Use") : null;
@@ -541,6 +541,30 @@ namespace MWCoop
             foreach (Transform c in t) { Transform r = FindUnder(c, name, parent); if (r != null) return r; }
             return null;
         }
+        static Transform MirrorBelt(Transform driverUp)
+        {
+            try
+            {
+                Transform sb = driverUp.parent;
+                var pb = new GameObject("PassengerBelt");
+                pb.transform.SetParent(sb, false);
+                pb.transform.localScale = new Vector3(-1f, 1f, 1f);   // (miroir gauche-droite dans le repere de Seatbelts, a l'origine de la voiture)
+                var clone = (GameObject)Object.Instantiate(driverUp.gameObject);
+                clone.name = "HandleUpPivot";
+                clone.transform.SetParent(pb.transform, false);
+                clone.transform.localPosition = driverUp.localPosition; clone.transform.localRotation = driverUp.localRotation; clone.transform.localScale = driverUp.localScale;
+                foreach (PlayMakerFSM fz in clone.GetComponentsInChildren<PlayMakerFSM>(true)) Object.Destroy(fz);
+                foreach (Collider cz in clone.GetComponentsInChildren<Collider>(true)) Object.Destroy(cz);
+                clone.SetActive(true);
+                Log.Info("ceinture passager : copie en miroir de celle du conducteur ajoutee a " + sb.root.name);
+                return pb.transform;
+            }
+            catch (System.Exception e) { Log.Warn("ceinture passager (miroir) : " + e.Message); return null; }
+        }
+
+        // Ceinture du passager local bouclee (accident : le passager attache survit au choc qui a tue un conducteur non attache).
+        public static bool LocalBelted { get { return current != null && beltOn; } }
+
         static Belt BeltOf(Transform car)
         {
             Belt b;
@@ -548,7 +572,11 @@ namespace MWCoop
             if (belts.TryGetValue(car, out b)) return b;
             Transform f = FindUnder(car, "Fastened_mesh", null) ?? FindUnder(car, "Close", "Seatbelts");
             Transform o = FindUnder(car, "PassengerBelt", null) ?? FindUnder(car, "Passenger", "Seatbelts");
-            Transform dov = FindUnder(car, "HandleUpPivot", "DriverBelt");
+            Transform dov = FindUnder(car, "HandleUpPivot", "DriverBelt") ?? FindUnder(car, "HandleUpPivot", "Seatbelts");
+            // CORRIS : pas de ceinture passager dans le jeu (Somegames1, 12/10 : « une ceinture pour le passager de la Rivett ») --
+            // copie en miroir de celle du conducteur (sangles et languette), sans ses automates (ils agiraient sur la boucle et
+            // la ceinture du conducteur) ; la ceinture passager du mod (BeltInput) s'en sert comme d'une vraie.
+            if (o == null && f != null && dov != null && dov.parent != null && dov.parent.name == "Seatbelts" && car.name.StartsWith("CORRIS")) o = MirrorBelt(dov);
             Transform k = FindUnder(car, "SeatbeltLock", null) ?? FindUnder(car, "BuckleUp", null) ?? FindUnder(car, "HandleDownPivot", null);
             b = null;
             if (f != null && f.GetComponent<MeshFilter>() != null)
