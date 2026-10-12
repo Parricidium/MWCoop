@@ -1679,6 +1679,10 @@ extern "C" __declspec(dllexport) void RtPostRender(int mode)
         lastMode = mode;
     }
     if (!g_capturing) ProcessBatches();
+    if (g_lampsArmed && mode == 7 && (d.Width != g_inW || d.Height != g_inH)) {   // (pas la taille de l'ecran : autre camera, rien)
+        static int other; if (other++ < 3) Log("lampes : cible %ux%u, pas celle de l'ecran (%ux%u) : passe sautee", d.Width, d.Height, g_inW, g_inH);
+        g_lampsArmed = false;
+    }
     if (g_lampsArmed && mode == 7) {
         // Lampes, en fin de rendu de la camera : la cible courante est une copie de l'image (apres le brouillard du jeu), dont
         // l'orientation face au G-buffer varie : mesuree (GbufFlip).

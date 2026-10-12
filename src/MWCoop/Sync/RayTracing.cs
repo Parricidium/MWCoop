@@ -182,7 +182,7 @@ namespace MWCoop
             if (!probed) { probed = true; Probe(); }
             if (!ready || !Wanted) return;
             Camera c = Camera.main;
-            if (c != null && c != hooked)
+            if (c != null && c != hooked && GameCam(c))
             {
                 if (c.GetComponent<RtCamHook>() == null) c.gameObject.AddComponent<RtCamHook>();
                 hooked = c;
@@ -648,6 +648,15 @@ namespace MWCoop
         }
 
         static bool capturing;
+        // Camera du jeu seulement (retour de JD, 12/10 : en pause, Echap, la camera du menu « CAM » devenait Camera.main ; le
+        // RT s'y accrochait et dessinait a la taille de l'ecran dans une image plus petite -- quart d'ecran agrandi) : la
+        // camera FPS, ou une camera en rendu differe a la taille de l'ecran, sans texture cible.
+        static bool GameCam(Camera c)
+        {
+            if (c == null || !c.enabled || c.targetTexture != null) return false;
+            if (c.name == "FPSCamera") return true;
+            return c.actualRenderingPath == RenderingPath.DeferredShading && c.pixelWidth == Screen.width && c.pixelHeight == Screen.height;
+        }
         static bool dumped, nearLogged;
         static float capDistWas;
         class RtCamHook : MonoBehaviour
@@ -655,7 +664,7 @@ namespace MWCoop
             void OnPreRender()
             {
                 if (ready && !Wanted) { RestoreShadows(); return; }   // (coupe en jeu, menu F10 : ombres d'Unity rendues)
-                if (!ready || !Wanted) return;
+                if (!ready || !Wanted || !GameCam(GetComponent<Camera>())) return;
                 if (captureNow)
                 {
                     captureNow = false;
@@ -684,7 +693,7 @@ namespace MWCoop
             }
             void OnPostRender()
             {
-                if (!ready || !Wanted) return;
+                if (!ready || !Wanted || !GameCam(GetComponent<Camera>())) { if (ready) RtArm(0); return; }
                 Camera cam = GetComponent<Camera>();
                 bool was = capturing;
                 if (capturing) { RtCapture(0); capturing = false; if (Mode != 0) QualitySettings.shadowDistance = capDistWas; }
