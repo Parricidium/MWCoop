@@ -175,6 +175,15 @@ namespace MWCoop
                 foreach (Pussi b in pussit)
                     if (b.Go != null && b.Go.transform.parent == null && b.Col.Raycast(ray, out h, best)) { best = h.distance; hit = b; }   // (pas tenu en main)
             }
+            else if (cam != null && !Game.GlobalBool("PlayerSleeps"))
+            {
+                // sacs de courses : partout (emportes a la maison, dans la voiture... ; JD, 12/10 : rien ne sortait loin de la boutique)
+                var ray = new Ray(cam.transform.position, cam.transform.forward);
+                float best = 1.6f;
+                RaycastHit h;
+                foreach (Pussi b in pussit)
+                    if (b.Go != null && b.Go.transform.parent == null && b.Col.Raycast(ray, out h, best)) { best = h.distance; hit = b; }
+            }
             if (hit != looked)
             {
                 if (looked != null) ClearGui();
@@ -184,7 +193,19 @@ namespace MWCoop
             if (hit == null)
             {
                 // objets du coin video (magnetoscope...) : vises partout, pas seulement pres de la boutique
-                if (cam != null && !Game.GlobalBool("PlayerSleeps")) InteractItems(new Ray(cam.transform.position, cam.transform.forward), now);
+                bool aimed = cam != null && !Game.GlobalBool("PlayerSleeps") && InteractItems(new Ray(cam.transform.position, cam.transform.forward), now);
+                // sac de courses tenu en main : F bref = un article, F tenu = tout (devant soi)
+                Pussi hb = aimed ? null : HeldBag();
+                if (hb != null && !KameraBusy)
+                {
+                    if (Input.GetKeyDown(KeyCode.F)) heldFDown = now;
+                    if (heldFDown >= 0f)
+                    {
+                        if (now - heldFDown >= 1.0f) { heldFDown = -1f; TakeOut(hb, true); }
+                        else if (Input.GetKeyUp(KeyCode.F)) { heldFDown = -1f; TakeOut(hb, false); }
+                    }
+                }
+                else heldFDown = -1f;
                 return;
             }
             if (lookedItem != null) { ClearGui(); lookedItem = null; }
@@ -472,6 +493,8 @@ namespace MWCoop
                         case "nauhuri": TestVcr(); break;
                         case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
                         case "filmi": TestFilm(); break;
+                        case "kanna": if (pussit.Count > 0 && EyeT != null) { Transform bt = pussit[pussit.Count - 1].Go.transform; pussit[pussit.Count - 1].Rb.isKinematic = true; bt.SetParent(EyeT, true); bt.position = EyeT.position + EyeT.forward * 0.5f; L("essai : sac en main"); } break;
+                        case "irti": foreach (Pussi pb in pussit) if (pb.Go != null && pb.Go.transform.parent != null) { pb.Go.transform.SetParent(null, true); pb.Rb.isKinematic = false; L("essai : sac lache"); } break;
                         case "ulos": { Esine k = esineet.Find(e => e.Kind == KKamera); if (k != null) Eject(k); break; }
                         case "nimi": { Esine tp = esineet.FindLast(e => e.Kind == KVhs); if (tp != null) { tp.Go.transform.rotation = root.transform.rotation * Quaternion.Euler(0f, 180f, 0f); string c0 = tp.Data.Split('~')[0]; SetData(tp, (c0.Length > 0 ? c0 : "tyhja") + "~" + string.Join(" ", a, 2, a.Length - 2)); L("essai : titre " + tp.Data); } break; }
                         case "viseur": if (a.Length > 2 && a[2] == "0") ExitViewfinder(); else { EnterViewfinder(); vfForced = true; } break;

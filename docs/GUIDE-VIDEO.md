@@ -27,7 +27,7 @@ In the shop:
 1. Look at an item on the shelf and **left click**: you take one (it disappears from the shelf). **Right click** puts it back.
 2. Look at the **till** on the counter: the total shows up. **Click** to pay.
 3. Your purchases come in an OSUUSKAUPPA **shopping bag** on the counter. Pick it up like any object.
-4. Look at the bag: **F** (short press) takes one item out, **hold F** takes everything out. An empty bag disappears.
+4. Look at the bag (or hold it in your hand), anywhere — at the shop, at home, next to your car: **F** (short press) takes one item out, **hold F** takes everything out. An empty bag disappears.
 
 To film and watch, you need: **a camcorder, a tape, a VCR and a TV**. You can also use a TV of the game instead of buying one (the TV at home, in the prison, at the retirement home, at Jokke's).
 
@@ -116,7 +116,7 @@ Dans la boutique :
 1. Vise un objet en rayon et **clic gauche** : tu en prends un (il disparaît du rayon). **Clic droit** pour le reposer.
 2. Vise la **caisse** sur le comptoir : le total s'affiche. **Clic** pour payer.
 3. Tes achats arrivent dans un **sac de courses** OSUUSKAUPPA sur le comptoir. Prends-le comme n'importe quel objet.
-4. Vise le sac : **F** (appui bref) sort un article, **F tenu** sort tout. Vide, le sac disparaît.
+4. Vise le sac (ou tiens-le en main), où que tu sois — à la boutique, à la maison, à côté de ta voiture : **F** (appui bref) sort un article, **F tenu** sort tout. Vide, le sac disparaît.
 
 Pour filmer et regarder, il faut : **un caméscope, une cassette, un magnétoscope et une TV**. Tu peux aussi utiliser une TV du jeu au lieu d'en acheter une (la TV de la maison, de la prison, de la maison de retraite, de chez Jokke).
 

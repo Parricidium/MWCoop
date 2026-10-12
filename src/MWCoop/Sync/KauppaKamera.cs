@@ -274,6 +274,14 @@ namespace MWCoop
             Esine k = HeldKamera();
             if (k == null)
             {
+                Pussi hb = HeldBag();
+                if (hb != null && !KameraBusy)
+                {
+                    string bs = hb.Count > 0 ? Lang.T("SAC DE COURSES : " + hb.Count + " ARTICLE(S)  -  F : EN SORTIR UN    F TENU : TOUT SORTIR", "SHOPPING BAG: " + hb.Count + " ITEM(S)  -  F: TAKE ONE OUT    HOLD F: TAKE ALL OUT")
+                                             : Lang.T("SAC DE COURSES VIDE", "EMPTY SHOPPING BAG");
+                    Style.Text(new Rect(0, Screen.height - Style.Px(120), Screen.width, Style.Px(30)), bs, 20, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.85f));
+                    return;
+                }
                 // cassette en main : son titre, et comment l'ecrire
                 Esine tp = esineet.Find(e => e.Kind == KVhs && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform));
                 if (tp == null || KameraBusy) return;
