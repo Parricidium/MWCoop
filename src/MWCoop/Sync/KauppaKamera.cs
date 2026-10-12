@@ -22,7 +22,7 @@ namespace MWCoop
     public static partial class Kauppa
     {
         public const string KKamera = "kamera";
-        const int RecW = 256, RecH = 192, RecFps = 10, RecRate = 11025;
+        const int RecW = 256, RecH = 192, RecFps = 10, RecRate = 11025, MaxClips = 40;
 
         public static string TapeFilm(string content) { int i = content.IndexOf('~'); string f = i < 0 ? content : content.Substring(0, i); return f == "tyhja" ? "" : f; }
         public static string TapeTitle(string content) { int i = content.IndexOf('~'); return i < 0 ? "" : content.Substring(i + 1); }
@@ -305,6 +305,7 @@ namespace MWCoop
             if (rec != null) return;
             string tape = Tape(k);
             if (tape.Length == 0) { Hud.Toast(Lang.T("Caméscope : pas de cassette", "Camcorder: no tape")); return; }
+            if (Clips(tape).Count >= MaxClips) { Hud.Toast(Lang.T("Caméscope : bande pleine", "Camcorder: tape full")); return; }
             string film = "f" + Session.LocalId + "-" + DateTime.Now.Ticks.ToString("x");
             BinaryWriter w;
             try
@@ -334,8 +335,9 @@ namespace MWCoop
             L("video : film " + r.Film + " : " + dur.ToString("F1") + " s, " + r.Frames + " images, son " + r.Sound / 1024 + " Ko, " + r.Bytes / 1024 + " Ko (" + why + ")");
             if (r.Cam.Go != null && esineet.Contains(r.Cam))
             {
-                string title = TapeTitle(Tape(r.Cam));
-                SetData(r.Cam, (r.Frames > 0 ? r.Film + "~" + title : Tape(r.Cam)) + "|0");
+                // la prise s'ajoute a la suite des precedentes
+                string content = Tape(r.Cam), title = TapeTitle(content), films = TapeFilm(content);
+                SetData(r.Cam, (r.Frames > 0 ? (films.Length > 0 ? films + "+" : "") + r.Film + "~" + title : content) + "|0");
             }
             if (r.Frames > 0) SendFilm(r.Film);
         }
@@ -512,7 +514,7 @@ namespace MWCoop
             k.Go.transform.position = root.transform.TransformPoint(new Vector3(3.4f, 0.85f, 2.0f));
             k.Go.transform.rotation = root.transform.rotation * Quaternion.LookRotation(new Vector3(-0.2f, 0f, -4.6f));
             k.Rb.velocity = Vector3.zero; k.Rb.angularVelocity = Vector3.zero;
-            string content = tape != null ? tape.Data : "tyhja";
+            string content = tape != null ? tape.Data : Tape(k).Length > 0 ? Tape(k) : "tyhja";
             if (tape != null) RemoveItem(tape, true);
             SetData(k, content + "|0");
             StartRec(k);

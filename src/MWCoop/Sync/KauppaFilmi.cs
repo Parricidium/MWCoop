@@ -10,6 +10,8 @@ namespace MWCoop
     //  - partage : a la fin d'une prise, celui qui a filme envoie le fichier a tous (@filmi, morceaux fiables de 1000
     //    octets, [Boutique] FilmiVauhti morceaux par image, 3 par defaut ; l'hote relaie). Chacun le range dans
     //    <profil>\videot. Il manque un film a la lecture : demande (@filmi?), l'hote (ou celui qui l'a filme) le renvoie.
+    //  - une cassette porte une ou plusieurs prises : chaque enregistrement s'ajoute a la suite (comme une vraie VHS
+    //    qu'on reprend apres un arret), au plus MaxClips ; la lecture les enchaine.
     //  - lecture : chaque machine joue le film elle-meme, depuis l'instant ou SON magnetoscope est passe en lecture (a la
     //    latence pres, tous ensemble) ; film arrive en retard : il part au bon endroit. Images JPEG sur l'ecran, son
     //    sur un AudioSource 3D a la TV ; apres la fin de la bande : neige et souffle.
@@ -52,11 +54,11 @@ namespace MWCoop
                     f.Clip = AudioClip.Create("kauppa_" + id, f.Sound.Length, 1, RecRate, false);
                     f.Clip.SetData(f.Sound, 0);
                 }
-                // (garde les deux derniers films lus)
-                if (filmCache.Count >= 2)
+                // (garde les prises des cassettes en lecture, et quelques autres)
+                if (filmCache.Count >= 6)
                 {
                     string drop = null;
-                    foreach (string k in filmCache.Keys) if (!showing.Exists(s => s.Film == filmCache[k])) { drop = k; break; }
+                    foreach (string k in filmCache.Keys) if (!showing.Exists(s => s.Vcr != null && Clips(Tape(s.Vcr)).Contains(k))) { drop = k; break; }
                     if (drop != null) { if (filmCache[drop].Clip != null) UnityEngine.Object.Destroy(filmCache[drop].Clip); filmCache.Remove(drop); }
                 }
                 filmCache[id] = f;
@@ -66,25 +68,38 @@ namespace MWCoop
             catch (Exception e) { L("video : film " + id + " : " + e.Message); return null; }
         }
 
+        // Prises d'une cassette, dans l'ordre (chaque enregistrement s'ajoute a la suite : "f1+f2+f3~titre").
+        public static List<string> Clips(string content)
+        {
+            var l = new List<string>();
+            foreach (string c in TapeFilm(content).Split('+')) if (c.Length > 0) l.Add(c);
+            return l;
+        }
+
         // ---------------------------------------------------------------- lecture sur un ecran (appele par TickScreens)
         static void ShowFilm(Showing s, float now)
         {
             Esine v = s.Vcr;
-            string film = TapeFilm(Tape(v));
-            KeyValuePair<float, string> ps;
             string tape = Tape(v);
+            KeyValuePair<float, string> ps;
             if (!playStart.TryGetValue(v.Id, out ps) || ps.Value != tape) { ps = new KeyValuePair<float, string>(now, tape); playStart[v.Id] = ps; }   // (autre cassette : depuis le debut)
             float t = now - ps.Key;
-            Film f = null;
-            if (film.Length > 0)
-            {
-                f = LoadFilm(film);
-                if (f == null) AskFilm(film, now);
-            }
-            bool on = f != null && t * 1000f < f.LengthMs + 300f;
+            // les prises bout a bout ; il en manque une : neige en attendant (puis reprise au bon endroit)
+            List<string> clips = Clips(tape);
+            Film f = null; float clipStart = 0f, at = 0f;
+            bool all = clips.Count > 0;
+            var loaded = new List<Film>();
+            foreach (string c in clips) { Film x = LoadFilm(c); if (x == null) { AskFilm(c, now); all = false; } else loaded.Add(x); }
+            if (all)
+                foreach (Film x in loaded)
+                {
+                    float len = x.LengthMs / 1000f;
+                    if (t < at + len + (x == loaded[loaded.Count - 1] ? 0.3f : 0f)) { f = x; clipStart = at; break; }
+                    at += len;
+                }
             Renderer r = s.Screen != null ? s.Screen.GetComponent<Renderer>() : null;
             if (r == null) return;
-            if (!on)
+            if (f == null)
             {
                 // neige (cassette vierge, film absent ou fini)
                 if (s.Film != null) { s.Film = null; s.Frame = -1; }
@@ -92,6 +107,7 @@ namespace MWCoop
                 if (s.Audio != null && s.Audio.clip != hissClip) { s.Audio.clip = hissClip; s.Audio.loop = true; s.Audio.volume = 0.3f; s.Audio.Play(); }
                 return;
             }
+            float tc = t - clipStart;
             if (s.Film != f)
             {
                 s.Film = f; s.Frame = -1;
@@ -101,13 +117,13 @@ namespace MWCoop
                 {
                     s.Audio.Stop();
                     s.Audio.clip = f.Clip; s.Audio.loop = false; s.Audio.volume = 0.95f;
-                    if (f.Clip != null) { s.Audio.time = Mathf.Clamp(t, 0f, f.Clip.length - 0.05f); s.Audio.Play(); }
+                    if (f.Clip != null && tc < f.Clip.length - 0.05f) { s.Audio.time = Mathf.Max(0f, tc); s.Audio.Play(); }
                 }
-                L("video : " + v.Id + " lit le film " + f.Id + " depuis " + t.ToString("F1") + " s");
+                L("video : " + v.Id + " lit la prise " + f.Id + " (" + (clips.IndexOf(f.Id) + 1) + "/" + clips.Count + ") depuis " + tc.ToString("F1") + " s");
             }
             if (r.sharedMaterial != s.Mat) r.sharedMaterial = s.Mat;
             // image de l'instant
-            uint ms = (uint)Mathf.Max(0f, t * 1000f);
+            uint ms = (uint)Mathf.Max(0f, tc * 1000f);
             int lo = 0, hi = f.Ms.Count - 1, idx = -1;
             while (lo <= hi) { int mid = (lo + hi) / 2; if (f.Ms[mid] <= ms) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
             if (idx >= 0 && idx != s.Frame)
