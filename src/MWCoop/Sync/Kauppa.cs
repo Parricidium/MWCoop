@@ -38,6 +38,7 @@ namespace MWCoop
             root = null; door = null; doorAngle = 0f; built = false; vendor = null; looked = null; testCam = null;
             gameMats = null; byName = null; guiText = null; guiUse = null; guiBuy = null; money = null; guiSub = null;
             basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
+            lippu = null; lippuBackMesh = null;
             pussit.Clear(); pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
             buildAt = Active && Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
@@ -66,6 +67,7 @@ namespace MWCoop
             Greet(now);
             TickSay();
             TickBags(now);
+            TickLippu();
             RunScript(now);
             if (shotAt > 0f && now >= shotAt) { shotAt = -1f; TakeShot(); }
         }
@@ -456,6 +458,7 @@ namespace MWCoop
                             break;
                         case "argent": if (money != null) money.Value = F(a[2]); L("essai : argent " + a[2]); break;
                         case "tex": DumpTex(string.Join(" ", a, 2, a.Length - 2)); break;
+                        case "lippu": LippuState(); break;
                         case "ota": if (offers.Count > 0) Take(offers[0]); break;
                         case "maksa": lastBuy = -10f; Pay(); break;
                         case "avaa": if (pussit.Count > 0) TakeOut(pussit[pussit.Count - 1], a.Length > 2 && a[2] == "kaikki"); break;
