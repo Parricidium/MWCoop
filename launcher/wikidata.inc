@@ -9,7 +9,7 @@ static const WikiCat kWikiCat[] = {
     { IC_GEAR, L"Réglages et options", L"Settings and options" },
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
-enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_MSC, WA_MODS, WA_CONTENT,
+enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MSC, WA_MODS, WA_CONTENT,
        WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS };
 
 struct WikiKey { const wchar_t *key, *fr, *en; };
@@ -28,6 +28,8 @@ static const WikiKey kWikiKeys[] = {
     { L"1 · 2", L"Après une mort : revenir à l'appartement ou chez les parents", L"After dying: come back at the apartment or the parents' house" },
     { L"Espace", L"Se réveiller quand on dort seul (l'heure n'avance que si tout le monde dort)", L"Wake up when sleeping alone (time only moves on when everyone sleeps)" },
     { L"Maj + Tab", L"Surcouche Steam : inviter des amis pendant la partie", L"Steam overlay: invite friends during the game" },
+    { L"F · R", L"Caméscope en main : F = viseur (molette : zoom), R = enregistrer / arrêter (touches réglables)", L"Camcorder in hand: F = viewfinder (wheel: zoom), R = record / stop (keys can be changed)" },
+    { L"/titre · /importer", L"Dans le tchat, cassette en main : écrire un titre sur la tranche, ou y mettre une de tes vidéos", L"In the chat, holding a tape: write a title on the spine, or put one of your videos on it (/title · /import)" },
 };
 static const int kWikiKeysN = (int)(sizeof(kWikiKeys) / sizeof(kWikiKeys[0]));
 
@@ -330,8 +332,8 @@ static const WikiBlock kW_Look[] = {
     { WB_P, L"La couleur de la CORRIS pour une NOUVELLE partie (la couleur de l'hôte est donnée aux invités).", L"The CORRIS color for a NEW game (the host's color is given to the guests)." },
     { WB_P, L"« Plaque VIN… » : les options de la plaque VIN (année, moteur, boîte, suspension, pare-brise, toit vinyle, intérieur, roues, radio, tableau de bord, servofrein, lunette dégivrante). Clique une case pour passer à la valeur suivante ; « Hasard » laisse le jeu tirer. Seules les valeurs possibles pour la finition choisie sont proposées : lance une partie une fois pour que le mod les relève. Comme la couleur, l'hôte décide pour tous.",
             L"\"VIN plate…\": the VIN plate options (year, engine, gearbox, suspension, windshield, vinyl roof, interior, wheels, radio, instrument panel, power brakes, heated rear window). Click a box for the next value; \"Random\" lets the game pick. Only the values possible for the chosen trim are offered: start a game once so the mod reads them. Like the color, the host decides for everyone." },
-    { WB_P, L"« Peinture perso… » : ta propre peinture sur la CORRIS. « Gabarit » montre la carrosserie du jeu à plat (Images\car.png, 2048 x 2048 ; le PSD en calques est dans le dossier Images du jeu) : peins par-dessus, puis « Mon image… ». En jeu, achète « Custom paint made by artist » chez Fleetari : la CORRIS la prend. Le dossier du jeu n'est pas touché ; l'hôte l'envoie à ses invités (Contenu envoyé > Peinture de la CORRIS).",
-            L"\"Custom paint…\": your own paint on the CORRIS. \"Template\" shows the game's body laid flat (Images\car.png, 2048 x 2048; the layered PSD is in the game's Images folder): paint over it, then \"My image…\". In game, buy \"Custom paint made by artist\" at Fleetari's: the CORRIS takes it. The game folder is not touched; the host sends it to their guests (Sent content > CORRIS paint)." },
+    { WB_P, L"« Peinture perso… » : ta propre peinture sur la CORRIS. « Gabarit » montre la carrosserie du jeu à plat (Images\\car.png, 2048 x 2048 ; le PSD en calques est dans le dossier Images du jeu) : peins par-dessus, puis « Mon image… ». En jeu, achète « Custom paint made by artist » chez Fleetari : la CORRIS la prend. Le dossier du jeu n'est pas touché ; l'hôte l'envoie à ses invités (Contenu envoyé > Peinture de la CORRIS).",
+            L"\"Custom paint…\": your own paint on the CORRIS. \"Template\" shows the game's body laid flat (Images\\car.png, 2048 x 2048; the layered PSD is in the game's Images folder): paint over it, then \"My image…\". In game, buy \"Custom paint made by artist\" at Fleetari's: the CORRIS takes it. The game folder is not touched; the host sends it to their guests (Sent content > CORRIS paint)." },
     { WB_GO, L"Ouvrir Voiture", L"Open Car", TAB_CAR },
     { WB_H, L"Options du jeu", L"Game options" },
     { WB_P, L"Préréglages en haut (Vanilla, Performance, Équilibré, Beau, Ultra, RT), puis trois blocs. Vanilla remet les options du jeu d'origine, sans les ajouts de MWCoop. Chaque catégorie a son icône et se déplie d'un clic sur son titre (toutes fermées au départ). Pour toi seul : les autres ne voient aucune différence.",
@@ -449,6 +451,70 @@ static const WikiBlock kW_Drone[] = {
     { WB_GO, L"Ouvrir les Options du jeu", L"Open Game options", TAB_GFX },
 };
 
+static const WikiBlock kW_Shop[] = {
+    { WB_P, L"La boutique OSUUSKAUPPA s21, juste à l'ouest du parking de la PSK (le magasin de Peräjärvi), ne vend que des objets du coop. Clic sur la poignée pour ouvrir la porte.",
+            L"The OSUUSKAUPPA s21 shop, just west of the PSK car park (the Peräjärvi store), only sells co-op items. Click the handle to open the door." },
+    { WB_H, L"En rayon", L"On the shelves", 0 },
+    { WB_B, L"Sacs de couchage, 149 mk : gondole blanche, au milieu.", L"Sleeping bags, 149 mk: white gondola, in the middle." },
+    { WB_B, L"Cassettes VHS, 19 mk : tablette du haut de la gondole blanche.", L"VHS tapes, 19 mk: top shelf of the white gondola." },
+    { WB_B, L"Magnétoscopes, 390 mk, et la télévision, 590 mk : étagère en bois du mur gauche, celle du milieu.", L"VCRs, 390 mk, and the television, 590 mk: wooden shelf on the left wall, middle unit." },
+    { WB_B, L"Caméscopes, 890 mk : étagère en bois du mur gauche, celle de droite.", L"Camcorders, 890 mk: wooden shelf on the left wall, right-hand unit." },
+    { WB_H, L"Acheter", L"Buying", 0 },
+    { WB_S, L"Vise un objet en rayon : clic gauche pour en prendre un, clic droit pour le reposer.", L"Look at an item on the shelf: left click takes one, right click puts it back." },
+    { WB_S, L"Vise la caisse sur le comptoir : le total s'affiche. Clic pour payer.", L"Look at the till on the counter: the total shows up. Click to pay." },
+    { WB_S, L"Tes achats arrivent dans un sac de courses sur le comptoir. Prends-le comme n'importe quel objet.", L"Your purchases come in a shopping bag on the counter. Pick it up like any object." },
+    { WB_S, L"Vise le sac, ou tiens-le en main, n'importe où : F sort un article, F tenu sort tout. Vide, le sac disparaît.", L"Look at the bag, or hold it in your hand, anywhere: F takes one item out, hold F takes everything out. An empty bag disappears." },
+    { WB_TIP, L"Chacun paie avec son propre porte-monnaie. Les achats et les sacs sont vus par tous les joueurs.", L"Everyone pays from their own wallet. Purchases and bags are seen by every player." },
+    { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
+};
+static const WikiBlock kW_Video[] = {
+    { WB_P, L"Filme vos aventures avec un caméscope VHS des années 90 et regardez-les ensemble sur une télé, avec le son. Il faut : un caméscope, une cassette, un magnétoscope et une télé (celle de la boutique, ou une télé du jeu : maison, prison, maison de retraite, chez Jokke).",
+            L"Film your adventures with a 90s VHS camcorder and watch them together on a TV, with sound. You need: a camcorder, a tape, a VCR and a TV (the shop's, or one of the game's TVs: home, prison, retirement home, Jokke's)." },
+    { WB_H, L"Mettre une cassette", L"Loading a tape", 0 },
+    { WB_S, L"Pose le caméscope (ou le magnétoscope), par exemple sur une table.", L"Put the camcorder (or the VCR) down, for example on a table." },
+    { WB_S, L"Prends une cassette en main, vise l'appareil et fais un clic gauche : elle entre.", L"Pick up a tape, look at the device and left click: it goes in." },
+    { WB_S, L"Pour la ressortir : vise l'appareil posé et tiens F.", L"To take it out: look at the device (set down) and hold F." },
+    { WB_H, L"Filmer", L"Filming", 0 },
+    { WB_B, L"Caméscope en main : F ouvre le viseur (image 4:3 façon VHS, REC, compteur ; molette : zoom), R lance ou arrête l'enregistrement.",
+            L"Camcorder in hand: F opens the viewfinder (4:3 VHS picture, REC, counter; wheel: zoom), R starts or stops recording." },
+    { WB_B, L"Caméscope posé : vise-le, F lance ou arrête l'enregistrement. Il filme droit devant lui ; quand tu le lâches, il se tourne vers là où tu regardais.",
+            L"Camcorder set down: look at it, F starts or stops recording. It films straight ahead; when you drop it, it turns to where you were looking." },
+    { WB_B, L"Chaque prise s'ajoute à la suite des précédentes sur la cassette (40 au plus, 10 minutes chacune). Le son enregistré est ce que tu entends.",
+            L"Each take is added after the previous ones on the tape (40 at most, 10 minutes each). The sound recorded is what you hear." },
+    { WB_B, L"Un voyant rouge clignote sur le caméscope pendant l'enregistrement : tout le monde le voit.", L"A red light blinks on the camcorder while recording: everybody sees it." },
+    { WB_H, L"Regarder", L"Watching", 0 },
+    { WB_S, L"Pose le magnétoscope à moins de 2,5 m d'une télé et mets-y la cassette.", L"Put the VCR less than 2.5 m from a TV and load the tape." },
+    { WB_S, L"Vise le magnétoscope : F lance ou arrête la lecture, F tenu éjecte.", L"Look at the VCR: F plays or stops, hold F ejects." },
+    { WB_S, L"Le film passe sur la télé chez tous les joueurs en même temps, avec le son. Cassette vierge ou fin de bande : de la neige.", L"The film plays on the TV for all players at the same time, with sound. Blank tape or end of tape: static." },
+    { WB_H, L"Écrire un titre sur la cassette", L"Writing a title on the tape", 0 },
+    { WB_P, L"Cassette en main, ouvre le tchat (T) et tape /titre suivi du nom (24 caractères au plus). Il s'écrit sur la tranche. /titre seul l'efface.",
+            L"Holding the tape, open the chat (T) and type /title followed by the name (24 characters max). It is written on the spine. /title alone wipes it." },
+    { WB_TIP, L"À la fin d'une prise, le film part chez les autres joueurs en tâche de fond. Les films sont rangés dans MWCoop\\videot (fichiers .mwv, environ 4 Mo par minute).",
+              L"When a take ends, the film is sent to the other players in the background. Films are stored in MWCoop\\videot (.mwv files, about 4 MB per minute)." },
+    { WB_GO, L"Tes vidéos sur une cassette", L"Your videos on a tape", 1000 + WA_IMPORT },
+};
+static const WikiBlock kW_Import[] = {
+    { WB_P, L"Tu peux mettre une vraie vidéo (un clip de ton téléphone, un court métrage, un clip musical...) sur une cassette et la regarder dans le jeu avec tes amis.",
+            L"You can put a real video (a clip from your phone, a short film, a music video...) on a tape and watch it in the game with your friends." },
+    { WB_H, L"Étape par étape", L"Step by step", 0 },
+    { WB_S, L"Mets le fichier dans le dossier du jeu, sous MWCoop\\videot\\importer (créé au premier chargement d'une partie). Tout ce que Windows sait lire marche : mp4, wmv, avi, mov, m4v...",
+            L"Put the file in the game folder, under MWCoop\\videot\\importer (created the first time you load a game). Anything Windows can play works: mp4, wmv, avi, mov, m4v..." },
+    { WB_S, L"En jeu, prends une cassette en main (vierge ou non).", L"In the game, pick up a tape (blank or not)." },
+    { WB_S, L"Ouvre le tchat (T) et tape /importer suivi du nom du fichier (le début suffit). /importer seul liste les vidéos du dossier.",
+            L"Open the chat (T) and type /import followed by the file name (the beginning is enough). /import alone lists the videos in the folder." },
+    { WB_S, L"La conversion se fait en tâche de fond : continue à jouer, l'avancement s'affiche en bas de l'écran.", L"The conversion runs in the background: keep playing, the progress shows at the bottom of the screen." },
+    { WB_S, L"La vidéo s'ajoute après les prises de la cassette, qui prend le nom du fichier comme titre. Mets-la dans un magnétoscope : tout le monde la voit, avec le son.",
+            L"The video is added after the tape's takes, and the tape gets the file name as its title. Put it in a VCR: everybody sees it, with sound." },
+    { WB_H, L"Bon à savoir", L"Good to know", 0 },
+    { WB_B, L"L'image passe au rendu VHS du jeu : 320×240, 12 images par seconde. Une vieille cassette sur une vieille télé, c'est voulu !",
+            L"The picture gets the game's VHS look: 320×240, 12 frames per second. An old tape on an old TV, on purpose!" },
+    { WB_B, L"20 minutes au plus par vidéo (au-delà, elle est coupée). Envoi aux autres : environ une minute par tranche de 5 minutes de vidéo.",
+            L"20 minutes at most per video (longer ones are cut). Sending to the others: about one minute per 5 minutes of video." },
+    { WB_WARN, L"Windows 7 et les éditions « N » de Windows (sans le Media Feature Pack) ne peuvent pas convertir de vidéo : le reste du coin vidéo marche.",
+               L"Windows 7 and the \"N\" editions of Windows (without the Media Feature Pack) can't convert videos: the rest of the video corner works." },
+    { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
+};
+
 #define WART(c, tf, te, sf, se, b) { c, tf, te, sf, se, b, (int)(sizeof(b) / sizeof(b[0])) }
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
@@ -461,6 +527,9 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"Sauvegarde : hôte et invités", L"Save: host and guests", L"À qui est la partie", L"Whose game it is", kW_Save),
     WART(1, L"En jeu : touches et menu", L"In game: keys and menu", L"F10, discussion, places passager…", L"F10, chat, passenger seats…", kW_InGame),
     WART(1, L"Caméra drone (photos)", L"Drone camera (photos)", L"F8 : viseur, zoom, flash", L"F8: viewfinder, zoom, flash", kW_Drone),
+    WART(1, L"La boutique OSUUSKAUPPA s21", L"The OSUUSKAUPPA s21 shop", L"Rayons, caisse, sac de courses", L"Shelves, till, shopping bag", kW_Shop),
+    WART(1, L"Filmer et regarder (VHS)", L"Film and watch (VHS)", L"Caméscope, magnétoscope, télé", L"Camcorder, VCR, TV", kW_Video),
+    WART(1, L"Tes vidéos sur une cassette", L"Your videos on a tape", L"/importer : une vraie vidéo dans le jeu", L"/import: a real video in the game", kW_Import),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),
     WART(2, L"Contenu envoyé", L"Sent content", L"CD, radio, posters, peinture", L"CDs, radio, posters, paint", kW_Content),
