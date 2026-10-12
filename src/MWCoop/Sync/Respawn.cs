@@ -197,8 +197,9 @@ namespace MWCoop
             // Accident au volant : les passagers de cette voiture meurent aussi (le jeu n'a pas de passager : seul le
             // conducteur mourait, retour d'un joueur, 09/10 : « seul l'hote meurt dans l'accident »).
             string car = VehicleSync.LocalDrivingKey;
+            bool beltAtCrash = Game.GlobalBool("PlayerSeatbeltsOn");   // (conducteur attache au moment du choc)
             if (crash && car != null && Session.Active && Session.RemoteCount > 0)
-                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@accident").Str(car), true);
+                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@accident").Str(car).Bool(beltAtCrash), true);
             if (Config.GetInt("Test", "TestReapparition", 0) > 0) testChoiceAt = Time.realtimeSinceStartup + 3f;
             return true;
         }
@@ -389,9 +390,12 @@ namespace MWCoop
         }
 
         // Le conducteur 'who' est mort dans un accident de la voiture 'car' : passager de cette voiture ici -> mort aussi.
-        public static void OnAccident(int who, string car)
+        public static void OnAccident(int who, string car, bool driverBelted)
         {
             if (Choosing || !Seats.Seated || Seats.SeatedCarKey != car) return;
+            // Passager attache, conducteur non attache : le choc qui a tue le conducteur, le passager l'encaisse (Somegames1,
+            // 12/10 : ceinture passager de la Rivett) ; conducteur attache et tue quand meme : choc trop fort, tous y passent.
+            if (Seats.LocalBelted && !driverBelted) { Log.Info("reapparition : accident de " + car + " (conducteur #" + who + " non attache), passager attache ici : survit"); return; }
             Log.Info("reapparition : accident de " + car + " (conducteur #" + who + "), passager ici : mort aussi");
             TestDie("Crash");
         }

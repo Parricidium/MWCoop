@@ -57,6 +57,7 @@ namespace MWCoop
         static readonly string[] Containers = { "TRAFFIC/VehiclesHighway", "TRAFFIC/VehiclesDirtRoad", "TRAIN", "NPC_CARS", "TRAFFIC/Police" };
         const string WalkersPath = "HUMANS/Randomizer/Walkers";
         static readonly List<Ent> ents = new List<Ent>();
+        static float nextRunOver;
         static readonly List<string> wheelNotes = new List<string>();
         static readonly List<PlayMakerFSM> mutedSpawners = new List<PlayMakerFSM>();
         static bool built, verified;
@@ -214,6 +215,14 @@ namespace MWCoop
             {
                 HostFollowOwned();
                 HostGuard(now);
+                // (voitures PNJ physiques chez l'hote : renversent-elles un invite ? 20 fois/s)
+                if (now >= nextRunOver)
+                {
+                    nextRunOver = now + 0.05f;
+                    foreach (Ent e in ents)
+                        if (!e.Walker && !e.Train && e.Body != null && !e.Body.isKinematic && e.Owner < 0 && e.T != null && e.T.gameObject.activeInHierarchy)
+                            RunOver.Check(e.T, e.Body, e.Key);
+                }
                 Envols(now);
                 if (now < nextSend || Session.RemoteCount == 0) return;
                 nextSend = now + 0.2f;

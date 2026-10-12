@@ -674,6 +674,9 @@ namespace MWCoop
                 nextFast = now + 0.05f;
                 if (LocalDriving < 0) PushTick(now);
                 BumpTick(now);
+                // (renverser un autre joueur : la voiture qu'on mene, physique ici)
+                int runLead = LocalDriving >= 0 ? LocalDriving : owned;
+                if (runLead >= 0 && runLead < cars.Count && cars[runLead].Body != null) RunOver.Check(cars[runLead].T, cars[runLead].Body, cars[runLead].Key);
                 HitchScan(now);
                 HitchTick(now);
                 if (LocalDriving >= 0) Send(cars[LocalDriving], 1);
