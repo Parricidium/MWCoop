@@ -30,7 +30,7 @@ namespace MWCoop
 
         public static bool Present { get { return ram != null; } }
 
-        public static void OnLevelLoaded() { ram = null; drive = null; findAt = Time.realtimeSinceStartup + 10f; tStep = 0; slots = null; }
+        public static void OnLevelLoaded() { ram = null; drive = null; findAt = Time.realtimeSinceStartup + 10f; tStep = 0; slots = null; lot.Clear(); lotCamper = null; lotInit = false; lotLook = Time.realtimeSinceStartup + 12f; }
 
         const BindingFlags F = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
@@ -85,9 +85,9 @@ namespace MWCoop
         static bool Find()
         {
             if (ram != null && slots != null) return true;
-            if (ram == null) slots = null;
             if (Time.realtimeSinceStartup < findAt) return false;
             findAt = Time.realtimeSinceStartup + 5f;
+            slots = null;
             ram = GameObject.Find("Ram1500");
             if (ram == null || TypeOf("IgnitionKnob") == null) { ram = null; return false; }
             drive = Comp("RamDrivingController", null);
@@ -186,6 +186,119 @@ namespace MWCoop
                 });
             if (x4 != null)
                 Add("4x4", () => Int(Get(x4, "currentMode")), v => { if (Int(Get(x4, "currentMode")) != v) Call(x4, v == 0 ? "SetH2" : v == 1 ? "SetH4" : "SetL4"); });
+            // Cellule camping (si elle existe) : montee sur le Ram ou posee a part (alors objet pris a la main : Props,
+            // w:mod:ramcamper) ; sa porte et ses deux poignees.
+            GameObject cg = GameObject.Find("CamperShell");
+            Type ct = TypeOf("CamperShellManager");
+            camper = cg != null && ct != null ? cg.GetComponent(ct) : null;
+            camperId = cg != null ? cg.GetInstanceID() : 0;
+            if (camper != null)
+            {
+                Component cm = camper;
+                Add("cellule", () => Int(Get(cm, "isFitted")), v =>
+                {
+                    if (Int(Get(cm, "isFitted")) == v) return;
+                    if (v == 1) Call(cm, "RestoreFitted", true); else Call(cm, "Detach");
+                    MethodInfo st = TypeOf("ram1500") != null ? TypeOf("ram1500").GetMethod("SyncTruckAndCamper", BindingFlags.Public | BindingFlags.Static) : null;
+                    if (st != null) { try { st.Invoke(null, null); } catch { } }
+                });
+                Add("cellulePorte", () => Int(Get(cm, "doorOpen")), v => { if (Int(Get(cm, "doorOpen")) != v) Call(cm, "ToggleDoor"); });
+                Add("cellulePoigneeG", () => Int(Get(cm, "leftHandleTwisted")), v => { if (Int(Get(cm, "leftHandleTwisted")) != v) Call(cm, "ToggleHandle", true); });
+                Add("cellulePoigneeD", () => Int(Get(cm, "rightHandleTwisted")), v => { if (Int(Get(cm, "rightHandleTwisted")) != v) Call(cm, "ToggleHandle", false); });
+            }
+        }
+        static Component camper;
+        static int camperId;
+
+        // ---------------------------------------------------------------- achat au parc du vendeur (histoire du mod)
+        // Le joueur paie, le camion (ou la cellule) du parc est detruit, ram1500.SpawnPurchasedTruck (ou SpawnPurchasedCamper)
+        // cree le sien a la meme place et SellerLogic.LockLot ferme le parc -- chez lui seul. Ici : le parc (configuration et
+        // pose de chaque camion, de la cellule) est releve toutes les secondes ; quand il passe a « vendu » chez nous sans
+        // qu'on l'ait applique, l'achat part (@ram 2 / 3 : celui le plus pres du camion apparu) ; les autres creent le meme et
+        // ferment leur parc, sans payer. (Les camions du parc sont tires au hasard chez chacun : seul l'achete est le meme.)
+        class LotEntry { public Vector3 Pos; public Quaternion Rot; public string Branding; public bool Dually, Diesel, Manual, Matte; public Color Paint; }
+        static readonly List<LotEntry> lot = new List<LotEntry>();
+        static LotEntry lotCamper;
+        static bool lotSoldSeen, camperSoldSeen, lotInit;
+        static float lotLook;
+        static bool StaticBool(string type, string field) { Type t = TypeOf(type); FieldInfo f = t != null ? t.GetField(field, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static) : null; return f != null && (bool)f.GetValue(null); }
+        static void LotWatch(float now)
+        {
+            if (now < lotLook || TypeOf("SellerLogic") == null) return;
+            lotLook = now + 1f;
+            bool sold = StaticBool("SellerLogic", "LotSold"), csold = StaticBool("SellerLogic", "CamperLotSold");
+            if (!lotInit) { lotInit = true; lotSoldSeen = sold; camperSoldSeen = csold; }
+            if (!sold)
+            {
+                lot.Clear();
+                Type tt = TypeOf("LotTruckTag");
+                if (tt != null)
+                    foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(tt))
+                    {
+                        Component c = o as Component;
+                        if (c == null) continue;
+                        lot.Add(new LotEntry { Pos = c.transform.position, Rot = c.transform.rotation, Branding = (string)Get(c, "brandingStyle"), Dually = (bool)Get(c, "isDually"), Diesel = (bool)Get(c, "isDiesel"), Manual = (bool)Get(c, "isManual"), Paint = (Color)Get(c, "paintColor"), Matte = (bool)Get(c, "isMatte") });
+                    }
+            }
+            else if (!lotSoldSeen && lot.Count > 0)
+            {
+                GameObject nr = GameObject.Find("Ram1500");
+                LotEntry best = null; float bd = float.MaxValue;
+                foreach (LotEntry e in lot) { float d = nr != null ? (e.Pos - nr.transform.position).sqrMagnitude : 0f; if (d < bd) { bd = d; best = e; } }
+                if (best != null)
+                {
+                    Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@ram").U8(2).Vec(best.Pos).Quat(best.Rot).Str(best.Branding ?? "").Bool(best.Dually).Bool(best.Diesel).Bool(best.Manual)
+                        .F32(best.Paint.r).F32(best.Paint.g).F32(best.Paint.b).Bool(best.Matte), true);
+                    Log.Info("ram : camion achete ici au parc (" + best.Branding + (best.Diesel ? ", diesel" : "") + (best.Manual ? ", manuelle" : "") + "), envoye");
+                }
+            }
+            lotSoldSeen = sold;
+            if (!csold)
+            {
+                lotCamper = null;
+                Type lt = TypeOf("LotCamperTag");
+                UnityEngine.Object lo = lt != null ? UnityEngine.Object.FindObjectOfType(lt) : null;
+                Component lc = lo as Component;
+                if (lc != null) lotCamper = new LotEntry { Pos = lc.transform.position, Rot = lc.transform.rotation, Paint = (Color)Get(lc, "paintColor"), Matte = (bool)Get(lc, "isMatte") };
+            }
+            else if (!camperSoldSeen && lotCamper != null)
+            {
+                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@ram").U8(3).Vec(lotCamper.Pos).Quat(lotCamper.Rot).F32(lotCamper.Paint.r).F32(lotCamper.Paint.g).F32(lotCamper.Paint.b).Bool(lotCamper.Matte), true);
+                Log.Info("ram : cellule achetee ici au parc, envoyee");
+            }
+            camperSoldSeen = csold;
+        }
+
+        static void OnBought(int kind, int who, NetReader r)
+        {
+            Type rt = TypeOf("ram1500"), st = TypeOf("SellerLogic");
+            if (rt == null || st == null) return;
+            Vector3 pos = r.Vec(); Quaternion rot = r.Quat();
+            if (kind == 2)
+            {
+                string br = r.Str(); bool du = r.Bool(), di = r.Bool(), ma = r.Bool();
+                Color pc = new Color(r.F32(), r.F32(), r.F32()); bool mt = r.Bool();
+                if (StaticBool("SellerLogic", "LotSold")) { Log.Info("ram : achat de #" + who + " recu, parc deja vendu ici"); return; }
+                MethodInfo sp = rt.GetMethod("SpawnPurchasedTruck", BindingFlags.Public | BindingFlags.Static);
+                object ok = sp != null ? sp.Invoke(null, new object[] { pos, rot, br, du, di, ma, pc, mt }) : null;
+                MethodInfo ll = st.GetMethod("LockLot", BindingFlags.Public | BindingFlags.Static);
+                if (ll != null) ll.Invoke(null, null);
+                lotSoldSeen = true;
+                ram = null; slots = null; findAt = 0f;   // (nouveau Ram : commandes relevees de nouveau)
+                Log.Info("ram : camion achete par #" + who + " cree ici (" + br + ", " + ok + "), parc ferme");
+            }
+            else
+            {
+                Color pc = new Color(r.F32(), r.F32(), r.F32()); bool mt = r.Bool();
+                if (StaticBool("SellerLogic", "CamperLotSold")) return;
+                MethodInfo sp = rt.GetMethod("SpawnPurchasedCamper", BindingFlags.Public | BindingFlags.Static);
+                if (sp != null) sp.Invoke(null, new object[] { pos, rot, pc, mt });
+                MethodInfo ll = st.GetMethod("LockCamperLot", BindingFlags.Public | BindingFlags.Static);
+                if (ll != null) ll.Invoke(null, null);
+                camperSoldSeen = true;
+                slots = null; findAt = 0f;
+                Log.Info("ram : cellule achetee par #" + who + " creee ici");
+            }
         }
 
         static bool AnyCabDoorOpen(Component changed, bool open)
@@ -201,7 +314,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- boucle
-        static float nextPoll, nextFull, nextCont, nextSlow;
+        static float nextPoll, nextFull, nextCont, nextSlow, camperLook;
         static bool wasAuth = true;
         static float recvRpm; static bool recvBrake; static int recvGear = -1; static bool haveCont;
         static float fuelFactor = -1f, absMiles = -1f, stallTemp = -1f;
@@ -215,8 +328,15 @@ namespace MWCoop
         public static void Update()
         {
             if (!PlayerSync.InGame || !Session.Active) return;
-            if (!Find()) return;
             float now = Time.realtimeSinceStartup;
+            LotWatch(now);
+            if (!Find()) return;
+            if (now >= camperLook)
+            {
+                camperLook = now + 5f;
+                GameObject cg = GameObject.Find("CamperShell");
+                if ((cg != null ? cg.GetInstanceID() : 0) != camperId) { slots = null; findAt = 0f; return; }   // (cellule achetee ou recreee)
+            }
             bool auth = Authority();
             if (auth != wasAuth) { wasAuth = auth; Local(auth); }
             if (now >= nextPoll)
@@ -286,8 +406,9 @@ namespace MWCoop
 
         public static void OnMessage(int who, NetReader r)
         {
-            if (!Find()) return;
             int kind = r.U8();
+            if (kind == 2 || kind == 3) { OnBought(kind, who, r); return; }
+            if (!Find()) return;
             if (kind == 0)
             {
                 while (r.More)
@@ -340,6 +461,37 @@ namespace MWCoop
                 foreach (Renderer rr in ram.GetComponentsInChildren<Renderer>(true)) { Vector3 e = rr.bounds.size; if (e.x * e.y * e.z > vol && rr.name.ToLowerInvariant().Contains("body")) { vol = e.x * e.y * e.z; best = rr; } }
                 if (best != null) sb.Append((char)10).Append("  carrosserie ").Append(best.name).Append(" taille ").Append(best.bounds.size.ToString("F2"));
                 Log.Info(sb.ToString());
+            }
+            // [Test] Autotest=ramcellule : l'hote monte la cellule a 40 s (RestoreFitted), la demonte a 50 s ; chacun note.
+            if (mode == "ramcellule" && Find())
+            {
+                if (Session.IsHost && tStep == 0 && t > 55f) { tStep = 1; Call(camper, "RestoreFitted", true); Log.Info("autotest : ramcellule, montee ici (" + (camper != null) + ")"); }
+                if (Session.IsHost && tStep == 1 && t > 66f) { tStep = 2; Call(camper, "Detach"); Log.Info("autotest : ramcellule, demontee ici"); }
+                if (t > 50f && t < 76f && t >= tLog) { tLog = t + 3f; Log.Info("autotest : ramcellule, montee " + Get(camper, "isFitted") + (camper != null ? ", parent " + (camper.transform.parent != null ? camper.transform.parent.name : "-") : "")); }
+                return;
+            }
+            // [Test] Autotest=ramachat (histoire du mod : parc du vendeur) : a 40 s l'hote « achete » le premier camion du parc
+            // (comme LotBuyInteract : camion du parc detruit, SpawnPurchasedTruck a sa place, LockLot) ; chacun note a 50 s.
+            if (mode == "ramachat")
+            {
+                if (Session.IsHost && tStep == 0 && t > 40f)
+                {
+                    tStep = 1;
+                    Type tt = TypeOf("LotTruckTag");
+                    UnityEngine.Object o = tt != null ? UnityEngine.Object.FindObjectOfType(tt) : null;
+                    Component c = o as Component;
+                    if (c == null) { Log.Info("autotest : ramachat, pas de camion au parc"); return; }
+                    Vector3 pos = c.transform.position; Quaternion rot = c.transform.rotation;
+                    object[] a = { pos, rot, Get(c, "brandingStyle"), Get(c, "isDually"), Get(c, "isDiesel"), Get(c, "isManual"), Get(c, "paintColor"), Get(c, "isMatte") };
+                    MethodInfo rl = TypeOf("SellerLogic").GetMethod("RemoveLotTruck", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                    if (rl != null) rl.Invoke(null, new object[] { c.gameObject });
+                    UnityEngine.Object.Destroy(c.gameObject);
+                    object ok = TypeOf("ram1500").GetMethod("SpawnPurchasedTruck", BindingFlags.Public | BindingFlags.Static).Invoke(null, a);
+                    TypeOf("SellerLogic").GetMethod("LockLot", BindingFlags.Public | BindingFlags.Static).Invoke(null, null);
+                    Log.Info("autotest : ramachat, achete ici (" + a[2] + ", " + ok + ")");
+                }
+                if (tStep < 2 && t > 52f) { tStep = 2; GameObject g = GameObject.Find("Ram1500"); Log.Info("autotest : ramachat, Ram1500 " + (g != null ? g.transform.position.ToString("F1") : "absent") + ", parc vendu " + StaticBool("SellerLogic", "LotSold")); }
+                return;
             }
             if (mode != "ram" || !Find()) return;
             Rigidbody rb = ram.GetComponent<Rigidbody>();
