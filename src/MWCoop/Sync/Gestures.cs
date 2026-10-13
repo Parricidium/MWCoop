@@ -208,6 +208,7 @@ namespace MWCoop
                 }
                 heldOff = cam.InverseTransformPoint(bb.center);
                 heldSize = Mathf.Max(bb.size.x, bb.size.z);
+                if (Kauppa.KartturiUp) heldSize = Mathf.Max(heldSize, 0.26f);   // (KARTTURI leve : a deux mains)
                 b |= G_Held;
             }
             else if (testHeld) { heldOff = new Vector3(0f, -0.3f, 0.6f); heldSize = 0.5f; b |= G_Held; }

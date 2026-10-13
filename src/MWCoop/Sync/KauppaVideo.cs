@@ -89,6 +89,7 @@ namespace MWCoop
                         Piece(g, PrimitiveType.Cube, new Vector3(x, -size.y / 2 - 0.005f, z), Vector3.zero, new Vector3(0.03f, 0.01f, 0.03f), blackPlastic);
             }
             else if (kind == KKamera) KameraModel(g, out size);
+            else if (kind == KKartturi) KartturiModel(g, out size, out screen);
             else
             {
                 // television : copie des maillages de la TV de la prison (tv_14 + son ecran)
@@ -143,11 +144,11 @@ namespace MWCoop
         {
             Vector3 size; Transform screen;
             GameObject g = Model(kind, out size, out screen);
-            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : "television") + " osuuskauppa(itemx)";
+            g.name = (kind == KVhs ? "vhs tape" : kind == KNauhuri ? "vcr" : kind == KKamera ? "camcorder" : kind == KKartturi ? "kartturi gps" : "television") + " osuuskauppa(itemx)";
             g.transform.position = pos; g.transform.rotation = rot;
             var e = new Esine { Id = id, Kind = kind, Data = data ?? "", Go = g, Screen = screen };
             e.Col = g.AddComponent<BoxCollider>(); e.Col.size = size;
-            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : 9f;
+            e.Rb = g.AddComponent<Rigidbody>(); e.Rb.mass = kind == KVhs ? 0.25f : kind == KNauhuri ? 4f : kind == KKamera ? 2.5f : kind == KKartturi ? 0.4f : 9f;
             e.Rb.collisionDetectionMode = CollisionDetectionMode.Continuous;   // (cassette fine : ne traverse pas le sol en tombant)
             g.layer = 19; g.tag = "PART";
             esineet.Add(e);
@@ -261,6 +262,7 @@ namespace MWCoop
             TickInsert();
             TickScreens(now);
             TickKamera(now);
+            TickKartturi(now);
             TickFilms(now);
             TickLabels();
             TickMontageKey(KameraBusy || Viewfinder ? null : aimedTape ?? HeldTape(), now);
@@ -521,7 +523,8 @@ namespace MWCoop
             foreach (float z in new[] { 1.78f, 2.27f }) Display(kam, KKamera, new Vector3(wx, kt, z), 90f);
             OfferCol(kam, new Vector3(wx, kt + 0.12f, 2.02f), new Vector3(0.45f, 0.3f, 1.0f));
             Plane("hlkamera", new Vector3(front, kt - 0.06f, 2.02f), 0.18f, 0.09f, Vector3.right);
-            L("en rayon : cassettes 19 mk, magnetoscopes 390 mk, television 590 mk, camescopes 890 mk");
+            KartturiOffers(wx, front);
+            L("en rayon : cassettes 19 mk, magnetoscopes 390 mk, television 590 mk, camescopes 890 mk, KARTTURI " + KartturiPrice + " mk");
         }
 
         // un article expose (sans physique), pose par le bas en "at" ; yaw NaN : ecran de la TV vers la piece (+x)
@@ -567,6 +570,7 @@ namespace MWCoop
         public static void OnLevelLoadedVideo()
         {
             OnLevelLoadedKamera();
+            OnLevelLoadedKartturi();
             OnLevelLoadedFilms();
             OnLevelLoadedMontage();
             esineet.Clear(); esineLoaded = false; showing.Clear(); gameScreens = null; lookedItem = null; pendingTape = null;

@@ -329,7 +329,8 @@ namespace MWCoop
                 // pas un objet tenu -- sa pose envoyee la tirait chez les autres, dont le jeu la demontait (« Bolted
                 // -UNINSTALL-> » : portieres, capot, coffre qui tombent des qu'on les touche, retour de witefold et
                 // mugshot, 11/10). CarDoors s'en charge ; demontee, elle n'est plus sous la voiture.
-                if (rb != null && rb.transform.parent != null && VehicleSync.CarRoot(rb.transform) != null) rb = null;
+                // (Passager assis : le joueur est accroche a la voiture, l'objet en main aussi -- c'est bien un objet tenu.)
+                if (rb != null && rb.transform.parent != null && VehicleSync.CarRoot(rb.transform) != null && !Game.UnderPlayer(rb.transform)) rb = null;
                 if (rb != null && !byBody.TryGetValue(rb, out h) && Time.realtimeSinceStartup - lastForced > 1f)
                 {
                     lastForced = Time.realtimeSinceStartup;
