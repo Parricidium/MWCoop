@@ -22,7 +22,7 @@ for ($i = 1; $i -le $Players; $i++) {
     if ($env:MWC_SANSMSC -eq "1") { $args += " -mscloader-disable" }   # (captures sans les fenetres de MSCLoader)
     if ($env:MWC_ARGS) { $args += " " + $env:MWC_ARGS }   # (options d'Unity en plus, ex. -force-gfx-direct pour le ray tracing)
     $procs += Start-Process "$d\mywintercar.exe" -ArgumentList $args -WorkingDirectory $d -PassThru
-    if ($i -lt $Players) { Start-Sleep 4 }
+    if ($i -lt $Players) { Start-Sleep $(if ($env:MWC_DELAI) { [int]$env:MWC_DELAI } else { 4 }) }   # (MWC_DELAI : arrivee tardive d'un invite)
 }
 $fin = (Get-Date).AddSeconds($Seconds)
 while ((Get-Date) -lt $fin -and ($procs | Where-Object { -not $_.HasExited })) { Start-Sleep 1 }

@@ -46,6 +46,7 @@ namespace MWCoop
 
         static void Clear()
         {
+            forestJob = null;   // (un calcul en cours finit dans le vide : plus lu)
             if (root != null) Object.Destroy(root);
             root = null; Ready = false; Progress = -1f; todo = null; buf = null;
             if (rt != null) { rt.Release(); Object.Destroy(rt); rt = null; }
@@ -54,11 +55,18 @@ namespace MWCoop
         public static void Update()
         {
             if (startAt > 0 && Time.realtimeSinceStartup >= startAt) { startAt = -1; Begin(); }
+            if (forestJob != null) { DrainForests(); return; }
             if (todo == null) return;
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            while (todoAt < todo.Count && sw.Elapsed.TotalMilliseconds < 4f) { Add(todo[todoAt]); todoAt++; }
+            // (un collisionneur a la fois, par morceaux : les routes goudronnees ou l'herbe d'un seul tenant prenaient 120 a
+            // 400 ms d'un coup)
+            while (sw.Elapsed.TotalMilliseconds < 4f)
+            {
+                if (cur == null) { if (todoAt >= todo.Count) break; cur = Add(todo[todoAt++]); }
+                if (!cur.MoveNext()) cur = null;
+            }
             Progress = todo.Count > 0 ? (float)todoAt / todo.Count : 1f;
-            if (todoAt >= todo.Count) Finish();
+            if (todoAt >= todo.Count && cur == null) Finish();
         }
 
         static void Begin()
@@ -84,7 +92,7 @@ namespace MWCoop
                 if (!(c is MeshCollider) && !(c is BoxCollider)) continue;
                 todo.Add(c);
             }
-            todoAt = 0; buf = new Buf(); meshCount = 0; triCount = 0;
+            todoAt = 0; cur = null; buf = new Buf(); meshCount = 0; triCount = 0;
             covered = new bool[G * G];
             Progress = 0f;
             Log.Info("carte : construction (" + todo.Count + " collisionneurs), sol " + b.min.ToString("F0") + " - " + b.max.ToString("F0") + ", shader " + (sh != null ? sh.name : "?"));
@@ -118,10 +126,12 @@ namespace MWCoop
             k = Building; return true;
         }
 
-        static void Add(Collider c)
+        static System.Collections.IEnumerator cur;
+        const int Step = 4000;   // (triangles ou sommets par morceau)
+        static System.Collections.IEnumerator Add(Collider c)
         {
             Kind k; bool lakeCheck;
-            if (c == null || !KindOf(c, out k, out lakeCheck)) return;
+            if (c == null || !KindOf(c, out k, out lakeCheck)) yield break;
             Transform t = c.transform;
             if (c is BoxCollider)
             {
@@ -130,19 +140,22 @@ namespace MWCoop
                 Vector3 p0 = t.TransformPoint(bc.center + new Vector3(-h.x, 0, -h.z)), p1 = t.TransformPoint(bc.center + new Vector3(h.x, 0, -h.z)),
                         p2 = t.TransformPoint(bc.center + new Vector3(h.x, 0, h.z)), p3 = t.TransformPoint(bc.center + new Vector3(-h.x, 0, h.z));
                 Tri(p0, p1, p2, k); Tri(p0, p2, p3, k);
-                return;
+                yield break;
             }
             Mesh m = ((MeshCollider)c).sharedMesh;
-            if (m == null) return;
-            Vector3[] v; int[] tr;
-            try { v = m.vertices; tr = m.triangles; } catch { return; }
-            if (v == null || tr == null || v.Length == 0) return;
+            if (m == null) yield break;
+            Vector3[] v = null; int[] tr = null;
+            try { v = m.vertices; tr = m.triangles; } catch { }
+            if (v == null || tr == null || v.Length == 0) yield break;
+            yield return null;
             var w = new Vector3[v.Length];
-            for (int i = 0; i < v.Length; i++) w[i] = t.TransformPoint(v[i]);
+            Matrix4x4 mx = t.localToWorldMatrix;
+            for (int i = 0; i < v.Length; i++) { w[i] = mx.MultiplyPoint3x4(v[i]); if (i % (Step * 4) == Step * 4 - 1) yield return null; }
             // routes goudronnees : bordure foncee (aretes de bord du maillage, en bandes de 1,4 m), sous le jaune
-            if (k.Y == Asphalt.Y) Edges(w, tr, AsphaltEdge, 1.4f);
+            if (k.Y == Asphalt.Y) { var ed = Edges(w, tr, AsphaltEdge, 1.4f); while (ed.MoveNext()) yield return null; }
             for (int i = 0; i + 2 < tr.Length; i += 3)
             {
+                if (i % (Step * 3) == Step * 3 - 3) yield return null;
                 Vector3 a = w[tr[i]], b = w[tr[i + 1]], d = w[tr[i + 2]];
                 Kind kk = k;
                 if (lakeCheck && a.y < -3.9f && b.y < -3.9f && d.y < -3.9f)
@@ -155,18 +168,23 @@ namespace MWCoop
         }
 
         // Aretes de bord (une seule face) : bandes de largeur w autour.
-        static void Edges(Vector3[] w, int[] tr, Kind k, float width)
+        static System.Collections.IEnumerator Edges(Vector3[] w, int[] tr, Kind k, float width)
         {
             var count = new Dictionary<long, int>();
             for (int i = 0; i + 2 < tr.Length; i += 3)
+            {
+                if (i % (Step * 3) == Step * 3 - 3) yield return null;
                 for (int e = 0; e < 3; e++)
                 {
                     int a = tr[i + e], b = tr[i + (e + 1) % 3];
                     long key = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
                     int n; count.TryGetValue(key, out n); count[key] = n + 1;
                 }
+            }
+            int done = 0;
             foreach (var kv in count)
             {
+                if (++done % (Step * 2) == 0) yield return null;
                 if (kv.Value != 1) continue;
                 Vector3 a = w[(int)(kv.Key >> 32)], b = w[(int)(kv.Key & 0xffffffff)];
                 Vector3 d = new Vector3(b.x - a.x, 0f, b.z - a.z);
@@ -232,7 +250,6 @@ namespace MWCoop
                 }
             // contour lisse (marching squares sur les centres des cases) ; l'interieur plein en bandes par ligne
             float cell = Size / G;
-            noCover = true;
             for (int zz = 0; zz < G - 1; zz++)
             {
                 int runStart = -1;
@@ -246,15 +263,14 @@ namespace MWCoop
                 }
                 if (runStart >= 0) Quad(runStart, G - 1, zz, cell);
             }
-            noCover = false;
-            Log.Info("carte : forets " + cells + " cases de " + cell.ToString("F1") + " m");
+            forestCells = cells;
         }
         // (points : centres des cases)
         static Vector3 P(float x, float z, float cell) { return new Vector3(MinX + (x + 0.5f) * cell, 0f, MinZ + (z + 0.5f) * cell); }
         static void Quad(int x0, int x1, int z, float cell)
         {
             Vector3 a = P(x0, z, cell), b = P(x1, z, cell), c = P(x1, z + 1, cell), d = P(x0, z + 1, cell);
-            Tri(a, b, c, ForestK); Tri(a, c, d, ForestK);
+            fout.Add(a); fout.Add(b); fout.Add(c); fout.Add(a); fout.Add(c); fout.Add(d);
         }
         // coins : 1 bas-gauche, 2 bas-droite, 4 haut-droite, 8 haut-gauche ; milieux : b(as), d(roite), h(aut), g(auche)
         static readonly string[] Cases = { "", "0bg", "b1d", "01dg", "d2h", "0bd2hg", "b12h", "012hg", "h3g", "0bh3", "b1dh3g", "01dh3", "d23g", "0bd23", "b123g", "0123" };
@@ -276,7 +292,7 @@ namespace MWCoop
                     default: pts[i] = P(x, z + 0.5f, cell); break;
                 }
             }
-            for (int i = 1; i + 1 < pts.Length; i++) Tri(pts[0], pts[i], pts[i + 1], ForestK);
+            for (int i = 1; i + 1 < pts.Length; i++) { fout.Add(pts[0]); fout.Add(pts[i]); fout.Add(pts[i + 1]); }
         }
 
         static void Visit(int k, bool[] outside, Queue<int> q) { if (!covered[k] && !outside[k]) { outside[k] = true; q.Enqueue(k); } }
@@ -315,12 +331,39 @@ namespace MWCoop
             buf = new Buf();
         }
 
+        // Forets : calculees a part (remplissage et contours de 4 millions de cases : ~400 ms d'un coup, a-coup de la carte
+        // 20 s apres l'arrivee), puis leurs triangles ajoutes par paquets de 4 ms.
+        static System.Threading.Thread forestJob;
+        static volatile bool forestDone;
+        static List<Vector3> fout;
+        static int foutAt, forestCells;
         static void Finish()
         {
-            Forests();
-            covered = null;
+            todo = null;
+            fout = new List<Vector3>();
+            foutAt = 0; forestDone = false;
+            forestJob = new System.Threading.Thread(() => { try { Forests(); } catch (System.Exception e) { forestError = e.Message; } forestDone = true; });
+            forestJob.IsBackground = true;
+            forestJob.Start();
+        }
+        static string forestError;
+        static void DrainForests()
+        {
+            if (!forestDone) return;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            noCover = true;
+            if (forestError != null) foutAt = fout.Count;
+            while (foutAt + 2 < fout.Count && sw.Elapsed.TotalMilliseconds < 4f)
+            {
+                for (int i = 0; i < 300 && foutAt + 2 < fout.Count; i++, foutAt += 3) Tri(fout[foutAt], fout[foutAt + 1], fout[foutAt + 2], ForestK);
+            }
+            noCover = false;
+            if (foutAt + 2 < fout.Count) return;
+            forestJob = null; fout = null; covered = null;
+            if (forestError != null) { Log.Warn("carte : forets : " + forestError); forestError = null; }
+            else Log.Info("carte : forets " + forestCells + " cases de " + (Size / G).ToString("F1") + " m");
             Flush();
-            todo = null; buf = null;
+            buf = null;
             Ready = true; Progress = -1f;
             Log.Info("carte : construite, " + triCount + " triangles en " + meshCount + " maillages");
         }

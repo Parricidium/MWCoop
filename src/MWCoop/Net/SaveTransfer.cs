@@ -60,6 +60,7 @@ namespace MWCoop.Net
             Buttons(now);
             if (!Session.IsHost) { GuestFollow(now); GuestCoop(now); return; }
             HostCoop(now);
+            Pump();
             if (!PlayerSync.InGame) { inGameSince = sendAt = -1; if (CarColor.NewGame) newGame = true; return; }
             if (inGameSince < 0)
             {
@@ -190,14 +191,34 @@ namespace MWCoop.Net
             var w = new NetWriter(Msg.SaveBegin).U8(list.Count);
             for (int i = 0; i < list.Count; i++) w.Str(Path.GetFileName(list[i])).I32(data[i].Length);
             Session.T.SendReliable(p, w.ToArray());
-            for (int i = 0; i < data.Count; i++)
-                for (int off = 0; off < data[i].Length; off += Chunk)
+            outgoing.Add(new Outgoing { P = p, Data = data, Total = total });
+            Pump();
+        }
+
+        // Morceaux mis en file 3 ms par image (avant : les ~1500 morceaux d'un coup, ~80 ms chez l'hote a l'arrivee d'un ami).
+        class Outgoing { public Peer P; public List<byte[]> Data; public int File, Off; public long Total; }
+        static readonly List<Outgoing> outgoing = new List<Outgoing>();
+        static void Pump()
+        {
+            if (outgoing.Count == 0) return;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (outgoing.Count > 0 && sw.Elapsed.TotalMilliseconds < 3.0)
+            {
+                Outgoing o = outgoing[0];
+                if (!Session.T.Peers.Contains(o.P)) { outgoing.RemoveAt(0); continue; }
+                for (int k = 0; k < 40 && o.File < o.Data.Count; k++)
                 {
-                    int n = Math.Min(Chunk, data[i].Length - off);
-                    Session.T.SendReliable(p, new NetWriter(Msg.SaveChunk).U8(i).I32(off).Bytes(data[i], off, n).ToArray());
+                    byte[] d = o.Data[o.File];
+                    if (o.Off >= d.Length) { o.File++; o.Off = 0; continue; }
+                    int n = Math.Min(Chunk, d.Length - o.Off);
+                    Session.T.SendReliable(o.P, new NetWriter(Msg.SaveChunk).U8(o.File).I32(o.Off).Bytes(d, o.Off, n).ToArray());
+                    o.Off += n;
                 }
-            Session.T.SendReliable(p, new NetWriter(Msg.SaveEnd).U8(list.Count).ToArray());
-            Log.Info("sauvegarde envoyee a " + p + " : " + list.Count + " fichiers, " + total / 1024 + " Ko");
+                if (o.File < o.Data.Count) continue;
+                Session.T.SendReliable(o.P, new NetWriter(Msg.SaveEnd).U8(o.Data.Count).ToArray());
+                Log.Info("sauvegarde envoyee a " + o.P + " : " + o.Data.Count + " fichiers, " + o.Total / 1024 + " Ko");
+                outgoing.RemoveAt(0);
+            }
         }
 
         public static void OnMessage(Msg type, NetReader r)

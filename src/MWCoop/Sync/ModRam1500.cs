@@ -34,15 +34,25 @@ namespace MWCoop
 
         const BindingFlags F = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
+        // Assemblage du mod, cherche une fois (puis toutes les 30 s s'il manque) : avant, chaque appel parcourait tous les
+        // assemblages (GetName alloue) -- a chaque image sans le mod (LotWatch), d'ou des passages du ramasse-miettes.
+        static Assembly ramAsm;
+        static float ramAsmLook = -1f;
+        static readonly Dictionary<string, Type> types = new Dictionary<string, Type>();
         static Type TypeOf(string name)
         {
-            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            if (ramAsm == null)
             {
-                if (a.GetName().Name != "ram1500") continue;
-                Type t = a.GetType(name, false);
-                if (t != null) return t;
+                float now = Time.realtimeSinceStartup;
+                if (ramAsmLook >= 0f && now < ramAsmLook) return null;
+                ramAsmLook = now + 30f;
+                foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+                    if (a.GetName().Name == "ram1500") { ramAsm = a; break; }
+                if (ramAsm == null) return null;
             }
-            return null;
+            Type t;
+            if (!types.TryGetValue(name, out t)) { t = ramAsm.GetType(name, false); types[name] = t; }
+            return t;
         }
         static Component Comp(string type, string goName)
         {
@@ -254,8 +264,9 @@ namespace MWCoop
         static bool StaticBool(string type, string field) { Type t = TypeOf(type); FieldInfo f = t != null ? t.GetField(field, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static) : null; return f != null && (bool)f.GetValue(null); }
         static void LotWatch(float now)
         {
-            if (now < lotLook || TypeOf("SellerLogic") == null) return;
+            if (now < lotLook) return;
             lotLook = now + 1f;
+            if (TypeOf("SellerLogic") == null) return;
             bool sold = StaticBool("SellerLogic", "LotSold"), csold = StaticBool("SellerLogic", "CamperLotSold");
             if (!lotInit) { lotInit = true; lotSoldSeen = sold; camperSoldSeen = csold; }
             if (!sold)
