@@ -1011,3 +1011,13 @@ Drone camera (F8)	Камера-дрон (F8)
 Sleeping bags	Спальные мешки
 s21 shop (video, KARTTURI)	Магазин s21 (видео, KARTTURI)
 Museum of Corsica	Музей Корсики
+These guests are still receiving your mods: 	Эти гости ещё получают твои моды: 
+\n\nWait for their download to finish before starting the game.	\n\nДождись окончания их загрузки, прежде чем начинать игру.
+Sending mods (%d)\u2026	Отправка модов (%d)…
+Receiving the host's mods cancelled	Получение модов хоста отменено
+The game has already started: receiving the host's mods, then you join	Игра уже началась: получение модов хоста, затем ты войдёшь в игру
+Connection to the host lost before its mods were done: \"Join in game\" without them, or try again	Связь с хостом прервалась до окончания модов: \"Подключиться в игре\" без них или попробуй снова
+The host isn't sending mods: \"Join in game\"	Хост не отправляет моды: \"Подключиться в игре\"
+%s is already playing: receiving their mods, then you join	%s уже играет: получение его модов, затем ты войдёшь в игру
+HOST'S MODS…	МОДЫ ХОСТА…
+The host is already playing: receiving their mods (%d %%), then you join. Click to cancel.	Хост уже играет: получение его модов (%d %%), затем ты войдёшь в игру. Нажми, чтобы отменить.

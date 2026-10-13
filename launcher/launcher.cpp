@@ -137,6 +137,8 @@ static int g_lastLaunchMode;                        // mode du dernier lancement
 #define WM_APP_RELAUNCH (WM_APP + 1)
 #define WM_APP_GO (WM_APP + 2)          // invite : l'hote a lance la partie
 #define WM_APP_LOBBYEND (WM_APP + 3)    // invite : salon ferme (0), refuse (1) ou injoignable (2)
+#define WM_APP_LATE (WM_APP + 4)        // invite en retard (salon IP) : l'hote joue, ses mods arrivent
+#define WM_APP_LATEEND (WM_APP + 5)     // ... connexion finie
 
 // Salon : etat partage entre la fenetre et les fils reseau (sous g_lcs)
 enum { LB_NONE, LB_HOST, LB_CONNECTING, LB_GUEST };
@@ -144,7 +146,7 @@ enum { PARTIE_CONTINUER, PARTIE_NOUVELLE };
 static const int kLobbyMax = 8;                     // joueurs dans un salon (hote compris)
 // Test UDP du salon (le jeu passe en UDP sur le port du salon) : sans objet (ancien lanceur), en cours, recu, bloque.
 enum { UDP_NA, UDP_WAIT, UDP_OK, UDP_FAIL };
-struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; int udp; DWORD since; uint64_t sid; };   // sid : compte Steam (salon Steam)
+struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; int udp; DWORD since; uint64_t sid; int dl = -1; };   // sid : compte Steam (salon Steam) ; dl : invite qui recoit l'envoi de l'hote (%), -1 fini ou rien, -2 pas encore dit
 static std::atomic<int> g_lobby(LB_NONE);
 static CRITICAL_SECTION g_lcs;
 static std::vector<LobbyPeer> g_peers;
@@ -156,7 +158,9 @@ static bool g_joinFallback;                         // invite : pas de salon che
 static std::string g_rejectWhy;                     // invite : raison du refus (sous g_lcs)
 static std::wstring g_testSalon, g_testSalonLog;    // /testsalon hote|invite <journal>
 static std::wstring g_testPartie = L"continuer";    // /testsalon : choix de l'hote
-static bool g_testNoUdp;                            // /testsalon hote ... /sansudp : l'hote ne repond pas en UDP
+static bool g_testNoUdp;
+static DWORD g_testHoldMs, g_testSlowMs;              // ... ; /lent <ms> (invite) : un morceau des mods par <ms>
+static bool g_testForce;                             // /testsalon hote ... /forcer : LANCER des qu'un invite est la, pret ou non                          // /testsalon hote ... /garder <ms> : apres LANCER, reste ouvert (invites en retard)                            // /testsalon hote ... /sansudp : l'hote ne repond pas en UDP
 static std::atomic<int> g_udpMine(UDP_NA);          // invite : reponse UDP de l'hote a ses sondes
 static std::atomic<bool> g_hostUdpTest(false);      // invite : l'hote fait le test UDP (sinon : ancien lanceur)
 static std::wstring g_launchWarn;                   // ecran d'attente : avertissement (UDP non confirme)
@@ -5031,6 +5035,23 @@ static void LoaderEnsure(const std::wstring &dir, const char *where)
 static int SyncLaunchKind();   // (modsync.inc)
 static bool SyncLaunchPending();
 static bool g_launchAfterSync;
+// Invite arrive apres le lancement (demande de JD, 13/10) : l'hote joue deja ; ses mods sont recus d'abord (salon IP : par
+// le lanceur de l'hote, qui les sert encore ; Steam : par son jeu, Net/ModServe.cs), puis le jeu de l'invite part tout seul.
+static bool g_lateSync, g_lateSteam;
+static DWORD g_lateT;
+// Hote, salon IP : apres LANCER, l'ecoute du salon reste ouverte pour servir ses mods aux invites en retard.
+static std::atomic<bool> g_lateServe(false);
+static void SyncWriteLateOffer();   // (modsync.inc)
+static bool LateBegin(bool steam);   // (modsync.inc : invite en retard, debut / fin / echec)
+static void LateEnd();
+static void LateFail(const wchar_t *why);
+static bool SyncHostHasMods();   // (modsync.inc)
+// Hote : cet invite recoit (ou va recevoir) l'envoi -- LANCER attend. Pas encore dit (il vient d'arriver, sa liste n'est pas
+// encore traitee) : compte aussi quand l'hote envoie des mods, 30 s au plus (jamais bloque pour de bon).
+static bool PeerSyncPending(const LobbyPeer &p)
+{
+    return p.id != 0 && (p.dl >= 0 || (p.dl == -2 && SyncHostHasMods() && GetTickCount() - p.since < 30000));
+}
 static std::wstring GuestCopyDir();
 static bool PrepareGuestCopy(const std::wstring &m, bool mods);
 static bool g_syncKeep;   // GO recu : la copie des mods sert au lancement (LobbyClose ne l'oublie pas)
@@ -5041,11 +5062,17 @@ static void Launch(int mode, const char *partie = NULL)
     // Invite : les mods de l'hote d'abord (le jeu partira tout seul a la fin de la reception) -- un invite sans eux entrait
     // quand meme (retour de Menos, 10/10).
     if (mode == MODE_GUEST && SyncLaunchPending()) {
-        g_launchAfterSync = true;
-        SetStatus(K_NORMAL, T(L"Réception des mods de l'hôte… le jeu se lancera tout seul ensuite", L"Receiving the host's mods… the game will start on its own afterwards"));
-        TestLog("lancement de l'invite retenu : mods de l'hote pas encore recus");
-        return;
+        if (g_lobby == LB_GUEST || g_lateSync) {
+            g_launchAfterSync = true;
+            SetStatus(K_NORMAL, T(L"Réception des mods de l'hôte… le jeu se lancera tout seul ensuite", L"Receiving the host's mods… the game will start on its own afterwards"));
+            TestLog("lancement de l'invite retenu : mods de l'hote pas encore recus");
+            return;
+        }
+        // (plus de salon -- l'hote a lance pendant la reception, ancien lanceur : avant, l'invite restait bloque sans jeu)
+        g_launchAfterSync = false;
+        TestLog("lancement de l'invite : reception des mods interrompue (salon ferme), sans eux");
     }
+    if (mode == MODE_HOST) SyncWriteLateOffer();   // (son jeu sert ses mods aux invites Steam en retard)
     std::wstring addr = Trim(g_fields[1].text);
     const Opt *po = OptByKey("Port");
     int port = po ? OptGet(*po) : 7870;
@@ -5083,6 +5110,7 @@ static void Launch(int mode, const char *partie = NULL)
         ReadAll(g_gameDir + L"MWCoop\\lancement.ini", d);
         std::string text(d.begin(), d.end());
         TestLog("lancement.ini ecrit (%s) :\n%s", Narrow(g_gameDir + L"MWCoop\\lancement.ini", CP_UTF8).c_str(), text.c_str());
+        if (mode == MODE_HOST && g_testHoldMs) { TestLog("test : hote garde ouvert %u ms (envoi aux invites en retard %d)", (unsigned)g_testHoldMs, (int)g_lateServe); SetTimer(g_wnd, 77, g_testHoldMs, NULL); return; }
         TestLog("test : fin (jeu NON lance, mode d'essai)");
         DestroyWindow(g_wnd);
         return;
@@ -5260,6 +5288,9 @@ static void Launch(int mode, const char *partie = NULL)
 // donc avant le lancement de son jeu (qui ouvre ce meme port UDP).
 enum { LB_PROTO = 1, M_HELLO = 1, M_WELCOME, M_REJECT, M_STATE, M_READY, M_GO, M_PING, M_PONG, M_SKIN };
 enum { M_MODS = 20, M_MODGET, M_MODDATA, M_MODSREQ, M_MODSX };   // mods de l'hote (modsync.inc ; M_MODSX : suite de la liste)
+// M_SYNCST (invite -> hote) : u8 avancement de la reception de l'envoi de l'hote (0-99, 255 : rien en cours) ; M_LATE (hote ->
+// invite en retard, a la place de WELCOME) : la partie est lancee, voici les mods (puis M_MODS...) -- u8 0 sur Steam : rien.
+enum { M_SYNCST = 25, M_LATE };
 static SOCKET g_listen = INVALID_SOCKET, g_guestSock = INVALID_SOCKET;
 static SOCKET g_udpHost = INVALID_SOCKET;           // hote : ecoute UDP du salon (sous g_lcs)
 static int g_udpHostErr;                            // hote : erreur de l'ouverture du port UDP (0 = ouvert)
@@ -5431,6 +5462,7 @@ static void DropConn(SOCKET s)
     LeaveCriticalSection(&g_lcs);
     closesocket(s);
 }
+static bool LateSession(SOCKET s, const std::string &name);   // (modsync.inc)
 static void LobbySession(SOCKET s)
 {
     std::string m;
@@ -5447,13 +5479,17 @@ static void LobbySession(SOCKET s)
         reject("version " + mine);
         return;
     }
-    if (g_goSent) { reject("started"); return; }
-    if (g_lobby != LB_HOST) { reject("closed"); return; }
+    if (g_goSent || g_lobby != LB_HOST) {
+        if (g_lateServe && LateSession(s, name)) return;   // (partie lancee : ses mods, puis il rejoint en jeu)
+        reject(g_goSent ? "started" : "closed");
+        return;
+    }
     int id = -1;
     EnterCriticalSection(&g_lcs);   // (WELCOME envoye sous le verrou : pas de STATE glisse avant lui)
     for (int k = 1; k < kLobbyMax && id < 0; k++) if (!PeerById(k)) id = k;
     if (id > 0) {
         g_peers.push_back({ id, name, skin, ver, false, 0, UDP_WAIT, GetTickCount() });
+        g_peers.back().dl = -2;   // (son etat de l'envoi : pas encore dit)
         g_conns.push_back({ s, id });
         Wr w; w.u8(M_WELCOME); w.u8(id); SendMsg(s, w);
     }
@@ -5477,6 +5513,7 @@ static void LobbySession(SOCKET s)
         if (p && t == M_READY) { p->ready = q.u8() != 0; TestLog("salon : %s (joueur %d) pret=%d", p->name.c_str(), id, (int)p->ready); }
         else if (p && t == M_PONG) { uint32_t sent = q.u32(); if (q.ok) p->ping = (int)(GetTickCount() - sent); }
         else if (p && t == M_SKIN) { std::string sk = q.str(); if (q.ok) { p->skin = sk; TestLog("salon : joueur %d apparence %s", id, sk.c_str()); } }
+        else if (p && t == M_SYNCST) { int v = q.u8(); if (q.ok && (v == 255 ? -1 : v) != p->dl) { p->dl = v == 255 ? -1 : v; if (p->dl < 0 || p->dl % 25 == 0) TestLog("salon : %s (joueur %d) envoi de l'hote %d%%", p->name.c_str(), id, p->dl); } }
         LeaveCriticalSection(&g_lcs);
         if (t == M_READY || t == M_SKIN) BroadcastState();
     }
@@ -5811,8 +5848,16 @@ static bool FirewallBeforeHosting()
     return true;
 }
 
+static void LateServeStop()
+{
+    if (!g_lateServe) return;
+    g_lateServe = false;
+    if (g_lobby == LB_NONE && g_listen != INVALID_SOCKET) { closesocket(g_listen); g_listen = INVALID_SOCKET; }
+    TestLog("salon : envoi des mods aux invites en retard arrete");
+}
 static void LobbyHost()
 {
+    LateServeStop();
     SavePlayer();
     g_lobbyPort = LobbyPort();
     SOCKET ls = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -5871,12 +5916,14 @@ static bool LobbyCanStart()
     return notReady == 0;
 }
 
-static void LobbyClose()
+// keepListen : LANCER (salon IP) -- l'ecoute reste ouverte, pour servir les mods aux invites en retard (g_lateServe).
+static void LobbyClose(bool keepListen = false)
 {
     if (g_lobbySteam) SteamLobbyLeave(g_lobby == LB_HOST);
     g_lobbyGen++;
     g_lobby = LB_NONE;
-    if (g_listen != INVALID_SOCKET) { closesocket(g_listen); g_listen = INVALID_SOCKET; }
+    if (!keepListen) g_lateServe = false;
+    if (g_listen != INVALID_SOCKET && !keepListen) { closesocket(g_listen); g_listen = INVALID_SOCKET; }
     EnterCriticalSection(&g_lcs);
     // Port UDP rendu tout de suite : le jeu de l'hote l'ouvre juste apres (LANCER : LobbyClose puis Launch). La
     // sonde de l'invite (UdpProbeThread) s'arrete d'elle-meme sur le changement de g_lobbyGen.
@@ -5899,6 +5946,20 @@ static void HostStart()
 {
     if (g_lobby != LB_HOST || g_goSent) return;
     if (g_testSalon.empty() && GameRunningAsk()) return;
+    {   // un invite recoit encore l'envoi : pas de lancement, meme force (demande de JD, 13/10 : son jeu partirait sans les mods)
+        std::string dl;
+        EnterCriticalSection(&g_lcs);
+        for (auto &p : g_peers) if (PeerSyncPending(p)) { char b[300]; sprintf_s(b, "%s (%d %%)", p.name.c_str(), max(0, p.dl)); dl += (dl.empty() ? "" : ", ") + std::string(b); }
+        LeaveCriticalSection(&g_lcs);
+        if (!dl.empty()) {
+            TestLog("salon : LANCER refuse, envoi en cours chez %s", dl.c_str());
+            std::wstring q = std::wstring(T(L"Ces invités reçoivent encore tes mods : ", L"These guests are still receiving your mods: ")) + Widen(dl, CP_UTF8)
+                           + T(L"\n\nAttends la fin de leur téléchargement pour lancer la partie.", L"\n\nWait for their download to finish before starting the game.");
+            if (g_testSalon.empty()) MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_OK | MB_ICONINFORMATION);
+            else SetStatus(K_WARN, L"%s", q.c_str());
+            return;
+        }
+    }
     int guests, notReady;
     GuestCounts(&guests, &notReady);
     if (notReady && g_testSalon.empty()) {
@@ -5948,7 +6009,8 @@ static void HostStart()
         if (empty) break;
         Sleep(50);
     }
-    LobbyClose();
+    LobbyClose(true);
+    g_lateServe = true;   // (ses mods restent servis aux invites qui arrivent pendant la partie)
     if (!g_testSalon.empty()) {   // essai : le port UDP est-il bien rendu au jeu ?
         SOCKET u = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         sockaddr_in a = {};
@@ -6039,6 +6101,30 @@ static DWORD WINAPI GuestThread(void *param)
         closesocket(s);
         TestLog("salon : refuse par l'hote (%s)", why.c_str());
         PostMessageW(g_wnd, WM_APP_LOBBYEND, 1, gen);
+        return 0;
+    }
+    if (t == M_LATE) {   // l'hote joue deja : ses mods d'abord (WM_APP_LATE), puis son jeu
+        EnterCriticalSection(&g_lcs);
+        bool stale = gen != g_lobbyGen;
+        if (!stale) g_guestSock = s;
+        LeaveCriticalSection(&g_lcs);
+        if (stale) { closesocket(s); return 0; }
+        TestLog("salon : partie deja lancee, reception des mods de l'hote");
+        PostMessageW(g_wnd, WM_APP_LATE, 0, gen);
+        to = 60000;
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
+        while (RecvMsg(s, m)) {
+            Rd q(m);
+            int type = q.u8();
+            if (type == M_MODS) SyncOnOffer(m);
+            else if (type == M_MODSX) SyncOnOfferMore(m);
+            else if (type == M_MODDATA) SyncOnData(m);
+        }
+        EnterCriticalSection(&g_lcs);
+        if (g_guestSock == s) g_guestSock = INVALID_SOCKET;
+        LeaveCriticalSection(&g_lcs);
+        closesocket(s);
+        PostMessageW(g_wnd, WM_APP_LATEEND, 0, gen);
         return 0;
     }
     if (t != M_WELCOME) { closesocket(s); PostMessageW(g_wnd, WM_APP_LOBBYEND, 2, gen); return 0; }
@@ -6445,7 +6531,10 @@ static void DrawLobby(Graphics &g)
                     }
                 }
                 // etat : HOTE, PRET, PAS PRET
-                const wchar_t *stl = p.id == 0 ? T(L"H\u00D4TE", L"HOST") : p.ready ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PAS PR\u00CAT", L"NOT READY");
+                wchar_t dlb[32];
+                bool dlp = PeerSyncPending(p);
+                if (dlp) swprintf_s(dlb, L"MODS %d %%", max(0, p.dl));   // (recoit l'envoi de l'hote : LANCER attend)
+                const wchar_t *stl = p.id == 0 ? T(L"H\u00D4TE", L"HOST") : dlp ? dlb : p.ready ? T(L"PR\u00CAT \u2713", L"READY \u2713") : T(L"PAS PR\u00CAT", L"NOT READY");
                 RectF pr(r.X + r.Width - 112, r.Y + (r.Height - 32) / 2, 96, 32);
                 GraphicsPath pp; RoundRect(pp, pr, 16);
                 if (p.id != 0 && p.ready) { SolidBrush ob(kOk); g.FillPath(&ob, &pp); }
@@ -6535,7 +6624,12 @@ static void DrawLobby(Graphics &g)
                 GuestCounts(&guests, &notReady);
                 l1 = T(L"LANCER LA PARTIE", L"START THE GAME");
                 wchar_t b2[64];
+                int dls = 0;
+                EnterCriticalSection(&g_lcs);
+                for (auto &pp : g_peers) if (PeerSyncPending(pp)) dls++;
+                LeaveCriticalSection(&g_lcs);
                 if (!guests) swprintf_s(b2, L"%s", T(L"Seul pour l'instant", L"Alone for now"));
+                else if (dls) swprintf_s(b2, T(L"Envoi des mods en cours (%d)\u2026", L"Sending mods (%d)\u2026"), dls);
                 else swprintf_s(b2, T(L"%d / %d pr\u00EAt(s)", L"%d / %d ready"), guests - notReady, guests);
                 l2 = b2;
             } else if (lobby == LB_GUEST && g_wantReady && !g_meReady) { l1 = T(L"PR\u00CAT APR\u00C8S L'ENVOI", L"READY AFTER FILES"); l2 = T(L"Re\u00E7ois l'envoi de l'h\u00F4te\u2026 (clique pour annuler)", L"Getting the host's files\u2026 (click to cancel)"); }
@@ -6741,6 +6835,11 @@ static void TestSalonStep()
         EnterCriticalSection(&g_lcs);
         for (auto &p : g_peers) if (p.id != 0 && p.udp == UDP_WAIT) udpDone = false;
         LeaveCriticalSection(&g_lcs);
+        if (g_testForce && guests >= 1 && t > 3000) {   // (essai : LANCER pendant la reception des mods -> refuse, puis accepte)
+            static DWORD lastTry;
+            if (GetTickCount() - lastTry > 1500) { lastTry = GetTickCount(); TestLog("test : LANCER (force)"); HostStart(); }
+            return;
+        }
         bool can = guests >= 1 && LobbyCanStart() && udpDone;
         if (!can) allReadySince = 0;
         else if (!allReadySince) { allReadySince = GetTickCount(); TestLog("test : tous les invites sont prets"); }
@@ -7076,6 +7175,7 @@ static void OnButton(int id)
         else if (g_lobby == LB_NONE && FirewallBeforeHosting()) LobbyHost();
         break;
     case B_JOIN:
+        if (g_lateSync) { LateFail(T(L"Réception des mods de l'hôte annulée", L"Receiving the host's mods cancelled")); break; }
         if (g_lobby != LB_NONE) {
             bool host = g_lobby == LB_HOST;
             LobbyClose();
@@ -7217,6 +7317,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     if ((m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) || m == WM_KEYDOWN || m == WM_CHAR) g_inputT = GetTickCount();
     switch (m) {
     case WM_TIMER:
+        if (wp == 77) { KillTimer(h, 77); TestLog("test : fin (hote garde ouvert)"); DestroyWindow(h); return 0; }
         if (wp == 4) {   // invite : GO recu il y a ~4 s, au tour de son jeu
             KillTimer(h, 4);
             g_goWait = false;
@@ -7244,6 +7345,17 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         }
     }
         SetTimer(h, 4, 4000 + 3000 * max(0, g_myId - 1), NULL);   // (invites sur le meme PC, en test : l'un apres l'autre)
+        return 0;
+    case WM_APP_LATE:   // invite en retard (salon IP) : hors du salon, la reception continue, le jeu partira a la fin (SyncTick)
+        if ((int)lp != g_lobbyGen) return 0;
+        g_lobby = LB_NONE;
+        if (g_tab == TAB_LOBBY) g_tab = TAB_HOME;
+        LateBegin(false);
+        SetStatus(K_NORMAL, T(L"La partie est déjà lancée : réception des mods de l'hôte, puis tu entres en jeu", L"The game has already started: receiving the host's mods, then you join"));
+        return 0;
+    case WM_APP_LATEEND:
+        if ((int)lp != g_lobbyGen || !g_lateSync || g_lateSteam) return 0;
+        LateFail(T(L"Connexion à l'hôte coupée avant la fin de ses mods : « Rejoindre en jeu » sans eux, ou réessaie", L"Connection to the host lost before its mods were done: \"Join in game\" without them, or try again"));
         return 0;
     case WM_APP_LOBBYEND: {
         if ((int)lp != g_lobbyGen || g_lobby == LB_NONE) return 0;   // (salon deja quitte, ou message d'une tentative annulee)
@@ -7566,6 +7678,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/echelle")) g_scale = (float)_wtof(argv[i + 1]);   // captures : rendu agrandi
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];
         if (!_wcsicmp(argv[i], L"/testsalon") && i + 2 < argc) { g_testSalon = argv[i + 1]; g_testSalonLog = argv[i + 2]; }
+        if (!_wcsicmp(argv[i], L"/garder")) g_testHoldMs = (DWORD)_wtoi(argv[i + 1]);
+        if (!_wcsicmp(argv[i], L"/lent")) g_testSlowMs = (DWORD)_wtoi(argv[i + 1]);
+        if (!_wcsicmp(argv[i], L"/forcer")) g_testForce = true;
         if (!_wcsicmp(argv[i], L"/partie")) g_testPartie = argv[i + 1];
         if (!_wcsicmp(argv[i + 1], L"/sansudp")) g_testNoUdp = true;   // (dernier argument)
         if (!_wcsicmp(argv[i], L"/temps")) g_sceneT = (float)_wtof(argv[i + 1]);   // captures : instant de la scene animee
@@ -7897,8 +8012,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"graphismes-rt") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 14 || gi == 1; g_gfxContentH = 3000; g_scroll[TAB_GFX] = 330; }   // (categories Ray tracing et Ombres depliees)
         else if (st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_scroll[TAB_GFX] = GfxMaxScroll(); }   // (bas de la page : touches)
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
-        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
-            bool host = st == L"salon" || st == L"salon-options" || st == L"salon-mods";   // (salon-udp : invite dont l'UDP est bloque)
+        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || st == L"salon-dl" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
+            bool host = st == L"salon" || st == L"salon-options" || st == L"salon-mods" || st == L"salon-dl";   // (salon-udp : invite dont l'UDP est bloque ; salon-dl : Kalle recoit les mods)
             std::string v = MyVersion();
             g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0 },
                         { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38, UDP_OK },
@@ -7910,6 +8025,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_meReady = !host;
             g_lobbyAddr = L"192.168.1.20"; g_lobbyPort = 7870; g_myAddresses = L"192.168.1.20";
             g_tab = TAB_LOBBY;
+            if (st == L"salon-dl") g_peers[2].dl = 45;
                     if (host) { SetStatus(K_OK, T(L"Salon ouvert \u00B7 port %d", L"Lobby open \u00B7 port %d"), 7870); g_lobbyHot = 1; }
             else SetStatus(K_OK, T(L"Dans le salon de %s", L"In %s's lobby"), L"192.168.1.20");
             if (st == L"salon-udp") { g_udpMine = UDP_FAIL; g_peers[1].udp = UDP_WAIT; }

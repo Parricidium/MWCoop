@@ -445,8 +445,12 @@ static void SteamEntered(bool ok, uint32_t response, SteamId lobby)
         if (game) {
             g_sHost = owner;
             g_sHostName = hostName;
-            g_joinFallback = true;
-            SetStatus(K_WARN, T(L"%s joue déjà : « Rejoindre en jeu »", L"%s is already playing: \"Join in game\""), hostName.c_str());
+            // (demande de JD, 13/10 : ses mods d'abord -- son jeu les sert, Net/ModServe.cs -- puis on entre en jeu tout seul)
+            if (LateBegin(true)) SetStatus(K_NORMAL, T(L"%s joue déjà : réception de ses mods, puis tu entres en jeu", L"%s is already playing: receiving their mods, then you join"), hostName.c_str());
+            else {
+                g_joinFallback = true;
+                SetStatus(K_WARN, T(L"%s joue déjà : « Rejoindre en jeu »", L"%s is already playing: \"Join in game\""), hostName.c_str());
+            }
         } else SetStatus(K_ERR, T(L"Ce salon Steam n'est pas un salon MWCoop", L"This Steam lobby is not an MWCoop lobby"));
         return;
     }
@@ -508,6 +512,11 @@ static void SteamLobbySync()
         if (p.skin.empty()) p.skin = "char_shirt21";
         p.ver = SMemberData(u, "version");
         p.ready = id == 0 || SMemberData(u, "pret") == "1";
+        std::string dl = id == 0 ? "ok" : SMemberData(u, "dl");   // (recoit l'envoi de l'hote : %, "ok" fini, rien : pas encore dit)
+        p.dl = dl.empty() ? -2 : dl == "ok" ? -1 : atoi(dl.c_str());
+        static std::map<SteamId, DWORD> firstSeen;   // (arrivee de chacun : PeerSyncPending)
+        if (!firstSeen.count(u)) firstSeen[u] = GetTickCount();
+        p.since = firstSeen[u];
         p.udp = UDP_NA;
         v.push_back(p);
     }

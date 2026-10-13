@@ -84,6 +84,7 @@ namespace MWCoop.Net
         {
             if (!Ready) return;
             MakeCallbacks();
+            if (hosting) ModServe.Update();   // (mods de l'hote pour les invites en retard, canal 5)
             float now = Time.realtimeSinceStartup;
             if (hosting && Lobby == 0 && !creating && now >= nextCreate)
             {

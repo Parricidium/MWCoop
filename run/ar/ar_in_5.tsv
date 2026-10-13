@@ -1,0 +1,10 @@
+R0	These guests are still receiving your mods: 
+R1	\n\nWait for their download to finish before starting the game.
+R2	Sending mods (%d)\u2026
+R3	Receiving the host's mods cancelled
+R4	The game has already started: receiving the host's mods, then you join
+R5	Connection to the host lost before its mods were done: \"Join in game\" without them, or try again
+R6	The host isn't sending mods: \"Join in game\"
+R7	%s is already playing: receiving their mods, then you join
+R8	HOST'S MODS…
+R9	The host is already playing: receiving their mods (%d %%), then you join. Click to cancel.
