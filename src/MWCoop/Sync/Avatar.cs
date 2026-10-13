@@ -769,6 +769,18 @@ namespace MWCoop
                         }
                     }
                 }
+                // Objet tenu (KARTTURI leve, boisson...) : les mains dessus, place recue dans le repere de sa camera
+                // (la camera : la tete, orientee comme son regard dans la voiture).
+                Gestures.Remote pgh = Gestures.Of(Player.Id);
+                if (passenger && (f & PlayerSync.F_Carry) != 0 && pgh != null && (pgh.Bits & Gestures.G_Held) != 0 && headBone != null)
+                {
+                    Quaternion camRot = Root.transform.rotation * Quaternion.Euler(pitch, Mathf.DeltaAngle(Root.transform.eulerAngles.y, st.Yaw), 0f);
+                    Vector3 at = headBone.position + camRot * pgh.Held;
+                    float half = pgh.HeldSize > 0.25f ? Mathf.Min(pgh.HeldSize * 0.3f, 0.2f) : 0f;   // (mains sur les cotes)
+                    Vector3 sideH = camRot * Vector3.right;
+                    ArmTo(true, at + sideH * half, 1f);
+                    if (half > 0f) ArmTo(false, at - sideH * half, 1f);
+                }
                 // Se pencher : le buste va vers la camera (cote : autour de l'avant, avant : autour de la droite). Avant les
                 // mains : elles se posent ensuite sur le volant depuis le buste penche.
                 float side = Mathf.Atan2(leanOff.x, 0.55f) * Mathf.Rad2Deg, fwdLean = Mathf.Atan2(leanOff.z, 0.55f) * Mathf.Rad2Deg;
@@ -1349,7 +1361,7 @@ namespace MWCoop
             float tp = g != null ? now - g.PunchAt : 99f;
             float punch = tp < 0.12f ? tp / 0.12f : tp < 0.52f ? 1f - (tp - 0.12f) / 0.4f : 0f;
             bool finger = g != null && now - g.FingerAt < 1.6f;
-            bool carry = (f & PlayerSync.F_Carry) != 0 && !inCar;
+            bool carry = (f & PlayerSync.F_Carry) != 0 && (!inCar || Seats.RemoteSeatIndex(Player.Id) >= 0);   // (passager : il peut tenir quelque chose, le KARTTURI)
             bool piss = (gb & Gestures.G_Piss) != 0 && pelvis != null, push = (gb & Gestures.G_Push) != 0;
             float rate = Time.deltaTime * 5f;
             Ease(ref wR[0], finger, rate); Ease(ref wR[1], (gb & Gestures.G_Thumb) != 0, rate); Ease(ref wR[2], push, rate);

@@ -9,7 +9,7 @@ static const WikiCat kWikiCat[] = {
     { IC_GEAR, L"Réglages et options", L"Settings and options" },
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
-enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_MSC, WA_MODS, WA_CONTENT,
+enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
        WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS };
 
 struct WikiKey { const wchar_t *key, *fr, *en; };
@@ -28,6 +28,7 @@ static const WikiKey kWikiKeys[] = {
     { L"1 · 2", L"Après une mort : revenir à l'appartement ou chez les parents", L"After dying: come back at the apartment or the parents' house" },
     { L"Espace", L"Se réveiller quand on dort seul (l'heure n'avance que si tout le monde dort)", L"Wake up when sleeping alone (time only moves on when everyone sleeps)" },
     { L"Maj + Tab", L"Surcouche Steam : inviter des amis pendant la partie", L"Steam overlay: invite friends during the game" },
+    { L"F (passager)", L"KARTTURI 2000 en main, assis en passager : le tenir devant soi / le baisser", L"KARTTURI 2000 in hand, seated as a passenger: hold it up / lower it" },
     { L"F · R", L"Caméscope en main : F = à l'œil (clic gauche : filmer / pause ; F : baisser, fin de la prise) ; posé : R = enregistrer / arrêter", L"Camcorder in hand: F = to the eye (left click: film / pause; F: lower, end of take); set down: R = record / stop" },
     { L"/titre · /importer", L"Dans le tchat, cassette en main : écrire un titre sur la tranche, ou y mettre une de tes vidéos", L"In the chat, holding a tape: write a title on the spine, or put one of your videos on it (/title · /import)" },
 };
@@ -470,6 +471,7 @@ static const WikiBlock kW_Shop[] = {
     { WB_B, L"Cassettes VHS, 19 mk : tablette du haut de la gondole blanche.", L"VHS tapes, 19 mk: top shelf of the white gondola." },
     { WB_B, L"Magnétoscopes, 390 mk, et la télévision, 590 mk : étagère en bois du mur gauche, celle du milieu.", L"VCRs, 390 mk, and the television, 590 mk: wooden shelf on the left wall, middle unit." },
     { WB_B, L"Caméscopes, 890 mk : étagère en bois du mur gauche, celle de droite.", L"Camcorders, 890 mk: wooden shelf on the left wall, right-hand unit." },
+    { WB_B, L"KARTTURI 2000, le GPS de rallye, 690 mk : même étagère, au-dessus des caméscopes.", L"KARTTURI 2000, the rally GPS, 690 mk: same shelf, above the camcorders." },
     { WB_H, L"Acheter", L"Buying", 0 },
     { WB_S, L"Vise un objet en rayon : clic gauche pour en prendre un, clic droit pour le reposer.", L"Look at an item on the shelf: left click takes one, right click puts it back." },
     { WB_S, L"Vise la caisse sur le comptoir : le total s'affiche. Clic pour payer.", L"Look at the till on the counter: the total shows up. Click to pay." },
@@ -548,6 +550,23 @@ static const WikiBlock kW_Montage[] = {
     { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
 };
 
+static const WikiBlock kW_Kartturi[] = {
+    { WB_P, L"Le KARTTURI 2000 est un vieux GPS de rallye à écran vert, façon console de poche. Assis à côté du pilote, tu y lis la route qui arrive et tu annonces les virages à voix haute (vocal) : un vrai copilote.",
+            L"The KARTTURI 2000 is an old rally GPS with a green screen, like a handheld console. Seated next to the driver, you read the road ahead on it and call the corners out loud (voice chat): a real co-driver." },
+    { WB_H, L"S'en servir", L"Using it", 0 },
+    { WB_S, L"Achète-le à la boutique OSUUSKAUPPA s21 (690 mk) et sors-le du sac.", L"Buy it at the OSUUSKAUPPA s21 shop (690 mk) and take it out of the bag." },
+    { WB_S, L"Prends-le en main, monte en passager (Entrée près du siège).", L"Pick it up, get in as a passenger (Enter near the seat)." },
+    { WB_S, L"F : tu le tiens devant toi, en bas de l'image ; baisse les yeux pour le voir de plus près. F (ou clic droit) : le baisser.", L"F: you hold it up, at the bottom of your view; look down to see it closer. F (or right click): lower it." },
+    { WB_H, L"L'écran", L"The screen", 0 },
+    { WB_B, L"En haut : la spéciale (SS1, SS2, SS3) et les kilomètres qui restent. Au milieu : la carte qui tourne avec la voiture, la route de la spéciale en foncé.", L"Top: the stage (SS1, SS2, SS3) and the kilometres left. Middle: the map turning with the car, the stage road in dark." },
+    { WB_B, L"En bas : la prochaine note en grand (flèche du côté du virage, cote de 1, très serré, à 6, presque droit ; H : épingle ; CREST : bosse), sa distance, puis la note d'après. TIGHTENS : il se resserre ; OPENS : il s'ouvre ; LONG : long virage.",
+            L"Bottom: the next note in big (arrow on the side of the corner, grade from 1, very tight, to 6, almost straight; H: hairpin; CREST: crest), its distance, then the note after. TIGHTENS: it gets tighter; OPENS: it opens up; LONG: long corner." },
+    { WB_B, L"Un bip quand un virage est passé : lis la note suivante. Deux bips : épingle ou 1 à moins de 80 m.", L"A beep when a corner is passed: read the next note. Two beeps: hairpin or 1 less than 80 m away." },
+    { WB_TIP, L"Le tracé est celui des pilotes du rallye du week-end : les notes marchent aussi en dehors du rallye, dès que tu roules sur la route d'une spéciale, dans son sens. Hors spéciale, la carte seule.",
+              L"The line is the one the weekend rally drivers follow: the notes also work outside the rally, as soon as you drive on a stage road, in its direction. Off stage, just the map." },
+    { WB_B, L"Les autres te voient le tenir à deux mains, et son écran marche chez tous (posé dans la voiture aussi).", L"The others see you holding it with both hands, and its screen works for everyone (also lying in the car)." },
+};
+
 #define WART(c, tf, te, sf, se, b) { c, tf, te, sf, se, b, (int)(sizeof(b) / sizeof(b[0])) }
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
@@ -565,6 +584,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"Tes vidéos sur une cassette", L"Your videos on a tape", L"/importer : une vraie vidéo dans le jeu", L"/import: a real video in the game", kW_Import),
     WART(1, L"Monter et exporter une cassette", L"Edit and export a tape", L"Touche R : rogner, effacer, .mp4", L"Press R: trim, erase, .mp4", kW_Montage),
     WART(1, L"Le musée de la Corse", L"The Museum of Corsica", L"Relief, bustes, tableaux, rallye", L"Relief model, busts, paintings, rallying", kW_Museo),
+    WART(1, L"Copilote de rallye (KARTTURI 2000)", L"Rally co-driver (KARTTURI 2000)", L"Le GPS qui annonce les virages", L"The GPS that calls the corners", kW_Kartturi),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),
     WART(2, L"Contenu envoyé", L"Sent content", L"CD, radio, posters, peinture", L"CDs, radio, posters, paint", kW_Content),

@@ -214,6 +214,10 @@ Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
 - **Museum of Corsica** (next to the shop): a small museum built in the village — Corsica in relief under glass, busts of
   Napoleon and Pasquale Paoli, 19th-century paintings, old postcards and a Tour de Corse room, with French/English plaques.
   Pictures and 3D models are public domain or Creative Commons, credited in the launcher (Credits).
+- **Rally co-driver — KARTTURI 2000** (690 mk at the shop): an old rally GPS with a green handheld-console screen. Seated
+  as a passenger, press F to hold it up: rotating map of the stage, the next pace notes (left/right, grade 1-6, hairpin,
+  crest, tightens…) with their distance, and a beep after each corner — call them out to your driver on voice chat. The
+  stage lines come from the game's own rally drivers (SS1, SS2, SS3).
 
 The detailed list, version by version, is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
 
@@ -401,6 +405,10 @@ Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) 
   et liste les actions locales pas encore partagées.
 - **Caméra drone** (F8) : mode photo — ton personnage reste sur place pendant qu'un petit drone filme (viseur, zoom,
   pencher, flash) ; les photos vont dans Images\CoopPictures avec le logo de MWCoop. Les autres voient le drone et son flash.
+- **Copilote de rallye — KARTTURI 2000** (690 mk à la boutique) : un vieux GPS de rallye à écran vert façon console de poche.
+  Assis en passager, F le tient devant soi : carte de la spéciale qui tourne, les prochaines notes (gauche/droite, cote 1
+  à 6, épingle, bosse, se resserre…) avec leur distance, et un bip après chaque virage — annonce-les à ton pilote au vocal.
+  Le tracé des spéciales (SS1, SS2, SS3) est celui des pilotes du rallye du jeu.
 
 La liste détaillée, version par version : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
 

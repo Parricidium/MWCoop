@@ -518,6 +518,9 @@ namespace MWCoop
             { "APPEARANCE", "ВНЕШНОСТЬ" },
             { "SYNC", "СИНХР." },
             { "GRAPHICS", "ГРАФИКА" },
+            { ": LOWER THE KARTTURI", ": ОПУСТИТЬ KARTTURI" },
+            { ": HOLD IT UP", ": ДЕРЖАТЬ ПЕРЕД СОБОЙ" },
+            { "KARTTURI 2000  -  SIT AS A PASSENGER TO READ IT", "KARTTURI 2000  -  СЯДЬ ПАССАЖИРОМ, ЧТОБЫ ЧИТАТЬ" },
         };
     }
 }

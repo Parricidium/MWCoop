@@ -124,6 +124,7 @@ namespace MWCoop
             OwnMat("hlnauhuri", "hintalappu-nauhuri.png");
             OwnMat("hltv", "hintalappu-tv.png");
             OwnMat("hlkamera", "hintalappu-kamera.png");
+            OwnMat("hlkartturi", "hintalappu-kartturi.png");
         }
 
         // ---------------------------------------------------------------- geometrie

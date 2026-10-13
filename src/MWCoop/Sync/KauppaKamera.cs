@@ -373,6 +373,7 @@ namespace MWCoop
         public static void DrawKameraHint()
         {
             if (Viewfinder || !Active || root == null || Event.current.type != EventType.Repaint) return;
+            if (DrawKartturiHint()) return;
             Esine k = HeldKamera();
             if (k == null)
             {

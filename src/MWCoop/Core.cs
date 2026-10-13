@@ -49,6 +49,7 @@ namespace MWCoop
                 CarVisuals.LateUpdate(); Perf.Mark("[poses volants]");
                 Autotest.PedalTest();
                 HandTools.LateUpdate(); Perf.Mark("[poses outils]");
+                Kauppa.LateKartturi();
                 PlayerSync.LateUpdate(); Perf.Mark("[poses avatars]");
                 Machines.LateUpdate(); Perf.Mark("[poses machines]");
                 Npcs.LateUpdate(); Perf.Mark("[poses PNJ]");
