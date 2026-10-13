@@ -1585,6 +1585,7 @@ namespace MWCoop
                 case "@don": { int to = r.U8(); Wallet.OnGift(who, to, r.I32()); break; }
                 case "@visage?": CustomFace.OnAsk(who, r.Str()); break;
                 case "@triches": if (!Session.IsHost) Cheats.OnAllowed(r.Bool()); break;
+                case "@ajouts": if (!Session.IsHost) Ajouts.OnHost(r.U8()); break;
                 case "@triche": Cheats.OnRemote(who, r.Str()); break;
                 case "@mw2": ModSecondMachtwagen.OnMessage(who, r); break;
                 case "@300d": ModMachtwagen300D.OnRemote(who, r.Bool()); break;

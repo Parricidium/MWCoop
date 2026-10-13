@@ -1004,4 +1004,9 @@ static const wchar_t *const kRu[][2] = {
     { L"Outfits", L"Одежда" },
     { L"A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"Пак из 155 комплектов одежды для персонажа: 84 верха, 27 штанов и 44 лица. Во вкладке «Одежда», после игровых («Одежда Dom 12»…)." },
     { L"PLAY", L"ИГРАТЬ" },
+    { L"CO-OP additions", L"Дополнения КООП" },
+    { L"Disable them all (vanilla game)", L"Отключить все (ванильная игра)" },
+    { L"Drone camera (F8)", L"Камера-дрон (F8)" },
+    { L"Sleeping bags", L"Спальные мешки" },
+    { L"s21 shop (video, KARTTURI)", L"Магазин s21 (видео, KARTTURI)" },
 };

@@ -151,6 +151,7 @@ namespace MWCoop
             new Mod("outils en main", HandTools.Update),
             new Mod("tas de bois des remorques", LogPiles.Update),
             new Mod("sacs de couchage", SleepingBags.Update),
+            new Mod("ajouts (hote)", Ajouts.Update),
             new Mod("boutique", Kauppa.Update),
             new Mod("mods (Cheatbox++)", ModCheatbox.Update),
             new Mod("fendeuse (attelage)", CutterHitch.Update),
@@ -266,6 +267,7 @@ namespace MWCoop
             HandTools.OnLevelLoaded();
             LogPiles.OnLevelLoaded();
             SleepingBags.OnLevelLoaded();
+            Ajouts.OnLevelLoaded();
             Kauppa.OnLevelLoaded();
             ModCheatbox.OnLevelLoaded();
             ModJonne.OnLevelLoaded();
