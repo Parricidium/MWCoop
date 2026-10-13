@@ -9,7 +9,7 @@ static const WikiCat kWikiCat[] = {
     { IC_GEAR, L"Réglages et options", L"Settings and options" },
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
-enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MSC, WA_MODS, WA_CONTENT,
+enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MSC, WA_MODS, WA_CONTENT,
        WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS };
 
 struct WikiKey { const wchar_t *key, *fr, *en; };
@@ -491,6 +491,7 @@ static const WikiBlock kW_Video[] = {
             L"Holding the tape, open the chat (T) and type /title followed by the name (24 characters max). It is written on the spine. /title alone wipes it." },
     { WB_TIP, L"À la fin d'une prise, le film part chez les autres joueurs en tâche de fond. Les films sont rangés dans MWCoop\\videot (fichiers .mwv, environ 4 Mo par minute).",
               L"When a take ends, the film is sent to the other players in the background. Films are stored in MWCoop\\videot (.mwv files, about 4 MB per minute)." },
+    { WB_GO, L"Monter et exporter une cassette", L"Edit and export a tape", 1000 + WA_MONTAGE },
     { WB_GO, L"Tes vidéos sur une cassette", L"Your videos on a tape", 1000 + WA_IMPORT },
 };
 static const WikiBlock kW_Import[] = {
@@ -515,6 +516,23 @@ static const WikiBlock kW_Import[] = {
     { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
 };
 
+static const WikiBlock kW_Montage[] = {
+    { WB_P, L"Vise une cassette posée ou tiens-la en main, et tiens R une seconde : le panneau de montage s'ouvre (souris libre ; Échap pour fermer).",
+            L"Look at a tape (set down) or hold it, and hold R for a second: the editing panel opens (mouse free; Esc to close)." },
+    { WB_H, L"Dans le panneau", L"In the panel", 0 },
+    { WB_B, L"Titre : tape-le puis ÉCRIRE (ou Entrée), il s'écrit sur la tranche.", L"Title: type it then WRITE (or Enter), it's written on the spine." },
+    { WB_B, L"Petit écran : LIRE / PAUSE avec le son ; clique ou glisse sur la barre de temps pour te déplacer.", L"Small screen: PLAY / PAUSE with sound; click or drag the time bar to move." },
+    { WB_B, L"DÉBUT ICI / FIN ICI : le morceau à garder ou à exporter (en bleu). TOUT : toute la cassette.", L"START HERE / END HERE: the part to keep or export (in blue). ALL: the whole tape." },
+    { WB_B, L"ROGNER : ne garde que la sélection (deux clics). Les prochains enregistrements s'ajoutent à la suite.", L"TRIM: keeps only the selection (two clicks). Next recordings are added after it." },
+    { WB_B, L"EFFACER LA CASSETTE : elle redevient vierge (deux clics), le titre reste.", L"ERASE THE TAPE: it becomes blank again (two clicks), the title stays." },
+    { WB_H, L"Exporter en .mp4", L"Export as .mp4", 0 },
+    { WB_P, L"EXPORTER EN .MP4 écrit la sélection en vrai fichier vidéo (H.264 avec le son, image ×3, logo de MWCoop en haut à gauche) dans Vidéos\\CoopVideos. CHANGER ouvre le choix de dossier de Windows, OUVRIR ouvre le dossier.",
+            L"EXPORT AS .MP4 writes the selection as a real video file (H.264 with sound, picture ×3, MWCoop logo at the top left) in Videos\\CoopVideos. CHANGE opens the Windows folder picker, OPEN opens the folder." },
+    { WB_TIP, L"Rogner, effacer et le titre changent la cassette pour tout le monde ; l'export ne concerne que ton PC (pas sous Windows 7).",
+              L"Trim, erase and the title change the tape for everybody; the export is only on your PC (not on Windows 7)." },
+    { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
+};
+
 #define WART(c, tf, te, sf, se, b) { c, tf, te, sf, se, b, (int)(sizeof(b) / sizeof(b[0])) }
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
@@ -530,6 +548,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"La boutique OSUUSKAUPPA s21", L"The OSUUSKAUPPA s21 shop", L"Rayons, caisse, sac de courses", L"Shelves, till, shopping bag", kW_Shop),
     WART(1, L"Filmer et regarder (VHS)", L"Film and watch (VHS)", L"Caméscope, magnétoscope, télé", L"Camcorder, VCR, TV", kW_Video),
     WART(1, L"Tes vidéos sur une cassette", L"Your videos on a tape", L"/importer : une vraie vidéo dans le jeu", L"/import: a real video in the game", kW_Import),
+    WART(1, L"Monter et exporter une cassette", L"Edit and export a tape", L"R tenu : rogner, effacer, .mp4", L"Hold R: trim, erase, .mp4", kW_Montage),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),
     WART(2, L"Contenu envoyé", L"Sent content", L"CD, radio, posters, peinture", L"CDs, radio, posters, paint", kW_Content),

@@ -263,6 +263,8 @@ namespace MWCoop
             TickKamera(now);
             TickFilms(now);
             TickLabels();
+            TickMontageKey(KameraBusy || Viewfinder ? null : aimedTape ?? HeldTape(), now);
+            TickMontage(now);
         }
 
         // ---------------------------------------------------------------- magnetoscope et ecran
@@ -413,14 +415,24 @@ namespace MWCoop
         // Appele par Interact quand rien de la boutique n'est vise. Renvoie vrai si un objet video est vise.
         static bool InteractItems(Ray ray, float now)
         {
-            if (Viewfinder) { if (lookedItem != null) { ClearGui(); lookedItem = null; } return false; }
+            aimedTape = null;
+            if (Viewfinder || MontageOpen) { if (lookedItem != null) { ClearGui(); lookedItem = null; } return false; }
             Esine hit = null; float best = 1.6f; RaycastHit h;
             Esine held = null;
             foreach (Esine e in esineet) if (e.Kind == KVhs && Held(e)) held = e;
             foreach (Esine e in esineet)
-                if ((e.Kind == KNauhuri || e.Kind == KKamera) && e.Go != null && !Held(e) && e.Col.Raycast(ray, out h, best)) { best = h.distance; hit = e; }
+                if ((e.Kind == KNauhuri || e.Kind == KKamera || e.Kind == KVhs) && e.Go != null && !Held(e) && e.Col.Raycast(ray, out h, best)) { best = h.distance; hit = e; }
             if (hit != lookedItem) { if (lookedItem != null) ClearGui(); lookedItem = hit; vcrFDown = -1f; }
             if (hit == null) return false;
+            if (hit.Kind == KVhs)
+            {
+                // cassette posee : son titre, et R tenu = montage
+                string ti = TapeTitle(hit.Data);
+                guiUse.Value = true;
+                guiText.Value = Lang.T("CASSETTE", "TAPE") + (ti.Length > 0 ? " « " + ti.ToUpperInvariant() + " »" : "") + " - " + Keys.Label(Keys.CameraRec) + Lang.T(" TENU : MONTAGE", " HELD: EDITING");
+                aimedTape = hit;
+                return true;
+            }
             FsmBool asm = FsmVariables.GlobalVariables.FindFsmBool("GUIassemble");
             string tape = Tape(hit);
             if (held != null && tape.Length == 0)
@@ -556,6 +568,7 @@ namespace MWCoop
         {
             OnLevelLoadedKamera();
             OnLevelLoadedFilms();
+            OnLevelLoadedMontage();
             esineet.Clear(); esineLoaded = false; showing.Clear(); gameScreens = null; lookedItem = null; pendingTape = null;
             texMats.Clear(); blackPlastic = null; greyMetal = null; plainMat = null; noiseMat = null; noiseTex = null;
         }

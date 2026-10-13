@@ -51,13 +51,13 @@ namespace MWCoop
             if (test > 0 && inGame && !testDone && Time.timeSinceLevelLoad > 8f) { testDone = true; Open = true; tab = test - 1; }
             if (Input.GetKeyDown(KeyCode.F10)) { Open = !Open; ChatOpen = false; WalletPanel.Open = false; CheatPanel.Open = false; MapPanel.Open = false; }
             else if (Input.GetKeyDown(KeyCode.Escape) && (Open || ChatOpen)) { Open = ChatOpen = false; }
-            else if (inGame && !Open && !ChatOpen && !WalletPanel.Open && !CheatPanel.Open && !MapPanel.Open && Session.Active && Input.GetKeyDown(Keys.Chat))   // (touche reglable dans le lanceur)
+            else if (inGame && !Open && !ChatOpen && !WalletPanel.Open && !CheatPanel.Open && !MapPanel.Open && !Kauppa.MontageOpen && Session.Active && Input.GetKeyDown(Keys.Chat))   // (touche reglable dans le lanceur)
             {
                 ChatOpen = true;
                 focusChat = true;
                 chatText = "";
             }
-            bool panel = Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open;
+            bool panel = Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || Kauppa.MontageOpen;
             // Menu pause du jeu ouvert : rien de bloque. Son automate 'Update Cursor' doit voir l'aller-retour du menu (il rend
             // a la camera du joueur l'etiquette MainCamera que le menu donne a sa camera CAM) ; bloque, le menu referme laissait
             // le jeu sans camera principale (OpNoob, 0.75.50 : apres la camera drone, Echap, plus aucun clic -- erreur
@@ -91,7 +91,7 @@ namespace MWCoop
 
         // Curseur du mod (Core le dessine en dernier) : menu ouvert ou choix de reapparition, en partie.
         // [Test] CurseurTest=x,y : dessine a ce point sans lire la souris (captures des instances d'essai).
-        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open); } }
+        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || Kauppa.MontageOpen); } }
 
         public static Vector2 CursorPos()
         {
