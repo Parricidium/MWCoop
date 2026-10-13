@@ -156,8 +156,8 @@ static const WikiBlock kW_Join[] = {
     { WB_WARN, L"« Version différente » : l'hôte et toi n'avez pas la même version. Mettez à jour tous les deux, puis relancez MWCoop.exe.",
                L"\"Different version\": the host and you don't have the same version. Both update, then start MWCoop.exe again." },
     { WB_H, L"Ouvrir MWCoop depuis une invitation Steam", L"Open MWCoop from a Steam invite" },
-    { WB_P, L"Option de lancement Steam du jeu (Propriétés > Général) : \"<dossier du jeu>\\MWCoop.exe\" %command%. Une invitation acceptée quand MWCoop est fermé ouvre alors MWCoop.",
-            L"The game's Steam launch option (Properties > General): \"<game folder>\\MWCoop.exe\" %command%. An invite accepted while MWCoop is closed then opens MWCoop." },
+    { WB_P, L"Option de lancement Steam du jeu (Propriétés > Général) : \"<dossier du jeu>\\MWCoop.exe\" %command%. Le bouton Jouer de Steam et une invitation acceptée quand MWCoop est fermé ouvrent alors MWCoop (héberger, rejoindre ou jouer seul).",
+            L"The game's Steam launch option (Properties > General): \"<game folder>\\MWCoop.exe\" %command%. Steam's Play button and an invite accepted while MWCoop is closed then open MWCoop (host, join or play solo)." },
 };
 static const WikiBlock kW_Net[] = {
     { WB_P, L"Deux façons de se retrouver. Tout le monde doit choisir la même.", L"Two ways to meet. Everyone must pick the same one." },
@@ -532,8 +532,8 @@ static const WikiBlock kW_Montage[] = {
     { WB_TIP, L"Rogner, effacer et le titre changent la cassette pour tout le monde ; l'export ne concerne que ton PC (pas sous Windows 7).",
               L"Trim, erase and the title change the tape for everybody; the export is only on your PC (not on Windows 7)." },
     { WB_H, L"Depuis le lanceur", L"From the launcher", 0 },
-    { WB_P, L"Page MÉDIA > VHS : toutes les cassettes de ta partie (même dans un magnétoscope ou un caméscope) ; renommer, effacer, ou y mettre une vidéo de ton PC. Jeu fermé.",
-            L"MEDIA > VHS page: every tape of your game (even inside a VCR or a camcorder); rename, erase, or put a video from your PC on it. Game closed." },
+    { WB_P, L"Page MÉDIA > VHS : toutes les cassettes de ta partie (même dans un magnétoscope ou un caméscope). Choisis-en une : son aperçu se joue à droite, EXPORTER EN .MP4 en fait une vidéo (dans Vidéos\CoopVideos), et tu peux la renommer, l'effacer ou y mettre une vidéo de ton PC (jeu fermé).",
+            L"MEDIA > VHS page: every tape of your game (even inside a VCR or a camcorder). Pick one: its preview plays on the right, EXPORT AS .MP4 makes a video of it (in Videos\CoopVideos), and you can rename it, erase it or put a video from your PC on it (game closed)." },
     { WB_GO, L"Ouvrir la page VHS", L"Open the VHS page", TAB_VHS },
     { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
 };
