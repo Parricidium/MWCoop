@@ -27,7 +27,7 @@
 static const uint32_t kSyncChunk = 48 * 1024;
 static const int kSyncWindow = 8, kSyncChannel = 5;
 struct SyncFile { std::string path; uint32_t size; uint64_t hash; };
-struct SyncOffer { bool msc = false; std::string mscVer; std::vector<std::string> mods, cats; std::vector<SyncFile> files; uint64_t key = 0; };
+struct SyncOffer { bool msc = false; std::string mscVer; std::vector<std::string> mods, cats; std::vector<SyncFile> files; uint64_t key = 0; int expect = 0; };
 
 static uint64_t Fnv(const void *p, size_t n, uint64_t h = 1469598103934665603ULL)
 {
@@ -113,13 +113,38 @@ static bool OfferParse(const std::string &m, SyncOffer &o)
         if (!SyncPathOk(f.path)) { LaunchLog("mods : chemin refuse dans la liste de l'hote (%s)", f.path.c_str()); return false; }
         o.files.push_back(f);
     }
+    // (liste trop longue pour un message : marque 0xC5 + nombre total de fichiers ; la suite arrive en M_MODSX)
+    if (r.ok && r.p < m.size()) { Rd t = r; if (t.u8() == 0xC5) { int total = t.u16(); if (t.ok && total > (int)o.files.size()) o.expect = total; } }
     o.key = Fnv(m.data(), m.size());
+    return r.ok;
+}
+
+// Suite de la liste (M_MODSX) : empreinte du premier message, indice du premier fichier, fichiers.
+static bool OfferMoreParse(const std::string &m, uint64_t &key, int &start, std::vector<SyncFile> &files)
+{
+    Rd r(m);
+    if (r.u8() != M_MODSX) return false;
+    uint32_t lo = r.u32(), hi = r.u32();
+    key = lo | ((uint64_t)hi << 32);
+    start = r.u16();
+    int n = r.u16();
+    for (int i = 0; i < n && r.ok; i++) {
+        SyncFile f;
+        f.path = r.str();
+        f.size = r.u32();
+        uint32_t a = r.u32(), b = r.u32();
+        f.hash = a | ((uint64_t)b << 32);
+        if (!r.ok) break;
+        if (!SyncPathOk(f.path)) { LaunchLog("mods : chemin refuse dans la suite de la liste (%s)", f.path.c_str()); return false; }
+        files.push_back(f);
+    }
     return r.ok;
 }
 
 // ---- hote : la liste proposee
 static SyncOffer g_offer;                 // (sous g_lcs)
 static std::string g_offerBlob;           // (sous g_lcs) message M_MODS pret a envoyer
+static std::vector<std::string> g_offerExtra;   // (sous g_lcs) suite de la liste (M_MODSX), envoyee juste apres
 static std::wstring g_offerDir;           // (sous g_lcs) dossier Mods de l'hote
 static std::wstring g_offerGame;          // (sous g_lcs) dossier du jeu de l'hote (contenu)
 static std::wstring g_offerPaint;         // (sous g_lcs) peinture perso de la CORRIS envoyee a la place de Images\car.png (vide : celle du jeu)
@@ -226,6 +251,32 @@ static void OfferAddTree(const std::wstring &base, const std::wstring &rel, cons
     } while (FindNextFileW(h, &fd));
     FindClose(h);
 }
+// Messages de la liste : le premier (M_MODS, ce qui tient dans 60 Ko, plus la marque 0xC5 si la suite existe), puis la
+// suite (M_MODSX). o.key : empreinte du premier ; o.files : la liste entiere, dans l'ordre.
+static void OfferSplit(SyncOffer &o, std::string &blob, std::vector<std::string> &extra)
+{
+    blob = OfferBlob(o);
+    size_t full = o.files.size();
+    std::vector<SyncFile> cut;
+    // Liste trop longue pour un message du salon (64 Ko) : le premier message en garde ce qui y tient (les lanceurs d'avant
+    // le lisent tel quel), suivi d'une marque (0xC5, nombre total) ; le reste part en messages M_MODSX (memes indices :
+    // les demandes de fichiers restent valables). Avant : le reste etait coupe, les invites n'avaient pas ces fichiers.
+    while (blob.size() > 59990 && !o.files.empty()) { cut.push_back(o.files.back()); o.files.pop_back(); blob = OfferBlob(o); }
+    std::reverse(cut.begin(), cut.end());
+    if (!cut.empty()) { Wr t; t.u8(0xC5); t.u16((int)full); blob += t.d; }
+    o.key = Fnv(blob.data(), blob.size());
+    for (size_t i = 0; i < cut.size();) {
+        Wr w; w.u8(M_MODSX); w.u32((uint32_t)o.key); w.u32((uint32_t)(o.key >> 32)); w.u16((int)(o.files.size() + i));
+        size_t n0 = w.d.size(); w.u16(0);
+        int n = 0;
+        while (i < cut.size() && w.d.size() < 59000) { const SyncFile &f = cut[i]; w.str(f.path); w.u32(f.size); w.u32((uint32_t)f.hash); w.u32((uint32_t)(f.hash >> 32)); i++; n++; }
+        w.d[n0] = (char)(n & 0xFF); w.d[n0 + 1] = (char)((n >> 8) & 0xFF);
+        extra.push_back(w.d);
+    }
+    for (auto &f : cut) o.files.push_back(f);
+    if (!cut.empty()) LaunchLog("mods : liste longue (%d fichiers) : %d dans le premier message, %d en %d message(s) de plus", (int)full, (int)(full - cut.size()), (int)cut.size(), (int)extra.size());
+}
+
 static DWORD WINAPI OfferThread(void *p)
 {
     OfferJob *job = (OfferJob *)p;
@@ -317,22 +368,13 @@ static DWORD WINAPI OfferThread(void *p)
             return ca != cb ? ca < cb : _stricmp(ga.c_str(), gb.c_str()) < 0;
         });
     }
-    std::string blob = OfferBlob(o);
-    size_t full = o.files.size();
-    std::vector<SyncFile> cut;
-    while (blob.size() > 60000 && !o.files.empty()) { cut.push_back(o.files.back()); o.files.pop_back(); blob = OfferBlob(o); }
-    if (!cut.empty()) {
-        std::map<std::string, int> lost;
-        for (auto &f : cut) { size_t a = f.path.find('\\', 5), b = a == std::string::npos ? a : f.path.find('\\', a + 1); lost[f.path.substr(0, b)]++; }
-        std::string what;
-        for (auto &l : lost) what += " " + l.first + " (" + std::to_string(l.second) + ")";
-        LaunchLog("mods : ATTENTION liste trop longue pour le salon : %d fichier(s) sur %d pas envoye(s), les invites ne les auront pas :%s"
-                  " -- garder ce mod pour soi (onglet Mods) s'il ne doit pas partir", (int)cut.size(), (int)full, what.c_str());
-    }
-    o.key = Fnv(blob.data(), blob.size());
+    std::string blob;
+    std::vector<std::string> extra;
+    OfferSplit(o, blob, extra);
     EnterCriticalSection(&g_lcs);
     g_offer = o;
     g_offerBlob = blob;
+    g_offerExtra = extra;
     g_offerDir = job->dir;
     g_offerGame = job->game;
     g_offerPaint = job->paint;
@@ -353,6 +395,7 @@ static void SyncOfferReset()
     EnterCriticalSection(&g_lcs);
     g_offer = SyncOffer();
     g_offerBlob.clear();
+    g_offerExtra.clear();
     LeaveCriticalSection(&g_lcs);
     g_offerSig.clear();
 }
@@ -364,7 +407,7 @@ static void SyncHostTick()
         EnterCriticalSection(&g_lcs);
         std::string blob = g_offerBlob;
         uint64_t key = g_offer.key;
-        if (!g_lobbySteam) for (auto &c : g_conns) SendMsg(c.s, Wr{ blob });
+        if (!g_lobbySteam) for (auto &c : g_conns) { SendMsg(c.s, Wr{ blob }); for (auto &x : g_offerExtra) SendMsg(c.s, Wr{ x }); }
         LeaveCriticalSection(&g_lcs);
         if (g_lobbySteam) { char k[24]; sprintf_s(k, "%016llx", (unsigned long long)key); SSetLobby("mods", k); }
     }
@@ -629,10 +672,86 @@ static DWORD WINAPI SyncCheckThread(void *p)
 }
 
 // Invite : liste de l'hote recue (fil du salon IP, ou fil de la fenetre pour Steam).
+static void SyncStartOffer(SyncOffer o);
+static SyncOffer g_offerWait;   // (sous g_syncMx) liste longue en attente de sa suite
+static std::map<int, std::vector<SyncFile>> g_offerWaitParts;
+static SyncOffer *g_offerTestWant;   // (auto-test /testmodsx : liste attendue, rien n'est telecharge)
+static int g_offerTestResult = -1;
+// Auto-test (/testmodsx N) : N fichiers factices, decoupes comme l'hote, relus comme l'invite (suite avant le debut et a
+// l'envers), liste comparee.
+static int OfferSelfTest(int n)
+{
+    SyncOffer o;
+    o.msc = true; o.mscVer = "1.4"; o.mods.push_back("GrosMod"); o.mods.push_back("PetitMod");
+    for (int i = 0; i < n; i++) { SyncFile f; char b[200]; sprintf_s(b, "Mods\\Assets\\GrosMod\\Textures\\dossier%02d\\fichier_numero_%05d.png", i / 100, i); f.path = b; f.size = 1000 + i; f.hash = 0x123456789ULL * (i + 1); o.files.push_back(f); }
+    std::string blob; std::vector<std::string> extra;
+    OfferSplit(o, blob, extra);
+    TestLog("testmodsx : %d fichiers -> premier message %d octets, %d message(s) de plus (le plus gros %d octets)", n, (int)blob.size(), (int)extra.size(), extra.empty() ? 0 : (int)std::max_element(extra.begin(), extra.end(), [](const std::string &a, const std::string &b) { return a.size() < b.size(); })->size());
+    SyncOffer want = o;
+    g_offerTestWant = &want;
+    for (int i = (int)extra.size() - 1; i >= 1; i--) SyncOnOfferMore(extra[i]);
+    SyncOnOffer(blob);
+    if (!extra.empty()) SyncOnOfferMore(extra[0]);
+    g_offerTestWant = nullptr;
+    SyncOffer old;
+    bool oldOk = OfferParse(blob, old);
+    TestLog("testmodsx : lanceur d'avant (premier message seul) : %s, %d fichiers", oldOk ? "lisible" : "ILLISIBLE", (int)old.files.size());
+    return g_offerTestResult == 1 && oldOk ? 0 : 1;
+}
+
 static void SyncOnOffer(const std::string &m)
 {
     SyncOffer o;
     if (!OfferParse(m, o)) { LaunchLog("mods : liste de l'hote illisible"); return; }
+    if (o.expect > 0)
+    {
+        std::lock_guard<std::mutex> lk(g_syncMx);
+        if (o.key == g_hostOffer.key && g_sync != SY_NONE && g_sync != SY_FAIL) return;   // (la meme, deja complete)
+        if (o.key != g_offerWait.key) g_offerWaitParts.clear();
+        g_offerWait = o;
+        LaunchLog("mods : liste longue de l'hote (%d fichiers), %d recus, la suite arrive", o.expect, (int)o.files.size());
+    }
+    else { SyncStartOffer(o); return; }
+    SyncOnOfferMore(std::string());   // (morceaux arrives avant le debut)
+}
+static void SyncOnOfferMore(const std::string &m)
+{
+    SyncOffer done;
+    {
+        std::lock_guard<std::mutex> lk(g_syncMx);
+        if (!m.empty())
+        {
+            uint64_t key; int start; std::vector<SyncFile> files;
+            if (!OfferMoreParse(m, key, start, files)) { LaunchLog("mods : suite de la liste illisible"); return; }
+            if (g_offerWait.expect > 0 && key != g_offerWait.key) return;   // (autre liste)
+            g_offerWaitParts[start] = files;
+            if (g_offerWait.expect == 0) { g_offerWait.key = key; return; }   // (avant le premier message : gardee)
+        }
+        if (g_offerWait.expect == 0) return;
+        for (auto it = g_offerWaitParts.find((int)g_offerWait.files.size()); it != g_offerWaitParts.end(); it = g_offerWaitParts.find((int)g_offerWait.files.size()))
+        {
+            for (auto &f : it->second) g_offerWait.files.push_back(f);
+            g_offerWaitParts.erase(it);
+        }
+        if ((int)g_offerWait.files.size() < g_offerWait.expect) return;
+        done = g_offerWait;
+        done.expect = 0;
+        g_offerWait = SyncOffer();
+        g_offerWaitParts.clear();
+        LaunchLog("mods : liste longue de l'hote complete (%d fichiers)", (int)done.files.size());
+    }
+    SyncStartOffer(done);
+}
+static void SyncStartOffer(SyncOffer o)
+{
+    if (g_offerTestWant)
+    {
+        bool same = o.files.size() == g_offerTestWant->files.size() && o.key == g_offerTestWant->key;
+        for (size_t i = 0; same && i < o.files.size(); i++) same = o.files[i].path == g_offerTestWant->files[i].path && o.files[i].size == g_offerTestWant->files[i].size && o.files[i].hash == g_offerTestWant->files[i].hash;
+        g_offerTestResult = same ? 1 : 0;
+        TestLog("testmodsx : liste recue %d fichiers, attendue %d : %s", (int)o.files.size(), (int)g_offerTestWant->files.size(), same ? "IDENTIQUE" : "DIFFERENTE");
+        return;
+    }
     std::lock_guard<std::mutex> lk(g_syncMx);
     if (o.key == g_hostOffer.key && g_sync != SY_NONE && g_sync != SY_FAIL) return;   // (la meme)
     SyncCloseParts();
@@ -1047,7 +1166,7 @@ static void DrawSyncCard(Graphics &g, RectF c, int hot)
 static void SyncWelcome(SOCKET s)
 {
     EnterCriticalSection(&g_lcs);
-    if (!g_offerBlob.empty()) SendMsg(s, Wr{ g_offerBlob });
+    if (!g_offerBlob.empty()) { SendMsg(s, Wr{ g_offerBlob }); for (auto &x : g_offerExtra) SendMsg(s, Wr{ x }); }
     LeaveCriticalSection(&g_lcs);
 }
 
@@ -1080,11 +1199,13 @@ static void SyncSteamTick()
             if (t == M_MODSREQ) {
                 EnterCriticalSection(&g_lcs);
                 std::string blob = g_offerBlob;
+                std::vector<std::string> extra = g_offerExtra;
                 LeaveCriticalSection(&g_lcs);
-                if (!blob.empty()) SteamSendP2P(from, blob);
+                if (!blob.empty()) { SteamSendP2P(from, blob); for (auto &x : extra) SteamSendP2P(from, x); }
             } else if (t == M_MODGET) { Wr w; if (SyncServe(m, w)) SteamSendP2P(from, w.d); }
         } else if (from == g_sHost) {
             if (t == M_MODS) SyncOnOffer(m);
+            else if (t == M_MODSX) SyncOnOfferMore(m);
             else if (t == M_MODDATA) SyncOnData(m);
         }
     }

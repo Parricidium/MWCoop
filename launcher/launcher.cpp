@@ -4303,8 +4303,8 @@ static void DrawSteamGuide(Graphics &g)
           L"HOST opens a Steam lobby for your friends only: invite them with the lobby's \"Invite friends\" button."),
         T(L"Tes amis acceptent l'invitation dans Steam (ou cliquent REJOINDRE dans MWCoop, mode STEAM) ; LANCER d\u00E9marre le jeu de chacun.",
           L"Your friends accept the invite in Steam (or click JOIN in MWCoop, STEAM mode); START launches everyone's game."),
-        T(L"Pour qu'une invitation accept\u00E9e MWCoop ferm\u00E9 ouvre MWCoop (et pas le jeu sans le mod), chacun ajoute cette option de lancement :",
-          L"So that an invite accepted with MWCoop closed opens MWCoop (not the game without the mod), everyone adds this launch option:") };
+        T(L"Pour que le bouton Jouer de Steam et une invitation accept\u00E9e MWCoop ferm\u00E9 ouvrent MWCoop (et pas le jeu sans le mod), chacun ajoute cette option de lancement :",
+          L"So that Steam's Play button and an invite accepted with MWCoop closed open MWCoop (not the game without the mod), everyone adds this launch option:") };
     float y = c.Y + 82;
     for (int i = 0; i < 3; i++) {
         RectF dot(c.X + 40, y, 28, 28);
@@ -5175,7 +5175,7 @@ static void Launch(int mode, const char *partie = NULL)
 // ces octets en trop (et les sondes : il n'ecoute pas en UDP). La socket UDP de l'hote est fermee par LobbyClose(),
 // donc avant le lancement de son jeu (qui ouvre ce meme port UDP).
 enum { LB_PROTO = 1, M_HELLO = 1, M_WELCOME, M_REJECT, M_STATE, M_READY, M_GO, M_PING, M_PONG, M_SKIN };
-enum { M_MODS = 20, M_MODGET, M_MODDATA, M_MODSREQ };   // mods de l'hote (modsync.inc)
+enum { M_MODS = 20, M_MODGET, M_MODDATA, M_MODSREQ, M_MODSX };   // mods de l'hote (modsync.inc ; M_MODSX : suite de la liste)
 static SOCKET g_listen = INVALID_SOCKET, g_guestSock = INVALID_SOCKET;
 static SOCKET g_udpHost = INVALID_SOCKET;           // hote : ecoute UDP du salon (sous g_lcs)
 static int g_udpHostErr;                            // hote : erreur de l'ouverture du port UDP (0 = ouvert)
@@ -5271,6 +5271,7 @@ static bool RecvAllS(SOCKET s, void *d, int n)
 }
 static bool SendMsg(SOCKET s, const Wr &w);
 static void SyncOnOffer(const std::string &m);
+static void SyncOnOfferMore(const std::string &m);
 static void SyncOnData(const std::string &m);
 static bool SyncServe(const std::string &m, Wr &out);
 static void SyncWelcome(SOCKET s);
@@ -6008,6 +6009,7 @@ static DWORD WINAPI GuestThread(void *param)
                 if (list != lastList) { TestLog("salon : liste %s", list.c_str()); lastList = list; }
             }
         } else if (type == M_MODS) SyncOnOffer(m);
+        else if (type == M_MODSX) SyncOnOfferMore(m);
         else if (type == M_MODDATA) SyncOnData(m);
         else if (type == M_PING) {
             Wr w; w.u8(M_PONG); w.u32(q.u32());
@@ -7694,6 +7696,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         return ok ? 0 : 1;
     }
 
+    // Auto-test de la liste des mods en plusieurs messages
+    if (argc >= 2 && !_wcsicmp(argv[1], L"/testmodsx")) { if (argc >= 4) g_testSalonLog = argv[3]; return OfferSelfTest(argc >= 3 ? _wtoi(argv[2]) : 4000); }
+
     // Capture d'un etat, sans fenetre (verification du rendu)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/capture")) {
         std::wstring st = argv[3];
@@ -7788,6 +7793,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; }
         else if (st == L"api") g_tab = TAB_API;   // page API des moddeurs
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
+        else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
         else if (st == L"credits") g_tab = TAB_CREDITS;
         else if (!wcsncmp(st.c_str(), L"guide", 5) && st != L"guide-steam") {   // guide : guide-<article>-<defilement>
@@ -7869,6 +7875,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }
         if (g_tab == TAB_HOME) g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);   // (accueil : le personnage tourne avec /temps)
         // /vhsimport <ligne> <video> : page VHS, import sans la fenetre de choix, attendu jusqu'au bout (essais)
+        // /vhsexport <dossier> : page VHS, export de la cassette choisie (vhs1) dans ce dossier, attendu jusqu'au bout (essais)
+        for (int i = 4; i + 1 < argc; i++) if (!_wcsicmp(argv[i], L"/vhsexport")) {
+            g_vhsExpDirTest = WithSlash(argv[i + 1]); VhsScan(); VhsExport(max(0, g_vhsSel));
+            for (int k = 0; k < 1200 && !g_vhsExpDst.empty(); k++) { Sleep(100); VhsTick(); }
+            TestLog("vhsexport : %ls", g_status.c_str());
+        }
         for (int i = 4; i + 2 < argc; i++) if (!_wcsicmp(argv[i], L"/vhsimport")) {
             VhsScan(); VhsImport(_wtoi(argv[i + 1]), argv[i + 2]);
             for (int k = 0; k < 1200 && !g_vhsImpFilm.empty(); k++) { Sleep(100); VhsTick(); }

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -11,8 +11,9 @@ namespace MWCoop
     // la manivelle). Cote passager, la vitre a son pivot (FrontR/WindowPivot/GlassPivot) et une manivelle dessinee
     // (« opener 3 ») sans automate. Ici, 3 s apres le chargement (avant que Jobs n'accroche les commandes : la copie est alors
     // relevee et rejouee comme les autres, sous son propre chemin), la manivelle du conducteur est copiee a la place de celle
-    // du passager, sa manivelle a elle tournant. Chez tous de la meme facon. Portieres arriere : pas de pivot de vitre dans le
-    // jeu (rien a faire bouger).
+    // du passager, sa manivelle a elle tournant. Chez tous de la meme facon. Portieres arriere (Menor, meme liste : « et les
+    // deux vitres arriere ») : la SORBET y a aussi un pivot de vitre et une manivelle dessinee (opener 1 / opener 2) -- meme
+    // copie, en miroir a droite, simplement deplacee a gauche (meme cote que le conducteur).
     // La vitre : les iTween de l'automate visent des poses ABSOLUES (rotation locale 14,0,0 ; position 0,1 / -0,1 / -0,4),
     // faites pour le pivot de gauche. Posees telles quelles sur le pivot de droite, la vitre basculait dans l'habitacle
     // (Menor, 12/10, video : « out of place », faces vues de dos). L'automate copie pilote donc un TEMOIN (objet vide, meme
@@ -26,12 +27,14 @@ namespace MWCoop
         class Mirror
         {
             public Transform Proxy, GlassL, GlassR, PivotL, PivotR, Car, DoorL, DoorR;
-            public bool Ready; public Matrix4x4 A, B; public float WaitLog, DownMag;   // vitre de droite (locale) = A * temoin (local) * B
+            public bool Ready, Flip = true; public Matrix4x4 A, B; public float WaitLog, DownMag;   // vitre de droite (locale) = A * temoin (local) * B
             public Vector3 LastP = new Vector3(1e9f, 0, 0); public Quaternion LastQ;
         }
         static readonly System.Collections.Generic.List<Mirror> mirrors = new System.Collections.Generic.List<Mirror>();
+        class Follow { public Transform Src, Dst; public Quaternion SrcRest, DstRest; }
+        static readonly System.Collections.Generic.List<Follow> followers = new System.Collections.Generic.List<Follow>();
 
-        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); wins.Clear(); nextWinScan = 0f; }
+        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); followers.Clear(); wins.Clear(); nextWinScan = 0f; }
 
         public static void Update()
         {
@@ -53,21 +56,58 @@ namespace MWCoop
                 if (hasKnob) continue;
                 if (Make(f, frontR, glassR)) n++;
             }
+            // Portieres arriere : chaque DoorRear* avec un pivot de vitre et une manivelle sans automate.
+            int nr = 0;
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            {
+                if (f == null || f.FsmName != "Knob" || f.gameObject.name != "opener" || f.transform.parent == null || f.transform.parent.name != "FrontL") continue;
+                Transform doors = f.transform.parent.parent != null ? f.transform.parent.parent.parent : null;
+                if (doors == null) continue;
+                foreach (Transform door in doors)
+                {
+                    if (!door.name.StartsWith("DoorRear")) continue;
+                    Transform glass = null, drawn = null;
+                    bool knob = false;
+                    foreach (Transform x in door.GetComponentsInChildren<Transform>(true))
+                    {
+                        if (glass == null && x.name == "GlassPivot") glass = x;
+                        if (drawn == null && x.name.StartsWith("opener") && x.name != "opener MWCoop") drawn = x;
+                        if (x.name == "opener MWCoop") knob = true;
+                        foreach (PlayMakerFSM k in x.GetComponents<PlayMakerFSM>()) knob |= k.FsmName == "Knob";
+                    }
+                    if (glass == null || drawn == null || knob) continue;
+                    Transform side = glass.parent != null && glass.parent.parent != null ? glass.parent.parent : door;
+                    Transform car = doors.parent;
+                    bool flip = car != null && car.InverseTransformPoint(glass.position).x * car.InverseTransformPoint(f.transform.position).x < 0f;
+                    if (Make(f, side, glass, drawn, flip)) nr++;
+                }
+            }
             if (n > 0) Log.Info("vitres : manivelle passager ajoutee a " + n + " voiture(s)");
+            if (nr > 0) Log.Info("vitres : " + nr + " manivelle(s) arriere ajoutee(s)");
             nextWinScan = 0f;   // (vitres a suivre, temoins compris)
         }
 
-        static bool Make(PlayMakerFSM knob, Transform frontR, Transform glassR)
+        static bool Make(PlayMakerFSM knob, Transform frontR, Transform glassR) { return Make(knob, frontR, glassR, null, true); }
+        static bool Make(PlayMakerFSM knob, Transform frontR, Transform glassR, Transform drawnRear, bool flip)
         {
             try
             {
                 Transform src = knob.transform, frontL = src.parent;
-                Transform drawn = frontR.Find("opener 3") ?? (frontR.parent != null ? frontR.parent.Find("opener 3") : null);   // (SORBET : sous la portiere)
+                Transform drawn = drawnRear ?? frontR.Find("opener 3") ?? (frontR.parent != null ? frontR.parent.Find("opener 3") : null);   // (SORBET : sous la portiere)
                 var c = (GameObject)Object.Instantiate(src.gameObject);
                 c.name = "opener MWCoop";
                 c.transform.SetParent(frontR, false);
-                // A la place de la manivelle dessinee (cachee), sinon en miroir de celle du conducteur.
-                if (drawn != null) { c.transform.position = drawn.position; c.transform.rotation = drawn.rotation; drawn.gameObject.SetActive(false); }
+                // A la place de la manivelle dessinee, sinon en miroir de celle du conducteur. La manivelle dessinee (le modele du
+                // jeu, tourne vers l'habitacle) reste visible et la copie invisible (clic et automate seulement) : le modele du
+                // conducteur pose de ce cote montrait son envers, tourne vers la portiere (retour de JD, 13/10). La manivelle
+                // dessinee tourne comme le pivot de la copie (Follow).
+                if (drawn != null)
+                {
+                    c.transform.position = drawn.position; c.transform.rotation = drawn.rotation;
+                    foreach (Renderer rr in c.GetComponentsInChildren<Renderer>(true)) rr.enabled = false;
+                    Transform cp = c.transform.Find("Pivot") ?? c.transform, dp = drawn.Find("Pivot") ?? drawn;
+                    followers.Add(new Follow { Src = cp, Dst = dp, SrcRest = cp.localRotation, DstRest = dp.localRotation });
+                }
                 else { Vector3 lp = src.localPosition; c.transform.localPosition = new Vector3(-lp.x, lp.y, lp.z); c.transform.localRotation = src.localRotation; }
                 Transform handle = c.transform.Find("Pivot");
                 Transform glassL = null;
@@ -84,8 +124,8 @@ namespace MWCoop
                 if (glassL != null && glassL.parent != null && glassR.parent != null)
                     mirrors.Add(new Mirror { Proxy = proxy, GlassL = glassL, GlassR = glassR, PivotL = glassL.parent, PivotR = glassR.parent,
                         Car = frontL.parent != null && frontL.parent.parent != null ? frontL.parent.parent.parent : frontR.root,
-                        DoorL = frontL.parent, DoorR = frontR.parent, DownMag = DownTarget(c) });
-                if (logs++ < 4) Log.Info("vitres : manivelle passager de " + frontR.root.name + " (" + (drawn != null ? "a la place de opener 3" : "en miroir") + ")");
+                        DoorL = frontL.parent, DoorR = drawnRear != null ? DoorOf(glassR) : frontR.parent, DownMag = DownTarget(c), Flip = flip });
+                if (logs++ < 8) Log.Info("vitres : manivelle " + (drawnRear != null ? "arriere (" + frontR.name + (flip ? ", miroir" : "") + ")" : "passager") + " de " + frontR.root.name + " (" + (drawn != null ? "a la place de " + drawn.name : "en miroir") + ")");
                 return true;
             }
             catch (System.Exception e) { Log.Warn("vitres : manivelle passager : " + e.Message); return false; }
@@ -94,6 +134,7 @@ namespace MWCoop
         // Vitres de droite : etalonnage (une fois, les deux portieres fermees), puis le mouvement du temoin en miroir.
         static void Drive()
         {
+            foreach (Follow fo in followers) if (fo.Src != null && fo.Dst != null) fo.Dst.localRotation = fo.DstRest * (Quaternion.Inverse(fo.SrcRest) * fo.Src.localRotation);
             for (int i = mirrors.Count - 1; i >= 0; i--)
             {
                 Mirror m = mirrors[i];
@@ -121,6 +162,10 @@ namespace MWCoop
                 if (y.sqrMagnitude > 1e-8f && z.sqrMagnitude > 1e-8f) m.GlassR.localRotation = Quaternion.LookRotation(z, y);
             }
         }
+
+
+        // Portiere (charniere) qui porte cette vitre.
+        static Transform DoorOf(Transform t) { for (; t != null; t = t.parent) if (t.GetComponent<HingeJoint>() != null) return t; return null; }
 
         static string Angle(Transform door)
         {
@@ -248,7 +293,7 @@ namespace MWCoop
             Matrix4x4 wl = m.PivotL.localToWorldMatrix, wr = m.PivotR.localToWorldMatrix;
             Vector3 gl = m.Car.InverseTransformPoint(m.PivotL.position), gr = m.Car.InverseTransformPoint(m.GlassR.position);
             float x0 = (gl.x + gr.x) * 0.5f;
-            Matrix4x4 rc = Matrix4x4.TRS(new Vector3(2f * x0, 0, 0), Quaternion.identity, new Vector3(-1f, 1f, 1f));   // (x -> 2 x0 - x)
+            Matrix4x4 rc = m.Flip ? Matrix4x4.TRS(new Vector3(2f * x0, 0, 0), Quaternion.identity, new Vector3(-1f, 1f, 1f)) : Matrix4x4.identity;   // (x -> 2 x0 - x ; meme cote : le mouvement tel quel)
             Matrix4x4 r = m.Car.localToWorldMatrix * rc * m.Car.worldToLocalMatrix;
             Matrix4x4 tr0 = Matrix4x4.TRS(m.GlassR.localPosition, m.GlassR.localRotation, m.GlassR.localScale);
             Matrix4x4 scl = Matrix4x4.Scale(m.GlassL.localScale);
@@ -266,7 +311,8 @@ namespace MWCoop
         // (place passager, x > 0 ; s = -1 : place conducteur, vers la vitre de gauche)
         static void Look(float s)
         {
-            Vector3 eye = car.TransformPoint(new Vector3(0.25f * s, 0.8f, 0.05f)), at = car.TransformPoint(new Vector3(0.85f * s, 0.45f, 0.35f));
+            float dz = Config.Get("Test", "VitreArriere", "").Length > 0 ? -0.75f : 0f;   // (vitre arriere : meme vue, reculee)
+            Vector3 eye = car.TransformPoint(new Vector3(0.25f * s, 0.8f, 0.05f + dz)), at = car.TransformPoint(new Vector3(0.85f * s, 0.45f, 0.35f + dz));
             tcam.transform.position = eye; tcam.transform.rotation = Quaternion.LookRotation(at - eye, car.up);
         }
 
@@ -313,6 +359,13 @@ namespace MWCoop
                 car = s.transform;
                 gl = car.Find("Doors/DoorFront(leftx)/FrontL/WindowPivot/GlassPivot"); gr = car.Find("Doors/DoorFront(right)/FrontR/WindowPivot/GlassPivot");
                 Transform ol = car.Find("Doors/DoorFront(leftx)/FrontL/opener"), or = car.Find("Doors/DoorFront(right)/FrontR/opener MWCoop");
+                string rearDoor = Config.Get("Test", "VitreArriere", "");   // ([Test] VitreArriere=DoorRear(right) : vitre arriere au lieu du passager)
+                if (rearDoor.Length > 0)
+                {
+                    Transform rd = car.Find("Doors/" + rearDoor);
+                    gr = null; or = null;
+                    if (rd != null) foreach (Transform x in rd.GetComponentsInChildren<Transform>(true)) { if (gr == null && x.name == "GlassPivot") gr = x; if (x.name == "opener MWCoop") or = x; }
+                }
                 if (gl == null || gr == null || ol == null || or == null) { tStep = 9; Log.Info("autotest : vitre, pieces introuvables (manivelle copiee " + (or != null) + ")"); return; }
                 l0 = car.InverseTransformPoint(gl.position); r0 = car.InverseTransformPoint(gr.position);
                 ql0 = Quaternion.Inverse(car.rotation) * gl.rotation; qr0 = Quaternion.Inverse(car.rotation) * gr.rotation;

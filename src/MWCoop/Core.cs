@@ -47,6 +47,7 @@ namespace MWCoop
             {
                 Perf.MarkStart();
                 CarVisuals.LateUpdate(); Perf.Mark("[poses volants]");
+                Autotest.PedalTest();
                 HandTools.LateUpdate(); Perf.Mark("[poses outils]");
                 PlayerSync.LateUpdate(); Perf.Mark("[poses avatars]");
                 Machines.LateUpdate(); Perf.Mark("[poses machines]");
@@ -179,6 +180,8 @@ namespace MWCoop
             new Mod("vitres", WindowCranks.Update),
             new Mod("ram1500", ModRam1500.Update),
             new Mod("jonne", ModJonne.Update),
+            new Mod("chariot", ModTowCart.Update),
+            new Mod("chandelles", ModJackStands.Update),
             new Mod("tenues", Studio.Update),
             new Mod("quetes", Jobs.Update),
             new Mod("trace", Trace.Update),
@@ -265,6 +268,8 @@ namespace MWCoop
             Kauppa.OnLevelLoaded();
             ModCheatbox.OnLevelLoaded();
             ModJonne.OnLevelLoaded();
+            ModTowCart.OnLevelLoaded();
+            ModJackStands.OnLevelLoaded();
             CutterHitch.OnLevelLoaded();
             AssembleIcon.OnLevelLoaded();
             CarLeaks.OnLevelLoaded();
