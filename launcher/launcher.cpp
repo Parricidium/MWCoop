@@ -5175,7 +5175,7 @@ static void Launch(int mode, const char *partie = NULL)
 // ces octets en trop (et les sondes : il n'ecoute pas en UDP). La socket UDP de l'hote est fermee par LobbyClose(),
 // donc avant le lancement de son jeu (qui ouvre ce meme port UDP).
 enum { LB_PROTO = 1, M_HELLO = 1, M_WELCOME, M_REJECT, M_STATE, M_READY, M_GO, M_PING, M_PONG, M_SKIN };
-enum { M_MODS = 20, M_MODGET, M_MODDATA, M_MODSREQ };   // mods de l'hote (modsync.inc)
+enum { M_MODS = 20, M_MODGET, M_MODDATA, M_MODSREQ, M_MODSX };   // mods de l'hote (modsync.inc ; M_MODSX : suite de la liste)
 static SOCKET g_listen = INVALID_SOCKET, g_guestSock = INVALID_SOCKET;
 static SOCKET g_udpHost = INVALID_SOCKET;           // hote : ecoute UDP du salon (sous g_lcs)
 static int g_udpHostErr;                            // hote : erreur de l'ouverture du port UDP (0 = ouvert)
@@ -5271,6 +5271,7 @@ static bool RecvAllS(SOCKET s, void *d, int n)
 }
 static bool SendMsg(SOCKET s, const Wr &w);
 static void SyncOnOffer(const std::string &m);
+static void SyncOnOfferMore(const std::string &m);
 static void SyncOnData(const std::string &m);
 static bool SyncServe(const std::string &m, Wr &out);
 static void SyncWelcome(SOCKET s);
@@ -6008,6 +6009,7 @@ static DWORD WINAPI GuestThread(void *param)
                 if (list != lastList) { TestLog("salon : liste %s", list.c_str()); lastList = list; }
             }
         } else if (type == M_MODS) SyncOnOffer(m);
+        else if (type == M_MODSX) SyncOnOfferMore(m);
         else if (type == M_MODDATA) SyncOnData(m);
         else if (type == M_PING) {
             Wr w; w.u8(M_PONG); w.u32(q.u32());
@@ -7693,6 +7695,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
+
+    // Auto-test de la liste des mods en plusieurs messages
+    if (argc >= 2 && !_wcsicmp(argv[1], L"/testmodsx")) { if (argc >= 4) g_testSalonLog = argv[3]; return OfferSelfTest(argc >= 3 ? _wtoi(argv[2]) : 4000); }
 
     // Capture d'un etat, sans fenetre (verification du rendu)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/capture")) {
