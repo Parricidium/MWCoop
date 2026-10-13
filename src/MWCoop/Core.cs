@@ -180,6 +180,7 @@ namespace MWCoop
             new Mod("ram1500", ModRam1500.Update),
             new Mod("jonne", ModJonne.Update),
             new Mod("chariot", ModTowCart.Update),
+            new Mod("chandelles", ModJackStands.Update),
             new Mod("tenues", Studio.Update),
             new Mod("quetes", Jobs.Update),
             new Mod("trace", Trace.Update),
@@ -267,6 +268,7 @@ namespace MWCoop
             ModCheatbox.OnLevelLoaded();
             ModJonne.OnLevelLoaded();
             ModTowCart.OnLevelLoaded();
+            ModJackStands.OnLevelLoaded();
             CutterHitch.OnLevelLoaded();
             AssembleIcon.OnLevelLoaded();
             CarLeaks.OnLevelLoaded();

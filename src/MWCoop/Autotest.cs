@@ -1352,6 +1352,7 @@ namespace MWCoop
             if (mode == "jonne" && Net.Session.IsHost && t > 58f && step == 1) { step = 2; Log.Info("autotest : jonne, " + ModJonne.Test(1)); }
             if (mode == "jonne" && !Net.Session.IsHost && t > 50f && step == 0) { step = 1; Log.Info("autotest : jonne, " + ModJonne.Test(2)); }
             ModTowCart.Test(mode, t);
+            ModJackStands.Test(mode, t);
             if (mode == "jonne2" && Net.Session.IsHost && t > 45f && step == 0) { step = 1; Log.Info("autotest : jonne, " + ModJonne.Test(5)); }
             if (mode == "jonne2" && t > 60f && step2 == 0) { step2 = 1; Log.Info("autotest : jonne, objets " + Props.Ids("w:jfs:") + " ; " + ModJonne.Test(3)); }
             if (mode == "jonne" && Net.Session.IsHost && t > 64f && step == 2) { step = 3; Log.Info("autotest : jonne, " + ModJonne.Test(4)); }

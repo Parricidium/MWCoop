@@ -1570,6 +1570,7 @@ namespace MWCoop
                 case "@ram": ModRam1500.OnMessage(who, r); break;
                 case "@jfs": ModJonne.OnMessage(who, r); break;
                 case "@tow": ModTowCart.OnMessage(who, r); break;
+                case "@jack": ModJackStands.OnMessage(who, r); break;
                 case "@carbu": FuelPrices.OnMessage(who, r); break;
                 case "@bout": { Vector3 p = r.Vec(); Quaternion q = r.Quat(); SewageHose.OnRemote(who, p, q, r.Bool()); break; }
                 case "@attelage": OnHitch(who, r.U8()); break;
