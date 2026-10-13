@@ -716,7 +716,7 @@ namespace MWCoop
 
             HotTick();
             PushRemote(now);
-            if (frozenCar != null && frozenCar.Dt != null) frozenCar.Dt.throttle = 0f;   // (mort au volant)
+            if (frozenCar != null) HoldFrozen();   // (mort au volant)
             float pf = Config.GetFloat("Test", "PousseForce", 1500f);
             foreach (Car c in cars)
                 if (c.PushUntil > now && c.Body != null && !c.Body.isKinematic)
@@ -1208,6 +1208,7 @@ namespace MWCoop
         public static void FixedUpdate()
         {
             if (!scanned) return;
+            if (frozenCar != null) HoldFrozen();
             foreach (Car c in cars)
                 if (c.Body != null && c.Kinematic && c.Body.gameObject.activeInHierarchy && !c.Framewise) Follow(c);
                 else if (c.Body != null && !c.Kinematic && c.SettleUntil > 0f) Settle(c);
@@ -1704,8 +1705,12 @@ namespace MWCoop
 
         // Sortie forcee du vehicule conduit ici (reapparition) : l'etat de sortie du jeu, quelle que soit la vitesse.
         // Mort au volant (retour de Menor, 10/10 : « mort, on peut encore conduire ») : pendant le choix de la reapparition, les
-        // commandes de la voiture coupees (AxisCarController) et les gaz a zero ; rendues a la reapparition.
-        static AxisCarController frozenAxis;
+        // commandes de la voiture coupees et les gaz a zero ; rendues a la reapparition. TOUS les CarController de la voiture,
+        // pas seulement AxisCarController : le mod « Advanced Keyboard and Mouse Steering » conduit par le sien, et Menor
+        // conduisait encore mort (12/10). Et a chaque pas de physique (FixedUpdate) : gaz a zero, frein et frein a main serres
+        // sur chaque roue -- ce qu'un mod ecrirait directement dans les roues ou la transmission est ecrase.
+        static readonly List<CarController> frozenCtl = new List<CarController>();
+        static Wheel[] frozenWheels;
         static Car frozenCar;
         public static void FreezeLocal(bool on)
         {
@@ -1714,13 +1719,26 @@ namespace MWCoop
                 if (frozenCar != null || LocalDriving < 0 || LocalDriving >= cars.Count) return;
                 Car c = cars[LocalDriving];
                 frozenCar = c;
-                if (c.Axis != null && c.Axis.enabled) { c.Axis.enabled = false; frozenAxis = c.Axis; }
-                Log.Info("mort au volant : commandes de " + c.Key + " coupees");
+                frozenCtl.Clear();
+                var names = new List<string>();
+                if (c.T != null)
+                    foreach (CarController cc in c.T.GetComponents<CarController>())
+                        if (cc != null && cc.enabled) { cc.enabled = false; frozenCtl.Add(cc); names.Add(cc.GetType().Name); }
+                Axles ax = c.T != null ? c.T.GetComponent<Axles>() : null;
+                frozenWheels = ax != null ? ax.allWheels : null;
+                Log.Info("mort au volant : commandes de " + c.Key + " coupees (" + string.Join(", ", names.ToArray()) + ")");
                 return;
             }
-            if (frozenAxis != null) frozenAxis.enabled = true;
+            foreach (CarController cc in frozenCtl) if (cc != null) cc.enabled = true;
             if (frozenCar != null) Log.Info("mort au volant : commandes de " + frozenCar.Key + " rendues");
-            frozenAxis = null; frozenCar = null;
+            frozenCtl.Clear(); frozenWheels = null; frozenCar = null;
+        }
+
+        static void HoldFrozen()
+        {
+            if (frozenCar.Dt != null) frozenCar.Dt.throttle = 0f;
+            if (frozenWheels != null)
+                foreach (Wheel w in frozenWheels) if (w != null) { w.brake = 1f; w.handbrake = 1f; }
         }
 
         public static bool ExitLocal()
