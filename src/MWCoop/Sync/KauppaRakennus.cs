@@ -390,11 +390,11 @@ namespace MWCoop
 
             // perron et marches devant la porte
             float deck0 = -5.1f, deck1 = -2.7f, dz = D2 + 1.3f;
-            Box(new Vector3(deck0, -frontDrop - 0.3f, D2), new Vector3(deck1, -0.03f, dz), "terassi");
+            Box(new Vector3(deck0, -frontDrop - 1.0f, D2), new Vector3(deck1, -0.03f, dz), "terassi");
             int steps = Mathf.Max(0, Mathf.CeilToInt((frontDrop - 0.05f) / 0.19f));
             float rise = steps > 0 ? (frontDrop - 0.03f) / (steps + 0.0001f) : 0;
             for (int k = 1; k <= steps; k++)
-                Box(new Vector3(deck0, -frontDrop - 0.3f, dz + (k - 1) * 0.32f), new Vector3(deck1, -0.03f - k * rise, dz + k * 0.32f), "terassi");
+                Box(new Vector3(deck0, -frontDrop - 1.0f, dz + (k - 1) * 0.32f), new Vector3(deck1, -0.03f - k * rise, dz + k * 0.32f), "terassi");
 
             // tapis, ryijy, affiches (materiaux du jeu sur des plans), puis meubles et etageres garnies
             FlatDeco();
