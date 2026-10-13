@@ -302,7 +302,7 @@ static bool PageSnap(int p) { return p == TAB_SKIN || p == TAB_CAR || p == TAB_C
 static bool PageEnabled(int p)
 {
     if (g_state != ST_IDLE) return false;
-    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI;
+    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
 }
@@ -320,6 +320,8 @@ static void GoPage(int p)
     g_focus = -1; g_optHot = -1; g_lobbyOpts = false;
     if (p == TAB_NOTES) NotesMarkSeen();
     if (p == TAB_LOGS) { LogsScan(); CrashSeen(); }
+    if (p == TAB_VHS) { g_vhsEdit = -1; VhsScan(); }
+    if (p == TAB_ALBUM) AlbScan();
     if (p == TAB_MODS || p == TAB_CONTENT) MscScan();
     if (p == TAB_SKIN) g_skinIdleT = GetTickCount();
     if (p == TAB_GFX) GfxLoad();
@@ -344,25 +346,27 @@ static const NavItem kNav[] = {
     { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" },
     { TAB_SKIN, IC_SHIRT, L"Tenue", L"Outfit" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" },
     { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
-    { TAB_GFX, IC_SLIDERS, L"Options du jeu", L"Game options" }, { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" },
+    { TAB_GFX, IC_SLIDERS, L"Options du jeu", L"Game options" },
+    { TAB_VHS, IC_FILM, L"VHS", L"VHS" }, { TAB_ALBUM, IC_IMAGE, L"Album", L"Album" },   // (MEDIA : media.inc, demande de JD, 13/10)
+    { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" },
     { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" } };   // (guide des joueurs, wiki.inc)
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
-static const int kNavGroupN[] = { 2, 2, 2, 1, 2 };   // pages de chaque groupe, dans l'ordre de kNav
-static const int kNavGroups = 5;
-static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"JEU", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"GAME", L"INFO" };
+static const int kNavGroupN[] = { 2, 2, 2, 1, 2, 2 };   // pages de chaque groupe, dans l'ordre de kNav
+static const int kNavGroups = 6;
+static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"JEU", L"MÉDIA", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"GAME", L"MEDIA", L"INFO" };
 static Bitmap *g_logo;
 // Groupes pliables (demande de JD, 10/10) : MON PERSONNAGE, PARTAGE, JEU (pas JOUER ni INFOS). Plies : [Lanceur] RailPlie
 // (numeros de groupe). La page ouverte reste montree meme dans un groupe plie ; tout est deplie pendant la visite guidee.
 static bool TutoActive();   // (tuto.inc)
 static int g_railFold = -1;   // bits des groupes plies (-1 : pas encore lu)
-static bool RailFoldable(int k) { return k >= 1 && k <= 3; }
+static bool RailFoldable(int k) { return k >= 1 && k <= 4; }   // (MEDIA aussi)
 static bool RailFolded(int k)
 {
     if (g_railFold < 0) {
         g_railFold = 0;
         wchar_t b[32] = {};
         GetPrivateProfileStringW(L"Lanceur", L"RailPlie", L"", b, 32, g_iniLauncher.c_str());
-        for (int i = 1; i <= 3; i++) if (wcschr(b, L'0' + i)) g_railFold |= 1 << i;
+        for (int i = 1; i <= 4; i++) if (wcschr(b, L'0' + i)) g_railFold |= 1 << i;
     }
     return RailFoldable(k) && (g_railFold & (1 << k)) != 0 && !TutoActive();
 }
@@ -372,7 +376,7 @@ static void RailToggle(int k)
     RailFolded(k);
     g_railFold ^= 1 << k;
     std::wstring s;
-    for (int i = 1; i <= 3; i++) if (g_railFold & (1 << i)) s += (wchar_t)(L'0' + i);
+    for (int i = 1; i <= 4; i++) if (g_railFold & (1 << i)) s += (wchar_t)(L'0' + i);
     WritePrivateProfileStringW(L"Lanceur", L"RailPlie", s.empty() ? NULL : s.c_str(), g_iniLauncher.c_str());
 }
 static int MscModCount();   // (mods.inc)
@@ -452,6 +456,8 @@ static void DrawRail(Graphics &g)
     float avail = 666 - y0, lab = 26, step = 46;
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 24; step = 42; }
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 22; step = 40; }   // (bouton de mise a jour + 9 pages)
+    if (avail - kNavGroups * lab - nItems * step < 6) { lab = 20; step = 37; }   // (11 pages depuis MEDIA)
+    if (avail - kNavGroups * lab - nItems * step < 6) { lab = 18; step = 34; }
     float gap = min(20.0f, max(0.0f, (avail - kNavGroups * lab - nItems * step) / (kNavGroups - 1))), y = y0;
     for (int k = 0, i = 0; k < kNavGroups; k++) {
         SmallLabel(g, g_fr ? kNavGroupFr[k] : kNavGroupEn[k], RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
@@ -584,6 +590,8 @@ static void DrawHeader(Graphics &g)
     case TAB_GFX: title = T(L"Options du jeu", L"Game options"); sub = T(L"Graphismes et coop, pour toi seul · en partie : menu F10 > Graphismes", L"Graphics and co-op, just for you · in game: F10 menu > Graphics"); break;
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
+    case TAB_VHS: title = T(L"Cassettes VHS", L"VHS tapes"); sub = T(L"Renommer, effacer, y mettre une vidéo · jeu fermé", L"Rename, erase, put a video on them · game closed"); break;
+    case TAB_ALBUM: title = T(L"Album", L"Album"); sub = T(L"Les photos du drone (F8 en jeu)", L"Drone photos (F8 in game)"); break;
     case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Tout pour jouer sans souci : installation, salons, mods, réglages, solutions", L"Everything to play trouble-free: install, lobbies, mods, settings, fixes"); break;
     }
     // commandes de droite : fermer, reduire, theme, langue, puis celles de la page
@@ -1406,6 +1414,8 @@ static void DrawUI(Graphics &g)
     case TAB_GFX: DrawGfxPage(g); break;
     case TAB_CREDITS: DrawCreditsPage(g); break;
     case TAB_WIKI: DrawWikiPage(g); break;
+    case TAB_VHS: DrawVhs(g); break;
+    case TAB_ALBUM: DrawAlbum(g); break;
     default: DrawHome(g); break;
     }
     DrawHeader(g);
@@ -1514,6 +1524,8 @@ static bool UiClick(int id)
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
+    if (id >= UI_VHS_OPEN && id < UI_ALB_OPEN) { VhsClick(id); return true; }   // (media.inc)
+    if (id >= UI_ALB_OPEN && id < UI_ALB + 4000) { AlbClick(id); return true; }
     if (id == UI_LOG_CLEAR) {   // second clic dans les 4 s : les parties rangees a la corbeille
         if (g_logDelKey == L"**" && GetTickCount() - g_logDelT < 4000) { g_logDelKey.clear(); LogsDeleteAll(); }
         else { g_logDelKey = L"**"; g_logDelT = GetTickCount(); SetStatus(K_WARN, T(L"Clique encore pour mettre toutes les parties rangées à la corbeille", L"Click again to move every stored session to the Recycle Bin")); }

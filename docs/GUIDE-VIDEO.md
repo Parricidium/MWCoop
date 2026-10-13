@@ -114,6 +114,13 @@ Look at a tape (set down) or hold it, and **hold R** for a second: the **tape ed
 
 Trimming, erasing and the title change the tape for everybody; the export is only on your PC. Settings in `mwcoop.ini`, section `[Boutique]`: `DossierVideos=` (export folder), `ExportEchelle=3` (picture size ×1 to ×6), `ExportLogo=0` (no logo).
 
+### 9. From the launcher: MEDIA > VHS and Album
+
+In the launcher, the **MEDIA** group has two pages:
+
+- **VHS**: every tape of your game (the one you host or play alone), including those inside a VCR or a camcorder, with their takes and length. **Rename**, **Erase** (click twice) or **Video…**: pick a video on your PC, it's converted and added after the takes. The game must be closed (it rewrites the tape list while running).
+- **Album**: your drone photos (F8) as thumbnails. Click one to see it big, then **Open**, **Show in folder** or **Delete** (goes to the Recycle Bin, click twice).
+
 ### Settings
 
 In `MWCoop\mwcoop.ini`:
@@ -232,6 +239,13 @@ Vise une cassette (posée) ou tiens-la en main, et **tiens R** une seconde : le 
 - **EXPORTER EN .MP4** : écrit la sélection en vrai fichier vidéo (H.264 avec le son, image ×3, logo de MWCoop en haut à gauche) dans le dossier choisi — par défaut `Vidéos\CoopVideos`. **CHANGER** ouvre le choix de dossier de Windows, **OUVRIR** ouvre le dossier.
 
 Rogner, effacer et le titre changent la cassette pour tout le monde ; l'export ne concerne que ton PC. Réglages dans `mwcoop.ini`, section `[Boutique]` : `DossierVideos=` (dossier d'export), `ExportEchelle=3` (taille de l'image, ×1 à ×6), `ExportLogo=0` (sans logo).
+
+### 9. Depuis le lanceur : MÉDIA > VHS et Album
+
+Dans le lanceur, le groupe **MÉDIA** a deux pages :
+
+- **VHS** : toutes les cassettes de ta partie (celle que tu héberges ou joues seul), y compris celles qui sont dans un magnétoscope ou un caméscope, avec leurs prises et leur durée. **Renommer**, **Effacer** (deux clics) ou **Vidéo…** : choisis une vidéo de ton PC, elle est convertie et ajoutée à la suite des prises. Le jeu doit être fermé (il réécrit la liste des cassettes pendant qu'il tourne).
+- **Album** : tes photos du drone (F8) en vignettes. Clique sur une photo pour la voir en grand, puis **Ouvrir**, **Afficher dans le dossier** ou **Supprimer** (vers la Corbeille, deux clics).
 
 ### Réglages
 
