@@ -238,6 +238,7 @@ namespace MWCoop
         {
             if (Session.IsHost) return;   // (seul l'hote decide)
             string key = r.Str();
+            if (key == TeimoSled.Key) { TeimoSled.OnMessage(r); return; }   // (luge de Teimo : sur ce canal, inconnue des anciennes versions)
             int n = r.U8();
             Ev e;
             if (!byKey.TryGetValue(key, out e) || e.T.Count != n) return;   // (pas encore releve ici : au prochain envoi complet)
