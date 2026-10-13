@@ -38,7 +38,7 @@ namespace MWCoop
             root = null; door = null; doorAngle = 0f; built = false; vendor = null; looked = null; testCam = null;
             gameMats = null; byName = null; guiText = null; guiUse = null; guiBuy = null; money = null; guiSub = null;
             basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
-            lippu = null; lippuBackMesh = null;
+            lippu = null; lippuBackMesh = null; ResetMuseo();
             pussit.Clear(); pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
             offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
@@ -55,6 +55,7 @@ namespace MWCoop
                 built = true;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 try { Build(); } catch (Exception e) { L("construction : " + e); }
+                try { BuildMuseo(); } catch (Exception e) { L("musee : " + e); }
                 L("construite en " + sw.ElapsedMilliseconds + " ms");
                 t0 = now;
                 LoadScript();
@@ -62,6 +63,7 @@ namespace MWCoop
                 gameMats = null; byName = null;   // (index liberes)
                 return;
             }
+            TickMuseo();
             if (root == null) return;
             TickDoor();
             Interact();
@@ -489,6 +491,7 @@ namespace MWCoop
                         case "argent": if (money != null) money.Value = F(a[2]); L("essai : argent " + a[2]); break;
                         case "tex": DumpTex(string.Join(" ", a, 2, a.Length - 2)); break;
                         case "lippu": LippuState(); break;
+                        case "museo": forceMuseoDoor = a.Length > 2 && a[2] == "auki"; L("essai : portes du musee " + (forceMuseoDoor ? "ouvertes" : "libres")); break;
                         case "ota": { Offer o = a.Length > 2 ? offers.Find(x => x.Item == a[2]) : (offers.Count > 0 ? offers[0] : null); if (o != null) Take(o); break; }
                         case "nauhuri": TestVcr(); break;
                         case "kamera": TestKamera(a.Length < 3 || a[2] != "0"); break;
