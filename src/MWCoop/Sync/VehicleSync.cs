@@ -77,6 +77,7 @@ namespace MWCoop
             public Dictionary<Rigidbody, RigidbodyInterpolation> InterpWas;   // copie : interpolation de la voiture et de ses pieces
             public bool Framewise;              // copie ou le joueur local est passager : deplacee a chaque image (Ride)
             public float SettleUntil;           // reprise d'une copie (voiture redevenue physique ici) : bridee jusque-la
+            public float CalmUntil;             // piece montee ou demontee (ici ou chez un autre) : garee, tenue calme jusque-la
             public Vector3 SettleVel, SettleAng;
             public Dictionary<Joint, Vector2> JointsLater;   // attaches rendues cassables a SettleUntil seulement
             public float NextLog;
@@ -796,6 +797,13 @@ namespace MWCoop
             {
                 if (c.Body == null || c.Kinematic || !c.Body.gameObject.activeInHierarchy) continue;
                 if (!gesture && (c.Body.velocity.sqrMagnitude < 0.16f || c.RemoteBy >= 0)) continue;   // (sans geste : seulement ce qui bouge, a personne)
+                // pas un geste : sursaut de la physique (piece qui vient d'etre montee, ou elan qu'aucune main ne donne)
+                if (now < c.CalmUntil) continue;
+                if (!gesture && c.Body.velocity.sqrMagnitude > 64f)
+                {
+                    if (now - pushSkipLog > 10f) { pushSkipLog = now; Log.Info("poussee : " + c.Key + " a " + c.Body.velocity.magnitude.ToString("F0") + " m/s sans geste : sursaut, pas prise"); }
+                    continue;
+                }
                 float d = (c.Body.ClosestPointOnBounds(p) - p).sqrMagnitude;
                 if (d < bd) { bd = d; best = c; }
             }
@@ -1203,6 +1211,35 @@ namespace MWCoop
             foreach (Car c in cars)
                 if (c.Body != null && c.Kinematic && c.Body.gameObject.activeInHierarchy && !c.Framewise) Follow(c);
                 else if (c.Body != null && !c.Kinematic && c.SettleUntil > 0f) Settle(c);
+            foreach (Car c in cars)
+                if (c.CalmUntil > 0f && c.Body != null && !c.Kinematic) Calm(c);
+        }
+
+        // Montage ou demontage d'une piece sur une voiture (Parts, ici ou recu) : pendant 1,5 s, si personne ne la conduit,
+        // elle ne prend pas d'elan. Une voiture qu'on visse ne roule pas ; un elan a cet instant est un sursaut de la
+        // physique (piece qui s'emboite dans la carrosserie) : avant, il la lancait a 257 km/h, et la poussee d'ici le
+        // prenait pour un geste et l'envoyait aux autres (hote ecrase, pieces arrachees ; .nolly et witefold, 12-13/10).
+        public static void CalmAfterPart(string partKey)
+        {
+            if (string.IsNullOrEmpty(partKey)) return;
+            int s = partKey.IndexOf('/');
+            string root = s < 0 ? partKey : partKey.Substring(0, s);
+            float now = Time.realtimeSinceStartup;
+            foreach (Car c in cars)
+                if (c.Body != null && (c.Key == root || c.T != null && c.T.root.name == root)) c.CalmUntil = now + 1.5f;
+        }
+
+        static int calmLogs;
+        static void Calm(Car c)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now >= c.CalmUntil) { c.CalmUntil = 0f; return; }
+            if (c.Body.isKinematic || c.Index == LocalDriving || c.RemoteDriver >= 0) return;   // (conduite : rien a brider)
+            Vector3 v = c.Body.velocity, w = c.Body.angularVelocity;
+            bool clamped = false;
+            if (v.magnitude > 1.5f) { c.Body.velocity = v.normalized * 1.5f; clamped = true; }
+            if (w.magnitude > 1f) { c.Body.angularVelocity = w.normalized * 1f; clamped = true; }
+            if (clamped && calmLogs++ < 20) Log.Info("voiture " + c.Key + " : sursaut au montage d'une piece, elan bride (" + v.magnitude.ToString("F1") + " m/s, " + w.magnitude.ToString("F1") + " rad/s)");
         }
 
         // Voiture tout juste reprise (voir SetKinematic) : vitesse verticale et rotation bridees ; puis attaches rendues.

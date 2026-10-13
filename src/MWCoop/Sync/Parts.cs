@@ -413,8 +413,14 @@ namespace MWCoop
             PlayMakerFSM data = Game.FsmOn(part, "Data");
             FsmInt aid = data != null ? data.FsmVariables.FindFsmInt("AssemblyID") : null;
             Log.Info((install ? "montage : " : "demontage : ") + id + " sur " + p.Key);
+            VehicleSync.CalmAfterPart(p.Key);   // (sursaut de la physique au montage : la voiture garee ne s'envole pas)
+            // + pose dans le repere du point de montage : chez l'autre, la piece est posee la ou elle est par rapport a SA
+            // voiture (posee a la pose du monde d'ici, elle entrait dans la carrosserie d'une copie a peine decalee, et la
+            // voiture etait ejectee -- .nolly, 13/10 : siege conducteur pose par l'hote, CORRIS a 257 km/h chez l'invite)
+            Transform pt = p.Fsm.transform;
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(install).Str(p.Key).Str(id).I32(aid != null ? aid.Value : 0)
-                .Vec(part.transform.position).Quat(part.transform.rotation), true);
+                .Vec(part.transform.position).Quat(part.transform.rotation)
+                .Vec(pt.InverseTransformPoint(part.transform.position)).Quat(Quaternion.Inverse(pt.rotation) * part.transform.rotation), true);
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -426,8 +432,15 @@ namespace MWCoop
             int aid = r.I32();
             Vector3 pos = r.Vec();
             Quaternion rot = r.Quat();
+            bool rel = r.More;
+            Vector3 lpos = rel ? r.Vec() : Vector3.zero;
+            Quaternion lrot = rel ? r.Quat() : Quaternion.identity;
             if (Session.IsHost)
-                Session.Broadcast(new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).I32(aid).Vec(pos).Quat(rot), true, who);
+            {
+                var bw = new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).I32(aid).Vec(pos).Quat(rot);
+                if (rel) bw.Vec(lpos).Quat(lrot);
+                Session.Broadcast(bw, true, who);
+            }
             Point p;
             if (!points.TryGetValue(key, out p) || p.Fsm == null) { Scan(); points.TryGetValue(key, out p); }
             GameObject part = FindByIdCached(id);
@@ -437,6 +450,7 @@ namespace MWCoop
             bool isIn = Holds(p.Fsm, part);
             if (install == isIn) { Log.Info("piece " + id + " deja " + (isIn ? "montee" : "demontee")); return; }
             p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value = part;
+            VehicleSync.CalmAfterPart(key);
             Trace.Watch(p.Fsm, "point " + key, 8f);
             Trace.Watch(data, "piece " + id, 8f);
             applying = true; Replay.Depth++;
@@ -446,9 +460,10 @@ namespace MWCoop
                 {
                     FsmInt a = data.FsmVariables.FindFsmInt("AssemblyID");
                     if (a != null) a.Value = aid;
-                    // La piece exactement ou le joueur l'a posee (le jeu la fixe la ou elle est).
-                    part.transform.position = pos;
-                    part.transform.rotation = rot;
+                    // La piece exactement ou le joueur l'a posee (le jeu la fixe la ou elle est) -- par rapport au point de
+                    // montage d'ici quand l'envoi le donne (voiture d'ici un peu ailleurs que celle de l'autre).
+                    if (rel) { Transform pt = p.Fsm.transform; part.transform.position = pt.TransformPoint(lpos); part.transform.rotation = pt.rotation * lrot; }
+                    else { part.transform.position = pos; part.transform.rotation = rot; }
                     data.SendEvent("INSTALL");
                     Game.SetState(p.Fsm, "Install 2");
                 }
