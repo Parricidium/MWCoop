@@ -14,9 +14,11 @@ namespace MWCoop
     public static class Clearing
     {
         // terrain (x, z du monde), trace par JD sur la vue du carrefour, un peu elargi
+        // (au nord : jusqu'au bord de la petite route, pour qu'aucun arbre ne reste devant les facades)
         public static readonly Vector2[] Plot = {
-            new Vector2(-1612f, 1103f), new Vector2(-1613f, 1075f), new Vector2(-1582f, 1059f), new Vector2(-1537f, 1050f),
-            new Vector2(-1514f, 1081f), new Vector2(-1550f, 1087f), new Vector2(-1604f, 1104f) };
+            new Vector2(-1613f, 1075f), new Vector2(-1582f, 1059f), new Vector2(-1537f, 1050f), new Vector2(-1514f, 1081f),
+            new Vector2(-1530f, 1091.5f), new Vector2(-1540f, 1089.5f), new Vector2(-1550f, 1089.5f), new Vector2(-1560f, 1092.5f),
+            new Vector2(-1570f, 1097.5f), new Vector2(-1580f, 1101.5f), new Vector2(-1590f, 1106.5f), new Vector2(-1600f, 1111.5f), new Vector2(-1612f, 1108f) };
         static readonly string[] Visual = { "TREES1", "TREES2", "TREES_MEDIUM1", "TREES_MEDIUM2", "TREES_MEDIUM3", "TREES_SMALL1", "TREES_SMALL2", "TREES_SMALL3", "TREES_SMALL4" };
         static readonly string[] Colls = { "TREES1_COLL", "TREES2_COLL", "TREES3_COLL" };
         static bool done;
@@ -52,6 +54,7 @@ namespace MWCoop
                 colls += k;
             }
             Log.Info("defrichage : " + trees + " arbre(s) et buisson(s), " + colls + " tronc(s) retires du terrain du coin s21 (" + sw.ElapsedMilliseconds + " ms)");
+            Terrace();
             MuseumMockup();
             Parking();
             Probe();
@@ -158,6 +161,70 @@ namespace MWCoop
                 }
                 Log.Info(sb.ToString());
             }
+        }
+
+        // [Boutique] Tasanne=x,z,cap,demi-largeur,demi-profondeur;... : plateformes de terrassement. Le sol du jeu (maillages
+        // MAP/MESH/TERRAIN_OBJ/Grass, rendu et collision) est mis a plat sous chaque emprise, a la hauteur du sol au milieu de la
+        // facade (cote route, +z local), plat 4 m autour, puis raccord en pente douce sur 12 m. Le talus de la grande route montait de
+        // 2,5 m sous la boutique : plancher perche, grand escalier.
+        static void Terrace()
+        {
+            string s = Config.Get("Boutique", "Tasanne", "");
+            if (s.Length == 0) return;
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var pads = new List<float[]>();
+            foreach (string one in s.Split(';'))
+            {
+                string[] a = one.Split(',');
+                if (a.Length < 5) continue;
+                float x = float.Parse(a[0], ci), z = float.Parse(a[1], ci), yaw = float.Parse(a[2], ci), hw = float.Parse(a[3], ci), hd = float.Parse(a[4], ci);
+                Quaternion r = Quaternion.Euler(0, yaw, 0);
+                Vector3 front = new Vector3(x, 0, z) + r * new Vector3(0, 0, hd + 1f);
+                float h = Ground(front.x, front.z);
+                pads.Add(new[] { x, z, yaw, hw, hd, h });
+                Log.Info("defrichage : plateforme en " + x + ", " + z + " a " + h.ToString("F2") + " m");
+            }
+            GameObject terr = GameObject.Find("MAP/MESH/TERRAIN_OBJ");
+            if (terr == null || pads.Count == 0) return;
+            const float Blend = 12f, Flat = 4f;   // (sol du jeu grossier : un sommet tous les 5 a 10 m)
+            int moved = 0;
+            foreach (Transform t in terr.transform)
+            {
+                if (t.name != "Grass") continue;
+                MeshFilter mf = t.GetComponent<MeshFilter>(); MeshCollider mc = t.GetComponent<MeshCollider>();
+                Mesh m = mf != null ? mf.sharedMesh : null;
+                if (m == null) continue;
+                Vector3[] v;
+                try { v = m.vertices; } catch { continue; }
+                Matrix4x4 l2w = t.localToWorldMatrix, w2l = t.worldToLocalMatrix;
+                Vector3[] nr = m.normals;
+                Vector3 up = t.InverseTransformDirection(Vector3.up).normalized;
+                int n = 0;
+                for (int i = 0; i < v.Length; i++)
+                {
+                    Vector3 w = l2w.MultiplyPoint3x4(v[i]);
+                    float best = 0f, target = 0f;
+                    foreach (float[] p in pads)
+                    {
+                        Vector3 loc = Quaternion.Inverse(Quaternion.Euler(0, p[2], 0)) * new Vector3(w.x - p[0], 0, w.z - p[1]);
+                        float dx = Mathf.Max(0f, Mathf.Abs(loc.x) - p[3] - Flat), dz = Mathf.Max(0f, Mathf.Abs(loc.z) - p[4] - Flat);
+                        float d = Mathf.Sqrt(dx * dx + dz * dz);
+                        if (d >= Blend) continue;
+                        float k = 1f - Mathf.SmoothStep(0f, 1f, d / Blend);
+                        if (k > best) { best = k; target = p[5]; }
+                    }
+                    if (best <= 0f) continue;
+                    w.y = Mathf.Lerp(w.y, target, best);
+                    v[i] = w2l.MultiplyPoint3x4(w); n++;
+                    if (nr != null && i < nr.Length) nr[i] = Vector3.Slerp(nr[i], up, best);   // (normales d'origine ailleurs : rien ne change sur le reste de la carte)
+                }
+                if (n == 0) continue;
+                m.vertices = v; if (nr != null && nr.Length == v.Length) m.normals = nr; m.RecalculateBounds();
+                if (mc != null) { mc.sharedMesh = null; mc.sharedMesh = m; }
+                moved += n;
+                Log.Info("defrichage : sol " + t.name + " (" + v.Length + " sommets) : " + n + " sommet(s) nivele(s)");
+            }
+            Log.Info("defrichage : terrassement, " + moved + " sommet(s) du sol deplaces");
         }
 
         // [Boutique] MuseoEssai=x,z,cap,largeur,profondeur,hauteur : volume d'essai du musee (rouge de Falun, toit gris), pour juger
