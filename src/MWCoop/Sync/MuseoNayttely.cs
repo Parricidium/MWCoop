@@ -104,7 +104,7 @@ namespace MWCoop
             }
             MuseoRelief();
             MuseoStatue("patsas-napoleon", -2.15f, -3.7f, 18f, 1.0f);
-            MuseoStatue("patsas-paoli", 2.15f, -3.7f, -18f, 1.0f);
+            MuseoStatue("patsas-paoli", 2.15f, -3.7f, -18f, 1.1f);
             L("musee : " + n + " piece(s) exposee(s)" + (missing > 0 ? ", " + missing + " image(s) absente(s)" : ""));
         }
 
