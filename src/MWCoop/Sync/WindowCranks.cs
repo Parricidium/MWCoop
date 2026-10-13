@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -31,8 +31,10 @@ namespace MWCoop
             public Vector3 LastP = new Vector3(1e9f, 0, 0); public Quaternion LastQ;
         }
         static readonly System.Collections.Generic.List<Mirror> mirrors = new System.Collections.Generic.List<Mirror>();
+        class Follow { public Transform Src, Dst; public Quaternion SrcRest, DstRest; }
+        static readonly System.Collections.Generic.List<Follow> followers = new System.Collections.Generic.List<Follow>();
 
-        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); wins.Clear(); nextWinScan = 0f; }
+        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); followers.Clear(); wins.Clear(); nextWinScan = 0f; }
 
         public static void Update()
         {
@@ -95,8 +97,17 @@ namespace MWCoop
                 var c = (GameObject)Object.Instantiate(src.gameObject);
                 c.name = "opener MWCoop";
                 c.transform.SetParent(frontR, false);
-                // A la place de la manivelle dessinee (cachee), sinon en miroir de celle du conducteur.
-                if (drawn != null) { c.transform.position = drawn.position; c.transform.rotation = drawn.rotation; drawn.gameObject.SetActive(false); }
+                // A la place de la manivelle dessinee, sinon en miroir de celle du conducteur. La manivelle dessinee (le modele du
+                // jeu, tourne vers l'habitacle) reste visible et la copie invisible (clic et automate seulement) : le modele du
+                // conducteur pose de ce cote montrait son envers, tourne vers la portiere (retour de JD, 13/10). La manivelle
+                // dessinee tourne comme le pivot de la copie (Follow).
+                if (drawn != null)
+                {
+                    c.transform.position = drawn.position; c.transform.rotation = drawn.rotation;
+                    foreach (Renderer rr in c.GetComponentsInChildren<Renderer>(true)) rr.enabled = false;
+                    Transform cp = c.transform.Find("Pivot") ?? c.transform, dp = drawn.Find("Pivot") ?? drawn;
+                    followers.Add(new Follow { Src = cp, Dst = dp, SrcRest = cp.localRotation, DstRest = dp.localRotation });
+                }
                 else { Vector3 lp = src.localPosition; c.transform.localPosition = new Vector3(-lp.x, lp.y, lp.z); c.transform.localRotation = src.localRotation; }
                 Transform handle = c.transform.Find("Pivot");
                 Transform glassL = null;
@@ -123,6 +134,7 @@ namespace MWCoop
         // Vitres de droite : etalonnage (une fois, les deux portieres fermees), puis le mouvement du temoin en miroir.
         static void Drive()
         {
+            foreach (Follow fo in followers) if (fo.Src != null && fo.Dst != null) fo.Dst.localRotation = fo.DstRest * (Quaternion.Inverse(fo.SrcRest) * fo.Src.localRotation);
             for (int i = mirrors.Count - 1; i >= 0; i--)
             {
                 Mirror m = mirrors[i];
@@ -150,6 +162,7 @@ namespace MWCoop
                 if (y.sqrMagnitude > 1e-8f && z.sqrMagnitude > 1e-8f) m.GlassR.localRotation = Quaternion.LookRotation(z, y);
             }
         }
+
 
         // Portiere (charniere) qui porte cette vitre.
         static Transform DoorOf(Transform t) { for (; t != null; t = t.parent) if (t.GetComponent<HingeJoint>() != null) return t; return null; }
