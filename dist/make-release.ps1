@@ -1,6 +1,7 @@
 # Compile MWCoop puis assemble dist\out\MWCoop-<version>.zip (sans aucune donnee du jeu).
 # -Publier : cree la release v<Version> sur GitHub (Parricidium/MWCoop) avec le zip. -Notes : texte de la
-# release (puces en francais, une ligne ---, les memes puces en anglais : le lanceur les affiche).
+# release (puces en francais, une ligne ---, les memes puces en anglais, une ligne ---, les memes en russe : le lanceur
+# les affiche dans sa langue ; l'annonce Discord prend l'anglais et le russe -- demande de JD, 13/10).
 # -AFaire : seulement quand les joueurs ont une manipulation a faire apres le correctif (meme format : francais, ---,
 # anglais ; une ligne par consigne). Mis en tete des notes ("A faire : ..." / "To do: ...") et en encadre
 # "What you need to do" dans l'annonce Discord.
@@ -53,13 +54,18 @@ if ($Publier) {
     $AFaire = $AFaire -replace '[ \t]+---+[ \t]+', "`n---`n"
     $todoEn = ''
     if ($AFaire.Trim()) {
+        # (parties : francais, anglais, russe ; une partie absente prend l'anglais)
         $tp = @($AFaire -split '(?m)^\s*---+\s*$')
         $np = @($Notes -split '(?m)^\s*---+\s*$')
+        $tEn = if ($tp.Count -ge 2) { $tp[1] } else { $tp[0] }; $tRu = if ($tp.Count -ge 3) { $tp[2] } else { $tEn }
         $lines = { param($t, $pre) (@($t -split "`r?`n" | ForEach-Object { $_.Trim() -replace '^- *', '' } | Where-Object { $_ }) | ForEach-Object { "- $pre$_" }) -join "`n" }
         $fr = & $lines $tp[0] ("$([char]0xC0) faire : ")
-        $todoEn = (@($tp[-1] -split "`r?`n" | ForEach-Object { $_.Trim() -replace '^- *', '' } | Where-Object { $_ }) | ForEach-Object { "- $_" }) -join "`n"
-        $en = & $lines $tp[-1] 'To do: '
-        if ($np.Count -ge 2) { $Notes = "$fr`n$($np[0].Trim())`n---`n$en`n$($np[-1].Trim())" } else { $Notes = "$fr`n$en`n$($Notes.Trim())" }
+        $todoEn = (@($tEn -split "`r?`n" | ForEach-Object { $_.Trim() -replace '^- *', '' } | Where-Object { $_ }) | ForEach-Object { "- $_" }) -join "`n"
+        $todoRu = (@($tRu -split "`r?`n" | ForEach-Object { $_.Trim() -replace '^- *', '' } | Where-Object { $_ }) | ForEach-Object { "- $_" }) -join "`n"
+        $en = & $lines $tEn 'To do: '
+        $ru = & $lines $tRu ("$([char]0x041D)$([char]0x0443)$([char]0x0436)$([char]0x043D)$([char]0x043E): ")
+        if ($np.Count -ge 3) { $Notes = "$fr`n$($np[0].Trim())`n---`n$en`n$($np[1].Trim())`n---`n$ru`n$($np[2].Trim())" }
+        elseif ($np.Count -ge 2) { $Notes = "$fr`n$($np[0].Trim())`n---`n$en`n$($np[1].Trim())" } else { $Notes = "$fr`n$en`n$($Notes.Trim())" }
     }
     $nf = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($nf, $Notes, (New-Object System.Text.UTF8Encoding $false))
@@ -74,22 +80,33 @@ if ($Publier) {
     $url = "https://github.com/Parricidium/MWCoop/releases/tag/v$Version"
     "Publie : $url"
     # Annonce Discord (#announcements) si dist\discord-webhook.txt existe (hors depot, ecrit par
-    # MWCoopDiscord\setup_server.py) : ligne 1 = webhook, ligne 2 = role Update Pings. Partie anglaise des notes.
+    # MWCoopDiscord\setup_server.py) : ligne 1 = webhook, ligne 2 = role Update Pings. Parties anglaise et russe des notes.
     $wf = "$PSScriptRoot\discord-webhook.txt"
     if (Test-Path $wf) {
         try {
             $w = @(Get-Content $wf -Encoding UTF8 | Where-Object { $_.Trim() })
-            $en = ($Notes -split '(?m)^\s*---+\s*$')[-1].Trim()
-            if ($todoEn) { $en = (@($en -split "`n") | Where-Object { $_ -notmatch '^- To do: ' }) -join "`n" }   # (dans l'encadre)
-            if ($en.Length -gt 3900) { $en = $en.Substring(0, 3900) + '...' }
+            $parts = @($Notes -split '(?m)^\s*---+\s*$')
+            $en = $(if ($parts.Count -ge 2) { $parts[1] } else { $parts[0] }).Trim()
+            $ruN = $(if ($parts.Count -ge 3) { $parts[2] } else { '' }).Trim()
+            if ($todoEn) {   # (dans l'encadre)
+                $en = (@($en -split "`n") | Where-Object { $_ -notmatch '^- To do: ' }) -join "`n"
+                $ruN = (@($ruN -split "`n") | Where-Object { $_ -notmatch "^- $([char]0x041D)$([char]0x0443)$([char]0x0436)$([char]0x043D)$([char]0x043E): " }) -join "`n"
+            }
+            $desc = $en
+            if ($ruN) { $desc = "$en`n`n**$([char]0x0420)$([char]0x0443)$([char]0x0441)$([char]0x0441)$([char]0x043A)$([char]0x0438)$([char]0x0439)**`n$ruN" }   # (Russkiy)
+            if ($desc.Length -gt 3900) { $desc = $desc.Substring(0, 3900) + '...' }
             $embed = @{
-                title = "MWCoop $Version"; url = $url; color = 7912959; description = $en
+                title = "MWCoop $Version"; url = $url; color = 7912959; description = $desc
                 footer = @{ text = 'Update from the launcher: NEW VERSION - UPDATE' }
             }
             $head = "<@&$($w[1].Trim())> **MWCoop $Version is out!**"
             if ($todoEn) {   # (consignes : encadre a part, et un mot dans le message)
                 if ($todoEn.Length -gt 1000) { $todoEn = $todoEn.Substring(0, 1000) + '...' }
                 $embed.fields = @(@{ name = "$([char]0x26A0)$([char]0xFE0F) What you need to do"; value = $todoEn })
+                if ($ruN -and $todoRu -and $todoRu -ne $todoEn) {
+                    if ($todoRu.Length -gt 1000) { $todoRu = $todoRu.Substring(0, 1000) + '...' }
+                    $embed.fields += @{ name = "$([char]0x26A0)$([char]0xFE0F) $([char]0x0427)$([char]0x0442)$([char]0x043E) $([char]0x043D)$([char]0x0443)$([char]0x0436)$([char]0x043D)$([char]0x043E) $([char]0x0441)$([char]0x0434)$([char]0x0435)$([char]0x043B)$([char]0x0430)$([char]0x0442)$([char]0x044C)"; value = $todoRu }
+                }
                 $head += ' **Action needed after updating: see below.**'
             }
             $users = @()
