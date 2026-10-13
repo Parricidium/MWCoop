@@ -33,6 +33,10 @@ namespace MWCoop
         static bool muted;
         static Transform clouds, cloudObjects;
         static PlayMakerFSM sunColor, sunRotation, weather, forecast, temperature, playerRain;
+        // Aiguilles de l'horloge du soleil (SUN/Clock : 'Time' les tourne chaque seconde depuis la derniere heure pile) : les
+        // montres du jeu les lisent (TimeRotationHour / Minute). Chez un invite arrive en cours d'heure, la minute repartait de
+        // 0 a son arrivee -- montres decalees (Dr.Robi, 11/10). Envoyees avec l'heure (champs facultatifs, en fin).
+        static Transform needleHour, needleMinute;
         static bool found;
         const float SleepScale = 0.5f, NormalScale = 300f;
         const float PassOutWait = 30f;
@@ -161,6 +165,7 @@ namespace MWCoop
             GameObject fc = GameObject.Find("MAP/WEATHER/Forecast");
             sunColor = sun != null ? Game.FsmOn(sun, "Color") : null;
             sunRotation = pivot != null ? Game.FsmOn(pivot, "Rotation") : null;
+            if (sun != null) { needleHour = sun.transform.Find("Clock/hour/NeedleHour"); needleMinute = sun.transform.Find("Clock/minute/NeedleMinute"); }
             if (cl != null)
             {
                 clouds = cl.transform;
@@ -206,6 +211,7 @@ namespace MWCoop
                     .F32(GlobalFloat("AmbientTemperature"))
                     .Bool(forecast != null && forecast.FsmVariables.GetFsmBool("Snowing").Value)
                     .F32(GlobalFloat("GlobalTimeScale"));
+                if (needleHour != null && needleMinute != null) w.F32(needleHour.localEulerAngles.y).F32(needleMinute.localEulerAngles.y);
                 Session.Broadcast(w, false);
             }
         }
@@ -302,6 +308,7 @@ namespace MWCoop
             }
         }
 
+        static int needleLogs;
         public static void OnMessage(Msg type, Peer from, NetReader r)
         {
             // Msg 9 (StartGame, reserve jusqu'ici) : sauvegarde coop des toilettes ; Session passe ici les
@@ -349,6 +356,16 @@ namespace MWCoop
             {
                 FsmFloat rot = sunRotation.FsmVariables.GetFsmFloat("Rotation");
                 if (Mathf.Abs(Mathf.DeltaAngle(rot.Value, sunRot)) > 0.5f) rot.Value = sunRot;
+            }
+            if (r.More)
+            {
+                float hy = r.F32(), my = r.F32();
+                if (needleHour != null && Mathf.Abs(Mathf.DeltaAngle(needleHour.localEulerAngles.y, hy)) > 0.5f) needleHour.localEulerAngles = new Vector3(0f, hy, 0f);
+                if (needleMinute != null && Mathf.Abs(Mathf.DeltaAngle(needleMinute.localEulerAngles.y, my)) > 1f)
+                {
+                    if (needleLogs++ < 3) Log.Info("monde : aiguille des minutes " + needleMinute.localEulerAngles.y.ToString("F0") + " -> " + my.ToString("F0") + " (hote)");
+                    needleMinute.localEulerAngles = new Vector3(0f, my, 0f);
+                }
             }
             if (clouds != null) clouds.position = cloudsPos;
             if (cloudObjects != null) { cloudObjects.position = objPos; cloudObjects.rotation = objRot; }
