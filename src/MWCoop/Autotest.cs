@@ -1288,6 +1288,9 @@ namespace MWCoop
             }
             if (mode == "cbxextra" && Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : cbxextra " + ModCheatbox.TestExtra()); }
             if (mode == "cbxextra" && t > 55f && step2 == 0) { step2 = 1; Log.Info("autotest : cbxextra, ici " + ModCheatbox.TestCount()); }
+            if (mode == "vendeur" && Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + ModCheatbox.TestSeller(0, 0)); }
+            if (mode == "vendeur" && Net.Session.IsHost && t > 46f && step == 1) { step = 2; Log.Info("autotest : " + ModCheatbox.TestSeller(1, Config.GetInt("Test", "VendeurPiece", 0))); }
+            if (mode == "vendeur" && Net.Session.IsHost && t > 52f && step == 2) { step = 3; Log.Info("autotest : " + ModCheatbox.TestSeller(1, Config.GetInt("Test", "VendeurPiece2", 3))); }
             // [Test] Autotest=valise (mod Suitcase installe des deux cotes) : chacun note la valise toutes les 2 s de 30 a 85 s ;
             // l'hote la tient devant lui de 40 a 50 s ; l'invite la fait reapparaitre devant lui a 62 s comme le mod (ancienne
             // detruite, nouvelle a sa place). Attendu : memes poses des deux cotes apres chaque geste.

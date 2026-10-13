@@ -240,8 +240,8 @@ static const WikiBlock kW_Mods[] = {
     { WB_B, L"Les mods de l'hôte sont toujours reçus par ses invités, même en rejoignant une partie en cours : MSCLoader est installé s'il manque (version MWCoop si tu n'as pas l'officiel) et le jeu attend la fin de la réception pour se lancer. Tes propres mods ne sont pas touchés.",
             L"Guests always receive the host's mods, even when joining a game in progress: MSCLoader is installed if missing (MWCoop's version if you don't have the official one) and the game waits until they're received to start. Your own mods are not touched." },
     { WB_WARN, L"L'envoi de mods est expérimental : un mod qui n'est pas prévu pour le multijoueur peut se désynchroniser.", L"Mod sending is experimental: a mod not made for multiplayer can get out of sync." },
-    { WB_TIP, L"Rendus compatibles : Second Machtwagen (achat chez Fleetari, couleurs, plaque et préparation pareils chez tous ; seul l'acheteur paie).",
-              L"Made compatible: Second Machtwagen (purchase at Fleetari, colors, plate and tuning the same for everyone; only the buyer pays)." },
+    { WB_TIP, L"Rendus compatibles : Second Machtwagen (achat chez Fleetari, couleurs, plaque et préparation pareils chez tous ; seul l'acheteur paie), Spare Parts Seller (pièces achetées au vendeur visibles chez tous, même sans le mod).",
+              L"Made compatible: Second Machtwagen (purchase at Fleetari, colors, plate and tuning the same for everyone; only the buyer pays), Spare Parts Seller (parts bought from the seller seen by everyone, even without the mod)." },
 };
 static const WikiBlock kW_Content[] = {
     { WB_P, L"Tes CD, ta radio, tes posters, ta peinture… Ce que tu mets dans ton jeu, tes invités le voient et l'entendent aussi.",

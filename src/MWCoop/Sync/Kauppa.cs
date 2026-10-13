@@ -506,6 +506,54 @@ namespace MWCoop
                         case "rogne": Trim(); L("essai : apres rognage " + mTotal.ToString("F2") + " s, data " + (mTape != null ? mTape.Data : "")); break;
                         case "exporte": Export(); break;
                         case "ferme": CloseMontage(); break;
+                        case "rtenu": testRUntil = now + F(a[2]); break;
+                        case "echap":
+                        {
+                            CloseMontage();
+                            GameObject od = GameObject.Find("Systems/OptionsDB") ?? GameObject.Find("OptionsDB");
+                            PlayMakerFSM om = null;
+                            foreach (PlayMakerFSM pf in UnityEngine.Object.FindObjectsOfType<PlayMakerFSM>()) if (pf.FsmName == "Open Menu") om = pf;
+                            if (om != null) om.SendEvent("MENU");
+                            L("essai : Echap (menu du jeu " + (om != null ? om.ActiveStateName : "?") + ")");
+                            break;
+                        }
+                        case "prendsvhs": { Esine k = esineet.FindLast(e => e.Kind == KVhs); PlayMakerFSM pf = PickUpFsm(); if (k != null && pf != null) { k.Rb.isKinematic = false; if (EyeT != null) k.Go.transform.position = EyeT.position + EyeT.forward * 0.6f; pf.FsmVariables.GetFsmGameObject("PickedObject").Value = k.Go; Game.SetState(pf, "Set pivot 3"); } L("essai : prise de la cassette (" + (pf != null ? pf.ActiveStateName : "pas de main") + "), tenue " + (HeldTape() != null)); break; }
+                        case "focus": testFocus = true; break;
+                        case "photo": Autotest.CaptureSoon(a[2], 0.2f); break;
+                        case "texte": { var tfi = typeof(GUIUtility).GetProperty("textFieldInput", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public); L("essai : keyboardControl " + GUIUtility.keyboardControl + ", textFieldInput " + (tfi != null ? tfi.GetValue(null, null) : "?") + ", eat " + Input.eatKeyPressOnTextFieldFocus); break; }
+                        case "reprend": { FsmBool im = FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu"); if (im != null) im.Value = false; GameObject sy = GameObject.Find("Systems"); Transform omn = sy != null ? sy.transform.Find("OptionsMenu") : null; if (omn != null) omn.gameObject.SetActive(false); L("essai : menu du jeu referme"); break; }
+                        case "camera": { FsmBool im = FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu"); L("essai : Camera.main " + (Camera.main != null ? Camera.main.name : "nul") + ", PlayerInMenu " + (im != null && im.Value) + ", curseur bloque " + Screen.lockCursor); break; }
+                        case "fsms":
+                        {
+                            int sl = a[2].IndexOf('/'); GameObject fg = GameObject.Find(sl < 0 ? a[2] : a[2].Substring(0, sl));
+                            if (fg != null && sl >= 0) { Transform ft = fg.transform.Find(a[2].Substring(sl + 1)); fg = ft != null ? ft.gameObject : null; }
+                            if (fg == null) { L("essai : pas de " + a[2]); break; }
+                            foreach (PlayMakerFSM pf in fg.GetComponentsInChildren<PlayMakerFSM>(true))
+                            {
+                                if (a.Length > 3 && pf.FsmName != string.Join(" ", a, 3, a.Length - 3)) continue;
+                                L("essai : FSM " + pf.gameObject.name + "/'" + pf.FsmName + "' etat " + pf.ActiveStateName + (pf.enabled ? "" : " (coupe)"));
+                                foreach (HutongGames.PlayMaker.FsmState st in pf.FsmStates)
+                                {
+                                    var sb = new System.Text.StringBuilder("essai :    " + st.Name + " :");
+                                    foreach (HutongGames.PlayMaker.FsmTransition tr in st.Transitions) sb.Append(" ").Append(tr.EventName).Append("->").Append(tr.ToState);
+                                    sb.Append(" |");
+                                    foreach (HutongGames.PlayMaker.FsmStateAction ac in st.Actions)
+                                    {
+                                        sb.Append(" ").Append(ac.GetType().Name).Append("(");
+                                        foreach (System.Reflection.FieldInfo fi in ac.GetType().GetFields())
+                                        {
+                                            object v = fi.GetValue(ac);
+                                            string vs = v is HutongGames.PlayMaker.NamedVariable ? ((HutongGames.PlayMaker.NamedVariable)v).Name + "=" + v : v is HutongGames.PlayMaker.FsmEvent ? "evt:" + ((HutongGames.PlayMaker.FsmEvent)v).Name : v is HutongGames.PlayMaker.FsmOwnerDefault ? "owner" : "" + v;
+                                            sb.Append(fi.Name).Append("=").Append(vs).Append(",");
+                                        }
+                                        sb.Append(")");
+                                    }
+                                    L(sb.ToString());
+                                }
+                            }
+                            break;
+                        }
+                        case "cassette": { Transform ey = EyeT; if (ey != null) { Esine tp = esineet.FindLast(e => e.Kind == KVhs); Vector3 at = ey.position + ey.forward * 0.6f; if (tp == null) CreateItem("essaivhs", KVhs, at, Quaternion.identity, a.Length > 2 ? a[2] : "tyhja"); else { tp.Go.transform.SetParent(null, true); tp.Go.transform.position = at; if (a.Length > 2) tp.Data = a[2]; } tp = esineet.FindLast(e => e.Kind == KVhs); if (tp != null && tp.Rb != null) { tp.Rb.isKinematic = true; tp.Rb.velocity = Vector3.zero; } L("essai : cassette devant les yeux " + at.ToString("F2")); } break; }
                         case "kanna": if (pussit.Count > 0 && EyeT != null) { Transform bt = pussit[pussit.Count - 1].Go.transform; pussit[pussit.Count - 1].Rb.isKinematic = true; bt.SetParent(EyeT, true); bt.position = EyeT.position + EyeT.forward * 0.5f; L("essai : sac en main"); } break;
                         case "irti": foreach (Pussi pb in pussit) if (pb.Go != null && pb.Go.transform.parent != null) { pb.Go.transform.SetParent(null, true); pb.Rb.isKinematic = false; L("essai : sac lache"); } break;
                         case "ulosv": { Esine v = esineet.Find(e => e.Kind == KNauhuri && Tape(e).Length > 0); if (v != null) { Eject(v); L("essai : magnetoscope en " + v.Go.transform.position.ToString("F2")); } break; }
