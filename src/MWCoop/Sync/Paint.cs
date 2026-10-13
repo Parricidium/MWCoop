@@ -27,7 +27,11 @@ namespace MWCoop
         static readonly List<string> reapply = new List<string>();
 
         // Releve bientot (colis ouvert : pieces neuves a suivre).
-        public static void ScanSoon() { if (nextScan > 0) nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1.5f); }
+        // (et toutes les 2 s pendant 20 s : l'automate d'une piece neuve n'est pas encore pret au premier releve -- il ne
+        // l'etait qu'au suivant, 45 s plus tard, sa couleur tiree entre-temps ; portieres de colis beige chez l'un, rouge
+        // chez l'autre, .nolly 13/10)
+        public static void ScanSoon() { if (nextScan > 0) { nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1.5f); burstUntil = Time.realtimeSinceStartup + 20f; } }
+        static float burstUntil;
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
         static readonly HashSet<PlayMakerFSM> rejected = new HashSet<PlayMakerFSM>();   // automates Paint sans REPAINT : plus revus
         // Evenement du coup de bombe : REPAINT, ou GLOBALEVENT (-> "Paint type") pour les pieces du moteur (bloc, culasse,
@@ -35,6 +39,7 @@ namespace MWCoop
         static readonly Dictionary<PlayMakerFSM, string> repaintEvent = new Dictionary<PlayMakerFSM, string>();
         static string RepaintOf(PlayMakerFSM f) { string e; return repaintEvent.TryGetValue(f, out e) ? e : "REPAINT"; }
         static float nextScan = -1, loadedAt;
+        static int lateLogs;
         static bool applying;
 
         class Hook : ModHook
@@ -68,7 +73,7 @@ namespace MWCoop
             float now0 = Time.realtimeSinceStartup;
             bool waiting = false;
             foreach (string k in new List<string>(received.Keys)) { if (now0 - received[k].At > 60f) received.Remove(k); else if (!received[k].Done) waiting = true; }
-            nextScan = now0 + (waiting ? 2f : now0 - loadedAt < 120f ? 15f : 45f);
+            nextScan = now0 + (waiting || now0 < burstUntil ? 2f : now0 - loadedAt < 120f ? 15f : 45f);
             int n = 0;
             foreach (Object o in Game.AllFsms())
             {
@@ -95,6 +100,14 @@ namespace MWCoop
                 hooked.Add(f);
                 if (ev != "REPAINT") repaintEvent[f] = ev;
                 n++;
+                // Hote : piece accrochee en cours de partie (colis ouvert, objet apparu) -- sa couleur, deja tiree, fait foi.
+                if (Session.IsHost && Session.Active && Session.RemoteCount > 0 && now0 - loadedAt > 60f)
+                {
+                    var w = new NetWriter(Msg.Paint).U8(Session.LocalId).Str(KeyOf(f));
+                    WriteVars(f, w);
+                    Session.SendAll(w, true);
+                    if (lateLogs++ < 20) Log.Info("peinture : " + KeyOf(f) + " accrochee en cours de partie, sa couleur envoyee (" + Describe(f) + ")");
+                }
             }
             if (n > 0) Log.Info("peinture : " + n + " pieces suivies (" + hooked.Count + " en tout)");
             foreach (KeyValuePair<string, Vars> kv in new List<KeyValuePair<string, Vars>>(received)) if (!kv.Value.Done) Apply(kv.Key, kv.Value, false);
