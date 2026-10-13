@@ -47,6 +47,7 @@ namespace MWCoop
             {
                 Perf.MarkStart();
                 CarVisuals.LateUpdate(); Perf.Mark("[poses volants]");
+                Autotest.PedalTest();
                 HandTools.LateUpdate(); Perf.Mark("[poses outils]");
                 PlayerSync.LateUpdate(); Perf.Mark("[poses avatars]");
                 Machines.LateUpdate(); Perf.Mark("[poses machines]");

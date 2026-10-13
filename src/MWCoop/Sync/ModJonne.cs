@@ -49,7 +49,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); byId.Clear(); loose.Clear(); catalog = null;
+            byKey.Clear(); byId.Clear(); loose.Clear(); catalog = null; nativeSeen.Clear(); nativeKeys.Clear(); nativeLater.Clear(); nativeObjs.Clear(); nativeMachines.Clear(); nextMachines = 0f;
             started = rosterIn = false; seq = 0;
             startAt = Time.realtimeSinceStartup + 25f;   // (apres le chargement du mod : ApplySave de sa sauvegarde)
             rosterAsk = 0f;
@@ -114,6 +114,106 @@ namespace MWCoop
             }
             if (!Session.IsHost && !rosterIn && now >= rosterAsk) { rosterAsk = now + 10f; Head(4).Send(); }
             if (now >= nextScan) { nextScan = now + 0.25f; Scan(now); }
+            if (now >= nextNative) { nextNative = now + 0.5f; NativeScan(now); }
+        }
+
+        // ---------------------------------------------------------------- articles du jeu sortis des distributeurs
+        // Distributeur de boissons energisantes (canette du jeu, energydrink) et de biere (copie de la Beer du jeu) : des copies
+        // d'objets du jeu (automate 'Use', a boire comme les vrais), sans VendingItemData. Reperes au pied de ces deux
+        // distributeurs, ils recoivent une cle comme ID (la meme chez tous) : Props les suit et Consume les fait boire partout.
+        static float nextNative, nextMachines;
+        static readonly List<Transform> nativeMachines = new List<Transform>();
+        static readonly HashSet<int> nativeSeen = new HashSet<int>();
+        static readonly HashSet<string> nativeKeys = new HashSet<string>();
+        static readonly Dictionary<string, GameObject> nativeObjs = new Dictionary<string, GameObject>();
+        static int NativeKind(GameObject g)
+        {
+            if (g == null || g.transform.parent != null || Game.FsmOn(g, "Use") == null) return -1;
+            if (g.name.StartsWith("energy drink", StringComparison.OrdinalIgnoreCase)) return 0;
+            if (g.name == "Beer") return 1;
+            return -1;
+        }
+        static readonly Dictionary<string, GameObject> nativeLater = new Dictionary<string, GameObject>();
+        static float nativeLaterAt;
+        static void NativeScan(float now)
+        {
+            if (nativeLater.Count > 0 && now >= nativeLaterAt)
+            {
+                foreach (KeyValuePair<string, GameObject> kv in nativeLater) if (kv.Value != null) SetNativeId(kv.Value, kv.Key);
+                nativeLater.Clear();
+            }
+            if (now >= nextMachines)
+            {
+                nextMachines = now + 10f;
+                nativeMachines.Clear();
+                Type mb = asm.GetType("Vending_Machines.VendingMachineBase");
+                if (mb != null)
+                    foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(mb))
+                    {
+                        string tn = o.GetType().Name;
+                        if (tn == "EnergyDrinkMachineController" || tn == "JonneMachineController") nativeMachines.Add(((Component)o).transform);
+                    }
+            }
+            foreach (Transform m in nativeMachines)
+            {
+                if (m == null) continue;
+                foreach (Collider col in Physics.OverlapSphere(m.position, 3f))
+                {
+                    Rigidbody rb = col.attachedRigidbody;
+                    GameObject g = rb != null ? rb.gameObject : null;
+                    int kind = NativeKind(g);
+                    if (kind < 0 || !nativeSeen.Add(g.GetInstanceID())) continue;
+                    if (now < startAt + 5f || !MaySend(now)) continue;   // (deja la au depart, ou sorti chez un invite sans geste)
+                    string key = NewKey();
+                    SetNativeId(g, key);
+                    nativeKeys.Add(key);
+                    if (Session.RemoteCount > 0)
+                        Head(8).Str(key).U8(kind).Str(g.name).Vec(g.transform.position).Quat(g.transform.rotation).Send();
+                    Log.Info("mods : Jonne Food System, " + g.name + " sorti du distributeur ici, envoye (" + key + ")");
+                }
+            }
+        }
+        static void SetNativeId(GameObject g, string key)
+        {
+            PlayMakerFSM use = Game.FsmOn(g, "Use");
+            HutongGames.PlayMaker.FsmString id = use != null ? use.FsmVariables.FindFsmString("ID") : null;
+            if (id != null) id.Value = key;
+            nativeObjs[key] = g;
+            Props.Track(g);
+        }
+        static GameObject NativePrefab(int kind)
+        {
+            if (kind == 1)
+            {
+                foreach (GameObject g in Resources.FindObjectsOfTypeAll<GameObject>()) if (g.name == "Beer" && g.GetComponent<PlayMakerFSM>() != null) return g;
+                return null;
+            }
+            GameObject ci = GameObject.Find("STORE/CreateItems") ?? GameObject.Find("CreateItems");
+            if (ci != null)
+                foreach (PlayMakerFSM f in ci.GetComponents<PlayMakerFSM>())
+                    if (f.FsmName == "EnergyDrink") { HutongGames.PlayMaker.FsmGameObject pv = f.FsmVariables.FindFsmGameObject("Prefab"); if (pv != null && pv.Value != null) return pv.Value; }
+            foreach (GameObject g in Resources.FindObjectsOfTypeAll<GameObject>()) if (string.Equals(g.name, "energydrink", StringComparison.OrdinalIgnoreCase)) return g;
+            return null;
+        }
+        static void OnNative(int who, string key, int kind, string name, Vector3 pos, Quaternion rot)
+        {
+            if (!nativeKeys.Add(key)) return;
+            GameObject pf = NativePrefab(kind);
+            if (pf == null) { Log.Warn("mods : Jonne Food System, modele du jeu introuvable ici (" + name + ")"); return; }
+            GameObject g = (GameObject)UnityEngine.Object.Instantiate(pf, pos, rot);
+            g.name = name;
+            g.layer = LayerMask.NameToLayer("Parts"); g.tag = "PART";
+            g.SetActive(true);
+            PlayMakerFSM use = Game.FsmOn(g, "Use");
+            HutongGames.PlayMaker.FsmFloat cond = use != null ? use.FsmVariables.FindFsmFloat("Condition") : null;
+            if (cond != null) cond.Value = 100f;
+            Rigidbody rb = g.GetComponent<Rigidbody>();
+            if (rb != null) { rb.isKinematic = false; rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+            nativeSeen.Add(g.GetInstanceID());
+            nativeLaterAt = Time.realtimeSinceStartup + 0.3f;
+            nativeLater[key] = g;   // (ID pose une fois son automate demarre : a son demarrage il reprend ses valeurs de depart)
+            nativeObjs[key] = g;
+            Log.Info("mods : Jonne Food System, " + name + " sorti du distributeur chez #" + who + ", recree ici (" + key + ")");
         }
 
         static void Track(Component c, string key, float now)
@@ -490,6 +590,7 @@ namespace MWCoop
                     Log.Info("mods : Jonne Food System, " + key + " disparu chez #" + who + ", retire ici");
                     break;
                 }
+                case 8: { string nk = r.Str(); int nkind = r.U8(); string nname = r.Str(); Vector3 npos = r.Vec(); OnNative(who, nk, nkind, nname, npos, r.Quat()); break; }
                 case 3: if (!Session.IsHost && r.U8() == Session.LocalId) OnRoster(r, now); break;
                 case 4: if (Session.IsHost) SendRoster(who); break;
                 case 5:
@@ -642,6 +743,20 @@ namespace MWCoop
                 UnityEngine.Object.Destroy(last.C.gameObject);
                 return n + " detruit (" + last.Key + ")";
             }
+            if (step == 5)
+            {
+                bool beer = Config.GetInt("Test", "JonneBiere", 0) != 0;
+                Type mbt = asm.GetType("Vending_Machines.VendingMachineBase");
+                foreach (UnityEngine.Object o in mbt != null ? UnityEngine.Object.FindObjectsOfType(mbt) : new UnityEngine.Object[0])
+                    if (o.GetType().Name == (beer ? "JonneMachineController" : "EnergyDrinkMachineController"))
+                    {
+                        TestAct = true;
+                        MethodInfo sp = o.GetType().GetMethod(beer ? "TestSpawnItem" : "SpawnEnergyDrink", A);
+                        try { sp.Invoke(o, null); } catch (Exception e) { return "distributeur : " + (e.InnerException ?? e).Message; }
+                        return "article du jeu sorti de " + ((Component)o).name;
+                    }
+                return "pas de distributeur " + (beer ? "de biere" : "de boissons energisantes");
+            }
             if (step == 4)
             {
                 string path = (string)pPath.GetValue(null, null);
@@ -651,7 +766,13 @@ namespace MWCoop
                 return "aucun objet avec ID";
             }
             TestAct = false;
-            return "suivis " + byKey.Count + ", en attente " + loose.Count + ", dans le mod " + Items().Count;
+            var ns = new System.Text.StringBuilder();
+            foreach (KeyValuePair<string, GameObject> kv in nativeObjs)
+            {
+                GameObject g = kv.Value; PlayMakerFSM u = g != null ? Game.FsmOn(g, "Use") : null;
+                ns.Append(" | ").Append(kv.Key).Append(g == null ? " detruit" : (g.activeInHierarchy ? " actif " : " INACTIF ") + g.transform.position.ToString("F1") + (u != null ? " etat " + u.ActiveStateName : ""));
+            }
+            return "suivis " + byKey.Count + ns + ", en attente " + loose.Count + ", dans le mod " + Items().Count;
         }
     }
 }
