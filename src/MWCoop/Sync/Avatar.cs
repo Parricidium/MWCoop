@@ -1090,6 +1090,22 @@ namespace MWCoop
             bool taxi = carName != null && carName.ToUpperInvariant().Contains("MACHTWAGEN");
             // (BACHGLOTZ : banquette avant, avatar enfonce, les cuisses dans l'assise -- retour de Menor, 11/10)
             bool van = rear && carName != null && carName.StartsWith("BACHGLOTZ");   // (passagers ; conducteur pas verifie en essai)
+            // (voitures tres basses, assise de course -- Alpine A110, mod de JD, 13/10 : « jambes allongees comme dans une F1 ») :
+            // la tete est deja sous le toit (pivot descendu par le mod) ; le corps garde sa hauteur, les jambes partent
+            // presque a l'horizontale vers l'avant au lieu de tomber vers le plancher
+            bool low = carName != null && carName.ToUpperInvariant().Contains("ALPINE");
+            if (low && vehicleT != null && Config.GetInt("Test", "SansSiege", 0) == 0)
+            {
+                Transform lc = vehicleT;
+                motoRaise = lc.TransformVector(new Vector3(0f, Config.GetFloat("Test", "BasMonte", 0f), 0f));
+                anim.transform.position += motoRaise;
+                seatFitted = true;
+                Transform lr = Bone("thig_right"), ll = Bone("thig_left");
+                float lf = Config.GetFloat("Test", "BasPieds", 0.82f), ld = Config.GetFloat("Test", "BasChute", 0.16f);
+                if (lr != null && Bone("ankle_right") != null) Leg("thig_right", "knee_right", "ankle_right", lr.position + lc.forward * lf - lc.up * ld + lc.right * 0.05f);
+                if (ll != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", ll.position + lc.forward * lf - lc.up * ld - lc.right * 0.05f);
+                return;
+            }
             if (carName == null || !gifu && !taxi && !van || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
             // (passager avant : enfonce de 30 cm dans le fauteuil sans ca -- assis comme le conducteur, dos arrondi, mains sur
             // les cuisses ; la couchette n'a pas de « Seats » : rien a faire)
