@@ -30,6 +30,10 @@ namespace MWCoop
         public static void ScanSoon() { if (nextScan > 0) nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 1.5f); }
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
         static readonly HashSet<PlayMakerFSM> rejected = new HashSet<PlayMakerFSM>();   // automates Paint sans REPAINT : plus revus
+        // Evenement du coup de bombe : REPAINT, ou GLOBALEVENT (-> "Paint type") pour les pieces du moteur (bloc, culasse,
+        // carter...) -- ecartees jusqu'ici, leur peinture restait chez celui qui peignait (Crowbangus, 12/10).
+        static readonly Dictionary<PlayMakerFSM, string> repaintEvent = new Dictionary<PlayMakerFSM, string>();
+        static string RepaintOf(PlayMakerFSM f) { string e; return repaintEvent.TryGetValue(f, out e) ? e : "REPAINT"; }
         static float nextScan = -1, loadedAt;
         static bool applying;
 
@@ -46,7 +50,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            hooked.Clear(); rejected.Clear(); received.Clear(); reapply.Clear();
+            hooked.Clear(); rejected.Clear(); received.Clear(); reapply.Clear(); repaintEvent.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 9f : -1;
         }
@@ -71,8 +75,12 @@ namespace MWCoop
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.FsmName != "Paint" || f.hideFlags != HideFlags.None || hooked.Contains(f) || rejected.Contains(f)) continue;
                 FsmState s = null;
+                string ev = "REPAINT";
                 foreach (FsmTransition tr in f.Fsm.GlobalTransitions)
                     if (tr.EventName == "REPAINT") s = f.Fsm.GetState(tr.ToState);
+                if (s == null)
+                    foreach (FsmTransition tr in f.Fsm.GlobalTransitions)
+                        if (tr.EventName == "GLOBALEVENT" && tr.ToState == "Paint type") { s = f.Fsm.GetState(tr.ToState); ev = "GLOBALEVENT"; }
                 if (s == null) { rejected.Add(f); continue; }
                 // (Objet jamais actif : ses actions ne sont pas chargees -- les lire les chargeait a grands frais puis
                 // echouait, a chaque releve, pour chaque piece en carton : 65-80 ms. Accroche des que l'objet a vecu.)
@@ -85,6 +93,7 @@ namespace MWCoop
                 }
                 catch { continue; }
                 hooked.Add(f);
+                if (ev != "REPAINT") repaintEvent[f] = ev;
                 n++;
             }
             if (n > 0) Log.Info("peinture : " + n + " pieces suivies (" + hooked.Count + " en tout)");
@@ -95,7 +104,7 @@ namespace MWCoop
         {
             if (!Session.Active) return;
             FsmTransition tr = f.Fsm.LastTransition;
-            bool sprayed = tr != null && tr.EventName == "REPAINT";
+            bool sprayed = tr != null && tr.EventName == RepaintOf(f);
             bool random = f.Fsm.PreviousActiveState != null && f.Fsm.PreviousActiveState.Name == "Save color";
             // Invite qui tire la couleur d'une piece dont il a deja la peinture de l'hote : reposee juste apres.
             if (random && !Session.IsHost) { string rid = KeyOf(f); if (received.ContainsKey(rid)) reapply.Add(rid); return; }
@@ -173,7 +182,7 @@ namespace MWCoop
             foreach (var x in g.C) { FsmColor t = v.FindFsmColor(x.Key); if (t != null) t.Value = x.Value; }
             foreach (var x in g.S) { FsmString t = v.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
             applying = true; Replay.Depth++;
-            try { f.SendEvent("REPAINT"); }
+            try { f.SendEvent(RepaintOf(f)); }
             finally { applying = false; Replay.Depth--; }
             g.Done = true;
             Log.Info("peinture : " + id + " repeinte (joueur #" + g.Who + ")" + (again ? " apres le tirage d'ici" : ""));
@@ -194,7 +203,7 @@ namespace MWCoop
             string id = KeyOf(f);
             f.FsmVariables.GetFsmInt("PaintType").Value = 1;
             f.FsmVariables.GetFsmColor("Color").Value = c;
-            f.SendEvent("REPAINT");
+            f.SendEvent(RepaintOf(f));
             return id + " peinte en " + c;
         }
 
