@@ -11,10 +11,11 @@ namespace MWCoop
     // materiaux du jeu trouves par leur nom (aucun fichier du jeu copie) + nos textures (assets\kauppa, dans la DLL).
     public static partial class Kauppa
     {
-        // place : a l'ouest du parking de la PSK, porte vers le parking (repere local +z = monde +x)
-        static Vector3 Place = new Vector3(-1786.6f, 0f, 963.5f);
-        static float Yaw = 90f;
-        static float FloorY = 3.74f;   // hauteur du plancher, la meme chez tous (sol mesure 2,95..3,34 + 0,4)
+        // place : coin s21 de Perajarvi, au sud-ouest du carrefour de Teimo, a cote du musee de la Corse, porte vers la petite
+        // route (choisi par JD le 13/10 ; avant : a l'ouest du parking de la PSK, en -1786.6, 963.5, cap 90, plancher 3.74)
+        static Vector3 Place = new Vector3(-1591.1f, 0f, 1098.5f);
+        static float Yaw = 25f;
+        static float FloorY = 4.46f;   // hauteur du plancher, la meme chez tous (sol nivele par Clearing, mesure 3,38..4,06 + 0,4)
         static bool floorAuto;
         // [Boutique] Paikka=x,z,cap[,plancher|auto] : autre emplacement (essais du coin s21 a Perajarvi)
         static void ReadPlace()

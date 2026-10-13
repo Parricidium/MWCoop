@@ -30,6 +30,7 @@ namespace MWCoop
         {
             if (done || at < 0f || Time.realtimeSinceStartup < at) return;
             done = true;
+            if (!Kauppa.Active) return;   // (sans les ajouts COOP ni la boutique : la foret reste)
             if (Config.GetInt("Boutique", "Defrichage", 1) == 0) { Log.Info("defrichage : coupe ([Boutique] Defrichage=0)"); return; }
             GameObject mesh = GameObject.Find("MAP/MESH");
             if (mesh == null) { Log.Info("defrichage : MAP/MESH introuvable"); return; }
@@ -55,8 +56,6 @@ namespace MWCoop
             }
             Log.Info("defrichage : " + trees + " arbre(s) et buisson(s), " + colls + " tronc(s) retires du terrain du coin s21 (" + sw.ElapsedMilliseconds + " ms)");
             Terrace();
-            MuseumMockup();
-            Parking();
             Probe();
         }
 
@@ -86,73 +85,11 @@ namespace MWCoop
             return RoadEdge[RoadEdge.Length - 1];
         }
 
-        // [Boutique] Parkki=x0,x1,ecart,profondeur : parking goudronne entre la route et les batiments, de x0 a x1, a 'ecart' m du
-        // bord de la route et 'profondeur' m de large ; il suit le sol (releve tous les metres) ; collision (on s'y gare) ;
-        // places marquees en blanc. Materiau : celui de la route du jeu (AsphaltRoad).
-        static void Parking()
-        {
-            string s = Config.Get("Boutique", "Parkki", "");
-            if (s.Length == 0) return;
-            var ci = System.Globalization.CultureInfo.InvariantCulture;
-            string[] a = s.Split(',');
-            float xa = float.Parse(a[0], ci), xb = float.Parse(a[1], ci), gap = float.Parse(a[2], ci), depth = float.Parse(a[3], ci);
-            var vs = new List<Vector3>(); var uv = new List<Vector2>(); var tri = new List<int>();
-            var lineV = new List<Vector3>(); var lineT = new List<int>();
-            int cols = 0, rows = Mathf.CeilToInt(depth) + 1;
-            float along = 0f; Vector2 prev = Vector2.zero; bool first = true;
-            for (float x = xa; x <= xb + 0.01f; x += 1f, cols++)
-            {
-                Vector2 e = EdgeAt(x), e2 = EdgeAt(x + 0.5f), e1 = EdgeAt(x - 0.5f);
-                Vector2 dir = (e2 - e1).normalized, nrm = new Vector2(dir.y, -dir.x);   // (vers le sud : la route est au nord)
-                if (!first) along += (e - prev).magnitude; prev = e; first = false;
-                for (int r = 0; r < rows; r++)
-                {
-                    float dd = gap + depth * r / (rows - 1);
-                    Vector2 p = e + nrm * dd;
-                    vs.Add(new Vector3(p.x, Ground(p.x, p.y) + 0.05f, p.y));
-                    uv.Add(new Vector2(along / 4f, dd / 4f));
-                }
-            }
-            for (int c = 0; c + 1 < cols; c++)
-                for (int r = 0; r + 1 < rows; r++)
-                {
-                    int i0 = c * rows + r, i1 = (c + 1) * rows + r;
-                    tri.AddRange(new[] { i0, i0 + 1, i1, i1, i0 + 1, i1 + 1 });
-                }
-            var m = new Mesh { name = "MWCoop parkki" };
-            m.vertices = vs.ToArray(); m.uv = uv.ToArray(); m.triangles = tri.ToArray(); m.RecalculateNormals(); m.RecalculateBounds();
-            var go = new GameObject("MWCoop parkki");
-            go.AddComponent<MeshFilter>().sharedMesh = m;
-            var mr = go.AddComponent<MeshRenderer>();
-            GameObject road = GameObject.Find("MAP/MESH/TERRAIN_OBJ/AsphaltRoad");
-            Renderer rr = road != null ? road.GetComponent<Renderer>() : null;
-            Shader sh = Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Diffuse");
-            mr.sharedMaterial = rr != null ? rr.sharedMaterial : new Material(sh) { color = new Color(0.3f, 0.3f, 0.32f) };
-            go.AddComponent<MeshCollider>().sharedMesh = m;
-            // places : traits blancs perpendiculaires a la route, tous les 2,7 m, sur les 5 m du fond
-            var wm = new Material(sh) { color = new Color(0.92f, 0.92f, 0.9f) };
-            int n = 0;
-            for (float x = xa + 1.5f; x <= xb - 1.5f; x += 2.7f, n++)
-            {
-                Vector2 e = EdgeAt(x), dir = (EdgeAt(x + 0.5f) - EdgeAt(x - 0.5f)).normalized, nrm = new Vector2(dir.y, -dir.x);
-                Vector2 p0 = e + nrm * (gap + depth - 5.2f), p1 = e + nrm * (gap + depth - 0.2f);
-                var l = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                Object.Destroy(l.GetComponent<Collider>());
-                Vector2 c = (p0 + p1) / 2f;
-                l.transform.position = new Vector3(c.x, Mathf.Max(Ground(p0.x, p0.y), Ground(p1.x, p1.y)) + 0.075f, c.y);
-                l.transform.rotation = Quaternion.LookRotation(new Vector3(nrm.x, 0, nrm.y));
-                l.transform.localScale = new Vector3(0.12f, 0.02f, 5f);
-                l.GetComponent<Renderer>().sharedMaterial = wm;
-                l.transform.SetParent(go.transform, true);
-            }
-            Log.Info("defrichage : parking de " + (xb - xa) + " x " + depth + " m, " + n + " traits, materiau " + mr.sharedMaterial.name);
-        }
-
         static float Ground(float x, float z)
         {
             float best = float.MinValue;
             foreach (RaycastHit h in Physics.RaycastAll(new Vector3(x, 300f, z), Vector3.down, 400f))
-                if (!h.collider.isTrigger && h.collider.name != "MWCoop parkki" && h.point.y > best && h.collider.GetComponentInParent<Rigidbody>() == null) best = h.point.y;
+                if (!h.collider.isTrigger && h.point.y > best && h.collider.GetComponentInParent<Rigidbody>() == null) best = h.point.y;
             return best == float.MinValue ? 2f : best;
         }
 
@@ -182,9 +119,11 @@ namespace MWCoop
         // MAP/MESH/TERRAIN_OBJ/Grass, rendu et collision) est mis a plat sous chaque emprise, a la hauteur du sol au milieu de la
         // facade (cote route, +z local), plat 4 m autour, puis raccord en pente douce sur 12 m. Le talus de la grande route montait de
         // 2,5 m sous la boutique : plancher perche, grand escalier.
+        // boutique puis musee (memes centres et caps que KauppaRakennus / MuseoRakennus ; le musee : sa facade et son parvis)
+        const string DefaultPads = "-1591.1,1098.5,25,5.6,3.6;-1573.8,1087.4,22,10.6,7.9";
         static void Terrace()
         {
-            string s = Config.Get("Boutique", "Tasanne", "");
+            string s = Config.Get("Boutique", "Tasanne", DefaultPads);
             if (s.Length == 0) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             var pads = new List<float[]>();
@@ -291,38 +230,6 @@ namespace MWCoop
                 Log.Info("defrichage : sol " + t.name + " (" + v.Length + " sommets) : " + n + " sommet(s) nivele(s)");
             }
             Log.Info("defrichage : terrassement, " + moved + " sommet(s) du sol et " + layers + " des couches posees dessus deplaces");
-        }
-
-        // [Boutique] MuseoEssai=x,z,cap,largeur,profondeur,hauteur : volume d'essai du musee (rouge de Falun, toit gris), pour juger
-        // l'emplacement avant le dessin du batiment.
-        static void MuseumMockup()
-        {
-            string s = Config.Get("Boutique", "MuseoEssai", "");
-            if (s.Length == 0) return;
-            var ci = System.Globalization.CultureInfo.InvariantCulture;
-            string[] a = s.Split(',');
-            float x = float.Parse(a[0], ci), z = float.Parse(a[1], ci), yaw = float.Parse(a[2], ci), w = float.Parse(a[3], ci), d = float.Parse(a[4], ci), h = float.Parse(a[5], ci);
-            Quaternion rot = Quaternion.Euler(0, yaw, 0);
-            float g = float.MinValue;
-            for (float u = -w / 2; u <= w / 2; u += 1f)
-                for (float v = -d / 2; v <= d / 2; v += 1f)
-                {
-                    RaycastHit hit;
-                    if (Physics.Raycast(new Vector3(x, 300f, z) + rot * new Vector3(u, 0, v), Vector3.down, out hit, 400f)) g = Mathf.Max(g, hit.point.y);
-                }
-            if (g == float.MinValue) g = 3.5f;
-            var root = new GameObject("MWCoop museo essai");
-            root.transform.position = new Vector3(x, g, z); root.transform.rotation = rot;
-            Shader sh = Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Diffuse");
-            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            body.transform.SetParent(root.transform, false);
-            body.transform.localPosition = new Vector3(0, h / 2 - 1.5f, 0); body.transform.localScale = new Vector3(w, h + 3f, d);   // (3 m sous le sol : pas de bord qui flotte la ou le terrain redescend)
-            body.GetComponent<Renderer>().material = new Material(sh) { color = new Color(0.55f, 0.16f, 0.1f) };
-            GameObject roof = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            roof.transform.SetParent(root.transform, false);
-            roof.transform.localPosition = new Vector3(0, h + 0.9f, 0); roof.transform.localScale = new Vector3(w + 0.6f, 1.8f, d + 0.6f);
-            roof.GetComponent<Renderer>().material = new Material(sh) { color = new Color(0.32f, 0.33f, 0.35f) };
-            Log.Info("defrichage : volume d'essai du musee en " + x + ", " + g.ToString("F2") + ", " + z + " (" + w + " x " + d + " m)");
         }
 
         static bool Inside(float x, float z)

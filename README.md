@@ -208,9 +208,12 @@ Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
   shared yet.
 - **Drone camera** (F8): photo mode — your character stays put while a small drone camera flies around (viewfinder,
   zoom, tilt, flash); photos land in Pictures\CoopPictures with the MWCoop logo. The others see the drone and its flash.
-- **OSUUSKAUPPA 𝔰21 shop** (west of the PSK car park): a co-op-only village shop with its shopkeeper — sleeping bags and a
+- **OSUUSKAUPPA 𝔰21 shop** (Peräjärvi, south-west of the PSK crossroads, along the small road): a co-op-only village shop with its shopkeeper — sleeping bags and a
   **video corner**: VHS tapes, VCRs, a TV and a 90s camcorder (VHS viewfinder, recording with sound); films are sent to
   every player and play on the TV for everyone at once; you can also put your own videos on a tape (/import). Step-by-step guide: [docs/GUIDE-VIDEO.md](docs/GUIDE-VIDEO.md).
+- **Museum of Corsica** (next to the shop): a small museum built in the village — Corsica in relief under glass, busts of
+  Napoleon and Pasquale Paoli, 19th-century paintings, old postcards and a Tour de Corse room, with French/English plaques.
+  Pictures and 3D models are public domain or Creative Commons, credited in the launcher (Credits).
 
 The detailed list, version by version, is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
 

@@ -9,7 +9,7 @@ static const WikiCat kWikiCat[] = {
     { IC_GEAR, L"Réglages et options", L"Settings and options" },
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
-enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MSC, WA_MODS, WA_CONTENT,
+enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_MSC, WA_MODS, WA_CONTENT,
        WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS };
 
 struct WikiKey { const wchar_t *key, *fr, *en; };
@@ -452,9 +452,19 @@ static const WikiBlock kW_Drone[] = {
     { WB_GO, L"Voir mes photos (Album)", L"See my photos (Album)", TAB_ALBUM },
 };
 
+static const WikiBlock kW_Museo[] = {
+    { WB_P, L"Le musée de la Corse (Korsikan museo) est à côté de la boutique OSUUSKAUPPA s21, au sud-ouest du carrefour de la PSK à Peräjärvi. Entrée libre : les portes coulissantes s'ouvrent devant chaque joueur.",
+            L"The Museum of Corsica (Korsikan museo) stands next to the OSUUSKAUPPA s21 shop, south-west of the PSK crossroads in Peräjärvi. Free entry: the sliding doors open for every player." },
+    { WB_H, L"À voir", L"What to see", 0 },
+    { WB_B, L"Le hall : la Corse en relief sous vitrine, les bustes de Napoléon et de Pascal Paoli, et de grands tableaux du XIXe siècle.", L"The hall: Corsica in relief under glass, busts of Napoleon and Pasquale Paoli, and large 19th-century paintings." },
+    { WB_B, L"La salle « La Corse » (à droite en entrant) : histoire, villes et villages, vieilles cartes postales, la carte génoise.", L"The \"Corsica\" room (on the right as you enter): history, towns and villages, old postcards, the Genoese map." },
+    { WB_B, L"La salle « Sport automobile » (à gauche) : le Tour de Corse et les grandes voitures de rallye, jusqu'en 1999.", L"The \"Motorsport\" room (on the left): the Tour de Corse and the great rally cars, up to 1999." },
+    { WB_TIP, L"Chaque œuvre a sa plaque en français et en anglais. Les auteurs et licences des images et des modèles 3D sont dans les crédits (étoile en haut).", L"Every piece has its plaque in French and English. The authors and licences of the pictures and 3D models are in the credits (star at the top)." },
+};
+
 static const WikiBlock kW_Shop[] = {
-    { WB_P, L"La boutique OSUUSKAUPPA s21, juste à l'ouest du parking de la PSK (le magasin de Peräjärvi), ne vend que des objets du coop. Clic sur la poignée pour ouvrir la porte.",
-            L"The OSUUSKAUPPA s21 shop, just west of the PSK car park (the Peräjärvi store), only sells co-op items. Click the handle to open the door." },
+    { WB_P, L"La boutique OSUUSKAUPPA s21, à Peräjärvi, au sud-ouest du carrefour de la PSK (le magasin de Teimo), le long de la petite route, à côté du musée de la Corse, ne vend que des objets du coop. Clic sur la poignée pour ouvrir la porte.",
+            L"The OSUUSKAUPPA s21 shop, in Peräjärvi, south-west of the PSK crossroads (Teimo's store), along the small road next to the Museum of Corsica, only sells co-op items. Click the handle to open the door." },
     { WB_H, L"En rayon", L"On the shelves", 0 },
     { WB_B, L"Sacs de couchage, 149 mk : gondole blanche, au milieu.", L"Sleeping bags, 149 mk: white gondola, in the middle." },
     { WB_B, L"Cassettes VHS, 19 mk : tablette du haut de la gondole blanche.", L"VHS tapes, 19 mk: top shelf of the white gondola." },
@@ -554,6 +564,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"Filmer et regarder (VHS)", L"Film and watch (VHS)", L"Caméscope, magnétoscope, télé", L"Camcorder, VCR, TV", kW_Video),
     WART(1, L"Tes vidéos sur une cassette", L"Your videos on a tape", L"/importer : une vraie vidéo dans le jeu", L"/import: a real video in the game", kW_Import),
     WART(1, L"Monter et exporter une cassette", L"Edit and export a tape", L"Touche R : rogner, effacer, .mp4", L"Press R: trim, erase, .mp4", kW_Montage),
+    WART(1, L"Le musée de la Corse", L"The Museum of Corsica", L"Relief, bustes, tableaux, rallye", L"Relief model, busts, paintings, rallying", kW_Museo),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),
     WART(2, L"Contenu envoyé", L"Sent content", L"CD, radio, posters, peinture", L"CDs, radio, posters, paint", kW_Content),
