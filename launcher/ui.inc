@@ -770,11 +770,17 @@ static void DrawHome(Graphics &g)
             GraphicsPath ip; RoundRect(ip, ib, 14);
             SolidBrush ibb(host ? Color(26, 6, 19, 37) : TH(cardSel)); g.FillPath(&ibb, &ip);
             Icon(g, host ? IC_HOMEPLUS : IC_LOGIN, ib.X + 22, ib.Y + 22, 22, acc, 2.0f);
-            const wchar_t *lab = host ? T(L"HÉBERGER", L"HOST") : g_joinFallback ? T(L"REJOINDRE EN JEU", L"JOIN IN GAME") : T(L"REJOINDRE", L"JOIN");
+            const wchar_t *lab = host ? T(L"HÉBERGER", L"HOST") : g_lateSync ? T(L"MODS DE L'HÔTE…", L"HOST'S MODS…") : g_joinFallback ? T(L"REJOINDRE EN JEU", L"JOIN IN GAME") : T(L"REJOINDRE", L"JOIN");
             Title(g, lab, RectF(r.X + 22, r.Y + 74, r.Width - 44, 34), 25, acc);
             std::wstring d;
             if (host) d = g_steamNet ? T(L"Ouvre un salon Steam pour tes amis ; chacun se met prêt, puis tu lances.", L"Opens a Steam lobby for your friends; everyone gets ready, then you start.")
                                      : T(L"Ouvre un salon : tes amis le rejoignent, chacun se met prêt, puis tu lances.", L"Opens a lobby: your friends join, everyone gets ready, then you start.");
+            else if (g_lateSync) {   // invite en retard : reception, puis le jeu
+                wchar_t lb[200];
+                uint64_t tot = g_syncTotal, got = g_syncGot;
+                swprintf_s(lb, T(L"L'hôte joue déjà : réception de ses mods (%d %%), puis tu entres en jeu. Clique pour annuler.", L"The host is already playing: receiving their mods (%d %%), then you join. Click to cancel."), tot ? (int)min<uint64_t>(99, got * 100 / tot) : 0);
+                d = lb;
+            }
             else if (g_joinFallback) d = T(L"L'hôte joue déjà : rejoins sa partie directement.", L"The host is already playing: join their game directly.");
             else if (g_steamNet && g_sInvite) d = g_sInviteName + T(L" t'invite : clique pour entrer dans son salon.", L" invites you: click to enter their lobby.");
             else d = g_steamNet ? T(L"Ton invitation Steam, sinon le salon MWCoop d'un ami.", L"Your Steam invite, or else a friend's MWCoop lobby.")

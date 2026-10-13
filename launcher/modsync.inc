@@ -534,7 +534,7 @@ static bool ModsAuto() { const Opt *o = OptByKey("ModsAuto"); return o && OptGet
 
 static void SyncSendHost(const Wr &w)
 {
-    if (g_lobbySteam) SteamSendP2P(g_sHost, w.d);
+    if (g_lateSteam || (g_lobbySteam && !g_lateSync)) SteamSendP2P(g_sHost, w.d);
     else GuestSend(w);
 }
 static void SyncCloseParts()   // (sous g_syncMx)
@@ -560,6 +560,23 @@ static void SyncReset()
 static void SyncPumpLocked()
 {
     if (g_sync != SY_GET) return;
+    if (g_testSlowMs) {   // (essai /lent : un morceau a la fois, espaces -- la reception dure)
+        static DWORD lastReq;
+        if (g_syncInflight > 0 || GetTickCount() - lastReq < g_testSlowMs || g_syncNext >= g_syncNeed.size()) return;
+        lastReq = GetTickCount();
+        int idx = g_syncNeed[g_syncNext];
+        const SyncFile &f = g_hostOffer.files[idx];
+        Wr w;
+        w.u8(M_MODGET);
+        w.u32((uint32_t)g_hostOffer.key); w.u32((uint32_t)(g_hostOffer.key >> 32));
+        w.u16(idx);
+        w.u32(g_syncNextOff);
+        SyncSendHost(w);
+        g_syncInflight++;
+        g_syncNextOff += kSyncChunk;
+        if (g_syncNextOff >= f.size) { g_syncNext++; g_syncNextOff = 0; }
+        return;
+    }
     while (g_syncInflight < kSyncWindow && g_syncNext < g_syncNeed.size()) {
         int idx = g_syncNeed[g_syncNext];
         const SyncFile &f = g_hostOffer.files[idx];
@@ -932,10 +949,34 @@ static void SyncTick()
         { std::lock_guard<std::mutex> lk(g_syncMx); key = g_hostOffer.key; msc = g_hostOffer.msc; }
         if (msc && key != mscFor) { mscFor = key; SyncEnsureMsc(true); }
     }
-    if (g_launchAfterSync && g_lobby == LB_GUEST && !SyncLaunchPending()) {
+    if (g_testSlowMs && g_sync == SY_GET) { std::lock_guard<std::mutex> lk(g_syncMx); SyncPumpLocked(); }   // (essai /lent)
+    // Invite : son avancement a l'hote (LANCER attend la fin ; demande de JD, 13/10).
+    {
+        static int sentDl = -2;
+        static DWORD sentT;
+        if (g_lobby != LB_GUEST) sentDl = -2;
+        else if (g_sync != SY_NONE) {   // (liste de l'hote traitee : avant, l'hote attend -- PeerSyncPending)
+            int dl = -1;
+            if (SyncBusy() || SyncLaunchPending()) { uint64_t tot = g_syncTotal, got = g_syncGot; dl = tot ? (int)min<uint64_t>(99, got * 100 / tot) : 0; }
+            if (dl != sentDl && (dl < 0 || sentDl < 0 || GetTickCount() - sentT > 1500)) {
+                sentDl = dl; sentT = GetTickCount();
+                if (g_lobbySteam) SSetMember("dl", dl < 0 ? "ok" : std::to_string(dl));
+                else { Wr w; w.u8(M_SYNCST); w.u8(dl < 0 ? 255 : dl); GuestSend(w); }
+            }
+        }
+    }
+    // Invite en retard : la liste de l'hote doit d'abord arriver (rien en 12 s : rien a recevoir, ou hote d'avant).
+    if (g_lateSync && g_sync == SY_NONE && GetTickCount() - g_lateT > 12000)
+        LateFail(T(L"L'hôte n'envoie pas de mods : « Rejoindre en jeu »", L"The host isn't sending mods: \"Join in game\""));
+    if (g_launchAfterSync && (g_lobby == LB_GUEST || (g_lateSync && g_sync != SY_NONE)) && !SyncLaunchPending()) {
         g_launchAfterSync = false;
-        if (g_sync == SY_FAIL) SetStatus(K_WARN, T(L"Mods de l'hôte pas reçus : RÉESSAYER, puis rejoindre", L"Host's mods not received: RETRY, then join"));
-        else { LaunchLog("mods : mods de l'hote recus, lancement de l'invite"); Launch(MODE_GUEST); }
+        bool late = g_lateSync;
+        LateEnd();
+        if (g_sync == SY_FAIL) {
+            SetStatus(K_WARN, T(L"Mods de l'hôte pas reçus : RÉESSAYER, puis rejoindre", L"Host's mods not received: RETRY, then join"));
+            if (late) g_joinFallback = true;
+        }
+        else { LaunchLog("mods : mods de l'hote recus, lancement de l'invite%s", late ? " (partie deja lancee)" : ""); Launch(MODE_GUEST); }
     }
     if (g_sync == SY_GET && GetTickCount() - g_syncLastT > 20000) {
         std::lock_guard<std::mutex> lk(g_syncMx);
@@ -1178,9 +1219,150 @@ static void SyncWelcome(SOCKET s)
     LeaveCriticalSection(&g_lcs);
 }
 
+// ---- invites en retard (demande de JD, 13/10 : « ceux qui rejoignent pendant la partie : les mods, puis ils entrent »)
+// Hote, salon IP : apres LANCER l'ecoute reste ouverte (g_lateServe) ; un invite qui arrive recoit M_LATE puis la liste, et ses
+// demandes de morceaux sont servies jusqu'a ce qu'il raccroche. Rien a envoyer (pas de mods) : false, il est refuse
+// (« started ») et rejoint en jeu comme avant.
+static bool SyncHostHasMods()
+{
+    EnterCriticalSection(&g_lcs);
+    bool b = !g_offer.mods.empty();
+    LeaveCriticalSection(&g_lcs);
+    return b;
+}
+
+static bool LateSession(SOCKET s, const std::string &name)
+{
+    EnterCriticalSection(&g_lcs);
+    bool any = !g_offerBlob.empty() && !g_offer.mods.empty();
+    LeaveCriticalSection(&g_lcs);
+    if (!any) return false;
+    { Wr w; w.u8(M_LATE); w.u8(1); if (!SendMsg(s, w)) { closesocket(s); return true; } }
+    SyncWelcome(s);
+    TestLog("salon : %s arrive pendant la partie : envoi des mods", name.c_str());
+    LaunchLog("mods : %s arrive pendant la partie, envoi des mods", name.c_str());
+    DWORD to = 60000;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
+    std::string m;
+    while (RecvMsg(s, m)) {
+        Rd q(m);
+        if (q.u8() != M_MODGET) continue;
+        Wr w;
+        if (SyncServe(m, w)) { EnterCriticalSection(&g_lcs); SendMsg(s, w); LeaveCriticalSection(&g_lcs); }
+    }
+    closesocket(s);
+    return true;
+}
+
+// Hote, au lancement de son jeu : la liste et les fichiers pour son jeu (MWCoop\offre-mods.bin, lu par Net/ModServe.cs), qui
+// les sert aux invites Steam en retard. "MWOF", u32 nombre de messages (u32 longueur, octets : M_MODS, M_MODSX...), u32 + u32
+// empreinte, u16 nombre de fichiers (u16 longueur, chemin complet UTF-8 ; u32 taille). Sans mods : fichier efface.
+static void SyncWriteLateOffer()
+{
+    if (g_gameDir.empty()) return;
+    std::wstring f = g_gameDir + L"MWCoop\\offre-mods.bin";
+    std::string out;
+    EnterCriticalSection(&g_lcs);
+    bool any = !g_offerBlob.empty() && !g_offer.mods.empty();
+    if (any) {
+        Wr w;
+        w.d = "MWOF";
+        w.u32(1 + (uint32_t)g_offerExtra.size());
+        w.u32((uint32_t)g_offerBlob.size()); w.d += g_offerBlob;
+        for (auto &x : g_offerExtra) { w.u32((uint32_t)x.size()); w.d += x; }
+        w.u32((uint32_t)g_offer.key); w.u32((uint32_t)(g_offer.key >> 32));
+        w.u16((int)g_offer.files.size());
+        for (auto &sf : g_offer.files) {
+            std::wstring path = !sf.path.compare(0, 5, "Mods\\") ? g_offerDir + Widen(sf.path.substr(5), CP_UTF8)
+                              : !g_offerPaint.empty() && IsCarPng(Widen(sf.path, CP_UTF8)) ? g_offerPaint : g_offerGame + Widen(sf.path, CP_UTF8);
+            std::string p8 = Narrow(path, CP_UTF8);
+            w.u16((int)p8.size()); w.d += p8;
+            w.u32(sf.size);
+        }
+        out = w.d;
+    }
+    LeaveCriticalSection(&g_lcs);
+    if (!any) { DeleteFileW(f.c_str()); return; }
+    EnsureModDir();
+    HANDLE h = CreateFileW(f.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return;
+    DWORD wr = 0;
+    WriteFile(h, out.data(), (DWORD)out.size(), &wr, NULL);
+    CloseHandle(h);
+    LaunchLog("mods : liste pour les invites en retard ecrite (%u octets)", (unsigned)out.size());
+}
+
+// Invite en retard : debut (Steam : la liste est demandee au jeu de l'hote), fin, echec.
+static bool LateBegin(bool steam)
+{
+    if (steam && (g_steamUp != 1 || !sapi::nw || !g_sHost)) return false;
+    if (steam) SyncReset();   // (IP : deja fait par LobbyJoin -- la liste de l'hote a pu arriver avant ce message)
+    g_syncAccepted = true;   // (il a demande a rejoindre : ses mods et son contenu, sans question)
+    g_lateSync = true;
+    g_lateSteam = steam;
+    g_lateT = GetTickCount();
+    g_launchAfterSync = true;
+    g_joinFallback = false;
+    if (steam) {
+        sapi::AcceptP2PSessionWithUser(sapi::nw, g_sHost);
+        Wr w; w.u8(M_MODSREQ);
+        SteamSendP2P(g_sHost, w.d);
+    }
+    TestLog("salon : invite en retard (%s), demande des mods de l'hote", steam ? "steam" : "ip");
+    return true;
+}
+static void LateEnd()
+{
+    if (!g_lateSync) return;
+    g_lateSync = false;
+    g_lateSteam = false;
+    EnterCriticalSection(&g_lcs);
+    if (g_guestSock != INVALID_SOCKET) shutdown(g_guestSock, SD_BOTH);   // (GuestThread la ferme)
+    LeaveCriticalSection(&g_lcs);
+}
+static void LateFail(const wchar_t *why)
+{
+    if (!g_lateSync) return;
+    TestLog("salon : invite en retard, sans les mods (%s)", Narrow(why, CP_UTF8).c_str());
+    LateEnd();
+    g_launchAfterSync = false;
+    SyncReset();
+    g_joinFallback = true;
+    SetStatus(K_WARN, L"%s", why);
+}
+
+// Invite en retard (Steam) : paquets du jeu de l'hote sur le canal des mods ; la liste redemandee toutes les 3 s.
+static void LateSteamTick()
+{
+    if (g_steamUp != 1 || !sapi::nw) return;
+    uint32_t size = 0;
+    int ch = P2PRecvChannel();
+    for (int k = 0; k < 64 && sapi::IsP2PPacketAvailable(sapi::nw, &size, ch); k++) {
+        std::string m(size, '\0');
+        uint32_t got = 0;
+        SteamId from = 0;
+        if (!sapi::ReadP2PPacket(sapi::nw, size ? &m[0] : NULL, size, &got, &from, ch)) break;
+        m.resize(got);
+        if (m.empty() || from != g_sHost) continue;
+        int t = (uint8_t)m[0];
+        if (t == M_MODS) SyncOnOffer(m);
+        else if (t == M_MODSX) SyncOnOfferMore(m);
+        else if (t == M_MODDATA) SyncOnData(m);
+        else if (t == M_LATE && m.size() >= 2 && m[1] == 0) { LateFail(T(L"L'hôte n'envoie pas de mods : « Rejoindre en jeu »", L"The host isn't sending mods: \"Join in game\"")); return; }
+    }
+    static DWORD lastAsk;
+    if (g_lateSteam && g_sync == SY_NONE && GetTickCount() - lastAsk > 3000) {
+        lastAsk = GetTickCount();
+        Wr w; w.u8(M_MODSREQ);
+        SteamSendP2P(g_sHost, w.d);
+    }
+}
+
 // Salon Steam (fil de la fenetre) : paquets du canal des mods ; invite, liste a demander quand l'empreinte change.
+static void LateSteamTick();
 static void SyncSteamTick()
 {
+    if (g_lateSteam) { LateSteamTick(); return; }
     if (g_steamUp != 1 || !sapi::nw || !g_sLobby || (g_lobby != LB_HOST && g_lobby != LB_GUEST)) return;
     bool host = g_lobby == LB_HOST;
     static DWORD lastAccept;

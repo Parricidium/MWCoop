@@ -84,7 +84,8 @@ static void RunTick()
     if (!g_modChecked && now - g_launchT > 30000) ModTraceCheck();
     if (g_proc && WaitForSingleObject(g_proc, 0) == WAIT_OBJECT_0) { CloseHandle(g_proc); g_proc = NULL; }
     if (g_proc || GameProcessRunning()) return;
-    // jeu ferme : retour au menu
+    // jeu ferme : retour au menu (et plus d'envoi des mods aux invites en retard)
+    LateServeStop();
     g_state = ST_IDLE;
     g_srv.clear();
     CrashCheck();

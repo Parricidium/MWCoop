@@ -992,3 +992,13 @@ Disable them all (vanilla game)	تعطيلها كلها (اللعبة الأصل
 Drone camera (F8)	كاميرا الطائرة المسيّرة (F8)
 Sleeping bags	أكياس النوم
 s21 shop (video, KARTTURI)	متجر s21 (فيديو، KARTTURI)
+These guests are still receiving your mods: 	هؤلاء الضيوف ما زالوا يستلمون مودّاتك: 
+\n\nWait for their download to finish before starting the game.	\n\nانتظر انتهاء التنزيل لديهم قبل بدء اللعبة.
+Sending mods (%d)\u2026	إرسال المودّات (%d)…
+Receiving the host's mods cancelled	أُلغي استلام مودّات المضيف
+The game has already started: receiving the host's mods, then you join	اللعبة بدأت بالفعل: جارٍ استلام مودّات المضيف، ثم تدخل اللعبة
+Connection to the host lost before its mods were done: \"Join in game\" without them, or try again	انقطع الاتصال بالمضيف قبل اكتمال مودّاته: \"الانضمام أثناء اللعب\" بدونها، أو حاول مجددًا
+The host isn't sending mods: \"Join in game\"	المضيف لا يرسل مودّات: \"الانضمام أثناء اللعب\"
+%s is already playing: receiving their mods, then you join	%s يلعب بالفعل: جارٍ استلام مودّاته، ثم تدخل اللعبة
+HOST'S MODS…	مودّات المضيف…
+The host is already playing: receiving their mods (%d %%), then you join. Click to cancel.	المضيف يلعب بالفعل: جارٍ استلام مودّاته (%d %%)، ثم تدخل اللعبة. انقر للإلغاء.
