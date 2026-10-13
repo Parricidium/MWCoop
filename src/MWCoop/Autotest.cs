@@ -1004,7 +1004,9 @@ namespace MWCoop
             }
             if (mode == "mort")
             {
-                // [Test] TestCause (booleen de Systems/Death) a 30 s ; TestReapparition=1/2 choisit 3 s apres.
+                // [Test] TestCause (booleen de Systems/Death) a 30 s ; TestReapparition=1/2 choisit 3 s apres. MortVolant=1 : au
+                // volant de TestVoiture des 22 s (mort au volant : commandes coupees, puis rendues).
+                if (Config.GetInt("Test", "MortVolant", 0) != 0 && t > 22f && step == 0 && step2 == 0) { step2 = 1; Log.Info("autotest : mort au volant, " + VehicleSync.TestEnter(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), true)); }
                 if (t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Respawn.TestDie(Config.Get("Test", "TestCause", "Hunger"))); }
                 if (t > 31f && Time.frameCount % 90 == 0 && t < 45f) Log.Info("autotest : " + Respawn.State() + " ; " + Respawn.FxDiff());
                 if (t > 38f && step == 1)
