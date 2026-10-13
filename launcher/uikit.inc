@@ -66,7 +66,7 @@ enum {
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
        IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR, IC_BOOK,
-       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE };
+       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE, IC_FILM };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -226,6 +226,7 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
         circ(5.5f, 6.5f, 3); circ(18.5f, 6.5f, 3); circ(5.5f, 17.5f, 3); circ(18.5f, 17.5f, 3); break;
     }
     case IC_LAYERS: poly({ 12, 3, 21, 8, 12, 13, 3, 8 }, true); poly({ 3, 12, 12, 17, 21, 12 }, false); poly({ 3, 16, 12, 21, 21, 16 }, false); break;
+    case IC_FILM: { GraphicsPath p; RoundRect(p, RectF(cx - 10 * k, cy - 7 * k, 20 * k, 14 * k), 2 * k); g.DrawPath(&pen, &p); circ(8, 11, 2.4f); circ(16, 11, 2.4f); line(7, 16.5f, 17, 16.5f); break; }   // (cassette VHS)
     case IC_IMAGE: { GraphicsPath p; RoundRect(p, RectF(cx - 9 * k, cy - 8 * k, 18 * k, 16 * k), 2 * k); g.DrawPath(&pen, &p); circ(9, 10, 2); poly({ 21, 16, 16, 11, 7, 20 }, false); break; }
     case IC_RADIO: { GraphicsPath p; RoundRect(p, RectF(cx - 9 * k, cy - 4 * k, 18 * k, 12 * k), 2 * k); g.DrawPath(&pen, &p); line(7, 8, 17, 4); circ(15.5f, 14, 2.5f); line(6, 13, 10, 13); line(6, 16, 10, 16); break; }
     case IC_USER: { circ(12, 8, 4); GraphicsPath p; bez(p, 4, 21, 5, 16.8f, 8, 14.5f, 12, 14.5f); bez(p, 12, 14.5f, 16, 14.5f, 19, 16.8f, 20, 21); g.DrawPath(&pen, &p); break; }

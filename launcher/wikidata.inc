@@ -449,6 +449,7 @@ static const WikiBlock kW_Drone[] = {
     { WB_TIP, L"Toutes les touches se changent dans Options du jeu > Caméra drone (Suppr sur une pastille : touche par défaut). Pas de drone depuis la place du conducteur.",
               L"Every key can be changed in Game options > Drone camera (Delete on a pill: default key). No drone from the driver's seat." },
     { WB_GO, L"Ouvrir les Options du jeu", L"Open Game options", TAB_GFX },
+    { WB_GO, L"Voir mes photos (Album)", L"See my photos (Album)", TAB_ALBUM },
 };
 
 static const WikiBlock kW_Shop[] = {
@@ -530,6 +531,10 @@ static const WikiBlock kW_Montage[] = {
             L"EXPORT AS .MP4 writes the selection as a real video file (H.264 with sound, picture ×3, MWCoop logo at the top left) in Videos\\CoopVideos. CHANGE opens the Windows folder picker, OPEN opens the folder." },
     { WB_TIP, L"Rogner, effacer et le titre changent la cassette pour tout le monde ; l'export ne concerne que ton PC (pas sous Windows 7).",
               L"Trim, erase and the title change the tape for everybody; the export is only on your PC (not on Windows 7)." },
+    { WB_H, L"Depuis le lanceur", L"From the launcher", 0 },
+    { WB_P, L"Page MÉDIA > VHS : toutes les cassettes de ta partie (même dans un magnétoscope ou un caméscope) ; renommer, effacer, ou y mettre une vidéo de ton PC. Jeu fermé.",
+            L"MEDIA > VHS page: every tape of your game (even inside a VCR or a camcorder); rename, erase, or put a video from your PC on it. Game closed." },
+    { WB_GO, L"Ouvrir la page VHS", L"Open the VHS page", TAB_VHS },
     { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
 };
 

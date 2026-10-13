@@ -1185,7 +1185,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_COUNT };
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_COUNT };
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };
@@ -1962,9 +1962,11 @@ static float GfxMaxScroll();
 static float LobbyMaxScroll();
 static float MscMaxScroll();
 static float WikiMaxScroll();   // (wiki.inc)
+static float VhsMaxScroll();    // (media.inc)
+static float AlbMaxScroll();
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
-static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : 0.0f; }
+static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : 0.0f; }
 
 static int ValueIndex(const Opt &o, int v)
 {
@@ -6087,6 +6089,7 @@ static void GuestToggleReady()
 static void OnButton(int id);
 #include "api.inc"
 #include "gfx.inc"
+#include "media.inc"
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -7029,6 +7032,7 @@ static void Tick()
 {
     static DWORD last = GetTickCount(), lastScan;
     DWORD now = GetTickCount();
+    VhsTick();   // (media.inc : video importee sur une cassette)
     float dt = min((now - last) / 1000.0f, 0.1f);
     last = now;
     g_time += dt;
@@ -7296,6 +7300,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_CHAR:
+        if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
         if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait || g_guide || g_tuto >= 0) return 0;
         if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
         if (wp == 8) { if (g_focus >= 0 && !g_fields[g_focus].text.empty()) g_fields[g_focus].text.pop_back(); }
@@ -7782,6 +7787,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; }
         else if (st == L"api") g_tab = TAB_API;   // page API des moddeurs
+        else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
+        else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
         else if (st == L"credits") g_tab = TAB_CREDITS;
         else if (!wcsncmp(st.c_str(), L"guide", 5) && st != L"guide-steam") {   // guide : guide-<article>-<defilement>
             g_tab = TAB_WIKI;
@@ -7861,6 +7868,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"maj") { g_busy = true; g_progress = 0.42f; SetStatus(K_NORMAL, T(L"T\u00E9l\u00E9chargement de MWCoop %s\u2026", L"Downloading MWCoop %s\u2026"), L"0.1.1"); g_focus = 0; g_time = 0.2f; }
         else { SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), ModLabel().c_str()); g_hot = B_HOST; g_btn[B_HOST].hover = 1; }
         if (g_tab == TAB_HOME) g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);   // (accueil : le personnage tourne avec /temps)
+        // /vhsimport <ligne> <video> : page VHS, import sans la fenetre de choix, attendu jusqu'au bout (essais)
+        for (int i = 4; i + 2 < argc; i++) if (!_wcsicmp(argv[i], L"/vhsimport")) {
+            VhsScan(); VhsImport(_wtoi(argv[i + 1]), argv[i + 2]);
+            for (int k = 0; k < 1200 && !g_vhsImpFilm.empty(); k++) { Sleep(100); VhsTick(); }
+            VhsScan();
+        }
         // /clic x y (coordonnees de la carte, autant de fois qu'il faut) : clics simules avant la capture, dans une
         // fenetre "message only" (ni souris ni clavier) ; l'etat apres chaque clic dans <png>.txt (essais de la navigation).
         {
