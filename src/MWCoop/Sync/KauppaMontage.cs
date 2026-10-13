@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Montage d'une cassette (demande de JD, 13/10) : R tenu (0,7 s) en visant une cassette posee ou en la tenant en main.
+    // Montage d'une cassette (demande de JD, 13/10) : R en visant une cassette posee ou en la tenant en main.
     // Panneau (souris libre, joueur immobile : Menu le compte parmi ses panneaux) :
     //  - titre modifiable ; prises et durees ; petit ecran de lecture avec le son (lecture / pause, barre de temps ou l'on
     //    clique pour se deplacer) ; deux reperes DEBUT et FIN (la selection) ;
@@ -73,9 +73,10 @@ namespace MWCoop
                 L("video : R sur une cassette sans montage (occupe " + KameraBusy + ", viseur " + Viewfinder + ", menu " + Menu.Open + ", tchat " + Menu.ChatOpen + ", focus clavier " + GUIUtility.keyboardControl + ")");
             }
             if (MontageOpen || tape == null) { mRDown = -1f; return; }
-            if (Input.GetKeyDown(Keys.CameraRec) || simR && mRDown < 0f) mRDown = now;
-            if (mRDown >= 0f && !Input.GetKey(Keys.CameraRec) && !simR) mRDown = -1f;
-            if (mRDown >= 0f && now - mRDown >= 0.7f) { mRDown = -1f; OpenMontage(tape); }
+            // Un appui suffit (Marshal, 13/10, journaux et video : il appuyait sur R sans le tenir -- « je ne peux pas ouvrir le
+            // montage ». R tenu 0,7 s avant).
+            if (Input.GetKeyDown(Keys.CameraRec) || simR && mRDown < 0f) { mRDown = now; OpenMontage(tape); }
+            if (!Input.GetKey(Keys.CameraRec) && !simR) mRDown = -1f;
         }
 
         static void OpenMontage(Esine tape)
