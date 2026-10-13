@@ -103,6 +103,8 @@ namespace MWCoop
                 catch (Exception e) { L("musee : ligne illisible '" + line + "' : " + e.Message); }
             }
             MuseoRelief();
+            MuseoStatue("patsas-napoleon", -2.15f, -3.7f, 18f, 1.0f);
+            MuseoStatue("patsas-paoli", 2.15f, -3.7f, -18f, 1.0f);
             L("musee : " + n + " piece(s) exposee(s)" + (missing > 0 ? ", " + missing + " image(s) absente(s)" : ""));
         }
 
@@ -217,6 +219,64 @@ namespace MWCoop
                 Plane("mu_relief_k", new Vector3(0, top - 0.06f - ph / 2, cz + d / 2 + 0.121f), pw, ph, Vector3.forward);
             }
             L("musee : maquette de la Corse " + nx + "x" + ny + " (" + (realW / 1000f).ToString("F0") + " km de large)");
+        }
+
+        // buste ou statue (maillage .mwm a facettes, hauteur 1, face vers +z) sur un socle en granit ; plaque devant le socle
+        static void MuseoStatue(string name, float x, float z, float yaw, float height)
+        {
+            string path = Path.Combine(MuseoDir, name + ".mwm");
+            if (!File.Exists(path)) return;
+            Mesh mesh;
+            using (var r = new BinaryReader(File.OpenRead(path)))
+            {
+                if (new string(r.ReadChars(4)) != "MWM1") { L("musee : " + name + " : format inconnu"); return; }
+                int nSub = r.ReadInt32(), n = r.ReadInt32();
+                var pos = new Vector3[n]; var nrm = new Vector3[n]; var uv = new Vector2[n];
+                for (int i = 0; i < n; i++) pos[i] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()) * height;
+                for (int i = 0; i < n; i++) nrm[i] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+                for (int i = 0; i < n; i++) uv[i] = new Vector2(r.ReadSingle(), r.ReadSingle());
+                mesh = new Mesh { name = "museo_" + name };
+                mesh.vertices = pos; mesh.normals = nrm; mesh.uv = uv;
+                mesh.subMeshCount = nSub;
+                for (int k = 0; k < nSub; k++)
+                {
+                    int c = r.ReadInt32(); var idx = new int[c];
+                    for (int i = 0; i < c; i++) idx[i] = r.ReadInt32();
+                    mesh.SetTriangles(idx, k);
+                    r.ReadSingle(); r.ReadSingle(); r.ReadSingle();
+                }
+                mesh.RecalculateBounds();
+            }
+            // socle : granit, corniche et base en saillie
+            float ped = 1.0f, hw = 0.32f;
+            Quaternion q = Quaternion.Euler(0, yaw, 0);
+            Vector3 c0 = new Vector3(x, 0, z);
+            OBox(c0 + new Vector3(0, 0.06f, 0), q, new Vector3(2 * hw + 0.14f, 0.12f, 2 * hw + 0.14f), "mu_kivi", null, "mu_kivi");
+            OBox(c0 + new Vector3(0, ped / 2, 0), q, new Vector3(2 * hw, ped, 2 * hw), "mu_kivi", null, "mu_kivi");
+            OBox(c0 + new Vector3(0, ped - 0.04f, 0), q, new Vector3(2 * hw + 0.1f, 0.08f, 2 * hw + 0.1f), "mu_kivi", null, "mu_kivi");
+            cols.Add(new Bounds(c0 + new Vector3(0, ped / 2, 0), new Vector3(2 * hw + 0.1f, ped, 2 * hw + 0.1f)));
+            var g = new GameObject("museo_" + name);
+            g.transform.SetParent(root.transform, false);
+            g.transform.localPosition = c0 + Vector3.up * ped;
+            g.transform.localRotation = q;
+            g.AddComponent<MeshFilter>().sharedMesh = mesh;
+            Material basis = GameMat("wood_panel7");
+            var mat = new Material(basis != null ? basis.shader : Shader.Find("Legacy Shaders/Diffuse")) { name = "museo_marmori", mainTexture = null };
+            if (mat.HasProperty("_Color")) mat.color = new Color(0.93f, 0.92f, 0.89f);
+            g.AddComponent<MeshRenderer>().sharedMaterial = mat;
+            // plaque sur la face avant du socle
+            Texture2D pl = FileTex(Path.Combine(MuseoDir, name + "-kyltti.png"), false);
+            if (pl != null)
+            {
+                TexMat("mu_" + name + "_k", pl);
+                float pw = 0.5f, ph = pw * pl.height / (float)pl.width;
+                Vector3 f = q * Vector3.forward;
+                Vector3 pc = c0 + Vector3.up * 0.6f + f * (hw + 0.004f);
+                Vector3 rgt = Vector3.Cross(Vector3.up, -f).normalized;
+                Quad("mu_" + name + "_k", pc - rgt * pw / 2 - Vector3.up * ph / 2, pc + rgt * pw / 2 - Vector3.up * ph / 2, pc + rgt * pw / 2 + Vector3.up * ph / 2, pc - rgt * pw / 2 + Vector3.up * ph / 2,
+                     new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
+            }
+            L("musee : " + name + " (" + mesh.triangles.Length / 3 + " triangles)");
         }
     }
 }
