@@ -28,10 +28,10 @@ namespace MWCoop
 
         static void ResetMuseo() { museo = null; museoLeaves = null; museoOpen = 0f; museoNear = -10f; forceMuseoDoor = false; flags.Clear(); }
 
-        // [Boutique] Museo=x,z,cap[,plancher|auto]
+        // [Boutique] Museo=x,z,cap[,plancher|auto] (vide : pas de musee)
         static void BuildMuseo()
         {
-            string s = Config.Get("Boutique", "Museo", "");
+            string s = Config.Get("Boutique", "Museo", "-1574.6,1085.4,22,3.51");   // (plancher fixe, le meme chez tous : sol nivele 2,23..3,16 + 0,35)
             if (s.Length == 0) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             string[] a = s.Split(',');

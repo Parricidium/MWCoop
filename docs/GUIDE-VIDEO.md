@@ -8,7 +8,7 @@ Film your co-op adventures with a 90s VHS camcorder — or put your own videos o
 
 ### 1. Go to the shop
 
-The **OSUUSKAUPPA 𝔰21** shop is just west of the PSK (Peräjärvi store) car park. Click the door handle to open the door.
+The **OSUUSKAUPPA 𝔰21** shop is in Peräjärvi, south-west of the PSK crossroads (Teimo's store), along the small road, next to the Museum of Corsica. Click the door handle to open the door.
 
 In the shop:
 
@@ -143,7 +143,7 @@ Films are stored in `MWCoop\profils\<your profile>\videot\` (`.mwv` files, about
 
 ### 1. Aller à la boutique
 
-La boutique **OSUUSKAUPPA 𝔰21** est juste à l'ouest du parking de la PSK (le magasin de Peräjärvi). Clic sur la poignée pour ouvrir la porte.
+La boutique **OSUUSKAUPPA 𝔰21** est à Peräjärvi, au sud-ouest du carrefour de la PSK (le magasin de Teimo), le long de la petite route, à côté du musée de la Corse. Clic sur la poignée pour ouvrir la porte.
 
 Dans la boutique :
 
