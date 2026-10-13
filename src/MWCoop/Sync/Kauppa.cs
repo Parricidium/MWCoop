@@ -500,6 +500,12 @@ namespace MWCoop
                         case "pause": Pause(rec != null && !rec.Paused); break;
                         case "sors": ExitViewfinder(); break;
                         case "etat": { PlayMakerFSM pf = PickUpFsm(); Esine k = esineet.Find(e => e.Kind == KKamera); L("essai : main " + (pf != null ? pf.ActiveStateName + (pf.enabled ? "" : " (en pause)") : "?") + ", camescope tenu " + (k != null && HeldKamera() == k) + ", equipe " + eqStage + ", viseur " + Viewfinder + ", rec " + (rec != null ? (rec.Paused ? "pause" : "oui") : "non") + ", data " + (k != null ? k.Data : "")); break; }
+                        case "montage": { Esine tp = esineet.FindLast(e => e.Kind == KVhs && TapeFilm(e.Data).Length > 0) ?? esineet.Find(e => e.Kind == KVhs); if (tp != null) OpenMontage(tp); break; }
+                        case "joue": mPlaying = true; ShowMontageFrame(true); break;
+                        case "sel": mA = F(a[2]); mB = Mathf.Min(F(a[3]), mTotal); Seek(mA); L("essai : selection " + mA + "-" + mB + " sur " + mTotal); break;
+                        case "rogne": Trim(); L("essai : apres rognage " + mTotal.ToString("F2") + " s, data " + (mTape != null ? mTape.Data : "")); break;
+                        case "exporte": Export(); break;
+                        case "ferme": CloseMontage(); break;
                         case "kanna": if (pussit.Count > 0 && EyeT != null) { Transform bt = pussit[pussit.Count - 1].Go.transform; pussit[pussit.Count - 1].Rb.isKinematic = true; bt.SetParent(EyeT, true); bt.position = EyeT.position + EyeT.forward * 0.5f; L("essai : sac en main"); } break;
                         case "irti": foreach (Pussi pb in pussit) if (pb.Go != null && pb.Go.transform.parent != null) { pb.Go.transform.SetParent(null, true); pb.Rb.isKinematic = false; L("essai : sac lache"); } break;
                         case "ulosv": { Esine v = esineet.Find(e => e.Kind == KNauhuri && Tape(e).Length > 0); if (v != null) { Eject(v); L("essai : magnetoscope en " + v.Go.transform.position.ToString("F2")); } break; }

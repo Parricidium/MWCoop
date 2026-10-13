@@ -101,6 +101,19 @@ Good to know:
 - Settings in `mwcoop.ini`, section `[Boutique]`: `ImportMinutes=20`, `ImportLargeur=320`, `ImportHauteur=240`, `ImportImages=12`, `ImportQualite=50`.
 - Windows "N" editions don't have the video decoder: install Microsoft's "Media Feature Pack" first.
 
+### 8. Edit a tape and export it as a video file
+
+Look at a tape (set down) or hold it, and **hold R** for a second: the **tape editing** panel opens (the mouse is free, your character stands still; **Esc** closes it).
+
+- **Title**: type it and click **WRITE** (or Enter) — it's written on the spine.
+- **Small screen**: watch the tape with its sound (**PLAY / PAUSE**). Click or drag the **time bar** to move.
+- **START HERE / END HERE**: pick the part to keep or export (the blue selection). **ALL** selects the whole tape.
+- **TRIM**: keeps only the selection (click twice to confirm). The takes become one; your next recordings are added after it.
+- **ERASE THE TAPE**: makes it blank again (click twice to confirm). The title stays.
+- **EXPORT AS .MP4**: writes the selection as a real video file (H.264 with sound, picture ×3, the MWCoop logo at the top left) in the chosen folder — by default `Videos\CoopVideos`. **CHANGE** opens the Windows folder picker, **OPEN** opens the folder.
+
+Trimming, erasing and the title change the tape for everybody; the export is only on your PC. Settings in `mwcoop.ini`, section `[Boutique]`: `DossierVideos=` (export folder), `ExportEchelle=3` (picture size ×1 to ×6), `ExportLogo=0` (no logo).
+
 ### Settings
 
 In `MWCoop\mwcoop.ini`:
@@ -206,6 +219,19 @@ Bon à savoir :
 - La vidéo part chez les autres joueurs comme un film du caméscope. Compte environ une minute d'envoi par tranche de 5 minutes de vidéo.
 - Réglages dans `mwcoop.ini`, section `[Boutique]` : `ImportMinutes=20`, `ImportLargeur=320`, `ImportHauteur=240`, `ImportImages=12`, `ImportQualite=50`.
 - Les éditions « N » de Windows n'ont pas le décodeur vidéo : installe d'abord le « Media Feature Pack » de Microsoft.
+
+### 8. Monter une cassette et l'exporter en fichier vidéo
+
+Vise une cassette (posée) ou tiens-la en main, et **tiens R** une seconde : le panneau **Montage de la cassette** s'ouvre (la souris est libre, ton personnage ne bouge plus ; **Échap** le ferme).
+
+- **Titre** : tape-le et clique **ÉCRIRE** (ou Entrée) — il s'écrit sur la tranche.
+- **Petit écran** : regarde la cassette avec le son (**LIRE / PAUSE**). Clique ou glisse sur la **barre de temps** pour te déplacer.
+- **DÉBUT ICI / FIN ICI** : choisis le morceau à garder ou à exporter (la sélection en bleu). **TOUT** sélectionne toute la cassette.
+- **ROGNER** : ne garde que la sélection (deux clics pour confirmer). Les prises n'en font plus qu'une ; tes prochains enregistrements s'ajoutent à la suite.
+- **EFFACER LA CASSETTE** : elle redevient vierge (deux clics pour confirmer). Le titre reste.
+- **EXPORTER EN .MP4** : écrit la sélection en vrai fichier vidéo (H.264 avec le son, image ×3, logo de MWCoop en haut à gauche) dans le dossier choisi — par défaut `Vidéos\CoopVideos`. **CHANGER** ouvre le choix de dossier de Windows, **OUVRIR** ouvre le dossier.
+
+Rogner, effacer et le titre changent la cassette pour tout le monde ; l'export ne concerne que ton PC. Réglages dans `mwcoop.ini`, section `[Boutique]` : `DossierVideos=` (dossier d'export), `ExportEchelle=3` (taille de l'image, ×1 à ×6), `ExportLogo=0` (sans logo).
 
 ### Réglages
 

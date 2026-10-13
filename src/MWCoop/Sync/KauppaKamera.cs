@@ -76,7 +76,7 @@ namespace MWCoop
             get
             {
                 if (inMenu == null) inMenu = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu");
-                return Menu.Open || Menu.ChatOpen || MapPanel.Open || CheatPanel.Open || WalletPanel.Open || Respawn.Choosing || inMenu != null && inMenu.Value || DroneCam.Active;
+                return Menu.Open || Menu.ChatOpen || MapPanel.Open || CheatPanel.Open || WalletPanel.Open || Respawn.Choosing || inMenu != null && inMenu.Value || DroneCam.Active || MontageOpen;
             }
         }
 
@@ -389,7 +389,7 @@ namespace MWCoop
                 if (tp == null || KameraBusy) return;
                 string ti = TapeTitle(tp.Data), fi = TapeFilm(tp.Data);
                 string hs = Lang.T("CASSETTE VHS", "VHS TAPE") + (ti.Length > 0 ? " « " + ti + " »" : "") + (fi.Length > 0 ? Lang.T(" (FILM)", " (FILM)") : Lang.T(" (VIERGE)", " (BLANK)"))
-                          + Lang.T("  -  TCHAT : /titre NOM pour écrire sur la tranche", "  -  CHAT: /title NAME to write on the spine");
+                          + "  -  " + Keys.Label(Keys.CameraRec) + Lang.T(" TENU : MONTAGE (titre, rogner, effacer, exporter)", " HELD: EDITING (title, trim, erase, export)");
                 Style.Text(new Rect(0, Screen.height - Style.Px(120), Screen.width, Style.Px(30)), hs, 20, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.85f));
                 return;
             }
