@@ -896,7 +896,7 @@ static void DrawHomeLook(Graphics &g, RectF stage)
 static std::vector<std::wstring> NoteBullets(const Note &n, int maxN)
 {
     std::vector<std::wstring> out;
-    const std::wstring &body = g_fr ? n.fr : n.en;
+    const std::wstring &body = NoteBody(n);
     for (size_t at = 0; at < body.size() && (int)out.size() < maxN;) {
         size_t e = body.find(L'\n', at);
         std::wstring line = body.substr(at, e == std::wstring::npos ? std::wstring::npos : e - at);
@@ -965,7 +965,7 @@ static void DrawNotesPage(Graphics &g)
     Pen sep(TH(sep), 1); g.DrawLine(&sep, b.X + 28, b.Y + 84, b.X + b.Width - 28, b.Y + 84);
     // corps : puces, paragraphes, images (defilement)
     RectF area = NotesArea();
-    const std::wstring &body = g_fr ? n.fr : n.en;
+    const std::wstring &body = NoteBody(n);
     UiFont fb(L"Segoe UI", 14.5f, FontStyleRegular);
     StringFormat sf;
     SolidBrush ink(kInk);

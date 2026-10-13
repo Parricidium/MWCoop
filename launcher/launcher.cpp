@@ -896,7 +896,9 @@ static bool IsWritableDir(const std::wstring &dir)
 // ---------------------------------------------------------------- notes des versions (onglet NOUVEAUTES)
 // Texte de chaque release GitHub : en francais, puis une ligne "---", puis en anglais. Gardees dans
 // <jeu>\MWCoop\notes-maj.json pour les lire hors ligne.
-struct Note { std::wstring ver, date, fr, en, zip; };
+// (depuis 0.92.3, demande de JD : encore une ligne "---" et en russe ; sans : l'anglais en russe)
+struct Note { std::wstring ver, date, fr, en, ru, zip; };
+static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : n.en; }
 static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
 static float g_notesH;
@@ -970,7 +972,14 @@ static std::vector<Note> ParseReleases(const std::string &json)
         else {
             size_t enAt = body.find(L'\n', sep + 1);
             n.fr = CleanNote(body.substr(0, sep));
-            n.en = CleanNote(enAt == std::wstring::npos ? L"" : body.substr(enAt + 1));
+            std::wstring rest = enAt == std::wstring::npos ? L"" : body.substr(enAt + 1);
+            size_t sep2 = rest.find(L"\n---");   // (russe apres une seconde ligne ---)
+            if (sep2 != std::wstring::npos) {
+                size_t ruAt = rest.find(L'\n', sep2 + 1);
+                n.ru = CleanNote(ruAt == std::wstring::npos ? L"" : rest.substr(ruAt + 1));
+                rest = rest.substr(0, sep2);
+            }
+            n.en = CleanNote(rest);
             if (n.en.empty()) n.en = n.fr;
         }
         for (size_t k = p; k < end;) {
@@ -7804,8 +7813,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (st == L"tenue-perso") { g_skinRowHot = 1; g_skinYaw = (float)_wtof(argv[argc - 1]); }   // (dernier argument : la vue 0..16)
         }
         else if (st == L"notes") {   // notes d'exemple (le depot n'a pas encore de release)
-            g_notes = { { L"0.1.1", L"09/10/2026", L"\u2022 Exemple de note de version (capture).\n\u2022 Deuxi\u00E8me ligne : une correction.", L"\u2022 Sample release note (capture).\n\u2022 Second line: a fix.", L"" },
-                        { L"0.1.0", L"02/10/2026", L"\u2022 Premi\u00E8re version : chargeur, joueurs visibles.", L"\u2022 First version: loader, visible players.", L"" } };
+            // (passees par ParseReleases, comme une vraie release : francais --- anglais --- russe)
+            g_notes = ParseReleases("[{\"tag_name\":\"v0.1.1\",\"published_at\":\"2026-10-09T10:00:00Z\",\"body\":\"- Exemple de note de version (capture).\\n- Deuxième ligne : une correction.\\n---\\n- Sample release note (capture).\\n- Second line: a fix.\\n---\\n- Пример заметки к версии (снимок).\\n- Вторая строка: исправление.\"},{\"tag_name\":\"v0.1.0\",\"published_at\":\"2026-10-02T10:00:00Z\",\"body\":\"- Première version : chargeur, joueurs visibles.\\n---\\n- First version: loader, visible players.\"}]");
             g_notesDone = true; g_relState = REL_OK; g_tab = TAB_NOTES;
         }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }

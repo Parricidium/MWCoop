@@ -521,7 +521,7 @@ static void DrawGfxPage(Graphics &g)
         if (!sel) { Pen pen(TH(fieldBorder), 1.0f); g.DrawPath(&pen, &p); }
         Color ink = off ? kGrey : sel ? kOnAcc : kInk;
         Text(g, T(ps[i].fr, ps[i].en), RectF(r.X + 12, r.Y + 7, r.Width - 34, 22), 12.5f, FontStyleBold, ink, StringAlignmentNear);
-        Text(g, off ? T(L"Carte non compatible", L"GPU not supported") : g_fr ? ps[i].dFr : ps[i].dEn, RectF(r.X + 12, r.Y + 29, r.Width - 16, 18), 11, FontStyleRegular, sel ? WithA(kOnAcc, 0.8f) : kGrey, StringAlignmentNear);
+        Text(g, off ? T(L"Carte non compatible", L"GPU not supported") : T(ps[i].dFr, ps[i].dEn), RectF(r.X + 12, r.Y + 29, r.Width - 16, 18), 11, FontStyleRegular, sel ? WithA(kOnAcc, 0.8f) : kGrey, StringAlignmentNear);
         // barres de niveau (Vanilla aucune, Performance 1 ... Ultra et RT 4)
         int lvl = min(i, 4);
         for (int b = 0; b <= 3; b++) {
