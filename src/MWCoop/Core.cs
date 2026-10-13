@@ -167,6 +167,7 @@ namespace MWCoop
             new Mod("portes poussees", PushDoors.Update),
             new Mod("molettes", Knobs.Update),
             new Mod("evenements", Events.Update),
+            new Mod("luge de Teimo", TeimoSled.Update),
             new Mod("graphismes", Gfx.Update),
             new Mod("rallye", Rally.Update),
             new Mod("couleur", CarColor.Update),
@@ -277,6 +278,7 @@ namespace MWCoop
             PushDoors.OnLevelLoaded();
             Knobs.OnLevelLoaded();
             Events.OnLevelLoaded();
+            TeimoSled.OnLevelLoaded();
             Gfx.OnLevelLoaded();
             Lights.OnLevelLoaded();
             Rally.OnLevelLoaded();

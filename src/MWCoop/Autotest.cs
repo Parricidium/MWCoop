@@ -135,7 +135,7 @@ namespace MWCoop
             }
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
-            VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); PushDoors.Test(mode, t);
+            VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); TeimoSled.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); PushDoors.Test(mode, t);
             MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {
@@ -1672,6 +1672,8 @@ namespace MWCoop
             }
             if (mode == "magasin" && MWCoop.Net.Session.IsHost && t > 32f && step == 0) { step = 1; Log.Info("autotest : panier " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), 3)); }
             if (mode == "magasin" && MWCoop.Net.Session.IsHost && t > 48f && step == 1) { step = 2; Log.Info("autotest : repose " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), -3)); }
+            // (invite : il prend 2 articles a 40 s ; attendu chez l'hote : « pris » +2 et les numeros du haut caches)
+            if (mode == "magasin" && !MWCoop.Net.Session.IsHost && MWCoop.Net.Session.Active && t > 40f && step == 0) { step = 1; Log.Info("autotest : panier invite " + Stock.TestCarry(Config.Get("Test", "TestProduit", "Sausages"), 2)); }
             string npcWatch = Config.Get("Test", "SuivrePNJ", "");
             if (npcWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f) Log.Info("autotest : pnj " + Npcs.State(npcWatch) + " | garees " + Parked.State());
             string stockWatch = Config.Get("Test", "SuivreStock", "");

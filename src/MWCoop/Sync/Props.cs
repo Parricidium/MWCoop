@@ -80,6 +80,7 @@ namespace MWCoop
         static readonly HashSet<string> noKey = new HashSet<string>();
         static readonly Dictionary<string, float> unknown = new Dictionary<string, float>();
         static float nextScan = -1, nextSend, nextHost, lastForced, nextRide;
+        static int pushLogs;
         static int ridePass;
 
         public static void OnLevelLoaded()
@@ -406,6 +407,28 @@ namespace MWCoop
                 nextHost = now + 2f;
                 foreach (Prop p in props.Values)
                     if (HostResends(p) && (p.Body.position - p.LastSentPos).sqrMagnitude >= 0.04f) Send(p, 0);
+            }
+            // Invite : ce qu'il a pousse sans le prendre (tables et chaises du pub, en marchant ou en voiture) ne partait jamais --
+            // seul l'hote recale ; la table restait deplacee chez lui seul (retour de CBetoy, 13/10). Une fois immobile, a moins
+            // de 4 m de lui, sa pose part (fiable) ; ce qui bouge loin de lui (chute au chargement, autre joueur) ne part pas.
+            else if (!Session.IsHost && Session.Active && now >= nextHost)
+            {
+                nextHost = now + 1f;
+                Transform me = Game.PlayerT;
+                int n = 0;
+                if (me != null)
+                    foreach (Prop p in props.Values)
+                    {
+                        if (!HostResends(p)) continue;
+                        Vector3 bp = p.Body.position;
+                        if (p.LastSentPos == Vector3.zero || now - p.RemoteAt < 3f) { p.LastSentPos = bp; continue; }   // (premier passage, ou pose recue a l'instant)
+                        if (p.Body.isKinematic || p.Id.Contains("/skeleton/")) { p.LastSentPos = bp; continue; }   // (os d'un PNJ anime : l'ivrogne du bar)
+                        if ((bp - p.LastSentPos).sqrMagnitude < 0.04f) continue;
+                        if (!p.Body.IsSleeping() && p.Body.velocity.sqrMagnitude > 0.01f) continue;   // (encore en mouvement)
+                        if ((bp - me.position).sqrMagnitude > 16f && !TestAnyDistance) { p.LastSentPos = bp; continue; }
+                        Send(p, 0, true);
+                        if (n++ < 3 && pushLogs++ < 40) Log.Info("objet " + p.Id + " pousse ici : pose envoyee");
+                    }
             }
             // Invite arrive en jeu : la pose de tout ce qui est au repos, une fois, en fiable. Le premier recalage partait des
             // la connexion, pendant son chargement (perdu), et ne repartait plus (« deja envoye ») : objets deplaces avant son
@@ -883,6 +906,7 @@ namespace MWCoop
                 p.Body.velocity = vel;
                 VehicleSync.Forget(p.Body);   // voiture sous l'objet a revoir a sa nouvelle place
             }
+            p.LastSentPos = t.position;   // (pose commune : pas renvoyee comme un deplacement d'ici)
         }
 
         // Essais : fait comme si le joueur local tenait la piece 'id' et la promenait devant lui.
@@ -984,9 +1008,29 @@ namespace MWCoop
             Log.Info("autotest : sacs : " + p.Id + " deplace en " + p.Body.position.ToString("F1") + " (" + Session.RemoteCount + " invite(s))");
         }
 
+        // [Test] Autotest=pub : a 40 s l'invite deplace la table du pub de 0,8 m (comme poussee, sans la prendre ; essai :
+        // sans la condition des 4 m) ; toutes les 10 s chacun note sa position. Attendu chez l'hote : la meme position que
+        // chez l'invite apres son « pousse ici : pose envoyee ».
+        static int pubStep; static float pubLog;
+        public static bool TestAnyDistance;
+        static void TestPub(float t)
+        {
+            Prop tp = null;
+            foreach (Prop p in props.Values) if (p.Id.StartsWith("w:STORE_AREA/Stuff/LOD/GFX_Pub/table_pub") && p.Body != null) { tp = p; break; }
+            if (tp == null) return;
+            if (!Session.IsHost && t > 40f && pubStep == 0)
+            {
+                pubStep = 1; TestAnyDistance = true;
+                tp.Body.transform.position += tp.Body.transform.right * 0.8f; tp.Body.velocity = Vector3.zero;
+                Log.Info("autotest : pub, table " + tp.Id + " deplacee ici en " + tp.Body.position.ToString("F2"));
+            }
+            if (t > pubLog) { pubLog = t + 10f; Log.Info("autotest : pub, table " + tp.Id + " en " + tp.Body.position.ToString("F2")); }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "sacs") { TestSandbags(t); return; }
+            if (mode == "pub") { TestPub(t); return; }
             bool push = mode == "coffre-pousse";
             if (mode != "coffre-objets" && mode != "coffre-objets-invite" && !push) return;
             string name = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
