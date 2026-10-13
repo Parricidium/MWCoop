@@ -12,9 +12,27 @@ namespace MWCoop
     public static partial class Kauppa
     {
         // place : a l'ouest du parking de la PSK, porte vers le parking (repere local +z = monde +x)
-        static readonly Vector3 Place = new Vector3(-1786.6f, 0f, 963.5f);
-        const float Yaw = 90f;
-        const float FloorY = 3.74f;   // hauteur du plancher, la meme chez tous (sol mesure 2,95..3,34 + 0,4)
+        static Vector3 Place = new Vector3(-1786.6f, 0f, 963.5f);
+        static float Yaw = 90f;
+        static float FloorY = 3.74f;   // hauteur du plancher, la meme chez tous (sol mesure 2,95..3,34 + 0,4)
+        static bool floorAuto;
+        // [Boutique] Paikka=x,z,cap[,plancher|auto] : autre emplacement (essais du coin s21 a Perajarvi)
+        static void ReadPlace()
+        {
+            string s = Config.Get("Boutique", "Paikka", "");
+            if (s.Length == 0) return;
+            string[] a = s.Split(',');
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            try
+            {
+                Place = new Vector3(float.Parse(a[0], ci), 0f, float.Parse(a[1], ci));
+                Yaw = float.Parse(a[2], ci);
+                floorAuto = a.Length < 4 || a[3].Trim() == "auto";
+                if (!floorAuto) FloorY = float.Parse(a[3], ci);
+                L("emplacement d'essai " + Place.x + ", " + Place.z + ", cap " + Yaw + ", plancher " + (floorAuto ? "mesure" : FloorY.ToString("F2")));
+            }
+            catch { L("[Boutique] Paikka illisible : " + s); }
+        }
         const float W2 = 5.5f, D2 = 3.5f, Wall = 0.2f, WallH = 3.4f, Ceil = 2.9f, Pitch = 25f;
 
         static GameObject root;
@@ -271,6 +289,7 @@ namespace MWCoop
         static void Build()
         {
             Materials();
+            ReadPlace();
             // hauteur : le plancher 0,4 m au-dessus du point le plus haut du sol sous l'emprise
             Quaternion rot = Quaternion.Euler(0, Yaw, 0);
             float gMax = float.MinValue, gMin = float.MaxValue, gFront = 0; int nf = 0;
@@ -289,7 +308,7 @@ namespace MWCoop
             // l'hote voyait l'invite flotter). Mesure chez l'un 2,95..3,34 (plancher 3,74), chez l'autre 2,95..4,06 (4,46) : un
             // objet ou une voiture sous l'emprise a son chargement. Chacun marchait sur son plancher, 72 cm d'ecart. La mesure ne
             // sert plus qu'au soubassement et aux marches.
-            float floorY = FloorY;
+            float floorY = floorAuto ? gMax + 0.4f : FloorY;
             L(string.Format("sol sous la boutique {0:F2}..{1:F2}, devant {2:F2} ; plancher a {3:F2}{4}", gMin, gMax, gFront, floorY, Mathf.Abs(gMax + 0.4f - floorY) > 0.05f ? " (mesure " + (gMax + 0.4f).ToString("F2") + " ignoree)" : ""));
             gMin = Mathf.Min(gMin, floorY - 0.8f);
             float down = floorY - gMin + 0.4f;          // profondeur du soubassement
