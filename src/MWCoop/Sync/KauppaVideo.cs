@@ -426,10 +426,10 @@ namespace MWCoop
             if (hit == null) return false;
             if (hit.Kind == KVhs)
             {
-                // cassette posee : son titre, et R tenu = montage
+                // cassette posee : son titre, et R = montage
                 string ti = TapeTitle(hit.Data);
                 guiUse.Value = true;
-                guiText.Value = Lang.T("CASSETTE", "TAPE") + (ti.Length > 0 ? " « " + ti.ToUpperInvariant() + " »" : "") + " - " + Keys.Label(Keys.CameraRec) + Lang.T(" TENU : MONTAGE", " HELD: EDITING");
+                guiText.Value = Lang.T("CASSETTE", "TAPE") + (ti.Length > 0 ? " « " + ti.ToUpperInvariant() + " »" : "") + " - " + Keys.Label(Keys.CameraRec) + Lang.T(" : MONTAGE", ": EDITING");
                 aimedTape = hit;
                 return true;
             }

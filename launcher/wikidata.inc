@@ -518,8 +518,8 @@ static const WikiBlock kW_Import[] = {
 };
 
 static const WikiBlock kW_Montage[] = {
-    { WB_P, L"Vise une cassette posée ou tiens-la en main, et tiens R une seconde : le panneau de montage s'ouvre (souris libre ; Échap pour fermer).",
-            L"Look at a tape (set down) or hold it, and hold R for a second: the editing panel opens (mouse free; Esc to close)." },
+    { WB_P, L"Vise une cassette posée ou tiens-la en main, et appuie sur R : le panneau de montage s'ouvre (souris libre ; Échap pour fermer).",
+            L"Look at a tape (set down) or hold it, and press R: the editing panel opens (mouse free; Esc to close)." },
     { WB_H, L"Dans le panneau", L"In the panel", 0 },
     { WB_B, L"Titre : tape-le puis ÉCRIRE (ou Entrée), il s'écrit sur la tranche.", L"Title: type it then WRITE (or Enter), it's written on the spine." },
     { WB_B, L"Petit écran : LIRE / PAUSE avec le son ; clique ou glisse sur la barre de temps pour te déplacer.", L"Small screen: PLAY / PAUSE with sound; click or drag the time bar to move." },
@@ -553,7 +553,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"La boutique OSUUSKAUPPA s21", L"The OSUUSKAUPPA s21 shop", L"Rayons, caisse, sac de courses", L"Shelves, till, shopping bag", kW_Shop),
     WART(1, L"Filmer et regarder (VHS)", L"Film and watch (VHS)", L"Caméscope, magnétoscope, télé", L"Camcorder, VCR, TV", kW_Video),
     WART(1, L"Tes vidéos sur une cassette", L"Your videos on a tape", L"/importer : une vraie vidéo dans le jeu", L"/import: a real video in the game", kW_Import),
-    WART(1, L"Monter et exporter une cassette", L"Edit and export a tape", L"R tenu : rogner, effacer, .mp4", L"Hold R: trim, erase, .mp4", kW_Montage),
+    WART(1, L"Monter et exporter une cassette", L"Edit and export a tape", L"Touche R : rogner, effacer, .mp4", L"Press R: trim, erase, .mp4", kW_Montage),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),
     WART(2, L"Contenu envoyé", L"Sent content", L"CD, radio, posters, peinture", L"CDs, radio, posters, paint", kW_Content),
