@@ -600,7 +600,7 @@ static void DrawHeader(Graphics &g)
     HeadButton(g, B_CLOSE, IC_CLOSE);
     HeadButton(g, B_MIN, IC_MIN);
     HeadButton(g, B_THEME, g_dark ? IC_SUN : IC_MOON);
-    HeadButton(g, B_LANG, 0, g_fr ? L"FR" : g_ru ? L"RU" : L"EN");
+    HeadButton(g, B_LANG, 0, g_fr ? L"FR" : g_ru ? L"RU" : g_ar ? L"AR" : L"EN");
     // | puis API moddeurs et Journaux (pastille rouge : la derniere partie s'est arretee brutalement)
     {
         Pen sp(TH(fieldBorder), 1.4f);
@@ -1233,7 +1233,7 @@ static void DrawSettings(Graphics &g)
     UiSeg(g, RectF(la.X + la.Width - 220, y, 200, 40), { T(L"Sombre", L"Dark"), T(L"Clair", L"Light") }, g_dark ? 0 : 1, UI_SET_DARK);
     y += 50;
     Text(g, T(L"Langue", L"Language"), RectF(la.X + 20, y, 200, 40), 14, FontStyleBold, kInk, StringAlignmentNear);
-    UiSeg(g, RectF(la.X + la.Width - 300, y, 280, 40), { L"Français", L"English", L"Русский" }, g_fr ? 0 : g_ru ? 2 : 1, UI_SET_LANG);
+    UiSeg(g, RectF(la.X + la.Width - 380, y, 360, 40), { L"Français", L"English", L"Русский", L"\u0627\u0644\u0639\u0631\u0628\u064A\u0629" }, g_fr ? 0 : g_ru ? 2 : g_ar ? 3 : 1, UI_SET_LANG);
     y += 50;
     if (const Opt *fl = OptByKey("FermerLanceur")) {
         RectF row(la.X + 20, y, la.Width - 40, 52);
@@ -1509,8 +1509,8 @@ static bool UiClick(int id)
         g_dark = id == UI_SET_DARK;
         WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str());
         return true;
-    case UI_SET_LANG: case UI_SET_LANG + 1: case UI_SET_LANG + 2:
-        SetLang(id == UI_SET_LANG ? L"fr" : id == UI_SET_LANG + 1 ? L"en" : L"ru");
+    case UI_SET_LANG: case UI_SET_LANG + 1: case UI_SET_LANG + 2: case UI_SET_LANG + 3:
+        SetLang(id == UI_SET_LANG ? L"fr" : id == UI_SET_LANG + 1 ? L"en" : id == UI_SET_LANG + 2 ? L"ru" : L"ar");
         return true;
     case UI_SET_CLOSE: if (const Opt *o = OptByKey("FermerLanceur")) OptSet(*o, OptGet(*o) ? 0 : 1); return true;
     case UI_SET_START: case UI_SET_START1: case UI_SET_START2:

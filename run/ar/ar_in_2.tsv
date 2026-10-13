@@ -1,0 +1,253 @@
+253	Refused by the host
+254	No lobby at the host: \"Join in game\" if they are already playing
+255	My Winter Car not found: choose mywintercar.exe
+256	The game stopped abruptly: see the logs
+257	The last launch ran WITHOUT the mod (antivirus? version.dll?): see LOGS
+258	UDP not confirmed for Kalle: forward UDP port 7870 (not just TCP) on your router
+259	Steam host
+260	connected to Pekka (Steam)
+261	JD joins Pekka
+262	Steam lobby open: invite your friends
+263	In %s's Steam lobby
+264	Close the game to change the tapes (it rewrites their list)
+265	A video is already being converted
+266	Choose the video to put on the tape
+267	Can't convert: MWCoopRT.dll missing or too old (no conversion on Windows 7)
+268	Conversion not started
+269	Converting %s…
+270	Conversion failed: %s
+271	Video converted, but the game is open: close it and import again
+272	Video added to the tape \"%s\" (%s)
+273	Video converted, but the save couldn't be changed
+274	Video converted, but the tape is no longer in the save
+275	Tape renamed
+276	Save not changed
+277	A conversion or an export is already running
+278	Nothing to export: this tape's films aren't on this PC
+279	Can't export: MWCoopRT.dll missing or too old (no export on Windows 7)
+280	Export not started
+281	Exporting \"%s\" as .mp4…
+282	Video exported: %s
+283	Export failed: %s
+284	Tapes of your game
+285	Those of the game you host or play alone (including inside a VCR or a camcorder). Pick one to watch it, export it, rename it or put a video on it.
+286	Films folder
+287	Game open: read only
+288	No tape yet: buy some at the OSUUSKAUPPA shop in game (west of the PSK car park).
+289	No tape in your game.
+290	Tape title
+291	Enter: write · Esc: cancel · 24 characters
+292	Write
+293	Cancel
+294	(no title)
+295	Blank
+296	 take
+297	 film(s) not on this PC
+298	 · in a VCR
+299	 · in a camcorder
+300	Converting 
+301	Click a tape to see it here.
+302	BLANK TAPE
+303	Films not on this PC
+304	Exporting… 
+305	Export as .mp4
+306	Rename
+307	Video…
+308	Confirm?
+309	Erase
+310	Exported videos
+311	Tape erased (the title stays)
+312	Click Confirm again to erase this tape
+313	Drone photos
+314	 photo(s) · F8 in game to take some
+315	No photo yet. In game, F8 starts the drone camera; left click takes the photo.
+316	Click a photo to see it here.
+317	Open
+318	Show in folder
+319	Confirm? (Recycle Bin)
+320	Delete
+321	Photo moved to the Recycle Bin
+322	Photo not deleted
+323	Click again to move the photo to the Recycle Bin
+324	Mod settings not saved (error %lu)
+325	Close My Winter Car before installing MSCLoader
+326	Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it FOR MWCOOP, apart (%LOCALAPPDATA%\\MWCoop)?\n\nThe game folder is not changed (except the Mods folder, if missing). Your mods stay in the game's Mods folder. An official MSCLoader already installed is not touched.\n\nMSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL.
+327	Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and reinstall it in the game folder? Your mods and their settings are kept.
+328	REINSTALL MSCLoader (your mods and their settings are kept).\n\n
+329	Installing MSCLoader…
+330	Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it in the game folder?\n\nMSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL.
+331	MSCLoader %s installed: put your mods in its Mods folder
+332	MSCLoader not installed: %s
+333	EXPERIMENTAL
+334	Close the game to turn a mod on or off
+335	%s: can't rename (error %lu)
+336	%s on: loaded at the next launch
+337	%s off: neither loaded nor sent (.dll.off file)
+338	MSCLoader will load at launch
+339	MSCLoader will not load (nothing is uninstalled)
+340	MWCoop's MSCLoader: installed apart, the game is not changed
+341	MWCoop's MSCLoader: click INSTALL MSCLOADER (installed apart, the game is not changed)
+342	Official MSCLoader: the one installed in the game
+343	Official MSCLoader: not installed in the game (INSTALL MSCLOADER)
+344	%s is off: it is not sent
+345	%s will be sent to the lobby's guests
+346	%s stays with you (not sent)
+347	\u2190 Back to mods
+348	Mod enabled
+349	  (button: in game)
+350	in game
+351	  (in game)
+352	OFFICIAL
+353	REINSTALL
+354	Installing MSCLoader\u2026
+355	MSCLoader, the community mod loader (independent project), is not installed.
+356	MSCLoader %s%s \u00B7 %d mod(s) \u00B7 %s folder
+357	 by MWCoop (apart, the game is not changed)
+358	 (official)
+359	Documents
+360	game
+361	Load MSCLoader
+362	Your mods in your MWCoop games
+363	INSTALLING\u2026
+364	INSTALL MSCLOADER
+365	Accept the host's files
+366	No more ACCEPT ALL in a friend's lobby
+367	Your mods
+368	No mod in the Mods folder. Add MSCLoader mods (My Winter Car version), then start the game once: their names and options will show up here.
+369	.off \u00B7 off: neither loaded nor sent
+370	 \u00B7 disabled
+371	 \u00B7 start the game once for details
+372	On
+373	Send
+374	Settings apply at the next game launch. \"On\" off: the mod no longer loads. \"Send\": it is copied to your lobby's guests.
+375	Open the Mods folder
+376	This lobby uses mods (MSCLoader).\n\nInstall MSCLoader (MWCoop's Coop version, installed apart) and get the host's mods?\n\nNo: you join without the mods (some of the host's items or cars may be missing).
+377	Without MSCLoader: you play without the host's mods
+378	Installing MSCLoader (Coop version)\u2026
+379	The host is sending new files: ready as soon as they're received
+380	Host's files failed: RETRY, then READY
+381	Host's files received: you're ready
+382	Host's mods not received: RETRY, then join
+383	MSCLoader files missing: reinstall it in the Mods tab
+384	%.1f MB
+385	%llu KB
+386	Sent to guests
+387	Host's files
+388	Nothing for now
+389	Nothing is sent
+390	Nothing (MSCLoader off: guests without mods)
+391	%d mod(s) \u00B7 %d item(s) \u00B7 %s
+392	Choose
+393	Checking\u2026
+394	ACCEPT ALL
+395	Downloading\u2026 %d%% (%s)
+396	Ready \u2713  %d mod(s) \u00B7 %d item(s)
+397	The host sends nothing \u2713
+398	 \u00B7 no MSCLoader
+399	 \u00B7 installing MSCLoader\u2026
+400	Failed (
+401	RETRY
+402	Content sent to guests
+403	Your CDs, paint, flag\u2026 as you have them in your game, copied apart to your lobby's guests.
+404	nothing in the game
+405	%d read by the game \u00B7 %d ignored (track1.ogg\u2026)
+406	%d song(s) \u00B7 %s
+407	%d file(s) \u00B7 %s
+408	MSCLoader mods: not installed
+409	MSCLoader mods: off (guests without mods)
+410	MSCLoader mods: %d sent of %d
+411	%d / %d items sent \u00B7 copied apart to your guests
+412	Regular
+413	Default
+414	None
+415	Pig
+416	Custom pants
+417	Custom face
+418	Pants 
+419	Face 
+420	Pants
+421	Face
+422	 (woman)
+423	Game over · %s
+424	MWCoop did not load in the game: close it, then send the logs (zip) without closing the launcher
+425	MWCoop did not load from the launch copy: start your game again, it will now start from the game folder
+426	MWCoop did not load in the game.\n\nFor some players it only loads when the game is started through Steam (like its PLAY button).\n\nTurn on \"Start the game through Steam\" (Settings > Game) and start your game again?
+427	Start through Steam turned on: start your game again
+428	%s is coming to you
+429	%s kicked from the game
+430	Game running
+431	 \u00B7 through Steam
+432	The launcher stays open during the game and goes back to the menu when the game closes. To close it at launch: Settings.
+433	Server
+434	Waiting for the game's information\u2026
+435	They show up once the mod is loaded (game menu).
+436	%d player(s)
+437	  \u00B7 host
+438	at the menu
+439	BRING HERE
+440	CONFIRM?
+441	KICK
+442	BRING HERE: the player comes next to you (unless in a vehicle). KICK: two clicks.
+443	My Winter Car not found
+444	steam_api64.dll not found in the game folder
+445	Unexpected steam_api64.dll in the game
+446	Steam is not running (or not logged in)
+447	Steam interfaces not found
+448	One moment…
+449	Creating the Steam lobby…
+450	Joining the Steam lobby…
+451	Steam could not create the lobby (code %d)
+452	This lobby no longer exists (or is closed)
+453	Could not join the Steam lobby (code %u)
+454	%s is already playing: \"Join in game\"
+455	This Steam lobby is not an MWCoop lobby
+456	The host is starting the game… yours starts in a moment
+457	Invite sent to %s
+458	Steam refused the invite
+459	No friend lobby: ask the host to invite you
+460	%s invites you: click JOIN
+461	No Steam friend online (%d offline)
+462	Steam friends online: %d · %d offline
+463	Your Steam friends show up here as soon as they are online. They can also join from Steam (\"Join game\").
+464	Playing My Winter Car
+465	Busy
+466	Away
+467	Snooze
+468	Online
+469	IN THE LOBBY
+470	INVITED ✓
+471	INVITE AGAIN
+472	INVITE
+473	NEW
+474	FINISH
+475	NEXT
+476	Skip
+477	Back
+478	Update · 
+479	Settings
+480	Good morning, 
+481	Good afternoon, 
+482	Good evening, 
+483	Starting
+484	Welcome
+485	Ready for a winter together?
+486	Joining the lobby…
+487	Lobby of 
+488	Lobby
+489	Steam · friends only · %d / %d players
+490	Port %d (UDP and TCP) · local address %s · %d / %d
+491	Host: %s:%d · %d / %d players
+492	My character
+493	What the other players see in game
+494	Sharing
+495	Copied to your guests for your game, apart from their own files
+496	What's new
+497	What changes in each version
+498	Logs
+499	Trouble in game? A zip to send
+500	Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini
+501	Game options
+502	Graphics and co-op, just for you · in game: F10 menu > Graphics
+503	API for modders
+504	MWCoop.CoopApi: docs, DLL and an example
+505	Credits

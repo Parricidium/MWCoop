@@ -42,7 +42,7 @@ enum {
     UI_LOG_DEBUG = 251,           // JOURNAUX : mode debogage
     UI_SET_COMPAT = 252,          // Reglages > Jeu : retirer les modes de compatibilite de Windows
     UI_SET_KEY = 253,             // + k (0 tchat, 1 porte-monnaie, 2 vocal) : touche en jeu a choisir (253-255)
-    UI_SET_LANG = 260,            // + k (0 francais, 1 anglais, 2 russe) : langue du lanceur et du mod
+    UI_SET_LANG = 260,            // + k (0 francais, 1 anglais, 2 russe, 3 arabe) : langue du lanceur et du mod
     UI_GFX_GROUP = 2560,          // + groupe (13) : plier / deplier une categorie des Options du jeu
     UI_GFX_PRESET = 2590,         // + prereglage
     UI_GFX = 2600,                // + ligne * 3 + (0 ligne, 1 fleche gauche, 2 fleche droite)
