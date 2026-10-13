@@ -1306,57 +1306,108 @@ static void DrawSettings(Graphics &g)
     // (« Chez un ami » : envoi de l'hote et touches en jeu dans Options du jeu, categories Partie et partage, Touches -- demande de JD, 10/10)
 }
 
-// ---- credits (demande de JD, 08/10 : ceux qui donnent quelque chose pour ameliorer MWCoop). Le plus recent en haut.
-struct Credit { const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
+// ---- credits (demande de JD, 08/10 : ceux qui donnent quelque chose pour ameliorer MWCoop). Trois onglets (JD, 13/10) :
+// modeles 3D, images (musee de la Corse : la liste complete, generee dans credits-images.inc), remerciements. Le plus
+// recent en haut de chaque onglet ; la page defile a la molette.
+enum { CRED_3D, CRED_IMG, CRED_THANKS };
+struct Credit { int cat; const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
-    { L"GalaninaKira", L"Modèle 3D", L"3D model",
+    { CRED_3D, L"Scan the World", L"Buste de Pascal Paoli", L"Bust of Pasquale Paoli",
+      L"Le buste de Paoli du musée de la Corse, d'après celui du Palazzu Naziunale de Corte, numérisé par JF Andreani pour Scan the World (MyMiniFactory), licence CC BY-NC-SA. Simplifié pour le jeu.",
+      L"The Paoli bust in the Museum of Corsica, after the one in the Palazzu Naziunale in Corte, scanned by JF Andreani for Scan the World (MyMiniFactory), CC BY-NC-SA license. Simplified for the game.", L"13/10/2026", 0 },
+    { CRED_3D, L"Lincoln 3D Scans", L"Buste de Napoléon", L"Bust of Napoleon",
+      L"Le buste de Napoléon du musée de la Corse, d'après Antoine-Denis Chaudet, numérisé par Oliver Laric (The Usher Gallery, Lincoln), sans restriction de droits. Simplifié pour le jeu.",
+      L"The Napoleon bust in the Museum of Corsica, after Antoine-Denis Chaudet, scanned by Oliver Laric (The Usher Gallery, Lincoln), free of copyright restriction. Simplified for the game.", L"13/10/2026", 0 },
+    { CRED_3D, L"GalaninaKira", L"Modèle 3D", L"3D model",
       L"Le drone de la caméra drone (mode photo), par Kira sur Sketchfab : sketchfab.com/GalaninaKira, modèle « Drone », licence CC BY 4.0. Simplifié pour le jeu.",
       L"The drone of the drone camera (photo mode), by Kira on Sketchfab: sketchfab.com/GalaninaKira, model \"Drone\", CC BY 4.0 license. Simplified for the game.", L"11/10/2026", 0 },
-    { L"WillBarrow", L"Modèles 3D", L"3D models",
+    { CRED_3D, L"WillBarrow", L"Modèles 3D", L"3D models",
       L"Les modèles du sac de couchage (plié et déplié), sur Sketchfab : sketchfab.com/WillBarrow. Un sac par joueur, dans la chambre du départ.",
       L"The sleeping bag models (rolled and unrolled), on Sketchfab: sketchfab.com/WillBarrow. One bag per player, in the starting bedroom.", L"10/10/2026", 0 },
-    { L"Dom", L"Tenues", L"Outfits",
+    { CRED_THANKS, L"Dom", L"Tenues", L"Outfits",
       L"Un pack de 155 tenues pour ton personnage : 84 hauts, 27 pantalons et 44 visages. Dans l'onglet Tenue, à la suite de celles du jeu (« Tenue Dom 12 »…).",
       L"A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026", 6 },
 };
+#include "credits-images.inc"
+static int g_credTab = CRED_3D;
+static float g_credContentH;   // hauteur du contenu de l'onglet (pour la molette)
+static RectF CreditsArea() { return RectF(kMain.X + 24, kMain.Y + 168, kMain.Width - 48, kMain.Height - 168 - 64); }
+static float CreditsMaxScroll() { return max(0.0f, g_credContentH - CreditsArea().Height); }
+
+static void CreditCard(Graphics &g, const Credit &k, float y, float x, float w)
+{
+    RectF row(x, y, w, 104);
+    GraphicsPath rp; RoundRect(rp, row, 16);
+    SolidBrush rb(TH(card)); g.FillPath(&rb, &rp);
+    Pen rpen(TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
+    RectF av(row.X + 20, row.Y + 22, 60, 60);
+    static std::map<int, Bitmap *> imgs;   // (images des contributeurs : chargees une fois)
+    Bitmap *im = NULL;
+    if (k.img) { auto it = imgs.find(k.img); if (it == imgs.end()) im = imgs[k.img] = LoadPngRes(k.img); else im = it->second; }
+    if (im) {   // photo ronde, cadrage carre au centre, anneau aux couleurs de l'etoile
+        GraphicsPath cp; cp.AddEllipse(av);
+        GraphicsState gs = g.Save();
+        g.SetClip(&cp, CombineModeIntersect);
+        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        float iw = (float)im->GetWidth(), ih = (float)im->GetHeight(), side = min(iw, ih);
+        g.DrawImage(im, av, (iw - side) / 2, (ih - side) / 2, side, side, UnitPixel);
+        g.Restore(gs);
+        Pen ring(Hue(g_time * 70.0f), 2.4f); g.DrawEllipse(&ring, av);
+    } else {
+        SolidBrush ab(WithA(kAcc, 0.85f)); g.FillEllipse(&ab, av);
+        Text(g, std::wstring(1, k.name[0]), av, 26, FontStyleBold, Color(255, 255, 255, 255));
+    }
+    Text(g, k.name, RectF(row.X + 100, row.Y + 16, 420, 28), 19, FontStyleBold, kInk, StringAlignmentNear);
+    Text(g, g_fr ? k.roleFr : k.roleEn, RectF(row.X + 100, row.Y + 44, 420, 20), 13, FontStyleBold, kAcc, StringAlignmentNear);
+    Text(g, k.date, RectF(row.X + row.Width - 220, row.Y + 16, 200, 28), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+    Para(g, g_fr ? k.fr : k.en, RectF(row.X + 100, row.Y + 64, row.Width - 124, 38), 12, kGrey);
+}
+
 static void DrawCreditsPage(Graphics &g)
 {
     RectF c(kMain.X, kMain.Y, kMain.Width, kMain.Height);
     Glass(c);
     Title(g, T(L"Merci !", L"Thank you!"), RectF(c.X + 28, c.Y + 22, 400, 30), 22, kInk);
-    Para(g, T(L"MWCoop grandit aussi grâce à vous. Chaque personne qui donne quelque chose au mod (tenues, traductions, idées devenues fonctions, tests…) est créditée ici.",
-              L"MWCoop also grows thanks to you. Everyone who gives something to the mod (outfits, translations, ideas turned into features, testing…) is credited here."),
-         RectF(c.X + 28, c.Y + 60, c.Width - 56, 44), 13, kGrey);
-    float y = c.Y + 120;
-    for (const Credit &k : kCredits) {
-        RectF row(c.X + 24, y, c.Width - 48, 104);
-        GraphicsPath rp; RoundRect(rp, row, 16);
-        SolidBrush rb(TH(card)); g.FillPath(&rb, &rp);
-        Pen rpen(TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
-        RectF av(row.X + 20, row.Y + 22, 60, 60);
-        static std::map<int, Bitmap *> imgs;   // (images des contributeurs : chargees une fois)
-        Bitmap *im = NULL;
-        if (k.img) { auto it = imgs.find(k.img); if (it == imgs.end()) im = imgs[k.img] = LoadPngRes(k.img); else im = it->second; }
-        if (im) {   // photo ronde, cadrage carre au centre, anneau aux couleurs de l'etoile
-            GraphicsPath cp; cp.AddEllipse(av);
-            GraphicsState gs = g.Save();
-            g.SetClip(&cp, CombineModeIntersect);
-            g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
-            float iw = (float)im->GetWidth(), ih = (float)im->GetHeight(), side = min(iw, ih);
-            g.DrawImage(im, av, (iw - side) / 2, (ih - side) / 2, side, side, UnitPixel);
-            g.Restore(gs);
-            Pen ring(Hue(g_time * 70.0f), 2.4f); g.DrawEllipse(&ring, av);
-        } else {
-            SolidBrush ab(WithA(kAcc, 0.85f)); g.FillEllipse(&ab, av);
-            Text(g, std::wstring(1, k.name[0]), av, 26, FontStyleBold, Color(255, 255, 255, 255));
+    Para(g, T(L"MWCoop grandit aussi grâce à vous et aux créateurs qui partagent leur travail. Chaque personne qui donne quelque chose au mod est créditée ici.",
+              L"MWCoop also grows thanks to you and to the creators who share their work. Everyone who gives something to the mod is credited here."),
+         RectF(c.X + 28, c.Y + 58, c.Width - 56, 40), 13, kGrey);
+    UiSeg(g, RectF(c.X + 24, c.Y + 106, 520, 40), { T(L"Modèles 3D", L"3D Models"), L"Images", T(L"Remerciements", L"Special Thanks") }, g_credTab, UI_CRED_TAB, 13);
+
+    RectF area = CreditsArea();
+    float sc = g_scroll[TAB_CREDITS] = min(g_scroll[TAB_CREDITS], CreditsMaxScroll());
+    GraphicsState st = g.Save();
+    g.SetClip(area, CombineModeIntersect);
+    float y = area.Y - sc;
+    if (g_credTab == CRED_IMG) {
+        // musee de la Corse : un en-tete, puis une ligne par image (titre, auteur, date, licence)
+        Text(g, T(L"Musée de la Corse", L"Museum of Corsica"), RectF(area.X + 4, y, 600, 28), 18, FontStyleBold, kInk, StringAlignmentNear);
+        Para(g, T(L"Tableaux, cartes, cartes postales et photos d'avant 2000, du domaine public ou sous licence Creative Commons (Wikimedia Commons). Liens complets : MWCoop\\musee\\CREDITS.txt.",
+                  L"Paintings, maps, postcards and photos from before 2000, public domain or under Creative Commons licenses (Wikimedia Commons). Full links: MWCoop\\musee\\CREDITS.txt."),
+             RectF(area.X + 4, y + 30, area.Width - 8, 36), 12, kGrey);
+        y += 74;
+        int i = 0;
+        for (const CreditImg &k : kCreditImgs) {
+            RectF row(area.X, y, area.Width, 40);
+            if (i++ % 2 == 0) { GraphicsPath rp; RoundRect(rp, row, 10); SolidBrush rb(TH(card)); g.FillPath(&rb, &rp); }
+            Text(g, std::wstring(g_fr ? k.titleFr : k.titleEn) + L"  (" + k.date + L")", RectF(row.X + 14, row.Y + 3, row.Width * 0.55f, 18), 13, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, k.author, RectF(row.X + 14, row.Y + 20, row.Width * 0.6f, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            Text(g, k.license, RectF(row.X + row.Width * 0.6f, row.Y + 3, row.Width * 0.4f - 14, 34), 11.5f, FontStyleRegular, kAcc, StringAlignmentFar);
+            y += 42;
         }
-        Text(g, k.name, RectF(row.X + 100, row.Y + 16, 300, 28), 19, FontStyleBold, kInk, StringAlignmentNear);
-        Text(g, g_fr ? k.roleFr : k.roleEn, RectF(row.X + 100, row.Y + 44, 300, 20), 13, FontStyleBold, kAcc, StringAlignmentNear);
-        Text(g, k.date, RectF(row.X + row.Width - 220, row.Y + 16, 200, 28), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
-        Para(g, g_fr ? k.fr : k.en, RectF(row.X + 100, row.Y + 66, row.Width - 124, 36), 12.5f, kGrey);
-        y += 116;
+        y += 10;
+        Text(g, T(L"Maquette en relief : altitudes SRTM (NASA, domaine public) via AWS Terrain Tiles (Mapzen)", L"Relief model: SRTM elevation data (NASA, public domain) via AWS Terrain Tiles (Mapzen)"),
+             RectF(area.X + 14, y, area.Width - 28, 22), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
+        y += 30;
+    } else {
+        for (const Credit &k : kCredits) {
+            if (k.cat != g_credTab) continue;
+            CreditCard(g, k, y, area.X, area.Width);
+            y += 116;
+        }
     }
+    g_credContentH = y + sc - area.Y;
+    g.Restore(st);
     Para(g, T(L"Tu as fait quelque chose pour MWCoop ? Partage-le sur le Discord (bouton en bas à gauche) : tu seras crédité ici et dans les notes de version.",
               L"Made something for MWCoop? Share it on the Discord (button at the bottom left): you'll be credited here and in the release notes."),
          RectF(c.X + 28, c.Y + c.Height - 56, c.Width - 56, 40), 12.5f, kGrey);
@@ -1521,6 +1572,7 @@ static bool UiClick(int id)
     if (id >= UI_LOOKPIN && id < UI_LOOKPIN + 4) { g_lookZone = id - UI_LOOKPIN; return true; }
     if (id == UI_LOOKROT || id == UI_LOOKROT + 1) { g_skinYaw = fmodf(g_skinYaw + (id == UI_LOOKROT ? 2.0f : -2.0f) + 16, 16.0f); g_skinIdleT = GetTickCount(); return true; }
     if (id == UI_LOOKRAND) { LookRandom(); return true; }
+    if (id >= UI_CRED_TAB && id < UI_CRED_TAB + 3) { g_credTab = id - UI_CRED_TAB; g_scroll[TAB_CREDITS] = 0; return true; }
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
