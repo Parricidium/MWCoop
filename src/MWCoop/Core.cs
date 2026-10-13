@@ -177,6 +177,7 @@ namespace MWCoop
             new Mod("chocs", CarHits.Update),
             new Mod("vitres", WindowCranks.Update),
             new Mod("ram1500", ModRam1500.Update),
+            new Mod("jonne", ModJonne.Update),
             new Mod("tenues", Studio.Update),
             new Mod("quetes", Jobs.Update),
             new Mod("trace", Trace.Update),
@@ -262,6 +263,7 @@ namespace MWCoop
             SleepingBags.OnLevelLoaded();
             Kauppa.OnLevelLoaded();
             ModCheatbox.OnLevelLoaded();
+            ModJonne.OnLevelLoaded();
             CutterHitch.OnLevelLoaded();
             AssembleIcon.OnLevelLoaded();
             CarLeaks.OnLevelLoaded();

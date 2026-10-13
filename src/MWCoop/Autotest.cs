@@ -1288,6 +1288,11 @@ namespace MWCoop
             }
             if (mode == "cbxextra" && Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : cbxextra " + ModCheatbox.TestExtra()); }
             if (mode == "cbxextra" && t > 55f && step2 == 0) { step2 = 1; Log.Info("autotest : cbxextra, ici " + ModCheatbox.TestCount()); }
+            if (mode == "jonne" && Net.Session.IsHost && t > 45f && step == 0) { step = 1; Log.Info("autotest : jonne, " + ModJonne.Test(0)); }
+            if (mode == "jonne" && Net.Session.IsHost && t > 58f && step == 1) { step = 2; Log.Info("autotest : jonne, " + ModJonne.Test(1)); }
+            if (mode == "jonne" && !Net.Session.IsHost && t > 50f && step == 0) { step = 1; Log.Info("autotest : jonne, " + ModJonne.Test(2)); }
+            if (mode == "jonne" && Net.Session.IsHost && t > 64f && step == 2) { step = 3; Log.Info("autotest : jonne, " + ModJonne.Test(4)); }
+            if (mode == "jonne" && t > 70f && step2 == 0) { step2 = 1; Log.Info("autotest : jonne, " + ModJonne.Test(3)); }
             if (mode == "vendeur" && Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + ModCheatbox.TestSeller(0, 0)); }
             if (mode == "vendeur" && Net.Session.IsHost && t > 46f && step == 1) { step = 2; Log.Info("autotest : " + ModCheatbox.TestSeller(1, Config.GetInt("Test", "VendeurPiece", 0))); }
             if (mode == "vendeur" && Net.Session.IsHost && t > 52f && step == 2) { step = 3; Log.Info("autotest : " + ModCheatbox.TestSeller(1, Config.GetInt("Test", "VendeurPiece2", 3))); }
