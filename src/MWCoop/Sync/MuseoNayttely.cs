@@ -157,7 +157,7 @@ namespace MWCoop
 
         // maquette en relief de la Corse au milieu du hall, sous vitrine : grille d'altitudes (korsika-relief.bin :
         // nx, ny, largeur reelle en m, puis nx*ny altitudes en m, mer < 0) et texture teintee (korsika-relief.jpg).
-        // Nord vers le fond du hall (-z), relief exagere 5 fois.
+        // Nord vers le fond du hall (-z), donc l'est a -x (a droite vu de l'entree) ; relief exagere 5 fois.
         static void MuseoRelief()
         {
             string bin = Path.Combine(MuseoDir, "korsika-relief.bin");
@@ -188,7 +188,7 @@ namespace MWCoop
                 {
                     float h = hgt[j * nx + i];
                     float y = top + 0.012f + (h > 0 ? h * s * exag + 0.004f : 0f);
-                    v[j * nx + i] = new Vector3(-w / 2 + w * i / (nx - 1), y, cz - d / 2 + d * j / (ny - 1));
+                    v[j * nx + i] = new Vector3(w / 2 - w * i / (nx - 1), y, cz - d / 2 + d * j / (ny - 1));
                     uv[j * nx + i] = new Vector2(i / (float)(nx - 1), 1f - j / (float)(ny - 1));
                 }
             var t = new int[(nx - 1) * (ny - 1) * 6]; int k = 0;
@@ -196,7 +196,7 @@ namespace MWCoop
                 for (int i = 0; i + 1 < nx; i++)
                 {
                     int a = j * nx + i, b = a + 1, c = a + nx, e = c + 1;
-                    t[k++] = a; t[k++] = c; t[k++] = b; t[k++] = b; t[k++] = c; t[k++] = e;
+                    t[k++] = a; t[k++] = b; t[k++] = c; t[k++] = b; t[k++] = e; t[k++] = c;
                 }
             var m = new Mesh { name = "museo_korsika" };
             m.vertices = v; m.uv = uv; m.triangles = t;
