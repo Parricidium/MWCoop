@@ -153,6 +153,14 @@ static std::atomic<int> g_offerBusy(0);
 static std::atomic<bool> g_offerNew(false);
 static std::string g_offerSig;            // ce sur quoi la liste a ete faite (fil de la fenetre)
 
+// Mods qui sautent le menu principal (Autoload de Roman266 : « Continue » des le menu). Chez un invite, le jeu chargeait
+// alors sa copie d'avant de la sauvegarde de l'hote, avant meme la connexion : il jouait l'ancien monde par-dessus le
+// nouveau (objets que l'un voit et pas l'autre ; forum, cbetoykaktyc, 13/10). Jamais envoyes aux invites (et retires de
+// leur copie des mods comme une DLL que l'hote n'a plus) : le salon fait lui-meme « Continuer » au bon moment.
+static bool MenuSkipper(const MscMod &m)
+{
+    return !_wcsicmp(m.file.c_str(), L"Autoload.dll") || (m.known && !_wcsicmp(m.id.c_str(), L"Autoload"));
+}
 static bool ModShared(const std::wstring &file)
 {
     wchar_t b[4096] = L"";
@@ -437,7 +445,7 @@ static void SyncHostTick()
         for (auto &m : g_msc) {
             // (mod coupe ici : ni charge ni envoye -- et ses dossiers (Assets, reglages) gardes aussi : retour de JD, 12/10, NDSerra
             // coupe partait quand meme, 1 Go d'Assets « pas au nom d'un mod »)
-            if (m.off || !ModShared(m.file)) { job->priv.push_back(m.file.substr(0, m.file.size() - 4)); if (m.known && !m.id.empty()) job->priv.push_back(m.id); continue; }
+            if (m.off || !ModShared(m.file) || MenuSkipper(m)) { job->priv.push_back(m.file.substr(0, m.file.size() - 4)); if (m.known && !m.id.empty()) job->priv.push_back(m.id); continue; }
             std::wstring id = m.known && !m.id.empty() ? m.id : m.file.substr(0, m.file.size() - 4);
             job->mods.push_back({ m.file, id });
             WIN32_FILE_ATTRIBUTE_DATA a;   // (la DLL et ses reglages : date et taille)
