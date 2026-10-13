@@ -919,6 +919,12 @@ namespace MWCoop
             foreach (Car c in cars)
                 if (c.Heat != null && !float.IsNaN(c.RemoteHeat) && c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving)
                     c.Heat.Value = c.RemoteHeat;
+            // Regime et gaz de la copie remis apres la logique du jeu : la moto (JONNEZ) n'a que le SoundController, dont le
+            // volume suit Drivetrain.rpm, et son automate Starter (« Wait for start », la copie n'y passe jamais en marche)
+            // remet rpm a 0 a chaque image -- l'hote n'entendait pas la moto d'un invite (JD, 13/10). Avant la physique
+            // (FixedUpdate de l'image suivante), c'est le regime du conducteur qui compte.
+            foreach (Car c in cars)
+                if (Config.GetInt("Test", "SansRegimeTardif", 0) == 0 && c.Dt != null && c.Kinematic && Remote(c, now)) { c.Dt.rpm = c.Rpm; c.Dt.throttle = c.Throttle; if (c.Dt.enabled) c.Dt.enabled = false; }
             // Klaxon de la copie : celui du conducteur (apres la logique du jeu) ; rendu a son etat d'avant ensuite.
             foreach (Car c in cars)
             {
@@ -1452,7 +1458,7 @@ namespace MWCoop
             var sb = new System.Text.StringBuilder("sons moteur :");
             foreach (GameObject g in c.SoundObjs)
                 if (g != null) { AudioSource a = g.GetComponent<AudioSource>(); sb.Append(' ').Append(g.name).Append(g.activeInHierarchy ? "/on" : "/off").Append('/').Append(a.isPlaying ? "joue" : "-").Append('/').Append(a.pitch.ToString("F2")); }
-            if (sb.Length > 0) return sb.ToString();
+            if (c.SoundObjs.Length > 0) return sb.ToString();
             sb.Append("SoundController " + (sc.enabled ? "actif" : "coupe") + ", throttle=" + (sc.engineThrottle != null ? sc.engineThrottle.name : "null") + " :");
             foreach (AudioSource a in c.Body.GetComponentsInChildren<AudioSource>(true))
                 sb.Append(' ').Append(a.clip != null ? a.clip.name : "-").Append('/').Append(a.isPlaying ? "joue" : "arret").Append('/').Append(a.volume.ToString("F2")).Append(a.enabled && a.gameObject.activeInHierarchy ? "" : "(off)");
@@ -1706,8 +1712,10 @@ namespace MWCoop
             {
                 bool hot = c.RemoteBy >= 0 && c.RemoteDriver < 0 && Remote(c, now);
                 if (relaisStep == 0 && hot) { relaisStep = 1; relaisAt = now; Log.Info("autotest : relais, moteur tournant chez #" + c.RemoteBy + ", regime recu " + c.Rpm.ToString("F0")); }
-                if (relaisStep == 1 && now > relaisAt + 0.5f) { relaisStep = 2; Log.Info("autotest : relais, hote " + TestEnter(name, false)); }
-                if (relaisStep == 2 && now > relaisAt + 1.5f) { relaisStep = 3; Log.Info("autotest : relais, hote volant -> " + TestEnter(name, true)); relaisAt = now; }
+                float wait = Config.GetFloat("Test", "RelaisAttente", 0f);   // (sons de la copie notes pendant l'attente)
+                if (relaisStep == 1 && wait > 0f && now >= relaisLog && now < relaisAt + wait) { relaisLog = now + 0.5f; Log.Info("autotest : relais, copie regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + " | " + SoundDiag(c)); }
+                if (relaisStep == 1 && now > relaisAt + 0.5f + wait) { relaisStep = 2; Log.Info("autotest : relais, hote " + TestEnter(name, false)); }
+                if (relaisStep == 2 && now > relaisAt + 1.5f + wait) { relaisStep = 3; Log.Info("autotest : relais, hote volant -> " + TestEnter(name, true)); relaisAt = now; }
             }
             if (relaisAt > 0f && now - relaisAt < 6f && now >= relaisLog && (Session.IsHost ? relaisStep >= 3 : relaisStep >= 4))
             {

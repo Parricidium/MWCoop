@@ -203,6 +203,8 @@ namespace MWCoop
                     {
                         if (t > 15f && step == 0) { step = 1; Log.Info("autotest : moto -> " + VehicleSync.TestEnter(jn, false)); }
                         if (t > 22f && step == 1) { step = 2; Log.Info("autotest : moto, guidon -> " + VehicleSync.TestEnter(jn, true)); }
+                        // ([Test] MotoMoteur=tr/min : moteur tenu en marche (faux regime envoye) -- son chez l'hote, 13/10)
+                        if (t > 25f && step == 2 && Config.GetFloat("Test", "MotoMoteur", 0f) > 0f) { step = 3; VehicleSync.TestEngine(Config.GetFloat("Test", "MotoMoteur", 0f), 0.4f); Log.Info("autotest : moto, moteur tenu a " + Config.GetFloat("Test", "MotoMoteur", 0f) + " tr/min"); }
                     }
                 }
                 else if (t > 25f)

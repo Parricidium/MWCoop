@@ -29,6 +29,7 @@ static std::atomic<int> g_mscInstall(0);   // 0 rien, 1 en cours, 2 fini, 3 eche
 static std::string g_mscInstallWhy;
 static bool g_mscFake;                      // captures : liste factice, pas de releve
 static bool ModShared(const std::wstring &file);   // (modsync.inc : envoye aux invites)
+static bool MenuSkipper(const MscMod &m);       // (modsync.inc : saute le menu -- jamais envoye)
 static void ModSetShared(const std::wstring &file, bool on);
 
 static std::wstring MscManaged() { return g_gameDir + L"mywintercar_Data\\Managed\\"; }
@@ -720,7 +721,7 @@ static void DrawMods(Graphics &g)
             bool acHot = g_mscHot == 6000 + i;
             Text(g, T(L"Actif", L"On"), RectF(ar.X - 84, r.Y, 76, r.Height), 12.5f, FontStyleBold, acHot ? kAcc : !m.off ? kInk : kGrey, StringAlignmentFar);
             DrawToggle(g, ar, !m.off, acHot);
-            bool sh = ModShared(m.file) && !m.off, shHot = g_mscHot == 4000 + i;   // envoye aux invites du salon
+            bool sh = ModShared(m.file) && !m.off && !MenuSkipper(m), shHot = g_mscHot == 4000 + i;   // envoye aux invites du salon
             Text(g, T(L"Envoyer", L"Send"), RectF(sr.X - 84, r.Y, 76, r.Height), 12.5f, FontStyleBold, shHot ? kAcc : sh ? kInk : kGrey, StringAlignmentFar);
             DrawToggle(g, sr, sh, shHot);
             if (m.known) {
