@@ -738,6 +738,7 @@ namespace MWCoop
                         }
                 }
                 if (!moto) SeatFit(passenger);
+                if (!moto && !passenger && vehicleT != null) PedalLegs(vehicleT);
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
                 if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - motoRaise - Root.transform.position) + EyeOffset;   // (sans la remontee : sinon l'ancrage la defait)
                 // Dos arrondi vers le volant, tete vers le retroviseur (dessin de JD) : apres les yeux au repos (la courbure ne
@@ -1132,8 +1133,78 @@ namespace MWCoop
             // Cuisses sur l'assise, genoux plies, pieds aux pedales : chaque pied devant et sous sa hanche
             float fwd = Config.GetFloat("Test", "SiegePieds", 0.55f), down = Mathf.Max(0.2f, Config.GetFloat("Test", "SiegeChute", 0.5f) - lostY);
             Transform hr = Bone("thig_right"), hl = Bone("thig_left");
-            if (ar != null && hr != null) Leg("thig_right", "knee_right", "ankle_right", hr.position + car.forward * fwd - car.up * down + car.right * 0.04f);
-            if (al != null && hl != null) Leg("thig_left", "knee_left", "ankle_left", hl.position + car.forward * fwd - car.up * down - car.right * 0.04f);
+            Vector3 footR = hr != null ? hr.position + car.forward * fwd - car.up * down + car.right * 0.04f : Vector3.zero;
+            Vector3 footL = hl != null ? hl.position + car.forward * fwd - car.up * down - car.right * 0.04f : Vector3.zero;
+            if (ar != null && hr != null) Leg("thig_right", "knee_right", "ankle_right", footR);
+            if (al != null && hl != null) Leg("thig_left", "knee_left", "ankle_left", footL);
+        }
+
+        // Pieds du conducteur sur les pedales (Menor, liste du 12/10, point 12 : « qu'on voie le pied appuyer ») : les pedales
+        // de la copie bougent deja (CarVisuals, envoyees par le conducteur) ; le pied droit suit l'accelerateur, ou le frein
+        // quand il est plus enfonce, le gauche l'embrayage quand on l'enfonce. Pedale reperee a son pivot (pivot_throttle,
+        // pivot_brake, pivot_clutch), le patin au bas de sa piece ; enfoncement = angle depuis la pose au repos.
+        class Pedal { public Transform P; public Quaternion Rest; public Vector3 Pad; public float Max = 1f; }
+        Transform pedCar; Pedal pThr, pBrk, pClu; float brakeBlend, clutchBlend; float pedLog;
+        static Pedal FindPedal(Transform car, string name)
+        {
+            Transform t = null;
+            foreach (Transform x in car.GetComponentsInChildren<Transform>(true)) if (x.name == name) { t = x; break; }
+            if (t == null) return null;
+            Renderer r = t.GetComponentInChildren<Renderer>();
+            if (r == null) return null;
+            Bounds b = r.bounds;
+            // (patin : en bas de la piece, vers l'arriere de la voiture)
+            Vector3 pad = b.center - car.up * b.extents.y * 0.7f;
+            return new Pedal { P = t, Rest = t.localRotation, Pad = t.InverseTransformPoint(pad) };
+        }
+        static float Press(Pedal p)
+        {
+            if (p == null || p.P == null) return 0f;
+            float a = Quaternion.Angle(p.Rest, p.P.localRotation);
+            if (a > p.Max) p.Max = a;
+            return Mathf.Clamp01(a / Mathf.Max(p.Max, 8f));
+        }
+        // (apres la pose de conduite et le recalage sur le siege : chevilles du moment comme pieds au repos)
+        void PedalLegs(Transform car)
+        {
+            Transform hr = Bone("thig_right"), hl = Bone("thig_left"), ar = Bone("ankle_right"), al = Bone("ankle_left");
+            if (hr == null || hl == null || ar == null || al == null) return;
+            Vector3 footR = ar.position, footL = al.position, r0 = footR, l0 = footL;
+            PedalFeet(car, hr.position, hl.position, ref footR, ref footL);
+            if (footR != r0) Leg("thig_right", "knee_right", "ankle_right", footR);
+            if (footL != l0) Leg("thig_left", "knee_left", "ankle_left", footL);
+        }
+        void PedalFeet(Transform car, Vector3 hipR, Vector3 hipL, ref Vector3 footR, ref Vector3 footL)
+        {
+            if (Config.GetInt("Coop", "PiedsPedales", 1) == 0) return;
+            if (pedCar != car)
+            {
+                pedCar = car;
+                pThr = FindPedal(car, "pivot_throttle"); pBrk = FindPedal(car, "pivot_brake"); pClu = FindPedal(car, "pivot_clutch");
+                Log.Info("avatar " + Player.Name + " : pedales de " + car.name + " : " + (pThr != null ? "acc " : "") + (pBrk != null ? "frein " : "") + (pClu != null ? "embrayage" : "") + (pThr == null && pBrk == null ? "aucune" : ""));
+                brakeBlend = clutchBlend = 0f;
+            }
+            if (pThr == null && pBrk == null) return;
+            float thr = Press(pThr), brk = Press(pBrk), clu = Press(pClu);
+            brakeBlend = Mathf.MoveTowards(brakeBlend, brk > thr + 0.05f && brk > 0.08f ? 1f : 0f, Time.deltaTime * 6f);
+            clutchBlend = Mathf.MoveTowards(clutchBlend, clu > 0.1f ? 1f : 0f, Time.deltaTime * 6f);
+            Vector3 back = -car.forward * 0.07f + car.up * 0.04f;   // (cheville un peu derriere et au-dessus du patin)
+            Vector3 onThr = pThr != null && pThr.P != null ? pThr.P.TransformPoint(pThr.Pad) + back : footR;
+            Vector3 onBrk = pBrk != null && pBrk.P != null ? pBrk.P.TransformPoint(pBrk.Pad) + back : onThr;
+            Vector3 r = Vector3.Lerp(onThr, onBrk, brakeBlend);
+            if ((r - hipR).magnitude < 1.1f) footR = r;
+            if (pClu != null && pClu.P != null)
+            {
+                Vector3 l = Vector3.Lerp(footL, pClu.P.TransformPoint(pClu.Pad) + back, clutchBlend);
+                if ((l - hipL).magnitude < 1.1f) footL = l;
+            }
+            if (Config.GetInt("Test", "JournalPedales", 0) != 0 && Time.realtimeSinceStartup >= pedLog)
+            {
+                pedLog = Time.realtimeSinceStartup + 2f;
+                Log.Info("avatar " + Player.Name + " : pedales acc " + thr.ToString("F2") + " frein " + brk.ToString("F2") + " embr " + clu.ToString("F2") + " (frein " + brakeBlend.ToString("F2") + ") pied D " + car.InverseTransformPoint(footR).ToString("F2")
+                         + " patins acc " + (pThr != null && pThr.P != null ? car.InverseTransformPoint(pThr.P.TransformPoint(pThr.Pad)).ToString("F2") : "-") + " frein " + (pBrk != null && pBrk.P != null ? car.InverseTransformPoint(pBrk.P.TransformPoint(pBrk.Pad)).ToString("F2") : "-")
+                         + " hanche D " + car.InverseTransformPoint(hipR).ToString("F2"));
+            }
         }
 
         // [Test] JournalSiege=1 : os de l'avatar assis et sieges du vehicule, dans le repere du vehicule, toutes les 3 s.

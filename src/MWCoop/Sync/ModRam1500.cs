@@ -30,19 +30,29 @@ namespace MWCoop
 
         public static bool Present { get { return ram != null; } }
 
-        public static void OnLevelLoaded() { ram = null; drive = null; findAt = Time.realtimeSinceStartup + 10f; tStep = 0; slots = null; lot.Clear(); lotCamper = null; lotInit = false; lotLook = Time.realtimeSinceStartup + 12f; }
+        public static void OnLevelLoaded() { icePanes.Clear(); iceComp = null; iceLook = 0f; lotSeed = 0; lotSeedApplied = 0; lotSeedNext = Time.realtimeSinceStartup + 20f; ram = null; drive = null; findAt = Time.realtimeSinceStartup + 10f; tStep = 0; slots = null; lot.Clear(); lotCamper = null; lotInit = false; lotLook = Time.realtimeSinceStartup + 12f; }
 
         const BindingFlags F = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
+        // Assemblage du mod, cherche une fois (puis toutes les 30 s s'il manque) : avant, chaque appel parcourait tous les
+        // assemblages (GetName alloue) -- a chaque image sans le mod (LotWatch), d'ou des passages du ramasse-miettes.
+        static Assembly ramAsm;
+        static float ramAsmLook = -1f;
+        static readonly Dictionary<string, Type> types = new Dictionary<string, Type>();
         static Type TypeOf(string name)
         {
-            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            if (ramAsm == null)
             {
-                if (a.GetName().Name != "ram1500") continue;
-                Type t = a.GetType(name, false);
-                if (t != null) return t;
+                float now = Time.realtimeSinceStartup;
+                if (ramAsmLook >= 0f && now < ramAsmLook) return null;
+                ramAsmLook = now + 30f;
+                foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+                    if (a.GetName().Name == "ram1500") { ramAsm = a; break; }
+                if (ramAsm == null) return null;
             }
-            return null;
+            Type t;
+            if (!types.TryGetValue(name, out t)) { t = ramAsm.GetType(name, false); types[name] = t; }
+            return t;
         }
         static Component Comp(string type, string goName)
         {
@@ -237,6 +247,8 @@ namespace MWCoop
             {
                 Add("radio", () => Int(Get(radio, "radioON")), v => Set(radio, "radioON", v == 1));
                 Add("radioVolume", () => Mathf.RoundToInt((float)Get(radio, "radioVolume") * 10f), v => Set(radio, "radioVolume", v / 10f));
+                // (frequence du cadran : la meme chez tous ; ce qu'on y entend depend du reglage « radio du jeu ou internet » de chacun)
+                Add("radioFreq", () => Mathf.RoundToInt((float)Get(radio, "radioFrequency") * 10f), v => Set(radio, "radioFrequency", v / 10f));
             }
         }
 
@@ -254,8 +266,9 @@ namespace MWCoop
         static bool StaticBool(string type, string field) { Type t = TypeOf(type); FieldInfo f = t != null ? t.GetField(field, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static) : null; return f != null && (bool)f.GetValue(null); }
         static void LotWatch(float now)
         {
-            if (now < lotLook || TypeOf("SellerLogic") == null) return;
+            if (now < lotLook) return;
             lotLook = now + 1f;
+            if (TypeOf("SellerLogic") == null) return;
             bool sold = StaticBool("SellerLogic", "LotSold"), csold = StaticBool("SellerLogic", "CamperLotSold");
             if (!lotInit) { lotInit = true; lotSoldSeen = sold; camperSoldSeen = csold; }
             if (!sold)
@@ -297,6 +310,143 @@ namespace MWCoop
                 Log.Info("ram : cellule achetee ici au parc, envoyee");
             }
             camperSoldSeen = csold;
+        }
+
+        // ---------------------------------------------------------------- camions du parc, les memes chez tous
+        // SellerLogic.SpawnLotTrucks tire tout au hasard (UnityEngine.Random : sens, version, moteur, boite, couleur, mat) : le
+        // parc differait d'un joueur a l'autre. L'hote refait son parc (et la cellule du parc) avec une graine a lui et l'envoie
+        // (@ram 4, redit toutes les 20 s) ; chacun refait le sien avec la meme graine -- meme tirage, memes camions.
+        static int lotSeed, lotSeedApplied;
+        static float lotSeedNext;
+        static bool LotRespawn(int seed)
+        {
+            Type st = TypeOf("SellerLogic");
+            if (st == null || StaticBool("SellerLogic", "LotSold")) return false;
+            FieldInfo cp = st.GetField("CachedPrefab", BindingFlags.Public | BindingFlags.Static), ccp = st.GetField("CachedCamperPrefab", BindingFlags.Public | BindingFlags.Static);
+            GameObject pf = cp != null ? cp.GetValue(null) as GameObject : null;
+            if (pf == null) return false;
+            int was = UnityEngine.Random.seed;
+            try
+            {
+                UnityEngine.Random.seed = seed;
+                st.GetMethod("SpawnLotTrucks", BindingFlags.Public | BindingFlags.Static).Invoke(null, new object[] { pf });
+                GameObject cpf = ccp != null ? ccp.GetValue(null) as GameObject : null;
+                MethodInfo sc = st.GetMethod("SpawnLotCamper", BindingFlags.Public | BindingFlags.Static);
+                if (cpf != null && sc != null && !StaticBool("SellerLogic", "CamperLotSold")) { UnityEngine.Random.seed = seed + 1; sc.Invoke(null, new object[] { cpf }); }
+            }
+            catch (Exception e) { Log.Warn("ram : parc refait : " + (e.InnerException ?? e).Message); return false; }
+            finally { UnityEngine.Random.seed = was ^ seed; }
+            lotInit = false;   // (releve du parc repris sur les nouveaux camions)
+            return true;
+        }
+        static void LotSeedTick(float now)
+        {
+            if (!Session.IsHost || now < lotSeedNext) return;
+            lotSeedNext = now + (lotSeed == 0 ? 3f : 20f);
+            if (lotSeed == 0)
+            {
+                int sd = new System.Random().Next(1, int.MaxValue);
+                if (!LotRespawn(sd)) return;
+                lotSeed = sd;
+                Log.Info("ram : parc du vendeur refait (graine " + sd + "), envoye aux autres");
+            }
+            if (Session.RemoteCount > 0) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@ram").U8(4).I32(lotSeed), true);
+        }
+        static void OnLotSeed(int who, int seed)
+        {
+            if (Session.IsHost || seed == lotSeedApplied) return;
+            if (LotRespawn(seed)) { lotSeedApplied = seed; Log.Info("ram : parc du vendeur refait comme chez #" + who + " (graine " + seed + ")"); }
+        }
+
+        // ---------------------------------------------------------------- givre gratte sur les vitres
+        // GlassIce (une instance) : chaque vitre (Pane) a une grille d'epaisseur de glace (thick, res x res) que le grattoir
+        // creuse (StampBlade). Celui qui gratte (clic tenu) envoie les cases creusees (indice, epaisseur sur 255 de celle du
+        // depart) 4 fois par seconde ; les autres ne font que creuser d'autant (jamais regeler). Vitres sans masque : la part
+        // grattee (uniformScraped). Fonte et regel : la simulation de chacun.
+        class IcePane { public object P; public float[] Shadow; public float Max; public float Uniform; }
+        static readonly List<IcePane> icePanes = new List<IcePane>();
+        static Component iceComp;
+        static float iceNext, iceLook;
+        static FieldInfo fThick, fUniform, fDirty, fMasked;
+        static MethodInfo mRefresh;
+        static bool IceFind(float now)
+        {
+            if (iceComp != null && icePanes.Count > 0) return true;
+            if (now < iceLook) return false;
+            iceLook = now + 5f;
+            Type gt = TypeOf("GlassIce");
+            FieldInfo inst = gt != null ? gt.GetField("Instance", BindingFlags.Public | BindingFlags.Static) : null;
+            iceComp = inst != null ? inst.GetValue(null) as Component : null;
+            if (iceComp == null) return false;
+            System.Collections.IList list = Get(iceComp, "panes") as System.Collections.IList;
+            if (list == null || list.Count == 0) return false;
+            icePanes.Clear();
+            Type pt = list[0].GetType();
+            fThick = pt.GetField("thick"); fUniform = pt.GetField("uniformScraped"); fDirty = pt.GetField("dirty"); fMasked = pt.GetField("masked");
+            mRefresh = gt.GetMethod("RefreshPane", BindingFlags.NonPublic | BindingFlags.Instance);
+            foreach (object p in list)
+            {
+                float[] th = fThick.GetValue(p) as float[];
+                float mx = 0f; if (th != null) foreach (float v in th) if (v > mx) mx = v;
+                icePanes.Add(new IcePane { P = p, Shadow = th != null ? (float[])th.Clone() : null, Max = mx > 0f ? mx : 1f, Uniform = (float)fUniform.GetValue(p) });
+            }
+            Log.Info("ram : givre, " + icePanes.Count + " vitre(s) suivie(s)");
+            return true;
+        }
+        static void IceTick(float now)
+        {
+            if (now < iceNext) return;
+            iceNext = now + 0.25f;
+            if (!IceFind(now)) return;
+            bool scraping = Input.GetMouseButton(0) || testScrape;
+            for (int i = 0; i < icePanes.Count; i++)
+            {
+                IcePane ip = icePanes[i];
+                float[] th = fThick.GetValue(ip.P) as float[];
+                if (th == null) continue;
+                if (ip.Shadow == null || ip.Shadow.Length != th.Length) { ip.Shadow = (float[])th.Clone(); float mx = 0f; foreach (float v in th) if (v > mx) mx = v; ip.Max = mx > 0f ? mx : 1f; continue; }
+                var cells = new List<int>();
+                for (int k = 0; k < th.Length; k++)
+                {
+                    if (scraping && th[k] < ip.Shadow[k] - ip.Max * 0.02f) cells.Add(k);
+                    else if (!scraping || th[k] > ip.Shadow[k]) ip.Shadow[k] = th[k];   // (fonte ou regel d'ici : pas envoyes)
+                }
+                float u = (float)fUniform.GetValue(ip.P);
+                bool uni = scraping && u > ip.Uniform + 0.01f;
+                if (!uni) ip.Uniform = Mathf.Max(ip.Uniform, u);
+                if (cells.Count == 0 && !uni) continue;
+                for (int c0 = 0; c0 < Math.Max(1, cells.Count); c0 += 300)
+                {
+                    int n = Math.Min(300, cells.Count - c0);
+                    var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@ram").U8(5).U8(i).F32(u).U16(Math.Max(0, n));
+                    for (int j = 0; j < n; j++) { int k = cells[c0 + j]; w.U16(k).U8(Mathf.Clamp(Mathf.RoundToInt(th[k] / ip.Max * 255f), 0, 255)); ip.Shadow[k] = th[k]; }
+                    if (Session.RemoteCount > 0) Session.SendAll(w, true);
+                }
+                ip.Uniform = u;
+                if (iceLogs++ < 6) Log.Info("ram : givre gratte ici (vitre " + i + ", " + cells.Count + " cases), envoye");
+            }
+        }
+        static int iceLogs;
+        public static bool testScrape;
+        static void OnIce(int who, NetReader r)
+        {
+            int i = r.U8(); float u = r.F32(); int n = r.U16();
+            if (!IceFind(Time.realtimeSinceStartup) || i >= icePanes.Count) return;
+            IcePane ip = icePanes[i];
+            float[] th = fThick.GetValue(ip.P) as float[];
+            bool changed = false;
+            for (int j = 0; j < n; j++)
+            {
+                int k = r.U16(); float v = r.U8() / 255f * ip.Max;
+                if (th == null || k >= th.Length || th[k] <= v) continue;
+                th[k] = v; changed = true;
+                if (ip.Shadow != null && k < ip.Shadow.Length) ip.Shadow[k] = v;
+            }
+            if ((float)fUniform.GetValue(ip.P) < u) { fUniform.SetValue(ip.P, u); ip.Uniform = u; changed = true; }
+            if (!changed) return;
+            fDirty.SetValue(ip.P, true);
+            try { if (mRefresh != null) mRefresh.Invoke(iceComp, new object[] { ip.P, true }); } catch { }
+            if (iceLogs++ < 12) Log.Info("ram : givre gratte chez #" + who + " (vitre " + i + ", " + n + " cases), applique ici");
         }
 
         static void OnBought(int kind, int who, NetReader r)
@@ -360,7 +510,15 @@ namespace MWCoop
             if (!PlayerSync.InGame || !Session.Active) return;
             float now = Time.realtimeSinceStartup;
             LotWatch(now);
+            LotSeedTick(now);
+            IceTick(now);
             if (!Find()) return;
+            // Place du conducteur fermee au joueur d'ici quand il est assis en passager ou qu'un autre conduit : la zone du
+            // RamDrivingController (OnTriggerStay, touche DrivingMode = Entree) n'est pas un automate du jeu que Seats sait couper
+            // -- Entree pour descendre de la banquette aurait aussi pris le volant. Son delai d'entree est tenu ouvert.
+            if (drive != null && !(Get(drive, "InCar") is bool && (bool)Get(drive, "InCar"))
+                && (Seats.SeatedCar == ram.transform || VehicleSync.RemotelyDriven(ram.transform)))
+            { object cd = Get(drive, "cooldown"); if (cd is float && (float)cd < 0.3f) Set(drive, "cooldown", 0.5f); }
             if (now >= camperLook)
             {
                 camperLook = now + 5f;
@@ -445,6 +603,8 @@ namespace MWCoop
         {
             int kind = r.U8();
             if (kind == 2 || kind == 3) { OnBought(kind, who, r); return; }
+            if (kind == 4) { OnLotSeed(who, r.I32()); return; }
+            if (kind == 5) { OnIce(who, r); return; }
             if (!Find()) return;
             if (kind == 0)
             {
@@ -486,6 +646,38 @@ namespace MWCoop
         static int tStep; static float tLog;
         public static void Test(string mode, float t)
         {
+            // [Test] Autotest=ramgivre : l'hote gratte le pare-brise a 45 s (grattoir du mod, StampBlade, une ligne) ; a 60 s
+            // chacun note l'epaisseur moyenne de chaque vitre et la graine du parc ; et la radio a 88,5 chez l'hote a 50 s.
+            if (mode == "ramgivre")
+            {
+                float now = Time.realtimeSinceStartup;
+                if (Session.IsHost && tStep == 0 && t > 45f && IceFind(now))
+                {
+                    tStep = 1; testScrape = true;
+                    MethodInfo sb = iceComp.GetType().GetMethod("StampBlade", BindingFlags.NonPublic | BindingFlags.Instance);
+                    object p0 = icePanes.Count > 0 ? icePanes[0].P : null;
+                    float got = 0f;
+                    if (sb != null && p0 != null)
+                        for (int k = 0; k <= 20; k++) got += (float)sb.Invoke(iceComp, new object[] { p0, new Vector2(0.3f + k * 0.02f, 0.5f), new Vector2(1f, 0f), 4f, 2f, 10f });
+                    Log.Info("autotest : ramgivre, pare-brise gratte ici (" + got.ToString("F1") + " retire)");
+                    Component radio = Comp("RadioController", null);
+                    if (radio != null) { Set(radio, "radioFrequency", 88.5f); Log.Info("autotest : ramgivre, radio a 88,5"); }
+                }
+                if (tStep == 1 && t > 47f) { tStep = 2; testScrape = false; }
+                if (t > 60f && tStep < 9)
+                {
+                    tStep = 9;
+                    var sbl = new System.Text.StringBuilder("autotest : ramgivre, ici :");
+                    if (IceFind(now))
+                        for (int i = 0; i < icePanes.Count; i++) { float[] th = fThick.GetValue(icePanes[i].P) as float[]; double sum = 0; if (th != null) foreach (float v in th) sum += v; sbl.Append(" vitre ").Append(i).Append(" ").Append(th != null && th.Length > 0 ? (sum / th.Length).ToString("F4") : "-"); }
+                    Component radio = Comp("RadioController", null);
+                    sbl.Append(" | radio ").Append(radio != null ? Get(radio, "radioFrequency") : "?").Append(" | graine du parc ").Append(Session.IsHost ? lotSeed : lotSeedApplied);
+                    Type tt = TypeOf("LotTruckTag");
+                    if (tt != null) foreach (UnityEngine.Object o in UnityEngine.Object.FindObjectsOfType(tt)) { Component c = o as Component; sbl.Append(" ; ").Append(Get(c, "brandingStyle")).Append(Get(c, "isDiesel") is bool && (bool)Get(c, "isDiesel") ? " D" : "").Append(" ").Append(((Color)Get(c, "paintColor")).ToString()); }
+                    Log.Info(sbl.ToString());
+                }
+                return;
+            }
             if (mode == "ramreperes" && Find() && tStep == 0 && t > 30f)
             {
                 tStep = 9;

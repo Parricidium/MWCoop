@@ -59,7 +59,16 @@ namespace MWCoop
             if (!exported)
             {
                 exported = true;
-                try { Log.Info("voiture : apercu exporte, " + Export()); } catch (System.Exception e) { Log.Warn("voiture : export " + e.Message); }
+                // (voiture de serie : le meme apercu d'une partie a l'autre -- refait seulement si MWCoop ou le reglage changent ;
+                // l'export prenait ~100 ms d'un coup, 20 s apres le chargement)
+                string tag = Version.Text + " " + Config.GetInt("Coop", "ApercuComplet", 1), tagFile = MeshPath + ".version";
+                bool fresh = false;
+                try { fresh = Config.GetInt("Coop", "ApercuComplet", 1) != 0 && File.Exists(MeshPath) && File.Exists(tagFile) && File.ReadAllText(tagFile) == tag; } catch { }
+                if (fresh) Log.Info("voiture : apercu a jour");
+                else
+                {
+                    try { Log.Info("voiture : apercu exporte, " + Export()); File.WriteAllText(tagFile, tag); } catch (System.Exception e) { Log.Warn("voiture : export " + e.Message); }
+                }
             }
         }
 

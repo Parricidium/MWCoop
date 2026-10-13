@@ -29,6 +29,38 @@ namespace MWCoop
         static float capAt;
         // [Test] Autotest=pantin : le joueur 2 est « mort » (pantin chez les autres) de 30 a 45 s, en marchant ; captures.
         public static bool TestDead;
+        // [Test] MesureCamera=1 : a-coups vus a l'ecran (passager surtout) : a chaque image, l'ecart de la camera (et de la
+        // voiture ou l'on est assis) a un mouvement regulier -- p(t) - 2 p(t-1) + p(t-2), ramene a des images de 1/60 s --,
+        // et chaque seconde la mediane, le 95e centile et le pire, en millimetres, avec la vitesse.
+        static float nanNext;
+        static Vector3 mc1, mc2, mv1, mv2; static float md1 = -1f, md2 = -1f, mcNext; static readonly System.Collections.Generic.List<float> mcJ = new System.Collections.Generic.List<float>(), mvJ = new System.Collections.Generic.List<float>();
+        static void MeasureCam(float t)
+        {
+            Transform cam = PlayerSync.LocalCamera;
+            if (cam == null) return;
+            Transform carT = Seats.SeatedCar;
+            if (carT == null && VehicleSync.LocalDrivingRoot != null) carT = VehicleSync.LocalDrivingRoot;
+            Vector3 p = cam.position, v = carT != null ? carT.position : p;
+            float dt = Time.unscaledDeltaTime;
+            if (md2 > 0f && md1 > 0f && dt > 0f)
+            {
+                // (pas inegaux : second ecart divise par les pas, ramene a 1/60 s)
+                Vector3 a = ((p - mc1) / dt - (mc1 - mc2) / md1) * (1f / 60f) * (1f / 60f) / ((dt + md1) * 0.5f);
+                Vector3 b = ((v - mv1) / dt - (mv1 - mv2) / md1) * (1f / 60f) * (1f / 60f) / ((dt + md1) * 0.5f);
+                mcJ.Add(a.magnitude * 1000f); mvJ.Add(b.magnitude * 1000f);
+            }
+            mc2 = mc1; mc1 = p; mv2 = mv1; mv1 = v; md2 = md1; md1 = dt;
+            if (Time.realtimeSinceStartup < mcNext) return;
+            mcNext = Time.realtimeSinceStartup + 1f;
+            if (mcJ.Count < 10) { mcJ.Clear(); mvJ.Clear(); return; }
+            mcJ.Sort(); mvJ.Sort();
+            float spd = carT != null && carT.GetComponent<Rigidbody>() != null ? carT.GetComponent<Rigidbody>().velocity.magnitude : 0f;
+            Log.Info("autotest : a-coups camera med " + mcJ[mcJ.Count / 2].ToString("F2") + " p95 " + mcJ[mcJ.Count * 95 / 100].ToString("F2") + " max " + mcJ[mcJ.Count - 1].ToString("F1")
+                + " mm | voiture med " + mvJ[mvJ.Count / 2].ToString("F2") + " p95 " + mvJ[mvJ.Count * 95 / 100].ToString("F2") + " max " + mvJ[mvJ.Count - 1].ToString("F1")
+                + " mm | " + mcJ.Count + " images, " + (carT != null ? carT.name + " " + spd.ToString("F1") + " m/s" : "a pied"));
+            mcJ.Clear(); mvJ.Clear();
+        }
+
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
 
         // [Test] Autotest=cabine, CabinePassager=1 : en fin d'image (ce qui est rendu), l'avatar du conducteur dans le repere
@@ -36,6 +68,17 @@ namespace MWCoop
         // correctif du 10/10, vitesse x duree d'image vers l'arriere).
         static bool lateAv; static Vector3 lateMin, lateMax; static float lateLogAt; static int lateN;
         public static int BeltLookLate = -1;   // (essais : regard force en fin d'image vers la ceinture : 0 rangee, 1 boucle)
+        // [Test] TestPedale=brake|clutch|throttle : de 40 a 60 s (temps de jeu), cette pedale de [Test] TestVoiture enfoncee ici
+        // (15 degres, comme l'automate du jeu), apres CarVisuals et avant les avatars -- le pied du conducteur doit la suivre.
+        public static void PedalTest()
+        {
+            string tped = Config.Get("Test", "TestPedale", "");
+            float t = Time.timeSinceLevelLoad;
+            if (tped.Length == 0 || t < 40f || t > 60f) return;
+            Rigidbody pb = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET"));
+            if (pb != null) foreach (Transform x in pb.GetComponentsInChildren<Transform>(true)) if (x.name == "pivot_" + tped) x.localRotation = Quaternion.Euler(15f, 0f, 0f);
+        }
+
         public static void LateMeasure()
         {
             Vector3 blt;
@@ -263,15 +306,17 @@ namespace MWCoop
             {
                 // Au volant de [Test] TestVoiture a 15 s, puis le vehicule est pousse en avant (8 m/s) 12 s.
                 string car = Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)");
-                if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
-                if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                float enterAt = Config.GetFloat("Test", "EntreeA", 15f);
+                if (t > enterAt && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > enterAt + 7f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
                 Rigidbody b = VehicleSync.Body(car);
-                VehicleSync.TestEngine(t > 25f && t < 37f ? 2000f : -1f, 0.6f);
+                float push0 = Config.GetFloat("Test", "PousseDebut", 25f), push1 = Config.GetFloat("Test", "PousseFin", 37f);
+                VehicleSync.TestEngine(t > push0 && t < push1 ? 2000f : -1f, 0.6f);
                 if (t > 24f && step == 2) { step = 3; Log.Info("autotest : moteur " + VehicleSync.TestSounds(car, true)); }
                 if (t > 23f && Time.frameCount % 120 == 0 && t < 30f) Log.Info("autotest : yeux " + Seats.DriverEyes(car.Split('(')[0]));
                 if (t > 55f && step == 3 && Config.GetInt("Test", "TestSortie", 0) != 0) { step = 4; Log.Info("autotest : sortie -> " + VehicleSync.TestExit(car)); }
                 if (t > 56f && step == 4) { step = 5; Log.Info("autotest : apres sortie -> " + VehicleSync.TestExit(car)); }
-                if (b != null && t > 25f && t < 37f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                if (b != null && t > push0 && t < push1) { Vector3 f = b.transform.forward; f.y = 0; float turn = Config.GetFloat("Test", "PousseVirage", 0f); if (turn != 0f) b.angularVelocity = new Vector3(b.angularVelocity.x, turn, b.angularVelocity.z); b.velocity = f.normalized * Config.GetFloat("Test", "PousseVitesse", 8f) + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
                 if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + " rot " + b.rotation.eulerAngles.ToString("F0") + ", cinematique " + b.isKinematic);
                 if (b != null && t > 20f && !b.isKinematic)
                 {
@@ -938,6 +983,21 @@ namespace MWCoop
                     testCam.transform.LookAt(target);
                 }
             }
+            // [Test] CameraVoiture=x,y,z,vx,vy,vz : camera d'essai dans le repere de [Test] TestVoiture, tournee vers (vx,vy,vz).
+            string cv = Config.Get("Test", "CameraVoiture", "");
+            if (cv.Length > 0)
+            {
+                string[] c = cv.Split(',');
+                Rigidbody vb = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET"));
+                if (c.Length >= 6 && vb != null)
+                {
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    System.Func<int, float> F = i => float.Parse(c[i], ci);
+                    if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
+                    testCam.transform.position = vb.transform.TransformPoint(new Vector3(F(0), F(1), F(2)));
+                    testCam.transform.LookAt(vb.transform.TransformPoint(new Vector3(F(3), F(4), F(5))), vb.transform.up);
+                }
+            }
             int look = Config.GetInt("Test", "Regarder", 0);
             if (look == 2) LookAtGroup();
             else if (look != 0) LookAtNearestAvatar();
@@ -1291,6 +1351,10 @@ namespace MWCoop
             if (mode == "jonne" && Net.Session.IsHost && t > 45f && step == 0) { step = 1; Log.Info("autotest : jonne, " + ModJonne.Test(0)); }
             if (mode == "jonne" && Net.Session.IsHost && t > 58f && step == 1) { step = 2; Log.Info("autotest : jonne, " + ModJonne.Test(1)); }
             if (mode == "jonne" && !Net.Session.IsHost && t > 50f && step == 0) { step = 1; Log.Info("autotest : jonne, " + ModJonne.Test(2)); }
+            ModTowCart.Test(mode, t);
+            ModJackStands.Test(mode, t);
+            if (mode == "jonne2" && Net.Session.IsHost && t > 45f && step == 0) { step = 1; Log.Info("autotest : jonne, " + ModJonne.Test(5)); }
+            if (mode == "jonne2" && t > 60f && step2 == 0) { step2 = 1; Log.Info("autotest : jonne, objets " + Props.Ids("w:jfs:") + " ; " + ModJonne.Test(3)); }
             if (mode == "jonne" && Net.Session.IsHost && t > 64f && step == 2) { step = 3; Log.Info("autotest : jonne, " + ModJonne.Test(4)); }
             if (mode == "jonne" && t > 70f && step2 == 0) { step2 = 1; Log.Info("autotest : jonne, " + ModJonne.Test(3)); }
             if (mode == "vendeur" && Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + ModCheatbox.TestSeller(0, 0)); }
@@ -1697,6 +1761,9 @@ namespace MWCoop
                 PlayMakerFSM sf = g != null && pf.Length > 1 ? Game.FsmOn(g, pf[1]) : null;
                 Log.Info("autotest : etat " + stateWatch + " = " + (sf != null ? sf.ActiveStateName : "?"));
             }
+            if (Config.GetInt("Test", "MesureCamera", 0) != 0) MeasureCam(t);
+            string nanWatch = Config.Get("Test", "SuivreNaN", "");
+            if (nanWatch.Length > 0 && t > 20f && Time.realtimeSinceStartup >= nanNext) { nanNext = Time.realtimeSinceStartup + 1f; Log.Info("autotest : " + VehicleSync.TestNan(nanWatch)); }
             if (mode == "passager" && Time.frameCount % 120 == 0 && t > 28f) Log.Info("autotest : place " + Seats.PlaceDans(Config.Get("Test", "TestVoiture", "SORBET")));
             string soundWatch = Config.Get("Test", "SuivreSons", "");
             if (soundWatch.Length > 0 && Time.frameCount % 90 == 0 && t > 20f) Log.Info("autotest : sons " + VehicleSync.AudioState(soundWatch));
@@ -1738,7 +1805,7 @@ namespace MWCoop
             if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "TestPlace", 0))); }
             // [Test] Autotest=ceinture : l'invite s'assoit a l'avant de [Test] TestVoiture, attache sa ceinture a 36 s ;
             // l'hote le regarde (CameraAvatar) et voit la ceinture bouclee (journal + captures).
-            if (mode == "ceinture" && !Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), 0)); }
+            if (mode == "ceinture" && !Net.Session.IsHost && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SORBET"), Config.GetInt("Test", "CeinturePlace", 0))); }
             // [Test] CeintureVisee=1 : avant d'attacher, le regard vers la ceinture rangee (37-41 s) puis la boucle (42-46 s),
             // ce que voit la visee note chaque seconde, et captures (ecran-ceinture-*).
             if (mode == "ceinture" && !Net.Session.IsHost && Config.GetInt("Test", "CeintureVisee", 0) != 0 && step >= 1 && step < 9 && t > 37f && t < 47f)

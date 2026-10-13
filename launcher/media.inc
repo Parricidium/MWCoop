@@ -5,11 +5,12 @@
 // (vierge) ou "f1+f2~titre" ; films dans <jeu>\MWCoop\videot\<film>.mwv. On peut : renommer, effacer, importer une
 // video (convertie par MWCoopRT.dll : VidImportStart, comme /importer en jeu ; ajoutee a la suite des prises). Jeu
 // ouvert : rien n'est modifie (le mod reecrit la liste toutes les minutes).
+// La cassette choisie a droite (comme l'Album) : apercu des images de ses prises, export .mp4 (VidExportStart), et les actions.
 // Album : les photos du drone (Images\CoopPictures, ou [Coop] DossierPhotos de mwcoop.ini) en vignettes ; a droite, la
 // photo choisie en grand, OUVRIR, DOSSIER, SUPPRIMER (vers la Corbeille, deux clics).
 
-enum { UI_VHS_OPEN = 2990, UI_VHS_REFRESH = 2991, UI_VHS = 3000, UI_ALB_OPEN = 3490, UI_ALB_DIR, UI_ALB_DEL, UI_ALB_FOLDER, UI_ALB = 3500 };
-enum { VP_RENAME, VP_IMPORT, VP_ERASE, VP_OK, VP_CANCEL };
+enum { UI_VHS_OPEN = 2990, UI_VHS_REFRESH = 2991, UI_VHS_EXPORT = 2992, UI_VHS_PLAY = 2993, UI_VHS_VIDDIR = 2994, UI_VHS = 3000, UI_ALB_OPEN = 3490, UI_ALB_DIR, UI_ALB_DEL, UI_ALB_FOLDER, UI_ALB = 3500 };
+enum { VP_RENAME, VP_IMPORT, VP_ERASE, VP_OK, VP_CANCEL, VP_SELECT };
 
 // ---- donnees
 struct VhsTape {
@@ -208,8 +209,10 @@ static void VhsImport(int i, const wchar_t *given = NULL)   // (given : essais /
     SetStatus(K_NORMAL, T(L"Conversion de %s…", L"Converting %s…"), g_vhsImpName.c_str());
 }
 
+static bool VhsExportTick();
 static void VhsTick()   // (Tick, chaque image)
 {
+    if (VhsExportTick()) return;
     if (g_vhsImpFilm.empty() || !g_vidPoll) return;
     float p = 0; wchar_t msg[512] = L"";
     int st = g_vidPoll(&p, msg, 512);
@@ -253,44 +256,221 @@ static bool VhsChar(wchar_t c)
 }
 
 // ---- page VHS
-static RectF kVhsList(288, 196, 952, 528);
+static RectF kVhsList(288, 196, 600, 528), kVhsView(904, 88, 360, 656);
 static const float kVhsRowH = 84;
 static float VhsMaxScroll() { return max(0.0f, (float)g_vhs.size() * kVhsRowH - kVhsList.Height); }
 
 static std::wstring VhsClock(float s) { int t = (int)(s + 0.5f); wchar_t b[32]; if (t >= 3600) swprintf_s(b, L"%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60); else swprintf_s(b, L"%d:%02d", t / 60, t % 60); return b; }
 
+// ---- apercu de la cassette choisie (demande de JD, 13/10 : « une preview de la video comme pour les images ») : les images
+// des prises (.mwv : en-tete de 11 octets puis des blocs sorte / ms / taille / donnees ; sorte 1 = une image JPEG), lues dans
+// le fichier a la demande, jouees en boucle a leur rythme (sans le son).
+static int g_vhsSel = -1;
+struct VhsFrame { int film; uint32_t off, len; float t; };
+static std::vector<VhsFrame> g_pvFrames;
+static std::vector<std::wstring> g_pvPaths;
+static std::wstring g_pvOf;
+static float g_pvTotal;
+static DWORD g_pvStart;
+static bool g_pvPause;
+static float g_pvAt;            // (en pause : instant montre)
+static int g_pvShown = -1;
+static Bitmap *g_pvBmp;
+
+// Blocs d'un film : (sorte, ms, position des donnees, taille) ; duree = derniere image ou fin du son.
+static bool VhsReadBlocks(const std::wstring &path, std::vector<std::pair<int, std::pair<uint32_t, std::pair<uint32_t, uint32_t>>>> &out, float &len, int *w = NULL, int *h = NULL, int *fps = NULL, int *rate = NULL)
+{
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    unsigned char hd[11]; DWORD got = 0;
+    bool ok = ReadFile(f, hd, 11, &got, NULL) && got == 11 && hd[0] == 'M' && hd[1] == 'W' && hd[2] == 'V' && hd[3] == '1';
+    int rt = ok ? (hd[9] | hd[10] << 8) : 11025;
+    if (ok) { if (w) *w = hd[4] | hd[5] << 8; if (h) *h = hd[6] | hd[7] << 8; if (fps) *fps = hd[8]; if (rate) *rate = rt; }
+    LARGE_INTEGER sz; GetFileSizeEx(f, &sz);
+    uint64_t pos = 11, snd = 0; uint32_t lastMs = 0;
+    while (ok && pos + 9 <= (uint64_t)sz.QuadPart) {
+        unsigned char b[9];
+        LARGE_INTEGER li; li.QuadPart = (LONGLONG)pos;
+        if (!SetFilePointerEx(f, li, NULL, FILE_BEGIN) || !ReadFile(f, b, 9, &got, NULL) || got != 9) break;
+        int kind = b[0]; uint32_t ms, n; memcpy(&ms, b + 1, 4); memcpy(&n, b + 5, 4);
+        pos += 9;
+        if ((int32_t)n < 0 || pos + n > (uint64_t)sz.QuadPart) break;
+        out.push_back({ kind, { ms, { (uint32_t)pos, n } } });
+        if (kind == 2) snd += n;
+        if (ms > lastMs) lastMs = ms;
+        pos += n;
+    }
+    CloseHandle(f);
+    len = max(lastMs / 1000.0f, rt > 0 ? (float)snd / rt : 0.0f);
+    return ok;
+}
+
+static void VhsPreviewFor(const VhsTape &t)
+{
+    std::wstring key = t.id + L"|" + t.content;
+    if (key == g_pvOf) return;
+    g_pvOf = key; g_pvFrames.clear(); g_pvPaths.clear(); g_pvTotal = 0; g_pvShown = -1; g_pvStart = GetTickCount(); g_pvPause = false; g_pvAt = 0;
+    delete g_pvBmp; g_pvBmp = NULL;
+    for (auto &film : t.films) {
+        std::vector<std::pair<int, std::pair<uint32_t, std::pair<uint32_t, uint32_t>>>> bl; float len = 0;
+        std::wstring p = VhsFilmPath(film);
+        if (!VhsReadBlocks(p, bl, len)) continue;
+        int fi = (int)g_pvPaths.size(); g_pvPaths.push_back(p);
+        for (auto &b : bl) if (b.first == 1) g_pvFrames.push_back({ fi, b.second.second.first, b.second.second.second, g_pvTotal + b.second.first / 1000.0f });
+        g_pvTotal += len;
+    }
+}
+
+static Bitmap *VhsDecode(const VhsFrame &fr)
+{
+    HANDLE f = CreateFileW(g_pvPaths[fr.film].c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return NULL;
+    std::vector<unsigned char> buf(fr.len);
+    LARGE_INTEGER li; li.QuadPart = fr.off; DWORD got = 0;
+    bool ok = SetFilePointerEx(f, li, NULL, FILE_BEGIN) && ReadFile(f, buf.data(), fr.len, &got, NULL) && got == fr.len;
+    CloseHandle(f);
+    if (!ok) return NULL;
+    IStream *s = SHCreateMemStream(buf.data(), (UINT)buf.size());
+    if (!s) return NULL;
+    Bitmap *src = Bitmap::FromStream(s), *copy = NULL;
+    if (src && src->GetLastStatus() == Ok) {   // (copie : l'image ne doit plus dependre du flux)
+        copy = new Bitmap(src->GetWidth(), src->GetHeight(), PixelFormat32bppPARGB);
+        Graphics cg(copy); cg.DrawImage(src, 0, 0, (INT)src->GetWidth(), (INT)src->GetHeight());
+    }
+    delete src; s->Release();
+    return copy;
+}
+
+static float VhsPreviewTime()
+{
+    if (g_pvTotal <= 0) return 0;
+    if (g_pvPause) return g_pvAt;
+    return fmodf((GetTickCount() - g_pvStart) / 1000.0f, g_pvTotal);
+}
+
+// ---- export .mp4 (MWCoopRT.dll : VidExportStart, comme en jeu) : les prises bout a bout dans un .mwv provisoire.
+typedef int (__cdecl *VidExportFn)(const wchar_t *, const wchar_t *, int, const wchar_t *);
+static std::wstring g_vhsExpDst, g_vhsExpTmp; static float g_vhsExpP = -1;
+static std::wstring g_vhsExpDirTest;   // (essais : /vhsexport <dossier>)
+static std::wstring VhsVideoDir()
+{
+    if (!g_vhsExpDirTest.empty()) return g_vhsExpDirTest;
+    wchar_t b[MAX_PATH] = L"";
+    if (!g_gameDir.empty()) GetPrivateProfileStringW(L"Boutique", L"DossierVideos", L"", b, MAX_PATH, ModIni().c_str());
+    if (b[0]) return WithSlash(b);
+    wchar_t v[MAX_PATH] = L"";
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_MYVIDEO, NULL, 0, v)) && v[0]) return WithSlash(v) + L"CoopVideos\\";
+    return LocalDir() + L"CoopVideos\\";
+}
+static bool VhsJoin(const VhsTape &t, const std::wstring &dst)
+{
+    HANDLE o = CreateFileW(dst.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (o == INVALID_HANDLE_VALUE) return false;
+    bool first = true; float off = 0; int n = 0; DWORD wr;
+    for (auto &film : t.films) {
+        std::vector<std::pair<int, std::pair<uint32_t, std::pair<uint32_t, uint32_t>>>> bl; float len = 0; int w = 256, h = 192, fps = 10, rate = 11025;
+        std::wstring p = VhsFilmPath(film);
+        if (!VhsReadBlocks(p, bl, len, &w, &h, &fps, &rate)) continue;
+        if (first) {
+            unsigned char hd[11] = { 'M', 'W', 'V', '1', (unsigned char)w, (unsigned char)(w >> 8), (unsigned char)h, (unsigned char)(h >> 8), (unsigned char)fps, (unsigned char)rate, (unsigned char)(rate >> 8) };
+            WriteFile(o, hd, 11, &wr, NULL); first = false;
+        }
+        HANDLE f = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        if (f == INVALID_HANDLE_VALUE) continue;
+        std::vector<unsigned char> buf;
+        for (auto &b : bl) {
+            if (b.first != 1 && b.first != 2) continue;
+            buf.resize(b.second.second.second);
+            LARGE_INTEGER li; li.QuadPart = b.second.second.first; DWORD got = 0;
+            if (!SetFilePointerEx(f, li, NULL, FILE_BEGIN) || !ReadFile(f, buf.data(), (DWORD)buf.size(), &got, NULL) || got != buf.size()) break;
+            unsigned char hd[9]; hd[0] = (unsigned char)b.first;
+            uint32_t ms = (uint32_t)(off * 1000.0f) + b.second.first, len32 = (uint32_t)buf.size();
+            memcpy(hd + 1, &ms, 4); memcpy(hd + 5, &len32, 4);
+            WriteFile(o, hd, 9, &wr, NULL); if (!buf.empty()) WriteFile(o, buf.data(), (DWORD)buf.size(), &wr, NULL);
+            if (b.first == 1) n++;
+        }
+        CloseHandle(f);
+        off += len;
+    }
+    CloseHandle(o);
+    if (n == 0) { DeleteFileW(dst.c_str()); return false; }
+    return true;
+}
+static void VhsExport(int i)
+{
+    if (i < 0 || i >= (int)g_vhs.size() || g_vhs[i].films.empty()) return;
+    if (!g_vhsImpFilm.empty() || !g_vhsExpDst.empty()) { SetStatus(K_WARN, T(L"Une conversion ou un export est déjà en cours", L"A conversion or an export is already running")); return; }
+    VhsTape &t = g_vhs[i];
+    std::wstring dir = VhsVideoDir();
+    SHCreateDirectoryExW(NULL, dir.c_str(), NULL);
+    SYSTEMTIME st; GetLocalTime(&st);
+    wchar_t stamp[64]; swprintf_s(stamp, L"%04d-%02d-%02d_%02d-%02d-%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    std::wstring name = t.title.empty() ? L"MWCoop" : t.title;
+    for (wchar_t &c : name) if (wcschr(L"\\/:*?\"<>|", c)) c = L'_';
+    std::wstring dst = dir + name + L"_" + stamp + L".mp4", tmp = VhsFilmDir() + L"export-" + stamp + L".mwv";
+    CreateDirectoryW(VhsFilmDir().c_str(), NULL);
+    if (!VhsJoin(t, tmp)) { SetStatus(K_ERR, T(L"Rien à exporter : les films de cette cassette ne sont pas sur ce PC", L"Nothing to export: this tape's films aren't on this PC")); return; }
+    VhsImportFree();
+    g_vidLib = LoadLibraryW((g_gameDir + L"MWCoop\\MWCoopRT.dll").c_str());
+    VidExportFn ex = g_vidLib ? (VidExportFn)GetProcAddress(g_vidLib, "VidExportStart") : NULL;
+    g_vidPoll = g_vidLib ? (VidPollFn)GetProcAddress(g_vidLib, "VidImportPoll") : NULL;
+    if (!ex || !g_vidPoll) { VhsImportFree(); DeleteFileW(tmp.c_str()); SetStatus(K_ERR, T(L"Export impossible : MWCoopRT.dll manque ou est trop ancienne (Windows 7 : pas d'export)", L"Can't export: MWCoopRT.dll missing or too old (no export on Windows 7)")); return; }
+    std::wstring ini = ModIni();
+    int scale = max(1, min(6, (int)GetPrivateProfileIntW(L"Boutique", L"ExportEchelle", 3, ini.c_str())));
+    std::wstring logo = GetPrivateProfileIntW(L"Boutique", L"ExportLogo", 1, ini.c_str()) != 0 && FileExists(VhsFilmDir() + L"logo-mwcoop.png") ? VhsFilmDir() + L"logo-mwcoop.png" : L"";
+    if (ex(tmp.c_str(), dst.c_str(), scale, logo.c_str()) != 0) { VhsImportFree(); DeleteFileW(tmp.c_str()); SetStatus(K_ERR, T(L"Export pas lancé", L"Export not started")); return; }
+    g_vhsExpDst = dst; g_vhsExpTmp = tmp; g_vhsExpP = 0; g_progress = 0;
+    SetStatus(K_NORMAL, T(L"Export de « %s » en .mp4…", L"Exporting \"%s\" as .mp4…"), name.c_str());
+}
+static bool VhsExportTick()
+{
+    if (g_vhsExpDst.empty() || !g_vidPoll) return false;
+    float p = 0; wchar_t msg[512] = L"";
+    int st = g_vidPoll(&p, msg, 512);
+    if (st == 1) { g_vhsExpP = p; g_progress = p; return true; }
+    std::wstring dst = g_vhsExpDst;
+    g_vhsExpDst.clear(); g_vhsExpP = -1; g_progress = -1;
+    VhsImportFree();
+    DeleteFileW(g_vhsExpTmp.c_str()); g_vhsExpTmp.clear();
+    if (st == 2) { SetStatus(K_OK, T(L"Vidéo exportée : %s", L"Video exported: %s"), dst.c_str()); std::wstring a = L"/select,\"" + dst + L"\""; ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL); }
+    else SetStatus(K_ERR, T(L"Export raté : %s", L"Export failed: %s"), msg);
+    return true;
+}
+
 static void DrawVhs(Graphics &g)
 {
     if (GetTickCount() - g_vhsScanT > 2000) VhsScan();
-    RectF c = kMain; Glass(c);
-    Title(g, T(L"Cassettes de ta partie", L"Tapes of your game"), RectF(c.X + 24, c.Y + 18, 600, 30), 20, kInk);
-    Para(g, T(L"Celles de la partie que tu héberges ou joues seul (y compris dans un magnétoscope ou un caméscope). Renomme-les, efface-les, ou mets-y une vidéo de ton PC.",
-              L"Those of the game you host or play alone (including inside a VCR or a camcorder). Rename them, erase them, or put a video from your PC on them."),
-         RectF(c.X + 24, c.Y + 52, 640, 44), 12.5f, kGrey);
-    UiButton(g, RectF(c.X + c.Width - 24 - 150, c.Y + 22, 150, 40), T(L"Dossier des films", L"Films folder"), UI_VHS_OPEN, false, IC_FOLDER);
-    UiButton(g, RectF(c.X + c.Width - 24 - 150 - 12 - 44, c.Y + 22, 44, 40), L"", UI_VHS_REFRESH, false, IC_UNDO);
-    if (g_vhsGameOn) Pill(g, RectF(c.X + 24, c.Y + 84, PillW(T(L"Jeu ouvert : lecture seule", L"Game open: read only"), 11.5f), 22), WithA(kWarn, 0.2f), T(L"Jeu ouvert : lecture seule", L"Game open: read only"), kWarn, 11.5f);
+    RectF c(kMain.X, kMain.Y, 624, kMain.Height); Glass(c);
+    Title(g, T(L"Cassettes de ta partie", L"Tapes of your game"), RectF(c.X + 24, c.Y + 18, 400, 30), 20, kInk);
+    Para(g, T(L"Celles de la partie que tu héberges ou joues seul (y compris dans un magnétoscope ou un caméscope). Choisis-en une pour la voir, l'exporter, la renommer ou y mettre une vidéo.",
+              L"Those of the game you host or play alone (including inside a VCR or a camcorder). Pick one to watch it, export it, rename it or put a video on it."),
+         RectF(c.X + 24, c.Y + 52, 576, 44), 12.5f, kGrey);
+    UiButton(g, RectF(c.X + c.Width - 24 - 150, c.Y + 12, 150, 36), T(L"Dossier des films", L"Films folder"), UI_VHS_OPEN, false, IC_FOLDER);
+    UiButton(g, RectF(c.X + c.Width - 24 - 150 - 12 - 40, c.Y + 12, 40, 36), L"", UI_VHS_REFRESH, false, IC_UNDO);
+    if (g_vhsGameOn) Pill(g, RectF(c.X + 24, c.Y + 98, PillW(T(L"Jeu ouvert : lecture seule", L"Game open: read only"), 11.5f), 22), WithA(kWarn, 0.2f), T(L"Jeu ouvert : lecture seule", L"Game open: read only"), kWarn, 11.5f);
+    Glass(kVhsView);
     if (!g_vhsFileFound || g_vhs.empty()) {
         Para(g, !g_vhsFileFound ? T(L"Aucune cassette pour l'instant : achète-en à la boutique OSUUSKAUPPA en jeu (à l'ouest du parking de la PSK).", L"No tape yet: buy some at the OSUUSKAUPPA shop in game (west of the PSK car park).")
-                                : T(L"Aucune cassette dans ta partie.", L"No tape in your game."), RectF(kVhsList.X, kVhsList.Y + 20, kVhsList.Width, 60), 14, kGrey);
+                                : T(L"Aucune cassette dans ta partie.", L"No tape in your game."), RectF(kVhsList.X, kVhsList.Y + 20, kVhsList.Width - 30, 60), 14, kGrey);
         return;
     }
+    if (g_vhsSel >= (int)g_vhs.size()) g_vhsSel = -1;
     float sc = g_scroll[TAB_VHS] = min(g_scroll[TAB_VHS], VhsMaxScroll()), ms = VhsMaxScroll();
     GraphicsState st = g.Save(); g.SetClip(kVhsList, CombineModeIntersect);
-    bool armed = g_vhsDel >= 0 && GetTickCount() - g_vhsDelT < 4000;
     for (int i = 0; i < (int)g_vhs.size(); i++) {
         VhsTape &t = g_vhs[i];
         RectF r(kVhsList.X, kVhsList.Y + i * kVhsRowH - sc, kVhsList.Width - (ms > 0 ? 14 : 0), kVhsRowH - 10);
         if (r.Y + r.Height < kVhsList.Y || r.Y > kVhsList.Y + kVhsList.Height) continue;
         bool vis = r.Y >= kVhsList.Y - 1 && r.Y + r.Height <= kVhsList.Y + kVhsList.Height + 1;   // (zones : seulement pour les lignes entieres)
+        bool sel = g_vhsSel == i, hot = g_uiHot == UI_VHS + i * 8 + VP_SELECT;
         GraphicsPath p; RoundRect(p, r, 14);
         SolidBrush rb(TH(card)); g.FillPath(&rb, &p);
-        Pen rp(TH(choiceBorder), 1); g.DrawPath(&rp, &p);
+        Pen rp(sel ? kAcc : hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), sel ? 2.5f : 1); g.DrawPath(&rp, &p);
         Icon(g, IC_FILM, r.X + 34, r.Y + r.Height / 2, 30, t.films.empty() ? WithA(kGrey, 0.7f) : kAcc, 1.8f);
         float tx = r.X + 64, bx = r.X + r.Width - 16;
         bool importing = !g_vhsImpFilm.empty() && g_vhsImpTape == t.id;
         if (g_vhsEdit == i) {
-            RectF fr(tx, r.Y + 14, r.Width - 64 - 16 - 260, 40);
+            RectF fr(tx, r.Y + 14, r.Width - 64 - 16 - 236, 40);
             GraphicsPath fp; RoundRect(fp, fr, 10); SolidBrush fb(TH(field)); g.FillPath(&fb, &fp); Pen fpn(kAcc, 2); g.DrawPath(&fpn, &fp);
             RectF trr(fr.X + 14, fr.Y, fr.Width - 28, fr.Height);
             Text(g, g_vhsEditText.empty() ? T(L"Titre de la cassette", L"Tape title") : g_vhsEditText, trr, 16, FontStyleBold, g_vhsEditText.empty() ? TH(placeholder) : kInk, StringAlignmentNear);
@@ -299,14 +479,14 @@ static void DrawVhs(Graphics &g)
                 float cx = min(trr.X + cw + 1, trr.X + trr.Width);
                 Pen cp(kAcc, 1.6f); g.DrawLine(&cp, cx, fr.Y + 10, cx, fr.Y + fr.Height - 10);
             }
-            Text(g, T(L"Entrée : écrire · Échap : annuler · 24 caractères", L"Enter: write · Esc: cancel · 24 characters"), RectF(tx, r.Y + 54, fr.Width, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            Text(g, T(L"Entrée : écrire · Échap : annuler · 24 caractères", L"Enter: write · Esc: cancel · 24 characters"), RectF(tx, r.Y + 54, fr.Width + 100, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             if (vis) {
-                UiButton(g, RectF(bx - 124, r.Y + 17, 124, 40), T(L"Écrire", L"Write"), UI_VHS + i * 8 + VP_OK, true, IC_CHECK);
-                UiButton(g, RectF(bx - 124 - 10 - 124, r.Y + 17, 124, 40), T(L"Annuler", L"Cancel"), UI_VHS + i * 8 + VP_CANCEL, false, IC_CLOSE);
+                UiButton(g, RectF(bx - 108, r.Y + 17, 108, 40), T(L"Écrire", L"Write"), UI_VHS + i * 8 + VP_OK, true, IC_CHECK);
+                UiButton(g, RectF(bx - 108 - 10 - 108, r.Y + 17, 108, 40), T(L"Annuler", L"Cancel"), UI_VHS + i * 8 + VP_CANCEL, false, IC_CLOSE);
             }
             continue;
         }
-        Text(g, t.title.empty() ? T(L"(sans titre)", L"(no title)") : t.title, RectF(tx, r.Y + 10, r.Width - 64 - 440, 28), 17, FontStyleBold, t.title.empty() ? kGrey : kInk, StringAlignmentNear);
+        Text(g, t.title.empty() ? T(L"(sans titre)", L"(no title)") : t.title, RectF(tx, r.Y + 10, r.Width - 64 - 20, 28), 17, FontStyleBold, t.title.empty() ? kGrey : kInk, StringAlignmentNear);
         std::wstring info;
         if (t.films.empty()) info = T(L"Vierge", L"Blank");
         else {
@@ -316,27 +496,71 @@ static void DrawVhs(Graphics &g)
         if (t.kind == L"nauhuri") info += T(L" · dans un magnétoscope", L" · in a VCR");
         else if (t.kind == L"kamera") info += T(L" · dans un caméscope", L" · in a camcorder");
         if (importing) info = T(L"Conversion de ", L"Converting ") + g_vhsImpName + L"… " + std::to_wstring((int)(g_vhsImpP * 100)) + L" %";
-        Text(g, info, RectF(tx, r.Y + 40, r.Width - 64 - 440, 22), 12.5f, FontStyleRegular, importing ? kAcc : kGrey, StringAlignmentNear);
-        if (importing) DrawBar(g, RectF(tx, r.Y + 64, r.Width - 64 - 440, 4), g_vhsImpP);
-        bool can = !g_vhsGameOn && g_vhsImpFilm.empty();
-        bool arm = armed && g_vhsDel == i;
-        float bw = 132;
-        if (vis) {
-            UiButton(g, RectF(bx - bw, r.Y + 17, bw, 40), arm ? T(L"Confirmer ?", L"Confirm?") : T(L"Effacer", L"Erase"), UI_VHS + i * 8 + VP_ERASE, false, IC_TRASH, can && !t.films.empty());
-            UiButton(g, RectF(bx - 2 * bw - 10, r.Y + 17, bw, 40), T(L"Vidéo…", L"Video…"), UI_VHS + i * 8 + VP_IMPORT, true, IC_DOWNLOAD, can);
-            UiButton(g, RectF(bx - 3 * bw - 20, r.Y + 17, bw, 40), T(L"Renommer", L"Rename"), UI_VHS + i * 8 + VP_RENAME, false, IC_FILE, can);
-        }
+        Text(g, info, RectF(tx, r.Y + 40, r.Width - 64 - 20, 22), 12.5f, FontStyleRegular, importing ? kAcc : kGrey, StringAlignmentNear);
+        if (importing) DrawBar(g, RectF(tx, r.Y + 64, r.Width - 64 - 20, 4), g_vhsImpP);
+        if (vis) HotZone(r, UI_VHS + i * 8 + VP_SELECT);
     }
     g.Restore(st);
     if (ms > 0) DrawScrollBar(g, kVhsList, sc, ms);
+
+    // a droite : la cassette choisie
+    if (g_vhsSel < 0) {
+        Icon(g, IC_FILM, kVhsView.X + kVhsView.Width / 2, kVhsView.Y + 250, 56, WithA(kGrey, 0.45f), 1.4f);
+        Para(g, T(L"Clique sur une cassette pour la voir ici.", L"Click a tape to see it here."), RectF(kVhsView.X + 24, kVhsView.Y + 300, kVhsView.Width - 48, 50), 13, kGrey, StringAlignmentNear);
+        return;
+    }
+    VhsTape &t = g_vhs[g_vhsSel];
+    VhsPreviewFor(t);
+    RectF pr(kVhsView.X + 16, kVhsView.Y + 16, kVhsView.Width - 32, (kVhsView.Width - 32) * 0.75f);
+    GraphicsPath pp; RoundRect(pp, pr, 10);
+    SolidBrush blk(Color(255, 8, 8, 10)); g.FillPath(&blk, &pp);
+    float now = VhsPreviewTime();
+    if (!g_pvFrames.empty()) {
+        int lo = 0, hi = (int)g_pvFrames.size() - 1, k = 0;   // (derniere image dont l'instant est passe)
+        while (lo <= hi) { int m = (lo + hi) / 2; if (g_pvFrames[m].t <= now) { k = m; lo = m + 1; } else hi = m - 1; }
+        if (k != g_pvShown) { Bitmap *b = VhsDecode(g_pvFrames[k]); if (b) { delete g_pvBmp; g_pvBmp = b; } g_pvShown = k; }
+        if (g_pvBmp) {
+            float iw = (float)g_pvBmp->GetWidth(), ih = (float)g_pvBmp->GetHeight(), s = min(pr.Width / iw, pr.Height / ih);
+            RectF dr(pr.X + (pr.Width - iw * s) / 2, pr.Y + (pr.Height - ih * s) / 2, iw * s, ih * s);
+            GraphicsState s2 = g.Save(); g.SetClip(&pp, CombineModeIntersect); g.SetInterpolationMode(InterpolationModeBilinear); g.DrawImage(g_pvBmp, dr); g.Restore(s2);
+        }
+    } else Text(g, t.films.empty() ? T(L"CASSETTE VIERGE", L"BLANK TAPE") : T(L"Films pas sur ce PC", L"Films not on this PC"), pr, 15, FontStyleBold, kGrey);
+    float y = pr.Y + pr.Height + 10;
+    if (!g_pvFrames.empty()) {
+        UiButton(g, RectF(kVhsView.X + 24, y, 44, 36), g_pvPause ? L"" : L"❚❚", UI_VHS_PLAY, false, g_pvPause ? IC_PLAY : -1);
+        RectF bar(kVhsView.X + 80, y + 15, kVhsView.Width - 80 - 24 - 90, 6);
+        DrawBar(g, bar, g_pvTotal > 0 ? now / g_pvTotal : 0);
+        Text(g, VhsClock(now) + L" / " + VhsClock(g_pvTotal), RectF(bar.X + bar.Width + 8, y, 90, 36), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+    }
+    y += 46;
+    Text(g, t.title.empty() ? T(L"(sans titre)", L"(no title)") : t.title, RectF(kVhsView.X + 24, y, kVhsView.Width - 48, 26), 15, FontStyleBold, kInk, StringAlignmentNear);
+    y += 34;
+    bool can = !g_vhsGameOn && g_vhsImpFilm.empty() && g_vhsExpDst.empty();
+    bool exporting = !g_vhsExpDst.empty();
+    float bw = kVhsView.Width - 48;
+    UiButton(g, RectF(kVhsView.X + 24, y, bw, 42), exporting ? T(L"Export… ", L"Exporting… ") + std::to_wstring((int)(max(0.0f, g_vhsExpP) * 100)) + L" %" : T(L"Exporter en .mp4", L"Export as .mp4"), UI_VHS_EXPORT, true, IC_DOWNLOAD, !t.films.empty() && g_pvFrames.size() > 0 && g_vhsImpFilm.empty() && !exporting); y += 50;
+    float hw = (bw - 10) / 2;
+    UiButton(g, RectF(kVhsView.X + 24, y, hw, 40), T(L"Renommer", L"Rename"), UI_VHS + g_vhsSel * 8 + VP_RENAME, false, IC_FILE, can);
+    UiButton(g, RectF(kVhsView.X + 24 + hw + 10, y, hw, 40), T(L"Vidéo…", L"Video…"), UI_VHS + g_vhsSel * 8 + VP_IMPORT, false, IC_DOWNLOAD, can); y += 48;
+    bool arm = g_vhsDel == g_vhsSel && GetTickCount() - g_vhsDelT < 4000;
+    UiButton(g, RectF(kVhsView.X + 24, y, hw, 40), arm ? T(L"Confirmer ?", L"Confirm?") : T(L"Effacer", L"Erase"), UI_VHS + g_vhsSel * 8 + VP_ERASE, false, IC_TRASH, can && !t.films.empty());
+    UiButton(g, RectF(kVhsView.X + 24 + hw + 10, y, hw, 40), T(L"Vidéos exportées", L"Exported videos"), UI_VHS_VIDDIR, false, IC_FOLDER);
 }
 
 static void VhsClick(int id)
 {
     if (id == UI_VHS_OPEN) { CreateDirectoryW((g_gameDir + L"MWCoop").c_str(), NULL); CreateDirectoryW(VhsFilmDir().c_str(), NULL); ShellExecuteW(g_wnd, L"open", VhsFilmDir().c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
-    if (id == UI_VHS_REFRESH) { g_vhsEdit = -1; VhsScan(); return; }
+    if (id == UI_VHS_REFRESH) { g_vhsEdit = -1; g_pvOf.clear(); VhsScan(); return; }
+    if (id == UI_VHS_VIDDIR) { std::wstring d = VhsVideoDir(); SHCreateDirectoryExW(NULL, d.c_str(), NULL); ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
+    if (id == UI_VHS_PLAY) {
+        if (g_pvPause) { g_pvPause = false; g_pvStart = GetTickCount() - (DWORD)(g_pvAt * 1000); }
+        else { g_pvAt = VhsPreviewTime(); g_pvPause = true; }
+        return;
+    }
+    if (id == UI_VHS_EXPORT) { VhsExport(g_vhsSel); return; }
     int i = (id - UI_VHS) / 8, part = (id - UI_VHS) % 8;
     if (i < 0 || i >= (int)g_vhs.size()) return;
+    if (part == VP_SELECT) { if (g_vhsSel != i) { g_vhsSel = i; g_vhsDel = -1; } return; }
     if (part == VP_CANCEL) { g_vhsEdit = -1; return; }
     if (part == VP_OK) { VhsChar(13); return; }
     if (!VhsGuard()) return;

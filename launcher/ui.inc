@@ -590,7 +590,7 @@ static void DrawHeader(Graphics &g)
     case TAB_GFX: title = T(L"Options du jeu", L"Game options"); sub = T(L"Graphismes et coop, pour toi seul · en partie : menu F10 > Graphismes", L"Graphics and co-op, just for you · in game: F10 menu > Graphics"); break;
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
-    case TAB_VHS: title = T(L"Cassettes VHS", L"VHS tapes"); sub = T(L"Renommer, effacer, y mettre une vidéo · jeu fermé", L"Rename, erase, put a video on them · game closed"); break;
+    case TAB_VHS: title = T(L"Cassettes VHS", L"VHS tapes"); sub = T(L"Les voir, les exporter en .mp4, les renommer, y mettre une vidéo", L"Watch them, export them as .mp4, rename them, put a video on them"); break;
     case TAB_ALBUM: title = T(L"Album", L"Album"); sub = T(L"Les photos du drone (F8 en jeu)", L"Drone photos (F8 in game)"); break;
     case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Tout pour jouer sans souci : installation, salons, mods, réglages, solutions", L"Everything to play trouble-free: install, lobbies, mods, settings, fixes"); break;
     }

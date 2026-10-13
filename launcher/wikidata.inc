@@ -156,8 +156,8 @@ static const WikiBlock kW_Join[] = {
     { WB_WARN, L"« Version différente » : l'hôte et toi n'avez pas la même version. Mettez à jour tous les deux, puis relancez MWCoop.exe.",
                L"\"Different version\": the host and you don't have the same version. Both update, then start MWCoop.exe again." },
     { WB_H, L"Ouvrir MWCoop depuis une invitation Steam", L"Open MWCoop from a Steam invite" },
-    { WB_P, L"Option de lancement Steam du jeu (Propriétés > Général) : \"<dossier du jeu>\\MWCoop.exe\" %command%. Une invitation acceptée quand MWCoop est fermé ouvre alors MWCoop.",
-            L"The game's Steam launch option (Properties > General): \"<game folder>\\MWCoop.exe\" %command%. An invite accepted while MWCoop is closed then opens MWCoop." },
+    { WB_P, L"Option de lancement Steam du jeu (Propriétés > Général) : \"<dossier du jeu>\\MWCoop.exe\" %command%. Le bouton Jouer de Steam et une invitation acceptée quand MWCoop est fermé ouvrent alors MWCoop (héberger, rejoindre ou jouer seul).",
+            L"The game's Steam launch option (Properties > General): \"<game folder>\\MWCoop.exe\" %command%. Steam's Play button and an invite accepted while MWCoop is closed then open MWCoop (host, join or play solo)." },
 };
 static const WikiBlock kW_Net[] = {
     { WB_P, L"Deux façons de se retrouver. Tout le monde doit choisir la même.", L"Two ways to meet. Everyone must pick the same one." },
@@ -240,8 +240,8 @@ static const WikiBlock kW_Mods[] = {
     { WB_B, L"Les mods de l'hôte sont toujours reçus par ses invités, même en rejoignant une partie en cours : MSCLoader est installé s'il manque (version MWCoop si tu n'as pas l'officiel) et le jeu attend la fin de la réception pour se lancer. Tes propres mods ne sont pas touchés.",
             L"Guests always receive the host's mods, even when joining a game in progress: MSCLoader is installed if missing (MWCoop's version if you don't have the official one) and the game waits until they're received to start. Your own mods are not touched." },
     { WB_WARN, L"L'envoi de mods est expérimental : un mod qui n'est pas prévu pour le multijoueur peut se désynchroniser.", L"Mod sending is experimental: a mod not made for multiplayer can get out of sync." },
-    { WB_TIP, L"Rendus compatibles : Second Machtwagen (achat chez Fleetari, couleurs, plaque et préparation pareils chez tous ; seul l'acheteur paie), Spare Parts Seller (pièces achetées au vendeur visibles chez tous, même sans le mod), Jonne Food System (aliments achetés, ouverts, cuisinés ou mangés pareils chez tous).",
-              L"Made compatible: Second Machtwagen (purchase at Fleetari, colors, plate and tuning the same for everyone; only the buyer pays), Spare Parts Seller (parts bought from the seller seen by everyone, even without the mod), Jonne Food System (food bought, opened, cooked or eaten is the same for everyone)." },
+    { WB_TIP, L"Rendus compatibles : Second Machtwagen (achat chez Fleetari, couleurs, plaque et préparation pareils chez tous ; seul l'acheteur paie), Spare Parts Seller (pièces achetées au vendeur visibles chez tous, même sans le mod), Jonne Food System (aliments achetés, ouverts, cuisinés ou mangés pareils chez tous), Utility Tow Cart (le chariot, tiré ou attelé, au même endroit chez tous), Jack Stands (chandelles fixées, détachées et réglées pareil chez tous).",
+              L"Made compatible: Second Machtwagen (purchase at Fleetari, colors, plate and tuning the same for everyone; only the buyer pays), Spare Parts Seller (parts bought from the seller seen by everyone, even without the mod), Jonne Food System (food bought, opened, cooked or eaten is the same for everyone), Utility Tow Cart (the cart, pulled or hitched, in the same place for everyone), Jack Stands (stands attached, detached and adjusted the same for everyone)." },
 };
 static const WikiBlock kW_Content[] = {
     { WB_P, L"Tes CD, ta radio, tes posters, ta peinture… Ce que tu mets dans ton jeu, tes invités le voient et l'entendent aussi.",
@@ -518,8 +518,8 @@ static const WikiBlock kW_Import[] = {
 };
 
 static const WikiBlock kW_Montage[] = {
-    { WB_P, L"Vise une cassette posée ou tiens-la en main, et tiens R une seconde : le panneau de montage s'ouvre (souris libre ; Échap pour fermer).",
-            L"Look at a tape (set down) or hold it, and hold R for a second: the editing panel opens (mouse free; Esc to close)." },
+    { WB_P, L"Vise une cassette posée ou tiens-la en main, et appuie sur R : le panneau de montage s'ouvre (souris libre ; Échap pour fermer).",
+            L"Look at a tape (set down) or hold it, and press R: the editing panel opens (mouse free; Esc to close)." },
     { WB_H, L"Dans le panneau", L"In the panel", 0 },
     { WB_B, L"Titre : tape-le puis ÉCRIRE (ou Entrée), il s'écrit sur la tranche.", L"Title: type it then WRITE (or Enter), it's written on the spine." },
     { WB_B, L"Petit écran : LIRE / PAUSE avec le son ; clique ou glisse sur la barre de temps pour te déplacer.", L"Small screen: PLAY / PAUSE with sound; click or drag the time bar to move." },
@@ -532,8 +532,8 @@ static const WikiBlock kW_Montage[] = {
     { WB_TIP, L"Rogner, effacer et le titre changent la cassette pour tout le monde ; l'export ne concerne que ton PC (pas sous Windows 7).",
               L"Trim, erase and the title change the tape for everybody; the export is only on your PC (not on Windows 7)." },
     { WB_H, L"Depuis le lanceur", L"From the launcher", 0 },
-    { WB_P, L"Page MÉDIA > VHS : toutes les cassettes de ta partie (même dans un magnétoscope ou un caméscope) ; renommer, effacer, ou y mettre une vidéo de ton PC. Jeu fermé.",
-            L"MEDIA > VHS page: every tape of your game (even inside a VCR or a camcorder); rename, erase, or put a video from your PC on it. Game closed." },
+    { WB_P, L"Page MÉDIA > VHS : toutes les cassettes de ta partie (même dans un magnétoscope ou un caméscope). Choisis-en une : son aperçu se joue à droite, EXPORTER EN .MP4 en fait une vidéo (dans Vidéos\CoopVideos), et tu peux la renommer, l'effacer ou y mettre une vidéo de ton PC (jeu fermé).",
+            L"MEDIA > VHS page: every tape of your game (even inside a VCR or a camcorder). Pick one: its preview plays on the right, EXPORT AS .MP4 makes a video of it (in Videos\CoopVideos), and you can rename it, erase it or put a video from your PC on it (game closed)." },
     { WB_GO, L"Ouvrir la page VHS", L"Open the VHS page", TAB_VHS },
     { WB_GO, L"Filmer et regarder", L"Film and watch", 1000 + WA_VIDEO },
 };
@@ -553,7 +553,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"La boutique OSUUSKAUPPA s21", L"The OSUUSKAUPPA s21 shop", L"Rayons, caisse, sac de courses", L"Shelves, till, shopping bag", kW_Shop),
     WART(1, L"Filmer et regarder (VHS)", L"Film and watch (VHS)", L"Caméscope, magnétoscope, télé", L"Camcorder, VCR, TV", kW_Video),
     WART(1, L"Tes vidéos sur une cassette", L"Your videos on a tape", L"/importer : une vraie vidéo dans le jeu", L"/import: a real video in the game", kW_Import),
-    WART(1, L"Monter et exporter une cassette", L"Edit and export a tape", L"R tenu : rogner, effacer, .mp4", L"Hold R: trim, erase, .mp4", kW_Montage),
+    WART(1, L"Monter et exporter une cassette", L"Edit and export a tape", L"Touche R : rogner, effacer, .mp4", L"Press R: trim, erase, .mp4", kW_Montage),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),
     WART(2, L"Contenu envoyé", L"Sent content", L"CD, radio, posters, peinture", L"CDs, radio, posters, paint", kW_Content),
