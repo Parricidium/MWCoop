@@ -639,8 +639,8 @@ namespace MWCoop
             {
                 Transform pl = Game.PlayerT;
                 if (pl != null && pl.parent != null)
-                    foreach (Car c in cars)
-                        if (c.Mod && c.Body != null && pl.IsChildOf(c.T)) { driving = c.Index; break; }
+                    foreach (Car c in cars)   // (et les voitures de mods sans DriveTrigger du jeu : RAM 1500, demande de JD 13/10 -- son RamDrivingController range le joueur sous la voiture)
+                        if ((c.Mod || c.Drive == null) && c.Body != null && pl.IsChildOf(c.T)) { driving = c.Index; break; }
             }
             if (driving != LocalDriving)
             {
