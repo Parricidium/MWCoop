@@ -296,7 +296,7 @@ namespace MWCoop
         class Level
         {
             public string Key; public PlayMakerFSM F; public string[] Vars; public float[] Sent;
-            public int Auth = -1; public bool WasAuth;
+            public int Auth = -1; public bool WasAuth; public float NextFull;
         }
         static readonly Dictionary<string, Level> levels = new Dictionary<string, Level>();
         static readonly HashSet<PlayMakerFSM> levelFsms = new HashSet<PlayMakerFSM>();
@@ -344,6 +344,26 @@ namespace MWCoop
                 int i = System.Array.IndexOf(l.Vars, v.Key);
                 if (i >= 0) l.Sent[i] = v.Value;
             }
+            if (l.F.FsmName == "Data") PanColor(l.F);
+        }
+
+        // Couleur du liquide de la cafetiere : l'automate 'Data' ne la calcule, au repos ("Idle"), qu'en entrant dans l'etat ;
+        // le cafe recu (Coffee) laissait l'eau claire chez les autres -- « remplie d'eau, pas de cafe » (Crowbangus, 12/10).
+        // Meme calcul que le jeu : alpha = Coffee / Water x 1,5 sur Functions/WaterSurface/CoffeeSurface.
+        static void PanColor(PlayMakerFSM f)
+        {
+            float water = FireTools.GetF(f, "Water", 0f), coffee = FireTools.GetF(f, "Coffee", 0f);
+            if (water < 0.01f) water = 0.01f;
+            float caf = Mathf.Min(coffee, water) / water * 1.5f;
+            FsmFloat cv = f.FsmVariables.FindFsmFloat("Caffeine");
+            if (cv != null) cv.Value = caf;
+            FsmColor col = f.FsmVariables.FindFsmColor("Color");
+            Color c = col != null ? col.Value : new Color(0.463f, 0.105f, 0f, 1f);
+            c.a = caf;
+            if (col != null) col.Value = c;
+            Transform s = f.transform.Find("Functions/WaterSurface/CoffeeSurface");
+            Renderer r = s != null ? s.GetComponent<Renderer>() : null;
+            if (r != null && r.material != null) r.material.color = c;
         }
 
         // ================================================================ envois
@@ -372,7 +392,8 @@ namespace MWCoop
             {
                 if (l.F == null) continue;
                 if (LevelAuthority(l) != Session.LocalId) { l.WasAuth = false; continue; }
-                bool all = !l.WasAuth;
+                bool all = !l.WasAuth || now >= l.NextFull;   // (et tout, toutes les 10 s : une copie qui a cuit de son cote est recalee)
+                if (all) l.NextFull = now + 10f;
                 l.WasAuth = true;
                 var changed = new List<int>();
                 for (int i = 0; i < l.Vars.Length; i++)
@@ -622,6 +643,13 @@ namespace MWCoop
             }
         }
 
+        static string SurfaceAlpha(PlayMakerFSM f)
+        {
+            Transform s = f.transform.Find("Functions/WaterSurface/CoffeeSurface");
+            Renderer r = s != null ? s.GetComponent<Renderer>() : null;
+            return r != null && r.material != null ? r.material.color.a.ToString("F2") : "?";
+        }
+
         static void TestCoffee(float t)
         {
             Level pan = null, cup = null;
@@ -645,7 +673,7 @@ namespace MWCoop
                 if (pan == null) { Log.Info("autotest : cafetiere introuvable (" + levels.Count + " suivis)"); return; }
                 Log.Info("autotest : cafetiere Water=" + FireTools.GetF(pan.F, "Water", -1f).ToString("F3") + " Ground=" + FireTools.GetF(pan.F, "Ground", -1f).ToString("F2")
                          + " Coffee=" + FireTools.GetF(pan.F, "Coffee", -1f).ToString("F3") + " etat=" + pan.F.ActiveStateName + " autorite=#" + pan.Auth
-                         + " ; tasse Coffee=" + (cup != null ? FireTools.GetF(cup.F, "Coffee", -1f).ToString("F3") : "?"));
+                         + " ; tasse Coffee=" + (cup != null ? FireTools.GetF(cup.F, "Coffee", -1f).ToString("F3") : "?") + " ; liquide alpha=" + SurfaceAlpha(pan.F));
             }
         }
     }
