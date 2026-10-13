@@ -60,7 +60,13 @@ namespace MWCoop
             UpdateRemotes();
             if (!PlayerSync.InGame || !Session.Active) { if (Active) Exit(false); return; }
             // Ajouts coop coupes (lanceur, Partie ; Menor, 12/10) : pas de camera drone ici (celles des autres restent visibles).
-            if (!Ajouts.On) { if (Active) Exit(true); return; }
+            // (invite : coupee aussi quand l'hote l'a coupee chez lui -- on le dit a l'appui sur la touche)
+            if (!Ajouts.Drone)
+            {
+                if (Active) Exit(true);
+                if (!Busy && Input.GetKeyDown(Keys.Drone)) Hud.Toast(Ajouts.LocalDrone ? Lang.T("Caméra drone coupée par l'hôte", "Drone camera turned off by the host") : Lang.T("Caméra drone coupée (lanceur : Options du jeu > Ajouts COOP)", "Drone camera turned off (launcher: Game options > CO-OP additions)"));
+                return;
+            }
             bool test = Config.GetInt("Test", "Drone", 0) != 0;
             if (!Busy && Input.GetKeyDown(Keys.Drone) || test && !Active && !testDone)
             {

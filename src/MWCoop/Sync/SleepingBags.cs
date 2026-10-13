@@ -206,7 +206,7 @@ namespace MWCoop
             if (log) Log.Info("sac de couchage " + b.Id + (folded ? " plie" : " deplie") + " en " + b.Go.transform.position.ToString("F1"));
         }
 
-        public static bool Wanted { get { return Ajouts.On; } }
+        public static bool Wanted { get { return Ajouts.Bags; } }
         static bool hiddenByOption;
 
         static Bag Find(string id) { foreach (Bag b in bags) if (b.Id == id) return b; return null; }

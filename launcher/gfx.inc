@@ -187,7 +187,12 @@ static const std::vector<GfxRow> &GfxRows()
         { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
         // Un seul interrupteur pour tout ce que MWCoop ajoute au jeu (demande de Menor, 12/10 : « un jeu 100 % vanilla » ;
         // JD : un bouton pour tous les ajouts, presents et a venir -- Sync/Ajouts.cs).
-        { "SansAjouts", L"Désactiver les ajouts COOP (drone F8, sacs de couchage, boutique)", L"Disable the CO-OP additions (F8 drone, sleeping bags, shop)", 0, {}, {}, {}, 0, 8, "Coop" },
+        { "SansAjouts", L"Tout désactiver (jeu vanilla)", L"Disable them all (vanilla game)", 0, {}, {}, {}, 0, 15, "Coop" },
+        // (et un interrupteur par ajout -- JD, 13/10 : garder le drone, retirer la boutique et le musee...)
+        { "AjoutDrone", L"Caméra drone (F8)", L"Drone camera (F8)", 1, {}, {}, {}, 0, 15, "Coop" },
+        { "AjoutSacs", L"Sacs de couchage", L"Sleeping bags", 1, {}, {}, {}, 0, 15, "Coop" },
+        { "AjoutBoutique", L"Boutique s21 (vidéo, KARTTURI)", L"s21 shop (video, KARTTURI)", 1, {}, {}, {}, 0, 15, "Coop" },
+        { "AjoutMusee", L"Musée de la Corse", L"Museum of Corsica", 1, {}, {}, {}, 0, 15, "Coop" },
         { "Touche:Tchat", L"Écrire aux autres (tchat)", L"Write to the others (chat)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:PorteMonnaie", L"Porte-monnaie (donner de l'argent)", L"Wallet (give money)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Vocal", L"Parler (vocal, touche tenue)", L"Talk (voice, hold the key)", 0, {}, {}, {}, 0, 9, "Touches" },
@@ -342,8 +347,8 @@ static const float kGfxRowH = 27, kGfxHeadH = 44;
 // jeu lui-meme (son menu Options), puis celles que MWCoop ajoute ; une icone par categorie. Valeurs negatives : titre de
 // bloc. Deplies : [Lanceur] GfxOuverts4 (lettres a.. : numeros de groupe ; aucune par defaut, demande de JD 12/10 --
 // nouvelle cle : chacun repart ferme).
-static const int kGfxGroups = 15;
-static const int kGfxOrder[] = { -1, 6, 7, 8, 9, 13, -2, 0, 1, 2, 3, -3, 5, 10, 14, 11, 12, 4 };
+static const int kGfxGroups = 16;
+static const int kGfxOrder[] = { -1, 6, 7, 8, 15, 9, 13, -2, 0, 1, 2, 3, -3, 5, 10, 14, 11, 12, 4 };
 static bool g_gfxOpen[kGfxGroups] = {};   // (toutes fermees par defaut : demande de JD, 12/10)
 static bool g_gfxOpenRead;
 static float g_gfxContentH;
@@ -449,10 +454,10 @@ static void DrawGfxBlock(Graphics &g, int block, float x, float &y, float w, flo
 static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, float top, float bottom)
 {
     static const wchar_t *kFr[] = { L"Image", L"Ombres", L"Distance et vue", L"Confort", L"Lumières", L"Écran", L"Voix", L"Visages, habits et pseudos", L"Partie et partage", L"Touches",
-                                    L"Fluidité", L"Ombres avancées", L"Détails et textures", L"Caméra drone", L"Ray tracing" };
+                                    L"Fluidité", L"Ombres avancées", L"Détails et textures", L"Caméra drone", L"Ray tracing", L"Ajouts COOP" };
     static const wchar_t *kEn[] = { L"Image", L"Shadows", L"Distance and view", L"Comfort", L"Lights", L"Screen", L"Voice", L"Faces, clothes and names", L"Game and sharing", L"Keys",
-                                    L"Smoothness", L"Advanced shadows", L"Detail and textures", L"Drone camera", L"Ray tracing" };
-    static const int kIcon[] = { IC_IMAGE, IC_MOON, IC_EYE, IC_SLIDERS, IC_BULB, IC_MONITOR, IC_MIC, IC_SHIRT, IC_USERS, IC_KEYB, IC_GAUGE, IC_SUN, IC_LAYERS, IC_DRONE, IC_SPARK };
+                                    L"Smoothness", L"Advanced shadows", L"Detail and textures", L"Drone camera", L"Ray tracing", L"CO-OP additions" };
+    static const int kIcon[] = { IC_IMAGE, IC_MOON, IC_EYE, IC_SLIDERS, IC_BULB, IC_MONITOR, IC_MIC, IC_SHIRT, IC_USERS, IC_KEYB, IC_GAUGE, IC_SUN, IC_LAYERS, IC_DRONE, IC_SPARK, IC_BOX };
     const auto &rows = GfxRows();
     std::vector<int> mine;
     for (int i = 0; i < (int)rows.size(); i++) if (rows[i].group == group) mine.push_back(i);

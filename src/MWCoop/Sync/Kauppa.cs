@@ -23,10 +23,12 @@ namespace MWCoop
     {
         public const int SleepingBagPrice = 149;
 
-        public static bool Active { get { return Ajouts.On && Config.GetInt("Boutique", "Active", 1) != 0; } }
+        // Coin s21 a construire : la boutique ou le musee (chacun son interrupteur, Ajouts) ; [Boutique] Active=0 : rien.
+        public static bool Active { get { return (Ajouts.Shop || Ajouts.Museum) && Config.GetInt("Boutique", "Active", 1) != 0; } }
+        public static bool ShopOn { get { return Active && Ajouts.Shop; } }
 
         // Sacs poses d'office au debut de partie (sans boutique : oui).
-        public static bool StarterBags { get { return !Active || Config.GetInt("Boutique", "SacsAuDepart", 0) != 0; } }
+        public static bool StarterBags { get { return !ShopOn || Config.GetInt("Boutique", "SacsAuDepart", 0) != 0; } }
 
         static float buildAt = -1;
         static bool built;
@@ -51,11 +53,13 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (!built)
             {
-                if (now < buildAt) return;
+                if (now < buildAt || !Ajouts.Ready) return;   // (invite : les choix de l'hote d'abord)
                 built = true;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                try { Build(); } catch (Exception e) { L("construction : " + e); }
-                try { BuildMuseo(); } catch (Exception e) { L("musee : " + e); }
+                if (ShopOn) try { Build(); } catch (Exception e) { L("construction : " + e); }
+                else L("boutique coupee (ajouts COOP : lanceur, ou choix de l'hote)");
+                if (Ajouts.Museum) try { if (!ShopOn) Materials(); BuildMuseo(); } catch (Exception e) { L("musee : " + e); }   // (materiaux communs, d'habitude faits par la boutique)
+                else L("musee coupe (ajouts COOP : lanceur, ou choix de l'hote)");
                 L("construite en " + sw.ElapsedMilliseconds + " ms");
                 t0 = now;
                 LoadScript();
@@ -115,6 +119,13 @@ namespace MWCoop
         // Sacs de couchage plies, exposes sur la tablette du milieu de la gondole (cote porte), etiquette de prix devant.
         static void Offers()
         {
+            try { BagOffer(); } catch (Exception e) { L("sacs de couchage : rayon " + e); }
+            try { VideoOffers(); } catch (Exception e) { L("video : rayons " + e); }
+        }
+
+        static void BagOffer()
+        {
+            if (!Ajouts.Bags) { L("sacs de couchage coupes (lanceur : ajouts COOP) : pas en rayon"); return; }
             Mesh m; Material mat;
             if (!SleepingBags.DisplayModel(out m, out mat)) { L("sacs de couchage : modele indisponible, rien en rayon"); return; }
             // (gondole : StoreGondola(-2.7, -0.5, -0.55, 0.15, 1.45, 3) -- tablette 2, face avant de mid+0.02 a b1-0.02)
@@ -143,7 +154,6 @@ namespace MWCoop
             bc.size = new Vector3(1.9f, 0.36f, 0.4f);
             offer.Col = bc;
             offers.Add(offer);
-            try { VideoOffers(); } catch (Exception e) { L("video : rayons " + e); }
             Plane("hintalappu", new Vector3(-1.6f, shelf - 0.075f, 0.152f), 0.18f, 0.09f, Vector3.forward);
             L("en rayon : sac de couchage " + SleepingBagPrice + " mk");
         }

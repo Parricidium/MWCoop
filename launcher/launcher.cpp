@@ -1,4 +1,4 @@
-﻿// MWCoop - lanceur (MWCoop.exe, a poser dans le dossier du jeu, livre dans le paquet). Porte de celui de SACoop.
+// MWCoop - lanceur (MWCoop.exe, a poser dans le dossier du jeu, livre dans le paquet). Porte de celui de SACoop.
 //
 //  - Fenetre sans cadre ("layered", alpha par pixel) de 1280 x 800 : depuis 0.42 (lanceur 2026, ui.inc / uikit.inc),
 //    une scene d'aurore boreale dessinee au demarrage, des cartes de verre depoli, une barre de navigation a gauche
@@ -7834,6 +7834,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"graphismes") { g_tab = TAB_GFX; GfxLoad(); }
         else if (st == L"graphismes-video") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi : { 6, 7, 8, 9, 0, 1, 2, 3 }) g_gfxOpen[gi] = false; g_gfxContentH = 3000; g_scroll[TAB_GFX] = (float)_wtof(argv[argc - 1]); }   // (blocs video : coop et jeu plies)
+        else if (st == L"graphismes-ajouts") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 15; }   // (categorie Ajouts COOP seule depliee)
         else if (st == L"graphismes-drone") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 13; }   // (categorie Camera drone seule depliee)
         else if (st == L"graphismes-rt") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 14 || gi == 1; g_gfxContentH = 3000; g_scroll[TAB_GFX] = 330; }   // (categories Ray tracing et Ombres depliees)
         else if (st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_scroll[TAB_GFX] = GfxMaxScroll(); }   // (bas de la page : touches)
