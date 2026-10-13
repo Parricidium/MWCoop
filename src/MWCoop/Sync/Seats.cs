@@ -108,7 +108,18 @@ namespace MWCoop
                 foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) driveTriggers.Add(f);
                 Transform dhp = Find(rb.transform, "DriverHeadPivot");
-                if (dhp == null) continue;
+                if (dhp == null)
+                {
+                    // RAM 1500 (mod) : pas de DriverHeadPivot ; banquette avant d'une piece -- passager a droite (en miroir du
+                    // conducteur) et une place au milieu (rang 1, sans ceinture).
+                    Vector3 rh;
+                    if (n == "Ram1500" && ModDriverHead(rb.transform, out rh))
+                    {
+                        seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-rh.x, rh.y, rh.z) });
+                        seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(0.03f, rh.y, rh.z), ZoneX = 0.3f, MaxX = 0.35f });
+                    }
+                    continue;
+                }
                 Vector3 d = rb.transform.InverseTransformPoint(dhp.position) + EyeFromPivot;
                 seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-d.x, d.y, d.z) });
                 // (taxi et ses copies -- mods Machtwagen300D, SECONDMACHTWAGEN : noms en minuscules ou prefixes, sans banquette
@@ -158,8 +169,20 @@ namespace MWCoop
             if (car == null) return false;
             Transform dhp;
             if (!headPivots.TryGetValue(car, out dhp) || (dhp == null && !ReferenceEquals(dhp, null))) { dhp = Find(car, "DriverHeadPivot"); headPivots[car] = dhp; }
-            if (dhp == null) return false;
+            if (dhp == null) return ModDriverHead(car, out local);
             local = car.InverseTransformPoint(dhp.position) + EyeFromPivot;
+            return true;
+        }
+
+        // Yeux du conducteur d'une voiture de mod sans DriverHeadPivot : RAM 1500, PlayerTrigger/DriveTrigger (le pivot ou le mod
+        // range le joueur) + 0,6 m (mesure au volant, 13/10 : yeux a (-0,39 ; 1,68 ; 0,38), pivot a (-0,39 ; 1,04 ; 0,44)).
+        static bool ModDriverHead(Transform car, out Vector3 local)
+        {
+            local = Vector3.zero;
+            if (car == null || car.name != "Ram1500") return false;
+            Transform tr = car.Find("PlayerTrigger/DriveTrigger");
+            if (tr == null) return false;
+            local = car.InverseTransformPoint(tr.position) + new Vector3(0f, 0.6f, -0.06f);
             return true;
         }
 

@@ -326,6 +326,21 @@ namespace MWCoop
         static int tStep; static float tLog;
         public static void Test(string mode, float t)
         {
+            if (mode == "ramreperes" && Find() && tStep == 0 && t > 30f)
+            {
+                tStep = 9;
+                var sb = new System.Text.StringBuilder("autotest : ram reperes (repere du Ram) :");
+                foreach (Transform x in ram.GetComponentsInChildren<Transform>(true))
+                {
+                    string n = x.name.ToLowerInvariant();
+                    if (n.Contains("pivot") || n.Contains("trigger") || n.Contains("seat") || n.Contains("steer") || n.Contains("passenger") || n.Contains("getin") || n.Contains("bench") || n.Contains("door"))
+                        sb.Append((char)10).Append("  ").Append(Recon.Path(x)).Append(" ").Append(ram.transform.InverseTransformPoint(x.position).ToString("F2"));
+                }
+                Renderer best = null; float vol = 0f;
+                foreach (Renderer rr in ram.GetComponentsInChildren<Renderer>(true)) { Vector3 e = rr.bounds.size; if (e.x * e.y * e.z > vol && rr.name.ToLowerInvariant().Contains("body")) { vol = e.x * e.y * e.z; best = rr; } }
+                if (best != null) sb.Append((char)10).Append("  carrosserie ").Append(best.name).Append(" taille ").Append(best.bounds.size.ToString("F2"));
+                Log.Info(sb.ToString());
+            }
             if (mode != "ram" || !Find()) return;
             Rigidbody rb = ram.GetComponent<Rigidbody>();
             if (Session.IsHost && tStep == 0 && t > 40f)
@@ -354,7 +369,7 @@ namespace MWCoop
                 tLog = t + 3f;
                 Component dl = Comp("RamDoors", "doorLeft");
                 Log.Info("autotest : ram, " + ram.transform.position.ToString("F1") + (rb != null ? " v " + rb.velocity.magnitude.ToString("F1") + (rb.isKinematic ? " cinematique" : "") : "")
-                         + ", moteur " + Get(ign, "engineOn") + " cle " + Get(ign, "Stage") + ", regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + ", phares " + Get(lights, "lightingStage") + ", portiere G " + Get(dl, "doorOpen") + ", au volant ici " + (VehicleSync.LocalDrivingName ?? "-"));
+                         + ", moteur " + Get(ign, "engineOn") + " cle " + Get(ign, "Stage") + ", regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + ", phares " + Get(lights, "lightingStage") + ", portiere G " + Get(dl, "doorOpen") + ", au volant ici " + (VehicleSync.LocalDrivingName ?? "-") + (Camera.main != null && VehicleSync.LocalDrivingName != null ? ", yeux (repere Ram) " + ram.transform.InverseTransformPoint(Camera.main.transform.position).ToString("F2") : ""));
             }
         }
     }
