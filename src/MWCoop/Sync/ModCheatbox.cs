@@ -15,12 +15,17 @@ namespace MWCoop
     // d'appels : PlayMaker traite l'evenement tout de suite) ; a l'image suivante (objet pose), le distributeur et la pose
     // partent aux autres (@cbx), qui font tourner le meme distributeur (meme compteur, meme ID d'objet) et posent l'objet au
     // meme endroit ; Props suit ensuite ses deplacements. Inutile que les autres aient le mod.
+    // Meme chose pour « Spare Parts Seller » (Homura ; suggestion #24) : son vendeur de pieces d'occasion envoie SPAWNITEM
+    // a un distributeur de SPAWNERS_VIN quand on clique une piece (BuyPart.Buy), la pose sur son etal et, pour les
+    // ressorts, change le type (automate « Data », Type) ; l'usure tiree par le distributeur et ce type partent aussi.
     public static class ModCheatbox
     {
         static readonly string[] Holders = { "Spawner/CreateItems", "Spawner/CreateItemsSeparate", "SPAWNERS_VIN", "SPAWNERS_Aftermarket", "SPAWNERS_Fleetari" };
         static readonly HashSet<PlayMakerFSM> hooked = new HashSet<PlayMakerFSM>();
         static readonly Dictionary<string, PlayMakerFSM> byKey = new Dictionary<string, PlayMakerFSM>();
         static readonly List<PlayMakerFSM> pending = new List<PlayMakerFSM>();
+        static readonly Dictionary<PlayMakerFSM, float> pendingCond = new Dictionary<PlayMakerFSM, float>();
+        static bool cheatbox, seller;
         static bool present, looked, replaying;
         static float nextScan;
 
@@ -34,9 +39,14 @@ namespace MWCoop
             {
                 Type t = null;
                 try { t = a.GetType("CheatboxPlusPlus.Cpp", false); } catch { }
-                if (t != null) { present = true; break; }
+                if (t != null) cheatbox = true;
+                t = null;
+                try { t = a.GetType("SparePartsSellerMWC.BuyPart", false); } catch { }
+                if (t != null) seller = true;
             }
-            if (present) Log.Info("mods : Cheatbox++ present, objets qu'il fait apparaitre partages");
+            present = cheatbox || seller;
+            if (cheatbox) Log.Info("mods : Cheatbox++ present, objets qu'il fait apparaitre partages");
+            if (seller) Log.Info("mods : Spare Parts Seller present, pieces achetees au vendeur partagees");
             return present;
         }
 
@@ -47,7 +57,7 @@ namespace MWCoop
         static System.Reflection.FieldInfo openField, instField; static bool openLooked;
         public static bool MenuOpen()
         {
-            if (!Present()) return false;
+            if (!Present() || !cheatbox) return false;
             if (!openLooked)
             {
                 openLooked = true;
@@ -98,6 +108,39 @@ namespace MWCoop
             }
             return sb.ToString();
         }
+        // Essai [Test] Autotest=vendeur (Spare Parts Seller installe chez l'hote) : vendeur ouvert (lundi 10 h), puis achat de
+        // la piece n (BuyPart.Buy, comme un clic) ; les autres doivent noter « recree ici ».
+        public static string TestSeller(int step, int n)
+        {
+            const System.Reflection.BindingFlags A = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            Type bp = null;
+            foreach (System.Reflection.Assembly a in AppDomain.CurrentDomain.GetAssemblies()) { try { bp = a.GetType("SparePartsSellerMWC.BuyPart", false); } catch { } if (bp != null) break; }
+            if (bp == null) return "Spare Parts Seller absent";
+            if (step == 0)
+            {
+                FsmInt d = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay"), h = FsmVariables.GlobalVariables.FindFsmInt("GlobalHour");
+                if (d != null) d.Value = 1; if (h != null) h.Value = 10;
+                Vector3 at = Vector3.zero; int on = 0;
+                foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(bp))
+                {
+                    Component bc = o as Component;
+                    if (bc == null || !bc.transform.root.gameObject.activeInHierarchy) continue;   // (modeles de l'AssetBundle)
+                    at = bc.transform.position; on++;
+                }
+                if (on > 0) Menu.TeleportTo(at + Vector3.up * 0.3f + Vector3.right * 1.5f, 0f, "essai vendeur");   // (pres de l'etal : LOD du vendeur actif)
+                return "vendeur : lundi 10 h, " + on + " pieces en vente, joueur pres de l'etal " + at.ToString("F1");
+            }
+            UnityEngine.Object[] all = UnityEngine.Object.FindObjectsOfType(bp);
+            if (all.Length == 0) return "vendeur : aucune piece active";
+            Component c = (Component)all[Mathf.Clamp(n, 0, all.Length - 1)];
+            FsmFloat money = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
+            if (money != null) money.Value += 5000f;
+            string pn = (string)bp.GetField("partName", A).GetValue(c);
+            try { bp.GetMethod("Buy", A).Invoke(c, null); }
+            catch (Exception e) { Exception x = e.InnerException ?? e; return "vendeur : achat de " + pn + " ERREUR " + x.Message; }
+            return "vendeur : " + pn + " achete (" + all.Length + " actives, spring " + bp.GetField("springType", A).GetValue(c) + ")";
+        }
+
         public static string TestCount()
         {
             var sb = new System.Text.StringBuilder();
@@ -113,7 +156,12 @@ namespace MWCoop
             {
                 try
                 {
-                    if (!replaying && Session.Active && Session.RemoteCount > 0 && FromCheatbox() && !pending.Contains(F)) pending.Add(F);
+                    if (!replaying && Session.Active && Session.RemoteCount > 0 && FromCheatbox() && !pending.Contains(F))
+                    {
+                        pending.Add(F);
+                        FsmFloat c = F.FsmVariables.FindFsmFloat("Condition");
+                        pendingCond[F] = c != null ? c.Value : -1f;
+                    }
                 }
                 catch (Exception e) { Replay.HookError(e); }
                 Finish();
@@ -123,7 +171,7 @@ namespace MWCoop
         static bool FromCheatbox()
         {
             string st = Environment.StackTrace;
-            return st.IndexOf("CheatboxPlusPlus", StringComparison.Ordinal) >= 0;
+            return st.IndexOf("CheatboxPlusPlus", StringComparison.Ordinal) >= 0 || st.IndexOf("SparePartsSellerMWC", StringComparison.Ordinal) >= 0;
         }
 
         static void Scan()
@@ -168,13 +216,23 @@ namespace MWCoop
                 FsmGameObject nv = f.FsmVariables.FindFsmGameObject("New");
                 GameObject go = nv != null ? nv.Value : null;
                 if (go == null) continue;
-                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@cbx").Str(KeyOf(f)).Vec(go.transform.position).Quat(go.transform.rotation), true);
-                Log.Info("mods : Cheatbox++, " + go.name + " apparu ici (" + f.FsmName + "), envoye");
+                float cond; if (!pendingCond.TryGetValue(f, out cond)) cond = -1f;
+                int type = DataType(go);
+                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@cbx").Str(KeyOf(f)).Vec(go.transform.position).Quat(go.transform.rotation).F32(cond).I32(type), true);
+                Log.Info("mods : " + go.name + " apparu ici (" + f.FsmName + ", usure " + cond + (type >= 0 ? ", type " + type : "") + "), envoye");
             }
-            pending.Clear();
+            pending.Clear(); pendingCond.Clear();
         }
 
-        public static void OnRemote(int who, string key, Vector3 pos, Quaternion rot)
+        // Type de la piece (automate « Data » : ressorts du vendeur de pieces), -1 sans.
+        static int DataType(GameObject go)
+        {
+            PlayMakerFSM d = Game.FsmOn(go, "Data");
+            FsmInt t = d != null ? d.FsmVariables.FindFsmInt("Type") : null;
+            return t != null ? t.Value : -1;
+        }
+
+        public static void OnRemote(int who, string key, Vector3 pos, Quaternion rot, float sentCond = -1f, int type = -1)
         {
             if (byKey.Count == 0 || !byKey.ContainsKey(key)) Scan();
             PlayMakerFSM f;
@@ -184,7 +242,7 @@ namespace MWCoop
             replaying = true;
             try
             {
-                if (cond != null) cond.Value = 100f;   // (comme Cheatbox++ : article neuf)
+                if (cond != null) cond.Value = sentCond >= 0f ? sentCond : 100f;   // (usure de celui qui l'a fait apparaitre ; ancienne version : neuf, comme Cheatbox++)
                 f.SendEvent("SPAWNITEM");
             }
             finally { replaying = false; if (cond != null) cond.Value = was; }
@@ -192,10 +250,27 @@ namespace MWCoop
             GameObject go = nv != null ? nv.Value : null;
             if (go == null) { Log.Warn("mods : Cheatbox++, rien de cree par " + key); return; }
             go.transform.position = pos; go.transform.rotation = rot;
+            if (type >= 0)
+            {
+                // (comme Spare Parts Seller : Init de « Data » coupe, Type pose, automate relance)
+                PlayMakerFSM d = Game.FsmOn(go, "Data");
+                FsmInt ti = d != null ? d.FsmVariables.FindFsmInt("Type") : null;
+                if (ti != null && ti.Value != type)
+                {
+                    try
+                    {
+                        d.Fsm.InitData();
+                        FsmState init = d.Fsm.GetState("Init");
+                        if (init != null && init.Actions.Length > 1) init.Actions[1].Enabled = false;
+                        d.enabled = false; ti.Value = type; d.enabled = true;
+                    }
+                    catch (Exception e) { Log.Warn("mods : type de " + go.name + " : " + e.Message); }
+                }
+            }
             Rigidbody rb = go.GetComponent<Rigidbody>();
             if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
             Props.Track(go);
-            Log.Info("mods : Cheatbox++, " + go.name + " apparu chez #" + who + ", recree ici");
+            Log.Info("mods : " + go.name + " apparu chez #" + who + ", recree ici" + (type >= 0 ? " (type " + type + ")" : ""));
         }
 
         // ---------------------------------------------------------------- bois et sacs de sable (groupe « Extra »)

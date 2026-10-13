@@ -53,20 +53,34 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- ouvrir / fermer
         static Esine aimedTape;   // cassette posee visee (InteractItems)
+        static float testRUntil; static bool testRWas, testFocus;
+        // Focus clavier a vider au prochain passage d'OnGUI : mis a 0 hors d'OnGUI (Echap), GUIUtility.keyboardControl revenait
+        // au champ du titre -- a la reouverture il avait deja le focus (essai vhs : « keyboardControl 1 » apres fermeture) et,
+        // champ texte actif, Unity avale les touches du jeu (Input.eatKeyPressOnTextFieldFocus). Retour de Marshal, 13/10 :
+        // « R ouvre le montage une fois ; ferme, il ne s'ouvre plus ».
+        static bool mUnfocus;
+        static float mWhyAt;   // (essai : R tenu simule)
         static Esine HeldTape() { return esineet.Find(e => e.Kind == KVhs && e.Go != null && e.Go.transform.parent != null && Game.UnderPlayer(e.Go.transform)); }
 
         // R tenu : appele chaque image avec la cassette visee ou tenue (null : rien)
         static void TickMontageKey(Esine tape, float now)
         {
+            bool simR = now < testRUntil;
+            if (testRUntil > 0f && simR != testRWas) { testRWas = simR; L("essai : R " + (simR ? "enfonce" : "relache") + " (cassette visee " + (tape != null) + ", montage " + MontageOpen + ", occupe " + KameraBusy + ", viseur " + Viewfinder + ")"); }
+            if (!MontageOpen && tape == null && Input.GetKeyDown(Keys.CameraRec) && now > mWhyAt && (lookedItem != null && lookedItem.Kind == KVhs || HeldTape() != null))
+            {
+                mWhyAt = now + 5f;   // (journal : pourquoi R ne fait rien sur une cassette)
+                L("video : R sur une cassette sans montage (occupe " + KameraBusy + ", viseur " + Viewfinder + ", menu " + Menu.Open + ", tchat " + Menu.ChatOpen + ", focus clavier " + GUIUtility.keyboardControl + ")");
+            }
             if (MontageOpen || tape == null) { mRDown = -1f; return; }
-            if (Input.GetKeyDown(Keys.CameraRec)) mRDown = now;
-            if (mRDown >= 0f && !Input.GetKey(Keys.CameraRec)) mRDown = -1f;
+            if (Input.GetKeyDown(Keys.CameraRec) || simR && mRDown < 0f) mRDown = now;
+            if (mRDown >= 0f && !Input.GetKey(Keys.CameraRec) && !simR) mRDown = -1f;
             if (mRDown >= 0f && now - mRDown >= 0.7f) { mRDown = -1f; OpenMontage(tape); }
         }
 
         static void OpenMontage(Esine tape)
         {
-            mTape = tape; MontageOpen = true; mOpenedAt = Time.realtimeSinceStartup;
+            mTape = tape; MontageOpen = true; mOpenedAt = Time.realtimeSinceStartup; mUnfocus = true;
             mTitle = TapeTitle(tape.Data); mNote = null; mConfirm = 0; mDrag = false;
             WalletPanel.Open = false; CheatPanel.Open = false; MapPanel.Open = false;
             LoadMontage();
@@ -89,7 +103,7 @@ namespace MWCoop
         {
             MontageOpen = false; mPlaying = false; mTape = null;
             if (mAudio != null) mAudio.Stop();
-            GUIUtility.keyboardControl = 0;
+            GUIUtility.keyboardControl = 0; mUnfocus = true;
         }
 
         // ---------------------------------------------------------------- chaque image
@@ -383,6 +397,7 @@ namespace MWCoop
 
         public static void DrawMontage()
         {
+            if (mUnfocus && Event.current.type == EventType.Layout) { mUnfocus = false; GUIUtility.keyboardControl = 0; }
             if (!MontageOpen || mTape == null) return;
             Event e = Event.current;
             float now = Time.realtimeSinceStartup;
@@ -403,6 +418,7 @@ namespace MWCoop
             if (enter) e.Use();
             GUI.SetNextControlName(TitleField);
             mTitle = GUI.TextField(rf, mTitle, 24, Style.Field(19));
+            if (testFocus) { testFocus = false; GUI.FocusControl(TitleField); }
             string saved = TapeTitle(mTape.Data);
             if (MButton(new Rect(rf.xMax + Style.Px(10), cy + Style.Px(2), Style.Px(140), Style.Px(34)), Lang.T("ÉCRIRE", "WRITE"), true, e, Clean(mTitle) != saved) || enter && Clean(mTitle) != saved)
             {
