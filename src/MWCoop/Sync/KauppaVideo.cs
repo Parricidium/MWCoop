@@ -101,6 +101,9 @@ namespace MWCoop
                     {
                         var mf = r.GetComponent<MeshFilter>();
                         if (mf == null || mf.sharedMesh == null || mf.sharedMesh.name.StartsWith("Combined Mesh")) continue;
+                        // (ni le cache noir « mask » ni la vitre « Lens » : au meme endroit que la dalle, ils se battaient avec elle --
+                        // taches noires qui bougent avec la camera, video de JD du 13/10)
+                        if (r.name == "mask" || r.name == "Lens") continue;
                         var c = new GameObject(r.name);
                         c.transform.SetParent(g.transform, false);
                         // (orientation du monde, pas celle de JAIL/TV dont les axes sont couches : la TV etait sur le cote)
@@ -108,7 +111,8 @@ namespace MWCoop
                         c.transform.localRotation = r.transform.rotation;
                         c.transform.localScale = r.transform.lossyScale;
                         c.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
-                        c.AddComponent<MeshRenderer>().sharedMaterials = r.sharedMaterials;
+                        var cr = c.AddComponent<MeshRenderer>(); cr.sharedMaterials = r.sharedMaterials;
+                        cr.shadowCastingMode = r.shadowCastingMode; cr.receiveShadows = r.receiveShadows;   // (dalle : sans ombres, comme le jeu)
                         if (r.name == "TVScreen") screen = c.transform;
                     }
                     // recentre : boite des maillages autour de l'origine, posee sur y = -size.y/2
@@ -235,6 +239,7 @@ namespace MWCoop
         static void LoadItems()
         {
             EnsureImportDir();   // (le dossier ou mettre ses videos, cree des le debut pour qu'on le trouve)
+            WorldFiles.Check(Path.GetDirectoryName(ItemFile));   // (nouvelle partie : les objets du monde d'avant ne reviennent pas)
             if (!BagAuthority || !File.Exists(ItemFile)) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             try

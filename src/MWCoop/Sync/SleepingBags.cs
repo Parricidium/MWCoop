@@ -399,6 +399,7 @@ namespace MWCoop
 
         static void Load()
         {
+            WorldFiles.Check(Path.GetDirectoryName(FilePath));
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             try
             {

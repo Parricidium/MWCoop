@@ -267,6 +267,7 @@ namespace MWCoop
             HandTools.OnLevelLoaded();
             LogPiles.OnLevelLoaded();
             SleepingBags.OnLevelLoaded();
+            WorldFiles.OnLevelLoaded();
             Ajouts.OnLevelLoaded();
             Kauppa.OnLevelLoaded();
             ModCheatbox.OnLevelLoaded();
