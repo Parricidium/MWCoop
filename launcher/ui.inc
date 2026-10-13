@@ -460,7 +460,7 @@ static void DrawRail(Graphics &g)
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 18; step = 34; }
     float gap = min(20.0f, max(0.0f, (avail - kNavGroups * lab - nItems * step) / (kNavGroups - 1))), y = y0;
     for (int k = 0, i = 0; k < kNavGroups; k++) {
-        SmallLabel(g, g_fr ? kNavGroupFr[k] : kNavGroupEn[k], RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
+        SmallLabel(g, T(kNavGroupFr[k], kNavGroupEn[k]), RectF(40, y + 2, 190, 20), WithA(kGrey, 0.9f));
         if (RailFoldable(k)) {   // chevron a droite du titre ; clic sur la ligne du titre : plier / deplier
             RectF hr(28, y, 208, lab);
             bool hot = g_uiHot == UI_NAV_GROUP + k;
@@ -471,7 +471,7 @@ static void DrawRail(Graphics &g)
         for (int j = 0; j < kNavGroupN[k]; j++, i++) {
             const NavItem &it = kNav[i];
             if (RailFolded(k) && it.page != g_tab) continue;
-            DrawNavItem(g, RectF(28, y, 208, step - 2), it.page, it.icon, g_fr ? it.fr : it.en);
+            DrawNavItem(g, RectF(28, y, 208, step - 2), it.page, it.icon, T(it.fr, it.en));
             y += step;
         }
         y += gap;
@@ -499,7 +499,7 @@ static std::wstring Greeting()
 {
     SYSTEMTIME st; GetLocalTime(&st);
     std::wstring n = PlayerName();
-    if (st.wHour >= 5 && st.wHour < 18) return std::wstring(g_fr ? (st.wHour < 12 ? L"Bonjour, " : L"Bonjour, ") : (st.wHour < 12 ? L"Good morning, " : L"Good afternoon, ")) + n;
+    if (st.wHour >= 5 && st.wHour < 18) return std::wstring(st.wHour < 12 ? T(L"Bonjour, ", L"Good morning, ") : T(L"Bonjour, ", L"Good afternoon, ")) + n;
     return std::wstring(T(L"Bonsoir, ", L"Good evening, ")) + n;
 }
 static void DrawLobbyHeadControls(Graphics &g, float &right);   // (salon, plus bas)
@@ -600,7 +600,7 @@ static void DrawHeader(Graphics &g)
     HeadButton(g, B_CLOSE, IC_CLOSE);
     HeadButton(g, B_MIN, IC_MIN);
     HeadButton(g, B_THEME, g_dark ? IC_SUN : IC_MOON);
-    HeadButton(g, B_LANG, 0, g_fr ? L"FR" : L"EN");
+    HeadButton(g, B_LANG, 0, g_fr ? L"FR" : g_ru ? L"RU" : L"EN");
     // | puis API moddeurs et Journaux (pastille rouge : la derniere partie s'est arretee brutalement)
     {
         Pen sp(TH(fieldBorder), 1.4f);
@@ -878,7 +878,7 @@ static void DrawHomeLook(Graphics &g, RectF stage)
     // etiquettes : haut, corpulence, chapeau
     std::vector<std::wstring> chips;
     if (g_perso.state == 1) { chips.push_back(PersoLabel(PF_SHIRT, PersoGet(PF_SHIRT))); chips.push_back(PersoLabel(PF_BODY, PersoGet(PF_BODY))); if (!PersoGet(PF_HAT).empty()) chips.push_back(PersoLabel(PF_HAT, PersoGet(PF_HAT))); }
-    else if (ap) chips.push_back((g_fr ? ap->labFr : ap->labEn)[OptGet(*ap)]);
+    else if (ap) chips.push_back(TLab(ap->labFr, ap->labEn, OptGet(*ap)));
     float tw = 0;
     std::vector<float> ws;
     for (auto &c : chips) { float w = min(PillW(c, 12), 120.0f); ws.push_back(w); tw += w + 6; }
@@ -1233,7 +1233,7 @@ static void DrawSettings(Graphics &g)
     UiSeg(g, RectF(la.X + la.Width - 220, y, 200, 40), { T(L"Sombre", L"Dark"), T(L"Clair", L"Light") }, g_dark ? 0 : 1, UI_SET_DARK);
     y += 50;
     Text(g, T(L"Langue", L"Language"), RectF(la.X + 20, y, 200, 40), 14, FontStyleBold, kInk, StringAlignmentNear);
-    UiSeg(g, RectF(la.X + la.Width - 220, y, 200, 40), { L"Français", L"English" }, g_fr ? 0 : 1, UI_SET_FR);
+    UiSeg(g, RectF(la.X + la.Width - 300, y, 280, 40), { L"Français", L"English", L"Русский" }, g_fr ? 0 : g_ru ? 2 : 1, UI_SET_LANG);
     y += 50;
     if (const Opt *fl = OptByKey("FermerLanceur")) {
         RectF row(la.X + 20, y, la.Width - 40, 52);
@@ -1359,9 +1359,9 @@ static void CreditCard(Graphics &g, const Credit &k, float y, float x, float w)
         Text(g, std::wstring(1, k.name[0]), av, 26, FontStyleBold, Color(255, 255, 255, 255));
     }
     Text(g, k.name, RectF(row.X + 100, row.Y + 16, 420, 28), 19, FontStyleBold, kInk, StringAlignmentNear);
-    Text(g, g_fr ? k.roleFr : k.roleEn, RectF(row.X + 100, row.Y + 44, 420, 20), 13, FontStyleBold, kAcc, StringAlignmentNear);
+    Text(g, T(k.roleFr, k.roleEn), RectF(row.X + 100, row.Y + 44, 420, 20), 13, FontStyleBold, kAcc, StringAlignmentNear);
     Text(g, k.date, RectF(row.X + row.Width - 220, row.Y + 16, 200, 28), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
-    Para(g, g_fr ? k.fr : k.en, RectF(row.X + 100, row.Y + 64, row.Width - 124, 38), 12, kGrey);
+    Para(g, T(k.fr, k.en), RectF(row.X + 100, row.Y + 64, row.Width - 124, 38), 12, kGrey);
 }
 
 static void DrawCreditsPage(Graphics &g)
@@ -1390,7 +1390,7 @@ static void DrawCreditsPage(Graphics &g)
         for (const CreditImg &k : kCreditImgs) {
             RectF row(area.X, y, area.Width, 40);
             if (i++ % 2 == 0) { GraphicsPath rp; RoundRect(rp, row, 10); SolidBrush rb(TH(card)); g.FillPath(&rb, &rp); }
-            Text(g, std::wstring(g_fr ? k.titleFr : k.titleEn) + L"  (" + k.date + L")", RectF(row.X + 14, row.Y + 3, row.Width * 0.55f, 18), 13, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, std::wstring(T(k.titleFr, k.titleEn)) + L"  (" + k.date + L")", RectF(row.X + 14, row.Y + 3, row.Width * 0.55f, 18), 13, FontStyleBold, kInk, StringAlignmentNear);
             Text(g, k.author, RectF(row.X + 14, row.Y + 20, row.Width * 0.6f, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             Text(g, k.license, RectF(row.X + row.Width * 0.6f, row.Y + 3, row.Width * 0.4f - 14, 34), 11.5f, FontStyleRegular, kAcc, StringAlignmentFar);
             y += 42;
@@ -1509,9 +1509,8 @@ static bool UiClick(int id)
         g_dark = id == UI_SET_DARK;
         WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str());
         return true;
-    case UI_SET_FR: case UI_SET_EN:
-        g_fr = id == UI_SET_FR;
-        WritePrivateProfileStringW(L"Lanceur", L"Langue", g_fr ? L"fr" : L"en", g_iniLauncher.c_str());
+    case UI_SET_LANG: case UI_SET_LANG + 1: case UI_SET_LANG + 2:
+        SetLang(id == UI_SET_LANG ? L"fr" : id == UI_SET_LANG + 1 ? L"en" : L"ru");
         return true;
     case UI_SET_CLOSE: if (const Opt *o = OptByKey("FermerLanceur")) OptSet(*o, OptGet(*o) ? 0 : 1); return true;
     case UI_SET_START: case UI_SET_START1: case UI_SET_START2:

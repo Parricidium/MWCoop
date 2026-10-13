@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -91,7 +91,7 @@ namespace MWCoop
             {
                 Cheats.Place p = Cheats.Places[i];
                 Rect r = new Rect(ix + (i % perRow) * (pw + gap), cy + (i / perRow) * (bh + gap), pw, bh);
-                if (Button(r, Lang.Fr ? p.Fr : p.En, false, e, ok)) Do("/lieu " + p.Key, Lang.Fr ? p.Fr : p.En);
+                if (Button(r, Lang.T(p.Fr, p.En), false, e, ok)) Do("/lieu " + p.Key, Lang.T(p.Fr, p.En));
             }
             cy += placeRows * (bh + gap) + Style.Px(6);
             // moi

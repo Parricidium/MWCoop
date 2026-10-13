@@ -224,7 +224,7 @@ The detailed list, version by version, is in [docs/FEUILLE-DE-ROUTE.md](docs/FEU
 | Key | Effect |
 |---|---|
 | `Port=7870` | Game port (UDP) and lobby port (TCP) |
-| `Langue=fr` / `en` | Language of the in-game texts (written by the launcher) |
+| `Langue=fr` / `en` / `ru` | Language of the in-game texts (written by the launcher) |
 | `Flou=0` | Plain panels instead of the blurred glass (very old PCs) |
 | `Reapparition=0` | Death ends the game as in solo |
 | `EcranAttente=0` | Guests see the game's main menu instead of the waiting screen |
@@ -411,7 +411,7 @@ La liste détaillée, version par version : [docs/FEUILLE-DE-ROUTE.md](docs/FEUI
 | Clé | Effet |
 |---|---|
 | `Port=7870` | Port du jeu (UDP) et du salon (TCP) |
-| `Langue=fr` / `en` | Langue des textes en jeu (écrite par le lanceur) |
+| `Langue=fr` / `en` / `ru` | Langue des textes en jeu (écrite par le lanceur) |
 | `Flou=0` | Panneaux unis au lieu du verre flouté (PC très anciens) |
 | `Reapparition=0` | La mort termine la partie comme en solo |
 | `EcranAttente=0` | Les invités voient le menu du jeu au lieu de l'écran d'attente |

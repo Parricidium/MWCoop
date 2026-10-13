@@ -59,7 +59,7 @@ static void DrawApiPage(Graphics &g)
         SolidBrush fb(TH(card)); g.FillPath(&fb, &p);
         SolidBrush ab(kAcc);
         DrawStr(g, f.code, -1, &fm, RectF(r.X + 14, r.Y, 260, r.Height), &sfl, &ab);
-        Text(g, g_fr ? f.fr : f.en, RectF(r.X + 274, r.Y, r.Width - 284, r.Height), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
+        Text(g, T(f.fr, f.en), RectF(r.X + 274, r.Y, r.Width - 284, r.Height), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
         y += 46;
     }
     // exemple
@@ -151,7 +151,7 @@ static void DrawApiPage(Graphics &g)
     float ty = t.Y + 56;
     UiFont tfont(L"Segoe UI", 12.5f, FontStyleRegular);
     for (int i = 0; i < 4; i++) {
-        const wchar_t *s = g_fr ? tipsFr[i] : tipsEn[i];
+        const wchar_t *s = T(tipsFr[i], tipsEn[i]);
         RectF m; MeasureStr(g, s, -1, &tfont, RectF(0, 0, t.Width - 58, 400), &m);
         SolidBrush dot(kAcc); g.FillEllipse(&dot, t.X + 22, ty + 7, 7.0f, 7.0f);
         Para(g, s, RectF(t.X + 38, ty, t.Width - 58, m.Height + 4), 12.5f, kInk);

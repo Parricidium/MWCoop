@@ -368,7 +368,7 @@ namespace MWCoop
                 case "prix du rallye": return Lang.T("prix du rallye", "rally prize");
                 case "prix de la course sur glace": return Lang.T("prix de la course sur glace", "ice race prize");
             }
-            return Lang.Fr ? label : "income";
+            return Lang.Fr ? label : Lang.R("income");
         }
 
         // Versement partage vu chez un autre joueur.

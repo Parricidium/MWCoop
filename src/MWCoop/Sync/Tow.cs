@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -216,7 +216,7 @@ namespace MWCoop
                     Session.SendAll(new NetWriter(Msg.Tow).U8(REMOVE).U8(m.Owner).U8(Session.LocalId), true);
                     rAttached.Value = false;   // 'Check distance' -> 'Snap off' ; le crochet -> 'Remove rope'
                     if (ropeFsm.ActiveStateName == "Wait") Game.SetState(ropeFsm, "Snap off");
-                    Hud.Toast(Lang.T("Corde de " + Name(m.Owner) + " retir\u00E9e", Name(m.Owner) + "'s rope removed"));
+                    Hud.Toast(string.Format(Lang.T("Corde de {0} retir\u00E9e", "{0}'s rope removed"), Name(m.Owner)));
                     Log.Info("remorquage : clic sur " + m.Path1 + " : retrait de la corde de " + Name(m.Owner) + " demande");
                 }
             }

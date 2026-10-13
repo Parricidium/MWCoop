@@ -1,0 +1,511 @@
+the parents' house	дом родителей
+the apartment	квартира
+Cabin	Хижина
+Cottage	Коттедж
+Dance hall	Танцзал
+Landfill	Свалка
+Inspection	Техосмотр
+Repair shop	Автосервис
+Harbor	Порт
+Pub Nappo	Паб Nappo
+Parents' house	Дом родителей
+Apartment	Квартира
+income	доход
+error: 	ошибка: 
+no answer from 	нет ответа от 
+refused: 	отказано: 
+disconnected (	отключено (
+connected to 	подключено к 
+connecting to 	подключение к 
+waiting for a Steam invite	ждём приглашения Steam
+Steam host	хост Steam
+host, port 	хост, порт 
+solo	соло
+ was kicked from the game	 исключён(а) из игры
+Bring here: be in game	Призвать: нужно быть в игре
+ is coming	 уже в пути
+The host wants to bring you over: get out of the vehicle first	Хост хочет перенести тебя: сначала выйди из транспорта
+the host	хост
+The host brought you over	Хост перенёс тебя к себе
+The host is preparing the save, you will join in a moment...	Хост готовит сохранение, скоро войдёшь в игру...
+Waiting: the host is not in game yet	Ожидание: хост ещё не в игре
+The host went back to the menu: back to the menu	Хост вернулся в меню: возврат в меню
+Host's save ignored: start the game from MWCoop.exe	Сохранение хоста проигнорировано: запусти игру из MWCoop.exe
+Host's save not written: 	Сохранение хоста не записано: 
+Host's save received	Сохранение хоста получено
+Saving...	Сохранение...
+Save already requested from the host	Сохранение уже запрошено у хоста
+Save requested from the host: you stay in game	Сохранение запрошено у хоста: ты остаёшься в игре
+Co-op save: guests stay in game	Кооп-сохранение: гости остаются в игре
+ asks for a save: in 	 просит сохранить: через 
+Game saved, everyone stays in game. Click again within {0} s to save and quit to the menu	Игра сохранена, все остаются в игре. Нажми ещё раз в течение {0} с, чтобы сохранить и выйти в меню
+Game saved (requested by 	Игра сохранена (запросил(а) 
+Co-op save in {0} s ({1}): you stay in game	Кооп-сохранение через {0} с ({1}): ты остаёшься в игре
+Game saved on the host (	Игра сохранена у хоста (
+The host saves and quits to the menu: you follow, then come back with them	Хост сохраняет и выходит в меню: ты следуешь за ним, потом вернёшься вместе с ним
+Save: {0} difference(s) with 	Сохранение: расхождений ({0}) с 
+ left the game	 вышел(а) из игры
+You were kicked from the game by the host	Хост исключил тебя из игры
+Disconnected from the host: 	Отключено от хоста: 
+ joined the game	 присоединился(ась) к игре
+ is in the game	 в игре
+Steam lobby ready: invite your friends (F10 or Shift+Tab)	Лобби Steam готово: пригласи друзей (F10 или Shift+Tab)
+Steam lobby not ready yet	Лобби Steam ещё не готово
+Cheats are off (host's choice).	Читы выключены (решение хоста).
+Cheats are off: launcher, Game options > Game and sharing > Allow cheats.	Читы выключены: лаунчер, Настройки игры > Игра и обмен > Разрешить читы.
+Cheat	Чит
+No such player: 	Нет такого игрока: 
+ is not in game.	 не в игре.
+Unknown place. /help for the list.	Неизвестное место. /help — список.
+Amount: 1 to 1000000.	Сумма: от 1 до 1000000.
+Wallet not ready.	Кошелёк не готов.
+Time: 0 to 24.	Время: от 0 до 24.
+/snow on or /snow off	/snow on или /snow off
+Unknown command. /help for the list.	Неизвестная команда. /help — список.
+ calls you: get out of the vehicle.	 зовёт тебя: выйди из транспорта.
+Get out of the vehicle first.	Сначала выйди из транспорта.
+Police not found.	Полиция не найдена.
+Drone: leave the driver's seat first	Дрон: сначала покинь место водителя
+Interface hidden: 	Интерфейс скрыт: 
+Photo saved: CoopPictures\\	Фото сохранено: CoopPictures\\
+Move	Движение
+Mouse	Мышь
+Aim	Прицел
+Up / down	Вверх / вниз
+Faster (hold)	Быстрее (держать)
+Wheel	Колесо
+Zoom	Зум
+Tilt	Наклон
+Reset	Сброс
+Take the photo	Сделать фото
+Grid	Сетка
+Hide interface	Скрыть интерфейс
+Leave the drone	Выйти из дрона
+DRONE CAMERA	КАМЕРА-ДРОН
+PRICE TOTAL 	ИТОГО 
+OPENING THE BAG...	ОТКРЫВАЮ ПАКЕТ...
+Pick up a VHS tape first.	Сначала возьми кассету VHS.
+Written on the spine: 	Надпись на корешке: 
+Spine wiped.	Корешок стёрт.
+Camcorder: end of tape	Видеокамера: конец кассеты
+NO TAPE	НЕТ КАССЕТЫ
+LEFT CLICK: FILM / PAUSE    	ЛКМ: СНИМАТЬ / ПАУЗА    
+: LOWER (END OF TAKE)    WHEEL: ZOOM	: ОПУСТИТЬ (КОНЕЦ ДУБЛЯ)    КОЛЕСО: ЗУМ
+SHOPPING BAG: {0} ITEM(S)  -  F: TAKE ONE OUT    HOLD F: TAKE ALL OUT	ПАКЕТ: {0} ПРЕДМ.  -  F: ДОСТАТЬ ОДИН    УДЕРЖИВАЙ F: ДОСТАТЬ ВСЕ
+EMPTY SHOPPING BAG	ПУСТОЙ ПАКЕТ
+VHS TAPE	КАССЕТА VHS
+ (FILM)	 (ЗАПИСЬ)
+ (BLANK)	 (ЧИСТАЯ)
+: EDITING (title, trim, erase, export)	: МОНТАЖ (название, обрезка, стирание, экспорт)
+CAMCORDER	ВИДЕОКАМЕРА
+ (NO TAPE)	 (НЕТ КАССЕТЫ)
+: TO THE EYE (VIEWFINDER)    	: К ГЛАЗУ (ВИДОИСКАТЕЛЬ)    
+: STOP	: СТОП
+: RECORD	: ЗАПИСЬ
+Camcorder: no tape	Видеокамера: нет кассеты
+Camcorder: tape full	Видеокамера: кассета заполнена
+Selection too short.	Выделение слишком короткое.
+Trim failed: 	Обрезка не удалась: 
+Nothing in the selection.	В выделении ничего нет.
+Trimmed: 	Обрезано: осталось 
+ left. Next recordings are added after it.	 . Новые записи добавятся следом.
+Tape erased.	Кассета стёрта.
+An export or import is already running.	Экспорт или импорт уже идёт.
+Export unavailable: MWCoopRT.dll missing or too old (no export on Windows 7).	Экспорт недоступен: MWCoopRT.dll нет или она устарела (на Windows 7 экспорта нет).
+Can't use folder: 	Папка недоступна: 
+Export failed: 	Экспорт не удался: 
+Export not started (	Экспорт не запущен (
+Exporting…	Экспорт…
+Exported: 	Экспортировано: 
+Video exported: 	Видео экспортировано: 
+Folder picker unavailable.	Выбор папки недоступен.
+Folder: 	Папка: 
+TAPE EDITING	МОНТАЖ КАССЕТЫ
+CLOSE (Esc)	ЗАКРЫТЬ (Esc)
+Title	Название
+WRITE	НАПИСАТЬ
+Title written on the spine.	Название написано на корешке.
+Film still arriving…	Фильм ещё загружается…
+BLANK TAPE	ЧИСТАЯ КАССЕТА
+ take(s) — 	 дублей — 
+Position 	Позиция 
+Selection 	Выделение 
+❚❚  PAUSE	❚❚  ПАУЗА
+▶  PLAY	▶  ПУСК
+START HERE	НАЧАЛО ЗДЕСЬ
+END HERE	КОНЕЦ ЗДЕСЬ
+ALL	ВСЁ
+GO TO START	В НАЧАЛО
+Click or drag the bar to move; START HERE / END HERE pick the part to keep or export.	Кликни или тяни полосу для перемотки; НАЧАЛО ЗДЕСЬ / КОНЕЦ ЗДЕСЬ задают кусок, который оставить или экспортировать.
+SURE? CLICK AGAIN	ТОЧНО? НАЖМИ ЕЩЁ
+TRIM (KEEP THE SELECTION)	ОБРЕЗАТЬ (ОСТАВИТЬ ВЫДЕЛЕНИЕ)
+ERASE THE TAPE	СТЕРЕТЬ КАССЕТУ
+EXPORTING… 	ЭКСПОРТ… 
+EXPORT AS .MP4	ЭКСПОРТ В .MP4
+CHANGE	ИЗМЕНИТЬ
+OPEN	ОТКРЫТЬ
+An import is already running: 	Импорт уже идёт: 
+Put your video in: 	Положи видео в: 
+(the folder is empty)	(папка пуста)
+No file \"	Нет файла «
+\" in 	» в 
+This tape is full.	Эта кассета заполнена.
+Import unavailable: MWCoopRT.dll is missing or too old.	Импорт недоступен: MWCoopRT.dll нет или она устарела.
+Import not started (	Импорт не запущен (
+Converting 	Конвертирую 
+ for the tape... (you can keep playing)	 для кассеты... (можно играть дальше)
+Video import: 	Импорт видео: 
+Import failed: 	Импорт не удался: 
+Video converted, but the tape is gone: pick it up again and run /import again.	Видео сконвертировано, но кассеты нет: возьми её снова и запусти /import ещё раз.
+Video added to the tape \"	Видео добавлено на кассету «
+\": 	»: 
+TAPE	КАССЕТА
+: EDITING	: МОНТАЖ
+INSERT THE TAPE	ВСТАВИТЬ КАССЕТУ
+CAMCORDER (NO TAPE)	ВИДЕОКАМЕРА (НЕТ КАССЕТЫ)
+ - HOLD F: EJECT	 - УДЕРЖИВАЙ F: ИЗВЛЕЧЬ
+VCR (EMPTY)	ВИДЕОМАГНИТОФОН (ПУСТО)
+F: STOP	F: СТОП
+F: PLAY	F: ПУСК
+ (NO TV NEARBY)	 (НЕТ ТВ РЯДОМ)
+Build	Телосложение
+Pants	Штаны
+Face	Лицо
+Hat	Шапка
+Glasses	Очки
+Hair	Волосы
+Regular	Обычный
+Default	По умолчанию
+None	Нет
+Thin	Худой
+Slim	Стройный
+Stout	Крепкий
+Short and round	Низкий и полный
+Short and slim	Низкий и худой
+Pig	Свинья
+Custom pants	Свои штаны
+Custom face	Своё лицо
+Pants 	Штаны 
+Face 	Лицо 
+Police	Полиция
+Inspector	Инспектор
+Rally	Ралли
+ (woman)	 (женщина)
+Beanie	Вязаная шапка
+Cap	Кепка
+Trucker cap	Кепка дальнобойщика
+Police cap	Полицейская фуражка
+Fur hat	Ушанка
+Fishing hat	Рыбацкая панама
+Bus driver cap	Кепка водителя автобуса
+Teimo's hat	Шляпа Teimo
+Gifu cap	Кепка Gifu
+Flat cap	Плоская кепка
+Helmet	Шлем
+Round glasses	Круглые очки
+Sunglasses	Солнечные очки
+Ponytail	Хвост
+Mullet	Маллет
+Machine in use by 	Автомат занят: 
+ plays 	 играет в 
+A night in the cell: {0} day(s) left	Ночь в камере: ещё {0} дн.
+Sentence served: released during the day	Срок отбыт: выход в течение дня
+The police take you too, with 	Полиция забирает и тебя, вместе с 
+ was arrested by the police	 арестован(а) полицией
+Rally: starts at 	Ралли: старт в 
+Sunday 	воскресенье 
+* died (	* погиб(ла) (
+Back at 	Снова: 
+crash	авария
+run over	наезд
+septic tank	септик
+murder	убийство
+exhaustion	истощение
+hunger	голод
+thirst	жажда
+bladder	мочевой пузырь
+burnt	ожоги
+drowned	утопление
+electrocuted	удар током
+jail	тюрьма
+cold	холод
+farm machine	сельхозтехника
+carbon monoxide	угарный газ
+heart attack	сердечный приступ
+You are dead	Ты мёртв
+Cause: 	Причина: 
+Where do you want to come back?	Где хочешь возродиться?
+1  \u00B7  The apartment	1  ·  Квартира
+2  \u00B7  Parents' house	2  ·  Дом родителей
+The game goes on for the other players.	Игра продолжается для остальных.
+The car is moving: wait until it stops to get out	Машина едет: подожди остановки, чтобы выйти
+The car is moving: get in once it stops	Машина едет: садись, когда остановится
+ went shopping: 	 сходил(а) за покупками: 
+ took a coffee	 взял(а) кофе
+ paid for an \u00E0 la carte dish	 оплатил(а) блюдо из меню
+ paid for a meal at the burger counter	 оплатил(а) еду у бургерной стойки
+ paid for a bus ticket	 оплатил(а) билет на автобус
+ paid at the bar	 оплатил(а) в баре
+ paid at the flea market	 оплатил(а) на барахолке
+ paid at the sewage plant	 оплатил(а) на очистных
+ paid at the inspection	 оплатил(а) техосмотр
+ paid at a till	 оплатил(а) на кассе
+SLEEPING BAG - CLICK: PICK UP - F: UNROLL	СПАЛЬНИК - КЛИК: ВЗЯТЬ - F: РАЗВЕРНУТЬ
+F: ROLL UP - HOLD F: SLEEP	F: СВЕРНУТЬ - УДЕРЖИВАЙ F: СПАТЬ
+Put the bag on the ground to unfold it	Положи спальник на землю, чтобы развернуть
+Put the bag on flat ground to unfold it	Положи спальник на ровную землю, чтобы развернуть
+{0}'s rope removed	Трос игрока {0} снят
+The rope broke	Трос порвался
+ removed the rope	 снял(а) трос
+Wallet not ready	Кошелёк не готов
+Player not found	Игрок не найден
+Nothing to give	Нечего отдавать
+Not enough cash	Не хватает наличных
+ gave you 	 дал(а) тебе 
+Your wallet: 	Твой кошелёк: 
+First visit: 	Первый визит: 
+ mk to start with	 мк для начала
+unemployment benefit	пособие по безработице
+housing support	жилищная помощь
+factory pay	зарплата на заводе
+factory pay (overtime)	зарплата на заводе (сверхурочно)
+ads pay	оплата за рекламу
+taxi pay	оплата за такси
+interest	проценты
+scrap sale	сдача металлолома
+flea market sales	продажи на барахолке
+kilju sold to Jokke	килью для Jokke
+lottery win	выигрыш в лотерею
+rally prize	приз ралли
+ice race prize	приз гонки на льду
+ sold at the flea market: +	 продано на барахолке: +
+ mk (envelope when the rental ends)	 мк (конверт по окончании аренды)
+Sleeping alone: you rest, the clock does not move for the others. Space: wake up	Спишь один: ты отдыхаешь, время для других не идёт. Space: проснуться
+Passed out: waking up in {0} s, the clock does not move for the others (unless everyone sleeps)	Без сознания: очнёшься через {0} с, время для других не идёт (если не спят все)
+CHEATS	ЧИТЫ
+ / Esc: close	 / Esc: закрыть
+Allowed by the host. Every cheat is announced to everyone.	Разрешено хостом. О каждом чите узнают все.
+Allowed. Every cheat is announced to everyone.	Разрешены. О каждом чите узнают все.
+Turned off by the host.	Выключены хостом.
+Off: launcher, Game options > Game and sharing > Allow cheats.	Выкл: лаунчер, Настройки игры > Игра и общий доступ > Разрешить читы.
+PLAYERS	ИГРОКИ
+Nobody else in the game	В игре больше никого
+  (in menu)	  (в меню)
+GO TO	ПЕРЕЙТИ
+Teleported to 	Телепорт: 
+BRING	ПРИЗВАТЬ
+PLACES	МЕСТА
+ME	Я
+HEAL	ЛЕЧИТЬ
+Feeling great	Отличное самочувствие
+FREE	ОСВОБОДИТЬ
+No longer wanted	Больше не в розыске
+WORLD (FOR EVERYONE)	МИР (ДЛЯ ВСЕХ)
+Time	Время
+It's 	Сейчас 
+Snow	Снег
+ON	ВКЛ
+It's snowing	Идёт снег
+OFF	ВЫКЛ
+Dry weather	Сухая погода
+Also in the chat (	Также в чате (
+MIC	МИК
+Left Shift	Левый Shift
+Right Shift	Правый Shift
+Left Ctrl	Левый Ctrl
+Right Ctrl	Правый Ctrl
+Left click	ЛКМ
+Right click	ПКМ
+Middle click	СКМ
+Space	Пробел
+Mouse 4	Мышь 4
+Mouse 5	Мышь 5
+MAP	КАРТА
+Wheel: zoom · drag: move · C: me · 	Колесо: масштаб · тянуть: сдвиг · C: я · 
+Map being made	Карта создаётся
+Me	Я
+Up/Down: select	Вверх/Вниз: выбор
+Left/Right: change	Влево/Вправо: изменить
+Enter: confirm	Enter: подтвердить
+Tab, Q/E: tab	Tab, Q/E: вкладка
+F10/Esc: close	F10/Esc: закрыть
+Left/Right: switch tab	Влево/Вправо: сменить вкладку
+Down or Enter: go to the list	Вниз или Enter: к списку
+HOST	ХОСТ
+GUEST	ГОСТЬ
+[host] 	[хост] 
+ (you)	 (ты)
+in game	в игре
+at the menu	в меню
+Solo (start the game from MWCoop.exe to play with friends)	Соло (запусти игру через MWCoop.exe, чтобы играть с друзьями)
+Enter or click: go to this player	Enter или клик: перейти к игроку
+Bring here: 	Призвать: 
+not in game	не в игре
+Enter or click: this player comes next to you	Enter или клик: игрок появится рядом с тобой
+Kick 	Выгнать 
+click again to confirm	нажми ещё раз для подтверждения
+Two clicks: this player is disconnected from the game	Два клика: игрок будет отключён от игры
+Invite Steam friends	Пригласить друзей Steam
+lobby starting...	лобби запускается...
+Opens Steam's invite window (also: Shift+Tab). They start MWCoop.exe > JOIN (Steam) and accept.	Открывает окно приглашений Steam (также: Shift+Tab). Друзья запускают MWCoop.exe > ПОДКЛЮЧИТЬСЯ (Steam) и принимают.
+Get out of the vehicle first	Сначала выйди из машины
+Outfits are picked in game.	Одежда выбирается в игре.
+Your outfit, as the other players see it.	Твоя одежда, какой её видят другие игроки.
+Outfit	Одежда
+Left/Right: change outfit	Влево/Вправо: сменить одежду
+Left/Right: change (the others see it right away)	Влево/Вправо: изменить (другие видят сразу)
+OUTFITS	ОДЕЖДА
+WORN	НАДЕТО
+Enter or click: wear this outfit	Enter или клик: надеть эту одежду
+DEFAULT	ПО УМОЛЧАНИЮ
+Outfit 	Одежда 
+Custom top	Свой верх
+Police officer	Полицейский
+Police officer 2	Полицейский 2
+Rally driver	Раллийный гонщик
+PSK employee	Сотрудник PSK
+Audit is off by default (performance). To turn it on: Audit=1 under [Coop] in MWCoop\\mwcoop.ini, then restart.	Аудит выключен по умолчанию (производительность). Чтобы включить: Audit=1 в [Coop] в MWCoop\\mwcoop.ini, затем перезапусти.
+Write the census (dumps/recensement.txt)	Записать перепись (dumps/recensement.txt)
+Enter or click: write the census	Enter или клик: записать перепись
+DIFFERENCES WITH THE GUESTS	РАСХОЖДЕНИЯ С ГОСТЯМИ
+Host: everyone is compared to you.	Хост: все сравниваются с тобой.
+Differences: seen by the host (their SYNC tab and log).	Расхождения видит хост (его вкладка СИНХР. и лог).
+YOUR ACTIONS NOT SHARED WITH THE OTHERS	ТВОИ ДЕЙСТВИЯ, НЕ ВИДНЫЕ ДРУГИМ
+Just for you: the other players see no difference. Kept for your next games (also in the launcher).	Только для тебя: другие игроки не видят разницы. Сохраняется для следующих игр (также в лаунчере).
+Preset	Пресет
+Custom	Свой
+Left/Right: Performance, Balanced, Pretty, Ultra	Влево/Вправо: Производительность, Баланс, Красиво, Ультра
+IMAGE	ИЗОБРАЖЕНИЕ
+SHADOWS	ТЕНИ
+DISTANCE AND DETAIL	ДАЛЬНОСТЬ И ДЕТАЛИ
+GAME AND COMFORT	ИГРА И КОМФОРТ
+LIGHTS	СВЕТ
+SCREEN	ЭКРАН
+RAY TRACING (IN DEVELOPMENT)	ТРАССИРОВКА ЛУЧЕЙ (В РАЗРАБОТКЕ)
+On	Вкл
+Off	Выкл
+Heavy on the frame rate	Сильно снижает FPS
+Active at the next launch from the launcher	Сработает при следующем запуске из лаунчера
+No messages yet. In game, T opens the chat without this menu.	Сообщений пока нет. В игре T открывает чат без этого меню.
+In game, T opens the chat without this menu.	В игре T открывает чат без этого меню.
+Enter: send the message	Enter: отправить сообщение
+Up: read the history	Вверх: история
+SEND	ОТПРАВИТЬ
+CHAT	ЧАТ
+Refused by the host: 	Отказ хоста: 
+Steam is not available: start Steam, and the Steam version of the game.	Steam недоступен: запусти Steam и Steam-версию игры.
+Waiting for the host: they invite you through Steam (F10 > Invite Steam friends, or Shift+Tab), then accept the invite here. If a friend is already hosting, their game is joined automatically.	Ждём хоста: он приглашает тебя через Steam (F10 > Пригласить друзей Steam или Shift+Tab), затем прими приглашение здесь. Если друг уже хостит, подключение к его игре автоматическое.
+No answer from the host's game through Steam for {0} s. Retrying...	Нет ответа от игры хоста через Steam уже {0} с. Повторяем...
+No answer from the host's game for {0} s. Most often: the host's Windows Firewall is blocking My Winter Car (MWCoop.exe offers to fix it when clicking HOST; Radmin VPN often counts as a public network). Otherwise: check the address, and that UDP port {1} is forwarded on the host's router. Retrying...	Нет ответа от игры хоста уже {0} с. Чаще всего: брандмауэр Windows хоста блокирует My Winter Car (MWCoop.exe предлагает исправить это при нажатии ХОСТ; Radmin VPN часто считается публичной сетью). Иначе: проверь адрес и что UDP-порт {1} проброшен на роутере хоста. Повторяем...
+Connection lost, retrying...	Связь потеряна, повторяем...
+The host's save could not be written (see the MWCoop log): start the game from MWCoop.exe.	Не удалось записать сохранение хоста (см. лог MWCoop): запусти игру через MWCoop.exe.
+Co-op game: you are hosting, your friends join you	Кооп: ты хост, друзья подключаются к тебе
+Co-op game: you are joining the host's game	Кооп: ты подключаешься к игре хоста
+Starting the game	Запуск игры
+New game	Новая игра
+Opening your save	Открываем твоё сохранение
+Loading the game	Загрузка игры
+Connecting to the host	Подключение к хосту
+Waiting for the host{0} to create or load the game	Ждём, пока хост{0} создаст или загрузит игру
+Receiving the save	Получение сохранения
+The licence is filled in for you.	Права заполнены за тебя.
+Like \"Continue\" in the menu.	Как «Продолжить» в меню.
+Your friends receive your save as soon as you are in game.	Друзья получат твоё сохранение, как только ты будешь в игре.
+The host is at the menu. You will join when they start.	Хост в меню. Ты войдёшь, когда он начнёт.
+ KB)	 КБ)
+Received ({0} KB)	Получено ({0} КБ)
+None: the host starts a new game	Нет: хост начинает новую игру
+Not written	Не записано
+The host is preparing the save...	Хост готовит сохранение...
+The game is loading, one moment.	Игра загружается, секунду.
+Connected: 	Подключены: 
+No friend connected yet.	Пока никто из друзей не подключён.
+Esc: quit the game	Esc: выйти из игры
+Quit the game	Выйти из игры
+WALLET	КОШЕЛЁК
+Cash: 	Наличные: 
+Amount	Сумма
+GIVE 	ДАТЬ 
+ mk given to 	 мк передано: 
+Resolution	Разрешение
+Display mode	Режим экрана
+Windowed	Оконный
+Fullscreen	Полный экран
+Borderless	Без рамки
+Engine quality	Качество движка
+Low	Низкое
+Medium	Среднее
+Good	Хорошее
+Anti-aliasing	Сглаживание
+HDR (rich light)	HDR (насыщенный свет)
+Bloom	Свечение (bloom)
+Contrast boost	Усиленный контраст
+Sun shafts	Солнечные лучи
+Max frames per second	Макс. кадров в секунду
+Unlimited	Без ограничений
+V-sync	Верт. синхронизация
+Sun shadows	Тени от солнца
+Moon shadows	Тени от луны
+House shadows	Тени домов
+Shadow distance	Дальность теней
+Ray-traced sun shadows	Тени от солнца (трассировка)
+Rays per pixel	Лучей на пиксель
+Shadow range	Охват теней
+Shadow edges	Края теней
+Light	Лёгкие
+Soft	Мягкие
+Very soft	Очень мягкие
+Your body in reflections and shadows	Твоё тело в отражениях и тенях
+Reflections (car paint, smooth surfaces)	Отражения (кузова, гладкие поверхности)
+Subtle	Слабые
+Normal	Обычные
+Window reflections	Отражения в стёклах
+Light bounce (global illumination)	Отражённый свет (глобальное освещение)
+Ambient occlusion (corners, underneath)	Фоновое затенение (углы, снизу)
+Strong	Сильное
+Lamp shadows (headlights, street lights)	Тени от ламп (фары, фонари)
+4 lamps	4 лампы
+8 lamps	8 ламп
+16 lamps	16 ламп
+Shadow detail	Детализация теней
+Fine	Чёткая
+Basic	Простая
+Very fine	Очень чёткая
+Draw distance	Дальность прорисовки
+Level of detail	Уровень детализации
+Max	Макс
+High	Высокий
+Very high	Очень высокий
+Quarter	Четверть
+Half	Половина
+Full	Полное
+Texture filtering	Фильтрация текстур
+Forced	Принудительно
+Headlight shadows	Тени от фар
+2 lights	2 фары
+4 lights	4 фары
+8 lights	8 фар
+Street light shadows	Тени от фонарей
+Light coronas (GTA style)	Ореолы света (как в GTA)
+Headlight range	Дальность фар
+Long	Дальняя
+Field of view	Поле зрения
+Mirrors	Зеркала
+Head bob on foot	Покачивание головы пешком
+Head bob in cars	Покачивание головы в машине
+FPS counter	Счётчик FPS
+Gear on screen	Передача на экране
+Traffic dust	Пыль от трафика
+Traffic skid marks	Следы шин трафика
+Player names	Ники игроков
+/bring <player>: bring a player to you	/bring <игрок>: призвать игрока к себе
+/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin	/place <название>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin
+/money <amount>: cash for yourself	/money <сумма>: наличные себе
+/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero	/heal: голод, жажда, усталость, стресс, мочевой пузырь, грязь на ноль
+/free: no longer wanted, out of jail	/free: снять розыск, выйти из тюрьмы
+/time <0-24>: everyone's time of day	/time <0-24>: время суток для всех
+/snow on|off: snow (or rain) for everyone	/snow on|off: снег (или дождь) для всех
+/tp <player>: go to a player	/tp <игрок>: перейти к игроку
+APPEARANCE	ВНЕШНОСТЬ
+SYNC	СИНХР.
+GRAPHICS	ГРАФИКА

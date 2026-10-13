@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using MWCoop.Net;
 using UnityEngine;
@@ -112,7 +112,7 @@ namespace MWCoop
                 Vector2 s = ToScreen(local, p.Face != Vector3.zero ? p.Face.x : p.At.x, p.Face != Vector3.zero ? p.Face.z : p.At.z);
                 if (!local.Contains(s)) continue;
                 Style.Round(new Rect(s.x - Style.Px(4), s.y - Style.Px(4), Style.Px(8), Style.Px(8)), Style.Px(4), new Color(1f, 0.85f, 0.35f, 0.95f));
-                string name = Lang.Fr ? p.Fr : p.En;
+                string name = Lang.T(p.Fr, p.En);
                 var lr = new Rect(s.x + Style.Px(8), s.y - Style.Px(11), Style.Width(name, 13, true) + Style.Px(4), Style.Px(22));
                 bool clash = false;
                 foreach (Rect u in used) if (u.Overlaps(lr)) { clash = true; break; }

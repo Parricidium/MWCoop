@@ -1,0 +1,1007 @@
+Preview to redo: start a game (~30 s)	Обнови превью: зайди в игру (~30 с)
+Sent content and mods	Контент и моды
+Sent content	Контент
+Outfit 	Одежда 
+Sync your mod in co-op	Синхронизация твоего мода в коопе
+MWCoop.CoopApi sends your MSCLoader mod's data to the other players: MWCoop handles the network, splitting big messages and relaying through the host.	MWCoop.CoopApi отправляет данные твоего мода MSCLoader другим игрокам: MWCoop берёт на себя сеть, разбивку больших сообщений и ретрансляцию через хоста.
+EXAMPLE	ПРИМЕР
+Through reflection	Через рефлексию
+Direct reference	Прямая ссылка
+Copied!	Скопировано!
+Copy	Копировать
+Where to get it	Где взять
+In the game folder, under MWCoop\\ (once installed)	В папке игры, в MWCoop\\ (после установки)
+Documentation (GitHub)	Документация (GitHub)
+Source code	Исходный код
+Folder	Папка
+Docs, full member list and MSCLoader examples in docs/API.md.	Документация, полный список членов и примеры MSCLoader в docs/API.md.
+Good to know	Полезно знать
+Left Shift	Левый Shift
+Right Shift	Правый Shift
+Left Ctrl	Левый Ctrl
+Right Ctrl	Правый Ctrl
+Left click	ЛКМ
+Right click	ПКМ
+Middle click	СКМ
+Space	Пробел
+Mouse 4	Мышь 4
+Mouse 5	Мышь 5
+GPU not supported	GPU не поддерживается
+RT off	RT выкл
+ray tracing	трассировка лучей
+heavy	тяжело
+medium	средне
+Press a key…	Нажми клавишу…
+IN DEVELOPMENT	В РАЗРАБОТКЕ
+%d settings	Настроек: %d
+Image quality	Качество изображения
+One click sets everything, then fine-tune below.	Один клик настраивает всё, потом подстрой ниже.
+Custom settings: pick a preset to start over.	Свои настройки: выбери пресет, чтобы начать заново.
+Checking for updates\u2026	Проверка обновлений…
+%s \u00B7 new version %s available	%s · доступна новая версия %s
+Offline: MWCoop is not installed here	Офлайн: MWCoop здесь не установлен
+GitHub rate limit: try again in a few minutes \u00B7 %s	Лимит запросов GitHub: попробуй через несколько минут · %s
+GitHub error (code %lu) \u00B7 %s	Ошибка GitHub (код %lu) · %s
+Offline (GitHub unreachable, error %lu) \u00B7 %s	Офлайн (GitHub недоступен, ошибка %lu) · %s
+No MWCoop release published yet	Версий MWCoop ещё не опубликовано
+%s \u00B7 no release published	%s · нет опубликованных версий
+%s \u00B7 up to date	%s · актуальная версия
+Downloading MWCoop %s\u2026	Загрузка MWCoop %s…
+Downloading MWCoop %s\u2026 (try %d / 3)	Загрузка MWCoop %s… (попытка %d / 3)
+Update failed (download, error %lu)	Ошибка обновления (загрузка, ошибка %lu)
+Installing MWCoop %s\u2026	Установка MWCoop %s…
+Update failed (archive)	Ошибка обновления (архив)
+Update failed (incomplete package: MWCoop\\version.txt missing)	Ошибка обновления (неполный пакет: нет MWCoop\\version.txt)
+Game folder is protected: run MWCoop.exe as administrator to update	Папка игры защищена: запусти MWCoop.exe от имени администратора для обновления
+%s is in use: close the game, then restart the launcher	%s занят: закрой игру, затем перезапусти лаунчер
+Updated \u00B7 MWCoop %s	Обновлено · MWCoop %s
+e.g. 26.12.34.56 (address:port accepted)	напр. 26.12.34.56 (можно адрес:порт)
+Host	Хост
+Guest	Гость
+Solo	Соло
+Mod log	Лог мода
+Loader log	Лог загрузчика
+Unity log	Лог Unity
+ \u00B7 guest profile	 · профиль гостя
+ \u00B7 profile 	 · профиль 
+Click the bin again to delete these logs	Нажми на корзину ещё раз, чтобы удалить эти логи
+none	нет
+B \u00B7 manual	B · механика
+7 \u00B7 automatic	7 · автомат
+ \u00B7 facelift	 · рестайлинг
+J \u00B7 radio	J · радио
+B \u00B7 power brakes	B · усилитель тормозов
+ \u00B7 heated	 · с обогревом
+VIN plate	Табличка VIN
+CORRIS options for a new game. Click for the next value; Random: like the game.	Опции CORRIS для новой игры. Нажми для следующего значения; Случайно: как в игре.
+Start a game once: the mod then reads the possible options of each trim.	Начни игру один раз: мод считает возможные опции каждой комплектации.
+ (only one)	 (единственный)
+Random	Случайно
+ (not for this trim)	 (не для этой комплектации)
+Choose the CORRIS paint (painted on the car.png template)	Выбери покраску CORRIS (нарисованную по шаблону car.png)
+can't save it	не удаётся сохранить
+This image could not be read: 	Не удалось прочитать изображение: 
+Images\\car.png was not found in the game folder.	Images\\car.png не найден в папке игры.
+Custom paint	Своя покраска
+Your own paint on the CORRIS, painted on the game's template. The host sends it to their guests.	Твоя покраска CORRIS, нарисованная по шаблону игры. Хост отправляет её своим гостям.
+Your paint	Твоя покраска
+Game paint (Images\\car.png)	Покраска игры (Images\\car.png)
+Template	Шаблон
+My image…	Моя картинка…
+In use: yes	Используется: да
+In use: no	Используется: нет
+Remove	Убрать
+1. Template: the game's body laid flat (2048 x 2048). The game's Images folder also has corris_template_layered.psd, in layers.	1. Шаблон: кузов из игры в развёртке (2048 x 2048). В папке Images игры есть ещё corris_template_layered.psd, по слоям.
+2. Paint over it keeping the size, then \"My image…\".	2. Рисуй поверх, сохраняя размер, затем \"Моя картинка…\".
+3. In game, buy \"Custom paint made by artist\" at Fleetari's (repair shop): the CORRIS takes your paint.	3. В игре купи \"Custom paint made by artist\" у Fleetari (автосервис): CORRIS получит твою покраску.
+Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.	Превью не читается (MWCoop\\cache\\corris.mesh): начни игру, чтобы пересоздать его.
+Start a game once to see the car preview.	Начни игру один раз, чтобы увидеть превью машины.
+Your CORRIS	Твоя CORRIS
+Color and trim for a new game; the host gives them to their guests.	Цвет и комплектация для новой игры; хост передаёт их своим гостям.
+Drag to rotate	Тяни, чтобы вращать
+Show the car	Показать машину
+Custom paint…	Своя покраска…
+Color	Цвет
+Random (like the game)	Случайно (как в игре)
+Custom color	Свой цвет
+Other color\u2026	Другой цвет…
+Trim	Комплектация
+VIN plate\u2026	Табличка VIN…
+CANCEL	ОТМЕНА
+file can't be read	файл не читается
+image format not recognized by Windows (try PNG or JPG)	формат изображения не распознан Windows (попробуй PNG или JPG)
+The templates are made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\nEach shows the game's texture (face, top or pants) with its seams: paint over it keeping the size, then import.	Шаблоны создаёт мод: начни игру (можно соло) и побудь ~20 с в игре с этой версией, потом вернись сюда.\n\nКаждый показывает текстуру игры (лицо, верх или штаны) со швами: рисуй поверх, сохраняя размер, затем импортируй.
+No preview for this outfit.	Нет превью для этой одежды.
+Previews appear after a first game (~30 s in game) with this version.	Превью появятся после первой игры (~30 с в игре) с этой версией.
+As before	Как раньше
+Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone (standing bodies).	Превью сделано старой версией: начни игру (можно соло) и побудь ~30 с в игре, оно обновится (тела стоя).
+Tops	Верх
+Full look	Весь образ
+Build, pants, face, hat, glasses, hair: start a game (solo is fine) and stay ~30 s in game with this version, they will show up here.	Телосложение, штаны, лицо, шапка, очки, волосы: начни игру (можно соло) и побудь ~30 с в игре с этой версией, они появятся здесь.
+Join us on Discord!	Присоединяйся к нам в Discord!
+Help, bug reports, early news and players to team up with. English channels, plus a French one.	Помощь, баг-репорты, новости раньше всех и игроки для совместной игры. Каналы на английском, плюс один на французском.
+Trouble in game? Send your logs (Logs button, top right) in #bug-reports.	Проблема в игре? Отправь свои логи (кнопка «Логи», справа вверху) в #bug-reports.
+JOIN THE DISCORD	ВСТУПИТЬ В DISCORD
+Later	Позже
+Always one click away: the Discord button, bottom left.	Всегда под рукой: кнопка Discord слева внизу.
+Launch option copied: paste it in Steam	Параметр запуска скопирован: вставь его в Steam
+Playing through Steam	Игра через Steam
+HOST opens a Steam lobby for your friends only: invite them with the lobby's \"Invite friends\" button.	ХОСТ открывает лобби Steam только для твоих друзей: пригласи их кнопкой лобби \"Пригласить друзей\".
+Your friends accept the invite in Steam (or click JOIN in MWCoop, STEAM mode); START launches everyone's game.	Твои друзья принимают приглашение в Steam (или жмут ПОДКЛЮЧИТЬСЯ в MWCoop, режим STEAM); НАЧАТЬ ИГРУ запускает игру у всех.
+So that Steam's Play button and an invite accepted with MWCoop closed open MWCoop (not the game without the mod), everyone adds this launch option:	Чтобы кнопка «Играть» в Steam и приглашение, принятое при закрытом MWCoop, открывали MWCoop (а не игру без мода), каждый добавляет этот параметр запуска:
+Steam > Library > right-click My Winter Car > Properties > General > Launch options	Steam > Библиотека > ПКМ по My Winter Car > Свойства > Общие > Параметры запуска
+Steam's PLAY button will then open MWCoop. To get the game without the mod back, clear the line.	Кнопка ИГРАТЬ в Steam будет открывать MWCoop. Чтобы вернуть игру без мода, очисти строку.
+LINE COPIED \u2713	СТРОКА СКОПИРОВАНА ✓
+COPY THE LINE	СКОПИРОВАТЬ СТРОКУ
+GOT IT	ПОНЯТНО
+Don't show again when choosing STEAM	Больше не показывать при выборе STEAM
+Choose mywintercar.exe (My Winter Car folder)	Выбери mywintercar.exe (папка My Winter Car)
+This folder does not contain My Winter Car.\n\nPick the mywintercar.exe from the game folder (Steam: right-click the game > Manage > Browse local files).	В этой папке нет My Winter Car.\n\nВыбери mywintercar.exe в папке игры (Steam: ПКМ по игре > Управление > Просмотреть локальные файлы).
+My Winter Car is still running in the background, without a window (stuck after closing?).\n\nForce it to close so you can launch again?	My Winter Car всё ещё работает в фоне, без окна (зависла после закрытия?).\n\nЗакрыть её принудительно, чтобы запустить снова?
+My Winter Car is already running: close it first	My Winter Car уже запущена: сначала закрой её
+A Windows compatibility mode stops MWCoop from loading: mywintercar.exe > Properties > Compatibility > for all users, untick everything	Режим совместимости Windows мешает загрузке MWCoop: mywintercar.exe > Свойства > Совместимость > для всех пользователей, сними все галочки
+A version.dll from another program was in the game folder: set aside (version.dll.autre)	В папке игры была version.dll от другой программы: отложена (version.dll.autre)
+Receiving the host's mods… the game will start on its own afterwards	Получение модов хоста… игра запустится сама после этого
+Enter the host address	Введи адрес хоста
+Could not write MWCoop\\lancement.ini (error %lu)	Не удалось записать MWCoop\\lancement.ini (ошибка %lu)
+%s is hosting (Steam)	%s хостит игру (Steam)
+%s is hosting (port %d)	%s хостит игру (порт %d)
+%s joins %s	%s подключается к %s
+%s plays solo	%s играет соло
+Steam could not start the game (is Steam open?)	Steam не смог запустить игру (Steam открыт?)
+Could not prepare the launch copy: the game starts without the host's mods	Не удалось подготовить копию запуска: игра запустится без модов хоста
+Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)	Не удалось подготовить копию запуска: запуск из папки игры (мод или MSCLoader могут не загрузиться)
+Launch cancelled (administrator prompt declined)	Запуск отменён (запрос администратора отклонён)
+Could not start mywintercar.exe (error %lu)	Не удалось запустить mywintercar.exe (ошибка %lu)
+random	случайно
+custom #%06X	свой #%06X
+%S refused: version %S (yours: %S)	%S отклонён: версия %S (у тебя: %S)
+Windows Firewall is BLOCKING My Winter Car (its question was refused, or stayed hidden behind the game).	Брандмауэр Windows БЛОКИРУЕТ My Winter Car (его запрос был отклонён или остался скрыт за игрой).
+Windows Firewall does not allow My Winter Car on this network yet (Radmin VPN often counts as a public network).	Брандмауэр Windows ещё не разрешает My Winter Car в этой сети (Radmin VPN часто считается общественной сетью).
+\n\nYour friends would get into the lobby, but not into the game (\"timed out\").\n\nAllow My Winter Car and MWCoop in the firewall? Windows will ask for administrator approval.	\n\nТвои друзья попадут в лобби, но не в игру (\"timed out\").\n\nРазрешить My Winter Car и MWCoop в брандмауэре? Windows запросит права администратора.
+Firewall: My Winter Car allowed	Брандмауэр: My Winter Car разрешена
+Firewall unchanged: your friends may not get into the game	Брандмауэр не изменён: друзья могут не попасть в игру
+Cannot open the lobby: TCP port %d in use (error %d)	Не удаётся открыть лобби: TCP-порт %d занят (ошибка %d)
+Lobby open \u00B7 port %d	Лобби открыто · порт %d
+%d of %d guest(s) not ready yet.\n\nStart anyway? Their game will start too.	Гостей не готово: %d из %d.\n\nВсё равно начать? Их игра тоже запустится.
+UDP not confirmed for %s: forward UDP port %d (not just TCP) on your router	UDP не подтверждён для %s: пробрось UDP-порт %d (не только TCP) на роутере
+Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\nCORRIS color (car icon in the lobby): 	Начать НОВУЮ игру?\n\nОна заменит твоё текущее сохранение My Winter Car (текущая игра будет потеряна).\n\nЦвет CORRIS (иконка машины в лобби): 
+In %s's lobby	В лобби %s
+Connecting to %s's lobby\u2026	Подключение к лобби %s…
+You'll be ready as soon as the host's files are received	Ты будешь готов, как только получишь файлы хоста
+Ready, but UDP is blocked: the host must forward UDP port %d	Готов, но UDP заблокирован: хост должен пробросить UDP-порт %d
+UDP port %d is already in use on this PC (error %d): the game will not be able to open it. Close the program using it.	UDP-порт %d уже занят на этом ПК (ошибка %d): игра не сможет его открыть. Закрой программу, которая его использует.
+UDP blocked for %s: forward UDP port %d (not just TCP) on your router to this PC. The lobby uses TCP, the game uses UDP.	UDP заблокирован для %s: пробрось UDP-порт %d (не только TCP) на роутере на этот ПК. Лобби работает по TCP, игра — по UDP.
+UDP blocked: the host must forward UDP port %d (not just TCP) on their router. The lobby uses TCP, the game uses UDP.	UDP заблокирован: хост должен пробросить UDP-порт %d (не только TCP) на своём роутере. Лобби работает по TCP, игра — по UDP.
+Players	Игроки
+UDP: not checked (host has an old launcher)	UDP: не проверен (у хоста старый лаунчер)
+UDP: blocked	UDP: заблокирован
+UDP: testing\u2026	UDP: проверка…
+Click yourself: outfit, car	Нажми на себя: одежда, машина
+Creating the Steam lobby\u2026	Создание лобби Steam…
+Connecting to the lobby\u2026	Подключение к лобби…
+A lobby for your Steam friends only: you can invite them from here.	Лобби только для твоих друзей в Steam: приглашай их отсюда.
+If the host is already playing or has no lobby, you can join directly in game.	Если хост уже играет или у него нет лобби, можно подключиться прямо в игре.
+Invite Steam friends	Пригласить друзей Steam
+Waiting for a player\u2026	Ожидание игрока…
+  (you)	  (ты)
+HOST	ХОСТ
+READY \u2713	ГОТОВ ✓
+NOT READY	НЕ ГОТОВ
+UDP blocked	UDP заблокирован
+Game	Игра
+Game (chosen by the host)	Игра (выбирает хост)
+Continue my game	Продолжить мою игру
+Continue the game	Продолжить игру
+New game	Новая игра
+Your save, sent to the guests	Твоё сохранение, отправляется гостям
+The host's save	Сохранение хоста
+Replaces your save	Заменит твоё сохранение
+A fresh game at the host's	Новая игра у хоста
+CORRIS color: 	Цвет CORRIS: 
+You join as soon as the host is in game.	Ты подключишься, как только хост будет в игре.
+Your guests receive it when they arrive.	Твои гости получат его при входе.
+You receive it on arrival; yours is left untouched.	Ты получишь его при входе; твоё не тронуто.
+Invite your Steam friends. Once everyone is ready, START launches everyone's game.	Пригласи друзей Steam. Когда все готовы, НАЧАТЬ ИГРУ запускает игру у всех.
+Once everyone is ready, START launches everyone's game; the guests follow your game.	Когда все готовы, НАЧАТЬ ИГРУ запускает игру у всех; гости следуют за твоей игрой.
+Click READY. Your game starts by itself when the host starts the session.	Нажми ГОТОВ. Твоя игра запустится сама, когда хост начнёт сессию.
+START THE GAME	НАЧАТЬ ИГРУ
+Alone for now	Пока один
+%d / %d ready	Готовы: %d / %d
+READY AFTER FILES	ГОТОВ ПОСЛЕ ФАЙЛОВ
+Getting the host's files\u2026 (click to cancel)	Получение файлов хоста… (нажми для отмены)
+READY?	ГОТОВ?
+Click to cancel	Нажми для отмены
+Click when you're ready	Нажми, когда будешь готов
+CONNECTING\u2026	ПОДКЛЮЧЕНИЕ…
+CLOSE THE LOBBY	ЗАКРЫТЬ ЛОББИ
+LEAVE THE LOBBY	ПОКИНУТЬ ЛОББИ
+Back to the lobby	Назад в лобби
+Invite friends	Пригласить друзей
+Lobby options	Настройки лобби
+Close the launcher at launch	Закрывать лаунчер при запуске
+Otherwise it comes back at the end	Иначе он вернётся в конце
+Used by the next lobby	Применится в следующем лобби
+My outfit and car	Моя одежда и машина
+What the others see	Что видят другие
+Sent content and mods	Отправляемый контент и моды
+CDs, paint, posters, mods\u2026	CD, покраска, постеры, моды…
+No logs yet: start the game with MWCoop first	Логов пока нет: сначала запусти игру с MWCoop
+The game is running: close it before uninstalling MWCoop	Игра запущена: закрой её перед удалением MWCoop
+Completely uninstall MWCoop?\n\nMoved to the Recycle Bin: everything MWCoop in the game folder (version.dll, the MWCoop folder with its profiles, logs and received content, this launcher), all of %LOCALAPPDATA%\\MWCoop (launch copies, MWCoop's MSCLoader, caches), and the guest profile settings.\n\nKept: your save, your mods (Mods folder) and the official MSCLoader.\n\nTo play co-op again, you will need to download MWCoop again.	Полностью удалить MWCoop?\n\nВ корзину отправится: всё от MWCoop в папке игры (version.dll, папка MWCoop с профилями, логами и полученным контентом, этот лаунчер), весь %LOCALAPPDATA%\\MWCoop (копии запуска, MSCLoader от MWCoop, кэши) и настройки профиля гостя.\n\nСохранятся: твоё сохранение, твои моды (папка Mods) и официальный MSCLoader.\n\nЧтобы снова играть в кооп, нужно будет заново скачать MWCoop.
+MWCoop is uninstalled (everything is in the Recycle Bin).	MWCoop удалён (всё в корзине).
+MWCoop is uninstalled, except these items (open in another program?):	MWCoop удалён, кроме этих элементов (открыты в другой программе?):
+\n\nIf you had put MWCoop in Steam's launch options (game Properties > General), remove it: otherwise the game won't start from Steam anymore.\n\nTo reinstall: download MWCoop and run MWCoop.exe.	\n\nЕсли ты добавлял MWCoop в параметры запуска Steam (Свойства игры > Общие), убери его: иначе игра больше не запустится из Steam.\n\nДля переустановки: скачай MWCoop и запусти MWCoop.exe.
+The game is running: close it before deleting its logs	Игра запущена: закрой её перед удалением логов
+Logs moved to the Recycle Bin	Логи перемещены в корзину
+Could not delete (file in use?)	Не удалось удалить (файл открыт?)
+%d sessions moved to the Recycle Bin	Сессий перемещено в корзину: %d
+Could not create the zip (error %lu)	Не удалось создать zip (ошибка %lu)
+Zip on the Desktop (%d files): send it	Zip на рабочем столе (файлов: %d): отправь его
+Zip created (%d files): send it	Zip создан (файлов: %d): отправь его
+Lobby closed \u00B7 %s	Лобби закрыто · %s
+Left the lobby \u00B7 %s	Ты покинул лобби · %s
+Game through Steam: lobby and invites right here	Игра через Steam: лобби и приглашения прямо здесь
+Game through IP address (LAN, Radmin, Hamachi...)	Игра по IP-адресу (LAN, Radmin, Hamachi...)
+New outfits by Dom: Outfit tab (credits: star at the top)	Новая одежда от Dom: вкладка «Одежда» (авторы: звёздочка вверху)
+The game closed on startup (see the logs)	Игра закрылась при запуске (смотри логи)
+The host is starting the game\u2026 yours starts in a moment	Хост запускает игру… твоя запустится через мгновение
+The host is starting\u2026 UDP not confirmed (UDP port %d)	Хост запускает… UDP не подтверждён (UDP-порт %d)
+UDP not confirmed: the host must forward UDP port %d (not just TCP) on their router	UDP не подтверждён: хост должен пробросить UDP-порт %d (не только TCP) на своём роутере
+Different version (you %s, host %s): update, restart MWCoop.exe	Другая версия (у тебя %s, у хоста %s): обновитесь, перезапустите MWCoop.exe
+Lobby is full (%d players)	Лобби заполнено (игроков: %d)
+Session already started: \"Join in game\"	Сессия уже началась: \"Подключиться в игре\"
+The host closed the lobby	Хост закрыл лобби
+Refused by the host	Хост отказал
+No lobby at the host: \"Join in game\" if they are already playing	У хоста нет лобби: \"Подключиться в игре\", если он уже играет
+My Winter Car not found: choose mywintercar.exe	My Winter Car не найдена: выбери mywintercar.exe
+The game stopped abruptly: see the logs	Игра внезапно остановилась: смотри логи
+The last launch ran WITHOUT the mod (antivirus? version.dll?): see LOGS	Последний запуск прошёл БЕЗ мода (антивирус? version.dll?): смотри ЛОГИ
+UDP not confirmed for Kalle: forward UDP port 7870 (not just TCP) on your router	UDP не подтверждён для Kalle: пробрось UDP-порт 7870 (не только TCP) на роутере
+Steam host	хост Steam
+connected to Pekka (Steam)	подключён к Pekka (Steam)
+JD joins Pekka	JD подключается к Pekka
+Steam lobby open: invite your friends	Лобби Steam открыто: пригласи друзей
+In %s's Steam lobby	В лобби Steam игрока %s
+Close the game to change the tapes (it rewrites their list)	Закрой игру, чтобы изменить кассеты (она перезаписывает их список)
+A video is already being converted	Видео уже конвертируется
+Choose the video to put on the tape	Выбери видео для записи на кассету
+Can't convert: MWCoopRT.dll missing or too old (no conversion on Windows 7)	Конвертация невозможна: MWCoopRT.dll нет или она устарела (на Windows 7 конвертации нет)
+Conversion not started	Конвертация не запущена
+Converting %s…	Конвертация %s…
+Conversion failed: %s	Ошибка конвертации: %s
+Video converted, but the game is open: close it and import again	Видео сконвертировано, но игра открыта: закрой её и импортируй снова
+Video added to the tape \"%s\" (%s)	Видео добавлено на кассету \"%s\" (%s)
+Video converted, but the save couldn't be changed	Видео сконвертировано, но сохранение изменить не удалось
+Video converted, but the tape is no longer in the save	Видео сконвертировано, но кассеты больше нет в сохранении
+Tape renamed	Кассета переименована
+Save not changed	Сохранение не изменено
+A conversion or an export is already running	Конвертация или экспорт уже идёт
+Nothing to export: this tape's films aren't on this PC	Нечего экспортировать: фильмов с этой кассеты нет на этом ПК
+Can't export: MWCoopRT.dll missing or too old (no export on Windows 7)	Экспорт невозможен: MWCoopRT.dll нет или она устарела (на Windows 7 экспорта нет)
+Export not started	Экспорт не запущен
+Exporting \"%s\" as .mp4…	Экспорт \"%s\" в .mp4…
+Video exported: %s	Видео экспортировано: %s
+Export failed: %s	Ошибка экспорта: %s
+Tapes of your game	Кассеты твоей игры
+Those of the game you host or play alone (including inside a VCR or a camcorder). Pick one to watch it, export it, rename it or put a video on it.	Кассеты игры, которую ты хостишь или играешь соло (включая те, что в видеомагнитофоне или видеокамере). Выбери одну, чтобы посмотреть, экспортировать, переименовать или записать на неё видео.
+Films folder	Папка фильмов
+Game open: read only	Игра открыта: только чтение
+No tape yet: buy some at the OSUUSKAUPPA shop in game (west of the PSK car park).	Кассет пока нет: купи их в магазине OSUUSKAUPPA в игре (к западу от парковки PSK).
+No tape in your game.	В твоей игре нет кассет.
+Tape title	Название кассеты
+Enter: write · Esc: cancel · 24 characters	Enter: записать · Esc: отмена · 24 символа
+Write	Записать
+Cancel	Отмена
+(no title)	(без названия)
+Blank	Пустая
+ take	 дубль
+ film(s) not on this PC	 фильм(ов) нет на этом ПК
+ · in a VCR	 · в видеомагнитофоне
+ · in a camcorder	 · в видеокамере
+Converting 	Конвертация 
+Click a tape to see it here.	Нажми на кассету, чтобы увидеть её здесь.
+BLANK TAPE	ПУСТАЯ КАССЕТА
+Films not on this PC	Фильмов нет на этом ПК
+Exporting… 	Экспорт… 
+Export as .mp4	Экспорт в .mp4
+Rename	Переименовать
+Video…	Видео…
+Confirm?	Подтвердить?
+Erase	Стереть
+Exported videos	Экспортированные видео
+Tape erased (the title stays)	Кассета стёрта (название осталось)
+Click Confirm again to erase this tape	Нажми «Подтвердить» ещё раз, чтобы стереть кассету
+Drone photos	Фото с дрона
+ photo(s) · F8 in game to take some	 фото · F8 в игре, чтобы снять
+No photo yet. In game, F8 starts the drone camera; left click takes the photo.	Фото пока нет. В игре F8 включает камеру дрона; ЛКМ делает снимок.
+Click a photo to see it here.	Нажми на фото, чтобы увидеть его здесь.
+Open	Открыть
+Show in folder	Показать в папке
+Confirm? (Recycle Bin)	Подтвердить? (Корзина)
+Delete	Удалить
+Photo moved to the Recycle Bin	Фото перемещено в корзину
+Photo not deleted	Фото не удалено
+Click again to move the photo to the Recycle Bin	Нажми ещё раз, чтобы переместить фото в корзину
+Mod settings not saved (error %lu)	Настройки мода не сохранены (ошибка %lu)
+Close My Winter Car before installing MSCLoader	Закрой My Winter Car перед установкой MSCLoader
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it FOR MWCOOP, apart (%LOCALAPPDATA%\\MWCoop)?\n\nThe game folder is not changed (except the Mods folder, if missing). Your mods stay in the game's Mods folder. An official MSCLoader already installed is not touched.\n\nMSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL.	Скачать последний официальный MSCLoader (GitHub piotrulos, около 4 МБ) и установить его ДЛЯ MWCOOP, отдельно (%LOCALAPPDATA%\\MWCoop)?\n\nПапка игры не меняется (кроме папки Mods, если её нет). Твои моды остаются в папке Mods игры. Уже установленный официальный MSCLoader не трогается.\n\nMSCLoader — проект, независимый от MWCoop. Его поддержка в MWCoop ЭКСПЕРИМЕНТАЛЬНАЯ.
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and reinstall it in the game folder? Your mods and their settings are kept.	Скачать последний официальный MSCLoader (GitHub piotrulos, около 4 МБ) и переустановить его в папку игры? Твои моды и их настройки сохранятся.
+REINSTALL MSCLoader (your mods and their settings are kept).\n\n	ПЕРЕУСТАНОВИТЬ MSCLoader (твои моды и их настройки сохранятся).\n\n
+Installing MSCLoader…	Установка MSCLoader…
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it in the game folder?\n\nMSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL.	Скачать последний официальный MSCLoader (GitHub piotrulos, около 4 МБ) и установить его в папку игры?\n\nMSCLoader — проект, независимый от MWCoop. Его поддержка в MWCoop ЭКСПЕРИМЕНТАЛЬНАЯ.
+MSCLoader %s installed: put your mods in its Mods folder	MSCLoader %s установлен: положи свои моды в его папку Mods
+MSCLoader not installed: %s	MSCLoader не установлен: %s
+EXPERIMENTAL	ЭКСПЕРИМЕНТАЛЬНО
+Close the game to turn a mod on or off	Закрой игру, чтобы включить или выключить мод
+%s: can't rename (error %lu)	%s: не удаётся переименовать (ошибка %lu)
+%s on: loaded at the next launch	%s вкл: загрузится при следующем запуске
+%s off: neither loaded nor sent (.dll.off file)	%s выкл: не загружается и не отправляется (файл .dll.off)
+MSCLoader will load at launch	MSCLoader загрузится при запуске
+MSCLoader will not load (nothing is uninstalled)	MSCLoader не загрузится (ничего не удаляется)
+MWCoop's MSCLoader: installed apart, the game is not changed	MSCLoader от MWCoop: установлен отдельно, игра не меняется
+MWCoop's MSCLoader: click INSTALL MSCLOADER (installed apart, the game is not changed)	MSCLoader от MWCoop: нажми УСТАНОВИТЬ MSCLOADER (устанавливается отдельно, игра не меняется)
+Official MSCLoader: the one installed in the game	Официальный MSCLoader: тот, что установлен в игре
+Official MSCLoader: not installed in the game (INSTALL MSCLOADER)	Официальный MSCLoader: не установлен в игре (УСТАНОВИТЬ MSCLOADER)
+%s is off: it is not sent	%s выключен: не отправляется
+%s will be sent to the lobby's guests	%s будет отправлен гостям лобби
+%s stays with you (not sent)	%s остаётся у тебя (не отправляется)
+\u2190 Back to mods	← Назад к модам
+Mod enabled	Мод включён
+  (button: in game)	  (кнопка: в игре)
+in game	в игре
+  (in game)	  (в игре)
+OFFICIAL	ОФИЦИАЛЬНЫЙ
+REINSTALL	ПЕРЕУСТАНОВИТЬ
+Installing MSCLoader\u2026	Установка MSCLoader…
+MSCLoader, the community mod loader (independent project), is not installed.	MSCLoader, загрузчик модов от сообщества (независимый проект), не установлен.
+MSCLoader %s%s \u00B7 %d mod(s) \u00B7 %s folder	MSCLoader %s%s · модов: %d · папка %s
+ by MWCoop (apart, the game is not changed)	 от MWCoop (отдельно, игра не меняется)
+ (official)	 (официальный)
+Documents	Документы
+game	игры
+Load MSCLoader	Загружать MSCLoader
+Your mods in your MWCoop games	Твои моды в играх MWCoop
+INSTALLING\u2026	УСТАНОВКА…
+INSTALL MSCLOADER	УСТАНОВИТЬ MSCLOADER
+Accept the host's files	Принимать файлы хоста
+No more ACCEPT ALL in a friend's lobby	Больше никакого ПРИНЯТЬ ВСЁ в лобби друга
+Your mods	Твои моды
+No mod in the Mods folder. Add MSCLoader mods (My Winter Car version), then start the game once: their names and options will show up here.	В папке Mods нет модов. Добавь моды MSCLoader (версия для My Winter Car), затем запусти игру один раз: их названия и настройки появятся здесь.
+.off \u00B7 off: neither loaded nor sent	.off · выкл: не загружается и не отправляется
+ \u00B7 disabled	 · отключён
+ \u00B7 start the game once for details	 · запусти игру один раз для подробностей
+On	Вкл
+Send	Отправлять
+Settings apply at the next game launch. \"On\" off: the mod no longer loads. \"Send\": it is copied to your lobby's guests.	Настройки применятся при следующем запуске игры. \"Вкл\" выключено: мод больше не загружается. \"Отправлять\": он копируется гостям твоего лобби.
+Open the Mods folder	Открыть папку Mods
+This lobby uses mods (MSCLoader).\n\nInstall MSCLoader (MWCoop's Coop version, installed apart) and get the host's mods?\n\nNo: you join without the mods (some of the host's items or cars may be missing).	Это лобби использует моды (MSCLoader).\n\nУстановить MSCLoader (кооп-версия от MWCoop, ставится отдельно) и получить моды хоста?\n\nНет: ты подключишься без модов (некоторых предметов или машин хоста может не быть).
+Without MSCLoader: you play without the host's mods	Без MSCLoader: ты играешь без модов хоста
+Installing MSCLoader (Coop version)\u2026	Установка MSCLoader (кооп-версия)…
+The host is sending new files: ready as soon as they're received	Хост отправляет новые файлы: будешь готов, как только они придут
+Host's files failed: RETRY, then READY	Файлы хоста не получены: ПОВТОРИТЬ, затем ГОТОВ
+Host's files received: you're ready	Файлы хоста получены: ты готов
+Host's mods not received: RETRY, then join	Моды хоста не получены: ПОВТОРИТЬ, затем подключись
+MSCLoader files missing: reinstall it in the Mods tab	Нет файлов MSCLoader: переустанови его во вкладке «Моды»
+%.1f MB	%.1f МБ
+%llu KB	%llu КБ
+Sent to guests	Отправлено гостям
+Host's files	Файлы хоста
+Nothing for now	Пока ничего
+Nothing is sent	Ничего не отправляется
+Nothing (MSCLoader off: guests without mods)	Ничего (MSCLoader выкл: гости без модов)
+%d mod(s) \u00B7 %d item(s) \u00B7 %s	%d мод(ов) · %d элем. · %s
+Choose	Выбрать
+Checking\u2026	Проверка…
+ACCEPT ALL	ПРИНЯТЬ ВСЁ
+Downloading\u2026 %d%% (%s)	Загрузка… %d%% (%s)
+Ready \u2713  %d mod(s) \u00B7 %d item(s)	Готово ✓  %d мод(ов) · %d элем.
+The host sends nothing \u2713	Хост ничего не отправляет ✓
+ \u00B7 no MSCLoader	 · без MSCLoader
+ \u00B7 installing MSCLoader\u2026	 · установка MSCLoader…
+Failed (	Ошибка (
+RETRY	ПОВТОРИТЬ
+Content sent to guests	Контент для гостей
+Your CDs, paint, flag\u2026 as you have them in your game, copied apart to your lobby's guests.	Твои CD, краска, флаг… как в твоей игре, копируются отдельно гостям твоего лобби.
+nothing in the game	в игре ничего нет
+%d read by the game \u00B7 %d ignored (track1.ogg\u2026)	%d читается игрой · %d пропущено (track1.ogg…)
+%d song(s) \u00B7 %s	%d трек(ов) · %s
+%d file(s) \u00B7 %s	%d файл(ов) · %s
+MSCLoader mods: not installed	Моды MSCLoader: не установлен
+MSCLoader mods: off (guests without mods)	Моды MSCLoader: выкл (гости без модов)
+MSCLoader mods: %d sent of %d	Моды MSCLoader: отправлено %d из %d
+%d / %d items sent \u00B7 copied apart to your guests	%d / %d отправлено · копируются отдельно твоим гостям
+Regular	Обычное
+Default	По умолчанию
+None	Нет
+Pig	Свинья
+Custom pants	Свои штаны
+Custom face	Своё лицо
+Pants 	Штаны 
+Face 	Лицо 
+Pants	Штаны
+Face	Лицо
+ (woman)	 (жен.)
+Game over · %s	Игра окончена · %s
+MWCoop did not load in the game: close it, then send the logs (zip) without closing the launcher	MWCoop не загрузился в игре: закрой её, затем отправь логи (zip), не закрывая лаунчер
+MWCoop did not load from the launch copy: start your game again, it will now start from the game folder	MWCoop не загрузился из копии запуска: запусти игру снова, теперь она стартует из папки игры
+MWCoop did not load in the game.\n\nFor some players it only loads when the game is started through Steam (like its PLAY button).\n\nTurn on \"Start the game through Steam\" (Settings > Game) and start your game again?	MWCoop не загрузился в игре.\n\nУ некоторых игроков он грузится, только если игра запущена через Steam (как кнопкой ИГРАТЬ).\n\nВключить \"Запуск игры через Steam\" (Настройки > Игра) и запустить игру снова?
+Start through Steam turned on: start your game again	Запуск через Steam включён: запусти игру снова
+%s is coming to you	%s идёт к тебе
+%s kicked from the game	%s исключён из игры
+Game running	Игра идёт
+ \u00B7 through Steam	 · через Steam
+The launcher stays open during the game and goes back to the menu when the game closes. To close it at launch: Settings.	Лаунчер остаётся открытым во время игры и возвращается в меню, когда игра закрывается. Чтобы он закрывался при запуске: Настройки.
+Server	Сервер
+Waiting for the game's information\u2026	Ждём данные игры…
+They show up once the mod is loaded (game menu).	Появятся, когда мод загрузится (меню игры).
+%d player(s)	Игроков: %d
+  \u00B7 host	  · хост
+at the menu	в меню
+BRING HERE	ПРИЗВАТЬ
+CONFIRM?	ПОДТВЕРДИТЬ?
+KICK	ИСКЛЮЧИТЬ
+BRING HERE: the player comes next to you (unless in a vehicle). KICK: two clicks.	ПРИЗВАТЬ: игрок появится рядом с тобой (если он не в транспорте). ИСКЛЮЧИТЬ: два клика.
+My Winter Car not found	My Winter Car не найдена
+steam_api64.dll not found in the game folder	steam_api64.dll не найден в папке игры
+Unexpected steam_api64.dll in the game	Неожиданный steam_api64.dll в игре
+Steam is not running (or not logged in)	Steam не запущен (или вход не выполнен)
+Steam interfaces not found	Интерфейсы Steam не найдены
+One moment…	Секунду…
+Creating the Steam lobby…	Создание лобби Steam…
+Joining the Steam lobby…	Вход в лобби Steam…
+Steam could not create the lobby (code %d)	Steam не смог создать лобби (код %d)
+This lobby no longer exists (or is closed)	Этого лобби больше нет (или оно закрыто)
+Could not join the Steam lobby (code %u)	Не удалось войти в лобби Steam (код %u)
+%s is already playing: \"Join in game\"	%s уже играет: \"Подключиться в игре\"
+This Steam lobby is not an MWCoop lobby	Это лобби Steam не от MWCoop
+The host is starting the game… yours starts in a moment	Хост запускает игру… твоя стартует через миг
+Invite sent to %s	Приглашение отправлено: %s
+Steam refused the invite	Steam отклонил приглашение
+No friend lobby: ask the host to invite you	Нет лобби друзей: попроси хоста пригласить тебя
+%s invites you: click JOIN	%s приглашает тебя: нажми ПОДКЛЮЧИТЬСЯ
+No Steam friend online (%d offline)	Нет друзей Steam в сети (%d не в сети)
+Steam friends online: %d · %d offline	Друзья Steam в сети: %d · %d не в сети
+Your Steam friends show up here as soon as they are online. They can also join from Steam (\"Join game\").	Твои друзья Steam появятся здесь, как только будут в сети. Они также могут подключиться из Steam (\"Присоединиться к игре\").
+Playing My Winter Car	Играет в My Winter Car
+Busy	Занят
+Away	Отошёл
+Snooze	Спит
+Online	В сети
+IN THE LOBBY	В ЛОББИ
+INVITED ✓	ПРИГЛАШЁН ✓
+INVITE AGAIN	ЕЩЁ РАЗ
+INVITE	ПРИГЛАСИТЬ
+NEW	НОВОЕ
+FINISH	ГОТОВО
+NEXT	ДАЛЕЕ
+Skip	Пропустить
+Back	Назад
+Update · 	Обновить · 
+Settings	Настройки
+Good morning, 	Доброе утро, 
+Good afternoon, 	Добрый день, 
+Good evening, 	Добрый вечер, 
+Starting	Запуск
+Welcome	Добро пожаловать
+Ready for a winter together?	Готов к зиме вместе?
+Joining the lobby…	Вход в лобби…
+Lobby of 	Лобби: 
+Lobby	Лобби
+Steam · friends only · %d / %d players	Steam · только друзья · игроков: %d / %d
+Port %d (UDP and TCP) · local address %s · %d / %d	Порт %d (UDP и TCP) · локальный адрес %s · %d / %d
+Host: %s:%d · %d / %d players	Хост: %s:%d · игроков: %d / %d
+My character	Мой персонаж
+What the other players see in game	Что видят другие игроки в игре
+Sharing	Обмен
+Copied to your guests for your game, apart from their own files	Копируется гостям для твоей игры, отдельно от их файлов
+What's new	Что нового
+What changes in each version	Что меняется в каждой версии
+Logs	Логи
+Trouble in game? A zip to send	Проблема в игре? Zip для отправки
+Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini	Хранятся в mwcoop-lanceur.ini и MWCoop\\mwcoop.ini
+Game options	Настройки игры
+Graphics and co-op, just for you · in game: F10 menu > Graphics	Графика и кооп, только для тебя · в игре: меню F10 > Графика
+API for modders	API для моддеров
+MWCoop.CoopApi: docs, DLL and an example	MWCoop.CoopApi: документация, DLL и пример
+Credits	Авторы
+Thanks to everyone who makes MWCoop better	Спасибо всем, кто делает MWCoop лучше
+VHS tapes	Кассеты VHS
+Watch them, export them as .mp4, rename them, put a video on them	Смотри, экспортируй в .mp4, переименовывай, записывай видео
+Album	Альбом
+Drone photos (F8 in game)	Фото с дрона (F8 в игре)
+Guide	Гайд
+Everything to play trouble-free: install, lobbies, mods, settings, fixes	Всё для игры без проблем: установка, лобби, моды, настройки, решения
+Outfit	Одежда
+Car	Машина
+Content · 	Контент · 
+Change folder	Сменить папку
+Choose exe…	Выбрать exe…
+MWCoop.exe goes in the game folder (Steam: right-click My Winter Car > Manage > Browse local files). Otherwise, show it mywintercar.exe.	MWCoop.exe кладётся в папку игры (Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы). Иначе укажи ему mywintercar.exe.
+Buy the game	Купить игру
+Unofficial, non-commercial mod · not affiliated with Amistech Games · requires a legal copy of My Winter Car.	Неофициальный некоммерческий мод · не связан с Amistech Games · нужна легальная копия My Winter Car.
+YOUR CHARACTER	ТВОЙ ПЕРСОНАЖ
+Edit	Изменить
+NICKNAME	НИК
+How to connect	Как подключиться
+Your friends must pick the same	Друзья должны выбрать то же
+recommended	рекомендуется
+Invites, no port or firewall	Приглашения, без портов и брандмауэра
+LAN, Radmin, Hamachi…	Локальная сеть, Radmin, Hamachi…
+HOST ADDRESS	АДРЕС ХОСТА
+Steam launch option	Параметр запуска Steam
+So that an accepted invite opens MWCoop (not the bare game)	Чтобы принятое приглашение открывало MWCoop (а не голую игру)
+GUIDE	ГАЙД
+LOBBY IN PROGRESS	ЛОББИ ОТКРЫТО
+Back to the lobby: players, game, start	Вернуться в лобби: игроки, игра, запуск
+JOIN IN GAME	ПОДКЛЮЧИТЬСЯ В ИГРЕ
+JOIN	ПОДКЛЮЧИТЬСЯ
+Opens a Steam lobby for your friends; everyone gets ready, then you start.	Открывает лобби Steam для друзей; все готовятся, затем ты запускаешь.
+Opens a lobby: your friends join, everyone gets ready, then you start.	Открывает лобби: друзья подключаются, все готовятся, затем ты запускаешь.
+The host is already playing: join their game directly.	Хост уже играет: подключайся к его игре сразу.
+ invites you: click to enter their lobby.	 приглашает тебя: нажми, чтобы войти в лобби.
+Your Steam invite, or else a friend's MWCoop lobby.	Твоё приглашение Steam или лобби MWCoop друга.
+The lobby at the address entered above.	Лобби по адресу, указанному выше.
+Up to 8 players	До 8 игроков
+A friend's lobby	Лобби друга
+PLAY SOLO	ИГРАТЬ ОДНОМУ
+The normal game, without MWCoop.	Обычная игра, без MWCoop.
+See all	Показать все
+Loading…	Загрузка…
+Notes unavailable (offline).	Заметки недоступны (нет сети).
+The 3D preview shows up after a first game (~30 s in game) with this version.	3D-превью появится после первой игры (~30 с в игре) с этой версией.
+Preview to redo: start a game (~30 s)	Превью нужно обновить: запусти игру (~30 с)
+Loading release notes…	Загрузка списка изменений…
+No release published yet.	Пока нет ни одного релиза.
+Release notes unavailable (offline).	Список изменений недоступен (нет сети).
+INSTALLED	УСТАНОВЛЕНА
+Update	Обновить
+Loading image…	Загрузка изображения…
+Current session	Текущая сессия
+Last session	Прошлая сессия
+Session of 	Сессия от 
+profile 	профиль 
+%d logs, %.0f KB	%d логов, %.0f КБ
+%d logs, %.1f MB	%d логов, %.1f МБ
+ABRUPT STOP	СБОЙ
+1 ERROR	1 ОШИБКА
+%d ERRORS	ОШИБОК: %d
+The game's and the mod's logs	Логи игры и мода
+Delete all	Удалить все
+Every session keeps its own logs (the last 30).	У каждой сессии свои логи (последние 30).
+Create a zip to send	Создать zip для отправки
+Open folder	Открыть папку
+Debug mode	Режим отладки
+Detailed launcher log: every step, Steam, files, DLLs loaded in the game, antivirus. Turn on if MWCoop doesn't load, then zip.	Подробный лог лаунчера: каждый шаг, Steam, файлы, DLL в игре, антивирус. Включи, если MWCoop не грузится, затем zip.
+The last game stopped abruptly.	Последняя игра внезапно прервалась.
+Create a zip and send it (GitHub, Discord) so we can take a look.	Создай zip и отправь (GitHub, Discord), чтобы мы посмотрели.
+No game logs: MWCoop hasn't loaded in game yet. The launcher's log (and debug mode's) is still in the zip: create it and send it.	Нет логов игры: MWCoop ещё не загружался в игре. Лог лаунчера (и режима отладки) всё равно в zip: создай и отправь.
+KB	КБ
+MB	МБ
+Updates	Обновления
+MWCoop is not installed	MWCoop не установлен
+You have 	У тебя 
+Version 	Версия 
+ available	 доступна
+Checking or installing…	Проверка или установка…
+MWCoop is up to date	MWCoop обновлён
+Check	Проверить
+Install automatically	Устанавливать автоматически
+At every start, without asking	При каждом запуске, без вопросов
+Launcher	Лаунчер
+Theme	Тема
+Dark	Тёмная
+Light	Светлая
+Language	Язык
+Otherwise it stays open (players, ping) and comes back	Иначе он остаётся открытым (игроки, пинг) и возвращается
+See the starting guide again	Показать вводный гайд снова
+About	О программе
+Unofficial, non-commercial mod, not affiliated with Amistech Games. Requires a legal copy of My Winter Car.	Неофициальный некоммерческий мод, не связан с Amistech Games. Нужна легальная копия My Winter Car.
+Buy the game on Steam	Купить игру в Steam
+Uninstall MWCoop	Удалить MWCoop
+Network	Сеть
+Port	Порт
+UDP and TCP, to host by IP	UDP и TCP, для хоста по IP
+Start the game	Запуск игры
+If MWCoop doesn't load	Если MWCoop не грузится
+Remove compatibility modes	Убрать режимы совместимости
+Windows adds some after a crash: MWCoop stops loading	Windows добавляет их после вылета: MWCoop перестаёт грузиться
+Thank you!	Спасибо!
+MWCoop also grows thanks to you and to the creators who share their work. Everyone who gives something to the mod is credited here.	MWCoop растёт и благодаря вам, и авторам, которые делятся своей работой. Все, кто что-то дал моду, указаны здесь.
+3D Models	3D-модели
+Special Thanks	Благодарности
+Museum of Corsica	Музей Корсики
+Paintings, maps, postcards and photos from before 2000, public domain or under Creative Commons licenses (Wikimedia Commons). Full links: MWCoop\\musee\\CREDITS.txt.	Картины, карты, открытки и фото до 2000 года, общественное достояние или лицензии Creative Commons (Wikimedia Commons). Полные ссылки: MWCoop\\musee\\CREDITS.txt.
+Relief model: SRTM elevation data (NASA, public domain) via AWS Terrain Tiles (Mapzen)	Рельефный макет: данные высот SRTM (NASA, общественное достояние) через AWS Terrain Tiles (Mapzen)
+Made something for MWCoop? Share it on the Discord (button at the bottom left): you'll be credited here and in the release notes.	Сделал что-то для MWCoop? Поделись в Discord (кнопка слева внизу): тебя укажут здесь и в списке изменений.
+My Winter Car is starting	My Winter Car запускается
+The game window will appear shortly.	Окно игры скоро появится.
+A small Unity window may ask for the resolution first: pick it, then click Play.	Маленькое окно Unity может сначала спросить разрешение: выбери его и нажми Play.
+The game will start from the launch copy (default)	Игра запустится из копии запуска (по умолчанию)
+The game will start straight from its folder	Игра запустится прямо из своей папки
+The game will be started through Steam (the launcher closes)	Игра запустится через Steam (лаунчер закроется)
+The game will be started through Steam (like its PLAY button)	Игра запустится через Steam (как кнопкой ИГРАТЬ)
+The game will be started by the launcher	Игру запустит лаунчер
+Windows compatibility modes will be removed before every game	Режимы совместимости Windows будут убираться перед каждой игрой
+Compatibility modes kept: MWCoop may not load	Режимы совместимости оставлены: MWCoop может не загрузиться
+Debug mode on: start your game, then create the zip	Режим отладки вкл: запусти игру, затем создай zip
+Debug mode off	Режим отладки выкл
+Click again to move every stored session to the Recycle Bin	Нажми ещё раз, чтобы отправить все сессии в корзину
+to everyone or one player (64 KB)	всем или одному игроку (64 КБ)
+receive on your channel (mod ID)	приём на своём канале (ID мода)
+who hosts, who plays	кто хост, кто играет
+players joining and leaving	вход и выход игроков
+No dependency: found through reflection, your mod also works without MWCoop.	Без зависимости: находится через рефлексию, твой мод работает и без MWCoop.
+Already done for you: your files, settings and save data (Mods.txt) go to the guests with the host's.	Уже сделано за тебя: твои файлы, настройки и сохранение (Mods.txt) уходят гостям вместе с файлами хоста.
+The host decides: it saves the world. A message sent before the other player's mod listens is kept for it.	Решает хост: он сохраняет мир. Сообщение, отправленное до того, как мод другого игрока начал слушать, сохраняется для него.
+In English: names, comments and docs. The rest of MWCoop's code is in French, but open and not obfuscated: no need to read it.	На английском: имена, комментарии и документация. Остальной код MWCoop на французском, но открыт и не обфусцирован: читать его не нужно.
+The cliffs of Bonifacio	Скалы Бонифачо
+1896 (published)	1896 (опубликовано)
+Map of Genoese Corsica	Карта генуэзской Корсики
+View from the Col de Sorba	Вид с перевала Сорба
+The Forest of Valdoniello	Лес Вальдоньелло
+Ajaccio, the quays	Аяччо, набережные
+Anonymous (postcard, J. Moretti collection)	Аноним (открытка, коллекция J. Moretti)
+Bastia, the old harbour	Бастия, старый порт
+Anonymous (postcard)	Аноним (открытка)
+The Bavella needles	Иглы Бавеллы
+Corsican shepherd	Корсиканский пастух
+Calvi and its citadel	Кальви и его цитадель
+Anonymous French amateur photographer / Rijksmuseum Amsterdam	Неизвестный французский фотограф-любитель / Rijksmuseum Amsterdam
+Cargèse	Каржез
+1870 (published; sketched 1868)	1870 (опубл.; эскиз 1868)
+Giant chestnut tree	Гигантский каштан
+Corte	Корте
+'Vendetta' knife	Нож «Вендетта»
+Unknown maker; photo Livrustkammaren (Royal Armoury), Stockholm	Неизвестный мастер; фото Livrustkammaren (Королевская оружейная палата), Стокгольм
+Moor's head banner	Знамя с головой мавра
+Unknown	Неизвестен
+Napoleon's birthplace	Дом, где родился Наполеон
+Musicians in Ajaccio	Музыканты в Аяччо
+Napoleon Bonaparte in 1792	Наполеон Бонапарт в 1792 году
+Pasquale Paoli	Паскуале Паоли
+Corsican country people	Корсиканские крестьяне
+Sartène	Сартен
+A Genoese tower	Генуэзская башня
+A mountain village	Горная деревня
+Unknown (published in Autosprint)	Неизвестен (опубл. в Autosprint)
+Unknown (via forum-auto.com)	Неизвестен (через forum-auto.com)
+Unknown (published in Italian press)	Неизвестен (опубл. в итальянской прессе)
+1962 Tour de Corse	Тур де Корс 1962
+R1093 (Wikimedia Commons user)	R1093 (пользователь Wikimedia Commons)
+1973 Tour de Corse rally plate	Табличка ралли Тур де Корс 1973
+Kerlavarec (Wikimedia Commons user)	Kerlavarec (пользователь Wikimedia Commons)
+1977 Tour de Corse	Тур де Корс 1977
+JCL92800 (Wikimedia Commons user)	JCL92800 (пользователь Wikimedia Commons)
+Chat	Чат
+Wallet	Кошелёк
+Voice	Голос
+Cheats	Читы
+Map	Карта
+View	Вид
+Drone	Дрон
+Forward	Вперёд
+Left	Влево
+Right	Вправо
+Up	Вверх
+Down	Вниз
+Fast	Быстро
+Zoom +	Зум +
+Zoom -	Зум -
+Tilt left	Наклон влево
+Tilt right	Наклон вправо
+Reset	Сброс
+Photo	Фото
+Grid	Сетка
+Interface	Интерфейс
+Anti-aliasing	Сглаживание
+HDR (rich light)	HDR (насыщенный свет)
+Bloom	Свечение (bloom)
+Contrast boost	Усиление контраста
+Sun shafts	Солнечные лучи
+Max frames per second	Макс. кадров в секунду
+Unlimited	Без ограничений
+V-sync	Верт. синхронизация
+Off	Выкл
+Sun shadows	Тени от солнца
+Moon shadows	Тени от луны
+House shadows	Тени домов
+Shadow distance	Дальность теней
+Shadow detail	Детализация теней
+Simple	Простая
+Fine	Чёткая
+Basic	Базовая
+Very fine	Очень чёткая
+Draw distance	Дальность прорисовки
+Level of detail	Уровень детализации
+Normal	Обычный
+Max	Макс
+Low	Низкое
+High	Высокое
+Very high	Очень высокое
+Textures	Текстуры
+Quarter	Четверть
+Half	Половина
+Full	Полные
+Texture filtering	Фильтрация текстур
+Forced	Принуд.
+Ray-traced sun shadows	Тени солнца с трассировкой
+Rays per pixel	Лучей на пиксель
+Shadow range	Дальность теней
+Shadow edges	Края теней
+Soft	Мягкие
+Very soft	Очень мягкие
+Your body in reflections and shadows	Твоё тело в отражениях и тенях
+Reflections (car paint, smooth surfaces)	Отражения (краска авто, гладкие поверхности)
+Subtle	Слабые
+Window reflections	Отражения в стёклах
+Light bounce (global illumination)	Отражённый свет (глобальное освещение)
+Ambient occlusion (corners, underneath)	Фоновое затенение (углы, снизу)
+Strong	Сильное
+Lamp shadows (headlights, street lights)	Тени от ламп (фары, фонари)
+4 lamps	4 лампы
+8 lamps	8 ламп
+16 lamps	16 ламп
+Headlight shadows	Тени от фар
+2 lights	2 фары
+4 lights	4 фары
+8 lights	8 фар
+Street light shadows	Тени от фонарей
+Light coronas (GTA style)	Ореолы света (как в GTA)
+Headlight range	Дальность фар
+Long	Дальняя
+Field of view	Поле зрения
+Mirrors	Зеркала
+Head bob on foot	Покачивание головы пешком
+Head bob in cars	Покачивание головы в авто
+FPS counter	Счётчик FPS
+Gear on screen	Передача на экране
+Traffic dust	Пыль от трафика
+Traffic skid marks	Следы шин трафика
+Player names	Ники игроков
+Proximity voice	Голос по близости
+Voice range	Дальность голоса
+Voice volume	Громкость голосов
+Your microphone volume (for the others)	Громкость твоего микрофона (для других)
+See others' imported images	Видеть картинки, импортированные другими
+Guests' starting money	Стартовые деньги гостей
+Allow cheats (host)	Разрешить читы (хост)
+Cars run players over (friends, NPCs)	Машины сбивают игроков (друзей, NPC)
+Disable the CO-OP additions (F8 drone, sleeping bags, shop)	Отключить добавки КООП (дрон F8, спальники, магазин)
+Write to the others (chat)	Писать другим (чат)
+Wallet (give money)	Кошелёк (дать денег)
+Talk (voice, hold the key)	Говорить (голос, удерживай клавишу)
+Cheat panel	Панель читов
+Map (live players)	Карта (игроки вживую)
+Third-person view (on foot, in vehicles)	Вид от 3-го лица (пешком, в транспорте)
+Drone on / off (photo mode)	Дрон вкл / выкл (фоторежим)
+Take the photo	Сделать фото
+Move forward	Вперёд
+Move back	Назад
+Move left	Влево
+Move right	Вправо
+Go up	Вверх
+Go down	Вниз
+Faster (hold the key)	Быстрее (удерживай клавишу)
+Zoom in (also the wheel)	Приблизить (или колесо)
+Zoom out	Отдалить
+Reset (tilt and zoom)	Сброс (наклон и зум)
+Viewfinder grid	Сетка видоискателя
+Hide the viewfinder	Скрыть видоискатель
+Map: press or hold	Карта: нажать или удерживать
+Hold	Удерживать
+Resolution	Разрешение
+Display mode	Режим экрана
+Windowed	Оконный
+Fullscreen	Полный экран
+Borderless	Без рамки
+Engine quality	Качество движка
+Medium	Среднее
+Good	Хорошее
+Vanilla	Ванилла
+Like the game	Как в игре
+Performance	Производительность
+More frames	Больше кадров
+Balanced	Баланс
+The sweet spot	Золотая середина
+Pretty	Красиво
+Better looking	Красивее
+Ultra	Ультра
+Everything maxed	Всё на максимум
+Ray tracing	Трассировка лучей
+My Winter Car video options	Видеонастройки My Winter Car
+MWCoop enhanced video options	Улучшенные видеонастройки MWCoop
+The game's own settings (its Options menu)	Настройки самой игры (её меню настроек)
+Added by MWCoop: screen, smoothness, shadows, detail, lights	Добавлено MWCoop: экран, плавность, тени, детали, свет
+Shadows	Тени
+Distance and view	Дальность и обзор
+Comfort	Комфорт
+Lights	Свет
+Screen	Экран
+Faces, clothes and names	Лица, одежда и ники
+Game and sharing	Игра и обмен
+Keys	Клавиши
+Smoothness	Плавность
+Advanced shadows	Расширенные тени
+Detail and textures	Детали и текстуры
+Drone camera	Камера дрона
+Co-op	Кооп
+Voice, players, sharing and the mod's keys	Голос, игроки, обмен и клавиши мода
+Image	Изображение
+Police officer 2	Полицейский 2
+Rally driver	Раллист
+PSK employee	Сотрудник PSK
+Inspector	Инспектор
+Sahara beige	Бежевый Сахара
+Apple green	Яблочно-зелёный
+Orange	Оранжевый
+Sky blue	Небесно-голубой
+Navy blue	Тёмно-синий
+Red	Красный
+White	Белый
+Black	Чёрный
+Metallic grey	Серый металлик
+Brown	Коричневый
+Mustard yellow	Горчичный
+Dark green	Тёмно-зелёный
+Burgundy	Бордовый
+Turquoise	Бирюзовый
+Avocado green	Зелёный авокадо
+Year (code)	Год (код)
+Engine	Двигатель
+Gearbox	КПП
+Suspension	Подвеска
+Windshield	Лобовое стекло
+Vinyl roof	Виниловая крыша
+Interior	Салон
+Wheels	Колёса
+Radio	Радио
+Instrument panel	Приборная панель
+Power brakes	Усилитель тормозов
+Heated rear window	Обогрев заднего стекла
+Choose the top image (painted on the template)	Выбери картинку верха (рисуется на шаблоне)
+Choose the pants image (painted on the template)	Выбери картинку штанов (рисуется на шаблоне)
+The templates are made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\n	Шаблоны создаёт мод: запусти игру (можно одному) и побудь в ней ~20 с с этой версией, затем вернись сюда.\n\n
+My top…	Мой верх…
+My pants…	Мои штаны…
+imported top	импортированный верх
+imported pants	импортированные штаны
+Torso	Торс
+Legs	Ноги
+Build	Телосложение
+This folder does not contain My Winter Car.\n\nPick the mywintercar.exe from the game folder 	В этой папке нет My Winter Car.\n\nВыбери mywintercar.exe в папке игры 
+Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\n	Начать НОВУЮ игру?\n\nОна заменит твоё текущее сохранение My Winter Car (текущая игра будет потеряна).\n\n
+\u2022 Sample release note (capture).\n\u2022 Second line: a fix.	• Пример заметки к версии (снимок).\n• Вторая строка: исправление.
+\u2022 First version: loader, visible players.	• Первая версия: загрузчик, видимые игроки.
+\u2022 First version.	• Первая версия.
+Police officer	Полицейский
+Choose the face image (painted on the template)	Выбери картинку лица (рисуется на шаблоне)
+My face…	Моё лицо…
+imported face	импортированное лицо
+Head	Голова
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it FOR MWCOOP, apart (%LOCALAPPDATA%\\MWCoop)?\n\n	Скачать последний официальный MSCLoader (GitHub piotrulos, ~4 МБ) и установить его ДЛЯ MWCOOP, отдельно (%LOCALAPPDATA%\\MWCoop)?\n\n
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it in the game folder?\n\n	Скачать последний официальный MSCLoader (GitHub piotrulos, ~4 МБ) и установить его в папку игры?\n\n
+CORRIS paint	Краска CORRIS
+Images	Картинки
+Moped paint	Краска мопеда
+Garage flag	Флаг гаража
+Posters	Постеры
+Window sticker	Наклейка на стекло
+Fabric	Ткань
+ID photo	Фото на документы
+Hockey teams	Хоккейные команды
+Extra	Дополнительно
+Thin	Худой
+Slim	Стройный
+Stout	Крепкий
+Short and round	Низкий и полный
+Short and slim	Низкий и стройный
+Police	Полиция
+Rally	Ралли
+Beanie	Шапка
+Cap	Кепка
+Trucker cap	Кепка-сетка
+Police cap	Полицейская фуражка
+Fur hat	Ушанка
+Fishing hat	Рыбацкая панама
+Bus driver cap	Кепка водителя автобуса
+Teimo's hat	Шляпа Teimo
+Gifu cap	Кепка Gifu
+Flat cap	Плоская кепка
+Helmet	Шлем
+Glasses	Очки
+Round glasses	Круглые очки
+Sunglasses	Солнечные очки
+Ponytail	Хвост
+Mullet	Маллет
+clear	прозрачные
+black	чёрные
+chrome	хромированные
+glossy black	чёрный глянец
+smoked	тонированные
+glass	стекло
+original	оригинал
+TORSO	ТОРС
+LEGS	НОГИ
+BUILD	ТЕЛОСЛОЖЕНИЕ
+Hair	Волосы
+Top	Верх
+HEAD	ГОЛОВА
+Hat	Головной убор
+Welcome to MWCoop!	Добро пожаловать в MWCoop!
+A new, bigger launcher. A quick tour in a few bubbles: you can skip it at any time (Esc) and see it again from Settings.	Новый, более просторный лаунчер. Короткий тур в нескольких подсказках: его можно пропустить в любой момент (Esc) и посмотреть снова в Настройках.
+Your nickname	Твой ник
+The name the other players see above your character and in the lobby.	Имя, которое другие игроки видят над твоим персонажем и в лобби.
+STEAM: the easiest, you invite your Steam friends, no port or address. IP / VPN: by address (local network, Radmin, Hamachi…).	STEAM: проще всего, приглашаешь друзей из Steam, без порта и адреса. IP / VPN: по адресу (локальная сеть, Radmin, Hamachi…).
+Opens a lobby: your friends join it, everyone gets READY, then START launches everyone's game. The lobby's gear holds its options.	Открывает лобби: друзья заходят, все жмут ГОТОВ, потом СТАРТ запускает игру у всех. Шестерёнка лобби — его настройки.
+Enters a friend's lobby (through Steam: their invite, or their lobby found by itself; by IP: their address just above).	Входишь в лобби друга (через Steam: его приглашение или лобби, найденное само; по IP: его адрес чуть выше).
+The vanilla game: MWCoop isn't loaded at all (no badge, no co-op menu). Your save is never touched by other people's games.	Ванильная игра: MWCoop не загружается вовсе (ни значка, ни кооп-меню). Твоё сохранение никогда не затрагивается чужими играми.
+Every page, on the left	Все страницы — слева
+The lobby, your character, what you share and the updates: one click, no window popping over.	Лобби, твой персонаж, то, чем делишься, и обновления: один клик, без всплывающих окон.
+Outfit and car	Одежда и машина
+Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your CORRIS color.	Твоя внешность целиком (телосложение, шапка, очки, волосы, лицо, верх, штаны) в 3D и цвет твоей CORRIS.
+Content and mods	Контент и моды
+What you send to your guests: CDs, paint, flag, posters… and your MSCLoader mods (experimental), copied apart on their side.	Что ты отправляешь гостям: CD, краска, флаг, постеры… и твои моды MSCLoader (экспериментально), копируются у них отдельно.
+Graphics	Графика
+Sorted into categories you expand: shadows, distance, detail, textures, frame rate… and now player names (distance, or hidden). One-click presets; in game: F10 menu.	По раскрывающимся категориям: тени, дальность, детали, текстуры, частота кадров… и теперь ники игроков (дальность или скрыть). Пресеты в один клик; в игре: меню F10.
+What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.	Что меняется в каждой версии. Когда выходит новая версия, под логотипом появляется кнопка «Обновить»: обновление начнётся, когда ты на неё нажмёшь.
+Every session now keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.	Теперь каждая сессия хранит свои логи, по дате: раскрой ту, где был сбой, упакуй в zip или удали старые. Красный «!» — если последняя игра оборвалась.
+Modding API	API для моддеров
+Also up here now. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.	Теперь и здесь, наверху. Делаешь моды? Что умеет API MWCoop, пример для копирования, DLL и документация на GitHub.
+Updates, theme, language, port, game folder, a host's files at a friend's… and this guide.	Обновления, тема, язык, порт, папка игры, файлы хоста у друга… и этот гайд.
+Theme and language	Тема и язык
+Dark or light, French or English, in one click.	Тёмная или светлая, французский или английский — в один клик.
+The MWCoop community: help, bug reports, news and players to team up with. GitHub and Ko-fi right next to it.	Сообщество MWCoop: помощь, баг-репорты, новости и игроки для команды. GitHub и Ko-fi рядом.
+MWCoop's MSCLoader	MSCLoader от MWCoop
+In the Mods tab: OFFICIAL (the one installed in the game) or MWCOOP (installed apart, the game is not changed). If your mods don't load, try MWCOOP, or REINSTALL.	Во вкладке «Моды»: ОФИЦИАЛЬНЫЙ (установлен в игре) или MWCOOP (установлен отдельно, игра не меняется). Если моды не грузятся, попробуй MWCOOP или ПЕРЕУСТАНОВИТЬ.
+In Settings > Game: Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.	В Настройки > Игра: Копия (по умолчанию), Папка игры или Steam. Если MWCoop не грузится, попробуй один, потом другой; лаунчер и сам переключается на папку игры.
+Uninstall	Удаление
+In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.	В Настройки > О программе: удаляет весь MWCoop (вместе с папками) и MSCLoader от MWCoop в Корзину. Твоё сохранение, моды и официальный MSCLoader остаются.
+The star at the top: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in the Outfit tab!	Звезда наверху: те, кто вносит что-то, чтобы MWCoop стал лучше. Спасибо Dom за 155 комплектов одежды во вкладке «Одежда»!
+In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.	В «Логи»: если MWCoop не грузится, включи его, запусти игру и создай zip. Он записывает всё, что делает лаунчер, и что игра реально загрузила.
+Compatibility modes	Режимы совместимости
+In Settings > Game. After a crash, Windows sometimes adds a compatibility mode to the game, and MWCoop stops loading: the launcher removes it before every game.	В Настройки > Игра. После вылета Windows иногда добавляет игре режим совместимости, и MWCoop перестаёт грузиться: лаунчер убирает его перед каждой игрой.
+Everything to play trouble-free, sorted into categories you expand: install, host, join, share your mods, Copy / Folder / Steam… and fixes for common problems, with pictures.	Всё для игры без проблем, по раскрывающимся категориям: установка, хостинг, подключение, обмен модами, Копия / Папка / Steam… и решения частых проблем, с картинками.
+In-game keys	Клавиши в игре
+In Game options > Keys: click a pill then press the key you want. Chat (T), wallet to give money to others (N), voice (V).	В Настройки игры > Клавиши: нажми на плашку, затем нужную клавишу. Чат (T), кошелёк, чтобы дать деньги другим (N), голос (V).
+Imported face and clothes	Своё лицо и одежда
+Your own face, top or pants: pick the zone (Head, Torso, Legs), Template opens the game's image with its seams, paint over it, then import. \"Custom face\", \"Custom top\", \"Custom pants\" in the list; others see it in game.	Своё лицо, верх или штаны: выбери зону (Голова, Торс, Ноги), Шаблон открывает картинку игры со швами, рисуй поверх и импортируй. «Своё лицо», «Свой верх», «Свои штаны» в списке; другие видят это в игре.
+Car trim	Комплектация машины
+In Car: besides the color, the CORRIS trim (L, LX, SLX, GT) for a new game. The host gives it to their guests.	В «Машина»: кроме цвета, комплектация CORRIS (L, LX, SLX, GT) для новой игры. Хост передаёт её гостям.
+Graphics and co-op options sorted by type: Voice, Faces, Game and sharing (host's files, starting money), Keys. The groups of this bar fold with a click on their title.	Графика и настройки коопа по типам: Голос, Лица, Игра и обмен (файлы хоста, стартовые деньги), Клавиши. Группы этой панели сворачиваются кликом по заголовку.
+The host can allow cheats (Game options > Game and sharing). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.	Хост может разрешить читы (Настройки игры > Игра и обмен). В игре: панель (F7, задаётся в Клавишах) или команды чата (/help): к игроку, места, деньги, лечение, время, снег. О каждом чите узнают все.
+In game, M (set in Game options > Keys) opens the map: the other players live, places, wheel to zoom, drag to move.	В игре M (задаётся в Настройки игры > Клавиши) открывает карту: другие игроки в реальном времени, места, колесо — зум, перетаскивание — сдвиг.
+Third-person view	Вид от третьего лица
+In game, F5 (set in Game options > Keys) switches to third person: your character seen from behind on foot, your vehicle seen from behind while driving. Aiming and picking up work as usual.	В игре F5 (задаётся в Настройки игры > Клавиши) включает вид от третьего лица: персонаж со спины пешком, машина сзади за рулём. Прицеливание и подбор работают как обычно.
+Game options reorganized	Настройки игры переделаны
+Three blocks: Co-op, the game's video options, then MWCoop's enhanced ones. Each category has its icon. Unity's configuration window is now skipped: set your screen here.	Три блока: Кооп, видеонастройки игры, затем улучшенные от MWCoop. У каждой категории свой значок. Окно настроек Unity теперь пропускается: экран настраивается здесь.
+In game, F8: your camera becomes a small drone to take photos (viewfinder, zoom, tilt, flash). Keys are set in Game options > Drone camera.	В игре F8: камера становится маленьким дроном для фото (видоискатель, зум, наклон, вспышка). Клавиши — в Настройки игры > Камера-дрон.
+Vanilla and RT	Vanilla и RT
+Two new presets: Vanilla brings back the original game options, RT turns on ray-traced sun shadows (DXR-capable graphics card, in development). Its settings: Ray tracing category.	Два новых пресета: Vanilla возвращает исходные настройки игры, RT включает тени от солнца с трассировкой лучей (видеокарта с DXR, в разработке). Настройки RT: категория «Трассировка лучей».
+Rivett VIN plate	VIN-табличка Rivett
+In Car, under the trim: the CORRIS options for a new game (year, engine, gearbox, windshield, vinyl roof, wheels, radio...), like the game's plate. The host gives them to their guests.	В «Машина», под комплектацией: опции CORRIS для новой игры (год, двигатель, КПП, лобовое стекло, виниловая крыша, колёса, радио...), как табличка в игре. Хост передаёт их гостям.
+Rivett custom paint	Своя покраска Rivett
+In Car, at the top of the preview: your own paint on the CORRIS, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's; the host sends it to their guests.	В «Машина», вверху превью: твоя покраска CORRIS, нарисованная на шаблоне игры. В игре купи \"Custom paint made by artist\" у Fleetari; хост отправляет её гостям.
+Turn a mod on or off	Включить или выключить мод
+In Mods, each mod's \"On\" switch: off, the mod is no longer loaded at all (its DLL becomes .dll.off) nor sent to guests. Back on, it returns at the next launch.	В «Моды» переключатель «Вкл» у каждого мода: выключен — мод вообще не загружается (его DLL становится .dll.off) и не отправляется гостям. Снова включён — вернётся при следующем запуске.
+Let's go!	Поехали!
+Have fun together in Finland. And if something goes wrong: the logs, and the Discord.	Приятной совместной игры в Финляндии. А если что-то не так: логи и Discord.
+Home	Главная
+Sent content	Отправляемый контент
+Mods	Моды
+MY CHARACTER	МОЙ ПЕРСОНАЖ
+SHARING	ОБМЕН
+GAME	ИГРА
+MEDIA	МЕДИА
+INFO	ИНФО
+Bust of Pasquale Paoli	Бюст Паскуале Паоли
+The Paoli bust in the Museum of Corsica, after the one in the Palazzu Naziunale in Corte, scanned by JF Andreani for Scan the World (MyMiniFactory), CC BY-NC-SA license. Simplified for the game.	Бюст Паоли из Музея Корсики, по образцу бюста из Palazzu Naziunale в Корте, отсканирован JF Andreani для Scan the World (MyMiniFactory), лицензия CC BY-NC-SA. Упрощён для игры.
+Bust of Napoleon	Бюст Наполеона
+The Napoleon bust in the Museum of Corsica, after Antoine-Denis Chaudet, scanned by Oliver Laric (The Usher Gallery, Lincoln), free of copyright restriction. Simplified for the game.	Бюст Наполеона из Музея Корсики, по Антуану-Дени Шоде, отсканирован Oliver Laric (The Usher Gallery, Lincoln), без ограничений авторских прав. Упрощён для игры.
+3D model	3D-модель
+The drone of the drone camera (photo mode), by Kira on Sketchfab: sketchfab.com/GalaninaKira, model \"Drone\", CC BY 4.0 license. Simplified for the game.	Дрон для камеры-дрона (фоторежим), автор Kira на Sketchfab: sketchfab.com/GalaninaKira, модель «Drone», лицензия CC BY 4.0. Упрощён для игры.
+3D models	3D-модели
+The sleeping bag models (rolled and unrolled), on Sketchfab: sketchfab.com/WillBarrow. One bag per player, in the starting bedroom.	Модели спального мешка (свёрнутого и развёрнутого), на Sketchfab: sketchfab.com/WillBarrow. Один мешок на игрока, в спальне в начале игры.
+Outfits	Одежда
+A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).	Пак из 155 комплектов одежды для персонажа: 84 верха, 27 штанов и 44 лица. Во вкладке «Одежда», после игровых («Одежда Dom 12»…).
+PLAY	ИГРАТЬ
