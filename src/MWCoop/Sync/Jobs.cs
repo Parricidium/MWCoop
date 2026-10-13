@@ -462,7 +462,10 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (j.Noisy && now - j.NoisySince > 30f) { j.Noisy = false; j.WindowStart = now; j.Count = 0; Log.Info("quete : " + j.Key + " de nouveau envoye"); }
             if (now - j.WindowStart > 10f) { j.WindowStart = now; j.Count = 0; }
-            if (++j.Count > (j.Control ? 40 : 5) || j.Noisy)
+            // (molette d'une manivelle de vitre, d'un bouton tourne : un cran = un envoi, une vitre entiere en fait 25 ; elle ne
+            // tourne jamais seule -- Menor, 12/10 : vitre en pause 30 s a mi-course chez l'autre)
+            int cap = !j.Control ? 5 : j.F.FsmName == "Knob" && from != null && j.InputStates.Contains(from.Name) ? 300 : 40;
+            if (++j.Count > cap || j.Noisy)
             {
                 if (!j.Noisy) Log.Warn("quete : " + j.Key + " change trop souvent, en pause 30 s");
                 j.Noisy = true;
