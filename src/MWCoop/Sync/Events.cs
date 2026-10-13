@@ -236,8 +236,10 @@ namespace MWCoop
 
         public static void OnMessage(Peer from, NetReader r)
         {
-            if (Session.IsHost) return;   // (seul l'hote decide)
             string key = r.Str();
+            // (vitres : de tous, relayees par l'hote -- sur ce canal, inconnues des anciennes versions)
+            if (key.StartsWith(WindowCranks.WinPrefix)) { WindowCranks.OnWinMessage(from, key, r, true); return; }
+            if (Session.IsHost) return;   // (seul l'hote decide)
             if (key == TeimoSled.Key) { TeimoSled.OnMessage(r); return; }   // (luge de Teimo : sur ce canal, inconnue des anciennes versions)
             int n = r.U8();
             Ev e;

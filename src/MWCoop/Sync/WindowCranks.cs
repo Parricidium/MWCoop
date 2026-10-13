@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using HutongGames.PlayMaker;
+using MWCoop.Net;
 using UnityEngine;
 
 namespace MWCoop
@@ -29,11 +31,12 @@ namespace MWCoop
         }
         static readonly System.Collections.Generic.List<Mirror> mirrors = new System.Collections.Generic.List<Mirror>();
 
-        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); }
+        public static void OnLevelLoaded() { at = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1; mirrors.Clear(); wins.Clear(); nextWinScan = 0f; }
 
         public static void Update()
         {
             Drive();
+            TickWins();
             if (at < 0 || Time.realtimeSinceStartup < at) return;
             at = -1;
             int n = 0;
@@ -51,6 +54,7 @@ namespace MWCoop
                 if (Make(f, frontR, glassR)) n++;
             }
             if (n > 0) Log.Info("vitres : manivelle passager ajoutee a " + n + " voiture(s)");
+            nextWinScan = 0f;   // (vitres a suivre, temoins compris)
         }
 
         static bool Make(PlayMakerFSM knob, Transform frontR, Transform glassR)
@@ -125,6 +129,86 @@ namespace MWCoop
         }
 
         const float ExtraDown = 0.15f;
+
+        // ---------------------------------------------------------------- pose des vitres
+        // La manivelle est rejouee chez les autres (Jobs), mais leur automate repart aussitot ("State 1" -> "Get scroll" ->
+        // "Mouse off 2" : la souris n'y est pas) et l'iTween ne bouge la vitre que l'image ou l'etat est actif : chez l'autre
+        // la vitre bougeait a peine (journaux de .nolly, 12/10 : « -> Mouse off 2 (voulu State 1) »). Ici, celui qui tourne la
+        // manivelle (il la vise, a moins de 1,3 m) envoie la pose locale de la vitre 10 fois par seconde tant qu'elle bouge, puis
+        // une derniere fois (fiable) ; les autres la posent. L'hote redit toutes les 15 s la pose de chaque vitre (arrivants).
+        // Canal des evenements (Events), cle « vitre:<chemin de la manivelle> ». Toutes les voitures dont la manivelle ('Knob',
+        // variable Windows) vise une vitre, et le temoin de la vitre passager (Drive la pose en miroir).
+        class Win { public string Key; public PlayMakerFSM Knob; public Transform Glass; public float AimAt = -9f, LastSend, RemoteAt = -9f; public Vector3 SentPos; public Quaternion SentRot; public bool Moving; }
+        static readonly List<Win> wins = new List<Win>();
+        static float nextWinScan, nextWinFull;
+        public const string WinPrefix = "vitre:";
+
+        static void ScanWins()
+        {
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            {
+                if (f == null || f.FsmName != "Knob") continue;
+                FsmGameObject w = f.FsmVariables.FindFsmGameObject("Windows");
+                if (w == null || w.Value == null) continue;
+                string gn = w.Value.name;
+                if (gn != "vitre MWCoop" && gn.IndexOf("lass") < 0) continue;   // (pas les molettes du chauffage : Windows = CarTemp...)
+                if (VehicleSync.CarRoot(f.transform) == null) continue;
+                bool known = false;
+                foreach (Win x in wins) if (x.Knob == f) { known = true; break; }
+                if (known) continue;
+                wins.Add(new Win { Key = WinPrefix + Recon.Path(f.transform), Knob = f, Glass = w.Value.transform });
+            }
+        }
+
+        static void TickWins()
+        {
+            if (!Session.Active || !PlayerSync.InGame) return;
+            float now = Time.realtimeSinceStartup;
+            if (now >= nextWinScan) { nextWinScan = now + 30f; int before = wins.Count; ScanWins(); if (wins.Count != before && logs++ < 12) Log.Info("vitres : " + wins.Count + " vitres suivies (pose de celui qui tourne la manivelle)"); }
+            if (wins.Count == 0) return;
+            Transform cam = PlayerSync.LocalCamera;
+            for (int i = wins.Count - 1; i >= 0; i--)
+            {
+                Win w = wins[i];
+                if (w.Knob == null || w.Glass == null) { wins.RemoveAt(i); continue; }
+                if (cam != null)
+                {
+                    Vector3 d = w.Knob.transform.position - cam.position;
+                    if (d.sqrMagnitude < 1.3f * 1.3f && Vector3.Angle(cam.forward, d) < 12f) w.AimAt = now;
+                }
+                bool mine = now - w.AimAt < 0.6f && now - w.RemoteAt > 0.5f;
+                if (!mine) { w.Moving = false; continue; }
+                Vector3 p = w.Glass.localPosition; Quaternion q = w.Glass.localRotation;
+                bool changed = (p - w.SentPos).sqrMagnitude > 1e-6f || Quaternion.Angle(q, w.SentRot) > 0.2f;
+                if (changed && now - w.LastSend >= 0.1f) { SendWin(w, false); w.Moving = true; }
+                else if (!changed && w.Moving && now - w.LastSend > 0.4f) { SendWin(w, true); w.Moving = false; }
+            }
+            if (Session.IsHost && Session.RemoteCount > 0 && now >= nextWinFull)
+            {
+                nextWinFull = now + 15f;
+                foreach (Win w in wins) if (!w.Moving) SendWin(w, true);
+            }
+        }
+
+        static void SendWin(Win w, bool reliable)
+        {
+            w.SentPos = w.Glass.localPosition; w.SentRot = w.Glass.localRotation; w.LastSend = Time.realtimeSinceStartup;
+            Session.SendAll(new NetWriter(Msg.Event).Str(w.Key).Vec(w.SentPos).Quat(w.SentRot), reliable);
+        }
+
+        public static void OnWinMessage(Peer from, string key, NetReader r, bool reliable)
+        {
+            Vector3 p = r.Vec(); Quaternion q = r.Quat();
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Event).Str(key).Vec(p).Quat(q), reliable, from.Id);
+            Win w = null;
+            foreach (Win x in wins) if (x.Key == key) { w = x; break; }
+            if (w == null || w.Glass == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (now - w.AimAt < 1f) return;   // (on la tourne ici en ce moment : la notre fait foi)
+            w.RemoteAt = now;
+            w.Glass.localPosition = p; w.Glass.localRotation = q;
+            w.SentPos = p; w.SentRot = q;
+        }
 
         // Course de la vitre : position visee par l'iTween de « State 1 » (0,1 / -0,1 / -0,4 sur la SORBET).
         static float DownTarget(GameObject knob)
@@ -207,9 +291,21 @@ namespace MWCoop
 
         static float MaxDiff(Matrix4x4 a, Matrix4x4 b) { float e = 0f; for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) e = Mathf.Max(e, Mathf.Abs(a[i, j] - b[i, j])); return e; }
         static int tStep; static Vector3 l0, r0; static Quaternion ql0, qr0; static Matrix4x4 ml0, mr0; static Transform gl, gr, car; static PlayMakerFSM kl, kr; static Camera tcam;
+        static bool suiviLogged;
         public static void Test(string mode, float t)
         {
+            // [Test] Autotest=vitre-suivi (invite, avec Autotest=vitre chez l'hote) : a 50 s, pose des deux vitres de la SORBET
+            // dans leur pivot (attendu : celle de l'hote apres ses 3 s de manivelle, droite comprise en miroir).
+            if (mode == "vitre-suivi" && t > 50f && !suiviLogged)
+            {
+                suiviLogged = true;
+                GameObject s = GameObject.Find("SORBET(190-200psi)");
+                Transform a = s != null ? s.transform.Find("Doors/DoorFront(leftx)/FrontL/WindowPivot/GlassPivot") : null, b = s != null ? s.transform.Find("Doors/DoorFront(right)/FrontR/WindowPivot/GlassPivot") : null;
+                Log.Info("autotest : vitre-suivi, gauche " + (a != null ? a.localPosition.ToString("F3") : "?") + " ; droite " + (b != null ? b.localPosition.ToString("F3") : "?") + " (" + wins.Count + " vitres suivies)");
+                return;
+            }
             if (mode != "vitre") return;
+            if (tStep == 1 && t < 31f) foreach (Win w in wins) if (w.Key.Contains("SORBET")) w.AimAt = Time.realtimeSinceStartup;   // (comme si on la visait)
             if (tStep == 0 && t > 25f)
             {
                 GameObject s = GameObject.Find("SORBET(190-200psi)");
