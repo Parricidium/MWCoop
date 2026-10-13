@@ -64,6 +64,21 @@ namespace MWCoop
         static readonly Vector2[] RoadEdge = { new Vector2(-1600f, 1112f), new Vector2(-1590f, 1107f), new Vector2(-1580f, 1102f), new Vector2(-1570f, 1098f),
             new Vector2(-1560f, 1093f), new Vector2(-1550f, 1090f), new Vector2(-1540f, 1090f), new Vector2(-1530f, 1092f) };
 
+        // Bord est de la grande route (AsphaltRoad) le long du terrain, releve a la sonde.
+        static readonly Vector2[] MainRoadEdge = { new Vector2(-1624f, 1066f), new Vector2(-1619f, 1084f), new Vector2(-1615f, 1100f), new Vector2(-1609f, 1112f), new Vector2(-1600f, 1122f) };
+
+        static float DistToLine(Vector2 p, Vector2[] line)
+        {
+            float best = float.MaxValue;
+            for (int i = 0; i + 1 < line.Length; i++)
+            {
+                Vector2 a = line[i], b = line[i + 1], ab = b - a;
+                float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+                best = Mathf.Min(best, (a + ab * t - p).magnitude);
+            }
+            return best;
+        }
+
         static Vector2 EdgeAt(float x)
         {
             for (int i = 0; i + 1 < RoadEdge.Length; i++)
@@ -187,6 +202,65 @@ namespace MWCoop
             GameObject terr = GameObject.Find("MAP/MESH/TERRAIN_OBJ");
             if (terr == null || pads.Count == 0) return;
             const float Blend = 12f, Flat = 4f;   // (sol du jeu grossier : un sommet tous les 5 a 10 m)
+            System.Func<Vector3, Vector2> weight = w =>
+            {
+                float best = 0f, target = 0f;
+                foreach (float[] p in pads)
+                {
+                    Vector3 loc = Quaternion.Inverse(Quaternion.Euler(0, p[2], 0)) * new Vector3(w.x - p[0], 0, w.z - p[1]);
+                    float dx = Mathf.Max(0f, Mathf.Abs(loc.x) - p[3] - Flat), dz = Mathf.Max(0f, Mathf.Abs(loc.z) - p[4] - Flat);
+                    float d = Mathf.Sqrt(dx * dx + dz * dz);
+                    if (d >= Blend) continue;
+                    float k = 1f - Mathf.SmoothStep(0f, 1f, d / Blend);
+                    if (k > best) { best = k; target = p[5]; }
+                }
+                // Pres des routes, le sol ne bouge pas : leurs bords enneiges (le bourrelet le long de la route) font partie du
+                // maillage de la route, fusionne par le jeu (statique, illisible) -- abaisse dessous, le sol laissait le bourrelet
+                // en l'air, ombres de l'autre cote visibles au travers (retour de JD, 13/10). Rien a moins de 2 m, raccord jusqu'a 8 m.
+                float dr = Mathf.Min(DistToLine(new Vector2(w.x, w.z), RoadEdge), DistToLine(new Vector2(w.x, w.z), MainRoadEdge));
+                best *= Mathf.SmoothStep(0f, 1f, (dr - 2f) / 6f);
+                return new Vector2(best, target);
+            };
+            // Couches posees sur le sol (bourrelets de neige des routes -- Snowbanks, sans collision --, routes, trottoirs) : le meme
+            // deplacement que le sol sous elles, mesure sur le sol AVANT de le toucher. Sinon elles flottaient au-dessus du sol abaisse
+            // (plaque blanche, liseré sous les murs : retour de JD, 13/10).
+            var grassCols = new List<MeshCollider>();
+            foreach (Transform t in terr.transform) if (t.name == "Grass" && t.GetComponent<MeshCollider>() != null) grassCols.Add(t.GetComponent<MeshCollider>());
+            System.Func<float, float, float> grassY = (x, z) =>
+            {
+                RaycastHit h; var ray = new Ray(new Vector3(x, 300f, z), Vector3.down);
+                foreach (MeshCollider c in grassCols) if (c.Raycast(ray, out h, 500f)) return h.point.y;
+                return float.NaN;
+            };
+            int layers = 0;
+            foreach (Transform t in terr.transform)
+            {
+                if (t.name == "Grass") continue;
+                MeshFilter mf = t.GetComponent<MeshFilter>(); MeshCollider mc = t.GetComponent<MeshCollider>();
+                Mesh m = mf != null ? mf.sharedMesh : null;
+                if (m == null) continue;
+                Vector3[] v;
+                try { v = m.vertices; } catch { Log.Info("defrichage : couche " + t.name + " illisible"); continue; }
+                Matrix4x4 l2w = t.localToWorldMatrix, w2l = t.worldToLocalMatrix;
+                int n = 0, inside = 0, nan = 0;
+                for (int i = 0; i < v.Length; i++)
+                {
+                    Vector3 w = l2w.MultiplyPoint3x4(v[i]);
+                    Vector2 bt = weight(w);
+                    if (bt.x <= 0f) continue;
+                    inside++;
+                    float g = grassY(w.x, w.z);
+                    if (float.IsNaN(g)) { nan++; continue; }
+                    w.y += Mathf.Lerp(g, bt.y, bt.x) - g;
+                    v[i] = w2l.MultiplyPoint3x4(w); n++;
+                }
+                if (inside > 0 || v.Length == 0) Log.Info("defrichage : couche " + t.name + " : " + v.Length + " sommets, " + inside + " dans la zone, " + nan + " sans sol dessous, " + grassCols.Count + " sols");
+                if (n == 0) continue;
+                m.vertices = v; m.RecalculateBounds();
+                if (mc != null && mc.sharedMesh == m) { mc.sharedMesh = null; mc.sharedMesh = m; }
+                layers += n;
+                Log.Info("defrichage : couche " + t.name + " : " + n + " sommet(s) suivent le sol");
+            }
             int moved = 0;
             foreach (Transform t in terr.transform)
             {
@@ -203,16 +277,8 @@ namespace MWCoop
                 for (int i = 0; i < v.Length; i++)
                 {
                     Vector3 w = l2w.MultiplyPoint3x4(v[i]);
-                    float best = 0f, target = 0f;
-                    foreach (float[] p in pads)
-                    {
-                        Vector3 loc = Quaternion.Inverse(Quaternion.Euler(0, p[2], 0)) * new Vector3(w.x - p[0], 0, w.z - p[1]);
-                        float dx = Mathf.Max(0f, Mathf.Abs(loc.x) - p[3] - Flat), dz = Mathf.Max(0f, Mathf.Abs(loc.z) - p[4] - Flat);
-                        float d = Mathf.Sqrt(dx * dx + dz * dz);
-                        if (d >= Blend) continue;
-                        float k = 1f - Mathf.SmoothStep(0f, 1f, d / Blend);
-                        if (k > best) { best = k; target = p[5]; }
-                    }
+                    Vector2 bt = weight(w);
+                    float best = bt.x, target = bt.y;
                     if (best <= 0f) continue;
                     w.y = Mathf.Lerp(w.y, target, best);
                     v[i] = w2l.MultiplyPoint3x4(w); n++;
@@ -224,7 +290,7 @@ namespace MWCoop
                 moved += n;
                 Log.Info("defrichage : sol " + t.name + " (" + v.Length + " sommets) : " + n + " sommet(s) nivele(s)");
             }
-            Log.Info("defrichage : terrassement, " + moved + " sommet(s) du sol deplaces");
+            Log.Info("defrichage : terrassement, " + moved + " sommet(s) du sol et " + layers + " des couches posees dessus deplaces");
         }
 
         // [Boutique] MuseoEssai=x,z,cap,largeur,profondeur,hauteur : volume d'essai du musee (rouge de Falun, toit gris), pour juger
@@ -250,7 +316,7 @@ namespace MWCoop
             Shader sh = Shader.Find("Legacy Shaders/Diffuse") ?? Shader.Find("Diffuse");
             GameObject body = GameObject.CreatePrimitive(PrimitiveType.Cube);
             body.transform.SetParent(root.transform, false);
-            body.transform.localPosition = new Vector3(0, h / 2 - 0.6f, 0); body.transform.localScale = new Vector3(w, h + 1.2f, d);
+            body.transform.localPosition = new Vector3(0, h / 2 - 1.5f, 0); body.transform.localScale = new Vector3(w, h + 3f, d);   // (3 m sous le sol : pas de bord qui flotte la ou le terrain redescend)
             body.GetComponent<Renderer>().material = new Material(sh) { color = new Color(0.55f, 0.16f, 0.1f) };
             GameObject roof = GameObject.CreatePrimitive(PrimitiveType.Cube);
             roof.transform.SetParent(root.transform, false);
