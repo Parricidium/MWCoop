@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -72,6 +72,8 @@ namespace MWCoop
                 MuseoFront(frontDrop);
                 MuseoRoofs();
                 MuseoInterior();
+                MuseoFurniture();
+                MuseoExhibits();
                 Flush();
                 MuseoDoors();
                 MuseoLights();
@@ -399,9 +401,11 @@ namespace MWCoop
                 g.transform.SetParent(museo.transform, false); g.transform.localPosition = p;
                 var l = g.AddComponent<Light>(); l.type = LightType.Point; l.color = warm; l.intensity = i; l.range = r; l.shadows = LightShadows.None;
             };
-            point(new Vector3(0, 5.2f, 0.5f), 1.6f, 10f);
-            point(new Vector3(-6.6f, 3.2f, 0f), 1.4f, 8f);
-            point(new Vector3(6.6f, 3.2f, 0f), 1.4f, 8f);
+            point(new Vector3(0, 5.2f, 0.5f), 2.0f, 11f);
+            point(new Vector3(-6.6f, 3.3f, -1.5f), 2.0f, 9f);
+            point(new Vector3(-6.6f, 3.3f, 2.5f), 1.6f, 7f);
+            point(new Vector3(6.6f, 3.3f, -1.5f), 2.0f, 9f);
+            point(new Vector3(6.6f, 3.3f, 2.5f), 1.6f, 7f);
             point(new Vector3(0, 2.75f, MuFront + 1.2f), 1.3f, 6f);   // sous l'auvent
             // enseigne : deux projecteurs sur l'auvent
             foreach (float x in new[] { -1.6f, 1.6f })

@@ -1,0 +1,47 @@
+# Musee de la Corse : accrochage. nom|genre|x|y|z|face|largeur[|plaque]
+# genre : maalaus (tableau), kuva (photo), kartta (carte, gravure), otsikko (titre) ; face : px nx pz nz ;
+# plaque : (rien) a droite de l'image, ala = dessous, ei = sans plaque. Repere du musee : x largeur (-10..10),
+# z profondeur (arriere -5, facade des ailes +5), y depuis le plancher.
+
+# ---- hall : grand tableau du fond, gravures et tableaux en hauteur
+A-paysage-lear-valdoniello|maalaus|0|2.95|-4.79|pz|3.4
+B-cargese-lear|kartta|-2.98|4.95|-3.0|px|2.2|ei
+A-bonifacio-falaises|kartta|-2.98|4.95|0|px|2.2|ei
+B-bavella-lear|maalaus|-2.98|4.95|3.0|px|2.2|ei
+B-musiciens-ajaccio|maalaus|2.98|4.95|-3.0|nx|1.5|ei
+A-col-de-sorba-hummel|maalaus|2.98|4.95|0|nx|2.4|ei
+C-tour-de-corse-1973-plaque|kuva|2.98|4.95|3.0|nx|2.0|ei
+
+# ---- aile ouest : la Corse
+T-korsika|otsikko|-6.48|2.55|0|px|2.5
+A-carte-seutter|kartta|-9.79|1.75|0|px|1.35
+B-drapeau-cargese|kuva|-9.79|1.65|-4.1|px|1.0
+B-paoli|maalaus|-9.79|1.7|3.3|px|0.9
+B-napoleon-1792|maalaus|-6.55|1.75|-4.79|pz|0.75
+B-maison-bonaparte|kuva|-3.75|1.65|-4.79|pz|0.9
+B-chataignier|kuva|-9.25|2.0|-4.79|pz|0.45|ala
+B-berger|kuva|-3.7|2.05|4.79|nz|0.6|ala
+B-tour-genoise|kuva|-5.6|2.05|4.79|nz|0.55|ala
+B-paysans-cheval|kuva|-7.4|2.05|4.79|nz|0.55|ala
+B-couteau-vendetta|kuva|-9.3|2.05|4.79|nz|0.6|ala
+B-ajaccio-1900|kuva|-6.49|1.6|-2.1|px|0.85
+B-bastia-1900|kuva|-6.49|1.6|-0.3|px|0.85
+B-calvi|kuva|-6.49|1.6|1.5|px|0.85
+B-sartene|kuva|-6.71|1.6|2.1|nx|0.85
+B-corte|kuva|-6.71|1.6|0.3|nx|0.85
+B-village-montagne|kuva|-6.71|1.6|-1.5|nx|0.85
+
+# ---- aile est : sport automobile
+T-ralli|otsikko|6.48|2.55|0|nx|2.5
+C-tour-de-corse-1977|kuva|9.79|1.65|0.35|nx|1.5
+C-tour-de-corse-1962|kuva|9.79|1.65|-3.2|nx|0.9
+C-stratos-munari-1974|kuva|9.79|1.65|4.15|nx|0.9
+C-alpine-a110-1973|kuva|7.1|1.65|-4.79|pz|0.8
+C-stratos-waldegard-1975|kuva|4.4|1.65|-4.79|pz|0.85
+C-vatanen-escort-1978|kuva|9.25|2.0|-4.79|pz|0.55|ala
+C-peugeot-205t16-1985|kuva|6.49|1.6|2.1|nx|0.85
+C-delta-s4-alen-1986|kuva|6.49|1.6|0.3|nx|0.85
+C-delta-auriol-1990|kuva|6.49|1.6|-1.5|nx|0.85
+C-impreza-sainz-1994|kuva|6.71|1.6|-2.1|px|0.85
+C-alen-fiat131-1978|kuva|6.71|1.6|-0.3|px|0.85
+C-toivonen-porsche-1984|kuva|6.71|1.6|1.5|px|0.85
