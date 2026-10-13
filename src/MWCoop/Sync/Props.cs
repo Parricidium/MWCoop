@@ -157,6 +157,8 @@ namespace MWCoop
             // Valise du mod « Suitcase » (Marshalx14, demande de JD, 11/10) : objet « Suitcase » a la racine de la scene, ses
             // morceaux Part0... ; une seule par partie. Hors des racines du monde : jamais suivie, chacun avait la sienne ailleurs.
             if (k == null && tn == "Suitcase" && t.parent == null && t.Find("Part0") != null) k = SuitcaseKey;
+            // Cellule camping du mod RAM 1500 posee a part (montee : rangee sous le Ram, elle le suit) -- prise a la main comme une piece.
+            if (k == null && tn == "CamperShell" && t.parent == null) k = "w:mod:ramcamper";
             if (k != null) { worldKeys[rb.gameObject] = k; return k; }
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement. Cle
             // par son UT (maison, usine), pas par l'endroit : tenue en main, elle est sous PLAYER pour les deux.
