@@ -70,6 +70,7 @@ namespace MWCoop
             public Dictionary<Joint, Vector2> JointsWas;   // attaches rendues incassables sur la copie
             public float NextJoints;
             public float LastRemote;
+            public float Ts = -1f; public int TsFrom = -1;   // heure de la mesure (horloge de l'emetteur) et emetteur
             public Vector3 Pos, Vel, AngVel;
             public Quaternion Rot;
             public bool Kinematic;
@@ -1282,9 +1283,20 @@ namespace MWCoop
                 if (rb != null) rb.interpolation = on ? RigidbodyInterpolation.None : RigidbodyInterpolation.Interpolate;
         }
 
+        // Temps ecoule depuis la mesure du dernier etat recu : a l'horloge de l'emetteur s'il la donne (independant de
+        // l'heure d'arrivee du paquet, qui varie), sinon depuis sa reception.
+        static readonly float[] clockOff = new float[256];
+        static readonly bool[] clockSet = new bool[256];
+        static float Since(Car c)
+        {
+            float now = Time.realtimeSinceStartup;
+            float dt = c.TsFrom >= 0 && clockSet[c.TsFrom] ? now - clockOff[c.TsFrom] - c.Ts : now - c.LastRemote;
+            return Mathf.Clamp(dt, 0f, 0.3f);
+        }
+
         static void FollowFrame(Car c)
         {
-            float dt = Mathf.Min(Time.realtimeSinceStartup - c.LastRemote, 0.3f);
+            float dt = Since(c);
             Vector3 target = c.Pos + c.Vel * dt;
             Quaternion rot = c.Rot;
             if (c.AngVel.sqrMagnitude > 1e-4f)
@@ -1299,7 +1311,7 @@ namespace MWCoop
         static void Follow(Car c)
         {
             // Extrapole a partir du dernier etat recu, puis rattrape en douceur.
-            float dt = Mathf.Min(Time.realtimeSinceStartup - c.LastRemote, 0.3f);
+            float dt = Since(c);
             Vector3 target = c.Pos + c.Vel * dt;
             Quaternion rot = c.Rot;
             if (c.AngVel.sqrMagnitude > 1e-4f)
@@ -1528,6 +1540,7 @@ namespace MWCoop
         // Drivetrain, vitesses des roues, corps -- est remise d'aplomb avant que la physique ne s'emballe (retour d'un
         // joueur, 10/10 : regime NaN apres « moteur repris en marche », jeu fige chez l'hote et chez son passager).
         static readonly MonoBehaviour[] NoComps = new MonoBehaviour[0];
+        static readonly HashSet<string> nanSeen = new HashSet<string>();
         static void Sanitize()
         {
             foreach (Car c in cars)
@@ -1568,7 +1581,12 @@ namespace MWCoop
                     foreach (System.Reflection.FieldInfo fi in fs)
                     {
                         float v = (float)fi.GetValue(m);
-                        if (!Finite(v)) { fi.SetValue(m, fi.Name == "rpm" ? 800f : 0f); fixedF++; }
+                        if (!Finite(v))
+                        {
+                            fi.SetValue(m, fi.Name == "rpm" ? 800f : 0f); fixedF++;
+                            string fk = c.Key + ":" + m.GetType().Name + "." + fi.Name + "@" + m.name;
+                            if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " " + m.GetType().Name + "." + fi.Name + " (" + m.name + ") = " + v + ", remis a " + (fi.Name == "rpm" ? 800 : 0));
+                        }
                     }
                 }
                 if (bad)
@@ -1579,6 +1597,27 @@ namespace MWCoop
                 else { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; }
                 if ((bad || fixedF > 0) && now0 >= nanLogAt) { nanLogAt = now0 + 5f; Log.Warn("voitures : " + c.Key + " valeurs non finies corrigees (" + fixedF + " reglages" + (bad ? ", corps remis a sa derniere pose valide" : "") + ")"); }
             }
+        }
+
+        // Essai [Test] SuivreNaN=<voiture> : chaque seconde, les champs flottants non finis de tous ses scripts (sans corriger).
+        public static string TestNan(string key)
+        {
+            Car c = cars.Find(x => x.Key == key || x.Key.StartsWith(key));
+            if (c == null || c.Body == null) return "NaN : " + key + " introuvable";
+            var sb = new System.Text.StringBuilder();
+            int n = 0;
+            foreach (MonoBehaviour m in c.Body.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (m == null || m is PlayMakerFSM) continue;
+                foreach (System.Reflection.FieldInfo fi in m.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                {
+                    if (fi.FieldType != typeof(float)) continue;
+                    float v = (float)fi.GetValue(m);
+                    if (Finite(v)) continue;
+                    if (n++ < 12) sb.Append(' ').Append(m.GetType().Name).Append('.').Append(fi.Name).Append('(').Append(m.name).Append(")=").Append(v);
+                }
+            }
+            return "NaN " + c.Key + " : " + n + (c.Dt != null ? " (regime " + c.Dt.rpm.ToString("F0") + ", rapport " + c.Dt.gear + ")" : "") + sb;
         }
 
         static void HotStart(Car c)
@@ -1855,6 +1894,9 @@ namespace MWCoop
                 // retour d'un joueur, 09/10 : « le conducteur bugue quand la voiture accelere »).
                 if (mode == 1) { Transform cam = PlayerSync.LocalCamera; w.Vec(cam != null ? c.Body.transform.InverseTransformPoint(cam.position) : Vector3.zero); }
             }
+            // Heure de la mesure : la pose du corps est celle du dernier pas de physique (0 a 20 ms avant cette image, variable
+            // d'un envoi a l'autre -- a 25 m/s, jusqu'a 50 cm d'ecart au hasard : la copie du passager avancait par saccades).
+            w.F32(Time.realtimeSinceStartup - Mathf.Clamp(Time.time - Time.fixedTime, 0f, Time.fixedDeltaTime));
             Session.SendAll(w, false);
         }
 
@@ -2021,6 +2063,8 @@ namespace MWCoop
                 for (int i = 0; i < 14; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
             }
             Vector3 dhead = mode == 1 && r.More ? r.Vec() : Vector3.zero;
+            float ts = r.More ? r.F32() : -1f;
+            if (!Finite(ts)) ts = -1f;
             // Valeurs non finies (NaN, infini) : jamais appliquees ni relayees -- un regime NaN recu faisait partir la
             // physique de la copie en valeurs infinies et figeait le jeu (retour d'un joueur, 10/10).
             // Valeurs finies mais folles aussi (a plus de 50 km, plus de 500 m/s : une remorque projetee chez l'autre, des
@@ -2036,6 +2080,7 @@ namespace MWCoop
             {
                 var fw = new NetWriter(Msg.Vehicle).U8(who).U8(idx).U8(mode).Vec(pos).Quat(rot).Vec(vel).Vec(ang);
                 if (driven) { fw.F32(rpm).F32(thr).F32(steer).F32(heat).U16(smask); foreach (float v in spitch) fw.F32(v); if (mode == 1) fw.Vec(dhead); }
+                if (ts >= 0f) fw.F32(ts);
                 Session.Broadcast(fw, false, who);
             }
             if (!scanned) return;
@@ -2053,7 +2098,19 @@ namespace MWCoop
                 c.RemoteDriver = mode == 1 ? who : -1;
                 c.RemoteHead = dhead;
                 c.LastRemote = Time.realtimeSinceStartup;
+                if (ts >= 0f && who >= 0 && who < clockOff.Length)
+                {
+                    // Ecart d'horloge avec l'emetteur : le plus petit vu (meilleur trajet), relache lentement vers le haut
+                    // (derive des horloges, latence qui monte pour de bon). Paquet plus vieux que le dernier : pose ignoree.
+                    float off = c.LastRemote - ts;
+                    if (!clockSet[who] || off < clockOff[who]) { clockOff[who] = off; clockSet[who] = true; }
+                    else clockOff[who] += (off - clockOff[who]) * 0.02f;
+                    if (c.TsFrom == who && ts <= c.Ts) goto skipPose;
+                    c.Ts = ts; c.TsFrom = who;
+                }
+                else c.TsFrom = -1;
                 c.Pos = pos; c.Rot = rot; c.Vel = vel; c.AngVel = ang;
+                skipPose:
                 c.Rpm = rpm; c.Throttle = thr; c.Steer = steer; c.SoundMask = smask & 0x3FFF; c.RemoteHeat = heat;
                 c.HornRemote = (smask & 0x4000) != 0;
                 c.RemoteRunning = (smask & 0x8000) != 0;

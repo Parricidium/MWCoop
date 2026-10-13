@@ -36,7 +36,7 @@ namespace MWCoop
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
         // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
         // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
-        class Belt { public GameObject Fastened, Open, Copy; public Vector3 Buckle, DriverBuckle, Top, Floor; public bool Anchors; public bool OpenHidden; public GameObject DriverOpen, DriverCopy; public bool DriverOpenHidden; public Mesh Bulged; public bool CopyPlain; public Vector3 MeshBuckle; }
+        class Belt { public GameObject Fastened, Open, Copy; public Vector3 Buckle, DriverBuckle, Top, Floor; public bool Anchors; public bool OpenHidden; public GameObject DriverOpen, DriverCopy; public bool DriverOpenHidden; public Mesh Bulged; public bool CopyPlain; public Vector3 MeshBuckle; public Dictionary<int, GameObject> Rear = new Dictionary<int, GameObject>(); public Dictionary<int, bool> RearPlain = new Dictionary<int, bool>(); }
         static readonly Dictionary<int, bool> driverBelt = new Dictionary<int, bool>();   // conducteurs distants : ceinture bouclee
         static bool driverBeltSent;
         static float driverBeltResend;
@@ -488,7 +488,7 @@ namespace MWCoop
         static void SendSeat(string car, int index, Vector3 head)
         {
             if (!Session.Active) return;
-            Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(car).U8(index + 1).Vec(head).U8(beltOn && index == 0 ? 1 : 0), true);
+            Session.SendAll(new NetWriter(Msg.Seat).U8(Session.LocalId).Str(car).U8(index + 1).Vec(head).U8(beltOn ? 1 : 0), true);   // (places arriere comprises)
         }
 
         // ---- ceintures
@@ -648,6 +648,7 @@ namespace MWCoop
         static float beltHold;
         static void BeltInput()
         {
+            if (current.Index > 0) { RearBeltInput(); return; }
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
             bool aimBuckle = false, aimHandle = false;
             Transform handle = b != null && b.Open != null ? (heldHandle ?? FindUnder(b.Open.transform, "SeatbeltHandle", null)) : null;
@@ -779,8 +780,79 @@ namespace MWCoop
         }
 
         // Montre la ceinture bouclee (copie en miroir) des voitures dont le passager avant est attache, ici ou ailleurs.
+        // Ceintures arriere (Menor, liste du 12/10, point 3) : le jeu n'en a pas ; le modele de la ceinture bouclee du
+        // conducteur, porte a chaque place arriere laterale -- deplace de la place du conducteur a celle-ci, en miroir du
+        // cote passager. Bouclee d'un clic sur sa boucle (pas de languette a tirer), vue par tous (avec la place). Place du
+        // milieu : pas de ceinture.
+        static bool RearPlace(Transform car, int index, out Vector3 offset, out bool mirror)
+        {
+            offset = Vector3.zero; mirror = false;
+            Seat s0 = null, si = null;
+            foreach (Seat s in seats) if (s.CarT == car) { if (s.Index == 0) s0 = s; if (s.Index == index) si = s; }
+            if (s0 == null || si == null || index <= 0 || Mathf.Abs(si.Head.x) < 0.15f) return false;
+            Vector3 driver = new Vector3(-s0.Head.x, s0.Head.y, s0.Head.z);
+            mirror = si.Head.x * driver.x < 0f;
+            offset = si.Head - (mirror ? s0.Head : driver);
+            return true;
+        }
+        static Vector3 RearBuckle(Belt b, Vector3 offset, bool mirror) { return (mirror ? b.Buckle : b.DriverBuckle) + offset; }
+
+        static void RearBeltInput()
+        {
+            Belt b = BeltOf(current.CarT);
+            Vector3 off; bool mir;
+            if (b == null || !RearPlace(current.CarT, current.Index, out off, out mir)) return;
+            Transform view = Camera.main != null ? Camera.main.transform : cam;
+            if (view == null) return;
+            Vector3 at = current.CarT.TransformPoint(RearBuckle(b, off, mir));
+            Vector3 d = at - view.position;
+            bool aim = d.magnitude < 1.3f && Vector3.Angle(view.forward, d) < 16f;
+            BlockHandle(aim);
+            BeltHint(aim ? (beltOn ? "UNFASTEN SEATBELT" : "FASTEN SEATBELT") : null);
+            if (!aim || !Input.GetMouseButtonDown(0)) return;
+            beltOn = !beltOn;
+            Foley(beltOn ? "seatbelt_fasten" : "seatbelt_unfasten", at);
+            Log.Info("ceinture arriere : " + (beltOn ? "attachee" : "detachee") + " (" + current.Car + ", place " + current.Index + ")");
+            SendSeat(current.Car, current.Index, headLocal);
+        }
+
+        static void UpdateRearBelts()
+        {
+            var want = new Dictionary<Transform, HashSet<int>>();
+            System.Action<Transform, int> add = (car, i) => { HashSet<int> h; if (!want.TryGetValue(car, out h)) want[car] = h = new HashSet<int>(); h.Add(i); };
+            if (current != null && current.Index > 0 && beltOn && current.CarT != null) add(current.CarT, current.Index);
+            foreach (Remote r in remote.Values)
+                if (r.Index > 0 && r.Belt)
+                    foreach (Seat s in seats) if (s.Car == r.Car && s.Index == r.Index && s.CarT != null) add(s.CarT, r.Index);
+            foreach (Transform car in want.Keys) BeltOf(car);
+            foreach (KeyValuePair<Transform, Belt> kv in belts)
+            {
+                Belt b = kv.Value;
+                if (b == null) continue;
+                HashSet<int> w; want.TryGetValue(kv.Key, out w);
+                var drop = new List<int>();
+                foreach (KeyValuePair<int, GameObject> r in b.Rear) if (w == null || !w.Contains(r.Key)) drop.Add(r.Key);
+                foreach (int i in drop) { if (b.Rear[i] != null) Object.Destroy(b.Rear[i]); b.Rear.Remove(i); }
+                if (w == null || b.Fastened == null) continue;
+                foreach (int i in w)
+                {
+                    Vector3 off; bool mir;
+                    if (!RearPlace(kv.Key, i, out off, out mir)) continue;
+                    bool plain = current != null && current.CarT == kv.Key && current.Index == i && !ThirdPerson.Active;
+                    GameObject g; bool wasPlain;
+                    if (b.Rear.TryGetValue(i, out g) && g != null && b.RearPlain.TryGetValue(i, out wasPlain) && wasPlain == plain) continue;
+                    if (g != null) Object.Destroy(g);
+                    g = BeltMeshCopy(b, kv.Key, mir, plain);
+                    g.name = "MWCoop-CeintureArriere" + i;
+                    g.transform.localPosition += off;
+                    b.Rear[i] = g; b.RearPlain[i] = plain;
+                }
+            }
+        }
+
         static void UpdateBelts()
         {
+            UpdateRearBelts();
             var want = new HashSet<Transform>();
             if (current != null && current.Index == 0 && beltOn) want.Add(current.CarT);
             foreach (Remote r in remote.Values)
@@ -1163,6 +1235,16 @@ namespace MWCoop
         public static string TestBelt()
         {
             if (current == null) return "pas assis";
+            if (current.Index > 0)
+            {
+                Belt rb = BeltOf(current.CarT); Vector3 off; bool mir;
+                if (rb == null || !RearPlace(current.CarT, current.Index, out off, out mir)) return "pas de ceinture a cette place arriere";
+                beltOn = !beltOn;
+                SendSeat(current.Car, current.Index, headLocal);
+                UpdateBelts();
+                GameObject g; rb.Rear.TryGetValue(current.Index, out g);
+                return "ceinture arriere " + (beltOn ? "attachee" : "detachee") + " (place " + current.Index + ", decalage " + off.ToString("F2") + (mir ? ", miroir" : "") + ", boucle " + RearBuckle(rb, off, mir).ToString("F2") + ", modele " + (g != null ? "montre" : "absent") + ")";
+            }
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
             if (b == null) return "pas de ceinture ici";
             beltOn = !beltOn;
