@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -89,7 +89,7 @@ namespace MWCoop
             if (a.Length == 0) return null;
             string c = Canon(a[0].TrimStart('/').ToLowerInvariant());
             string arg = a.Length > 1 ? string.Join(" ", a, 1, a.Length - 1) : "";
-            if (c == "aide") { foreach (string h in Lang.Fr ? HelpFr : HelpEn) Say(h); return null; }
+            if (c == "aide") { foreach (string h in Lang.A(HelpFr, HelpEn)) Say(h); return null; }
             if (!Allowed)
             {
                 string no = Session.Active && !Session.IsHost ? Lang.T("Triches coupées par l'hôte.", "Cheats are off (host's choice).")
@@ -233,7 +233,7 @@ namespace MWCoop
             foreach (RaycastHit h in Physics.RaycastAll(top, Vector3.down, 8f))
                 if (h.collider != null && !h.collider.isTrigger && Game.RootName(h.collider.transform) != "PLAYER" && h.point.y > best) best = h.point.y;
             Vector3 feet = new Vector3(p.At.x, best > float.NegativeInfinity ? best : p.At.y, p.At.z);
-            Menu.TeleportTo(feet + Quaternion.Euler(0f, 180f, 0f) * new Vector3(0f, 0f, 1.5f), 180f, Lang.Fr ? p.Fr : p.En);   // (TeleportTo recule de 1,5 m selon le cap : sur le point)
+            Menu.TeleportTo(feet + Quaternion.Euler(0f, 180f, 0f) * new Vector3(0f, 0f, 1.5f), 180f, Lang.T(p.Fr, p.En));   // (TeleportTo recule de 1,5 m selon le cap : sur le point)
             if (p.Face != Vector3.zero && Game.PlayerT != null)
             {   // tourne vers le lieu (le corps porte le cap ; la camera garde sa hauteur de regard)
                 Vector3 d = p.Face - p.At; d.y = 0f;

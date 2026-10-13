@@ -379,7 +379,7 @@ namespace MWCoop
                 Pussi hb = HeldBag();
                 if (hb != null && !KameraBusy)
                 {
-                    string bs = hb.Count > 0 ? Lang.T("SAC DE COURSES : " + hb.Count + " ARTICLE(S)  -  F : EN SORTIR UN    F TENU : TOUT SORTIR", "SHOPPING BAG: " + hb.Count + " ITEM(S)  -  F: TAKE ONE OUT    HOLD F: TAKE ALL OUT")
+                    string bs = hb.Count > 0 ? string.Format(Lang.T("SAC DE COURSES : {0} ARTICLE(S)  -  F : EN SORTIR UN    F TENU : TOUT SORTIR", "SHOPPING BAG: {0} ITEM(S)  -  F: TAKE ONE OUT    HOLD F: TAKE ALL OUT"), hb.Count)
                                              : Lang.T("SAC DE COURSES VIDE", "EMPTY SHOPPING BAG");
                     Style.Text(new Rect(0, Screen.height - Style.Px(120), Screen.width, Style.Px(30)), bs, 20, TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0.85f));
                     return;

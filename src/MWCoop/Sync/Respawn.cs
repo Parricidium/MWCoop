@@ -281,7 +281,7 @@ namespace MWCoop
             if (cc != null) cc.enabled = true;
             Needs();
             Log.Info("reapparition : a " + place.Name + " en " + to.ToString("F2"));
-            Hud.Toast(Lang.T("De retour \u00E0 " + place.Name, "Back at " + place.NameEn));
+            Hud.Toast(Lang.T("De retour \u00E0 ", "Back at ") + Lang.T(place.Name, place.NameEn));
             if (Session.Active) Chat.Send("* revient a " + place.Name + " *");
         }
 

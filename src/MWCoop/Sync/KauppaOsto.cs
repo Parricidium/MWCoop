@@ -32,7 +32,7 @@ namespace MWCoop
         static void Say(string fr, string en)
         {
             if (guiSub == null) guiSub = FsmVariables.GlobalVariables.FindFsmString("GUIsubtitle");
-            subText = Lang.T(fr, en);
+            subText = Lang.TG(fr, en);
             if (guiSub != null) guiSub.Value = subText; else Hud.Toast(subText);
             subUntil = Time.realtimeSinceStartup + 3.5f;
         }

@@ -216,7 +216,7 @@ namespace MWCoop
             if (offer != null)
             {
                 guiBuy.Value = true;
-                guiText.Value = Lang.T(offer.Fr, offer.En) + " " + offer.Price.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " MK";
+                guiText.Value = Lang.TG(offer.Fr, offer.En) + " " + offer.Price.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " MK";
                 if (Input.GetMouseButtonDown(0)) Take(offer);
                 else if (Input.GetMouseButtonDown(1)) PutBack(offer);
                 return;
@@ -225,7 +225,7 @@ namespace MWCoop
             {
                 guiBuy.Value = true;
                 if (now < notEnoughUntil) guiText.Value = "NOT ENOUGH MONEY";
-                else guiText.Value = Lang.T("TOTAL ", "PRICE TOTAL ") + basketTotal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " MK";
+                else guiText.Value = Lang.TG("TOTAL ", "PRICE TOTAL ") + basketTotal.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " MK";
                 if (Input.GetMouseButtonDown(0))
                 {
                     if (basketTotal > 0f && (money == null || money.Value < basketTotal)) notEnoughUntil = now + 2f;
@@ -247,7 +247,7 @@ namespace MWCoop
                 if (fDown >= 0f)
                 {
                     float held = now - fDown;
-                    if (held > 0.25f) guiText.Value = Lang.T("OUVERTURE DU SAC...", "OPENING THE BAG...");
+                    if (held > 0.25f) guiText.Value = Lang.TG("OUVERTURE DU SAC...", "OPENING THE BAG...");
                     if (held >= 1.5f) { fDown = -1f; guiText.Value = ""; TakeOut(bag, true); }
                     else if (Input.GetKeyUp(KeyCode.F)) { fDown = -1f; guiText.Value = ""; TakeOut(bag, false); }
                 }
@@ -526,6 +526,26 @@ namespace MWCoop
                         case "texte": { var tfi = typeof(GUIUtility).GetProperty("textFieldInput", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public); L("essai : keyboardControl " + GUIUtility.keyboardControl + ", textFieldInput " + (tfi != null ? tfi.GetValue(null, null) : "?") + ", eat " + Input.eatKeyPressOnTextFieldFocus); break; }
                         case "reprend": { FsmBool im = FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu"); if (im != null) im.Value = false; GameObject sy = GameObject.Find("Systems"); Transform omn = sy != null ? sy.transform.Find("OptionsMenu") : null; if (omn != null) omn.gameObject.SetActive(false); L("essai : menu du jeu referme"); break; }
                         case "camera": { FsmBool im = FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu"); L("essai : Camera.main " + (Camera.main != null ? Camera.main.name : "nul") + ", PlayerInMenu " + (im != null && im.Value) + ", curseur bloque " + Screen.lockCursor); break; }
+                        case "liste":
+                        {
+                            // liste <chemin> [profondeur] : enfants (nombre de leurs enfants, position) -- essais
+                            int sl2 = a[2].IndexOf('/'); GameObject lg = GameObject.Find(sl2 < 0 ? a[2] : a[2].Substring(0, sl2));
+                            if (lg != null && sl2 >= 0) { Transform lt = lg.transform.Find(a[2].Substring(sl2 + 1)); lg = lt != null ? lt.gameObject : null; }
+                            if (lg == null) { L("essai : pas de " + a[2]); break; }
+                            int depth = a.Length > 3 ? int.Parse(a[3]) : 1;
+                            System.Action<Transform, int> walk = null;
+                            walk = (tr, d) =>
+                            {
+                                foreach (Transform ch in tr)
+                                {
+                                    L("essai :" + new string(' ', d * 2) + " " + ch.name + " (" + ch.childCount + ") " + ch.position.ToString("F0") + (ch.gameObject.activeSelf ? "" : " [off]"));
+                                    if (d < depth) walk(ch, d + 1);
+                                }
+                            };
+                            L("essai : liste de " + a[2] + " (" + lg.transform.childCount + ")");
+                            walk(lg.transform, 1);
+                            break;
+                        }
                         case "fsms":
                         {
                             int sl = a[2].IndexOf('/'); GameObject fg = GameObject.Find(sl < 0 ? a[2] : a[2].Substring(0, sl));

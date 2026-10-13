@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -185,7 +185,7 @@ namespace MWCoop
             jailTime.SendEvent("DAY");
             int after = left != null ? left.Value : -1;
             Log.Info("prison : reveil dans la cellule, DAY envoye ici (jours " + before + " -> " + after + ")");
-            if (after < before) Hud.Toast(after > 0 ? Lang.T("Une nuit en cellule : encore " + after + " jour(s)", "A night in the cell: " + after + " day(s) left")
+            if (after < before) Hud.Toast(after > 0 ? string.Format(Lang.T("Une nuit en cellule : encore {0} jour(s)", "A night in the cell: {0} day(s) left"), after)
                                                     : Lang.T("Peine purg\u00E9e : lib\u00E9r\u00E9 dans la journ\u00E9e", "Sentence served: released during the day"));
         }
 

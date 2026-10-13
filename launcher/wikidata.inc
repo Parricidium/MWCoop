@@ -296,7 +296,7 @@ static const WikiBlock kW_Settings[] = {
     { WB_H, L"Mises à jour", L"Updates" },
     { WB_B, L"Vérifier / Mettre à jour, et « Installer automatiquement ».", L"Check / Update, and \"Install automatically\"." },
     { WB_H, L"Lanceur", L"Launcher" },
-    { WB_B, L"Thème sombre ou clair, langue français ou anglais (aussi la langue du mod en jeu).", L"Dark or light theme, French or English (also the mod's language in game)." },
+    { WB_B, L"Thème sombre ou clair, langue français, anglais ou russe (aussi la langue des menus du mod en jeu ; en russe, les textes écrits avec la police du jeu restent en anglais).", L"Dark or light theme, French, English or Russian (also the language of the mod's menus in game; in Russian, texts drawn with the game's own font stay in English)." },
     { WB_B, L"« Fermer le lanceur au lancement » : coupé par défaut. Ouvert, il montre les joueurs pendant la partie.", L"\"Close the launcher at launch\": off by default. Open, it shows the players during the game." },
     { WB_B, L"Revoir le guide de démarrage.", L"See the starting guide again." },
     { WB_H, L"Réseau", L"Network" },

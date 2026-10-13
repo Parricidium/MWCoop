@@ -18,14 +18,13 @@ namespace MWCoop
         static readonly List<Behaviour> blocked = new List<Behaviour>();
         static bool focusChat, testDone;
         static readonly string[] tabsFr = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO", "GRAPHISMES" }, tabsEn = { "PLAYERS", "APPEARANCE", "CHAT", "SYNC", "GRAPHICS" };
-        static string[] tabs { get { return Lang.Fr ? tabsFr : tabsEn; } }
+        static string[] tabs { get { return Lang.A(tabsFr, tabsEn); } }
         const int TabChat = 2;
         const string ChatField = "mwcoop-chat2";
         const string Sep = "  ·  ";
-        static string Controls { get { return Lang.T("Haut/Bas : choisir" + Sep + "Gauche/Droite : changer" + Sep + "Entr\u00E9e : valider" + Sep + "Tab, Q/E : onglet" + Sep + "F10/\u00C9chap : fermer",
-                                                     "Up/Down: select" + Sep + "Left/Right: change" + Sep + "Enter: confirm" + Sep + "Tab, Q/E: tab" + Sep + "F10/Esc: close"); } }
-        static string TabsHint { get { return Lang.T("Gauche/Droite : changer d'onglet" + Sep + "Bas ou Entr\u00E9e : entrer dans la liste",
-                                                     "Left/Right: switch tab" + Sep + "Down or Enter: go to the list"); } }
+        static string Controls { get { return Lang.T("Haut/Bas : choisir", "Up/Down: select") + Sep + Lang.T("Gauche/Droite : changer", "Left/Right: change") + Sep + Lang.T("Entr\u00E9e : valider", "Enter: confirm")
+                                                     + Sep + Lang.T("Tab, Q/E : onglet", "Tab, Q/E: tab") + Sep + Lang.T("F10/\u00C9chap : fermer", "F10/Esc: close"); } }
+        static string TabsHint { get { return Lang.T("Gauche/Droite : changer d'onglet", "Left/Right: switch tab") + Sep + Lang.T("Bas ou Entr\u00E9e : entrer dans la liste", "Down or Enter: go to the list"); } }
 
         // Navigation : ligne choisie (-1 = bandeau des onglets), defilement, touches du passage OnGUI en cours.
         static int sel, items;
@@ -687,7 +686,7 @@ namespace MWCoop
             Para(Lang.T("Pour vous seul : les autres joueurs ne voient aucune diff\u00E9rence. Gard\u00E9 pour les prochaines parties (aussi dans le lanceur).",
                         "Just for you: the other players see no difference. Kept for your next games (also in the launcher)."), Style.Dim);
             int on = Gfx.PresetOn();
-            int d = Item(Lang.T("Pr\u00E9r\u00E9glage", "Preset"), on >= 0 ? (Lang.Fr ? Gfx.Presets[on].Fr : Gfx.Presets[on].En) : Lang.T("Personnalis\u00E9", "Custom"), true,
+            int d = Item(Lang.T("Pr\u00E9r\u00E9glage", "Preset"), on >= 0 ? Lang.T(Gfx.Presets[on].Fr, Gfx.Presets[on].En) : Lang.T("Personnalis\u00E9", "Custom"), true,
                          Lang.T("Gauche/Droite : Performance, \u00C9quilibr\u00E9, Beau, Ultra", "Left/Right: Performance, Balanced, Pretty, Ultra"), false);
             if (d == -1 || d == 1) Gfx.ApplyPreset(on < 0 ? (d > 0 ? 0 : Gfx.Presets.Length - 1) : Mathf.Clamp(on + d, 0, Gfx.Presets.Length - 1));
             string[] heads = { Lang.T("IMAGE", "IMAGE"), Lang.T("OMBRES", "SHADOWS"), Lang.T("DISTANCE ET D\u00C9TAILS", "DISTANCE AND DETAIL"), Lang.T("JEU ET CONFORT", "GAME AND COMFORT"), Lang.T("LUMI\u00C8RES", "LIGHTS"), Lang.T("\u00C9CRAN", "SCREEN"),
@@ -702,10 +701,10 @@ namespace MWCoop
                     string val;
                     int k = 0;
                     if (r.Vals == null) val = v == 1 ? Lang.T("Oui", "On") : Lang.T("Non", "Off");
-                    else { for (int i = 0; i < r.Vals.Length; i++) if (r.Vals[i] == v) k = i; val = Lang.Fr ? r.Lf[k] : r.Le[k]; }
+                    else { for (int i = 0; i < r.Vals.Length; i++) if (r.Vals[i] == v) k = i; val = Lang.T(r.Lf[k], r.Le[k]); }
                     string hint = r.Heavy ? Lang.T("Lourd pour les images par seconde", "Heavy on the frame rate") : null;
                     if (r.Key == "RayTracing" && !RayTracing.Direct) hint = Lang.T("Actif au prochain lancement par le lanceur", "Active at the next launch from the launcher");
-                    int res = Item(Lang.Fr ? r.Fr : r.En, val, true, hint, false);
+                    int res = Item(Lang.T(r.Fr, r.En), val, true, hint, false);
                     if (res != -1 && res != 1) continue;
                     if (r.Vals == null) Gfx.Set(r.Key, v == 1 ? 0 : 1);
                     else { int nk = Mathf.Clamp(k + res, 0, r.Vals.Length - 1); if (nk != k) Gfx.Set(r.Key, r.Vals[nk]); }
@@ -730,7 +729,7 @@ namespace MWCoop
             var r = new Rect(0, cy - scroll + Style.Px(4), cw, h);
             cy += h + Style.Px(6);
             bool selected = me == sel;
-            if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; hint = Lang.T("Entr\u00E9e : envoyer le message" + Sep + "Haut : relire l'historique", "Enter: send the message" + Sep + "Up: read the history"); }
+            if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; hint = Lang.T("Entr\u00E9e : envoyer le message", "Enter: send the message") + Sep + Lang.T("Haut : relire l'historique", "Up: read the history"); }
             float bw = Style.Px(150);
             var rb = new Rect(r.xMax - bw, r.y, bw, h);
             var rf = new Rect(r.x, r.y, r.width - bw - Style.Px(6), h);
@@ -807,10 +806,23 @@ namespace MWCoop
             else if (testStep == 4 && t > 30f) { testStep = 5; Log.Info("autotest : tchat historique : " + string.Join(" | ", Chat.History.ToArray()) + " ; ligne " + (ChatOpen ? "ouverte" : "fermee")); }
         }
 
+        // Autotest "langue" (traduction, 13/10) : les onglets comme "menu" (20 s, un toutes les 3 s), puis des textes du jeu
+        // (police du jeu : cyrillique ?) a 37 s, la carte a 41 s, les triches a 45 s, le porte-monnaie a 49 s ; ferme a 53 s.
+        static int langStep;
+        static void TestLang(float t)
+        {
+            if (langStep == 0 && t > 37f) { langStep = 1; Game.SetGlobal("GUIinteraction", "ПРОВЕРКА ШРИФТА : ВЗЯТЬ"); Game.SetGlobal("GUIsubtitle", "Продавец: спасибо! Kiitos!"); Log.Info("autotest : langue, textes du jeu en cyrillique"); }
+            if (langStep == 1 && t > 41f) { langStep = 2; Game.SetGlobal("GUIinteraction", ""); Game.SetGlobal("GUIsubtitle", ""); MapPanel.Open = true; }
+            if (langStep == 2 && t > 45f) { langStep = 3; MapPanel.Open = false; CheatPanel.Open = true; }
+            if (langStep == 3 && t > 49f) { langStep = 4; CheatPanel.Open = false; WalletPanel.Open = true; }
+            if (langStep == 4 && t > 53f) { langStep = 5; WalletPanel.Open = false; }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "tchat") { TestChat(t); return; }
-            if (mode != "menu" || testEnd || t < 20f) return;
+            if (mode == "langue") TestLang(t);
+            if ((mode != "menu" && mode != "langue") || testEnd || t < 20f) return;
             int k = (int)((t - 20f) / 3f);
             if (k >= tabs.Length)
             {

@@ -1,4 +1,4 @@
-using HutongGames.PlayMaker;
+﻿using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -256,8 +256,8 @@ namespace MWCoop
             {
                 passOutSince = now;
                 Log.Info("monde : evanoui (" + s + "), les autres ne dorment pas : reveil seul dans " + PassOutWait + " s");
-                Hud.Toast(Lang.T("\u00C9vanoui : r\u00E9veil dans " + (int)PassOutWait + " s, l'heure ne bouge pas pour les autres (sauf si tout le monde dort)",
-                              "Passed out: waking up in " + (int)PassOutWait + " s, the clock does not move for the others (unless everyone sleeps)"));
+                Hud.Toast(string.Format(Lang.T("\u00C9vanoui : r\u00E9veil dans {0} s, l'heure ne bouge pas pour les autres (sauf si tout le monde dort)",
+                              "Passed out: waking up in {0} s, the clock does not move for the others (unless everyone sleeps)"), (int)PassOutWait));
                 return;
             }
             if (now - passOutSince < PassOutWait) return;

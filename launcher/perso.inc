@@ -226,7 +226,7 @@ static std::wstring PersoLabel(int f, const std::string &v)
         static const struct { const char *k; const wchar_t *fr, *en; } kb[] = {
             { "1714-32", L"Mince", L"Thin" }, { "1709-34", L"Svelte", L"Slim" }, { "1712-48", L"Costaud", L"Stout" },
             { "1697-42", L"Petit et rond", L"Short and round" }, { "1789-29", L"Petit et fin", L"Short and slim" } };
-        for (auto &b : kb) if (v == b.k) return g_fr ? b.fr : b.en;
+        for (auto &b : kb) if (v == b.k) return T(b.fr, b.en);
         if (!v.compare(0, 4, "pig-")) return T(L"Cochon", L"Pig");
         return Widen(v);
     }
@@ -234,7 +234,7 @@ static std::wstring PersoLabel(int f, const std::string &v)
         if (v == "perso") return f == PF_PANTS ? T(L"Pantalon perso", L"Custom pants") : T(L"Visage perso", L"Custom face");
         static const struct { const char *k; const wchar_t *fr, *en; } kp[] = {
             { "cop_pants", L"Police", L"Police" }, { "inspector_pants", L"Inspecteur", L"Inspector" }, { "psk_pants", L"PSK", L"PSK" }, { "rally_pants", L"Rallye", L"Rally" } };
-        for (auto &p : kp) if (v == p.k) return g_fr ? p.fr : p.en;
+        for (auto &p : kp) if (v == p.k) return T(p.fr, p.en);
         if (IsTenue(v)) return std::wstring(f == PF_PANTS ? T(L"Pantalon ", L"Pants ") : T(L"Visage ", L"Face ")) + TenueLabel(v);
         const char *pre = f == PF_PANTS ? "char_pants" : "char_face";
         if (!v.compare(0, strlen(pre), pre)) {
@@ -254,7 +254,7 @@ static std::wstring PersoLabel(int f, const std::string &v)
         { "latsa", L"Béret", L"Flat cap" }, { "npc_helmet", L"Casque", L"Helmet" }, { "eye_glasses", L"Lunettes", L"Glasses" }, { "eye_glasses2", L"Lunettes rondes", L"Round glasses" },
         { "eye_glasses_dsl", L"Lunettes de soleil", L"Sunglasses" }, { "bodymesh_ponytail", L"Queue de cheval", L"Ponytail" }, { "hyppyritukka", L"Coupe mulet", L"Mullet" } };
     std::wstring name = Widen(mesh);
-    for (auto &a : ka) if (mesh == a.k) name = g_fr ? a.fr : a.en;
+    for (auto &a : ka) if (mesh == a.k) name = T(a.fr, a.en);
     // meme objet en plusieurs matieres : la matiere en plus (couleur, verre)
     int same = 0, rank = 0;
     for (auto &a : g_perso.accs) if (!a.key.compare(0, mesh.size() + 1, mesh + "@")) { same++; if (a.key <= v) rank++; }
@@ -263,7 +263,7 @@ static std::wstring PersoLabel(int f, const std::string &v)
             { "glass", L"claires", L"clear" }, { "windows_out_black", L"noires", L"black" }, { "CHROME", L"chromées", L"chrome" }, { "paint_black_shiny", L"noir brillant", L"glossy black" },
             { "dashboard_glass", L"fumées", L"smoked" }, { "window_glass", L"verre", L"glass" }, { "eye_glasses_dsl", L"d'origine", L"original" } };
         std::wstring m;
-        for (auto &k : km) if (mat == k.k) m = g_fr ? k.fr : k.en;
+        for (auto &k : km) if (mat == k.k) m = T(k.fr, k.en);
         if (m.empty()) { wchar_t b[16]; swprintf_s(b, L"%d", rank); m = b; }
         name += L" (" + m + L")";
     }
@@ -573,7 +573,7 @@ static void DrawPersoRows(Graphics &g)
             SolidBrush zb(WithA(kAcc, 0.10f)); g.FillPath(&zb, &zp);
             Pen zpen(WithA(kAcc, 0.45f), 1); g.DrawPath(&zpen, &zp);
         }
-        Text(g, g_fr ? grpFr[k] : grpEn[k], RectF(748, gy[k] + 6, 300, 22), 11, FontStyleBold, g_lookZone == k ? kAcc : kGrey, StringAlignmentNear);
+        Text(g, T(grpFr[k], grpEn[k]), RectF(748, gy[k] + 6, 300, 22), 11, FontStyleBold, g_lookZone == k ? kAcc : kGrey, StringAlignmentNear);
     }
     static const wchar_t *labFr[] = { L"Chapeau", L"Lunettes", L"Cheveux", L"Visage", L"Haut", L"Pantalon", L"Corpulence" }, *labEn[] = { L"Hat", L"Glasses", L"Hair", L"Face", L"Top", L"Pants", L"Build" };
     for (int i = 0; i < kPersoRowN; i++) {
@@ -596,7 +596,7 @@ static void DrawPersoRows(Graphics &g)
         for (int k2 = 0; k2 < (int)ch.size(); k2++) if (ch[k2] == cur) at = k2;
         wchar_t cnt[32]; swprintf_s(cnt, L"%d / %d", at + 1, (int)ch.size());
         Text(g, cnt, RectF(r.X + r.Width - 196, r.Y, 92, r.Height), 12, FontStyleBold, kGrey, StringAlignmentFar);
-        Text(g, g_fr ? labFr[i] : labEn[i], RectF(r.X + 16, r.Y + 5, 200, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        Text(g, T(labFr[i], labEn[i]), RectF(r.X + 16, r.Y + 5, 200, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
         std::wstring v = PersoLabel(f, cur);
         Text(g, v, RectF(r.X + 16, r.Y + 22, r.Width - 220, 24), 15, FontStyleBold, kInk, StringAlignmentNear);
     }

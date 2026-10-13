@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -85,15 +85,15 @@ namespace MWCoop
                         "Waiting for the host: they invite you through Steam (F10 > Invite Steam friends, or Shift+Tab), then accept the invite here. "
                         + "If a friend is already hosting, their game is joined automatically.");
             else if (!connected && Session.Steam && lostSince > 0 && (silent || now - lostSince >= 30f))
-                Error = L("Aucune réponse du jeu de l'hôte par Steam depuis " + (int)(now - lostSince) + " s. Nouvel essai en continu...",
-                          "No answer from the host's game through Steam for " + (int)(now - lostSince) + " s. Retrying...");
+                Error = string.Format(L("Aucune réponse du jeu de l'hôte par Steam depuis {0} s. Nouvel essai en continu...",
+                          "No answer from the host's game through Steam for {0} s. Retrying..."), (int)(now - lostSince));
             else if (!connected && lostSince > 0 && (silent || now - lostSince >= 30f))
-                Error = L("Aucune réponse du jeu de l'hôte depuis " + (int)(now - lostSince) + " s. Le plus souvent : le pare-feu Windows de l'hôte "
+                Error = string.Format(L("Aucune réponse du jeu de l'hôte depuis {0} s. Le plus souvent : le pare-feu Windows de l'hôte "
                           + "bloque My Winter Car (MWCoop.exe le propose en cliquant HÉBERGER ; Radmin VPN compte souvent comme réseau public). "
-                          + "Sinon : vérifie l'adresse, et que le port UDP " + Port + " est redirigé sur sa box. Nouvel essai en continu...",
-                          "No answer from the host's game for " + (int)(now - lostSince) + " s. Most often: the host's Windows Firewall is blocking "
+                          + "Sinon : vérifie l'adresse, et que le port UDP {1} est redirigé sur sa box. Nouvel essai en continu...",
+                          "No answer from the host's game for {0} s. Most often: the host's Windows Firewall is blocking "
                           + "My Winter Car (MWCoop.exe offers to fix it when clicking HOST; Radmin VPN often counts as a public network). "
-                          + "Otherwise: check the address, and that UDP port " + Port + " is forwarded on the host's router. Retrying...");
+                          + "Otherwise: check the address, and that UDP port {1} is forwarded on the host's router. Retrying..."), (int)(now - lostSince), Port);
             else if (!connected && drop.Length > 0) Error = L("Connexion perdue, nouvel essai...", "Connection lost, retrying...");
             else if (SaveTransfer.Done && SaveTransfer.HostHasSave && !SaveTransfer.Received)
                 Error = L("La sauvegarde de l'hôte n'a pas pu être écrite (voir le journal MWCoop) : lance le jeu depuis MWCoop.exe.",
@@ -156,7 +156,7 @@ namespace MWCoop
             switch (i)
             {
                 case 0: return L("Connexion à l'hôte", "Connecting to the host");
-                case 1: return L("En attente de l'hôte" + name + " : il crée ou charge la partie", "Waiting for the host" + name + " to create or load the game");
+                case 1: return string.Format(L("En attente de l'hôte{0} : il crée ou charge la partie", "Waiting for the host{0} to create or load the game"), name);
                 case 2: return L("Réception de la sauvegarde", "Receiving the save");
                 default: return L("Chargement de la partie", "Loading the game");
             }
@@ -181,7 +181,7 @@ namespace MWCoop
                     int got = SaveTransfer.BytesGot / 1024, exp = SaveTransfer.BytesExpected / 1024;
                     if (SaveTransfer.Receiving) return Mathf.FloorToInt(SaveTransfer.Progress * 100) + " %  (" + got + " / " + exp + L(" Ko)", " KB)");
                     if (SaveTransfer.Done)
-                        return SaveTransfer.Received ? L("Reçue (" + exp + " Ko)", "Received (" + exp + " KB)")
+                        return SaveTransfer.Received ? string.Format(L("Reçue ({0} Ko)", "Received ({0} KB)"), exp)
                              : !SaveTransfer.HostHasSave ? L("Aucune : l'hôte commence une nouvelle partie", "None: the host starts a new game")
                              : L("Non écrite", "Not written");
                     return Current == 2 ? L("L'hôte prépare sa sauvegarde...", "The host is preparing the save...") : "";

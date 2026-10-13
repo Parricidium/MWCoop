@@ -616,8 +616,8 @@ namespace MWCoop.Net
             if (coopByHost)
             {
                 quitUntil = now + QuitWindow;
-                Hud.Toast(Lang.T("Partie sauvegard\u00E9e, tout le monde reste en jeu. Recliquez dans les " + (int)QuitWindow + " s pour sauver et quitter au menu",
-                                  "Game saved, everyone stays in game. Click again within " + (int)QuitWindow + " s to save and quit to the menu"));
+                Hud.Toast(string.Format(Lang.T("Partie sauvegard\u00E9e, tout le monde reste en jeu. Recliquez dans les {0} s pour sauver et quitter au menu",
+                                  "Game saved, everyone stays in game. Click again within {0} s to save and quit to the menu"), (int)QuitWindow));
             }
             else Hud.Toast(Lang.T("Partie sauvegard\u00E9e (demand\u00E9e par ", "Game saved (requested by ") + coopBy + ")");
             if (CompareOn) { hostSave = ReadSaveFiles(); hostSaveSeq = coopSeq; TryCompare(); }
@@ -648,7 +648,7 @@ namespace MWCoop.Net
                     int seq = r.U16();
                     string by = r.Str();
                     Log.Info("sauvegarde coop #" + seq + " annoncee par l'hote (demandee par " + by + ")");
-                    Hud.Toast(Lang.T("Sauvegarde coop dans " + (int)FlushDelay + " s (" + by + ") : vous restez en jeu", "Co-op save in " + (int)FlushDelay + " s (" + by + "): you stay in game"));
+                    Hud.Toast(string.Format(Lang.T("Sauvegarde coop dans {0} s ({1}) : vous restez en jeu", "Co-op save in {0} s ({1}): you stay in game"), (int)FlushDelay, by));
                     SendReport(seq);
                     break;
                 }
@@ -970,7 +970,7 @@ namespace MWCoop.Net
             foreach (List<string> l in new[] { onlyGuest, differ, onlyHost })
                 foreach (string s in l) { if (shown++ >= 10) break; Log.Info("  ecart sauvegarde : " + s); }
             int lost = onlyGuest.Count + differ.Count;
-            if (lost > 0) Hud.Toast(Lang.T("Sauvegarde : " + lost + " \u00E9cart(s) avec ", "Save: " + lost + " difference(s) with ") + name + " (dumps\\ecarts-sauvegarde-joueur" + id + ".txt)");
+            if (lost > 0) Hud.Toast(string.Format(Lang.T("Sauvegarde : {0} \u00E9cart(s) avec ", "Save: {0} difference(s) with "), lost) + name + " (dumps\\ecarts-sauvegarde-joueur" + id + ".txt)");
         }
 
         static void Section(StringBuilder sb, string title, List<string> lines)

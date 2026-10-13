@@ -1332,7 +1332,7 @@ static void DrawContent(Graphics &g)
             int ic = !wcsncmp(kContent[i].root, L"CD", 2) ? IC_MUSIC : !wcscmp(kContent[i].root, L"Radio") ? IC_RADIO : IC_HASH;
             Icon(g, ic, tr.X + 22, tr.Y + 22, 20, WithA(kInk, a), 1.9f);
         }
-        Text(g, g_fr ? kContent[i].fr : kContent[i].en, RectF(r.X + 66, r.Y + 9, r.Width - 150, 24), 14.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
+        Text(g, T(kContent[i].fr, kContent[i].en), RectF(r.X + 66, r.Y + 9, r.Width - 150, 24), 14.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
         std::wstring det;
         if (!ci.n) det = T(L"rien dans le jeu", L"nothing in the game");
         else if (ci.ignored > 0) { wchar_t b[96]; swprintf_s(b, T(L"%d lue(s) par le jeu \u00B7 %d ignor\u00E9e(s) (track1.ogg\u2026)", L"%d read by the game \u00B7 %d ignored (track1.ogg\u2026)"), ci.songs, ci.ignored); det = b; }

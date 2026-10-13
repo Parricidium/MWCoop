@@ -292,8 +292,8 @@ namespace MWCoop
             {
                 guiUse.Value = true;
                 // (plie : le clic gauche le prend comme tout objet du jeu -- la main du jeu, etiquette PART ; F le deplie)
-                guiText.Value = hit.Folded ? Lang.T("SAC DE COUCHAGE - CLIC : PRENDRE - F : DEPLIER", "SLEEPING BAG - CLICK: PICK UP - F: UNROLL")
-                                           : Lang.T("F : REPLIER - TENIR F : DORMIR", "F: ROLL UP - HOLD F: SLEEP");
+                guiText.Value = hit.Folded ? Lang.TG("SAC DE COUCHAGE - CLIC : PRENDRE - F : DEPLIER", "SLEEPING BAG - CLICK: PICK UP - F: UNROLL")
+                                           : Lang.TG("F : REPLIER - TENIR F : DORMIR", "F: ROLL UP - HOLD F: SLEEP");
             }
             if (KeyDown() && hit != null) { fDownAt = now; fBag = hit; }
             PickAssist(hit, now);

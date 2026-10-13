@@ -271,8 +271,8 @@ static void DrawTuto(Graphics &g)
         Pill(g, RectF(tx, b.Y + 15, w, 20), kRed, nl, Color(255, 255, 255, 255), 10);
         tx += w + 8;
     }
-    Title(g, g_fr ? st.tFr : st.tEn, RectF(tx, b.Y + 10, b.X + b.Width - 96 - tx, 28), 17, kAcc);
-    Para(g, g_fr ? st.dFr : st.dEn, RectF(b.X + 18, b.Y + 44, b.Width - 36, b.Height - 100), 13, kInk);
+    Title(g, T(st.tFr, st.tEn), RectF(tx, b.Y + 10, b.X + b.Width - 96 - tx, 28), 17, kAcc);
+    Para(g, T(st.dFr, st.dEn), RectF(b.X + 18, b.Y + 44, b.Width - 36, b.Height - 100), 13, kInk);
     for (int k = 1; k <= 3; k++) {
         if (k == 3 && g_tuto == 0) continue;
         if (k == 2 && g_tuto == (int)g_tutoList.size() - 1) continue;   // (derniere bulle : rien a passer)

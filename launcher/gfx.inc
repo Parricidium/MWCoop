@@ -372,7 +372,7 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
     int id = UI_GFX + idx * 3;
     bool hot = g_uiHot == id || g_uiHot == id + 1 || g_uiHot == id + 2;
     if (hot) { GraphicsPath p; RoundRect(p, RectF(row.X - 8, row.Y, row.Width + 16, row.Height), 10); SolidBrush hb(TH(card)); g.FillPath(&hb, &p); }
-    const wchar_t *lab = g_fr ? r.fr : r.en;
+    const wchar_t *lab = T(r.fr, r.en);
     Text(g, lab, RectF(row.X, row.Y, row.Width - 190, row.Height), 13.5f, FontStyleRegular, kInk, StringAlignmentNear);
     if (r.impact >= 2) {   // impact sur les images : pastille apres le nom
         Graphics &mg = MeasureG();
@@ -419,7 +419,7 @@ static void DrawGfxRow(Graphics &g, const GfxRow &r, int idx, RectF row)
     Icon(g, IC_CHEVL, lft.X + 15, lft.Y + lft.Height / 2, 14, WithA(g_uiHot == id + 1 ? kAcc : kInk, canL ? 1.0f : 0.25f), 2.2f);
     Icon(g, IC_CHEVR, rgt.X + 15, rgt.Y + rgt.Height / 2, 14, WithA(g_uiHot == id + 2 ? kAcc : kInk, canR ? 1.0f : 0.25f), 2.2f);
     bool game = r.vals[k] == -1;
-    Text(g, g_fr ? r.lf[k] : r.le[k], RectF(lft.X + lft.Width, val.Y, val.Width - 60, val.Height), 12.5f, FontStyleBold, game ? kGrey : kInk);
+    Text(g, T(r.lf[k], r.le[k]), RectF(lft.X + lft.Width, val.Y, val.Width - 60, val.Height), 12.5f, FontStyleBold, game ? kGrey : kInk);
     if (!g_gfxZones) return;
     HotZone(row, UI_NONE);
     if (canL) HotZone(lft, id + 1);
@@ -438,8 +438,8 @@ static void DrawGfxBlock(Graphics &g, int block, float x, float &y, float w, flo
     static const wchar_t *dEn[] = { L"Voice, players, sharing and the mod's keys", L"The game's own settings (its Options menu)", L"Added by MWCoop: screen, smoothness, shadows, detail, lights" };
     float sy = top + y - g_scroll[TAB_GFX] + (y > 0 ? 8 : 0);
     if (sy + kGfxBlockH > top && sy < bottom) {
-        Title(g, g_fr ? tFr[block] : tEn[block], RectF(x + 2, sy + 4, w - 4, 24), 15.5f, kAcc);
-        Text(g, g_fr ? dFr[block] : dEn[block], RectF(x + 2, sy + 26, w - 4, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        Title(g, T(tFr[block], tEn[block]), RectF(x + 2, sy + 4, w - 4, 24), 15.5f, kAcc);
+        Text(g, T(dFr[block], dEn[block]), RectF(x + 2, sy + 26, w - 4, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
         Pen ln(WithA(kAcc, 0.35f), 1.0f);
         g.DrawLine(&ln, x + 2, sy + kGfxBlockH - 4, x + w - 2, sy + kGfxBlockH - 4);
     }
@@ -469,10 +469,10 @@ static void DrawGfxGroup(Graphics &g, int group, float x, float &y, float w, flo
         GraphicsPath ip; RoundRect(ip, ib, 8);
         SolidBrush ibb(WithA(kAcc, hot ? 0.28f : 0.16f)); g.FillPath(&ibb, &ip);
         Icon(g, kIcon[group], ib.X + 13, ib.Y + 13, 17, kAcc, 2.0f);
-        Text(g, g_fr ? kFr[group] : kEn[group], RectF(hr.X + 76, hr.Y, 340, hr.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, T(kFr[group], kEn[group]), RectF(hr.X + 76, hr.Y, 340, hr.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
         if (group == 14) {   // (demande de JD, 12/10 : etiquette tant que le ray tracing est en chantier)
             Graphics &mg = MeasureG();
-            float nw = MeasureW(mg, g_fr ? kFr[group] : kEn[group], 14, FontStyleBold);
+            float nw = MeasureW(mg, T(kFr[group], kEn[group]), 14, FontStyleBold);
             const wchar_t *tag = T(L"EN DÉVELOPPEMENT", L"IN DEVELOPMENT");
             Pill(g, RectF(hr.X + 76 + nw + 12, hr.Y + (hr.Height - 20) / 2, PillW(tag, 10.0f), 20), WithA(kWarn, 0.18f), tag, kWarn, 10.0f);
         }
@@ -515,7 +515,7 @@ static void DrawGfxPage(Graphics &g)
         SolidBrush fb(sel ? kAcc : hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&fb, &p);
         if (!sel) { Pen pen(TH(fieldBorder), 1.0f); g.DrawPath(&pen, &p); }
         Color ink = off ? kGrey : sel ? kOnAcc : kInk;
-        Text(g, g_fr ? ps[i].fr : ps[i].en, RectF(r.X + 12, r.Y + 7, r.Width - 34, 22), 12.5f, FontStyleBold, ink, StringAlignmentNear);
+        Text(g, T(ps[i].fr, ps[i].en), RectF(r.X + 12, r.Y + 7, r.Width - 34, 22), 12.5f, FontStyleBold, ink, StringAlignmentNear);
         Text(g, off ? T(L"Carte non compatible", L"GPU not supported") : g_fr ? ps[i].dFr : ps[i].dEn, RectF(r.X + 12, r.Y + 29, r.Width - 16, 18), 11, FontStyleRegular, sel ? WithA(kOnAcc, 0.8f) : kGrey, StringAlignmentNear);
         // barres de niveau (Vanilla aucune, Performance 1 ... Ultra et RT 4)
         int lvl = min(i, 4);

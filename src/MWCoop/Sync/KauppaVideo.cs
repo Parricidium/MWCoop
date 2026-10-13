@@ -429,7 +429,7 @@ namespace MWCoop
                 // cassette posee : son titre, et R = montage
                 string ti = TapeTitle(hit.Data);
                 guiUse.Value = true;
-                guiText.Value = Lang.T("CASSETTE", "TAPE") + (ti.Length > 0 ? " « " + ti.ToUpperInvariant() + " »" : "") + " - " + Keys.Label(Keys.CameraRec) + Lang.T(" : MONTAGE", ": EDITING");
+                guiText.Value = Lang.TG("CASSETTE", "TAPE") + (ti.Length > 0 ? " « " + ti.ToUpperInvariant() + " »" : "") + " - " + Keys.Label(Keys.CameraRec) + Lang.TG(" : MONTAGE", ": EDITING");
                 aimedTape = hit;
                 return true;
             }
@@ -438,7 +438,7 @@ namespace MWCoop
             if (held != null && tape.Length == 0)
             {
                 if (asm != null) asm.Value = true;
-                guiText.Value = Lang.T("INSÉRER LA CASSETTE", "INSERT THE TAPE");
+                guiText.Value = Lang.TG("INSÉRER LA CASSETTE", "INSERT THE TAPE");
                 if (Input.GetMouseButtonDown(0)) { pendingTape = held; pendingVcr = hit; pendingFrame = Time.frameCount; }
                 return true;
             }
@@ -449,8 +449,8 @@ namespace MWCoop
                 // pose : R = enregistrer / arreter (pour se filmer a plusieurs ; JD, 12/10), F tenu = ejecter
                 bool recording = hit.Data.EndsWith("|1") || hit.Data.EndsWith("|2");
                 string rk = Keys.Label(Keys.CameraRec);
-                if (tape.Length == 0) guiText.Value = Lang.T("CAMÉSCOPE (PAS DE CASSETTE)", "CAMCORDER (NO TAPE)");
-                else guiText.Value = rk + (recording ? Lang.T(" : ARRÊTER", ": STOP") : Lang.T(" : ENREGISTRER", ": RECORD")) + Lang.T(" - F TENU : ÉJECTER", " - HOLD F: EJECT");
+                if (tape.Length == 0) guiText.Value = Lang.TG("CAMÉSCOPE (PAS DE CASSETTE)", "CAMCORDER (NO TAPE)");
+                else guiText.Value = rk + (recording ? Lang.TG(" : ARRÊTER", ": STOP") : Lang.TG(" : ENREGISTRER", ": RECORD")) + Lang.TG(" - F TENU : ÉJECTER", " - HOLD F: EJECT");
                 if (tape.Length == 0) return true;
                 if (Input.GetKeyDown(Keys.CameraRec))
                 {
@@ -468,9 +468,9 @@ namespace MWCoop
             }
             bool tv = ScreenNear(hit.Go.transform.position) != null;
             string title = TapeTitle(tape);
-            if (tape.Length == 0) guiText.Value = Lang.T("MAGNÉTOSCOPE (VIDE)", "VCR (EMPTY)");
-            else guiText.Value = (title.Length > 0 ? "« " + title.ToUpperInvariant() + " » " : "") + (Playing(hit) ? Lang.T("F : STOP", "F: STOP") : Lang.T("F : LECTURE", "F: PLAY")) + Lang.T(" - F TENU : ÉJECTER", " - HOLD F: EJECT")
-                                 + (tv ? "" : Lang.T(" (PAS DE TV À CÔTÉ)", " (NO TV NEARBY)"));
+            if (tape.Length == 0) guiText.Value = Lang.TG("MAGNÉTOSCOPE (VIDE)", "VCR (EMPTY)");
+            else guiText.Value = (title.Length > 0 ? "« " + title.ToUpperInvariant() + " » " : "") + (Playing(hit) ? Lang.TG("F : STOP", "F: STOP") : Lang.TG("F : LECTURE", "F: PLAY")) + Lang.TG(" - F TENU : ÉJECTER", " - HOLD F: EJECT")
+                                 + (tv ? "" : Lang.TG(" (PAS DE TV À CÔTÉ)", " (NO TV NEARBY)"));
             if (tape.Length == 0) return true;
             if (Input.GetKeyDown(KeyCode.F)) vcrFDown = now;
             if (vcrFDown >= 0f)

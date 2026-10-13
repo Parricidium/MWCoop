@@ -74,6 +74,7 @@ using std::max;
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <set>
 #include <array>
 #include <atomic>
@@ -97,7 +98,7 @@ enum { MODE_SOLO, MODE_HOST, MODE_GUEST };
 enum { REL_OFFLINE = -1, REL_NONE = 0, REL_OK = 1 };   // reponse de GitHub
 
 static HWND g_wnd;
-static bool g_fr;
+static bool g_fr, g_ru;   // langue : francais, russe (13/10 : traduction de l'anglais, ru.inc), sinon anglais
 static std::wstring g_dir, g_self, g_iniLauncher;   // dossier du lanceur (avec \), chemin du lanceur
 static std::wstring g_gameDir, g_gameVer;           // dossier de My Winter Car (avec \, vide = introuvable), version
 static std::wstring g_localVer;                     // MWCoop\version.txt
@@ -162,7 +163,23 @@ static std::wstring g_launchWarn;                   // ecran d'attente : avertis
 static uint64_t g_sHost;                            // salon Steam : compte de l'hote (HoteSteam de lancement.ini ; steam.inc)
 static std::wstring g_sHostName;                    // ... et son nom Steam
 static void SteamDown();
-static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return g_fr ? fr : en; }
+// Russe : la traduction du texte anglais (ru.inc, generee par ru_gen.py), l'anglais s'il n'y est pas.
+#include "ru.inc"
+static const wchar_t *Ru(const wchar_t *en)
+{
+    static std::unordered_map<std::wstring, const wchar_t *> m;
+    if (m.empty()) for (const auto &p : kRu) m[p[0]] = p[1];
+    auto it = m.find(en);
+    return it != m.end() ? it->second : en;
+}
+static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return g_fr ? fr : g_ru ? Ru(en) : en; }
+static std::wstring T(const std::wstring &fr, const std::wstring &en) { return g_fr ? fr : g_ru ? std::wstring(Ru(en.c_str())) : en; }
+static const wchar_t *LangCode() { return g_fr ? L"fr" : g_ru ? L"ru" : L"en"; }
+static void SetLang(const wchar_t *code)   // fr, en, ru : gardee dans [Lanceur] Langue
+{
+    g_fr = !_wcsicmp(code, L"fr"); g_ru = !_wcsicmp(code, L"ru");
+    WritePrivateProfileStringW(L"Lanceur", L"Langue", LangCode(), g_iniLauncher.c_str());
+}
 
 static void SetStatus(int kind, const wchar_t *fmt, ...)
 {
@@ -377,7 +394,7 @@ static void SavePlayer()
     std::string ini = ModIniA();
     WritePrivateProfileStringA("Coop", "Pseudo", Narrow(PlayerName()).c_str(), ini.c_str());
     WritePrivateProfileStringA("Coop", "Adresse", Narrow(Trim(g_fields[1].text)).c_str(), ini.c_str());
-    WritePrivateProfileStringA("Coop", "Langue", g_fr ? "fr" : "en", ini.c_str());   // textes du mod en jeu dans la langue du lanceur
+    WritePrivateProfileStringA("Coop", "Langue", g_fr ? "fr" : g_ru ? "ru" : "en", ini.c_str());   // textes du mod en jeu dans la langue du lanceur
 }
 
 static void LoadLocalVersion()
@@ -1975,11 +1992,19 @@ static int ValueIndex(const Opt &o, int v)
     for (int i = 0; i < (int)o.vals.size(); i++) if (o.vals[i] > v) return i;   // valeur hors liste : la suivante
     return (int)o.vals.size() - 1;
 }
+// Libelle i d'une option a valeurs nommees (« Tenue 21 » : en russe, « Outfit » traduit et le numero).
+static std::wstring TLab(const std::vector<std::wstring> &fr, const std::vector<std::wstring> &en, size_t i)
+{
+    if (g_fr || !g_ru) return g_fr ? fr[i] : en[i];
+    const wchar_t *r = Ru(en[i].c_str());
+    if (r != en[i].c_str()) return r;
+    if (en[i].compare(0, 7, L"Outfit ") == 0) return std::wstring(Ru(L"Outfit ")) + en[i].substr(7);
+    return en[i];
+}
 static std::wstring ValueText(const Opt &o, int v)
 {
     int i = ValueIndex(o, v);
-    const std::vector<std::wstring> &lab = g_fr ? o.labFr : o.labEn;
-    if (!lab.empty()) return lab[i];
+    if (!o.labEn.empty()) return TLab(o.labFr, o.labEn, i);
     wchar_t b[32];
     swprintf_s(b, L"%d%s", v, o.suffix);
     return b;
@@ -3047,7 +3072,7 @@ static void DrawVinOptions(Graphics &g, RectF card)
         GraphicsPath p; RoundRect(p, r, 14);
         SolidBrush fb(hot && !fixed ? TH(cardSel) : TH(field)); g.FillPath(&fb, &p);
         Pen pen(!cur.empty() ? kAcc : TH(fieldBorder), !cur.empty() ? 2.0f : 1.0f); g.DrawPath(&pen, &p);
-        Text(g, g_fr ? kVinKeys[k].fr : kVinKeys[k].en, RectF(r.X + 14, r.Y + 8, r.Width - 28, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        Text(g, T(kVinKeys[k].fr, kVinKeys[k].en), RectF(r.X + 14, r.Y + 8, r.Width - 28, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
         std::wstring val = cur.empty() ? (fixed ? (vals.empty() ? T(L"\u2014", L"\u2014") : VinMeaning(k, vals[0]) + T(L" (seule possible)", L" (only one)")) : T(L"Hasard", L"Random"))
                                        : VinMeaning(k, cur) + (absent ? T(L" (pas pour cette finition)", L" (not for this trim)") : L"");
         Text(g, val, RectF(r.X + 14, r.Y + 28, r.Width - 28, 26), 14.5f, FontStyleBold, absent ? kGrey : kInk, StringAlignmentNear);
@@ -3315,7 +3340,7 @@ static void DrawCar(Graphics &g)
     else {
         int c = show > 0 ? kSwatches[show - 1].rgb : g_carColor;
         swprintf_s(hex, L"#%06X", c & 0xFFFFFF);
-        name = show > 0 ? (g_fr ? kSwatches[show - 1].fr : kSwatches[show - 1].en) : T(L"Couleur personnalis\u00E9e", L"Custom color");
+        name = show > 0 ? T(kSwatches[show - 1].fr, kSwatches[show - 1].en) : T(L"Couleur personnalis\u00E9e", L"Custom color");
     }
     float ny = CarSwatchRect(kSwatchN - 1).Y + 76;
     {
@@ -3852,7 +3877,7 @@ static void FaceImport()
     of.lpstrInitialDir = init.c_str();
     static const wchar_t *titFr[3] = { L"Choisir l'image du visage (peinte sur le gabarit)", L"Choisir l'image du haut (peinte sur le gabarit)", L"Choisir l'image du pantalon (peinte sur le gabarit)" };
     static const wchar_t *titEn[3] = { L"Choose the face image (painted on the template)", L"Choose the top image (painted on the template)", L"Choose the pants image (painted on the template)" };
-    of.lpstrTitle = g_fr ? titFr[k] : titEn[k];
+    of.lpstrTitle = T(titFr[k], titEn[k]);
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
     if (!GetOpenFileNameW(&of)) return;
     std::wstring why;
@@ -3932,7 +3957,7 @@ static void DrawFaceRow(Graphics &g, RectF r, RectF view)
     Bitmap *th = PersoThumb(k);
     static const wchar_t *impFr[3] = { L"Mon visage…", L"Mon haut…", L"Mon pantalon…" }, *impEn[3] = { L"My face…", L"My top…", L"My pants…" };
     float gap = 6, bw = (r.Width - 2 * gap) / 3;
-    UiButton(g, RectF(r.X, r.Y + 4, bw + 16, 36), g_fr ? impFr[k] : impEn[k], UI_FACE_IMPORT, th == NULL);
+    UiButton(g, RectF(r.X, r.Y + 4, bw + 16, 36), T(impFr[k], impEn[k]), UI_FACE_IMPORT, th == NULL);
     UiButton(g, RectF(r.X + bw + 16 + gap, r.Y + 4, bw - 8, 36), T(L"Gabarit", L"Template"), UI_FACE_TPL, false);
     UiButton(g, RectF(r.X + 2 * bw + 8 + 2 * gap, r.Y + 4, bw - 8, 36), T(L"Retirer", L"Remove"), UI_FACE_DEL, false, -1, th != NULL);
     if (th) {
@@ -3943,7 +3968,7 @@ static void DrawFaceRow(Graphics &g, RectF r, RectF view)
         GraphicsPath p; RoundRect(p, RectF(ti.X - 4, ti.Y - 4, ti.Width + 8, ti.Height + 22), 8);
         SolidBrush b(TH(card)); g.FillPath(&b, &p);
         DrawPixels(g, th, ti);
-        Text(g, g_fr ? capFr[k] : capEn[k], RectF(ti.X - 4, ti.Y + ti.Height, ti.Width + 8, 18), 10.5f, FontStyleRegular, kGrey);
+        Text(g, T(capFr[k], capEn[k]), RectF(ti.X - 4, ti.Y + ti.Height, ti.Width + 8, 18), 10.5f, FontStyleRegular, kGrey);
     }
 }
 
@@ -3956,7 +3981,8 @@ static void DrawSkins(Graphics &g)
     Glass(kSkinPanel);
     int n = (int)ap->svals.size(), sel = OptGet(*ap);
     const std::string &skin = ap->svals[sel];
-    const std::vector<std::wstring> &lab = g_fr ? ap->labFr : ap->labEn;
+    std::vector<std::wstring> lab;
+    for (size_t i = 0; i < ap->labEn.size(); i++) lab.push_back(TLab(ap->labFr, ap->labEn, i));
     RectF view = kSkinView;
     PersoCheck();
     bool perso = g_perso.state == 1;
@@ -4023,7 +4049,7 @@ static void DrawSkins(Graphics &g)
             SolidBrush b(on ? kAcc : hot ? (g_dark ? Color(220, 24, 38, 72) : Color(240, 255, 255, 255)) : (g_dark ? Color(180, 6, 12, 30) : Color(215, 255, 255, 255)));
             g.FillPath(&b, &p);
             if (!on) { Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); }
-            Text(g, g_fr ? zf[z] : ze[z], r, 13, FontStyleBold, on ? kOnAcc : kInk);
+            Text(g, T(zf[z], ze[z]), r, 13, FontStyleBold, on ? kOnAcc : kInk);
             HotZone(r, UI_LOOKPIN + z);
         }
     }
@@ -5303,7 +5329,7 @@ static std::wstring SkinLabel(const std::string &look)
     std::string skin = look.substr(0, look.find('|'));   // (apparence complete : le haut)
     if (const Opt *ap = OptByKey("Apparence"))
         for (size_t i = 0; i < ap->svals.size(); i++)
-            if (!_stricmp(ap->svals[i].c_str(), skin.c_str())) return (g_fr ? ap->labFr : ap->labEn)[i];
+            if (!_stricmp(ap->svals[i].c_str(), skin.c_str())) return TLab(ap->labFr, ap->labEn, i);
     auto il = g_skinLabels.find(SkinKey(skin));   // tenue plus recente que ce lanceur : libelle de index.txt
     if (il != g_skinLabels.end() && !il->second.empty()) return il->second;
     return skin.empty() ? L"?" : Widen(skin, CP_UTF8);
@@ -5314,7 +5340,7 @@ static std::wstring CarColorName()
 {
     int sel = CarSwatchSel();
     if (sel == 0) return T(L"au hasard", L"random");
-    if (sel > 0) return g_fr ? kSwatches[sel - 1].fr : kSwatches[sel - 1].en;
+    if (sel > 0) return T(kSwatches[sel - 1].fr, kSwatches[sel - 1].en);
     wchar_t b[48];
     swprintf_s(b, T(L"personnalis\u00E9e #%06X", L"custom #%06X"), g_carColor & 0xFFFFFF);
     return b;
@@ -7018,7 +7044,7 @@ static void OnButton(int id)
     case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
     case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
-    case B_LANG: g_fr = !g_fr; WritePrivateProfileStringW(L"Lanceur", L"Langue", g_fr ? L"fr" : L"en", g_iniLauncher.c_str()); break;
+    case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> FR
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
     case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
@@ -7385,6 +7411,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
     g_fr = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_FRENCH;
+    g_ru = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN;
     wchar_t self[MAX_PATH];
     GetModuleFileNameW(NULL, self, MAX_PATH);
     g_self = self;
@@ -7449,11 +7476,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     }
     DeleteFileW((g_self + L".old").c_str());   // reste d'une mise a jour du lanceur
     DeleteFileW((g_dir + L"version.dll.old").c_str());   // (chargeur verrouille pendant une mise a jour : plus utilise, sauf jeu ouvert)
-    // Langue : francais si Windows est en francais, anglais pour toute autre langue ; Langue=fr|en pour forcer.
+    // Langue : francais ou russe si Windows l'est, anglais pour toute autre langue ; Langue=fr|en|ru pour forcer.
     wchar_t lang[8] = L"";
     GetPrivateProfileStringW(L"Lanceur", L"Langue", L"", lang, 8, g_iniLauncher.c_str());
-    if (!_wcsicmp(lang, L"fr")) g_fr = true;
-    else if (!_wcsicmp(lang, L"en")) g_fr = false;
+    if (!_wcsicmp(lang, L"fr") || !_wcsicmp(lang, L"en") || !_wcsicmp(lang, L"ru")) { g_fr = !_wcsicmp(lang, L"fr"); g_ru = !_wcsicmp(lang, L"ru"); }
     {   // Theme : Theme=clair|sombre, sinon celui des applications de Windows
         wchar_t th[16] = L"";
         GetPrivateProfileStringW(L"Lanceur", L"Theme", L"", th, 16, g_iniLauncher.c_str());
@@ -7477,7 +7503,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     int argc = 0;
     wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i + 1 < argc; i++) {
-        if (!_wcsicmp(argv[i], L"/lang")) g_fr = !_wcsicmp(argv[i + 1], L"fr");
+        if (!_wcsicmp(argv[i], L"/lang")) { g_fr = !_wcsicmp(argv[i + 1], L"fr"); g_ru = !_wcsicmp(argv[i + 1], L"ru"); }
         if (!_wcsicmp(argv[i], L"/theme")) g_dark = !_wcsicmp(argv[i + 1], L"sombre");
         if (!_wcsicmp(argv[i], L"/echelle")) g_scale = (float)_wtof(argv[i + 1]);   // captures : rendu agrandi
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];
