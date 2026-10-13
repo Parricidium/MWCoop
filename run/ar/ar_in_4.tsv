@@ -1,0 +1,250 @@
+759	Proximity voice
+760	Voice range
+761	Voice volume
+762	Your microphone volume (for the others)
+763	See others' imported images
+764	Guests' starting money
+765	Allow cheats (host)
+766	Cars run players over (friends, NPCs)
+767	Disable the CO-OP additions (F8 drone, sleeping bags, shop)
+768	Write to the others (chat)
+769	Wallet (give money)
+770	Talk (voice, hold the key)
+771	Cheat panel
+772	Map (live players)
+773	Third-person view (on foot, in vehicles)
+774	Drone on / off (photo mode)
+775	Take the photo
+776	Move forward
+777	Move back
+778	Move left
+779	Move right
+780	Go up
+781	Go down
+782	Faster (hold the key)
+783	Zoom in (also the wheel)
+784	Zoom out
+785	Reset (tilt and zoom)
+786	Viewfinder grid
+787	Hide the viewfinder
+788	Map: press or hold
+789	Hold
+790	Resolution
+791	Display mode
+792	Windowed
+793	Fullscreen
+794	Borderless
+795	Engine quality
+796	Medium
+797	Good
+798	Vanilla
+799	Like the game
+800	Performance
+801	More frames
+802	Balanced
+803	The sweet spot
+804	Pretty
+805	Better looking
+806	Ultra
+807	Everything maxed
+808	Ray tracing
+809	My Winter Car video options
+810	MWCoop enhanced video options
+811	The game's own settings (its Options menu)
+812	Added by MWCoop: screen, smoothness, shadows, detail, lights
+813	Shadows
+814	Distance and view
+815	Comfort
+816	Lights
+817	Screen
+818	Faces, clothes and names
+819	Game and sharing
+820	Keys
+821	Smoothness
+822	Advanced shadows
+823	Detail and textures
+824	Drone camera
+825	Co-op
+826	Voice, players, sharing and the mod's keys
+827	Image
+828	Police officer 2
+829	Rally driver
+830	PSK employee
+831	Inspector
+832	Sahara beige
+833	Apple green
+834	Orange
+835	Sky blue
+836	Navy blue
+837	Red
+838	White
+839	Black
+840	Metallic grey
+841	Brown
+842	Mustard yellow
+843	Dark green
+844	Burgundy
+845	Turquoise
+846	Avocado green
+847	Year (code)
+848	Engine
+849	Gearbox
+850	Suspension
+851	Windshield
+852	Vinyl roof
+853	Interior
+854	Wheels
+855	Radio
+856	Instrument panel
+857	Power brakes
+858	Heated rear window
+859	Choose the top image (painted on the template)
+860	Choose the pants image (painted on the template)
+861	The templates are made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\n
+862	My top…
+863	My pants…
+864	imported top
+865	imported pants
+866	Torso
+867	Legs
+868	Build
+869	This folder does not contain My Winter Car.\n\nPick the mywintercar.exe from the game folder 
+870	Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\n
+871	\u2022 Sample release note (capture).\n\u2022 Second line: a fix.
+872	\u2022 First version: loader, visible players.
+873	\u2022 First version.
+874	Police officer
+875	Choose the face image (painted on the template)
+876	My face…
+877	imported face
+878	Head
+879	Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it FOR MWCOOP, apart (%LOCALAPPDATA%\\MWCoop)?\n\n
+880	Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it in the game folder?\n\n
+881	CORRIS paint
+882	Images
+883	Moped paint
+884	Garage flag
+885	Posters
+886	Window sticker
+887	Fabric
+888	ID photo
+889	Hockey teams
+890	Extra
+891	Thin
+892	Slim
+893	Stout
+894	Short and round
+895	Short and slim
+896	Police
+897	Rally
+898	Beanie
+899	Cap
+900	Trucker cap
+901	Police cap
+902	Fur hat
+903	Fishing hat
+904	Bus driver cap
+905	Teimo's hat
+906	Gifu cap
+907	Flat cap
+908	Helmet
+909	Glasses
+910	Round glasses
+911	Sunglasses
+912	Ponytail
+913	Mullet
+914	clear
+915	black
+916	chrome
+917	glossy black
+918	smoked
+919	glass
+920	original
+921	TORSO
+922	LEGS
+923	BUILD
+924	Hair
+925	Top
+926	HEAD
+927	Hat
+928	Welcome to MWCoop!
+929	A new, bigger launcher. A quick tour in a few bubbles: you can skip it at any time (Esc) and see it again from Settings.
+930	Your nickname
+931	The name the other players see above your character and in the lobby.
+932	STEAM: the easiest, you invite your Steam friends, no port or address. IP / VPN: by address (local network, Radmin, Hamachi…).
+933	Opens a lobby: your friends join it, everyone gets READY, then START launches everyone's game. The lobby's gear holds its options.
+934	Enters a friend's lobby (through Steam: their invite, or their lobby found by itself; by IP: their address just above).
+935	The vanilla game: MWCoop isn't loaded at all (no badge, no co-op menu). Your save is never touched by other people's games.
+936	Every page, on the left
+937	The lobby, your character, what you share and the updates: one click, no window popping over.
+938	Outfit and car
+939	Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your CORRIS color.
+940	Content and mods
+941	What you send to your guests: CDs, paint, flag, posters… and your MSCLoader mods (experimental), copied apart on their side.
+942	Graphics
+943	Sorted into categories you expand: shadows, distance, detail, textures, frame rate… and now player names (distance, or hidden). One-click presets; in game: F10 menu.
+944	What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.
+945	Every session now keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.
+946	Modding API
+947	Also up here now. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.
+948	Updates, theme, language, port, game folder, a host's files at a friend's… and this guide.
+949	Theme and language
+950	Dark or light, French or English, in one click.
+951	The MWCoop community: help, bug reports, news and players to team up with. GitHub and Ko-fi right next to it.
+952	MWCoop's MSCLoader
+953	In the Mods tab: OFFICIAL (the one installed in the game) or MWCOOP (installed apart, the game is not changed). If your mods don't load, try MWCOOP, or REINSTALL.
+954	In Settings > Game: Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.
+955	Uninstall
+956	In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.
+957	The star at the top: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in the Outfit tab!
+958	In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.
+959	Compatibility modes
+960	In Settings > Game. After a crash, Windows sometimes adds a compatibility mode to the game, and MWCoop stops loading: the launcher removes it before every game.
+961	Everything to play trouble-free, sorted into categories you expand: install, host, join, share your mods, Copy / Folder / Steam… and fixes for common problems, with pictures.
+962	In-game keys
+963	In Game options > Keys: click a pill then press the key you want. Chat (T), wallet to give money to others (N), voice (V).
+964	Imported face and clothes
+965	Your own face, top or pants: pick the zone (Head, Torso, Legs), Template opens the game's image with its seams, paint over it, then import. \"Custom face\", \"Custom top\", \"Custom pants\" in the list; others see it in game.
+966	Car trim
+967	In Car: besides the color, the CORRIS trim (L, LX, SLX, GT) for a new game. The host gives it to their guests.
+968	Graphics and co-op options sorted by type: Voice, Faces, Game and sharing (host's files, starting money), Keys. The groups of this bar fold with a click on their title.
+969	The host can allow cheats (Game options > Game and sharing). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.
+970	In game, M (set in Game options > Keys) opens the map: the other players live, places, wheel to zoom, drag to move.
+971	Third-person view
+972	In game, F5 (set in Game options > Keys) switches to third person: your character seen from behind on foot, your vehicle seen from behind while driving. Aiming and picking up work as usual.
+973	Game options reorganized
+974	Three blocks: Co-op, the game's video options, then MWCoop's enhanced ones. Each category has its icon. Unity's configuration window is now skipped: set your screen here.
+975	In game, F8: your camera becomes a small drone to take photos (viewfinder, zoom, tilt, flash). Keys are set in Game options > Drone camera.
+976	Vanilla and RT
+977	Two new presets: Vanilla brings back the original game options, RT turns on ray-traced sun shadows (DXR-capable graphics card, in development). Its settings: Ray tracing category.
+978	Rivett VIN plate
+979	In Car, under the trim: the CORRIS options for a new game (year, engine, gearbox, windshield, vinyl roof, wheels, radio...), like the game's plate. The host gives them to their guests.
+980	Rivett custom paint
+981	In Car, at the top of the preview: your own paint on the CORRIS, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's; the host sends it to their guests.
+982	Turn a mod on or off
+983	In Mods, each mod's \"On\" switch: off, the mod is no longer loaded at all (its DLL becomes .dll.off) nor sent to guests. Back on, it returns at the next launch.
+984	Let's go!
+985	Have fun together in Finland. And if something goes wrong: the logs, and the Discord.
+986	Home
+987	Mods
+988	MY CHARACTER
+989	SHARING
+990	GAME
+991	MEDIA
+992	INFO
+993	Bust of Pasquale Paoli
+994	The Paoli bust in the Museum of Corsica, after the one in the Palazzu Naziunale in Corte, scanned by JF Andreani for Scan the World (MyMiniFactory), CC BY-NC-SA license. Simplified for the game.
+995	Bust of Napoleon
+996	The Napoleon bust in the Museum of Corsica, after Antoine-Denis Chaudet, scanned by Oliver Laric (The Usher Gallery, Lincoln), free of copyright restriction. Simplified for the game.
+997	3D model
+998	The drone of the drone camera (photo mode), by Kira on Sketchfab: sketchfab.com/GalaninaKira, model \"Drone\", CC BY 4.0 license. Simplified for the game.
+999	3D models
+1000	The sleeping bag models (rolled and unrolled), on Sketchfab: sketchfab.com/WillBarrow. One bag per player, in the starting bedroom.
+1001	Outfits
+1002	A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).
+1003	PLAY
+1004	CO-OP additions
+1005	Disable them all (vanilla game)
+1006	Drone camera (F8)
+1007	Sleeping bags
+1008	s21 shop (video, KARTTURI)

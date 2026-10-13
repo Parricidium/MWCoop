@@ -1,0 +1,994 @@
+Preview to redo: start a game (~30 s)	المعاينة بحاجة لإعادة: ابدأ لعبة (~30 ث)
+Sent content and mods	المحتوى والتعديلات المُرسلة
+Sent content	المحتوى المُرسل
+Outfit 	الملابس 
+Sync your mod in co-op	زامِن تعديلك في اللعب الجماعي
+MWCoop.CoopApi sends your MSCLoader mod's data to the other players: MWCoop handles the network, splitting big messages and relaying through the host.	يرسل MWCoop.CoopApi بيانات تعديل MSCLoader الخاص بك إلى اللاعبين الآخرين: يتولى MWCoop الشبكة وتقسيم الرسائل الكبيرة وتمريرها عبر المضيف.
+EXAMPLE	مثال
+Through reflection	عبر الانعكاس البرمجي
+Direct reference	مرجع مباشر
+Copied!	تم النسخ!
+Copy	نسخ
+Where to get it	من أين تحصل عليه
+In the game folder, under MWCoop\\ (once installed)	في مجلد اللعبة، ضمن MWCoop\\ (بعد التثبيت)
+Documentation (GitHub)	التوثيق (GitHub)
+Source code	الشيفرة المصدرية
+Folder	المجلد
+Docs, full member list and MSCLoader examples in docs/API.md.	التوثيق والقائمة الكاملة للأعضاء وأمثلة MSCLoader في docs/API.md.
+Good to know	من المفيد معرفته
+Left click	النقر الأيسر
+Right click	النقر الأيمن
+Middle click	النقر الأوسط
+GPU not supported	بطاقة الرسوميات غير مدعومة
+RT off	بدون تتبع الأشعة
+ray tracing	تتبع الأشعة
+heavy	ثقيل
+medium	متوسط
+Press a key…	اضغط على مفتاح…
+IN DEVELOPMENT	قيد التطوير
+%d settings	%d إعدادات
+Image quality	جودة الصورة
+One click sets everything, then fine-tune below.	نقرة واحدة تضبط كل شيء، ثم عدّل بدقة في الأسفل.
+Custom settings: pick a preset to start over.	إعدادات مخصّصة: اختر إعداداً مسبقاً للبدء من جديد.
+Checking for updates\u2026	جارٍ البحث عن تحديثات\u2026
+%s \u00B7 new version %s available	%s \u00B7 الإصدار الجديد %s متوفر
+Offline: MWCoop is not installed here	غير متصل: MWCoop غير مثبّت هنا
+GitHub rate limit: try again in a few minutes \u00B7 %s	حدّ طلبات GitHub: حاول مجدداً بعد بضع دقائق \u00B7 %s
+GitHub error (code %lu) \u00B7 %s	خطأ GitHub (الرمز %lu) \u00B7 %s
+Offline (GitHub unreachable, error %lu) \u00B7 %s	غير متصل (تعذّر الوصول إلى GitHub، الخطأ %lu) \u00B7 %s
+No MWCoop release published yet	لم يُنشر أي إصدار من MWCoop بعد
+%s \u00B7 no release published	%s \u00B7 لا يوجد إصدار منشور
+%s \u00B7 up to date	%s \u00B7 محدّث
+Downloading MWCoop %s\u2026	جارٍ تنزيل MWCoop %s\u2026
+Downloading MWCoop %s\u2026 (try %d / 3)	جارٍ تنزيل MWCoop %s\u2026 (المحاولة %d / 3)
+Update failed (download, error %lu)	فشل التحديث (التنزيل، الخطأ %lu)
+Installing MWCoop %s\u2026	جارٍ تثبيت MWCoop %s\u2026
+Update failed (archive)	فشل التحديث (الأرشيف)
+Update failed (incomplete package: MWCoop\\version.txt missing)	فشل التحديث (حزمة ناقصة: MWCoop\\version.txt مفقود)
+Game folder is protected: run MWCoop.exe as administrator to update	مجلد اللعبة محمي: شغّل MWCoop.exe كمسؤول للتحديث
+%s is in use: close the game, then restart the launcher	%s قيد الاستخدام: أغلق اللعبة ثم أعد تشغيل المشغّل
+Updated \u00B7 MWCoop %s	تم التحديث \u00B7 MWCoop %s
+e.g. 26.12.34.56 (address:port accepted)	مثال: 26.12.34.56 (يُقبل العنوان:المنفذ)
+Host	المضيف
+Guest	الضيف
+Solo	فردي
+Mod log	سجل التعديل
+Loader log	سجل المحمّل
+Unity log	سجل Unity
+ \u00B7 guest profile	 \u00B7 ملف الضيف
+ \u00B7 profile 	 \u00B7 الملف الشخصي 
+Click the bin again to delete these logs	انقر على سلة المحذوفات مجدداً لحذف هذه السجلات
+none	لا شيء
+B \u00B7 manual	B \u00B7 يدوي
+7 \u00B7 automatic	7 \u00B7 أوتوماتيكي
+ \u00B7 facelift	 \u00B7 تصميم مُحدَّث
+J \u00B7 radio	J \u00B7 راديو
+B \u00B7 power brakes	B \u00B7 فرامل معزّزة
+ \u00B7 heated	 \u00B7 بتدفئة
+VIN plate	لوحة رقم الهيكل
+CORRIS options for a new game. Click for the next value; Random: like the game.	خيارات CORRIS للعبة جديدة. انقر للقيمة التالية؛ عشوائي: مثل اللعبة.
+Start a game once: the mod then reads the possible options of each trim.	ابدأ لعبة مرة واحدة: سيقرأ التعديل بعدها الخيارات الممكنة لكل فئة.
+ (only one)	 (واحد فقط)
+Random	عشوائي
+ (not for this trim)	 (غير متاح لهذه الفئة)
+Choose the CORRIS paint (painted on the car.png template)	اختر طلاء CORRIS (مرسوم على قالب car.png)
+can't save it	تعذّر حفظه
+This image could not be read: 	تعذّرت قراءة هذه الصورة: 
+Images\\car.png was not found in the game folder.	لم يُعثر على Images\\car.png في مجلد اللعبة.
+Custom paint	طلاء مخصّص
+Your own paint on the CORRIS, painted on the game's template. The host sends it to their guests.	طلاؤك الخاص على CORRIS، مرسوم على قالب اللعبة. يرسله المضيف إلى ضيوفه.
+Your paint	طلاؤك
+Game paint (Images\\car.png)	طلاء اللعبة (Images\\car.png)
+Template	القالب
+My image…	صورتي…
+In use: yes	قيد الاستخدام: نعم
+In use: no	قيد الاستخدام: لا
+Remove	إزالة
+1. Template: the game's body laid flat (2048 x 2048). The game's Images folder also has corris_template_layered.psd, in layers.	1. القالب: هيكل السيارة في اللعبة مبسوطاً (2048 x 2048). يحتوي مجلد Images في اللعبة أيضاً على corris_template_layered.psd بطبقات.
+2. Paint over it keeping the size, then \"My image…\".	2. ارسم فوقه مع الحفاظ على الحجم، ثم \"صورتي…\".
+3. In game, buy \"Custom paint made by artist\" at Fleetari's (repair shop): the CORRIS takes your paint.	3. في اللعبة، اشترِ \"Custom paint made by artist\" لدى Fleetari (ورشة التصليح): تأخذ CORRIS طلاءك.
+Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.	تعذّرت قراءة المعاينة (MWCoop\\cache\\corris.mesh): ابدأ لعبة لإعادة بنائها.
+Start a game once to see the car preview.	ابدأ لعبة مرة واحدة لرؤية معاينة السيارة.
+Your CORRIS	سيارتك CORRIS
+Color and trim for a new game; the host gives them to their guests.	اللون والفئة للعبة جديدة؛ يمنحهما المضيف لضيوفه.
+Drag to rotate	اسحب للتدوير
+Show the car	اعرض السيارة
+Custom paint…	طلاء مخصّص…
+Color	اللون
+Random (like the game)	عشوائي (مثل اللعبة)
+Custom color	لون مخصّص
+Other color\u2026	لون آخر\u2026
+Trim	الفئة
+VIN plate\u2026	لوحة رقم الهيكل\u2026
+CANCEL	إلغاء
+file can't be read	تعذّرت قراءة الملف
+image format not recognized by Windows (try PNG or JPG)	صيغة الصورة غير معروفة لدى Windows (جرّب PNG أو JPG)
+The templates are made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\nEach shows the game's texture (face, top or pants) with its seams: paint over it keeping the size, then import.	يُنشئ التعديل القوالب: ابدأ لعبة (اللعب الفردي يكفي) وابقَ ~20 ث في اللعبة بهذا الإصدار، ثم عُد إلى هنا.\n\nيعرض كل قالب خامة اللعبة (الوجه أو القميص أو البنطال) مع خطوط الدرز: ارسم فوقه مع الحفاظ على الحجم، ثم استورده.
+No preview for this outfit.	لا توجد معاينة لهذا الطقم.
+Previews appear after a first game (~30 s in game) with this version.	تظهر المعاينات بعد أول لعبة (~30 ث في اللعبة) بهذا الإصدار.
+As before	كما في السابق
+Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone (standing bodies).	معاينة من إصدار أقدم: ابدأ لعبة (اللعب الفردي يكفي) وابقَ ~30 ث في اللعبة، وستُعاد (أجسام واقفة).
+Tops	القمصان
+Full look	المظهر الكامل
+Build, pants, face, hat, glasses, hair: start a game (solo is fine) and stay ~30 s in game with this version, they will show up here.	البنية، البنطال، الوجه، القبعة، النظارات، الشعر: ابدأ لعبة (اللعب الفردي يكفي) وابقَ ~30 ث في اللعبة بهذا الإصدار، وستظهر هنا.
+Join us on Discord!	انضم إلينا على Discord!
+Help, bug reports, early news and players to team up with. English channels, plus a French one.	مساعدة، بلاغات الأخطاء، أخبار مبكرة ولاعبون للتعاون معهم. قنوات بالإنجليزية، وقناة بالفرنسية.
+Trouble in game? Send your logs (Logs button, top right) in #bug-reports.	مشكلة في اللعبة؟ أرسل سجلاتك (زر السجلات، أعلى اليمين) في #bug-reports.
+JOIN THE DISCORD	انضم إلى Discord
+Later	لاحقاً
+Always one click away: the Discord button, bottom left.	دائماً على بُعد نقرة: زر Discord، أسفل اليسار.
+Launch option copied: paste it in Steam	نُسخ خيار التشغيل: الصقه في Steam
+Playing through Steam	اللعب عبر Steam
+HOST opens a Steam lobby for your friends only: invite them with the lobby's \"Invite friends\" button.	زر استضافة يفتح ردهة Steam لأصدقائك فقط: ادعُهم بزر \"دعوة الأصدقاء\" في الردهة.
+Your friends accept the invite in Steam (or click JOIN in MWCoop, STEAM mode); START launches everyone's game.	يقبل أصدقاؤك الدعوة في Steam (أو ينقرون انضمام في MWCoop، وضع STEAM)؛ وزر ابدأ يشغّل لعبة الجميع.
+So that Steam's Play button and an invite accepted with MWCoop closed open MWCoop (not the game without the mod), everyone adds this launch option:	ليفتح MWCoop (لا اللعبة بدون التعديل) عند زر العب في Steam أو عند قبول دعوة وMWCoop مغلق، يضيف الجميع خيار التشغيل هذا:
+Steam > Library > right-click My Winter Car > Properties > General > Launch options	Steam > المكتبة > النقر الأيمن على My Winter Car > الخصائص > عام > خيارات التشغيل
+Steam's PLAY button will then open MWCoop. To get the game without the mod back, clear the line.	سيفتح زر العب في Steam بعدها MWCoop. لاستعادة اللعبة بدون التعديل، امسح السطر.
+LINE COPIED \u2713	تم نسخ السطر \u2713
+COPY THE LINE	انسخ السطر
+GOT IT	فهمت
+Don't show again when choosing STEAM	لا تعرض هذا مجدداً عند اختيار STEAM
+Choose mywintercar.exe (My Winter Car folder)	اختر mywintercar.exe (مجلد My Winter Car)
+This folder does not contain My Winter Car.\n\nPick the mywintercar.exe from the game folder (Steam: right-click the game > Manage > Browse local files).	هذا المجلد لا يحتوي على My Winter Car.\n\nاختر mywintercar.exe من مجلد اللعبة (Steam: النقر الأيمن على اللعبة > إدارة > تصفح الملفات المحلية).
+My Winter Car is still running in the background, without a window (stuck after closing?).\n\nForce it to close so you can launch again?	لا تزال My Winter Car تعمل في الخلفية بدون نافذة (عالقة بعد الإغلاق؟).\n\nهل تفرض إغلاقها لتتمكن من التشغيل مجدداً؟
+My Winter Car is already running: close it first	My Winter Car تعمل بالفعل: أغلقها أولاً
+A Windows compatibility mode stops MWCoop from loading: mywintercar.exe > Properties > Compatibility > for all users, untick everything	وضع توافق Windows يمنع تحميل MWCoop: mywintercar.exe > الخصائص > التوافق > لجميع المستخدمين، ألغِ تحديد كل شيء
+A version.dll from another program was in the game folder: set aside (version.dll.autre)	كان ملف version.dll من برنامج آخر في مجلد اللعبة: نُقل جانباً (version.dll.autre)
+Receiving the host's mods… the game will start on its own afterwards	جارٍ استلام تعديلات المضيف… ستبدأ اللعبة تلقائياً بعد ذلك
+Enter the host address	أدخل عنوان المضيف
+Could not write MWCoop\\lancement.ini (error %lu)	تعذّرت كتابة MWCoop\\lancement.ini (الخطأ %lu)
+%s is hosting (Steam)	%s يستضيف (Steam)
+%s is hosting (port %d)	%s يستضيف (المنفذ %d)
+%s joins %s	%s ينضم إلى %s
+%s plays solo	%s يلعب وحده
+Steam could not start the game (is Steam open?)	تعذّر على Steam تشغيل اللعبة (هل Steam مفتوح؟)
+Could not prepare the launch copy: the game starts without the host's mods	تعذّر تجهيز نسخة التشغيل: ستبدأ اللعبة بدون تعديلات المضيف
+Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)	تعذّر تجهيز نسخة التشغيل: التشغيل من مجلد اللعبة (قد لا يُحمَّل التعديل أو MSCLoader)
+Launch cancelled (administrator prompt declined)	أُلغي التشغيل (رُفض طلب صلاحيات المسؤول)
+Could not start mywintercar.exe (error %lu)	تعذّر تشغيل mywintercar.exe (الخطأ %lu)
+random	عشوائي
+custom #%06X	مخصّص #%06X
+%S refused: version %S (yours: %S)	%S مرفوض: الإصدار %S (إصدارك: %S)
+Windows Firewall is BLOCKING My Winter Car (its question was refused, or stayed hidden behind the game).	جدار حماية Windows يحظر My Winter Car (رُفض سؤاله، أو بقي مخفياً خلف اللعبة).
+Windows Firewall does not allow My Winter Car on this network yet (Radmin VPN often counts as a public network).	جدار حماية Windows لا يسمح بعد لـ My Winter Car على هذه الشبكة (غالباً ما يُعدّ Radmin VPN شبكة عامة).
+\n\nYour friends would get into the lobby, but not into the game (\"timed out\").\n\nAllow My Winter Car and MWCoop in the firewall? Windows will ask for administrator approval.	\n\nسيدخل أصدقاؤك الردهة، لكن ليس اللعبة (\"timed out\").\n\nهل تسمح لـ My Winter Car وMWCoop في جدار الحماية؟ سيطلب Windows موافقة المسؤول.
+Firewall: My Winter Car allowed	جدار الحماية: تم السماح لـ My Winter Car
+Firewall unchanged: your friends may not get into the game	جدار الحماية دون تغيير: قد لا يتمكن أصدقاؤك من دخول اللعبة
+Cannot open the lobby: TCP port %d in use (error %d)	تعذّر فتح الردهة: منفذ TCP %d قيد الاستخدام (الخطأ %d)
+Lobby open \u00B7 port %d	الردهة مفتوحة \u00B7 المنفذ %d
+%d of %d guest(s) not ready yet.\n\nStart anyway? Their game will start too.	%d من أصل %d ضيوف غير جاهزين بعد.\n\nهل تبدأ على أي حال؟ ستبدأ لعبتهم أيضاً.
+UDP not confirmed for %s: forward UDP port %d (not just TCP) on your router	UDP غير مؤكد لـ %s: حوّل منفذ UDP %d (وليس TCP فقط) في الراوتر
+Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\nCORRIS color (car icon in the lobby): 	بدء لعبة جديدة؟\n\nستحل محل ملف حفظ My Winter Car الحالي (ستضيع اللعبة الجارية).\n\nلون CORRIS (أيقونة السيارة في الردهة): 
+In %s's lobby	في ردهة %s
+Connecting to %s's lobby\u2026	جارٍ الاتصال بردهة %s\u2026
+You'll be ready as soon as the host's files are received	ستكون جاهزاً فور استلام ملفات المضيف
+Ready, but UDP is blocked: the host must forward UDP port %d	جاهز، لكن UDP محظور: يجب على المضيف تحويل منفذ UDP %d
+UDP port %d is already in use on this PC (error %d): the game will not be able to open it. Close the program using it.	منفذ UDP %d مستخدم بالفعل على هذا الجهاز (الخطأ %d): لن تتمكن اللعبة من فتحه. أغلق البرنامج الذي يستخدمه.
+UDP blocked for %s: forward UDP port %d (not just TCP) on your router to this PC. The lobby uses TCP, the game uses UDP.	UDP محظور لـ %s: حوّل منفذ UDP %d (وليس TCP فقط) في الراوتر إلى هذا الجهاز. الردهة تستخدم TCP، واللعبة تستخدم UDP.
+UDP blocked: the host must forward UDP port %d (not just TCP) on their router. The lobby uses TCP, the game uses UDP.	UDP محظور: يجب على المضيف تحويل منفذ UDP %d (وليس TCP فقط) في الراوتر لديه. الردهة تستخدم TCP، واللعبة تستخدم UDP.
+Players	اللاعبون
+UDP: not checked (host has an old launcher)	UDP: لم يُفحص (لدى المضيف مشغّل قديم)
+UDP: blocked	UDP: محظور
+UDP: testing\u2026	UDP: جارٍ الاختبار\u2026
+Click yourself: outfit, car	انقر على نفسك: الملابس، السيارة
+Creating the Steam lobby\u2026	جارٍ إنشاء ردهة Steam\u2026
+Connecting to the lobby\u2026	جارٍ الاتصال بالردهة\u2026
+A lobby for your Steam friends only: you can invite them from here.	ردهة لأصدقائك على Steam فقط: يمكنك دعوتهم من هنا.
+If the host is already playing or has no lobby, you can join directly in game.	إذا كان المضيف يلعب بالفعل أو ليست لديه ردهة، يمكنك الانضمام مباشرة داخل اللعبة.
+Invite Steam friends	ادعُ أصدقاء Steam
+Waiting for a player\u2026	بانتظار لاعب\u2026
+  (you)	  (أنت)
+HOST	المضيف
+READY \u2713	جاهز \u2713
+NOT READY	غير جاهز
+UDP blocked	UDP محظور
+Game	اللعبة
+Game (chosen by the host)	اللعبة (يختارها المضيف)
+Continue my game	تابع لعبتي
+Continue the game	تابع اللعبة
+New game	لعبة جديدة
+Your save, sent to the guests	ملف حفظك، يُرسل إلى الضيوف
+The host's save	ملف حفظ المضيف
+Replaces your save	يحل محل ملف حفظك
+A fresh game at the host's	لعبة جديدة لدى المضيف
+CORRIS color: 	لون CORRIS: 
+You join as soon as the host is in game.	تنضم فور دخول المضيف إلى اللعبة.
+Your guests receive it when they arrive.	يستلمه ضيوفك عند وصولهم.
+You receive it on arrival; yours is left untouched.	تستلمه عند وصولك؛ ويبقى ملفك دون مساس.
+Invite your Steam friends. Once everyone is ready, START launches everyone's game.	ادعُ أصدقاءك على Steam. عندما يصبح الجميع جاهزين، يشغّل زر ابدأ لعبة الجميع.
+Once everyone is ready, START launches everyone's game; the guests follow your game.	عندما يصبح الجميع جاهزين، يشغّل زر ابدأ لعبة الجميع؛ ويتبع الضيوف لعبتك.
+Click READY. Your game starts by itself when the host starts the session.	انقر جاهز. ستبدأ لعبتك تلقائياً عندما يبدأ المضيف الجلسة.
+START THE GAME	ابدأ اللعبة
+Alone for now	وحدك حالياً
+%d / %d ready	%d / %d جاهز
+READY AFTER FILES	جاهز بعد الملفات
+Getting the host's files\u2026 (click to cancel)	جارٍ جلب ملفات المضيف\u2026 (انقر للإلغاء)
+READY?	جاهز؟
+Click to cancel	انقر للإلغاء
+Click when you're ready	انقر عندما تكون جاهزاً
+CONNECTING\u2026	جارٍ الاتصال\u2026
+CLOSE THE LOBBY	أغلق الردهة
+LEAVE THE LOBBY	غادر الردهة
+Back to the lobby	العودة إلى الردهة
+Invite friends	دعوة الأصدقاء
+Lobby options	خيارات الردهة
+Close the launcher at launch	أغلق المشغّل عند التشغيل
+Otherwise it comes back at the end	وإلا فسيعود في النهاية
+Used by the next lobby	تستخدمه الردهة التالية
+My outfit and car	ملابسي وسيارتي
+What the others see	ما يراه الآخرون
+CDs, paint, posters, mods\u2026	أقراص CD، طلاء، ملصقات، تعديلات\u2026
+No logs yet: start the game with MWCoop first	لا توجد سجلات بعد: شغّل اللعبة مع MWCoop أولاً
+The game is running: close it before uninstalling MWCoop	اللعبة تعمل: أغلقها قبل إلغاء تثبيت MWCoop
+Completely uninstall MWCoop?\n\nMoved to the Recycle Bin: everything MWCoop in the game folder (version.dll, the MWCoop folder with its profiles, logs and received content, this launcher), all of %LOCALAPPDATA%\\MWCoop (launch copies, MWCoop's MSCLoader, caches), and the guest profile settings.\n\nKept: your save, your mods (Mods folder) and the official MSCLoader.\n\nTo play co-op again, you will need to download MWCoop again.	إلغاء تثبيت MWCoop بالكامل؟\n\nيُنقل إلى سلة المحذوفات: كل ما يخص MWCoop في مجلد اللعبة (version.dll، ومجلد MWCoop بملفاته الشخصية وسجلاته والمحتوى المستلم، وهذا المشغّل)، وكامل %LOCALAPPDATA%\\MWCoop (نسخ التشغيل، وMSCLoader الخاص بـ MWCoop، وذاكرات التخزين المؤقت)، وإعدادات ملف الضيف.\n\nيُحتفظ بـ: ملف حفظك، وتعديلاتك (مجلد Mods) وMSCLoader الرسمي.\n\nللعب الجماعي مجدداً، ستحتاج إلى تنزيل MWCoop من جديد.
+MWCoop is uninstalled (everything is in the Recycle Bin).	تم إلغاء تثبيت MWCoop (كل شيء في سلة المحذوفات).
+MWCoop is uninstalled, except these items (open in another program?):	تم إلغاء تثبيت MWCoop، باستثناء هذه العناصر (مفتوحة في برنامج آخر؟):
+\n\nIf you had put MWCoop in Steam's launch options (game Properties > General), remove it: otherwise the game won't start from Steam anymore.\n\nTo reinstall: download MWCoop and run MWCoop.exe.	\n\nإذا كنت قد وضعت MWCoop في خيارات التشغيل في Steam (خصائص اللعبة > عام)، فأزله: وإلا فلن تبدأ اللعبة من Steam بعد الآن.\n\nلإعادة التثبيت: نزّل MWCoop وشغّل MWCoop.exe.
+The game is running: close it before deleting its logs	اللعبة تعمل: أغلقها قبل حذف سجلاتها
+Logs moved to the Recycle Bin	نُقلت السجلات إلى سلة المحذوفات
+Could not delete (file in use?)	تعذّر الحذف (الملف قيد الاستخدام؟)
+%d sessions moved to the Recycle Bin	نُقلت %d جلسات إلى سلة المحذوفات
+Could not create the zip (error %lu)	تعذّر إنشاء ملف zip (الخطأ %lu)
+Zip on the Desktop (%d files): send it	ملف zip على سطح المكتب (%d ملفات): أرسله
+Zip created (%d files): send it	تم إنشاء ملف zip (%d ملفات): أرسله
+Lobby closed \u00B7 %s	أُغلقت الردهة \u00B7 %s
+Left the lobby \u00B7 %s	غادرت الردهة \u00B7 %s
+Game through Steam: lobby and invites right here	اللعب عبر Steam: الردهة والدعوات هنا مباشرة
+Game through IP address (LAN, Radmin, Hamachi...)	اللعب عبر عنوان IP (LAN، Radmin، Hamachi...)
+New outfits by Dom: Outfit tab (credits: star at the top)	ملابس جديدة من Dom: تبويب الملابس (الشكر والتقدير: النجمة في الأعلى)
+The game closed on startup (see the logs)	أُغلقت اللعبة عند بدء التشغيل (راجع السجلات)
+The host is starting the game\u2026 yours starts in a moment	المضيف يبدأ اللعبة\u2026 ستبدأ لعبتك بعد لحظات
+The host is starting\u2026 UDP not confirmed (UDP port %d)	المضيف يبدأ\u2026 UDP غير مؤكد (منفذ UDP %d)
+UDP not confirmed: the host must forward UDP port %d (not just TCP) on their router	UDP غير مؤكد: يجب على المضيف تحويل منفذ UDP %d (وليس TCP فقط) في الراوتر لديه
+Different version (you %s, host %s): update, restart MWCoop.exe	إصدار مختلف (أنت %s، المضيف %s): حدّث، ثم أعد تشغيل MWCoop.exe
+Lobby is full (%d players)	الردهة ممتلئة (%d لاعبين)
+Session already started: \"Join in game\"	الجلسة بدأت بالفعل: \"الانضمام داخل اللعبة\"
+The host closed the lobby	أغلق المضيف الردهة
+Refused by the host	رفضك المضيف
+No lobby at the host: \"Join in game\" if they are already playing	لا توجد ردهة لدى المضيف: \"انضم داخل اللعبة\" إن كان يلعب بالفعل
+My Winter Car not found: choose mywintercar.exe	لم يُعثر على My Winter Car: اختر mywintercar.exe
+The game stopped abruptly: see the logs	توقفت اللعبة فجأة: راجع السجلات
+The last launch ran WITHOUT the mod (antivirus? version.dll?): see LOGS	آخر تشغيل تمّ دون التعديل (مضاد الفيروسات؟ version.dll؟): راجع السجلات
+UDP not confirmed for Kalle: forward UDP port 7870 (not just TCP) on your router	UDP غير مؤكَّد لـ Kalle: حوّل منفذ UDP 7870 (وليس TCP فقط) في الراوتر
+Steam host	مضيف Steam
+connected to Pekka (Steam)	متصل بـ Pekka (Steam)
+JD joins Pekka	JD ينضم إلى Pekka
+Steam lobby open: invite your friends	ردهة Steam مفتوحة: ادعُ أصدقاءك
+In %s's Steam lobby	في ردهة Steam الخاصة بـ %s
+Close the game to change the tapes (it rewrites their list)	أغلق اللعبة لتغيير الأشرطة (فهي تعيد كتابة قائمتها)
+A video is already being converted	يجري تحويل فيديو بالفعل
+Choose the video to put on the tape	اختر الفيديو الذي تضعه على الشريط
+Can't convert: MWCoopRT.dll missing or too old (no conversion on Windows 7)	تعذّر التحويل: MWCoopRT.dll مفقود أو قديم جداً (لا تحويل على Windows 7)
+Conversion not started	لم يبدأ التحويل
+Converting %s…	جارٍ تحويل %s…
+Conversion failed: %s	فشل التحويل: %s
+Video converted, but the game is open: close it and import again	تم تحويل الفيديو، لكن اللعبة مفتوحة: أغلقها واستورده مجدداً
+Video added to the tape \"%s\" (%s)	أُضيف الفيديو إلى الشريط \"%s\" (%s)
+Video converted, but the save couldn't be changed	تم تحويل الفيديو، لكن تعذّر تعديل ملف الحفظ
+Video converted, but the tape is no longer in the save	تم تحويل الفيديو، لكن الشريط لم يعد في ملف الحفظ
+Tape renamed	أُعيدت تسمية الشريط
+Save not changed	لم يُعدَّل ملف الحفظ
+A conversion or an export is already running	يجري تحويل أو تصدير بالفعل
+Nothing to export: this tape's films aren't on this PC	لا شيء للتصدير: أفلام هذا الشريط ليست على هذا الحاسوب
+Can't export: MWCoopRT.dll missing or too old (no export on Windows 7)	تعذّر التصدير: MWCoopRT.dll مفقود أو قديم جداً (لا تصدير على Windows 7)
+Export not started	لم يبدأ التصدير
+Exporting \"%s\" as .mp4…	جارٍ تصدير \"%s\" بصيغة .mp4…
+Video exported: %s	تم تصدير الفيديو: %s
+Export failed: %s	فشل التصدير: %s
+Tapes of your game	أشرطة لعبتك
+Those of the game you host or play alone (including inside a VCR or a camcorder). Pick one to watch it, export it, rename it or put a video on it.	أشرطة اللعبة التي تستضيفها أو تلعبها وحدك (بما فيها ما داخل جهاز الفيديو أو كاميرا الفيديو). اختر شريطاً لمشاهدته أو تصديره أو إعادة تسميته أو وضع فيديو عليه.
+Films folder	مجلد الأفلام
+Game open: read only	اللعبة مفتوحة: للقراءة فقط
+No tape yet: buy some at the OSUUSKAUPPA shop in game (west of the PSK car park).	لا أشرطة بعد: اشترِ بعضها من متجر OSUUSKAUPPA في اللعبة (غرب موقف سيارات PSK).
+No tape in your game.	لا أشرطة في لعبتك.
+Tape title	عنوان الشريط
+Enter: write · Esc: cancel · 24 characters	Enter: كتابة · Esc: إلغاء · 24 حرفاً
+Write	اكتب
+Cancel	إلغاء
+(no title)	(بلا عنوان)
+Blank	فارغ
+ take	 لقطة
+ film(s) not on this PC	 أفلام ليست على هذا الحاسوب
+ · in a VCR	 · في جهاز فيديو
+ · in a camcorder	 · في كاميرا فيديو
+Converting 	جارٍ تحويل 
+Click a tape to see it here.	انقر شريطاً لرؤيته هنا.
+BLANK TAPE	شريط فارغ
+Films not on this PC	أفلام ليست على هذا الحاسوب
+Exporting… 	جارٍ التصدير… 
+Export as .mp4	تصدير بصيغة .mp4
+Rename	إعادة تسمية
+Video…	فيديو…
+Confirm?	تأكيد؟
+Erase	مسح
+Exported videos	الفيديوهات المصدَّرة
+Tape erased (the title stays)	مُسح الشريط (يبقى العنوان)
+Click Confirm again to erase this tape	انقر تأكيد مجدداً لمسح هذا الشريط
+Drone photos	صور الطائرة المسيّرة
+ photo(s) · F8 in game to take some	 صورة · F8 في اللعبة لالتقاط بعضها
+No photo yet. In game, F8 starts the drone camera; left click takes the photo.	لا صور بعد. في اللعبة، يشغّل F8 كاميرا الطائرة المسيّرة، والنقر الأيسر يلتقط الصورة.
+Click a photo to see it here.	انقر صورة لرؤيتها هنا.
+Open	فتح
+Show in folder	إظهار في المجلد
+Confirm? (Recycle Bin)	تأكيد؟ (سلة المحذوفات)
+Delete	حذف
+Photo moved to the Recycle Bin	نُقلت الصورة إلى سلة المحذوفات
+Photo not deleted	لم تُحذف الصورة
+Click again to move the photo to the Recycle Bin	انقر مجدداً لنقل الصورة إلى سلة المحذوفات
+Mod settings not saved (error %lu)	لم تُحفظ إعدادات التعديل (خطأ %lu)
+Close My Winter Car before installing MSCLoader	أغلق My Winter Car قبل تثبيت MSCLoader
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it FOR MWCOOP, apart (%LOCALAPPDATA%\\MWCoop)?\n\nThe game folder is not changed (except the Mods folder, if missing). Your mods stay in the game's Mods folder. An official MSCLoader already installed is not touched.\n\nMSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL.	هل تريد تنزيل أحدث إصدار رسمي من MSCLoader (من GitHub الخاص بـ piotrulos، نحو 4 MB) وتثبيته لـ MWCoop بشكل منفصل (%LOCALAPPDATA%\\MWCoop)؟\n\nلا يتغيّر مجلد اللعبة (باستثناء مجلد Mods إن كان مفقوداً). تبقى تعديلاتك في مجلد Mods الخاص باللعبة. لا يُمسّ MSCLoader الرسمي المثبّت مسبقاً.\n\nMSCLoader مشروع مستقل عن MWCoop. دعمه في MWCoop تجريبي.
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and reinstall it in the game folder? Your mods and their settings are kept.	هل تريد تنزيل أحدث إصدار رسمي من MSCLoader (من GitHub الخاص بـ piotrulos، نحو 4 MB) وإعادة تثبيته في مجلد اللعبة؟ تُحفظ تعديلاتك وإعداداتها.
+REINSTALL MSCLoader (your mods and their settings are kept).\n\n	إعادة تثبيت MSCLoader (تُحفظ تعديلاتك وإعداداتها).\n\n
+Installing MSCLoader…	جارٍ تثبيت MSCLoader…
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it in the game folder?\n\nMSCLoader is a project independent from MWCoop. Its support in MWCoop is EXPERIMENTAL.	هل تريد تنزيل أحدث إصدار رسمي من MSCLoader (من GitHub الخاص بـ piotrulos، نحو 4 MB) وتثبيته في مجلد اللعبة؟\n\nMSCLoader مشروع مستقل عن MWCoop. دعمه في MWCoop تجريبي.
+MSCLoader %s installed: put your mods in its Mods folder	تم تثبيت MSCLoader %s: ضع تعديلاتك في مجلد Mods الخاص به
+MSCLoader not installed: %s	لم يُثبَّت MSCLoader: %s
+EXPERIMENTAL	تجريبي
+Close the game to turn a mod on or off	أغلق اللعبة لتشغيل تعديل أو إيقافه
+%s: can't rename (error %lu)	%s: تعذّرت إعادة التسمية (خطأ %lu)
+%s on: loaded at the next launch	%s مفعّل: يُحمَّل في التشغيل القادم
+%s off: neither loaded nor sent (.dll.off file)	%s معطّل: لا يُحمَّل ولا يُرسَل (ملف .dll.off)
+MSCLoader will load at launch	سيُحمَّل MSCLoader عند التشغيل
+MSCLoader will not load (nothing is uninstalled)	لن يُحمَّل MSCLoader (لا يُزال تثبيت أي شيء)
+MWCoop's MSCLoader: installed apart, the game is not changed	MSCLoader الخاص بـ MWCoop: مثبّت بشكل منفصل، ولا تتغيّر اللعبة
+MWCoop's MSCLoader: click INSTALL MSCLOADER (installed apart, the game is not changed)	MSCLoader الخاص بـ MWCoop: انقر تثبيت MSCLoader (مثبّت بشكل منفصل، ولا تتغيّر اللعبة)
+Official MSCLoader: the one installed in the game	MSCLoader الرسمي: المثبّت في اللعبة
+Official MSCLoader: not installed in the game (INSTALL MSCLOADER)	MSCLoader الرسمي: غير مثبّت في اللعبة (تثبيت MSCLoader)
+%s is off: it is not sent	%s معطّل: لا يُرسَل
+%s will be sent to the lobby's guests	سيُرسَل %s إلى ضيوف الردهة
+%s stays with you (not sent)	يبقى %s عندك (لا يُرسَل)
+\u2190 Back to mods	← العودة إلى التعديلات
+Mod enabled	التعديل مفعّل
+  (button: in game)	  (الزر: في اللعبة)
+in game	في اللعبة
+  (in game)	  (في اللعبة)
+OFFICIAL	رسمي
+REINSTALL	إعادة تثبيت
+Installing MSCLoader\u2026	جارٍ تثبيت MSCLoader…
+MSCLoader, the community mod loader (independent project), is not installed.	MSCLoader، محمّل التعديلات المجتمعي (مشروع مستقل)، غير مثبّت.
+MSCLoader %s%s \u00B7 %d mod(s) \u00B7 %s folder	MSCLoader %s%s · %d تعديل · مجلد %s
+ by MWCoop (apart, the game is not changed)	 من MWCoop (منفصل، ولا تتغيّر اللعبة)
+ (official)	 (رسمي)
+Documents	المستندات
+game	اللعبة
+Load MSCLoader	تحميل MSCLoader
+Your mods in your MWCoop games	تعديلاتك في ألعاب MWCoop الخاصة بك
+INSTALLING\u2026	جارٍ التثبيت…
+INSTALL MSCLOADER	تثبيت MSCLoader
+Accept the host's files	اقبل ملفات المضيف
+No more ACCEPT ALL in a friend's lobby	لا مزيد من قبول الكل في ردهة صديق
+Your mods	تعديلاتك
+No mod in the Mods folder. Add MSCLoader mods (My Winter Car version), then start the game once: their names and options will show up here.	لا تعديلات في مجلد Mods. أضف تعديلات MSCLoader (إصدار My Winter Car)، ثم شغّل اللعبة مرة واحدة: ستظهر هنا أسماؤها وخياراتها.
+.off \u00B7 off: neither loaded nor sent	.off · معطّل: لا يُحمَّل ولا يُرسَل
+ \u00B7 disabled	 · معطّل
+ \u00B7 start the game once for details	 · شغّل اللعبة مرة لرؤية التفاصيل
+On	تشغيل
+Send	إرسال
+Settings apply at the next game launch. \"On\" off: the mod no longer loads. \"Send\": it is copied to your lobby's guests.	تُطبَّق الإعدادات في التشغيل القادم للعبة. \"تشغيل\" غير مفعّل: لم يعد التعديل يُحمَّل. \"إرسال\": يُنسخ إلى ضيوف ردهتك.
+Open the Mods folder	افتح مجلد Mods
+This lobby uses mods (MSCLoader).\n\nInstall MSCLoader (MWCoop's Coop version, installed apart) and get the host's mods?\n\nNo: you join without the mods (some of the host's items or cars may be missing).	تستخدم هذه الردهة تعديلات (MSCLoader).\n\nهل تريد تثبيت MSCLoader (نسخة Coop من MWCoop، مثبّتة بشكل منفصل) والحصول على تعديلات المضيف؟\n\nلا: تنضم دون التعديلات (قد تنقص بعض أغراض المضيف أو سياراته).
+Without MSCLoader: you play without the host's mods	دون MSCLoader: تلعب دون تعديلات المضيف
+Installing MSCLoader (Coop version)\u2026	جارٍ تثبيت MSCLoader (نسخة Coop)…
+The host is sending new files: ready as soon as they're received	المضيف يرسل ملفات جديدة: ستكون جاهزاً فور استلامها
+Host's files failed: RETRY, then READY	فشل استلام ملفات المضيف: إعادة المحاولة، ثم جاهز
+Host's files received: you're ready	استُلمت ملفات المضيف: أنت جاهز
+Host's mods not received: RETRY, then join	لم تُستلم تعديلات المضيف: إعادة المحاولة، ثم انضم
+MSCLoader files missing: reinstall it in the Mods tab	ملفات MSCLoader مفقودة: أعد تثبيته من تبويب التعديلات
+Sent to guests	مُرسَل إلى الضيوف
+Host's files	ملفات المضيف
+Nothing for now	لا شيء حالياً
+Nothing is sent	لا يُرسَل شيء
+Nothing (MSCLoader off: guests without mods)	لا شيء (MSCLoader معطّل: الضيوف دون تعديلات)
+%d mod(s) \u00B7 %d item(s) \u00B7 %s	%d تعديل · %d غرض · %s
+Choose	اختر
+Checking\u2026	جارٍ التحقق…
+ACCEPT ALL	قبول الكل
+Downloading\u2026 %d%% (%s)	جارٍ التنزيل… %d%% (%s)
+Ready \u2713  %d mod(s) \u00B7 %d item(s)	جاهز ✓  %d تعديل · %d غرض
+The host sends nothing \u2713	المضيف لا يرسل شيئاً ✓
+ \u00B7 no MSCLoader	 · دون MSCLoader
+ \u00B7 installing MSCLoader\u2026	 · جارٍ تثبيت MSCLoader…
+Failed (	فشل (
+RETRY	إعادة المحاولة
+Content sent to guests	المحتوى المُرسَل إلى الضيوف
+Your CDs, paint, flag\u2026 as you have them in your game, copied apart to your lobby's guests.	أقراصك المدمجة، الطلاء، العلم… كما هي في لعبتك، تُنسخ بشكل منفصل إلى ضيوف ردهتك.
+nothing in the game	لا شيء في اللعبة
+%d read by the game \u00B7 %d ignored (track1.ogg\u2026)	%d تقرؤها اللعبة · %d متجاهَلة (track1.ogg…)
+%d song(s) \u00B7 %s	%d أغنية · %s
+%d file(s) \u00B7 %s	%d ملف · %s
+MSCLoader mods: not installed	تعديلات MSCLoader: غير مثبّتة
+MSCLoader mods: off (guests without mods)	تعديلات MSCLoader: معطّلة (الضيوف دون تعديلات)
+MSCLoader mods: %d sent of %d	تعديلات MSCLoader: أُرسل %d من %d
+%d / %d items sent \u00B7 copied apart to your guests	أُرسل %d / %d غرض · تُنسخ بشكل منفصل إلى ضيوفك
+Regular	عادي
+Default	افتراضي
+None	بلا
+Pig	خنزير
+Custom pants	بنطال مخصّص
+Custom face	وجه مخصّص
+Pants 	بنطال 
+Face 	وجه 
+Pants	البنطال
+Face	الوجه
+ (woman)	 (امرأة)
+Game over · %s	انتهت اللعبة · %s
+MWCoop did not load in the game: close it, then send the logs (zip) without closing the launcher	لم يُحمَّل MWCoop في اللعبة: أغلقها، ثم أرسل السجلات (zip) دون إغلاق المشغّل
+MWCoop did not load from the launch copy: start your game again, it will now start from the game folder	لم يُحمَّل MWCoop من نسخة التشغيل: شغّل لعبتك مجدداً، وستبدأ الآن من مجلد اللعبة
+MWCoop did not load in the game.\n\nFor some players it only loads when the game is started through Steam (like its PLAY button).\n\nTurn on \"Start the game through Steam\" (Settings > Game) and start your game again?	لم يُحمَّل MWCoop في اللعبة.\n\nعند بعض اللاعبين لا يُحمَّل إلا إذا شُغّلت اللعبة عبر Steam (مثل زر التشغيل فيه).\n\nهل تريد تفعيل \"تشغيل اللعبة عبر Steam\" (الإعدادات > اللعبة) وإعادة تشغيل لعبتك؟
+Start through Steam turned on: start your game again	تم تفعيل التشغيل عبر Steam: شغّل لعبتك مجدداً
+%s is coming to you	%s قادم إليك
+%s kicked from the game	طُرد %s من اللعبة
+Game running	اللعبة قيد التشغيل
+ \u00B7 through Steam	 · عبر Steam
+The launcher stays open during the game and goes back to the menu when the game closes. To close it at launch: Settings.	يبقى المشغّل مفتوحاً أثناء اللعب ويعود إلى القائمة عند إغلاق اللعبة. لإغلاقه عند التشغيل: الإعدادات.
+Server	الخادم
+Waiting for the game's information\u2026	في انتظار معلومات اللعبة…
+They show up once the mod is loaded (game menu).	تظهر بعد تحميل التعديل (قائمة اللعبة).
+%d player(s)	%d لاعب
+  \u00B7 host	  · المضيف
+at the menu	في القائمة
+BRING HERE	أحضره هنا
+CONFIRM?	تأكيد؟
+KICK	طرد
+BRING HERE: the player comes next to you (unless in a vehicle). KICK: two clicks.	أحضره هنا: يأتي اللاعب إلى جانبك (إلا إن كان في مركبة). طرد: نقرتان.
+My Winter Car not found	لم يُعثر على My Winter Car
+steam_api64.dll not found in the game folder	لم يُعثر على steam_api64.dll في مجلد اللعبة
+Unexpected steam_api64.dll in the game	ملف steam_api64.dll غير متوقَّع في اللعبة
+Steam is not running (or not logged in)	Steam لا يعمل (أو لم تسجّل الدخول)
+Steam interfaces not found	لم يُعثر على واجهات Steam
+One moment…	لحظة…
+Creating the Steam lobby…	جارٍ إنشاء ردهة Steam…
+Joining the Steam lobby…	جارٍ الانضمام إلى ردهة Steam…
+Steam could not create the lobby (code %d)	تعذّر على Steam إنشاء الردهة (الرمز %d)
+This lobby no longer exists (or is closed)	لم تعد هذه الردهة موجودة (أو أُغلقت)
+Could not join the Steam lobby (code %u)	تعذّر الانضمام إلى ردهة Steam (الرمز %u)
+%s is already playing: \"Join in game\"	%s يلعب بالفعل: \"انضم داخل اللعبة\"
+This Steam lobby is not an MWCoop lobby	ردهة Steam هذه ليست ردهة MWCoop
+The host is starting the game… yours starts in a moment	المضيف يبدأ اللعبة… ستبدأ لعبتك بعد لحظة
+Invite sent to %s	أُرسلت الدعوة إلى %s
+Steam refused the invite	رفض Steam الدعوة
+No friend lobby: ask the host to invite you	لا ردهة لدى أصدقائك: اطلب من المضيف دعوتك
+%s invites you: click JOIN	%s يدعوك: انقر انضمام
+No Steam friend online (%d offline)	لا أصدقاء متصلون على Steam (%d غير متصل)
+Steam friends online: %d · %d offline	أصدقاء Steam المتصلون: %d · %d غير متصل
+Your Steam friends show up here as soon as they are online. They can also join from Steam (\"Join game\").	يظهر أصدقاؤك على Steam هنا فور اتصالهم. ويمكنهم أيضاً الانضمام من Steam (\"الانضمام إلى اللعبة\").
+Playing My Winter Car	يلعب My Winter Car
+Busy	مشغول
+Away	بعيد
+Snooze	نائم
+Online	متصل
+IN THE LOBBY	في الردهة
+INVITED ✓	تمت الدعوة ✓
+INVITE AGAIN	ادعُه مجدداً
+INVITE	دعوة
+NEW	جديد
+FINISH	إنهاء
+NEXT	التالي
+Skip	تخطَّ
+Back	رجوع
+Update · 	تحديث · 
+Settings	الإعدادات
+Good morning, 	صباح الخير، 
+Good afternoon, 	طاب نهارك، 
+Good evening, 	مساء الخير، 
+Starting	البدء
+Welcome	أهلاً بك
+Ready for a winter together?	مستعد لشتاء معاً؟
+Joining the lobby…	جارٍ الانضمام إلى الردهة…
+Lobby of 	ردهة 
+Lobby	الردهة
+Steam · friends only · %d / %d players	Steam · الأصدقاء فقط · %d / %d لاعب
+Port %d (UDP and TCP) · local address %s · %d / %d	المنفذ %d (UDP وTCP) · العنوان المحلي %s · %d / %d
+Host: %s:%d · %d / %d players	المضيف: %s:%d · %d / %d لاعب
+My character	شخصيتي
+What the other players see in game	ما يراه اللاعبون الآخرون في اللعبة
+Sharing	المشاركة
+Copied to your guests for your game, apart from their own files	تُنسخ إلى ضيوفك من أجل لعبتك، بمعزل عن ملفاتهم
+What's new	ما الجديد
+What changes in each version	ما الذي يتغيّر في كل إصدار
+Logs	السجلات
+Trouble in game? A zip to send	مشكلة في اللعبة؟ ملف zip لإرساله
+Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini	محفوظة في mwcoop-lanceur.ini وMWCoop\\mwcoop.ini
+Game options	خيارات اللعبة
+Graphics and co-op, just for you · in game: F10 menu > Graphics	الرسوميات واللعب الجماعي، لك وحدك · في اللعبة: قائمة F10 > الرسوميات
+API for modders	واجهة برمجية لصانعي التعديلات
+MWCoop.CoopApi: docs, DLL and an example	MWCoop.CoopApi: الوثائق وملف DLL ومثال
+Credits	الشكر والتقدير
+Thanks to everyone who makes MWCoop better	شكراً لكل من يجعل MWCoop أفضل
+VHS tapes	أشرطة VHS
+Watch them, export them as .mp4, rename them, put a video on them	شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو
+Album	الألبوم
+Drone photos (F8 in game)	صور الطائرة المسيّرة (F8 في اللعبة)
+Guide	الدليل
+Everything to play trouble-free: install, lobbies, mods, settings, fixes	كل ما تحتاجه للعب دون مشاكل: التثبيت، الردهات، التعديلات، الإعدادات، الإصلاحات
+Outfit	الملابس
+Car	السيارة
+Content · 	المحتوى · 
+Change folder	غيّر المجلد
+Choose exe…	اختر ملف exe…
+MWCoop.exe goes in the game folder (Steam: right-click My Winter Car > Manage > Browse local files). Otherwise, show it mywintercar.exe.	يوضع MWCoop.exe في مجلد اللعبة (Steam: انقر بالزر الأيمن على My Winter Car > Manage > Browse local files). وإلا، فدلّه على mywintercar.exe.
+Buy the game	اشترِ اللعبة
+Unofficial, non-commercial mod · not affiliated with Amistech Games · requires a legal copy of My Winter Car.	تعديل غير رسمي وغير تجاري · غير تابع لـ Amistech Games · يتطلب نسخة قانونية من My Winter Car.
+YOUR CHARACTER	شخصيتك
+Edit	تعديل
+NICKNAME	الاسم المستعار
+How to connect	طريقة الاتصال
+Your friends must pick the same	يجب أن يختار أصدقاؤك الطريقة نفسها
+recommended	موصى به
+Invites, no port or firewall	دعوات، بلا منفذ ولا جدار حماية
+LAN, Radmin, Hamachi…	شبكة محلية، Radmin، Hamachi…
+HOST ADDRESS	عنوان المضيف
+Steam launch option	خيار تشغيل Steam
+So that an accepted invite opens MWCoop (not the bare game)	لكي تفتح الدعوة المقبولة MWCoop (لا اللعبة وحدها)
+GUIDE	الدليل
+LOBBY IN PROGRESS	ردهة جارية
+Back to the lobby: players, game, start	العودة إلى الردهة: اللاعبون، اللعبة، البدء
+JOIN IN GAME	انضم أثناء اللعب
+JOIN	انضمام
+Opens a Steam lobby for your friends; everyone gets ready, then you start.	يفتح ردهة Steam لأصدقائك؛ يستعد الجميع، ثم تبدأ أنت.
+Opens a lobby: your friends join, everyone gets ready, then you start.	يفتح ردهة: ينضم أصدقاؤك، يستعد الجميع، ثم تبدأ أنت.
+The host is already playing: join their game directly.	المضيف يلعب بالفعل: انضم إلى لعبته مباشرة.
+ invites you: click to enter their lobby.	 يدعوك: انقر لدخول ردهته.
+Your Steam invite, or else a friend's MWCoop lobby.	دعوة Steam الخاصة بك، أو ردهة MWCoop لصديق.
+The lobby at the address entered above.	الردهة على العنوان المُدخل أعلاه.
+Up to 8 players	حتى 8 لاعبين
+A friend's lobby	ردهة صديق
+PLAY SOLO	العب وحدك
+The normal game, without MWCoop.	اللعبة العادية، بدون MWCoop.
+See all	عرض الكل
+Loading…	جارٍ التحميل…
+Notes unavailable (offline).	الملاحظات غير متاحة (دون اتصال).
+The 3D preview shows up after a first game (~30 s in game) with this version.	تظهر المعاينة ثلاثية الأبعاد بعد أول لعبة (~30 ثانية في اللعبة) بهذا الإصدار.
+Loading release notes…	جارٍ تحميل ملاحظات الإصدار…
+No release published yet.	لم يُنشر أي إصدار بعد.
+Release notes unavailable (offline).	ملاحظات الإصدار غير متاحة (دون اتصال).
+INSTALLED	مثبّت
+Update	تحديث
+Loading image…	جارٍ تحميل الصورة…
+Current session	الجلسة الحالية
+Last session	الجلسة الأخيرة
+Session of 	جلسة 
+profile 	الملف الشخصي 
+%d logs, %.0f KB	%d سجلات، %.0f KB
+%d logs, %.1f MB	%d سجلات، %.1f MB
+ABRUPT STOP	توقف مفاجئ
+1 ERROR	خطأ واحد
+%d ERRORS	%d أخطاء
+The game's and the mod's logs	سجلات اللعبة والتعديل
+Delete all	احذف الكل
+Every session keeps its own logs (the last 30).	كل جلسة تحتفظ بسجلاتها (آخر 30).
+Create a zip to send	أنشئ ملف zip لإرساله
+Open folder	افتح المجلد
+Debug mode	وضع التصحيح
+Detailed launcher log: every step, Steam, files, DLLs loaded in the game, antivirus. Turn on if MWCoop doesn't load, then zip.	سجل مفصّل للمشغّل: كل خطوة، Steam، الملفات، ملفات DLL المحمّلة في اللعبة، مضاد الفيروسات. فعّله إذا لم يُحمَّل MWCoop، ثم أنشئ ملف zip.
+The last game stopped abruptly.	توقفت اللعبة الأخيرة بشكل مفاجئ.
+Create a zip and send it (GitHub, Discord) so we can take a look.	أنشئ ملف zip وأرسله (GitHub، Discord) لنلقي نظرة.
+No game logs: MWCoop hasn't loaded in game yet. The launcher's log (and debug mode's) is still in the zip: create it and send it.	لا توجد سجلات للعبة: لم يُحمَّل MWCoop في اللعبة بعد. سجل المشغّل (وسجل وضع التصحيح) موجود في ملف zip: أنشئه وأرسله.
+Updates	التحديثات
+MWCoop is not installed	MWCoop غير مثبّت
+You have 	لديك 
+Version 	الإصدار 
+ available	 متاح
+Checking or installing…	جارٍ التحقق أو التثبيت…
+MWCoop is up to date	MWCoop محدَّث
+Check	تحقّق
+Install automatically	ثبّت تلقائياً
+At every start, without asking	عند كل تشغيل، دون سؤال
+Launcher	المشغّل
+Theme	المظهر
+Dark	داكن
+Light	فاتح
+Language	اللغة
+Otherwise it stays open (players, ping) and comes back	وإلا يبقى مفتوحاً (اللاعبون، زمن الاستجابة) ثم يعود
+See the starting guide again	اعرض دليل البدء مجدداً
+About	حول
+Unofficial, non-commercial mod, not affiliated with Amistech Games. Requires a legal copy of My Winter Car.	تعديل غير رسمي وغير تجاري، غير تابع لـ Amistech Games. يتطلب نسخة قانونية من My Winter Car.
+Buy the game on Steam	اشترِ اللعبة على Steam
+Uninstall MWCoop	أزل تثبيت MWCoop
+Network	الشبكة
+Port	المنفذ
+UDP and TCP, to host by IP	UDP وTCP، للاستضافة عبر IP
+Start the game	ابدأ اللعبة
+If MWCoop doesn't load	إذا لم يُحمَّل MWCoop
+Remove compatibility modes	أزل أوضاع التوافق
+Windows adds some after a crash: MWCoop stops loading	يضيف Windows بعضها بعد انهيار: فيتوقف تحميل MWCoop
+Thank you!	شكراً لك!
+MWCoop also grows thanks to you and to the creators who share their work. Everyone who gives something to the mod is credited here.	ينمو MWCoop أيضاً بفضلك وبفضل المبدعين الذين يشاركون أعمالهم. كل من يقدّم شيئاً للتعديل يُذكر هنا.
+3D Models	نماذج ثلاثية الأبعاد
+Special Thanks	شكر خاص
+Museum of Corsica	متحف كورسيكا
+Paintings, maps, postcards and photos from before 2000, public domain or under Creative Commons licenses (Wikimedia Commons). Full links: MWCoop\\musee\\CREDITS.txt.	لوحات وخرائط وبطاقات بريدية وصور من قبل عام 2000، في الملك العام أو بتراخيص Creative Commons (Wikimedia Commons). الروابط الكاملة: MWCoop\\musee\\CREDITS.txt.
+Relief model: SRTM elevation data (NASA, public domain) via AWS Terrain Tiles (Mapzen)	مجسّم التضاريس: بيانات الارتفاع SRTM (NASA، ملك عام) عبر AWS Terrain Tiles (Mapzen)
+Made something for MWCoop? Share it on the Discord (button at the bottom left): you'll be credited here and in the release notes.	صنعت شيئاً لـ MWCoop؟ شاركه على Discord (الزر أسفل اليسار): سيُذكر اسمك هنا وفي ملاحظات الإصدار.
+My Winter Car is starting	My Winter Car قيد التشغيل
+The game window will appear shortly.	ستظهر نافذة اللعبة بعد قليل.
+A small Unity window may ask for the resolution first: pick it, then click Play.	قد تطلب نافذة Unity صغيرة الدقة أولاً: اخترها، ثم انقر Play.
+The game will start from the launch copy (default)	ستبدأ اللعبة من نسخة التشغيل (افتراضي)
+The game will start straight from its folder	ستبدأ اللعبة مباشرة من مجلدها
+The game will be started through Steam (the launcher closes)	ستبدأ اللعبة عبر Steam (يُغلق المشغّل)
+The game will be started through Steam (like its PLAY button)	ستبدأ اللعبة عبر Steam (مثل زر PLAY فيه)
+The game will be started by the launcher	سيبدأ المشغّل اللعبة
+Windows compatibility modes will be removed before every game	ستُزال أوضاع توافق Windows قبل كل لعبة
+Compatibility modes kept: MWCoop may not load	أوضاع التوافق محفوظة: قد لا يُحمَّل MWCoop
+Debug mode on: start your game, then create the zip	وضع التصحيح مفعّل: ابدأ لعبتك، ثم أنشئ ملف zip
+Debug mode off	وضع التصحيح معطّل
+Click again to move every stored session to the Recycle Bin	انقر مجدداً لنقل كل الجلسات المخزّنة إلى سلة المحذوفات
+to everyone or one player (64 KB)	إلى الجميع أو إلى لاعب واحد (64 KB)
+receive on your channel (mod ID)	استقبل على قناتك (معرّف التعديل)
+who hosts, who plays	من يستضيف، ومن يلعب
+players joining and leaving	انضمام اللاعبين ومغادرتهم
+No dependency: found through reflection, your mod also works without MWCoop.	بلا اعتمادية: يُعثر عليه عبر الانعكاس، فيعمل تعديلك أيضاً بدون MWCoop.
+Already done for you: your files, settings and save data (Mods.txt) go to the guests with the host's.	تم ذلك لك مسبقاً: ملفاتك وإعداداتك وبيانات حفظك (Mods.txt) تذهب إلى الضيوف مع ملفات المضيف.
+The host decides: it saves the world. A message sent before the other player's mod listens is kept for it.	المضيف يقرر: هو من يحفظ العالم. الرسالة المرسلة قبل أن يستمع تعديل اللاعب الآخر تُحفظ له.
+In English: names, comments and docs. The rest of MWCoop's code is in French, but open and not obfuscated: no need to read it.	بالإنجليزية: الأسماء والتعليقات والوثائق. بقية شيفرة MWCoop بالفرنسية، لكنها مفتوحة وغير مموّهة: لا حاجة لقراءتها.
+The cliffs of Bonifacio	منحدرات بونيفاسيو
+1896 (published)	1896 (تاريخ النشر)
+Map of Genoese Corsica	خريطة كورسيكا الجنوية
+View from the Col de Sorba	منظر من ممر سوربا
+The Forest of Valdoniello	غابة فالدونييلو
+Ajaccio, the quays	أجاكسيو، الأرصفة
+Anonymous (postcard, J. Moretti collection)	مجهول (بطاقة بريدية، مجموعة J. Moretti)
+Bastia, the old harbour	باستيا، الميناء القديم
+Anonymous (postcard)	مجهول (بطاقة بريدية)
+The Bavella needles	إبر بافيلا
+Corsican shepherd	راعٍ كورسيكي
+Calvi and its citadel	كالفي وقلعتها
+Anonymous French amateur photographer / Rijksmuseum Amsterdam	مصوّر فرنسي هاوٍ مجهول / Rijksmuseum أمستردام
+1870 (published; sketched 1868)	1870 (تاريخ النشر؛ رُسم عام 1868)
+Giant chestnut tree	شجرة كستناء عملاقة
+'Vendetta' knife	سكين «الثأر»
+Unknown maker; photo Livrustkammaren (Royal Armoury), Stockholm	صانع مجهول؛ صورة Livrustkammaren (مستودع الأسلحة الملكي)، ستوكهولم
+Moor's head banner	راية رأس المغربي
+Unknown	مجهول
+Napoleon's birthplace	مسقط رأس نابليون
+Musicians in Ajaccio	موسيقيون في أجاكسيو
+Napoleon Bonaparte in 1792	نابليون بونابرت عام 1792
+Corsican country people	ريفيّون كورسيكيون
+A Genoese tower	برج جنوي
+A mountain village	قرية جبلية
+Unknown (published in Autosprint)	مجهول (نُشر في Autosprint)
+Unknown (via forum-auto.com)	مجهول (عبر forum-auto.com)
+Unknown (published in Italian press)	مجهول (نُشر في الصحافة الإيطالية)
+1962 Tour de Corse	رالي كورسيكا 1962
+R1093 (Wikimedia Commons user)	R1093 (مستخدم Wikimedia Commons)
+1973 Tour de Corse rally plate	لوحة رالي كورسيكا 1973
+Kerlavarec (Wikimedia Commons user)	Kerlavarec (مستخدم Wikimedia Commons)
+1977 Tour de Corse	رالي كورسيكا 1977
+JCL92800 (Wikimedia Commons user)	JCL92800 (مستخدم Wikimedia Commons)
+Chat	الدردشة
+Wallet	المحفظة
+Voice	الصوت
+Cheats	الغشّ
+Map	الخريطة
+View	العرض
+Drone	الطائرة المسيّرة
+Forward	للأمام
+Left	يسار
+Right	يمين
+Up	أعلى
+Down	أسفل
+Fast	سريع
+Zoom +	تكبير +
+Zoom -	تصغير -
+Tilt left	إمالة لليسار
+Tilt right	إمالة لليمين
+Reset	إعادة ضبط
+Photo	صورة
+Grid	الشبكة
+Interface	الواجهة
+Anti-aliasing	تنعيم الحواف
+HDR (rich light)	HDR (إضاءة غنية)
+Bloom	التوهج
+Contrast boost	تعزيز التباين
+Sun shafts	أشعة الشمس
+Max frames per second	الحد الأقصى للإطارات في الثانية
+Unlimited	غير محدود
+V-sync	المزامنة العمودية
+Off	إيقاف
+Sun shadows	ظلال الشمس
+Moon shadows	ظلال القمر
+House shadows	ظلال المنازل
+Shadow distance	مسافة الظلال
+Shadow detail	تفاصيل الظلال
+Simple	بسيط
+Fine	دقيق
+Basic	أساسي
+Very fine	دقيق جداً
+Draw distance	مسافة الرؤية
+Level of detail	مستوى التفاصيل
+Normal	عادي
+Max	أقصى
+Low	منخفض
+High	مرتفع
+Very high	مرتفع جداً
+Textures	الخامات
+Quarter	ربع
+Half	نصف
+Full	كامل
+Texture filtering	ترشيح الخامات
+Forced	إجباري
+Ray-traced sun shadows	ظلال الشمس بتتبع الأشعة
+Rays per pixel	أشعة لكل بكسل
+Shadow range	مدى الظلال
+Shadow edges	حواف الظلال
+Soft	ناعمة
+Very soft	ناعمة جداً
+Your body in reflections and shadows	جسمك في الانعكاسات والظلال
+Reflections (car paint, smooth surfaces)	الانعكاسات (طلاء السيارة، الأسطح الملساء)
+Subtle	خفيف
+Window reflections	انعكاسات النوافذ
+Light bounce (global illumination)	ارتداد الضوء (الإضاءة الشاملة)
+Ambient occlusion (corners, underneath)	الإطباق المحيطي (الزوايا، الأسفل)
+Strong	قوي
+Lamp shadows (headlights, street lights)	ظلال المصابيح (الأضواء الأمامية، أعمدة الإنارة)
+4 lamps	4 مصابيح
+8 lamps	8 مصابيح
+16 lamps	16 مصباحاً
+Headlight shadows	ظلال الأضواء الأمامية
+2 lights	ضوءان
+4 lights	4 أضواء
+8 lights	8 أضواء
+Street light shadows	ظلال أعمدة الإنارة
+Light coronas (GTA style)	هالات الأضواء (بأسلوب GTA)
+Headlight range	مدى الأضواء الأمامية
+Long	طويل
+Field of view	مجال الرؤية
+Mirrors	المرايا
+Head bob on foot	اهتزاز الرأس سيراً
+Head bob in cars	اهتزاز الرأس في السيارات
+FPS counter	عدّاد FPS
+Gear on screen	ناقل الحركة على الشاشة
+Traffic dust	غبار حركة المرور
+Traffic skid marks	آثار انزلاق حركة المرور
+Player names	أسماء اللاعبين
+Proximity voice	الصوت حسب القرب
+Voice range	مدى الصوت
+Voice volume	مستوى الصوت
+Your microphone volume (for the others)	مستوى صوت ميكروفونك (للآخرين)
+See others' imported images	عرض الصور المستوردة من الآخرين
+Guests' starting money	نقود البداية للضيوف
+Allow cheats (host)	السماح بالغشّ (المضيف)
+Cars run players over (friends, NPCs)	السيارات تدهس اللاعبين (الأصدقاء والشخصيات)
+Disable the CO-OP additions (F8 drone, sleeping bags, shop)	تعطيل إضافات اللعب الجماعي (طائرة F8، أكياس النوم، المتجر)
+Write to the others (chat)	الكتابة للآخرين (الدردشة)
+Wallet (give money)	المحفظة (إعطاء النقود)
+Talk (voice, hold the key)	التحدث (الصوت، اضغط مطولاً على الزر)
+Cheat panel	لوحة الغشّ
+Map (live players)	الخريطة (اللاعبون مباشرة)
+Third-person view (on foot, in vehicles)	منظور الشخص الثالث (سيراً وفي المركبات)
+Drone on / off (photo mode)	تشغيل / إيقاف الطائرة المسيّرة (وضع التصوير)
+Take the photo	التقط الصورة
+Move forward	تقدّم للأمام
+Move back	تراجع للخلف
+Move left	تحرّك يساراً
+Move right	تحرّك يميناً
+Go up	اصعد
+Go down	انزل
+Faster (hold the key)	أسرع (اضغط مطولاً على الزر)
+Zoom in (also the wheel)	تكبير (بالعجلة أيضاً)
+Zoom out	تصغير
+Reset (tilt and zoom)	إعادة ضبط (الميل والتكبير)
+Viewfinder grid	شبكة محدد المنظر
+Hide the viewfinder	إخفاء محدد المنظر
+Map: press or hold	الخريطة: ضغطة أو ضغط مطوّل
+Hold	ضغط مطوّل
+Resolution	الدقة
+Display mode	وضع العرض
+Windowed	نافذة
+Fullscreen	ملء الشاشة
+Borderless	بلا حواف
+Engine quality	جودة المحرك
+Medium	متوسطة
+Good	جيدة
+Vanilla	الأصلية
+Like the game	مثل اللعبة
+Performance	الأداء
+More frames	إطارات أكثر
+Balanced	متوازن
+The sweet spot	الخيار الأمثل
+Pretty	جميل
+Better looking	مظهر أفضل
+Ultra	فائق
+Everything maxed	كل شيء بأقصى حد
+Ray tracing	تتبع الأشعة
+My Winter Car video options	خيارات الفيديو في My Winter Car
+MWCoop enhanced video options	خيارات الفيديو المحسّنة من MWCoop
+The game's own settings (its Options menu)	إعدادات اللعبة نفسها (قائمة الخيارات فيها)
+Added by MWCoop: screen, smoothness, shadows, detail, lights	مضافة من MWCoop: الشاشة، السلاسة، الظلال، التفاصيل، الأضواء
+Shadows	الظلال
+Distance and view	المسافة والرؤية
+Comfort	الراحة
+Lights	الأضواء
+Screen	الشاشة
+Faces, clothes and names	الوجوه والملابس والأسماء
+Game and sharing	اللعبة والمشاركة
+Keys	المفاتيح
+Smoothness	السلاسة
+Advanced shadows	ظلال متقدمة
+Detail and textures	التفاصيل والخامات
+Drone camera	كاميرا الطائرة المسيّرة
+Co-op	اللعب الجماعي
+Voice, players, sharing and the mod's keys	الصوت واللاعبون والمشاركة ومفاتيح التعديل
+Image	الصورة
+Police officer 2	شرطي 2
+Rally driver	سائق رالي
+PSK employee	موظف PSK
+Inspector	مفتش
+Sahara beige	بيج صحراوي
+Apple green	أخضر تفاحي
+Orange	برتقالي
+Sky blue	أزرق سماوي
+Navy blue	أزرق داكن
+Red	أحمر
+White	أبيض
+Black	أسود
+Metallic grey	رمادي معدني
+Brown	بني
+Mustard yellow	أصفر خردلي
+Dark green	أخضر داكن
+Burgundy	عنابي
+Turquoise	فيروزي
+Avocado green	أخضر أفوكادو
+Year (code)	السنة (الرمز)
+Engine	المحرك
+Gearbox	علبة التروس
+Suspension	التعليق
+Windshield	الزجاج الأمامي
+Vinyl roof	سقف فينيل
+Interior	المقصورة
+Wheels	العجلات
+Radio	الراديو
+Instrument panel	لوحة العدادات
+Power brakes	مكابح معززة
+Heated rear window	تدفئة الزجاج الخلفي
+Choose the top image (painted on the template)	اختر صورة القميص (تُرسم على القالب)
+Choose the pants image (painted on the template)	اختر صورة البنطال (تُرسم على القالب)
+The templates are made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\n	القوالب يصنعها التعديل: ابدأ لعبة (وحدك لا بأس) وابقَ نحو 20 ثانية في اللعبة بهذا الإصدار، ثم عد إلى هنا.\n\n
+My top…	قميصي…
+My pants…	بنطالي…
+imported top	قميص مستورد
+imported pants	بنطال مستورد
+Torso	الجذع
+Legs	الساقان
+Build	البنية
+This folder does not contain My Winter Car.\n\nPick the mywintercar.exe from the game folder 	هذا المجلد لا يحتوي على My Winter Car.\n\nاختر ملف mywintercar.exe من مجلد اللعبة 
+Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\n	بدء لعبة جديدة؟\n\nستحل محل ملف حفظ My Winter Car الحالي (ستضيع اللعبة الجارية).\n\n
+\u2022 Sample release note (capture).\n\u2022 Second line: a fix.	• مثال على ملاحظة إصدار (لقطة).\n• السطر الثاني: إصلاح.
+\u2022 First version: loader, visible players.	• الإصدار الأول: المحمّل، لاعبون مرئيون.
+\u2022 First version.	• الإصدار الأول.
+Police officer	شرطي
+Choose the face image (painted on the template)	اختر صورة الوجه (تُرسم على القالب)
+My face…	وجهي…
+imported face	وجه مستورد
+Head	الرأس
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it FOR MWCOOP, apart (%LOCALAPPDATA%\\MWCoop)?\n\n	تنزيل أحدث MSCLoader رسمي (من GitHub الخاص بـ piotrulos، نحو 4 MB) وتثبيته لـ MWCOOP بشكل منفصل (%LOCALAPPDATA%\\MWCoop)؟\n\n
+Download the latest official MSCLoader (piotrulos's GitHub, about 4 MB) and install it in the game folder?\n\n	تنزيل أحدث MSCLoader رسمي (من GitHub الخاص بـ piotrulos، نحو 4 MB) وتثبيته في مجلد اللعبة؟\n\n
+CORRIS paint	طلاء CORRIS
+Images	الصور
+Moped paint	طلاء الدراجة النارية
+Garage flag	علم المرآب
+Posters	الملصقات الجدارية
+Window sticker	ملصق النافذة
+Fabric	القماش
+ID photo	صورة الهوية
+Hockey teams	فرق الهوكي
+Extra	إضافي
+Thin	نحيف
+Slim	رشيق
+Stout	ممتلئ
+Short and round	قصير وممتلئ
+Short and slim	قصير ونحيف
+Police	الشرطة
+Rally	الرالي
+Beanie	قبعة صوفية
+Cap	قبعة
+Trucker cap	قبعة سائق شاحنة
+Police cap	قبعة شرطي
+Fur hat	قبعة فرو
+Fishing hat	قبعة صيد
+Bus driver cap	قبعة سائق حافلة
+Teimo's hat	قبعة Teimo
+Gifu cap	قبعة Gifu
+Flat cap	قبعة مسطحة
+Helmet	خوذة
+Glasses	نظارات
+Round glasses	نظارات مستديرة
+Sunglasses	نظارات شمسية
+Ponytail	ذيل حصان
+Mullet	مليت
+clear	شفاف
+black	أسود
+chrome	كروم
+glossy black	أسود لامع
+smoked	مُدخَّن
+glass	زجاج
+original	أصلي
+TORSO	الجذع
+LEGS	الساقان
+BUILD	البنية
+Hair	الشعر
+Top	القميص
+HEAD	الرأس
+Hat	القبعة
+Welcome to MWCoop!	أهلاً بك في MWCoop!
+A new, bigger launcher. A quick tour in a few bubbles: you can skip it at any time (Esc) and see it again from Settings.	مشغّل جديد وأكبر. جولة سريعة في بضع فقاعات: يمكنك تخطيها في أي وقت (Esc) ومشاهدتها مجدداً من الإعدادات.
+Your nickname	اسمك المستعار
+The name the other players see above your character and in the lobby.	الاسم الذي يراه اللاعبون الآخرون فوق شخصيتك وفي الردهة.
+STEAM: the easiest, you invite your Steam friends, no port or address. IP / VPN: by address (local network, Radmin, Hamachi…).	STEAM: الأسهل، تدعو أصدقاءك على Steam، بلا منفذ أو عنوان. IP / VPN: عبر العنوان (شبكة محلية، Radmin، Hamachi…).
+Opens a lobby: your friends join it, everyone gets READY, then START launches everyone's game. The lobby's gear holds its options.	يفتح ردهة: ينضم إليها أصدقاؤك، يضغط الجميع جاهز، ثم ابدأ يشغّل لعبة الجميع. ترس الردهة يحوي خياراتها.
+Enters a friend's lobby (through Steam: their invite, or their lobby found by itself; by IP: their address just above).	يدخل ردهة صديق (عبر Steam: دعوته، أو ردهته التي تُكتشف تلقائياً؛ عبر IP: عنوانه في الأعلى مباشرة).
+The vanilla game: MWCoop isn't loaded at all (no badge, no co-op menu). Your save is never touched by other people's games.	اللعبة الأصلية: لا يُحمَّل MWCoop إطلاقاً (لا شارة، لا قائمة لعب جماعي). ملف حفظك لا تمسّه ألعاب الآخرين أبداً.
+Every page, on the left	كل الصفحات، على اليسار
+The lobby, your character, what you share and the updates: one click, no window popping over.	الردهة، شخصيتك، ما تشاركه والتحديثات: بنقرة واحدة، بلا نوافذ منبثقة.
+Outfit and car	الملابس والسيارة
+Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your CORRIS color.	مظهرك الكامل (البنية، القبعة، النظارات، الشعر، الوجه، القميص، البنطال) بالأبعاد الثلاثية، ولون CORRIS.
+Content and mods	المحتوى والتعديلات
+What you send to your guests: CDs, paint, flag, posters… and your MSCLoader mods (experimental), copied apart on their side.	ما ترسله لضيوفك: الأقراص، الطلاء، العلم، الملصقات… وتعديلات MSCLoader الخاصة بك (تجريبي)، تُنسخ بشكل منفصل لديهم.
+Graphics	الرسوميات
+Sorted into categories you expand: shadows, distance, detail, textures, frame rate… and now player names (distance, or hidden). One-click presets; in game: F10 menu.	مرتبة في فئات قابلة للتوسيع: الظلال، المسافة، التفاصيل، الخامات، معدل الإطارات… والآن أسماء اللاعبين (المسافة أو الإخفاء). إعدادات جاهزة بنقرة؛ داخل اللعبة: قائمة F10.
+What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.	ما يتغير في كل إصدار. عند صدور إصدار جديد، يظهر زر \"تحديث\" تحت الشعار: يتم التحديث عند النقر عليه.
+Every session now keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.	كل جلسة تحتفظ الآن بسجلاتها، مرتبة حسب التاريخ: وسّع الجلسة التي فشلت، اضغطها أو احذف القديمة. تظهر \"!\" حمراء إذا توقفت اللعبة الأخيرة فجأة.
+Modding API	واجهة برمجة التعديلات
+Also up here now. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.	هنا في الأعلى أيضاً الآن. تصنع تعديلات؟ ما تقدمه واجهة MWCoop البرمجية، مثال للنسخ، ملف DLL والوثائق على GitHub.
+Updates, theme, language, port, game folder, a host's files at a friend's… and this guide.	التحديثات، المظهر، اللغة، المنفذ، مجلد اللعبة، ملفات المضيف لدى صديق… وهذا الدليل.
+Theme and language	المظهر واللغة
+Dark or light, French or English, in one click.	داكن أو فاتح، فرنسي أو إنجليزي، بنقرة واحدة.
+The MWCoop community: help, bug reports, news and players to team up with. GitHub and Ko-fi right next to it.	مجتمع MWCoop: المساعدة، الإبلاغ عن الأخطاء، الأخبار ولاعبون للتعاون معهم. GitHub و Ko-fi بجانبه مباشرة.
+MWCoop's MSCLoader	MSCLoader الخاص بـ MWCoop
+In the Mods tab: OFFICIAL (the one installed in the game) or MWCOOP (installed apart, the game is not changed). If your mods don't load, try MWCOOP, or REINSTALL.	في تبويب التعديلات: الرسمي (المثبت في اللعبة) أو MWCOOP (مثبت بشكل منفصل، اللعبة لا تتغير). إذا لم تُحمَّل تعديلاتك، جرّب MWCOOP أو أعد التثبيت.
+In Settings > Game: Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.	في الإعدادات > اللعبة: نسخة (افتراضي)، مجلد اللعبة أو Steam. إذا لم يُحمَّل MWCoop، جرّب واحداً ثم الآخر؛ والمشغّل ينتقل أيضاً إلى مجلد اللعبة تلقائياً.
+Uninstall	إلغاء التثبيت
+In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.	في الإعدادات > حول: يزيل MWCoop بالكامل (مع المجلدات) و MSCLoader الخاص بـ MWCoop إلى سلة المحذوفات. ملف حفظك وتعديلاتك و MSCLoader الرسمي تبقى.
+The star at the top: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in the Outfit tab!	النجمة في الأعلى: الأشخاص الذين يقدمون شيئاً لتحسين MWCoop. شكراً لـ Dom على 155 طقماً، في تبويب الملابس!
+In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.	في السجلات: إذا لم يُحمَّل MWCoop، فعّله، ابدأ لعبتك، ثم أنشئ ملف zip. يسجل كل ما يفعله المشغّل وما حمّلته اللعبة فعلاً.
+Compatibility modes	أوضاع التوافق
+In Settings > Game. After a crash, Windows sometimes adds a compatibility mode to the game, and MWCoop stops loading: the launcher removes it before every game.	في الإعدادات > اللعبة. بعد انهيار، يضيف Windows أحياناً وضع توافق للعبة فيتوقف تحميل MWCoop: المشغّل يزيله قبل كل لعبة.
+Everything to play trouble-free, sorted into categories you expand: install, host, join, share your mods, Copy / Folder / Steam… and fixes for common problems, with pictures.	كل ما تحتاجه للعب بلا مشاكل، مرتب في فئات قابلة للتوسيع: التثبيت، الاستضافة، الانضمام، مشاركة تعديلاتك، نسخة / مجلد / Steam… وحلول للمشاكل الشائعة، مع صور.
+In-game keys	مفاتيح اللعبة
+In Game options > Keys: click a pill then press the key you want. Chat (T), wallet to give money to others (N), voice (V).	في خيارات اللعبة > المفاتيح: انقر على زر ثم اضغط المفتاح الذي تريده. الدردشة (T)، المحفظة لإعطاء النقود للآخرين (N)، الصوت (V).
+Imported face and clothes	الوجه والملابس المستوردة
+Your own face, top or pants: pick the zone (Head, Torso, Legs), Template opens the game's image with its seams, paint over it, then import. \"Custom face\", \"Custom top\", \"Custom pants\" in the list; others see it in game.	وجهك أو قميصك أو بنطالك: اختر المنطقة (الرأس، الجذع، الساقان)، القالب يفتح صورة اللعبة مع خطوط اللحام، ارسم فوقها، ثم استورد. \"وجه مخصّص\"، \"قميص مخصّص\"، \"بنطال مخصّص\" في القائمة؛ يراه الآخرون في اللعبة.
+Car trim	فئة السيارة
+In Car: besides the color, the CORRIS trim (L, LX, SLX, GT) for a new game. The host gives it to their guests.	في السيارة: إلى جانب اللون، فئة CORRIS (L، LX، SLX، GT) للعبة جديدة. المضيف يمنحها لضيوفه.
+Graphics and co-op options sorted by type: Voice, Faces, Game and sharing (host's files, starting money), Keys. The groups of this bar fold with a click on their title.	خيارات الرسوميات واللعب الجماعي مرتبة حسب النوع: الصوت، الوجوه، اللعبة والمشاركة (ملفات المضيف، نقود البداية)، المفاتيح. مجموعات هذا الشريط تُطوى بنقرة على عنوانها.
+The host can allow cheats (Game options > Game and sharing). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.	يمكن للمضيف السماح بالغشّ (خيارات اللعبة > اللعبة والمشاركة). في اللعبة: اللوحة (F7، تُضبط في المفاتيح) أو أوامر الدردشة (/help): الذهاب إلى لاعب، أماكن، نقود، علاج، الوقت، الثلج. كل غشّ يُعلن للجميع.
+In game, M (set in Game options > Keys) opens the map: the other players live, places, wheel to zoom, drag to move.	في اللعبة، M (تُضبط في خيارات اللعبة > المفاتيح) يفتح الخريطة: اللاعبون الآخرون مباشرة، الأماكن، العجلة للتكبير، السحب للتحريك.
+Third-person view	منظور الشخص الثالث
+In game, F5 (set in Game options > Keys) switches to third person: your character seen from behind on foot, your vehicle seen from behind while driving. Aiming and picking up work as usual.	في اللعبة، F5 (تُضبط في خيارات اللعبة > المفاتيح) ينتقل إلى منظور الشخص الثالث: شخصيتك من الخلف سيراً، ومركبتك من الخلف أثناء القيادة. التصويب والالتقاط يعملان كالمعتاد.
+Game options reorganized	إعادة تنظيم خيارات اللعبة
+Three blocks: Co-op, the game's video options, then MWCoop's enhanced ones. Each category has its icon. Unity's configuration window is now skipped: set your screen here.	ثلاث كتل: اللعب الجماعي، خيارات فيديو اللعبة، ثم خيارات MWCoop المحسّنة. لكل فئة أيقونتها. نافذة إعدادات Unity تُتخطى الآن: اضبط شاشتك هنا.
+In game, F8: your camera becomes a small drone to take photos (viewfinder, zoom, tilt, flash). Keys are set in Game options > Drone camera.	في اللعبة، F8: تصبح كاميرتك طائرة مسيّرة صغيرة لالتقاط الصور (محدد المنظر، التكبير، الميل، الفلاش). تُضبط المفاتيح في خيارات اللعبة > كاميرا الطائرة المسيّرة.
+Vanilla and RT	الأصلية و RT
+Two new presets: Vanilla brings back the original game options, RT turns on ray-traced sun shadows (DXR-capable graphics card, in development). Its settings: Ray tracing category.	إعدادان جاهزان جديدان: الأصلية يعيد خيارات اللعبة الأصلية، و RT يفعّل ظلال الشمس بتتبع الأشعة (بطاقة رسوميات تدعم DXR، قيد التطوير). إعداداته: فئة تتبع الأشعة.
+Rivett VIN plate	لوحة رقم هيكل Rivett
+In Car, under the trim: the CORRIS options for a new game (year, engine, gearbox, windshield, vinyl roof, wheels, radio...), like the game's plate. The host gives them to their guests.	في السيارة، تحت الفئة: خيارات CORRIS للعبة جديدة (السنة، المحرك، علبة التروس، الزجاج الأمامي، سقف الفينيل، العجلات، الراديو...)، مثل لوحة اللعبة. المضيف يمنحها لضيوفه.
+Rivett custom paint	طلاء Rivett المخصّص
+In Car, at the top of the preview: your own paint on the CORRIS, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's; the host sends it to their guests.	في السيارة، أعلى المعاينة: طلاؤك الخاص على CORRIS، مرسوم على قالب اللعبة. في اللعبة، اشترِ \"Custom paint made by artist\" لدى Fleetari؛ المضيف يرسله لضيوفه.
+Turn a mod on or off	تفعيل أو تعطيل تعديل
+In Mods, each mod's \"On\" switch: off, the mod is no longer loaded at all (its DLL becomes .dll.off) nor sent to guests. Back on, it returns at the next launch.	في التعديلات، مفتاح \"تشغيل\" لكل تعديل: عند إيقافه لا يُحمَّل التعديل إطلاقاً (يصبح ملف DLL الخاص به .dll.off) ولا يُرسل للضيوف. عند إعادة تشغيله، يعود في التشغيل التالي.
+Let's go!	هيا بنا!
+Have fun together in Finland. And if something goes wrong: the logs, and the Discord.	استمتعوا معاً في فنلندا. وإذا حدث خطأ ما: السجلات، و Discord.
+Home	الرئيسية
+Mods	التعديلات
+MY CHARACTER	شخصيتي
+SHARING	المشاركة
+GAME	اللعبة
+MEDIA	الوسائط
+INFO	معلومات
+Bust of Pasquale Paoli	تمثال نصفي لباسكوالي باولي
+The Paoli bust in the Museum of Corsica, after the one in the Palazzu Naziunale in Corte, scanned by JF Andreani for Scan the World (MyMiniFactory), CC BY-NC-SA license. Simplified for the game.	تمثال باولي النصفي في متحف كورسيكا، عن نظيره في القصر الوطني في كورتي، مسحه JF Andreani لصالح Scan the World (MyMiniFactory)، ترخيص CC BY-NC-SA. مبسّط للعبة.
+Bust of Napoleon	تمثال نصفي لنابليون
+The Napoleon bust in the Museum of Corsica, after Antoine-Denis Chaudet, scanned by Oliver Laric (The Usher Gallery, Lincoln), free of copyright restriction. Simplified for the game.	تمثال نابليون النصفي في متحف كورسيكا، عن أنطوان-دوني شوديه، مسحه Oliver Laric (The Usher Gallery، Lincoln)، بلا قيود حقوق نشر. مبسّط للعبة.
+3D model	نموذج ثلاثي الأبعاد
+The drone of the drone camera (photo mode), by Kira on Sketchfab: sketchfab.com/GalaninaKira, model \"Drone\", CC BY 4.0 license. Simplified for the game.	طائرة كاميرا الطائرة المسيّرة (وضع التصوير)، من Kira على Sketchfab: sketchfab.com/GalaninaKira، النموذج \"Drone\"، ترخيص CC BY 4.0. مبسّط للعبة.
+3D models	نماذج ثلاثية الأبعاد
+The sleeping bag models (rolled and unrolled), on Sketchfab: sketchfab.com/WillBarrow. One bag per player, in the starting bedroom.	نماذج أكياس النوم (ملفوفة ومفرودة)، على Sketchfab: sketchfab.com/WillBarrow. كيس لكل لاعب، في غرفة النوم عند البداية.
+Outfits	الملابس
+A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).	حزمة من 155 طقماً لشخصيتك: 84 قميصاً و 27 بنطالاً و 44 وجهاً. في تبويب الملابس، بعد ملابس اللعبة (\"Outfit Dom 12\"…).
+PLAY	العب
+CO-OP additions	إضافات اللعب الجماعي
+Disable them all (vanilla game)	تعطيلها كلها (اللعبة الأصلية)
+Drone camera (F8)	كاميرا الطائرة المسيّرة (F8)
+Sleeping bags	أكياس النوم
+s21 shop (video, KARTTURI)	متجر s21 (فيديو، KARTTURI)

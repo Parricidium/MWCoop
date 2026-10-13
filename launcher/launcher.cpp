@@ -98,7 +98,7 @@ enum { MODE_SOLO, MODE_HOST, MODE_GUEST };
 enum { REL_OFFLINE = -1, REL_NONE = 0, REL_OK = 1 };   // reponse de GitHub
 
 static HWND g_wnd;
-static bool g_fr, g_ru;   // langue : francais, russe (13/10 : traduction de l'anglais, ru.inc), sinon anglais
+static bool g_fr, g_ru, g_ar;   // langue : francais, russe (13/10 : traduction de l'anglais, ru.inc), arabe (ar.inc), sinon anglais
 static std::wstring g_dir, g_self, g_iniLauncher;   // dossier du lanceur (avec \), chemin du lanceur
 static std::wstring g_gameDir, g_gameVer;           // dossier de My Winter Car (avec \, vide = introuvable), version
 static std::wstring g_localVer;                     // MWCoop\version.txt
@@ -165,6 +165,7 @@ static std::wstring g_sHostName;                    // ... et son nom Steam
 static void SteamDown();
 // Russe : la traduction du texte anglais (ru.inc, generee par ru_gen.py), l'anglais s'il n'y est pas.
 #include "ru.inc"
+#include "ar.inc"
 static const wchar_t *Ru(const wchar_t *en)
 {
     static std::unordered_map<std::wstring, const wchar_t *> m;
@@ -172,12 +173,34 @@ static const wchar_t *Ru(const wchar_t *en)
     auto it = m.find(en);
     return it != m.end() ? it->second : en;
 }
-static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return g_fr ? fr : g_ru ? Ru(en) : en; }
-static std::wstring T(const std::wstring &fr, const std::wstring &en) { return g_fr ? fr : g_ru ? std::wstring(Ru(en.c_str())) : en; }
-static const wchar_t *LangCode() { return g_fr ? L"fr" : g_ru ? L"ru" : L"en"; }
+// Arabe : chaque texte traduit est entoure (dans ar.inc) d'un debut et d'une fin d'incorporation droite-a-gauche
+// (U+202B ... U+202C, par ligne) : il se lit de droite a gauche sans changer la mise en page du lanceur.
+static const wchar_t *Ar(const wchar_t *en)
+{
+    static std::unordered_map<std::wstring, const wchar_t *> m;
+    if (m.empty()) for (const auto &p : kAr) m[p[0]] = p[1];
+    auto it = m.find(en);
+    return it != m.end() ? it->second : en;
+}
+// Notes de version en arabe : meme incorporation droite-a-gauche, ligne par ligne (pas les lignes d'image, \x01).
+static std::wstring ArNote(const std::wstring &s)
+{
+    std::wstring o;
+    for (size_t a = 0; a <= s.size();) {
+        size_t e = s.find(L'\n', a);
+        std::wstring l = s.substr(a, e == std::wstring::npos ? std::wstring::npos : e - a);
+        if (!l.empty() && l[0] != L'\x01') o += L"\u202B" + l + L"\u202C"; else o += l;
+        if (e == std::wstring::npos) break;
+        o += L'\n'; a = e + 1;
+    }
+    return o;
+}
+static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return g_fr ? fr : g_ru ? Ru(en) : g_ar ? Ar(en) : en; }
+static std::wstring T(const std::wstring &fr, const std::wstring &en) { return g_fr ? fr : g_ru ? std::wstring(Ru(en.c_str())) : g_ar ? std::wstring(Ar(en.c_str())) : en; }
+static const wchar_t *LangCode() { return g_fr ? L"fr" : g_ru ? L"ru" : g_ar ? L"ar" : L"en"; }
 static void SetLang(const wchar_t *code)   // fr, en, ru : gardee dans [Lanceur] Langue
 {
-    g_fr = !_wcsicmp(code, L"fr"); g_ru = !_wcsicmp(code, L"ru");
+    g_fr = !_wcsicmp(code, L"fr"); g_ru = !_wcsicmp(code, L"ru"); g_ar = !_wcsicmp(code, L"ar");
     WritePrivateProfileStringW(L"Lanceur", L"Langue", LangCode(), g_iniLauncher.c_str());
 }
 
@@ -394,7 +417,7 @@ static void SavePlayer()
     std::string ini = ModIniA();
     WritePrivateProfileStringA("Coop", "Pseudo", Narrow(PlayerName()).c_str(), ini.c_str());
     WritePrivateProfileStringA("Coop", "Adresse", Narrow(Trim(g_fields[1].text)).c_str(), ini.c_str());
-    WritePrivateProfileStringA("Coop", "Langue", g_fr ? "fr" : g_ru ? "ru" : "en", ini.c_str());   // textes du mod en jeu dans la langue du lanceur
+    WritePrivateProfileStringA("Coop", "Langue", g_fr ? "fr" : g_ru ? "ru" : "en", ini.c_str());   // textes du mod en jeu dans la langue du lanceur (arabe : anglais en jeu)
 }
 
 static void LoadLocalVersion()
@@ -897,8 +920,8 @@ static bool IsWritableDir(const std::wstring &dir)
 // Texte de chaque release GitHub : en francais, puis une ligne "---", puis en anglais. Gardees dans
 // <jeu>\MWCoop\notes-maj.json pour les lire hors ligne.
 // (depuis 0.92.3, demande de JD : encore une ligne "---" et en russe ; sans : l'anglais en russe)
-struct Note { std::wstring ver, date, fr, en, ru, zip; };
-static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : n.en; }
+struct Note { std::wstring ver, date, fr, en, ru, ar, zip; };
+static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en; }
 static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
 static float g_notesH;
@@ -976,7 +999,14 @@ static std::vector<Note> ParseReleases(const std::string &json)
             size_t sep2 = rest.find(L"\n---");   // (russe apres une seconde ligne ---)
             if (sep2 != std::wstring::npos) {
                 size_t ruAt = rest.find(L'\n', sep2 + 1);
-                n.ru = CleanNote(ruAt == std::wstring::npos ? L"" : rest.substr(ruAt + 1));
+                std::wstring ruPart = ruAt == std::wstring::npos ? L"" : rest.substr(ruAt + 1);
+                size_t sep3 = ruPart.find(L"\n---");   // (arabe apres une troisieme ligne ---)
+                if (sep3 != std::wstring::npos) {
+                    size_t arAt = ruPart.find(L'\n', sep3 + 1);
+                    n.ar = ArNote(CleanNote(arAt == std::wstring::npos ? L"" : ruPart.substr(arAt + 1)));
+                    ruPart = ruPart.substr(0, sep3);
+                }
+                n.ru = CleanNote(ruPart);
                 rest = rest.substr(0, sep2);
             }
             n.en = CleanNote(rest);
@@ -1572,9 +1602,25 @@ static RectF GdiMeasure(const WCHAR *s, INT n, const Font *font, RectF layout, c
     if (hasLayout && layout.Height > 0) h = min(h, layout.Height);
     return RectF(layout.X, layout.Y, (float)z.cx, h);
 }
+// Arabe : une ligne qui contient des lettres arabes est ecrite dans une incorporation droite-a-gauche (U+202B ... U+202C,
+// par ligne) : lue de droite a gauche, morceaux assembles compris, sans changer la mise en page.
+static bool RtlText(const WCHAR *s, INT n, std::wstring &out)
+{
+    if (!g_ar) return false;
+    size_t len = n < 0 ? wcslen(s) : (size_t)n;
+    bool arabic = false;
+    for (size_t i = 0; i < len && !arabic; i++) arabic = s[i] >= 0x0600 && s[i] <= 0x06FF;
+    if (!arabic) return false;
+    out = L"\u202B";
+    for (size_t i = 0; i < len; i++) { if (s[i] == L'\n') out += L"\u202C\n\u202B"; else out += s[i]; }
+    out += L"\u202C";
+    return true;
+}
 // Ecriture de tout le texte du lanceur (DrawString, ou ses lettres en formes si DrawString est muet ici).
 static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, const RectF &r, const StringFormat *sf, const Brush *b)
 {
+    std::wstring rtl;
+    if (RtlText(s, n, rtl)) { s = rtl.c_str(); n = (INT)rtl.size(); }
     if (g_textGdi) return GdiDraw(g, std::wstring(s, n < 0 ? wcslen(s) : (size_t)n), font, r, sf, b, true);
     if (!g_textPath) return g.DrawString(s, n, font, r, sf, b);
     FontFamily ff;
@@ -1585,6 +1631,8 @@ static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, cons
 }
 static Status DrawStr(Graphics &g, const WCHAR *s, INT n, const Font *font, const PointF &o, const StringFormat *sf, const Brush *b)
 {
+    std::wstring rtl;
+    if (RtlText(s, n, rtl)) { s = rtl.c_str(); n = (INT)rtl.size(); }
     if (g_textGdi) return GdiDraw(g, std::wstring(s, n < 0 ? wcslen(s) : (size_t)n), font, RectF(o.X, o.Y, 0, 0), sf, b, false);
     if (!g_textPath) return g.DrawString(s, n, font, o, sf, b);
     FontFamily ff;
@@ -2004,10 +2052,10 @@ static int ValueIndex(const Opt &o, int v)
 // Libelle i d'une option a valeurs nommees (« Tenue 21 » : en russe, « Outfit » traduit et le numero).
 static std::wstring TLab(const std::vector<std::wstring> &fr, const std::vector<std::wstring> &en, size_t i)
 {
-    if (g_fr || !g_ru) return g_fr ? fr[i] : en[i];
-    const wchar_t *r = Ru(en[i].c_str());
+    if (g_fr || (!g_ru && !g_ar)) return g_fr ? fr[i] : en[i];
+    const wchar_t *r = g_ar ? Ar(en[i].c_str()) : Ru(en[i].c_str());
     if (r != en[i].c_str()) return r;
-    if (en[i].compare(0, 7, L"Outfit ") == 0) return std::wstring(Ru(L"Outfit ")) + en[i].substr(7);
+    if (en[i].compare(0, 7, L"Outfit ") == 0) return std::wstring(g_ar ? Ar(L"Outfit ") : Ru(L"Outfit ")) + en[i].substr(7);
     return en[i];
 }
 static std::wstring ValueText(const Opt &o, int v)
@@ -7053,7 +7101,7 @@ static void OnButton(int id)
     case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
     case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
-    case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> FR
+    case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"ar" : g_ar ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> AR -> FR
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
     case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
@@ -7421,6 +7469,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     WSAStartup(MAKEWORD(2, 2), &wsa);
     g_fr = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_FRENCH;
     g_ru = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN;
+    g_ar = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ARABIC;
     wchar_t self[MAX_PATH];
     GetModuleFileNameW(NULL, self, MAX_PATH);
     g_self = self;
@@ -7485,10 +7534,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     }
     DeleteFileW((g_self + L".old").c_str());   // reste d'une mise a jour du lanceur
     DeleteFileW((g_dir + L"version.dll.old").c_str());   // (chargeur verrouille pendant une mise a jour : plus utilise, sauf jeu ouvert)
-    // Langue : francais ou russe si Windows l'est, anglais pour toute autre langue ; Langue=fr|en|ru pour forcer.
+    // Langue : francais, russe ou arabe si Windows l'est, anglais pour toute autre langue ; Langue=fr|en|ru|ar pour forcer.
     wchar_t lang[8] = L"";
     GetPrivateProfileStringW(L"Lanceur", L"Langue", L"", lang, 8, g_iniLauncher.c_str());
-    if (!_wcsicmp(lang, L"fr") || !_wcsicmp(lang, L"en") || !_wcsicmp(lang, L"ru")) { g_fr = !_wcsicmp(lang, L"fr"); g_ru = !_wcsicmp(lang, L"ru"); }
+    if (!_wcsicmp(lang, L"fr") || !_wcsicmp(lang, L"en") || !_wcsicmp(lang, L"ru") || !_wcsicmp(lang, L"ar")) { g_fr = !_wcsicmp(lang, L"fr"); g_ru = !_wcsicmp(lang, L"ru"); g_ar = !_wcsicmp(lang, L"ar"); }
     {   // Theme : Theme=clair|sombre, sinon celui des applications de Windows
         wchar_t th[16] = L"";
         GetPrivateProfileStringW(L"Lanceur", L"Theme", L"", th, 16, g_iniLauncher.c_str());
@@ -7512,7 +7561,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     int argc = 0;
     wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i + 1 < argc; i++) {
-        if (!_wcsicmp(argv[i], L"/lang")) { g_fr = !_wcsicmp(argv[i + 1], L"fr"); g_ru = !_wcsicmp(argv[i + 1], L"ru"); }
+        if (!_wcsicmp(argv[i], L"/lang")) { g_fr = !_wcsicmp(argv[i + 1], L"fr"); g_ru = !_wcsicmp(argv[i + 1], L"ru"); g_ar = !_wcsicmp(argv[i + 1], L"ar"); }
         if (!_wcsicmp(argv[i], L"/theme")) g_dark = !_wcsicmp(argv[i + 1], L"sombre");
         if (!_wcsicmp(argv[i], L"/echelle")) g_scale = (float)_wtof(argv[i + 1]);   // captures : rendu agrandi
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];

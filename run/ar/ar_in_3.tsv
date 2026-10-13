@@ -1,0 +1,253 @@
+506	Thanks to everyone who makes MWCoop better
+507	VHS tapes
+508	Watch them, export them as .mp4, rename them, put a video on them
+509	Album
+510	Drone photos (F8 in game)
+511	Guide
+512	Everything to play trouble-free: install, lobbies, mods, settings, fixes
+513	Outfit
+514	Car
+515	Content · 
+516	Change folder
+517	Choose exe…
+518	MWCoop.exe goes in the game folder (Steam: right-click My Winter Car > Manage > Browse local files). Otherwise, show it mywintercar.exe.
+519	Buy the game
+520	Unofficial, non-commercial mod · not affiliated with Amistech Games · requires a legal copy of My Winter Car.
+521	YOUR CHARACTER
+522	Edit
+523	NICKNAME
+524	How to connect
+525	Your friends must pick the same
+526	recommended
+527	Invites, no port or firewall
+528	LAN, Radmin, Hamachi…
+529	HOST ADDRESS
+530	Steam launch option
+531	So that an accepted invite opens MWCoop (not the bare game)
+532	GUIDE
+533	LOBBY IN PROGRESS
+534	Back to the lobby: players, game, start
+535	JOIN IN GAME
+536	JOIN
+537	Opens a Steam lobby for your friends; everyone gets ready, then you start.
+538	Opens a lobby: your friends join, everyone gets ready, then you start.
+539	The host is already playing: join their game directly.
+540	 invites you: click to enter their lobby.
+541	Your Steam invite, or else a friend's MWCoop lobby.
+542	The lobby at the address entered above.
+543	Up to 8 players
+544	A friend's lobby
+545	PLAY SOLO
+546	The normal game, without MWCoop.
+547	See all
+548	Loading…
+549	Notes unavailable (offline).
+550	The 3D preview shows up after a first game (~30 s in game) with this version.
+551	Loading release notes…
+552	No release published yet.
+553	Release notes unavailable (offline).
+554	INSTALLED
+555	Update
+556	Loading image…
+557	Current session
+558	Last session
+559	Session of 
+560	profile 
+561	%d logs, %.0f KB
+562	%d logs, %.1f MB
+563	ABRUPT STOP
+564	1 ERROR
+565	%d ERRORS
+566	The game's and the mod's logs
+567	Delete all
+568	Every session keeps its own logs (the last 30).
+569	Create a zip to send
+570	Open folder
+571	Debug mode
+572	Detailed launcher log: every step, Steam, files, DLLs loaded in the game, antivirus. Turn on if MWCoop doesn't load, then zip.
+573	The last game stopped abruptly.
+574	Create a zip and send it (GitHub, Discord) so we can take a look.
+575	No game logs: MWCoop hasn't loaded in game yet. The launcher's log (and debug mode's) is still in the zip: create it and send it.
+576	KB
+577	MB
+578	Updates
+579	MWCoop is not installed
+580	You have 
+581	Version 
+582	 available
+583	Checking or installing…
+584	MWCoop is up to date
+585	Check
+586	Install automatically
+587	At every start, without asking
+588	Launcher
+589	Theme
+590	Dark
+591	Light
+592	Language
+593	Otherwise it stays open (players, ping) and comes back
+594	See the starting guide again
+595	About
+596	Unofficial, non-commercial mod, not affiliated with Amistech Games. Requires a legal copy of My Winter Car.
+597	Buy the game on Steam
+598	Uninstall MWCoop
+599	Network
+600	Port
+601	UDP and TCP, to host by IP
+602	Start the game
+603	If MWCoop doesn't load
+604	Remove compatibility modes
+605	Windows adds some after a crash: MWCoop stops loading
+606	Thank you!
+607	MWCoop also grows thanks to you and to the creators who share their work. Everyone who gives something to the mod is credited here.
+608	3D Models
+609	Special Thanks
+610	Museum of Corsica
+611	Paintings, maps, postcards and photos from before 2000, public domain or under Creative Commons licenses (Wikimedia Commons). Full links: MWCoop\\musee\\CREDITS.txt.
+612	Relief model: SRTM elevation data (NASA, public domain) via AWS Terrain Tiles (Mapzen)
+613	Made something for MWCoop? Share it on the Discord (button at the bottom left): you'll be credited here and in the release notes.
+614	My Winter Car is starting
+615	The game window will appear shortly.
+616	A small Unity window may ask for the resolution first: pick it, then click Play.
+617	The game will start from the launch copy (default)
+618	The game will start straight from its folder
+619	The game will be started through Steam (the launcher closes)
+620	The game will be started through Steam (like its PLAY button)
+621	The game will be started by the launcher
+622	Windows compatibility modes will be removed before every game
+623	Compatibility modes kept: MWCoop may not load
+624	Debug mode on: start your game, then create the zip
+625	Debug mode off
+626	Click again to move every stored session to the Recycle Bin
+627	to everyone or one player (64 KB)
+628	receive on your channel (mod ID)
+629	who hosts, who plays
+630	players joining and leaving
+631	No dependency: found through reflection, your mod also works without MWCoop.
+632	Already done for you: your files, settings and save data (Mods.txt) go to the guests with the host's.
+633	The host decides: it saves the world. A message sent before the other player's mod listens is kept for it.
+634	In English: names, comments and docs. The rest of MWCoop's code is in French, but open and not obfuscated: no need to read it.
+635	The cliffs of Bonifacio
+636	1896 (published)
+637	Map of Genoese Corsica
+638	View from the Col de Sorba
+639	The Forest of Valdoniello
+640	Ajaccio, the quays
+641	Anonymous (postcard, J. Moretti collection)
+642	Bastia, the old harbour
+643	Anonymous (postcard)
+644	The Bavella needles
+645	Corsican shepherd
+646	Calvi and its citadel
+647	Anonymous French amateur photographer / Rijksmuseum Amsterdam
+648	Cargèse
+649	1870 (published; sketched 1868)
+650	Giant chestnut tree
+651	Corte
+652	'Vendetta' knife
+653	Unknown maker; photo Livrustkammaren (Royal Armoury), Stockholm
+654	Moor's head banner
+655	Unknown
+656	Napoleon's birthplace
+657	Musicians in Ajaccio
+658	Napoleon Bonaparte in 1792
+659	Pasquale Paoli
+660	Corsican country people
+661	Sartène
+662	A Genoese tower
+663	A mountain village
+664	Unknown (published in Autosprint)
+665	Unknown (via forum-auto.com)
+666	Unknown (published in Italian press)
+667	1962 Tour de Corse
+668	R1093 (Wikimedia Commons user)
+669	1973 Tour de Corse rally plate
+670	Kerlavarec (Wikimedia Commons user)
+671	1977 Tour de Corse
+672	JCL92800 (Wikimedia Commons user)
+673	Chat
+674	Wallet
+675	Voice
+676	Cheats
+677	Map
+678	View
+679	Drone
+680	Forward
+681	Left
+682	Right
+683	Up
+684	Down
+685	Fast
+686	Zoom +
+687	Zoom -
+688	Tilt left
+689	Tilt right
+690	Reset
+691	Photo
+692	Grid
+693	Interface
+694	Anti-aliasing
+695	HDR (rich light)
+696	Bloom
+697	Contrast boost
+698	Sun shafts
+699	Max frames per second
+700	Unlimited
+701	V-sync
+702	Off
+703	Sun shadows
+704	Moon shadows
+705	House shadows
+706	Shadow distance
+707	Shadow detail
+708	Simple
+709	Fine
+710	Basic
+711	Very fine
+712	Draw distance
+713	Level of detail
+714	Normal
+715	Max
+716	Low
+717	High
+718	Very high
+719	Textures
+720	Quarter
+721	Half
+722	Full
+723	Texture filtering
+724	Forced
+725	Ray-traced sun shadows
+726	Rays per pixel
+727	Shadow range
+728	Shadow edges
+729	Soft
+730	Very soft
+731	Your body in reflections and shadows
+732	Reflections (car paint, smooth surfaces)
+733	Subtle
+734	Window reflections
+735	Light bounce (global illumination)
+736	Ambient occlusion (corners, underneath)
+737	Strong
+738	Lamp shadows (headlights, street lights)
+739	4 lamps
+740	8 lamps
+741	16 lamps
+742	Headlight shadows
+743	2 lights
+744	4 lights
+745	8 lights
+746	Street light shadows
+747	Light coronas (GTA style)
+748	Headlight range
+749	Long
+750	Field of view
+751	Mirrors
+752	Head bob on foot
+753	Head bob in cars
+754	FPS counter
+755	Gear on screen
+756	Traffic dust
+757	Traffic skid marks
+758	Player names

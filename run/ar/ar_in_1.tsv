@@ -1,0 +1,253 @@
+0	Preview to redo: start a game (~30 s)
+1	Sent content and mods
+2	Sent content
+3	Outfit 
+4	Sync your mod in co-op
+5	MWCoop.CoopApi sends your MSCLoader mod's data to the other players: MWCoop handles the network, splitting big messages and relaying through the host.
+6	EXAMPLE
+7	Through reflection
+8	Direct reference
+9	Copied!
+10	Copy
+11	Where to get it
+12	In the game folder, under MWCoop\\ (once installed)
+13	Documentation (GitHub)
+14	Source code
+15	Folder
+16	Docs, full member list and MSCLoader examples in docs/API.md.
+17	Good to know
+18	Left Shift
+19	Right Shift
+20	Left Ctrl
+21	Right Ctrl
+22	Left click
+23	Right click
+24	Middle click
+25	Space
+26	Mouse 4
+27	Mouse 5
+28	GPU not supported
+29	RT off
+30	ray tracing
+31	heavy
+32	medium
+33	Press a key…
+34	IN DEVELOPMENT
+35	%d settings
+36	Image quality
+37	One click sets everything, then fine-tune below.
+38	Custom settings: pick a preset to start over.
+39	Checking for updates\u2026
+40	%s \u00B7 new version %s available
+41	Offline: MWCoop is not installed here
+42	GitHub rate limit: try again in a few minutes \u00B7 %s
+43	GitHub error (code %lu) \u00B7 %s
+44	Offline (GitHub unreachable, error %lu) \u00B7 %s
+45	No MWCoop release published yet
+46	%s \u00B7 no release published
+47	%s \u00B7 up to date
+48	Downloading MWCoop %s\u2026
+49	Downloading MWCoop %s\u2026 (try %d / 3)
+50	Update failed (download, error %lu)
+51	Installing MWCoop %s\u2026
+52	Update failed (archive)
+53	Update failed (incomplete package: MWCoop\\version.txt missing)
+54	Game folder is protected: run MWCoop.exe as administrator to update
+55	%s is in use: close the game, then restart the launcher
+56	Updated \u00B7 MWCoop %s
+57	e.g. 26.12.34.56 (address:port accepted)
+58	Host
+59	Guest
+60	Solo
+61	Mod log
+62	Loader log
+63	Unity log
+64	 \u00B7 guest profile
+65	 \u00B7 profile 
+66	Click the bin again to delete these logs
+67	none
+68	B \u00B7 manual
+69	7 \u00B7 automatic
+70	 \u00B7 facelift
+71	J \u00B7 radio
+72	B \u00B7 power brakes
+73	 \u00B7 heated
+74	VIN plate
+75	CORRIS options for a new game. Click for the next value; Random: like the game.
+76	Start a game once: the mod then reads the possible options of each trim.
+77	 (only one)
+78	Random
+79	 (not for this trim)
+80	Choose the CORRIS paint (painted on the car.png template)
+81	can't save it
+82	This image could not be read: 
+83	Images\\car.png was not found in the game folder.
+84	Custom paint
+85	Your own paint on the CORRIS, painted on the game's template. The host sends it to their guests.
+86	Your paint
+87	Game paint (Images\\car.png)
+88	Template
+89	My image…
+90	In use: yes
+91	In use: no
+92	Remove
+93	1. Template: the game's body laid flat (2048 x 2048). The game's Images folder also has corris_template_layered.psd, in layers.
+94	2. Paint over it keeping the size, then \"My image…\".
+95	3. In game, buy \"Custom paint made by artist\" at Fleetari's (repair shop): the CORRIS takes your paint.
+96	Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.
+97	Start a game once to see the car preview.
+98	Your CORRIS
+99	Color and trim for a new game; the host gives them to their guests.
+100	Drag to rotate
+101	Show the car
+102	Custom paint…
+103	Color
+104	Random (like the game)
+105	Custom color
+106	Other color\u2026
+107	Trim
+108	VIN plate\u2026
+109	CANCEL
+110	file can't be read
+111	image format not recognized by Windows (try PNG or JPG)
+112	The templates are made by the mod: start a game (solo is fine) and stay ~20 s in game with this version, then come back here.\n\nEach shows the game's texture (face, top or pants) with its seams: paint over it keeping the size, then import.
+113	No preview for this outfit.
+114	Previews appear after a first game (~30 s in game) with this version.
+115	As before
+116	Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone (standing bodies).
+117	Tops
+118	Full look
+119	Build, pants, face, hat, glasses, hair: start a game (solo is fine) and stay ~30 s in game with this version, they will show up here.
+120	Join us on Discord!
+121	Help, bug reports, early news and players to team up with. English channels, plus a French one.
+122	Trouble in game? Send your logs (Logs button, top right) in #bug-reports.
+123	JOIN THE DISCORD
+124	Later
+125	Always one click away: the Discord button, bottom left.
+126	Launch option copied: paste it in Steam
+127	Playing through Steam
+128	HOST opens a Steam lobby for your friends only: invite them with the lobby's \"Invite friends\" button.
+129	Your friends accept the invite in Steam (or click JOIN in MWCoop, STEAM mode); START launches everyone's game.
+130	So that Steam's Play button and an invite accepted with MWCoop closed open MWCoop (not the game without the mod), everyone adds this launch option:
+131	Steam > Library > right-click My Winter Car > Properties > General > Launch options
+132	Steam's PLAY button will then open MWCoop. To get the game without the mod back, clear the line.
+133	LINE COPIED \u2713
+134	COPY THE LINE
+135	GOT IT
+136	Don't show again when choosing STEAM
+137	Choose mywintercar.exe (My Winter Car folder)
+138	This folder does not contain My Winter Car.\n\nPick the mywintercar.exe from the game folder (Steam: right-click the game > Manage > Browse local files).
+139	My Winter Car is still running in the background, without a window (stuck after closing?).\n\nForce it to close so you can launch again?
+140	My Winter Car is already running: close it first
+141	A Windows compatibility mode stops MWCoop from loading: mywintercar.exe > Properties > Compatibility > for all users, untick everything
+142	A version.dll from another program was in the game folder: set aside (version.dll.autre)
+143	Receiving the host's mods… the game will start on its own afterwards
+144	Enter the host address
+145	Could not write MWCoop\\lancement.ini (error %lu)
+146	%s is hosting (Steam)
+147	%s is hosting (port %d)
+148	%s joins %s
+149	%s plays solo
+150	Steam could not start the game (is Steam open?)
+151	Could not prepare the launch copy: the game starts without the host's mods
+152	Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)
+153	Launch cancelled (administrator prompt declined)
+154	Could not start mywintercar.exe (error %lu)
+155	random
+156	custom #%06X
+157	%S refused: version %S (yours: %S)
+158	Windows Firewall is BLOCKING My Winter Car (its question was refused, or stayed hidden behind the game).
+159	Windows Firewall does not allow My Winter Car on this network yet (Radmin VPN often counts as a public network).
+160	\n\nYour friends would get into the lobby, but not into the game (\"timed out\").\n\nAllow My Winter Car and MWCoop in the firewall? Windows will ask for administrator approval.
+161	Firewall: My Winter Car allowed
+162	Firewall unchanged: your friends may not get into the game
+163	Cannot open the lobby: TCP port %d in use (error %d)
+164	Lobby open \u00B7 port %d
+165	%d of %d guest(s) not ready yet.\n\nStart anyway? Their game will start too.
+166	UDP not confirmed for %s: forward UDP port %d (not just TCP) on your router
+167	Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\nCORRIS color (car icon in the lobby): 
+168	In %s's lobby
+169	Connecting to %s's lobby\u2026
+170	You'll be ready as soon as the host's files are received
+171	Ready, but UDP is blocked: the host must forward UDP port %d
+172	UDP port %d is already in use on this PC (error %d): the game will not be able to open it. Close the program using it.
+173	UDP blocked for %s: forward UDP port %d (not just TCP) on your router to this PC. The lobby uses TCP, the game uses UDP.
+174	UDP blocked: the host must forward UDP port %d (not just TCP) on their router. The lobby uses TCP, the game uses UDP.
+175	Players
+176	UDP: not checked (host has an old launcher)
+177	UDP: blocked
+178	UDP: testing\u2026
+179	Click yourself: outfit, car
+180	Creating the Steam lobby\u2026
+181	Connecting to the lobby\u2026
+182	A lobby for your Steam friends only: you can invite them from here.
+183	If the host is already playing or has no lobby, you can join directly in game.
+184	Invite Steam friends
+185	Waiting for a player\u2026
+186	  (you)
+187	HOST
+188	READY \u2713
+189	NOT READY
+190	UDP blocked
+191	Game
+192	Game (chosen by the host)
+193	Continue my game
+194	Continue the game
+195	New game
+196	Your save, sent to the guests
+197	The host's save
+198	Replaces your save
+199	A fresh game at the host's
+200	CORRIS color: 
+201	You join as soon as the host is in game.
+202	Your guests receive it when they arrive.
+203	You receive it on arrival; yours is left untouched.
+204	Invite your Steam friends. Once everyone is ready, START launches everyone's game.
+205	Once everyone is ready, START launches everyone's game; the guests follow your game.
+206	Click READY. Your game starts by itself when the host starts the session.
+207	START THE GAME
+208	Alone for now
+209	%d / %d ready
+210	READY AFTER FILES
+211	Getting the host's files\u2026 (click to cancel)
+212	READY?
+213	Click to cancel
+214	Click when you're ready
+215	CONNECTING\u2026
+216	CLOSE THE LOBBY
+217	LEAVE THE LOBBY
+218	Back to the lobby
+219	Invite friends
+220	Lobby options
+221	Close the launcher at launch
+222	Otherwise it comes back at the end
+223	Used by the next lobby
+224	My outfit and car
+225	What the others see
+226	CDs, paint, posters, mods\u2026
+227	No logs yet: start the game with MWCoop first
+228	The game is running: close it before uninstalling MWCoop
+229	Completely uninstall MWCoop?\n\nMoved to the Recycle Bin: everything MWCoop in the game folder (version.dll, the MWCoop folder with its profiles, logs and received content, this launcher), all of %LOCALAPPDATA%\\MWCoop (launch copies, MWCoop's MSCLoader, caches), and the guest profile settings.\n\nKept: your save, your mods (Mods folder) and the official MSCLoader.\n\nTo play co-op again, you will need to download MWCoop again.
+230	MWCoop is uninstalled (everything is in the Recycle Bin).
+231	MWCoop is uninstalled, except these items (open in another program?):
+232	\n\nIf you had put MWCoop in Steam's launch options (game Properties > General), remove it: otherwise the game won't start from Steam anymore.\n\nTo reinstall: download MWCoop and run MWCoop.exe.
+233	The game is running: close it before deleting its logs
+234	Logs moved to the Recycle Bin
+235	Could not delete (file in use?)
+236	%d sessions moved to the Recycle Bin
+237	Could not create the zip (error %lu)
+238	Zip on the Desktop (%d files): send it
+239	Zip created (%d files): send it
+240	Lobby closed \u00B7 %s
+241	Left the lobby \u00B7 %s
+242	Game through Steam: lobby and invites right here
+243	Game through IP address (LAN, Radmin, Hamachi...)
+244	New outfits by Dom: Outfit tab (credits: star at the top)
+245	The game closed on startup (see the logs)
+246	The host is starting the game\u2026 yours starts in a moment
+247	The host is starting\u2026 UDP not confirmed (UDP port %d)
+248	UDP not confirmed: the host must forward UDP port %d (not just TCP) on their router
+249	Different version (you %s, host %s): update, restart MWCoop.exe
+250	Lobby is full (%d players)
+251	Session already started: \"Join in game\"
+252	The host closed the lobby
