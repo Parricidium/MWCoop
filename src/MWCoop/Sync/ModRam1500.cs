@@ -76,7 +76,7 @@ namespace MWCoop
         static int errs, logs;
 
         // ---------------------------------------------------------------- etats discrets
-        class Slot { public string Key; public Func<int> GetV; public Action<int> Apply; public int Shared = int.MinValue; }
+        class Slot { public string Key; public Func<int> GetV; public Action<int> Apply; public int Shared = int.MinValue; public float Hold; }   // Hold : valeur recue en cours d'application (demarreur...) : pas d'envoi
         static List<Slot> slots;
         static Component ign, lights, wipers, intLight, windows, handbrake, auto, manual, x4, fuel, mech, brakeLights;
         static Drivetrain dt;
@@ -206,9 +206,39 @@ namespace MWCoop
                 Add("cellulePoigneeG", () => Int(Get(cm, "leftHandleTwisted")), v => { if (Int(Get(cm, "leftHandleTwisted")) != v) Call(cm, "ToggleHandle", true); });
                 Add("cellulePoigneeD", () => Int(Get(cm, "rightHandleTwisted")), v => { if (Int(Get(cm, "rightHandleTwisted")) != v) Call(cm, "ToggleHandle", false); });
             }
+            AddPaintAndRadio();
         }
         static Component camper;
         static int camperId;
+
+        // Peinture (bombe du jeu sur les pieces MSCPaintablePart : carrosserie, capot, portieres, hayon, ailes, cellule) : la
+        // couleur de sa matiere, RGB sur 24 bits ; radio (marche, volume -- la frequence depend du reglage « radio du jeu ou
+        // internet » de chacun).
+        static void AddPaintAndRadio()
+        {
+            Type pt = TypeOf("MSCPaintablePart");
+            if (pt != null)
+            {
+                var roots = new List<GameObject> { ram };
+                if (camper != null) roots.Add(camper.gameObject);
+                var seen = new HashSet<string>();
+                foreach (GameObject root in roots)
+                    foreach (Component pc in root.GetComponentsInChildren(pt, true))
+                    {
+                        Component c = pc;
+                        string key = "peinture:" + root.name + "/" + c.gameObject.name;
+                        if (!seen.Add(key)) continue;
+                        Add(key, () => { Material m = Get(c, "paintMaterial") as Material; if (m == null) return -1; Color k = m.color; return (Mathf.RoundToInt(k.r * 255f) << 16) | (Mathf.RoundToInt(k.g * 255f) << 8) | Mathf.RoundToInt(k.b * 255f); },
+                            v => { Material m = Get(c, "paintMaterial") as Material; if (m == null || v < 0) return; Color k = new Color(((v >> 16) & 255) / 255f, ((v >> 8) & 255) / 255f, (v & 255) / 255f, m.color.a); m.color = k; if (m.HasProperty("_Color")) m.SetColor("_Color", k); });
+                    }
+            }
+            Component radio = Comp("RadioController", null);
+            if (radio != null)
+            {
+                Add("radio", () => Int(Get(radio, "radioON")), v => Set(radio, "radioON", v == 1));
+                Add("radioVolume", () => Mathf.RoundToInt((float)Get(radio, "radioVolume") * 10f), v => Set(radio, "radioVolume", v / 10f));
+            }
+        }
 
         // ---------------------------------------------------------------- achat au parc du vendeur (histoire du mod)
         // Le joueur paie, le camion (ou la cellule) du parc est detruit, ram1500.SpawnPurchasedTruck (ou SpawnPurchasedCamper)
@@ -349,7 +379,13 @@ namespace MWCoop
                 {
                     int v;
                     try { v = s.GetV(); } catch { continue; }
+                    // (premier releve : seule l'autorite donne l'etat de depart -- sinon l'arrivant eteignait les phares de
+                    // l'hote, ou y remettait sa peinture)
+                    if (s.Shared == int.MinValue && !auth) { s.Shared = v; continue; }
                     if (v == s.Shared && !full) continue;
+                    // (valeur recue pas encore atteinte ici -- demarrage rejoue, porte qui s'ouvre : ce n'est pas un geste
+                    // d'ici ; renvoyee, elle coupait le moteur de l'hote pendant que l'invite rejouait le demarreur)
+                    if (v != s.Shared && now < s.Hold) continue;
                     if (w == null) w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@ram").U8(0);
                     w.Str(s.Key).I32(v);
                     if (v != s.Shared && logs++ < 30) Log.Info("ram : " + s.Key + " = " + v + " envoye");
@@ -366,11 +402,12 @@ namespace MWCoop
                 bool slow = now >= nextSlow;
                 if (slow) nextSlow = now + 2f;
                 w.Bool(slow);
-                if (slow) w.F32(fuel != null ? (float)Get(fuel, "fuelLevel") : -1f).F32(fuel != null ? (float)Get(fuel, "fuelOilLevel") : -1f).F32(TempGet());
+                if (slow) w.F32(fuel != null ? (float)Get(fuel, "fuelLevel") : -1f).F32(fuel != null ? (float)Get(fuel, "fuelOilLevel") : -1f).F32(TempGet()).F32(Mileage());
                 Session.SendAll(w, false);
             }
         }
 
+        static float Mileage() { Component od = Comp("Odometer", null); object v = Get(od, "totalMileage"); return v != null ? (float)v : -1f; }
         static object engineTemp;
         static float TempGet() { Component et = Comp("EngineTemp", null); engineTemp = et; object v = Get(et, "Temp"); return v != null ? (float)v : -1f; }
 
@@ -418,6 +455,7 @@ namespace MWCoop
                     {
                         if (s.Key != key) continue;
                         s.Shared = v;
+                        s.Hold = Time.realtimeSinceStartup + 3f;
                         int cur; try { cur = s.GetV(); } catch { cur = int.MinValue; }
                         if (cur != v) { try { s.Apply(v); } catch (Exception e) { if (errs++ < 10) Log.Warn("ram : " + key + " : " + e.Message); } if (logs++ < 30) Log.Info("ram : " + key + " = " + v + " de #" + who); }
                         try { s.Shared = s.GetV() == v ? v : s.Shared; } catch { }
@@ -429,7 +467,8 @@ namespace MWCoop
             bool slow = r.Bool();
             if (slow)
             {
-                float fl = r.F32(), fo = r.F32(), te = r.F32();
+                float fl = r.F32(), fo = r.F32(), te = r.F32(), km = r.More ? r.F32() : -1f;
+                if (!wasAuth && km >= 0f) { Component od = Comp("Odometer", null); if (od != null && Mathf.Abs((float)Get(od, "totalMileage") - km) > 0.05f) Call(od, "LoadMileage", km); }
                 if (!wasAuth)
                 {
                     if (fuel != null && fl >= 0f) { Set(fuel, "fuelLevel", fl); Set(fuel, "fuelOilLevel", Mathf.Max(0f, fo)); }
