@@ -358,6 +358,7 @@ namespace MWCoop
 
         static void LoadBags()
         {
+            WorldFiles.Check(Path.GetDirectoryName(BagFile));
             if (!BagAuthority || !File.Exists(BagFile)) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             try

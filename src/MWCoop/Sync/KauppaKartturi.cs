@@ -268,13 +268,17 @@ namespace MWCoop
             // [Test] Autotest=copilote4 : camera d'essai devant le rayon des KARTTURI, capture dumps\ecran-gps-rayon.png a 30 s
             if (mode == "copilote4" && Active && root != null && t > 26f)
             {
-                Offer o = offers.Find(x => x.Item == KKartturi);
+                string item = Config.Get("Test", "RayonArticle", KKartturi);   // ([Test] RayonArticle=tv : la TV, de trois cotes)
+                Offer o = offers.Find(x => x.Item == item);
                 if (o == null || o.Col == null) return;
                 if (gpsCam == null) { gpsCam = new GameObject("MWCoop-CameraGps").AddComponent<Camera>(); gpsCam.depth = 100; gpsCam.nearClipPlane = 0.03f; gpsCam.fieldOfView = 60f; }
                 Vector3 lc = root.transform.InverseTransformPoint(o.Col.transform.position);
-                gpsCam.transform.position = root.transform.TransformPoint(lc + new Vector3(1.5f, 0.1f, 0f));
-                gpsCam.transform.LookAt(root.transform.TransformPoint(lc + new Vector3(0f, -0.25f, 0f)));
-                if (t > 30f && gpsShot == 0) { gpsShot = 1; Application.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "ecran-gps-rayon.png")); L("essai : rayon des KARTTURI"); }
+                int view = t < 31f ? 0 : t < 33f ? 1 : 2;
+                Vector3 off = item == KKartturi ? new Vector3(1.5f, 0.1f, 0f) : view == 0 ? new Vector3(1.1f, 0.15f, 0f) : view == 1 ? new Vector3(0.9f, 0.4f, 0.6f) : new Vector3(1.4f, -0.05f, -0.7f);
+                gpsCam.transform.position = root.transform.TransformPoint(lc + off);
+                gpsCam.transform.LookAt(root.transform.TransformPoint(lc + new Vector3(0f, item == KKartturi ? -0.25f : -0.1f, 0f)));
+                int shot = t > 30f && t < 31f ? 1 : t > 32f && t < 33f ? 2 : t > 34f && t < 35f ? 3 : 0;
+                if (shot > gpsShot) { gpsShot = shot; Application.CaptureScreenshot(System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "ecran-rayon-" + item + "-" + shot + ".png")); L("essai : rayon " + item + " " + shot); }
                 return;
             }
             if (mode != "copilote3" || !Active || root == null) return;

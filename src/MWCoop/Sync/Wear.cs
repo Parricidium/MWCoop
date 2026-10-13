@@ -265,6 +265,7 @@ namespace MWCoop
 
         static void LoadFile()
         {
+            WorldFiles.Check(Path.GetDirectoryName(FilePath));
             fileRead = true;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             try
