@@ -35,4 +35,6 @@ C-tour-de-corse-1962 : 1962 Tour de Corse (1962) - R1093 (Wikimedia Commons user
 C-tour-de-corse-1973-plaque : 1973 Tour de Corse rally plate (1973) - Kerlavarec (Wikimedia Commons user) - CC0 - https://commons.wikimedia.org/wiki/File:1973-12-01-TourCorse.jpg
 C-tour-de-corse-1977 : 1977 Tour de Corse (1977) - JCL92800 (Wikimedia Commons user) - CC BY-SA 4.0 - https://commons.wikimedia.org/wiki/File:Tour_de_Corse_1977.jpg
 C-vatanen-escort-1978 : Ari Vatanen, Ford Escort RS1800 (1978) - Jarmo Mäki - JKM(C)Pictures - CC BY 2.0 - https://commons.wikimedia.org/wiki/File:Ari_Vatanen_-_1978_Rally_Finland.jpg
+patsas-napoleon : Napoleon bust after A.-D. Chaudet - scan Oliver Laric, Lincoln 3D Scans - no copyright restriction - https://www.lincoln3dscans.co.uk/lincoln-3d-scans/2018/7/3/napoleon
+patsas-paoli : Pasquale Paoli bust, Palazzu Naziunale Corte - scan JF Andreani, Scan the World - CC BY-NC-SA - https://www.myminifactory.com/object/3d-print-pasquale-paoli-corsica-47276
 korsika-relief : elevation data SRTM (NASA, public domain) via AWS Terrain Tiles (Mapzen, https://registry.opendata.aws/terrain-tiles/)
