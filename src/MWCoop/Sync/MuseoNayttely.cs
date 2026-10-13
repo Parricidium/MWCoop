@@ -102,6 +102,7 @@ namespace MWCoop
                 }
                 catch (Exception e) { L("musee : ligne illisible '" + line + "' : " + e.Message); }
             }
+            MuseoRelief();
             L("musee : " + n + " piece(s) exposee(s)" + (missing > 0 ? ", " + missing + " image(s) absente(s)" : ""));
         }
 
@@ -146,12 +147,76 @@ namespace MWCoop
                 Box(new Vector3(x - 0.13f, 2.9f, -2.73f), new Vector3(x + 0.13f, 2.95f, 2.73f), "mu_tumma", false);    // couvre-mur
             }
             // banquettes du hall (bois sombre sur pieds noirs)
-            foreach (float z in new[] { -0.6f, 2.6f })
+            foreach (float z in new[] { -2.5f })
             {
                 Box(new Vector3(-1.1f, 0.42f, z - 0.22f), new Vector3(1.1f, 0.48f, z + 0.22f), "mu_tumma");
                 foreach (float x in new[] { -0.95f, 0.95f })
                     Box(new Vector3(x - 0.04f, 0f, z - 0.18f), new Vector3(x + 0.04f, 0.42f, z + 0.18f), "mu_musta", false);
             }
+        }
+
+        // maquette en relief de la Corse au milieu du hall, sous vitrine : grille d'altitudes (korsika-relief.bin :
+        // nx, ny, largeur reelle en m, puis nx*ny altitudes en m, mer < 0) et texture teintee (korsika-relief.jpg).
+        // Nord vers le fond du hall (-z), relief exagere 5 fois.
+        static void MuseoRelief()
+        {
+            string bin = Path.Combine(MuseoDir, "korsika-relief.bin");
+            Texture2D tex = FileTex(Path.Combine(MuseoDir, "korsika-relief.jpg"), false);
+            if (!File.Exists(bin) || tex == null) { L("musee : pas de maquette"); return; }
+            int nx, ny; float realW; float[] hgt;
+            using (var r = new BinaryReader(File.OpenRead(bin)))
+            {
+                nx = r.ReadInt32(); ny = r.ReadInt32(); realW = r.ReadSingle();
+                hgt = new float[nx * ny];
+                for (int i = 0; i < hgt.Length; i++) hgt[i] = r.ReadSingle();
+            }
+            const float w = 1.3f, cz = 1.0f, top = 0.8f, exag = 5f;
+            float d = w * ny / nx, s = w / realW;
+            // table et vitrine
+            Box(new Vector3(-w / 2 - 0.12f, 0f, cz - d / 2 - 0.12f), new Vector3(w / 2 + 0.12f, top, cz + d / 2 + 0.12f), "mu_tumma");
+            Box(new Vector3(-w / 2 - 0.15f, top - 0.04f, cz - d / 2 - 0.15f), new Vector3(w / 2 + 0.15f, top + 0.006f, cz + d / 2 + 0.15f), "mu_kulta", false);
+            float gy = top + 0.45f, gx = w / 2 + 0.1f, gz = d / 2 + 0.1f;
+            Box(new Vector3(-gx, top, cz - gz), new Vector3(gx, gy, cz + gz), "lasi", "lasi", "lasi", null, "lasi", "lasi");
+            Box(new Vector3(-gx, top, cz - gz), new Vector3(gx, gy, cz + gz), null, null, null, "lasi", null, null, false);
+            foreach (float sx in new[] { -1f, 1f })
+                foreach (float sz in new[] { -1f, 1f })
+                    Box(new Vector3(sx * gx - 0.015f, top, cz + sz * gz - 0.015f), new Vector3(sx * gx + 0.015f, gy, cz + sz * gz + 0.015f), "mu_kulta", false);
+            // relief
+            var v = new Vector3[nx * ny]; var uv = new Vector2[nx * ny];
+            for (int j = 0; j < ny; j++)
+                for (int i = 0; i < nx; i++)
+                {
+                    float h = hgt[j * nx + i];
+                    float y = top + 0.012f + (h > 0 ? h * s * exag + 0.004f : 0f);
+                    v[j * nx + i] = new Vector3(-w / 2 + w * i / (nx - 1), y, cz - d / 2 + d * j / (ny - 1));
+                    uv[j * nx + i] = new Vector2(i / (float)(nx - 1), 1f - j / (float)(ny - 1));
+                }
+            var t = new int[(nx - 1) * (ny - 1) * 6]; int k = 0;
+            for (int j = 0; j + 1 < ny; j++)
+                for (int i = 0; i + 1 < nx; i++)
+                {
+                    int a = j * nx + i, b = a + 1, c = a + nx, e = c + 1;
+                    t[k++] = a; t[k++] = c; t[k++] = b; t[k++] = b; t[k++] = c; t[k++] = e;
+                }
+            var m = new Mesh { name = "museo_korsika" };
+            m.vertices = v; m.uv = uv; m.triangles = t;
+            m.RecalculateNormals(); m.RecalculateBounds();
+            var g = new GameObject("museo_korsika");
+            g.transform.SetParent(root.transform, false);
+            g.AddComponent<MeshFilter>().sharedMesh = m;
+            Material basis = GameMat("wood_panel7");
+            var mat = new Material(basis != null ? basis.shader : Shader.Find("Legacy Shaders/Diffuse")) { mainTexture = tex, name = "museo_korsika" };
+            if (mat.HasProperty("_Color")) mat.color = new Color(1.25f, 1.25f, 1.25f);
+            g.AddComponent<MeshRenderer>().sharedMaterial = mat;
+            // plaque sur le devant de la table
+            Texture2D pl = FileTex(Path.Combine(MuseoDir, "M-relief-kyltti.png"), false);
+            if (pl != null)
+            {
+                TexMat("mu_relief_k", pl);
+                float pw = 0.5f, ph = pw * pl.height / (float)pl.width;
+                Plane("mu_relief_k", new Vector3(0, top - 0.06f - ph / 2, cz + d / 2 + 0.121f), pw, ph, Vector3.forward);
+            }
+            L("musee : maquette de la Corse " + nx + "x" + ny + " (" + (realW / 1000f).ToString("F0") + " km de large)");
         }
     }
 }
