@@ -148,7 +148,7 @@ static std::vector<std::string> g_offerExtra;   // (sous g_lcs) suite de la list
 static std::wstring g_offerDir;           // (sous g_lcs) dossier Mods de l'hote
 static std::wstring g_offerGame;          // (sous g_lcs) dossier du jeu de l'hote (contenu)
 static std::wstring g_offerPaint;         // (sous g_lcs) peinture perso de la CORRIS envoyee a la place de Images\car.png (vide : celle du jeu)
-static bool IsCarPng(const std::wstring &rel) { return !_wcsicmp(rel.c_str(), L"Images\car.png"); }
+static bool IsCarPng(const std::wstring &rel) { return !_wcsicmp(rel.c_str(), L"Images\\car.png"); }
 static std::atomic<int> g_offerBusy(0);
 static std::atomic<bool> g_offerNew(false);
 static std::string g_offerSig;            // ce sur quoi la liste a ete faite (fil de la fenetre)

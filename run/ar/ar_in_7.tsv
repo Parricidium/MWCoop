@@ -1,0 +1,5 @@
+T0	My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?
+T1	Different version (you %s, host %s): update
+T2	The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.
+T3	Different version (you %s, host %s): the host must update MWCoop
+T10	\"Different version\": the host and you don't have the same version. If the host is more up to date, the launcher offers to update right away (it restarts by itself); otherwise the host must update.

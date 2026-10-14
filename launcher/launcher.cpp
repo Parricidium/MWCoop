@@ -4813,6 +4813,46 @@ static BOOL CALLBACK FindPidWindow(HWND h, LPARAM lp)
     if (pid == f->pid && IsWindowVisible(h)) { f->found = true; return FALSE; }
     return TRUE;
 }
+// Niveau du jeu en cours d'apres serveur.txt (ecrit chaque seconde par le mod) : "MainMenu", "GAME"... ; vide si aucun etat frais.
+static std::wstring GameLevelNow()
+{
+    std::vector<std::wstring> dirs = { g_gameDir + L"MWCoop\\", g_gameDir + L"MWCoop\\profils\\invite\\" };
+    if (!LocalDir().empty()) {
+        dirs.push_back(LocalDir()); dirs.push_back(LocalDir() + L"profils\\invite\\");
+        dirs.push_back(LocalDir() + L"invite\\My Winter Car\\MWCoop\\"); dirs.push_back(LocalDir() + L"invite\\My Winter Car\\MWCoop\\profils\\invite\\");
+    }
+    std::wstring best; long long bt = 0;
+    for (auto &d : dirs) { long long t = FileUnixTime(d + L"serveur.txt"); if (t > bt) { bt = t; best = d + L"serveur.txt"; } }
+    if (best.empty() || (long long)_time64(NULL) - bt > 6) return L"";
+    std::vector<unsigned char> raw;
+    if (!ReadAll(best, raw)) return L"";
+    std::wstring all = Widen(std::string(raw.begin(), raw.end()), CP_UTF8);
+    if (all.compare(0, 5, L"etat\t")) return L"";
+    std::vector<std::wstring> f;
+    size_t a = 0, e = all.find(L'\n');
+    std::wstring l = all.substr(0, e);
+    while (a <= l.size()) { size_t b = l.find(L'\t', a); if (b == std::wstring::npos) b = l.size(); f.push_back(l.substr(a, b - a)); a = b + 1; }
+    return f.size() > 4 ? f[4] : L"";
+}
+
+// Fermer le jeu : d'abord poliment (WM_CLOSE a ses fenetres), de force apres 5 s.
+static BOOL CALLBACK ClosePidWindows(HWND h, LPARAM lp)
+{
+    DWORD pid = 0; GetWindowThreadProcessId(h, &pid);
+    if (pid == (DWORD)lp) PostMessageW(h, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+static void CloseGameProcess(DWORD pid)
+{
+    EnumWindows(ClosePidWindows, (LPARAM)pid);
+    HANDLE t = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
+    if (!t) { LaunchLog("jeu %lu : ouverture impossible pour le fermer", pid); return; }
+    bool gone = WaitForSingleObject(t, 5000) == WAIT_OBJECT_0;
+    if (!gone) { TerminateProcess(t, 1); gone = WaitForSingleObject(t, 5000) == WAIT_OBJECT_0; }
+    CloseHandle(t);
+    LaunchLog("jeu %lu ferme depuis le lanceur : %s", pid, gone ? "fait" : "IMPOSSIBLE");
+}
+
 static bool GameRunningAsk()
 {
     DWORD pid = 0;
@@ -4831,6 +4871,19 @@ static bool GameRunningAsk()
             }
         }
         if (h) CloseHandle(h);
+    }
+    // Jeu ouvert au menu principal (retour de Matilda, 14/10 : partie quittee a 14h50, jeu laisse au menu, le lanceur rouvert
+    // a 16h13 refusait tout -- « deja lance », Steam le montrait en cours) : l'etat que le mod ecrit chaque seconde
+    // (serveur.txt, Net/Admin.cs : niveau charge) dit s'il est au menu ; alors on propose de le fermer (rien a sauvegarder).
+    std::wstring level = GameLevelNow();
+    if (!stuck && level == L"MainMenu") {
+        LaunchLog("jeu %lu ouvert au menu principal : fermeture proposee", pid);
+        if (MessageBoxW(g_wnd, T(L"My Winter Car est encore ouvert, au menu principal (partie quitt\u00E9e).\n\nLe fermer pour relancer depuis le lanceur ?",
+                                 L"My Winter Car is still open, at the main menu (game quit).\n\nClose it so you can launch again from the launcher?"),
+                        L"MWCoop", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+            CloseGameProcess(pid);
+            if (!GameProcessRunning()) return false;
+        }
     }
     if (stuck) {
         LaunchLog("jeu %lu en cours sans fenetre depuis plus d'une minute : fermeture proposee", pid);
@@ -5437,6 +5490,24 @@ static std::string MyShirt() { const Opt *ap = OptByKey("Apparence"); return ap 
 static std::string MySkin() { return PersoLookString(); }
 static std::string MyName() { return Narrow(PlayerName(), CP_UTF8); }
 static std::string MyVersion() { return g_localVer.empty() ? "dev" : Narrow(g_localVer, CP_UTF8); }   // MWCoop\version.txt
+
+// Rejoindre un hote d'une autre version (demande de JD, 14/10 : « que ca check la version, si elle n'est pas bonne, une
+// proposition de mettre a jour »). Hote plus recent : proposer la mise a jour tout de suite (le lanceur se relance, puis on
+// rejoint) ; hote plus ancien : c'est a lui de mettre a jour.
+static void VersionMismatch(const std::wstring &his)
+{
+    std::wstring mine = Widen(MyVersion());
+    if (mine != L"dev" && CmpVer(his, mine) > 0) {
+        SetStatus(K_ERR, T(L"Version diff\u00E9rente (toi %s, h\u00F4te %s) : mets \u00E0 jour", L"Different version (you %s, host %s): update"), mine.c_str(), his.c_str());
+        wchar_t q[600];
+        swprintf_s(q, T(L"L'h\u00F4te a MWCoop %s et toi %s : il faut la m\u00EAme version pour jouer ensemble.\n\nMettre \u00E0 jour maintenant ? Le lanceur se relance tout seul, puis tu pourras rejoindre.",
+                        L"The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join."), his.c_str(), mine.c_str());
+        TestLog("salon : version de l'hote %s, la mienne %s : mise a jour proposee", Narrow(his, CP_UTF8).c_str(), Narrow(mine, CP_UTF8).c_str());
+        if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONQUESTION) == IDYES) StartUpdate(true);
+        return;
+    }
+    SetStatus(K_ERR, T(L"Version diff\u00E9rente (toi %s, h\u00F4te %s) : l'h\u00F4te doit mettre \u00E0 jour MWCoop", L"Different version (you %s, host %s): the host must update MWCoop"), mine.c_str(), his.c_str());
+}
 // Apparence lisible ("Tenue 21", "Policier") : libelle de l'onglet COOP, sinon le nom brut.
 static std::wstring SkinLabel(const std::string &look)
 {
@@ -7393,8 +7464,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         bool fallback = false;
         if (wp == 1) {
             if (!why.compare(0, 8, "version ")) {
-                std::wstring mine = Widen(MyVersion()), his = Widen(why.substr(8));
-                SetStatus(K_ERR, T(L"Version diff\u00E9rente (toi %s, h\u00F4te %s) : mettez \u00E0 jour, relancez MWCoop.exe", L"Different version (you %s, host %s): update, restart MWCoop.exe"), mine.c_str(), his.c_str());
+                VersionMismatch(Widen(why.substr(8)));
             }
             else if (why == "full") SetStatus(K_ERR, T(L"Salon complet (%d joueurs)", L"Lobby is full (%d players)"), kLobbyMax);
             else if (why == "started") { SetStatus(K_WARN, T(L"Partie d\u00E9j\u00E0 lanc\u00E9e : \u00AB Rejoindre en jeu \u00BB", L"Session already started: \"Join in game\"")); fallback = true; }
