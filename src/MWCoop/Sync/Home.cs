@@ -65,11 +65,11 @@ namespace MWCoop
             Unmute();
             holders.Clear(); holderOf.Clear(); statuses.Clear(); heldAt.Clear();
             hand = null; resolved = false; applyingHolder = null;
-            bucket = lid = null; brew = lidRemoval = ingredients = jokke = null;
-            lidHooked = ingHooked = jokkeHooked = false;
+            bucket = lid = null; brew = lidRemoval = ingredients = jokke = fill = null;
+            lidHooked = ingHooked = jokkeHooked = fillHooked = false;
             brewAuth = 0; brewSig = ""; lastBrewSent = -100; brewDirty = false; jokkeHere = true; jokkeCut = false;
             brewApplied = brewSent = 0;
-            testStep = testStep2 = 0; testLog = 0; testDescribed = false;
+            testStep = testStep2 = 0; testLog = 0; testDescribed = false; testCan = null;
             // Avant le releve du monde (16 s) : les porte-fusibles, le seau et Jokke sont a ce module.
             startAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 8f : -1;
             nextRescan = Time.realtimeSinceStartup + 40f;
@@ -184,6 +184,12 @@ namespace MWCoop
                 Inject(ingredients, "Sugar", HK_Ingredient, "sucre");
                 Inject(ingredients, "Yeast", HK_Ingredient, "levure");
                 Log.Info("kilju : ingredients du seau suivis");
+            }
+            if (!fillHooked && Ready(fill) && Replay.Owner(fill) == Mod && fill.Fsm.GetState("Fill") != null)
+            {
+                fillHooked = true;
+                FsmHooks.Append(fill.Fsm.GetState("Fill"), new FillHook());
+                Log.Info("kilju : remplissage des bidons suivi");
             }
             if (!jokkeHooked && Ready(jokke) && Replay.Owner(jokke) == Mod)
             {
@@ -482,12 +488,35 @@ namespace MWCoop
 
         // ================================================================ kilju
         static GameObject bucket, lid;
-        static PlayMakerFSM brew, lidRemoval, ingredients, jokke;
-        static bool lidHooked, ingHooked, jokkeHooked, brewDirty, jokkeHere = true, jokkeCut;
+        static PlayMakerFSM brew, lidRemoval, ingredients, jokke, fill;
+        static bool lidHooked, ingHooked, jokkeHooked, fillHooked, brewDirty, jokkeHere = true, jokkeCut;
         static int brewAuth, brewApplied, brewSent;   // brewAuth : joueur qui fait autorite sur le seau
         static float lastBrewSent;
         static string brewSig = "";
         const string BucketPath = "EQUIPMENTS/bucket(itemx)", JokkePath = "JOBS/JOKKEHOME/HouseDrunkNew/KiljuBuyer/CanTrigger";
+
+        // Bidon rempli au seau (TriggerFill :: Fill pose ContainsKilju, KiljuAlc... dans l'automate Use du bidon ; retour de
+        // RullER 14/10 : « bidons de kilju remplis, vides apres la sauvegarde » -- rempli chez l'invite, il restait vide chez
+        // l'hote, qui sauvegarde). Chez celui qui tient le bidon : tout son contenu part aux autres (Consume), qui le posent
+        // et lui envoient GLOBALEVENT comme le seau (le bidon se met a jour).
+        class FillHook : ModHook
+        {
+            public override string Module { get { return Mod; } }
+            public override void OnEnter()
+            {
+                try
+                {
+                    if (Replay.Depth == 0 && fill != null)
+                    {
+                        GameObject can = GoVar(fill, "Object");
+                        PlayMakerFSM use = can != null ? Game.FsmOn(can, "Use") : null;
+                        if (use != null && (CausedHere(can, 60f) || testForceFill)) Consume.SendContentNow(use, "GLOBALEVENT", "bidon rempli au seau a kilju");
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
 
         static void ResolveKilju()
         {
@@ -497,9 +526,11 @@ namespace MWCoop
             lidRemoval = lid != null ? Game.FsmOn(lid, "Removal") : null;
             Transform ti = bucket != null ? bucket.transform.Find("TriggerIngredients") : null;
             ingredients = ti != null ? Game.FsmOn(ti.gameObject, "Level") : null;
+            Transform tf = bucket != null ? bucket.transform.Find("TriggerFill") : null;
+            fill = tf != null ? Game.FsmOn(tf.gameObject, "Fill") : null;
             GameObject jk = Game.FindAny(JokkePath);
             jokke = jk != null ? Game.FsmOn(jk, "Logic") : null;
-            Own(brew); Own(lidRemoval); Own(ingredients); Own(jokke);
+            Own(brew); Own(lidRemoval); Own(ingredients); Own(jokke); Own(fill);
         }
 
         // Variables du seau envoyees : ses nombres et drapeaux, sauf les calculs intermediaires.
@@ -670,6 +701,7 @@ namespace MWCoop
             if (!resolved) return;
             if (mode == "fusible") TestFuse(t);
             else if (mode == "kilju") TestKilju(t);
+            else if (mode == "kiljuremplir") TestFill(t);
         }
 
         static string SlotName(Holder h) { GameObject s = GoVar(h.F, "Slot"); return s != null ? s.name : h.Key; }
@@ -747,6 +779,73 @@ namespace MWCoop
         {
             FsmFloat v = brew != null ? brew.FsmVariables.FindFsmFloat(name) : null;
             if (v != null) v.Value += d;
+        }
+
+        // [Test] Autotest=kiljuremplir : a 40 s l'invite remplit au seau un bidon vide (comme s'il le tenait : TriggerFill en
+        // 'Fill') ; chacun note ce bidon a 50 s. Attendu : ContainsKilju vrai des deux cotes (avant : seulement chez l'invite).
+        static GameObject testCan;
+        static bool testForceFill;   // (essai : le bidon, sorti du sac de l'hote, compte comme tenu ici)
+        static void TestFill(float t)
+        {
+            if (fill == null) { if (testStep == 0 && t > 30f) { testStep = 9; Log.Info("autotest : kiljuremplir, seau ou remplissage absent"); } return; }
+            if (testCan == null)
+                foreach (Object o in Game.FsmsNamed("Use"))
+                {
+                    var f = o as PlayMakerFSM;
+                    if (f != null && (f.gameObject.name == "empty plastic can(itemx)" || Game.LocalVar(f, "ContainsKilju") && f.FsmVariables.FindFsmString("ID") != null && f.FsmVariables.FindFsmString("ID").Value.Length > 0)) { testCan = f.gameObject; break; }   // (pas de bidon vide : un bidon de jus, memes variables)
+                }
+            // (aucun bidon dans la partie : l'hote achete du jus au magasin, TestPos dans la PSK, et ouvre le sac)
+            if (Session.IsHost && t > 28f && testDescribed == false)
+            {
+                testDescribed = true;   // (produits du magasin qui parlent de bidon : nom de l'objet et textes de l'automate Buy)
+                var sbp = new System.Text.StringBuilder();
+                foreach (Object o in Game.FsmsNamed("Buy"))
+                {
+                    var f = o as PlayMakerFSM;
+                    if (f == null) continue;
+                    string all = f.gameObject.name;
+                    foreach (FsmString v in f.FsmVariables.StringVariables) all += " " + v.Name + "=" + v.Value;
+                    if (all.ToLowerInvariant().Contains("can") || all.ToLowerInvariant().Contains("kanist") || all.ToLowerInvariant().Contains("plastic")) sbp.Append(" | ").Append(Recon.Path(f.transform)).Append(" : ").Append(all);
+                }
+                Log.Info("autotest : kiljuremplir, produits :" + sbp);
+            }
+            if (testCan == null && Session.IsHost && t > 30f && testStep == 0) { testStep = 5; Consume.TestBuyBag(t, Config.Get("Test", "TestAchat", "Juice")); testLog = t; }
+            if (testStep == 5 && t > testLog + 3f) { testStep = 6; Log.Info("autotest : kiljuremplir, " + Consume.TestOpenBought()); }
+            if (testCan == null) { if (testStep == 0 && t > 70f) { testStep = 9; Log.Info("autotest : kiljuremplir, aucun bidon"); } return; }
+            PlayMakerFSM use = Game.FsmOn(testCan, "Use");
+            FsmString idv = use != null ? use.FsmVariables.FindFsmString("ID") : null;
+            FsmBool juiceNow = use != null ? use.FsmVariables.FindFsmBool("ContainsJuice") : null;
+            if (!Session.IsHost && t > 45f && testStep == 0 && juiceNow != null && juiceNow.Value)
+            {
+                testStep = 3;   // (bidon de jus : bu d'abord, il devient « empty plastic can » comme dans le jeu)
+                Consume.TestDrink(use);
+                Log.Info("autotest : kiljuremplir, jus bu ici -> " + use.ActiveStateName);
+            }
+            if (!Session.IsHost && t > 55f && (testStep == 0 || testStep == 3) && fillHooked)
+            {
+                testStep = 1;
+                testForceFill = true;
+                MarkHeld(testCan);
+                FsmGameObject ov = fill.FsmVariables.FindFsmGameObject("Object");
+                if (ov != null) ov.Value = testCan;
+                Game.SetState(fill, "Fill");
+                var tgt = new System.Text.StringBuilder();
+                foreach (FsmStateAction ac in fill.Fsm.GetState("Fill").Actions)
+                {
+                    var od = ac != null ? ac.GetType().GetField("gameObject") : null;
+                    var ow = od != null ? od.GetValue(ac) as FsmOwnerDefault : null;
+                    if (ow != null) tgt.Append(ac.GetType().Name).Append("->").Append(ow.OwnerOption).Append("/").Append(ow.GameObject != null ? ow.GameObject.Name + "=" + (ow.GameObject.Value != null ? ow.GameObject.Value.name : "null") : "-").Append(" ");
+                }
+                FsmBool k0 = use != null ? use.FsmVariables.FindFsmBool("ContainsKilju") : null;
+                Log.Info("autotest : kiljuremplir, bidon " + (idv != null ? idv.Value : "?") + " rempli ici (" + fill.ActiveStateName + ", ContainsKilju " + (k0 != null && k0.Value) + ") cibles : " + tgt);
+            }
+            if (t > 65f && testStep2 == 0 || t > 90f && testStep2 == 1)
+            {
+                testStep2++;
+                FsmBool k = use != null ? use.FsmVariables.FindFsmBool("ContainsKilju") : null;
+                FsmFloat a = use != null ? use.FsmVariables.FindFsmFloat("KiljuAlc") : null;
+                Log.Info("autotest : kiljuremplir, bidon " + (idv != null ? idv.Value : "?") + " : ContainsKilju " + (k != null && k.Value) + ", KiljuAlc " + (a != null ? a.Value.ToString("F3") : "?") + ", nom " + testCan.name);
+            }
         }
 
         static void TestKilju(float t)

@@ -831,6 +831,21 @@ namespace MWCoop
             marks[f] = m;
         }
 
+        // Contenu change hors d'un usage de l'objet (bidon rempli au seau a kilju, Home) : tout le contenu part aux autres ;
+        // 'evt' : evenement que les autres envoient ensuite a l'automate (comme le jeu l'a fait ici).
+        internal static void SendContentNow(PlayMakerFSM f, string evt, string why)
+        {
+            if (f == null || !Session.Active) return;
+            FsmString idv = f.FsmVariables.FindFsmString("ID");
+            string id = idv != null ? idv.Value : "";
+            List<KeyValuePair<string, object>> vars = ContentValues(f);
+            if (id.Length == 0 || vars.Count == 0) return;
+            string visual = string.IsNullOrEmpty(evt) ? "" : "!" + evt;
+            if (Session.IsHost) RememberContent(id, "", vars);
+            Log.Info("consommables : contenu de " + id + " change ici (" + why + ") : " + Describe(vars));
+            Session.SendAll(Write(Session.LocalId, id, F_Content, visual, vars, null), true);
+        }
+
         // Retour dans un etat d'attente apres un usage : ce qui a change dans le contenu part aux autres.
         static void Back(PlayMakerFSM f, string id, FsmState prev)
         {
@@ -932,6 +947,7 @@ namespace MWCoop
             try
             {
                 SetValues(f, vars);
+                if (!string.IsNullOrEmpty(visual) && visual[0] == '!') { f.SendEvent(visual.Substring(1)); visual = ""; }   // (SendContentNow)
                 FsmState vs = string.IsNullOrEmpty(visual) ? null : f.Fsm.GetState(visual);
                 if (vs != null && f.ActiveStateName != visual && SafeVisual(vs, f)) Game.SetState(f, visual);
             }
@@ -1211,6 +1227,7 @@ namespace MWCoop
             if (mode == "gorgee") { TestSip(t); return; }
             if (mode == "biere") { TestBeer(t); return; }
             if (mode == "gorgee2") { TestJuice(t); return; }
+            if (mode == "contenuenvoi") { TestSendContent(t); return; }
             if (mode == "poubelle") { TestTrash(t); return; }
             if (mode != "poche") return;
             string prefix = Config.Get("Test", "TestPiece", "cigarettes");
@@ -1341,6 +1358,11 @@ namespace MWCoop
 
         // Essais : achat de secours ([Test] TestAchat ; vide = pas d'achat) quand l'essai ne trouve pas son article,
         // sac neuf vide 3 s plus tard (pas pour la caisse de biere, gros article hors sac).
+        // (essais d'autres modules : achat d'un produit au magasin, puis ouverture du sac)
+        internal static void TestBuyBag(float t, string product) { TestBuyFallback(t, product, true); }
+        internal static void TestDrink(PlayMakerFSM f) { MarkUse(f); Game.SetState(f, "Play anim"); }   // (comme le clic : boire)
+        internal static string TestOpenBought() { string r = TestOpenBag(testBags); testBags = null; return r; }
+
         static void TestBuyFallback(float t, string product, bool bag)
         {
             if (product.Length == 0) { Log.Info("autotest : rien de tel ici, pas d'achat ([Test] TestAchat vide)"); return; }
@@ -1445,6 +1467,34 @@ namespace MWCoop
         // (DRINKJUICE a SON joueur) -> Status -> Empty -> Wait player. Chacun note toutes les 2 s de 28 a 60 s les
         // bidons a moins de 80 m : ContainsJuice, ContainsKilju, nom. Attendu : chez l'invite « contenu de
         // juiceconcentrateN (joueur #0) : ContainsJuice=False -> Wait player » et le meme nom (vide) des deux cotes.
+        // [Test] Autotest=contenuenvoi : a 40 s l'invite change le contenu d'un objet suivi (premiere variable de contenu) et
+        // l'envoie par SendContentNow ; chacun note ce contenu a 50 et 75 s. Attendu : la meme valeur des deux cotes.
+        static string sendId;
+        static int sendStep;
+        static void TestSendContent(float t)
+        {
+            if (sendId == null)
+                foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
+                    if (kv.Value != null && ContentVars(kv.Value).Length > 0) { sendId = kv.Key; break; }
+            PlayMakerFSM f;
+            if (sendId == null || !byId.TryGetValue(sendId, out f) || f == null) { if (sendStep == 0 && t > 35f) { sendStep = 9; Log.Info("autotest : contenuenvoi, aucun objet a contenu suivi (" + byId.Count + ")"); } return; }
+            if (!Session.IsHost && t > 40f && sendStep == 0)
+            {
+                sendStep = 1;
+                NamedVariable v = ContentVars(f)[0];
+                var fi = v as FsmInt; var ff = v as FsmFloat; var fb = v as FsmBool;
+                if (fi != null) fi.Value += 3; else if (ff != null) ff.Value += 0.5f; else if (fb != null) fb.Value = !fb.Value;
+                SendContentNow(f, null, "essai");
+                Log.Info("autotest : contenuenvoi, " + sendId + " change ici : " + Describe(ContentValues(f)));
+            }
+            if (t > 50f && sendStep2 == 0 || t > 75f && sendStep2 == 1)
+            {
+                sendStep2++;
+                Log.Info("autotest : contenuenvoi, " + sendId + " : " + Describe(ContentValues(f)));
+            }
+        }
+        static int sendStep2;
+
         static void TestJuice(float t)
         {
             string prefix = Config.Get("Test", "TestPiece", "");
