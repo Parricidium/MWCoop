@@ -147,7 +147,7 @@ namespace MWCoop
             float t = Time.realtimeSinceStartup - t0;
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); AssembleIcon.Test(mode, t); DroneCam.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t);
-            Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t); Consume.TestPick(mode, t); Fluids.TestFill(mode, t); ModMachtwagen300D.Test(mode, t); SleepingBags.Test(mode, t); ModCheatbox.Test(mode, t); CarLeaks.Test(mode, t);
+            Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t); Consume.TestPick(mode, t); Fluids.TestFill(mode, t); ModMachtwagen300D.Test(mode, t); SleepingBags.Test(mode, t); ModCheatbox.Test(mode, t); CarLeaks.Test(mode, t); Sauna.Test(mode, t);
             if (mode == "sondesac" && t > 20f && step == 0)
             {
                 step = 1;
@@ -1711,6 +1711,7 @@ namespace MWCoop
                 }
             }
             if (mode == "sangsonde" && t > 25f && !done) { done = true; Log.Info("autotest : " + Respawn.ProbeBlood()); }
+            if (mode == "vapeursonde" && t > 25f && !done) { done = true; Log.Info("autotest : " + SaunaProbe.Probe()); Log.Info("autotest : " + SaunaProbe.Probe2()); }
             if (mode == "porter")
             {
                 // [Test] TestPiece promenee de 30 a 36 s (comme tenue en main), position a 45 s.
