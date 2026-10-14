@@ -90,8 +90,8 @@ namespace MWCoop
             Log.Info("mods : Machtwagen 300D, " + parts.Count + " equipements suivis (toit, vitres, compartiments, boite auto, climatisation) et la cle");
         }
 
-        static T Get<T>(object o, string f) { FieldInfo fi = o.GetType().GetField(f, Any); object v = fi != null ? fi.GetValue(o) : null; return v is T ? (T)v : default(T); }
-        static void SetF(object o, string f, object v) { FieldInfo fi = o.GetType().GetField(f, Any); if (fi != null) fi.SetValue(o, v); }
+        static T Get<T>(object o, string f) { return ModRefl.Get<T>(o, f); }   // (champs gardes, ModRefl)
+        static void SetF(object o, string f, object v) { ModRefl.Set(o, f, v); }
         static void CallM(object o, string m, params object[] a) { MethodInfo mi = o.GetType().GetMethod(m, Any); if (mi != null) try { mi.Invoke(o, a); } catch (Exception e) { Log.Warn("mods : 300D " + m + " : " + (e.InnerException ?? e).Message); } }
 
         // Valeur d'etat ; toit et vitres : aussi pendant le mouvement (position de l'animation), suivie chez les autres qui
