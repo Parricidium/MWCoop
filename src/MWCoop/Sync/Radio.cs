@@ -60,6 +60,7 @@ namespace MWCoop
             if (!Session.Active || !PlayerSync.InGame || !Find()) return;
             float now = Time.realtimeSinceStartup;
             Watch(now);
+            Beat(now);
             if (!Session.IsHost || now < nextSend || Session.RemoteCount == 0) return;
             nextSend = now + 1f;
             var w = new NetWriter(Msg.Radio).U8(ch.Length);
@@ -118,7 +119,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- postes des autres
         class Ghost
         {
-            public Transform K; public GameObject Go; public AudioSource[] Ch; public PlayMakerFSM Fetch; public int Who;
+            public Transform K; public GameObject Go; public AudioSource[] Ch; public PlayMakerFSM Fetch; public int Who; public float Born;
             // Chanson importee (flux WWW) : un seul lecteur a la fois -- la copie charge son propre exemplaire.
             public string[] SongKey = new string[2]; public WWW[] SongWww = new WWW[2]; public AudioClip[] SongClip = new AudioClip[2];
         }
@@ -157,7 +158,7 @@ namespace MWCoop
             go.name = "MWCoop-RadioAutre";
             foreach (PlayMakerFSM f in go.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName != "Fetch") f.enabled = false;   // (tirage des morceaux : celui du vrai)
             go.transform.parent = speaker; go.transform.localPosition = Vector3.zero; go.transform.localRotation = Quaternion.identity;
-            var g = new Ghost { K = k, Go = go, Who = who, Fetch = Game.FsmOn(go, "Fetch") };
+            var g = new Ghost { K = k, Go = go, Who = who, Fetch = Game.FsmOn(go, "Fetch"), Born = Time.realtimeSinceStartup };
             Transform c1 = go.transform.Find("Channel1"), fk = go.transform.Find("Folk");
             g.Ch = new[] { c1 != null ? c1.GetComponent<AudioSource>() : null, fk != null ? fk.GetComponent<AudioSource>() : null };
             if (g.Fetch != null) { g.Fetch.enabled = true; g.Fetch.SendEvent("FETCH"); }
@@ -297,6 +298,42 @@ namespace MWCoop
                     else if (!src.isPlaying && dst.isPlaying) dst.Stop();
                     else if (dst.isPlaying && dst.clip == src.clip && Mathf.Abs(dst.time - src.time) > 0.5f) dst.time = src.time;
                 }
+            }
+        }
+
+        // Ou joue mon vrai poste (retour de RullER, 14/10 : « contact coupe, la radio continue chez mon ami ») : la copie chez
+        // les autres ne nait et ne meurt que des gestes rejoues (bouton, molette) ; un poste coupe autrement (contact, batterie,
+        // pile) restait allume chez eux. Chacun dit toutes les 2 s ou joue son vrai jeu de canaux (« » : eteint) ; chez les
+        // autres, sa copie d'un autre poste s'arrete (pas dans ses 3 premieres secondes : le geste peut devancer ce message).
+        static float nextBeat; static string beatSent;
+        static void Beat(float now)
+        {
+            if (Session.RemoteCount == 0 || realT == null || fetch == null || now < nextBeat) return;
+            Snap s = Take();
+            string k = Off(s) || !s.On ? "" : Recon.Path(KeyOf(s.Parent));
+            if (k == beatSent && now < nextBeat + 8f) { nextBeat = now + 2f; return; }
+            nextBeat = now + 2f; beatSent = k;
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@poste").Str(k), false);
+        }
+
+        // Essais (radioautre, RadioCoupe=1) : le vrai jeu de canaux rendu a RADIO sans geste, comme un poste qui perd le courant.
+        public static string TestCut()
+        {
+            GameObject r = GameObject.Find("RADIO");
+            if (realT == null || fetch == null || r == null) return "radio : pas de canaux ou pas de RADIO";
+            realT.parent = r.transform; fetch.enabled = false;
+            last = Take(); lastSet = true;
+            return "radio : vrai jeu de canaux rendu a RADIO (coupe sans geste)";
+        }
+
+        public static void OnBeat(int who, string key)
+        {
+            float now = Time.realtimeSinceStartup;
+            for (int i = ghosts.Count - 1; i >= 0; i--)
+            {
+                Ghost g = ghosts[i];
+                if (g.Who != who || now - g.Born < 3f || g.K == null) continue;
+                if (key.Length == 0 || Recon.Path(g.K) != key) Kill(g, "coupe : #" + who + " ne l'ecoute plus" + (key.Length == 0 ? " (eteint chez lui)" : " (" + key + ")"));
             }
         }
 
