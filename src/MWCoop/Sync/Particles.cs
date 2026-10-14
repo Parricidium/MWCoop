@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
+using HutongGames.PlayMaker;
+using HutongGames.PlayMaker.Actions;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -14,14 +16,24 @@ namespace MWCoop
     // Vehicules du trafic, PNJ et courses (copies) : repose a chaque seconde (un automate local, LOD, peut les eteindre) ;
     // le reste (poeles, cheminees) : seulement aux changements de l'hote. A part : voitures des joueurs (leur conducteur
     // fait foi, VehicleSync), le joueur, douches et robinets, vapeur de l'eau jetee sur le poele, traces de pneus.
+    //
+    // Objets allumes par les automates des copies (refonte, revue du 14/10 : feux stop du trafic, des PNJ et du bus jamais
+    // allumes chez l'invite -- Throttle 'Cruise 2' : ActivateGameObject BrakeLights) : l'hote releve les cibles des actions
+    // ActivateGameObject des automates de TRAFFIC / NPC_CARS / RACES / TRAIN (pas une voiture entiere : rien qui porte un
+    // corps rigide) et dit leur etat, cle "a:" racine|rangs depuis la racine|nom ; l'invite retrouve l'objet par ces rangs.
     public static class Particles
     {
-        class Em { public string Key; public ParticleEmitter E; public bool Last, Want, Has, Copy; }
+        class Em
+        {
+            public string Key; public ParticleEmitter E; public GameObject Go; public bool Last, Want, Has, Copy;
+            public bool On { get { return E != null ? E.emit : Go != null && Go.activeSelf; } }
+        }
         static readonly Dictionary<string, Em> byKey = new Dictionary<string, Em>();
+        static readonly HashSet<PlayMakerFSM> examined = new HashSet<PlayMakerFSM>();
         static float nextScan, nextSend, nextFull, nextApply;
-        static int sentLogs, gotLogs;
+        static int sentLogs, gotLogs, actLogs, diagLogs;
 
-        public static void OnLevelLoaded() { byKey.Clear(); nextScan = 0f; nextFull = 0f; }
+        public static void OnLevelLoaded() { byKey.Clear(); examined.Clear(); nextScan = 0f; nextFull = 0f; actLogs = 0; }
 
         static bool Eligible(ParticleEmitter pe)
         {
@@ -33,7 +45,36 @@ namespace MWCoop
             if (VehicleSync.IsPlayerCar(t)) return false;   // (voiture d'un joueur : son conducteur)
             return true;
         }
-        static bool IsCopy(Transform t) { string r = t.root.name; return r == "TRAFFIC" || r == "NPC_CARS" || r == "RACES" || r == "TRAIN"; }
+        static bool IsCopyRoot(string r) { return r == "TRAFFIC" || r == "NPC_CARS" || r == "RACES" || r == "TRAIN"; }
+        static bool IsCopy(Transform t) { return IsCopyRoot(t.root.name); }
+
+        // Cle d'un objet allume : racine, rangs parmi les freres depuis la racine, nom ("a:TRAFFIC|0.3.1|BrakeLights").
+        static string ActiveKey(Transform t)
+        {
+            var idx = new List<int>();
+            Transform c = t;
+            for (; c.parent != null; c = c.parent) idx.Add(c.GetSiblingIndex());
+            idx.Reverse();
+            var sb = new System.Text.StringBuilder("a:").Append(c.name).Append('|');
+            for (int i = 0; i < idx.Count; i++) { if (i > 0) sb.Append('.'); sb.Append(idx[i]); }
+            return sb.Append('|').Append(t.name).ToString();
+        }
+        static GameObject ResolveActive(string key)
+        {
+            string[] p = key.Substring(2).Split('|');
+            if (p.Length != 3) return null;
+            GameObject root = Game.FindAny(p[0]);
+            if (root == null) return null;
+            Transform t = root.transform;
+            if (p[1].Length > 0)
+                foreach (string s in p[1].Split('.'))
+                {
+                    int i;
+                    if (!int.TryParse(s, out i) || i < 0 || i >= t.childCount) return null;
+                    t = t.GetChild(i);
+                }
+            return t.name == p[2] ? t.gameObject : null;
+        }
 
         static void Scan()
         {
@@ -45,6 +86,62 @@ namespace MWCoop
                 if (!byKey.TryGetValue(k, out e)) { e = new Em { Key = k }; byKey[k] = e; e.Last = pe.emit; }
                 e.E = pe; e.Copy = IsCopy(pe.transform);
             }
+            if (Session.IsHost) ScanActivated();
+        }
+
+        // Seulement les lumieres d'un vehicule copie (feux stop, phares, clignotants) : sous un corps rigide (la voiture), sans
+        // en porter (pas la voiture entiere), nom de lumiere. Pas les LOD, declencheurs, PNJ, radars (essai du 14/10 : sans ce
+        // filtre, LOD des voitures, Markku, CrouchTrigger, radar -- objets que l'invite tient lui-meme, a distance de lui).
+        static readonly string[] LightWords = { "Light", "Lamp", "Brake", "Blink", "Signal", "Indicator", "Reverse", "Turn" };
+        static bool IsVehicleLight(GameObject go, PlayMakerFSM f)
+        {
+            Transform t = go.transform;
+            if (t.parent == null || t.root != f.transform.root || go.GetComponentsInChildren<Rigidbody>(true).Length > 0) return false;
+            bool word = false;
+            foreach (string w in LightWords) if (go.name.IndexOf(w, System.StringComparison.OrdinalIgnoreCase) >= 0) { word = true; break; }
+            if (!word) return false;
+            for (Transform c = t.parent; c != null; c = c.parent) if (c.GetComponent<Rigidbody>() != null) return true;
+            return false;
+        }
+
+        // Hote : cibles des ActivateGameObject des automates des copies (une fois par automate, actions chargees)
+        static void ScanActivated()
+        {
+            int added = 0, nf = 0, na = 0, nag = 0, nnull = 0, nrej = 0;
+            foreach (Object o in Game.AllFsms())
+            {
+                var f = o as PlayMakerFSM;
+                if (f == null || examined.Contains(f) || f.hideFlags != HideFlags.None || !IsCopyRoot(f.transform.root.name)) continue;
+                nf++;
+                FsmState[] sts;
+                try { sts = f.FsmStates; } catch { continue; }
+                bool loaded = false;
+                foreach (FsmState st in sts)
+                {
+                    FsmStateAction[] acts;
+                    try { acts = st.Actions; } catch { continue; }
+                    if (acts == null) continue;
+                    loaded = true;
+                    foreach (FsmStateAction a in acts)
+                    {
+                        na++;
+                        if (a != null && a.GetType().Name == "ActivateGameObject") nag++;
+                        var ag = a as ActivateGameObject;
+                        if (ag == null || ag.gameObject == null) continue;
+                        GameObject go = ag.gameObject.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : ag.gameObject.GameObject != null ? ag.gameObject.GameObject.Value : null;
+                        if (go == null) { nnull++; continue; }
+                        if (!IsVehicleLight(go, f)) { nrej++; continue; }
+                        string k = ActiveKey(go.transform);
+                        if (byKey.ContainsKey(k)) continue;
+                        byKey[k] = new Em { Key = k, Go = go, Copy = true, Last = go.activeSelf };
+                        added++;
+                        if (actLogs++ < 10) Log.Info("particules : " + Recon.Path(go.transform) + " allume par " + f.FsmName + " / " + st.Name + " (suivi)");
+                    }
+                }
+                if (loaded) examined.Add(f);
+            }
+            if (added > 0) Log.Info("particules : " + added + " objet(s) allume(s) par les automates des copies suivi(s)");
+            if (nf > 0 && diagLogs++ < 3) Log.Info("particules : releve des copies, " + nf + " automates, " + na + " actions, " + nag + " ActivateGameObject, " + nnull + " sans cible, " + nrej + " ecartes, " + added + " suivis");
         }
 
         public static void Update()
@@ -61,8 +158,8 @@ namespace MWCoop
                 var batch = new List<Em>();
                 foreach (Em e in byKey.Values)
                 {
-                    if (e.E == null) continue;
-                    bool v = e.E.emit;
+                    if (e.E == null && e.Go == null) continue;
+                    bool v = e.On;
                     if (full || v != e.Last) batch.Add(e);
                     e.Last = v;
                 }
@@ -78,7 +175,34 @@ namespace MWCoop
             }
             if (now < nextApply) return;   // invite : copies reposees chaque seconde
             nextApply = now + 1f;
-            foreach (Em e in byKey.Values) if (e.Has && e.Copy && e.E != null && e.E.emit != e.Want) e.E.emit = e.Want;
+            foreach (Em e in byKey.Values) if (e.Has && e.Copy) Apply(e);
+        }
+
+        // (essai Autotest=particules) lumieres suivies : nombre, retrouvees ici, voulues allumees, allumees ici
+        public static string LightReport()
+        {
+            int n = 0, found = 0, want = 0, on = 0, same = 0;
+            foreach (Em e in byKey.Values)
+            {
+                if (!e.Key.StartsWith("a:")) continue;
+                n++;
+                if (e.Go == null && !Session.IsHost) e.Go = ResolveActive(e.Key);
+                if (e.Go != null) found++;
+                bool w = Session.IsHost ? e.Last : e.Want;
+                if (w) want++;
+                if (e.Go != null && e.Go.activeSelf) on++;
+                if (e.Go != null && e.Go.activeSelf == w) same++;
+            }
+            return n + " suivies, " + found + " retrouvees, " + want + " allumees chez l'hote, " + on + " allumees ici, " + same + " pareilles";
+        }
+
+        static bool Apply(Em e)
+        {
+            if (e.E != null) { if (e.E.emit == e.Want) return false; e.E.emit = e.Want; return true; }
+            if (e.Go == null && e.Key.StartsWith("a:")) e.Go = ResolveActive(e.Key);
+            if (e.Go == null || e.Go.activeSelf == e.Want) return false;
+            e.Go.SetActive(e.Want);
+            return true;
         }
 
         public static void OnMessage(int who, NetReader r)
@@ -89,14 +213,10 @@ namespace MWCoop
                 string k = r.Str(); bool v = r.Bool();
                 if (Session.IsHost || who != 0) continue;
                 Em e;
-                if (!byKey.TryGetValue(k, out e)) { e = new Em { Key = k }; byKey[k] = e; }
+                if (!byKey.TryGetValue(k, out e)) { e = new Em { Key = k, Copy = k.StartsWith("a:") }; byKey[k] = e; }
                 bool changed = !e.Has || e.Want != v;
                 e.Want = v; e.Has = true;
-                if (changed && e.E != null && e.E.emit != v)
-                {
-                    e.E.emit = v;
-                    if (gotLogs++ < 10) Log.Info("particules : " + k + " " + (v ? "allume" : "eteint") + " (hote)");
-                }
+                if (changed && Apply(e) && gotLogs++ < 10) Log.Info("particules : " + k + " " + (v ? "allume" : "eteint") + " (hote)");
             }
         }
     }
