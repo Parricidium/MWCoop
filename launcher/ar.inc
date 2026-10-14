@@ -1081,4 +1081,12 @@ static const wchar_t *const kAr[][2] = {
     { L"Saves", L"الحفظات" },
     { L"One game per group of friends: pick, name, restart", L"لعبة لكل مجموعة أصدقاء: اختيار، تسمية، إعادة بدء" },
     { L"Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.", L"عدة ألعاب، لعبة لكل مجموعة أصدقاء: أنشئها، سمّها، اختر التي تستضيفها (هنا أو في الردهة). يستلم ضيوفك حفظك، وحفظهم لا يُمسّ." },
+    { L"Different version (you %s, host %s)", L"نسخة مختلفة (لديك %s، لدى المضيف %s)" },
+    { L"The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n", L"المضيف يلعب بنسخة Nightly من MWCoop: تحتاج إلى النسخة نفسها للعب معًا.\n\n" },
+    { L"⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?", L"⚠ تنبيه: نسخة Nightly ما زالت قيد التطوير وقد تكون غير مستقرة (أخطاء، انهيارات، حفظ تالف).\n\nيجب أن يكون الجميع على النسخة نفسها للعب معًا: على أصدقائك الانتقال إلى Nightly أيضًا.\n\nتُنسخ حفظاتك أولًا (MWCoop\\copie-avant-nightly). يمكنك العودة إلى Stable في أي وقت (الإعدادات، التحديثات).\n\nالانتقال إلى Nightly؟" },
+    { L"The host plays the Stable version of MWCoop, you a Nightly: you need the same one to play together.\n\nGo back to Stable now?", L"المضيف يلعب بنسخة Stable من MWCoop، وأنت بنسخة Nightly: تحتاج إلى النسخة نفسها للعب معًا.\n\nالعودة إلى Stable الآن؟" },
+    { L"Nightly channel: development version", L"قناة Nightly: نسخة قيد التطوير" },
+    { L"Stable channel", L"قناة Stable" },
+    { L"Stable or Nightly", L"Stable أو Nightly" },
+    { L"In Settings, Updates: Stable, the recommended version; Nightly, the next version still in development, to try with friends. Unstable, and the same for everyone.", L"في الإعدادات، التحديثات: Stable هي النسخة الموصى بها؛ Nightly هي النسخة القادمة قيد التطوير، لتجربتها مع الأصدقاء. غير مستقرة، ويجب أن تكون نفسها لدى الجميع." },
 };

@@ -1,0 +1,8 @@
+CAN0	Different version (you %s, host %s)
+CAN1	The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n
+CAN2	⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?
+CAN3	The host plays the Stable version of MWCoop, you a Nightly: you need the same one to play together.\n\nGo back to Stable now?
+CAN4	Nightly channel: development version
+CAN5	Stable channel
+CAN6	Stable or Nightly
+CAN7	In Settings, Updates: Stable, the recommended version; Nightly, the next version still in development, to try with friends. Unstable, and the same for everyone.

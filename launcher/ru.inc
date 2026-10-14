@@ -1096,4 +1096,12 @@ static const wchar_t *const kRu[][2] = {
     { L"Saves", L"Сохранения" },
     { L"One game per group of friends: pick, name, restart", L"Одна игра на компанию друзей: выбрать, назвать, перезапустить" },
     { L"Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.", L"Несколько игр, по одной на компанию друзей: создавай их, называй, выбирай, какую хостить (здесь или в лобби). Гости получают твоё сохранение, их собственное не затрагивается." },
+    { L"Different version (you %s, host %s)", L"Другая версия (у тебя %s, у хоста %s)" },
+    { L"The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n", L"Хост играет на версии Nightly MWCoop: чтобы играть вместе, нужна такая же.\n\n" },
+    { L"⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\nEveryone must be on the same version to play together: your friends must switch to Nightly too.\n\nYour saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\nSwitch to Nightly?", L"⚠ Внимание: версия Nightly ещё в разработке и может работать нестабильно (ошибки, вылеты, повреждённое сохранение).\n\nЧтобы играть вместе, у всех должна быть одна версия: друзьям тоже нужно перейти на Nightly.\n\nСначала твои сохранения копируются (MWCoop\\copie-avant-nightly). Вернуться на Stable можно в любой момент (Настройки, Обновления).\n\nПерейти на Nightly?" },
+    { L"The host plays the Stable version of MWCoop, you a Nightly: you need the same one to play together.\n\nGo back to Stable now?", L"Хост играет на версии Stable MWCoop, а ты на Nightly: чтобы играть вместе, нужна одна версия.\n\nВернуться на Stable сейчас?" },
+    { L"Nightly channel: development version", L"Канал Nightly: версия в разработке" },
+    { L"Stable channel", L"Канал Stable" },
+    { L"Stable or Nightly", L"Stable или Nightly" },
+    { L"In Settings, Updates: Stable, the recommended version; Nightly, the next version still in development, to try with friends. Unstable, and the same for everyone.", L"В Настройках, Обновления: Stable — рекомендуемая версия; Nightly — следующая версия, ещё в разработке, чтобы попробовать с друзьями. Нестабильна, и у всех должна быть одинаковой." },
 };

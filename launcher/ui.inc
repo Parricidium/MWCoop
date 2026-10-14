@@ -1209,7 +1209,10 @@ static void DrawSettings(Graphics &g)
     // Mise a jour
     RectF up(lx, kMain.Y, cw, 196);
     Glass(up);
-    Title(g, T(L"Mise à jour", L"Updates"), RectF(up.X + 20, up.Y + 16, 300, 24), 17, kInk);
+    Title(g, T(L"Mise à jour", L"Updates"), RectF(up.X + 20, up.Y + 16, 200, 24), 17, kInk);
+    // canal (temporaire : Stable / Nightly, pendant la refonte)
+    g_canalRect = RectF(up.X + up.Width - 220, up.Y + 12, 200, 32);
+    UiSeg(g, g_canalRect, { L"Stable", L"Nightly" }, ChannelNightly() ? 1 : 0, UI_SET_CANAL);
     {
         RectF box(up.X + 20, up.Y + 52, up.Width - 40, 64);
         std::wstring av = UpdAvail();
@@ -1510,6 +1513,11 @@ static bool UiClick(int id)
     case UI_PAGE_CANCEL: PageCancel(); return true;
     case UI_NOTE_UPDATE: if (g_lobby == LB_NONE && !g_busy) StartUpdate(true); return true;
     case UI_SET_CHECK: if (!g_busy) StartUpdate(false); return true;
+    case UI_SET_CANAL: case UI_SET_CANAL + 1:
+        if ((id == UI_SET_CANAL + 1) != ChannelNightly() && ChannelSet(id == UI_SET_CANAL + 1, false)) {
+            if (g_lobby == LB_NONE && !g_busy && !GameProcessRunning()) StartUpdate(true); else StartUpdate(false);
+        }
+        return true;
     case UI_SET_AUTO: {
         bool on = GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0;
         WritePrivateProfileStringW(L"Lanceur", L"MajAuto", on ? L"0" : L"1", g_iniLauncher.c_str());

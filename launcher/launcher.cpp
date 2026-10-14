@@ -481,7 +481,8 @@ static void SetGame(const std::wstring &dir)
     TenuesAddShirts();
 }
 
-// "0.75.35", ou ancien "0.1.0-prealpha" : nombres compares un a un, puis le suffixe (a egalite, sans suffixe = plus recent).
+// "0.75.35", ou ancien "0.1.0-prealpha" : nombres compares un a un, puis le suffixe (a egalite, sans suffixe = plus recent ;
+// "0.96.0-nightly.10" apres "0.96.0-nightly.9" : nombres du suffixe compares comme des nombres).
 static int CmpVer(std::wstring a, std::wstring b)
 {
     if (!a.empty() && (a[0] == L'v' || a[0] == L'V')) a.erase(0, 1);
@@ -500,7 +501,18 @@ static int CmpVer(std::wstring a, std::wstring b)
     std::wstring sa = a.substr(min(i, a.size())), sb = b.substr(min(j, b.size()));
     if (sa == sb) return 0;
     if (sa.empty() != sb.empty()) return sa.empty() ? 1 : -1;
-    return sa < sb ? -1 : 1;
+    for (size_t x = 0, y = 0; x < sa.size() && y < sb.size();) {
+        if (iswdigit(sa[x]) && iswdigit(sb[y])) {
+            long na = wcstol(sa.c_str() + x, NULL, 10), nb = wcstol(sb.c_str() + y, NULL, 10);
+            if (na != nb) return na < nb ? -1 : 1;
+            while (x < sa.size() && iswdigit(sa[x])) x++;
+            while (y < sb.size() && iswdigit(sb[y])) y++;
+            continue;
+        }
+        if (sa[x] != sb[y]) return sa[x] < sb[y] ? -1 : 1;
+        x++; y++;
+    }
+    return sa.size() < sb.size() ? -1 : 1;
 }
 
 // ---------------------------------------------------------------- HTTP (WinHTTP)
@@ -925,7 +937,7 @@ static bool IsWritableDir(const std::wstring &dir)
 // Texte de chaque release GitHub : en francais, puis une ligne "---", puis en anglais. Gardees dans
 // <jeu>\MWCoop\notes-maj.json pour les lire hors ligne.
 // (depuis 0.92.3, demande de JD : encore une ligne "---" et en russe ; sans : l'anglais en russe)
-struct Note { std::wstring ver, date, fr, en, ru, ar, zip; };
+struct Note { std::wstring ver, date, fr, en, ru, ar, zip; bool pre = false; };   // pre : pre-release de GitHub (Nightly)
 static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en; }
 static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
@@ -1022,9 +1034,12 @@ static std::vector<Note> ParseReleases(const std::string &json)
             if (u == std::string::npos || u >= end) break;
             std::string url = JsonField(json, "browser_download_url", u, end);
             k = u + 20;
+            // (Nightly : paquet en .nightly, un zip sous un autre nom, que les lanceurs d'avant 0.95.2 ne prennent pas)
             if (url.size() > 4 && !_stricmp(url.c_str() + url.size() - 4, ".zip")) { n.zip = Widen(url); break; }
+            if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".nightly")) { n.zip = Widen(url); n.pre = true; break; }
         }
         bool draft = json.find("\"draft\": true", p) < end || json.find("\"draft\":true", p) < end;
+        if (json.find("\"prerelease\": true", p) < end || json.find("\"prerelease\":true", p) < end || n.ver.find(L"nightly") != std::wstring::npos) n.pre = true;
         if (!n.ver.empty() && !draft) list.push_back(n);
         at = end;
     }
@@ -1075,6 +1090,36 @@ static DWORD g_updCheckT;
 static std::wstring UpdAvail() { EnterCriticalSection(&g_cs); std::wstring v = g_updVer; LeaveCriticalSection(&g_cs); return v; }
 static void UpdSet(const std::wstring &v) { EnterCriticalSection(&g_cs); g_updVer = v; LeaveCriticalSection(&g_cs); }
 
+// Canal (demande de JD, 14/10, temporaire : « un switch Stable / Nightly dans le lanceur, les deux versions sur GitHub ;
+// quand la Nightly est stable, on la passe en stable et on enleve le bouton ») : [Lanceur] Canal=stable|nightly. Nightly =
+// pre-release de GitHub (tag v0.96.0-nightly.N, paquet .nightly : dist\make-release.ps1 -Nightly). Stable : la plus
+// recente hors pre-releases ; Nightly : la plus recente de toutes (une Stable plus recente passe devant).
+static bool ChannelNightly()
+{
+    wchar_t b[16] = L"";
+    GetPrivateProfileStringW(L"Lanceur", L"Canal", L"stable", b, 16, g_iniLauncher.c_str());
+    return !_wcsicmp(b, L"nightly");
+}
+static bool IsNightlyVer(const std::wstring &v) { return v.find(L"nightly") != std::wstring::npos; }
+static const Note *PickRelease(const std::vector<Note> &rel, bool nightly)
+{
+    const Note *best = NULL;
+    for (const Note &n : rel) if (!n.zip.empty() && (nightly || !n.pre) && (!best || CmpVer(n.ver, best->ver) > 0)) best = &n;
+    return best;
+}
+// A installer : plus recente, ou retour en Stable depuis une Nightly (meme plus ancienne).
+static bool WantVer(const std::wstring &remote, const std::wstring &local, bool nightly)
+{
+    return local.empty() || CmpVer(remote, local) > 0 || (!nightly && IsNightlyVer(local) && remote != local);
+}
+static std::vector<Note> ChannelNotes(const std::vector<Note> &rel, bool nightly)
+{
+    if (nightly) return rel;
+    std::vector<Note> out;
+    for (const Note &n : rel) if (!n.pre) out.push_back(n);
+    return out;
+}
+
 static DWORD WINAPI UpdateThread(void *param)
 {
     int mode = (int)(INT_PTR)param;
@@ -1086,18 +1131,18 @@ static DWORD WINAPI UpdateThread(void *param)
     }
     std::string json;
     std::wstring local = g_localVer, label = ModLabel();
-    bool mod = g_modOk;
+    bool mod = g_modOk, nightly = ChannelNightly();
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
+    const Note *pick = PickRelease(rel, nightly);
     EnterCriticalSection(&g_cs);
-    g_notes = rel;
+    g_notes = ChannelNotes(rel, nightly);
     LeaveCriticalSection(&g_cs);
     g_relState = rs;
     g_notesDone = true;
     if (quiet) {   // (verification periodique : seulement le bouton, s'il y a du nouveau)
-        std::wstring remote;
-        for (const Note &n : rel) if (!n.zip.empty()) { remote = n.ver; break; }
-        if (rs != REL_OFFLINE && !remote.empty() && !local.empty() && CmpVer(remote, local) > 0 && UpdAvail() != remote) {
+        std::wstring remote = pick ? pick->ver : L"";
+        if (rs != REL_OFFLINE && !remote.empty() && !local.empty() && WantVer(remote, local, nightly) && UpdAvail() != remote) {
             UpdSet(remote);
             SetStatus(K_WARN, T(L"%s \u00B7 nouvelle version %s disponible", L"%s \u00B7 new version %s available"), label.c_str(), remote.c_str());
         }
@@ -1112,8 +1157,7 @@ static DWORD WINAPI UpdateThread(void *param)
         g_busy = false;
         return 0;
     }
-    std::wstring remote, zipUrl;
-    for (const Note &n : rel) if (!n.zip.empty()) { remote = n.ver; zipUrl = n.zip; break; }   // la plus recente avec un zip
+    std::wstring remote = pick ? pick->ver : L"", zipUrl = pick ? pick->zip : L"";   // la plus recente du canal, avec un paquet
     if (remote.empty() || zipUrl.empty()) {   // pas encore de release : rien a installer
         g_progress = -1;
         if (!mod) SetStatus(K_WARN, T(L"Aucune version de MWCoop publi\u00E9e pour l'instant", L"No MWCoop release published yet"));
@@ -1121,7 +1165,7 @@ static DWORD WINAPI UpdateThread(void *param)
         g_busy = false;
         return 0;
     }
-    if (!local.empty() && CmpVer(remote, local) <= 0) {
+    if (!local.empty() && !WantVer(remote, local, nightly)) {
         g_progress = -1;
         UpdSet(L"");
         SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), label.c_str());
@@ -1215,7 +1259,7 @@ static DWORD WINAPI NotesOnlyThread(void *)
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
     EnterCriticalSection(&g_cs);
-    g_notes = rel;
+    g_notes = ChannelNotes(rel, ChannelNightly());
     LeaveCriticalSection(&g_cs);
     g_relState = rs;
     g_notesDone = true;
@@ -5501,9 +5545,17 @@ static std::string MyVersion() { return g_localVer.empty() ? "dev" : Narrow(g_lo
 // Rejoindre un hote d'une autre version (demande de JD, 14/10 : « que ca check la version, si elle n'est pas bonne, une
 // proposition de mettre a jour »). Hote plus recent : proposer la mise a jour tout de suite (le lanceur se relance, puis on
 // rejoint) ; hote plus ancien : c'est a lui de mettre a jour.
+static bool ChannelSet(bool nightly, bool host);   // (saves.inc)
 static void VersionMismatch(const std::wstring &his)
 {
     std::wstring mine = Widen(MyVersion());
+    // Canal different (Stable / Nightly) : proposer de suivre celui de l'hote
+    if (mine != L"dev" && IsNightlyVer(his) != ChannelNightly()) {
+        SetStatus(K_ERR, T(L"Version différente (toi %s, hôte %s)", L"Different version (you %s, host %s)"), mine.c_str(), his.c_str());
+        TestLog("salon : version de l'hote %s, la mienne %s : canal %s propose", Narrow(his, CP_UTF8).c_str(), Narrow(mine, CP_UTF8).c_str(), IsNightlyVer(his) ? "nightly" : "stable");
+        if (ChannelSet(IsNightlyVer(his), true)) StartUpdate(true);
+        return;
+    }
     if (mine != L"dev" && CmpVer(his, mine) > 0) {
         SetStatus(K_ERR, T(L"Version diff\u00E9rente (toi %s, h\u00F4te %s) : mets \u00E0 jour", L"Different version (you %s, host %s): update"), mine.c_str(), his.c_str());
         wchar_t q[600];
@@ -7810,6 +7862,22 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         // Steam : invitation acceptee jeu ferme, lanceur demarre par l'option de lancement ("<MWCoop.exe>" %command%)
         if (!_wcsicmp(argv[i], L"+connect_lobby")) { g_sConnect = _wcstoui64(argv[i + 1], NULL, 10); g_steamNet = true; }
         if (!_wcsicmp(argv[i], L"/steam")) { g_testSteamFile = argv[i + 1]; g_steamNet = true; }   // essai : /testsalon ... /steam <fichier>
+    }
+    // Essai du canal : /testmaj <releases.json> <journal> <version locale> -- version choisie (Stable, Nightly) et a installer ou non
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/testmaj")) {
+        std::vector<unsigned char> d;
+        ReadAll(argv[2], d);
+        std::vector<Note> rel = ParseReleases(std::string(d.begin(), d.end()));
+        std::string o;
+        for (const Note &n : rel) o += Narrow(n.ver, CP_UTF8) + (n.pre ? " pre" : "") + (n.zip.empty() ? " sans paquet" : " " + Narrow(n.zip, CP_UTF8)) + "\r\n";
+        for (int nightly = 0; nightly < 2; nightly++) {
+            const Note *p = PickRelease(rel, nightly != 0);
+            std::wstring v = p ? p->ver : L"";
+            o += std::string(nightly ? "nightly" : "stable") + " : " + Narrow(v, CP_UTF8) + (p && WantVer(v, argv[4], nightly != 0) ? " a installer" : " rien") + " ; notes " + std::to_string(ChannelNotes(rel, nightly != 0).size()) + "\r\n";
+        }
+        HANDLE f = CreateFileW(argv[3], GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, o.data(), (DWORD)o.size(), &w, NULL); CloseHandle(f); }
+        return 0;
     }
     // Un lanceur deja ouvert prend le salon (un seul lanceur, Steam s'adresse a lui ensuite)
     if (g_sConnect && g_testSalon.empty()) {

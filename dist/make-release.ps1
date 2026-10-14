@@ -7,7 +7,11 @@
 # anglais ; une ligne par consigne). Mis en tete des notes ("A faire : ..." / "To do: ...") et en encadre
 # "What you need to do" dans l'annonce Discord.
 # -Merci : remerciement ajoute a l'annonce Discord (anglais), mentions <@id> comprises (la personne est notifiee).
-param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '')
+# -Nightly (canal temporaire, demande de JD, 14/10) : version en developpement (ex. 0.96.0-nightly.1, branche refonte) ;
+# pre-release GitHub, paquet MWCoop-<version>.nightly (le meme zip sous un nom que les lanceurs d'avant 0.95.2 ne prennent
+# pas), branche courante poussee (pas main), PAS d'annonce Discord. Le lanceur ne la propose qu'en canal Nightly.
+param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '', [switch]$Nightly)
+if ($Nightly -ne ($Version -match 'nightly')) { throw "-Nightly va avec une version 'x.y.z-nightly.N' (et seulement elle)" }
 $root = Split-Path $PSScriptRoot
 $code = Get-Content "$root\src\MWCoop\Version.cs" -Raw
 if ($code -notmatch "Text = `"$([regex]::Escape($Version))`"") { throw "src\MWCoop\Version.cs ne dit pas $Version" }
@@ -35,6 +39,7 @@ foreach ($f in Get-ChildItem $stage -File -Recurse) {
 }
 $z.Dispose()
 "Ecrit : $zip ($([math]::Round((Get-Item $zip).Length / 1KB)) Ko)"
+if ($Nightly) { $nz = "$PSScriptRoot\out\MWCoop-$Version.nightly"; Copy-Item $zip $nz -Force; Remove-Item $zip; $zip = $nz }
 # Empreintes SHA-256 publiees a cote du zip : chacun peut verifier ses fichiers (et les chercher sur VirusTotal)
 # quand un antivirus a apprentissage automatique s'inquiete d'un exe non signe.
 $sums = "$PSScriptRoot\out\SHA256SUMS-$Version.txt"
@@ -75,9 +80,12 @@ if ($Publier) {
     [System.IO.File]::WriteAllText($nf, $Notes, (New-Object System.Text.UTF8Encoding $false))
     # Le tag est cree sur GitHub : le code doit y etre avant (sinon il pointe sur l'ancien main).
     $head = (git -C $root rev-parse HEAD).Trim()
-    $po = cmd /c "git -C `"$root`" push origin HEAD:main 2>&1"   # par cmd : git ecrit sur stderr, ce qui arreterait le script
-    if ($LASTEXITCODE -ne 0) { Remove-Item $nf; throw "echec du push de main" }
-    gh release create "v$Version" $zip $sums --repo Parricidium/MWCoop --title "MWCoop $Version" --notes-file $nf --target $head
+    $branch = if ($Nightly) { (git -C $root rev-parse --abbrev-ref HEAD).Trim() } else { 'main' }
+    if ($Nightly -and $branch -eq 'main') { Remove-Item $nf; throw "une Nightly se publie depuis sa branche (refonte), pas main" }
+    $po = cmd /c "git -C `"$root`" push origin HEAD:$branch 2>&1"   # par cmd : git ecrit sur stderr, ce qui arreterait le script
+    if ($LASTEXITCODE -ne 0) { Remove-Item $nf; throw "echec du push de $branch" }
+    if ($Nightly) { gh release create "v$Version" $zip $sums --repo Parricidium/MWCoop --title "MWCoop $Version (Nightly)" --notes-file $nf --target $head --prerelease }
+    else { gh release create "v$Version" $zip $sums --repo Parricidium/MWCoop --title "MWCoop $Version" --notes-file $nf --target $head }
     $rc = $LASTEXITCODE
     Remove-Item $nf
     if ($rc -ne 0) { throw "echec de la publication GitHub" }
@@ -86,7 +94,8 @@ if ($Publier) {
     # Annonce Discord (#announcements) si dist\discord-webhook.txt existe (hors depot, ecrit par
     # MWCoopDiscord\setup_server.py) : ligne 1 = webhook, ligne 2 = role Update Pings. Parties anglaise, russe et arabe des notes.
     $wf = "$PSScriptRoot\discord-webhook.txt"
-    if (Test-Path $wf) {
+    if ($Nightly) { "Nightly : pas d'annonce Discord" }
+    elseif (Test-Path $wf) {
         try {
             $w = @(Get-Content $wf -Encoding UTF8 | Where-Object { $_.Trim() })
             $parts = @($Notes -split '(?m)^\s*---+\s*$')
