@@ -1,0 +1,38 @@
+U0	Host's game: 
+U1	New save, or restart one
+U2	Main game
+U3	Could not create the save
+U4	Game %d
+U5	Empty: will start with a new game
+U6	Last saved: %04d-%02d-%02d %02d:%02d
+U7	Close the game before changing your saves
+U8	Delete the save \"%s\"?\n\nIt goes to the Windows Recycle Bin (you can still get it back from there).
+U9	Could not delete (%d)
+U10	\"%s\" moved to the Recycle Bin
+U11	Save renamed
+U12	Save \"%s\" created and in use
+U13	You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nCORRIS color (car icon in the lobby): %s.
+U14	Save in use: %s (empty: new game)
+U15	Save in use: %s
+U16	Your saves
+U17	One game per group of friends: HOST plays the save in use (the host also picks it in the lobby); PLAY SOLO keeps the main game. As a guest, you play the host's save, kept apart: yours are never touched.
+U18	New save…
+U19	Save name
+U20	Enter: keep · Esc: cancel
+U21	Keep
+U22	 · the game's normal save
+U23	IN USE
+U24	Use
+U25	Game save
+U26	Restart a save
+U27	New save
+U28	A fresh game in a separate save: your other games are not touched.
+U29	Erases one of your saves and restarts it from scratch.
+U30	A new save for this game. Your other saves stay as they are.
+U31	It will be used when you host.
+U32	Create
+U33	Your guests receive the chosen save when they arrive; theirs is not touched.
+U34	Pick the save to erase and restart.
+U35	Saves
+U36	One game per group of friends: pick, name, restart
+U37	Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.

@@ -438,6 +438,20 @@ static const WikiBlock kW_ModCompat[] = {
               L"A mod missing from this list? Try it: if it adds an object the others can't see, say so on Discord (suggestions channel) with its Nexus link." },
     { WB_GO, L"Ouvrir l'onglet Mods", L"Open the Mods tab", TAB_MODS },
 };
+static const WikiBlock kW_Saves[] = {
+    { WB_P, L"Une partie par groupe d'amis : l'onglet Sauvegardes garde plusieurs parties, chacune avec son nom. Quand tu héberges, c'est la sauvegarde utilisée qui est jouée et envoyée à tes invités.",
+            L"One game per group of friends: the Saves tab keeps several games, each with its own name. When you host, the save in use is the one played and sent to your guests." },
+    { WB_H, L"Gérer tes sauvegardes", L"Manage your saves" },
+    { WB_B, L"Nouvelle sauvegarde : une partie neuve, à part. Elle commence par une nouvelle partie au premier lancement.", L"New save: a fresh game, kept apart. It starts with a new game at the first launch." },
+    { WB_B, L"Utiliser, Renommer, ouvrir son dossier ; Supprimer l'envoie à la corbeille de Windows (récupérable).", L"Use, Rename, open its folder; Delete sends it to the Windows Recycle Bin (recoverable)." },
+    { WB_B, L"« Partie principale » est la sauvegarde normale du jeu : JOUER EN SOLO la garde toujours.", L"\"Main game\" is the game's normal save: PLAY SOLO always keeps it." },
+    { WB_H, L"Dans le salon (hôte)", L"In the lobby (host)" },
+    { WB_S, L"Le bouton à droite de « Partie » montre la sauvegarde : clique pour en choisir une autre ou en créer une.", L"The button right of \"Game\" shows the save: click to pick another one or create one." },
+    { WB_S, L"« Nouvelle partie » : une nouvelle sauvegarde, ou en recommencer une existante (elle est effacée, confirmation demandée).", L"\"New game\": a new save, or restart an existing one (it is erased, you are asked to confirm)." },
+    { WB_TIP, L"Tes invités voient le nom de ta sauvegarde. Ils la reçoivent à part : leurs propres parties, en solo ou en hôte, ne sont jamais touchées.",
+              L"Your guests see your save's name. They receive it apart: their own games, solo or as host, are never touched." },
+    { WB_GO, L"Ouvrir les Sauvegardes", L"Open Saves", TAB_SAVES },
+};
 static const WikiBlock kW_Av[] = {
     { WB_P, L"MWCoop n'est pas signé (ça coûte cher pour un mod gratuit) : certains antivirus s'en méfient. Une alerte comme « Wacatac.B!ml » est une fausse alerte d'apprentissage automatique.",
             L"MWCoop isn't signed (that costs a lot for a free mod): some antiviruses distrust it. An alert like \"Wacatac.B!ml\" is a machine-learning false positive." },
@@ -626,5 +640,6 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(4, L"Mes mods ne se chargent pas", L"My mods don't load", L"MSCLoader et l'envoi de l'hôte", L"MSCLoader and the host's files", kW_ModsKo),
     WART(4, L"Antivirus et fausses alertes", L"Antivirus and false alarms", L"Vérifier et autoriser MWCoop", L"Check and allow MWCoop", kW_Av),
     WART(4, L"Envoyer ses journaux", L"Send your logs", L"Le zip qui aide à corriger", L"The zip that helps fix things", kW_Logs),
+    WART(1, L"Plusieurs sauvegardes", L"Several saves", L"Une partie par groupe d'amis", L"One game per group of friends", kW_Saves),
     WART(2, L"Mods pris en charge et déconseillés", L"Mod support and known incompatibilities", L"Ce qui est synchronisé, ce qui pose souci", L"What is synced, what causes trouble", kW_ModCompat),
 };

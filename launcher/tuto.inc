@@ -84,6 +84,8 @@ static const TutoStep kTuto[] = {
       L"Mod support", L"In Mods, this button opens the list of mods MWCoop syncs, those that work as they are, and the mods to avoid with their known bugs.", "0.94.0" },
     { L"Retirer les bosses", L"Dans Voiture : toutes les voitures de ta sauvegarde repartent lisses (jeu fermé). Le fichier des bosses est mis de côté, pas effacé. En coop, c'est l'hôte qui le fait.",
       L"Remove dents", L"In Car: every car in your save is smooth again (game closed). The dents file is set aside, not deleted. In co-op, the host does it.", "0.94.0" },
+    { L"Sauvegardes", L"Plusieurs parties, une par groupe d'amis : crée-les, nomme-les, choisis celle à héberger (ici ou dans le salon). Tes invités reçoivent ta sauvegarde, la leur n'est pas touchée.",
+      L"Saves", L"Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.", "0.95.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -131,6 +133,7 @@ static RectF TutoTarget(int i)
     case 35: return MscActiveRect(MscRowRect(0));
     case 36: return kMscCompat;
     case 37: return g_dentBtnRect;
+    case 38: return g_navR[TAB_SAVES];
     }
     return RectF(0, 0, 0, 0);
 }
