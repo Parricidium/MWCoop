@@ -398,9 +398,7 @@ namespace MWCoop
         {
             try
             {
-                var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, a);
-                s.Actions = list.ToArray();
+                FsmHooks.Prepend(s, a);
                 return true;
             }
             catch { return false; }

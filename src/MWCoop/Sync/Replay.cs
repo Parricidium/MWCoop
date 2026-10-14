@@ -18,6 +18,25 @@ namespace MWCoop
         public abstract string Module { get; }
     }
 
+    // Accroches : une action de plus dans un etat d'automate, au debut, a la fin ou a un rang (avant : la meme copie de liste
+    // dans 37 endroits ; refonte du 14/10).
+    public static class FsmHooks
+    {
+        public static void Prepend(HutongGames.PlayMaker.FsmState s, HutongGames.PlayMaker.FsmStateAction a) { Insert(s, 0, a); }
+        public static void Append(HutongGames.PlayMaker.FsmState s, HutongGames.PlayMaker.FsmStateAction a) { Insert(s, -1, a); }
+        // at < 0 ou au-dela : a la fin
+        public static void Insert(HutongGames.PlayMaker.FsmState s, int at, HutongGames.PlayMaker.FsmStateAction a)
+        {
+            var old = s.Actions ?? new HutongGames.PlayMaker.FsmStateAction[0];
+            if (at < 0 || at > old.Length) at = old.Length;
+            var n = new HutongGames.PlayMaker.FsmStateAction[old.Length + 1];
+            System.Array.Copy(old, 0, n, 0, at);
+            n[at] = a;
+            System.Array.Copy(old, at, n, at + 1, old.Length - at);
+            s.Actions = n;
+        }
+    }
+
     public static class Replay
     {
         public static int Depth;

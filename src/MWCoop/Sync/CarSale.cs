@@ -114,8 +114,8 @@ namespace MWCoop
             FsmState explain = anim.Fsm.GetState("Explain car"), keys = anim.Fsm.GetState("Give keys");
             if (explain == null || keys == null) { hooked = true; Log.Warn("vente : vendeur sans Explain car / Give keys"); return; }
             if (!explain.IsInitialized || !keys.IsInitialized) return;
-            var l1 = new List<FsmStateAction>(explain.Actions); l1.Insert(0, new SaleHook { Kind = 0 }); explain.Actions = l1.ToArray();
-            var l2 = new List<FsmStateAction>(keys.Actions); l2.Insert(0, new SaleHook { Kind = 1 }); keys.Actions = l2.ToArray();
+            FsmHooks.Prepend(explain, new SaleHook { Kind = 0 });
+            FsmHooks.Prepend(keys, new SaleHook { Kind = 1 });
             hooked = true;
             Log.Info("vente : vendeur de la Rivett suivi (" + anim.ActiveStateName + ")");
         }

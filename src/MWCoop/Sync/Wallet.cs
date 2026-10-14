@@ -478,9 +478,7 @@ namespace MWCoop
                         FsmState st = f.Fsm.GetState(s);
                         if (st == null) { Log.Warn("argent : etat " + s + " absent de " + g.Path); continue; }
                         if (System.Array.Exists(st.Actions, a => a is TrigHook)) continue;
-                        var list = new List<FsmStateAction>(st.Actions);
-                        list.Insert(0, new TrigHook { G = g, St = st });
-                        st.Actions = list.ToArray();
+                        FsmHooks.Prepend(st, new TrigHook { G = g, St = st });
                     }
                 }
                 catch { continue; }   // pas encore pret
@@ -827,8 +825,8 @@ namespace MWCoop
                         FsmState take = e.F.Fsm.GetState("State 1"), end = e.F.Fsm.GetState("State 3");
                         if (take == null || end == null) { e.Hooked = true; Log.Warn("argent : enveloppe " + e.Key + " sans State 1/State 3"); continue; }
                         if (!take.IsInitialized || !end.IsInitialized) continue;
-                        var l1 = new List<FsmStateAction>(take.Actions); l1.Insert(0, new EnvHook { E = e, Take = true }); take.Actions = l1.ToArray();
-                        var l3 = new List<FsmStateAction>(end.Actions); l3.Insert(0, new EnvHook { E = e }); end.Actions = l3.ToArray();
+                        FsmHooks.Prepend(take, new EnvHook { E = e, Take = true });
+                        FsmHooks.Prepend(end, new EnvHook { E = e });
                         e.Hooked = true;
                         Log.Info("argent : enveloppe " + e.Key + " tendue ici");
                     }

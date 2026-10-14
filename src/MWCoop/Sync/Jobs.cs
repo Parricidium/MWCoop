@@ -368,9 +368,7 @@ namespace MWCoop
                         var gf = a as HutongGames.PlayMaker.Actions.GetFsmFloat;
                         if (gf != null && gf.variableName != null && (gf.variableName.Value == "Hours" || gf.variableName.Value == "Minutes")) j.ClockStates.Add(s.Name);
                     }
-                    var list = new List<FsmStateAction>(s.Actions);
-                    list.Insert(0, new Hook { J = j, State = s.Name });
-                    s.Actions = list.ToArray();
+                    FsmHooks.Prepend(s, new Hook { J = j, State = s.Name });
                 }
                 return true;
             }
@@ -940,9 +938,7 @@ namespace MWCoop
             if (s == null || !s.IsInitialized || !Replay.Claim(cj, "quetes")) return;
             try
             {
-                var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, new SplitHook { Id = id });
-                s.Actions = list.ToArray();
+                FsmHooks.Prepend(s, new SplitHook { Id = id });
                 hooked.Add(cj);
             }
             catch (System.Exception e) { Log.Warn("bois : fente de " + id + " pas suivie (" + e.GetType().Name + ")"); }
@@ -1114,9 +1110,7 @@ namespace MWCoop
                 FsmState s2 = j.F.Fsm.GetState("State 2"), s4 = j.F.Fsm.GetState("State 4");
                 if (s2 != null)
                 {
-                    var l2 = new List<FsmStateAction>(s2.Actions);
-                    l2.Insert(0, new FeedHook { Step = 0 });
-                    s2.Actions = l2.ToArray();
+                    FsmHooks.Prepend(s2, new FeedHook { Step = 0 });
                 }
                 if (s4 == null) { Log.Warn("bois : fendeuse sans \"State 4\", buches pas gardees"); return; }
                 var l4 = new List<FsmStateAction>(s4.Actions);
@@ -1500,8 +1494,8 @@ namespace MWCoop
             if (!a.IsInitialized || !b.IsInitialized) return false;
             try
             {
-                var la = new List<FsmStateAction>(a.Actions); la.Insert(0, new HoseHook { W = w, In = true }); a.Actions = la.ToArray();
-                var lb = new List<FsmStateAction>(b.Actions); lb.Insert(0, new HoseHook { W = w, In = false }); b.Actions = lb.ToArray();
+                FsmHooks.Prepend(a, new HoseHook { W = w, In = true });
+                FsmHooks.Prepend(b, new HoseHook { W = w, In = false });
             }
             catch { return false; }
             hooked.Add(w.F);

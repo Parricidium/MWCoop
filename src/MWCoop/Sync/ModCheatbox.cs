@@ -190,9 +190,7 @@ namespace MWCoop
                     if (s == null || f.FsmVariables.FindFsmGameObject("New") == null) continue;
                     try
                     {
-                        var l = new List<FsmStateAction>(s.Actions);
-                        l.Insert(0, new Hook { F = f });
-                        s.Actions = l.ToArray();
+                        FsmHooks.Prepend(s, new Hook { F = f });
                     }
                     catch { continue; }   // (automate pas encore charge : au prochain passage)
                     hooked.Add(f);

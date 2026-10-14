@@ -141,7 +141,7 @@ namespace MWCoop
                 if (use == null || use.Fsm == null) continue;
                 FsmState st = use.Fsm.GetState("State 3");
                 if (st == null || !st.IsInitialized || st.Actions == null) continue;
-                var l = new List<FsmStateAction>(st.Actions); l.Insert(0, new HelmetHook { Go = it.Go }); st.Actions = l.ToArray();
+                FsmHooks.Prepend(st, new HelmetHook { Go = it.Go });
                 helmetHooked.Add(it.Go);
             }
         }

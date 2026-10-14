@@ -159,9 +159,7 @@ namespace MWCoop
             if (st == null) { Log.Warn("maison : etat '" + state + "' absent de " + Recon.Path(f.transform) + "::" + f.FsmName); return null; }
             foreach (FsmStateAction a in st.Actions) { var h0 = a as Hook; if (h0 != null && h0.Kind == kind) return h0; }
             var h = new Hook { Kind = kind, Target = target, St = st, F = f };
-            var list = new List<FsmStateAction>(st.Actions);
-            list.Insert(0, h);
-            st.Actions = list.ToArray();
+            FsmHooks.Prepend(st, h);
             return h;
         }
 

@@ -109,9 +109,7 @@ namespace MWCoop
         {
             FsmState s = f.Fsm.GetState(state);
             if (s == null) { Log.Warn("rallye : etat " + state + " absent"); return; }
-            var l = new List<FsmStateAction>(s.Actions);
-            l.Insert(0, new Hook { Kind = kind });
-            s.Actions = l.ToArray();
+            FsmHooks.Prepend(s, new Hook { Kind = kind });
         }
 
         static FsmFloat F(string n) { return data.FsmVariables.FindFsmFloat(n); }

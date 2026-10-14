@@ -44,9 +44,7 @@ namespace MWCoop
                 foreach (FsmState st in drinkFsm.Fsm.States)
                 {
                     if (!st.Name.StartsWith("Throw") || Prefab(drinkFsm, st.Name) == null) continue;
-                    var list = new System.Collections.Generic.List<FsmStateAction>(st.Actions);
-                    list.Add(new ThrowEnd { F = drinkFsm });
-                    st.Actions = list.ToArray();
+                    FsmHooks.Append(st, new ThrowEnd { F = drinkFsm });
                     n++;
                 }
                 Log.Info("boissons : " + n + " etats de lancer accroches (automate Drink du joueur)");
