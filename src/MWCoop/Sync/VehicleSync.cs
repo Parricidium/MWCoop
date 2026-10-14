@@ -663,6 +663,7 @@ namespace MWCoop
                 if (driving >= 0) owned = -1;
                 LocalDriving = driving;
             }
+            if (LocalDriving >= 0 && now >= nextSeatCheck) { nextSeatCheck = now + 0.5f; SeatGuard(cars[LocalDriving]); }
             // Moteur demarre ici sans etre au volant (cle tournee par un passager, ou de l'exterieur) : personne ne la
             // menait, chacun faisait tourner son moteur (melange, batterie, regime a lui) et il calait chez l'un, tournait
             // chez l'autre. Celui qui a tourne la cle en garde la main comme un moteur laisse tournant (etat 2).
@@ -1783,6 +1784,30 @@ namespace MWCoop
                 else if (v is float) sb.Append(' ').Append(fi.Name).Append('=').Append(((float)v).ToString("F1"));
             }
             return sb.ToString();
+        }
+
+        // Joueur au volant mais loin de sa voiture (retour de JD, 14/10 : apres une mort au volant, remonte dans une voiture,
+        // l'invite conduisait avec la camera a 800 m -- a la maison des parents, son point de reapparition -- et y etait remis
+        // en sortant). L'etat « Reset view » du jeu range le joueur sous le siege en gardant sa position dans le monde
+        // (SetParent sans remise a zero) : place ailleurs juste avant, il y reste, accroche a la voiture. Au volant, le joueur
+        // est a moins d'un metre de l'origine de la voiture (0,4 m mesure) : a plus de 20 m, ramene dessus. (En montant, le
+        // jeu fait glisser le joueur vers le siege et il passe loin -- jusqu'a 1900 m, en se rapprochant a chaque releve :
+        // seulement s'il reste loin plus de 3 s SANS se rapprocher.)
+        static float nextSeatCheck, farSince = -1f, farLast;
+        static int seatFixes;
+        static void SeatGuard(Car c)
+        {
+            Transform pl = Game.PlayerT;
+            if (pl == null || c.T == null || pl.parent == null || !pl.IsChildOf(c.T)) { farSince = -1f; return; }
+            float d = (pl.position - c.T.position).magnitude, now = Time.realtimeSinceStartup;
+            if (d < 20f) { farSince = -1f; return; }
+            if (farSince < 0f || d < farLast * 0.9f) { farSince = now; farLast = d; return; }   // (encore en train d'arriver)
+            farLast = d;
+            if (now - farSince < 3f) return;
+            Vector3 was = pl.position;
+            pl.position = c.T.position;
+            farSince = -1f;
+            if (seatFixes++ < 20) Log.Warn("au volant de " + c.Key + " mais a " + d.ToString("F0") + " m depuis plus de 3 s (en " + was.ToString("F0") + ") : joueur ramene dans la voiture");
         }
 
         // Sortie forcee du vehicule conduit ici (reapparition) : l'etat de sortie du jeu, quelle que soit la vitesse.

@@ -601,6 +601,9 @@ namespace MWCoop
 
         static Phone PhoneAt(int i)
         {
+            // (objet detruit depuis -- telephone remplace : NullReferenceException a chaque seconde dans le journal de Matilda,
+            // 14/10, 1146 fois) : cherche de nouveau
+            if (phones[i] != null && phones[i].Go == null) phones[i] = null;
             if (phones[i] != null) return phones[i];
             GameObject go = Game.FindAny(LogicPaths[i]);
             if (go == null) return null;
