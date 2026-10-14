@@ -1154,16 +1154,23 @@ namespace MWCoop
             {
                 // Au volant (mode conduite), la tete du conducteur se detache a 30 s, en roulant.
                 string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
-                if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
-                if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                float choc = Config.GetInt("Test", "TestChoc", 30);   // (passager a bord, voiture de mod : plus tard ; tout le reste suit)
+                float o = choc - 30f;
+                if (t > 15f + o && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > 22f + o && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
                 Rigidbody b = VehicleSync.Body(car);
-                float choc = Config.GetInt("Test", "TestChoc", 30);   // (passager a bord : plus tard)
                 if (b != null && t > choc - 5f && t < choc + 1f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
                 if (t > choc && step == 2) { step = 3; Log.Info("autotest : choc " + Respawn.TestCrash(car)); }
-                if (t > 30.5f && Time.frameCount % 90 == 0 && t < 46f) Log.Info("autotest : " + Respawn.State());
-                if (t > 46f && step == 3) { step = 4; Log.Info("autotest : remonte " + VehicleSync.TestEnter(car, false)); }
-                if (t > 52f && step == 4) { step = 5; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
-                if (t > 54f && step == 5 && Time.frameCount % 120 == 0 && t < 60f) Log.Info("autotest : yeux " + Seats.DriverEyes(car.Split('(')[0]));
+                if (t > 30.5f + o && Time.frameCount % 90 == 0 && t < 46f + o) Log.Info("autotest : " + Respawn.State());
+                if (t > 46f + o && step == 3) { step = 4; Log.Info("autotest : remonte " + VehicleSync.TestEnter(car, false)); }
+                if (t > 52f + o && step == 4) { step = 5; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                if (t > 54f + o && step == 5 && Time.frameCount % 120 == 0 && t < 60f + o) Log.Info("autotest : yeux " + Seats.DriverEyes(car.Split('(')[0]));
+                // (retour de JD, 14/10 : apres une mort au volant, remonte dans la voiture, teleporte a la maison a la sortie)
+                // [Test] DeplaceJoueur=1 : a 56 s, le joueur (accroche au siege) est pose 800 m plus loin -- la garde doit le ramener.
+                if (t > 56f + o && step == 5 && Config.GetInt("Test", "DeplaceJoueur", 0) != 0 && !moveDone) { moveDone = true; Transform pl = Game.PlayerT; if (pl != null) { pl.position += new Vector3(800f, 0f, 0f); Log.Info("autotest : joueur deplace de 800 m (accroche a " + (pl.parent != null ? pl.parent.name : "rien") + ")"); } }
+                if (b != null && t > 58f + o && step == 5) { step = 6; Transform pl = Game.PlayerT; Log.Info("autotest : remonte, joueur a " + (pl != null ? (pl.position - b.position).magnitude.ToString("F1") : "?") + " m de la voiture, parent " + (pl != null && pl.parent != null ? Recon.Path(pl.parent) + ", local " + pl.localPosition.ToString("F3") : "aucun")); }
+                if (t > 60f + o && step == 6) { step = 7; Log.Info("autotest : conduite " + VehicleSync.TestDriveDump(car)); Log.Info("autotest : sortie -> " + VehicleSync.TestExit(car)); }
+                if (b != null && t > 64f + o && step == 7) { step = 8; Transform pl = Game.PlayerT; Log.Info("autotest : apres la sortie, joueur en " + (pl != null ? pl.position.ToString("F1") : "?") + ", a " + (pl != null ? (pl.position - b.position).magnitude.ToString("F1") : "?") + " m de la voiture"); }
             }
             if (mode == "coffre")
             {
@@ -2592,6 +2599,7 @@ namespace MWCoop
         static bool brokeLock;
         static float maxUp = 0.5f, maxRot, coffreT;
         static bool coffreStartSet;
+        static bool moveDone;
         static Vector3 coffreStart;
         static float lastPeriodic;
 
