@@ -1,0 +1,452 @@
+MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.	MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру.
+Install in 4 steps	Установка в 4 шага
+In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.	В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры.
+Copy EVERYTHING from the MWCoop zip into that folder (MWCoop.exe, version.dll and the MWCoop folder), next to mywintercar.exe.	Скопируй ВСЁ из zip-архива MWCoop в эту папку (MWCoop.exe, version.dll и папку MWCoop), рядом с mywintercar.exe.
+Start MWCoop.exe from that folder. On first start, a short tour shows you the launcher.	Запусти MWCoop.exe из этой папки. При первом запуске короткий тур покажет тебе лаунчер.
+Pick your nickname, then HOST, JOIN or SOLO. That's it!	Выбери ник, затем ХОСТ, ПОДКЛЮЧИТЬСЯ или ИГРАТЬ ОДНОМУ. Вот и всё!
+The game the launcher found	Игра, которую нашёл лаунчер
+At the bottom of the window, the launcher shows the game it uses. If it picked the wrong one (old copy of the game, other drive), choose the right folder.	Внизу окна лаунчер показывает игру, которую использует. Если он выбрал не ту (старая копия игры, другой диск), укажи нужную папку.
+A shortcut to MWCoop.exe on your desktop is fine. A COPY of MWCoop.exe somewhere else is not: it would stop updating.	Ярлык MWCoop.exe на рабочем столе — это нормально. А вот КОПИЯ MWCoop.exe в другом месте — нет: она перестанет обновляться.
+See the ideal install	Посмотреть идеальную установку
+What works every time, for every player. If your install looks like this, MWCoop loads without trouble.	То, что работает всегда и у всех. Если твоя установка выглядит так, MWCoop загружается без проблем.
+The perfect install	Идеальная установка
+The game bought on Steam and installed ONCE (no old copy on another drive).	Игра куплена в Steam и установлена ОДИН раз (без старой копии на другом диске).
+All MWCoop files in the game folder, next to mywintercar.exe.	Все файлы MWCoop в папке игры, рядом с mywintercar.exe.
+Always start MWCoop.exe from that folder (or a shortcut to it).	Всегда запускай MWCoop.exe из этой папки (или через ярлык на него).
+Steam open and logged in before starting MWCoop.	Steam открыт и вход выполнен до запуска MWCoop.
+The latest MWCoop version, the same for the host and every guest.	Последняя версия MWCoop, одинаковая у хоста и у всех гостей.
+\"Start the game\" on Copy (the default setting), as long as everything works.	«Запуск игры» на «Копия» (настройка по умолчанию), пока всё работает.
+MSCLoader: only if you play with mods. The official one installed normally, or MWCoop's (Mods tab).	MSCLoader: только если играешь с модами. Официальный, установленный обычным способом, или от MWCoop (вкладка Моды).
+If your antivirus complains: allow the game folder (exclusion), then start again.	Если антивирус ругается: добавь папку игры в исключения, затем запусти снова.
+No compatibility mode on mywintercar.exe (Properties > Compatibility: all unticked). The launcher removes the ones Windows adds.	Никакого режима совместимости у mywintercar.exe (Свойства > Совместимость: все галочки сняты). Лаунчер убирает те, что добавляет Windows.
+If it's done differently: possible problems	Если сделано иначе: возможные проблемы
+Two game installs: the launcher and Steam may each start their own, and MWCoop is only in one. Check the path at the bottom of the launcher and keep a single install.	Две установки игры: лаунчер и Steam могут запускать каждый свою, а MWCoop есть только в одной. Проверь путь внизу лаунчера и оставь одну установку.
+Zip extracted elsewhere (Downloads, desktop): the launcher still installs the mod into the game, but stays apart itself and can get old. Use the one in the game folder.	Zip распакован в другое место (Загрузки, рабочий стол): лаунчер всё равно ставит мод в игру, но сам остаётся в стороне и может устареть. Используй тот, что в папке игры.
+Protected game folder (Windows rights): updates fail. Run MWCoop.exe as administrator once, or move the Steam library.	Защищённая папка игры (права Windows): обновления не проходят. Запусти MWCoop.exe один раз от имени администратора или перенеси библиотеку Steam.
+Another version.dll (ReShade, graphics tools): it takes MWCoop's loader slot. The launcher now sets it aside (version.dll.autre) before every game.	Другой version.dll (ReShade, графические утилиты): он занимает место загрузчика MWCoop. Теперь лаунчер убирает его в сторону (version.dll.autre) перед каждой игрой.
+Antivirus quarantining version.dll: the game starts without MWCoop. Restore the file and add an exclusion (see \"Antivirus\").	Антивирус отправил version.dll в карантин: игра запускается без MWCoop. Восстанови файл и добавь исключение (см. «Антивирус»).
+Compatibility mode on the game: Windows adds one by itself after a crash on exit (\"IgnoreFreeLibrary\"). The game then loads Windows' version.dll before MWCoop's, and the mod stops loading, even if everything worked before. The launcher removes it before every game (Settings > Game).	Режим совместимости у игры: Windows сама добавляет его после вылета при выходе («IgnoreFreeLibrary»). Тогда игра грузит version.dll от Windows раньше, чем от MWCoop, и мод перестаёт загружаться, даже если раньше всё работало. Лаунчер убирает его перед каждой игрой (Настройки > Игра).
+Different versions between friends: the lobby refuses the guest. Everyone updates.	Разные версии у друзей: лобби не пускает гостя. Обновитесь все.
+Synced folder (OneDrive): files locked while syncing, failed updates. Don't put the game or the launcher there.	Синхронизируемая папка (OneDrive): файлы блокируются во время синхронизации, обновления не проходят. Не держи там ни игру, ни лаунчер.
+Before every game, the launcher checks the game's loader (version.dll) is its own and puts it back if needed. If it sees MWCoop didn't load, it tells you and tries another way to start by itself.	Перед каждой игрой лаунчер проверяет, что загрузчик игры (version.dll) — его собственный, и при необходимости возвращает его. Если видит, что MWCoop не загрузился, он сообщает тебе и сам пробует другой способ запуска.
+MWCoop doesn't load?	MWCoop не загружается?
+MWCoop moves fast: new versions come out often. The launcher checks at start, then every 30 minutes.	MWCoop развивается быстро: новые версии выходят часто. Лаунчер проверяет их при запуске, затем каждые 30 минут.
+How it works	Как это работает
+The \"Update\" button shows up under the logo.	Под логотипом появляется кнопка «Обновить».
+One click: the version is downloaded and installed into the game folder, your settings are kept.	Один клик: версия скачивается и устанавливается в папку игры, твои настройки сохраняются.
+The launcher restarts by itself. The What's new page says what changed.	Лаунчер сам перезапускается. Страница «Что нового» расскажет, что изменилось.
+Settings > Updates > \"Install automatically\": no more clicking, updates happen at every start.	Настройки > Обновления > «Устанавливать автоматически»: больше никаких кликов, обновления ставятся при каждом запуске.
+Settings > Updates, top right. Stable: the recommended version. Nightly: the next version, still in development, to try with friends. It may be unstable; your saves are copied the first time (MWCoop\\copie-avant-nightly). Going back to Stable reinstalls the latest Stable.	Настройки > Обновления, справа вверху. Stable: рекомендуемая версия. Nightly: следующая версия, ещё в разработке, чтобы попробовать с друзьями. Может быть нестабильной; твои сохранения копируются в первый раз (MWCoop\\copie-avant-nightly). При возврате на Stable ставится последняя Stable.
+Close the game and the lobby before updating. Host and guests must have exactly the same version, or the lobby refuses.	Перед обновлением закрой игру и лобби. У хоста и гостей должна быть точно одна и та же версия, иначе лобби откажет.
+Open What's new	Открыть «Что нового»
+Every page is on the left; top right: logs, API, credits, language and theme; at the bottom, the launcher's status and the game it found.	Все страницы слева; справа вверху: логи, API, авторы, язык и тема; внизу — состояние лаунчера и найденная им игра.
+The pages	Страницы
+Home: your nickname, the network (Steam or IP), HOST, JOIN, SOLO.	Главная: твой ник, сеть (Steam или IP), ХОСТ, ПОДКЛЮЧИТЬСЯ, ИГРАТЬ ОДНОМУ.
+Lobby: the players, READY and START, the options gear.	Лобби: игроки, ГОТОВ и НАЧАТЬ ИГРУ, шестерёнка опций.
+Outfit and Car: what the others see of you.	Одежда и Машина: что другие видят у тебя.
+Sent content and Mods: what you share with your guests.	Отправляемый контент и Моды: чем ты делишься с гостями.
+Game options: your picture settings and the co-op options (voice, faces…), just for you.	Настройки игры: твои настройки картинки и опции кооператива (голос, лица…), только для тебя.
+What's new, Guide (here), Settings.	Что нового, Гайд (ты здесь), Настройки.
+The first-start tour can be seen again in Settings > See the starting guide again.	Вводный тур можно посмотреть снова: Настройки > Показать вводный гайд снова.
+Open Settings	Открыть Настройки
+The host opens a lobby, friends join it, then everyone goes into THEIR game. Up to 8 players, host included.	Хост открывает лобби, друзья подключаются к нему, затем каждый заходит в СВОЮ игру. До 8 игроков, включая хоста.
+Host through Steam (the easiest)	Хост через Steam (проще всего)
+Steam open, STEAM network on Home, then HOST.	Steam открыт, сеть STEAM на Главной, затем ХОСТ.
+Pick \"Continue my game\" (your save) or \"New game\" (it replaces your save: the launcher asks first).	Выбери «Продолжить мою игру» (твоё сохранение) или «Новая игра» (она заменит твоё сохранение: лаунчер сначала спросит).
+\"Invite friends\": your online Steam friends, one click on INVITE.	«Пригласить друзей»: твои друзья из Steam в сети, один клик на ПРИГЛАСИТЬ.
+When everyone is READY, click START.	Когда все ГОТОВЫ, нажми НАЧАТЬ ИГРУ.
+Host by IP / VPN	Хост по IP / VPN
+IP / VPN network, then HOST. Give your address to your friends: your Radmin VPN / ZeroTier one, or your public address if you open the port.	Сеть IP / VPN, затем ХОСТ. Дай друзьям свой адрес: из Radmin VPN / ZeroTier или публичный, если откроешь порт.
+Port 7870 by default (Settings > Network), to forward in UDP AND TCP on your router if you don't use a VPN.	Порт 7870 по умолчанию (Настройки > Сеть); если не используешь VPN, пробрось его на роутере по UDP И TCP.
+Before hosting, the launcher checks the Windows firewall and offers to allow the game (admin prompt).	Перед хостингом лаунчер проверяет брандмауэр Windows и предлагает разрешить игру (запрос администратора).
+In the lobby, each guest shows \"UDP ✓\" or \"UDP blocked\": blocked, they'd get into the lobby but not into the game.	В лобби у каждого гостя видно «UDP ✓» или «UDP заблокирован»: при блокировке он попадёт в лобби, но не в игру.
+During the game	Во время игры
+The launcher stays open: it shows the players and their ping. The host can BRING HERE a player, or KICK them (two clicks). It goes back to the menu when the game closes.	Лаунчер остаётся открытым: показывает игроков и их пинг. Хост может ПРИЗВАТЬ игрока или ИСКЛЮЧИТЬ его (два клика). Когда игра закрывается, лаунчер возвращается в меню.
+In game, F10 > Players: invite more Steam friends, go to a player.	В игре F10 > Игроки: пригласить ещё друзей из Steam, перейти к игроку.
+Joining a friend means entering their lobby: you play in THEIR world, your own save isn't touched.	Подключиться к другу — значит войти в его лобби: ты играешь в ЕГО мире, твоё сохранение не трогается.
+Through Steam	Через Steam
+Accept your friend's invite in Steam, OR pick the STEAM network then JOIN.	Прими приглашение друга в Steam ИЛИ выбери сеть STEAM, затем ПОДКЛЮЧИТЬСЯ.
+In the lobby, click READY. The game starts when the host starts.	В лобби нажми ГОТОВ. Игра начнётся, когда её запустит хост.
+The host sends you mods, CDs or images? READY waits for the download to finish (\"ready after files\"): otherwise you'd get in game without them.	Хост отправляет тебе моды, CD или картинки? ГОТОВ ждёт окончания загрузки («ГОТОВ ПОСЛЕ ФАЙЛОВ»): иначе ты попал бы в игру без них.
+By IP / VPN	По IP / VPN
+IP / VPN network, then enter the host's address (address:port if their port isn't 7870).	Сеть IP / VPN, затем введи адрес хоста (адрес:порт, если его порт не 7870).
+JOIN, then READY.	ПОДКЛЮЧИТЬСЯ, затем ГОТОВ.
+Game already started? If the host plays with mods, you first receive their mods (the button shows the progress), then you join on your own. Without mods: the \"Join in game\" button shows up and you go straight into the game.	Игра уже началась? Если хост играет с модами, сначала ты получишь его моды (кнопка показывает прогресс), потом подключишься сам. Без модов: появится кнопка «Подключиться в игре», и ты сразу попадёшь в игру.
+Open MWCoop from a Steam invite	Открыть MWCoop из приглашения Steam
+The game's Steam launch option (Properties > General): \"<game folder>\\MWCoop.exe\" %command%. Steam's Play button and an invite accepted while MWCoop is closed then open MWCoop (host, join or play solo).	Параметр запуска игры в Steam (Свойства > Общие): \"<папка игры>\\MWCoop.exe\" %command%. Тогда кнопка ИГРАТЬ в Steam и приглашение, принятое при закрытом MWCoop, откроют MWCoop (хост, подключение или игра одному).
+Two ways to meet. Everyone must pick the same one.	Два способа встретиться. Все должны выбрать один и тот же.
+STEAM (recommended)	STEAM (рекомендуется)
+No port, no address, no firewall to set: you invite your Steam friends.	Ни порта, ни адреса, ни брандмауэра настраивать не нужно: ты приглашаешь друзей из Steam.
+Steam must be open and logged in, for everyone.	Steam должен быть открыт и с выполненным входом, у всех.
+IP / VPN	IP / VPN
+For a local network, or a gaming VPN (Radmin VPN, ZeroTier, Hamachi).	Для локальной сети или игрового VPN (Radmin VPN, ZeroTier, Hamachi).
+The lobby uses TCP, the game uses UDP, on the same port (7870 by default).	Лобби использует TCP, игра — UDP, на одном порту (по умолчанию 7870).
+Without a VPN: forward the port in UDP AND TCP on the host's router.	Без VPN: пробрось порт по UDP И TCP на роутере хоста.
+Windows often sees Radmin VPN as a \"public\" network: the firewall then blocks the game. Accept the permission the launcher offers.	Windows часто считает Radmin VPN «общественной» сетью: тогда брандмауэр блокирует игру. Прими разрешение, которое предлагает лаунчер.
+Settings > Network	Настройки > Сеть
+One game for everyone: the host's.	Одна игра на всех: игра хоста.
+What to know	Что нужно знать
+The host sends their save to the guests at the start of the game.	Хост отправляет своё сохранение гостям в начале игры.
+Only the host saves the world. A co-op save is also possible at the toilet, like in solo.	Мир сохраняет только хост. Кооп-сохранение возможно и в туалете, как в соло.
+The guest plays in a separate profile (MWCoop\\profils\\invite): their solo save and settings stay intact.	Гость играет в отдельном профиле (MWCoop\\profils\\invite): его соло-сохранение и настройки остаются нетронутыми.
+Money: everyone has their own wallet and keeps their own pay (N key to give money to another player). Crimes and jail: everyone has their own.	Деньги: у каждого свой кошелёк и своя зарплата (клавиша N — передать деньги другому игроку). Преступления и тюрьма: у каждого свои.
+In game, MWCoop adds a few keys and a menu. Top left, a pill shows the connection state and the number of players.	В игре MWCoop добавляет несколько клавиш и меню. Слева вверху плашка показывает состояние подключения и число игроков.
+What's shared	Что синхронизируется
+Players and their moves, the host's time and weather, doors, TV and CDs, vehicles (driver, passengers, damage), every bolt, paint, fluids, money, shops, NPCs, police, jobs, bills, phone, traffic, fire, towing…	Игроки и их движения, время и погода хоста, двери, ТВ и CD, транспорт (водитель, пассажиры, повреждения), каждый болт, покраска, жидкости, деньги, магазины, NPC, полиция, работы, счета, телефон, трафик, огонь, буксировка…
+Sleeping bag	Спальный мешок
+One bag per player, in the starting bedroom (next to the bed). Rolled up, you pick it up and carry it like any game item, cars included. On the ground (flat floor, not on a sofa or bed): F to unroll it, then hold F to sleep on it like a bed; a short F press rolls it back up.	Один мешок на игрока, в начальной спальне (рядом с кроватью). Свёрнутый мешок ты поднимаешь и носишь как любой предмет игры, в том числе в машинах. На земле (ровный пол, не на диване и не на кровати): F — развернуть, затем удерживай F, чтобы спать на нём как на кровати; короткое нажатие F сворачивает его обратно.
+Clothes, helmet and cup	Одежда, шлем и кружка
+One winter jacket, coverall, helmet and coffee cup per player: the game's own, plus a copy for each extra player in the hallway of the starting house. One worn by someone else disappears on your side while they wear it. If your game loads with a piece already worn by the host, you hand it over and put on a free copy.	Одна зимняя куртка, комбинезон, шлем и кофейная кружка на игрока: игровые, плюс копия для каждого дополнительного игрока в прихожей начального дома. Вещь, которую носит кто-то другой, пропадает у тебя, пока он её носит. Если твоя игра загрузилась с вещью, которую уже носит хост, ты отдаёшь её и надеваешь свободную копию.
+View and character	Вид и персонаж
+F5: third-person view, on foot (behind your character) and in vehicles (behind it). Aiming, picking up and opening work like in first person.	F5: вид от третьего лица, пешком (за персонажем) и в транспорте (за ним). Прицеливание, подбор и открывание работают как от первого лица.
+Tools in hand show for the others: axe, sledgehammer, digging bar, flashlight, extinguisher, spray can, fuel pump nozzle, wrenches, screwdriver…	Инструменты в руках видны другим: топор, кувалда, лом, фонарик, огнетушитель, баллончик с краской, заправочный пистолет, ключи, отвёртка…
+On death, the character collapses (ragdoll) until the player comes back; at the wheel, it slumps in the seat.	При смерти персонаж падает (ragdoll), пока игрок не вернётся; за рулём он оседает в кресле.
+Not yet	Пока нет
+Restaurant trays aren't seen by players who join mid-game.	Подносы в ресторане не видны игрокам, зашедшим посреди игры.
+Something's off? Send the logs zip on the Discord. The F10 > Sync audit is off by default (performance): Audit=1 under [Coop] in mwcoop.ini turns it on.	Что-то не так? Отправь zip с логами в Discord. Аудит синхронизации (F10 > Sync audit) выключен по умолчанию (производительность): его включает Audit=1 в [Coop] в mwcoop.ini.
+MSCLoader loads My Winter Car mods. MWCoop works with or without it. The Mods tab lets you choose which one to use.	MSCLoader загружает моды My Winter Car. MWCoop работает с ним и без него. Во вкладке «Моды» выбираешь, какой использовать.
+Which one?	Какой выбрать?
+You installed MSCLoader yourself and your mods work: keep OFFICIAL.	Ты сам установил MSCLoader, и моды работают: оставь ОФИЦИАЛЬНЫЙ.
+No MSCLoader, or your mods don't load: try MWCOOP. The launcher downloads it (about 4 MB) and starts the game from a separate copy; the game folder isn't changed.	Нет MSCLoader или моды не грузятся: попробуй MWCOOP. Лаунчер скачает его (около 4 МБ) и запустит игру из отдельной копии; папка игры не меняется.
+Either way, your mods are the ones in the game's Mods folder.	В обоих случаях твои моды — те, что лежат в папке Mods игры.
+The other buttons	Другие кнопки
+\"Load MSCLoader\" off: the game starts without MSCLoader (nothing is uninstalled).	«Загружать MSCLoader» выключено: игра запускается без MSCLoader (ничего не удаляется).
+A mod's gear opens its options; they apply at the next game.	Шестерёнка мода открывает его настройки; они применяются в следующей игре.
+Close the game before installing or reinstalling MSCLoader.	Закрой игру перед установкой или переустановкой MSCLoader.
+Open the Mods tab	Открыть вкладку «Моды»
+The host can send their mods to their guests for the game: they get them in a separate copy, without touching anything on their side.	Хост может отправить свои моды гостям на время игры: они получают их в отдельной копии, у себя ничего не трогая.
+Host side	У хоста
+Mods tab: each mod has a \"Send\" switch. Turn off the ones you keep for yourself. \"On\" off: the mod is no longer loaded at all (its DLL becomes .dll.off), nor sent; back on, it returns at the next launch.	Вкладка «Моды»: у каждого мода есть переключатель «Отправлять». Выключи те, что оставляешь себе. «Вкл» выключено: мод больше вообще не загружается (его DLL становится .dll.off) и не отправляется; если включить снова, он вернётся при следующем запуске.
+Host as usual: sending happens in the lobby.	Будь хостом как обычно: отправка идёт в лобби.
+Guest side	У гостя
+In the lobby, click ACCEPT ALL once.	В лобби один раз нажми ПРИНЯТЬ ВСЁ.
+It's remembered: \"Accept the host's files\" (Game options > Game and sharing) turns on, next times it's automatic.	Это запоминается: включается «Принимать файлы хоста» (Настройки игры > Игра и обмен), в следующие разы всё автоматически.
+MSCLoader missing on your side: the launcher asks whether to install it (MWCoop's Coop version, kept apart). No: you play without the host's mods. Your game starts from a copy where the mods are the host's.	Нет MSCLoader у тебя: лаунчер спросит, установить ли его (версию Coop от MWCoop, отдельно). Нет — играешь без модов хоста. Твоя игра запускается из копии, где моды — хоста.
+Sent: the mod's DLL, its files (Assets) and its settings. The mods' save data comes along with the host's save.	Отправляется: DLL мода, его файлы (Assets) и настройки. Сохранённые данные модов приходят вместе с сохранением хоста.
+Guests always receive the host's mods, even when joining a game in progress: MSCLoader is installed if missing (MWCoop's version if you don't have the official one) and the game waits until they're received to start. Your own mods are not touched.	Гости всегда получают моды хоста, даже заходя в уже идущую игру: MSCLoader ставится, если его нет (версия MWCoop, если нет официального), и игра ждёт их получения перед запуском. Твои собственные моды не трогаются.
+Mod sending is experimental: a mod not made for multiplayer can get out of sync.	Отправка модов экспериментальная: мод, не рассчитанный на мультиплеер, может рассинхронизироваться.
+Made compatible: Second Machtwagen (purchase at Fleetari, colors, plate and tuning the same for everyone; only the buyer pays), Spare Parts Seller (parts bought from the seller seen by everyone, even without the mod), Jonne Food System (food bought, opened, cooked or eaten is the same for everyone), Utility Tow Cart (the cart, pulled or hitched, in the same place for everyone), Jack Stands (stands attached, detached and adjusted the same for everyone).	Сделаны совместимыми: Second Machtwagen (покупка у Fleetari, цвета, номер и тюнинг одинаковы у всех; платит только покупатель), Spare Parts Seller (детали, купленные у продавца, видны всем, даже без мода), Jonne Food System (купленная, открытая, приготовленная или съеденная еда одинакова у всех), Utility Tow Cart (тележка, на буксире или прицепленная, в одном месте у всех), Jack Stands (подставки установлены, сняты и отрегулированы одинаково у всех).
+Your CDs, radio, posters, paint… What you put in your game, your guests see and hear it too.	Твои CD, радио, постеры, покраска… Что ты добавил в свою игру, твои гости тоже видят и слышат.
+What can be sent	Что можно отправить
+CDs 1 to 3 (music and covers), the radio.	CD с 1 по 3 (музыка и обложки), радио.
+Music: the game only reads OGG files named track1.ogg, track2.ogg, track3.ogg… in a row, in CD1, CD2, CD3 or Radio. An MP3 or another name is ignored, for you and your guests: the tile shows it in orange.	Музыка: игра читает только OGG-файлы с именами track1.ogg, track2.ogg, track3.ogg… подряд, в CD1, CD2, CD3 или Radio. MP3 или другое имя игнорируется — и у тебя, и у гостей: плитка показывает это оранжевым.
+Music import (the game menu's IMPORT MUSIC FILES button) happens by itself when MWCoop starts the game: on the guest's side with the host's music, on the host's side with their own.	Импорт музыки (кнопка IMPORT MUSIC FILES в меню игры) происходит сам, когда MWCoop запускает игру: у гостя — с музыкой хоста, у хоста — с его собственной.
+CORRIS and moped paint, garage flag, posters, sticker, fabric, hockey teams.	Покраска CORRIS и мопеда, флаг гаража, постеры, наклейка, ткань, хоккейные команды.
+The ID photo: off by default.	Фото на документы: выключено по умолчанию.
+How	Как
+Sent content page: tick what you share, then OK.	Страница «Отправляемый контент»: отметь, чем делишься, затем OK.
+Your guests get it in the lobby, with the mods (same ACCEPT ALL).	Гости получают это в лобби вместе с модами (то же ПРИНЯТЬ ВСЁ).
+A guest who clicks READY while downloading becomes \"ready after files\": they turn ready by themselves once everything is received. While a guest is receiving your files, their row shows \"MODS 45 %\" and START is impossible, even forced: their game would start without the mods.	Гость, нажавший ГОТОВ во время загрузки, становится «ГОТОВ ПОСЛЕ ФАЙЛОВ»: он сам станет готов, когда всё получит. Пока гость получает твои файлы, в его строке видно «MODS 45 %», и НАЧАТЬ ИГРУ невозможно, даже принудительно: его игра запустилась бы без модов.
+A friend arrives while you are already playing? Keep the launcher open (Settings: don't close it at launch): it sends them your mods, then they join your game. Through Steam, your game sends them.	Друг пришёл, когда ты уже играешь? Держи лаунчер открытым (Настройки: не закрывать при запуске): он отправит ему твои моды, затем друг войдёт в твою игру. Через Steam их отправляет твоя игра.
+In game, the guest's mod reads what it received directly: posters, flag, paint, CD covers and music, radio, hockey. What the host doesn't send stays the guest's own.	В игре мод гостя напрямую читает полученное: постеры, флаг, покраску, обложки и музыку CD, радио, хоккей. Что хост не отправляет, остаётся у гостя своим.
+On the guest's side it's kept apart: their own CDs and images come back when they play alone.	У гостя всё хранится отдельно: его собственные CD и картинки возвращаются, когда он играет один.
+Open Sent content	Открыть «Отправляемый контент»
+Three ways to start the game, in Settings > Game. Keep Copy as long as everything works: the other two are fallbacks.	Три способа запуска игры — в Настройки > Игра. Оставляй «Копировать», пока всё работает: два других — запасные.
+1 · Copy (default)	1 · Копировать (по умолчанию)
+The game starts from a light copy in %LOCALAPPDATA%\\MWCoop: a few files copied, the rest linked to the real game (same data, same save).	Игра запускается из лёгкой копии в %LOCALAPPDATA%\\MWCoop: несколько файлов скопированы, остальное связано с настоящей игрой (те же данные, то же сохранение).
+Why: a game started in Steam's folder gets the Steam overlay, which can load Windows' version.dll before MWCoop's. The copy avoids that trap.	Зачем: игра, запущенная из папки Steam, получает оверлей Steam, который может загрузить version.dll от Windows раньше, чем от MWCoop. Копия обходит эту ловушку.
+2 · Folder	2 · Папка
+The game starts straight from its folder. For some players, something (often the antivirus) blocks the loader in the copy: from the game folder, it gets through.	Игра запускается прямо из своей папки. У некоторых игроков что-то (часто антивирус) блокирует загрузчик в копии: из папки игры он проходит.
+The launcher switches to Folder by itself when MWCoop didn't load from the copy: just start your game again.	Лаунчер сам переключается на «Папка», если MWCoop не загрузился из копии: просто запусти игру снова.
+3 · Steam	3 · Steam
+Like Steam's PLAY button. The launcher closes (otherwise Steam would think the game is already running). Steam must be open.	Как кнопка ИГРАТЬ в Steam. Лаунчер закрывается (иначе Steam решит, что игра уже запущена). Steam должен быть открыт.
+Which order to try?	В каком порядке пробовать?
+Copy. If MWCoop doesn't load:	«Копировать». Если MWCoop не загрузился:
+Folder. If still not:	«Папка». Если всё ещё нет:
+Steam. If nothing works: debug mode, then the logs zip on the Discord.	Steam. Если ничего не помогает: режим отладки, затем zip с логами в Discord.
+Guest of a host with mods: the game always starts from the guest copy (the one with the host's mods), whatever this setting.	Гость хоста с модами: игра всегда запускается из копии гостя (той, где моды хоста), независимо от этой настройки.
+Everything is kept in mwcoop-lanceur.ini (game folder) and MWCoop\\mwcoop.ini.	Всё хранится в mwcoop-lanceur.ini (папка игры) и MWCoop\\mwcoop.ini.
+Check / Update, and \"Install automatically\".	Проверить / Обновить и «Устанавливать автоматически».
+Dark or light theme, French, English or Russian (also the language of the mod's menus in game; in Russian, texts drawn with the game's own font stay in English).	Тёмная или светлая тема, французский, английский или русский (это и язык меню мода в игре; на русском тексты, нарисованные шрифтом самой игры, остаются на английском).
+\"Close the launcher at launch\": off by default. Open, it shows the players during the game.	«Закрывать лаунчер при запуске»: выключено по умолчанию. Открытый лаунчер показывает игроков во время игры.
+See the starting guide again.	Показать вводный гайд снова.
+Steam or IP / VPN by default, and the port (7870 to 7875, UDP and TCP).	Steam или IP / VPN по умолчанию и порт (с 7870 по 7875, UDP и TCP).
+The game found and \"Change folder\".	Найденная игра и «Сменить папку».
+Start the game: Copy, Folder or Steam.	Запуск игры: «Копировать», «Папка» или Steam.
+Remove compatibility modes (on by default): removes the ones Windows adds to the game after a crash, otherwise MWCoop stops loading. Only turn off if you need a compatibility mode.	Убрать режимы совместимости (включено по умолчанию): убирает те, что Windows добавляет игре после вылета, иначе MWCoop перестаёт загружаться. Выключай, только если тебе нужен режим совместимости.
+Copy, Folder or Steam?	«Копировать», «Папка» или Steam?
+The in-game keys and \"Accept the host's files\" are now in Game options (Keys, Game and sharing categories).	Клавиши в игре и «Принимать файлы хоста» теперь в Настройках игры (категории «Клавиши» и «Игра и обмен»).
+Buy the game on Steam.	Купить игру в Steam.
+Uninstall MWCoop: all of MWCoop goes to the Recycle Bin. Your save, your mods and the official MSCLoader stay. Remember to remove the Steam launch option if you had set it.	Удалить MWCoop: весь MWCoop отправляется в корзину. Твоё сохранение, твои моды и официальный MSCLoader остаются. Не забудь убрать параметр запуска Steam, если ты его задавал.
+Your look in 3D: build, hat, glasses, hair, face, top, pants. The choices come from the game's clothes, plus the 155 outfits given by Dom (\"Outfit Dom 12\"…).	Твой облик в 3D: телосложение, шапка, очки, волосы, лицо, верх, штаны. Варианты — из одежды игры, плюс 155 комплектов от Dom («Одежда Dom 12»…).
+The 3D preview shows up after a first game (about 30 s in game). In game: F10 > Appearance, the others see the change right away.	3D-превью появляется после первой игры (около 30 с в игре). В игре: F10 > ВНЕШНОСТЬ, другие сразу видят изменения.
+Your own face, top or pants: pick the zone on the preview (Head, Torso, Legs). \"Template\" opens the game's image (face 512 x 256, top and pants 512 x 512) with its seams in red: paint over it (Paint, GIMP…) keeping the size, save, then \"My face…\", \"My top…\" or \"My pants…\".	Своё лицо, верх или штаны: выбери зону на превью (Голова, Торс, Ноги). «Шаблон» открывает картинку игры (лицо 512 x 256, верх и штаны 512 x 512) со швами красным: рисуй поверх (Paint, GIMP…), сохраняя размер, сохрани, затем «Моё лицо…», «Мой верх…» или «Мои штаны…».
+The imported image shows up in its part's list (\"Custom face\", \"Custom top\", \"Custom pants\") and the preview shows it right away. Others see it in game; \"Remove\" deletes it.	Импортированная картинка появляется в списке своей части («Своё лицо», «Свой верх», «Свои штаны»), и превью сразу её показывает. Другие видят её в игре; «Убрать» удаляет её.
+PNG, JPG, BMP, WebP, HEIC…: what Windows can read. Transparent parts keep the game's texture. The templates are made the first time you are in game (about 20 s) with this version.	PNG, JPG, BMP, WebP, HEIC…: всё, что умеет читать Windows. Прозрачные части сохраняют текстуру игры. Шаблоны создаются при первом заходе в игру (около 20 с) с этой версией.
+Open Outfit	Открыть вкладку «Одежда»
+The CORRIS color for a NEW game (the host's color is given to the guests).	Цвет CORRIS для НОВОЙ игры (цвет хоста передаётся гостям).
+\"VIN plate…\": the VIN plate options (year, engine, gearbox, suspension, windshield, vinyl roof, interior, wheels, radio, instrument panel, power brakes, heated rear window). Click a box for the next value; \"Random\" lets the game pick. Only the values possible for the chosen trim are offered: start a game once so the mod reads them. Like the color, the host decides for everyone.	«Табличка VIN…»: опции таблички VIN (год, двигатель, коробка передач, подвеска, лобовое стекло, виниловая крыша, салон, колёса, радио, приборная панель, усилитель тормозов, обогрев заднего стекла). Нажми на поле для следующего значения; «Случайно» — выбор за игрой. Предлагаются только значения, возможные для выбранной комплектации: начни игру один раз, чтобы мод их считал. Как и цвет, решает хост за всех.
+\"Custom paint…\": your own paint on the CORRIS. \"Template\" shows the game's body laid flat (Images\\car.png, 2048 x 2048; the layered PSD is in the game's Images folder): paint over it, then \"My image…\". In game, buy \"Custom paint made by artist\" at Fleetari's: the CORRIS takes it. The game folder is not touched; the host sends it to their guests (Sent content > CORRIS paint).	«Своя покраска…»: твоя покраска CORRIS. «Шаблон» показывает кузов из игры в развёртке (Images\\car.png, 2048 x 2048; PSD по слоям лежит в папке Images игры): рисуй поверх, затем «Моя картинка…». В игре купи «Custom paint made by artist» у Fleetari: CORRIS получит её. Папка игры не трогается; хост отправляет покраску гостям (Отправляемый контент > Краска CORRIS).
+Open Car	Открыть вкладку «Машина»
+Presets at the top (Vanilla, Performance, Balanced, Pretty, Ultra, RT), then three blocks. Vanilla brings back the original game options, without MWCoop's additions. Each category has its icon and opens with a click on its title (all closed at first). Just for you: the others see no difference.	Пресеты сверху (Ванилла, Производительность, Баланс, Красиво, Ультра, RT), затем три блока. Ванилла возвращает исходные настройки игры, без добавок MWCoop. У каждой категории свой значок, она открывается кликом по заголовку (сначала все закрыты). Только для тебя: другие не видят разницы.
+Co-op: the mod's options.	Кооп: настройки мода.
+Voice: proximity voice (on or off), range, voices volume, your microphone volume for the others (up to 300 %).	Голос: голос по близости (вкл или выкл), дальность, громкость голосов, громкость твоего микрофона для других (до 300 %).
+Faces, clothes and names: see the others' imported faces and clothes; how far the names above players show (or hidden).	Лица, одежда и ники: видеть импортированные лица и одежду других; на каком расстоянии видны ники над игроками (или скрыть их).
+Game and sharing: accept the host's files (mods, CDs, images) without asking; new guests' starting money, cheats (host), cars running players over (friends and NPCs, above 20 km/h); the CO-OP additions category removes what MWCoop adds to the game, all at once (\"Disable them all\": near-vanilla game) or one by one (F8 drone camera, sleeping bags, shop, museum); in a game, the host's choices apply to all their guests.	Игра и обмен: принимать файлы хоста (моды, CD, картинки) без вопросов; стартовые деньги новых гостей, читы (хост), машины сбивают игроков (друзей и NPC, выше 20 км/ч); категория «Дополнения КООП» убирает то, что MWCoop добавляет в игру, всё сразу («Отключить все»: почти ванильная игра) или по одному (камера-дрон F8, спальные мешки, магазин, музей); в игре выбор хоста действует для всех его гостей.
+Keys: chat, wallet, voice, cheat panel, map, third-person view. Click a pill then press the key you want.	Клавиши: чат, кошелёк, голос, панель читов, карта, вид от третьего лица. Нажми на плашку, затем нужную клавишу.
+My Winter Car video options: the game's own settings, those of its Options menu.	Видеонастройки My Winter Car: собственные настройки игры, те, что в её меню Options.
+Image (anti-aliasing, HDR, bloom, contrast, sun shafts), Shadows (sun, moon, houses), Distance and view (draw distance, field of view, mirrors), Comfort (head bob, FPS counter, gear on screen, traffic dust and skid marks).	Изображение (сглаживание, HDR, свечение, контраст, солнечные лучи), Тени (солнце, луна, дома), Дальность и обзор (дальность прорисовки, поле зрения, зеркала), Комфорт (покачивание головы, счётчик FPS, передача на экране, пыль и следы шин трафика).
+MWCoop enhanced video options: what the mod adds.	Улучшенные видеонастройки MWCoop: то, что добавляет мод.
+Screen (resolution, windowed / fullscreen / borderless, engine quality), Smoothness (max frames per second, v-sync), Advanced shadows (distance, detail), Detail and textures, Lights (headlight and street light shadows, GTA-style coronas, headlight range).	Экран (разрешение, оконный / полный экран / без рамки, качество движка), Плавность (макс. кадров в секунду, верт. синхронизация), Расширенные тени (дальность, детализация), Детали и текстуры, Свет (тени от фар и фонарей, ореолы как в GTA, дальность фар).
+Ray tracing (in development): sun shadows computed with rays (trees, poles and wires included), with the game's own lighting. Needs a DXR 1.1 graphics card (NVIDIA RTX, AMD RX 6000 and newer). Settings: rays per pixel, range, shadow edges, reflections (car paint and smooth surfaces: what surrounds them is reflected, you included; car windows, mostly at an angle), your body (invisible in first person, but present in reflections and shadows), light bounce (sunlit snow lights up the bottom of shaded walls, a facade tints its surroundings), ambient occlusion (ambient light darkened under cars, in corners, under trees), lamp shadows (nearest headlights and street lights, 8 by default: they replace Unity's headlight and street light shadows). Cost: about 1 ms per frame on a recent card. Active at the next game launch (the launcher adds -force-gfx-direct). Unity's shadows (distance, detail, moon) are then replaced.	Трассировка лучей (в разработке): тени от солнца, рассчитанные лучами (включая деревья, столбы и провода), с собственным освещением игры. Нужна видеокарта с DXR 1.1 (NVIDIA RTX, AMD RX 6000 и новее). Настройки: лучей на пиксель, дальность, края теней, отражения (краска авто и гладкие поверхности: в них отражается окружение, включая тебя; стёкла машин — в основном под углом), твоё тело (невидимо от первого лица, но есть в отражениях и тенях), отражённый свет (освещённый солнцем снег подсвечивает низ затенённых стен, фасад окрашивает всё вокруг), фоновое затенение (окружающий свет темнее под машинами, в углах, под деревьями), тени от ламп (ближайшие фары и фонари, 8 по умолчанию: они заменяют тени Unity от фар и фонарей). Цена: около 1 мс на кадр на современной карте. Действует со следующего запуска игры (лаунчер добавляет -force-gfx-direct). Тени Unity (дальность, детализация, луна) тогда заменяются.
+Unity's small \"My Winter Car Configuration\" window is no longer needed: the launcher skips it by itself at launch, set your screen here.	Маленькое окно Unity «My Winter Car Configuration» больше не нужно: лаунчер сам пропускает его при запуске, настрой экран здесь.
+Off by default. The host allows them in Game and sharing (\"Allow cheats\"); their guests follow that choice. Every cheat is announced to everyone in the chat.	Выключено по умолчанию. Хост разрешает их в разделе «Игра и обмен» («Разрешить читы»); его гости следуют этому выбору. О каждом чите все узнают в чате.
+Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin).	Панель (F7) или чат: /tp <игрок>, /bring <игрок>, /place <место> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin).
+/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail).	/money <сумма>, /heal (голод, жажда, усталость, стресс… на ноль), /free (больше не в розыске, выход из тюрьмы).
+For everyone: /time <0-24>, /snow on|off (done by the host, the world follows).	Для всех: /time <0-24>, /snow on|off (делает хост, мир следует за ним).
+Open Game options	Открыть «Настройки игры»
+The game starts, but without MWCoop (no MWCoop pill top left, no co-op). The launcher notices by itself and tells you.	Игра запускается, но без MWCoop (нет плашки MWCoop слева вверху, нет коопа). Лаунчер сам это замечает и сообщает тебе.
+Try in this order	Пробуй в таком порядке
+Settings > Game: \"Remove compatibility modes\" must be on (it is by default). It's the most common cause: it worked, then not at all.	Настройки > Игра: «Убрать режимы совместимости» должно быть включено (по умолчанию так и есть). Это самая частая причина: работало, а потом совсем перестало.
+Check the game at the bottom of the launcher: is it the install you usually start? Otherwise \"Change\".	Проверь игру внизу лаунчера: это та установка, которую ты обычно запускаешь? Если нет — «Сменить».
+Start the game again: after a failure from Copy, the launcher switches to Folder by itself.	Запусти игру снова: после неудачи с «Копировать» лаунчер сам переключается на «Папка».
+Settings > Game > Start the game: try Folder, then Steam.	Настройки > Игра > Запуск игры: попробуй «Папка», затем Steam.
+Antivirus: check its history (Windows Security > Protection history); allow version.dll and add the game folder as an exclusion.	Антивирус: проверь его журнал (Безопасность Windows > Журнал защиты); разреши version.dll и добавь папку игры в исключения.
+Still nothing: Logs > Debug mode, start your game, close it, create the zip and send it on the Discord.	Всё ещё ничего: Логи > Режим отладки, запусти игру, закрой её, создай zip и отправь его в Discord.
+Why \"it worked, then not at all\"?	Почему «работало, а потом совсем перестало»?
+When the game crashes while closing, Windows sometimes adds a compatibility mode to it by itself. On the next start, that mode loads Windows' version.dll before MWCoop's: the game starts without the mod. Each copy of the game gets its own, and so does each Windows install, hence different results from one drive or Windows to another.	Когда игра вылетает при закрытии, Windows иногда сама добавляет ей режим совместимости. При следующем запуске этот режим загружает version.dll из Windows раньше, чем от MWCoop: игра стартует без мода. У каждой копии игры он свой, как и у каждой установки Windows, отсюда разные результаты на разных дисках или Windows.
+The launcher removes it before every game, at start and when the game closes. Started straight from Steam's PLAY button right after a crash, the game may still start without MWCoop: open the launcher once and start again.	Лаунчер убирает его перед каждой игрой, при запуске и при закрытии игры. Если сразу после вылета запустить игру кнопкой ИГРАТЬ в Steam, она может стартовать без MWCoop: открой лаунчер один раз и запусти снова.
+Before every game, the launcher puts its loader (version.dll) back if it's missing, old, or if another program put its own.	Перед каждой игрой лаунчер возвращает свой загрузчик (version.dll), если его нет, он устарел или другая программа поставила свой.
+The lobby refuses	Лобби не пускает
+\"Different version\": everyone updates, then starts MWCoop.exe again.	«Другая версия»: все обновляются, затем снова запускают MWCoop.exe.
+Lobby full: 8 players max, host included.	Лобби заполнено: максимум 8 игроков, включая хоста.
+Steam: \"No friend lobby\": ask the host to invite you; check you're both on the STEAM network.	Steam: «Нет лобби друзей»: попроси хоста пригласить тебя; проверь, что вы оба в сети STEAM.
+The lobby works, but not the game (IP)	Лобби работает, а игра нет (IP)
+The lobby uses TCP, the game uses UDP. A guest marked \"UDP blocked\" gets into the lobby but not into the game.	Лобби работает по TCP, игра — по UDP. Гость с пометкой «UDP заблокирован» попадает в лобби, но не в игру.
+Host: forward the port in UDP (not just TCP) on your router, or use a VPN.	Хост: пробрось порт на роутере по UDP (не только TCP) или используй VPN.
+Host: accept the firewall permission the launcher offers.	Хост: прими разрешение брандмауэра, которое предлагает лаунчер.
+The easiest: all use the STEAM network.	Проще всего: всем использовать сеть STEAM.
+Mods tab: is MSCLoader installed and \"Load MSCLoader\" on?	Вкладка «Моды»: MSCLoader установлен и «Загружать MSCLoader» включено?
+Try the other MSCLoader (OFFICIAL or MWCOOP).	Попробуй другой MSCLoader (ОФИЦИАЛЬНЫЙ или MWCOOP).
+REINSTALL (game closed): your mods and their settings are kept.	ПЕРЕУСТАНОВИТЬ (игра закрыта): твои моды и их настройки сохраняются.
+Guest: did you click ACCEPT ALL? Does the host have MSCLoader on?	Гость: ты нажал ПРИНЯТЬ ВСЁ? У хоста включён MSCLoader?
+A freshly added mod shows \"start the game once for details\": that's normal.	Только что добавленный мод показывает «запусти игру один раз для подробностей»: это нормально.
+One game per group of friends: the Saves tab keeps several games, each with its own name. When you host, the save in use is the one played and sent to your guests.	Своя игра для каждой компании друзей: вкладка «Сохранения» хранит несколько игр, у каждой своё имя. Когда ты хост, играется и отправляется гостям выбранное сохранение.
+Manage your saves	Управление сохранениями
+New save: a fresh game, kept apart. It starts with a new game at the first launch.	Новое сохранение: свежая игра, хранится отдельно. При первом запуске начинается новая игра.
+Use, Rename, open its folder; Delete sends it to the Windows Recycle Bin (recoverable).	Использовать, Переименовать, открыть его папку; Удалить отправляет его в корзину Windows (можно восстановить).
+\"Main game\" is the game's normal save: PLAY SOLO always keeps it.	«Основная игра» — обычное сохранение игры: ИГРАТЬ ОДНОМУ всегда использует его.
+In the lobby (host)	В лобби (хост)
+The button right of \"Game\" shows the save: click to pick another one or create one.	Кнопка справа от «Игра» показывает сохранение: нажми, чтобы выбрать другое или создать новое.
+\"New game\": a new save, or restart an existing one (it is erased, you are asked to confirm).	«Новая игра»: новое сохранение или перезапуск существующего (оно стирается, тебя попросят подтвердить).
+Your guests see your save's name. They receive it apart: their own games, solo or as host, are never touched.	Гости видят имя твоего сохранения. Они получают его отдельно: их собственные игры, одиночные или где они хост, никогда не затрагиваются.
+Open Saves	Открыть «Сохранения»
+MWCoop isn't signed (that costs a lot for a free mod): some antiviruses distrust it. An alert like \"Wacatac.B!ml\" is a machine-learning false positive.	MWCoop не подписан (для бесплатного мода это слишком дорого): некоторые антивирусы ему не доверяют. Тревога вроде «Wacatac.B!ml» — ложное срабатывание машинного обучения.
+Check your files	Проверь свои файлы
+Every version publishes its SHA-256 fingerprints on GitHub (SHA256SUMS): compare them, or look them up on VirusTotal. MWCoop's code is open.	Каждая версия публикует свои отпечатки SHA-256 на GitHub (SHA256SUMS): сравни их или проверь на VirusTotal. Код MWCoop открыт.
+Allow MWCoop (Windows Defender)	Разрешить MWCoop (Windows Defender)
+Windows Security > Virus & threat protection > Protection history.	Безопасность Windows > Защита от вирусов и угроз > Журнал защиты.
+On the MWCoop alert: Actions > Allow (or Restore).	На тревоге MWCoop: Действия > Разрешить (или Восстановить).
+Manage settings > Exclusions: add the game folder.	Управление настройками > Исключения: добавь папку игры.
+Other antivirus (Avast, Norton, Bitdefender…): same idea, in its history / quarantine and exclusions.	Другой антивирус (Avast, Norton, Bitdefender…): то же самое, в его журнале / карантине и исключениях.
+A problem? The logs zip has everything needed to understand: mod and launcher logs, settings, MSCLoader.	Проблема? В zip с логами есть всё, чтобы разобраться: логи мода и лаунчера, настройки, MSCLoader.
+Send a good report	Как хорошо сообщить о проблеме
+MWCoop doesn't load? Turn on debug mode first (Logs page).	MWCoop не загружается? Сначала включи режим отладки (страница «Логи»).
+Start the game where the problem happens, then close it.	Запусти игру там, где возникает проблема, затем закрой её.
+\"Create a zip to send\": it lands on your desktop.	«Создать zip для отправки»: он появится на рабочем столе.
+Send it on the Discord (#bug-reports) or on GitHub, with what you were doing.	Отправь его в Discord (#bug-reports) или на GitHub и опиши, что ты делал.
+Even with no game log, the zip has the launcher's log: send it anyway.	Даже без лога игры в zip есть лог лаунчера: всё равно отправь его.
+Open Logs	Открыть «Логи»
+F8 in game: your camera flies off as a small drone to take photos, like Assetto Corsa's photo mode. Your character stays where it is, still: the others see it, and so do you in the frame.	F8 в игре: твоя камера улетает маленьким дроном, чтобы фотографировать, как фоторежим в Assetto Corsa. Твой персонаж стоит на месте неподвижно: другие его видят, и ты тоже — в кадре.
+Moving: WASD (ZQSD on AZERTY), Space to go up, C to go down, hold Left Shift to go faster. The mouse aims.	Движение: WASD (ZQSD на AZERTY), Space — вверх, C — вниз, удерживай Left Shift, чтобы лететь быстрее. Мышь — прицел.
+Zoom: wheel, or R / F. Tilt the picture: Q / E (A / E on AZERTY). X resets (tilt and zoom).	Зум: колесо или R / F. Наклон кадра: Q / E (A / E на AZERTY). X сбрасывает (наклон и зум).
+Viewfinder: rule-of-thirds grid and centre marks (G), key legend on the right, focal length and distance at the bottom; H hides the whole viewfinder.	Видоискатель: сетка третей и метки центра (G), легенда клавиш справа, фокусное расстояние и дистанция внизу; H скрывает весь видоискатель.
+Left click: the photo, with a flash and a click the others see and hear. It is saved in Pictures\\CoopPictures, with the MWCoop logo at the top left.	ЛКМ: снимок, со вспышкой и щелчком, которые другие видят и слышат. Он сохраняется в Pictures\\CoopPictures, с логотипом MWCoop слева вверху.
+The other players see you as a small drone (spinning propellers, faint buzz). Range: 80 m around you; walls and the ground stop the drone.	Другие игроки видят тебя маленьким дроном (крутящиеся пропеллеры, тихое жужжание). Дальность: 80 м вокруг тебя; стены и земля останавливают дрон.
+Every key can be changed in Game options > Drone camera (Delete on a pill: default key). No drone from the driver's seat.	Любую клавишу можно сменить в Настройки игры > Камера дрона (Delete на плашке: клавиша по умолчанию). С места водителя дрона нет.
+See my photos (Album)	Мои фото (Альбом)
+The Museum of Corsica (Korsikan museo) stands next to the OSUUSKAUPPA s21 shop, south-west of the PSK crossroads in Peräjärvi. Free entry: the sliding doors open for every player.	Музей Корсики (Korsikan museo) стоит рядом с магазином OSUUSKAUPPA s21, к юго-западу от перекрёстка PSK в Peräjärvi. Вход бесплатный: раздвижные двери открываются для любого игрока.
+What to see	Что посмотреть
+The hall: Corsica in relief under glass, busts of Napoleon and Pasquale Paoli, and large 19th-century paintings.	Холл: рельефная Корсика под стеклом, бюсты Наполеона и Паскаля Паоли, большие картины XIX века.
+The \"Corsica\" room (on the right as you enter): history, towns and villages, old postcards, the Genoese map.	Зал «Корсика» (справа от входа): история, города и деревни, старые открытки, генуэзская карта.
+The \"Motorsport\" room (on the left): the Tour de Corse and the great rally cars, up to 1999.	Зал «Автоспорт» (слева): Tour de Corse и великие раллийные машины, до 1999 года.
+Every piece has its plaque in French and English. The authors and licences of the pictures and 3D models are in the credits (star at the top).	У каждого экспоната есть табличка на французском и английском. Авторы и лицензии картинок и 3D-моделей — во вкладке «Авторы» (звезда вверху).
+The OSUUSKAUPPA s21 shop, in Peräjärvi, south-west of the PSK crossroads (Teimo's store), along the small road next to the Museum of Corsica, only sells co-op items. Click the handle to open the door.	Магазин OSUUSKAUPPA s21 в Peräjärvi, к юго-западу от перекрёстка PSK (магазин Teimo), у маленькой дороги рядом с Музеем Корсики, продаёт только кооп-товары. Нажми на ручку, чтобы открыть дверь.
+On the shelves	На полках
+Sleeping bags, 149 mk: white gondola, in the middle.	Спальные мешки, 149 mk: белый стеллаж посередине.
+VHS tapes, 19 mk: top shelf of the white gondola.	Кассеты VHS, 19 mk: верхняя полка белого стеллажа.
+VCRs, 390 mk, and the television, 590 mk: wooden shelf on the left wall, middle unit.	Видеомагнитофоны, 390 mk, и телевизор, 590 mk: деревянная полка у левой стены, средняя секция.
+Camcorders, 890 mk: wooden shelf on the left wall, right-hand unit.	Видеокамеры, 890 mk: деревянная полка у левой стены, правая секция.
+KARTTURI 2000, the rally GPS, 690 mk: same shelf, above the camcorders.	KARTTURI 2000, раллийный GPS, 690 mk: та же полка, над видеокамерами.
+Buying	Покупка
+Look at an item on the shelf: left click takes one, right click puts it back.	Посмотри на товар на полке: ЛКМ берёт один, ПКМ кладёт обратно.
+Look at the till on the counter: the total shows up. Click to pay.	Посмотри на кассу на прилавке: появится сумма. Нажми, чтобы заплатить.
+Your purchases come in a shopping bag on the counter. Pick it up like any object.	Покупки появляются в пакете на прилавке. Подними его, как любой предмет.
+Look at the bag, or hold it in your hand, anywhere: F takes one item out, hold F takes everything out. An empty bag disappears.	Посмотри на пакет или держи его в руке, где угодно: F достаёт один предмет, удержание F — всё сразу. Пустой пакет исчезает.
+Everyone pays from their own wallet. Purchases and bags are seen by every player.	Каждый платит из своего кошелька. Покупки и пакеты видят все игроки.
+Film and watch	Снимай и смотри
+Film your adventures with a 90s VHS camcorder and watch them together on a TV, with sound. You need: a camcorder, a tape, a VCR and a TV (the shop's, or one of the game's TVs: home, prison, retirement home, Jokke's).	Снимай свои приключения на VHS-камеру 90-х и смотрите их вместе по телевизору, со звуком. Нужно: видеокамера, кассета, видеомагнитофон и телевизор (из магазина или любой телевизор игры: дома, в тюрьме, в доме престарелых, у Jokke).
+Loading a tape	Как вставить кассету
+Put the camcorder (or the VCR) down, for example on a table.	Поставь видеокамеру (или видеомагнитофон), например на стол.
+Pick up a tape, look at the device and left click: it goes in.	Возьми кассету, посмотри на устройство и нажми ЛКМ: кассета внутри.
+To take it out: look at the device (set down) and hold F.	Чтобы вынуть: посмотри на устройство (поставленное) и удерживай F.
+Filming	Съёмка
+Camcorder in hand: F raises it to your eye (like the ice scraper; the others see you filming) and opens the VHS viewfinder. Left click: film, then pause, then resume. Wheel: zoom. F: lower it back into your hands (end of the take); then a right click throws it.	Видеокамера в руке: F поднимает её к глазу (как скребок для льда; другие видят, что ты снимаешь) и открывает видоискатель VHS. ЛКМ: съёмка, затем пауза, затем продолжение. Колесо: зум. F: опустить обратно в руки (конец дубля); потом ПКМ её бросает.
+Camcorder set down: look at it, R starts recording, R again stops it. It films straight ahead; when you drop it, it turns to where you were looking. Handy to film yourselves together.	Видеокамера поставлена: посмотри на неё, R начинает запись, снова R — останавливает. Она снимает прямо перед собой; когда ты её бросаешь, она поворачивается туда, куда ты смотрел. Удобно, чтобы снять себя всей компанией.
+Each take is added after the previous ones on the tape (40 at most, 10 minutes each). The sound recorded is what you hear, other players' voices included, plus your own voice when you talk (V).	Каждый дубль добавляется после предыдущих на кассете (не больше 40, по 10 минут). Записывается то, что ты слышишь, включая голоса других игроков, плюс твой голос, когда ты говоришь (V).
+A red light blinks on the camcorder while recording: everybody sees it.	Во время записи на камере мигает красный огонёк: его видят все.
+Watching	Просмотр
+Put the VCR less than 2.5 m from a TV and load the tape.	Поставь видеомагнитофон ближе 2,5 м к телевизору и вставь кассету.
+Look at the VCR: F plays or stops, hold F ejects.	Посмотри на видеомагнитофон: F — воспроизведение или стоп, удержание F — извлечь.
+The film plays on the TV for all players at the same time, with sound. Blank tape or end of tape: static.	Фильм идёт на телевизоре у всех игроков одновременно, со звуком. Пустая кассета или конец кассеты: помехи.
+Writing a title on the tape	Подпись на кассете
+Holding the tape, open the chat (T) and type /title followed by the name (24 characters max). It is written on the spine. /title alone wipes it.	Держа кассету, открой чат (T) и введи /title и название (не больше 24 символов). Оно пишется на корешке. /title без текста стирает его.
+When a take ends, the film is sent to the other players in the background. Films are stored in MWCoop\\videot (.mwv files, about 4 MB per minute).	Когда дубль заканчивается, фильм в фоне отправляется другим игрокам. Фильмы хранятся в MWCoop\\videot (файлы .mwv, около 4 МБ в минуту).
+Edit and export a tape	Монтаж и экспорт кассеты
+Your videos on a tape	Твои видео на кассете
+You can put a real video (a clip from your phone, a short film, a music video...) on a tape and watch it in the game with your friends.	Можно записать на кассету настоящее видео (ролик с телефона, короткометражку, клип...) и смотреть его в игре с друзьями.
+Step by step	Шаг за шагом
+Put the file in the game folder, under MWCoop\\videot\\importer (created the first time you load a game). Anything Windows can play works: mp4, wmv, avi, mov, m4v...	Положи файл в папку игры, в MWCoop\\videot\\importer (создаётся при первой загрузке игры). Подойдёт всё, что умеет воспроизводить Windows: mp4, wmv, avi, mov, m4v...
+In the game, pick up a tape (blank or not).	В игре возьми кассету (пустую или нет).
+Open the chat (T) and type /import followed by the file name (the beginning is enough). /import alone lists the videos in the folder.	Открой чат (T) и введи /import и имя файла (хватит начала). /import без текста показывает список видео в папке.
+The conversion runs in the background: keep playing, the progress shows at the bottom of the screen.	Конвертация идёт в фоне: играй дальше, прогресс виден внизу экрана.
+The video is added after the tape's takes, and the tape gets the file name as its title. Put it in a VCR: everybody sees it, with sound.	Видео добавляется после дублей кассеты, а кассета получает имя файла как название. Вставь её в видеомагнитофон: все увидят, со звуком.
+The picture gets the game's VHS look: 320×240, 12 frames per second. An old tape on an old TV, on purpose!	Картинка получает VHS-вид игры: 320×240, 12 кадров в секунду. Старая кассета на старом телевизоре — так задумано!
+20 minutes at most per video (longer ones are cut). Sending to the others: about one minute per 5 minutes of video.	Не больше 20 минут на видео (длиннее обрезаются). Отправка другим: около минуты на каждые 5 минут видео.
+Windows 7 and the \"N\" editions of Windows (without the Media Feature Pack) can't convert videos: the rest of the video corner works.	Windows 7 и «N»-редакции Windows (без Media Feature Pack) не могут конвертировать видео: остальной видеоуголок работает.
+Look at a tape (set down) or hold it, and press R: the editing panel opens (mouse free; Esc to close).	Посмотри на кассету (лежащую) или возьми её в руки и нажми R: откроется панель монтажа (мышь свободна; Esc — закрыть).
+In the panel	В панели
+Title: type it then WRITE (or Enter), it's written on the spine.	Название: введи его и нажми НАПИСАТЬ (или Enter), оно появится на корешке.
+Small screen: PLAY / PAUSE with sound; click or drag the time bar to move.	Маленький экран: ПУСК / ПАУЗА со звуком; кликни по полосе времени или тяни её, чтобы перемотать.
+START HERE / END HERE: the part to keep or export (in blue). ALL: the whole tape.	НАЧАЛО ЗДЕСЬ / КОНЕЦ ЗДЕСЬ: часть, которую оставить или экспортировать (синим). ВСЁ: вся кассета.
+TRIM: keeps only the selection (two clicks). Next recordings are added after it.	ОБРЕЗАТЬ: оставляет только выделение (два клика). Следующие записи добавляются после него.
+ERASE THE TAPE: it becomes blank again (two clicks), the title stays.	СТЕРЕТЬ КАССЕТУ: она снова чистая (два клика), название остаётся.
+EXPORT AS .MP4 writes the selection as a real video file (H.264 with sound, picture ×3, MWCoop logo at the top left) in Videos\\CoopVideos. CHANGE opens the Windows folder picker, OPEN opens the folder.	ЭКСПОРТ В .MP4 сохраняет выделение как настоящий видеофайл (H.264 со звуком, картинка ×3, логотип MWCoop слева вверху) в Videos\\CoopVideos. ИЗМЕНИТЬ открывает выбор папки Windows, ОТКРЫТЬ открывает папку.
+Trim, erase and the title change the tape for everybody; the export is only on your PC (not on Windows 7).	Обрезка, стирание и название меняют кассету у всех; экспорт — только на твоём ПК (не на Windows 7).
+From the launcher	Из лаунчера
+MEDIA > VHS page: every tape of your game (even inside a VCR or a camcorder). Pick one: its preview plays on the right, EXPORT AS .MP4 makes a video of it (in Videos\\CoopVideos), and you can rename it, erase it or put a video from your PC on it (game closed).	МЕДИА > страница VHS: все кассеты твоей игры (даже в видеомагнитофоне или видеокамере). Выбери одну: справа идёт превью, «Экспорт в .mp4» делает из неё видео (в Videos\\CoopVideos), а ещё её можно переименовать, стереть или записать на неё видео с ПК (игра закрыта).
+Open the VHS page	Открыть страницу VHS
+The KARTTURI 2000 is an old rally GPS with a green screen, like a handheld console. Seated next to the driver, you read the road ahead on it and call the corners out loud (voice chat): a real co-driver.	KARTTURI 2000 — старый раллийный GPS с зелёным экраном, как карманная консоль. Сидя рядом с водителем, ты читаешь на нём дорогу впереди и диктуешь повороты вслух (голосовой чат): настоящий штурман.
+Using it	Как пользоваться
+Buy it at the OSUUSKAUPPA s21 shop (690 mk) and take it out of the bag.	Купи его в магазине OSUUSKAUPPA s21 (690 mk) и достань из пакета.
+Pick it up, get in as a passenger (Enter near the seat).	Возьми его и садись пассажиром (Enter рядом с сиденьем).
+F: you hold it up, at the bottom of your view; look down to see it closer. F (or right click): lower it.	F: поднимаешь его, он внизу поля зрения; посмотри вниз, чтобы увидеть ближе. F (или ПКМ): опустить.
+The screen	Экран
+Top: the stage (SS1, SS2, SS3) and the kilometres left. Middle: the map turning with the car, the stage road in dark.	Вверху: спецучасток (SS1, SS2, SS3) и оставшиеся километры. В центре: карта, которая поворачивается с машиной, дорога спецучастка — тёмным.
+Bottom: the next note in big (arrow on the side of the corner, grade from 1, very tight, to 6, almost straight; H: hairpin; CREST: crest), its distance, then the note after. TIGHTENS: it gets tighter; OPENS: it opens up; LONG: long corner.	Внизу: следующая подсказка крупно (стрелка в сторону поворота, степень от 1 — очень крутой, до 6 — почти прямо; H: шпилька; CREST: гребень), расстояние до неё, затем следующая. TIGHTENS: поворот закручивается; OPENS: раскрывается; LONG: длинный поворот.
+A beep when a corner is passed: read the next note. Two beeps: hairpin or 1 less than 80 m away.	Один сигнал — поворот пройден: читай следующую подсказку. Два сигнала: шпилька или «1» ближе 80 м.
+The line is the one the weekend rally drivers follow: the notes also work outside the rally, as soon as you drive on a stage road, in its direction. Off stage, just the map.	Траектория та же, что у гонщиков ралли выходного дня: подсказки работают и вне ралли, как только ты едешь по дороге спецучастка в его направлении. Вне спецучастка — только карта.
+The others see you holding it with both hands, and its screen works for everyone (also lying in the car).	Другие видят, как ты держишь его обеими руками, и его экран работает у всех (даже когда он лежит в машине).
+Co-op menu: players, appearance, chat, graphics	Кооп-меню: игроки, внешность, чат, графика
+Write to the other players (chat) — key can be changed: Game options > Keys	Писать другим игрокам (чат) — клавишу можно сменить: Настройки игры > Клавиши
+Wallet: give money to another player (key can be changed)	Кошелёк: дать денег другому игроку (клавишу можно сменить)
+Talk to nearby players (Steam voice, fades with distance) — key can be changed	Говорить с игроками рядом (голос Steam, тише с расстоянием) — клавишу можно сменить
+Map: players live, places (wheel: zoom, drag: move, C: yourself) — key can be changed	Карта: игроки в реальном времени, места (колесо: зум, перетаскивание: сдвиг, C: к себе) — клавишу можно сменить
+Third-person view: behind your character on foot, behind your vehicle when driving (key can be changed)	Вид от третьего лица: за персонажем пешком, за машиной за рулём (клавишу можно сменить)
+Drone camera: photo mode (viewfinder, zoom, tilt; left click: photo in Pictures\\CoopPictures) — keys can be changed	Камера дрона: фоторежим (видоискатель, зум, наклон; ЛКМ: фото в Pictures\\CoopPictures) — клавиши можно сменить
+Cheat panel, if the host allows cheats (key can be changed). In the chat: /help	Панель читов, если хост разрешил читы (клавишу можно сменить). В чате: /help
+Close the co-op menu	Закрыть кооп-меню
+Switch tabs in the co-op menu	Переключать вкладки кооп-меню
+Sit in a passenger seat (near the seat)	Сесть на пассажирское место (рядом с сиденьем)
+After dying: come back at the apartment or the parents' house	После смерти: вернуться в квартиру или в дом родителей
+Wake up when sleeping alone (time only moves on when everyone sleeps)	Проснуться, если спишь один (время идёт вперёд, только когда спят все)
+Steam overlay: invite friends during the game	Оверлей Steam: пригласить друзей во время игры
+KARTTURI 2000 in hand, seated as a passenger: hold it up / lower it	KARTTURI 2000 в руке, сидя пассажиром: поднять / опустить
+Camcorder in hand: F = to the eye (left click: film / pause; F: lower, end of take); set down: R = record / stop	Видеокамера в руке: F = к глазу (ЛКМ: снимать / пауза; F: опустить, конец дубля); поставлена: R = запись / стоп
+In the chat, holding a tape: write a title on the spine, or put one of your videos on it (/title · /import)	В чате, с кассетой в руке: написать название на корешке или записать на неё своё видео (/title · /import)
+Getting started	С чего начать
+Playing together	Играем вместе
+Mods and sharing	Моды и обмен
+Settings and options	Настройки и опции
+Problems and fixes	Проблемы и решения
+Two game installs (old copies): the launcher and Steam don't start the same one	Две установки игры (старые копии): лаунчер и Steam запускают разные
+Antivirus quarantining version.dll, or blocking the folder	Антивирус отправляет version.dll в карантин или блокирует папку
+Another version.dll (ReShade…) next to the game	Другой version.dll (ReShade…) рядом с игрой
+Launcher copied elsewhere (desktop, OneDrive): it doesn't update	Лаунчер скопирован в другое место (рабочий стол, OneDrive): он не обновляется
+Install MWCoop	Установка MWCoop
+Where to put the files, and off you go	Куда положить файлы — и вперёд
+The ideal install	Идеальная установка
+What always works, and the traps	Что работает всегда и где ловушки
+Updating	Обновление
+One click, and the same version for everyone	Один клик — и у всех одна версия
+The launcher at a glance	Лаунчер с первого взгляда
+Where to find what	Где что искать
+Host a game	Хостить игру
+Lobby, invites, READY, START	Лобби, приглашения, ГОТОВ, НАЧАТЬ ИГРУ
+Join a friend	Подключиться к другу
+Through Steam or by address	Через Steam или по адресу
+Steam or IP / VPN	Steam или IP / VPN
+The network, the port, the firewall	Сеть, порт, брандмауэр
+Save: host and guests	Сохранение: хост и гости
+Whose game it is	Чья это игра
+In game: keys and menu	В игре: клавиши и меню
+F10, chat, passenger seats…	F10, чат, места пассажиров…
+Drone camera (photos)	Камера дрона (фото)
+F8: viewfinder, zoom, flash	F8: видоискатель, зум, вспышка
+The OSUUSKAUPPA s21 shop	Магазин OSUUSKAUPPA s21
+Shelves, till, shopping bag	Полки, касса, пакет для покупок
+Film and watch (VHS)	Снимать и смотреть (VHS)
+Camcorder, VCR, TV	Видеокамера, видеомагнитофон, телевизор
+/import: a real video in the game	/import: настоящее видео в игре
+Press R: trim, erase, .mp4	Нажми R: обрезка, стирание, .mp4
+The Museum of Corsica	Музей Корсики
+Relief model, busts, paintings, rallying	Рельефный макет, бюсты, картины, ралли
+Rally co-driver (KARTTURI 2000)	Штурман ралли (KARTTURI 2000)
+The GPS that calls the corners	GPS, который подсказывает повороты
+MSCLoader: official or MWCoop	MSCLoader: официальный или MWCoop
+The two choices of the Mods tab	Два варианта во вкладке «Моды»
+Share your mods	Делись модами
+From host to guests, kept apart	От хоста к гостям, отдельно
+CDs, radio, posters, paint	CD, радио, постеры, краска
+The three ways to start the game	Три способа запустить игру
+All settings	Все настройки
+What each option does	Что делает каждая опция
+Outfit, car, graphics	Одежда, машина, графика
+Your character and your picture	Твой персонаж и твоя картинка
+MWCoop doesn't load	MWCoop не загружается
+The game starts without the mod	Игра запускается без мода
+My friends can't join	Друзья не могут подключиться
+Version, port, firewall	Версия, порт, брандмауэр
+My mods don't load	Мои моды не загружаются
+MSCLoader and the host's files	MSCLoader и файлы хоста
+Antivirus and false alarms	Антивирус и ложные тревоги
+Check and allow MWCoop	Проверить и разрешить MWCoop
+Send your logs	Отправь свои логи
+The zip that helps fix things	Zip, который помогает всё исправить
+Several saves	Несколько сохранений
+One game per group of friends	Одна игра на каждую компанию друзей
+THE GAME	ИГРА
+LAUNCHER	ЛАУНЧЕР
+MWCOOP LOADER	ЗАГРУЗЧИК MWCOOP
+THE MOD, PROFILES, LOGS	МОД, ПРОФИЛИ, ЖУРНАЛЫ
+YOUR MODS (MSCLOADER)	ТВОИ МОДЫ (MSCLOADER)
+OFFICIAL MSCLOADER (OPTIONAL)	ОФИЦИАЛЬНЫЙ MSCLOADER (НЕОБЯЗАТЕЛЬНО)
+GAME DATA	ДАННЫЕ ИГРЫ
+Change	Изменить
+The game the launcher found, and its folder	Игра, найденная лаунчером, и её папка
+To pick another one (Settings > Game too)	Чтобы выбрать другую (также Настройки > Игра)
+Separate copy of the game (default)	Отдельная копия игры (по умолчанию)
+Straight from the game folder	Прямо из папки игры
+Through Steam (launcher closes)	Через Steam (лаунчер закрывается)
+(your current setting is highlighted)	(твоя текущая настройка выделена)
+SOLO	SOLO
+1 network · 2 open a lobby · 3 enter a friend's · 4 play alone, with MWCoop	1 сеть · 2 открыть лобби · 3 зайти в лобби друга · 4 играть одному, с MWCoop
+Everyone: READY	Все: ГОТОВ
+Host: START	Хост: НАЧАТЬ ИГРУ
+Everyone's game starts together, in the host's game.	Игра у всех запускается одновременно, в игре хоста.
+OFFICIAL: the one installed in the game folder (winhttp.dll). The same as solo.	ОФИЦИАЛЬНЫЙ: тот, что установлен в папке игры (winhttp.dll). Как в соло.
+MWCOOP: installed apart by the launcher, the game isn't changed. Your mods stay the ones in the Mods folder.	MWCOOP: ставится лаунчером отдельно, игра не меняется. Твои моды — те же, что в папке Mods.
+REINSTALL: puts MSCLoader back fresh (your mods and their settings are kept).	ПЕРЕУСТАНОВИТЬ: ставит MSCLoader заново (твои моды и их настройки сохраняются).
+The host	Хост
+their mods	его моды
+CDs, images, paint…	диски, картинки, покраска…
+You (guest)	Ты (гость)
+separate copy	отдельная копия
+FOR THIS GAME	ДЛЯ ЭТОЙ ИГРЫ
+your own mods	твои собственные моды
+UNTOUCHED	НЕ ТРОНУТЫ
+Sent in the lobby, copied apart on your side: your save, mods and settings don't move.	Отправлены в лобби, копируются у тебя отдельно: твоё сохранение, моды и настройки не меняются.
+Their mods, CDs and images, copied apart, without asking	Его моды, диски и картинки, копируются отдельно, без вопросов
+Game options > Game and sharing (your current setting)	Настройки игры > Игра и обмен (твоя текущая настройка)
+Start your game, then close it	Запусти игру, затем закрой её
+The zip is created on your desktop: send it on the Discord.	Zip-архив появится на рабочем столе: отправь его в Discord.
+Update · 0.64.0	Обновить · 0.64.0
+Shows under the logo when a version is out. One click: downloaded and installed, the launcher restarts.	Появляется под логотипом, когда выходит версия. Один клик: загрузка и установка, лаунчер перезапускается.
+Host and guests: always the same version.	Хост и гости: всегда одна и та же версия.
+Their own save: everyone's game. They save like in solo.	Его сохранение — игра для всех. Он сохраняет как в соло.
+Plays in the host's world, with a separate profile: their own solo save is never touched.	Играет в мире хоста, с отдельным профилем: его соло-сохранение никогда не трогается.
+Their money, crimes, outfit: kept for them, from one session to the next.	Его деньги, нарушения, одежда: сохраняются за ним от сессии к сессии.
+CDs	Диски
+Flag	Флаг
+Paint	Покраска
+What you put in your game, your guests see and hear it too.	Что ты добавишь в свою игру, гости тоже увидят и услышат.

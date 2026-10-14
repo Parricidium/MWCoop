@@ -234,7 +234,7 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
             Pen kp(TH(fieldBorder), 1.2f); g.DrawPath(&kp, &p);
             Pen kd(TH(fieldBorder), 2.4f); g.DrawLine(&kd, k.X + 6, k.Y + k.Height, k.X + k.Width - 6, k.Y + k.Height);
             Text(g, kWikiKeys[i].key, k, 12, FontStyleBold, kInk);
-            Text(g, g_fr ? kWikiKeys[i].fr : kWikiKeys[i].en, RectF(x + 110, ky, w - 110, 28), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
+            Text(g, T(kWikiKeys[i].fr, kWikiKeys[i].en), RectF(x + 110, ky, w - 110, 28), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
         }
         return h + 16;
     }
@@ -277,7 +277,7 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
             float ry = y + i * 34.0f;
             Icon(g, IC_CLOSE, x + 12, ry + 13, 14, kRed, 2.6f);
             Icon(g, bad[i].ic, x + 38, ry + 13, 16, kInk, 1.8f);
-            Text(g, g_fr ? bad[i].fr : bad[i].en, RectF(x + 56, ry, w - 56, 26), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
+            Text(g, T(bad[i].fr, bad[i].en), RectF(x + 56, ry, w - 56, 26), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
         }
         return 152;
     }
@@ -307,7 +307,7 @@ static void DrawWikiList(Graphics &g)
         if (hot) { GraphicsPath p; RoundRect(p, r, 12); SolidBrush b(TH(card)); g.FillPath(&b, &p); }
         Icon(g, open ? IC_CHEVD : IC_CHEVR, r.X + 16, r.Y + 21, 14, kGrey, 2.2f);
         Icon(g, kWikiCat[c].icon, r.X + 40, r.Y + 21, 18, kAcc, 1.9f);
-        Text(g, g_fr ? kWikiCat[c].fr : kWikiCat[c].en, RectF(r.X + 58, r.Y, r.Width - 96, r.Height), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, T(kWikiCat[c].fr, kWikiCat[c].en), RectF(r.X + 58, r.Y, r.Width - 96, r.Height), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
         std::wstring ns = std::to_wstring(n);
         float pw = PillW(ns, 10);
         Pill(g, RectF(r.X + r.Width - pw - 8, r.Y + 11, pw, 20), TH(cardSel), ns, kGrey, 10);
@@ -320,7 +320,7 @@ static void DrawWikiList(Graphics &g)
             bool on = a == g_wikiSel, ah = g_uiHot == UI_WIKI_ART + a;
             if (on || ah) { GraphicsPath p; RoundRect(p, ar, 10); SolidBrush b(on ? TH(cardSel) : TH(card)); g.FillPath(&b, &p); }
             if (on) { SolidBrush d(kAcc); g.FillEllipse(&d, ar.X + 10, ar.Y + 14, 6.0f, 6.0f); }
-            Text(g, g_fr ? kWikiArt[a].tFr : kWikiArt[a].tEn, RectF(ar.X + 24, ar.Y, ar.Width - 30, ar.Height), 12.5f, on ? FontStyleBold : FontStyleRegular, on ? kInk : WithA(kInk, 0.85f), StringAlignmentNear);
+            Text(g, T(kWikiArt[a].tFr, kWikiArt[a].tEn), RectF(ar.X + 24, ar.Y, ar.Width - 30, ar.Height), 12.5f, on ? FontStyleBold : FontStyleRegular, on ? kInk : WithA(kInk, 0.85f), StringAlignmentNear);
             HotZone(ar, UI_WIKI_ART + a);
             y += 38;
         }
@@ -337,9 +337,9 @@ static void DrawWikiPage(Graphics &g)
     DrawWikiList(g);
     const WikiArticle &art = kWikiArt[g_wikiSel];
     RectF b = kWikiBody;
-    SmallLabel(g, g_fr ? kWikiCat[art.cat].fr : kWikiCat[art.cat].en, RectF(b.X + 28, b.Y + 18, 400, 18), kAcc);
-    Title(g, g_fr ? art.tFr : art.tEn, RectF(b.X + 28, b.Y + 34, b.Width - 56, 34), 24, kInk);
-    Text(g, g_fr ? art.sFr : art.sEn, RectF(b.X + 28, b.Y + 66, b.Width - 56, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    SmallLabel(g, T(kWikiCat[art.cat].fr, kWikiCat[art.cat].en), RectF(b.X + 28, b.Y + 18, 400, 18), kAcc);
+    Title(g, T(art.tFr, art.tEn), RectF(b.X + 28, b.Y + 34, b.Width - 56, 34), 24, kInk);
+    Text(g, T(art.sFr, art.sEn), RectF(b.X + 28, b.Y + 66, b.Width - 56, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     Pen sep(TH(sep), 1); g.DrawLine(&sep, b.X + 28, b.Y + 90, b.X + b.Width - 28, b.Y + 90);
     RectF area = WikiArea();
     float sc = g_scroll[TAB_WIKI], y = area.Y + 8 - sc, w = area.Width - 14;
@@ -350,7 +350,7 @@ static void DrawWikiPage(Graphics &g)
     auto vis = [&](float top, float h) { return top + h >= area.Y && top <= area.Y + area.Height; };
     for (int i = 0; i < art.n; i++) {
         const WikiBlock &k = art.b[i];
-        std::wstring t = k.fr ? (g_fr ? k.fr : k.en) : L"";
+        std::wstring t = k.fr ? T(k.fr, k.en) : L"";
         if (k.kind == WB_H) {
             if (i > 0) y += 6;
             folded = g_wikiFold.count(g_wikiSel * 1000 + i) != 0;

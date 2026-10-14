@@ -73,7 +73,7 @@ def run(files, cpp, pat, name):
     print(name, len(rows), "textes,", len(bads), "appels non litteraux")
 
 L = os.path.join(ROOT, "launcher")
-lf = [os.path.join(L, f) for f in sorted(os.listdir(L)) if f.endswith((".cpp", ".inc")) and not f.startswith("wiki") and f != "ru.inc"]
+lf = [os.path.join(L, f) for f in sorted(os.listdir(L)) if f.endswith((".cpp", ".inc")) and not f.startswith("wikidata") and f != "ru.inc"]
 run(lf, True, r"(?<![A-Za-z0-9_])T\(", "launcher")
 M = os.path.join(ROOT, "src", "MWCoop")
 mf = []
