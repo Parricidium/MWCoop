@@ -142,9 +142,7 @@ namespace MWCoop
             if (s == null) return false;
             try
             {
-                var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, new Hook { Target = e, StateName = stateName });
-                s.Actions = list.ToArray();
+                FsmHooks.Prepend(s, new Hook { Target = e, StateName = stateName });
                 return true;
             }
             catch (Exception) { return false; }   // automate pas encore charge (objet inactif) : au prochain passage

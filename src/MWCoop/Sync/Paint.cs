@@ -92,9 +92,7 @@ namespace MWCoop
                 if (!s.IsInitialized) continue;
                 try
                 {
-                    var list = new List<FsmStateAction>(s.Actions);
-                    list.Insert(0, new Hook { F = f });
-                    s.Actions = list.ToArray();
+                    FsmHooks.Prepend(s, new Hook { F = f });
                 }
                 catch { continue; }
                 hooked.Add(f);

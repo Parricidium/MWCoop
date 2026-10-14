@@ -193,9 +193,7 @@ namespace MWCoop
         {
             FsmState st = f.Fsm.GetState(state);
             if (st == null) { Log.Warn("appels : etat '" + state + "' absent de " + Recon.Path(f.transform) + "::" + f.FsmName); return; }
-            var list = new List<FsmStateAction>(st.Actions);
-            list.Insert(0, new Hook { Kind = kind, Index = index, F = f });
-            st.Actions = list.ToArray();
+            FsmHooks.Prepend(st, new Hook { Kind = kind, Index = index, F = f });
         }
 
         static void OnHook(Hook h)

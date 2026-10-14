@@ -416,9 +416,7 @@ namespace MWCoop
             {
                 foreach (FsmState st in f.Fsm.States)
                 {
-                    var list = new List<FsmStateAction>(st.Actions);
-                    list.Insert(0, new Hook { J = w, State = st.Name });
-                    st.Actions = list.ToArray();
+                    FsmHooks.Prepend(st, new Hook { J = w, State = st.Name });
                 }
             }
             catch { return false; }

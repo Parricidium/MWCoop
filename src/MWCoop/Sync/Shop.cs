@@ -469,9 +469,7 @@ namespace MWCoop
             FsmState s = r.Fsm.Fsm.GetState("Spawn bag");
             try
             {
-                var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, new Hook { R = r });
-                s.Actions = list.ToArray();
+                FsmHooks.Prepend(s, new Hook { R = r });
             }
             catch { return; }
             r.Hooked = true;
@@ -580,9 +578,7 @@ namespace MWCoop
                 {
                     FsmState s = f.Fsm.GetState(st);
                     if (System.Array.Exists(s.Actions, a => a is PayHook)) continue;   // essai precedent interrompu
-                    var list = new List<FsmStateAction>(s.Actions);
-                    list.Insert(0, new PayHook { C = c, StateName = st });
-                    s.Actions = list.ToArray();
+                    FsmHooks.Prepend(s, new PayHook { C = c, StateName = st });
                 }
                 // Objets crees par le comptoir (verres du bar) : ID d'achat a la creation.
                 if (c.Kind == "bar")
@@ -591,9 +587,7 @@ namespace MWCoop
                         List<CreateObject> acts = null;
                         foreach (FsmStateAction a in s.Actions) { var co = a as CreateObject; if (co != null) { if (acts == null) acts = new List<CreateObject>(); acts.Add(co); } }
                         if (acts == null || System.Array.Exists(s.Actions, a => a is Made)) continue;
-                        var list = new List<FsmStateAction>(s.Actions);
-                        list.Add(new Made { C = c, Acts = acts.ToArray() });
-                        s.Actions = list.ToArray();
+                        FsmHooks.Append(s, new Made { C = c, Acts = acts.ToArray() });
                         made++;
                     }
                 // Caisse burger : 'State 4' envoie la commande a Keijo ; en fin d'etat, un rejeu qu'il n'a pas prise.
@@ -602,9 +596,7 @@ namespace MWCoop
                     FsmState s4 = f.Fsm.GetState("State 4");
                     if (!System.Array.Exists(s4.Actions, a => a is OrderHook))
                     {
-                        var list = new List<FsmStateAction>(s4.Actions);
-                        list.Add(new OrderHook { C = c });
-                        s4.Actions = list.ToArray();
+                        FsmHooks.Append(s4, new OrderHook { C = c });
                     }
                 }
             }
@@ -627,9 +619,7 @@ namespace MWCoop
                 FsmState start = w.Fsm.GetState(c.WaiterStart);
                 if (start != null && !System.Array.Exists(start.Actions, a => a is ServeStart))
                 {
-                    var l = new List<FsmStateAction>(start.Actions);
-                    l.Insert(0, new ServeStart { C = c });
-                    start.Actions = l.ToArray();
+                    FsmHooks.Prepend(start, new ServeStart { C = c });
                 }
                 foreach (FsmState s in w.Fsm.States)
                 {
@@ -637,9 +627,7 @@ namespace MWCoop
                     foreach (FsmStateAction a in s.Actions) { var co = a as CreateObject; if (co != null) { if (acts == null) acts = new List<CreateObject>(); acts.Add(co); } }
                     bool place = s.Name == c.PlaceState;
                     if ((acts == null && !place) || System.Array.Exists(s.Actions, a => a is Served)) continue;
-                    var list = new List<FsmStateAction>(s.Actions);
-                    list.Add(new Served { C = c, Acts = acts != null ? acts.ToArray() : new CreateObject[0], Place = place });
-                    s.Actions = list.ToArray();
+                    FsmHooks.Append(s, new Served { C = c, Acts = acts != null ? acts.ToArray() : new CreateObject[0], Place = place });
                     if (acts != null) made++;
                 }
             }
@@ -924,9 +912,7 @@ namespace MWCoop
                     {
                         // (+ "Play anim" : le debut d'une gorgee / bouchee, annonce pour verrouiller le bouton chez les autres.)
                         if (!(s.Name.StartsWith("State ") || s.Name == "Play anim") || System.Array.Exists(s.Actions, a => a is EatHook)) continue;
-                        var l = new List<FsmStateAction>(s.Actions);
-                        l.Insert(0, new EatHook { Id = e.Id, Path = path, StateName = s.Name });
-                        s.Actions = l.ToArray();
+                        FsmHooks.Prepend(s, new EatHook { Id = e.Id, Path = path, StateName = s.Name });
                         n++;
                     }
                 }

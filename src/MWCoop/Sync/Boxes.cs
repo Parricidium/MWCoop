@@ -101,10 +101,8 @@ namespace MWCoop
                 if (!IsCreate(s)) continue;
                 try
                 {
-                    var list = new List<FsmStateAction>(s.Actions);
-                    list.Insert(0, new Start { F = f, Id = id });
-                    list.Add(new End { F = f });
-                    s.Actions = list.ToArray();
+                    FsmHooks.Prepend(s, new Start { F = f, Id = id });
+                    FsmHooks.Append(s, new End { F = f });
                     n++;
                     if (Consume.TouchesPlayer(s) && warned.Add(s)) Log.Warn("boites : " + id + " '" + s.Name + "' touche au joueur (objet pose ensuite a la place recue)");
                 }

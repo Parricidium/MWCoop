@@ -123,7 +123,7 @@ namespace MWCoop
                 foreach (string tn in new[] { "L", "LX", "SLX", "GT" })
                 {
                     FsmState ts = f.Fsm.GetState(tn);
-                    if (ts != null) { var l = new System.Collections.Generic.List<FsmStateAction>(ts.Actions); l.Insert(0, new TrimSeen { Name = tn }); ts.Actions = l.ToArray(); }
+                    if (ts != null) { FsmHooks.Prepend(ts, new TrimSeen { Name = tn }); }
                 }
                 if (!found) for (int i = 0; i < r.weights.Length; i++) r.weights[i].Value = 1f;
                 return;

@@ -668,9 +668,7 @@ namespace MWCoop
                 {
                     FsmState st = f.Fsm.GetState(s);
                     if (st == null) continue;
-                    var list = new List<FsmStateAction>(st.Actions);
-                    list.Insert(0, new HitHook { Key = key, Target = s });
-                    st.Actions = list.ToArray();
+                    FsmHooks.Prepend(st, new HitHook { Key = key, Target = s });
                     hitHooked++;
                     Log.Info("PNJ : " + key + " \"" + s + "\" (renverse) rejoue chez tous");
                 }

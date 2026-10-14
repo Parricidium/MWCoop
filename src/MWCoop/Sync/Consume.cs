@@ -228,7 +228,7 @@ namespace MWCoop
                 if (s7 == null || !s7.IsInitialized) continue;
                 bool has = false;
                 foreach (FsmStateAction a in s7.Actions) if (a is PickHook) has = true;
-                if (!has) { var l = new List<FsmStateAction>(s7.Actions); l.Insert(0, new PickHook { Path = p }); s7.Actions = l.ToArray(); }
+                if (!has) { FsmHooks.Prepend(s7, new PickHook { Path = p }); }
                 n++;
             }
             if (n == SpawnerPaths.Length) { spawnersHooked = true; Log.Info("consommables : articles sortis des sacs suivis (" + n + " distributeurs)"); }
@@ -634,9 +634,7 @@ namespace MWCoop
                 try
                 {
                     if (!Tracked(s)) continue;
-                    var list = new List<FsmStateAction>(s.Actions);
-                    list.Insert(0, new Hook { Id = idv.Value, StateName = s.Name });
-                    s.Actions = list.ToArray();
+                    FsmHooks.Prepend(s, new Hook { Id = idv.Value, StateName = s.Name });
                     any = true;
                 }
                 catch { }
@@ -687,10 +685,8 @@ namespace MWCoop
                         made.Add(c);
                     }
                     if (made == null) continue;
-                    var list = new List<FsmStateAction>(st.Actions);
-                    list.Insert(0, new PreSpawn());
-                    list.Add(new Spawned(made.ToArray()));
-                    st.Actions = list.ToArray();
+                    FsmHooks.Prepend(st, new PreSpawn());
+                    FsmHooks.Append(st, new Spawned(made.ToArray()));
                     n++;
                 }
             }
@@ -823,9 +819,7 @@ namespace MWCoop
 
         static void Prepend(FsmState s, FsmStateAction a)
         {
-            var list = new List<FsmStateAction>(s.Actions);
-            list.Insert(0, a);
-            s.Actions = list.ToArray();
+            FsmHooks.Prepend(s, a);
         }
 
         internal static void MarkUse(PlayMakerFSM f)

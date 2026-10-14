@@ -27,9 +27,7 @@ namespace MWCoop
                 if (f.Fsm == null || !f.Fsm.Initialized) return;
                 FsmState s = f.Fsm.GetState("Save game");
                 if (s == null) { injected = true; Log.Warn("sauvegarde du jeu : etat \"Save game\" introuvable, objets des ajouts ecrits a la sortie seulement"); return; }
-                var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, new Hook());
-                s.Actions = list.ToArray();
+                FsmHooks.Prepend(s, new Hook());
                 injected = true;
                 Log.Info("sauvegarde du jeu : suivie (objets des ajouts ecrits a chaque sauvegarde)");
                 return;

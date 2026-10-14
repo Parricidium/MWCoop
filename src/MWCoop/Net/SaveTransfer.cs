@@ -498,9 +498,7 @@ namespace MWCoop.Net
                     var mp = a as HutongGames.PlayMaker.Actions.MousePickEvent;
                     if (mp != null && mp.mouseOver != null) { b.Pick = mp; b.PickOver = mp.mouseOver; break; }
                 }
-                var list = new List<FsmStateAction>(s.Actions);
-                list.Insert(0, new ButtonHook { B = b });
-                s.Actions = list.ToArray();
+                FsmHooks.Prepend(s, new ButtonHook { B = b });
                 b.Hooked = true;
                 b.Click.ToState = "Wait";
                 // Texte du survol : le parametre FsmString du SetStringValue qui affiche "SAVE AND QUIT TO MENU".

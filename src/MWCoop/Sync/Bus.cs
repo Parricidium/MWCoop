@@ -130,9 +130,7 @@ namespace MWCoop
         {
             FsmState st = f.Fsm.GetState(state);
             if (st == null) { Log.Warn("bus : etat '" + state + "' absent de " + f.FsmName); return; }
-            var list = new List<FsmStateAction>(st.Actions);
-            list.Insert(0, new ActHook { What = what });
-            st.Actions = list.ToArray();
+            FsmHooks.Prepend(st, new ActHook { What = what });
             Log.Info("bus : " + f.gameObject.name + "::" + f.FsmName + " \"" + state + "\" suivi");
         }
 
