@@ -23,7 +23,7 @@ namespace MWCoop
         class Esine { public string Id, Kind, Data = ""; public GameObject Go; public Rigidbody Rb; public BoxCollider Col; public Transform Screen; }
         static readonly List<Esine> esineet = new List<Esine>();
         static bool esineLoaded;
-        static float nextEsineSync, nextEsineSave;
+        static float nextEsineSync;
 
         public static string ItemKeyOf(Rigidbody rb)
         {
@@ -174,13 +174,12 @@ namespace MWCoop
         public static void OnItem(int who, NetReader r)
         {
             int op = r.U8(); string id = r.Str();
-            if (op == 2) { Esine x = FindItem(id); if (x != null) RemoveItem(x, false); SaveItems(); return; }
+            if (op == 2) { Esine x = FindItem(id); if (x != null) RemoveItem(x, false); return; }
             string kind = r.Str(), data = r.Str(); Vector3 p = r.Vec(); Quaternion q = r.Quat();
             if (!Active || root == null) return;
             Esine e = FindItem(id);
             if (e == null) CreateItem(id, kind, p, q, data);
             else if (e.Data != data) { e.Data = data; }
-            SaveItems();
         }
 
         // Nouvel objet : cree ici par l'hote ou le joueur seul, sinon demande a l'hote.
@@ -192,7 +191,6 @@ namespace MWCoop
                 do id = "e" + DateTime.Now.Ticks.ToString("x") + (++idSeq).ToString("x"); while (FindItem(id) != null);   // (horloge a ~1 ms : plusieurs objets du meme sac dans la meme image)
                 Esine e = CreateItem(id, kind, pos, rot, data);
                 SendItem(e);
-                SaveItems();
                 L("video : " + kind + " " + e.Id + " pose en " + pos.ToString("F1"));
                 return;
             }
@@ -217,8 +215,10 @@ namespace MWCoop
         {
             e.Data = data;
             SendItem(e);
-            SaveItems();
         }
+
+        // Sauvegarde du jeu (SaveHook) : seul moment ou les objets s'ecrivent (JD, 14/10) ; boutique coupee (objets jamais lus) : rien.
+        public static void OnGameSaveVideo() { if (esineLoaded) SaveItems(); }
 
         static void SaveItems()
         {
@@ -262,7 +262,6 @@ namespace MWCoop
             if (BagAuthority && esineet.Count > 0)
             {
                 if (Session.Active && Session.RemoteCount > 0 && now >= nextEsineSync) { nextEsineSync = now + 12f; foreach (Esine e in esineet) SendItem(e); }
-                if (now >= nextEsineSave) { nextEsineSave = now + 60f; SaveItems(); }
             }
             TickInsert();
             TickScreens(now);
@@ -297,7 +296,6 @@ namespace MWCoop
             SetData(v, content + "|0");
             try { MasterAudio.PlaySound3DAtVector3AndForget("HouseFoley", v.Go.transform.position, 0.6f, null, 0f, "mailbox_open"); } catch { }
             L("video : cassette inseree dans " + v.Id);
-            SaveItems();
         }
 
         static void Eject(Esine vcr)

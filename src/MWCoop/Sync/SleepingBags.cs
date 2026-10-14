@@ -32,7 +32,7 @@ namespace MWCoop
         static Material mat;
         static GameObject sleepTpl;
         static bool prepared, listed;
-        static float startAt = -1, nextHost, nextSave, fDownAt = -1;
+        static float startAt = -1, nextHost, fDownAt = -1;
         static Bag looked, fBag;
         static FsmBool guiUse; static FsmString guiText;
         const float FoldScale = 0.32f;    // (modele plie fourni a 1 m de diametre : ramene a 32 cm x 49 cm)
@@ -228,7 +228,6 @@ namespace MWCoop
                 if (sleepTpl == null) return;
                 if (Session.Active && Kauppa.StarterBags) EnsureCount();
                 if (Session.Active && now >= nextHost) { nextHost = now + 10f; SendList(); }
-                if (now >= nextSave) { nextSave = now + 60f; Save(); }
             }
             if (bags.Count == 0) return;
             // Ajouts coop coupes (lanceur, Partie ; demande de Menor, 12/10 : « un jeu 100 % vanilla ») : sacs caches ici
@@ -381,7 +380,6 @@ namespace MWCoop
             b.Rb.velocity = Vector3.zero; b.Rb.angularVelocity = Vector3.zero;
             b.Parked = false;
             ApplyFolded(b, folded, true);
-            if (Authority) Save();
             if (send && Session.Active) Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@sac").Str(b.Id).Bool(folded).Vec(pos).Quat(rot), true);
         }
 
@@ -472,7 +470,6 @@ namespace MWCoop
                 Create("sac" + (k + 1), at, q);
                 Log.Info("sacs de couchage : sac" + (k + 1) + " pose " + (home ? "dans la maison du depart" : "devant l'hote") + " en " + at.ToString("F1") + " (un par joueur)");
             }
-            Save();
             SendList();
         }
 
@@ -529,13 +526,13 @@ namespace MWCoop
             while (Find("sac" + n) != null) n++;
             Bag b = Create("sac" + n, pos, rot);
             b.Parked = false; b.Rb.isKinematic = false;
-            Save();
             SendList();
             Log.Info("sac de couchage sac" + n + " achete par #" + who + " (boutique), pose en " + pos.ToString("F1"));
         }
 
-        // Sauvegarde du jeu : la liste aussi (WorldFsms / Game appellent a chaque SAVEGAME vu ici).
-        public static void OnGameSave() { Save(); }
+        // Sauvegarde du jeu (SaveHook) : seul moment ou la liste s'ecrit, comme les objets du jeu (JD, 14/10). Sacs coupes par
+        // les ajouts : caches mais toujours dans la liste, ecrits tels quels ; liste pas encore lue : rien.
+        public static void OnGameSave() { if (listed) Save(); }
 
         // ---------------------------------------------------------------- essais
         // [Test] Autotest=sac : l'hote deplie sac1 a 30 s, le replie a 45 s ; chacun note l'etat a 38 et 52 s.

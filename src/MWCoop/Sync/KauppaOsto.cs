@@ -172,7 +172,7 @@ namespace MWCoop
         static bool pussiTried;
         static Pussi lookedBag;
         static float fDown = -1f;
-        static float nextBagSync, nextBagSave;
+        static float nextBagSync;
 
         public static string KeyOf(Rigidbody rb)
         {
@@ -258,7 +258,6 @@ namespace MWCoop
             Pussi b = CreateBag(id, pos, rot, items);
             if (b == null) { for (int i = 0; i < items.Count; i++) SpawnKind(items[i], pos + Vector3.up * 0.25f * i, rot); return; }   // (sans modele : articles directs)
             SendBag(b);
-            SaveBags();
             L("sac de courses " + id + " : " + string.Join(", ", items.ToArray()));
         }
 
@@ -292,7 +291,6 @@ namespace MWCoop
             if (count <= 0) { if (b != null) RemoveBag(b); }
             else if (b == null) CreateBag(id, p, q, items);
             else { b.Items.Clear(); b.Items.AddRange(items); }
-            SaveBags();
         }
 
         static void RemoveBag(Pussi b)
@@ -333,7 +331,6 @@ namespace MWCoop
             L("sac de courses " + b.Id + " : " + n + " article(s) sorti(s)" + (held ? " (en main)" : "") + ", reste " + b.Count);
             SendBag(b);
             if (b.Count <= 0 && !held) RemoveBag(b);
-            SaveBags();
         }
 
         static bool BagAuthority { get { return !Session.Active || Session.IsHost; } }
@@ -356,8 +353,13 @@ namespace MWCoop
             try { File.WriteAllText(BagFile, sb.ToString()); } catch (Exception e) { L("sacs de courses : ecriture " + e.Message); }
         }
 
+        static bool bagsLoaded;
+        // Sauvegarde du jeu (SaveHook) : seul moment ou les sacs de courses s'ecrivent (JD, 14/10) ; boutique coupee : rien.
+        public static void OnGameSaveBags() { if (bagsLoaded) SaveBags(); }
+
         static void LoadBags()
         {
+            bagsLoaded = true;
             WorldFiles.Check(Path.GetDirectoryName(BagFile));
             if (!BagAuthority || !File.Exists(BagFile)) return;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
@@ -383,7 +385,6 @@ namespace MWCoop
             if (BagAuthority && pussit.Count > 0)
             {
                 if (Session.Active && Session.RemoteCount > 0 && now >= nextBagSync) { nextBagSync = now + 10f; foreach (Pussi b in pussit) SendBag(b); }
-                if (now >= nextBagSave) { nextBagSave = now + 60f; SaveBags(); }
             }
         }
 
