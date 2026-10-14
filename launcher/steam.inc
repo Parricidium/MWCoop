@@ -295,7 +295,6 @@ static std::string SMemberData(SteamId u, const char *k)
 }
 static void SSetMember(const char *k, const std::string &v) { if (g_steamUp == 1 && g_sLobby) sapi::SetLobbyMemberData(sapi::mm, g_sLobby, k, v.c_str()); }
 static void SSetLobby(const char *k, const std::string &v) { if (g_steamUp == 1 && g_sLobby) sapi::SetLobbyData(sapi::mm, g_sLobby, k, v.c_str()); }
-static std::string SIdStr(SteamId id) { char b[32]; sprintf_s(b, "%llu", (unsigned long long)id); return b; }
 
 // Le salon : liste des joueurs refaite d'apres les membres et leurs donnees.
 static void SteamLobbySync();

@@ -1824,76 +1824,8 @@ static float MeasureW(Graphics &g, const std::wstring &s, float px, int style)
     return box.Width;
 }
 
-static void DrawButton(Graphics &g, int id, const wchar_t *label, bool primary)
-{
-    Button &b = g_btn[id];
-    if (!b.visible) return;
-    float a = b.enabled ? 1.0f : 0.38f;
-    RectF r = b.r;
-    if (g_pressed == id && g_hot == id) r.Offset(0, 1);
-    GraphicsPath p;
-    RoundRect(p, r, 12);
-    if (primary) {
-        GraphicsPath sp;   // ombre
-        RoundRect(sp, RectF(r.X + 2, r.Y + 5, r.Width - 4, r.Height), 12);
-        SolidBrush sb(Color((BYTE)(45 * a), 0, 0, 0));
-        g.FillPath(&sb, &sp);
-        LinearGradientBrush lg(r, WithA(kAcc, a), WithA(kAcc2, a), LinearGradientModeHorizontal);
-        g.FillPath(&lg, &p);
-        SolidBrush hi(Color((BYTE)(60 * b.hover * a), 255, 255, 255));
-        g.FillPath(&hi, &p);
-    } else {
-        SolidBrush fill(Mix(WithA(TH(btn2), a), WithA(TH(btn2Hot), a), b.hover));
-        g.FillPath(&fill, &p);
-        Pen pen(WithA(kAcc, a), 1.6f);
-        g.DrawPath(&pen, &p);
-    }
-    float px = 15;   // libelles longs (FERMER LE SALON, REJOINDRE EN JEU) : un peu plus petits
-    while (px > 11 && MeasureW(g, label, px, FontStyleBold) > r.Width - 14) px -= 0.5f;
-    Text(g, label, r, px, FontStyleBold, WithA(primary ? kOnAcc : kAcc, a));
-}
 
-// Petit bouton (Jouer en solo) : pilule discrete, accent au survol.
-// Choix du reseau : barre a deux segments (le choisi en degrade).
-static void DrawNetChoice(Graphics &g)
-{
-    if (!g_btn[B_NETIP].visible) return;
-    RectF a = g_btn[B_NETIP].r, b2 = g_btn[B_NETSTEAM].r, track(a.X, a.Y, b2.X + b2.Width - a.X, a.Height);
-    GraphicsPath tp;
-    RoundRect(tp, track, track.Height / 2);
-    SolidBrush tb(TH(field));
-    g.FillPath(&tb, &tp);
-    Pen tpen(TH(fieldBorder), 1.2f);
-    g.DrawPath(&tpen, &tp);
-    for (int id = B_NETIP; id <= B_NETSTEAM; id++) {
-        Button &b = g_btn[id];
-        bool on = (id == B_NETSTEAM) == g_steamNet;
-        RectF r = b.r;
-        r.Inflate(-3, -3);
-        GraphicsPath p;
-        RoundRect(p, r, r.Height / 2);
-        if (on) { LinearGradientBrush lg(r, kAcc, kAcc2, LinearGradientModeHorizontal); g.FillPath(&lg, &p); }
-        else if (b.hover > 0.01f) { SolidBrush hb(WithA(kAcc, 0.2f * b.hover)); g.FillPath(&hb, &p); }
-        Text(g, id == B_NETIP ? L"IP / VPN" : L"STEAM", r, 12, FontStyleBold, on ? kOnAcc : Mix(kInk, kAcc, b.hover));
-    }
-}
 
-static void DrawSmallButton(Graphics &g, int id, const wchar_t *label)
-{
-    Button &b = g_btn[id];
-    if (!b.visible) return;
-    float a = b.enabled ? 1.0f : 0.38f;
-    RectF r = b.r;
-    if (g_pressed == id && g_hot == id) r.Offset(0, 1);
-    GraphicsPath p;
-    RoundRect(p, r, r.Height / 2);
-    SolidBrush fill(Mix(WithA(TH(btn2), a * 0.75f), WithA(TH(btn2Hot), a), b.hover));
-    g.FillPath(&fill, &p);
-    Color c = WithA(Mix(kGrey, kAcc, b.hover), a);
-    Pen pen(WithA(c, 0.7f), 1.1f);
-    g.DrawPath(&pen, &p);
-    Text(g, label, r, 12, FontStyleBold, c);
-}
 
 static void DrawField(Graphics &g, int i, const wchar_t *label)
 {
@@ -2072,13 +2004,6 @@ static void OptSet(const Opt &o, int v)
 }
 static const Opt *OptByKey(const char *key) { for (auto &o : g_opts) if (!strcmp(o.key, key)) return &o; return NULL; }
 
-static std::vector<int> TabRows(int t)
-{
-    std::vector<int> r;
-    for (int i = 0; i < (int)g_opts.size(); i++)
-        if (g_opts[i].tab == t) r.push_back(i);
-    return r;
-}
 static float NotesMaxScroll();
 static float LogsMaxScroll();
 static float GfxMaxScroll();
@@ -2107,14 +2032,6 @@ static std::wstring TLab(const std::vector<std::wstring> &fr, const std::vector<
     if (r != en[i].c_str()) return r;
     if (en[i].compare(0, 7, L"Outfit ") == 0) return std::wstring(g_ar ? Ar(L"Outfit ") : Ru(L"Outfit ")) + en[i].substr(7);
     return en[i];
-}
-static std::wstring ValueText(const Opt &o, int v)
-{
-    int i = ValueIndex(o, v);
-    if (!o.labEn.empty()) return TLab(o.labFr, o.labEn, i);
-    wchar_t b[32];
-    swprintf_s(b, L"%d%s", v, o.suffix);
-    return b;
 }
 static void TutoStart(bool all);
 static std::wstring ContentSummary();   // (modsync.inc)
@@ -2577,17 +2494,6 @@ static std::wstring LogDate(const FILETIME &ft)
     return b;
 }
 
-static void DrawFolderCircle(Graphics &g, RectF c, bool hot)
-{
-    SolidBrush cb(hot ? TH(circleHot) : TH(circle));
-    g.FillEllipse(&cb, c);
-    Pen pen(hot ? kAcc : kInk, 1.4f);
-    pen.SetLineJoin(LineJoinRound); pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
-    float cx = c.X + c.Width / 2, cy = c.Y + c.Height / 2;
-    PointF p[] = { PointF(cx - 7, cy - 4.5f), PointF(cx - 2.5f, cy - 4.5f), PointF(cx - 1, cy - 2.5f), PointF(cx + 7, cy - 2.5f),
-                   PointF(cx + 7, cy + 5), PointF(cx - 7, cy + 5) };
-    g.DrawPolygon(&pen, p, 6);
-}
 
 static RectF LogRowRect(int i)
 {

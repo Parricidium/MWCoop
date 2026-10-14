@@ -60,7 +60,6 @@ namespace MWCoop
         static uint listHash;
         static bool hashOk;                    // invite : meme liste que l'hote
         static readonly List<PlayMakerFSM> mutedLogic = new List<PlayMakerFSM>();
-        static PlayMakerFSM rallyCarsResultsOwner;
         static Hashtable results;              // RallyCars : Results
         static string resultsSig = "";
         static float deathCheck;
@@ -73,7 +72,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             cars.Clear(); mutedLogic.Clear(); built = false; hashOk = false; results = null; resultsSig = ""; pendingResults = null; nextResultsLook = 0;
-            rallyCarsResultsOwner = null; distHooked = false;
+            distHooked = false;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 7f : -1;
         }
 

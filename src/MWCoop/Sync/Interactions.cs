@@ -35,7 +35,7 @@ namespace MWCoop
         class Entry { public string Id; public PlayMakerFSM Fsm; }
         static readonly Dictionary<string, Entry> byId = new Dictionary<string, Entry>();
         static readonly HashSet<PlayMakerFSM> tracked = new HashSet<PlayMakerFSM>();
-        static bool applying, scanned;
+        static bool applying;
         static float scanAt = -1;
 
         // Action injectee : previent a l'entree de l'etat.
@@ -54,7 +54,6 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             byId.Clear(); tracked.Clear();
-            scanned = false;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
         }
 

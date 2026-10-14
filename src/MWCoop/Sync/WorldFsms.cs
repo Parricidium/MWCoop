@@ -93,13 +93,12 @@ namespace MWCoop
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
         static readonly Dictionary<string, float> houseSent = new Dictionary<string, float>();
         static float nextScan = -1, nextMirror, loadedAt, nextWarn, lastInput = -100, nextStopCheck;
-        static bool applying;
         static int sentEvents, recvEvents;
 
         class Hook : ModHook
         {
             public override string Module { get { return "monde"; } }
-            public W J; public string State;
+            public W J; public new string State;   // (masque FsmStateAction.State, comme Jobs.Hook)
             public override void OnEnter()
             {
                 try
@@ -713,24 +712,6 @@ namespace MWCoop
             return res;
         }
 
-        static void WriteListData(NetWriter w, List<ListData> lists)
-        {
-            w.U8(lists.Count);
-            foreach (ListData d in lists)
-            {
-                w.Str(d.Owner).Str(d.Ref).U16(d.Items.Count);
-                foreach (object o in d.Items)
-                {
-                    if (o is int) w.U8(0).I32((int)o);
-                    else if (o is float) w.U8(1).F32((float)o);
-                    else if (o is string) w.U8(2).Str((string)o);
-                    else if (o is bool) w.U8(3).Bool((bool)o);
-                    else if (o is GameObject && (GameObject)o != null) w.U8(4).Str(Recon.Path(((GameObject)o).transform));
-                    else w.U8(5);
-                }
-            }
-        }
-
         static void ApplyLists(PlayMakerFSM f, List<ListData> lists)
         {
             List<KeyValuePair<string, PlayMakerArrayListProxy>> mine = Lists(f);
@@ -813,7 +794,7 @@ namespace MWCoop
             // joueur local) passe toujours ; l'argent est remis juste apres (RestorePersonal).
             FsmFloat money = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
             if (money != null && global < 2) money.Value = 1e7f;
-            applying = true; Replay.Depth++;
+            Replay.Depth++;
             try
             {
                 foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
@@ -852,7 +833,7 @@ namespace MWCoop
             }
             finally
             {
-                applying = false; Replay.Depth--; RestorePersonal(mine);
+                Replay.Depth--; RestorePersonal(mine);
                 if (j.Muted != null && (j.InputStates.Contains(j.F.ActiveStateName) || string.IsNullOrEmpty(j.F.ActiveStateName))) Unmute(j);
             }
             if (++recvEvents <= 30 || recvEvents % 50 == 0) Log.Info("monde de #" + who + " : " + key + " -" + ev + "-> " + j.F.ActiveStateName + " (voulu " + state + ")");
@@ -1077,8 +1058,8 @@ namespace MWCoop
                 {
                     var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(j.Key).Str(prev).Str(ev).U8(0).Str(state);
                     WriteVars(j.F, w, true);
-                    applying = true; Replay.Depth++;
-                    try { Game.SetState(j.F, state); } finally { applying = false; Replay.Depth--; }
+                    Replay.Depth++;
+                    try { Game.SetState(j.F, state); } finally { Replay.Depth--; }
                     Session.SendAll(w, true);
                     return j.Key + " " + prev + " -" + ev + "-> " + state + " envoye";
                 }

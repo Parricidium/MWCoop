@@ -15,7 +15,7 @@ namespace MWCoop
     public static class TaxiCustomer
     {
         const string WalkerPath = "JOBS/TAXIJOB/Customer1/TaxiWalker";
-        static GameObject walker, ch, rag;
+        static GameObject walker, ch;
         static PlayMakerFSM mat, acc;
         static SkinnedMeshRenderer body, ragBody;
         static Transform accRoot;

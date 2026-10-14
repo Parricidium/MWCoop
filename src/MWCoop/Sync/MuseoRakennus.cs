@@ -224,7 +224,7 @@ namespace MWCoop
 
         static void MuseoFront(float frontDrop)
         {
-            float z = MuFront, zi = MuFront - Wall, zg = MuFront - 0.08f;
+            float z = MuFront, zg = MuFront - 0.08f;
             // poteaux et traverses anthracite (le vitrage est en retrait de 8 cm)
             foreach (float x in new[] { -MuHall + 0.06f, -MuDoorHalf - 0.05f, MuDoorHalf + 0.05f, MuHall - 0.06f })
                 Box(new Vector3(x - 0.06f, 0f, zg - 0.07f), new Vector3(x + 0.06f, 4.0f, z), "mu_alu", false);

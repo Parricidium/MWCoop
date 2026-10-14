@@ -35,7 +35,7 @@ namespace MWCoop
         static Hashtable names, times;
         static ArrayList playerTimes, startTimes, playerStages;
         static bool hooked, restored;
-        static float readyAt = -1, nextReport, nextStore, nextLook, nextStage, nextBoard, lastTotal = -1;
+        static float readyAt = -1, nextReport, nextStore, nextLook, nextStage, nextBoard;
         static string lastReport = "";
         static int boardWeek = -1, seed;
         static readonly Dictionary<int, Human> humans = new Dictionary<int, Human>();
@@ -48,7 +48,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             data = pen = null; names = times = null; playerTimes = startTimes = playerStages = null;
-            hooked = restored = false; lastReport = ""; lastTotal = -1;
+            hooked = restored = false; lastReport = "";
             humans.Clear(); slots.Clear(); boardWeek = -1;
             for (int i = 0; i < 4; i++) { remoteStageAt[i] = -100; stageForced[i] = false; }
             readyAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;

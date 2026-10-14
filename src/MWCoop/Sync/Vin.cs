@@ -99,7 +99,7 @@ namespace MWCoop
         // (Logic : Check save -FINISHED-> "Trim" : SendRandomEvent L/LX/SLX/GT, puis ses pieces, sa plaque...) ; ici, des le
         // chargement et avant ce tirage, ses poids sont mis a 1 pour la finition choisie, 0 pour les autres. Partie deja
         // sauvee : rien ne change (la finition est dans la sauvegarde). Hote ou solo (l'invite recoit la table de l'hote).
-        class TrimSeen : FsmStateAction { public string Name; public override void OnEnter() { MWCoop.Log.Info("vin : finition tiree par le jeu : " + Name); Finish(); } }
+        class TrimSeen : FsmStateAction { public new string Name; public override void OnEnter() { MWCoop.Log.Info("vin : finition tiree par le jeu : " + Name); Finish(); } }
         static void ForceTrim()
         {
             string want = Config.Get("Coop", "FinitionVoiture", "").Trim().ToUpperInvariant();
