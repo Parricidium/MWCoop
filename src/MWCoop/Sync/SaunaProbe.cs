@@ -61,6 +61,29 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // Essai Autotest=sonsonde : sons des copies (TRAFFIC, NPC_CARS) a moins de 150 m : sources actives, qui jouent.
+        public static string ProbeSounds()
+        {
+            Transform me = Game.PlayerT;
+            if (me == null) return "sonsonde : pas de joueur";
+            var sb = new StringBuilder("sonsonde :");
+            int on = 0, playing = 0;
+            foreach (string root in new[] { "TRAFFIC", "NPC_CARS" })
+            {
+                GameObject r = Game.FindAny(root);
+                if (r == null) continue;
+                foreach (AudioSource a in r.GetComponentsInChildren<AudioSource>(false))
+                {
+                    if (a == null || !a.enabled || (a.transform.position - me.position).sqrMagnitude > 300f * 300f) continue;
+                    on++;
+                    if (!a.isPlaying) continue;
+                    playing++;
+                    sb.Append(" | ").Append(Recon.Path(a.transform)).Append(a.clip != null ? " [" + a.clip.name + "]" : "").Append(" v").Append(a.volume.ToString("F2")).Append(" p").Append(a.pitch.ToString("F2"));
+                }
+            }
+            return sb.Insert(10, " " + on + " sources actives, " + playing + " jouent").ToString();
+        }
+
         public static string Probe()
         {
             var sb = new StringBuilder("vapeur : ");
