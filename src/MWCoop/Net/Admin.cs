@@ -31,7 +31,7 @@ namespace MWCoop.Net
             if (!Session.IsHost || Session.T == null) return;
             PlayerInfo pi;
             if (!Session.Players.TryGetValue(id, out pi) || pi.Local || pi.Peer == null || !pi.Peer.Accepted) return;
-            GameObject me = GameObject.Find("PLAYER");
+            GameObject me = Game.PlayerGo;
             if (me == null || !PlayerSync.InGame) { Hud.Toast(Lang.T("Faire venir : soyez en partie", "Bring here: be in game")); return; }
             Vector3 p = me.transform.position;
             float yaw = PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.eulerAngles.y : me.transform.eulerAngles.y;

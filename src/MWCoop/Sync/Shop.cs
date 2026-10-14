@@ -2515,7 +2515,7 @@ namespace MWCoop
 
         static Counter Nearest(string kind)
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             Counter best = null;
             foreach (Counter c in counters.Values)
             {

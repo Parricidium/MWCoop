@@ -67,7 +67,7 @@ namespace MWCoop
             if (now >= nextScan) { nextScan = now + 20f; Scan(); }
             if (now < nextPoll) return;
             nextPoll = now + 0.5f;
-            if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
+            if (player == null) { GameObject p = Game.PlayerGo; if (p == null) return; player = p.transform; }
             foreach (Watch w in watches)
             {
                 if (w.Fsm == null || Mathf.Abs(w.Var.Value - w.Last) < 1e-4f) continue;

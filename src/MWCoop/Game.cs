@@ -235,14 +235,14 @@ namespace MWCoop
         // tests "root.name == PLAYER" ne le reconnaissaient plus (ses automates et objets passaient pour ceux de la voiture,
         // GameObject.Find("PLAYER/...") ne trouvait plus rien).
         static Transform playerT;
-        static float playerLook;
+        static int playerLookFrame = -1;
         public static Transform PlayerT
         {
             get
             {
-                if (playerT == null && Time.realtimeSinceStartup >= playerLook)
+                if (playerT == null && Time.frameCount != playerLookFrame)   // (absent : cherche au plus une fois par image)
                 {
-                    playerLook = Time.realtimeSinceStartup + 2f;
+                    playerLookFrame = Time.frameCount;
                     GameObject g = GameObject.Find("PLAYER");
                     playerT = g != null && g.transform.Find("Pivot") != null ? g.transform : null;
                     // (un autre objet nomme PLAYER trouve d'abord : remonte depuis la camera du joueur)
@@ -252,6 +252,9 @@ namespace MWCoop
                 return playerT;
             }
         }
+
+        // Objet PLAYER (GameObject.Find("PLAYER") a chaque appel avant, 80 endroits : revue du 14/10)
+        public static GameObject PlayerGo { get { Transform t = PlayerT; return t != null ? t.gameObject : null; } }
 
         // Racine "logique" de t : "PLAYER" pour tout ce qui est sous le joueur, meme assis ; sinon sa vraie racine.
         public static string RootName(Transform t)

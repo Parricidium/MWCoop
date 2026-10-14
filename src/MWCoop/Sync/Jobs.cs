@@ -237,7 +237,7 @@ namespace MWCoop
             // Joueur assis : PLAYER est range sous la voiture. Ses automates a lui (vetements, boire, fumer...) ne sont
             // pas ceux de la voiture : jamais suivis -- rejoues chez les autres, ils jouaient l'animation et le fondu
             // d'ecran du changement de vetements chez TOUS (retour d'un joueur, 08/10 : Clothing::Logic sous SORBET/...).
-            GameObject plGo = GameObject.Find("PLAYER");
+            GameObject plGo = Game.PlayerGo;
             Transform playerT = plGo != null ? plGo.transform : null;
             foreach (KeyValuePair<GameObject, bool> root in RootsNow())
             {

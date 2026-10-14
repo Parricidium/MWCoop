@@ -729,7 +729,7 @@ namespace MWCoop
             if (Session.IsHost && tStep == 0 && t > 40f)
             {
                 tStep = 1;
-                GameObject pl = GameObject.Find("PLAYER");
+                GameObject pl = Game.PlayerGo;
                 var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                 if (cc != null) cc.enabled = false;
                 FieldInfo pv = drive != null ? drive.GetType().GetField("PlayerPivotObject") : null;

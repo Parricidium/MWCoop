@@ -415,7 +415,7 @@ namespace MWCoop
         // Copie qui renverse le joueur d'ici : comme Throttle 'Die 3' (vitesse relative > 5 m/s au contact).
         static void RunOver()
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (pl == null) return;
             Vector3 pp = pl.transform.position + Vector3.up * 0.9f;
             foreach (Car c in cars)

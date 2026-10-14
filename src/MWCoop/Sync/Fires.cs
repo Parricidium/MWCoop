@@ -76,7 +76,7 @@ namespace MWCoop
         {
             get
             {
-                if (player == null) { GameObject go = GameObject.Find("PLAYER"); if (go != null) player = go.transform; }
+                if (player == null) { GameObject go = Game.PlayerGo; if (go != null) player = go.transform; }
                 return player != null ? player.position : Vector3.zero;
             }
         }

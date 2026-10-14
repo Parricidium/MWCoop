@@ -299,7 +299,7 @@ namespace MWCoop
         static PlayMakerFSM FindBox(string prefix)
         {
             Consume.ScanNow();
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             Vector3 me = pl != null ? pl.transform.position : Vector3.zero;
             PlayMakerFSM best = null;
             foreach (KeyValuePair<string, PlayMakerFSM> kv in Consume.ById)
@@ -315,7 +315,7 @@ namespace MWCoop
 
         static string List(float radius)
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             Vector3 me = pl != null ? pl.transform.position : Vector3.zero;
             var keys = new List<string>();
             foreach (KeyValuePair<string, PlayMakerFSM> kv in Consume.ById)

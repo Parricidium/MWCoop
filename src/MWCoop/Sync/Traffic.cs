@@ -1190,7 +1190,7 @@ namespace MWCoop
                     Ent ve = ents[best];
                     Vector3 fwd = ve.T.forward; fwd.y = 0f; fwd.Normalize();
                     ve.Body.velocity = fwd * 12.5f;
-                    GameObject pl = GameObject.Find("PLAYER");
+                    GameObject pl = Game.PlayerGo;
                     var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                     if (cc != null) cc.enabled = false;
                     if (pl != null) pl.transform.position = ve.T.position + fwd * 7f + Vector3.up * 1f;

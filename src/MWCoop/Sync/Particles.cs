@@ -31,7 +31,7 @@ namespace MWCoop
         static readonly Dictionary<string, Em> byKey = new Dictionary<string, Em>();
         static readonly HashSet<PlayMakerFSM> examined = new HashSet<PlayMakerFSM>();
         static float nextScan, nextSend, nextFull, nextApply;
-        static int sentLogs, gotLogs, actLogs, diagLogs;
+        static int sentLogs, gotLogs, actLogs;
 
         public static void OnLevelLoaded() { byKey.Clear(); examined.Clear(); nextScan = 0f; nextFull = 0f; actLogs = 0; }
 
@@ -104,44 +104,48 @@ namespace MWCoop
             return false;
         }
 
-        // Hote : cibles des ActivateGameObject des automates des copies (une fois par automate, actions chargees)
+        // Hote : cibles des ActivateGameObject des automates des copies. Seulement les automates qui tournent (actions
+        // chargees ; ceux d'une voiture eteinte au loin : quand elle s'allume) et d'un vehicule (sous un corps rigide) ; chacun
+        // une seule fois, 4 ms au plus par releve (premiere version : 800 automates relus toutes les 5 s, exceptions
+        // comprises, 4,8 s de jeu fige chez l'hote -- essai du 14/10).
         static void ScanActivated()
         {
-            int added = 0, nf = 0, na = 0, nag = 0, nnull = 0, nrej = 0;
+            int added = 0, seen = 0;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             foreach (Object o in Game.AllFsms())
             {
                 var f = o as PlayMakerFSM;
-                if (f == null || examined.Contains(f) || f.hideFlags != HideFlags.None || !IsCopyRoot(f.transform.root.name)) continue;
-                nf++;
-                FsmState[] sts;
-                try { sts = f.FsmStates; } catch { continue; }
-                bool loaded = false;
-                foreach (FsmState st in sts)
-                {
-                    FsmStateAction[] acts;
-                    try { acts = st.Actions; } catch { continue; }
-                    if (acts == null) continue;
-                    loaded = true;
-                    foreach (FsmStateAction a in acts)
+                if (f == null || !f.enabled || f.hideFlags != HideFlags.None || examined.Contains(f) || !f.gameObject.activeInHierarchy) continue;
+                if (!IsCopyRoot(f.transform.root.name)) { examined.Add(f); continue; }
+                examined.Add(f);
+                bool inVehicle = false;
+                for (Transform c = f.transform; c != null && !inVehicle; c = c.parent) inVehicle = c.GetComponent<Rigidbody>() != null;
+                if (!inVehicle) continue;
+                seen++;
+                FsmState[] sts = null;
+                try { sts = f.FsmStates; } catch { }
+                if (sts != null)
+                    foreach (FsmState st in sts)
                     {
-                        na++;
-                        if (a != null && a.GetType().Name == "ActivateGameObject") nag++;
-                        var ag = a as ActivateGameObject;
-                        if (ag == null || ag.gameObject == null) continue;
-                        GameObject go = ag.gameObject.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : ag.gameObject.GameObject != null ? ag.gameObject.GameObject.Value : null;
-                        if (go == null) { nnull++; continue; }
-                        if (!IsVehicleLight(go, f)) { nrej++; continue; }
-                        string k = ActiveKey(go.transform);
-                        if (byKey.ContainsKey(k)) continue;
-                        byKey[k] = new Em { Key = k, Go = go, Copy = true, Last = go.activeSelf };
-                        added++;
-                        if (actLogs++ < 10) Log.Info("particules : " + Recon.Path(go.transform) + " allume par " + f.FsmName + " / " + st.Name + " (suivi)");
+                        FsmStateAction[] acts = null;
+                        try { acts = st.Actions; } catch { }
+                        if (acts == null) continue;
+                        foreach (FsmStateAction a in acts)
+                        {
+                            var ag = a as ActivateGameObject;
+                            if (ag == null || ag.gameObject == null) continue;
+                            GameObject go = ag.gameObject.OwnerOption == OwnerDefaultOption.UseOwner ? f.gameObject : ag.gameObject.GameObject != null ? ag.gameObject.GameObject.Value : null;
+                            if (go == null || !IsVehicleLight(go, f)) continue;
+                            string k = ActiveKey(go.transform);
+                            if (byKey.ContainsKey(k)) continue;
+                            byKey[k] = new Em { Key = k, Go = go, Copy = true, Last = go.activeSelf };
+                            added++;
+                            if (actLogs++ < 10) Log.Info("particules : " + Recon.Path(go.transform) + " allume par " + f.FsmName + " / " + st.Name + " (suivi)");
+                        }
                     }
-                }
-                if (loaded) examined.Add(f);
+                if (sw.ElapsedMilliseconds > 4) break;   // (la suite au prochain releve)
             }
-            if (added > 0) Log.Info("particules : " + added + " objet(s) allume(s) par les automates des copies suivi(s)");
-            if (nf > 0 && diagLogs++ < 3) Log.Info("particules : releve des copies, " + nf + " automates, " + na + " actions, " + nag + " ActivateGameObject, " + nnull + " sans cible, " + nrej + " ecartes, " + added + " suivis");
+            if (added > 0) Log.Info("particules : " + added + " lumiere(s) de vehicule suivie(s), " + seen + " automates lus en " + sw.ElapsedMilliseconds + " ms");
         }
 
         public static void Update()

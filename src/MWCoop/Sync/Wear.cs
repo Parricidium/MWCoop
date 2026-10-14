@@ -100,7 +100,7 @@ namespace MWCoop
             }
             // PLAYER par son nom seul (GameObject.Find cherche alors partout, pas seulement les racines) : trouve
             // aussi quand le joueur est assis dans une voiture ; une fois trouve, garde (jamais remis a null ici).
-            if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p != null) player = p.transform; }
+            if (player == null) { GameObject p = Game.PlayerGo; if (p != null) player = p.transform; }
             if (player == null) { found = false; return; }
             if (clothLogic == null) { Transform c = player.Find(ClothingPath); if (c != null) clothLogic = Game.FsmOn(c.gameObject, "Logic"); }
             if (helmetLogic == null) { Transform h = player.Find(HelmetPath); if (h != null) helmetLogic = Game.FsmOn(h.gameObject, "Logic"); }

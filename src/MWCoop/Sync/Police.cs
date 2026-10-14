@@ -145,7 +145,7 @@ namespace MWCoop
             Log.Info("police a domicile : arrete ici (depuis " + was + ")" + (arrestApplying ? " avec le joueur arrete" : ""));
             if (arrestApplying) { arrestApplying = false; return; }
             if (!Session.Active || Session.RemoteCount == 0) return;
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@arrestation").Vec(p != null ? p.transform.position : Vector3.zero), true);
         }
 
@@ -194,7 +194,7 @@ namespace MWCoop
         {
             PlayerInfo pi;
             string name = Session.Players.TryGetValue(who, out pi) ? pi.Name : "#" + who;
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             float d = p != null ? Vector3.Distance(p.transform.position, at) : 999f;
             if (WantedAtHome() && d < 30f)
             {
@@ -336,7 +336,7 @@ namespace MWCoop
                     if (ev != null) ev.Value = Mathf.Max(ev.Value, 1);
                     Game.SetState(wanted, "Check crime");
                 }
-                GameObject p = GameObject.Find("PLAYER");
+                GameObject p = Game.PlayerGo;
                 Log.Info("autotest : arrestation, avant : " + wanted.ActiveStateName + ", recherche ici " + WantedAtHome() + ", joueur en " + (p != null ? p.transform.position.ToString("F1") : "?"));
             }
             if (t > 60f && arrStep == 1)
@@ -355,7 +355,7 @@ namespace MWCoop
             if (t > 125f && arrStep == 5)
             {
                 arrStep = 6;
-                GameObject p = GameObject.Find("PLAYER");
+                GameObject p = Game.PlayerGo;
                 Log.Info("autotest : arrestation, fin : prison " + (jailTime != null ? jailTime.ActiveStateName : "?") + ", joueur en " + (p != null ? p.transform.position.ToString("F1") : "?") + ", " + wanted.ActiveStateName + ", " + CrimeLine());
             }
             if (t > 92f && arrStep == 4)
@@ -366,7 +366,7 @@ namespace MWCoop
             if (t > 78f && arrStep == 2)
             {
                 arrStep = 3;
-                GameObject p = GameObject.Find("PLAYER");
+                GameObject p = Game.PlayerGo;
                 Log.Info("autotest : arrestation, apres : " + wanted.ActiveStateName + ", joueur en " + (p != null ? p.transform.position.ToString("F1") : "?") + ", " + CrimeLine());
             }
         }

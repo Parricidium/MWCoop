@@ -324,7 +324,7 @@ namespace MWCoop
 
         static void Action(Obs o, string was, string st, float now)
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (pl == null) return;
             bool inCar = VehicleSync.LocalDriving >= 0 && o.F.transform.root.name == VehicleSync.LocalDrivingName;
             if (!inCar && (o.F.transform.position - pl.transform.position).sqrMagnitude > 25f) return;
@@ -507,7 +507,7 @@ namespace MWCoop
         // Essais : « clic » sur l'automate interactif non suivi le plus proche (premiere transition de son etat).
         public static string TestAct()
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (pl == null) return "pas de joueur";
             Obs best = null; float bd = 25f;
             foreach (Obs o in obs)

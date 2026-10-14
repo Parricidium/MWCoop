@@ -130,7 +130,7 @@ namespace MWCoop
             if (gen < 0 ? now >= nextScan : gen != VehicleSync.Generation) { nextScan = now + 30f; scanNext = -1; Scan(); }
             else if (now >= nextScan) { nextScan = now + 30f; scanNext = 0; }
             if (scanNext >= 0) { if (scanNext < VehicleSync.LocalCount) ScanCar(scanNext++); else scanNext = -1; }
-            if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
+            if (player == null) { GameObject p = Game.PlayerGo; if (p == null) return; player = p.transform; }
             if (now < nextSend || Session.RemoteCount == 0) return;
             // 20 fois par seconde pour la voiture qu'on conduit (volant, aiguilles : retour d'un joueur, "le volant tourne
             // avec du retard"), 10 sinon ; chez les autres, chaque pose recue est rejointe en douceur (LateUpdate).

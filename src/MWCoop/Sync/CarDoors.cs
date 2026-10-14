@@ -453,7 +453,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (now - plCollsAt < 0.5f) return plColls;
             plCollsAt = now;
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             plCc = pl != null ? pl.GetComponent<CharacterController>() : null;
             plColls = pl != null ? pl.GetComponentsInChildren<Collider>() : new Collider[0];
             return plColls;
@@ -848,7 +848,7 @@ namespace MWCoop
             Scan();
             Door d = First(car, part);
             if (d == null || d.Body == null || d.Hinge == null) return "pas de portiere " + part;
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (pl == null) return "pas de joueur";
             Transform b = d.Body.transform, carT = VehicleSync.CarRoot(d.Fsm.transform) ?? d.Fsm.transform.root;
             Vector3 axis = b.TransformDirection(d.Hinge.axis).normalized;
@@ -993,7 +993,7 @@ namespace MWCoop
                 case 7:
                     {
                         // Comme Seats : moteur de deplacement coupe avec le controleur (sinon Move sur un controleur coupe).
-                        GameObject pl = GameObject.Find("PLAYER");
+                        GameObject pl = Game.PlayerGo;
                         if (pl == null) { tStep = 8; break; }
                         bool on = tStep == 7;
                         Behaviour motor = pl.GetComponent("CharacterMotor") as Behaviour, input = pl.GetComponent("FPSInputController") as Behaviour;

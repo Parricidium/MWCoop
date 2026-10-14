@@ -1466,7 +1466,7 @@ namespace MWCoop
             if (on && pee == null && !peeTried)
             {
                 peeTried = true;
-                GameObject pl = GameObject.Find("PLAYER");
+                GameObject pl = Game.PlayerGo;
                 Transform piss = pl != null ? pl.transform.Find("Pivot/AnimPivot/Camera/FPSCamera/Piss") : null;
                 Transform src = piss != null ? piss.Find("Fluid/Fluid") : null;
                 if (src != null)
@@ -1810,7 +1810,7 @@ namespace MWCoop
                 tip.transform.localPosition = new Vector3(0f, 0.95f, 0f);
                 Shader unlit = Shader.Find("Unlit/Color") ?? diff;
                 if (unlit != null) tip.GetComponent<Renderer>().material = new Material(unlit) { color = new Color(1f, 0.35f, 0.05f) };
-                GameObject pl = GameObject.Find("PLAYER");
+                GameObject pl = Game.PlayerGo;
                 Transform bs = pl != null ? FindBone(pl.transform, "BreathSmoke") : null;
                 if (bs != null)
                 {

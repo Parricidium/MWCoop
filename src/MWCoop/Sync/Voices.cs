@@ -107,7 +107,7 @@ namespace MWCoop
             if (now >= nextScan) { nextScan = float.MaxValue; Scan(); }
             if (now < nextPoll || Session.RemoteCount == 0) return;
             nextPoll = now + 0.05f;
-            if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
+            if (player == null) { GameObject p = Game.PlayerGo; if (p == null) return; player = p.transform; }
             foreach (Var x in vars)
             {
                 if (x.Src == null) continue;
@@ -321,7 +321,7 @@ namespace MWCoop
             foreach (Var x in vars)
                 if (x.Group == group && x.Src.clip != null)
                 {
-                    x.Src.transform.position = GameObject.Find("PLAYER").transform.position + Vector3.forward * 2f;
+                    x.Src.transform.position = Game.PlayerGo.transform.position + Vector3.forward * 2f;
                     x.Src.Play();
                     return group + "/" + x.Name + " (" + x.Src.clip.name + ", " + x.Src.clip.length.ToString("F1") + " s)";
                 }

@@ -37,7 +37,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = now + 90f; Scan(); }
             if (probes.Count == 0) return;
-            if (player == null) { GameObject g = GameObject.Find("PLAYER"); if (g == null) return; player = g.transform; }
+            if (player == null) { GameObject g = Game.PlayerGo; if (g == null) return; player = g.transform; }
             // Hauteur du point PLAYER au-dessus des pieds (les avatars sont places par les pieds).
             float lift = Session.Me != null ? player.position.y - Session.Me.State.Feet.y : 0f;
             if (lift < 0f || lift > 2f) lift = 0.2f;

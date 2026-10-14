@@ -442,7 +442,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- engagement et autorite
         static Transform MePlayer()
         {
-            if (me == null) { GameObject p = GameObject.Find("PLAYER"); if (p != null) me = p.transform; }
+            if (me == null) { GameObject p = Game.PlayerGo; if (p != null) me = p.transform; }
             return me;
         }
 
@@ -1494,7 +1494,7 @@ namespace MWCoop
         {
             var fsms = new List<PlayMakerFSM>();
             if (n != null) { fsms.Add(FindFsm(n, "Anger")); fsms.Add(PhoneFsm(n)); fsms.Add(FindFsm(n, "Speak")); fsms.Add(FindFsm(n, "Move")); }
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (pl != null) foreach (PlayMakerFSM f in pl.GetComponentsInChildren<PlayMakerFSM>(true)) if (f.FsmName == "PlayerFunctions") { fsms.Add(f); break; }
             foreach (PlayMakerFSM f in fsms)
             {
@@ -1570,7 +1570,7 @@ namespace MWCoop
         static string TestNear(string part, float dist)
         {
             Npc n = Find(part);
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (n == null || pl == null) return "approche impossible (" + (n == null ? "aucun PNJ " + part : "pas de joueur") + ")";
             Vector3 to = n.Char.position + n.Char.forward * dist + Vector3.up * 0.5f;
             var cc = pl.GetComponent<CharacterController>();
@@ -1583,7 +1583,7 @@ namespace MWCoop
         // La camera du joueur vise 'target' (souris du jeu coupee pendant l'essai, curseur jamais touche).
         static void LookAt(Vector3 target)
         {
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             Transform cam = p != null ? p.transform.Find("Pivot/AnimPivot/Camera/FPSCamera") : null;
             if (cam == null) return;
             foreach (Behaviour b in p.GetComponents<Behaviour>()) if (b.GetType().Name.Contains("MouseLook")) b.enabled = false;
@@ -1606,7 +1606,7 @@ namespace MWCoop
         static string TestArrive(string part)
         {
             Npc n = Find(part);
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (n == null || pl == null) return "pnjtel : arrivee impossible (" + (n == null ? "aucun PNJ " + part : "pas de joueur") + ")";
             Vector3 to = n.Char.position - n.Char.forward * 2f + Vector3.up * 0.5f;
             string[] c = Config.Get("Test", "PnjArriveePos", "").Split(',');

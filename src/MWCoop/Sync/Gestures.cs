@@ -88,7 +88,7 @@ namespace MWCoop
             if (found && player != null) return true;
             if (Time.realtimeSinceStartup < nextFind) return false;
             nextFind = Time.realtimeSinceStartup + 2f;
-            GameObject go = GameObject.Find("PLAYER");
+            GameObject go = Game.PlayerGo;
             if (go == null) return false;
             player = go.transform;
             camBase = player.Find("Pivot/AnimPivot/Camera");
