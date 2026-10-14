@@ -77,7 +77,7 @@ namespace MWCoop
             }
             // Etageres : automates 'Buy' (Name = produit, ProductList = objets visibles, Inventory = magasin).
             int shelves = 0;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Buy"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Buy") continue;

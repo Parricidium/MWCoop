@@ -176,7 +176,7 @@ namespace MWCoop
         static Dictionary<Transform, GameObject> StockParts(Transform root)
         {
             var map = new Dictionary<Transform, GameObject>();
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Spawn"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.FsmName != "Spawn" || f.hideFlags != HideFlags.None) continue;
@@ -340,7 +340,7 @@ namespace MWCoop
         {
             var points = new HashSet<Transform>();
             var diag = new System.Text.StringBuilder();
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Data"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Data") continue;

@@ -27,7 +27,7 @@ namespace MWCoop
         static void Scan()
         {
             piles.Clear();
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Logic"))
             {
                 var f = (PlayMakerFSM)o;
                 if (f == null || f.hideFlags != HideFlags.None || f.FsmName != "Logic" || f.gameObject.name != "LogTrigger") continue;

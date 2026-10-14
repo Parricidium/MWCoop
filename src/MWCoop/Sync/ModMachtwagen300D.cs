@@ -79,7 +79,7 @@ namespace MWCoop
                 }
             }
             // Trappe a essence (automate du jeu, copie du taxi ; retour de Menor, 11/10 : pas synchronisee) : ouverte ou non.
-            foreach (UnityEngine.Object o in Game.AllFsms())
+            foreach (UnityEngine.Object o in Game.FsmsNamed("Use"))
             {
                 var f = o as PlayMakerFSM;
                 if (f == null || f.hideFlags != HideFlags.None || f.FsmName != "Use" || f.transform.root.name != "Machtwagen300D") continue;

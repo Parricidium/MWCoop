@@ -37,7 +37,7 @@ namespace MWCoop
             if (found) return ch != null;
             if (Time.realtimeSinceStartup < nextFind) return false;
             nextFind = Time.realtimeSinceStartup + 5f;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Fetch"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Fetch" || f.gameObject.name != "RadioChannels") continue;

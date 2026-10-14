@@ -148,7 +148,7 @@ namespace MWCoop
         static void FindGrills()
         {
             var found = new List<Grill>();
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Logic"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || grillFsms.Contains(f) || f.FsmName != "Logic" || f.gameObject.name != "SausageTrigger") continue;

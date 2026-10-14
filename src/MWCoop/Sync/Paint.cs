@@ -75,7 +75,7 @@ namespace MWCoop
             foreach (string k in new List<string>(received.Keys)) { if (now0 - received[k].At > 60f) received.Remove(k); else if (!received[k].Done) waiting = true; }
             nextScan = now0 + (waiting || now0 < burstUntil ? 2f : now0 - loadedAt < 120f ? 15f : 45f);
             int n = 0;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Paint"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.FsmName != "Paint" || f.hideFlags != HideFlags.None || hooked.Contains(f) || rejected.Contains(f)) continue;

@@ -145,7 +145,7 @@ namespace MWCoop
         static void Scan()
         {
             int claimed = 0;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Logic"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.FsmName != "Logic" || f.hideFlags != HideFlags.None || !f.transform.root.gameObject.activeInHierarchy) continue;

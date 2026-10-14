@@ -247,7 +247,7 @@ namespace MWCoop
             {
                 nextTriggerScan = Time.realtimeSinceStartup + 30f;
                 triggers.Clear();
-                foreach (Object o in Game.AllFsms())
+                foreach (Object o in Game.FsmsNamed("PlayerTrigger"))
                 {
                     var f = (PlayMakerFSM)o;
                     if (f != null && f.hideFlags == HideFlags.None && f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("CrouchTrigger")) triggers.Add(f);

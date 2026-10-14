@@ -29,7 +29,7 @@ namespace MWCoop
         static void Scan()
         {
             boxes.RemoveAll(b => b.Use == null);
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Use"))
             {
                 PlayMakerFSM f = o as PlayMakerFSM;
                 if (f == null || f.FsmName != "Use" || !f.gameObject.name.StartsWith("Post Package") || f.FsmVariables.FindFsmGameObject("ThisOrder") == null) continue;
@@ -114,7 +114,7 @@ namespace MWCoop
         public static void DumpSpawners()
         {
             int n = 0;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Spawn"))
             {
                 PlayMakerFSM f = o as PlayMakerFSM;
                 if (f == null || f.FsmName != "Spawn" || f.FsmVariables.FindFsmFloat("MinimumWear") == null) continue;

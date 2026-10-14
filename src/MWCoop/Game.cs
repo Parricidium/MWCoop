@@ -173,6 +173,32 @@ namespace MWCoop
             return allFsms;
         }
 
+        // Automates d'un nom (index du releve AllFsms, refait avec lui) : les balayages qui ne gardent qu'un nom ("Use",
+        // "Data", "Logic"...) ne parcourent plus les ~10 000 automates de la scene (refonte du 14/10, 22 balayages).
+        static Object[] namedFrom;
+        static Dictionary<string, List<Object>> named = new Dictionary<string, List<Object>>();
+        static readonly List<Object> noneNamed = new List<Object>();
+        public static List<Object> FsmsNamed(string name, float maxAge = 3f)
+        {
+            Object[] all = AllFsms(maxAge);
+            if (!ReferenceEquals(all, namedFrom))
+            {
+                namedFrom = all;
+                named = new Dictionary<string, List<Object>>();   // (listes neuves : une boucle en cours sur l'ancienne n'est pas derangee)
+                foreach (Object o in all)
+                {
+                    var f = o as PlayMakerFSM;
+                    if (f == null) continue;
+                    string n = f.FsmName ?? "";
+                    List<Object> l;
+                    if (!named.TryGetValue(n, out l)) named[n] = l = new List<Object>();
+                    l.Add(o);
+                }
+            }
+            List<Object> r;
+            return named.TryGetValue(name, out r) ? r : noneNamed;
+        }
+
         // Racines de la scene par nom (Resources.FindObjectsOfTypeAll(GameObject) : 10-40 ms sur la scene du jeu, plus sur un
         // PC modeste -- les a-coups reguliers en coop, retour de joueurs 10/10). Gardees tant qu'elles restent des racines ;
         // nouveau releve seulement quand un chemin n'est pas trouve, au plus une fois par seconde, et pour un meme chemin
