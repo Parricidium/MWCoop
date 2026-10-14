@@ -2055,7 +2055,7 @@ namespace MWCoop
             {
                 sleepSpotsAt = Time.realtimeSinceStartup;
                 sleepSpots.Clear();
-                foreach (Object o in Game.AllFsms())
+                foreach (Object o in Game.FsmsNamed("Activate"))
                 {
                     var f = (PlayMakerFSM)o;
                     if (f != null && f.hideFlags == HideFlags.None && f.FsmName == "Activate" && f.gameObject.name == "SleepTrigger") sleepSpots.Add(f.transform);

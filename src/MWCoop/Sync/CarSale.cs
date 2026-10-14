@@ -59,7 +59,7 @@ namespace MWCoop
             if (Config.GetInt("Test", "VenteReparation", 0) == 0) return;
             FsmInt key = FsmVariables.GlobalVariables.FindFsmInt("PlayerKeySatsuma");
             PlayMakerFSM data = null;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Data"))
             {
                 var f = (PlayMakerFSM)o;
                 if (f == null || f.FsmName != "Data" || f.transform.parent == null || f.transform.parent.name != "PhoneNumbers") continue;
@@ -154,7 +154,7 @@ namespace MWCoop
             }
             sold = true;
             // Etape 3 du numero (l'annonce disparait au prochain chargement de cette sauvegarde) et cles, comme "Give keys".
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Data"))
             {
                 var f = (PlayMakerFSM)o;
                 if (f == null || f.FsmName != "Data" || f.transform.parent == null || f.transform.parent.name != "PhoneNumbers") continue;
@@ -201,7 +201,7 @@ namespace MWCoop
         {
             if (mode != "vente-sauve" || !Session.IsHost) return;
             PlayMakerFSM data = null;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Data"))
             {
                 var f = (PlayMakerFSM)o;
                 if (f == null || f.FsmName != "Data" || f.transform.parent == null || f.transform.parent.name != "PhoneNumbers") continue;

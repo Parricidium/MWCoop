@@ -277,7 +277,7 @@ namespace MWCoop
         static void ScanHolders()
         {
             int added = 0;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Use"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Use" || !f.gameObject.name.StartsWith("fuse holder")) continue;
@@ -432,7 +432,7 @@ namespace MWCoop
 
         static void ScanStatus()
         {
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Status"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Status" || f.gameObject.name != "HouseElectricity") continue;

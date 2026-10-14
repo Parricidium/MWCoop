@@ -83,7 +83,7 @@ namespace MWCoop
         {
             var seen = new Dictionary<string, int>();
             var all = new List<PlayMakerFSM>();
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Use"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Use") continue;

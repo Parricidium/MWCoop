@@ -66,7 +66,7 @@ namespace MWCoop
             nextBedScan = Time.realtimeSinceStartup + 20f;
             beds.Clear();
             passOut = null;
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Activate"))
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Activate") continue;

@@ -27,7 +27,7 @@ namespace MWCoop
         static void Scan()
         {
             glasses.Clear();
-            foreach (Object o in Game.AllFsms())
+            foreach (Object o in Game.FsmsNamed("Data"))
             {
                 PlayMakerFSM f = o as PlayMakerFSM;
                 if (f == null || f.FsmName != "Data" || f.FsmVariables.FindFsmGameObject("BrokenWindshield") == null) continue;

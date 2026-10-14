@@ -174,7 +174,7 @@ namespace MWCoop
         // CD par son disque (CD1, CD2...), ou qu'il soit (boitier, lecteur, main, sol).
         public static GameObject FindCd(string disc)
         {
-            foreach (Object o in Game.AllFsms(0.5f))
+            foreach (Object o in Game.FsmsNamed("Data", 0.5f))
             {
                 var f = (PlayMakerFSM)o;
                 if (f == null || f.FsmName != "Data" || f.gameObject.name != "cd(itemx)" || f.hideFlags != HideFlags.None) continue;
