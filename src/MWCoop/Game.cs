@@ -151,7 +151,7 @@ namespace MWCoop
         {
             get { int f = Time.frameCount; if (f != mainCamFrame || mainCam == null) { mainCamFrame = f; mainCam = Camera.main; } return mainCam; }
         }
-        public static void LevelChanged() { levelFrame = -1; mainCamFrame = -1; }
+        public static void LevelChanged() { levelFrame = -1; mainCamFrame = -1; gBools.Clear(); gFloats.Clear(); }
 
         // Tous les automates (actifs ou non), releve partage par les modules qui balaient tout periodiquement : un seul
         // Resources.FindObjectsOfTypeAll toutes les 3 s au plus (70-90 ms chacun sur une grande scene ; une douzaine de
@@ -329,27 +329,48 @@ namespace MWCoop
             if (v != null) v.Value = value; else Log.Warn("globale texte absente : " + name);
         }
 
+        // Globales du jeu par nom, gardees (FindFsmBool parcourt toute la liste des globales a chaque appel ; une
+        // quarantaine d'appels, plusieurs par image -- refonte du 14/10). Les globales restent les memes objets toute la partie.
+        static readonly Dictionary<string, HutongGames.PlayMaker.FsmBool> gBools = new Dictionary<string, HutongGames.PlayMaker.FsmBool>();
+        static readonly Dictionary<string, HutongGames.PlayMaker.FsmFloat> gFloats = new Dictionary<string, HutongGames.PlayMaker.FsmFloat>();
+        static HutongGames.PlayMaker.FsmBool GBool(string name)
+        {
+            HutongGames.PlayMaker.FsmBool v;
+            if (gBools.TryGetValue(name, out v) && v != null) return v;
+            v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool(name);
+            if (v != null) gBools[name] = v;
+            return v;
+        }
+        static HutongGames.PlayMaker.FsmFloat GFloat(string name)
+        {
+            HutongGames.PlayMaker.FsmFloat v;
+            if (gFloats.TryGetValue(name, out v) && v != null) return v;
+            v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmFloat(name);
+            if (v != null) gFloats[name] = v;
+            return v;
+        }
+
         public static bool GlobalBool(string name)
         {
-            var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool(name);
+            var v = GBool(name);
             return v != null && v.Value;
         }
 
         public static void SetGlobalBool(string name, bool value)
         {
-            var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool(name);
+            var v = GBool(name);
             if (v != null) v.Value = value; else Log.Warn("globale booleenne absente : " + name);
         }
 
         public static float GlobalFloat(string name)
         {
-            var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmFloat(name);
+            var v = GFloat(name);
             return v != null ? v.Value : -1f;
         }
 
         public static void SetGlobalFloat(string name, float value)
         {
-            var v = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmFloat(name);
+            var v = GFloat(name);
             if (v != null) v.Value = value; else Log.Warn("globale flottante absente : " + name);
         }
 
