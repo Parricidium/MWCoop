@@ -39,7 +39,7 @@ namespace MWCoop.Net
     public static class Strings
     {
         public const int Mark = 0xF000;
-        public static readonly string[] List = { "@300d","@300f","@300k","@accident","@ajouts","@arrestation","@attelage","@bagages","@benne","@bout","@carbu","@cbx","@cbxx","@client","@colis","@coup","@cree","@don","@drone","@emit","@esine","@esineosto","@etape","@fend","@fendattel","@filmi","@flash","@fuite","@jack","@jfs","@kassi","@kovi","@mw2","@outil","@parti","@percute","@poste","@pousse","@pvp","@ram","@renverse","@sac","@sacitem","@sacosto","@sacs","@tas","@tasse","@taxicarte","@touche","@tow","@triche","@triches","@tuyau","@vente","@vet","@vin","@visagep","@vitre" };
+        public static readonly string[] List = { "@300d","@300f","@300k","@accident","@ajouts","@arrestation","@attelage","@bagages","@benne","@bout","@carbu","@cbx","@cbxx","@client","@colis","@coup","@cree","@don","@drone","@emit","@esine","@esineosto","@etape","@fend","@fendattel","@filmi","@flash","@fuite","@jack","@jfs","@kassi","@kovi","@mw2","@outil","@parti","@percute","@poste","@pousse","@pvp","@ram","@renverse","@sac","@sacitem","@sacosto","@sacs","@tas","@tasse","@taxicarte","@touche","@tow","@triche","@triches","@tuyau","@vente","@vet","@vin","@visagep","@vitre", "@vapeur" };
         public static readonly System.Collections.Generic.Dictionary<string, int> Ids = Build();
         static System.Collections.Generic.Dictionary<string, int> Build()
         {
