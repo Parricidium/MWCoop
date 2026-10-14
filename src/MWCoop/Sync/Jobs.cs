@@ -181,7 +181,7 @@ namespace MWCoop
         {
             public override string Module { get { return "quetes"; } }
             public Job J;
-            public string State;
+            public new string State;   // (nom de l'etat accroche ; masque FsmStateAction.State, que PlayMaker lit par son propre type)
             public override void OnEnter()
             {
                 try { if (Replay.Depth == 0) OnLocal(J, State); else J.Entered.Add(State); } catch (System.Exception e) { Replay.HookError(e); }

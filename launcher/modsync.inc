@@ -206,7 +206,6 @@ static const ContentCat kContent[] = {
 static const int kContentN = (int)(sizeof(kContent) / sizeof(kContent[0]));
 static bool ContentOn(int i) { return GetPrivateProfileIntW(L"Contenu", Widen(kContent[i].key).c_str(), kContent[i].def ? 1 : 0, g_iniLauncher.c_str()) != 0; }
 static void ContentSet(int i, bool on) { WritePrivateProfileStringW(L"Contenu", Widen(kContent[i].key).c_str(), on ? L"1" : L"0", g_iniLauncher.c_str()); }
-static int ContentCatOf(const std::string &key) { for (int i = 0; i < kContentN; i++) if (key == kContent[i].key) return i; return -1; }
 // Fichiers presents d'une categorie, chemins "<dossier>\<fichier>" (dossier du jeu : game, avec \ final).
 static void ContentFilesTree(const std::wstring &base, const std::wstring &rel, std::vector<std::wstring> &out)
 {

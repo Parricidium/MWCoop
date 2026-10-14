@@ -25,7 +25,6 @@ namespace MWCoop
             // [Coop] CarteMaintenir=1 (lanceur) : ouverte tant que la touche est tenue ; sinon un appui ouvre, un autre ferme
             bool hold = Config.GetInt("Coop", "CarteMaintenir", 0) != 0;
             bool want = hold ? Input.GetKey(Keys.Map) : (Input.GetKeyDown(Keys.Map) ? !Open : Open);
-            if (hold && testHold) want = true;
             if (want != Open)
             {
                 Open = want;
@@ -259,7 +258,6 @@ namespace MWCoop
 
         // [Test] Autotest=carte : a [Test] CarteOuvre (90 s) la carte s'ouvre (zoom [Test] CarteZoom), capture a +2 s.
         static int testStep;
-        static bool testHold;
         static bool probed;
         public static void Test(string mode, float t)
         {

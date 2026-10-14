@@ -40,7 +40,7 @@ namespace MWCoop
             root = null; door = null; doorAngle = 0f; built = false; vendor = null; looked = null; testCam = null;
             gameMats = null; byName = null; guiText = null; guiUse = null; guiBuy = null; money = null; guiSub = null;
             basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
-            lippu = null; lippuBackMesh = null; ResetMuseo();
+            ResetMuseo();
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
             offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
@@ -77,7 +77,6 @@ namespace MWCoop
             TickSay();
             TickBags(now);
             TickItems(now);
-            TickLippu();
             RunScript(now);
             if (shotAt > 0f && now >= shotAt) { shotAt = -1f; TakeShot(); }
         }
@@ -502,7 +501,6 @@ namespace MWCoop
                             break;
                         case "argent": if (money != null) money.Value = F(a[2]); L("essai : argent " + a[2]); break;
                         case "tex": DumpTex(string.Join(" ", a, 2, a.Length - 2)); break;
-                        case "lippu": LippuState(); break;
                         case "museo": forceMuseoDoor = a.Length > 2 && a[2] == "auki"; L("essai : portes du musee " + (forceMuseoDoor ? "ouvertes" : "libres")); break;
                         case "ota": { Offer o = a.Length > 2 ? offers.Find(x => x.Item == a[2]) : (offers.Count > 0 ? offers[0] : null); if (o != null) Take(o); break; }
                         case "nauhuri": TestVcr(); break;

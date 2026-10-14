@@ -288,13 +288,6 @@ namespace MWCoop
             try { iniTime = File.GetLastWriteTimeUtc(Config.IniPath); } catch { }
         }
 
-        static void SaveKey(string key, int v)
-        {
-            Config.Save("Graphismes", key, v.ToString());
-            ini[key] = v;
-            try { iniTime = File.GetLastWriteTimeUtc(Config.IniPath); } catch { }
-        }
-
         // ---- pour le menu F10
         public static int Get(string key, int def) { int v; return ini.TryGetValue(key, out v) ? v : GameValue(key, def); }
         public static bool IsSet(string key) { return ini.ContainsKey(key); }

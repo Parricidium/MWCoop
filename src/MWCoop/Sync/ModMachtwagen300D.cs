@@ -60,8 +60,6 @@ namespace MWCoop
         static readonly string[] PartTypes = { "SaveVars", "ElectricSunroof", "PowerWindow", "OpenableCompartment", "Machtmatic", "AutoAC",
                                                "Sunvisor", "InteriorLight", "FrontFogSwitch", "RecircSwitch", "DefrosterSwitch", "RearDomeLightSwitch", "HornToneSwitch", "HornButton",
                                                "OpenableTrunk", "GloveboxLock" };
-        // Interrupteurs a deux positions (SwitchOn ; retour de Menos, 10/10 : pare-soleil et le reste non synchronises).
-        static bool IsSwitch(string t) { return t == "FrontFogSwitch" || t == "RecircSwitch" || t == "DefrosterSwitch" || t == "RearDomeLightSwitch" || t == "HornToneSwitch"; }
 
         static void ScanParts()
         {

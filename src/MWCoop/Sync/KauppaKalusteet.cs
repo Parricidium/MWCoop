@@ -184,30 +184,6 @@ namespace MWCoop
         const float CounterTop = 0.93f;   // dessus du tapis du comptoir de la PSK (repere boutique)
         static float fridgeYaw = -90f;   // portes vitrees vers l'interieur (+x)
 
-        // hauteur (repere boutique) du dessus d'un meuble copie, mesuree sur l'original (ses collisions sont actives la ou
-        // il est) : point boutique -> repere de la copie -> meme point chez l'original -> rayon vers le bas
-        static float SourceSurface(GameObject copy, Transform src, Vector3 at)
-        {
-            Vector3 inCopy = copy.transform.InverseTransformPoint(root.transform.TransformPoint(new Vector3(at.x, 3f, at.z)));
-            Vector3 w = src.TransformPoint(inCopy);
-            foreach (RaycastHit h in Physics.RaycastAll(w, Vector3.down, 4f))
-                if (h.collider.transform == src || h.collider.transform.IsChildOf(src))
-                {
-                    Vector3 back = copy.transform.TransformPoint(src.InverseTransformPoint(h.point));
-                    return root.transform.InverseTransformPoint(back).y;
-                }
-            return float.NaN;
-        }
-
-        // hauteur (repere boutique) de la premiere surface solide sous le point, en partant de "from"
-        static float SurfaceUnder(Vector3 at, float from)
-        {
-            Vector3 w = root.transform.TransformPoint(new Vector3(at.x, from, at.z));
-            RaycastHit h;
-            if (Physics.Raycast(w, Vector3.down, out h, from + 1f)) return root.transform.InverseTransformPoint(h.point).y;
-            return float.NaN;
-        }
-
         // gondole de magasin facon PSK (materiau "store_shelfs" du jeu) : socle, panneau central, joues, tablettes des
         // deux cotes ; le long de x de a0 a a1, profondeur de b0 a b1
         static void StoreGondola(float a0, float a1, float b0, float b1, float h, int levels)
@@ -233,25 +209,6 @@ namespace MWCoop
         {
             if (axisX) Box(new Vector3(u0, y0, v0), new Vector3(u1, y1, v1), key, false);
             else Box(new Vector3(v0, y0, u0), new Vector3(v1, y1, u1), key, false);
-        }
-
-        // rangee de produits poses cote a cote, de a0 a a1 (le long de x ou de z), centres entre front et back
-        static void Products(string[] paths, float a0, float a1, float y, float front, float back, bool axisX, float yaw, float maxH)
-        {
-            float cur = a0 + 0.04f; int i = 0, guard = 0;
-            float mid = (front + back) / 2, depth = Mathf.Abs(front - back);
-            while (cur < a1 - 0.05f && guard++ < 60)
-            {
-                string pth = paths[i++ % paths.Length];
-                Vector3 at = axisX ? new Vector3(cur, y, mid) : new Vector3(mid, y, cur);
-                GameObject g = Clone(pth, 0, at, yaw, axisX ? new Vector3(-1, -1, 0) : new Vector3(0, -1, -1), false, false);
-                if (g == null) continue;
-                Bounds b = LocalBounds(g);
-                float w = axisX ? b.size.x : b.size.z, d = axisX ? b.size.z : b.size.x;
-                if (cur + w > a1 - 0.02f) { UnityEngine.Object.Destroy(g); break; }
-                if (d > depth + 0.05f || b.size.y > maxH) { UnityEngine.Object.Destroy(g); continue; }
-                cur += w + 0.03f;
-            }
         }
 
         static void Furnish()

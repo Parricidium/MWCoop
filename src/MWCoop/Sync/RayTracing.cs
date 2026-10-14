@@ -246,7 +246,7 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- scene
-        class Tracked { public Renderer R; public int Mesh; public bool Static, Skinned; }
+        class Tracked { public Renderer R; public int Mesh; public bool Static; }
         // Sol (rendus sans ombre : MAP/MESH/TERRAIN_OBJ...) : leur collision a le maillage d'origine, lisible (le rendu est en
         // lot statique, illisible, et absent de la carte d'ombres ou le decor est releve). Masque 2 : vu par l'occlusion
         // ambiante et les reflets, pas par les ombres (pas plus que chez Unity). [Graphismes] RTSol (1).
@@ -559,7 +559,6 @@ namespace MWCoop
             }
         }
 
-        static Mesh bakeTmp;
         static void UpdateSkins()
         {
             foreach (SkinnedMeshRenderer sm in skinNear)

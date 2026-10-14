@@ -78,13 +78,6 @@ namespace MWCoop
             return best;
         }
 
-        static Vector2 EdgeAt(float x)
-        {
-            for (int i = 0; i + 1 < RoadEdge.Length; i++)
-                if (x <= RoadEdge[i + 1].x) { float t = Mathf.InverseLerp(RoadEdge[i].x, RoadEdge[i + 1].x, x); return Vector2.Lerp(RoadEdge[i], RoadEdge[i + 1], t); }
-            return RoadEdge[RoadEdge.Length - 1];
-        }
-
         static float Ground(float x, float z)
         {
             float best = float.MinValue;
