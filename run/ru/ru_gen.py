@@ -24,6 +24,8 @@ def load(name):
     return rows
 
 lr = load("launcher")
+lrk = set(en for en, ru in lr)
+lr += [r for r in load("wiki") if r[0] not in lrk]   # (GUIDE du lanceur : ru_wiki.tsv, refonte du 14/10)
 with open(os.path.join(ROOT, "launcher", "ru.inc"), "w", encoding="utf-8", newline="\n") as o:
     o.write("// Genere par ru_gen.py (traduction russe du lanceur, 13/10/2026) : texte anglais tel qu'ecrit dans T(), russe.\n")
     o.write("static const wchar_t *const kRu[][2] = {\n")
