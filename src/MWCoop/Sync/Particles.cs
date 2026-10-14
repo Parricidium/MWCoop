@@ -49,17 +49,19 @@ namespace MWCoop
         static bool IsCopy(Transform t) { return IsCopyRoot(t.root.name); }
 
         // Cle d'un objet allume : racine, rangs parmi les freres depuis la racine, nom ("a:TRAFFIC|0.3.1|BrakeLights").
-        static string ActiveKey(Transform t)
+        static string ActiveKey(Transform t) { return ChainKey("a:", t); }
+        // (aussi CopySounds, prefixe "s:")
+        internal static string ChainKey(string prefix, Transform t)
         {
             var idx = new List<int>();
             Transform c = t;
             for (; c.parent != null; c = c.parent) idx.Add(c.GetSiblingIndex());
             idx.Reverse();
-            var sb = new System.Text.StringBuilder("a:").Append(c.name).Append('|');
+            var sb = new System.Text.StringBuilder(prefix).Append(c.name).Append('|');
             for (int i = 0; i < idx.Count; i++) { if (i > 0) sb.Append('.'); sb.Append(idx[i]); }
             return sb.Append('|').Append(t.name).ToString();
         }
-        static GameObject ResolveActive(string key)
+        internal static GameObject ResolveActive(string key)   // (cle ChainKey, prefixe de 2 caracteres)
         {
             string[] p = key.Substring(2).Split('|');
             if (p.Length != 3) return null;

@@ -1586,6 +1586,7 @@ namespace MWCoop
                 case "@poste": Radio.OnBeat(who, r.Str()); break;
                 case "@emit": Particles.OnMessage(who, r); break;
                 case "@vapeur": Sauna.OnRemote(who, r); break;
+                case "@son": CopySounds.OnMessage(who, r); break;
                 case "@coup": Pvp.OnPunch(who, r); break;
                 case "@ajouts": if (!Session.IsHost) Ajouts.OnHost(r.U8()); break;
                 case "@triche": Cheats.OnRemote(who, r.Str()); break;

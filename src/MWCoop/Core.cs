@@ -125,6 +125,7 @@ namespace MWCoop
             new Mod("radio", Radio.Update),
             new Mod("particules", Particles.Update),
             new Mod("sauna", Sauna.Update),
+            new Mod("sons des copies", CopySounds.Update),
             new Mod("interactions", Interactions.Update),
             new Mod("voitures", VehicleSync.Update),
             new Mod("pieces", Parts.Update),
@@ -241,6 +242,7 @@ namespace MWCoop
             Radio.OnLevelLoaded();
             Particles.OnLevelLoaded();
             Sauna.OnLevelLoaded();
+            CopySounds.OnLevelLoaded();
             Interactions.OnLevelLoaded();
             VehicleSync.OnLevelLoaded();
             Parts.OnLevelLoaded();
