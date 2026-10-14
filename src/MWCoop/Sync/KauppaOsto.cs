@@ -334,7 +334,7 @@ namespace MWCoop
         }
 
         static bool BagAuthority { get { return !Session.Active || Session.IsHost; } }
-        static string BagFile { get { string d = Config.Get("Test", "DossierSacs", ""); return Path.Combine(d.Length > 0 ? d : Application.persistentDataPath, "MWCoop-pussit.txt"); } }
+        static string BagFile { get { return WorldFiles.PathOf("MWCoop-pussit.txt"); } }
 
         static void SaveBags()
         {

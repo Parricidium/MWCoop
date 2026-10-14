@@ -261,7 +261,7 @@ namespace MWCoop
             return true;
         }
 
-        static string FilePath { get { string d = Config.Get("Test", "DossierSacs", ""); return Path.Combine(d.Length > 0 ? d : Application.persistentDataPath, "MWCoop-vetements.txt"); } }   // ([Test] DossierSacs : comme SleepingBags)
+        static string FilePath { get { return WorldFiles.PathOf("MWCoop-vetements.txt"); } }   // ([Test] DossierSacs : comme SleepingBags)
 
         static void LoadFile()
         {
