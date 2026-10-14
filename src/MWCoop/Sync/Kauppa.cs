@@ -41,11 +41,13 @@ namespace MWCoop
             gameMats = null; byName = null; guiText = null; guiUse = null; guiBuy = null; money = null; guiSub = null;
             basketTotal = 0f; registerT = null; registerCol = null; registerText = null; doorOpen = false; doorCol = null;
             lippu = null; lippuBackMesh = null; ResetMuseo();
-            pussit.Clear(); pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
+            pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
             offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
             buildAt = Active && Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
         }
+
+        public static void OnGameSave() { OnGameSaveVideo(); OnGameSaveBags(); }
 
         public static void Update()
         {

@@ -172,6 +172,7 @@ namespace MWCoop
             new Mod("molettes", Knobs.Update),
             new Mod("evenements", Events.Update),
             new Mod("defrichage", Clearing.Update),
+            new Mod("sauvegarde du jeu", SaveHook.Update),
             new Mod("luge de Teimo", TeimoSled.Update),
             new Mod("graphismes", Gfx.Update),
             new Mod("rallye", Rally.Update),
@@ -293,6 +294,7 @@ namespace MWCoop
             Knobs.OnLevelLoaded();
             Events.OnLevelLoaded();
             Clearing.OnLevelLoaded();
+            SaveHook.OnLevelLoaded();
             TeimoSled.OnLevelLoaded();
             Gfx.OnLevelLoaded();
             Lights.OnLevelLoaded();
