@@ -1698,6 +1698,7 @@ namespace MWCoop
                     }
                     Log.Info(sb2.ToString());
                 }
+                if (t > 40f && Time.frameCount % 900 == 0) Log.Info("autotest : particules, lumieres " + Particles.LightReport());
                 if (t > 152f && step == 0)
                 {
                     step = 1;
