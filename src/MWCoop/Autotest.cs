@@ -1397,6 +1397,7 @@ namespace MWCoop
                     if (kf != null) { HutongGames.PlayMaker.FsmFloat vf = kf.FsmVariables.FindFsmFloat("Volume"); if (vf != null) vf.Value = 0.6f; }
                     Log.Info("autotest : radioautre, " + Jobs.TestSend(part, "Mouse off 2", "ON", "Check tune"));
                 }
+                if (Net.Session.IsHost && t > 50f && step == 1 && Config.GetInt("Test", "RadioCoupe", 0) != 0) { step = 2; Log.Info("autotest : radioautre, " + Radio.TestCut()); }
                 if (Net.Session.IsHost && t > 58f && step == 1) { step = 2; Log.Info("autotest : radioautre, " + Jobs.TestSend(part, "Decrease", "OFF", "Off")); }
                 if (!Net.Session.IsHost && Config.GetInt("Test", "RadioFlux", 0) != 0 && t > 30f && step == 0) { step = 1; Log.Info("autotest : radioautre, " + Radio.TestFolkSong()); }
                 // ([Test] RadioLocale=s : l'invite allume ici la radio du KEKMET a s secondes, volume 0,3 -- ses reglages doivent rester les siens)
@@ -1566,6 +1567,63 @@ namespace MWCoop
                              + ", vendeur " + (anim != null ? anim.ActiveStateName + (anim.enabled ? "" : " (coupe)") + (anim.gameObject.activeInHierarchy ? "" : " (eteint)") : "?")
                              + ", PayMoney " + (pay != null ? pay.ActiveStateName + (payGo.activeInHierarchy ? "" : " (eteint)") : "?")
                              + ", WoodJob1Point " + (logic != null ? logic.ActiveStateName : "?") + " Car " + (car != null && car.Value) + " Order " + (order != null && order.Value));
+                }
+            }
+            // [Test] Autotest=teleinvite ([Test] TeleQui=invite|hote) : ce joueur allume la tele du salon a 30 s ; chacun note
+            // toutes les 3 s de 28 a 80 s la grille (TVPrograms :: Schedule, ADs : etat, actif) et l'ecran (enfants actifs).
+            if (mode == "teleinvite")
+            {
+                bool me = Net.Session.IsHost == (Config.Get("Test", "TeleQui", "invite") == "hote");
+                if (me && t > 30f && step == 0)
+                {
+                    step = 1;
+                    GameObject sw = Game.FindAny("YARD/Building/LIVINGROOM/TV/TVSwitch");
+                    PlayMakerFSM u = sw != null ? Game.FsmOn(sw, "Use") : null;
+                    if (u != null) { Game.SetState(u, "Switch"); Log.Info("autotest : tele allumee ici -> " + u.ActiveStateName); }
+                }
+                // (photos de l'ecran : camera d'essai a 1,2 m de TVScreen, sur ses 4 cotes, a 45-48 s)
+                for (int k = 0; k < 4; k++)
+                    if (t > 45f + k && step3 == k)
+                    {
+                        step3 = k + 1;
+                        GameObject scr = null, tvr = Game.FindAny("YARD/Building/LIVINGROOM/TV");
+                        if (tvr != null) foreach (Transform c in tvr.GetComponentsInChildren<Transform>(true)) if (c.name == "TVScreen") { scr = c.gameObject; break; }
+                        if (scr == null) { Log.Info("autotest : tele, TVScreen introuvable"); break; }
+                        if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.02f; testCam.fieldOfView = 50f; }
+                        Transform st = scr.transform;
+                        Vector3 n = k == 0 ? st.forward : k == 1 ? -st.forward : k == 2 ? st.right : -st.right;
+                        testCam.transform.position = st.position + n * 1.2f;
+                        testCam.transform.rotation = Quaternion.LookRotation(st.position - testCam.transform.position, Vector3.up);
+                        CaptureSoon("tele-" + k, 0.4f);
+                        Log.Info("autotest : tele, photo " + k + " (" + Recon.Path(st) + ")");
+                    }
+                if (t > 40f && step2 == 0)
+                {
+                    step2 = 1;
+                    foreach (Object o in Game.AllFsms())
+                    {
+                        var f = (PlayMakerFSM)o;
+                        if (f == null || f.hideFlags != HideFlags.None || f.gameObject.name != "TVPrograms" || f.FsmName != "Schedule") continue;
+                        var names = new System.Text.StringBuilder();
+                        foreach (HutongGames.PlayMaker.FsmState st in f.FsmStates) names.Append(st.Name).Append(", ");
+                        Log.Info("autotest : grille, etats : " + names);
+                        foreach (string st in new[] { f.ActiveStateName, "State 1", "Start", "Check time", "Time" }) Log.Info("autotest : grille, " + Jobs.DumpActions(f, st));
+                        break;
+                    }
+                }
+                if (t > 28f && t < 80f && t >= ttLog2)
+                {
+                    ttLog2 = t + 3f;
+                    var sb = new System.Text.StringBuilder("autotest : tele");
+                    foreach (Object o in Game.AllFsms())
+                    {
+                        var f = (PlayMakerFSM)o;
+                        if (f == null || f.hideFlags != HideFlags.None || f.gameObject.name != "TVPrograms") continue;
+                        sb.Append(" | ").Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append(" [").Append(f.ActiveStateName).Append("]").Append(f.enabled ? "" : " COUPE").Append(f.gameObject.activeInHierarchy ? "" : " eteint");
+                    }
+                    GameObject tv = Game.FindAny("YARD/Building/LIVINGROOM/TV");
+                    if (tv != null) foreach (Transform c in tv.GetComponentsInChildren<Transform>(false)) if (c.name.ToLowerInvariant().Contains("screen") || c.name.ToLowerInvariant().Contains("noise") || c.name.ToLowerInvariant().Contains("static")) sb.Append(" | ").Append(c.name).Append(" on");
+                    Log.Info(sb.ToString());
                 }
             }
             if (mode == "sangsonde" && t > 25f && !done) { done = true; Log.Info("autotest : " + Respawn.ProbeBlood()); }
@@ -2204,7 +2262,7 @@ namespace MWCoop
         // Teletexte ([Test] Autotest=teletexte) : a 30 s l'hote allume le teletexte avec la telecommande (Use : 'Bool
         // test' -> Open), a 36 s il tape la page 123 (Input : 'Send code', NumberInt) ; les deux notent toutes les 2 s si
         // Systems/TV/Teletext est allume et sa page (Pages.PageNumber). Attendu chez l'invite : allume, 123.
-        static float ttLog;
+        static float ttLog, ttLog2;
         static void TestTeletext(float t)
         {
             if (MWCoop.Net.Session.IsHost && t > 24f && step == 0)
@@ -2442,7 +2500,7 @@ namespace MWCoop
         static int seenFlags = -1;
         static float shotAt = -1;
         static string bagId;
-        static int step, step2, portiereMark, spamLogged = -1;
+        static int step, step2, step3, portiereMark, spamLogged = -1;
         static bool brokeLock;
         static float maxUp = 0.5f, maxRot, coffreT;
         static bool coffreStartSet;
