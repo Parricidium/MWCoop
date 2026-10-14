@@ -86,6 +86,8 @@ static const TutoStep kTuto[] = {
       L"Remove dents", L"In Car: every car in your save is smooth again (game closed). The dents file is set aside, not deleted. In co-op, the host does it.", "0.94.0" },
     { L"Sauvegardes", L"Plusieurs parties, une par groupe d'amis : crée-les, nomme-les, choisis celle à héberger (ici ou dans le salon). Tes invités reçoivent ta sauvegarde, la leur n'est pas touchée.",
       L"Saves", L"Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.", "0.95.0" },
+    { L"Stable ou Nightly", L"Dans Réglages, Mise à jour : Stable, la version recommandée ; Nightly, la prochaine version en cours de développement, à essayer entre amis. Instable, et la même pour tout le monde.",
+      L"Stable or Nightly", L"In Settings, Updates: Stable, the recommended version; Nightly, the next version still in development, to try with friends. Unstable, and the same for everyone.", "0.95.2" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -134,10 +136,11 @@ static RectF TutoTarget(int i)
     case 36: return kMscCompat;
     case 37: return g_dentBtnRect;
     case 38: return g_navR[TAB_SAVES];
+    case 39: return g_canalRect;
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 17 || i == 18 || i == 21 || i == 39 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

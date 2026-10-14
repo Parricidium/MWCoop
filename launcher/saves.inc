@@ -427,3 +427,64 @@ static void SaveClick(int id)
         if (part == SP_OK) { SaveChar(13); return; }
     }
 }
+
+// ---------------------------------------------------------------- CANAL Stable / Nightly (temporaire, voir ChannelNightly)
+static RectF g_canalRect;   // (bulle du guide)
+// Copie des sauvegardes (principale et partie-N : les fichiers du dossier LocalLow, sans sous-dossiers) avant le premier
+// passage en Nightly : MWCoop\copie-avant-nightly\<date>\<principale | partie-N>.
+static std::wstring SavesBackupNightly()
+{
+    std::wstring root = SaveProfRoot();
+    root = root.substr(0, root.size() - 8);   // (sans "profils\")
+    SYSTEMTIME t; GetLocalTime(&t);
+    wchar_t d[32]; swprintf_s(d, L"%04d-%02d-%02d_%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute);
+    std::wstring dst = root + L"copie-avant-nightly\\" + d + L"\\";
+    SavesScan();
+    int files = 0;
+    for (const SaveSlot &sl : g_saves) {
+        std::wstring src = SaveDirOf(sl.prof), to = dst + (sl.prof.empty() ? L"principale" : sl.prof) + L"\\";
+        WIN32_FIND_DATAW fd;
+        HANDLE h = src.empty() ? INVALID_HANDLE_VALUE : FindFirstFileW((src + L"*").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        SHCreateDirectoryExW(NULL, to.c_str(), NULL);
+        do {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            if (CopyFileW((src + fd.cFileName).c_str(), (to + fd.cFileName).c_str(), FALSE)) files++;
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    TestLog("canal : %d fichier(s) de sauvegarde copies dans %s", files, Narrow(dst, CP_UTF8).c_str());
+    return files ? dst : L"";
+}
+// Passer en Nightly (avertissement, copie des sauvegardes la premiere fois) ou revenir en Stable. host : demande venue du
+// salon (l'hote est sur l'autre canal). Faux : le joueur a refuse.
+static bool ChannelSet(bool nightly, bool host)
+{
+    wchar_t q[1200];
+    if (nightly) {
+        q[0] = 0;
+        if (host) wcscpy_s(q, T(L"L'hôte joue avec une version Nightly de MWCoop : il faut la même pour jouer ensemble.\n\n", L"The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n"));
+        wcscat_s(q, T(L"⚠ Attention : la version Nightly est en cours de développement et peut présenter des instabilités (bugs, plantages, sauvegarde abîmée).\n\n"
+                      L"Tout le monde doit être sur la même version pour jouer ensemble : tes amis doivent aussi passer en Nightly.\n\n"
+                      L"Tes sauvegardes sont copiées avant (MWCoop\\copie-avant-nightly). Tu peux revenir en Stable à tout moment (Réglages, Mise à jour).\n\n"
+                      L"Passer en Nightly ?",
+                      L"⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\n"
+                      L"Everyone must be on the same version to play together: your friends must switch to Nightly too.\n\n"
+                      L"Your saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\n"
+                      L"Switch to Nightly?"));
+        if (MessageBoxW(g_wnd, q, L"MWCoop Nightly", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return false;
+        if (GetPrivateProfileIntW(L"Lanceur", L"CopieNightly", 0, g_iniLauncher.c_str()) == 0) {
+            std::wstring dst = SavesBackupNightly();
+            if (!dst.empty()) WritePrivateProfileStringW(L"Lanceur", L"CopieNightly", L"1", g_iniLauncher.c_str());
+        }
+    } else if (host) {
+        if (MessageBoxW(g_wnd, T(L"L'hôte joue avec la version Stable de MWCoop, toi avec une Nightly : il faut la même pour jouer ensemble.\n\nRevenir en Stable maintenant ?",
+                                 L"The host plays the Stable version of MWCoop, you a Nightly: you need the same one to play together.\n\nGo back to Stable now?"),
+                        L"MWCoop", MB_YESNO | MB_ICONQUESTION) != IDYES) return false;
+    }
+    WritePrivateProfileStringW(L"Lanceur", L"Canal", nightly ? L"nightly" : L"stable", g_iniLauncher.c_str());
+    UpdSet(L"");
+    TestLog("canal : %s", nightly ? "nightly" : "stable");
+    SetStatus(nightly ? K_WARN : K_OK, nightly ? T(L"Canal Nightly : version en développement", L"Nightly channel: development version") : T(L"Canal Stable", L"Stable channel"));
+    return true;
+}
