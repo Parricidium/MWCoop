@@ -144,6 +144,7 @@ namespace MWCoop
             System.Func<Vector3, Vector2> weight = w =>
             {
                 float best = 0f, target = 0f;
+                if (!Inside(w.x, w.z)) return Vector2.zero;   // (seulement dans notre terrain)
                 foreach (float[] p in pads)
                 {
                     Vector3 loc = Quaternion.Inverse(Quaternion.Euler(0, p[2], 0)) * new Vector3(w.x - p[0], 0, w.z - p[1]);
@@ -212,11 +213,21 @@ namespace MWCoop
                 Matrix4x4 l2w = t.localToWorldMatrix, w2l = t.worldToLocalMatrix;
                 Vector3[] nr = m.normals;
                 Vector3 up = t.InverseTransformDirection(Vector3.up).normalized;
-                int n = 0;
+                // Sommet fixe si l'un de ses triangles sort du terrain : le sol du jeu est fait de triangles de 5 a 10 m, et un
+                // triangle a cheval sur la petite route penchait quand son sommet sud descendait -- le sol passait sous le bourrelet
+                // de neige du bord nord (fixe, dans le maillage de la route) : une fente au pied du bourrelet (retour de JD, 14/10).
+                var fixedV = new bool[v.Length];
+                for (int i = 0; i < v.Length; i++) { Vector3 w0 = l2w.MultiplyPoint3x4(v[i]); fixedV[i] = !Inside(w0.x, w0.z); }
+                var keepV = (bool[])fixedV.Clone();
+                int[] tri = m.triangles;
+                for (int i = 0; i + 2 < tri.Length; i += 3)
+                    if (fixedV[tri[i]] || fixedV[tri[i + 1]] || fixedV[tri[i + 2]]) keepV[tri[i]] = keepV[tri[i + 1]] = keepV[tri[i + 2]] = true;
+                int n = 0, kept = 0;
                 for (int i = 0; i < v.Length; i++)
                 {
                     Vector3 w = l2w.MultiplyPoint3x4(v[i]);
                     Vector2 bt = weight(w);
+                    if (bt.x > 0f && keepV[i]) { kept++; continue; }
                     float best = bt.x, target = bt.y;
                     if (best <= 0f) continue;
                     w.y = Mathf.Lerp(w.y, target, best);
@@ -227,7 +238,7 @@ namespace MWCoop
                 m.vertices = v; if (nr != null && nr.Length == v.Length) m.normals = nr; m.RecalculateBounds();
                 if (mc != null) { mc.sharedMesh = null; mc.sharedMesh = m; }
                 moved += n;
-                Log.Info("defrichage : sol " + t.name + " (" + v.Length + " sommets) : " + n + " sommet(s) nivele(s)");
+                Log.Info("defrichage : sol " + t.name + " (" + v.Length + " sommets) : " + n + " sommet(s) nivele(s), " + kept + " garde(s) (triangle hors du terrain)");
             }
             Log.Info("defrichage : terrassement, " + moved + " sommet(s) du sol et " + layers + " des couches posees dessus deplaces");
         }
