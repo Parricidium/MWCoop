@@ -31,7 +31,7 @@ namespace MWCoop
             return null;
         }
 
-        static string ItemFile { get { string d = Config.Get("Test", "DossierSacs", ""); return Path.Combine(d.Length > 0 ? d : Application.persistentDataPath, "MWCoop-esineet.txt"); } }
+        static string ItemFile { get { return WorldFiles.PathOf("MWCoop-esineet.txt"); } }
 
         // ---------------------------------------------------------------- modeles (maison, sauf la TV : copie du jeu)
         static Material plainMat;

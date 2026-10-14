@@ -19,6 +19,14 @@ namespace MWCoop
 
         public static void OnLevelLoaded() { done.Clear(); }
 
+        // Chemin d'un fichier du mod rattache au monde ([Test] DossierSacs : un dossier a part pour les copies d'essai, qui
+        // partagent sinon le dossier du vrai jeu ; avant : la meme ligne dans quatre modules).
+        public static string PathOf(string file)
+        {
+            string d = Config.Get("Test", "DossierSacs", "");
+            return Path.Combine(d.Length > 0 ? d : UnityEngine.Application.persistentDataPath, file);
+        }
+
         public static void Check(string dir)
         {
             if (done.Contains(dir)) return;

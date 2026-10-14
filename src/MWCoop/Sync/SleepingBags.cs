@@ -393,7 +393,7 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- liste (hote)
         // ([Test] DossierSacs : un dossier a part pour les copies d'essai, qui partagent sinon le dossier du vrai jeu)
-        static string FilePath { get { string d = Config.Get("Test", "DossierSacs", ""); return Path.Combine(d.Length > 0 ? d : Application.persistentDataPath, "MWCoop-sacs.txt"); } }
+        static string FilePath { get { return WorldFiles.PathOf("MWCoop-sacs.txt"); } }
 
         static void Load()
         {
