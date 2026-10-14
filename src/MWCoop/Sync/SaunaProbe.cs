@@ -34,6 +34,33 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // Essai Autotest=kiljusonde : automates du seau a kilju et d'un bidon de jus (remplissage des bidons, retour de RullER 14/10 :
+        // « bouteilles de kilju remplies, vides apres la sauvegarde »)
+        public static string ProbeKilju()
+        {
+            var sb = new StringBuilder("kiljusonde : ");
+            var gos = new List<GameObject>();
+            GameObject bucket = Game.FindAny("EQUIPMENTS/bucket(itemx)");
+            if (bucket != null) gos.Add(bucket);
+            int juice = 0;
+            foreach (Object o in Game.AllFsms())
+            {
+                var f = o as PlayMakerFSM;
+                if (f == null || f.hideFlags != HideFlags.None) continue;
+                string n = f.gameObject.name.ToLowerInvariant();
+                if ((n.Contains("juice") || n.Contains("kilju") || n.Contains("bottle")) && !gos.Contains(f.gameObject) && juice++ < 3) gos.Add(f.gameObject);
+            }
+            foreach (GameObject g in gos)
+                foreach (PlayMakerFSM f in g.GetComponentsInChildren<PlayMakerFSM>(true))
+                {
+                    sb.Append(" ||| ").Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append(" [").Append(f.ActiveStateName).Append("]");
+                    foreach (FsmState st in f.FsmStates) sb.Append(" ## ").Append(st.Name).Append(" : ").Append(Jobs.DumpActions(f, st.Name));
+                    sb.Append(" @vars");
+                    foreach (NamedVariable v in f.FsmVariables.GetAllNamedVariables()) sb.Append(" ").Append(v.Name).Append("=").Append(v.ToString());
+                }
+            return sb.ToString();
+        }
+
         public static string Probe()
         {
             var sb = new StringBuilder("vapeur : ");
