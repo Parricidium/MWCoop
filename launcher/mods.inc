@@ -439,7 +439,8 @@ static void MscTick()
 static int MscModCount() { return g_mscInstalled ? (int)g_msc.size() : 0; }
 static const RectF kMscToggle(690, 188, 50, 28), kMscAuto(1172, 188, 50, 28), kMscInstall(300, 179, 300, 46), kMscList(288, 282, 952, 390),
                    kMscBack(1000, 108, 240, 30), kMscOpenDir(288, 694, 260, 30),
-                   kMscSrcOff(838, 102, 112, 30), kMscSrcOwn(954, 102, 112, 30), kMscReinst(1078, 102, 162, 30);   // officiel / MWCoop, reinstaller
+                   kMscSrcOff(838, 102, 112, 30), kMscSrcOwn(954, 102, 112, 30), kMscReinst(1078, 102, 162, 30),   // officiel / MWCoop, reinstaller
+                   kMscCompat(860, 244, 380, 30);   // mods pris en charge / deconseilles (article du GUIDE)
 static const float kMscRowH = 76, kMscSetH = 54;
 
 static void DrawToggle(Graphics &g, RectF r, bool on, bool hot) { UiToggle(g, r, on, hot); }
@@ -477,7 +478,8 @@ static void MscSetActive(int i, bool on)
 }
 
 // Element sous la souris : 1000 interrupteur, 1001 installer, 1002 retour, 1003 mod active (page), 1004 dossier,
-// 1005 accepter les mods de l'hote, 2000+i ouvrir le mod i, 3000+i*4+k option i (k : 0 case, 1 moins, 2 plus), 4000+i envoyer.
+// 1005 accepter les mods de l'hote, 1009 mods pris en charge, 2000+i ouvrir le mod i, 3000+i*4+k option i (k : 0 case, 1 moins,
+// 2 plus), 4000+i envoyer.
 static int MscAt(float x, float y)
 {
     if (g_state != ST_IDLE) return -1;
@@ -498,6 +500,7 @@ static int MscAt(float x, float y)
         }
         return -1;
     }
+    if (kMscCompat.Contains(x, y)) return 1009;
     if (kMscSrcOff.Contains(x, y)) return 1006;
     if (kMscSrcOwn.Contains(x, y)) return 1007;
     if (g_mscInstalled && g_mscInstall != 1 && kMscReinst.Contains(x, y)) return 1008;
@@ -513,6 +516,10 @@ static int MscAt(float x, float y)
     if (x > sr.X - 80 && x < sr.X + sr.Width + 8) return 4000 + i;   // Envoyer aux invites
     return g_msc[i].known ? 2000 + i : -1;
 }
+
+// Bouton « Mods pris en charge / incompatibilites connues » (demande de JD, 14/10) : l'article du GUIDE (wikidata.inc,
+// kW_ModCompat), sa categorie ouverte.
+static void MscOpenCompat();   // (wiki.inc)
 
 static bool MscClick(float x, float y)
 {
@@ -534,6 +541,7 @@ static bool MscClick(float x, float y)
                                                          : T(L"MSCLoader officiel : pas install\u00E9 dans le jeu (INSTALLER MSCLOADER)", L"Official MSCLoader: not installed in the game (INSTALL MSCLOADER)"));
     }
     else if (h == 1004) ShellExecuteW(g_wnd, L"open", g_mscDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    else if (h == 1009) MscOpenCompat();
     else if (h == 1002) { g_mscPage = -1; g_scroll[TAB_MODS] = 0; }
     else if (h >= 6000) MscSetActive(h - 6000, g_msc[h - 6000].off);
     else if (h >= 4000) {
@@ -696,6 +704,13 @@ static void DrawMods(Graphics &g)
             DrawToggle(g, kMscAuto, OptGet(*ma) != 0, g_mscHot == 1005);
         }
         Title(g, T(L"Tes mods", L"Your mods"), RectF(c.X + 24, c.Y + 160, 300, 26), 16, kInk);
+        {   // mods pris en charge / deconseilles : article du GUIDE
+            bool hot = g_mscHot == 1009;
+            GraphicsPath p; RoundRect(p, kMscCompat, 15);
+            SolidBrush b(hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
+            Icon(g, IC_BOOK, kMscCompat.X + 22, kMscCompat.Y + 15, 15, hot ? kAcc : kInk, 1.9f);
+            Text(g, T(L"MODS PRIS EN CHARGE / INCOMPATIBILITÉS", L"MOD SUPPORT / KNOWN INCOMPATIBILITIES"), RectF(kMscCompat.X + 36, kMscCompat.Y, kMscCompat.Width - 42, kMscCompat.Height), 11.5f, FontStyleBold, hot ? kAcc : kInk, StringAlignmentCenter);
+        }
         float sc = g_scroll[TAB_MODS], ms = MscMaxScroll();
         if (g_mscInstalled && g_msc.empty())
             Para(g, T(L"Aucun mod dans le dossier Mods. Ajoute les DLL des mods MSCLoader (version My Winter Car) puis lance le jeu une fois : leurs noms et leurs options appara\u00EEtront ici.",

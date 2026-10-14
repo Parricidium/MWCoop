@@ -80,6 +80,10 @@ static const TutoStep kTuto[] = {
       L"Rivett custom paint", L"In Car, at the top of the preview: your own paint on the CORRIS, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's; the host sends it to their guests.", "0.83.4" },
     { L"Activer ou couper un mod", L"Dans Mods, l'interrupteur « Actif » de chaque mod : coupé, le mod n'est plus chargé du tout (sa DLL devient .dll.off) ni envoyé aux invités. Remis, il revient au prochain lancement.",
       L"Turn a mod on or off", L"In Mods, each mod's \"On\" switch: off, the mod is no longer loaded at all (its DLL becomes .dll.off) nor sent to guests. Back on, it returns at the next launch.", "0.83.6" },
+    { L"Mods pris en charge", L"Dans Mods, ce bouton ouvre la liste des mods que MWCoop synchronise, de ceux qui marchent tels quels, et des mods déconseillés avec leurs bugs connus.",
+      L"Mod support", L"In Mods, this button opens the list of mods MWCoop syncs, those that work as they are, and the mods to avoid with their known bugs.", "0.94.0" },
+    { L"Retirer les bosses", L"Dans Voiture : toutes les voitures de ta sauvegarde repartent lisses (jeu fermé). Le fichier des bosses est mis de côté, pas effacé. En coop, c'est l'hôte qui le fait.",
+      L"Remove dents", L"In Car: every car in your save is smooth again (game closed). The dents file is set aside, not deleted. In co-op, the host does it.", "0.94.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -125,10 +129,12 @@ static RectF TutoTarget(int i)
     case 33: return g_vinBtnRect;
     case 34: return g_paintBtnRect;
     case 35: return MscActiveRect(MscRowRect(0));
+    case 36: return kMscCompat;
+    case 37: return g_dentBtnRect;
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 || i == 35 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 || i == 33 || i == 34 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la

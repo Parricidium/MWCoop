@@ -32,6 +32,90 @@ namespace MWCoop
                 if (Open) { openedAt = Time.realtimeSinceStartup; WalletPanel.Open = false; CheatPanel.Open = false; CenterOnMe(); }
             }
             if (Open && Input.GetKeyDown(KeyCode.C)) CenterOnMe();
+            if (Open && Input.GetKeyDown(KeyCode.B)) showJobs = !showJobs;
+            TaxiTick();
+        }
+
+        // ---------------------------------------------------------------- boulots
+        // Lieux ou gagner de l'argent (demande de « ...., », forum des suggestions, 13/10) : fosses septiques (JOBS/HouseShitN),
+        // livraisons de bois (JOBS/HouseWoodN/WoodJobNPoint), tas de bois a ramasser (JOBS/LogLongPile), tracts (JOBS/ADs) ;
+        // et pour le taxi, le client qui attend et la destination demandee (JOBS/TAXIJOB/Customer1/TaxiWalker :: Logic,
+        // variable DropOffPoint). L'automate du client tourne chez l'hote : il envoie la destination (@taxicarte).
+        // B, carte ouverte : montrer / cacher.
+        class Spot { public Vector3 At; public string Fr, En; public Color C; }
+        static readonly List<Spot> spots = new List<Spot>();
+        static int spotsLevel = -1;
+        static bool showJobs = true;
+        static readonly Color JobColor = new Color(0.45f, 0.85f, 1f), TaxiColor = new Color(1f, 0.62f, 0.25f);
+
+        static void BuildSpots()
+        {
+            if (spotsLevel == Application.loadedLevel && spots.Count > 0) return;
+            spots.Clear();
+            spotsLevel = Application.loadedLevel;
+            GameObject jobs = Game.FindAny("JOBS");
+            if (jobs == null) return;
+            foreach (Transform c in jobs.transform)
+            {
+                if (c.name.StartsWith("HouseShit")) { Transform w = c.Find("WasteWell_2000litre"); spots.Add(new Spot { At = (w ?? c).position, Fr = "Fosse septique", En = "Septic tank", C = JobColor }); }
+                else if (c.name.StartsWith("HouseWood"))
+                    foreach (Transform d in c) { if (d.name.StartsWith("WoodJob")) spots.Add(new Spot { At = d.position, Fr = "Livraison de bois", En = "Firewood delivery", C = JobColor }); }
+                else if (c.name == "LogLongPile") spots.Add(new Spot { At = c.position, Fr = "Tas de bois", En = "Log pile", C = JobColor });
+                else if (c.name == "ADs") spots.Add(new Spot { At = c.position, Fr = "Tracts", En = "Flyers", C = JobColor });
+            }
+            Log.Info("carte : " + spots.Count + " lieux de boulots");
+        }
+
+        static PlayMakerFSM taxiLogic; static GameObject taxiCust; static float taxiNext, taxiSentAt;
+        static string taxiDropPath, taxiSent; static bool taxiActive;
+        static void TaxiTick()
+        {
+            if (!PlayerSync.InGame || !Session.IsHost) return;
+            float now = Time.realtimeSinceStartup;
+            if (now < taxiNext) return;
+            taxiNext = now + 2f;
+            if (taxiCust == null) { taxiCust = Game.FindAny("JOBS/TAXIJOB/Customer1"); GameObject w = Game.FindAny("JOBS/TAXIJOB/Customer1/TaxiWalker"); taxiLogic = w != null ? Game.FsmOn(w, "Logic") : null; }
+            HutongGames.PlayMaker.FsmGameObject drop = taxiLogic != null ? taxiLogic.FsmVariables.FindFsmGameObject("DropOffPoint") : null;
+            taxiActive = taxiCust != null && taxiCust.activeInHierarchy;
+            taxiDropPath = taxiActive && drop != null && drop.Value != null ? Recon.Path(drop.Value.transform) : "";
+            string msg = (taxiActive ? "1" : "0") + taxiDropPath;
+            if (Session.RemoteCount > 0 && (msg != taxiSent || now - taxiSentAt > 15f))
+            {
+                taxiSent = msg; taxiSentAt = now;
+                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@taxicarte").Bool(taxiActive).Str(taxiDropPath), true);
+            }
+        }
+
+        public static void OnTaxi(int who, NetReader r)
+        {
+            bool active = r.Bool(); string drop = r.Str();
+            if (Session.IsHost || who != 0) return;
+            taxiActive = active; taxiDropPath = drop;
+        }
+
+        static void DrawJobs(Rect local, List<Rect> used)
+        {
+            BuildSpots();
+            foreach (Spot sp in spots) Place(local, used, sp.At, Lang.T(sp.Fr, sp.En), sp.C, false);
+            if (!taxiActive) return;
+            if (taxiCust == null) taxiCust = Game.FindAny("JOBS/TAXIJOB/Customer1");
+            Transform walker = taxiCust != null ? taxiCust.transform.Find("TaxiWalker") : null;
+            if (walker != null && walker.gameObject.activeInHierarchy) Place(local, used, walker.position, Lang.T("Taxi : client", "Taxi: customer"), TaxiColor, true);
+            GameObject dst = !string.IsNullOrEmpty(taxiDropPath) ? Game.FindAny(taxiDropPath) : null;
+            if (dst != null) Place(local, used, dst.transform.position, Lang.T("Taxi : destination", "Taxi: destination"), TaxiColor, true);
+        }
+
+        static void Place(Rect local, List<Rect> used, Vector3 at, string name, Color c, bool big)
+        {
+            Vector2 s = ToScreen(local, at.x, at.z);
+            if (!local.Contains(s)) return;
+            float r = Style.Px(big ? 7 : 5);
+            Style.Round(new Rect(s.x - r - Style.Px(2), s.y - r - Style.Px(2), 2 * r + Style.Px(4), 2 * r + Style.Px(4)), r + Style.Px(2), new Color(0f, 0f, 0f, 0.75f));
+            Style.Round(new Rect(s.x - r, s.y - r, 2 * r, 2 * r), r, c);
+            var lr = new Rect(s.x + r + Style.Px(5), s.y - Style.Px(11), Style.Width(name, 13, true) + Style.Px(4), Style.Px(22));
+            foreach (Rect u in used) if (u.Overlaps(lr)) return;
+            used.Add(lr);
+            Label(lr, name, 13, c);
         }
 
         static void CenterOnMe()
@@ -56,7 +140,7 @@ namespace MWCoop
             float pad = Style.Px(18);
             Style.Title(new Rect(panel.x + pad, panel.y + Style.Px(8), panel.width - 2 * pad, Style.Px(40)), Lang.T("CARTE", "MAP"), Style.White, TextAnchor.MiddleLeft, 24);
             Style.Text(new Rect(panel.x + pad, panel.y + Style.Px(8), panel.width - 2 * pad, Style.Px(40)),
-                       Lang.T("Molette : zoom · glisser : déplacer · C : moi · ", "Wheel: zoom · drag: move · C: me · ") + Keys.Label(Keys.Map) + Lang.T(" / Échap : fermer", " / Esc: close"), 14, TextAnchor.MiddleRight, Style.Dim, false);
+                       Lang.T("Molette : zoom · glisser : déplacer · C : moi · ", "Wheel: zoom · drag: move · C: me · ") + Lang.T("B : boulots · ", "B: jobs · ") + Keys.Label(Keys.Map) + Lang.T(" / Échap : fermer", " / Esc: close"), 14, TextAnchor.MiddleRight, Style.Dim, false);
             var view = new Rect(panel.x + pad, panel.y + Style.Px(52), panel.width - 2 * pad, panel.height - Style.Px(52) - pad);
             // (hors de la carte : le verre du panneau, demande de JD)
             if (!MapRender.Ready)
@@ -120,6 +204,7 @@ namespace MWCoop
                 used.Add(lr);
                 Label(lr, name, 13, new Color(1f, 0.92f, 0.7f));
             }
+            if (showJobs) DrawJobs(local, used);
             // joueurs
             foreach (PlayerInfo pi in Session.Players.Values)
             {
@@ -175,8 +260,33 @@ namespace MWCoop
         // [Test] Autotest=carte : a [Test] CarteOuvre (90 s) la carte s'ouvre (zoom [Test] CarteZoom), capture a +2 s.
         static int testStep;
         static bool testHold;
+        static bool probed;
         public static void Test(string mode, float t)
         {
+            if (mode == "carteboulots" && t > 30f && !probed)
+            {
+                probed = true;
+                GameObject jobs = Game.FindAny("JOBS");
+                var sb = new System.Text.StringBuilder("autotest : JOBS :");
+                if (jobs != null)
+                    foreach (Transform c in jobs.transform)
+                    {
+                        sb.Append(" | ").Append(c.name).Append(" ").Append(c.position.ToString("F0")).Append(c.gameObject.activeSelf ? "" : " (eteint)");
+                        foreach (Transform d in c) sb.Append(" || ").Append(d.name).Append(" ").Append(d.position.ToString("F0")).Append(d.gameObject.activeSelf ? "" : " (eteint)");
+                    }
+                Log.Info(sb.ToString());
+                GameObject cust = Game.FindAny("JOBS/TAXIJOB/Customer1");
+                if (cust != null)
+                    foreach (PlayMakerFSM f in cust.GetComponentsInChildren<PlayMakerFSM>(true))
+                    {
+                        var v = new System.Text.StringBuilder("autotest : taxi " + Recon.Path(f.transform) + "::" + f.FsmName + " [" + f.ActiveStateName + "] :");
+                        foreach (var x in f.FsmVariables.GameObjectVariables) v.Append(' ').Append(x.Name).Append('=').Append(x.Value != null ? x.Value.name : "-");
+                        foreach (var x in f.FsmVariables.Vector3Variables) v.Append(' ').Append(x.Name).Append('=').Append(x.Value.ToString("F0"));
+                        foreach (var x in f.FsmVariables.StringVariables) v.Append(' ').Append(x.Name).Append("='").Append(x.Value).Append("'");
+                        foreach (var x in f.FsmVariables.IntVariables) v.Append(' ').Append(x.Name).Append('=').Append(x.Value);
+                        Log.Info(v.ToString());
+                    }
+            }
             if (mode != "carte") return;
             // (invite : au garage a 30 s, pour voir deux joueurs loin l'un de l'autre)
             if (!Session.IsHost && testStep == 0 && t > 30f) { testStep = 9; foreach (Cheats.Place p in Cheats.Places) if (p.Key == "garage") Cheats.GoPlace(p); }

@@ -84,6 +84,7 @@ namespace MWCoop
             public float NextLog;
             public Drivetrain Dt;
             public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
+            public float BadAt = -10f; public int BadN;                                 // garde-fou : derniere remise, remises rapprochees
             public MonoBehaviour[] SanComps; public float SanNext;                      // garde-fou : Drivetrain, roues..., releve suivant
             public Wheel[] Wheels;
             public AxisCarController Axis;
@@ -1547,13 +1548,22 @@ namespace MWCoop
         // joueur, 10/10 : regime NaN apres « moteur repris en marche », jeu fige chez l'hote et chez son passager).
         static readonly MonoBehaviour[] NoComps = new MonoBehaviour[0];
         static readonly HashSet<string> nanSeen = new HashSet<string>();
+        static string nanTest;
         static void Sanitize()
         {
+            // ([Test] NaNVoiture=<voiture> : de 40 a 41 s de jeu, sa vitesse mise a NaN a chaque image -- source qui revient)
+            if (nanTest == null) nanTest = Config.Get("Test", "NaNVoiture", "");
+            if (nanTest.Length > 0 && Time.timeSinceLevelLoad > 40f && Time.timeSinceLevelLoad < 41f)
+            {
+                Car tc = cars.Find(x => x.Key.StartsWith(nanTest));
+                if (tc != null && tc.Body != null && !tc.Body.isKinematic) tc.Body.velocity = new Vector3(float.NaN, 0f, 0f);
+            }
             foreach (Car c in cars)
             {
                 if (c.Body == null || c.Kinematic && c.Index != LocalDriving) continue;
                 Rigidbody b = c.Body;
-                bool bad = !Finite(b.position) || !Finite(b.velocity) || !Finite(b.angularVelocity);
+                Quaternion br = b.rotation;
+                bool bad = !Finite(b.position) || !Finite(b.velocity) || !Finite(b.angularVelocity) || !Finite(br.x + br.y + br.z + br.w);
                 int fixedF = 0;
                 if (c.Dt != null && !Finite(c.Dt.rpm)) { c.Dt.rpm = 800f; fixedF++; }
                 // (champs des roues et de la transmission : seulement la voiture conduite ici, celle reprise en marche, ou deja abimee)
@@ -1597,8 +1607,30 @@ namespace MWCoop
                 }
                 if (bad)
                 {
-                    if (c.GoodSet) { b.position = c.GoodPos; b.rotation = c.GoodRot; c.T.position = c.GoodPos; c.T.rotation = c.GoodRot; }
+                    // Remise a repetition (retour de Crowbangus, 14/10 : Sorbet rendue par l'invite contre la CORRIS que l'hote
+                    // poussait -- NaN a chaque pas, remise au meme endroit, encore NaN : voiture disparue pour tous et hote a
+                    // 20 FPS jusqu'au redemarrage) : posee plus haut, a plat, ses pieces articulees ramenees sur elle.
+                    c.BadN = now0 - c.BadAt < 3f ? c.BadN + 1 : 0;
+                    c.BadAt = now0;
+                    Vector3 gp = c.GoodSet ? c.GoodPos : c.Pos;
+                    Quaternion gr = c.GoodSet ? c.GoodRot : c.Rot;
+                    if (!Finite(gr.x + gr.y + gr.z + gr.w) || gr.x * gr.x + gr.y * gr.y + gr.z * gr.z + gr.w * gr.w < 0.5f) gr = Quaternion.identity;
+                    if (!Finite(gp)) gp = c.T.parent != null ? c.T.parent.position : Vector3.zero;
+                    if (c.BadN >= 2)
+                    {
+                        gp += Vector3.up * Mathf.Min(0.8f * (c.BadN - 1), 2.4f);
+                        gr = Quaternion.Euler(0f, gr.eulerAngles.y, 0f);
+                    }
+                    b.position = gp; b.rotation = gr; c.T.position = gp; c.T.rotation = gr;
                     b.velocity = Vector3.zero; b.angularVelocity = Vector3.zero;
+                    foreach (Rigidbody rb in b.GetComponentsInChildren<Rigidbody>())
+                    {
+                        if (rb == b) continue;
+                        Quaternion rr = rb.rotation;
+                        if (!Finite(rb.position) || !Finite(rr.x + rr.y + rr.z + rr.w)) { rb.position = gp; rb.rotation = gr; }
+                        if (!rb.isKinematic) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+                    }
+                    if (c.BadN >= 2 && c.BadN < 8) Log.Warn("voitures : " + c.Key + " encore non finie (" + c.BadN + "e fois en 3 s) : posee " + Mathf.Min(0.8f * (c.BadN - 1), 2.4f).ToString("F1") + " m plus haut, a plat");
                 }
                 else { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; }
                 if ((bad || fixedF > 0) && now0 >= nanLogAt) { nanLogAt = now0 + 5f; Log.Warn("voitures : " + c.Key + " valeurs non finies corrigees (" + fixedF + " reglages" + (bad ? ", corps remis a sa derniere pose valide" : "") + ")"); }

@@ -1021,3 +1021,37 @@ The host isn't sending mods: \"Join in game\"	Хост не отправляет
 %s is already playing: receiving their mods, then you join	%s уже играет: получение его модов, затем ты войдёшь в игру
 HOST'S MODS…	МОДЫ ХОСТА…
 The host is already playing: receiving their mods (%d %%), then you join. Click to cancel.	Хост уже играет: получение его модов (%d %%), затем ты войдёшь в игру. Нажми, чтобы отменить.
+MOD SUPPORT / KNOWN INCOMPATIBILITIES	ПОДДЕРЖКА МОДОВ / НЕСОВМЕСТИМОСТИ
+Remove dents…	Убрать вмятины…
+Close the game to remove the dents	Закрой игру, чтобы убрать вмятины
+No dents saved: the bodies are already smooth	Вмятин не сохранено: кузова уже ровные
+Remove all dents from the cars in your save?\n\nThe game keeps the dented shape of the body panels in meshsave.txt. It will be set aside (a copy is kept next to it), and every car will be smooth again at the next load.\n\nIn co-op, the host does it: their save is sent to the guests.	Убрать все вмятины с машин в твоём сохранении?\n\nИгра хранит форму помятых панелей в meshsave.txt. Он будет отложен (копия останется рядом), и все машины снова станут ровными при следующей загрузке.\n\nВ коопе это делает хост: его сохранение отправляется гостям.
+meshsave.txt: can't rename (error %lu)	meshsave.txt: не удаётся переименовать (ошибка %lu)
+Dents removed: the cars will be smooth at the next load (copy: meshsave.txt%s)	Вмятины убраны: машины будут ровными при следующей загрузке (копия: meshsave.txt%s)
+Punches between players (host)	Удары кулаком между игроками (хост)
+Mod support	Поддержка модов
+In Mods, this button opens the list of mods MWCoop syncs, those that work as they are, and the mods to avoid with their known bugs.	В разделе «Моды» эта кнопка открывает список модов, которые MWCoop синхронизирует, тех, что работают как есть, и модов, которых лучше избегать, с их известными багами.
+Remove dents	Убрать вмятины
+In Car: every car in your save is smooth again (game closed). The dents file is set aside, not deleted. In co-op, the host does it.	В разделе «Машина»: все машины в твоём сохранении снова ровные (игра закрыта). Файл вмятин откладывается, а не удаляется. В коопе это делает хост.
+Mod support and known incompatibilities	Поддержка модов и известные несовместимости
+What is synced, what causes trouble	Что синхронизируется, что создаёт проблемы
+Most MSCLoader mods work in co-op as long as they only do things for you. Those that add objects or vehicles the others must see need MWCoop to sync them: here is the list, and the mods to avoid.	Большинство модов MSCLoader работают в коопе, пока они делают что-то только для тебя. Тем, что добавляют предметы или машины, которые должны видеть другие, нужна синхронизация MWCoop: вот список, и моды, которых лучше избегать.
+Synced by MWCoop	Синхронизируются MWCoop
+Machtwagen 300D: doors, locking, sunroof, windows, A/C, engine.	Machtwagen 300D: двери, замки, люк, стёкла, кондиционер, двигатель.
+Second Machtwagen: purchase, color, plate, tuning.	Second Machtwagen: покупка, цвет, номер, тюнинг.
+RAM 1500: driving, key, lights, doors, lot purchase, camper shell, paint, radio.	RAM 1500: вождение, ключ, фары, двери, покупка на стоянке, кунг, покраска, радио.
+Cheatbox++: the items and parts it spawns (not time, weather or teleporting).	Cheatbox++: предметы и детали, которые он создаёт (не время, погода или телепортация).
+Spare Parts Seller: the parts you buy.	Spare Parts Seller: купленные детали.
+Jonne Food System: food and drinks.	Jonne Food System: еда и напитки.
+Utility Tow Cart: the cart, pulled by hand or hitched.	Utility Tow Cart: тележка, руками или на сцепке.
+Jack Stands (with OASIS): the stands under the car.	Jack Stands (с OASIS): подставки под машиной.
+Suitcase: the suitcase.	Suitcase: чемодан.
+Nothing to sync (work as they are)	Нечего синхронизировать (работают как есть)
+BetterFPS, NOP: picture settings, each player their own.	BetterFPS, NOP: настройки картинки, у каждого свои.
+Autoload (skips the menu): kept on your side, never sent to guests (their game would load its old save before yours).	Autoload (пропускает меню): остаётся у тебя, никогда не отправляется гостям (их игра загрузила бы своё старое сохранение раньше твоего).
+Not recommended: known bugs	Не рекомендуются: известные баги
+MOP (Modern Optimization Plugin): it turns off and on cars and objects far from you, which MWCoop follows live. Cars that fly, teleport or desync. Remove it to play co-op.	MOP (Modern Optimization Plugin): он выключает и включает машины и предметы вдали от тебя, а MWCoop следит за ними в реальном времени. Машины летают, телепортируются или рассинхронизируются. Удали его для игры в коопе.
+Toiveradio Enhanced: each player picks their own songs and ads on Toivoradio, you don't hear the same thing. Without it, the radio is the same for everyone.	Toiveradio Enhanced: каждый игрок сам выбирает песни и рекламу на Toivoradio, и вы слышите разное. Без него радио одинаковое для всех.
+A mod missing from this list? Try it: if it adds an object the others can't see, say so on Discord (suggestions channel) with its Nexus link.	Мода нет в этом списке? Попробуй его: если он добавляет предмет, который другие не видят, напиши в Discord (канал предложений) со ссылкой на Nexus.
+Punches between players	Удары кулаком между игроками
+Off by default. The host allows them in Game and sharing (\"Punches between players\"); their guests follow that choice. The game's punch hits a player on foot right in front of you: they step back a little, and on the 5th punch within 20 s they die (then respawn as usual).	Выключено по умолчанию. Хост разрешает их в разделе «Игра и обмен» («Удары кулаком между игроками»); его гости следуют этому выбору. Удар из игры попадает в пешего игрока прямо перед тобой: он немного отступает, а на 5-м ударе за 20 с умирает (затем возрождается как обычно).

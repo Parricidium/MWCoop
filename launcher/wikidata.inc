@@ -365,6 +365,9 @@ static const WikiBlock kW_Look[] = {
             L"Panel (F7) or chat: /tp <player>, /bring <player>, /place <name> (apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin)." },
     { WB_B, L"/argent <montant>, /soin (faim, soif, fatigue, stress… à zéro), /liberer (plus recherché, sorti de prison).", L"/money <amount>, /heal (hunger, thirst, fatigue, stress… to zero), /free (no longer wanted, out of jail)." },
     { WB_B, L"Pour tous : /heure <0-24>, /neige oui|non (faits par l'hôte, le monde suit).", L"For everyone: /time <0-24>, /snow on|off (done by the host, the world follows)." },
+    { WB_H, L"Coups de poing entre joueurs", L"Punches between players" },
+    { WB_P, L"Coupés d'origine. L'hôte les autorise dans Partie et partage (« Coups de poing entre joueurs ») ; ses invités suivent son choix. Le poing du jeu touche un joueur à pied juste devant toi : il recule un peu, et au 5e coup en moins de 20 s il meurt (puis réapparaît comme d'habitude).",
+            L"Off by default. The host allows them in Game and sharing (\"Punches between players\"); their guests follow that choice. The game's punch hits a player on foot right in front of you: they step back a little, and on the 5th punch within 20 s they die (then respawn as usual)." },
     { WB_GO, L"Ouvrir Options du jeu", L"Open Game options", TAB_GFX },
 };
 
@@ -408,6 +411,31 @@ static const WikiBlock kW_ModsKo[] = {
     { WB_S, L"RÉINSTALLER (jeu fermé) : tes mods et leurs réglages sont gardés.", L"REINSTALL (game closed): your mods and their settings are kept." },
     { WB_S, L"Invité : as-tu cliqué TOUT ACCEPTER ? L'hôte a-t-il MSCLoader allumé ?", L"Guest: did you click ACCEPT ALL? Does the host have MSCLoader on?" },
     { WB_TIP, L"Un mod tout juste ajouté s'affiche « lance le jeu une fois pour les détails » : c'est normal.", L"A freshly added mod shows \"start the game once for details\": that's normal." },
+    { WB_GO, L"Ouvrir l'onglet Mods", L"Open the Mods tab", TAB_MODS },
+};
+static const WikiBlock kW_ModCompat[] = {
+    { WB_P, L"La plupart des mods MSCLoader marchent en coop tant qu'ils ne font que des choses à toi. Ceux qui ajoutent des objets ou des véhicules que les autres doivent voir ont besoin que MWCoop les synchronise : voici la liste, et les mods à éviter.",
+            L"Most MSCLoader mods work in co-op as long as they only do things for you. Those that add objects or vehicles the others must see need MWCoop to sync them: here is the list, and the mods to avoid." },
+    { WB_H, L"Synchronisés par MWCoop", L"Synced by MWCoop" },
+    { WB_B, L"Machtwagen 300D : portes, verrouillage, toit ouvrant, vitres, clim, moteur.", L"Machtwagen 300D: doors, locking, sunroof, windows, A/C, engine." },
+    { WB_B, L"Second Machtwagen : achat, couleur, plaque, préparation.", L"Second Machtwagen: purchase, color, plate, tuning." },
+    { WB_B, L"RAM 1500 : conduite, clé, phares, portes, achat au parc, cellule, peinture, radio.", L"RAM 1500: driving, key, lights, doors, lot purchase, camper shell, paint, radio." },
+    { WB_B, L"Cheatbox++ : les objets et pièces qu'il fait apparaître (pas l'heure, la météo ni la téléportation).", L"Cheatbox++: the items and parts it spawns (not time, weather or teleporting)." },
+    { WB_B, L"Spare Parts Seller : les pièces achetées.", L"Spare Parts Seller: the parts you buy." },
+    { WB_B, L"Jonne Food System : nourriture et boissons.", L"Jonne Food System: food and drinks." },
+    { WB_B, L"Utility Tow Cart : le chariot, tiré à la main ou attelé.", L"Utility Tow Cart: the cart, pulled by hand or hitched." },
+    { WB_B, L"Jack Stands (avec OASIS) : les chandelles sous la voiture.", L"Jack Stands (with OASIS): the stands under the car." },
+    { WB_B, L"Suitcase : la valise.", L"Suitcase: the suitcase." },
+    { WB_H, L"Rien à synchroniser (marchent tels quels)", L"Nothing to sync (work as they are)" },
+    { WB_B, L"BetterFPS, NOP : réglages d'image, à chacun les siens.", L"BetterFPS, NOP: picture settings, each player their own." },
+    { WB_B, L"Autoload (passe le menu) : gardé chez toi, jamais envoyé aux invités (leur jeu chargerait sa vieille sauvegarde avant la tienne).", L"Autoload (skips the menu): kept on your side, never sent to guests (their game would load its old save before yours)." },
+    { WB_H, L"Déconseillés : bugs connus", L"Not recommended: known bugs" },
+    { WB_WARN, L"MOP (Modern Optimization Plugin) : il coupe et rallume voitures et objets loin de toi, ce que MWCoop suit en direct. Voitures qui volent, se téléportent ou se désynchronisent. Retire-le pour jouer en coop.",
+               L"MOP (Modern Optimization Plugin): it turns off and on cars and objects far from you, which MWCoop follows live. Cars that fly, teleport or desync. Remove it to play co-op." },
+    { WB_WARN, L"Toiveradio Enhanced : chaque joueur tire ses propres morceaux et pubs sur Toivoradio, vous n'entendez pas la même chose. Sans lui, la radio est la même pour tous.",
+               L"Toiveradio Enhanced: each player picks their own songs and ads on Toivoradio, you don't hear the same thing. Without it, the radio is the same for everyone." },
+    { WB_TIP, L"Un mod absent de cette liste ? Essaie-le : s'il ajoute un objet que les autres ne voient pas, dis-le sur Discord (salon suggestions) avec son lien Nexus.",
+              L"A mod missing from this list? Try it: if it adds an object the others can't see, say so on Discord (suggestions channel) with its Nexus link." },
     { WB_GO, L"Ouvrir l'onglet Mods", L"Open the Mods tab", TAB_MODS },
 };
 static const WikiBlock kW_Av[] = {
@@ -598,4 +626,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(4, L"Mes mods ne se chargent pas", L"My mods don't load", L"MSCLoader et l'envoi de l'hôte", L"MSCLoader and the host's files", kW_ModsKo),
     WART(4, L"Antivirus et fausses alertes", L"Antivirus and false alarms", L"Vérifier et autoriser MWCoop", L"Check and allow MWCoop", kW_Av),
     WART(4, L"Envoyer ses journaux", L"Send your logs", L"Le zip qui aide à corriger", L"The zip that helps fix things", kW_Logs),
+    WART(2, L"Mods pris en charge et déconseillés", L"Mod support and known incompatibilities", L"Ce qui est synchronisé, ce qui pose souci", L"What is synced, what causes trouble", kW_ModCompat),
 };
