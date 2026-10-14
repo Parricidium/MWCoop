@@ -456,8 +456,7 @@ static void SteamEntered(bool ok, uint32_t response, SteamId lobby)
     }
     if (ver != MyVersion()) {
         LobbyClose();
-        std::wstring mine = Widen(MyVersion()), his = Widen(ver);
-        SetStatus(K_ERR, T(L"Version différente (toi %s, hôte %s) : mettez à jour, relancez MWCoop.exe", L"Different version (you %s, host %s): update, restart MWCoop.exe"), mine.c_str(), his.c_str());
+        VersionMismatch(Widen(ver));
         return;
     }
     g_sHost = owner;
