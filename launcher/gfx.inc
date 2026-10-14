@@ -185,6 +185,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "ArgentDepart", L"Argent de départ des invités", L"Guests' starting money", 1, {}, {}, {}, 0, 8, "Coop" },
         { "Triches", L"Autoriser les triches (hôte)", L"Allow cheats (host)", 0, {}, {}, {}, 0, 8, "Coop" },
         { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
+        // (suggestion de квазарик, 13/10 : « tuer les autres a coups de poing, option de l'hote ») -- Sync/Pvp.cs
+        { "PvP", L"Coups de poing entre joueurs (hôte)", L"Punches between players (host)", 0, {}, {}, {}, 0, 8, "Coop" },
         // Un seul interrupteur pour tout ce que MWCoop ajoute au jeu (demande de Menor, 12/10 : « un jeu 100 % vanilla » ;
         // JD : un bouton pour tous les ajouts, presents et a venir -- Sync/Ajouts.cs).
         { "SansAjouts", L"Tout désactiver (jeu vanilla)", L"Disable them all (vanilla game)", 0, {}, {}, {}, 0, 15, "Coop" },

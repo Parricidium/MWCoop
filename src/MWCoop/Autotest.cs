@@ -178,7 +178,7 @@ namespace MWCoop
             }
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
-            VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); ModRam1500.Test(mode, t); TeimoSled.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); Kartturi.Test(mode, t); Net.ModServe.Test(mode, t); Kauppa.TestKartturi(mode, t); Kauppa.TestKartturiDrive(mode, t); PushDoors.Test(mode, t);
+            VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); Pvp.Test(mode, t); ModRam1500.Test(mode, t); TeimoSled.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); Kartturi.Test(mode, t); Net.ModServe.Test(mode, t); Kauppa.TestKartturi(mode, t); Kauppa.TestKartturiDrive(mode, t); PushDoors.Test(mode, t);
             MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {
@@ -1078,6 +1078,10 @@ namespace MWCoop
                     Application.CaptureScreenshot(png);
                     Log.Info("autotest : capture " + png);
                 }
+                // ([Test] SangRetour=1 : a 50 s, l'automate Death de la camera relance hors de toute mort -- le sang revient ;
+                // attendu : eteint par la surveillance)
+                if (Config.GetInt("Test", "SangRetour", 0) != 0 && t > 50f && step == 2) { step = 3; Log.Info("autotest : sang relance, " + Respawn.TestStrayBlood()); }
+                if (step == 3 && t > 50.5f && t < 56f && Time.frameCount % 60 == 0) Log.Info("autotest : apres le sang relance : " + Respawn.State());
             }
             // [Test] Autotest=peinture : chacun fait apparaitre la meme piece neuve (distributeur [Test] PeintureDistributeur,
             // Prefab VIN405 : pare-chocs) a 40 s ; sa peinture a 50 et 90 s (l'invite doit avoir celle de l'hote).
@@ -1242,7 +1246,7 @@ namespace MWCoop
             {
                 string id = Config.Get("Test", "TestPiece", "~sandbag(item1)");
                 if (id.StartsWith("~")) id = Props.FindKey(id.Substring(1)) ?? id;
-                if (Net.Session.IsHost)
+                if (Net.Session.IsHost == (Config.Get("Test", "Teneur", "hote") != "invite"))   // ([Test] Teneur=invite : l'invite tient, l'hote note)
                 {
                     Transform cam = PlayerSync.LocalCamera;
                     if (t > 40f && t < 70f && cam != null)
@@ -1564,6 +1568,7 @@ namespace MWCoop
                              + ", WoodJob1Point " + (logic != null ? logic.ActiveStateName : "?") + " Car " + (car != null && car.Value) + " Order " + (order != null && order.Value));
                 }
             }
+            if (mode == "sangsonde" && t > 25f && !done) { done = true; Log.Info("autotest : " + Respawn.ProbeBlood()); }
             if (mode == "porter")
             {
                 // [Test] TestPiece promenee de 30 a 36 s (comme tenue en main), position a 45 s.

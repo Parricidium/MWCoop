@@ -106,6 +106,7 @@ namespace MWCoop
             new Mod("sauvegarde en jeu", Game.Update),
             new Mod("porte-monnaie", WalletPanel.Update),
             new Mod("triches", Cheats.Update),
+            new Mod("coups de poing", Pvp.Update),
             new Mod("panneau des triches", CheatPanel.Update),
             new Mod("carte", MapRender.Update),
             new Mod("panneau carte", MapPanel.Update),

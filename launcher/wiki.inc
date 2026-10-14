@@ -435,6 +435,18 @@ static void DrawWikiPage(Graphics &g)
     }
 }
 
+// Onglet Mods, bouton « Mods pris en charge / incompatibilites connues » (mods.inc) : cet article, sa categorie ouverte.
+static void MscOpenCompat()
+{
+    for (int i = 0; i < kWikiArts; i++)
+        if (kWikiArt[i].b == kW_ModCompat) {
+            GoPage(TAB_WIKI);
+            g_wikiSel = i; g_scroll[TAB_WIKI] = 0;
+            g_wikiClosed &= ~(1u << kWikiArt[i].cat);
+            return;
+        }
+}
+
 static bool WikiClick(int id)
 {
     if (id >= UI_WIKI_CAT && id < UI_WIKI_CAT + 32) { g_wikiClosed ^= 1u << (id - UI_WIKI_CAT); return true; }

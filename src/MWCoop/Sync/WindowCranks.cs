@@ -28,6 +28,7 @@ namespace MWCoop
         {
             public Transform Proxy, GlassL, GlassR, PivotL, PivotR, Car, DoorL, DoorR;
             public bool Ready, Flip = true; public Matrix4x4 A, B; public float WaitLog, DownMag;   // vitre de droite (locale) = A * temoin (local) * B
+            public bool Straight; public Vector3 RestP; public Quaternion RestQ;   // vitre arriere : descend tout droit dans sa portiere
             public Vector3 LastP = new Vector3(1e9f, 0, 0); public Quaternion LastQ;
         }
         static readonly System.Collections.Generic.List<Mirror> mirrors = new System.Collections.Generic.List<Mirror>();
@@ -124,7 +125,7 @@ namespace MWCoop
                 if (glassL != null && glassL.parent != null && glassR.parent != null)
                     mirrors.Add(new Mirror { Proxy = proxy, GlassL = glassL, GlassR = glassR, PivotL = glassL.parent, PivotR = glassR.parent,
                         Car = frontL.parent != null && frontL.parent.parent != null ? frontL.parent.parent.parent : frontR.root,
-                        DoorL = frontL.parent, DoorR = drawnRear != null ? DoorOf(glassR) : frontR.parent, DownMag = DownTarget(c), Flip = flip });
+                        DoorL = frontL.parent, DoorR = drawnRear != null ? DoorOf(glassR) : frontR.parent, DownMag = DownTarget(c), Flip = flip, Straight = drawnRear != null });
                 if (logs++ < 8) Log.Info("vitres : manivelle " + (drawnRear != null ? "arriere (" + frontR.name + (flip ? ", miroir" : "") + ")" : "passager") + " de " + frontR.root.name + " (" + (drawn != null ? "a la place de " + drawn.name : "en miroir") + ")");
                 return true;
             }
@@ -157,6 +158,15 @@ namespace MWCoop
                 // visible). La vitre de droite, sans grattoir de l'interieur, est souvent givree : ce bord blanc en travers de
                 // la fenetre (Menor, 12/10, « out of place »). Elle descend donc 15 cm de plus, au prorata de la course.
                 float f = m.DownMag > 0.01f ? Mathf.Clamp01(p.magnitude / m.DownMag) : 0f;
+                // Vitre arriere : le trajet de la vitre avant est en biais (sa coulisse suit le montant avant de la portiere) ;
+                // repris tel quel, la vitre arriere baissee glissait vers l'avant, hors de sa portiere -- plaque givree en travers
+                // de l'ouverture (videos de Menor, 13/10). Elle descend donc tout droit (vers le bas de la voiture), de la meme course.
+                if (m.Straight)
+                {
+                    m.GlassR.localRotation = m.RestQ;
+                    m.GlassR.localPosition = m.RestP + m.PivotR.InverseTransformVector(-m.Car.up * ((m.DownMag > 0.01f ? m.DownMag : 0.37f) * f + ExtraDown * f));
+                    continue;
+                }
                 Vector3 extra = m.PivotR.InverseTransformVector(-m.Car.up * (ExtraDown * f));
                 m.GlassR.localPosition = (Vector3)t.GetColumn(3) + extra;
                 if (y.sqrMagnitude > 1e-8f && z.sqrMagnitude > 1e-8f) m.GlassR.localRotation = Quaternion.LookRotation(z, y);
@@ -296,6 +306,7 @@ namespace MWCoop
             Matrix4x4 rc = m.Flip ? Matrix4x4.TRS(new Vector3(2f * x0, 0, 0), Quaternion.identity, new Vector3(-1f, 1f, 1f)) : Matrix4x4.identity;   // (x -> 2 x0 - x ; meme cote : le mouvement tel quel)
             Matrix4x4 r = m.Car.localToWorldMatrix * rc * m.Car.worldToLocalMatrix;
             Matrix4x4 tr0 = Matrix4x4.TRS(m.GlassR.localPosition, m.GlassR.localRotation, m.GlassR.localScale);
+            m.RestP = m.GlassR.localPosition; m.RestQ = m.GlassR.localRotation;
             Matrix4x4 scl = Matrix4x4.Scale(m.GlassL.localScale);
             Matrix4x4 s = (r * wl * scl).inverse * wr * tr0;
             m.A = wr.inverse * r * wl;
@@ -335,6 +346,47 @@ namespace MWCoop
             return mn.ToString("F2") + "-" + mx.ToString("F2");
         }
 
+        // [Test] Autotest=vitreporte (solo) : la portiere [Test] VitrePorte (DoorRear(leftx) par defaut) de la SORBET vue de
+        // dehors, fermee a 25 s puis ouverte a 28 s (photos vp-ferme / vp-ouverte), et la vitre de cette portiere dans le repere
+        // de la portiere aux deux moments (attendu : la meme -- elle suit la portiere).
+        static int vpStep; static Transform vpDoor, vpGlass; static Vector3 vpPos; static Quaternion vpRot;
+        static void TestDoorGlass(float t)
+        {
+            string door = Config.Get("Test", "VitrePorte", "DoorRear(leftx)");
+            if (vpStep == 0 && t > 25f)
+            {
+                GameObject s = GameObject.Find("SORBET(190-200psi)");
+                if (s == null) return;
+                car = s.transform;
+                vpStep = 1;
+                Transform d = car.Find("Doors/" + door);
+                if (d != null) foreach (Transform x in d.GetComponentsInChildren<Transform>(true)) if (vpGlass == null && x.name == "GlassPivot") vpGlass = x;
+                vpDoor = vpGlass != null ? DoorOf(vpGlass) : null;
+                if (vpGlass == null || vpDoor == null) { Log.Info("autotest : vitreporte, " + door + " : vitre " + (vpGlass != null) + ", charniere " + (vpDoor != null)); vpStep = 9; return; }
+                vpPos = vpDoor.InverseTransformPoint(vpGlass.position); vpRot = Quaternion.Inverse(vpDoor.rotation) * vpGlass.rotation;
+                float sx = car.InverseTransformPoint(vpGlass.position).x < 0f ? -1f : 1f;
+                tcam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>();
+                tcam.depth = 100; tcam.nearClipPlane = 0.02f; tcam.fieldOfView = 70f;
+                Vector3 g = car.InverseTransformPoint(vpGlass.position);
+                Vector3 eye = car.TransformPoint(new Vector3(sx * 3.2f, 1.6f, g.z - 1.6f)), at = car.TransformPoint(new Vector3(sx * 0.9f, 0.9f, g.z));
+                tcam.transform.position = eye; tcam.transform.rotation = Quaternion.LookRotation(at - eye, car.up);
+                Autotest.CaptureSoon("vp-ferme", 0.3f);
+                Log.Info("autotest : vitreporte, " + Recon.Path(vpGlass) + " (charniere " + vpDoor.name + ", parent de la vitre " + vpGlass.parent.name + ")");
+            }
+            if (vpStep == 1 && t > 26.5f) { vpStep = 2; Log.Info("autotest : vitreporte, ouvre : " + CarDoors.TestOpen("SORBET", true, door)); }
+            if (vpStep == 2 && t > 29f)
+            {
+                vpStep = 3;
+                Autotest.CaptureSoon("vp-ouverte", 0.05f);
+                Vector3 p = vpDoor.InverseTransformPoint(vpGlass.position); Quaternion q = Quaternion.Inverse(vpDoor.rotation) * vpGlass.rotation;
+                var sb = new System.Text.StringBuilder();
+                foreach (Renderer r in vpDoor.GetComponentsInChildren<Renderer>(true))
+                    if (r.name.ToLowerInvariant().Contains("glass") || r.name.ToLowerInvariant().Contains("window") || r.name.ToLowerInvariant().Contains("frost")) sb.Append(" [").Append(r.name).Append(r.enabled && r.gameObject.activeInHierarchy ? "" : " cache").Append(" sous ").Append(r.transform.parent != null ? r.transform.parent.name : "-").Append("]");
+                Log.Info("autotest : vitreporte, charniere " + Angle(vpDoor) + ", vitre dans le repere de la portiere : ecart " + (p - vpPos).magnitude.ToString("F3") + " m, " + Quaternion.Angle(q, vpRot).ToString("F1") + " deg ;" + sb);
+            }
+            if (vpStep == 3 && t > 31f) { vpStep = 4; if (tcam != null) Object.Destroy(tcam.gameObject); }
+        }
+
         static float MaxDiff(Matrix4x4 a, Matrix4x4 b) { float e = 0f; for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) e = Mathf.Max(e, Mathf.Abs(a[i, j] - b[i, j])); return e; }
         static int tStep; static Vector3 l0, r0; static Quaternion ql0, qr0; static Matrix4x4 ml0, mr0; static Transform gl, gr, car; static PlayMakerFSM kl, kr; static Camera tcam;
         static bool suiviLogged;
@@ -350,6 +402,7 @@ namespace MWCoop
                 Log.Info("autotest : vitre-suivi, gauche " + (a != null ? a.localPosition.ToString("F3") : "?") + " ; droite " + (b != null ? b.localPosition.ToString("F3") : "?") + " (" + wins.Count + " vitres suivies)");
                 return;
             }
+            if (mode == "vitreporte") { TestDoorGlass(t); return; }
             if (mode != "vitre") return;
             if (tStep == 1 && t < 31f) foreach (Win w in wins) if (w.Key.Contains("SORBET")) w.AimAt = Time.realtimeSinceStartup;   // (comme si on la visait)
             if (tStep == 0 && t > 25f)

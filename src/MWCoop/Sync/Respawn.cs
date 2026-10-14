@@ -22,7 +22,7 @@ namespace MWCoop
         public static bool Choosing;
         static string cause = "";
         static PlayMakerFSM deathFsm;
-        static float scanAt = -1, deactivateAt = -1, restoreAt = -1;
+        static float scanAt = -1, deactivateAt = -1, restoreAt = -1, diedAt = -100f;
 
         // Lieux : point au sol cherche par un rayon vers le bas depuis une hauteur sous le plafond.
         struct Place { public string Name, NameEn; public Vector3 Top; }
@@ -167,15 +167,32 @@ namespace MWCoop
         }
 
         // Voile de sang allume hors de la mort (ni choix ouvert, ni Systems/Death actif) : eteint.
+        // 8 s apres la mort et hors du choix, meme si Systems/Death est reste allume (alors eteint aussi), et ses reglages
+        // (intensite, texture) remis a ceux du chargement -- retour de Maxim Pennis, 13/10 : sang plein ecran apres la reapparition.
         static void BloodWatch()
         {
-            if (!Enabled || Choosing || bloodFx.Count == 0 || deathFsm != null && deathFsm.gameObject.activeSelf) return;
+            if (!Enabled || Choosing || bloodFx.Count == 0) return;
+            bool late = Time.realtimeSinceStartup - diedAt > 8f;
+            if (deathFsm != null && deathFsm.gameObject.activeSelf)
+            {
+                if (!late) return;
+                deathFsm.gameObject.SetActive(false);
+                if (bloodFixes++ < 5) Log.Warn("reapparition : Systems/Death encore allume " + (Time.realtimeSinceStartup - diedAt).ToString("F0") + " s apres la mort, hors du choix : eteint");
+            }
             foreach (Behaviour b in bloodFx)
                 if (b != null && b.enabled)
                 {
                     b.enabled = false;
                     if (bloodFixes++ < 5) Log.Warn("reapparition : voile de sang " + b.GetType().Name + " encore allume hors de la mort : eteint (camera::Death [" + (camDeath != null ? camDeath.ActiveStateName : "?") + "])");
                 }
+            if (!late) return;
+            foreach (var kv in camFx)
+            {
+                if (kv.Key == null || !bloodFx.Contains(kv.Key)) continue;
+                foreach (var f in kv.Value)
+                    try { if (!Equals(f.Key.GetValue(kv.Key), f.Value)) { f.Key.SetValue(kv.Key, f.Value); if (bloodFixes++ < 5) Log.Warn("reapparition : voile de sang, " + f.Key.Name + " remis"); } } catch { }
+            }
+            if (camDeath != null && camDeath.ActiveStateName == "State 1" && camDeath.Fsm.GetState("State 2") != null) Game.SetState(camDeath, "State 2");
         }
 
         // La mort vient d'activer Systems/Death : on la garde pour nous si la coop est la.
@@ -189,6 +206,7 @@ namespace MWCoop
                 if (b.Value && b.Name != "Smoking") { causes.Add(CauseName(b.Name)); crash |= b.Name == "Crash"; b.Value = false; }
             cause = causes.Count > 0 ? string.Join(", ", causes.ToArray()) : "inconnue";
             Log.Info("reapparition : mort (" + cause + "), mort du jeu arretee");
+            diedAt = Time.realtimeSinceStartup;
             Needs();
             restoreAt = Time.realtimeSinceStartup + 0.3f;   // (apres son "State 3" : Wait 0,1 puis "State 1")
             Choosing = true;
@@ -412,6 +430,58 @@ namespace MWCoop
             if (why == "Crash" && camDeath != null) camDeath.SendEvent("DEATH");   // (le sang de l'accident, comme le jeu)
             deathFsm.gameObject.SetActive(true);
             return "mort par " + why + (Choosing ? " : arretee, choix ouvert" : " : PAS arretee");
+        }
+
+        // Essais : tout ce qui peut voiler l'ecran -- ScreenOverlay de toutes les cameras, automates qui les allument, et
+        // objets dont le nom ou la texture parle de sang (retour de Maxim Pennis, 13/10 : sang reste apres la reapparition).
+        public static string ProbeBlood()
+        {
+            var sb = new System.Text.StringBuilder("sonde du sang :");
+            foreach (Camera c in Resources.FindObjectsOfTypeAll(typeof(Camera)))
+            try
+            {
+                if (c == null || c.hideFlags != HideFlags.None) continue;
+                foreach (Behaviour b in c.GetComponents<Behaviour>())
+                {
+                    if (b == null) continue;
+                    string tn = b.GetType().Name;
+                    if (tn != "ScreenOverlay" && !tn.StartsWith("Vignette") && !tn.Contains("Blur") && !tn.Contains("Color")) continue;
+                    var tex = b.GetType().GetField("texture");
+                    Texture t = tex != null ? tex.GetValue(b) as Texture : null;
+                    sb.Append(" | ").Append(Recon.Path(c.transform)).Append(" : ").Append(tn).Append(b.enabled ? " ALLUME" : " eteint").Append(t != null ? " (texture " + t.name + ")" : "");
+                }
+                foreach (PlayMakerFSM f in c.GetComponents<PlayMakerFSM>()) sb.Append(" | ").Append(Recon.Path(c.transform)).Append(" :: ").Append(f.FsmName).Append(" [").Append(f.ActiveStateName).Append("]");
+            }
+            catch { }
+            var fsms = new List<PlayMakerFSM>();
+            foreach (string root in new[] { "PLAYER", "GUI", "Systems" }) { GameObject r = Game.FindAny(root); if (r != null) fsms.AddRange(r.GetComponentsInChildren<PlayMakerFSM>(true)); }
+            foreach (PlayMakerFSM f in fsms)
+            {
+                if (f.hideFlags != HideFlags.None || f.Fsm == null || f.FsmStates == null) continue;
+                foreach (FsmState st in f.FsmStates)
+                {
+                    FsmStateAction[] acts;
+                    try { acts = st.Actions; } catch { continue; }   // (automate jamais lance : ses actions ne se chargent pas)
+                    foreach (FsmStateAction a in acts ?? new FsmStateAction[0])
+                    try
+                    {
+                        FieldInfo pf = a != null ? a.GetType().GetField("targetProperty") : null;
+                        FsmProperty fp = pf != null ? pf.GetValue(a) as FsmProperty : null;
+                        Object to = fp != null && fp.TargetObject != null ? fp.TargetObject.Value : null;
+                        if (to != null && to.GetType().Name == "ScreenOverlay") sb.Append(" | automate ").Append(Recon.Path(f.transform)).Append("::").Append(f.FsmName).Append(" / ").Append(st.Name).Append(" : ScreenOverlay ").Append(((Component)to).name).Append('.').Append(fp.PropertyName);
+                    }
+                    catch { }
+                }
+            }
+            return sb.ToString();
+        }
+
+        // Essais : le sang rallume hors de la mort (automate Death de la camera relance).
+        public static string TestStrayBlood()
+        {
+            if (camDeath == null) return "pas d'automate Death";
+            camDeath.SendEvent("DEATH");
+            return "camera::Death [" + camDeath.ActiveStateName + "]";
         }
 
         // Accident : la liaison de la tete du conducteur de 'car' casse (comme sous un choc).

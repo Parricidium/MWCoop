@@ -3152,6 +3152,29 @@ static Bitmap *LoadAnyImage(const std::wstring &file, std::wstring *why);
 static bool EncoderClsid(const wchar_t *mime, CLSID *out);
 static bool g_paintView;
 static RectF g_paintBtnRect;   // (bulle du guide)
+static RectF g_dentBtnRect;    // (bulle du guide)
+
+// Bosses des carrosseries (suggestion de « ...., », 13/10 : « pouvoir retirer les bosses de la Corris Rivett en supprimant
+// le fichier meshsave ») : le jeu garde la forme cabossee de chaque tole dans LocalLow\...\meshsave.txt ; sans lui, toutes
+// les voitures repartent lisses. Le fichier est renomme (meshsave.txt.bak-<date>), pas supprime : on peut le remettre.
+// Jeu ferme seulement (il le reecrit a la sauvegarde). En coop, la sauvegarde est celle de l'hote : c'est lui qui le fait.
+static void CarRemoveDents()
+{
+    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Ferme le jeu pour retirer les bosses", L"Close the game to remove the dents")); return; }
+    wchar_t up[MAX_PATH] = L"";
+    GetEnvironmentVariableW(L"USERPROFILE", up, MAX_PATH);
+    if (!up[0]) return;
+    std::wstring f = WithSlash(up) + L"AppData\\LocalLow\\Amistech\\My Winter Car\\meshsave.txt";
+    if (GetFileAttributesW(f.c_str()) == INVALID_FILE_ATTRIBUTES) { SetStatus(K_NORMAL, T(L"Aucune bosse enregistrée : les carrosseries sont déjà lisses", L"No dents saved: the bodies are already smooth")); return; }
+    if (MessageBoxW(g_wnd, T(L"Retirer toutes les bosses des voitures de ta sauvegarde ?\n\nLe jeu garde la forme cabossée des tôles dans meshsave.txt. Il sera mis de côté (une copie reste à côté), et toutes les voitures repartiront lisses au prochain chargement.\n\nEn coop, c'est l'hôte qui le fait : sa sauvegarde est envoyée aux invités.",
+                             L"Remove all dents from the cars in your save?\n\nThe game keeps the dented shape of the body panels in meshsave.txt. It will be set aside (a copy is kept next to it), and every car will be smooth again at the next load.\n\nIn co-op, the host does it: their save is sent to the guests."),
+                    L"MWCoop", MB_ICONQUESTION | MB_YESNO) != IDYES) return;
+    SYSTEMTIME t; GetLocalTime(&t);
+    wchar_t bak[64]; swprintf_s(bak, L".bak-%04d%02d%02d-%02d%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+    if (!MoveFileExW(f.c_str(), (f + bak).c_str(), 0)) { SetStatus(K_ERR, T(L"meshsave.txt : renommage impossible (erreur %lu)", L"meshsave.txt: can't rename (error %lu)"), GetLastError()); return; }
+    TestLog("voiture : bosses retirees (meshsave.txt -> meshsave.txt%s)", Narrow(bak, CP_UTF8).c_str());
+    SetStatus(K_OK, T(L"Bosses retirées : les voitures seront lisses au prochain chargement (copie : meshsave.txt%s)", L"Dents removed: the cars will be smooth at the next load (copy: meshsave.txt%s)"), bak);
+}
 static Bitmap *g_paintThumb;
 static std::wstring g_paintThumbOf;
 static std::wstring PaintFile() { return LocalDir() + L"peinture.png"; }
@@ -3377,6 +3400,9 @@ static void DrawCar(Graphics &g)
     }
     g_paintBtnRect = RectF(kCarCard.X + kCarCard.Width - 24 - 184, kCarCard.Y + 18, 184, 34);
     UiButton(g, g_paintBtnRect, g_paintView ? T(L"Voir la voiture", L"Show the car") : T(L"Peinture perso…", L"Custom paint…"), UI_CAR_PAINT, g_paintView, g_paintView ? -1 : IC_IMAGE, true, 10);
+    g_dentBtnRect = RectF(g_paintBtnRect.X - 12 - 196, g_paintBtnRect.Y, 196, 34);
+    if (!g_vinView && !g_paintView) UiButton(g, g_dentBtnRect, T(L"Retirer les bosses…", L"Remove dents…"), UI_CAR_DENTS, false, IC_UNDO, true, 10);
+    else g_dentBtnRect = RectF(0, 0, 0, 0);
 
     // Couleur : pastilles, nom, autre couleur
     RectF pn = kCarPanel;
@@ -3442,7 +3468,7 @@ static bool CarMouseDown(float x, float y)
 {
     int s = CarSwatchAt(x, y);
     if (s >= 0) { CarSetColor(CarSwatchColor(s)); return true; }
-    if (g_car.state == 1 && !g_vinView && !g_paintView && kCarView.Contains(x, y) && !g_paintBtnRect.Contains(x, y)) {
+    if (g_car.state == 1 && !g_vinView && !g_paintView && kCarView.Contains(x, y) && !g_paintBtnRect.Contains(x, y) && !g_dentBtnRect.Contains(x, y)) {
         g_carDrag = true;
         g_carDragX = x; g_carDragY = y;
         SetCapture(g_wnd);

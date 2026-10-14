@@ -50,6 +50,7 @@ namespace MWCoop
             public List<Behaviour> HostOff;  // hote : logique coupee pendant que l'invite l'a
             public bool Traffic;             // voiture de TRAFFIC/Vehicles* (seules celles-ci passent a l'invite)
             public float GuardUntil = -1f; public Vector3 GuardVel;   // hote : figee pres d'une voiture d'invite (HostGuard)
+            public float TraceUntil = -1f; public string Trace;       // invite : premieres images apres la prise (journal)
         }
 
         // TRAIN : toute la racine (le train change de parent entre SpawnEast et SpawnWest ; c'en est le seul
@@ -546,6 +547,23 @@ namespace MWCoop
             Log.Info(sb.ToString());
         }
 
+        // Structure d'une voiture de la circulation (journal de la prise, essai trafsonde) : corps, inertie, autres corps et attaches.
+        static bool sondeDone, sondeAct, sondePrise;
+        static string Probe(Ent e)
+        {
+            var sb = new System.Text.StringBuilder(e.Key + (e.T.gameObject.activeInHierarchy ? "" : " (inactive)"));
+            if (e.Body != null) sb.Append(" : masse ").Append(e.Body.mass.ToString("F0")).Append(", inertie ").Append(e.Body.inertiaTensor.ToString("F0")).Append(", centre ").Append(e.Body.centerOfMass.ToString("F2"))
+                .Append(", rot max ").Append(e.Body.maxAngularVelocity.ToString("F0")).Append(e.Body.isKinematic ? ", cinematique" : "").Append(e.Body.transform == e.T ? "" : ", corps " + Recon.Path(e.Body.transform));
+            foreach (Rigidbody rb in e.T.GetComponentsInChildren<Rigidbody>(true))
+                if (rb != e.Body) sb.Append(" | corps ").Append(rb.name).Append(rb.isKinematic ? " cin" : " dyn").Append(rb.gameObject.activeInHierarchy ? "" : " off").Append(" ").Append(rb.mass.ToString("F0")).Append(" kg");
+            foreach (Joint j in e.T.GetComponentsInChildren<Joint>(true))
+                sb.Append(" | attache ").Append(j.GetType().Name).Append(" ").Append(j.name).Append(" -> ").Append(j.connectedBody != null ? j.connectedBody.name : "monde");
+            int cols = 0, on = 0;
+            foreach (Collider c in e.T.GetComponentsInChildren<Collider>(true)) { if (c.isTrigger) continue; cols++; if (c.enabled && c.gameObject.activeInHierarchy) on++; }
+            sb.Append(" | colliders ").Append(on).Append('/').Append(cols);
+            return sb.ToString();
+        }
+
         public static void Test(string mode, float t)
         {
             TestCamera();
@@ -556,6 +574,24 @@ namespace MWCoop
             if (mode == "choc") TestChoc(t);
             if (mode == "frontal") TestFrontal(t);
             if (mode == "roues") TestWheels(t);
+            if (mode == "trafsonde")
+            {
+                // ([Test] SondeActive=VICTRO#0 : l'hote allume cette voiture a 20 s, chacun la sonde a 30 s)
+                string act = Config.Get("Test", "SondeActive", "");
+                if (act.Length > 0 && t > 20f && !sondeAct)
+                {
+                    sondeAct = true;
+                    foreach (Ent e in ents) if (e.Traffic && e.T != null && e.Key.EndsWith("/" + act)) { for (Transform p = Session.IsHost ? e.T : e.T.parent; p != null; p = p.parent) if (!p.gameObject.activeSelf) { Log.Info("autotest : sonde : " + Recon.Path(p) + " allume"); p.gameObject.SetActive(true); } Log.Info("autotest : sonde : " + e.Key + " allumee ici (" + e.T.gameObject.activeInHierarchy + ")"); }
+                }
+                if (t > 30f && !sondeDone) { sondeDone = true; foreach (Ent e in ents) if (e.Traffic && e.T != null && (act.Length == 0 || e.Key.EndsWith("/" + act))) Log.Info("autotest : sonde " + Probe(e)); }
+                // (invite, [Test] SondePrise=1 : a 35 s, prise de cette voiture lancee a 25 m/s, comme en la croisant)
+                if (!Session.IsHost && act.Length > 0 && t > 35f && !sondePrise && Config.GetInt("Test", "SondePrise", 0) != 0)
+                {
+                    sondePrise = true;
+                    for (int li = 0; li < ents.Count; li++)
+                        if (ents[li].Traffic && ents[li].T != null && ents[li].Key.EndsWith("/" + act)) { ents[li].Vel = ents[li].T.forward * 25f; Claim(ents[li], li, Time.realtimeSinceStartup); }
+                }
+            }
             // [Test] EteindreConteneur=chemin (invite, 25 s) : comme un declencheur de route du joueur local.
             string off = Config.Get("Test", "EteindreConteneur", "");
             if (off.Length > 0 && !Session.IsHost && t > 25f && !testOffDone)
@@ -680,8 +716,16 @@ namespace MWCoop
                         claimR += Mathf.Clamp(closing, 0f, 60f) * 0.5f;
                     }
                     // (pas si la voiture d'un autre joueur est plus pres : ici c'est une copie cinematique, de masse infinie)
-                    if (e.Owner < 0 && d2 < claimR * claimR && e.LastRecv > 0 && verified && Config.GetInt("Test", "SansPrise", 0) == 0 && d2 < OtherCarD2(e.T.position)) Claim(e, li, now);
+                    // (et seulement si nos trajectoires se rapprochent a moins de 3 m : une voiture qui nous croise sur l'autre voie
+                    // reste a l'hote -- question de JD, 14/10 : « que l'hote garde la physique de la circulation »)
+                    if (e.Owner < 0 && d2 < claimR * claimR && e.LastRecv > 0 && verified && Config.GetInt("Test", "SansPrise", 0) == 0 && d2 < OtherCarD2(e.T.position)
+                        && (d2 < 36f || Miss(e.T.position - car.position, e.Vel - carVel) < 3f)) Claim(e, li, now);
                     continue;
+                }
+                if (e.TraceUntil > 0f)
+                {
+                    e.Trace += " | " + (now - e.OwnSince).ToString("F2") + " s : rot " + e.Body.angularVelocity.magnitude.ToString("F1") + ", v " + e.Body.velocity.magnitude.ToString("F1") + " (vy " + e.Body.velocity.y.ToString("F1") + "), haut " + e.T.up.y.ToString("F2");
+                    if (now > e.TraceUntil) { e.TraceUntil = -1f; Log.Info("trafic : apres la prise de " + e.Key + e.Trace); e.Trace = null; }
                 }
                 if (now - e.OwnSent >= 0.05f)
                 {
@@ -701,6 +745,18 @@ namespace MWCoop
             }
         }
 
+        // Ecart au plus pres (a plat, dans les 3 s) de deux voitures : 'r' position de l'une moins l'autre, 'u' vitesse relative.
+        // Croisement sur l'autre voie : ~3,5-4 m ; choc : moins de ~2 m. [Test] SansEcart=1 : comme avant 0.93.2 (toujours pris).
+        static float Miss(Vector3 r, Vector3 u)
+        {
+            if (Config.GetInt("Test", "SansEcart", 0) != 0) return 0f;
+            r.y = 0f; u.y = 0f;
+            float uu = u.sqrMagnitude;
+            if (uu < 1f) return r.magnitude;
+            float t = Mathf.Clamp(-Vector3.Dot(r, u) / uu, 0f, 3f);
+            return (r + u * t).magnitude;
+        }
+
         // Distance (au carre) de 'p' a la voiture la plus proche menee par un autre joueur (hote compris).
         static string otherName;
         static float OtherCarD2(Vector3 p)
@@ -718,11 +774,65 @@ namespace MWCoop
             return best;
         }
 
+        // Inertie des voitures de la grande route chez l'invite (retour de Crowbangus, 14/10 : chaque voiture de la circulation
+        // prise en la croisant partait en toupie, 7 rad/s -- le plafond de Unity -- 30 ms apres la prise, puis s'envolait
+        // chez l'hote a son retour). Ici la voiture est rendue cinematique avant son premier reveil ; CarDynamics.Start
+        // multiplie alors l'inertie que donne Unity pour un corps cinematique, (1, 1, 1) : 1 kg.m2 au lieu de ~1 700 (sonde
+        // de VICTRO, hote (1671, 1829, 338), invite (1, 1, 1)). Le moindre effort des pneus la faisait tourner. Remise ici
+        // d'apres ses collisionneurs (boite pleine de sa masse, x CarDynamics.inertiaFactor ; ~20 % pres de celle de l'hote).
+        static int inertiaLogs;
+        static void FixInertia(Ent e)
+        {
+            Rigidbody b = e.Body;
+            if (b == null || b.mass <= 0f || Config.GetInt("Test", "SansInertie", 0) != 0) return;   // ([Test] SansInertie=1 : comme avant)
+            Vector3 it = b.inertiaTensor;
+            if (it.x > b.mass * 0.05f && it.y > b.mass * 0.05f && it.z > b.mass * 0.02f) return;   // (normale)
+            bool any = false;
+            var bb = new Bounds();
+            foreach (Collider c in b.GetComponentsInChildren<Collider>())
+            {
+                if (c.isTrigger || !c.enabled || c.attachedRigidbody != b || c is WheelCollider) continue;
+                Bounds lb;
+                var bx = c as BoxCollider; var mc = c as MeshCollider; var sc = c as SphereCollider; var cc = c as CapsuleCollider;
+                if (bx != null) lb = new Bounds(bx.center, bx.size);
+                else if (mc != null && mc.sharedMesh != null) lb = mc.sharedMesh.bounds;
+                else if (sc != null) lb = new Bounds(sc.center, Vector3.one * sc.radius * 2f);
+                else if (cc != null) lb = new Bounds(cc.center, new Vector3(cc.radius * 2f, cc.direction == 1 ? cc.height : cc.radius * 2f, cc.direction == 2 ? cc.height : cc.radius * 2f));
+                else continue;
+                for (int k = 0; k < 8; k++)
+                {
+                    Vector3 corner = lb.center + Vector3.Scale(lb.extents, new Vector3((k & 1) == 0 ? -1f : 1f, (k & 2) == 0 ? -1f : 1f, (k & 4) == 0 ? -1f : 1f));
+                    Vector3 p = b.transform.InverseTransformPoint(c.transform.TransformPoint(corner));
+                    if (!any) { bb = new Bounds(p, Vector3.zero); any = true; } else bb.Encapsulate(p);
+                }
+            }
+            Vector3 sz = any ? bb.size : new Vector3(1.7f, 1.4f, 4.3f);   // (sans collisionneur : une berline)
+            sz = new Vector3(Mathf.Clamp(sz.x, 1.2f, 3f), Mathf.Clamp(sz.y, 1f, 4f), Mathf.Clamp(sz.z, 2.5f, 14f));
+            float k12 = b.mass / 12f;
+            Vector3 want = new Vector3(k12 * (sz.y * sz.y + sz.z * sz.z), k12 * (sz.x * sz.x + sz.z * sz.z), k12 * (sz.x * sz.x + sz.y * sz.y));
+            Component cd = b.GetComponent("CarDynamics");
+            var f = cd != null ? cd.GetType().GetField("inertiaFactor") : null;
+            float factor = f != null ? (float)f.GetValue(cd) : 1f;
+            if (factor > 0.1f && factor < 10f) want *= factor;
+            b.inertiaTensorRotation = Quaternion.identity;
+            b.inertiaTensor = want;
+            if (inertiaLogs++ < 30) Log.Info("trafic : " + e.Key + " : inertie " + it.ToString("F0") + " remise a " + want.ToString("F0") + " (boite " + sz.ToString("F1") + " m, facteur " + factor.ToString("F2") + ")");
+        }
+
+        static int claimTraces;
         static void Claim(Ent e, int li, float now)
         {
             int hi = HostIndexOf(li);
             if (hi < 0) return;
             e.Owner = Session.LocalId; e.OwnSince = now; e.FarSince = -1; e.OwnSent = 0;
+            if (claimTraces++ < 12)
+            {
+                Vector3 to = e.Base + Vector3.up * e.Ride;
+                e.TraceUntil = now + 0.5f;
+                e.Trace = " [" + Probe(e) + "] (ecart de pose " + (to - e.T.position).magnitude.ToString("F2") + " m, vitesse recue " + e.Vel.ToString("F1") + ", avant " + Vector3.Dot(e.Vel.normalized, e.T.forward).ToString("F2")
+                          + ", cinematique " + e.Body.isKinematic + ", interpolation " + e.Body.interpolation + ")";
+            }
+            FixInertia(e);
             e.Body.isKinematic = false;
             e.Body.velocity = e.Vel;
             e.Body.angularVelocity = Vector3.zero;
@@ -836,7 +946,7 @@ namespace MWCoop
                     Vector3 rel = e.T.position - c.Key;
                     float d = rel.magnitude;
                     float closing = d > 0.01f ? -Vector3.Dot(rel / d, tv - c.Value) : 0f;
-                    if (d < 7f + Mathf.Clamp(closing, 0f, 60f) * 0.6f && d < dMine) { near = true; break; }
+                    if (d < 7f + Mathf.Clamp(closing, 0f, 60f) * 0.6f && d < dMine && (d < 6f || Miss(rel, tv - c.Value) < 3.5f)) { near = true; break; }
                 }
                 if (near)
                 {
@@ -1020,18 +1130,23 @@ namespace MWCoop
                 foreach (Ent e in ents)
                 {
                     if (e.T == null || !e.Traffic || e.Body == null || !e.T.gameObject.activeInHierarchy || e.LastRecv <= 0 || e.Vel.magnitude < 8f) continue;
+                    if (e.Key.IndexOf(Config.Get("Test", "FrontalCible", ""), System.StringComparison.Ordinal) < 0) continue;   // (ex. VehiclesHighway)
                     float d = mine != null ? (e.T.position - mine.position).sqrMagnitude : 0f;
                     if (d < bd) { bd = d; best = e; }
                 }
                 if (best == null || mine == null) { if (t > 74f) Log.Info("autotest : frontal : aucune voiture de la circulation en mouvement (" + (mine == null ? "pas de voiture" : "") + ")"); return; }
                 frontStep = 3;
                 Vector3 dir = best.Vel; dir.y = 0f; dir.Normalize();
-                Vector3 at = best.T.position + dir * (convoi ? 110f : 30f) + Vector3.up * 0.6f + (convoi ? Vector3.Cross(Vector3.up, dir) * 3f : Vector3.zero);
+                // ([Test] FrontalCote : decalage sur le cote, + a droite de la voiture de la circulation, - a gauche : la voie
+                // d'en face, croisement sans choc -- retour de Crowbangus, 14/10 ; FrontalAvance, FrontalVitesse en m/s)
+                float avance = Config.GetFloat("Test", "FrontalAvance", convoi ? 110f : 30f), cote = Config.GetFloat("Test", "FrontalCote", convoi ? 3f : 0f);
+                float vit = Config.GetFloat("Test", "FrontalVitesse", 15f);
+                Vector3 at = best.T.position + dir * avance + Vector3.up * 0.6f + Vector3.Cross(Vector3.up, dir) * cote;
                 mine.transform.position = at;
                 mine.transform.rotation = Quaternion.LookRotation(-dir, Vector3.up);
-                mine.velocity = -dir * 15f;
+                mine.velocity = -dir * vit;
                 mine.angularVelocity = Vector3.zero;
-                Log.Info("autotest : frontal : " + best.Key + " a " + (best.Vel.magnitude * 3.6f).ToString("F0") + " km/h, ma voiture posee 30 m devant, face a elle, a 54 km/h");
+                Log.Info("autotest : frontal : " + best.Key + " a " + (best.Vel.magnitude * 3.6f).ToString("F0") + " km/h, ma voiture posee " + avance.ToString("F0") + " m devant (cote " + cote.ToString("F1") + " m), face a elle, a " + (vit * 3.6f).ToString("F0") + " km/h");
             }
         }
 

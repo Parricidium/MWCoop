@@ -1,0 +1,34 @@
+S0	MOD SUPPORT / KNOWN INCOMPATIBILITIES
+S1	Remove dents…
+S2	Close the game to remove the dents
+S3	No dents saved: the bodies are already smooth
+S4	Remove all dents from the cars in your save?\n\nThe game keeps the dented shape of the body panels in meshsave.txt. It will be set aside (a copy is kept next to it), and every car will be smooth again at the next load.\n\nIn co-op, the host does it: their save is sent to the guests.
+S5	meshsave.txt: can't rename (error %lu)
+S6	Dents removed: the cars will be smooth at the next load (copy: meshsave.txt%s)
+S7	Punches between players (host)
+S8	Mod support
+S9	In Mods, this button opens the list of mods MWCoop syncs, those that work as they are, and the mods to avoid with their known bugs.
+S10	Remove dents
+S11	In Car: every car in your save is smooth again (game closed). The dents file is set aside, not deleted. In co-op, the host does it.
+S12	Mod support and known incompatibilities
+S13	What is synced, what causes trouble
+S14	Most MSCLoader mods work in co-op as long as they only do things for you. Those that add objects or vehicles the others must see need MWCoop to sync them: here is the list, and the mods to avoid.
+S15	Synced by MWCoop
+S16	Machtwagen 300D: doors, locking, sunroof, windows, A/C, engine.
+S17	Second Machtwagen: purchase, color, plate, tuning.
+S18	RAM 1500: driving, key, lights, doors, lot purchase, camper shell, paint, radio.
+S19	Cheatbox++: the items and parts it spawns (not time, weather or teleporting).
+S20	Spare Parts Seller: the parts you buy.
+S21	Jonne Food System: food and drinks.
+S22	Utility Tow Cart: the cart, pulled by hand or hitched.
+S23	Jack Stands (with OASIS): the stands under the car.
+S24	Suitcase: the suitcase.
+S25	Nothing to sync (work as they are)
+S26	BetterFPS, NOP: picture settings, each player their own.
+S27	Autoload (skips the menu): kept on your side, never sent to guests (their game would load its old save before yours).
+S28	Not recommended: known bugs
+S29	MOP (Modern Optimization Plugin): it turns off and on cars and objects far from you, which MWCoop follows live. Cars that fly, teleport or desync. Remove it to play co-op.
+S30	Toiveradio Enhanced: each player picks their own songs and ads on Toivoradio, you don't hear the same thing. Without it, the radio is the same for everyone.
+S31	A mod missing from this list? Try it: if it adds an object the others can't see, say so on Discord (suggestions channel) with its Nexus link.
+S32	Punches between players
+S33	Off by default. The host allows them in Game and sharing (\"Punches between players\"); their guests follow that choice. The game's punch hits a player on foot right in front of you: they step back a little, and on the 5th punch within 20 s they die (then respawn as usual).

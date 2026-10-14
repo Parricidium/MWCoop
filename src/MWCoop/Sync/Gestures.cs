@@ -145,7 +145,7 @@ namespace MWCoop
             bool helm = Game.GlobalBool("PlayerHelmet");
             if (helmSeen && helm != helmWas) { SendEvent(E_Helmet); if (ThirdPerson.HasBody) Mine().HelmetAt = now; }
             helmWas = helm; helmSeen = true;
-            if (fistNow && !fistWas) SendEvent(E_Punch);
+            if (fistNow && !fistWas) { SendEvent(E_Punch); Pvp.OnLocalPunch(); }
             if (fingerNow && !fingerWas) SendEvent(E_Finger);
             fistWas = fistNow; fingerWas = fingerNow;
             if (fistNow) bits |= G_Fist;

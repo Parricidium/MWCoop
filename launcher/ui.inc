@@ -1541,6 +1541,7 @@ static bool UiClick(int id)
     case UI_CAR_TRIM: case UI_CAR_TRIM + 1: case UI_CAR_TRIM + 2: case UI_CAR_TRIM + 3: case UI_CAR_TRIM + 4: CarTrimSet(id - UI_CAR_TRIM); return true;
     case UI_CAR_VIN: g_vinView = !g_vinView; g_paintView = false; return true;
     case UI_CAR_PAINT: g_paintView = !g_paintView; g_vinView = false; return true;
+    case UI_CAR_DENTS: CarRemoveDents(); return true;
     case UI_CAR_PAINTIMP: PaintImport(); return true;
     case UI_CAR_PAINTTPL: PaintTemplate(); return true;
     case UI_CAR_PAINTUSE: PaintUse(!PaintOn()); return true;
