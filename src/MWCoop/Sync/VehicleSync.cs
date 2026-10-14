@@ -299,6 +299,9 @@ namespace MWCoop
 
         // Voiture qui porte 't' (lui-meme ou un parent) : celles connues d'abord (sans GetComponent), sinon en
         // remontant les parents (voiture pas encore relevee, inactive). null : pas dans une voiture.
+        // Voiture d'un joueur suivie ici (pas une voiture du trafic) ?
+        public static bool IsPlayerCar(Transform t) { return CarOf(t) != null; }
+
         public static Transform CarRoot(Transform t)
         {
             Car c = CarOf(t);

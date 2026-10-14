@@ -121,6 +121,7 @@ namespace MWCoop
             new Mod("joueurs", PlayerSync.Update),
             new Mod("monde", World.Update),
             new Mod("radio", Radio.Update),
+            new Mod("particules", Particles.Update),
             new Mod("interactions", Interactions.Update),
             new Mod("voitures", VehicleSync.Update),
             new Mod("pieces", Parts.Update),
@@ -234,6 +235,7 @@ namespace MWCoop
             PlayerSync.OnLevelLoaded();
             World.OnLevelLoaded();
             Radio.OnLevelLoaded();
+            Particles.OnLevelLoaded();
             Interactions.OnLevelLoaded();
             VehicleSync.OnLevelLoaded();
             Parts.OnLevelLoaded();

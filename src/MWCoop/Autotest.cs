@@ -1626,6 +1626,88 @@ namespace MWCoop
                     Log.Info(sb.ToString());
                 }
             }
+            // [Test] Autotest=particules : de 30 a 90 s, toutes les secondes, le plus grand nombre de particules vivantes de
+            // chaque emetteur actif (ParticleSystem et ParticleEmitter) ; a 92 s, ceux qui ont emis, et le nombre d'emetteurs
+            // actifs muets. A comparer chez l'hote et l'invite (retour de JD, 14/10 : fumee, poussiere du trafic absentes chez l'invite).
+            if (mode == "particules")
+            {
+                if (t > 30f && t < 150f && t >= partNext)
+                {
+                    partNext = t + 1f;
+                    foreach (ParticleSystem ps in Object.FindObjectsOfType<ParticleSystem>())
+                    {
+                        string k = Recon.Path(ps.transform) + " [S]";
+                        int c; partMax.TryGetValue(k, out c); partMax[k] = Mathf.Max(c, ps.particleCount);
+                    }
+                    foreach (ParticleEmitter pe in Object.FindObjectsOfType<ParticleEmitter>())
+                    {
+                        string k = Recon.Path(pe.transform) + " [E" + (pe.emit ? "+" : "-") + "]";
+                        int c; partMax.TryGetValue(k, out c); partMax[k] = Mathf.Max(c, pe.particleCount);
+                    }
+                }
+                if (t > 36f && step3 == 0 && Net.Session.IsHost)
+                {
+                    step3 = 1;
+                    GameObject hp = Game.FindAny("TRAFFIC/VehiclesDirtRoad/Rally/HEPPA");
+                    PlayMakerFSM th = hp != null ? Game.FsmOn(hp, "Throttle") : null;
+                    if (th != null) foreach (string st in new[] { "Accelerate", "Cruise", "Cruise 2", "Other", "State 1", "State 2", "State 3" }) Log.Info("autotest : particules, Throttle " + Jobs.DumpActions(th, st));
+                    PlayMakerFSM sh = hp != null ? Game.FsmOn(hp, "Shifting") : null;
+                    if (sh != null) foreach (string st in new[] { "State 2", "State 3" }) Log.Info("autotest : particules, Shifting " + Jobs.DumpActions(sh, st));
+                }
+                if (t > 35f && step2 == 99)
+                {
+                    // qui commande ces emetteurs : automates (de la meme racine) dont une action vise l'emetteur ou son parent
+                    step2 = 1;
+                    var sb2 = new System.Text.StringBuilder("autotest : particules, commandes :");
+                    var targets = new System.Collections.Generic.List<GameObject>();
+                    foreach (ParticleEmitter pe in Resources.FindObjectsOfTypeAll(typeof(ParticleEmitter)))
+                        if (pe != null && pe.hideFlags == HideFlags.None && (pe.name == "RoosterTail" || pe.name.StartsWith("SnowCloud") || pe.name == "ExhaustParticle" || pe.name.StartsWith("SmokeHomeKiuas") || pe.transform.parent != null && pe.transform.parent.name == "Kiuas")) targets.Add(pe.gameObject);
+                    var seen = new System.Collections.Generic.HashSet<string>();
+                    foreach (GameObject tg in targets)
+                    {
+                        Transform root = tg.transform;
+                        for (int up = 0; up < 3 && root.parent != null; up++) root = root.parent;   // (pas toute la racine : YARD figeait le jeu)
+                        foreach (PlayMakerFSM f in root.GetComponentsInChildren<PlayMakerFSM>(true))
+                        {
+                            HutongGames.PlayMaker.FsmState[] sts;
+                            try { sts = f.FsmStates; } catch { continue; }
+                            foreach (HutongGames.PlayMaker.FsmState st in sts)
+                            {
+                                HutongGames.PlayMaker.FsmStateAction[] acts;
+                                try { acts = st.Actions; } catch { continue; }
+                                foreach (HutongGames.PlayMaker.FsmStateAction ac in acts ?? new HutongGames.PlayMaker.FsmStateAction[0])
+                                {
+                                    if (ac == null) continue;
+                                    bool hit = false;
+                                    foreach (System.Reflection.FieldInfo fi in ac.GetType().GetFields())
+                                    {
+                                        object v = null; try { v = fi.GetValue(ac); } catch { }
+                                        GameObject go = null;
+                                        var od = v as HutongGames.PlayMaker.FsmOwnerDefault; if (od != null) go = od.OwnerOption == HutongGames.PlayMaker.OwnerDefaultOption.UseOwner ? f.gameObject : od.GameObject != null ? od.GameObject.Value : null;
+                                        var fg = v as HutongGames.PlayMaker.FsmGameObject; if (fg != null) go = fg.Value;
+                                        var fp = v as HutongGames.PlayMaker.FsmProperty; if (fp != null && fp.TargetObject != null) { Component cp = fp.TargetObject.Value as Component; go = cp != null ? cp.gameObject : fp.TargetObject.Value as GameObject; }
+                                        if (go != null && (go == tg || tg.transform.IsChildOf(go.transform))) hit = true;
+                                    }
+                                    if (!hit) continue;
+                                    string k = Recon.Path(f.transform) + "::" + f.FsmName + " / " + st.Name + " : " + ac.GetType().Name + " -> " + tg.name;
+                                    if (seen.Add(k)) sb2.Append(" | ").Append(k).Append(f.enabled ? "" : " (COUPE)").Append(" [").Append(f.ActiveStateName).Append("]");
+                                }
+                            }
+                        }
+                    }
+                    Log.Info(sb2.ToString());
+                }
+                if (t > 152f && step == 0)
+                {
+                    step = 1;
+                    var sb = new System.Text.StringBuilder("autotest : particules, emetteurs actifs " + partMax.Count + " ; ont emis :");
+                    var keys = new System.Collections.Generic.List<string>(partMax.Keys); keys.Sort();
+                    foreach (string k in keys) if (partMax[k] > 0) sb.Append(" | ").Append(k).Append(" = ").Append(partMax[k]);
+                    sb.Append(" || muets :");
+                    foreach (string k in keys) if (partMax[k] == 0) sb.Append(" | ").Append(k);
+                    Log.Info(sb.ToString());
+                }
+            }
             if (mode == "sangsonde" && t > 25f && !done) { done = true; Log.Info("autotest : " + Respawn.ProbeBlood()); }
             if (mode == "porter")
             {
@@ -2262,7 +2344,8 @@ namespace MWCoop
         // Teletexte ([Test] Autotest=teletexte) : a 30 s l'hote allume le teletexte avec la telecommande (Use : 'Bool
         // test' -> Open), a 36 s il tape la page 123 (Input : 'Send code', NumberInt) ; les deux notent toutes les 2 s si
         // Systems/TV/Teletext est allume et sa page (Pages.PageNumber). Attendu chez l'invite : allume, 123.
-        static float ttLog, ttLog2;
+        static float ttLog, ttLog2, partNext;
+        static readonly System.Collections.Generic.Dictionary<string, int> partMax = new System.Collections.Generic.Dictionary<string, int>();
         static void TestTeletext(float t)
         {
             if (MWCoop.Net.Session.IsHost && t > 24f && step == 0)
