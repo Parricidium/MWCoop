@@ -21,6 +21,8 @@ namespace MWCoop.Net
         public NetWriter Quat(Quaternion q) { w.Write(q.x); w.Write(q.y); w.Write(q.z); w.Write(q.w); return this; }
         public NetWriter Str(string s)
         {
+            int id;
+            if (s != null && s.Length > 0 && s[0] == '@' && Strings.Ids.TryGetValue(s, out id)) { w.Write((ushort)(Strings.Mark + id)); return this; }
             byte[] b = Encoding.UTF8.GetBytes(s ?? "");
             w.Write((ushort)b.Length); w.Write(b); return this;
         }
@@ -29,6 +31,22 @@ namespace MWCoop.Net
         public NetWriter Raw(byte[] b, int off, int n) { w.Write(b, off, n); return this; }
         public byte[] ToArray() { w.Flush(); return ms.ToArray(); }
         public int Length { get { return (int)ms.Length; } }
+    }
+
+    // Textes connus : les types de messages "@..." (Jobs.OnSpecial et les autres) partent sur 2 octets -- longueur
+    // >= Mark = rang dans la liste (un message fait au plus 1150 octets : jamais une vraie longueur). Liste triee, la meme
+    // des deux cotes (meme version du mod, Session.NetVersion). Un "@" absent de la liste part en entier, comme avant.
+    public static class Strings
+    {
+        public const int Mark = 0xF000;
+        public static readonly string[] List = { "@300d","@300f","@300k","@accident","@ajouts","@arrestation","@attelage","@bagages","@benne","@bout","@carbu","@cbx","@cbxx","@client","@colis","@coup","@cree","@don","@drone","@emit","@esine","@esineosto","@etape","@fend","@fendattel","@filmi","@flash","@fuite","@jack","@jfs","@kassi","@kovi","@mw2","@outil","@parti","@percute","@poste","@pousse","@pvp","@ram","@renverse","@sac","@sacitem","@sacosto","@sacs","@tas","@tasse","@taxicarte","@touche","@tow","@triche","@triches","@tuyau","@vente","@vet","@vin","@visagep","@vitre" };
+        public static readonly System.Collections.Generic.Dictionary<string, int> Ids = Build();
+        static System.Collections.Generic.Dictionary<string, int> Build()
+        {
+            var d = new System.Collections.Generic.Dictionary<string, int>();
+            for (int i = 0; i < List.Length; i++) d[List[i]] = i;
+            return d;
+        }
     }
 
     public class BadNumberException : Exception { public BadNumberException(string m) : base(m) { } }
@@ -65,7 +83,12 @@ namespace MWCoop.Net
             return q;
         }
         static bool Ok(float f, float max) { return !float.IsNaN(f) && f <= max && f >= -max; }
-        public string Str() { int n = U16(); Need(n); string s = Encoding.UTF8.GetString(b, p, n); p += n; return s; }
+        public string Str()
+        {
+            int n = U16();
+            if (n >= Strings.Mark) { int id = n - Strings.Mark; if (id >= Strings.List.Length) throw new Exception("texte connu inconnu " + id); return Strings.List[id]; }
+            Need(n); string s = Encoding.UTF8.GetString(b, p, n); p += n; return s;
+        }
         public byte[] Bytes() { int n = U16(); Need(n); var r = new byte[n]; Buffer.BlockCopy(b, p, r, 0, n); p += n; return r; }
     }
 
