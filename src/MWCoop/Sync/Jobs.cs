@@ -1588,6 +1588,7 @@ namespace MWCoop
                 case "@triches": if (!Session.IsHost) Cheats.OnAllowed(r.Bool()); break;
                 case "@pvp": if (!Session.IsHost) Pvp.OnAllowed(r.Bool()); break;
                 case "@poste": Radio.OnBeat(who, r.Str()); break;
+                case "@emit": Particles.OnMessage(who, r); break;
                 case "@coup": Pvp.OnPunch(who, r); break;
                 case "@ajouts": if (!Session.IsHost) Ajouts.OnHost(r.U8()); break;
                 case "@triche": Cheats.OnRemote(who, r.Str()); break;
