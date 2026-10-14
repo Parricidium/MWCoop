@@ -195,7 +195,7 @@ namespace MWCoop
             if (now >= nextScan) { nextScan = machines.Count == 0 ? now + 30f : float.MaxValue; Scan(); }
             Computer(now);
             if (machines.Count == 0) return;
-            if (player == null) { GameObject g = GameObject.Find("PLAYER"); if (g == null) return; player = g.transform; }
+            if (player == null) { GameObject g = Game.PlayerGo; if (g == null) return; player = g.transform; }
             if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || CodeKey()) lastInput = now;   // (pas les deplacements : se servir de la machine)
             UpdateLocks(now);
             if (now < nextSend || Session.RemoteCount == 0) return;

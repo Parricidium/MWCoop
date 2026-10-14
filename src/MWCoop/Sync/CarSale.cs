@@ -129,7 +129,7 @@ namespace MWCoop
 
         static bool PlayerNear()
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             return pl != null && anim != null && (pl.transform.position - anim.transform.position).sqrMagnitude < Near * Near;
         }
 

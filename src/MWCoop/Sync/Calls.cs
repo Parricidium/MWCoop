@@ -601,6 +601,9 @@ namespace MWCoop
 
         static Phone PhoneAt(int i)
         {
+            // (objet detruit depuis -- telephone remplace : NullReferenceException a chaque seconde dans le journal de Matilda,
+            // 14/10, 1146 fois) : cherche de nouveau
+            if (phones[i] != null && phones[i].Go == null) phones[i] = null;
             if (phones[i] != null) return phones[i];
             GameObject go = Game.FindAny(LogicPaths[i]);
             if (go == null) return null;
@@ -625,8 +628,8 @@ namespace MWCoop
 
         static float LocalDistance(Vector3 pos)
         {
-            GameObject pl = GameObject.Find("PLAYER");
-            return pl != null ? Vector3.Distance(pl.transform.position, pos) : float.MaxValue;
+            Transform pl = Game.PlayerT;   // (GameObject.Find a chaque appel avant)
+            return pl != null ? Vector3.Distance(pl.position, pos) : float.MaxValue;
         }
 
         // Call : U8 joueur, U8 K_Phone, U8 n, (U8 ligne, Bool tourne chez l'hote, Str etat de 'Ring') x n (hote -> invites).

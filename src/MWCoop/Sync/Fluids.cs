@@ -292,7 +292,7 @@ namespace MWCoop
         // Essais : ajoute 3 a la premiere valeur Fluid/FuelLevel non nulle la plus proche du joueur.
         public static string TestNearest(string name)
         {
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             Watch best = null;
             float bd = float.MaxValue;
             foreach (Watch x in watches)

@@ -196,7 +196,7 @@ namespace MWCoop
         static bool FindPlayer()
         {
             if (player != null && cam != null) return true;
-            GameObject go = GameObject.Find("PLAYER");
+            GameObject go = Game.PlayerGo;
             if (go == null) return false;
             player = go.transform;
             controller = go.GetComponent<CharacterController>();
@@ -1047,7 +1047,7 @@ namespace MWCoop
                 foreach (Seat s in seats) if (s.Car.StartsWith(car) && InSeatZone(s, pts[i])) { sb.Append(" place ").Append(s.Index); any = true; }
                 if (!any) sb.Append(" aucune");
             }
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             CharacterController cc = pl != null ? pl.GetComponent<CharacterController>() : null;
             if (cc != null) sb.Append(" | joueur : pieds a ").Append((cc.center.y - cc.height / 2f).ToString("F2")).Append(" m de son ancre");
             foreach (Seat s in seats)

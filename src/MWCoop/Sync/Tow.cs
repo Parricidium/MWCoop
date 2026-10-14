@@ -720,7 +720,7 @@ namespace MWCoop
         static string TestWalk()
         {
             if (testH1 == null || testH2 == null) return "pas de crochets";
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             var cc = p != null ? p.GetComponent<CharacterController>() : null;
             if (cc == null) return "pas de joueur";
             Vector3 side = Vector3.Cross(Vector3.up, Flat(testH2.position - testH1.position));

@@ -32,7 +32,7 @@ namespace MWCoop
         static bool Find()
         {
             if (hand != null && drinkFsm != null) return true;
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             Transform d = pl != null ? pl.transform.Find("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera/Drink") : null;
             if (d == null) return false;
             hand = d.Find("Hand");

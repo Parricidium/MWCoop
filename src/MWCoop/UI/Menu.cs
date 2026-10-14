@@ -109,7 +109,7 @@ namespace MWCoop
         {
             if (on && blocked.Count == 0)
             {
-                GameObject p = GameObject.Find("PLAYER");
+                GameObject p = Game.PlayerGo;
                 if (p == null) return;
                 var list = new List<Behaviour>();
                 list.AddRange(p.GetComponents<Behaviour>());
@@ -513,7 +513,7 @@ namespace MWCoop
         // Pres de quelqu'un (pieds, cap) : 1,5 m derriere lui, un peu au-dessus du sol (la gravite fait le reste).
         public static void TeleportTo(Vector3 feet, float yaw, string who)
         {
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             if (p == null) return;
             Vector3 target = feet + Quaternion.Euler(0, yaw, 0) * new Vector3(0, 0, -1.5f) + Vector3.up * 1.0f;
             var cc = p.GetComponent<CharacterController>();

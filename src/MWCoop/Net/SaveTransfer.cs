@@ -1070,7 +1070,7 @@ namespace MWCoop.Net
         // "Wait"), puis CLICK : la vraie transition, et l'action de tete de "Wait".
         static string TestPress()
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             Vector3 me = pl != null ? pl.transform.position : Vector3.zero;
             SaveButton best = null;
             float bd = float.MaxValue;

@@ -204,7 +204,7 @@ namespace MWCoop
         static void Proxy()
         {
             if (proxy == null) return;
-            if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
+            if (player == null) { GameObject p = Game.PlayerGo; if (p == null) return; player = p.transform; }
             Vector3 bp = bus.position, mine = player.position;
             // Pieds -> origine du joueur (comme PLAYER, que mesuraient les actions).
             Vector3 lift = Session.Me != null && Session.Me.State.Feet != Vector3.zero ? mine - Session.Me.State.Feet : Vector3.up * 0.9f;
@@ -299,7 +299,7 @@ namespace MWCoop
         static void Interior()
         {
             if (lod == null) return;
-            if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
+            if (player == null) { GameObject p = Game.PlayerGo; if (p == null) return; player = p.transform; }
             bool near = bus.gameObject.activeInHierarchy && (player.position - bus.position).sqrMagnitude < 150f * 150f;
             if (lod.activeSelf != near) lod.SetActive(near);
         }
@@ -307,7 +307,7 @@ namespace MWCoop
         // Monte dans la copie : suit son deplacement de l'image.
         static void Ride()
         {
-            if (player == null) { GameObject p = GameObject.Find("PLAYER"); if (p == null) return; player = p.transform; }
+            if (player == null) { GameObject p = Game.PlayerGo; if (p == null) return; player = p.transform; }
             bool on = bus.gameObject.activeInHierarchy && player.parent == null && Inside(player.position);
             if (on && prevOk)
             {
@@ -452,7 +452,7 @@ namespace MWCoop
 
         static string TestArrive(bool inBus)
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (pl == null) return "pas de joueur";
             Vector3 to;
             if (inBus && inside != null) to = inside.transform.TransformPoint(inside.center) + Vector3.up * 0.2f;

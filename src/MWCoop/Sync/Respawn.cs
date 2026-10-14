@@ -262,7 +262,7 @@ namespace MWCoop
 
         static void Revive(Place place)
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (pl == null) return;
             // Accident : liaisons de tete recreees, mannequins ranges (avant de sortir du vehicule).
             foreach (Head h in heads) RestoreHead(h);
@@ -518,7 +518,7 @@ namespace MWCoop
 
         public static string State()
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
             string s = "choix " + Choosing + ", mort active " + (deathFsm != null && deathFsm.gameObject.activeSelf) + ", joueur " + (pl != null ? pl.transform.position.ToString("F2") : "?")
                        + (pl != null && pl.transform.parent != null ? " dans " + pl.transform.parent.name : "") + ", controleur " + (cc != null ? (cc.enabled ? "actif" : "coupe") : "DETRUIT");

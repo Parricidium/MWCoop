@@ -183,7 +183,7 @@ namespace MWCoop
             MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {
-                GameObject p = GameObject.Find("PLAYER");
+                GameObject p = Game.PlayerGo;
                 var cc = p != null ? p.GetComponent<CharacterController>() : null;
                 if (cc == null) return;
                 p.transform.Rotate(0, 40f * Time.deltaTime, 0);
@@ -379,7 +379,7 @@ namespace MWCoop
                 if (t > 22f && step == 1)
                 {
                     step = 2;
-                    GameObject pl = GameObject.Find("PLAYER");
+                    GameObject pl = Game.PlayerGo;
                     Vector3 at = Vector3.zero, toward = Vector3.zero;
                     if (Config.Get("Test", "LumieresLieu", "voiture") == "rue")
                     {
@@ -499,7 +499,7 @@ namespace MWCoop
                         Log.Info("autotest : rivett : " + RivSet(car, RivPart[rivStep], RivState[rivStep]));
                         rivStep++;
                     }
-                    GameObject pl = GameObject.Find("PLAYER");
+                    GameObject pl = Game.PlayerGo;
                     var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                     if (cc != null && b != null && t > 78f && t < 82f)
                     {
@@ -588,7 +588,7 @@ namespace MWCoop
                     if (t > 30f && step == 0)
                     {
                         step = 1;
-                        GameObject pl = GameObject.Find("PLAYER");
+                        GameObject pl = Game.PlayerGo;
                         var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                         if (cc != null)
                         {
@@ -617,7 +617,7 @@ namespace MWCoop
                     if (t > 28f && step == 0)
                     {
                         step = 1;
-                        GameObject pl = GameObject.Find("PLAYER");
+                        GameObject pl = Game.PlayerGo;
                         var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                         if (cc != null) { cc.enabled = false; pl.transform.position = b.transform.TransformPoint(new Vector3(0f, 0f, -3.2f)); cc.enabled = true; }
                         Log.Info("autotest : pousse, derriere la voiture");
@@ -699,7 +699,7 @@ namespace MWCoop
                     if (!Net.Session.IsHost && fb != null && t > 26f && attVoisin == 0)
                     {
                         attVoisin = 1;
-                        GameObject pl = GameObject.Find("PLAYER");
+                        GameObject pl = Game.PlayerGo;
                         var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                         if (cc != null) cc.enabled = false;
                         if (pl != null) pl.transform.position = fb.position + fb.transform.right * 1.8f + Vector3.up * 0.5f;
@@ -1207,7 +1207,7 @@ namespace MWCoop
                 if (Config.GetInt("Test", "TestPaie", 0) != 0 && step == 0 && st.EndsWith("Activate order")) { step = 1; Log.Info("autotest : le boulot rejoue paie, " + Wallet.Test(300)); }
                 if (t > 45f && !done) { done = true; Log.Info("autotest : quete " + st + ", " + Wallet.State()); }
             }
-            if (mode == "desynchro" && t > 6f && !done) { done = true; Log.Info("autotest : porte locale seulement " + Interactions.TestLocalDoor(GameObject.Find("PLAYER").transform.position)); }
+            if (mode == "desynchro" && t > 6f && !done) { done = true; Log.Info("autotest : porte locale seulement " + Interactions.TestLocalDoor(Game.PlayerGo.transform.position)); }
             // [Test] Autotest2=etat : apres l'essai principal, l'hote met TestQuete dans TestEtat a 45 s.
             if (Config.Get("Test", "Autotest2", "") == "etat" && MWCoop.Net.Session.IsHost && t > 45f && step2 == 0)
             { step2 = 1; Log.Info("autotest : " + WorldFsms.TestState(Config.Get("Test", "TestQuete", "TVPrograms::Schedule"), Config.Get("Test", "TestEtat", "News"))); }
@@ -1215,7 +1215,7 @@ namespace MWCoop
             if (mode == "porte" && t > 15f && !done)
             {
                 done = true;
-                GameObject pl = GameObject.Find("PLAYER");
+                GameObject pl = Game.PlayerGo;
                 Log.Info("autotest : porte " + Interactions.TestNearestDoor(pl.transform.position));
             }
             if (mode == "monter")
@@ -1252,7 +1252,7 @@ namespace MWCoop
                     Transform cam = PlayerSync.LocalCamera;
                     if (t > 40f && t < 70f && cam != null)
                     {
-                        GameObject pl = GameObject.Find("PLAYER");
+                        GameObject pl = Game.PlayerGo;
                         var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                         if (cc != null) { pl.transform.Rotate(0, 30f * Time.deltaTime, 0); cc.SimpleMove(pl.transform.forward * 1.8f); }
                         Rigidbody hb = Props.TestHold(id, cam);
@@ -1322,7 +1322,7 @@ namespace MWCoop
                 {
                     step = 1;
                     GameObject pallet = Game.FindAny("JOBS/FACTORY/OpeningTimes/LOD1/JOB/NPClookPallet");
-                    GameObject pl = GameObject.Find("PLAYER");
+                    GameObject pl = Game.PlayerGo;
                     if (pallet != null && pl != null)
                     {
                         var cc = pl.GetComponent<CharacterController>(); if (cc != null) cc.enabled = false;
@@ -1546,7 +1546,7 @@ namespace MWCoop
                     rivNear = true;
                     string[] c = near.Split(',');
                     var ci = System.Globalization.CultureInfo.InvariantCulture;
-                    GameObject pl = GameObject.Find("PLAYER");
+                    GameObject pl = Game.PlayerGo;
                     var cc = pl.GetComponent<CharacterController>();
                     cc.enabled = false; pl.transform.position = new Vector3(float.Parse(c[0], ci), float.Parse(c[1], ci), float.Parse(c[2], ci)); cc.enabled = true;
                     Log.Info("autotest : rivettvente, " + (buyer ? "acheteur" : "temoin") + " pres du vendeur (" + near + ")");
@@ -1725,7 +1725,7 @@ namespace MWCoop
             {
                 teleported = true;
                 string[] c = tp.Split(',');
-                GameObject pl = GameObject.Find("PLAYER");
+                GameObject pl = Game.PlayerGo;
                 var cc = pl.GetComponent<CharacterController>();
                 cc.enabled = false;
                 pl.transform.position = new Vector3(float.Parse(c[0], System.Globalization.CultureInfo.InvariantCulture),
@@ -1752,14 +1752,14 @@ namespace MWCoop
                 // Apres l'achat (30 s) : le sac est promene de 36 a 42 s (comme porte), objets a 50 s.
                 if (t > 36f && t < 42f)
                 {
-                    if (bagId == null) { bagId = Props.NearestId("shoppingbag", GameObject.Find("PLAYER").transform.position); Log.Info("autotest : sac " + bagId); }
+                    if (bagId == null) { bagId = Props.NearestId("shoppingbag", Game.PlayerGo.transform.position); Log.Info("autotest : sac " + bagId); }
                     if (bagId != null) Props.TestCarry(bagId, t);
                 }
             }
             if ((mode == "courses" || mode == "") && t > 50f && step == 0 && Config.Get("Test", "TestPos", "").Length > 0)
             {
                 step = 1;
-                Log.Info("autotest : objets autour : " + Props.Near(GameObject.Find("PLAYER").transform.position, 8f));
+                Log.Info("autotest : objets autour : " + Props.Near(Game.PlayerGo.transform.position, 8f));
             }
             if (mode == "argent")
             {
@@ -2265,7 +2265,7 @@ namespace MWCoop
                 // Le joueur se couche dans le lit le plus proche (fatigue montee pour qu'il dorme
                 // plusieurs heures) ; on suit l'heure et la fatigue chaque seconde.
                 done = true;
-                Vector3 me = GameObject.Find("PLAYER").transform.position;
+                Vector3 me = Game.PlayerGo.transform.position;
                 PlayMakerFSM bed = null;
                 foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
                     if (f.gameObject.name == "SleepTrigger" && f.FsmName == "Activate"
@@ -2595,7 +2595,7 @@ namespace MWCoop
         // La camera du joueur suit l'avatar le plus proche (souris du jeu coupee pendant le test).
         static void LookAtGroup()
         {
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             Transform cam = p != null ? p.transform.Find("Pivot/AnimPivot/Camera/FPSCamera") : null;
             if (cam == null) return;
             Vector3 sum = Vector3.zero;
@@ -2607,7 +2607,7 @@ namespace MWCoop
 
         static void FacePoint(string xyz)
         {
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             Transform cam = p != null ? p.transform.Find("Pivot/AnimPivot/Camera/FPSCamera") : null;
             string[] c = xyz.Split(',');
             if (cam == null || c.Length < 3) return;
@@ -2626,7 +2626,7 @@ namespace MWCoop
 
         static void LookAtNearestAvatar()
         {
-            GameObject p = GameObject.Find("PLAYER");
+            GameObject p = Game.PlayerGo;
             if (p == null) return;
             Transform cam = p.transform.Find("Pivot/AnimPivot/Camera/FPSCamera");
             Avatar best = null;

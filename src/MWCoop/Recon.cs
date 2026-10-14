@@ -260,7 +260,7 @@ namespace MWCoop
                     bool withParams = path.StartsWith("presp:");
                     // Objets physiques a moins de N m du joueur, avec leurs automates (sans actions).
                     float rad = float.Parse(path.Substring(path.IndexOf(':') + 1), System.Globalization.CultureInfo.InvariantCulture);
-                    Vector3 c = GameObject.Find("PLAYER").transform.position;
+                    Vector3 c = Game.PlayerGo.transform.position;
                     foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
                         if ((rb.position - c).sqrMagnitude < rad * rad && Game.RootName(rb.transform) != "PLAYER")
                         {

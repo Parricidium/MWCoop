@@ -207,7 +207,7 @@ namespace MWCoop
             if (tStep == 1 && now - tAt > 5f)
             {
                 tStep = 2;
-                GameObject pl = GameObject.Find("PLAYER");
+                GameObject pl = Game.PlayerGo;
                 var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                 if (cc != null) cc.enabled = false;
                 if (pl != null) pl.transform.position = new Vector3(-1350.5f, 4.2f, 1207.5f);

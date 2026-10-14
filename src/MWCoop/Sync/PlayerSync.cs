@@ -44,7 +44,7 @@ namespace MWCoop
         static bool FindPlayer()
         {
             if (player != null) return true;
-            GameObject go = GameObject.Find("PLAYER");
+            GameObject go = Game.PlayerGo;
             if (go == null) return false;
             player = go.transform;
             controller = go.GetComponent<CharacterController>();

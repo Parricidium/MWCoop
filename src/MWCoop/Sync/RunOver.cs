@@ -120,7 +120,7 @@ namespace MWCoop
                 if (tStep == 1)
                 {
                     tStep = 2;
-                    GameObject pl = GameObject.Find("PLAYER");
+                    GameObject pl = Game.PlayerGo;
                     var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
                     if (cc != null) cc.enabled = false;
                     if (pl != null) pl.transform.position = car.position + back * 9f + Vector3.up * 0.5f;

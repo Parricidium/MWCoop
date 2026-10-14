@@ -788,7 +788,7 @@ namespace MWCoop
             bool gesture = Gestures.Pushing;
             if (!gesture && now < nextMoveLook) return;
             if (!gesture) nextMoveLook = now + 0.25f;
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             if (pl == null) return;
             Vector3 p = pl.transform.position + Vector3.up * 0.8f;
             Car best = null;
@@ -2180,7 +2180,7 @@ namespace MWCoop
             if (c == null || c.Drive == null) return null;
             if (!seat)
             {
-                GameObject p = GameObject.Find("PLAYER");
+                GameObject p = Game.PlayerGo;
                 var cc = p.GetComponent<CharacterController>();
                 cc.enabled = false;
                 p.transform.position = c.Drive.transform.position + Vector3.up * 0.5f;
@@ -2343,7 +2343,7 @@ namespace MWCoop
                     if (t > 67f && tStep == 10)
                     {
                         tStep = 11;
-                        GameObject pl = GameObject.Find("PLAYER");   // (introuvable si inactif)
+                        GameObject pl = Game.PlayerGo;   // (introuvable si inactif)
                         Log.Info("autotest : taxi range " + (!Seats.Seated && pl != null ? "OK" : "ECHEC") + " : passager " + (Seats.Seated ? "toujours assis" : "sorti")
                                  + ", PLAYER " + (pl != null ? "actif en " + pl.transform.position.ToString("F1") : "inactif"));
                     }
@@ -2351,7 +2351,7 @@ namespace MWCoop
                     {
                         tStep = 12;
                         GameObject taxi = Game.FindAny("JOBS/TAXIJOB/MACHTWAGEN");
-                        GameObject pl = GameObject.Find("PLAYER");
+                        GameObject pl = Game.PlayerGo;
                         if (taxi != null && pl != null)
                         {
                             var cc = pl.GetComponent<CharacterController>();

@@ -1158,7 +1158,7 @@ namespace MWCoop
         public static string TestOpenBag(HashSet<string> skip = null)
         {
             Scan();
-            Vector3 me = GameObject.Find("PLAYER").transform.position;
+            Vector3 me = Game.PlayerGo.transform.position;
             PlayMakerFSM best = null; string bestId = null;
             foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
             {
@@ -1183,7 +1183,7 @@ namespace MWCoop
         public static string TestNearest()
         {
             Scan();
-            Vector3 me = GameObject.Find("PLAYER").transform.position;
+            Vector3 me = Game.PlayerGo.transform.position;
             PlayMakerFSM best = null;
             string bestId = null;
             foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
@@ -1281,7 +1281,7 @@ namespace MWCoop
         static PlayMakerFSM EmptyBox(string prefix)
         {
             Scan();
-            Vector3 me = GameObject.Find("PLAYER").transform.position;
+            Vector3 me = Game.PlayerGo.transform.position;
             PlayMakerFSM best = null;
             foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
             {
@@ -1307,7 +1307,7 @@ namespace MWCoop
             {
                 testStep = 1;
                 Scan();
-                Vector3 me = GameObject.Find("PLAYER").transform.position;
+                Vector3 me = Game.PlayerGo.transform.position;
                 PlayMakerFSM best = null; string bestId = null;
                 foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
                 {
@@ -1327,7 +1327,7 @@ namespace MWCoop
         static PlayMakerFSM TestFind(string prefix, System.Predicate<PlayMakerFSM> ok)
         {
             Scan();
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             Vector3 me = pl != null ? pl.transform.position : Vector3.zero;
             PlayMakerFSM best = null;
             foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
@@ -1430,7 +1430,7 @@ namespace MWCoop
         // Essais : articles suivis a moins de 'radius' m que 'ok' accepte, tries par ID : "ID [etat] details ; ...".
         static string TestList(float radius, System.Predicate<PlayMakerFSM> ok, System.Func<PlayMakerFSM, string> details)
         {
-            GameObject pl = GameObject.Find("PLAYER");
+            GameObject pl = Game.PlayerGo;
             Vector3 me = pl != null ? pl.transform.position : Vector3.zero;
             var keys = new List<string>();
             foreach (KeyValuePair<string, PlayMakerFSM> kv in byId)
