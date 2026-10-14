@@ -30,7 +30,7 @@ namespace MWCoop
             Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); Gestures.PlayerLeft(pi.Id); HandTools.PlayerLeft(pi.Id); Stock.PlayerLeft(pi.Id); CarDoors.PlayerLeft(pi.Id); Voice.PlayerLeft(pi.Id); };
         }
 
-        public static bool InGame { get { return Application.loadedLevelName == "GAME"; } }
+        public static bool InGame { get { return Game.LevelName == "GAME"; } }
 
         public static void OnLevelLoaded()
         {
@@ -261,6 +261,8 @@ namespace MWCoop
                     CarDoors.ScheduleSnapshot(from);
                     Props.ScheduleSnapshot();
                     TaxiCustomer.ScheduleSnapshot(from);
+                    ModMachtwagen300D.ScheduleSnapshot();   // (revue du 14/10 : equipements de la 300D et bagages du taxi
+                    Jobs.LuggageResend();                   // jamais redits a celui qui arrive)
                 }
             }
         }

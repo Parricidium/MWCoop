@@ -117,6 +117,7 @@ namespace MWCoop
 
         public static void Update()
         {
+            if (!Config.Testing) return;   // (partie normale : aucun essai, rien a regarder a chaque image)
             string mode = Config.Get("Test", "Autotest", "");
             WaitScreen.Test(mode, Time.realtimeSinceStartup);   // au menu : avant le filtre GAME
             Contenu.MenuTest(mode);
@@ -131,7 +132,7 @@ namespace MWCoop
                 string png = System.IO.Path.Combine(System.IO.Path.Combine(Log.DataDir, "dumps"), "ecran-" + ((int)captureTimes[0]).ToString("000") + ".png");
                 System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(png));
                 Application.CaptureScreenshot(png);
-                Log.Info("autotest : capture " + png + " (" + Application.loadedLevelName + ")");
+                Log.Info("autotest : capture " + png + " (" + Game.LevelName + ")");
                 captureTimes.RemoveAt(0);
             }
             if (capName != null && Time.realtimeSinceStartup >= capAt)
@@ -141,7 +142,7 @@ namespace MWCoop
                 Log.Info("autotest : capture " + png);
                 capName = null;
             }
-            if (Application.loadedLevelName != "GAME") { t0 = -1; return; }
+            if (Game.LevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
@@ -838,7 +839,7 @@ namespace MWCoop
                 sb.Append(", lodBias ").Append(QualitySettings.lodBias).Append(" maxLOD ").Append(QualitySettings.maximumLODLevel).Append(", textures ").Append(QualitySettings.masterTextureLimit);
                 sb.Append(", aniso ").Append(QualitySettings.anisotropicFiltering).Append(", lumieres ").Append(QualitySettings.pixelLightCount).Append(", msaa ").Append(QualitySettings.antiAliasing);
                 sb.Append(", vsync ").Append(QualitySettings.vSyncCount).Append(", images max ").Append(Application.targetFrameRate).Append(", particules douces ").Append(QualitySettings.softVegetation);
-                Camera c = Camera.main;
+                Camera c = Game.MainCam;
                 if (c != null) sb.Append(", camera ").Append(c.name).Append(" ").Append(c.renderingPath).Append(" hdr ").Append(c.hdr).Append(" loin ").Append(c.farClipPlane).Append(" fov ").Append(c.fieldOfView);
                 Terrain[] ts = Object.FindObjectsOfType<Terrain>();
                 sb.Append(", terrains ").Append(ts.Length);
@@ -2244,7 +2245,7 @@ namespace MWCoop
                     if (!hit) foreach (FsmFloat v in FsmVariables.GlobalVariables.FloatVariables) { }
                     if (hit) hits.Add(Recon.Path(f.transform));
                 }
-                var cam = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+                var cam = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
                 var sb = new System.Text.StringBuilder();
                 if (cam != null) foreach (MonoBehaviour m in cam.GetComponents<MonoBehaviour>()) sb.Append(' ').Append(m.GetType().Name).Append(m.enabled ? "+" : "-");
                 Log.Info("autotest : releveco : " + hits.Count + " automates ; camera :" + sb + " ; " + Recon.DumpTargets(string.Join(";", hits.ToArray())));

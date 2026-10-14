@@ -63,7 +63,7 @@ namespace MWCoop
 
             // Pseudos au-dessus des joueurs : pilule sombre, effacee sur la derniere moitie de la distance choisie
             // ([Graphismes] Pseudos : 0 caches, sinon la distance en metres ; 120 par defaut).
-            Camera cam = Camera.main;
+            Camera cam = Game.MainCam;
             float far = Gfx.Get("Pseudos", 120);
             if (cam == null || far <= 0f) return;
             foreach (Avatar a in PlayerSync.Avatars)

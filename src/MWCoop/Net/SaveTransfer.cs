@@ -1012,7 +1012,7 @@ namespace MWCoop.Net
                 if (!host && testStep == 1 && t > 65f)
                 {
                     testStep = 2;
-                    Log.Info("autotest : sauve : invite toujours en jeu (" + Application.loadedLevelName + "), entrees en jeu " + testEntries
+                    Log.Info("autotest : sauve : invite toujours en jeu (" + Game.LevelName + "), entrees en jeu " + testEntries
                              + ", sauvegardes de l'hote annoncees " + guestDone);
                 }
                 if (host && testStep == 0 && t > 70f) { testStep = 1; Log.Info("autotest : sauve : " + coopDone + " sauvegarde(s) coop, invites : " + Guests()); }

@@ -1544,7 +1544,9 @@ namespace MWCoop
         //  @etape  Stage atteint par la fendeuse      (fiable, U8)
         static void OnSpecial(int who, string kind, NetReader r)
         {
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), kind != "@benne" && kind != "@pousse" && kind != "@drone" && kind != "@bout", who);
+            // (relais : par le canal ou il est arrive -- avant, choisi par une liste de noms : fin de @drone, envoyee fiable,
+            // relayee non fiable ; flux @ram / @tow / @poste / @300d relayes fiables, en file derriere le reste a 3 joueurs et plus)
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Job).U8(who).Str(kind).Raw(r.Rest()), Session.InReliable, who);
             switch (kind)
             {
                 case "@cree":
@@ -1710,6 +1712,9 @@ namespace MWCoop
                 if (lugItems[i] != null && lugItems[i].parent != lugPivots[i]) sb.Append(sb.Length > 0 ? "," : "").Append(lugPivots[i].name);
             return sb.ToString();
         }
+
+        // Hote : un joueur arrive en jeu -- bagages redits (envoyes seulement aux changements).
+        public static void LuggageResend() { if (Session.IsHost) { lugWas = null; nextLug = 0f; } }
 
         static void LuggageUpdate(float now)
         {

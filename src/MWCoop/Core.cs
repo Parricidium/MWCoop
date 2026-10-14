@@ -13,6 +13,7 @@ namespace MWCoop
         void Awake()
         {
             I = this;
+            useGUILayout = false;   // (aucun GUILayout : pas de passage Layout dans OnGUI, une passe de moins par evenement -- revue du 14/10)
             Config.Load();
             dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0 || Config.Get("Test", "VidageCibles", "").Length > 0;
             Log.Info("Core pret, profil '" + System.Environment.GetEnvironmentVariable("MWCOOP_PROFIL") + "'");
@@ -71,7 +72,7 @@ namespace MWCoop
             {
                 nextBeat = Time.realtimeSinceStartup + 10f;
                 Log.Info("images " + Time.frameCount + ", temps " + Time.time.ToString("F1")
-                         + ", niveau " + Application.loadedLevelName + ", " + Session.Status
+                         + ", niveau " + Game.LevelName + ", " + Session.Status
                          + (Session.T != null ? ", recu " + Session.T.BytesIn / 1024 + " Ko, envoye " + Session.T.BytesOut / 1024 + " Ko" : "")
                          // Besoins du joueur (une mort de soif ou de faim se relit dans le journal) :
                          + (PlayerSync.InGame ? ", soif " + Game.GlobalFloat("PlayerThirst").ToString("F0") + " faim " + Game.GlobalFloat("PlayerHunger").ToString("F0")
@@ -83,13 +84,13 @@ namespace MWCoop
                 try
                 {
                     string targets = Config.Get("Test", "VidageCibles", "");
-                    if (targets.Length > 0 && Application.loadedLevelName == "GAME") Log.Info("cibles : " + Recon.DumpTargets(targets) + ", pieces : " + Parts.DumpIds());
-                    if (Config.GetInt("Test", "Vidage", 0) == 1) Recon.DumpLevel("auto", Application.loadedLevelName != "GAME");
+                    if (targets.Length > 0 && Game.LevelName == "GAME") Log.Info("cibles : " + Recon.DumpTargets(targets) + ", pieces : " + Parts.DumpIds());
+                    if (Config.GetInt("Test", "Vidage", 0) == 1) Recon.DumpLevel("auto", Game.LevelName != "GAME");
                     // Vidage=2 : niveau complet AVEC les parametres des actions (reference hors jeu, voir ref\LISEZMOI.md).
                     if (Config.GetInt("Test", "Vidage", 0) == 2) Recon.DumpLevel("complet", true);
                     Log.Info("globales : " + Recon.DumpGlobals());
                     Log.Info("personnages : " + Recon.DumpCharacters());
-                    if (Application.loadedLevelName == "GAME") Log.Info("apparences : " + Recon.DumpLooks());
+                    if (Game.LevelName == "GAME") Log.Info("apparences : " + Recon.DumpLooks());
                     Log.Info("clips : " + Recon.DumpClips());
                 }
                 catch (System.Exception e) { Log.Error("vidage : " + e); }
@@ -230,7 +231,8 @@ namespace MWCoop
 
         void OnLevelWasLoaded(int level)
         {
-            Log.Info("niveau charge : " + level + " " + Application.loadedLevelName);
+            Game.LevelChanged();
+            Log.Info("niveau charge : " + level + " " + Game.LevelName);
             Replay.OnLevelLoaded();
             PlayerSync.OnLevelLoaded();
             World.OnLevelLoaded();
@@ -311,7 +313,7 @@ namespace MWCoop
             Studio.OnLevelLoaded();
             Jobs.OnLevelLoaded();
             WaitScreen.OnLevelLoaded();
-            if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
+            if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Game.LevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
         }
 
         void OnGUI()

@@ -37,7 +37,7 @@ namespace MWCoop
         {
             foreach (L l in all) if (l.H != null && l.H.Go != null) Object.Destroy(l.H.Go);
             all.Clear(); sun = null;
-            scanAt = Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + 12f : -1;
+            scanAt = Game.LevelName == "GAME" ? Time.realtimeSinceStartup + 12f : -1;
         }
 
         static void Scan(bool newCars)
@@ -87,7 +87,7 @@ namespace MWCoop
             // (releve : 12 s apres le chargement, puis chaque minute ou des qu'une voiture apparait -- FindObjectsOfTypeAll coute)
             if (now >= scanAt && (now >= nextScan || scanGen != VehicleSync.Generation)) { nextScan = now + 60f; bool newCars = scanGen != VehicleSync.Generation; scanGen = VehicleSync.Generation; Scan(newCars); }
             if (all.Count == 0) return;
-            Camera cam = Camera.main;
+            Camera cam = Game.MainCam;
             if (cam == null) return;
             Vector3 cp = cam.transform.position;
             int nBeam = Gfx.Get("OmbresPhares", 0), nStreet = Gfx.Get("OmbresLampadaires", 0), halos = Gfx.Get("Halos", 0);

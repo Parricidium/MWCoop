@@ -137,7 +137,7 @@ namespace MWCoop
                 if (v != null) folder = Path.GetFullPath(v.ToString());
             }
             catch { }
-            Log.Info("mscloader : " + n + " mod(s) releve(s) pour le lanceur (" + Application.loadedLevelName + "), dossier des mods " + folder + ", MSCLoader " + LoaderPath(ml));
+            Log.Info("mscloader : " + n + " mod(s) releve(s) pour le lanceur (" + Game.LevelName + "), dossier des mods " + folder + ", MSCLoader " + LoaderPath(ml));
         }
     }
 }

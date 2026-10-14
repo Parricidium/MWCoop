@@ -80,7 +80,7 @@ namespace MWCoop.Net
             var sb = new StringBuilder();
             long now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds;
             sb.Append("etat\t").Append(Session.IsHost ? 1 : 0).Append('\t').Append(Session.Steam ? 1 : 0).Append('\t').Append(Clean(Lang.Status(Session.Status)))
-              .Append('\t').Append(Clean(Application.loadedLevelName)).Append('\t').Append(now).Append('\n');
+              .Append('\t').Append(Clean(Game.LevelName)).Append('\t').Append(now).Append('\n');
             foreach (PlayerInfo pi in Session.Players.Values)
             {
                 int ping = -1;

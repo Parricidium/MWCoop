@@ -87,7 +87,7 @@ namespace MWCoop
         static void TickLippu()
         {
             if (lippu == null || lippuMesh == null || lippuRest == null) return;
-            Camera cam = Camera.main;
+            Camera cam = Game.MainCam;
             if (cam != null && (cam.transform.position - lippu.position).sqrMagnitude > 120f * 120f) return;
             float time = Time.time;
             float gust = 0.55f + 0.45f * Mathf.Sin(time * 0.37f) * Mathf.Sin(time * 0.23f + 1.3f);

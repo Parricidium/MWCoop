@@ -70,7 +70,7 @@ namespace MWCoop
         static float nextCamCheck;
         static int camFixes;
         static bool camLost;
-        // Garde-fou : en partie, hors menu du jeu, plus aucune camera principale (Camera.main nul) -- la camera du joueur la
+        // Garde-fou : en partie, hors menu du jeu, plus aucune camera principale (Game.MainCam nul) -- la camera du joueur la
         // redevient (repare aussi une partie deja bloquee).
         static void MainCameraGuard()
         {
@@ -80,8 +80,8 @@ namespace MWCoop
             // [Test] CameraPerdue=<s> : a ce temps de jeu, la camera du joueur perd son etiquette (comme apres le drone + Echap).
             int lose = Config.GetInt("Test", "CameraPerdue", 0);
             if (lose > 0 && !camLost && Time.timeSinceLevelLoad > lose && PlayerSync.LocalCamera != null)
-            { camLost = true; PlayerSync.LocalCamera.gameObject.tag = "Untagged"; Log.Info("autotest : camera du joueur sans etiquette, Camera.main " + (Camera.main != null ? Camera.main.name : "nul")); }
-            if (Camera.main != null) return;
+            { camLost = true; PlayerSync.LocalCamera.gameObject.tag = "Untagged"; Log.Info("autotest : camera du joueur sans etiquette, Game.MainCam " + (Game.MainCam != null ? Game.MainCam.name : "nul")); }
+            if (Game.MainCam != null) return;
             Transform c = PlayerSync.LocalCamera;
             if (c == null || c.GetComponent<Camera>() == null || !c.gameObject.activeInHierarchy) return;
             c.gameObject.tag = "MainCamera";
@@ -138,7 +138,7 @@ namespace MWCoop
 
         public static void Draw()
         {
-            if (ChatOpen && testKey != null && Event.current.type == EventType.Layout)
+            if (ChatOpen && testKey != null && Event.current.type == EventType.Repaint)
             {
                 // Autotest "tchat" : la touche simulee remplace l'evenement de ce passage, comme une vraie frappe.
                 Event real = Event.current;

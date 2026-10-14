@@ -194,9 +194,12 @@ namespace MWCoop
             }
             foreach (int id in Session.Players.Keys)
                 if (id != Session.LocalId && known.Add(id)) Raise(PlayerJoined, id);
-            foreach (int id in new List<int>(known))
-                if (!Session.Players.ContainsKey(id)) { known.Remove(id); Raise(PlayerLeft, id); }
+            // (departs : liste reutilisee, remplie seulement s'il en manque un -- avant, une liste neuve a chaque image)
+            gone.Clear();
+            foreach (int id in known) if (!Session.Players.ContainsKey(id)) gone.Add(id);
+            foreach (int id in gone) { known.Remove(id); Raise(PlayerLeft, id); }
         }
+        static readonly List<int> gone = new List<int>();
 
         static void Raise(Action<int> ev, int id)
         {

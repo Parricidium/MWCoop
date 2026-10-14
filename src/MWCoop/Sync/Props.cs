@@ -174,10 +174,10 @@ namespace MWCoop
         // CD par son disque (CD1, CD2...), ou qu'il soit (boitier, lecteur, main, sol).
         public static GameObject FindCd(string disc)
         {
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms(0.5f))
             {
                 var f = (PlayMakerFSM)o;
-                if (f.FsmName != "Data" || f.gameObject.name != "cd(itemx)" || f.hideFlags != HideFlags.None) continue;
+                if (f == null || f.FsmName != "Data" || f.gameObject.name != "cd(itemx)" || f.hideFlags != HideFlags.None) continue;
                 FsmString n = f.FsmVariables.FindFsmString("ThisCD");
                 if (n != null && n.Value == disc) return f.gameObject;
             }

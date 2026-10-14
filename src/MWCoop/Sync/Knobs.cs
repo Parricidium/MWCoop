@@ -68,9 +68,8 @@ namespace MWCoop
             }
             catch { refused.Add(f); return false; }
             if (kn.Var == null || !Replay.Claim(f, "molettes")) { refused.Add(f); return false; }
-            int n = 0;
-            while (byKey.ContainsKey(path + "#" + n)) n++;
-            kn.Key = path + "#" + n;
+            kn.Key = path + "#" + Recon.Twin(f);   // (rang stable, Recon.Twin)
+            for (int n = 2; byKey.ContainsKey(kn.Key); n++) kn.Key = path + "#" + Recon.Twin(f) + "+" + n;
             knobs.Add(kn);
             byKey[kn.Key] = kn;
             Log.Info("molettes : " + kn.Key + " suivie (valeur " + kn.Var.Name + " tenue dans " + string.Join(", ", new List<string>(kn.Held).ToArray()) + ", " + kn.Apply.Count + " actions de pose" + (kn.HasLight ? ", voyant" : "") + ")");

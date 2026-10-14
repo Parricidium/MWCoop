@@ -18,7 +18,7 @@ namespace MWCoop
         {
             string dir = System.IO.Path.Combine(Log.DataDir, "dumps");
             Directory.CreateDirectory(dir);
-            string path = System.IO.Path.Combine(dir, Application.loadedLevelName + "-" + tag + ".txt");
+            string path = System.IO.Path.Combine(dir, Game.LevelName + "-" + tag + ".txt");
             var sb = new StringBuilder();
             foreach (GameObject go in SceneRoots())
                 Walk(sb, go.transform, 0, actionParams);
@@ -427,6 +427,20 @@ namespace MWCoop
                 return sb.Append(']').ToString();
             }
             return o.ToString();
+        }
+
+        // Suffixe d'un automate parmi ses homonymes (meme chemin, meme nom) : rang de l'objet parmi ses freres, puis rang de
+        // l'automate parmi ceux du meme nom sur l'objet. Le meme chez l'hote et l'invite, quel que soit l'ordre des releves
+        // (revue du 14/10 : « premier #n libre » dans l'ordre de decouverte, Events / Knobs -- cles inversables).
+        public static string Twin(PlayMakerFSM f)
+        {
+            int k = 0;
+            foreach (PlayMakerFSM o in f.GetComponents<PlayMakerFSM>())
+            {
+                if (o == f) break;
+                if (o.FsmName == f.FsmName) k++;
+            }
+            return f.transform.GetSiblingIndex() + (k > 0 ? "." + k : "");
         }
 
         public static string Path(Transform t)

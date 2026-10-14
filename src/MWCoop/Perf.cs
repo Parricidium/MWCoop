@@ -75,7 +75,7 @@ namespace MWCoop
         {
             int all = 0, awake = 0;
             var near = new Dictionary<string, int>();
-            Camera cam = Camera.main;
+            Camera cam = Game.MainCam;
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
                 all++;

@@ -244,7 +244,7 @@ namespace MWCoop
                 if (e.Owner == Session.LocalId) continue;   // physique ici (choc) : rien de l'hote
                 // Loin de la camera (plus de 120 m) : posee une image sur 3, avec le temps cumule (0,4 ms par image pour
                 // 9 voitures sinon ; retour de joueurs 10/10, performances).
-                if (camT == null) { Camera c = Camera.main; if (c != null) camT = c.transform; }
+                if (camT == null) { Camera c = Game.MainCam; if (c != null) camT = c.transform; }
                 if (camT != null && (e.T.position - camT.position).sqrMagnitude > 120f * 120f && (Time.frameCount + ++far) % 3 != 0) { e.SkipDt += Time.deltaTime; continue; }
                 fdt = Time.deltaTime + e.SkipDt; e.SkipDt = 0f;
                 Follow(e);
@@ -522,7 +522,7 @@ namespace MWCoop
             if (wheelsKey == null) { wheelsKey = e.Key; Log.Info("autotest : roues : suivie " + e.Key); }
             float v = Session.IsHost && e.Body != null ? e.Body.velocity.magnitude : e.Vel.magnitude;
             var sb = new System.Text.StringBuilder("autotest : roues " + e.Key + " " + (v * 3.6f).ToString("F0") + " km/h");
-            Transform cam = Camera.main != null ? Camera.main.transform : null;
+            Transform cam = Game.MainCam != null ? Game.MainCam.transform : null;
             if (cam != null) sb.Append(" a ").Append((cam.position - e.T.position).magnitude.ToString("F0")).Append(" m");
             if (!Session.IsHost) sb.Append(" (recue ").Append((e.Vel.magnitude * 3.6f).ToString("F0")).Append(", affichee ").Append((e.MoveVel.magnitude * 3.6f).ToString("F0")).Append(" km/h)");
             for (int i = 0; i < e.Wheels.Length; i++)
@@ -645,7 +645,7 @@ namespace MWCoop
             // chaussee visible et decalait les voitures proches de la camera (« voitures enfoncees », retour d'un joueur).
             // [Test] CalageTrafic=1 le remet.
             if (Config.GetInt("Test", "CalageTrafic", 0) == 0) { e.Ride = 0f; return; }
-            if (camT == null) { Camera c = Camera.main; if (c != null) camT = c.transform; }
+            if (camT == null) { Camera c = Game.MainCam; if (c != null) camT = c.transform; }
             if (camT == null || (camT.position - e.T.position).sqrMagnitude > 150f * 150f) return;
             float sum = 0f;
             int n = 0;
@@ -1169,7 +1169,7 @@ namespace MWCoop
             if (chocStep == 0 && t > 40f)
             {
                 chocStep = 1;
-                Transform me = Camera.main != null ? Camera.main.transform : null;
+                Transform me = Game.MainCam != null ? Game.MainCam.transform : null;
                 int best = -1;
                 float bd = float.MaxValue;
                 for (int i = 0; i < ents.Count; i++)

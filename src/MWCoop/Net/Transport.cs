@@ -22,6 +22,7 @@ namespace MWCoop.Net
         internal readonly Dictionary<ushort, Pending> unacked = new Dictionary<ushort, Pending>();
         internal readonly Queue<byte[]> waiting = new Queue<byte[]>();
         internal readonly Dictionary<ushort, byte[]> early = new Dictionary<ushort, byte[]>();
+        internal readonly List<ushort> acks = new List<ushort>();   // acquittements a envoyer (un paquet par image)
         public int InFlight { get { return unacked.Count + waiting.Count; } }
         internal class Pending { public byte[] Packet; public float SentAt; public int Tries; }
         public override string ToString() { return "#" + Id + " " + End; }   // (SteamId.ToString : l'identifiant)
@@ -49,6 +50,8 @@ namespace MWCoop.Net
         public event Action<Peer, string> OnDisconnected;
         public event Action<Peer, byte[], int, int> OnMessage; // pair, donnees, debut, longueur
         public event Action<string> OnRejected;
+        // Message en cours de remise (OnMessage) : venu par le canal fiable ? (relais de l'hote : meme canal, Jobs.OnSpecial)
+        public bool InReliable;
 
         public void Host(int port) { Host(new UdpLink(port)); }
 
@@ -162,6 +165,7 @@ namespace MWCoop.Net
             Receive();
             foreach (Peer p in Peers.ToArray())
             {
+                FlushAcks(p);
                 if (Now - p.LastHeard > Timeout) { DropPeer(p, "delai depasse"); continue; }
                 if (Now - p.LastPingSent > 1f)
                 {
@@ -174,6 +178,21 @@ namespace MWCoop.Net
                     if (Now - pd.SentAt > resend) { pd.SentAt = Now; pd.Tries++; SendRaw(p, pd.Packet); }
                 while (p.waiting.Count > 0 && p.unacked.Count < Window) SendReliableNow(p, p.waiting.Dequeue());
             }
+        }
+
+        // Acquittements groupes : un paquet par pair et par image au lieu d'un par message fiable recu (T_ACK porte une
+        // liste de numeros ; les versions d'avant n'en envoyaient qu'un, et lisaient deja la liste).
+        void FlushAcks(Peer p)
+        {
+            for (int i = 0; i < p.acks.Count; i += 500)
+            {
+                int k = Math.Min(500, p.acks.Count - i);
+                var b = new byte[3 + 2 * k];
+                b[0] = (byte)'M'; b[1] = (byte)'W'; b[2] = T_ACK;
+                for (int j = 0; j < k; j++) { ushort s = p.acks[i + j]; b[3 + 2 * j] = (byte)s; b[4 + 2 * j] = (byte)(s >> 8); }
+                SendRaw(p, b);
+            }
+            p.acks.Clear();
         }
 
         void Receive()
@@ -234,12 +253,13 @@ namespace MWCoop.Net
                     for (int i = 3; i + 1 < n; i += 2) p.unacked.Remove((ushort)(buf[i] | buf[i + 1] << 8));
                     break;
                 case T_UNREL:
+                    InReliable = false;
                     if (p.Accepted && OnMessage != null) OnMessage(p, buf, 3, n - 3);
                     break;
                 case T_REL:
                     if (n < 5 || !p.Accepted) return;
                     ushort seq = (ushort)(buf[3] | buf[4] << 8);
-                    SendRaw(p, Build(T_ACK, new[] { buf[3], buf[4] }));
+                    p.acks.Add(seq);
                     short ahead = (short)(seq - p.recvSeq);
                     if (ahead < 0) return;                       // deja recu
                     var copy = new byte[n - 5];
@@ -255,6 +275,7 @@ namespace MWCoop.Net
         void Deliver(Peer p, byte[] msg)
         {
             p.recvSeq++;
+            InReliable = true;
             if (OnMessage != null) OnMessage(p, msg, 0, msg.Length);
         }
     }

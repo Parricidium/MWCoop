@@ -46,7 +46,7 @@ namespace MWCoop
         {
             if (Time.realtimeSinceStartup < next) return;
             next = Time.realtimeSinceStartup + 0.5f;
-            string level = Application.loadedLevelName;
+            string level = Game.LevelName;
             if (level != "MainMenu") { menuSince = -1; step = 0; pending = null; }
             if (level == "SplashScreen" && AutoSkip) Splash();
             else if (level == "Intro" && AutoSkip) Intro();

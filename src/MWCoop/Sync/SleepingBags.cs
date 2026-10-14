@@ -257,7 +257,7 @@ namespace MWCoop
         static bool Authority { get { return !Session.Active || Session.IsHost; } }
         static bool NearPlayer(Vector3 p, float r)
         {
-            Camera cam = Camera.main;
+            Camera cam = Game.MainCam;
             if (cam != null && (cam.transform.position - p).sqrMagnitude < r * r) return true;
             foreach (Avatar a in PlayerSync.Avatars) if (a.Root != null && (a.Root.transform.position - p).sqrMagnitude < r * r) return true;
             return false;
@@ -269,7 +269,7 @@ namespace MWCoop
         static void Interact(float now)
         {
             if (guiUse == null) { guiUse = FsmVariables.GlobalVariables.FindFsmBool("GUIuse"); guiText = FsmVariables.GlobalVariables.FindFsmString("GUIinteraction"); }
-            Camera cam = Camera.main;
+            Camera cam = Game.MainCam;
             Bag hit = null;
             if (cam != null && !Game.GlobalBool("PlayerSleeps") && !Game.GlobalBool("PlayerSeated"))
             {
@@ -596,7 +596,7 @@ namespace MWCoop
                     {
                         Transform pl = Game.PlayerT;
                         Log.Info("autotest : sac, lit " + b.Fsm.ActiveStateName + ", dort " + Game.GlobalBool("PlayerSleeps") + ", joueur " + (pl != null ? b.Go.transform.InverseTransformPoint(pl.position).ToString("F2") + " parent " + (pl.parent != null ? pl.parent.name : "-") : "?")
-                                 + ", camera " + (Camera.main != null ? b.Go.transform.InverseTransformPoint(Camera.main.transform.position).ToString("F2") : "?")
+                                 + ", camera " + (Game.MainCam != null ? b.Go.transform.InverseTransformPoint(Game.MainCam.transform.position).ToString("F2") : "?")
                                  + ", pivot " + b.Go.transform.InverseTransformPoint(b.Sleep.Find("AnimPivotSleep").position).ToString("F2") + " rot " + (Quaternion.Inverse(b.Go.transform.rotation) * b.Sleep.Find("AnimPivotSleep").rotation).eulerAngles.ToString("F0"));
                     }
                 }
@@ -605,7 +605,7 @@ namespace MWCoop
             if (t > 38f && (testStep == 1 || !Session.IsHost && testStep == 0))
             {
                 testStep = 2; Log.Info("autotest : sacs " + Describe());
-                Camera mc = Camera.main;
+                Camera mc = Game.MainCam;
                 if (mc != null) Log.Info("autotest : sacs, camera du joueur " + mc.name + " : couches 0 " + ((mc.cullingMask & 1) != 0) + ", 2 " + ((mc.cullingMask & 4) != 0) + ", 19 " + ((mc.cullingMask & (1 << 19)) != 0));
             }
             if (t > 52f && testStep == 3 || !Session.IsHost && t > 60f && testStep == 2) { testStep = 4; Log.Info("autotest : sacs " + Describe()); }

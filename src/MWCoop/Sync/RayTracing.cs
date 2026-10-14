@@ -189,7 +189,7 @@ namespace MWCoop
             if (probeAt < 0 || Time.realtimeSinceStartup < probeAt) return;
             if (!probed) { probed = true; Probe(); }
             if (!ready || !Wanted) return;
-            Camera c = Camera.main;
+            Camera c = Game.MainCam;
             if (c != null && c != hooked && GameCam(c))
             {
                 if (c.GetComponent<RtCamHook>() == null) c.gameObject.AddComponent<RtCamHook>();
@@ -688,7 +688,7 @@ namespace MWCoop
         }
 
         static bool capturing;
-        // Camera du jeu seulement (retour de JD, 12/10 : en pause, Echap, la camera du menu « CAM » devenait Camera.main ; le
+        // Camera du jeu seulement (retour de JD, 12/10 : en pause, Echap, la camera du menu « CAM » devenait Game.MainCam ; le
         // RT s'y accrochait et dessinait a la taille de l'ecran dans une image plus petite -- quart d'ecran agrandi) : la
         // camera FPS, ou une camera en rendu differe a la taille de l'ecran, sans texture cible.
         static bool GameCam(Camera c)

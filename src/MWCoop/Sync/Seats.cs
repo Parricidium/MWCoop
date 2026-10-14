@@ -652,7 +652,7 @@ namespace MWCoop
             Belt b = current.Index == 0 ? BeltOf(current.CarT) : null;
             bool aimBuckle = false, aimHandle = false;
             Transform handle = b != null && b.Open != null ? (heldHandle ?? FindUnder(b.Open.transform, "SeatbeltHandle", null)) : null;
-            Transform view = Camera.main != null ? Camera.main.transform : cam;
+            Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
             if (b != null && view != null)
             {
                 Vector3 d = current.CarT.TransformPoint(b.Buckle) - view.position;
@@ -723,7 +723,7 @@ namespace MWCoop
         static void Grab(Belt b)
         {
             Transform h = b != null && b.Open != null ? FindUnder(b.Open.transform, "SeatbeltHandle", null) : null;
-            Transform view = Camera.main != null ? Camera.main.transform : cam;
+            Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
             if (h == null || view == null) return;
             if (!b.Open.activeSelf) { b.Open.SetActive(true); b.OpenHidden = false; }
             heldHandle = h; heldPivot = h.parent; heldPos = h.localPosition; heldRot = h.localRotation; heldScale = h.localScale;
@@ -802,7 +802,7 @@ namespace MWCoop
             Belt b = BeltOf(current.CarT);
             Vector3 off; bool mir;
             if (b == null || !RearPlace(current.CarT, current.Index, out off, out mir)) return;
-            Transform view = Camera.main != null ? Camera.main.transform : cam;
+            Transform view = Game.MainCam != null ? Game.MainCam.transform : cam;
             if (view == null) return;
             Vector3 at = current.CarT.TransformPoint(RearBuckle(b, off, mir));
             Vector3 d = at - view.position;

@@ -92,9 +92,8 @@ namespace MWCoop
 
                 if (ev == null || !Replay.Claim(f, "evenements")) return;
                 string path = Recon.Path(f.transform) + "::" + f.FsmName;
-                int n = 0;
-                while (byKey.ContainsKey(path + "#" + n)) n++;
-                ev.Key = path + "#" + n;
+                ev.Key = path + "#" + Recon.Twin(f);
+                for (int n = 2; byKey.ContainsKey(ev.Key); n++) ev.Key = path + "#" + Recon.Twin(f) + "+" + n;   // (hierarchie identique : n'arrive pas)
                 evs.Add(ev);
                 byKey[ev.Key] = ev;
                 if (Session.IsHost) NearDoors.Retarget(f);

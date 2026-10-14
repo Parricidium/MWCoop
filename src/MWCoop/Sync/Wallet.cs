@@ -253,7 +253,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            if (Application.loadedLevelName == "MainMenu" && startCash < 0)
+            if (Game.LevelName == "MainMenu" && startCash < 0)
             {
                 FsmFloat mc = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney"), mb = FsmVariables.GlobalVariables.FindFsmFloat("PlayerBankAccount");
                 if (mc != null && mb != null) { startCash = mc.Value; startBank = mb.Value; Log.Info("argent : au menu (nouvelle partie) " + startCash + " liquide, " + startBank + " banque"); }

@@ -81,7 +81,7 @@ namespace MWCoop
                 }
             }
             // Trappe a essence (automate du jeu, copie du taxi ; retour de Menor, 11/10 : pas synchronisee) : ouverte ou non.
-            foreach (UnityEngine.Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (UnityEngine.Object o in Game.AllFsms())
             {
                 var f = o as PlayMakerFSM;
                 if (f == null || f.hideFlags != HideFlags.None || f.FsmName != "Use" || f.transform.root.name != "Machtwagen300D") continue;
@@ -309,11 +309,24 @@ namespace MWCoop
             }
         }
 
+        // Hote : un joueur arrive en jeu -- 22 s plus tard (son chargement fini, comme WorldFsms), etat de tous les equipements
+        // (sa sauvegarde recue ne dit que l'etat de la derniere sauvegarde de l'hote).
+        static float snapAt = -1f;
+        public static void ScheduleSnapshot() { if (Session.IsHost) snapAt = Time.realtimeSinceStartup + 22f; }
+
         static void UpdateParts()
         {
             float now = Time.realtimeSinceStartup;
             if (now < nextParts) return;
             nextParts = now + 0.25f;
+            if (snapAt > 0f && now >= snapAt)
+            {
+                snapAt = -1f;
+                int sent = 0;
+                foreach (Part p in parts)
+                    if (p.C != null && !float.IsNaN(p.Last)) { Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@300f").Str(p.Type).Str(p.Path).F32(p.Last), true); sent++; }
+                if (sent > 0) Log.Info("mods : 300D, " + sent + " equipement(s) redit(s) pour le joueur arrive");
+            }
             if (parts.Count == 0 || saveVars == null) { if (now >= partsAt) { partsAt = now + 10f; ScanParts(); } if (parts.Count == 0) return; }
             foreach (Part p in parts)
             {

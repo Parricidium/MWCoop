@@ -138,16 +138,32 @@ namespace MWCoop
             return null;
         }
 
+        // Nom du niveau et camera principale, lus une fois par image (Application.loadedLevelName cree une chaine a chaque
+        // appel, Camera.main cherche par etiquette ; des dizaines d'appels par image -- revue du 14/10). LevelChanged :
+        // au chargement d'un niveau (Core.OnLevelWasLoaded), pour ne pas garder l'ancien nom jusqu'a l'image suivante.
+        static string levelName; static int levelFrame = -1;
+        public static string LevelName
+        {
+            get { int f = Time.frameCount; if (f != levelFrame || levelName == null) { levelFrame = f; levelName = Application.loadedLevelName; } return levelName; }
+        }
+        static Camera mainCam; static int mainCamFrame = -1;
+        public static Camera MainCam
+        {
+            get { int f = Time.frameCount; if (f != mainCamFrame || mainCam == null) { mainCamFrame = f; mainCam = Camera.main; } return mainCam; }
+        }
+        public static void LevelChanged() { levelFrame = -1; mainCamFrame = -1; }
+
         // Tous les automates (actifs ou non), releve partage par les modules qui balaient tout periodiquement : un seul
         // Resources.FindObjectsOfTypeAll toutes les 3 s au plus (70-90 ms chacun sur une grande scene ; une douzaine de
         // modules le faisaient chacun de leur cote). Un automate detruit depuis le releve vaut null (a sauter).
         static Object[] allFsms;
         static float allFsmsAt = -100f;
         static int allFsmsLevel = -1, allFsmsLogs;
-        public static Object[] AllFsms()
+        // maxAge : age maximal du releve (plus court pour un objet attendu tout juste apparu : piece achetee, Parts).
+        public static Object[] AllFsms(float maxAge = 3f)
         {
             float now = Time.realtimeSinceStartup;
-            if (allFsms == null || now - allFsmsAt > 3f || now < allFsmsAt || allFsmsLevel != Application.loadedLevel)
+            if (allFsms == null || now - allFsmsAt > maxAge || now < allFsmsAt || allFsmsLevel != Application.loadedLevel)
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 allFsms = Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)); allFsmsAt = now; allFsmsLevel = Application.loadedLevel;
