@@ -263,6 +263,7 @@ namespace MWCoop
                     TaxiCustomer.ScheduleSnapshot(from);
                     ModMachtwagen300D.ScheduleSnapshot();   // (revue du 14/10 : equipements de la 300D et bagages du taxi
                     Jobs.LuggageResend();                   // jamais redits a celui qui arrive)
+                    Particles.ScheduleSnapshot(); CopySounds.ScheduleSnapshot();   // (tables des cles courtes)
                 }
             }
         }

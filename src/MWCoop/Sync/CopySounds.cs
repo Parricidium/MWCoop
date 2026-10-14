@@ -12,13 +12,16 @@ namespace MWCoop
     // l'invite les pose (cle "s:" racine|rangs|nom, comme les lumieres de Particles).
     public static class CopySounds
     {
-        class Snd { public string Key; public AudioSource A; public bool Play, Has; public float Vol, Pitch; public bool LastPlay; public float LastVol = -1f, LastPitch = -1f; }
+        class Snd { public string Key; public AudioSource A; public bool Play, Has; public float Vol, Pitch; public bool LastPlay; public float LastVol = -1f, LastPitch = -1f, NextTry; }
         static readonly Dictionary<string, Snd> byKey = new Dictionary<string, Snd>();
         static float nextScan, nextSend, nextFull, nextApply;
+        static readonly KeyTable table = new KeyTable("@sonk");   // (cles courtes)
+        public static void OnDefs(int who, NetReader r) { if (Session.IsHost || who != 0) { r.U8(); return; } table.OnDefs(r); }
+        public static void ScheduleSnapshot() { table.ResendAll(); nextFull = 0f; }
         static int logs;
         const float Range = 300f;
 
-        public static void OnLevelLoaded() { byKey.Clear(); nextScan = nextFull = 0f; logs = 0; }
+        public static void OnLevelLoaded() { byKey.Clear(); table.Clear(); nextScan = nextFull = 0f; logs = 0; }
 
         static bool NearPlayer(Vector3 p)
         {
@@ -73,14 +76,16 @@ namespace MWCoop
                         s.LastPlay = play; s.LastVol = vol; s.LastPitch = pitch;
                     }
                 }
-                for (int i = 0; i < batch.Count; i += 16)
+                foreach (Snd s in batch) table.Id(s.Key);
+                table.SendDefs();
+                for (int i = 0; i < batch.Count; i += 64)
                 {
-                    int n = Mathf.Min(16, batch.Count - i);
+                    int n = Mathf.Min(64, batch.Count - i);
                     var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@son").U8(n);
                     for (int k = 0; k < n; k++)
                     {
                         Snd s = batch[i + k];
-                        w.Str(s.Key).Bool(s.LastPlay).U8(Mathf.Clamp(Mathf.RoundToInt(s.LastVol * 255f), 0, 255)).U8(Mathf.Clamp(Mathf.RoundToInt(s.LastPitch / 3f * 255f), 0, 255));
+                        w.U16(table.Id(s.Key)).Bool(s.LastPlay).U8(Mathf.Clamp(Mathf.RoundToInt(s.LastVol * 255f), 0, 255)).U8(Mathf.Clamp(Mathf.RoundToInt(s.LastPitch / 3f * 255f), 0, 255));
                     }
                     Session.SendAll(w, false);
                 }
@@ -93,7 +98,7 @@ namespace MWCoop
 
         static void Apply(Snd s)
         {
-            if (s.A == null) { GameObject g = Particles.ResolveActive(s.Key); s.A = g != null ? g.GetComponent<AudioSource>() : null; }
+            if (s.A == null && Time.realtimeSinceStartup >= s.NextTry) { GameObject g = Particles.ResolveActive(s.Key); s.A = g != null ? g.GetComponent<AudioSource>() : null; if (s.A == null) s.NextTry = Time.realtimeSinceStartup + 10f; }
             if (s.A == null || !s.A.gameObject.activeInHierarchy) return;
             s.A.volume = s.Vol; s.A.pitch = s.Pitch;
             if (s.Play && !s.A.isPlaying) { s.A.enabled = true; s.A.Play(); if (logs++ < 10) Log.Info("sons des copies : " + s.Key + " joue (hote)"); }
@@ -105,8 +110,10 @@ namespace MWCoop
             int n = r.U8();
             for (int i = 0; i < n; i++)
             {
-                string k = r.Str(); bool play = r.Bool(); float vol = r.U8() / 255f, pitch = r.U8() / 255f * 3f;
+                int id = r.U16(); bool play = r.Bool(); float vol = r.U8() / 255f, pitch = r.U8() / 255f * 3f;
                 if (Session.IsHost || who != 0) continue;
+                string k = table.Key(id);
+                if (k == null) continue;
                 Snd s;
                 if (!byKey.TryGetValue(k, out s)) byKey[k] = s = new Snd { Key = k };
                 s.Play = play; s.Vol = vol; s.Pitch = pitch; s.Has = true;
