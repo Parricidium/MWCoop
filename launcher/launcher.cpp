@@ -152,6 +152,7 @@ static CRITICAL_SECTION g_lcs;
 static std::vector<LobbyPeer> g_peers;
 static int g_myId;
 static std::atomic<int> g_partie(PARTIE_CONTINUER); // choix de l'hote (recopie chez les invites)
+static std::wstring g_hostSaveName;                  // invite : nom de la sauvegarde de l'hote (salon ; g_lcs)
 static std::atomic<bool> g_meReady(false);          // invite : pret
 static bool g_goWait;                               // invite : GO recu, lancement dans un instant
 static bool g_joinFallback;                         // invite : pas de salon chez l'hote -> rejoindre directement en jeu
@@ -1245,7 +1246,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_COUNT };
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_COUNT };
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };
@@ -2043,9 +2044,10 @@ static float WikiMaxScroll();   // (wiki.inc)
 static float VhsMaxScroll();    // (media.inc)
 static float AlbMaxScroll();
 static float CreditsMaxScroll();   // (ui.inc)
+static float SavesMaxScroll();     // (saves.inc)
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
-static float MaxScroll(int t) { return t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : 0.0f; }
+static float MaxScroll(int t) { return t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : 0.0f; }
 
 static int ValueIndex(const Opt &o, int v)
 {
@@ -2116,6 +2118,11 @@ enum { NI_WAIT, NI_LOAD, NI_OK, NI_FAIL };
 struct NoteImg { int state; Bitmap *bmp; };
 static std::map<std::wstring, NoteImg> g_noteImgs;   // (sous g_cs)
 static std::wstring LocalDir();
+static std::wstring SaveCurrentProf();                  // (saves.inc : sauvegarde utilisee, profil du chargeur ; vide : la principale)
+static std::wstring SaveCurrentName();
+static std::wstring SaveDirOf(const std::wstring &prof); // (dossier de la sauvegarde du jeu de ce profil)
+static std::wstring SaveProfRoot();
+static void SaveOpenNewGame();
 static Bitmap *LoadPngMem(const void *p, size_t n, UINT maxW, UINT maxH);
 
 static std::wstring NoteImgFile(const std::wstring &url)
@@ -3161,10 +3168,9 @@ static RectF g_dentBtnRect;    // (bulle du guide)
 static void CarRemoveDents()
 {
     if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Ferme le jeu pour retirer les bosses", L"Close the game to remove the dents")); return; }
-    wchar_t up[MAX_PATH] = L"";
-    GetEnvironmentVariableW(L"USERPROFILE", up, MAX_PATH);
-    if (!up[0]) return;
-    std::wstring f = WithSlash(up) + L"AppData\\LocalLow\\Amistech\\My Winter Car\\meshsave.txt";
+    std::wstring d = SaveDirOf(SaveCurrentProf());   // (la sauvegarde utilisee : saves.inc)
+    if (d.empty()) return;
+    std::wstring f = d + L"meshsave.txt";
     if (GetFileAttributesW(f.c_str()) == INVALID_FILE_ATTRIBUTES) { SetStatus(K_NORMAL, T(L"Aucune bosse enregistrée : les carrosseries sont déjà lisses", L"No dents saved: the bodies are already smooth")); return; }
     if (MessageBoxW(g_wnd, T(L"Retirer toutes les bosses des voitures de ta sauvegarde ?\n\nLe jeu garde la forme cabossée des tôles dans meshsave.txt. Il sera mis de côté (une copie reste à côté), et toutes les voitures repartiront lisses au prochain chargement.\n\nEn coop, c'est l'hôte qui le fait : sa sauvegarde est envoyée aux invités.",
                              L"Remove all dents from the cars in your save?\n\nThe game keeps the dented shape of the body panels in meshsave.txt. It will be set aside (a copy is kept next to it), and every car will be smooth again at the next load.\n\nIn co-op, the host does it: their save is sent to the guests."),
@@ -4821,6 +4827,7 @@ static std::wstring GameLevelNow()
         dirs.push_back(LocalDir()); dirs.push_back(LocalDir() + L"profils\\invite\\");
         dirs.push_back(LocalDir() + L"invite\\My Winter Car\\MWCoop\\"); dirs.push_back(LocalDir() + L"invite\\My Winter Car\\MWCoop\\profils\\invite\\");
     }
+    for (const std::wstring &pr : Profiles()) dirs.push_back(SaveProfRoot() + pr + L"\\");   // (sauvegardes a part : saves.inc)
     std::wstring best; long long bt = 0;
     for (auto &d : dirs) { long long t = FileUnixTime(d + L"serveur.txt"); if (t > bt) { bt = t; best = d + L"serveur.txt"; } }
     if (best.empty() || (long long)_time64(NULL) - bt > 6) return L"";
@@ -4966,7 +4973,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     t += "Port=" + std::to_string(port) + "\r\n";
     t += "Pseudo=" + Narrow(PlayerName(), CP_UTF8) + "\r\n";
     t += "Apparence=" + skin + "\r\n";
-    t += std::string("Profil=") + (mode == MODE_GUEST ? "invite" : "") + "\r\n";
+    t += std::string("Profil=") + (mode == MODE_GUEST ? "invite" : mode == MODE_HOST ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
     if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
     if (mode == MODE_GUEST) t += ContentLaunchLines();
     t += "Horodatage=" + std::to_string((long long)_time64(NULL)) + "\r\n";
@@ -5542,6 +5549,7 @@ static void BroadcastState()
     w.u8(g_partie);
     w.u8((int)g_peers.size());   // test UDP de chacun (ignore par un ancien lanceur)
     for (auto &p : g_peers) { w.u8(p.id); w.u8(p.udp); }
+    { std::string sn = Narrow(SaveCurrentName(), CP_UTF8); if (sn.size() > 200) sn.resize(200); w.str(sn); }   // (sauvegarde de l'hote : saves.inc ; ignore par un ancien lanceur)
     for (auto &c : g_conns) SendMsg(c.s, w);
     LeaveCriticalSection(&g_lcs);
 }
@@ -6019,6 +6027,7 @@ static void LobbyClose(bool keepListen = false)
     if (g_lobbySteam) SteamLobbyLeave(g_lobby == LB_HOST);
     g_lobbyGen++;
     g_lobby = LB_NONE;
+    EnterCriticalSection(&g_lcs); g_hostSaveName.clear(); LeaveCriticalSection(&g_lcs);
     if (!keepListen) g_lateServe = false;
     if (g_listen != INVALID_SOCKET && !keepListen) { closesocket(g_listen); g_listen = INVALID_SOCKET; }
     EnterCriticalSection(&g_lcs);
@@ -6121,18 +6130,18 @@ static void HostStart()
     Launch(MODE_HOST, PartieName(partie));
 }
 
-// Choix de partie (hote). Nouvelle partie : confirmation (elle remplace la sauvegarde de l'hote).
+// Choix de partie (hote). Nouvelle partie : fenetre des sauvegardes (saves.inc : nouvelle sauvegarde, ou en recommencer une
+// avec confirmation) ; elle appelle LobbyApplyPartie une fois le choix fait.
+static void LobbyApplyPartie(int p);
 static void LobbySetPartie(int p)
 {
     if (g_lobby != LB_HOST || g_goSent || p == g_partie) return;
-    if (p == PARTIE_NOUVELLE && g_testSalon.empty()) {
-        std::wstring q = std::wstring(T(L"Commencer une NOUVELLE partie ?\n\nElle remplace ta sauvegarde actuelle de My Winter Car "
-                                        L"(la partie en cours sera perdue).\n\nCouleur de la CORRIS (ic\u00F4ne voiture du salon) : ",
-                                        L"Start a NEW game?\n\nIt replaces your current My Winter Car save (the game in progress will be lost).\n\n"
-                                        L"CORRIS color (car icon in the lobby): ")) + CarColorName() + L".";
-        if (MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
-        if (g_lobby != LB_HOST || g_goSent) return;
-    }
+    if (p == PARTIE_NOUVELLE && g_testSalon.empty()) { SaveOpenNewGame(); return; }
+    LobbyApplyPartie(p);
+}
+static void LobbyApplyPartie(int p)
+{
+    if (g_lobby != LB_HOST || g_goSent) return;
     g_partie = p;
     TestLog("salon : partie = %s", PartieName(p));
     if (g_lobbySteam) SSetLobby("partie", PartieName(p));
@@ -6266,6 +6275,8 @@ static DWORD WINAPI GuestThread(void *param)
                     if (id == g_myId && udp == UDP_OK && g_udpMine != UDP_OK) { g_udpMine = UDP_OK; TestLog("udp : l'hote a recu ma sonde"); }
                 }
                 q.ok = true;   // (extension abimee : la liste reste bonne)
+                if (q.p < m.size()) { std::string sn = q.str(); if (q.ok) { EnterCriticalSection(&g_lcs); g_hostSaveName = Widen(sn, CP_UTF8); LeaveCriticalSection(&g_lcs); list += " ; sauvegarde=" + sn; } }
+                q.ok = true;
             }
             if (q.ok) {
                 EnterCriticalSection(&g_lcs);
@@ -6359,6 +6370,7 @@ static void OnButton(int id);
 #include "api.inc"
 #include "gfx.inc"
 #include "media.inc"
+#include "saves.inc"
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
@@ -6667,10 +6679,21 @@ static void DrawLobby(Graphics &g)
     const float rx = 924, rw = 340;
     RectF pc(rx, 88, rw, 236);
     Glass(pc);
-    Title(g, host ? T(L"Partie", L"Game") : T(L"Partie (choisie par l'h\u00F4te)", L"Game (chosen by the host)"), RectF(pc.X + 20, pc.Y + 16, pc.Width - 40, 24), 17, kInk);
+    if (host) {   // sauvegarde de la partie (saves.inc : clic -> choisir, ou en creer une)
+        Title(g, T(L"Partie", L"Game"), RectF(pc.X + 20, pc.Y + 16, 110, 24), 17, kInk);
+        std::wstring sn = SaveCurrentName();
+        if (sn.size() > 20) sn = sn.substr(0, 19) + L"\u2026";
+        UiButton(g, RectF(pc.X + pc.Width - 20 - 196, pc.Y + 10, 196, 34), sn, UI_SAVE_LOBBY, false, IC_FILE, lobby != LB_CONNECTING && !g_goSent, 12);
+    } else {
+        EnterCriticalSection(&g_lcs);
+        std::wstring hs = g_hostSaveName;
+        LeaveCriticalSection(&g_lcs);
+        if (hs.size() > 24) hs = hs.substr(0, 23) + L"\u2026";
+        Title(g, hs.empty() ? T(L"Partie (choisie par l'h\u00F4te)", L"Game (chosen by the host)") : T(L"Partie de l'h\u00F4te : ", L"Host's game: ") + hs, RectF(pc.X + 20, pc.Y + 16, pc.Width - 40, 24), 17, kInk);
+    }
     const wchar_t *lab[2] = { host ? T(L"Continuer ma partie", L"Continue my game") : T(L"Continuer la partie", L"Continue the game"), T(L"Nouvelle partie", L"New game") };
     const wchar_t *sub[2] = { host ? T(L"Ta sauvegarde, envoy\u00E9e aux invit\u00E9s", L"Your save, sent to the guests") : T(L"La sauvegarde de l'h\u00F4te", L"The host's save"),
-                              host ? T(L"Remplace ta sauvegarde", L"Replaces your save") : T(L"Une partie neuve chez l'h\u00F4te", L"A fresh game at the host's") };
+                              host ? T(L"Nouvelle sauvegarde, ou en recommencer une", L"New save, or restart one") : T(L"Une partie neuve chez l'h\u00F4te", L"A fresh game at the host's") };
     for (int i = 0; i < 2; i++) {
         RectF r = kChoiceR[i];
         bool on = partie == i, hot = g_lobbyHot == i && host;
@@ -7594,6 +7617,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_CHAR:
+        if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
         if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait || g_guide || g_tuto >= 0) return 0;
         if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
@@ -8091,6 +8115,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
+        else if (st == L"sauvegardes") { g_tab = TAB_SAVES; SavesScan(); }   // (saves.inc ; fenetres : -nouvelle, -choix, -nom, -recommencer)
+        else if (st == L"sauvegardes-nouvelle") { g_tab = TAB_SAVES; SaveOpenNewGame(); }
+        else if (st == L"sauvegardes-choix") { g_tab = TAB_SAVES; SaveOpenPick(); }
+        else if (st == L"sauvegardes-recommencer") { g_tab = TAB_SAVES; SavesScan(); g_saveModal = SM_RESTART; }
+        else if (st == L"sauvegardes-nom") { g_tab = TAB_SAVES; SaveAskName(true); }
         else if (st == L"credits") g_tab = TAB_CREDITS;
         else if (st == L"credits-images" || st == L"credits-merci") { g_tab = TAB_CREDITS; g_credTab = st == L"credits-images" ? 1 : 2; }
         else if (!wcsncmp(st.c_str(), L"guide", 5) && st != L"guide-steam") {   // guide : guide-<article>-<defilement>

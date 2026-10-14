@@ -1060,3 +1060,41 @@ Different version (you %s, host %s): update	Другая версия (у теб
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	У хоста MWCoop %s, а у тебя %s: для совместной игры нужна одна и та же версия.\n\nОбновить сейчас? Лаунчер перезапустится сам, затем ты сможешь присоединиться.
 Different version (you %s, host %s): the host must update MWCoop	Другая версия (у тебя %s, у хоста %s): хост должен обновить MWCoop
 \"Different version\": the host and you don't have the same version. If the host is more up to date, the launcher offers to update right away (it restarts by itself); otherwise the host must update.	«Другая версия»: у хоста и у тебя разные версии. Если у хоста версия новее, лаунчер сразу предложит обновиться (он перезапустится сам); иначе обновиться должен хост.
+Host's game: 	Игра хоста: 
+New save, or restart one	Новое сохранение или перезапуск старого
+Main game	Основная игра
+Could not create the save	Не удалось создать сохранение
+Game %d	Игра %d
+Empty: will start with a new game	Пусто: начнётся с новой игры
+Last saved: %04d-%02d-%02d %02d:%02d	Сохранено: %04d-%02d-%02d %02d:%02d
+Close the game before changing your saves	Закрой игру, прежде чем менять сохранения
+Delete the save \"%s\"?\n\nIt goes to the Windows Recycle Bin (you can still get it back from there).	Удалить сохранение «%s»?\n\nОно попадёт в корзину Windows (оттуда его ещё можно восстановить).
+Could not delete (%d)	Не удалось удалить (%d)
+\"%s\" moved to the Recycle Bin	«%s» перемещено в корзину
+Save renamed	Сохранение переименовано
+Save \"%s\" created and in use	Сохранение «%s» создано и используется
+You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nCORRIS color (car icon in the lobby): %s.	Ты собираешься перезапустить «%s».\n\nЭто сотрёт это сохранение (текущая игра будет потеряна). Ты уверен?\n\nЦвет CORRIS (значок машины в лобби): %s.
+Save in use: %s (empty: new game)	Используется сохранение: %s (пусто: новая игра)
+Save in use: %s	Используется сохранение: %s
+Your saves	Твои сохранения
+One game per group of friends: HOST plays the save in use (the host also picks it in the lobby); PLAY SOLO keeps the main game. As a guest, you play the host's save, kept apart: yours are never touched.	Одна игра на компанию друзей: «ХОСТ» запускает используемое сохранение (хост выбирает его и в лобби); «ОДИНОЧНАЯ ИГРА» остаётся на основной игре. Гостем ты играешь в сохранение хоста, отдельно: твои никогда не затрагиваются.
+New save…	Новое сохранение…
+Save name	Название сохранения
+Enter: keep · Esc: cancel	Enter: сохранить · Esc: отмена
+Keep	Сохранить
+ · the game's normal save	 · обычное сохранение игры
+IN USE	ИСПОЛЬЗУЕТСЯ
+Use	Использовать
+Game save	Сохранение игры
+Restart a save	Перезапустить сохранение
+New save	Новое сохранение
+A fresh game in a separate save: your other games are not touched.	Новая игра в отдельном сохранении: другие твои игры не затрагиваются.
+Erases one of your saves and restarts it from scratch.	Стирает одно из твоих сохранений и начинает его заново.
+A new save for this game. Your other saves stay as they are.	Новое сохранение для этой игры. Другие твои сохранения останутся как есть.
+It will be used when you host.	Оно будет использоваться, когда ты хостишь.
+Create	Создать
+Your guests receive the chosen save when they arrive; theirs is not touched.	Гости получают выбранное сохранение при входе; их собственное не затрагивается.
+Pick the save to erase and restart.	Выбери сохранение, которое нужно стереть и начать заново.
+Saves	Сохранения
+One game per group of friends: pick, name, restart	Одна игра на компанию друзей: выбрать, назвать, перезапустить
+Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.	Несколько игр, по одной на компанию друзей: создавай их, называй, выбирай, какую хостить (здесь или в лобби). Гости получают твоё сохранение, их собственное не затрагивается.

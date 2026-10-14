@@ -32,7 +32,8 @@ static std::wstring VhsItemFile()
 {
     wchar_t up[MAX_PATH] = L"";
     GetEnvironmentVariableW(L"USERPROFILE", up, MAX_PATH);
-    return up[0] ? WithSlash(up) + L"AppData\\LocalLow\\Amistech\\My Winter Car\\MWCoop-esineet.txt" : L"";
+    (void)up; std::wstring d = SaveDirOf(SaveCurrentProf());   // (la sauvegarde utilisee : saves.inc)
+    return d.empty() ? L"" : d + L"MWCoop-esineet.txt";
 }
 static std::wstring VhsFilmDir() { return g_gameDir + L"MWCoop\\videot\\"; }
 static std::wstring VhsFilmPath(const std::wstring &f)

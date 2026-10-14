@@ -322,6 +322,7 @@ static void GoPage(int p)
     if (p == TAB_LOGS) { LogsScan(); CrashSeen(); }
     if (p == TAB_VHS) { g_vhsEdit = -1; VhsScan(); }
     if (p == TAB_ALBUM) AlbScan();
+    if (p == TAB_SAVES) { g_saveEdit = -1; SavesScan(); }
     if (p == TAB_MODS || p == TAB_CONTENT) MscScan();
     if (p == TAB_SKIN) g_skinIdleT = GetTickCount();
     if (p == TAB_GFX) GfxLoad();
@@ -343,7 +344,7 @@ static void PageOk() { int back = g_snapFrom >= 0 && !PageSnap(g_snapFrom) && Pa
 // ---- barre de navigation
 struct NavItem { int page, icon; const wchar_t *fr, *en; };
 static const NavItem kNav[] = {
-    { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" },
+    { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" }, { TAB_SAVES, IC_FILE, L"Sauvegardes", L"Saves" },
     { TAB_SKIN, IC_SHIRT, L"Tenue", L"Outfit" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" },
     { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
     { TAB_GFX, IC_SLIDERS, L"Options du jeu", L"Game options" },
@@ -351,7 +352,7 @@ static const NavItem kNav[] = {
     { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" },
     { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" } };   // (guide des joueurs, wiki.inc)
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
-static const int kNavGroupN[] = { 2, 2, 2, 1, 2, 2 };   // pages de chaque groupe, dans l'ordre de kNav
+static const int kNavGroupN[] = { 3, 2, 2, 1, 2, 2 };   // pages de chaque groupe, dans l'ordre de kNav
 static const int kNavGroups = 6;
 static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"JEU", L"MÉDIA", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"GAME", L"MEDIA", L"INFO" };
 static Bitmap *g_logo;
@@ -591,6 +592,7 @@ static void DrawHeader(Graphics &g)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
     case TAB_VHS: title = T(L"Cassettes VHS", L"VHS tapes"); sub = T(L"Les voir, les exporter en .mp4, les renommer, y mettre une vidéo", L"Watch them, export them as .mp4, rename them, put a video on them"); break;
+    case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Une partie par groupe d'amis : choisir, nommer, recommencer", L"One game per group of friends: pick, name, restart"); break;
     case TAB_ALBUM: title = T(L"Album", L"Album"); sub = T(L"Les photos du drone (F8 en jeu)", L"Drone photos (F8 in game)"); break;
     case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Tout pour jouer sans souci : installation, salons, mods, réglages, solutions", L"Everything to play trouble-free: install, lobbies, mods, settings, fixes"); break;
     }
@@ -786,7 +788,7 @@ static void DrawHome(Graphics &g)
             else d = g_steamNet ? T(L"Ton invitation Steam, sinon le salon MWCoop d'un ami.", L"Your Steam invite, or else a friend's MWCoop lobby.")
                                 : T(L"Le salon de l'adresse saisie au-dessus.", L"The lobby at the address entered above.");
             Para(g, d, RectF(r.X + 22, r.Y + 112, r.Width - 44, 44), 13, host ? WithA(kOnAcc, 0.78f * a) : WithA(kGrey, a));
-            Text(g, host ? T(L"Jusqu'à 8 joueurs", L"Up to 8 players") : T(L"Salon d'un ami", L"A friend's lobby"), RectF(r.X + 22, r.Y + r.Height - 40, r.Width - 80, 24), 12.5f, FontStyleBold, host ? WithA(kOnAcc, a) : WithA(kInk, 0.8f * a), StringAlignmentNear);
+            Text(g, host ? std::wstring(T(L"Jusqu'à 8 joueurs", L"Up to 8 players")) + L" \u00B7 " + SaveCurrentName() : std::wstring(T(L"Salon d'un ami", L"A friend's lobby")), RectF(r.X + 22, r.Y + r.Height - 40, r.Width - 80, 24), 12.5f, FontStyleBold, host ? WithA(kOnAcc, a) : WithA(kInk, 0.8f * a), StringAlignmentNear);
             Icon(g, IC_CHEVR, r.X + r.Width - 34, r.Y + r.Height - 28, 20, acc, 2.4f);
             if (!host && g_steamNet && g_sInvite) { SolidBrush dot(kOk); g.FillEllipse(&dot, r.X + r.Width - 34, r.Y + 22, 12.0f, 12.0f); }
         }
@@ -1473,10 +1475,12 @@ static void DrawUI(Graphics &g)
     case TAB_WIKI: DrawWikiPage(g); break;
     case TAB_VHS: DrawVhs(g); break;
     case TAB_ALBUM: DrawAlbum(g); break;
+    case TAB_SAVES: DrawSaves(g); break;
     default: DrawHome(g); break;
     }
     DrawHeader(g);
     DrawFooter(g, status, kind, prog);
+    DrawSaveModal(g);   // (saves.inc : par-dessus tout)
 }
 
 // Clic sur une zone (UI_*). Vrai si traite.
@@ -1582,6 +1586,7 @@ static bool UiClick(int id)
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
+    if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
     if (id >= UI_VHS_OPEN && id < UI_ALB_OPEN) { VhsClick(id); return true; }   // (media.inc)
     if (id >= UI_ALB_OPEN && id < UI_ALB + 4000) { AlbClick(id); return true; }
     if (id == UI_LOG_CLEAR) {   // second clic dans les 4 s : les parties rangees a la corbeille

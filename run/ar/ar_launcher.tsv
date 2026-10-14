@@ -1041,3 +1041,41 @@ Different version (you %s, host %s): update	إصدار مختلف (لديك %s،
 The host has MWCoop %s and you have %s: you need the same version to play together.\n\nUpdate now? The launcher restarts by itself, then you can join.	لدى المضيف MWCoop %s ولديك %s: تحتاجان إلى الإصدار نفسه للعب معاً.\n\nالتحديث الآن؟ يُعيد المشغّل تشغيل نفسه، ثم يمكنك الانضمام.
 Different version (you %s, host %s): the host must update MWCoop	إصدار مختلف (لديك %s، لدى المضيف %s): على المضيف تحديث MWCoop
 \"Different version\": the host and you don't have the same version. If the host is more up to date, the launcher offers to update right away (it restarts by itself); otherwise the host must update.	«إصدار مختلف»: ليس لديك ولدى المضيف الإصدار نفسه. إن كان المضيف أحدث، يعرض عليك المشغّل التحديث فوراً (ويعيد تشغيل نفسه)؛ وإلا فعلى المضيف أن يحدّث.
+Host's game: 	لعبة المضيف: 
+New save, or restart one	حفظ جديد، أو إعادة بدء حفظ
+Main game	اللعبة الرئيسية
+Could not create the save	تعذّر إنشاء الحفظ
+Game %d	لعبة %d
+Empty: will start with a new game	فارغ: سيبدأ بلعبة جديدة
+Last saved: %04d-%02d-%02d %02d:%02d	آخر حفظ: %04d-%02d-%02d %02d:%02d
+Close the game before changing your saves	أغلق اللعبة قبل تعديل حفظاتك
+Delete the save \"%s\"?\n\nIt goes to the Windows Recycle Bin (you can still get it back from there).	حذف الحفظ «%s»؟\n\nسيذهب إلى سلة محذوفات Windows (يمكنك استعادته من هناك).
+Could not delete (%d)	تعذّر الحذف (%d)
+\"%s\" moved to the Recycle Bin	نُقل «%s» إلى سلة المحذوفات
+Save renamed	أُعيدت تسمية الحفظ
+Save \"%s\" created and in use	أُنشئ الحفظ «%s» وهو قيد الاستخدام
+You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nCORRIS color (car icon in the lobby): %s.	أنت على وشك إعادة بدء «%s».\n\nسيؤدي ذلك إلى مسح هذا الحفظ (ستضيع اللعبة الجارية). هل أنت متأكد؟\n\nلون CORRIS (أيقونة السيارة في الردهة): %s.
+Save in use: %s (empty: new game)	الحفظ المستخدم: %s (فارغ: لعبة جديدة)
+Save in use: %s	الحفظ المستخدم: %s
+Your saves	حفظاتك
+One game per group of friends: HOST plays the save in use (the host also picks it in the lobby); PLAY SOLO keeps the main game. As a guest, you play the host's save, kept apart: yours are never touched.	لعبة لكل مجموعة أصدقاء: «استضافة» تلعب الحفظ المستخدم (ويختاره المضيف أيضاً في الردهة)؛ و«اللعب منفرداً» يبقى على اللعبة الرئيسية. كضيف، تلعب حفظ المضيف بشكل منفصل: حفظاتك لا تُمسّ أبداً.
+New save…	حفظ جديد…
+Save name	اسم الحفظ
+Enter: keep · Esc: cancel	Enter: احتفاظ · Esc: إلغاء
+Keep	احتفاظ
+ · the game's normal save	 · الحفظ العادي للعبة
+IN USE	قيد الاستخدام
+Use	استخدام
+Game save	حفظ اللعبة
+Restart a save	إعادة بدء حفظ
+New save	حفظ جديد
+A fresh game in a separate save: your other games are not touched.	لعبة جديدة في حفظ منفصل: ألعابك الأخرى لا تُمسّ.
+Erases one of your saves and restarts it from scratch.	يمسح أحد حفظاتك ويبدؤه من جديد.
+A new save for this game. Your other saves stay as they are.	حفظ جديد لهذه اللعبة. تبقى حفظاتك الأخرى كما هي.
+It will be used when you host.	سيُستخدم عندما تستضيف.
+Create	إنشاء
+Your guests receive the chosen save when they arrive; theirs is not touched.	يستلم ضيوفك الحفظ المختار عند وصولهم؛ وحفظهم لا يُمسّ.
+Pick the save to erase and restart.	اختر الحفظ الذي تريد مسحه وإعادة بدئه.
+Saves	الحفظات
+One game per group of friends: pick, name, restart	لعبة لكل مجموعة أصدقاء: اختيار، تسمية، إعادة بدء
+Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.	عدة ألعاب، لعبة لكل مجموعة أصدقاء: أنشئها، سمّها، اختر التي تستضيفها (هنا أو في الردهة). يستلم ضيوفك حفظك، وحفظهم لا يُمسّ.

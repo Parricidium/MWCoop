@@ -404,6 +404,7 @@ static void SteamCreated(bool ok, int result, SteamId lobby)
     SSetLobby("version", MyVersion());
     SSetLobby("hote", MyName());
     SSetLobby("partie", PartieName(g_partie));
+    SSetLobby("sauvegarde", Narrow(SaveCurrentName(), CP_UTF8));   // (saves.inc)
     sapi::SetLobbyJoinable(sapi::mm, lobby, true);
     SteamPublishMe(true);
     SteamPresence();
@@ -537,6 +538,7 @@ static void SteamLobbySync()
         return;
     }
     g_partie = SLobbyData("partie") == "nouvelle" ? PARTIE_NOUVELLE : PARTIE_CONTINUER;
+    if (g_lobby == LB_GUEST) { std::wstring sn = Widen(SLobbyData("sauvegarde"), CP_UTF8); EnterCriticalSection(&g_lcs); g_hostSaveName = sn; LeaveCriticalSection(&g_lcs); }   // (saves.inc)
 }
 
 // LobbyClose : quitter le salon Steam (l'hote le dit d'abord aux invites).
