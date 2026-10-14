@@ -89,9 +89,9 @@ namespace MWCoop
             {
                 Transform c = PlayerSync.LocalCamera;
                 if (c != null && c.GetComponent<Camera>() != null) return c;
-                GameObject g = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+                GameObject g = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");   // (assis aussi : revue du 14/10)
                 if (g != null && g.GetComponent<Camera>() != null) return g.transform;
-                return Camera.main != null ? Camera.main.transform : null;
+                return Game.MainCam != null ? Game.MainCam.transform : null;
             }
         }
 
@@ -155,7 +155,7 @@ namespace MWCoop
 
         static PlayMakerFSM PickUpFsm()
         {
-            GameObject h = GameObject.Find("PLAYER/Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
+            GameObject h = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/1Hand_Assemble/Hand");
             return h != null ? Game.FsmOn(h, "PickUp") : null;
         }
 

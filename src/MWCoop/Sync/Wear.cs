@@ -57,7 +57,7 @@ namespace MWCoop
         static float loadedAt;   // (copies faites 12 s apres le chargement : casque et tasse trouves d'ici la)
         static PlayMakerFSM clothLogic, helmetLogic;
         static Transform player;   // PLAYER (par reference : pas de nom lu 12 fois/s), garde une fois trouve
-        static float nextPoll, findAt = -1, nextList, nextSave;
+        static float nextPoll, findAt = -1, nextList;
         static bool found, fileRead;
         static readonly List<Vector3[]> filePoses = new List<Vector3[]>();   // (hote) poses des copies lues du fichier
         static int swapKind = -1; static float swapAt, swapUntil;            // vetement rendu : une copie libre a mettre a la place
@@ -79,7 +79,7 @@ namespace MWCoop
             player = null;
             found = fileRead = false;
             filePoses.Clear();
-            nextList = nextSave = 0f;
+            nextList = 0f;
             swapKind = -1;
             step = seatStep = 0; testLog = 0; testSeat = null;
             // Tout de suite (avant que le jeu ne range sous PLAYER un vetement porte a la sauvegarde), puis 5 s plus
@@ -261,7 +261,7 @@ namespace MWCoop
             return true;
         }
 
-        static string FilePath { get { return Path.Combine(Application.persistentDataPath, "MWCoop-vetements.txt"); } }
+        static string FilePath { get { string d = Config.Get("Test", "DossierSacs", ""); return Path.Combine(d.Length > 0 ? d : Application.persistentDataPath, "MWCoop-vetements.txt"); } }   // ([Test] DossierSacs : comme SleepingBags)
 
         static void LoadFile()
         {
@@ -292,6 +292,9 @@ namespace MWCoop
             e = Vector3.zero;
             if (!SpawnPoint(it.Kind, k, out p)) p = t != null ? t.position : Vector3.zero;
         }
+
+        // A la sauvegarde du jeu (SaveHook), comme les autres objets des ajouts : poses des tenues de plus.
+        public static void OnGameSave() { if (Session.Active && fileRead) SaveFile(); }
 
         static void SaveFile()
         {
@@ -430,7 +433,6 @@ namespace MWCoop
                 int want = Mathf.Max(Session.RemoteCount + 1, filePoses.Count + 1);
                 if (want > pairs && EnsurePairs(want, filePoses, filePoses.Count + 1 >= want ? "reprises de la sauvegarde" : "une par joueur")) { SaveFile(); nextList = 0f; }
                 if (now >= nextList) { nextList = now + 10f; SendList(); }
-                if (now >= nextSave) { nextSave = now + 60f; SaveFile(); }
             }
             if (swapKind >= 0 && now >= swapAt) Swap(now);
             for (int i = 0; i < items.Count; i++)

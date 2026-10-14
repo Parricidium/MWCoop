@@ -752,7 +752,7 @@ namespace MWCoop
                 tLog = t + 3f;
                 Component dl = Comp("RamDoors", "doorLeft");
                 Log.Info("autotest : ram, " + ram.transform.position.ToString("F1") + (rb != null ? " v " + rb.velocity.magnitude.ToString("F1") + (rb.isKinematic ? " cinematique" : "") : "")
-                         + ", moteur " + Get(ign, "engineOn") + " cle " + Get(ign, "Stage") + ", regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + ", phares " + Get(lights, "lightingStage") + ", portiere G " + Get(dl, "doorOpen") + ", au volant ici " + (VehicleSync.LocalDrivingName ?? "-") + (Camera.main != null && VehicleSync.LocalDrivingName != null ? ", yeux (repere Ram) " + ram.transform.InverseTransformPoint(Camera.main.transform.position).ToString("F2") : ""));
+                         + ", moteur " + Get(ign, "engineOn") + " cle " + Get(ign, "Stage") + ", regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + ", phares " + Get(lights, "lightingStage") + ", portiere G " + Get(dl, "doorOpen") + ", au volant ici " + (VehicleSync.LocalDrivingName ?? "-") + (Game.MainCam != null && VehicleSync.LocalDrivingName != null ? ", yeux (repere Ram) " + ram.transform.InverseTransformPoint(Game.MainCam.transform.position).ToString("F2") : ""));
             }
         }
     }

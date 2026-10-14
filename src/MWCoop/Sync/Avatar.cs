@@ -649,7 +649,7 @@ namespace MWCoop
                     MeshRenderer cr = cig.GetComponentInChildren<MeshRenderer>();
                     Vector3 cw = cr != null ? cr.bounds.center : cig.transform.position;
                     sb.Append(" cigarette ").Append(r.InverseTransformPoint(cw).ToString("F2"));
-                    Camera cam = PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.GetComponent<Camera>() : Camera.main;
+                    Camera cam = PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.GetComponent<Camera>() : Game.MainCam;
                     if (cam != null && Bone("hand_left") != null)
                         sb.Append(" ecran main ").Append(cam.WorldToScreenPoint(Bone("hand_left").position).ToString("F0")).Append(" doigts ").Append(Bone("finger_left") != null ? cam.WorldToScreenPoint(Bone("finger_left").position).ToString("F0") : "-")
                           .Append(" cigarette ").Append(cam.WorldToScreenPoint(cw).ToString("F0")).Append(" nb rendus ").Append(cig.GetComponentsInChildren<Renderer>(true).Length);

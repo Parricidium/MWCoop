@@ -185,7 +185,7 @@ namespace MWCoop
 
         public static void MenuUpdate()
         {
-            if (Application.loadedLevelName != "MainMenu") { menuAt = -1; menuDone = false; importUntil = 0; return; }
+            if (Game.LevelName != "MainMenu") { menuAt = -1; menuDone = false; importUntil = 0; return; }
             float now = Time.realtimeSinceStartup;
             if (menuAt < 0) { menuAt = now + 1f; done.Clear(); cds = null; roots = null; }
             if (!menuDone && now >= menuAt)
@@ -328,7 +328,7 @@ namespace MWCoop
         static bool menuDumped;
         public static void MenuTest(string mode)
         {
-            if (mode != "contenumenu" || menuDumped || Application.loadedLevelName != "MainMenu" || Time.realtimeSinceStartup < 25f) return;
+            if (mode != "contenumenu" || menuDumped || Game.LevelName != "MainMenu" || Time.realtimeSinceStartup < 25f) return;
             menuDumped = true;
             int n = 0;
             foreach (UnityEngine.Object o in Game.AllFsms())

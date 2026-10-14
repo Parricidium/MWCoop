@@ -562,7 +562,7 @@ namespace MWCoop
         // fin : le jeu plante en solo, la voiture se coupe en coop » -- coupee par le garde-fou des valeurs non finies) :
         // la voiture conduite ici, en solo comme en coop, ne depasse pas son regime maximal (Drivetrain.maxRPM) de plus de
         // 1500 tr/min -- ramenee a ce maximum, le moteur continue de tourner.
-        static Drivetrain limitDt; static Transform limitFrom; static System.Reflection.FieldInfo maxRpmField; static float limitLogAt;
+        static Drivetrain limitDt; static Transform limitFrom; static float limitLogAt;
         public static void RevLimiter()
         {
             if (!PlayerSync.InGame) return;
@@ -574,10 +574,6 @@ namespace MWCoop
                 limitFrom = par; limitDt = par != null ? par.GetComponentInParent<Drivetrain>() : null;
                 if (limitDt != null) Log.Info("voitures : limiteur de regime sur " + limitDt.name);
             }
-            if (limitDt == null) return;
-            if (maxRpmField == null) maxRpmField = typeof(Drivetrain).GetField("maxRPM");
-            float max = maxRpmField != null ? (float)maxRpmField.GetValue(limitDt) : 7000f;
-            if (max < 1000f || !Finite(max)) max = 7000f;
         }
 
         // Au pas de physique (Core.FixedUpdate). Le regime du Drivetrain n'est qu'une copie : a chaque pas le jeu le recalcule
@@ -595,8 +591,7 @@ namespace MWCoop
             if (d == null || !d.enabled && Config.GetInt("Test", "RegimeFou", 0) == 0) { lastW = -1f; return; }
             if (fEngineW == null) fEngineW = typeof(Drivetrain).GetField("engineAngularVelo", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             if (fEngineW == null) return;
-            if (maxRpmField == null) maxRpmField = typeof(Drivetrain).GetField("maxRPM");
-            float maxRpm = maxRpmField != null ? (float)maxRpmField.GetValue(d) : 7000f;
+            float maxRpm = d.maxRPM;   // (champ public : lu directement, sans reflexion ni boite a chaque pas)
             if (maxRpm < 1000f || !Finite(maxRpm)) maxRpm = 7000f;
             float k = d.RPM2angularVelo > 0f && Finite(d.RPM2angularVelo) ? d.RPM2angularVelo : Mathf.PI / 30f;
             float w = (float)fEngineW.GetValue(d), w0 = w;

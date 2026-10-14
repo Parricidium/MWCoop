@@ -85,13 +85,13 @@ namespace MWCoop
         // L'objet cree le plus pres de la camera (CreateObject sans variable de sortie).
         static GameObject Nearest(GameObject prefab)
         {
-            if (prefab == null || Camera.main == null) return null;
+            if (prefab == null || Game.MainCam == null) return null;
             string n = prefab.name + "(Clone)";
             GameObject best = null; float bd = 9f;
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
                 if (rb.name != n) continue;
-                float d = (rb.position - Camera.main.transform.position).sqrMagnitude;
+                float d = (rb.position - Game.MainCam.transform.position).sqrMagnitude;
                 if (d < bd) { bd = d; best = rb.gameObject; }
             }
             return best;

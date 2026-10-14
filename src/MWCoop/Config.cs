@@ -11,6 +11,8 @@ namespace MWCoop
         static readonly Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public static string IniPath;
         public static string LaunchedBy = "";
+        // Une valeur d'essai ([Test] non vide, ou argument -mwcoop-) : sinon Autotest ne fait rien du tout (revue du 14/10).
+        public static bool Testing;
 
         public static void Load()
         {
@@ -55,6 +57,9 @@ namespace MWCoop
             for (int i = 0; i + 1 < args.Length; i++)
                 if (args[i].StartsWith("-mwcoop-", StringComparison.OrdinalIgnoreCase) && !args[i + 1].StartsWith("-"))
                     values["Arg." + args[i].Substring(8)] = args[i + 1];
+            Testing = false;
+            foreach (KeyValuePair<string, string> kv in values)
+                if (kv.Value.Length > 0 && (kv.Key.StartsWith("Test.", StringComparison.OrdinalIgnoreCase) || kv.Key.StartsWith("Arg.", StringComparison.OrdinalIgnoreCase))) { Testing = true; break; }
         }
 
         // L'argument -mwcoop-cle passe devant "Section.Cle" ; une valeur vide vaut 'def'.

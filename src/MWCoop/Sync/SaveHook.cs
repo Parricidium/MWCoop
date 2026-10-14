@@ -19,7 +19,7 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (injected || Application.loadedLevelName != "GAME" || Time.realtimeSinceStartup < nextTry) return;
+            if (injected || Game.LevelName != "GAME" || Time.realtimeSinceStartup < nextTry) return;
             nextTry = Time.realtimeSinceStartup + 2f;
             foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
             {
@@ -46,6 +46,7 @@ namespace MWCoop
                     MWCoop.Log.Info("sauvegarde du jeu : objets des ajouts ecrits");
                     SleepingBags.OnGameSave();
                     Kauppa.OnGameSave();
+                    Wear.OnGameSave();   // (avant : toutes les 60 s ; revue du 14/10)
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();

@@ -398,7 +398,7 @@ namespace MWCoop
 
         public static void DrawMontage()
         {
-            if (mUnfocus && Event.current.type == EventType.Layout) { mUnfocus = false; GUIUtility.keyboardControl = 0; }
+            if (mUnfocus && Event.current.type == EventType.Repaint) { mUnfocus = false; GUIUtility.keyboardControl = 0; }
             if (!MontageOpen || mTape == null) return;
             Event e = Event.current;
             float now = Time.realtimeSinceStartup;

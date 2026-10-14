@@ -43,7 +43,7 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (Application.loadedLevelName == "MainMenu")
+            if (Game.LevelName == "MainMenu")
             {
                 // Bouton Commencer de la carte du permis : 'Generate ID' = nouvelle partie.
                 if (begin == null) { GameObject b = Game.FindAny("Licence/Buttons/ButtonBegin"); if (b != null) begin = Game.FsmOn(b, "SetSize"); }

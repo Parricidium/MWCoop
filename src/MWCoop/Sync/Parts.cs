@@ -380,9 +380,12 @@ namespace MWCoop
         static void Scan()
         {
             int before = points.Count, beforeBolts = screws.Count;
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            // (releve partage Game.AllFsms, frais de 0,5 s au plus -- avant : un releve complet de 70-90 ms a chaque point ou
+            // piece inconnu, jusqu'a trois par message ; revue du 14/10)
+            foreach (Object o in Game.AllFsms(0.5f))
             {
                 var f = (PlayMakerFSM)o;
+                if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || (f.FsmName != "Data" && f.FsmName != "Screw")) continue;
                 Consider(f);
             }
@@ -493,9 +496,10 @@ namespace MWCoop
             if (Time.realtimeSinceStartup - idMapAt < 2f) return null;
             idMapAt = Time.realtimeSinceStartup;
             idMap.Clear();
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms(0.5f))
             {
                 var f = (PlayMakerFSM)o;
+                if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Data") continue;
                 FsmString s = f.FsmVariables.FindFsmString("ID");
                 if (s != null && s.Value.Length > 0) idMap[s.Value] = f.gameObject;
@@ -505,9 +509,10 @@ namespace MWCoop
 
         public static GameObject FindById(string id)
         {
-            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            foreach (Object o in Game.AllFsms(0.5f))
             {
                 var f = (PlayMakerFSM)o;
+                if (f == null) continue;
                 if (f.hideFlags != HideFlags.None || f.FsmName != "Data") continue;
                 FsmString s = f.FsmVariables.FindFsmString("ID");
                 if (s != null && s.Value == id) return f.gameObject;

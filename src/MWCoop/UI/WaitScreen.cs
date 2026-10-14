@@ -37,7 +37,7 @@ namespace MWCoop
 
         public static void Update()
         {
-            string level = Application.loadedLevelName;
+            string level = Game.LevelName;
             float now = Time.realtimeSinceStartup;
             // Hote lance par le salon (le mod ouvre sa partie tout seul) : son ecran de demarrage, meme habillage.
             Host = Session.Active && Session.IsHost && Flow.HostChoice != null;
@@ -198,7 +198,7 @@ namespace MWCoop
         {
             // [Test] AttenteForcee=etape (1-4) : l'ecran par-dessus la partie, pour le photographier (la capture
             // d'ecran du jeu ne s'ecrit pas au menu principal) ; jauge a 60 % a l'etape 3, [Test] AttenteErreur=texte.
-            int forced = Application.loadedLevelName == "GAME" ? Config.GetInt("Test", "AttenteForcee", 0) : 0;
+            int forced = Game.LevelName == "GAME" ? Config.GetInt("Test", "AttenteForcee", 0) : 0;
             if (!Shown && forced == 0) return;
             if (forced > 0) { Current = Mathf.Clamp(forced - 1, 0, 3); Error = Config.Get("Test", "AttenteErreur", ""); }
             float now = Time.realtimeSinceStartup;
@@ -297,7 +297,7 @@ namespace MWCoop
             y += Style.Px(18);
             float bh2 = Style.Px(42), bw2 = Style.Px(190);
             // Echap quitte le jeu au menu (automate Quit du jeu) ; a l'introduction, il la passe.
-            if (Application.loadedLevelName == "MainMenu")
+            if (Game.LevelName == "MainMenu")
                 Style.Text(new Rect(x + pad, y, iw - bw2 - Style.Px(12), bh2), L("Échap : quitter le jeu", "Esc: quit the game"), 15, TextAnchor.MiddleLeft, Style.Dim, false);
             if (Style.Button(new Rect(x + w - pad - bw2, y, bw2, bh2), L("Quitter le jeu", "Quit the game"), false, 17))
             {
@@ -313,7 +313,7 @@ namespace MWCoop
         {
             if (mode != "attente" || t < nextTestLog) return;
             nextTestLog = t + 2f;
-            string s = Shown ? "etape " + (Current + 1) + " " + StepLog(Current) : "ecran cache (" + Application.loadedLevelName + ")";
+            string s = Shown ? "etape " + (Current + 1) + " " + StepLog(Current) : "ecran cache (" + Game.LevelName + ")";
             Log.Info("autotest : attente : " + s + ", sauvegarde " + Mathf.FloorToInt(SaveTransfer.Progress * 100) + " % ("
                      + SaveTransfer.BytesGot / 1024 + "/" + SaveTransfer.BytesExpected / 1024 + " Ko"
                      + (SaveTransfer.Done ? ", finie" + (SaveTransfer.Received ? ", ecrite" : SaveTransfer.HostHasSave ? ", NON ecrite" : ", vide") : "")

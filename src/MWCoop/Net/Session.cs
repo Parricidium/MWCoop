@@ -28,7 +28,7 @@ namespace MWCoop.Net
     // Session coop : l'hote fait autorite et relaie tout. [Coop] Mode=solo|hote|invite.
     public static class Session
     {
-        public const int NetVersion = 41;   // 38 : moteur en marche (bit 15 du masque des sons d'une voiture) ; 39 : klaxon (bit 14) ; 40 : pose d'un PNJ dans sa voiture (Npcs, drapeau 4) ; 41 : objet range (Props, etat 4)
+        public const int NetVersion = 42;   // 42 : refonte (cles Recon.Twin des evenements et molettes, acquittements groupes) ; 38 : moteur en marche (bit 15 du masque des sons d'une voiture) ; 39 : klaxon (bit 14) ; 40 : pose d'un PNJ dans sa voiture (Npcs, drapeau 4) ; 41 : objet range (Props, etat 4)
         public static Transport T;
         public static bool Active, IsHost;
         public static int LocalId;
@@ -248,6 +248,9 @@ namespace MWCoop.Net
             retryAt = Time.realtimeSinceStartup + 3f;
         }
 
+        static float badLogAt;
+        public static bool InReliable { get { return T != null && T.InReliable; } }   // message en cours : canal fiable ?
+
         public static void SendRoster()
         {
             var w = new NetWriter(Msg.Roster).U8(Players.Count);
@@ -315,6 +318,10 @@ namespace MWCoop.Net
                     case Msg.SaveBegin: case Msg.SaveChunk: case Msg.SaveEnd: SaveTransfer.OnMessage(type, r); break;
                     default: World.OnMessage(type, from, r); break;
                 }
+            }
+            catch (BadNumberException e)
+            {
+                if (Time.realtimeSinceStartup >= badLogAt) { badLogAt = Time.realtimeSinceStartup + 5f; Log.Warn("message " + type + " de " + from + " ignore : " + e.Message + " (non fini ou aberrant)"); }
             }
             catch (Exception e) { Log.Error("message " + type + " de " + from + " : " + e); }
         }

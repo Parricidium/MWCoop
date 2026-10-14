@@ -41,7 +41,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             Clear();
-            startAt = Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Test", "CarteDelai", 20f) : -1;
+            startAt = Game.LevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Test", "CarteDelai", 20f) : -1;
         }
 
         static void Clear()

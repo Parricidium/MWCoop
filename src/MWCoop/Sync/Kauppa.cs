@@ -44,7 +44,7 @@ namespace MWCoop
             pussit.Clear(); bagsLoaded = false; pussiTried = false; pussiMesh = null; pussiMat = null; lookedBag = null; fDown = -1f; subUntil = -1f;
             OnLevelLoadedVideo();
             offers.Clear(); script.Clear(); scriptAt = 0; inside = false; counterBounds = new Bounds();
-            buildAt = Active && Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
+            buildAt = Active && Game.LevelName == "GAME" ? Time.realtimeSinceStartup + Config.GetFloat("Boutique", "Delai", 12f) : -1f;
         }
 
         public static void OnGameSave() { OnGameSaveVideo(); OnGameSaveBags(); }
@@ -176,7 +176,7 @@ namespace MWCoop
                 money = gv.FindFsmFloat("PlayerMoney"); guiSub = gv.FindFsmString("GUIsubtitle");
             }
             float now = Time.realtimeSinceStartup;
-            Camera cam = Camera.main;
+            Camera cam = Game.MainCam;
             object hit = null;
             if (cam != null && (cam.transform.position - root.transform.position).sqrMagnitude < 40f * 40f && !Game.GlobalBool("PlayerSleeps"))
             {
@@ -537,7 +537,7 @@ namespace MWCoop
                         case "photo": Autotest.CaptureSoon(a[2], 0.2f); break;
                         case "texte": { var tfi = typeof(GUIUtility).GetProperty("textFieldInput", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public); L("essai : keyboardControl " + GUIUtility.keyboardControl + ", textFieldInput " + (tfi != null ? tfi.GetValue(null, null) : "?") + ", eat " + Input.eatKeyPressOnTextFieldFocus); break; }
                         case "reprend": { FsmBool im = FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu"); if (im != null) im.Value = false; GameObject sy = GameObject.Find("Systems"); Transform omn = sy != null ? sy.transform.Find("OptionsMenu") : null; if (omn != null) omn.gameObject.SetActive(false); L("essai : menu du jeu referme"); break; }
-                        case "camera": { FsmBool im = FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu"); L("essai : Camera.main " + (Camera.main != null ? Camera.main.name : "nul") + ", PlayerInMenu " + (im != null && im.Value) + ", curseur bloque " + Screen.lockCursor); break; }
+                        case "camera": { FsmBool im = FsmVariables.GlobalVariables.FindFsmBool("PlayerInMenu"); L("essai : Game.MainCam " + (Game.MainCam != null ? Game.MainCam.name : "nul") + ", PlayerInMenu " + (im != null && im.Value) + ", curseur bloque " + Screen.lockCursor); break; }
                         case "liste":
                         {
                             // liste <chemin> [profondeur] : enfants (nombre de leurs enfants, position) -- essais
@@ -609,7 +609,7 @@ namespace MWCoop
                             if (testCam == null)
                             {
                                 testCam = new GameObject("MWCoop-CameraBoutique").AddComponent<Camera>();
-                                if (Camera.main != null) testCam.CopyFrom(Camera.main);
+                                if (Game.MainCam != null) testCam.CopyFrom(Game.MainCam);
                                 testCam.depth = 100;
                             }
                             testCam.farClipPlane = 3000f; testCam.nearClipPlane = 0.03f;

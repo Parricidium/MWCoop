@@ -127,7 +127,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             gfx = null; gameApplied = false; applied.Clear();
-            gfxAt = Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + 3f : -1;
+            gfxAt = Game.LevelName == "GAME" ? Time.realtimeSinceStartup + 3f : -1;
             bool first = baseShadow < 0;
             if (first) CaptureBase();
             ReadIni(true);
@@ -454,7 +454,7 @@ namespace MWCoop
             sb.Append(" ; moteur : ombres ").Append(QualitySettings.shadowDistance).Append(" x").Append(QualitySettings.shadowCascades).Append(", details ").Append(QualitySettings.lodBias)
               .Append(", textures ").Append(QualitySettings.masterTextureLimit).Append(", filtrage ").Append(QualitySettings.anisotropicFiltering).Append(", images ").Append(Application.targetFrameRate)
               .Append(", synchro ").Append(QualitySettings.vSyncCount);
-            Camera c = Camera.main;
+            Camera c = Game.MainCam;
             if (c != null) sb.Append(", camera loin ").Append(c.farClipPlane).Append(" fov ").Append(c.fieldOfView.ToString("F0"));
             sb.Append(", ecran ").Append(Screen.width).Append('x').Append(Screen.height).Append(Screen.fullScreen ? " plein ecran" : " fenetre").Append(", qualite ").Append(QualitySettings.names[QualitySettings.GetQualityLevel()]);
             return sb.ToString();

@@ -227,7 +227,7 @@ namespace MWCoop
         static float exportAt = -1;
         public static void OnLevelLoaded()
         {
-            exportAt = Application.loadedLevelName == "GAME" ? Time.realtimeSinceStartup + 20f : -1;
+            exportAt = Game.LevelName == "GAME" ? Time.realtimeSinceStartup + 20f : -1;
             for (int k = 0; k < 3; k++) myLooked[k] = false;
         }
         public static void Update()

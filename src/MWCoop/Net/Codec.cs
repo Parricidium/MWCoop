@@ -31,6 +31,8 @@ namespace MWCoop.Net
         public int Length { get { return (int)ms.Length; } }
     }
 
+    public class BadNumberException : Exception { public BadNumberException(string m) : base(m) { } }
+
     public class NetReader
     {
         readonly byte[] b;
@@ -47,8 +49,22 @@ namespace MWCoop.Net
         public float F32() { Need(4); float v = BitConverter.ToSingle(b, p); p += 4; return v; }
         public double F64() { Need(8); double v = BitConverter.ToDouble(b, p); p += 8; return v; }
         public bool Bool() { return U8() != 0; }
-        public Vector3 Vec() { return new Vector3(F32(), F32(), F32()); }
-        public Quaternion Quat() { return new Quaternion(F32(), F32(), F32(), F32()); }
+        // Positions et rotations recues : jamais de NaN / infini / valeur folle appliques (revue du 14/10 : seul VehicleSync
+        // verifiait ; Props, Traffic, TowCart, Garage, SleepingBags, Kauppa posaient tel quel -- une pose NaN fait partir la
+        // physique en valeurs infinies et fige le jeu). Le message entier est alors ignore (Session.Message).
+        public Vector3 Vec()
+        {
+            var v = new Vector3(F32(), F32(), F32());
+            if (!Ok(v.x, 1e6f) || !Ok(v.y, 1e6f) || !Ok(v.z, 1e6f)) throw new BadNumberException("vecteur " + v);
+            return v;
+        }
+        public Quaternion Quat()
+        {
+            var q = new Quaternion(F32(), F32(), F32(), F32());
+            if (!Ok(q.x, 2f) || !Ok(q.y, 2f) || !Ok(q.z, 2f) || !Ok(q.w, 2f)) throw new BadNumberException("rotation " + q);
+            return q;
+        }
+        static bool Ok(float f, float max) { return !float.IsNaN(f) && f <= max && f >= -max; }
         public string Str() { int n = U16(); Need(n); string s = Encoding.UTF8.GetString(b, p, n); p += n; return s; }
         public byte[] Bytes() { int n = U16(); Need(n); var r = new byte[n]; Buffer.BlockCopy(b, p, r, 0, n); p += n; return r; }
     }

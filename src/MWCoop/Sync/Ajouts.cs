@@ -44,7 +44,7 @@ namespace MWCoop
         public static bool Ready { get { return !Guest || hostBits >= 0 || Time.realtimeSinceStartup - loadedAt > 30f; } }
 
         // (au menu : choix d'un ancien hote oublies ; la prochaine partie attend ceux du sien)
-        public static void OnLevelLoaded() { loadedAt = Time.realtimeSinceStartup; if (Application.loadedLevelName != "GAME") hostBits = -1; }
+        public static void OnLevelLoaded() { loadedAt = Time.realtimeSinceStartup; if (Game.LevelName != "GAME") hostBits = -1; }
 
         public static void Update()
         {

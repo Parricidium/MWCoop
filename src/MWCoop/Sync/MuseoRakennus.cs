@@ -533,7 +533,7 @@ namespace MWCoop
         static void TickFlags()
         {
             if (flags.Count == 0) return;
-            Camera cam = Camera.main;
+            Camera cam = Game.MainCam;
             float time = Time.time;
             foreach (Flag fl in flags)
             {
