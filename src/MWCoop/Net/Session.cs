@@ -249,6 +249,9 @@ namespace MWCoop.Net
         }
 
         static float badLogAt;
+        // Fin d'image (Core.LateUpdate) : messages non fiables groupes et acquittements envoyes.
+        public static void Flush() { if (T != null) T.Flush(); }
+
         public static bool InReliable { get { return T != null && T.InReliable; } }   // message en cours : canal fiable ?
 
         public static void SendRoster()
