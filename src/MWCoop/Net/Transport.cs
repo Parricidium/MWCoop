@@ -23,6 +23,8 @@ namespace MWCoop.Net
         internal readonly Queue<byte[]> waiting = new Queue<byte[]>();
         internal readonly Dictionary<ushort, byte[]> early = new Dictionary<ushort, byte[]>();
         internal readonly List<ushort> acks = new List<ushort>();   // acquittements a envoyer (un paquet par image)
+        internal readonly byte[] batch = new byte[3 + Transport.MaxBatch];   // messages non fiables de l'image (T_BATCH)
+        internal int batchLen, batchCount;
         public int InFlight { get { return unacked.Count + waiting.Count; } }
         internal class Pending { public byte[] Packet; public float SentAt; public int Tries; }
         public override string ToString() { return "#" + Id + " " + End; }   // (SteamId.ToString : l'identifiant)
@@ -31,7 +33,10 @@ namespace MWCoop.Net
     public class Transport
     {
         public const int MaxPayload = 1150;
-        const byte T_UNREL = 1, T_REL = 2, T_ACK = 3, T_PING = 4, T_PONG = 5, T_CONNECT = 6, T_ACCEPT = 7, T_REJECT = 8, T_BYE = 9;
+        const byte T_UNREL = 1, T_REL = 2, T_ACK = 3, T_PING = 4, T_PONG = 5, T_CONNECT = 6, T_ACCEPT = 7, T_REJECT = 8, T_BYE = 9, T_BATCH = 10;
+        // Messages non fiables d'une image mis ensemble (T_BATCH : longueur U16 + message, a la suite), un datagramme par pair
+        // au lieu d'un par message (refonte du 14/10 : en-tetes UDP / Steam par paquet). Envoyes a Flush (fin d'image, Core).
+        internal const int MaxBatch = 1180;
         const int Window = 192;
         public const float Timeout = 15f;
 
@@ -137,7 +142,40 @@ namespace MWCoop.Net
 
         public void SendUnreliable(Peer p, byte[] msg)
         {
-            if (p.Accepted) SendRaw(p, Build(T_UNREL, msg));
+            if (!p.Accepted) return;
+            if (msg.Length + 2 > MaxBatch) { SendRaw(p, Build(T_UNREL, msg)); return; }   // (trop gros : seul)
+            if (p.batchLen + 2 + msg.Length > MaxBatch) FlushBatch(p);
+            int at = 3 + p.batchLen;
+            p.batch[at] = (byte)msg.Length; p.batch[at + 1] = (byte)(msg.Length >> 8);
+            Buffer.BlockCopy(msg, 0, p.batch, at + 2, msg.Length);
+            p.batchLen += 2 + msg.Length; p.batchCount++;
+        }
+
+        void FlushBatch(Peer p)
+        {
+            if (p.batchCount == 0) return;
+            if (p.batchCount == 1)   // (un seul : T_UNREL, comme avant)
+            {
+                var one = new byte[p.batchLen - 2 + 3];
+                one[0] = (byte)'M'; one[1] = (byte)'W'; one[2] = T_UNREL;
+                Buffer.BlockCopy(p.batch, 5, one, 3, p.batchLen - 2);
+                SendRaw(p, one);
+            }
+            else
+            {
+                var pk = new byte[3 + p.batchLen];
+                Buffer.BlockCopy(p.batch, 3, pk, 3, p.batchLen);
+                pk[0] = (byte)'M'; pk[1] = (byte)'W'; pk[2] = T_BATCH;
+                SendRaw(p, pk);
+            }
+            p.batchLen = 0; p.batchCount = 0;
+        }
+
+        // Fin d'image : messages non fiables groupes et acquittements partent (Core.LateUpdate, et au debut de Update).
+        public void Flush()
+        {
+            if (link == null) return;
+            foreach (Peer p in Peers) { FlushBatch(p); FlushAcks(p); }
         }
 
         public void SendReliable(Peer p, byte[] msg)
@@ -162,6 +200,7 @@ namespace MWCoop.Net
         {
             Now = now;
             if (link == null) return;
+            Flush();   // (envoyes apres la fin de l'image precedente : physique, LateUpdate)
             Receive();
             foreach (Peer p in Peers.ToArray())
             {
@@ -255,6 +294,18 @@ namespace MWCoop.Net
                 case T_UNREL:
                     InReliable = false;
                     if (p.Accepted && OnMessage != null) OnMessage(p, buf, 3, n - 3);
+                    break;
+                case T_BATCH:
+                    if (!p.Accepted || OnMessage == null) break;
+                    for (int i = 3; i + 2 <= n;)
+                    {
+                        int len = buf[i] | buf[i + 1] << 8;
+                        i += 2;
+                        if (len <= 0 || i + len > n) break;
+                        InReliable = false;
+                        OnMessage(p, buf, i, len);
+                        i += len;
+                    }
                     break;
                 case T_REL:
                     if (n < 5 || !p.Accepted) return;

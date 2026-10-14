@@ -36,6 +36,7 @@ namespace MWCoop
         {
             Perf.Begin();
             LateUpdateBody();
+            try { Session.Flush(); } catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("envoi : " + e.Message); }
             Perf.End("(poses)");
             Autotest.LateMeasure();
             Perf.Frame();
