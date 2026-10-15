@@ -1276,6 +1276,19 @@ static DWORD WINAPI NotesOnlyThread(void *)
     return 0;
 }
 
+// Premier lanceur Reworked (0.96) sur une installation qui vient de l'ancienne version par la mise a jour normale (l'ancien
+// lanceur a installe la 0.96.0 lui-meme, sans la copie faite au choix Legacy -> Reworked) : les sauvegardes sont copiees
+// une fois (MWCoop\copie-avant-reworked), avant tout jeu. Appele au demarrage de la fenetre normale (pas /capture ni /testsalon).
+static void FirstReworkedBackup()
+{
+    if (!g_modOk || g_localVer.empty() || g_iniLauncher.empty()) return;
+    if (GetPrivateProfileIntW(L"Lanceur", L"CopieNightly", 0, g_iniLauncher.c_str()) != 0) return;
+    if (!IsReworkedVer(g_localVer)) return;   // (encore en Legacy : rien, la copie se fera a la mise a jour)
+    std::wstring dst = SavesBackupNightly();
+    WritePrivateProfileStringW(L"Lanceur", L"CopieNightly", L"1", g_iniLauncher.c_str());   // (meme vide : rien a copier, on ne reessaie pas)
+    TestLog("sauvegardes copiees avant le premier jeu en Reworked : %s", dst.empty() ? "(rien)" : Narrow(dst, CP_UTF8).c_str());
+}
+
 // install : bouton METTRE A JOUR ; sinon regarder seulement (installer d'office si [Lanceur] MajAuto=1).
 static void StartUpdate(bool install = false)
 {
@@ -5849,6 +5862,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     SetTimer(g_wnd, 1, 16, NULL);
     if (!g_gameDir.empty() && !g_sConnect) TutoAtStartup();   // visite guidee : complete la 1re fois, puis les nouveautes
     if (!g_sConnect && g_tuto < 0) DiscordAskMaybe();          // invitation au Discord (une fois ; sinon a la fin de la visite)
+    FirstReworkedBackup();
     if (!g_gameDir.empty()) StartUpdate();
     else {
         HANDLE nt = CreateThread(NULL, 0, NotesOnlyThread, NULL, 0, NULL);
