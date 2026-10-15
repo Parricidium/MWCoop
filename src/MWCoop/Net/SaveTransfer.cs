@@ -74,7 +74,8 @@ namespace MWCoop.Net
             {
                 // Partie qui vient d'etre chargee (Continuer) : la sauvegarde du disque EST le monde, envoi
                 // tout de suite. Sinon (nouvelle partie, invite arrive en cours de route) : on sauve d'abord.
-                bool fresh = !newGame && now - inGameSince < 60f && File.Exists(Path.Combine(SaveDir, "savefile.txt"));
+                // (25 s et non 60 : ce que les modules avaient change entre 25 et 60 s manquait a l'arrivant -- relecture du 15/10)
+                bool fresh = !newGame && now - inGameSince < 25f && File.Exists(Path.Combine(SaveDir, "savefile.txt"));
                 if (!fresh)
                 {
                     newGame = false;
@@ -88,8 +89,15 @@ namespace MWCoop.Net
             if (now < sendAt || Game.Saving) return;
             if (!Settled()) { sendAt = now + 0.5f; return; }
             sendAt = -1;
-            foreach (Peer p in waiting) if (p.Accepted && Session.T.Peers.Contains(p)) SendTo(p);
-            waiting.Clear();
+            // (un envoi qui leve sortait avant waiting.Clear() : l'hote resauvegardait a chaque image, jeu fige --
+            // relecture du 15/10, #11)
+            try
+            {
+                foreach (Peer p in waiting)
+                    if (p.Accepted && Session.T.Peers.Contains(p))
+                        try { SendTo(p); } catch (Exception e) { Log.Error("sauvegarde : envoi a " + p + " impossible : " + e.Message); }
+            }
+            finally { waiting.Clear(); }
         }
 
         // Le jeu ecrit ses fichiers sur plusieurs images (jusqu'a 5 s) : fini quand rien n'a bouge depuis 2 s.
@@ -187,10 +195,25 @@ namespace MWCoop.Net
             List<string> list = SaveFiles();
             var data = new List<byte[]>();
             long total = 0;
+            if (list.Count > 255) { Log.Warn("sauvegarde : " + list.Count + " fichiers, seuls les 255 premiers partent"); list = list.GetRange(0, 255); }
             foreach (string f in list) { byte[] b = File.ReadAllBytes(f); data.Add(b); total += b.Length; }
-            var w = new NetWriter(Msg.SaveBegin).U8(list.Count);
-            for (int i = 0; i < list.Count; i++) w.Str(Path.GetFileName(list[i])).I32(data[i].Length);
-            Session.T.SendReliable(p, w.ToArray());
+            // En-tete en plusieurs messages d'au plus ~1000 octets (relecture du 15/10, #11) : SaveBegin = U8 total,
+            // U8 premier rang, U8 m, (Str nom, I32 taille) x m. En un seul, 45 fichiers et plus depassaient le paquet fiable.
+            int at = 0;
+            do
+            {
+                int m = 0, bytes = 8;
+                while (at + m < list.Count && m < 255)
+                {
+                    int b = 6 + Encoding.UTF8.GetByteCount(Path.GetFileName(list[at + m]));
+                    if (m > 0 && bytes + b > 1000) break;
+                    bytes += b; m++;
+                }
+                var w = new NetWriter(Msg.SaveBegin).U8(list.Count).U8(at).U8(m);
+                for (int i = 0; i < m; i++) w.Str(Path.GetFileName(list[at + i])).I32(data[at + i].Length);
+                Session.T.SendReliable(p, w.ToArray());
+                at += m;
+            } while (at < list.Count);
             outgoing.Add(new Outgoing { P = p, Data = data, Total = total });
             Pump();
         }
@@ -227,27 +250,33 @@ namespace MWCoop.Net
             switch (type)
             {
                 case Msg.SaveBegin:
-                    int n = r.U8();
-                    names = new List<string>();
-                    files = new byte[n][];
-                    expected = got = 0;
-                    for (int i = 0; i < n; i++)
+                    // (en-tete en plusieurs messages, fiables et ordonnes : le premier (rang 0) ouvre la reception)
+                    int n = r.U8(), at = r.U8(), m = r.U8();
+                    if (at == 0 || files == null || files.Length != n)
+                    {
+                        names = new List<string>();
+                        files = new byte[n][];
+                        expected = got = 0;
+                        Received = Done = false;
+                        HostHasSave = n > 0;
+                        Progress = 0;
+                    }
+                    for (int i = 0; i < m && at + i < n; i++)
                     {
                         string name = Path.GetFileName(r.Str());
                         int size = r.I32();
-                        names.Add(name);
-                        files[i] = new byte[size];
+                        while (names.Count <= at + i) names.Add("");
+                        names[at + i] = name;
+                        files[at + i] = new byte[size];
                         expected += size;
                     }
-                    Received = Done = false;
-                    HostHasSave = n > 0;
-                    Progress = 0;
-                    Log.Info("reception de la sauvegarde de l'hote : " + n + " fichiers, " + expected / 1024 + " Ko");
+                    if (at + m >= n) Log.Info("reception de la sauvegarde de l'hote : " + n + " fichiers, " + expected / 1024 + " Ko");
                     break;
                 case Msg.SaveChunk:
                     if (files == null) return;
                     int idx = r.U8(), off = r.I32();
                     byte[] part = r.Bytes();
+                    if (idx >= files.Length || files[idx] == null) return;   // (en-tete incomplet : rien a remplir)
                     Buffer.BlockCopy(part, 0, files[idx], off, part.Length);
                     got += part.Length;
                     Progress = expected > 0 ? (float)got / expected : 1f;

@@ -177,6 +177,20 @@ namespace MWCoop
         static float nextScan = -1, loadedAt, nextWarn;
         static bool applying;
 
+        // Tirages au sort (SendRandomEvent) : seul celui de l'hote compte. Si l'automate ne tourne pas chez l'hote (objet
+        // eteint : lieu decharge chez lui, automate desactive) le tirage n'arrivait jamais : l'invite attendait sans fin
+        // ou gardait son propre tirage, different (relecture du 15/10, ecart n7). Meme reprise que les telephones
+        // (Calls.RunsHere) : l'hote dit toutes les 5 s (au changement, et au plus tard toutes les 30 s) quels boulots a tirage
+        // ne tournent pas chez lui (@tirages, par morceaux de 1000 octets) ; pour ceux-la l'invite envoie ses tirages comme
+        // l'hote le ferait, l'hote les relaie sans refaire le sien (et ignore un tirage d'invite pour un automate qui tourne
+        // chez lui).
+        static readonly HashSet<string> hostIdle = new HashSet<string>();      // invite : boulots a tirage dont l'automate ne tourne pas chez l'hote
+        static readonly HashSet<string> idlePending = new HashSet<string>();   // invite : liste en cours de reception (morceaux)
+        static readonly HashSet<string> tookOver = new HashSet<string>();      // invite : reprises deja notees au journal
+        static string idleSig;
+        static float nextIdle, nextIdleSend;
+        const int IdleChunk = 1000;
+
         class Hook : ModHook
         {
             public override string Module { get { return "quetes"; } }
@@ -203,6 +217,7 @@ namespace MWCoop
             feedStep2 = false; feedStageSeen = -1; feedCaughtUp = 0; jobGen = -1; fastWaitUntil = 0;
             chopped = null; lastId = null; testStep = testLogs = 0; testBefore = false; otherSince = -1; testClick2 = false;
             lugFsm = null; lugItems = null; lugPivots = null; lugWas = ""; lugWanted = null; nextLug = 0f;
+            hostIdle.Clear(); idlePending.Clear(); tookOver.Clear(); idleSig = null; nextIdle = nextIdleSend = 0f;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 10f : -1;
         }
@@ -229,6 +244,7 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
             SpecialUpdate(now);
+            IdleStep(now);
             if (now < nextScan) return;
             nextScan = now + 30f;
             if (!specialsScanned) ScanSpecials();
@@ -348,6 +364,50 @@ namespace MWCoop
             return false;
         }
 
+        // ---------------------------------------------------------------- tirages au sort d'un automate qui ne tourne pas chez l'hote
+        // L'automate tourne ici (objet allume, automate actif) : ses tirages se font.
+        static bool Runs(Job j) { return j.F != null && j.F.gameObject.activeInHierarchy && j.F.enabled; }
+
+        // Hote : @tirages, U8 drapeaux (1 : premier morceau, 2 : dernier), U8 n, Str cle x n (hote -> invites, fiable).
+        static void IdleStep(float now)
+        {
+            if (!Session.IsHost || !Session.Active || now < nextIdle) return;
+            nextIdle = now + 5f;
+            if (Session.RemoteCount == 0) { idleSig = null; return; }   // (renvoye des qu'un invite est la)
+            var keys = new List<string>();
+            foreach (Job j in jobs.Values) if (j.F != null && j.RandomStates.Count > 0 && !Runs(j)) keys.Add(j.Key);
+            keys.Sort(string.CompareOrdinal);
+            string sig = string.Join("|", keys.ToArray());
+            if (sig == idleSig && now < nextIdleSend) return;
+            if (sig != idleSig) Log.Info("quete : " + keys.Count + " boulot(s) a tirage au sort dont l'automate ne tourne pas chez l'hote (les invites tirent eux-memes)" + (keys.Count > 0 && keys.Count <= 4 ? " : " + sig : ""));
+            idleSig = sig; nextIdleSend = now + 30f;
+            int i = 0;
+            bool first = true;
+            do
+            {
+                int start = i, bytes = 0;
+                while (i < keys.Count && i - start < 255 && (i == start || bytes + keys[i].Length + 2 <= IdleChunk)) { bytes += keys[i].Length + 2; i++; }
+                bool last = i >= keys.Count;
+                var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@tirages").U8((first ? 1 : 0) | (last ? 2 : 0)).U8(i - start);
+                for (int k = start; k < i; k++) w.Str(keys[k]);
+                Session.SendAll(w, true);
+                first = false;
+            } while (i < keys.Count);
+        }
+
+        // Invite : liste de l'hote recue (par morceaux) ; appliquee au dernier.
+        static void OnHostIdle(NetReader r)
+        {
+            int flags = r.U8(), n = r.U8();
+            if ((flags & 1) != 0) idlePending.Clear();
+            for (int i = 0; i < n; i++) idlePending.Add(r.Str());
+            if ((flags & 2) == 0) return;
+            foreach (string k in hostIdle)
+                if (!idlePending.Contains(k) && tookOver.Remove(k)) Log.Info("quete : " + k + " : l'automate tourne de nouveau chez l'hote, ses tirages lui reviennent");
+            hostIdle.Clear(); hostIdle.UnionWith(idlePending);
+            idlePending.Clear();
+        }
+
         static bool InjectAll(Job j)
         {
             // Automate jamais demarre : rien a lire (et pas une erreur PlayMaker par etat a chaque releve).
@@ -440,8 +500,15 @@ namespace MWCoop
             // Fendeuse : la fin de la buche (State 4 -STOP-> State 1) n'est annoncee que par celui dont c'etait
             // l'etape ; chez les autres elle suit l'etape rejouee (sinon renvoyee en retard sur la buche suivante).
             if (j.Kind == K_FEEDLOG && tr.EventName == "STOP" && !feedStageLocal) return;
-            // Tirage au sort : seul celui de l'hote compte (les invites s'y recalent a son message).
-            if (from != null && j.RandomStates.Contains(from.Name) && !Session.IsHost) return;
+            // Tirage au sort : seul celui de l'hote compte (les invites s'y recalent a son message) -- sauf si l'automate ne tourne
+            // pas chez lui (@tirages) : l'invite tire a sa place (relecture du 15/10, ecart n7).
+            if (from != null && j.RandomStates.Contains(from.Name) && !Session.IsHost)
+            {
+                if (!hostIdle.Contains(j.Key)) return;
+                if (tookOver.Add(j.Key)) Log.Info("quete : " + j.Key + " : l'automate ne tourne pas chez l'hote, ses tirages au sort partent d'ici");
+            }
+            // Etat de paie (usine, publicites, taxi) : chacun le sien, par sa propre horloge -- pas envoye (relecture du 15/10).
+            if (!j.Control && PaysIn(j, from != null ? from.Name : null, state)) { Log.Info("quete : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + tr.EventName + "-> " + state + " (paie : chacun la sienne), pas envoye"); return; }
             // Retour a l'attente (souris partie, fin de survol) : de la tenue de survol, pas une action.
             if (state == "Wait player" || state == "Mouse off" || state == "Mouse off 2" || state == "Wait button") return;
             // Etat qui lit l'heure du jeu et repasse en boucle (usine : « Factory open » toutes les 10 s, -MEETING-> a 13 h,
@@ -538,6 +605,47 @@ namespace MWCoop
 
         static bool Skip(string n) { return n.StartsWith("UT") || n.StartsWith("UniqueTag"); }
 
+        // Etats qui VERSENT une paie (les memes que Wallet.Pays, chacun garde sa paie depuis 0.75.42) : les transitions qui y
+        // entrent ou en sortent ne sont ni envoyees ni rejouees -- chacun y arrive par sa propre horloge, pour son propre
+        // travail. Rejouees, la paie etait versee selon l'ordre d'arrivee des horloges (« deja fait ici » dans les 10 s -> paie
+        // double ; sinon celle de l'invite allait a l'hote, et le recalage direct sur l'etat d'arrivee sautait l'etat de paie
+        // chez le plus lent -- relecture du 15/10). Cle de Jobs = chemin::automate#rang ; la table : chemin::automate -> etats.
+        // (Les compteurs de travail de ces automates restent recopies avec les autres transitions : leurs noms ne sont pas
+        // surs, voir le rapport ; seule l'exclusion des etats de paie est faite ici.)
+        static readonly Dictionary<string, string[]> PayStates = new Dictionary<string, string[]>
+        {
+            { "JOBS/FACTORY::PlayerData", new[] { "Base salary", "High salary" } },
+            { "JOBS/ADs::Data", new[] { "Bank transfer 2" } },
+            { "JOBS/TAXIJOB/MACHTWAGEN/TaxiFunctions::Payments", new[] { "Payment" } },
+        };
+        static bool PaysIn(Job j, string prev, string state)
+        {
+            int hash = j.Key.LastIndexOf('#');
+            string[] states;
+            if (!PayStates.TryGetValue(hash > 0 ? j.Key.Substring(0, hash) : j.Key, out states)) return false;
+            return System.Array.IndexOf(states, state) >= 0 || (prev != null && System.Array.IndexOf(states, prev) >= 0);
+        }
+
+        // Globales du joueur local (corps : stress, fatigue, soif, ivresse... ; sauf l'argent, a Wallet) : notees avant le rejeu
+        // d'un boulot, remises apres -- le rejeu les ecrivait ici comme si c'etait le travail de ce joueur (meme chose que
+        // WorldFsms.SavePersonal/RestorePersonal, prives la-bas ; relecture du 15/10).
+        class Personal { public List<KeyValuePair<FsmFloat, float>> F = new List<KeyValuePair<FsmFloat, float>>(); public List<KeyValuePair<FsmInt, int>> I = new List<KeyValuePair<FsmInt, int>>(); public List<KeyValuePair<FsmBool, bool>> B = new List<KeyValuePair<FsmBool, bool>>(); }
+        static bool Money(string n) { return n == "PlayerMoney" || n == "PlayerBankAccount"; }
+        static Personal SavePersonal()
+        {
+            var p = new Personal();
+            foreach (FsmFloat x in FsmVariables.GlobalVariables.FloatVariables) if (x.Name.StartsWith("Player") && !Money(x.Name)) p.F.Add(new KeyValuePair<FsmFloat, float>(x, x.Value));
+            foreach (FsmInt x in FsmVariables.GlobalVariables.IntVariables) if (x.Name.StartsWith("Player")) p.I.Add(new KeyValuePair<FsmInt, int>(x, x.Value));
+            foreach (FsmBool x in FsmVariables.GlobalVariables.BoolVariables) if (x.Name.StartsWith("PlayerHand")) p.B.Add(new KeyValuePair<FsmBool, bool>(x, x.Value));
+            return p;
+        }
+        static void RestorePersonal(Personal p)
+        {
+            foreach (var kv in p.F) kv.Key.Value = kv.Value;
+            foreach (var kv in p.I) kv.Key.Value = kv.Value;
+            foreach (var kv in p.B) kv.Key.Value = kv.Value;
+        }
+
         // Client du taxi (TaxiWalker::Logic) : son lieu de prise en charge et sa destination sont tires au sort
         // ("Randomize loca" : ArrayListGetRandom -> PickupPoint, DropOffPoint, objets) et son identite ("ID" : textes des
         // animations, sous-titres). Chacun tirait les siens : le client attendait a un autre endroit chez chaque
@@ -597,6 +705,15 @@ namespace MWCoop
             var gos = new List<KeyValuePair<string, string>>();
             for (int i = 0, n = r.U8(); i < n; i++) strs.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
             for (int i = 0, n = r.U8(); i < n; i++) gos.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
+            // Tirage au sort d'un invite (il ne l'envoie que pour un automate annonce arrete ici, @tirages) alors que l'automate
+            // tourne de nouveau chez l'hote (liste pas encore renouvelee chez lui) : le tirage de l'hote fait foi, celui de
+            // l'invite n'est ni relaye ni rejoue (relecture du 15/10, ecart n7).
+            Job jh;
+            if (Session.IsHost && prev.Length > 0 && jobs.TryGetValue(key, out jh) && jh.F != null && jh.Kind != K_IGNITION && jh.RandomStates.Contains(prev) && Runs(jh))
+            {
+                Log.Info("quete de #" + who + " : " + key + " " + prev + " -" + ev + "-> " + state + " (tirage d'un invite, l'automate tourne ici) : ignore");
+                return;
+            }
             if (Session.IsHost)
             {
                 var w = new NetWriter(Msg.Job).U8(who).Str(key).Str(prev).Str(ev).Str(state);
@@ -615,6 +732,8 @@ namespace MWCoop
             }
             if (j.Control) PlayerSync.ReachFor(who, j.F.transform);   // (son avatar appuie sur la commande)
             if (j.Kind == K_IGNITION) { ApplyIgnition(j, who, key, state); return; }
+            // Etat de paie chez l'autre (version d'avant, ou instantane) : sa paie, pas la notre -- ignore (relecture du 15/10).
+            if (!j.Control && PaysIn(j, prev, state)) { Log.Info("quete de #" + who + " : " + key + " " + prev + " -" + ev + "-> " + state + " (paie : chacun la sienne), ignore"); return; }
             // Fendeuse arretee ici (mise en marche pas recue : arrivee en cours de buche) : seule la fin de la
             // buche est reprise (rend le declencheur), une etape rejouee sur l'automate inactif ne mene a rien.
             if (j.Kind == K_FEEDLOG && !j.F.gameObject.activeInHierarchy && state != "State 1")
@@ -624,8 +743,11 @@ namespace MWCoop
             }
             // Deja fait ici a l'instant (la meme logique a tourne chez les deux, ex. le jour de paie) : pas une 2e fois.
             // Sauf la fendeuse : deux clics de suite (un par joueur) sont deux etapes.
+            // (ni les clics sur une commande : le passager qui rallume les phares eteints par le conducteur moins de 10 s apres
+            // etait ignore chez lui -- relecture du 15/10)
+            bool click = j.Control && (j.ClickStates.Contains(prev) || j.InputStates.Contains(prev) || j.KeyStates.Contains(prev));
             float done;
-            if (j.Kind != K_FEEDLOG && j.LocalRecent.TryGetValue(prev + "|" + ev + "|" + state, out done) && Time.realtimeSinceStartup - done < 10f)
+            if (j.Kind != K_FEEDLOG && !click && j.LocalRecent.TryGetValue(prev + "|" + ev + "|" + state, out done) && Time.realtimeSinceStartup - done < 10f)
             {
                 Log.Info("quete de #" + who + " : " + key + " -" + ev + "-> deja fait ici");
                 return;
@@ -651,7 +773,9 @@ namespace MWCoop
             // Plateau a bois : la buche comptee chez l'autre est detruite ici par son propre message (@parti) ;
             // l'objet que "Destroy Wood" detruirait ici (variable Log, d'un ancien passage) n'est pas le bon.
             if (j.Kind == K_LOGTRIGGER) { FsmGameObject lg = v.FindFsmGameObject("Log"); if (lg != null) lg.Value = null; }
-            if (!j.Control) Wallet.Suppress(8f);   // la paie que le boulot rejoue ici n'est pas renvoyee aux autres
+            if (!j.Control) Wallet.Suppress(1.5f);   // la paie que le boulot rejoue ici n'est pas renvoyee aux autres (8 s retiraient aussi un revenu propre gagne juste apres ; le rejeu est synchrone, le releve suit dans la seconde -- relecture du 15/10)
+            // Boulot (pas une commande de vehicule) : le corps du joueur local a l'abri du rejeu (stress, fatigue, soif...).
+            Personal mine = j.Control ? null : SavePersonal();
             applying = true; Replay.Depth++;
             if (j.Control) Radio.BeforeRemote();   // (poste de radio d'un autre : sa copie ici, pas notre jeu de canaux)
             try
@@ -662,8 +786,18 @@ namespace MWCoop
                 if (j.F.ActiveStateName == prev) j.F.SendEvent(ev);
                 if (!j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
             }
-            finally { applying = false; Replay.Depth--; if (j.Control) Radio.AfterRemote(j.F.transform, who, state); }
+            finally { applying = false; Replay.Depth--; if (mine != null) RestorePersonal(mine); if (j.Control) Radio.AfterRemote(j.F.transform, who, state); }
             Log.Info("quete de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
+            // Tirage au sort enchaine pendant le rejeu (l'etat vise tire sans delai) : chez l'hote, le crochet ne l'envoie pas
+            // (Replay.Depth > 0) et l'invite avait garde son propre tirage -> l'hote diffuse ou il est arrive, a tous, l'emetteur
+            // compris (relecture du 15/10). Pas si l'automate ne tourne pas ici (ecart n7) : le tirage recu est celui de l'invite
+            // qui l'a fait a la place de l'hote, deja relaye tel quel ; l'automate arrete d'ici ne tire rien de valable.
+            if (Session.IsHost && j.RandomStates.Count > 0 && j.F.ActiveStateName != state && Session.RemoteCount > 0 && Runs(j))
+            {
+                var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(state).Str("").Str(j.F.ActiveStateName);
+                WriteVars(j.F, w);
+                if (w.ToArray().Length <= Net.Transport.MaxPayload - 40) { Session.SendAll(w, true); Log.Info("quete : " + j.Key + " tirage de l'hote apres rejeu -> " + j.F.ActiveStateName + " (diffuse)"); }
+            }
         }
 
         // Hote : etat courant (et variables) des automates suivis dont la cle contient 'keyPart', envoye a un invite arrive en
@@ -1536,6 +1670,8 @@ namespace MWCoop
         //  @benne  angle de la benne                  (non fiable, 4/s au plus)
         //  @tuyau  fosse, dedans                      (fiable)
         //  @etape  Stage atteint par la fendeuse      (fiable, U8)
+        //  @tirages boulots a tirage arretes chez l'hote (fiable, hote -> invites, voir IdleStep)
+        //  @puces  table des puces : vendeur, table active, vente d'un invite (fiable, voir Wallet.OnFleaSpecial)
         static void OnSpecial(int who, string kind, NetReader r)
         {
             // (relais : par le canal ou il est arrive -- avant, choisi par une liste de noms : fin de @drone, envoyee fiable,
@@ -1619,6 +1755,8 @@ namespace MWCoop
                 case "@visagep": { string h = r.Str(); int i = r.U16(), n = r.U16(); CustomFace.OnPart(who, h, i, n, r.Bytes()); break; }
                 case "@bagages": if (!Session.IsHost) { lugWanted = r.Str(); nextLug = 0f; } break;
                 case "@etape": OnFeedStage(who, r.U8()); break;
+                case "@tirages": if (!Session.IsHost && who == 0) OnHostIdle(r); break;
+                case "@puces": Wallet.OnFleaSpecial(who, r); break;
                 case "@tuyau":
                 {
                     string key = r.Str();

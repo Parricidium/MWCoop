@@ -666,7 +666,9 @@ namespace MWCoop
             int kind = r.U8();
             // Relais aux autres invites (pas les annonces destinees a l'hote seul).
             if (Session.IsHost && kind != K_FleaPlaced) Session.Broadcast(new NetWriter(Msg.Home).U8(who).Raw(raw, 1, raw.Length - 1), true, who);
-            if (!PlayerSync.InGame) return;
+            // (credit d'une vente aux puces recu hors jeu -- invite au menu ou en chargement : garde par Wallet, credite une fois
+            // en partie ; avant, jete avec le reste -- relecture du 15/10)
+            if (!PlayerSync.InGame) { if (kind == K_FleaCredit) Wallet.OnFlea(who, kind, r); return; }
             if (!resolved && startAt > 0) { resolved = true; Resolve(); }
             switch (kind)
             {

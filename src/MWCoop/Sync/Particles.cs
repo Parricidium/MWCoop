@@ -195,29 +195,41 @@ namespace MWCoop
                 nextSend = now + 0.2f;
                 bool full = now >= nextFull;
                 if (full) nextFull = now + 5f;
-                var batch = new List<Em>();
+                // Les changements partent toujours en fiable, meme pendant un tour complet (relecture du 15/10, 3.1 : un
+                // changement tombe sur le tour complet partait en non fiable -- feu de vehicule perdu 5 s) ; le reste du
+                // tour complet en non fiable, comme avant.
+                var changed = new List<Em>();
+                var rest = new List<Em>();
                 foreach (Em e in byKey.Values)
                 {
                     if (e.E == null && e.Go == null) continue;
                     bool v = e.On;
-                    if (full || v != e.Last) batch.Add(e);
+                    if (v != e.Last) changed.Add(e); else if (full) rest.Add(e);
                     e.Last = v;
                 }
-                foreach (Em e in batch) table.Id(e.Key);
+                foreach (Em e in changed) table.Id(e.Key);
+                foreach (Em e in rest) table.Id(e.Key);
                 table.SendDefs();   // (cles nouvelles d'abord, en fiable)
-                for (int i = 0; i < batch.Count; i += 64)
-                {
-                    int n = Mathf.Min(64, batch.Count - i);
-                    var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@emit").U8(n);
-                    for (int k = 0; k < n; k++) w.U16(table.Id(batch[i + k].Key)).Bool(batch[i + k].Last);
-                    Session.SendAll(w, !full);
-                }
-                if (!full && batch.Count > 0 && sentLogs++ < 10) Log.Info("particules : " + batch.Count + " emetteur(s) change(s) envoye(s) (" + batch[0].Key + " " + batch[0].Last + ")");
+                SendBatch(changed, true);
+                SendBatch(rest, false);
+                if (changed.Count > 0 && sentLogs++ < 10) Log.Info("particules : " + changed.Count + " emetteur(s) change(s) envoye(s) (" + changed[0].Key + " " + changed[0].Last + ")");
                 return;
             }
             if (now < nextApply) return;   // invite : copies reposees chaque seconde
             nextApply = now + 1f;
             foreach (Em e in byKey.Values) if (e.Has && e.Copy) Apply(e);
+        }
+
+        // Hote : etat des emetteurs 'list' (@emit, par 64), fiable ou non.
+        static void SendBatch(List<Em> list, bool reliable)
+        {
+            for (int i = 0; i < list.Count; i += 64)
+            {
+                int n = Mathf.Min(64, list.Count - i);
+                var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@emit").U8(n);
+                for (int k = 0; k < n; k++) w.U16(table.Id(list[i + k].Key)).Bool(list[i + k].Last);
+                Session.SendAll(w, reliable);
+            }
         }
 
         // (essai Autotest=particules) lumieres suivies : nombre, retrouvees ici, voulues allumees, allumees ici

@@ -22,8 +22,12 @@ namespace MWCoop
     //  - detruit (mange, transforme) : retire chez les autres (@jfs 1).
     // Ce qui arrive tout seul (cuisson au four ou au micro-ondes, peremption, rayons regarnis) se passe chez chacun : seul
     // l'hote l'envoie ; un invite ne l'envoie que dans les 9 s d'un geste a lui (clic, F, E) et laisse sinon l'hote decider (ce
-    // qu'il cree tout seul est remplace par l'objet de l'hote, ou retire s'il n'en vient pas). A l'arrivee, l'invite (qui
-    // a recu la sauvegarde du mod avec celle de l'hote) apparie ses objets a ceux de l'hote (meme ID, meme place).
+    // qu'il cree tout seul est remplace par l'objet de l'hote, ou retire s'il n'en vient pas). Sauf les objets qu'il a touches :
+    // un objet qui change ou nait dans les 9 s d'un geste de l'invite reste A LUI 2 minutes (Ent.Mine) -- ses changements
+    // suivants (cuisson qui finit bien apres le geste) et ce qui nait a cote de lui (plat transforme, parts) partent de chez
+    // lui au lieu d'etre retires comme « apparus tout seuls » ; avant, le plat fini au-dela des 9 s n'etait jamais envoye et
+    // le nouvel objet etait detruit a 6 s (relecture du 15/10). A l'arrivee, l'invite (qui a recu la sauvegarde du mod avec
+    // celle de l'hote) apparie ses objets a ceux de l'hote (meme ID, meme place).
     public static class ModJonne
     {
         const BindingFlags A = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
@@ -35,7 +39,7 @@ namespace MWCoop
         static PropertyInfo pPath;
         static FieldInfo fItemId, fItemName, fIsDrink, fIsFood, fItems, fStock;
 
-        class Ent { public string Key; public Component C; public List<Component> Alts; public string Sig; public float Quiet; }
+        class Ent { public string Key; public Component C; public List<Component> Alts; public string Sig; public float Quiet; public float Mine; public Vector3 Pos; }   // Mine : a ce joueur jusqu'a (invite) ; Pos : derniere place vue
         static readonly Dictionary<string, Ent> byKey = new Dictionary<string, Ent>();
         static readonly Dictionary<int, Ent> byId = new Dictionary<int, Ent>();
         // Objets pas (encore) suivis : -1 = la depuis le chargement (invite, en attente du releve de l'hote) ; sinon heure de
@@ -49,7 +53,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            byKey.Clear(); byId.Clear(); loose.Clear(); catalog = null; nativeSeen.Clear(); nativeKeys.Clear(); nativeLater.Clear(); nativeObjs.Clear(); nativeMachines.Clear(); nextMachines = 0f;
+            byKey.Clear(); byId.Clear(); loose.Clear(); mineSpots.Clear(); catalog = null; nativeSeen.Clear(); nativeKeys.Clear(); nativeLater.Clear(); nativeObjs.Clear(); nativeMachines.Clear(); nextMachines = 0f;
             started = rosterIn = false; seq = 0;
             startAt = Time.realtimeSinceStartup + 25f;   // (apres le chargement du mod : ApplySave de sa sauvegarde)
             rosterAsk = 0f;
@@ -97,6 +101,29 @@ namespace MWCoop
         static string Name(Component c) { string id = Id(c); return id.Length > 0 ? id : c.gameObject.name; }
         static bool Acting(float now) { return TestAct || now - lastAction < 9f; }   // (ouvre-boite : 7,6 s, buffet 3,5 s, monnayeur 3 s)
         static bool MaySend(float now) { return Session.IsHost || Acting(now); }
+        // Autorite par objet (invite) : objet touche par un geste d'ici (ne ou change dans les 9 s), a lui pendant MineFor --
+        // le temps d'une cuisson, d'une peremption apres ouverture. Un objet qui nait a moins de 1,5 m d'un objet a lui (ou de
+        // la place d'un objet a lui qui vient de disparaitre : plat transforme) est a lui aussi. Voir l'en-tete.
+        const float MineFor = 120f;
+        static readonly List<KeyValuePair<Vector3, float>> mineSpots = new List<KeyValuePair<Vector3, float>>();   // places d'objets a ce joueur disparus, jusqu'a
+        static bool MaySend(Ent e, float now) { return MaySend(now) || now < e.Mine; }
+        static void Own(Ent e, float now)
+        {
+            if (Session.IsHost) return;
+            if (e.Mine < now) Log.Info("mods : Jonne Food System, " + (e.C != null ? Name(e.C) : e.Key) + " a ce joueur pour " + MineFor + " s (geste d'ici)");
+            e.Mine = now + MineFor;
+        }
+        static bool NearMine(Vector3 p, float now)
+        {
+            if (Session.IsHost) return false;
+            foreach (Ent e in byKey.Values) if (e.C != null && now < e.Mine && (e.C.transform.position - p).sqrMagnitude < 2.25f) return true;
+            for (int i = mineSpots.Count - 1; i >= 0; i--)
+            {
+                if (now >= mineSpots[i].Value) { mineSpots.RemoveAt(i); continue; }
+                if ((mineSpots[i].Key - p).sqrMagnitude < 2.25f) return true;
+            }
+            return false;
+        }
         static string NewKey() { return "w:jfs:" + Session.LocalId + ":" + session + ":" + (++seq); }
 
         public static void Update()
@@ -232,11 +259,16 @@ namespace MWCoop
             foreach (Component c in Items())
             {
                 if (byId.ContainsKey(c.GetInstanceID()) || loose.ContainsKey(c)) continue;
-                if (MaySend(now))
+                // (ne a cote d'un objet a ce joueur, sans geste : la cuisson qu'il a lancee -- a lui aussi, pas « loose »)
+                bool near = !MaySend(now) && NearMine(c.transform.position, now);
+                if (MaySend(now) || near)
                 {
                     string k = NewKey();
                     Track(c, k, now);
-                    Send(byKey[k], false);
+                    Ent ne = byKey[k];
+                    ne.Pos = c.transform.position;
+                    if (!Session.IsHost) { if (near) Log.Info("mods : Jonne Food System, " + Name(c) + " ne a cote d'un objet a ce joueur (cuisson lancee par lui) : a lui aussi"); Own(ne, now); }
+                    Send(ne, false);
                 }
                 else loose[c] = now;
             }
@@ -253,7 +285,8 @@ namespace MWCoop
                 foreach (Ent e in gone)
                 {
                     Forget(e);
-                    if (MaySend(now) && Session.RemoteCount > 0) { Head(1).Str(e.Key).Send(); Log.Info("mods : Jonne Food System, " + e.Key + " disparu ici, envoye"); }
+                    if (!Session.IsHost && now < e.Mine) mineSpots.Add(new KeyValuePair<Vector3, float>(e.Pos, e.Mine));   // (ce qui nait a sa place est a ce joueur)
+                    if (MaySend(e, now) && Session.RemoteCount > 0) { Head(1).Str(e.Key).Send(); Log.Info("mods : Jonne Food System, " + e.Key + " disparu ici, envoye" + (!Acting(now) && now < e.Mine ? " (objet a ce joueur)" : "")); }
                 }
             if (now >= nextSig)
             {
@@ -261,10 +294,13 @@ namespace MWCoop
                 foreach (Ent e in byKey.Values)
                 {
                     if (e.C == null) continue;
+                    e.Pos = e.C.transform.position;
                     string s = Sig(e.C);
                     if (s == e.Sig) continue;
                     e.Sig = s;
-                    if (now >= e.Quiet && MaySend(now)) Send(e, true);
+                    if (now < e.Quiet || !MaySend(e, now)) continue;
+                    if (!Session.IsHost && Acting(now)) Own(e, now);   // change dans les 9 s d'un geste : a ce joueur (la cuisson finira bien apres)
+                    Send(e, true);
                 }
             }
             if (!Session.IsHost && rosterIn && loose.Count > 0)

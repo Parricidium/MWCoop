@@ -185,6 +185,7 @@ namespace MWCoop
             missed.Clear(); missedOrder.Clear(); contents.Clear(); marks.Clear(); recounts.Clear();
             trackedCache.Clear(); destroyCache.Clear(); contentCache.Clear();
             testStep = 0; testLog = 0; testFsm = null; testBags = null; lastEnd = null; lastEndF = null;
+            endAt.Clear(); endBy.Clear();
             watchedStates = 0;
             Boxes.OnLevelLoaded();
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 11f : -1;
@@ -1007,6 +1008,16 @@ namespace MWCoop
 
         static int Flags(bool snapshot, bool gone) { return (snapshot ? F_Snapshot : 0) | (gone ? F_Gone : 0); }
 
+        // Derniere fin (mange, bu, vide, jete) de chaque article : heure et joueur. Une fin d'un AUTRE joueur a moins d'une
+        // seconde est la meme bouchee, pas une 2e (relecture du 15/10).
+        static readonly Dictionary<string, float> endAt = new Dictionary<string, float>();
+        static readonly Dictionary<string, int> endBy = new Dictionary<string, int>();
+        static bool RecentEnd(string id, int who)
+        {
+            float at; int by;
+            return endAt.TryGetValue(id, out at) && Time.realtimeSinceStartup - at < 1f && endBy.TryGetValue(id, out by) && by != who;
+        }
+
         static void OnLocal(string id, string from, string state, int end)
         {
             if (IsBag(state))
@@ -1026,6 +1037,11 @@ namespace MWCoop
                 EatUntil = Time.realtimeSinceStartup + 2f;
             bool gone = end == 2;
             if (gone) done.Add(id);
+            // Le meme article fini par un autre a moins d'une seconde (deux joueurs qui mangent le meme objet a moins d'une
+            // latence : chacun jouait « Eat », effet double partout) : sa fin, deja rejouee ici, est la bonne ; la notre
+            // n'est pas envoyee (son effet local a deja eu lieu, pas rattrapable) -- relecture du 15/10.
+            if (RecentEnd(id, Session.LocalId)) { Log.Info("consommables : " + id + " fini ici (" + from + " -> " + state + ") juste apres la fin recue du joueur #" + endBy[id] + " : pas renvoye"); return; }
+            endAt[id] = Time.realtimeSinceStartup; endBy[id] = Session.LocalId;
             if (Session.IsHost) Remember(id, state, gone);
             lastEnd = id;
             byId.TryGetValue(id, out lastEndF);
@@ -1071,6 +1087,11 @@ namespace MWCoop
             if (over) { if (!snapshot) Log.Info("consommables : " + id + " deja fini ici (" + state + " du joueur #" + who + ")"); return; }
             PlayMakerFSM f;
             float now = Time.realtimeSinceStartup;
+            // Fin du meme article par un autre joueur (ou ici) il y a moins d'une seconde : la meme bouchee vue deux fois
+            // (deux joueurs a moins d'une latence), pas un 2e effet -- relecture du 15/10. (Relayee quand meme par l'hote :
+            // chacun tranche chez soi, avec la meme regle.)
+            if (!special && !snapshot && RecentEnd(id, who)) { Log.Info("consommables : " + id + " " + state + " du joueur #" + who + " moins d'1 s apres la fin " + (endBy[id] == Session.LocalId ? "d'ici" : "du joueur #" + endBy[id]) + " : ignore (pas deux fois)"); return; }
+            if (!special && !snapshot) { endAt[id] = now; endBy[id] = who; }
             if (!byId.TryGetValue(id, out f) || f == null)
             {
                 GameObject go = Props.ObjectOf(id);   // connu de Props (cree a l'instant) : son automate tout de suite

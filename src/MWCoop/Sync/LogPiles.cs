@@ -10,8 +10,11 @@ namespace MWCoop
     // Firewood / Logs augmentent et le tas (LogpileBed) grandit d'autant ("Add scale"). Les buches de la fendeuse arrivent
     // chez tous (@cree), mais c'est la copie de l'hote qui tombe dans son plateau et compte ; il annonce ensuite leur
     // disparition (@parti) : chez les autres, rien n'etait compte, le tas restait vide.
-    // Ici l'hote fait autorite : a chaque changement (et toutes les 5 s), ses compteurs et la taille du tas partent (@tas) ;
-    // les autres les prennent tels quels (un comptage local entre-temps est remplace).
+    // Ici celui qui fait autorite sur le plateau (VehicleSync.Authority : qui le tire, sinon l'hote -- le meme que
+    // Jobs.BedAuthority, dont le declencheur compte les buches) envoie, a chaque changement (et toutes les 5 s), ses
+    // compteurs et la taille du tas (@tas) ; les autres les prennent tels quels (un comptage local entre-temps est
+    // remplace). Avant, seul l'hote envoyait : un invite qui tirait le plateau comptait chez lui (declencheur actif
+    // chez lui seul) et personne ne le voyait (relecture du 15/10, ecart n°9).
     public static class LogPiles
     {
         class Pile
@@ -23,6 +26,13 @@ namespace MWCoop
         static float nextScan, nextSend, nextFull;
 
         public static void OnLevelLoaded() { testStep = 0; testLog = 0; piles.Clear(); nextScan = 0f; nextSend = 0f; nextFull = 0f; }
+
+        // Qui fait autorite sur le plateau de ce tas : le corps a la racine du declencheur (FLATBED), comme Jobs.FindBed.
+        static int Authority(Pile p)
+        {
+            Rigidbody rb = p.F != null ? p.F.transform.root.GetComponent<Rigidbody>() : null;
+            return rb != null ? VehicleSync.Authority(rb) : 0;
+        }
 
         static void Scan()
         {
@@ -43,13 +53,15 @@ namespace MWCoop
             if (!Session.Active || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             if (piles.Count == 0 && now >= nextScan) { nextScan = now + 10f; Scan(); }
-            if (!Session.IsHost || piles.Count == 0 || now < nextSend) return;
+            if (Session.RemoteCount == 0 || piles.Count == 0 || now < nextSend) return;
             nextSend = now + 0.5f;
             bool full = now >= nextFull;
             if (full) nextFull = now + 5f;
             foreach (Pile p in piles)
             {
                 if (p.F == null) continue;
+                // Pas l'autorite : rien n'est envoye, et ce qu'on a envoye est oublie (a la reprise, tout repart fiable).
+                if (Authority(p) != Session.LocalId) { p.SFire = -1f; p.SLogs = -1f; continue; }
                 float fw = p.Firewood != null ? p.Firewood.Value : 0f, lg = p.Logs != null ? p.Logs.Value : 0f;
                 GameObject bed = p.Bed != null ? p.Bed.Value : null;
                 Vector3 sc = bed != null ? bed.transform.localScale : Vector3.one;
@@ -101,11 +113,12 @@ namespace MWCoop
 
         public static void OnRemote(int who, string key, float fw, float lg, Vector3 sc, bool on)
         {
-            if (Session.IsHost || who != 0) return;
+            if (who == Session.LocalId) return;
             if (piles.Count == 0) Scan();
             foreach (Pile p in piles)
             {
                 if (p.Key != key || p.F == null) continue;
+                if (Authority(p) == Session.LocalId) return;   // (l'autorite, c'est nous : un envoi en retard de l'ancienne)
                 bool was = p.Firewood != null && p.Firewood.Value != fw || p.Logs != null && p.Logs.Value != lg;
                 if (p.Firewood != null) p.Firewood.Value = fw;
                 if (p.Logs != null) p.Logs.Value = lg;
@@ -120,7 +133,7 @@ namespace MWCoop
                     Rigidbody rb = bt != null ? bt.GetComponent<Rigidbody>() : null;
                     if (mass != null && empty != null) { mass.Value = lg / 2f + empty.Value; if (rb != null) rb.mass = mass.Value; }
                 }
-                if (was) Log.Info("tas de bois : " + key + " buches " + fw.ToString("F0") + ", troncs " + lg.ToString("F0") + " (de l'hote)");
+                if (was) Log.Info("tas de bois : " + key + " buches " + fw.ToString("F0") + ", troncs " + lg.ToString("F0") + " (de #" + who + ")");
                 return;
             }
         }

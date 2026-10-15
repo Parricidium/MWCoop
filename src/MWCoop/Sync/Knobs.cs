@@ -25,6 +25,7 @@ namespace MWCoop
             public List<FsmStateAction> Apply = new List<FsmStateAction>();
             public bool HasLight;
             public bool Mine; public float NextSend; public float LastSent = float.NaN;
+            public float RemoteAt = -10f;   // dernier message d'un autre joueur sur cette commande (il la manoeuvre)
         }
 
         static readonly List<Knob> knobs = new List<Knob>();
@@ -95,7 +96,9 @@ namespace MWCoop
             if (Session.IsHost && Session.RemoteCount > 0 && now >= nextHost)
             {
                 nextHost = now + 5f;
-                foreach (Knob k in knobs) if (k.F != null && !k.Mine) Send(k, true);
+                // (pas une commande qu'un autre joueur manoeuvre -- message de lui depuis moins d'1 s : la valeur de l'hote,
+                // en retard, la faisait reculer chez tous -- relecture du 15/10, 3.1)
+                foreach (Knob k in knobs) if (k.F != null && !k.Mine && now - k.RemoteAt > 1f) Send(k, true);
             }
         }
 
@@ -113,6 +116,7 @@ namespace MWCoop
             if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Knob).Str(key).F32(v).Bool(final), final, from.Id);
             Knob k;
             if (!byKey.TryGetValue(key, out k) || k.F == null || k.Mine || Holding(k)) return;
+            k.RemoteAt = Time.realtimeSinceStartup;
             if (Mathf.Abs(k.Var.Value - v) < 0.001f && final) return;
             PlayerSync.ReachNearest(k.F.transform);   // (son avatar tient la commande : retour de Menor, 11/10)
             Set(k, v, final);

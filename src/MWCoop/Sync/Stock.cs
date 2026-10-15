@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -36,6 +36,7 @@ namespace MWCoop
             public Hashtable Carried { get { return CarriedProxy != null ? CarriedProxy._hashTable : null; } }
             public Hashtable Bought { get { return BoughtProxy != null ? BoughtProxy._hashTable : null; } }
             public Dictionary<string, int> SentBought = new Dictionary<string, int>();
+            public Hashtable BoughtRef; public bool FullNow;   // table 'Bought' vue au dernier tour ; envoi complet force (hote)
             public Dictionary<string, List<PlayMakerFSM>> Buys = new Dictionary<string, List<PlayMakerFSM>>();   // produit -> automates 'Buy'
             public Dictionary<string, int> SentStocked = new Dictionary<string, int>(), SentCarried = new Dictionary<string, int>();
             public Dictionary<int, Dictionary<string, int>> Remote = new Dictionary<int, Dictionary<string, int>>();   // paniers des autres
@@ -55,7 +56,34 @@ namespace MWCoop
         public static void PlayerLeft(int id)
         {
             foreach (Store s in stores.Values)
-                if (s.Remote.ContainsKey(id)) { foreach (string it in s.Remote[id].Keys) s.Touched.Add(it); s.Remote.Remove(id); }
+            {
+                if (!s.Remote.ContainsKey(id)) continue;
+                Dictionary<string, int> basket = s.Remote[id];
+                s.Remote.Remove(id);
+                // Son panier (pris en rayon, pas paye) disparait avec lui : l'hote le rend au rayon -- 'Bought' le comptait
+                // encore, les articles restaient caches chez tous (relecture du 15/10).
+                var abs = new List<KeyValuePair<string, int>>();
+                foreach (KeyValuePair<string, int> kv in basket)
+                {
+                    s.Touched.Add(kv.Key);
+                    if (!Session.IsHost || kv.Value <= 0 || s.Bought == null || !s.Bought.ContainsKey(kv.Key)) continue;
+                    int nv = Mathf.Max(0, ToInt(s.Bought[kv.Key]) - kv.Value);
+                    SetBought(s, kv.Key, nv);
+                    abs.Add(new KeyValuePair<string, int>(kv.Key, nv));
+                }
+                if (abs.Count > 0)
+                {
+                    Log.Info("magasins : " + s.Key + " : panier de #" + id + " (parti) rendu au rayon, " + abs.Count + " produit(s)");
+                    if (Session.RemoteCount > 0) SendChunks(s, new List<string>(), BoughtAbs, abs);
+                }
+            }
+        }
+
+        // Zero du type des valeurs de la table (le jeu y lit des nombres : entiers ou flottants selon la table).
+        static object Zero(Hashtable t)
+        {
+            foreach (DictionaryEntry e in t) return e.Value is float ? (object)0f : (object)0;
+            return 0;
         }
 
         static void Scan()
@@ -73,6 +101,7 @@ namespace MWCoop
                 foreach (DictionaryEntry e in s.Stocked) s.SentStocked[e.Key.ToString()] = ToInt(e.Value);
                 foreach (DictionaryEntry e in s.Carried) s.SentCarried[e.Key.ToString()] = ToInt(e.Value);
                 if (s.Bought != null) foreach (DictionaryEntry e in s.Bought) s.SentBought[e.Key.ToString()] = ToInt(e.Value);
+                s.BoughtRef = s.Bought;
                 stores[key] = s;
             }
             // Etageres : automates 'Buy' (Name = produit, ProductList = objets visibles, Inventory = magasin).
@@ -123,6 +152,17 @@ namespace MWCoop
                 // Pris en rayon ici (ou repose, ou reassort) : l'ecart part a l'hote ; l'hote envoie la valeur.
                 var bch = new List<KeyValuePair<string, int>>();
                 Hashtable bought = s.Bought;
+                // Table NEUVE dans le proxy (reassort : copie vide ; passage en caisse) : ce qu'on avait envoye ne vaut plus,
+                // sinon l'invite envoyait « -6 » (0 moins l'ancien) et l'hote retirait 6 au rayon (relecture du 15/10). Les
+                // valeurs de la nouvelle table sont prises comme deja connues ; l'hote renvoie tout a ce tour.
+                if (bought != null && !ReferenceEquals(bought, s.BoughtRef))
+                {
+                    s.BoughtRef = bought;
+                    s.SentBought.Clear();
+                    foreach (DictionaryEntry e in bought) { string k = e.Key.ToString(); s.SentBought[k] = ToInt(e.Value); s.Touched.Add(k); }
+                    if (Session.IsHost) s.FullNow = true;
+                    Log.Info("magasins : " + s.Key + " : nouvelle table 'Bought' (" + bought.Count + " produits)" + (Session.IsHost ? ", renvoyee" : ""));
+                }
                 if (bought != null)
                     foreach (DictionaryEntry e in bought)
                     {
@@ -133,11 +173,12 @@ namespace MWCoop
                         s.Touched.Add(k);
                         bch.Add(new KeyValuePair<string, int>(k, Session.IsHost ? v : v - old));
                     }
-                bool full = Session.IsHost && bought != null && now >= nextFull && Session.RemoteCount > 0;
+                bool full = Session.IsHost && bought != null && (fullRound || s.FullNow) && Session.RemoteCount > 0;   // (nextFull deja avance : fullRound, pas now >= nextFull -- l'envoi complet ne partait plus, 0.95.4-0.95.8)
                 if ((changed.Count > 0 || bch.Count > 0 || full) && Session.RemoteCount > 0)
                 {
                     if (full)
                     {
+                        s.FullNow = false;
                         bch.Clear();
                         foreach (DictionaryEntry e in bought) bch.Add(new KeyValuePair<string, int>(e.Key.ToString(), ToInt(e.Value)));
                     }
@@ -189,19 +230,25 @@ namespace MWCoop
         }
 
         // 'Bought' d'un produit pose ici (recu) : table, valeur deja connue (pas renvoyee), automates 'Buy', rayon.
+        // Produit absent de la table d'ici (table d'apres reassort sans lui) : la cle est creee, pas ignoree.
+        // Chez un invite, une prise locale pas encore envoyee (ecart entre la table et SentBought) est gardee par-dessus
+        // la valeur de l'hote, et repart au tour suivant -- sinon l'article tenu en main revenait au rayon (relecture du 15/10).
         static void SetBought(Store s, string item, int v)
         {
             Hashtable b = s.Bought;
-            if (b == null || !b.ContainsKey(item)) return;
+            if (b == null) return;
+            if (!b.ContainsKey(item)) b[item] = Zero(b);
             if (v < 0) v = 0;
-            if (ToInt(b[item]) != v) b[item] = v;
+            int cur = ToInt(b[item]), sent, pending = !Session.IsHost && s.SentBought.TryGetValue(item, out sent) ? cur - sent : 0;
+            int target = Mathf.Max(0, v + pending);
+            if (cur != target) b[item] = target;
             s.SentBought[item] = v;
             List<PlayMakerFSM> fs;
             if (s.Buys.TryGetValue(item, out fs))
                 foreach (PlayMakerFSM f in fs)
                 {
                     FsmInt q = f != null ? f.FsmVariables.FindFsmInt("Quantity") : null;
-                    if (q != null) q.Value = v;
+                    if (q != null) q.Value = target;
                 }
             s.Touched.Add(item);
         }
@@ -260,9 +307,11 @@ namespace MWCoop
             for (int i = 0; i < m; i++)
             {
                 string item = r.Str(); int v = r.I32();
-                if (s == null || s.Bought == null || !s.Bought.ContainsKey(item)) continue;
+                if (s == null || s.Bought == null) continue;
                 if (mode == BoughtDelta && Session.IsHost)
                 {
+                    // (produit inconnu de la table de l'hote : cree a 0, l'ecart de l'invite n'est plus perdu -- relecture du 15/10)
+                    if (!s.Bought.ContainsKey(item)) { s.Bought[item] = Zero(s.Bought); s.SentBought[item] = 0; }
                     int nv = Mathf.Max(0, ToInt(s.Bought[item]) + v);
                     SetBought(s, item, nv);
                     abs.Add(new KeyValuePair<string, int>(item, nv));

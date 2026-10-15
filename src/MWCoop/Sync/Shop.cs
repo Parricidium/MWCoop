@@ -1030,14 +1030,19 @@ namespace MWCoop
             if (!Session.Active) return;
             Hashtable carried = CarriedOf(r.Fsm);
             if (carried == null) return;
+            // Seuls les produits pris (quantite > 0) : la table garde les produits reposes a 0, et le receveur la vide avant
+            // de la remplir (ApplyBag) -- un panier complet depassait le paquet fiable (relecture du 15/10, #11).
+            int taken = 0;
+            foreach (DictionaryEntry e in carried) if (e.Value is int && (int)e.Value > 0) taken++;
             var w = new NetWriter(Msg.Purchase).U8(Session.LocalId).U8(0).Str(r.Key)
-                .I32(r.Fsm.FsmVariables.GetFsmInt("BagStuff").Value).U16(carried.Count);
+                .I32(r.Fsm.FsmVariables.GetFsmInt("BagStuff").Value).U16(taken);
             var desc = new System.Text.StringBuilder();
             foreach (DictionaryEntry e in carried)
             {
                 int q = e.Value is int ? (int)e.Value : 0;
+                if (q <= 0) continue;
                 w.Str(e.Key.ToString()).I32(q);
-                if (q > 0) desc.Append(e.Key).Append(" x").Append(q).Append(' ');
+                desc.Append(e.Key).Append(" x").Append(q).Append(' ');
             }
             var floats = new List<KeyValuePair<string, float>>();
             foreach (string name in BagFloats)
@@ -1047,6 +1052,8 @@ namespace MWCoop
             }
             w.U8(floats.Count);
             foreach (KeyValuePair<string, float> kv in floats) w.Str(kv.Key).F32(kv.Value);
+            int size = w.ToArray().Length;
+            if (size > Net.Transport.MaxPayload - 40) { Log.Warn("magasin : achat " + desc + "trop long (" + size + " octets), pas envoye"); return; }
             Log.Info("magasin : achat " + desc);
             Session.SendAll(w, true);
         }

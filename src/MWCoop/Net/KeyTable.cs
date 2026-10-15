@@ -14,9 +14,16 @@ namespace MWCoop.Net
         readonly List<int> pending = new List<int>();
         readonly Dictionary<int, string> recv = new Dictionary<int, string>();
 
-        public KeyTable(string kind) { this.kind = kind; }
+        // Toutes les tables (Particles, CopySounds) : les tables recues sont oubliees a la deconnexion (Session),
+        // sinon un numero de l'hote precedent designait ici un autre son ou emetteur (relecture du 15/10, 3.1).
+        static readonly List<KeyTable> all = new List<KeyTable>();
+
+        public KeyTable(string kind) { this.kind = kind; all.Add(this); }
 
         public void Clear() { ids.Clear(); keys.Clear(); pending.Clear(); recv.Clear(); }
+
+        // invite : tables numero -> cle recues de l'hote, toutes oubliees (deconnexion)
+        public static void ClearReceived() { foreach (KeyTable t in all) t.recv.Clear(); }
 
         // hote : numero de la cle (nouvelle : a envoyer)
         public int Id(string key)
@@ -31,18 +38,26 @@ namespace MWCoop.Net
         // hote : toute la table de nouveau (un joueur arrive)
         public void ResendAll() { pending.Clear(); for (int i = 0; i < keys.Count; i++) pending.Add(i); }
 
-        // hote : nouvelles cles, en fiable, par paquets de 12
+        // hote : nouvelles cles, en fiable, par paquets d'au plus ~1000 octets (relecture du 15/10, #11 : 12 cles de
+        // ~95 octets depassaient le paquet, le message fiable etait refuse et les cles restaient en attente pour de bon)
         public void SendDefs()
         {
             if (pending.Count == 0 || !Session.Active || Session.RemoteCount == 0) return;
-            for (int i = 0; i < pending.Count; i += 12)
+            while (pending.Count > 0)
             {
-                int n = System.Math.Min(12, pending.Count - i);
+                // Combien de cles tiennent : en-tete (type, joueur, kind, compte) puis numero + longueur + UTF-8 par cle.
+                int n = 0, bytes = 12 + kind.Length;
+                while (n < pending.Count && n < 255)
+                {
+                    int b = 4 + System.Text.Encoding.UTF8.GetByteCount(keys[pending[n]]);
+                    if (n > 0 && bytes + b > 1000) break;
+                    bytes += b; n++;
+                }
                 var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(kind).U8(n);
-                for (int k = 0; k < n; k++) w.U16(pending[i + k]).Str(keys[pending[i + k]]);
+                for (int k = 0; k < n; k++) w.U16(pending[k]).Str(keys[pending[k]]);
+                pending.RemoveRange(0, n);   // (avant l'envoi : une cle trop longue a elle seule ne bloque pas les autres)
                 Session.SendAll(w, true);
             }
-            pending.Clear();
         }
 
         // invite : table recue

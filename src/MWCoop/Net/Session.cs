@@ -226,6 +226,9 @@ namespace MWCoop.Net
                 }
                 return;
             }
+            // Tables numero -> cle recues (Particles, CopySounds) oubliees : le prochain hote (ou le meme, revenu) renvoie
+            // les siennes ; gardees, un numero pouvait designer un autre son ou emetteur (relecture du 15/10, 3.1).
+            KeyTable.ClearReceived();
             if (reason.StartsWith("exclu"))   // exclu par l'hote (Admin.Kick) : pas de nouvel essai tout seul
             {
                 Log.Warn("exclu par l'hote");

@@ -18,6 +18,7 @@ namespace MWCoop
             dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0 || Config.Get("Test", "VidageCibles", "").Length > 0;
             Log.Info("Core pret, profil '" + System.Environment.GetEnvironmentVariable("MWCOOP_PROFIL") + "'");
             Log.Info("sauvegardes : " + Application.persistentDataPath);
+            Application.runInBackground = true;   // (hote en Alt-Tab : plus de paquets pendant 15 s -> delai depasse chez les invites ; relecture du 15/10)
             SaveTransfer.CopyPlayerOptions();
             Session.Start();
         }
@@ -137,6 +138,7 @@ namespace MWCoop
             new Mod("liquides", Fluids.Update),
             new Mod("sauvegarde", SaveTransfer.Update),
             new Mod("consommables", Consume.Update),
+            new Mod("objets (etat)", ItemFsms.Update),
             new Mod("voix", Voices.Update),
             new Mod("portieres", CarDoors.Update),
             new Mod("tableaux de bord", CarVisuals.Update),
@@ -253,6 +255,7 @@ namespace MWCoop
             Settings.OnLevelLoaded();
             Fluids.OnLevelLoaded();
             Consume.OnLevelLoaded();
+            ItemFsms.OnLevelLoaded();
             Voices.OnLevelLoaded();
             CarDoors.OnLevelLoaded();
             CarVisuals.OnLevelLoaded();
@@ -338,6 +341,7 @@ namespace MWCoop
 
         void OnApplicationQuit()
         {
+            Wallet.Store();   // (porte-monnaie de l'invite ecrit avant de partir : Update ne tourne plus ensuite -- relecture du 15/10)
             Session.Stop();
             // Le lanceur cherche cette ligne : absente a la fin du journal, le jeu s'est arrete brutalement (crash,
             // processus tue) et l'icone des journaux porte un "!" rouge.

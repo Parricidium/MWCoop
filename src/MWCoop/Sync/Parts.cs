@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -34,7 +34,18 @@ namespace MWCoop
             public bool Install;
             public override void OnEnter()
             {
-                try { if (!applying && Replay.Depth == 0) OnLocal(P, Install); } catch (System.Exception e) { Replay.HookError(e); }
+                try
+                {
+                    if (!applying && Replay.Depth == 0)
+                    {
+                        // Demontage par casse (« Update 2 » -BREAKOFF-> « Remove part » : choc, physique emballee) ou a la main
+                        // (« Allow removal? » -PROCEED->) : la casse n'est envoyee que par celui qui fait autorite sur la voiture,
+                        // et au compte-gouttes (voir OnLocal).
+                        FsmTransition tr = P.Fsm.Fsm.LastTransition;
+                        OnLocal(P, Install, !Install && (testBreak || tr != null && tr.EventName == "BREAKOFF"));
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
         }
@@ -231,9 +242,28 @@ namespace MWCoop
                     b.F.SendEvent(t.Value < target ? "TIGHTEN" : "UNTIGHTEN");
             }
             finally { applying = false; Replay.Depth--; }
-            if (t.Value != target) Log.Warn("vis " + part + "/" + key + " : " + t.Value + " au lieu de " + target);
-            else Log.Info("vis " + part + "/" + key + " = " + target + " (joueur #" + who + ")");
+            if (t.Value != target)
+            {
+                if (last) Log.Warn("vis " + part + "/" + key + " : " + t.Value + " au lieu de " + target);
+                return false;   // (automate occupe : en attente, reessayee -- relecture du 15/10)
+            }
+            Log.Info("vis " + part + "/" + key + " = " + target + " (joueur #" + who + ")");
+            SyncTightness(part);
             return true;
+        }
+
+        // Serrage de la piece = somme de ses vis (le jeu l'additionne cran par cran ; recu en absolu au montage du moteur, les
+        // vis rejouees ensuite le comptaient deux fois : piece indemontable chez le receveur -- relecture du 15/10).
+        static void SyncTightness(string partKey)
+        {
+            GameObject part = partKey.StartsWith("p:") ? null : FindByIdCached(partKey);
+            PlayMakerFSM data = part != null ? Game.FsmOn(part, "Data") : null;
+            FsmFloat tf = data != null ? data.FsmVariables.FindFsmFloat("Tightness") : null;
+            if (tf == null) return;
+            float sum = 0f; int n = 0;
+            foreach (Bolt b in bolts)
+                if (b.F != null && PartKey(b.F.FsmVariables.GetFsmGameObject("ThisPart").Value) == partKey) { sum += b.F.FsmVariables.GetFsmInt("BoltTightness").Value; n++; }
+            if (n > 0 && Mathf.Abs(tf.Value - sum) > 0.01f) tf.Value = sum;
         }
 
         // Essais : serre (ou desserre) d'un cran la premiere vis (par cle) de la piece 'id', comme la cle.
@@ -286,6 +316,7 @@ namespace MWCoop
             if (fresh.Count > 0) CheckFresh(now);
             if (pendingBolts.Count > 0) RetryBolts(now);
             if (mounting.Count > 0) CheckMounting(now);
+            if (reinstall.Count > 0) CheckReinstall(now);
             if (now < nextScan) return;
             nextScan = now + 15f;   // nouvelles pieces (achats...) : nouveau passage
             Scan();
@@ -466,17 +497,75 @@ namespace MWCoop
             mountedNow.Clear();
         }
 
-        static void OnLocal(Point p, bool install)
+        // Casses (BREAKOFF) : une voiture dont la physique s'emballe chez un joueur (copie recalee, choc, NaN) fait passer tous
+        // ses points en « Remove part » d'un coup ; chaque demontage partait comme un geste, l'hote rejouait et relayait tout :
+        // voiture desossee chez tous (Rivett de Vaydon, 15/10). Une casse n'est envoyee que par celui qui fait autorite sur la
+        // voiture, et 3 au plus par seconde et par voiture ; l'hote refuse les autres (OnMessage).
+        class Burst { public float Since; public int N; }
+        static readonly Dictionary<string, Burst> bursts = new Dictionary<string, Burst>();
+        static bool TooMany(string carKey, float now)
+        {
+            Burst b;
+            if (!bursts.TryGetValue(carKey, out b)) bursts[carKey] = b = new Burst();
+            if (now - b.Since > 1f) { b.Since = now; b.N = 0; }
+            return ++b.N > 3;
+        }
+
+        // Casse locale sans autorite (voir OnLocal) : la piece est remise sur son point, comme un montage rejoue.
+        class Reinstall { public Point Point; public GameObject Part; public float At; }
+        static readonly List<Reinstall> reinstall = new List<Reinstall>();
+        static void CheckReinstall(float now)
+        {
+            for (int i = reinstall.Count - 1; i >= 0; i--)
+            {
+                Reinstall r = reinstall[i];
+                if (now < r.At) continue;
+                reinstall.RemoveAt(i);
+                if (r.Part == null || r.Point == null || r.Point.Fsm == null || Holds(r.Point.Fsm, r.Part)) continue;
+                PlayMakerFSM data = Game.FsmOn(r.Part, "Data");
+                if (data == null) continue;
+                r.Point.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value = r.Part;
+                applying = true; Replay.Depth++;
+                try
+                {
+                    Transform pt = r.Point.Fsm.transform;
+                    r.Part.transform.position = pt.position; r.Part.transform.rotation = pt.rotation;
+                    Props.ReleaseRemote(r.Part);
+                    mounting[r.Part] = now + 1f; mountingAt[r.Part] = pt;
+                    data.SendEvent("INSTALL");
+                    Game.SetState(r.Point.Fsm, "Install 2");
+                }
+                catch (System.Exception e) { Log.Warn("piece " + IdOf(r.Part) + " : remise impossible (" + e.Message + ")"); }
+                finally { applying = false; Replay.Depth--; }
+                Log.Info("piece " + IdOf(r.Part) + " remise sur " + r.Point.Key + " (casse locale sans autorite)");
+            }
+        }
+
+        static void OnLocal(Point p, bool install) { OnLocal(p, install, false); }
+        static void OnLocal(Point p, bool install, bool breakoff)
         {
             GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
             if (install) Freshen(part, p.Fsm, IdOf(part));   // ses vis s'activent : accrochees avant le premier tour de cle
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;   // chargement : chacun le sien
             string id = IdOf(part);
             if (id.Length == 0) { Log.Warn("piece sans ID sur " + p.Key); return; }
+            if (breakoff && Config.GetInt("Test", "CasseSansGarde", 0) == 0)   // ([Test] CasseSansGarde=1 : envoyee quand meme, pour eprouver le refus de l'hote)
+            {
+                Transform car = VehicleSync.CarRoot(p.Fsm.transform);
+                Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
+                if (cb != null && VehicleSync.Authority(cb) != Session.LocalId)
+                {
+                    // (copie d'ici qui s'est emballee : la piece est toujours montee chez celui qui fait autorite -- remise ici dans 1 s)
+                    Log.Warn("piece " + id + " cassee de " + p.Key + " : voiture sous l'autorite d'un autre, pas envoye, remise dans 1 s");
+                    reinstall.Add(new Reinstall { Point = p, Part = part, At = Time.realtimeSinceStartup + 1f });
+                    return;
+                }
+                if (TooMany(car != null ? car.name : p.Key, Time.realtimeSinceStartup)) { Log.Warn("piece " + id + " cassee de " + p.Key + " : plus de 3 casses en 1 s, pas envoye"); return; }
+            }
             PlayMakerFSM data = Game.FsmOn(part, "Data");
             FsmInt aid = data != null ? data.FsmVariables.FindFsmInt("AssemblyID") : null;
-            Log.Info((install ? "montage : " : "demontage : ") + id + " sur " + p.Key);
-            VehicleSync.CalmAfterPart(p.Key);   // (sursaut de la physique au montage : la voiture garee ne s'envole pas)
+            Log.Info((install ? "montage : " : breakoff ? "casse : " : "demontage : ") + id + " sur " + p.Key);
+            VehicleSync.CalmAfterPart(p.Fsm.transform);   // (sursaut de la physique au montage : la voiture garee ne s'envole pas)
             // + pose dans le repere du point de montage : chez l'autre, la piece est posee la ou elle est par rapport a SA
             // voiture (posee a la pose du monde d'ici, elle entrait dans la carrosserie d'une copie a peine decalee, et la
             // voiture etait ejectee -- .nolly, 13/10 : siege conducteur pose par l'hote, CORRIS a 257 km/h chez l'invite)
@@ -486,7 +575,7 @@ namespace MWCoop
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(install).Str(p.Key).Str(id).I32(aid != null ? aid.Value : 0)
                 .Vec(part.transform.position).Quat(part.transform.rotation)
                 .Vec(pt.InverseTransformPoint(part.transform.position)).Quat(Quaternion.Inverse(pt.rotation) * part.transform.rotation)
-                .F32(tf != null ? tf.Value : -1f), true);
+                .F32(tf != null ? tf.Value : -1f).U8(breakoff ? 1 : 0), true);
             if (install) { mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = pt; }
             else Props.SettleHere(part);   // (ses poses de chute partent aux autres, comme un objet lache de la main)
         }
@@ -504,15 +593,26 @@ namespace MWCoop
             Vector3 lpos = rel ? r.Vec() : Vector3.zero;
             Quaternion lrot = rel ? r.Quat() : Quaternion.identity;
             float tight = r.More ? r.F32() : -1f;
-            if (Session.IsHost)
-            {
-                var bw = new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).I32(aid).Vec(pos).Quat(rot);
-                if (rel) bw.Vec(lpos).Quat(lrot);
-                if (rel && tight >= 0f) bw.F32(tight);
-                Session.Broadcast(bw, true, who);
-            }
+            int flags = r.More ? r.U8() : 0;
+            bool breakoff = (flags & 1) != 0;
             Point p;
             if (!points.TryGetValue(key, out p) || p.Fsm == null) { Scan(); points.TryGetValue(key, out p); }
+            if (Session.IsHost)
+            {
+                // Casse venue d'un invite : seulement s'il fait autorite sur la voiture, et 3 par seconde au plus (voir OnLocal).
+                if (breakoff && p != null && p.Fsm != null)
+                {
+                    Transform car = VehicleSync.CarRoot(p.Fsm.transform);
+                    Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
+                    if (cb != null && VehicleSync.Authority(cb) != who) { Log.Warn("piece " + id + " cassee de " + key + " par #" + who + " sans autorite sur la voiture : ignoree"); return; }
+                    if (TooMany("#" + who + ":" + (car != null ? car.name : key), Time.realtimeSinceStartup)) { Log.Warn("piece " + id + " cassee de " + key + " par #" + who + " : plus de 3 casses en 1 s, ignoree"); return; }
+                }
+                var bw = new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).I32(aid).Vec(pos).Quat(rot);
+                if (rel) bw.Vec(lpos).Quat(lrot);
+                if (rel && tight >= 0f) bw.F32(tight).U8(flags);
+                Session.Broadcast(bw, true, who);
+            }
+            if (rel && lpos.magnitude > 3f) { Log.Warn("piece " + id + " sur " + key + " : pose a " + lpos.magnitude.ToString("F1") + " m du point, ignoree"); return; }
             GameObject part = FindByIdCached(id);
             if (part == null) part = FindById(id);   // (achetee depuis le dernier releve des ID)
             if (p == null || part == null) { Log.Warn("piece " + id + " / point " + key + " introuvable ici"); return; }
@@ -520,7 +620,7 @@ namespace MWCoop
             bool isIn = Holds(p.Fsm, part);
             if (install == isIn) { Log.Info("piece " + id + " deja " + (isIn ? "montee" : "demontee")); return; }
             p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value = part;
-            VehicleSync.CalmAfterPart(key);
+            VehicleSync.CalmAfterPart(p.Fsm.transform);
             Trace.Watch(p.Fsm, "point " + key, 8f);
             Trace.Watch(data, "piece " + id, 8f);
             applying = true; Replay.Depth++;
@@ -553,7 +653,7 @@ namespace MWCoop
             finally { applying = false; Replay.Depth--; }
             if (install) Freshen(part, p.Fsm, id);   // ses vis, avant les tours de cle de l'autre
             else Props.HoldFromRemote(part, who);   // (tenue le temps que ses poses de chute arrivent : pas ejectee par la physique d'ici)
-            Log.Info("piece " + id + (install ? " montee sur " : " demontee de ") + key + " (joueur #" + who + ")" + (install ? " [parent " + (part.transform.parent != null ? part.transform.parent.name : "aucun") + ", local " + part.transform.localPosition.ToString("F2") + "]" : ""));
+            Log.Info("piece " + id + (install ? " montee sur " : breakoff ? " cassee de " : " demontee de ") + key + " (joueur #" + who + ")" + (install ? " [parent " + (part.transform.parent != null ? part.transform.parent.name : "aucun") + ", local " + part.transform.localPosition.ToString("F2") + "]" : ""));
         }
 
         // Montee = le point de montage la tient (sa variable Installed + ActivePart). La variable
@@ -597,6 +697,14 @@ namespace MWCoop
                 if (s != null && s.Value == id) return f.gameObject;
             }
             return null;
+        }
+
+        // Essais : demonte la piece 'id' comme une casse (BREAKOFF) -- le crochet la traite comme telle.
+        static bool testBreak;
+        public static string TestBreak(string id)
+        {
+            testBreak = true;
+            try { return TestToggle(id); } finally { testBreak = false; }
         }
 
         // Essais : monte (ou demonte) la piece 'id' sur son point prevu (InstallPoint), comme le jeu.

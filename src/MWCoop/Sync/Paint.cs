@@ -103,6 +103,7 @@ namespace MWCoop
                 {
                     var w = new NetWriter(Msg.Paint).U8(Session.LocalId).Str(KeyOf(f));
                     WriteVars(f, w);
+                    if (TooLong(w, KeyOf(f))) continue;
                     Session.SendAll(w, true);
                     if (lateLogs++ < 20) Log.Info("peinture : " + KeyOf(f) + " accrochee en cours de partie, sa couleur envoyee (" + Describe(f) + ")");
                 }
@@ -123,8 +124,20 @@ namespace MWCoop
             string id = KeyOf(f);
             var w = new NetWriter(Msg.Paint).U8(Session.LocalId).Str(id);
             WriteVars(f, w);
+            if (TooLong(w, id)) return;
             if (sprayed) Log.Info("peinture : " + id + " (" + Describe(f) + ")");
             Session.SendAll(w, true);
+        }
+
+        // Message borne (relecture du 15/10, #11) : WriteVars met TOUTES les variables de l'automate dans un fiable, sans
+        // garde ; un automate bavard (chaines longues) depassait le paquet et l'envoi levait. Vrai : trop long, pas envoye
+        // (dit une fois dans le journal).
+        static bool longLogged;
+        static bool TooLong(NetWriter w, string id)
+        {
+            if (w.Length <= 1000) return false;
+            if (!longLogged) { longLogged = true; Log.Warn("peinture : " + id + " trop long (" + w.Length + " octets), pas envoye"); }
+            return true;
         }
 
         static string KeyOf(PlayMakerFSM f)

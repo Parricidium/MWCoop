@@ -600,14 +600,15 @@ namespace MWCoop
             foreach (KeyValuePair<int, int> kv in fresh) owners[kv.Key] = kv.Value;
         }
 
-        // Joueur parti : ses PNJ reviennent a l'hote.
+        // Joueur parti : ses PNJ reviennent a l'hote. Chez un invite aussi, seulement les siens : a 3 joueurs et plus,
+        // tout vider desynchronisait 5 s le client du taxi mene par un autre (relecture du 15/10).
         static void OnPlayerLeft(PlayerInfo pi)
         {
-            if (!Session.IsHost) { owners.Clear(); return; }
             var gone = new List<int>();
             foreach (KeyValuePair<int, int> kv in owners) if (kv.Value == pi.Id) gone.Add(kv.Key);
             if (gone.Count == 0) return;
             foreach (int id in gone) owners.Remove(id);
+            if (!Session.IsHost) return;
             Log.Info("PNJ : " + gone.Count + " PNJ de #" + pi.Id + " repris par l'hote (parti)");
             SendOwners();
         }
