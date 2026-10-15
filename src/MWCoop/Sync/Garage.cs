@@ -57,7 +57,7 @@ namespace MWCoop
     {
         const string Module = "atelier";
         // Msg.Garage : joueur, type (bit 0x80 : fiable, l'hote relaie pareil), donnees.
-        const int T_LIFT = 1, T_FOLD = 2, T_CAR = 3, T_GLASS = 4, T_DENT = 5, T_BEND = 6, T_LOADER = 7;
+        const int T_LIFT = 1, T_FOLD = 2, T_CAR = 3, T_GLASS = 4, T_DENT = 5, T_BEND = 6, T_LOADER = 7, T_HOIST = 8;
         const int RELIABLE = 0x80;
 
         static float nextScan = -1, loadedAt, nextPoll, nextCar, nextDamage, nextWarn;
@@ -84,7 +84,8 @@ namespace MWCoop
                 if (liftScans++ < 2) ScanLifts();
                 ScanLoaders(); ScanDamage();
             }
-            if (now >= nextPoll) { nextPoll = now + 0.1f; PollLifts(now); PollLoaders(now); }
+            if (now >= nextPoll) { nextPoll = now + 0.1f; PollLifts(now); PollLoaders(now); PollHoists(now); }
+            if (!Session.IsHost) PinHoists();
             if (now >= nextCar) { nextCar = now + 0.25f; SendLiftedCars(now); }
             // Degats : une voiture par passage (10/s), chacune revue environ une fois par seconde.
             if (now >= nextDamage) { nextDamage = now + 0.1f; PollDamage(); }
@@ -139,6 +140,9 @@ namespace MWCoop
             public bool Held; public float HeldUntil; public Vector3[] HPos; public Quaternion[] HRot;
             public Rigidbody Added;                      // corps cinematique du plateau du cric ajoute ici
             public int By = -1;                          // dernier joueur qui l'a manoeuvre (essais)
+            // Palan : automate 'Hook' du crochet et ses trois entrees (voir PollHoists) ; chez l'invite, valeurs tenues.
+            public PlayMakerFSM Hook, HookData; public FsmBool T1, T2, HB;
+            public bool Pinned, P1, P2, PB; public int Sent = -1; public float NextSend; public string HookState;
         }
         static readonly List<Lift> lifts = new List<Lift>();
         static readonly HashSet<PlayMakerFSM> liftKnown = new HashSet<PlayMakerFSM>();
@@ -183,6 +187,14 @@ namespace MWCoop
                 d.Moved = moved.ToArray();
                 d.HPos = new Vector3[d.Moved.Length]; d.HRot = new Quaternion[d.Moved.Length];
                 if (d.Point != null) owned.Add(d.Point);
+                if (kind == K_PALAN)
+                {
+                    Transform hk = root.Find("Hoist");
+                    d.Hook = hk != null ? Game.FsmOn(hk.gameObject, "Hook") : null;
+                    d.HookData = hk != null ? Game.FsmOn(hk.gameObject, "Data") : null;
+                    if (d.Hook != null) { d.T1 = d.Hook.FsmVariables.FindFsmBool("Trigger1"); d.T2 = d.Hook.FsmVariables.FindFsmBool("Trigger2"); d.HB = d.Hook.FsmVariables.FindFsmBool("HoistBolted"); }
+                    if (d.T1 == null || d.T2 == null || d.HB == null) { Log.Warn("atelier : crochet du palan " + d.Key + " sans automate Hook complet"); d.Hook = null; }
+                }
                 if (kind == K_CRIC)
                 {
                     d.Fold = Game.FsmOn(root.gameObject, "Fold");
@@ -198,6 +210,68 @@ namespace MWCoop
                 foreach (Lift d in lifts) sb.Append(sb.Length > 0 ? ", " : "").Append(KindName[d.Kind]).Append(' ').Append(d.Key).Append(" (").Append(d.Moved.Length).Append(" pieces)");
                 Log.Info("atelier : appareils de levage suivis : " + sb);
             }
+        }
+
+        // Crochet du palan (automate 'Hook' de motor hoist(itemx)/Hoist). Ses transitions ne passent pas par WorldFsms :
+        // detecteurs physiques (les deux boules du moteur dans les deux detecteurs du crochet), vis du palan, vis du
+        // moteur -- jamais « provoquees par le joueur » au sens de ce module. Chez l'invite, le crochet restait donc en
+        // attente : moteur jamais pendu au palan, vis du palan inactives (« vis ... 0 au lieu de N »), et le moteur
+        // boulonne dans la baie n'y etait pose que chez l'hote (journaux de CBetoy et de son ami, 14/10). L'hote fait
+        // autorite : il envoie les trois entrees de l'automate (detecteurs 1 et 2, palan boulonne) quand elles changent,
+        // et toutes les 5 s (arrivants) ; chaque invite les tient a ces valeurs a chaque image (ses propres detecteurs
+        // sont coupes), et le reste de l'automate (accrochage, joint, INSTALL au point de montage) en decoule chez lui
+        // comme chez l'hote. Le moteur pose sur son point : Parts (message de montage, serrage de l'envoyeur).
+        static void PollHoists(float now)
+        {
+            if (!Session.IsHost || Session.RemoteCount == 0) return;
+            foreach (Lift d in lifts)
+            {
+                if (d.Kind != K_PALAN || d.Hook == null) continue;
+                int v = (d.T1.Value ? 1 : 0) | (d.T2.Value ? 2 : 0) | (d.HB.Value ? 4 : 0);
+                if (v == d.Sent && now < d.NextSend) continue;
+                if (v != d.Sent) Log.Info("atelier : crochet du " + d.Key + " : detecteurs " + d.T1.Value + "/" + d.T2.Value + ", boulonne " + d.HB.Value + " ; crochet [" + d.Hook.ActiveStateName + "]");
+                d.Sent = v; d.NextSend = now + 5f;
+                Session.SendAll(new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_HOIST | RELIABLE).Str(d.Key).U8(v), true);
+            }
+        }
+
+        static void PinHoists()
+        {
+            foreach (Lift d in lifts)
+            {
+                if (d.Kind != K_PALAN || d.Hook == null || !d.Pinned || !d.Hook.gameObject.activeInHierarchy) continue;
+                // « Palan boulonne » : celui de l'hote, ou le sien quand ses propres vis (rejouees) le disent (son automate
+                // Data vient de le poser et d'envoyer ISASSEMBLED : le message de l'hote, 60 ms plus tard, le defaisait).
+                string ds = d.HookData != null ? d.HookData.ActiveStateName : "";
+                bool hb = d.PB || ds == "Delay" || ds == "Bolts ON 2";
+                d.T1.Value = d.P1; d.T2.Value = d.P2; d.HB.Value = hb;
+                // Boulonne chez l'hote alors que le crochet attend ici (ses vis a lui n'ont pas suivi : inactives tant que
+                // le crochet n'est pas sur le moteur) : l'evenement de son automate Data, envoye a sa place.
+                if (hb && d.Hook.ActiveStateName == "Wait") d.Hook.SendEvent("ISASSEMBLED");
+                if (d.Hook.ActiveStateName != d.HookState) { Log.Info("atelier : crochet du " + d.Key + " ici : " + (d.HookState ?? "?") + " -> " + d.Hook.ActiveStateName); d.HookState = d.Hook.ActiveStateName; }
+            }
+        }
+
+        static void OnHoist(int who, NetReader r)
+        {
+            string key = r.Str();
+            int v = r.U8();
+            Lift d = FindLift(key);
+            if (d == null || d.Hook == null || Session.IsHost) return;
+            bool p1 = (v & 1) != 0, p2 = (v & 2) != 0, pb = (v & 4) != 0;
+            if (!d.Pinned)
+            {
+                // (ses detecteurs a lui ne comptent plus : ceux de l'hote font foi)
+                foreach (string tn in new[] { "Hoist/Hooks/Trigger1", "Hoist/Hooks/Trigger2" })
+                {
+                    Transform tt = d.Root.Find(tn);
+                    PlayMakerFSM tf = tt != null ? Game.FsmOn(tt.gameObject, "Trigger") : null;
+                    if (tf != null) tf.enabled = false;
+                }
+            }
+            if (!d.Pinned || p1 != d.P1 || p2 != d.P2 || pb != d.PB) Log.Info("atelier : crochet du " + d.Key + " chez #" + who + " : detecteurs " + p1 + "/" + p2 + ", boulonne " + pb + " ; crochet ici [" + d.Hook.ActiveStateName + "]");
+            d.Pinned = true; d.P1 = p1; d.P2 = p2; d.PB = pb;
+            PinHoists();
         }
 
         static Lift FindLift(string key)
@@ -734,6 +808,7 @@ namespace MWCoop
                 case T_DENT: OnDent(who, r); break;
                 case T_BEND: OnBend(who, r); break;
                 case T_LOADER: OnLoader(who, r); break;
+                case T_HOIST: OnHoist(who, r); break;
                 default: Warn("message " + type + " inconnu"); break;
             }
         }
