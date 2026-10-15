@@ -64,7 +64,9 @@ namespace MWCoop.Net
         public int U8() { Need(1); return b[p++]; }
         public int U16() { Need(2); int v = b[p] | b[p + 1] << 8; p += 2; return v; }
         public int I32() { Need(4); int v = BitConverter.ToInt32(b, p); p += 4; return v; }
-        public float F32() { Need(4); float v = BitConverter.ToSingle(b, p); p += 4; return v; }
+        // (relecture du 15/10 : un flottant NaN/infini recu finissait dans un angle de portiere, un niveau de cric, un Yaw
+        // d'avatar, un niveau d'essence... -> corps NaN ; rejete comme les vecteurs)
+        public float F32() { Need(4); float v = BitConverter.ToSingle(b, p); p += 4; if (float.IsNaN(v) || float.IsInfinity(v)) throw new BadNumberException("flottant " + v); return v; }
         public double F64() { Need(8); double v = BitConverter.ToDouble(b, p); p += 8; return v; }
         public bool Bool() { return U8() != 0; }
         // Positions et rotations recues : jamais de NaN / infini / valeur folle appliques (revue du 14/10 : seul VehicleSync
@@ -79,7 +81,7 @@ namespace MWCoop.Net
         public Quaternion Quat()
         {
             var q = new Quaternion(F32(), F32(), F32(), F32());
-            if (!Ok(q.x, 2f) || !Ok(q.y, 2f) || !Ok(q.z, 2f) || !Ok(q.w, 2f)) throw new BadNumberException("rotation " + q);
+            if (!Ok(q.x, 2f) || !Ok(q.y, 2f) || !Ok(q.z, 2f) || !Ok(q.w, 2f) || q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w < 0.25f) throw new BadNumberException("rotation " + q);
             return q;
         }
         static bool Ok(float f, float max) { return !float.IsNaN(f) && f <= max && f >= -max; }

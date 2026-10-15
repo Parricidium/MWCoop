@@ -377,11 +377,22 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- commandes
         // Commande creee ici ('Create product' du createur, avant la creation) : numero a venir, annonce, liste.
+        // Numero (ObjectNumberInt : nom de la commande, donc du colis chez Props) pris dans la tranche de CE joueur : rang + 1000 x
+        // son numero de joueur (l'hote, 0 : les numeros du jeu tels quels). Deux commandes croisees a moins d'une latence
+        // prenaient le meme numero chez les deux (chacun cree la sienne tout de suite, sans passer par l'hote : lui donner le
+        // numero aurait retarde la creation du jeu), colis en collision (relecture du 15/10). La tranche est reprise a chaque
+        // commande d'ici (rang = numero modulo 1000 : la commande d'un autre, recue, laisse le compteur dans SA tranche).
+        const int NumberStride = 1000;
         static void SendOrder(int s, PlayMakerFSM f)
         {
             FsmGameObject cl = f.FsmVariables.FindFsmGameObject("CurrentListing");
             GameObject listing = cl != null ? cl.Value : null;
             FsmInt num = f.FsmVariables.FindFsmInt("ObjectNumberInt");
+            if (num != null && Session.LocalId > 0 && num.Value >= 0)
+            {
+                int own = num.Value % NumberStride + NumberStride * Session.LocalId;
+                if (own != num.Value) { Log.Info("appels : commande n" + (num.Value + 1) + " prise au numero " + (own + 1) + " (tranche du joueur #" + Session.LocalId + ")"); num.Value = own; }
+            }
             int n = num != null ? num.Value : -1;
             string key = s == 0 && listing != null ? ListingKey(listing) : "";
             System.Collections.ArrayList items = listing != null ? ListOf(listing, SpawnerLists[s]) : null;
@@ -401,11 +412,12 @@ namespace MWCoop
             List<object> items = ReadList(r);
             PlayMakerFSM sp = s < 2 ? spawners[s] : null;
             if (sp == null) { Log.Warn("appels de #" + who + " : createur de commandes " + s + " absent ici"); return; }
-            // Meme numero que chez l'expediteur : meme nom de commande, donc de colis (Props).
+            // Meme numero que chez l'expediteur : meme nom de commande, donc de colis (Props). (Numero dans la tranche de
+            // l'expediteur, voir SendOrder : un compteur d'ici plus haut dans la MEME tranche serait une vraie collision.)
             FsmInt num = sp.FsmVariables.FindFsmInt("ObjectNumberInt");
             if (num != null && n >= 0)
             {
-                if (num.Value > n) Log.Warn("appels de #" + who + " : commande n" + (n + 1) + " mais deja " + num.Value + " ici (deux commandes croisees)");
+                if (num.Value > n && num.Value / NumberStride == n / NumberStride) Log.Warn("appels de #" + who + " : commande n" + (n + 1) + " mais deja " + num.Value + " ici (deux commandes croisees)");
                 num.Value = n;
             }
             string what;

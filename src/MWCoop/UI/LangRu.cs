@@ -531,6 +531,9 @@ namespace MWCoop
             { "Taxi: customer", "Такси: клиент" },
             { "Taxi: destination", "Такси: пункт назначения" },
             { "Punched by ", "Удар кулаком от " },
+            { " registered for the ice race", " записался на гонку по льду" },
+            { "Ice race: ", "Гонка на льду: " },
+            { "Gift returned (player left): ", "Подарок возвращён (игрок вышел): " },
         };
     }
 }

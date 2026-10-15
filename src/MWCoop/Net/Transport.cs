@@ -18,6 +18,7 @@ namespace MWCoop.Net
         internal string Key;          // cle de l'adresse (table des pairs)
         public bool Accepted;
         public float LastHeard, LastPingSent, Rtt = 0.1f;
+        internal uint Token;          // jeton de session de l'invite (T_CONNECT) : 0 pour une version sans jeton
         internal ushort sendSeq, recvSeq;
         internal readonly Dictionary<ushort, Pending> unacked = new Dictionary<ushort, Pending>();
         internal readonly Queue<byte[]> waiting = new Queue<byte[]>();
@@ -50,6 +51,21 @@ namespace MWCoop.Net
         int nextId = 1;
         public float Now;
         public long BytesIn, BytesOut;
+        // Jeton de session (relecture du 15/10, #2) : un invite qui recree son transport (hote fige > 15 s, Steam) garde
+        // la meme adresse, donc la meme cle ; sans jeton l'hote le prenait pour le pair existant (deja Accepted, numeros
+        // gardes) et jetait son Hello (seq 0) comme « deja recu » -- invite connecte mais muet pour toujours. Tire au
+        // hasard a la creation du transport (jamais 0 : 0 = version sans jeton, ancien comportement).
+        static readonly Random rng = new Random();
+        readonly uint token = (uint)rng.Next(1, int.MaxValue);
+        // Pairs exclus ou refuses (relecture du 15/10, 3.1) : adresse -> fin de l'exclusion et motif ; un T_CONNECT pendant
+        // ce temps recoit un T_REJECT au lieu d'etre accepte puis re-exclu en boucle (BYE perdu, invite qui reessaie a 3 s).
+        class Ban { public float Until; public string Reason; }
+        readonly Dictionary<string, Ban> banned = new Dictionary<string, Ban>();
+        const float BanTime = 10f;
+        // Adieux en cours : le BYE d'une exclusion part 3 fois (0, +0,3 s, +0,6 s : non fiable, un seul se perdait) et le
+        // lien n'oublie l'adresse (Steam : session fermee) qu'une seconde apres, le temps que le dernier BYE parte.
+        class Farewell { public object End; public byte[] Packet; public float NextAt, ForgetAt; public int Left; }
+        readonly List<Farewell> farewells = new List<Farewell>();
 
         public event Action<Peer> OnConnected;               // hote : nouveau pair ; invite : accepte par l'hote
         public event Action<Peer, string> OnDisconnected;
@@ -85,8 +101,17 @@ namespace MWCoop.Net
             link = l;
             Peer p = AddPeer(hostAddr);
             p.Id = 0;   // l'hote est toujours le joueur 0
-            SendRaw(p, Build(T_CONNECT, BitConverter.GetBytes(NetVersion)));
+            SendRaw(p, ConnectPacket());
             return p;
+        }
+
+        // T_CONNECT : version reseau (I32) puis jeton de session (U32) ; un hote d'avant ne lit que la version.
+        byte[] ConnectPacket()
+        {
+            var body = new byte[8];
+            Buffer.BlockCopy(BitConverter.GetBytes(NetVersion), 0, body, 0, 4);
+            Buffer.BlockCopy(BitConverter.GetBytes(token), 0, body, 4, 4);
+            return Build(T_CONNECT, body);
         }
 
         public void Close()
@@ -97,6 +122,8 @@ namespace MWCoop.Net
             link = null;
             Peers.Clear();
             byEnd.Clear();
+            farewells.Clear();
+            banned.Clear();
         }
 
         public bool IsOpen { get { return link != null; } }
@@ -110,10 +137,14 @@ namespace MWCoop.Net
             return p;
         }
 
-        void DropPeer(Peer p, string reason)
+        void DropPeer(Peer p, string reason) { DropPeer(p, reason, true); }
+
+        // forget faux : l'adresse reste connue du lien (pair remplace : le nouveau pair la reprend tout de suite ;
+        // exclusion : oubli differe par Farewell, apres les derniers BYE).
+        void DropPeer(Peer p, string reason, bool forget)
         {
             byEnd.Remove(p.Key);
-            if (link != null) link.Forget(p.End);
+            if (forget && link != null) link.Forget(p.End);
             Peers.Remove(p);
             if (p.Accepted && OnDisconnected != null) OnDisconnected(p, reason);
             else if (!IsHost && OnRejected != null) OnRejected(reason);
@@ -121,8 +152,27 @@ namespace MWCoop.Net
 
         public void Kick(Peer p, string reason)
         {
-            SendRaw(p, Build(T_BYE, System.Text.Encoding.UTF8.GetBytes(reason)));
-            DropPeer(p, reason);
+            byte[] bye = Build(T_BYE, System.Text.Encoding.UTF8.GetBytes(reason));
+            SendRaw(p, bye);
+            farewells.Add(new Farewell { End = p.End, Packet = bye, NextAt = Now + 0.3f, ForgetAt = Now + 1f, Left = 2 });
+            if (IsHost) banned[p.Key] = new Ban { Until = Now + BanTime, Reason = reason };
+            DropPeer(p, reason, false);
+        }
+
+        // Adieux : BYE renvoyes, puis adresse oubliee par le lien (Update).
+        void UpdateFarewells()
+        {
+            for (int i = farewells.Count - 1; i >= 0; i--)
+            {
+                Farewell f = farewells[i];
+                if (f.Left > 0 && Now >= f.NextAt) { f.Left--; f.NextAt = Now + 0.3f; SendRawTo(f.End, f.Packet); }
+                if (f.Left == 0 && Now >= f.ForgetAt)
+                {
+                    farewells.RemoveAt(i);
+                    // (pas si l'adresse a deja un nouveau pair : sa session serait fermee sous lui)
+                    if (link != null && !byEnd.ContainsKey(link.KeyOf(f.End))) link.Forget(f.End);
+                }
+            }
         }
 
         static byte[] Build(byte type, byte[] body)
@@ -134,10 +184,12 @@ namespace MWCoop.Net
             return b;
         }
 
-        void SendRaw(Peer p, byte[] packet)
+        void SendRaw(Peer p, byte[] packet) { SendRawTo(p.End, packet); }
+
+        void SendRawTo(object end, byte[] packet)
         {
             if (link == null) return;
-            if (link.Send(p.End, packet, packet.Length)) BytesOut += packet.Length;
+            if (link.Send(end, packet, packet.Length)) BytesOut += packet.Length;
         }
 
         public void SendUnreliable(Peer p, byte[] msg)
@@ -182,6 +234,9 @@ namespace MWCoop.Net
         {
             if (msg.Length > MaxPayload) throw new ArgumentException("message fiable trop long : " + msg.Length);
             if (p.unacked.Count >= Window) { p.waiting.Enqueue(msg); return; }
+            // Le lot non fiable de l'image part d'abord (relecture du 15/10, 3.1) : un fiable partait tout de suite et les
+            // non fiables de la meme image au Flush -- la « finale » (Knobs, @drone) etait depassee par le flux d'avant.
+            FlushBatch(p);
             SendReliableNow(p, msg);
         }
 
@@ -202,6 +257,7 @@ namespace MWCoop.Net
             if (link == null) return;
             Flush();   // (envoyes apres la fin de l'image precedente : physique, LateUpdate)
             Receive();
+            UpdateFarewells();
             foreach (Peer p in Peers.ToArray())
             {
                 FlushAcks(p);
@@ -209,8 +265,8 @@ namespace MWCoop.Net
                 if (Now - p.LastPingSent > 1f)
                 {
                     p.LastPingSent = Now;
-                    SendRaw(p, Build(p.Accepted || IsHost ? T_PING : T_CONNECT,
-                        p.Accepted || IsHost ? BitConverter.GetBytes(Now) : BitConverter.GetBytes(NetVersion)));
+                    if (p.Accepted || IsHost) SendRaw(p, Build(T_PING, BitConverter.GetBytes(Now)));
+                    else SendRaw(p, ConnectPacket());
                 }
                 float resend = Math.Max(0.2f, p.Rtt * 1.5f);
                 foreach (Peer.Pending pd in p.unacked.Values)
@@ -256,12 +312,23 @@ namespace MWCoop.Net
                 int ver = n >= 7 ? BitConverter.ToInt32(buf, 3) : -1;
                 if (ver != NetVersion)
                 {
-                    var tmp = new Peer { End = ep };
-                    SendRaw(tmp, Build(T_REJECT, System.Text.Encoding.UTF8.GetBytes(
+                    SendRawTo(ep, Build(T_REJECT, System.Text.Encoding.UTF8.GetBytes(
                         "version reseau differente (hote " + NetVersion + ", invite " + ver + ")")));
                     return;
                 }
-                if (p == null) { p = AddPeer(ep); p.Id = nextId++; }
+                // Exclu il y a moins de 10 s : refuse (le BYE a pu se perdre, l'invite reessaie), sans l'accepter.
+                Ban ban;
+                string key = link.KeyOf(ep);
+                if (banned.TryGetValue(key, out ban))
+                {
+                    if (Now < ban.Until) { SendRawTo(ep, Build(T_REJECT, System.Text.Encoding.UTF8.GetBytes(ban.Reason))); return; }
+                    banned.Remove(key);
+                }
+                // Meme adresse, autre jeton : l'invite a recree son transport (numeros a zero) -- l'ancien pair est
+                // remplace par un neuf, pour que son Hello (seq 0) soit pris (relecture du 15/10, #2).
+                uint tok = n >= 11 ? BitConverter.ToUInt32(buf, 7) : 0;
+                if (p != null && tok != p.Token) { DropPeer(p, "pair remplace", false); p = null; }
+                if (p == null) { p = AddPeer(ep); p.Id = nextId++; p.Token = tok; }
                 p.LastHeard = Now;
                 SendRaw(p, Build(T_ACCEPT, BitConverter.GetBytes(p.Id)));
                 if (!p.Accepted) { p.Accepted = true; if (OnConnected != null) OnConnected(p); }

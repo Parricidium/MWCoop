@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -23,6 +23,8 @@ namespace MWCoop
     // Rallye : 'AIdrivers' (choix de la voiture et du pilote) et 'GenerateTimes' (temps de depart tires au hasard) ne
     // tournent que chez l'hote ; sa table des resultats (RallyCars, hashtable Results : pilote -> temps) est recopiee
     // chez les invites, dont 'Leaderboard' refait le meme classement (tele, tableau).
+    // Pilotes humains : Rally (rallye) et IceRace (course sur glace, relecture du 15/10, ecart n1), appeles d'ici (meme
+    // boucle, memes messages Msg.Race : rangs 10-14 Rally, 20+ IceRace).
     public static class Races
     {
         class Car
@@ -74,6 +76,7 @@ namespace MWCoop
             cars.Clear(); mutedLogic.Clear(); built = false; hashOk = false; results = null; resultsSig = ""; pendingResults = null; nextResultsLook = 0;
             distHooked = false;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 7f : -1;
+            IceRace.OnLevelLoaded();
         }
 
         static void Build()
@@ -128,10 +131,14 @@ namespace MWCoop
             if (results != null) { Log.Info("courses : table des resultats du rallye trouvee (" + results.Count + " pilotes)"); ApplyResults(); }
         }
 
+        static float nextIceError;
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
+            // Pilotes humains de la glace : a part, une erreur la-dedans ne doit pas arreter les voitures IA (1 trace / 10 s).
+            try { IceRace.Update(); }
+            catch (System.Exception e) { if (now >= nextIceError) { nextIceError = now + 10f; Log.Error("glace : " + e); } }
             if (!built) { if (buildAt > 0 && now >= buildAt) Build(); return; }
             FindResults();
             if (Session.IsHost)
@@ -237,6 +244,7 @@ namespace MWCoop
         public static void OnMessage(Peer from, NetReader r)
         {
             int kind = r.U8();
+            if (kind >= 20) { IceRace.OnMessage(kind, from, r); return; }   // course sur glace a plusieurs pilotes
             if (kind >= 10) { Rally.OnMessage(kind, from, r); return; }   // rallye a plusieurs pilotes
             if (kind == K_HASH)
             {
@@ -458,10 +466,11 @@ namespace MWCoop
         static int testSec = -1;
         public static void Test(string mode, float t)
         {
-            if ((mode != "rallye" && mode != "glace" && mode != "rallye3") || !built) return;
+            IceRace.Test(mode, t);
+            if ((mode != "rallye" && mode != "glace" && mode != "glace2" && mode != "rallye3") || !built) return;
             // [Test] Autotest=glace : semaine de la course sur glace (GlobalWeeksPassed impair, RACES 'SwapDates' WAKEUP),
             // vendredi 10 h (essais libres : le jeu lance des voitures IA au hasard sur la piste).
-            if (Session.IsHost && testStep == 0 && t > 20f && mode == "glace")
+            if (Session.IsHost && testStep == 0 && t > 20f && (mode == "glace" || mode == "glace2"))   // (glace2 : meme semaine, pilotes humains -- IceRace.Test)
             {
                 testStep = 1;
                 FsmInt wk = FsmVariables.GlobalVariables.FindFsmInt("GlobalWeeksPassed");
@@ -487,6 +496,7 @@ namespace MWCoop
             if (t < 25f || sec % 5 != 0 || sec == testSec) return;
             testSec = sec;
             var sb = new System.Text.StringBuilder("autotest : " + mode + " " + System.DateTime.Now.ToString("mm:ss") + " :");
+            if (mode == "glace2") return;   // (releve par IceRace.Test)
             if (mode != "glace")
             {
                 PlayMakerFSM reset = Game.FindFsm("RACES/RALLY", "Reset");

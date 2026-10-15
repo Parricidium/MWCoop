@@ -396,6 +396,7 @@ namespace MWCoop
                     }
                 }
             }
+            if (!leftHooked) { leftHooked = true; Session.PlayerLeft += pi => PlayerLeft(pi.Id); }
             if (Session.IsHost && stored.Count > 0 && now >= nextStored && Session.RemoteCount > 0)
             {
                 nextStored = now + 10f;
@@ -449,7 +450,7 @@ namespace MWCoop
             {
                 if (p.Body == null) { if (p.GoneAt == 0f && Destroyed(p.Body)) Gone(p, now); continue; }
                 if (p.RemoteBy < 0 || p.RideCar >= 0) continue;   // transporte : place apres la physique (LateUpdate)
-                if (now - p.LastRemote > 1.5f) { p.RemoteBy = -1; SetKinematic(p, false); continue; }
+                if (now - p.LastRemote > 1.5f) { p.RemoteBy = -1; if (Mounted(p)) p.Vel = Vector3.zero; SetKinematic(p, false); continue; }
                 Follow(p);
             }
             // Transport recu : la voiture n'est plus une copie ici (conducteur sorti), ou plus de nouvelles
@@ -494,7 +495,7 @@ namespace MWCoop
             Prop p;
             if (rb == null || !byBody.TryGetValue(rb, out p) || p == held) return;
             settling.Remove(p);
-            if (p.RemoteBy >= 0) { p.RemoteBy = -1; p.HeadBy = -1; Unride(p); SetKinematic(p, false); }
+            if (p.RemoteBy >= 0) { p.RemoteBy = -1; p.HeadBy = -1; Unride(p); p.Vel = Vector3.zero; SetKinematic(p, false); }   // (sans la vitesse de la main : elle poussait la voiture par le joint)
         }
         // Piece tout juste demontee chez un autre (Parts) : tenue cinematique ici le temps que ses poses de chute arrivent
         // (1,5 s sans message : relachee). Liberee d'un coup dans la carrosserie, la physique d'ici l'ejectait (culbuteur
@@ -504,6 +505,9 @@ namespace MWCoop
             Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
             Prop p;
             if (rb == null || !byBody.TryGetValue(rb, out p) || p == held) return;
+            // (cible = la ou elle est : Follow partait vers l'ancienne pose recue -- origine du monde, tete de celui qui l'avait
+            // portee -- relecture du 15/10)
+            p.Pos = rb.position; p.Rot = rb.rotation; p.Vel = Vector3.zero; p.RelCar = -1; p.HeadBy = -1; Unride(p);
             p.RemoteBy = who; p.LastRemote = Time.realtimeSinceStartup;
             SetKinematic(p, true);
         }
@@ -515,6 +519,25 @@ namespace MWCoop
             if (rb == null || !byBody.TryGetValue(rb, out p) || p == held) return;
             p.SettleUntil = Time.realtimeSinceStartup + 5f;
             if (!settling.Contains(p)) settling.Add(p);
+        }
+
+        // Joueur parti : ce qu'il avait range (cache pour tous, « range par #N » redit toutes les 10 s) reparait, et ce qu'il
+        // deplacait est relache (relecture du 15/10).
+        static bool leftHooked;
+        public static void PlayerLeft(int id)
+        {
+            var back = new List<string>();
+            foreach (KeyValuePair<string, int> kv in storedBy) if (kv.Value == id) back.Add(kv.Key);
+            foreach (string sid in back)
+            {
+                storedBy.Remove(sid); stored.Remove(sid);
+                Prop p;
+                if (props.TryGetValue(sid, out p) && p.Body != null && p.Hidden) { p.Hidden = false; p.Body.gameObject.SetActive(true); }
+            }
+            int n = 0;
+            foreach (Prop p in props.Values)
+                if (p.Body != null && p.RemoteBy == id) { p.RemoteBy = -1; p.HeadBy = -1; Unride(p); p.Vel = Vector3.zero; SetKinematic(p, false); n++; }
+            if (back.Count > 0 || n > 0) Log.Info("objets : joueur #" + id + " parti, " + back.Count + " objet(s) ranges ressortis, " + n + " relache(s)");
         }
 
         // Objet au repos dont l'hote fait foi (ni tenu, ni deplace par un autre, ni transporte par un autre).
@@ -888,7 +911,7 @@ namespace MWCoop
                 // l'autre la libere quand meme : restee cinematique (0.95.4) et liee a la voiture par le joint du jeu, elle
                 // entrainait la voiture a son prochain recalage -- batterie posee par l'hote, Rivett desossee d'un coup chez
                 // l'invite (tous ses points en BREAKOFF), rejoue chez l'hote (journaux de Vaydon, 15/10).
-                if (state == 0 && p.RemoteBy >= 0) { p.RemoteBy = -1; p.HeadBy = -1; Unride(p); settling.Remove(p); SetKinematic(p, false); }
+                if (state == 0 && p.RemoteBy >= 0) { p.RemoteBy = -1; p.HeadBy = -1; Unride(p); settling.Remove(p); p.Vel = Vector3.zero; SetKinematic(p, false); }
                 return;
             }
             // Range ici (ou dans notre main, eteint : outil du jeu) : c'est nous qui l'avons, pas a cacher.

@@ -201,12 +201,16 @@ namespace MWCoop
     //    recalent (allumage, extinction quand il n'y a plus de bois).
     //  - INCENDIES decides par l'hote : maison (YARD/Building/HOUSEFIRE/<piece>/Fire<piece> 'Simulation' : depart,
     //    propagation tiree au hasard, meubles detruits, extinction), maison de Koistinen (FIRE 'Logic'), explosion
-    //    des bidons d'essence ('Explosion'). Chez un invite, un depart qui vient de sa propre logique (poele, tele,
-    //    grill trop pres du mur, sauna surchauffe, propagation) est annule ; s'il vient du joueur (cigarette au
-    //    lit : SleepTrigger 'Extras' ; grill renverse : 'Empty'), il est demande a l'hote. L'hote annonce chaque
-    //    etape, les invites la rejouent (seulement en avant, jamais un retour en arriere : leur propre minuterie
-    //    a pu les y mener avant). Un invite qui eteint une piece (PutOut -> PUTOUT) l'eteint chez lui et le
-    //    demande a l'hote. Les drapeaux sauvegardes (Data : Fire<piece>, *Done) suivent deja l'hote (WorldFsms).
+    //    des bidons d'essence ('Explosion'). Chez un invite, un depart de piece est toujours annule chez lui, puis
+    //    demande a l'hote (4) s'il vient du joueur (cigarette au lit : SleepTrigger 'Extras' ; grill renverse :
+    //    'Empty') OU de sa propre logique (poele, tele, grill trop pres du mur, sauna surchauffe) : l'hote verifie
+    //    que la piece n'est pas deja en feu et l'allume comme si c'etait sa logique (relecture du 15/10, ecart n°6 :
+    //    avant, seule l'action du joueur passait, la negligence d'un invite loin de l'hote n'allumait jamais rien).
+    //    Seule la propagation (FIRE envoye par la simulation d'une autre piece, "Spread") reste annulee sans
+    //    demande : l'hote la tire au hasard chez lui. L'hote annonce chaque etape, les invites la rejouent
+    //    (seulement en avant, jamais un retour en arriere : leur propre minuterie a pu les y mener avant). Un
+    //    invite qui eteint une piece (PutOut -> PUTOUT) l'eteint chez lui et le demande a l'hote. Les drapeaux
+    //    sauvegardes (Data : Fire<piece>, *Done) suivent deja l'hote (WorldFsms).
     //  - Feux de voiture (FIRE, OverheatFire, FireElectric sous la voiture) : objets actifs ou non, decides par
     //    celui qui fait tourner la voiture (VehicleSync.SimAuthority) ; un autre qui l'eteint le lui demande
     //    (PUTOUT rejoue chez lui). Incendie de la station-service (PERAPORTTI .../GasolineFire) : l'hote.
@@ -223,13 +227,13 @@ namespace MWCoop
         {
             public string Key; public PlayMakerFSM F; public int Kind;
             public Dictionary<string, int> Rank; public string Start, Idle;
+            public float AskedAt = -100f;   // invite : derniere demande de depart a l'hote (au plus une toutes les 5 s)
         }
         static readonly Dictionary<string, Ruled> ruled = new Dictionary<string, Ruled>();
         static readonly HashSet<PlayMakerFSM> ruledFsms = new HashSet<PlayMakerFSM>();
         static readonly List<Ruled> fresh = new List<Ruled>();
         static Ruled applying;
         static bool forceForward;   // essais : le prochain depart local est demande a l'hote comme s'il venait du joueur
-        static readonly HashSet<string> PlayerSenders = new HashSet<string> { "Extras", "Empty" };
 
         // Progression de chaque sorte d'incendie (un etat recu n'est rejoue que s'il est plus loin que l'etat local).
         static readonly string[] HouseSteps = { "Wait", "Fire", "Burn gfx", "Destroy|Destroyed", "Spread|Destroy 2", "Reset state", "Stop fire", "State 1" };
@@ -277,23 +281,37 @@ namespace MWCoop
             string ev = tr != null ? tr.EventName : "";
             if (state == r.Start)
             {
-                // Depart chez un invite : jamais ici sans l'hote.
+                // Depart chez un invite : jamais ici sans l'hote. Annule ici (l'automate repart d'ou il venait), et
+                // demande a l'hote pour une piece de la maison, que ce soit le joueur (cigarette au lit : Extras ;
+                // grill renverse : Empty) ou la logique locale (poele, tele, grill, sauna, ou la simulation de la
+                // piece elle-meme ; envoyeur inconnu = code) -- relecture du 15/10, ecart n°6. Pas la propagation
+                // (FIRE venu de la simulation d'une AUTRE piece, "Spread") : c'est l'hote qui la tire au hasard.
+                // L'hote verifie que la piece n'est pas deja en feu (OnRequest) ; sa reponse (3) allume ici. Au
+                // plus une demande toutes les 5 s par piece : une logique qui insiste (etat annule, condition
+                // toujours vraie) renverrait FIRE a chaque image.
                 FsmEventData ed = Fsm.EventData;
-                string sender = ed != null && ed.SentByFsm != null ? ed.SentByFsm.Name : "";
-                bool forward = Replay.Depth == 0 && (forceForward || r.Kind == House && PlayerSenders.Contains(sender));
+                Fsm by = ed != null ? ed.SentByFsm : null;
+                string sender = by != null ? by.Name : "";
+                PlayMakerFSM byFsm = by != null ? by.Owner as PlayMakerFSM : null;
+                bool spread = by != null && by != r.F.Fsm && (byFsm != null ? ruledFsms.Contains(byFsm) : sender == "Simulation");
+                bool byPlayer = forceForward;
                 forceForward = false;
+                float now = Time.realtimeSinceStartup;
+                bool forward = Replay.Depth == 0 && (byPlayer || r.Kind == House && !spread && now - r.AskedAt >= 5f);
                 FsmState prev = r.F.Fsm.PreviousActiveState;
                 string back = prev != null && prev.Name != state ? prev.Name : r.Idle;
                 FireTools.Cancel(r.F, st, h, back);
                 if (forward)
                 {
-                    Log.Info("feux : " + r.Key + " " + ev + " (" + sender + ") demande a l'hote");
+                    r.AskedAt = now;
+                    Log.Info("feux : " + r.Key + " " + ev + " (" + (sender.Length > 0 ? sender : "code") + ") demande a l'hote");
                     Session.SendAll(new NetWriter(Msg.Fire).U8(4).U8(Session.LocalId).Str(r.Key).Str(ev.Length > 0 ? ev : "FIRE"), true);
                 }
-                else if (Time.realtimeSinceStartup >= nextCancelLog)
+                else if (now >= nextCancelLog)
                 {
-                    nextCancelLog = Time.realtimeSinceStartup + 5f;
-                    Log.Info("feux : " + r.Key + " -> " + state + " (" + (sender.Length > 0 ? sender : "?") + ") annule ici : l'hote decide");
+                    nextCancelLog = now + 5f;
+                    Log.Info("feux : " + r.Key + " -> " + state + " (" + (sender.Length > 0 ? sender : "?") + ") annule ici : l'hote decide"
+                             + (spread ? " (propagation)" : ""));
                 }
                 return true;
             }
@@ -372,7 +390,9 @@ namespace MWCoop
         {
             Ruled r;
             if (!Session.IsHost || !ruled.TryGetValue(key, out r) || r.F == null) return;
-            if (ev == "FIRE" && r.F.ActiveStateName != r.Idle) { Log.Info("feux : depart demande par #" + who + " pour " + key + " ignore (deja " + r.F.ActiveStateName + ")"); return; }
+            // Depart (FIRE, ou tout autre evenement de depart de la logique de l'invite) : seulement si la piece est au
+            // repos ici -- deja en feu, ou en train de s'eteindre, la demande est ignoree (ecart n°6).
+            if (ev != "PUTOUT" && r.F.ActiveStateName != r.Idle) { Log.Info("feux : depart demande par #" + who + " pour " + key + " ignore (deja " + r.F.ActiveStateName + ")"); return; }
             string before = r.F.ActiveStateName;
             r.F.SendEvent(ev);
             Log.Info("feux : " + key + " " + before + " -" + ev + "-> " + r.F.ActiveStateName + " (demande de #" + who + ")");
@@ -854,10 +874,11 @@ namespace MWCoop
         //   [Test] TestFeuDuree (s avant l'extinction, 3 par defaut ; 0 : laisser bruler -- la maison de la partie
         //   d'essai brule alors chez les deux). 30 s : la cuisine prend feu (FIRE a Kitchen/FireKitchen 'Simulation' ;
         //   chez l'invite : demande a l'hote comme une cigarette au lit). 30 s + duree : PUTOUT (comme l'extincteur).
-        //   45 s (incendie-invite) : l'invite envoie FIRE a Bedroom2 de lui-meme (logique locale) : annule, pas
-        //   demande. Chacun note toutes les 2 s l'etat de chaque piece, les drapeaux Data et si la cuisine existe :
+        //   45 s (incendie-invite) : l'invite envoie FIRE a Bedroom2 de lui-meme (logique locale, pas une action du
+        //   joueur) : annule chez lui puis demande a l'hote, qui l'allume (ecart n°6) ; 45 s + duree : PUTOUT.
+        //   Chacun note toutes les 2 s l'etat de chaque piece, les drapeaux Data et si la cuisine existe :
         //   "autotest : incendie FireKitchen=Fire ... ; Data FireKitchen=True ... ; cuisine presente".
-        //   Attendu : memes etats des deux cotes (a un pas pres), FireBedroom2 reste Wait partout.
+        //   Attendu : memes etats des deux cotes (a un pas pres), FireBedroom2 passe par Fire partout.
         static int testStep;
         static float testLog;
         static bool testing;
@@ -945,6 +966,14 @@ namespace MWCoop
                 testStep = 3;
                 Ruled b2 = Room("Bedroom2");
                 if (b2 != null && b2.F != null) { b2.F.SendEvent("FIRE"); Log.Info("autotest : FIRE local -> " + b2.Key + " : " + b2.F.ActiveStateName); }
+            }
+            // Depuis l'ecart n°6 ce depart local est demande a l'hote et allume partout : eteint comme la cuisine,
+            // sinon la maison de la partie d'essai brule.
+            if (actor && guestMode && dur > 0f && t > 45f + dur && testStep == 3)
+            {
+                testStep = 4;
+                Ruled b2 = Room("Bedroom2");
+                if (b2 != null && b2.F != null) { b2.F.SendEvent("PUTOUT"); Log.Info("autotest : PUTOUT -> " + b2.Key + " : " + b2.F.ActiveStateName); }
             }
             if (t > 28f && t < 75f && t - testLog >= 2f)
             {

@@ -26,7 +26,8 @@ namespace MWCoop
     //    s'arretent sur cet angle). A la fin, chaque piece reprend son etat d'avant chez le spectateur.
     //    Les credits et l'argent restent ceux de chacun : ce que la machine paie (encaissement, gain pris,
     //    mise reprise) n'est pas un revenu a partager, Wallet le demande a KeepsMoney.
-    //  - Ordinateur de la maison : chacun joue chez lui ; les autres voient "X joue a Massacre".
+    //  - Ordinateur de la maison : chacun joue chez lui ; les autres voient "X joue a Massacre", et son ecran
+    //    allume (allumage annonce, pieces de l'ecran recopiees : voir "ordinateur de la maison" plus bas).
     public static class Machines
     {
         class Part
@@ -55,7 +56,7 @@ namespace MWCoop
         }
 
         const float Lease = 20f, Reach = 3.5f, SpinSpeed = 720f, KeepMoney = 5f;
-        const int L_FREE = 0, L_ASK = 1, L_HELD = 2, L_REFUSED = 3, L_GAME = 4;   // Msg.MachineLock
+        const int L_FREE = 0, L_ASK = 1, L_HELD = 2, L_REFUSED = 3, L_GAME = 4, L_POWER = 5;   // Msg.MachineLock
 
         static readonly Dictionary<string, Machine> machines = new Dictionary<string, Machine>();
         static readonly List<Machine> lockables = new List<Machine>();
@@ -75,6 +76,8 @@ namespace MWCoop
         {
             machines.Clear(); lockables.Clear(); locks.Clear(); player = null;
             matByName = null; texByName = null; system = null; playing = ""; keepMoneyUntil = 0;
+            computerOn = false; compDiffAt = 0f; nextPowerSend = 0f; shownRemote = -1;
+            compBase.Clear(); compBaseMat.Clear(); screen.Clear(); remoteOn.Clear();
             testStep = 0; testNextLog = 0; testSeq = null; testRefus = null; testMoneyBase = testMoneyDone = false;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;
             nextComputer = Time.realtimeSinceStartup + 20f;
@@ -499,6 +502,7 @@ namespace MWCoop
 
         static void OnPlayerLeft(PlayerInfo pi)
         {
+            remoteOn.Remove(pi.Id);   // son ordinateur ne compte plus (ecran recopie ici)
             var keys = new List<string>();
             foreach (KeyValuePair<string, Lock> kv in locks)
                 if (kv.Value.Owner >= 0 && (kv.Value.Owner == pi.Id || !Session.IsHost && pi.Id == 0)) keys.Add(kv.Key);
@@ -509,7 +513,8 @@ namespace MWCoop
             }
         }
 
-        // Msg.MachineLock : U8 operation, U8 joueur, Str machine (jeu de l'ordinateur pour L_GAME).
+        // Msg.MachineLock : U8 operation, U8 joueur, Str machine (jeu de l'ordinateur pour L_GAME ; "1" allume / "0"
+        // eteint pour L_POWER).
         public static void OnLock(Peer from, NetReader r)
         {
             int op = r.U8(), who = r.U8();
@@ -520,12 +525,14 @@ namespace MWCoop
                 if (op == L_ASK) HostAsk(who, key);
                 else if (op == L_FREE) HostRelease(who, key, NameOf(who) + " l'a lachee");
                 else if (op == L_GAME) { Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_GAME).U8(who).Str(key), true, who); Played(who, key); }
+                else if (op == L_POWER) { Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_POWER).U8(who).Str(key), true, who); Powered(who, key == "1"); }
                 return;
             }
             if (op == L_HELD) SetOwner(key, who, "hote");
             else if (op == L_FREE) { if (GetLock(key).Owner == who) SetOwner(key, -1, "hote"); }
             else if (op == L_REFUSED) { SetOwner(key, who, "refusee par l'hote"); Hud.Toast(Lang.T("Machine occup\u00E9e par ", "Machine in use by ") + NameOf(who)); }
             else if (op == L_GAME) Played(who, key);
+            else if (op == L_POWER) Powered(who, key == "1");
         }
 
         // ---------------------------------------------------------------- machines a jeu : spectateur
@@ -737,12 +744,32 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- ordinateur de la maison
         // Jeu lance (enfant actif de COMPUTER/SYSTEM : RAMI-Massacre, Kaappis-Grilli...) : les autres le savent.
+        // Allumage (SYSTEM actif) : annonce aussi (L_POWER, renvoye toutes les 10 s tant qu'il est allume, pour un
+        // arrivant), et l'ecran allume se voit chez les autres (relecture du 15/10, ecart n\u00B012). La partie reste a
+        // chacun (COMPUTER hors du monde : WorldFsms.SkipRoots), seul ce que le jeu allume AVEC l'ordinateur est
+        // recopie. Quelles pieces ? Inconnues d'avance (pas de releve de COMPUTER sous la main) : apprises a notre
+        // premier basculement -- tout ce qui, sous COMPUTER hors SYSTEM, a change (actif, materiau) 3 s apres, par
+        // rapport a l'etat d'avant (releve chaque seconde), est "l'ecran", avec son etat allume et eteint ; les
+        // chemins vont au journal ("ordinateur : ecran = ..."). Chez les autres, ces pieces sont mises a l'etat
+        // allume quand leur ordinateur est eteint et qu'un joueur a le sien allume (remises a l'etat eteint sinon) ;
+        // des qu'ils allument le leur, le jeu reprend la main. Avant notre premier basculement, rien a montrer.
+        // TODO (ecart n\u00B012) : une fois les chemins lus au journal, les nommer ici (plus besoin d'avoir allume le
+        // sien) ; si rien n'est trouve (ecran hors de COMPUTER, dans le mesh de la maison, ou tenu par une texture de
+        // rendu de la camera de SYSTEM), il faudra un materiau "allume" a poser sur l'ecran, ou recopier la texture.
+        class ScreenPart { public Transform T; public bool OnActive, OffActive; public Renderer R; public Material OnMat, OffMat; }
         static Transform system;
-        static float nextComputer;
+        static float nextComputer, compDiffAt, nextPowerSend;
         static string playing = "";
+        static bool computerOn;
+        static int shownRemote = -1;   // ecran mis ici a l'etat d'un autre joueur : 1 allume, 0 eteint, -1 le jeu a la main
+        static readonly Dictionary<Transform, bool> compBase = new Dictionary<Transform, bool>();
+        static readonly Dictionary<Renderer, Material> compBaseMat = new Dictionary<Renderer, Material>();
+        static readonly List<ScreenPart> screen = new List<ScreenPart>();
+        static readonly HashSet<int> remoteOn = new HashSet<int>();   // joueurs dont l'ordinateur est allume
 
         static void Computer(float now)
         {
+            if (compDiffAt > 0f && now >= compDiffAt) LearnScreen();
             if (now < nextComputer) return;
             nextComputer = now + 1f;
             if (system == null)
@@ -751,8 +778,23 @@ namespace MWCoop
                 system = g != null ? g.transform.Find("SYSTEM") : null;
                 if (system == null) { nextComputer = now + 10f; return; }
             }
+            bool on = system.gameObject.activeInHierarchy;
+            if (on != computerOn)
+            {
+                computerOn = on;
+                Log.Info(on ? "ordinateur : allume ici" : "ordinateur : eteint ici");
+                if (Session.RemoteCount > 0) SendPower(now);
+                if (compDiffAt <= 0f) compDiffAt = now + 3f;   // les pieces de l'ecran : ce qui aura change d'ici 3 s
+                shownRemote = -1;                              // le jeu a la main sur l'ecran ici
+            }
+            else
+            {
+                if (on && now >= nextPowerSend && Session.RemoteCount > 0) SendPower(now);
+                if (compDiffAt <= 0f) SnapshotComputer();
+            }
+            ApplyRemoteScreen(on);
             string game = "";
-            if (system.gameObject.activeInHierarchy)
+            if (on)
                 foreach (Transform c in system)
                 {
                     if (!c.gameObject.activeSelf) continue;
@@ -766,9 +808,94 @@ namespace MWCoop
             if (Session.RemoteCount > 0) Session.SendAll(new NetWriter(Msg.MachineLock).U8(L_GAME).U8(Session.LocalId).Str(game), true);
         }
 
+        static void SendPower(float now)
+        {
+            nextPowerSend = now + 10f;
+            Session.SendAll(new NetWriter(Msg.MachineLock).U8(L_POWER).U8(Session.LocalId).Str(computerOn ? "1" : "0"), true);
+        }
+
         static void Played(int who, string game)
         {
             if (game.Length > 0) Hud.Toast(NameOf(who) + Lang.T(" joue \u00E0 ", " plays ") + game);
+        }
+
+        static void Powered(int who, bool on)
+        {
+            if (on) remoteOn.Add(who); else remoteOn.Remove(who);
+            Log.Info("ordinateur de " + NameOf(who) + (on ? " allume" : " eteint") + (screen.Count == 0 ? " (pieces de l'ecran pas encore connues ici)" : ""));
+        }
+
+        // Tout ce qui est sous COMPUTER hors SYSTEM (petit : SYSTEM porte les jeux).
+        static List<Transform> ComputerParts()
+        {
+            var l = new List<Transform>();
+            Transform root = system != null ? system.parent : null;
+            if (root == null) return l;
+            foreach (Transform c in root)
+            {
+                if (c == system) continue;
+                foreach (Transform t in c.GetComponentsInChildren<Transform>(true)) l.Add(t);
+            }
+            return l;
+        }
+
+        // Etat de reference (chaque seconde, hors fenetre d'apprentissage) : ce a quoi comparer apres un basculement.
+        static void SnapshotComputer()
+        {
+            compBase.Clear(); compBaseMat.Clear();
+            foreach (Transform t in ComputerParts())
+            {
+                compBase[t] = t.gameObject.activeSelf;
+                Renderer r = t.GetComponent<Renderer>();
+                if (r != null) compBaseMat[r] = r.sharedMaterial;
+            }
+        }
+
+        // 3 s apres notre basculement : ce qui a change par rapport a la reference, c'est l'ecran (etat allume / eteint).
+        static void LearnScreen()
+        {
+            compDiffAt = 0f;
+            if (system == null || compBase.Count == 0) return;
+            bool on = computerOn;
+            int added = 0;
+            foreach (Transform t in ComputerParts())
+            {
+                bool was, act = t.gameObject.activeSelf;
+                bool actCh = compBase.TryGetValue(t, out was) && was != act;
+                Renderer r = t.GetComponent<Renderer>();
+                Material wasMat = null;
+                bool matCh = r != null && compBaseMat.TryGetValue(r, out wasMat) && wasMat != r.sharedMaterial;
+                if (!actCh && !matCh) continue;
+                ScreenPart p = null;
+                foreach (ScreenPart x in screen) if (x.T == t) { p = x; break; }
+                if (p == null) { p = new ScreenPart { T = t, R = r, OnActive = act, OffActive = act }; screen.Add(p); added++; }
+                if (actCh) { if (on) { p.OnActive = act; p.OffActive = was; } else { p.OffActive = act; p.OnActive = was; } }
+                if (matCh) { if (on) { p.OnMat = r.sharedMaterial; p.OffMat = wasMat; } else { p.OffMat = r.sharedMaterial; p.OnMat = wasMat; } }
+            }
+            if (added == 0 && screen.Count == 0) { Log.Info("ordinateur : rien ne change sous COMPUTER hors SYSTEM a l'allumage : ecran non recopie (voir TODO ecart n\u00B012)"); return; }
+            var sb = new System.Text.StringBuilder("ordinateur : ecran = ");
+            foreach (ScreenPart p in screen)
+                sb.Append(Recon.Path(p.T)).Append(" (actif ").Append(p.OnActive).Append('/').Append(p.OffActive)
+                  .Append(p.OnMat != null || p.OffMat != null ? ", materiau " + (p.OnMat != null ? BaseName(p.OnMat.name) : "-") + "/" + (p.OffMat != null ? BaseName(p.OffMat.name) : "-") : "").Append(") ");
+            Log.Info(sb.ToString());
+        }
+
+        // Ordinateur eteint ici : l'ecran prend l'etat d'un autre joueur (allume si l'un l'a allume).
+        static void ApplyRemoteScreen(bool localOn)
+        {
+            if (localOn || compDiffAt > 0f || screen.Count == 0) return;   // le jeu a la main, ou on apprend encore
+            int want = remoteOn.Count > 0 ? 1 : 0;
+            if (want == shownRemote) return;
+            shownRemote = want;
+            foreach (ScreenPart p in screen)
+            {
+                if (p.T == null) continue;
+                bool act = want == 1 ? p.OnActive : p.OffActive;
+                if (p.T.gameObject.activeSelf != act) p.T.gameObject.SetActive(act);
+                Material m = want == 1 ? p.OnMat : p.OffMat;
+                if (p.R != null && m != null && p.R.sharedMaterial != m) p.R.sharedMaterial = m;
+            }
+            Log.Info(want == 1 ? "ordinateur : ecran allume ici (un autre joueur a allume le sien)" : "ordinateur : ecran eteint ici");
         }
 
         // ---------------------------------------------------------------- essais

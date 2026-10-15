@@ -580,7 +580,7 @@ namespace MWCoop
             if (b == null) return;
             var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(idx).U8(mode)
                 .Vec(b.position).Quat(b.rotation).Vec(b.velocity).Vec(b.angularVelocity);
-            if (mode != 0) w.F32(0f).F32(0f).F32(0f).F32(float.NaN).U16(0);
+            if (mode != 0) w.F32(0f).F32(0f).F32(0f).F32(VehicleSync.NoHeat).U16(0);
             Session.SendAll(w, reliable);
         }
 

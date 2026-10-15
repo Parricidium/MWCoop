@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
@@ -97,7 +97,9 @@ namespace MWCoop
                 evs.Add(ev);
                 byKey[ev.Key] = ev;
                 if (Session.IsHost) NearDoors.Retarget(f);
-                else f.enabled = false;
+                // (invite : l'automate n'est PAS arrete ici, seulement au premier message de l'hote pour cette cle, OnMessage.
+                // L'hote ne le pilote pas toujours -- initialise chez l'un pas l'autre, ou pris par un autre module chez lui --
+                // et arrete d'avance il restait fige : porte, fete, lumiere. Relecture du 15/10, 3.1)
                 names.Add(ev.Key + " (" + ev.T.Count + ")");
         }
 
@@ -189,9 +191,11 @@ namespace MWCoop
         {
             if (!Session.Active || scanAt < 0) return;
             float now = Time.realtimeSinceStartup;
-            // (releve a 12 s, puis 40 s apres : automates d'objets actives plus tard)
+            // (releve a 12 s, puis toutes les 20 s : automates d'objets actives ou initialises plus tard -- a 12 et 52 s
+            // seulement, un automate initialise apres restait sans suivi ; les deja vus sont sautes, le releve est leger.
+            // Relecture du 15/10, 3.1)
             if (todo.Count > 0 || placeAt < Places.Length && scans > 0) ScanSome();
-            else if (now >= scanAt && now >= nextScan && scans < 2) { nextScan = now + 40f; scans++; StartScan(); }
+            else if (now >= scanAt && now >= nextScan) { nextScan = now + 20f; scans++; StartScan(); }
             if (!Session.IsHost || evs.Count == 0 || Session.RemoteCount == 0 || now < nextSend) return;
             nextSend = now + 0.5f;
             bool full = now >= nextFull;
@@ -237,6 +241,7 @@ namespace MWCoop
         {
             string key = r.Str();
             // (vitres : de tous, relayees par l'hote -- sur ce canal, inconnues des anciennes versions)
+            if (key.StartsWith(ItemFsms.Prefix)) { ItemFsms.OnMessage(from, key, r); return; }   // (objets portables : de tous, relayes par l'hote ; relecture du 15/10, ecart n2)
             if (key.StartsWith(WindowCranks.WinPrefix)) { WindowCranks.OnWinMessage(from, key, r, true); return; }
             if (Session.IsHost) return;   // (seul l'hote decide)
             if (key == TeimoSled.Key) { TeimoSled.OnMessage(r); return; }   // (luge de Teimo : sur ce canal, inconnue des anciennes versions)

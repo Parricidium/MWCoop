@@ -82,6 +82,7 @@ namespace MWCoop
             public Dictionary<string, float> LocalRecent = new Dictionary<string, float>();   // transitions prises ici
             public List<FsmStateAction> Writes, Muted; public float MutedUntil;               // ecritures Player*
             public HashSet<string> Creates = new HashSet<string>();                           // etats qui creent un objet
+            public string LoadState;                                                           // etat au releve (= celui du chargement, pour un arrivant)
         }
 
         static readonly Dictionary<string, W> byKey = new Dictionary<string, W>();
@@ -146,15 +147,73 @@ namespace MWCoop
 
         // Logique tiree au hasard qui doit etre la meme pour tous : seul l'hote la fait tourner, les
         // invites la suivent etat par etat (leur copie est arretee). Telephone : qui appelle et quand.
-        // Tele (Systems/TV/TVPrograms : grille, episodes tires au sort, pubs) : suivie seulement tant que
-        // la tele de l'hote est allumee (TVOn) ; sinon chacun garde la sienne (un invite seul devant une
-        // autre tele).
+        // Tele (Systems/TV/TVPrograms : grille, episodes tires au sort, pubs) : suivie tant qu'une tele de
+        // REFERENCE est allumee, celle de son auteur (tvAuthor) ; sinon chacun garde la sienne (un invite seul
+        // devant une autre tele). L'hote decide de l'auteur (relecture du 15/10, ecart n°5 : avant, commune
+        // seulement tant que la tele de l'HOTE etait allumee) :
+        //  - sa tele allumee : lui, comme avant ; il envoie chaque etat de sa grille (mode 2), TVOn parmi les
+        //    variables dit aux invites qu'il est l'auteur ;
+        //  - sa tele eteinte : le premier invite dont la tele est allumee. Un invite qui ne suit personne envoie
+        //    les etats de sa grille tant que sa tele est allumee (et l'etat ou elle s'eteint) ; l'hote retient le
+        //    premier (TvFromGuest), relaie ses etats aux autres invites (qui le suivent comme ils suivaient
+        //    l'hote), jette ceux des autres, et ne les applique pas a sa propre grille : eteinte, elle n'a rien
+        //    a montrer, sa logique n'est pas arretee et reprend la main des que sa tele s'allume ;
+        //  - l'auteur lache (tele eteinte, parti) : chacun reprend sa grille jusqu'au suivant (Update).
         static bool HostDrivenFsm(PlayMakerFSM f)
         {
             return (f.FsmName == "Ring" || f.FsmName == "Jokes") && f.gameObject.name.StartsWith("PhoneLogic") || IsTv(f);
         }
         static bool IsTv(PlayMakerFSM f) { return f.gameObject.name == "TVPrograms" && (f.FsmName == "Schedule" || f.FsmName == "ADs"); }
-        static bool hostTvOn;   // tele de l'hote allumee (dernier etat recu de sa grille)
+        static int tvAuthor = -1;   // joueur dont la grille fait reference (-1 : chacun la sienne)
+        static W tvSchedule;        // notre grille (TVPrograms::Schedule), pour lire TVOn
+        static bool tvSentOn;       // invite : notre dernier envoi disait notre tele allumee (l'extinction part encore)
+
+        // Notre tele est-elle allumee (TVOn de notre grille) ?
+        static bool LocalTvOn()
+        {
+            if (tvSchedule == null || tvSchedule.F == null)
+            {
+                tvSchedule = null;
+                foreach (W x in byKey.Values) if (x.Tv && x.F != null && x.F.FsmName == "Schedule") { tvSchedule = x; break; }
+                if (tvSchedule == null) return false;
+            }
+            FsmBool on = tvSchedule.F.FsmVariables.FindFsmBool("TVOn");
+            return on != null && on.Value;
+        }
+
+        static bool BoolOf(List<KeyValuePair<string, bool>> bools, string name)
+        {
+            foreach (KeyValuePair<string, bool> kv in bools) if (kv.Key == name) return kv.Value;
+            return false;
+        }
+
+        // Hote : grille recue d'un invite (mode 2). Vrai : c'est l'auteur retenu, a relayer aux autres invites.
+        static bool TvFromGuest(int who, string key, List<KeyValuePair<string, bool>> bools)
+        {
+            W j;
+            if (!Lookup(key, out j) || j.F == null || !j.Tv) return false;
+            if (LocalTvOn()) return false;   // la tele de l'hote est allumee : c'est lui l'auteur
+            bool schedule = j.F.FsmName == "Schedule";
+            bool on = schedule ? BoolOf(bools, "TVOn") : tvAuthor == who;
+            if (schedule && on && tvAuthor < 0) { tvAuthor = who; Log.Info("monde : tele de #" + who + " allumee, sa grille fait reference (celle de l'hote est eteinte)"); }
+            if (tvAuthor != who) return false;
+            if (schedule && !on) { tvAuthor = -1; Log.Info("monde : tele de #" + who + " eteinte, chacun reprend sa grille"); }
+            return true;
+        }
+
+        // Invite : grille recue (mode 2) de 'who' (l'hote, ou un invite relaye par lui). TVOn parmi ses variables
+        // le designe auteur (allumee) ou le libere (eteinte). Vrai : c'est l'auteur, ses variables et son etat
+        // s'appliquent ici ; faux : rien n'est applique, notre grille reste intacte (elle reprend, voir Update).
+        static bool TvAuthorMsg(int who, W j, List<KeyValuePair<string, bool>> bools)
+        {
+            if (j.F.FsmName == "Schedule")
+            {
+                bool on = BoolOf(bools, "TVOn");
+                if (on && tvAuthor != who) { tvAuthor = who; Log.Info("monde : la grille de la tele suit #" + who); }
+                else if (!on && tvAuthor == who) { tvAuthor = -1; Log.Info("monde : tele de #" + who + " eteinte, notre grille reprend"); }
+            }
+            return tvAuthor == who;
+        }
 
         // Automates commandes par un AUTRE automate apres une action du joueur (decrocher le telephone
         // envoie ANSWER a la sonnerie) : ces evenements-la comptent comme une action du joueur.
@@ -188,7 +247,8 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear(); pathOf.Clear(); mutedList.Clear(); alias.Clear();
-            hostTvOn = false; scanIdx = -1; scanRoots = null; rootsDirty = true; npcLeft = npcLogged = 0;
+            worldLogic.Clear();   // (automates de la partie d'avant gardes en cle : fuite, relecture du 15/10)
+            tvAuthor = -1; tvSchedule = null; tvSentOn = false; scanIdx = -1; scanRoots = null; rootsDirty = true; npcLeft = npcLogged = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
@@ -421,6 +481,7 @@ namespace MWCoop
             }
             catch { return false; }
             hooked.Add(f);
+            w.LoadState = f.ActiveStateName;
             byKey[w.Key] = w;
             addedSinceLog++;
             return true;
@@ -448,7 +509,15 @@ namespace MWCoop
             if (j.HostDriven)
             {
                 // Logique de l'hote : chaque etat est envoye (FINISHED compris), les invites s'y recalent.
+                // Tele d'un invite qui ne suit personne : ses etats partent aussi tant que sa tele est allumee (et
+                // l'etat ou elle s'eteint, pour que l'hote le libere) ; l'hote decide s'il en fait l'auteur
+                // (TvFromGuest, ecart n°5).
                 if (Session.IsHost) Send(j, prev, tr != null ? tr.EventName : "", 2, state);
+                else if (j.Tv && (tvAuthor < 0 || tvAuthor == Session.LocalId))
+                {
+                    bool on = LocalTvOn();
+                    if (on || tvSentOn) { tvSentOn = on; Send(j, prev, tr != null ? tr.EventName : "", 2, state); }
+                }
                 return;
             }
             if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
@@ -761,14 +830,23 @@ namespace MWCoop
             for (int i = 0, n = r.U8(); i < n; i++) strs.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
             for (int i = 0, n = r.U8(); i < n; i++) gos.Add(new KeyValuePair<string, string>(r.Str(), r.Str()));
             List<ListData> lists = ReadLists(r);
-            // Relais aux autres invites : le message tel quel, seul le numero du joueur est fixe par l'hote.
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.WorldFsm).U8(who).Raw(raw, 1, raw.Length - 1), true, who);
+            // Relais aux autres invites : le message tel quel, seul le numero du joueur est fixe par l'hote. Grille de
+            // la tele venue d'un invite (seul mode 2 qu'un invite envoie) : seulement celle de l'auteur retenu, et
+            // l'hote ne l'applique pas a sa propre grille (ecart n°5).
+            if (Session.IsHost)
+            {
+                if (global == 2 && !TvFromGuest(who, key, bools)) return;
+                Session.Broadcast(new NetWriter(Msg.WorldFsm).U8(who).Raw(raw, 1, raw.Length - 1), true, who);
+                if (global == 2) return;
+            }
             W j;
             if (!Lookup(key, out j) || j.F == null)
             {
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("monde : " + key + " introuvable ici"); }
                 return;
             }
+            // Tele : seul l'auteur compte, variables ET etat (avant, les variables de l'hote ecrasaient toujours la grille).
+            if (global == 2 && j.Tv && !TvAuthorMsg(who, j, bools)) return;
             // Deja fait ici a l'instant (la meme logique a tourne chez les deux) : pas une 2e fois. Jamais pour un clic de
             // joueur (evenement d'une action de commande de l'etat de depart) : chaque clic est une action a part -- un
             // robinet ouvert ici puis ferme par l'autre dans les 10 s ne se fermait pas ici (meme passage "Wait button
@@ -813,9 +891,8 @@ namespace MWCoop
                 j.Entered.Clear();
                 if (global == 2)
                 {
-                    // Logique de l'hote (tele : seulement si la sienne est allumee).
-                    if (j.Tv && j.F.FsmName == "Schedule") { FsmBool on = j.F.FsmVariables.FindFsmBool("TVOn"); hostTvOn = on != null && on.Value; }
-                    if ((!j.Tv || hostTvOn) && !Calls.RunsHere(j.F) && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);   // telephone repris ici (hote loin) : sa logique tourne ici
+                    // Logique de l'hote, ou grille de la tele de son auteur (deja filtree par TvAuthorMsg).
+                    if (!Calls.RunsHere(j.F) && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);   // telephone repris ici (hote loin) : sa logique tourne ici
                 }
                 else if (global == 3)
                 {
@@ -850,15 +927,22 @@ namespace MWCoop
             else if (now >= nextPending) { nextPending = now + 2f; CheckPending(); }
             if (Input.anyKeyDown || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetAxis("Mouse ScrollWheel") != 0f) lastInput = now;
             for (int i = mutedList.Count - 1; i >= 0; i--) if (now > mutedList[i].MutedUntil) Unmute(mutedList[i]);
-            if (!Session.IsHost && now >= nextStopCheck)
+            if (now >= nextStopCheck)
             {
                 nextStopCheck = now + 2f;
-                foreach (W x in byKey.Values)
+                // Auteur de la tele parti, ou (hote) sa propre tele rallumee : il reprend la main (ecart n°5).
+                if (tvAuthor >= 0 && (!Session.Players.ContainsKey(tvAuthor) || Session.IsHost && LocalTvOn()))
                 {
-                    if (!x.HostDriven || x.F == null) continue;
-                    bool follow = (!x.Tv || hostTvOn) && !Calls.RunsHere(x.F);
-                    if (x.F.enabled == follow) { x.F.enabled = !follow; Log.Info("monde : " + x.Key + (follow ? " suit l'hote" : " tourne ici")); }
+                    Log.Info("monde : la grille de #" + tvAuthor + " ne fait plus reference (" + (Session.Players.ContainsKey(tvAuthor) ? "tele de l'hote allumee" : "parti") + ")");
+                    tvAuthor = -1;
                 }
+                if (!Session.IsHost)
+                    foreach (W x in byKey.Values)
+                    {
+                        if (!x.HostDriven || x.F == null) continue;
+                        bool follow = (!x.Tv || tvAuthor >= 0 && tvAuthor != Session.LocalId) && !Calls.RunsHere(x.F);
+                        if (x.F.enabled == follow) { x.F.enabled = !follow; Log.Info("monde : " + x.Key + (follow ? (x.Tv ? " suit #" + tvAuthor : " suit l'hote") : " tourne ici")); }
+                    }
             }
             if (!Session.IsHost || Session.RemoteCount == 0) return;
             for (int i = snapshots.Count - 1; i >= 0; i--)
@@ -869,13 +953,23 @@ namespace MWCoop
                 if (p.Accepted && Session.T.Peers.Contains(p))
                 {
                     Mirror(p, true);
+                    int moved = 0;
                     foreach (W x in byKey.Values)
-                        if (x.HostDriven && x.F != null && !string.IsNullOrEmpty(x.F.ActiveStateName))
-                        {
-                            var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(x.Key).Str("").Str("").U8(2).Str(x.F.ActiveStateName);
-                            WriteVars(x.F, w, false);
-                            if (w.Length <= MaxMsg) Session.T.SendReliable(p, w.ToArray());
-                        }
+                    {
+                        if (x.F == null || string.IsNullOrEmpty(x.F.ActiveStateName)) continue;
+                        string st = x.F.ActiveStateName;
+                        bool send = x.HostDriven;
+                        // Etats non sauvegardes (robinets, plaques, lampes hors miroir) : l'arrivant les a a l'etat du chargement.
+                        // Ce qui a bouge depuis le releve part en recalage direct (mode 2), sauf les etats qui creent un objet
+                        // (doublon) ou touchent au joueur (relecture du 15/10, ecart n°3). Le rejeu n'est pas touche.
+                        if (!send && !(x.Persistent && x.Mirror) && !x.External && x.LoadState != null && st != x.LoadState
+                            && !x.Creates.Contains(st) && !x.PersonalStates.Contains(st)) { send = true; moved++; }
+                        if (!send) continue;
+                        var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(x.Key).Str("").Str("").U8(2).Str(st);
+                        WriteVars(x.F, w, false);
+                        if (w.Length <= MaxMsg) Session.T.SendReliable(p, w.ToArray());
+                    }
+                    if (moved > 0) Log.Info("monde : " + moved + " automates hors miroir changes depuis le chargement envoyes a " + p);
                 }
             }
             if (now < nextMirror) return;

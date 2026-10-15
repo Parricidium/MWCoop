@@ -20,8 +20,13 @@ namespace MWCoop
     //    les 2 s). Ailleurs : regime pose en fin d'image avec le Drivetrain coupe (sa simulation ne l'ecrase pas ; le son et
     //    les cadrans le lisent), feux stop menes d'ici (BrakeLightsController coupe : le frein est a 0 sur la copie),
     //    consommation, surchauffe et panne d'ABS au hasard neutralisees (elles coupaient le moteur chez un seul joueur).
-    // Pas encore : achat au parc du vendeur (camions tires au hasard chez chacun), cellule camping, radio, givre gratte,
-    // compteur kilometrique, peinture.
+    //  - histoire du mod (parc du vendeur) : l'hote refait le parc avec une graine a lui, redite aux autres (@ram 4 : memes
+    //    camions, meme cellule chez tous) ; un achat (camion @ram 2, cellule @ram 3) part de chez l'acheteur, les autres creent
+    //    le meme et ferment leur parc sans payer ;
+    //  - cellule camping (montee / posee, porte, poignees), radio (marche, volume, frequence), peinture (couleur des pieces
+    //    MSCPaintablePart), givre gratte (@ram 5 : cases creusees, vitre par vitre) : etats discrets ci-dessus ; compteur
+    //    kilometrique : de l'autorite, avec le carburant (LoadMileage chez les autres).
+    // (En-tete mis a jour, relecture du 15/10 : il disait encore tout cela « pas encore » fait.)
     public static class ModRam1500
     {
         static GameObject ram;

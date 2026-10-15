@@ -1243,6 +1243,21 @@ namespace MWCoop
                 else if (t > 45f && step == 1) { step = 2; Log.Info("autotest : " + Parts.TestToggle(id)); }
             }
             if (mode == "palan") Palan(t);
+            // [Test] Autotest=casse (2 joueurs) : l'INVITE « casse » a 30 s les pieces de [Test] TestPieces (montees sur la CORRIS de
+            // l'hote) comme des BREAKOFF ; avec CasseSansGarde=1 elles partent quand meme : attendu chez l'hote « sans autorite
+            // sur la voiture : ignoree » (et « plus de 3 casses en 1 s ») -- rien de demonte chez lui.
+            if (mode == "casse" && Net.Session.IsHost && t > 25f && step == 0)
+            {
+                step = 1;
+                foreach (string id in Config.Get("Test", "TestPieces", "VIN405C1,VIN4111,VIN413D1,VIN406B2,VIN4072,VIN2141").Split(','))
+                    Log.Info("autotest : monte " + id.Trim() + " : " + Parts.TestToggle(id.Trim()));
+            }
+            if (mode == "casse" && !Net.Session.IsHost && t > 40f && step == 0)
+            {
+                step = 1;
+                foreach (string id in Config.Get("Test", "TestPieces", "VIN405C1,VIN4111,VIN413D1,VIN406B2,VIN4072,VIN2141").Split(','))
+                    Log.Info("autotest : casse " + id.Trim() + " : " + Parts.TestBreak(id.Trim()));
+            }
             // [Test] SuivrePiece=~gasoline : position de cet objet a 46 s (l'autre joueur le promene).
             string watchKey = Config.Get("Test", "SuivrePiece", "");
             if (watchKey.Length > 0 && t > Config.GetInt("Test", "SuivreDelai", 46) && !watchLogged)

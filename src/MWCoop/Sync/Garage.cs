@@ -25,6 +25,8 @@ namespace MWCoop
     //  Ailleurs : le niveau est recopie dans l'automate (le geste suivant part du meme niveau) et les pieces sont
     //  tenues sur la pose recue apres la logique du jeu, 3 s apres le dernier message. Le corps cinematique du
     //  plateau du cric est ajoute/retire comme le jeu le fait.
+    //  Arrivants (relecture du 15/10) : l'hote envoie l'etat de tout l'atelier a qui arrive en jeu (20 s apres), et le
+    //  renvoie a tous toutes les 5 s (appareils au repos seulement) ; les degats aussi a l'arrivant, une fois.
     //  Voiture sur un appareil leve : la voiture garee n'est recalee par VehicleSync qu'au-dela de 1 m / 10 deg ;
     //  une voiture levee de 25 cm d'un seul cote restait donc en bas chez l'autre. Tant qu'un cric ou le pont est
     //  leve sous une voiture (et 4 s apres), celui qui fait autorite sur elle (VehicleSync.Authority : l'hote
@@ -60,17 +62,24 @@ namespace MWCoop
         const int T_LIFT = 1, T_FOLD = 2, T_CAR = 3, T_GLASS = 4, T_DENT = 5, T_BEND = 6, T_LOADER = 7, T_HOIST = 8;
         const int RELIABLE = 0x80;
 
-        static float nextScan = -1, loadedAt, nextPoll, nextCar, nextDamage, nextWarn;
+        static float nextScan = -1, loadedAt, nextPoll, nextCar, nextDamage, nextWarn, nextLiftScan, nextResend;
         static int gen = -1, liftScans, dmgIdx;
+        static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();   // arrivants (hote)
 
         public static void OnLevelLoaded()
         {
             lifts.Clear(); liftKnown.Clear(); owned.Clear(); loaders.Clear(); loaderKnown.Clear();
-            dmg.Clear(); lifted.Clear(); corrected.Clear();
+            dmg.Clear(); lifted.Clear(); corrected.Clear(); snapshots.Clear(); dmgSend.Clear();
             gen = -1; liftScans = 0; dmgIdx = 0; tStep = 0; tAt = 0; tLog = 0; testFsm = null; testOff.Clear();
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
+            nextLiftScan = 0; nextResend = 0;
         }
+
+        // Arrivant en jeu (PlayerSync) : l'etat de l'atelier 20 s plus tard (ses appareils et ses voitures sont releves
+        // d'ici la, comme CarDoors). Avant, rien ne lui etait renvoye hors le crochet du palan : voiture sur cric chez
+        // l'hote tombee chez lui, puis recalee toutes les 0,5 s (relecture du 15/10).
+        public static void ScheduleSnapshot(Peer p) { if (Session.IsHost) snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
 
         public static void Update()
         {
@@ -78,17 +87,134 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan || (gen >= 0 && gen != VehicleSync.Generation))
             {
+                bool newGen = gen != VehicleSync.Generation;
                 nextScan = now + 20f;
                 gen = VehicleSync.Generation;
-                // Appareils : objets de la scene, presents des le chargement (meme inactifs) ; deux passages suffisent.
-                if (liftScans++ < 2) ScanLifts();
+                // Appareils : objets de la scene, presents des le chargement (meme inactifs) : deux passages ; puis a chaque
+                // changement de VehicleSync et toutes les 60 s -- un cric ou un palan apparu plus tard (objet active, mod)
+                // n'etait jamais suivi (relecture du 15/10).
+                if (liftScans++ < 2 || newGen || now >= nextLiftScan) { nextLiftScan = now + 60f; ScanLifts(); }
                 ScanLoaders(); ScanDamage();
             }
             if (now >= nextPoll) { nextPoll = now + 0.1f; PollLifts(now); PollLoaders(now); PollHoists(now); }
             if (!Session.IsHost) PinHoists();
+            else
+            {
+                SendSnapshots(now);
+                if (now >= nextResend) { nextResend = now + 5f; Resend(now); }
+            }
             if (now >= nextCar) { nextCar = now + 0.25f; SendLiftedCars(now); }
             // Degats : une voiture par passage (10/s), chacune revue environ une fois par seconde.
-            if (now >= nextDamage) { nextDamage = now + 0.1f; PollDamage(); }
+            if (now >= nextDamage) { nextDamage = now + 0.1f; PollDamage(); if (dmgSend.Count > 0) SendDents(); }
+        }
+
+        // ---------------------------------------------------------------- arrivants et renvoi (hote)
+        // Instantane pour un arrivant : niveau et poses de chaque appareil, crics deplies ou non, chargeurs ; puis les
+        // degats : vitres cassees et trains tordus tout de suite, toles par lots (SendDents). Les memes messages que la
+        // manoeuvre ou le choc (T_LIFT final, T_FOLD, T_LOADER, T_GLASS, T_BEND, T_DENT) : rien de neuf a recevoir.
+        static void SendSnapshots(float now)
+        {
+            for (int i = snapshots.Count - 1; i >= 0; i--)
+            {
+                if (now < snapshots[i].Key) continue;
+                Peer p = snapshots[i].Value;
+                snapshots.RemoveAt(i);
+                if (!p.Accepted || !Session.T.Peers.Contains(p)) continue;
+                int n = 0, g = 0, b = 0;
+                foreach (Lift d in lifts)
+                {
+                    if (d.Ctrl == null || d.Level == null) continue;
+                    Session.T.SendReliable(p, LiftWriter(d, true).ToArray()); n++;
+                    if (d.Open != null) { Session.T.SendReliable(p, FoldWriter(d).ToArray()); n++; }
+                }
+                foreach (Loader l in loaders)
+                {
+                    if (l.F == null || l.Tip == null) continue;
+                    Session.T.SendReliable(p, LoaderWriter(l, true).ToArray()); n++;
+                }
+                foreach (CarDmg c in dmg.Values)
+                {
+                    if (c.Root == null) continue;
+                    // (vitre montee sans attache = cassee ici ; chez lui 'Assemble' la casse, ou « deja cassee »)
+                    foreach (Glass x in c.Glasses)
+                        if (x.Coll != null && x.Coll.activeInHierarchy && x.Coll.GetComponent<FixedJoint>() == null)
+                        { Session.T.SendReliable(p, new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_GLASS | RELIABLE).Str(c.Car).Str(x.Key).ToArray()); g++; }
+                    foreach (Bend x in c.Bends)
+                        if (x.T != null) { Session.T.SendReliable(p, new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_BEND | RELIABLE).Str(c.Car).Str(x.Key).Quat(x.Snap).ToArray()); b++; }
+                }
+                dmgSend.Add(new DmgSend { P = p, Cars = new List<CarDmg>(dmg.Values) });
+                Log.Info("atelier : etat envoye a " + p + " : " + n + " messages d'appareils, " + g + " vitres cassees, " + b + " trains ; toles a suivre");
+            }
+        }
+
+        // Toutes les 5 s, a tous : appareils, repli des crics, chargeurs -- pour l'arrivant dont les appareils n'etaient
+        // pas encore releves a l'instantane, et contre un message final perdu. Jamais un appareil manoeuvre en ce moment
+        // (ici : il envoie deja ; par un autre : sa manoeuvre reculerait, cf. Knobs) ni dans les 5 s apres son dernier message.
+        static void Resend(float now)
+        {
+            if (Session.RemoteCount == 0) return;
+            foreach (Lift d in lifts)
+            {
+                if (d.Ctrl == null || d.Level == null || now < d.ActiveUntil || now - d.MsgAt < 5f) continue;
+                Session.SendAll(LiftWriter(d, true), true);
+                if (d.Open != null) Session.SendAll(FoldWriter(d), true);
+            }
+            foreach (Loader l in loaders)
+            {
+                if (l.F == null || l.Tip == null || now < l.ActiveUntil || now - l.MsgAt < 5f) continue;
+                Session.SendAll(LoaderWriter(l, true), true);
+            }
+        }
+
+        static NetWriter LiftWriter(Lift d, bool reliable)
+        {
+            var w = new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_LIFT | (reliable ? RELIABLE : 0)).Str(d.Key).F32(d.Level.Value).U8(d.Moved.Length);
+            foreach (Transform t in d.Moved)
+            {
+                if (t != null) w.Vec(t.localPosition).Quat(t.localRotation);
+                else w.Vec(Vector3.zero).Quat(Quaternion.identity);
+            }
+            return w;
+        }
+        static NetWriter FoldWriter(Lift d) { return new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_FOLD | RELIABLE).Str(d.Key).Bool(d.Open.Value); }
+        static NetWriter LoaderWriter(Loader l, bool reliable) { return new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_LOADER | (reliable ? RELIABLE : 0)).Str(l.Key).F32(l.Rot.Value).Quat(l.Tip.localRotation); }
+
+        // Toles pour un arrivant : chaque sommet ecarte de l'origine, 12 messages par passage (comme PollDent), une tole
+        // apres l'autre ; 'Snap' n'est pas touche (les chocs suivants partent a tous comme d'habitude).
+        class DmgSend { public Peer P; public List<CarDmg> Cars; public int Car, Dent, At, Sent; }
+        static readonly List<DmgSend> dmgSend = new List<DmgSend>();
+
+        static void SendDents()
+        {
+            if (fVerts == null || fBase == null) { dmgSend.Clear(); return; }
+            DmgSend q = dmgSend[0];
+            if (!q.P.Accepted || !Session.T.Peers.Contains(q.P)) { dmgSend.RemoveAt(0); return; }
+            int budget = 12;
+            while (budget > 0 && q.Car < q.Cars.Count)
+            {
+                CarDmg c = q.Cars[q.Car];
+                if (c.Root == null || q.Dent >= c.Dents.Count) { q.Car++; q.Dent = 0; q.At = 0; continue; }
+                Dent d = c.Dents[q.Dent];
+                var v = d.D != null ? fVerts.GetValue(d.D) as Vector3[] : null;
+                var bs = d.D != null ? fBase.GetValue(d.D) as Vector3[] : null;
+                var moved = new List<int>();
+                if (v != null && bs != null && bs.Length == v.Length)
+                    for (int i = 0; i < v.Length; i++) if ((v[i] - bs[i]).sqrMagnitude > 1e-8f) moved.Add(i);
+                int per = Mathf.Max(10, (1000 - DentHead(c, d)) / 8);
+                int k = q.At;
+                while (k < moved.Count && budget > 0)
+                {
+                    int n = Mathf.Min(per, moved.Count - k);
+                    Session.T.SendReliable(q.P, DentWriter(c, d, v, bs, moved, k, n).ToArray());
+                    k += n; budget--; q.Sent += n;
+                }
+                if (k >= moved.Count) { q.Dent++; q.At = 0; } else q.At = k;
+            }
+            if (q.Car >= q.Cars.Count)
+            {
+                dmgSend.RemoveAt(0);
+                if (q.Sent > 0) Log.Info("atelier : toles envoyees a " + q.P + " : " + q.Sent + " sommets");
+            }
         }
 
         // Apres la logique du jeu (appele par CarVisuals.LateUpdate) : poses recues des appareils et du chargeur.
@@ -135,7 +261,7 @@ namespace MWCoop
             public PlayMakerFSM Ctrl; public FsmFloat Level;
             public PlayMakerFSM Fold; public FsmBool Open; public bool OpenLast;
             public Transform[] Moved; public Transform Point;   // pieces mobiles ; ce qui porte la voiture
-            public float Rest, Last, ActiveUntil;
+            public float Rest, Last, ActiveUntil, MsgAt;   // MsgAt : dernier message recu pour lui (renvoi 5 s)
             public bool Final;
             public bool Held; public float HeldUntil; public Vector3[] HPos; public Quaternion[] HRot;
             public Rigidbody Added;                      // corps cinematique du plateau du cric ajoute ici
@@ -308,16 +434,7 @@ namespace MWCoop
             }
         }
 
-        static void SendLift(Lift d, bool final)
-        {
-            var w = new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_LIFT | (final ? RELIABLE : 0)).Str(d.Key).F32(d.Level.Value).U8(d.Moved.Length);
-            foreach (Transform t in d.Moved)
-            {
-                if (t != null) w.Vec(t.localPosition).Quat(t.localRotation);
-                else w.Vec(Vector3.zero).Quat(Quaternion.identity);
-            }
-            Session.SendAll(w, final);
-        }
+        static void SendLift(Lift d, bool final) { Session.SendAll(LiftWriter(d, final), final); }
 
         static void OnLift(int who, NetReader r)
         {
@@ -330,7 +447,7 @@ namespace MWCoop
             if (d == null) { Warn("appareil " + key + " introuvable ici"); return; }
             float now = Time.realtimeSinceStartup;
             if (now < d.ActiveUntil && d.By == Session.LocalId) Log.Info("atelier : " + KindName[d.Kind] + " " + d.Key + " repris par #" + who);
-            d.Level.Value = lv; d.Last = lv; d.ActiveUntil = 0; d.Final = false; d.By = who;
+            d.Level.Value = lv; d.Last = lv; d.ActiveUntil = 0; d.Final = false; d.By = who; d.MsgAt = now;
             if (n == d.Moved.Length)
             {
                 for (int i = 0; i < n; i++) { d.HPos[i] = pos[i]; d.HRot[i] = rot[i]; }
@@ -456,7 +573,7 @@ namespace MWCoop
         class Loader
         {
             public string Key; public PlayMakerFSM F; public FsmFloat Rot; public Transform Tip;
-            public float Last, ActiveUntil; public bool Final;
+            public float Last, ActiveUntil, MsgAt; public bool Final;
             public bool Held; public float HeldUntil; public Quaternion HRot;
         }
         static readonly List<Loader> loaders = new List<Loader>();
@@ -515,7 +632,7 @@ namespace MWCoop
             foreach (Loader x in loaders) if (x.Key == key) { l = x; break; }
             if (l == null || l.F == null) { Warn("chargeur " + key + " introuvable ici"); return; }
             // ArmRot recopie : l'automate d'ici (SetRotation au repos, prochain geste) part de la meme valeur.
-            l.Rot.Value = v; l.Last = v; l.ActiveUntil = 0; l.Final = false;
+            l.Rot.Value = v; l.Last = v; l.ActiveUntil = 0; l.Final = false; l.MsgAt = Time.realtimeSinceStartup;
             l.HRot = q; l.Held = true; l.HeldUntil = Time.realtimeSinceStartup + 3f;
         }
 
@@ -690,25 +807,31 @@ namespace MWCoop
                 if ((v[i] - d.Snap[i]).sqrMagnitude > 1e-8f) { if (changed == null) changed = new List<int>(); changed.Add(i); }
             if (changed == null) return budget;
             if (!remote) { foreach (int i in changed) d.Snap[i] = v[i]; return budget; }
-            int head = 16 + System.Text.Encoding.UTF8.GetByteCount(c.Car) + System.Text.Encoding.UTF8.GetByteCount(d.Key);
-            int per = Mathf.Max(10, (1000 - head) / 8);
+            int per = Mathf.Max(10, (1000 - DentHead(c, d)) / 8);
             int k = 0, sent = 0;
             while (k < changed.Count && budget > 0)
             {
                 int n = Mathf.Min(per, changed.Count - k);
-                var w = new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_DENT | RELIABLE).Str(c.Car).Str(d.Key).U16(v.Length).U8(n);
-                for (int j = 0; j < n; j++)
-                {
-                    int i = changed[k + j];
-                    Vector3 off = v[i] - bs[i];
-                    w.U16(i).U16(Mm(off.x)).U16(Mm(off.y)).U16(Mm(off.z));
-                    d.Snap[i] = v[i];
-                }
-                Session.SendAll(w, true);
+                Session.SendAll(DentWriter(c, d, v, bs, changed, k, n), true);
+                for (int j = 0; j < n; j++) d.Snap[changed[k + j]] = v[changed[k + j]];
                 k += n; sent += n; budget--;
             }
             Log.Info("atelier : tole " + c.Car + d.Key + " deformee ici, " + sent + " sommets envoyes" + (k < changed.Count ? " (" + (changed.Count - k) + " au prochain passage)" : ""));
             return budget;
+        }
+
+        // Un lot de sommets (indices idx[k..k+n[) d'une tole : decalage par rapport a l'origine, en millimetres.
+        static int DentHead(CarDmg c, Dent d) { return 16 + System.Text.Encoding.UTF8.GetByteCount(c.Car) + System.Text.Encoding.UTF8.GetByteCount(d.Key); }
+        static NetWriter DentWriter(CarDmg c, Dent d, Vector3[] v, Vector3[] bs, List<int> idx, int k, int n)
+        {
+            var w = new NetWriter(Msg.Garage).U8(Session.LocalId).U8(T_DENT | RELIABLE).Str(c.Car).Str(d.Key).U16(v.Length).U8(n);
+            for (int j = 0; j < n; j++)
+            {
+                int i = idx[k + j];
+                Vector3 off = v[i] - bs[i];
+                w.U16(i).U16(Mm(off.x)).U16(Mm(off.y)).U16(Mm(off.z));
+            }
+            return w;
         }
 
         // Decalage en millimetres sur 16 bits signes (+-32 m).

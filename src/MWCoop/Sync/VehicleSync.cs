@@ -54,6 +54,8 @@ namespace MWCoop
     {
         class Sim { public string Key; public uint Hash; public FsmFloat Var; public bool Control; }
 
+        public const float NoHeat = -9999f;   // (« pas de chaleur » sur le reseau : NaN est rejete a la lecture depuis la relecture du 15/10)
+
         class Car
         {
             public int Index;                   // rang dans la liste locale (les voitures trouvees plus tard s'ajoutent a la fin)
@@ -210,7 +212,20 @@ namespace MWCoop
         // Jamais pris par une poussee (a pied ou en voiture) : la remorque que le tracteur de l'hote venait d'atteler bougeait
         // a cote de l'invite, qui la prenait (« poussee ») -- deux joueurs sur l'attelage, l'hote tue, tracteur et benne
         // projetes (OpNoob, 0.82.2, 12/10).
+        static readonly Dictionary<int, bool> hitchedMemo = new Dictionary<int, bool>();
+        static float hitchedMemoAt;
         static bool Hitched(Car c)
+        {
+            // (GetComponentsInChildren<Joint> sur toutes les voitures, 20 fois/s pendant une poussee : memorise 1 s -- relecture du 15/10)
+            float now = Time.realtimeSinceStartup;
+            if (now - hitchedMemoAt > 1f) { hitchedMemo.Clear(); hitchedMemoAt = now; }
+            bool known;
+            if (hitchedMemo.TryGetValue(c.Index, out known)) return known;
+            bool r = HitchedNow(c);
+            hitchedMemo[c.Index] = r;
+            return r;
+        }
+        static bool HitchedNow(Car c)
         {
             foreach (KeyValuePair<int, int> h in hitches) if (h.Key == c.Index || h.Value == c.Index) return true;
             foreach (Car o in cars)
@@ -906,7 +921,7 @@ namespace MWCoop
         // (fiable) ; l'instantane de l'hote ne l'ecrase pas tout de suite.
         static void Release(Car c, float now)
         {
-            Send(c, 0);
+            Send(c, 0, true);   // (derniere pose fiable : perdue, la copie derivait 1,5 s plus tard et l'hote recalait le joueur gare)
             SendSim(c, SimFinal, true);
             c.AuthorityUntil = now + 5f;
         }
@@ -970,7 +985,8 @@ namespace MWCoop
         }
 
         // Conduite ici, ou quittee moteur tournant (on en garde la main) : on fait autorite dessus.
-        public static bool DrivenHere(int index) { Car c = ByNet(index); return c != null && (c.Index == LocalDriving || c.Index == owned || hitchSent.Contains(c.Index)); }   // (remorque tiree d'ici comprise)
+        // (+ voiture tiree a la corde par nous, Tow.Carries : son contenu est transporte par nous, pas par l'hote -- relecture du 15/10)
+        public static bool DrivenHere(int index) { Car c = ByNet(index); return c != null && (c.Index == LocalDriving || c.Index == owned || hitchSent.Contains(c.Index) || Tow.Carries(c.Index)); }   // (remorque tiree d'ici comprise)
 
         // Copie ici d'une voiture qu'un autre fait rouler.
         public static bool IsCopy(int index) { Car c = ByNet(index); return c != null && Remote(c, Time.realtimeSinceStartup); }
@@ -983,7 +999,7 @@ namespace MWCoop
             if (c == null) return 0;
             // (remorque attelee au vehicule qu'on conduit : a nous aussi -- benne, bois, compteur ; avant : a l'hote, et quand un
             // invite tirait le plateau, personne n'avait la benne ni le compteur de bois)
-            if (c.Index == LocalDriving || c.Index == owned || hitchSent.Contains(c.Index)) return Session.LocalId;
+            if (c.Index == LocalDriving || c.Index == owned || hitchSent.Contains(c.Index) || Tow.Carries(c.Index)) return Session.LocalId;
             return Remote(c, Time.realtimeSinceStartup) ? c.RemoteBy : 0;
         }
         public static int Authority(Rigidbody car) { return Authority(CarIndex(car)); }
@@ -1227,6 +1243,15 @@ namespace MWCoop
         // elle ne prend pas d'elan. Une voiture qu'on visse ne roule pas ; un elan a cet instant est un sursaut de la
         // physique (piece qui s'emboite dans la carrosserie) : avant, il la lancait a 257 km/h, et la poussee d'ici le
         // prenait pour un geste et l'envoyait aux autres (hote ecrase, pieces arrachees ; .nolly et witefold, 12-13/10).
+        // (point porte par une piece a ID -- « VIN1010/VINP_Piston2 » : la racine de la cle n'est pas la voiture ; par le
+        // Transform du point, la voiture est retrouvee -- relecture du 15/10)
+        public static void CalmAfterPart(Transform point)
+        {
+            Transform root = point != null ? CarRoot(point) : null;
+            if (root == null) return;
+            float now = Time.realtimeSinceStartup;
+            foreach (Car c in cars) if (c.Body != null && c.T == root) c.CalmUntil = now + 1.5f;
+        }
         public static void CalmAfterPart(string partKey)
         {
             if (string.IsNullOrEmpty(partKey)) return;
@@ -1943,7 +1968,8 @@ namespace MWCoop
             return false;
         }
 
-        static void Send(Car c, int mode)
+        static void Send(Car c, int mode) { Send(c, mode, false); }
+        static void Send(Car c, int mode, bool reliable)
         {
             if (c.Body == null || c.Net < 0) return;   // (absente de la table de l'hote : personne ne la connait sous ce numero)
             bool driven = mode != 0;
@@ -1959,7 +1985,7 @@ namespace MWCoop
                 for (int i = 0; i < c.SoundObjs.Length && i < 14; i++) if (c.SoundObjs[i] != null && c.SoundObjs[i].activeSelf) mask |= 1 << i;   // (14 au plus : 0x4000 klaxon, 0x8000 moteur)
                 if ((c.Starter != null && c.Starter.ActiveStateName == c.RunState) || testRpm > 0f || ModBool(c.ModDt, c.ModRun)) mask |= 0x8000;   // (essais : faux moteur en marche)
                 if ((c.Horn != null && c.Horn.activeInHierarchy) || testHorn) mask |= 0x4000;
-                w.F32(rpm).F32(thr).F32(float.IsNaN(testSteer) ? SteerOf(c) : testSteer).F32(c.Heat != null ? c.Heat.Value : float.NaN).U16(mask);
+                w.F32(rpm).F32(thr).F32(float.IsNaN(testSteer) ? SteerOf(c) : testSteer).F32(c.Heat != null ? c.Heat.Value : NoHeat).U16(mask);   // (NoHeat et non NaN : NetReader.F32 rejette les NaN)
                 for (int i = 0; i < c.SoundObjs.Length && i < 14; i++)
                     if ((mask & (1 << i)) != 0)
                     {
@@ -1974,7 +2000,7 @@ namespace MWCoop
             // Heure de la mesure : la pose du corps est celle du dernier pas de physique (0 a 20 ms avant cette image, variable
             // d'un envoi a l'autre -- a 25 m/s, jusqu'a 50 cm d'ecart au hasard : la copie du passager avancait par saccades).
             w.F32(Time.realtimeSinceStartup - Mathf.Clamp(Time.time - Time.fixedTime, 0f, Time.fixedDeltaTime));
-            Session.SendAll(w, false);
+            Session.SendAll(w, reliable);
         }
 
         // Etat de la simulation (SimVars) : (empreinte de la cle, valeur). Les commandes (tirette de starter) seulement
@@ -2136,7 +2162,7 @@ namespace MWCoop
             var spitch = new List<float>();
             if (driven)
             {
-                rpm = r.F32(); thr = r.F32(); steer = r.F32(); heat = r.F32(); smask = r.U16();
+                rpm = r.F32(); thr = r.F32(); steer = r.F32(); heat = r.F32(); if (heat <= NoHeat + 1f) heat = float.NaN; smask = r.U16();
                 for (int i = 0; i < 14; i++) if ((smask & (1 << i)) != 0) { spitch.Add(r.F32()); spitch.Add(r.F32()); }
             }
             Vector3 dhead = mode == 1 && r.More ? r.Vec() : Vector3.zero;
@@ -2196,10 +2222,17 @@ namespace MWCoop
                 return;
             }
             // Sans conducteur : recalage si la voiture locale a derive (> 1 m ou > 10 degres).
+            // (pose « garee » en retard d'un tiers alors qu'un autre la conduit ici : ignoree -- sinon la copie redevenait
+            // physique une image et sautait ; relecture du 15/10)
+            if (Remote(c, Time.realtimeSinceStartup) && c.RemoteBy != who) return;
             if (c.RemoteBy == who) { c.RemoteBy = -1; c.RemoteDriver = -1; }
             c.Vel = vel; c.AngVel = ang;
             Transform t = c.Body.transform;
-            if ((t.position - pos).sqrMagnitude > 1f || Quaternion.Angle(t.rotation, rot) > 10f)
+            // Voiture en chantier (piece montee ou demontee depuis moins de 20 s) : seuil serre, 4 cm / 1,5 degre -- decalee de
+            // 30-90 cm, le moteur au palan n'arrivait jamais a 5 cm des detecteurs de vis et les pieces portees par l'autre
+            // apparaissaient a cote de la voiture (relecture du 15/10). Sinon 1 m / 10 degres (voiture garee au loin).
+            bool work = Time.realtimeSinceStartup < c.CalmUntil + 20f;
+            if ((t.position - pos).sqrMagnitude > (work ? 0.0016f : 1f) || Quaternion.Angle(t.rotation, rot) > (work ? 1.5f : 10f))
             {
                 SetKinematic(c, false);
                 MoveCargo(c, pos, rot, vel);   // ce qui est pose dedans suit (avant que la voiture bouge)

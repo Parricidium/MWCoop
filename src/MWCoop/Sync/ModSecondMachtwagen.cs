@@ -150,7 +150,9 @@ namespace MWCoop
             if (s.Tuning != cur.Tuning) { Set("tuning", s.Tuning); Call("Tuning"); }
             if (s.Awd != cur.Awd) Set("m_awd", s.Awd);
             if (s.Sabuf != cur.Sabuf) { Set("sabuf", s.Sabuf); Call("CDPlayer"); }
-            last = Read();
+            // L'etat RECU, pas une relecture : un achat fait ici avant l'etat de l'hote (Own deja vrai chez nous) etait
+            // relu dans 'last' et jamais envoye -- voiture encore a vendre chez les autres (relecture du 15/10).
+            last = s;
         }
     }
 }

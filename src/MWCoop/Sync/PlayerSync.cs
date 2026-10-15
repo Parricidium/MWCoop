@@ -257,8 +257,10 @@ namespace MWCoop
                     Interactions.ScheduleSnapshot(from);
                     Fluids.ScheduleSnapshot(from);
                     Consume.ScheduleSnapshot(from);
+                    ItemFsms.ScheduleSnapshot(from);   // (relecture du 15/10, ecart n2 : lampes, lanterne, chargeur...)
                     WorldFsms.ScheduleSnapshot(from);
                     CarDoors.ScheduleSnapshot(from);
+                    Garage.ScheduleSnapshot(from);   // (relecture du 15/10 : crics, pont, chargeur, degats)
                     Props.ScheduleSnapshot();
                     TaxiCustomer.ScheduleSnapshot(from);
                     ModMachtwagen300D.ScheduleSnapshot();   // (revue du 14/10 : equipements de la 300D et bagages du taxi

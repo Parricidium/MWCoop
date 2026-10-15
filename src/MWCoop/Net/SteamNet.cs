@@ -286,6 +286,8 @@ namespace MWCoop.Net
             return true;
         }
 
+        // (meme compte = meme cle a chaque reconnexion, a la difference d'un port UDP : c'est le jeton de session de
+        // Transport, T_CONNECT, qui distingue un invite revenu de l'ancien pair -- relecture du 15/10, #2)
         public string KeyOf(object addr) { return addr != null ? "steam:" + addr : ""; }
         public void Forget(object addr) { try { if (addr is ulong) SteamNetworking.CloseP2PSessionWithUser(new CSteamID((ulong)addr)); } catch { } }
         public string Describe(object addr) { return addr is ulong ? SteamNet.Name((ulong)addr) : KeyOf(addr); }
