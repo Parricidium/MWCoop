@@ -1239,6 +1239,7 @@ namespace MWCoop
                 }
                 else if (t > 45f && step == 1) { step = 2; Log.Info("autotest : " + Parts.TestToggle(id)); }
             }
+            if (mode == "palan") Palan(t);
             // [Test] SuivrePiece=~gasoline : position de cet objet a 46 s (l'autre joueur le promene).
             string watchKey = Config.Get("Test", "SuivrePiece", "");
             if (watchKey.Length > 0 && t > Config.GetInt("Test", "SuivreDelai", 46) && !watchLogged)
@@ -2308,6 +2309,90 @@ namespace MWCoop
                 c.FsmVariables.GetFsmInt("Time").Value = h;
                 c.SendEvent("TIMESKIP");
                 Log.Info("autotest : l'hote passe a " + h + " h");
+            }
+        }
+
+        // [Test] Autotest=palan (2 joueurs, l'hote agit) : moteur VIN1010 accroche au palan comme dans le jeu (detecteurs du
+        // crochet a vrai, vis du palan serrees par leur automate -> Remove hinge/Set joint/Hook 2), palan (cinematique)
+        // amene pour que le moteur soit a sa pose de montage (les detecteurs du point montrent ses vis), vis du moteur
+        // serrees (-> Bolted -> Hook 2 INCAR -> State 2 -> INSTALL au point -> Install 2), palan desserre (Off hook) ;
+        // etat (parent, corps, joint, point) note chez chacun a 70 s. Journal : Trace des automates du palan, du point
+        // et du moteur.
+        static Transform palan, palanHook, palanPivot; static GameObject moteur, palanPoint;
+        static void Palan(float t)
+        {
+            if (step == 0 && t > (Net.Session.IsHost ? 30f : 12f))
+            {
+                step = 1;
+                GameObject h = Game.FindAny("EQUIPMENTS/motor hoist(itemx)");
+                moteur = Parts.FindById("VIN1010");
+                palanPoint = Game.FindAny("CORRIS/MotorPivot/MassCenter/Block/VINP_Block");
+                if (h == null || moteur == null || palanPoint == null) { Log.Warn("autotest : palan " + (h != null) + " moteur " + (moteur != null) + " point " + (palanPoint != null)); step = 99; return; }
+                palan = h.transform; palanHook = palan.Find("Hoist"); palanPivot = palan.Find("Hoist/BlockPivot");
+                PlayMakerFSM hook = Game.FsmOn(palanHook.gameObject, "Hook");
+                Trace.Watch(hook, "palan Hook", 70f);
+                Trace.Watch(Game.FsmOn(palanHook.gameObject, "Data"), "palan Data", 70f);
+                Trace.Watch(Game.FsmOn(palanPoint, "Data"), "point VINP_Block", 70f);
+                Trace.Watch(Game.FsmOn(moteur, "Data"), "moteur", 70f);
+                Trace.Watch(Game.FsmOn(palanPoint.transform.Find("Trigger_motor1").gameObject, "Assembly"), "detecteur 1 du point", 70f);
+                if (!Net.Session.IsHost) return;
+                Transform car = palanPoint.transform.root;
+                Vector3 at = palanPoint.transform.position + car.forward * 2.2f;
+                RaycastHit hit; if (Physics.Raycast(at + Vector3.up * 2f, Vector3.down, out hit, 6f)) at.y = hit.point.y; else at.y = car.position.y;
+                foreach (Rigidbody rb in new[] { h.GetComponent<Rigidbody>(), palanHook.GetComponent<Rigidbody>() }) if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; rb.isKinematic = true; }
+                palan.position = at; palan.rotation = Quaternion.LookRotation(-car.forward, Vector3.up);
+                Rigidbody mrb = moteur.GetComponent<Rigidbody>();
+                if (mrb != null) { mrb.velocity = Vector3.zero; mrb.angularVelocity = Vector3.zero; mrb.isKinematic = true; }
+                moteur.transform.position = palanPivot.position; moteur.transform.rotation = palanPivot.rotation;
+                Log.Info("autotest : palan en " + at.ToString("F1") + " (cinematique), moteur sous le crochet ; Hook [" + hook.ActiveStateName + "]");
+            }
+            if (step < 1 || step > 90 || moteur == null) return;
+            PlayMakerFSM hk = palanHook != null ? Game.FsmOn(palanHook.gameObject, "Hook") : null;
+            string parent = moteur.transform.parent != null ? moteur.transform.parent.name : "aucun";
+            if (t > 70f && !done)
+            {
+                done = true;
+                PlayMakerFSM pd = Game.FsmOn(palanPoint, "Data");
+                Log.Info("autotest : etat final : moteur parent " + parent + ", corps " + (moteur.GetComponent<Rigidbody>() != null) + ", joint " + (moteur.GetComponent<FixedJoint>() != null)
+                    + ", point Installed " + pd.FsmVariables.GetFsmBool("Installed").Value + " Bolted " + pd.FsmVariables.GetFsmBool("Bolted").Value + ", Hook [" + (hk != null ? hk.ActiveStateName : "?") + "], moteur en "
+                    + moteur.transform.position.ToString("F2") + " (point en " + palanPoint.transform.position.ToString("F2") + "), vis " + Parts.BoltState("VIN1010"));
+            }
+            if (!Net.Session.IsHost || hk == null) return;
+            // detecteurs du crochet tenus a vrai tant que le crochet attend (le jeu : les deux boules du moteur dans les deux detecteurs)
+            if (step <= 16 && (hk.ActiveStateName == "Wait" || hk.ActiveStateName == "Trigger" || hk.ActiveStateName == "Reset"))
+            { hk.FsmVariables.GetFsmBool("Trigger1").Value = true; hk.FsmVariables.GetFsmBool("Trigger2").Value = true; }
+            if (step >= 1 && step <= 16 && t > 32f + step * 0.2f)
+            {
+                Transform bolts = palanHook.Find("Hooks/Bolts");
+                int i = (step - 1) % 2;
+                PlayMakerFSM f = bolts != null && bolts.childCount > i ? Game.FsmOn(bolts.GetChild(i).gameObject, "Screw") : null;
+                if (f != null) f.SendEvent("TIGHTEN");
+                if (step == 16) Log.Info("autotest : vis du palan serrees (" + (f != null ? f.FsmVariables.GetFsmInt("BoltTightness").Value.ToString() : "automate absent") + ") ; Hook [" + hk.ActiveStateName + "], moteur parent " + parent + ", joint " + (moteur.GetComponent<FixedJoint>() != null));
+                step++;
+            }
+            if (step == 17 && t > 40f)
+            {
+                step = 18;
+                Rigidbody mrb = moteur.GetComponent<Rigidbody>();
+                if (mrb != null) mrb.isKinematic = false;
+                // le pivot du bloc sur la pose du point : le moteur (pose locale remise a zero sous le pivot) a sa pose de montage
+                Quaternion q = palanPoint.transform.rotation * Quaternion.Inverse(palanPivot.rotation);
+                palan.rotation = q * palan.rotation;
+                palan.position += palanPoint.transform.position - palanPivot.position;
+                moteur.transform.position = palanPoint.transform.position; moteur.transform.rotation = palanPoint.transform.rotation;
+                if (mrb != null) { mrb.velocity = Vector3.zero; mrb.angularVelocity = Vector3.zero; }
+                Transform e1 = moteur.transform.Find("EnginePointTrigger1"), t1 = palanPoint.transform.Find("Trigger_motor1");
+                Log.Info("autotest : palan amene ; Hook [" + hk.ActiveStateName + "], moteur parent " + parent + ", joint " + (moteur.GetComponent<FixedJoint>() != null) + ", detecteur 1 a " + (e1 != null && t1 != null ? (e1.position - t1.position).magnitude.ToString("F3") + " m" : "?"));
+            }
+            if (step >= 18 && step <= 25 && t > 44f + (step - 18) * 0.5f) { Log.Info("autotest : vis moteur " + Parts.TestBolt("VIN1010", true) + " ; Hook [" + hk.ActiveStateName + "]"); step++; }
+            if (step >= 26 && step <= 41 && t > 52f + (step - 26) * 0.2f)
+            {
+                Transform bolts = palanHook.Find("Hooks/Bolts");
+                int i = (step - 26) % 2;
+                PlayMakerFSM f = bolts != null && bolts.childCount > i ? Game.FsmOn(bolts.GetChild(i).gameObject, "Screw") : null;
+                if (f != null) f.SendEvent("UNTIGHTEN");
+                if (step == 41) Log.Info("autotest : palan desserre ; Hook [" + hk.ActiveStateName + "], moteur parent " + parent + ", joint " + (moteur.GetComponent<FixedJoint>() != null));
+                step++;
             }
         }
 
