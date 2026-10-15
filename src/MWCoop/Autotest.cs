@@ -1718,6 +1718,7 @@ namespace MWCoop
                 }
             }
             if (mode == "sangsonde" && t > 25f && !done) { done = true; Log.Info("autotest : " + Respawn.ProbeBlood()); }
+            if (mode == "pointsonde" && t > 30f && !done) { done = true; Log.Info("autotest : pointsonde " + Parts.DumpPoint(Config.Get("Test", "TestPoint", "CORRIS/Assemblies/VINP_Grille"))); Log.Info("autotest : pieces " + Parts.ListIds()); }
             if (mode == "sonsonde" && t > 30f && Time.frameCount % 600 == 0) Log.Info("autotest : " + SaunaProbe.ProbeSounds() + " || " + CopySounds.Report());
             if (mode == "kiljusonde" && t > 25f && !done) { done = true; Log.Info("autotest : " + SaunaProbe.ProbeKilju()); }
             if (mode == "vapeursonde" && t > 25f && !done) { done = true; Log.Info("autotest : " + SaunaProbe.Probe()); Log.Info("autotest : " + SaunaProbe.Probe2()); }

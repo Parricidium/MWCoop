@@ -284,6 +284,7 @@ namespace MWCoop
             if (now >= nextWaiting) { nextWaiting = now + 0.25f; CheckWaiting(); }
             if (fresh.Count > 0) CheckFresh(now);
             if (pendingBolts.Count > 0) RetryBolts(now);
+            if (mounting.Count > 0) CheckMounting(now);
             if (now < nextScan) return;
             nextScan = now + 15f;   // nouvelles pieces (achats...) : nouveau passage
             Scan();
@@ -356,6 +357,41 @@ namespace MWCoop
             Jobs.SoonScan();
         }
 
+        // Essais : etats et actions de l'automate d'un point de montage (et de la piece qui y est, Data), par sa cle.
+        public static string DumpPoint(string key)
+        {
+            Point p;
+            if (!points.TryGetValue(key, out p) || p.Fsm == null) return "point " + key + " inconnu (" + points.Count + " points)";
+            var sb = new System.Text.StringBuilder(Recon.Path(p.Fsm.transform) + "::" + p.Fsm.FsmName + " [" + p.Fsm.ActiveStateName + "]");
+            foreach (FsmState st in p.Fsm.FsmStates) sb.Append(" ## ").Append(st.Name).Append(" : ").Append(Jobs.DumpActions(p.Fsm, st.Name));
+            GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+            PlayMakerFSM data = part != null ? Game.FsmOn(part, "Data") : null;
+            if (data != null)
+            {
+                sb.Append(" ||| piece ").Append(part.name).Append(" local ").Append(part.transform.localPosition.ToString("F3")).Append(" ").Append(part.transform.localEulerAngles.ToString("F1")).Append(" parent ").Append(part.transform.parent != null ? part.transform.parent.name : "aucun");
+                foreach (FsmState st in data.FsmStates) sb.Append(" ## ").Append(st.Name).Append(" : ").Append(Jobs.DumpActions(data, st.Name));
+            }
+            return sb.ToString();
+        }
+
+        // Essais : pieces a ID connues ici (nom, montee ou non), 80 au plus.
+        public static string ListIds()
+        {
+            var sb = new System.Text.StringBuilder();
+            int n = 0;
+            foreach (Object o in Game.FsmsNamed("Data"))
+            {
+                var f = o as PlayMakerFSM;
+                if (f == null || f.hideFlags != HideFlags.None) continue;
+                FsmString s = f.FsmVariables.FindFsmString("ID");
+                if (s == null || s.Value.Length == 0) continue;
+                FsmBool inst = f.FsmVariables.FindFsmBool("Installed");
+                sb.Append(" | ").Append(s.Value).Append(' ').Append(f.gameObject.name).Append(inst != null && inst.Value ? " [montee]" : "");
+                if (++n >= 80) break;
+            }
+            return n + " pieces" + sb;
+        }
+
         public static string IdOf(GameObject go)
         {
             if (go == null) return "";
@@ -404,6 +440,30 @@ namespace MWCoop
             catch { return false; }
         }
 
+        // Pieces en cours de montage (ici ou rejoue) : jusqu'a ce que le joint du jeu existe (etat Set joint 2, l'image
+        // suivante), Props n'y touche pas et n'en envoie pas la pose (journaux et video de witefold, 14/10 : la main qui lache
+        // la piece au montage envoyait encore sa pose « en train de se poser », l'autre cote la recopiait et le joint la
+        // figeait de travers).
+        static readonly Dictionary<GameObject, float> mounting = new Dictionary<GameObject, float>();
+        public static bool IsMounting(GameObject go) { float t; return go != null && mounting.TryGetValue(go, out t) && Time.realtimeSinceStartup < t; }
+        static readonly Dictionary<GameObject, Transform> mountingAt = new Dictionary<GameObject, Transform>();
+        static readonly List<GameObject> mountedNow = new List<GameObject>();
+        // Fin de la fenetre de montage : une ligne de journal (joint present ? pose par rapport au point de montage --
+        // la meme chez tous quand tout va bien) pour les retours de pieces posees de travers.
+        static void CheckMounting(float now)
+        {
+            foreach (KeyValuePair<GameObject, float> e in mounting) if (now >= e.Value) mountedNow.Add(e.Key);
+            foreach (GameObject part in mountedNow)
+            {
+                mounting.Remove(part);
+                Transform pt; mountingAt.TryGetValue(part, out pt); mountingAt.Remove(part);
+                if (part == null || pt == null) continue;
+                Log.Info("piece " + IdOf(part) + " posee : joint " + (part.GetComponent<FixedJoint>() != null ? "oui" : "NON") + ", par rapport au point "
+                    + pt.InverseTransformPoint(part.transform.position).ToString("F3") + " / " + (Quaternion.Inverse(pt.rotation) * part.transform.rotation).eulerAngles.ToString("F1"));
+            }
+            mountedNow.Clear();
+        }
+
         static void OnLocal(Point p, bool install)
         {
             GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
@@ -422,6 +482,8 @@ namespace MWCoop
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(install).Str(p.Key).Str(id).I32(aid != null ? aid.Value : 0)
                 .Vec(part.transform.position).Quat(part.transform.rotation)
                 .Vec(pt.InverseTransformPoint(part.transform.position)).Quat(Quaternion.Inverse(pt.rotation) * part.transform.rotation), true);
+            if (install) { mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = pt; }
+            else Props.SettleHere(part);   // (ses poses de chute partent aux autres, comme un objet lache de la main)
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -465,6 +527,7 @@ namespace MWCoop
                     // montage d'ici quand l'envoi le donne (voiture d'ici un peu ailleurs que celle de l'autre).
                     if (rel) { Transform pt = p.Fsm.transform; part.transform.position = pt.TransformPoint(lpos); part.transform.rotation = pt.rotation * lrot; }
                     else { part.transform.position = pos; part.transform.rotation = rot; }
+                    mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
                     data.SendEvent("INSTALL");
                     Game.SetState(p.Fsm, "Install 2");
                 }
@@ -472,7 +535,8 @@ namespace MWCoop
             }
             finally { applying = false; Replay.Depth--; }
             if (install) Freshen(part, p.Fsm, id);   // ses vis, avant les tours de cle de l'autre
-            Log.Info("piece " + id + (install ? " montee sur " : " demontee de ") + key + " (joueur #" + who + ")");
+            else Props.HoldFromRemote(part, who);   // (tenue le temps que ses poses de chute arrivent : pas ejectee par la physique d'ici)
+            Log.Info("piece " + id + (install ? " montee sur " : " demontee de ") + key + " (joueur #" + who + ")" + (install ? " [parent " + (part.transform.parent != null ? part.transform.parent.name : "aucun") + ", local " + part.transform.localPosition.ToString("F2") + "]" : ""));
         }
 
         // Montee = le point de montage la tient (sa variable Installed + ActivePart). La variable

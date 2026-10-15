@@ -1245,8 +1245,10 @@ namespace MWCoop
             if (c.Body.isKinematic || c.Index == LocalDriving || c.RemoteDriver >= 0) return;   // (conduite : rien a brider)
             Vector3 v = c.Body.velocity, w = c.Body.angularVelocity;
             bool clamped = false;
-            if (v.magnitude > 1.5f) { c.Body.velocity = v.normalized * 1.5f; clamped = true; }
-            if (w.magnitude > 1f) { c.Body.angularVelocity = w.normalized * 1f; clamped = true; }
+            // (0,3 au lieu de 1,5 m/s et 1 rad/s : une voiture qu'on visse ne bouge pas ; a 1 rad/s elle « s'envolait » encore
+            // d'un coup au montage d'une piece par l'autre, journaux de CBetoy, 14/10)
+            if (v.magnitude > 0.3f) { c.Body.velocity = v.normalized * 0.3f; clamped = true; }
+            if (w.magnitude > 0.3f) { c.Body.angularVelocity = w.normalized * 0.3f; clamped = true; }
             if (clamped && calmLogs++ < 20) Log.Info("voiture " + c.Key + " : sursaut au montage d'une piece, elan bride (" + v.magnitude.ToString("F1") + " m/s, " + w.magnitude.ToString("F1") + " rad/s)");
         }
 
