@@ -433,10 +433,19 @@ static void DrawRail(Graphics &g)
     std::wstring ver = g_localVer.empty() ? L"" : L"v" + g_localVer.substr(0, g_localVer.find(L'-'));
     float vw = ver.empty() ? 0 : PillW(ver, 10.5f), x = kRail.X + (kRail.Width - vw) / 2;
     if (vw > 0) Pill(g, RectF(x, 104, vw, 20), TH(cardSel), ver, kInk, 10.5f);
-    float y0 = 132;
+    // version du jeu co-op, sous le numero (JD, 15/10) : Legacy (l'ancienne, plus mise a jour) / Reworked (la refonte, par
+    // defaut, etiquette NEW) ; clic : saves.inc ChannelSet, puis mise a jour
+    g_canalRect = RectF(28, 130, 208, 30);
+    UiSeg(g, g_canalRect, { L"Legacy", L"Reworked" }, ChannelReworked() ? 1 : 0, UI_SET_CANAL, 12);
+    {
+        const wchar_t *nl = T(L"NOUVEAU", L"NEW");
+        float w = PillW(nl, 8);
+        Pill(g, RectF(g_canalRect.X + g_canalRect.Width - w + 2, g_canalRect.Y - 8, w, 15), kRed, nl, Color(255, 255, 255, 255), 8);
+    }
+    float y0 = 168;
     if (g_btn[B_UPDATE].visible) {   // mise a jour proposee : bouton sous la version
         Button &b = g_btn[B_UPDATE];
-        b.r = RectF(28, 134, 208, 40);
+        b.r = RectF(28, 170, 208, 40);
         float pulse = b.enabled ? 0.5f + 0.5f * sinf(g_time * 3.0f) : 0.0f;
         GraphicsPath gp; RoundRect(gp, RectF(b.r.X - 3, b.r.Y - 3, b.r.Width + 6, b.r.Height + 6), 15);
         SolidBrush glow(WithA(kAcc, 0.10f + 0.14f * pulse * (1 - b.hover))); g.FillPath(&glow, &gp);
@@ -448,7 +457,7 @@ static void DrawRail(Graphics &g)
         if (dash != std::wstring::npos) v.resize(dash);
         Icon(g, IC_DOWNLOAD, b.r.X + 20, b.r.Y + b.r.Height / 2, 17, kOnAcc, 2.2f);
         Text(g, std::wstring(T(L"Mettre à jour · ", L"Update · ")) + v, RectF(b.r.X + 34, b.r.Y, b.r.Width - 40, b.r.Height), 13, FontStyleBold, kOnAcc, StringAlignmentNear);
-        y0 = 180;
+        y0 = 216;
     }
     // groupes jusqu'a Reglages (674) : lignes de 44 px, ou de 40 quand le bouton de mise a jour prend de la place
     int nItems = 0;
@@ -1210,9 +1219,6 @@ static void DrawSettings(Graphics &g)
     RectF up(lx, kMain.Y, cw, 196);
     Glass(up);
     Title(g, T(L"Mise à jour", L"Updates"), RectF(up.X + 20, up.Y + 16, 200, 24), 17, kInk);
-    // canal (temporaire : Stable / Nightly, pendant la refonte)
-    g_canalRect = RectF(up.X + up.Width - 220, up.Y + 12, 200, 32);
-    UiSeg(g, g_canalRect, { L"Stable", L"Nightly" }, ChannelNightly() ? 1 : 0, UI_SET_CANAL);
     {
         RectF box(up.X + 20, up.Y + 52, up.Width - 40, 64);
         std::wstring av = UpdAvail();
@@ -1514,7 +1520,7 @@ static bool UiClick(int id)
     case UI_NOTE_UPDATE: if (g_lobby == LB_NONE && !g_busy) StartUpdate(true); return true;
     case UI_SET_CHECK: if (!g_busy) StartUpdate(false); return true;
     case UI_SET_CANAL: case UI_SET_CANAL + 1:
-        if ((id == UI_SET_CANAL + 1) != ChannelNightly() && ChannelSet(id == UI_SET_CANAL + 1, false)) {
+        if ((id == UI_SET_CANAL + 1) != ChannelReworked() && ChannelSet(id == UI_SET_CANAL + 1, false)) {
             if (g_lobby == LB_NONE && !g_busy && !GameProcessRunning()) StartUpdate(true); else StartUpdate(false);
         }
         return true;

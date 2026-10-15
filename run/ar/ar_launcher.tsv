@@ -244,6 +244,15 @@ Different version (you %s, host %s): update, restart MWCoop.exe	إصدار مخ�
 Lobby is full (%d players)	الردهة ممتلئة (%d لاعبين)
 Session already started: \"Join in game\"	الجلسة بدأت بالفعل: \"الانضمام داخل اللعبة\"
 The host closed the lobby	أغلق المضيف الردهة
+The host plays the Reworked version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Reworked من MWCoop: تحتاج إلى النسخة نفسها للعب معاً.\n\n
+The host plays the Legacy version of MWCoop: you need the same one to play together.\n\n	المضيف يلعب بنسخة Legacy من MWCoop: تحتاج إلى النسخة نفسها للعب معاً.\n\n
+Reworked: the new MWCoop, rebuilt in depth (sync, workshop, jobs, money, network). This is the version that gets updates.\n\nEveryone must be on the same version to play together.\n\nYour saves are copied first (MWCoop\\copie-avant-reworked). You can go back to Legacy at any time (under the version number, top left).\n\nSwitch to Reworked?	Reworked: نسخة MWCoop الجديدة، أُعيد بناؤها بعمق (المزامنة، الورشة، الأعمال، المال، الشبكة). هذه هي النسخة التي تتلقى التحديثات.\n\nيجب أن يكون الجميع على النسخة نفسها للعب معاً.\n\nتُنسخ حفظاتك أولاً (MWCoop\\copie-avant-reworked). يمكنك العودة إلى Legacy في أي وقت (تحت رقم النسخة، أعلى اليسار).\n\nالانتقال إلى Reworked؟
+Legacy: the old MWCoop (0.95), kept as it is and no longer updated. Only to play with someone who stayed on it.\n\nSwitch to Legacy?	Legacy: نسخة MWCoop القديمة (0.95)، تبقى كما هي ولن تُحدَّث بعد الآن. فقط للعب مع شخص بقي عليها.\n\nالانتقال إلى Legacy؟
+Reworked version	نسخة Reworked
+Legacy version: the old one, no longer updated	نسخة Legacy: القديمة، لم تعد تُحدَّث
+Legacy or Reworked	Legacy أو Reworked
+Under the version number, top left: Reworked, the new MWCoop (recommended, the one that gets updates); Legacy, the old one, no longer updated. Everyone must be on the same version to play together.	تحت رقم النسخة، أعلى اليسار: Reworked، نسخة MWCoop الجديدة (موصى بها، وهي التي تتلقى التحديثات)؛ Legacy، النسخة القديمة التي لم تعد تُحدَّث. يجب أن يكون الجميع على النسخة نفسها للعب معاً.
+Under the version number, top left of the launcher. Reworked: the new MWCoop, rebuilt in depth; recommended, the one that gets updates. Legacy: the old version (0.95), kept as it is and no longer updated, only to play with someone who stayed on it. Your saves are copied the first time you switch to Reworked (MWCoop\\copie-avant-reworked).	تحت رقم النسخة، أعلى يسار المشغّل. Reworked: نسخة MWCoop الجديدة، أُعيد بناؤها بعمق؛ موصى بها، وهي التي تتلقى التحديثات. Legacy: النسخة القديمة (0.95)، تبقى كما هي ولن تُحدَّث بعد الآن، فقط للعب مع شخص بقي عليها. تُنسخ حفظاتك عند أول انتقال إلى Reworked (MWCoop\\copie-avant-reworked).
 Refused by the host	رفضك المضيف
 No lobby at the host: \"Join in game\" if they are already playing	لا توجد ردهة لدى المضيف: \"انضم داخل اللعبة\" إن كان يلعب بالفعل
 My Winter Car not found: choose mywintercar.exe	لم يُعثر على My Winter Car: اختر mywintercar.exe

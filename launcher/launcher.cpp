@@ -1090,35 +1090,40 @@ static DWORD g_updCheckT;
 static std::wstring UpdAvail() { EnterCriticalSection(&g_cs); std::wstring v = g_updVer; LeaveCriticalSection(&g_cs); return v; }
 static void UpdSet(const std::wstring &v) { EnterCriticalSection(&g_cs); g_updVer = v; LeaveCriticalSection(&g_cs); }
 
-// Canal (demande de JD, 14/10, temporaire : « un switch Stable / Nightly dans le lanceur, les deux versions sur GitHub ;
-// quand la Nightly est stable, on la passe en stable et on enleve le bouton ») : [Lanceur] Canal=stable|nightly. Nightly =
-// pre-release de GitHub (tag v0.96.0-nightly.N, paquet .nightly : dist\make-release.ps1 -Nightly). Stable : la plus
-// recente hors pre-releases ; Nightly : la plus recente de toutes (une Stable plus recente passe devant).
-static bool ChannelNightly()
+// Version du jeu co-op (JD, 15/10 : « Legacy, la Stable actuelle ; Reworked, la Nightly, qui devient la stable ») :
+// [Lanceur] Version=legacy|reworked, Reworked par defaut (l'ancienne cle Canal de 0.95.2 est ignoree). Reworked = la refonte,
+// 0.96 et plus : la plus recente hors pre-releases, sinon la plus recente pre-release (.nightly, tant que la 0.96.0 n'est pas
+// sortie). Legacy = l'ancienne, moins de 0.96, hors pre-releases ; plus mise a jour sauf demande de JD.
+static bool ChannelReworked()
 {
     wchar_t b[16] = L"";
-    GetPrivateProfileStringW(L"Lanceur", L"Canal", L"stable", b, 16, g_iniLauncher.c_str());
-    return !_wcsicmp(b, L"nightly");
+    GetPrivateProfileStringW(L"Lanceur", L"Version", L"reworked", b, 16, g_iniLauncher.c_str());
+    return _wcsicmp(b, L"legacy") != 0;
 }
-static bool IsNightlyVer(const std::wstring &v) { return v.find(L"nightly") != std::wstring::npos; }
-static const Note *PickRelease(const std::vector<Note> &rel, bool nightly)
+static bool IsReworkedVer(const std::wstring &v) { return v.find(L"nightly") != std::wstring::npos || CmpVer(v, L"0.96.0") >= 0; }
+static const Note *PickRelease(const std::vector<Note> &rel, bool reworked)
 {
-    const Note *best = NULL;
-    for (const Note &n : rel) if (!n.zip.empty() && (nightly || !n.pre) && (!best || CmpVer(n.ver, best->ver) > 0)) best = &n;
-    return best;
+    const Note *best = NULL, *pre = NULL;
+    for (const Note &n : rel) {
+        if (n.zip.empty() || IsReworkedVer(n.ver) != reworked) continue;
+        if (!n.pre) { if (!best || CmpVer(n.ver, best->ver) > 0) best = &n; }
+        else if (reworked && (!pre || CmpVer(n.ver, pre->ver) > 0)) pre = &n;
+    }
+    return best ? best : pre;
 }
-// A installer : plus recente, ou retour en Stable depuis une Nightly (meme plus ancienne).
-static bool WantVer(const std::wstring &remote, const std::wstring &local, bool nightly)
+// A installer : plus recente, ou changement de version (Legacy <-> Reworked, meme plus ancienne).
+static bool WantVer(const std::wstring &remote, const std::wstring &local, bool reworked)
 {
-    return local.empty() || CmpVer(remote, local) > 0 || (!nightly && IsNightlyVer(local) && remote != local);
+    return local.empty() || CmpVer(remote, local) > 0 || (IsReworkedVer(local) != reworked && remote != local);
 }
-static std::vector<Note> ChannelNotes(const std::vector<Note> &rel, bool nightly)
+// Notes montrees : Reworked, tout (les anciennes aussi, c'est l'histoire) ; Legacy, les anciennes hors pre-releases.
+static std::vector<Note> ChannelNotes(const std::vector<Note> &rel, bool reworked)
 {
-    if (nightly) return rel;
     std::vector<Note> out;
-    for (const Note &n : rel) if (!n.pre) out.push_back(n);
+    for (const Note &n : rel) if (reworked ? (!n.pre || IsReworkedVer(n.ver)) : (!n.pre && !IsReworkedVer(n.ver))) out.push_back(n);
     return out;
 }
+static std::wstring SavesBackupNightly();   // (saves.inc)
 
 static DWORD WINAPI UpdateThread(void *param)
 {
@@ -1131,18 +1136,18 @@ static DWORD WINAPI UpdateThread(void *param)
     }
     std::string json;
     std::wstring local = g_localVer, label = ModLabel();
-    bool mod = g_modOk, nightly = ChannelNightly();
+    bool mod = g_modOk, reworked = ChannelReworked();
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
-    const Note *pick = PickRelease(rel, nightly);
+    const Note *pick = PickRelease(rel, reworked);
     EnterCriticalSection(&g_cs);
-    g_notes = ChannelNotes(rel, nightly);
+    g_notes = ChannelNotes(rel, reworked);
     LeaveCriticalSection(&g_cs);
     g_relState = rs;
     g_notesDone = true;
     if (quiet) {   // (verification periodique : seulement le bouton, s'il y a du nouveau)
         std::wstring remote = pick ? pick->ver : L"";
-        if (rs != REL_OFFLINE && !remote.empty() && !local.empty() && WantVer(remote, local, nightly) && UpdAvail() != remote) {
+        if (rs != REL_OFFLINE && !remote.empty() && !local.empty() && WantVer(remote, local, reworked) && UpdAvail() != remote) {
             UpdSet(remote);
             SetStatus(K_WARN, T(L"%s \u00B7 nouvelle version %s disponible", L"%s \u00B7 new version %s available"), label.c_str(), remote.c_str());
         }
@@ -1165,7 +1170,7 @@ static DWORD WINAPI UpdateThread(void *param)
         g_busy = false;
         return 0;
     }
-    if (!local.empty() && !WantVer(remote, local, nightly)) {
+    if (!local.empty() && !WantVer(remote, local, reworked)) {
         g_progress = -1;
         UpdSet(L"");
         SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), label.c_str());
@@ -1180,6 +1185,11 @@ static DWORD WINAPI UpdateThread(void *param)
         return 0;
     }
     UpdSet(L"");
+    // Premier passage de Legacy a Reworked (par defaut depuis 0.96, sans clic) : sauvegardes copiees avant, comme au choix a la main
+    if (!local.empty() && reworked && !IsReworkedVer(local) && GetPrivateProfileIntW(L"Lanceur", L"CopieNightly", 0, g_iniLauncher.c_str()) == 0) {
+        std::wstring dst = SavesBackupNightly();
+        if (!dst.empty()) WritePrivateProfileStringW(L"Lanceur", L"CopieNightly", L"1", g_iniLauncher.c_str());
+    }
 
     wchar_t tmp[MAX_PATH];
     GetTempPathW(MAX_PATH, tmp);
@@ -1259,7 +1269,7 @@ static DWORD WINAPI NotesOnlyThread(void *)
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
     EnterCriticalSection(&g_cs);
-    g_notes = ChannelNotes(rel, ChannelNightly());
+    g_notes = ChannelNotes(rel, ChannelReworked());
     LeaveCriticalSection(&g_cs);
     g_relState = rs;
     g_notesDone = true;
@@ -5287,17 +5297,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"+connect_lobby")) { g_sConnect = _wcstoui64(argv[i + 1], NULL, 10); g_steamNet = true; }
         if (!_wcsicmp(argv[i], L"/steam")) { g_testSteamFile = argv[i + 1]; g_steamNet = true; }   // essai : /testsalon ... /steam <fichier>
     }
-    // Essai du canal : /testmaj <releases.json> <journal> <version locale> -- version choisie (Stable, Nightly) et a installer ou non
+    // Essai : /testmaj <releases.json> <journal> <version locale> -- version choisie (Legacy, Reworked) et a installer ou non
     if (argc >= 5 && !_wcsicmp(argv[1], L"/testmaj")) {
         std::vector<unsigned char> d;
         ReadAll(argv[2], d);
         std::vector<Note> rel = ParseReleases(std::string(d.begin(), d.end()));
         std::string o;
         for (const Note &n : rel) o += Narrow(n.ver, CP_UTF8) + (n.pre ? " pre" : "") + (n.zip.empty() ? " sans paquet" : " " + Narrow(n.zip, CP_UTF8)) + "\r\n";
-        for (int nightly = 0; nightly < 2; nightly++) {
-            const Note *p = PickRelease(rel, nightly != 0);
+        for (int rw = 0; rw < 2; rw++) {
+            const Note *p = PickRelease(rel, rw != 0);
             std::wstring v = p ? p->ver : L"";
-            o += std::string(nightly ? "nightly" : "stable") + " : " + Narrow(v, CP_UTF8) + (p && WantVer(v, argv[4], nightly != 0) ? " a installer" : " rien") + " ; notes " + std::to_string(ChannelNotes(rel, nightly != 0).size()) + "\r\n";
+            o += std::string(rw ? "reworked" : "legacy") + " : " + Narrow(v, CP_UTF8) + (p && WantVer(v, argv[4], rw != 0) ? " a installer" : " rien") + " ; notes " + std::to_string(ChannelNotes(rel, rw != 0).size()) + "\r\n";
         }
         HANDLE f = CreateFileW(argv[3], GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
         if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, o.data(), (DWORD)o.size(), &w, NULL); CloseHandle(f); }

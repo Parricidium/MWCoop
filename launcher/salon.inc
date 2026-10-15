@@ -147,15 +147,15 @@ static std::string MyVersion() { return g_localVer.empty() ? "dev" : Narrow(g_lo
 // Rejoindre un hote d'une autre version (demande de JD, 14/10 : « que ca check la version, si elle n'est pas bonne, une
 // proposition de mettre a jour »). Hote plus recent : proposer la mise a jour tout de suite (le lanceur se relance, puis on
 // rejoint) ; hote plus ancien : c'est a lui de mettre a jour.
-static bool ChannelSet(bool nightly, bool host);   // (saves.inc)
+static bool ChannelSet(bool reworked, bool host);   // (saves.inc)
 static void VersionMismatch(const std::wstring &his)
 {
     std::wstring mine = Widen(MyVersion());
-    // Canal different (Stable / Nightly) : proposer de suivre celui de l'hote
-    if (mine != L"dev" && IsNightlyVer(his) != ChannelNightly()) {
+    // Version differente (Legacy / Reworked) : proposer de suivre celle de l'hote
+    if (mine != L"dev" && IsReworkedVer(his) != ChannelReworked()) {
         SetStatus(K_ERR, T(L"Version différente (toi %s, hôte %s)", L"Different version (you %s, host %s)"), mine.c_str(), his.c_str());
-        TestLog("salon : version de l'hote %s, la mienne %s : canal %s propose", Narrow(his, CP_UTF8).c_str(), Narrow(mine, CP_UTF8).c_str(), IsNightlyVer(his) ? "nightly" : "stable");
-        if (ChannelSet(IsNightlyVer(his), true)) StartUpdate(true);
+        TestLog("salon : version de l'hote %s, la mienne %s : version %s proposee", Narrow(his, CP_UTF8).c_str(), Narrow(mine, CP_UTF8).c_str(), IsReworkedVer(his) ? "reworked" : "legacy");
+        if (ChannelSet(IsReworkedVer(his), true)) StartUpdate(true);
         return;
     }
     if (mine != L"dev" && CmpVer(his, mine) > 0) {
