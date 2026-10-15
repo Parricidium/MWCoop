@@ -183,12 +183,15 @@ namespace MWCoop
                             }
                             m.Bottom = Mathf.Max(0f, -lo);
                         }
+                        Log.Info("vitres : vitre arriere de " + m.Car.name + " (" + (m.DoorR != null ? m.DoorR.name : "?") + ") : axe vertical " + m.UpAxis + " (haut " + ul.ToString("F2") + "), bas a " + m.Bottom.ToString("F3") + " m sous le pivot, echelle au repos " + m.RestS.ToString("F2")
+                            + ", verre " + (rr != null ? rr.name + " local " + rr.transform.localPosition.ToString("F2") + " " + rr.transform.localEulerAngles.ToString("F0") : "absent"));
                     }
-                    float s = 1f - 0.97f * f;
+                    // (en butee basse : hauteur quasi nulle et 2 cm sous la ceinture -- un lisere depassait encore, capture de JD 15/10)
+                    float s = Mathf.Max(0.004f, 1f - f);
                     Vector3 sc = m.RestS; sc[m.UpAxis] = m.RestS[m.UpAxis] * s;
                     m.GlassR.localScale = sc;
                     m.GlassR.localRotation = m.RestQ;
-                    m.GlassR.localPosition = m.RestP + new Vector3(0f, 0f, -m.Bottom * (1f - s));   // (repere du pivot : Z = haut)
+                    m.GlassR.localPosition = m.RestP + new Vector3(0f, 0f, -m.Bottom * (1f - s) - 0.02f * f);   // (repere du pivot : Z = haut)
                     continue;
                 }
                 Vector3 extra = m.PivotR.InverseTransformVector(-m.Car.up * (ExtraDown * f));
