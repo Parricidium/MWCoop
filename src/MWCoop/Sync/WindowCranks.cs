@@ -171,8 +171,11 @@ namespace MWCoop
                 if (Make(f, frontR, glassR)) n++;
             }
             // Portieres arriere : chaque DoorRear* avec un pivot de vitre et une manivelle sans automate.
+            // Coupe par defaut (JD, 15/10 : la vitre arriere, animee tout droit, inclinee ou coupee a la ceinture, restait
+            // incorrecte chez lui -- a animer a la main plus tard) : manivelles arriere laissees telles que le jeu les
+            // dessine, inertes, vitres arriere d'origine. [Coop] VitresArriere=1 : l'animation (essais).
             int nr = 0;
-            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            if (Config.GetInt("Coop", "VitresArriere", 0) != 0) foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
             {
                 if (f == null || f.FsmName != "Knob" || f.gameObject.name != "opener" || f.transform.parent == null || f.transform.parent.name != "FrontL") continue;
                 Transform doors = f.transform.parent.parent != null ? f.transform.parent.parent.parent : null;
@@ -470,7 +473,7 @@ namespace MWCoop
         // [Test] Autotest=vitreporte (solo) : la portiere [Test] VitrePorte (DoorRear(leftx) par defaut) de la SORBET vue de
         // dehors, fermee a 25 s puis ouverte a 28 s (photos vp-ferme / vp-ouverte), et la vitre de cette portiere dans le repere
         // de la portiere aux deux moments (attendu : la meme -- elle suit la portiere).
-        static int vpStep; static Transform vpDoor, vpGlass; static Vector3 vpPos; static Quaternion vpRot; static PlayMakerFSM vpKnob;
+        static int vpStep; static Transform vpDoor, vpGlass; static Vector3 vpPos; static Quaternion vpRot; static PlayMakerFSM vpKnob; static int vpCam;
         static void TestDoorGlass(float t)
         {
             string door = Config.Get("Test", "VitrePorte", "DoorRear(leftx)");
@@ -495,10 +498,18 @@ namespace MWCoop
                 Vector3 at = car.TransformPoint(cm == 2 ? new Vector3(sx * 0.9f, 0.5f, g.z + 0.3f) : cm == 3 ? new Vector3(sx * 0.7f, 0.6f, g.z) : new Vector3(sx * 0.9f, 0.9f, g.z));
                 if (cm == 2) tcam.fieldOfView = 90f;
                 tcam.transform.position = eye; tcam.transform.rotation = Quaternion.LookRotation(at - eye, car.up);
+                vpCam = cm;
                 Autotest.CaptureSoon("vp-ferme", 0.3f);
                 Log.Info("autotest : vitreporte, " + Recon.Path(vpGlass) + " (charniere " + vpDoor.name + ", parent de la vitre " + vpGlass.parent.name + ")");
             }
             if (vpStep == 1 && t > 26.5f) { vpStep = 2; Log.Info("autotest : vitreporte, ouvre : " + CarDoors.TestOpen("SORBET", true, door)); }
+            // (4 : portiere ouverte vue sur sa tranche, depuis son bord libre vers la charniere, a hauteur de vitre -- JD, 15/10)
+            if (vpStep == 2 && t > 28.5f && vpCam == 4 && tcam != null)
+            {
+                Vector3 ax = vpGlass.right; if (Vector3.Dot(vpGlass.position - vpDoor.position, ax) < 0f) ax = -ax;   // (vers le bord libre)
+                Vector3 eye = vpGlass.position + ax * 2.2f + car.up * 0.25f, at = vpGlass.position + car.up * 0.1f;
+                tcam.transform.position = eye; tcam.transform.rotation = Quaternion.LookRotation(at - eye, car.up); tcam.fieldOfView = 50f;
+            }
             if (vpStep == 2 && t > 29f)
             {
                 vpStep = 3;
@@ -510,7 +521,7 @@ namespace MWCoop
                 Log.Info("autotest : vitreporte, charniere " + Angle(vpDoor) + ", vitre dans le repere de la portiere : ecart " + (p - vpPos).magnitude.ToString("F3") + " m, " + Quaternion.Angle(q, vpRot).ToString("F1") + " deg ;" + sb);
             }
             // Portiere ouverte, vitre baissee (manivelle de cette portiere tenue 3 s), capture : la vitre reste dans la portiere.
-            if (vpStep == 3 && t > 31f && t < 34f)
+            if (vpStep == 3 && t > 31f && t < (Config.GetInt("Test", "VitrePorteDemi", 0) != 0 ? 32.5f : 34f))
             {
                 if (vpKnob == null) foreach (PlayMakerFSM k in vpDoor.GetComponentsInChildren<PlayMakerFSM>(true)) if (k.FsmName == "Knob") { vpKnob = k; break; }
                 if (vpKnob != null && vpKnob.ActiveStateName != "State 1") Game.SetState(vpKnob, "State 1");
