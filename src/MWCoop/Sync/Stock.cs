@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -133,7 +133,7 @@ namespace MWCoop
                         s.Touched.Add(k);
                         bch.Add(new KeyValuePair<string, int>(k, Session.IsHost ? v : v - old));
                     }
-                bool full = Session.IsHost && bought != null && now >= nextFull && Session.RemoteCount > 0;
+                bool full = Session.IsHost && bought != null && fullRound && Session.RemoteCount > 0;   // (nextFull deja avance : fullRound, pas now >= nextFull -- l'envoi complet ne partait plus, 0.95.4-0.95.8)
                 if ((changed.Count > 0 || bch.Count > 0 || full) && Session.RemoteCount > 0)
                 {
                     if (full)
