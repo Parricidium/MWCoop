@@ -28,10 +28,123 @@ namespace MWCoop
         {
             public Transform Proxy, GlassL, GlassR, PivotL, PivotR, Car, DoorL, DoorR;
             public bool Ready, Flip = true; public Matrix4x4 A, B; public float WaitLog, DownMag;   // vitre de droite (locale) = A * temoin (local) * B
-            public bool Straight; public Vector3 RestP, RestS; public Quaternion RestQ; public int UpAxis = -1; public float Bottom;   // vitre arriere : raccourcie en descendant (axe vertical local, bas sous l'origine)
+            public bool Straight; public Vector3 RestP, RestS; public Quaternion RestQ; public Cut[] Cuts;   // vitre arriere : descend tout droit, maillages coupes a la ceinture
             public Vector3 LastP = new Vector3(1e9f, 0, 0); public Quaternion LastQ;
         }
         static readonly System.Collections.Generic.List<Mirror> mirrors = new System.Collections.Generic.List<Mirror>();
+
+        // Maillage d'une vitre arriere (verre, givre...) coupe a un plan horizontal : au repos tout est garde ; descendue de
+        // « travel », tout ce qui passe sous le bas d'origine (ceinture de caisse) est retire, triangle par triangle (les aretes
+        // coupees sont interpolees : position, normale, UV). Le maillage d'origine reste intact (copie de travail).
+        public class Cut
+        {
+            public MeshFilter MF; public Mesh Work; public Vector3[] V, N; public Vector2[] UV; public int[][] T; public Vector3 Up; public float Min; public float Last = -1f;
+            public System.Collections.Generic.List<Vector3> v = new System.Collections.Generic.List<Vector3>(), n = new System.Collections.Generic.List<Vector3>();
+            public System.Collections.Generic.List<Vector2> uv = new System.Collections.Generic.List<Vector2>();
+            public System.Collections.Generic.List<int> t = new System.Collections.Generic.List<int>();
+        }
+
+        static void PrepareCuts(Mirror m)
+        {
+            var list = new System.Collections.Generic.List<Cut>();
+            foreach (MeshFilter mf in m.GlassR.GetComponentsInChildren<MeshFilter>(true))
+            {
+                Mesh src = mf.sharedMesh;
+                if (src == null) continue;
+                try
+                {
+                    var c = new Cut { MF = mf, V = src.vertices, N = src.normals, UV = src.uv };
+                    if (c.V == null || c.V.Length == 0) continue;
+                    if (c.N == null || c.N.Length != c.V.Length) c.N = null;
+                    if (c.UV == null || c.UV.Length != c.V.Length) c.UV = null;
+                    c.T = new int[src.subMeshCount][];
+                    for (int k = 0; k < src.subMeshCount; k++) c.T[k] = src.GetTriangles(k);
+                    c.Up = mf.transform.InverseTransformDirection(m.Car.up).normalized;
+                    Vector3 ls = mf.transform.lossyScale; float sc = Mathf.Abs(Vector3.Dot(new Vector3(Mathf.Abs(c.Up.x), Mathf.Abs(c.Up.y), Mathf.Abs(c.Up.z)), ls));
+                    c.Up = c.Up * (sc > 1e-4f ? sc : 1f);   // (hauteurs en metres du monde malgre l'echelle du maillage)
+                    c.Min = float.MaxValue;
+                    foreach (Vector3 p in c.V) c.Min = Mathf.Min(c.Min, Vector3.Dot(p, c.Up));
+                    c.Work = new Mesh(); c.Work.name = src.name + " MWCoop";
+                    list.Add(c);
+                }
+                catch (System.Exception e) { Log.Warn("vitres : maillage " + mf.name + " non coupable : " + e.Message); }
+            }
+            m.Cuts = list.ToArray();
+            if (logs++ < 12) Log.Info("vitres : vitre arriere de " + m.Car.name + " (" + (m.DoorR != null ? m.DoorR.name : "?") + ") : " + m.Cuts.Length + " maillage(s) coupes a la ceinture en descendant");
+        }
+
+        static void ApplyCut(Cut c, float h)
+        {
+            if (c.MF == null) return;
+            if (h <= 0.001f)
+            {
+                if (c.Last != 0f) { c.MF.sharedMesh = c.Work; RebuildCut(c, float.MinValue); c.Last = 0f; }   // (au repos : copie entiere)
+                return;
+            }
+            if (Mathf.Abs(h - c.Last) < 0.002f) return;
+            c.Last = h;
+            if (c.MF.sharedMesh != c.Work) c.MF.sharedMesh = c.Work;
+            RebuildCut(c, c.Min + h);
+        }
+
+        static void RebuildCut(Cut c, float cutoff)
+        {
+            c.v.Clear(); c.n.Clear(); c.uv.Clear();
+            int[][] subs = new int[c.T.Length][];
+            float[] d = new float[c.V.Length];
+            for (int i = 0; i < c.V.Length; i++) d[i] = Vector3.Dot(c.V[i], c.Up) - cutoff;
+            for (int k = 0; k < c.T.Length; k++)
+            {
+                c.t.Clear();
+                int[] tri = c.T[k];
+                for (int i = 0; i + 2 < tri.Length; i += 3)
+                {
+                    int a = tri[i], b = tri[i + 1], e = tri[i + 2];
+                    bool ia = d[a] >= 0f, ib = d[b] >= 0f, ie = d[e] >= 0f;
+                    int nin = (ia ? 1 : 0) + (ib ? 1 : 0) + (ie ? 1 : 0);
+                    if (nin == 0) continue;
+                    if (nin == 3) { c.t.Add(Add(c, a)); c.t.Add(Add(c, b)); c.t.Add(Add(c, e)); continue; }
+                    // ordre cyclique : le(s) sommet(s) garde(s) d'abord
+                    int p0 = a, p1 = b, p2 = e; bool i0 = ia, i1 = ib, i2 = ie;
+                    for (int r = 0; r < 3 && !(nin == 1 ? i0 && !i1 && !i2 : i0 && i1 && !i2); r++) { int tp = p0; p0 = p1; p1 = p2; p2 = tp; bool tb = i0; i0 = i1; i1 = i2; i2 = tb; }
+                    if (nin == 1)
+                    {
+                        int x = Add(c, p0), y = Lerp(c, p0, p1, d[p0], d[p1]), z = Lerp(c, p0, p2, d[p0], d[p2]);
+                        c.t.Add(x); c.t.Add(y); c.t.Add(z);
+                    }
+                    else
+                    {
+                        int x = Add(c, p0), y = Add(c, p1), y2 = Lerp(c, p1, p2, d[p1], d[p2]), x2 = Lerp(c, p0, p2, d[p0], d[p2]);
+                        c.t.Add(x); c.t.Add(y); c.t.Add(y2);
+                        c.t.Add(x); c.t.Add(y2); c.t.Add(x2);
+                    }
+                }
+                subs[k] = c.t.ToArray();
+            }
+            Mesh w = c.Work;
+            w.Clear();
+            w.vertices = c.v.ToArray();
+            if (c.N != null) w.normals = c.n.ToArray();
+            if (c.UV != null) w.uv = c.uv.ToArray();
+            w.subMeshCount = subs.Length;
+            for (int k = 0; k < subs.Length; k++) w.SetTriangles(subs[k], k);
+            w.RecalculateBounds();
+        }
+
+        static int Add(Cut c, int i)
+        {
+            c.v.Add(c.V[i]); if (c.N != null) c.n.Add(c.N[i]); if (c.UV != null) c.uv.Add(c.UV[i]);
+            return c.v.Count - 1;
+        }
+
+        static int Lerp(Cut c, int a, int b, float da, float db)
+        {
+            float t = da / (da - db);
+            c.v.Add(Vector3.Lerp(c.V[a], c.V[b], t));
+            if (c.N != null) c.n.Add(Vector3.Lerp(c.N[a], c.N[b], t).normalized);
+            if (c.UV != null) c.uv.Add(Vector2.Lerp(c.UV[a], c.UV[b], t));
+            return c.v.Count - 1;
+        }
         class Follow { public Transform Src, Dst; public Quaternion SrcRest, DstRest; }
         static readonly System.Collections.Generic.List<Follow> followers = new System.Collections.Generic.List<Follow>();
 
@@ -163,35 +276,16 @@ namespace MWCoop
                 // de l'ouverture (videos de Menor, 13/10). Elle descend donc tout droit (vers le bas de la voiture), de la meme course.
                 if (m.Straight)
                 {
-                    // La portiere arriere est pleine (pas de creux entre panneau et tole) : descendue, la vitre se voyait a travers
-                    // le garnissage, inclinee elle sortait par la tole ou le panneau (Menor 14/10, JD 15/10). Elle est donc
-                    // raccourcie en descendant (echelle sur son axe vertical, bas tenu sur la ceinture de caisse) : seule sa partie
-                    // dans l'ouverture existe, rien dans la portiere, quel que soit l'angle de la portiere (tout en repere local).
-                    if (m.UpAxis < 0)
-                    {
-                        Vector3 ul = m.GlassR.InverseTransformDirection(m.Car.up);
-                        m.UpAxis = Mathf.Abs(ul.x) >= Mathf.Abs(ul.y) && Mathf.Abs(ul.x) >= Mathf.Abs(ul.z) ? 0 : Mathf.Abs(ul.y) >= Mathf.Abs(ul.z) ? 1 : 2;
-                        Renderer rr = m.GlassR.GetComponentInChildren<Renderer>();
-                        m.Bottom = 0.08f;
-                        if (rr != null)
-                        {
-                            Bounds bb = rr.bounds; float lo = float.MaxValue;
-                            for (int k = 0; k < 8; k++)
-                            {
-                                Vector3 c = new Vector3((k & 1) != 0 ? bb.max.x : bb.min.x, (k & 2) != 0 ? bb.max.y : bb.min.y, (k & 4) != 0 ? bb.max.z : bb.min.z);
-                                lo = Mathf.Min(lo, Vector3.Dot(c - m.GlassR.position, m.Car.up));
-                            }
-                            m.Bottom = Mathf.Max(0f, -lo);
-                        }
-                        Log.Info("vitres : vitre arriere de " + m.Car.name + " (" + (m.DoorR != null ? m.DoorR.name : "?") + ") : axe vertical " + m.UpAxis + " (haut " + ul.ToString("F2") + "), bas a " + m.Bottom.ToString("F3") + " m sous le pivot, echelle au repos " + m.RestS.ToString("F2")
-                            + ", verre " + (rr != null ? rr.name + " local " + rr.transform.localPosition.ToString("F2") + " " + rr.transform.localEulerAngles.ToString("F0") : "absent"));
-                    }
-                    // (en butee basse : hauteur quasi nulle et 2 cm sous la ceinture -- un lisere depassait encore, capture de JD 15/10)
-                    float s = Mathf.Max(0.004f, 1f - f);
-                    Vector3 sc = m.RestS; sc[m.UpAxis] = m.RestS[m.UpAxis] * s;
-                    m.GlassR.localScale = sc;
+                    // La portiere arriere est pleine (pas de creux entre panneau et tole) : descendue tout droit, la vitre se voyait
+                    // a travers le garnissage ; inclinee, elle sortait par le panneau ou la tole ; raccourcie, elle « s'ecrasait »
+                    // (JD, 15/10). Elle descend donc tout droit, et son maillage (verre, givre) est coupe au plan de la ceinture de
+                    // caisse : seule la partie dans l'ouverture est dessinee, texture intacte, quel que soit l'angle de la portiere.
+                    if (m.Cuts == null) PrepareCuts(m);
+                    float travel = (m.DownMag > 0.01f ? m.DownMag : 0.37f) * f;
+                    m.GlassR.localScale = m.RestS;
                     m.GlassR.localRotation = m.RestQ;
-                    m.GlassR.localPosition = m.RestP + new Vector3(0f, 0f, -m.Bottom * (1f - s) - 0.02f * f);   // (repere du pivot : Z = haut)
+                    m.GlassR.localPosition = m.RestP + new Vector3(0f, 0f, -travel);   // (repere du pivot : Z = haut)
+                    foreach (Cut c in m.Cuts) ApplyCut(c, travel + 0.02f);   // (2 cm de marge : pas de lisere au-dessus de la ceinture)
                     continue;
                 }
                 Vector3 extra = m.PivotR.InverseTransformVector(-m.Car.up * (ExtraDown * f));
@@ -210,7 +304,7 @@ namespace MWCoop
             return h == null ? "sans" : h.angle.ToString("F1") + " (" + h.limits.min.ToString("F0") + ".." + h.limits.max.ToString("F0") + ")";
         }
 
-        const float ExtraDown = 0.15f;
+        const float ExtraDown = 0f;   // (JD, 15/10 : vitre avant passager = miroir exact de celle du conducteur, animation du jeu ; les 15 cm de plus de Menor retires)
 
         // ---------------------------------------------------------------- pose des vitres
         // La manivelle est rejouee chez les autres (Jobs), mais leur automate repart aussitot ("State 1" -> "Get scroll" ->
@@ -448,7 +542,7 @@ namespace MWCoop
             }
             if (mode == "vitreporte") { TestDoorGlass(t); return; }
             if (mode != "vitre") return;
-            if (tStep == 1 && t < 31f) foreach (Win w in wins) if (w.Key.Contains("SORBET")) w.AimAt = Time.realtimeSinceStartup;   // (comme si on la visait)
+            if (tStep == 1 && t < (Config.GetInt("Test", "VitreDemi", 0) != 0 ? 27f : 31f)) foreach (Win w in wins) if (w.Key.Contains("SORBET")) w.AimAt = Time.realtimeSinceStartup;   // (comme si on la visait)
             if (tStep == 0 && t > 25f)
             {
                 GameObject s = GameObject.Find("SORBET(190-200psi)");
@@ -497,7 +591,7 @@ namespace MWCoop
                 tStep = 1;
                 Log.Info("autotest : vitre, les deux manivelles tournent");
             }
-            if (tStep == 1 && t < 31f) foreach (PlayMakerFSM f in new[] { kl, kr }) if (f != null && f.ActiveStateName != "State 1") Game.SetState(f, "State 1");   // (molette tenue)
+            if (tStep == 1 && t < (Config.GetInt("Test", "VitreDemi", 0) != 0 ? 27f : 31f)) foreach (PlayMakerFSM f in new[] { kl, kr }) if (f != null && f.ActiveStateName != "State 1") Game.SetState(f, "State 1");   // (molette tenue)
             if (tStep == 1 && t > 31f)
             {
                 tStep = 2;
