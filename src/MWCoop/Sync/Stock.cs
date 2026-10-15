@@ -106,6 +106,7 @@ namespace MWCoop
             if (now < nextCheck || stores.Count == 0) return;
             nextCheck = now + 0.5f;
             bool fullRound = now >= nextFull;
+            if (fullRound) nextFull = now + 60f;   // (marque AVANT l'envoi : un envoi rate ne doit pas etre retente a chaque tour)
             foreach (Store s in stores.Values)
             {
                 Hashtable stocked = s.Stocked, carried = s.Carried;
@@ -135,16 +136,12 @@ namespace MWCoop
                 bool full = Session.IsHost && bought != null && now >= nextFull && Session.RemoteCount > 0;
                 if ((changed.Count > 0 || bch.Count > 0 || full) && Session.RemoteCount > 0)
                 {
-                    var w = new NetWriter(Msg.Stock).U8(Session.LocalId).Str(s.Key).U8(Mathf.Min(changed.Count, 255));
-                    for (int i = 0; i < changed.Count && i < 255; i++)
-                        w.Str(changed[i]).I32(s.SentStocked.ContainsKey(changed[i]) ? s.SentStocked[changed[i]] : -1).I32(s.SentCarried.ContainsKey(changed[i]) ? s.SentCarried[changed[i]] : 0);
                     if (full)
                     {
                         bch.Clear();
                         foreach (DictionaryEntry e in bought) bch.Add(new KeyValuePair<string, int>(e.Key.ToString(), ToInt(e.Value)));
                     }
-                    if (bch.Count > 0) WriteBought(w, Session.IsHost ? BoughtAbs : BoughtDelta, bch);
-                    Session.SendAll(w, true);
+                    SendChunks(s, changed, Session.IsHost ? BoughtAbs : BoughtDelta, bch);
                 }
                 // Produit que d'autres ont aussi dans leur panier : l'etagere se recalcule.
                 foreach (string k in changed)
@@ -153,7 +150,35 @@ namespace MWCoop
                 foreach (string it in s.Touched) Refresh(s, it);
                 s.Touched.Clear();
             }
-            if (fullRound) nextFull = now + 60f;
+        }
+
+        // Un message tient dans un paquet (Transport.MaxPayload) : les etageres changees, puis les achats, par morceaux.
+        // Journaux de CBetoy (14/10) : « message fiable trop long : 1248 » deux fois par seconde pendant 80 min -- la liste
+        // complete des achats du magasin depassait, l'exception sortait avant que l'envoi complet soit marque fait, et les
+        // stocks ne partaient jamais aux invites.
+        const int ChunkBytes = 900;
+        static int Bytes(string t) { return System.Text.Encoding.UTF8.GetByteCount(t ?? ""); }
+        static void SendChunks(Store s, List<string> changed, byte mode, List<KeyValuePair<string, int>> bought)
+        {
+            int head = 4 + Bytes(s.Key);
+            for (int i = 0; i < changed.Count;)
+            {
+                var w = new NetWriter(Msg.Stock).U8(Session.LocalId).Str(s.Key);
+                int size = head, n = 0, start = i;
+                while (i < changed.Count && n < 255) { int e = 10 + Bytes(changed[i]); if (n > 0 && size + e > ChunkBytes) break; size += e; i++; n++; }
+                w.U8(n);
+                for (int k = start; k < i; k++) w.Str(changed[k]).I32(s.SentStocked.ContainsKey(changed[k]) ? s.SentStocked[changed[k]] : -1).I32(s.SentCarried.ContainsKey(changed[k]) ? s.SentCarried[changed[k]] : 0);
+                Session.SendAll(w, true);
+            }
+            for (int i = 0; i < bought.Count;)
+            {
+                var part = new List<KeyValuePair<string, int>>();
+                int size = head + 3;
+                while (i < bought.Count) { int e = 6 + Bytes(bought[i].Key); if (part.Count > 0 && size + e > ChunkBytes) break; size += e; part.Add(bought[i]); i++; }
+                var w = new NetWriter(Msg.Stock).U8(Session.LocalId).Str(s.Key).U8(0);
+                WriteBought(w, mode, part);
+                Session.SendAll(w, true);
+            }
         }
 
         static void WriteBought(NetWriter w, byte mode, List<KeyValuePair<string, int>> l)
@@ -244,12 +269,7 @@ namespace MWCoop
                 }
                 else if (mode == BoughtAbs && !Session.IsHost) SetBought(s, item, v);
             }
-            if (abs != null && abs.Count > 0)
-            {
-                var w = new NetWriter(Msg.Stock).U8(Session.LocalId).Str(key).U8(0);
-                WriteBought(w, BoughtAbs, abs);
-                Session.SendAll(w, true);
-            }
+            if (abs != null && abs.Count > 0 && s != null) SendChunks(s, new List<string>(), BoughtAbs, abs);
         }
 
         public static string State(string item)
