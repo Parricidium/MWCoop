@@ -28,7 +28,7 @@ namespace MWCoop
         {
             public Transform Proxy, GlassL, GlassR, PivotL, PivotR, Car, DoorL, DoorR;
             public bool Ready, Flip = true; public Matrix4x4 A, B; public float WaitLog, DownMag;   // vitre de droite (locale) = A * temoin (local) * B
-            public bool Straight; public Vector3 RestP; public Quaternion RestQ;   // vitre arriere : descend tout droit dans sa portiere
+            public bool Straight; public Vector3 RestP; public Quaternion RestQ; public float OutSign;   // vitre arriere : descend dans sa portiere (OutSign : cote de la tole, -1 a gauche)
             public Vector3 LastP = new Vector3(1e9f, 0, 0); public Quaternion LastQ;
         }
         static readonly System.Collections.Generic.List<Mirror> mirrors = new System.Collections.Generic.List<Mirror>();
@@ -163,8 +163,15 @@ namespace MWCoop
                 // de l'ouverture (videos de Menor, 13/10). Elle descend donc tout droit (vers le bas de la voiture), de la meme course.
                 if (m.Straight)
                 {
-                    m.GlassR.localRotation = m.RestQ;
-                    m.GlassR.localPosition = m.RestP + m.PivotR.InverseTransformVector(-m.Car.up * ((m.DownMag > 0.01f ? m.DownMag : 0.37f) * f + ExtraDown * f));
+                    // Tout droit, la vitre restait du cote habitacle du panneau de porte (verre a x -0,62, panneau a -0,65) : on la
+                    // voyait a travers le garnissage en descendant (video de Menor, 14/10). Comme le jeu pour les vitres avant
+                    // (rotation 14 degres, decalage), elle s'incline et glisse vers la tole en descendant, et ne descend que sa
+                    // course (le rebord arriere la cache deja : pas les 15 cm de plus de l'avant).
+                    if (m.OutSign == 0f) m.OutSign = m.Car.InverseTransformPoint(m.PivotR.position).x < 0f ? -1f : 1f;
+                    float travel = (m.DownMag > 0.01f ? m.DownMag : 0.37f) * f + 0.05f * f;
+                    Vector3 move = -m.Car.up * travel + m.Car.right * (m.OutSign * 0.09f * f);
+                    m.GlassR.localPosition = m.RestP + m.PivotR.InverseTransformVector(move);
+                    m.GlassR.localRotation = Quaternion.AngleAxis(m.OutSign * 12f * f, m.PivotR.InverseTransformDirection(m.Car.forward)) * m.RestQ;
                     continue;
                 }
                 Vector3 extra = m.PivotR.InverseTransformVector(-m.Car.up * (ExtraDown * f));
@@ -428,6 +435,26 @@ namespace MWCoop
                 tcam.depth = 100; tcam.nearClipPlane = 0.02f; tcam.fieldOfView = 75f;
                 Look(1f);
                 Autotest.CaptureSoon("vitre-haut", 0.5f);
+                if (Config.GetInt("Test", "VitreExt", 0) != 0)
+                {
+                    // (essai : camera dehors, en face de la vitre suivie, givre eteint pour voir le verre ; rendus de la portiere)
+                    Vector3 g = car.InverseTransformPoint(gr.position); float sx = g.x < 0f ? -1f : 1f;
+                    bool inside = Config.GetInt("Test", "VitreExt", 0) == 2;   // (2 : depuis l'habitacle, de la banquette opposee, givre garde)
+                    Vector3 eye = car.TransformPoint(inside ? new Vector3(-sx * 0.25f, 0.95f, g.z + 0.1f) : new Vector3(sx * 3.0f, 1.5f, g.z)), at = car.TransformPoint(new Vector3(sx * 0.8f, 0.55f, g.z));
+                    tcam.transform.position = eye; tcam.transform.rotation = Quaternion.LookRotation(at - eye, car.up);
+                    if (inside) tcam.fieldOfView = 85f;
+                    Renderer grr = gr.GetComponentInChildren<Renderer>();
+                    Log.Info("autotest : vitre, verre arriere au repos : centre " + (grr != null ? car.InverseTransformPoint(grr.bounds.center).ToString("F3") : "?") + ", pivot " + g.ToString("F3") + ", axes du pivot (repere voiture) Y " + car.InverseTransformDirection(gr.up).ToString("F2") + " Z " + car.InverseTransformDirection(gr.forward).ToString("F2") + ", haut de la portiere (repere voiture) " + car.InverseTransformDirection(DoorOf(gr) != null ? DoorOf(gr).up : Vector3.up).ToString("F2"));
+                    Transform dr = DoorOf(gr);
+                    var sbh = new System.Text.StringBuilder();
+                    if (dr != null) foreach (Renderer r in dr.GetComponentsInChildren<Renderer>(true))
+                    {
+                        string n = r.name.ToLowerInvariant();
+                        if ((n.Contains("frost") || n.Contains("frozen")) && !inside) r.enabled = false;
+                        sbh.Append(" | ").Append(Recon.Path(r.transform).Replace(Recon.Path(dr) + "/", "")).Append(r.transform.IsChildOf(gr) ? " [sous pivot]" : " [HORS pivot]").Append(r.enabled ? "" : " (eteint)").Append(" centre ").Append(car.InverseTransformPoint(r.bounds.center).ToString("F2")).Append(" taille ").Append(r.bounds.size.ToString("F2")).Append(r.sharedMaterial != null ? " mat " + r.sharedMaterial.name : "");
+                    }
+                    Log.Info("autotest : vitre, rendus de la portiere " + (dr != null ? dr.name : "?") + sbh);
+                }
                 Log.Info("autotest : vitre, repos : verre gauche " + Box(gl) + " droite " + Box(gr) + " ; portiere gauche " + Box(gl.parent.parent) + " droite " + Box(gr.parent.parent));
                 kl = Game.FsmOn(ol.gameObject, "Knob"); kr = Game.FsmOn(or.gameObject, "Knob");
                 tStep = 1;
@@ -458,6 +485,7 @@ namespace MWCoop
                 float err = 0f; for (int a = 0; a < 3; a++) for (int b = 0; b < 4; b++) err = Mathf.Max(err, Mathf.Abs(want[a, b] - dmr[a, b]));
                 Log.Info("autotest : vitre, ecart au miroir (matrices) " + err.ToString("F3") + " (attendu ~0) ; meme sens que la gauche (ancien defaut) " + MaxDiff(dml, dmr).ToString("F3"));
                 Log.Info("autotest : vitre, bas : verre gauche " + Box(gl) + " droite " + Box(gr));
+                { Renderer grr = gr.GetComponentInChildren<Renderer>(); if (grr != null) Log.Info("autotest : vitre, verre arriere baisse : centre " + car.InverseTransformPoint(grr.bounds.center).ToString("F3") + " (repere voiture)"); }
                 foreach (Transform x in new[] { gl, gr }) foreach (MeshFilter mf in x.GetComponentsInChildren<MeshFilter>(true))
                     Log.Info("autotest : vitre, maillage " + mf.name + " sous " + x.parent.parent.name + " : local " + mf.transform.localPosition.ToString("F3") + " " + mf.transform.localEulerAngles.ToString("F1") + " x" + mf.transform.localScale.ToString("F2") + ", sommets " + (mf.sharedMesh != null ? mf.sharedMesh.vertexCount + " limites " + mf.sharedMesh.bounds.ToString("F3") : "?"));
                 Autotest.CaptureSoon("vitre-bas", 0.05f);

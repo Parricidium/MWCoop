@@ -365,6 +365,7 @@ namespace MWCoop
                 for (int i = settling.Count - 1; i >= 0; i--)
                 {
                     Prop p = settling[i];
+                    if (Mounted(p)) { settling.RemoveAt(i); continue; }   // (montee entre-temps : sa pose est celle de la voiture)
                     bool done = p.Body == null || now > p.SettleUntil || (now > p.SettleUntil - 4.5f && p.Body.IsSleeping());
                     p.LocalAt = now;
                     Send(p, done ? 0 : 2);
@@ -475,6 +476,36 @@ namespace MWCoop
         // Hote : invite arrive en jeu -> 20 s plus tard (ses objets sont releves), la pose de tout ce qui est au repos.
         static float resendAt;
         public static void ScheduleSnapshot() { if (Session.IsHost) resendAt = Time.realtimeSinceStartup + 20f; }
+
+        // Piece montee sur une voiture (joint du jeu, rangee sous la voiture, ou en cours de montage : Parts) : sa pose est
+        // celle de la voiture, jamais une pose libre recue ni envoyee.
+        static bool Mounted(Prop p)
+        {
+            if (p == null || p.Body == null) return false;
+            if (p.Body.GetComponent<FixedJoint>() != null || Parts.IsMounting(p.Body.gameObject)) return true;
+            Transform t = p.Body.transform;
+            return t.parent != null && VehicleSync.CarRoot(t) != null;
+        }
+        // Piece tout juste demontee chez un autre (Parts) : tenue cinematique ici le temps que ses poses de chute arrivent
+        // (1,5 s sans message : relachee). Liberee d'un coup dans la carrosserie, la physique d'ici l'ejectait (culbuteur
+        // envole, piston sous la carte : journaux de CBetoy, 14/10).
+        public static void HoldFromRemote(GameObject go, int who)
+        {
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            Prop p;
+            if (rb == null || !byBody.TryGetValue(rb, out p) || p == held) return;
+            p.RemoteBy = who; p.LastRemote = Time.realtimeSinceStartup;
+            SetKinematic(p, true);
+        }
+        // Piece tout juste demontee ici (Parts) : ses poses de chute partent aux autres, comme un objet lache de la main.
+        public static void SettleHere(GameObject go)
+        {
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            Prop p;
+            if (rb == null || !byBody.TryGetValue(rb, out p) || p == held) return;
+            p.SettleUntil = Time.realtimeSinceStartup + 5f;
+            if (!settling.Contains(p)) settling.Add(p);
+        }
 
         // Objet au repos dont l'hote fait foi (ni tenu, ni deplace par un autre, ni transporte par un autre).
         static bool HostResends(Prop p)
@@ -841,7 +872,7 @@ namespace MWCoop
             }
             if (state == STORED) { stored.Add(id); storedBy[id] = who; } else stored.Remove(id);
             if (p == null || p.Body == null || p == held) return;
-            if (state != STORED && p.Body.transform.parent != null && VehicleSync.CarRoot(p.Body.transform) != null) return;   // (montee ici : voir plus haut)
+            if (state != STORED && Mounted(p)) return;   // (montee ici, ou en cours de montage : sa pose est celle de la voiture)
             // Range ici (ou dans notre main, eteint : outil du jeu) : c'est nous qui l'avons, pas a cacher.
             if (state == STORED && (storedHere.ContainsKey(id) || (hand != null && hand.FsmVariables.GetFsmGameObject("PickedObject").Value == p.Body.gameObject))) return;
             p.RemoteAt = now;
