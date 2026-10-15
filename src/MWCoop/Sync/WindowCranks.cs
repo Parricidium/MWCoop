@@ -28,7 +28,7 @@ namespace MWCoop
         {
             public Transform Proxy, GlassL, GlassR, PivotL, PivotR, Car, DoorL, DoorR;
             public bool Ready, Flip = true; public Matrix4x4 A, B; public float WaitLog, DownMag;   // vitre de droite (locale) = A * temoin (local) * B
-            public bool Straight; public Vector3 RestP; public Quaternion RestQ; public float OutSign;   // vitre arriere : descend dans sa portiere (OutSign : cote de la tole, -1 a gauche)
+            public bool Straight; public Vector3 RestP, RestS; public Quaternion RestQ; public int UpAxis = -1; public float Bottom;   // vitre arriere : raccourcie en descendant (axe vertical local, bas sous l'origine)
             public Vector3 LastP = new Vector3(1e9f, 0, 0); public Quaternion LastQ;
         }
         static readonly System.Collections.Generic.List<Mirror> mirrors = new System.Collections.Generic.List<Mirror>();
@@ -163,17 +163,32 @@ namespace MWCoop
                 // de l'ouverture (videos de Menor, 13/10). Elle descend donc tout droit (vers le bas de la voiture), de la meme course.
                 if (m.Straight)
                 {
-                    // Tout droit, la vitre restait du cote habitacle du panneau de porte (verre a x -0,62, panneau a -0,65) : on la
-                    // voyait a travers le garnissage en descendant (video de Menor, 14/10). Comme le jeu pour les vitres avant
-                    // (rotation 14 degres, decalage), elle s'incline et glisse vers la tole en descendant, et ne descend que sa
-                    // course (le rebord arriere la cache deja : pas les 15 cm de plus de l'avant).
-                    if (m.OutSign == 0f) m.OutSign = m.Car.InverseTransformPoint(m.PivotR.position).x < 0f ? -1f : 1f;
-                    float travel = (m.DownMag > 0.01f ? m.DownMag : 0.37f) * f + 0.05f * f;
-                    // Dans le repere du pivot (releve : X avant, Y droite, Z haut de la voiture, portiere fermee) -- et non dans
-                    // celui de la voiture : portiere ouverte, le mouvement en repere voiture sortait de la portiere (captures de
-                    // JD, 15/10 : vitre en travers de l'ouverture).
-                    m.GlassR.localPosition = m.RestP + new Vector3(0f, m.OutSign * 0.09f * f, -travel);
-                    m.GlassR.localRotation = Quaternion.AngleAxis(m.OutSign * 12f * f, Vector3.right) * m.RestQ;
+                    // La portiere arriere est pleine (pas de creux entre panneau et tole) : descendue, la vitre se voyait a travers
+                    // le garnissage, inclinee elle sortait par la tole ou le panneau (Menor 14/10, JD 15/10). Elle est donc
+                    // raccourcie en descendant (echelle sur son axe vertical, bas tenu sur la ceinture de caisse) : seule sa partie
+                    // dans l'ouverture existe, rien dans la portiere, quel que soit l'angle de la portiere (tout en repere local).
+                    if (m.UpAxis < 0)
+                    {
+                        Vector3 ul = m.GlassR.InverseTransformDirection(m.Car.up);
+                        m.UpAxis = Mathf.Abs(ul.x) >= Mathf.Abs(ul.y) && Mathf.Abs(ul.x) >= Mathf.Abs(ul.z) ? 0 : Mathf.Abs(ul.y) >= Mathf.Abs(ul.z) ? 1 : 2;
+                        Renderer rr = m.GlassR.GetComponentInChildren<Renderer>();
+                        m.Bottom = 0.08f;
+                        if (rr != null)
+                        {
+                            Bounds bb = rr.bounds; float lo = float.MaxValue;
+                            for (int k = 0; k < 8; k++)
+                            {
+                                Vector3 c = new Vector3((k & 1) != 0 ? bb.max.x : bb.min.x, (k & 2) != 0 ? bb.max.y : bb.min.y, (k & 4) != 0 ? bb.max.z : bb.min.z);
+                                lo = Mathf.Min(lo, Vector3.Dot(c - m.GlassR.position, m.Car.up));
+                            }
+                            m.Bottom = Mathf.Max(0f, -lo);
+                        }
+                    }
+                    float s = 1f - 0.97f * f;
+                    Vector3 sc = m.RestS; sc[m.UpAxis] = m.RestS[m.UpAxis] * s;
+                    m.GlassR.localScale = sc;
+                    m.GlassR.localRotation = m.RestQ;
+                    m.GlassR.localPosition = m.RestP + new Vector3(0f, 0f, -m.Bottom * (1f - s));   // (repere du pivot : Z = haut)
                     continue;
                 }
                 Vector3 extra = m.PivotR.InverseTransformVector(-m.Car.up * (ExtraDown * f));
@@ -315,7 +330,7 @@ namespace MWCoop
             Matrix4x4 rc = m.Flip ? Matrix4x4.TRS(new Vector3(2f * x0, 0, 0), Quaternion.identity, new Vector3(-1f, 1f, 1f)) : Matrix4x4.identity;   // (x -> 2 x0 - x ; meme cote : le mouvement tel quel)
             Matrix4x4 r = m.Car.localToWorldMatrix * rc * m.Car.worldToLocalMatrix;
             Matrix4x4 tr0 = Matrix4x4.TRS(m.GlassR.localPosition, m.GlassR.localRotation, m.GlassR.localScale);
-            m.RestP = m.GlassR.localPosition; m.RestQ = m.GlassR.localRotation;
+            m.RestP = m.GlassR.localPosition; m.RestQ = m.GlassR.localRotation; m.RestS = m.GlassR.localScale;
             Matrix4x4 scl = Matrix4x4.Scale(m.GlassL.localScale);
             Matrix4x4 s = (r * wl * scl).inverse * wr * tr0;
             m.A = wr.inverse * r * wl;
