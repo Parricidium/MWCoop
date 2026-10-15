@@ -169,9 +169,11 @@ namespace MWCoop
                     // course (le rebord arriere la cache deja : pas les 15 cm de plus de l'avant).
                     if (m.OutSign == 0f) m.OutSign = m.Car.InverseTransformPoint(m.PivotR.position).x < 0f ? -1f : 1f;
                     float travel = (m.DownMag > 0.01f ? m.DownMag : 0.37f) * f + 0.05f * f;
-                    Vector3 move = -m.Car.up * travel + m.Car.right * (m.OutSign * 0.09f * f);
-                    m.GlassR.localPosition = m.RestP + m.PivotR.InverseTransformVector(move);
-                    m.GlassR.localRotation = Quaternion.AngleAxis(m.OutSign * 12f * f, m.PivotR.InverseTransformDirection(m.Car.forward)) * m.RestQ;
+                    // Dans le repere du pivot (releve : X avant, Y droite, Z haut de la voiture, portiere fermee) -- et non dans
+                    // celui de la voiture : portiere ouverte, le mouvement en repere voiture sortait de la portiere (captures de
+                    // JD, 15/10 : vitre en travers de l'ouverture).
+                    m.GlassR.localPosition = m.RestP + new Vector3(0f, m.OutSign * 0.09f * f, -travel);
+                    m.GlassR.localRotation = Quaternion.AngleAxis(m.OutSign * 12f * f, Vector3.right) * m.RestQ;
                     continue;
                 }
                 Vector3 extra = m.PivotR.InverseTransformVector(-m.Car.up * (ExtraDown * f));
