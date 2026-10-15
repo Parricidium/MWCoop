@@ -190,7 +190,7 @@ namespace MWCoop
             bool queued = Queued(part, key, pendingBolts.Count);
             if (!queued && ApplyBolt(who, part, key, target, false)) return;
             if (!queued) { CheckWaiting(); if (ApplyBolt(who, part, key, target, false)) return; }
-            pendingBolts.Add(new PendingBolt { Who = who, Part = part, Key = key, Target = target, Until = Time.realtimeSinceStartup + 6f });
+            pendingBolts.Add(new PendingBolt { Who = who, Part = part, Key = key, Target = target, Until = Time.realtimeSinceStartup + 15f });
         }
 
         // Un tour de la meme vis attend-il deja (parmi les 'upTo' premiers) ?
@@ -217,9 +217,10 @@ namespace MWCoop
         static bool ApplyBolt(int who, string part, string key, int target, bool last)
         {
             Bolt b = FindBolt(part, key);
-            if (b == null)
+            // (vis inactive : moteur pendu au palan pas encore a 5 cm de son detecteur ici -- en attente, comme absente)
+            if (b == null || !b.F.gameObject.activeInHierarchy)
             {
-                if (last) Log.Warn("vis " + part + "/" + key + " introuvable ici (piece pas montee ici ?)");
+                if (last) Log.Warn("vis " + part + "/" + key + (b == null ? " introuvable ici (piece pas montee ici ?)" : " inactive ici (detecteur du point pas atteint ?)"));
                 return false;
             }
             FsmInt t = b.F.FsmVariables.GetFsmInt("BoltTightness");
@@ -479,9 +480,12 @@ namespace MWCoop
             // voiture (posee a la pose du monde d'ici, elle entrait dans la carrosserie d'une copie a peine decalee, et la
             // voiture etait ejectee -- .nolly, 13/10 : siege conducteur pose par l'hote, CORRIS a 257 km/h chez l'invite)
             Transform pt = p.Fsm.transform;
+            // + serrage de la piece (moteur : voir OnMessage)
+            FsmFloat tf = data != null ? data.FsmVariables.FindFsmFloat("Tightness") : null;
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(install).Str(p.Key).Str(id).I32(aid != null ? aid.Value : 0)
                 .Vec(part.transform.position).Quat(part.transform.rotation)
-                .Vec(pt.InverseTransformPoint(part.transform.position)).Quat(Quaternion.Inverse(pt.rotation) * part.transform.rotation), true);
+                .Vec(pt.InverseTransformPoint(part.transform.position)).Quat(Quaternion.Inverse(pt.rotation) * part.transform.rotation)
+                .F32(tf != null ? tf.Value : -1f), true);
             if (install) { mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = pt; }
             else Props.SettleHere(part);   // (ses poses de chute partent aux autres, comme un objet lache de la main)
         }
@@ -498,10 +502,12 @@ namespace MWCoop
             bool rel = r.More;
             Vector3 lpos = rel ? r.Vec() : Vector3.zero;
             Quaternion lrot = rel ? r.Quat() : Quaternion.identity;
+            float tight = r.More ? r.F32() : -1f;
             if (Session.IsHost)
             {
                 var bw = new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).I32(aid).Vec(pos).Quat(rot);
                 if (rel) bw.Vec(lpos).Quat(lrot);
+                if (rel && tight >= 0f) bw.F32(tight);
                 Session.Broadcast(bw, true, who);
             }
             Point p;
@@ -527,6 +533,15 @@ namespace MWCoop
                     // montage d'ici quand l'envoi le donne (voiture d'ici un peu ailleurs que celle de l'autre).
                     if (rel) { Transform pt = p.Fsm.transform; part.transform.position = pt.TransformPoint(lpos); part.transform.rotation = pt.rotation * lrot; }
                     else { part.transform.position = pos; part.transform.rotation = rot; }
+                    // Moteur (VINP_Block) : le jeu le pose sur son point quand ses vis le tiennent (Tightness >= 1, etat Bolted),
+                    // pendu au palan. Ici ses vis n'ont pas forcement suivi (actives seulement a 5 cm de leur detecteur) :
+                    // avec Tightness 0, INSTALL le ferait retirer aussitot (Tightness? -> Unbolted -> Remove). On lui donne
+                    // le serrage de l'envoyeur. Et s'il pend a un palan ici (joint fixe, crochet rejoue par Garage), le joint
+                    // saute avant que le jeu retire son corps -- comme l'etat State 2 du crochet.
+                    FsmFloat tf = tight >= 0f ? data.FsmVariables.FindFsmFloat("Tightness") : null;
+                    if (tf != null && tf.Value < tight) tf.Value = tight;
+                    FixedJoint fj = part.GetComponent<FixedJoint>();
+                    if (fj != null) Object.Destroy(fj);
                     mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
                     data.SendEvent("INSTALL");
                     Game.SetState(p.Fsm, "Install 2");
