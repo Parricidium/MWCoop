@@ -1,4 +1,4 @@
-# Compile MWCoop puis assemble dist\out\MWCoop-<version>.zip (sans aucune donnee du jeu).
+﻿# Compile MWCoop puis assemble dist\out\MWCoop-<version>.zip (sans aucune donnee du jeu).
 # -Publier : cree la release v<Version> sur GitHub (Parricidium/MWCoop) avec le zip. -Notes : texte de la
 # release (puces en francais, une ligne ---, les memes puces en anglais, une ligne ---, les memes en russe, une ligne ---,
 # les memes en arabe : le lanceur les affiche dans sa langue ; l'annonce Discord prend l'anglais, le russe et l'arabe --
@@ -107,10 +107,18 @@ if ($Publier) {
                 $ruN = (@($ruN -split "`n") | Where-Object { $_ -notmatch "^- $([char]0x041D)$([char]0x0443)$([char]0x0436)$([char]0x043D)$([char]0x043E): " }) -join "`n"
                 $arN = (@($arN -split "`n") | Where-Object { $_ -notmatch "^- $([char]0x0645)$([char]0x0637)$([char]0x0644)$([char]0x0648)$([char]0x0628): " }) -join "`n"
             }
+            # Notes longues (0.96.0 : liste detaillee Reworked / Legacy, demande de JD) : au lieu de couper a 3900 caracteres,
+            # chaque langue va dans son propre message a la suite (russe, arabe), elle-meme decoupee par lignes si besoin.
+            $chunks = { param($t) $acc = @(); $cur = ''; foreach ($l in @($t -split "`n")) { if (($cur.Length + $l.Length + 1) -gt 3900 -and $cur) { $acc += $cur; $cur = '' }; $cur = if ($cur) { "$cur`n$l" } else { $l } }; if ($cur) { $acc += $cur }; $acc }
+            $ruTitle = "**$([char]0x0420)$([char]0x0443)$([char]0x0441)$([char]0x0441)$([char]0x043A)$([char]0x0438)$([char]0x0439)**"   # (Russkiy)
+            $arTitle = "**$([char]0x0627)$([char]0x0644)$([char]0x0639)$([char]0x0631)$([char]0x0628)$([char]0x064A)$([char]0x0629)**"   # (al-arabiya)
             $desc = $en
-            if ($ruN) { $desc = "$en`n`n**$([char]0x0420)$([char]0x0443)$([char]0x0441)$([char]0x0441)$([char]0x043A)$([char]0x0438)$([char]0x0439)**`n$ruN" }   # (Russkiy)
-            if ($arN) { $desc += "`n`n**$([char]0x0627)$([char]0x0644)$([char]0x0639)$([char]0x0631)$([char]0x0628)$([char]0x064A)$([char]0x0629)**`n$arN" }   # (al-arabiya)
-            if ($desc.Length -gt 3900) { $desc = $desc.Substring(0, 3900) + '...' }
+            $follow = @()   # messages a la suite : @(titre, texte)
+            if ($ruN) { if (($desc.Length + $ruN.Length + 20) -le 3900) { $desc = "$en`n`n$ruTitle`n$ruN" } else { $follow += ,@($ruTitle, $ruN) } }
+            if ($arN) { if (-not $follow -and ($desc.Length + $arN.Length + 20) -le 3900) { $desc += "`n`n$arTitle`n$arN" } else { $follow += ,@($arTitle, $arN) } }
+            $enParts = @(& $chunks $desc)
+            $desc = $enParts[0]
+            for ($k = 1; $k -lt $enParts.Count; $k++) { $follow = @(,@('', $enParts[$k])) + $follow }
             $embed = @{
                 title = "MWCoop $Version"; url = $url; color = 7912959; description = $desc
                 footer = @{ text = 'Update from the launcher: NEW VERSION - UPDATE' }
@@ -141,7 +149,15 @@ if ($Publier) {
             }
             $body = [System.Text.Encoding]::UTF8.GetBytes(($msg | ConvertTo-Json -Depth 6))
             Invoke-RestMethod -Method Post -Uri $w[0].Trim() -Body $body -ContentType 'application/json; charset=utf-8' | Out-Null
-            "Annonce Discord envoyee"
+            foreach ($f in $follow) {   # (suite : un message par langue, sans mention)
+                foreach ($part in @(& $chunks $f[1])) {
+                    $d2 = if ($f[0]) { "$($f[0])`n$part" } else { $part }
+                    $m2 = @{ allowed_mentions = @{ parse = @() }; embeds = @(@{ title = "MWCoop $Version"; url = $url; color = 7912959; description = $d2 }) }
+                    Start-Sleep -Milliseconds 800
+                    Invoke-RestMethod -Method Post -Uri $w[0].Trim() -Body ([System.Text.Encoding]::UTF8.GetBytes(($m2 | ConvertTo-Json -Depth 6))) -ContentType 'application/json; charset=utf-8' | Out-Null
+                }
+            }
+            "Annonce Discord envoyee" + $(if ($follow) { " (+ $($follow.Count) suite(s))" })
         } catch { Write-Warning "annonce Discord ratee : $_" }
     }
 }
