@@ -486,6 +486,16 @@ namespace MWCoop
             Transform t = p.Body.transform;
             return t.parent != null && VehicleSync.CarRoot(t) != null;
         }
+        // Piece que l'autre vient de monter (Parts) : si elle etait tenue ou deplacee par lui ici (cinematique), liberee avant
+        // que le jeu la fixe a la voiture (voir OnMessage).
+        public static void ReleaseRemote(GameObject go)
+        {
+            Rigidbody rb = go != null ? go.GetComponent<Rigidbody>() : null;
+            Prop p;
+            if (rb == null || !byBody.TryGetValue(rb, out p) || p == held) return;
+            settling.Remove(p);
+            if (p.RemoteBy >= 0) { p.RemoteBy = -1; p.HeadBy = -1; Unride(p); SetKinematic(p, false); }
+        }
         // Piece tout juste demontee chez un autre (Parts) : tenue cinematique ici le temps que ses poses de chute arrivent
         // (1,5 s sans message : relachee). Liberee d'un coup dans la carrosserie, la physique d'ici l'ejectait (culbuteur
         // envole, piston sous la carte : journaux de CBetoy, 14/10).
@@ -872,7 +882,15 @@ namespace MWCoop
             }
             if (state == STORED) { stored.Add(id); storedBy[id] = who; } else stored.Remove(id);
             if (p == null || p.Body == null || p == held) return;
-            if (state != STORED && Mounted(p)) return;   // (montee ici, ou en cours de montage : sa pose est celle de la voiture)
+            if (state != STORED && Mounted(p))
+            {
+                // Montee ici, ou en cours de montage : sa pose est celle de la voiture. Mais la fin de son deplacement par
+                // l'autre la libere quand meme : restee cinematique (0.95.4) et liee a la voiture par le joint du jeu, elle
+                // entrainait la voiture a son prochain recalage -- batterie posee par l'hote, Rivett desossee d'un coup chez
+                // l'invite (tous ses points en BREAKOFF), rejoue chez l'hote (journaux de Vaydon, 15/10).
+                if (state == 0 && p.RemoteBy >= 0) { p.RemoteBy = -1; p.HeadBy = -1; Unride(p); settling.Remove(p); SetKinematic(p, false); }
+                return;
+            }
             // Range ici (ou dans notre main, eteint : outil du jeu) : c'est nous qui l'avons, pas a cacher.
             if (state == STORED && (storedHere.ContainsKey(id) || (hand != null && hand.FsmVariables.GetFsmGameObject("PickedObject").Value == p.Body.gameObject))) return;
             p.RemoteAt = now;

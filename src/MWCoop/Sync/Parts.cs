@@ -459,7 +459,8 @@ namespace MWCoop
                 mounting.Remove(part);
                 Transform pt; mountingAt.TryGetValue(part, out pt); mountingAt.Remove(part);
                 if (part == null || pt == null) continue;
-                Log.Info("piece " + IdOf(part) + " posee : joint " + (part.GetComponent<FixedJoint>() != null ? "oui" : "NON") + ", par rapport au point "
+                Rigidbody prb = part.GetComponent<Rigidbody>();
+                Log.Info("piece " + IdOf(part) + " posee : joint " + (part.GetComponent<FixedJoint>() != null ? "oui" : "NON") + ", corps " + (prb == null ? "aucun" : prb.isKinematic ? "CINEMATIQUE" : "libre") + ", par rapport au point "
                     + pt.InverseTransformPoint(part.transform.position).ToString("F3") + " / " + (Quaternion.Inverse(pt.rotation) * part.transform.rotation).eulerAngles.ToString("F1"));
             }
             mountedNow.Clear();
@@ -542,6 +543,7 @@ namespace MWCoop
                     if (tf != null && tf.Value < tight) tf.Value = tight;
                     FixedJoint fj = part.GetComponent<FixedJoint>();
                     if (fj != null) Object.Destroy(fj);
+                    Props.ReleaseRemote(part);   // (tenue par lui ici : plus cinematique avant le joint du jeu)
                     mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
                     data.SendEvent("INSTALL");
                     Game.SetState(p.Fsm, "Install 2");
