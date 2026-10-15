@@ -1229,6 +1229,9 @@ namespace MWCoop
             {
                 // [Test] TestPiece monte a 30 s, demontee a 45 s (comme les clics du jeu).
                 string id = Config.Get("Test", "TestPiece", "VIN413C1");
+                // ([Test] PorterAvant=1 : la piece promenee comme tenue en main de 24 a 29 s, puis montee : chez l'autre elle
+                // etait cinematique, suivie a distance)
+                if (Config.GetInt("Test", "PorterAvant", 0) != 0 && t > 24f && t < 29f && step == 0) { string w = Props.TestCarry(id, t); if (Time.frameCount % 60 == 0) Log.Info("autotest : " + w); }
                 if (t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Parts.TestToggle(id)); }
                 if (Config.GetInt("Test", "TestVis", 0) != 0)
                 {
