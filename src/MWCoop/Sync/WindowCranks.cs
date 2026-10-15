@@ -169,9 +169,11 @@ namespace MWCoop
                     // course (le rebord arriere la cache deja : pas les 15 cm de plus de l'avant).
                     if (m.OutSign == 0f) m.OutSign = m.Car.InverseTransformPoint(m.PivotR.position).x < 0f ? -1f : 1f;
                     float travel = (m.DownMag > 0.01f ? m.DownMag : 0.37f) * f + 0.05f * f;
-                    Vector3 move = -m.Car.up * travel + m.Car.right * (m.OutSign * 0.09f * f);
-                    m.GlassR.localPosition = m.RestP + m.PivotR.InverseTransformVector(move);
-                    m.GlassR.localRotation = Quaternion.AngleAxis(m.OutSign * 12f * f, m.PivotR.InverseTransformDirection(m.Car.forward)) * m.RestQ;
+                    // Dans le repere du pivot (releve : X avant, Y droite, Z haut de la voiture, portiere fermee) -- et non dans
+                    // celui de la voiture : portiere ouverte, le mouvement en repere voiture sortait de la portiere (captures de
+                    // JD, 15/10 : vitre en travers de l'ouverture).
+                    m.GlassR.localPosition = m.RestP + new Vector3(0f, m.OutSign * 0.09f * f, -travel);
+                    m.GlassR.localRotation = Quaternion.AngleAxis(m.OutSign * 12f * f, Vector3.right) * m.RestQ;
                     continue;
                 }
                 Vector3 extra = m.PivotR.InverseTransformVector(-m.Car.up * (ExtraDown * f));
@@ -356,7 +358,7 @@ namespace MWCoop
         // [Test] Autotest=vitreporte (solo) : la portiere [Test] VitrePorte (DoorRear(leftx) par defaut) de la SORBET vue de
         // dehors, fermee a 25 s puis ouverte a 28 s (photos vp-ferme / vp-ouverte), et la vitre de cette portiere dans le repere
         // de la portiere aux deux moments (attendu : la meme -- elle suit la portiere).
-        static int vpStep; static Transform vpDoor, vpGlass; static Vector3 vpPos; static Quaternion vpRot;
+        static int vpStep; static Transform vpDoor, vpGlass; static Vector3 vpPos; static Quaternion vpRot; static PlayMakerFSM vpKnob;
         static void TestDoorGlass(float t)
         {
             string door = Config.Get("Test", "VitrePorte", "DoorRear(leftx)");
@@ -375,7 +377,11 @@ namespace MWCoop
                 tcam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>();
                 tcam.depth = 100; tcam.nearClipPlane = 0.02f; tcam.fieldOfView = 70f;
                 Vector3 g = car.InverseTransformPoint(vpGlass.position);
-                Vector3 eye = car.TransformPoint(new Vector3(sx * 3.2f, 1.6f, g.z - 1.6f)), at = car.TransformPoint(new Vector3(sx * 0.9f, 0.9f, g.z));
+                // ([Test] VitrePorteCam : 1 dehors, loin ; 2 dans l'habitacle, de la banquette opposee ; 3 dehors, pres, de profil)
+                int cm = Config.GetInt("Test", "VitrePorteCam", 1);
+                Vector3 eye = car.TransformPoint(cm == 2 ? new Vector3(-sx * 0.35f, 0.95f, g.z - 0.1f) : cm == 3 ? new Vector3(sx * 1.7f, 1.1f, g.z - 2.0f) : new Vector3(sx * 3.2f, 1.6f, g.z - 1.6f));
+                Vector3 at = car.TransformPoint(cm == 2 ? new Vector3(sx * 0.9f, 0.5f, g.z + 0.3f) : cm == 3 ? new Vector3(sx * 0.7f, 0.6f, g.z) : new Vector3(sx * 0.9f, 0.9f, g.z));
+                if (cm == 2) tcam.fieldOfView = 90f;
                 tcam.transform.position = eye; tcam.transform.rotation = Quaternion.LookRotation(at - eye, car.up);
                 Autotest.CaptureSoon("vp-ferme", 0.3f);
                 Log.Info("autotest : vitreporte, " + Recon.Path(vpGlass) + " (charniere " + vpDoor.name + ", parent de la vitre " + vpGlass.parent.name + ")");
@@ -391,7 +397,20 @@ namespace MWCoop
                     if (r.name.ToLowerInvariant().Contains("glass") || r.name.ToLowerInvariant().Contains("window") || r.name.ToLowerInvariant().Contains("frost")) sb.Append(" [").Append(r.name).Append(r.enabled && r.gameObject.activeInHierarchy ? "" : " cache").Append(" sous ").Append(r.transform.parent != null ? r.transform.parent.name : "-").Append("]");
                 Log.Info("autotest : vitreporte, charniere " + Angle(vpDoor) + ", vitre dans le repere de la portiere : ecart " + (p - vpPos).magnitude.ToString("F3") + " m, " + Quaternion.Angle(q, vpRot).ToString("F1") + " deg ;" + sb);
             }
-            if (vpStep == 3 && t > 31f) { vpStep = 4; if (tcam != null) Object.Destroy(tcam.gameObject); }
+            // Portiere ouverte, vitre baissee (manivelle de cette portiere tenue 3 s), capture : la vitre reste dans la portiere.
+            if (vpStep == 3 && t > 31f && t < 34f)
+            {
+                if (vpKnob == null) foreach (PlayMakerFSM k in vpDoor.GetComponentsInChildren<PlayMakerFSM>(true)) if (k.FsmName == "Knob") { vpKnob = k; break; }
+                if (vpKnob != null && vpKnob.ActiveStateName != "State 1") Game.SetState(vpKnob, "State 1");
+            }
+            if (vpStep == 3 && t > 34f)
+            {
+                vpStep = 4;
+                Autotest.CaptureSoon("vp-ouverte-basse", 0.3f);
+                Vector3 p = vpDoor.InverseTransformPoint(vpGlass.position);
+                Log.Info("autotest : vitreporte, vitre baissee portiere ouverte (manivelle " + (vpKnob != null ? Recon.Path(vpKnob.transform) : "absente") + ") : vitre dans le repere de la portiere " + p.ToString("F3") + " (repos " + vpPos.ToString("F3") + ")");
+            }
+            if (vpStep == 4 && t > 36f) { vpStep = 5; if (tcam != null) Object.Destroy(tcam.gameObject); }
         }
 
         static float MaxDiff(Matrix4x4 a, Matrix4x4 b) { float e = 0f; for (int i = 0; i < 3; i++) for (int j = 0; j < 4; j++) e = Mathf.Max(e, Mathf.Abs(a[i, j] - b[i, j])); return e; }
