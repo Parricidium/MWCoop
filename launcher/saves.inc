@@ -428,17 +428,17 @@ static void SaveClick(int id)
     }
 }
 
-// ---------------------------------------------------------------- CANAL Stable / Nightly (temporaire, voir ChannelNightly)
-static RectF g_canalRect;   // (bulle du guide)
+// ---------------------------------------------------------------- VERSION Legacy / Reworked (voir ChannelReworked)
+static RectF g_canalRect;   // (bulle du guide ; selecteur sous le numero de version, ecran principal)
 // Copie des sauvegardes (principale et partie-N : les fichiers du dossier LocalLow, sans sous-dossiers) avant le premier
-// passage en Nightly : MWCoop\copie-avant-nightly\<date>\<principale | partie-N>.
+// passage en Reworked : MWCoop\copie-avant-reworked\<date>\<principale | partie-N>.
 static std::wstring SavesBackupNightly()
 {
     std::wstring root = SaveProfRoot();
     root = root.substr(0, root.size() - 8);   // (sans "profils\")
     SYSTEMTIME t; GetLocalTime(&t);
     wchar_t d[32]; swprintf_s(d, L"%04d-%02d-%02d_%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute);
-    std::wstring dst = root + L"copie-avant-nightly\\" + d + L"\\";
+    std::wstring dst = root + L"copie-avant-reworked\\" + d + L"\\";
     SavesScan();
     int files = 0;
     for (const SaveSlot &sl : g_saves) {
@@ -456,35 +456,36 @@ static std::wstring SavesBackupNightly()
     TestLog("canal : %d fichier(s) de sauvegarde copies dans %s", files, Narrow(dst, CP_UTF8).c_str());
     return files ? dst : L"";
 }
-// Passer en Nightly (avertissement, copie des sauvegardes la premiere fois) ou revenir en Stable. host : demande venue du
-// salon (l'hote est sur l'autre canal). Faux : le joueur a refuse.
-static bool ChannelSet(bool nightly, bool host)
+// Choisir la version : Reworked (la refonte, par defaut ; copie des sauvegardes la premiere fois) ou Legacy (l'ancienne,
+// plus mise a jour). host : demande venue du salon (l'hote est sur l'autre version). Faux : le joueur a refuse.
+static bool ChannelSet(bool reworked, bool host)
 {
-    wchar_t q[1200];
-    if (nightly) {
-        q[0] = 0;
-        if (host) wcscpy_s(q, T(L"L'hôte joue avec une version Nightly de MWCoop : il faut la même pour jouer ensemble.\n\n", L"The host plays a Nightly version of MWCoop: you need the same one to play together.\n\n"));
-        wcscat_s(q, T(L"⚠ Attention : la version Nightly est en cours de développement et peut présenter des instabilités (bugs, plantages, sauvegarde abîmée).\n\n"
-                      L"Tout le monde doit être sur la même version pour jouer ensemble : tes amis doivent aussi passer en Nightly.\n\n"
-                      L"Tes sauvegardes sont copiées avant (MWCoop\\copie-avant-nightly). Tu peux revenir en Stable à tout moment (Réglages, Mise à jour).\n\n"
-                      L"Passer en Nightly ?",
-                      L"⚠ Warning: the Nightly version is still in development and may be unstable (bugs, crashes, damaged save).\n\n"
-                      L"Everyone must be on the same version to play together: your friends must switch to Nightly too.\n\n"
-                      L"Your saves are copied first (MWCoop\\copie-avant-nightly). You can go back to Stable at any time (Settings, Updates).\n\n"
-                      L"Switch to Nightly?"));
-        if (MessageBoxW(g_wnd, q, L"MWCoop Nightly", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return false;
+    wchar_t q[1400];
+    q[0] = 0;
+    if (host) wcscpy_s(q, reworked ? T(L"L'hôte joue avec la version Reworked de MWCoop : il faut la même pour jouer ensemble.\n\n", L"The host plays the Reworked version of MWCoop: you need the same one to play together.\n\n")
+                                   : T(L"L'hôte joue avec la version Legacy de MWCoop : il faut la même pour jouer ensemble.\n\n", L"The host plays the Legacy version of MWCoop: you need the same one to play together.\n\n"));
+    if (reworked) {
+        wcscat_s(q, T(L"Reworked : le nouveau MWCoop, refait en profondeur (synchronisation, atelier, boulots, argent, réseau). C'est la version qui reçoit les mises à jour.\n\n"
+                      L"Tout le monde doit être sur la même version pour jouer ensemble.\n\n"
+                      L"Tes sauvegardes sont copiées avant (MWCoop\\copie-avant-reworked). Tu peux revenir en Legacy à tout moment (sous le numéro de version, en haut à gauche).\n\n"
+                      L"Passer en Reworked ?",
+                      L"Reworked: the new MWCoop, rebuilt in depth (sync, workshop, jobs, money, network). This is the version that gets updates.\n\n"
+                      L"Everyone must be on the same version to play together.\n\n"
+                      L"Your saves are copied first (MWCoop\\copie-avant-reworked). You can go back to Legacy at any time (under the version number, top left).\n\n"
+                      L"Switch to Reworked?"));
+        if (MessageBoxW(g_wnd, q, L"MWCoop Reworked", MB_YESNO | MB_ICONQUESTION) != IDYES) return false;
         if (GetPrivateProfileIntW(L"Lanceur", L"CopieNightly", 0, g_iniLauncher.c_str()) == 0) {
             std::wstring dst = SavesBackupNightly();
             if (!dst.empty()) WritePrivateProfileStringW(L"Lanceur", L"CopieNightly", L"1", g_iniLauncher.c_str());
         }
-    } else if (host) {
-        if (MessageBoxW(g_wnd, T(L"L'hôte joue avec la version Stable de MWCoop, toi avec une Nightly : il faut la même pour jouer ensemble.\n\nRevenir en Stable maintenant ?",
-                                 L"The host plays the Stable version of MWCoop, you a Nightly: you need the same one to play together.\n\nGo back to Stable now?"),
-                        L"MWCoop", MB_YESNO | MB_ICONQUESTION) != IDYES) return false;
+    } else {
+        wcscat_s(q, T(L"Legacy : l'ancien MWCoop (0.95), gardé tel quel et plus mis à jour. Seulement pour jouer avec quelqu'un qui y est resté.\n\nPasser en Legacy ?",
+                      L"Legacy: the old MWCoop (0.95), kept as it is and no longer updated. Only to play with someone who stayed on it.\n\nSwitch to Legacy?"));
+        if (MessageBoxW(g_wnd, q, L"MWCoop Legacy", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return false;
     }
-    WritePrivateProfileStringW(L"Lanceur", L"Canal", nightly ? L"nightly" : L"stable", g_iniLauncher.c_str());
+    WritePrivateProfileStringW(L"Lanceur", L"Version", reworked ? L"reworked" : L"legacy", g_iniLauncher.c_str());
     UpdSet(L"");
-    TestLog("canal : %s", nightly ? "nightly" : "stable");
-    SetStatus(nightly ? K_WARN : K_OK, nightly ? T(L"Canal Nightly : version en développement", L"Nightly channel: development version") : T(L"Canal Stable", L"Stable channel"));
+    TestLog("version : %s", reworked ? "reworked" : "legacy");
+    SetStatus(reworked ? K_OK : K_WARN, reworked ? T(L"Version Reworked", L"Reworked version") : T(L"Version Legacy : l'ancienne, plus mise à jour", L"Legacy version: the old one, no longer updated"));
     return true;
 }
