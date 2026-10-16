@@ -27,7 +27,7 @@ namespace MWCoop
     //    Les credits et l'argent restent ceux de chacun : ce que la machine paie (encaissement, gain pris,
     //    mise reprise) n'est pas un revenu a partager, Wallet le demande a KeepsMoney.
     //  - Ordinateur de la maison : chacun joue chez lui ; les autres voient "X joue a Massacre", et son ecran
-    //    allume (allumage annonce, pieces de l'ecran recopiees : voir "ordinateur de la maison" plus bas).
+    //    allume avec le programme a l'ecran (copie visuelle, automates coupes : voir "ordinateur de la maison" plus bas).
     public static class Machines
     {
         class Part
@@ -78,6 +78,10 @@ namespace MWCoop
             matByName = null; texByName = null; system = null; playing = ""; keepMoneyUntil = 0;
             computerOn = false; compDiffAt = 0f; nextPowerSend = 0f; shownRemote = -1;
             compBase.Clear(); compBaseMat.Clear(); screen.Clear(); remoteOn.Clear();
+            if (mirroring && screenMat != null && offTex != null) screenMat.SetTexture("_MainTex", offTex);   // (materiau du jeu : il survit au chargement)
+            program = ""; named = 0; namedTries = 0; namedRetry = 0f; powerFsm = partsFsm = null; lights = null;
+            screenMat = null; videoTex = offTex = null; mirroring = false; mirrorProg = null; mirrorWho = -1;
+            muted.Clear(); mirrorSaved.Clear(); compTest = 0; compTestNext = 0f;
             testStep = 0; testNextLog = 0; testSeq = null; testRefus = null; testMoneyBase = testMoneyDone = false;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;
             nextComputer = Time.realtimeSinceStartup + 20f;
@@ -193,6 +197,7 @@ namespace MWCoop
 
         public static void Update()
         {
+            if (mirroring && (!Session.Active || !PlayerSync.InGame)) StopMirror(GameWantsOn());   // fin de partie : l'ecran copie est rendu
             if (!Session.Active || nextScan < 0 || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = machines.Count == 0 ? now + 30f : float.MaxValue; Scan(); }
@@ -513,8 +518,8 @@ namespace MWCoop
             }
         }
 
-        // Msg.MachineLock : U8 operation, U8 joueur, Str machine (jeu de l'ordinateur pour L_GAME ; "1" allume / "0"
-        // eteint pour L_POWER).
+        // Msg.MachineLock : U8 operation, U8 joueur, Str machine (jeu de l'ordinateur pour L_GAME ; pour L_POWER "0" eteint,
+        // "1" allume a l'invite DOS, "1|<enfant de COMPUTER/SYSTEM>" allume sur ce programme : "1|Kaappis-Fishgame", "1|TELEBBS").
         public static void OnLock(Peer from, NetReader r)
         {
             int op = r.U8(), who = r.U8();
@@ -525,14 +530,14 @@ namespace MWCoop
                 if (op == L_ASK) HostAsk(who, key);
                 else if (op == L_FREE) HostRelease(who, key, NameOf(who) + " l'a lachee");
                 else if (op == L_GAME) { Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_GAME).U8(who).Str(key), true, who); Played(who, key); }
-                else if (op == L_POWER) { Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_POWER).U8(who).Str(key), true, who); Powered(who, key == "1"); }
+                else if (op == L_POWER) { Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_POWER).U8(who).Str(key), true, who); Powered(who, key); }
                 return;
             }
             if (op == L_HELD) SetOwner(key, who, "hote");
             else if (op == L_FREE) { if (GetLock(key).Owner == who) SetOwner(key, -1, "hote"); }
             else if (op == L_REFUSED) { SetOwner(key, who, "refusee par l'hote"); Hud.Toast(Lang.T("Machine occup\u00E9e par ", "Machine in use by ") + NameOf(who)); }
             else if (op == L_GAME) Played(who, key);
-            else if (op == L_POWER) Powered(who, key == "1");
+            else if (op == L_POWER) Powered(who, key);
         }
 
         // ---------------------------------------------------------------- machines a jeu : spectateur
@@ -743,29 +748,53 @@ namespace MWCoop
         }
 
         // ---------------------------------------------------------------- ordinateur de la maison
-        // Jeu lance (enfant actif de COMPUTER/SYSTEM : RAMI-Massacre, Kaappis-Grilli...) : les autres le savent.
-        // Allumage (SYSTEM actif) : annonce aussi (L_POWER, renvoye toutes les 10 s tant qu'il est allume, pour un
-        // arrivant), et l'ecran allume se voit chez les autres (relecture du 15/10, ecart n\u00B012). La partie reste a
-        // chacun (COMPUTER hors du monde : WorldFsms.SkipRoots), seul ce que le jeu allume AVEC l'ordinateur est
-        // recopie. Quelles pieces ? Inconnues d'avance (pas de releve de COMPUTER sous la main) : apprises a notre
-        // premier basculement -- tout ce qui, sous COMPUTER hors SYSTEM, a change (actif, materiau) 3 s apres, par
-        // rapport a l'etat d'avant (releve chaque seconde), est "l'ecran", avec son etat allume et eteint ; les
-        // chemins vont au journal ("ordinateur : ecran = ..."). Chez les autres, ces pieces sont mises a l'etat
-        // allume quand leur ordinateur est eteint et qu'un joueur a le sien allume (remises a l'etat eteint sinon) ;
-        // des qu'ils allument le leur, le jeu reprend la main. Avant notre premier basculement, rien a montrer.
-        // TODO (ecart n\u00B012) : une fois les chemins lus au journal, les nommer ici (plus besoin d'avoir allume le
-        // sien) ; si rien n'est trouve (ecran hors de COMPUTER, dans le mesh de la maison, ou tenu par une texture de
-        // rendu de la camera de SYSTEM), il faudra un materiau "allume" a poser sur l'ecran, ou recopier la texture.
+        // Jeu lance (enfant actif de COMPUTER/SYSTEM : RAMI-Massacre, Kaappis-Grilli...) : les autres le savent (L_GAME).
+        // Allumage : annonce (L_POWER "1|<programme>" / "0", renvoye toutes les 10 s tant qu'il est allume, pour un arrivant,
+        // et tout de suite quand le programme affiche change), et l'ecran allume se voit chez les autres (relecture du 15/10,
+        // ecart n°12). La partie reste a chacun (COMPUTER hors du monde : WorldFsms.SkipRoots).
+        // Pieces NOMMEES d'apres le releve du jeu (ref v.261008-01, GAME-complet.txt) :
+        //  - interrupteur : <386CASE>/Functions/ButtonPower, automate 'Use' (FsmBool PowerOn ; etats ON / OFF, et ON 2 / OFF 2
+        //    a l'appartement). ON : materiau 386_screen._MainTex = 386_video (texture de rendu de COMPUTER/SYSTEM/Camera),
+        //    active <386CASE>/Functions/Lights (LCD, ScreenLight, monitor_led) puis COMPUTER/SYSTEM ; OFF : tv_off, eteint les
+        //    deux. Le jeu n'allume que si PowerOn, courant (HouseElectricity + Fuse, ou HouseElectricity2 + FuseApartment a
+        //    l'appartement) et COMPUTER/Computer 'Parts' Case / Monitor / Peripherals (GameWantsOn refait ce test).
+        //    <386CASE> : FleaMarketProducts/Disable/386CASE au releve, range sous COMPUTER/PosHome/TRI_Case (ou PosApart)
+        //    une fois pose -- trouve par son nom et celui de l'automate, pas par le chemin.
+        //  - programme affiche : enfant actif de COMPUTER/SYSTEM -- Kaappis-* / RAMI-* / Rami-Turku / PROCYON-ProPilkki
+        //    (actives par SYSTEM/POS/Command 'Typer', etats Grilli, Fishgame, Massacre...), TELEBBS (modem) ; aucun :
+        //    l'invite DOS (SYSTEM/POS : BIOS, Text, dos_bg, Command).
+        // Chez les autres, ordinateur eteint ici et un joueur ayant allume le sien : copie VISUELLE de son ecran. Tous les
+        // automates, sons et animations sous SYSTEM sont coupes (et les automates de Lights : Consumption compterait
+        // l'electricite, Fuseblow ferait sauter le fusible), puis SYSTEM, Lights et SON programme sont actives (POS et les
+        // autres programmes caches) et 386_screen prend 386_video : la camera filme ce programme tel qu'il est, immobile.
+        // Rien n'est joue ni compte ici, chacun garde ses parties. Fin de la copie (plus personne, ou on allume le sien :
+        // PowerOn + courant + pieces, comme le jeu) : SYSTEM eteint, chaque objet reprend son etat d'avant, automates
+        // rendus ; si le jeu voulait l'allumer, SYSTEM et Lights sont rallumes (ses automates repartent comme a l'allumage).
+        // Repli : piece nommee introuvable (autre version du jeu) -> l'ancien apprentissage : ce qui change sous COMPUTER
+        // hors SYSTEM 3 s apres notre basculement est "l'ecran" ("ordinateur : ecran = ..."), recopie allume / eteint.
         class ScreenPart { public Transform T; public bool OnActive, OffActive; public Renderer R; public Material OnMat, OffMat; }
         static Transform system;
         static float nextComputer, compDiffAt, nextPowerSend;
-        static string playing = "";
+        static string playing = "", program = "";   // program : enfant de SYSTEM affiche ici ("" : DOS)
         static bool computerOn;
-        static int shownRemote = -1;   // ecran mis ici a l'etat d'un autre joueur : 1 allume, 0 eteint, -1 le jeu a la main
+        static int shownRemote = -1;   // (repli) ecran mis ici a l'etat d'un autre joueur : 1 allume, 0 eteint, -1 le jeu a la main
         static readonly Dictionary<Transform, bool> compBase = new Dictionary<Transform, bool>();
         static readonly Dictionary<Renderer, Material> compBaseMat = new Dictionary<Renderer, Material>();
         static readonly List<ScreenPart> screen = new List<ScreenPart>();
-        static readonly HashSet<int> remoteOn = new HashSet<int>();   // joueurs dont l'ordinateur est allume
+        static readonly Dictionary<int, string> remoteOn = new Dictionary<int, string>();   // joueurs dont l'ordinateur est allume -> programme
+        // pieces nommees : 0 pas encore cherchees, 1 trouvees, -1 introuvables (apprentissage ; nouvel essai 30 s plus tard, 3 en tout)
+        static int named, namedTries;
+        static float namedRetry;
+        static PlayMakerFSM powerFsm, partsFsm;
+        static GameObject lights;
+        static Material screenMat;
+        static Texture videoTex, offTex;
+        // copie de l'ecran d'un autre joueur
+        static bool mirroring;
+        static string mirrorProg;
+        static int mirrorWho = -1;
+        static readonly List<Behaviour> muted = new List<Behaviour>();
+        static readonly Dictionary<GameObject, bool> mirrorSaved = new Dictionary<GameObject, bool>();
 
         static void Computer(float now)
         {
@@ -778,53 +807,217 @@ namespace MWCoop
                 system = g != null ? g.transform.Find("SYSTEM") : null;
                 if (system == null) { nextComputer = now + 10f; return; }
             }
-            bool on = system.gameObject.activeInHierarchy;
+            if (named == 0 || named < 0 && namedTries < 3 && now >= namedRetry) FindNamed(now);
+            // Copie en cours : SYSTEM est actif par nous, l'allumage d'ici se lit sur l'interrupteur (comme le jeu le decide).
+            bool on = mirroring ? GameWantsOn() : system.gameObject.activeInHierarchy;
             if (on != computerOn)
             {
                 computerOn = on;
                 Log.Info(on ? "ordinateur : allume ici" : "ordinateur : eteint ici");
+                if (on && mirroring) StopMirror(true);         // on allume le sien : le jeu reprend la main
                 if (Session.RemoteCount > 0) SendPower(now);
-                if (compDiffAt <= 0f) compDiffAt = now + 3f;   // les pieces de l'ecran : ce qui aura change d'ici 3 s
+                if (named < 0 && compDiffAt <= 0f) compDiffAt = now + 3f;   // (repli) les pieces de l'ecran : ce qui aura change d'ici 3 s
                 shownRemote = -1;                              // le jeu a la main sur l'ecran ici
             }
             else
             {
                 if (on && now >= nextPowerSend && Session.RemoteCount > 0) SendPower(now);
-                if (compDiffAt <= 0f) SnapshotComputer();
+                if (named < 0 && compDiffAt <= 0f) SnapshotComputer();
             }
-            ApplyRemoteScreen(on);
-            string game = "";
-            if (on)
-                foreach (Transform c in system)
+            if (named > 0) MirrorTick(on); else ApplyRemoteScreen(on);
+            string prog = on ? ActiveProgram() : "";
+            if (prog != program)
+            {
+                program = prog;
+                if (on && Session.RemoteCount > 0)
                 {
-                    if (!c.gameObject.activeSelf) continue;
-                    string n = c.name;
-                    int dash = n.IndexOf('-');
-                    if (dash > 0 && dash < n.Length - 1 && c.GetComponent<PlayMakerFSM>() != null) { game = n.Substring(dash + 1); break; }
+                    SendPower(now);
+                    Log.Info("ordinateur : programme " + (prog.Length > 0 ? prog : "DOS (POS)") + " affiche chez les autres");
                 }
+            }
+            int dash = prog.IndexOf('-');
+            string game = dash > 0 ? prog.Substring(dash + 1) : "";
             if (game == playing) return;
             playing = game;
             Log.Info(game.Length > 0 ? "ordinateur : joue a " + game : "ordinateur : plus de jeu");
             if (Session.RemoteCount > 0) Session.SendAll(new NetWriter(Msg.MachineLock).U8(L_GAME).U8(Session.LocalId).Str(game), true);
         }
 
+        // Programme de SYSTEM : un enfant « Editeur-Jeu » porteur d'automate, ou TELEBBS (le modem).
+        static bool IsProgram(Transform c)
+        {
+            string n = c.name;
+            if (n == "TELEBBS") return true;
+            int dash = n.IndexOf('-');
+            return dash > 0 && dash < n.Length - 1 && c.GetComponent<PlayMakerFSM>() != null;
+        }
+
+        static string ActiveProgram()
+        {
+            string bbs = "";
+            foreach (Transform c in system)
+            {
+                if (!c.gameObject.activeSelf || !IsProgram(c)) continue;
+                if (c.name == "TELEBBS") bbs = c.name; else return c.name;   // (un jeu lance depuis le modem l'emporte)
+            }
+            return bbs;
+        }
+
         static void SendPower(float now)
         {
             nextPowerSend = now + 10f;
-            Session.SendAll(new NetWriter(Msg.MachineLock).U8(L_POWER).U8(Session.LocalId).Str(computerOn ? "1" : "0"), true);
+            string s = computerOn ? (program.Length > 0 ? "1|" + program : "1") : "0";
+            Session.SendAll(new NetWriter(Msg.MachineLock).U8(L_POWER).U8(Session.LocalId).Str(s), true);
         }
 
         static void Played(int who, string game)
         {
-            if (game.Length > 0) Hud.Toast(NameOf(who) + Lang.T(" joue \u00E0 ", " plays ") + game);
+            if (game.Length > 0) Hud.Toast(NameOf(who) + Lang.T(" joue à ", " plays ") + game);
         }
 
-        static void Powered(int who, bool on)
+        static void Powered(int who, string key)
         {
-            if (on) remoteOn.Add(who); else remoteOn.Remove(who);
-            Log.Info("ordinateur de " + NameOf(who) + (on ? " allume" : " eteint") + (screen.Count == 0 ? " (pieces de l'ecran pas encore connues ici)" : ""));
+            bool on = key.Length > 0 && key[0] == '1';
+            string prog = on && key.Length > 2 && key[1] == '|' ? key.Substring(2) : "";
+            string was;
+            bool had = remoteOn.TryGetValue(who, out was);
+            if (on) remoteOn[who] = prog; else remoteOn.Remove(who);
+            if (had == on && (!on || was == prog)) return;   // renvoi des 10 s : rien de neuf
+            Log.Info("ordinateur de " + NameOf(who) + (on ? " allume" + (prog.Length > 0 ? ", programme " + prog : ", DOS") : " eteint")
+                     + (named < 0 && screen.Count == 0 ? " (pieces de l'ecran pas encore connues ici)" : ""));
         }
 
+        // ---- pieces nommees (releve du jeu)
+        static void FindNamed(float now)
+        {
+            namedTries++; namedRetry = now + 30f;
+            powerFsm = null;
+            foreach (Object o in Game.FsmsNamed("Use"))
+            {
+                var f = o as PlayMakerFSM;
+                if (f == null || f.hideFlags != HideFlags.None || f.gameObject.name != "ButtonPower") continue;
+                Transform fn = f.transform.parent;
+                if (fn == null || fn.name != "Functions" || fn.parent == null || fn.parent.name != "386CASE" || f.FsmVariables.FindFsmBool("PowerOn") == null) continue;
+                if (powerFsm == null || f.transform.root.gameObject.activeInHierarchy) powerFsm = f;
+            }
+            Transform lt = powerFsm != null ? powerFsm.transform.parent.Find("Lights") : null;
+            lights = lt != null ? lt.gameObject : null;
+            GameObject comp = Game.FindAny("COMPUTER/Computer");
+            partsFsm = comp != null ? Game.FsmOn(comp, "Parts") : null;
+            screenMat = FindMat("386_screen"); videoTex = FindTex("386_video"); offTex = FindTex("tv_off");
+            named = powerFsm != null && screenMat != null && videoTex != null ? 1 : -1;
+            if (named > 0)
+            {
+                Log.Info("ordinateur : pieces nommees trouvees (interrupteur " + Recon.Path(powerFsm.transform) + ", Lights " + (lights != null ? "oui" : "NON")
+                         + ", Parts " + (partsFsm != null ? "oui" : "NON") + ", 386_screen / 386_video / tv_off " + (offTex != null ? "oui" : "sans tv_off") + ") : ecran recopie sans apprentissage");
+                compDiffAt = 0f; screen.Clear(); compBase.Clear(); compBaseMat.Clear();
+                return;
+            }
+            var miss = new List<string>();
+            if (powerFsm == null) miss.Add("386CASE/Functions/ButtonPower 'Use' (PowerOn)");
+            if (screenMat == null) miss.Add("materiau 386_screen");
+            if (videoTex == null) miss.Add("texture 386_video");
+            Log.Info("ordinateur : pieces nommees introuvables (" + string.Join(", ", miss.ToArray()) + ") : repli sur l'apprentissage de l'ecran (essai " + namedTries + "/3)");
+        }
+
+        static bool PartsBool(string name, bool def)
+        {
+            FsmBool b = partsFsm != null ? partsFsm.FsmVariables.FindFsmBool(name) : null;
+            return b != null ? b.Value : def;
+        }
+
+        // Le jeu allumerait-il l'ordinateur ici ? (ButtonPower 'Use' : Press -> Switch On -> State 1 -> ON.)
+        static bool GameWantsOn()
+        {
+            if (powerFsm == null) return false;
+            FsmBool p = powerFsm.FsmVariables.FindFsmBool("PowerOn");
+            if (p == null || !p.Value) return false;
+            if (!PartsBool("Case", true) || !PartsBool("Monitor", true) || !PartsBool("Peripherals", true)) return false;
+            bool apart = PartsBool("Apartment", false);
+            FsmBool elec = FsmVariables.GlobalVariables.FindFsmBool(apart ? "HouseElectricity2" : "HouseElectricity");
+            FsmBool fuse = powerFsm.FsmVariables.FindFsmBool(apart ? "FuseApartment" : "Fuse");
+            return (elec == null || elec.Value) && (fuse == null || fuse.Value);
+        }
+
+        // Chaque seconde : copier l'ecran d'un autre joueur (le plus petit numero parmi ceux qui l'ont allume) quand le
+        // sien est eteint et l'ecran pose ici ; sinon rendre la main au jeu.
+        static void MirrorTick(bool localOn)
+        {
+            int who = -1; string prog = null;
+            bool placed = PartsBool("Case", true) && PartsBool("Monitor", true) && (partsFsm == null || partsFsm.gameObject.activeSelf);   // (COMPUTER/Computer : active a la pose de l'unite)
+            if (!localOn && placed && !GameWantsOn())
+                foreach (KeyValuePair<int, string> kv in remoteOn) if (who < 0 || kv.Key < who) { who = kv.Key; prog = kv.Value; }
+            if (who < 0) { if (mirroring) StopMirror(localOn); return; }
+            if (!mirroring) StartMirror();
+            else if (!system.gameObject.activeSelf || lights != null && !lights.activeSelf)
+            {
+                // coupure de courant ici (ELEC_CUTOFF : etat OFF du jeu) pendant la copie : on la remet
+                system.gameObject.SetActive(true);
+                if (lights != null) lights.SetActive(true);
+                if (screenMat != null && videoTex != null) screenMat.SetTexture("_MainTex", videoTex);
+                mirrorProg = null;   // (OFF eteint aussi SYSTEM/TELEBBS : le programme est remontre)
+            }
+            if (prog != mirrorProg || who != mirrorWho) ShowProgram(who, prog);
+        }
+
+        static void SetSaved(GameObject g, bool active)
+        {
+            if (!mirrorSaved.ContainsKey(g)) mirrorSaved[g] = g.activeSelf;
+            if (g.activeSelf != active) g.SetActive(active);
+        }
+
+        static void StartMirror()
+        {
+            mirroring = true; mirrorProg = null; mirrorWho = -1;
+            muted.Clear(); mirrorSaved.Clear();
+            // Tout ce qui joue sous SYSTEM (automates, sons, animations) coupe AVANT l'activation : rien ne demarre, seule la
+            // camera tourne. (Les automates jamais actives recoivent leur Awake, pas de Start ni d'OnEnable.)
+            foreach (Behaviour b in system.GetComponentsInChildren<Behaviour>(true))
+                if (b != null && b.enabled && (b is PlayMakerFSM || b is AudioSource || b is Animation)) { b.enabled = false; muted.Add(b); }
+            if (lights != null)
+                foreach (PlayMakerFSM f in lights.GetComponents<PlayMakerFSM>()) if (f.enabled) { f.enabled = false; muted.Add(f); }
+            foreach (Transform c in system) if (c.gameObject.activeSelf && IsProgram(c)) SetSaved(c.gameObject, false);   // restes d'une partie d'ici
+            SetSaved(system.gameObject, true);
+            if (lights != null) SetSaved(lights, true);
+            if (screenMat != null && videoTex != null) screenMat.SetTexture("_MainTex", videoTex);
+        }
+
+        static void ShowProgram(int who, string prog)
+        {
+            if (!string.IsNullOrEmpty(mirrorProg) && mirrorProg != prog)
+            {
+                Transform old = system.Find(mirrorProg);
+                if (old != null) SetSaved(old.gameObject, false);
+            }
+            Transform c = prog.Length > 0 ? system.Find(prog) : null;
+            if (c != null) SetSaved(c.gameObject, true);
+            Transform pos = system.Find("POS");
+            if (pos != null) SetSaved(pos.gameObject, c == null);   // l'invite DOS seulement sans programme
+            mirrorProg = prog; mirrorWho = who;
+            Log.Info("ordinateur : ecran de " + NameOf(who) + " recopie ici, programme " + (c != null ? prog : prog.Length > 0 ? prog + " introuvable ici (DOS)" : "DOS (POS)")
+                     + " (" + muted.Count + " automates / sons / animations coupes)");
+        }
+
+        static void StopMirror(bool gameOn)
+        {
+            mirroring = false; mirrorProg = null; mirrorWho = -1;
+            GameObject sys = system != null ? system.gameObject : null;
+            bool sysWas = false, lightsWas = false;
+            if (sys != null) { mirrorSaved.TryGetValue(sys, out sysWas); sys.SetActive(false); }   // tout arrete avant de rendre les automates
+            if (lights != null) { mirrorSaved.TryGetValue(lights, out lightsWas); lights.SetActive(false); }
+            foreach (KeyValuePair<GameObject, bool> kv in mirrorSaved)
+                if (kv.Key != null && kv.Key != sys && kv.Key != lights && kv.Key.activeSelf != kv.Value) kv.Key.SetActive(kv.Value);
+            foreach (Behaviour b in muted) if (b != null) b.enabled = true;
+            int n = muted.Count;
+            muted.Clear(); mirrorSaved.Clear();
+            // Comme l'etat ON du jeu : Lights puis SYSTEM (ses automates repartent a l'activation).
+            if (lights != null && (gameOn || lightsWas)) lights.SetActive(true);
+            if (sys != null && (gameOn || sysWas)) sys.SetActive(true);
+            if (screenMat != null) { Texture t = gameOn ? videoTex : offTex; if (t != null) screenMat.SetTexture("_MainTex", t); }
+            Log.Info("ordinateur : copie de l'ecran rendue (" + n + " automates / sons / animations rendus" + (gameOn ? ", allume ici : le jeu reprend la main)" : ", ecran eteint ici)"));
+        }
+
+        // ---- repli : apprentissage (pieces nommees introuvables)
         // Tout ce qui est sous COMPUTER hors SYSTEM (petit : SYSTEM porte les jeux).
         static List<Transform> ComputerParts()
         {
@@ -855,7 +1048,7 @@ namespace MWCoop
         static void LearnScreen()
         {
             compDiffAt = 0f;
-            if (system == null || compBase.Count == 0) return;
+            if (system == null || compBase.Count == 0 || named > 0) return;
             bool on = computerOn;
             int added = 0;
             foreach (Transform t in ComputerParts())
@@ -872,7 +1065,7 @@ namespace MWCoop
                 if (actCh) { if (on) { p.OnActive = act; p.OffActive = was; } else { p.OffActive = act; p.OnActive = was; } }
                 if (matCh) { if (on) { p.OnMat = r.sharedMaterial; p.OffMat = wasMat; } else { p.OffMat = r.sharedMaterial; p.OnMat = wasMat; } }
             }
-            if (added == 0 && screen.Count == 0) { Log.Info("ordinateur : rien ne change sous COMPUTER hors SYSTEM a l'allumage : ecran non recopie (voir TODO ecart n\u00B012)"); return; }
+            if (added == 0 && screen.Count == 0) { Log.Info("ordinateur : rien ne change sous COMPUTER hors SYSTEM a l'allumage : ecran non recopie (repli, pieces nommees introuvables)"); return; }
             var sb = new System.Text.StringBuilder("ordinateur : ecran = ");
             foreach (ScreenPart p in screen)
                 sb.Append(Recon.Path(p.T)).Append(" (actif ").Append(p.OnActive).Append('/').Append(p.OffActive)
@@ -880,7 +1073,7 @@ namespace MWCoop
             Log.Info(sb.ToString());
         }
 
-        // Ordinateur eteint ici : l'ecran prend l'etat d'un autre joueur (allume si l'un l'a allume).
+        // (Repli) ordinateur eteint ici : l'ecran prend l'etat d'un autre joueur (allume si l'un l'a allume).
         static void ApplyRemoteScreen(bool localOn)
         {
             if (localOn || compDiffAt > 0f || screen.Count == 0) return;   // le jeu a la main, ou on apprend encore
@@ -896,6 +1089,88 @@ namespace MWCoop
                 if (p.R != null && m != null && p.R.sharedMaterial != m) p.R.sharedMaterial = m;
             }
             Log.Info(want == 1 ? "ordinateur : ecran allume ici (un autre joueur a allume le sien)" : "ordinateur : ecran eteint ici");
+        }
+
+        // Etat de l'ordinateur pour les essais.
+        static string ComputerState()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append(system == null ? "SYSTEM introuvable" : "SYSTEM " + (system.gameObject.activeSelf ? "actif" : "inactif"));
+            sb.Append(", pieces nommees ").Append(named > 0 ? "oui" : named < 0 ? "non (repli, " + screen.Count + " pieces apprises)" : "pas encore cherchees");
+            FsmBool p = powerFsm != null ? powerFsm.FsmVariables.FindFsmBool("PowerOn") : null;
+            sb.Append(", allume ici ").Append(computerOn).Append(" (PowerOn ").Append(p != null ? p.Value.ToString() : "-")
+              .Append(", interrupteur ").Append(powerFsm != null ? powerFsm.ActiveStateName : "-").Append(")");
+            sb.Append(", programme ici '").Append(program).Append("'");
+            sb.Append(", copie ").Append(mirroring ? "de " + NameOf(mirrorWho) + " programme '" + mirrorProg + "' (" + muted.Count + " coupes)" : "non");
+            sb.Append(", Lights ").Append(lights != null ? (lights.activeInHierarchy ? "allume" : "eteint") : "-");
+            Texture tx = screenMat != null ? screenMat.GetTexture("_MainTex") : null;
+            sb.Append(", 386_screen = ").Append(tx != null ? tx.name : "-");
+            sb.Append(", enfants actifs de SYSTEM :");
+            if (system != null) foreach (Transform c in system) if (c.gameObject.activeSelf) sb.Append(' ').Append(c.name);
+            sb.Append(", allumes ailleurs :");
+            foreach (KeyValuePair<int, string> kv in remoteOn) sb.Append(' ').Append(NameOf(kv.Key)).Append('=').Append(kv.Value.Length > 0 ? kv.Value : "DOS");
+            return sb.ToString();
+        }
+
+        // Nasse (EQUIPMENTS/fish trap(itemx)) : au releve du 08/10 le jeu n'a aucune prise -- un seul automate 'Save'
+        // (pose sauvegardee), des maillages et HatchPivot (Animation que rien ne joue ; le son fishtrap_open n'est appele
+        // par aucun automate). Seule sa pose compte, et Props la suit (cle w:EQUIPMENTS/fish trap(itemx)#rang). Les essais
+        // notent sa pose et l'etat de 'Save' des deux cotes.
+        static string FishTrapState()
+        {
+            GameObject g = Game.FindAny("EQUIPMENTS/fish trap(itemx)");
+            if (g == null) return "nasse introuvable sous EQUIPMENTS (deplacee ou tenue ?)";
+            PlayMakerFSM f = Game.FsmOn(g, "Save");
+            var sb = new System.Text.StringBuilder("nasse ");
+            sb.Append(g.transform.position.ToString("F2")).Append(", active ").Append(g.activeInHierarchy).Append(", 'Save' ").Append(f != null ? f.ActiveStateName : "-");
+            int fsms = g.GetComponentsInChildren<PlayMakerFSM>(true).Length;
+            sb.Append(", ").Append(fsms).Append(" automate(s) en tout");
+            return sb.ToString();
+        }
+
+        // [Test] Autotest=ordinateur. Hote : a 25 s presse l'interrupteur comme un clic (ButtonPower 'Use' -> Press, ou
+        // Press 2 a l'appartement), a 45 s lance la peche (SYSTEM/POS/Command 'Typer' -> Fishgame) si l'invite DOS est
+        // prete ; etat de l'ordinateur toutes les 5 s de 30 a 60 s. Invite : etat toutes les 5 s de 40 a 70 s (copie de
+        // l'ecran de l'hote, programme). Les deux : la nasse a 50 s (hote) / 60 s (invite).
+        static int compTest;
+        static float compTestNext;
+        static void TestComputer(float t)
+        {
+            bool host = Session.IsHost;
+            if (host && compTest == 0 && t >= 25f)
+            {
+                compTest = 1;
+                if (system != null && named == 0) FindNamed(Time.realtimeSinceStartup);
+                FsmBool p = powerFsm != null ? powerFsm.FsmVariables.FindFsmBool("PowerOn") : null;
+                if (powerFsm == null) Log.Info("autotest ordinateur : interrupteur 386CASE/Functions/ButtonPower introuvable");
+                else if (!powerFsm.enabled || !powerFsm.gameObject.activeInHierarchy) Log.Info("autotest ordinateur : interrupteur inactif ici (" + Recon.Path(powerFsm.transform) + " : ordinateur pas achete ou pas pose ?)");
+                else if (p != null && p.Value) Log.Info("autotest ordinateur : deja sous tension (PowerOn), rien a presser");
+                else
+                {
+                    string press = PartsBool("Apartment", false) ? "Press 2" : "Press";
+                    Game.SetState(powerFsm, press);
+                    Log.Info("autotest ordinateur : l'hote presse l'interrupteur (" + press + ") -> " + powerFsm.ActiveStateName + ", PowerOn " + (p != null && p.Value));
+                }
+            }
+            if (host && compTest == 1 && t >= 45f)
+            {
+                compTest = 2;
+                Transform cmd = system != null ? system.Find("POS/Command") : null;
+                PlayMakerFSM typer = cmd != null ? Game.FsmOn(cmd.gameObject, "Typer") : null;
+                if (typer == null || !cmd.gameObject.activeInHierarchy) Log.Info("autotest ordinateur : invite DOS pas prete (Command " + (cmd == null ? "introuvable" : "inactif") + ", systeme installe ?) : peche non lancee");
+                else { Game.SetState(typer, "Fishgame"); Log.Info("autotest ordinateur : l'hote lance la peche -> Typer " + typer.ActiveStateName); }
+            }
+            float from = host ? 30f : 40f;
+            if (t >= from && t <= from + 30f && t >= compTestNext)
+            {
+                compTestNext = t + 5f;
+                Log.Info("autotest ordinateur : " + ComputerState());
+            }
+            if (compTest < 3 && t >= (host ? 50f : 60f))
+            {
+                compTest = 3;
+                Log.Info("autotest ordinateur : " + FishTrapState());
+            }
         }
 
         // ---------------------------------------------------------------- essais
@@ -1019,6 +1294,7 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode == "pin") { TestPin(t); return; }
+            if (mode == "ordinateur") { TestComputer(t); return; }
             if (mode != "machine") return;
             if (t > 20f && t >= testNextLog)
             {

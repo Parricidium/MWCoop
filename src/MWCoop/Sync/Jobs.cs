@@ -102,6 +102,8 @@ namespace MWCoop
             public HashSet<string> Quiet = new HashSet<string>();                            // ... qui bouclent : plus envoyees
             public float LoopStart, LastClick = -100f;
             public float KeyClickAt = -100f;                                                 // cle : dernier clic d'ici
+            public NetWriter PauseMsg; public string PauseState;                              // garde-fou : dernier changement garde pendant la pause (recalage)
+            public float PauseSentAt = -100f, PauseLogAt = -100f; public int PauseSends;      // ... dernier renvoi, derniere note au journal
         }
         const int K_PLAIN = 0, K_LOGTRIGGER = 1, K_FEEDLOG = 2, K_IGNITION = 3;
         static readonly HashSet<string> ControlFsms = new HashSet<string> { "Use", "Knob", "Screw", "Usage", "Change", "Switch", "ChangeChannel", "ChangeTrack", "Attach",
@@ -215,7 +217,7 @@ namespace MWCoop
             feed = null; feedHand = null; feedMute = null; feedMuted.Clear(); feedClick = feedActivation = feedWasActive = false; feedStageLocal = true;
             bed = flatbed = null; bedHinge = null; bedTargetAt = -100; bedSent = float.NaN; bedLift = null; bedFollow = false;
             feedStep2 = false; feedStageSeen = -1; feedCaughtUp = 0; jobGen = -1; fastWaitUntil = 0;
-            chopped = null; lastId = null; testStep = testLogs = 0; testBefore = false; otherSince = -1; testClick2 = false;
+            chopped = null; lastId = null; testStep = testLogs = 0; boucleStep = boucleN = boucleLogs = 0; testBefore = false; otherSince = -1; testClick2 = false;
             lugFsm = null; lugItems = null; lugPivots = null; lugWas = ""; lugWanted = null; nextLug = 0f;
             hostIdle.Clear(); idlePending.Clear(); tookOver.Clear(); idleSig = null; nextIdle = nextIdleSend = 0f;
             loadedAt = Time.realtimeSinceStartup;
@@ -245,6 +247,7 @@ namespace MWCoop
             if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
             SpecialUpdate(now);
             IdleStep(now);
+            PauseStep(now);
             // [Test] JournalUsine=1 : toutes les 10 s, etat et variables (entiers, reels, booleens) des automates de l'usine
             // (JOBS/FACTORY : PlayerData, Database, FiringConditions... et LOD1/JOB : JobProgress), pour arreter la liste FactoryOwn.
             if (Config.Testing && now >= nextUsineLog && Config.GetInt("Test", "JournalUsine", 0) != 0) { nextUsineLog = now + 10f; foreach (string l in FactoryDump()) Log.Info("usine : " + l); }
@@ -527,27 +530,80 @@ namespace MWCoop
                 j.ClockLast = ck; j.ClockAt = tc;
                 if (again) return;
             }
-            // Garde-fou : un automate qui boucle (plus de 5 changements en 10 s ; 40 pour les commandes des
-            // vehicules, une molette tourne vite) n'est plus envoye -- jusqu'a 30 s de calme.
+            Send(j, from != null ? from.Name : null, tr.EventName, state);
+        }
+
+        // Garde-fou puis envoi d'une transition prise ici (OnLocal ; essai boucle).
+        // Garde-fou : un automate qui boucle (plus de 5 changements en 10 s ; 40 pour les commandes des
+        // vehicules, une molette tourne vite) n'est plus envoye -- jusqu'a 30 s de calme.
+        // Pendant la pause, les changements ne partent plus un par un : le dernier est garde (etat d'arrivee et variables
+        // relevees a son ENTREE, comme un envoi ordinaire) et part seul, comme un instantane d'arrivant, au plus toutes les
+        // 5 s et a la fin de la pause (PauseStep). Avant, ils etaient perdus : l'etape restait differente chez les autres
+        // sans bruit (relecture du 15/10, ecart 16).
+        static void Send(Job j, string from, string ev, string state)
+        {
             float now = Time.realtimeSinceStartup;
-            if (j.Noisy && now - j.NoisySince > 30f) { j.Noisy = false; j.WindowStart = now; j.Count = 0; Log.Info("quete : " + j.Key + " de nouveau envoye"); }
+            if (j.Noisy && now - j.NoisySince > 30f) EndPause(j, now);
             if (now - j.WindowStart > 10f) { j.WindowStart = now; j.Count = 0; }
             // (molette d'une manivelle de vitre, d'un bouton tourne : un cran = un envoi, une vitre entiere en fait 25 ; elle ne
             // tourne jamais seule -- Menor, 12/10 : vitre en pause 30 s a mi-course chez l'autre)
-            int cap = !j.Control ? 5 : j.F.FsmName == "Knob" && from != null && j.InputStates.Contains(from.Name) ? 300 : 40;
+            int cap = !j.Control ? 5 : j.F.FsmName == "Knob" && from != null && j.InputStates.Contains(from) ? 300 : 40;
             if (++j.Count > cap || j.Noisy)
             {
                 if (!j.Noisy) Log.Warn("quete : " + j.Key + " change trop souvent, en pause 30 s");
                 j.Noisy = true;
                 j.NoisySince = now;
+                if (j.Kind != K_FEEDLOG)   // (fendeuse : etapes menees par celui dont c'est la buche, pas de recalage)
+                {
+                    var p = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(PauseMark).Str("").Str(state);
+                    WriteVars(j.F, p);
+                    if (p.ToArray().Length <= Net.Transport.MaxPayload - 40) { j.PauseMsg = p; j.PauseState = state; }
+                }
                 return;
             }
-            var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(from != null ? from.Name : "").Str(tr.EventName).Str(state);
+            var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(from ?? "").Str(ev).Str(state);
             WriteVars(j.F, w);
             int size = w.ToArray().Length;
-            if (size > Net.Transport.MaxPayload - 40) { Log.Warn("quete : " + j.Key + " -" + tr.EventName + "-> " + state + " trop long (" + size + " octets), pas envoye"); return; }
-            Log.Info("quete : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + tr.EventName + "-> " + state);
+            if (size > Net.Transport.MaxPayload - 40) { Log.Warn("quete : " + j.Key + " -" + ev + "-> " + state + " trop long (" + size + " octets), pas envoye"); return; }
+            j.PauseMsg = null;   // (plus recent que le dernier changement garde pendant la pause)
+            Log.Info("quete : " + j.Key + " " + (from ?? "?") + " -" + ev + "-> " + state);
             Session.SendAll(w, true);
+        }
+
+        // Marque d'un recalage apres pause (a la place de l'etat de depart, comme "(instantane)" pour un arrivant) : chez les
+        // autres, aucun etat ne porte ce nom, donc pas d'evenement rejoue -- recalage direct sur l'etat d'arrivee, variables
+        // recopiees seulement s'il differe, paie et pointage ecartes (OwnTransition), compteurs de l'usine jamais touches
+        // (FactoryOwn), corps du joueur et argent a l'abri (SavePersonal, Wallet.Suppress) : le chemin d'un instantane.
+        const string PauseMark = "(pause)";
+        static float nextPause;
+
+        static void EndPause(Job j, float now)
+        {
+            j.Noisy = false; j.WindowStart = now; j.Count = 0;
+            Log.Info("quete : " + j.Key + " de nouveau envoye");
+        }
+
+        // Une fois par seconde : fin des pauses (30 s sans changement, sans attendre le changement suivant) et renvoi du
+        // dernier changement garde pendant une pause, au plus toutes les 5 s par automate (journal : au plus toutes les 30 s).
+        static void PauseStep(float now)
+        {
+            if (now < nextPause) return;
+            nextPause = now + 1f;
+            foreach (Job j in jobs.Values)
+            {
+                if (!j.Noisy && j.PauseMsg == null) continue;
+                if (j.Noisy && now - j.NoisySince > 30f) EndPause(j, now);
+                if (j.PauseMsg == null || now - j.PauseSentAt < 5f) continue;
+                if (j.F == null || !Session.Active) { j.PauseMsg = null; continue; }
+                Session.SendAll(j.PauseMsg, true);
+                j.PauseMsg = null; j.PauseSentAt = now; j.PauseSends++;
+                if (now - j.PauseLogAt >= 30f)
+                {
+                    Log.Info("quete : " + j.Key + " en pause : etat courant renvoye (etat " + j.PauseState + (j.F.ActiveStateName != j.PauseState ? ", ici deja " + j.F.ActiveStateName : "")
+                             + ")" + (j.PauseSends > 1 ? " -- " + j.PauseSends + " renvois depuis la derniere note" : ""));
+                    j.PauseLogAt = now; j.PauseSends = 0;
+                }
+            }
         }
 
         // ---------------------------------------------------------------- cle de contact
@@ -775,7 +831,8 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextWarn) { nextWarn = Time.realtimeSinceStartup + 10f; Log.Warn("quete " + key + " introuvable ici"); }
                 return;
             }
-            if (j.Control) PlayerSync.ReachFor(who, j.F.transform);   // (son avatar appuie sur la commande)
+            bool pause = prev == PauseMark;   // recalage apres une pause du garde-fou chez l'autre (comme un instantane)
+            if (j.Control && !pause) PlayerSync.ReachFor(who, j.F.transform);   // (son avatar appuie sur la commande)
             if (j.Kind == K_IGNITION) { ApplyIgnition(j, who, key, state); return; }
             // Etat de paie ou de pointage chez l'autre (version d'avant, ou instantane) : sa paie, son travail, pas les notres --
             // ignore (relecture du 15/10 ; usine 16/10).
@@ -835,7 +892,8 @@ namespace MWCoop
                 if (!j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
             }
             finally { applying = false; Replay.Depth--; if (mine != null) RestorePersonal(mine); if (j.Control) Radio.AfterRemote(j.F.transform, who, state); }
-            Log.Info("quete de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
+            if (pause) Log.Info("quete de #" + who + " : " + key + " recale apres pause sur " + state + (j.F.ActiveStateName != state ? " (ici " + j.F.ActiveStateName + ")" : ""));
+            else Log.Info("quete de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ")");
             // Tirage au sort enchaine pendant le rejeu (l'etat vise tire sans delai) : chez l'hote, le crochet ne l'envoie pas
             // (Replay.Depth > 0) et l'invite avait garde son propre tirage -> l'hote diffuse ou il est arrive, a tous, l'emetteur
             // compris (relecture du 15/10). Pas si l'automate ne tourne pas ici (ecart n7) : le tirage recu est celui de l'invite
@@ -993,6 +1051,44 @@ namespace MWCoop
                 return "hote, compteurs gonfles et automate envoye (" + st + " -AUTOTEST-> " + st + ", " + w.ToArray().Length + " octets) : " + FactoryOwnLine(j.F);
             }
             return "etat " + j.F.ActiveStateName + " : " + FactoryOwnLine(j.F);
+        }
+
+        // [Test] Autotest=boucle (relecture du 15/10, ecart 16 : garde-fou des boulots). A 25 s l'hote fait changer d'etat un
+        // boulot suivi 8 fois en 2 s, comme 8 vraies transitions d'ici ([Test] TestQuete, par defaut WoodJob1Point : "Random wait"
+        // et "State 1", [Test] BoucleEtatA / BoucleEtatB -- deux etats sans sortie d'eux-memes le jour ; "State 1" n'allume que
+        // le client du bois, son repere et le booleen Car, rien de sauve). Les 5 premiers partent, le 6e met l'automate en pause :
+        // le 5e envoye est A, le dernier B -- sans recalage, l'invite reste sur A. A 48 et 58 s chacun note l'etat de
+        // l'automate : le meme attendu (B), et « recale apres pause sur B » au journal de l'invite.
+        static int boucleStep, boucleN, boucleLogs;
+        static float boucleAt;
+
+        public static void TestBoucle(float t)
+        {
+            string part = Config.Get("Test", "TestQuete", "WoodJob1Point");
+            string a = Config.Get("Test", "BoucleEtatA", "Random wait"), b = Config.Get("Test", "BoucleEtatB", "State 1");
+            Job j = null;
+            foreach (Job x in jobs.Values) if (x.F != null && !x.Control && x.Key.Contains(part)) { j = x; break; }
+            float now = Time.realtimeSinceStartup;
+            if (Session.IsHost && boucleStep == 0 && t > 25f)
+            {
+                boucleStep = 99;
+                if (j == null) Log.Info("autotest boucle : aucun boulot " + part + " suivi ici (" + jobs.Count + " automates)");
+                else if (j.F.Fsm.GetState(a) == null || j.F.Fsm.GetState(b) == null) Log.Info("autotest boucle : " + j.Key + " sans etat '" + a + "' ou '" + b + "'");
+                else { boucleStep = 1; boucleAt = now; boucleN = 0; Log.Info("autotest boucle : " + j.Key + " en " + j.F.ActiveStateName + ", 8 changements " + a + " / " + b + " en 2 s"); }
+            }
+            if (boucleStep == 1 && j != null && now - boucleAt >= 0.25f * boucleN)
+            {
+                string from = j.F.ActiveStateName, to = boucleN % 2 == 0 ? a : b;   // 1er, 3e, 5e, 7e : A ; 2e, 4e, 6e, 8e : B
+                applying = true; Replay.Depth++;
+                try { Game.SetState(j.F, to); } finally { applying = false; Replay.Depth--; }
+                Send(j, from, "AUTOTEST", to);
+                if (++boucleN >= 8) { boucleStep = 2; Log.Info("autotest boucle : 8 changements faits, " + j.Key + " en " + j.F.ActiveStateName + (j.Noisy ? " (en pause)" : " (pas en pause : garde-fou pas declenche)")); }
+            }
+            if (boucleLogs < 2 && t > 48f + 10f * boucleLogs)
+            {
+                boucleLogs++;
+                Log.Info("autotest boucle : " + (Session.IsHost ? "hote" : "invite") + ", " + (j != null ? j.Key + " = " + j.F.ActiveStateName + (j.Noisy ? " (en pause)" : "") : "aucun boulot " + part + " suivi ici"));
+            }
         }
 
         // ================================================================ bois de chauffage
@@ -2230,6 +2326,7 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode == "cle") { TestKey(t); return; }
+            if (mode == "boucle") { TestBoucle(t); return; }
             if (mode == "atteler") { TestAtteler(t); return; }
             if (mode == "fendeuse" || mode == "fendeuse2" || mode == "benne" || mode == "benne2" || mode == "taxi-commandes" || mode == "boitegants")
             {

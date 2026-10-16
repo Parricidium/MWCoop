@@ -30,6 +30,10 @@ namespace MWCoop
         public const string Prefix = "objet:";
         const string ModName = "objets-etat";
 
+        // Pas « Save » non plus (rien qu'un joueur presse : TryHook l'ecarterait). La nasse (EQUIPMENTS/fish trap(itemx)) n'a
+        // que lui au releve du 08/10 -- aucune prise, aucun poisson cree, HatchPivot que rien n'anime : Props suit sa pose,
+        // il n'y a rien d'autre a partager (Machines.FishTrapState, essai « ordinateur »).
+
         // Automates d'un objet a suivre (a etendre au besoin). Pas « Data » : Consume refuse un 'Data' pris par un autre
         // module (ClaimedByOther, Consume.cs) et Parts tient ceux des pieces -- le prendre ici leur cassait le suivi des fins.
         static readonly string[] FsmNames = { "Use", "Switch", "Light", "Power" };
