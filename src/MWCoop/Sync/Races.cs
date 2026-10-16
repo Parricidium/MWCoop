@@ -51,7 +51,7 @@ namespace MWCoop
         }
 
         const int F_ON = 1, F_BRAKE = 2, F_ENGINE = 4;
-        const int K_CARS = 1, K_RESULTS = 2, K_HASH = 3, K_HASHREPLY = 4, K_ROOTS = 5;
+        const int K_CARS = 1, K_RESULTS = 2, K_HASH = 3, K_HASHREPLY = 4, K_ROOTS = 5, K_HELPERS = 6;
         // Course en place cette semaine (RACES 'SwapDates' : semaine paire le rallye, impaire la glace), d'apres l'hote :
         // chez l'invite le choix n'etait refait qu'a son reveil (WAKEUP) -- voitures IA de la glace roulant sur une piste eteinte.
         static readonly string[] Roots = { "RACES/RALLY", "RACES/ICERACE" };
@@ -75,6 +75,7 @@ namespace MWCoop
         {
             cars.Clear(); mutedLogic.Clear(); built = false; hashOk = false; results = null; resultsSig = ""; pendingResults = null; nextResultsLook = 0;
             distHooked = false;
+            helpers = null; helpersHooked = false; helpersCar = null; nextHelpersLook = 0; gHelpIdx = -1; gReplayed = -1; gEnd = false; retStep = 0; retLog = 0; retWarn = 0; retCar = null;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 7f : -1;
             IceRace.OnLevelLoaded();
         }
@@ -144,6 +145,7 @@ namespace MWCoop
             if (Session.IsHost)
             {
                 HookDistances();
+                HelpersHost(now);
                 if (Session.RemoteCount == 0) return;
                 if (now >= nextSend) { nextSend = now + 1f / 15f; SendCars(now >= nextOffSend); if (now >= nextOffSend) nextOffSend = now + 1f; }
                 if (now >= nextResults) { nextResults = now + 1f; SendResults(false); }
@@ -170,6 +172,7 @@ namespace MWCoop
                 if (c.LastRecv > 0) Follow(c);
             }
             if (now >= deathCheck) { deathCheck = now + 0.05f; RunOver(); }
+            HelpersGuest(now);
             if (now >= nextLog)
             {
                 nextLog = now + 15f;
@@ -272,6 +275,7 @@ namespace MWCoop
                 }
                 return;
             }
+            if (kind == K_HELPERS) { OnHelpers(r.U8()); return; }
             if (kind == K_CARS) OnCars(r);
         }
 
@@ -468,7 +472,7 @@ namespace MWCoop
         {
             IceRace.Test(mode, t);
             bool ice = mode == "glace" || mode == "glace2" || mode == "glace3";   // (glace2/3 : meme semaine, pilotes humains -- IceRace.Test)
-            if ((mode != "rallye" && !ice && mode != "rallye3") || !built) return;
+            if ((mode != "rallye" && !ice && mode != "rallye3" && mode != "retourne") || !built) return;
             // [Test] Autotest=glace : semaine de la course sur glace (GlobalWeeksPassed impair, RACES 'SwapDates' WAKEUP),
             // vendredi 10 h (essais libres : le jeu lance des voitures IA au hasard sur la piste).
             if (Session.IsHost && testStep == 0 && t > 20f && ice)
@@ -493,6 +497,7 @@ namespace MWCoop
                 if (sun != null) { sun.FsmVariables.GetFsmInt("Time").Value = h; sun.SendEvent("TIMESKIP"); }
                 Log.Info("autotest : rallye : jour " + day + ", " + h + " h ici");
             }
+            if (mode == "retourne") TestRetourne(t);
             int sec = System.DateTime.Now.Second;
             if (t < 25f || sec % 5 != 0 || sec == testSec) return;
             testSec = sec;
@@ -591,6 +596,246 @@ namespace MWCoop
                 catch (System.Exception e) { Log.Warn("courses : distances de " + Recon.Path(f.transform) + "::" + f.FsmName + " pas accrochees (" + e.GetType().Name + ")"); }
             }
             Log.Info("courses : " + n + " mesures de distance au joueur comptent tous les joueurs (voitures IA, aides)");
+        }
+
+        // ---------------------------------------------------------------- rallye : spectateurs qui remettent une voiture IA
+        // RACES/RALLY/Spectators :: Helpers (jeu) : la voiture IA renversee (son automate 'Disable', etat 'Over turn' : rayon
+        // vers le haut qui touche le sol, Hit) pose RolledCar et envoie ROLLED. 'State 1' --ROLLED--> 'Player dis?' / 'TV car?'
+        // / '2nd player check' (joueur a plus de 200 m, voiture pas a la tele) -> 'Activate' (enfant Helpers : 5
+        // SpectatorHelper poses a la voiture et allumes) -> 'Being rolled' (chaque seconde : RolledCar::Disable.Hit ; faux =
+        // sur ses roues) -> 'Player dis? 2' / 'TV car? 2' / '2nd player check 2' -> 'State 1' (Helpers eteint). Rien n'y
+        // touche a la carrosserie : la voiture retombe sur ses roues, ou 'Disable' la replace (Navigation FULLRESET) au bout
+        // de 60 s, joueurs loin -- chez l'hote, logique intacte, pose recopiee chez l'invite.
+        // Chez l'invite, 'Disable' des copies est coupe (Mute) : ROLLED n'y partait jamais, les spectateurs restaient eteints.
+        //  - hote : 'Being rolled' et 'Player dis? 2' accroches ; il dit quelle voiture (rang Idx de K_CARS) a la premiere
+        //    entree, 255 a la fin, et redit toutes les 3 s tant que ca dure (arrivants). Ses distances comptent deja tous
+        //    les joueurs (MinDist) : spectateurs poses quand tout le monde est a plus de 200 m.
+        //  - invite : RolledCar = la copie, Disable.Hit de la copie vrai (automate coupe : rien d'autre ne l'ecrit), Helpers
+        //    force en 'Activate' (distances et tele deja vues par l'hote) ; la copie suit la pose de l'hote. A la fin, Hit
+        //    faux : 'Being rolled' repart seul vers 'Player dis? 2' (spectateurs eteints quand le joueur d'ici est loin).
+        //    Un ROLLED d'ici (voiture IA pas encore copiee) est annule : retour en 'State 1'.
+        static PlayMakerFSM helpers;
+        static bool helpersHooked;
+        static GameObject helpersCar;              // hote : voiture aidee en ce moment
+        static float nextHelpersLook, nextHelpersSend, nextHelpersTry, nextHelpersWarn, nextGuardLog;
+        static int gHelpIdx = -1, gReplayed = -1;  // invite : voiture aidee chez l'hote ; voiture rejouee ici
+        static bool gEnd;                          // invite : fin recue, Helpers d'ici pas encore sorti de 'Being rolled'
+        static readonly HashSet<string> HelpersBusy = new HashSet<string> { "Player dis?", "TV car?", "2nd player check", "Activate", "Being rolled" };
+
+        class HelpersHook : FsmStateAction
+        {
+            public bool Start;
+            public override void OnEnter()
+            {
+                try { HostHelpers(Start); }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        static PlayMakerFSM FindHelpers()
+        {
+            if (helpers == null && Time.realtimeSinceStartup >= nextHelpersLook)
+            {
+                nextHelpersLook = Time.realtimeSinceStartup + 2f;
+                GameObject spec = Game.FindAny("RACES/RALLY/Spectators");
+                helpers = spec != null ? Game.FsmOn(spec, "Helpers") : null;
+            }
+            return helpers;
+        }
+
+        // Pret : Spectators allume (jour de rallye) et automate initialise par PlayMaker (accroche apres : rien d'ecrase).
+        static bool HelpersReady() { return helpers != null && helpers.gameObject.activeInHierarchy && helpers.Fsm != null && helpers.Fsm.Initialized; }
+
+        static Car CarOf(GameObject go)
+        {
+            if (go == null) return null;
+            foreach (Car c in cars) if (c.T != null && c.T.gameObject == go) return c;
+            return null;
+        }
+
+        static FsmBool HitOf(Car c)
+        {
+            PlayMakerFSM d = c != null && c.T != null ? Game.FsmOn(c.T.gameObject, "Disable") : null;
+            return d != null ? d.FsmVariables.FindFsmBool("Hit") : null;
+        }
+
+        static void HelpersHost(float now)
+        {
+            if (FindHelpers() == null) return;
+            if (!helpersHooked && HelpersReady())
+            {
+                helpersHooked = true;
+                FsmState br = helpers.Fsm.GetState("Being rolled"), back = helpers.Fsm.GetState("Player dis? 2");
+                if (br == null || back == null) { Log.Warn("rallye : Spectators::Helpers sans 'Being rolled' / 'Player dis? 2' : spectateurs pas partages"); return; }
+                FsmHooks.Prepend(br, new HelpersHook { Start = true });
+                FsmHooks.Prepend(back, new HelpersHook { Start = false });
+                Log.Info("rallye : Spectators::Helpers accroche (spectateurs partages avec les invites)");
+            }
+            if (helpersCar != null && Session.RemoteCount > 0 && now >= nextHelpersSend)
+            {
+                nextHelpersSend = now + 3f;
+                Car c = CarOf(helpersCar);
+                if (c != null && c.Idx < 255) Session.Broadcast(new NetWriter(Msg.Race).U8(K_HELPERS).U8(c.Idx), false);
+            }
+        }
+
+        // Hote : Helpers entre en 'Being rolled' (start ; il y repasse chaque seconde tant que la voiture est sur le toit)
+        // ou en 'Player dis? 2' (voiture remise).
+        static void HostHelpers(bool start)
+        {
+            if (!Session.IsHost || helpers == null) return;
+            if (start)
+            {
+                FsmGameObject rc = helpers.FsmVariables.FindFsmGameObject("RolledCar");
+                GameObject go = rc != null ? rc.Value : null;
+                if (go == null || go == helpersCar) return;
+                helpersCar = go;
+                if (Session.RemoteCount == 0) return;
+                Car c = CarOf(go);
+                if (c == null || c.Idx >= 255) { Log.Warn("rallye : spectateurs autour de " + go.name + " (pas une voiture IA suivie) : pas partages"); return; }
+                Log.Info("rallye : spectateurs remettent " + go.name + " sur ses roues (hote)");
+                Session.Broadcast(new NetWriter(Msg.Race).U8(K_HELPERS).U8(c.Idx), true);
+                nextHelpersSend = Time.realtimeSinceStartup + 3f;
+                return;
+            }
+            if (helpersCar == null) return;
+            string n = helpersCar.name;
+            helpersCar = null;
+            if (Session.RemoteCount == 0) return;
+            Log.Info("rallye : spectateurs : " + n + " de nouveau sur ses roues (hote)");
+            Session.Broadcast(new NetWriter(Msg.Race).U8(K_HELPERS).U8(255), true);
+        }
+
+        // Invite : voiture aidee chez l'hote (rang de K_CARS ; 255 : plus aucune).
+        static void OnHelpers(int idx)
+        {
+            if (idx == 255)
+            {
+                gHelpIdx = -1;
+                if (gReplayed < 0 || gEnd) return;
+                gEnd = true;
+                Car c = gReplayed < cars.Count ? cars[gReplayed] : null;
+                FsmBool hit = HitOf(c);
+                if (hit != null) hit.Value = false;
+                Log.Info("rallye : spectateurs : " + (c != null && c.T != null ? c.T.name : "?") + " de nouveau sur ses roues chez l'hote, spectateurs liberes ici");
+                return;
+            }
+            if (idx == gHelpIdx) return;
+            gHelpIdx = idx; nextHelpersTry = 0; nextHelpersWarn = 0;
+        }
+
+        static void HelpersGuest(float now)
+        {
+            if (FindHelpers() == null) return;
+            if (gHelpIdx >= 0 && (gReplayed != gHelpIdx || gEnd) && now >= nextHelpersTry) { nextHelpersTry = now + 1f; TryReplay(now); }
+            if (!HelpersReady()) return;
+            string s = helpers.ActiveStateName;
+            if (gReplayed >= 0 && gEnd && s != "Activate" && s != "Being rolled") { gReplayed = -1; gEnd = false; }   // episode fini ici
+            if (gReplayed >= 0 || !HelpersBusy.Contains(s)) return;
+            // ROLLED parti d'ici (voiture IA locale pas encore copiee) : les voitures IA sont celles de l'hote.
+            Game.SetState(helpers, "State 1");
+            if (now >= nextGuardLog) { nextGuardLog = now + 10f; Log.Info("rallye : spectateurs : ROLLED d'ici ignore ('" + s + "' -> 'State 1', voitures IA de l'hote)"); }
+        }
+
+        static void TryReplay(float now)
+        {
+            Car c = gHelpIdx < cars.Count ? cars[gHelpIdx] : null;
+            string why = null;
+            if (!hashOk) why = "voitures IA pas encore comparees a celles de l'hote";
+            else if (c == null || c.T == null) why = "voiture " + gHelpIdx + " inconnue ici";
+            else if (!c.Known || !c.On || !c.T.gameObject.activeInHierarchy) why = c.T.name + " pas en piste ici";
+            else if (!HelpersReady()) why = "RACES/RALLY/Spectators eteint ici";
+            if (why != null)
+            {
+                if (now >= nextHelpersWarn) { nextHelpersWarn = now + 10f; Log.Info("rallye : spectateurs de l'hote en attente ici (" + why + ")"); }
+                return;
+            }
+            if (gReplayed >= 0 && gReplayed != gHelpIdx && gReplayed < cars.Count) { FsmBool old = HitOf(cars[gReplayed]); if (old != null) old.Value = false; }
+            FsmBool hit = HitOf(c);
+            if (hit != null) hit.Value = true;   // ('Disable' de la copie coupe : 'Being rolled' le lit, rien ne le reecrit)
+            FsmGameObject rc = helpers.FsmVariables.FindFsmGameObject("RolledCar");
+            if (rc != null) rc.Value = c.T.gameObject;
+            gReplayed = gHelpIdx; gEnd = false;
+            Game.SetState(helpers, "Activate");
+            Log.Info("rallye : spectateurs de l'hote pour " + c.T.name + " rejoues ici (Helpers '" + helpers.ActiveStateName + "'" + (hit == null ? ", Disable.Hit absent" : "") + ")");
+        }
+
+        // [Test] Autotest=retourne (avec le samedi 13 h de l'essai rallye) : l'hote, des 25 s, retourne une voiture IA du
+        // rallye allumee (180 degres autour de son axe avant, 1,5 m plus haut) et fait comme son 'Disable' ('Over turn') :
+        // RolledCar + ROLLED a Spectators::Helpers ; 2 s plus tard, si Helpers attend encore (un joueur a moins de 200 m,
+        // la voiture a la tele), 'Activate' est force pour l'essai. Chacun note a 30/35/40 s (puis jusqu'a 60 s) l'etat de
+        // Helpers, la voiture aidee, son haut (up.y) et son Hit. Attendu chez l'invite : 'Being rolled', meme voiture,
+        // enfant Helpers allume a quelques metres d'elle ; "spectateurs de l'hote pour X rejoues ici" dans le journal.
+        static int retStep, retLog;
+        static float retAt, retWarn;
+        static Car retCar;
+        static void TestRetourne(float t)
+        {
+            FindHelpers();
+            if (Session.IsHost && retStep == 0 && t > 25f)
+            {
+                Car pick = null;
+                foreach (Car c in cars) if (c.T != null && c.T.gameObject.activeInHierarchy && c.Key.StartsWith("RACES/RALLY/")) { pick = c; break; }
+                string why = pick == null ? "pas de voiture IA du rallye allumee" : !HelpersReady() ? "Spectators::Helpers pas pret" : !helpersHooked ? "Helpers pas encore accroche" : null;
+                if (why != null)
+                {
+                    if (t >= retWarn) { retWarn = t + 10f; Log.Info("autotest retourne : hote : en attente (" + why + ")"); }
+                    if (t > 120f) { retStep = 9; Log.Warn("autotest retourne : abandon (" + why + ")"); }
+                }
+                else
+                {
+                    retStep = 1; retAt = t; retCar = pick;
+                    pick.T.position = pick.T.position + Vector3.up * 1.5f;
+                    pick.T.rotation = Quaternion.AngleAxis(180f, pick.T.forward) * pick.T.rotation;
+                    if (pick.Body != null && !pick.Body.isKinematic) { pick.Body.velocity = Vector3.zero; pick.Body.angularVelocity = Vector3.zero; }
+                    FsmBool hit = HitOf(pick);
+                    if (hit != null) hit.Value = true;
+                    FsmGameObject rc = helpers.FsmVariables.FindFsmGameObject("RolledCar");
+                    if (rc != null) rc.Value = pick.T.gameObject;
+                    string before = helpers.ActiveStateName;
+                    helpers.SendEvent("ROLLED");
+                    Log.Info("autotest retourne : hote : " + pick.T.name + " retournee a " + pick.T.position.ToString("F0") + ", ROLLED a Helpers ('" + before + "' -> '" + helpers.ActiveStateName + "')");
+                }
+            }
+            if (Session.IsHost && retStep == 1 && t > retAt + 2f)
+            {
+                retStep = 2;
+                string s = helpers.ActiveStateName;
+                if (s == "State 1" || s == "Player dis?" || s == "TV car?" || s == "2nd player check")
+                {
+                    FsmGameObject rc = helpers.FsmVariables.FindFsmGameObject("RolledCar");
+                    if (rc != null && retCar != null && retCar.T != null) rc.Value = retCar.T.gameObject;
+                    Game.SetState(helpers, "Activate");
+                    Log.Info("autotest retourne : hote : Helpers attendait en '" + s + "' (joueur a moins de 200 m ou voiture a la tele) : 'Activate' force pour l'essai -> '" + helpers.ActiveStateName + "'");
+                }
+            }
+            int k = (int)(t / 5f);
+            if (t < 30f || k == retLog || k > 12) return;
+            retLog = k;
+            var sb = new System.Text.StringBuilder("autotest retourne : " + (Session.IsHost ? "hote" : "invite") + " t=" + (k * 5) + " : Helpers ");
+            if (helpers == null) sb.Append("introuvable");
+            else
+            {
+                sb.Append('\'').Append(helpers.ActiveStateName).Append('\'').Append(helpers.gameObject.activeInHierarchy ? "" : " (Spectators eteint)");
+                Transform ht = helpers.transform.Find("Helpers");
+                bool on = ht != null && ht.gameObject.activeInHierarchy;
+                sb.Append(", enfant Helpers ").Append(on ? "allume a " + ht.position.ToString("F0") + " (" + ht.childCount + " spectateurs)" : "eteint");
+                FsmGameObject rc = helpers.FsmVariables.FindFsmGameObject("RolledCar");
+                GameObject go = rc != null ? rc.Value : null;
+                sb.Append(", RolledCar ").Append(go != null ? go.name : "aucune");
+                Car c = CarOf(go);
+                if (c != null && c.T != null)
+                {
+                    FsmBool hit = HitOf(c);
+                    sb.Append(" a ").Append(c.T.position.ToString("F0")).Append(" haut ").Append(c.T.up.y.ToString("F2")).Append(" Hit ").Append(hit != null ? (hit.Value ? "vrai" : "faux") : "?");
+                    if (on) sb.Append(", ecart ").Append(Vector3.Distance(ht.position, c.T.position).ToString("F0")).Append(" m");
+                }
+            }
+            if (Session.IsHost) sb.Append(" ; aidee ").Append(helpersCar != null ? helpersCar.name : "aucune");
+            else sb.Append(" ; chez l'hote ").Append(gHelpIdx >= 0 && gHelpIdx < cars.Count && cars[gHelpIdx].T != null ? cars[gHelpIdx].T.name : "aucune")
+                   .Append(", rejouee ").Append(gReplayed >= 0 && gReplayed < cars.Count && cars[gReplayed].T != null ? cars[gReplayed].T.name : "non").Append(gEnd ? " (finie)" : "");
+            Log.Info(sb.ToString());
         }
     }
 }
