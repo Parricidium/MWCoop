@@ -1195,6 +1195,12 @@ namespace MWCoop
             }
             if (mode == "etatpeinture" && t > 36f && !done) { done = true; string id = Config.Get("Test", "TestPiece", "VIN4111"); Log.Info("autotest : peinture " + id + " : " + Paint.State(id)); }
             if (mode == "reglage" && t > 30f && !done) { done = true; Log.Info("autotest : reglage " + Settings.TestNearest()); }
+            if (mode == "parallelisme")
+            {
+                // Sauvegarde Rivett (cremaillere montee) : l'hote regle la biellette gauche de +0,5 a 30 s (comme sa vis) ; etat des deux cotes a 45 s.
+                if (t > 30f && step == 0) { step = 1; if (MWCoop.Net.Session.IsHost) Log.Info("autotest : parallelisme " + Settings.TestToe(true)); }
+                if (t > 45f && step == 1) { step = 2; Log.Info("autotest : parallelisme " + Settings.TestToe(false)); }
+            }
             if (mode == "quete")
             {
                 // [Test] TestQuete=partie de cle, TestEvenement=evenement envoye a 30 s ; etat a 40 s.

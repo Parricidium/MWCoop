@@ -1165,6 +1165,7 @@ static const wchar_t *const kRu[][2] = {
     { L"Shared marker (tap: place, hold: remove)", L"Общий маркер (нажать: поставить, удерживать: убрать)" },
     { L"Marker", L"Маркер" },
     { L"Ice race: Jokkis rentals (host, beta)", L"Гонка на льду: аренда Йоккис (хост, бета)" },
+    { L"My Winter Car is still open but no longer answers MWCoop (stuck after closing, or started without MWCoop).\n\nClose it so you can launch again from the launcher?", L"My Winter Car всё ещё открыта, но больше не отвечает MWCoop (зависла после закрытия или запущена без MWCoop).\n\nЗакрыть её, чтобы снова запустить из лаунчера?" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },

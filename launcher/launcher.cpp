@@ -2761,7 +2761,8 @@ static BOOL CALLBACK FindPidWindow(HWND h, LPARAM lp)
     return TRUE;
 }
 // Niveau du jeu en cours d'apres serveur.txt (ecrit chaque seconde par le mod) : "MainMenu", "GAME"... ; vide si aucun etat frais.
-static std::wstring GameLevelNow()
+// serveur.txt le plus recent (le mod l'ecrit chaque seconde, Net/Admin.cs) ; age en secondes (-1 : aucun).
+static std::wstring NewestHeartbeat(long long *age)
 {
     std::vector<std::wstring> dirs = { g_gameDir + L"MWCoop\\", g_gameDir + L"MWCoop\\profils\\invite\\" };
     if (!LocalDir().empty()) {
@@ -2771,7 +2772,14 @@ static std::wstring GameLevelNow()
     for (const std::wstring &pr : Profiles()) dirs.push_back(SaveProfRoot() + pr + L"\\");   // (sauvegardes a part : saves.inc)
     std::wstring best; long long bt = 0;
     for (auto &d : dirs) { long long t = FileUnixTime(d + L"serveur.txt"); if (t > bt) { bt = t; best = d + L"serveur.txt"; } }
-    if (best.empty() || (long long)_time64(NULL) - bt > 6) return L"";
+    if (age) *age = best.empty() ? -1 : (long long)_time64(NULL) - bt;
+    return best;
+}
+static std::wstring GameLevelNow()
+{
+    long long age = -1;
+    std::wstring best = NewestHeartbeat(&age);
+    if (best.empty() || age > 6) return L"";
     std::vector<unsigned char> raw;
     if (!ReadAll(best, raw)) return L"";
     std::wstring all = Widen(std::string(raw.begin(), raw.end()), CP_UTF8);
@@ -2805,21 +2813,36 @@ static bool GameRunningAsk()
 {
     DWORD pid = 0;
     if (!GameProcessRunning(&pid)) return false;
-    bool stuck = false;
+    bool stuck = false, window = false;
+    ULONGLONG ageS = 0;
+    long long beat = -1;
+    NewestHeartbeat(&beat);
+    std::string path = "(chemin inconnu)";
     if (pid) {
         WndFind f = { pid, false };
         EnumWindows(FindPidWindow, (LPARAM)&f);
+        window = f.found;
         HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (h && !f.found) {
+        if (h) {
+            wchar_t p[MAX_PATH]; DWORD n = MAX_PATH;
+            if (QueryFullProcessImageNameW(h, 0, p, &n)) path = Narrow(p, CP_UTF8);
             FILETIME c, e, k, u, now;
             if (GetProcessTimes(h, &c, &e, &k, &u)) {
                 GetSystemTimeAsFileTime(&now);
                 ULONGLONG age = (((ULONGLONG)now.dwHighDateTime << 32) | now.dwLowDateTime) - (((ULONGLONG)c.dwHighDateTime << 32) | c.dwLowDateTime);
-                stuck = age > 60ull * 10000000ull;
+                ageS = age / 10000000ull;
             }
+            CloseHandle(h);
         }
-        if (h) CloseHandle(h);
+        // Pendu : plus d'une minute, et sans fenetre, ou avec une fenetre mais le battement du mod arrete depuis plus de
+        // 15 s (jeu quitte reste en memoire fenetre comprise, ou parti sans MWCoop) -- Matilda, 15-16/10 : refus « deja
+        // lance » a chaque LANCER, Steam le montrait en cours, rien ne partait.
+        bool silent = beat < 0 || beat > 15;
+        stuck = ageS > 60 && (!window || silent);
     }
+    // Toujours au journal : ce refus n'y laissait aucune trace.
+    std::string beatTxt = beat < 0 ? "jamais" : std::to_string(beat) + " s";
+    LaunchLog("jeu %lu en cours : %s, fenetre %d, depuis %llu s, dernier battement du mod : %s", pid, path.c_str(), (int)window, ageS, beatTxt.c_str());
     // Jeu ouvert au menu principal (retour de Matilda, 14/10 : partie quittee a 14h50, jeu laisse au menu, le lanceur rouvert
     // a 16h13 refusait tout -- « deja lance », Steam le montrait en cours) : l'etat que le mod ecrit chaque seconde
     // (serveur.txt, Net/Admin.cs : niveau charge) dit s'il est au menu ; alors on propose de le fermer (rien a sauvegarder).
@@ -2833,7 +2856,15 @@ static bool GameRunningAsk()
             if (!GameProcessRunning()) return false;
         }
     }
-    if (stuck) {
+    if (stuck && window) {
+        LaunchLog("jeu %lu avec fenetre mais muet depuis plus d'une minute : fermeture proposee", pid);
+        if (MessageBoxW(g_wnd, T(L"My Winter Car est encore ouvert mais ne r\u00E9pond plus \u00E0 MWCoop (rest\u00E9 bloqu\u00E9 apr\u00E8s sa fermeture, ou lanc\u00E9 sans MWCoop).\n\nLe fermer pour relancer depuis le lanceur ?",
+                                 L"My Winter Car is still open but no longer answers MWCoop (stuck after closing, or started without MWCoop).\n\nClose it so you can launch again from the launcher?"),
+                        L"MWCoop", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+            CloseGameProcess(pid);
+            if (!GameProcessRunning()) return false;
+        }
+    } else if (stuck) {
         LaunchLog("jeu %lu en cours sans fenetre depuis plus d'une minute : fermeture proposee", pid);
         if (MessageBoxW(g_wnd, T(L"My Winter Car tourne encore en arri\u00E8re-plan, sans fen\u00EAtre (rest\u00E9 bloqu\u00E9 apr\u00E8s sa fermeture ?).\n\nLe fermer de force pour pouvoir relancer ?",
                                  L"My Winter Car is still running in the background, without a window (stuck after closing?).\n\nForce it to close so you can launch again?"),
