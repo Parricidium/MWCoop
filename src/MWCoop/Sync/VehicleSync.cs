@@ -816,12 +816,23 @@ namespace MWCoop
             HotTick();
             PushRemote(now);
             if (frozenCar != null) HoldFrozen();   // (mort au volant)
-            float pf = Config.GetFloat("Test", "PousseForce", 1500f);
+            // Plafonnee a la vitesse de marche, comme la poussee du jeu (le pousseur doit suivre a pied : 2 m/s, 3,4 en
+            // courant) ; la force s'efface en approchant. Vaydon, 16/10 : la CORRIS laissee moteur tournant dans le garage,
+            // poussee par l'invite (1500 N tant qu'il restait a portee de la copie), ricochait sur les murs a 25-36 km/h et
+            // finissait en l'air.
+            float pf = Config.GetFloat("Test", "PousseForce", 1500f), pushMax = Config.GetFloat("Test", "PousseVitesseMax", 2.5f);
             foreach (Car c in cars)
                 if (c.PushUntil > now && c.Body != null && !c.Body.isKinematic)
                 {
+                    Vector3 dir = c.T.TransformDirection(c.PushDir);
+                    float along = Vector3.Dot(c.Body.velocity, dir);
+                    if (along >= pushMax || c.Body.velocity.magnitude >= pushMax * 1.5f)
+                    {
+                        if (now >= pushCapLog) { pushCapLog = now + 5f; Log.Info("poussee : " + c.Key + " a " + c.Body.velocity.magnitude.ToString("F1") + " m/s : force retenue (vitesse de marche depassee)"); }
+                        continue;
+                    }
                     c.Body.WakeUp();
-                    c.Body.AddForceAtPosition(c.T.TransformDirection(c.PushDir) * pf * Time.deltaTime, c.T.TransformPoint(c.PushPoint), ForceMode.Impulse);
+                    c.Body.AddForceAtPosition(dir * pf * Mathf.Clamp01((pushMax - Mathf.Max(along, 0f)) / pushMax) * Time.deltaTime, c.T.TransformPoint(c.PushPoint), ForceMode.Impulse);
                 }
             foreach (Car c in cars)
             {
@@ -844,12 +855,19 @@ namespace MWCoop
         // Menor, 11/10 : « pousser a deux, ou avec quelqu'un au volant ») : ici c'est une copie figee, la main du jeu ne la
         // bouge pas. Le geste part a celui qui la mene (10 fois/s : point et direction dans le repere de la voiture), qui
         // applique la force (PousseForce, 1500 N par pousseur) a sa voiture.
-        static float pushSendAt, pushSendLog;
+        static float pushSendAt, pushSendLog, pushIdleLog;
+        static Vector3 pushLastPos; static float pushLastAt;
         static void PushRemote(float now)
         {
             if (LocalDriving >= 0 || !Gestures.Pushing || now < pushSendAt || !Session.Active) return;
             Transform pl = Game.PlayerT, cam = PlayerSync.LocalCamera;
             if (pl == null || cam == null) return;
+            // Les mains de poussee du jeu sont une bascule (touche Push : sorties jusqu'au prochain appui) : seul, le jeu ne
+            // pousse que si le joueur avance dans la voiture. Ici pareil : le pousseur doit marcher vers elle (Vaydon, 16/10 :
+            // l'invite se promenait mains sorties pres de la copie de la CORRIS, l'hote la voyait partir seule).
+            Vector3 walk = pushLastAt > 0f && now - pushLastAt < 0.5f ? (pl.position - pushLastPos) / Mathf.Max(now - pushLastAt, 0.01f) : Vector3.zero;
+            pushLastPos = pl.position; pushLastAt = now;
+            walk.y = 0f;
             Vector3 p = pl.position + Vector3.up * 0.8f;
             Car best = null; float bd = 1.5f * 1.5f;
             foreach (Car c in cars)
@@ -863,12 +881,17 @@ namespace MWCoop
             Vector3 dir = cam.forward; dir.y = 0f;
             if (dir.sqrMagnitude < 0.01f) return;
             dir.Normalize();
+            if (Vector3.Dot(walk, dir) < 0.4f)
+            {
+                if (now >= pushIdleLog) { pushIdleLog = now + 10f; Log.Info("poussee : " + best.Key + " menee par #" + best.RemoteBy + ", mains sorties sans marcher : rien d'envoye"); }
+                return;
+            }
             Vector3 cp = best.Body.ClosestPointOnBounds(p);
             Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pousse").U8(best.Net).Vec(best.T.InverseTransformPoint(cp)).Vec(best.T.InverseTransformDirection(dir)), false);
             if (now >= pushSendLog) { pushSendLog = now + 5f; Log.Info("poussee : " + best.Key + " menee par #" + best.RemoteBy + ", poussee envoyee"); }
         }
 
-        static float pushRecvLog;
+        static float pushRecvLog, pushCapLog;
         public static void OnRemotePush(int who, int net, Vector3 lp, Vector3 ld)
         {
             Car c = ByNet(net);
