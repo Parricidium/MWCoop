@@ -50,6 +50,8 @@ namespace MWCoop
     // copie (moteur froid), elle est reprise apres la logique du jeu -- le passager se rechauffe aussi.
     // Objets poses dedans (coffre, banquette) : voir Props (CarUnder, Authority) ; un recalage d'un coup
     // de la voiture les emmene avec elle.
+    // Effets (fumee d'echappement et de la simulation, traces et fumee de glisse des roues) : celui qui mene la voiture
+    // les envoie (M_FX), la copie les rejoue -- section « particules et traces de pneus ».
     public static class VehicleSync
     {
         class Sim { public string Key; public uint Hash; public FsmFloat Var; public bool Control; }
@@ -114,12 +116,21 @@ namespace MWCoop
             public Sim[] Sims = new Sim[0];     // etat de la simulation (SimVars)
             public float AuthorityUntil;        // on vient de la rendre : l'instantane de l'hote (voiture garee) attend
             public bool SimLogged;
+            // Effets (particules, glisse des roues : section « particules et traces de pneus »)
+            public Fx[] Fx = new Fx[0]; public float FxScanAt;            // emetteurs de particules sous la voiture (FxScan)
+            public float FxSendAt; public int FxSig;                       // menee d'ici : prochain envoi, signature du dernier etat
+            public float FxAt = -10f; public int FxFrom = -1;              // copie : derniere reception (heure, joueur)
+            public Dictionary<uint, FxState> FxWant;                       // copie : etats recus (empreinte -> emission)
+            public bool FxSet, FxLogged;                                   // copie : emetteurs poses d'ici (a remettre a la fin)
+            public byte[] SkidWant, SmokeWant; public int[] SkidLast;      // copie : intensites recues par roue, derniere trace (AddSkidMark)
+            public Skidmarks Skid; public ParticleEmitter SkidSmoke; public bool SkidLooked; public int SkidAdded;
         }
 
         // Message Msg.Vehicle : joueur, numero de voiture, mode. Modes 0 garee, 1 conduite, 2 moteur tournant (pose,
         // vitesses...) ; 8 etat de la simulation ; 9 table de l'hote et 10 liste d'un invite (numero NoCar) ;
-        // 11 voiture proposee par un invite (active chez lui, absente de la table de l'hote : cle, nom, chemin).
-        const int M_SIM = 8, M_TABLE = 9, M_KEYS = 10, M_PROPOSE = 11;
+        // 11 voiture proposee par un invite (active chez lui, absente de la table de l'hote : cle, nom, chemin) ;
+        // 12 effets de celui qui la mene (emetteurs de particules allumes, glisse des roues : M_FX).
+        const int M_SIM = 8, M_TABLE = 9, M_KEYS = 10, M_PROPOSE = 11, M_FX = 12;
         const int NoCar = 255;
         // Voiture active chez un invite seulement (pretee, JOKKIS, HYDROCOPTER, taxi active par son propre jeu...) : jamais
         // dans la table de l'hote, donc jamais suivie (relecture du 15/10, ecart n10). L'invite la propose a l'hote (cle, nom,
@@ -775,6 +786,9 @@ namespace MWCoop
                     else { Release(o, now); Log.Info((o.Index == pushCar ? "poussee finie : " : "moteur coupe : ") + o.Key + " rendue"); owned = -1; pushCar = -1; }
                 }
             }
+            // Effets (particules, glisse des roues) de ce qu'on fait rouler : 4 fois/s et a chaque changement.
+            if (LocalDriving >= 0) FxTick(cars[LocalDriving], now);
+            else if (owned >= 0 && owned < cars.Count) FxTick(cars[owned], now);
             // Etat de la simulation de ce qu'on fait rouler : une fois par seconde.
             if (now >= nextSim)
             {
@@ -1018,6 +1032,14 @@ namespace MWCoop
                 }
                 else if (c.HornSet) { c.HornSet = false; c.Horn.SetActive(c.HornWas); }
             }
+            // Emetteurs de particules de la copie : ceux de celui qui la mene (apres la logique du jeu : son automate 'Smoke'
+            // regle maxEmission d'apres son propre regime a chaque image) ; etat d'avant remis a la fin de la copie.
+            foreach (Car c in cars)
+            {
+                if (c.Body == null) continue;
+                if (c.Kinematic && Remote(c, now) && c.FxFrom == c.RemoteBy && c.FxWant != null && now - c.FxAt < 1.5f) FxApply(c, now);
+                else if (c.FxSet) FxRestore(c);
+            }
             // Objets transportes dans une copie : places sur la pose affichee de la voiture (apres sa physique).
             Props.LateUpdate();
         }
@@ -1026,6 +1048,299 @@ namespace MWCoop
         static bool Remote(Car c, float now)
         {
             return c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving && c.Index != owned && c.Index != bumped;
+        }
+
+        // ---------------------------------------------------------------- particules et traces de pneus
+        // Effets de la voiture menee (JD, 16/10 : « tout effet visible doit l'etre chez tous ») : fumee d'echappement
+        // (ExhaustSmoke, EllipsoidParticleEmitter sous Simulation/..., dont l'automate 'Smoke' regle maxEmission et la vitesse
+        // d'apres le regime de la jauge), fumee de l'embrayage (ClutchSmoke), du joint de culasse (Gasketsmoke), geyser de vapeur
+        // (SteamFountainCorris), feu moteur et electrique (OverheatFire, FIRE, FireElectric : ParticleSystem allumes par activation
+        // de l'objet), crachat du carburateur (CarbSpitFlame), citerne de la GIFU (ShitShower)... Sur la copie, Drivetrain et
+        // roues sont coupes et les automates ne voient pas les memes entrees : rien n'emettait, ou autre chose. (Les voitures des
+        // joueurs n'ont pas de RoosterTail / SnowCloudTrail : ceux-la sont au trafic, aux PNJ et aux courses -- Particles.)
+        // Celui qui mene la voiture (conducteur, ou moteur laisse tournant) releve tous les ParticleEmitter et ParticleSystem
+        // sous sa racine (hors joueur, avatars et SkidSmoke) et envoie ceux qui emettent (M_FX : 4 fois/s, et a chaque
+        // changement) ; la copie les pose apres la logique du jeu (LateUpdate, comme Particles pour le trafic) et remet l'etat
+        // d'avant a la fin de la copie. Cle d'un emetteur : le plus court suffixe unique de son chemin sous la voiture
+        // (l'ExhaustSmoke de la CORRIS est deplace par son automate sous From* selon l'echappement monte : le nom seul suffit),
+        // empreinte FNV sur le reseau (pas de table : un arrivant comprend le premier message). Seul l'objet de l'emetteur est
+        // allume d'ici, et seulement s'il ne porte ni corps, ni son, ni attache (pas un groupe de simulation entier).
+        // Traces de pneus et fumee de glisse : le jeu les fait par roue (Wheel.CalcSkidmarks / CalcSkidSmoke au pas physique,
+        // d'apres la vitesse de glissement) dans l'objet 'Skidmarks' de la scene (CarDynamics.skidmarks, SkidSmoke dessous).
+        // Les roues de la copie sont coupees : celui qui mene envoie par roue l'intensite de trace et de fumee (0-255), la
+        // copie lance un rayon sous chaque roue et appelle Skidmarks.AddSkidMark / SkidSmoke.Emit comme le jeu.
+        // Message M_FX : joueur, numero, 12, nRoues (8 au plus) x { U8 trace, U8 fumee }, n (40 au plus) x { I32 empreinte,
+        // U8 drapeaux (1 : emet / joue, 2 : ParticleSystem), F32 minEmission, F32 maxEmission (ParticleSystem : 0, emissionRate) }.
+        // Les emetteurs absents du message sont eteints. L'hote relaie tel quel (non fiable).
+        class Fx
+        {
+            public string Key; public uint Hash; public ParticleEmitter E; public ParticleSystem S; public GameObject Go;
+            public bool Set, WasEmit, WasActive; public float WasMin, WasMax; public int Can;   // Can : 0 pas regarde, 1 activable d'ici, 2 non
+            public bool On { get { return Go != null && Go.activeInHierarchy && (E != null ? E.emit : S != null && S.isPlaying); } }
+        }
+        struct FxState { public float Min, Max; }
+        const System.Reflection.BindingFlags WheelBf = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+        static readonly System.Reflection.FieldInfo fSlipSmoke = typeof(Wheel).GetField("slipVeloSmoke", WheelBf), fSkidMark = typeof(Wheel).GetField("isSkidMark", WheelBf),
+                                                    fSkidSmoke = typeof(Wheel).GetField("isSkidSmoke", WheelBf), fSlipThreshold = typeof(Wheel).GetField("slipVeloThreshold", WheelBf),
+                                                    fLastSkid = typeof(Wheel).GetField("lastSkid", WheelBf);
+        static float testFxUntil, testFxLog; static int testFxSkid;   // (essai poussiere : emetteurs forces, glisse forcee)
+        static int fxLogs, fxBlockedLogs;
+
+        static bool FxEligible(Car c, Transform t)
+        {
+            if (t.name.Contains("Skid")) return false;
+            for (Transform p = t; p != null && p != c.T; p = p.parent) if (p.name == "PLAYER" || p.name.StartsWith("MWCoop")) return false;
+            return true;
+        }
+
+        // Emetteurs sous la voiture, cle = plus court suffixe unique du chemin (homonymes de meme chemin : "~rang").
+        static void FxScan(Car c, float now)
+        {
+            c.FxScanAt = now + 5f;
+            if (c.Body == null) return;
+            var list = new List<Fx>();
+            var paths = new List<string>();
+            foreach (ParticleEmitter e in c.T.GetComponentsInChildren<ParticleEmitter>(true))
+                if (e != null && FxEligible(c, e.transform)) { list.Add(new Fx { E = e, Go = e.gameObject }); paths.Add(RelPath(c.T, e.transform)); }
+            foreach (ParticleSystem s in c.T.GetComponentsInChildren<ParticleSystem>(true))
+                if (s != null && FxEligible(c, s.transform)) { list.Add(new Fx { S = s, Go = s.gameObject }); paths.Add(RelPath(c.T, s.transform)); }
+            var dup = new Dictionary<string, int>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                string[] segs = paths[i].Substring(1).Split('/');
+                string key = null;
+                for (int k = segs.Length - 1; k >= 0 && key == null; k--)
+                {
+                    string suf = string.Join("/", segs, k, segs.Length - k);
+                    int n = 0;
+                    for (int j = 0; j < paths.Count; j++) if (paths[j].EndsWith("/" + suf)) n++;
+                    if (n == 1) key = suf;
+                }
+                if (key == null) { key = paths[i].Substring(1); int d; dup.TryGetValue(key, out d); dup[key] = d + 1; if (d > 0) key += "~" + d; }
+                list[i].Key = key; list[i].Hash = Hash(key);
+            }
+            // (emetteur deja pose d'ici : son etat d'avant et son droit d'allumage sont gardes)
+            foreach (Fx o in c.Fx)
+                if (o.Set || o.Can != 0)
+                    foreach (Fx n in list) if (n.Go == o.Go) { n.Set = o.Set; n.WasEmit = o.WasEmit; n.WasActive = o.WasActive; n.WasMin = o.WasMin; n.WasMax = o.WasMax; n.Can = o.Can; }
+            if (list.Count != c.Fx.Length && fxLogs++ < 10)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (Fx f in list) { if (sb.Length > 0) sb.Append(' '); sb.Append(f.Key); }
+                Log.Info("particules : " + c.Key + " : " + list.Count + " emetteur(s) (" + sb + ")");
+            }
+            c.Fx = list.ToArray();
+        }
+
+        // Glisse d'une roue (d'ici, roue active) : intensite de trace et de fumee, 0-255 (Wheel.CalcSkidmarks : (slipVelo - seuil) / 15).
+        static void WheelSkid(Wheel w, out int skid, out int smoke)
+        {
+            skid = smoke = 0;
+            if (testFxSkid > 0) { skid = smoke = testFxSkid; return; }
+            if (w == null || !w.enabled) return;
+            float v = w.slipVelo, th = 4f, vs = v;
+            try
+            {
+                if (fSlipThreshold != null) th = (float)fSlipThreshold.GetValue(w);
+                if (fSlipSmoke != null) vs = (float)fSlipSmoke.GetValue(w);
+                if (v > th && (fSkidMark == null || (bool)fSkidMark.GetValue(w))) skid = Mathf.Clamp((int)((v - th) / 15f * 255f), 1, 255);
+                if (vs > th && (fSkidSmoke == null || (bool)fSkidSmoke.GetValue(w))) smoke = Mathf.Clamp((int)((vs - th) / 15f * 255f), 1, 255);
+            }
+            catch { }
+        }
+
+        // Celui qui mene : etat des emetteurs et des roues, envoye 4 fois/s, et des qu'il change (10 fois/s au plus).
+        static void FxTick(Car c, float now)
+        {
+            if (c.Body == null || c.Net < 0 || !Session.Active || Session.RemoteCount == 0) return;
+            if (now >= c.FxScanAt) FxScan(c, now);
+            if (now < testFxUntil)
+                foreach (Fx f in c.Fx) if (f.E != null && f.Go.activeInHierarchy) { f.E.emit = true; f.E.minEmission = 20f; f.E.maxEmission = 40f; }
+            int nw = Mathf.Min(c.Wheels.Length, 8);
+            var skid = new int[nw]; var smoke = new int[nw];
+            int sig = nw;
+            for (int i = 0; i < nw; i++) { WheelSkid(c.Wheels[i], out skid[i], out smoke[i]); sig = sig * 31 + (skid[i] >> 4) * 16 + (smoke[i] >> 4); }
+            var on = new List<Fx>();
+            foreach (Fx f in c.Fx)
+            {
+                if (!f.On || on.Count >= 40) continue;
+                on.Add(f);
+                sig = sig * 31 + (int)(f.Hash & 0xFFFF) + (int)(f.E != null ? f.E.maxEmission : f.S.emissionRate);
+            }
+            if (!(now >= c.FxSendAt || (sig != c.FxSig && now >= c.FxSendAt - 0.15f))) return;
+            c.FxSendAt = now + 0.25f; c.FxSig = sig;
+            var w = new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(c.Net).U8(M_FX).U8(nw);
+            for (int i = 0; i < nw; i++) w.U8(skid[i]).U8(smoke[i]);
+            w.U8(on.Count);
+            foreach (Fx f in on)
+            {
+                float mn = f.E != null ? f.E.minEmission : 0f, mx = f.E != null ? f.E.maxEmission : f.S.emissionRate;
+                w.I32((int)f.Hash).U8(f.E != null ? 1 : 3).F32(Finite(mn) ? mn : 0f).F32(Finite(mx) ? mx : 0f);
+            }
+            Session.SendAll(w, false);
+        }
+
+        static void OnFx(Car c, int who, NetReader r)
+        {
+            int nw = r.U8();
+            var skid = new byte[nw]; var smoke = new byte[nw];
+            for (int i = 0; i < nw; i++) { skid[i] = (byte)r.U8(); smoke[i] = (byte)r.U8(); }
+            int n = r.U8();
+            var want = new Dictionary<uint, FxState>();
+            for (int i = 0; i < n; i++) { uint h = (uint)r.I32(); r.U8(); float mn = r.F32(), mx = r.F32(); want[h] = new FxState { Min = mn, Max = mx }; }
+            if (c == null || c.Body == null || c.Index == LocalDriving || c.Index == owned || c.Index == bumped) return;
+            c.FxWant = want; c.SkidWant = skid; c.SmokeWant = smoke; c.FxAt = Time.realtimeSinceStartup; c.FxFrom = who;
+            if (c.SkidLast == null || c.SkidLast.Length != nw) { c.SkidLast = new int[nw]; for (int i = 0; i < nw; i++) c.SkidLast[i] = -1; }
+            if (!c.FxLogged) { c.FxLogged = true; Log.Info("particules : " + c.Key + " menee par #" + who + " : " + n + " emetteur(s) allume(s), " + nw + " roue(s)"); }
+        }
+
+        // Objet d'un emetteur allumable d'ici : sans corps, son ni attache en lui ou dessous (l'ExhaustSmoke de la CORRIS
+        // porte les sons du moteur ; un groupe FIRE porte sa logique).
+        static bool FxCanActivate(Fx f)
+        {
+            if (f.Can == 0)
+                f.Can = f.Go.GetComponentsInChildren<Rigidbody>(true).Length == 0 && f.Go.GetComponentsInChildren<AudioSource>(true).Length == 0
+                        && f.Go.GetComponentsInChildren<Joint>(true).Length == 0 ? 1 : 2;
+            return f.Can == 1;
+        }
+
+        // Copie : emetteurs mis a l'etat recu (apres la logique du jeu).
+        static void FxApply(Car c, float now)
+        {
+            if (now >= c.FxScanAt) FxScan(c, now);
+            c.FxSet = true;
+            foreach (Fx f in c.Fx)
+            {
+                if (f.Go == null) continue;
+                FxState s; bool want = c.FxWant.TryGetValue(f.Hash, out s);
+                if (!f.Set)
+                {
+                    f.Set = true; f.WasActive = f.Go.activeSelf;
+                    if (f.E != null) { f.WasEmit = f.E.emit; f.WasMin = f.E.minEmission; f.WasMax = f.E.maxEmission; }
+                    else { f.WasEmit = f.S.isPlaying; f.WasMax = f.S.emissionRate; }
+                }
+                if (want && !f.Go.activeSelf && FxCanActivate(f)) f.Go.SetActive(true);
+                else if (!want && f.Go.activeSelf && !f.WasActive) f.Go.SetActive(false);   // (allume d'ici seulement)
+                if (want && !f.Go.activeInHierarchy && fxBlockedLogs++ < 5) Log.Info("particules : " + c.Key + " : " + f.Key + " allume chez #" + c.FxFrom + ", objet ou parent eteint ici (pas allume)");
+                if (f.E != null)
+                {
+                    if (f.E.emit != want) f.E.emit = want;
+                    if (want) { f.E.minEmission = s.Min; f.E.maxEmission = s.Max; }
+                }
+                else if (f.S != null)
+                {
+                    if (want) { f.S.emissionRate = s.Max; if (!f.S.isPlaying && f.Go.activeInHierarchy) f.S.Play(); }
+                    else if (f.S.isPlaying) f.S.Stop();
+                }
+            }
+        }
+
+        // Fin de la copie : chaque emetteur pose d'ici reprend l'etat d'avant (ses automates reprennent la main).
+        static void FxRestore(Car c)
+        {
+            c.FxSet = false;
+            foreach (Fx f in c.Fx)
+            {
+                if (!f.Set || f.Go == null) continue;
+                f.Set = false;
+                if (f.E != null) { f.E.emit = f.WasEmit; f.E.minEmission = f.WasMin; f.E.maxEmission = f.WasMax; }
+                else if (f.S != null) { f.S.emissionRate = f.WasMax; if (f.WasEmit && !f.S.isPlaying) f.S.Play(); else if (!f.WasEmit && f.S.isPlaying) f.S.Stop(); }
+                if (f.Go.activeSelf != f.WasActive) f.Go.SetActive(f.WasActive);
+            }
+        }
+
+        static void SkidFind(Car c)
+        {
+            c.SkidLooked = true;
+            try
+            {
+                Component cd = c.Body.GetComponent("CarDynamics");
+                if (cd != null) { System.Reflection.FieldInfo fi = cd.GetType().GetField("skidmarks"); if (fi != null) c.Skid = fi.GetValue(cd) as Skidmarks; }
+            }
+            catch { }
+            if (c.Skid == null) { GameObject g = Game.FindAny("Skidmarks"); if (g != null) c.Skid = g.GetComponent<Skidmarks>(); }
+            if (c.Skid != null) c.SkidSmoke = c.Skid.GetComponentInChildren<ParticleEmitter>();
+            Log.Info("particules : " + c.Key + " : traces de pneus " + (c.Skid != null ? "dans " + c.Skid.name + (c.SkidSmoke != null ? ", fumee " + c.SkidSmoke.name : ", sans fumee") : "introuvables (pas d'objet Skidmarks)"));
+        }
+
+        // Copie, au pas physique : trace et fumee sous chaque roue qui glisse chez celui qui mene (rayon sous la roue,
+        // hors colliders de la voiture et declencheurs ; Wheel.CalcSkidmarks / CalcSkidSmoke du jeu refaits ici).
+        static void SkidApply(Car c)
+        {
+            if (!c.SkidLooked) SkidFind(c);
+            if (c.Skid == null) return;
+            Vector3 up = c.T.up;
+            for (int i = 0; i < c.SkidWant.Length && i < c.Wheels.Length && i < c.SkidLast.Length; i++)
+            {
+                int sk = c.SkidWant[i], sm = c.SmokeWant[i];
+                Wheel w = c.Wheels[i];
+                if (w == null || (sk == 0 && sm == 0)) { c.SkidLast[i] = -1; continue; }
+                Transform wt = w.transform;
+                RaycastHit best = new RaycastHit(); bool found = false;
+                foreach (RaycastHit h in Physics.RaycastAll(wt.position + up * 0.1f, -up, w.suspensionTravel + w.radius + 0.4f))
+                {
+                    if (h.collider == null || h.collider.isTrigger || h.collider.transform.IsChildOf(c.T)) continue;
+                    if (!found || h.distance < best.distance) { best = h; found = true; }
+                }
+                if (!found) { c.SkidLast[i] = -1; continue; }
+                if (sk > 0) { c.Skid.markWidth = w.width; c.SkidLast[i] = c.Skid.AddSkidMark(best.point, best.normal, sk / 255f, c.SkidLast[i]); if (c.SkidLast[i] >= 0) c.SkidAdded++; }
+                else c.SkidLast[i] = -1;
+                if (sm > 0 && c.SkidSmoke != null)
+                {
+                    Vector3 v = wt.TransformDirection(c.SkidSmoke.localVelocity) + c.SkidSmoke.worldVelocity;
+                    c.SkidSmoke.Emit(best.point + Random.insideUnitSphere * 0.1f, v + c.Vel * 0.05f,
+                                     Random.Range(c.SkidSmoke.minSize, c.SkidSmoke.maxSize) * Mathf.Clamp(sm / 255f * 0.1f, 0.5f, 1f),
+                                     Random.Range(c.SkidSmoke.minEnergy, c.SkidSmoke.maxEnergy), Color.white);
+                }
+            }
+        }
+
+        // (essai poussiere) emetteurs qui emettent, glisse par roue, traces -- a comparer entre celui qui mene et la copie
+        public static string FxReport(string name)
+        {
+            Car c = Named(name);
+            if (c == null) return name + " inconnue ici";
+            float now = Time.realtimeSinceStartup;
+            if (now >= c.FxScanAt) FxScan(c, now);
+            bool mine = c.Index == LocalDriving || c.Index == owned;
+            var sb = new System.Text.StringBuilder(c.Key);
+            sb.Append(mine ? " menee ici" : Remote(c, now) ? " copie de #" + c.RemoteBy + (c.FxWant != null ? ", " + c.FxWant.Count + " voulu(s) recu(s) il y a " + (now - c.FxAt).ToString("F1") + " s" : ", rien recu") : " garee");
+            sb.Append(" ; emettent :");
+            int n = 0;
+            foreach (Fx f in c.Fx)
+                if (f.On) { n++; sb.Append(' ').Append(f.Key).Append(f.E != null ? " (" + f.E.minEmission.ToString("F0") + "-" + f.E.maxEmission.ToString("F0") + ")" : " (S " + f.S.emissionRate.ToString("F0") + ")"); }
+            if (n == 0) sb.Append(" aucun");
+            sb.Append(" ; ").Append(c.Fx.Length).Append(" emetteur(s) ; glisse par roue (trace/fumee) :");
+            for (int i = 0; i < c.Wheels.Length; i++)
+            {
+                int sk = 0, sm = 0;
+                if (mine) WheelSkid(c.Wheels[i], out sk, out sm);
+                else if (c.SkidWant != null && i < c.SkidWant.Length) { sk = c.SkidWant[i]; sm = c.SmokeWant[i]; }
+                int last = -1;
+                if (mine && fLastSkid != null && c.Wheels[i] != null) try { last = (int)fLastSkid.GetValue(c.Wheels[i]); } catch { }
+                else if (!mine && c.SkidLast != null && i < c.SkidLast.Length) last = c.SkidLast[i];
+                sb.Append(' ').Append(sk).Append('/').Append(sm).Append(last >= 0 ? "*" : "");
+            }
+            sb.Append(" ; traces ").Append(mine ? "par le jeu" : c.SkidAdded + " posee(s) ici" + (c.Skid != null ? " dans " + c.Skid.name : ", pas d'objet Skidmarks"));
+            return sb.ToString();
+        }
+
+        // [Test] Autotest=poussiere : l'hote prend le volant de TestVoiture (15 s, 22 s), la pousse de 25 a 40 s (8 m/s) et, de
+        // 25 a 45 s, force ses emetteurs (emit, 20-40 particules/s) et une glisse de 0,6 sur chaque roue ; des deux cotes, de 30
+        // a 40 s, chaque seconde : "autotest poussiere : ..." (emetteurs qui emettent, glisse, traces). Attendu : le meme ensemble.
+        static void TestFx(float t)
+        {
+            string name = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+            if (Session.IsHost)
+            {
+                if (t > 15f && tStep == 0) { tStep = 1; Log.Info("autotest poussiere : " + TestEnter(name, false)); }
+                if (t > 22f && tStep == 1) { tStep = 2; Log.Info("autotest poussiere : volant -> " + TestEnter(name, true)); }
+                Rigidbody b = Body(name);
+                if (b != null && t > 25f && t < 40f && !b.isKinematic) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 8f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                TestEngine(t > 25f && t < 40f ? 2000f : -1f, 0.6f);
+                if (t > 25f && t < 45f) { testFxUntil = Time.realtimeSinceStartup + 0.5f; testFxSkid = 153; } else testFxSkid = 0;
+            }
+            if (t > 30f && t < 40f && t >= testFxLog) { testFxLog = t + 1f; Log.Info("autotest poussiere : " + FxReport(name)); }
         }
 
         // ---------------------------------------------------------------- objets dans les voitures
@@ -1303,6 +1618,10 @@ namespace MWCoop
                 else if (c.Body != null && !c.Kinematic && c.SettleUntil > 0f) Settle(c);
             foreach (Car c in cars)
                 if (c.CalmUntil > 0f && c.Body != null && !c.Kinematic) Calm(c);
+            // Traces et fumee de glisse des roues de la copie (au pas physique, comme Wheel.CalcSkidmarks du jeu).
+            float nowS = Time.realtimeSinceStartup;
+            foreach (Car c in cars)
+                if (c.Body != null && c.Kinematic && c.SkidWant != null && Remote(c, nowS) && c.FxFrom == c.RemoteBy && nowS - c.FxAt < 1.5f && c.Body.gameObject.activeInHierarchy) SkidApply(c);
         }
 
         // Montage ou demontage d'une piece sur une voiture (Parts, ici ou recu) : pendant 1,5 s, si personne ne la conduit,
@@ -2220,6 +2539,13 @@ namespace MWCoop
                 OnSim(sc, who, r);
                 return;
             }
+            if (mode == M_FX)
+            {
+                if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Vehicle).U8(who).U8(idx).U8(M_FX).Raw(r.Rest()), false, who);
+                if (!scanned) return;
+                OnFx(ByNet(idx), who, r);
+                return;
+            }
             bool driven = mode != 0;
             Vector3 pos = r.Vec();
             Quaternion rot = r.Quat();
@@ -2413,6 +2739,7 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode == "pousservoiture") { TestBump(t); return; }
+            if (mode == "poussiere") { TestFx(t); return; }
             if (mode != "taxi" && mode != "reprise") return;
             bool host = Session.IsHost;
             string name = mode == "taxi" ? "MACHTWAGEN" : Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");

@@ -28,6 +28,17 @@ namespace MWCoop
     //    mise reprise) n'est pas un revenu a partager, Wallet le demande a KeepsMoney.
     //  - Ordinateur de la maison : chacun joue chez lui ; les autres voient "X joue a Massacre", et son ecran
     //    allume avec le programme a l'ecran (copie visuelle, automates coupes : voir "ordinateur de la maison" plus bas).
+    //  - Ventti (vingt-et-un contre le cochon de la maison de retraite, PERAJARVI/Kunnalliskoti/Functions/RoomVenttiPig/
+    //    Ventti/Table) : meme modele que le poker. La racine suivie est la TABLE (GameManager 'Use' + 'LoseText', boutons
+    //    GAME/Gamestuff/Bet, HitPlayer, Stand ; HitHouse tire pour le cochon), pas 'Ventti' : le cochon (PIG) dessous
+    //    bouge sans arret et ses reactions (animations, cris) restent locales. Ce qu'on voit sur la table : les cartes
+    //    GAME/Gamestuff/Player/1..9 et House/1..9, activees une a une, leur face = texture posee par le jeu sur leur
+    //    2e materiau (SetMaterialTexture materialIndex=1 : MatIdx), liasse et paquet. La mise, la main ("CURRENT BET
+    //    400 MK", "HIT", "STAND AT 17") et YOU WIN / YOU LOSE ne sont que dans le GUI du joueur (GUIinteraction) : rien
+    //    sur la table. Bet 'Use' se joue par INCREASE / DECREASE (clic gauche / droit), pas USE ; HitPlayer tourne sans
+    //    mise (Check bet) : seul 'Wait button' vaut survol. WorldFsms ne rejoue rien sous 'Ventti' (SkipParents) :
+    //    rejoues, les clics tiraient d'autres cartes chez l'autre et son argent etait force. La mise et le gain (Win :
+    //    PlayerMoney += 2 x mise ; Cars / Home : mise rendue + 4050) restent a celui qui joue (KeepsMoney, comme le poker).
     public static class Machines
     {
         class Part
@@ -36,19 +47,19 @@ namespace MWCoop
             public bool Active; public Vector3 Pos; public Quaternion Rot; public string Txt;          // dernier envoye
             public bool Held; public bool HActive; public bool HPose; public Vector3 HPos; public Quaternion HRot; public string HTxt; public float HeldAt;
             // machines a jeu : rendu (pas pour les textes), camera, rouleau
-            public Renderer R; public Camera Cam; public bool Reel;
+            public Renderer R; public Camera Cam; public bool Reel; public int MatIdx;   // MatIdx : materiau surveille (cartes du ventti : le 2e)
             public Material Mat; public string MatName = ""; public bool HasTex; public Texture Tex; public string TexName = "";   // dernier envoye
             public bool CamOn, Moved, Spin;
             public string HMat, HTex; public bool HCamSet, HCam, HSpin;                                                           // recu
             public string ShownTxt, ShownMat, ShownTex; public bool Block, Spinning; public float SpinUntil;                     // applique ici
-            public bool SActive; public Vector3 SPos; public Quaternion SRot; public string STxt; public Material SMat; public bool SCam;   // ici avant
+            public bool SActive; public Vector3 SPos; public Quaternion SRot; public string STxt; public Material SMat; public bool SCam; public Texture STex;   // ici avant
         }
         class Lock { public int Owner = -1; public float Until, Seen; }
         class Machine
         {
             public string Key, Name; public Transform Root; public List<Part> Parts = new List<Part>(); public Dictionary<string, Part> ByKey = new Dictionary<string, Part>(); public float OwnerUntil, NextFull;
             // machines a jeu
-            public bool Lockable; public Transform Center; public Lock L;
+            public bool Lockable, Ventti; public Transform Center; public Lock L;
             public List<PlayMakerFSM> Fsms, Buttons; public List<Collider> Colliders;
             public readonly List<PlayMakerFSM> Frozen = new List<PlayMakerFSM>(); public readonly List<bool> Restart = new List<bool>();
             public readonly List<Collider> Cut = new List<Collider>();
@@ -69,8 +80,10 @@ namespace MWCoop
             Session.PlayerLeft += OnPlayerLeft;
         }
 
-        static bool IsMachine(Transform t) { string n = t.name; return n.StartsWith("FuelPumps_") || IsLockable(n); }
+        static bool IsMachine(Transform t) { string n = t.name; return n.StartsWith("FuelPumps_") || IsLockable(n) || IsVentti(t); }
         static bool IsLockable(string n) { return n == "VideoPoker" || n.StartsWith("SlotMachine"); }   // SlotMachine (station), SlotMachinePub (bar)
+        // Table du ventti (.../RoomVenttiPig/Ventti/Table) : reconnue par son chemin, 'Table' seul ne dit rien.
+        static bool IsVentti(Transform t) { return t.name == "Table" && t.parent != null && t.parent.name == "Ventti"; }
 
         public static void OnLevelLoaded()
         {
@@ -83,6 +96,7 @@ namespace MWCoop
             screenMat = null; videoTex = offTex = null; mirroring = false; mirrorProg = null; mirrorWho = -1;
             muted.Clear(); mirrorSaved.Clear(); compTest = 0; compTestNext = 0f;
             testStep = 0; testNextLog = 0; testSeq = null; testRefus = null; testMoneyBase = testMoneyDone = false;
+            venttiStep = 0; venttiNext = venttiLastAt = venttiMoney0 = venttiCheck = 0f; venttiGone = venttiOpened = venttiMoneyDone = false; venttiSeq = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;
             nextComputer = Time.realtimeSinceStartup + 20f;
         }
@@ -95,7 +109,8 @@ namespace MWCoop
                 if (t.gameObject.hideFlags != HideFlags.None || !IsMachine(t) || !t.root.gameObject.activeInHierarchy) continue;
                 string key = Recon.Path(t);
                 if (machines.ContainsKey(key) || t.GetComponentsInChildren<PlayMakerFSM>(true).Length == 0) continue;
-                var m = new Machine { Key = key, Root = t, Name = t.name, Lockable = IsLockable(t.name) };
+                bool ventti = IsVentti(t);
+                var m = new Machine { Key = key, Root = t, Name = ventti ? "Ventti" : t.name, Lockable = ventti || IsLockable(t.name), Ventti = ventti };
                 // Machine a jeu : seulement ce qui se voit ou s'entend (les 104 cartes du paquet, simple logique
                 // que SetParent promene, n'en sont pas).
                 HashSet<Transform> visible = m.Lockable ? Visible(t) : null;
@@ -118,6 +133,7 @@ namespace MWCoop
                         p.Cam = c.GetComponent<Camera>();
                         p.CamOn = p.Cam != null && p.Cam.enabled;
                         p.Reel = p.R != null && c.parent != null && c.parent.name == "Rolls";
+                        if (m.Ventti && p.R != null && p.R.sharedMaterials.Length > 1) p.MatIdx = 1;   // cartes : la face est sur le 2e materiau
                     }
                     m.Parts.Add(p);
                     m.ByKey[p.Key] = p;
@@ -183,7 +199,7 @@ namespace MWCoop
             foreach (PlayMakerFSM f in m.Fsms)
             {
                 if (Replay.Claim(f, "machines")) mine++;
-                if (f.FsmName != "Use") continue;
+                if (f.FsmName != "Use" || !HasState(f, "Wait player")) continue;   // (ventti : GameManager et HitHouse ont un 'Use' sans bouton)
                 m.Buttons.Add(f);
                 Collider c = f.GetComponent<Collider>();
                 if (c != null) m.Colliders.Add(c);
@@ -193,6 +209,11 @@ namespace MWCoop
             lockables.Add(m);
             Log.Info("machine a jeu " + m.Name + " : " + m.Parts.Count + " pieces visibles, " + m.Buttons.Count + " boutons, "
                      + mine + "/" + m.Fsms.Count + " automates a ce module");
+        }
+
+        static bool HasState(PlayMakerFSM f, string state)
+        {
+            try { return f.Fsm.GetState(state) != null; } catch { return false; }
         }
 
         public static void Update()
@@ -400,7 +421,10 @@ namespace MWCoop
             {
                 if (f == null || !f.enabled) continue;
                 string s = f.ActiveStateName;
-                if (!string.IsNullOrEmpty(s) && s != "Wait player") return true;
+                if (string.IsNullOrEmpty(s)) continue;
+                // Ventti : HitPlayer tourne sans mise (Check bet, Delay 3, House turn?...), seul 'Wait button' dit que la
+                // souris est dessus (clic deja traite par le jeu : m.Hover de l'image d'avant).
+                if (m.Ventti ? s == "Wait button" : s != "Wait player") return true;
             }
             return false;
         }
@@ -563,6 +587,7 @@ namespace MWCoop
                 p.SActive = p.T.gameObject.activeSelf; p.SPos = p.T.localPosition; p.SRot = p.T.localRotation;
                 p.STxt = p.Text != null ? p.Text.text : null;
                 p.SMat = p.R != null ? p.R.sharedMaterial : null;
+                p.STex = p.MatIdx > 0 ? TexOn(MatOf(p)) : null;
                 p.SCam = p.Cam != null && p.Cam.enabled;
                 p.ShownTxt = p.ShownMat = p.ShownTex = null; p.Spinning = false;
             }
@@ -579,9 +604,10 @@ namespace MWCoop
                 p.T.localPosition = p.SPos; p.T.localRotation = p.SRot;
                 if (p.Text != null && p.STxt != null && p.Text.text != p.STxt) p.Text.text = p.STxt;
                 if (p.R != null && p.SMat != null && p.R.sharedMaterial != p.SMat) p.R.sharedMaterial = p.SMat;
+                if (p.MatIdx > 0 && p.STex != null) { Material cm = MatOf(p); if (cm != null && cm.mainTexture != p.STex) cm.SetTexture("_MainTex", p.STex); }
                 if (p.Block) { Block().Clear(); p.R.SetPropertyBlock(Block()); p.Block = false; }
                 if (p.Cam != null) p.Cam.enabled = p.SCam;
-                p.STxt = null; p.SMat = null; p.Spinning = false;
+                p.STxt = null; p.SMat = null; p.STex = null; p.Spinning = false;
             }
             for (int i = 0; i < m.Frozen.Count; i++)
             {
@@ -631,6 +657,7 @@ namespace MWCoop
         // par un bloc de proprietes, sans copie ici.
         static void ApplyLook(Part p)
         {
+            if (p.MatIdx > 0) { ApplyCardTex(p); return; }
             if (p.HMat != null && p.HMat != p.ShownMat)
             {
                 p.ShownMat = p.HMat; p.ShownTex = null;
@@ -650,6 +677,29 @@ namespace MWCoop
             else if (p.Block) { Block().Clear(); p.R.SetPropertyBlock(Block()); p.Block = false; }
         }
 
+        // Carte du ventti : la face va sur son 2e materiau, comme le fait le jeu (SetMaterialTexture materialIndex=1 :
+        // Renderer.materials, copie du materiau faite une fois par carte). Un bloc de proprietes couvrirait aussi le dos
+        // (pas de bloc par materiau dans cet Unity).
+        static void ApplyCardTex(Part p)
+        {
+            if (p.HTex == null || p.HTex == p.ShownTex) return;
+            p.ShownTex = p.HTex;
+            Texture tex = p.HTex.Length > 0 ? FindTex(p.HTex) : null;
+            if (tex == null) return;
+            Material[] ms = p.R.materials;
+            if (ms.Length > p.MatIdx && ms[p.MatIdx].mainTexture != tex) ms[p.MatIdx].SetTexture("_MainTex", tex);
+        }
+
+        // Materiau surveille : le premier, ou (MatIdx) celui que le jeu change.
+        static Material MatOf(Part p)
+        {
+            if (p.MatIdx == 0) return p.R.sharedMaterial;
+            Material[] ms = p.R.sharedMaterials;
+            return ms.Length > p.MatIdx ? ms[p.MatIdx] : p.R.sharedMaterial;
+        }
+
+        static Texture TexOn(Material m) { return m != null && m.HasProperty("_MainTex") ? m.mainTexture : null; }
+
         static MaterialPropertyBlock block;
         static MaterialPropertyBlock Block() { if (block == null) block = new MaterialPropertyBlock(); return block; }
 
@@ -663,7 +713,7 @@ namespace MWCoop
         static bool Look(Part p)
         {
             bool ch = false;
-            Material sm = p.R.sharedMaterial;
+            Material sm = MatOf(p);
             if (sm != p.Mat) { p.Mat = sm; p.MatName = sm != null ? BaseName(sm.name) : ""; p.HasTex = sm != null && sm.HasProperty("_MainTex"); ch = true; }
             Texture tx = p.HasTex ? sm.mainTexture : null;
             if (tx != p.Tex) { p.Tex = tx; p.TexName = tx != null ? tx.name : ""; ch = true; }
@@ -1190,8 +1240,7 @@ namespace MWCoop
         static string TexOf(Part p)
         {
             if (p.Block) return p.ShownTex;
-            Material sm = p.R.sharedMaterial;
-            Texture t = sm != null && sm.HasProperty("_MainTex") ? sm.mainTexture : null;
+            Texture t = TexOn(MatOf(p));
             return t != null ? t.name : "-";
         }
 
@@ -1207,11 +1256,12 @@ namespace MWCoop
             foreach (Part p in m.Parts)
             {
                 if (p.T == null) continue;
-                string n = p.T.name;
-                bool card = p.R != null && (n.EndsWith("-Suit") || n.EndsWith("-Rank"));
+                string n = p.MatIdx > 0 ? p.T.parent.name + "/" + p.T.name : p.T.name;   // ventti : Player/3, House/1
+                bool card = p.R != null && (n.EndsWith("-Suit") || n.EndsWith("-Rank") || p.MatIdx > 0);
                 if (!card && p.Text == null && !p.Reel) continue;
+                if (p.MatIdx > 0 && !Shown(p.T, m.Root)) continue;   // (18 cartes, seules celles sur la table)
                 sb.Append(" | ").Append(n).Append(Shown(p.T, m.Root) ? "" : " (cache)").Append(" = ");
-                if (card) sb.Append(p.R.sharedMaterial != null ? BaseName(p.R.sharedMaterial.name) : "-").Append(" / ").Append(TexOf(p));
+                if (card) { Material cm = MatOf(p); sb.Append(cm != null ? BaseName(cm.name) : "-").Append(" / ").Append(TexOf(p)); }
                 else if (p.Text != null) sb.Append('\'').Append(p.Text.text).Append('\'');
                 else sb.Append(p.T.localEulerAngles.ToString("F0")).Append(p.Spinning || p.Spin ? " tourne" : "");
             }
@@ -1242,6 +1292,7 @@ namespace MWCoop
             FsmState s = f.Fsm.GetState("Wait button");
             if (s == null) return null;
             foreach (FsmTransition tr in s.Transitions) if (tr.EventName == "USE") return tr.ToState;
+            foreach (FsmTransition tr in s.Transitions) if (tr.EventName == "INCREASE") return tr.ToState;   // mise du ventti (clic gauche)
             return null;
         }
 
@@ -1295,6 +1346,7 @@ namespace MWCoop
         {
             if (mode == "pin") { TestPin(t); return; }
             if (mode == "ordinateur") { TestComputer(t); return; }
+            if (mode == "ventti") { TestVentti(t); return; }
             if (mode != "machine") return;
             if (t > 20f && t >= testNextLog)
             {
@@ -1321,6 +1373,121 @@ namespace MWCoop
             Machine m = Find(testRefus[0]);
             if (testStep == 0 && m != null && m.L != null && m.L.Owner >= 0 && m.L.Owner != Session.LocalId) { testStep = 1; testTryAt = t + 2f; }
             if (testStep == 1 && t >= testTryAt) { testStep = 2; Log.Info("autotest : l'hote essaie " + TestPress(testRefus[0], testRefus[1]) + " ; " + State(testRefus[0])); }
+        }
+
+        // [Test] Autotest=ventti. Les deux : a 8 s, sans [Test] TestPos, teleportes a la table du ventti de la maison de
+        // retraite (cote chaise, +z de la table, le cochon est en -z ; l'invite 60 cm a cote) ; a 10 s la table est ouverte
+        // de force (OpeningHours arrete, 'CabinVentti' vrai, GAME et PIG actives : le jeu ne l'ouvre que de 18 h a 8 h, et
+        // seulement apres que le joueur s'en est eloigne de 200 m ; verifie toutes les 5 s). Hote : [Test] TestVentti (bouton@t;...) = Bet@25 (mise de 50 :
+        // verrou demande, Bet 'Use' passe par INCREASE), HitPlayer@30 (deux cartes tirees : textures envoyees), Stand@36
+        // (le cochon joue, puis Win / Lose chez l'hote) ; etat toutes les 2 s de 26 a 56 s, liquide avant le premier appui
+        // et 16 s apres le dernier (gain ou perte a lui seul). Invite : de 35 a 55 s, toutes les 2 s, qui tient le verrou,
+        // ses automates du ventti (arretes ?), les cartes visibles, son liquide ("autotest ventti : ...").
+        const string VenttiTable = "PERAJARVI/Kunnalliskoti/Functions/RoomVenttiPig/Ventti/Table";
+        static int venttiStep;
+        static float venttiNext, venttiLastAt, venttiMoney0, venttiCheck;
+        static bool venttiGone, venttiOpened, venttiMoneyDone;
+        static string[] venttiSeq;
+
+        static void TestVentti(float t)
+        {
+            if (t > 8f && !venttiGone)
+            {
+                venttiGone = true;
+                if (Config.Get("Test", "TestPos", "").Length == 0)
+                {
+                    GameObject table = Game.FindAny(VenttiTable);
+                    if (table == null) Log.Info("autotest ventti : table introuvable (" + VenttiTable + ")");
+                    else
+                    {
+                        // TeleportTo pose 1,5 m derriere le point selon le cap : cap 180 -> 1,5 m en +z, soit 1,2 m de la table.
+                        Vector3 feet = table.transform.position + new Vector3(Session.IsHost ? 0f : 0.6f, -0.2f, -0.3f);
+                        Menu.TeleportTo(feet, 180f, "table du ventti (essai)");
+                        Log.Info("autotest ventti : teleporte a la table (" + table.transform.position.ToString("F1") + ")");
+                    }
+                }
+            }
+            if (t > 10f && !venttiOpened) { venttiOpened = true; venttiCheck = t + 5f; Log.Info("autotest ventti : " + OpenVentti()); }
+            if (venttiOpened && t < 60f && t >= venttiCheck) { venttiCheck = t + 5f; string k = KeepVenttiOpen(); if (k != null) Log.Info("autotest ventti : " + k); }
+            Machine m = Find("Ventti");
+            if (m == null)
+            {
+                if (t > 20f && t >= venttiNext) { venttiNext = t + 5f; Log.Info("autotest ventti : table pas suivie (" + machines.Count + " machines ; releve " + (nextScan == float.MaxValue ? "fait" : "a venir") + ")"); }
+                return;
+            }
+            if (!Session.IsHost)
+            {
+                if (t >= 35f && t <= 55f && t >= venttiNext) { venttiNext = t + 2f; Log.Info("autotest ventti : " + State("Ventti") + FsmsOf(m) + " ; liquide " + Money()); }
+                return;
+            }
+            if (venttiSeq == null) venttiSeq = Config.Get("Test", "TestVentti", "Bet@25;HitPlayer@30;Stand@36").Split(';');
+            if (venttiStep < venttiSeq.Length)
+            {
+                string[] it = venttiSeq[venttiStep].Split('@');
+                float at = it.Length > 1 ? float.Parse(it[1], System.Globalization.CultureInfo.InvariantCulture) : 25f;
+                if (t >= at)
+                {
+                    if (venttiStep == 0) { venttiMoney0 = Money(); Log.Info("autotest ventti : liquide de l'hote avant : " + venttiMoney0); }
+                    venttiStep++; venttiLastAt = t;
+                    Log.Info("autotest ventti : l'hote appuie " + TestPress("Ventti", it[0]) + " ; liquide " + Money());
+                }
+            }
+            else if (!venttiMoneyDone && t >= venttiLastAt + 16f)
+            {
+                venttiMoneyDone = true;
+                Log.Info("autotest ventti : liquide de l'hote apres : " + venttiMoney0 + " -> " + Money() + " (mise et gain a lui seul attendus) ; " + State("Ventti") + FsmsOf(m));
+            }
+            if (t >= 26f && t <= 56f && t >= venttiNext) { venttiNext = t + 2f; Log.Info("autotest ventti : " + State("Ventti") + FsmsOf(m)); }
+        }
+
+        // Table ouverte pour l'essai. Rien n'active Gamestuff (jamais inactif) ni ne demande de s'asseoir : seul GAME est
+        // ferme, par 'OpeningHours' (PERAJARVI/Kunnalliskoti/Functions). Cet automate tourne en boucle : State 1 (GAME et PIG
+        // actives selon CabinVentti, 2 s) -> State 2 (heure paire du jour 8..16 : CabinVentti remis a FAUX ; 18..6 : vrai
+        // puis attente que le joueur soit a 200 m) -> State 1. Mettre le bool a vrai ne tenait que 2 s (essai du 16/10 :
+        // "objet inactif" partout) : l'automate est ARRETE pour l'essai, CabinVentti mis a vrai, GAME et PIG actives ; tant
+        // que l'essai dure, GAME est verifie toutes les 5 s et reactive au besoin (snapshot ou rejeu de l'hote chez l'invite).
+        static string OpenVentti()
+        {
+            GameObject table = Game.FindAny(VenttiTable);
+            if (table == null) return "table introuvable (" + VenttiTable + ")";
+            GameObject fn = Game.FindAny("PERAJARVI/Kunnalliskoti/Functions");
+            PlayMakerFSM oh = fn != null ? Game.FsmOn(fn, "OpeningHours") : null;
+            FsmBool open = oh != null ? oh.FsmVariables.FindFsmBool("CabinVentti") : null;
+            if (open != null) open.Value = true;
+            if (oh != null && oh.enabled) oh.enabled = false;   // (sans redemarrage : il repartirait a State 1 avec son bool)
+            Transform game = table.transform.Find("GAME"), pig = table.transform.parent.Find("PIG");
+            bool was = game != null && game.gameObject.activeSelf;
+            if (game != null && !was) game.gameObject.SetActive(true);
+            if (pig != null && !pig.gameObject.activeSelf) pig.gameObject.SetActive(true);
+            return "table ouverte de force (GAME " + (game == null ? "introuvable" : was ? "deja actif" : "active") + ", PIG " + (pig != null ? "actif" : "introuvable")
+                   + ", OpeningHours " + (oh != null ? "arrete (etait " + oh.ActiveStateName + ")" : "introuvable") + ", CabinVentti " + (open != null ? "vrai" : "introuvable") + ")";
+        }
+
+        // GAME retombe inactif (OpeningHours relance, rejeu de l'hote chez l'invite...) : reactive, et dit par qui il l'etait.
+        static string KeepVenttiOpen()
+        {
+            GameObject table = Game.FindAny(VenttiTable);
+            Transform game = table != null ? table.transform.Find("GAME") : null;
+            if (game == null) return null;
+            if (game.gameObject.activeInHierarchy) return null;
+            if (!game.gameObject.activeSelf) game.gameObject.SetActive(true);
+            string why = game.gameObject.activeInHierarchy ? "GAME" : "un parent de GAME";
+            for (Transform x = game.parent; x != null; x = x.parent) if (!x.gameObject.activeSelf) { why = Recon.Path(x); break; }
+            return "GAME etait retombe inactif (" + why + " inactif) : " + (game.gameObject.activeInHierarchy ? "reactive" : "PAS reactivable d'ici") + " ; " + OpenVentti();
+        }
+
+        // Automates de la machine : objet:automate=etat (actif / arrete ici).
+        static string FsmsOf(Machine m)
+        {
+            if (m.Fsms == null) return "";
+            var sb = new System.Text.StringBuilder(" ; automates :");
+            foreach (PlayMakerFSM f in m.Fsms)
+            {
+                if (f == null) continue;
+                sb.Append(' ').Append(f.gameObject.name).Append(':').Append(f.FsmName).Append('=').Append(f.ActiveStateName)
+                  .Append(f.enabled ? (f.gameObject.activeInHierarchy ? "" : "(objet inactif)") : "(arrete)");
+            }
+            return sb.ToString();
         }
 
         // Hote : son liquide quand un autre prend une machine, puis quand plus aucune n'est tenue par un autre

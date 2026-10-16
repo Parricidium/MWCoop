@@ -1422,6 +1422,7 @@ namespace MWCoop
             // tune", volume 0,6), l'eteint a 58 s ; chacun note toutes les 3 s ou est son vrai jeu de canaux et les copies.
             // Attendu chez l'invite : une copie dans le BACHGLOTZ de 40 a 58 s, son vrai jeu de canaux pas deplace.
             if (mode == "radioflux" && !Net.Session.IsHost) Radio.TestStream(t);
+            if (mode == "boombox") Radio.TestBoombox(t);   // (radio portable allumee par l'hote a 25 s ; copie chez l'invite ? voir Radio.TestBoombox)
             // (l'hote fait apparaitre a 40 s ; chacun compte ensuite les buches et sacs de Cheatbox++ a 55 s)
             // [Test] Autotest=fendattel : l'hote attelle la fendeuse au KEKMET a 40 s, la detelle a 55 s ; chacun note son etat
             // toutes les 3 s de 35 a 70 s. Attendu : meme etat des deux cotes quelques dixiemes apres chaque geste.

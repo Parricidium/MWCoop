@@ -14,8 +14,10 @@ namespace MWCoop
     // Autotest=particules) : rien n'emettait, chez l'hote RoosterTail, SnowCloudTrail, Exhaust du bus.
     // Ici : l'hote dit quels emetteurs sont allumes (@emit : a chaque changement, et tous toutes les 5 s) ; l'invite les pose.
     // Vehicules du trafic, PNJ et courses (copies) : repose a chaque seconde (un automate local, LOD, peut les eteindre) ;
-    // le reste (poeles, cheminees) : seulement aux changements de l'hote. A part : voitures des joueurs (leur conducteur
-    // fait foi, VehicleSync), le joueur, douches et robinets, vapeur de l'eau jetee sur le poele, traces de pneus.
+    // le reste (poeles, cheminees) : seulement aux changements de l'hote. A part : voitures des joueurs (celui qui les mene
+    // fait foi : VehicleSync, message M_FX -- fumee d'echappement et de la simulation, traces et fumee de glisse des roues de
+    // la copie ; depuis le 16/10), le joueur, douches et robinets, vapeur de l'eau jetee sur le poele, SkidSmoke (fait par
+    // roue chez celui qui mene : VehicleSync aussi).
     //
     // Objets allumes par les automates des copies (refonte, revue du 14/10 : feux stop du trafic, des PNJ et du bus jamais
     // allumes chez l'invite -- Throttle 'Cruise 2' : ActivateGameObject BrakeLights) : l'hote releve les cibles des actions

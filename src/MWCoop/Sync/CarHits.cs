@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -10,6 +11,8 @@ namespace MWCoop
     // voiture d'un autre joueur touchee (vitesse relative) ; si le jeu nous tue d'un accident dans la seconde qui suit
     // (Respawn.Intercept), son conducteur recoit @percute et meurt aussi -- sauf s'il etait attache et nous non (comme le
     // passager attache, OnAccident). Ses passagers suivent par son propre @accident.
+    // Chocs notables de chaque voiture d'ici (temoin sur tous les corps de VehicleSync, vitesse relative > 4 m/s, mur, fosse ou
+    // autre voiture) : Parts s'en sert pour admettre une rafale de casses dans les 2 s d'un vrai choc (16/10).
     public static class CarHits
     {
         public class Watch : MonoBehaviour
@@ -21,13 +24,26 @@ namespace MWCoop
         static int lastId = -1;
         static string lastKey;
         static float lastAt = -10f, lastSpeed;
-        static int logs;
+        static int logs, impactLogs;
+        static readonly Dictionary<Transform, float> impacts = new Dictionary<Transform, float>();   // racine de voiture -> instant du dernier choc
+        static float nextWatchAll;
 
-        public static void OnLevelLoaded() { watched = null; lastId = -1; lastAt = -10f; }
+        public static void OnLevelLoaded() { watched = null; lastId = -1; lastAt = -10f; impacts.Clear(); nextWatchAll = 0f; }
 
         public static void Update()
         {
             if (!Session.Active) return;
+            float now = Time.realtimeSinceStartup;
+            // Temoin de choc sur toutes les voitures d'ici (garee heurtee, copie recalee) : revues toutes les 2 s.
+            if (now >= nextWatchAll)
+            {
+                nextWatchAll = now + 2f;
+                for (int i = 0; i < VehicleSync.LocalCount; i++)
+                {
+                    Rigidbody b = VehicleSync.LocalBody(i);
+                    if (b != null && b.GetComponent<Watch>() == null) b.gameObject.AddComponent<Watch>();
+                }
+            }
             Transform car = VehicleSync.LocalDrivingRoot;
             if (car == null || car == watched) return;
             watched = car;
@@ -35,9 +51,28 @@ namespace MWCoop
             if (rb != null && rb.GetComponent<Watch>() == null) rb.gameObject.AddComponent<Watch>();
         }
 
+        // Secondes depuis le dernier choc notable de cette voiture (racine de VehicleSync) ; tres grand si aucun.
+        public static float ImpactAgo(Transform carRoot)
+        {
+            float at;
+            return carRoot != null && impacts.TryGetValue(carRoot, out at) ? Time.realtimeSinceStartup - at : 1e9f;
+        }
+
+        // Essais (autotest casse2) : un choc note a l'instant sur cette voiture.
+        public static void NoteImpact(Transform carRoot) { if (carRoot != null) impacts[carRoot] = Time.realtimeSinceStartup; }
+
         static void Hit(Transform mine, Collision c)
         {
-            if (c == null || c.collider == null || mine != watched) return;   // (la derniere conduite : la mort coupe la conduite)
+            if (c == null || c.collider == null) return;
+            float speed = c.relativeVelocity.magnitude;
+            if (speed > 4f)
+            {
+                Transform root = VehicleSync.CarRoot(mine);
+                if (root == null) root = mine;
+                impacts[root] = Time.realtimeSinceStartup;
+                if (impactLogs++ < 10) Log.Info("choc : " + root.name + " heurte " + c.collider.name + " a " + (speed * 3.6f).ToString("F0") + " km/h");
+            }
+            if (mine != watched) return;   // (la derniere conduite : la mort coupe la conduite)
             Transform other = VehicleSync.CarRoot(c.collider.transform);
             if (other == null || other == mine) return;
             foreach (int id in Session.Players.Keys)

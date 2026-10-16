@@ -297,7 +297,8 @@ namespace MWCoop
             hooked.Clear();
             waiting.Clear(); waitingSet.Clear(); fresh.Clear(); pendingBolts.Clear();
             idMap.Clear(); idMapAt = -100;
-            testStep = testLogs = 0;
+            bursts.Clear(); reinstall.Clear(); reinstallLogs = 0;
+            testStep = testLogs = 0; test2Step = test2Logs = 0;
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 8f : -1;
         }
@@ -500,20 +501,43 @@ namespace MWCoop
         // Casses (BREAKOFF) : une voiture dont la physique s'emballe chez un joueur (copie recalee, choc, NaN) fait passer tous
         // ses points en « Remove part » d'un coup ; chaque demontage partait comme un geste, l'hote rejouait et relayait tout :
         // voiture desossee chez tous (Rivett de Vaydon, 15/10). Une casse n'est envoyee que par celui qui fait autorite sur la
-        // voiture, et 3 au plus par seconde et par voiture ; l'hote refuse les autres (OnMessage).
+        // voiture, et 3 au plus par seconde et par voiture (8 en 2 s juste apres un vrai choc note par CarHits : rafale d'un
+        // accident) ; l'hote refuse les autres (OnMessage). Ce qui n'est pas envoye n'est pas garde non plus : la piece est
+        // remise ici (Reinstall), sinon celui qui a depasse le quota roulait seul avec une voiture desossee (16/10).
+        // Points a attache incassable (InitialAttachForce = float.MaxValue : portieres, sieges, capot, coffre, ailes, pare-chocs,
+        // calandre, batterie, reservoir... les 18 points a attache de la CORRIS, releve du 08/10) : le jeu n'y produit jamais de
+        // BREAKOFF par la physique en solo -- un accident cabosse les toles sans rien arracher. Une telle casse ici, c'est une
+        // attache rompue par une force infinie (copie recalee, NaN) : jamais envoyee, remise ici, meme avec l'autorite (retour
+        // de deux joueurs, 16/10 : conducteur avec toutes ses pieces, l'autre sans portieres, sieges, capot ni coffre).
         class Burst { public float Since; public int N; }
         static readonly Dictionary<string, Burst> bursts = new Dictionary<string, Burst>();
-        static bool TooMany(string carKey, float now)
+        const int BurstCalm = 3, BurstCrash = 8;
+        const float WindowCalm = 1f, WindowCrash = 2f;
+        static bool TooMany(string carKey, float now, int limit, float window)
         {
             Burst b;
             if (!bursts.TryGetValue(carKey, out b)) bursts[carKey] = b = new Burst();
-            if (now - b.Since > 1f) { b.Since = now; b.N = 0; }
-            return ++b.N > 3;
+            if (now - b.Since > window) { b.Since = now; b.N = 0; }
+            return ++b.N > limit;
         }
 
-        // Casse locale sans autorite (voir OnLocal) : la piece est remise sur son point, comme un montage rejoue.
+        static bool Unbreakable(Point p)
+        {
+            FsmFloat f = p != null && p.Fsm != null ? p.Fsm.FsmVariables.FindFsmFloat("InitialAttachForce") : null;
+            return f != null && (f.Value >= 1e30f || float.IsInfinity(f.Value));
+        }
+
+        // Casse locale a ne pas garder (voir OnLocal) : la piece est remise sur son point 1 s plus tard, comme un montage rejoue.
+        // Un etat recu entre-temps pour la piece (demontage ou montage par l'autorite) annule la remise (OnMessage).
         class Reinstall { public Point Point; public GameObject Part; public float At; }
         static readonly List<Reinstall> reinstall = new List<Reinstall>();
+        static int reinstallLogs;
+        static void QueueReinstall(Point p, GameObject part, string id, string why)
+        {
+            if (reinstallLogs++ < 40 || reinstallLogs % 50 == 0) Log.Warn("piece " + id + " cassee de " + p.Key + " : " + why + ", pas envoye, remise dans 1 s");
+            foreach (Reinstall r in reinstall) if (r.Part == part) return;
+            reinstall.Add(new Reinstall { Point = p, Part = part, At = Time.realtimeSinceStartup + 1f });
+        }
         static void CheckReinstall(float now)
         {
             for (int i = reinstall.Count - 1; i >= 0; i--)
@@ -537,7 +561,7 @@ namespace MWCoop
                 }
                 catch (System.Exception e) { Log.Warn("piece " + IdOf(r.Part) + " : remise impossible (" + e.Message + ")"); }
                 finally { applying = false; Replay.Depth--; }
-                Log.Info("piece " + IdOf(r.Part) + " remise sur " + r.Point.Key + " (casse locale sans autorite)");
+                if (reinstallLogs++ < 40 || reinstallLogs % 50 == 0) Log.Info("piece " + IdOf(r.Part) + " remise sur " + r.Point.Key + " (casse locale non gardee)");
             }
         }
 
@@ -549,22 +573,30 @@ namespace MWCoop
             if (!Session.Active || Time.realtimeSinceStartup - loadedAt < 20f) return;   // chargement : chacun le sien
             string id = IdOf(part);
             if (id.Length == 0) { Log.Warn("piece sans ID sur " + p.Key); return; }
+            int flags = breakoff ? 1 : 0;
             if (breakoff && Config.GetInt("Test", "CasseSansGarde", 0) == 0)   // ([Test] CasseSansGarde=1 : envoyee quand meme, pour eprouver le refus de l'hote)
             {
                 Transform car = VehicleSync.CarRoot(p.Fsm.transform);
                 Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
+                // (attache incassable dans le jeu : rompue ici par une force infinie, physique emballee -- jamais une vraie casse ;
+                // les essais (TestBreak) passent outre, pour eprouver la rafale et le quota)
+                if (!testBreak && Unbreakable(p)) { QueueReinstall(p, part, id, "attache incassable dans le jeu (force infinie), physique emballee ici"); return; }
                 if (cb != null && VehicleSync.Authority(cb) != Session.LocalId)
                 {
                     // (copie d'ici qui s'est emballee : la piece est toujours montee chez celui qui fait autorite -- remise ici dans 1 s)
-                    Log.Warn("piece " + id + " cassee de " + p.Key + " : voiture sous l'autorite d'un autre, pas envoye, remise dans 1 s");
-                    reinstall.Add(new Reinstall { Point = p, Part = part, At = Time.realtimeSinceStartup + 1f });
+                    QueueReinstall(p, part, id, "voiture sous l'autorite d'un autre");
                     return;
                 }
-                if (TooMany(car != null ? car.name : p.Key, Time.realtimeSinceStartup)) { Log.Warn("piece " + id + " cassee de " + p.Key + " : plus de 3 casses en 1 s, pas envoye"); return; }
+                bool crash = CarHits.ImpactAgo(car) < WindowCrash;
+                int limit = crash ? BurstCrash : BurstCalm;
+                float window = crash ? WindowCrash : WindowCalm;
+                if (TooMany(car != null ? car.name : p.Key, Time.realtimeSinceStartup, limit, window))
+                { QueueReinstall(p, part, id, "plus de " + limit + " casses en " + window.ToString("F0") + " s" + (crash ? " malgre le choc" : "")); return; }
+                if (crash) flags |= 2;   // (rafale d'accident : l'hote admet le meme quota -- OnMessage)
             }
             PlayMakerFSM data = Game.FsmOn(part, "Data");
             FsmInt aid = data != null ? data.FsmVariables.FindFsmInt("AssemblyID") : null;
-            Log.Info((install ? "montage : " : breakoff ? "casse : " : "demontage : ") + id + " sur " + p.Key);
+            Log.Info((install ? "montage : " : breakoff ? "casse : " : "demontage : ") + id + " sur " + p.Key + ((flags & 2) != 0 ? " (choc il y a " + CarHits.ImpactAgo(VehicleSync.CarRoot(p.Fsm.transform)).ToString("F1") + " s)" : ""));
             VehicleSync.CalmAfterPart(p.Fsm.transform);   // (sursaut de la physique au montage : la voiture garee ne s'envole pas)
             // + pose dans le repere du point de montage : chez l'autre, la piece est posee la ou elle est par rapport a SA
             // voiture (posee a la pose du monde d'ici, elle entrait dans la carrosserie d'une copie a peine decalee, et la
@@ -575,7 +607,7 @@ namespace MWCoop
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(install).Str(p.Key).Str(id).I32(aid != null ? aid.Value : 0)
                 .Vec(part.transform.position).Quat(part.transform.rotation)
                 .Vec(pt.InverseTransformPoint(part.transform.position)).Quat(Quaternion.Inverse(pt.rotation) * part.transform.rotation)
-                .F32(tf != null ? tf.Value : -1f).U8(breakoff ? 1 : 0), true);
+                .F32(tf != null ? tf.Value : -1f).U8(flags), true);
             if (install) { mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = pt; }
             else Props.SettleHere(part);   // (ses poses de chute partent aux autres, comme un objet lache de la main)
         }
@@ -594,18 +626,24 @@ namespace MWCoop
             Quaternion lrot = rel ? r.Quat() : Quaternion.identity;
             float tight = r.More ? r.F32() : -1f;
             int flags = r.More ? r.U8() : 0;
-            bool breakoff = (flags & 1) != 0;
+            bool breakoff = (flags & 1) != 0, crash = (flags & 2) != 0;
             Point p;
             if (!points.TryGetValue(key, out p) || p.Fsm == null) { Scan(); points.TryGetValue(key, out p); }
             if (Session.IsHost)
             {
-                // Casse venue d'un invite : seulement s'il fait autorite sur la voiture, et 3 par seconde au plus (voir OnLocal).
+                // Casse venue d'un invite : seulement s'il fait autorite sur la voiture, jamais d'un point a attache incassable
+                // (physique emballee chez lui), et 3 par seconde au plus -- 8 en 2 s s'il annonce un choc (voir OnLocal).
                 if (breakoff && p != null && p.Fsm != null)
                 {
                     Transform car = VehicleSync.CarRoot(p.Fsm.transform);
                     Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
                     if (cb != null && VehicleSync.Authority(cb) != who) { Log.Warn("piece " + id + " cassee de " + key + " par #" + who + " sans autorite sur la voiture : ignoree"); return; }
-                    if (TooMany("#" + who + ":" + (car != null ? car.name : key), Time.realtimeSinceStartup)) { Log.Warn("piece " + id + " cassee de " + key + " par #" + who + " : plus de 3 casses en 1 s, ignoree"); return; }
+                    if (Unbreakable(p) && Config.GetInt("Test", "CasseSansGarde", 0) == 0)
+                    { Log.Warn("piece " + id + " cassee de " + key + " par #" + who + " : attache incassable dans le jeu (physique emballee chez lui), ignoree"); return; }
+                    int limit = crash ? BurstCrash : BurstCalm;
+                    float window = crash ? WindowCrash : WindowCalm;
+                    if (TooMany("#" + who + ":" + (car != null ? car.name : key), Time.realtimeSinceStartup, limit, window))
+                    { Log.Warn("piece " + id + " cassee de " + key + " par #" + who + " : plus de " + limit + " casses en " + window.ToString("F0") + " s, ignoree"); return; }
                 }
                 var bw = new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).I32(aid).Vec(pos).Quat(rot);
                 if (rel) bw.Vec(lpos).Quat(lrot);
@@ -616,6 +654,10 @@ namespace MWCoop
             GameObject part = FindByIdCached(id);
             if (part == null) part = FindById(id);   // (achetee depuis le dernier releve des ID)
             if (p == null || part == null) { Log.Warn("piece " + id + " / point " + key + " introuvable ici"); return; }
+            // L'etat recu de l'autorite prime sur une remise en attente ici (casse locale puis vraie casse ou demontage recus :
+            // sans cela, la piece revenait ici 1 s plus tard et manquait chez lui).
+            for (int i = reinstall.Count - 1; i >= 0; i--)
+                if (reinstall[i].Part == part) { reinstall.RemoveAt(i); Log.Info("piece " + id + " : remise annulee, etat recu du joueur #" + who); }
             PlayMakerFSM data = Game.FsmOn(part, "Data");
             bool isIn = Holds(p.Fsm, part);
             if (install == isIn) { Log.Info("piece " + id + " deja " + (isIn ? "montee" : "demontee")); return; }
@@ -735,8 +777,65 @@ namespace MWCoop
         static int testStep, testLogs;
         static float testAt;
 
+        // [Test] Autotest=casse2 (2 joueurs, CORRIS assemblee -- sauvegarde Rivett) : a 25 s, l'HOTE « casse » en rafale (BREAKOFF,
+        // comme un accident) les pieces montees sur les points de [Test] TestPoints (portieres, sieges, capot, coffre de la CORRIS
+        // par defaut), apres avoir note un choc sur la voiture ([Test] CasseChoc=1, defaut : rafale admise, 8 en 2 s) ; a 45 s,
+        // chacun note l'etat des points : "autotest casse2 : VINP_DoorLeft=vide ; ...". Attendu : la meme liste chez les deux,
+        // tout vide. Avec CasseChoc=0 : quota de 3 par seconde, les 3 autres sont remises chez l'hote ("plus de 3 casses en 1 s,
+        // pas envoye, remise dans 1 s") -- les memes 3 points vides chez les deux.
+        static int test2Step, test2Logs;
+        const string TestPointsDefault = "CORRIS/Assemblies/VINP_DoorLeft,CORRIS/Assemblies/VINP_DoorRight,CORRIS/Assemblies/VINP_SeatDriver,"
+                                       + "CORRIS/Assemblies/VINP_SeatPassenger,CORRIS/Assemblies/VINP_Hood,CORRIS/Assemblies/VINP_Bootlid";
+
+        static void TestCasse2(float t)
+        {
+            string[] keys = Config.Get("Test", "TestPoints", TestPointsDefault).Split(',');
+            if (Session.IsHost && t > 25f && test2Step == 0 && Jobs.OtherInGame(15f))
+            {
+                test2Step = 1;
+                if (Config.GetInt("Test", "CasseChoc", 1) != 0)
+                {
+                    Point p0;
+                    Transform car = points.TryGetValue(keys[0].Trim(), out p0) && p0.Fsm != null ? VehicleSync.CarRoot(p0.Fsm.transform) : null;
+                    CarHits.NoteImpact(car);
+                    Log.Info("autotest casse2 : choc note sur " + (car != null ? car.name : "? (point " + keys[0].Trim() + " inconnu)"));
+                }
+                foreach (string k in keys) Log.Info("autotest casse2 : casse " + k.Trim() + " : " + TestBreakPoint(k.Trim()));
+            }
+            if (test2Logs == 0 && t > 45f) { test2Logs = 1; Log.Info("autotest casse2 : " + PointsState(keys) + " (" + reinstall.Count + " remises en attente)"); }
+        }
+
+        // Essais : demonte comme une casse (BREAKOFF) la piece montee sur le point de cle 'key'.
+        public static string TestBreakPoint(string key)
+        {
+            Point p;
+            if (!points.TryGetValue(key, out p) || p.Fsm == null) { Scan(); if (!points.TryGetValue(key, out p) || p.Fsm == null) return "point inconnu (" + points.Count + " points)"; }
+            GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+            if (part == null || !Holds(p.Fsm, part)) return "rien de monte";
+            testBreak = true;
+            try { Game.SetState(p.Fsm, "Remove part"); } finally { testBreak = false; }
+            return "casse de " + IdOf(part);
+        }
+
+        // Essais : pour chaque point (cle), l'ID de la piece montee ou "vide".
+        public static string PointsState(string[] keys)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (string k0 in keys)
+            {
+                string k = k0.Trim();
+                Point p;
+                sb.Append(sb.Length > 0 ? " ; " : "").Append(k.Substring(k.LastIndexOf('/') + 1)).Append('=');
+                if (!points.TryGetValue(k, out p) || p.Fsm == null) { sb.Append('?'); continue; }
+                GameObject part = p.Fsm.FsmVariables.GetFsmGameObject("ActivePart").Value;
+                sb.Append(part != null && Holds(p.Fsm, part) ? IdOf(part) : "vide");
+            }
+            return sb.ToString();
+        }
+
         public static void Test(string mode, float t)
         {
+            if (mode == "casse2") { TestCasse2(t); return; }
             if (mode != "boulons") return;
             string id = Config.Get("Test", "TestPiece", "VIN413C1");
             float now = Time.realtimeSinceStartup;

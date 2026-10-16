@@ -25,10 +25,53 @@ namespace MWCoop
     //  - Arrivant : 20 s apres son entree en jeu, l'hote lui rejoue la derniere action de chaque automate qui a bouge
     //    depuis le chargement (une lampe allumee le reste), un message par automate, sous Transport.MaxPayload.
     //  - Canal des evenements (Msg.Event), cle « objet:<ID> » : aiguille dans Events.OnMessage comme « vitre: ».
+    //  - Radio portable (EQUIPMENTS/radio(itemx), retour d'un joueur du 16/10 : « pas entendue par les autres ») : ses boutons
+    //    sont des automates sur des ENFANTS (Power, Volume, Open, Play :: Knob ; ChangeBatteries/Insert :: Assembly), pas sur
+    //    l'objet -- personne ne les suivait sous la cle de l'objet. Pris ici sous l'ID de la radio (ChildFsms), nom d'automate
+    //    sur le fil « Power/Knob » (chemin relatif + automate, meme message). Releve des 13 s, AVANT le monde (16 s) : sinon
+    //    WorldFsms les prenait (son rejeu ne passe pas par Radio.BeforeRemote / AfterRemote : le vrai jeu de canaux de
+    //    l'invite filait dans la radio de l'autre). Leur rejeu passe par Radio (copie du poste chez les autres, comme les
+    //    molettes des voitures dans Jobs). Molette de volume : pas de pression, la molette (GetAxis) -- ses sorties comptent
+    //    comme des pressions. Piles : l'insertion (ASSEMBLE) est rejouee jusqu'a l'attente du declencheur suivant (un
+    //    TriggerEvent est une attente, comme une touche) ; le retrait (CreateObject) reste a chacun.
     public static class ItemFsms
     {
         public const string Prefix = "objet:";
         const string ModName = "objets-etat";
+
+        // Objets dont des automates ENFANTS sont suivis : objet -> { chemin relatif de l'enfant, automate }.
+        static readonly string[] ChildItems = { "radio(itemx)" };
+        static readonly string[,] ChildFsms = { { "Power", "Knob" }, { "Volume", "Knob" }, { "Open", "Knob" }, { "Play", "Knob" },
+                                                { "ChangeBatteries/Insert", "Assembly" }, { "ChangeBatteries/Remove", "Knob" } };
+        static readonly string[] ChildFsmNames = { "Knob", "Assembly" };
+        static float nextChildScan = -1;
+
+        // Objet de ChildItems dont 'f' est un automate enfant liste (rel : chemin relatif, « Power ») ; null sinon.
+        static Transform ChildItemOf(PlayMakerFSM f, out string rel)
+        {
+            rel = null;
+            Transform t = f.transform;
+            if (t.parent == null || System.Array.IndexOf(ChildFsmNames, f.FsmName) < 0) return null;
+            string r = t.name;
+            for (Transform p = t.parent; p != null && r.Length < 64; p = p.parent)
+            {
+                if (System.Array.IndexOf(ChildItems, p.name) >= 0)
+                {
+                    for (int i = 0; i < ChildFsms.GetLength(0); i++)
+                        if (ChildFsms[i, 0] == r && ChildFsms[i, 1] == f.FsmName) { rel = r; return p; }
+                    return null;
+                }
+                r = p.name + "/" + r;
+            }
+            return null;
+        }
+
+        // Pour WorldFsms.Skip : automate enfant d'un objet suivi ici (a laisser, meme vu avant le releve d'ici).
+        public static bool Wants(PlayMakerFSM f)
+        {
+            string rel;
+            return f != null && ChildItemOf(f, out rel) != null;
+        }
 
         // Pas « Save » non plus (rien qu'un joueur presse : TryHook l'ecarterait). La nasse (EQUIPMENTS/fish trap(itemx)) n'a
         // que lui au releve du 08/10 -- aucune prise, aucun poisson cree, HatchPivot que rien n'anime : Props suit sa pose,
@@ -63,6 +106,7 @@ namespace MWCoop
         class Tracked
         {
             public string Id, Name; public PlayMakerFSM F;
+            public bool Radio;                                 // bouton d'une radio portable : rejeu sous Radio.BeforeRemote / AfterRemote
             public string LoadState;                           // etat au crochet (= au chargement) : l'arrivant y est aussi
             public string LastPrev, LastEvent, LastState;      // derniere action (d'ici ou recue) : rejouee pour un arrivant
             public HashSet<string> InputStates = new HashSet<string>();
@@ -115,6 +159,8 @@ namespace MWCoop
             applying = false; sent = recv = tooLong = 0;
             // (apres Props a 10 s -- les cles « w: » sont prises quand tout est a sa place --, Consume a 11 s et le monde a 16 s)
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 18f : -1;
+            // (automates enfants -- radio portable -- : avant le monde, qui les prendrait sinon ; Props a deja ses cles)
+            nextChildScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 13f : -1;
         }
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
@@ -127,10 +173,12 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (snapshots.Count > 0) SendSnapshots(now);
             if (late.Count > 0) RetryLate(now);
+            if (nextChildScan >= 0 && now >= nextChildScan) { nextChildScan = -1; ScanChildren(); }
             // (toutes les 20 s : objets achetes ou crees depuis, objets poses -- tenu en main, un objet unique n'a pas encore de cle)
             if (now < nextScan) return;
             nextScan = now + 20f;
             Scan();
+            ScanChildren();
         }
 
         // ---------------------------------------------------------------- choix des automates
@@ -153,6 +201,27 @@ namespace MWCoop
             if (added > 0) Log.Info("objets : " + (before == 0 ? added + " automates d'objets suivis" : added + " automates d'objets de plus suivis (" + byKey.Count + " en tout)") + " (lampe, lanterne, chargeur... : etat partage)");
         }
 
+        // Automates enfants (ChildFsms) : sous l'ID de leur objet, nom « chemin/automate ». (Play :: Knob, eteint tant que la
+        // radio ne l'est pas : pas initialise, repris au releve suivant une fois allumee.)
+        static void ScanChildren()
+        {
+            int added = 0;
+            foreach (string name in ChildFsmNames)
+                foreach (Object o in Game.FsmsNamed(name))
+                {
+                    var f = (PlayMakerFSM)o;
+                    if (f == null || f.hideFlags != HideFlags.None || f.FsmName != name) continue;
+                    if (hooked.Contains(f) || rejected.Contains(f)) continue;
+                    string rel;
+                    Transform item = ChildItemOf(f, out rel);
+                    if (item == null || !item.root.gameObject.activeInHierarchy) continue;
+                    string id = IdOf(item.gameObject);
+                    if (id == null) continue;
+                    if (Consider(f, id, item.gameObject, rel + "/" + name)) added++;
+                }
+            if (added > 0) Log.Info("objets : " + added + " automate(s) de boutons d'objet suivis (radio portable : marche, station, volume, piles)");
+        }
+
         // Cle Props de l'objet : son ID (articles), sinon la cle « w: » d'un objet unique du monde ; null : pas un objet suivi.
         static string IdOf(GameObject go)
         {
@@ -169,20 +238,22 @@ namespace MWCoop
         }
 
         // Vrai : accroche. Faux : ecarte pour de bon (rejected) ou pas encore pret (automate pas initialise : au prochain passage).
-        static bool Consider(PlayMakerFSM f, string id)
+        // 'item' : l'objet porteur (l'automate lui-meme, ou l'objet dont il est un bouton enfant), 'name' : nom sur le fil.
+        static bool Consider(PlayMakerFSM f, string id) { return Consider(f, id, f.gameObject, f.FsmName); }
+
+        static bool Consider(PlayMakerFSM f, string id, GameObject item, string name)
         {
-            GameObject go = f.gameObject;
-            if (Skipped(go.name) || go.GetComponent<Rigidbody>() == null) { rejected.Add(f); return false; }
+            if (Skipped(item.name) || item.GetComponent<Rigidbody>() == null) { rejected.Add(f); return false; }
             if (Replay.ClaimedByOther(f, ModName) || Interactions.Tracks(f) || Interactions.Wants(f) || WorldFsms.Tracks(f) || Jobs.Tracks(f)) { rejected.Add(f); return false; }
-            string key = id + "::" + f.FsmName;
+            string key = id + "::" + name;
             if (byKey.ContainsKey(key)) { rejected.Add(f); return false; }   // (homonyme sous la meme cle : n'arrive pas)
-            return TryHook(f, id, key);
+            return TryHook(f, id, key, name, item.name == "radio(itemx)");
         }
 
-        static bool TryHook(PlayMakerFSM f, string id, string key)
+        static bool TryHook(PlayMakerFSM f, string id, string key, string name, bool radio)
         {
             if (f.Fsm == null || !f.Fsm.Initialized) return false;   // (pas encore charge : au prochain passage, sans l'avertissement de PlayMaker)
-            var t = new Tracked { Id = id, Name = f.FsmName, F = f };
+            var t = new Tracked { Id = id, Name = name, F = f, Radio = radio };
             bool loaded;
             try { loaded = Classify(f, t); } catch { return false; }
             if (!loaded) return false;
@@ -207,7 +278,8 @@ namespace MWCoop
                 if (acts == null) return false;
                 var inEv = new HashSet<string>();
                 var prEv = new HashSet<string>();
-                bool input = false, personal = false;
+                var hoverEv = new HashSet<string>();
+                bool input = false, personal = false, axis = false;
                 foreach (FsmStateAction a in acts)
                 {
                     if (a == null) continue;
@@ -215,7 +287,12 @@ namespace MWCoop
                     bool pick = tn == "MousePickEvent";
                     bool isInput = InputActions.Contains(tn);
                     bool press = pick || PressActions.Contains(tn);
+                    // Zone ou choc (TriggerEvent, CollisionEvent) : une attente, comme une touche -- l'enchainement automatique
+                    // (Safe) s'y arrete (piles de la radio portable : apres la pose, l'attente du prochain contact lit la main
+                    // du joueur ; sans cela la pose n'etait jamais rejouee).
+                    bool trig = tn == "TriggerEvent" || tn == "CollisionEvent";
                     if (isInput) input = true;
+                    if (tn == "GetAxis") axis = true;
                     // Creation et destruction d'objets : Consume et Boxes (sacs, boites de pieces, bouteilles) ; eteindre
                     // l'objet lui-meme aussi (c'est une fin). Eteindre un enfant (la lampe) reste une action normale.
                     if (tn == "CreateObject" || tn == "DestroySelf" || tn == "DestroyObject" || tn == "DestroyComponent") personal = true;
@@ -231,7 +308,8 @@ namespace MWCoop
                         {
                             if (string.IsNullOrEmpty(ev.Name)) continue;
                             if (ev.Name == "SAVEGAME") personal = true;
-                            if (isInput) inEv.Add(ev.Name);
+                            if (isInput || trig) inEv.Add(ev.Name);
+                            if (pick && HoverFields.Contains(fi.Name)) hoverEv.Add(ev.Name);
                             if (press && !(pick && HoverFields.Contains(fi.Name))) prEv.Add(ev.Name);
                             continue;
                         }
@@ -246,6 +324,9 @@ namespace MWCoop
                         if (v is FsmString && ((FsmString)v).Value == "SAVEGAME") personal = true;
                     }
                 }
+                // Molette (GetAxis : volume de la radio portable, « Get scroll » -> TIGHTEN / UNTIGHTEN par comparaison du defilement) :
+                // pas de pression a proprement parler -- toute sortie de l'etat, sauf le survol, est l'action du joueur.
+                if (axis) foreach (FsmTransition tr in st.Transitions) if (!string.IsNullOrEmpty(tr.EventName) && !hoverEv.Contains(tr.EventName) && !inEv.Contains(tr.EventName)) prEv.Add(tr.EventName);
                 if (input) t.InputStates.Add(st.Name);
                 t.InputEvents[st.Name] = inEv;
                 if (prEv.Count > 0) t.PressEvents[st.Name] = prEv;
@@ -306,7 +387,8 @@ namespace MWCoop
             float now = Time.realtimeSinceStartup;
             if (now < t.PausedUntil) return;
             if (now - t.WindowStart > 10f) { t.WindowStart = now; t.Count = 0; }
-            if (++t.Count > 20) { t.PausedUntil = now + 30f; Log.Warn("objets : " + t.Id + "::" + t.Name + " change trop souvent, en pause 30 s"); return; }
+            int cap = t.F.FsmName == "Knob" ? 60 : 20;   // (molette : un cran par message, 20 crans de 0 a 1)
+            if (++t.Count > cap) { t.PausedUntil = now + 30f; Log.Warn("objets : " + t.Id + "::" + t.Name + " change trop souvent, en pause 30 s"); return; }
             t.LastPrev = prev.Name; t.LastEvent = tr.EventName; t.LastState = state;
             Session.SendAll(Build(t, Session.LocalId, 0, prev.Name, tr.EventName, state, ""), true);
             if (++sent <= 30 || sent % 50 == 0) Log.Info("objets : " + t.Id + "::" + t.Name + " " + prev.Name + " -" + tr.EventName + "-> " + state + " envoye");
@@ -392,6 +474,7 @@ namespace MWCoop
         }
 
         // Automate suivi de cet objet ; pas encore : l'objet est peut-etre connu de Props (cree a l'instant), accroche tout de suite.
+        // 'fsm' : nom d'automate, ou « chemin/automate » d'un bouton enfant (radio portable : « Power/Knob »).
         static Tracked Find(string id, string fsm)
         {
             Tracked t;
@@ -399,8 +482,18 @@ namespace MWCoop
             if (byKey.TryGetValue(key, out t) && t.F != null) return t;
             GameObject go = Props.ObjectOf(id);
             if (go == null || nextScan < 0) return null;
-            foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
-                if (f.FsmName == fsm && System.Array.IndexOf(FsmNames, fsm) >= 0 && !hooked.Contains(f) && !rejected.Contains(f)) Consider(f, id);
+            int slash = fsm.LastIndexOf('/');
+            if (slash > 0)
+            {
+                Transform child = go.transform.Find(fsm.Substring(0, slash));
+                string name = fsm.Substring(slash + 1);
+                if (child != null)
+                    foreach (PlayMakerFSM f in child.GetComponents<PlayMakerFSM>())
+                        if (f.FsmName == name && Wants(f) && !hooked.Contains(f) && !rejected.Contains(f)) Consider(f, id, go, fsm);
+            }
+            else
+                foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
+                    if (f.FsmName == fsm && System.Array.IndexOf(FsmNames, fsm) >= 0 && !hooked.Contains(f) && !rejected.Contains(f)) Consider(f, id);
             return byKey.TryGetValue(key, out t) && t.F != null ? t : null;
         }
 
@@ -425,6 +518,7 @@ namespace MWCoop
             // Instantane : deja dans l'etat de l'hote (rien n'a bouge, ou deja rejoue) -> les variables suffisent.
             if (kind == 1 && cur.Length > 0 && f.ActiveStateName == cur) return;
             applying = true; Replay.Depth++;
+            if (t.Radio) Radio.BeforeRemote();   // (radio portable d'un autre : sa copie ici, pas notre jeu de canaux -- comme les molettes des voitures, Jobs)
             try
             {
                 // Meme etat de depart -> meme evenement (l'objet reagit comme a un clic, animation et son compris) ; sinon
@@ -434,7 +528,7 @@ namespace MWCoop
                 if (state.Length > 0 && !t.Entered.Contains(state) && f.ActiveStateName != state && f.Fsm.GetState(state) != null) Game.SetState(f, state);
             }
             catch (System.Exception e) { Log.Warn("objets : rejeu de " + t.Id + "::" + t.Name + " -> " + state + " : " + e.Message); }
-            finally { applying = false; Replay.Depth--; }
+            finally { applying = false; Replay.Depth--; if (t.Radio) Radio.AfterRemote(f.transform, who, state); }
             if (kind == 0)
             {
                 t.LastPrev = prev; t.LastEvent = ev; t.LastState = state;   // (hote : pour les arrivants)
@@ -470,6 +564,27 @@ namespace MWCoop
                 }
                 if (n > 0 || skipped > 0) Log.Info("objets : etat de " + n + " automates d'objets envoye a " + p + (skipped > 0 ? " (" + skipped + " de plus non envoyes)" : ""));
             }
+        }
+
+        // ---------------------------------------------------------------- essais
+        // Comme un joueur qui actionne l'objet : l'automate 'fsm' (« Power/Knob ») de l'objet dont la cle contient 'part' passe de
+        // 'prev' a 'state' par 'ev' ici (actions jouees), et le message part comme en vrai (variables prises AVANT, comme le crochet).
+        public static string TestSend(string part, string fsm, string prev, string ev, string state)
+        {
+            foreach (KeyValuePair<string, Tracked> kv in byKey)
+            {
+                Tracked t = kv.Value;
+                if (t.F == null || t.Name != fsm || t.Id.IndexOf(part, System.StringComparison.Ordinal) < 0) continue;
+                if (t.F.Fsm == null || !t.F.Fsm.Initialized) return kv.Key + " pas initialise";
+                NetWriter w = Build(t, Session.LocalId, 0, prev, ev, state, "");
+                applying = true; Replay.Depth++;
+                try { Game.SetState(t.F, state); }   // (geste d'ici : le vrai jeu de canaux suit, comme un clic -- pas de copie)
+                finally { applying = false; Replay.Depth--; }
+                t.LastPrev = prev; t.LastEvent = ev; t.LastState = state;
+                Session.SendAll(w, true);
+                return kv.Key + " " + prev + " -" + ev + "-> " + state + " envoye (ici " + t.F.ActiveStateName + ")";
+            }
+            return "rien pour " + part + "::" + fsm + " (" + byKey.Count + " automates suivis)";
         }
     }
 }
