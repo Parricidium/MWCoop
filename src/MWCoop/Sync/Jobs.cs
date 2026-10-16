@@ -245,6 +245,9 @@ namespace MWCoop
             if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
             SpecialUpdate(now);
             IdleStep(now);
+            // [Test] JournalUsine=1 : toutes les 10 s, etat et variables (entiers, reels, booleens) des automates de l'usine
+            // (JOBS/FACTORY : PlayerData, Database, FiringConditions... et LOD1/JOB : JobProgress), pour arreter la liste FactoryOwn.
+            if (Config.Testing && now >= nextUsineLog && Config.GetInt("Test", "JournalUsine", 0) != 0) { nextUsineLog = now + 10f; foreach (string l in FactoryDump()) Log.Info("usine : " + l); }
             if (now < nextScan) return;
             nextScan = now + 30f;
             if (!specialsScanned) ScanSpecials();
@@ -507,8 +510,10 @@ namespace MWCoop
                 if (!hostIdle.Contains(j.Key)) return;
                 if (tookOver.Add(j.Key)) Log.Info("quete : " + j.Key + " : l'automate ne tourne pas chez l'hote, ses tirages au sort partent d'ici");
             }
-            // Etat de paie (usine, publicites, taxi) : chacun le sien, par sa propre horloge -- pas envoye (relecture du 15/10).
-            if (!j.Control && PaysIn(j, from != null ? from.Name : null, state)) { Log.Info("quete : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + tr.EventName + "-> " + state + " (paie : chacun la sienne), pas envoye"); return; }
+            // Etat de paie (usine, publicites, taxi) ou de pointage a l'usine : chacun le sien, par sa propre horloge -- pas
+            // envoye (relecture du 15/10 ; usine 16/10).
+            string own = OwnTransition(j, from != null ? from.Name : null, state);
+            if (own != null) { Log.Info("quete : " + j.Key + " " + (from != null ? from.Name : "?") + " -" + tr.EventName + "-> " + state + " (" + own + "), pas envoye"); return; }
             // Retour a l'attente (souris partie, fin de survol) : de la tenue de survol, pas une action.
             if (state == "Wait player" || state == "Mouse off" || state == "Mouse off 2" || state == "Wait button") return;
             // Etat qui lit l'heure du jeu et repasse en boucle (usine : « Factory open » toutes les 10 s, -MEETING-> a 13 h,
@@ -610,20 +615,59 @@ namespace MWCoop
         // travail. Rejouees, la paie etait versee selon l'ordre d'arrivee des horloges (« deja fait ici » dans les 10 s -> paie
         // double ; sinon celle de l'invite allait a l'hote, et le recalage direct sur l'etat d'arrivee sautait l'etat de paie
         // chez le plus lent -- relecture du 15/10). Cle de Jobs = chemin::automate#rang ; la table : chemin::automate -> etats.
-        // (Les compteurs de travail de ces automates restent recopies avec les autres transitions : leurs noms ne sont pas
-        // surs, voir le rapport ; seule l'exclusion des etats de paie est faite ici.)
         static readonly Dictionary<string, string[]> PayStates = new Dictionary<string, string[]>
         {
             { "JOBS/FACTORY::PlayerData", new[] { "Base salary", "High salary" } },
             { "JOBS/ADs::Data", new[] { "Bank transfer 2" } },
             { "JOBS/TAXIJOB/MACHTWAGEN/TaxiFunctions::Payments", new[] { "Payment" } },
         };
-        static bool PaysIn(Job j, string prev, string state)
+        // Travail a l'usine (16/10) : JOBS/FACTORY::PlayerData tient le pointage et les compteurs de CE joueur (d'apres le
+        // releve des automates du jeu, ref/v.261008-01) : PUNCHIN -> "Punch in" -> "State 2" (pointe, guette l'heure de
+        // fermeture) -PUNCHOUT-> "Punch out" -> "Time bank F" (minutes du jour, cumul, heures sup) -> "State 5" -PLUS/MINUS->
+        // "State 6"/"State 7" (afficheur de la pointeuse) ; chaque semaine "Work ON" -PAYCHECK-> "Is monday?" / "Check data 2" ->
+        // "Load paychecks" -> "Reset days" -> "State 11" -PAY1/PAY2-> paie. Rejoue chez l'autre, le pointage de l'un pointait
+        // l'autre (AtWork, PunchInMinutes a SON horloge) et les compteurs recus ecrasaient les siens (relecture du 15/10,
+        // « compteurs de travail de l'usine encore recopies »). Ces etats ne sont ni envoyes ni rejoues (comme la paie), et
+        // les variables FactoryOwn ne partent ni ne s'appliquent jamais (meme dans un instantane). Le reste de l'automate
+        // (embauche : "Stage 2", "Wait day", lettres du chomage, licenciement) reste partage comme avant ; l'usine elle-meme
+        // (Database : « Factory open », reunion, repas ; PNJ ; portes) reste menee par l'hote. Chez l'invite les compteurs
+        // sont gardes par monde dans etat-joueur.ini (Wallet, usine.<nom>) : la sauvegarde recue est celle de l'hote.
+        static readonly Dictionary<string, string[]> WorkStates = new Dictionary<string, string[]>
+        {
+            { "JOBS/FACTORY::PlayerData", new[] { "Punch in", "State 2", "Punch out", "Time bank F", "State 5", "State 6", "State 7",
+                                                  "Is monday?", "Check data 2", "Load paychecks", "Reset days", "State 11" } },
+        };
+        // Variables de JOBS/FACTORY::PlayerData propres a chaque joueur (jamais recopiees). Sures : pointage et compteurs
+        // (sauves par le jeu sous UTMinutes*, UTDaysPassed, UTPaychecks, UTDayActive). Moins sures (voir le rapport) :
+        // ProgressPackages* (copie de JOB::JobProgress PackagesTotal faite a la sauvegarde), Salary/Salary2 (montants calcules
+        // dans l'etat de paie, deja exclu), Seconds/Hour/MinutesHour (brouillons du pointage).
+        public static readonly string[] FactoryOwn = { "AtWork", "DayActive", "PunchInMinutes", "PunchOutMinutes", "WorkMinutesDayF", "WorkMinutesAlltime",
+            "WorkMinutesOvertimeF", "SlackMinutesAllTime", "DaysPassed", "Paychecks", "ProgressPackagesEmpty", "ProgressPackagesTotal",
+            "Salary", "Salary2", "Seconds", "Hour", "MinutesHour" };
+        static readonly HashSet<string> factoryOwnSet = new HashSet<string>(FactoryOwn);
+        public const string FactoryPath = "JOBS/FACTORY", FactoryFsm = "PlayerData";
+
+        static bool IsFactoryData(PlayMakerFSM f)
+        {
+            return f != null && f.FsmName == FactoryFsm && f.gameObject.name == "FACTORY" && f.transform.parent != null && f.transform.parent.name == "JOBS" && f.transform.parent.parent == null;
+        }
+        // Variables de cet automate qui restent a chacun (null : aucune).
+        static HashSet<string> OwnVars(PlayMakerFSM f) { return IsFactoryData(f) ? factoryOwnSet : null; }
+
+        static bool StateIn(Dictionary<string, string[]> table, Job j, string prev, string state)
         {
             int hash = j.Key.LastIndexOf('#');
             string[] states;
-            if (!PayStates.TryGetValue(hash > 0 ? j.Key.Substring(0, hash) : j.Key, out states)) return false;
+            if (!table.TryGetValue(hash > 0 ? j.Key.Substring(0, hash) : j.Key, out states)) return false;
             return System.Array.IndexOf(states, state) >= 0 || (prev != null && System.Array.IndexOf(states, prev) >= 0);
+        }
+        // Transition qui n'appartient qu'a ce joueur (paie, pointage de l'usine) : le motif a noter, sinon null.
+        static string OwnTransition(Job j, string prev, string state)
+        {
+            if (j.Control) return null;
+            if (StateIn(PayStates, j, prev, state)) return "paie : chacun la sienne";
+            if (StateIn(WorkStates, j, prev, state)) return "travail a l'usine : chacun le sien";
+            return null;
         }
 
         // Globales du joueur local (corps : stress, fatigue, soif, ivresse... ; sauf l'argent, a Wallet) : notees avant le rejeu
@@ -666,9 +710,10 @@ namespace MWCoop
         static void WriteVars(PlayMakerFSM f, NetWriter w)
         {
             FsmVariables v = f.FsmVariables;
-            var ints = new List<FsmInt>(); foreach (FsmInt x in v.IntVariables) if (!Skip(x.Name)) ints.Add(x);
-            var floats = new List<FsmFloat>(); foreach (FsmFloat x in v.FloatVariables) if (!Skip(x.Name)) floats.Add(x);
-            var bools = new List<FsmBool>(); foreach (FsmBool x in v.BoolVariables) if (!Skip(x.Name)) bools.Add(x);
+            HashSet<string> own = OwnVars(f);   // (usine : compteurs de ce joueur, jamais envoyes)
+            var ints = new List<FsmInt>(); foreach (FsmInt x in v.IntVariables) if (!Skip(x.Name) && (own == null || !own.Contains(x.Name))) ints.Add(x);
+            var floats = new List<FsmFloat>(); foreach (FsmFloat x in v.FloatVariables) if (!Skip(x.Name) && (own == null || !own.Contains(x.Name))) floats.Add(x);
+            var bools = new List<FsmBool>(); foreach (FsmBool x in v.BoolVariables) if (!Skip(x.Name) && (own == null || !own.Contains(x.Name))) bools.Add(x);
             w.U8(ints.Count); foreach (FsmInt x in ints) w.Str(x.Name).I32(x.Value);
             w.U8(floats.Count); foreach (FsmFloat x in floats) w.Str(x.Name).F32(x.Value);
             w.U8(bools.Count); foreach (FsmBool x in bools) w.Str(x.Name).Bool(x.Value);
@@ -732,8 +777,10 @@ namespace MWCoop
             }
             if (j.Control) PlayerSync.ReachFor(who, j.F.transform);   // (son avatar appuie sur la commande)
             if (j.Kind == K_IGNITION) { ApplyIgnition(j, who, key, state); return; }
-            // Etat de paie chez l'autre (version d'avant, ou instantane) : sa paie, pas la notre -- ignore (relecture du 15/10).
-            if (!j.Control && PaysIn(j, prev, state)) { Log.Info("quete de #" + who + " : " + key + " " + prev + " -" + ev + "-> " + state + " (paie : chacun la sienne), ignore"); return; }
+            // Etat de paie ou de pointage chez l'autre (version d'avant, ou instantane) : sa paie, son travail, pas les notres --
+            // ignore (relecture du 15/10 ; usine 16/10).
+            string own = OwnTransition(j, prev, state);
+            if (own != null) { Log.Info("quete de #" + who + " : " + key + " " + prev + " -" + ev + "-> " + state + " (" + own + "), ignore"); return; }
             // Fendeuse arretee ici (mise en marche pas recue : arrivee en cours de buche) : seule la fin de la
             // buche est reprise (rend le declencheur), une etape rejouee sur l'automate inactif ne mene a rien.
             if (j.Kind == K_FEEDLOG && !j.F.gameObject.activeInHierarchy && state != "State 1")
@@ -758,9 +805,10 @@ namespace MWCoop
             // (loquet du capot : Open inverse chez l'invite).
             if (j.F.ActiveStateName != state)
             {
-                foreach (var x in ints) { FsmInt t = v.FindFsmInt(x.Key); if (t != null) t.Value = x.Value; }
-                foreach (var x in floats) { FsmFloat t = v.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
-                foreach (var x in bools) { FsmBool t = v.FindFsmBool(x.Key); if (t != null) t.Value = x.Value; }
+                HashSet<string> ownV = OwnVars(j.F);   // (usine : compteurs de ce joueur, jamais ecrases -- meme venus d'une version d'avant)
+                foreach (var x in ints) { FsmInt t = ownV == null || !ownV.Contains(x.Key) ? v.FindFsmInt(x.Key) : null; if (t != null) t.Value = x.Value; }
+                foreach (var x in floats) { FsmFloat t = ownV == null || !ownV.Contains(x.Key) ? v.FindFsmFloat(x.Key) : null; if (t != null) t.Value = x.Value; }
+                foreach (var x in bools) { FsmBool t = ownV == null || !ownV.Contains(x.Key) ? v.FindFsmBool(x.Key) : null; if (t != null) t.Value = x.Value; }
                 foreach (var x in strs) { FsmString t = v.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
                 foreach (var x in gos)
                 {
@@ -874,6 +922,77 @@ namespace MWCoop
             foreach (Job j in jobs.Values)
                 if (j.F != null && j.Key.Contains(part)) return j.Key + " = " + j.F.ActiveStateName;
             return "?";
+        }
+
+        // ---------------------------------------------------------------- usine : journal et essai
+        static float nextUsineLog;
+
+        // Une ligne par automate de l'usine : etat courant et variables (hors UT*), pour le journal [Test] JournalUsine et l'essai.
+        static List<string> FactoryDump()
+        {
+            var lines = new List<string>();
+            foreach (string path in new[] { FactoryPath, FactoryPath + "/OpeningTimes/LOD1/JOB" })
+            {
+                GameObject go = Game.FindAny(path);
+                if (go == null) { lines.Add(path + " introuvable"); continue; }
+                foreach (PlayMakerFSM f in go.GetComponents<PlayMakerFSM>())
+                {
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append(go.name).Append("::").Append(f.FsmName).Append(" [").Append(f.ActiveStateName ?? "?").Append(f.enabled && go.activeInHierarchy ? "" : ", arrete").Append("]");
+                    try
+                    {
+                        FsmVariables v = f.FsmVariables;
+                        foreach (FsmInt x in v.IntVariables) if (!Skip(x.Name)) sb.Append(' ').Append(x.Name).Append('=').Append(x.Value);
+                        foreach (FsmFloat x in v.FloatVariables) if (!Skip(x.Name)) sb.Append(' ').Append(x.Name).Append('=').Append(x.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+                        foreach (FsmBool x in v.BoolVariables) if (!Skip(x.Name)) sb.Append(' ').Append(x.Name).Append('=').Append(x.Value ? "oui" : "non");
+                    }
+                    catch (System.Exception e) { sb.Append(" (variables illisibles : ").Append(e.GetType().Name).Append(')'); }
+                    lines.Add(sb.ToString());
+                }
+            }
+            return lines;
+        }
+
+        // Compteurs de travail de ce joueur (FactoryOwn de JOBS/FACTORY::PlayerData), sur une ligne.
+        static string FactoryOwnLine(PlayMakerFSM f)
+        {
+            var sb = new System.Text.StringBuilder();
+            FsmVariables v = f.FsmVariables;
+            foreach (string n in FactoryOwn)
+            {
+                FsmInt vi = v.FindFsmInt(n); FsmFloat vf = v.FindFsmFloat(n); FsmBool vb = v.FindFsmBool(n);
+                if (vi == null && vf == null && vb == null) continue;
+                sb.Append(sb.Length > 0 ? " " : "").Append(n).Append('=').Append(vi != null ? vi.Value.ToString() : vf != null ? vf.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : vb.Value ? "oui" : "non");
+            }
+            return sb.ToString();
+        }
+
+        // [Test] Autotest=usine (voir Autotest) : phase 0, l'hote gonfle ses compteurs (WorkMinutesAlltime +123, WorkMinutesDayF +45,
+        // DaysPassed +1, Paychecks +1) et envoie son automate comme un changement ordinaire (etat courant -AUTOTEST-> etat courant,
+        // variables jointes : les compteurs n'y sont pas) ; phase 1 : les compteurs d'ici (invite : inchanges attendus, et
+        // « quete de #1 : JOBS/FACTORY::PlayerData#0 -> ... » au journal). Les deux dans le meme etat (employes, « Work ON »),
+        // sinon le recalage direct deplace l'invite sur l'etat de l'hote (comme pour tout boulot).
+        public static string TestUsine(int phase)
+        {
+            Job j = null;
+            foreach (Job x in jobs.Values) if (x.F != null && IsFactoryData(x.F)) { j = x; break; }
+            if (j == null) return "JOBS/FACTORY::PlayerData pas suivi ici (" + jobs.Count + " automates)";
+            FsmVariables v = j.F.FsmVariables;
+            if (phase == 0)
+            {
+                FsmFloat a = v.FindFsmFloat("WorkMinutesAlltime"), d = v.FindFsmFloat("WorkMinutesDayF");
+                FsmInt dp = v.FindFsmInt("DaysPassed"), pc = v.FindFsmInt("Paychecks");
+                if (a != null) a.Value += 123f;
+                if (d != null) d.Value += 45f;
+                if (dp != null) dp.Value += 1;
+                if (pc != null) pc.Value += 1;
+                string st = j.F.ActiveStateName ?? "";
+                var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str(j.Key).Str(st).Str("AUTOTEST").Str(st);
+                WriteVars(j.F, w);
+                Session.SendAll(w, true);
+                return "hote, compteurs gonfles et automate envoye (" + st + " -AUTOTEST-> " + st + ", " + w.ToArray().Length + " octets) : " + FactoryOwnLine(j.F);
+            }
+            return "etat " + j.F.ActiveStateName + " : " + FactoryOwnLine(j.F);
         }
 
         // ================================================================ bois de chauffage

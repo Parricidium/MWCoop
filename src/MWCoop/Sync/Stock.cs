@@ -136,6 +136,9 @@ namespace MWCoop
             nextCheck = now + 0.5f;
             bool fullRound = now >= nextFull;
             if (fullRound) nextFull = now + 60f;   // (marque AVANT l'envoi : un envoi rate ne doit pas etre retente a chaque tour)
+            // Meme tour complet pour les vendeurs du rallye (boutons de pieces vendus, saucisse en attente au kiosque : Shop) --
+            // un arrivant les recoit dans la minute, comme les tables 'Bought'.
+            if (fullRound && Session.IsHost) Shop.SendSellers("tour complet");
             foreach (Store s in stores.Values)
             {
                 Hashtable stocked = s.Stocked, carried = s.Carried;

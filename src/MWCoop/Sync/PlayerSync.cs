@@ -261,6 +261,8 @@ namespace MWCoop
                     WorldFsms.ScheduleSnapshot(from);
                     CarDoors.ScheduleSnapshot(from);
                     Garage.ScheduleSnapshot(from);   // (relecture du 15/10 : crics, pont, chargeur, degats)
+                    Knobs.ScheduleSnapshot(from);    // (relecture du 15/10, ecart n17 : boutons des voitures garees -- phares, essuie-glaces -- et commandes tenues)
+                    Shop.SendSellers("arrivee de #" + from.Id);   // (ecart n14 : boutons du vendeur du rallye vendus, saucisse en attente au kiosque)
                     Props.ScheduleSnapshot();
                     TaxiCustomer.ScheduleSnapshot(from);
                     ModMachtwagen300D.ScheduleSnapshot();   // (revue du 14/10 : equipements de la 300D et bagages du taxi

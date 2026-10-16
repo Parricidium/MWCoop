@@ -467,10 +467,11 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             IceRace.Test(mode, t);
-            if ((mode != "rallye" && mode != "glace" && mode != "glace2" && mode != "rallye3") || !built) return;
+            bool ice = mode == "glace" || mode == "glace2" || mode == "glace3";   // (glace2/3 : meme semaine, pilotes humains -- IceRace.Test)
+            if ((mode != "rallye" && !ice && mode != "rallye3") || !built) return;
             // [Test] Autotest=glace : semaine de la course sur glace (GlobalWeeksPassed impair, RACES 'SwapDates' WAKEUP),
             // vendredi 10 h (essais libres : le jeu lance des voitures IA au hasard sur la piste).
-            if (Session.IsHost && testStep == 0 && t > 20f && (mode == "glace" || mode == "glace2"))   // (glace2 : meme semaine, pilotes humains -- IceRace.Test)
+            if (Session.IsHost && testStep == 0 && t > 20f && ice)
             {
                 testStep = 1;
                 FsmInt wk = FsmVariables.GlobalVariables.FindFsmInt("GlobalWeeksPassed");
@@ -496,7 +497,7 @@ namespace MWCoop
             if (t < 25f || sec % 5 != 0 || sec == testSec) return;
             testSec = sec;
             var sb = new System.Text.StringBuilder("autotest : " + mode + " " + System.DateTime.Now.ToString("mm:ss") + " :");
-            if (mode == "glace2") return;   // (releve par IceRace.Test)
+            if (mode == "glace2" || mode == "glace3") return;   // (releve par IceRace.Test)
             if (mode != "glace")
             {
                 PlayMakerFSM reset = Game.FindFsm("RACES/RALLY", "Reset");

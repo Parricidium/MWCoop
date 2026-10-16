@@ -534,6 +534,8 @@ namespace MWCoop
             { " registered for the ice race", " записался на гонку по льду" },
             { "Ice race: ", "Гонка на льду: " },
             { "Gift returned (player left): ", "Подарок возвращён (игрок вышел): " },
+            { " bought at the sausage kiosk", " купил(а) в киоске с сосисками" },
+            { " bought a part from the rally parts seller", " купил(а) деталь у продавца запчастей ралли" },
         };
     }
 }
