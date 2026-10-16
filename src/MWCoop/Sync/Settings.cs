@@ -12,8 +12,11 @@ namespace MWCoop
     // transition globale ADJUST, la declenchent pour que l'effet soit recalcule.
     public static class Settings
     {
+        // TierodLeft/RightSetting : parallelisme, sur le Data de la cremaillere (sa vis de reglage ajoute +-0,05 et envoie
+        // ADJUSTMENT, mais seulement avec la cle a cliquet en main : rejouee chez l'invite elle ne faisait rien -- Vaydon, 16/10).
         static readonly string[] Names = { "Adjust1", "Adjust2", "Adjust3", "Adjust4", "Adjust5", "Adjust6", "Adjust7", "Adjust8",
-                                           "Setting", "SettingMixture", "AdjustmentF" };
+                                           "Setting", "SettingMixture", "AdjustmentF", "TierodLeftSetting", "TierodRightSetting" };
+        static bool anyRange;   // essais : sans la regle des 4 m
 
         class Watch { public string Id; public PlayMakerFSM Fsm; public FsmFloat Var; public float Last, NextSend; }
         static readonly List<Watch> watches = new List<Watch>();
@@ -37,7 +40,8 @@ namespace MWCoop
             foreach (Object o in Game.AllFsms())
             {
                 var f = (PlayMakerFSM)o; if (f == null) continue;
-                if (seen.Contains(f) || noPart.Contains(f) || f.hideFlags != HideFlags.None || f.FsmName == "Data" || f.FsmName == "Paint") continue;
+                if (seen.Contains(f) || noPart.Contains(f) || f.hideFlags != HideFlags.None || f.FsmName == "Paint") continue;
+                if (f.FsmName == "Data" && f.FsmVariables.FindFsmFloat("TierodLeftSetting") == null) continue;   // (Data : la cremaillere seule)
                 string id = PartIdOf(f.transform);
                 if (id.Length == 0) { noPart.Add(f); continue; }
                 seen.Add(f);
@@ -71,7 +75,7 @@ namespace MWCoop
             foreach (Watch w in watches)
             {
                 if (w.Fsm == null || Mathf.Abs(w.Var.Value - w.Last) < 1e-4f) continue;
-                if (now < w.NextSend || (w.Fsm.transform.position - player.position).sqrMagnitude > 16f) { w.Last = w.Var.Value; continue; }
+                if (now < w.NextSend || (!anyRange && (w.Fsm.transform.position - player.position).sqrMagnitude > 16f)) { w.Last = w.Var.Value; continue; }
                 w.Last = w.Var.Value;
                 w.NextSend = now + 0.5f;
                 Session.SendAll(new NetWriter(Msg.Setting).U8(Session.LocalId).Str(w.Id).Str(w.Fsm.FsmName).Str(w.Var.Name).F32(w.Var.Value), true);
@@ -92,10 +96,38 @@ namespace MWCoop
                 w.Last = value;
                 foreach (FsmTransition t in w.Fsm.Fsm.GlobalTransitions)
                     if (t.EventName == "ADJUST") { w.Fsm.SendEvent("ADJUST"); break; }
+                // Cremaillere montee (etat Bolted) : ADJUSTMENT borne la valeur et la passe a la voiture, qui tourne la roue (ToeFL/FR).
+                if (name.StartsWith("Tierod")) w.Fsm.SendEvent("ADJUSTMENT");
                 Log.Info("reglage " + id + " " + fsm + "." + name + " = " + value + " (joueur #" + who + ")");
                 return;
             }
             Log.Warn("reglage " + id + " " + fsm + "." + name + " introuvable ici");
+        }
+
+        // Essais : parallelisme -- la cremaillere montee : +0,5 sur la biellette gauche puis ADJUSTMENT (comme sa vis) si
+        // 'bump' ; etat (piece, voiture, angle de la roue).
+        public static string TestToe(bool bump)
+        {
+            anyRange = true;
+            PlayMakerFSM rack = null, any = null;
+            foreach (Object o in Game.AllFsms())
+            {
+                var f = (PlayMakerFSM)o;
+                if (f == null || f.FsmName != "Data" || f.FsmVariables.FindFsmFloat("TierodLeftSetting") == null || !f.gameObject.activeInHierarchy) continue;
+                if (f.transform.root.name.StartsWith("CORRIS")) { rack = f; break; }
+                if (any == null) any = f;
+            }
+            if (rack == null) rack = any;
+            if (rack == null) return "cremaillere introuvable";
+            FsmFloat v = rack.FsmVariables.GetFsmFloat("TierodLeftSetting");
+            if (bump) { v.Value += 0.5f; rack.SendEvent("ADJUSTMENT"); }
+            GameObject car = Game.FindAny("CORRIS/PhysicalAssemblies/FRONT/AxleFront/VINP_SteeringRack");
+            PlayMakerFSM cd = car != null ? Game.FsmOn(car, "Data") : null;
+            FsmFloat cv = cd != null ? cd.FsmVariables.FindFsmFloat("TieRodLeftSetting") : null;
+            GameObject toe = Game.FindAny("CORRIS/PhysicalAssemblies/FRONT/AxleFront/LinkFL/ToeFL");
+            return rack.gameObject.name + " (" + rack.ActiveStateName + ") TierodLeftSetting=" + v.Value.ToString("F2")
+                   + " ; voiture TieRodLeftSetting=" + (cv != null ? cv.Value.ToString("F2") : "?")
+                   + " ; ToeFL y=" + (toe != null ? toe.transform.localEulerAngles.y.ToString("F2") : "?") + " ; " + watches.Count + " reglages suivis";
         }
 
         // Essais : change le premier reglage suivi de la piece la plus proche du joueur.

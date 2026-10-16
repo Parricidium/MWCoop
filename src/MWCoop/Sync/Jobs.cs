@@ -115,6 +115,9 @@ namespace MWCoop
             if (!ControlFsms.Contains(f.FsmName) || CarDoors.Tracks(f)) return false;
             if (CarDoorsLike(f)) return false;                          // portieres, capots, hayons : CarDoors (meme pas encore vus)
             if (f.FsmName == "Screw" && Parts.IsBolt(f)) return false;   // vis des pieces : Parts
+            // Vis de reglage a la cle a cliquet (biellettes, soupapes) : leur transition ne fait rien sans la cle en main ;
+            // la valeur reglee passe par Settings (TierodLeft/RightSetting) et Fluids (soupapes).
+            if (f.FsmName == "Screw" && f.FsmVariables.FindFsmBool("PlayerHasRatchet") != null) return false;
             if (DoorDriven(f)) return false;   // suit les portieres rejouees
             string n = f.gameObject.name;
             // Raccord du tuyau de la GIFU ('Attach' : se raccroche au camion d'apres la main du joueur local, boucle
