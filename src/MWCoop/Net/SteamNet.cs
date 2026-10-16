@@ -90,7 +90,7 @@ namespace MWCoop.Net
             {
                 creating = true;
                 nextCreate = now + 10f;
-                crCreated.Set(SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, 8));
+                crCreated.Set(SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, Mathf.Clamp(Config.GetInt("Coop", "JoueursMax", 8), 2, 16)));   // (joueurs au plus choisis dans le salon du lanceur, lancement.ini)
                 Note = "creation du salon Steam";
                 Log.Info("steam : creation du salon");
             }

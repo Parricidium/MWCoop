@@ -27,7 +27,7 @@ namespace MWCoop
 
         static PlayerSync()
         {
-            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); Gestures.PlayerLeft(pi.Id); HandTools.PlayerLeft(pi.Id); Stock.PlayerLeft(pi.Id); CarDoors.PlayerLeft(pi.Id); Voice.PlayerLeft(pi.Id); };
+            Session.PlayerLeft += pi => { RemoveAvatar(pi.Id); Seats.PlayerLeft(pi.Id); Gestures.PlayerLeft(pi.Id); HandTools.PlayerLeft(pi.Id); Stock.PlayerLeft(pi.Id); CarDoors.PlayerLeft(pi.Id); Voice.PlayerLeft(pi.Id); resyncBy.Remove(pi.Id); };
         }
 
         public static bool InGame { get { return Game.LevelName == "GAME"; } }
@@ -36,6 +36,7 @@ namespace MWCoop
         {
             player = cam = null; crouchFsm = null; smokeFsm = null;
             controller = null;
+            resyncAt = -1f; resyncSince = -1f; resyncIn.Clear(); testStep = 0;
             foreach (Avatar a in avatars.Values) a.Destroy();
             avatars.Clear();
             Avatar.ResetTemplate();
@@ -251,24 +252,122 @@ namespace MWCoop
                     .Vec(st.Feet).Vec(st.Head).F32(st.Yaw).F32(st.Pitch).F32(st.Height).F32(st.Speed).U16(st.Flags).U8(st.Drink);
                 Session.Broadcast(w, false, id);
                 if (levelChanged) Session.SendRoster();
-                if (levelChanged && level == 1)
-                {
-                    // Arrive en jeu : etat des portes, liquides et objets consommes pendant son chargement.
-                    Interactions.ScheduleSnapshot(from);
-                    Fluids.ScheduleSnapshot(from);
-                    Consume.ScheduleSnapshot(from);
-                    ItemFsms.ScheduleSnapshot(from);   // (relecture du 15/10, ecart n2 : lampes, lanterne, chargeur...)
-                    WorldFsms.ScheduleSnapshot(from);
-                    CarDoors.ScheduleSnapshot(from);
-                    Garage.ScheduleSnapshot(from);   // (relecture du 15/10 : crics, pont, chargeur, degats)
-                    Knobs.ScheduleSnapshot(from);    // (relecture du 15/10, ecart n17 : boutons des voitures garees -- phares, essuie-glaces -- et commandes tenues)
-                    Shop.SendSellers("arrivee de #" + from.Id);   // (ecart n14 : boutons du vendeur du rallye vendus, saucisse en attente au kiosque)
-                    Props.ScheduleSnapshot();
-                    TaxiCustomer.ScheduleSnapshot(from);
-                    ModMachtwagen300D.ScheduleSnapshot();   // (revue du 14/10 : equipements de la 300D et bagages du taxi
-                    Jobs.LuggageResend();                   // jamais redits a celui qui arrive)
-                    Particles.ScheduleSnapshot(); CopySounds.ScheduleSnapshot();   // (tables des cles courtes)
-                }
+                // Arrive en jeu : etat complet (portes, liquides, objets consommes pendant son chargement...).
+                if (levelChanged && level == 1) SnapshotAll(from, "arrivee de #" + from.Id);
+            }
+        }
+
+        // ---------------------------------------------------------------- etat complet (arrivee, resynchronisation)
+        // Hote : tout ce qu'un invite recoit en arrivant en jeu -- chaque module l'envoie quelques secondes plus tard, le temps
+        // que ses objets soient releves chez l'arrivant. Aussi sur demande (@resync, bouton « Resynchroniser le monde » de
+        // l'onglet SYNCHRO du menu F10, 16/10) : un invite dont l'etat a derive sans bruit se recale sur celui de l'hote, qui
+        // seul fait foi (sa sauvegarde). Renvoie le nombre de modules sollicites.
+        // Pas ici : Fires, Cooking (25 s) et Frost (28 s) reperent eux-memes le passage en jeu (niveau 0 -> 1) ; Jonne (releve
+        // demande par l'invite), VehicleSync (table repondue aux cles de l'invite), Vin (table demandee par l'invite) ; et tout ce
+        // qui est redit periodiquement de toute facon (Garage, Knobs, Tow, CutterHitch, FuelPrices, Wear, SleepingBags, Machines,
+        // IceRace, Rally, Races, Radio, Ram). Les boulots (Jobs) ne partent qu'a leurs changements : l'arrivant les a par la
+        // sauvegarde ; un recalage en masse (SnapshotTo) toucherait des automates a horloge par joueur (paies) -- pas sans tri.
+        public static int SnapshotAll(Peer p, string why)
+        {
+            if (!Session.IsHost || p == null) return 0;
+            int k = 0;
+            Interactions.ScheduleSnapshot(p); k++;   // portes, interrupteurs, robinets... : booleens des automates suivis (12 s)
+            Fluids.ScheduleSnapshot(p); k++;         // niveaux de tous les liquides (20 s)
+            Consume.ScheduleSnapshot(p); k++;        // articles manges, bus, jetes ; contenu des boites (20 s)
+            ItemFsms.ScheduleSnapshot(p); k++;       // objets portables : lampes, lanterne, chargeur... (relecture du 15/10, ecart n2 ; 20 s)
+            WorldFsms.ScheduleSnapshot(p); k++;      // automates du monde : etat et variables (22 s)
+            CarDoors.ScheduleSnapshot(p); k++;       // portieres, capots, coffres, banquettes (20 s)
+            Garage.ScheduleSnapshot(p); k++;         // crics, pont, chargeur, degats : vitres, trains, toles (relecture du 15/10 ; 20 s)
+            Knobs.ScheduleSnapshot(p); k++;          // boutons des voitures garees -- phares, essuie-glaces -- et commandes tenues (ecart n17 ; 20 s)
+            TaxiCustomer.ScheduleSnapshot(p); k++;   // client du taxi : automates et apparence (20 s)
+            Fires.ScheduleSnapshot(p); Cooking.ScheduleSnapshot(p); Frost.ScheduleSnapshot(p); k += 3;   // feux, cuisson, givre (25-28 s, comme a l'arrivee)
+            Markers.ScheduleSnapshot(p); k++;        // marqueurs partages poses avant son arrivee (20 s)
+            // A tous les invites (pas de destinataire) : boutons du vendeur du rallye vendus et saucisse en attente au kiosque
+            // (ecart n14), pose des objets au repos, equipements de la 300D et bagages du taxi (revue du 14/10 : jamais redits a
+            // celui qui arrive), tables des cles courtes des particules et des sons.
+            Shop.SendSellers(why); k++;
+            Props.ScheduleSnapshot(); k++;
+            ModMachtwagen300D.ScheduleSnapshot(); k++;
+            Jobs.LuggageResend(); k++;
+            Particles.ScheduleSnapshot(); CopySounds.ScheduleSnapshot(); k += 2;
+            return k;
+        }
+
+        // ---------------------------------------------------------------- resynchronisation (menu F10, onglet SYNCHRO)
+        // Un invite redemande tout l'etat a l'hote (@resync, fiable) ; l'hote le lui renvoie comme a son arrivee. Chez l'hote,
+        // le bouton renvoie tout a chaque invite en jeu (invites soupconnes d'avoir derive). Une fois toutes les 30 s par
+        // joueur, des deux cotes.
+        const float ResyncEvery = 30f;
+        static float resyncAt = -1f;                                                     // derniere demande d'ici (hote : dernier renvoi)
+        static readonly Dictionary<int, float> resyncBy = new Dictionary<int, float>();  // hote : derniere demande de chaque invite
+        static float resyncSince = -1f;                                                  // invite : heure de la demande (essai)
+        static readonly Dictionary<Msg, int> resyncIn = new Dictionary<Msg, int>();      // invite : messages fiables recus depuis, par type
+
+        // Secondes a attendre avant de pouvoir redemander (0 : tout de suite).
+        public static float ResyncWait { get { return resyncAt < 0f ? 0f : Mathf.Max(0f, resyncAt + ResyncEvery - Time.realtimeSinceStartup); } }
+
+        // Bouton « Resynchroniser le monde » : vrai si c'est parti.
+        public static bool RequestResync()
+        {
+            if (!Session.Active || !InGame || ResyncWait > 0f) return false;
+            float now = Time.realtimeSinceStartup;
+            if (Session.IsHost)
+            {
+                int n = 0, k = 0;
+                foreach (PlayerInfo pi in Session.Players.Values)
+                    if (!pi.Local && pi.Level == 1 && pi.Peer != null) { k = SnapshotAll(pi.Peer, "resynchronisation par l'hote"); n++; }
+                if (n == 0) return false;
+                resyncAt = now;
+                Log.Info("resynchronisation : etat complet renvoye a " + n + " invite(s) (" + k + " modules)");
+                return true;
+            }
+            if (!Session.HostConnected) return false;
+            resyncAt = now; resyncSince = now; resyncIn.Clear();
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@resync"), true);
+            Log.Info("resynchronisation : demandee a l'hote");
+            return true;
+        }
+
+        // Hote : demande @resync d'un invite (Jobs.OnSpecial).
+        public static void OnResyncRequest(int who)
+        {
+            if (!Session.IsHost) return;
+            PlayerInfo pi;
+            if (!Session.Players.TryGetValue(who, out pi) || pi.Local || pi.Peer == null) return;
+            float now = Time.realtimeSinceStartup, last;
+            if (resyncBy.TryGetValue(who, out last) && now - last < ResyncEvery)
+            {
+                Log.Info("resynchronisation : demandee par #" + who + " (deja il y a " + (now - last).ToString("F0") + " s : ignoree)");
+                return;
+            }
+            resyncBy[who] = now;
+            Log.Info("resynchronisation : demandee par #" + who);
+            int k = SnapshotAll(pi.Peer, "resynchronisation demandee par #" + who);
+            Log.Info("resynchronisation : etat complet renvoye a #" + who + " (" + k + " modules)");
+        }
+
+        // Invite : message recu (a appeler de Session.Message, tous types) -- les fiables sont comptes pendant une
+        // resynchronisation, pour l'essai « resync ».
+        public static void NoteIncoming(Msg type)
+        {
+            if (resyncSince < 0f || !Session.InReliable) return;
+            int n; resyncIn.TryGetValue(type, out n); resyncIn[type] = n + 1;
+        }
+
+        // [Test] Autotest=resync : l'invite demande la resynchronisation a 30 s (comme le bouton ; l'hote repond dans son
+        // journal) ; a 45 s il note les messages fiables arrives depuis, par type (si Session.Message appelle NoteIncoming).
+        static int testStep;
+        public static void TestResync(float t)
+        {
+            if (Session.IsHost || !Session.Active) return;
+            if (testStep == 0 && t > 30f) { testStep = 1; Log.Info("autotest : resync, demande " + (RequestResync() ? "envoyee" : "refusee (attente " + ResyncWait.ToString("F0") + " s)")); }
+            if (testStep == 1 && t > 45f)
+            {
+                testStep = 2;
+                int total = 0;
+                var sb = new System.Text.StringBuilder();
+                foreach (var kv in resyncIn) { total += kv.Value; sb.Append(sb.Length > 0 ? ", " : "").Append(kv.Key).Append(' ').Append(kv.Value); }
+                Log.Info("autotest : resync, " + total + " message(s) fiable(s) recu(s) depuis la demande" + (total > 0 ? " : " + sb : " (rien compte : Session.Message n'appelle pas PlayerSync.NoteIncoming ?)"));
             }
         }
 

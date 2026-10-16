@@ -401,7 +401,7 @@ static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t 
         EnterCriticalSection(&g_lcs);
         int n = (int)g_peers.size();
         LeaveCriticalSection(&g_lcs);
-        wchar_t b[16]; swprintf_s(b, L"%d/%d", n, kLobbyMax);
+        wchar_t b[16]; swprintf_s(b, L"%d/%d", n, g_lobbyMax);
         float w = PillW(b, 10.5f);
         Pill(g, RectF(rx - w, r.Y + (r.Height - 20) / 2, w, 20), WithA(kOk, 0.2f), b, kOk, 10.5f);
     } else if (page == TAB_CAR) {
@@ -586,9 +586,10 @@ static void DrawHeader(Graphics &g)
         int n = (int)g_peers.size();
         LeaveCriticalSection(&g_lcs);
         wchar_t b[200];
-        if (g_lobbySteam) swprintf_s(b, T(L"Steam · amis seulement · %d / %d joueurs", L"Steam · friends only · %d / %d players"), n, kLobbyMax);
-        else if (host) swprintf_s(b, T(L"Port %d (UDP et TCP) · adresse locale %s · %d / %d", L"Port %d (UDP and TCP) · local address %s · %d / %d"), g_lobbyPort, g_myAddresses.empty() ? L"?" : g_myAddresses.c_str(), n, kLobbyMax);
-        else swprintf_s(b, T(L"Hôte : %s:%d · %d / %d joueurs", L"Host: %s:%d · %d / %d players"), g_lobbyAddr.c_str(), g_lobbyPort, n, kLobbyMax);
+        std::wstring mode = lobby == LB_CONNECTING ? std::wstring(L"…") : LobbyModeText();   // (Public, ou Prive et le code)
+        if (g_lobbySteam) swprintf_s(b, T(L"Steam · amis seulement · %s · %d / %d joueurs", L"Steam · friends only · %s · %d / %d players"), mode.c_str(), n, g_lobbyMax);
+        else if (host) swprintf_s(b, T(L"Port %d (UDP et TCP) · %s · %s · %d / %d", L"Port %d (UDP and TCP) · %s · %s · %d / %d"), g_lobbyPort, g_myAddresses.empty() ? L"?" : g_myAddresses.c_str(), mode.c_str(), n, g_lobbyMax);
+        else swprintf_s(b, T(L"Hôte : %s:%d · %s · %d / %d joueurs", L"Host: %s:%d · %s · %d / %d players"), g_lobbyAddr.c_str(), g_lobbyPort, mode.c_str(), n, g_lobbyMax);
         sub = b;
         break;
     }
@@ -733,11 +734,14 @@ static void DrawHome(Graphics &g)
     }
     RectF row(net.X + 20, net.Y + 126, net.Width - 40, 44);
     if (!g_steamNet) {
-        SmallLabel(g, T(L"ADRESSE DE L'HÔTE", L"HOST ADDRESS"), RectF(row.X, row.Y, 150, row.Height), kGrey);
-        g_fields[1].r = RectF(row.X + 156, row.Y, row.Width - 156, row.Height);
+        SmallLabel(g, T(L"ADRESSE DE L'HÔTE", L"HOST ADDRESS"), RectF(row.X, row.Y, 130, row.Height), kGrey);
+        g_fields[1].r = RectF(row.X + 134, row.Y, row.Width - 134 - 150, row.Height);
         DrawField(g, 1, L"");
+        SmallLabel(g, T(L"CODE", L"CODE"), RectF(row.X + row.Width - 142, row.Y, 40, row.Height), kGrey);   // (code de session d'un salon privé, 0.96.4)
+        g_fields[2].r = RectF(row.X + row.Width - 100, row.Y, 100, row.Height);
+        DrawField(g, 2, L"");
     } else {   // option de lancement Steam : pour qu'une invitation ouvre MWCoop
-        g_fields[1].r = RectF(0, 0, 0, 0);
+        g_fields[1].r = g_fields[2].r = RectF(0, 0, 0, 0);
         bool hot = g_uiHot == UI_HOME_STEAMOPT;
         GraphicsPath p; RoundRect(p, row, 12);
         SolidBrush fb(WithA(kAcc, hot ? 0.18f : 0.10f)); g.FillPath(&fb, &p);
@@ -797,7 +801,9 @@ static void DrawHome(Graphics &g)
             else d = g_steamNet ? T(L"Ton invitation Steam, sinon le salon MWCoop d'un ami.", L"Your Steam invite, or else a friend's MWCoop lobby.")
                                 : T(L"Le salon de l'adresse saisie au-dessus.", L"The lobby at the address entered above.");
             Para(g, d, RectF(r.X + 22, r.Y + 112, r.Width - 44, 44), 13, host ? WithA(kOnAcc, 0.78f * a) : WithA(kGrey, a));
-            Text(g, host ? std::wstring(T(L"Jusqu'à 8 joueurs", L"Up to 8 players")) + L" \u00B7 " + SaveCurrentName() : std::wstring(T(L"Salon d'un ami", L"A friend's lobby")), RectF(r.X + 22, r.Y + r.Height - 40, r.Width - 80, 24), 12.5f, FontStyleBold, host ? WithA(kOnAcc, a) : WithA(kInk, 0.8f * a), StringAlignmentNear);
+            wchar_t upto[48];   // (joueurs au plus : choix du salon, [Lanceur] SalonMax)
+            swprintf_s(upto, T(L"Jusqu'à %d joueurs", L"Up to %d players"), max(2, min(kLobbyMaxAbs, (int)GetPrivateProfileIntW(L"Lanceur", L"SalonMax", 8, g_iniLauncher.c_str()))));
+            Text(g, host ? std::wstring(upto) + L" \u00B7 " + SaveCurrentName() : std::wstring(T(L"Salon d'un ami", L"A friend's lobby")), RectF(r.X + 22, r.Y + r.Height - 40, r.Width - 80, 24), 12.5f, FontStyleBold, host ? WithA(kOnAcc, a) : WithA(kInk, 0.8f * a), StringAlignmentNear);
             Icon(g, IC_CHEVR, r.X + r.Width - 34, r.Y + r.Height - 28, 20, acc, 2.4f);
             if (!host && g_steamNet && g_sInvite) { SolidBrush dot(kOk); g.FillEllipse(&dot, r.X + r.Width - 34, r.Y + 22, 12.0f, 12.0f); }
         }
@@ -1495,6 +1501,7 @@ static void DrawUI(Graphics &g)
 // Clic sur une zone (UI_*). Vrai si traite.
 static void SteamGuideOpen();
 static void LobbyOptsClick(int id);
+static void LobbyOptClick(int id);   // (cartes du bas du salon : code, public / prive, joueurs max, options)
 static bool UiClick(int id)
 {
     if (id == UI_NONE) return true;
@@ -1599,6 +1606,7 @@ static bool UiClick(int id)
     if (id >= UI_CRED_TAB && id < UI_CRED_TAB + 3) { g_credTab = id - UI_CRED_TAB; g_scroll[TAB_CREDITS] = 0; return true; }
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
+    if (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 100) { LobbyOptClick(id); return true; }
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
     if (id >= UI_VHS_OPEN && id < UI_ALB_OPEN) { VhsClick(id); return true; }   // (media.inc)

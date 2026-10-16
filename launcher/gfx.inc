@@ -5,7 +5,7 @@
 // plus ; prereglages Performance / Equilibre / Beau / Ultra en un clic.
 // ---- touches en jeu (Options du jeu > Touches) : section [Touches] de mwcoop.ini, noms des KeyCode de Unity
 struct GameKey { const char *ini, *def; const wchar_t *fr, *en; const char *defAz = nullptr; };   // defAz : clavier AZERTY
-static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "PorteMonnaie", "N", L"Argent", L"Wallet" }, { "Vocal", "V", L"Vocal", L"Voice" }, { "Triches", "F7", L"Triches", L"Cheats" }, { "Carte", "M", L"Carte", L"Map" }, { "Vue", "F5", L"Vue", L"View" },
+static const GameKey kGameKeys[] = { { "Tchat", "T", L"Tchat", L"Chat" }, { "PorteMonnaie", "N", L"Argent", L"Wallet" }, { "Vocal", "V", L"Vocal", L"Voice" }, { "Triches", "F7", L"Triches", L"Cheats" }, { "Carte", "M", L"Carte", L"Map" }, { "Vue", "F5", L"Vue", L"View" }, { "Marqueur", "Mouse2", L"Marqueur", L"Marker" },
     // Camera drone (mode photo, demande de JD, 11/10) : categorie Camera drone ; memes noms et defauts que MWCoop\UI\Keys.cs.
     { "Drone", "F8", L"Drone", L"Drone" }, { "DroneAvant", "W", L"Avancer", L"Forward", "Z" }, { "DroneArriere", "S", L"Reculer", L"Back" },
     { "DroneGauche", "A", L"Gauche", L"Left", "Q" }, { "DroneDroite", "D", L"Droite", L"Right" }, { "DroneMonter", "Space", L"Monter", L"Up" },
@@ -187,6 +187,11 @@ static const std::vector<GfxRow> &GfxRows()
         { "Renverser", L"Les voitures renversent les joueurs (amis, PNJ)", L"Cars run players over (friends, NPCs)", 1, {}, {}, {}, 0, 8, "Coop" },
         // (suggestion de квазарик, 13/10 : « tuer les autres a coups de poing, option de l'hote ») -- Sync/Pvp.cs
         { "PvP", L"Coups de poing entre joueurs (hôte)", L"Punches between players (host)", 0, {}, {}, {}, 0, 8, "Coop" },
+        { "Jokkis", L"Course sur glace : Jokkis à louer (hôte, bêta)", L"Ice race: Jokkis rentals (host, beta)", 0, {}, {}, {}, 0, 8, "Coop" },   // (Sync/Jokkis.cs : les joueurs sans la Rivett courent dans une des 16 Jokkis du jeu ; en essai)
+        // Ventti (16/10, lu par l'HOTE seulement) : au-dela de 4000 mk le cochon joue la Ruscko, la Rivett ou la maison ; gagnees ou
+        // perdues par un joueur, elles le sont pour tout le monde (c'est la sauvegarde de l'hote). 0 : chacun ses enjeux. La table
+        // renversee par le cochon fache est toujours partagee. (La table n'a pas de texte d'aide : ce commentaire en tient lieu.)
+        { "VenttiEnjeux", L"Ventti : voiture et maison jouées pour tout le groupe", L"Ventti: car and house stakes apply to the whole group", 1, {}, {}, {}, 0, 8, "Coop" },
         // Un seul interrupteur pour tout ce que MWCoop ajoute au jeu (demande de Menor, 12/10 : « un jeu 100 % vanilla » ;
         // JD : un bouton pour tous les ajouts, presents et a venir -- Sync/Ajouts.cs).
         { "SansAjouts", L"Tout désactiver (jeu vanilla)", L"Disable them all (vanilla game)", 0, {}, {}, {}, 0, 15, "Coop" },
@@ -201,6 +206,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "Touche:Triches", L"Panneau des triches", L"Cheat panel", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Carte", L"Carte (joueurs en direct)", L"Map (live players)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Vue", L"Vue à la 3e personne (à pied, en véhicule)", L"Third-person view (on foot, in vehicles)", 0, {}, {}, {}, 0, 9, "Touches" },
+        { "Touche:Marqueur", L"Marqueur partagé (court : poser, tenu : retirer)", L"Shared marker (tap: place, hold: remove)", 0, {}, {}, {}, 0, 9, "Touches" },
         // Camera drone (13) : une pastille par action.
         { "Touche:Drone", L"Passer en drone / revenir (mode photo)", L"Drone on / off (photo mode)", 0, {}, {}, {}, 0, 13, "Touches" },
         { "Touche:DronePhoto", L"Prendre la photo", L"Take the photo", 0, {}, {}, {}, 0, 13, "Touches" },
@@ -218,6 +224,7 @@ static const std::vector<GfxRow> &GfxRows()
         { "Touche:DroneRecentrer", L"Recentrer (penché et zoom)", L"Reset (tilt and zoom)", 0, {}, {}, {}, 0, 13, "Touches" },
         { "Touche:DroneGrille", L"Grille du viseur", L"Viewfinder grid", 0, {}, {}, {}, 0, 13, "Touches" },
         { "Touche:DroneInterface", L"Cacher le viseur", L"Hide the viewfinder", 0, {}, {}, {}, 0, 13, "Touches" },
+        { "Marqueurs", L"Voir les marqueurs des autres", L"See others' markers", 1, {}, {}, {}, 0, 9, "Coop" },   // (marqueur partage, une couleur par joueur : Sync/Markers.cs)
         { "CarteMaintenir", L"Carte : appuyer ou maintenir", L"Map: press or hold", 0, { 0, 1 }, { L"Appuyer", L"Maintenir" }, { L"Press", L"Hold" }, 0, 9, "Coop" },   // (appuyer : ouvre / ferme ; maintenir : tant que la touche est tenue)
     };
     // Ecran (comme les GTA, a la place de la petite fenetre Unity) : resolutions de l'ecran principal (Windows),

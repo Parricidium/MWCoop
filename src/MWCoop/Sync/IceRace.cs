@@ -43,6 +43,27 @@ namespace MWCoop
     //    (places fusionnees), le classe (manche la plus avancee, place, tour) et le renvoie a tous ;
     //  - invite : sa participation est gardee par monde (glace.ini, comme rallye.ini) ; la sauvegarde recue a chaque
     //    connexion contient celle de l'hote, remplacee par la sienne (ou effacee) au chargement.
+    // Locations Jokkis (16/10, module Jokkis : voitures de location conduisibles) : un joueur qui loue une voiture court avec
+    // le numero de CETTE voiture (p. ex. 33) et sa livree ; l'IA de ce numero ne court pas de la semaine :
+    //  - numeros : Jokkis.ChosenNumber(id) = n > 0 remplace la case 15-43 (hote compris : lui n'est alors plus la 14, son
+    //    numero voyage dans K_GRID comme celui des invites, identifiant 0) ; chez le locataire pas d'echange 14/N (son
+    //    numero est reel) ; la table de l'hote met son tour a la cle n (le tirage de l'IA n est garde et rendu a la
+    //    liberation, Jokkis.Changed) ; la 14 est retiree de la table si l'hote loue ;
+    //  - voiture : Cars[n] = la racine de la location (Jokkis.CarOf) chez tous, avec les memes automates legers que les
+    //    doublures si elle n'en a pas ('Throttle'.Navigation -> 'Navigation'.StartPositionID, DB 'SkinChange') ; la
+    //    voiture IA du jeu sort aussi d'AllCars (essais du vendredi) ; le RaceTrigger du jeu sous son DB, s'il y en a un,
+    //    est coupe (comptage ci-dessous) ; le tout rendu a la liberation ;
+    //  - grille : 'Create grid' pose StartPositionID sur la location comme sur une IA ; le locataire (autorite de sa
+    //    voiture) la teleporte alors sur sa voie (Gridding[voie] : TrackFunctions/StartPos<voie>, cap vers DragPoint1),
+    //    les autres la voient par VehicleSync ;
+    //  - tours : le RaceTrigger du jeu (CORRIS/DB) ne compte que la 14 ; pour une location le module suit la position de
+    //    la voiture et les boites des lignes de la piste (Checkpoint1, Checkpoint2, StartFinishLaps/StartFinishTime :
+    //    MeshCollider, evenements LAP/TIME du jeu aux colliders 'StagingWheel') : un tour = Checkpoint1 puis Checkpoint2
+    //    puis la ligne ; vendredi (StartFinishTime allume) meilleur tour -> LapTimes[n] ; en manche (StartFinishLaps)
+    //    RaceDistance tours -> arrivee : n ajoute a ResultsNumbers, DB a ResultsCars et FINISHRACE diffuse, comme
+    //    RaceTrigger 'State 2' ; l'hote fusionne comme pour la 14 (K_FINISH) ;
+    //  - inscription : LINEUPS 'State 4' (autocollants, CORRIS/DB, Cars[14] = CORRIS) est reduit a PlayerRegistered pour
+    //    un locataire ; podium ('Get pos' compare a "14") : son numero est mis en 14 le temps de l'etat.
     // [Coop] CourseGlace=0 coupe tout le module (vrai jeu : si cela se comporte mal).
     public static class IceRace
     {
@@ -86,6 +107,22 @@ namespace MWCoop
         static readonly HashSet<string> seen = new HashSet<string>();
         static int arrivalsHeat = -1, arrivalsWeek = -1;
         static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+        // Locations Jokkis (16/10)
+        static bool myRental;                       // le joueur d'ici court dans une location : numero reel, pas d'echange 14/N
+        static bool hookedTrack, jokkisHooked, rentalsDirty, placeAnyState, linesWarned, slotWarned, testNoBroadcast;
+        static float nextRentals, nextLineLog;
+        static readonly Dictionary<string, float> aiSaved = new Dictionary<string, float>();       // hote : tour IA remplace par un locataire
+        static readonly Dictionary<int, GameObject> carsOrig = new Dictionary<int, GameObject>();  // Cars[n] du jeu remplace par une location
+        static readonly Dictionary<int, GameObject> aiHidden = new Dictionary<int, GameObject>();  // voiture IA sortie d'AllCars
+        static ArrayList allCars;
+        static readonly List<FsmStateAction> muted = new List<FsmStateAction>();   // LINEUPS 'State 4' : actions coupees pour un locataire
+        static int mutedFrame = -1, prizeIdx = -1, prizeFrame = -1;
+        // location d'ici : lignes de la piste (0 Checkpoint1, 1 Checkpoint2, 2 depart/arrivee), tours, arrivee
+        static Bounds[] lines; static readonly bool[] inside = new bool[3];
+        static GameObject lineLaps, lineTime;
+        static Vector3 lastCarPos; static bool hasLast, cp1, cp2, timing, finished;
+        static float lapStart, bestLap;
+        static int laps; static string lapsKey = "", placedKey = "";
 
         public static void OnLevelLoaded()
         {
@@ -94,6 +131,11 @@ namespace MWCoop
             humans.Clear(); numbers.Clear(); numbersByName.Clear(); hostLaps.Clear(); hostLists.Clear(); hostResults = null; standIns.Clear();
             arrivals.Clear(); seen.Clear(); arrivalsHeat = arrivalsWeek = -1;
             boardWeek = localWeek = -1; lastHeat = -1; lastPos = 0; myNum = 0; hostHeat = -1; hostRacing = false;
+            myRental = hookedTrack = rentalsDirty = placeAnyState = linesWarned = slotWarned = testNoBroadcast = false;
+            aiSaved.Clear(); carsOrig.Clear(); aiHidden.Clear(); allCars = null; muted.Clear(); mutedFrame = prizeIdx = prizeFrame = -1;
+            lines = null; lineLaps = lineTime = null; hasLast = cp1 = cp2 = timing = finished = false; bestLap = 0f; laps = 0; lapsKey = placedKey = "";
+            testStep = 0;
+            if (!jokkisHooked) { jokkisHooked = true; try { Jokkis.Changed += OnJokkisChanged; } catch (System.Exception e) { Log.Warn("glace : module Jokkis : " + e.Message); } }
             enabled = Config.GetInt("Coop", "CourseGlace", 1) != 0;
             readyAt = PlayerSync.InGame && enabled ? Time.realtimeSinceStartup + 10f : -1;
             if (PlayerSync.InGame && !enabled) Log.Info("glace : module coupe ([Coop] CourseGlace=0)");
@@ -102,13 +144,14 @@ namespace MWCoop
         class Hook : ModHook
         {
             public override string Module { get { return "courses"; } }
-            public int Kind;   // 0 tirage des essais fait (apres 'Set result'), 2 inscription
+            public int Kind;   // 0 tirage des essais fait (apres 'Set result'), 2 inscription, 3 podium ('Get pos')
             public override void OnEnter()
             {
                 try
                 {
-                    if (Kind == 2) OnRegistered();
-                    else { ApplyHostLaps(true); nextTable = 0; }
+                    if (Kind == 2) { if (RentalNumber(Session.LocalId) > 0) MuteState(State, this); OnRegistered(); }
+                    else if (Kind == 3) PrizeSwap();
+                    else { ApplyHostLaps(true); FixMyLap(); nextTable = 0; }
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
@@ -130,7 +173,9 @@ namespace MWCoop
                 if (l == null || string.IsNullOrEmpty(l.ActiveStateName)) return false;
                 GameObject tf = Game.FindAny("RACES/ICERACE/TrackFunctions");
                 track = tf != null ? Game.FsmOn(tf, "Data") : null;
-                if (tf != null) foreach (PlayMakerArrayListProxy p in tf.GetComponents<PlayMakerArrayListProxy>()) if (p.referenceName == "Cars") carsList = p.arrayList;
+                if (tf != null) foreach (PlayMakerArrayListProxy p in tf.GetComponents<PlayMakerArrayListProxy>()) { if (p.referenceName == "Cars") carsList = p.arrayList; if (p.referenceName == "AllCars") allCars = p.arrayList; }
+                if (tf != null) FindLines(tf);
+                if (track != null && !hookedTrack) { hookedTrack = true; Inject(track, "Get pos", 3); }
                 foreach (PlayMakerArrayListProxy p in go.GetComponents<PlayMakerArrayListProxy>()) if (System.Array.IndexOf(HeatLists, p.referenceName) >= 0) heatLists[p.referenceName] = p.arrayList;
                 if (track == null) Log.Warn("course glace : automate RACES/ICERACE/TrackFunctions 'Data' introuvable : manches pas suivies");
                 if (heatLists.Count < HeatLists.Length) Log.Warn("course glace : listes de manches de LINEUPS incompletes (" + heatLists.Count + "/" + HeatLists.Length + ")");
@@ -171,11 +216,15 @@ namespace MWCoop
         static string HeatName(int h) { return h >= 0 && h < HeatNames.Length ? HeatNames[h] : "?"; }
         static bool IsRacing(string state) { return System.Array.IndexOf(RacingStates, state) >= 0; }
 
+        // Cle de la voiture du joueur d'ici dans la table LapTimes et les listes : "14" (CORRIS), ou son numero s'il loue.
+        static string MyKey() { return myRental && myNum != 0 ? myNum.ToString() : ME; }
+
         // Meilleur tour d'essai du joueur d'ici (0 : aucun ; 999 est la valeur du jeu pour "pas de tour").
         static float MyLap()
         {
-            if (lapTimes == null || !lapTimes.ContainsKey(ME)) return 0f;
-            float v = ToF(lapTimes[ME]);
+            string k = MyKey();
+            if (lapTimes == null || !lapTimes.ContainsKey(k)) return 0f;
+            float v = ToF(lapTimes[k]);
             return v > 0f && v < 900f ? v : 0f;
         }
 
@@ -197,17 +246,124 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- numeros : canonique (hote) <-> local (ici)
         // L'hote est 14 chez lui et pour tous ; un invite de numero N est 14 chez lui : chez lui, 14 et N sont echanges.
-        static int LocalNum(int canon) { return myNum == 0 ? canon : canon == 14 ? myNum : canon == myNum ? 14 : canon; }
+        // Un locataire (location Jokkis) court avec son vrai numero partout : rien d'echange.
+        static int LocalNum(int canon) { return myNum == 0 || myRental ? canon : canon == 14 ? myNum : canon == myNum ? 14 : canon; }
         static string Local(string canon) { int n; return int.TryParse(canon, out n) ? LocalNum(n).ToString() : canon; }
         static string Canon(string local) { return Local(local); }   // (echange : la meme fonction)
 
-        // Joueur dont c'est le numero canonique (-1 : voiture IA ou inconnu).
+        // Joueur dont c'est le numero canonique (-1 : voiture IA ou inconnu). La 14 est l'hote, sauf s'il loue (numbers[0]).
         static int IdOfNumber(string canon)
         {
-            if (canon == ME) return 0;
             int n; if (!int.TryParse(canon, out n)) return -1;
             foreach (KeyValuePair<int, int> kv in numbers) if (kv.Value == n) return kv.Key;
-            return -1;
+            return n == 14 && !numbers.ContainsKey(0) ? 0 : -1;
+        }
+
+        // ---------------------------------------------------------------- locations Jokkis
+        // Numero et voiture loues par un joueur (0 / null : aucun). [Test] GlaceJokkis=n : l'invite 1 est repute louer la
+        // voiture n (racine factice MWCoop-Jokkis-<n>) -- essai glace4 sans le module Jokkis.
+        static int RentalNumber(int id)
+        {
+            int t = Config.Testing && id == 1 ? Config.GetInt("Test", "GlaceJokkis", 0) : 0;
+            if (t > 0) return t;
+            try { return Jokkis.ChosenNumber(id); } catch { return 0; }
+        }
+
+        static Transform RentalCar(int id)
+        {
+            int t = Config.Testing && id == 1 ? Config.GetInt("Test", "GlaceJokkis", 0) : 0;
+            if (t > 0)
+            {
+                GameObject go = GameObject.Find("MWCoop-Jokkis-" + t);
+                if (go == null) { go = new GameObject("MWCoop-Jokkis-" + t); go.transform.position = new Vector3(-1150f, -4.5f, 900f); go.AddComponent<Rigidbody>().isKinematic = true; }
+                return go.transform;
+            }
+            try { return Jokkis.CarOf(id); } catch { return null; }
+        }
+
+        static string RentalModel(int n)
+        {
+            if (Config.Testing && n == Config.GetInt("Test", "GlaceJokkis", 0)) return "Fittan";
+            try { foreach (Jokkis.Def d in Jokkis.All()) if (d.Number == n) return d.Model ?? "-"; } catch { }
+            return "-";
+        }
+
+        static void OnJokkisChanged() { rentalsDirty = true; }
+
+        // Numeros des locataires (hote : numbers, identifiant 0 pour lui-meme) et situation d'ici (myNum/myRental) ; a
+        // chaque changement du module Jokkis et toutes les 2 s. Hote : un locataire garde son numero de voiture ; une
+        // location rendue en cours de semaine redonne une case 15-43 (AssignNumber), l'IA revient (HostSyncTable).
+        static void RefreshRentals()
+        {
+            if (Session.IsHost)
+            {
+                var ids = new List<int>(humans.Keys);
+                foreach (int id in ids)
+                {
+                    Human h = humans[id];
+                    int rn = h.Registered ? RentalNumber(id) : 0, cur;
+                    numbers.TryGetValue(id, out cur);
+                    if (rn > 0 && cur != rn)
+                    {
+                        numbers[id] = rn;
+                        Log.Info("glace : " + h.Name + " court avec sa location n " + rn + (cur != 0 ? " (etait " + cur + ")" : ""));
+                        Hud.Toast(h.Name + Lang.T(" : voiture n° ", ": car no. ") + rn);
+                        nextTable = 0; nextGrid = 0; lastGridLog = "";
+                    }
+                    else if (rn == 0 && cur != 0 && !numbersByName.ContainsValue(cur))
+                    {
+                        // location rendue : l'IA reprend son numero, le joueur une case libre (ou aucune : l'hote en CORRIS)
+                        numbers.Remove(id);
+                        Log.Info("glace : " + h.Name + " a rendu la location n " + cur);
+                        if (id != 0 && h.Registered) AssignNumber(h);
+                        nextTable = 0; nextGrid = 0; lastGridLog = "";
+                    }
+                }
+                int mine; numbers.TryGetValue(0, out mine);
+                if (mine != myNum) { myNum = mine; lastGridLog = ""; }
+            }
+            bool r = myNum != 0 && RentalNumber(Session.LocalId) == myNum;
+            if (r == myRental) return;
+            myRental = r;
+            lastReport = ""; lastGridLog = ""; nextTable = 0;
+            Log.Info("glace : " + (myRental ? "je cours avec ma location n " + myNum + " (numero reel, rien d'echange)" : "plus de location : " + (myNum != 0 ? "14 ici, " + myNum + " chez l'hote" : "voiture 14")));
+        }
+
+        // LINEUPS 'State 4' pour un locataire : seul PlayerRegistered compte (pas d'autocollants ni de CORRIS/DB, Cars[14]
+        // reste 'Reserved') ; les autres actions de l'etat sont coupees le temps de l'etat, rendues a l'image suivante.
+        static void MuteState(FsmState s, FsmStateAction hook)
+        {
+            if (s == null) return;
+            FsmBool reg = lineups != null ? lineups.FsmVariables.FindFsmBool("PlayerRegistered") : null;
+            if (reg != null) reg.Value = true;
+            foreach (FsmStateAction a in s.Actions) if (a != null && a != hook && a.Enabled) { a.Enabled = false; muted.Add(a); }
+            mutedFrame = Time.frameCount;
+            Log.Info("glace : inscription en location : " + s.Name + " reduit a PlayerRegistered (" + muted.Count + " actions sautees)");
+        }
+
+        static void Unmute()
+        {
+            if (muted.Count > 0 && Time.frameCount > mutedFrame) { foreach (FsmStateAction a in muted) a.Enabled = true; muted.Clear(); }
+            if (prizeIdx >= 0 && Time.frameCount > prizeFrame)
+            {
+                if (resultsNumbers != null && prizeIdx < resultsNumbers.Count && resultsNumbers[prizeIdx] != null && resultsNumbers[prizeIdx].ToString() == ME) resultsNumbers[prizeIdx] = MyKey();
+                prizeIdx = -1;
+            }
+        }
+
+        // 'Get pos' (podium, prix) compare ResultsNumbers[0..2] a "14" : pour un locataire, son numero y est mis en 14 le
+        // temps de l'etat (remis a l'image suivante ; RESULTSPublic et Final ont deja ete recopies par 'State 44').
+        static void PrizeSwap()
+        {
+            if (!myRental || resultsNumbers == null) return;
+            string k = MyKey();
+            for (int i = 0; i < 3 && i < resultsNumbers.Count; i++)
+                if (resultsNumbers[i] != null && resultsNumbers[i].ToString() == k)
+                {
+                    resultsNumbers[i] = ME; prizeIdx = i; prizeFrame = Time.frameCount;
+                    Log.Info("glace : podium : ma location n " + k + " (" + (i + 1) + "e) comptee comme la 14 pour le prix");
+                    return;
+                }
         }
 
         static string NameOf(int id)
@@ -239,6 +395,7 @@ namespace MWCoop
                 // Nouvelle semaine : la derniere arrivee de manche ne compte plus (le jeu remet les listes a zero).
                 if (localWeek >= 0) { lastHeat = -1; lastPos = 0; lastReport = ""; }
                 localWeek = w;
+                bestLap = 0f; timing = false; lapsKey = placedKey = "";   // (location : tours de la semaine passee)
             }
             if (!Session.IsHost && !restored)
             {
@@ -247,6 +404,9 @@ namespace MWCoop
                 if (lineups.ActiveStateName != "State 2") return;
                 restored = true; RestoreGuest();
             }
+            Unmute();
+            if (rentalsDirty || now >= nextRentals) { rentalsDirty = false; nextRentals = now + 2f; RefreshRentals(); }
+            if (myRental) { TrackRental(); PlaceRental(); }
             if (now >= nextPoll) { nextPoll = now + 0.1f; PollArrivals(); }
             if (Session.IsHost)
             {
@@ -269,7 +429,7 @@ namespace MWCoop
             for (int i = 0; i < resultsNumbers.Count; i++)
             {
                 object o = resultsNumbers[i];
-                if (o == null || o.ToString() != ME) continue;
+                if (o == null || o.ToString() != MyKey()) continue;
                 int heat = TrackHeat();
                 if (lastPos != i + 1 || lastHeat != heat) Log.Info("glace : arrive " + (i + 1) + "e de la manche " + HeatName(heat) + " ici");
                 lastPos = i + 1; lastHeat = heat;
@@ -302,6 +462,7 @@ namespace MWCoop
             Log.Info("glace : " + h.Name + (h.Registered ? " inscrit" : "") + ", tour " + h.Lap.ToString("F1") + (h.Pos > 0 ? ", " + h.Pos + "e en " + HeatName(h.Heat) : ""));
             if (newReg && h.Id != Session.LocalId) Hud.Toast(h.Name + Lang.T(" s'inscrit à la course sur glace", " registered for the ice race"));
             if (Session.IsHost && h.Registered && h.Id != 0 && !numbers.ContainsKey(h.Id)) AssignNumber(h);
+            if (Session.IsHost) RefreshRentals();   // (location de l'hote lui-meme, ou d'un inscrit)
             nextTable = 0;   // (table de l'hote : son tour, son numero)
             ShowRank();
             SendBoard();
@@ -311,8 +472,17 @@ namespace MWCoop
         static void HostWeek(int w)
         {
             if (w == boardWeek) return;
-            // Numeros de la semaine passee : sortis de la table (sinon ils y resteraient en voitures fantomes).
-            if (lapTimes != null) foreach (int n in numbers.Values) if (n != 0 && lapTimes.ContainsKey(n.ToString())) lapTimes.Remove(n.ToString());
+            // Numeros de la semaine passee : sortis de la table (sinon ils y resteraient en voitures fantomes) ; une location
+            // rend son tirage a l'IA (le jeu retire tout le vendredi suivant de toute facon).
+            if (lapTimes != null)
+                foreach (int n in numbers.Values)
+                {
+                    string k = n.ToString(); float ai;
+                    if (n == 0) continue;
+                    if (aiSaved.TryGetValue(k, out ai)) lapTimes[k] = ai;
+                    else if (lapTimes.ContainsKey(k)) lapTimes.Remove(k);
+                }
+            aiSaved.Clear();
             boardWeek = w;
             humans.Clear(); numbers.Clear(); numbersByName.Clear();
             lastReport = "";
@@ -354,11 +524,20 @@ namespace MWCoop
 
         static string Clean(string s) { return s.Replace(";", "").Replace(":", "").Replace("=", "").Replace("|", ""); }
 
-        // Numero libre pour un invite inscrit : 15-43 hors des IA (cles de la table) et des numeros deja donnes.
+        // Numero libre pour un invite inscrit : 15-43 hors des IA (cles de la table) et des numeros deja donnes. Un
+        // locataire (Jokkis) garde le numero de sa voiture.
         static void AssignNumber(Human h)
         {
             string who = Clean(h.Name);
-            int n;
+            int n = RentalNumber(h.Id);
+            if (n > 0)
+            {
+                numbers[h.Id] = n;
+                Log.Info("glace : " + h.Name + " court avec sa location n " + n);
+                Hud.Toast(h.Name + Lang.T(" : voiture n° ", ": car no. ") + n);
+                nextGrid = 0;
+                return;
+            }
             if (!numbersByName.TryGetValue(who, out n))
             {
                 var used = new HashSet<int>(numbersByName.Values);
@@ -386,6 +565,8 @@ namespace MWCoop
         // Table de l'hote = la table canonique : chaque invite inscrit y est a son numero (son tour d'essai, ou 999.<n>
         // sans tour ; valeurs toutes distinctes : 'Leaderboard' retrouve le numero PAR la valeur) ; au-dela de 17
         // voitures, les IA les plus lentes cedent leur place (le jeu ne garde que 17 tours dans Qual1-4).
+        // Locations : le locataire prend la cle de sa voiture (le tirage de l'IA est garde dans aiSaved et rendu quand la
+        // location est rendue) ; l'hote qui loue n'est plus la 14, retiree de la table.
         static void HostSyncTable()
         {
             if (!Session.IsHost || lapTimes == null) return;
@@ -393,17 +574,26 @@ namespace MWCoop
             foreach (Human h in humans.Values)
             {
                 int n;
-                if (h.Id == 0 || !h.Registered || !numbers.TryGetValue(h.Id, out n) || n == 0) continue;
+                if (!h.Registered || !numbers.TryGetValue(h.Id, out n) || n == 0) continue;   // (l'hote n'y est que s'il loue : numbers[0])
                 wanted[n.ToString()] = h.Lap > 0f ? h.Lap : 999f + n * 0.01f;
             }
             int changed = 0;
             var gone = new List<string>();
-            foreach (object k in lapTimes.Keys) { string key = k.ToString(); if (key != ME && IdOfNumber(key) > 0 && !wanted.ContainsKey(key)) gone.Add(key); }
+            foreach (object k in lapTimes.Keys) { string key = k.ToString(); if (key != ME && IdOfNumber(key) >= 0 && !wanted.ContainsKey(key)) gone.Add(key); }
             foreach (string key in gone) { lapTimes.Remove(key); changed++; }
+            var back = new List<string>();
+            foreach (KeyValuePair<string, float> kv in aiSaved) if (!wanted.ContainsKey(kv.Key)) back.Add(kv.Key);
+            foreach (string key in back) { lapTimes[key] = aiSaved[key]; aiSaved.Remove(key); changed++; Log.Info("glace : voiture IA n " + key + " de retour aux essais (location rendue)"); }
+            if (myRental && lapTimes.ContainsKey(ME)) { lapTimes.Remove(ME); changed++; Log.Info("glace : la 14 (CORRIS) retiree de la table : l'hote court en location n " + myNum); }
             foreach (KeyValuePair<string, float> kv in wanted)
             {
                 float v = kv.Value;
                 if (lapTimes.ContainsKey(kv.Key) && Mathf.Abs(ToF(lapTimes[kv.Key]) - v) < 0.05f) continue;
+                if (lapTimes.ContainsKey(kv.Key) && !aiSaved.ContainsKey(kv.Key) && RentalNumber(IdOfNumber(kv.Key)) > 0 && ToF(lapTimes[kv.Key]) < 900f)
+                {
+                    aiSaved[kv.Key] = ToF(lapTimes[kv.Key]);
+                    Log.Info("glace : voiture IA n " + kv.Key + " retiree des essais de la semaine (voiture louee par " + NameOf(IdOfNumber(kv.Key)) + ")");
+                }
                 while (HasValue(lapTimes, v, kv.Key)) v += 0.01f;
                 lapTimes[kv.Key] = v; changed++;
             }
@@ -520,7 +710,7 @@ namespace MWCoop
                 arrivals.Add(new Arrival { Num = Canon(s), At = now, Db = resultsCars != null && i < resultsCars.Count ? resultsCars[i] as GameObject : null });
                 changed = true;
                 Log.Info("glace : arrivee de " + Label(s) + " en manche " + HeatName(heat) + " vue ici (" + (i + 1) + "e)");
-                if (s == ME && !Session.IsHost) Session.SendToHost(new NetWriter(Msg.Race).U8(K_FINISH).I32(localWeek).U8(heat + 1), true);
+                if (s == MyKey() && !Session.IsHost) Session.SendToHost(new NetWriter(Msg.Race).U8(K_FINISH).I32(localWeek).U8(heat + 1), true);
             }
             if (!changed) return;
             ReadFinish();
@@ -573,12 +763,15 @@ namespace MWCoop
             SendGrid(true);
         }
 
-        // Objet DB (automate 'SkinChange' : numero, nom) d'un numero LOCAL : la CORRIS, une doublure, une voiture IA.
+        // Objet DB (automate 'SkinChange' : numero, nom) d'un numero LOCAL : une location, la CORRIS, une doublure, une IA.
         static GameObject DbOf(string local)
         {
             int n; if (!int.TryParse(local, out n)) return null;
             GameObject car = null;
-            if (local == ME) car = Game.FindAny("CORRIS");
+            int id = IdOfNumber(Canon(local));
+            Transform rc = id >= 0 && RentalNumber(id) == LocalNum(n) ? RentalCar(id) : null;
+            if (rc != null) car = rc.gameObject;
+            else if (local == ME) car = Game.FindAny("CORRIS");
             else if (!standIns.TryGetValue(n, out car) && carsList != null && n >= 0 && n < carsList.Count) car = carsList[n] as GameObject;
             Transform db = car != null ? car.transform.Find("DB") : null;
             return db != null ? db.gameObject : null;
@@ -588,12 +781,20 @@ namespace MWCoop
         // Une voiture de paille par AUTRE pilote humain, dans Cars[numero local] : 'Create grid' y lit 'Throttle'.Navigation
         // puis pose 'Navigation'.StartPositionID (la voie) ; la table des resultats lit DB 'SkinChange' Number/DriverName.
         // Automates vides, comme l'etiquette MWCoopId de Jobs. A la racine de la scene (WorldFsms saute MWCoop*).
+        // Locations : Cars[n] = la racine de la location (la sienne comprise), munie des memes automates si elle n'en a pas
+        // (EnsureProxy) ; la voiture IA du jeu qui y etait est gardee (carsOrig) et sortie d'AllCars, rendues a la liberation.
         static void EnsureStandIns()
         {
             if (lineups == null) return;
             var others = new List<KeyValuePair<int, string>>();   // numero canonique -> pseudo
-            if (!Session.IsHost && myNum != 0) others.Add(new KeyValuePair<int, string>(14, NameOf(0)));
-            foreach (KeyValuePair<int, int> kv in numbers) if (kv.Value != 0 && kv.Key != Session.LocalId) others.Add(new KeyValuePair<int, string>(kv.Value, NameOf(kv.Key)));
+            if (!Session.IsHost)
+            {
+                int hn; if (!numbers.TryGetValue(0, out hn)) hn = 14;
+                if (hn != 14 || myNum != 0) others.Add(new KeyValuePair<int, string>(hn, NameOf(0)));   // (hote en location : toujours ; en CORRIS : si on a un numero)
+            }
+            foreach (KeyValuePair<int, int> kv in numbers) if (kv.Value != 0 && kv.Key != Session.LocalId && kv.Key != 0) others.Add(new KeyValuePair<int, string>(kv.Value, NameOf(kv.Key)));
+            if (myRental) others.Add(new KeyValuePair<int, string>(myNum, Session.Me != null ? Session.Me.Name : "?"));   // ma location : 'Create grid' lui donne sa voie
+            RestoreCars(others);
             if (others.Count == 0) return;
             if (carsList == null)
             {
@@ -603,8 +804,24 @@ namespace MWCoop
             foreach (KeyValuePair<int, string> o in others)
             {
                 int local = LocalNum(o.Key);
-                if (local == 14 || local < 0 || local >= carsList.Count) { if (!carsWarned) { carsWarned = true; Log.Warn("course glace : numero " + local + " hors de la liste Cars (" + carsList.Count + ")"); } continue; }
+                if (local < 0 || local >= carsList.Count || (local == 14 && !myRental)) { if (!carsWarned) { carsWarned = true; Log.Warn("course glace : numero " + local + " hors de la liste Cars (" + carsList.Count + ")"); } continue; }
+                int id = IdOfNumber(o.Key.ToString());
+                Transform rc = id >= 0 && RentalNumber(id) == o.Key ? RentalCar(id) : null;
                 GameObject go;
+                if (rc != null)
+                {
+                    go = rc.gameObject;
+                    EnsureProxy(go, local, o.Value, RentalModel(o.Key));
+                    GameObject si; if (standIns.TryGetValue(local, out si)) { standIns.Remove(local); if (si != null) Object.Destroy(si); }
+                    if (carsList[local] as GameObject != go)
+                    {
+                        if (!carsOrig.ContainsKey(local)) carsOrig[local] = carsList[local] as GameObject;
+                        carsList[local] = go;
+                        HideAi(local, carsOrig[local]);
+                        Log.Info("glace : " + o.Value + " sur la grille d'ici avec sa location n " + local + " (Cars[" + local + "] = " + go.name + (carsOrig[local] != null ? ", voiture IA " + carsOrig[local].name + " ecartee" : "") + ")");
+                    }
+                    continue;
+                }
                 if (!standIns.TryGetValue(local, out go) || go == null) { go = MakeStandIn(local, o.Value); standIns[local] = go; }
                 else
                 {
@@ -615,10 +832,286 @@ namespace MWCoop
                 }
                 if (carsList[local] as GameObject != go)
                 {
+                    if (!carsOrig.ContainsKey(local) && carsList[local] is GameObject) carsOrig[local] = carsList[local] as GameObject;
                     carsList[local] = go;
                     Log.Info("glace : " + o.Value + " sur la grille d'ici avec le numero " + local + " (Cars[" + local + "] = doublure)");
                 }
             }
+        }
+
+        // Cars[n] et AllCars rendus au jeu pour les numeros qui ne sont plus a un humain (location rendue, semaine suivante).
+        static void RestoreCars(List<KeyValuePair<int, string>> others)
+        {
+            if (carsList == null || carsOrig.Count == 0) return;
+            var keep = new HashSet<int>();
+            foreach (KeyValuePair<int, string> o in others) keep.Add(LocalNum(o.Key));
+            var back = new List<int>();
+            foreach (int local in carsOrig.Keys) if (!keep.Contains(local)) back.Add(local);
+            foreach (int local in back)
+            {
+                GameObject orig = carsOrig[local]; carsOrig.Remove(local);
+                if (local < carsList.Count && orig != null) carsList[local] = orig;
+                GameObject ai; if (aiHidden.TryGetValue(local, out ai)) { aiHidden.Remove(local); if (allCars != null && ai != null && !allCars.Contains(ai)) allCars.Add(ai); }
+                GameObject si; if (standIns.TryGetValue(local, out si)) { standIns.Remove(local); if (si != null) Object.Destroy(si); }
+                Log.Info("glace : Cars[" + local + "] rendu au jeu (" + (orig != null ? orig.name : "-") + ")");
+            }
+        }
+
+        // La voiture IA du numero loue sort d'AllCars (TrackFunctions 'State 6' : voitures tirees au hasard aux essais du
+        // vendredi) ; Jokkis l'eteint, 'Create grid' ne la voit plus (Cars[n] = la location).
+        static void HideAi(int local, GameObject ai)
+        {
+            if (ai == null || allCars == null || aiHidden.ContainsKey(local)) return;
+            if (allCars.Contains(ai)) { allCars.Remove(ai); aiHidden[local] = ai; }
+        }
+
+        // La location a-t-elle ce qu'y lit le jeu ? 'Create grid' : 'Throttle'.Navigation -> 'Navigation'.StartPositionID ;
+        // table des resultats : DB 'SkinChange' Number/DriverName/CarModel. Ce qui manque est ajoute (automates vides, comme
+        // MakeStandIn) ; ce qui existe (voiture tiree d'une IA) est garde et renseigne. Le RaceTrigger du jeu sous DB
+        // ('Data' : tours de la 14 / des IA) est coupe : le module compte lui-meme (TrackRental), sinon deux arrivees.
+        static void EnsureProxy(GameObject root, int local, string name, string model)
+        {
+            PlayMakerFSM thr = Game.FsmOn(root, "Throttle");
+            if (thr == null) { thr = root.AddComponent<PlayMakerFSM>(); thr.FsmName = "Throttle"; thr.FsmVariables.GameObjectVariables = new[] { new FsmGameObject("Navigation") }; }
+            FsmGameObject navVar = thr.FsmVariables.FindFsmGameObject("Navigation");
+            if (navVar == null)
+            {
+                navVar = new FsmGameObject("Navigation");
+                var l = new List<FsmGameObject>(thr.FsmVariables.GameObjectVariables ?? new FsmGameObject[0]); l.Add(navVar);
+                thr.FsmVariables.GameObjectVariables = l.ToArray();
+            }
+            GameObject nav = navVar.Value;
+            if (nav == null)
+            {
+                Transform nt = root.transform.Find("NavigationIce");
+                nav = nt != null ? nt.gameObject : new GameObject("NavigationIce");
+                if (nt == null) nav.transform.parent = root.transform;
+                navVar.Value = nav;
+            }
+            PlayMakerFSM navF = Game.FsmOn(nav, "Navigation");
+            if (navF == null) { navF = nav.AddComponent<PlayMakerFSM>(); navF.FsmName = "Navigation"; navF.FsmVariables.IntVariables = new[] { new FsmInt("StartPositionID") }; }
+            else if (navF.FsmVariables.FindFsmInt("StartPositionID") == null)
+            {
+                var l = new List<FsmInt>(navF.FsmVariables.IntVariables ?? new FsmInt[0]); l.Add(new FsmInt("StartPositionID"));
+                navF.FsmVariables.IntVariables = l.ToArray();
+            }
+            Transform dbT = root.transform.Find("DB");
+            GameObject db = dbT != null ? dbT.gameObject : null;
+            if (db == null) { db = new GameObject("DB"); db.transform.parent = root.transform; }
+            if (!db.activeSelf) db.SetActive(true);   // (variables lisibles par ArrayListGet/GetFsmString du jeu)
+            PlayMakerFSM skin = Game.FsmOn(db, "SkinChange");
+            if (skin == null)
+            {
+                skin = db.AddComponent<PlayMakerFSM>();
+                skin.FsmName = "SkinChange";
+                skin.FsmVariables.StringVariables = new[] { new FsmString("Number"), new FsmString("ID"), new FsmString("DriverName"), new FsmString("CarModel"), new FsmString("UA") { Value = "-" } };
+                skin.FsmVariables.IntVariables = new[] { new FsmInt("DriverID") };
+            }
+            SetStr(skin, "Number", local.ToString()); SetStr(skin, "ID", local.ToString()); SetStr(skin, "DriverName", name);
+            FsmString cm = skin.FsmVariables.FindFsmString("CarModel");
+            if (cm != null && (string.IsNullOrEmpty(cm.Value) || cm.Value == "-") && model != "-") cm.Value = model;
+            FsmInt did = skin.FsmVariables.FindFsmInt("DriverID"); if (did != null && did.Value != local) did.Value = local;
+            Transform rt = db.transform.Find("RaceTrigger");
+            PlayMakerFSM data = rt != null ? Game.FsmOn(rt.gameObject, "Data") : null;
+            if (data != null && data.enabled) { data.enabled = false; Log.Info("glace : " + root.name + " : RaceTrigger 'Data' du jeu coupe (tours comptes par le module)"); }
+        }
+
+        static void SetStr(PlayMakerFSM f, string name, string v) { FsmString s = f.FsmVariables.FindFsmString(name); if (s != null && s.Value != v) s.Value = v; }
+
+        // ---------------------------------------------------------------- location d'ici : grille
+        // 'Create grid' a pose StartPositionID (1-6) sur ma location : je la teleporte sur sa voie (Gridding[voie] de
+        // TrackFunctions, sinon StartPos<voie>), cap vers DragPoint1 (la ligne droite du depart), une fois par manche et
+        // par voie, pendant la constitution de la grille seulement ; les autres la voient par VehicleSync.
+        static void PlaceRental()
+        {
+            if (track == null || carsList == null || myNum <= 0 || myNum >= carsList.Count) return;
+            string st = track.ActiveStateName;
+            if (!placeAnyState && st != "Create grid" && st != "Create grid 2" && st != "Wait command" && st != "Wait command 2") return;
+            int lane = LaneOf(myNum);
+            if (lane <= 0) return;
+            string key = localWeek + "|" + TrackHeat() + "|" + lane;
+            if (key == placedKey) return;
+            Transform car = RentalCar(Session.LocalId);
+            if (car == null) return;
+            Transform slot = GridSlot(lane);
+            if (slot == null) { if (!slotWarned) { slotWarned = true; Log.Warn("glace : voie " + lane + " : emplacement de grille introuvable (Gridding / StartPos" + lane + ")"); } placedKey = key; return; }
+            placedKey = key;
+            Transform drag = slot.Find("DragPoint1"), first = slot.Find("1");
+            Vector3 fwd = drag != null ? drag.position - slot.position : first != null ? slot.position - first.position : slot.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 0.01f) fwd = slot.forward;
+            Quaternion rot = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+            Vector3 pos = slot.position + Vector3.up * 0.3f;
+            Rigidbody rb = car.GetComponent<Rigidbody>();
+            if (rb != null && !rb.isKinematic) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+            car.position = pos; car.rotation = rot;
+            if (rb != null) { rb.position = pos; rb.rotation = rot; }
+            hasLast = false;   // (pas un franchissement de ligne)
+            Log.Info("glace : ma location n " + myNum + " placee sur la voie " + lane + " de la grille " + HeatName(TrackHeat()) + " @" + pos.ToString("F1") + ", cap " + rot.eulerAngles.y.ToString("F0") + " (piste en " + st + ")");
+        }
+
+        static Transform GridSlot(int lane)
+        {
+            GameObject tf = Game.FindAny("RACES/ICERACE/TrackFunctions");
+            if (tf == null) return null;
+            foreach (PlayMakerArrayListProxy p in tf.GetComponents<PlayMakerArrayListProxy>())
+                if (p.referenceName == "Gridding" && p.arrayList != null && lane < p.arrayList.Count) { var g = p.arrayList[lane] as GameObject; if (g != null) return g.transform; }
+            return tf.transform.Find("StartPos" + lane);
+        }
+
+        // ---------------------------------------------------------------- location d'ici : tours et arrivee
+        // Boites (monde) des lignes de la piste, depuis leur MeshCollider (objets eteints compris : StartFinishLaps et
+        // StartFinishTime alternent) ; sans maillage, 20 m autour de l'objet.
+        static void FindLines(GameObject tf)
+        {
+            lines = new Bounds[3];
+            string[] names = { "Checkpoint1", "Checkpoint2", "StartFinishLaps" };
+            for (int i = 0; i < 3; i++)
+            {
+                Transform t = tf.transform.Find(names[i]);
+                if (t == null) { lines = null; if (!linesWarned) { linesWarned = true; Log.Warn("glace : ligne " + names[i] + " introuvable sous TrackFunctions : tours d'une location pas comptes"); } return; }
+                lines[i] = LineBounds(t);
+            }
+            Transform lt = tf.transform.Find("StartFinishTime");
+            if (lt != null) lines[2].Encapsulate(LineBounds(lt));
+            lineLaps = tf.transform.Find("StartFinishLaps").gameObject;
+            lineTime = lt != null ? lt.gameObject : null;
+            Log.Info("glace : lignes de la piste relevees (CP1 " + lines[0].center.ToString("F0") + " " + lines[0].size.ToString("F0") + ", CP2 " + lines[1].center.ToString("F0") + ", arrivee " + lines[2].center.ToString("F0") + " " + lines[2].size.ToString("F0") + ")");
+        }
+
+        static Bounds LineBounds(Transform t)
+        {
+            var mc = t.GetComponent<MeshCollider>();
+            Mesh m = mc != null ? mc.sharedMesh : null;
+            if (m == null) return new Bounds(t.position, new Vector3(20f, 6f, 20f));
+            Bounds lb = m.bounds;
+            var b = new Bounds(t.TransformPoint(lb.center), Vector3.zero);
+            for (int i = 0; i < 8; i++)
+            {
+                var c = new Vector3((i & 1) != 0 ? lb.max.x : lb.min.x, (i & 2) != 0 ? lb.max.y : lb.min.y, (i & 4) != 0 ? lb.max.z : lb.min.z);
+                b.Encapsulate(t.TransformPoint(c));
+            }
+            b.Expand(new Vector3(1f, 2f, 1f));
+            return b;
+        }
+
+        // La voiture (son pivot) vient-elle d'entrer dans la boite i entre ses deux dernieres positions ? (le segment coupe
+        // la boite, ou la position d'arrivee y est, et elle n'y etait pas avant)
+        static bool Crossed(int i, Vector3 a, Vector3 b)
+        {
+            Bounds bx = lines[i];
+            bool now = bx.Contains(b), was = inside[i];
+            if (!now && !was)
+            {
+                Vector3 d = b - a; float len = d.magnitude, dist;
+                if (len > 0.001f && bx.IntersectRay(new Ray(a, d / len), out dist) && dist <= len) now = true;
+            }
+            bool entered = now && !was;
+            inside[i] = bx.Contains(b);
+            return entered;
+        }
+
+        static int RaceDistance()
+        {
+            PlayMakerFSM timing = board != null ? Game.FsmOn(board.gameObject, "Timing") : null;
+            FsmInt d = timing != null ? timing.FsmVariables.FindFsmInt("RaceDistance") : null;
+            return d != null && d.Value > 0 ? d.Value : 2;
+        }
+
+        // Comme CORRIS/DB/RaceTrigger 'Data', pour ma location : vendredi (StartFinishTime allume) un tour chronometre entre
+        // deux passages de la ligne avec les deux points de passage -> meilleur tour dans LapTimes[n] ; en manche
+        // (StartFinishLaps allume, piste de 'Start race' a 'State 14/15') RaceDistance tours -> arrivee (RentalFinished).
+        // Tours remis a zero a chaque grille ; la teleportation sur la grille n'est pas un franchissement.
+        static void TrackRental()
+        {
+            if (lines == null || track == null || myNum <= 0) return;
+            Transform car = RentalCar(Session.LocalId);
+            if (car == null) { hasLast = false; return; }
+            string st = track.ActiveStateName;
+            if (st == "Create grid" || st == "Create grid 2" || st == "Wait command" || st == "Wait command 2")
+            {
+                string key = localWeek + "|" + TrackHeat();
+                if (key != lapsKey) { lapsKey = key; laps = 0; cp1 = cp2 = finished = false; Log.Info("glace : ma location n " + myNum + " : tours remis a zero pour la manche " + HeatName(TrackHeat())); }
+                hasLast = false;
+                return;
+            }
+            Vector3 p = car.position;
+            if (!hasLast) { lastCarPos = p; hasLast = true; for (int i = 0; i < 3; i++) inside[i] = lines[i].Contains(p); return; }
+            if ((p - lastCarPos).sqrMagnitude > 2500f) { lastCarPos = p; hasLast = false; return; }   // (teleportation)
+            bool c1 = Crossed(0, lastCarPos, p), c2 = Crossed(1, lastCarPos, p), sf = Crossed(2, lastCarPos, p);
+            lastCarPos = p;
+            if (c1 && !cp1) cp1 = true;
+            if (c2 && !cp2) cp2 = true;
+            if (!sf) return;
+            bool practice = lineTime != null && lineTime.activeInHierarchy, racing = lineLaps != null && lineLaps.activeInHierarchy;
+            float now = Time.time;
+            if (practice)
+            {
+                if (timing && cp1 && cp2)
+                {
+                    float lap = now - lapStart;
+                    bool best = bestLap <= 0f || lap < bestLap;
+                    if (best) { bestLap = lap; SetMyLap(lap); }
+                    Log.Info("glace : ma location n " + myNum + " : tour d'essai " + lap.ToString("F1") + " s" + (best ? " (meilleur)" : " (meilleur " + bestLap.ToString("F1") + ")"));
+                }
+                else if (timing) Log.Info("glace : ma location n " + myNum + " : ligne franchie sans les deux points de passage, tour non compte");
+                timing = true; lapStart = now; cp1 = cp2 = false;
+                return;
+            }
+            if (!racing || finished) return;
+            if (st != "Start race" && st != "Start race 2" && st != "Wait results" && st != "Wait results 2" && st != "State 14" && st != "State 15") return;
+            if (!(cp1 && cp2))
+            {
+                if (Time.realtimeSinceStartup >= nextLineLog) { nextLineLog = Time.realtimeSinceStartup + 5f; Log.Info("glace : ma location n " + myNum + " : ligne franchie (depart ou tour incomplet), " + laps + " tour(s)"); }
+                return;
+            }
+            laps++; cp1 = cp2 = false;
+            int dist = RaceDistance();
+            Log.Info("glace : ma location n " + myNum + " : tour " + laps + "/" + dist + " de la manche " + HeatName(TrackHeat()));
+            if (laps >= dist) RentalFinished();
+        }
+
+        // Mon meilleur tour d'essai dans la table, a ma cle, valeur distincte des autres ('Leaderboard' retrouve le numero
+        // par la valeur) ; Report l'annonce a l'hote (K_HUMAN), qui le met a ma cle dans sa table.
+        static void SetMyLap(float lap)
+        {
+            if (lapTimes == null) return;
+            if (bestLap <= 0f || lap < bestLap) bestLap = lap;
+            string k = MyKey();
+            float v = lap;
+            while (HasValue(lapTimes, v, k)) v += 0.01f;
+            lapTimes[k] = v;
+            lastReport = "";
+        }
+
+        // Ma cle apres le tirage du jeu ('Set result' ecrit un tour au hasard sur les 16 numeros IA, le mien compris) : mon
+        // meilleur tour mesure ici, sinon celui que l'hote garde pour moi (rechargement), sinon 999.<n> (pas de tour).
+        static void FixMyLap()
+        {
+            if (!myRental || lapTimes == null) return;
+            string k = MyKey();
+            float hostV; hostLaps.TryGetValue(k, out hostV);   // (invite : table de l'hote ; hote : rien)
+            float v = bestLap > 0f ? bestLap : !Session.IsHost && hostV > 0f && hostV < 900f ? hostV : 999f + myNum * 0.01f;
+            if (lapTimes.ContainsKey(k) && Mathf.Abs(ToF(lapTimes[k]) - v) < 0.0005f) return;
+            while (v < 900f && HasValue(lapTimes, v, k)) v += 0.01f;
+            lapTimes[k] = v; lastReport = "";
+            Log.Info("glace : ma location n " + myNum + " : tour d'essai remis a " + (v < 900f ? v.ToString("F2") + " s" : "aucun") + " apres le tirage du jeu");
+        }
+
+        // Arrivee de ma location, comme RaceTrigger 'State 2' : mon numero dans ResultsNumbers, mon DB dans ResultsCars,
+        // FINISHRACE a tous (TrackFunctions 'Start race' -> 'Wait results', CORRIS/NavigationIce) ; PollArrivals la voit et
+        // l'annonce a l'hote (K_FINISH) ou la fusionne (hote).
+        static void RentalFinished()
+        {
+            finished = true;
+            if (resultsNumbers == null) return;
+            string k = MyKey();
+            for (int i = 0; i < resultsNumbers.Count; i++) if (resultsNumbers[i] != null && resultsNumbers[i].ToString() == k) return;
+            resultsNumbers.Add(k);
+            if (resultsCars != null) resultsCars.Add(DbOf(k));
+            Log.Info("glace : ma location n " + k + " a fini la manche " + HeatName(TrackHeat()) + " (" + resultsNumbers.Count + "e ici)");
+            if (!testNoBroadcast) PlayMakerFSM.BroadcastEvent("FINISHRACE");
+            nextPoll = 0;
         }
 
         static GameObject MakeStandIn(int local, string name)
@@ -641,13 +1134,17 @@ namespace MWCoop
             return go;
         }
 
-        // Voie donnee par 'Create grid' a une doublure (0 : pas encore).
-        static int StandInLane(int local)
+        // Voie donnee par 'Create grid' a une doublure ou a une location (Cars[local] : 'Throttle'.Navigation ->
+        // 'Navigation'.StartPositionID ; 0 : pas encore, ou voiture IA du jeu).
+        static int LaneOf(int local)
         {
             GameObject go;
-            if (!standIns.TryGetValue(local, out go) || go == null) return 0;
-            Transform nav = go.transform.Find("NavigationIce");
-            PlayMakerFSM f = nav != null ? Game.FsmOn(nav.gameObject, "Navigation") : null;
+            if (!standIns.TryGetValue(local, out go) || go == null) go = carsList != null && local >= 0 && local < carsList.Count ? carsList[local] as GameObject : null;
+            if (go == null || (!standIns.ContainsKey(local) && !carsOrig.ContainsKey(local))) return 0;
+            PlayMakerFSM thr = Game.FsmOn(go, "Throttle");
+            FsmGameObject nv = thr != null ? thr.FsmVariables.FindFsmGameObject("Navigation") : null;
+            GameObject nav = nv != null ? nv.Value : null;
+            PlayMakerFSM f = nav != null ? Game.FsmOn(nav, "Navigation") : null;
             FsmInt v = f != null ? f.FsmVariables.FindFsmInt("StartPositionID") : null;
             return v != null ? v.Value : 0;
         }
@@ -665,7 +1162,7 @@ namespace MWCoop
                 string s = l[i] != null ? l[i].ToString() : "";
                 if (s.Length == 0) continue;
                 sb.Append(n++ > 0 ? " " : "").Append(i).Append(':').Append(Label(s));
-                int x; if (int.TryParse(s, out x) && standIns.ContainsKey(x) && StandInLane(x) > 0) sb.Append("[voie ").Append(StandInLane(x)).Append(']');
+                int x; if (int.TryParse(s, out x) && LaneOf(x) > 0) sb.Append("[voie ").Append(LaneOf(x)).Append(']');
             }
             string text = HeatName(heat) + " " + sb;
             if (text == lastGridLog) return;
@@ -724,10 +1221,12 @@ namespace MWCoop
             if (mine != myNum)
             {
                 myNum = mine;
-                Log.Info("glace : mon numero chez l'hote : " + (myNum != 0 ? myNum.ToString() : "aucun") + (myNum != 0 ? " (14 ici : 14 et " + myNum + " echanges)" : ""));
-                if (myNum != 0) Hud.Toast(Lang.T("Glace : vous êtes la voiture n° ", "Ice race: you are car no. ") + myNum + Lang.T(" pour les autres", " for the others"));
+                bool rental = myNum != 0 && RentalNumber(Session.LocalId) == myNum;
+                Log.Info("glace : mon numero chez l'hote : " + (myNum != 0 ? myNum.ToString() : "aucun") + (myNum != 0 ? rental ? " (ma location : numero reel)" : " (14 ici : 14 et " + myNum + " echanges)" : ""));
+                if (myNum != 0 && !rental) Hud.Toast(Lang.T("Glace : vous êtes la voiture n° ", "Ice race: you are car no. ") + myNum + Lang.T(" pour les autres", " for the others"));
                 lastGridLog = "";
             }
+            RefreshRentals();
             hostLaps.Clear(); hostLapsFull = true;
             for (int i = 0, n = r.U8(); i < n; i++) { string k = r.Str(); hostLaps[k] = r.F32(); }
             hostLists.Clear();
@@ -837,21 +1336,31 @@ namespace MWCoop
             if (!Session.IsHost && !restored) return;   // chargement : c'est l'inscription de l'hote (sauvegarde), pas la notre
             lastReport = "";
             Report(true);
+            // Inscrit sans la Rivett (ou pas encore de voiture) : le panneau des Jokkis a louer s'ouvre (Jokkis actif chez l'hote)
+            if (RentalNumber(Session.LocalId) == 0 && Config.GetInt("Coop", "Jokkis", 0) != 0) JokkisPanel.Open = true;
         }
 
         // ---------------------------------------------------------------- tirage de l'hote chez l'invite
         // La table de l'hote (16 IA, lui en 14, les invites a leur numero) remplace celle tiree ici, numeros echanges
         // (14 <-> le notre), sauf notre propre voiture ; les numeros absents chez l'hote sont retires (IA cedant la place).
         // Le 'Leaderboard' retrie toutes les 4 s le vendredi et refait Qual1-4 -> meme grille que chez l'hote.
+        // Locataire : sa cle est son numero (la 14 est alors celle de l'hote, recopiee ou retiree comme les autres) ; sans
+        // tour ici (rechargement), celui que l'hote garde pour lui est repris.
         static void ApplyHostLaps(bool afterDraw)
         {
             if (Session.IsHost || lapTimes == null || hostLaps.Count == 0) return;
             int changed = 0, removed = 0;
             float mine = MyLap();
+            string my = MyKey();
             foreach (KeyValuePair<string, float> kv in hostLaps)
             {
                 string lk = Local(kv.Key);
-                if (lk == ME || kv.Value <= 0f) continue;
+                if (kv.Value <= 0f) continue;
+                if (lk == my)
+                {
+                    if (myRental && mine <= 0f && kv.Value < 900f) { lapTimes[lk] = kv.Value; mine = kv.Value; changed++; Log.Info("glace : mon tour d'essai (" + kv.Value.ToString("F1") + " s) repris de la table de l'hote"); }
+                    continue;
+                }
                 float v = kv.Value;
                 if (mine > 0f && Mathf.Abs(v - mine) < 0.0005f) v += 0.01f;   // (meme tour que le notre : valeurs distinctes)
                 if (lapTimes.ContainsKey(lk) && Mathf.Abs(ToF(lapTimes[lk]) - v) < 0.001f) continue;
@@ -861,7 +1370,7 @@ namespace MWCoop
             if (hostLapsFull)
             {
                 var gone = new List<string>();
-                foreach (object k in lapTimes.Keys) { string key = k.ToString(); if (key != ME && !hostLaps.ContainsKey(Canon(key))) gone.Add(key); }
+                foreach (object k in lapTimes.Keys) { string key = k.ToString(); if (key != my && !hostLaps.ContainsKey(Canon(key))) gone.Add(key); }
                 foreach (string key in gone) { lapTimes.Remove(key); removed++; }
             }
             if (changed > 0 || removed > 0) Log.Info("glace : " + changed + " tours d'essai recopies de l'hote" + (removed > 0 ? ", " + removed + " voiture(s) retiree(s)" : "") + (afterDraw ? " (apres le tirage du jeu ici)" : "") + " ; " + lapTimes.Count + " voitures");
@@ -889,9 +1398,9 @@ namespace MWCoop
         // Numero LOCAL d'un humain (0 : aucun).
         static int NumOf(Human h)
         {
-            if (h.Id == Session.LocalId) return 14;
-            if (h.Id == 0) return LocalNum(14);
-            int n; return numbers.TryGetValue(h.Id, out n) ? LocalNum(n) : 0;
+            if (h.Id == Session.LocalId) return myRental ? myNum : 14;
+            int n; if (numbers.TryGetValue(h.Id, out n)) return LocalNum(n);
+            return h.Id == 0 ? LocalNum(14) : 0;
         }
 
         // Le tableau commun, montre (message) quand il change ; seuls les inscrits ou ceux qui ont couru y figurent.
@@ -933,6 +1442,7 @@ namespace MWCoop
             if (rs != null) sb.Append("RaceStage:").Append(rs.Value).Append(';');
             if (hs != null) sb.Append("HeatStage:").Append(hs.Value).Append(';');
             sb.Append("Lap:").Append(MyLap().ToString("R", Inv)).Append(';');
+            sb.Append("Num:").Append(myRental ? myNum : 0).Append(';');   // (location : le tour est a ce numero)
             sb.Append("Week:").Append(localWeek).Append(';');
             sb.Append("Heat:").Append(lastHeat).Append(';');
             sb.Append("Pos:").Append(lastPos).Append(';');
@@ -984,7 +1494,12 @@ namespace MWCoop
                 if (reg != null && d.TryGetValue("Registered", out v)) reg.Value = v == "1";
                 if (rs != null && d.TryGetValue("RaceStage", out v) && int.TryParse(v, out i)) rs.Value = i;
                 if (hs != null && d.TryGetValue("HeatStage", out v) && int.TryParse(v, out i)) hs.Value = i;
-                if (lapTimes != null && d.TryGetValue("Lap", out v) && float.TryParse(v, System.Globalization.NumberStyles.Float, Inv, out f)) lapTimes[ME] = f > 0f ? f : 999f;
+                int num = 0; if (d.TryGetValue("Num", out v)) int.TryParse(v, out num);
+                if (lapTimes != null && d.TryGetValue("Lap", out v) && float.TryParse(v, System.Globalization.NumberStyles.Float, Inv, out f))
+                {
+                    if (num <= 0) lapTimes[ME] = f > 0f ? f : 999f;
+                    else if (f > 0f && RentalNumber(Session.LocalId) == num) lapTimes[num.ToString()] = f;   // (toujours locataire de cette voiture)
+                }
                 int wk = -1;
                 if (d.TryGetValue("Week", out v)) int.TryParse(v, out wk);
                 if (wk == localWeek)
@@ -1015,22 +1530,32 @@ namespace MWCoop
         // "10" a 83 s a sa liste ResultsNumbers (comme le RaceTrigger des IA), l'invite ajoute "14" (lui) a 86 s, l'hote
         // "14" (lui) a 92 s. A 105 s chacun note ses arrivees et le classement. Attendu : hote 37 10 15 14, invite
         // 37 10 14 15 (le meme ordre, numeros echanges) ; classement commun : invite Q1 3e, hote Q1 4e.
+        // [Test] Autotest=glace4 (avec [Test] GlaceJokkis=33 des deux cotes) : l'hote s'inscrit en CORRIS (14), l'invite est
+        // repute louer la voiture 33 (racine factice MWCoop-Jokkis-33) : son inscription a 30 s passe par 'State 4' reduit
+        // (pas d'autocollants), son tour d'essai (84 s) va a LapTimes["33"] par SetMyLap. A 70 s chacun note sa table (attendu
+        // des deux cotes : 14=88.0 33=84.0, IA 33 remplacee, pas d'echange), ses listes Qual (33 et 14 dedans, identiques)
+        // et Cars (33 = location). A 75 s l'invite simule 'Create grid' (StartPositionID 3 sur sa location) : placee sur la
+        // voie 3. Manche simulee : hote "37" a 80 s, hote "14" a 86 s, invite arrivee de sa location a 92 s (RentalFinished :
+        // "33" dans ResultsNumbers, K_FINISH). A 105 s attendu des deux cotes : 37 14 33 ; classement : hote 2e, invite 3e.
         static int testStep;
         public static void Test(string mode, float t)
         {
-            if ((mode != "glace2" && mode != "glace3") || lineups == null || board == null) return;
+            if ((mode != "glace2" && mode != "glace3" && mode != "glace4") || lineups == null || board == null) return;
+            bool g4 = mode == "glace4";
             if (testStep == 0 && t > 30f)
             {
                 testStep = 1;
+                if (g4) { testNoBroadcast = true; placeAnyState = true; }
                 lineups.SendEvent("REGISTER");
-                Log.Info("autotest : " + mode + " : inscription -> " + lineups.ActiveStateName + ", inscrit " + Registered());
+                Log.Info("autotest : " + mode + " : inscription -> " + lineups.ActiveStateName + ", inscrit " + Registered() + (g4 ? ", location " + RentalNumber(Session.LocalId) : ""));
             }
             if (testStep == 1 && t > 45f)
             {
                 testStep = 2;
-                float lap = Config.GetInt("Test", Session.IsHost ? "TourGlace" : "TourGlaceInvite", Session.IsHost ? 88 : 86);
-                if (lapTimes != null) lapTimes[ME] = lap;
-                Log.Info("autotest : " + mode + " : meilleur tour d'ici " + lap + " s");
+                float lap = Config.GetInt("Test", Session.IsHost ? "TourGlace" : "TourGlaceInvite", Session.IsHost ? 88 : g4 ? 84 : 86);
+                if (g4 && !Session.IsHost && !myRental) Log.Warn("autotest : glace4 : l'hote ne m'a pas encore donne ma location (numero " + myNum + ")");
+                if (g4) SetMyLap(lap); else if (lapTimes != null) lapTimes[ME] = lap;
+                Log.Info("autotest : " + mode + " : meilleur tour d'ici " + lap + " s (cle " + MyKey() + ")");
             }
             if (testStep == 2 && t > 70f)
             {
@@ -1055,7 +1580,43 @@ namespace MWCoop
                 foreach (Human h in Ranked()) hs.Append(' ').Append(h.Name).Append('=').Append(h.Registered ? "inscrit" : "-").Append('/').Append(h.Lap.ToString("F1")).Append("/n").Append(NumOf(h));
                 var cs = new System.Text.StringBuilder();
                 foreach (KeyValuePair<int, GameObject> kv in standIns) cs.Append(' ').Append(kv.Key).Append('=').Append(carsList != null && kv.Key < carsList.Count && carsList[kv.Key] as GameObject == kv.Value ? "doublure" : "?");
-                Log.Info("autotest : " + mode + " : mon numero " + myNum + " ; tours" + sb + " ; grilles" + ql + " ; humains" + hs + " ; Cars" + cs);
+                foreach (KeyValuePair<int, GameObject> kv in carsOrig) if (!standIns.ContainsKey(kv.Key)) { var g = carsList != null && kv.Key < carsList.Count ? carsList[kv.Key] as GameObject : null; cs.Append(' ').Append(kv.Key).Append('=').Append(g != null && g.name.StartsWith("MWCoop-Jokkis") ? "location" : g != null ? g.name : "?"); }
+                Log.Info("autotest : " + mode + " : mon numero " + myNum + (myRental ? " (location)" : "") + " ; tours" + sb + " ; grilles" + ql + " ; humains" + hs + " ; Cars" + cs);
+            }
+            if (g4)
+            {
+                if (testStep == 3 && t > 75f && !Session.IsHost)
+                {
+                    testStep = 4;
+                    GameObject go = carsList != null && myNum > 0 && myNum < carsList.Count ? carsList[myNum] as GameObject : null;
+                    PlayMakerFSM thr = go != null ? Game.FsmOn(go, "Throttle") : null;
+                    FsmGameObject nv = thr != null ? thr.FsmVariables.FindFsmGameObject("Navigation") : null;
+                    PlayMakerFSM nav = nv != null && nv.Value != null ? Game.FsmOn(nv.Value, "Navigation") : null;
+                    FsmInt sp = nav != null ? nav.FsmVariables.FindFsmInt("StartPositionID") : null;
+                    if (sp != null) sp.Value = 3;
+                    Log.Info("autotest : glace4 : 'Create grid' simule : voie 3 posee sur Cars[" + myNum + "] (" + (go != null ? go.name : "-") + ", StartPositionID " + (sp != null ? "ok" : "absent") + ")");
+                }
+                if (testStep == 4 && t > 78f && !Session.IsHost)
+                {
+                    testStep = 5;
+                    Transform car = RentalCar(Session.LocalId);
+                    Log.Info("autotest : glace4 : ma location " + (car != null ? "@" + car.position.ToString("F1") + " cap " + car.eulerAngles.y.ToString("F0") : "absente") + " ; voie lue " + LaneOf(myNum) + " ; grille " + lastGridLog);
+                }
+                if (testStep == 3 && t > 80f && Session.IsHost) { testStep = 5; if (resultsNumbers != null) resultsNumbers.Add("37"); Log.Info("autotest : glace4 : arrivee IA 37 simulee ici"); }
+                if (testStep == 5 && t > 86f && Session.IsHost) { testStep = 6; if (resultsNumbers != null) resultsNumbers.Add(ME); Log.Info("autotest : glace4 : mon arrivee simulee ici (14)"); }
+                if (testStep == 5 && t > 92f && !Session.IsHost) { testStep = 6; RentalFinished(); Log.Info("autotest : glace4 : arrivee de ma location simulee ici (" + MyKey() + ")"); }
+                if (testStep == 6 && t > 105f)
+                {
+                    testStep = 7;
+                    var sb = new System.Text.StringBuilder();
+                    if (resultsNumbers != null) for (int i = 0; i < resultsNumbers.Count; i++) sb.Append(i > 0 ? " " : "").Append(i + 1).Append(':').Append(Label(resultsNumbers[i] != null ? resultsNumbers[i].ToString() : ""));
+                    var cs = new System.Text.StringBuilder();
+                    if (resultsCars != null) for (int i = 0; i < resultsCars.Count; i++) { var g = resultsCars[i] as GameObject; cs.Append(i > 0 ? "," : "").Append(g != null && g.transform.parent != null ? g.transform.parent.name : "-"); }
+                    var hs = new System.Text.StringBuilder();
+                    foreach (Human h in Ranked()) hs.Append(' ').Append(h.Name).Append('=').Append(h.Pos > 0 ? h.Pos + "e/" + HeatName(h.Heat) : "-").Append("/n").Append(NumOf(h));
+                    Log.Info("autotest : glace4 : arrivees " + sb + " ; DB " + cs + " ; classement" + hs + " ; manche ici " + HeatName(TrackHeat()) + (Session.IsHost ? "" : ", hote " + HeatName(hostHeat)) + " ; ma cle " + MyKey());
+                }
+                return;
             }
             if (mode != "glace3" || resultsNumbers == null) return;
             if (testStep == 3 && t > 80f && Session.IsHost) { testStep = 4; resultsNumbers.Add("37"); Log.Info("autotest : glace3 : arrivee IA 37 simulee ici"); }
@@ -1093,6 +1654,12 @@ namespace MWCoop
         //  - feuille des resultats (Sheets/IceRacePractice, TentContents/Results) : le tableau commun n'y est pas, il
         //    passe par message (Hud.Toast) et le journal ;
         //  - un invite parti en cours de semaine garde son numero dans la table (voiture qui ne se presente pas, comme un
-        //    inscrit absent dans le jeu) jusqu'a la semaine suivante.
+        //    inscrit absent dans le jeu) jusqu'a la semaine suivante ;
+        //  - locations (16/10, a verifier en jeu) : boites des lignes (MeshCollider des Checkpoint1/2 et StartFinish*) :
+        //    verifier au journal que CP1, CP2 et l'arrivee sont vus a chaque tour d'une location (sinon elargir LineBounds) ;
+        //    'Create grid' sur une location : pas d'erreur PlayMaker au journal du jeu, StartPositionID bien pose, voiture
+        //    teleportee sur sa voie (PlaceRental) ; un joueur deja inscrit en CORRIS (autocollants poses) qui loue ensuite
+        //    garde la CORRIS/DB active : ses tours en Rivett compteraient pour la 14 (a traiter si cela arrive) ; prix du
+        //    podium pour un locataire : 'Get pos' avec son numero mis en 14 le temps de l'etat (PrizeSwap).
     }
 }

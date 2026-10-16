@@ -247,6 +247,7 @@ namespace MWCoop
         public static void OnMessage(Peer from, NetReader r)
         {
             int kind = r.U8();
+            if (kind >= 24) { Jokkis.OnMessage(kind, from, r); return; }   // voitures Jokkis de location (16/10)
             if (kind >= 20) { IceRace.OnMessage(kind, from, r); return; }   // course sur glace a plusieurs pilotes
             if (kind >= 10) { Rally.OnMessage(kind, from, r); return; }   // rallye a plusieurs pilotes
             if (kind == K_HASH)
@@ -471,7 +472,7 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             IceRace.Test(mode, t);
-            bool ice = mode == "glace" || mode == "glace2" || mode == "glace3";   // (glace2/3 : meme semaine, pilotes humains -- IceRace.Test)
+            bool ice = mode == "glace" || mode == "glace2" || mode == "glace3" || mode == "glace4";   // (glace2/3/4 : meme semaine, pilotes humains -- IceRace.Test)
             if ((mode != "rallye" && !ice && mode != "rallye3" && mode != "retourne") || !built) return;
             // [Test] Autotest=glace : semaine de la course sur glace (GlobalWeeksPassed impair, RACES 'SwapDates' WAKEUP),
             // vendredi 10 h (essais libres : le jeu lance des voitures IA au hasard sur la piste).
@@ -502,7 +503,7 @@ namespace MWCoop
             if (t < 25f || sec % 5 != 0 || sec == testSec) return;
             testSec = sec;
             var sb = new System.Text.StringBuilder("autotest : " + mode + " " + System.DateTime.Now.ToString("mm:ss") + " :");
-            if (mode == "glace2" || mode == "glace3") return;   // (releve par IceRace.Test)
+            if (mode == "glace2" || mode == "glace3" || mode == "glace4") return;   // (releve par IceRace.Test)
             if (mode != "glace")
             {
                 PlayMakerFSM reset = Game.FindFsm("RACES/RALLY", "Reset");

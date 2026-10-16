@@ -529,7 +529,15 @@ static bool OfferHasRoot(const SyncOffer &o, const std::wstring &root)
     for (auto &f : o.files) if (!_strnicmp(f.path.c_str(), r.c_str(), r.size())) return true;
     return false;
 }
-static bool ModsAuto() { const Opt *o = OptByKey("ModsAuto"); return o && OptGet(*o); }
+static bool ModsAuto()
+{
+    if (g_lobby == LB_GUEST || g_lobby == LB_CONNECTING) {   // (choix fait dans le salon, pour ce salon seulement : salon.inc)
+        auto it = g_lobbyOpt.find("ModsAuto");
+        if (it != g_lobbyOpt.end()) return it->second != 0;
+    }
+    const Opt *o = OptByKey("ModsAuto");
+    return o && OptGet(*o);
+}
 
 static void SyncSendHost(const Wr &w)
 {

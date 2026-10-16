@@ -54,6 +54,7 @@ namespace MWCoop
         static readonly HashSet<string> ambiguous = new HashSet<string>();
         static readonly Dictionary<int, int> levels = new Dictionary<int, int>();   // hote : niveau vu de chaque joueur
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();
+        public static void ScheduleSnapshot(Peer p) { if (Session.IsHost && p != null) snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 28f, p)); }   // (resynchronisation)
         static readonly float[] vals = new float[N + 1];
         static float scanAt = -1, quietUntil, nextPoll, nextFog, nextArrivals, nextWarn;
         static int scans, sent, applied;

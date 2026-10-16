@@ -3,10 +3,20 @@
 // Le lanceur de l'hote ouvre un salon en TCP sur le port de la partie (le jeu, lui, est en UDP sur ce meme numero :
 // pas de conflit). Chaque connexion commence par "MWS1" (pas compatible avec le salon de SACoop), puis des messages
 // [u16 longueur][u8 type][...] :
-//   HELLO (proto, version, pseudo, apparence) -> WELCOME (numero) ou REJECT (raison : "version X", "full",
-//   "started", "closed", "proto") ; STATE (joueurs : numero, pseudo, apparence, version, pret, ping ; puis le choix
-//   de partie) ; READY (u8) ; SKIN (apparence changee dans l'onglet COOP) ; PING / PONG (u32, heure de l'hote) ;
-//   GO (u8 partie).
+//   HELLO (proto, version, pseudo, apparence, code de session) -> WELCOME (numero) ou REJECT (raison : "version X",
+//   "full N", "started", "closed", "proto", "code") ; STATE (joueurs : numero, pseudo, apparence, version, pret, ping ;
+//   puis le choix de partie) ; READY (u8) ; SKIN (apparence changee dans l'onglet COOP) ; PING / PONG (u32, heure de
+//   l'hote) ; GO (u8 partie).
+// Salon prive / public et options de la partie (0.96.4, demande de JD du 16/10) : l'hote choisit Public ou Prive (prive :
+// un code de session de 6 caracteres, montre en grand dans le salon, a copier ; les invites par IP le tapent sur
+// l'accueil, HELLO le porte, sinon REJECT "code" ; par Steam, les donnees du salon le portent : un ami invite entre sans
+// le taper, un ami venu de Steam sans invitation doit le taper), le nombre de joueurs (2 a 16) et les options de la
+// partie (celles de la categorie Coop des Options du jeu que l'hote decide : argent de depart, triches, renverser, PvP,
+// ajouts). Les valeurs viennent de mwcoop.ini a l'ouverture du salon et ne changent que POUR CE SALON : elles vont
+// dans lancement.ini (le mod les lit 3 minutes, devant mwcoop.ini), chez l'hote et chez chaque invite. STATE les porte,
+// APRES le nom de la sauvegarde (un ancien lanceur les ignore) : u8 joueurs max, u8 prive, str code, u8 n, puis n fois
+// (str cle, u16 valeur). Chaque joueur a aussi ses options a lui (vocal, visages, carte, envoi de l'hote...) pour ce
+// salon seulement, dans son lancement.ini. Le protocole (LB_PROTO) ne change pas : tout est ajoute en fin de message.
 // GO : l'hote lance son jeu (lancement.ini : Partie=continuer|nouvelle, il entre en partie tout seul) ; chaque invite
 // attend ~4 s (deux jeux sur le meme PC ne demarrent pas ensemble) puis lance le sien en invite : il suit l'hote.
 //
@@ -138,6 +148,92 @@ static bool RecvMsg(SOCKET s, std::string &out)
 }
 
 static int LobbyPort() { const Opt *po = OptByKey("Port"); return po ? OptGet(*po) : 7870; }
+
+// --- options du salon (voir en tete) : cle de [Coop], valeur par defaut (celle du mod), decidee par l'hote ou par chacun
+struct LobbyOptDef { const char *key; int def; bool host; };
+static const LobbyOptDef kLobbyOptDefs[] = {
+    { "ArgentDepart", 1, true }, { "Triches", 0, true }, { "Renverser", 1, true }, { "PvP", 0, true }, { "Jokkis", 0, true }, { "VenttiEnjeux", 1, true },
+    { "SansAjouts", 0, true }, { "AjoutDrone", 1, true }, { "AjoutSacs", 1, true }, { "AjoutBoutique", 1, true }, { "AjoutMusee", 1, true },
+    { "Vocal", 1, false }, { "VocalPortee", 35, false }, { "VolumeVocal", 100, false }, { "GainMicro", 100, false },
+    { "VoirVisages", 1, false }, { "CarteMaintenir", 0, false }, { "Marqueurs", 1, false }, { "ModsAuto", 0, false },
+};
+static const int kLobbyOptN = (int)(sizeof(kLobbyOptDefs) / sizeof(kLobbyOptDefs[0]));
+static std::map<std::string, int> g_lobbyOpt;       // mes choix pour CE salon (hote : options de la partie et les miennes ; invite : les miennes)
+static std::map<std::string, int> g_hostOpt;        // invite : options de la partie recues de l'hote (sous g_lcs)
+static int g_lobbyOptTab;                           // carte des options du salon : 0 la partie, 1 les miennes
+static DWORD g_codeCopiedT;                         // COPIER du code de session : "copie" pendant 2 s
+static int LobbyOptGet(const char *key)
+{
+    auto it = g_lobbyOpt.find(key);
+    if (it != g_lobbyOpt.end()) return it->second;
+    for (auto &d : kLobbyOptDefs) if (!strcmp(d.key, key)) return d.def;
+    return 0;
+}
+// Ouverture d'un salon : les valeurs du moment (MWCoop\mwcoop.ini [Coop], comme GfxLoad), sans y toucher ensuite.
+static void LobbyOptImport()
+{
+    g_lobbyOpt.clear();
+    EnterCriticalSection(&g_lcs); g_hostOpt.clear(); LeaveCriticalSection(&g_lcs);
+    g_lobbyOptTab = 0;
+    std::string ini = ModIniA();
+    for (auto &d : kLobbyOptDefs) g_lobbyOpt[d.key] = GetPrivateProfileIntA("Coop", d.key, d.def, ini.c_str());
+    g_lobbyPrive = GetPrivateProfileIntW(L"Lanceur", L"SalonPrive", 1, g_iniLauncher.c_str()) != 0;
+    g_lobbyMax = max(2, min(kLobbyMaxAbs, (int)GetPrivateProfileIntW(L"Lanceur", L"SalonMax", 8, g_iniLauncher.c_str())));
+}
+static std::string LobbyOptText()   // "cle=valeur;..." des options de la partie (salon Steam, journal)
+{
+    std::string s;
+    for (auto &d : kLobbyOptDefs) if (d.host) s += std::string(d.key) + "=" + std::to_string(LobbyOptGet(d.key)) + ";";
+    return s;
+}
+static void LobbyOptParse(const std::string &s, std::map<std::string, int> &out)   // (l'inverse)
+{
+    out.clear();
+    size_t p = 0;
+    while (p < s.size()) {
+        size_t e = s.find(';', p), q = s.find('=', p);
+        if (e == std::string::npos) e = s.size();
+        if (q != std::string::npos && q < e) out[s.substr(p, q - p)] = atoi(s.c_str() + q + 1);
+        p = e + 1;
+    }
+}
+// Lignes de lancement.ini (lu par le mod comme [Coop], devant mwcoop.ini, 3 minutes) : chez l'hote tout ; chez l'invite
+// les options de la partie de l'hote et les siennes. JoueursMax : pour le salon Steam du jeu (invites en retard).
+static std::string LobbyCoopLines(bool host)
+{
+    std::string t = "[Coop]\r\n";
+    std::map<std::string, int> ho;
+    if (!host) { EnterCriticalSection(&g_lcs); ho = g_hostOpt; LeaveCriticalSection(&g_lcs); }
+    for (auto &d : kLobbyOptDefs) {
+        if (d.host && !host) { auto it = ho.find(d.key); if (it != ho.end()) t += std::string(d.key) + "=" + std::to_string(it->second) + "\r\n"; continue; }
+        t += std::string(d.key) + "=" + std::to_string(LobbyOptGet(d.key)) + "\r\n";
+    }
+    if (host) t += "JoueursMax=" + std::to_string(g_lobbyMax) + "\r\n";
+    return t;
+}
+// Code de session : 6 caracteres sans ambiguite (ni 0/O ni 1/I), tires au sort.
+static std::string MakeSessionCode()
+{
+    static const char *al = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    LARGE_INTEGER qpc;
+    QueryPerformanceCounter(&qpc);
+    static uint64_t x;
+    if (!x) x = (uint64_t)qpc.QuadPart ^ ((uint64_t)GetCurrentProcessId() << 32) ^ ((uint64_t)GetTickCount() << 11) ^ 0x9E3779B97F4A7C15ULL;
+    std::string c;
+    for (int i = 0; i < 6; i++) { x ^= x << 13; x ^= x >> 7; x ^= x << 17; c += al[(x >> 24) % 32]; }
+    return c;
+}
+static std::string CodeNorm(const std::wstring &w)   // code tape : majuscules, sans espaces
+{
+    std::string c;
+    for (wchar_t ch : w) if (iswalnum(ch) && ch < 128) c += (char)towupper(ch);
+    return c;
+}
+static std::wstring LobbyModeText()   // sous-titre : "Public" ou "Prive . code ABC123"
+{
+    if (!g_lobbyPrive) return T(L"Public", L"Public");
+    return std::wstring(T(L"Privé · code", L"Private · code")) + L" " + Widen(g_lobbyCode);
+}
 static std::string MyShirt() { const Opt *ap = OptByKey("Apparence"); return ap ? ap->svals[OptGet(*ap)] : "char_shirt21"; }
 // Apparence annoncee au salon : complete ("haut|pantalon|visage|corps|chapeau|lunettes|cheveux", comme le mod).
 static std::string MySkin() { return PersoLookString(); }
@@ -204,6 +300,11 @@ static void BroadcastState()
     w.u8((int)g_peers.size());   // test UDP de chacun (ignore par un ancien lanceur)
     for (auto &p : g_peers) { w.u8(p.id); w.u8(p.udp); }
     { std::string sn = Narrow(SaveCurrentName(), CP_UTF8); if (sn.size() > 200) sn.resize(200); w.str(sn); }   // (sauvegarde de l'hote : saves.inc ; ignore par un ancien lanceur)
+    w.u8(g_lobbyMax); w.u8(g_lobbyPrive ? 1 : 0); w.str(g_lobbyPrive ? g_lobbyCode : "");   // (0.96.4 : salon et options de la partie, voir en tete)
+    int nh = 0;
+    for (auto &d : kLobbyOptDefs) if (d.host) nh++;
+    w.u8(nh);
+    for (auto &d : kLobbyOptDefs) if (d.host) { w.str(d.key); w.u16(LobbyOptGet(d.key)); }
     for (auto &c : g_conns) SendMsg(c.s, w);
     LeaveCriticalSection(&g_lcs);
 }
@@ -229,6 +330,7 @@ static void LobbySession(SOCKET s)
     Rd r(m);
     int type = r.u8(), proto = r.u8();
     std::string ver = r.str(), name = r.str(), skin = r.str();
+    std::string code = r.ok && r.p < m.size() ? r.str() : "";   // (code de session, 0.96.4 ; absent : ancien lanceur)
     auto reject = [&](const std::string &why) { Wr w; w.u8(M_REJECT); w.str(why); SendMsg(s, w); shutdown(s, SD_SEND); closesocket(s); };
     if (!r.ok || type != M_HELLO || proto != LB_PROTO) { TestLog("salon : connexion refusee (protocole)"); reject("proto"); return; }
     std::string mine = MyVersion();
@@ -238,6 +340,12 @@ static void LobbySession(SOCKET s)
         reject("version " + mine);
         return;
     }
+    if (g_lobbyPrive && _stricmp(code.c_str(), g_lobbyCode.c_str())) {   // salon prive : le code, avant tout (meme en retard)
+        TestLog("salon : %s refuse (code de session %s, attendu %s)", name.c_str(), code.c_str(), g_lobbyCode.c_str());
+        SetStatus(K_WARN, T(L"%S refusé : code de session incorrect", L"%S refused: wrong session code"), name.c_str());
+        reject("code");
+        return;
+    }
     if (g_goSent || g_lobby != LB_HOST) {
         if (g_lateServe && LateSession(s, name)) return;   // (partie lancee : ses mods, puis il rejoint en jeu)
         reject(g_goSent ? "started" : "closed");
@@ -245,7 +353,7 @@ static void LobbySession(SOCKET s)
     }
     int id = -1;
     EnterCriticalSection(&g_lcs);   // (WELCOME envoye sous le verrou : pas de STATE glisse avant lui)
-    for (int k = 1; k < kLobbyMax && id < 0; k++) if (!PeerById(k)) id = k;
+    for (int k = 1; k < g_lobbyMax && id < 0; k++) if (!PeerById(k)) id = k;
     if (id > 0) {
         g_peers.push_back({ id, name, skin, ver, false, 0, UDP_WAIT, GetTickCount() });
         g_peers.back().dl = -2;   // (son etat de l'envoi : pas encore dit)
@@ -253,7 +361,7 @@ static void LobbySession(SOCKET s)
         Wr w; w.u8(M_WELCOME); w.u8(id); SendMsg(s, w);
     }
     LeaveCriticalSection(&g_lcs);
-    if (id < 0) { reject("full"); return; }
+    if (id < 0) { TestLog("salon : %s refuse (salon complet, %d joueurs)", name.c_str(), g_lobbyMax); reject("full " + std::to_string(g_lobbyMax)); return; }
     TestLog("salon : %s arrive (joueur %d, version %s, apparence %s)", name.c_str(), id, ver.c_str(), skin.c_str());
     BroadcastState();
     SyncWelcome(s);

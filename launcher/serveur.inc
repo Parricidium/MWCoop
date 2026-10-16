@@ -215,7 +215,7 @@ static void DrawServer(Graphics &g)
     wchar_t head[64];
     swprintf_s(head, T(L"%d joueur(s)", L"%d player(s)"), (int)g_srv.size());
     Text(g, head, RectF(c.X + c.Width - 240, c.Y + 18, 216, 28), 13, FontStyleBold, kGrey, StringAlignmentFar);
-    static const int pal[8] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89 };
+    static const int pal[16] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89, 0x55B04C, 0x3FBFD9, 0xE8A33C, 0xB24FA5, 0x8C6239, 0x5C6BC0, 0xA9C43A, 0xE88A7A };   // (meme palette que Sync/Markers.cs)
     bool armedLive = g_kickArmed >= 0 && GetTickCount() - g_kickArmedT < 4000;
     for (int i = 0; i < (int)g_srv.size(); i++) {
         const SrvPlayer &p = g_srv[i];
@@ -224,7 +224,7 @@ static void DrawServer(Graphics &g)
         GraphicsPath rp; RoundRect(rp, r, 18);
         SolidBrush rb(p.me ? WithA(kAcc, 0.10f) : TH(card)); g.FillPath(&rb, &rp);
         Pen rpen(p.me ? kAcc : TH(choiceBorder), p.me ? 1.5f : 1.0f); g.DrawPath(&rpen, &rp);
-        DrawSkinAvatar(g, RectF(r.X + 12, r.Y + (r.Height - 54) / 2, 54, 54), p.skin, CarRgb(pal[p.id % 8]), p.name);
+        DrawSkinAvatar(g, RectF(r.X + 12, r.Y + (r.Height - 54) / 2, 54, 54), p.skin, CarRgb(pal[p.id % 16]), p.name);
         std::wstring nm = p.name + (p.me ? T(L"  (toi)", L"  (you)") : L"") + (p.id == 0 ? T(L"  \u00B7 h\u00F4te", L"  \u00B7 host") : L"");
         Text(g, nm, RectF(r.X + 80, r.Y + 14, 240, 24), 16, FontStyleBold, kInk, StringAlignmentNear);
         std::wstring line = p.inGame ? T(L"en partie", L"in game") : T(L"au menu", L"at the menu");

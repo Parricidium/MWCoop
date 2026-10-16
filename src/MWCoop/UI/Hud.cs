@@ -61,6 +61,9 @@ namespace MWCoop
                 Style.Text(new Rect(mr.x + Style.Px(24), mr.y, mw - Style.Px(28), mh), mic, 15, TextAnchor.MiddleCenter, Style.White);
             }
 
+            // Marqueurs partages (Markers) : pastille de la couleur du joueur, nom et distance, par-dessus tout (OnGUI).
+            Markers.DrawHud();
+
             // Pseudos au-dessus des joueurs : pilule sombre, effacee sur la derniere moitie de la distance choisie
             // ([Graphismes] Pseudos : 0 caches, sinon la distance en metres ; 120 par defaut).
             Camera cam = Game.MainCam;
@@ -79,6 +82,8 @@ namespace MWCoop
                 var r = new Rect(Mathf.Round(sp.x - nw / 2), Mathf.Round(Screen.height - sp.y - nh), nw, nh);
                 Style.Alpha = Mathf.Clamp01(2f - 2f * sp.z / far);
                 Style.Round(r, nh / 2, pill);
+                // (filet de la couleur du joueur : la meme que sa pastille sur la carte et son marqueur -- Markers)
+                Style.Round(new Rect(r.x + nh / 2, r.yMax - Style.Px(3), r.width - nh, Style.Px(3)), Style.Px(1.5f), Markers.ColorOf(a.Player.Id));
                 if (Voice.Speaking(a.Player.Id)) Style.Ring(new Rect(r.x - 2, r.y - 2, r.width + 4, r.height + 4), nh / 2 + 2, Style.Good);   // (parle : vocal)
                 if (av != null)
                 {

@@ -1,0 +1,62 @@
+LOB1	if private
+LOB2	Yes
+LOB3	No
+LOB4	Host's options
+LOB5	My options
+LOB6	The game
+LOB7	Mine
+LOB8	Not received from the host yet
+LOB9	For this lobby only; your guests receive them.
+LOB10	Chosen by the host for this game.
+LOB11	For this lobby only (Game options: unchanged).
+LOB12	Public
+LOB13	Private
+LOB14	PRIVATE
+LOB15	PUBLIC
+LOB16	SESSION CODE
+LOB17	COPIED ✓
+LOB18	COPY
+LOB19	For your friends by IP; through Steam, the invite is enough.
+LOB20	No code: anyone can join
+LOB21	By IP, the address is enough; through Steam, any Steam friend.
+LOB22	Players max
+LOB23	host included, 2 to 16
+LOB24	Above 10: a very good connection and a good machine on the host's side.
+LOB25	Steam · friends only
+LOB26	Invite your friends from the lobby; they can also join from Steam (\"Join game\").
+LOB27	Port %d (UDP and TCP)
+LOB28	Local address:
+LOB29	Private lobby: session code
+LOB30	The lobby of
+LOB31	is private. Enter the 6-character code they gave you, or ask them for a Steam invite (it is enough).
+LOB32	ENTER
+LOB33	Session code copied: %S
+LOB34	Private lobby: the session code is required
+LOB35	Public lobby: no code
+LOB36	Wrong session code: ask the host for it (private lobby)
+LOB37	Private · code
+LOB38	%S refused: wrong session code
+LOB39	Lobby is full
+LOB40	Private lobby: enter the session code given by %s
+LOB41	Steam · friends only · %s · %d / %d players
+LOB42	Port %d (UDP and TCP) · %s · %s · %d / %d
+LOB43	Host: %s:%d · %s · %d / %d players
+LOB44	CODE
+LOB45	Up to %d players
+LOB46	Ventti: car and house stakes apply to the whole group
+LOB47	The lobby: code and options
+LOB48	When hosting: Public or Private (a session code to COPY for your friends by IP), players max (2 to 16) and game options, for this lobby only, sent to your guests.
+LOB49	Session code
+LOB50	To join a private lobby by IP: the host's address and, here, the code they gave you. Public lobby: leave it empty. Through Steam, an invited friend gets in without typing anything.
+LOB51	Lobby: the players, the session code (Public / Private), the game options, READY and START.
+LOB52	The host opens a lobby, friends join it, then everyone goes into THEIR game. Up to 16 players, host included (8 by default, set in the lobby).
+LOB53	The lobby: code, Public / Private, options
+LOB54	Under the players, the Lobby card: Public (anyone can join) or Private (a 6-character session code, shown big; COPY puts it in the clipboard, the arrow draws a new one). The choice is remembered for next time.
+LOB55	By IP, your friends type the code next to your address; through Steam, a friend you invite gets in without typing it (a friend coming from Steam without an invite has to type it).
+LOB56	Players max: from 2 to 16, host included (8 by default). Above 10, you need a very good connection and a good machine on the host's side.
+LOB57	Game options: starting money, cheats, run over, PvP, CO-OP additions… They start from the Game options but only apply to this lobby (the Game options don't change); your guests receive them. The \"Mine\" tab: your own options (voice, faces, map).
+LOB58	Private lobby? If the host invited you, you get straight in. Coming from Steam without an invite (\"Join game\"), the launcher asks you for their session code.
+LOB59	IP / VPN network, then enter the host's address (address:port if their port isn't 7870) and, private lobby, the session code they gave you (CODE field).
+LOB60	In the lobby: the options chosen by the host (read-only) and yours (voice, faces, map, host's files), for this lobby only.
+LOB61	Lobby full: the number chosen by the host (8 by default, 16 at most), host included.
+LOB62	\"Wrong session code\": the lobby is private, ask the host for the code (they copy it with one click in their lobby).

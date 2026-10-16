@@ -29,6 +29,7 @@ namespace MWCoop
         static readonly string salt = Salt();
         static readonly Dictionary<int, int> joinLevels = new Dictionary<int, int>();
         static readonly List<KeyValuePair<float, Peer>> due = new List<KeyValuePair<float, Peer>>();
+        public static void ScheduleSnapshot(Peer p) { if (Session.IsHost && p != null) due.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 25f, p)); }   // (resynchronisation)
         static int testAuth = -1;   // essais : autorite imposee sur la nourriture
 
         static string Salt()

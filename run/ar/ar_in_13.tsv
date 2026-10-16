@@ -1,0 +1,2 @@
+WJ0	Shared marker: middle click (configurable) on what you look at, or right-click on the M map: a beacon in your colour, visible to everyone in the world and on the map, with the distance. One per player; hold the key to remove it.
+WJ1	Something looks wrong on your side (missing item, a door closed for you only)? F10 > Sync > Resync the world: the host resends you its whole state, as on your arrival (once per 30 s).

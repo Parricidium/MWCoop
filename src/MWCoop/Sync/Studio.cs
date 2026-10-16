@@ -594,6 +594,29 @@ namespace MWCoop
             dragAt = Time.realtimeSinceStartup;
         }
 
+        // ---------------------------------------------------------------- apercus d'autres modules (JokkisPanel, 16/10)
+        // Le studio prete sa couche, sa camera et ses lumieres : l'appelant pose ses objets (copies visuelles seules) sur
+        // PreviewLayer autour de OtherPivot (loin sous le monde, a l'ecart des personnages du studio) et demande un rendu par
+        // image tant que son panneau est ouvert ; il detruit ses objets lui-meme.
+        public static int PreviewLayer { get { if (layer < 0) layer = PickLayer(); return layer; } }
+        public static readonly Vector3 OtherPivot = new Vector3(-80f, -3000f, 0f);
+
+        // Rend la couche du studio dans rt : camera en 'pos' tournee vers 'target', champ vertical 'fov' (degres), plans
+        // near / far ; eclairage du studio (cle, appoint, contre-jour), soleil ote de la couche, brouillard coupe (Render).
+        // Faux hors partie (le studio vit avec la scene) ou sans texture.
+        public static bool RenderPreview(Vector3 pos, Vector3 target, float fov, float near, float far, RenderTexture rt, Color bg)
+        {
+            if (rt == null || !PlayerSync.InGame || !EnsureStudio()) return false;
+            cam.transform.position = pos;
+            cam.transform.rotation = Quaternion.LookRotation(target - pos);
+            cam.fieldOfView = fov;
+            cam.aspect = rt.width / (float)rt.height;
+            cam.nearClipPlane = Mathf.Max(0.05f, near);
+            cam.farClipPlane = Mathf.Max(cam.nearClipPlane + 0.1f, far);
+            Render(rt, bg);
+            return true;
+        }
+
         // ---------------------------------------------------------------- autotest "tenues"
         // 25 s : apercus refaits (comme RefaireTenues=1) ; 40 s : menu F10 sur APPARENCE, une autre tenue en surbrillance
         // toutes les 2 s (captures [Test] Captures=...) ; 50 s : menu ferme.

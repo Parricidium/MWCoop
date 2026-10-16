@@ -527,3 +527,51 @@ Ice race: 	Гонка на льду:
 Gift returned (player left): 	Подарок возвращён (игрок вышел): 
  bought at the sausage kiosk	 купил(а) в киоске с сосисками
  bought a part from the rally parts seller	 купил(а) деталь у продавца запчастей ралли
+ won the Ruscko at ventti	 выиграл(а) Руско в вентти
+ lost the car at ventti	 проиграл(а) машину в вентти
+ lost the house at ventti	 проиграл(а) дом в вентти
+ won the cabin at ventti	 выиграл(а) домик в вентти
+ made the ventti pig angry: table thrown	 разозлил(а) свинью в вентти: стол опрокинут
+ ruined the ventti pig: it leaves	 разорил(а) свинью в вентти: она уходит
+Resync the world	Пересинхронизировать мир
+already requested, wait 	уже запрошено, подожди 
+Already requested, wait 	Уже запрошено, подожди 
+no guest in game	нет гостей в игре
+host unreachable	хост недоступен
+Resends the whole world state to every guest, as on their arrival	Повторно отправляет всё состояние мира каждому гостю, как при его входе
+Asks the host for the whole world state, as on arrival	Запрашивает у хоста всё состояние мира, как при входе
+Whole world state resent to the guests	Всё состояние мира отправлено гостям заново
+Resync requested from the host	Пересинхронизация запрошена у хоста
+right-click: marker · 	правый клик: маркер · 
+RENTAL JOKKIS	ЙОККИС В АРЕНДУ
+Ice race: one car per player, free, first come first served; given back at the end of the weekend.	Гонка на льду: одна машина на игрока, бесплатно, кто первый; возвращается в конце выходных.
+Rivett no. 14: the game's car, free as well	Rivett № 14: машина игры, тоже бесплатно
+GIVE BACK	ВЕРНУТЬ
+CHOOSE	ВЫБРАТЬ
+yours	ваша
+free	свободна
+taken by 	занята: 
+Yours this week	Ваша на этой неделе
+Free	Свободна
+Taken by 	Занята: 
+GIVE BACK NO. 	ВЕРНУТЬ № 
+CHOOSE NO. 	ВЫБРАТЬ № 
+ALREADY TAKEN	УЖЕ ЗАНЯТА
+Give back no. 	Сначала верните № 
+Up/Down: car  ·  Enter: choose or give back  ·  drag the preview: turn  ·  Esc: close	Вверх/Вниз: машина  ·  Enter: выбрать или вернуть  ·  тяни превью: повернуть  ·  Esc: закрыть
+Preview unavailable	Превью недоступно
+Jokkis no. 	Йоккис № 
+ is yours	 ваша
+No. 	№ 
+ was just taken	 только что заняли
+ given back	 возвращена
+Return of no. 	Возврат № 
+Solo: Jokkis are rented in a multiplayer game	Соло: Йоккис арендуются в сетевой игре
+ is already taken	 уже занята
+Rental refused	В аренде отказано
+Request sent to the host…	Запрос отправлен хосту…
+ICE RACE	ГОНКА НА ЛЬДУ
+Ice race: pick a car	Гонка на льду: выбрать машину
+yours: no. 	ваша: № 
+rental Jokkis, free	Йоккис в аренду, бесплатно
+Enter or click: the game's 16 Jokkis, one per player, with a 3D preview	Enter или клик: 16 Йоккис игры, одна на игрока, с 3D-превью
