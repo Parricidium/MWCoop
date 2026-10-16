@@ -44,6 +44,7 @@ static const char *(*GetLobbyMemberData)(intptr_t, uint64_t, uint64_t, const cha
 static void (*SetLobbyMemberData)(intptr_t, uint64_t, const char *, const char *);
 static uint64_t (*GetLobbyOwner)(intptr_t, uint64_t);
 static bool (*SetLobbyJoinable)(intptr_t, uint64_t, bool);
+static bool (*SetLobbyMemberLimit)(intptr_t, uint64_t, int);   // (joueurs max choisi dans le salon ; absent : limite de la creation)
 static int (*GetFriendCount)(intptr_t, int);
 static uint64_t (*GetFriendByIndex)(intptr_t, int, int);
 static int (*GetFriendPersonaState)(intptr_t, uint64_t);
@@ -84,6 +85,7 @@ static bool SteamBind()
     STEAM_SYM(GetLobbyData, "SteamAPI_ISteamMatchmaking_GetLobbyData"); STEAM_SYM(SetLobbyData, "SteamAPI_ISteamMatchmaking_SetLobbyData");
     STEAM_SYM(GetLobbyMemberData, "SteamAPI_ISteamMatchmaking_GetLobbyMemberData"); STEAM_SYM(SetLobbyMemberData, "SteamAPI_ISteamMatchmaking_SetLobbyMemberData");
     STEAM_SYM(GetLobbyOwner, "SteamAPI_ISteamMatchmaking_GetLobbyOwner"); STEAM_SYM(SetLobbyJoinable, "SteamAPI_ISteamMatchmaking_SetLobbyJoinable");
+    SteamSym(SetLobbyMemberLimit, "SteamAPI_ISteamMatchmaking_SetLobbyMemberLimit");   // (facultatif)
     STEAM_SYM(GetFriendCount, "SteamAPI_ISteamFriends_GetFriendCount"); STEAM_SYM(GetFriendByIndex, "SteamAPI_ISteamFriends_GetFriendByIndex");
     STEAM_SYM(GetFriendPersonaState, "SteamAPI_ISteamFriends_GetFriendPersonaState"); STEAM_SYM(GetFriendPersonaName, "SteamAPI_ISteamFriends_GetFriendPersonaName");
     STEAM_SYM(GetFriendGamePlayed, "SteamAPI_ISteamFriends_GetFriendGamePlayed"); STEAM_SYM(GetMediumFriendAvatar, "SteamAPI_ISteamFriends_GetMediumFriendAvatar");
@@ -139,6 +141,7 @@ static uint64_t g_sCall;              // creation (513) ou entree (504) en cours
 static int g_sCallKind;
 static bool g_sCallStale;             // ... abandonnee entre-temps : salon quitte des qu'il arrive
 static SteamId g_sInvite;             // invitation recue lanceur ouvert : REJOINDRE la prend
+static SteamId g_sInvitedTo;          // salon rejoint sur une invitation recue ici (salon prive : pas de code a taper)
 static std::wstring g_sInviteName;    // ... et qui l'envoie
 static SteamId g_sConnect;            // salon a rejoindre des que possible (+connect_lobby, invitation acceptee)
 static std::map<SteamId, int> g_sIds; // numero de chaque membre dans le salon (couleur, sons)
@@ -298,6 +301,7 @@ static void SSetLobby(const char *k, const std::string &v) { if (g_steamUp == 1 
 
 // Le salon : liste des joueurs refaite d'apres les membres et leurs donnees.
 static void SteamLobbySync();
+static void SteamEnterDone();
 
 static void SteamLobbyHost()
 {
@@ -317,6 +321,9 @@ static void SteamLobbyHost()
     g_sInvited.clear();
     g_mySkinSent = MySkin();
     g_partie = PARTIE_CONTINUER;
+    LobbyOptImport();   // (salon prive / public, joueurs max, options de la partie : valeurs du moment, pour ce salon)
+    g_lobbyCode = g_testCode.empty() ? MakeSessionCode() : g_testCode;
+    if (g_testPublic) g_lobbyPrive = false;
     g_goSent = false;
     g_myId = 0;
     g_joinFallback = false;
@@ -325,7 +332,7 @@ static void SteamLobbyHost()
     g_tab = TAB_LOBBY;
     g_scroll[TAB_LOBBY] = 0;
     g_focus = -1;
-    g_sCall = sapi::CreateLobby(sapi::mm, 1 /* amis seulement */, kLobbyMax);
+    g_sCall = sapi::CreateLobby(sapi::mm, 1 /* amis seulement */, g_lobbyMax);
     g_sCallKind = 513;
     g_sCallStale = false;
     SetStatus(K_NORMAL, T(L"Création du salon Steam…", L"Creating the Steam lobby…"));
@@ -357,6 +364,9 @@ static void SteamLobbyJoin(SteamId lobby)
     g_sNextId = 1;
     g_sHost = 0;
     g_partie = PARTIE_CONTINUER;
+    LobbyOptImport();   // (mes options pour ce salon ; celles de l'hote : donnees du salon)
+    g_lobbyPrive = false; g_lobbyMax = 8; g_lobbyCode.clear();
+    g_sCodeAsk = false;
     g_mySkinSent = MySkin();
     g_lobbySteam = true;
     g_lobby = LB_CONNECTING;
@@ -382,7 +392,7 @@ static void SteamPresence()
     if (g_steamUp != 1) return;
     int n = g_sLobby ? sapi::GetNumLobbyMembers(sapi::mm, g_sLobby) : 0;
     char b[96];
-    sprintf_s(b, "MWCoop : salon (%d/%d)", n, kLobbyMax);
+    sprintf_s(b, "MWCoop : salon (%d/%d)", n, g_lobbyMax);
     sapi::SetRichPresence(sapi::fr, "status", g_sLobby ? b : "MWCoop");
 }
 
@@ -404,6 +414,11 @@ static void SteamCreated(bool ok, int result, SteamId lobby)
     SSetLobby("hote", MyName());
     SSetLobby("partie", PartieName(g_partie));
     SSetLobby("sauvegarde", Narrow(SaveCurrentName(), CP_UTF8));   // (saves.inc)
+    SSetLobby("prive", g_lobbyPrive ? "1" : "0");   // (0.96.4 : salon prive, code, joueurs max, options de la partie, amis invites)
+    SSetLobby("code", g_lobbyPrive ? g_lobbyCode : "");
+    SSetLobby("max", std::to_string(g_lobbyMax));
+    SSetLobby("options", LobbyOptText());
+    SSetLobby("invites", "");
     sapi::SetLobbyJoinable(sapi::mm, lobby, true);
     SteamPublishMe(true);
     SteamPresence();
@@ -411,7 +426,7 @@ static void SteamCreated(bool ok, int result, SteamId lobby)
     g_sFriendsView = g_testSalon.empty();   // (tout de suite : qui inviter)
     g_scroll[TAB_LOBBY] = 0;
     SetStatus(K_OK, T(L"Salon Steam ouvert : invite tes amis", L"Steam lobby open: invite your friends"));
-    TestLog("salon steam : %llu cree", (unsigned long long)lobby);
+    TestLog("salon steam : %llu cree (%s, code %s, %d joueurs au plus, options %s)", (unsigned long long)lobby, g_lobbyPrive ? "prive" : "public", g_lobbyCode.c_str(), g_lobbyMax, LobbyOptText().c_str());
     if (!g_testSteamFile.empty()) {
         FILE *f = _wfopen(g_testSteamFile.c_str(), L"wb");
         if (f) { fprintf(f, "%llu", (unsigned long long)lobby); fclose(f); }
@@ -427,7 +442,7 @@ static void SteamEntered(bool ok, uint32_t response, SteamId lobby)
     if (!ok || response != 1) {
         LobbyClose();
         // EChatRoomEnterResponse : 2 inexistant, 3 pas autorise, 4 plein, 6 banni, 7 limite, 8 verrouille...
-        if (ok && response == 4) SetStatus(K_ERR, T(L"Salon complet (%d joueurs)", L"Lobby is full (%d players)"), kLobbyMax);
+        if (ok && response == 4) SetStatus(K_ERR, T(L"Salon complet", L"Lobby is full"));
         else if (ok && (response == 2 || response == 3 || response == 8)) SetStatus(K_WARN, T(L"Ce salon n'existe plus (ou il est fermé)", L"This lobby no longer exists (or is closed)"));
         else SetStatus(K_ERR, T(L"Impossible d'entrer dans le salon Steam (code %u)", L"Could not join the Steam lobby (code %u)"), ok ? response : 0u);
         TestLog("salon steam : entree refusee (ok=%d reponse %u)", (int)ok, response);
@@ -461,13 +476,58 @@ static void SteamEntered(bool ok, uint32_t response, SteamId lobby)
     }
     g_sHost = owner;
     g_sHostName = hostName;
-    g_sIds[owner] = 0;
+    // Salon prive (0.96.4) : un ami invite par l'hote (liste "invites" du salon, ou invitation recue ici) entre tout de suite ;
+    // un ami venu de Steam sans invitation (« Rejoindre la partie ») doit taper le code de session.
+    bool invited = g_sInvitedTo == lobby;
+    {
+        std::string inv = SLobbyData("invites"), me = std::to_string((unsigned long long)g_steamMe) + ",";
+        if (inv.find(me) != std::string::npos) invited = true;
+    }
+    g_sInvitedTo = 0;
+    if (SLobbyData("prive") == "1" && !invited) {
+        g_sCodeAsk = true;
+        g_focus = 2;
+        g_time = 0;
+        SetStatus(K_WARN, T(L"Salon privé : entre le code de session donné par %s", L"Private lobby: enter the session code given by %s"), hostName.c_str());
+        TestLog("salon steam : salon prive sans invitation, code demande");
+        return;
+    }
+    SteamEnterDone();
+}
+// Entree dans le salon Steam (apres le code s'il le faut).
+static void SteamEnterDone()
+{
+    SteamId lobby = g_sLobby;
+    g_sIds[g_sHost] = 0;
     g_partie = SLobbyData("partie") == "nouvelle" ? PARTIE_NOUVELLE : PARTIE_CONTINUER;
     SteamPublishMe(false);
     SteamPresence();
     g_lobby = LB_GUEST;
-    SetStatus(K_OK, T(L"Dans le salon Steam de %s", L"In %s's Steam lobby"), hostName.c_str());
+    SetStatus(K_OK, T(L"Dans le salon Steam de %s", L"In %s's Steam lobby"), g_sHostName.c_str());
+    TestLog("salon steam : entre dans %llu", (unsigned long long)lobby);
     SteamLobbySync();
+}
+// ENTRER (code d'un salon Steam prive) : compare au code du salon ; bon -> on entre ; sinon on reste devant la question.
+static void SteamCodeSubmit()
+{
+    if (!g_sCodeAsk || !g_sLobby || g_lobby != LB_CONNECTING) return;
+    if (SLobbyData("mwcoopsalon") != "1" || SLobbyData("ferme") == "1") { LobbyClose(); SetStatus(K_WARN, T(L"Ce salon n'existe plus (ou il est fermé)", L"This lobby no longer exists (or is closed)")); return; }
+    std::string typed = CodeNorm(g_fields[2].text), code = SLobbyData("code");
+    if (typed.empty() || _stricmp(typed.c_str(), code.c_str())) {
+        SetStatus(K_ERR, T(L"Code de session incorrect : demande-le à l'hôte (salon privé)", L"Wrong session code: ask the host for it (private lobby)"));
+        TestLog("salon steam : code %s refuse", typed.c_str());
+        return;
+    }
+    g_sCodeAsk = false;
+    g_focus = -1;
+    SavePlayer();   // (le code retenu pour la prochaine fois)
+    TestLog("salon steam : code accepte");
+    SteamEnterDone();
+}
+// Hote : joueurs au plus change dans le salon (limite Steam suivie si la DLL le permet).
+static void SteamLobbySetMax(int v)
+{
+    if (g_steamUp == 1 && g_sLobby && sapi::SetLobbyMemberLimit) sapi::SetLobbyMemberLimit(sapi::mm, g_sLobby, v);
 }
 
 // Invite : l'hote a lance (go). Il quitte le salon et lance son jeu un peu apres (l'hote demarre le premier).
@@ -476,6 +536,7 @@ static void SteamGo(const std::string &go)
     int partie = go == "nouvelle" ? PARTIE_NOUVELLE : PARTIE_CONTINUER;
     TestLog("salon steam : GO recu (%s), hote %llu", go.c_str(), (unsigned long long)g_sHost);
     g_syncKeep = true;
+    g_lobbyOptGo = true;   // (options de l'hote et les miennes dans lancement.ini)
     LobbyClose();
     g_partie = partie;
     g_goWait = true;
@@ -538,6 +599,22 @@ static void SteamLobbySync()
     }
     g_partie = SLobbyData("partie") == "nouvelle" ? PARTIE_NOUVELLE : PARTIE_CONTINUER;
     if (g_lobby == LB_GUEST) { std::wstring sn = Widen(SLobbyData("sauvegarde"), CP_UTF8); EnterCriticalSection(&g_lcs); g_hostSaveName = sn; LeaveCriticalSection(&g_lcs); }   // (saves.inc)
+    if (g_lobby == LB_GUEST) {   // salon (joueurs max, prive, code) et options de la partie de l'hote (0.96.4)
+        std::string mx = SLobbyData("max"), opts = SLobbyData("options");
+        if (!mx.empty()) g_lobbyMax = max(2, min(kLobbyMaxAbs, atoi(mx.c_str())));
+        g_lobbyPrive = SLobbyData("prive") == "1";
+        g_lobbyCode = SLobbyData("code");
+        static std::string lastOpts = "-";
+        if (opts != lastOpts) {
+            lastOpts = opts;
+            std::map<std::string, int> ho;
+            LobbyOptParse(opts, ho);
+            EnterCriticalSection(&g_lcs);
+            g_hostOpt = ho;
+            LeaveCriticalSection(&g_lcs);
+            TestLog("salon steam : options de l'hote %s (max %s, %s)", opts.c_str(), mx.c_str(), g_lobbyPrive ? "prive" : "public");
+        }
+    }
 }
 
 // LobbyClose : quitter le salon Steam (l'hote le dit d'abord aux invites).
@@ -615,6 +692,9 @@ static void SteamInviteFriend(int i)
     bool ok = sapi::InviteUserToLobby(sapi::mm, g_sLobby, f.id);
     if (ok) {
         g_sInvited[f.id] = GetTickCount();
+        std::string inv;   // (salon prive : les amis invites entrent sans le code)
+        for (auto &kv : g_sInvited) inv += std::to_string((unsigned long long)kv.first) + ",";
+        SSetLobby("invites", inv);
         SetStatus(K_OK, T(L"Invitation envoyée à %s", L"Invite sent to %s"), f.name.c_str());
     } else SetStatus(K_ERR, T(L"Steam a refusé l'invitation", L"Steam refused the invite"));
     TestLog("salon steam : invitation (ok=%d)", (int)ok);
@@ -624,7 +704,7 @@ static void SteamInviteFriend(int i)
 static void SteamJoinClick()
 {
     if (!SteamUp()) { SetStatus(K_ERR, L"%s", g_steamWhy.c_str()); return; }
-    if (g_sInvite) { SteamId l = g_sInvite; g_sInvite = 0; SteamLobbyJoin(l); return; }
+    if (g_sInvite) { SteamId l = g_sInvite; g_sInvite = 0; g_sInvitedTo = l; SteamLobbyJoin(l); return; }
     std::vector<std::pair<SteamId, std::wstring>> found;
     int n = sapi::GetFriendCount(sapi::fr, 4);
     for (int i = 0; i < n; i++) {
@@ -692,6 +772,7 @@ static void SteamTick()
     if (g_sConnect && !g_sCall && g_state == ST_IDLE && !g_busy && !g_goWait && g_modOk) {
         SteamId l = g_sConnect;
         g_sConnect = 0;
+        if (g_sInvite == l) { g_sInvitedTo = l; g_sInvite = 0; }   // (invitation recue ici puis acceptee dans Steam : pas de code a taper)
         if (!(g_lobbySteam && g_sLobby == l)) SteamLobbyJoin(l);
     }
     if (g_lobbySteam && g_sLobby && (g_lobby == LB_HOST || g_lobby == LB_GUEST) && now - lastSync >= 100) { lastSync = now; SteamLobbySync(); }

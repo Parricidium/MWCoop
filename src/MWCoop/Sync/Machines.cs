@@ -39,6 +39,17 @@ namespace MWCoop
     //    mise (Check bet) : seul 'Wait button' vaut survol. WorldFsms ne rejoue rien sous 'Ventti' (SkipParents) :
     //    rejoues, les clics tiraient d'autres cartes chez l'autre et son argent etait force. La mise et le gain (Win :
     //    PlayerMoney += 2 x mise ; Cars / Home : mise rendue + 4050) restent a celui qui joue (KeepsMoney, comme le poker).
+    //    Enjeux et cochon fache (0.96.4) : mise au-dela de 4000 mk, le joueur joue la voiture (BetStage 0) ou la maison (1) :
+    //    les etats 'Win car' / 'Lose car' / 'Lose house' / 'Win house' du GameManager changent les cles (PlayerKeyRuscko,
+    //    PlayerKeySatsuma, PlayerKeyHome), le chalet (CABIN/LOD/Sleep, SAVEGAME), les portes de la maison (GLOBALEVENT) et
+    //    BetStage (sauve : VenttiPigStage). C'est le monde de tous : celui qui joue les annonce (crochet dans ces etats,
+    //    Msg.MachineLock L_STATE, relaye par l'hote) et chacun les rejoue chez lui sous Replay.Depth, sans ce qui est au joueur
+    //    (argent, stress, juron, texte du GUI) ; l'hote aussi (c'est sa sauvegarde). [Coop] VenttiEnjeux=0 chez l'hote :
+    //    enjeux a chacun (ni rejoues ni relayes). Cochon fache (OpponentLoss >= 7000 : 'Delay' puis 'Anim 2' renverse la
+    //    table ; maison gagnee : 'Delay 2' puis 'Anim 3' et 'Crawl', il s'en va) : 'Delay' / 'Delay 2' sont annonces de meme
+    //    (toujours) ; les boutons y sont DETRUITS (DestroyObject), la table et la chaise lachees (SetIsKinematic faux) ;
+    //    chez les autres l'automate repart de la (lache 1 s apres par le joueur, qui rend le verrou : Broken, plus suivie),
+    //    la table est un corps du monde que Props recale (PERAJARVI : cle par chemin).
     public static class Machines
     {
         class Part
@@ -64,10 +75,24 @@ namespace MWCoop
             public readonly List<PlayMakerFSM> Frozen = new List<PlayMakerFSM>(); public readonly List<bool> Restart = new List<bool>();
             public readonly List<Collider> Cut = new List<Collider>();
             public bool Spectating, Hover, Toasted, Watched; public int HeldFrom = -1; public float NextRenew;
+            // ventti : GameManager 'Use' (etats annonces), table renversee (boutons detruits : plus rien a jouer), numeros d'envoi
+            public PlayMakerFSM Manager; public bool Broken; public float ReleaseAt; public int Seq, SeqFrom = -1, SeqIn = -1;
+        }
+
+        // Etat du GameManager du ventti entre ICI (pas rejoue) : annonce aux autres (voir « enjeux et cochon fache »).
+        class StateHook : ModHook
+        {
+            public override string Module { get { return "machines"; } }
+            public Machine M; public string StateName;
+            public override void OnEnter()
+            {
+                try { if (Session.Active && Replay.Depth == 0) Entered(M, StateName); } catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
         }
 
         const float Lease = 20f, Reach = 3.5f, SpinSpeed = 720f, KeepMoney = 5f;
-        const int L_FREE = 0, L_ASK = 1, L_HELD = 2, L_REFUSED = 3, L_GAME = 4, L_POWER = 5;   // Msg.MachineLock
+        const int L_FREE = 0, L_ASK = 1, L_HELD = 2, L_REFUSED = 3, L_GAME = 4, L_POWER = 5, L_STATE = 6;   // Msg.MachineLock
 
         static readonly Dictionary<string, Machine> machines = new Dictionary<string, Machine>();
         static readonly List<Machine> lockables = new List<Machine>();
@@ -97,6 +122,7 @@ namespace MWCoop
             muted.Clear(); mirrorSaved.Clear(); compTest = 0; compTestNext = 0f;
             testStep = 0; testNextLog = 0; testSeq = null; testRefus = null; testMoneyBase = testMoneyDone = false;
             venttiStep = 0; venttiNext = venttiLastAt = venttiMoney0 = venttiCheck = 0f; venttiGone = venttiOpened = venttiMoneyDone = false; venttiSeq = null;
+            v2Step = 0; v2Money0 = -1f;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;
             nextComputer = Time.realtimeSinceStartup + 20f;
         }
@@ -209,6 +235,30 @@ namespace MWCoop
             lockables.Add(m);
             Log.Info("machine a jeu " + m.Name + " : " + m.Parts.Count + " pieces visibles, " + m.Buttons.Count + " boutons, "
                      + mine + "/" + m.Fsms.Count + " automates a ce module");
+            if (m.Ventti) HookVentti(m);
+        }
+
+        // Table du ventti : le GameManager 'Use' et ses etats annonces aux autres (enjeux, cochon fache). Relevee sans aucun
+        // bouton (deja renversee dans cette partie, ou pendant qu'on en etait loin) : plus rien a y jouer.
+        static void HookVentti(Machine m)
+        {
+            foreach (PlayMakerFSM f in m.Fsms)
+                if (f != null && f.FsmName == "Use" && f.gameObject.name == "GameManager" && HasState(f, "Win car")) { m.Manager = f; break; }
+            if (m.Manager == null) { Log.Warn("ventti : GameManager 'Use' introuvable sous " + m.Key + " : enjeux et cochon fache non partages"); return; }
+            int n = 0;
+            foreach (string s in StakeStates) if (HookState(m, s)) n++;
+            foreach (string s in RageStates) if (HookState(m, s)) n++;
+            if (m.Buttons.Count == 0) { m.Broken = true; Log.Info("ventti : table relevee sans bouton (deja renversee) : plus suivie"); }
+            Log.Info("ventti : " + n + " etats du GameManager annonces aux autres (enjeux " + (StakesOn ? "partages" : "a chacun : [Coop] VenttiEnjeux=0") + ")");
+        }
+
+        static bool HookState(Machine m, string state)
+        {
+            FsmState st = m.Manager.Fsm.GetState(state);
+            if (st == null) { Log.Warn("ventti : etat '" + state + "' absent du GameManager"); return false; }
+            if (st.Actions != null && System.Array.Exists(st.Actions, a => a is StateHook)) return true;
+            FsmHooks.Prepend(st, new StateHook { M = m, StateName = state });
+            return true;
         }
 
         static bool HasState(PlayMakerFSM f, string state)
@@ -387,6 +437,14 @@ namespace MWCoop
                 if (tick && !Session.IsHost && l.Owner >= 0 && now - l.Seen > 10f) SetOwner(m.Key, -1, "plus de nouvelles de l'hote");
                 bool spect = l.Owner >= 0 && l.Owner != Session.LocalId;
                 if (spect != m.Spectating) { if (spect) Freeze(m); else Thaw(m); }
+                // Table du ventti renversee : plus de boutons, plus rien a jouer ni a envoyer ; celui qui la tenait rend le
+                // verrou 1 s apres l'annonce (l'etat est parti avant, en fiable ; les autres repartent de la a la reprise).
+                if (m.Broken)
+                {
+                    m.Toasted = false; m.Hover = false;
+                    if (m.ReleaseAt > 0f && now >= m.ReleaseAt) { m.ReleaseAt = 0f; if (l.Owner == Session.LocalId) Release(m, "table renversee"); }
+                    continue;
+                }
                 bool near = Near(m);
                 if (spect)
                 {
@@ -407,7 +465,7 @@ namespace MWCoop
             nextLockSend = now + 0.1f;
             foreach (Machine m in lockables)
             {
-                if (m.Root == null || m.L.Owner != Session.LocalId) continue;
+                if (m.Root == null || m.Broken || m.L.Owner != Session.LocalId) continue;
                 bool watched = Watched(m);
                 if (watched && !m.Watched) m.NextFull = 0f;
                 m.Watched = watched;
@@ -472,11 +530,13 @@ namespace MWCoop
             return true;
         }
 
-        static void Release(Machine m)
+        static void Release(Machine m) { Release(m, "joueur parti de la machine"); }
+
+        static void Release(Machine m, string why)
         {
-            if (Session.IsHost) { HostRelease(Session.LocalId, m.Key, "joueur parti de la machine"); return; }
+            if (Session.IsHost) { HostRelease(Session.LocalId, m.Key, why); return; }
             Session.SendToHost(new NetWriter(Msg.MachineLock).U8(L_FREE).U8(Session.LocalId).Str(m.Key), true);
-            SetOwner(m.Key, -1, "joueur parti de la machine");
+            SetOwner(m.Key, -1, why);
         }
 
         static bool HostAsk(int who, string key)
@@ -544,6 +604,8 @@ namespace MWCoop
 
         // Msg.MachineLock : U8 operation, U8 joueur, Str machine (jeu de l'ordinateur pour L_GAME ; pour L_POWER "0" eteint,
         // "1" allume a l'invite DOS, "1|<enfant de COMPUTER/SYSTEM>" allume sur ce programme : "1|Kaappis-Fishgame", "1|TELEBBS").
+        // L_STATE (ventti, fiable) : + Str etat du GameManager ('Win car', 'Lose car', 'Lose house', 'Win house', 'Delay', 'Delay 2'),
+        // U8 numero d'envoi (dedoublonnage) ; l'hote le rejoue et le relaie aux autres -- sauf un enjeu si [Coop] VenttiEnjeux=0.
         public static void OnLock(Peer from, NetReader r)
         {
             int op = r.U8(), who = r.U8();
@@ -555,6 +617,13 @@ namespace MWCoop
                 else if (op == L_FREE) HostRelease(who, key, NameOf(who) + " l'a lachee");
                 else if (op == L_GAME) { Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_GAME).U8(who).Str(key), true, who); Played(who, key); }
                 else if (op == L_POWER) { Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_POWER).U8(who).Str(key), true, who); Powered(who, key); }
+                else if (op == L_STATE)
+                {
+                    string state = r.Str(); int seq = r.U8();
+                    if (IsStake(state) && !StakesOn) { Log.Info("ventti : " + state + " de " + NameOf(who) + " : enjeux a chacun ([Coop] VenttiEnjeux=0), ni rejoue ni relaye"); return; }
+                    Session.Broadcast(new NetWriter(Msg.MachineLock).U8(L_STATE).U8(who).Str(key).Str(state).U8(seq), true, who);
+                    ApplyState(who, key, state, seq);
+                }
                 return;
             }
             if (op == L_HELD) SetOwner(key, who, "hote");
@@ -562,6 +631,127 @@ namespace MWCoop
             else if (op == L_REFUSED) { SetOwner(key, who, "refusee par l'hote"); Hud.Toast(Lang.T("Machine occup\u00E9e par ", "Machine in use by ") + NameOf(who)); }
             else if (op == L_GAME) Played(who, key);
             else if (op == L_POWER) Powered(who, key);
+            else if (op == L_STATE) { string state = r.Str(); ApplyState(who, key, state, r.U8()); }
+        }
+
+        // ---------------------------------------------------------------- ventti : enjeux et cochon fache
+        // Etats du GameManager 'Use' (releve v.261008-01) annonces par celui qui joue et rejoues chez les autres :
+        //  - enjeux ('Win car' : PlayerKeyRuscko=1, OpponentLoss=6000 ; 'Lose car' : PlayerKeySatsuma=0 ; 'Lose house' :
+        //    PlayerKeyHome=0, PlayerKeyRuscko=1, CABIN/LOD/Sleep et CABIN/SHITHOUSE/SavePivot/SAVEGAME actives, SAVEGAME du
+        //    salon eteint, GLOBALEVENT aux poignees DoorFront / DoorRear (fermees) ; 'Win house' : PlayerKeyRuscko=1,
+        //    PlayerKeySatsuma=1, chalet (Sleep, SAVEGAME, poele, Logwall) ; tous : BetStage +1, texte LoseText) -- a condition
+        //    que l'hote partage les enjeux ([Coop] VenttiEnjeux, 1 par defaut : il decide pour tous, en relayant ou non) ;
+        //  - cochon fache ('Delay' : boutons detruits, cri, puis 'Anim 2' lache la table et la chaise et les renverse, 6 fois ;
+        //    'Delay 2' apres la maison gagnee : boutons detruits, puis 'Anim 3' renverse et 'Crawl' le fait partir) -- toujours.
+        // Chez les autres l'etat est entre tel quel (SwitchState ; FINISHED enchaine sur 'Anim' / 'Anim 4', ou s'arrete a l'attente
+        // de 'Delay'), sauf ce qui est au joueur (PlayerOnly). Automate arrete ici (spectateur) : rendu actif le temps d'entrer
+        // l'etat, puis arrete de nouveau la ou il en est -- a la reprise (verrou rendu) il continue comme chez le joueur.
+        static readonly string[] StakeStates = { "Win car", "Lose car", "Lose house", "Win house" };
+        static readonly string[] RageStates = { "Delay", "Delay 2" };
+
+        static bool StakesOn { get { return Config.GetInt("Coop", "VenttiEnjeux", 1) != 0; } }
+        static bool IsStake(string state) { return System.Array.IndexOf(StakeStates, state) >= 0; }
+
+        // Entre ici, par le jeu (ou l'essai) : annonce. Spectateur : l'automate est arrete, ce n'est pas notre partie.
+        static void Entered(Machine m, string state)
+        {
+            if (m.Spectating || m.Manager == null) return;
+            bool stake = IsStake(state);
+            if (stake && Session.IsHost && !StakesOn) { Log.Info("ventti : " + state + " ici, enjeux a chacun ([Coop] VenttiEnjeux=0) : pas partage"); return; }
+            if (!stake) Broke(m, state + " ici");
+            if (Session.RemoteCount == 0) return;
+            m.Seq = (m.Seq + 1) & 255;
+            Session.SendAll(new NetWriter(Msg.MachineLock).U8(L_STATE).U8(Session.LocalId).Str(m.Key).Str(state).U8(m.Seq), true);
+            Log.Info("ventti : " + state + " ici, annonce aux autres (" + (stake ? "enjeu" : "cochon fache") + ", envoi " + m.Seq + ")");
+        }
+
+        // Boutons detruits : plus rien a jouer, plus rien a envoyer ; le verrou tenu ici est rendu 1 s apres (UpdateLocks).
+        static void Broke(Machine m, string why)
+        {
+            if (m.Broken) return;
+            m.Broken = true; m.ReleaseAt = Time.realtimeSinceStartup + 1f;
+            Log.Info("machine " + m.Name + " : table renversee, plus suivie (" + why + ")");
+        }
+
+        static void ApplyState(int who, string key, string state, int seq)
+        {
+            Machine m;
+            machines.TryGetValue(key, out m);
+            PlayMakerFSM f = m != null ? m.Manager : null;
+            if (f == null)
+            {
+                // Table pas encore relevee ici (le releve attend 15 s apres l'entree en jeu) : par son chemin.
+                GameObject table = Game.FindAny(key);
+                Transform gm = table != null ? table.transform.Find("GameManager") : null;
+                f = gm != null ? Game.FsmOn(gm.gameObject, "Use") : null;
+            }
+            if (f == null) { Log.Warn("ventti : " + state + " de " + NameOf(who) + " : GameManager introuvable ici (" + key + ")"); return; }
+            if (m != null) { if (m.SeqFrom == who && m.SeqIn == seq) return; m.SeqFrom = who; m.SeqIn = seq; }
+            bool stake = IsStake(state);
+            // Table deja renversee ici : un second 'Delay' (automate d'un autre reparti de la a la reprise) la renverserait encore.
+            if (!stake && m != null && m.Broken) { Log.Info("ventti : " + state + " de " + NameOf(who) + ", table deja renversee ici : ignore"); return; }
+            FsmState st = f.Fsm.GetState(state);
+            if (st == null) { Log.Warn("ventti : etat '" + state + "' de " + NameOf(who) + " absent du GameManager d'ici"); return; }
+            var muted = new List<FsmStateAction>();
+            if (st.Actions != null) foreach (FsmStateAction a in st.Actions) if (a != null && a.Enabled && PlayerOnly(a)) { a.Enabled = false; muted.Add(a); }
+            bool frozen = !f.enabled;
+            string before = f.ActiveStateName;
+            Replay.Depth++;
+            try
+            {
+                if (frozen) f.enabled = true;
+                Game.SetState(f, state);
+            }
+            catch (System.Exception e) { Log.Error("ventti : rejeu de " + state + " : " + e); }
+            finally
+            {
+                Replay.Depth--;
+                foreach (FsmStateAction a in muted) a.Enabled = true;
+                if (frozen)
+                {
+                    f.enabled = false;
+                    if (m != null) foreach (PlayMakerFSM x in m.Frozen) if (x != null && x.enabled) x.enabled = false;   // (EnableFSM LoseText de 'Anim' : arrete aussi)
+                }
+            }
+            if (!stake && m != null) Broke(m, state + " chez " + NameOf(who));
+            Log.Info("ventti : " + state + " de " + NameOf(who) + " rejoue ici (" + before + " => " + f.ActiveStateName + ", " + muted.Count + " actions du joueur coupees"
+                     + (frozen ? ", automate rendu arrete" : "") + ")");
+            Hud.Toast(NameOf(who) + Said(state));
+        }
+
+        // Ce qui est au joueur dans ces etats : argent et stress (globales), juron (SWEARING a sa SpeakDatabase), texte du GUI
+        // (SetFsmString Status de LoseText : YOU WON A CAR...). Le reste (cles, portes, chalet, BetStage, OpponentLoss, sons,
+        // animations, boutons detruits, corps laches) est le monde.
+        static bool PlayerOnly(FsmStateAction a)
+        {
+            string n = a.GetType().Name;
+            if (n == "SetFsmString") return true;
+            if (n == "SendEventByName") { var ev = Field(a, "sendEvent") as FsmString; return ev != null && ev.Value == "SWEARING"; }
+            if (n == "FloatAdd" || n == "FloatSubtract" || n == "FloatMultiply" || n == "SetFloatValue")
+            {
+                var v = Field(a, "floatVariable") as NamedVariable;
+                return v != null && (v.Name == "PlayerMoney" || v.Name == "PlayerStress");
+            }
+            return false;
+        }
+
+        static object Field(FsmStateAction a, string name)
+        {
+            System.Reflection.FieldInfo fi = a.GetType().GetField(name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            return fi != null ? fi.GetValue(a) : null;
+        }
+
+        static string Said(string state)
+        {
+            switch (state)
+            {
+                case "Win car": return Lang.T(" a gagn\u00E9 la Ruscko au ventti", " won the Ruscko at ventti");
+                case "Lose car": return Lang.T(" a perdu la voiture au ventti", " lost the car at ventti");
+                case "Lose house": return Lang.T(" a perdu la maison au ventti", " lost the house at ventti");
+                case "Win house": return Lang.T(" a gagn\u00E9 le chalet au ventti", " won the cabin at ventti");
+                case "Delay": return Lang.T(" a mis le cochon du ventti en col\u00E8re : table renvers\u00E9e", " made the ventti pig angry: table thrown");
+                default: return Lang.T(" a ruin\u00E9 le cochon du ventti : il s'en va", " ruined the ventti pig: it leaves");
+            }
         }
 
         // ---------------------------------------------------------------- machines a jeu : spectateur
@@ -1347,6 +1537,7 @@ namespace MWCoop
             if (mode == "pin") { TestPin(t); return; }
             if (mode == "ordinateur") { TestComputer(t); return; }
             if (mode == "ventti") { TestVentti(t); return; }
+            if (mode == "ventti2") { TestVentti2(t); return; }
             if (mode != "machine") return;
             if (t > 20f && t >= testNextLog)
             {
@@ -1389,7 +1580,9 @@ namespace MWCoop
         static bool venttiGone, venttiOpened, venttiMoneyDone;
         static string[] venttiSeq;
 
-        static void TestVentti(float t)
+        // Les deux cotes (essais 'ventti' et 'ventti2') : a 8 s teleportes a la table, a 10 s table ouverte de force, GAME verifie
+        // toutes les 5 s jusqu'a 'until'.
+        static void VenttiSetup(float t, string tag, float until)
         {
             if (t > 8f && !venttiGone)
             {
@@ -1397,18 +1590,23 @@ namespace MWCoop
                 if (Config.Get("Test", "TestPos", "").Length == 0)
                 {
                     GameObject table = Game.FindAny(VenttiTable);
-                    if (table == null) Log.Info("autotest ventti : table introuvable (" + VenttiTable + ")");
+                    if (table == null) Log.Info("autotest " + tag + " : table introuvable (" + VenttiTable + ")");
                     else
                     {
                         // TeleportTo pose 1,5 m derriere le point selon le cap : cap 180 -> 1,5 m en +z, soit 1,2 m de la table.
                         Vector3 feet = table.transform.position + new Vector3(Session.IsHost ? 0f : 0.6f, -0.2f, -0.3f);
                         Menu.TeleportTo(feet, 180f, "table du ventti (essai)");
-                        Log.Info("autotest ventti : teleporte a la table (" + table.transform.position.ToString("F1") + ")");
+                        Log.Info("autotest " + tag + " : teleporte a la table (" + table.transform.position.ToString("F1") + ")");
                     }
                 }
             }
-            if (t > 10f && !venttiOpened) { venttiOpened = true; venttiCheck = t + 5f; Log.Info("autotest ventti : " + OpenVentti()); }
-            if (venttiOpened && t < 60f && t >= venttiCheck) { venttiCheck = t + 5f; string k = KeepVenttiOpen(); if (k != null) Log.Info("autotest ventti : " + k); }
+            if (t > 10f && !venttiOpened) { venttiOpened = true; venttiCheck = t + 5f; Log.Info("autotest " + tag + " : " + OpenVentti()); }
+            if (venttiOpened && t < until && t >= venttiCheck) { venttiCheck = t + 5f; string k = KeepVenttiOpen(); if (k != null) Log.Info("autotest " + tag + " : " + k); }
+        }
+
+        static void TestVentti(float t)
+        {
+            VenttiSetup(t, "ventti", 60f);
             Machine m = Find("Ventti");
             if (m == null)
             {
@@ -1438,6 +1636,93 @@ namespace MWCoop
                 Log.Info("autotest ventti : liquide de l'hote apres : " + venttiMoney0 + " -> " + Money() + " (mise et gain a lui seul attendus) ; " + State("Ventti") + FsmsOf(m));
             }
             if (t >= 26f && t <= 56f && t >= venttiNext) { venttiNext = t + 2f; Log.Info("autotest ventti : " + State("Ventti") + FsmsOf(m)); }
+        }
+
+        // [Test] Autotest=ventti2 : enjeux et cochon fache. Memes 8 s / 10 s que 'ventti' (GAME verifie jusqu'a 45 s : apres, les
+        // boutons sont detruits). Hote : a 25 s prend le verrou et force le GameManager dans 'Win car' (BetStage remis a 0 avant :
+        // la voiture en jeu ; le crochet l'annonce, l'invite le rejoue), a 45 s dans 'Delay' (cochon fache : boutons detruits,
+        // 'Anim 2' renverse la table 2 s plus tard ; verrou rendu 1 s apres l'annonce). Les deux : liquide a 20 s ; puis toutes
+        // les 5 s (hote de 30 a 65 s, invite de 35 a 65 s) cles (PlayerKeyRuscko / Satsuma / Home), BetStage et OpponentLoss du
+        // GameManager, CABIN/LOD/Sleep, porte d'entree, table (cinematique, pose, au repos), chaise, boutons restants, verrou,
+        // liquide ("autotest ventti2 : ..."). Attendu : a 35 s PlayerKeyRuscko 1 et BetStage 1 des deux cotes, liquide de
+        // l'invite inchange ; a 55 s table libre et renversee des deux cotes, 0/4 boutons, verrou libre, « plus suivie » ;
+        // a 62 s meme pose de la table (au repos) des deux cotes, a quelques cm.
+        static int v2Step;
+        static float v2Money0 = -1f;
+
+        static void TestVentti2(float t)
+        {
+            VenttiSetup(t, "ventti2", 45f);
+            Machine m = Find("Ventti");
+            if (m == null)
+            {
+                if (t > 20f && t >= venttiNext) { venttiNext = t + 5f; Log.Info("autotest ventti2 : table pas suivie (" + machines.Count + " machines ; releve " + (nextScan == float.MaxValue ? "fait" : "a venir") + ")"); }
+                return;
+            }
+            if (t >= 20f && v2Money0 < 0f) { v2Money0 = Money(); Log.Info("autotest ventti2 : liquide avant : " + v2Money0 + " ; " + VenttiWorld(m)); }
+            if (Session.IsHost && m.Manager == null) { if (v2Step == 0) { v2Step = 3; Log.Info("autotest ventti2 : GameManager 'Use' introuvable : rien force"); } }
+            else if (Session.IsHost && v2Step == 0 && t >= 25f)
+            {
+                v2Step = 1;
+                bool got = Ask(m);
+                FsmInt stage = m.Manager.FsmVariables.FindFsmInt("BetStage");
+                if (stage != null) stage.Value = 0;
+                Log.Info("autotest ventti2 : l'hote force 'Win car' (verrou " + (got ? "pris" : "REFUSE") + ", BetStage 0) ; avant : " + Keys());
+                Game.SetState(m.Manager, "Win car");
+                Log.Info("autotest ventti2 : apres : GameManager " + m.Manager.ActiveStateName + " ; " + Keys());
+            }
+            else if (Session.IsHost && v2Step == 1 && t >= 45f)
+            {
+                v2Step = 2;
+                bool got = Ask(m);   // (bail de 20 s pris a 25 s : renouvele)
+                Log.Info("autotest ventti2 : l'hote force 'Delay' (cochon fache, verrou " + (got ? "pris" : "REFUSE") + ")");
+                Game.SetState(m.Manager, "Delay");
+                Log.Info("autotest ventti2 : apres : GameManager " + m.Manager.ActiveStateName + " ; " + VenttiWorld(m));
+            }
+            float from = Session.IsHost ? 30f : 35f;
+            if (t >= from && t <= 65f && t >= venttiNext)
+            {
+                venttiNext = t + 5f;
+                float money = Money();
+                Log.Info("autotest ventti2 : " + VenttiWorld(m) + " ; liquide " + money
+                         + (Session.IsHost ? "" : Mathf.Abs(money - v2Money0) < 0.5f ? " (inchange, OK)" : " (ECART " + (money - v2Money0) + " depuis " + v2Money0 + ")"));
+            }
+        }
+
+        static string GInt(string name)
+        {
+            FsmInt v = FsmVariables.GlobalVariables.FindFsmInt(name);
+            return v != null ? v.Value.ToString() : "-";
+        }
+
+        static string Keys() { return "PlayerKeyRuscko " + GInt("PlayerKeyRuscko") + ", PlayerKeySatsuma " + GInt("PlayerKeySatsuma") + ", PlayerKeyHome " + GInt("PlayerKeyHome"); }
+
+        // Ce que les enjeux et le cochon fache changent dans le monde : cles, GameManager, chalet, porte, table, chaise, boutons, verrou.
+        static string VenttiWorld(Machine m)
+        {
+            var sb = new System.Text.StringBuilder(Keys());
+            if (m.Manager != null)
+            {
+                FsmInt stage = m.Manager.FsmVariables.FindFsmInt("BetStage");
+                FsmFloat loss = m.Manager.FsmVariables.FindFsmFloat("OpponentLoss");
+                sb.Append(", GameManager ").Append(m.Manager.ActiveStateName).Append(m.Manager.enabled ? "" : " (arrete)")
+                  .Append(", BetStage ").Append(stage != null ? stage.Value.ToString() : "-").Append(", OpponentLoss ").Append(loss != null ? loss.Value.ToString("F0") : "-");
+            }
+            GameObject sleep = Game.FindAny("CABIN/LOD/Sleep");
+            sb.Append(", CABIN/LOD/Sleep ").Append(sleep != null ? (sleep.activeSelf ? "actif" : "inactif") : "introuvable");
+            GameObject door = Game.FindAny("YARD/Building/LIVINGROOM/DoorFront/Pivot/Handle");
+            PlayMakerFSM du = door != null ? Game.FsmOn(door, "Use") : null;
+            sb.Append(", porte d'entree ").Append(du != null ? du.ActiveStateName : "-");
+            Rigidbody table = m.Root != null ? m.Root.GetComponent<Rigidbody>() : null;
+            sb.Append(", table ").Append(table == null ? "sans corps" : (table.isKinematic ? "cinematique " : "libre ") + m.Root.position.ToString("F2") + " / " + m.Root.eulerAngles.ToString("F0") + (table.IsSleeping() ? " (au repos)" : ""));
+            Transform chair = m.Root != null && m.Root.parent != null ? m.Root.parent.Find("Chair") : null;
+            Rigidbody crb = chair != null ? chair.GetComponent<Rigidbody>() : null;
+            sb.Append(", chaise ").Append(crb == null ? "-" : crb.isKinematic ? "cinematique" : "libre " + chair.position.ToString("F2"));
+            int alive = 0;
+            if (m.Buttons != null) foreach (PlayMakerFSM b in m.Buttons) if (b != null) alive++;
+            sb.Append(", boutons ").Append(alive).Append('/').Append(m.Buttons != null ? m.Buttons.Count : 0);
+            sb.Append(", verrou ").Append(m.L.Owner >= 0 ? "tenu par " + NameOf(m.L.Owner) : "libre").Append(m.Spectating ? " (spectateur)" : "").Append(m.Broken ? ", table renversee : plus suivie" : "");
+            return sb.ToString();
         }
 
         // Table ouverte pour l'essai. Rien n'active Gamestuff (jamais inactif) ni ne demande de s'asseoir : seul GAME est

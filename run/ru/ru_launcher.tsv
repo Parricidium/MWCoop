@@ -1113,3 +1113,58 @@ Legacy: the old MWCoop (0.95), kept as it is and no longer updated. Only to play
 Legacy version: the old one, no longer updated	Версия Legacy: старая, больше не обновляется
 Legacy or Reworked	Legacy или Reworked
 Under the version number, top left: Reworked, the new MWCoop (recommended, the one that gets updates); Legacy, the old one, no longer updated. Everyone must be on the same version to play together.	Под номером версии, слева вверху: Reworked — новый MWCoop (рекомендуется, именно он получает обновления); Legacy — старый, больше не обновляется. Чтобы играть вместе, все должны быть на одной версии.
+
+if private	если приватное
+Yes	Да
+No	Нет
+Host's options	Настройки хоста
+My options	Мои настройки
+The game	Игра
+Mine	Мои
+Not received from the host yet	Ещё не получены от хоста
+For this lobby only; your guests receive them.	Только для этого лобби; гости их получают.
+Chosen by the host for this game.	Выбраны хостом для этой игры.
+For this lobby only (Game options: unchanged).	Только для этого лобби (настройки игры не меняются).
+Public	Публичное
+Private	Приватное
+PRIVATE	ПРИВАТНОЕ
+PUBLIC	ПУБЛИЧНОЕ
+SESSION CODE	КОД СЕССИИ
+COPIED ✓	В БУФЕРЕ ✓
+COPY	В БУФЕР
+For your friends by IP; through Steam, the invite is enough.	Для друзей по IP; через Steam достаточно приглашения.
+No code: anyone can join	Без кода: войти может любой
+By IP, the address is enough; through Steam, any Steam friend.	По IP достаточно адреса; через Steam — любой друг Steam.
+Players max	Макс. игроков
+host included, 2 to 16	включая хоста, от 2 до 16
+Above 10: a very good connection and a good machine on the host's side.	Больше 10: нужны очень хорошее соединение и мощный ПК у хоста.
+Steam · friends only	Steam · только друзья
+Invite your friends from the lobby; they can also join from Steam (\"Join game\").	Приглашай друзей из лобби; они могут войти и из Steam («Присоединиться к игре»).
+Port %d (UDP and TCP)	Порт %d (UDP и TCP)
+Local address:	Локальный адрес:
+Private lobby: session code	Приватное лобби: код сессии
+The lobby of	Лобби
+is private. Enter the 6-character code they gave you, or ask them for a Steam invite (it is enough).	приватное. Введи код из 6 символов, который дал хост, или попроси у него приглашение Steam (его достаточно).
+ENTER	ВОЙТИ
+Session code copied: %S	Код сессии скопирован: %S
+Private lobby: the session code is required	Приватное лобби: нужен код сессии
+Public lobby: no code	Публичное лобби: без кода
+Wrong session code: ask the host for it (private lobby)	Неверный код сессии: спроси его у хоста (приватное лобби)
+Private · code	Приватное · код
+%S refused: wrong session code	%S отклонён: неверный код сессии
+Lobby is full	Лобби заполнено
+Private lobby: enter the session code given by %s	Приватное лобби: введи код сессии от %s
+Steam · friends only · %s · %d / %d players	Steam · только друзья · %s · %d / %d игроков
+Port %d (UDP and TCP) · %s · %s · %d / %d	Порт %d (UDP и TCP) · %s · %s · %d / %d
+Host: %s:%d · %s · %d / %d players	Хост: %s:%d · %s · %d / %d игроков
+CODE	КОД
+Up to %d players	До %d игроков
+Ventti: car and house stakes apply to the whole group	Вентти: машина и дом разыгрываются на всю группу
+The lobby: code and options	Лобби: код и настройки
+When hosting: Public or Private (a session code to COPY for your friends by IP), players max (2 to 16) and game options, for this lobby only, sent to your guests.	При хостинге: Публичное или Приватное (код сессии — КОПИРОВАТЬ для друзей по IP), макс. игроков (от 2 до 16) и настройки игры — только для этого лобби, отправляются гостям.
+Session code	Код сессии
+To join a private lobby by IP: the host's address and, here, the code they gave you. Public lobby: leave it empty. Through Steam, an invited friend gets in without typing anything.	Чтобы войти в приватное лобби по IP: адрес хоста и здесь — код, который он тебе дал. Публичное лобби: оставь пустым. Через Steam приглашённый друг входит, ничего не вводя.
+See others' markers	Видеть маркеры других
+Shared marker (tap: place, hold: remove)	Общий маркер (нажать: поставить, удерживать: убрать)
+Marker	Маркер
+Ice race: Jokkis rentals (host, beta)	Гонка на льду: аренда Йоккис (хост, бета)

@@ -48,15 +48,15 @@ namespace MWCoop
             bool inGame = PlayerSync.InGame;
             int test = Config.GetInt("Test", "TestMenu", 0);   // essais : menu ouvert sur l'onglet test-1
             if (test > 0 && inGame && !testDone && Time.timeSinceLevelLoad > 8f) { testDone = true; Open = true; tab = test - 1; }
-            if (Input.GetKeyDown(KeyCode.F10)) { Open = !Open; ChatOpen = false; WalletPanel.Open = false; CheatPanel.Open = false; MapPanel.Open = false; }
+            if (Input.GetKeyDown(KeyCode.F10)) { Open = !Open; ChatOpen = false; WalletPanel.Open = false; CheatPanel.Open = false; MapPanel.Open = false; JokkisPanel.Open = false; }
             else if (Input.GetKeyDown(KeyCode.Escape) && (Open || ChatOpen)) { Open = ChatOpen = false; }
-            else if (inGame && !Open && !ChatOpen && !WalletPanel.Open && !CheatPanel.Open && !MapPanel.Open && !Kauppa.MontageOpen && Session.Active && Input.GetKeyDown(Keys.Chat))   // (touche reglable dans le lanceur)
+            else if (inGame && !Open && !ChatOpen && !WalletPanel.Open && !CheatPanel.Open && !MapPanel.Open && !JokkisPanel.Open && !Kauppa.MontageOpen && Session.Active && Input.GetKeyDown(Keys.Chat))   // (touche reglable dans le lanceur)
             {
                 ChatOpen = true;
                 focusChat = true;
                 chatText = "";
             }
-            bool panel = Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || Kauppa.MontageOpen;
+            bool panel = Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || JokkisPanel.Open || Kauppa.MontageOpen;
             // Menu pause du jeu ouvert : rien de bloque. Son automate 'Update Cursor' doit voir l'aller-retour du menu (il rend
             // a la camera du joueur l'etiquette MainCamera que le menu donne a sa camera CAM) ; bloque, le menu referme laissait
             // le jeu sans camera principale (OpNoob, 0.75.50 : apres la camera drone, Echap, plus aucun clic -- erreur
@@ -90,7 +90,7 @@ namespace MWCoop
 
         // Curseur du mod (Core le dessine en dernier) : menu ouvert ou choix de reapparition, en partie.
         // [Test] CurseurTest=x,y : dessine a ce point sans lire la souris (captures des instances d'essai).
-        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || Kauppa.MontageOpen); } }
+        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || JokkisPanel.Open || Kauppa.MontageOpen); } }
 
         public static Vector2 CursorPos()
         {
@@ -348,10 +348,13 @@ namespace MWCoop
         // Ligne choisissable : 0 rien, -1/+1 valeur changee (choice), 2 validee (Entree ou clic).
         // Image a gauche du libelle de la prochaine ligne (avatar Steam d'un joueur), remise a zero par Item.
         static Texture nextIcon;
+        // Prochaine ligne grisee (action indisponible : libelle en gris), remis a zero par Item.
+        static bool nextDim;
 
         static int Item(string label, string value, bool choice, string help, bool wrap)
         {
             Texture icon = nextIcon; nextIcon = null;
+            bool dim = nextDim; nextDim = false;
             int me = idx++;
             lines++;
             float ip = Style.Px(12), h = Style.Px(38);
@@ -388,7 +391,7 @@ namespace MWCoop
             if (!vis || e.type != EventType.Repaint) return res;
             float rr = Style.Px(10);
             if (selected) { Style.Round(r, rr, selFill); Style.Ring(r, rr, selEdge); }
-            Color tc = selected ? Style.White : rowText;
+            Color tc = selected ? Style.White : dim ? Style.Dim : rowText;
             if (icon != null && !wrap)
             {
                 float isz = h - Style.Px(10);
@@ -502,6 +505,17 @@ namespace MWCoop
                      Lang.T("Ouvre la fen\u00EAtre d'invitation de Steam (aussi : Maj+Tab). Ils lancent MWCoop.exe > REJOINDRE (Steam) et acceptent.",
                             "Opens Steam's invite window (also: Shift+Tab). They start MWCoop.exe > JOIN (Steam) and accept."), false) == 2)
                 MWCoop.Net.SteamNet.InviteDialog();
+            // Course sur glace (16/10) : le panneau des Jokkis de location (JokkisPanel, apercu 3D), en partie.
+            if (PlayerSync.InGame)
+            {
+                Header(Lang.T("COURSE SUR GLACE", "ICE RACE"));
+                int mine = Jokkis.ChosenNumber(Session.LocalId);
+                Jokkis.Def md = mine != 0 ? Jokkis.DefOf(mine) : null;
+                if (Item(Lang.T("Course sur glace : choisir une voiture", "Ice race: pick a car"),
+                         md != null ? Lang.T("la v\u00F4tre : n\u00B0 ", "yours: no. ") + mine + " " + md.Driver : Lang.T("Jokkis de location, gratuite", "rental Jokkis, free"), false,
+                         Lang.T("Entr\u00E9e ou clic : les 16 Jokkis du jeu, une par joueur, avec l'aper\u00E7u 3D", "Enter or click: the game's 16 Jokkis, one per player, with a 3D preview"), false) == 2)
+                { Open = false; JokkisPanel.Open = true; }
+            }
         }
 
         static void GoTo(PlayerInfo pi)
@@ -664,6 +678,7 @@ namespace MWCoop
         // Audit de la synchro : ecarts durables entre l'hote et les invites, actions locales non partagees.
         static void SyncTab()
         {
+            ResyncRow();
             if (Time.realtimeSinceStartup >= syncAt)
             {
                 syncAt = Time.realtimeSinceStartup + 0.5f;
@@ -678,6 +693,32 @@ namespace MWCoop
             foreach (string l in Audit.Desyncs) Item(l, null, false, null, true);
             Header(Lang.T("VOS ACTIONS QUI NE PARTENT PAS CHEZ LES AUTRES", "YOUR ACTIONS NOT SHARED WITH THE OTHERS"));
             foreach (string l in Audit.Unshared) Item(l, null, false, null, true);
+        }
+
+        // « Resynchroniser le monde » (16/10) : l'invite redemande tout l'etat a l'hote, comme a son arrivee (seule la
+        // sauvegarde de l'hote compte : ce qui a derive sans bruit chez l'invite se recale) ; l'hote le renvoie a chaque invite
+        // en jeu. Une fois toutes les 30 s : en attendant, ligne grisee et le delai a droite.
+        static void ResyncRow()
+        {
+            if (!Session.Active) return;
+            float wait = PlayerSync.ResyncWait;
+            bool guestsIn = false;
+            foreach (PlayerInfo pi in Session.Players.Values) if (!pi.Local && pi.Level == 1) guestsIn = true;
+            bool can = wait <= 0f && PlayerSync.InGame && (Session.IsHost ? guestsIn : Session.HostConnected);
+            string val = wait > 0f ? Lang.T("d\u00E9j\u00E0 demand\u00E9, attends ", "already requested, wait ") + Mathf.CeilToInt(wait) + " s"
+                       : Session.IsHost && !guestsIn ? Lang.T("aucun invit\u00E9 en partie", "no guest in game")
+                       : !Session.IsHost && !Session.HostConnected ? Lang.T("h\u00F4te injoignable", "host unreachable") : null;
+            string help = Session.IsHost ? Lang.T("Renvoie tout l'\u00E9tat du monde \u00E0 chaque invit\u00E9, comme \u00E0 son arriv\u00E9e", "Resends the whole world state to every guest, as on their arrival")
+                                         : Lang.T("Redemande tout l'\u00E9tat \u00E0 l'h\u00F4te, comme \u00E0 l'arriv\u00E9e", "Asks the host for the whole world state, as on arrival");
+            nextDim = !can;
+            if (Item(Lang.T("Resynchroniser le monde", "Resync the world"), val, false, help, false) != 2) return;
+            if (can && PlayerSync.RequestResync())
+            {
+                Hud.Toast(Session.IsHost ? Lang.T("\u00C9tat complet renvoy\u00E9 aux invit\u00E9s", "Whole world state resent to the guests")
+                                         : Lang.T("Resynchronisation demand\u00E9e \u00E0 l'h\u00F4te", "Resync requested from the host"));
+                Open = false;
+            }
+            else if (wait > 0f) Hud.Toast(Lang.T("D\u00E9j\u00E0 demand\u00E9, attends ", "Already requested, wait ") + Mathf.CeilToInt(wait) + " s");
         }
 
         // Graphismes (comme la page du lanceur) : prereglage, puis chaque option ; applique tout de suite, garde dans mwcoop.ini.
@@ -820,7 +861,9 @@ namespace MWCoop
 
         public static void Test(string mode, float t)
         {
+            JokkisPanel.Test(mode, t);   // (Autotest=jokkispanel : panneau des Jokkis ouvert chez l'hote a 25 s, bilan a 30 s, ferme a 35 s)
             if (mode == "tchat") { TestChat(t); return; }
+            if (mode == "resync") { PlayerSync.TestResync(t); return; }   // (demande de l'invite a 30 s, bilan a 45 s)
             if (mode == "langue") TestLang(t);
             if ((mode != "menu" && mode != "langue") || testEnd || t < 20f) return;
             int k = (int)((t - 20f) / 3f);

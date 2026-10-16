@@ -7,7 +7,8 @@ namespace MWCoop
 {
     // Carte en grand (demande de JD, 10/10) : touche Keys.Map (M, reglable dans le lanceur). La carte vue du ciel faite par
     // MapRender, les joueurs en direct (pseudo, fleche du regard, en voiture), les lieux. Molette : zoom autour de la
-    // souris ; glisser : deplacer ; C : recentrer sur soi ; Echap ou la touche : fermer.
+    // souris ; glisser : deplacer ; C : recentrer sur soi ; Echap ou la touche : fermer. Clic droit : son marqueur partage
+    // (Markers : pose, deplace, retire sur le sien) ; les marqueurs de tous, a la couleur de leur joueur.
     public static class MapPanel
     {
         public static bool Open;
@@ -117,6 +118,31 @@ namespace MWCoop
             Label(lr, name, 13, c);
         }
 
+        // Marqueurs partages (Markers) : epingle de la couleur du joueur, coeur blanc, nom du proprietaire (le sien : « Moi »).
+        // Dessines apres les lieux et les boulots : un nom qui en chevaucherait un autre n'est pas ecrit (on zoome).
+        static void DrawMarkers(Rect local, List<Rect> used)
+        {
+            if (Markers.Count == 0) return;
+            foreach (Markers.Marker m in Markers.All)
+            {
+                if (!Markers.Shown(m)) continue;
+                Vector2 s = ToScreen(local, m.At.x, m.At.z);
+                if (!local.Contains(s)) continue;
+                Color c = Markers.ColorOf(m.Owner);
+                float r = Style.Px(8);
+                Style.Round(new Rect(s.x - r - Style.Px(2), s.y - r - Style.Px(2), 2 * r + Style.Px(4), 2 * r + Style.Px(4)), r + Style.Px(2), new Color(0f, 0f, 0f, 0.75f));
+                Style.Round(new Rect(s.x - r, s.y - r, 2 * r, 2 * r), r, c);
+                Style.Round(new Rect(s.x - r * 0.4f, s.y - r * 0.4f, r * 0.8f, r * 0.8f), r * 0.4f, Style.White);
+                string name = Markers.NameOf(m.Owner);
+                var lr = new Rect(s.x + r + Style.Px(5), s.y - Style.Px(11), Style.Width(name, 13, true) + Style.Px(4), Style.Px(22));
+                bool clash = false;
+                foreach (Rect u in used) if (u.Overlaps(lr)) { clash = true; break; }
+                if (clash) continue;
+                used.Add(lr);
+                Label(lr, name, 13, c);
+            }
+        }
+
         static void CenterOnMe()
         {
             Transform p = Game.PlayerT;
@@ -139,7 +165,7 @@ namespace MWCoop
             float pad = Style.Px(18);
             Style.Title(new Rect(panel.x + pad, panel.y + Style.Px(8), panel.width - 2 * pad, Style.Px(40)), Lang.T("CARTE", "MAP"), Style.White, TextAnchor.MiddleLeft, 24);
             Style.Text(new Rect(panel.x + pad, panel.y + Style.Px(8), panel.width - 2 * pad, Style.Px(40)),
-                       Lang.T("Molette : zoom · glisser : déplacer · C : moi · ", "Wheel: zoom · drag: move · C: me · ") + Lang.T("B : boulots · ", "B: jobs · ") + Keys.Label(Keys.Map) + Lang.T(" / Échap : fermer", " / Esc: close"), 14, TextAnchor.MiddleRight, Style.Dim, false);
+                       Lang.T("Molette : zoom · glisser : déplacer · C : moi · ", "Wheel: zoom · drag: move · C: me · ") + Lang.T("B : boulots · ", "B: jobs · ") + Lang.T("clic droit : marqueur · ", "right-click: marker · ") + Keys.Label(Keys.Map) + Lang.T(" / Échap : fermer", " / Esc: close"), 14, TextAnchor.MiddleRight, Style.Dim, false);
             var view = new Rect(panel.x + pad, panel.y + Style.Px(52), panel.width - 2 * pad, panel.height - Style.Px(52) - pad);
             // (hors de la carte : le verre du panneau, demande de JD)
             if (!MapRender.Ready)
@@ -163,6 +189,14 @@ namespace MWCoop
                     e.Use();
                 }
                 if (e.type == EventType.MouseDown && e.button == 0) { dragging = true; dragFrom = e.mousePosition; e.Use(); }
+                // clic droit : son marqueur ici (sur le sien, a l'ecran : le retire)
+                if (e.type == EventType.MouseDown && e.button == 1)
+                {
+                    Markers.Marker mine = Markers.Mine;
+                    if (mine != null && Vector2.Distance(ToScreen(view, mine.At.x, mine.At.z), e.mousePosition) < Style.Px(14)) Markers.Remove();
+                    else { Vector2 w = ToWorld(view, e.mousePosition); Markers.PlaceOnMap(w.x, w.y); }
+                    e.Use();
+                }
             }
             if (dragging && e.type == EventType.MouseDrag) { Vector2 d = e.mousePosition - dragFrom; dragFrom = e.mousePosition; center += new Vector2(-d.x, d.y) / zoom; e.Use(); }
             if (e.type == EventType.MouseUp) dragging = false;
@@ -204,17 +238,18 @@ namespace MWCoop
                 Label(lr, name, 13, new Color(1f, 0.92f, 0.7f));
             }
             if (showJobs) DrawJobs(local, used);
+            DrawMarkers(local, used);
             // joueurs
             foreach (PlayerInfo pi in Session.Players.Values)
             {
                 if (pi.Local || pi.Level != 1) continue;
-                Marker(local, pi.State.Feet, pi.State.Yaw, pi.Name, Style.Accent, VehicleSync.RemoteCarName(pi.Id) != null || Seats.RemoteSeatIndex(pi.Id) >= 0);
+                Marker(local, pi.State.Feet, pi.State.Yaw, pi.Name, Markers.ColorOf(pi.Id), VehicleSync.RemoteCarName(pi.Id) != null || Seats.RemoteSeatIndex(pi.Id) >= 0);   // (sa couleur : celle de son marqueur)
             }
             Transform me = Game.PlayerT;
             if (me != null)
             {
                 float yaw = PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.eulerAngles.y : me.eulerAngles.y;
-                Marker(local, me.position, yaw, Lang.T("Moi", "Me"), Style.Good, VehicleSync.LocalDriving >= 0 || Seats.Seated);
+                Marker(local, me.position, yaw, Lang.T("Moi", "Me"), Markers.ColorOf(Session.LocalId), VehicleSync.LocalDriving >= 0 || Seats.Seated);
             }
             GUI.EndGroup();
             // echelle
@@ -261,6 +296,7 @@ namespace MWCoop
         static bool probed;
         public static void Test(string mode, float t)
         {
+            Markers.Test(mode, t);   // (Autotest=marqueur : pose / retrait de l'hote, releves de l'invite)
             if (mode == "carteboulots" && t > 30f && !probed)
             {
                 probed = true;

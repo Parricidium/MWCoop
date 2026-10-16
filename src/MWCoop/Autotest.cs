@@ -181,7 +181,7 @@ namespace MWCoop
             Frost.Test(mode, t); Tow.Test(mode, t); Calls.Test(mode, t); Wear.Test(mode, t);
             Cooking.Test(mode, t); Fires.Test(mode, t); Garage.Test(mode, t); Home.Test(mode, t); Gestures.Test(mode, t);
             VehicleSync.Test(mode, t); Jobs.Test(mode, t); SewageHose.Test(mode, t); RunOver.Test(mode, t); CustomPaint.Test(mode, t); FuelPrices.Test(mode, t); Wear.TestCup(mode, t); PhoneKeys.Test(mode, t); CarHits.Test(mode, t); Gestures.Test2(mode, t); WindowCranks.Test(mode, t); Pvp.Test(mode, t); ModRam1500.Test(mode, t); TeimoSled.Test(mode, t); Parts.Test(mode, t); Races.Test(mode, t); Rally.Test(mode, t); Kartturi.Test(mode, t); Net.ModServe.Test(mode, t); Kauppa.TestKartturi(mode, t); Kauppa.TestKartturiDrive(mode, t); PushDoors.Test(mode, t);
-            MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t);
+            MWCoop.Net.SaveTransfer.Test(mode, t); World.Test(mode, t); Menu.Test(mode, t); Studio.Test(mode, t); Jokkis.Test(mode, t);
             if (mode == "marche" && t > 5f)
             {
                 GameObject p = Game.PlayerGo;

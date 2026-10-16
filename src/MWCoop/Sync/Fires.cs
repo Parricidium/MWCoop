@@ -220,6 +220,8 @@ namespace MWCoop
         static float loadedAt = -1, nextFind, nextPlaces, nextFlags, nextArrivals, nextWarn, nextCancelLog;
         static readonly Dictionary<int, int> levels = new Dictionary<int, int>();
         static readonly List<KeyValuePair<float, Peer>> due = new List<KeyValuePair<float, Peer>>();
+        // Resynchronisation demandee (PlayerSync.SnapshotAll) : comme a l'arrivee, 25 s plus tard.
+        public static void ScheduleSnapshot(Peer p) { if (Session.IsHost && p != null) due.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 25f, p)); }
 
         // ================================================================ incendies decides par l'hote
         const int House = 0, Koistinen = 1, Can = 2;

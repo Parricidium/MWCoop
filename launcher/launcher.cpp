@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|contenu|tenue-perso [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -143,7 +143,13 @@ static int g_lastLaunchMode;                        // mode du dernier lancement
 // Salon : etat partage entre la fenetre et les fils reseau (sous g_lcs)
 enum { LB_NONE, LB_HOST, LB_CONNECTING, LB_GUEST };
 enum { PARTIE_CONTINUER, PARTIE_NOUVELLE };
-static const int kLobbyMax = 8;                     // joueurs dans un salon (hote compris)
+static const int kLobbyMaxAbs = 16;                 // joueurs au plus dans un salon (tableaux) ; le choix de l'hote : g_lobbyMax
+static int g_lobbyMax = 8;                          // joueurs dans le salon, hote compris (hote : [Lanceur] SalonMax, 2 a 16 ; invite : recu de l'hote)
+static bool g_lobbyPrive = true;                    // salon prive (code de session demande) ou public ([Lanceur] SalonPrive)
+static std::string g_lobbyCode;                     // code de session (hote : le sien ; invite : celui recu dans STATE)
+static std::string g_joinCode;                      // invite : code saisi sur l'accueil (champ CODE), envoye dans HELLO
+static bool g_lobbyOptGo;                           // GO / LANCER : les options du salon vont dans lancement.ini (WriteLaunchFile)
+static bool g_sCodeAsk;                             // salon Steam prive sans invitation : le code est demande avant d'entrer (steam.inc)
 // Test UDP du salon (le jeu passe en UDP sur le port du salon) : sans objet (ancien lanceur), en cours, recu, bloque.
 enum { UDP_NA, UDP_WAIT, UDP_OK, UDP_FAIL };
 struct LobbyPeer { int id; std::string name, skin, ver; bool ready; int ping; int udp; DWORD since; uint64_t sid; int dl = -1; };   // sid : compte Steam (salon Steam) ; dl : invite qui recoit l'envoi de l'hote (%), -1 fini ou rien, -2 pas encore dit
@@ -159,6 +165,8 @@ static bool g_joinFallback;                         // invite : pas de salon che
 static std::string g_rejectWhy;                     // invite : raison du refus (sous g_lcs)
 static std::wstring g_testSalon, g_testSalonLog;    // /testsalon hote|invite <journal>
 static std::wstring g_testPartie = L"continuer";    // /testsalon : choix de l'hote
+static std::string g_testCode;                       // /testsalon ... /code <X> : code de session (hote : le sien, salon prive ; invite : celui qu'il envoie)
+static bool g_testPublic;                            // /testsalon hote ... /public : salon public (pas de code)
 static bool g_testNoUdp;
 static DWORD g_testHoldMs, g_testSlowMs;              // ... ; /lent <ms> (invite) : un morceau des mods par <ms>
 static bool g_testForce;                             // /testsalon hote ... /forcer : LANCER des qu'un invite est la, pret ou non                          // /testsalon hote ... /garder <ms> : apres LANCER, reste ouvert (invites en retard)                            // /testsalon hote ... /sansudp : l'hote ne repond pas en UDP
@@ -377,8 +385,8 @@ static std::wstring ReadGameVersion()
 }
 
 // ---------------------------------------------------------------- reglages (MWCoop\mwcoop.ini, section [Coop])
-struct Field { std::wstring text; RectF r; size_t maxLen; bool address; };
-static Field g_fields[2];   // 0 = pseudo, 1 = adresse
+struct Field { std::wstring text; RectF r; size_t maxLen; bool address; bool code; };
+static Field g_fields[3];   // 0 = pseudo, 1 = adresse, 2 = code de session (salon prive)
 static int g_focus = -1;
 static int g_carColor = -1;   // [Coop] CouleurVoiture : 0xRRGGBB, -1 = au hasard (comme le jeu)
 
@@ -405,6 +413,8 @@ static void LoadPlayer()
     g_fields[0].text = v[0] ? Widen(v, CP_ACP) : DefaultName();
     GetPrivateProfileStringA("Coop", "Adresse", "", v, sizeof(v), ini.c_str());
     g_fields[1].text = Widen(v, CP_ACP);
+    GetPrivateProfileStringW(L"Lanceur", L"DernierCode", L"", (wchar_t *)v, 32, g_iniLauncher.c_str());   // (dernier code de session saisi)
+    g_fields[2].text = (wchar_t *)v;
     // CouleurVoiture=RRGGBB ("#" accepte) ; vide ou illisible : au hasard
     GetPrivateProfileStringA("Coop", "CouleurVoiture", "", v, sizeof(v), ini.c_str());
     const char *h = v[0] == '#' ? v + 1 : v;
@@ -422,6 +432,7 @@ static void SavePlayer()
     std::string ini = ModIniA();
     WritePrivateProfileStringA("Coop", "Pseudo", Narrow(PlayerName()).c_str(), ini.c_str());
     WritePrivateProfileStringA("Coop", "Adresse", Narrow(Trim(g_fields[1].text)).c_str(), ini.c_str());
+    WritePrivateProfileStringW(L"Lanceur", L"DernierCode", Trim(g_fields[2].text).c_str(), g_iniLauncher.c_str());
     WritePrivateProfileStringA("Coop", "Langue", g_fr ? "fr" : g_ru ? "ru" : "en", ini.c_str());   // textes du mod en jeu dans la langue du lanceur (arabe : anglais en jeu)
 }
 
@@ -1340,6 +1351,7 @@ static void Layout()
 {
     g_fields[0].maxLen = 23; g_fields[0].address = false;
     g_fields[1].maxLen = 63; g_fields[1].address = true;
+    g_fields[2].maxLen = 6; g_fields[2].code = true;   // code de session : 6 lettres / chiffres, en majuscules
     // (les autres boutons sont places par leur page en se dessinant : ui.inc)
     g_btn[B_DISCORD].r = RectF(28, 726, 104, 44);   // Discord (nom et logo), GitHub et Ko-fi (logos)
     g_btn[B_GITHUB].r = RectF(136, 726, 48, 44);
@@ -1863,8 +1875,8 @@ static void DrawField(Graphics &g, int i, const wchar_t *label)
     RectF tr(f.r.X + 16, f.r.Y, f.r.Width - 32, f.r.Height);
     std::wstring shown = f.text;
     bool placeholder = shown.empty() && g_focus != i;
-    if (placeholder) shown = f.address ? T(L"ex. 26.12.34.56 (adresse:port accept\u00E9)", L"e.g. 26.12.34.56 (address:port accepted)") : DefaultName();
-    Text(g, shown, tr, placeholder && f.address ? 13.5f : 16.0f, placeholder ? FontStyleRegular : FontStyleBold, placeholder ? TH(placeholder) : kInk, StringAlignmentNear);
+    if (placeholder) shown = f.address ? T(L"ex. 26.12.34.56 (adresse:port accept\u00E9)", L"e.g. 26.12.34.56 (address:port accepted)") : f.code ? T(L"si priv\u00E9", L"if private") : DefaultName();
+    Text(g, shown, tr, placeholder && (f.address || f.code) ? 13.5f : 16.0f, placeholder ? FontStyleRegular : FontStyleBold, placeholder ? TH(placeholder) : kInk, StringAlignmentNear);
     if (g_focus == i && fmodf(g_time, 1.0f) < 0.55f) {
         UiFont font(L"Segoe UI", 16, FontStyleBold);
         StringFormat sf(StringFormat::GenericTypographic());
@@ -2885,6 +2897,7 @@ static bool GameWindowShown()
 // MWCoop\lancement.ini (contrat avec le chargeur et le mod), ecrit d'un coup (fichier temporaire puis renomme).
 // partie (hote lance depuis le salon) : "continuer" | "nouvelle" -> Partie=..., le jeu entre en partie tout seul.
 static std::string ContentLaunchLines();   // (modsync.inc)
+static std::string LobbyCoopLines(bool host);   // (salon.inc)
 static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const char *partie)
 {
     const Opt *ap = OptByKey("Apparence");
@@ -2905,6 +2918,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     t += std::string("Profil=") + (mode == MODE_GUEST ? "invite" : mode == MODE_HOST ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
     if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
     if (mode == MODE_GUEST) t += ContentLaunchLines();
+    if (mode != MODE_SOLO && g_lobbyOptGo) { t += LobbyCoopLines(mode == MODE_HOST); g_lobbyOptGo = false; }   // (options choisies dans le salon : salon.inc)
     t += "Horodatage=" + std::to_string((long long)_time64(NULL)) + "\r\n";
     EnsureModDir();
     std::wstring path = g_gameDir + L"MWCoop\\lancement.ini", tmp = path + L".tmp";
@@ -3494,6 +3508,9 @@ static void LobbyHost()
     g_myId = 0;
     g_joinFallback = false;
     g_myAddresses = LocalAddresses();
+    LobbyOptImport();   // (salon prive / public, joueurs max, options de la partie : valeurs du moment, pour ce salon)
+    g_lobbyCode = g_testCode.empty() ? MakeSessionCode() : g_testCode;
+    if (g_testPublic) g_lobbyPrive = false;
     g_lobby = LB_HOST;
     g_tab = TAB_LOBBY;
     g_scroll[TAB_LOBBY] = 0;
@@ -3502,6 +3519,7 @@ static void LobbyHost()
     if (t) CloseHandle(t);
     SetStatus(K_OK, T(L"Salon ouvert \u00B7 port %d", L"Lobby open \u00B7 port %d"), g_lobbyPort);
     TestLog("salon : ouvert sur le port TCP %d (version %s, %s, %s)", g_lobbyPort, MyVersion().c_str(), MyName().c_str(), MySkin().c_str());
+    TestLog("salon : %s, code %s, %d joueurs au plus, options de la partie %s", g_lobbyPrive ? "prive" : "public", g_lobbyCode.c_str(), g_lobbyMax, LobbyOptText().c_str());
 }
 
 // Invites : combien, et combien pas encore prets.
@@ -3544,6 +3562,8 @@ static void LobbyClose(bool keepListen = false)
     if (!g_syncKeep) SyncReset();   // (GO : gardee pour le lancement)
     if (g_tab == TAB_LOBBY) g_tab = TAB_HOME;
     g_lobbyOpts = false;
+    g_sCodeAsk = false;
+    if (!g_syncKeep) { EnterCriticalSection(&g_lcs); g_hostOpt.clear(); LeaveCriticalSection(&g_lcs); }   // (GO : gardees pour le lancement)
 }
 
 // LANCER : actif quand tous les invites sont prets ; sinon, une question permet de forcer.
@@ -3581,6 +3601,7 @@ static void HostStart()
         TestLog("salon steam : LANCER (%d invite(s), %d pas prets), partie=%s", guests, notReady, PartieName(partie));
         SteamHostStart(partie);
         LobbyClose();
+        g_lobbyOptGo = true;   // (les options du salon dans lancement.ini)
         Launch(MODE_HOST, PartieName(partie));
         return;
     }
@@ -3626,6 +3647,7 @@ static void HostStart()
         TestLog("udp : port UDP %d libre pour le jeu apres la fermeture du salon : %s", g_lobbyPort, free ? "oui" : "NON");
         if (u != INVALID_SOCKET) closesocket(u);
     }
+    g_lobbyOptGo = true;   // (les options du salon dans lancement.ini)
     Launch(MODE_HOST, PartieName(partie));
 }
 
@@ -3688,7 +3710,7 @@ static DWORD WINAPI GuestThread(void *param)
     DWORD to = 10000;
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
     Wr hello;
-    hello.u8(M_HELLO); hello.u8(LB_PROTO); hello.str(MyVersion()); hello.str(MyName()); hello.str(g_mySkinSent);
+    hello.u8(M_HELLO); hello.u8(LB_PROTO); hello.str(MyVersion()); hello.str(MyName()); hello.str(g_mySkinSent); hello.str(g_joinCode);   // (code de session : 0.96.4)
     std::string m;
     if (!SendAllS(s, "MWS1", 4) || !SendMsg(s, hello) || !RecvMsg(s, m)) {   // (ancien lanceur, autre programme sur ce port...)
         closesocket(s);
@@ -3757,7 +3779,7 @@ static DWORD WINAPI GuestThread(void *param)
             int n = q.u8();
             std::vector<LobbyPeer> peers;
             std::string list;
-            for (int i = 0; i < n && i < kLobbyMax; i++) {
+            for (int i = 0; i < n && i < kLobbyMaxAbs; i++) {
                 LobbyPeer p;
                 p.id = q.u8(); p.name = q.str(); p.skin = q.str(); p.ver = q.str(); p.ready = q.u8() != 0; p.ping = q.u16();
                 peers.push_back(p);
@@ -3776,6 +3798,25 @@ static DWORD WINAPI GuestThread(void *param)
                 q.ok = true;   // (extension abimee : la liste reste bonne)
                 if (q.p < m.size()) { std::string sn = q.str(); if (q.ok) { EnterCriticalSection(&g_lcs); g_hostSaveName = Widen(sn, CP_UTF8); LeaveCriticalSection(&g_lcs); list += " ; sauvegarde=" + sn; } }
                 q.ok = true;
+                if (q.p < m.size()) {   // salon (joueurs max, prive, code) et options de la partie de l'hote (0.96.4)
+                    int mx = q.u8(), pv = q.u8();
+                    std::string cd = q.str();
+                    int no = q.u8();
+                    std::map<std::string, int> ho;
+                    for (int i = 0; i < no && q.ok; i++) { std::string k = q.str(); int v = q.u16(); if (q.ok) ho[k] = v; }
+                    if (q.ok) {
+                        g_lobbyMax = max(2, min(kLobbyMaxAbs, mx));
+                        g_lobbyPrive = pv != 0;
+                        g_lobbyCode = cd;
+                        EnterCriticalSection(&g_lcs);
+                        g_hostOpt = ho;
+                        LeaveCriticalSection(&g_lcs);
+                        std::string ot;
+                        for (auto &kv : ho) ot += kv.first + "=" + std::to_string(kv.second) + ";";
+                        list += " ; max=" + std::to_string(mx) + (pv ? " prive code=" + cd : " public") + " options=" + ot;
+                    }
+                    q.ok = true;
+                }
             }
             if (q.ok) {
                 EnterCriticalSection(&g_lcs);
@@ -3827,6 +3868,9 @@ static void LobbyJoin()
     g_rejectWhy.clear();
     LeaveCriticalSection(&g_lcs);
     g_partie = PARTIE_CONTINUER;
+    LobbyOptImport();   // (mes options pour ce salon ; celles de l'hote arrivent par STATE)
+    g_lobbyPrive = false; g_lobbyMax = 8; g_lobbyCode.clear();
+    g_joinCode = g_testCode.empty() ? CodeNorm(g_fields[2].text) : g_testCode;
     g_mySkinSent = MySkin();
     int gen = ++g_lobbyGen;
     g_lobby = LB_CONNECTING;
@@ -3835,6 +3879,7 @@ static void LobbyJoin()
     g_focus = -1;
     SetStatus(K_NORMAL, T(L"Connexion au salon de %s\u2026", L"Connecting to %s's lobby\u2026"), g_lobbyAddr.c_str());
     TestLog("salon : connexion a %s:%d (version %s, %s, %s)", Narrow(g_lobbyAddr).c_str(), g_lobbyPort, MyVersion().c_str(), MyName().c_str(), g_mySkinSent.c_str());
+    if (!g_joinCode.empty()) TestLog("salon : code de session envoye %s", g_joinCode.c_str());
     HANDLE t = CreateThread(NULL, 0, GuestThread, (void *)(intptr_t)gen, 0, NULL);
     if (t) CloseHandle(t);
 }
@@ -3993,7 +4038,7 @@ static float LobbyMaxScroll()
     EnterCriticalSection(&g_lcs);
     int n = (int)g_peers.size();
     LeaveCriticalSection(&g_lcs);
-    int rows = n + (n < kLobbyMax ? 1 : 0);
+    int rows = n + (n < g_lobbyMax ? 1 : 0);
     return max(0.0f, rows * kLobbyRowH - kLobbyList.Height);
 }
 // 0/1 : partie ; 50 retour au salon, 51 "inviter des amis" (place libre, salon Steam), 100+i ami i ;
@@ -4011,10 +4056,135 @@ static int LobbyChoiceAt(float x, float y)
         EnterCriticalSection(&g_lcs);
         int n = (int)g_peers.size();
         LeaveCriticalSection(&g_lcs);
-        if (n < kLobbyMax && (int)((y - kLobbyList.Y + g_scroll[TAB_LOBBY]) / kLobbyRowH) == n) return 51;
+        if (n < g_lobbyMax && (int)((y - kLobbyList.Y + g_scroll[TAB_LOBBY]) / kLobbyRowH) == n) return 51;
     }
     for (int i = 0; i < 2; i++) if (kChoiceR[i].Contains(x, y)) return i;
     return -1;
+}
+
+// --- cartes du bas du salon (0.96.4) : hote = Salon (public / prive, code de session, joueurs max, reseau) et Options
+// (la partie / les miennes) ; invite = Options de l'hote (lecture seule, suivies en direct) et Mes options.
+static const float kLobbyPlayersH = 272;   // carte des joueurs au-dessus de ces cartes
+static const GfxRow *GfxRowByKey(const char *k) { for (auto &r : GfxRows()) if (!strcmp(r.key, k)) return &r; return NULL; }
+// Une option du salon : libelle des Options du jeu, interrupteur ou valeur (< >) ; lecture seule : Oui / Non ou la valeur.
+static void DrawLobbyOptRow(Graphics &g, RectF row, int i, int val, bool edit, bool dim)
+{
+    const LobbyOptDef &d = kLobbyOptDefs[i];
+    const GfxRow *r = GfxRowByKey(d.key);
+    std::wstring lab = r ? T(r->fr, r->en) : Widen(d.key);
+    bool sub = !strncmp(d.key, "Ajout", 5);   // (un ajout : en retrait sous « Tout désactiver »)
+    int id = UI_LOBBY_OPT + i * 3;
+    float a = dim ? 0.45f : 1.0f;
+    bool hot = edit && g_uiHot == id;
+    if (hot) { GraphicsPath hp; RoundRect(hp, RectF(row.X - 6, row.Y, row.Width + 12, row.Height), 9); SolidBrush hb(TH(card)); g.FillPath(&hb, &hp); }
+    if (!r || r->vals.empty()) {   // interrupteur
+        Text(g, lab, RectF(row.X + (sub ? 16 : 0), row.Y, row.Width - 54 - (sub ? 16 : 0), row.Height), 12, FontStyleRegular, WithA(kInk, a), StringAlignmentNear);
+        float th = min(20.0f, row.Height - 4);   // (lignes serrees : interrupteur un peu plus petit)
+        if (edit) { UiToggle(g, RectF(row.X + row.Width - 2 * th, row.Y + (row.Height - th) / 2, 2 * th, th), val == 1, hot); HotZone(row, id); }
+        else Pill(g, RectF(row.X + row.Width - 46, row.Y + (row.Height - th) / 2, 46, th), val == 1 ? WithA(kAcc, 0.22f) : TH(toggleOff), val == 1 ? T(L"Oui", L"Yes") : T(L"Non", L"No"), WithA(kInk, a), 10.5f);
+        return;
+    }
+    int k = 0;
+    for (int j = 0; j < (int)r->vals.size(); j++) if (r->vals[j] == val) k = j;
+    Text(g, lab, RectF(row.X, row.Y, row.Width - 124, row.Height), 12, FontStyleRegular, WithA(kInk, a), StringAlignmentNear);
+    RectF v(row.X + row.Width - 118, row.Y + 2, 118, row.Height - 4);
+    if (!edit) { Text(g, T(r->lf[k], r->le[k]), v, 12, FontStyleBold, WithA(kInk, a), StringAlignmentFar); return; }
+    RectF lft(v.X, v.Y, 24, v.Height), rgt(v.X + v.Width - 24, v.Y, 24, v.Height);
+    GraphicsPath vp; RoundRect(vp, v, 8);
+    SolidBrush vb(TH(btn2)); g.FillPath(&vb, &vp);
+    bool canL = k > 0, canR = k + 1 < (int)r->vals.size();
+    Icon(g, IC_CHEVL, lft.X + 12, lft.Y + lft.Height / 2, 12, WithA(g_uiHot == id + 1 ? kAcc : kInk, canL ? 1.0f : 0.25f), 2.0f);
+    Icon(g, IC_CHEVR, rgt.X + 12, rgt.Y + rgt.Height / 2, 12, WithA(g_uiHot == id + 2 ? kAcc : kInk, canR ? 1.0f : 0.25f), 2.0f);
+    Text(g, T(r->lf[k], r->le[k]), RectF(lft.X + lft.Width, v.Y, v.Width - 48, v.Height), 11.5f, FontStyleBold, kInk);
+    if (canL) HotZone(lft, id + 1);
+    if (canR) HotZone(rgt, id + 2);
+}
+// Carte des options : hote, deux onglets (la partie : decidee par lui, envoyee aux invites ; les miennes : pour lui seul) ;
+// invite : which = 0 celles de l'hote (lecture seule), 1 les siennes. Tout vaut pour ce salon seulement (lancement.ini).
+static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
+{
+    Glass(c, 20);
+    std::wstring title = which == 0 ? (host ? T(L"Options de la partie", L"Game options") : T(L"Options de l'hôte", L"Host's options")) : T(L"Mes options", L"My options");
+    Title(g, title, RectF(c.X + 18, c.Y + 14, c.Width - 36, 24), 15, kInk);
+    float y = c.Y + 46;
+    if (host) { UiSeg(g, RectF(c.X + 18, c.Y + 42, c.Width - 36, 30), { T(L"La partie", L"The game"), T(L"Les miennes", L"Mine") }, which, UI_LOBBY_OPTTAB, 11.5f); y = c.Y + 80; }
+    std::map<std::string, int> ho;
+    if (!host && which == 0) { EnterCriticalSection(&g_lcs); ho = g_hostOpt; LeaveCriticalSection(&g_lcs); }
+    bool edit = (host || which == 1) && !g_goSent;
+    int nrows = 0;   // hauteur de ligne : 26 au plus, moins s'il faut pour que tout tienne au-dessus de la note du bas
+    for (int i = 0; i < kLobbyOptN; i++) if (kLobbyOptDefs[i].host == (which == 0) && !(host && !strcmp(kLobbyOptDefs[i].key, "ModsAuto"))) nrows++;
+    const float rh = max(20.0f, min(26.0f, floorf((c.Y + c.Height - 30 - y - 3) / max(1, nrows))));
+    auto val = [&](const LobbyOptDef &d) { if (host || which == 1) return LobbyOptGet(d.key); auto it = ho.find(d.key); return it != ho.end() ? it->second : d.def; };
+    int sans = 0;
+    for (int i = 0; i < kLobbyOptN; i++) {
+        const LobbyOptDef &d = kLobbyOptDefs[i];
+        if (d.host != (which == 0)) continue;
+        if (host && !strcmp(d.key, "ModsAuto")) continue;   // (l'hote ne recoit rien)
+        if (!strcmp(d.key, "SansAjouts")) { Pen sp(TH(sep), 1); g.DrawLine(&sp, c.X + 18, y + 1, c.X + c.Width - 18, y + 1); y += 3; sans = val(d); }
+        DrawLobbyOptRow(g, RectF(c.X + 18, y, c.Width - 36, rh), i, val(d), edit, !strncmp(d.key, "Ajout", 5) && sans);
+        y += rh;
+    }
+    if (!host && which == 0 && ho.empty()) Text(g, T(L"Pas encore reçues de l'hôte", L"Not received from the host yet"), RectF(c.X + 18, y + 2, c.Width - 36, 18), 11, FontStyleItalic, kGrey, StringAlignmentNear);
+    else if (which == 0) Text(g, host ? T(L"Pour ce salon seulement ; tes invités les reçoivent.", L"For this lobby only; your guests receive them.") : T(L"Choisies par l'hôte pour cette partie.", L"Chosen by the host for this game."), RectF(c.X + 18, c.Y + c.Height - 24, c.Width - 36, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    else Text(g, T(L"Pour ce salon seulement (Options du jeu : inchangées).", L"For this lobby only (Game options: unchanged)."), RectF(c.X + 18, c.Y + c.Height - 24, c.Width - 36, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+}
+// Carte Salon (hote) : Public / Prive, le code de session en grand (COPIER, nouveau code), joueurs au plus, reseau.
+static void DrawLobbySalonCard(Graphics &g, RectF c, int n)
+{
+    Glass(c, 20);
+    bool go = g_goSent;
+    Title(g, T(L"Salon", L"Lobby"), RectF(c.X + 18, c.Y + 14, 120, 24), 15, kInk);
+    if (!go) UiSeg(g, RectF(c.X + 18, c.Y + 42, c.Width - 36, 30), { T(L"Public", L"Public"), T(L"Privé", L"Private") }, g_lobbyPrive ? 1 : 0, UI_LOBBY_PRIV, 11.5f);
+    else Pill(g, RectF(c.X + 18, c.Y + 46, 90, 22), WithA(kAcc, 0.22f), g_lobbyPrive ? T(L"PRIVÉ", L"PRIVATE") : T(L"PUBLIC", L"PUBLIC"), kInk);
+    SmallLabel(g, T(L"CODE DE SESSION", L"SESSION CODE"), RectF(c.X + 18, c.Y + 84, 200, 16), kGrey);
+    if (g_lobbyPrive) {
+        float cx = c.X + 16;   // en grand, lettres espacees
+        for (char ch : g_lobbyCode) { TextF(g, TitleFont(), std::wstring(1, (wchar_t)ch), RectF(cx, c.Y + 100, 27, 40), 31, FontStyleBold, kAcc); cx += 26; }
+        bool copied = GetTickCount() - g_codeCopiedT < 2000;
+        UiButton(g, RectF(c.X + c.Width - 18 - 34 - 6 - 80, c.Y + 103, 80, 34), copied ? T(L"COPIÉ ✓", L"COPIED ✓") : T(L"COPIER", L"COPY"), UI_LOBBY_COPY, !copied, -1, true, 10);
+        RectF rg(c.X + c.Width - 18 - 34, c.Y + 103, 34, 34);
+        { GraphicsPath p; RoundRect(p, rg, 10); SolidBrush b(g_uiHot == UI_LOBBY_REGEN && !go ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p); Pen pen(WithA(TH(fieldBorder), go ? 0.4f : 1.0f), 1); g.DrawPath(&pen, &p); }
+        Icon(g, IC_UNDO, rg.X + 17, rg.Y + 17, 14, WithA(kInk, go ? 0.4f : 1.0f), 2.0f);
+        if (!go) HotZone(rg, UI_LOBBY_REGEN);
+        Text(g, T(L"Pour tes amis par IP ; par Steam, l'invitation suffit.", L"For your friends by IP; through Steam, the invite is enough."), RectF(c.X + 18, c.Y + 144, c.Width - 36, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    } else {
+        Text(g, T(L"Pas de code : tout le monde peut entrer", L"No code: anyone can join"), RectF(c.X + 18, c.Y + 102, c.Width - 36, 36), 13.5f, FontStyleBold, kGrey, StringAlignmentNear);
+        Text(g, T(L"Par IP, l'adresse suffit ; par Steam, tout ami Steam.", L"By IP, the address is enough; through Steam, any Steam friend."), RectF(c.X + 18, c.Y + 144, c.Width - 36, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    }
+    // joueurs au plus (hote compris) : 2 a 16, avertissement au-dela de 10
+    float y = c.Y + 174;
+    Pen sp(TH(sep), 1);
+    g.DrawLine(&sp, c.X + 18, y - 6, c.X + c.Width - 18, y - 6);
+    Text(g, T(L"Joueurs au plus", L"Players max"), RectF(c.X + 18, y - 1, 150, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+    Text(g, T(L"hôte compris, 2 à 16", L"host included, 2 to 16"), RectF(c.X + 18, y + 17, 150, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    RectF m(c.X + c.Width - 18 - 32 - 44 - 32, y, 32, 32), pl(c.X + c.Width - 18 - 32, y, 32, 32);
+    for (int k = 0; k < 2; k++) {
+        RectF br = k ? pl : m;
+        int id = k ? UI_LOBBY_MAXP : UI_LOBBY_MAXM;
+        bool can = !go && (k ? g_lobbyMax < kLobbyMaxAbs : g_lobbyMax > max(2, n));
+        GraphicsPath bp; RoundRect(bp, br, 9);
+        SolidBrush bb(g_uiHot == id && can ? TH(btn2Hot) : TH(btn2)); g.FillPath(&bb, &bp);
+        Icon(g, k ? IC_PLUS : IC_MIN, br.X + 16, br.Y + 16, 14, WithA(kInk, can ? 1.0f : 0.3f), 2.2f);
+        if (can) HotZone(br, id);
+    }
+    Text(g, std::to_wstring(g_lobbyMax), RectF(m.X + m.Width, y, pl.X - m.X - m.Width, 32), 15, FontStyleBold, kInk);
+    y += 40;
+    if (g_lobbyMax > 10) {
+        Icon(g, IC_ALERT, c.X + 26, y + 12, 14, kWarn, 1.9f);
+        Para(g, T(L"Au-delà de 10 : très bonne connexion et bonne machine chez l'hôte.", L"Above 10: a very good connection and a good machine on the host's side."), RectF(c.X + 40, y, c.Width - 58, 34), 11, kWarn);
+    }
+    y += 48;
+    // reseau
+    g.DrawLine(&sp, c.X + 18, y - 4, c.X + c.Width - 18, y - 4);
+    if (g_lobbySteam) {
+        Text(g, T(L"Steam · amis seulement", L"Steam · friends only"), RectF(c.X + 18, y + 2, c.Width - 36, 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Para(g, T(L"Invite tes amis depuis le salon ; ils peuvent aussi entrer depuis Steam (« Rejoindre la partie »).", L"Invite your friends from the lobby; they can also join from Steam (\"Join game\")."), RectF(c.X + 18, y + 22, c.Width - 36, 32), 10.5f, kGrey);
+    } else {
+        wchar_t b[64];
+        swprintf_s(b, T(L"Port %d (UDP et TCP)", L"Port %d (UDP and TCP)"), g_lobbyPort);
+        Text(g, b, RectF(c.X + 18, y + 2, c.Width - 36, 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, std::wstring(T(L"Adresse locale :", L"Local address:")) + L" " + (g_myAddresses.empty() ? L"?" : g_myAddresses), RectF(c.X + 18, y + 22, c.Width - 36, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    }
 }
 
 static void DrawLobbyPopover(Graphics &g);
@@ -4029,7 +4199,8 @@ static void DrawLobby(Graphics &g)
     SkinsCheck();   // (portraits des joueurs)
     PersoCheck();
     int myUdp = g_udpMine;
-    RectF lc = kLobbyCard;
+    bool split = lobby != LB_CONNECTING && !(host && g_lobbySteam && g_sFriendsView);   // joueurs en haut ; dessous, le salon et les options
+    RectF lc = split ? RectF(kLobbyCard.X, kLobbyCard.Y, kLobbyCard.Width, kLobbyPlayersH) : kLobbyCard;
     Glass(lc);
     // UDP bloque (ou port UDP pris chez l'hote) : avertissement en bas de la liste
     std::wstring warn;
@@ -4055,6 +4226,8 @@ static void DrawLobby(Graphics &g)
         warn = wb;
     }
     float bottom = lc.Y + lc.Height - 18;
+    std::wstring hintWarn;   // (cartes du bas : l'avertissement prend la place du conseil, a droite)
+    if (split) hintWarn.swap(warn);
     if (!warn.empty()) {
         RectF wr(lc.X + 20, bottom - 66, lc.Width - 40, 66);
         GraphicsPath p; RoundRect(p, wr, 14);
@@ -4079,7 +4252,15 @@ static void DrawLobby(Graphics &g)
         }
         if (!udpLine.empty()) Text(g, udpLine, RectF(lc.X + lc.Width - 320, lc.Y + 18, 300, 26), 12.5f, FontStyleBold, udpC, StringAlignmentFar);
         else if (lobby != LB_CONNECTING) Text(g, T(L"Clique sur toi : tenue, voiture", L"Click yourself: outfit, car"), RectF(lc.X + lc.Width - 320, lc.Y + 18, 300, 26), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
-        if (lobby == LB_CONNECTING) {
+        if (lobby == LB_CONNECTING && g_sCodeAsk) {   // salon Steam prive, sans invitation : le code de session d'abord
+            float cy = kLobbyList.Y + kLobbyList.Height / 2 - 90;
+            Title(g, T(L"Salon privé : code de session", L"Private lobby: session code"), RectF(lc.X, cy, lc.Width, 34), 22, kInk, StringAlignmentCenter);
+            Para(g, std::wstring(T(L"Le salon de", L"The lobby of")) + L" " + g_sHostName + L" " + T(L"est privé. Entre le code à 6 caractères qu'il t'a donné, ou demande-lui une invitation Steam (elle suffit).", L"is private. Enter the 6-character code they gave you, or ask them for a Steam invite (it is enough)."),
+                 RectF(lc.X + 90, cy + 44, lc.Width - 180, 44), 13, kGrey, StringAlignmentCenter);
+            g_fields[2].r = RectF(lc.X + lc.Width / 2 - 150, cy + 104, 176, 48);
+            DrawField(g, 2, L"");
+            UiButton(g, RectF(lc.X + lc.Width / 2 + 36, cy + 104, 114, 48), T(L"ENTRER", L"ENTER"), UI_LOBBY_CODEOK, true, IC_LOGIN);
+        } else if (lobby == LB_CONNECTING) {
             bool creating = g_lobbySteam && g_myId == 0;
             float cy = kLobbyList.Y + kLobbyList.Height / 2 - 60;
             Title(g, creating ? T(L"Cr\u00E9ation du salon Steam\u2026", L"Creating the Steam lobby\u2026") : T(L"Connexion au salon\u2026", L"Connecting to the lobby\u2026"),
@@ -4089,9 +4270,9 @@ static void DrawLobby(Graphics &g)
                              : T(L"Si l'h\u00F4te joue d\u00E9j\u00E0 ou n'a pas de salon, tu pourras rejoindre directement en jeu.", L"If the host is already playing or has no lobby, you can join directly in game."),
                  RectF(lc.X + 100, cy + 72, lc.Width - 200, 44), 13, kGrey, StringAlignmentCenter);
         } else {
-            static const int pal[kLobbyMax] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89 };
+            static const int pal[16] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89, 0x55B04C, 0x3FBFD9, 0xE8A33C, 0xB24FA5, 0x8C6239, 0x5C6BC0, 0xA9C43A, 0xE88A7A };   // (meme palette que Sync/Markers.cs : pastille carte, marqueur, pseudo)
             float sc = g_scroll[TAB_LOBBY] = min(g_scroll[TAB_LOBBY], LobbyMaxScroll()), ms = LobbyMaxScroll();
-            int rows = (int)peers.size() + ((int)peers.size() < kLobbyMax ? 1 : 0);
+            int rows = (int)peers.size() + ((int)peers.size() < g_lobbyMax ? 1 : 0);
             GraphicsState st = g.Save();
             g.SetClip(kLobbyList, CombineModeIntersect);
             for (int i = 0; i < rows; i++) {
@@ -4116,7 +4297,7 @@ static void DrawLobby(Graphics &g)
                 Pen rpen(me ? kAcc : TH(choiceBorder), me ? 1.5f : 1.0f);
                 g.DrawPath(&rpen, &rp);
                 std::wstring nm = Widen(p.name, CP_UTF8);
-                Color pc = CarRgb(pal[p.id % kLobbyMax]);
+                Color pc = CarRgb(pal[p.id % 16]);
                 DrawSkinAvatar(g, RectF(r.X + 12, r.Y + (r.Height - 54) / 2, 54, 54), p.skin, pc, nm);
                 if (p.sid) DrawSteamAvatar(g, RectF(r.X + 50, r.Y + r.Height - 30, 22, 22), p.sid);   // (avatar Steam en coin)
                 Text(g, nm + (me ? T(L"  (toi)", L"  (you)") : L""), RectF(r.X + 80, r.Y + 13, 210, 24), 16, FontStyleBold, kInk, StringAlignmentNear);
@@ -4174,6 +4355,11 @@ static void DrawLobby(Graphics &g)
         }
     }
 
+    if (split) {   // dessous : le salon et les options (hote) ; les options de l'hote et les miennes (invite)
+        RectF c1(kLobbyCard.X, kLobbyCard.Y + kLobbyPlayersH + 16, 314, kLobbyCard.Height - kLobbyPlayersH - 16), c2(c1.X + c1.Width + 16, c1.Y, c1.Width, c1.Height);
+        if (host) { DrawLobbySalonCard(g, c1, (int)peers.size()); DrawLobbyOptCard(g, c2, true, g_lobbyOptTab); }
+        else { DrawLobbyOptCard(g, c1, false, 0); DrawLobbyOptCard(g, c2, false, 1); }
+    }
     // --- a droite
     const float rx = 924, rw = 340;
     RectF pc(rx, 88, rw, 236);
@@ -4225,8 +4411,13 @@ static void DrawLobby(Graphics &g)
                                    L"Once everyone is ready, START launches everyone's game; the guests follow your game.")
                                : T(L"Clique sur PR\u00CAT. Ton jeu d\u00E9marre tout seul quand l'h\u00F4te lance la partie.",
                                    L"Click READY. Your game starts by itself when the host starts the session.");
-    Icon(g, IC_SPARK, hc.X + 26, hc.Y + 28, 18, kAcc, 1.9f);
-    Para(g, hint, RectF(hc.X + 46, hc.Y + 14, hc.Width - 62, hc.Height - 20), 12.5f, kInk);
+    if (!hintWarn.empty()) {   // UDP bloque (ou port UDP pris) : ici, en ambre
+        Icon(g, IC_ALERT, hc.X + 26, hc.Y + 28, 18, kWarn, 2.0f);
+        Para(g, hintWarn, RectF(hc.X + 46, hc.Y + 10, hc.Width - 58, hc.Height - 14), 11.5f, kInk);
+    } else {
+        Icon(g, IC_SPARK, hc.X + 26, hc.Y + 28, 18, kAcc, 1.9f);
+        Para(g, hint, RectF(hc.X + 46, hc.Y + 14, hc.Width - 62, hc.Height - 20), 12.5f, kInk);
+    }
     // boutons : LANCER / PRET ; FERMER LE SALON / QUITTER / ANNULER
     for (int id : { B_HOST, B_JOIN }) {
         Button &b = g_btn[id];
@@ -4368,6 +4559,74 @@ static void LobbyOptsClick(int id)
     }
 }
 
+// Hote : le salon (prive / public, code, joueurs max) et les options de la partie aux invites (STATE, ou donnees du salon Steam).
+static void LobbyPublish()
+{
+    if (g_lobby != LB_HOST) return;
+    if (g_lobbySteam) { SSetLobby("prive", g_lobbyPrive ? "1" : "0"); SSetLobby("code", g_lobbyPrive ? g_lobbyCode : ""); SSetLobby("max", std::to_string(g_lobbyMax)); SSetLobby("options", LobbyOptText()); }
+    else BroadcastState();
+}
+// Cartes du bas du salon : Public / Prive, COPIER, nouveau code, joueurs max, onglets et options (hote) ; mes options (invite) ;
+// ENTRER (code d'un salon Steam prive).
+static void LobbyOptClick(int id)
+{
+    bool host = g_lobby == LB_HOST;
+    if (id == UI_LOBBY_CODEOK) { SteamCodeSubmit(); return; }
+    if (g_goSent) return;
+    if (id == UI_LOBBY_OPTTAB || id == UI_LOBBY_OPTTAB + 1) { g_lobbyOptTab = id - UI_LOBBY_OPTTAB; return; }
+    if (id == UI_LOBBY_COPY) {
+        if (CopyText(Widen(g_lobbyCode))) { g_codeCopiedT = GetTickCount(); SetStatus(K_OK, T(L"Code de session copié : %S", L"Session code copied: %S"), g_lobbyCode.c_str()); }
+        return;
+    }
+    bool pub = false;
+    if (id == UI_LOBBY_PRIV || id == UI_LOBBY_PRIV + 1) {
+        if (!host) return;
+        bool prive = id == UI_LOBBY_PRIV + 1;
+        if (prive == g_lobbyPrive) return;
+        g_lobbyPrive = prive;
+        if (prive && g_lobbyCode.empty()) g_lobbyCode = MakeSessionCode();
+        WritePrivateProfileStringW(L"Lanceur", L"SalonPrive", prive ? L"1" : L"0", g_iniLauncher.c_str());
+        SetStatus(K_NORMAL, prive ? T(L"Salon privé : le code de session est demandé", L"Private lobby: the session code is required") : T(L"Salon public : pas de code", L"Public lobby: no code"));
+        TestLog("salon : %s (code %s)", prive ? "prive" : "public", g_lobbyCode.c_str());
+        pub = true;
+    } else if (id == UI_LOBBY_REGEN) {
+        if (!host) return;
+        g_lobbyCode = MakeSessionCode();
+        TestLog("salon : nouveau code de session %s", g_lobbyCode.c_str());
+        pub = true;
+    } else if (id == UI_LOBBY_MAXM || id == UI_LOBBY_MAXP) {
+        if (!host) return;
+        EnterCriticalSection(&g_lcs);
+        int n = (int)g_peers.size();
+        LeaveCriticalSection(&g_lcs);
+        int v = max(max(2, n), min(kLobbyMaxAbs, g_lobbyMax + (id == UI_LOBBY_MAXP ? 1 : -1)));
+        if (v == g_lobbyMax) return;
+        g_lobbyMax = v;
+        WritePrivateProfileStringW(L"Lanceur", L"SalonMax", std::to_wstring(v).c_str(), g_iniLauncher.c_str());
+        if (g_lobbySteam) SteamLobbySetMax(v);
+        TestLog("salon : %d joueurs au plus", v);
+        pub = true;
+    } else if (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + kLobbyOptN * 3) {
+        int i = (id - UI_LOBBY_OPT) / 3, part = (id - UI_LOBBY_OPT) % 3;
+        const LobbyOptDef &d = kLobbyOptDefs[i];
+        if (d.host && !host) return;
+        const GfxRow *r = GfxRowByKey(d.key);
+        int v = LobbyOptGet(d.key);
+        if (!r || r->vals.empty()) v = v ? 0 : 1;
+        else {
+            int k = 0;
+            for (int j = 0; j < (int)r->vals.size(); j++) if (r->vals[j] == v) k = j;
+            k += part == 2 ? 1 : part == 1 ? -1 : 0;
+            if (k < 0 || k >= (int)r->vals.size()) return;
+            v = r->vals[k];
+        }
+        g_lobbyOpt[d.key] = v;
+        TestLog("salon : option %s = %d (ce salon seulement)", d.key, v);
+        pub = d.host;
+    }
+    if (pub) LobbyPublish();
+}
+
 static bool LobbyClick(float x, float y)
 {
     int c = LobbyChoiceAt(x, y);
@@ -4418,6 +4677,7 @@ static void TestSteamStep(DWORD t)
             if (id) { tried = true; TestLog("test : salon %llu lu", id); SteamLobbyJoin(id); }
             return;
         }
+        if (g_sCodeAsk) { g_fields[2].text = Widen(g_testCode); TestLog("test : code de session tape %s", g_testCode.c_str()); SteamCodeSubmit(); return; }   // (salon prive sans invitation)
         if (tried && g_lobby == LB_NONE) {
             EnterCriticalSection(&g_cs);
             std::string st = Narrow(g_status, CP_UTF8);
@@ -4915,9 +5175,10 @@ static int HitButton(float x, float y)
 }
 static int HitField(float x, float y)
 {
-    if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait) return -1;   // (pendant un salon : pseudo et adresse figes)
-    if (g_tab != TAB_HOME) return -1;
-    for (int i = 0; i < 2; i++) if (g_fields[i].r.Width > 0 && g_fields[i].r.Contains(x, y) && !(i == 1 && g_steamNet)) return i;   // (Steam : pas d'adresse)
+    if (g_state != ST_IDLE || g_goWait) return -1;
+    if (g_sCodeAsk && g_tab == TAB_LOBBY) return g_fields[2].r.Width > 0 && g_fields[2].r.Contains(x, y) ? 2 : -1;   // (salon Steam prive : le code)
+    if (g_lobby != LB_NONE || g_tab != TAB_HOME) return -1;   // (pendant un salon : pseudo et adresse figes)
+    for (int i = 0; i < 3; i++) if (g_fields[i].r.Width > 0 && g_fields[i].r.Contains(x, y) && !(i >= 1 && g_steamNet)) return i;   // (Steam : ni adresse ni code)
     return -1;
 }
 
@@ -4926,7 +5187,8 @@ static void TypeChar(wchar_t ch)
     if (g_focus < 0) return;
     Field &f = g_fields[g_focus];
     if (f.text.size() >= f.maxLen) return;
-    if (f.address) { if (!(iswalnum(ch) && ch < 128) && ch != L'.' && ch != L':' && ch != L'-' && ch != L'_') return; }
+    if (f.code) { if (!(iswalnum(ch) && ch < 128)) return; ch = towupper(ch); }   // code de session : lettres et chiffres, en majuscules
+    else if (f.address) { if (!(iswalnum(ch) && ch < 128) && ch != L'.' && ch != L':' && ch != L'-' && ch != L'_') return; }
     else if (ch < 32 || ch > 126) return;   // pseudo : ASCII
     f.text += ch;
 }
@@ -4951,6 +5213,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     {
         bool udpOk = g_udpMine == UDP_OK;
         g_syncKeep = true;
+        g_lobbyOptGo = true;   // (options de l'hote et les miennes dans lancement.ini)
         LobbyClose();
         g_goWait = true;
         g_launchWarn.clear();
@@ -4988,7 +5251,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             if (!why.compare(0, 8, "version ")) {
                 VersionMismatch(Widen(why.substr(8)));
             }
-            else if (why == "full") SetStatus(K_ERR, T(L"Salon complet (%d joueurs)", L"Lobby is full (%d players)"), kLobbyMax);
+            else if (!why.compare(0, 4, "full")) SetStatus(K_ERR, T(L"Salon complet (%d joueurs)", L"Lobby is full (%d players)"), why.size() > 5 ? atoi(why.c_str() + 5) : 8);
+            else if (why == "code") { SetStatus(K_ERR, T(L"Code de session incorrect : demande-le à l'hôte (salon privé)", L"Wrong session code: ask the host for it (private lobby)")); g_focus = 2; g_time = 0; }
             else if (why == "started") { SetStatus(K_WARN, T(L"Partie d\u00E9j\u00E0 lanc\u00E9e : \u00AB Rejoindre en jeu \u00BB", L"Session already started: \"Join in game\"")); fallback = true; }
             else if (why == "closed") SetStatus(K_WARN, T(L"L'h\u00F4te a ferm\u00E9 le salon", L"The host closed the lobby"));
             else SetStatus(K_ERR, T(L"Refus\u00E9 par l'h\u00F4te", L"Refused by the host"));
@@ -5118,7 +5382,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_CHAR:
         if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
-        if (g_state != ST_IDLE || g_lobby != LB_NONE || g_goWait || g_guide || g_tuto >= 0) return 0;
+        if (g_state != ST_IDLE || (g_lobby != LB_NONE && !g_sCodeAsk) || g_goWait || g_guide || g_tuto >= 0) return 0;
         if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
         if (wp == 8) { if (g_focus >= 0 && !g_fields[g_focus].text.empty()) g_fields[g_focus].text.pop_back(); }
         else if (wp == 127) { if (g_focus >= 0) g_fields[g_focus].text.clear(); }   // Ctrl+Retour arriere
@@ -5127,8 +5391,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             const wchar_t *s = d ? (const wchar_t *)GlobalLock(d) : NULL;
             if (s) { for (; *s && *s != L'\r' && *s != L'\n'; s++) TypeChar(*s); GlobalUnlock(d); }
             CloseClipboard();
-        } else if (wp == 9) { g_focus = g_focus == 0 ? 1 : 0; g_time = 0; }
-        else if (wp == 13) { if (g_focus == 1) { UpdateButtons(); if (g_btn[B_JOIN].enabled) OnButton(B_JOIN); } else if (g_focus == 0) { g_focus = 1; g_time = 0; } }
+        } else if (wp == 9) { g_focus = g_sCodeAsk ? 2 : g_steamNet ? 0 : (g_focus + 1) % 3; g_time = 0; }   // (pseudo, adresse, code)
+        else if (wp == 13) {
+            if (g_sCodeAsk) SteamCodeSubmit();
+            else if (g_focus == 1 || g_focus == 2) { UpdateButtons(); if (g_btn[B_JOIN].enabled) OnButton(B_JOIN); }
+            else if (g_focus == 0) { g_focus = 1; g_time = 0; }
+        }
         else if (wp == 27) g_focus = -1;
         else if (wp >= 32) TypeChar((wchar_t)wp);
         g_time = 0.2f;
@@ -5301,6 +5569,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/lent")) g_testSlowMs = (DWORD)_wtoi(argv[i + 1]);
         if (!_wcsicmp(argv[i], L"/forcer")) g_testForce = true;
         if (!_wcsicmp(argv[i], L"/partie")) g_testPartie = argv[i + 1];
+        if (!_wcsicmp(argv[i], L"/code")) g_testCode = Narrow(argv[i + 1]);   // (salon prive : code de l'hote ; code envoye par l'invite)
+        if (!_wcsicmp(argv[i], L"/public") || !_wcsicmp(argv[i + 1], L"/public")) g_testPublic = true;
         if (!_wcsicmp(argv[i + 1], L"/sansudp")) g_testNoUdp = true;   // (dernier argument)
         if (!_wcsicmp(argv[i], L"/temps")) g_sceneT = (float)_wtof(argv[i + 1]);   // captures : instant de la scene animee
         if (!_wcsicmp(argv[i], L"/images")) g_bench = _wtoi(argv[i + 1]);
@@ -5652,8 +5922,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"graphismes-rt") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 14 || gi == 1; g_gfxContentH = 3000; g_scroll[TAB_GFX] = 330; }   // (categories Ray tracing et Ombres depliees)
         else if (st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_scroll[TAB_GFX] = GfxMaxScroll(); }   // (bas de la page : touches)
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
-        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || st == L"salon-dl" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
-            bool host = st == L"salon" || st == L"salon-options" || st == L"salon-mods" || st == L"salon-dl";   // (salon-udp : invite dont l'UDP est bloque ; salon-dl : Kalle recoit les mods)
+        else if (st == L"salon" || st == L"salon-invite" || st == L"salon-udp" || st == L"salon-options" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite
+            bool host = st == L"salon" || st == L"salon-options" || st == L"salon-mods" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi";   // (salon-udp : invite dont l'UDP est bloque ; salon-dl : Kalle recoit les mods ; salon-public : sans code ; salon-max : 12 joueurs ; salon-moi : mes options)
             std::string v = MyVersion();
             g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0 },
                         { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 38, UDP_OK },
@@ -5664,6 +5934,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_partie = host ? PARTIE_CONTINUER : PARTIE_NOUVELLE;
             g_meReady = !host;
             g_lobbyAddr = L"192.168.1.20"; g_lobbyPort = 7870; g_myAddresses = L"192.168.1.20";
+            LobbyOptImport();   // (salon prive, code, joueurs max, options de la partie : vus par l'hote ou recus par l'invite)
+            g_lobbyPrive = st != L"salon-public"; g_lobbyCode = "K7PM3Q"; g_lobbyMax = st == L"salon-max" ? 12 : 8;
+            if (st == L"salon-moi") g_lobbyOptTab = 1;
+            if (!host) { for (auto &d : kLobbyOptDefs) if (d.host) g_hostOpt[d.key] = d.def; g_hostOpt["Triches"] = 1; g_hostOpt["AjoutMusee"] = 0; }
             g_tab = TAB_LOBBY;
             if (st == L"salon-dl") g_peers[2].dl = 45;
                     if (host) { SetStatus(K_OK, T(L"Salon ouvert \u00B7 port %d", L"Lobby open \u00B7 port %d"), 7870); g_lobbyHot = 1; }
@@ -5685,8 +5959,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 if (g_sync == SY_ASK) g_lobbyHot = 70;
             }
         }
-        else if (st == L"salon-steam" || st == L"salon-steam-amis" || st == L"salon-steam-invite") {   // salon Steam (faux)
-            bool host = st != L"salon-steam-invite";
+        else if (st == L"salon-steam" || st == L"salon-steam-amis" || st == L"salon-steam-invite" || st == L"salon-steam-code") {   // salon Steam (faux)
+            bool host = st != L"salon-steam-invite" && st != L"salon-steam-code";   // (salon-steam-code : invite venu de Steam, le code lui est demande)
             std::string v = MyVersion();
             g_peers = { { 0, host ? MyName() : "Pekka", host ? MySkin() : "cop_shirt", v, true, 0, UDP_NA, 0, 1 },
                         { 1, host ? "Teppo" : MyName(), host ? "rally_shirt" : MySkin(), v, true, 0, UDP_NA, 0, 2 },
@@ -5698,6 +5972,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_meReady = !host;
             g_sHostName = L"Pekka";
             g_partie = PARTIE_CONTINUER;
+            LobbyOptImport();
+            g_lobbyPrive = true; g_lobbyCode = "K7PM3Q"; g_lobbyMax = 8;
+            if (!host) for (auto &d : kLobbyOptDefs) if (d.host) g_hostOpt[d.key] = d.def;
+            if (st == L"salon-steam-code") { g_lobby = LB_CONNECTING; g_sCodeAsk = true; g_focus = 2; g_fields[2].text = L"K7P"; g_time = 0.2f; }
             g_tab = TAB_LOBBY;
                     if (st == L"salon-steam-amis") {
                 g_sFriendsView = true;

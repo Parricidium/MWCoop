@@ -88,6 +88,10 @@ static const TutoStep kTuto[] = {
       L"Saves", L"Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.", "0.95.0" },
     { L"Legacy ou Reworked", L"Sous le numéro de version, en haut à gauche : Reworked, le nouveau MWCoop (recommandé, celui qui reçoit les mises à jour) ; Legacy, l'ancien, plus mis à jour. Tout le monde doit avoir la même version pour jouer ensemble.",
       L"Legacy or Reworked", L"Under the version number, top left: Reworked, the new MWCoop (recommended, the one that gets updates); Legacy, the old one, no longer updated. Everyone must be on the same version to play together.", "0.96.0" },
+    { L"Le salon : code et options", L"En hébergeant : Public ou Privé (code de session à COPIER pour tes amis par IP), joueurs au plus (2 à 16) et options de la partie, pour ce salon seulement, envoyées à tes invités.",
+      L"The lobby: code and options", L"When hosting: Public or Private (a session code to COPY for your friends by IP), players max (2 to 16) and game options, for this lobby only, sent to your guests.", "0.96.4" },
+    { L"Code de session", L"Pour rejoindre un salon privé par IP : l'adresse de l'hôte et, ici, le code qu'il t'a donné. Salon public : laisse vide. Par Steam, un ami invité entre sans rien taper.",
+      L"Session code", L"To join a private lobby by IP: the host's address and, here, the code they gave you. Public lobby: leave it empty. Through Steam, an invited friend gets in without typing anything.", "0.96.4" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -137,6 +141,8 @@ static RectF TutoTarget(int i)
     case 37: return g_dentBtnRect;
     case 38: return g_navR[TAB_SAVES];
     case 39: return g_canalRect;
+    case 40: return g_btn[B_HOST].r;
+    case 41: return g_fields[2].r;   // (reseau IP : le champ CODE ; Steam : bulle au centre)
     }
     return RectF(0, 0, 0, 0);
 }

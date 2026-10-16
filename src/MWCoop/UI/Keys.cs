@@ -12,6 +12,8 @@ namespace MWCoop
         public static KeyCode Cheats { get { return Get("Triches", KeyCode.F7); } }
         public static KeyCode Map { get { return Get("Carte", KeyCode.M); } }
         public static KeyCode View { get { return Get("Vue", KeyCode.F5); } }
+        // Marqueur partage (Markers) : clic molette par defaut (le jeu ne s'en sert pas) ; appui court pose, tenu retire.
+        public static KeyCode Marker { get { return Get("Marqueur", KeyCode.Mouse2); } }
 
         // Camescope de la boutique (tenu en main) : viseur, enregistrer.
         public static KeyCode CameraViewfinder { get { return Get("CameraViseur", KeyCode.F); } }

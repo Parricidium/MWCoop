@@ -113,6 +113,8 @@ namespace MWCoop
             new Mod("panneau des triches", CheatPanel.Update),
             new Mod("carte", MapRender.Update),
             new Mod("panneau carte", MapPanel.Update),
+            new Mod("panneau jokkis", JokkisPanel.Update),
+            new Mod("marqueurs", Markers.Update),
             new Mod("mods (compatibilite)", ModSecondMachtwagen.Update),
             new Mod("mods (300D)", ModMachtwagen300D.Update),
             new Mod("vocal", Voice.Update),
@@ -175,6 +177,7 @@ namespace MWCoop
             new Mod("monde (automates)", WorldFsms.Update),
             new Mod("trafic", Traffic.Update),
             new Mod("courses", Races.Update),
+            new Mod("jokkis", Jokkis.Update),
             new Mod("portes poussees", PushDoors.Update),
             new Mod("molettes", Knobs.Update),
             new Mod("evenements", Events.Update),
@@ -302,6 +305,7 @@ namespace MWCoop
             WorldFsms.OnLevelLoaded();
             Traffic.OnLevelLoaded();
             Races.OnLevelLoaded();
+            Jokkis.OnLevelLoaded();
             PushDoors.OnLevelLoaded();
             Knobs.OnLevelLoaded();
             Events.OnLevelLoaded();
@@ -332,7 +336,7 @@ namespace MWCoop
                 if (DroneCam.Active) DroneCam.Draw();   // (drone : viseur seul, rien d'autre du mod sur la photo)
                 else if (Kauppa.Viewfinder) Kauppa.DrawViewfinder();   // (camescope : son viseur seul)
                 else { Hud.Draw(); Kauppa.DrawKameraHint(); }
-                WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); MapPanel.Draw(); Respawn.Draw(); Kauppa.DrawMontage();
+                WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); MapPanel.Draw(); JokkisPanel.Draw(); Respawn.Draw(); Kauppa.DrawMontage();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }
             catch (System.Exception e) { Style.Alpha = 1f; Log.Error("hud : " + e); }

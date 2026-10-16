@@ -268,6 +268,7 @@ namespace MWCoop.Net
         {
             var r = new NetReader(data, off, len);
             Msg type = (Msg)r.U8();
+            if (!IsHost) PlayerSync.NoteIncoming(type);   // (essai resync : messages comptes par type pendant une resynchronisation)
             try
             {
                 switch (type)

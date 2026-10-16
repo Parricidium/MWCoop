@@ -364,6 +364,9 @@ namespace MWCoop
         public static int LocalCount { get { return cars.Count; } }
         public static Rigidbody LocalBody(int i) { return i >= 0 && i < cars.Count ? cars[i].Body : null; }
         public static string LocalKey(int i) { return i >= 0 && i < cars.Count ? cars[i].Key : null; }
+        // Voiture creee a chaud (Jokkis de location) : releve au prochain passage plutot que dans 20 s.
+        public static void RescanSoon() { if (scanned) nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 0.5f); }
+
         // Racine de la voiture de cle 'key' (null : inconnue ici ou corps detruit) -- Knobs (commandes d'une voiture garee).
         public static Transform RootByKey(string key)
         {
