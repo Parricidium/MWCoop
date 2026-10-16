@@ -20,6 +20,16 @@ namespace MWCoop
     // lui que la pompe tourne au vrai regime, tuyau dans la fosse -- voir Jobs, @tuyau). Lui seul les envoie ;
     // ailleurs la derive locale (pompage refait sur la copie avec le regime recu, montee lente du niveau) n'est
     // jamais envoyee et la valeur recue l'ecrase. Jamais disputees : une seule source.
+    // Reglages du moteur qui ne sont pas des variables flottantes (16/10, retour de deux joueurs : apres un changement de piece,
+    // cliquetis chez l'un, frottement chez l'autre -- les automates SymptomsEngine/Valves tournent chez chacun sur ses propres
+    // entrees) :
+    //  - jeu aux soupapes : liste ArrayMaker 'Valves' (8 flottants) de la culasse, reglee par les vis ValveAdjustment (automates
+    //    'Screw' sans BoltTightness : pas des boulons pour Parts) et lue par Simulation/Engine/Valves (> 5 +- tolerance :
+    //    valve_knock, le cliquetis) -- jamais envoyee jusqu'ici ;
+    //  - calage de la distribution : rotation locale Y de VINP_CrankPulley et VINP_CamshaftSprocket (Adjust/Adjust 2 de
+    //    TimingData, et Misalign qui tire au sort chez chacun) lue par Combustion « Calc timing » (hors calage : Break ->
+    //    Valvedamage, damage_bearing ou valve_knock au hasard).
+    //  Suivis comme les autres valeurs (cle, valeur), instantane aux arrivants compris.
     public static class Fluids
     {
         static readonly HashSet<string> Names = new HashSet<string> {
@@ -27,14 +37,38 @@ namespace MWCoop
             "Coolant", "BrakeFluidF", "BrakeFluidR", "Level" };
         static readonly HashSet<string> SkipFsm = new HashSet<string> {
             "Scale", "Explosion", "Temp", "Assembly", "Flicker", "Jumping", "Paint", "Pressure" };
+        static readonly HashSet<string> TimingPoints = new HashSet<string> { "VINP_CrankPulley", "VINP_CamshaftSprocket" };
 
         class Watch
         {
             public string Key; public PlayMakerFSM Fsm; public FsmFloat Var;
+            public System.Collections.ArrayList List; public int Idx;   // valeur d'une liste ArrayMaker (jeu aux soupapes) : Var null
+            public Transform Rot;                                        // rotation locale Y d'un objet (calage) : Var null
             public float Last, NextSend;
             public int Sends, Recvs; public float WindowStart; public bool Contested;
             public bool Septic;   // fosse ou citerne : envoyee par l'autorite de la GIFU seulement
             public float Pending, NextDelta;   // remplissage fait ici, pas encore envoye (valeur que l'on n'envoie pas)
+        }
+
+        static float Val(Watch x)
+        {
+            if (x.List != null)
+            {
+                object o = x.Idx < x.List.Count ? x.List[x.Idx] : null;
+                return o is float ? (float)o : o is double ? (float)(double)o : o is int ? (int)o : 0f;
+            }
+            if (x.Rot != null) return x.Rot.localEulerAngles.y;
+            return x.Var.Value;
+        }
+        static void SetVal(Watch x, float v)
+        {
+            if (x.List != null) { if (x.Idx < x.List.Count) x.List[x.Idx] = v; }
+            else if (x.Rot != null) { Vector3 e = x.Rot.localEulerAngles; x.Rot.localEulerAngles = new Vector3(e.x, v, e.z); }
+            else x.Var.Value = v;
+        }
+        static bool Changed(Watch x, float v)
+        {
+            return x.Rot != null ? Mathf.Abs(Mathf.DeltaAngle(v, x.Last)) > 0.5f : Mathf.Abs(v - x.Last) > 0.005f + 0.001f * Mathf.Abs(v);
         }
 
         // Plein fait par un invite (retour d'un joueur, 10/10 : « l'argent part, l'essence n'arrive pas ») : le niveau
@@ -43,7 +77,7 @@ namespace MWCoop
         // valeur que l'on n'envoie pas part en AJOUT (« +cle », volume), garde ici d'ici la, ajoute chez les autres.
         static readonly HashSet<string> FillNames = new HashSet<string> {
             "FuelLevel", "Fuel", "Oil", "OilLevel", "Fluid", "WaterLevel", "Water", "Coolant", "BrakeFluidF", "BrakeFluidR" };
-        static bool Fill(Watch x) { return !x.Septic && FillNames.Contains(x.Var.Name); }
+        static bool Fill(Watch x) { return !x.Septic && x.Var != null && FillNames.Contains(x.Var.Name); }
 
         static Rigidbody gifu;   // corps de la GIFU (racine de la citerne)
 
@@ -81,7 +115,7 @@ namespace MWCoop
                     if (x.Fsm == null) continue;
                     if (w != null && w.Length + 6 + System.Text.Encoding.UTF8.GetByteCount(x.Key) > 1000) { Session.T.SendReliable(p, w.ToArray()); w = null; }
                     if (w == null) w = new NetWriter(Msg.Fluid).U8(Session.LocalId);
-                    w.Str(x.Key).F32(x.Var.Value);
+                    w.Str(x.Key).F32(Val(x));
                     n++;
                 }
                 if (w != null) Session.T.SendReliable(p, w.ToArray());
@@ -122,22 +156,43 @@ namespace MWCoop
                     bool battery = v.Name == "Charge" && f.FsmName == "Data";
                     if (!Names.Contains(v.Name) && !septic && !battery) continue;
                     if (septic && f.FsmName == "Waste") gifu = f.transform.root.GetComponent<Rigidbody>();
-                    string key = owner + ":" + f.FsmName + "." + v.Name;
-                    // Homonymes : l'ordre de decouverte differe d'une machine a l'autre, la cle est abandonnee.
-                    if (ambiguous.Contains(key)) continue;
-                    Watch old;
-                    if (byKey.TryGetValue(key, out old))
+                    Add(new Watch { Key = owner + ":" + f.FsmName + "." + v.Name, Fsm = f, Var = v, Last = v.Value, Septic = septic });
+                }
+                if (f.FsmName != "Data") continue;
+                // Jeu aux soupapes (liste 'Valves' de la culasse) et calage (sprockets) : voir l'en-tete.
+                foreach (PlayMakerArrayListProxy px in f.GetComponents<PlayMakerArrayListProxy>())
+                {
+                    if ((px.referenceName ?? "") != "Valves" || px._arrayList == null) continue;
+                    for (int i = 0; i < px._arrayList.Count && i < 16; i++)
                     {
-                        if (old.Fsm == f) continue;
-                        byKey.Remove(key); watches.Remove(old); ambiguous.Add(key);
-                        continue;
+                        var w = new Watch { Key = owner + ":Valves[" + i + "]", Fsm = f, List = px._arrayList, Idx = i };
+                        w.Last = Val(w);
+                        Add(w);
                     }
-                    var w = new Watch { Key = key, Fsm = f, Var = v, Last = v.Value, Septic = septic };
-                    byKey[key] = w;
-                    watches.Add(w);
+                }
+                if (TimingPoints.Contains(f.name))
+                {
+                    var w = new Watch { Key = owner + ":RotY", Fsm = f, Rot = f.transform };
+                    w.Last = Val(w);
+                    Add(w);
                 }
             }
             if (watches.Count != before) Log.Info("liquides et usure : " + watches.Count + " valeurs suivies");
+        }
+
+        // Homonymes : l'ordre de decouverte differe d'une machine a l'autre, la cle est abandonnee.
+        static void Add(Watch w)
+        {
+            if (ambiguous.Contains(w.Key)) return;
+            Watch old;
+            if (byKey.TryGetValue(w.Key, out old))
+            {
+                if (old.Fsm == w.Fsm) return;
+                byKey.Remove(w.Key); watches.Remove(old); ambiguous.Add(w.Key);
+                return;
+            }
+            byKey[w.Key] = w;
+            watches.Add(w);
         }
 
         // Cle stable : ID de la piece porteuse (lui-meme ou jusqu'a 4 parents) + chemin relatif, sinon
@@ -182,7 +237,7 @@ namespace MWCoop
             foreach (Watch x in watches)
             {
                 if (x.Fsm == null) continue;
-                float v = x.Var.Value;
+                float v = Val(x);
                 if (x.Contested && now - x.WindowStart > 30f) x.Contested = false;   // plus de conflit depuis 30 s
                 if (x.Pending > 0.02f && now >= x.NextDelta && !alone)
                 {
@@ -192,7 +247,7 @@ namespace MWCoop
                     if (++fills % 20 == 1) Log.Info("liquides et usure : " + x.Key + " rempli ici de " + x.Pending.ToString("F2") + ", envoye en ajout");
                     x.Pending = 0f; x.NextDelta = now + 0.5f;
                 }
-                if (Mathf.Abs(v - x.Last) <= 0.005f + 0.001f * Mathf.Abs(v)) continue;
+                if (!Changed(x, v)) continue;
                 if (alone) { x.Last = v; continue; }   // personne a prevenir : l'arrivant recevra l'instantane
                 if (x.Septic)
                 {
@@ -228,7 +283,7 @@ namespace MWCoop
                 x.Contested = true;
                 Log.Info("liquides et usure : " + x.Key + " recalculee des deux cotes, seul l'hote l'envoie");
             }
-            if (send && ++sent % 200 == 1) Log.Info("liquides et usure : " + sent + " valeurs envoyees (" + x.Key + " = " + x.Var.Value + ")");
+            if (send && ++sent % 200 == 1) Log.Info("liquides et usure : " + sent + " valeurs envoyees (" + x.Key + " = " + Val(x) + ")");
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -253,14 +308,15 @@ namespace MWCoop
                 if (add)
                 {
                     // Rempli par un autre : ajoute a la valeur d'ici (pas un releve : ne compte pas comme dispute).
-                    x.Var.Value += v; x.Last += v;
-                    if (++fillsIn % 20 == 1) Log.Info("liquides et usure : " + key + " rempli de " + v.ToString("F2") + " par le joueur #" + who + " -> " + x.Var.Value.ToString("F2"));
+                    SetVal(x, Val(x) + v); x.Last += v;
+                    if (++fillsIn % 20 == 1) Log.Info("liquides et usure : " + key + " rempli de " + v.ToString("F2") + " par le joueur #" + who + " -> " + Val(x).ToString("F2"));
                     continue;
                 }
                 // (remplissage fait ici depuis le dernier releve, pas encore parti : garde par-dessus la valeur recue)
-                if (Fill(x) && x.Var.Value > x.Last && (VehicleSync.RemotelyDriven(x.Fsm.transform) || x.Contested && !Session.IsHost)) x.Pending += x.Var.Value - x.Last;
-                x.Var.Value = v + (Fill(x) ? x.Pending : 0f);
-                x.Last = x.Var.Value;
+                float here = Val(x);
+                if (Fill(x) && here > x.Last && (VehicleSync.RemotelyDriven(x.Fsm.transform) || x.Contested && !Session.IsHost)) x.Pending += here - x.Last;
+                SetVal(x, v + (Fill(x) ? x.Pending : 0f));
+                x.Last = Val(x);
                 Tally(x, false, now);
                 if (++applied % 200 == 1) Log.Info("liquides et usure : " + applied + " valeurs recues (" + key + " = " + v + ", joueur #" + who + ")");
             }
@@ -284,7 +340,7 @@ namespace MWCoop
             if (t > 28f && fuelLog == 0 || t > (Session.IsHost ? 60f : 45f) && fuelLog == 1)
             {
                 fuelLog++;
-                foreach (Watch x in watches) if (x.Fsm != null && x.Key.Contains(Part)) Log.Info("autotest : plein, " + x.Key + " = " + x.Var.Value.ToString("F2") + (x.Contested ? " (disputee)" : "") + (VehicleSync.RemotelyDriven(x.Fsm.transform) ? " (conduite par un autre)" : ""));
+                foreach (Watch x in watches) if (x.Fsm != null && x.Key.Contains(Part)) Log.Info("autotest : plein, " + x.Key + " = " + Val(x).ToString("F2") + (x.Contested ? " (disputee)" : "") + (VehicleSync.RemotelyDriven(x.Fsm.transform) ? " (conduite par un autre)" : ""));
             }
         }
         static int fuelLog;
@@ -297,7 +353,7 @@ namespace MWCoop
             float bd = float.MaxValue;
             foreach (Watch x in watches)
             {
-                if (x.Fsm == null || x.Var.Name != name || x.Key.StartsWith("p:CORRIS/Simulation")) continue;
+                if (x.Fsm == null || x.Var == null || x.Var.Name != name || x.Key.StartsWith("p:CORRIS/Simulation")) continue;
                 float d = (x.Fsm.transform.position - p.transform.position).sqrMagnitude;
                 if (d < bd) { bd = d; best = x; }
             }
@@ -306,11 +362,11 @@ namespace MWCoop
             return best.Key + " = " + best.Var.Value + " a " + Mathf.Sqrt(bd).ToString("F0") + " m (" + watches.Count + " suivies)";
         }
 
-        // Essais : ajoute 'delta' a la 1re valeur suivie dont la cle contient 'part' (bidon rempli a la pompe).
+        // Essais : ajoute 'delta' a la 1re valeur suivie dont la cle contient 'part' (bidon rempli a la pompe, jeu aux soupapes).
         public static string TestBump(string part, float delta)
         {
             foreach (Watch x in watches)
-                if (x.Fsm != null && x.Key.Contains(part)) { x.Var.Value += delta; return x.Key + " = " + x.Var.Value.ToString("F2"); }
+                if (x.Fsm != null && x.Key.Contains(part)) { SetVal(x, Val(x) + delta); return x.Key + " = " + Val(x).ToString("F2"); }
             return "aucune valeur '" + part + "'";
         }
 
@@ -319,7 +375,7 @@ namespace MWCoop
         {
             var sb = new System.Text.StringBuilder();
             foreach (Watch x in watches)
-                if (x.Fsm != null && x.Key.Contains(part)) sb.Append(sb.Length > 0 ? " ; " : "").Append(x.Key).Append(" = ").Append(x.Var.Value.ToString("F2"));
+                if (x.Fsm != null && x.Key.Contains(part)) sb.Append(sb.Length > 0 ? " ; " : "").Append(x.Key).Append(" = ").Append(Val(x).ToString("F2"));
             return sb.Length > 0 ? sb.ToString() : "aucune valeur '" + part + "' (" + watches.Count + " suivies)";
         }
 
@@ -327,7 +383,7 @@ namespace MWCoop
         static List<Watch> SepticWatches(string var)
         {
             var l = new List<Watch>();
-            foreach (Watch x in watches) if (x.Septic && x.Fsm != null && x.Var.Name == var) l.Add(x);
+            foreach (Watch x in watches) if (x.Septic && x.Fsm != null && x.Var != null && x.Var.Name == var) l.Add(x);
             l.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
             return l;
         }

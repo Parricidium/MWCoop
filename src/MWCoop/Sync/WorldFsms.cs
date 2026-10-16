@@ -50,6 +50,7 @@ namespace MWCoop
         // des speciales (TimingSSn, RallyTree), parc ferme, inscription a la glace (LINEUPS). Rejoues, l'inscription
         // d'un invite inscrivait l'hote (autocollants sur sa CORRIS, ses heures de depart retirees).
         static readonly string[] SkipParents = { "VideoPoker", "SlotMachine", "FuelPumps_",
+                                                 "Ventti",   // ventti du cochon (maison de retraite) : Machines, meme modele que le poker (table verrouillee, cartes recopiees)
                                                  "ResultsWeekend", "RacingInspection", "TimingSS", "RallyTree", "ParcFerme", "LINEUPS",
                                                  // Menu d'options du jeu (Systems/OptionsMenu : commandes de conduite, souris, graphismes...) : a chacun
                                                  // les siennes. Rejoues, les clics d'un joueur changeaient les reglages des autres (retour de joueurs, 10/10).
@@ -311,6 +312,7 @@ namespace MWCoop
         {
             Transform root = f.transform.root;
             if (!root.gameObject.activeInHierarchy) return true;                        // modeles (prefabs)
+            if (ItemFsms.Wants(f)) return true;                                          // boutons d'objets portables (radio portable : Power/Volume/Open/Play) : ItemFsms, avec le detour par Radio
             if (SkipRoots.Contains(root.name) || root.name.StartsWith("MWCoop") || Game.UnderPlayer(f.transform)) return true;
             // Vehicules : Jobs, CarDoors... Sauf le lecteur CD (DiscTriggerPlayer* :: Data, point d'insertion du CD).
             if (root.GetComponent("CarDynamics") != null && !(f.gameObject.name.StartsWith("DiscTrigger") && f.FsmName == "Data")) return true;

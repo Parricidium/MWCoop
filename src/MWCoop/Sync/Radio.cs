@@ -18,6 +18,23 @@ namespace MWCoop
     // Le vrai jeu de canaux reste aux gestes d'ici ; un poste allume par un autre joue une copie (canaux et Fetch du jeu,
     // tirage coupe) dans son haut-parleur, sur le meme morceau au meme moment, avec son volume et sa station : on entend
     // chaque voiture la ou elle est. Voir RemoteChange / LocalChange.
+    // Radio portable (EQUIPMENTS/radio(itemx), retour d'un joueur du 16/10 : « pas entendue par les autres ») : un poste comme
+    // les autres (son bouton Power :: Knob 'Check channel' deplace le jeu de canaux dans son SoundSpeaker), mais ses boutons
+    // sont des enfants de l'objet, rejoues par ItemFsms (sous Radio.BeforeRemote / AfterRemote, comme les molettes des
+    // voitures par Jobs). Son poste = l'objet radio(itemx) (KeyOf), cle « radio(itemx) » sur le fil (SetKey : son chemin change
+    // quand on la porte, PLAYER/...). La copie chez les autres nait dans son SoundSpeaker (enfant : elle suit l'objet porte) ;
+    // volume et piles : le Play :: Charge local de chacun regle Settings.Volume du haut-parleur, que la copie lit (meme
+    // sauvegarde au depart, meme consommation : a peu pres pareil) ; piles a plat chez son porteur (Charge 0, ou moins de
+    // 10 piles : 'State 3'), son @poste dit « eteint » et la copie s'arrete chez les autres.
+    // Lecteurs CD (CDAudioSource* : CORRIS, SORBET, maison, taxi) : une source PAR appareil, pas le jeu de canaux ; la piste est
+    // sequentielle (Index remis a 0 a l'insertion, +1 a la fin de chaque piste ou par NEXT), rien n'est tire au sort ;
+    // insertion (WorldFsms), lecture / piste suivante (Jobs en voiture, WorldFsms a la maison) et marche (Interactions) sont
+    // rejouees -- mais un arrivant repart de la piste 1, les debuts different d'une latence, et un rejeu rate decale pour de
+    // bon. Depuis le 16/10 l'hote fait reference pour les lecteurs comme pour les canaux : chaque seconde, par lecteur, le
+    // disque (CurrentCD), le rang (Index), la position et s'il joue ; chez l'invite, l'automate 'Update' du lecteur est coupe
+    // au premier message (plus d'enchainement local), le morceau est retrouve dans la liste du disque (Radio/CD, meme liste
+    // chez tous : Contenu), rang et disque recopies dans ses variables. (L'afficheur « track 05 » du lecteur, ecrit par cet
+    // automate, ne bouge plus chez l'invite.)
     public static class Radio
     {
         static AudioSource[] ch;              // Channel1, Folk
@@ -30,6 +47,7 @@ namespace MWCoop
         {
             found = muted = false; ch = null; upd = null; clips = null; nextFind = 0;
             ghosts.Clear(); realT = null; fetch = null; lastSet = false; winK = null; winUntil = 0f;
+            cds.Clear(); nextCdFind = 0f; cdRoot = null; beatRecv.Clear(); tbStep = 0; tbLog = 0f;
         }
 
         static bool Find()
@@ -69,6 +87,7 @@ namespace MWCoop
                 AudioClip c = a != null ? a.clip : null;
                 w.Str(ClipKey(c)).F32(c != null ? a.time : 0f).Bool(a != null && a.isPlaying);
             }
+            WriteCds(w, now);
             Session.Broadcast(w, false);
         }
 
@@ -85,19 +104,100 @@ namespace MWCoop
             return i >= 0 ? "#chanson:" + i : "";
         }
 
-        static System.Collections.ArrayList Songs()
+        static System.Collections.ArrayList Songs() { return ArrayListOf(GameObject.Find("Radio/Folk"), "Songs"); }
+
+        // Liste PlayMaker (PlayMakerArrayListProxy) de reference 'reference' sur 'go' : chansons de la radio (Radio/Folk,
+        // "Songs"), pistes d'un disque (Radio/CD, "CD1"...).
+        static System.Collections.ArrayList ArrayListOf(GameObject go, string reference)
         {
-            GameObject folk = GameObject.Find("Radio/Folk");
-            if (folk == null) return null;
-            foreach (Component comp in folk.GetComponents<Component>())
+            if (go == null) return null;
+            foreach (Component comp in go.GetComponents<Component>())
             {
                 if (comp == null || comp.GetType().Name != "PlayMakerArrayListProxy") continue;
                 var rn = comp.GetType().GetField("referenceName");
-                if (rn != null && (rn.GetValue(comp) as string) != "Songs") continue;
+                if (rn != null && (rn.GetValue(comp) as string) != reference) continue;
                 var al = comp.GetType().GetField("_arrayList", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 return al != null ? al.GetValue(comp) as System.Collections.ArrayList : null;
             }
             return null;
+        }
+
+        // ---------------------------------------------------------------- lecteurs CD (voir l'en-tete)
+        class Cd { public string Name; public AudioSource A; public PlayMakerFSM Upd; public bool Muted; public string Last; }
+        static readonly List<Cd> cds = new List<Cd>();
+        static float nextCdFind; static GameObject cdRoot;
+
+        // Lecteurs du jeu (objets « CDAudioSource... » portant un automate 'Update' et une source) : revus toutes les 10 s
+        // (taxi, voiture ajoutee). Nom unique par appareil : la cle sur le fil.
+        static void FindCds(float now)
+        {
+            if (now < nextCdFind) return;
+            nextCdFind = now + 10f;
+            foreach (Object o in Game.FsmsNamed("Update"))
+            {
+                var f = (PlayMakerFSM)o; if (f == null) continue;
+                if (f.hideFlags != HideFlags.None || f.FsmName != "Update" || !f.gameObject.name.StartsWith("CDAudioSource")) continue;
+                bool known = false;
+                foreach (Cd c in cds) if (c.Upd == f || c.Name == f.gameObject.name) { known = true; break; }
+                if (known) continue;
+                AudioSource a = f.GetComponent<AudioSource>();
+                if (a == null) continue;
+                cds.Add(new Cd { Name = f.gameObject.name, A = a, Upd = f });
+                Log.Info("radio : lecteur CD trouve (" + Recon.Path(f.transform) + ")");
+            }
+        }
+
+        static Cd CdNamed(string name) { foreach (Cd c in cds) if (c.Name == name) return c; return null; }
+
+        // Hote : apres les canaux, les lecteurs -- nom, disque, rang, position, joue. (Un invite d'une version sans cette suite
+        // s'arrete apres les canaux ; un hote sans elle n'envoie rien de plus : OnMessage lit si More.)
+        static void WriteCds(NetWriter w, float now)
+        {
+            FindCds(now);
+            int n = 0;
+            foreach (Cd c in cds) if (c.A != null && c.Upd != null) n++;
+            w.U8(Mathf.Min(n, 255));
+            foreach (Cd c in cds)
+            {
+                if (c.A == null || c.Upd == null || n-- <= 0) continue;
+                FsmString cd = c.Upd.FsmVariables.FindFsmString("CurrentCD");
+                FsmInt idx = c.Upd.FsmVariables.FindFsmInt("Index");
+                bool playing = c.A.clip != null && c.A.isPlaying && c.A.gameObject.activeInHierarchy;
+                w.Str(c.Name).Str(cd != null ? cd.Value ?? "" : "").I32(idx != null ? idx.Value : -1).F32(playing ? c.A.time : 0f).Bool(playing);
+            }
+        }
+
+        // Piste 'idx' (0..) du disque 'cd' : la liste du disque sur Radio/CD (celle que lit l'automate du lecteur, ArrayListGet).
+        static AudioClip CdClip(string cd, int idx)
+        {
+            if (cdRoot == null) cdRoot = GameObject.Find("Radio/CD");
+            System.Collections.ArrayList l = ArrayListOf(cdRoot, cd);
+            return l != null && idx >= 0 && idx < l.Count ? l[idx] as AudioClip : null;
+        }
+
+        // Invite : le lecteur suit l'hote. Son automate 'Update' coupe au premier message (il enchainerait sinon la piste
+        // suivante tout seul a chaque arret d'ici) ; disque et rang recopies dans ses variables (pour qui les lit).
+        static void ApplyCd(Cd c, string cd, int idx, float t, bool playing)
+        {
+            AudioSource a = c.A;
+            if (!c.Muted) { c.Muted = true; if (c.Upd.enabled) c.Upd.enabled = false; Log.Info("radio : lecteur " + c.Name + " mene par l'hote (enchainement local coupe)"); }
+            FsmString cv = c.Upd.FsmVariables.FindFsmString("CurrentCD"); if (cv != null && cd.Length > 0) cv.Value = cd;
+            FsmInt iv = c.Upd.FsmVariables.FindFsmInt("Index"); if (iv != null && idx >= 0) iv.Value = idx;
+            string key = cd + ":" + idx;
+            if (!playing) { if (a.isPlaying) a.Stop(); c.Last = null; return; }
+            AudioClip clip = CdClip(cd, idx);
+            if (clip == null)
+            {
+                if (c.Last != key && Time.realtimeSinceStartup >= nextLog) { nextLog = Time.realtimeSinceStartup + 30f; Log.Warn("radio : lecteur " + c.Name + ", piste " + key + " de l'hote introuvable ici"); }
+                c.Last = key;
+                return;
+            }
+            bool swap = a.clip != clip;
+            if (swap) { a.clip = clip; if (a.isPlaying) a.Stop(); }
+            bool seekable = clip.loadType != AudioClipLoadType.Streaming;   // (un flux -- CD importe -- ne se positionne pas)
+            if (seekable && (swap || Mathf.Abs(a.time - t) > 1.5f)) a.time = Mathf.Clamp(t, 0f, Mathf.Max(0f, clip.length - 0.05f));
+            if (!a.isPlaying && a.gameObject.activeInHierarchy) a.Play();
+            if (c.Last != key) { c.Last = key; Log.Info("radio : lecteur " + c.Name + " -> " + key + " a " + t.ToString("F0") + " s (hote)"); }
         }
 
         static AudioClip ClipNamed(string n)
@@ -147,8 +247,33 @@ namespace MWCoop
             if (fetch.enabled != s.On) fetch.enabled = s.On;
         }
 
-        // Poste d'un automate : sa voiture, sinon sa racine (chaine de la maison).
-        static Transform KeyOf(Transform t) { return VehicleSync.CarRoot(t) ?? t.root; }
+        // Poste d'un automate : la radio portable qui le porte, sinon sa voiture, sinon sa racine (chaine de la maison).
+        static Transform KeyOf(Transform t) { return BoomboxOf(t) ?? VehicleSync.CarRoot(t) ?? t.root; }
+
+        const string Boombox = "radio(itemx)";
+        static Transform BoomboxOf(Transform t)
+        {
+            for (Transform p = t; p != null; p = p.parent) if (p.name == Boombox) return p;
+            return null;
+        }
+
+        // Cle d'un poste sur le fil (@poste) : son chemin ; la radio portable par son nom (portee, elle est sous PLAYER/... chez
+        // son porteur, et son chemin changeait a chaque prise en main : copie coupee chez les autres).
+        static string SetKey(Transform k) { return k.name == Boombox ? Boombox : Recon.Path(k); }
+
+        // Radio portable allumee et alimentee : son objet Play actif (Power 'Check channel'), et son automate Play :: Charge pas
+        // a plat (Charge > 0, et pas 'State 3' : moins de 10 piles, volume force a 0).
+        static bool BoomboxAlive(Transform parent)
+        {
+            Transform b = BoomboxOf(parent);
+            if (b == null) return false;
+            Transform play = b.Find("Play");
+            if (play == null || !play.gameObject.activeSelf) return false;
+            PlayMakerFSM ch = Game.FsmOn(play.gameObject, "Charge");
+            if (ch == null) return true;
+            FsmFloat c = ch.FsmVariables.FindFsmFloat("Charge");
+            return (c == null || c.Value > 0f) && ch.ActiveStateName != "State 3";
+        }
 
         static Ghost GhostOf(Transform k) { foreach (Ghost g in ghosts) if (g.K == k) return g; return null; }
 
@@ -310,7 +435,10 @@ namespace MWCoop
         {
             if (Session.RemoteCount == 0 || realT == null || fetch == null || now < nextBeat) return;
             Snap s = Take();
-            string k = Off(s) || !s.On ? "" : Recon.Path(KeyOf(s.Parent));
+            // (radio portable : Fetch n'y fait pas foi -- allumee si son Play est actif et ses piles pas a plat)
+            bool boombox = !Off(s) && BoomboxOf(s.Parent) != null;
+            bool on = boombox ? BoomboxAlive(s.Parent) : s.On;
+            string k = Off(s) || !on ? "" : SetKey(KeyOf(s.Parent));
             if (k == beatSent && now < nextBeat + 8f) { nextBeat = now + 2f; return; }
             nextBeat = now + 2f; beatSent = k;
             Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@poste").Str(k), false);
@@ -326,14 +454,16 @@ namespace MWCoop
             return "radio : vrai jeu de canaux rendu a RADIO (coupe sans geste)";
         }
 
+        static readonly Dictionary<int, string> beatRecv = new Dictionary<int, string>();   // dernier @poste de chacun (essais)
         public static void OnBeat(int who, string key)
         {
             float now = Time.realtimeSinceStartup;
+            beatRecv[who] = key;
             for (int i = ghosts.Count - 1; i >= 0; i--)
             {
                 Ghost g = ghosts[i];
                 if (g.Who != who || now - g.Born < 3f || g.K == null) continue;
-                if (key.Length == 0 || Recon.Path(g.K) != key) Kill(g, "coupe : #" + who + " ne l'ecoute plus" + (key.Length == 0 ? " (eteint chez lui)" : " (" + key + ")"));
+                if (key.Length == 0 || SetKey(g.K) != key) Kill(g, "coupe : #" + who + " ne l'ecoute plus" + (key.Length == 0 ? " (eteint chez lui)" : " (" + key + ")"));
             }
         }
 
@@ -412,6 +542,13 @@ namespace MWCoop
                   .Append(g.Ch[0] != null && g.Ch[0].clip != null ? g.Ch[0].clip.name + " a " + g.Ch[0].time.ToString("F0") + " s" : "-")
                   .Append(g.Ch.Length > 1 && g.Ch[1] != null && g.Ch[1].clip != null ? " / folk '" + ClipKey(g.Ch[1].clip) + "' a " + g.Ch[1].time.ToString("F0") + " s" + (g.Ch[1].isPlaying ? " joue" : " arrete") : "")
                   .Append(g.Ch[0] != null ? (g.Ch[0].isPlaying ? " joue" : " arrete") + (g.Ch[0].mute ? " muet" : "") + " vol " + g.Ch[0].volume.ToString("F2") : "");
+            foreach (Cd c in cds)
+            {
+                if (c.A == null || c.Upd == null || (c.A.clip == null && !c.A.isPlaying)) continue;
+                FsmString cd = c.Upd.FsmVariables.FindFsmString("CurrentCD"); FsmInt idx = c.Upd.FsmVariables.FindFsmInt("Index");
+                sb.Append(" ; cd ").Append(c.Name).Append(" '").Append(cd != null ? cd.Value : "?").Append(":").Append(idx != null ? idx.Value.ToString() : "?").Append("' ")
+                  .Append(c.A.clip != null ? c.A.time.ToString("F0") + "/" + c.A.clip.length.ToString("F0") + " s" : "-").Append(c.A.isPlaying ? " joue" : " arrete").Append(c.Muted ? " (hote)" : " [" + c.Upd.ActiveStateName + "]");
+            }
             return sb.ToString();
         }
 
@@ -453,6 +590,76 @@ namespace MWCoop
                 }
                 catch (System.Exception e) { if (Time.realtimeSinceStartup >= nextLog) { nextLog = Time.realtimeSinceStartup + 30f; Log.Warn("radio : " + e.Message); } }
             }
+            // Lecteurs CD (suite du message, hote depuis le 16/10 ; rien de plus avec un hote plus ancien).
+            if (!r.More) return;
+            FindCds(Time.realtimeSinceStartup);
+            int m = r.U8();
+            for (int i = 0; i < m; i++)
+            {
+                string name = r.Str(), cd = r.Str();
+                int idx = r.I32();
+                float t = r.F32();
+                bool playing = r.Bool();
+                Cd c = CdNamed(name);
+                if (c == null || c.A == null || c.Upd == null) continue;
+                try { ApplyCd(c, cd, idx, t, playing); }
+                catch (System.Exception e) { if (Time.realtimeSinceStartup >= nextLog) { nextLog = Time.realtimeSinceStartup + 30f; Log.Warn("radio : lecteur " + name + " : " + e.Message); } }
+            }
+        }
+
+        // Essai [Test] Autotest=boombox : l'hote allume la radio portable a 25 s par son bouton de marche comme un clic (Power :: Knob
+        // 'Get scroll' -FINISHED-> 'Switch' -> 'Check channel' -> 'Channel 1', message ItemFsms), piles pleines pour l'essai (Charge 1,
+        // 10 piles) ; l'invite note a 40 s si une copie joue dans radio(itemx)/SoundSpeaker et le dernier @poste recu de l'hote ;
+        // chacun note l'etat des postes toutes les 3 s de 20 a 60 s. Attendu chez l'invite : copie presente, qui joue, @poste
+        // « radio(itemx) » ; son vrai jeu de canaux pas deplace.
+        static int tbStep; static float tbLog;
+        public static void TestBoombox(float t)
+        {
+            if (Session.IsHost && t > 25f && tbStep == 0) { tbStep = 1; Log.Info("autotest boombox : " + TestBoomboxOn()); }
+            if (!Session.IsHost && t > 40f && tbStep == 0) { tbStep = 1; Log.Info("autotest boombox : " + TestBoomboxState()); }
+            if (t > 20f && t < 60f && t >= tbLog) { tbLog = t + 3f; Log.Info("autotest boombox : " + GhostState()); }
+        }
+
+        static string TestBoomboxOn()
+        {
+            GameObject b = Game.FindAny("EQUIPMENTS/" + Boombox);
+            if (b == null) return "radio portable introuvable (EQUIPMENTS/" + Boombox + ")";
+            try
+            {
+                // (piles : comme Data :: Idle au chargement -- variables de Play :: Charge et de Insert :: Assembly, objets eteints ou non)
+                Transform play = b.transform.Find("Play"), ins = b.transform.Find("ChangeBatteries/Insert");
+                PlayMakerFSM ch = play != null ? Game.FsmOn(play.gameObject, "Charge") : null;
+                PlayMakerFSM asm = ins != null ? Game.FsmOn(ins.gameObject, "Assembly") : null;
+                FsmFloat c = ch != null ? ch.FsmVariables.FindFsmFloat("Charge") : null; if (c != null) c.Value = 1f;
+                FsmInt bc = ch != null ? ch.FsmVariables.FindFsmInt("Batteries") : null; if (bc != null) bc.Value = 10;
+                FsmInt ba = asm != null ? asm.FsmVariables.FindFsmInt("Batteries") : null; if (ba != null) ba.Value = 10;
+                PlayMakerFSM data = Game.FsmOn(b, "Data");
+                if (data != null) { FsmFloat dc = data.FsmVariables.FindFsmFloat("Charge"); if (dc != null) dc.Value = 1f; FsmInt db = data.FsmVariables.FindFsmInt("Batteries"); if (db != null) db.Value = 10; }
+            }
+            catch (System.Exception e) { Log.Warn("autotest boombox : piles : " + e.Message); }
+            return ItemFsms.TestSend(Boombox, "Power/Knob", "Get scroll", "FINISHED", "Switch");
+        }
+
+        static string TestBoomboxState()
+        {
+            GameObject b = Game.FindAny("EQUIPMENTS/" + Boombox);
+            Transform sp = b != null ? b.transform.Find("SoundSpeaker") : null;
+            Transform g = sp != null ? sp.Find("MWCoop-RadioAutre") : null;
+            var sb = new System.Text.StringBuilder();
+            sb.Append("copie dans ").Append(Boombox).Append("/SoundSpeaker : ");
+            if (b == null) sb.Append("radio portable introuvable");
+            else if (g == null) sb.Append("aucune");
+            else
+            {
+                Transform c1 = g.Find("Channel1"), fk = g.Find("Folk");
+                AudioSource a1 = c1 != null ? c1.GetComponent<AudioSource>() : null, af = fk != null ? fk.GetComponent<AudioSource>() : null;
+                sb.Append("oui, locale ").Append(a1 != null ? (a1.isPlaying ? "joue" : "arretee") + (a1.mute ? " muette" : "") + " vol " + a1.volume.ToString("F2") : "-")
+                  .Append(", folk ").Append(af != null ? (af.isPlaying ? "joue" : "arretee") + (af.mute ? " muette" : "") : "-");
+            }
+            string k; sb.Append(" ; @poste de l'hote : ").Append(beatRecv.TryGetValue(0, out k) ? "'" + k + "'" : "aucun recu");
+            Transform play = b != null ? b.transform.Find("Play") : null;
+            sb.Append(" ; Play ici ").Append(play != null ? (play.gameObject.activeSelf ? "actif" : "eteint") : "?");
+            return sb.ToString();
         }
     }
 }
