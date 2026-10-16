@@ -148,6 +148,7 @@ namespace MWCoop
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); AssembleIcon.Test(mode, t); DroneCam.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t);
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t); Consume.TestPick(mode, t); Fluids.TestFill(mode, t); ModMachtwagen300D.Test(mode, t); SleepingBags.Test(mode, t); ModCheatbox.Test(mode, t); CarLeaks.Test(mode, t); Sauna.Test(mode, t);
+            if (mode == "horszones") Props.TestHorsZones(t);   // (objets sans ID hors des anciennes racines du monde : REPAIRSHOP, PERAPORTTI, LANDFILL)
             if (mode == "sondesac" && t > 20f && step == 0)
             {
                 step = 1;
@@ -1225,6 +1226,31 @@ namespace MWCoop
                 GameObject pl = Game.PlayerGo;
                 Log.Info("autotest : porte " + Interactions.TestNearestDoor(pl.transform.position));
             }
+            // [Test] Autotest=declencheur : a 25 s l'hote est teleporte dans la zone de [Test] TestDeclencheur (par defaut la
+            // porte arriere du bar, STORE_AREA/Stuff/LOD/DoorBarRear/TriggerIn : 'Wait IN 2' -FINISHED-> 'State 14', Teimo
+            // salue) ; a 20 s chacun note si l'automate est suivi, a 40 s son etat (attendu 'State 14' chez l'invite aussi).
+            if (mode == "declencheur")
+            {
+                string tdPart = Config.Get("Test", "TestDeclencheur", "STORE_AREA/Stuff/LOD/DoorBarRear/TriggerIn");
+                if (t > 20f && step == 0) { step = 1; Log.Info("autotest declencheur : a 20 s " + WorldFsms.StateOf(tdPart)); }
+                if (t > 25f && step == 1)
+                {
+                    step = 2;
+                    if (Net.Session.IsHost)
+                    {
+                        GameObject tz = Game.FindAny(tdPart);
+                        if (tz == null) Log.Info("autotest declencheur : " + tdPart + " introuvable, pas de teleportation");
+                        else
+                        {
+                            // (TeleportTo pose 1,5 m derriere 'feet' selon le cap, 1 m au-dessus : le point vise est la zone elle-meme)
+                            Vector3 zp = tz.transform.position;
+                            Menu.TeleportTo(zp + new Vector3(0f, 0f, 1.5f), 0f, "essai declencheur");
+                            Log.Info("autotest declencheur : hote teleporte dans " + tdPart + " a " + zp.ToString("F1") + " ; " + WorldFsms.StateOf(tdPart));
+                        }
+                    }
+                }
+                if (t > 40f && step == 2) { step = 3; Log.Info("autotest declencheur : " + (Net.Session.IsHost ? "hote" : "invite") + " a 40 s " + WorldFsms.StateOf(tdPart)); }
+            }
             if (mode == "monter")
             {
                 // [Test] TestPiece monte a 30 s, demontee a 45 s (comme les clics du jeu).
@@ -1243,6 +1269,22 @@ namespace MWCoop
                 else if (t > 45f && step == 1) { step = 2; Log.Info("autotest : " + Parts.TestToggle(id)); }
             }
             if (mode == "palan") Palan(t);
+            // [Test] Autotest=garee (2 joueurs, l'invite arrive en retard) : l'hote allume les phares de [Test] TestVoiture (SORBET) a
+            // 20 et 22 s (ButtonLightModes deux fois : position puis route, Selection 2) et les essuie-glaces a 24 s (ButtonWipers) ;
+            // chacun note l'etat a 25, 40 et 45 s ("autotest garee : phares=... essuie=..."). Chez l'invite arrive apres ces clics,
+            // phares et essuie-glaces doivent etre comme chez l'hote a 40-45 s (instantane de Knobs, 20 s apres son arrivee en jeu).
+            if (mode == "garee")
+            {
+                string gcar = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                if (Net.Session.IsHost)
+                {
+                    if (t > 20f && step == 0) { step = 1; Log.Info("autotest garee : " + Knobs.TestSwitch(gcar, "ButtonLightModes")); }
+                    if (t > 22f && step == 1) { step = 2; Log.Info("autotest garee : " + Knobs.TestSwitch(gcar, "ButtonLightModes")); }
+                    if (t > 24f && step == 2) { step = 3; Log.Info("autotest garee : " + Knobs.TestSwitch(gcar, "ButtonWipers")); }
+                }
+                if ((t > 25f && step2 == 0) || (t > 40f && step2 == 1) || (t > 45f && step2 == 2))
+                { step2++; Log.Info("autotest garee : t=" + t.ToString("F0") + " (" + (Net.Session.IsHost ? "hote" : "invite") + ") " + Knobs.DescribeSwitches(gcar)); }
+            }
             // [Test] Autotest=casse (2 joueurs) : l'INVITE « casse » a 30 s les pieces de [Test] TestPieces (montees sur la CORRIS de
             // l'hote) comme des BREAKOFF ; avec CasseSansGarde=1 elles partent quand meme : attendu chez l'hote « sans autorite
             // sur la voiture : ignoree » (et « plus de 3 casses en 1 s ») -- rien de demonte chez lui.
@@ -1338,6 +1380,16 @@ namespace MWCoop
                     foreach (Rigidbody rb in Resources.FindObjectsOfTypeAll(typeof(Rigidbody))) if (rb.name == "advert pile(itemx)" && rb.hideFlags == HideFlags.None) pile = rb.gameObject;
                     Log.Info("autotest : tracts, automate " + (data != null ? data.ActiveStateName : "?") + ", paquet " + (pile == null ? "introuvable" : (pile.activeInHierarchy ? "actif" : "inactif") + " en " + pile.transform.position.ToString("F1") + " sous " + (pile.transform.parent != null ? Recon.Path(pile.transform.parent) : "racine")) + ", cle " + pk);
                 }
+            }
+            // [Test] Autotest=usine : a 25 s l'hote gonfle ses compteurs de travail de l'usine (JOBS/FACTORY::PlayerData : minutes,
+            // jours, paies) et envoie son automate comme un changement ordinaire ; l'invite note ses compteurs a 20 s et a 40 s.
+            // Attendu chez l'invite : les deux lignes identiques (compteurs de l'hote pas recopies) et, entre les deux, « quete de
+            // #1 : JOBS/FACTORY::PlayerData#0 -> ... ». Les deux employes et au repos (« Work ON »), voir Jobs.TestUsine.
+            if (mode == "usine")
+            {
+                if (Net.Session.IsHost && t > 25f && step == 0) { step = 1; Log.Info("autotest usine : " + Jobs.TestUsine(0)); }
+                if (!Net.Session.IsHost && t > 20f && step == 0) { step = 1; Log.Info("autotest usine : invite avant, " + Jobs.TestUsine(1)); }
+                if (!Net.Session.IsHost && t > 40f && step == 1) { step = 2; Log.Info("autotest usine : invite apres, " + Jobs.TestUsine(1)); }
             }
             // [Test] Autotest=boulotloin : l'invite va a l'usine a 40 s (l'hote reste chez lui) ; a 60 et 75 s, chacun note la
             // distance mesuree par l'usine (JOBS/FACTORY :: Database, Distance -- l'usine ferme au-dela de 200 m) et si son
@@ -1751,6 +1803,9 @@ namespace MWCoop
             }
             // [Test] TestPos=x,y,z : le joueur y est teleporte a 8 s (recos, scenes a cote d'un lieu).
             string tp = Config.Get("Test", "TestPos", "");
+            // [Test] Autotest=kiosque, sans TestPos : les deux joueurs vont a 8 s devant le kiosque a saucisses du rallye
+            // (le reste de l'essai -- jour, heure, achat de l'hote, releves -- est dans Shop.TestKiosque).
+            if (mode == "kiosque" && tp.Length == 0 && t > 8f && !teleported) { teleported = true; Shop.TestKioskGo(); }
             if (tp.Length > 0 && t > 8f && !teleported)
             {
                 teleported = true;

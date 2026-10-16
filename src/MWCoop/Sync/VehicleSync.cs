@@ -117,9 +117,17 @@ namespace MWCoop
         }
 
         // Message Msg.Vehicle : joueur, numero de voiture, mode. Modes 0 garee, 1 conduite, 2 moteur tournant (pose,
-        // vitesses...) ; 8 etat de la simulation ; 9 table de l'hote et 10 liste d'un invite (numero NoCar).
-        const int M_SIM = 8, M_TABLE = 9, M_KEYS = 10;
+        // vitesses...) ; 8 etat de la simulation ; 9 table de l'hote et 10 liste d'un invite (numero NoCar) ;
+        // 11 voiture proposee par un invite (active chez lui, absente de la table de l'hote : cle, nom, chemin).
+        const int M_SIM = 8, M_TABLE = 9, M_KEYS = 10, M_PROPOSE = 11;
         const int NoCar = 255;
+        // Voiture active chez un invite seulement (pretee, JOKKIS, HYDROCOPTER, taxi active par son propre jeu...) : jamais
+        // dans la table de l'hote, donc jamais suivie (relecture du 15/10, ecart n10). L'invite la propose a l'hote (cle, nom,
+        // chemin de sa racine ; une fois par cle toutes les 30 s) ; l'hote l'active chez lui si l'objet existe inactif, la
+        // numerote au releve suivant et renvoie sa table a tous. L'hote garde la main : rien n'est numerote par l'invite.
+        static readonly Dictionary<string, float> proposedAt = new Dictionary<string, float>();   // invite : derniere proposition par cle
+        static readonly Dictionary<string, float> proposalLog = new Dictionary<string, float>();  // hote : dernier journal par (joueur, cle)
+        static float nextPropose;
         const int SimFinal = 1, SimParked = 2;   // drapeaux de M_SIM : rendue (fiable), instantane de l'hote (garee)
 
         // Etat de la simulation porte d'un conducteur a l'autre : { automate, debut du nom de l'objet ("" : tous),
@@ -278,7 +286,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            cars.Clear(); under.Clear(); byNet.Clear(); netKeys.Clear(); missingLogged.Clear();
+            cars.Clear(); under.Clear(); byNet.Clear(); netKeys.Clear(); missingLogged.Clear(); proposedAt.Clear(); proposalLog.Clear(); nextPropose = 0;
             scanned = false; tableSeen = false; inCarWas = false; curVehicle = null; curVehicleLooked = false;
             LocalDriving = -1; owned = -1; moving = null; bumped = -1;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 3f : -1;
@@ -345,6 +353,12 @@ namespace MWCoop
         public static int LocalCount { get { return cars.Count; } }
         public static Rigidbody LocalBody(int i) { return i >= 0 && i < cars.Count ? cars[i].Body : null; }
         public static string LocalKey(int i) { return i >= 0 && i < cars.Count ? cars[i].Key : null; }
+        // Racine de la voiture de cle 'key' (null : inconnue ici ou corps detruit) -- Knobs (commandes d'une voiture garee).
+        public static Transform RootByKey(string key)
+        {
+            foreach (Car c in cars) if (c.Key == key) return c.Body != null ? c.T : null;
+            return null;
+        }
 
         static Car CarOf(Transform t)
         {
@@ -410,7 +424,7 @@ namespace MWCoop
                 car.Key = rank == 0 ? rb.name : rb.name + "#" + rank;
                 cars.Add(car);
                 if (Session.IsHost) { if (byNet.Count < NoCar) { car.Net = byNet.Count; byNet.Add(car); netKeys.Add(car.Key); } }
-                else Bind(car);
+                else { Bind(car); if (car.Net < 0 && tableSeen) Propose(car); }
                 added.Add(car.Key + (car.Drive != null ? "" : "(?)") + (car.T.parent != null ? " [" + Recon.Path(car.T.parent) + "]" : "") + (car.Sims.Length > 0 ? " sim " + car.Sims.Length : ""));
             }
             generation++;
@@ -555,6 +569,56 @@ namespace MWCoop
                      + (extra.Count > 0 ? " ; inconnues de l'hote (non suivies) : " + string.Join(", ", extra.ToArray()) : ""));
             // Voitures de l'hote pas encore vues ici : nouveau releve bientot.
             if (missing.Count > 0) nextScan = Mathf.Min(nextScan, Time.realtimeSinceStartup + 10f);
+            // Voitures actives ici que l'hote ne numerote pas : proposees (il les activera chez lui si elles existent).
+            foreach (Car c in cars) if (c.Net < 0 && c.Body != null) Propose(c);
+        }
+
+        // Invite : propose a l'hote une voiture active ici, absente de sa table (une fois par cle toutes les 30 s).
+        static void Propose(Car c)
+        {
+            if (!Session.Active || Session.IsHost || !tableSeen || c.Body == null || c.Net >= 0) return;
+            float now = Time.realtimeSinceStartup, last;
+            bool first = !proposedAt.TryGetValue(c.Key, out last);
+            if (!first && now - last < 30f) return;
+            proposedAt[c.Key] = now;
+            string path = Recon.Path(c.T);
+            Session.SendToHost(new NetWriter(Msg.Vehicle).U8(Session.LocalId).U8(NoCar).U8(M_PROPOSE).Str(c.Key).Str(c.Name).Str(path), true);
+            if (first) Log.Info("voitures : " + c.Key + " proposee a l'hote (active ici, absente de sa table : " + path + " ; de nouveau toutes les 30 s tant qu'elle n'a pas de numero)");
+        }
+
+        // Hote : voiture proposee par un invite. Deja numerotee : sa table lui est renvoyee. Sinon l'objet est cherche par son
+        // chemin : inactif -> active ici (numerote au releve suivant, table renvoyee a tous) ; actif mais pas encore releve ->
+        // releve ; introuvable (objet qui n'existe pas dans cette partie) -> journal, ignoree.
+        static void OnPropose(Peer from, NetReader r)
+        {
+            string key = r.Str(), name = r.Str(), path = r.Str();
+            if (!Session.IsHost) return;
+            float now = Time.realtimeSinceStartup, last;
+            string logKey = from.Id + ":" + key;
+            bool quiet = proposalLog.TryGetValue(logKey, out last) && now - last < 300f;   // (journal : une fois par 5 min et par (joueur, cle) ; l'activation, toujours)
+            proposalLog[logKey] = now;
+            if (netKeys.Contains(key))
+            {
+                if (!quiet) Log.Info("voitures : " + key + " proposee par #" + from.Id + ", deja numerotee ici : table renvoyee");
+                SendTable(from);
+                return;
+            }
+            if (path.Length == 0 || path.StartsWith("PLAYER") || path.Contains("/PLAYER")) { if (!quiet) Log.Warn("voitures : " + key + " proposee par #" + from.Id + " (" + path + ") : chemin refuse"); return; }
+            GameObject g = Game.FindAny(path);
+            if (g == null) { if (!quiet) Log.Info("voitures : " + key + " proposee par #" + from.Id + ", introuvable ici (" + path + ")"); return; }
+            Rigidbody rb = g.GetComponent<Rigidbody>();
+            if (rb == null || (rb.GetComponent("CarDynamics") == null && !IsModVehicle(rb))) { if (!quiet) Log.Warn("voitures : " + key + " proposee par #" + from.Id + " : " + path + " n'est pas une voiture ici"); return; }
+            foreach (Car c in cars)
+                if (ReferenceEquals(c.Body, rb)) { if (!quiet) Log.Info("voitures : " + key + " proposee par #" + from.Id + ", connue ici sous " + c.Key + " : table renvoyee"); SendTable(from); return; }
+            if (g.transform.parent != null && !g.transform.parent.gameObject.activeInHierarchy)
+            { if (!quiet) Log.Info("voitures : " + key + " proposee par #" + from.Id + ", un parent de " + path + " est inactif ici : ignoree"); return; }
+            if (!g.activeSelf)
+            {
+                g.SetActive(true);
+                Log.Info("voitures : " + key + " proposee par #" + from.Id + ", activee ici (" + path + ") ; releve et table a tous");
+            }
+            else if (!quiet) Log.Info("voitures : " + key + " proposee par #" + from.Id + ", deja active ici mais pas encore relevee : releve");
+            if (scanned) nextScan = Mathf.Min(nextScan, now + 0.5f);
         }
 
         static void OnKeys(Peer from, NetReader r)
@@ -646,6 +710,8 @@ namespace MWCoop
             inCarWas = inCar;
             if (now >= nextScan) Scan();
             if (!Session.IsHost && !tableSeen && now >= nextKeys) SendKeys();
+            // Voitures toujours sans numero (actives ici seulement) : reproposees toutes les 30 s (l'objet peut etre apparu chez l'hote).
+            if (!Session.IsHost && tableSeen && now >= nextPropose) { nextPropose = now + 30f; foreach (Car c in cars) if (c.Net < 0 && c.Body != null) Propose(c); }
 
             int driving = -1;
             foreach (Car c in cars)
@@ -2137,6 +2203,7 @@ namespace MWCoop
             {
                 if (mode == M_TABLE) OnTable(r);
                 else if (mode == M_KEYS) OnKeys(from, r);
+                else if (mode == M_PROPOSE) OnPropose(from, r);
                 return;
             }
             if (mode == M_SIM)

@@ -86,8 +86,26 @@ namespace MWCoop
     //    la meme commande est retire (deja la). Manger (boutons 'Button' du plateau ou de l'assiette : frites,
     //    burger deballe puis mange, soda gorgee par gorgee) : les etats « State N » apres le clic sont rejoues
     //    chez les autres, ce qui touche au joueur coupe (seul celui qui mange a moins faim).
-    //    Pas suivis ici : kiosque a saucisses et vendeur de pieces du rallye (leur effet passe deja par un automate
-    //    du monde, PURCHASE / ALTERNATOR globaux), bureau de poste (courrier).
+    // 5) KIOSQUE A SAUCISSES du rallye (RACES/HutRally/SausageHutFunctions/LOD/Open/Functions : boutons Sausage, Coffee,
+    //    Both :: Buy, 'Purchase' = PlayerMoney retire, bools Coffee/Sausage de Functions :: Logic, PURCHASE). Logic
+    //    allume la pile de gobelets (GetACup) et/ou pose Sausage sur Lantakari :: Rotate, qui finit par la creer
+    //    ('Create sausage' : prefab sausagelantakari sous SausageParent, puis RESET aux boutons). Ouvert le week-end
+    //    de 10 a 15 h, joueur a moins de 99 m. Rejoue comme un comptoir (kind "kiosque" : argent coupe chez celui qui
+    //    rejoue, 'Purchase' attendu au repos -- le bouton y reste jusqu'au RESET, un 2e achat attend que la saucisse
+    //    soit sortie) ; Logic et Lantakari sont reserves a ce module (PURCHASE et GRILL globaux : le monde les aurait
+    //    rejoues aussi, saucisse en double). La saucisse recoit a sa creation l'ID de l'achat (nom + acheteur +
+    //    numero), le meme partout (chaque Lantakari la cree chez lui) : Props et Consume la suivent (mangee = 'Destroy',
+    //    seul celui qui mange a moins faim). Kiosque eteint ici (loin) : faite a la main de la meme prefab, sous
+    //    SausageParent, figee tant que le kiosque n'est pas charge ici. Le cafe : gobelet et verseur comme la machine a
+    //    cafe (kind "tasse", verseur reserve) ; GetACup reste au monde (clic simple).
+    // 6) VENDEUR DE PIECES du rallye (RACES/RALLY/PartsSalesman/Functions/Parts/Buy<Piece> :: Buy, jour de rallye,
+    //    joueur a moins de 30 m : 'Purchase' = PlayerMoney retire, _SpawnPoint pose dans Functions/Purchase :: Data et
+    //    evenement global ALTERNATOR, CRANKSHAFT... qui y remet la piece a neuf, la pose sur l'etal et detruit le
+    //    bouton). Rejoue comme un comptoir (kind "rallye", argent coupe) ; Purchase :: Data reserve a ce module. Le
+    //    stock du vendeur est la presence des boutons : l'hote envoie toutes les 60 s (tour complet de Stock) et 2 s
+    //    apres une vente la liste des boutons vendus -- un arrivant retire les siens (meme piece pas vendue deux fois).
+    //    Vendeur eteint ici : le bouton est retire a la main (la piece elle-meme a son ID : Props la suit).
+    //    Pas suivi ici : bureau de poste (courrier).
     public static class Shop
     {
         const string Mod = "magasin";
@@ -154,7 +172,7 @@ namespace MWCoop
         static readonly HashSet<string> named = new HashSet<string>();   // ID poses ici sur des objets de comptoir
         static readonly List<Frozen> frozen = new List<Frozen>();
         static bool applying;
-        static float nextScan = -1, nextHookCheck, nextSpawnStep, nextWarn, nextFrozen;
+        static float nextScan = -1, nextHookCheck, nextSpawnStep, nextWarn, nextFrozen, nextKioskCheck;
         static int serialBase, serialN;
 
         // Restaurant : plateaux et assiettes servis (ID de commande -> objet), dans l'ordre ; poses recues en
@@ -180,6 +198,38 @@ namespace MWCoop
         static readonly HashSet<string> RestoIdle = new HashSet<string> { "Player distance", "Player waiting", "Hello!", "Wait player", "Wait button" };
         // Kinds du message Purchase pour le restaurant.
         const int K_Served = 5, K_Eat = 6;
+        // Kind du message Purchase pour l'etat des vendeurs du rallye (hote -> invites : boutons vendus, saucisse en attente).
+        const int K_Sellers = 7;
+
+        // Kiosque a saucisses : Functions (:: Logic, bools Coffee/Sausage), Lantakari (:: Rotate, cree la saucisse).
+        // Who/Serial : le dernier achat de saucisse (ici ou rejoue) -- ID de la prochaine saucisse creee.
+        class Kiosk
+        {
+            public string Key; public GameObject Functions; public PlayMakerFSM Logic, Lantakari; public bool Hooked;
+            public GameObject Prefab, Parent;   // CreateObject de 'Create sausage' (connus des que Lantakari a ete accroche ici)
+            public int Who, Serial; public bool PendingFlag;   // PendingFlag : saucisse en attente chez l'hote, Lantakari pas encore accroche ici
+        }
+        static readonly Dictionary<GameObject, Kiosk> kiosks = new Dictionary<GameObject, Kiosk>();
+        static float sellersAt = -1f;   // hote : prochain envoi K_Sellers (2 s apres une vente ; tour complet de Stock)
+
+        // Fin de 'Create sausage' de Lantakari : la saucisse recoit l'ID de l'achat. N'envoie rien (chacun nomme la sienne).
+        class KioskMade : FsmStateAction
+        {
+            public Kiosk K; public CreateObject[] Acts;
+            public override void OnEnter()
+            {
+                try
+                {
+                    foreach (CreateObject co in Acts)
+                    {
+                        GameObject go = co.storeObject != null ? co.storeObject.Value : null;
+                        if (go != null) NameKiosk(K, go, false);
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
 
         // Debut du service d'une commande par le serveur ('Tray1' de Keijo, 'Purchase' de Jouni) : la commande qu'il
         // sert est celle du dernier achat a sa caisse (ici ou rejoue). N'envoie rien.
@@ -304,6 +354,7 @@ namespace MWCoop
             ignored.Clear(); restCache.Clear(); named.Clear(); frozen.Clear();
             served.Clear(); servedOrder.Clear(); waitServe.Clear(); eatObjs.Clear(); eatPending.Clear(); eatMuted.Clear(); prefabs.Clear();
             testStep = 0; testLog = 0; testBag = null; testEatAt = 0;
+            kiosks.Clear(); sellersAt = -1f; testMoney = -1f;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 9f : -1;
             fleaDb = null; fleaCreator = null; fleaHostLists.Clear(); fleaHostShelf = null; fleaSentSig = null;
             fleaRolling = fleaPending = false; fleaReplyAt = -1; fleaApplied = 0; fleaRetry = 0; fleaNextSig = 0;
@@ -344,6 +395,13 @@ namespace MWCoop
                     if (r.Fsm.gameObject.activeInHierarchy) HookRegister(r);
                 }
             }
+            // Kiosque : Lantakari accroche des qu'il s'allume (kiosque ouvert, joueur pres).
+            if (nextScan > 0 && now >= nextKioskCheck && kiosks.Count > 0)
+            {
+                nextKioskCheck = now + 1f;
+                foreach (Kiosk k in kiosks.Values) if (!k.Hooked && k.Lantakari != null && k.Lantakari.gameObject.activeInHierarchy) HookKiosk(k);
+            }
+            if (Session.IsHost && sellersAt > 0 && now >= sellersAt) { sellersAt = -1f; SendSellers("vente"); }
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 Pending p = pending[i];
@@ -450,7 +508,9 @@ namespace MWCoop
                 Counter c = NewCounter(f, n);
                 if (c == null) { ignored.Add(f); continue; }
                 counters[c.Key] = c; counterOf[f] = c;
-                if (c.Kind == "cafe") ClaimPan(c);
+                if (c.Kind == "cafe" || c.Kind == "kiosque") ClaimPan(c);   // (kiosque : seul le bouton Coffee a un verseur)
+                if (c.Kind == "kiosque") ClaimKiosk(c);
+                if (c.Kind == "rallye") ClaimSeller(c);
                 if (c.Waiter != null && !Replay.Claim(c.Waiter, Mod))
                 {
                     // (Keijo et Jouni n'ont ni clic ni evenement global : le monde ne les prend pas d'ordinaire.)
@@ -533,6 +593,20 @@ namespace MWCoop
             {
                 kind = "cafe"; label = "un cafe"; states = new[] { "Purchase" }; wait = 20f;
             }
+            else if (fsm == "Buy" && (n == "Sausage" || n == "Coffee" || n == "Both") && parent != null && parent.name == "Functions"
+                     && f.Fsm.GetState("Purchase") != null && f.Fsm.GetState("Check money") != null && f.FsmVariables.FindFsmGameObject("Functions") != null
+                     && Recon.Path(f.transform).Contains("SausageHut"))
+            {
+                // Kiosque a saucisses du rallye : 'Purchase' sans suite (le bouton y reste jusqu'au RESET de Lantakari ou du gobelet).
+                kind = "kiosque"; states = new[] { "Purchase" }; wait = 120f;
+                label = n == "Coffee" ? "un cafe au kiosque" : n == "Both" ? "une saucisse et un cafe au kiosque" : "une saucisse au kiosque";
+            }
+            else if (fsm == "Buy" && n.StartsWith("Buy") && f.Fsm.GetState("Purchase") != null && f.Fsm.GetState("Money") != null
+                     && f.FsmVariables.FindFsmGameObject("PurchaseDB") != null && f.FsmVariables.FindFsmString("EventName") != null)
+            {
+                // Vendeur de pieces du rallye (BuyAlternator, BuyCrankshaft...) : eteint sauf jour de rallye, joueur a moins de 30 m.
+                kind = "rallye"; label = "une piece au vendeur du rallye (" + n.Substring(3) + ")"; states = new[] { "Purchase" }; wait = 600f;
+            }
             else if (fsm == "Button" && n == "Ticket" && parent != null && parent.name == "BUS" && Game.RootName(f.transform) == "NPC_CARS"
                      && f.Fsm.GetState("Pay trip") != null)
             {
@@ -564,6 +638,244 @@ namespace MWCoop
                     c.Fsm = null;
                     return;
                 }
+        }
+
+        // ---------------------------------------------------------------- kiosque a saucisses, vendeur du rallye
+        static Kiosk KioskOf(Counter c)
+        {
+            GameObject fn = c != null && c.Fsm != null ? Var(c.Fsm, "Functions") : null;
+            Kiosk k;
+            return fn != null && kiosks.TryGetValue(fn, out k) ? k : null;
+        }
+
+        // Functions :: Logic (PURCHASE global) et Lantakari :: Rotate (GRILL global, cree la saucisse) a ce module : le monde
+        // les aurait rejoues aussi (saucisse en double, sans ID). Un kiosque par objet Functions (trois boutons).
+        static void ClaimKiosk(Counter c)
+        {
+            GameObject fn = Var(c.Fsm, "Functions");
+            if (fn == null || kiosks.ContainsKey(fn)) return;
+            var k = new Kiosk { Key = Recon.Path(fn.transform), Functions = fn, Logic = Game.FsmOn(fn, "Logic") };
+            k.Lantakari = k.Logic != null ? FsmOnVar(k.Logic, "Lantakari", "Rotate") : null;
+            kiosks[fn] = k;
+            foreach (PlayMakerFSM f in new[] { k.Logic, k.Lantakari })
+            {
+                if (f == null) continue;
+                if (!Replay.Claim(f, Mod)) Log.Warn("magasin : kiosque : " + Recon.Path(f.transform) + "::" + f.FsmName + " deja suivi par " + Replay.Owner(f) + " : saucisse peut-etre en double");
+            }
+            Log.Info("magasin : kiosque a saucisses " + k.Key + " (Logic " + (k.Logic != null ? "ok" : "absent") + ", Lantakari " + (k.Lantakari != null ? "ok" : "absent") + ")");
+        }
+
+        // Functions/Purchase :: Data du vendeur (ALTERNATOR, CRANKSHAFT... globaux) a ce module : rejoue par le bouton.
+        static readonly HashSet<PlayMakerFSM> sellerDbs = new HashSet<PlayMakerFSM>();
+        static void ClaimSeller(Counter c)
+        {
+            PlayMakerFSM db = FsmOnVar(c.Fsm, "PurchaseDB", "Data");
+            if (db == null || sellerDbs.Contains(db)) return;
+            sellerDbs.Add(db);
+            if (Replay.Claim(db, Mod)) Log.Info("magasin : vendeur du rallye " + Recon.Path(db.transform) + "::Data reserve (rejoue par les boutons)");
+            else Log.Warn("magasin : vendeur du rallye " + Recon.Path(db.transform) + "::Data deja suivi par " + Replay.Owner(db) + " : piece peut-etre servie deux fois");
+        }
+
+        // Lantakari allume : fin de 'Create sausage' observee (ID de l'achat), prefab et point de creation notes.
+        static void HookKiosk(Kiosk k)
+        {
+            PlayMakerFSM f = k.Lantakari;
+            if (k.Hooked || f == null || !f.gameObject.activeInHierarchy) return;
+            try
+            {
+                FsmState s = f.Fsm.GetState("Create sausage");
+                if (s == null) { Log.Warn("magasin : kiosque : 'Create sausage' absent de Lantakari"); k.Hooked = true; return; }
+                var acts = new List<CreateObject>();
+                foreach (FsmStateAction a in s.Actions)
+                {
+                    var co = a as CreateObject;
+                    if (co == null) continue;
+                    acts.Add(co);
+                    if (co.gameObject != null && co.gameObject.Value != null) k.Prefab = co.gameObject.Value;
+                    if (co.spawnPoint != null && co.spawnPoint.Value != null) k.Parent = co.spawnPoint.Value;
+                }
+                if (!System.Array.Exists(s.Actions, a => a is KioskMade)) FsmHooks.Append(s, new KioskMade { K = k, Acts = acts.ToArray() });
+            }
+            catch { return; }
+            k.Hooked = true;
+            // Saucisse en attente chez l'hote (releve recu avant que Lantakari soit allume ici) : posee maintenant.
+            if (k.PendingFlag) { k.PendingFlag = false; SetSausageFlag(k); }
+            Log.Info("magasin : kiosque : Lantakari suivi (" + (k.Prefab != null ? k.Prefab.name : "prefab ?") + " sous " + (k.Parent != null ? k.Parent.name : "?") + ")");
+        }
+
+        // Achat de saucisse (Sausage, Both ; ici ou rejoue) : ID de la prochaine saucisse de ce kiosque.
+        static void KioskSale(Counter c)
+        {
+            Kiosk k = KioskOf(c);
+            if (k == null || c.Fsm.gameObject.name == "Coffee") return;
+            k.Who = c.SerialWho; k.Serial = c.Serial;
+        }
+
+        // = 'State 6' de Logic : Lantakari.Sausage vrai (il la cree a son prochain passage a la grille).
+        static void SetSausageFlag(Kiosk k)
+        {
+            FsmBool s = k.Lantakari != null ? k.Lantakari.FsmVariables.FindFsmBool("Sausage") : null;
+            if (s == null || s.Value) return;
+            s.Value = true;
+            Log.Info("magasin : kiosque : saucisse de l'achat " + k.Serial + " mise en attente chez Lantakari (releve de l'hote)");
+        }
+
+        // Saucisse creee (par Lantakari d'ici, ou a la main) : ID de l'achat, le meme partout ; sans achat suivi, ID local.
+        // Deja la ici sous cet ID (faite a la main avant que le kiosque s'allume) : celle de Lantakari est retiree.
+        static void NameKiosk(Kiosk k, GameObject go, bool byHand)
+        {
+            if (Props.ItemId(go).Length > 0) return;
+            string id;
+            if (k.Serial == 0)
+            {
+                id = Prefix(go.name) + "-" + (Session.Active ? Session.LocalId : 0) + "-" + NextSerial();
+                SetId(go, id); Props.Track(go); Consume.Soon(go);
+                Log.Info("magasin : " + go.name + " servie au kiosque sans achat suivi, ID local " + id);
+                return;
+            }
+            id = Prefix(go.name) + "-" + k.Who + "-" + k.Serial;
+            k.Serial = 0;
+            GameObject old = Props.ObjectOf(id);
+            if (old != null && old != go)
+            {
+                Object.Destroy(go);
+                Log.Info("magasin : " + id + " deja la ici (faite a la main) : celle de Lantakari retiree");
+                return;
+            }
+            SetId(go, id); Props.Track(go); Consume.Soon(go);
+            Log.Info("magasin : " + go.name + " servie au kiosque" + (byHand ? " (a la main)" : "") + ", ID " + id);
+        }
+
+        // Hote -> invites : boutons du vendeur du rallye deja vendus (detruits ici : stock), et par kiosque le dernier achat de
+        // saucisse avec son attente chez Lantakari. Toutes les 60 s (tour complet de Stock) et 2 s apres une vente : un
+        // arrivant retire les boutons vendus (meme piece pas vendue deux fois) et sortira la saucisse en attente sous le
+        // meme ID. Purchase : U8 joueur, U8 K_Sellers, U8 n, (Str bouton) x n, U8 m, (Str kiosque, U8 acheteur, I32 numero,
+        // Bool en attente) x m.
+        public static void SendSellers(string why)
+        {
+            if (!Session.IsHost || !Session.Active || Session.RemoteCount == 0 || nextScan < 0) return;
+            var sold = new List<string>();
+            foreach (Counter c in counters.Values) if (c.Kind == "rallye" && c.Fsm == null && sold.Count < 255) sold.Add(c.Key);
+            var w = new NetWriter(Msg.Purchase).U8(Session.LocalId).U8(K_Sellers).U8(sold.Count);
+            foreach (string s in sold) w.Str(s);
+            int m = Mathf.Min(kiosks.Count, 255);
+            w.U8(m);
+            int pending = 0;
+            foreach (Kiosk k in kiosks.Values)
+            {
+                if (m-- <= 0) break;
+                FsmBool s = k.Lantakari != null ? k.Lantakari.FsmVariables.FindFsmBool("Sausage") : null;
+                bool wait = s != null && s.Value && k.Serial != 0;
+                if (wait) pending++;
+                w.Str(k.Key).U8(k.Who).I32(k.Serial).Bool(wait);
+            }
+            if (sold.Count == 0 && pending == 0 && why != "vente") return;   // rien a dire (tour complet)
+            Session.SendAll(w, true);
+            Log.Info("magasin : vendeurs du rallye envoyes (" + why + ") : " + sold.Count + " bouton(s) vendu(s), " + pending + " saucisse(s) en attente");
+        }
+
+        static void OnSellers(NetReader r)
+        {
+            int n = r.U8(), removed = 0;
+            for (int i = 0; i < n; i++)
+            {
+                string key = r.Str();
+                Counter c;
+                if (!counters.TryGetValue(key, out c)) { Scan(); counters.TryGetValue(key, out c); }
+                if (c == null || c.Fsm == null || c.Kind != "rallye") continue;
+                if (c.Fsm.gameObject.activeInHierarchy && c.Fsm.ActiveStateName == "Purchase") continue;   // le jeu le retire lui-meme
+                string nm = c.Fsm.gameObject.name;
+                Object.Destroy(c.Fsm.gameObject);
+                removed++;
+                Log.Info("magasin : " + nm + " du vendeur du rallye deja vendu (releve de l'hote) : bouton retire ici");
+            }
+            int m = r.U8(), set = 0;
+            for (int i = 0; i < m; i++)
+            {
+                string key = r.Str(); int who = r.U8(), serial = r.I32(); bool wait = r.Bool();
+                if (!wait) continue;
+                Kiosk k = null;
+                foreach (Kiosk x in kiosks.Values) if (x.Key == key) k = x;
+                if (k == null || k.Serial == serial && k.Who == who) continue;   // inconnu ici, ou deja en attente (achat rejoue)
+                if (Props.ObjectOf(Prefix("sausagelantakari") + "-" + who + "-" + serial) != null) continue;   // deja sortie
+                k.Who = who; k.Serial = serial;
+                if (k.Hooked) SetSausageFlag(k); else k.PendingFlag = true;
+                set++;
+            }
+            if (removed > 0 || set > 0) Log.Info("magasin : releve des vendeurs du rallye : " + removed + " bouton(s) retire(s), " + set + " saucisse(s) en attente");
+        }
+
+        // [Test] Autotest=kiosque (essais) : les deux joueurs devant le kiosque a saucisses du rallye (sans TestPos :
+        // Autotest y teleporte a 8 s, voir TestKioskGo). A 12 s l'hote passe au samedi 12 h ([Test] KiosqueJour 6,
+        // KiosqueHeure 12 : le kiosque ouvre le week-end de 10 a 15 h, joueur a moins de 99 m). A 25 s (ou des que le
+        // bouton est allume, jusqu'a 70 s) l'hote presse le bouton [Test] KiosqueBouton (Sausage ; Coffee, Both) : 'Purchase'
+        // comme le clic apres 'Check money'. Chacun note son argent a 24 s, puis toutes les 5 s de 26 a 90 s l'etat du
+        // kiosque (boutons, Logic, Lantakari et son bool Sausage) et les saucisses suivies (sausagelantakari*) ; l'invite
+        // note a 40 s et 60 s si l'objet achete existe chez lui et si son argent a bouge. Attendu : « rejoue » chez l'invite,
+        // argent de l'invite inchange (seul l'hote paie 15 mk), une saucisse de meme ID des deux cotes sous SausageParent.
+        static float testMoney = -1f, testKioskTry;
+        public static void TestKioskGo()
+        {
+            GameObject both = Game.FindAny("RACES/SausageHutFunctions/LOD/Open/Functions/Both") ?? Game.FindAny("RACES/HutRally/SausageHutFunctions/LOD/Open/Functions/Both");
+            if (both == null) { Log.Info("autotest kiosque : kiosque introuvable (RACES/SausageHutFunctions)"); return; }
+            // Cote client du comptoir (Lantakari est en -x derriere lui) : 1,5 m devant les boutons, face au vendeur.
+            Menu.TeleportTo(both.transform.position + new Vector3(-0.2f, -0.6f, -0.3f), -90f, "kiosque a saucisses (essai)");
+            Log.Info("autotest kiosque : teleporte devant le kiosque (" + both.transform.position.ToString("F1") + ")");
+        }
+
+        static string KioskState()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Counter c in counters.Values)
+            {
+                if (c.Kind != "kiosque" || c.Fsm == null) continue;
+                sb.Append(c.Fsm.gameObject.name).Append(c.Fsm.gameObject.activeInHierarchy ? " [" + c.Fsm.ActiveStateName + "]" : " [eteint]").Append(' ');
+            }
+            foreach (Kiosk k in kiosks.Values)
+            {
+                FsmBool s = k.Lantakari != null ? k.Lantakari.FsmVariables.FindFsmBool("Sausage") : null;
+                sb.Append("; Logic ").Append(k.Logic != null && k.Logic.gameObject.activeInHierarchy ? k.Logic.ActiveStateName : "eteint")
+                  .Append(", Lantakari ").Append(k.Lantakari != null && k.Lantakari.gameObject.activeInHierarchy ? k.Lantakari.ActiveStateName : "eteint")
+                  .Append(" Sausage=").Append(s != null ? s.Value.ToString() : "?").Append(k.Hooked ? " (suivi)" : " (pas accroche)")
+                  .Append(", achat ").Append(k.Who).Append('/').Append(k.Serial);
+            }
+            return (sb.Length > 0 ? sb.ToString() : "aucun kiosque releve") + " ; saucisses " + Props.Ids("sausagelantakari") + " ; " + Wallet.State();
+        }
+
+        static void TestKiosque(float t)
+        {
+            if (Session.IsHost && testStep == 0 && t > 12f)
+            {
+                testStep = 1;
+                int day = Config.GetInt("Test", "KiosqueJour", 6), h = Config.GetInt("Test", "KiosqueHeure", 12);
+                FsmInt gd = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay"); if (gd != null) gd.Value = day;
+                PlayMakerFSM sun = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
+                if (sun != null) { sun.FsmVariables.GetFsmInt("Time").Value = h; sun.SendEvent("TIMESKIP"); }
+                Log.Info("autotest kiosque : jour " + day + ", " + h + " h ici (le kiosque ouvre le week-end de 10 a 15 h)");
+            }
+            if (testMoney < 0f && t > 24f && Wallet.Ready) { testMoney = Wallet.Cash; Log.Info("autotest kiosque : argent avant " + testMoney); }
+            if (Session.IsHost && (testStep == 1 || testStep == 0) && t > 25f && t < 70f && t - testKioskTry >= 2f)
+            {
+                testKioskTry = t;
+                string want = Config.Get("Test", "KiosqueBouton", "Sausage");
+                Counter btn = null;
+                foreach (Counter c in counters.Values) if (c.Kind == "kiosque" && c.Fsm != null && c.Fsm.gameObject.name == want && c.Fsm.gameObject.activeInHierarchy) btn = c;
+                if (btn == null) { Log.Info("autotest kiosque : bouton " + want + " pas encore allume (" + KioskState() + ")"); return; }
+                testStep = 2;
+                if (!btn.Hooked) HookCounter(btn);
+                Game.SetState(btn.Fsm, "Purchase");
+                Log.Info("autotest kiosque : bouton " + want + " presse -> " + btn.Fsm.ActiveStateName + " (achat " + btn.Serial + ")");
+            }
+            if (t > 26f && t < 90f && t - testLog >= 5f) { testLog = t; Log.Info("autotest kiosque : " + KioskState()); }
+            if (!Session.IsHost && (testStep == 0 && t > 40f || testStep == 1 && t > 60f))
+            {
+                testStep++;
+                string ids = Props.Ids("sausagelantakari");
+                bool has = ids.Length > 0 && ids != "?" && ids != "aucun";
+                float cash = Wallet.Ready ? Wallet.Cash : -1f;
+                Log.Info("autotest kiosque : objet achete " + (has ? "present ici (" + ids + ")" : "absent ici") + ", argent "
+                         + (testMoney >= 0f && cash >= 0f ? (Mathf.Abs(cash - testMoney) < 0.5f ? "inchange" : "change de " + (cash - testMoney)) : "?") + " (" + cash + ")");
+            }
         }
 
         static void HookCounter(Counter c)
@@ -643,8 +955,18 @@ namespace MWCoop
         }
 
         // Comptoir pret a rejouer un achat d'un autre. Burger : caisse sans choix local en cours, Keijo libre.
+        // Kiosque : bouton rendu ('Purchase' est sans suite : il y reste jusqu'au RESET), et pas de saucisse deja en attente
+        // chez Lantakari (son bool Sausage ne compte pas deux achats : le 2e attend qu'elle soit sortie).
         static bool Ready(Counter c)
         {
+            if (c.Kind == "kiosque")
+            {
+                if (!AtRest(c.Fsm) || c.Fsm.ActiveStateName == "Purchase") return false;
+                if (c.Fsm.gameObject.name == "Coffee") return true;
+                Kiosk kq = KioskOf(c);
+                FsmBool s = kq != null && kq.Lantakari != null ? kq.Lantakari.FsmVariables.FindFsmBool("Sausage") : null;
+                return s == null || !s.Value;
+            }
             if (c.Kind != "resto") return AtRest(c.Fsm);
             // (Keijo encaisse aussi a la carte, avec Virpi : 'Move 3' a 'Move 6' -- pas interrompu.)
             string k = c.Waiter != null && c.Waiter.gameObject.activeInHierarchy ? c.Waiter.ActiveStateName ?? "" : "";
@@ -1071,6 +1393,7 @@ namespace MWCoop
             else if (kind == K_Served) OnServed(who, r);
             else if (kind == K_Eat) OnEat(who, r);
             else if (kind == K_FleaLists || kind == K_FleaShelf) { if (!Session.IsHost && who == 0) OnFleaPrices(kind, r); }
+            else if (kind == K_Sellers) { if (!Session.IsHost && who == 0) OnSellers(r); }
             else if (kind == K_FleaAsk) { if (Session.IsHost) { fleaReplyAt = Time.realtimeSinceStartup + 0.5f; Log.Info("magasin : puces : " + PlayerName(who) + " demande le tirage de l'hote"); } }
         }
 
@@ -1231,6 +1554,8 @@ namespace MWCoop
             UnmuteCounter(c);
             c.ReplayOrder = false;
             c.SerialWho = Session.Active ? Session.LocalId : 0; c.Serial = NextSerial(); c.Made = 0;
+            if (c.Kind == "kiosque") KioskSale(c);
+            if (c.Kind == "rallye" && Session.IsHost) sellersAt = Time.realtimeSinceStartup + 2f;
             if (!Session.Active) return;
             var w = new NetWriter(Msg.Purchase).U8(Session.LocalId).U8(1).Str(c.Key).Str(state).U8(c.SerialWho).I32(c.Serial);
             WriteVars(c.Fsm, w);
@@ -1349,6 +1674,8 @@ namespace MWCoop
                 case "bus": return Lang.T(" a pay\u00E9 un ticket de bus", " paid for a bus ticket");
                 case "bar": return Lang.T(" a pay\u00E9 au bar", " paid at the bar");
                 case "puces": return Lang.T(" a pay\u00E9 au march\u00E9 aux puces", " paid at the flea market");
+                case "kiosque": return Lang.T(" a achet\u00E9 au kiosque \u00E0 saucisses", " bought at the sausage kiosk");
+                case "rallye": return Lang.T(" a achet\u00E9 une pi\u00E8ce au vendeur du rallye", " bought a part from the rally parts seller");
             }
             if (c.Label.Contains("epuration")) return Lang.T(" a pay\u00E9 \u00E0 la station d'\u00E9puration", " paid at the sewage plant");
             if (c.Label.Contains("controle")) return Lang.T(" a pay\u00E9 au contr\u00F4le technique", " paid at the inspection");
@@ -1402,6 +1729,8 @@ namespace MWCoop
             foreach (var x in it.V.S) { FsmString t = fv.FindFsmString(x.Key); if (t != null) t.Value = x.Value; }
             SetLists(c, it.Lists);
             c.SerialWho = it.SerialWho; c.Serial = it.Serial; c.Made = 0;
+            if (c.Kind == "kiosque") KioskSale(c);
+            if (c.Kind == "rallye" && Session.IsHost) sellersAt = now + 2f;
             MuteCounter(c);
             if (c.Kind == "bar") HideOrders(c);
             if (c.Kind == "resto") { c.ReplayOrder = true; MuteSubtitles(c.Waiter); }   // 'State 4' : Keijo mis au service s'il ne prend pas ORDER
@@ -1525,6 +1854,30 @@ namespace MWCoop
                 PlayMakerFSM start = route != null ? Game.FsmOn(route.gameObject, "Start") : null;
                 FsmBool paid = start != null ? start.FsmVariables.FindFsmBool("Paid") : null;
                 if (paid != null) { paid.Value = true; Log.Info("magasin : trajet en bus paye par " + PlayerName(it.Who) + " (ticket eteint ici)"); }
+                return true;
+            }
+            if (c.Kind == "kiosque")
+            {
+                // Cafe : gobelet et verseur chez l'acheteur seulement, rien a garder ici. Saucisse : faite de la meme prefab
+                // que Lantakari (connue si le kiosque a deja ete accroche ici), sous SausageParent, figee tant que le kiosque
+                // n'est pas charge ici ; sinon le rejeu attend que le kiosque s'allume (abandonne apres c.Wait).
+                if (c.Fsm.gameObject.name == "Coffee") { Log.Info("magasin : cafe du kiosque de " + PlayerName(it.Who) + " pas rejoue ici (kiosque eteint)"); return true; }
+                if (c.Fsm.gameObject.activeInHierarchy) return false;   // kiosque allume mais occupe trop longtemps : abandonne (jamais en double)
+                Kiosk k = KioskOf(c);
+                if (k == null || k.Prefab == null) return false;
+                var go = (GameObject)Object.Instantiate(k.Prefab, k.Parent != null ? k.Parent.transform.position : c.Fsm.transform.position, k.Parent != null ? k.Parent.transform.rotation : Quaternion.identity);
+                k.Who = it.SerialWho; k.Serial = it.Serial;
+                NameKiosk(k, go, true);
+                Freeze(go, k.Functions);
+                Log.Info("magasin : " + go.name + " de " + PlayerName(it.Who) + " faite ici a la main (kiosque eteint)");
+                return true;
+            }
+            if (c.Kind == "rallye")
+            {
+                // = DestroyObject du bouton par Purchase :: Data (la piece a son ID : Props la suit depuis l'acheteur).
+                string n = c.Fsm.gameObject.name;
+                Object.Destroy(c.Fsm.gameObject);
+                Log.Info("magasin : " + n + " du vendeur du rallye vendu a " + PlayerName(it.Who) + " : bouton retire ici (vendeur eteint)");
                 return true;
             }
             return false;
@@ -2157,6 +2510,7 @@ namespace MWCoop
             else if (mode == "sac-loin") TestFar(t);
             else if (mode == "puces") TestFlea(t);
             else if (mode == "puces-prix") TestFleaPrices(t);
+            else if (mode == "kiosque") TestKiosque(t);
         }
 
         // Puces (essais) : comme un clic gauche sur l'objet de rang k (TriggerFlea 'Add' -> 'Cashier').

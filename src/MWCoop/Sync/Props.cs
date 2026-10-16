@@ -87,6 +87,7 @@ namespace MWCoop
         {
             props.Clear(); byBody.Clear(); settling.Clear(); worldKeys.Clear(); worldLogged = false; stored.Clear(); storedBy.Clear(); storedHere.Clear();
             ridingIn.Clear(); ridingOut.Clear(); vanished.Clear(); unknown.Clear();
+            dupKeys.Clear(); dupLogged.Clear(); censusPass = 0; hzStep = 0; hzLog = 0f;
             hand = null; held = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
         }
@@ -123,13 +124,42 @@ namespace MWCoop
             return "";
         }
 
-        static bool censusDone, worldLogged;
+        static int censusPass; static float censusAgain;
+        static bool worldLogged;
         static readonly Dictionary<GameObject, string> worldKeys = new Dictionary<GameObject, string>();
+        // Racines du monde dont TOUT corps sans ID est suivi par son chemin (comme avant le 16/10 : pas de critere, meme
+        // cinematique ou articule -- portes du garage de la maison sous YARD, os de l'ivrogne du pub sous STORE_AREA).
         static readonly HashSet<string> WorldRoots = new HashSet<string> { "EQUIPMENTS", "Systems", "YARD", "COTTAGE", "CABIN", "MISC",
             "JOBS", "STORE_AREA", "SOCCER", "MAP", "PERAJARVI", "HOMENEW",
             "Cutter" };   // (fendeur de bois du KEKMET : detele, il n'etait suivi par personne -- chacun le sien, 08/10)   // plaques de puits, mobilier du pub, buts, abribus...
+        // Hors de ces racines (REPAIRSHOP, PERAPORTTI, LANDFILL, FleaMarket, RACES, INSPECTION, DANCEHALL...), un corps sans ID
+        // n'etait jamais suivi : pneu, bidon ou chaise pousse la-bas ne bougeait que chez celui qui l'a pousse (relecture du
+        // 15/10, ecart 11). Depuis le 16/10 : accepte sur criteres (LooseCandidate) -- corps non cinematique, avec un collider
+        // plein, sans articulation (HingeJoint, ConfigurableJoint... : portes, ragdolls), ni vehicule ni piece d'un vehicule,
+        // pas a la racine de la scene (son rang de racine depend de l'ordre de chargement) -- sauf sous ces racines-ci, jamais
+        // touchees : circulation et PNJ (copies de l'hote : Traffic, Npcs), joueurs et avatars, interface, generateurs.
+        static readonly HashSet<string> SkipRoots = new HashSet<string> { "TRAFFIC", "NPC_CARS", "TRAIN", "HUMANS", "PLAYER", "Player",
+            "GUI", "Spawner", "Sheets", "COMPUTER", "Radio", "JAIL" };
+        // Cles vues en double a un releve (deux corps, meme cle) : objets « (Clone) » apparus en jeu, ou le rang ne vaut rien
+        // d'un joueur a l'autre -- ni l'un ni l'autre n'est suivi (impossible de savoir lequel est lequel en face).
+        static readonly HashSet<string> dupKeys = new HashSet<string>();
+        static readonly HashSet<string> dupLogged = new HashSet<string>();
 
         public static string WorldKeyOf(Rigidbody rb) { return WorldKey(rb); }   // (Fluids : bidons)
+
+        // Corps sans ID hors des racines du monde : vaut-il une cle par son chemin ? (voir WorldRoots)
+        static bool LooseCandidate(Rigidbody rb, Transform t, string rootName)
+        {
+            if (SkipRoots.Contains(rootName) || rootName.StartsWith("MWCoop")) return false;
+            // A la racine de la scene : son rang parmi les racines change avec l'ordre de chargement. Seul un objet apparu en
+            // jeu « (Clone) » passe, avec une cle sans rang (son nom, meme des deux cotes) -- en double, personne ne le suit.
+            if (t.parent == null && !t.name.Contains("(Clone)")) return false;
+            if (rb.isKinematic) return false;   // (anime par le jeu, ou pas encore libre : revu au releve suivant)
+            if (rb.GetComponent<Joint>() != null) return false;   // porte, ragdoll, chaine : sa physique est celle du joint
+            bool solid = false;
+            foreach (Collider c in rb.GetComponentsInChildren<Collider>()) if (!c.isTrigger) { solid = true; break; }
+            return solid;
+        }
 
         static string WorldKey(Rigidbody rb)
         {
@@ -163,12 +193,44 @@ namespace MWCoop
             // Prise du chauffage moteur : son corps est detruit une fois branchee et recree au debranchement. Cle
             // par son UT (maison, usine), pas par l'endroit : tenue en main, elle est sous PLAYER pour les deux.
             bool plug = tn.StartsWith("cable plug");
-            if ((!WorldRoots.Contains(t.root.name) && !plug) || rb.GetComponent("CarDynamics") != null) return null;
+            string rootName = t.root.name;
+            bool listed = plug || WorldRoots.Contains(rootName);
+            if (!listed && !LooseCandidate(rb, t, rootName)) return null;
+            if (rb.GetComponent("CarDynamics") != null) return null;
             if (!plug && VehicleSync.CarRoot(t) != null) return null;   // piece d'une voiture rangee sous une racine du monde (taxi sous JOBS) : CarDoors, pas Props
             string pk = plug ? CarDoors.PlugKey(Game.FsmOn(t.gameObject, "Data")) : null;
-            k = plug ? (pk != null ? "w:" + pk : "w:prise:" + t.root.name + "/" + (t.parent != null ? t.parent.name : "")) : "w:" + Recon.Path(t) + "#" + t.GetSiblingIndex();
+            if (plug) k = pk != null ? "w:" + pk : "w:prise:" + rootName + "/" + (t.parent != null ? t.parent.name : "");
+            else
+            {
+                string path = Recon.Path(t);
+                if (!listed && path.Contains("skeleton")) return null;   // (os d'un PNJ anime sans joint)
+                k = !listed && t.parent == null ? "w:" + path : "w:" + path + "#" + t.GetSiblingIndex();   // (racine « (Clone) » : sans rang)
+                if (!listed && dupKeys.Contains(k)) return null;
+            }
             worldKeys[rb.gameObject] = k;
             return k;
+        }
+
+        // Deux corps vivants sous la meme cle a ce releve : le second n'est pas suivi (sa cle est celle d'un autre, prise
+        // au chargement) ; objet apparu en jeu (racine « (Clone) ») : ni l'un ni l'autre, et plus jamais sous cette cle.
+        static void Duplicate(string id, Rigidbody rb, Rigidbody first)
+        {
+            // (cle par chemin : "w:" sans autre ':' -- pas les cles fixes w:vetement:, w:cd:, w:mod:, w:cbx:... des modules)
+            bool clone = id.StartsWith("w:") && id.IndexOf(':', 2) < 0 && rb.transform.root.name.Contains("(Clone)");
+            if (dupLogged.Add(id))
+                Log.Info("objets : cle en double " + id + " : " + Recon.Path(rb.transform) + " et " + Recon.Path(first.transform)
+                    + (clone ? " (objet apparu en jeu : ni l'un ni l'autre suivi)" : " (le second ignore)"));
+            if (!clone) return;
+            worldKeys.Remove(rb.gameObject);
+            dupKeys.Add(id);
+            worldKeys.Remove(first.gameObject);
+            Prop p;
+            if (props.TryGetValue(id, out p) && p != held && p.RemoteBy < 0 && p.RideCar < 0 && p.RideOut < 0)
+            {
+                settling.Remove(p);
+                if (p.Body != null) byBody.Remove(p.Body);
+                props.Remove(id);
+            }
         }
 
         // CD par son disque (CD1, CD2...), ou qu'il soit (boitier, lecteur, main, sol).
@@ -228,35 +290,62 @@ namespace MWCoop
                 if (p.Hidden && p.Body != null && !Destroyed(p.Body)) byBody[p.Body] = p;   // cache ici (range par un autre) : garde
                 else p.Body = null;
             }
-            bool census = Config.GetInt("Test", "JournalSansId", 0) != 0 && !censusDone;
+            // [Test] JournalSansId=1 : au premier releve, puis une fois encore 60 s plus tard (zones chargees entre-temps), la liste
+            // des corps sans ID refuses et, par racine, combien de corps ont un ID, une cle par chemin, ou sont refuses.
+            bool census = Config.GetInt("Test", "JournalSansId", 0) != 0 && (censusPass == 0 || (censusPass == 1 && now >= censusAgain));
             var noId = census ? new Dictionary<string, int>() : null;
+            var byRoot = census ? new Dictionary<string, int[]>() : null;   // racine -> { avec ID, cle par chemin, refuses, dont cinematiques }
+            var seen = new Dictionary<string, Rigidbody>();   // cle -> premier corps vivant de ce releve (double : voir Duplicate)
             foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>())
             {
-                if (Game.RootName(rb.transform) == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
+                string rn = Game.RootName(rb.transform);
+                if (rn == "PLAYER" && rb.transform.parent.name != "ItemPivot") continue;
                 if (Garage.Owns(rb)) continue;   // levage d'un cric (corps rajoute par le jeu) : Garage, pas Props (recalage de l'hote sinon)
                 string bagKey = SleepingBags.KeyOf(rb) ?? Kauppa.KeyOf(rb) ?? Kauppa.ItemKeyOf(rb);   // (sacs de couchage de MWCoop, sacs de courses de la boutique)
-                if (bagKey != null) { Register(rb, bagKey, null); continue; }
                 PlayMakerFSM use = null;
                 string pre;
-                string id = worldKeys.TryGetValue(rb.gameObject, out pre) && pre.StartsWith("w:cbx:") ? pre : ItemId(rb.gameObject, out use);   // (objets de Cheatbox++ : leur cle)
+                string id = bagKey ?? (worldKeys.TryGetValue(rb.gameObject, out pre) && pre.StartsWith("w:cbx:") ? pre : ItemId(rb.gameObject, out use));   // (objets de Cheatbox++ : leur cle)
                 if (id.Length == 0) id = PackageKey(rb.gameObject);
+                int kind = id.Length > 0 ? 0 : 1;
                 if (id.Length == 0) id = WorldKey(rb) ?? "";
                 if (id.Length == 0)
                 {
+                    kind = 2;
                     if (census && !rb.isKinematic && rb.GetComponent("CarDynamics") == null)
                     {
-                        string k = rb.transform.root == rb.transform ? rb.name : Game.RootName(rb.transform) + "/.../" + rb.name;
+                        string k = rb.transform.root == rb.transform ? rb.name : rn + "/.../" + rb.name;
                         int c; noId.TryGetValue(k, out c); noId[k] = c + 1;
                     }
-                    continue;
                 }
+                if (census)
+                {
+                    int[] n;
+                    if (!byRoot.TryGetValue(rn, out n)) byRoot[rn] = n = new int[4];
+                    n[kind]++;
+                    if (kind == 2 && rb.isKinematic) n[3]++;
+                }
+                if (id.Length == 0) continue;
+                Rigidbody first;
+                if (seen.TryGetValue(id, out first) && first != rb) { Duplicate(id, rb, first); continue; }
+                seen[id] = rb;
                 Register(rb, id, use);
             }
             if (census)
             {
-                censusDone = true;
+                censusPass++; censusAgain = now + 60f;
                 var sb = new System.Text.StringBuilder("objets physiques sans ID (non synchronises) :");
                 foreach (KeyValuePair<string, int> kv in noId) sb.Append("\n  ").Append(kv.Value).Append(" x ").Append(kv.Key);
+                Log.Info(sb.ToString());
+                var roots = new List<string>(byRoot.Keys);
+                roots.Sort(string.CompareOrdinal);
+                sb = new System.Text.StringBuilder("objets : releve par racine (passage " + censusPass + ") :");
+                foreach (string r in roots)
+                {
+                    int[] n = byRoot[r];
+                    sb.Append("\n  ").Append(r).Append(" : ").Append(n[0]).Append(" avec ID, ").Append(n[1]).Append(" par chemin, ").Append(n[2]).Append(" refuses");
+                    if (n[3] > 0) sb.Append(" (dont ").Append(n[3]).Append(" cinematiques)");
+                    if (!WorldRoots.Contains(r) && n[1] > 0) sb.Append(" [criteres]");
+                }
                 Log.Info(sb.ToString());
             }
             if (!worldLogged && worldKeys.Count > 0)
@@ -1100,6 +1189,69 @@ namespace MWCoop
                 Log.Info("autotest : pub, table " + tp.Id + " deplacee ici en " + tp.Body.position.ToString("F2"));
             }
             if (t > pubLog) { pubLog = t + 10f; Log.Info("autotest : pub, table " + tp.Id + " en " + tp.Body.position.ToString("F2")); }
+        }
+
+        // [Test] Autotest=horszones (ecart 11 : objets sans ID hors des anciennes WorldRoots) : chacun choisit le meme objet -- la
+        // premiere cle (ordre alphabetique) suivie sous REPAIRSHOP, PERAPORTTI ou LANDFILL, [Test] HorsZonesCle=<partie> pour en
+        // viser un -- et note a 20 s sa cle, son chemin et sa position. A 25 s l'hote le souleve de 1 m (il retombe, poses de
+        // chute envoyees comme un objet lache) ; a 40 s chacun note sa position. Attendu : meme cle des deux cotes, meme position
+        // a 5 cm pres a 40 s chez l'invite.
+        static int hzStep; static float hzLog;
+        static bool hzWent;
+        public static void TestHorsZones(float t)
+        {
+            if (nextScan < 0) return;
+            // [Test] HorsZonesAller=<racine> (REPAIRSHOP, PERAPORTTI, LANDFILL) : a 8 s, les deux joueurs vont au milieu de cette
+            // zone (centre des rendus de sa racine) : depuis la maison, ses objets sont inactifs (LOD) et jamais releves.
+            string go = Config.Get("Test", "HorsZonesAller", "");
+            if (go.Length > 0 && !hzWent && t >= 8f)
+            {
+                hzWent = true;
+                GameObject root = Game.FindAny(go);   // (un objet precis de la zone, ex. REPAIRSHOP/LOD/Office/Fleetari/LookTarget : une racine s'etend sur toute la carte)
+                if (root == null) Log.Info("autotest horszones : racine " + go + " introuvable, pas de teleport");
+                else
+                {
+                    Bounds b = new Bounds(); bool any = false;
+                    if (go.IndexOf('/') < 0) foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true)) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
+                    Vector3 at = any ? new Vector3(b.center.x, b.max.y + 1f, b.center.z) : root.transform.position + Vector3.up;
+                    Menu.TeleportTo(at, 0f, "zone " + go + " (essai)");
+                    Log.Info("autotest horszones : teleporte vers " + go + " en " + at.ToString("F1") + (any ? " (centre de " + b.size.ToString("F0") + ")" : ""));
+                    nextScan = Time.realtimeSinceStartup + 6f;   // (releve des que la zone est chargee)
+                }
+            }
+            string want = Config.Get("Test", "HorsZonesCle", "");
+            Prop best = null; int n = 0;
+            foreach (Prop p in props.Values)
+            {
+                string k = p.Id;
+                if (p.Body == null || !(k.StartsWith("w:REPAIRSHOP/") || k.StartsWith("w:PERAPORTTI/") || k.StartsWith("w:LANDFILL/"))) continue;
+                if (want.Length > 0 && !k.Contains(want)) continue;
+                n++;
+                if (best == null || string.CompareOrdinal(k, best.Id) < 0) best = p;
+            }
+            string side = Session.IsHost ? "hote" : "invite";
+            if (best == null)
+            {
+                if (t > 20f && hzLog == 0f) { hzLog = t; Log.Info("autotest horszones : aucun objet suivi sous REPAIRSHOP, PERAPORTTI ou LANDFILL (" + side + ")"); }
+                return;
+            }
+            if ((t > 20f && hzLog == 0f) || (t > 40f && hzLog < 40f))
+            {
+                hzLog = t;
+                Log.Info("autotest horszones : " + best.Id + " chemin=" + Recon.Path(best.Body.transform) + " en " + best.Body.position.ToString("F2")
+                    + " (" + side + ", " + n + " candidats" + (best.Body.isKinematic ? ", cinematique" : "") + (best.RemoteBy >= 0 ? ", deplace par #" + best.RemoteBy : "") + ")");
+            }
+            if (Session.IsHost && t > 25f && hzStep == 0)
+            {
+                hzStep = 1;
+                Vector3 from = best.Body.position;
+                best.Body.position = from + Vector3.up; best.Body.transform.position = best.Body.position;
+                best.Body.velocity = Vector3.zero; best.Body.angularVelocity = Vector3.zero; best.Body.WakeUp();
+                best.SettleUntil = Time.realtimeSinceStartup + 5f;
+                if (!settling.Contains(best)) settling.Add(best);
+                Send(best, 2, true);
+                Log.Info("autotest horszones : hote souleve " + best.Id + " de " + from.ToString("F2") + " en " + best.Body.position.ToString("F2") + " (" + Session.RemoteCount + " invite(s))");
+            }
         }
 
         public static void Test(string mode, float t)

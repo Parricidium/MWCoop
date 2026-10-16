@@ -200,6 +200,83 @@ namespace MWCoop
         static bool Tag(string n) { return n.StartsWith("UT") || n.StartsWith("UniqueTag"); }
         static bool Plain(string s) { return s != null && s.Length > 0 && s.Length <= 40 && s.IndexOf(';') < 0 && s.IndexOf(':') < 0 && s.IndexOf('=') < 0; }
 
+        // Usine, meme ligne (16/10) : le pointage et les compteurs de travail de JOBS/FACTORY::PlayerData sont a chacun
+        // (Jobs.FactoryOwn : ni envoyes ni rejoues), mais chez l'invite ils venaient de la sauvegarde de l'hote a chaque session
+        // (UTMinutes*, UTDaysPassed, UTPaychecks... : les SIENS). Gardes sous usine.<nom>, l'etat sous usine.@etat ; remis a la
+        // lecture (apres le « Load game » de l'automate, Restore passe 15 s apres le chargement). L'etat n'est remis que s'il
+        // etait « State 2 » (pointe, l'automate guette l'heure de fermeture) et que l'automate attend en « Work ON » : les autres
+        // etats (embauche, lettres, paie) suivent la partie. Le total de paquets vit aussi dans LOD1/JOB::JobProgress
+        // (PackagesTotal, recopie dans PlayerData a la sauvegarde) : remis la aussi quand l'automate est la.
+        static PlayMakerFSM usine;
+        static string usineLine = "";
+        const string UsineJob = Jobs.FactoryPath + "/OpeningTimes/LOD1/JOB";
+        static PlayMakerFSM Usine()
+        {
+            if (usine == null && PlayerSync.InGame) { GameObject go = Game.FindAny(Jobs.FactoryPath); usine = go != null ? Game.FsmOn(go, Jobs.FactoryFsm) : null; }
+            return usine;
+        }
+
+        static string UsineLine()
+        {
+            PlayMakerFSM u = Usine();
+            if (u == null) return usineLine;
+            var sb = new System.Text.StringBuilder();
+            try
+            {
+                FsmVariables v = u.FsmVariables;
+                foreach (string n in Jobs.FactoryOwn)
+                {
+                    FsmInt vi = v.FindFsmInt(n); FsmFloat vf = v.FindFsmFloat(n); FsmBool vb = v.FindFsmBool(n);
+                    if (vi == null && vf == null && vb == null) continue;
+                    sb.Append(sb.Length > 0 ? ";" : "").Append("usine.").Append(n).Append(':').Append(vi != null ? vi.Value.ToString(Inv) : vf != null ? vf.Value.ToString("R", Inv) : vb.Value ? "1" : "0");
+                }
+                // Paquets : la valeur vivante est celle de JobProgress (PlayerData ne la recopie qu'a la sauvegarde).
+                GameObject jg = Game.FindAny(UsineJob);
+                PlayMakerFSM jp = jg != null ? Game.FsmOn(jg, "JobProgress") : null;
+                FsmInt pt = jp != null ? jp.FsmVariables.FindFsmInt("PackagesTotal") : null;
+                if (pt != null) sb.Append(sb.Length > 0 ? ";" : "").Append("usine.@paquets:").Append(pt.Value.ToString(Inv));
+                string st = u.ActiveStateName;
+                if (Plain(st)) sb.Append(sb.Length > 0 ? ";" : "").Append("usine.@etat:").Append(st);
+            }
+            catch { return usineLine; }   // automate pas encore pret : la derniere ligne
+            usineLine = sb.ToString();
+            return usineLine;
+        }
+
+        // Une valeur usine.<nom> remise dans l'automate ; faux : inconnue ici.
+        static bool RestoreUsine(string name, string val)
+        {
+            string vn = name.Substring(6);
+            PlayMakerFSM u = Usine();
+            if (u == null || vn.Length == 0 || System.Array.IndexOf(Jobs.FactoryOwn, vn) < 0) return false;
+            FsmVariables v = u.FsmVariables;
+            float f; int i;
+            FsmInt vi = v.FindFsmInt(vn);
+            if (vi != null) { if (int.TryParse(val, System.Globalization.NumberStyles.Integer, Inv, out i)) { vi.Value = i; return true; } return false; }
+            FsmFloat vf = v.FindFsmFloat(vn);
+            if (vf != null) { if (float.TryParse(val, System.Globalization.NumberStyles.Float, Inv, out f)) { vf.Value = f; return true; } return false; }
+            FsmBool vb = v.FindFsmBool(vn);
+            if (vb != null) { vb.Value = val == "1"; return true; }
+            return false;
+        }
+
+        // Total de paquets remis dans LOD1/JOB::JobProgress (et dans PlayerData, d'ou le jeu le relit au chargement).
+        static bool RestorePackages(string val)
+        {
+            int n;
+            if (!int.TryParse(val, System.Globalization.NumberStyles.Integer, Inv, out n)) return false;
+            GameObject jg = Game.FindAny(UsineJob);
+            PlayMakerFSM jp = jg != null ? Game.FsmOn(jg, "JobProgress") : null;
+            FsmInt pt = null;
+            try { pt = jp != null ? jp.FsmVariables.FindFsmInt("PackagesTotal") : null; } catch { }
+            if (pt == null) return false;
+            pt.Value = n;
+            PlayMakerFSM u = Usine();
+            FsmInt pp = u != null ? u.FsmVariables.FindFsmInt("ProgressPackagesTotal") : null;
+            if (pp != null) pp.Value = n;
+            return true;
+        }
+
         static string KelaLine()
         {
             PlayMakerFSM k = Kela();
@@ -259,20 +336,24 @@ namespace MWCoop
             }
             string kl = KelaLine();
             if (kl.Length > 0) sb.Append(sb.Length > 0 ? ";" : "").Append(kl);
+            string ul = UsineLine();
+            if (ul.Length > 0) sb.Append(sb.Length > 0 ? ";" : "").Append(ul);
             return sb.ToString();
         }
 
         static void RestoreSelf()
         {
-            kelaLine = "";   // (nouveau monde : rien de Kela a reporter tant que l'automate n'a pas ete releve ici)
+            kelaLine = usineLine = "";   // (nouveau monde : rien de Kela ni de l'usine a reporter tant que l'automate n'a pas ete releve ici)
             if (Session.IsHost || world.Length == 0 || !System.IO.File.Exists(SelfPath)) return;
             foreach (string l in System.IO.File.ReadAllLines(SelfPath))
             {
                 int eq = l.IndexOf('=');
                 if (eq <= 0 || l.Substring(0, eq) != world) continue;
-                int n = 0, nk = 0;
-                string kelaState = null;
+                int n = 0, nk = 0, nu = 0;
+                string kelaState = null, usineState = null;
+                bool packages = false;
                 var kept = new List<string>();
+                var keptUsine = new List<string>();
                 foreach (string kv in l.Substring(eq + 1).Split(';'))
                 {
                     int c = kv.IndexOf(':');
@@ -283,6 +364,14 @@ namespace MWCoop
                         kept.Add(kv);
                         if (name == "kela.@etat") kelaState = val;
                         else if (RestoreKela(name, val)) nk++;
+                        continue;
+                    }
+                    if (name.StartsWith("usine."))
+                    {
+                        keptUsine.Add(kv);
+                        if (name == "usine.@etat") usineState = val;
+                        else if (name == "usine.@paquets") packages = RestorePackages(val);
+                        else if (RestoreUsine(name, val)) nu++;
                         continue;
                     }
                     float f; int i;
@@ -300,8 +389,18 @@ namespace MWCoop
                     try { if (k.ActiveStateName != kelaState && k.Fsm.GetState(kelaState) != null) Game.SetState(k, kelaState); stNow = k.ActiveStateName; }
                     catch (System.Exception e) { Log.Warn("joueur : etat Kela '" + kelaState + "' pas remis (" + e.GetType().Name + ")"); }
                 }
+                // Usine : ses compteurs ; l'etat seulement s'il etait pointe (« State 2 ») et que l'automate attend en « Work ON ».
+                usineLine = string.Join(";", keptUsine.ToArray());
+                PlayMakerFSM u = Usine();
+                string ustNow = null;
+                if (usineState == "State 2" && u != null)
+                {
+                    try { if (u.ActiveStateName == "Work ON" && u.Fsm.GetState("State 2") != null) { Game.SetState(u, "State 2"); ustNow = u.ActiveStateName; } }
+                    catch (System.Exception e) { Log.Warn("joueur : etat de l'usine 'State 2' pas remis (" + e.GetType().Name + ")"); }
+                }
                 Log.Info("joueur : etat du corps retrouve pour ce monde (" + n + " valeurs : faim, soif, fatigue...)"
-                         + (kept.Count > 0 ? " ; Kela : " + nk + " valeurs" + (stNow != null ? ", etat " + stNow : kelaState != null ? ", etat '" + kelaState + "' pas remis" : "") + (k == null ? " (automate absent)" : "") : ""));
+                         + (kept.Count > 0 ? " ; Kela : " + nk + " valeurs" + (stNow != null ? ", etat " + stNow : kelaState != null ? ", etat '" + kelaState + "' pas remis" : "") + (k == null ? " (automate absent)" : "") : "")
+                         + (keptUsine.Count > 0 ? " ; usine : " + nu + " compteurs" + (packages ? ", paquets" : "") + (ustNow != null ? ", pointe (" + ustNow + ")" : usineState != null ? ", etat '" + usineState + "' laisse" : "") + (u == null ? " (automate absent)" : "") : ""));
             }
         }
 
@@ -398,7 +497,7 @@ namespace MWCoop
             saleLogic = saleSell = null; saleHooked = saleOpen = sellOffLogged = false; sellers.Clear();
             fleaSeller = -1; fleaSellerSent = -2; fleaReported = -1; fleaSellerAt = -1; nextFleaHost = nextFleaSend = nextFleaReport = 0;
             fleaTakeLogged = sellWasOn = false; fleaTables.Clear();
-            kela = null;
+            kela = usine = null;
             trigLocal = trigOther = 0;
         }
 

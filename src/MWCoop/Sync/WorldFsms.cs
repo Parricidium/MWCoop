@@ -18,6 +18,8 @@ namespace MWCoop
     //    rejouee que si son etat d'arrivee ET tout ce qui peut s'enchainer automatiquement apres
     //    (minuteurs, comparaisons -- pas ce qui attend le joueur) ne touchent pas au joueur. Ainsi le pont
     //    elevateur ou les fusibles passent, le lit (qui finit par deplacer le joueur) non.
+    //  - DECLENCHEURS : une transition tiree par une zone (le joueur ou un objet entre dans un collider) ou un
+    //    choc est rejouee aussi, en coupant les actions perso si sa chaine toucherait au joueur (voir TriggerActions).
     //  - Ni la logique propre des PNJ (marche, ragdoll, telephone : Npcs fait suivre leur corps), sauf ce
     //    qu'un joueur leur fait, ni les machines a sous et le video-poker (la partie reste a celui qui joue).
     //  - Chez celui qui rejoue, son argent et son corps (globales Player*) sont remis comme avant :
@@ -66,12 +68,56 @@ namespace MWCoop
         static readonly HashSet<string> Ignore = new HashSet<string> { "FINISHED", "SAVEGAME", "LOAD", "EXISTS", "NOTEXISTS", "DONOTEXIST", "DOESNOTEXIST", "SAVE", "LOOP" };
         static readonly HashSet<string> InputActions = new HashSet<string> { "MousePickEvent", "GetButtonDown", "GetButtonUp", "GetMouseButtonDown", "GetMouseButtonUp", "GetAxis", "GetKeyDown", "GetButton", "AnyKeyStoreString" };   // (AnyKeyStoreString : pave de la telecommande)
 
+        // DECLENCHEURS (relecture du 15/10, ecart n°15) : une transition tiree par une zone (TriggerEvent : le joueur ou un
+        // objet entre dans un collider) ou un choc (CollisionEvent) n'est ni une saisie ni de la logique propre -- avant,
+        // jamais rejouee : porte du bar, boite aux lettres, chargeur de batterie... divergeaient en silence. Elle est
+        // maintenant prise pour une action du joueur : rejouee chez les autres telle quelle si sa chaine laisse le joueur
+        // tranquille (mode 5), sinon en coupant les actions perso (Mute, mode 4) au lieu de refuser. Jamais quand l'etat
+        // d'arrivee attend une commande (la zone arme une invite pour CELUI qui y est : "PLACE BATTERY", "Press return"),
+        // ni sous RACES (passage de ligne, points de controle : a chaque pilote), ni si tout l'etat agit sur le joueur.
+        // Les automates qui n'ont QUE des declencheurs sont suivis aussi. [Test] SansDeclencheurs=1 : comme avant.
+        static readonly HashSet<string> TriggerActions = new HashSet<string>();
+        static bool triggers = true, triggerTypesFound;
+        static int trigSent, trigRecv;
+
+        // Types d'actions de zone/choc presents dans ce jeu (PlayMaker.dll et Assembly-CSharp : TriggerEvent, CollisionEvent ;
+        // TriggerEvent2D, CollisionEvent2D, TriggerEventByTag... s'ils existent un jour).
+        static void FindTriggerTypes()
+        {
+            if (triggerTypesFound) return;
+            triggerTypesFound = true;
+            foreach (Assembly asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                string an = asm.GetName().Name;
+                if (an != "PlayMaker" && an != "Assembly-CSharp" && an != "Assembly-CSharp-firstpass") continue;
+                System.Type[] types;
+                try { types = asm.GetTypes(); }
+                catch (ReflectionTypeLoadException e) { types = e.Types; }
+                catch { continue; }
+                if (types == null) continue;
+                foreach (System.Type t in types)
+                {
+                    if (t == null || t.Namespace != "HutongGames.PlayMaker.Actions" || !typeof(FsmStateAction).IsAssignableFrom(t)) continue;
+                    string n = t.Name;
+                    if (n.StartsWith("TriggerEvent") || n.StartsWith("CollisionEvent") || n.StartsWith("ControllerColliderHit")) TriggerActions.Add(n);
+                }
+            }
+            if (TriggerActions.Count == 0) { TriggerActions.Add("TriggerEvent"); TriggerActions.Add("CollisionEvent"); }
+            var names = new List<string>(TriggerActions); names.Sort();
+            Log.Info("monde : actions de declencheur reconnues : " + string.Join(", ", names.ToArray()) + (triggers ? "" : " (rejeu coupe : SansDeclencheurs=1)"));
+        }
+
         class W
         {
             public string Key; public PlayMakerFSM F; public bool Persistent, Mirror;
             public bool HostDriven, External, Tv;   // voir HostDrivenFsm / ExternalFsm
             public HashSet<string> InputStates = new HashSet<string>();
             public HashSet<string> GlobalEvents = new HashSet<string>();
+            public HashSet<string> TriggerStates = new HashSet<string>();                     // etats qui attendent une zone ou un choc
+            public Dictionary<string, HashSet<string>> TriggerEvents = new Dictionary<string, HashSet<string>>();   // evenements qu'ils envoient
+            public HashSet<string> PersonalOnly = new HashSet<string>();                      // etats dont TOUTES les actions touchent au joueur
+            public Dictionary<string, float> TrigSent = new Dictionary<string, float>();      // dernier envoi par declencheur, par etat
+            public bool Races;                                                                 // sous RACES : declencheurs jamais rejoues
             public float WindowStart, NoisySince; public int Count; public bool Noisy;
             public HashSet<string> Entered = new HashSet<string>();   // etats traverses pendant un rejeu
             public HashSet<string> PersonalStates = new HashSet<string>();
@@ -107,7 +153,7 @@ namespace MWCoop
                     if (J.Creates.Contains(State)) SoonScan();
                     if (Replay.Depth == 0)
                     {
-                        if (J.Muted != null && J.InputStates.Contains(State)) Unmute(J);   // la chaine rejouee est finie
+                        if (J.Muted != null && Waiting(J, State)) Unmute(J);   // la chaine rejouee est finie
                         OnLocal(J, State);
                     }
                     else J.Entered.Add(State);
@@ -118,6 +164,10 @@ namespace MWCoop
         }
 
         public static bool Tracks(PlayMakerFSM f) { return hooked.Contains(f); }
+
+        // L'automate attend de nouveau le monde (une commande, ou une zone/un choc) : fin de la chaine rejouee, les
+        // actions coupees (Player*, perso) sont rendues.
+        static bool Waiting(W j, string state) { return j.InputStates.Contains(state) || triggers && j.TriggerStates.Contains(state); }
 
         // Cle de l'autre introuvable ici : l'objet a pu changer de parent entre les deux releves (la tele
         // allumee prend Systems/TV/TVPrograms sous elle). On cherche alors par le nom de l'objet et de
@@ -249,6 +299,7 @@ namespace MWCoop
             byKey.Clear(); hooked.Clear(); rejected.Clear(); snapshots.Clear(); houseSent.Clear(); known.Clear(); pending.Clear(); pathOf.Clear(); mutedList.Clear(); alias.Clear();
             worldLogic.Clear();   // (automates de la partie d'avant gardes en cle : fuite, relecture du 15/10)
             tvAuthor = -1; tvSchedule = null; tvSentOn = false; scanIdx = -1; scanRoots = null; rootsDirty = true; npcLeft = npcLogged = 0;
+            triggers = Config.GetInt("Test", "SansDeclencheurs", 0) == 0; trigSent = trigRecv = 0;   // ([Test] SansDeclencheurs=1 : essais A/B, comme avant)
             loadedAt = Time.realtimeSinceStartup;
             nextScan = PlayerSync.InGame ? loadedAt + 16f : -1;
         }
@@ -317,18 +368,26 @@ namespace MWCoop
         static bool Classify(PlayMakerFSM f, W w, out bool personal)
         {
             personal = false;
+            FindTriggerTypes();
+            w.Races = f.transform.root.name == "RACES";
             foreach (FsmString s in f.FsmVariables.StringVariables)
                 if (s.Name.StartsWith("UniqueTag") || s.Name.StartsWith("UT")) w.Persistent = true;
             foreach (FsmTransition t in f.Fsm.GlobalTransitions) if (!Ignore.Contains(t.EventName)) w.GlobalEvents.Add(t.EventName);
             foreach (FsmState st in f.Fsm.States)
             {
                 var inEv = new HashSet<string>();
+                var trEv = new HashSet<string>();
+                int acts = 0, pers = 0;
                 foreach (FsmStateAction a in st.Actions)
                 {
                     if (a == null) continue;
+                    acts++;
+                    bool personalAct = false;
                     bool input = InputActions.Contains(a.GetType().Name);
+                    bool trig = TriggerActions.Contains(a.GetType().Name);
                     if (a.GetType().Name == "CreateObject") w.Creates.Add(st.Name);
                     if (input) w.InputStates.Add(st.Name);
+                    if (trig) w.TriggerStates.Add(st.Name);
                     foreach (FieldInfo fi in a.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
                     {
                         object v = fi.GetValue(a);
@@ -338,22 +397,29 @@ namespace MWCoop
                         // Point d'insertion d'un CD : 'Find correct part' LIT la main du joueur (GetChild de ItemPivot) ;
                         // ce n'est pas agir sur lui, et sans cela la pose du CD (ASSEMBLE) n'etait jamais envoyee.
                         bool reads = f.gameObject.name.StartsWith("DiscTrigger") && a.GetType().Name.StartsWith("Get");
-                        if (go != null && PersonalRoots.Contains(Game.RootName(go.transform)) && !reads) w.PersonalStates.Add(st.Name);
+                        if (go != null && PersonalRoots.Contains(Game.RootName(go.transform)) && !reads) personalAct = true;
                         var nv = v as NamedVariable;
                         if (nv != null && nv.UseVariable && nv.Name.StartsWith("Player") && !Game.LocalVar(f, nv.Name)
                             && (v is FsmGameObject || nv.Name == "PlayerStop" || nv.Name == "PlayerInMenu" || nv.Name == "PlayerSeated" || nv.Name == "PlayerSleeps"))
-                            w.PersonalStates.Add(st.Name);
+                            personalAct = true;
                         if (v is FsmEvent && ((FsmEvent)v).Name == "SAVEGAME") personal = true;
                         if (v is FsmString && ((FsmString)v).Value == "SAVEGAME") personal = true;
                         if (input && v is FsmEvent && v != null) inEv.Add(((FsmEvent)v).Name);
+                        if (trig && v is FsmEvent && v != null) trEv.Add(((FsmEvent)v).Name);   // (sendEvent de TriggerEvent/CollisionEvent)
                     }
+                    if (personalAct) { pers++; w.PersonalStates.Add(st.Name); }
                 }
                 w.InputEvents[st.Name] = inEv;
+                if (trEv.Count > 0) w.TriggerEvents[st.Name] = trEv;
+                if (acts > 0 && pers == acts) w.PersonalOnly.Add(st.Name);
             }
             w.HostDriven = HostDrivenFsm(f);
             w.Tv = IsTv(f);
             w.External = ExternalFsm(f);
-            return w.Persistent || w.InputStates.Count > 0 || w.GlobalEvents.Count > 0 || w.HostDriven || w.External;
+            // Automates qui n'ont que des declencheurs (porte du bar : TriggerIn, boite postale : HatchTrigger) : suivis
+            // aussi, sauf sous RACES (chaque pilote sa course).
+            bool byTriggers = triggers && !w.Races && w.TriggerEvents.Count > 0;
+            return w.Persistent || w.InputStates.Count > 0 || w.GlobalEvents.Count > 0 || w.HostDriven || w.External || byTriggers;
         }
 
         // L'etat 'state' et tout ce qui s'enchaine automatiquement apres lui laissent-ils le joueur tranquille ?
@@ -520,7 +586,11 @@ namespace MWCoop
                 }
                 return;
             }
-            if (tr == null || Ignore.Contains(tr.EventName) || tr.ToState != state) return;
+            // Par declencheur : la transition sort d'un etat qui attend une zone ou un choc, par l'evenement que cette
+            // action envoie -- souvent FINISHED, ignore d'ordinaire (minuteurs) mais pas ici. Voir TriggerActions.
+            HashSet<string> trEv;
+            bool trigEv = triggers && !j.Races && prev != null && tr != null && j.TriggerEvents.TryGetValue(prev.Name, out trEv) && trEv.Contains(tr.EventName);
+            if (tr == null || Ignore.Contains(tr.EventName) && !trigEv || tr.ToState != state) return;
             j.LocalRecent[(prev != null ? prev.Name : "") + "|" + tr.EventName + "|" + state] = now;
             if (j.GlobalEvents.Contains(tr.EventName)) j.LocalRecent["g|" + tr.EventName] = now;
             if (j.External)
@@ -547,8 +617,24 @@ namespace MWCoop
             // commande du joueur) : chacun le recoit de son propre jeu, le rejouer le doublerait.
             if (global && !byPlayer && !order && !forceNext && SenderIsWorldLogic(j)) return;
             forceNext = false;
-            if ((!global && !byPlayer && !order) || (now - lastInput > 1f && !order)) return;
-            if (!Safe(j, state)) return;   // finirait par agir sur ce joueur-ci chez l'autre
+            // Par declencheur (sans saisie recente, le joueur a juste marche ; ni global ni commande).
+            bool byTrigger = trigEv && !global && !byPlayer;
+            if ((!global && !byPlayer && !order && !byTrigger) || (now - lastInput > 1f && !order && !byTrigger)) return;
+            int mode = global ? 1 : 0;
+            if (byTrigger)
+            {
+                // La zone arme une invite pour celui qui y est ("PLACE BATTERY", "Press return") : a lui seul.
+                if (j.InputStates.Contains(state)) return;
+                // Tout l'etat agit sur le joueur (JailSafeTrigger : SetPosition PLAYER) : rien a rejouer ailleurs.
+                if (j.PersonalOnly.Contains(state)) return;
+                // Les deux dans la zone, OnTriggerStay chaque image, boucle de 0,1 s : pas deux fois le meme etat en 0,5 s.
+                float last;
+                if (j.TrigSent.TryGetValue(state, out last) && now - last < 0.5f) return;
+                j.TrigSent[state] = now;
+                mode = Safe(j, state) ? 5 : 4;   // 4 : chaine qui toucherait au joueur, rejouee en coupant ces actions
+                if (++trigSent <= 20) Log.Info("monde : automate " + j.Key + " : etat " + state + " par declencheur (" + prev.Name + " -" + tr.EventName + "->), envoye" + (mode == 4 ? " muet" : ""));
+            }
+            else if (!Safe(j, state)) return;   // finirait par agir sur ce joueur-ci chez l'autre
             if (j.Noisy && now - j.NoisySince > 30f) { j.Noisy = false; j.WindowStart = now; j.Count = 0; }
             if (now - j.WindowStart > 10f) { j.WindowStart = now; j.Count = 0; }
             if (++j.Count > 40 || j.Noisy)
@@ -556,7 +642,7 @@ namespace MWCoop
                 if (!j.Noisy) { Log.Warn("monde : " + j.Key + " change trop souvent, en pause 30 s"); j.Noisy = true; j.NoisySince = now; }
                 return;
             }
-            Send(j, prev, tr.EventName, global ? 1 : 0, state);
+            Send(j, prev, tr.EventName, mode, state);
         }
 
         static bool forceNext;   // essais : le prochain global part comme s'il venait du joueur
@@ -594,7 +680,8 @@ namespace MWCoop
         }
 
         // mode : 0 meme etat de depart -> meme evenement ; 1 evenement global ; 2 recalage direct (hote) ;
-        // 3 rejeu muet (actions qui touchent au joueur coupees) puis repos.
+        // 3 rejeu muet (actions qui touchent au joueur coupees) puis repos ; 4 par declencheur, muet jusqu'a ce que
+        // l'automate attende de nouveau (commande ou zone) ; 5 par declencheur, comme 0.
         static void Send(W j, FsmState prev, string ev, int mode, string state)
         {
             NetWriter w = null;
@@ -645,6 +732,17 @@ namespace MWCoop
             if (j.Writes.Count == 0) return;
             if (j.Muted == null) { j.Muted = new List<FsmStateAction>(); mutedList.Add(j); }
             foreach (FsmStateAction a in j.Writes) if (a.Enabled) { a.Enabled = false; j.Muted.Add(a); }
+            j.MutedUntil = Time.realtimeSinceStartup + 60f;
+        }
+
+        // Rejeu par declencheur d'une chaine qui toucherait au joueur (mode 4) : ses actions perso (Mute : camera, interface,
+        // son, globales Player*/GUI*) coupees comme les ecritures Player* (MuteWrites), rendues au meme moment (Unmute).
+        static void MutePersonal(W j)
+        {
+            List<FsmStateAction> cut = Mute(j);
+            if (cut.Count == 0) return;
+            if (j.Muted == null) { j.Muted = new List<FsmStateAction>(); mutedList.Add(j); }
+            j.Muted.AddRange(cut);
             j.MutedUntil = Time.realtimeSinceStartup + 60f;
         }
 
@@ -853,8 +951,14 @@ namespace MWCoop
             // -USE-> Position"), l'eau continuait de couler (retour de JD, 06/10).
             HashSet<string> inEv;
             bool click = prev != null && j.InputEvents.TryGetValue(prev, out inEv) && inEv.Contains(ev);
+            // Par declencheur (modes 4 et 5) : rejoue comme le mode 0 ; en 4, les actions perso restent coupees jusqu'a ce
+            // que l'automate attende de nouveau (Waiting) ou 60 s. Coupe ici (SansDeclencheurs=1) : rien, meme venu d'un
+            // autre qui l'a allume.
+            bool byTrigger = global == 4 || global == 5;
+            if (byTrigger && !triggers) return;
+            bool direct = global < 2 || byTrigger;   // meme etat de depart -> meme evenement (0, 1, 4, 5)
             float done, now = Time.realtimeSinceStartup;
-            if (global < 2 && !click && (j.LocalRecent.TryGetValue(prev + "|" + ev + "|" + state, out done) && now - done < 10f
+            if (direct && !click && (j.LocalRecent.TryGetValue(prev + "|" + ev + "|" + state, out done) && now - done < 10f
                                || global == 1 && j.LocalRecent.TryGetValue("g|" + ev, out done) && now - done < 10f))
             {
                 Log.Info("monde de #" + who + " : " + key + " -" + ev + "-> deja fait ici");
@@ -863,13 +967,15 @@ namespace MWCoop
             FsmVariables v = j.F.FsmVariables;
             // Automate coupe ici (pave de la telecommande : le jeu ne l'allume que quand on la vise) : allume le temps
             // que sa chaine se deroule (0,5 s), puis recoupe -- sinon l'etat rejoue reste en plan (page jamais tapee).
-            if (!j.F.enabled && global < 2) { j.F.enabled = true; reDisable.Add(new KeyValuePair<PlayMakerFSM, float>(j.F, Time.realtimeSinceStartup + 0.5f)); }
+            if (!j.F.enabled && direct) { j.F.enabled = true; reDisable.Add(new KeyValuePair<PlayMakerFSM, float>(j.F, Time.realtimeSinceStartup + 0.5f)); }
             Personal mine = SavePersonal();
-            if (global < 2) MuteWrites(j);
+            if (direct) MuteWrites(j);
+            if (global == 4) MutePersonal(j);
+            if (byTrigger && ++trigRecv <= 20) Log.Info("monde de #" + who + " : automate " + key + " : etat " + state + " par declencheur, rejoue" + (global == 4 ? " muet" : ""));
             // Celui qui a agi a deja verifie qu'il pouvait payer : ici, la meme verification (argent du
             // joueur local) passe toujours ; l'argent est remis juste apres (RestorePersonal).
             FsmFloat money = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
-            if (money != null && global < 2) money.Value = 1e7f;
+            if (money != null && direct) money.Value = 1e7f;
             Replay.Depth++;
             try
             {
@@ -904,12 +1010,12 @@ namespace MWCoop
                     if (j.F.Fsm.GetState("Disable phone") != null) Game.SetState(j.F, "Disable phone");
                 }
                 else if (global == 1 || j.F.ActiveStateName == prev) j.F.SendEvent(ev);
-                if (global < 2 && !j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
+                if (direct && !j.Entered.Contains(state) && j.F.ActiveStateName != state && j.F.Fsm.GetState(state) != null) Game.SetState(j.F, state);
             }
             finally
             {
                 Replay.Depth--; RestorePersonal(mine);
-                if (j.Muted != null && (j.InputStates.Contains(j.F.ActiveStateName) || string.IsNullOrEmpty(j.F.ActiveStateName))) Unmute(j);
+                if (j.Muted != null && (Waiting(j, j.F.ActiveStateName) || string.IsNullOrEmpty(j.F.ActiveStateName))) Unmute(j);
             }
             if (++recvEvents <= 30 || recvEvents % 50 == 0) Log.Info("monde de #" + who + " : " + key + " -" + ev + "-> " + j.F.ActiveStateName + " (voulu " + state + ")");
         }
@@ -962,8 +1068,9 @@ namespace MWCoop
                         // Etats non sauvegardes (robinets, plaques, lampes hors miroir) : l'arrivant les a a l'etat du chargement.
                         // Ce qui a bouge depuis le releve part en recalage direct (mode 2), sauf les etats qui creent un objet
                         // (doublon) ou touchent au joueur (relecture du 15/10, ecart n°3). Le rejeu n'est pas touche.
+                        // (Ni un etat qui attend une zone -- "quelqu'un est dedans" : propre a chacun.)
                         if (!send && !(x.Persistent && x.Mirror) && !x.External && x.LoadState != null && st != x.LoadState
-                            && !x.Creates.Contains(st) && !x.PersonalStates.Contains(st)) { send = true; moved++; }
+                            && !x.Creates.Contains(st) && !x.PersonalStates.Contains(st) && !(triggers && x.TriggerStates.Contains(st))) { send = true; moved++; }
                         if (!send) continue;
                         var w = new NetWriter(Msg.WorldFsm).U8(Session.LocalId).Str(x.Key).Str("").Str("").U8(2).Str(st);
                         WriteVars(x.F, w, false);
@@ -1199,6 +1306,16 @@ namespace MWCoop
                     return j.Key + " : " + before + " => " + j.F.ActiveStateName;
                 }
             return "rien pour " + part;
+        }
+
+        // Essais (declencheur) : etat courant du premier automate suivi dont la cle contient 'part'.
+        public static string StateOf(string part)
+        {
+            foreach (W j in byKey.Values)
+                if (j.F != null && j.Key.Contains(part)) return j.Key + " [" + j.F.ActiveStateName + "]" + (j.TriggerStates.Count > 0 ? " (declencheurs : " + j.TriggerStates.Count + " etats)" : "");
+            foreach (W j in pending)
+                if (j.F != null && j.Key.Contains(part)) return j.Key + " en attente (objet inactif), etat [" + j.F.ActiveStateName + "]";
+            return "rien de suivi pour " + part;
         }
 
         public static string Var(string part, string name)
