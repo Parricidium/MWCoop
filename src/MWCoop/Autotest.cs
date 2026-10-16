@@ -602,6 +602,13 @@ namespace MWCoop
                         Log.Info("autotest : poussevolant, derriere la voiture");
                     }
                     Gestures.TestPush = t > 32f && t < 42f;
+                    // Mains sorties sans marcher de 32 a 35 s (rien ne doit partir), puis en marchant vers la voiture.
+                    if (t > 35f && t < 42f)
+                    {
+                        GameObject pl = Game.PlayerGo;
+                        var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                        if (cc != null) { Vector3 f = b.position - pl.transform.position; f.y = 0f; cc.Move(f.normalized * 1.2f * Time.deltaTime); }
+                    }
                 }
                 if (b != null && t > 25f && t < 50f && Time.realtimeSinceStartup >= rivLog)
                 {
