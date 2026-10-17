@@ -100,6 +100,8 @@ static std::wstring PersoDir() { return g_gameDir.empty() ? L"" : g_gameDir + L"
 // la grand-mere restait assise) : il sera refait a la prochaine partie (~30 s en jeu).
 static bool PersoStale() { return g_perso.state == 1 && !g_localVer.empty() && g_perso.ver.substr(0, g_perso.ver.find('+')) != Narrow(g_localVer, CP_UTF8); }   // ("+tenuesN" : tenues offertes de l'export)
 
+static void VigReset();     // (plus bas : vignettes des tuiles, oubliees avec l'export)
+static void VigFreeMem();
 // Relit perso.mesh s'il a change ; au plus toutes les 2 s.
 static void PersoCheck()
 {
@@ -116,11 +118,13 @@ static void PersoCheck()
     g_perso.path = path;
     g_persoDrawn.clear();
     TileBmpFree();
+    VigFreeMem();
     if (!exists) { g_perso.state = -1; return; }
     g_perso.mt = a.ftLastWriteTime;
     std::vector<unsigned char> d;
     g_perso.state = ReadAll(path, d) && PersoParse(d) ? 1 : -2;
     if (g_perso.state != 1) { g_perso.bodies.clear(); g_perso.accs.clear(); return; }
+    VigReset();
     std::vector<unsigned char> c;   // couleurs des matieres
     if (ReadAll(PersoDir() + L"perso\\couleurs.txt", c)) {
         std::string t(c.begin(), c.end());
@@ -369,20 +373,43 @@ static std::string PersoLookString()
     return s;
 }
 
-// Rendu W x H (pixels de l'ecran) de l'apparence 'look', tournee de 'yaw' (radians, 0 : de face) ; portrait : tete et
-// epaules, sinon le personnage entier.
-static void PersoRender(int W, int H, float yaw, const std::string look[PF_COUNT], bool portrait = false, bool own = false)
+// Cadrages (page PERSONNAGE et vignettes des tuiles) : hauteur du centre (m), hauteur montree (m), recul, plongee.
+// Les corps sont exportes debout : « Volant » est une vue de trois quarts du buste, a hauteur du siege conducteur.
+enum { PV_FULL, PV_PORTRAIT, PV_VOLANT, PV_TORSO, PV_LEGS, PV_HEAD, PV_HEADHAT };
+struct PersoCam { float cy0, span, dist, pitch, yawOff; };
+static PersoCam PersoCamFor(int view, const PersoBody *body, float zoom)
+{
+    float hy = body->head[13];   // hauteur de la tete (repere de l'avatar)
+    PersoCam c = { 0.98f, 2.05f, 5.0f, 0.08f, 0 };
+    switch (view) {
+    case PV_PORTRAIT: c = { hy - 0.02f, 0.62f, 2.6f, 0.04f, 0 }; break;
+    case PV_VOLANT:   c = { hy - 0.24f, 1.02f, 2.8f, 0.10f, -0.75f }; break;
+    case PV_TORSO:    c = { hy - 0.42f, 0.78f, 2.4f, 0.05f, 0 }; break;
+    case PV_LEGS:     c = { hy * 0.30f, hy * 0.66f, 3.2f, 0.05f, 0 }; break;
+    case PV_HEAD:     c = { hy + 0.04f, 0.40f, 2.0f, 0.03f, 0 }; break;
+    case PV_HEADHAT:  c = { hy + 0.08f, 0.48f, 2.0f, 0.03f, 0 }; break;
+    default: break;
+    }
+    c.span /= max(zoom, 0.1f);   // molette : moins de hauteur montree = plus pres
+    return c;
+}
+
+// Rendu W x H (pixels de l'ecran) de l'apparence 'look', tournee de 'yaw' (radians, 0 : de face), cadree par 'view'
+// (PV_*) ; dans 'out' (sinon g_persoPix, l'apercu de la page).
+static void PersoRender(int W, int H, float yaw, const std::string look[PF_COUNT], int view = PV_FULL, bool own = false, float zoom = 1, std::vector<uint32_t> *out = NULL)
 {
     const int S = 2, BW = W * S, BH = H * S;
+    std::vector<uint32_t> &dst = out ? *out : g_persoPix;
     g_persoBig.assign((size_t)BW * BH, 0);
     g_persoZ.assign((size_t)BW * BH, 0.0f);
-    g_persoPix.assign((size_t)W * H, 0);
+    dst.assign((size_t)W * H, 0);
     const PersoBody *body = PersoBodyFor(look[PF_BODY]);
     if (!body) return;
-    // camera : personnage debout de face (il regarde +z ; la camera est devant lui, regard vers -z), un peu en
-    // plongee ; 2,05 m de haut dans l'image (portrait : 0,62 m autour de la tete, plus pres)
-    const float dist = portrait ? 2.6f : 5.0f, cy0 = portrait ? body->head[13] - 0.02f : 0.98f, pitch = portrait ? 0.04f : 0.08f;
-    float f = BH * 0.95f * dist / (portrait ? 0.62f : 2.05f);
+    // camera : personnage debout de face (il regarde +z ; la camera est devant lui, regard vers -z), un peu en plongee
+    PersoCam cam = PersoCamFor(view, body, zoom);
+    const float dist = cam.dist, cy0 = cam.cy0, pitch = cam.pitch;
+    float f = BH * 0.95f * dist / cam.span;
+    yaw += cam.yawOff;
     float cyaw = cosf(yaw + 3.14159265f), syaw = sinf(yaw + 3.14159265f), cp = cosf(pitch), sp = sinf(pitch);
     auto xf = [&](float x, float y, float z, float &X, float &Y, float &Z) {
         float x1 = x * cyaw + z * syaw, z1 = -x * syaw + z * cyaw;
@@ -466,71 +493,161 @@ static void PersoRender(int W, int H, float yaw, const std::string look[PF_COUNT
                 for (uint32_t c : c4) sum += (c >> sh) & 255;
                 out |= ((sum + 2) / 4) << sh;
             }
-            g_persoPix[(size_t)y * W + x] = out;
+            dst[(size_t)y * W + x] = out;
         }
 }
+// Pixels PARGB -> Bitmap (copie).
+static Bitmap *PixToBitmap(const std::vector<uint32_t> &px, int W, int H)
+{
+    Bitmap *b = new Bitmap(W, H, PixelFormat32bppPARGB);
+    BitmapData bd;
+    Rect r(0, 0, W, H);
+    if (b->LockBits(&r, ImageLockModeWrite, PixelFormat32bppPARGB, &bd) == Ok) {
+        for (int y = 0; y < H; y++) memcpy((BYTE *)bd.Scan0 + (size_t)y * bd.Stride, &px[(size_t)y * W], (size_t)W * 4);
+        b->UnlockBits(&bd);
+    }
+    return b;
+}
 
-// Image du personnage pour la vue 'dst' (coordonnees logiques), refaite si l'apparence, l'angle ou la taille change.
-// portrait : tete et epaules (vue « Portrait » de la page PERSONNAGE).
-static Bitmap *PersoImage(RectF dst, float yaw, bool portrait = false)
+// Image du personnage pour la vue 'dst' (coordonnees logiques), refaite si l'apparence, l'angle, le cadrage, le zoom ou
+// la taille change. view : PV_FULL (Pied), PV_PORTRAIT, PV_VOLANT (page PERSONNAGE).
+static Bitmap *PersoImage(RectF dst, float yaw, int view = PV_FULL, float zoom = 1)
 {
     if (g_perso.state != 1) return NULL;
     int W = max(8, (int)(dst.Width * g_scale + 0.5f)), H = max(8, (int)(dst.Height * g_scale + 0.5f));
     std::string key;
     for (int f = 0; f < PF_COUNT; f++) key += PersoGet(f) + "|";
     char b[64];
-    sprintf_s(b, "%d|%d|%d|%d", (int)(yaw * 100), W, H, (int)portrait);
+    sprintf_s(b, "%d|%d|%d|%d|%d", (int)(yaw * 100), W, H, view, (int)(zoom * 100));
     key += b;
     if (key == g_persoDrawn && g_persoBmp) return g_persoBmp;
     std::string look[PF_COUNT];
     for (int f = 0; f < PF_COUNT; f++) look[f] = PersoGet(f);
-    PersoRender(W, H, yaw, look, portrait, true);
+    PersoRender(W, H, yaw, look, view, true, zoom);
     delete g_persoBmp;
-    g_persoBmp = new Bitmap(W, H, PixelFormat32bppPARGB);
-    BitmapData bd;
-    Rect r(0, 0, W, H);
-    if (g_persoBmp->LockBits(&r, ImageLockModeWrite, PixelFormat32bppPARGB, &bd) == Ok) {
-        for (int y = 0; y < H; y++) memcpy((BYTE *)bd.Scan0 + (size_t)y * bd.Stride, &g_persoPix[(size_t)y * W], (size_t)W * 4);
-        g_persoBmp->UnlockBits(&bd);
-    }
+    g_persoBmp = PixToBitmap(g_persoPix, W, H);
     g_persoDrawn = key;
     return g_persoBmp;
 }
 
-// Pastille d'un joueur (salon, etat du serveur) : portrait 3D de SON apparence complete, dans un cercle ; NULL sans
-// export (ou pour une apparence "haut seul" : les portraits d'images suffisent). Gardees par apparence et taille.
+// Pastille d'un joueur (salon, etat du serveur) : portrait 3D de SON apparence complete, dans un cercle (shape 0) ou un
+// carre arrondi (1 : le portrait de la page PERSONNAGE) ; NULL sans export (ou pour une apparence "haut seul" : les
+// portraits d'images suffisent). Gardees par apparence, forme et taille.
 static std::map<std::string, Bitmap *> g_persoPortraits;
-static Bitmap *PersoPortrait(const std::string &skin, int W, int H)
+static Bitmap *PersoPortrait(const std::string &skin, int W, int H, int shape)
 {
     if (g_perso.state != 1 || skin.find('|') == std::string::npos || W < 8 || H < 8) return NULL;
     char b[32];
-    sprintf_s(b, "#%dx%d", W, H);
+    sprintf_s(b, "#%dx%d/%d", W, H, shape);
     std::string key = skin + b;
     auto it = g_persoPortraits.find(key);
     if (it != g_persoPortraits.end()) return it->second;
     if (g_persoPortraits.size() > 40) { for (auto &kv : g_persoPortraits) delete kv.second; g_persoPortraits.clear(); }
     std::string look[PF_COUNT];
     PersoParseLook(skin, look);
-    PersoRender(W, H, 0.3f, look, true, skin == PersoLookString());
-    Bitmap tmp(W, H, PixelFormat32bppPARGB), *out = new Bitmap(W, H, PixelFormat32bppPARGB);
-    BitmapData bd;
-    Rect r(0, 0, W, H);
-    if (tmp.LockBits(&r, ImageLockModeWrite, PixelFormat32bppPARGB, &bd) == Ok) {
-        for (int y = 0; y < H; y++) memcpy((BYTE *)bd.Scan0 + (size_t)y * bd.Stride, &g_persoPix[(size_t)y * W], (size_t)W * 4);
-        tmp.UnlockBits(&bd);
-    }
+    static std::vector<uint32_t> px;
+    PersoRender(W, H, 0.3f, look, PV_PORTRAIT, skin == PersoLookString(), 1, &px);
+    Bitmap *tmp = PixToBitmap(px, W, H), *out = new Bitmap(W, H, PixelFormat32bppPARGB);
     {
         Graphics g(out);
         g.Clear(Color(0, 0, 0, 0));
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         GraphicsPath mask;
-        mask.AddEllipse(RectF(0, 0, (float)W, (float)H));
-        TextureBrush tb(&tmp, WrapModeClamp);
+        if (shape == 0) mask.AddEllipse(RectF(0, 0, (float)W, (float)H));
+        else RoundRect(mask, RectF(0, 0, (float)W, (float)H), W * 0.25f);
+        TextureBrush tb(tmp, WrapModeClamp);
         g.FillPath(&tb, &mask);
     }
-    g_persoDrawn.clear();   // (g_persoPix reutilise : l'apercu du volet sera refait)
+    delete tmp;
     g_persoPortraits[key] = out;
     return out;
+}
+
+// ---- vignettes des tuiles (maquette du 17/10) : la partie rendue en 3D sur un corps neutre (celui de base, ses vetements
+// d'origine, sans accessoire), 96 x 96, fond transparent : le haut = le buste, le bas = les jambes, visage / chapeau /
+// lunettes / cheveux = la tete de pres, la silhouette = le corps entier. PNG dans %LOCALAPPDATA%\MWCoop\vignettes\
+// <partie>-<id>.png, dossier vide quand l'export du mod change (version.txt a cote) ; les images importees ("perso")
+// restent en memoire seulement (elles changent sans l'export). Au plus 2 rendus par image a l'ecran (la tuile garde sa
+// couleur de matiere en attendant) ; capture : tout de suite.
+static const int kVigS = 96;
+static const wchar_t *kVigFmt = L"3";   // (change : toutes les vignettes refaites)
+struct Vig { Bitmap *bmp = NULL; bool tried = false; };
+static std::map<std::string, Vig> g_vigs;
+static int g_vigBudget;
+static bool EncoderClsid(const wchar_t *mime, CLSID *out);   // (launcher.cpp)
+static std::wstring VigDir() { return LocalDir().empty() ? L"" : LocalDir() + L"vignettes\\"; }
+static void VigFreeMem() { for (auto &kv : g_vigs) delete kv.second.bmp; g_vigs.clear(); }
+static std::wstring VigStamp()
+{
+    wchar_t b[96];
+    swprintf_s(b, L"|%08lx%08lx|%s", g_perso.mt.dwHighDateTime, g_perso.mt.dwLowDateTime, kVigFmt);
+    return Widen(g_perso.ver) + b;
+}
+// Export relu : si ce n'est plus le meme, le dossier est vide (les PNG seulement) et version.txt reecrit.
+static void VigReset()
+{
+    VigFreeMem();
+    std::wstring dir = VigDir();
+    if (dir.empty() || g_perso.state != 1) return;
+    std::vector<unsigned char> d;
+    std::wstring stamp = VigStamp();
+    if (ReadAll(dir + L"version.txt", d) && Widen(std::string(d.begin(), d.end())) == stamp) return;
+    SHCreateDirectoryExW(NULL, dir.c_str(), NULL);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"*.png").c_str(), &fd);
+    int n = 0;
+    if (h != INVALID_HANDLE_VALUE) {
+        do { if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && DeleteFileW((dir + fd.cFileName).c_str())) n++; } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    std::string s = Narrow(stamp, CP_UTF8);
+    FILE *f = _wfopen((dir + L"version.txt").c_str(), L"wb");
+    if (f) { fwrite(s.data(), 1, s.size(), f); fclose(f); }
+    if (n) LaunchLog("vignettes : export change, %d image(s) refaites", n);
+}
+// Nom de fichier sur : lettres, chiffres, _ et - gardes, le reste en _ ; un petit hachage evite les collisions.
+static std::wstring VigFile(int f, const std::string &v)
+{
+    static const wchar_t *kind[PF_COUNT] = { L"chapeau", L"lunettes", L"cheveux", L"visage", L"haut", L"bas", L"corps" };
+    std::wstring n;
+    uint32_t h = 2166136261u;
+    for (unsigned char c : v) { h = (h ^ c) * 16777619u; n += isalnum(c) || c == '_' || c == '-' ? (wchar_t)c : L'_'; }
+    if (n.size() > 40) n.resize(40);
+    wchar_t hx[16]; swprintf_s(hx, L"-%08x", h);
+    return VigDir() + kind[f] + L"-" + (n.empty() ? L"origine" : n) + hx + L".png";
+}
+static Bitmap *VigRender(int f, const std::string &v)
+{
+    std::string look[PF_COUNT];
+    look[f] = v;
+    int view = f == PF_SHIRT ? PV_TORSO : f == PF_PANTS ? PV_LEGS : f == PF_HAT ? PV_HEADHAT : f == PF_BODY ? PV_FULL : PV_HEAD;
+    static std::vector<uint32_t> px;
+    PersoRender(kVigS, kVigS, f == PF_BODY ? 0.3f : 0.35f, look, view, v == "perso", 1, &px);
+    bool any = false;
+    for (uint32_t c : px) if (c >> 24) { any = true; break; }
+    return any ? PixToBitmap(px, kVigS, kVigS) : NULL;
+}
+// Vignette prete, ou NULL (pas encore rendue, ou impossible).
+static Bitmap *VigGet(int f, const std::string &v)
+{
+    if (g_perso.state != 1 || f < 0 || f >= PF_COUNT) return NULL;
+    std::string key = std::to_string(f) + "|" + v;
+    Vig &vg = g_vigs[key];
+    if (vg.tried) return vg.bmp;
+    if (g_vigBudget <= 0) return NULL;
+    g_vigBudget--;
+    vg.tried = true;
+    bool disk = v != "perso" && !VigDir().empty();
+    std::wstring file = disk ? VigFile(f, v) : L"";
+    std::vector<unsigned char> d;
+    if (disk && ReadAll(file, d) && !d.empty()) { vg.bmp = LoadPngMem(d.data(), d.size(), kVigS, kVigS); if (vg.bmp) return vg.bmp; }
+    vg.bmp = VigRender(f, v);
+    if (vg.bmp && disk) {
+        CLSID png;
+        SHCreateDirectoryExW(NULL, VigDir().c_str(), NULL);
+        if (!EncoderClsid(L"image/png", &png) || vg.bmp->Save(file.c_str(), &png, NULL) != Ok) LaunchLog("vignette : enregistrement impossible (%ls)", file.c_str());
+    }
+    return vg.bmp;
 }
 
 // ---- page PERSONNAGE : les parties sont des grilles de tuiles (tenue.inc, maquette du 17/10) ; le survol passe par

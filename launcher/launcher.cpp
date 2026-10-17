@@ -5716,6 +5716,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             ScreenToClient(h, &pt);
             float x = pt.x / g_scale - kM, y = pt.y / g_scale - kM;
             float step = -(short)HIWORD(wp) / 120.0f * 64;
+            if (g_tab == TAB_SKIN && SkinWheel(x, y, (short)HIWORD(wp))) return 0;   // (apercu du personnage : zoom)
             if (g_tab == TAB_NOTES && kNotesList.Contains(x, y)) g_noteListScroll += step;
             else if (g_tab == TAB_WIKI && kWikiList.Contains(x, y)) g_wikiListScroll += step;
             else g_scroll[g_tab] = min(max(g_scroll[g_tab] + step, 0.0f), MaxScroll(g_tab));
@@ -6265,10 +6266,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
         else if (st == L"guide") { g_tab = TAB_WIKI; g_wikiSel = 1; }   // guide des joueurs (colonne Nouveautes : notes deja recues ou vides)
         else if (st == L"voiture") { g_tab = TAB_CAR; }   // couleur : CouleurVoiture du mwcoop.ini du jeu
-        else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s)
+        else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso" || st == L"visage" || st == L"volant") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s) ; visage : onglet Visage ; volant : vue Volant
             g_tab = TAB_SKIN;
             g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);
-            if (st == L"tenue-survol") { g_skinHot = 9; g_uiHot = UI_LOOKPIN + 1; g_lookZone = 1; }
+            if (st == L"tenue-survol") { g_skinRowHot = HT_TILE + 2; g_lookZone = 1; }   // (3e tuile des hauts survolee)
+            if (st == L"visage") g_persoTab = 1;
+            if (st == L"volant") g_persoView = PV_VOLANT;
             if (st == L"tenue-perso") { g_skinRowHot = 1; g_skinYaw = (float)_wtof(argv[argc - 1]); }   // (dernier argument : la vue 0..16)
         }
         else if (st == L"notes" || st == L"accueil-notes") {   // notes d'exemple (le depot n'a pas encore de release) ; accueil-notes : la carte Nouveautes de l'accueil

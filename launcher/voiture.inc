@@ -805,7 +805,7 @@ static void DrawCar(Graphics &g)
 
     // Couleur : pastilles, nom, autre couleur
     RectF pn = kCarPanel;
-    Title(g, T(L"Couleur", L"Color"), RectF(pn.X + 24, pn.Y + 20, 200, 26), 17, kInk);
+    Title(g, T(L"Couleur", L"Color"), RectF(pn.X + 24, pn.Y + 20, 200, 26), 16, kInk);   // (titres de carte a 16 comme la maquette)
     int sel = CarSwatchSel(), show = g_carHot >= 0 && g_carHot < kSwatchN ? g_carHot : sel;
     for (int i = 0; i < kSwatchN; i++) {
         RectF r = CarSwatchRect(i);
@@ -851,7 +851,7 @@ static void DrawCar(Graphics &g)
     }
     {   // Finition ([Coop] FinitionVoiture : L, LX, SLX, GT ; vide : au hasard) : imposee au tirage d'une nouvelle partie (Vin.cs)
         float ty = ny + 118;
-        Title(g, T(L"Finition", L"Trim"), RectF(pn.X + 24, ty, 200, 24), 17, kInk);
+        Title(g, T(L"Finition", L"Trim"), RectF(pn.X + 24, ty, 200, 24), 16, kInk);
         g_vinBtnRect = RectF(pn.X + pn.Width - 24 - 168, ty - 5, 168, 32);   // (options de la plaque VIN : a droite du titre)
         UiButton(g, g_vinBtnRect, g_vinView ? T(L"Voir la voiture", L"Show the car") : T(L"Plaque VIN\u2026", L"VIN plate\u2026"), UI_CAR_VIN, g_vinView, -1, true, 10);
         g_trimRect = RectF(pn.X + 24, ty, pn.Width - 48, 70);
