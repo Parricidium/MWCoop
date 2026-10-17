@@ -311,10 +311,10 @@ static void PaintGlass(Graphics &g, RectF r, float rad, Color tint, bool shadow)
         }
     GraphicsState st = g.Save();
     g.SetClip(&p, CombineModeIntersect);
-    if (g_sceneBlur) {
+    if (g_sceneBlur && g_glass) {
         g.SetInterpolationMode(InterpolationModeBilinear);
         g.DrawImage(g_sceneBlur, RectF(-kM, -kM, kImgW, kImgH));
-    }
+    } else { SolidBrush sb(TH(solid)); g.FillPath(&sb, &p); }   // verre depoli coupe (Reglages > Theme) : carte opaque
     SolidBrush tb(tint); g.FillPath(&tb, &p);
     float hh = min(r.Height, 140.0f);
     LinearGradientBrush hl(RectF(r.X, r.Y - 1, r.Width, hh + 2), Color((BYTE)(g_dark ? 16 : 70), 255, 255, 255), Color(0, 255, 255, 255), LinearGradientModeVertical);
@@ -331,6 +331,8 @@ static void GlassLive(Graphics &g, RectF r, float rad)
 }
 
 // ---- petits elements
+// Densite des pages (Reglages > Theme, [Lanceur] Densite) : facteur du pas des lignes (aeree, normale, compacte).
+static float UiDensity() { return g_densite == 0 ? 1.15f : g_densite == 2 ? 0.88f : 1.0f; }
 static void SmallLabel(Graphics &g, const std::wstring &s, RectF r, Color c, StringAlignment h = StringAlignmentNear)
 {
     Text(g, s, r, 11, FontStyleBold, c, h);

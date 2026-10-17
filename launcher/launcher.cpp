@@ -1112,6 +1112,9 @@ static bool ChannelReworked()
     return _wcsicmp(b, L"legacy") != 0;
 }
 static bool IsReworkedVer(const std::wstring &v) { return v.find(L"nightly") != std::wstring::npos || CmpVer(v, L"0.96.0") >= 0; }
+// Versions d'essai (nightly, pre-releases de GitHub) : [Lanceur] Nightly=1 (Reglages > Lanceur) les propose comme mises a
+// jour si elles sont plus recentes que la version stable ; sinon elles ne servent que de secours (aucune stable Reworked).
+static bool NightlyOn() { return GetPrivateProfileIntW(L"Lanceur", L"Nightly", 0, g_iniLauncher.c_str()) != 0; }
 static const Note *PickRelease(const std::vector<Note> &rel, bool reworked)
 {
     const Note *best = NULL, *pre = NULL;
@@ -1120,6 +1123,7 @@ static const Note *PickRelease(const std::vector<Note> &rel, bool reworked)
         if (!n.pre) { if (!best || CmpVer(n.ver, best->ver) > 0) best = &n; }
         else if (reworked && (!pre || CmpVer(n.ver, pre->ver) > 0)) pre = &n;
     }
+    if (best && pre && NightlyOn() && CmpVer(pre->ver, best->ver) > 0) return pre;
     return best ? best : pre;
 }
 // A installer : plus recente, ou changement de version (Legacy <-> Reworked, meme plus ancienne).
@@ -1410,6 +1414,7 @@ static void RoundRect(GraphicsPath &p, RectF r, float rad)
 struct Theme {
     Color ink, grey, panel, panelBorder, sep, card, cardSel, choiceBorder, toggleOff, field, fieldBorder, placeholder,
           tab, tabHot, pill, btn2, btn2Hot, circle, circleHot, fallA, fallB, accent, accent2, onAccent, pillHot, ok, warn, red;
+    Color solid;   // carte opaque (verre depoli coupe : [Lanceur] Verre=0)
 };
 static Theme kLight = {   // (pas const : la couleur d'accent se change dans Reglages > Theme, gfx.inc ThemeLoad)
     Color(255, 16, 30, 48), Color(255, 74, 90, 112), Color(150, 255, 255, 255), Color(190, 255, 255, 255), Color(34, 16, 30, 48),
@@ -1418,7 +1423,7 @@ static Theme kLight = {   // (pas const : la couleur d'accent se change dans Reg
     Color(120, 255, 255, 255), Color(205, 255, 255, 255), Color(235, 20, 40, 64), Color(130, 255, 255, 255), Color(215, 255, 255, 255),
     Color(140, 255, 255, 255), Color(225, 255, 255, 255), Color(255, 246, 250, 254), Color(255, 205, 220, 236),
     Color(255, 26, 98, 172), Color(255, 58, 132, 206), Color(255, 255, 255, 255), Color(255, 42, 84, 128),
-    Color(255, 18, 132, 92), Color(255, 172, 100, 12), Color(255, 206, 40, 60) };
+    Color(255, 18, 132, 92), Color(255, 172, 100, 12), Color(255, 206, 40, 60), Color(255, 240, 247, 255) };
 static Theme kDark = {
     Color(255, 238, 244, 255), Color(255, 164, 178, 202), Color(128, 14, 24, 52), Color(38, 255, 255, 255), Color(28, 255, 255, 255),
     Color(14, 255, 255, 255), Color(34, 255, 255, 255), Color(30, 255, 255, 255), Color(48, 255, 255, 255),
@@ -1426,10 +1431,61 @@ static Theme kDark = {
     Color(20, 255, 255, 255), Color(36, 255, 255, 255), Color(200, 30, 44, 74), Color(16, 255, 255, 255), Color(32, 255, 255, 255),
     Color(22, 255, 255, 255), Color(40, 255, 255, 255), Color(255, 10, 18, 34), Color(255, 24, 40, 64),
     Color(255, 166, 225, 255), Color(255, 200, 236, 255), Color(255, 6, 19, 37), Color(230, 48, 66, 100),
-    Color(255, 124, 242, 196), Color(255, 255, 196, 107), Color(255, 255, 110, 110) };
+    Color(255, 124, 242, 196), Color(255, 255, 196, 107), Color(255, 255, 110, 110), Color(255, 22, 36, 70) };
+// Aurore verte (maquette Theme, 17/10) : nuit bleu-vert profonde, contraste fort, accent menthe ; aurore verte seule.
+static Theme kAurore = {
+    Color(255, 236, 250, 244), Color(255, 150, 186, 174), Color(132, 8, 26, 36), Color(44, 124, 232, 168), Color(30, 180, 240, 210),
+    Color(14, 255, 255, 255), Color(36, 124, 232, 168), Color(36, 124, 232, 168), Color(52, 255, 255, 255),
+    Color(18, 255, 255, 255), Color(52, 124, 232, 168), Color(255, 118, 156, 144),
+    Color(20, 255, 255, 255), Color(38, 124, 232, 168), Color(200, 16, 48, 54), Color(16, 255, 255, 255), Color(34, 124, 232, 168),
+    Color(22, 255, 255, 255), Color(42, 124, 232, 168), Color(255, 6, 16, 24), Color(255, 12, 34, 50),
+    Color(255, 124, 232, 198), Color(255, 170, 246, 220), Color(255, 4, 24, 26), Color(230, 30, 80, 76),
+    Color(255, 124, 242, 196), Color(255, 255, 206, 120), Color(255, 255, 120, 120), Color(255, 12, 38, 50) };
+// Garage : nuit brune et chaude (bois, lampe a huile), accent ambre ; voiles ambre et orange a la place de l'aurore.
+static Theme kGarage = {
+    Color(255, 252, 240, 224), Color(255, 190, 170, 146), Color(136, 32, 22, 14), Color(44, 255, 200, 120), Color(30, 255, 220, 160),
+    Color(16, 255, 230, 190), Color(40, 255, 200, 120), Color(38, 255, 200, 120), Color(56, 255, 240, 220),
+    Color(18, 255, 230, 190), Color(54, 255, 200, 120), Color(255, 160, 136, 110),
+    Color(22, 255, 230, 190), Color(40, 255, 200, 120), Color(200, 60, 40, 24), Color(18, 255, 230, 190), Color(36, 255, 200, 120),
+    Color(24, 255, 230, 190), Color(44, 255, 200, 120), Color(255, 20, 14, 10), Color(255, 42, 30, 20),
+    Color(255, 255, 180, 84), Color(255, 255, 210, 140), Color(255, 36, 20, 6), Color(230, 90, 60, 30),
+    Color(255, 150, 230, 160), Color(255, 255, 196, 107), Color(255, 255, 120, 110), Color(255, 46, 32, 22) };
 static bool g_dark;
+enum { THEME_SOMBRE, THEME_CLAIR, THEME_AURORE, THEME_GARAGE, THEME_N };
+static int g_theme = THEME_SOMBRE;   // [Lanceur] Theme=sombre|clair|aurore|garage (absent : celui de Windows) ; g_dark suit (tout sauf clair)
 static int g_aurore = 2;   // aurore et neige du fond : 0 off, 1 calme, 2 vivant ([Lanceur] Aurore, Reglages > Theme)
-#define TH(x) ((g_dark ? kDark : kLight).x)
+static bool g_glass = true;   // [Lanceur] Verre : cartes en verre depoli (scene floutee dessous) ou opaques
+static int g_densite = 1;     // [Lanceur] Densite : 0 aeree, 1 normale, 2 compacte (pas des lignes des pages)
+static int g_texte = 100;     // [Lanceur] Texte : taille du texte en % (80..110, toutes les polices)
+static Theme &ThemeTab() { return g_theme == THEME_CLAIR ? kLight : g_theme == THEME_AURORE ? kAurore : g_theme == THEME_GARAGE ? kGarage : kDark; }
+static float UiTextScale() { return g_texte / 100.0f; }
+// Cle de la scene de fond (ui.inc) : refaite quand le theme, l'aurore ou le verre changent.
+static int SceneKey() { return g_theme + g_aurore * 4 + (g_glass ? 16 : 0); }
+// Couleurs de la scene de fond par theme (ui.inc SceneDraw) : ciel (4 arrets), deux jeux de voiles d'aurore (4 arrets chacun),
+// collines, sapins, neige au sol.
+struct ScenePal { Color sky[4], aurA[4], aurB[4], farHill, nearHill, treeInk, treeSnow, snow0, snow1, drift; };
+static const ScenePal &ScenePalette()
+{
+    static const ScenePal pal[THEME_N] = {
+        { { Color(255, 4, 8, 22), Color(255, 10, 21, 52), Color(255, 22, 40, 90), Color(255, 34, 56, 110) },
+          { Color(0, 47, 255, 176), Color(190, 47, 255, 176), Color(140, 47, 214, 255), Color(0, 138, 107, 255) },
+          { Color(0, 138, 107, 255), Color(128, 176, 107, 255), Color(115, 47, 255, 176), Color(0, 47, 255, 176) },
+          Color(235, 19, 37, 82), Color(255, 14, 29, 68), Color(255, 10, 22, 54), Color(150, 198, 212, 234), Color(255, 159, 182, 220), Color(255, 93, 114, 153), Color(140, 125, 147, 189) },
+        { { Color(255, 132, 176, 226), Color(255, 190, 216, 242), Color(255, 238, 220, 214), Color(255, 248, 233, 223) },
+          { Color(0, 255, 190, 200), Color(120, 255, 200, 214), Color(100, 190, 210, 255), Color(0, 255, 230, 210) },
+          { Color(0, 255, 190, 200), Color(0, 255, 200, 214), Color(0, 190, 210, 255), Color(0, 255, 230, 210) },
+          Color(255, 178, 198, 228), Color(255, 150, 174, 210), Color(255, 44, 68, 94), Color(230, 250, 252, 255), Color(255, 252, 253, 255), Color(255, 214, 226, 242), Color(200, 236, 242, 250) },
+        { { Color(255, 3, 10, 16), Color(255, 7, 18, 28), Color(255, 11, 32, 46), Color(255, 14, 44, 60) },   // aurore verte : verts seulement
+          { Color(0, 72, 240, 176), Color(210, 72, 240, 176), Color(150, 124, 232, 168), Color(0, 60, 200, 150) },
+          { Color(0, 60, 200, 150), Color(130, 120, 255, 190), Color(110, 72, 240, 176), Color(0, 72, 240, 176) },
+          Color(235, 12, 42, 52), Color(255, 9, 32, 42), Color(255, 6, 24, 30), Color(150, 190, 222, 212), Color(255, 150, 190, 196), Color(255, 84, 120, 128), Color(140, 118, 158, 160) },
+        { { Color(255, 12, 8, 6), Color(255, 26, 20, 16), Color(255, 42, 30, 20), Color(255, 58, 42, 26) },   // garage : ambre et orange
+          { Color(0, 255, 180, 84), Color(170, 255, 180, 84), Color(120, 255, 140, 60), Color(0, 255, 120, 50) },
+          { Color(0, 255, 120, 50), Color(110, 255, 200, 120), Color(100, 255, 160, 70), Color(0, 255, 180, 84) },
+          Color(235, 50, 36, 26), Color(255, 38, 27, 19), Color(255, 28, 19, 13), Color(150, 230, 206, 170), Color(255, 196, 168, 132), Color(255, 120, 96, 70), Color(140, 160, 128, 96) } };
+    return pal[g_theme >= 0 && g_theme < THEME_N ? g_theme : 0];
+}
+#define TH(x) (ThemeTab().x)
 #define kInk TH(ink)
 #define kGrey TH(grey)
 #define kAcc TH(accent)
@@ -1747,28 +1803,37 @@ static Status MeasureStr(Graphics &g, const WCHAR *s, INT n, const Font *f, cons
 // memoire pour GDI+ (PrivateFontCollection) et pour GDI (AddFontMemResourceEx, mode de secours). Illisible : Segoe UI
 // comme avant. Variable (axe wght) : GDI+ n'en lit que l'instance par defaut, le gras est synthetise.
 static PrivateFontCollection *g_fontCol;
-static FontFamily *g_nunito;
+static FontFamily *g_nunito, *g_nunitoSemi, *g_nunitoBold;   // variable (secours), SemiBold (textes), ExtraBold (gras) : graisses de la maquette (600-800)
 static bool FamilyOk(const FontFamily *f);
 static void EmbedFontLoad()
 {
-    HRSRC r = FindResourceW(NULL, MAKEINTRESOURCEW(6), RT_RCDATA);
-    HGLOBAL h = r ? LoadResource(NULL, r) : NULL;
-    void *p = h ? LockResource(h) : NULL;
-    if (!p) return;
-    DWORD n = SizeofResource(NULL, r), gdiN = 0;
     g_fontCol = new PrivateFontCollection();
-    if (g_fontCol->AddMemoryFont(p, n) != Ok) { LaunchLog("police : Nunito integree illisible"); return; }
+    const void *data[3] = {}; DWORD size[3] = {};
+    for (int i = 0; i < 3; i++) {   // 6 variable, 7 SemiBold, 8 ExtraBold (launcher.rc)
+        HRSRC r = FindResourceW(NULL, MAKEINTRESOURCEW(6 + i), RT_RCDATA);
+        HGLOBAL h = r ? LoadResource(NULL, r) : NULL;
+        void *p = h ? LockResource(h) : NULL;
+        if (!p) continue;
+        DWORD n = SizeofResource(NULL, r);
+        if (g_fontCol->AddMemoryFont(p, n) != Ok) { LaunchLog("police : Nunito integree %d illisible", 6 + i); continue; }
+        data[i] = p; size[i] = n;
+    }
     int cnt = g_fontCol->GetFamilyCount(), got = 0;
     if (cnt < 1) return;
-    FontFamily fams[4];
-    g_fontCol->GetFamilies(min(cnt, 4), fams, &got);
-    if (got < 1) return;
-    g_nunito = fams[0].Clone();
-    if (!FamilyOk(g_nunito)) { delete g_nunito; g_nunito = NULL; LaunchLog("police : Nunito integree n'ecrit rien, Segoe UI gardee"); return; }
-    AddFontMemResourceEx(p, n, NULL, &gdiN);
-    WCHAR name[LF_FACESIZE] = L"?";
-    g_nunito->GetFamilyName(name);
-    LaunchLog("police : %ls integree (%lu octets)", name, (unsigned long)n);
+    FontFamily fams[6];
+    g_fontCol->GetFamilies(min(cnt, 6), fams, &got);
+    for (int i = 0; i < got; i++) {   // (les familles sont nommees : la statique porte son nom complet, "Nunito SemiBold")
+        WCHAR name[LF_FACESIZE] = L"";
+        fams[i].GetFamilyName(name);
+        FontFamily **slot = !wcscmp(name, L"Nunito SemiBold") ? &g_nunitoSemi : !wcscmp(name, L"Nunito ExtraBold") ? &g_nunitoBold : !wcscmp(name, L"Nunito") ? &g_nunito : NULL;
+        if (!slot || *slot) continue;
+        *slot = fams[i].Clone();
+        if (!FamilyOk(*slot)) { LaunchLog("police : %ls integree n'ecrit rien", name); delete *slot; *slot = NULL; continue; }
+        LaunchLog("police : %ls integree", name);
+    }
+    if (!g_nunito) { LaunchLog("police : Nunito integree absente, Segoe UI gardee"); return; }
+    DWORD gdiN = 0;
+    for (int i = 0; i < 3; i++) if (data[i]) AddFontMemResourceEx((void *)data[i], size[i], NULL, &gdiN);
 }
 // Une police peut aussi etre declaree presente et ne rien ecrire (fichier abime, Windows "allege") : chaque famille
 // ecrit "Ag" avec le rendu retenu ; aucun pixel = police suivante.
@@ -1811,10 +1876,25 @@ static const FontFamily *UiFamily(const wchar_t *want)
     cache[want] = got;
     return got;
 }
-// Police du lanceur : celle de UiFamily, avec son nom, sa taille et son style gardes pour le mode GDI.
+// Famille selon la graisse demandee : gras = Nunito ExtraBold, normal = Nunito SemiBold (instances statiques, style
+// "Regular" dans leur fichier : le bit gras est retire, sinon GDI+ epaissirait encore) ; sans elles, la variable (gras
+// synthetise), puis UiFamily (Segoe UI...). Consolas reste a part.
+static const FontFamily *UiFamilyStyled(const wchar_t *want, int style)
+{
+    if (!wcscmp(want, L"Consolas") || !g_nunito) return UiFamily(want);
+    FontFamily *f = (style & FontStyleBold) ? g_nunitoBold : g_nunitoSemi;
+    return f ? f : g_nunito;
+}
+static int UiStyleFor(const wchar_t *want, int style)
+{
+    const FontFamily *f = UiFamilyStyled(want, style);
+    return (f == g_nunitoBold || f == g_nunitoSemi) && f ? (style & ~FontStyleBold) : style;
+}
+// Police du lanceur : celle de UiFamily, avec son nom, sa taille et son style gardes pour le mode GDI. La taille est
+// multipliee par la taille du texte choisie (Reglages > Theme, [Lanceur] Texte).
 struct UiFont : Font
 {
-    UiFont(const wchar_t *face, float px, int style) : Font(UiFamily(face), px, style, UnitPixel) { FontSpec s = { face, px, style }; g_fontSpecs[this] = s; }
+    UiFont(const wchar_t *face, float px, int style) : Font(UiFamilyStyled(face, style), px * UiTextScale(), UiStyleFor(face, style), UnitPixel) { FontSpec s = { face, px * UiTextScale(), style }; g_fontSpecs[this] = s; }
     ~UiFont() { g_fontSpecs.erase(this); }
 };
 // Police des titres : Bahnschrift (Windows 10 et plus, geometrique) si elle est la, sinon Segoe UI.
@@ -1830,7 +1910,7 @@ static Font *FontOf(const wchar_t *family, float px, int style)
 {
     static std::map<std::wstring, Font *> cache;
     wchar_t k[96];
-    swprintf_s(k, L"%s|%d|%d", family, (int)(px * 20 + 0.5f), style);
+    swprintf_s(k, L"%s|%d|%d|%d", family, (int)(px * 20 + 0.5f), style, g_texte);   // (taille du texte : une police par valeur)
     auto it = cache.find(k);
     if (it != cache.end()) return it->second;
     Font *f = new UiFont(family, px, style);
@@ -4002,6 +4082,61 @@ static void GuestToggleReady()
 #include "modsync.inc"
 #include "serveur.inc"
 static void OnButton(int id);
+// Reparer MWCoop (Reglages > Lanceur > Depannage) : ce que fait un lancement, sans lancer -- modes de compatibilite retires,
+// chargeur (version.dll) verifie dans le dossier du jeu, copie de lancement refaite (jonctions, fichiers, Doorstop du
+// MSCLoader de MWCoop) et son chargeur verifie. Resultat dans la ligne d'etat.
+static void RepairMWCoop()
+{
+    if (g_gameDir.empty()) { SetStatus(K_WARN, T(L"My Winter Car introuvable : choisis le dossier du jeu", L"My Winter Car not found: choose the game folder")); return; }
+    CompatCleanAll("reparation");
+    LoaderEnsure(g_gameDir, "reparation");
+    bool ownMsc = MscOwn() && MscOwnInstalled() && g_mscOn;
+    std::wstring m = ownMsc ? MscCopyDir() : MirrorDir();
+    bool ok = true;
+    if (!m.empty()) {
+        ok = PrepareMirror(m) && (!ownMsc || MscOwnApply(m, true, false));
+        if (ok) LoaderEnsure(m, "reparation");
+    }
+    LaunchLog("reparation : %s (copie %ls)", ok ? "ok" : "ECHEC", m.empty() ? L"aucune" : m.c_str());
+    if (ok) SetStatus(K_OK, m.empty() ? T(L"MWCoop réparé : chargeur vérifié dans le dossier du jeu", L"MWCoop repaired: loader checked in the game folder")
+                                      : T(L"MWCoop réparé : copie de lancement et chargeur réécrits", L"MWCoop repaired: launch copy and loader rewritten"));
+    else SetStatus(K_ERR, T(L"Réparation incomplète : copie de lancement impossible (voir lanceur.log)", L"Repair incomplete: could not prepare the launch copy (see lanceur.log)"));
+}
+// Tester ma connexion (Reglages > Co-op > Reseau) : le port UDP et TCP du jeu se laissent ouvrir ici (ou le salon les tient
+// deja), le pare-feu Windows laisse passer le jeu, Steam repond. Pas de test depuis l'exterieur (il faudrait un serveur) :
+// la redirection de la box reste a verifier avec un ami. Resultat garde pour la pastille de la carte, et dans la ligne d'etat.
+static std::wstring g_netTest;   // (vide : pas encore teste)
+static int g_netTestKind = K_NORMAL;
+static void NetTest()
+{
+    int port = 7870;
+    if (const Opt *o = OptByKey("Port")) port = OptGet(*o);
+    auto bindOk = [&](int type) {
+        SOCKET s = socket(AF_INET, type, type == SOCK_DGRAM ? IPPROTO_UDP : IPPROTO_TCP);
+        if (s == INVALID_SOCKET) return false;
+        sockaddr_in a = {}; a.sin_family = AF_INET; a.sin_addr.s_addr = INADDR_ANY; a.sin_port = htons((u_short)port);
+        BOOL excl = TRUE; setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char *)&excl, sizeof(excl));
+        bool ok = bind(s, (sockaddr *)&a, sizeof(a)) == 0;
+        closesocket(s);
+        return ok;
+    };
+    bool mine = g_lobby != LB_NONE;   // (le salon tient deja le port : c'est le notre)
+    bool udp = mine || bindOk(SOCK_DGRAM), tcp = mine || bindOk(SOCK_STREAM);
+    int fw = FirewallState(g_gameDir + L"mywintercar.exe");
+    bool steamWas = g_steamUp == 1, steam = SteamUp();
+    if (steam && !steamWas && g_lobby == LB_NONE) SteamDown();   // (ouvert pour le test seulement)
+    wchar_t b[200];
+    swprintf_s(b, T(L"UDP %d %s · TCP %d %s · pare-feu %s · Steam %s", L"UDP %d %s · TCP %d %s · firewall %s · Steam %s"),
+               port, udp ? T(L"libre", L"free") : T(L"OCCUPÉ", L"BUSY"), port, tcp ? T(L"libre", L"free") : T(L"OCCUPÉ", L"BUSY"),
+               fw == FW_OK ? L"ok" : fw == FW_BLOCKED ? T(L"BLOQUE le jeu", L"BLOCKS the game") : fw == FW_MISSING ? T(L"sans règle", L"no rule") : L"?",
+               steam ? T(L"connecté", L"connected") : T(L"fermé", L"closed"));
+    bool bad = !udp || !tcp || fw == FW_BLOCKED, warn = fw == FW_MISSING || !steam;
+    g_netTest = b;
+    g_netTestKind = bad ? K_ERR : warn ? K_WARN : K_OK;
+    LaunchLog("test de connexion : %ls", b);
+    SetStatus(g_netTestKind, L"%ls", b);
+}
+
 #include "api.inc"
 #include "gfx.inc"
 #include "media.inc"
@@ -4009,6 +4144,13 @@ static void OnButton(int id);
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
+// Reglages > Co-op : « Revoir le guide de l'hote » ouvre l'article du guide (wikidata.inc : Heberger une partie, 5e article).
+static void WikiOpenHost()
+{
+    for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].b == kW_Host) { g_wikiSel = a; g_wikiClosed &= ~(1u << kWikiArt[a].cat); break; }
+    g_scroll[TAB_WIKI] = 0;
+    GoPage(TAB_WIKI);
+}
 
 // Image de la fenetre : la scene et ses cartes de verre (gardees), l'animation, puis l'interface. Mise en page changee
 // (autres cartes) : l'image du fond est refaite et l'interface redessinee aussitot.
@@ -5747,7 +5889,7 @@ static void OnButton(int id)
     case B_EXE: ChooseExe(); break;
     case B_CLOSE: LobbyClose(); g_state = ST_CLOSING; break;
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
-    case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
+    case B_THEME: ThemeSet(g_dark ? THEME_CLAIR : THEME_SOMBRE); break;   // (lune / soleil : sombre <-> clair ; les autres themes dans Reglages > Theme)
     case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"ar" : g_ar ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> AR -> FR
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_JOURNAUX: if (PageEnabled(TAB_LOGS)) GoPage(TAB_LOGS); break;   // (ex-GitHub : lien dans Reglages > Lanceur > Depannage)
@@ -6213,32 +6355,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     wchar_t lang[8] = L"";
     GetPrivateProfileStringW(L"Lanceur", L"Langue", L"", lang, 8, g_iniLauncher.c_str());
     if (!_wcsicmp(lang, L"fr") || !_wcsicmp(lang, L"en") || !_wcsicmp(lang, L"ru") || !_wcsicmp(lang, L"ar")) { g_fr = !_wcsicmp(lang, L"fr"); g_ru = !_wcsicmp(lang, L"ru"); g_ar = !_wcsicmp(lang, L"ar"); }
-    {   // Theme : Theme=clair|sombre, sinon celui des applications de Windows
-        wchar_t th[16] = L"";
-        GetPrivateProfileStringW(L"Lanceur", L"Theme", L"", th, 16, g_iniLauncher.c_str());
-        {
-            wchar_t rn[16];
-            GetPrivateProfileStringW(L"Lanceur", L"Reseau", L"ip", rn, 16, g_iniLauncher.c_str());
-            g_steamNet = _wcsicmp(rn, L"steam") == 0;
-            g_mscOn = GetPrivateProfileIntW(L"Lanceur", L"MSCLoader", 1, g_iniLauncher.c_str()) != 0;
-            g_debug = GetPrivateProfileIntW(L"Lanceur", L"Debug", 0, g_iniLauncher.c_str()) != 0;
-            if (g_debug) DebugSys();
-            g_mscOwnPref = GetPrivateProfileIntW(L"Lanceur", L"MSCLoaderMWCoop", -1, g_iniLauncher.c_str());
-        }
-        if (!_wcsicmp(th, L"sombre") || !_wcsicmp(th, L"dark")) g_dark = true;
-        else if (!_wcsicmp(th, L"clair") || !_wcsicmp(th, L"light")) g_dark = false;
-        else {
-            DWORD v = 1, sz = sizeof(v);
-            if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", RRF_RT_REG_DWORD, NULL, &v, &sz) == ERROR_SUCCESS) g_dark = v == 0;
-        }
-        ThemeLoad();   // (couleur d'accent, aurore : gfx.inc)
+    {
+        wchar_t rn[16];
+        GetPrivateProfileStringW(L"Lanceur", L"Reseau", L"ip", rn, 16, g_iniLauncher.c_str());
+        g_steamNet = _wcsicmp(rn, L"steam") == 0;
+        g_mscOn = GetPrivateProfileIntW(L"Lanceur", L"MSCLoader", 1, g_iniLauncher.c_str()) != 0;
+        g_debug = GetPrivateProfileIntW(L"Lanceur", L"Debug", 0, g_iniLauncher.c_str()) != 0;
+        if (g_debug) DebugSys();
+        g_mscOwnPref = GetPrivateProfileIntW(L"Lanceur", L"MSCLoaderMWCoop", -1, g_iniLauncher.c_str());
+        ThemeLoad();   // theme (Theme=sombre|clair|aurore|garage, sinon celui de Windows), couleur d'accent, aurore, verre, densite, texte : gfx.inc
     }
 
     int argc = 0;
     wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i + 1 < argc; i++) {
         if (!_wcsicmp(argv[i], L"/lang")) { g_fr = !_wcsicmp(argv[i + 1], L"fr"); g_ru = !_wcsicmp(argv[i + 1], L"ru"); g_ar = !_wcsicmp(argv[i + 1], L"ar"); }
-        if (!_wcsicmp(argv[i], L"/theme")) g_dark = !_wcsicmp(argv[i + 1], L"sombre");
+        // captures : theme, verre, densite et taille du texte sans toucher a l'ini (/theme sombre|clair|aurore|garage, /verre 0|1, /densite 0|1|2, /texte 80..110)
+        if (!_wcsicmp(argv[i], L"/theme")) { int t = ThemeFromName(argv[i + 1]); if (t >= 0) ThemeSelect(t); }
+        if (!_wcsicmp(argv[i], L"/verre")) g_glass = _wtoi(argv[i + 1]) != 0;
+        if (!_wcsicmp(argv[i], L"/densite")) g_densite = max(0, min(2, _wtoi(argv[i + 1])));
+        if (!_wcsicmp(argv[i], L"/texte")) g_texte = max(80, min(110, _wtoi(argv[i + 1])));
         if (!_wcsicmp(argv[i], L"/echelle")) g_scale = (float)_wtof(argv[i + 1]);   // captures : rendu agrandi
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];
         if (!_wcsicmp(argv[i], L"/testsalon") && i + 2 < argc) { g_testSalon = argv[i + 1]; g_testSalonLog = argv[i + 2]; }
