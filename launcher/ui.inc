@@ -595,18 +595,29 @@ static void DrawHeader(Graphics &g)
     case TAB_LOBBY: {
         int lobby = g_lobby;
         bool host = lobby == LB_HOST;
-        if (lobby == LB_CONNECTING) title = T(L"Connexion au salon…", L"Joining the lobby…");
-        else if (host) title = std::wstring(T(L"Salon de ", L"Lobby of ")) + PlayerName();
-        else if (g_lobbySteam) title = std::wstring(T(L"Salon de ", L"Lobby of ")) + g_sHostName;
-        else title = T(L"Salon", L"Lobby");
+        // (maquette du 17/10) hote : « Steam · Prive · code K7PM3Q · <sauvegarde> · n / max joueurs » (IP : « IP · port 7870 · … ») ;
+        // invite : « Tu es invite · IP 192.168.1.20:7870 (ou Steam) · Prive · n / max joueurs », titre « Salon de <hote> ».
         EnterCriticalSection(&g_lcs);
         int n = (int)g_peers.size();
+        std::string hn;
+        for (auto &p : g_peers) if (p.id == 0) hn = p.name;
         LeaveCriticalSection(&g_lcs);
-        wchar_t b[200];
+        if (lobby == LB_CONNECTING) title = T(L"Connexion au salon…", L"Joining the lobby…");
+        else if (host) title = std::wstring(T(L"Salon de ", L"Lobby of ")) + PlayerName();
+        else if (!hn.empty()) title = std::wstring(T(L"Salon de ", L"Lobby of ")) + Widen(hn, CP_UTF8);
+        else if (g_lobbySteam) title = std::wstring(T(L"Salon de ", L"Lobby of ")) + g_sHostName;
+        else title = T(L"Salon", L"Lobby");
+        wchar_t b[300];
         std::wstring mode = lobby == LB_CONNECTING ? std::wstring(L"…") : LobbyModeText();   // (Public, ou Prive et le code)
-        if (g_lobbySteam) swprintf_s(b, T(L"Steam · amis seulement · %s · %d / %d joueurs", L"Steam · friends only · %s · %d / %d players"), mode.c_str(), n, g_lobbyMax);
-        else if (host) swprintf_s(b, T(L"Port %d (UDP et TCP) · %s · %s · %d / %d", L"Port %d (UDP and TCP) · %s · %s · %d / %d"), g_lobbyPort, g_myAddresses.empty() ? L"?" : g_myAddresses.c_str(), mode.c_str(), n, g_lobbyMax);
-        else swprintf_s(b, T(L"Hôte : %s:%d · %s · %d / %d joueurs", L"Host: %s:%d · %s · %d / %d players"), g_lobbyAddr.c_str(), g_lobbyPort, mode.c_str(), n, g_lobbyMax);
+        if (host) {
+            std::wstring sn = SaveCurrentName(), via = g_lobbySteam ? L"Steam" : std::wstring(T(L"IP · port ", L"IP · port ")) + std::to_wstring(g_lobbyPort);
+            if (sn.size() > 28) sn = sn.substr(0, 27) + L"…";
+            swprintf_s(b, T(L"%s · %s · %s · %d / %d joueurs", L"%s · %s · %s · %d / %d players"), via.c_str(), mode.c_str(), sn.c_str(), n, g_lobbyMax);
+        } else {
+            std::wstring via = g_lobbySteam ? L"Steam" : L"IP " + g_lobbyAddr + L":" + std::to_wstring(g_lobbyPort);
+            std::wstring pv = lobby == LB_CONNECTING ? std::wstring(L"…") : g_lobbyPrive ? T(L"Privé", L"Private") : T(L"Public", L"Public");
+            swprintf_s(b, T(L"Tu es invité · %s · %s · %d / %d joueurs", L"You are a guest · %s · %s · %d / %d players"), via.c_str(), pv.c_str(), n, g_lobbyMax);
+        }
         sub = b;
         break;
     }
@@ -678,6 +689,18 @@ static void DrawFooter(Graphics &g, const std::wstring &status, int kind, float 
     SolidBrush db(sc); g.FillEllipse(&db, x, cy - 4, 8.0f, 8.0f);
     float sw = gx - 30 - (x + 16);
     Text(g, status, RectF(x + 16, kFooter.Y + 2, sw, 22), 13, FontStyleBold, kind == K_NORMAL ? kInk : sc, StringAlignmentNear);
+    if (g_tab == TAB_LOBBY && (g_lobby == LB_HOST || g_lobby == LB_GUEST) && !g_lobbySteam) {   // salon IP : « · Ping moyen NN ms » (maquette du 17/10)
+        int sum = 0, cnt = 0;
+        EnterCriticalSection(&g_lcs);
+        for (auto &p : g_peers) if (p.id != 0 && p.ping > 0) { sum += p.ping; cnt++; }
+        LeaveCriticalSection(&g_lcs);
+        float tw = MeasureW(mg, status, 13, FontStyleBold) + 10;
+        if (cnt && tw + 140 < sw) {
+            wchar_t pb[64];
+            swprintf_s(pb, T(L"·  Ping moyen %d ms", L"·  Average ping %d ms"), sum / cnt);
+            Text(g, pb, RectF(x + 16 + tw, kFooter.Y + 2, sw - tw, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        }
+    }
     if (prog != -1.0f) DrawBar(g, RectF(x + 16, kFooter.Y + 26, min(320.0f, sw), 4), prog);
 }
 
