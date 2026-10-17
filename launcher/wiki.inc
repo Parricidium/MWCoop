@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------- page GUIDE : petit wiki des joueurs - inclus par launcher.cpp
+// ---------------------------------------------------------------- page GUIDE : petit wiki des joueurs - inclus par launcher.cpp
 // Demande de JD (08/10) : tout ce qu'il faut pour jouer sans probleme (installation, MSCLoader officiel / de MWCoop,
 // partage des mods, options, Copie / Dossier / Steam...), range en categories pliables, avec des mini tutos en images.
 // A gauche les categories (clic : plier / deplier) et leurs articles ; a droite l'article : sections pliables, etapes
@@ -14,15 +14,24 @@ enum { WF_FOLDER, WF_FOOTER, WF_START, WF_NET, WF_LOBBY, WF_MSC, WF_SHARE, WF_AC
 
 static const int kWikiCats = (int)(sizeof(kWikiCat) / sizeof(kWikiCat[0]));
 static const int kWikiArts = (int)(sizeof(kWikiArt) / sizeof(kWikiArt[0]));
-// Trois colonnes depuis le rework du 17/10 : sommaire, article, Nouveautes + « Un souci ? » (maquette validee par JD).
+// Trois colonnes (maquette du 17/10, validee par JD) : sommaire 240, article, Nouveautes + « Un souci ? » 272, marges de 12.
+// En-tete : pilules Guide / Nouveautes / Credits (Nouveautes et Credits = pages TAB_NOTES et TAB_CREDITS, ui.inc) et le
+// champ Chercher (filtre les articles ; taper depuis un autre onglet ramene au Guide).
 static const RectF kWikiList(264, 88, 240, 656), kWikiBody(516, 88, 464, 656), kWikiNews(992, 88, 272, 656);
 static int g_wikiSel;
-static unsigned g_wikiClosed = ~1u;           // categories pliees (bit par categorie) : au depart, seule la premiere est ouverte
+static int g_wikiShown = -1;                  // article cadre dans le sommaire (autre article : on le remet en vue)
 static std::set<int> g_wikiFold;              // sections pliees : article * 1000 + bloc
 static float g_wikiListScroll, g_wikiH;
-static RectF WikiArea() { return RectF(kWikiBody.X + 28, kWikiBody.Y + 96, kWikiBody.Width - 46, kWikiBody.Height - 110); }
+static std::wstring g_wikiSearch;             // champ Chercher de l'en-tete (vide : tout le sommaire)
+static bool g_wikiFocus;                      // champ actif (curseur, WM_CHAR -> GuideChar)
+static float g_guideTabRight = 1264;          // bord droit des pilules (ui.inc DrawHeader)
+static RectF g_credBtnRect;                   // pilule Credits (bulle de la visite : tuto.inc, etape 19)
+static const Color kWikiPink(255, 255, 107, 139), kWikiGold(255, 255, 210, 143);   // (maquette : .chip.new, etoile de l'astuce)
+// Zones de la page dans le trou laisse par uikit.inc entre UI_WIKI_ART + 200 et UI_WIKI_SEC (UiClick les passe a WikiClick).
+enum { UI_WIKI_TAB = UI_WIKI_ART + 200, UI_WIKI_SEARCH = UI_WIKI_ART + 210, UI_WIKI_SEARCHX, UI_WIKI_PREV, UI_WIKI_NEXT };
+static RectF WikiArea() { return RectF(kWikiBody.X + 22, kWikiBody.Y + 108, kWikiBody.Width - 44, kWikiBody.Height - 108 - 52); }
 static float WikiMaxScroll() { return max(0.0f, g_wikiH - WikiArea().Height); }
-
+static std::wstring WikiUpper(std::wstring s) { if (!s.empty()) CharUpperBuffW(&s[0], (DWORD)s.size()); return s; }
 static float WikiTextH(Graphics &g, const std::wstring &t, float w, float px, int style)
 {
     UiFont f(L"Segoe UI", px, style);
@@ -286,112 +295,171 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
     return 0;
 }
 
-// ---- liste des categories et articles
-static void DrawWikiList(Graphics &g)
+
+// ---- recherche : articles dont le titre, le sous-titre ou un bloc contient le texte (sans accents ni casse, SetFold de gfx.inc)
+static std::vector<char> g_wikiHits;
+static std::wstring g_wikiHitsFor = L"\x01";
+static void WikiHitsUpdate()
 {
-    RectF lr(kWikiList.X + 10, kWikiList.Y + 10, kWikiList.Width - 20, kWikiList.Height - 20);
-    // hauteur totale (pour borner le defilement)
-    float total = 0;
-    for (int c = 0; c < kWikiCats; c++) {
-        total += 46;
-        if (!(g_wikiClosed & (1u << c))) for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].cat == c) total += 38;
+    if (g_wikiHitsFor == g_wikiSearch) return;
+    g_wikiHitsFor = g_wikiSearch;
+    g_wikiHits.assign(kWikiArts, 1);
+    std::wstring q = SetFold(Trim(g_wikiSearch));
+    if (q.empty()) return;
+    for (int a = 0; a < kWikiArts; a++) {
+        const WikiArticle &art = kWikiArt[a];
+        std::wstring all = std::wstring(T(art.tFr, art.tEn)) + L"\n" + T(art.sFr, art.sEn);
+        for (int i = 0; i < art.n; i++) if (art.b[i].fr) { all += L"\n"; all += T(art.b[i].fr, art.b[i].en); }
+        g_wikiHits[a] = SetFold(all).find(q) != std::wstring::npos;
     }
-    g_wikiListScroll = min(max(g_wikiListScroll, 0.0f), max(0.0f, total - lr.Height));
-    GraphicsState st = g.Save();
-    g.SetClip(lr, CombineModeIntersect);
-    float y = lr.Y - g_wikiListScroll;
-    for (int c = 0; c < kWikiCats; c++) {
-        bool open = !(g_wikiClosed & (1u << c)), hot = g_uiHot == UI_WIKI_CAT + c;
-        int n = 0;
-        for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].cat == c) n++;
-        RectF r(lr.X, y, lr.Width, 42);
-        if (hot) { GraphicsPath p; RoundRect(p, r, 12); SolidBrush b(TH(card)); g.FillPath(&b, &p); }
-        Icon(g, open ? IC_CHEVD : IC_CHEVR, r.X + 16, r.Y + 21, 14, kGrey, 2.2f);
-        Icon(g, kWikiCat[c].icon, r.X + 40, r.Y + 21, 18, kAcc, 1.9f);
-        Text(g, T(kWikiCat[c].fr, kWikiCat[c].en), RectF(r.X + 58, r.Y, r.Width - 96, r.Height), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
-        std::wstring ns = std::to_wstring(n);
-        float pw = PillW(ns, 10);
-        Pill(g, RectF(r.X + r.Width - pw - 8, r.Y + 11, pw, 20), TH(cardSel), ns, kGrey, 10);
-        HotZone(r, UI_WIKI_CAT + c);
-        y += 46;
-        if (!open) continue;
-        for (int a = 0; a < kWikiArts; a++) {
-            if (kWikiArt[a].cat != c) continue;
-            RectF ar(lr.X + 26, y, lr.Width - 26, 34);
-            bool on = a == g_wikiSel, ah = g_uiHot == UI_WIKI_ART + a;
-            if (on || ah) { GraphicsPath p; RoundRect(p, ar, 10); SolidBrush b(on ? TH(cardSel) : TH(card)); g.FillPath(&b, &p); }
-            if (on) { SolidBrush d(kAcc); g.FillEllipse(&d, ar.X + 10, ar.Y + 14, 6.0f, 6.0f); }
-            Text(g, T(kWikiArt[a].tFr, kWikiArt[a].tEn), RectF(ar.X + 24, ar.Y, ar.Width - 30, ar.Height), 12.5f, on ? FontStyleBold : FontStyleRegular, on ? kInk : WithA(kInk, 0.85f), StringAlignmentNear);
-            HotZone(ar, UI_WIKI_ART + a);
-            y += 38;
-        }
-    }
-    g.Restore(st);
+}
+static bool WikiHit(int a) { WikiHitsUpdate(); return Trim(g_wikiSearch).empty() || g_wikiHits[a] != 0; }
+// Ordre du sommaire : par categorie, puis l'ordre de wikidata.inc (les derniers articles ajoutes rejoignent leur categorie).
+static const std::vector<int> &WikiOrder()
+{
+    static std::vector<int> o;
+    if (o.empty()) for (int c = 0; c < kWikiCats; c++) for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].cat == c) o.push_back(a);
+    return o;
+}
+// Article voisin dans le sommaire (parmi ceux montres) ; -1 au bout.
+static int WikiNeighbor(int dir)
+{
+    const std::vector<int> &o = WikiOrder();
+    int pos = -1;
+    for (int i = 0; i < (int)o.size(); i++) if (o[i] == g_wikiSel) pos = i;
+    for (int i = pos + dir; i >= 0 && i < (int)o.size(); i += dir) if (WikiHit(o[i])) return o[i];
+    return -1;
+}
+static void WikiGoArt(int a) { if (a < 0 || a >= kWikiArts) return; g_wikiSel = a; g_scroll[TAB_WIKI] = 0; }
+// Temps de lecture (minutes, 1 au moins) : environ 1100 caracteres par minute.
+static int WikiMinutes(const WikiArticle &art)
+{
+    size_t n = 0;
+    for (int i = 0; i < art.n; i++) if (art.b[i].fr) n += wcslen(T(art.b[i].fr, art.b[i].en)); else n += 220;
+    return max(1, (int)((n + 550) / 1100));
+}
+// Puce neutre de la maquette (.chip) : fond leger, lisere, texte presque blanc.
+static void WikiChip(Graphics &g, RectF r, const std::wstring &s, float px = 11.5f, bool pink = false)
+{
+    GraphicsPath p; RoundRect(p, r, r.Height / 2);
+    SolidBrush b(pink ? kWikiPink : g_dark ? Color(26, 255, 255, 255) : Color(28, 16, 30, 48)); g.FillPath(&b, &p);
+    if (!pink) { Pen pen(g_dark ? Color(36, 255, 255, 255) : Color(44, 16, 30, 48), 1); g.DrawPath(&pen, &p); }
+    Text(g, s, r, px, FontStyleBold, pink ? Color(255, 255, 255, 255) : WithA(kInk, 0.92f));
 }
 
-// ---- colonne de droite : les dernieres versions (notes de GitHub, canal joue) et l'encart d'aide
-static std::wstring NoteFirstLine(const Note &n)
+// ---- sommaire : en-tetes de categorie et articles a plat (maquette .toc) ; filtre par la recherche
+static void DrawWikiList(Graphics &g)
 {
-    std::wstring t = g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en;
-    if (t.empty()) t = n.en;
-    size_t a = 0;
-    while (a < t.size()) {
-        size_t e = t.find(L'\n', a);
-        std::wstring l = t.substr(a, e == std::wstring::npos ? std::wstring::npos : e - a);
-        while (!l.empty() && (l[0] == L'-' || l[0] == L'*' || l[0] == L' ' || l[0] == L'\r')) l.erase(0, 1);
-        if (!l.empty() && l[0] != L'#') return l;
-        if (e == std::wstring::npos) break;
-        a = e + 1;
+    RectF lr(kWikiList.X + 10, kWikiList.Y + 12, kWikiList.Width - 20, kWikiList.Height - 24);
+    const std::vector<int> &ord = WikiOrder();
+    bool searching = !Trim(g_wikiSearch).empty();
+    // mise en page : en-tete (10 de marge, 14 de texte, 4 dessous), articles de 36
+    struct Row { int art, cat; float y; };
+    std::vector<Row> rows;
+    float y = 0, selY = -1;
+    int lastCat = -1, found = 0;
+    if (searching) y += 22;   // (la ligne « N articles »)
+    for (int a : ord) {
+        if (!WikiHit(a)) continue;
+        found++;
+        if (kWikiArt[a].cat != lastCat) { lastCat = kWikiArt[a].cat; rows.push_back({ -1, lastCat, y }); y += 28; }
+        if (a == g_wikiSel) selY = y;
+        rows.push_back({ a, lastCat, y }); y += 36;
     }
-    return L"";
+    float total = y, maxS = max(0.0f, total - lr.Height);
+    if (g_wikiShown != g_wikiSel) {   // (autre article : le sommaire le montre)
+        g_wikiShown = g_wikiSel;
+        if (selY >= 0 && (selY < g_wikiListScroll || selY + 36 > g_wikiListScroll + lr.Height)) g_wikiListScroll = selY - lr.Height / 2 + 18;
+    }
+    g_wikiListScroll = min(max(g_wikiListScroll, 0.0f), maxS);
+    GraphicsState st = g.Save();
+    g.SetClip(lr, CombineModeIntersect);
+    float y0 = lr.Y - g_wikiListScroll;
+    if (searching) {
+        wchar_t b[96];
+        if (found) swprintf_s(b, found == 1 ? T(L"1 article · Échap : effacer", L"1 article · Esc: clear") : T(L"%d articles · Échap : effacer", L"%d articles · Esc: clear"), found);
+        else swprintf_s(b, T(L"Rien pour « %s »", L"Nothing for \"%s\""), Trim(g_wikiSearch).c_str());
+        Text(g, b, RectF(lr.X + 10, y0, lr.Width - 20, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    }
+    for (const Row &r : rows) {
+        float ry = y0 + r.y;
+        if (r.art < 0) {
+            if (ry + 28 < lr.Y || ry > lr.Y + lr.Height) continue;
+            Text(g, WikiUpper(T(kWikiCat[r.cat].fr, kWikiCat[r.cat].en)), RectF(lr.X + 10, ry + 10, lr.Width - 20, 14), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+            continue;
+        }
+        RectF ar(lr.X, ry, lr.Width, 36);
+        if (ar.Y + ar.Height < lr.Y || ar.Y > lr.Y + lr.Height) continue;
+        bool on = r.art == g_wikiSel, hot = g_uiHot == UI_WIKI_ART + r.art;
+        if (on || hot) { GraphicsPath p; RoundRect(p, ar, 10); SolidBrush b(on ? WithA(kAcc, 0.18f) : TH(card)); g.FillPath(&b, &p); }
+        Text(g, T(kWikiArt[r.art].tFr, kWikiArt[r.art].tEn), RectF(ar.X + 10, ar.Y, ar.Width - 20, ar.Height), 13.5f, FontStyleBold, on ? kInk : WithA(kInk, 0.85f), StringAlignmentNear);
+        HotZone(RectF(ar.X, max(ar.Y, lr.Y), ar.Width, min(ar.Y + ar.Height, lr.Y + lr.Height) - max(ar.Y, lr.Y)), UI_WIKI_ART + r.art);
+    }
+    g.Restore(st);
+    if (maxS > 0) {
+        float bh = lr.Height * lr.Height / (lr.Height + maxS), by = lr.Y + (lr.Height - bh) * g_wikiListScroll / maxS;
+        GraphicsPath sp; RoundRect(sp, RectF(lr.X + lr.Width - 3, by, 3, bh), 1.5f);
+        SolidBrush sbr(WithA(kAcc, 0.45f)); g.FillPath(&sbr, &sp);
+    }
 }
-static RectF g_credBtnRect;   // (bulle de la visite : etape Credits)
+
+// ---- colonne de droite : les trois dernieres versions (notes de GitHub, canal joue) et « Un souci ? »
+// Titre = premiere puce de la note, detail = la deuxieme (NoteBullets, ui.inc).
 static void DrawWikiNews(Graphics &g)
 {
     RectF c = kWikiNews;
     Glass(c);
-    Title(g, T(L"Nouveaut\u00E9s", L"What's new"), RectF(c.X + 18, c.Y + 16, 160, 24), 16, kInk);
-    {   // « Tout » : la page des notes
+    float x = c.X + 16, w = c.Width - 32;
+    Title(g, T(L"Nouveautés", L"What's new"), RectF(x, c.Y + 14, 160, 24), 16, kInk);
+    {   // « Tout » : l'onglet Nouveautes
         const wchar_t *all = T(L"Tout", L"All");
-        RectF r(c.X + c.Width - 18 - PillW(all, 12.5f), c.Y + 16, PillW(all, 12.5f), 24);
+        float aw = PillW(all, 12.5f);
+        RectF r(x + w - aw, c.Y + 14, aw, 24);
         Text(g, all, r, 12.5f, FontStyleBold, g_uiHot == UI_WIKI_GO + 199 ? kAcc2 : kAcc, StringAlignmentFar);
         HotZone(r, UI_WIKI_GO + 199);
     }
+    // « Un souci ? » en bas : le zip des journaux (bouton < > de la barre de gauche) puis Discord
+    std::wstring help = T(L"Journaux (le < > en bas à gauche) > Faire le zip, puis poste-le dans #bug-reports sur Discord.",
+                          L"Logs (the < > at the bottom left) > Make the zip, then post it in #bug-reports on Discord.");
+    float hh = WikiTextH(g, help, w - 24, 12, FontStyleRegular);
+    RectF h(c.X + 14, 0, c.Width - 28, 10 + 18 + hh + 10 + 36 + 10);
+    h.Y = c.Y + c.Height - 14 - h.Height;
+    {
+        GraphicsPath p; RoundRect(p, h, 14);
+        SolidBrush fb(g_dark ? Color(13, 255, 255, 255) : Color(60, 255, 255, 255)); g.FillPath(&fb, &p);
+        Pen pen(g_dark ? Color(31, 255, 255, 255) : TH(choiceBorder), 1); g.DrawPath(&pen, &p);
+        Text(g, T(L"Un souci ?", L"Something wrong?"), RectF(h.X + 12, h.Y + 10, h.Width - 24, 18), 13, FontStyleBold, kInk, StringAlignmentNear);
+        WikiText(g, help, RectF(h.X + 12, h.Y + 28, h.Width - 24, hh + 4), 12, FontStyleRegular, kGrey);
+        RectF b(h.X + 12, h.Y + h.Height - 10 - 36, h.Width - 24, 36);
+        GraphicsPath bp; RoundRect(bp, b, 11);
+        SolidBrush db(g_uiHot == UI_WIKI_GO + 198 ? Mix(kDiscordBlue, Color(255, 255, 255, 255), 0.18f) : kDiscordBlue); g.FillPath(&db, &bp);
+        float tw = MeasureW(MeasureG(), T(L"Ouvrir Discord", L"Open Discord"), 12.5f, FontStyleBold);
+        Icon(g, IC_DISCORD, b.X + (b.Width - tw - 26) / 2 + 9, b.Y + 18, 17, Color(255, 255, 255, 255));
+        Text(g, T(L"Ouvrir Discord", L"Open Discord"), RectF(b.X + (b.Width - tw - 26) / 2 + 26, b.Y, tw + 4, b.Height), 12.5f, FontStyleBold, Color(255, 255, 255, 255), StringAlignmentNear);
+        HotZone(b, UI_WIKI_GO + 198);
+    }
     std::vector<Note> notes = ChannelNotes(g_notes, ChannelReworked());
-    float y = c.Y + 50;
-    if (notes.empty()) Text(g, !g_notesDone ? T(L"Chargement\u2026", L"Loading\u2026") : T(L"Pas de notes pour l'instant.", L"No notes yet."), RectF(c.X + 18, y, c.Width - 36, 40), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    float y = c.Y + 44, bottom = h.Y - 10;
+    if (notes.empty()) Text(g, !g_notesDone ? T(L"Chargement…", L"Loading…") : T(L"Pas de notes pour l'instant.", L"No notes yet."), RectF(x, y + 10, w, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     for (size_t i = 0; i < notes.size() && i < 3; i++) {
         const Note &n = notes[i];
         std::wstring ver = n.ver.substr(0, n.ver.find(L'-'));
         bool fresh = i == 0 && (g_localVer.empty() || CmpVer(n.ver, g_localVer) > 0);
-        float pw = PillW(ver, 10);
-        Pill(g, RectF(c.X + 18, y + 2, pw, 20), fresh ? kRed : TH(cardSel), ver, fresh ? Color(255, 255, 255, 255) : kInk, 10);
-        std::wstring first = NoteFirstLine(n);
-        float h = max(36.0f, WikiTextH(g, first, c.Width - 36 - pw - 10, 12.5f, FontStyleRegular));
-        WikiText(g, first, RectF(c.X + 18 + pw + 10, y, c.Width - 36 - pw - 10, min(h, 54.0f)), 12.5f, FontStyleRegular, kInk);
-        y += min(h, 54.0f) + 8;
-        if (i + 1 < notes.size() && i + 1 < 3) { Pen sep(TH(sep), 1); g.DrawLine(&sep, c.X + 18, y, c.X + c.Width - 18, y); y += 8; }
+        std::vector<std::wstring> lines = NoteBullets(n, 2);
+        std::wstring title = lines.empty() ? T(L"(sans détail)", L"(no detail)") : lines[0], sub = lines.size() > 1 ? lines[1] : L"";
+        float cw = PillW(ver, 10) - 2, tx = x + cw + 12, tw = w - cw - 12;
+        float sh = sub.empty() ? 0 : min(WikiTextH(g, sub, tw, 12, FontStyleRegular), 48.0f);
+        float rh = 10 + 18 + (sub.empty() ? 0 : sh + 2) + 10;
+        if (y + rh > bottom) break;
+        WikiChip(g, RectF(x, y + 12, cw, 22), ver, 10, fresh);
+        Text(g, title, RectF(tx, y + 10, tw, 18), 13, FontStyleBold, kInk, StringAlignmentNear);
+        if (!sub.empty()) WikiText(g, sub, RectF(tx, y + 30, tw, sh), 12, FontStyleRegular, kGrey);
+        y += rh;
+        if (i + 1 < notes.size() && i + 1 < 3) { Pen sep(g_dark ? Color(18, 255, 255, 255) : TH(sep), 1); g.DrawLine(&sep, x, y, x + w, y); }
     }
-    // tout en bas : Credits (ex-etoile de l'en-tete ; onglet du Guide a venir), au-dessus : « Un souci ? »
-    g_credBtnRect = RectF(c.X + 14, c.Y + c.Height - 14 - 40, c.Width - 28, 40);
-    UiButton(g, g_credBtnRect, T(L"Crédits", L"Credits"), UI_WIKI_GO + 197, false, IC_STAR);
-    // « Un souci ? » : le zip des journaux puis Discord (Reglages > Lanceur > Journaux)
-    RectF h(c.X + 14, c.Y + c.Height - 14 - 40 - 10 - 150, c.Width - 28, 150);
-    GraphicsPath p; RoundRect(p, h, 14);
-    SolidBrush fb(TH(card)); g.FillPath(&fb, &p);
-    Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
-    Text(g, T(L"Un souci ?", L"Something wrong?"), RectF(h.X + 14, h.Y + 12, h.Width - 28, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
-    WikiText(g, T(L"Journaux (le < > en bas \u00E0 gauche) > Faire le zip, puis poste-le dans #bug-reports sur Discord.",
-                  L"Logs (the < > at the bottom left) > Make the zip, then post it in #bug-reports on Discord."), RectF(h.X + 14, h.Y + 36, h.Width - 28, 56), 12.5f, FontStyleRegular, kGrey);
-    RectF b(h.X + 14, h.Y + h.Height - 14 - 40, h.Width - 28, 40);
-    GraphicsPath bp; RoundRect(bp, b, 12);
-    SolidBrush db(g_uiHot == UI_WIKI_GO + 198 ? Mix(kDiscordBlue, Color(255, 255, 255, 255), 0.18f) : kDiscordBlue); g.FillPath(&db, &bp);
-    Icon(g, IC_DISCORD, b.X + 22, b.Y + 20, 18, Color(255, 255, 255, 255));
-    Text(g, T(L"Ouvrir Discord", L"Open Discord"), RectF(b.X + 38, b.Y, b.Width - 44, b.Height), 13, FontStyleBold, Color(255, 255, 255, 255), StringAlignmentNear);
-    HotZone(b, UI_WIKI_GO + 198);
 }
 
-// ---- article
+// ---- article (maquette .art) : puces categorie + temps de lecture, titre, sous-titre, blocs, puis precedent / suivant
 static void DrawWikiPage(Graphics &g)
 {
     Glass(kWikiList);
@@ -401,71 +469,91 @@ static void DrawWikiPage(Graphics &g)
     DrawWikiList(g);
     const WikiArticle &art = kWikiArt[g_wikiSel];
     RectF b = kWikiBody;
-    SmallLabel(g, T(kWikiCat[art.cat].fr, kWikiCat[art.cat].en), RectF(b.X + 28, b.Y + 18, 400, 18), kAcc);
-    Title(g, T(art.tFr, art.tEn), RectF(b.X + 28, b.Y + 34, b.Width - 56, 34), 24, kInk);
-    Text(g, T(art.sFr, art.sEn), RectF(b.X + 28, b.Y + 66, b.Width - 56, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-    Pen sep(TH(sep), 1); g.DrawLine(&sep, b.X + 28, b.Y + 90, b.X + b.Width - 28, b.Y + 90);
+    float bx = b.X + 22, bw = b.Width - 44;
+    std::wstring cat = T(kWikiCat[art.cat].fr, kWikiCat[art.cat].en);
+    float cw = PillW(cat, 11.5f) + 4;
+    WikiChip(g, RectF(bx, b.Y + 18, cw, 26), cat);
+    Text(g, std::to_wstring(WikiMinutes(art)) + L" min", RectF(bx + cw + 10, b.Y + 18, 80, 26), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+    Title(g, T(art.tFr, art.tEn), RectF(bx, b.Y + 50, bw, 30), 22, kInk);
+    Text(g, T(art.sFr, art.sEn), RectF(bx, b.Y + 82, bw, 18), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    // precedent / suivant, en bas
+    {
+        int prev = WikiNeighbor(-1), next = WikiNeighbor(1);
+        float ly = b.Y + b.Height - 18 - 22;
+        if (prev >= 0) {
+            std::wstring s = L"← " + std::wstring(T(kWikiArt[prev].tFr, kWikiArt[prev].tEn));
+            RectF r(bx, ly, min(bw / 2 - 6, MeasureW(MeasureG(), s, 12.5f, FontStyleBold) + 6), 22);
+            Text(g, s, r, 12.5f, FontStyleBold, g_uiHot == UI_WIKI_PREV ? kAcc2 : kAcc, StringAlignmentNear);
+            HotZone(r, UI_WIKI_PREV);
+        }
+        if (next >= 0) {
+            std::wstring s = std::wstring(T(kWikiArt[next].tFr, kWikiArt[next].tEn)) + L" →";
+            float sw = min(bw / 2 - 6, MeasureW(MeasureG(), s, 12.5f, FontStyleBold) + 6);
+            RectF r(bx + bw - sw, ly, sw, 22);
+            Text(g, s, r, 12.5f, FontStyleBold, g_uiHot == UI_WIKI_NEXT ? kAcc2 : kAcc, StringAlignmentFar);
+            HotZone(r, UI_WIKI_NEXT);
+        }
+    }
     RectF area = WikiArea();
-    float sc = g_scroll[TAB_WIKI], y = area.Y + 8 - sc, w = area.Width - 14;
+    float sc = g_scroll[TAB_WIKI], y = area.Y + 2 - sc, w = area.Width - 14;
+    bool searching = !Trim(g_wikiSearch).empty();   // (recherche : rien de plie)
+    Color ink = WithA(kInk, 0.92f);
     GraphicsState st = g.Save();
     g.SetClip(area, CombineModeIntersect);
     bool folded = false;
-    int step = 0;
+    int step = 0, sec = 0;
     auto vis = [&](float top, float h) { return top + h >= area.Y && top <= area.Y + area.Height; };
     for (int i = 0; i < art.n; i++) {
         const WikiBlock &k = art.b[i];
         std::wstring t = k.fr ? T(k.fr, k.en) : L"";
-        if (k.kind == WB_H) {
-            if (i > 0) y += 6;
-            folded = g_wikiFold.count(g_wikiSel * 1000 + i) != 0;
-            step = 0;
-            RectF r(area.X, y, w, 40);
+        if (k.kind == WB_H) {   // h3 de la maquette : numero, capitales, accent ; clic : plier / deplier
+            if (i > 0) y += 8;
+            folded = !searching && g_wikiFold.count(g_wikiSel * 1000 + i) != 0;
+            step = 0; sec++;
+            RectF r(area.X, y, w, 24);
             if (vis(r.Y, r.Height)) {
                 bool hot = g_uiHot == UI_WIKI_SEC + i;
-                GraphicsPath p; RoundRect(p, r, 12);
-                SolidBrush hb(hot ? TH(cardSel) : TH(card)); g.FillPath(&hb, &p);
-                Pen pen(hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), 1); g.DrawPath(&pen, &p);
-                Icon(g, folded ? IC_CHEVR : IC_CHEVD, r.X + 20, r.Y + 20, 15, kAcc, 2.3f);
-                Text(g, t, RectF(r.X + 38, r.Y, r.Width - 50, r.Height), 14.5f, FontStyleBold, kInk, StringAlignmentNear);
+                if (hot) { GraphicsPath p; RoundRect(p, RectF(r.X - 6, r.Y - 2, r.Width + 12, r.Height + 4), 8); SolidBrush hb(TH(card)); g.FillPath(&hb, &p); }
+                Text(g, std::to_wstring(sec) + L". " + WikiUpper(t), RectF(r.X, r.Y, r.Width - 30, r.Height), 13.5f, FontStyleBold, kAcc, StringAlignmentNear);
+                if (folded || hot) Icon(g, folded ? IC_CHEVR : IC_CHEVD, r.X + r.Width - 12, r.Y + 12, 14, folded ? kGrey : kAcc, 2.2f);
                 HotZone(RectF(r.X, max(r.Y, area.Y), r.Width, min(r.Y + r.Height, area.Y + area.Height) - max(r.Y, area.Y)), UI_WIKI_SEC + i);
             }
-            y += 50;
+            y += 30;
             continue;
         }
         if (folded) continue;
         switch (k.kind) {
         case WB_P: {
-            float h = WikiTextH(g, t, w - 8, 13.5f, FontStyleRegular);
-            if (vis(y, h)) WikiText(g, t, RectF(area.X + 4, y, w - 8, h + 2), 13.5f, FontStyleRegular, kInk);
-            y += h + 10;
+            float h = WikiTextH(g, t, w - 4, 13.5f, FontStyleRegular);
+            if (vis(y, h)) WikiText(g, t, RectF(area.X + 2, y, w - 4, h + 2), 13.5f, FontStyleRegular, ink);
+            y += h + 8;
             break;
         }
         case WB_B: {
-            float h = WikiTextH(g, t, w - 30, 13.5f, FontStyleRegular);
-            if (vis(y, h)) { SolidBrush d(kAcc); g.FillEllipse(&d, area.X + 10, y + 7, 7.0f, 7.0f); WikiText(g, t, RectF(area.X + 26, y, w - 30, h + 2), 13.5f, FontStyleRegular, kInk); }
-            y += h + 8;
+            float h = WikiTextH(g, t, w - 24, 13.5f, FontStyleRegular);
+            if (vis(y, h)) { SolidBrush d(kAcc); g.FillEllipse(&d, area.X + 6, y + 7, 6.0f, 6.0f); WikiText(g, t, RectF(area.X + 20, y, w - 24, h + 2), 13.5f, FontStyleRegular, ink); }
+            y += h + 6;
             break;
         }
         case WB_S: {
             step++;
-            float h = max(26.0f, WikiTextH(g, t, w - 44, 13.5f, FontStyleRegular));
-            if (vis(y, h)) { WikiBadge(g, area.X + 15, y + 12, step); WikiText(g, t, RectF(area.X + 38, y + 2, w - 44, h + 2), 13.5f, FontStyleRegular, kInk); }
+            float h = max(26.0f, WikiTextH(g, t, w - 40, 13.5f, FontStyleRegular));
+            if (vis(y, h)) { WikiBadge(g, area.X + 13, y + 12, step); WikiText(g, t, RectF(area.X + 34, y + 2, w - 40, h + 2), 13.5f, FontStyleRegular, ink); }
             y += h + 10;
             break;
         }
-        case WB_TIP: case WB_WARN: {
-            Color c = k.kind == WB_TIP ? kOk : kWarn;
-            float h = WikiTextH(g, t, w - 64, 13, FontStyleRegular) + 24;
+        case WB_TIP: case WB_WARN: {   // .tip : fond et lisere accent, etoile doree ; attention : en orange
+            Color c = k.kind == WB_TIP ? kAcc : kWarn;
+            float th = WikiTextH(g, t, w - 52, 13, FontStyleBold), h = th + 20;
             RectF r(area.X, y, w, h);
             if (vis(r.Y, r.Height)) {
                 GraphicsPath p; RoundRect(p, r, 12);
-                SolidBrush fb(WithA(c, 0.13f)); g.FillPath(&fb, &p);
-                Pen pen(WithA(c, 0.55f), 1); g.DrawPath(&pen, &p);
-                SolidBrush bar(c); g.FillRectangle(&bar, RectF(r.X, r.Y + 10, 4, r.Height - 20));
-                Icon(g, k.kind == WB_TIP ? IC_SPARK : IC_ALERT, r.X + 26, r.Y + 22, 18, c, 2.0f);
-                WikiText(g, t, RectF(r.X + 48, r.Y + 12, w - 64, h), 13, FontStyleRegular, kInk);
+                SolidBrush fb(WithA(c, 0.10f)); g.FillPath(&fb, &p);
+                Pen pen(WithA(c, 0.3f), 1); g.DrawPath(&pen, &p);
+                Icon(g, k.kind == WB_TIP ? IC_STAR : IC_ALERT, r.X + 21, r.Y + 19, 18, k.kind == WB_TIP ? kWikiGold : kWarn, 2.0f);
+                WikiText(g, t, RectF(r.X + 40, r.Y + 10, w - 52, th + 2), 13, FontStyleBold, kInk);
             }
-            y += h + 12;
+            y += h + 10;
             break;
         }
         case WB_FIG: {
@@ -478,11 +566,11 @@ static void DrawWikiPage(Graphics &g)
                 Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
                 WikiFigure(g, k.arg, r, true);
             }
-            y += r.Height + 14;
+            y += r.Height + 12;
             break;
         }
         case WB_GO: {
-            RectF r(area.X, y, min(w, PillW(t, 13) + 60), 40);
+            RectF r(area.X, y + 2, min(w, PillW(t, 13) + 60), 40);
             if (vis(r.Y, r.Height)) UiButton(g, r, t, UI_WIKI_GO + i, false, IC_CHEVR);
             y += 52;
             break;
@@ -499,22 +587,106 @@ static void DrawWikiPage(Graphics &g)
     }
 }
 
-// Onglet Mods, bouton « Mods pris en charge / incompatibilites connues » (mods.inc) : cet article, sa categorie ouverte.
+// ---- en-tete (ui.inc DrawHeader) : champ Chercher puis pilules Guide / Nouveautes (version pas encore lue en rose) / Credits
+static const wchar_t *GuideTabLabel(int k) { return k == 0 ? T(L"Guide", L"Guide") : k == 1 ? T(L"Nouveautés", L"What's new") : T(L"Crédits", L"Credits"); }
+static std::wstring GuideNewChip()
+{
+    if (!NotesUnseen()) return L"";
+    std::wstring v = NewestNote();
+    return v.substr(0, v.find(L'-'));
+}
+static float GuideTabW(int k)
+{
+    float w = PillW(GuideTabLabel(k), 13) + 12;   // (14 de chaque cote)
+    if (k == 1) { std::wstring c = GuideNewChip(); if (!c.empty()) w += PillW(c, 9.5f) - 2 + 6; }
+    return w;
+}
+static float GuideTabsW() { return GuideTabW(0) + GuideTabW(1) + GuideTabW(2) + 12; }
+static void GuideTabsDraw(Graphics &g)
+{
+    int sel = g_tab == TAB_NOTES ? 1 : g_tab == TAB_CREDITS ? 2 : 0;
+    float x = g_guideTabRight - GuideTabsW();
+    for (int k = 0; k < 3; k++) {
+        float w = GuideTabW(k);
+        RectF r(x, 26, w, 36);
+        bool on = k == sel, hot = g_uiHot == UI_WIKI_TAB + k;
+        GraphicsPath p; RoundRect(p, r, r.Height / 2);
+        SolidBrush b(on ? kAcc : hot ? TH(cardSel) : TH(btn2)); g.FillPath(&b, &p);
+        if (!on) { Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); }
+        std::wstring chip = k == 1 ? GuideNewChip() : L"";
+        float tw = PillW(GuideTabLabel(k), 13) - 16;
+        Text(g, GuideTabLabel(k), RectF(r.X + 14, r.Y, tw + 4, r.Height), 13, FontStyleBold, on ? kOnAcc : kInk, StringAlignmentNear);
+        if (!chip.empty()) WikiChip(g, RectF(r.X + 14 + tw + 6, r.Y + 9, PillW(chip, 9.5f) - 2, 18), chip, 9.5f, true);
+        HotZone(r, UI_WIKI_TAB + k);
+        if (k == 2) g_credBtnRect = r;
+        x += w + 6;
+    }
+}
+static void DrawGuideSearchBox(Graphics &g, float &right)
+{
+    RectF r(right - 164, 22, 164, 44);
+    GraphicsPath p; RoundRect(p, r, 14);
+    SolidBrush fill(TH(field)); g.FillPath(&fill, &p);
+    Pen pen(g_wikiFocus ? kAcc : TH(fieldBorder), g_wikiFocus ? 2.0f : 1.2f); g.DrawPath(&pen, &p);
+    RectF tr(r.X + 16, r.Y, r.Width - 16 - 34, r.Height);
+    if (g_wikiSearch.empty() && !g_wikiFocus) Text(g, T(L"Chercher…", L"Search…"), tr, 13.5f, FontStyleBold, TH(placeholder), StringAlignmentNear);
+    else {
+        Text(g, g_wikiSearch, tr, 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+        if (g_wikiFocus && fmodf(g_time, 1.0f) < 0.55f) {
+            float cx = min(tr.X + MeasureW(MeasureG(), g_wikiSearch, 13.5f, FontStyleBold) + 1, tr.X + tr.Width);
+            Pen cp(kAcc, 1.6f); g.DrawLine(&cp, cx, r.Y + 12, cx, r.Y + r.Height - 12);
+        }
+    }
+    HotZone(r, UI_WIKI_SEARCH);
+    if (!g_wikiSearch.empty()) {   // (zone declaree apres : elle gagne)
+        RectF xr(r.X + r.Width - 34, r.Y + 8, 28, 28);
+        Icon(g, IC_CLOSE, xr.X + 14, xr.Y + 14, 14, g_uiHot == UI_WIKI_SEARCHX ? kAcc : kGrey, 2.0f);
+        HotZone(xr, UI_WIKI_SEARCHX);
+    }
+    right -= 174;
+}
+// Commandes des trois onglets du Guide, de droite a gauche : Chercher, puis les pilules.
+static void DrawGuideHead(Graphics &g, float &right)
+{
+    DrawGuideSearchBox(g, right);
+    g_guideTabRight = right;
+    GuideTabsDraw(g);
+    right -= GuideTabsW() + 10;
+}
+// Caractere tape dans Chercher (WM_CHAR, launcher.cpp) ; vrai si pris. Depuis Nouveautes ou Credits : retour au Guide.
+static bool GuideChar(wchar_t c)
+{
+    if (!g_wikiFocus || g_state != ST_IDLE || (g_tab != TAB_WIKI && g_tab != TAB_NOTES && g_tab != TAB_CREDITS)) return false;
+    if (c == 27) { g_wikiSearch.clear(); g_wikiFocus = false; }
+    else if (c == 8) { if (!g_wikiSearch.empty()) g_wikiSearch.pop_back(); }
+    else if (c >= 32 && g_wikiSearch.size() < 40) g_wikiSearch += c;
+    else return true;
+    if (g_tab != TAB_WIKI) GoPage(TAB_WIKI);
+    if (!WikiHit(g_wikiSel)) for (int a : WikiOrder()) if (WikiHit(a)) { WikiGoArt(a); break; }   // (le premier qui correspond)
+    g_time = 0.2f;
+    return true;
+}
+
+// Onglet Mods, bouton « Mods pris en charge / incompatibilites connues » (mods.inc) : cet article.
 static void MscOpenCompat()
 {
     for (int i = 0; i < kWikiArts; i++)
         if (kWikiArt[i].b == kW_ModCompat) {
             GoPage(TAB_WIKI);
-            g_wikiSel = i; g_scroll[TAB_WIKI] = 0;
-            g_wikiClosed &= ~(1u << kWikiArt[i].cat);
+            g_wikiSearch.clear();
+            WikiGoArt(i);
             return;
         }
 }
 
 static bool WikiClick(int id)
 {
-    if (id >= UI_WIKI_CAT && id < UI_WIKI_CAT + 32) { g_wikiClosed ^= 1u << (id - UI_WIKI_CAT); return true; }
-    if (id >= UI_WIKI_ART && id < UI_WIKI_ART + 200) { g_wikiSel = id - UI_WIKI_ART; g_scroll[TAB_WIKI] = 0; return true; }
+    if (id != UI_WIKI_SEARCH) g_wikiFocus = false;
+    if (id >= UI_WIKI_TAB && id < UI_WIKI_TAB + 3) { GoPage(id == UI_WIKI_TAB ? TAB_WIKI : id == UI_WIKI_TAB + 1 ? TAB_NOTES : TAB_CREDITS); return true; }
+    if (id == UI_WIKI_SEARCH) { g_wikiFocus = true; g_time = 0.2f; if (g_tab != TAB_WIKI) GoPage(TAB_WIKI); return true; }
+    if (id == UI_WIKI_SEARCHX) { g_wikiSearch.clear(); return true; }
+    if (id == UI_WIKI_PREV || id == UI_WIKI_NEXT) { WikiGoArt(WikiNeighbor(id == UI_WIKI_PREV ? -1 : 1)); return true; }
+    if (id >= UI_WIKI_ART && id < UI_WIKI_ART + 200) { WikiGoArt(id - UI_WIKI_ART); return true; }
     if (id >= UI_WIKI_SEC && id < UI_WIKI_SEC + 200) {
         int key = g_wikiSel * 1000 + (id - UI_WIKI_SEC);
         if (g_wikiFold.count(key)) g_wikiFold.erase(key); else g_wikiFold.insert(key);
@@ -522,17 +694,17 @@ static bool WikiClick(int id)
         return true;
     }
     if (id == UI_WIKI_GO + 199) { GoPage(TAB_NOTES); return true; }   // colonne Nouveautes : « Tout »
-    if (id == UI_WIKI_GO + 197) { GoPage(TAB_CREDITS); return true; }   // colonne Nouveautes : Credits
+    if (id == UI_WIKI_GO + 197) { GoPage(TAB_CREDITS); return true; }
     if (id == UI_WIKI_GO + 198) { ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); return true; }
     if (id >= UI_WIKI_GO && id < UI_WIKI_GO + 200) {
         const WikiArticle &art = kWikiArt[g_wikiSel];
         int i = id - UI_WIKI_GO;
         if (i < art.n && art.b[i].kind == WB_GO) {
             int p = art.b[i].arg;
-            if (p >= 1000) { g_wikiSel = p - 1000; g_scroll[TAB_WIKI] = 0; g_wikiClosed &= ~(1u << kWikiArt[g_wikiSel].cat); }   // (autre article du guide, sa categorie ouverte)
+            if (p >= 1000) WikiGoArt(p - 1000);   // (autre article du guide)
             else if (PageEnabled(p)) GoPage(p);
         }
         return true;
     }
-    return id == UI_WIKI_FIG;
+    return id == UI_WIKI_FIG || (id >= UI_WIKI_CAT && id < UI_WIKI_CAT + 32);
 }
