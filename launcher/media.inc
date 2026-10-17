@@ -9,7 +9,8 @@
 // Album : les photos du drone (Images\CoopPictures, ou [Coop] DossierPhotos de mwcoop.ini) en vignettes ; a droite, la
 // photo choisie en grand, OUVRIR, DOSSIER, SUPPRIMER (vers la Corbeille, deux clics).
 
-enum { UI_VHS_OPEN = 2990, UI_VHS_REFRESH = 2991, UI_VHS_EXPORT = 2992, UI_VHS_PLAY = 2993, UI_VHS_VIDDIR = 2994, UI_VHS = 3000, UI_ALB_OPEN = 3490, UI_ALB_DIR, UI_ALB_DEL, UI_ALB_FOLDER, UI_ALB = 3500 };
+// (UiClick, ui.inc, envoie 2990..3489 a VhsClick et 3490.. a AlbClick : les onglets de la page passent par VhsClick)
+enum { UI_VHS_OPEN = 2990, UI_VHS_REFRESH = 2991, UI_VHS_EXPORT = 2992, UI_VHS_PLAY = 2993, UI_VHS_VIDDIR = 2994, UI_VHS_TAB = 2995, UI_VHS_IMPORT = 2997, UI_VHS = 3000, UI_ALB_OPEN = 3490, UI_ALB_DIR, UI_ALB_DEL, UI_ALB_FOLDER, UI_ALB = 3500 };
 enum { VP_RENAME, VP_IMPORT, VP_ERASE, VP_OK, VP_CANCEL, VP_SELECT };
 
 // ---- donnees
@@ -256,9 +257,11 @@ static bool VhsChar(wchar_t c)
     return true;
 }
 
-// ---- page VHS
-static RectF kVhsList(288, 196, 600, 528), kVhsView(904, 88, 360, 656);
-static const float kVhsRowH = 84;
+// ---- page MEDIA (maquette du 17/10) : onglets VHS / Album en haut (y 92), carte de gauche (liste ou grille) et carte de
+// droite (la cassette ou la photo choisie) dessous.
+static const RectF kMediaCard(264, 140, 624, 604), kMediaView(900, 140, 364, 604);
+static const RectF kVhsList(288, 238, 576, 418);   // (sous le titre et la ligne d'aide, au-dessus de la bande de la cassette choisie)
+static const float kVhsRowH = 66;
 static float VhsMaxScroll() { return max(0.0f, (float)g_vhs.size() * kVhsRowH - kVhsList.Height); }
 
 static std::wstring VhsClock(float s) { int t = (int)(s + 0.5f); wchar_t b[32]; if (t >= 3600) swprintf_s(b, L"%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60); else swprintf_s(b, L"%d:%02d", t / 60, t % 60); return b; }
@@ -438,81 +441,155 @@ static bool VhsExportTick()
     return true;
 }
 
+// Onglets de la page MEDIA (VHS / Album) : zones UI_VHS_TAB + k, suivies par VhsClick.
+static void MediaTabsDraw(Graphics &g)
+{
+    const wchar_t *lab[2] = { L"VHS", L"Album" };
+    float x = kMain.X;
+    for (int k = 0; k < 2; k++) {
+        float w = PillW(lab[k], 13) + 16;
+        RectF r(x, 92, w, 36);
+        bool on = (g_tab == TAB_ALBUM) == (k == 1), hot = g_uiHot == UI_VHS_TAB + k;
+        GraphicsPath p; RoundRect(p, r, r.Height / 2);
+        SolidBrush b(on ? kAcc : hot ? TH(cardSel) : TH(btn2)); g.FillPath(&b, &p);
+        if (!on) { Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); }
+        Text(g, lab[k], r, 13, FontStyleBold, on ? kOnAcc : kInk);
+        HotZone(r, UI_VHS_TAB + k);
+        x += w + 6;
+    }
+}
+
+// Cassette (glyphe de la maquette : boitier noir, deux bobines).
+static void DrawTapeGlyph(Graphics &g, RectF r, bool dim)
+{
+    GraphicsPath p; RoundRect(p, r, 5);
+    SolidBrush b(Color(255, 26, 26, 26)); g.FillPath(&b, &p);
+    Pen edge(Color(dim ? 36 : 56, 255, 255, 255), 1.0f); g.DrawPath(&edge, &p);
+    for (int k = 0; k < 2; k++) {
+        float cx = r.X + (k ? r.Width - 11 : 11), cy = r.Y + r.Height / 2;
+        SolidBrush hub(Color(255, 68, 68, 68)); g.FillEllipse(&hub, cx - 5, cy - 5, 10.0f, 10.0f);
+        Pen ring(dim ? Color(255, 90, 90, 90) : Color(255, 128, 128, 128), 2.2f); g.DrawEllipse(&ring, cx - 5, cy - 5, 10.0f, 10.0f);
+    }
+    Pen win(Color(60, 255, 255, 255), 1.0f); g.DrawLine(&win, r.X + 17, r.Y + r.Height - 6, r.X + r.Width - 17, r.Y + r.Height - 6);
+}
+// Film importe par le lanceur (VhsImport : « fL-<hex> ») : cassette « Perso ».
+static bool VhsIsPerso(const VhsTape &t) { for (auto &f : t.films) if (!f.compare(0, 3, L"fL-")) return true; return false; }
+
+// Onglet VHS : a gauche « Mes cassettes · N » (liste, Importer une video, bande de la cassette choisie) ; a droite l'apercu.
 static void DrawVhs(Graphics &g)
 {
     if (GetTickCount() - g_vhsScanT > 2000) VhsScan();
-    RectF c(kMain.X, kMain.Y, 624, kMain.Height); Glass(c);
-    Title(g, T(L"Cassettes de ta partie", L"Tapes of your game"), RectF(c.X + 24, c.Y + 18, 400, 30), 20, kInk);
-    Para(g, T(L"Celles de la partie que tu héberges ou joues seul (y compris dans un magnétoscope ou un caméscope). Choisis-en une pour la voir, l'exporter, la renommer ou y mettre une vidéo.",
-              L"Those of the game you host or play alone (including inside a VCR or a camcorder). Pick one to watch it, export it, rename it or put a video on it."),
-         RectF(c.X + 24, c.Y + 52, 576, 44), 12.5f, kGrey);
-    UiButton(g, RectF(c.X + c.Width - 24 - 150, c.Y + 12, 150, 36), T(L"Dossier des films", L"Films folder"), UI_VHS_OPEN, false, IC_FOLDER);
-    UiButton(g, RectF(c.X + c.Width - 24 - 150 - 12 - 40, c.Y + 12, 40, 36), L"", UI_VHS_REFRESH, false, IC_UNDO);
-    if (g_vhsGameOn) Pill(g, RectF(c.X + 24, c.Y + 98, PillW(T(L"Jeu ouvert : lecture seule", L"Game open: read only"), 11.5f), 22), WithA(kWarn, 0.2f), T(L"Jeu ouvert : lecture seule", L"Game open: read only"), kWarn, 11.5f);
-    Glass(kVhsView);
+    MediaTabsDraw(g);
+    RectF c = kMediaCard, v = kMediaView;
+    Glass(c);
+    Glass(v);
+    if (g_vhsSel >= (int)g_vhs.size()) g_vhsSel = -1;
+    bool can = !g_vhsGameOn && g_vhsImpFilm.empty() && g_vhsExpDst.empty();
+    Title(g, T(L"Mes cassettes", L"My tapes") + (g_vhs.empty() ? L"" : L" · " + std::to_wstring(g_vhs.size())), RectF(c.X + 18, c.Y + 14, 300, 30), 16, kInk);
+    UiButton(g, RectF(c.X + c.Width - 18 - 176, c.Y + 12, 176, 36), T(L"Importer une vidéo", L"Import a video"), UI_VHS_IMPORT, true, IC_DOWNLOAD, can && !g_vhs.empty(), 11);
+    UiButton(g, RectF(c.X + c.Width - 18 - 176 - 8 - 40, c.Y + 12, 40, 36), L"", UI_VHS_REFRESH, false, IC_UNDO, true, 11);
+    float subW = c.Width - 36;
+    if (g_vhsGameOn) {
+        std::wstring w = T(L"Jeu ouvert : lecture seule", L"Game open: read only");
+        float pw = PillW(w, 11.5f);
+        Pill(g, RectF(c.X + c.Width - 18 - pw, c.Y + 54, pw, 22), WithA(kWarn, 0.2f), w, kWarn, 11.5f);
+        subW -= pw + 12;
+    }
+    Text(g, T(L"Une vidéo (mp4, mkv, webm…) devient une cassette lisible sur le magnétoscope du jeu.", L"A video (mp4, mkv, webm…) becomes a tape you can play on the game's VCR."),
+         RectF(c.X + 18, c.Y + 56, subW, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+    // la liste
     if (!g_vhsFileFound || g_vhs.empty()) {
         Para(g, !g_vhsFileFound ? T(L"Aucune cassette pour l'instant : achète-en à la boutique OSUUSKAUPPA en jeu (à l'ouest du parking de la PSK).", L"No tape yet: buy some at the OSUUSKAUPPA shop in game (west of the PSK car park).")
-                                : T(L"Aucune cassette dans ta partie.", L"No tape in your game."), RectF(kVhsList.X, kVhsList.Y + 20, kVhsList.Width - 30, 60), 14, kGrey);
-        return;
-    }
-    if (g_vhsSel >= (int)g_vhs.size()) g_vhsSel = -1;
-    float sc = g_scroll[TAB_VHS] = min(g_scroll[TAB_VHS], VhsMaxScroll()), ms = VhsMaxScroll();
-    GraphicsState st = g.Save(); g.SetClip(kVhsList, CombineModeIntersect);
-    for (int i = 0; i < (int)g_vhs.size(); i++) {
-        VhsTape &t = g_vhs[i];
-        RectF r(kVhsList.X, kVhsList.Y + i * kVhsRowH - sc, kVhsList.Width - (ms > 0 ? 14 : 0), kVhsRowH - 10);
-        if (r.Y + r.Height < kVhsList.Y || r.Y > kVhsList.Y + kVhsList.Height) continue;
-        bool vis = r.Y >= kVhsList.Y - 1 && r.Y + r.Height <= kVhsList.Y + kVhsList.Height + 1;   // (zones : seulement pour les lignes entieres)
-        bool sel = g_vhsSel == i, hot = g_uiHot == UI_VHS + i * 8 + VP_SELECT;
-        GraphicsPath p; RoundRect(p, r, 14);
-        SolidBrush rb(TH(card)); g.FillPath(&rb, &p);
-        Pen rp(sel ? kAcc : hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), sel ? 2.5f : 1); g.DrawPath(&rp, &p);
-        Icon(g, IC_FILM, r.X + 34, r.Y + r.Height / 2, 30, t.films.empty() ? WithA(kGrey, 0.7f) : kAcc, 1.8f);
-        float tx = r.X + 64, bx = r.X + r.Width - 16;
-        bool importing = !g_vhsImpFilm.empty() && g_vhsImpTape == t.id;
-        if (g_vhsEdit == i) {
-            RectF fr(tx, r.Y + 14, r.Width - 64 - 16 - 236, 40);
-            GraphicsPath fp; RoundRect(fp, fr, 10); SolidBrush fb(TH(field)); g.FillPath(&fb, &fp); Pen fpn(kAcc, 2); g.DrawPath(&fpn, &fp);
-            RectF trr(fr.X + 14, fr.Y, fr.Width - 28, fr.Height);
-            Text(g, g_vhsEditText.empty() ? T(L"Titre de la cassette", L"Tape title") : g_vhsEditText, trr, 16, FontStyleBold, g_vhsEditText.empty() ? TH(placeholder) : kInk, StringAlignmentNear);
-            if (fmodf(g_time, 1.0f) < 0.55f) {
-                float cw = g_vhsEditText.empty() ? 0 : MeasureW(g, g_vhsEditText, 16, FontStyleBold);
-                float cx = min(trr.X + cw + 1, trr.X + trr.Width);
-                Pen cp(kAcc, 1.6f); g.DrawLine(&cp, cx, fr.Y + 10, cx, fr.Y + fr.Height - 10);
+                                : T(L"Aucune cassette dans ta partie.", L"No tape in your game."), RectF(kVhsList.X, kVhsList.Y + 12, kVhsList.Width - 30, 60), 13.5f, kGrey);
+    } else {
+        float sc = g_scroll[TAB_VHS] = min(g_scroll[TAB_VHS], VhsMaxScroll()), ms = VhsMaxScroll();
+        GraphicsState st = g.Save(); g.SetClip(kVhsList, CombineModeIntersect);
+        for (int i = 0; i < (int)g_vhs.size(); i++) {
+            VhsTape &t = g_vhs[i];
+            RectF r(kVhsList.X, kVhsList.Y + i * kVhsRowH - sc, kVhsList.Width - (ms > 0 ? 14 : 0), kVhsRowH - 8);
+            if (r.Y + r.Height < kVhsList.Y || r.Y > kVhsList.Y + kVhsList.Height) continue;
+            bool vis = r.Y >= kVhsList.Y - 1 && r.Y + r.Height <= kVhsList.Y + kVhsList.Height + 1;   // (zones : seulement pour les lignes entieres)
+            bool sel = g_vhsSel == i, hot = g_uiHot == UI_VHS + i * 8 + VP_SELECT;
+            bool importing = !g_vhsImpFilm.empty() && g_vhsImpTape == t.id;
+            GraphicsPath p; RoundRect(p, r, 14);
+            SolidBrush rb(sel ? WithA(kAcc, 0.10f) : hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &p);
+            Pen rp(sel ? kAcc : hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), sel ? 1.6f : 1); g.DrawPath(&rp, &p);
+            DrawTapeGlyph(g, RectF(r.X + 12, r.Y + 14, 48, 30), t.films.empty());
+            float tx = r.X + 72, bx = r.X + r.Width - 12;
+            if (g_vhsEdit == i) {   // renommage en place
+                RectF fr(tx, r.Y + 13, bx - tx - 2 * 84 - 16, 32);
+                GraphicsPath fp; RoundRect(fp, fr, 9); SolidBrush fb(TH(field)); g.FillPath(&fb, &fp); Pen fpn(kAcc, 1.6f); g.DrawPath(&fpn, &fp);
+                RectF trr(fr.X + 12, fr.Y, fr.Width - 24, fr.Height);
+                Text(g, g_vhsEditText.empty() ? T(L"Titre de la cassette", L"Tape title") : g_vhsEditText, trr, 14, FontStyleBold, g_vhsEditText.empty() ? TH(placeholder) : kInk, StringAlignmentNear);
+                if (fmodf(g_time, 1.0f) < 0.55f) {
+                    float cw = g_vhsEditText.empty() ? 0 : MeasureW(g, g_vhsEditText, 14, FontStyleBold);
+                    float cx = min(trr.X + cw + 1, trr.X + trr.Width);
+                    Pen cp(kAcc, 1.6f); g.DrawLine(&cp, cx, fr.Y + 8, cx, fr.Y + fr.Height - 8);
+                }
+                if (vis) {
+                    UiButton(g, RectF(bx - 84, r.Y + 13, 84, 32), T(L"Écrire", L"Write"), UI_VHS + i * 8 + VP_OK, true, -1, true, 10);
+                    UiButton(g, RectF(bx - 84 - 8 - 84, r.Y + 13, 84, 32), T(L"Annuler", L"Cancel"), UI_VHS + i * 8 + VP_CANCEL, false, -1, true, 10);
+                }
+                continue;
             }
-            Text(g, T(L"Entrée : écrire · Échap : annuler · 24 caractères", L"Enter: write · Esc: cancel · 24 characters"), RectF(tx, r.Y + 54, fr.Width + 100, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            if (vis) {
-                UiButton(g, RectF(bx - 108, r.Y + 17, 108, 40), T(L"Écrire", L"Write"), UI_VHS + i * 8 + VP_OK, true, IC_CHECK);
-                UiButton(g, RectF(bx - 108 - 10 - 108, r.Y + 17, 108, 40), T(L"Annuler", L"Cancel"), UI_VHS + i * 8 + VP_CANCEL, false, IC_CLOSE);
+            // etat : Prete (des prises), Perso (video importee), Vierge, En cours (conversion)
+            std::wstring pill = importing ? T(L"En cours", L"Converting") : t.films.empty() ? T(L"Vierge", L"Blank") : VhsIsPerso(t) ? T(L"Perso", L"Custom") : T(L"Prête", L"Ready");
+            Color pf = importing ? WithA(kWarn, 0.2f) : t.films.empty() ? Color(26, 255, 255, 255) : VhsIsPerso(t) ? WithA(kAcc, 0.18f) : WithA(kOk, 0.18f);
+            Color pi = importing ? kWarn : t.films.empty() ? kGrey : VhsIsPerso(t) ? kAcc : kOk;
+            float pw = PillW(pill, 11.5f) + 4;
+            Pill(g, RectF(bx - pw, r.Y + (r.Height - 24) / 2, pw, 24), pf, pill, pi, 11.5f);
+            float tw = bx - pw - 12 - tx;
+            Text(g, t.title.empty() ? T(L"(sans titre)", L"(no title)") : t.title, RectF(tx, r.Y + 8, tw, 22), 14.5f, FontStyleBold, t.title.empty() ? kGrey : kInk, StringAlignmentNear);
+            std::wstring info;
+            if (t.films.empty()) info = T(L"Rien dessus pour l'instant", L"Nothing on it yet");
+            else {
+                info = std::to_wstring(t.films.size()) + T(L" prise", L" take") + (t.films.size() > 1 ? L"s" : L"") + L" · " + VhsClock(t.secs);
+                if (t.missing) info += L" · " + std::to_wstring(t.missing) + T(L" film(s) pas sur ce PC", L" film(s) not on this PC");
             }
-            continue;
+            if (t.kind == L"nauhuri") info += T(L" · dans un magnétoscope", L" · in a VCR");
+            else if (t.kind == L"kamera") info += T(L" · dans un caméscope", L" · in a camcorder");
+            if (importing) info = T(L"Conversion de ", L"Converting ") + g_vhsImpName + L"… " + std::to_wstring((int)(g_vhsImpP * 100)) + L" %";
+            Text(g, info, RectF(tx, r.Y + 30, tw, 18), 11.5f, FontStyleRegular, importing ? kAcc : kGrey, StringAlignmentNear);
+            if (importing) DrawBar(g, RectF(tx, r.Y + 50, min(tw, 260.0f), 4), g_vhsImpP);
+            if (vis) HotZone(r, UI_VHS + i * 8 + VP_SELECT);
         }
-        Text(g, t.title.empty() ? T(L"(sans titre)", L"(no title)") : t.title, RectF(tx, r.Y + 10, r.Width - 64 - 20, 28), 17, FontStyleBold, t.title.empty() ? kGrey : kInk, StringAlignmentNear);
-        std::wstring info;
-        if (t.films.empty()) info = T(L"Vierge", L"Blank");
-        else {
-            info = std::to_wstring(t.films.size()) + T(L" prise", L" take") + (t.films.size() > 1 ? L"s" : L"") + L" · " + VhsClock(t.secs);
-            if (t.missing) info += T(L" · ", L" · ") + std::to_wstring(t.missing) + T(L" film(s) pas sur ce PC", L" film(s) not on this PC");
-        }
-        if (t.kind == L"nauhuri") info += T(L" · dans un magnétoscope", L" · in a VCR");
-        else if (t.kind == L"kamera") info += T(L" · dans un caméscope", L" · in a camcorder");
-        if (importing) info = T(L"Conversion de ", L"Converting ") + g_vhsImpName + L"… " + std::to_wstring((int)(g_vhsImpP * 100)) + L" %";
-        Text(g, info, RectF(tx, r.Y + 40, r.Width - 64 - 20, 22), 12.5f, FontStyleRegular, importing ? kAcc : kGrey, StringAlignmentNear);
-        if (importing) DrawBar(g, RectF(tx, r.Y + 64, r.Width - 64 - 20, 4), g_vhsImpP);
-        if (vis) HotZone(r, UI_VHS + i * 8 + VP_SELECT);
+        g.Restore(st);
+        if (ms > 0) DrawScrollBar(g, kVhsList, sc, ms);
     }
-    g.Restore(st);
-    if (ms > 0) DrawScrollBar(g, kVhsList, sc, ms);
+    // bande du bas : la cassette choisie (renommer, effacer)
+    {
+        RectF s(c.X + 18, c.Y + c.Height - 16 - 62, c.Width - 36, 62);
+        PersoStripBg(g, s);
+        if (g_vhsSel < 0) {
+            Text(g, T(L"Aucune cassette choisie", L"No tape selected"), RectF(s.X + 12, s.Y + 10, s.Width - 24, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, T(L"Clique sur une cassette : la voir à droite, la renommer, l'exporter ou y mettre une vidéo.", L"Click a tape: watch it on the right, rename it, export it or put a video on it."), RectF(s.X + 12, s.Y + 32, s.Width - 24, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        } else {
+            VhsTape &t = g_vhs[g_vhsSel];
+            bool arm = g_vhsDel == g_vhsSel && GetTickCount() - g_vhsDelT < 4000;
+            float bw = 92, bx = s.X + s.Width - 12;
+            UiButton(g, RectF(bx - bw, s.Y + 14, bw, 34), arm ? T(L"Confirmer ?", L"Confirm?") : T(L"Effacer", L"Erase"), UI_VHS + g_vhsSel * 8 + VP_ERASE, false, IC_TRASH, can && !t.films.empty(), 10);
+            UiButton(g, RectF(bx - 2 * bw - 8, s.Y + 14, bw, 34), T(L"Renommer", L"Rename"), UI_VHS + g_vhsSel * 8 + VP_RENAME, false, IC_FILE, can && g_vhsEdit < 0, 10);
+            float tw = bx - 2 * bw - 8 - 12 - (s.X + 12);
+            Text(g, T(L"Cassette sélectionnée : ", L"Selected tape: ") + (t.title.empty() ? T(L"(sans titre)", L"(no title)") : t.title), RectF(s.X + 12, s.Y + 10, tw, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+            std::wstring sub = g_vhsEdit == g_vhsSel ? T(L"Entrée : écrire · Échap : annuler · 24 caractères au plus", L"Enter: write · Esc: cancel · 24 characters at most")
+                             : t.films.empty() ? T(L"Vierge · « Importer une vidéo » la remplit (qualité VHS, 4:3)", L"Blank · \"Import a video\" fills it (VHS quality, 4:3)")
+                             : T(L"Qualité VHS, 4:3 · exporter en vidéo normale possible (à droite)", L"VHS quality, 4:3 · can be exported as a normal video (on the right)");
+            Text(g, sub, RectF(s.X + 12, s.Y + 32, tw, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        }
+    }
 
-    // a droite : la cassette choisie
+    // a droite : la cassette choisie (apercu, export) et les dossiers
+    float fy = v.Y + v.Height - 16 - 40, hw = (v.Width - 48 - 10) / 2;
+    UiButton(g, RectF(v.X + 24, fy, hw, 40), T(L"Dossier des films", L"Films folder"), UI_VHS_OPEN, false, IC_FOLDER, true, 12);
+    UiButton(g, RectF(v.X + 24 + hw + 10, fy, hw, 40), T(L"Vidéos exportées", L"Exported videos"), UI_VHS_VIDDIR, false, IC_FOLDER, true, 12);
     if (g_vhsSel < 0) {
-        Icon(g, IC_FILM, kVhsView.X + kVhsView.Width / 2, kVhsView.Y + 250, 56, WithA(kGrey, 0.45f), 1.4f);
-        Para(g, T(L"Clique sur une cassette pour la voir ici.", L"Click a tape to see it here."), RectF(kVhsView.X + 24, kVhsView.Y + 300, kVhsView.Width - 48, 50), 13, kGrey, StringAlignmentNear);
+        Icon(g, IC_FILM, v.X + v.Width / 2, v.Y + 220, 56, WithA(kGrey, 0.45f), 1.4f);
+        Para(g, T(L"Clique sur une cassette pour la voir ici.", L"Click a tape to see it here."), RectF(v.X + 24, v.Y + 270, v.Width - 48, 50), 13, kGrey, StringAlignmentNear);
         return;
     }
     VhsTape &t = g_vhs[g_vhsSel];
     VhsPreviewFor(t);
-    RectF pr(kVhsView.X + 16, kVhsView.Y + 16, kVhsView.Width - 32, (kVhsView.Width - 32) * 0.75f);
+    RectF pr(v.X + 16, v.Y + 16, v.Width - 32, (v.Width - 32) * 0.75f);
     GraphicsPath pp; RoundRect(pp, pr, 10);
     SolidBrush blk(Color(255, 8, 8, 10)); g.FillPath(&blk, &pp);
     float now = VhsPreviewTime();
@@ -528,28 +605,31 @@ static void DrawVhs(Graphics &g)
     } else Text(g, t.films.empty() ? T(L"CASSETTE VIERGE", L"BLANK TAPE") : T(L"Films pas sur ce PC", L"Films not on this PC"), pr, 15, FontStyleBold, kGrey);
     float y = pr.Y + pr.Height + 10;
     if (!g_pvFrames.empty()) {
-        UiButton(g, RectF(kVhsView.X + 24, y, 44, 36), g_pvPause ? L"" : L"❚❚", UI_VHS_PLAY, false, g_pvPause ? IC_PLAY : -1);
-        RectF bar(kVhsView.X + 80, y + 15, kVhsView.Width - 80 - 24 - 90, 6);
+        UiButton(g, RectF(v.X + 24, y, 44, 36), g_pvPause ? L"" : L"❚❚", UI_VHS_PLAY, false, g_pvPause ? IC_PLAY : -1);
+        RectF bar(v.X + 80, y + 15, v.Width - 80 - 24 - 90, 6);
         DrawBar(g, bar, g_pvTotal > 0 ? now / g_pvTotal : 0);
         Text(g, VhsClock(now) + L" / " + VhsClock(g_pvTotal), RectF(bar.X + bar.Width + 8, y, 90, 36), 12, FontStyleRegular, kGrey, StringAlignmentNear);
     }
     y += 46;
-    Text(g, t.title.empty() ? T(L"(sans titre)", L"(no title)") : t.title, RectF(kVhsView.X + 24, y, kVhsView.Width - 48, 26), 15, FontStyleBold, kInk, StringAlignmentNear);
+    Text(g, t.title.empty() ? T(L"(sans titre)", L"(no title)") : t.title, RectF(v.X + 24, y, v.Width - 48, 26), 15, FontStyleBold, kInk, StringAlignmentNear);
     y += 34;
-    bool can = !g_vhsGameOn && g_vhsImpFilm.empty() && g_vhsExpDst.empty();
     bool exporting = !g_vhsExpDst.empty();
-    float bw = kVhsView.Width - 48;
-    UiButton(g, RectF(kVhsView.X + 24, y, bw, 42), exporting ? T(L"Export… ", L"Exporting… ") + std::to_wstring((int)(max(0.0f, g_vhsExpP) * 100)) + L" %" : T(L"Exporter en .mp4", L"Export as .mp4"), UI_VHS_EXPORT, true, IC_DOWNLOAD, !t.films.empty() && g_pvFrames.size() > 0 && g_vhsImpFilm.empty() && !exporting); y += 50;
-    float hw = (bw - 10) / 2;
-    UiButton(g, RectF(kVhsView.X + 24, y, hw, 40), T(L"Renommer", L"Rename"), UI_VHS + g_vhsSel * 8 + VP_RENAME, false, IC_FILE, can);
-    UiButton(g, RectF(kVhsView.X + 24 + hw + 10, y, hw, 40), T(L"Vidéo…", L"Video…"), UI_VHS + g_vhsSel * 8 + VP_IMPORT, false, IC_DOWNLOAD, can); y += 48;
-    bool arm = g_vhsDel == g_vhsSel && GetTickCount() - g_vhsDelT < 4000;
-    UiButton(g, RectF(kVhsView.X + 24, y, hw, 40), arm ? T(L"Confirmer ?", L"Confirm?") : T(L"Effacer", L"Erase"), UI_VHS + g_vhsSel * 8 + VP_ERASE, false, IC_TRASH, can && !t.films.empty());
-    UiButton(g, RectF(kVhsView.X + 24 + hw + 10, y, hw, 40), T(L"Vidéos exportées", L"Exported videos"), UI_VHS_VIDDIR, false, IC_FOLDER);
+    UiButton(g, RectF(v.X + 24, y, v.Width - 48, 42), exporting ? T(L"Export… ", L"Exporting… ") + std::to_wstring((int)(max(0.0f, g_vhsExpP) * 100)) + L" %" : T(L"Exporter en .mp4", L"Export as .mp4"), UI_VHS_EXPORT, true, IC_DOWNLOAD, !t.films.empty() && g_pvFrames.size() > 0 && g_vhsImpFilm.empty() && !exporting);
 }
 
 static void VhsClick(int id)
 {
+    if (id == UI_VHS_TAB) { GoPage(TAB_VHS); return; }
+    if (id == UI_VHS_TAB + 1) { GoPage(TAB_ALBUM); return; }
+    if (id == UI_VHS_IMPORT) {   // sur la cassette choisie, sinon la premiere vierge (sinon la premiere)
+        int i = g_vhsSel;
+        if (i < 0) { for (int k = 0; k < (int)g_vhs.size() && i < 0; k++) if (g_vhs[k].films.empty()) i = k; }
+        if (i < 0 && !g_vhs.empty()) i = 0;
+        if (i < 0) return;
+        g_vhsSel = i; g_vhsDel = -1; g_vhsEdit = -1;
+        VhsImport(i);
+        return;
+    }
     if (id == UI_VHS_OPEN) { CreateDirectoryW((g_gameDir + L"MWCoop").c_str(), NULL); CreateDirectoryW(VhsFilmDir().c_str(), NULL); ShellExecuteW(g_wnd, L"open", VhsFilmDir().c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
     if (id == UI_VHS_REFRESH) { g_vhsEdit = -1; g_pvOf.clear(); VhsScan(); return; }
     if (id == UI_VHS_VIDDIR) { std::wstring d = VhsVideoDir(); SHCreateDirectoryExW(NULL, d.c_str(), NULL); ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
@@ -576,15 +656,15 @@ static void VhsClick(int id)
     }
 }
 
-// ---- page Album
+// ---- onglet Album : les photos du drone en vignettes (3 par rangee, date en pastille), la photo choisie a droite
 struct AlbPhoto { std::wstring path, name; FILETIME t; Bitmap *thumb = NULL; bool tried = false; };
 static std::vector<AlbPhoto> g_alb;
 static DWORD g_albScanT;
 static int g_albSel = -1;
 static Bitmap *g_albBig; static std::wstring g_albBigOf;
 static DWORD g_albDelT; static int g_albDel = -1;
-static RectF kAlbGrid(288, 160, 600, 568), kAlbView(904, 88, 360, 656);
-static const float kAlbCellW = 192, kAlbCellH = 132;
+static const RectF kAlbGrid(288, 218, 588, 324);   // (sous le titre et la ligne d'aide, au-dessus de la rangee Ouvrir le dossier)
+static const float kAlbCellW = 196, kAlbCellH = 118;   // pas de la grille (case de 188 x 106 : 16/9)
 
 static std::wstring AlbDir()
 {
@@ -633,18 +713,37 @@ static Bitmap *AlbThumb(AlbPhoto &p, float w, float h)
     return p.thumb;
 }
 
+// Date d'une photo pour sa pastille : « Aujourd'hui 22:03 », « Hier 21:40 », sinon « 15/10 14:32 ».
+static std::wstring AlbWhen(const FILETIME &ft)
+{
+    FILETIME lt; SYSTEMTIME st, now;
+    if (!FileTimeToLocalFileTime(&ft, &lt) || !FileTimeToSystemTime(&lt, &st)) return L"";
+    GetLocalTime(&now);
+    FILETIME nf; SystemTimeToFileTime(&now, &nf);
+    const ULONGLONG day = 864000000000ULL;
+    ULONGLONG a = (((ULONGLONG)lt.dwHighDateTime << 32) | lt.dwLowDateTime) / day, b = (((ULONGLONG)nf.dwHighDateTime << 32) | nf.dwLowDateTime) / day;
+    wchar_t buf[48];
+    if (a == b) swprintf_s(buf, T(L"Aujourd'hui %02d:%02d", L"Today %02d:%02d"), st.wHour, st.wMinute);
+    else if (a + 1 == b) swprintf_s(buf, T(L"Hier %02d:%02d", L"Yesterday %02d:%02d"), st.wHour, st.wMinute);
+    else swprintf_s(buf, L"%02d/%02d %02d:%02d", st.wDay, st.wMonth, st.wHour, st.wMinute);
+    return buf;
+}
+
 static void DrawAlbum(Graphics &g)
 {
     if (GetTickCount() - g_albScanT > 3000) AlbScan();
-    RectF c(kMain.X, kMain.Y, 624, kMain.Height); Glass(c);
-    Title(g, T(L"Photos du drone", L"Drone photos"), RectF(c.X + 24, c.Y + 18, 360, 30), 20, kInk);
-    Text(g, std::to_wstring(g_alb.size()) + T(L" photo(s) · F8 en jeu pour en prendre", L" photo(s) · F8 in game to take some"), RectF(c.X + 24, c.Y + 48, 420, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-    UiButton(g, RectF(c.X + c.Width - 24 - 150, c.Y + 20, 150, 40), T(L"Dossier", L"Folder"), UI_ALB_FOLDER, false, IC_FOLDER);
+    MediaTabsDraw(g);
+    RectF c = kMediaCard, v = kMediaView;
+    Glass(c);
+    Glass(v);
+    Title(g, T(L"Album", L"Album") + (g_alb.empty() ? L"" : L" · " + std::to_wstring(g_alb.size()) + T(L" photo", L" photo") + (g_alb.size() > 1 ? L"s" : L"")), RectF(c.X + 18, c.Y + 14, 300, 30), 16, kInk);
+    Text(g, T(L"Photos prises au drone (F8 en jeu, clic gauche). Clique sur une photo : en grand à droite.", L"Photos taken with the drone (F8 in game, left click). Click a photo: large on the right."),
+         RectF(c.X + 18, c.Y + 50, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
     float sc = g_scroll[TAB_ALBUM] = min(g_scroll[TAB_ALBUM], AlbMaxScroll()), ms = AlbMaxScroll();
     int budget = 3;   // (vignettes chargees par image : pas de gel a l'ouverture)
     GraphicsState st = g.Save(); g.SetClip(kAlbGrid, CombineModeIntersect);
     for (int i = 0; i < (int)g_alb.size(); i++) {
-        RectF r(kAlbGrid.X + (i % 3) * (kAlbCellW + 4), kAlbGrid.Y + (i / 3) * kAlbCellH - sc, kAlbCellW - 8, kAlbCellH - 10);
+        RectF r(kAlbGrid.X + (i % 3) * kAlbCellW, kAlbGrid.Y + (i / 3) * kAlbCellH - sc, kAlbCellW - 8, kAlbCellH - 12);
         if (r.Y + r.Height < kAlbGrid.Y || r.Y > kAlbGrid.Y + kAlbGrid.Height) continue;
         bool hot = g_uiHot == UI_ALB + i, sel = g_albSel == i;
         GraphicsPath p; RoundRect(p, r, 12);
@@ -652,36 +751,42 @@ static void DrawAlbum(Graphics &g)
         Bitmap *b = g_alb[i].tried ? g_alb[i].thumb : budget-- > 0 ? AlbThumb(g_alb[i], r.Width, r.Height) : NULL;
         if (b) { GraphicsState s2 = g.Save(); g.SetClip(&p, CombineModeIntersect); g.SetInterpolationMode(InterpolationModeNearestNeighbor); g.DrawImage(b, r); g.Restore(s2); }
         else Icon(g, IC_IMAGE, r.X + r.Width / 2, r.Y + r.Height / 2, 30, WithA(kGrey, 0.5f), 1.4f);
-        if (sel || hot) { Pen pen(sel ? kAcc : WithA(kAcc, 0.6f), sel ? 3.0f : 1.5f); g.DrawPath(&pen, &p); }
+        std::wstring when = AlbWhen(g_alb[i].t);   // la date en pastille
+        if (!when.empty()) Pill(g, RectF(r.X + 8, r.Y + r.Height - 8 - 20, PillW(when, 10.5f), 20), Color(160, 10, 20, 45), when, Color(255, 255, 255, 255), 10.5f);
+        Pen pen(sel ? kAcc : hot ? WithA(kAcc, 0.6f) : Color(30, 255, 255, 255), sel ? 2.5f : 1.2f); g.DrawPath(&pen, &p);
         if (r.Y >= kAlbGrid.Y - 1 && r.Y + r.Height <= kAlbGrid.Y + kAlbGrid.Height + 1) HotZone(r, UI_ALB + i);
     }
     g.Restore(st);
     if (ms > 0) DrawScrollBar(g, kAlbGrid, sc, ms);
-    if (g_alb.empty()) Para(g, T(L"Pas encore de photo. En jeu, F8 lance la caméra drone ; clic gauche prend la photo.", L"No photo yet. In game, F8 starts the drone camera; left click takes the photo."), RectF(kAlbGrid.X, kAlbGrid.Y + 20, kAlbGrid.Width - 30, 60), 14, kGrey);
+    if (g_alb.empty()) Para(g, T(L"Pas encore de photo. En jeu, F8 lance la caméra drone ; clic gauche prend la photo.", L"No photo yet. In game, F8 starts the drone camera; left click takes the photo."), RectF(kAlbGrid.X, kAlbGrid.Y + 12, kAlbGrid.Width - 30, 60), 13.5f, kGrey);
+    {   // rangee du bas : ouvrir le dossier, son chemin
+        float fy = c.Y + c.Height - 16 - 36;
+        UiButton(g, RectF(c.X + 18, fy, 164, 36), T(L"Ouvrir le dossier", L"Open the folder"), UI_ALB_FOLDER, false, IC_FOLDER, true, 11);
+        Text(g, T(L"Dossier : ", L"Folder: ") + AlbDir(), RectF(c.X + 18 + 164 + 12, fy, c.Width - 36 - 164 - 12, 36), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+    }
     // a droite : la photo choisie
-    Glass(kAlbView);
     if (g_albSel < 0 || g_albSel >= (int)g_alb.size()) {
-        Icon(g, IC_IMAGE, kAlbView.X + kAlbView.Width / 2, kAlbView.Y + 250, 56, WithA(kGrey, 0.45f), 1.4f);
-        Para(g, T(L"Clique sur une photo pour la voir ici.", L"Click a photo to see it here."), RectF(kAlbView.X + 24, kAlbView.Y + 300, kAlbView.Width - 48, 50), 13, kGrey, StringAlignmentNear);
+        Icon(g, IC_IMAGE, v.X + v.Width / 2, v.Y + 220, 56, WithA(kGrey, 0.45f), 1.4f);
+        Para(g, T(L"Clique sur une photo pour la voir ici.", L"Click a photo to see it here."), RectF(v.X + 24, v.Y + 270, v.Width - 48, 50), 13, kGrey, StringAlignmentNear);
         return;
     }
     AlbPhoto &ph = g_alb[g_albSel];
     if (g_albBigOf != ph.path) { delete g_albBig; g_albBig = LoadAnyImage(ph.path, NULL); g_albBigOf = ph.path; }
-    RectF ir(kAlbView.X + 16, kAlbView.Y + 16, kAlbView.Width - 32, 300);
+    RectF ir(v.X + 16, v.Y + 16, v.Width - 32, 280);
     if (g_albBig) {
         float iw = (float)g_albBig->GetWidth(), ih = (float)g_albBig->GetHeight(), k = min(ir.Width / iw, ir.Height / ih);
         RectF dr(ir.X + (ir.Width - iw * k) / 2, ir.Y + (ir.Height - ih * k) / 2, iw * k, ih * k);
         GraphicsPath p; RoundRect(p, dr, 10);
         GraphicsState s2 = g.Save(); g.SetClip(&p, CombineModeIntersect); g.SetInterpolationMode(InterpolationModeHighQualityBicubic); g.DrawImage(g_albBig, dr); g.Restore(s2);
         wchar_t sz[64]; swprintf_s(sz, L"%u × %u", g_albBig->GetWidth(), g_albBig->GetHeight());
-        Text(g, sz, RectF(kAlbView.X + 24, kAlbView.Y + 354, 300, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        Text(g, sz + std::wstring(L" · ") + AlbWhen(ph.t), RectF(v.X + 24, v.Y + 334, v.Width - 48, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     }
-    Text(g, ph.name, RectF(kAlbView.X + 24, kAlbView.Y + 326, kAlbView.Width - 48, 26), 14, FontStyleBold, kInk, StringAlignmentNear);
-    float by = kAlbView.Y + 392, bw = kAlbView.Width - 48;
-    UiButton(g, RectF(kAlbView.X + 24, by, bw, 44), T(L"Ouvrir", L"Open"), UI_ALB_OPEN, true, IC_EYE); by += 54;
-    UiButton(g, RectF(kAlbView.X + 24, by, bw, 44), T(L"Afficher dans le dossier", L"Show in folder"), UI_ALB_DIR, false, IC_FOLDER); by += 54;
+    Text(g, ph.name, RectF(v.X + 24, v.Y + 306, v.Width - 48, 26), 14, FontStyleBold, kInk, StringAlignmentNear);
+    float by = v.Y + 372, bw = v.Width - 48;
+    UiButton(g, RectF(v.X + 24, by, bw, 44), T(L"Ouvrir", L"Open"), UI_ALB_OPEN, true, IC_EYE); by += 54;
+    UiButton(g, RectF(v.X + 24, by, bw, 44), T(L"Afficher dans le dossier", L"Show in folder"), UI_ALB_DIR, false, IC_FOLDER); by += 54;
     bool arm = g_albDel == g_albSel && GetTickCount() - g_albDelT < 4000;
-    UiButton(g, RectF(kAlbView.X + 24, by, bw, 44), arm ? T(L"Confirmer ? (Corbeille)", L"Confirm? (Recycle Bin)") : T(L"Supprimer", L"Delete"), UI_ALB_DEL, false, IC_TRASH);
+    UiButton(g, RectF(v.X + 24, by, bw, 44), arm ? T(L"Confirmer ? (Corbeille)", L"Confirm? (Recycle Bin)") : T(L"Supprimer", L"Delete"), UI_ALB_DEL, false, IC_TRASH);
 }
 
 static void AlbClick(int id)

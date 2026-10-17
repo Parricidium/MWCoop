@@ -26,7 +26,9 @@ static std::vector<uint32_t> g_persoBig, g_persoPix;
 static std::vector<float> g_persoZ;
 static std::string g_persoDrawn;       // ce qui est dans g_persoPix (apparence + angle + taille)
 static Bitmap *g_persoBmp;
-static int g_skinRowHot = -1;          // ligne survolee * 2 + (0 fleche gauche, 1 fleche droite)
+static int g_skinRowHot = -1;          // element survole de la page PERSONNAGE (code de PersoPageHit, tenue.inc)
+static std::map<std::string, Bitmap *> g_tileBmp;   // vignettes des tuiles (texture reduite), par matiere ; oubliees avec l'export
+static void TileBmpFree() { for (auto &kv : g_tileBmp) delete kv.second; g_tileBmp.clear(); }
 
 enum { PF_HAT, PF_GLASSES, PF_HAIR, PF_FACE, PF_SHIRT, PF_PANTS, PF_BODY, PF_COUNT };
 static const char *kPersoKey[PF_COUNT] = { "Chapeau", "Lunettes", "Cheveux", "Visage", "Apparence", "Pantalon", "Corps" };
@@ -113,6 +115,7 @@ static void PersoCheck()
     for (auto &l : g_perso.lists) l.clear();
     g_perso.path = path;
     g_persoDrawn.clear();
+    TileBmpFree();
     if (!exists) { g_perso.state = -1; return; }
     g_perso.mt = a.ftLastWriteTime;
     std::vector<unsigned char> d;
@@ -468,19 +471,20 @@ static void PersoRender(int W, int H, float yaw, const std::string look[PF_COUNT
 }
 
 // Image du personnage pour la vue 'dst' (coordonnees logiques), refaite si l'apparence, l'angle ou la taille change.
-static Bitmap *PersoImage(RectF dst, float yaw)
+// portrait : tete et epaules (vue « Portrait » de la page PERSONNAGE).
+static Bitmap *PersoImage(RectF dst, float yaw, bool portrait = false)
 {
     if (g_perso.state != 1) return NULL;
     int W = max(8, (int)(dst.Width * g_scale + 0.5f)), H = max(8, (int)(dst.Height * g_scale + 0.5f));
     std::string key;
     for (int f = 0; f < PF_COUNT; f++) key += PersoGet(f) + "|";
     char b[64];
-    sprintf_s(b, "%d|%d|%d", (int)(yaw * 100), W, H);
+    sprintf_s(b, "%d|%d|%d|%d", (int)(yaw * 100), W, H, (int)portrait);
     key += b;
     if (key == g_persoDrawn && g_persoBmp) return g_persoBmp;
     std::string look[PF_COUNT];
     for (int f = 0; f < PF_COUNT; f++) look[f] = PersoGet(f);
-    PersoRender(W, H, yaw, look, false, true);
+    PersoRender(W, H, yaw, look, portrait, true);
     delete g_persoBmp;
     g_persoBmp = new Bitmap(W, H, PixelFormat32bppPARGB);
     BitmapData bd;
@@ -529,75 +533,7 @@ static Bitmap *PersoPortrait(const std::string &skin, int W, int H)
     return out;
 }
 
-// ---- lignes de la page TENUE (a droite de l'apercu) : tete en haut, jambes en bas
-static const int kPersoRows[] = { PF_HAT, PF_GLASSES, PF_HAIR, PF_FACE, PF_SHIRT, PF_PANTS, PF_BODY };
-static const int kPersoRowN = 7;
-static const int kPersoZone[] = { 0, 0, 0, 0, 1, 2, 3 };   // zone de chaque ligne (tete, torse, jambes, silhouette)
-static RectF PersoRowRect(int i)
-{
-    static const float ys[] = { 134, 190, 246, 302, 388, 474, 560 };
-    return RectF(744, ys[i], 496, 50);
-}
-static RectF PersoArrowRect(const RectF &r, int s) { return RectF(r.X + r.Width - (s ? 48 : 96), r.Y + 5, 40, 40); }
-static int PersoRowAt(float x, float y)
-{
-    if (g_perso.state != 1) return -1;
-    for (int i = 0; i < kPersoRowN; i++) {
-        RectF r = PersoRowRect(i);
-        if (!r.Contains(x, y)) continue;
-        return i * 2 + (PersoArrowRect(r, 0).Contains(x, y) ? 0 : 1);
-    }
-    return -1;
-}
-static void PersoStep(int row, int dir)
-{
-    int f = kPersoRows[row];
-    std::vector<std::string> v = PersoChoices(f);
-    if (v.empty()) return;
-    std::string cur = PersoGet(f);
-    int i = 0;
-    for (int k = 0; k < (int)v.size(); k++) if (v[k] == cur) i = k;
-    i = (i + dir + (int)v.size()) % (int)v.size();
-    PersoSet(f, v[i]);
-    g_skinChangeT = GetTickCount();
-    g_lookZone = kPersoZone[row];
-}
-static void DrawPersoRows(Graphics &g)
-{
-    static const wchar_t *grpFr[] = { L"T\u00CATE", L"TORSE", L"JAMBES", L"SILHOUETTE" }, *grpEn[] = { L"HEAD", L"TORSO", L"LEGS", L"BUILD" };
-    static const float gy[] = { 104, 358, 444, 530 }, gh[] = { 254, 82, 82, 82 };
-    for (int k = 0; k < 4; k++) {
-        RectF zr(732, gy[k], 520, gh[k] + (k == 0 ? 0 : 0));
-        if (g_lookZone == k) {   // zone mise en avant (repere de l'apercu, ou derniere changee)
-            GraphicsPath zp; RoundRect(zp, zr, 18);
-            SolidBrush zb(WithA(kAcc, 0.10f)); g.FillPath(&zb, &zp);
-            Pen zpen(WithA(kAcc, 0.45f), 1); g.DrawPath(&zpen, &zp);
-        }
-        Text(g, T(grpFr[k], grpEn[k]), RectF(748, gy[k] + 6, 300, 22), 11, FontStyleBold, g_lookZone == k ? kAcc : kGrey, StringAlignmentNear);
-    }
-    static const wchar_t *labFr[] = { L"Chapeau", L"Lunettes", L"Cheveux", L"Visage", L"Haut", L"Pantalon", L"Corpulence" }, *labEn[] = { L"Hat", L"Glasses", L"Hair", L"Face", L"Top", L"Pants", L"Build" };
-    for (int i = 0; i < kPersoRowN; i++) {
-        int f = kPersoRows[i];
-        RectF r = PersoRowRect(i);
-        bool hot = g_skinRowHot / 2 == i && g_skinRowHot >= 0;
-        GraphicsPath rp; RoundRect(rp, r, 14);
-        SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
-        Pen rpen(TH(choiceBorder), 1.0f); g.DrawPath(&rpen, &rp);
-        for (int s = 0; s < 2; s++) {
-            RectF a = PersoArrowRect(r, s);
-            bool ah = g_skinRowHot == i * 2 + s;
-            GraphicsPath ap; RoundRect(ap, a, 11);
-            SolidBrush ab(ah ? WithA(kAcc, 0.25f) : TH(btn2)); g.FillPath(&ab, &ap);
-            Icon(g, s ? IC_CHEVR : IC_CHEVL, a.X + 20, a.Y + 20, 16, ah ? kAcc : kInk, 2.3f);
-        }
-        std::vector<std::string> ch = PersoChoices(f);
-        std::string cur = PersoGet(f);
-        int at = 0;
-        for (int k2 = 0; k2 < (int)ch.size(); k2++) if (ch[k2] == cur) at = k2;
-        wchar_t cnt[32]; swprintf_s(cnt, L"%d / %d", at + 1, (int)ch.size());
-        Text(g, cnt, RectF(r.X + r.Width - 196, r.Y, 92, r.Height), 12, FontStyleBold, kGrey, StringAlignmentFar);
-        Text(g, T(labFr[i], labEn[i]), RectF(r.X + 16, r.Y + 5, 200, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-        std::wstring v = PersoLabel(f, cur);
-        Text(g, v, RectF(r.X + 16, r.Y + 22, r.Width - 220, 24), 15, FontStyleBold, kInk, StringAlignmentNear);
-    }
-}
+// ---- page PERSONNAGE : les parties sont des grilles de tuiles (tenue.inc, maquette du 17/10) ; le survol passe par
+// g_skinRowHot (launcher.cpp appelle PersoRowAt a chaque mouvement de la souris sur l'onglet).
+static int PersoPageHit(float x, float y);   // (tenue.inc)
+static int PersoRowAt(float x, float y) { return PersoPageHit(x, y); }
