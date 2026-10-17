@@ -5964,12 +5964,16 @@ static void Tick()
         else RunStart(g_lastLaunchMode);
     }
     RunTick();
-    // Images par seconde : 60 quand on s'en sert (souris, clavier, glisser, lancement), 30 au repos, 15 en arriere-plan
-    // (la neige suffit : le lanceur ne mange plus un coeur du processeur quand il attend).
+    // Images par seconde : 60 quand on s'en sert (souris, clavier, glisser, lancement), 30 au repos, 6 en arriere-plan ;
+    // partie en cours : 2, et 1 si le lanceur n'est pas devant (retour d'un hote, 18/10 : saccades en jeu, et dans d'autres
+    // jeux lances avec le lanceur ouvert -- il rendait 60 images/s en GDI+ pendant toute la partie, ST_RUNNING comptant
+    // comme « actif »). Chaque image = toute la fenetre (1320x840, verre, neige) : c'est le nombre d'images qui coute.
     static unsigned frameN;
     frameN++;
-    bool active = g_carDrag || g_skinDrag || now - g_inputT < 1500 || g_state != ST_IDLE || g_alpha < 1 || g_lobby == LB_CONNECTING;
-    unsigned every = active ? 1 : GetForegroundWindow() == g_wnd ? 2 : 4;
+    bool front = GetForegroundWindow() == g_wnd;
+    bool active = g_carDrag || g_skinDrag || now - g_inputT < 1500 || (g_state != ST_IDLE && g_state != ST_RUNNING) || g_alpha < 1 || g_lobby == LB_CONNECTING;
+    unsigned every = g_state == ST_RUNNING && now - g_inputT >= 1500 ? (front ? 30 : 60) : active ? 1 : front ? 2 : 10;
+    if (!active && g_aurore == 0) every = front ? 30 : 60;   // (Reglages > Theme > Aurore et neige : Off = fond fige, rien ne bouge : 2 images/s suffisent)
     if (!IsIconic(g_wnd) && frameN % every == 0) Present();   // (reduit : rien a dessiner)
 }
 
