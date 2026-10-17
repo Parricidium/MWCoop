@@ -1,0 +1,117 @@
+WK001	Write to the other players (chat) — key can be changed: Settings > Keys
+WK002	Compatibility mode on the game: Windows adds one by itself after a crash on exit (\"IgnoreFreeLibrary\"). The game then loads Windows' version.dll before MWCoop's, and the mod stops loading, even if everything worked before. The launcher removes it before every game (Settings > Launcher > Troubleshooting).
+WK003	Settings > Launcher > Version & updates > \"Update automatically\": no more clicking, updates happen at every start. Right next to it: \"Test builds (nightly)\", before everyone but sometimes broken.
+WK004	Every page is in the left bar, in four groups. Top right: the What's new star, the language (FR) and the theme (sun / moon). At the bottom of the window: the launcher's status and the game it found.
+WK005	PLAY — Home: your nickname, the network (Steam or IP), HOST, JOIN, PLAY SOLO. Lobby: the players, the session code, the options, the chat, READY and START. Saves: your games, one per group of friends.
+WK006	ME — Character (Outfit, Face, Car tabs): what the others see of you. Car: the CORRIS of a new game. Sent content: CDs, radio, paint, posters… for your guests.
+WK007	SETTINGS — Game, Co-op and Mods. Game and Co-op open the same Settings page, with its tabs (Game, Image & ray tracing, Sound & voice, Co-op, Keys, Theme, Launcher) and its \"Search a setting…\" field.
+WK008	MEDIA & HELP — VHS and Album (your tapes and photos), Guide (here) and What's new.
+WK009	At the very bottom of the bar: Discord, the Logs (the < > button) and Support (the heart).
+WK010	The Guide
+WK011	Three tabs in the header: Guide, What's new (each version's notes) and Credits. The Search… field filters the articles; at the bottom of every article, ← previous and next → go to the neighbour.
+WK012	The modding API and the source code (GitHub) are in Settings > Launcher > Troubleshooting. The first-start guided tour can be seen again in Settings > Launcher > \"Launcher help bubbles\" > See again.
+WK013	Port 7870 by default (Settings > Co-op > Network & launch), to forward in UDP AND TCP on your router if you don't use a VPN. \"Test my connection\" checks the port, the firewall and Steam.
+WK014	At the top of the lobby, the Session code banner: Public (anyone can join) or Private (a 6-character code, shown big; COPY puts it in the clipboard, the arrow draws a new one). The choice is remembered for next time.
+WK015	Players max: 4, 8, 12 or 16, host included (8 by default), in the Options card. Above 10, you need a very good connection and a good machine on the host's side.
+WK016	Options card, \"The game\" tab: starting money, cheats, run over, punches, Ventti, Jokkis, MWCoop additions (All / Choose / None), players max. They start from Settings > Co-op > \"When I host\" but only apply to this lobby; your guests receive them. \"Reset to my Settings\" brings them back, \"Keep as defaults\" saves them there. The \"Mine\" tab: your own options (voice, others' images, markers, map).
+WK017	Right column: Game (Continue my game or New game, and the save being played), Sent to guests (Choose), Game mods (Manage), then START THE GAME.
+WK018	The lobby chat
+WK019	Under the players: the last three messages, the \"Message to the lobby\" field and SEND (or Enter). Handy to agree on things before starting, through Steam as well as by IP.
+WK020	The launcher stays open: it shows the players and their ping. By IP, the host can kick a player out: two clicks on their row. It goes back to the menu when the game closes.
+WK021	In the lobby: the Options card shows \"Host's\" (their choices, read-only) and \"Mine\" (voice, others' images, markers, map), for this lobby only. On the right, \"Host's files\" follows the arrival of their mods, content and save; \"Accept everything from this host\" avoids asking again for every file. The lobby chat is under the players.
+WK022	Settings > Co-op > Network & launch: the default network, the port, and \"Test my connection\" (UDP and TCP port, firewall, Steam) to know before hosting whether your friends will get in.
+WK023	Settings > Co-op
+WK024	A click on a mod's row opens its options; they apply at the next game.
+WK025	Mods page: the Mod / Version / Sent / On table. Each mod's \"Sent\" chip can be clicked (Yes / No); \"Send all\" ticks them all. \"On\" off: the mod is no longer loaded at all (its DLL becomes .dll.off), nor sent; back on, it returns at the next launch. A mod to avoid is marked \"Not supported\" and is never sent.
+WK026	It's remembered: \"Accept the host's files\" (Settings > Co-op > On my side) turns on, next times it's automatic.
+WK027	Received mods stay in the \"Received from the host\" card of the Mods page (last lobby, size): \"Clear received mods\" deletes them, they are downloaded again at the next lobby if the host still sends them.
+WK028	\"My face (photo)\": your imported face, sent with your outfit (Auto chip, nothing to tick).
+WK029	Sent content page, \"What goes\" list: CD, Radio, My CORRIS paint, Flag, Posters, Others, each with its switch. Then OK.
+WK030	Click CD or Radio: on the right, its tracks. \"Add tracks\" (.ogg) or drop the files in the zone: the launcher numbers them track1…trackN for you. \"Choose\" on the Posters and Paint & flag cards replaces the pictures.
+WK031	The \"Total size\" gauge at the bottom of the list: above 100 MB, your guests take longer to arrive.
+WK032	A friend arrives while you are already playing? Keep the launcher open (Settings > Co-op > Network & launch: \"Close the launcher during the game\" off): it sends them your mods, then they join your game. Through Steam, your game sends them.
+WK033	Three ways to start the game: Settings > Launcher > Game > \"Game start\". Keep Copy as long as everything works: the other two are fallbacks.
+WK034	A single Settings page (left bar: Game or Co-op), with seven tabs at the top. Everything is kept in mwcoop-lanceur.ini (game folder) and MWCoop\\mwcoop.ini.
+WK035	The \"Search a setting…\" field in the header filters every row, across all tabs: type \"shadow\", \"port\" or \"voice\" and the setting shows up. Esc clears.
+WK036	Game and Image & ray tracing
+WK037	Game: the presets (Vanilla, Light, Balanced, Pretty, Ultra, Custom), the Display (resolution, window, frame rate, field of view, distance, detail, textures), in-game Comfort (head bob, mirrors, FPS counter, player names) and the Light & shadows summary.
+WK038	Image & ray tracing: the whole picture (HDR, bloom, contrast, sun shafts, lamp coronas, headlight range), the shadows (sun, moon, houses, distance, detail, headlights, street lights) and the Ray tracing card.
+WK039	Sound & voice
+WK040	Proximity voice (on or off), range, voices volume, your microphone for the others. Applied right away, even in game.
+WK042	When I host: the defaults of your lobbies (starting money, cheats, run over, punches, Ventti, Jokkis, MWCoop additions, players max, Public / Private). Every lobby takes them over; a change in the lobby only applies to that lobby.
+WK043	On my side: voice, \"Accept the host's files\", seeing the others' imported images and markers, the map (tap or hold), my content sent.
+WK044	Network & launch: Steam or IP / VPN by default, the port (7870 to 7875, UDP and TCP), \"Close the launcher during the game\", \"Start the game through Steam\", the Steam launch option, and \"Test my connection\".
+WK046	MWCoop's in-game keys (chat, talk, wallet, marker, map, third-person view, cheat panel) and the drone camera's. Click a key then press the new one; Esc cancels, Del restores the default.
+WK048	Four themes: Northern night, Daylight, Green aurora, Garage. Then the accent colour, Aurora and snow (Off / Calm / Lively), the cards' frosted glass, the density (Airy / Normal / Compact), the text size (80 to 110 %) and \"Follow Windows\". The preview on the right shows the result live; Apply keeps it.
+WK049	Language: French, English, Russian or Arabic (also the language of the mod's menus in game; texts drawn with the game's own font stay in English).
+WK050	Version & updates: Check, Legacy / Reworked, automatic update, test builds (nightly), the release notes and \"Launcher help bubbles\" (See the tour again).
+WK051	Game: the game folder (Change), Game start (Copy, Game folder or Steam), the MSCLoader provided by MWCoop, Buy the game on Steam, Uninstall MWCoop.
+WK052	Troubleshooting: the logs (Open the folder, Make the zip), sessions kept, Remove compatibility modes (on by default: removes the ones Windows adds to the game after a crash, otherwise MWCoop stops loading), debug mode, Offer the Discord, Repair MWCoop (rewrites the launch copy and the loader), the modding API and the source code.
+WK053	Character: Outfit and Face
+WK054	The Character page has three tabs in the header: Outfit, Face, Car. On the left, the 3D preview (Full, Portrait or Wheel): drag to turn, wheel to zoom. On the right, the tiles with their 3D thumbnail, per body part; the \"+ N\" tile shows the rest. RANDOM draws an outfit, SAVE keeps it.
+WK055	Outfit: top, bottom, head and build. The choices come from the game's clothes, plus the 155 outfits given by Dom (\"Dom 12\"…). At the bottom, the Car strip: your CORRIS colour and \"Custom paint…\".
+WK056	Face: face, hat, glasses, hair. At the bottom, the \"My images\" strip: your own face, top and pants (Import…, Template, Remove).
+WK057	Your own face, top or pants: in My images, pick the Face, Top or Pants tile. \"Template\" opens the game's image (face 512 x 256, top and pants 512 x 512) with its seams in red: paint over it (Paint, GIMP…) keeping the size, save, then \"Import…\".
+WK058	The imported image takes the tile (marked Photo) and the preview shows it right away. Others see it in game; your face goes along with your outfit (Sent content > My face). \"Remove\" deletes it.
+WK059	Open Character
+WK060	The CORRIS colour for a NEW game (the host's colour is given to the guests): sixteen shades, or \"Other colour…\" for your own. The trim (Random, L, LX, SLX, GT) is right below. \"Remove dents…\": every car in your save is smooth again (game closed).
+WK061	Graphics: Settings > Game and Image & ray tracing
+WK062	The Preset card of the Game tab sets everything at once: Vanilla (the game as is, without MWCoop's additions), Light (old PC), Balanced, Pretty (shadows, HDR), Ultra (ray tracing). As soon as you change a row, the pill moves to Custom. Just for you: the others see no difference; in game, the F10 menu has the same settings.
+WK063	Game > Display: resolution, window (Game, Windowed, Fullscreen, Borderless), max frames per second, v-sync, field of view, engine quality, draw distance, level of detail, textures, filtering, anti-aliasing. \"Game\" = the game's own value.
+WK064	Game > Comfort & in-game display: head bob (on foot, in the car), mirrors, gear on screen, FPS counter, player names (distance, or Off), traffic dust and skid marks.
+WK065	Image & ray tracing > Image and Shadows: HDR, bloom, contrast, sun shafts, GTA-style coronas, headlight range; sun, moon and house shadows, shadow distance and detail, headlight and street light shadows. The \"medium\" and \"heavy\" tags say what each row costs.
+WK066	Off by default. The host allows them in Settings > Co-op > When I host (\"Allow cheats (F7)\") or in the lobby's Options card; their guests follow that choice. Every cheat is announced to everyone in the chat.
+WK067	Off by default. The host allows them in Settings > Co-op > When I host (\"Punches between players\") or in the lobby; their guests follow that choice. The game's punch hits a player on foot right in front of you: they step back a little, and on the 5th punch within 20 s they die (then respawn as usual).
+WK068	Settings > Launcher > Troubleshooting: \"Remove compatibility modes\" must be on (it is by default). It's the most common cause: it worked, then not at all.
+WK069	Check the game at the bottom of the launcher: is it the install you usually start? Otherwise \"Change folder\".
+WK070	Settings > Launcher > Troubleshooting > \"Repair MWCoop\": the launch copy and the loader (version.dll) are rewritten.
+WK071	Settings > Launcher > Game > Game start: try Game folder, then Steam.
+WK072	New game (header button, or the last row of the list): a fresh save, kept apart, or \"From a zip…\" to take over a friend's game (their Export (zip)). It starts with a new game at the first launch.
+WK073	Click a game: on the right, its figures (day, money, hours played) and the last session (when, with whom, host or guest), written by the mod at every save. \"—\" until it has been played with MWCoop.
+WK074	Backup copies: the copies made before an update, restored with one click. Then Use for hosting, Rename, Duplicate, Export (zip), Restart (erased and started from scratch); Delete sends it to the Windows Recycle Bin (recoverable).
+WK075	\"Main game\" is the game's normal save: PLAY SOLO always keeps it. The game's folder is shown at the bottom (Open).
+WK076	MWCoop doesn't load? Turn on debug mode first (Logs page: the < > button at the bottom of the left bar, or Settings > Launcher > Troubleshooting).
+WK077	Every key can be changed in Settings > Keys > Drone camera (Delete on a key: the default one). No drone from the driver's seat.
+WK078	The launcher's album
+WK079	Album page (MEDIA & HELP): your photos, in Recent, By session or Favorites views. Click a photo to see it big on the right; the heart makes it a favorite, Delete sends it to the Recycle Bin. Slideshow runs through them; Open the folder leads to Pictures\\CoopPictures.
+WK080	Every piece has its plaque in French and English. The authors and licences of the pictures and 3D models are in the credits (Guide > Credits tab).
+WK081	VHS page (MEDIA & HELP; the Album tab is next to it): every tape of your game (even inside a VCR or a camcorder). Pick one: its preview plays on the right, \"Export as .mp4\" makes a video of it (in Videos\\CoopVideos), \"Send to the guests\" gives it to them, and you can rename it, erase it or put a video from your PC on it (\"Import a video\", game closed).
+WK082	Character and car
+WK083	Settings > Game: display, comfort, light and shadows, player names (distance, or hidden); the Image & ray tracing tab for the rest. One-click presets; in game: F10 menu.
+WK084	One page, seven tabs: Game, Image & ray tracing, Sound & voice, Co-op (your lobbies, the network, the port), Keys, Theme, Launcher (language, updates, game folder, troubleshooting).
+WK085	Sun or moon: light or dark, in one click. FR: French, English, Russian or Arabic. More themes and colours in Settings > Theme.
+WK086	In Settings > Launcher > Game, \"Game start\": Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.
+WK087	In Settings > Launcher > Game: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.
+WK088	The Guide's Credits tab: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in Character > Outfit!
+WK089	In Settings > Launcher > Troubleshooting. After a crash, Windows sometimes adds a compatibility mode to the game, and MWCoop stops loading: the launcher removes it before every game.
+WK090	In Settings > Keys: click a key then press the new one. Chat (T), wallet to give money to others (N), voice (V).
+WK091	Your own face, top or pants: Face tab, \"My images\" strip: pick the tile (Face, Top, Pants), Template opens the game's image with its seams, paint over it, then Import… Others see it in game.
+WK092	Co-op options
+WK093	Settings > Co-op: \"When I host\" (starting money, cheats, additions: your lobbies' defaults), \"On my side\" (voice, host's files, others' images) and \"Network & launch\". Sound & voice and Keys have their own tab.
+WK094	The host can allow cheats (Settings > Co-op > When I host, or in the lobby). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.
+WK095	In game, M (set in Settings > Keys) opens the map: the other players live, places, wheel to zoom, drag to move.
+WK096	In game, F5 (set in Settings > Keys) switches to third person: your character seen from behind on foot, your vehicle seen from behind while driving. Aiming and picking up work as usual.
+WK097	The Game tab
+WK098	Preset, Display, Comfort & in-game display, and the Light & shadows summary; everything else is in the Image & ray tracing tab. Unity's configuration window is now skipped: set your screen here.
+WK099	In game, F8: your camera becomes a small drone to take photos (viewfinder, zoom, tilt, flash). Keys are set in Settings > Keys > Drone camera.
+WK100	Vanilla and ray tracing
+WK101	Vanilla brings the game back as it is, without MWCoop's additions; Ultra turns on ray-traced sun shadows (DXR-capable graphics card, in development). Its settings: Image & ray tracing tab.
+WK102	In the Lobby, under the players: the last three messages, \"Message to the lobby\" and SEND (or Enter). To agree on things before starting, through Steam as well as by IP.
+WK103	Search a setting
+WK104	Type \"shadow\", \"port\" or \"voice\": the matching rows of every tab show up, with the name of their card. Esc clears.
+WK105	Theme tab
+WK106	Northern night, Daylight, Green aurora or Garage, the accent colour, the aurora and snow, the frosted glass, the density and the text size. The preview on the right shows the result; Apply keeps it.
+WK107	Presets
+WK108	Vanilla (the game as is), Light, Balanced, Pretty, Ultra: everything at once, every row stays editable; as soon as you change one, the pill moves to Custom.
+WK109	Outfit, Face, Car
+WK110	The three tabs of the Character page. Full, Portrait or Wheel views; drag to turn, wheel to zoom. The tiles show every choice in 3D; \"+ N\": the rest.
+WK111	Your game's figures
+WK112	For the chosen save: the day, the money, the hours played and the last session (when, with whom), noted by the mod at every save. Below: backup copies, Duplicate, Export (zip), Restart.
+WK113	The CD tracks
+WK114	Sent content > CD (or Radio): the tracks that go to your guests. \"Add tracks\" (.ogg) or drop the files here: numbered track1…trackN for you. Gauge at the bottom: 100 MB at most.
+WK115	Guide, What's new, Credits
+WK116	The three tabs of this page, with the Search… field that filters the articles. At the bottom of every article: ← previous and next →.
+WK117	The < > at the bottom of the bar. Every session keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.
+WK118	In Settings > Launcher > Troubleshooting. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.
+WK119	Discord
+WK120	The MWCoop community: help, bug reports, news and players to team up with. Logs and Support (Ko-fi) right next to it.
