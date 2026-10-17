@@ -23,57 +23,57 @@ static const TutoStep kTuto[] = {
       L"PLAY SOLO", L"The vanilla game: MWCoop isn't loaded at all (no badge, no co-op menu). Your save is never touched by other people's games.", "0.75.14" },
     { L"Toutes les pages, à gauche", L"Le salon, ton personnage, ce que tu partages et les nouveautés : un clic, sans fenêtre qui s'ouvre par-dessus.",
       L"Every page, on the left", L"The lobby, your character, what you share and the updates: one click, no window popping over.", "0.42.0" },
-    { L"Tenue et voiture", L"Ton apparence complète (corps, chapeau, lunettes, cheveux, visage, haut, pantalon) en 3D, et la couleur de ta CORRIS.",
-      L"Outfit and car", L"Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your CORRIS color.", "0.42.0" },
+    { L"Personnage et voiture", L"Ton apparence complète (silhouette, chapeau, lunettes, cheveux, visage, haut, pantalon) en 3D, et la couleur de ta CORRIS.",
+      L"Character and car", L"Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your CORRIS color.", "0.42.0" },
     { L"Contenu et mods", L"Ce que tu envoies à tes invités : CD, peinture, drapeau, posters… et tes mods MSCLoader (expérimental), copiés à part chez eux.",
       L"Content and mods", L"What you send to your guests: CDs, paint, flag, posters… and your MSCLoader mods (experimental), copied apart on their side.", "0.42.0" },
-    { L"Graphismes", L"Rangés par catégories à déplier : ombres, distance, détails, textures, images par seconde… et maintenant les pseudos des joueurs (distance, ou cachés). Préréglages en un clic ; en jeu : menu F10.",
-      L"Graphics", L"Sorted into categories you expand: shadows, distance, detail, textures, frame rate… and now player names (distance, or hidden). One-click presets; in game: F10 menu.", "0.54.0" },
+    { L"Graphismes", L"Réglages > Jeu : affichage, confort, lumière et ombres, pseudos des joueurs (distance, ou cachés) ; l'onglet Image & ray tracing pour le reste. Préréglages en un clic ; en jeu : menu F10.",
+      L"Graphics", L"Settings > Game: display, comfort, light and shadows, player names (distance, or hidden); the Image & ray tracing tab for the rest. One-click presets; in game: F10 menu.", "0.54.0" },
     { L"Nouveautés", L"Ce qui change à chaque version. Quand une nouvelle version sort, un bouton « Mettre à jour » apparaît sous le logo : la mise à jour se fait quand tu cliques.",
       L"What's new", L"What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.", "0.42.0" },
     { L"Journaux", L"Le < > en bas de la barre. Chaque partie garde ses journaux, rangés par date : déplie celle qui a posé problème, crée son zip ou supprime les vieilles. Un « ! » rouge s'affiche si la dernière partie s'est arrêtée brutalement.",
       L"Logs", L"The < > at the bottom of the bar. Every session keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.", "0.53.0" },
     { L"API moddeurs", L"Dans Réglages > Lanceur > Dépannage. Tu fais des mods ? Ce que l'API de MWCoop permet, un exemple à copier, la DLL et la doc sur GitHub.",
       L"Modding API", L"In Settings > Launcher > Troubleshooting. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.", "0.46.0" },
-    { L"Réglages", L"Mise à jour, thème, langue, port, dossier du jeu, envoi de l'hôte chez un ami… et ce guide.",
-      L"Settings", L"Updates, theme, language, port, game folder, a host's files at a friend's… and this guide.", "0.42.0" },
-    { L"Thème et langue", L"Sombre ou clair, français ou anglais, d'un clic.", L"Theme and language", L"Dark or light, French or English, in one click.", "0.42.0" },
+    { L"Réglages", L"Une seule page, sept onglets : Jeu, Image & ray tracing, Son & vocal, Co-op (tes salons, le réseau, le port), Touches, Thème, Lanceur (langue, mise à jour, dossier du jeu, dépannage).",
+      L"Settings", L"One page, seven tabs: Game, Image & ray tracing, Sound & voice, Co-op (your lobbies, the network, the port), Keys, Theme, Launcher (language, updates, game folder, troubleshooting).", "0.42.0" },
+    { L"Thème et langue", L"Soleil ou lune : clair ou sombre, d'un clic. FR : français, anglais, russe ou arabe. Plus de thèmes et de couleurs dans Réglages > Thème.", L"Theme and language", L"Sun or moon: light or dark, in one click. FR: French, English, Russian or Arabic. More themes and colours in Settings > Theme.", "0.42.0" },
     { L"Discord", L"La communauté MWCoop : de l'aide, les bugs à signaler, les nouveautés et des joueurs pour faire équipe. Journaux et Soutenir (Ko-fi) juste à côté.",
       L"Discord", L"The MWCoop community: help, bug reports, news and players to team up with. Logs and Support (Ko-fi) right next to it.", "0.51.0" },
     { L"MSCLoader de MWCoop", L"Dans l'onglet Mods : OFFICIEL (celui installé dans le jeu) ou MWCOOP (installé à part, le jeu n'est pas modifié). Si tes mods ne se chargent pas, essaie MWCOOP, ou RÉINSTALLER.",
       L"MWCoop's MSCLoader", L"In the Mods tab: OFFICIAL (the one installed in the game) or MWCOOP (installed apart, the game is not changed). If your mods don't load, try MWCOOP, or REINSTALL.", "0.60.0" },
-    { L"Démarrer le jeu", L"Dans Réglages > Jeu : Copie (d'origine), Dossier du jeu ou Steam. Si MWCoop ne se charge pas, essaie l'un puis l'autre ; le lanceur passe aussi tout seul au dossier du jeu.",
-      L"Start the game", L"In Settings > Game: Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.", "0.62.2" },
-    { L"Désinstaller", L"Dans Réglages > À propos : retire tout MWCoop (dossiers compris) et le MSCLoader de MWCoop, à la Corbeille. Ta sauvegarde, tes mods et le MSCLoader officiel restent.",
-      L"Uninstall", L"In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.", "0.60.8" },
-    { L"Crédits", L"En bas de la colonne Nouveautés du Guide : ceux qui donnent quelque chose pour améliorer MWCoop. Merci à Dom pour ses 155 tenues, dans l'onglet Tenue !",
-      L"Credits", L"At the bottom of the Guide's What's new column: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in the Outfit tab!", "0.61.0" },
+    { L"Démarrer le jeu", L"Dans Réglages > Lanceur > Jeu, « Départ du jeu » : Copie (d'origine), Dossier du jeu ou Steam. Si MWCoop ne se charge pas, essaie l'un puis l'autre ; le lanceur passe aussi tout seul au dossier du jeu.",
+      L"Start the game", L"In Settings > Launcher > Game, \"Game start\": Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.", "0.62.2" },
+    { L"Désinstaller", L"Dans Réglages > Lanceur > Jeu : retire tout MWCoop (dossiers compris) et le MSCLoader de MWCoop, à la Corbeille. Ta sauvegarde, tes mods et le MSCLoader officiel restent.",
+      L"Uninstall", L"In Settings > Launcher > Game: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.", "0.60.8" },
+    { L"Crédits", L"L'onglet Crédits du Guide : ceux qui donnent quelque chose pour améliorer MWCoop. Merci à Dom pour ses 155 tenues, dans Personnage > Tenue !",
+      L"Credits", L"The Guide's Credits tab: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in Character > Outfit!", "0.61.0" },
     { L"Mode débogage", L"Dans Journaux : si MWCoop ne se charge pas, active-le, lance ta partie puis crée le zip. Il note tout ce que fait le lanceur et ce que le jeu a vraiment chargé.",
       L"Debug mode", L"In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.", "0.62.0" },
-    { L"Modes de compatibilité", L"Dans Réglages > Jeu. Après un plantage, Windows ajoute parfois un mode de compatibilité au jeu, et MWCoop ne se charge plus : le lanceur le retire avant chaque partie.",
-      L"Compatibility modes", L"In Settings > Game. After a crash, Windows sometimes adds a compatibility mode to the game, and MWCoop stops loading: the launcher removes it before every game.", "0.64.1" },
+    { L"Modes de compatibilité", L"Dans Réglages > Lanceur > Dépannage. Après un plantage, Windows ajoute parfois un mode de compatibilité au jeu, et MWCoop ne se charge plus : le lanceur le retire avant chaque partie.",
+      L"Compatibility modes", L"In Settings > Launcher > Troubleshooting. After a crash, Windows sometimes adds a compatibility mode to the game, and MWCoop stops loading: the launcher removes it before every game.", "0.64.1" },
     { L"Guide", L"Tout pour jouer sans souci, rangé par catégories à déplier : installer, héberger, rejoindre, partager ses mods, Copie / Dossier / Steam… et les solutions aux problèmes courants, avec des images.",
       L"Guide", L"Everything to play trouble-free, sorted into categories you expand: install, host, join, share your mods, Copy / Folder / Steam… and fixes for common problems, with pictures.", "0.64.0" },
-    { L"Touches en jeu", L"Dans Options du jeu > Touches : clique sur une pastille puis appuie sur la touche voulue. Tchat (T), porte-monnaie pour donner de l'argent aux autres (N), vocal (V).",
-      L"In-game keys", L"In Game options > Keys: click a pill then press the key you want. Chat (T), wallet to give money to others (N), voice (V).", "0.67.0" },
-    { L"Visage et habits importés", L"Ton propre visage, haut ou pantalon : choisis la zone (Tête, Torse, Jambes), Gabarit ouvre l'image du jeu avec ses coutures, peins par-dessus, puis importe. « Visage perso », « Haut perso », « Pantalon perso » dans la liste ; les autres le voient en jeu.",
-      L"Imported face and clothes", L"Your own face, top or pants: pick the zone (Head, Torso, Legs), Template opens the game's image with its seams, paint over it, then import. \"Custom face\", \"Custom top\", \"Custom pants\" in the list; others see it in game.", "0.71.0" },
+    { L"Touches en jeu", L"Dans Réglages > Touches : clique sur une touche puis appuie sur la nouvelle. Tchat (T), porte-monnaie pour donner de l'argent aux autres (N), vocal (V).",
+      L"In-game keys", L"In Settings > Keys: click a key then press the new one. Chat (T), wallet to give money to others (N), voice (V).", "0.67.0" },
+    { L"Visage et habits importés", L"Ton propre visage, haut ou pantalon : onglet Visage, bande « Mes images » : choisis la tuile (Visage, Haut, Pantalon), Gabarit ouvre l'image du jeu avec ses coutures, peins par-dessus, puis Importer… Les autres le voient en jeu.",
+      L"Imported face and clothes", L"Your own face, top or pants: Face tab, \"My images\" strip: pick the tile (Face, Top, Pants), Template opens the game's image with its seams, paint over it, then Import… Others see it in game.", "0.71.0" },
     { L"Finition de la voiture", L"Dans Voiture : en plus de la couleur, la finition de la CORRIS (L, LX, SLX, GT) pour une nouvelle partie. L'hôte la donne à ses invités.",
       L"Car trim", L"In Car: besides the color, the CORRIS trim (L, LX, SLX, GT) for a new game. The host gives it to their guests.", "0.69.1" },
-    { L"Options du jeu", L"Graphismes et options de la coop rangées par type : Voix, Visages, Partie et partage (fichiers de l'hôte, argent de départ), Touches. Les groupes de cette barre se plient d'un clic sur leur titre.",
-      L"Game options", L"Graphics and co-op options sorted by type: Voice, Faces, Game and sharing (host's files, starting money), Keys. The groups of this bar fold with a click on their title.", "0.70.0" },
-    { L"Triches", L"L'hôte peut autoriser les triches (Options du jeu > Partie et partage). En jeu : panneau (F7, réglable dans Touches) ou commandes du tchat (/aide) : aller à un joueur, lieux, argent, soin, heure, neige. Chaque triche est annoncée à tous.",
-      L"Cheats", L"The host can allow cheats (Game options > Game and sharing). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.", "0.72.0" },
-    { L"Carte", L"En jeu, M (réglable dans Options du jeu > Touches) ouvre la carte : les autres joueurs en direct, les lieux, molette pour zoomer, glisser pour se déplacer.",
-      L"Map", L"In game, M (set in Game options > Keys) opens the map: the other players live, places, wheel to zoom, drag to move.", "0.73.0" },
-    { L"Vue à la 3e personne", L"En jeu, F5 (réglable dans Options du jeu > Touches) passe à la troisième personne : ton personnage vu de dos à pied, ton véhicule vu de derrière en conduisant. Viser et prendre marchent comme d'habitude.",
-      L"Third-person view", L"In game, F5 (set in Game options > Keys) switches to third person: your character seen from behind on foot, your vehicle seen from behind while driving. Aiming and picking up work as usual.", "0.75.0" },
-    { L"Options du jeu réorganisées", L"Trois blocs : la Coop, les options vidéo du jeu, puis celles améliorées par MWCoop. Chaque catégorie a son icône. La fenêtre de configuration d'Unity est passée toute seule : l'écran se règle ici.",
-      L"Game options reorganized", L"Three blocks: Co-op, the game's video options, then MWCoop's enhanced ones. Each category has its icon. Unity's configuration window is now skipped: set your screen here.", "0.75.40" },
-    { L"Caméra drone", L"En jeu, F8 : ta caméra devient un petit drone pour prendre des photos (viseur, zoom, pencher, flash). Les touches se règlent dans Options du jeu > Caméra drone.",
-      L"Drone camera", L"In game, F8: your camera becomes a small drone to take photos (viewfinder, zoom, tilt, flash). Keys are set in Game options > Drone camera.", "0.75.44" },
-    { L"Vanilla et RT", L"Deux nouveaux préréglages : Vanilla remet les options du jeu d'origine, RT active les ombres du soleil en ray tracing (carte graphique compatible DXR, en développement). Ses réglages : catégorie Ray tracing.",
-      L"Vanilla and RT", L"Two new presets: Vanilla brings back the original game options, RT turns on ray-traced sun shadows (DXR-capable graphics card, in development). Its settings: Ray tracing category.", "0.76.0" },
+    { L"Options de la coop", L"Réglages > Co-op : « Quand j'héberge » (argent de départ, triches, ajouts : les défauts de tes salons), « Chez moi » (vocal, fichiers de l'hôte, images des autres) et « Réseau & lancement ». Son & vocal et Touches ont leur onglet.",
+      L"Co-op options", L"Settings > Co-op: \"When I host\" (starting money, cheats, additions: your lobbies' defaults), \"On my side\" (voice, host's files, others' images) and \"Network & launch\". Sound & voice and Keys have their own tab.", "0.70.0" },
+    { L"Triches", L"L'hôte peut autoriser les triches (Réglages > Co-op > Quand j'héberge, ou dans le salon). En jeu : panneau (F7, réglable dans Touches) ou commandes du tchat (/aide) : aller à un joueur, lieux, argent, soin, heure, neige. Chaque triche est annoncée à tous.",
+      L"Cheats", L"The host can allow cheats (Settings > Co-op > When I host, or in the lobby). In game: panel (F7, set in Keys) or chat commands (/help): go to a player, places, money, heal, time, snow. Every cheat is announced to everyone.", "0.72.0" },
+    { L"Carte", L"En jeu, M (réglable dans Réglages > Touches) ouvre la carte : les autres joueurs en direct, les lieux, molette pour zoomer, glisser pour se déplacer.",
+      L"Map", L"In game, M (set in Settings > Keys) opens the map: the other players live, places, wheel to zoom, drag to move.", "0.73.0" },
+    { L"Vue à la 3e personne", L"En jeu, F5 (réglable dans Réglages > Touches) passe à la troisième personne : ton personnage vu de dos à pied, ton véhicule vu de derrière en conduisant. Viser et prendre marchent comme d'habitude.",
+      L"Third-person view", L"In game, F5 (set in Settings > Keys) switches to third person: your character seen from behind on foot, your vehicle seen from behind while driving. Aiming and picking up work as usual.", "0.75.0" },
+    { L"L'onglet Jeu", L"Préréglage, Affichage, Confort & affichage en jeu, et le résumé Lumière & ombres ; tout le reste est dans l'onglet Image & ray tracing. La fenêtre de configuration d'Unity est passée toute seule : l'écran se règle ici.",
+      L"The Game tab", L"Preset, Display, Comfort & in-game display, and the Light & shadows summary; everything else is in the Image & ray tracing tab. Unity's configuration window is now skipped: set your screen here.", "0.75.40" },
+    { L"Caméra drone", L"En jeu, F8 : ta caméra devient un petit drone pour prendre des photos (viseur, zoom, pencher, flash). Les touches se règlent dans Réglages > Touches > Caméra drone.",
+      L"Drone camera", L"In game, F8: your camera becomes a small drone to take photos (viewfinder, zoom, tilt, flash). Keys are set in Settings > Keys > Drone camera.", "0.75.44" },
+    { L"Vanilla et ray tracing", L"Vanilla remet le jeu tel quel, sans les ajouts de MWCoop ; Ultra allume les ombres du soleil en ray tracing (carte graphique compatible DXR, en développement). Ses réglages : onglet Image & ray tracing.",
+      L"Vanilla and ray tracing", L"Vanilla brings the game back as it is, without MWCoop's additions; Ultra turns on ray-traced sun shadows (DXR-capable graphics card, in development). Its settings: Image & ray tracing tab.", "0.76.0" },
     { L"Plaque VIN de la Rivett", L"Dans Voiture, sous la finition : les options de la CORRIS pour une nouvelle partie (année, moteur, boîte, pare-brise, toit vinyle, roues, radio...), comme la plaque du jeu. L'hôte les donne à ses invités.",
       L"Rivett VIN plate", L"In Car, under the trim: the CORRIS options for a new game (year, engine, gearbox, windshield, vinyl roof, wheels, radio...), like the game's plate. The host gives them to their guests.", "0.83.3" },
     { L"Peinture perso de la Rivett", L"Dans Voiture, en haut de l'aperçu : ta propre peinture sur la CORRIS, peinte sur le gabarit du jeu. En jeu, achète « Custom paint made by artist » chez Fleetari ; l'hôte l'envoie à ses invités.",
@@ -92,11 +92,38 @@ static const TutoStep kTuto[] = {
       L"The lobby: code and options", L"When hosting: Public or Private (a session code to COPY for your friends by IP), players max (2 to 16) and game options, for this lobby only, sent to your guests.", "0.96.4" },
     { L"Code de session", L"Pour rejoindre un salon privé par IP : l'adresse de l'hôte et, ici, le code qu'il t'a donné. Salon public : laisse vide. Par Steam, un ami invité entre sans rien taper.",
       L"Session code", L"To join a private lobby by IP: the host's address and, here, the code they gave you. Public lobby: leave it empty. Through Steam, an invited friend gets in without typing anything.", "0.96.4" },
+    // 0.97.0 (maquette du 17/10) : tchat du salon, Chercher un reglage, onglet Theme, prereglages, onglets Personnage, chiffres
+    // des sauvegardes, pistes du CD, onglets du Guide (42..49).
+    { L"Le tchat du salon", L"Dans le Salon, sous les joueurs : les trois derniers messages, « Message au salon » et ENVOYER (ou Entrée). Pour se mettre d'accord avant de lancer, par Steam comme par IP.",
+      L"The lobby chat", L"In the Lobby, under the players: the last three messages, \"Message to the lobby\" and SEND (or Enter). To agree on things before starting, through Steam as well as by IP.", "0.97.0" },
+    { L"Chercher un réglage", L"Tape « ombre », « port » ou « vocal » : les lignes de tous les onglets qui correspondent s'affichent, avec le nom de leur carte. Échap efface.",
+      L"Search a setting", L"Type \"shadow\", \"port\" or \"voice\": the matching rows of every tab show up, with the name of their card. Esc clears.", "0.97.0" },
+    { L"Onglet Thème", L"Nuit boréale, Plein jour, Aurore verte ou Garage, la couleur d'accent, l'aurore et la neige, le verre dépoli, la densité et la taille du texte. L'aperçu à droite montre le résultat ; Appliquer le garde.",
+      L"Theme tab", L"Northern night, Daylight, Green aurora or Garage, the accent colour, the aurora and snow, the frosted glass, the density and the text size. The preview on the right shows the result; Apply keeps it.", "0.97.0" },
+    { L"Préréglages", L"Vanilla (le jeu tel quel), Léger, Équilibré, Joli, Ultra : tout d'un coup, chaque ligne reste modifiable ; dès que tu en changes une, la pastille passe sur Perso.",
+      L"Presets", L"Vanilla (the game as is), Light, Balanced, Pretty, Ultra: everything at once, every row stays editable; as soon as you change one, the pill moves to Custom.", "0.97.0" },
+    { L"Tenue, Visage, Voiture", L"Les trois onglets de la page Personnage. Vues Pied, Portrait ou Volant ; glisse pour tourner, molette pour zoomer. Les tuiles montrent chaque choix en 3D ; « + N » : la suite.",
+      L"Outfit, Face, Car", L"The three tabs of the Character page. Full, Portrait or Wheel views; drag to turn, wheel to zoom. The tiles show every choice in 3D; \"+ N\": the rest.", "0.97.0" },
+    { L"Les chiffres de ta partie", L"Pour la sauvegarde choisie : le jour, l'argent, les heures jouées et la dernière partie (quand, avec qui), notés par le mod à chaque sauvegarde. Dessous : copies de secours, Dupliquer, Exporter (zip), Recommencer.",
+      L"Your game's figures", L"For the chosen save: the day, the money, the hours played and the last session (when, with whom), noted by the mod at every save. Below: backup copies, Duplicate, Export (zip), Restart.", "0.97.0" },
+    { L"Les pistes du CD", L"Contenu envoyé > CD (ou Radio) : les pistes qui partent chez tes invités. « Ajouter des pistes » (.ogg) ou glisse les fichiers ici : numérotés track1…trackN pour toi. Jauge en bas : 100 Mo au plus.",
+      L"The CD tracks", L"Sent content > CD (or Radio): the tracks that go to your guests. \"Add tracks\" (.ogg) or drop the files here: numbered track1…trackN for you. Gauge at the bottom: 100 MB at most.", "0.97.0" },
+    { L"Guide, Nouveautés, Crédits", L"Les trois onglets de cette page, avec le champ Chercher… qui filtre les articles. En bas de chaque article : ← précédent et suivant →.",
+      L"Guide, What's new, Credits", L"The three tabs of this page, with the Search… field that filters the articles. At the bottom of every article: ← previous and next →.", "0.97.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
 static const int kTutoN = (int)(sizeof(kTuto) / sizeof(kTuto[0]));
 
+// Pastille d'un onglet de la page Reglages (meme calcul que DrawSettingsPage : gfx.inc) et champ Chercher un reglage de
+// l'en-tete (DrawSetSearchBox : a gauche de l'etoile Nouveautes, ui.inc DrawHeader).
+static RectF TutoSetTab(int t)
+{
+    float x = kMain.X;
+    for (int k = 0; k < t; k++) x += MeasureW(MeasureG(), T(kSetTabFr[k], kSetTabEn[k]), 13, FontStyleBold) + 30 + 6;
+    return RectF(x, 92, MeasureW(MeasureG(), T(kSetTabFr[t], kSetTabEn[t]), 13, FontStyleBold) + 30, 36);
+}
+static RectF TutoSetSearch() { float right = g_btn[B_NEWS].r.Width > 0 ? g_btn[B_NEWS].r.X - 10 : 940; return RectF(right - 250, 22, 250, 44); }
 // Element montre a l'etape i (rectangle vide : bulle au centre). Coordonnees de la carte.
 static RectF TutoTarget(int i)
 {
@@ -143,10 +170,19 @@ static RectF TutoTarget(int i)
     case 39: return g_canalRect;
     case 40: return g_btn[B_HOST].r;
     case 41: return g_fields[2].r;   // (reseau IP : le champ CODE ; Steam : bulle au centre)
+    // 0.97.0
+    case 42: return g_navR[TAB_LOBBY];                       // (le tchat n'existe que dans un salon ouvert : la page Salon de la barre)
+    case 43: return TutoSetSearch();                         // Chercher un reglage (en-tete de la page Reglages)
+    case 44: return TutoSetTab(SET_THEME);                   // onglet Theme (TutoGo l'ouvre)
+    case 45: return kGfxTop;                                 // carte Prereglage (onglet Jeu)
+    case 46: return join(PersoTabRect(0), PersoTabRect(2));  // Tenue / Visage / Voiture (en-tete de la page Personnage : tenue.inc)
+    case 47: return RectF(kSaveR.X, kSaveR.Y + 28, kSaveR.Width, 240);   // haut de la carte de droite des Sauvegardes : chiffres et derniere partie (saves.inc)
+    case 48: return RectF(kContentR.X, kContentR.Y, kContentR.Width, 160);   // haut de la carte de droite : les pistes du CD (modsync.inc)
+    case 49: return RectF(g_guideTabRight - GuideTabsW(), 26, GuideTabsW(), 36);   // Guide / Nouveautes / Credits (wiki.inc GuideTabsDraw)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 ? TAB_WIKI : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19 : Guide)
+static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 || i == 43 || i == 45 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la
@@ -179,6 +215,7 @@ static void TutoGo(int i)
     int t = TutoTab(TutoCur());
     g_tab = t;
     if (t == TAB_GFX || t == TAB_COOP) SetTutoTab(TutoCur());   // (page Reglages : l'onglet de l'element montre)
+    if (TutoCur() == 44) g_setTab = SET_THEME;   // (0.97.0 : la bulle de l'onglet Theme l'ouvre)
 }
 static void TutoStart(bool all)
 {
