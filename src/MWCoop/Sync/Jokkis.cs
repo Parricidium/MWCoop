@@ -78,6 +78,7 @@ namespace MWCoop
             public GameObject Ai; public bool AiWasActive;
             public List<Renderer> Hidden = new List<Renderer>();
             public Drivetrain Dt; public Rigidbody Body;
+            public Drivetrain AiDt; public float AiMass;   // mecanique de la voiture IA du numero (moteur, masse ; essieux copies une fois)
             public Transform Needle;
             public FsmFloat Fuel, FuelLine;
             public float NextHide, NextSpec, NextBuild, NextMask;
@@ -574,6 +575,7 @@ namespace MWCoop
             // 7. Mecanique : fiche du modele, propulsion, masse ; reservoir plein.
             r.Body = car.GetComponent<Rigidbody>();
             r.Dt = car.GetComponent<Drivetrain>();
+            AdoptAi(r, ai, ct, offset);   // (JD, 18/10 : le moteur, la masse, les essieux et les sons de la voiture IA, pas ceux de la SORBET)
             ApplySpec(r, true);
             Transform tank = ct.Find("Simulation/FuelTankSorbett");
             PlayMakerFSM tf = tank != null ? Game.FsmOn(tank.gameObject, "Data") : null;
@@ -658,8 +660,104 @@ namespace MWCoop
 
         // Fiche du modele (wiki) : Drivetrain (puissance, couple, regimes), propulsion, masse. Remise toutes les 2 s (des
         // automates du jeu reecrivent la puissance de la SORBET).
+        // Mecanique et sons de la voiture IA du numero (demande de JD, 18/10 : « ce sont des Sorbet deguisees, elles n'ont pas le
+        // son ni le comportement des voitures des PNJ ») :
+        //  - Drivetrain : puissance, couple, regimes de l'IA (ApplySpec, toutes les 2 s) ; la boite reste celle de la SORBET
+        //    (5 rapports + marche arriere : ses automates de passage des vitesses en dependent) ;
+        //  - masse de l'IA ; essieux (Axles de l'IA : suspensions, raideurs, adherence, pression, carrossage) recopies champ par
+        //    champ (reflexion : Axle est une classe du jeu) puis CarDynamics.SetWheelsParams ;
+        //  - sons : la SORBET perd son AudioEngine (Low / Med / High) ; l'objet Sounds de l'IA (EngineSound : source, filtres,
+        //    automate 'Sound' lu sur le Drivetrain ; Backfire) est copie sous la Jokkis, ses references ramenees a elle. Chez les
+        //    autres joueurs (copie), VehicleSync pilote ces sources comme toutes (SoundObjs : enfants « Sounds », volume et
+        //    hauteur recus du conducteur).
+        static void AdoptAi(Rent r, GameObject ai, Transform ct, Vector3 offset)
+        {
+            r.AiDt = ai.GetComponent<Drivetrain>();
+            Rigidbody ab = ai.GetComponent<Rigidbody>();
+            r.AiMass = ab != null && ab.mass > 100f ? ab.mass : 0f;
+            // Essieux
+            int axleFields = 0;
+            try
+            {
+                Component sa = ct.GetComponent("Axles"), aa = ai.GetComponent("Axles");
+                if (sa != null && aa != null)
+                {
+                    foreach (string an in new[] { "frontAxle", "rearAxle" })
+                    {
+                        System.Reflection.FieldInfo af = sa.GetType().GetField(an);
+                        object src = af != null ? af.GetValue(aa) : null, dst = af != null ? af.GetValue(sa) : null;
+                        if (src == null || dst == null) continue;
+                        foreach (System.Reflection.FieldInfo fi in src.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                        {
+                            if (fi.FieldType != typeof(float) || fi.Name.StartsWith("old") || fi.Name.StartsWith("delta")) continue;
+                            float v = (float)fi.GetValue(src);
+                            if (float.IsNaN(v) || float.IsInfinity(v)) continue;
+                            fi.SetValue(dst, v); axleFields++;
+                        }
+                    }
+                    Component cd = ct.GetComponent("CarDynamics");
+                    System.Reflection.MethodInfo m = cd != null ? cd.GetType().GetMethod("SetWheelsParams") : null;
+                    if (m != null) m.Invoke(cd, null);
+                }
+            }
+            catch (System.Exception e) { Log.Warn("jokkis : essieux de l'IA : " + e.Message); }
+            // Sons
+            int snd = 0;
+            try
+            {
+                Transform ae = ct.Find("Simulation/Engine/AudioEngine");
+                if (ae != null) ae.gameObject.SetActive(false);
+                Transform aiSounds = ai.transform.Find("Sounds");
+                if (aiSounds != null)
+                {
+                    GameObject cp = Object.Instantiate(aiSounds.gameObject);
+                    cp.name = "Sounds";
+                    cp.transform.SetParent(ct, false);
+                    cp.transform.localPosition = aiSounds.localPosition + offset; cp.transform.localRotation = aiSounds.localRotation; cp.transform.localScale = aiSounds.localScale;
+                    cp.SetActive(true);
+                    Transform muzzle = FindDeep(ct, "Muzzle");
+                    foreach (PlayMakerFSM f in cp.GetComponentsInChildren<PlayMakerFSM>(true))
+                    {
+                        try
+                        {
+                            f.Fsm.InitData();
+                            foreach (FsmObject ov in f.FsmVariables.ObjectVariables)
+                                if (ov.Value is Drivetrain || ov.Name == "Drivetrain") ov.Value = r.Dt;
+                            foreach (FsmGameObject gv in f.FsmVariables.GameObjectVariables)
+                            {
+                                if (gv.Value == ai) gv.Value = r.Car;
+                                else if (gv.Name == "Muzzle") { if (muzzle != null) gv.Value = muzzle.gameObject; else f.enabled = false; }
+                            }
+                        }
+                        catch (System.Exception e) { Log.Warn("jokkis : son " + f.FsmName + " : " + e.Message); }
+                    }
+                    snd = cp.GetComponentsInChildren<AudioSource>(true).Length;
+                }
+            }
+            catch (System.Exception e) { Log.Warn("jokkis : sons de l'IA : " + e.Message); }
+            Log.Info("jokkis : n " + r.Number + " : mecanique de l'IA (" + (r.AiDt != null ? r.AiDt.maxPower.ToString("F0") + " ch, " : "moteur ?, ") + (r.AiMass > 0f ? r.AiMass.ToString("F0") + " kg, " : "") + axleFields + " reglages d'essieux), " + snd + " source(s) de son de l'IA");
+        }
+
         static void ApplySpec(Rent r, bool first)
         {
+            if (r.AiDt != null)
+            {
+                Drivetrain a = r.AiDt, d = r.Dt;
+                if (r.Body != null && r.AiMass > 0f && !Mathf.Approximately(r.Body.mass, r.AiMass)) r.Body.mass = r.AiMass;
+                if (d == null) return;
+                if (!Mathf.Approximately(d.maxPower, a.maxPower)) { d.maxPower = a.maxPower; d.originalMaxPower = a.maxPower; }
+                if (!Mathf.Approximately(d.maxTorque, a.maxTorque)) d.maxTorque = a.maxTorque;
+                if (!Mathf.Approximately(d.maxPowerRPM, a.maxPowerRPM)) d.maxPowerRPM = a.maxPowerRPM;
+                if (!Mathf.Approximately(d.maxTorqueRPM, a.maxTorqueRPM)) d.maxTorqueRPM = a.maxTorqueRPM;
+                if (!Mathf.Approximately(d.maxRPM, a.maxRPM)) d.maxRPM = a.maxRPM;
+                if (!Mathf.Approximately(d.minRPM, a.minRPM)) d.minRPM = a.minRPM;
+                if (d.transmission != a.transmission)
+                {
+                    d.transmission = a.transmission;
+                    if (!first) { try { d.SetTransmission(a.transmission); } catch (System.Exception e) { Log.Warn("jokkis : SetTransmission : " + e.Message); } }
+                }
+                return;
+            }
             Spec sp; if (!Specs.TryGetValue(r.D.Model, out sp)) sp = new Spec { Hp = 150f, Kg = 800f };
             if (r.Body != null && !Mathf.Approximately(r.Body.mass, sp.Kg)) r.Body.mass = sp.Kg;
             Drivetrain dt = r.Dt;

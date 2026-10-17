@@ -417,7 +417,8 @@ namespace MWCoop
         static void Restore()
         {
             FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID");
-            world = pid != null ? pid.Value.ToString("F0") : "";
+            world = pid != null && pid.Value != 0f ? pid.Value.ToString("F0") : "";   // (0 : monde inconnu, jamais une cle)
+            if (world.Length == 0 && !Session.IsHost) Log.Warn("argent : PlayerID inconnu, porte-monnaie et etat du joueur ni retrouves ni gardes");
             RestoreSelf();
             if (Session.IsHost || world.Length == 0) return;
             if (System.IO.File.Exists(StorePath)) foreach (string l in System.IO.File.ReadAllLines(StorePath))
@@ -466,7 +467,7 @@ namespace MWCoop
             try { System.IO.File.WriteAllLines(StorePath, lines.ToArray()); } catch { }
             StoreSelf();
         }
-        static bool ready;
+        static bool ready, pidWaitLogged; static float pidWaitUntil;
 
         public static void OnLevelLoaded()
         {
@@ -485,7 +486,7 @@ namespace MWCoop
                 else Log.Info("argent : globales deja remises a l'argent de depart par le menu, porte-monnaie pas reecrit (" + State() + ")");
             }
             cash = bank = null;
-            ready = false; wasActive = false;
+            ready = false; wasActive = false; pidWaitLogged = false; pidWaitUntil = Time.realtimeSinceStartup + 90f;
             readyAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 15f : -1;   // apres le chargement de la sauvegarde
             foreach (Pay p in Pays) { p.F = null; p.Hooked = p.Open = false; p.At = -100; p.Day = -1; }
             nextPayScan = 0; payHooked = worldLocal = worldIn = 0;
@@ -1066,6 +1067,16 @@ namespace MWCoop
                 cash = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
                 bank = FsmVariables.GlobalVariables.FindFsmFloat("PlayerBankAccount");
                 if (cash == null || bank == null) { readyAt = -1; Log.Warn("argent : globales absentes"); return; }
+                // PlayerID pas encore connu (0 : nouvelle partie en cours d'ecriture) : la cle du monde serait "0", la meme pour
+                // toutes les parties neuves -- argent d'une partie d'avant retrouve dans la nouvelle (retour de Donskoy, 18/10).
+                // On attend (30 s au plus), puis la cle vide : rien de retrouve, rien d'ecrit.
+                FsmFloat pid0 = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID");
+                if (!Session.IsHost && (pid0 == null || pid0.Value == 0f) && Time.realtimeSinceStartup < pidWaitUntil)
+                {
+                    readyAt = Time.realtimeSinceStartup + 2f;
+                    if (!pidWaitLogged) { pidWaitLogged = true; Log.Info("argent : PlayerID pas encore connu, porte-monnaie et etat du joueur attendus"); }
+                    return;
+                }
                 Restore();
                 if (pendingGift > 0) { cash.Value += pendingGift; Hud.Toast(pendingFrom + Lang.T(" vous a donn\u00E9 ", " gave you ") + pendingGift + " mk"); pendingGift = 0; }
                 if (pendingRefund > 0) { cash.Value += pendingRefund; Hud.Toast(Lang.T("Don rendu (joueur parti) : ", "Gift returned (player left): ") + pendingRefund + " mk"); pendingRefund = 0; }

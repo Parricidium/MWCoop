@@ -683,6 +683,7 @@ namespace MWCoop.Net
                 {
                     int seq = r.U16();
                     bool cmp = r.Bool();
+                    GuestSlot.OnHostSaving(seq);   // (la partie de l'hote rangee chez l'invite : sauvegarde locale puis copie en partie-N)
                     if (!cmp || !PlayerSync.InGame) break;
                     // Jamais dans la vraie sauvegarde du joueur : seulement dans son profil isole.
                     if (!IsolatedProfile) { Log.Info("sauvegarde coop #" + seq + " : pas de comparaison, profil non isole"); break; }
