@@ -5764,6 +5764,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (p >= 0 && HitButton(x, y) == p && g_btn[p].enabled) OnButton(p);
         return 0;
     }
+    case WM_DROPFILES: ContentDrop((HDROP)wp); return 0;   // (modsync.inc : pistes .ogg et images deposees, page Contenu envoye)
     case WM_CHAR:
         if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
@@ -6290,7 +6291,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }
-        else if (st == L"sauvegardes") { g_tab = TAB_SAVES; SavesScan(); }   // (saves.inc ; fenetres : -nouvelle, -choix, -nom, -recommencer)
+        else if (st == L"sauvegardes") { g_tab = TAB_SAVES; SavesFake(); }   // (saves.inc : parties factices ; fenetres : -nouvelle, -choix, -nom, -recommencer)
         else if (st == L"sauvegardes-nouvelle") { g_tab = TAB_SAVES; SaveOpenNewGame(); }
         else if (st == L"sauvegardes-choix") { g_tab = TAB_SAVES; SaveOpenPick(); }
         else if (st == L"sauvegardes-recommencer") { g_tab = TAB_SAVES; SavesScan(); g_saveModal = SM_RESTART; }
@@ -6516,6 +6517,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     int x = work.left + (work.right - work.left - g_winW) / 2, y = work.top + (work.bottom - work.top - g_winH) / 2;
     g_wnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_APPWINDOW, wc.lpszClassName, L"MWCoop", WS_POPUP | WS_MINIMIZEBOX | WS_SYSMENU,
                             x, y, g_winW, g_winH, NULL, NULL, inst, NULL);
+    DragAcceptFiles(g_wnd, TRUE);   // (fichiers deposes : WM_DROPFILES, page Contenu envoye)
 
     BITMAPINFO bi = {};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);

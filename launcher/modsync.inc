@@ -1420,23 +1420,114 @@ static void SyncSteamTick()
         }
     }
 }
-// ---- volet "Contenu envoye aux invites" (coordonnees du panneau des onglets, comme les autres volets)
+// ---- page CONTENU ENVOYE (maquette du 17/10) : a gauche « Ce qui part », une ligne par groupe (CD, Radio, peinture, drapeau,
+// posters, autres, visage) avec icone, detail et interrupteur, puis la jauge de la taille totale (100 Mo) ; a droite le detail
+// du groupe choisi (pistes du CD avec Ajouter des pistes et glisser-deposer, ou les images, ou les categories « Autres »), les
+// cartes Posters et Peinture & drapeau (Choisir), l'aide, ANNULER / VALIDER (les valeurs d'avant sont rendues : ui.inc PageCancel).
 // songs / ignored : CD et radio -- le jeu ne lit que track1.ogg, track2.ogg... a la suite (OGG Vorbis), les autres
 // fichiers audio sont ignores (retour d'un joueur, 10/10 : « ma musique ne s'importe pas chez les invites »).
 struct ContentInfo { int n; uint64_t bytes; int songs, ignored; };
 static ContentInfo g_contentInfo[16];
 static DWORD g_contentScanT;
-// (g_contentHot : drawer.inc)
-static std::vector<int> g_drContent;                 // a l'ouverture du volet (ANNULER)
-static std::map<std::wstring, Bitmap *> g_contentThumb;
-static const float kContentRowH = 72;   // pas des tuiles (deux colonnes)
-// Deux colonnes de tuiles a gauche (rework 17/10), colonne de droite : total envoye, apercu des images, mods.
-static const float kContentLeftW = 640;
-static RectF ContentRight() { return RectF(kMain.X + 24 + kContentLeftW + 14, kMain.Y + 84, kMain.Width - 48 - kContentLeftW - 14, kMain.Height - 84 - 86); }
-static RectF ContentTileRect(int i)
+// (g_contentHot : uikit.inc)
+static std::vector<int> g_drContent;                 // a l'ouverture de la page (ANNULER)
+static std::map<std::wstring, std::pair<std::wstring, Bitmap *>> g_contentThumb;   // fichier -> (cle taille|date, image)
+static const RectF kContentL(264, 88, 388, 656), kContentR(664, 88, 600, 656);
+static const float kContentRowH = 60, kContentRowStep = 68;
+// Groupes de la carte de gauche : categories de kContent (indices), icone, sous-titre.
+struct ContentGroup { const wchar_t *fr, *en, *subFr, *subEn; int icon; const int *cats; int ncats; };
+static const int kCgCd[] = { 0, 1, 2 }, kCgRadio[] = { 3 }, kCgPaint[] = { 4 }, kCgFlag[] = { 6 }, kCgPosters[] = { 7 }, kCgOther[] = { 5, 8, 9, 10, 11 };
+static const ContentGroup kCg[] = {
+    { L"CD", L"CD", L"Lecteur CD des voitures", L"Car CD player", IC_MUSIC, kCgCd, 3 },
+    { L"Radio", L"Radio", L"Station perso", L"Custom station", IC_RADIO, kCgRadio, 1 },
+    { L"Peinture de ma CORRIS", L"My CORRIS paint", L"", L"", IC_CAR, kCgPaint, 1 },
+    { L"Drapeau", L"Flag", L"Devant le garage", L"In front of the garage", IC_FLAG, kCgFlag, 1 },
+    { L"Posters", L"Posters", L"Murs du garage et de la maison", L"Garage and house walls", IC_IMAGE, kCgPosters, 1 },   // (ligne : « Garage et maison »)
+    { L"Autres", L"Others", L"Mobylette, autocollant, tissu, photo…", L"Moped, sticker, fabric, photo…", IC_LAYERS, kCgOther, 5 },
+};
+static const int kCgN = 6, kCgFace = 6;   // (ligne 6 : « Mon visage (photo) », envoye avec la tenue : puce Auto, pas d'interrupteur)
+static const Color kCgHue[7] = { Color(255, 166, 216, 255), Color(255, 255, 210, 143), Color(255, 240, 166, 255), Color(255, 154, 240, 192), Color(255, 201, 216, 242), Color(255, 201, 216, 242), Color(255, 201, 216, 242) };
+static int g_contentSel = 0;   // groupe detaille a droite (0 CD par defaut, comme la maquette)
+// Pistes d'un dossier de musique (CD1-3 ou Radio) : trackN.ogg a la suite, titre et duree lus dans l'OGG (en-tetes Vorbis).
+struct ContentTrack { std::wstring file, title; uint64_t bytes = 0; float secs = -1; int cd = 0; };
+static std::vector<ContentTrack> g_contentTracks[2];   // 0 : les trois CD, 1 : la radio
+static std::map<std::wstring, std::pair<uint64_t, std::pair<std::wstring, float>>> g_oggCache;   // chemin -> (taille ^ date, (titre, secondes))
+
+static void ContentScan();
+static void GoPage(int p);   // (ui.inc)
+
+// Titre (TITLE=) et duree (position du dernier granule / frequence) d'un OGG Vorbis : premiers et derniers 64 Ko seulement.
+static bool OggInfo(const std::wstring &f, std::wstring *title, float *secs)
 {
-    float w = (kContentLeftW - 12) / 2;
-    return RectF(kMain.X + 24 + (i % 2) * (w + 12), kMain.Y + 84 + (i / 2) * kContentRowH, w, kContentRowH - 10);
+    HANDLE h = CreateFileW(f.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER sz = {};
+    GetFileSizeEx(h, &sz);
+    std::vector<unsigned char> head((size_t)min(sz.QuadPart, (LONGLONG)65536)), tail;
+    DWORD n = 0;
+    ReadFile(h, head.data(), (DWORD)head.size(), &n, NULL); head.resize(n);
+    if (sz.QuadPart > 65536) { LARGE_INTEGER at; at.QuadPart = sz.QuadPart - 65536; SetFilePointerEx(h, at, NULL, FILE_BEGIN); tail.resize(65536); ReadFile(h, tail.data(), 65536, &n, NULL); tail.resize(n); }
+    else tail = head;
+    CloseHandle(h);
+    auto u32 = [](const std::vector<unsigned char> &b, size_t o) { return o + 4 <= b.size() ? (uint32_t)(b[o] | b[o + 1] << 8 | b[o + 2] << 16 | (uint32_t)b[o + 3] << 24) : 0u; };
+    auto find = [](const std::vector<unsigned char> &b, const char *s, size_t from) { size_t l = strlen(s); for (size_t i = from; i + l <= b.size(); i++) if (!memcmp(&b[i], s, l)) return i; return std::string::npos; };
+    if (head.size() < 4 || memcmp(head.data(), "OggS", 4)) return false;
+    size_t id = find(head, "\x01vorbis", 0);
+    uint32_t rate = id == std::string::npos ? 0 : u32(head, id + 12);
+    size_t cm = find(head, "\x03vorbis", 0);
+    if (cm != std::string::npos) {
+        size_t p = cm + 7, vl = u32(head, p); p += 4 + vl;
+        uint32_t cnt = u32(head, p); p += 4;
+        for (uint32_t i = 0; i < cnt && i < 64 && p + 4 <= head.size(); i++) {
+            uint32_t l = u32(head, p); p += 4;
+            if (p + l > head.size()) break;
+            std::string c((const char *)&head[p], l); p += l;
+            if (!_strnicmp(c.c_str(), "TITLE=", 6)) *title = Trim(Widen(c.substr(6), CP_UTF8));
+        }
+    }
+    *secs = -1;
+    if (rate) {   // dernier en-tete de page : "OggS", version, type, granule (8 octets)
+        size_t last = std::string::npos;
+        for (size_t p = find(tail, "OggS", 0); p != std::string::npos; p = find(tail, "OggS", p + 4)) if (p + 14 <= tail.size()) last = p;
+        if (last != std::string::npos) {
+            uint64_t gr = u32(tail, last + 6) | ((uint64_t)u32(tail, last + 10) << 32);
+            if (gr != ~0ull) *secs = (float)(gr / (double)rate);
+        }
+    }
+    return true;
+}
+static void ContentTrackInfo(ContentTrack &t, const std::wstring &path)
+{
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a)) return;
+    t.bytes = ((uint64_t)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+    uint64_t stamp = t.bytes * 1000003ULL ^ ((uint64_t)a.ftLastWriteTime.dwHighDateTime << 32 | a.ftLastWriteTime.dwLowDateTime);
+    auto it = g_oggCache.find(path);
+    if (it == g_oggCache.end() || it->second.first != stamp) {
+        std::wstring title; float secs = -1;
+        OggInfo(path, &title, &secs);
+        g_oggCache[path] = std::make_pair(stamp, std::make_pair(title, secs));
+        it = g_oggCache.find(path);
+    }
+    t.title = it->second.second.first.empty() ? t.file.substr(0, t.file.rfind(L'.')) : it->second.second.first;
+    t.secs = it->second.second.second;
+}
+static void ContentTracksScan()
+{
+    for (int k = 0; k < 2; k++) {
+        g_contentTracks[k].clear();
+        if (g_gameDir.empty()) continue;
+        for (int cd = 1; cd <= (k ? 1 : 3); cd++) {
+            std::wstring root = k ? L"Radio" : L"CD" + std::to_wstring(cd);
+            for (int n = 1; n < 999; n++) {
+                std::wstring f = L"track" + std::to_wstring(n) + L".ogg", p = g_gameDir + root + L"\\" + f;
+                if (!FileExists(p)) break;
+                ContentTrack t; t.file = f; t.cd = cd;
+                ContentTrackInfo(t, p);
+                g_contentTracks[k].push_back(t);
+            }
+        }
+    }
 }
 
 static void ContentScan()
@@ -1460,6 +1551,7 @@ static void ContentScan()
         }
         g_contentInfo[i] = ci;
     }
+    ContentTracksScan();
 }
 static std::wstring ContentSummary()
 {
@@ -1474,135 +1566,501 @@ static void ContentSnapshot(bool restore)
     if (!restore) { g_drContent.clear(); for (int i = 0; i < kContentN; i++) g_drContent.push_back(ContentOn(i)); return; }
     for (int i = 0; i < (int)g_drContent.size() && i < kContentN; i++) if (ContentOn(i) != (g_drContent[i] != 0)) ContentSet(i, g_drContent[i] != 0);
 }
-// Miniature d'une image du jeu (premiere image de la categorie), lue une fois.
-static Bitmap *ContentThumb(int i)
+// Groupe : allume si une de ses categories l'est ; l'interrupteur les regle toutes.
+static bool ContentGroupOn(int gi) { for (int k = 0; k < kCg[gi].ncats; k++) if (ContentOn(kCg[gi].cats[k])) return true; return false; }
+static int ContentGroupOnCount(int gi) { int n = 0; for (int k = 0; k < kCg[gi].ncats; k++) n += ContentOn(kCg[gi].cats[k]); return n; }
+static void ContentGroupSet(int gi, bool on) { for (int k = 0; k < kCg[gi].ncats; k++) ContentSet(kCg[gi].cats[k], on); }
+static ContentInfo ContentGroupInfo(int gi)
+{
+    ContentInfo s = { 0, 0, 0, 0 };
+    for (int k = 0; k < kCg[gi].ncats; k++) { const ContentInfo &c = g_contentInfo[kCg[gi].cats[k]]; s.n += c.n; s.bytes += c.bytes; s.songs += c.songs; s.ignored += c.ignored; }
+    return s;
+}
+// Miniature d'une image du jeu (Images\...), relue quand le fichier change.
+static Bitmap *ContentThumbFile(const std::wstring &rel)
+{
+    std::wstring f = g_gameDir + rel;
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (g_gameDir.empty() || !GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &a)) return NULL;
+    std::wstring key = std::to_wstring(a.nFileSizeLow) + L"|" + std::to_wstring(a.ftLastWriteTime.dwLowDateTime);
+    auto it = g_contentThumb.find(f);
+    if (it != g_contentThumb.end() && it->second.first == key) return it->second.second;
+    if (it != g_contentThumb.end()) delete it->second.second;
+    Bitmap *b = LoadAnyImage(f, NULL);
+    g_contentThumb[f] = std::make_pair(key, b);
+    return b;
+}
+static Bitmap *ContentThumb(int i)   // (premiere image de la categorie)
 {
     if (kContent[i].files == NULL || wcscmp(kContent[i].root, L"Images")) return NULL;
     std::vector<std::wstring> f = ContentFiles(i, g_gameDir);
-    if (f.empty()) return NULL;
-    auto it = g_contentThumb.find(f[0]);
-    if (it != g_contentThumb.end()) return it->second;
-    std::vector<unsigned char> d;
-    Bitmap *b = ReadAll(g_gameDir + f[0], d) ? LoadPngMem(d.data(), d.size(), 8192, 8192) : NULL;
-    g_contentThumb[f[0]] = b;
-    return b;
+    return f.empty() ? NULL : ContentThumbFile(f[0]);
 }
-static RectF ContentModsRow() { RectF r = ContentRight(); return RectF(r.X, r.Y + r.Height - 52, r.Width, 52); }
-// 5000+i : categorie i (la tuile entiere) ; 5100 : ligne des mods (page MODS).
+// Image dessinee dans un rectangle arrondi, recadree (couverture).
+static void ContentDrawImage(Graphics &g, Bitmap *b, RectF r, float rad)
+{
+    GraphicsPath p; RoundRect(p, r, rad);
+    if (!b) { SolidBrush f(WithA(kInk, 0.08f)); g.FillPath(&f, &p); Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p); return; }
+    GraphicsState st = g.Save();
+    g.SetClip(&p, CombineModeIntersect);
+    float bw = (float)b->GetWidth(), bh = (float)b->GetHeight(), s = max(r.Width / bw, r.Height / bh);
+    g.DrawImage(b, RectF(r.X + (r.Width - bw * s) / 2, r.Y + (r.Height - bh * s) / 2, bw * s, bh * s));
+    g.Restore(st);
+    Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
+}
+static std::wstring ContentClock(float s) { if (s < 0) return L""; int t = (int)(s + 0.5f); wchar_t b[32]; if (t >= 3600) swprintf_s(b, L"%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60); else swprintf_s(b, L"%d:%02d", t / 60, t % 60); return b; }
+
+// ---- ajouter des pistes (bouton, ou fichiers deposes sur la fenetre : launcher.cpp WM_DROPFILES -> ContentDrop)
+// Le lanceur n'a pas de convertisseur audio (MWCoopRT.dll ne fait que la video des cassettes) : .ogg seulement, numerote
+// trackN.ogg a la suite dans le premier CD qui a de la place (CD1, puis CD2, CD3 : 99 pistes chacun), ou dans Radio.
+static const int kContentCdMax = 99;
+static std::wstring ContentMusicRoot(bool radio, int *next)
+{
+    if (radio) { *next = g_contentInfo[3].songs + 1; return L"Radio"; }
+    for (int cd = 1; cd <= 3; cd++) if (g_contentInfo[cd - 1].songs < kContentCdMax) { *next = g_contentInfo[cd - 1].songs + 1; return L"CD" + std::to_wstring(cd); }
+    *next = 0;
+    return L"";
+}
+// Image choisie -> PNG du jeu (Images\<rel>) : n'importe quel format lisible (LoadAnyImage), taille d'origine.
+static bool ContentPutImage(const std::wstring &src, const std::wstring &rel)
+{
+    std::wstring why;
+    Bitmap *b = LoadAnyImage(src, &why);
+    if (!b) { SetStatus(K_ERR, T(L"Image illisible : %s", L"Unreadable image: %s"), why.c_str()); return false; }
+    std::wstring dst = g_gameDir + rel;
+    SHCreateDirectoryExW(NULL, dst.substr(0, dst.find_last_of(L'\\')).c_str(), NULL);
+    CLSID png;
+    SetFileAttributesW(dst.c_str(), FILE_ATTRIBUTE_NORMAL);
+    bool ok = EncoderClsid(L"image/png", &png) && b->Save(dst.c_str(), &png, NULL) == Ok;
+    delete b;
+    if (!ok) SetStatus(K_ERR, T(L"%s : écriture impossible dans le dossier du jeu", L"%s: can't write into the game folder"), rel.c_str());
+    else TestLog("contenu : %s <- %s", Narrow(rel, CP_UTF8).c_str(), Narrow(src, CP_UTF8).c_str());
+    return ok;
+}
+static void ContentAddFiles(const std::vector<std::wstring> &files)
+{
+    if (g_gameDir.empty() || files.empty()) return;
+    ContentScan();
+    // images deposees sur Posters / Drapeau : les images du jeu
+    if (g_contentSel == 3 || g_contentSel == 4) {
+        int put = 0, k = 0;
+        for (const std::wstring &f : files) {
+            const wchar_t *ext = wcsrchr(f.c_str(), L'.');
+            bool img = ext && (!_wcsicmp(ext, L".png") || !_wcsicmp(ext, L".jpg") || !_wcsicmp(ext, L".jpeg") || !_wcsicmp(ext, L".bmp") || !_wcsicmp(ext, L".gif") || !_wcsicmp(ext, L".webp") || !_wcsicmp(ext, L".tif") || !_wcsicmp(ext, L".tiff"));
+            if (!img) continue;
+            if (g_contentSel == 3) { if (ContentPutImage(f, L"Images\\flag_garage.png")) put++; break; }
+            if (k < 3 && ContentPutImage(f, L"Images\\poster" + std::to_wstring(k + 1) + L".png")) { put++; k++; }
+        }
+        ContentScan();
+        if (put) SetStatus(K_OK, g_contentSel == 3 ? T(L"Drapeau du garage remplacé (Images\\flag_garage.png)", L"Garage flag replaced (Images\\flag_garage.png)") : T(L"%d poster(s) mis dans Images (poster1…poster3)", L"%d poster(s) put into Images (poster1…poster3)"), put);
+        else SetStatus(K_WARN, T(L"Aucune image reconnue (png, jpg, bmp, gif, webp, tif)", L"No image recognized (png, jpg, bmp, gif, webp, tif)"));
+        return;
+    }
+    bool radio = g_contentSel == 1;
+    int added = 0, refused = 0, first = 0, last = 0;
+    std::wstring root;
+    for (const std::wstring &f : files) {
+        const wchar_t *ext = wcsrchr(f.c_str(), L'.');
+        if (!ext || _wcsicmp(ext, L".ogg")) { refused++; continue; }
+        int n = 0;
+        std::wstring r = ContentMusicRoot(radio, &n);
+        if (r.empty() || !n) { SetStatus(K_WARN, T(L"Plus de place : 99 pistes par CD", L"No room left: 99 tracks per CD")); break; }
+        std::wstring dir = g_gameDir + r;
+        SHCreateDirectoryExW(NULL, dir.c_str(), NULL);
+        std::wstring dst = dir + L"\\track" + std::to_wstring(n) + L".ogg";
+        if (!CopyFileW(f.c_str(), dst.c_str(), TRUE)) { SetStatus(K_ERR, T(L"%s : copie impossible (erreur %lu)", L"%s: can't copy (error %lu)"), f.substr(f.find_last_of(L'\\') + 1).c_str(), GetLastError()); ContentScan(); return; }
+        TestLog("contenu : %s <- %s", Narrow(r + L"\\track" + std::to_wstring(n) + L".ogg", CP_UTF8).c_str(), Narrow(f, CP_UTF8).c_str());
+        if (!added) first = n;
+        last = n; root = r; added++;
+        ContentScan();   // (le prochain numero)
+    }
+    wchar_t b[200];
+    if (added) {
+        if (added == 1) swprintf_s(b, T(L"1 piste ajoutée dans %s (track%d.ogg)", L"1 track added to %s (track%d.ogg)"), root.c_str(), first);
+        else swprintf_s(b, T(L"%d pistes ajoutées dans %s (track%d…track%d)", L"%d tracks added to %s (track%d…track%d)"), added, root.c_str(), first, last);
+        if (refused) { wchar_t r2[80]; swprintf_s(r2, T(L" · %d refusé(s) : format .ogg seulement", L" · %d refused: .ogg format only"), refused); wcscat_s(b, r2); }
+        SetStatus(refused ? K_WARN : K_OK, L"%s", b);
+    } else if (refused) SetStatus(K_WARN, T(L"Format .ogg seulement : le jeu ne lit que des OGG Vorbis (convertis d'abord tes fichiers)", L"Format .ogg only: the game reads only OGG Vorbis (convert your files first)"));
+    ContentScan();
+}
+// Fenetre de choix (plusieurs fichiers) : filtre et titre selon ce qu'on ajoute.
+static std::vector<std::wstring> ContentPickFiles(const wchar_t *filter, const wchar_t *title, bool multi)
+{
+    std::vector<wchar_t> buf(32768, 0);
+    OPENFILENAMEW of = { sizeof(of) };
+    of.hwndOwner = g_wnd;
+    of.lpstrFilter = filter;
+    of.lpstrFile = buf.data(); of.nMaxFile = (DWORD)buf.size();
+    of.lpstrTitle = title;
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_EXPLORER | (multi ? OFN_ALLOWMULTISELECT : 0);
+    std::vector<std::wstring> out;
+    if (!GetOpenFileNameW(&of)) return out;
+    std::wstring dir = buf.data();
+    const wchar_t *p = buf.data() + dir.size() + 1;
+    if (!*p) { out.push_back(dir); return out; }   // (un seul : le chemin entier)
+    for (; *p; p += wcslen(p) + 1) out.push_back(WithSlash(dir) + p);
+    return out;
+}
+static void ContentAddTracks()
+{
+    std::vector<std::wstring> f = ContentPickFiles(L"OGG Vorbis (*.ogg)\0*.ogg\0*.*\0*.*\0", g_contentSel == 1 ? T(L"Ajouter des morceaux à la radio (.ogg)", L"Add songs to the radio (.ogg)") : T(L"Ajouter des pistes au CD (.ogg)", L"Add tracks to the CD (.ogg)"), true);
+    if (!f.empty()) ContentAddFiles(f);
+}
+static void ContentChooseImages(bool flag)
+{
+    int sel = g_contentSel;
+    g_contentSel = flag ? 3 : 4;
+    std::vector<std::wstring> f = ContentPickFiles(L"Images\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp\0*.*\0*.*\0",
+                                                   flag ? T(L"Choisir le drapeau du garage (Images\\flag_garage.png)", L"Choose the garage flag (Images\\flag_garage.png)") : T(L"Choisir jusqu'à 3 posters (Images\\poster1…3.png)", L"Choose up to 3 posters (Images\\poster1…3.png)"), !flag);
+    if (!f.empty()) ContentAddFiles(f);
+    g_contentSel = f.empty() ? sel : g_contentSel;
+}
+// Fichiers deposes sur la fenetre (WM_DROPFILES, launcher.cpp) : pris sur la page Contenu envoye seulement.
+static void ContentDrop(HDROP h)
+{
+    UINT n = DragQueryFileW(h, 0xFFFFFFFF, NULL, 0);
+    std::vector<std::wstring> files;
+    for (UINT i = 0; i < n && i < 200; i++) { wchar_t p[MAX_PATH] = L""; if (DragQueryFileW(h, i, p, MAX_PATH)) files.push_back(p); }
+    DragFinish(h);
+    if (g_tab != TAB_CONTENT || g_state != ST_IDLE || g_gameDir.empty()) { SetStatus(K_WARN, T(L"Dépose tes fichiers sur la page Contenu envoyé (pistes .ogg, images)", L"Drop your files on the Sent content page (.ogg tracks, images)")); return; }
+    if (g_contentSel == 2 || g_contentSel == 5) g_contentSel = 0;   // (peinture : page Voiture ; autres : rien a deposer -> le CD)
+    ContentAddFiles(files);
+}
+static void ContentOpenMusicDir()
+{
+    std::wstring root = g_contentSel == 1 ? L"Radio" : L"CD1";
+    if (g_contentSel != 1) for (int cd = 1; cd <= 3; cd++) if (g_contentInfo[cd - 1].songs) { root = L"CD" + std::to_wstring(cd); break; }   // (le premier CD garni)
+    std::wstring d = g_gameDir + root;
+    SHCreateDirectoryExW(NULL, d.c_str(), NULL);
+    ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
+}
+
+// ---- zones (comme mods.inc MscZone : la souris passe par ContentAt, le clic par ContentClick)
+// 5000+g interrupteur du groupe g ; 5050+g choisir le groupe ; 5200 ouvrir le dossier CD / Radio ; 5201 ajouter des pistes ;
+// 5202 page Voiture (peinture) ; 5203 importer une peinture ; 5210 choisir les posters ; 5211 choisir le drapeau ;
+// 5300+k interrupteur de la categorie k de « Autres ».
+static std::vector<HotRect> g_contentZones;
+static void ContentZone(RectF r, int id) { g_contentZones.push_back({ r, id }); }
 static int ContentAt(float x, float y)
 {
-    for (int i = 0; i < kContentN; i++) if (ContentTileRect(i).Contains(x, y)) return 5000 + i;
-    return ContentModsRow().Contains(x, y) ? 5100 : -1;
+    for (int i = (int)g_contentZones.size() - 1; i >= 0; i--) if (g_contentZones[i].r.Contains(x, y)) return g_contentZones[i].id;
+    return -1;
 }
 static void ContentClick(float x, float y)
 {
     int h = ContentAt(x, y);
-    if (h >= 5000 && h < 5100) { int i = h - 5000; ContentSet(i, !ContentOn(i)); }
-    else if (h == 5100) { g_tab = TAB_MODS; g_mscPage = -1; g_scroll[TAB_MODS] = 0; MscScan(); }
+    if (h >= 5000 && h < 5000 + kCgN) { int gi = h - 5000; ContentGroupSet(gi, !ContentGroupOn(gi)); }
+    else if (h >= 5050 && h < 5050 + kCgN) g_contentSel = h - 5050;
+    else if (h == 5200) ContentOpenMusicDir();
+    else if (h == 5201) ContentAddTracks();
+    else if (h == 5202) GoPage(TAB_CAR);
+    else if (h == 5203) { PaintImport(); ContentScan(); }
+    else if (h == 5210) ContentChooseImages(false);
+    else if (h == 5211) ContentChooseImages(true);
+    else if (h >= 5300 && h < 5300 + kCg[5].ncats) { int i = kCg[5].cats[h - 5300]; ContentSet(i, !ContentOn(i)); }
 }
-// Page CONTENU : une tuile par categorie (miniature, taille, interrupteur), puis les mods, puis ANNULER / VALIDER.
+
+// Petits elements : bouton en verre clair ou plein (hot : g_contentHot == id), puce, carte interieure.
+static void ContentButton(Graphics &g, RectF r, const std::wstring &s, int id, bool primary = false, bool enabled = true)
+{
+    bool hot = enabled && g_contentHot == id;
+    float a = enabled ? 1.0f : 0.4f;
+    GraphicsPath p; RoundRect(p, r, min(11.0f, r.Height / 2));
+    if (primary) { SolidBrush b(WithA(kAcc, a)); g.FillPath(&b, &p); if (hot) { SolidBrush hb(Color(60, 255, 255, 255)); g.FillPath(&hb, &p); } }
+    else { SolidBrush b(hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p); Pen pen(WithA(TH(fieldBorder), a), 1.0f); g.DrawPath(&pen, &p); }
+    Text(g, s, r, 12.5f, FontStyleBold, WithA(primary ? kOnAcc : hot ? kAcc : kInk, a));
+    if (enabled) ContentZone(r, id);
+}
+static void ContentChip(Graphics &g, RectF r, const std::wstring &s, Color fill, Color ink, Color border, float px = 11.5f)
+{
+    GraphicsPath p; RoundRect(p, r, r.Height / 2);
+    SolidBrush b(fill); g.FillPath(&b, &p);
+    Pen pen(border, 1.0f); g.DrawPath(&pen, &p);
+    Text(g, s, r, px, FontStyleBold, ink);
+}
+static void ContentInner(Graphics &g, RectF r, float rad = 14)
+{
+    GraphicsPath p; RoundRect(p, r, rad);
+    SolidBrush b(TH(card)); g.FillPath(&b, &p);
+    Pen pen(TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
+}
+// Ligne « titre + detail + interrupteur » (categories « Autres », a droite).
+static void ContentSwitchRow(Graphics &g, RectF r, const std::wstring &t, const std::wstring &d, bool on, int id, Color dc)
+{
+    bool hot = g_contentHot == id;
+    Text(g, t, RectF(r.X, r.Y + 4, r.Width - 70, 20), 13.5f, FontStyleBold, WithA(kInk, on ? 1.0f : 0.6f), StringAlignmentNear);
+    Text(g, d, RectF(r.X, r.Y + 24, r.Width - 70, 18), 11.5f, FontStyleRegular, dc, StringAlignmentNear);
+    UiToggle(g, RectF(r.X + r.Width - 48, r.Y + (r.Height - 26) / 2, 48, 26), on, hot);
+    Pen sep(TH(sep), 1); g.DrawLine(&sep, r.X, r.Y + r.Height, r.X + r.Width, r.Y + r.Height);
+    ContentZone(r, id);
+}
+// Detail d'une categorie : « 3 fichier(s) · 3 Ko », « 44 Ko », « rien dans le jeu », ou les pistes lues / ignorees.
+static std::wstring ContentDetail(const ContentInfo &ci, bool music, bool folder)
+{
+    wchar_t b[96];
+    if (!ci.n) return T(L"rien dans le jeu", L"nothing in the game");
+    if (music && ci.ignored > 0) { swprintf_s(b, T(L"%d lue(s) par le jeu · %d ignorée(s) (track1.ogg…)", L"%d read by the game · %d ignored (track1.ogg…)"), ci.songs, ci.ignored); return b; }
+    if (music) { swprintf_s(b, T(L"%d musique(s) · %s", L"%d song(s) · %s"), ci.songs, SizeText(ci.bytes).c_str()); return b; }
+    if (folder) { swprintf_s(b, T(L"%d fichier(s) · %s", L"%d file(s) · %s"), ci.n, SizeText(ci.bytes).c_str()); return b; }
+    return SizeText(ci.bytes);
+}
+
+// Carte de droite, haut : les pistes du CD (ou de la radio), avec Ouvrir le dossier / Ajouter des pistes et la zone de depot.
+static void DrawContentTracks(Graphics &g, RectF c, float &y)
+{
+    bool radio = g_contentSel == 1;
+    const std::vector<ContentTrack> &tr = g_contentTracks[radio ? 1 : 0];
+    ContentInfo gi = ContentGroupInfo(g_contentSel);
+    Graphics &mg = MeasureG();
+    std::wstring t = radio ? T(L"Radio", L"Radio") : L"CD";
+    float tw = MeasureW(mg, t, 16, FontStyleBold);
+    Title(g, t, RectF(c.X + 18, c.Y + 14, tw + 6, 26), 16, kInk);
+    wchar_t sb[96];
+    if (radio) swprintf_s(sb, T(L"· %d morceau(x) · %s", L"· %d song(s) · %s"), (int)tr.size(), SizeText(gi.bytes).c_str());
+    else swprintf_s(sb, T(L"· %d piste(s) · %s", L"· %d track(s) · %s"), (int)tr.size(), SizeText(gi.bytes).c_str());
+    Text(g, sb, RectF(c.X + 18 + tw + 6, c.Y + 15, 220, 26), 13, FontStyleBold, kGrey, StringAlignmentNear);
+    float bx = c.X + c.Width - 18;
+    ContentButton(g, RectF(bx - 158, c.Y + 12, 158, 36), T(L"Ajouter des pistes", L"Add tracks"), 5201, true, !g_gameDir.empty());
+    std::wstring od = radio ? T(L"Ouvrir le dossier Radio", L"Open the Radio folder") : T(L"Ouvrir le dossier CD", L"Open the CD folder");
+    float ow = MeasureW(mg, od, 12.5f, FontStyleBold) + 28;
+    ContentButton(g, RectF(bx - 158 - 8 - ow, c.Y + 12, ow, 36), od, 5200, false, !g_gameDir.empty());
+    std::wstring hint = radio ? T(L"Glisse des fichiers .ogg ici : numérotés track1…trackN dans Radio. Le jeu les lit au menu principal ; MWCoop les importe pour toi.", L"Drop .ogg files here: numbered track1…trackN in Radio. The game reads them in the main menu; MWCoop imports them for you.")
+                              : T(L"Glisse des fichiers .ogg ici : numérotés track1…trackN. Le jeu les lit au menu principal ; MWCoop les importe pour toi.", L"Drop .ogg files here: numbered track1…trackN. The game reads them in the main menu; MWCoop imports them for you.");
+    if (gi.ignored > 0) { wchar_t ib[160]; swprintf_s(ib, T(L"%d fichier(s) audio ignoré(s) par le jeu : il ne lit que track1.ogg, track2.ogg… à la suite (OGG Vorbis).", L"%d audio file(s) ignored by the game: it reads only track1.ogg, track2.ogg… in a row (OGG Vorbis)."), gi.ignored); hint = ib; }
+    Para(g, hint, RectF(c.X + 18, c.Y + 50, c.Width - 36, 36), 12, gi.ignored > 0 ? kWarn : kGrey);
+    // grille : 2 colonnes, 7 lignes (14 cases) ; au-dela, une case « 13 à N · total » ; la derniere : la zone de depot
+    const int rows = 7, cells = rows * 2;
+    float gx = c.X + 18, gw = c.Width - 36, cw = (gw - 6) / 2, ch = 36, step = 42;
+    y = c.Y + 92;
+    int shown = (int)tr.size() <= cells - 1 ? (int)tr.size() : cells - 2;   // (toutes, ou 12 + la case « de plus »)
+    int extra = shown < (int)tr.size() ? 2 : 1;                              // (+ la case de depot)
+    static const Color kDisc[6] = { Color(255, 46, 139, 106), Color(255, 201, 74, 74), Color(255, 60, 90, 140), Color(255, 122, 63, 168), Color(255, 224, 192, 112), Color(255, 143, 166, 204) };
+    bool multiCd = false;
+    for (auto &x : tr) multiCd |= x.cd > 1;
+    for (int k = 0; k < shown + extra && k < cells; k++) {
+        RectF r(gx + (k % 2) * (cw + 6), y + (k / 2) * step, cw, ch);
+        bool rest = k == shown && extra == 2, drop = k == shown + extra - 1;
+        GraphicsPath p; RoundRect(p, r, 12);
+        SolidBrush b(Color((BYTE)(g_dark ? 56 : 14), 0, 0, 0)); g.FillPath(&b, &p);
+        Pen pen(TH(choiceBorder), 1); if (drop) pen.SetDashStyle(DashStyleDash); g.DrawPath(&pen, &p);
+        if (drop) { Text(g, T(L"+ Glisser des fichiers ici", L"+ Drop files here"), r, 12, FontStyleBold, kGrey); continue; }
+        RectF disc(r.X + 10, r.Y + 4, 28, 28);
+        if (rest) {
+            SolidBrush db(WithA(kInk, 0.15f)); g.FillEllipse(&db, disc);
+            float tot = 0; uint64_t by = 0; bool allDur = true;
+            for (int i = shown; i < (int)tr.size(); i++) { if (tr[i].secs < 0) allDur = false; else tot += tr[i].secs; by += tr[i].bytes; }
+            wchar_t rb[64]; swprintf_s(rb, T(L"%02d à %02d · %d de plus", L"%02d to %02d · %d more"), shown + 1, (int)tr.size(), (int)tr.size() - shown);
+            Text(g, rb, RectF(r.X + 46, r.Y, r.Width - 46 - 64, r.Height), 12.5f, FontStyleBold, WithA(kInk, 0.7f), StringAlignmentNear);
+            Text(g, allDur ? ContentClock(tot) : SizeText(by), RectF(r.X + r.Width - 70, r.Y, 60, r.Height), 12, FontStyleRegular, kGrey, StringAlignmentFar);
+            continue;
+        }
+        const ContentTrack &x = tr[k];
+        uint32_t hsh = 2166136261u; for (wchar_t ch2 : x.title) hsh = (hsh ^ (uint32_t)ch2) * 16777619u;
+        Pen ring(WithA(kInk, 0.14f), 4); g.DrawEllipse(&ring, RectF(disc.X + 2, disc.Y + 2, 24, 24));
+        SolidBrush db(kDisc[hsh % 6]); g.FillEllipse(&db, RectF(disc.X + 4, disc.Y + 4, 20, 20));
+        SolidBrush hole(Color((BYTE)(g_dark ? 120 : 60), 0, 0, 0)); g.FillEllipse(&hole, RectF(disc.X + 11, disc.Y + 11, 6, 6));
+        wchar_t nb[16]; swprintf_s(nb, L"%02d · ", k + 1);
+        std::wstring lab = (multiCd ? L"CD" + std::to_wstring(x.cd) + L" · " : L"") + nb + x.title;
+        std::wstring right = x.secs >= 0 ? ContentClock(x.secs) : SizeText(x.bytes);
+        float rw = MeasureW(mg, right, 12, FontStyleRegular) + 6;
+        RectF lr(r.X + 46, r.Y, r.Width - 46 - rw - 14, r.Height);
+        while (lab.size() > 4 && MeasureW(mg, lab, 12.5f, FontStyleBold) > lr.Width) { lab.resize(lab.size() - 2); lab += L"…"; }
+        Text(g, lab, lr, 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, right, RectF(r.X + r.Width - rw - 10, r.Y, rw, r.Height), 12, FontStyleRegular, kGrey, StringAlignmentFar);
+    }
+    y += rows * step;
+}
+// Carte de droite, haut : les images (peinture, drapeau, posters) en grand, avec Choisir ; ou les categories « Autres ».
+static void DrawContentDetail(Graphics &g, RectF c, float &y)
+{
+    int gi = g_contentSel;
+    const ContentGroup &cg = kCg[gi];
+    ContentInfo info = ContentGroupInfo(gi);
+    Graphics &mg = MeasureG();
+    std::wstring t = T(cg.fr, cg.en);
+    float tw = MeasureW(mg, t, 16, FontStyleBold);
+    Title(g, t, RectF(c.X + 18, c.Y + 14, tw + 6, 26), 16, kInk);
+    wchar_t sb[96];
+    if (gi == 5) swprintf_s(sb, T(L"· %d / %d envoyé(s) · %s", L"· %d / %d sent · %s"), ContentGroupOnCount(gi), cg.ncats, SizeText(info.bytes).c_str());
+    else if (gi == 4) swprintf_s(sb, L"· %d · %s", info.n, SizeText(info.bytes).c_str());
+    else swprintf_s(sb, L"· %s", info.n ? SizeText(info.bytes).c_str() : T(L"rien dans le jeu", L"nothing in the game"));
+    Text(g, sb, RectF(c.X + 18 + tw + 6, c.Y + 15, 260, 26), 13, FontStyleBold, kGrey, StringAlignmentNear);
+    float bx = c.X + c.Width - 18;
+    y = c.Y + 74;
+    if (gi == 2) {   // peinture : celle du jeu (Images\car.png) ou la perso (page Voiture, voiture.inc PaintImport)
+        ContentButton(g, RectF(bx - 150, c.Y + 12, 150, 36), T(L"Importer une image", L"Import an image"), 5203, true, !g_gameDir.empty());
+        ContentButton(g, RectF(bx - 150 - 8 - 130, c.Y + 12, 130, 36), T(L"Page Voiture", L"Car page"), 5202);
+        Text(g, PaintOn() ? T(L"Ta peinture perso (peinture.png) part à la place de Images\\car.png. Réglages : Personnage › Voiture.", L"Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car.")
+                          : T(L"La peinture du jeu (Images\\car.png) telle que tu l'as. Une peinture perso : Personnage › Voiture.", L"The game's paint (Images\\car.png) as you have it. A custom paint: Character › Car."),
+             RectF(c.X + 18, c.Y + 50, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        ContentDrawImage(g, PaintOn() ? PaintThumb() : ContentThumbFile(L"Images\\car.png"), RectF(c.X + 18, y, c.Width - 36, 280), 14);
+        y += 294;
+        return;
+    }
+    if (gi == 3 || gi == 4) {   // drapeau, posters : Choisir (fenetre), ou deposer des images
+        bool flag = gi == 3;
+        ContentButton(g, RectF(bx - 110, c.Y + 12, 110, 36), T(L"Choisir", L"Choose"), flag ? 5211 : 5210, true, !g_gameDir.empty());
+        Text(g, flag ? T(L"Glisse une image ici, ou Choisir : elle devient Images\\flag_garage.png (le drapeau devant le garage).", L"Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in front of the garage).")
+                     : T(L"Glisse jusqu'à 3 images ici, ou Choisir : elles deviennent Images\\poster1…3.png (murs du garage et de la maison).", L"Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (garage and house walls)."),
+             RectF(c.X + 18, c.Y + 50, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        std::vector<std::wstring> files = ContentFiles(kCg[gi].cats[0], g_gameDir);
+        if (flag) { ContentDrawImage(g, files.empty() ? NULL : ContentThumbFile(files[0]), RectF(c.X + 18, y, c.Width - 36, 280), 14); if (files.empty()) Text(g, T(L"Aucun drapeau dans Images", L"No flag in Images"), RectF(c.X + 18, y, c.Width - 36, 280), 13, FontStyleBold, kGrey); }
+        else {
+            float pw = (c.Width - 36 - 2 * 10) / 3;
+            for (int k = 0; k < 3; k++) {
+                RectF r(c.X + 18 + k * (pw + 10), y, pw, 280);
+                std::wstring rel = L"Images\\poster" + std::to_wstring(k + 1) + L".png";
+                Bitmap *b = FileExists(g_gameDir + rel) ? ContentThumbFile(rel) : NULL;
+                ContentDrawImage(g, b, r, 14);
+                if (!b) Text(g, L"poster" + std::to_wstring(k + 1) + L".png", r, 12, FontStyleBold, kGrey);
+            }
+        }
+        y += 294;
+        return;
+    }
+    // autres : une ligne par categorie, avec son interrupteur
+    Text(g, T(L"Le reste des fichiers perso du jeu, chacun à part. Tout est copié à part chez les invités.", L"The rest of the game's custom files, each on its own. Everything is copied apart to the guests."),
+         RectF(c.X + 18, c.Y + 50, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+    for (int k = 0; k < cg.ncats; k++) {
+        int i = cg.cats[k];
+        const ContentInfo &ci = g_contentInfo[i];
+        RectF r(c.X + 18, y + k * 52, c.Width - 36, 50);
+        Bitmap *b = ContentThumb(i);
+        RectF ir(r.X, r.Y + 5, 40, 40);
+        if (b) ContentDrawImage(g, b, ir, 10);
+        else { GraphicsPath ip; RoundRect(ip, ir, 10); SolidBrush ib(WithA(kAcc, 0.22f)); g.FillPath(&ib, &ip); Icon(g, IC_HASH, ir.X + 20, ir.Y + 20, 18, kInk, 1.9f); }
+        ContentSwitchRow(g, RectF(r.X + 52, r.Y, r.Width - 52, r.Height), T(kContent[i].fr, kContent[i].en), ContentDetail(ci, false, !kContent[i].files), ContentOn(i), 5300 + k, ci.n ? kGrey : WithA(kGrey, 0.7f));
+    }
+    y += cg.ncats * 52 + 8;
+}
+
+// Page CONTENU : « Ce qui part » a gauche, le detail a droite, ANNULER / VALIDER.
 static void DrawContent(Graphics &g)
 {
+    g_contentZones.clear();
     if (GetTickCount() - g_contentScanT > 2000) ContentScan();
-    RectF c = kMain;
-    Glass(c);
-    Title(g, T(L"Contenu envoy\u00E9 aux invit\u00E9s", L"Content sent to guests"), RectF(c.X + 24, c.Y + 20, 600, 28), 18, kInk);
-    Text(g, T(L"Tes CD, ta peinture, ton drapeau\u2026 tels que tu les as dans ton jeu, copi\u00E9s \u00E0 part chez les invit\u00E9s de ton salon.",
-              L"Your CDs, paint, flag\u2026 as you have them in your game, copied apart to your lobby's guests."),
-         RectF(c.X + 24, c.Y + 48, c.Width - 48, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
+    Glass(kContentL); Glass(kContentR);
+    Graphics &mg = MeasureG();
     int on_ = 0;
-    for (int i = 0; i < kContentN; i++) {
-        RectF r = ContentTileRect(i);
-        bool on = ContentOn(i), hot = g_contentHot == 5000 + i;
-        on_ += on;
-        const ContentInfo &ci = g_contentInfo[i];
-        GraphicsPath rp; RoundRect(rp, r, 16);
-        SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
-        Pen rpen(TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
-        float a = on ? 1.0f : 0.55f;
-        RectF tr(r.X + 10, r.Y + 9, 44, 44);
-        GraphicsPath tp; RoundRect(tp, tr, 12);
-        if (Bitmap *b = ContentThumb(i)) {   // miniature (images)
-            GraphicsState st = g.Save();
-            g.SetClip(&tp, CombineModeIntersect);
-            g.DrawImage(b, tr);
-            g.Restore(st);
-        } else {   // CD, radio, hockey : une icone
-            SolidBrush pb(WithA(kAcc, 0.22f)); g.FillPath(&pb, &tp);
-            int ic = !wcsncmp(kContent[i].root, L"CD", 2) ? IC_MUSIC : !wcscmp(kContent[i].root, L"Radio") ? IC_RADIO : IC_HASH;
-            Icon(g, ic, tr.X + 22, tr.Y + 22, 20, WithA(kInk, a), 1.9f);
-        }
-        Text(g, T(kContent[i].fr, kContent[i].en), RectF(r.X + 66, r.Y + 9, r.Width - 150, 24), 14.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
-        std::wstring det;
-        if (!ci.n) det = T(L"rien dans le jeu", L"nothing in the game");
-        else if (ci.ignored > 0) { wchar_t b[96]; swprintf_s(b, T(L"%d lue(s) par le jeu \u00B7 %d ignor\u00E9e(s) (track1.ogg\u2026)", L"%d read by the game \u00B7 %d ignored (track1.ogg\u2026)"), ci.songs, ci.ignored); det = b; }
-        else if (ci.songs > 0) { wchar_t b[64]; swprintf_s(b, T(L"%d musique(s) \u00B7 %s", L"%d song(s) \u00B7 %s"), ci.songs, SizeText(ci.bytes).c_str()); det = b; }
-        else if (!kContent[i].files) { wchar_t b[64]; swprintf_s(b, T(L"%d fichier(s) \u00B7 %s", L"%d file(s) \u00B7 %s"), ci.n, SizeText(ci.bytes).c_str()); det = b; }
-        else det = SizeText(ci.bytes);
-        Text(g, det, RectF(r.X + 66, r.Y + 32, r.Width - 150, 20), 12, FontStyleRegular, ci.ignored > 0 ? kWarn : kGrey, StringAlignmentNear);
-        UiToggle(g, RectF(r.X + r.Width - 66, r.Y + (r.Height - 28) / 2, 50, 28), on, hot);
-    }
-    // colonne de droite : total de ce qui part (jauge sur 100 Mo), apercu des images envoyees, puis les mods
+    for (int i = 0; i < kContentN; i++) on_ += ContentOn(i);
+    // ---- a gauche : ce qui part
     {
-        RectF rc = ContentRight();
+        RectF c = kContentL;
+        Title(g, T(L"Ce qui part", L"What goes out"), RectF(c.X + 18, c.Y + 14, c.Width - 36, 26), 16, kInk);
+        for (int gi = 0; gi <= kCgN; gi++) {
+            RectF r(c.X + 18, c.Y + 48 + gi * kContentRowStep, c.Width - 36, kContentRowH);
+            bool face = gi == kCgFace, sel = !face && gi == g_contentSel, hot = g_contentHot == 5050 + gi;
+            bool on = face ? PersoImgHas(PI_FACE) : ContentGroupOn(gi);
+            GraphicsPath rp; RoundRect(rp, r, 16);
+            SolidBrush rb(sel ? WithA(kAcc, 0.12f) : hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
+            Pen rpen(sel ? kAcc : hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), sel ? 1.6f : 1); g.DrawPath(&rpen, &rp);
+            float a = face ? 0.75f : on ? 1.0f : 0.55f;
+            RectF ir(r.X + 10, r.Y + 8, 44, 44);
+            GraphicsPath ip; RoundRect(ip, ir, 12);
+            SolidBrush ib(WithA(kInk, 0.08f)); g.FillPath(&ib, &ip);
+            Icon(g, face ? IC_USER : kCg[gi].icon, ir.X + 22, ir.Y + 22, 20, g_dark ? WithA(kCgHue[gi], a) : WithA(kAcc, a), 2.0f);
+            // titre + compte gris, puis le detail
+            std::wstring t = face ? T(L"Mon visage (photo)", L"My face (photo)") : T(kCg[gi].fr, kCg[gi].en), cnt, det;
+            ContentInfo info = face ? ContentInfo{ 0, 0, 0, 0 } : ContentGroupInfo(gi);
+            Color dc = kGrey;
+            if (face) {
+                WIN32_FILE_ATTRIBUTE_DATA fa;
+                bool has = PersoImgHas(PI_FACE) && GetFileAttributesExW(PersoImgFile(PI_FACE).c_str(), GetFileExInfoStandard, &fa);
+                det = has ? T(L"Envoyé avec ta tenue · ", L"Sent with your outfit · ") + SizeText(fa.nFileSizeLow) : T(L"Aucune : Personnage › Visage", L"None: Character › Face");
+            } else if (gi == 0 || gi == 1) {
+                int n = (int)g_contentTracks[gi].size();
+                wchar_t b[48]; swprintf_s(b, gi ? T(L"· %d morceau(x)", L"· %d song(s)") : T(L"· %d piste(s)", L"· %d track(s)"), n);
+                cnt = b;
+                if (!info.n) det = T(L"rien dans le jeu", L"nothing in the game");
+                else if (info.ignored > 0) { det = ContentDetail(info, true, true); dc = kWarn; }
+                else det = std::wstring(T(kCg[gi].subFr, kCg[gi].subEn)) + L" · " + SizeText(info.bytes);
+            } else if (gi == 2) {
+                WIN32_FILE_ATTRIBUTE_DATA pa;
+                bool perso = PaintOn() && GetFileAttributesExW(PaintFile().c_str(), GetFileExInfoStandard, &pa);
+                det = std::wstring(perso ? T(L"peinture.png (perso)", L"peinture.png (custom)") : L"car.png") + L" · " + (perso ? SizeText(pa.nFileSizeLow) : info.n ? SizeText(info.bytes) : std::wstring(T(L"rien dans le jeu", L"nothing in the game")));
+            }
+            else if (gi == 4) { cnt = L"· " + std::to_wstring(info.n); det = info.n ? std::wstring(T(L"Garage et maison", L"Garage and house")) + L" · " + SizeText(info.bytes) : T(L"rien dans le jeu", L"nothing in the game"); }
+            else if (gi == 5) { wchar_t b[24]; swprintf_s(b, L"· %d / %d", ContentGroupOnCount(gi), kCg[gi].ncats); cnt = b; det = T(kCg[gi].subFr, kCg[gi].subEn); }
+            else det = info.n ? std::wstring(T(kCg[gi].subFr, kCg[gi].subEn)) + L" · " + SizeText(info.bytes) : T(L"rien dans le jeu", L"nothing in the game");
+            float tx = r.X + 66, tw = MeasureW(mg, t, 13.5f, FontStyleBold), maxw = r.Width - 66 - 70;
+            Text(g, t, RectF(tx, r.Y + 9, min(tw + 4, maxw), 20), 13.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
+            if (!cnt.empty() && tw + 8 < maxw) Text(g, cnt, RectF(tx + tw + 5, r.Y + 10, maxw - tw - 5, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+            Text(g, det, RectF(tx, r.Y + 31, maxw, 18), 12, FontStyleRegular, WithA(dc, face ? 0.85f : 1.0f), StringAlignmentNear);
+            if (face) { const wchar_t *au = T(L"Auto", L"Auto"); float aw = PillW(au, 11.5f) + 6; ContentChip(g, RectF(r.X + r.Width - 12 - aw, r.Y + (r.Height - 26) / 2, aw, 26), au, WithA(kInk, 0.1f), kInk, TH(choiceBorder)); }
+            else {
+                bool th = g_contentHot == 5000 + gi;
+                RectF tr(r.X + r.Width - 12 - 48, r.Y + (r.Height - 26) / 2, 48, 26);
+                UiToggle(g, tr, on, th);
+                ContentZone(RectF(tr.X - 8, r.Y, tr.Width + 20, r.Height), 5000 + gi);
+                ContentZone(RectF(r.X, r.Y, r.Width - 76, r.Height), 5050 + gi);
+            }
+        }
+        // jauge : total de ce qui part, sur 100 Mo (orange au-dela de 85 %)
         uint64_t total = 0;
         for (int i = 0; i < kContentN; i++) if (ContentOn(i)) total += g_contentInfo[i].bytes;
-        RectF tc(rc.X, rc.Y, rc.Width, 92);
-        GraphicsPath tp; RoundRect(tp, tc, 16);
-        SolidBrush tb(TH(card)); g.FillPath(&tb, &tp);
-        Pen tpen(TH(choiceBorder), 1); g.DrawPath(&tpen, &tp);
-        Text(g, T(L"Taille totale", L"Total size"), RectF(tc.X + 16, tc.Y + 12, 160, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
-        Text(g, SizeText(total), RectF(tc.X + tc.Width - 116, tc.Y + 12, 100, 20), 13, FontStyleBold, kInk, StringAlignmentFar);
+        RectF tc(c.X + 18, c.Y + c.Height - 14 - 84, c.Width - 36, 84);
+        ContentInner(g, tc);
+        Text(g, T(L"Taille totale", L"Total size"), RectF(tc.X + 14, tc.Y + 10, 160, 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, SizeText(total), RectF(tc.X + tc.Width - 114, tc.Y + 10, 100, 20), 12.5f, FontStyleBold, kInk, StringAlignmentFar);
         float frac = min(1.0f, total / (100.0f * 1024 * 1024));
-        RectF bar(tc.X + 16, tc.Y + 40, tc.Width - 32, 8);
+        RectF bar(tc.X + 14, tc.Y + 38, tc.Width - 28, 8);
         GraphicsPath bp; RoundRect(bp, bar, 4);
         SolidBrush bb(TH(toggleOff)); g.FillPath(&bb, &bp);
-        if (frac > 0.01f) { GraphicsPath fp; RoundRect(fp, RectF(bar.X, bar.Y, max(8.0f, bar.Width * frac), 8), 4); SolidBrush fb(frac > 0.85f ? kWarn : kAcc); g.FillPath(&fb, &fp); }
-        Text(g, T(L"Au-del\u00E0 de 100 Mo, l'arriv\u00E9e des invit\u00E9s ralentit.", L"Above 100 MB, guests take longer to arrive."), RectF(tc.X + 16, tc.Y + 56, tc.Width - 32, 30), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-        // apercu : miniatures des images envoyees (peinture, drapeau, posters...)
-        RectF ac(rc.X, tc.Y + tc.Height + 12, rc.Width, rc.Height - tc.Height - 12 - 52 - 12);
-        GraphicsPath ap; RoundRect(ap, ac, 16);
-        SolidBrush ab(TH(card)); g.FillPath(&ab, &ap);
-        g.DrawPath(&tpen, &ap);
-        Text(g, T(L"Aper\u00E7u", L"Preview"), RectF(ac.X + 16, ac.Y + 12, 160, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
-        float tx = ac.X + 16, ty = ac.Y + 40, ts = (ac.Width - 32 - 3 * 8) / 4;
-        int shown = 0;
-        for (int i = 0; i < kContentN; i++) {
-            Bitmap *b = ContentThumb(i);
-            if (!b || !ContentOn(i)) continue;
-            RectF tr(tx + (shown % 4) * (ts + 8), ty + (shown / 4) * (ts + 8), ts, ts);
-            if (tr.Y + tr.Height > ac.Y + ac.Height - 12) break;
-            GraphicsPath cp; RoundRect(cp, tr, 10);
-            GraphicsState st = g.Save();
-            g.SetClip(&cp, CombineModeIntersect);
-            g.DrawImage(b, tr);
-            g.Restore(st);
-            Pen ep(TH(choiceBorder), 1); g.DrawPath(&ep, &cp);
-            shown++;
-        }
-        if (!shown) Text(g, T(L"Aucune image envoy\u00E9e : peinture, drapeau, posters\u2026 apparaissent ici.", L"No image sent: paint, flag, posters\u2026 show up here."), RectF(ac.X + 16, ty, ac.Width - 32, 60), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        if (frac > 0.005f) { GraphicsPath fp; RoundRect(fp, RectF(bar.X, bar.Y, max(8.0f, bar.Width * frac), 8), 4); SolidBrush fb(frac > 0.85f ? kWarn : kAcc); g.FillPath(&fb, &fp); }
+        Text(g, T(L"Au-delà de 100 Mo, l'arrivée des invités ralentit.", L"Above 100 MB, guests take longer to arrive."), RectF(tc.X + 14, tc.Y + 54, tc.Width - 28, 18), 11.5f, FontStyleRegular, frac > 0.85f ? kWarn : kGrey, StringAlignmentNear);
     }
-    RectF mr = ContentModsRow();
-    bool mh = g_contentHot == 5100;
-    GraphicsPath mp; RoundRect(mp, mr, 16);
-    SolidBrush mb_(mh ? TH(cardSel) : TH(card)); g.FillPath(&mb_, &mp);
-    Pen mpen(mh ? WithA(kAcc, 0.7f) : TH(choiceBorder), 1); g.DrawPath(&mpen, &mp);
-    Icon(g, IC_PUZZLE, mr.X + 30, mr.Y + mr.Height / 2, 20, kAcc, 1.9f);
-    int shared = 0;
-    for (auto &m : g_msc) shared += ModShared(m.file) && !m.off;
-    wchar_t mb[160];
-    if (!g_mscInstalled) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : non install\u00E9", L"MSCLoader mods: not installed"));
-    else if (!g_mscOn) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : coup\u00E9 (invit\u00E9s sans mods)", L"MSCLoader mods: off (guests without mods)"));
-    else swprintf_s(mb, T(L"Mods MSCLoader : %d envoy\u00E9(s) sur %d", L"MSCLoader mods: %d sent of %d"), shared, (int)g_msc.size());
-    Text(g, mb, RectF(mr.X + 54, mr.Y, mr.Width - 90, mr.Height), 13, FontStyleBold, kInk, StringAlignmentNear);
-    Icon(g, IC_CHEVR, mr.X + mr.Width - 24, mr.Y + mr.Height / 2, 18, kInk, 2.2f);
-    // bas : resume, annuler / valider
-    float by = c.Y + c.Height - 66;
-    Pen sep(TH(sep), 1); g.DrawLine(&sep, c.X + 24, by - 10, c.X + c.Width - 24, by - 10);
-    Icon(g, IC_CHECK, c.X + 36, by + 24, 18, kOk, 2.4f);
-    wchar_t sum[160];
-    swprintf_s(sum, T(L"%d / %d \u00E9l\u00E9ments envoy\u00E9s \u00B7 copi\u00E9s \u00E0 part chez tes invit\u00E9s", L"%d / %d items sent \u00B7 copied apart to your guests"), on_, kContentN);
-    Text(g, sum, RectF(c.X + 56, by, 520, 48), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
-    UiButton(g, RectF(c.X + c.Width - 24 - 300, by, 140, 48), T(L"ANNULER", L"CANCEL"), UI_PAGE_CANCEL, false);
-    UiButton(g, RectF(c.X + c.Width - 24 - 148, by, 148, 48), T(L"VALIDER", L"OK"), UI_PAGE_OK, true);
+    // ---- a droite : le detail du groupe choisi, puis Posters et Peinture & drapeau, l'aide, ANNULER / VALIDER
+    {
+        RectF c = kContentR;
+        if (g_contentSel < 0 || g_contentSel >= kCgN) g_contentSel = 0;
+        float y = c.Y + 74;
+        if (g_contentSel <= 1) DrawContentTracks(g, c, y);
+        else DrawContentDetail(g, c, y);
+        y += 6;
+        float cw = (c.Width - 36 - 12) / 2, ch = 124;
+        if (y + ch > c.Y + c.Height - 150) ch = max(96.0f, c.Y + c.Height - 150 - y);
+        {   // posters
+            RectF r(c.X + 18, y, cw, ch);
+            ContentInner(g, r);
+            ContentInfo pi = g_contentInfo[7];
+            Text(g, T(L"Posters · ", L"Posters · ") + std::to_wstring(pi.n), RectF(r.X + 14, r.Y + 10, r.Width - 28 - 100, 36), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+            ContentButton(g, RectF(r.X + r.Width - 14 - 92, r.Y + 10, 92, 34), T(L"Choisir", L"Choose"), 5210, false, !g_gameDir.empty());
+            float th = ch - 52 - 12, tw2 = th * 44 / 60;
+            for (int k = 0; k < 3; k++) {
+                std::wstring rel = L"Images\\poster" + std::to_wstring(k + 1) + L".png";
+                Bitmap *b = !g_gameDir.empty() && FileExists(g_gameDir + rel) ? ContentThumbFile(rel) : NULL;
+                ContentDrawImage(g, b, RectF(r.X + 14 + k * (tw2 + 6), r.Y + 52, tw2, th), 6);
+            }
+            if (!pi.n) Text(g, T(L"Aucun poster dans Images", L"No poster in Images"), RectF(r.X + 14 + 3 * (tw2 + 6), r.Y + 52, r.Width - 28 - 3 * (tw2 + 6), th), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        }
+        {   // peinture & drapeau
+            RectF r(c.X + 18 + cw + 12, y, cw, ch);
+            ContentInner(g, r);
+            Text(g, T(L"Peinture & drapeau", L"Paint & flag"), RectF(r.X + 14, r.Y + 10, r.Width - 28 - 100, 36), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+            ContentButton(g, RectF(r.X + r.Width - 14 - 92, r.Y + 10, 92, 34), T(L"Choisir", L"Choose"), 5211, false, !g_gameDir.empty());
+            float th = ch - 52 - 12;
+            RectF pr(r.X + 14, r.Y + 52, th * 80 / 60, th);   // (clic : importer une peinture perso, voiture.inc)
+            bool paintHot = g_contentHot == 5203;
+            ContentDrawImage(g, PaintOn() ? PaintThumb() : ContentThumbFile(L"Images\\car.png"), pr, 8);
+            if (paintHot) { GraphicsPath hp; RoundRect(hp, pr, 8); Pen hpn(kAcc, 1.6f); g.DrawPath(&hpn, &hp); }
+            ContentZone(pr, 5203);
+            RectF fr(pr.X + pr.Width + 8, r.Y + 52 + (th - th * 2 / 3) / 2, th * 0.9f, th * 2 / 3);
+            bool hasFlag = !g_gameDir.empty() && FileExists(g_gameDir + L"Images\\flag_garage.png");
+            ContentDrawImage(g, hasFlag ? ContentThumbFile(L"Images\\flag_garage.png") : NULL, fr, 4);
+            std::wstring names = (PaintOn() ? L"peinture.png" : L"car.png") + std::wstring(L"\n") + (hasFlag ? L"flag_garage.png" : T(L"pas de drapeau", L"no flag"));
+            Para(g, names, RectF(fr.X + fr.Width + 10, r.Y + 52, r.Width - (fr.X + fr.Width + 10 - r.X) - 10, th), 11.5f, kGrey);
+        }
+        y += ch + 14;
+        Para(g, T(L"Les invités reçoivent tout ça à l'arrivée dans ton salon, dans leur copie de lancement. Rien n'écrase leurs propres fichiers.",
+                  L"Guests receive all this when they arrive in your lobby, in their launch copy. Nothing overwrites their own files."), RectF(c.X + 18, y, c.Width - 36, 40), 12, kGrey);
+        // bas : resume, annuler / valider (valeurs d'avant rendues par ANNULER : ui.inc)
+        float by = c.Y + c.Height - 14 - 44;
+        Pen sep(TH(sep), 1); g.DrawLine(&sep, c.X + 18, by - 12, c.X + c.Width - 18, by - 12);
+        Icon(g, IC_CHECK, c.X + 28, by + 22, 16, kOk, 2.4f);
+        wchar_t sum[160];
+        swprintf_s(sum, T(L"%d / %d éléments envoyés", L"%d / %d items sent"), on_, kContentN);
+        Text(g, sum, RectF(c.X + 46, by, c.Width - 46 - 290, 44), 13, FontStyleBold, kInk, StringAlignmentNear);
+        UiButton(g, RectF(c.X + c.Width - 18 - 270, by, 124, 44), T(L"ANNULER", L"CANCEL"), UI_PAGE_CANCEL, false);
+        UiButton(g, RectF(c.X + c.Width - 18 - 136, by, 136, 44), T(L"VALIDER", L"OK"), UI_PAGE_OK, true);
+    }
 }
