@@ -17,8 +17,13 @@
 struct MscSet { std::string type, id; std::wstring name; std::string val, def, mn, mx, dec; std::vector<std::wstring> items; };
 // off : mod coupe par le lanceur (demande de JD, 12/10 : « activer / desactiver un mod, pas seulement le partager ») -- sa DLL
 // renommee <nom>.dll.off, que MSCLoader ne charge pas (il ne lit que les *.dll) ; file garde le nom en .dll.
-struct MscMod { std::wstring file, id, name, ver, author, desc; bool disabled = false, known = false, off = false; std::vector<MscSet> sets; };
+struct MscMod { std::wstring file, id, name, ver, author, desc; bool disabled = false, known = false, off = false; unsigned long long bytes = 0; std::vector<MscSet> sets; };
 static std::vector<MscMod> g_msc;
+// Mods recus de l'hote du dernier salon : les DLL de %LOCALAPPDATA%\MWCoop\mods-invite (modsync.inc CoopModsDir, gardes pour la
+// prochaine fois). Releves ici toutes les 3 s avec les mods (page MODS, carte « Recus de l'hote »).
+struct MscRecv { std::wstring name; unsigned long long bytes = 0; };
+static std::vector<MscRecv> g_mscRecv;
+static FILETIME g_mscRecvT = {};   // (le plus recent)
 static bool g_mscInstalled;   // (g_mscOn : launcher.cpp)
 static std::wstring g_mscVer, g_mscDir, g_mscDirKind;
 static int g_mscPage = -1, g_mscHot = -1;
@@ -164,6 +169,7 @@ static void MscScan()
                 MscMod m;
                 for (auto &c : cache) if (!_wcsicmp(c.file.c_str(), fd.cFileName)) { m = c; break; }
                 if (!m.known) { m.file = fd.cFileName; m.name = m.file.substr(0, m.file.size() - 4); }
+                m.bytes = ((unsigned long long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
                 list.push_back(m);
             } while (FindNextFileW(h, &fd));
             FindClose(h);
@@ -181,10 +187,29 @@ static void MscScan()
                 for (auto &c : cache) if (!_wcsicmp(c.file.c_str(), f.c_str())) { m = c; break; }
                 if (!m.known) { m.file = f; m.name = f.substr(0, f.size() - 4); }
                 m.off = true;
+                m.bytes = ((unsigned long long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
                 list.push_back(m);
             } while (FindNextFileW(h, &fd));
             FindClose(h);
         }
+    }
+    // recus de l'hote (mods-invite)
+    g_mscRecv.clear(); g_mscRecvT = FILETIME();
+    std::wstring ld = LocalDir();
+    if (!ld.empty()) {
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((ld + L"mods-invite\\*.dll").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                MscRecv r; r.name = fd.cFileName; r.name.resize(r.name.size() - 4);
+                r.bytes = ((unsigned long long)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+                if (CompareFileTime(&fd.ftLastWriteTime, &g_mscRecvT) > 0) g_mscRecvT = fd.ftLastWriteTime;
+                g_mscRecv.push_back(r);
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+        std::sort(g_mscRecv.begin(), g_mscRecv.end(), [](const MscRecv &a, const MscRecv &b) { return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0; });
     }
     std::sort(list.begin(), list.end(), [](const MscMod &a, const MscMod &b) { return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0; });
     // (page ouverte : le meme mod, retrouve par son fichier)
@@ -435,33 +460,38 @@ static void MscTick()
     if ((g_tab == TAB_MODS || g_tab == TAB_CONTENT) && GetTickCount() - g_mscScanT > 3000) MscScan();
 }
 
-// ---- dessin (page MODS, dans kMain)
+// ---- dessin (page MODS, dans kMain ; maquette du 17/10 : « Mes mods » a gauche, « Recus de l'hote » et « Bon a savoir » a droite)
 static int MscModCount() { return g_mscInstalled ? (int)g_msc.size() : 0; }
-static const RectF kMscToggle(690, 188, 50, 28), kMscAuto(1172, 188, 50, 28), kMscInstall(300, 179, 300, 46), kMscList(288, 282, 952, 390),
-                   kMscBack(1000, 108, 240, 30), kMscOpenDir(288, 694, 260, 30),
-                   kMscSrcOff(838, 102, 112, 30), kMscSrcOwn(954, 102, 112, 30), kMscReinst(1078, 102, 162, 30),   // officiel / MWCoop, reinstaller
-                   kMscCompat(860, 244, 380, 30);   // mods pris en charge / deconseilles (article du GUIDE)
-static const float kMscRowH = 76, kMscSetH = 54;
+static const RectF kMscL(264, 88, 658, 656), kMscRecvCard(934, 88, 330, 280), kMscInfoCard(934, 380, 330, 364);
+static const RectF kMscList(282, 234, 622, 418),          // lignes des mods (liste)
+                   kMscPageList(288, 170, 952, 540),      // options d'un mod (page)
+                   kMscToggle(854, 104, 50, 28),          // Mods actives (g_mscOn)
+                   kMscAuto(1196, 288, 50, 28),           // Accepter les fichiers de l'hote (ModsAuto)
+                   kMscInstall(282, 250, 300, 46),        // INSTALLER MSCLOADER (absent)
+                   kMscBack(1000, 108, 240, 30),          // page : retour
+                   kMscOpenDir(282, 692, 196, 36), kMscSendAll(488, 692, 130, 36), kMscClearRecv(952, 316, 294, 36),
+                   kMscSrcOff(582, 170, 96, 30), kMscSrcOwn(682, 170, 96, 30), kMscReinst(784, 170, 120, 30);   // officiel / MWCoop, reinstaller
+static RectF kMscCompat(952, 704, 294, 24);   // lien « Guide : jouer avec des mods » (article du GUIDE ; tuto.inc le vise)
+static const float kMscRowH = 62, kMscSetH = 54;
+// colonnes des lignes : icone 40 | nom | version 90 | envoye 130 | actif 50 | engrenage 36
+static const float kMscColVer = 562, kMscColSend = 664, kMscColOn = 806, kMscColGear = 868, kMscColName = 334;
 
 static void DrawToggle(Graphics &g, RectF r, bool on, bool hot) { UiToggle(g, r, on, hot); }
 static void DrawGear(Graphics &g, float cx, float cy, Color c) { Icon(g, IC_GEAR, cx, cy, 20, c, 1.9f); }
-static void DrawExperimental(Graphics &g, float x, float y)
-{
-    const wchar_t *s = T(L"EXP\u00C9RIMENTAL", L"EXPERIMENTAL");
-    float w = PillW(s, 10.5f);
-    Pill(g, RectF(x, y, w, 22), WithA(kWarn, 0.22f), s, kWarn, 10.5f);
-}
+static std::wstring SizeText(uint64_t b);   // (modsync.inc)
 
+static const RectF &MscListRect() { return g_mscPage >= 0 && g_mscPage < (int)g_msc.size() ? kMscPageList : kMscList; }
 static float MscMaxScroll()
 {
-    int rows = g_mscPage >= 0 && g_mscPage < (int)g_msc.size() ? (int)g_msc[g_mscPage].sets.size() + 1 : (int)g_msc.size();
-    float h = g_mscPage >= 0 ? kMscSetH : kMscRowH;
-    return max(0.0f, rows * h - kMscList.Height);
+    bool page = g_mscPage >= 0 && g_mscPage < (int)g_msc.size();
+    int rows = page ? (int)g_msc[g_mscPage].sets.size() + 1 : (int)g_msc.size();
+    float h = page ? kMscSetH : kMscRowH;
+    return max(0.0f, rows * h - 6 - MscListRect().Height);
 }
-static RectF MscRowRect(int i) { float ms = MscMaxScroll(); return RectF(kMscList.X, kMscList.Y + i * kMscRowH - g_scroll[TAB_MODS], kMscList.Width - (ms > 0 ? 12 : 0), kMscRowH - 10); }
-static RectF MscGearRect(const RectF &r) { return RectF(r.X + r.Width - 60, r.Y + (r.Height - 44) / 2, 44, 44); }
-static RectF MscSendRect(const RectF &r) { return RectF(r.X + r.Width - 60 - 16 - 50, r.Y + (r.Height - 28) / 2, 50, 28); }
-static RectF MscActiveRect(const RectF &r) { RectF s = MscSendRect(r); return RectF(s.X - 84 - 24 - 50, s.Y, 50, 28); }
+static RectF MscRowRect(int i) { float ms = MscMaxScroll(); return RectF(kMscList.X, kMscList.Y + i * kMscRowH - g_scroll[TAB_MODS], kMscList.Width - (ms > 0 ? 12 : 0), kMscRowH - 6); }
+static RectF MscGearRect(const RectF &r) { return RectF(kMscColGear, r.Y + (r.Height - 36) / 2, 36, 36); }
+static RectF MscSendRect(const RectF &r) { return RectF(kMscColSend, r.Y + (r.Height - 26) / 2, 130, 26); }
+static RectF MscActiveRect(const RectF &r) { return RectF(kMscColOn, r.Y + (r.Height - 26) / 2, 50, 26); }
 // Mod coupe / remis : sa DLL renommee <nom>.dll.off / <nom>.dll (le jeu ferme : sinon la DLL est verrouillee).
 static void MscSetActive(int i, bool on)
 {
@@ -469,26 +499,30 @@ static void MscSetActive(int i, bool on)
     MscMod m = g_msc[i];
     std::wstring dll = g_mscDir + m.file, off = dll + L".off";
     if (on == !m.off) return;
-    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Ferme le jeu pour activer ou d\u00E9sactiver un mod", L"Close the game to turn a mod on or off")); return; }
+    if (GameProcessRunning()) { SetStatus(K_WARN, T(L"Ferme le jeu pour activer ou désactiver un mod", L"Close the game to turn a mod on or off")); return; }
     BOOL ok = on ? MoveFileExW(off.c_str(), dll.c_str(), 0) : MoveFileExW(dll.c_str(), off.c_str(), MOVEFILE_REPLACE_EXISTING);
     if (!ok) { SetStatus(K_ERR, T(L"%s : renommage impossible (erreur %lu)", L"%s: can't rename (error %lu)"), m.name.c_str(), GetLastError()); return; }
     TestLog("mods : %s %s", Narrow(m.file, CP_UTF8).c_str(), on ? "active (.dll)" : "desactive (.dll.off)");
-    SetStatus(K_NORMAL, on ? T(L"%s activ\u00E9 : charg\u00E9 au prochain lancement", L"%s on: loaded at the next launch") : T(L"%s d\u00E9sactiv\u00E9 : ni charg\u00E9 ni envoy\u00E9 (fichier .dll.off)", L"%s off: neither loaded nor sent (.dll.off file)"), m.name.c_str());
+    SetStatus(K_NORMAL, on ? T(L"%s activé : chargé au prochain lancement", L"%s on: loaded at the next launch") : T(L"%s désactivé : ni chargé ni envoyé (fichier .dll.off)", L"%s off: neither loaded nor sent (.dll.off file)"), m.name.c_str());
     MscScan();
 }
+static bool MscSent(const MscMod &m) { return ModShared(m.file) && !m.off && !MenuSkipper(m); }   // envoye aux invites du salon
 
-// Element sous la souris : 1000 interrupteur, 1001 installer, 1002 retour, 1003 mod active (page), 1004 dossier,
-// 1005 accepter les mods de l'hote, 1009 mods pris en charge, 2000+i ouvrir le mod i, 3000+i*4+k option i (k : 0 case, 1 moins,
-// 2 plus), 4000+i envoyer.
+// Zones de la liste, declarees pendant le dessin (comme HotZone, mais pour g_mscHot : la souris et le clic passent par MscAt).
+// Element : 1000 interrupteur Mods actives, 1001 installer, 1002 retour, 1003 mod active (page), 1004 dossier, 1005 accepter
+// les fichiers de l'hote, 1006 / 1007 MSCLoader officiel / MWCoop, 1008 reinstaller, 1009 guide des mods, 1010 tout envoyer,
+// 2000+i ouvrir le mod i, 3000+i*4+k option i (k : 0 case, 1 moins, 2 plus), 4000+i envoyer, 6000+i actif.
+static std::vector<HotRect> g_mscZones;
+static void MscZone(RectF r, int id) { g_mscZones.push_back({ r, id }); }
 static int MscAt(float x, float y)
 {
     if (g_state != ST_IDLE) return -1;
     bool page = g_mscPage >= 0 && g_mscPage < (int)g_msc.size();
     if (page) {
         if (kMscBack.Contains(x, y)) return 1002;
-        if (!kMscList.Contains(x, y)) return -1;
-        int i = (int)((y - kMscList.Y + g_scroll[TAB_MODS]) / kMscSetH);
-        float right = kMscList.X + kMscList.Width - 16;
+        if (!kMscPageList.Contains(x, y)) return -1;
+        int i = (int)((y - kMscPageList.Y + g_scroll[TAB_MODS]) / kMscSetH);
+        float right = kMscPageList.X + kMscPageList.Width - 16;
         if (i == 0) return x > right - 80 ? 1003 : -1;
         const auto &sets = g_msc[g_mscPage].sets;
         if (--i < 0 || i >= (int)sets.size()) return -1;
@@ -500,25 +534,11 @@ static int MscAt(float x, float y)
         }
         return -1;
     }
-    if (kMscCompat.Contains(x, y)) return 1009;
-    if (kMscSrcOff.Contains(x, y)) return 1006;
-    if (kMscSrcOwn.Contains(x, y)) return 1007;
-    if (g_mscInstalled && g_mscInstall != 1 && kMscReinst.Contains(x, y)) return 1008;
-    if (g_mscInstalled && RectF(kMscToggle.X - 8, kMscToggle.Y - 8, kMscToggle.Width + 16, kMscToggle.Height + 16).Contains(x, y)) return 1000;
-    if (RectF(kMscAuto.X - 8, kMscAuto.Y - 8, kMscAuto.Width + 16, kMscAuto.Height + 16).Contains(x, y)) return 1005;
-    if (!g_mscInstalled && kMscInstall.Contains(x, y)) return 1001;
-    if (g_mscInstalled && kMscOpenDir.Contains(x, y)) return 1004;
-    if (!kMscList.Contains(x, y)) return -1;
-    int i = (int)((y - kMscList.Y + g_scroll[TAB_MODS]) / kMscRowH);
-    if (i < 0 || i >= (int)g_msc.size()) return -1;
-    RectF r = MscRowRect(i), sr = MscSendRect(r), ar = MscActiveRect(r);
-    if (x > ar.X - 80 && x < ar.X + ar.Width + 8) return 6000 + i;   // Actif (DLL renommee)
-    if (x > sr.X - 80 && x < sr.X + sr.Width + 8) return 4000 + i;   // Envoyer aux invites
-    return g_msc[i].known ? 2000 + i : -1;
+    for (int i = (int)g_mscZones.size() - 1; i >= 0; i--) if (g_mscZones[i].r.Contains(x, y)) return g_mscZones[i].id;
+    return -1;
 }
 
-// Bouton « Mods pris en charge / incompatibilites connues » (demande de JD, 14/10) : l'article du GUIDE (wikidata.inc,
-// kW_ModCompat), sa categorie ouverte.
+// Lien « Guide : jouer avec des mods » : l'article du GUIDE (wikidata.inc, kW_ModCompat), sa categorie ouverte.
 static void MscOpenCompat();   // (wiki.inc)
 
 static bool MscClick(float x, float y)
@@ -527,7 +547,7 @@ static bool MscClick(float x, float y)
     if (h == 1000) {
         g_mscOn = !g_mscOn;
         WritePrivateProfileStringW(L"Lanceur", L"MSCLoader", g_mscOn ? L"1" : L"0", g_iniLauncher.c_str());
-        SetStatus(K_NORMAL, g_mscOn ? T(L"MSCLoader sera charg\u00E9 au lancement", L"MSCLoader will load at launch") : T(L"MSCLoader ne sera pas charg\u00E9 (rien n'est d\u00E9sinstall\u00E9)", L"MSCLoader will not load (nothing is uninstalled)"));
+        SetStatus(K_NORMAL, g_mscOn ? T(L"MSCLoader sera chargé au lancement", L"MSCLoader will load at launch") : T(L"MSCLoader ne sera pas chargé (rien n'est désinstallé)", L"MSCLoader will not load (nothing is uninstalled)"));
     } else if (h == 1005) { if (const Opt *o = OptByKey("ModsAuto")) OptSet(*o, OptGet(*o) ? 0 : 1); }
     else if (h == 1001) MscInstall();
     else if (h == 1008) MscInstall(true);
@@ -535,21 +555,27 @@ static bool MscClick(float x, float y)
         g_mscOwnPref = h == 1007 ? 1 : 0;
         WritePrivateProfileStringW(L"Lanceur", L"MSCLoaderMWCoop", g_mscOwnPref ? L"1" : L"0", g_iniLauncher.c_str());
         MscScan();
-        if (g_mscOwnPref) SetStatus(K_NORMAL, MscOwnInstalled() ? T(L"MSCLoader de MWCoop : install\u00E9 \u00E0 part, le jeu n'est pas modifi\u00E9", L"MWCoop's MSCLoader: installed apart, the game is not changed")
-                                                                : T(L"MSCLoader de MWCoop : clique INSTALLER MSCLOADER (install\u00E9 \u00E0 part, le jeu n'est pas modifi\u00E9)", L"MWCoop's MSCLoader: click INSTALL MSCLOADER (installed apart, the game is not changed)"));
-        else SetStatus(K_NORMAL, MscOfficialInstalled() ? T(L"MSCLoader officiel : celui install\u00E9 dans le jeu", L"Official MSCLoader: the one installed in the game")
-                                                         : T(L"MSCLoader officiel : pas install\u00E9 dans le jeu (INSTALLER MSCLOADER)", L"Official MSCLoader: not installed in the game (INSTALL MSCLOADER)"));
+        if (g_mscOwnPref) SetStatus(K_NORMAL, MscOwnInstalled() ? T(L"MSCLoader de MWCoop : installé à part, le jeu n'est pas modifié", L"MWCoop's MSCLoader: installed apart, the game is not changed")
+                                                                : T(L"MSCLoader de MWCoop : clique INSTALLER MSCLOADER (installé à part, le jeu n'est pas modifié)", L"MWCoop's MSCLoader: click INSTALL MSCLOADER (installed apart, the game is not changed)"));
+        else SetStatus(K_NORMAL, MscOfficialInstalled() ? T(L"MSCLoader officiel : celui installé dans le jeu", L"Official MSCLoader: the one installed in the game")
+                                                         : T(L"MSCLoader officiel : pas installé dans le jeu (INSTALLER MSCLOADER)", L"Official MSCLoader: not installed in the game (INSTALL MSCLOADER)"));
     }
     else if (h == 1004) ShellExecuteW(g_wnd, L"open", g_mscDir.c_str(), NULL, NULL, SW_SHOWNORMAL);
     else if (h == 1009) MscOpenCompat();
+    else if (h == 1010) {   // tout envoyer : chaque mod actif (les sauteurs de menu ne partent jamais)
+        int n = 0;
+        for (const MscMod &m : g_msc) if (!m.off && !MenuSkipper(m) && !ModShared(m.file)) { ModSetShared(m.file, true); n++; }
+        SetStatus(K_NORMAL, n ? T(L"%d mod(s) de plus seront envoyés aux invités du salon", L"%d more mod(s) will be sent to the lobby's guests") : T(L"Tous tes mods actifs sont déjà envoyés", L"All your active mods are already sent"), n);
+    }
     else if (h == 1002) { g_mscPage = -1; g_scroll[TAB_MODS] = 0; }
     else if (h >= 6000) MscSetActive(h - 6000, g_msc[h - 6000].off);
     else if (h >= 4000) {
         const MscMod &m = g_msc[h - 4000];
-        if (m.off) { SetStatus(K_NORMAL, T(L"%s est d\u00E9sactiv\u00E9 : il n'est pas envoy\u00E9", L"%s is off: it is not sent"), m.name.c_str()); return true; }
+        if (m.off) { SetStatus(K_NORMAL, T(L"%s est désactivé : il n'est pas envoyé", L"%s is off: it is not sent"), m.name.c_str()); return true; }
+        if (MenuSkipper(m)) { SetStatus(K_WARN, T(L"%s saute le menu du jeu : jamais envoyé aux invités", L"%s skips the game menu: never sent to guests"), m.name.c_str()); return true; }
         bool on = !ModShared(m.file);
         ModSetShared(m.file, on);
-        SetStatus(K_NORMAL, on ? T(L"%s sera envoy\u00E9 aux invit\u00E9s du salon", L"%s will be sent to the lobby's guests") : T(L"%s reste chez toi (pas envoy\u00E9)", L"%s stays with you (not sent)"), m.name.c_str());
+        SetStatus(K_NORMAL, on ? T(L"%s sera envoyé aux invités du salon", L"%s will be sent to the lobby's guests") : T(L"%s reste chez toi (pas envoyé)", L"%s stays with you (not sent)"), m.name.c_str());
     }
     else if (h >= 2000 && h < 3000) { g_mscPage = h - 2000; g_scroll[TAB_MODS] = 0; MscLoadPage(); }
     else if (h == 1003) { g_mscPageDisabled = !g_mscPageDisabled; if (!g_mscFake) MscSavePage(); }
@@ -569,25 +595,58 @@ static void DrawScrollBar(Graphics &g, RectF area, float sc, float ms)
     SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
 }
 
+// Petits elements : bouton en verre clair (hot : g_mscHot == id, zone MscZone), puce (fond leger, liseré), carte interieure.
+static void MscButton(Graphics &g, RectF r, const std::wstring &s, int id, int icon = -1, bool enabled = true, bool primary = false, float padR = 0)
+{
+    bool hot = enabled && g_mscHot == id;
+    float a = enabled ? 1.0f : 0.4f;
+    GraphicsPath p; RoundRect(p, r, min(11.0f, r.Height / 2));
+    if (primary) { SolidBrush b(WithA(kAcc, a)); g.FillPath(&b, &p); if (hot) { SolidBrush hb(Color(60, 255, 255, 255)); g.FillPath(&hb, &p); } }
+    else { SolidBrush b(hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p); Pen pen(WithA(TH(fieldBorder), a), 1.0f); g.DrawPath(&pen, &p); }
+    Color ink = WithA(primary ? kOnAcc : hot ? kAcc : kInk, a);
+    Graphics &mg = MeasureG();
+    float px = 12.5f, tw = MeasureW(mg, s, px, FontStyleBold), iw = icon >= 0 ? 24.0f : 0.0f;
+    float x0 = r.X + (r.Width - padR - tw - iw) / 2;   // (padR : place gardee a droite, une puce par exemple)
+    if (icon >= 0) Icon(g, icon, x0 + 9, r.Y + r.Height / 2, 16, ink, 2.0f);
+    Text(g, s, RectF(x0 + iw, r.Y, tw + 2, r.Height), px, FontStyleBold, ink, StringAlignmentNear);
+    if (enabled) MscZone(r, id);
+}
+static void MscChip(Graphics &g, RectF r, const std::wstring &s, Color fill, Color ink, Color border, float px = 11.5f, int icon = -1)
+{
+    GraphicsPath p; RoundRect(p, r, r.Height / 2);
+    SolidBrush b(fill); g.FillPath(&b, &p);
+    Pen pen(border, 1.0f); g.DrawPath(&pen, &p);
+    if (icon >= 0) { Icon(g, icon, r.X + 14, r.Y + r.Height / 2, 12, ink, 2.6f); Text(g, s, RectF(r.X + 22, r.Y, r.Width - 28, r.Height), px, FontStyleBold, ink, StringAlignmentNear); }
+    else Text(g, s, r, px, FontStyleBold, ink);
+}
+static float MscChipW(const std::wstring &s, float px = 11.5f, int icon = -1) { return PillW(s, px) + 8 + (icon >= 0 ? 16 : 0); }
+static void MscInnerCard(Graphics &g, RectF r)
+{
+    GraphicsPath p; RoundRect(p, r, 14);
+    SolidBrush b(TH(card)); g.FillPath(&b, &p);
+    Pen pen(TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
+}
+
 static void DrawModsPage(Graphics &g)
 {
     const MscMod &m = g_msc[g_mscPage];
     RectF c = kMain;
     Title(g, m.name, RectF(c.X + 24, c.Y + 20, 600, 28), 18, kInk);
     bool backHot = g_mscHot == 1002;
-    Text(g, T(L"\u2190 Retour aux mods", L"\u2190 Back to mods"), kMscBack, 13, backHot ? FontStyleBold | FontStyleUnderline : FontStyleBold, backHot ? kAcc : kGrey, StringAlignmentFar);
-    std::wstring sub = L"v" + m.ver + (m.author.empty() ? L"" : L" \u00B7 " + m.author) + L" \u00B7 " + m.file;
+    Text(g, T(L"← Retour aux mods", L"← Back to mods"), kMscBack, 13, backHot ? FontStyleBold | FontStyleUnderline : FontStyleBold, backHot ? kAcc : kGrey, StringAlignmentFar);
+    std::wstring sub = L"v" + m.ver + (m.author.empty() ? L"" : L" · " + m.author) + L" · " + m.file;
     Text(g, sub, RectF(c.X + 24, c.Y + 48, c.Width - 48, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
-    float sc = g_scroll[TAB_MODS], ms = MscMaxScroll(), right = kMscList.X + kMscList.Width - 16;
+    const RectF &L = kMscPageList;
+    float sc = g_scroll[TAB_MODS], ms = MscMaxScroll(), right = L.X + L.Width - 16;
     GraphicsState st = g.Save();
-    g.SetClip(kMscList, CombineModeIntersect);
+    g.SetClip(L, CombineModeIntersect);
     for (int i = -1; i < (int)m.sets.size(); i++) {
-        RectF r(kMscList.X, kMscList.Y + (i + 1) * kMscSetH - sc, kMscList.Width - (ms > 0 ? 12 : 0), kMscSetH - 6);
-        if (r.Y + r.Height < kMscList.Y || r.Y > kMscList.Y + kMscList.Height) continue;
+        RectF r(L.X, L.Y + (i + 1) * kMscSetH - sc, L.Width - (ms > 0 ? 12 : 0), kMscSetH - 6);
+        if (r.Y + r.Height < L.Y || r.Y > L.Y + L.Height) continue;
         if (i < 0) {   // le mod lui-meme : active ou non (isDisabled de MSCLoader)
             GraphicsPath rp; RoundRect(rp, r, 14);
             SolidBrush rb(TH(card)); g.FillPath(&rb, &rp);
-            Text(g, T(L"Mod activ\u00E9", L"Mod enabled"), RectF(r.X + 16, r.Y, 300, r.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, T(L"Mod activé", L"Mod enabled"), RectF(r.X + 16, r.Y, 300, r.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
             DrawToggle(g, RectF(right - 58, r.Y + (r.Height - 28) / 2, 50, 28), !g_mscPageDisabled, g_mscHot == 1003);
             continue;
         }
@@ -637,125 +696,202 @@ static void DrawModsPage(Graphics &g)
         }
     }
     g.Restore(st);
-    DrawScrollBar(g, kMscList, sc, ms);
+    DrawScrollBar(g, L, sc, ms);
 }
 
 static void DrawMods(Graphics &g)
 {
-    RectF c = kMain;
-    Glass(c);
-    if (g_mscPage >= 0 && g_mscPage < (int)g_msc.size()) DrawModsPage(g);
-    else {
-        Graphics &mg = MeasureG();
-        Title(g, L"Mods \u00B7 MSCLoader", RectF(c.X + 24, c.Y + 20, 400, 28), 18, kInk);
-        DrawExperimental(g, c.X + 24 + MeasureW(mg, L"Mods \u00B7 MSCLoader", 18, FontStyleBold) + 18, c.Y + 24);
-        {   // MSCLoader : officiel (dans le jeu) ou celui de MWCoop (a part) ; reinstaller
+    g_mscZones.clear();
+    if (g_mscPage >= 0 && g_mscPage < (int)g_msc.size()) { Glass(kMain); DrawModsPage(g); return; }
+    Glass(kMscL); Glass(kMscRecvCard); Glass(kMscInfoCard);
+    Graphics &mg = MeasureG();
+    // ---- a gauche : mes mods
+    {
+        RectF c = kMscL;
+        std::wstring t = T(L"Mes mods", L"My mods");
+        float tw = MeasureW(mg, t, 16, FontStyleBold);
+        Title(g, t, RectF(c.X + 18, c.Y + 14, tw + 6, 26), 16, kInk);
+        if (g_mscInstalled) {
+            wchar_t b[160];
+            swprintf_s(b, T(L"· %d dans %s", L"· %d in %s"), (int)g_msc.size(), g_mscDirKind == L"MD" ? T(L"Documents\\My Winter Car\\Mods", L"Documents\\My Winter Car\\Mods") : g_mscDirKind == L"AD" ? L"LocalLow\\...\\Mods" : T(L"le dossier Mods du jeu", L"the game's Mods folder"));
+            Text(g, b, RectF(c.X + 18 + tw + 6, c.Y + 15, 330, 26), 13, FontStyleBold, kGrey, StringAlignmentNear);
+            bool hot = g_mscHot == 1000;
+            Text(g, T(L"Mods activés", L"Mods on"), RectF(kMscToggle.X - 130, kMscToggle.Y, 122, kMscToggle.Height), 13, FontStyleBold, hot ? kAcc : kInk, StringAlignmentFar);
+            DrawToggle(g, kMscToggle, g_mscOn, hot);
+            MscZone(RectF(kMscToggle.X - 130, kMscToggle.Y - 6, 180, kMscToggle.Height + 12), 1000);
+        }
+        Para(g, T(L"« Envoyé » = copié chez les invités de ton salon ; un invité reçoit les mods de l'hôte dans sa copie de lancement, jamais dans son dossier. « Actif » coupé : le mod n'est plus chargé. Pris au prochain lancement du jeu.",
+                  L"\"Sent\" = copied to your lobby's guests; a guest receives the host's mods in their launch copy, never in their own folder. \"On\" off: the mod no longer loads. Applied at the next game launch."), RectF(c.X + 18, c.Y + 46, c.Width - 36, 36), 12, kGrey);
+        // MSCLoader : son etat (puce), officiel / MWCoop, reinstaller
+        {
             bool own = MscOwn();
-            for (int k = 0; k < 2; k++) {
-                RectF r = k ? kMscSrcOwn : kMscSrcOff;
-                bool sel = (k == 1) == own, hot = g_mscHot == 1006 + k;
+            std::wstring st;
+            if (g_mscInstall == 1) st = T(L"Installation de MSCLoader…", L"Installing MSCLoader…");
+            else if (!g_mscInstalled) st = T(L"MSCLoader absent", L"MSCLoader missing");
+            else st = L"MSCLoader" + (g_mscVer.empty() ? L"" : L" " + g_mscVer) + (own ? T(L" · fourni par MWCoop", L" · provided by MWCoop") : T(L" · officiel (dans le jeu)", L" · official (in the game)"));
+            float w = min(MscChipW(st, 11.5f, IC_CHECK), 290.0f);
+            Color k = g_mscInstalled ? kOk : kWarn;
+            MscChip(g, RectF(c.X + 18, kMscSrcOff.Y + 2, w, 26), st, WithA(k, 0.18f), k, WithA(k, 0.35f), 11.5f, g_mscInstalled ? IC_CHECK : IC_ALERT);
+            for (int k2 = 0; k2 < 2; k2++) {
+                RectF r = k2 ? kMscSrcOwn : kMscSrcOff;
+                bool sel = (k2 == 1) == own, hot = g_mscHot == 1006 + k2;
                 GraphicsPath p; RoundRect(p, r, 15);
                 SolidBrush b(sel ? kAcc : hot ? TH(cardSel) : TH(card)); g.FillPath(&b, &p);
                 Pen pen(sel ? kAcc : TH(choiceBorder), 1); g.DrawPath(&pen, &p);
-                Text(g, k ? L"MWCOOP" : T(L"OFFICIEL", L"OFFICIAL"), r, 12, FontStyleBold, sel ? kOnAcc : hot ? kAcc : kInk, StringAlignmentCenter);
+                Text(g, k2 ? L"MWCOOP" : T(L"OFFICIEL", L"OFFICIAL"), r, 11.5f, FontStyleBold, sel ? kOnAcc : hot ? kAcc : kInk, StringAlignmentCenter);
+                MscZone(r, 1006 + k2);
             }
-            Text(g, L"MSCLoader", RectF(kMscSrcOff.X - 110, kMscSrcOff.Y, 102, kMscSrcOff.Height), 12, FontStyleBold, kGrey, StringAlignmentFar);
-            if (g_mscInstalled) {
-                bool rh = g_mscHot == 1008, busy = g_mscInstall == 1;
-                GraphicsPath p; RoundRect(p, kMscReinst, 15);
-                SolidBrush b(rh ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
-                Icon(g, IC_DOWNLOAD, kMscReinst.X + 20, kMscReinst.Y + 15, 14, busy ? kGrey : rh ? kAcc : kInk, 2.0f);
-                Text(g, T(L"R\u00C9INSTALLER", L"REINSTALL"), RectF(kMscReinst.X + 32, kMscReinst.Y, kMscReinst.Width - 38, kMscReinst.Height), 12, FontStyleBold, busy ? kGrey : rh ? kAcc : kInk, StringAlignmentCenter);
-            }
+            if (g_mscInstalled) MscButton(g, kMscReinst, T(L"RÉINSTALLER", L"REINSTALL"), 1008, IC_DOWNLOAD, g_mscInstall != 1);
         }
-        std::wstring sub;
-        if (g_mscInstall == 1) sub = T(L"Installation de MSCLoader\u2026", L"Installing MSCLoader\u2026");
-        else if (!g_mscInstalled) sub = T(L"MSCLoader, le chargeur de mods de la communaut\u00E9 (projet ind\u00E9pendant), n'est pas install\u00E9.", L"MSCLoader, the community mod loader (independent project), is not installed.");
-        else {
-            wchar_t b[200];
-            swprintf_s(b, T(L"MSCLoader %s%s \u00B7 %d mod(s) \u00B7 dossier %s", L"MSCLoader %s%s \u00B7 %d mod(s) \u00B7 %s folder"), g_mscVer.empty() ? L"" : g_mscVer.c_str(),
-                       MscOwn() ? T(L" de MWCoop (\u00E0 part, le jeu n'est pas modifi\u00E9)", L" by MWCoop (apart, the game is not changed)") : T(L" officiel", L" (official)"), (int)g_msc.size(),
-                       g_mscDirKind == L"MD" ? T(L"Documents", L"Documents") : g_mscDirKind == L"AD" ? L"LocalLow" : T(L"du jeu", L"game"));
-            sub = b;
-        }
-        Text(g, sub, RectF(c.X + 24, c.Y + 48, c.Width - 48, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
-        // deux tuiles : charger MSCLoader (ou l'installer), accepter les mods de l'hote
-        float tw = (c.Width - 48 - 12) / 2;
-        RectF t1(c.X + 24, c.Y + 80, tw, 68), t2(c.X + 36 + tw, c.Y + 80, tw, 68);
-        for (int k = 0; k < 2; k++) {
-            RectF t = k ? t2 : t1;
-            GraphicsPath p; RoundRect(p, t, 16);
-            SolidBrush b(TH(card)); g.FillPath(&b, &p);
-            Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
-        }
-        if (g_mscInstalled) {
-            SetRowText(g, RectF(t1.X + 18, t1.Y, t1.Width - 100, t1.Height), T(L"Charger MSCLoader", L"Load MSCLoader"), T(L"Tes mods dans tes parties MWCoop", L"Your mods in your MWCoop games"));
-            DrawToggle(g, kMscToggle, g_mscOn, g_mscHot == 1000);
-        } else {
+        if (!g_mscInstalled) {   // pas de liste : installer
+            Para(g, T(L"MSCLoader, le chargeur de mods de la communauté (projet indépendant), n'est pas installé. Installe-le ici, puis place tes mods (version My Winter Car) dans son dossier Mods.",
+                      L"MSCLoader, the community mod loader (independent project), is not installed. Install it here, then put your mods (My Winter Car version) in its Mods folder."),
+                 RectF(c.X + 18, c.Y + 124, c.Width - 36, 60), 12.5f, kGrey);
             GraphicsPath bp; RoundRect(bp, kMscInstall, 14);
             float a = g_mscInstall == 1 ? 0.5f : 1.0f;
             SolidBrush lg(WithA(kAcc, a)); g.FillPath(&lg, &bp);
             if (g_mscHot == 1001) { SolidBrush hb(Color(55, 255, 255, 255)); g.FillPath(&hb, &bp); }
             Icon(g, IC_DOWNLOAD, kMscInstall.X + 28, kMscInstall.Y + 23, 18, kOnAcc, 2.2f);
-            Text(g, g_mscInstall == 1 ? T(L"INSTALLATION\u2026", L"INSTALLING\u2026") : T(L"INSTALLER MSCLOADER", L"INSTALL MSCLOADER"), RectF(kMscInstall.X + 44, kMscInstall.Y, kMscInstall.Width - 52, kMscInstall.Height), 13.5f, FontStyleBold, kOnAcc, StringAlignmentNear);
-        }
-        if (const Opt *ma = OptByKey("ModsAuto")) {
-            SetRowText(g, RectF(t2.X + 18, t2.Y, t2.Width - 100, t2.Height), T(L"Accepter l'envoi de l'h\u00F4te", L"Accept the host's files"), T(L"Plus de TOUT ACCEPTER dans le salon d'un ami", L"No more ACCEPT ALL in a friend's lobby"));
-            DrawToggle(g, kMscAuto, OptGet(*ma) != 0, g_mscHot == 1005);
-        }
-        Title(g, T(L"Tes mods", L"Your mods"), RectF(c.X + 24, c.Y + 160, 300, 26), 16, kInk);
-        {   // mods pris en charge / deconseilles : article du GUIDE
-            bool hot = g_mscHot == 1009;
-            GraphicsPath p; RoundRect(p, kMscCompat, 15);
-            SolidBrush b(hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
-            Icon(g, IC_BOOK, kMscCompat.X + 22, kMscCompat.Y + 15, 15, hot ? kAcc : kInk, 1.9f);
-            Text(g, T(L"MODS PRIS EN CHARGE / INCOMPATIBILITÉS", L"MOD SUPPORT / KNOWN INCOMPATIBILITIES"), RectF(kMscCompat.X + 36, kMscCompat.Y, kMscCompat.Width - 42, kMscCompat.Height), 11.5f, FontStyleBold, hot ? kAcc : kInk, StringAlignmentCenter);
-        }
-        float sc = g_scroll[TAB_MODS], ms = MscMaxScroll();
-        if (g_mscInstalled && g_msc.empty())
-            Para(g, T(L"Aucun mod dans le dossier Mods. Ajoute les DLL des mods MSCLoader (version My Winter Car) puis lance le jeu une fois : leurs noms et leurs options appara\u00EEtront ici.",
-                      L"No mod in the Mods folder. Add MSCLoader mods (My Winter Car version), then start the game once: their names and options will show up here."),
-                 RectF(kMscList.X + 140, kMscList.Y + 80, kMscList.Width - 280, 80), 13.5f, kGrey, StringAlignmentCenter);
-        GraphicsState st = g.Save();
-        g.SetClip(kMscList, CombineModeIntersect);
-        for (int i = 0; i < (int)g_msc.size(); i++) {
-            const MscMod &m = g_msc[i];
-            RectF r = MscRowRect(i);
-            if (r.Y + r.Height < kMscList.Y || r.Y > kMscList.Y + kMscList.Height) continue;
-            bool hot = g_mscHot == 2000 + i;
-            GraphicsPath rp; RoundRect(rp, r, 16);
-            SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
-            Pen rpen(hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
-            float a = m.disabled || m.off ? 0.5f : 1.0f;
-            Text(g, m.name, RectF(r.X + 18, r.Y + 10, r.Width - 420, 24), 15, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
-            std::wstring line = m.off ? m.file + T(L".off \u00B7 d\u00E9sactiv\u00E9 : ni charg\u00E9 ni envoy\u00E9", L".off \u00B7 off: neither loaded nor sent")
-                              : m.known ? L"v" + m.ver + (m.author.empty() ? L"" : L" \u00B7 " + m.author) + (m.disabled ? T(L" \u00B7 d\u00E9sactiv\u00E9", L" \u00B7 disabled") : L"")
-                                        : m.file + T(L" \u00B7 lance le jeu une fois pour les d\u00E9tails", L" \u00B7 start the game once for details");
-            Text(g, line, RectF(r.X + 18, r.Y + 34, r.Width - 420, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            RectF sr = MscSendRect(r), gr = MscGearRect(r), ar = MscActiveRect(r);
-            bool acHot = g_mscHot == 6000 + i;
-            Text(g, T(L"Actif", L"On"), RectF(ar.X - 84, r.Y, 76, r.Height), 12.5f, FontStyleBold, acHot ? kAcc : !m.off ? kInk : kGrey, StringAlignmentFar);
-            DrawToggle(g, ar, !m.off, acHot);
-            bool sh = ModShared(m.file) && !m.off && !MenuSkipper(m), shHot = g_mscHot == 4000 + i;   // envoye aux invites du salon
-            Text(g, T(L"Envoyer", L"Send"), RectF(sr.X - 84, r.Y, 76, r.Height), 12.5f, FontStyleBold, shHot ? kAcc : sh ? kInk : kGrey, StringAlignmentFar);
-            DrawToggle(g, sr, sh, shHot);
-            if (m.known) {
-                GraphicsPath gp; RoundRect(gp, gr, 12);
-                SolidBrush gb(hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&gb, &gp);
-                DrawGear(g, gr.X + 22, gr.Y + 22, hot ? kAcc : kInk);
+            Text(g, g_mscInstall == 1 ? T(L"INSTALLATION…", L"INSTALLING…") : T(L"INSTALLER MSCLOADER", L"INSTALL MSCLOADER"), RectF(kMscInstall.X + 44, kMscInstall.Y, kMscInstall.Width - 52, kMscInstall.Height), 13.5f, FontStyleBold, kOnAcc, StringAlignmentNear);
+            if (g_mscInstall != 1) MscZone(kMscInstall, 1001);
+            Para(g, T(L"MSCLoader est un projet indépendant de MWCoop ; son support ici est expérimental. Rien n'est écrit dans le jeu avec la version fournie par MWCoop.",
+                      L"MSCLoader is a project independent from MWCoop; its support here is experimental. Nothing is written into the game with the version provided by MWCoop."),
+                 RectF(c.X + 18, c.Y + 230, c.Width - 36, 60), 12, kGrey);
+        } else {
+            // en-tete du tableau
+            float hy = c.Y + 126;
+            Text(g, T(L"MOD", L"MOD"), RectF(kMscColName, hy, 200, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+            Text(g, T(L"VERSION", L"VERSION"), RectF(kMscColVer, hy, 90, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+            Text(g, T(L"ENVOYÉ", L"SENT"), RectF(kMscColSend, hy, 130, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+            Text(g, T(L"ACTIF", L"ON"), RectF(kMscColOn - 10, hy, 70, 16), 10.5f, FontStyleBold, kGrey, StringAlignmentCenter);
+            float sc = g_scroll[TAB_MODS] = min(g_scroll[TAB_MODS], MscMaxScroll()), ms = MscMaxScroll();
+            if (g_msc.empty())
+                Para(g, T(L"Aucun mod dans le dossier Mods. Ajoute les DLL des mods MSCLoader (version My Winter Car) puis lance le jeu une fois : leurs noms et leurs options apparaîtront ici.",
+                          L"No mod in the Mods folder. Add MSCLoader mods (My Winter Car version), then start the game once: their names and options will show up here."),
+                     RectF(kMscList.X + 80, kMscList.Y + 60, kMscList.Width - 160, 80), 13, kGrey, StringAlignmentCenter);
+            static const Color kIconHue[4] = { Color(255, 166, 216, 255), Color(255, 255, 210, 143), Color(255, 154, 240, 192), Color(255, 240, 166, 255) };
+            int hidden = 0;
+            GraphicsState st = g.Save();
+            g.SetClip(kMscList, CombineModeIntersect);
+            for (int i = 0; i < (int)g_msc.size(); i++) {
+                const MscMod &m = g_msc[i];
+                RectF r = MscRowRect(i);
+                if (r.Y + r.Height < kMscList.Y || r.Y > kMscList.Y + kMscList.Height) { hidden++; continue; }
+                bool vis = r.Y >= kMscList.Y - 1 && r.Y + r.Height <= kMscList.Y + kMscList.Height + 1;
+                if (!vis) hidden++;
+                bool hot = g_mscHot == 2000 + i;
+                GraphicsPath rp; RoundRect(rp, r, 14);
+                SolidBrush rb(hot ? TH(cardSel) : TH(card)); g.FillPath(&rb, &rp);
+                Pen rpen(hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), 1); g.DrawPath(&rpen, &rp);
+                float a = m.disabled || m.off ? 0.5f : 1.0f;
+                RectF ic(r.X + 8, r.Y + 8, 40, 40);
+                GraphicsPath ip; RoundRect(ip, ic, 11);
+                SolidBrush ib(WithA(kInk, 0.08f)); g.FillPath(&ib, &ip);
+                Icon(g, IC_PUZZLE, ic.X + 20, ic.Y + 20, 18, g_dark ? WithA(kIconHue[i % 4], a) : WithA(kAcc, a), 1.9f);
+                float nw = kMscColVer - 12 - kMscColName;
+                Text(g, m.name, RectF(kMscColName, r.Y + 8, nw, 20), 13.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
+                std::wstring line = m.off ? m.file + T(L".off · désactivé : ni chargé ni envoyé", L".off · off: neither loaded nor sent")
+                                  : m.known ? (m.author.empty() ? m.file : m.author + L" · " + m.file) + (m.disabled ? T(L" · désactivé dans MSCLoader", L" · disabled in MSCLoader") : L"")
+                                            : m.file + T(L" · lance le jeu une fois pour les détails", L" · start the game once for details");
+                Text(g, line, RectF(kMscColName, r.Y + 29, nw, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+                Text(g, m.known && !m.ver.empty() ? m.ver : L"—", RectF(kMscColVer, r.Y, 90, r.Height), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+                // Envoye : puce cliquable (Oui · taille / Non · perso)
+                RectF sr = MscSendRect(r);
+                bool sent = MscSent(m), shHot = g_mscHot == 4000 + i;
+                std::wstring sl = m.off ? T(L"Non · coupé", L"No · off") : MenuSkipper(m) ? T(L"Jamais", L"Never")
+                                : sent ? std::wstring(T(L"Oui", L"Yes")) + (m.bytes ? L" · " + SizeText(m.bytes) : L"") : T(L"Non · perso", L"No · private");
+                float slw = min(MscChipW(sl), sr.Width);
+                RectF cr(sr.X, sr.Y, slw, sr.Height);
+                Color ck = sent ? kOk : kGrey;
+                MscChip(g, cr, sl, sent ? WithA(kOk, 0.18f) : WithA(kInk, 0.06f), WithA(ck, m.off ? 0.6f : 1.0f), shHot ? kAcc : sent ? WithA(kOk, 0.35f) : TH(choiceBorder), 11.5f);
+                RectF ar = MscActiveRect(r);
+                bool acHot = g_mscHot == 6000 + i;
+                DrawToggle(g, ar, !m.off, acHot);
+                if (m.known) {
+                    RectF gr = MscGearRect(r);
+                    GraphicsPath gp; RoundRect(gp, gr, 10);
+                    SolidBrush gb(hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&gb, &gp);
+                    DrawGear(g, gr.X + 18, gr.Y + 18, hot ? kAcc : kInk);
+                }
+                if (!vis) continue;
+                if (m.known) MscZone(r, 2000 + i);
+                MscZone(RectF(sr.X - 6, r.Y + 4, sr.Width + 6, r.Height - 8), 4000 + i);
+                MscZone(RectF(ar.X - 6, r.Y + 4, ar.Width + 12, r.Height - 8), 6000 + i);
             }
+            g.Restore(st);
+            DrawScrollBar(g, kMscList, sc, ms);
+            if (hidden > 0) { wchar_t hb[64]; swprintf_s(hb, T(L"+ %d autre(s) · défilement", L"+ %d more · scroll"), hidden); Text(g, hb, RectF(c.X + 18, c.Y + 568, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear); }
+            // bas : dossier, tout envoyer, total envoye
+            MscButton(g, kMscOpenDir, T(L"Ouvrir le dossier Mods", L"Open the Mods folder"), 1004, IC_FOLDER);
+            MscButton(g, kMscSendAll, T(L"Tout envoyer", L"Send all"), 1010, -1, !g_msc.empty());
+            unsigned long long tot = 0; int n = 0;
+            for (const MscMod &m : g_msc) if (MscSent(m)) { tot += m.bytes; n++; }
+            wchar_t tb[96];
+            swprintf_s(tb, T(L"Envoyé aux invités : %d mod(s) · %s", L"Sent to guests: %d mod(s) · %s"), n, SizeText(tot).c_str());
+            Text(g, tb, RectF(kMscSendAll.X + kMscSendAll.Width + 10, kMscOpenDir.Y, c.X + c.Width - 18 - (kMscSendAll.X + kMscSendAll.Width + 10), 36), 12, FontStyleRegular, kGrey, StringAlignmentFar);
         }
-        g.Restore(st);
-        DrawScrollBar(g, kMscList, sc, ms);
     }
-    Pen sep(TH(sep), 1);
-    g.DrawLine(&sep, c.X + 24, c.Y + c.Height - 62, c.X + c.Width - 24, c.Y + c.Height - 62);
-    Para(g, T(L"R\u00E9glages pris au prochain lancement du jeu. \u00AB Actif \u00BB coup\u00E9 : le mod n'est plus charg\u00E9. \u00AB Envoyer \u00BB : il est copi\u00E9 chez les invit\u00E9s de ton salon.",
-              L"Settings apply at the next game launch. \"On\" off: the mod no longer loads. \"Send\": it is copied to your lobby's guests."),
-         RectF(c.X + 300, c.Y + c.Height - 52, c.Width - 324, 40), 12.5f, kGrey, StringAlignmentCenter);
-    if (g_mscInstalled && g_mscPage < 0) {
-        bool hot = g_mscHot == 1004;
-        Icon(g, IC_FOLDER, kMscOpenDir.X + 10, kMscOpenDir.Y + 15, 17, hot ? kAcc : kInk, 1.9f);
-        Text(g, T(L"Ouvrir le dossier Mods", L"Open the Mods folder"), RectF(kMscOpenDir.X + 26, kMscOpenDir.Y, kMscOpenDir.Width - 26, kMscOpenDir.Height), 13, hot ? FontStyleBold | FontStyleUnderline : FontStyleUnderline, hot ? kAcc : kInk, StringAlignmentNear);
+    // ---- a droite : recus de l'hote
+    {
+        RectF c = kMscRecvCard;
+        Title(g, T(L"Reçus de l'hôte", L"Received from the host"), RectF(c.X + 18, c.Y + 14, c.Width - 36, 26), 16, kInk);
+        std::vector<MscRecv> recv = g_mscRecv;
+        if (g_mscFake && recv.empty()) recv = { { L"Better Headlights", 1258291 }, { L"Trunk Light", 204800 } };   // (captures)
+        std::wstring sub;
+        if (recv.empty()) sub = T(L"Aucun pour l'instant : ils arrivent en rejoignant un salon", L"None yet: they arrive when you join a lobby");
+        else {
+            wchar_t b[160];
+            FILETIME lt; SYSTEMTIME t = {};
+            if (g_mscRecvT.dwHighDateTime) { FileTimeToLocalFileTime(&g_mscRecvT, &lt); FileTimeToSystemTime(&lt, &t); }
+            wchar_t dt[16]; swprintf_s(dt, L"%02d/%02d", g_fr ? t.wDay : t.wMonth, g_fr ? t.wMonth : t.wDay);
+            if (t.wYear) swprintf_s(b, T(L"Dernier salon le %s · %d mod(s) · gardés pour la prochaine fois", L"Last lobby on %s · %d mod(s) · kept for next time"), dt, (int)recv.size());
+            else swprintf_s(b, T(L"%d mod(s) · gardés pour la prochaine fois", L"%d mod(s) · kept for next time"), (int)recv.size());
+            sub = b;
+        }
+        Text(g, sub, RectF(c.X + 18, c.Y + 42, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        float y = c.Y + 66;
+        for (int i = 0; i < (int)recv.size() && i < 4; i++, y += 28) {
+            Text(g, recv[i].name, RectF(c.X + 18, y, c.Width - 36 - 70, 24), 13, FontStyleBold, kInk, StringAlignmentNear);
+            std::wstring sz = recv[i].bytes ? SizeText(recv[i].bytes) : L"ok";
+            float w = MscChipW(sz, 10.5f);
+            MscChip(g, RectF(c.X + c.Width - 18 - w, y + 1, w, 22), sz, WithA(kOk, 0.18f), kOk, WithA(kOk, 0.35f), 10.5f);
+        }
+        if (recv.size() > 4) { wchar_t more[48]; swprintf_s(more, T(L"+ %d autre(s)", L"+ %d more"), (int)recv.size() - 4); Text(g, more, RectF(c.X + 18, y, c.Width - 36, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear); }
+        if (const Opt *ma = OptByKey("ModsAuto")) {   // accepter les fichiers de l'hote (ModsAuto)
+            bool hot = g_mscHot == 1005;
+            float ty = kMscAuto.Y - 6;
+            Text(g, T(L"Accepter les fichiers de l'hôte", L"Accept the host's files"), RectF(c.X + 18, ty, c.Width - 36 - 60, 20), 13, FontStyleBold, hot ? kAcc : kInk, StringAlignmentNear);
+            Text(g, T(L"Sans redemander à chaque salon", L"Without asking again in each lobby"), RectF(c.X + 18, ty + 20, c.Width - 36 - 60, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            DrawToggle(g, kMscAuto, OptGet(*ma) != 0, hot);
+            MscZone(RectF(c.X + 18, ty - 4, c.Width - 36, 46), 1005);
+        }
+        // TODO : vider mods-invite (copie des mods de l'hote) -- pas d'action encore : bouton gris + « Bientot »
+        const wchar_t *soon = T(L"Bientôt", L"Soon");
+        float sw = MscChipW(soon, 10);
+        MscButton(g, kMscClearRecv, T(L"Vider les mods reçus", L"Clear received mods"), 1011, -1, false, false, sw + 8);
+        MscChip(g, RectF(kMscClearRecv.X + kMscClearRecv.Width - sw - 8, kMscClearRecv.Y + 8, sw, 20), soon, WithA(kWarn, 0.2f), kWarn, WithA(kWarn, 0.4f), 10);
+    }
+    // ---- a droite : bon a savoir
+    {
+        RectF c = kMscInfoCard;
+        Title(g, T(L"Bon à savoir", L"Good to know"), RectF(c.X + 18, c.Y + 14, c.Width - 36, 26), 16, kInk);
+        struct { const wchar_t *t, *s; float h; } notes[2] = {
+            { T(L"Le salon attend les téléchargements", L"The lobby waits for downloads"),
+              T(L"Tant qu'un invité reçoit tes mods, LANCER reste gris. Un joueur qui arrive en cours de partie les reçoit avant d'entrer.",
+                L"While a guest is receiving your mods, START stays grey. A player who arrives mid-game gets them before joining."), 100 },
+            { T(L"Mods non pris en charge", L"Unsupported mods"),
+              T(L"MWCoop ne garantit pas les mods tiers : ils fonctionnent chez toi comme en solo, mais leurs objets ne sont pas forcément vus par les autres.",
+                L"MWCoop does not guarantee third-party mods: they work for you as in solo, but their objects are not necessarily seen by the others."), 116 } };
+        float y = c.Y + 50;
+        for (auto &n : notes) {
+            RectF r(c.X + 18, y, c.Width - 36, n.h);
+            MscInnerCard(g, r);
+            Text(g, n.t, RectF(r.X + 12, r.Y + 10, r.Width - 24, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+            Para(g, n.s, RectF(r.X + 12, r.Y + 32, r.Width - 24, r.Height - 38), 12, kGrey);
+            y += n.h + 8;
+        }
+        bool hot = g_mscHot == 1009;
+        Text(g, T(L"Guide : jouer avec des mods →", L"Guide: playing with mods →"), kMscCompat, 12.5f, hot ? FontStyleBold | FontStyleUnderline : FontStyleBold, kAcc, StringAlignmentNear);
+        MscZone(kMscCompat, 1009);
     }
 }
