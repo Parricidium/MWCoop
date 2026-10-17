@@ -3046,6 +3046,10 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     static const char *modes[] = { "solo", "hote", "invite" };
     std::string t = "[Lancement]\r\n";
     t += std::string("Mode=") + modes[mode] + "\r\n";
+    // Horodatage dans [Lancement], avant tout : le chargeur le lit par section (GetPrivateProfileString) et, depuis les options du
+    // salon (0.96.4, [Coop] ajoute en fin), il se retrouvait sous [Coop] -- fichier juge perime, Profil= ignore, toujours la
+    // sauvegarde principale (retour de JD, 18/10 : « ca charge toujours la meme sauvegarde »). Le mod, lui, lit a plat.
+    t += "Horodatage=" + std::to_string((long long)_time64(NULL)) + "\r\n";
     if (mode == MODE_GUEST) t += "Adresse=" + Narrow(addr, CP_UTF8) + "\r\n";
     if (mode != MODE_SOLO) t += std::string("Reseau=") + (g_steamNet ? "steam" : "ip") + "\r\n";
     if (mode == MODE_GUEST && g_steamNet && g_sHost) {   // salon Steam du lanceur : le mod se connecte directement a l'hote
@@ -3060,7 +3064,6 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
     if (mode == MODE_GUEST) t += ContentLaunchLines();
     if (mode != MODE_SOLO && g_lobbyOptGo) { t += LobbyCoopLines(mode == MODE_HOST); g_lobbyOptGo = false; }   // (options choisies dans le salon : salon.inc)
-    t += "Horodatage=" + std::to_string((long long)_time64(NULL)) + "\r\n";
     EnsureModDir();
     std::wstring path = g_gameDir + L"MWCoop\\lancement.ini", tmp = path + L".tmp";
     HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
