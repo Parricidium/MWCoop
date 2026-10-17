@@ -1439,6 +1439,23 @@ namespace MWCoop
             // (l'hote fait apparaitre a 40 s ; chacun compte ensuite les buches et sacs de Cheatbox++ a 55 s)
             // [Test] Autotest=fendattel : l'hote attelle la fendeuse au KEKMET a 40 s, la detelle a 55 s ; chacun note son etat
             // toutes les 3 s de 35 a 70 s. Attendu : meme etat des deux cotes quelques dixiemes apres chaque geste.
+            // [Test] Autotest=automate, Automate=<chemin>:<nom>[,...] : a 40 s, etats, actions, variables et evenements de ces
+            // automates (diagnostic ; OpNoob, 17/10 : l'arbre de la fendeuse ne s'attelle pas au tracteur).
+            if (mode == "automate" && t > 40f && step == 0)
+            {
+                step = 1;
+                foreach (string spec in Config.Get("Test", "Automate", "Cutter/PTOCheck:Attach").Split(','))
+                {
+                    int c = spec.LastIndexOf(':'); if (c <= 0) continue;
+                    GameObject go = Game.FindAny(spec.Substring(0, c).Trim());
+                    PlayMakerFSM fsm = go != null ? Game.FsmOn(go, spec.Substring(c + 1).Trim()) : null;
+                    if (fsm == null) { Log.Info("autotest : automate " + spec + " introuvable"); continue; }
+                    Log.Info("autotest : automate " + spec + " (" + Recon.Path(fsm.transform) + "), etat " + fsm.ActiveStateName);
+                    foreach (FsmState st in fsm.Fsm.States) Log.Info("autotest :   " + Jobs.DumpActions(fsm, st.Name));
+                    foreach (NamedVariable v in fsm.FsmVariables.GetAllNamedVariables()) Log.Info("autotest :   var " + v.Name + " = " + v);
+                    foreach (FsmEvent ev in fsm.Fsm.Events) Log.Info("autotest :   evenement " + ev.Name + (ev.IsGlobal ? " (global)" : ""));
+                }
+            }
             if (mode == "fendattel")
             {
                 if (Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + CutterHitch.TestSet(1)); }
