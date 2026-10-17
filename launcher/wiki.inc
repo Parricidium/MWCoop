@@ -345,6 +345,7 @@ static std::wstring NoteFirstLine(const Note &n)
     }
     return L"";
 }
+static RectF g_credBtnRect;   // (bulle de la visite : etape Credits)
 static void DrawWikiNews(Graphics &g)
 {
     RectF c = kWikiNews;
@@ -371,14 +372,17 @@ static void DrawWikiNews(Graphics &g)
         y += min(h, 54.0f) + 8;
         if (i + 1 < notes.size() && i + 1 < 3) { Pen sep(TH(sep), 1); g.DrawLine(&sep, c.X + 18, y, c.X + c.Width - 18, y); y += 8; }
     }
+    // tout en bas : Credits (ex-etoile de l'en-tete ; onglet du Guide a venir), au-dessus : « Un souci ? »
+    g_credBtnRect = RectF(c.X + 14, c.Y + c.Height - 14 - 40, c.Width - 28, 40);
+    UiButton(g, g_credBtnRect, T(L"Crédits", L"Credits"), UI_WIKI_GO + 197, false, IC_STAR);
     // « Un souci ? » : le zip des journaux puis Discord (Reglages > Lanceur > Journaux)
-    RectF h(c.X + 14, c.Y + c.Height - 14 - 150, c.Width - 28, 150);
+    RectF h(c.X + 14, c.Y + c.Height - 14 - 40 - 10 - 150, c.Width - 28, 150);
     GraphicsPath p; RoundRect(p, h, 14);
     SolidBrush fb(TH(card)); g.FillPath(&fb, &p);
     Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
     Text(g, T(L"Un souci ?", L"Something wrong?"), RectF(h.X + 14, h.Y + 12, h.Width - 28, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
-    WikiText(g, T(L"Journaux (en haut \u00E0 droite) > Faire le zip, puis poste-le dans #bug-reports sur Discord.",
-                  L"Logs (top right) > Make the zip, then post it in #bug-reports on Discord."), RectF(h.X + 14, h.Y + 36, h.Width - 28, 56), 12.5f, FontStyleRegular, kGrey);
+    WikiText(g, T(L"Journaux (le < > en bas \u00E0 gauche) > Faire le zip, puis poste-le dans #bug-reports sur Discord.",
+                  L"Logs (the < > at the bottom left) > Make the zip, then post it in #bug-reports on Discord."), RectF(h.X + 14, h.Y + 36, h.Width - 28, 56), 12.5f, FontStyleRegular, kGrey);
     RectF b(h.X + 14, h.Y + h.Height - 14 - 40, h.Width - 28, 40);
     GraphicsPath bp; RoundRect(bp, b, 12);
     SolidBrush db(g_uiHot == UI_WIKI_GO + 198 ? Mix(kDiscordBlue, Color(255, 255, 255, 255), 0.18f) : kDiscordBlue); g.FillPath(&db, &bp);
@@ -518,6 +522,7 @@ static bool WikiClick(int id)
         return true;
     }
     if (id == UI_WIKI_GO + 199) { GoPage(TAB_NOTES); return true; }   // colonne Nouveautes : « Tout »
+    if (id == UI_WIKI_GO + 197) { GoPage(TAB_CREDITS); return true; }   // colonne Nouveautes : Credits
     if (id == UI_WIKI_GO + 198) { ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); return true; }
     if (id >= UI_WIKI_GO && id < UI_WIKI_GO + 200) {
         const WikiArticle &art = kWikiArt[g_wikiSel];

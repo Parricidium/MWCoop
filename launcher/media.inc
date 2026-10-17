@@ -257,10 +257,11 @@ static bool VhsChar(wchar_t c)
     return true;
 }
 
-// ---- page MEDIA (maquette du 17/10) : onglets VHS / Album en haut (y 92), carte de gauche (liste ou grille) et carte de
-// droite (la cassette ou la photo choisie) dessous.
-static const RectF kMediaCard(264, 140, 624, 604), kMediaView(900, 140, 364, 604);
-static const RectF kVhsList(288, 238, 576, 418);   // (sous le titre et la ligne d'aide, au-dessus de la bande de la cassette choisie)
+// ---- page MEDIA (maquette du 17/10) : onglets VHS / Album dans l'en-tete (ui.inc DrawHeader), carte de gauche (liste ou
+// grille) et carte de droite (la cassette ou la photo choisie) a y 88 comme les autres pages.
+static const RectF kMediaCard(264, 88, 624, 656), kMediaView(900, 88, 364, 656);
+static const RectF kVhsList(288, 186, 576, 470);   // (sous le titre et la ligne d'aide, au-dessus de la bande de la cassette choisie)
+static float g_mediaTabRight = 1264;               // bord droit des onglets (ui.inc DrawHeader)
 static const float kVhsRowH = 66;
 static float VhsMaxScroll() { return max(0.0f, (float)g_vhs.size() * kVhsRowH - kVhsList.Height); }
 
@@ -441,14 +442,15 @@ static bool VhsExportTick()
     return true;
 }
 
-// Onglets de la page MEDIA (VHS / Album) : zones UI_VHS_TAB + k, suivies par VhsClick.
+// Onglets de la page MEDIA (VHS / Album), dessines par l'en-tete : zones UI_VHS_TAB + k, suivies par VhsClick.
+static float MediaTabsW() { return PillW(L"VHS", 13) + 16 + 6 + PillW(L"Album", 13) + 16; }
 static void MediaTabsDraw(Graphics &g)
 {
     const wchar_t *lab[2] = { L"VHS", L"Album" };
-    float x = kMain.X;
+    float x = g_mediaTabRight - MediaTabsW();
     for (int k = 0; k < 2; k++) {
         float w = PillW(lab[k], 13) + 16;
-        RectF r(x, 92, w, 36);
+        RectF r(x, 26, w, 36);
         bool on = (g_tab == TAB_ALBUM) == (k == 1), hot = g_uiHot == UI_VHS_TAB + k;
         GraphicsPath p; RoundRect(p, r, r.Height / 2);
         SolidBrush b(on ? kAcc : hot ? TH(cardSel) : TH(btn2)); g.FillPath(&b, &p);
@@ -479,7 +481,6 @@ static bool VhsIsPerso(const VhsTape &t) { for (auto &f : t.films) if (!f.compar
 static void DrawVhs(Graphics &g)
 {
     if (GetTickCount() - g_vhsScanT > 2000) VhsScan();
-    MediaTabsDraw(g);
     RectF c = kMediaCard, v = kMediaView;
     Glass(c);
     Glass(v);
@@ -663,7 +664,7 @@ static DWORD g_albScanT;
 static int g_albSel = -1;
 static Bitmap *g_albBig; static std::wstring g_albBigOf;
 static DWORD g_albDelT; static int g_albDel = -1;
-static const RectF kAlbGrid(288, 218, 588, 324);   // (sous le titre et la ligne d'aide, au-dessus de la rangee Ouvrir le dossier)
+static const RectF kAlbGrid(288, 166, 588, 376);   // (sous le titre et la ligne d'aide, au-dessus de la rangee Ouvrir le dossier)
 static const float kAlbCellW = 196, kAlbCellH = 118;   // pas de la grille (case de 188 x 106 : 16/9)
 
 static std::wstring AlbDir()
@@ -732,7 +733,6 @@ static std::wstring AlbWhen(const FILETIME &ft)
 static void DrawAlbum(Graphics &g)
 {
     if (GetTickCount() - g_albScanT > 3000) AlbScan();
-    MediaTabsDraw(g);
     RectF c = kMediaCard, v = kMediaView;
     Glass(c);
     Glass(v);

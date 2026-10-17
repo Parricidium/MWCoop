@@ -4,6 +4,9 @@
 1 ICON "mwcoop.ico"
 1 24 "launcher.manifest"
 4 RCDATA "logo-titre.png"
+// 6 : police de la maquette (Nunito, variable, licence SIL OFL 1.1 : OFL-Nunito.txt), chargee en memoire au demarrage
+// (launcher.cpp EmbedFontLoad) ; illisible : Segoe UI comme avant
+6 RCDATA "Nunito-VariableFont_wght.ttf"
 // 5 : le chargeur (build\version.dll) de la meme compilation -- reference pour verifier celui du jeu (LoaderEnsure)
 5 RCDATA "build\\version.dll"
 

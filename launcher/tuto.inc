@@ -31,23 +31,23 @@ static const TutoStep kTuto[] = {
       L"Graphics", L"Sorted into categories you expand: shadows, distance, detail, textures, frame rate… and now player names (distance, or hidden). One-click presets; in game: F10 menu.", "0.54.0" },
     { L"Nouveautés", L"Ce qui change à chaque version. Quand une nouvelle version sort, un bouton « Mettre à jour » apparaît sous le logo : la mise à jour se fait quand tu cliques.",
       L"What's new", L"What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.", "0.42.0" },
-    { L"Journaux", L"Chaque partie garde maintenant ses journaux, rangés par date : déplie celle qui a posé problème, crée son zip ou supprime les vieilles. Un « ! » rouge s'affiche si la dernière partie s'est arrêtée brutalement.",
-      L"Logs", L"Every session now keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.", "0.53.0" },
-    { L"API moddeurs", L"Aussi en haut maintenant. Tu fais des mods ? Ce que l'API de MWCoop permet, un exemple à copier, la DLL et la doc sur GitHub.",
-      L"Modding API", L"Also up here now. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.", "0.46.0" },
+    { L"Journaux", L"Le < > en bas de la barre. Chaque partie garde ses journaux, rangés par date : déplie celle qui a posé problème, crée son zip ou supprime les vieilles. Un « ! » rouge s'affiche si la dernière partie s'est arrêtée brutalement.",
+      L"Logs", L"The < > at the bottom of the bar. Every session keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.", "0.53.0" },
+    { L"API moddeurs", L"Dans Réglages > Lanceur > Dépannage. Tu fais des mods ? Ce que l'API de MWCoop permet, un exemple à copier, la DLL et la doc sur GitHub.",
+      L"Modding API", L"In Settings > Launcher > Troubleshooting. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.", "0.46.0" },
     { L"Réglages", L"Mise à jour, thème, langue, port, dossier du jeu, envoi de l'hôte chez un ami… et ce guide.",
       L"Settings", L"Updates, theme, language, port, game folder, a host's files at a friend's… and this guide.", "0.42.0" },
     { L"Thème et langue", L"Sombre ou clair, français ou anglais, d'un clic.", L"Theme and language", L"Dark or light, French or English, in one click.", "0.42.0" },
-    { L"Discord", L"La communauté MWCoop : de l'aide, les bugs à signaler, les nouveautés et des joueurs pour faire équipe. GitHub et Ko-fi juste à côté.",
-      L"Discord", L"The MWCoop community: help, bug reports, news and players to team up with. GitHub and Ko-fi right next to it.", "0.51.0" },
+    { L"Discord", L"La communauté MWCoop : de l'aide, les bugs à signaler, les nouveautés et des joueurs pour faire équipe. Journaux et Soutenir (Ko-fi) juste à côté.",
+      L"Discord", L"The MWCoop community: help, bug reports, news and players to team up with. Logs and Support (Ko-fi) right next to it.", "0.51.0" },
     { L"MSCLoader de MWCoop", L"Dans l'onglet Mods : OFFICIEL (celui installé dans le jeu) ou MWCOOP (installé à part, le jeu n'est pas modifié). Si tes mods ne se chargent pas, essaie MWCOOP, ou RÉINSTALLER.",
       L"MWCoop's MSCLoader", L"In the Mods tab: OFFICIAL (the one installed in the game) or MWCOOP (installed apart, the game is not changed). If your mods don't load, try MWCOOP, or REINSTALL.", "0.60.0" },
     { L"Démarrer le jeu", L"Dans Réglages > Jeu : Copie (d'origine), Dossier du jeu ou Steam. Si MWCoop ne se charge pas, essaie l'un puis l'autre ; le lanceur passe aussi tout seul au dossier du jeu.",
       L"Start the game", L"In Settings > Game: Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.", "0.62.2" },
     { L"Désinstaller", L"Dans Réglages > À propos : retire tout MWCoop (dossiers compris) et le MSCLoader de MWCoop, à la Corbeille. Ta sauvegarde, tes mods et le MSCLoader officiel restent.",
       L"Uninstall", L"In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.", "0.60.8" },
-    { L"Crédits", L"L'étoile en haut : ceux qui donnent quelque chose pour améliorer MWCoop. Merci à Dom pour ses 155 tenues, dans l'onglet Tenue !",
-      L"Credits", L"The star at the top: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in the Outfit tab!", "0.61.0" },
+    { L"Crédits", L"En bas de la colonne Nouveautés du Guide : ceux qui donnent quelque chose pour améliorer MWCoop. Merci à Dom pour ses 155 tenues, dans l'onglet Tenue !",
+      L"Credits", L"At the bottom of the Guide's What's new column: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in the Outfit tab!", "0.61.0" },
     { L"Mode débogage", L"Dans Journaux : si MWCoop ne se charge pas, active-le, lance ta partie puis crée le zip. Il note tout ce que fait le lanceur et ce que le jeu a vraiment chargé.",
       L"Debug mode", L"In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.", "0.62.0" },
     { L"Modes de compatibilité", L"Dans Réglages > Jeu. Après un plantage, Windows ajoute parfois un mode de compatibilité au jeu, et MWCoop ne se charge plus : le lanceur le retire avant chaque partie.",
@@ -113,14 +113,14 @@ static RectF TutoTarget(int i)
     case 9: return g_navR[TAB_GFX];
     case 10: return g_navR[TAB_NOTES];
     case 11: return g_navR[TAB_LOGS];
-    case 12: return g_navR[TAB_API];
+    case 12: return g_setApiRow;   // (Reglages > Lanceur > Depannage : gfx.inc)
     case 13: return g_navR[TAB_COOP];
     case 14: return join(g_btn[B_LANG].r, g_btn[B_THEME].r);
     case 15: return g_btn[B_DISCORD].r;
     case 16: { RectF a = kMscSrcOff, b = kMscReinst; return RectF(a.X - 110, a.Y, b.X + b.Width - a.X + 110, a.Height); }
     case 17: return g_setSteamRow;   // (page Reglages, onglet Lanceur : gfx.inc)
     case 18: return g_setUninst;
-    case 19: return g_navR[TAB_CREDITS];
+    case 19: return g_credBtnRect;   // (Guide, colonne Nouveautes : wiki.inc)
     case 20: return kLogsDebugRow;
     case 21: return g_setCompatRow;
     case 22: return g_navR[TAB_WIKI];
@@ -146,7 +146,7 @@ static RectF TutoTarget(int i)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 17, 18 : Reglages)
+static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 ? TAB_COOP : i == 24 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 ? TAB_WIKI : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19 : Guide)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la
