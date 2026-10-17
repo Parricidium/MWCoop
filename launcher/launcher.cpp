@@ -5769,6 +5769,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
         if (SetChar((wchar_t)wp)) return 0;   // (gfx.inc : champ Chercher des reglages)
+        if (GuideChar((wchar_t)wp)) return 0;   // (wiki.inc : champ Chercher du guide)
         if (g_state != ST_IDLE || (g_lobby != LB_NONE && !g_sCodeAsk) || g_goWait || g_guide || g_tuto >= 0) return 0;
         if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
         if (wp == 8) { if (g_focus >= 0 && !g_fields[g_focus].text.empty()) g_fields[g_focus].text.pop_back(); }
@@ -6264,7 +6265,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; GfxLoad(); SetEnter(TAB_COOP); }   // (page Reglages, onglet Co-op)
         else if (!wcsncmp(st.c_str(), L"reglages-", 9)) { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(st); }   // reglages-jeu|image|son|coop|touches|theme|lanceur|recherche
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
-        else if (st == L"guide") { g_tab = TAB_WIKI; g_wikiSel = 1; }   // guide des joueurs (colonne Nouveautes : notes deja recues ou vides)
+        else if (st == L"guide-recherche") { g_tab = TAB_WIKI; g_wikiSearch = L"mods"; g_wikiFocus = true; }   // (champ Chercher de l'en-tete)
+        else if (st == L"guide-credits") g_tab = TAB_CREDITS;   // (pilule Credits du Guide)
+        else if (st == L"album-partie" || st == L"album-favoris") {   // (Album : Par partie, Favoris -- les deux premieres photos, en memoire)
+            g_tab = TAB_ALBUM; AlbScan(); g_albView = st == L"album-partie" ? 1 : 2;
+            if (g_albView == 2) { for (size_t i = 0; i < g_alb.size() && i < 2; i++) g_albFav.insert(g_alb[i].name); if (!g_alb.empty()) g_albSel = 0; }
+        }
         else if (st == L"voiture") { g_tab = TAB_CAR; }   // couleur : CouleurVoiture du mwcoop.ini du jeu
         else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso" || st == L"visage" || st == L"volant") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s) ; visage : onglet Visage ; volant : vue Volant
             g_tab = TAB_SKIN;
@@ -6274,10 +6280,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (st == L"volant") g_persoView = PV_VOLANT;
             if (st == L"tenue-perso") { g_skinRowHot = 1; g_skinYaw = (float)_wtof(argv[argc - 1]); }   // (dernier argument : la vue 0..16)
         }
-        else if (st == L"notes" || st == L"accueil-notes") {   // notes d'exemple (le depot n'a pas encore de release) ; accueil-notes : la carte Nouveautes de l'accueil
+        else if (st == L"notes" || st == L"accueil-notes" || st == L"guide" || st == L"guide-nouveautes") {   // notes d'exemple (le depot n'a pas encore de release) ; accueil-notes : la carte Nouveautes de l'accueil ; guide : la colonne Nouveautes ; guide-nouveautes : la pilule du Guide
             // (passees par ParseReleases, comme une vraie release : francais --- anglais --- russe)
             g_notes = ParseReleases("[{\"tag_name\":\"v0.1.1\",\"published_at\":\"2026-10-09T10:00:00Z\",\"body\":\"- Exemple de note de version (capture).\\n- Deuxième ligne : une correction.\\n---\\n- Sample release note (capture).\\n- Second line: a fix.\\n---\\n- Пример заметки к версии (снимок).\\n- Вторая строка: исправление.\"},{\"tag_name\":\"v0.1.0\",\"published_at\":\"2026-10-02T10:00:00Z\",\"body\":\"- Première version : chargeur, joueurs visibles.\\n---\\n- First version: loader, visible players.\"}]");
-            g_notesDone = true; g_relState = REL_OK; g_tab = st == L"notes" ? TAB_NOTES : TAB_HOME;
+            g_notesDone = true; g_relState = REL_OK; g_tab = st == L"accueil-notes" ? TAB_HOME : st == L"guide" ? TAB_WIKI : TAB_NOTES;
+            if (st == L"guide") g_wikiSel = 1;
         }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }
         else if (st == L"notes-image") {   // une note avec une image (telechargee ici, avant la capture)
@@ -6305,7 +6312,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             int art = 0, sc = 0;
             swscanf_s(st.c_str(), L"guide-%d-%d", &art, &sc);
             g_wikiSel = art;
-            g_wikiClosed &= ~(1u << kWikiArt[art].cat);
             g_scroll[TAB_WIKI] = (float)sc;
         }
         else if (st == L"graphismes" || st == L"graphismes-video") { g_tab = TAB_GFX; GfxLoad(); SetEnter(TAB_GFX); }   // (page Reglages, onglet Jeu)

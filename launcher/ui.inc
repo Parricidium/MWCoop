@@ -585,6 +585,7 @@ static void HeadNews(Graphics &g)
     if (fresh || on) { SolidBrush sf(WithA(gold, a)); g.FillPolygon(&sf, pts, 10); }
     Pen sp2(WithA(fresh ? pink : on ? kAcc : kInk, a), 1.8f); sp2.SetLineJoin(LineJoinRound); g.DrawPolygon(&sp2, pts, 10);
 }
+static void DrawGuideHead(Graphics &g, float &right);   // (wiki.inc : champ Chercher et pilules du Guide)
 static void DrawHeader(Graphics &g)
 {
     std::wstring title, sub;
@@ -613,14 +614,13 @@ static void DrawHeader(Graphics &g)
     case TAB_SKIN: case TAB_CAR: title = T(L"Personnage", L"Character"); sub = T(L"Ce que les autres voient de toi : tenue, visage, voiture. Visible dès que tu entres dans un salon.", L"What the others see of you: outfit, face, car. Visible as soon as you enter a lobby."); break;
     case TAB_CONTENT: title = T(L"Contenu envoyé", L"Sent content"); sub = T(L"Tes fichiers perso, copiés chez les invités de ton salon. Ils voient et entendent la même chose que toi.", L"Your personal files, copied to your lobby's guests. They see and hear the same as you."); break;
     case TAB_MODS: title = T(L"Mods", L"Mods"); sub = T(L"Tes mods MSCLoader, et ceux que tu envoies à tes invités quand tu héberges.", L"Your MSCLoader mods, and those you send to your guests when you host."); break;
-    case TAB_NOTES: title = T(L"Nouveautés", L"What's new"); sub = T(L"Ce qui change à chaque version", L"What changes in each version"); break;
+    case TAB_NOTES: case TAB_CREDITS: case TAB_WIKI:   // (une page, trois pilules : wiki.inc DrawGuideHead)
+        title = T(L"Guide", L"Guide"); sub = T(L"Jouer ensemble, partage, versions.", L"Play together, sharing, versions."); break;   // (court : les pilules et Chercher prennent la place)
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: case TAB_GFX: title = T(L"Réglages", L"Settings"); sub = SetHeaderSub(); break;   // (gfx.inc : une page, des onglets)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
-    case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
     case TAB_VHS: case TAB_ALBUM: title = T(L"VHS & album", L"VHS & album"); sub = T(L"Tes cassettes pour la télé du salon, et les photos prises au drone.", L"Your tapes for the living-room TV, and the photos taken with the drone."); break;
     case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Tes parties MWCoop, à part de la sauvegarde solo du jeu. L'hôte choisit laquelle lancer ; les invités la reçoivent.", L"Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it."); break;
-    case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Comment jouer à plusieurs, ce qui est partagé, et ce qui change à chaque version.", L"How to play together, what is shared, and what changes in each version."); break;
     }
     // commandes de droite (maquette du 17/10) : fermer, reduire, theme, langue, l'etoile Nouveautes, les notes de version
     // (accueil seulement), puis celles de la page. Journaux : bas de la barre ; API moddeurs et GitHub : Reglages > Lanceur ;
@@ -646,6 +646,7 @@ static void DrawHeader(Graphics &g)
             right -= w + 10;
         } else if (g_tab == TAB_SKIN || g_tab == TAB_CAR) { g_persoTabRight = right; PersoTabsDraw(g); right -= PersoTabsW() + 10; }   // (Tenue / Visage / Voiture : tenue.inc)
         else if (g_tab == TAB_VHS || g_tab == TAB_ALBUM) { g_mediaTabRight = right; MediaTabsDraw(g); right -= MediaTabsW() + 10; }   // (VHS / Album : media.inc)
+        else if (g_tab == TAB_WIKI || g_tab == TAB_NOTES || g_tab == TAB_CREDITS) DrawGuideHead(g, right);   // (Chercher, Guide / Nouveautes / Credits : wiki.inc)
         else if (g_tab == TAB_LOBBY) DrawLobbyHeadControls(g, right);
         else if (g_tab == TAB_GFX || g_tab == TAB_COOP) DrawSetSearchBox(g, right);   // (Chercher un reglage)
     }
