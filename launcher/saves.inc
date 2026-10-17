@@ -21,10 +21,13 @@ static bool g_saveNameForGame;                                     // nom demand
 static std::wstring g_saveNameText;
 static const int kSaveNameMax = 32;
 enum { UI_SAVE_NEW = 9000, UI_SAVE_REFRESH, UI_SAVE_MCLOSE, UI_SAVE_MNEW, UI_SAVE_MOK, UI_SAVE_MRESTART, UI_SAVE_MFRESH, UI_SAVE_LOBBY,
+       UI_SAVE_DUP, UI_SAVE_EXPORT, UI_SAVE_RESTART, UI_SAVE_DEL,   // onglet, carte de droite : sur la partie choisie (g_saveSel)
+       UI_SAVE_RESTORE = 9050,   // + k : copie de secours k de la partie choisie (9050-9059)
        UI_SAVE = 9100,       // + ligne * 8 + partie (onglet)
        UI_SAVE_PICK = 9700,  // + ligne (fenetre : liste)
        UI_SAVE_END = 9900 };
-enum { SP_USE, SP_RENAME, SP_DIR, SP_DEL, SP_OK, SP_CANCEL };
+enum { SP_USE, SP_RENAME, SP_DIR, SP_DEL, SP_OK, SP_CANCEL, SP_SEL };
+static int g_saveSel = -1;   // onglet : partie choisie (detail a droite) ; -1 : celle en cours
 
 static std::wstring SaveProfRoot()
 {
@@ -255,69 +258,357 @@ static void SavePickRow(int i)
     SetStatus(K_NORMAL, s.has ? T(L"Sauvegarde utilisée : %s", L"Save in use: %s") : T(L"Sauvegarde utilisée : %s (vide : nouvelle partie)", L"Save in use: %s (empty: new game)"), s.name.c_str());
 }
 
-// ---- onglet
-static const RectF kSaveList(288, 236, 952, 492);
-static const float kSaveRowH = 84;
-static float SavesMaxScroll() { return max(0.0f, (float)g_saves.size() * kSaveRowH - kSaveList.Height); }
+// ---- onglet (maquette du 17/10 : deux cartes -- la liste des parties a gauche, le detail de la partie choisie a droite)
+static const RectF kSaveL(264, 88, 596, 656), kSaveR(872, 88, 392, 656);
+static const RectF kSaveList(282, 140, 560, 512);   // (lignes de la liste, puis la ligne « Nouvelle partie »)
+static const float kSaveRowH = 82;                  // (ligne de 74 + 8 d'espace)
+static float SavesMaxScroll() { return max(0.0f, ((float)g_saves.size() + 1) * kSaveRowH - 8 - kSaveList.Height); }
+static int SaveSelIndex()
+{
+    if (g_saveSel >= 0 && g_saveSel < (int)g_saves.size()) return g_saveSel;
+    std::wstring cur = SaveCurrentProf();
+    for (int i = 0; i < (int)g_saves.size(); i++) if (g_saves[i].prof == cur) return i;
+    return g_saves.empty() ? -1 : 0;
+}
+static std::wstring SaveDateText(const FILETIME &ft)
+{
+    FILETIME lt; SYSTEMTIME t;
+    FileTimeToLocalFileTime(&ft, &lt); FileTimeToSystemTime(&lt, &t);
+    wchar_t b[48];
+    if (g_fr) swprintf_s(b, L"%02d/%02d/%04d %02d:%02d", t.wDay, t.wMonth, t.wYear, t.wHour, t.wMinute);
+    else swprintf_s(b, L"%04d-%02d-%02d %02d:%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute);
+    return b;
+}
+static std::wstring SaveSizeText(unsigned long long b)
+{
+    wchar_t t[32];
+    if (b >= 1024 * 1024) swprintf_s(t, g_fr ? L"%.1f Mo" : L"%.1f MB", b / 1048576.0);
+    else swprintf_s(t, g_fr ? L"%llu Ko" : L"%llu KB", (b + 1023) / 1024);
+    if (g_fr) for (wchar_t *c = t; *c; c++) if (*c == L'.') *c = L',';
+    return t;
+}
+
+// Copies de secours d'une partie : MWCoop\copie-avant-reworked\<date>\<principale | partie-N> (SavesBackupNightly, faites
+// avant le premier passage en Reworked). Relues toutes les 3 s pour la partie choisie.
+struct SaveBak { std::wstring dir; FILETIME when = {}; unsigned long long bytes = 0; };
+static std::vector<SaveBak> g_saveBak;
+static std::wstring g_saveBakFor = L"?";
+static DWORD g_saveBakT;
+static void SaveBakScan(const std::wstring &prof)
+{
+    g_saveBakFor = prof; g_saveBakT = GetTickCount();
+    g_saveBak.clear();
+    std::wstring root = SaveProfRoot();
+    if (root.size() < 8) return;
+    root = root.substr(0, root.size() - 8) + L"copie-avant-reworked\\";
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((root + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
+        SaveBak b; b.dir = root + fd.cFileName + L"\\" + (prof.empty() ? L"principale" : prof) + L"\\";
+        WIN32_FIND_DATAW f2;
+        HANDLE h2 = FindFirstFileW((b.dir + L"*").c_str(), &f2);
+        if (h2 == INVALID_HANDLE_VALUE) continue;
+        bool any = false;
+        do {
+            if (f2.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            any = true;
+            b.bytes += ((unsigned long long)f2.nFileSizeHigh << 32) | f2.nFileSizeLow;
+            if (CompareFileTime(&f2.ftLastWriteTime, &b.when) > 0) b.when = f2.ftLastWriteTime;
+        } while (FindNextFileW(h2, &f2));
+        FindClose(h2);
+        if (any) g_saveBak.push_back(b);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(g_saveBak.begin(), g_saveBak.end(), [](const SaveBak &a, const SaveBak &b) { return CompareFileTime(&a.when, &b.when) > 0; });
+}
+// Copie les fichiers (sans sous-dossiers) de src dans dst. Nombre copie.
+static int SaveCopyFiles(const std::wstring &src, const std::wstring &dst)
+{
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((src + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    SHCreateDirectoryExW(NULL, dst.c_str(), NULL);
+    int n = 0;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        SetFileAttributesW((dst + fd.cFileName).c_str(), FILE_ATTRIBUTE_NORMAL);
+        if (CopyFileW((src + fd.cFileName).c_str(), (dst + fd.cFileName).c_str(), FALSE)) n++;
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return n;
+}
+static void SaveRestore(int i, int k)
+{
+    if (i < 0 || i >= (int)g_saves.size() || k < 0 || k >= (int)g_saveBak.size() || !SaveGuard()) return;
+    const SaveSlot s = g_saves[i];
+    const SaveBak b = g_saveBak[k];
+    wchar_t q[600];
+    swprintf_s(q, T(L"Remettre la copie du %s dans « %s » ?\n\nLa sauvegarde actuelle de cette partie est remplacée (ses fichiers sont écrasés).",
+                    L"Put the copy from %s back into \"%s\"?\n\nThe current save of this game is replaced (its files are overwritten)."), SaveDateText(b.when).c_str(), s.name.c_str());
+    if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
+    int n = SaveCopyFiles(b.dir, SaveDirOf(s.prof));
+    TestLog("sauvegardes : copie %s remise dans %s (%d fichiers)", Narrow(b.dir, CP_UTF8).c_str(), s.prof.empty() ? "principale" : Narrow(s.prof, CP_UTF8).c_str(), n);
+    if (n) SetStatus(K_OK, T(L"« %s » : copie du %s remise (%d fichiers)", L"\"%s\": copy from %s restored (%d files)"), s.name.c_str(), SaveDateText(b.when).c_str(), n);
+    else SetStatus(K_ERR, T(L"Copie impossible à remettre", L"Could not restore the copy"));
+    SavesScan();
+}
+// Dupliquer : une nouvelle partie-N avec les fichiers de la partie choisie.
+static void SaveDuplicate(int i)
+{
+    if (i < 0 || i >= (int)g_saves.size() || !SaveGuard()) return;
+    const SaveSlot s = g_saves[i];
+    std::wstring name = SaveCleanName(s.name + T(L" (copie)", L" (copy)"));
+    std::wstring prof = SaveCreate(name);
+    if (prof.empty()) return;
+    int n = s.has ? SaveCopyFiles(SaveDirOf(s.prof), SaveDirOf(prof)) : 0;
+    TestLog("sauvegardes : %s dupliquee en %s (%d fichiers)", s.prof.empty() ? "principale" : Narrow(s.prof, CP_UTF8).c_str(), Narrow(prof, CP_UTF8).c_str(), n);
+    SavesScan();
+    for (int k = 0; k < (int)g_saves.size(); k++) if (g_saves[k].prof == prof) g_saveSel = k;
+    SetStatus(K_OK, T(L"« %s » créée (%d fichiers copiés)", L"\"%s\" created (%d files copied)"), name.c_str(), n);
+}
+// Exporter : un zip (sans compression) des fichiers de la partie sur le Bureau, montre dans l'Explorateur. Noms a plat :
+// a decompresser dans le dossier LocalLow\Amistech\My Winter Car (ou celui d'une partie-N) chez un ami.
+static bool SaveZip(const std::wstring &zip, const std::wstring &dir)
+{
+    HANDLE f = CreateFileW(zip.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    std::string central;
+    unsigned off = 0;
+    int n = 0;
+    bool ok = true;
+    auto put = [&](const std::string &b) { DWORD w = 0; ok = ok && WriteFile(f, b.data(), (DWORD)b.size(), &w, NULL) && w == b.size(); off += (unsigned)b.size(); };
+    auto u16 = [](std::string &s, unsigned v) { s += (char)(v & 255); s += (char)((v >> 8) & 255); };
+    auto u32 = [&](std::string &s, unsigned v) { u16(s, v & 0xFFFF); u16(s, v >> 16); };
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            std::vector<unsigned char> d;
+            if (!ReadAll(dir + fd.cFileName, d)) continue;
+            std::string name = Narrow(fd.cFileName, CP_UTF8);
+            FILETIME lt; WORD dd = 0x21, dt = 0;
+            FileTimeToLocalFileTime(&fd.ftLastWriteTime, &lt); FileTimeToDosDateTime(&lt, &dd, &dt);
+            unsigned crc = Crc32(d.data(), d.size()), size = (unsigned)d.size(), at = off;
+            std::string hd, c;
+            u32(hd, 0x04034b50); u16(hd, 20); u16(hd, 0x0800); u16(hd, 0); u16(hd, dt); u16(hd, dd); u32(hd, crc); u32(hd, size); u32(hd, size); u16(hd, (unsigned)name.size()); u16(hd, 0); hd += name;
+            u32(c, 0x02014b50); u16(c, 20); u16(c, 20); u16(c, 0x0800); u16(c, 0); u16(c, dt); u16(c, dd); u32(c, crc); u32(c, size); u32(c, size); u16(c, (unsigned)name.size());
+            u16(c, 0); u16(c, 0); u16(c, 0); u16(c, 0); u32(c, 0); u32(c, at); c += name;
+            central += c;
+            put(hd); put(std::string(d.begin(), d.end()));
+            n++;
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    std::string e;
+    u32(e, 0x06054b50); u16(e, 0); u16(e, 0); u16(e, n); u16(e, n); u32(e, (unsigned)central.size()); u32(e, off); u16(e, 0);
+    put(central); put(e);
+    CloseHandle(f);
+    if (!ok || !n) DeleteFileW(zip.c_str());
+    return ok && n > 0;
+}
+static void SaveExport(int i)
+{
+    if (i < 0 || i >= (int)g_saves.size()) return;
+    const SaveSlot s = g_saves[i];
+    if (!s.has) { SetStatus(K_WARN, T(L"Cette partie est vide : rien à exporter", L"This game is empty: nothing to export")); return; }
+    wchar_t desk[MAX_PATH] = L"";
+    if (FAILED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, desk)) || !desk[0]) { SetStatus(K_ERR, T(L"Bureau introuvable", L"Desktop not found")); return; }
+    std::wstring base;
+    for (wchar_t c : s.name) base += wcschr(L"\\/:*?\"<>|", c) ? L'_' : c;
+    SYSTEMTIME t; GetLocalTime(&t);
+    wchar_t d[32]; swprintf_s(d, L"%04d%02d%02d-%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute);
+    std::wstring zip = WithSlash(desk) + L"MWCoop-" + base + L"-" + d + L".zip";
+    if (!SaveZip(zip, SaveDirOf(s.prof))) { SetStatus(K_ERR, T(L"Export impossible (%lu)", L"Could not export (%lu)"), GetLastError()); return; }
+    TestLog("sauvegardes : %s exportee dans %s", s.prof.empty() ? "principale" : Narrow(s.prof, CP_UTF8).c_str(), Narrow(zip, CP_UTF8).c_str());
+    SetStatus(K_OK, T(L"Exportée sur le Bureau : %s", L"Exported to the Desktop: %s"), zip.substr(zip.find_last_of(L'\\') + 1).c_str());
+    ShellExecuteW(g_wnd, L"open", L"explorer.exe", (L"/select,\"" + zip + L"\"").c_str(), NULL, SW_SHOWNORMAL);
+}
+
+// Petits elements de la page : puce (fond leger, liseré), bouton rouge (Supprimer), tuile de chiffre, etiquette de section.
+static void SaveChip(Graphics &g, RectF r, const std::wstring &s, Color fill, Color ink, Color border, float px = 11.5f)
+{
+    GraphicsPath p; RoundRect(p, r, r.Height / 2);
+    SolidBrush b(fill); g.FillPath(&b, &p);
+    Pen pen(border, 1.0f); g.DrawPath(&pen, &p);
+    Text(g, s, r, px, FontStyleBold, ink);
+}
+static void SaveDangerButton(Graphics &g, RectF r, const std::wstring &s, int id, bool enabled)
+{
+    bool hot = enabled && g_uiHot == id;
+    float a = enabled ? 1.0f : 0.4f;
+    GraphicsPath p; RoundRect(p, r, 11);
+    SolidBrush b(hot ? WithA(kRed, 0.18f) : TH(btn2)); g.FillPath(&b, &p);
+    Pen pen(WithA(kRed, 0.55f * a), 1.0f); g.DrawPath(&pen, &p);
+    Text(g, s, r, 12.5f, FontStyleBold, WithA(kRed, a));
+    if (enabled) HotZone(r, id);
+}
+static void SaveStat(Graphics &g, RectF r, const std::wstring &big, const std::wstring &label)
+{
+    GraphicsPath p; RoundRect(p, r, 12);
+    SolidBrush b(Color((BYTE)(g_dark ? 64 : 18), 0, 0, 0)); g.FillPath(&b, &p);
+    Pen pen(TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
+    Text(g, big, RectF(r.X + 12, r.Y + 8, r.Width - 24, 24), 17, FontStyleBold, kInk, StringAlignmentNear);
+    Text(g, label, RectF(r.X + 12, r.Y + 32, r.Width - 24, 18), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+}
+static void SaveSection(Graphics &g, float x, float y, float w, const std::wstring &s) { Text(g, s, RectF(x, y, w, 16), 10.5f, FontStyleBold, kAcc, StringAlignmentNear); }
+// Champ de saisie du nom (renommage dans la carte de droite ; fenetre : le meme dessin).
+static void SaveNameField(Graphics &g, RectF fr, const std::wstring &txt)
+{
+    GraphicsPath fp; RoundRect(fp, fr, 10); SolidBrush fb(TH(field)); g.FillPath(&fb, &fp); Pen fpn(kAcc, 2); g.DrawPath(&fpn, &fp);
+    RectF trr(fr.X + 14, fr.Y, fr.Width - 28, fr.Height);
+    Text(g, txt.empty() ? T(L"Nom de la sauvegarde", L"Save name") : txt, trr, 16, FontStyleBold, txt.empty() ? TH(placeholder) : kInk, StringAlignmentNear);
+    if (fmodf(g_time, 1.0f) < 0.55f) {
+        float cw = txt.empty() ? 0 : MeasureW(g, txt, 16, FontStyleBold);
+        float cx = min(trr.X + cw + 1, trr.X + trr.Width);
+        Pen cp(kAcc, 1.6f); g.DrawLine(&cp, cx, fr.Y + 10, cx, fr.Y + fr.Height - 10);
+    }
+}
 
 static void DrawSaves(Graphics &g)
 {
     if (GetTickCount() - g_savesScanT > 3000 && g_saveEdit < 0) SavesScan();
-    RectF c = kMain; Glass(c);
-    Title(g, T(L"Tes sauvegardes", L"Your saves"), RectF(c.X + 24, c.Y + 18, 500, 30), 20, kInk);
-    Para(g, T(L"Une partie par groupe d'amis : HÉBERGER joue la sauvegarde utilisée (l'hôte la choisit aussi dans le salon) ; JOUER EN SOLO garde la partie principale. En invité, tu joues la sauvegarde de l'hôte, à part : les tiennes ne sont jamais touchées.",
-              L"One game per group of friends: HOST plays the save in use (the host also picks it in the lobby); PLAY SOLO keeps the main game. As a guest, you play the host's save, kept apart: yours are never touched."),
-         RectF(c.X + 24, c.Y + 54, c.Width - 48 - 250, 64), 12.5f, kGrey);
-    UiButton(g, RectF(c.X + c.Width - 24 - 236, c.Y + 16, 236, 40), T(L"Nouvelle sauvegarde…", L"New save…"), UI_SAVE_NEW, true, IC_HOMEPLUS);
-    UiButton(g, RectF(c.X + c.Width - 24 - 40, c.Y + 66, 40, 36), L"", UI_SAVE_REFRESH, false, IC_UNDO);
+    Glass(kSaveL); Glass(kSaveR);
+    // en-tete : « Nouvelle partie » a droite du titre (avant les boutons de l'en-tete, ui.inc)
+    UiButton(g, RectF(698, 22, 164, 44), T(L"Nouvelle partie", L"New game"), UI_SAVE_NEW, true, IC_HOMEPLUS);
     std::wstring cur = SaveCurrentProf();
-    float sc = g_scroll[TAB_SAVES] = min(g_scroll[TAB_SAVES], SavesMaxScroll()), ms = SavesMaxScroll();
-    GraphicsState st = g.Save(); g.SetClip(kSaveList, CombineModeIntersect);
-    for (int i = 0; i < (int)g_saves.size(); i++) {
-        const SaveSlot &s = g_saves[i];
-        RectF r(kSaveList.X, kSaveList.Y + i * kSaveRowH - sc, kSaveList.Width - (ms > 0 ? 14 : 0), kSaveRowH - 10);
-        if (r.Y + r.Height < kSaveList.Y || r.Y > kSaveList.Y + kSaveList.Height) continue;
-        bool vis = r.Y >= kSaveList.Y - 1 && r.Y + r.Height <= kSaveList.Y + kSaveList.Height + 1;
-        bool used = s.prof == cur;
-        GraphicsPath p; RoundRect(p, r, 14);
-        SolidBrush rb(used ? WithA(kAcc, 0.10f) : TH(card)); g.FillPath(&rb, &p);
-        Pen rp(used ? kAcc : TH(choiceBorder), used ? 2.0f : 1.0f); g.DrawPath(&rp, &p);
-        Icon(g, i == 0 ? IC_HOME : IC_FILE, r.X + 32, r.Y + r.Height / 2, 24, used ? kAcc : kGrey, 1.8f);
-        float tx = r.X + 60, bx = r.X + r.Width - 16;
-        int base = UI_SAVE + i * 8;
-        if (g_saveEdit == i) {
-            RectF fr(tx, r.Y + 12, r.Width - 60 - 16 - 250, 40);
-            GraphicsPath fp; RoundRect(fp, fr, 10); SolidBrush fb(TH(field)); g.FillPath(&fb, &fp); Pen fpn(kAcc, 2); g.DrawPath(&fpn, &fp);
-            RectF trr(fr.X + 14, fr.Y, fr.Width - 28, fr.Height);
-            Text(g, g_saveEditText.empty() ? T(L"Nom de la sauvegarde", L"Save name") : g_saveEditText, trr, 16, FontStyleBold, g_saveEditText.empty() ? TH(placeholder) : kInk, StringAlignmentNear);
-            if (fmodf(g_time, 1.0f) < 0.55f) {
-                float cw = g_saveEditText.empty() ? 0 : MeasureW(g, g_saveEditText, 16, FontStyleBold);
-                float cx = min(trr.X + cw + 1, trr.X + trr.Width);
-                Pen cp(kAcc, 1.6f); g.DrawLine(&cp, cx, fr.Y + 10, cx, fr.Y + fr.Height - 10);
+    int sel = SaveSelIndex();
+    Graphics &mg = MeasureG();
+    // ---- a gauche : la liste
+    {
+        RectF c = kSaveL;
+        std::wstring t = T(L"Mes parties", L"My games");
+        float tw = MeasureW(mg, t, 16, FontStyleBold);
+        Title(g, t, RectF(c.X + 18, c.Y + 14, tw + 6, 26), 16, kInk);
+        Text(g, L"· " + std::to_wstring(g_saves.size()), RectF(c.X + 18 + tw + 6, c.Y + 15, 60, 26), 13, FontStyleBold, kGrey, StringAlignmentNear);
+        Text(g, T(L"Celle « en cours » est proposée dans le salon", L"The one \"in use\" is offered in the lobby"), RectF(c.X + 200, c.Y + 16, c.Width - 218, 24), 12, FontStyleRegular, kGrey, StringAlignmentFar);
+        float ms = SavesMaxScroll(), sc = g_scroll[TAB_SAVES] = min(g_scroll[TAB_SAVES], ms);
+        float rw = kSaveList.Width - (ms > 0 ? 14 : 0);
+        GraphicsState st = g.Save(); g.SetClip(kSaveList, CombineModeIntersect);
+        for (int i = 0; i <= (int)g_saves.size(); i++) {
+            RectF r(kSaveList.X, kSaveList.Y + i * kSaveRowH - sc, rw, kSaveRowH - 8);
+            if (r.Y + r.Height < kSaveList.Y || r.Y > kSaveList.Y + kSaveList.Height) continue;
+            bool vis = r.Y >= kSaveList.Y - 1 && r.Y + r.Height <= kSaveList.Y + kSaveList.Height + 1;
+            if (i == (int)g_saves.size()) {   // ligne « Nouvelle partie » (pointilles)
+                bool hot = g_uiHot == UI_SAVE_NEW;
+                GraphicsPath p; RoundRect(p, r, 16);
+                SolidBrush b(hot ? TH(cardSel) : WithA(TH(card), 0.6f)); g.FillPath(&b, &p);
+                Pen pen(hot ? WithA(kAcc, 0.8f) : TH(choiceBorder), 1.2f); pen.SetDashStyle(DashStyleDash); g.DrawPath(&pen, &p);
+                RectF sq(r.X + 14, r.Y + 14, 46, 46);
+                GraphicsPath sp; RoundRect(sp, sq, 13);
+                SolidBrush sb(Color((BYTE)(g_dark ? 50 : 14), 0, 0, 0)); g.FillPath(&sb, &sp);
+                Pen spn(WithA(kInk, 0.3f), 1.0f); spn.SetDashStyle(DashStyleDash); g.DrawPath(&spn, &sp);
+                Icon(g, IC_PLUS, sq.X + 23, sq.Y + 23, 18, kGrey, 2.4f);
+                Para(g, T(L"Nouvelle partie : une sauvegarde neuve, à part de tes autres parties. Elle sera utilisée quand tu héberges.",
+                          L"New game: a fresh save, apart from your other games. It will be used when you host."), RectF(r.X + 76, r.Y + 16, r.Width - 92, 44), 12.5f, kGrey);
+                if (vis) HotZone(r, UI_SAVE_NEW);
+                continue;
             }
-            Text(g, T(L"Entrée : garder · Échap : annuler", L"Enter: keep · Esc: cancel"), RectF(tx, r.Y + 54, fr.Width, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            if (vis) {
-                UiButton(g, RectF(bx - 112, r.Y + 16, 112, 40), T(L"Garder", L"Keep"), base + SP_OK, true, IC_CHECK);
-                UiButton(g, RectF(bx - 112 - 10 - 112, r.Y + 16, 112, 40), T(L"Annuler", L"Cancel"), base + SP_CANCEL, false, IC_CLOSE);
-            }
-            continue;
+            const SaveSlot &s = g_saves[i];
+            bool used = s.prof == cur, on = i == sel;
+            int base = UI_SAVE + i * 8;
+            bool hot = g_uiHot == base + SP_SEL;
+            GraphicsPath p; RoundRect(p, r, 16);
+            SolidBrush rb(on ? WithA(kAcc, 0.12f) : hot ? TH(cardSel) : used ? WithA(kAcc, 0.06f) : TH(card)); g.FillPath(&rb, &p);
+            Pen rp(on ? kAcc : hot ? WithA(kAcc, 0.6f) : TH(choiceBorder), on ? 2.0f : 1.0f); g.DrawPath(&rp, &p);
+            RectF sq(r.X + 14, r.Y + 14, 46, 46);   // carre numerote (maison : la sauvegarde solo du jeu)
+            GraphicsPath sp; RoundRect(sp, sq, 13);
+            SolidBrush sb(Color((BYTE)(g_dark ? 76 : 18), 0, 0, 0)); g.FillPath(&sb, &sp);
+            Pen spn(TH(fieldBorder), 1.0f); g.DrawPath(&spn, &sp);
+            if (i == 0) Icon(g, IC_HOME, sq.X + 23, sq.Y + 23, 22, on || used ? kAcc : kInk, 1.9f);
+            else Text(g, std::to_wstring(i), sq, 17, FontStyleBold, on || used ? kAcc : kInk);
+            float tx = r.X + 76;
+            std::wstring sz = SaveSizeText(s.bytes);
+            float szw = PillW(sz, 11.5f) + 4;
+            SaveChip(g, RectF(r.X + r.Width - 14 - szw, r.Y + 24, szw, 26), sz, WithA(kInk, 0.08f), kInk, TH(choiceBorder));
+            float nw = min(MeasureW(mg, s.name, 15, FontStyleBold) + 4, r.Width - 76 - 14 - szw - 100);
+            Text(g, s.name, RectF(tx, r.Y + 13, nw, 22), 15, FontStyleBold, kInk, StringAlignmentNear);
+            if (used) { const wchar_t *u = T(L"En cours", L"In use"); float uw = PillW(u, 10.5f); SaveChip(g, RectF(tx + nw + 6, r.Y + 14, uw, 20), u, WithA(kOk, 0.18f), kOk, WithA(kOk, 0.35f), 10.5f); }
+            std::wstring info = s.has ? std::wstring(T(L"Dernière sauvegarde : ", L"Last saved: ")) + SaveDateText(s.mtime) : T(L"Vide : commencera par une nouvelle partie", L"Empty: will start with a new game");
+            if (i == 0) info += T(L" · la sauvegarde solo du jeu", L" · the game's solo save");
+            Text(g, info, RectF(tx, r.Y + 37, r.Width - 76 - 14 - szw - 10, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+            if (vis) HotZone(r, base + SP_SEL);
         }
-        Text(g, s.name, RectF(tx, r.Y + 10, r.Width - 60 - 470, 28), 17, FontStyleBold, kInk, StringAlignmentNear);
-        std::wstring info = SaveWhen(s);
-        if (i == 0) info += T(L" · la sauvegarde normale du jeu", L" · the game's normal save");
-        Text(g, info, RectF(tx, r.Y + 40, r.Width - 60 - 470, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-        if (!vis) continue;
-        float x = bx;
-        bool arm = g_saveDelArm == i && GetTickCount() - g_saveDelT < 4000;
-        if (i > 0) { x -= 44; UiButton(g, RectF(x, r.Y + 16, 44, 40), L"", base + SP_DEL, false, IC_TRASH); (void)arm; }
-        x -= 10 + 44; UiButton(g, RectF(x, r.Y + 16, 44, 40), L"", base + SP_DIR, false, IC_FOLDER);
-        x -= 10 + 120; UiButton(g, RectF(x, r.Y + 16, 120, 40), T(L"Renommer", L"Rename"), base + SP_RENAME, false, -1);
-        x -= 10 + 130;
-        if (used) Pill(g, RectF(x + 130 - PillW(T(L"UTILISÉE", L"IN USE"), 11.5f), r.Y + 25, PillW(T(L"UTILISÉE", L"IN USE"), 11.5f), 22), WithA(kAcc, 0.22f), T(L"UTILISÉE", L"IN USE"), kAcc, 11.5f);
-        else UiButton(g, RectF(x, r.Y + 16, 130, 40), T(L"Utiliser", L"Use"), base + SP_USE, true, IC_CHECK);
+        g.Restore(st);
+        if (ms > 0) DrawScrollBar(g, kSaveList, sc, ms);
+        Text(g, T(L"En invité, tu joues la sauvegarde de l'hôte, à part : les tiennes ne sont jamais touchées.", L"As a guest you play the host's save, kept apart: yours are never touched."),
+             RectF(c.X + 18, c.Y + 572, c.Width - 36, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        // dossier de la partie choisie + Ouvrir
+        float fy = c.Y + c.Height - 16 - 36;
+        Text(g, T(L"Dossier", L"Folder"), RectF(c.X + 18, fy, 52, 36), 12, FontStyleBold, kGrey, StringAlignmentNear);
+        RectF pr(c.X + 74, fy, c.Width - 74 - 18 - 10 - 90, 36);
+        GraphicsPath pp; RoundRect(pp, pr, 10);
+        SolidBrush pb(Color((BYTE)(g_dark ? 76 : 18), 0, 0, 0)); g.FillPath(&pb, &pp);
+        Pen ppn(TH(fieldBorder), 1.0f); g.DrawPath(&ppn, &pp);
+        std::wstring path = sel >= 0 ? SaveDirOf(g_saves[sel].prof) : L"";
+        if (!path.empty() && path.back() == L'\\') path.pop_back();
+        while (!path.empty() && MeasureW(mg, L"…" + path, 12, FontStyleRegular) > pr.Width - 24) {   // (le debut coupe : la fin compte)
+            size_t k = path.find(L'\\');
+            if (k == std::wstring::npos) break;
+            path = path.substr(k + 1);
+        }
+        Text(g, path.empty() ? L"" : L"…\\" + path, RectF(pr.X + 12, pr.Y, pr.Width - 24, 36), 12, FontStyleRegular, kInk, StringAlignmentNear);
+        UiButton(g, RectF(c.X + c.Width - 18 - 90, fy, 90, 36), T(L"Ouvrir", L"Open"), sel >= 0 ? UI_SAVE + sel * 8 + SP_DIR : UI_NONE, false, -1, sel >= 0, 11);
     }
-    g.Restore(st);
-    if (ms > 0) DrawScrollBar(g, kSaveList, sc, ms);
+    // ---- a droite : la partie choisie
+    {
+        RectF c = kSaveR;
+        if (sel < 0) { Text(g, T(L"Aucune partie", L"No game"), RectF(c.X, c.Y + 60, c.Width, 30), 15, FontStyleBold, kGrey); return; }
+        const SaveSlot &s = g_saves[sel];
+        if (g_saveBakFor != s.prof || GetTickCount() - g_saveBakT > 3000) SaveBakScan(s.prof);
+        int base = UI_SAVE + sel * 8;
+        float x = c.X + 18, w = c.Width - 36, y = c.Y + 14;
+        if (g_saveEdit == sel) {   // renommage : champ, Entree / Echap, Garder / Annuler
+            SaveNameField(g, RectF(x, y, w, 40), g_saveEditText);
+            Text(g, T(L"Entrée : garder · Échap : annuler", L"Enter: keep · Esc: cancel"), RectF(x, y + 44, w - 230, 36), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            UiButton(g, RectF(x + w - 100, y + 46, 100, 34), T(L"Garder", L"Keep"), base + SP_OK, true, IC_CHECK, true, 11);
+            UiButton(g, RectF(x + w - 100 - 8 - 100, y + 46, 100, 34), T(L"Annuler", L"Cancel"), base + SP_CANCEL, false, -1, true, 11);
+            y += 92;
+        } else {
+            Title(g, s.name, RectF(x, y, w - 118, 36), 16, kInk);
+            UiButton(g, RectF(x + w - 110, y, 110, 36), T(L"Renommer", L"Rename"), base + SP_RENAME, false, -1, true, 11);
+            y += 48;
+        }
+        // trois chiffres : jour et argent (pas lisibles dans savefile.txt du jeu, format Easy Save 2 : TODO), taille
+        float sw = (w - 16) / 3;
+        SaveStat(g, RectF(x, y, sw, 58), L"—", T(L"JOUR", L"DAY"));
+        SaveStat(g, RectF(x + sw + 8, y, sw, 58), L"—", L"MK");
+        SaveStat(g, RectF(x + 2 * (sw + 8), y, sw, 58), s.has ? SaveSizeText(s.bytes) : L"—", T(L"TAILLE", L"SIZE"));
+        y += 68;
+        {   // derniere partie
+            RectF b(x, y, w, 84);
+            GraphicsPath p; RoundRect(p, b, 14);
+            SolidBrush bb(TH(card)); g.FillPath(&bb, &p);
+            Pen pn(TH(choiceBorder), 1.0f); g.DrawPath(&pn, &p);
+            SaveSection(g, b.X + 14, b.Y + 11, b.Width - 28, T(L"DERNIÈRE PARTIE", L"LAST GAME"));
+            Text(g, s.has ? SaveDateText(s.mtime) : T(L"Jamais jouée", L"Never played"), RectF(b.X + 14, b.Y + 30, b.Width - 28, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, s.has ? T(L"Enregistrée par le jeu, reprise à la prochaine partie", L"Saved by the game, resumed at the next session") : T(L"Vide : commencera par une nouvelle partie", L"Empty: will start with a new game"),
+                 RectF(b.X + 14, b.Y + 54, b.Width - 28, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+            y += 96;
+        }
+        {   // copies de secours
+            SaveSection(g, x, y, w, T(L"COPIES DE SECOURS", L"BACKUP COPIES"));
+            Text(g, g_saveBak.empty() ? T(L"Aucune copie pour cette partie.", L"No copy for this game.") : T(L"Faites avant le premier passage en Reworked.", L"Made before the first switch to Reworked."),
+                 RectF(x, y + 18, w, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+            float by = y + 42;
+            for (int k = 0; k < (int)g_saveBak.size() && k < 3; k++) {
+                const SaveBak &b = g_saveBak[k];
+                Text(g, SaveDateText(b.when) + L" · " + SaveSizeText(b.bytes), RectF(x, by, w - 110, 30), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+                UiButton(g, RectF(x + w - 100, by, 100, 30), T(L"Restaurer", L"Restore"), UI_SAVE_RESTORE + k, false, -1, s.prof == g_saveBakFor, 10);
+                by += 36;
+            }
+            if (g_saveBak.size() > 3) { wchar_t more[48]; swprintf_s(more, T(L"+ %d autres", L"+ %d more"), (int)g_saveBak.size() - 3); Text(g, more, RectF(x, by, w, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear); }
+        }
+        // en bas : utiliser (si ce n'est pas la partie en cours), puis les quatre actions
+        float ay = c.Y + c.Height - 16 - 36 * 2 - 8, bw = (w - 8) / 2;
+        if (s.prof != cur) UiButton(g, RectF(x, ay - 8 - 44, w, 44), T(L"Utiliser pour héberger", L"Use for hosting"), base + SP_USE, true, IC_CHECK);
+        UiButton(g, RectF(x, ay, bw, 36), T(L"Dupliquer", L"Duplicate"), UI_SAVE_DUP, false, -1, true, 11);
+        UiButton(g, RectF(x + bw + 8, ay, bw, 36), T(L"Exporter (zip)", L"Export (zip)"), UI_SAVE_EXPORT, false, -1, s.has, 11);
+        UiButton(g, RectF(x, ay + 44, bw, 36), T(L"Recommencer", L"Restart"), UI_SAVE_RESTART, false, -1, s.has, 11);
+        SaveDangerButton(g, RectF(x + bw + 8, ay + 44, bw, 36), T(L"Supprimer", L"Delete"), UI_SAVE_DEL, sel > 0);
+    }
 }
 
 // ---- fenetre (salon : choisir, nouvelle partie, recommencer, nom)
@@ -416,11 +707,18 @@ static void SaveClick(int id)
     if (id == UI_SAVE_MRESTART) { SavesScan(); g_saveModal = SM_RESTART; return; }
     if (id == UI_SAVE_MOK) { SaveNameDone(); return; }
     if (id >= UI_SAVE_PICK && id < UI_SAVE_END) { SavePickRow(id - UI_SAVE_PICK); return; }
+    int sel = SaveSelIndex();
+    if (id == UI_SAVE_DUP) { SaveDuplicate(sel); return; }
+    if (id == UI_SAVE_EXPORT) { SaveExport(sel); return; }
+    if (id == UI_SAVE_DEL) { SaveDelete(sel); if (sel >= (int)g_saves.size()) g_saveSel = -1; return; }
+    if (id == UI_SAVE_RESTART) { if (sel >= 0 && SaveGuard()) { g_saveModal = SM_RESTART; SavePickRow(sel); g_saveModal = SM_NONE; } return; }   // (meme confirmation que la fenetre)
+    if (id >= UI_SAVE_RESTORE && id < UI_SAVE_RESTORE + 10) { SaveRestore(sel, id - UI_SAVE_RESTORE); return; }
     if (id >= UI_SAVE && id < UI_SAVE_PICK) {
         int i = (id - UI_SAVE) / 8, part = (id - UI_SAVE) % 8;
         if (i < 0 || i >= (int)g_saves.size()) return;
+        if (part == SP_SEL) { if (g_saveEdit >= 0 && g_saveEdit != i) g_saveEdit = -1; g_saveSel = i; return; }
         if (part == SP_USE) { SaveSetCurrent(g_saves[i].prof); SetStatus(K_OK, T(L"Sauvegarde utilisée : %s", L"Save in use: %s"), g_saves[i].name.c_str()); return; }
-        if (part == SP_RENAME) { g_saveEdit = i; g_saveEditText = g_saves[i].name; g_time = 0; g_focus = -1; return; }
+        if (part == SP_RENAME) { g_saveSel = i; g_saveEdit = i; g_saveEditText = g_saves[i].name; g_time = 0; g_focus = -1; return; }
         if (part == SP_DIR) { SaveOpenDir(i); return; }
         if (part == SP_DEL) { SaveDelete(i); return; }
         if (part == SP_CANCEL) { g_saveEdit = -1; return; }
