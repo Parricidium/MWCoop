@@ -22,13 +22,12 @@ static void BezPath(GraphicsPath &p, std::initializer_list<float> v)
 static void SceneDraw(Graphics &g)
 {
     bool dk = g_dark;
+    const ScenePal &pal = ScenePalette();   // (couleurs du theme : launcher.cpp)
     RectF c(0, 0, kCardW, kCardH);
     {   // ciel
         LinearGradientBrush sky(RectF(0, -1, kCardW, kCardH + 2), Color(255, 0, 0, 0), Color(255, 0, 0, 0), LinearGradientModeVertical);
-        Color dc[4] = { Color(255, 4, 8, 22), Color(255, 10, 21, 52), Color(255, 22, 40, 90), Color(255, 34, 56, 110) };
-        Color lc[4] = { Color(255, 132, 176, 226), Color(255, 190, 216, 242), Color(255, 238, 220, 214), Color(255, 248, 233, 223) };
         REAL pos[4] = { 0, 0.45f, 0.78f, 1 };
-        sky.SetInterpolationColors(dk ? dc : lc, pos, 4);
+        sky.SetInterpolationColors(pal.sky, pos, 4);
         g.FillRectangle(&sky, c);
     }
     {   // aurore (sombre) ou voiles roses (clair) : formes nettes dans une petite image, agrandie = floue
@@ -59,19 +58,16 @@ static void SceneDraw(Graphics &g)
                 lg.FillPath(&lb, &p);
             };
             float af = g_aurore == 0 ? 0.0f : g_aurore == 1 ? 0.45f : 1.0f;   // (Reglages > Theme : aurore off, calme, vivante)
-            if (dk && af > 0) {
-                Color a[4] = { Color(0, 47, 255, 176), Color(190, 47, 255, 176), Color(140, 47, 214, 255), Color(0, 138, 107, 255) };
-                Color b[4] = { Color(0, 138, 107, 255), Color(128, 176, 107, 255), Color(115, 47, 255, 176), Color(0, 47, 255, 176) };
+            if (dk && af > 0) {   // (nuit : trois voiles aux couleurs du theme -- bleu-vert et violet, verts seuls, ambre et orange)
                 band({ -60, 250, 160, 120, 330, 300, 560, 180, 790, 60, 900, 60, 1140, 170, 1380, 280, 1360, 140, 1400, 120 },
-                     { 1400, 230, 1180, 260, 1010, 170, 780, 290, 550, 410, 380, 330, 160, 300, -60, 270, -40, 330, -60, 340 }, a, 4, af);
+                     { 1400, 230, 1180, 260, 1010, 170, 780, 290, 550, 410, 380, 330, 160, 300, -60, 270, -40, 330, -60, 340 }, pal.aurA, 4, af);
                 band({ -40, 140, 220, 60, 420, 200, 700, 110, 980, 20, 1080, 30, 1320, 90 },
-                     { 1320, 150, 1060, 120, 900, 200, 640, 190, 380, 180, 200, 170, -40, 220 }, b, 4, af);
+                     { 1320, 150, 1060, 120, 900, 200, 640, 190, 380, 180, 200, 170, -40, 220 }, pal.aurB, 4, af);
                 band({ 300, 330, 520, 260, 760, 380, 1000, 300, 1240, 220, 1240, 270, 1320, 300 },
-                     { 1320, 350, 1080, 360, 900, 400, 640, 390, 380, 380, 380, 380, 300, 380 }, a, 4, 0.6f * af);
+                     { 1320, 350, 1080, 360, 900, 400, 640, 390, 380, 380, 380, 380, 300, 380 }, pal.aurA, 4, 0.6f * af);
             } else if (af > 0) {
-                Color a[4] = { Color(0, 255, 190, 200), Color(120, 255, 200, 214), Color(100, 190, 210, 255), Color(0, 255, 230, 210) };
                 band({ -60, 250, 160, 160, 330, 300, 560, 220, 790, 140, 900, 120, 1140, 200, 1380, 280, 1360, 180, 1400, 160 },
-                     { 1400, 260, 1180, 290, 1010, 220, 780, 320, 550, 410, 380, 350, 160, 330, -60, 300, -40, 350, -60, 360 }, a, 4, 0.9f * af);
+                     { 1400, 260, 1180, 290, 1010, 220, 780, 320, 550, 410, 380, 350, 160, 330, -60, 300, -40, 350, -60, 360 }, pal.aurA, 4, 0.9f * af);
             }
         }
         const int tw = 48, th = 30;
@@ -111,13 +107,13 @@ static void SceneDraw(Graphics &g)
     {   // collines : lointaines, proches (adoucies)
         PointF far_[] = { PointF(0, 560), PointF(120, 478), PointF(210, 516), PointF(330, 440), PointF(470, 516), PointF(590, 456), PointF(720, 526), PointF(860, 446), PointF(990, 508), PointF(1120, 456), PointF(1280, 516) };
         GraphicsPath fp; fp.AddCurve(far_, 11, 0.45f); fp.AddLine(PointF(1280, 516), PointF(1280, 800)); fp.AddLine(PointF(1280, 800), PointF(0, 800)); fp.CloseFigure();
-        SolidBrush fb(dk ? Color(235, 19, 37, 82) : Color(255, 178, 198, 228)); g.FillPath(&fb, &fp);
+        SolidBrush fb(pal.farHill); g.FillPath(&fb, &fp);
         PointF near_[] = { PointF(0, 600), PointF(90, 562), PointF(200, 588), PointF(300, 548), PointF(430, 598), PointF(560, 562), PointF(700, 606), PointF(820, 566), PointF(960, 598), PointF(1100, 562), PointF(1280, 598) };
         GraphicsPath np; np.AddCurve(near_, 11, 0.45f); np.AddLine(PointF(1280, 598), PointF(1280, 800)); np.AddLine(PointF(1280, 800), PointF(0, 800)); np.CloseFigure();
-        SolidBrush nb(dk ? Color(255, 14, 29, 68) : Color(255, 150, 174, 210)); g.FillPath(&nb, &np);
+        SolidBrush nb(pal.nearHill); g.FillPath(&nb, &np);
     }
     {   // sapins
-        SolidBrush ink(dk ? Color(255, 10, 22, 54) : Color(255, 44, 68, 94)), snow(dk ? Color(150, 198, 212, 234) : Color(230, 250, 252, 255));
+        SolidBrush ink(pal.treeInk), snow(pal.treeSnow);
         for (int i = 0; i < 48; i++) {
             if (Rnd01(i, 91) < 0.22f) continue;
             float x = i * 27.5f + Rnd01(i, 92) * 16 - 8, base = 652 + Rnd01(i, 93) * 12, h = 44 + Rnd01(i, 94) * 66;
@@ -129,12 +125,12 @@ static void SceneDraw(Graphics &g)
         GraphicsPath sp;
         BezPath(sp, { 0, 660, 220, 630, 420, 650, 640, 640, 860, 630, 1060, 628, 1280, 650 });
         sp.AddLine(PointF(1280, 650), PointF(1280, 800)); sp.AddLine(PointF(1280, 800), PointF(0, 800)); sp.CloseFigure();
-        LinearGradientBrush sb(RectF(0, 625, kCardW, 180), dk ? Color(255, 159, 182, 220) : Color(255, 252, 253, 255), dk ? Color(255, 93, 114, 153) : Color(255, 214, 226, 242), LinearGradientModeVertical);
+        LinearGradientBrush sb(RectF(0, 625, kCardW, 180), pal.snow0, pal.snow1, LinearGradientModeVertical);
         g.FillPath(&sb, &sp);
         GraphicsPath dp;
         BezPath(dp, { 0, 700, 260, 680, 520, 712, 780, 696, 1040, 680, 1140, 690, 1280, 704 });
         dp.AddLine(PointF(1280, 704), PointF(1280, 800)); dp.AddLine(PointF(1280, 800), PointF(0, 800)); dp.CloseFigure();
-        SolidBrush db(dk ? Color(140, 125, 147, 189) : Color(200, 236, 242, 250)); g.FillPath(&db, &dp);
+        SolidBrush db(pal.drift); g.FillPath(&db, &dp);
     }
     {   // maison eclairee et vieille voiture
         GraphicsPath gp; gp.AddEllipse(865.0f, 492.0f, 240.0f, 240.0f);
@@ -208,7 +204,7 @@ static void SceneBuild(int w, int h, float scale)
         ia.SetWrapMode(WrapModeTileFlipXY);
         bg.DrawImage(&tiny, RectF(0, 0, (REAL)w, (REAL)h), 0, 0, (REAL)bw, (REAL)bh, UnitPixel, &ia);
     }
-    g_sceneW = w; g_sceneH = h; g_sceneScale = scale; g_sceneDarkK = (g_dark ? 1 : 0) + g_aurore * 2;
+    g_sceneW = w; g_sceneH = h; g_sceneScale = scale; g_sceneDarkK = SceneKey();
 }
 
 static const int kSnowCols = 32, kSnowRows = 20;
@@ -239,7 +235,7 @@ static void GlassBuild(int w, int h, float scale)
 }
 static void EnsureScene(int w, int h, float scale)
 {
-    if (!g_scene || g_sceneW != w || g_sceneH != h || g_sceneScale != scale || g_sceneDarkK != (g_dark ? 1 : 0) + g_aurore * 2) SceneBuild(w, h, scale);
+    if (!g_scene || g_sceneW != w || g_sceneH != h || g_sceneScale != scale || g_sceneDarkK != SceneKey()) SceneBuild(w, h, scale);
     if (!g_glassCache) GlassBuild(w, h, scale);
 }
 // Animation par-dessus le fond : neige (hors des cartes), etoiles qui scintillent et etoile filante (sombre).
