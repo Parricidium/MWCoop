@@ -532,6 +532,203 @@ What the others see of you: outfit, face, car	ما يراه الآخرون من�
 Yesterday %02d:%02d	أمس %02d:%02d
 Your tapes for the living-room TV, and the photos taken with the drone.	أشرطتك لتلفاز غرفة المعيشة، والصور الملتقطة بالطائرة المسيّرة.
 painted on the game's template, shown to the other players	مرسوم على قالب اللعبة، يراه اللاعبون الآخرون
+ (you)	 (أنت)
+ and this code.	 وهذا الرمز.
+ · %d refused: .ogg format only	 · %d مرفوض: صيغة .ogg فقط
+ · bank 	 · البنك 
+ · never played with MWCoop	 · لم تُلعب مع MWCoop قط
+ · sent to the guests	 · تُرسل إلى الضيوف
+ · up to date	 · محدَّث
+%02d to %02d · %d more	%02d إلى %02d · %d أخرى
+%S kicked out	طُرد %S
+%d / %d items sent	أُرسل %d / %d عناصر
+%d articles · Esc: clear	%d مقالات · Esc: مسح
+%d audio file(s) ignored by the game: it reads only track1.ogg, track2.ogg… in a row (OGG Vorbis).	%d ملف(ات) صوتية تتجاهلها اللعبة: تقرأ فقط track1.ogg وtrack2.ogg… بالتسلسل (OGG Vorbis).
+%d file(s) · %s	%d ملف(ات) · %s
+%d mods · %s	%d تعديلات · %s
+%d poster(s) put into Images (poster1…poster3)	وُضع %d ملصق(ات) في Images (poster1…poster3)
+%d read by the game · %d ignored (track1.ogg…)	%d تقرأها اللعبة · %d متجاهَلة (track1.ogg…)
+%d song(s) · %s	%d أغانٍ · %s
+%d tracks added to %s (track%d…track%d)	أُضيفت %d مقطوعات إلى %s (track%d…track%d)
+%d%% of %s	%d%% من %s
+%llu MB	%llu ميغابايت
+%s · %s · %s · %d / %d players	%s · %s · %s · %d / %d لاعبين
+%s: can't copy (error %lu)	%s: تعذّر النسخ (الخطأ %lu)
+%s: can't write into the game folder	%s: تعذّرت الكتابة في مجلد اللعبة
+%s: not recommended in co-op, never sent (see the mods guide)	%s: غير موصى به في اللعب الجماعي، لا يُرسل أبداً (راجع دليل التعديلات)
+(no detail)	(بلا تفاصيل)
++ Drop files here	+ أسقط الملفات هنا
+1 article · Esc: clear	مقال واحد · Esc: مسح
+1 track added to %s (track%d.ogg)	أُضيفت مقطوعة واحدة إلى %s (track%d.ogg)
+A video (mp4, mkv, webm…) becomes a tape for the game's TV, at your place and at your guests'.	يصبح الفيديو (mp4, mkv, webm…) شريطاً لتلفاز اللعبة، عندك وعند ضيوفك.
+Add songs to the radio (.ogg)	إضافة أغانٍ إلى الراديو (.ogg)
+Add tracks	إضافة مقطوعات
+Add tracks to the CD (.ogg)	إضافة مقطوعات إلى قرص CD (.ogg)
+Additions	الإضافات
+Airy	فسيح
+Applied ✓ · the theme is already in place	طُبّق ✓ · المظهر مفعّل بالفعل
+Apply	تطبيق
+Arriving… %d ms · TCP only	يصل… %d ms · TCP فقط
+At the host's, their save	عند المضيف، ملف حفظه
+Auto	تلقائي
+BLOCKS the game	يحظر اللعبة
+BUSY	مشغول
+Beta	تجريبي
+By IP, your address is enough	عبر IP، عنوانك يكفي
+By session	حسب الجلسة
+Car page	صفحة السيارة
+Choose a save zip (Export (zip) at a friend's)	اختر ملف zip لحفظ (تصدير (zip) عند صديق)
+Choose the garage flag (Images\\flag_garage.png)	اختر علم المرآب (Images\\flag_garage.png)
+Choose up to 3 posters (Images\\poster1…3.png)	اختر حتى 3 ملصقات (Images\\poster1…3.png)
+Clear the mods received from the host (%d)?\n\nThey will be downloaded again in the next lobby if the host still sends them. Your own mods are not touched.	مسح التعديلات المستلمة من المضيف (%d)؟\n\nستُنزَّل مجدداً في الردهة التالية إن كان المضيف لا يزال يرسلها. تعديلاتك الخاصة لا تُمسّ.
+Click %S again to kick them out	انقر على %S مجدداً لطرده
+Click a tape: watch it on the right, rename it, export it, send it to the guests or put a video on it.	انقر شريطاً: شاهده على اليمين، أعد تسميته، صدّره، أرسله إلى الضيوف أو ضع عليه فيديو.
+Click again to stop sending it.	انقر مجدداً للتوقف عن إرساله.
+Close the game before clearing the received mods	أغلق اللعبة قبل مسح التعديلات المستلمة
+Coming!	قادم!
+Compact	مضغوط
+Content	المحتوى
+Current theme · 	المظهر الحالي · 
+DECIDED BY THE HOST	يقرره المضيف
+Day 	اليوم 
+Default values restored for this tab	أُعيدت القيم الافتراضية لهذا التبويب
+Drag: rotate · wheel: zoom	اسحب: تدوير · العجلة: تكبير
+Drop .ogg files here: numbered track1…trackN in Radio. The game reads them in the main menu; MWCoop imports them for you.	أسقط ملفات .ogg هنا: تُرقَّم track1…trackN في Radio. تقرأها اللعبة في القائمة الرئيسية؛ ويستوردها MWCoop لك.
+Drop .ogg files here: numbered track1…trackN. The game reads them in the main menu; MWCoop imports them for you.	أسقط ملفات .ogg هنا: تُرقَّم track1…trackN. تقرأها اللعبة في القائمة الرئيسية؛ ويستوردها MWCoop لك.
+Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in front of the garage).	أسقط صورة هنا، أو اختر: تصبح Images\\flag_garage.png (العلم أمام المرآب).
+Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (garage and house walls).	أسقط حتى 3 صور هنا، أو اختر: تصبح Images\\poster1…3.png (جدران المرآب والمنزل).
+Drop your files on the Sent content page (.ogg tracks, images)	أسقط ملفاتك على صفحة المحتوى المُرسل (مقطوعات .ogg، صور)
+Editable in each lobby	قابلة للتعديل في كل ردهة
+Favorite	مفضلة
+Favorites	المفضلة
+Format .ogg only: the game reads only OGG Vorbis (convert your files first)	صيغة .ogg فقط: اللعبة لا تقرأ سوى OGG Vorbis (حوّل ملفاتك أولاً)
+From a zip…	من ملف zip…
+Garage and house	المرآب والمنزل
+Garage flag replaced (Images\\flag_garage.png)	استُبدل علم المرآب (Images\\flag_garage.png)
+Guests receive all this when they arrive in your lobby, in their launch copy. Nothing overwrites their own files.	يستلم الضيوف كل هذا عند وصولهم إلى ردهتك، في نسخة التشغيل لديهم. لا شيء يستبدل ملفاتهم الخاصة.
+Host included · above 10, a good connection is advised	بما فيهم المضيف · فوق 10، يُنصح باتصال جيد
+IP · port 	IP · المنفذ 
+Image tab	تبويب الصورة
+Import an image	استيراد صورة
+Jokkis night	أمسية Jokkis
+Kick?	طرد؟
+Last lobby on %s · %d mod(s) · kept	آخر ردهة في %s · %d تعديل(ات) · محفوظة
+Last lobby: %s · %d mod(s) · kept	آخر ردهة: %s · %d تعديل(ات) · محفوظة
+Last read: 	آخر ما قُرئ: 
+Leaving in 2 min…	سأغادر بعد دقيقتين…
+Lobby open · Steam · invite your friends	الردهة مفتوحة · Steam · ادعُ أصدقاءك
+Logs (the < > at the bottom left) > Make the zip, then post it in #bug-reports on Discord.	السجلات (الرمز < > أسفل اليسار) > أنشئ ملف zip، ثم انشره في #bug-reports على Discord.
+MWCoop repaired: launch copy and loader rewritten	أُصلح MWCoop: أُعيدت كتابة نسخة التشغيل والمحمّل
+MWCoop repaired: loader checked in the game folder	أُصلح MWCoop: تم التحقق من المحمّل في مجلد اللعبة
+MWCoop.exe · build of %hs	MWCoop.exe · بناء %hs
+Message to the lobby	رسالة إلى الردهة
+My Winter Car not found: choose the game folder	لم يُعثر على My Winter Car: اختر مجلد اللعبة
+My face (photo)	وجهي (صورة)
+My images	صوري
+Name the game first	سمِّ اللعبة أولاً
+New game: a fresh save, or a copy of a friend's (zip received).	لعبة جديدة: ملف حفظ جديد، أو نسخة من ملف صديق (zip مستلم).
+No favorite yet: pick a photo, then \"Favorite\" on the right.	لا مفضلة بعد: اختر صورة، ثم \"مفضلة\" على اليمين.
+No flag in Images	لا علم في Images
+No image recognized (png, jpg, bmp, gif, webp, tif)	لم يُتعرَّف على أي صورة (png, jpg, bmp, gif, webp, tif)
+No message yet. Say hello!	لا رسائل بعد. قل مرحباً!
+No poster in Images	لا ملصقات في Images
+No room left: 99 tracks per CD	لا مكان متبقٍ: 99 مقطوعة لكل قرص CD
+None: Character › Face	لا شيء: الشخصية › الوجه
+Not recommended in co-op: see the mods guide	غير موصى به في اللعب الجماعي: راجع دليل التعديلات
+Not supported	غير مدعوم
+Nothing for \"%s\"	لا شيء لـ \"%s\"
+Nunito font · The Nunito Project Authors · SIL OFL 1.1 license	خط Nunito · The Nunito Project Authors · رخصة SIL OFL 1.1
+Open the CD folder	فتح مجلد CD
+Open the Radio folder	فتح مجلد Radio
+PLAYED	لُعبت
+Paint & flag	الطلاء والعلم
+Painted on the game's template, shown to the other players. Pick a tile, then import your image.	مرسومة على قالب اللعبة، تظهر للاعبين الآخرين. اختر مربعاً، ثم استورد صورتك.
+Play together, sharing, versions.	اللعب معاً، المشاركة، النسخ.
+Port or firewall	المنفذ أو جدار الحماية
+Posters · 	الملصقات · 
+Private: your friends join with this code, or through your Steam invite.	خاصة: يدخل أصدقاؤك بهذا الرمز، أو عبر دعوتك على Steam.
+Private: your friends join with your address	خاصة: يدخل أصدقاؤك بعنوانك
+Punches	اللكمات
+RANDOM	عشوائي
+Ready for a winter together? Your friends must pick the same path as you.	جاهز لشتاء معاً؟ يجب أن يختار أصدقاؤك المسار نفسه الذي اخترته.
+Received mods cleared: %d file(s) deleted	مُسحت التعديلات المستلمة: حُذف %d ملف(ات)
+Recent	الأخيرة
+Recent GPU	بطاقة رسوميات حديثة
+Remove from favorites	إزالة من المفضلة
+Repair	إصلاح
+Repair incomplete: could not prepare the launch copy (see lanceur.log)	الإصلاح غير مكتمل: تعذّر تجهيز نسخة التشغيل (راجع lanceur.log)
+Reset to my Settings	إعادة إلى إعداداتي
+Run over	الدهس
+SAVE	حفظ
+SEND	إرسال
+Saved by the game · 	حفظتها اللعبة · 
+Saved ✓ · every change is kept right away	حُفظ ✓ · كل تغيير يُحفظ فوراً
+Search…	بحث…
+See the host guide again	مراجعة دليل المضيف مجدداً
+Send to the guests	إرسال إلى الضيوف
+Sent	مُرسَل
+Sent to guests: %s	يُرسل إلى الضيوف: %s
+Sent to guests: nothing	يُرسل إلى الضيوف: لا شيء
+Sent to the guests	يُرسل إلى الضيوف
+Sent with your outfit · 	يُرسل مع ملابسك · 
+Shared Ventti	فينتي مشترك
+Slideshow	عرض الشرائح
+Slideshow · 	عرض الشرائح · 
+Start money	المال الابتدائي
+Stop	إيقاف
+Tape \"%s\" sent to the guests of your next lobbies	سيُرسل الشريط \"%s\" إلى ضيوف ردهاتك القادمة
+Tape \"%s\": no longer sent	الشريط \"%s\": لم يعد يُرسل
+Test my connection	اختبار اتصالي
+The checked one will be offered in the lobby	المحددة ستُعرض في الردهة
+The game's paint (Images\\car.png) as you have it. A custom paint: Character › Car.	طلاء اللعبة (Images\\car.png) كما هو عندك. طلاء مخصص: الشخصية › السيارة.
+The host kicked you out of the lobby	طردك المضيف من الردهة
+The rest of the game's custom files, each on its own. Everything is copied apart to the guests.	بقية ملفات اللعبة المخصصة، كل منها على حدة. يُنسخ كل شيء على حدة إلى الضيوف.
+To check	للتحقق
+Today	اليوم
+UDP %d %s · TCP %d %s · firewall %s · Steam %s	UDP %d %s · TCP %d %s · جدار الحماية %s · Steam %s
+UDP %d open	UDP %d مفتوح
+UDP 7870 free · TCP 7870 free · firewall ok · Steam connected	UDP 7870 حر · TCP 7870 حر · جدار الحماية ok · Steam متصل
+UDP · testing… · %d ms	UDP · جارٍ الاختبار… · %d ms
+Unreadable image: %s	صورة غير قابلة للقراءة: %s
+Unreadable zip (%s): the game \"%s\" stays empty	ملف zip غير قابل للقراءة (%s): اللعبة \"%s\" تبقى فارغة
+VHS quality, mono sound, 4:3 · can be exported as a normal video.	جودة VHS، صوت أحادي، 4:3 · يمكن تصديره كفيديو عادي.
+Vanilla test	اختبار Vanilla
+What goes out	ما يُرسل
+What the others see of you: outfit, face, car. Visible as soon as you enter a lobby.	ما يراه الآخرون منك: الملابس، الوجه، السيارة. يظهر فور دخولك إلى ردهة.
+Yesterday	أمس
+You are a guest · %s · %s · %d / %d players	أنت ضيف · %s · %s · %d / %d لاعبين
+You were hosting	كنت المضيف
+You: outfit, car · another one: kick them out.	أنت: الملابس، السيارة · لاعب آخر: طرده.
+Your MSCLoader mods, and those you send to your guests when you host.	تعديلات MSCLoader الخاصة بك، وتلك التي ترسلها إلى ضيوفك عندما تستضيف.
+Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it.	ألعاب MWCoop الخاصة بك، منفصلة عن ملف الحفظ الفردي للعبة. يختار المضيف أيها يبدأ؛ ويستلمها الضيوف.
+Your character	شخصيتك
+Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car.	طلاؤك المخصص (peinture.png) يُرسل بدلاً من Images\\car.png. الإعدادات: الشخصية › السيارة.
+Your personal files, copied to your lobby's guests. They see and hear the same as you.	ملفاتك الشخصية، تُنسخ إلى ضيوف ردهتك. يرون ويسمعون ما تراه وتسمعه.
+Your solo save (the game's) is never touched by MWCoop.	ملف حفظك الفردي (الخاص باللعبة) لا يمسّه MWCoop أبداً.
+\"%s\" created from the zip and in use	أُنشئت \"%s\" من ملف zip وهي قيد الاستخدام
+all received	استُلم الكل
+at a friend's	عند صديق
+closed	مغلق
+connected	متصل
+free	حر
+no flag	بلا علم
+no rule	بلا قاعدة
+not installed	غير مثبّت
+nothing	لا شيء
+peinture.png (custom)	peinture.png (مخصص)
+played	لُعبت
+played 	لُعبت 
+solo	فردي
+today	اليوم
+with 	مع 
+yesterday	أمس
+you + 	أنت + 
+·  Average ping %d ms	·  متوسط البينغ %d ms
+· %d / %d sent · %s	· %d / %d مُرسل · %s
+· %d song(s)	· %d أغانٍ
+· %d song(s) · %s	· %d أغانٍ · %s
+· %d track(s)	· %d مقطوعات
+· %d track(s) · %s	· %d مقطوعات · %s
 Refused by the host	رفضك المضيف
 No lobby at the host: \"Join in game\" if they are already playing	لا توجد ردهة لدى المضيف: \"انضم داخل اللعبة\" إن كان يلعب بالفعل
 My Winter Car not found: choose mywintercar.exe	لم يُعثر على My Winter Car: اختر mywintercar.exe

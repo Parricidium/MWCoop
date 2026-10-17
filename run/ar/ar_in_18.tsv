@@ -1,0 +1,197 @@
+RY001	 (you)
+RY002	 and this code.
+RY003	 · %d refused: .ogg format only
+RY004	 · bank 
+RY005	 · never played with MWCoop
+RY006	 · sent to the guests
+RY007	 · up to date
+RY008	%02d to %02d · %d more
+RY009	%S kicked out
+RY010	%d / %d items sent
+RY011	%d articles · Esc: clear
+RY012	%d audio file(s) ignored by the game: it reads only track1.ogg, track2.ogg… in a row (OGG Vorbis).
+RY013	%d file(s) · %s
+RY014	%d mods · %s
+RY015	%d poster(s) put into Images (poster1…poster3)
+RY016	%d read by the game · %d ignored (track1.ogg…)
+RY017	%d song(s) · %s
+RY018	%d tracks added to %s (track%d…track%d)
+RY019	%d%% of %s
+RY020	%llu MB
+RY021	%s · %s · %s · %d / %d players
+RY022	%s: can't copy (error %lu)
+RY023	%s: can't write into the game folder
+RY024	%s: not recommended in co-op, never sent (see the mods guide)
+RY025	(no detail)
+RY026	+ Drop files here
+RY027	1 article · Esc: clear
+RY028	1 track added to %s (track%d.ogg)
+RY029	A video (mp4, mkv, webm…) becomes a tape for the game's TV, at your place and at your guests'.
+RY030	Add songs to the radio (.ogg)
+RY031	Add tracks
+RY032	Add tracks to the CD (.ogg)
+RY033	Additions
+RY034	Airy
+RY035	Applied ✓ · the theme is already in place
+RY036	Apply
+RY037	Arriving… %d ms · TCP only
+RY038	At the host's, their save
+RY039	Auto
+RY040	BLOCKS the game
+RY041	BUSY
+RY042	Beta
+RY043	By IP, your address is enough
+RY044	By session
+RY045	Car page
+RY046	Choose a save zip (Export (zip) at a friend's)
+RY047	Choose the garage flag (Images\\flag_garage.png)
+RY048	Choose up to 3 posters (Images\\poster1…3.png)
+RY049	Clear the mods received from the host (%d)?\n\nThey will be downloaded again in the next lobby if the host still sends them. Your own mods are not touched.
+RY050	Click %S again to kick them out
+RY051	Click a tape: watch it on the right, rename it, export it, send it to the guests or put a video on it.
+RY052	Click again to stop sending it.
+RY053	Close the game before clearing the received mods
+RY054	Coming!
+RY055	Compact
+RY056	Content
+RY057	Current theme · 
+RY058	DECIDED BY THE HOST
+RY059	Day 
+RY060	Default values restored for this tab
+RY061	Drag: rotate · wheel: zoom
+RY062	Drop .ogg files here: numbered track1…trackN in Radio. The game reads them in the main menu; MWCoop imports them for you.
+RY063	Drop .ogg files here: numbered track1…trackN. The game reads them in the main menu; MWCoop imports them for you.
+RY064	Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in front of the garage).
+RY065	Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (garage and house walls).
+RY066	Drop your files on the Sent content page (.ogg tracks, images)
+RY067	Editable in each lobby
+RY068	Favorite
+RY069	Favorites
+RY070	Format .ogg only: the game reads only OGG Vorbis (convert your files first)
+RY071	From a zip…
+RY072	Garage and house
+RY073	Garage flag replaced (Images\\flag_garage.png)
+RY074	Guests receive all this when they arrive in your lobby, in their launch copy. Nothing overwrites their own files.
+RY075	Host included · above 10, a good connection is advised
+RY076	IP · port 
+RY077	Image tab
+RY078	Import an image
+RY079	Jokkis night
+RY080	Kick?
+RY081	Last lobby on %s · %d mod(s) · kept
+RY082	Last lobby: %s · %d mod(s) · kept
+RY083	Last read: 
+RY084	Leaving in 2 min…
+RY085	Lobby open · Steam · invite your friends
+RY086	Logs (the < > at the bottom left) > Make the zip, then post it in #bug-reports on Discord.
+RY087	MWCoop repaired: launch copy and loader rewritten
+RY088	MWCoop repaired: loader checked in the game folder
+RY089	MWCoop.exe · build of %hs
+RY090	Message to the lobby
+RY091	My Winter Car not found: choose the game folder
+RY092	My face (photo)
+RY093	My images
+RY094	Name the game first
+RY095	New game: a fresh save, or a copy of a friend's (zip received).
+RY096	No favorite yet: pick a photo, then \"Favorite\" on the right.
+RY097	No flag in Images
+RY098	No image recognized (png, jpg, bmp, gif, webp, tif)
+RY099	No message yet. Say hello!
+RY100	No poster in Images
+RY101	No room left: 99 tracks per CD
+RY102	None: Character › Face
+RY103	Not recommended in co-op: see the mods guide
+RY104	Not supported
+RY105	Nothing for \"%s\"
+RY106	Nunito font · The Nunito Project Authors · SIL OFL 1.1 license
+RY107	Open the CD folder
+RY108	Open the Radio folder
+RY109	PLAYED
+RY110	Paint & flag
+RY111	Painted on the game's template, shown to the other players. Pick a tile, then import your image.
+RY112	Play together, sharing, versions.
+RY113	Port or firewall
+RY114	Posters · 
+RY115	Private: your friends join with this code, or through your Steam invite.
+RY116	Private: your friends join with your address
+RY117	Punches
+RY118	RANDOM
+RY119	Ready for a winter together? Your friends must pick the same path as you.
+RY120	Received mods cleared: %d file(s) deleted
+RY121	Recent
+RY122	Recent GPU
+RY123	Remove from favorites
+RY124	Repair
+RY125	Repair incomplete: could not prepare the launch copy (see lanceur.log)
+RY126	Reset to my Settings
+RY127	Run over
+RY128	SAVE
+RY129	SEND
+RY130	Saved by the game · 
+RY131	Saved ✓ · every change is kept right away
+RY132	Search…
+RY133	See the host guide again
+RY134	Send to the guests
+RY135	Sent
+RY136	Sent to guests: %s
+RY137	Sent to guests: nothing
+RY138	Sent to the guests
+RY139	Sent with your outfit · 
+RY140	Shared Ventti
+RY141	Slideshow
+RY142	Slideshow · 
+RY143	Start money
+RY144	Stop
+RY145	Tape \"%s\" sent to the guests of your next lobbies
+RY146	Tape \"%s\": no longer sent
+RY147	Test my connection
+RY148	The checked one will be offered in the lobby
+RY149	The game's paint (Images\\car.png) as you have it. A custom paint: Character › Car.
+RY150	The host kicked you out of the lobby
+RY151	The rest of the game's custom files, each on its own. Everything is copied apart to the guests.
+RY152	To check
+RY153	Today
+RY154	UDP %d %s · TCP %d %s · firewall %s · Steam %s
+RY155	UDP %d open
+RY156	UDP 7870 free · TCP 7870 free · firewall ok · Steam connected
+RY157	UDP · testing… · %d ms
+RY158	Unreadable image: %s
+RY159	Unreadable zip (%s): the game \"%s\" stays empty
+RY160	VHS quality, mono sound, 4:3 · can be exported as a normal video.
+RY161	Vanilla test
+RY162	What goes out
+RY163	What the others see of you: outfit, face, car. Visible as soon as you enter a lobby.
+RY164	Yesterday
+RY165	You are a guest · %s · %s · %d / %d players
+RY166	You were hosting
+RY167	You: outfit, car · another one: kick them out.
+RY168	Your MSCLoader mods, and those you send to your guests when you host.
+RY169	Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it.
+RY170	Your character
+RY171	Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car.
+RY172	Your personal files, copied to your lobby's guests. They see and hear the same as you.
+RY173	Your solo save (the game's) is never touched by MWCoop.
+RY174	\"%s\" created from the zip and in use
+RY175	all received
+RY176	at a friend's
+RY177	closed
+RY178	connected
+RY179	free
+RY180	no flag
+RY181	no rule
+RY182	not installed
+RY183	nothing
+RY184	peinture.png (custom)
+RY185	played
+RY186	played 
+RY187	solo
+RY188	today
+RY189	with 
+RY190	yesterday
+RY191	you + 
+RY192	·  Average ping %d ms
+RY193	· %d / %d sent · %s
+RY194	· %d song(s)
+RY195	· %d song(s) · %s
+RY196	· %d track(s)
+RY197	· %d track(s) · %s

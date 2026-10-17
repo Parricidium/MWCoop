@@ -1379,3 +1379,200 @@ What the others see of you: outfit, face, car	Что другие видят в 
 Yesterday %02d:%02d	Вчера %02d:%02d
 Your tapes for the living-room TV, and the photos taken with the drone.	Твои кассеты для телевизора в гостиной и фото, снятые дроном.
 painted on the game's template, shown to the other players	нарисована по шаблону игры, видна другим игрокам
+ (you)	 (ты)
+ and this code.	 и этот код.
+ · %d refused: .ogg format only	 · %d отклонено: только формат .ogg
+ · bank 	 · банк 
+ · never played with MWCoop	 · ни разу не играли с MWCoop
+ · sent to the guests	 · отправляется гостям
+ · up to date	 · актуально
+%02d to %02d · %d more	%02d – %02d · ещё %d
+%S kicked out	%S выгнан
+%d / %d items sent	%d / %d элементов отправлено
+%d articles · Esc: clear	%d статей · Esc: очистить
+%d audio file(s) ignored by the game: it reads only track1.ogg, track2.ogg… in a row (OGG Vorbis).	%d аудиофайл(ов) игра пропускает: она читает только track1.ogg, track2.ogg… подряд (OGG Vorbis).
+%d file(s) · %s	%d файл(ов) · %s
+%d mods · %s	%d модов · %s
+%d poster(s) put into Images (poster1…poster3)	%d постер(ов) помещено в Images (poster1…poster3)
+%d read by the game · %d ignored (track1.ogg…)	%d читается игрой · %d пропущено (track1.ogg…)
+%d song(s) · %s	%d песен · %s
+%d tracks added to %s (track%d…track%d)	%d треков добавлено в %s (track%d…track%d)
+%d%% of %s	%d%% от %s
+%llu MB	%llu МБ
+%s · %s · %s · %d / %d players	%s · %s · %s · игроков: %d / %d
+%s: can't copy (error %lu)	%s: не удалось скопировать (ошибка %lu)
+%s: can't write into the game folder	%s: не удаётся записать в папку игры
+%s: not recommended in co-op, never sent (see the mods guide)	%s: не рекомендуется в коопе, не отправляется (см. гайд по модам)
+(no detail)	(без подробностей)
++ Drop files here	+ Перетащи файлы сюда
+1 article · Esc: clear	1 статья · Esc: очистить
+1 track added to %s (track%d.ogg)	1 трек добавлен в %s (track%d.ogg)
+A video (mp4, mkv, webm…) becomes a tape for the game's TV, at your place and at your guests'.	Видео (mp4, mkv, webm…) становится кассетой для телевизора в игре — у тебя и у твоих гостей.
+Add songs to the radio (.ogg)	Добавить песни на радио (.ogg)
+Add tracks	Добавить треки
+Add tracks to the CD (.ogg)	Добавить треки на CD (.ogg)
+Additions	Дополнения
+Airy	Просторная
+Applied ✓ · the theme is already in place	Применено ✓ · тема уже установлена
+Apply	Применить
+Arriving… %d ms · TCP only	Доходит… %d мс · только TCP
+At the host's, their save	У хоста, его сохранение
+Auto	Авто
+BLOCKS the game	БЛОКИРУЕТ игру
+BUSY	ЗАНЯТ
+Beta	Бета
+By IP, your address is enough	По IP: достаточно твоего адреса
+By session	По партиям
+Car page	Страница «Машина»
+Choose a save zip (Export (zip) at a friend's)	Выбери zip сохранения (Экспорт (zip) у друга)
+Choose the garage flag (Images\\flag_garage.png)	Выбери флаг гаража (Images\\flag_garage.png)
+Choose up to 3 posters (Images\\poster1…3.png)	Выбери до 3 постеров (Images\\poster1…3.png)
+Clear the mods received from the host (%d)?\n\nThey will be downloaded again in the next lobby if the host still sends them. Your own mods are not touched.	Очистить моды, полученные от хоста (%d)?\n\nОни скачаются снова в следующем лобби, если хост всё ещё их отправляет. Твои собственные моды не затрагиваются.
+Click %S again to kick them out	Нажми на %S ещё раз, чтобы выгнать
+Click a tape: watch it on the right, rename it, export it, send it to the guests or put a video on it.	Нажми на кассету: посмотреть справа, переименовать, экспортировать, отправить гостям или записать на неё видео.
+Click again to stop sending it.	Нажми ещё раз, чтобы больше не отправлять.
+Close the game before clearing the received mods	Закрой игру, прежде чем очищать полученные моды
+Coming!	Иду!
+Compact	Компактная
+Content	Контент
+Current theme · 	Текущая тема · 
+DECIDED BY THE HOST	РЕШАЕТ ХОСТ
+Day 	День 
+Default values restored for this tab	Значения по умолчанию восстановлены для этой вкладки
+Drag: rotate · wheel: zoom	Тяни: вращение · колесо: зум
+Drop .ogg files here: numbered track1…trackN in Radio. The game reads them in the main menu; MWCoop imports them for you.	Перетащи сюда .ogg-файлы: они нумеруются track1…trackN в Radio. Игра читает их в главном меню; MWCoop импортирует их за тебя.
+Drop .ogg files here: numbered track1…trackN. The game reads them in the main menu; MWCoop imports them for you.	Перетащи сюда .ogg-файлы: они нумеруются track1…trackN. Игра читает их в главном меню; MWCoop импортирует их за тебя.
+Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in front of the garage).	Перетащи сюда картинку или нажми «Выбрать»: она станет Images\\flag_garage.png (флаг перед гаражом).
+Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (garage and house walls).	Перетащи сюда до 3 картинок или нажми «Выбрать»: они станут Images\\poster1…3.png (стены гаража и дома).
+Drop your files on the Sent content page (.ogg tracks, images)	Перетащи файлы на страницу «Отправляемый контент» (.ogg-треки, картинки)
+Editable in each lobby	Можно менять в каждом лобби
+Favorite	В избранное
+Favorites	Избранное
+Format .ogg only: the game reads only OGG Vorbis (convert your files first)	Только формат .ogg: игра читает лишь OGG Vorbis (сначала сконвертируй файлы)
+From a zip…	Из zip…
+Garage and house	Гараж и дом
+Garage flag replaced (Images\\flag_garage.png)	Флаг гаража заменён (Images\\flag_garage.png)
+Guests receive all this when they arrive in your lobby, in their launch copy. Nothing overwrites their own files.	Гости получают всё это при входе в твоё лобби, в свою копию запуска. Их собственные файлы не перезаписываются.
+Host included · above 10, a good connection is advised	Включая хоста · больше 10 — нужно хорошее соединение
+IP · port 	IP · порт 
+Image tab	Вкладка «Изображение»
+Import an image	Импортировать картинку
+Jokkis night	Вечер Йоккис
+Kick?	Выгнать?
+Last lobby on %s · %d mod(s) · kept	Последнее лобби %s · %d мод(ов) · сохранены
+Last lobby: %s · %d mod(s) · kept	Последнее лобби: %s · %d мод(ов) · сохранены
+Last read: 	Последняя прочитанная: 
+Leaving in 2 min…	Ухожу через 2 мин…
+Lobby open · Steam · invite your friends	Лобби открыто · Steam · пригласи друзей
+Logs (the < > at the bottom left) > Make the zip, then post it in #bug-reports on Discord.	Логи (< > слева внизу) > Создать zip, затем выложи его в #bug-reports в Discord.
+MWCoop repaired: launch copy and loader rewritten	MWCoop починен: копия запуска и загрузчик перезаписаны
+MWCoop repaired: loader checked in the game folder	MWCoop починен: загрузчик проверен в папке игры
+MWCoop.exe · build of %hs	MWCoop.exe · сборка от %hs
+Message to the lobby	Сообщение в лобби
+My Winter Car not found: choose the game folder	My Winter Car не найдена: выбери папку игры
+My face (photo)	Моё лицо (фото)
+My images	Мои картинки
+Name the game first	Сначала назови партию
+New game: a fresh save, or a copy of a friend's (zip received).	Новая партия: чистое сохранение или копия сохранения друга (полученный zip).
+No favorite yet: pick a photo, then \"Favorite\" on the right.	Избранного пока нет: выбери фото, затем \"В избранное\" справа.
+No flag in Images	В Images нет флага
+No image recognized (png, jpg, bmp, gif, webp, tif)	Картинка не распознана (png, jpg, bmp, gif, webp, tif)
+No message yet. Say hello!	Сообщений пока нет. Поздоровайся!
+No poster in Images	В Images нет постеров
+No room left: 99 tracks per CD	Места нет: 99 треков на CD
+None: Character › Face	Нет: Персонаж › Лицо
+Not recommended in co-op: see the mods guide	Не рекомендуется в коопе: см. гайд по модам
+Not supported	Не поддерживается
+Nothing for \"%s\"	Ничего по запросу \"%s\"
+Nunito font · The Nunito Project Authors · SIL OFL 1.1 license	Шрифт Nunito · The Nunito Project Authors · лицензия SIL OFL 1.1
+Open the CD folder	Открыть папку CD
+Open the Radio folder	Открыть папку Radio
+PLAYED	СЫГРАНО
+Paint & flag	Покраска и флаг
+Painted on the game's template, shown to the other players. Pick a tile, then import your image.	Рисуется по шаблону игры, видно другим игрокам. Выбери плитку, затем импортируй картинку.
+Play together, sharing, versions.	Совместная игра, обмен, версии.
+Port or firewall	Порт или брандмауэр
+Posters · 	Постеры · 
+Private: your friends join with this code, or through your Steam invite.	Приватное: друзья входят по этому коду или по твоему приглашению Steam.
+Private: your friends join with your address	Приватное: друзья входят по твоему адресу
+Punches	Удары кулаком
+RANDOM	СЛУЧАЙНО
+Ready for a winter together? Your friends must pick the same path as you.	Готов к зиме вместе? Друзья должны выбрать тот же путь, что и ты.
+Received mods cleared: %d file(s) deleted	Полученные моды очищены: удалено файлов: %d
+Recent	Недавние
+Recent GPU	Современный GPU
+Remove from favorites	Убрать из избранного
+Repair	Починить
+Repair incomplete: could not prepare the launch copy (see lanceur.log)	Починка не завершена: не удалось подготовить копию запуска (см. lanceur.log)
+Reset to my Settings	Вернуть мои Настройки
+Run over	Сбивать
+SAVE	СОХРАНИТЬ
+SEND	ОТПРАВИТЬ
+Saved by the game · 	Сохранено игрой · 
+Saved ✓ · every change is kept right away	Сохранено ✓ · каждое изменение запоминается сразу
+Search…	Поиск…
+See the host guide again	Посмотреть гайд хоста снова
+Send to the guests	Отправить гостям
+Sent	Отправляется
+Sent to guests: %s	Отправляется гостям: %s
+Sent to guests: nothing	Отправляется гостям: ничего
+Sent to the guests	Отправляется гостям
+Sent with your outfit · 	Отправляется с твоей одеждой · 
+Shared Ventti	Общий Вентти
+Slideshow	Слайд-шоу
+Slideshow · 	Слайд-шоу · 
+Start money	Стартовые деньги
+Stop	Стоп
+Tape \"%s\" sent to the guests of your next lobbies	Кассета \"%s\" будет отправляться гостям твоих следующих лобби
+Tape \"%s\": no longer sent	Кассета \"%s\": больше не отправляется
+Test my connection	Проверить моё соединение
+The checked one will be offered in the lobby	Отмеченная будет предложена в лобби
+The game's paint (Images\\car.png) as you have it. A custom paint: Character › Car.	Покраска игры (Images\\car.png) как есть у тебя. Своя покраска: Персонаж › Машина.
+The host kicked you out of the lobby	Хост выгнал тебя из лобби
+The rest of the game's custom files, each on its own. Everything is copied apart to the guests.	Остальные пользовательские файлы игры, каждый отдельно. Всё копируется гостям отдельно.
+To check	Проверить
+Today	Сегодня
+UDP %d %s · TCP %d %s · firewall %s · Steam %s	UDP %d %s · TCP %d %s · брандмауэр %s · Steam %s
+UDP %d open	UDP %d открыт
+UDP 7870 free · TCP 7870 free · firewall ok · Steam connected	UDP 7870 свободен · TCP 7870 свободен · брандмауэр ok · Steam подключён
+UDP · testing… · %d ms	UDP · проверка… · %d мс
+Unreadable image: %s	Нечитаемая картинка: %s
+Unreadable zip (%s): the game \"%s\" stays empty	Нечитаемый zip (%s): партия \"%s\" остаётся пустой
+VHS quality, mono sound, 4:3 · can be exported as a normal video.	Качество VHS, моно-звук, 4:3 · можно экспортировать как обычное видео.
+Vanilla test	Ванильный тест
+What goes out	Что отправляется
+What the others see of you: outfit, face, car. Visible as soon as you enter a lobby.	Что видят другие: одежда, лицо, машина. Видно, как только ты входишь в лобби.
+Yesterday	Вчера
+You are a guest · %s · %s · %d / %d players	Ты гость · %s · %s · игроков: %d / %d
+You were hosting	Ты был хостом
+You: outfit, car · another one: kick them out.	Ты: одежда, машина · другой игрок: выгнать.
+Your MSCLoader mods, and those you send to your guests when you host.	Твои моды MSCLoader и те, что ты отправляешь гостям, когда хостишь.
+Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it.	Твои партии MWCoop, отдельно от соло-сохранения игры. Хост выбирает, какую запустить; гости её получают.
+Your character	Твой персонаж
+Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car.	Твоя покраска (peinture.png) отправляется вместо Images\\car.png. Настройки: Персонаж › Машина.
+Your personal files, copied to your lobby's guests. They see and hear the same as you.	Твои личные файлы, копируются гостям твоего лобби. Они видят и слышат то же, что и ты.
+Your solo save (the game's) is never touched by MWCoop.	Твоё соло-сохранение (игры) MWCoop никогда не трогает.
+\"%s\" created from the zip and in use	\"%s\" создана из zip и используется
+all received	всё получено
+at a friend's	у друга
+closed	закрыт
+connected	подключён
+free	свободен
+no flag	без флага
+no rule	без правила
+not installed	не установлен
+nothing	ничего
+peinture.png (custom)	peinture.png (своя)
+played	сыграна
+played 	сыграна 
+solo	соло
+today	сегодня
+with 	с 
+yesterday	вчера
+you + 	ты + 
+·  Average ping %d ms	·  Средний пинг %d мс
+· %d / %d sent · %s	· %d / %d отправлено · %s
+· %d song(s)	· %d песен
+· %d song(s) · %s	· %d песен · %s
+· %d track(s)	· %d треков
+· %d track(s) · %s	· %d треков · %s
