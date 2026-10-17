@@ -10,9 +10,14 @@
 // (Net/SaveTransfer.cs) : ses propres parties ne sont jamais touchees. Une sauvegarde vide commence par une nouvelle partie
 // (Flow.cs : « continuer » sans sauvegarde -> « nouvelle »).
 
-struct SaveSlot { std::wstring prof, name; bool has = false; FILETIME mtime = {}; unsigned long long bytes = 0; };
+// Resume ecrit par le mod a chaque sauvegarde (Sync/SaveStats.cs : partie.txt a cote de savefile.txt, lignes cle=valeur) :
+// jour (GlobalDaysPassed), argent, banque, heures (jouees, reel), date (yyyy-MM-dd HH:mm), avec (pseudos, |), role (hote|invite|solo).
+// stats faux : pas de fichier (partie jamais jouee avec cette version du mod) -> « — ».
+struct SaveSlot { std::wstring prof, name; bool has = false; FILETIME mtime = {}; unsigned long long bytes = 0;
+                  bool stats = false; int jour = -1, argent = -1, banque = -1; float heures = -1; std::wstring date, avec, role; };
 static std::vector<SaveSlot> g_saves;
 static DWORD g_savesScanT;
+static bool g_savesFake;   // captures : liste factice (SavesFake), pas de releve
 static int g_saveEdit = -1; static std::wstring g_saveEditText;   // renommage dans la liste de l'onglet
 static int g_saveDelArm = -1; static DWORD g_saveDelT;
 enum { SM_NONE, SM_PICK, SM_NEWGAME, SM_RESTART, SM_NAME };      // fenetre par-dessus le lanceur
@@ -22,6 +27,7 @@ static std::wstring g_saveNameText;
 static const int kSaveNameMax = 32;
 enum { UI_SAVE_NEW = 9000, UI_SAVE_REFRESH, UI_SAVE_MCLOSE, UI_SAVE_MNEW, UI_SAVE_MOK, UI_SAVE_MRESTART, UI_SAVE_MFRESH, UI_SAVE_LOBBY,
        UI_SAVE_DUP, UI_SAVE_EXPORT, UI_SAVE_RESTART, UI_SAVE_DEL,   // onglet, carte de droite : sur la partie choisie (g_saveSel)
+       UI_SAVE_IMPORT,       // fenetre du nom : « Depuis un zip… » (la sauvegarde d'un ami, Exporter (zip))
        UI_SAVE_RESTORE = 9050,   // + k : copie de secours k de la partie choisie (9050-9059)
        UI_SAVE = 9100,       // + ligne * 8 + partie (onglet)
        UI_SAVE_PICK = 9700,  // + ligne (fenetre : liste)
@@ -89,6 +95,30 @@ static void SaveSetCurrent(const std::wstring &prof)
     if (g_lobby == LB_HOST) { if (g_lobbySteam) SSetLobby("sauvegarde", Narrow(SaveNameOf(prof), CP_UTF8)); else BroadcastState(); }
 }
 
+// partie.txt (UTF-8) de la partie : cle=valeur par ligne.
+static void SaveStatsRead(SaveSlot &s, const std::wstring &dir)
+{
+    s.stats = false;
+    std::vector<unsigned char> d;
+    if (dir.empty() || !ReadAll(dir + L"partie.txt", d) || d.empty()) return;
+    std::wstring all = Widen(std::string(d.begin(), d.end()), CP_UTF8);
+    for (size_t a = 0; a < all.size();) {
+        size_t b = all.find(L'\n', a);
+        std::wstring l = Trim(all.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a));
+        a = b == std::wstring::npos ? all.size() : b + 1;
+        size_t eq = l.find(L'=');
+        if (eq == std::wstring::npos) continue;
+        std::wstring k = l.substr(0, eq), v = l.substr(eq + 1);
+        if (k == L"jour") s.jour = _wtoi(v.c_str());
+        else if (k == L"argent") s.argent = _wtoi(v.c_str());
+        else if (k == L"banque") s.banque = _wtoi(v.c_str());
+        else if (k == L"heures") s.heures = (float)_wtof(v.c_str());
+        else if (k == L"date") s.date = v;
+        else if (k == L"avec") s.avec = v;
+        else if (k == L"role") s.role = v;
+        s.stats = true;
+    }
+}
 static void SaveInfo(SaveSlot &s)
 {
     std::wstring d = SaveDirOf(s.prof);
@@ -96,6 +126,7 @@ static void SaveInfo(SaveSlot &s)
     s.has = !d.empty() && GetFileAttributesExW((d + L"savefile.txt").c_str(), GetFileExInfoStandard, &a);
     if (s.has) s.mtime = a.ftLastWriteTime;
     s.bytes = 0;
+    SaveStatsRead(s, d);
     WIN32_FIND_DATAW fd;
     HANDLE h = d.empty() ? INVALID_HANDLE_VALUE : FindFirstFileW((d + L"*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return;
@@ -105,6 +136,7 @@ static void SaveInfo(SaveSlot &s)
 static void SavesScan()
 {
     g_savesScanT = GetTickCount();
+    if (g_savesFake) return;
     std::vector<SaveSlot> out;
     SaveSlot m; m.name = SaveMainName(); SaveInfo(m); out.push_back(m);
     std::vector<SaveSlot> extra;
@@ -146,6 +178,79 @@ static std::wstring SaveDefaultName()
         if (!used) return b;
     }
     return T(L"Nouvelle partie", L"New game");
+}
+// Captures (/capture sauvegardes) : trois parties factices, comme la maquette (jour 14, 12 450 mk, 31 h, hier avec Teppo et Pekka).
+static std::wstring SaveFakeDate(int daysAgo, int hh, int mm)
+{
+    SYSTEMTIME t; GetLocalTime(&t);
+    FILETIME ft; SystemTimeToFileTime(&t, &ft);
+    ULARGE_INTEGER u; u.LowPart = ft.dwLowDateTime; u.HighPart = ft.dwHighDateTime;
+    u.QuadPart -= (unsigned long long)daysAgo * 864000000000ULL;
+    ft.dwLowDateTime = u.LowPart; ft.dwHighDateTime = u.HighPart;
+    FileTimeToSystemTime(&ft, &t);
+    wchar_t b[32]; swprintf_s(b, L"%04d-%02d-%02d %02d:%02d", t.wYear, t.wMonth, t.wDay, hh, mm);
+    return b;
+}
+static void SavesFake()
+{
+    g_savesFake = true;
+    g_saves.clear();
+    SaveSlot a; a.name = T(L"Partie principale", L"Main game"); a.has = true; a.bytes = 153 * 1024; a.stats = true; a.jour = 14; a.argent = 12450; a.banque = 3800; a.heures = 31.2f;
+    a.date = SaveFakeDate(1, 22, 7); a.avec = L"Teppo|Pekka"; a.role = L"hote"; GetSystemTimeAsFileTime(&a.mtime);
+    SaveSlot b; b.prof = L"partie-1"; b.name = T(L"Soirée Jokkis", L"Jokkis night"); b.has = true; b.bytes = 41 * 1024; b.stats = true; b.jour = 3; b.argent = 2100; b.banque = 0; b.heures = 4.5f;
+    b.date = SaveFakeDate(2, 21, 30); b.role = L"solo"; b.mtime = a.mtime;
+    SaveSlot c; c.prof = L"partie-2"; c.name = T(L"Test vanilla", L"Vanilla test"); c.has = true; c.bytes = 12 * 1024; c.mtime = a.mtime;   // (jamais jouee avec le mod : pas de partie.txt)
+    g_saves = { a, b, c };
+    g_saveSel = 0;
+}
+// Montants : « 12 450 » (FR : espace fine ; EN : virgule).
+static std::wstring SaveMoney(int v)
+{
+    std::wstring d = std::to_wstring(v < 0 ? -v : v), out;
+    for (size_t i = 0; i < d.size(); i++) { if (i && (d.size() - i) % 3 == 0) out += g_fr ? L" " : L","; out += d[i]; }
+    return (v < 0 ? L"-" : L"") + out;
+}
+// Date de partie.txt (yyyy-MM-dd HH:mm) en mots : « aujourd'hui 22:07 », « hier 22:07 », « le 15/10 22:07 » (cap : « Hier 22:07 »).
+static std::wstring SaveDateRel(const std::wstring &d, bool cap)
+{
+    int y = 0, mo = 0, da = 0, hh = 0, mm = 0;
+    if (swscanf_s(d.c_str(), L"%d-%d-%d %d:%d", &y, &mo, &da, &hh, &mm) < 3) return d;
+    SYSTEMTIME t; GetLocalTime(&t);
+    auto days = [](int y, int m, int d) { int a = (14 - m) / 12, yy = y + 4800 - a, mmm = m + 12 * a - 3; return d + (153 * mmm + 2) / 5 + 365 * yy + yy / 4 - yy / 100 + yy / 400; };
+    int ago = days(t.wYear, t.wMonth, t.wDay) - days(y, mo, da);
+    wchar_t hm[16]; swprintf_s(hm, L"%02d:%02d", hh, mm);
+    std::wstring w;
+    if (ago == 0) w = cap ? T(L"Aujourd'hui", L"Today") : T(L"aujourd'hui", L"today");
+    else if (ago == 1) w = cap ? T(L"Hier", L"Yesterday") : T(L"hier", L"yesterday");
+    else { wchar_t b[48]; if (g_fr) swprintf_s(b, L"%s %02d/%02d", cap ? L"Le" : L"le", da, mo); else swprintf_s(b, L"%s %02d/%02d", cap ? L"On" : L"on", mo, da); if (y != t.wYear) { wchar_t yb[8]; swprintf_s(yb, L"/%04d", y); wcscat_s(b, yb); } w = b; }
+    return w + L" " + hm;
+}
+// « avec Teppo, Pekka » (joueurs de la derniere partie), ou le role.
+static std::wstring SaveWith(const SaveSlot &s, bool withMe)
+{
+    std::wstring names;
+    for (size_t a = 0; a <= s.avec.size() && !s.avec.empty();) {
+        size_t e = s.avec.find(L'|', a);
+        std::wstring n = Trim(s.avec.substr(a, e == std::wstring::npos ? std::wstring::npos : e - a));
+        if (!n.empty()) names += (names.empty() ? L"" : L", ") + n;
+        if (e == std::wstring::npos) break;
+        a = e + 1;
+    }
+    if (!names.empty()) return withMe ? T(L"toi + ", L"you + ") + names : T(L"avec ", L"with ") + names;
+    if (s.role == L"invite") return T(L"chez un ami", L"at a friend's");
+    return T(L"en solo", L"solo");
+}
+// Ligne d'une partie : « Jour 14 · 12 450 mk · jouée hier 22:07 avec Teppo, Pekka ».
+static std::wstring SaveDateText(const FILETIME &ft);
+static std::wstring SaveRowInfo(const SaveSlot &s)
+{
+    if (!s.has) return T(L"Vide : commencera par une nouvelle partie", L"Empty: will start with a new game");
+    if (!s.stats) return std::wstring(T(L"Dernière sauvegarde : ", L"Last saved: ")) + SaveDateText(s.mtime) + T(L" · jamais jouée avec MWCoop", L" · never played with MWCoop");
+    std::wstring r;
+    if (s.jour >= 0) r += T(L"Jour ", L"Day ") + std::to_wstring(s.jour) + L" · ";
+    if (s.argent >= 0) r += SaveMoney(s.argent) + L" mk · ";
+    r += (s.date.empty() ? std::wstring(T(L"jouée", L"played")) : T(L"jouée ", L"played ") + SaveDateRel(s.date, false)) + L" " + SaveWith(s, false);
+    return r;
 }
 static std::wstring SaveWhen(const SaveSlot &s)
 {
@@ -237,6 +342,34 @@ static void SaveNameDone()
     SaveSetCurrent(prof);
     if (g_saveNameForGame) LobbyApplyPartie(PARTIE_NOUVELLE);
     SetStatus(K_OK, T(L"Sauvegarde « %s » créée et utilisée", L"Save \"%s\" created and in use"), n.c_str());
+}
+// « Depuis un zip… » (fenetre du nom) : la sauvegarde d'un ami (Exporter (zip) : fichiers a plat) dans une nouvelle partie-N
+// portant le nom saisi. Le zip est deballe dans le dossier LocalLow de la partie ; rien d'autre n'est touche.
+static void SaveImportZip()
+{
+    std::wstring n = SaveCleanName(g_saveNameText);
+    if (n.empty()) { SetStatus(K_WARN, T(L"Donne d'abord un nom à la partie", L"Name the game first")); return; }
+    if (!SaveGuard()) return;
+    wchar_t file[MAX_PATH] = L"";
+    OPENFILENAMEW of = { sizeof(of) };
+    of.hwndOwner = g_wnd;
+    of.lpstrFilter = L"Zip\0*.zip\0*.*\0*.*\0";
+    of.lpstrFile = file; of.nMaxFile = MAX_PATH;
+    of.lpstrTitle = T(L"Choisir le zip d'une sauvegarde (Exporter (zip) chez un ami)", L"Choose a save zip (Export (zip) at a friend's)");
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    if (!GetOpenFileNameW(&of)) return;
+    std::wstring prof = SaveCreate(n);
+    if (prof.empty()) return;
+    std::wstring dir = SaveDirOf(prof);
+    if (!dir.empty() && dir.back() == L'\\') dir.pop_back();
+    std::string why;
+    if (!Unzip(file, dir, &why)) { SetStatus(K_ERR, T(L"Zip illisible (%s) : la partie « %s » reste vide", L"Unreadable zip (%s): the game \"%s\" stays empty"), Widen(why, CP_UTF8).c_str(), n.c_str()); SavesScan(); g_saveModal = SM_NONE; return; }
+    TestLog("sauvegardes : %s importee dans %s", Narrow(file, CP_UTF8).c_str(), Narrow(prof, CP_UTF8).c_str());
+    g_saveModal = SM_NONE;
+    SavesScan();
+    for (int k = 0; k < (int)g_saves.size(); k++) if (g_saves[k].prof == prof) g_saveSel = k;
+    SaveSetCurrent(prof);
+    SetStatus(K_OK, T(L"« %s » créée depuis le zip et utilisée", L"\"%s\" created from the zip and in use"), n.c_str());
 }
 static void SavePickRow(int i)
 {
@@ -483,7 +616,7 @@ static void DrawSaves(Graphics &g)
         float tw = MeasureW(mg, t, 16, FontStyleBold);
         Title(g, t, RectF(c.X + 18, c.Y + 14, tw + 6, 26), 16, kInk);
         Text(g, L"· " + std::to_wstring(g_saves.size()), RectF(c.X + 18 + tw + 6, c.Y + 15, 60, 26), 13, FontStyleBold, kGrey, StringAlignmentNear);
-        Text(g, T(L"Celle « en cours » est proposée dans le salon", L"The one \"in use\" is offered in the lobby"), RectF(c.X + 200, c.Y + 16, c.Width - 218, 24), 12, FontStyleRegular, kGrey, StringAlignmentFar);
+        Text(g, T(L"Celle qui est cochée sera proposée dans le salon", L"The checked one will be offered in the lobby"), RectF(c.X + 200, c.Y + 16, c.Width - 218, 24), 12, FontStyleRegular, kGrey, StringAlignmentFar);
         float ms = SavesMaxScroll(), sc = g_scroll[TAB_SAVES] = min(g_scroll[TAB_SAVES], ms);
         float rw = kSaveList.Width - (ms > 0 ? 14 : 0);
         GraphicsState st = g.Save(); g.SetClip(kSaveList, CombineModeIntersect);
@@ -501,8 +634,8 @@ static void DrawSaves(Graphics &g)
                 SolidBrush sb(Color((BYTE)(g_dark ? 50 : 14), 0, 0, 0)); g.FillPath(&sb, &sp);
                 Pen spn(WithA(kInk, 0.3f), 1.0f); spn.SetDashStyle(DashStyleDash); g.DrawPath(&spn, &sp);
                 Icon(g, IC_PLUS, sq.X + 23, sq.Y + 23, 18, kGrey, 2.4f);
-                Para(g, T(L"Nouvelle partie : une sauvegarde neuve, à part de tes autres parties. Elle sera utilisée quand tu héberges.",
-                          L"New game: a fresh save, apart from your other games. It will be used when you host."), RectF(r.X + 76, r.Y + 16, r.Width - 92, 44), 12.5f, kGrey);
+                Para(g, T(L"Nouvelle partie : une sauvegarde neuve, ou une copie de celle d'un ami (zip reçu).",
+                          L"New game: a fresh save, or a copy of a friend's (zip received)."), RectF(r.X + 76, r.Y + 16, r.Width - 92, 44), 12.5f, kGrey);
                 if (vis) HotZone(r, UI_SAVE_NEW);
                 continue;
             }
@@ -526,14 +659,12 @@ static void DrawSaves(Graphics &g)
             float nw = min(MeasureW(mg, s.name, 15, FontStyleBold) + 4, r.Width - 76 - 14 - szw - 100);
             Text(g, s.name, RectF(tx, r.Y + 13, nw, 22), 15, FontStyleBold, kInk, StringAlignmentNear);
             if (used) { const wchar_t *u = T(L"En cours", L"In use"); float uw = PillW(u, 10.5f); SaveChip(g, RectF(tx + nw + 6, r.Y + 14, uw, 20), u, WithA(kOk, 0.18f), kOk, WithA(kOk, 0.35f), 10.5f); }
-            std::wstring info = s.has ? std::wstring(T(L"Dernière sauvegarde : ", L"Last saved: ")) + SaveDateText(s.mtime) : T(L"Vide : commencera par une nouvelle partie", L"Empty: will start with a new game");
-            if (i == 0) info += T(L" · la sauvegarde solo du jeu", L" · the game's solo save");
-            Text(g, info, RectF(tx, r.Y + 37, r.Width - 76 - 14 - szw - 10, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+            Text(g, SaveRowInfo(s), RectF(tx, r.Y + 37, r.Width - 76 - 14 - szw - 10, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
             if (vis) HotZone(r, base + SP_SEL);
         }
         g.Restore(st);
         if (ms > 0) DrawScrollBar(g, kSaveList, sc, ms);
-        Text(g, T(L"En invité, tu joues la sauvegarde de l'hôte, à part : les tiennes ne sont jamais touchées.", L"As a guest you play the host's save, kept apart: yours are never touched."),
+        Text(g, T(L"Ta sauvegarde solo (celle du jeu) n'est jamais touchée par MWCoop.", L"Your solo save (the game's) is never touched by MWCoop."),
              RectF(c.X + 18, c.Y + 572, c.Width - 36, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
         // dossier de la partie choisie + Ouvrir
         float fy = c.Y + c.Height - 16 - 36;
@@ -571,21 +702,33 @@ static void DrawSaves(Graphics &g)
             UiButton(g, RectF(x + w - 110, y, 110, 36), T(L"Renommer", L"Rename"), base + SP_RENAME, false, -1, true, 11);
             y += 48;
         }
-        // trois chiffres : jour et argent (pas lisibles dans savefile.txt du jeu, format Easy Save 2 : TODO), taille
+        // trois chiffres (partie.txt du mod) : jour, argent liquide, heures jouees ; « — » sans fichier. Le jour de la semaine du
+        // jeu n'est pas connu du lanceur (GlobalDaysPassed compte les jours, pas la semaine) : sous-titre « — ».
         float sw = (w - 16) / 3;
-        SaveStat(g, RectF(x, y, sw, 58), L"—", T(L"JOUR", L"DAY"));
-        SaveStat(g, RectF(x + sw + 8, y, sw, 58), L"—", L"MK");
-        SaveStat(g, RectF(x + 2 * (sw + 8), y, sw, 58), s.has ? SaveSizeText(s.bytes) : L"—", T(L"TAILLE", L"SIZE"));
+        wchar_t hb[32] = L"—";
+        if (s.stats && s.heures >= 0) swprintf_s(hb, s.heures < 10 ? L"%.1f h" : L"%.0f h", s.heures);
+        if (g_fr) for (wchar_t *c2 = hb; *c2; c2++) if (*c2 == L'.') *c2 = L',';
+        SaveStat(g, RectF(x, y, sw, 58), s.stats && s.jour >= 0 ? T(L"Jour ", L"Day ") + std::to_wstring(s.jour) : L"—", L"—");
+        SaveStat(g, RectF(x + sw + 8, y, sw, 58), s.stats && s.argent >= 0 ? SaveMoney(s.argent) : L"—", L"MK");
+        SaveStat(g, RectF(x + 2 * (sw + 8), y, sw, 58), hb, T(L"JOUÉES", L"PLAYED"));
         y += 68;
-        {   // derniere partie
+        {   // derniere partie : « Hier 22:07 · toi + Teppo, Pekka », puis le role et la taille
             RectF b(x, y, w, 84);
             GraphicsPath p; RoundRect(p, b, 14);
             SolidBrush bb(TH(card)); g.FillPath(&bb, &p);
             Pen pn(TH(choiceBorder), 1.0f); g.DrawPath(&pn, &p);
             SaveSection(g, b.X + 14, b.Y + 11, b.Width - 28, T(L"DERNIÈRE PARTIE", L"LAST GAME"));
-            Text(g, s.has ? SaveDateText(s.mtime) : T(L"Jamais jouée", L"Never played"), RectF(b.X + 14, b.Y + 30, b.Width - 28, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
-            Text(g, s.has ? T(L"Enregistrée par le jeu, reprise à la prochaine partie", L"Saved by the game, resumed at the next session") : T(L"Vide : commencera par une nouvelle partie", L"Empty: will start with a new game"),
-                 RectF(b.X + 14, b.Y + 54, b.Width - 28, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+            std::wstring l1, l2;
+            if (!s.has) { l1 = T(L"Jamais jouée", L"Never played"); l2 = T(L"Vide : commencera par une nouvelle partie", L"Empty: will start with a new game"); }
+            else if (!s.stats) { l1 = SaveDateText(s.mtime); l2 = T(L"Enregistrée par le jeu · ", L"Saved by the game · ") + SaveSizeText(s.bytes); }
+            else {
+                l1 = (s.date.empty() ? SaveDateText(s.mtime) : SaveDateRel(s.date, true)) + L" · " + SaveWith(s, true);
+                l2 = (s.role == L"hote" ? T(L"Tu hébergeais", L"You were hosting") : s.role == L"invite" ? T(L"Chez l'hôte, sa sauvegarde", L"At the host's, their save") : T(L"En solo", L"Solo"));
+                if (s.banque >= 0) l2 += T(L" · banque ", L" · bank ") + SaveMoney(s.banque) + L" mk";
+                l2 += L" · " + SaveSizeText(s.bytes);
+            }
+            Text(g, l1, RectF(b.X + 14, b.Y + 30, b.Width - 28, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, l2, RectF(b.X + 14, b.Y + 54, b.Width - 28, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
             y += 96;
         }
         {   // copies de secours
@@ -663,6 +806,7 @@ static void DrawSaveModal(Graphics &g)
         }
         UiButton(g, RectF(c.X + c.Width - 24 - 150, c.Y + c.Height - 24 - 44, 150, 44), T(L"Créer", L"Create"), UI_SAVE_MOK, true, IC_CHECK, !SaveCleanName(g_saveNameText).empty());
         UiButton(g, RectF(c.X + c.Width - 24 - 150 - 12 - 130, c.Y + c.Height - 24 - 44, 130, 44), T(L"Annuler", L"Cancel"), UI_SAVE_MCLOSE, false, -1);
+        if (!g_saveNameForGame) UiButton(g, RectF(c.X + 24, c.Y + c.Height - 24 - 44, 170, 44), T(L"Depuis un zip…", L"From a zip…"), UI_SAVE_IMPORT, false, IC_ZIP, !SaveCleanName(g_saveNameText).empty());   // (la sauvegarde d'un ami)
         return;
     }
     // listes : choisir (avec « Nouvelle sauvegarde… » en bas) ou recommencer
@@ -706,6 +850,7 @@ static void SaveClick(int id)
     if (id == UI_SAVE_MFRESH) { if (SaveGuard()) SaveAskName(true); return; }
     if (id == UI_SAVE_MRESTART) { SavesScan(); g_saveModal = SM_RESTART; return; }
     if (id == UI_SAVE_MOK) { SaveNameDone(); return; }
+    if (id == UI_SAVE_IMPORT) { SaveImportZip(); return; }
     if (id >= UI_SAVE_PICK && id < UI_SAVE_END) { SavePickRow(id - UI_SAVE_PICK); return; }
     int sel = SaveSelIndex();
     if (id == UI_SAVE_DUP) { SaveDuplicate(sel); return; }
