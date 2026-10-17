@@ -1230,12 +1230,15 @@ static bool SetChar(wchar_t c)
 }
 // Arrivee sur la page (barre de gauche : Jeu ou Co-op), visite guidee, capture.
 static void SetEnter(int tab) { g_setTab = tab == TAB_COOP ? SET_COOP : SET_JEU; g_setSearch.clear(); g_setFocus = false; }
+// La barre de gauche suit l'onglet : Jeu / Image / Son = page Jeu (TAB_GFX), le reste = Co-op (TAB_COOP).
+static void SetRail() { int t = g_setTab <= SET_SON ? TAB_GFX : TAB_COOP; if (g_tab == TAB_GFX || g_tab == TAB_COOP) g_tab = t; }
 static void SetTutoTab(int step) { g_setTab = step == 17 || step == 18 || step == 21 ? SET_LANCEUR : SET_JEU; g_setSearch.clear(); }
 static void SetCaptureState(const std::wstring &st)
 {
     static const wchar_t *names[SET_N] = { L"jeu", L"image", L"son", L"coop", L"touches", L"theme", L"lanceur" };
     std::wstring s = st.size() > 9 ? st.substr(9) : L"";   // (apres "reglages-")
     for (int i = 0; i < SET_N; i++) if (s == names[i]) g_setTab = i;
+    SetRail();
     if (s == L"recherche") { g_setSearch = L"ombre"; g_setFocus = true; }
 }
 
@@ -1270,7 +1273,7 @@ static bool GfxClick(int id)
 static bool SetClick(int id)
 {
     if (id != UI_SET_SEARCH) g_setFocus = false;
-    if (id >= UI_SET_TAB && id < UI_SET_TAB + SET_N) { g_setTab = id - UI_SET_TAB; g_setSearch.clear(); g_scroll[g_tab] = 0; return true; }
+    if (id >= UI_SET_TAB && id < UI_SET_TAB + SET_N) { g_setTab = id - UI_SET_TAB; SetRail(); g_setSearch.clear(); g_scroll[g_tab] = 0; return true; }
     switch (id) {
     case UI_SET_SEARCH: g_setFocus = true; g_time = 0.2f; return true;
     case UI_SET_SEARCHX: g_setSearch.clear(); return true;
@@ -1293,7 +1296,7 @@ static bool SetClick(int id)
     case UI_SET_CAR: GoPage(TAB_CAR); return true;
     case UI_SET_CONTENT: GoPage(TAB_CONTENT); return true;
     case UI_SET_STEAMLINE: SteamGuideOpen(); return true;
-    case UI_SET_GOIMAGE: g_setTab = SET_IMAGE; g_setSearch.clear(); g_scroll[g_tab] = 0; return true;
+    case UI_SET_GOIMAGE: g_setTab = SET_IMAGE; SetRail(); g_setSearch.clear(); g_scroll[g_tab] = 0; return true;
     }
     if (id >= UI_SET_ACCENT && id < UI_SET_ACCENT + 5) { ThemeSetAccent(id - UI_SET_ACCENT); return true; }
     if (id >= UI_SET_AURORE && id < UI_SET_AURORE + 3) { ThemeSetAurore(id - UI_SET_AURORE); return true; }
