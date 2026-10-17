@@ -90,6 +90,7 @@ namespace MWCoop
             public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
             public float BadAt = -10f; public int BadN;                                 // garde-fou : derniere remise, remises rapprochees
             public MonoBehaviour[] SanComps; public float SanNext;                      // garde-fou : Drivetrain, roues..., releve suivant
+            public float[][] SanGood; public float SanRefresh;                          // garde-fou : leurs dernieres valeurs flottantes finies (restituees a la place de 0), releve toutes les 5 s
             public Wheel[] Wheels;
             public AxisCarController Axis;
             public bool Mod;                  // vehicule de mod sans CarDynamics (IsModVehicle)
@@ -1456,7 +1457,8 @@ namespace MWCoop
         static readonly Dictionary<Rigidbody, Under> under = new Dictionary<Rigidbody, Under>();
         static Car moving;   // voiture replacee d'un coup en ce moment (MoveCargo)
 
-        public static Rigidbody CarUnder(Rigidbody item)
+        public static Rigidbody CarUnder(Rigidbody item) { return CarUnder(item, 0); }
+        static Rigidbody CarUnder(Rigidbody item, int depth)
         {
             if (item == null || !scanned) return null;
             float now = Time.realtimeSinceStartup;
@@ -1493,6 +1495,13 @@ namespace MWCoop
                 if (rb == null || rb == item) continue;
                 Car hc = CarOf(rb.transform);
                 if (hc != null && hc.Body != null) { best = h.distance; u.Car = hc.Body; }
+                // Pose sur un autre objet (colis empiles sur le plateau, retour d'un joueur, 17/10 : ceux du dessus n'etaient pas
+                // « transportes », recales par l'hote, renvoyes par l'invite -- remorque projetee) : la voiture sous celui-la.
+                else if (depth < 3 && Props.IsProp(rb))
+                {
+                    Rigidbody below = CarUnder(rb, depth + 1);
+                    if (below != null) { best = h.distance; u.Car = below; }
+                }
             }
             return u.Car;
         }
@@ -1986,6 +1995,75 @@ namespace MWCoop
         static readonly MonoBehaviour[] NoComps = new MonoBehaviour[0];
         static readonly HashSet<string> nanSeen = new HashSet<string>();
         static string nanTest;
+        // Composants surveilles (Drivetrain, roues, CarDynamics, Axles) et leurs dernieres valeurs flottantes finies, relevees
+        // toutes les 5 s tant que la voiture est vivante ici : un champ non fini est remis a cette valeur (avant : 0). Au
+        // chargement, le jeu calcule la raideur des pneus de la CORRIS avant d'avoir ses roues (12 NaN, refaits par StartGame
+        // ensuite) : d'ou le releve repete, et jamais sur une copie.
+        static void SanSnapshot(Car c)
+        {
+            if (c.SanComps == null || System.Array.IndexOf(c.SanComps, null) >= 0)
+            {
+                var keep = new List<MonoBehaviour>();
+                foreach (MonoBehaviour m in c.Dt.GetComponentsInChildren<MonoBehaviour>(true))
+                {
+                    if (m == null) continue;
+                    string tn = m.GetType().Name;
+                    if (tn == "Drivetrain" || tn == "Wheel" || tn == "CarDynamics" || tn == "Axles") keep.Add(m);
+                }
+                c.SanComps = keep.ToArray();
+                c.SanGood = null;
+            }
+            bool first = c.SanGood == null;
+            if (first) c.SanGood = new float[c.SanComps.Length][];
+            int nan = 0; string names = "";
+            for (int i = 0; i < c.SanComps.Length; i++)
+            {
+                System.Reflection.FieldInfo[] fs = FloatFields(c.SanComps[i]);
+                float[] g = c.SanGood[i];
+                if (g == null || g.Length != fs.Length) { g = new float[fs.Length]; for (int k = 0; k < fs.Length; k++) g[k] = float.NaN; c.SanGood[i] = g; }
+                for (int k = 0; k < fs.Length; k++)
+                {
+                    float v = (float)fs[k].GetValue(c.SanComps[i]);
+                    if (Finite(v)) g[k] = v;
+                    else if (first && nan++ < 12) names += (names.Length > 0 ? ", " : "") + c.SanComps[i].GetType().Name + "." + fs[k].Name + "@" + c.SanComps[i].name;
+                }
+            }
+            if (first && nan > 0) Log.Info("voitures : " + c.Key + " releve des valeurs : " + nan + " non finie(s) pour l'instant (" + names + ")");
+        }
+        static System.Reflection.FieldInfo[] FloatFields(MonoBehaviour m)
+        {
+            System.Reflection.FieldInfo[] fs;
+            if (!floatFields.TryGetValue(m.GetType(), out fs))
+            {
+                var l = new List<System.Reflection.FieldInfo>();
+                foreach (System.Reflection.FieldInfo fi in m.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                    if (fi.FieldType == typeof(float)) l.Add(fi);
+                floatFields[m.GetType()] = fs = l.ToArray();
+            }
+            return fs;
+        }
+        // Raideur ou amortissement d'un pneu non finis (CORRIS de NotHuyarma et de Vaydon, 17-18/10 : les 4 roues d'un coup en prenant
+        // le volant) : le jeu les calcule une fois (Wheel.SetTireStiffness : 2 * sqrt(masse * raideur), raideur = f(rayon, jante,
+        // largeur, pression)) -- une pression ou un rayon fou a ce moment-la les laisse NaN pour de bon. Entrees notees (origine a
+        // trouver), remises d'aplomb, calcul refait ; ce qui reste non fini garde la valeur relevee.
+        static void FixTire(Car c, Wheel w, System.Reflection.FieldInfo[] fs, float[] good)
+        {
+            bool first = nanSeen.Add(c.Key + ":pneu@" + w.name);
+            if (first) Log.Warn("voitures : " + c.Key + " pneu " + w.name + " : pression " + w.pressure + " (optimale " + w.optimalPressure + "), masse " + w.mass + ", rayon " + w.radius + ", jante " + w.rimRadius + ", largeur " + w.width);
+            if (!Finite(w.optimalPressure) || w.optimalPressure <= 0f) w.optimalPressure = 200f;
+            if (!Finite(w.pressure) || w.pressure < 0f) w.pressure = w.optimalPressure;
+            if (!Finite(w.mass) || w.mass <= 0f) w.mass = 50f;
+            if (!Finite(w.radius) || !Finite(w.rimRadius) || !Finite(w.width) || w.radius <= w.rimRadius || w.width <= 0f) return;   // (pas de calcul possible)
+            try { w.SetTireStiffness(); } catch (System.Exception e) { if (first) Log.Warn("voitures : SetTireStiffness : " + e.Message); return; }
+            int still = 0;
+            for (int k = 0; k < fs.Length; k++)
+            {
+                float v = (float)fs[k].GetValue(w);
+                if (Finite(v)) continue;
+                fs[k].SetValue(w, good != null && k < good.Length && Finite(good[k]) ? good[k] : 0f); still++;
+            }
+            if (first) Log.Warn("voitures : " + c.Key + " pneu " + w.name + " recalcule" + (still > 0 ? ", " + still + " valeur(s) encore non finie(s) : relevees gardees" : ""));
+        }
         static void Sanitize()
         {
             // ([Test] NaNVoiture=<voiture> : de 40 a 41 s de jeu, sa vitesse mise a NaN a chaque image -- source qui revient)
@@ -2007,40 +2085,30 @@ namespace MWCoop
                 // (voiture conduite : 4 fois par seconde -- a chaque image avant, composants recherches et champs lus par
                 // reflexion : 0,5-1 ms par image au volant)
                 bool deep = c == hotCar || bad || fixedF > 0 || c.Index == LocalDriving && now0 >= c.SanNext;
+                if (c.Dt != null && now0 >= c.SanRefresh) { c.SanRefresh = now0 + 5f; SanSnapshot(c); }   // (voiture vivante ici : ses dernieres valeurs finies)
                 if (!deep || c.Dt == null) { if (!bad) { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; } if (!bad && fixedF == 0) continue; }
                 c.SanNext = now0 + 0.25f;
-                if (deep && c.Dt != null && (c.SanComps == null || System.Array.IndexOf(c.SanComps, null) >= 0))
+                if (deep && c.Dt != null && (c.SanComps == null || System.Array.IndexOf(c.SanComps, null) >= 0)) SanSnapshot(c);
+                for (int ci = 0; deep && c.SanComps != null && ci < c.SanComps.Length; ci++)
                 {
-                    var keep = new List<MonoBehaviour>();
-                    foreach (MonoBehaviour m in c.Dt.GetComponentsInChildren<MonoBehaviour>(true))
-                    {
-                        if (m == null) continue;
-                        string tn = m.GetType().Name;
-                        if (tn == "Drivetrain" || tn == "Wheel" || tn == "CarDynamics" || tn == "Axles") keep.Add(m);
-                    }
-                    c.SanComps = keep.ToArray();
-                }
-                foreach (MonoBehaviour m in deep && c.SanComps != null ? c.SanComps : NoComps)
-                {
+                    MonoBehaviour m = c.SanComps[ci];
                     if (m == null) continue;
-                    System.Reflection.FieldInfo[] fs;
-                    if (!floatFields.TryGetValue(m.GetType(), out fs))
+                    System.Reflection.FieldInfo[] fs = FloatFields(m);
+                    float[] good = c.SanGood != null && ci < c.SanGood.Length ? c.SanGood[ci] : null;
+                    bool tire = false;
+                    for (int k = 0; k < fs.Length; k++)
                     {
-                        var l = new List<System.Reflection.FieldInfo>();
-                        foreach (System.Reflection.FieldInfo fi in m.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
-                            if (fi.FieldType == typeof(float)) l.Add(fi);
-                        floatFields[m.GetType()] = fs = l.ToArray();
-                    }
-                    foreach (System.Reflection.FieldInfo fi in fs)
-                    {
+                        System.Reflection.FieldInfo fi = fs[k];
                         float v = (float)fi.GetValue(m);
-                        if (!Finite(v))
-                        {
-                            fi.SetValue(m, fi.Name == "rpm" ? 800f : 0f); fixedF++;
-                            string fk = c.Key + ":" + m.GetType().Name + "." + fi.Name + "@" + m.name;
-                            if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " " + m.GetType().Name + "." + fi.Name + " (" + m.name + ") = " + v + ", remis a " + (fi.Name == "rpm" ? 800 : 0));
-                        }
+                        if (Finite(v)) continue;
+                        // (valeur relevee au chargement plutot que 0 : amortissement des pneus a 0 = CORRIS qui s'envole, 17-18/10)
+                        float to = fi.Name == "rpm" ? 800f : good != null && k < good.Length && Finite(good[k]) ? good[k] : 0f;
+                        fi.SetValue(m, to); fixedF++;
+                        if (m is Wheel && (fi.Name == "tireDampingRate" || fi.Name == "criticalDamping" || fi.Name.EndsWith("TireStiffness"))) tire = true;
+                        string fk = c.Key + ":" + m.GetType().Name + "." + fi.Name + "@" + m.name;
+                        if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " " + m.GetType().Name + "." + fi.Name + " (" + m.name + ") = " + v + ", remis a " + to);
                     }
+                    if (tire) FixTire(c, (Wheel)m, fs, good);
                 }
                 if (bad)
                 {
@@ -2448,6 +2516,7 @@ namespace MWCoop
                 uint h = (uint)r.I32();
                 float v = r.F32();
                 if (skip) continue;
+                if (!Finite(v)) { if (now >= nanLogAt) { nanLogAt = now + 5f; Log.Warn("voitures : " + c.Key + " etat du moteur de #" + who + " : valeur non finie ignoree"); } continue; }   // (« chaleur ? (recue NaN) » : jamais appliquee)
                 foreach (Sim s in c.Sims) if (s.Hash == h) { s.Var.Value = v; break; }
             }
             if (skip) return;
