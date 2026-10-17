@@ -118,11 +118,11 @@ static RectF TutoTarget(int i)
     case 14: return join(g_btn[B_LANG].r, g_btn[B_THEME].r);
     case 15: return g_btn[B_DISCORD].r;
     case 16: { RectF a = kMscSrcOff, b = kMscReinst; return RectF(a.X - 110, a.Y, b.X + b.Width - a.X + 110, a.Height); }
-    case 17: return kSetSteamRow;
-    case 18: return kSetUninst;
+    case 17: return g_setSteamRow;   // (page Reglages, onglet Lanceur : gfx.inc)
+    case 18: return g_setUninst;
     case 19: return g_navR[TAB_CREDITS];
     case 20: return kLogsDebugRow;
-    case 21: return kSetCompatRow;
+    case 21: return g_setCompatRow;
     case 22: return g_navR[TAB_WIKI];
     case 23: return g_navR[TAB_GFX];
     case 24: return g_faceRect;
@@ -178,6 +178,7 @@ static void TutoGo(int i)
     g_tutoHot = 0;
     int t = TutoTab(TutoCur());
     g_tab = t;
+    if (t == TAB_GFX || t == TAB_COOP) SetTutoTab(TutoCur());   // (page Reglages : l'onglet de l'element montre)
 }
 static void TutoStart(bool all)
 {

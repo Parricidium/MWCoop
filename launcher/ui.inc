@@ -58,19 +58,20 @@ static void SceneDraw(Graphics &g)
                 lb.SetInterpolationColors(cc.data(), ps.data(), n);
                 lg.FillPath(&lb, &p);
             };
-            if (dk) {
+            float af = g_aurore == 0 ? 0.0f : g_aurore == 1 ? 0.45f : 1.0f;   // (Reglages > Theme : aurore off, calme, vivante)
+            if (dk && af > 0) {
                 Color a[4] = { Color(0, 47, 255, 176), Color(190, 47, 255, 176), Color(140, 47, 214, 255), Color(0, 138, 107, 255) };
                 Color b[4] = { Color(0, 138, 107, 255), Color(128, 176, 107, 255), Color(115, 47, 255, 176), Color(0, 47, 255, 176) };
                 band({ -60, 250, 160, 120, 330, 300, 560, 180, 790, 60, 900, 60, 1140, 170, 1380, 280, 1360, 140, 1400, 120 },
-                     { 1400, 230, 1180, 260, 1010, 170, 780, 290, 550, 410, 380, 330, 160, 300, -60, 270, -40, 330, -60, 340 }, a, 4, 1.0f);
+                     { 1400, 230, 1180, 260, 1010, 170, 780, 290, 550, 410, 380, 330, 160, 300, -60, 270, -40, 330, -60, 340 }, a, 4, af);
                 band({ -40, 140, 220, 60, 420, 200, 700, 110, 980, 20, 1080, 30, 1320, 90 },
-                     { 1320, 150, 1060, 120, 900, 200, 640, 190, 380, 180, 200, 170, -40, 220 }, b, 4, 1.0f);
+                     { 1320, 150, 1060, 120, 900, 200, 640, 190, 380, 180, 200, 170, -40, 220 }, b, 4, af);
                 band({ 300, 330, 520, 260, 760, 380, 1000, 300, 1240, 220, 1240, 270, 1320, 300 },
-                     { 1320, 350, 1080, 360, 900, 400, 640, 390, 380, 380, 380, 380, 300, 380 }, a, 4, 0.6f);
-            } else {
+                     { 1320, 350, 1080, 360, 900, 400, 640, 390, 380, 380, 380, 380, 300, 380 }, a, 4, 0.6f * af);
+            } else if (af > 0) {
                 Color a[4] = { Color(0, 255, 190, 200), Color(120, 255, 200, 214), Color(100, 190, 210, 255), Color(0, 255, 230, 210) };
                 band({ -60, 250, 160, 160, 330, 300, 560, 220, 790, 140, 900, 120, 1140, 200, 1380, 280, 1360, 180, 1400, 160 },
-                     { 1400, 260, 1180, 290, 1010, 220, 780, 320, 550, 410, 380, 350, 160, 330, -60, 300, -40, 350, -60, 360 }, a, 4, 0.9f);
+                     { 1400, 260, 1180, 290, 1010, 220, 780, 320, 550, 410, 380, 350, 160, 330, -60, 300, -40, 350, -60, 360 }, a, 4, 0.9f * af);
             }
         }
         const int tw = 48, th = 30;
@@ -207,7 +208,7 @@ static void SceneBuild(int w, int h, float scale)
         ia.SetWrapMode(WrapModeTileFlipXY);
         bg.DrawImage(&tiny, RectF(0, 0, (REAL)w, (REAL)h), 0, 0, (REAL)bw, (REAL)bh, UnitPixel, &ia);
     }
-    g_sceneW = w; g_sceneH = h; g_sceneScale = scale; g_sceneDarkK = g_dark ? 1 : 0;
+    g_sceneW = w; g_sceneH = h; g_sceneScale = scale; g_sceneDarkK = (g_dark ? 1 : 0) + g_aurore * 2;
 }
 
 static const int kSnowCols = 32, kSnowRows = 20;
@@ -238,18 +239,19 @@ static void GlassBuild(int w, int h, float scale)
 }
 static void EnsureScene(int w, int h, float scale)
 {
-    if (!g_scene || g_sceneW != w || g_sceneH != h || g_sceneScale != scale || g_sceneDarkK != (g_dark ? 1 : 0)) SceneBuild(w, h, scale);
+    if (!g_scene || g_sceneW != w || g_sceneH != h || g_sceneScale != scale || g_sceneDarkK != (g_dark ? 1 : 0) + g_aurore * 2) SceneBuild(w, h, scale);
     if (!g_glassCache) GlassBuild(w, h, scale);
 }
 // Animation par-dessus le fond : neige (hors des cartes), etoiles qui scintillent et etoile filante (sombre).
 static void DrawSceneAnim(Graphics &g)
 {
-    float t = g_sceneT;
+    if (g_aurore == 0) return;   // (Reglages > Theme : fond fige)
+    float t = g_sceneT, dens = g_aurore == 1 ? 0.35f : 1.0f;   // (calme : moins de neige, pas d'etoile filante)
     GraphicsState st = g.Save();
     if (g_outside) g.SetClip(g_outside, CombineModeIntersect); else g.SetClip(CardPath(), CombineModeIntersect);
     SolidBrush b(Color(0, 0, 0, 0));
     if (g_dark) {
-        for (int i = 0; i < 40; i++) {
+        for (int i = 0; i < (int)(40 * dens); i++) {
             float x = Rnd01(i, 1) * kCardW, y = Rnd01(i, 2) * 300;
             if (!SnowVisible(x, y)) continue;
             float s = sinf(t * (0.6f + Rnd01(i, 3) * 1.6f) + Rnd01(i, 4) * 6.283f);
@@ -262,7 +264,7 @@ static void DrawSceneAnim(Graphics &g)
         }
         int n = (int)(t / 17);
         float p = fmodf(t, 17) - 6;
-        if (p > 0 && p < 0.8f) {
+        if (p > 0 && p < 0.8f && g_aurore == 2) {
             float x0 = 500 + Rnd01(n, 7) * 600, y0 = 18 + Rnd01(n, 8) * 30;
             float hx = x0 - p * 230, hy = y0 + p * 230 * 0.28f, a = 230 * sinf(p / 0.8f * 3.14159f);
             PointF head(hx, hy), tail(hx + 60, hy - 60 * 0.28f);
@@ -276,7 +278,7 @@ static void DrawSceneAnim(Graphics &g)
     Color halo = g_dark ? Color(255, 160, 180, 220) : Color(255, 110, 140, 185);
     for (int l = 0; l < 3; l++) {
         const Layer &L = layers[l];
-        for (int i = 0; i < L.n; i++) {
+        for (int i = 0; i < (int)(L.n * dens); i++) {
             float sp = L.speed * (0.8f + 0.4f * Rnd01(i, 10 + l));
             float y = -10 + fmodf(Rnd01(i, 20 + l) * 820 + sp * t, 820);
             float x = fmodf(Rnd01(i, 30 + l) * 1300 + drift * L.speed / 30 + L.sway * sinf(t * (0.7f + 0.5f * Rnd01(i, 40 + l)) + Rnd01(i, 50 + l) * 6.283f) + 130000, 1300) - 10;
@@ -325,7 +327,7 @@ static void GoPage(int p)
     if (p == TAB_SAVES) { g_saveEdit = -1; SavesScan(); }
     if (p == TAB_MODS || p == TAB_CONTENT) MscScan();
     if (p == TAB_SKIN) g_skinIdleT = GetTickCount();
-    if (p == TAB_GFX) GfxLoad();
+    if (p == TAB_GFX || p == TAB_COOP) { GfxLoad(); SetEnter(p); }   // (page Reglages : onglet Jeu ou Co-op)
 }
 static void PageCancel()
 {
@@ -599,8 +601,7 @@ static void DrawHeader(Graphics &g)
     case TAB_MODS: title = T(L"Mods", L"Mods"); sub = T(L"Tes mods, et ceux envoyés à tes invités", L"Your mods, and those sent to your guests"); break;
     case TAB_NOTES: title = T(L"Nouveautés", L"What's new"); sub = T(L"Ce qui change à chaque version", L"What changes in each version"); break;
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
-    case TAB_COOP: title = T(L"Réglages", L"Settings"); sub = T(L"Gardés dans mwcoop-lanceur.ini et MWCoop\\mwcoop.ini", L"Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini"); break;
-    case TAB_GFX: title = T(L"Options du jeu", L"Game options"); sub = T(L"Graphismes et coop, pour toi seul · en partie : menu F10 > Graphismes", L"Graphics and co-op, just for you · in game: F10 menu > Graphics"); break;
+    case TAB_COOP: case TAB_GFX: title = T(L"Réglages", L"Settings"); sub = SetHeaderSub(); break;   // (gfx.inc : une page, des onglets)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
     case TAB_VHS: title = T(L"Cassettes VHS", L"VHS tapes"); sub = T(L"Les voir, les exporter en .mp4, les renommer, y mettre une vidéo", L"Watch them, export them as .mp4, rename them, put a video on them"); break;
@@ -641,6 +642,7 @@ static void DrawHeader(Graphics &g)
             UiSeg(g, r, lab, (g_tab == TAB_SKIN || g_tab == TAB_CONTENT) ? 0 : 1, UI_SEG, 13);
             right -= w + 10;
         } else if (g_tab == TAB_LOBBY) DrawLobbyHeadControls(g, right);
+        else if (g_tab == TAB_GFX || g_tab == TAB_COOP) DrawSetSearchBox(g, right);   // (Chercher un reglage)
     }
     Title(g, title, RectF(268, 16, right - 280, 34), 26, kInk);
     Text(g, sub, RectF(270, 50, right - 282, 20), 13.5f, FontStyleRegular, kGrey, StringAlignmentNear);
@@ -1219,118 +1221,6 @@ static void DrawLogsPage(Graphics &g)
     }
 }
 
-// ---- page REGLAGES
-static void DrawSettings(Graphics &g)
-{
-    float cw = (kMain.Width - 16) / 2, lx = kMain.X, rx = kMain.X + cw + 16;
-    // Mise a jour
-    RectF up(lx, kMain.Y, cw, 196);
-    Glass(up);
-    Title(g, T(L"Mise à jour", L"Updates"), RectF(up.X + 20, up.Y + 16, 200, 24), 17, kInk);
-    {
-        RectF box(up.X + 20, up.Y + 52, up.Width - 40, 64);
-        std::wstring av = UpdAvail();
-        GraphicsPath p; RoundRect(p, box, 14);
-        SolidBrush fb(av.empty() ? TH(card) : WithA(kAcc, 0.14f)); g.FillPath(&fb, &p);
-        Pen pen(av.empty() ? TH(choiceBorder) : WithA(kAcc, 0.5f), 1); g.DrawPath(&pen, &p);
-        std::wstring l1, l2 = g_localVer.empty() ? std::wstring(T(L"MWCoop n'est pas installé", L"MWCoop is not installed")) : std::wstring(T(L"Tu as la ", L"You have ")) + g_localVer;
-        if (!av.empty()) l1 = std::wstring(T(L"Version ", L"Version ")) + av + T(L" disponible", L" available");
-        else if (g_busy) l1 = T(L"Recherche ou installation en cours…", L"Checking or installing…");
-        else l1 = T(L"MWCoop est à jour", L"MWCoop is up to date");
-        Text(g, l1, RectF(box.X + 16, box.Y + 10, box.Width - 200, 22), 14, FontStyleBold, kInk, StringAlignmentNear);
-        Text(g, l2, RectF(box.X + 16, box.Y + 33, box.Width - 200, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
-        if (!av.empty()) UiButton(g, RectF(box.X + box.Width - 172, box.Y + 12, 160, 40), T(L"Mettre à jour", L"Update"), UI_NOTE_UPDATE, true, IC_DOWNLOAD, g_lobby == LB_NONE && !g_busy);
-        else UiButton(g, RectF(box.X + box.Width - 172, box.Y + 12, 160, 40), T(L"Vérifier", L"Check"), UI_SET_CHECK, false, -1, !g_busy);
-    }
-    {
-        RectF row(up.X + 20, up.Y + 128, up.Width - 40, 52);
-        bool on = GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0;
-        SetRowText(g, RectF(row.X, row.Y, row.Width - 70, row.Height), T(L"Installer automatiquement", L"Install automatically"), T(L"À chaque démarrage, sans demander", L"At every start, without asking"));
-        UiToggle(g, RectF(row.X + row.Width - 50, row.Y + 12, 50, 28), on, g_uiHot == UI_SET_AUTO);
-        HotZone(row, UI_SET_AUTO);
-    }
-    // Lanceur
-    RectF la(lx, up.Y + up.Height + 16, cw, 268);
-    Glass(la);
-    Title(g, T(L"Lanceur", L"Launcher"), RectF(la.X + 20, la.Y + 16, 300, 24), 17, kInk);
-    float y = la.Y + 54;
-    Text(g, T(L"Thème", L"Theme"), RectF(la.X + 20, y, 200, 40), 14, FontStyleBold, kInk, StringAlignmentNear);
-    UiSeg(g, RectF(la.X + la.Width - 220, y, 200, 40), { T(L"Sombre", L"Dark"), T(L"Clair", L"Light") }, g_dark ? 0 : 1, UI_SET_DARK);
-    y += 50;
-    Text(g, T(L"Langue", L"Language"), RectF(la.X + 20, y, 200, 40), 14, FontStyleBold, kInk, StringAlignmentNear);
-    UiSeg(g, RectF(la.X + la.Width - 380, y, 360, 40), { L"Français", L"English", L"Русский", L"\u0627\u0644\u0639\u0631\u0628\u064A\u0629" }, g_fr ? 0 : g_ru ? 2 : g_ar ? 3 : 1, UI_SET_LANG);
-    y += 50;
-    if (const Opt *fl = OptByKey("FermerLanceur")) {
-        RectF row(la.X + 20, y, la.Width - 40, 52);
-        SetRowText(g, RectF(row.X, row.Y, row.Width - 70, row.Height), T(L"Fermer le lanceur au lancement", L"Close the launcher at launch"), T(L"Sinon il reste ouvert (joueurs, ping) et revient au menu", L"Otherwise it stays open (players, ping) and comes back"));
-        UiToggle(g, RectF(row.X + row.Width - 50, row.Y + 12, 50, 28), OptGet(*fl) != 0, g_uiHot == UI_SET_CLOSE);
-        HotZone(row, UI_SET_CLOSE);
-    }
-    y += 62;
-    UiButton(g, RectF(la.X + 20, y, la.Width - 40, 44), T(L"Revoir le guide de démarrage", L"See the starting guide again"), UI_SET_GUIDE, false, IC_SPARK);
-    // A propos (sous le lanceur)
-    RectF ab(lx, la.Y + la.Height + 16, cw, kMain.Y + kMain.Height - (la.Y + la.Height + 16));
-    Glass(ab);
-    Title(g, T(L"À propos", L"About"), RectF(ab.X + 20, ab.Y + 16, 300, 24), 17, kInk);
-    Para(g, T(L"Mod non officiel et non commercial, non affilié à Amistech Games. Nécessite une copie légale de My Winter Car.",
-              L"Unofficial, non-commercial mod, not affiliated with Amistech Games. Requires a legal copy of My Winter Car."),
-         RectF(ab.X + 20, ab.Y + 48, ab.Width - 40, 40), 12.5f, kGrey);
-    // (kSetBuy, kSetUninst : ab.X + 20 / + 248, ab.Y + ab.Height - 60)
-    UiButton(g, kSetBuy, T(L"Acheter le jeu sur Steam", L"Buy the game on Steam"), UI_SET_BUY, false);
-    UiButton(g, kSetUninst, T(L"Désinstaller MWCoop", L"Uninstall MWCoop"), UI_SET_UNINST, false, IC_TRASH);
-
-    // Reseau
-    RectF ne(rx, kMain.Y, cw, 196);
-    Glass(ne);
-    Title(g, T(L"Réseau", L"Network"), RectF(ne.X + 20, ne.Y + 16, 300, 24), 17, kInk);
-    y = ne.Y + 54;
-    Text(g, T(L"Par défaut", L"Default"), RectF(ne.X + 20, y, 200, 40), 14, FontStyleBold, kInk, StringAlignmentNear);
-    UiSeg(g, RectF(ne.X + ne.Width - 220, y, 200, 40), { L"Steam", L"IP / VPN" }, g_steamNet ? 0 : 1, UI_SET_STEAM);
-    y += 52;
-    if (const Opt *po = OptByKey("Port")) {
-        RectF row(ne.X + 20, y, ne.Width - 40, 60);
-        SetRowText(g, RectF(row.X, row.Y, row.Width - 170, row.Height), T(L"Port", L"Port"), T(L"UDP et TCP, pour héberger par IP", L"UDP and TCP, to host by IP"));
-        RectF m(row.X + row.Width - 150, row.Y + 12, 36, 36), p(row.X + row.Width - 36, row.Y + 12, 36, 36);
-        for (int k = 0; k < 2; k++) {
-            RectF r = k ? p : m; int id = k ? UI_SET_PORTP : UI_SET_PORTM;
-            GraphicsPath bp; RoundRect(bp, r, 10);
-            SolidBrush b(g_uiHot == id ? TH(cardSel) : TH(card)); g.FillPath(&b, &bp);
-            Icon(g, k ? IC_PLUS : IC_MIN, r.X + 18, r.Y + 18, 16, kInk, 2.2f);
-            HotZone(r, id);
-        }
-        Text(g, std::to_wstring(OptGet(*po)), RectF(m.X + m.Width, row.Y, p.X - m.X - m.Width, row.Height), 15, FontStyleBold, kInk);
-    }
-    // Jeu
-    RectF ga(rx, ne.Y + ne.Height + 16, cw, 264);
-    Glass(ga);
-    Title(g, T(L"Jeu", L"Game"), RectF(ga.X + 20, ga.Y + 16, 300, 24), 17, kInk);
-    {
-        bool ok = !g_gameDir.empty();
-        if (ok) Icon(g, IC_CHECK, ga.X + 30, ga.Y + 70, 16, kOk, 2.6f);
-        Text(g, ok ? L"My Winter Car " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), RectF(ga.X + (ok ? 44.0f : 20.0f), ga.Y + 58, ga.Width - 70, 24), 14, FontStyleBold, ok ? kInk : kRed, StringAlignmentNear);
-        StringFormat sf; sf.SetTrimming(StringTrimmingEllipsisPath); sf.SetFormatFlags(StringFormatFlagsNoWrap); sf.SetLineAlignment(StringAlignmentCenter);
-        UiFont f(L"Segoe UI", 12, FontStyleRegular); SolidBrush gb(kGrey);
-        DrawStr(g, g_gameDir.c_str(), -1, &f, RectF(ga.X + 20, ga.Y + 82, ga.Width - 40, 20), &sf, &gb);
-        UiButton(g, RectF(ga.X + 20, ga.Y + 104, ga.Width - 40, 38), ok ? T(L"Changer de dossier", L"Change folder") : T(L"Choisir l'exe…", L"Choose exe…"), UI_SET_FOLDER, false, IC_FOLDER);
-    }
-    if (const Opt *ls = OptByKey("LancerSteam")) {   // (kSetSteamRow : ga.X + 20, ga.Y + 150)
-        RectF row = kSetSteamRow;
-        // Demarrer le jeu : copie de lancement (Steam, sinon le dossier du jeu), dossier du jeu ([Lanceur] SansCopie), Steam
-        // ([Coop] LancerSteam). Chez certains joueurs une seule marche (08/10).
-        int how = OptGet(*ls) ? 2 : GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) ? 1 : 0;
-        SetRowText(g, RectF(row.X, row.Y, row.Width - 250, row.Height), T(L"Démarrer le jeu", L"Start the game"), T(L"Si MWCoop ne se charge pas", L"If MWCoop doesn't load"));
-        UiSeg(g, RectF(row.X + row.Width - 240, row.Y + 6, 240, 36), { T(L"Copie", L"Copy"), T(L"Dossier", L"Folder"), L"Steam" }, how, UI_SET_START, 12);
-    }
-    {   // modes de compatibilite de Windows (kSetCompatRow : ga.X + 20, ga.Y + 204) : retires avant chaque lancement
-        RectF row = kSetCompatRow;
-        SetRowText(g, RectF(row.X, row.Y, row.Width - 70, row.Height), T(L"Retirer les modes de compatibilité", L"Remove compatibility modes"),
-                   T(L"Windows en ajoute après un plantage : MWCoop ne se charge plus", L"Windows adds some after a crash: MWCoop stops loading"));
-        UiToggle(g, RectF(row.X + row.Width - 50, row.Y + 10, 50, 28), CompatAuto(), g_uiHot == UI_SET_COMPAT);
-        HotZone(row, UI_SET_COMPAT);
-    }
-    // (« Chez un ami » : envoi de l'hote et touches en jeu dans Options du jeu, categories Partie et partage, Touches -- demande de JD, 10/10)
-}
-
 // ---- credits (demande de JD, 08/10 : ceux qui donnent quelque chose pour ameliorer MWCoop). Trois onglets (JD, 13/10) :
 // modeles 3D, images (musee de la Corse : la liste complete, generee dans credits-images.inc), remerciements. Le plus
 // recent en haut de chaque onglet ; la page defile a la molette.
@@ -1485,9 +1375,8 @@ static void DrawUI(Graphics &g)
     case TAB_MODS: DrawMods(g); break;
     case TAB_NOTES: DrawNotesPage(g); break;
     case TAB_LOGS: DrawLogsPage(g); break;
-    case TAB_COOP: DrawSettings(g); break;
+    case TAB_COOP: case TAB_GFX: DrawSettingsPage(g); break;   // (gfx.inc : Jeu, Image, Son, Co-op, Touches, Theme, Lanceur)
     case TAB_API: DrawApiPage(g); break;
-    case TAB_GFX: DrawGfxPage(g); break;
     case TAB_CREDITS: DrawCreditsPage(g); break;
     case TAB_WIKI: DrawWikiPage(g); break;
     case TAB_VHS: DrawVhs(g); break;
@@ -1618,7 +1507,6 @@ static bool UiClick(int id)
         else { g_logDelKey = L"**"; g_logDelT = GetTickCount(); SetStatus(K_WARN, T(L"Clique encore pour mettre toutes les parties rangées à la corbeille", L"Click again to move every stored session to the Recycle Bin")); }
         return true;
     }
-    if (id >= UI_GFX_GROUP && id < UI_GFX_GROUP + kGfxGroups) { GfxToggleGroup(id - UI_GFX_GROUP); return true; }
-    if (id >= UI_GFX_PRESET && GfxClick(id)) return true;
+    if (SetClick(id)) return true;   // (page Reglages : onglets, recherche, theme, et les reglages eux-memes)
     return false;
 }
