@@ -6,7 +6,8 @@
 // "+connect_lobby <salon>" -- avec l'option de lancement Steam  "<MWCoop.exe>" %command%  c'est le lanceur qui
 // demarre et entre dans le salon (un 2e lanceur passe le salon au 1er, WM_COPYDATA).
 // Donnees du salon (hote) : mwcoopsalon=1, version, hote, partie=continuer|nouvelle, go=<partie> (LANCER), ferme=1.
-// Donnees de chaque membre : pseudo, tenue, version, pret=0|1 (l'hote : toujours pret).
+// Donnees de chaque membre : pseudo, tenue, version, pret=0|1 (l'hote : toujours pret), chat="<numero>|<texte>" (tchat du
+// salon, 0.97.0 : la derniere ligne de chacun, lue par tous a chaque SteamLobbySync ; un ancien lanceur l'ignore).
 // LANCER : go ; chaque invite quitte le salon et lance son jeu en invite Steam, HoteSteam=<hote> dans lancement.ini
 // (le mod se connecte directement a l'hote en pair-a-pair) ; l'hote attend leur depart (3 s au plus) puis lance.
 // Le salon du jeu (mod, donnee "mwcoop") n'est pas celui du lanceur : y entrer propose REJOINDRE EN JEU.
@@ -324,6 +325,7 @@ static void SteamLobbyHost()
     LobbyOptImport();   // (salon prive / public, joueurs max, options de la partie : valeurs du moment, pour ce salon)
     g_lobbyCode = g_testCode.empty() ? MakeSessionCode() : g_testCode;
     if (g_testPublic) g_lobbyPrive = false;
+    LobbyChatClear();
     g_goSent = false;
     g_myId = 0;
     g_joinFallback = false;
@@ -368,6 +370,7 @@ static void SteamLobbyJoin(SteamId lobby)
     g_lobbyPrive = false; g_lobbyMax = 8; g_lobbyCode.clear();
     g_sCodeAsk = false;
     g_mySkinSent = MySkin();
+    LobbyChatClear();
     g_lobbySteam = true;
     g_lobby = LB_CONNECTING;
     g_tab = TAB_LOBBY;
@@ -425,7 +428,7 @@ static void SteamCreated(bool ok, int result, SteamId lobby)
     g_lobby = LB_HOST;
     g_sFriendsView = g_testSalon.empty();   // (tout de suite : qui inviter)
     g_scroll[TAB_LOBBY] = 0;
-    SetStatus(K_OK, T(L"Salon Steam ouvert : invite tes amis", L"Steam lobby open: invite your friends"));
+    SetStatus(K_OK, T(L"Salon ouvert · Steam · invite tes amis", L"Lobby open · Steam · invite your friends"));
     TestLog("salon steam : %llu cree (%s, code %s, %d joueurs au plus, options %s)", (unsigned long long)lobby, g_lobbyPrive ? "prive" : "public", g_lobbyCode.c_str(), g_lobbyMax, LobbyOptText().c_str());
     if (!g_testSteamFile.empty()) {
         FILE *f = _wfopen(g_testSteamFile.c_str(), L"wb");
@@ -503,6 +506,7 @@ static void SteamEnterDone()
     SteamPublishMe(false);
     SteamPresence();
     g_lobby = LB_GUEST;
+    LobbyLastHost(Narrow(g_sHostName, CP_UTF8));   // (page MODS : le dernier hote)
     SetStatus(K_OK, T(L"Dans le salon Steam de %s", L"In %s's Steam lobby"), g_sHostName.c_str());
     TestLog("salon steam : entre dans %llu", (unsigned long long)lobby);
     SteamLobbySync();
@@ -579,6 +583,11 @@ static void SteamLobbySync()
         p.since = firstSeen[u];
         p.udp = UDP_NA;
         v.push_back(p);
+        std::string chat = SMemberData(u, "chat");   // tchat : "<numero>|<texte>", une fois par numero
+        size_t bar = chat.find('|');
+        int seq = bar != std::string::npos ? atoi(chat.c_str()) : 0;
+        if (!g_sChatSeen.count(u)) g_sChatSeen[u] = u == g_steamMe ? 0 : seq;   // (en arrivant : la vieille ligne d'un membre deja la n'est pas rejouee)
+        if (seq > 0 && seq != g_sChatSeen[u]) { g_sChatSeen[u] = seq; LobbyChatAdd(id, p.name, chat.substr(bar + 1)); }
     }
     std::sort(v.begin(), v.end(), [](const LobbyPeer &a, const LobbyPeer &b) { return a.id < b.id; });
     EnterCriticalSection(&g_lcs);
