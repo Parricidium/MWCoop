@@ -1169,3 +1169,179 @@ Shared marker (tap: place, hold: remove)	Общий маркер (нажать: 
 Marker	Маркер
 Ice race: Jokkis rentals (host, beta)	Гонка на льду: аренда Йоккис (хост, бета)
 My Winter Car is still open but no longer answers MWCoop (stuck after closing, or started without MWCoop).\n\nClose it so you can launch again from the launcher?	My Winter Car всё ещё открыта, но больше не отвечает MWCoop (зависла после закрытия или запущена без MWCoop).\n\nЗакрыть её, чтобы снова запустить из лаунчера?
+ (copy)	 (копия)
+ · UDP blocked	 · UDP заблокирован
+ · disabled in MSCLoader	 · отключён в MSCLoader
+ · downloading the mods %d%%	 · скачивает моды %d%%
+ · official (in the game)	 · официальный (в игре)
+ · provided by MWCoop	 · от MWCoop
+ · start the game once for details	 · запусти игру один раз для подробностей
+ · the game's solo save	 · одиночное сохранение игры
+%d / %d ready · %s is downloading the mods	%d / %d готовы · %s скачивает моды
+%d / %d ready · sending mods (%d)…	%d / %d готовы · отправка модов (%d)…
+%d mod(s)	Модов: %d
+%d mod(s) · kept for next time	Модов: %d · сохранены на следующий раз
+%d mods · %d items · %s	Модов: %d · контента: %d · %s
+%d more mod(s) will be sent to the lobby's guests	Ещё %d мод(ов) будут отправлены гостям лобби
+%d rays/pixel · %d m range · %d lamps · reflections, bounce, occlusion	%d лучей/пиксель · дальность %d м · %d ламп · отражения, отскок света, затенение
+%d ready	Готовы: %d
+%d settings found · Esc: clear	Найдено настроек: %d · Esc: очистить
+%d%% of %s · %d mods	%d%% от %s · модов: %d
+%s IS HOSTING	%s ХОСТИТ
+%s skips the game menu: never sent to guests	%s пропускает меню игры: гостям никогда не отправляется
+%s · copied to each guest on arrival.	%s · копируется каждому гостю при входе.
+(show it mywintercar.exe)	(покажи ему mywintercar.exe)
++ %d more	+ ещё %d
++ %d more · scroll	+ ещё %d · прокрутка
+.off · off: neither loaded nor sent	.off · выкл: не загружается и не отправляется
+Above 10: a very good connection and a good machine on the host's side	Больше 10: нужны очень хорошее соединение и мощный ПК у хоста
+Accept everything from this host	Принимать всё от этого хоста
+All your active mods are already sent	Все твои активные моды уже отправлены
+Already %d players in the lobby	В лобби уже %d игроков
+Applied right away	Применяется сразу
+Arrows	Стрелки
+As a guest you play the host's save, kept apart: yours are never touched.	Как гость ты играешь на сохранении хоста, отдельно: твои никогда не трогаются.
+BACKUP COPIES	РЕЗЕРВНЫЕ КОПИИ
+BETA	БЕТА
+By IP, your address is enough.	По IP достаточно твоего адреса.
+CONNECTING…	ПОДКЛЮЧЕНИЕ…
+Calm	Спокойно
+Cheats (F7)	Читы (F7)
+Checking…	Проверка…
+Chosen by the host for this game; you get them live.	Выбраны хостом для этой игры; ты получаешь их сразу.
+Clear received mods	Очистить полученные моды
+Click yourself: outfit, car.	Нажми на себя: одежда, машина.
+Connecting to the lobby…	Подключение к лобби…
+Continuing their game · you join as soon as the host is in game	Продолжает свою игру · ты войдёшь, как только хост будет в игре
+Could not export (%lu)	Не удалось экспортировать (%lu)
+Could not restore the copy	Не удалось вернуть копию
+Custom	Своё
+DAY	ДЕНЬ
+DISPLAY	ЭКРАН
+Decided by you, for everyone. Taken from Settings > Co-op, for this lobby only.	Решаешь ты, для всех. Берутся из Настройки > Кооп, только для этого лобби.
+Desktop not found	Рабочий стол не найден
+Documents\\My Winter Car\\Mods	Documents\\My Winter Car\\Mods
+Drone, sleeping bags, s21 shop, museum	Дрон, спальники, магазин s21, музей
+Duplicate	Дублировать
+Export (zip)	Экспорт (zip)
+Exported to the Desktop: %s	Экспортировано на рабочий стол: %s
+Failed	Ошибка
+For this lobby only. Settings > Co-op stays unchanged.	Только для этого лобби. Настройки > Кооп не меняются.
+GAMES & ADDITIONS	ИГРЫ И ДОПОЛНЕНИЯ
+Game folder	Папка игры
+Game mods	Моды игры
+Game: 	Игра: 
+Getting the host's files… (click to cancel)	Получаю файлы хоста… (нажми, чтобы отменить)
+Guide: playing with mods →	Гайд: игра с модами →
+Hockey	Хоккей
+Host included	Включая хоста
+Host included · %d for this lobby	Включая хоста · %d для этого лобби
+Host's	Хоста
+INSTALLING…	УСТАНОВКА…
+In progress	В процессе
+In this lobby for	В этом лобби уже
+In use	Текущая
+Installed	Установлен
+Invite	Пригласить
+Keep as defaults	Сделать по умолчанию
+LAST GAME	ПОСЛЕДНЯЯ ИГРА
+Last lobby on %s · %d mod(s) · kept for next time	Последнее лобби %s · модов: %d · сохранены на следующий раз
+Last saved: 	Последнее сохранение: 
+Lively	Оживлённо
+MOD	МОД
+MSCLoader is a project independent from MWCoop; its support here is experimental. Nothing is written into the game with the version provided by MWCoop.	MSCLoader — независимый от MWCoop проект; его поддержка здесь экспериментальная. С версией от MWCoop в игру ничего не записывается.
+MSCLoader missing	MSCLoader отсутствует
+MSCLoader off: game without mods	MSCLoader выключен: игра без модов
+MSCLoader, the community mod loader (independent project), is not installed. Install it here, then put your mods (My Winter Car version) in its Mods folder.	MSCLoader, загрузчик модов от сообщества (независимый проект), не установлен. Установи его здесь, затем положи свои моды (версия для My Winter Car) в его папку Mods.
+MWCoop additions	Дополнения MWCoop
+MWCoop does not guarantee third-party mods: they work for you as in solo, but their objects are not necessarily seen by the others.	MWCoop не гарантирует работу сторонних модов: у тебя они работают как в одиночной игре, но их объекты не обязательно видны другим.
+Made before the first switch to Reworked.	Сделаны до первого перехода на Reworked.
+Make the zip	Создать zip
+Manage	Управлять
+Mods and content	Моды и контент
+Mods on	Моды включены
+Moped	Мопед
+My games	Мои игры
+My mods	Мои моды
+Never	Никогда
+Never played	Ещё не играли
+New game · you join as soon as the host is in game	Новая игра · ты войдёшь, как только хост будет в игре
+New game: a fresh save, apart from your other games. It will be used when you host.	Новая игра: чистое сохранение, отдельно от других твоих игр. Будет использоваться, когда ты хостишь.
+No copy for this game.	Нет копии для этой игры.
+No game	Нет игры
+No mod sent	Моды не отправляются
+No setting matches.	Ни одна настройка не подходит.
+No · off	Нет · выкл
+No · private	Нет · личный
+None yet: they arrive when you join a lobby	Пока нет: они приходят, когда ты входишь в лобби
+Not ready	Не готов
+Nothing	Ничего
+ON	ВКЛ
+Official MSCLoader	Официальный MSCLoader
+Open the folder	Открыть папку
+Options	Настройки
+Options kept as defaults (Settings > Co-op)	Настройки сохранены как значения по умолчанию (Настройки > Кооп)
+Options reset to the Settings ones (this lobby)	Настройки сброшены к значениям из Настроек (это лобби)
+Pick	Выбрать
+Private: the Steam invite is enough; this code is for a friend who comes without one.	Приватное: приглашения Steam достаточно; этот код — для друга, который пришёл без него.
+Private: your friends join with your address and this code.	Приватное: друзья входят по твоему адресу и этому коду.
+Put the copy from %s back into \"%s\"?\n\nThe current save of this game is replaced (its files are overwritten).	Вернуть копию от %s в «%s»?\n\nТекущее сохранение этой игры будет заменено (его файлы перезаписаны).
+READY ✓	ГОТОВ ✓
+RULES	ПРАВИЛА
+Read	Читать
+Ready ✓	Готов ✓
+Received from the host	Получены от хоста
+Restart	Заново
+Restore	Восстановить
+SENT	ОТПРАВЛЕНО
+SIZE	РАЗМЕР
+START	СТАРТ
+Save	Сохранение
+Saved by the game, resumed at the next session	Сохраняется игрой, продолжается в следующей сессии
+Search a setting…	Найти настройку…
+See again	Показать снова
+Send all	Отправить все
+Sent to guests: %d mod(s) · %s	Отправлено гостям: %d мод(ов) · %s
+Show the line	Показать строку
+Soon	Скоро
+Sticker	Наклейка
+Sun and lamp shadows, reflections, light bounce, occlusion	Тени от солнца и ламп, отражения, отскок света, затенение
+The lobby waits for downloads	Лобби ждёт окончания загрузок
+The one \"in use\" is offered in the lobby	Та, что «текущая», предлагается в лобби
+The whole Image & ray tracing tab	Вся вкладка «Изображение и трассировка лучей»
+Their save, mods and files reach you by themselves. Nothing to set up, except your own options.	Его сохранение, моды и файлы приходят к тебе сами. Настраивать ничего не нужно, кроме своих настроек.
+This game is empty: nothing to export	Эта игра пуста: нечего экспортировать
+Through Steam, any friend can join (\"Join game\").	Через Steam любой друг может войти («Присоединиться к игре»).
+To accept	К принятию
+To install	К установке
+UDP not checked (host has an old launcher)	UDP не проверен (у хоста старый лаунчер)
+UDP: OK ✓ · click yourself: outfit, car.	UDP: OK ✓ · нажми на себя: одежда, машина.
+UDP: blocked (see on the right)	UDP: заблокирован (см. справа)
+UDP: testing…	UDP: проверка…
+Unsupported mods	Неподдерживаемые моды
+Use for hosting	Использовать для хостинга
+VERSION	ВЕРСИЯ
+VOICE	ГОЛОС
+Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nThe push-to-talk key is in the Keys tab. Voice volume only changes what you hear; your microphone, what the others hear from you.	Голос работает по близости: тебя слышно до выбранной дальности, всё тише с расстоянием, как в жизни. Микрофон и динамики — устройства Windows по умолчанию.\n\nКлавиша для разговора (удерживать) — во вкладке «Клавиши». Громкость голосов меняет только то, что слышишь ты; твой микрофон — то, что другие слышат от тебя.
+Waiting	Ждёт
+Waiting for a player…	Ожидание игрока…
+While a guest is receiving your mods, START stays grey. A player who arrives mid-game gets them before joining.	Пока гость получает твои моды, СТАРТ остаётся серым. Игрок, пришедший посреди игры, получает их перед входом.
+Without asking again in each lobby	Не спрашивая снова в каждом лобби
+Without asking for each file	Не спрашивая о каждом файле
+Your MWCoop games, apart from the game's solo save	Твои игры MWCoop, отдельно от одиночного сохранения игры
+Your mods, and those sent to your guests	Твои моды и те, что отправляются гостям
+\"%s\" created (%d files copied)	«%s» создана (скопировано файлов: %d)
+\"%s\": copy from %s restored (%d files)	«%s»: копия от %s возвращена (файлов: %d)
+\"Sent\" = copied to your lobby's guests; a guest receives the host's mods in their launch copy, never in their own folder. \"On\" off: the mod no longer loads. Applied at the next game launch.	«Отправлено» = копируется гостям твоего лобби; гость получает моды хоста в свою копию запуска, никогда в свою папку. «Вкл» выключено: мод больше не загружается. Применяется при следующем запуске игры.
+checking…	проверка…
+everyone	все
+failed: 	ошибка: 
+fresh game: nothing to receive	новая игра: получать нечего
+my choices	мой выбор
+nobody yet	пока никого
+nothing for now	пока ничего
+on arrival in game	при входе в игру
+the game's Mods folder	папка Mods игры
+· %d in %s	· %d в %s
+… press	… нажми
+← Back to mods	← Назад к модам
