@@ -5905,6 +5905,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
         else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; g_uiHot = UI_SET_CLOSE; }
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
+        else if (st == L"guide") { g_tab = TAB_WIKI; g_wikiSel = 1; }   // guide des joueurs (colonne Nouveautes : notes deja recues ou vides)
         else if (st == L"voiture") { g_tab = TAB_CAR; }   // couleur : CouleurVoiture du mwcoop.ini du jeu
         else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s)
             g_tab = TAB_SKIN;

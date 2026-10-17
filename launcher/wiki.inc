@@ -14,7 +14,8 @@ enum { WF_FOLDER, WF_FOOTER, WF_START, WF_NET, WF_LOBBY, WF_MSC, WF_SHARE, WF_AC
 
 static const int kWikiCats = (int)(sizeof(kWikiCat) / sizeof(kWikiCat[0]));
 static const int kWikiArts = (int)(sizeof(kWikiArt) / sizeof(kWikiArt[0]));
-static const RectF kWikiList(264, 88, 300, 656), kWikiBody(580, 88, 684, 656);
+// Trois colonnes depuis le rework du 17/10 : sommaire, article, Nouveautes + « Un souci ? » (maquette validee par JD).
+static const RectF kWikiList(264, 88, 240, 656), kWikiBody(516, 88, 464, 656), kWikiNews(992, 88, 272, 656);
 static int g_wikiSel;
 static unsigned g_wikiClosed = ~1u;           // categories pliees (bit par categorie) : au depart, seule la premiere est ouverte
 static std::set<int> g_wikiFold;              // sections pliees : article * 1000 + bloc
@@ -328,11 +329,70 @@ static void DrawWikiList(Graphics &g)
     g.Restore(st);
 }
 
+// ---- colonne de droite : les dernieres versions (notes de GitHub, canal joue) et l'encart d'aide
+static std::wstring NoteFirstLine(const Note &n)
+{
+    std::wstring t = g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en;
+    if (t.empty()) t = n.en;
+    size_t a = 0;
+    while (a < t.size()) {
+        size_t e = t.find(L'\n', a);
+        std::wstring l = t.substr(a, e == std::wstring::npos ? std::wstring::npos : e - a);
+        while (!l.empty() && (l[0] == L'-' || l[0] == L'*' || l[0] == L' ' || l[0] == L'\r')) l.erase(0, 1);
+        if (!l.empty() && l[0] != L'#') return l;
+        if (e == std::wstring::npos) break;
+        a = e + 1;
+    }
+    return L"";
+}
+static void DrawWikiNews(Graphics &g)
+{
+    RectF c = kWikiNews;
+    Glass(c);
+    Title(g, T(L"Nouveaut\u00E9s", L"What's new"), RectF(c.X + 18, c.Y + 16, 160, 24), 16, kInk);
+    {   // « Tout » : la page des notes
+        const wchar_t *all = T(L"Tout", L"All");
+        RectF r(c.X + c.Width - 18 - PillW(all, 12.5f), c.Y + 16, PillW(all, 12.5f), 24);
+        Text(g, all, r, 12.5f, FontStyleBold, g_uiHot == UI_WIKI_GO + 199 ? kAcc2 : kAcc, StringAlignmentFar);
+        HotZone(r, UI_WIKI_GO + 199);
+    }
+    std::vector<Note> notes = ChannelNotes(g_notes, ChannelReworked());
+    float y = c.Y + 50;
+    if (notes.empty()) Text(g, !g_notesDone ? T(L"Chargement\u2026", L"Loading\u2026") : T(L"Pas de notes pour l'instant.", L"No notes yet."), RectF(c.X + 18, y, c.Width - 36, 40), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+    for (size_t i = 0; i < notes.size() && i < 3; i++) {
+        const Note &n = notes[i];
+        std::wstring ver = n.ver.substr(0, n.ver.find(L'-'));
+        bool fresh = i == 0 && (g_localVer.empty() || CmpVer(n.ver, g_localVer) > 0);
+        float pw = PillW(ver, 10);
+        Pill(g, RectF(c.X + 18, y + 2, pw, 20), fresh ? kRed : TH(cardSel), ver, fresh ? Color(255, 255, 255, 255) : kInk, 10);
+        std::wstring first = NoteFirstLine(n);
+        float h = max(36.0f, WikiTextH(g, first, c.Width - 36 - pw - 10, 12.5f, FontStyleRegular));
+        WikiText(g, first, RectF(c.X + 18 + pw + 10, y, c.Width - 36 - pw - 10, min(h, 54.0f)), 12.5f, FontStyleRegular, kInk);
+        y += min(h, 54.0f) + 8;
+        if (i + 1 < notes.size() && i + 1 < 3) { Pen sep(TH(sep), 1); g.DrawLine(&sep, c.X + 18, y, c.X + c.Width - 18, y); y += 8; }
+    }
+    // « Un souci ? » : le zip des journaux puis Discord (Reglages > Lanceur > Journaux)
+    RectF h(c.X + 14, c.Y + c.Height - 14 - 150, c.Width - 28, 150);
+    GraphicsPath p; RoundRect(p, h, 14);
+    SolidBrush fb(TH(card)); g.FillPath(&fb, &p);
+    Pen pen(TH(choiceBorder), 1); g.DrawPath(&pen, &p);
+    Text(g, T(L"Un souci ?", L"Something wrong?"), RectF(h.X + 14, h.Y + 12, h.Width - 28, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+    WikiText(g, T(L"Journaux (en haut \u00E0 droite) > Faire le zip, puis poste-le dans #bug-reports sur Discord.",
+                  L"Logs (top right) > Make the zip, then post it in #bug-reports on Discord."), RectF(h.X + 14, h.Y + 36, h.Width - 28, 56), 12.5f, FontStyleRegular, kGrey);
+    RectF b(h.X + 14, h.Y + h.Height - 14 - 40, h.Width - 28, 40);
+    GraphicsPath bp; RoundRect(bp, b, 12);
+    SolidBrush db(g_uiHot == UI_WIKI_GO + 198 ? Mix(kDiscordBlue, Color(255, 255, 255, 255), 0.18f) : kDiscordBlue); g.FillPath(&db, &bp);
+    Icon(g, IC_DISCORD, b.X + 22, b.Y + 20, 18, Color(255, 255, 255, 255));
+    Text(g, T(L"Ouvrir Discord", L"Open Discord"), RectF(b.X + 38, b.Y, b.Width - 44, b.Height), 13, FontStyleBold, Color(255, 255, 255, 255), StringAlignmentNear);
+    HotZone(b, UI_WIKI_GO + 198);
+}
+
 // ---- article
 static void DrawWikiPage(Graphics &g)
 {
     Glass(kWikiList);
     Glass(kWikiBody);
+    DrawWikiNews(g);
     if (g_wikiSel < 0 || g_wikiSel >= kWikiArts) g_wikiSel = 0;
     DrawWikiList(g);
     const WikiArticle &art = kWikiArt[g_wikiSel];
@@ -457,6 +517,8 @@ static bool WikiClick(int id)
         g_scroll[TAB_WIKI] = min(g_scroll[TAB_WIKI], WikiMaxScroll());
         return true;
     }
+    if (id == UI_WIKI_GO + 199) { GoPage(TAB_NOTES); return true; }   // colonne Nouveautes : « Tout »
+    if (id == UI_WIKI_GO + 198) { ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); return true; }
     if (id >= UI_WIKI_GO && id < UI_WIKI_GO + 200) {
         const WikiArticle &art = kWikiArt[g_wikiSel];
         int i = id - UI_WIKI_GO;

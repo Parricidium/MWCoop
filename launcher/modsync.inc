@@ -1430,9 +1430,12 @@ static DWORD g_contentScanT;
 static std::vector<int> g_drContent;                 // a l'ouverture du volet (ANNULER)
 static std::map<std::wstring, Bitmap *> g_contentThumb;
 static const float kContentRowH = 72;   // pas des tuiles (deux colonnes)
+// Deux colonnes de tuiles a gauche (rework 17/10), colonne de droite : total envoye, apercu des images, mods.
+static const float kContentLeftW = 640;
+static RectF ContentRight() { return RectF(kMain.X + 24 + kContentLeftW + 14, kMain.Y + 84, kMain.Width - 48 - kContentLeftW - 14, kMain.Height - 84 - 86); }
 static RectF ContentTileRect(int i)
 {
-    float w = (kMain.Width - 48 - 12) / 2;
+    float w = (kContentLeftW - 12) / 2;
     return RectF(kMain.X + 24 + (i % 2) * (w + 12), kMain.Y + 84 + (i / 2) * kContentRowH, w, kContentRowH - 10);
 }
 
@@ -1484,7 +1487,7 @@ static Bitmap *ContentThumb(int i)
     g_contentThumb[f[0]] = b;
     return b;
 }
-static RectF ContentModsRow() { RectF last = ContentTileRect(kContentN - 1); return RectF(kMain.X + 24, last.Y + last.Height + 14, kMain.Width - 48, 52); }
+static RectF ContentModsRow() { RectF r = ContentRight(); return RectF(r.X, r.Y + r.Height - 52, r.Width, 52); }
 // 5000+i : categorie i (la tuile entiere) ; 5100 : ligne des mods (page MODS).
 static int ContentAt(float x, float y)
 {
@@ -1539,6 +1542,46 @@ static void DrawContent(Graphics &g)
         Text(g, det, RectF(r.X + 66, r.Y + 32, r.Width - 150, 20), 12, FontStyleRegular, ci.ignored > 0 ? kWarn : kGrey, StringAlignmentNear);
         UiToggle(g, RectF(r.X + r.Width - 66, r.Y + (r.Height - 28) / 2, 50, 28), on, hot);
     }
+    // colonne de droite : total de ce qui part (jauge sur 100 Mo), apercu des images envoyees, puis les mods
+    {
+        RectF rc = ContentRight();
+        uint64_t total = 0;
+        for (int i = 0; i < kContentN; i++) if (ContentOn(i)) total += g_contentInfo[i].bytes;
+        RectF tc(rc.X, rc.Y, rc.Width, 92);
+        GraphicsPath tp; RoundRect(tp, tc, 16);
+        SolidBrush tb(TH(card)); g.FillPath(&tb, &tp);
+        Pen tpen(TH(choiceBorder), 1); g.DrawPath(&tpen, &tp);
+        Text(g, T(L"Taille totale", L"Total size"), RectF(tc.X + 16, tc.Y + 12, 160, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, SizeText(total), RectF(tc.X + tc.Width - 116, tc.Y + 12, 100, 20), 13, FontStyleBold, kInk, StringAlignmentFar);
+        float frac = min(1.0f, total / (100.0f * 1024 * 1024));
+        RectF bar(tc.X + 16, tc.Y + 40, tc.Width - 32, 8);
+        GraphicsPath bp; RoundRect(bp, bar, 4);
+        SolidBrush bb(TH(toggleOff)); g.FillPath(&bb, &bp);
+        if (frac > 0.01f) { GraphicsPath fp; RoundRect(fp, RectF(bar.X, bar.Y, max(8.0f, bar.Width * frac), 8), 4); SolidBrush fb(frac > 0.85f ? kWarn : kAcc); g.FillPath(&fb, &fp); }
+        Text(g, T(L"Au-del\u00E0 de 100 Mo, l'arriv\u00E9e des invit\u00E9s ralentit.", L"Above 100 MB, guests take longer to arrive."), RectF(tc.X + 16, tc.Y + 56, tc.Width - 32, 30), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        // apercu : miniatures des images envoyees (peinture, drapeau, posters...)
+        RectF ac(rc.X, tc.Y + tc.Height + 12, rc.Width, rc.Height - tc.Height - 12 - 52 - 12);
+        GraphicsPath ap; RoundRect(ap, ac, 16);
+        SolidBrush ab(TH(card)); g.FillPath(&ab, &ap);
+        g.DrawPath(&tpen, &ap);
+        Text(g, T(L"Aper\u00E7u", L"Preview"), RectF(ac.X + 16, ac.Y + 12, 160, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+        float tx = ac.X + 16, ty = ac.Y + 40, ts = (ac.Width - 32 - 3 * 8) / 4;
+        int shown = 0;
+        for (int i = 0; i < kContentN; i++) {
+            Bitmap *b = ContentThumb(i);
+            if (!b || !ContentOn(i)) continue;
+            RectF tr(tx + (shown % 4) * (ts + 8), ty + (shown / 4) * (ts + 8), ts, ts);
+            if (tr.Y + tr.Height > ac.Y + ac.Height - 12) break;
+            GraphicsPath cp; RoundRect(cp, tr, 10);
+            GraphicsState st = g.Save();
+            g.SetClip(&cp, CombineModeIntersect);
+            g.DrawImage(b, tr);
+            g.Restore(st);
+            Pen ep(TH(choiceBorder), 1); g.DrawPath(&ep, &cp);
+            shown++;
+        }
+        if (!shown) Text(g, T(L"Aucune image envoy\u00E9e : peinture, drapeau, posters\u2026 apparaissent ici.", L"No image sent: paint, flag, posters\u2026 show up here."), RectF(ac.X + 16, ty, ac.Width - 32, 60), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+    }
     RectF mr = ContentModsRow();
     bool mh = g_contentHot == 5100;
     GraphicsPath mp; RoundRect(mp, mr, 16);
@@ -1551,8 +1594,8 @@ static void DrawContent(Graphics &g)
     if (!g_mscInstalled) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : non install\u00E9", L"MSCLoader mods: not installed"));
     else if (!g_mscOn) swprintf_s(mb, L"%s", T(L"Mods MSCLoader : coup\u00E9 (invit\u00E9s sans mods)", L"MSCLoader mods: off (guests without mods)"));
     else swprintf_s(mb, T(L"Mods MSCLoader : %d envoy\u00E9(s) sur %d", L"MSCLoader mods: %d sent of %d"), shared, (int)g_msc.size());
-    Text(g, mb, RectF(mr.X + 54, mr.Y, mr.Width - 100, mr.Height), 14, FontStyleBold, kInk, StringAlignmentNear);
-    Icon(g, IC_CHEVR, mr.X + mr.Width - 28, mr.Y + mr.Height / 2, 18, kInk, 2.2f);
+    Text(g, mb, RectF(mr.X + 54, mr.Y, mr.Width - 90, mr.Height), 13, FontStyleBold, kInk, StringAlignmentNear);
+    Icon(g, IC_CHEVR, mr.X + mr.Width - 24, mr.Y + mr.Height / 2, 18, kInk, 2.2f);
     // bas : resume, annuler / valider
     float by = c.Y + c.Height - 66;
     Pen sep(TH(sep), 1); g.DrawLine(&sep, c.X + 24, by - 10, c.X + c.Width - 24, by - 10);
