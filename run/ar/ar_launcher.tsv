@@ -498,6 +498,40 @@ the game's Mods folder	مجلد Mods الخاص باللعبة
 · %d in %s	· %d في %s
 … press	… اضغط
 ← Back to mods	← العودة إلى التعديلات
+ photo	 صورة
+A video (mp4, mkv, webm…) becomes a tape you can play on the game's VCR.	يصبح الفيديو (mp4, mkv, webm…) شريطاً يمكنك تشغيله على جهاز الفيديو في اللعبة.
+Blank · \"Import a video\" fills it (VHS quality, 4:3)	فارغ · \"استيراد فيديو\" يملؤه (جودة VHS، 4:3)
+CAR	السيارة
+Character	الشخصية
+Click a tape: watch it on the right, rename it, export it or put a video on it.	انقر شريطاً: شاهده على اليمين، أعد تسميته، صدّره أو ضع عليه فيديو.
+Converting	جارٍ التحويل
+Drag: rotate	اسحب: تدوير
+Enter: write · Esc: cancel · 24 characters at most	Enter: كتابة · Esc: إلغاء · 24 حرفاً كحد أقصى
+Face, hat, glasses, hair · your images	الوجه، القبعة، النظارات، الشعر · صورك
+Folder: 	المجلد: 
+Game clothes + packs offered by the community	ملابس اللعبة + حزم مقدَّمة من المجتمع
+Import a video	استيراد فيديو
+Import…	استيراد…
+MY IMAGES	صوري
+My CORRIS (new game): 	سيارتي CORRIS (لعبة جديدة): 
+My face	وجهي
+My pants	بنطالي
+My tapes	أشرطتي
+My top	قميصي
+No tape selected	لم يُختر شريط
+Nothing on it yet	لا شيء عليه بعد
+Photos taken with the drone (F8 in game, left click). Click a photo: large on the right.	صور ملتقطة بالطائرة المسيّرة (F8 في اللعبة، النقر الأيسر). انقر صورة: تظهر كبيرة على اليمين.
+Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone.	معاينة من إصدار أقدم: ابدأ لعبة (اللعب الفردي يكفي) وابقَ ~30 ث في اللعبة، وستُعاد.
+Ready	جاهز
+Selected tape: 	الشريط المختار: 
+The portrait at the bottom right is the one shown in lobbies and on the map.	الصورة الشخصية في أسفل اليمين هي التي تظهر في الردهات وعلى الخريطة.
+Today %02d:%02d	اليوم %02d:%02d
+VHS & album	VHS والألبوم
+VHS quality, 4:3 · can be exported as a normal video (on the right)	جودة VHS، 4:3 · يمكن تصديره كفيديو عادي (على اليمين)
+What the others see of you: outfit, face, car	ما يراه الآخرون منك: الملابس، الوجه، السيارة
+Yesterday %02d:%02d	أمس %02d:%02d
+Your tapes for the living-room TV, and the photos taken with the drone.	أشرطتك لتلفاز غرفة المعيشة، والصور الملتقطة بالطائرة المسيّرة.
+painted on the game's template, shown to the other players	مرسوم على قالب اللعبة، يراه اللاعبون الآخرون
 Refused by the host	رفضك المضيف
 No lobby at the host: \"Join in game\" if they are already playing	لا توجد ردهة لدى المضيف: \"انضم داخل اللعبة\" إن كان يلعب بالفعل
 My Winter Car not found: choose mywintercar.exe	لم يُعثر على My Winter Car: اختر mywintercar.exe
