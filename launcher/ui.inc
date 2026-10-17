@@ -343,24 +343,25 @@ static void PageOk() { int back = g_snapFrom >= 0 && !PageSnap(g_snapFrom) && Pa
 
 // ---- barre de navigation
 struct NavItem { int page, icon; const wchar_t *fr, *en; };
+// Rangement de la maquette validee par JD (17/10) : JOUER / MOI / REGLAGES / MEDIA & AIDE -- une page = une tache ;
+// les options d'un salon se reglent dans le salon, les reglages durables dans Reglages (Jeu = graphismes, Co-op).
 static const NavItem kNav[] = {
     { TAB_HOME, IC_HOME, L"Accueil", L"Home" }, { TAB_LOBBY, IC_USERS, L"Salon", L"Lobby" }, { TAB_SAVES, IC_FILE, L"Sauvegardes", L"Saves" },
-    { TAB_SKIN, IC_SHIRT, L"Tenue", L"Outfit" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" },
-    { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
-    { TAB_GFX, IC_SLIDERS, L"Options du jeu", L"Game options" },
+    { TAB_SKIN, IC_SHIRT, L"Personnage", L"Character" }, { TAB_CAR, IC_CAR, L"Voiture", L"Car" }, { TAB_CONTENT, IC_BOX, L"Contenu envoyé", L"Sent content" },
+    { TAB_GFX, IC_SLIDERS, L"Jeu", L"Game" }, { TAB_COOP, IC_GLOBE, L"Co-op", L"Co-op" }, { TAB_MODS, IC_PUZZLE, L"Mods", L"Mods" },
     { TAB_VHS, IC_FILM, L"VHS", L"VHS" }, { TAB_ALBUM, IC_IMAGE, L"Album", L"Album" },   // (MEDIA : media.inc, demande de JD, 13/10)
-    { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" },
-    { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" } };   // (guide des joueurs, wiki.inc)
+    { TAB_WIKI, IC_BOOK, L"Guide", L"Guide" },   // (guide des joueurs, wiki.inc)
+    { TAB_NOTES, IC_SPARK, L"Nouveautés", L"What's new" } };
 // Journaux et API moddeurs : boutons de l'en-tete, a gauche de la langue (demande de JD, 07/10 : place liberee a gauche).
-static const int kNavGroupN[] = { 3, 2, 2, 1, 2, 2 };   // pages de chaque groupe, dans l'ordre de kNav
-static const int kNavGroups = 6;
-static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MON PERSONNAGE", L"PARTAGE", L"JEU", L"MÉDIA", L"INFOS" }, *kNavGroupEn[] = { L"PLAY", L"MY CHARACTER", L"SHARING", L"GAME", L"MEDIA", L"INFO" };
+static const int kNavGroupN[] = { 3, 3, 3, 4 };   // pages de chaque groupe, dans l'ordre de kNav
+static const int kNavGroups = 4;
+static const wchar_t *kNavGroupFr[] = { L"JOUER", L"MOI", L"RÉGLAGES", L"MÉDIA & AIDE" }, *kNavGroupEn[] = { L"PLAY", L"ME", L"SETTINGS", L"MEDIA & HELP" };
 static Bitmap *g_logo;
 // Groupes pliables (demande de JD, 10/10) : MON PERSONNAGE, PARTAGE, JEU (pas JOUER ni INFOS). Plies : [Lanceur] RailPlie
 // (numeros de groupe). La page ouverte reste montree meme dans un groupe plie ; tout est deplie pendant la visite guidee.
 static bool TutoActive();   // (tuto.inc)
 static int g_railFold = -1;   // bits des groupes plies (-1 : pas encore lu)
-static bool RailFoldable(int k) { return k >= 1 && k <= 4; }   // (MEDIA aussi)
+static bool RailFoldable(int k) { return k >= 1 && k <= 3; }   // (MOI, REGLAGES, MEDIA & AIDE)
 static bool RailFolded(int k)
 {
     if (g_railFold < 0) {
@@ -463,7 +464,7 @@ static void DrawRail(Graphics &g)
     int nItems = 0;
     for (int k = 0, i = 0; k < kNavGroups; k++)
         for (int j = 0; j < kNavGroupN[k]; j++, i++) if (!RailFolded(k) || kNav[i].page == g_tab) nItems++;
-    float avail = 666 - y0, lab = 26, step = 46;
+    float avail = 712 - y0, lab = 26, step = 46;
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 24; step = 42; }
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 22; step = 40; }   // (bouton de mise a jour + 9 pages)
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 20; step = 37; }   // (11 pages depuis MEDIA)
@@ -486,7 +487,7 @@ static void DrawRail(Graphics &g)
         }
         y += gap;
     }
-    DrawNavItem(g, RectF(28, 674, 208, 44), TAB_COOP, IC_GEAR, T(L"Réglages", L"Settings"));
+    // (Reglages : dans le groupe REGLAGES depuis le rangement du 17/10, plus de ligne fixe en bas)
     for (int id : { B_DISCORD, B_GITHUB, B_KOFI }) {
         Button &b = g_btn[id];
         GraphicsPath p; RoundRect(p, b.r, 12);
