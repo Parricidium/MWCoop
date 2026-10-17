@@ -28,10 +28,14 @@ static const CarSwatch kSwatches[] = {   // teintes des annees 70-80
     { 0x707A2C, L"Vert avocat", L"Avocado green" },
 };
 static const int kSwatchN = 1 + _countof(kSwatches);   // pastille 0 : au hasard
-static const RectF kCarCard(264, 88, 640, 656), kCarPanel(920, 88, 344, 656);
-static const RectF kCarView(284, 120, 600, 470);
+// Page PERSONNAGE (maquette du 17/10) : onglets Tenue / Visage / Voiture en haut de la page (tenue.inc), cartes dessous.
+static const RectF kCarCard(264, 140, 640, 604), kCarPanel(920, 140, 344, 604);
+static const RectF kCarView(284, 170, 600, 420);
 static const float kPitchMin = 0.04f, kPitchMax = 0.55f;
-static int g_carHot = -1;                // pastille survolee
+static int g_carHot = -1;                // pastille survolee (1000 + k : onglet k de la page, tenue.inc)
+static void PersoTabsDraw(Graphics &g);              // (tenue.inc : onglets de la page PERSONNAGE)
+static int PersoPageHit(float x, float y);
+static bool PersoPageMouseDown(float x, float y);
 
 struct CarPart { bool paint, glass; float r, g, b; };
 struct CarModel {
@@ -382,9 +386,11 @@ static int CarSwatchSel()
     for (int i = 1; i < kSwatchN; i++) if (kSwatches[i - 1].rgb == g_carColor) return i;
     return -1;
 }
-static RectF CarSwatchRect(int i) { return RectF(kCarPanel.X + 26 + (i % 4) * 76.0f, kCarPanel.Y + 64 + (i / 4) * 72.0f, 56, 56); }
+static RectF CarSwatchRect(int i) { return RectF(kCarPanel.X + 26 + (i % 4) * 76.0f, kCarPanel.Y + 60 + (i / 4) * 66.0f, 52, 52); }
 static int CarSwatchAt(float x, float y)
 {
+    int t = PersoPageHit(x, y);   // (onglets de la page : survol en 1000 + k)
+    if (t >= 0) return 1000 + t;
     for (int i = 0; i < kSwatchN; i++) {
         RectF r = CarSwatchRect(i);
         r.Inflate(3, 3);
@@ -738,6 +744,7 @@ static void DrawCarWheel(Graphics &g, RectF r)
 static void DrawCar(Graphics &g)
 {
     CarCheckFile();
+    PersoTabsDraw(g);
     Glass(kCarCard);
     Glass(kCarPanel);
     RectF view = kCarView;
@@ -800,7 +807,7 @@ static void DrawCar(Graphics &g)
     // Couleur : pastilles, nom, autre couleur
     RectF pn = kCarPanel;
     Title(g, T(L"Couleur", L"Color"), RectF(pn.X + 24, pn.Y + 20, 200, 26), 17, kInk);
-    int sel = CarSwatchSel(), show = g_carHot >= 0 ? g_carHot : sel;
+    int sel = CarSwatchSel(), show = g_carHot >= 0 && g_carHot < kSwatchN ? g_carHot : sel;
     for (int i = 0; i < kSwatchN; i++) {
         RectF r = CarSwatchRect(i);
         if (i == sel) { Pen ring(kAcc, 2.6f); g.DrawEllipse(&ring, r.X - 5, r.Y - 5, r.Width + 10, r.Height + 10); }
@@ -822,7 +829,7 @@ static void DrawCar(Graphics &g)
         swprintf_s(hex, L"#%06X", c & 0xFFFFFF);
         name = show > 0 ? T(kSwatches[show - 1].fr, kSwatches[show - 1].en) : T(L"Couleur personnalis\u00E9e", L"Custom color");
     }
-    float ny = CarSwatchRect(kSwatchN - 1).Y + 76;
+    float ny = CarSwatchRect(kSwatchN - 1).Y + 68;
     {
         RectF nr(pn.X + 24, ny, pn.Width - 48, 52);
         GraphicsPath np; RoundRect(np, nr, 14);
@@ -835,7 +842,7 @@ static void DrawCar(Graphics &g)
     }
     {   // Autre couleur... (selecteur de Windows)
         Button &b = g_btn[B_COLOR];
-        b.r = RectF(pn.X + 24, ny + 66, pn.Width - 48, 46);
+        b.r = RectF(pn.X + 24, ny + 62, pn.Width - 48, 46);
         GraphicsPath p; RoundRect(p, b.r, 14);
         SolidBrush fill(Mix(TH(btn2), TH(btn2Hot), b.hover)); g.FillPath(&fill, &p);
         Pen pen(sel < 0 ? kAcc : TH(fieldBorder), sel < 0 ? 2.0f : 1.0f); g.DrawPath(&pen, &p);
@@ -844,7 +851,7 @@ static void DrawCar(Graphics &g)
         Text(g, T(L"Autre couleur\u2026", L"Other color\u2026"), RectF(dot.X + 34, b.r.Y, b.r.Width - 60, b.r.Height), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
     }
     {   // Finition ([Coop] FinitionVoiture : L, LX, SLX, GT ; vide : au hasard) : imposee au tirage d'une nouvelle partie (Vin.cs)
-        float ty = ny + 128;
+        float ty = ny + 118;
         Title(g, T(L"Finition", L"Trim"), RectF(pn.X + 24, ty, 200, 24), 17, kInk);
         g_vinBtnRect = RectF(pn.X + pn.Width - 24 - 168, ty - 5, 168, 32);   // (options de la plaque VIN : a droite du titre)
         UiButton(g, g_vinBtnRect, g_vinView ? T(L"Voir la voiture", L"Show the car") : T(L"Plaque VIN\u2026", L"VIN plate\u2026"), UI_CAR_VIN, g_vinView, -1, true, 10);
@@ -859,6 +866,7 @@ static void DrawCar(Graphics &g)
 // Clic dans l'onglet : une pastille, ou l'apercu (debut du glisser).
 static bool CarMouseDown(float x, float y)
 {
+    if (PersoPageMouseDown(x, y)) return true;   // (onglets de la page)
     int s = CarSwatchAt(x, y);
     if (s >= 0) { CarSetColor(CarSwatchColor(s)); return true; }
     if (g_car.state == 1 && !g_vinView && !g_paintView && kCarView.Contains(x, y) && !g_paintBtnRect.Contains(x, y) && !g_dentBtnRect.Contains(x, y)) {
