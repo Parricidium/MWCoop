@@ -31,23 +31,23 @@ static const TutoStep kTuto[] = {
       L"Graphics", L"Settings > Game: display, comfort, light and shadows, player names (distance, or hidden); the Image & ray tracing tab for the rest. One-click presets; in game: F10 menu.", "0.54.0" },
     { L"Nouveautés", L"Ce qui change à chaque version. Quand une nouvelle version sort, un bouton « Mettre à jour » apparaît sous le logo : la mise à jour se fait quand tu cliques.",
       L"What's new", L"What changes in each version. When a new version is out, an \"Update\" button shows up under the logo: the update happens when you click it.", "0.42.0" },
-    { L"Journaux", L"Le < > en bas de la barre. Chaque partie garde ses journaux, rangés par date : déplie celle qui a posé problème, crée son zip ou supprime les vieilles. Un « ! » rouge s'affiche si la dernière partie s'est arrêtée brutalement.",
-      L"Logs", L"The < > at the bottom of the bar. Every session keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.", "0.53.0" },
-    { L"API moddeurs", L"Dans Réglages > Lanceur > Dépannage. Tu fais des mods ? Ce que l'API de MWCoop permet, un exemple à copier, la DLL et la doc sur GitHub.",
-      L"Modding API", L"In Settings > Launcher > Troubleshooting. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.", "0.46.0" },
+    { L"Journaux", L"L'icône page en haut à droite. Chaque partie garde ses journaux, rangés par date : déplie celle qui a posé problème, crée son zip ou supprime les vieilles. Un « ! » rouge s'affiche si la dernière partie s'est arrêtée brutalement.",
+      L"Logs", L"The page icon at the top right. Every session keeps its own logs, sorted by date: expand the one that went wrong, zip it or delete old ones. A red \"!\" shows if the last game stopped abruptly.", "0.53.0" },
+    { L"API moddeurs", L"Le { } en haut à droite. Tu fais des mods ? Ce que l'API de MWCoop permet, un exemple à copier, la DLL et la doc sur GitHub.",
+      L"Modding API", L"The { } at the top right. Making mods? What MWCoop's API does, an example to copy, the DLL and the docs on GitHub.", "0.46.0" },
     { L"Réglages", L"Une seule page, sept onglets : Jeu, Image & ray tracing, Son & vocal, Co-op (tes salons, le réseau, le port), Touches, Thème, Lanceur (langue, mise à jour, dossier du jeu, dépannage).",
       L"Settings", L"One page, seven tabs: Game, Image & ray tracing, Sound & voice, Co-op (your lobbies, the network, the port), Keys, Theme, Launcher (language, updates, game folder, troubleshooting).", "0.42.0" },
     { L"Thème et langue", L"Soleil ou lune : clair ou sombre, d'un clic. FR : français, anglais, russe ou arabe. Plus de thèmes et de couleurs dans Réglages > Thème.", L"Theme and language", L"Sun or moon: light or dark, in one click. FR: French, English, Russian or Arabic. More themes and colours in Settings > Theme.", "0.42.0" },
-    { L"Discord", L"La communauté MWCoop : de l'aide, les bugs à signaler, les nouveautés et des joueurs pour faire équipe. Journaux et Soutenir (Ko-fi) juste à côté.",
-      L"Discord", L"The MWCoop community: help, bug reports, news and players to team up with. Logs and Support (Ko-fi) right next to it.", "0.51.0" },
+    { L"Discord", L"La communauté MWCoop : de l'aide, les bugs à signaler, les nouveautés et des joueurs pour faire équipe. GitHub et Soutenir (Ko-fi) juste à côté.",
+      L"Discord", L"The MWCoop community: help, bug reports, news and players to team up with. GitHub and Support (Ko-fi) right next to it.", "0.51.0" },
     { L"MSCLoader de MWCoop", L"Dans l'onglet Mods : OFFICIEL (celui installé dans le jeu) ou MWCOOP (installé à part, le jeu n'est pas modifié). Si tes mods ne se chargent pas, essaie MWCOOP, ou RÉINSTALLER.",
       L"MWCoop's MSCLoader", L"In the Mods tab: OFFICIAL (the one installed in the game) or MWCOOP (installed apart, the game is not changed). If your mods don't load, try MWCOOP, or REINSTALL.", "0.60.0" },
     { L"Démarrer le jeu", L"Dans Réglages > Lanceur > Jeu, « Départ du jeu » : Copie (d'origine), Dossier du jeu ou Steam. Si MWCoop ne se charge pas, essaie l'un puis l'autre ; le lanceur passe aussi tout seul au dossier du jeu.",
       L"Start the game", L"In Settings > Launcher > Game, \"Game start\": Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.", "0.62.2" },
     { L"Désinstaller", L"Dans Réglages > Lanceur > Jeu : retire tout MWCoop (dossiers compris) et le MSCLoader de MWCoop, à la Corbeille. Ta sauvegarde, tes mods et le MSCLoader officiel restent.",
       L"Uninstall", L"In Settings > Launcher > Game: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.", "0.60.8" },
-    { L"Crédits", L"L'onglet Crédits du Guide : ceux qui donnent quelque chose pour améliorer MWCoop. Merci à Dom pour ses 155 tenues, dans Personnage > Tenue !",
-      L"Credits", L"The Guide's Credits tab: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in Character > Outfit!", "0.61.0" },
+    { L"Crédits", L"L'étoile en haut à droite : ceux qui donnent quelque chose pour améliorer MWCoop. Merci à Dom pour ses 155 tenues, dans Personnage > Tenue !",
+      L"Credits", L"The star at the top right: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in Character > Outfit!", "0.61.0" },
     { L"Mode débogage", L"Dans Journaux : si MWCoop ne se charge pas, active-le, lance ta partie puis crée le zip. Il note tout ce que fait le lanceur et ce que le jeu a vraiment chargé.",
       L"Debug mode", L"In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.", "0.62.0" },
     { L"Modes de compatibilité", L"Dans Réglages > Lanceur > Dépannage. Après un plantage, Windows ajoute parfois un mode de compatibilité au jeu, et MWCoop ne se charge plus : le lanceur le retire avant chaque partie.",
@@ -116,14 +116,14 @@ static const TutoStep kTuto[] = {
 static const int kTutoN = (int)(sizeof(kTuto) / sizeof(kTuto[0]));
 
 // Pastille d'un onglet de la page Reglages (meme calcul que DrawSettingsPage : gfx.inc) et champ Chercher un reglage de
-// l'en-tete (DrawSetSearchBox : a gauche de l'etoile Nouveautes, ui.inc DrawHeader).
+// l'en-tete (DrawSetSearchBox : a gauche des raccourcis API / Journaux / Credits, ui.inc DrawHeader).
 static RectF TutoSetTab(int t)
 {
     float x = kMain.X;
     for (int k = 0; k < t; k++) x += MeasureW(MeasureG(), T(kSetTabFr[k], kSetTabEn[k]), 13, FontStyleBold) + 30 + 6;
     return RectF(x, 92, MeasureW(MeasureG(), T(kSetTabFr[t], kSetTabEn[t]), 13, FontStyleBold) + 30, 36);
 }
-static RectF TutoSetSearch() { float right = g_btn[B_NEWS].r.Width > 0 ? g_btn[B_NEWS].r.X - 10 : 940; return RectF(right - 250, 22, 250, 44); }
+static RectF TutoSetSearch() { return RectF(g_headRight - 250, 22, 250, 44); }
 // Element montre a l'etape i (rectangle vide : bulle au centre). Coordonnees de la carte.
 static RectF TutoTarget(int i)
 {
@@ -140,14 +140,14 @@ static RectF TutoTarget(int i)
     case 9: return g_navR[TAB_GFX];
     case 10: return g_navR[TAB_NOTES];
     case 11: return g_navR[TAB_LOGS];
-    case 12: return g_setApiRow;   // (Reglages > Lanceur > Depannage : gfx.inc)
+    case 12: return g_navR[TAB_API];   // (raccourci de l'en-tete : ui.inc HeadPage)
     case 13: return g_navR[TAB_COOP];
     case 14: return join(g_btn[B_LANG].r, g_btn[B_THEME].r);
     case 15: return g_btn[B_DISCORD].r;
     case 16: { RectF a = kMscSrcOff, b = kMscReinst; return RectF(a.X - 110, a.Y, b.X + b.Width - a.X + 110, a.Height); }
     case 17: return g_setSteamRow;   // (page Reglages, onglet Lanceur : gfx.inc)
     case 18: return g_setUninst;
-    case 19: return g_credBtnRect;   // (Guide, colonne Nouveautes : wiki.inc)
+    case 19: return g_navR[TAB_CREDITS];   // (l'etoile de l'en-tete : ui.inc HeadPage)
     case 20: return kLogsDebugRow;
     case 21: return g_setCompatRow;
     case 22: return g_navR[TAB_WIKI];

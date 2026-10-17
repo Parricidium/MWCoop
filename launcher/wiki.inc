@@ -418,9 +418,9 @@ static void DrawWikiNews(Graphics &g)
         Text(g, all, r, 12.5f, FontStyleBold, g_uiHot == UI_WIKI_GO + 199 ? kAcc2 : kAcc, StringAlignmentFar);
         HotZone(r, UI_WIKI_GO + 199);
     }
-    // « Un souci ? » en bas : le zip des journaux (bouton < > de la barre de gauche) puis Discord
-    std::wstring help = T(L"Journaux (le < > en bas à gauche) > Faire le zip, puis poste-le dans #bug-reports sur Discord.",
-                          L"Logs (the < > at the bottom left) > Make the zip, then post it in #bug-reports on Discord.");
+    // « Un souci ? » en bas : le zip des journaux (icone page de l'en-tete) puis Discord
+    std::wstring help = T(L"Journaux (l'icône page en haut à droite) > Faire le zip, puis poste-le dans #bug-reports sur Discord.",
+                          L"Logs (the page icon at the top right) > Make the zip, then post it in #bug-reports on Discord.");
     float hh = WikiTextH(g, help, w - 24, 12, FontStyleRegular);
     RectF h(c.X + 14, 0, c.Width - 28, 10 + 18 + hh + 10 + 36 + 10);
     h.Y = c.Y + c.Height - 14 - h.Height;

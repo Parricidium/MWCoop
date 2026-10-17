@@ -1331,7 +1331,7 @@ static void UpdateTick()
 enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_COUNT };
 static int g_tab = TAB_HOME;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_JOURNAUX, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_NEWS, B_RELNOTES, B_COUNT };   // B_JOURNAUX : bas de la barre (ex-GitHub) ; B_NEWS / B_RELNOTES : en-tete (Nouveautes, notes de version)
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
 // Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
@@ -1358,8 +1358,8 @@ static void Layout()
     g_fields[1].maxLen = 63; g_fields[1].address = true;
     g_fields[2].maxLen = 6; g_fields[2].code = true;   // code de session : 6 lettres / chiffres, en majuscules
     // (les autres boutons sont places par leur page en se dessinant : ui.inc)
-    g_btn[B_DISCORD].r = RectF(28, 726, 104, 44);   // Discord (nom et logo), Journaux et Ko-fi (icones) -- maquette du 17/10
-    g_btn[B_JOURNAUX].r = RectF(136, 726, 48, 44);
+    g_btn[B_DISCORD].r = RectF(28, 726, 104, 44);   // Discord (nom et logo), GitHub et Ko-fi (icones)
+    g_btn[B_GITHUB].r = RectF(136, 726, 48, 44);
     g_btn[B_KOFI].r = RectF(188, 726, 48, 44);
 }
 
@@ -1374,10 +1374,7 @@ static void UpdateButtons()
     g_btn[B_SOLO].enabled = can;
     g_btn[B_EXE].enabled = menu && !busy;
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = g_btn[B_LANG].enabled = true;
-    g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = true;
-    g_btn[B_JOURNAUX].enabled = PageEnabled(TAB_LOGS);
-    g_btn[B_NEWS].enabled = g_btn[B_RELNOTES].enabled = PageEnabled(TAB_NOTES);
-    g_btn[B_RELNOTES].visible = menu && g_tab == TAB_HOME;   // (notes de version : seulement sur l'accueil, maquette)
+    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = true;
     g_btn[B_BUY].visible = false;
     g_btn[B_LOGS].visible = false;
     bool home = g_tab == TAB_HOME;
@@ -5892,8 +5889,7 @@ static void OnButton(int id)
     case B_THEME: ThemeSet(g_dark ? THEME_CLAIR : THEME_SOMBRE); break;   // (lune / soleil : sombre <-> clair ; les autres themes dans Reglages > Theme)
     case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"ar" : g_ar ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> AR -> FR
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
-    case B_JOURNAUX: if (PageEnabled(TAB_LOGS)) GoPage(TAB_LOGS); break;   // (ex-GitHub : lien dans Reglages > Lanceur > Depannage)
-    case B_NEWS: case B_RELNOTES: if (PageEnabled(TAB_NOTES)) GoPage(TAB_NOTES); break;
+    case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
     case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
     case B_DISCORD: ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_UPDATE: StartUpdate(true); break;
