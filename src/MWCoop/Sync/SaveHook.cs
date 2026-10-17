@@ -45,6 +45,7 @@ namespace MWCoop
                     SleepingBags.OnGameSave();
                     Kauppa.OnGameSave();
                     Wear.OnGameSave();   // (avant : toutes les 60 s ; revue du 14/10)
+                    SaveStats.OnGameSave();   // resume pour le lanceur (jour, argent, heures, avec qui)
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
