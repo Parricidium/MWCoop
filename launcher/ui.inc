@@ -489,8 +489,9 @@ static void DrawRail(Graphics &g)
         }
         y += gap;
     }
-    // (Reglages : dans le groupe REGLAGES depuis le rangement du 17/10, plus de ligne fixe en bas)
-    for (int id : { B_DISCORD, B_GITHUB, B_KOFI }) {
+    // bas de la barre (maquette du 17/10) : Discord, Journaux (le < > ; GitHub est parti dans Reglages > Lanceur > Depannage),
+    // Soutenir (coeur, Ko-fi). Journaux : contour accent si ouverte, pastille rouge si la derniere partie s'est arretee brutalement.
+    for (int id : { B_DISCORD, B_JOURNAUX, B_KOFI }) {
         Button &b = g_btn[id];
         GraphicsPath p; RoundRect(p, b.r, 12);
         if (id == B_DISCORD) {   // Discord : bleu Discord, logo et nom
@@ -500,10 +501,17 @@ static void DrawRail(Graphics &g)
             Text(g, L"Discord", RectF(b.r.X + 40, b.r.Y, b.r.Width - 44, b.r.Height), 13, FontStyleBold, Color(255, 255, 255, 255), StringAlignmentNear);
             continue;
         }
-        SolidBrush fb(Mix(TH(card), TH(cardSel), b.hover)); g.FillPath(&fb, &p);
-        Pen pen(TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
-        bool gh = id == B_GITHUB;
-        Icon(g, gh ? IC_CODE : IC_HEART, b.r.X + b.r.Width / 2, b.r.Y + b.r.Height / 2, 18, gh ? kInk : Color(255, 255, 143, 163), 2.1f);
+        bool lg = id == B_JOURNAUX, on = lg && g_tab == TAB_LOGS && g_state == ST_IDLE;
+        if (lg) g_navR[TAB_LOGS] = b.r;   // (bulle de la visite : etape Journaux)
+        SolidBrush fb(on ? TH(cardSel) : Mix(TH(card), TH(cardSel), b.hover)); g.FillPath(&fb, &p);
+        Pen pen(on ? WithA(kAcc, 0.8f) : TH(choiceBorder), on ? 1.4f : 1.0f); g.DrawPath(&pen, &p);
+        float a = !lg || b.enabled ? 1.0f : 0.4f;
+        Icon(g, lg ? IC_CODE : IC_HEART, b.r.X + b.r.Width / 2, b.r.Y + b.r.Height / 2, 18, lg ? WithA(on ? kAcc : kInk, a) : Color(255, 255, 143, 163), 2.1f);
+        if (lg && g_crashT && !on) {
+            RectF d(b.r.X + b.r.Width - 13, b.r.Y - 3, 16, 16);
+            SolidBrush rb(kRed); g.FillEllipse(&rb, d);
+            Text(g, L"!", d, 10.5f, FontStyleBold, Color(255, 255, 255, 255));
+        }
     }
 }
 
@@ -552,24 +560,30 @@ static void RgbStar(Graphics &g, float cx, float cy, float size, float t, bool o
     g.DrawPolygon(&pen, pts, 10);
 }
 
-// Page ouverte par un bouton de l'en-tete (Journaux, API moddeurs) : comme ceux de la fenetre, contour colore si ouverte.
-static void HeadPage(Graphics &g, RectF r, int page, int icon)
+// Bouton Nouveautes de l'en-tete (maquette du 17/10) : etoile doree au trait rose ; halo rose tant que la derniere
+// version n'a pas ete lue (NotesUnseen) ; contour accent quand la page est ouverte.
+static void HeadNews(Graphics &g)
 {
-    bool en = PageEnabled(page), on = g_tab == page && g_state == ST_IDLE, hot = en && g_uiHot == UI_NAV + page;
-    g_navR[page] = r;
-    GraphicsPath p; RoundRect(p, r, 14);
-    SolidBrush fb(on ? TH(cardSel) : Mix(TH(btn2), TH(btn2Hot), hot ? 1.0f : 0.0f)); g.FillPath(&fb, &p);
-    Pen pen(on ? WithA(kAcc, 0.8f) : TH(fieldBorder), on ? 1.4f : 1.0f); g.DrawPath(&pen, &p);
-    if (page == TAB_CREDITS) {   // contributeurs : etoile RGB, contour de la meme teinte
-        Pen rp(Hue(g_time * 70.0f + 120.0f, (BYTE)(on || hot ? 200 : 110)), on ? 1.6f : 1.2f); g.DrawPath(&rp, &p);
-        RgbStar(g, r.X + r.Width / 2, r.Y + r.Height / 2, 20, g_time, on || hot);
-    } else Icon(g, icon, r.X + r.Width / 2, r.Y + r.Height / 2, 18, WithA(on ? kAcc : kInk, en ? 1.0f : 0.4f), 2.0f);
-    if (page == TAB_LOGS && g_crashT && !on) {
-        RectF d(r.X + r.Width - 13, r.Y - 3, 16, 16);
-        SolidBrush rb(kRed); g.FillEllipse(&rb, d);
-        Text(g, L"!", d, 10.5f, FontStyleBold, Color(255, 255, 255, 255));
+    Button &b = g_btn[B_NEWS];
+    if (!b.visible) return;
+    bool on = g_tab == TAB_NOTES && g_state == ST_IDLE, fresh = !on && b.enabled && NotesUnseen();
+    const Color pink(255, 255, 107, 139), gold(255, 255, 210, 143);
+    if (fresh) {   // halo
+        for (int k = 3; k >= 1; k--) {
+            RectF h = b.r; h.Inflate(3.0f * k, 3.0f * k);
+            GraphicsPath hp; RoundRect(hp, h, 14 + 3.0f * k);
+            SolidBrush hb(WithA(pink, 0.07f)); g.FillPath(&hb, &hp);
+        }
     }
-    if (en) HotZone(r, UI_NAV + page);
+    GraphicsPath p; RoundRect(p, b.r, 14);
+    SolidBrush fb(on ? TH(cardSel) : Mix(TH(btn2), TH(btn2Hot), b.hover)); g.FillPath(&fb, &p);
+    Pen pen(on ? WithA(kAcc, 0.8f) : fresh ? pink : TH(fieldBorder), on || fresh ? 1.4f : 1.0f); g.DrawPath(&pen, &p);
+    float cx = b.r.X + b.r.Width / 2, cy = b.r.Y + b.r.Height / 2, k = 18 / 24.0f, a = b.enabled ? 1.0f : 0.4f;
+    static const float sp[] = { 12, 3.5f, 14.35f, 9.26f, 20.56f, 9.72f, 15.8f, 13.74f, 17.29f, 19.78f, 12, 16.5f, 6.71f, 19.78f, 8.2f, 13.74f, 3.44f, 9.72f, 9.65f, 9.26f };
+    PointF pts[10];
+    for (int i = 0; i < 10; i++) pts[i] = PointF(cx + (sp[2 * i] - 12) * k, cy + (sp[2 * i + 1] - 12.2f) * k);
+    if (fresh || on) { SolidBrush sf(WithA(gold, a)); g.FillPolygon(&sf, pts, 10); }
+    Pen sp2(WithA(fresh ? pink : on ? kAcc : kInk, a), 1.8f); sp2.SetLineJoin(LineJoinRound); g.DrawPolygon(&sp2, pts, 10);
 }
 static void DrawHeader(Graphics &g)
 {
@@ -577,7 +591,7 @@ static void DrawHeader(Graphics &g)
     if (g_state == ST_RUNNING) { title = T(L"Partie en cours", L"Game running"); sub = g_launchInfo; }
     else if (g_state == ST_LAUNCH || g_state == ST_CLOSING) { title = T(L"Lancement", L"Starting"); sub = g_launchInfo; }
     else switch (g_tab) {
-    case TAB_HOME: title = g_gameDir.empty() ? std::wstring(T(L"Bienvenue", L"Welcome")) : Greeting(); sub = T(L"Prêt pour un hiver à plusieurs ?", L"Ready for a winter together?"); break;
+    case TAB_HOME: title = g_gameDir.empty() ? std::wstring(T(L"Bienvenue", L"Welcome")) : Greeting(); sub = T(L"Prêt pour un hiver à plusieurs ? Tes amis doivent choisir le même chemin que toi.", L"Ready for a winter together? Your friends must pick the same path as you."); break;
     case TAB_LOBBY: {
         int lobby = g_lobby;
         bool host = lobby == LB_HOST;
@@ -596,54 +610,50 @@ static void DrawHeader(Graphics &g)
         sub = b;
         break;
     }
-    case TAB_SKIN: case TAB_CAR: title = T(L"Personnage", L"Character"); sub = T(L"Ce que les autres voient de toi : tenue, visage, voiture", L"What the others see of you: outfit, face, car"); break;
-    case TAB_CONTENT: title = T(L"Partage", L"Sharing"); sub = T(L"Copié chez tes invités pour ta partie, à part de leurs fichiers", L"Copied to your guests for your game, apart from their own files"); break;
-    case TAB_MODS: title = T(L"Mods", L"Mods"); sub = T(L"Tes mods, et ceux envoyés à tes invités", L"Your mods, and those sent to your guests"); break;
+    case TAB_SKIN: case TAB_CAR: title = T(L"Personnage", L"Character"); sub = T(L"Ce que les autres voient de toi : tenue, visage, voiture. Visible dès que tu entres dans un salon.", L"What the others see of you: outfit, face, car. Visible as soon as you enter a lobby."); break;
+    case TAB_CONTENT: title = T(L"Contenu envoyé", L"Sent content"); sub = T(L"Tes fichiers perso, copiés chez les invités de ton salon. Ils voient et entendent la même chose que toi.", L"Your personal files, copied to your lobby's guests. They see and hear the same as you."); break;
+    case TAB_MODS: title = T(L"Mods", L"Mods"); sub = T(L"Tes mods MSCLoader, et ceux que tu envoies à tes invités quand tu héberges.", L"Your MSCLoader mods, and those you send to your guests when you host."); break;
     case TAB_NOTES: title = T(L"Nouveautés", L"What's new"); sub = T(L"Ce qui change à chaque version", L"What changes in each version"); break;
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: case TAB_GFX: title = T(L"Réglages", L"Settings"); sub = SetHeaderSub(); break;   // (gfx.inc : une page, des onglets)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
     case TAB_VHS: case TAB_ALBUM: title = T(L"VHS & album", L"VHS & album"); sub = T(L"Tes cassettes pour la télé du salon, et les photos prises au drone.", L"Your tapes for the living-room TV, and the photos taken with the drone."); break;
-    case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Tes parties MWCoop, à part de la sauvegarde solo du jeu", L"Your MWCoop games, apart from the game's solo save"); break;
-    case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Tout pour jouer sans souci : installation, salons, mods, réglages, solutions", L"Everything to play trouble-free: install, lobbies, mods, settings, fixes"); break;
+    case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Tes parties MWCoop, à part de la sauvegarde solo du jeu. L'hôte choisit laquelle lancer ; les invités la reçoivent.", L"Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it."); break;
+    case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Comment jouer à plusieurs, ce qui est partagé, et ce qui change à chaque version.", L"How to play together, what is shared, and what changes in each version."); break;
     }
-    // commandes de droite : fermer, reduire, theme, langue, puis celles de la page
+    // commandes de droite (maquette du 17/10) : fermer, reduire, theme, langue, l'etoile Nouveautes, les notes de version
+    // (accueil seulement), puis celles de la page. Journaux : bas de la barre ; API moddeurs et GitHub : Reglages > Lanceur ;
+    // Credits : colonne Nouveautes du Guide.
     float right = 1264;
     for (int id : { B_CLOSE, B_MIN, B_THEME, B_LANG }) { g_btn[id].r = RectF(right - 44, 22, 44, 44); right -= 54; }
     HeadButton(g, B_CLOSE, IC_CLOSE);
     HeadButton(g, B_MIN, IC_MIN);
     HeadButton(g, B_THEME, g_dark ? IC_SUN : IC_MOON);
     HeadButton(g, B_LANG, 0, g_fr ? L"FR" : g_ru ? L"RU" : g_ar ? L"AR" : L"EN");
-    // | puis API moddeurs et Journaux (pastille rouge : la derniere partie s'est arretee brutalement)
-    {
-        Pen sp(TH(fieldBorder), 1.4f);
-        g.DrawLine(&sp, right - 2, 32.0f, right - 2, 56.0f);
-        right -= 14;
-        HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_API, IC_BRACES);
-        right -= 54;
-        HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_LOGS, IC_FILE);
-        right -= 54;
-        HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_CREDITS, IC_STAR);
-        right -= 54;
-    }
+    if (g_btn[B_RELNOTES].visible) { g_btn[B_RELNOTES].r = RectF(right - 44, 22, 44, 44); HeadButton(g, B_RELNOTES, IC_FILE); right -= 54; }
+    else g_btn[B_RELNOTES].r = RectF(0, 0, 0, 0);
+    g_btn[B_NEWS].r = RectF(right - 44, 22, 44, 44); right -= 54;
+    HeadNews(g);
     if (g_state == ST_IDLE) {
-        if (g_tab == TAB_CONTENT || g_tab == TAB_MODS) {   // (Personnage : onglets Tenue / Visage / Voiture dans la page, tenue.inc)
-            bool look = g_tab == TAB_SKIN || g_tab == TAB_CAR;
-            std::vector<std::wstring> lab;
-            if (look) lab = { T(L"Tenue", L"Outfit"), T(L"Voiture", L"Car") };
-            else {
-                int n = MscModCount();
-                lab = { std::wstring(T(L"Contenu · ", L"Content · ")) + ContentSummary(), std::wstring(L"Mods · ") + std::to_wstring(n) };
-            }
-            float w = look ? 220.0f : 280.0f;
+        if (g_tab == TAB_SAVES) { UiButton(g, RectF(right - 164, 22, 164, 44), T(L"Nouvelle partie", L"New game"), UI_SAVE_NEW, true, IC_HOMEPLUS); right -= 174; }   // (saves.inc)
+        if (g_tab == TAB_CONTENT || g_tab == TAB_MODS) {
+            int n = MscModCount();
+            std::vector<std::wstring> lab = { std::wstring(T(L"Contenu · ", L"Content · ")) + ContentSummary(), std::wstring(L"Mods · ") + std::to_wstring(n) };
+            float w = 280.0f;
             RectF r(right - w, 22, w, 44);
-            UiSeg(g, r, lab, (g_tab == TAB_SKIN || g_tab == TAB_CONTENT) ? 0 : 1, UI_SEG, 13);
+            UiSeg(g, r, lab, g_tab == TAB_CONTENT ? 0 : 1, UI_SEG, 13);
             right -= w + 10;
-        } else if (g_tab == TAB_LOBBY) DrawLobbyHeadControls(g, right);
+        } else if (g_tab == TAB_SKIN || g_tab == TAB_CAR) { g_persoTabRight = right; PersoTabsDraw(g); right -= PersoTabsW() + 10; }   // (Tenue / Visage / Voiture : tenue.inc)
+        else if (g_tab == TAB_VHS || g_tab == TAB_ALBUM) { g_mediaTabRight = right; MediaTabsDraw(g); right -= MediaTabsW() + 10; }   // (VHS / Album : media.inc)
+        else if (g_tab == TAB_LOBBY) DrawLobbyHeadControls(g, right);
         else if (g_tab == TAB_GFX || g_tab == TAB_COOP) DrawSetSearchBox(g, right);   // (Chercher un reglage)
     }
     Title(g, title, RectF(268, 16, right - 280, 34), 26, kInk);
+    if (MeasureW(MeasureG(), sub, 13.5f, FontStyleRegular) > right - 282) {   // (trop long a cote des commandes de la page : la premiere phrase seulement)
+        size_t dot = sub.find(L". ");
+        if (dot != std::wstring::npos) sub.resize(dot + 1);
+    }
     Text(g, sub, RectF(270, 50, right - 282, 20), 13.5f, FontStyleRegular, kGrey, StringAlignmentNear);
 }
 
@@ -696,7 +706,7 @@ static void DrawHome(Graphics &g)
     // --- a gauche : le personnage et le pseudo
     RectF left(kMain.X, kMain.Y, 340, kMain.Height);
     Glass(left);
-    SmallLabel(g, T(L"TON PERSONNAGE", L"YOUR CHARACTER"), RectF(left.X + 20, left.Y + 16, 200, 20), kGrey);
+    Title(g, T(L"Ton personnage", L"Your character"), RectF(left.X + 20, left.Y + 14, 200, 24), 16, kInk);
     {
         bool hot = g_uiHot == UI_HOME_LOOK;
         Text(g, T(L"Modifier", L"Edit"), RectF(left.X + left.Width - 120, left.Y + 16, 100, 20), 13, hot ? FontStyleBold | FontStyleUnderline : FontStyleBold, kAcc, StringAlignmentFar);
@@ -835,23 +845,27 @@ static void DrawHome(Graphics &g)
     EnterCriticalSection(&g_cs);
     notes = g_notes;
     LeaveCriticalSection(&g_cs);
-    std::wstring head = T(L"Nouveautés", L"What's new");
-    if (!notes.empty()) head += L" · " + notes[0].ver.substr(0, notes[0].ver.find(L'-'));
-    Title(g, head, RectF(nc.X + 20, nc.Y + 14, 400, 24), 17, kInk);
+    Title(g, T(L"Nouveautés", L"What's new"), RectF(nc.X + 20, nc.Y + 14, 400, 24), 16, kInk);
     {
         bool hot = g_uiHot == UI_HOME_NOTES;
         Text(g, T(L"Tout voir", L"See all"), RectF(nc.X + nc.Width - 120, nc.Y + 14, 100, 24), 13, hot ? FontStyleBold | FontStyleUnderline : FontStyleBold, kAcc, StringAlignmentFar);
         HotZone(RectF(nc.X + nc.Width - 110, nc.Y + 10, 96, 30), UI_HOME_NOTES);
     }
     if (notes.empty()) Text(g, !g_notesDone ? T(L"Chargement…", L"Loading…") : T(L"Notes indisponibles (hors ligne).", L"Notes unavailable (offline)."), RectF(nc.X + 20, nc.Y + 50, nc.Width - 40, 24), 13, FontStyleRegular, kGrey, StringAlignmentNear);
-    else {
-        std::vector<std::wstring> bl = NoteBullets(notes[0], 3);
-        float y = nc.Y + 50;
-        for (auto &s : bl) {
-            if (y + 22 > nc.Y + nc.Height - 8) break;
-            SolidBrush dot(kAcc); g.FillEllipse(&dot, nc.X + 22, y + 8, 6.0f, 6.0f);
-            Text(g, s, RectF(nc.X + 38, y, nc.Width - 58, 22), 13.5f, FontStyleRegular, kInk, StringAlignmentNear);
-            y += 30;
+    else {   // les 2 dernieres versions (maquette) : pastille (rose si plus recente que la mienne), premiere ligne, deuxieme en gris
+        float y = nc.Y + 46, rowH = (nc.Height - 54) / 2;
+        for (size_t i = 0; i < notes.size() && i < 2; i++) {
+            const Note &n = notes[i];
+            std::wstring ver = n.ver.substr(0, n.ver.find(L'-'));
+            bool fresh = i == 0 && (g_localVer.empty() || CmpVer(n.ver, g_localVer) > 0);
+            float pw = PillW(ver, 10);
+            Pill(g, RectF(nc.X + 20, y + 4, pw, 20), fresh ? kRed : TH(cardSel), ver, fresh ? Color(255, 255, 255, 255) : kInk, 10);
+            std::vector<std::wstring> bl = NoteBullets(n, 2);
+            float tx = nc.X + 20 + pw + 10, tw = nc.Width - 40 - pw - 10;
+            if (!bl.empty()) Text(g, bl[0], RectF(tx, y + 2, tw, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+            if (bl.size() > 1) Text(g, bl[1], RectF(tx, y + 24, tw, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+            y += rowH;
+            if (i == 0 && notes.size() > 1) { Pen sep(TH(sep), 1); g.DrawLine(&sep, nc.X + 20, y - 4, nc.X + nc.Width - 20, y - 4); }
         }
     }
 }
@@ -1312,6 +1326,9 @@ static void DrawCreditsPage(Graphics &g)
         y += 10;
         Text(g, T(L"Maquette en relief : altitudes SRTM (NASA, domaine public) via AWS Terrain Tiles (Mapzen)", L"Relief model: SRTM elevation data (NASA, public domain) via AWS Terrain Tiles (Mapzen)"),
              RectF(area.X + 14, y, area.Width - 28, 22), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
+        y += 26;
+        Text(g, T(L"Police Nunito · The Nunito Project Authors · licence SIL OFL 1.1", L"Nunito font · The Nunito Project Authors · SIL OFL 1.1 license"),
+             RectF(area.X + 14, y, area.Width - 28, 22), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);   // (police du lanceur, launcher.rc 6)
         y += 30;
     } else {
         for (const Credit &k : kCredits) {
@@ -1397,9 +1414,8 @@ static bool UiClick(int id)
     if (id == UI_NONE) return true;
     if (id >= UI_NAV && id < UI_NAV + TAB_COUNT) { int p = id - UI_NAV; if (PageEnabled(p)) GoPage(p); return true; }
     if (id >= UI_NAV_GROUP && id < UI_NAV_GROUP + 5) { RailToggle(id - UI_NAV_GROUP); return true; }
-    if (id == UI_SEG || id == UI_SEG + 1) {
-        bool look = g_tab == TAB_SKIN || g_tab == TAB_CAR;
-        int p = look ? (id == UI_SEG ? TAB_SKIN : TAB_CAR) : (id == UI_SEG ? TAB_CONTENT : TAB_MODS);
+    if (id == UI_SEG || id == UI_SEG + 1) {   // (en-tete : Contenu / Mods ; Personnage et Media ont leurs propres onglets)
+        int p = id == UI_SEG ? TAB_CONTENT : TAB_MODS;
         if (p == TAB_MODS && g_tab == TAB_CONTENT) { g_tab = TAB_MODS; MscScan(); return true; }   // (meme volet ouvert : on garde les valeurs a rendre)
         if (p == TAB_CONTENT && g_tab == TAB_MODS && PageSnap(TAB_CONTENT)) { GoPage(p); return true; }
         if (PageSnap(p) && PageSnap(g_tab)) { g_tab = p; if (p == TAB_SKIN) g_skinIdleT = GetTickCount(); return true; }

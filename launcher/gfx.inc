@@ -389,13 +389,13 @@ static bool g_setFocus;                 // champ Chercher actif (curseur)
 static int g_setFound;                  // lignes trouvees (sous-titre de l'en-tete)
 static float g_setContentH;             // hauteur du contenu (molette)
 static float g_setTop, g_setBottom;     // zone visible : zones cliquables seulement dedans
-static RectF g_setSteamRow, g_setCompatRow, g_setBuy, g_setUninst;   // (bulles du guide : tuto.inc)
+static RectF g_setSteamRow, g_setCompatRow, g_setBuy, g_setUninst, g_setApiRow;   // (bulles du guide : tuto.inc)
 static const RectF kSetArea(264, 136, 1000, 608);                   // sous les pastilles (y 92..128)
 static const RectF kGfxTop(264, 136, 494, 128), kGfxArea(264, 136, 1000, 608);   // (bulles du guide 30-32 : prereglages, onglet Jeu)
 static const float kSetRowH = 36, kSetRowDH = 46, kSetSecH = 26, kSetPad = 18;
 enum { UI_SET_TAB = 2900, UI_SET_SEARCH = 2910, UI_SET_SEARCHX, UI_SET_THEMECARD = 2920, UI_SET_ACCENT = 2925, UI_SET_AURORE = 2931, UI_SET_WINTHEME = 2935, UI_SET_THEMEDEF,
        UI_SET_MAXP = 2940, UI_SET_PRIV = 2945, UI_SET_AJOUTS = 2948, UI_SET_AJOUT = 2951, UI_SET_DRONEKB = 2956,
-       UI_SET_NOTES = 2960, UI_SET_LOGDIR, UI_SET_LOGZIP, UI_SET_DISCORDASK, UI_SET_SKIN, UI_SET_CAR, UI_SET_CONTENT, UI_SET_STEAMLINE, UI_SET_GOIMAGE,
+       UI_SET_NOTES = 2960, UI_SET_LOGDIR, UI_SET_LOGZIP, UI_SET_DISCORDASK, UI_SET_SKIN, UI_SET_CAR, UI_SET_CONTENT, UI_SET_STEAMLINE, UI_SET_GOIMAGE, UI_SET_API, UI_SET_GITHUB,
        UI_SETV = 12000 };   // + ligne * 8 + valeur (choix a segments)
 static void LogsOpenFolder();
 static void LogsZip();
@@ -512,6 +512,9 @@ static const SetItem kSetItems[] = {
     { 20, SI_X, "compat", L"Retirer les modes de compatibilité", L"Remove compatibility modes", L"Windows en ajoute après un plantage : MWCoop ne se charge plus", L"Windows adds some after a crash: MWCoop stops loading" },
     { 20, SI_X, "debug", L"Mode débogage", L"Debug mode", L"Journaux détaillés pour le zip", L"Detailed logs for the zip" },
     { 20, SI_X, "discordask", L"Proposer le Discord", L"Offer the Discord", L"L'invitation après la visite guidée", L"The invitation after the guided tour" },
+    // (ex-boutons de l'en-tete, maquette du 17/10 : la page API des moddeurs, le depot GitHub)
+    { 20, SI_X, "api", L"API pour les moddeurs", L"API for modders", L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example" },
+    { 20, SI_X, "github", L"Code source", L"Source code", L"Le dépôt GitHub de MWCoop : code, versions, signalements", L"MWCoop's GitHub repository: code, releases, issues" },
 };
 static const int kSetItemN = (int)(sizeof(kSetItems) / sizeof(kSetItems[0]));
 
@@ -1060,6 +1063,8 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
         } else if (!strcmp(k, "compat")) { SetToggleRow(g, it, row, CompatAuto(), UI_SET_COMPAT); g_setCompatRow = row; }
         else if (!strcmp(k, "debug")) SetToggleRow(g, it, row, g_debug, UI_LOG_DEBUG);
         else if (!strcmp(k, "discordask")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"DiscordPropose", 0, g_iniLauncher.c_str()) == 0, UI_SET_DISCORDASK);
+        else if (!strcmp(k, "api")) { SetButtonRow(g, it, row, T(L"Ouvrir", L"Open"), UI_SET_API); g_setApiRow = row; }
+        else if (!strcmp(k, "github")) SetButtonRow(g, it, row, L"GitHub", UI_SET_GITHUB);
     }
     if (!SetVisible(row)) g_zones.resize(nz);   // (ligne coupee par le bord : pas de clic)
     return h;
@@ -1232,7 +1237,7 @@ static bool SetChar(wchar_t c)
 static void SetEnter(int tab) { g_setTab = tab == TAB_COOP ? SET_COOP : SET_JEU; g_setSearch.clear(); g_setFocus = false; }
 // La barre de gauche suit l'onglet : Jeu / Image / Son = page Jeu (TAB_GFX), le reste = Co-op (TAB_COOP).
 static void SetRail() { int t = g_setTab <= SET_SON ? TAB_GFX : TAB_COOP; if (g_tab == TAB_GFX || g_tab == TAB_COOP) g_tab = t; }
-static void SetTutoTab(int step) { g_setTab = step == 17 || step == 18 || step == 21 ? SET_LANCEUR : SET_JEU; g_setSearch.clear(); }
+static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage)
 static void SetCaptureState(const std::wstring &st)
 {
     static const wchar_t *names[SET_N] = { L"jeu", L"image", L"son", L"coop", L"touches", L"theme", L"lanceur" };
@@ -1285,6 +1290,8 @@ static bool SetClick(int id)
     case UI_SET_THEMEDEF: ThemeSetAccent(0); ThemeSetAurore(2); return true;
     case UI_SET_PRIV: case UI_SET_PRIV + 1: WritePrivateProfileStringW(L"Lanceur", L"SalonPrive", id == UI_SET_PRIV ? L"0" : L"1", g_iniLauncher.c_str()); return true;
     case UI_SET_NOTES: GoPage(TAB_NOTES); return true;
+    case UI_SET_API: GoPage(TAB_API); return true;
+    case UI_SET_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); return true;
     case UI_SET_LOGDIR: LogsOpenFolder(); return true;
     case UI_SET_LOGZIP: LogsZip(); return true;
     case UI_SET_DISCORDASK: {

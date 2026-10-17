@@ -472,7 +472,7 @@ static void DrawSaves(Graphics &g)
     if (GetTickCount() - g_savesScanT > 3000 && g_saveEdit < 0) SavesScan();
     Glass(kSaveL); Glass(kSaveR);
     // en-tete : « Nouvelle partie » a droite du titre (avant les boutons de l'en-tete, ui.inc)
-    UiButton(g, RectF(698, 22, 164, 44), T(L"Nouvelle partie", L"New game"), UI_SAVE_NEW, true, IC_HOMEPLUS);
+    // (« Nouvelle partie » : dans l'en-tete, ui.inc DrawHeader)
     std::wstring cur = SaveCurrentProf();
     int sel = SaveSelIndex();
     Graphics &mg = MeasureG();

@@ -1327,7 +1327,7 @@ static void UpdateTick()
 enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_COUNT };
 static int g_tab = TAB_HOME;
 
-enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };
+enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_JOURNAUX, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_NEWS, B_RELNOTES, B_COUNT };   // B_JOURNAUX : bas de la barre (ex-GitHub) ; B_NEWS / B_RELNOTES : en-tete (Nouveautes, notes de version)
 // Reseau de la partie : IP (adresse:port, salon TCP du lanceur, UDP en jeu) ou Steam (salon et invitations Steam en
 // jeu, pair-a-pair par les relais de Valve : ni port ni pare-feu). Garde dans [Lanceur] Reseau, passe au mod par
 // lancement.ini (Reseau=).
@@ -1347,14 +1347,15 @@ struct Button { RectF r; float hover; bool visible, enabled; };
 static Button g_btn[B_COUNT];
 static int g_hot = -1, g_pressed = -1;
 
+static bool PageEnabled(int p);   // (ui.inc)
 static void Layout()
 {
     g_fields[0].maxLen = 23; g_fields[0].address = false;
     g_fields[1].maxLen = 63; g_fields[1].address = true;
     g_fields[2].maxLen = 6; g_fields[2].code = true;   // code de session : 6 lettres / chiffres, en majuscules
     // (les autres boutons sont places par leur page en se dessinant : ui.inc)
-    g_btn[B_DISCORD].r = RectF(28, 726, 104, 44);   // Discord (nom et logo), GitHub et Ko-fi (logos)
-    g_btn[B_GITHUB].r = RectF(136, 726, 48, 44);
+    g_btn[B_DISCORD].r = RectF(28, 726, 104, 44);   // Discord (nom et logo), Journaux et Ko-fi (icones) -- maquette du 17/10
+    g_btn[B_JOURNAUX].r = RectF(136, 726, 48, 44);
     g_btn[B_KOFI].r = RectF(188, 726, 48, 44);
 }
 
@@ -1369,7 +1370,10 @@ static void UpdateButtons()
     g_btn[B_SOLO].enabled = can;
     g_btn[B_EXE].enabled = menu && !busy;
     g_btn[B_CLOSE].enabled = g_btn[B_MIN].enabled = g_btn[B_BUY].enabled = g_btn[B_THEME].enabled = g_btn[B_LANG].enabled = true;
-    g_btn[B_GITHUB].enabled = g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = true;
+    g_btn[B_KOFI].enabled = g_btn[B_DISCORD].enabled = true;
+    g_btn[B_JOURNAUX].enabled = PageEnabled(TAB_LOGS);
+    g_btn[B_NEWS].enabled = g_btn[B_RELNOTES].enabled = PageEnabled(TAB_NOTES);
+    g_btn[B_RELNOTES].visible = menu && g_tab == TAB_HOME;   // (notes de version : seulement sur l'accueil, maquette)
     g_btn[B_BUY].visible = false;
     g_btn[B_LOGS].visible = false;
     bool home = g_tab == TAB_HOME;
@@ -1739,6 +1743,33 @@ static Status MeasureStr(Graphics &g, const WCHAR *s, INT n, const Font *f, cons
     return g.MeasureString(s, n, f, l, sf, box);
 }
 static Status MeasureStr(Graphics &g, const WCHAR *s, INT n, const Font *f, const RectF &l, RectF *box) { return MeasureStr(g, s, n, f, l, NULL, box); }
+// Police de la maquette (Nunito, arrondie, licence SIL OFL 1.1) integree a l'exe (launcher.rc : 6 RCDATA) : chargee en
+// memoire pour GDI+ (PrivateFontCollection) et pour GDI (AddFontMemResourceEx, mode de secours). Illisible : Segoe UI
+// comme avant. Variable (axe wght) : GDI+ n'en lit que l'instance par defaut, le gras est synthetise.
+static PrivateFontCollection *g_fontCol;
+static FontFamily *g_nunito;
+static bool FamilyOk(const FontFamily *f);
+static void EmbedFontLoad()
+{
+    HRSRC r = FindResourceW(NULL, MAKEINTRESOURCEW(6), RT_RCDATA);
+    HGLOBAL h = r ? LoadResource(NULL, r) : NULL;
+    void *p = h ? LockResource(h) : NULL;
+    if (!p) return;
+    DWORD n = SizeofResource(NULL, r), gdiN = 0;
+    g_fontCol = new PrivateFontCollection();
+    if (g_fontCol->AddMemoryFont(p, n) != Ok) { LaunchLog("police : Nunito integree illisible"); return; }
+    int cnt = g_fontCol->GetFamilyCount(), got = 0;
+    if (cnt < 1) return;
+    FontFamily fams[4];
+    g_fontCol->GetFamilies(min(cnt, 4), fams, &got);
+    if (got < 1) return;
+    g_nunito = fams[0].Clone();
+    if (!FamilyOk(g_nunito)) { delete g_nunito; g_nunito = NULL; LaunchLog("police : Nunito integree n'ecrit rien, Segoe UI gardee"); return; }
+    AddFontMemResourceEx(p, n, NULL, &gdiN);
+    WCHAR name[LF_FACESIZE] = L"?";
+    g_nunito->GetFamilyName(name);
+    LaunchLog("police : %ls integree (%lu octets)", name, (unsigned long)n);
+}
 // Une police peut aussi etre declaree presente et ne rien ecrire (fichier abime, Windows "allege") : chaque famille
 // ecrit "Ag" avec le rendu retenu ; aucun pixel = police suivante.
 static bool FamilyOk(const FontFamily *f)
@@ -1757,6 +1788,7 @@ static const FontFamily *UiFamily(const wchar_t *want)
     static std::map<std::wstring, FontFamily *> cache;
     auto it = cache.find(want);
     if (it != cache.end()) return it->second;
+    if (g_nunito && wcscmp(want, L"Consolas")) return g_nunito;   // (police de la maquette, integree a l'exe : titres et textes)
     static int noWin = -1;
     if (noWin < 0) { wchar_t v[8] = L""; GetEnvironmentVariableW(L"MWCOOP_SANS_POLICES", v, 8); noWin = v[0] == L'1'; }
     bool mono = !wcscmp(want, L"Consolas");
@@ -5434,7 +5466,8 @@ static void OnButton(int id)
     case B_THEME: g_dark = !g_dark; WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); break;
     case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"ar" : g_ar ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> AR -> FR
     case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
-    case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
+    case B_JOURNAUX: if (PageEnabled(TAB_LOGS)) GoPage(TAB_LOGS); break;   // (ex-GitHub : lien dans Reglages > Lanceur > Depannage)
+    case B_NEWS: case B_RELNOTES: if (PageEnabled(TAB_NOTES)) GoPage(TAB_NOTES); break;
     case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
     case B_DISCORD: ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); break;
     case B_UPDATE: StartUpdate(true); break;
@@ -5970,6 +6003,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     ULONG_PTR gtok;
     GdiplusStartup(&gtok, &gin, NULL);
     TextProbe();
+    EmbedFontLoad();
     Layout();
     BuildOptions();
 
@@ -6237,10 +6271,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (st == L"tenue-survol") { g_skinHot = 9; g_uiHot = UI_LOOKPIN + 1; g_lookZone = 1; }
             if (st == L"tenue-perso") { g_skinRowHot = 1; g_skinYaw = (float)_wtof(argv[argc - 1]); }   // (dernier argument : la vue 0..16)
         }
-        else if (st == L"notes") {   // notes d'exemple (le depot n'a pas encore de release)
+        else if (st == L"notes" || st == L"accueil-notes") {   // notes d'exemple (le depot n'a pas encore de release) ; accueil-notes : la carte Nouveautes de l'accueil
             // (passees par ParseReleases, comme une vraie release : francais --- anglais --- russe)
             g_notes = ParseReleases("[{\"tag_name\":\"v0.1.1\",\"published_at\":\"2026-10-09T10:00:00Z\",\"body\":\"- Exemple de note de version (capture).\\n- Deuxième ligne : une correction.\\n---\\n- Sample release note (capture).\\n- Second line: a fix.\\n---\\n- Пример заметки к версии (снимок).\\n- Вторая строка: исправление.\"},{\"tag_name\":\"v0.1.0\",\"published_at\":\"2026-10-02T10:00:00Z\",\"body\":\"- Première version : chargeur, joueurs visibles.\\n---\\n- First version: loader, visible players.\"}]");
-            g_notesDone = true; g_relState = REL_OK; g_tab = TAB_NOTES;
+            g_notesDone = true; g_relState = REL_OK; g_tab = st == L"notes" ? TAB_NOTES : TAB_HOME;
         }
         else if (st == L"notesvide") { NotesOnlyThread(NULL); g_tab = TAB_NOTES; }
         else if (st == L"notes-image") {   // une note avec une image (telechargee ici, avant la capture)

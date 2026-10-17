@@ -27,9 +27,10 @@ static DWORD g_skinCheckT;
 static int g_skinBudget = 1000;                             // portraits a charger pendant cette image
 static bool g_skinAnnounce;                                 // salon : annoncer l'apparence sans attendre
 // Page PERSONNAGE (maquette du 17/10) : onglets en haut (y 92), carte Apercu a gauche, carte des parties a droite.
-static const RectF kSkinCard(264, 140, 390, 604), kSkinPanel(666, 140, 598, 604);
-static const RectF kSkinView(280, 194, 358, 450);
-static const float kPersoTabY = 92, kPersoTabH = 36;
+static const RectF kSkinCard(264, 88, 390, 656), kSkinPanel(666, 88, 598, 656);   // (cartes a y 88 comme les autres pages, maquette du 17/10)
+static const RectF kSkinView(280, 142, 358, 502);
+static const float kPersoTabY = 26, kPersoTabH = 36;   // onglets Tenue / Visage / Voiture dans l'en-tete, a gauche des boutons ronds
+static float g_persoTabRight = 1264;                   // bord droit des onglets (ui.inc DrawHeader)
 static int g_lookZone;                                       // image perso montree dans la bande « Mes images » (0 visage, 1 haut, 2 pantalon)
 static float g_skinYaw;                                     // vue montree (0..16, la plus proche est dessinee)
 static bool g_skinDrag;
@@ -547,7 +548,7 @@ static int g_persoTab;                                     // 0 Tenue, 1 Visage 
 static int g_persoView;                                    // 0 Pied (en entier), 1 Portrait
 static int g_tilePage[PF_COUNT] = { -1, -1, -1, -1, -1, -1, -1 };   // page montree par partie (-1 : celle du choix actuel)
 static const int kTileCols = 7;
-static const float kTileH = 84, kTileGap = 8;
+static const float kTileH = 92, kTileGap = 8;
 static const int kPersoPal[16] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89, 0x55B04C, 0x3FBFD9, 0xE8A33C, 0xB24FA5, 0x8C6239, 0x5C6BC0, 0xA9C43A, 0xE88A7A };   // (couleur du joueur : meme palette que le salon et Sync/Markers.cs)
 struct TileSec { int f; const wchar_t *fr, *en; int rows; };
 static const TileSec kTenueSecs[] = { { PF_SHIRT, L"HAUT", L"TOP", 2 }, { PF_PANTS, L"BAS", L"BOTTOM", 1 }, { PF_BODY, L"SILHOUETTE", L"BUILD", 1 } };
@@ -585,18 +586,19 @@ static float PersoLayout(std::vector<SecLay> &out)
         int sel = PersoIndexOf(L.tiles, PersoGet(secs[s].f));
         L.page = g_tilePage[secs[s].f] < 0 ? sel / L.per : g_tilePage[secs[s].f] % L.pages;
         out.push_back(L);
-        y += 24 + secs[s].rows * (kTileH + kTileGap) - kTileGap + 12;
+        y += 24 + secs[s].rows * (kTileH + kTileGap) - kTileGap + 17;
     }
     return y;
 }
-static RectF PersoStripRect() { return g_persoTab ? RectF(kSkinPanel.X + 18, kSkinPanel.Y + 526, kSkinPanel.Width - 36, 62) : RectF(kSkinPanel.X + 18, kSkinPanel.Y + 502, kSkinPanel.Width - 36, 86); }
+static RectF PersoStripRect() { float b = kSkinPanel.Y + kSkinPanel.Height - 16; return g_persoTab ? RectF(kSkinPanel.X + 18, b - 62, kSkinPanel.Width - 36, 62) : RectF(kSkinPanel.X + 18, b - 86, kSkinPanel.Width - 36, 86); }   // (en bas de la carte)
 static RectF PersoSwatchRect(int i) { RectF s = PersoStripRect(); return RectF(s.X + 12 + i * 32.0f, s.Y + 50, 26, 26); }
 static RectF PersoPaintRect() { RectF s = PersoStripRect(); return RectF(s.X + s.Width - 12 - 136, s.Y + 8, 136, 34); }
 static RectF PersoViewSegRect() { return RectF(kSkinCard.X + kSkinCard.Width - 16 - 150, kSkinCard.Y + 14, 150, 30); }
 static float PersoTabW(int k) { return PillW(T(kPersoTabFr[k], kPersoTabEn[k]), 13) + 16; }
-static RectF PersoTabRect(int k) { float x = kMain.X; for (int j = 0; j < k; j++) x += PersoTabW(j) + 6; return RectF(x, kPersoTabY, PersoTabW(k), kPersoTabH); }
+static float PersoTabsW() { float w = 0; for (int k = 0; k < 3; k++) w += PersoTabW(k) + (k ? 6 : 0); return w; }
+static RectF PersoTabRect(int k) { float x = g_persoTabRight - PersoTabsW(); for (int j = 0; j < k; j++) x += PersoTabW(j) + 6; return RectF(x, kPersoTabY, PersoTabW(k), kPersoTabH); }
 
-// Onglets de la page (TENUE et VOITURE).
+// Onglets de la page (TENUE et VOITURE), dessines par l'en-tete (ui.inc DrawHeader) : pilules comme la maquette.
 static void PersoTabsDraw(Graphics &g)
 {
     int sel = g_tab == TAB_CAR ? 2 : g_persoTab;
@@ -881,7 +883,6 @@ static void DrawSkins(Graphics &g)
     SkinsCheck();
     const Opt *ap = SkinOpt();
     if (!ap) return;
-    PersoTabsDraw(g);
     Glass(kSkinCard);
     Glass(kSkinPanel);
     int sel = OptGet(*ap);
@@ -967,9 +968,9 @@ static void DrawSkins(Graphics &g)
     if (PersoStale())   // export d'une ancienne version (corps des PNJ dans leur pose : la grand-mere assise...)
         Para(g, T(L"Aperçu fait par une ancienne version : lance une partie (solo suffit) et reste ~30 s en jeu, il sera refait.",
                   L"Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone."),
-             RectF(c.X + 16, c.Y + 508, c.Width - 32, 34), 11.5f, kWarn);
+             RectF(c.X + 16, c.Y + c.Height - 96, c.Width - 32, 34), 11.5f, kWarn);
     else Para(g, T(L"Le portrait en bas à droite est celui affiché dans les salons et sur la carte.", L"The portrait at the bottom right is the one shown in lobbies and on the map."),
-              RectF(c.X + 16, c.Y + 508, c.Width - 32, 34), 11.5f, kGrey);
+              RectF(c.X + 16, c.Y + c.Height - 96, c.Width - 32, 34), 11.5f, kGrey);
     float by = c.Y + c.Height - 16 - 44;
     UiButton(g, RectF(c.X + 16, by, 110, 44), T(L"Aléatoire", L"Random"), UI_LOOKRAND, false, IC_SHUFFLE);
     UiButton(g, RectF(c.X + 134, by, 110, 44), T(L"Comme avant", L"As before"), UI_LOOKRESET, false);
