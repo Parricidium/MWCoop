@@ -186,6 +186,8 @@ static void SessionInfo(LogGroup &gr, const std::wstring &modLog, bool running)
     gr.crash = !running && v && !(a == 0 && b < 32) && !strstr(tail, "jeu ferme normalement");
 }
 
+static bool ToRecycleBin(const std::vector<std::wstring> &paths);   // (launcher.cpp)
+static int LogsSessionsKept() { int n = (int)GetPrivateProfileIntW(L"Lanceur", L"Sessions", 30, g_iniLauncher.c_str()); return n == 3 || n == 10 ? n : 30; }
 static void LogsScan()
 {
     std::vector<LogEntry> list;
@@ -284,6 +286,13 @@ static void LogsScan()
     std::vector<int> order;
     for (int gi = 1; gi < (int)groups.size(); gi++) if (groups[gi].files > 0) order.push_back(gi);
     std::sort(order.begin(), order.end(), [&](int a, int b) { return CompareFileTime(&groups[a].end, &groups[b].end) > 0; });
+    {   // Sessions gardees (Reglages > Lanceur > Depannage, [Lanceur] Sessions = 3|10|30 ; le chargeur en garde 30 de lui-meme) :
+        // les parties rangees au-dela, les plus anciennes, vont a la corbeille.
+        int keep = LogsSessionsKept();
+        std::vector<std::wstring> old;
+        while ((int)order.size() > keep) { old.push_back(groups[order.back()].dir); order.pop_back(); }
+        if (!old.empty()) { LaunchLog("journaux : %d partie(s) rangee(s) au-dela de %d mise(s) a la corbeille", (int)old.size(), keep); ToRecycleBin(old); }
+    }
     if (groups[0].files > 0) order.insert(order.begin(), 0);
     for (int gi : order) { remap[gi] = (int)kept.size(); kept.push_back(groups[gi]); }
     for (auto &e : list) e.group = remap[e.group];

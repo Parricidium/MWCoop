@@ -7,6 +7,9 @@
 // 6 : police de la maquette (Nunito, variable, licence SIL OFL 1.1 : OFL-Nunito.txt), chargee en memoire au demarrage
 // (launcher.cpp EmbedFontLoad) ; illisible : Segoe UI comme avant
 6 RCDATA "Nunito-VariableFont_wght.ttf"
+// 7, 8 : instances statiques SemiBold (textes) et ExtraBold (gras) -- GDI+ ne lit qu'une graisse de la variable
+7 RCDATA "Nunito-SemiBold.ttf"
+8 RCDATA "Nunito-ExtraBold.ttf"
 // 5 : le chargeur (build\version.dll) de la meme compilation -- reference pour verifier celui du jeu (LoaderEnsure)
 5 RCDATA "build\\version.dll"
 
