@@ -643,7 +643,18 @@ namespace MWCoop
             if (root != null && root != p.Body.transform) return false;
             // Posee dans une voiture qu'un autre fait rouler : c'est lui qui la transporte.
             Rigidbody car = VehicleSync.CarUnder(p.Body);
-            return car == null || VehicleSync.Authority(car) == Session.LocalId;
+            if (car != null && VehicleSync.Authority(car) != Session.LocalId) return false;
+            // Qu'un autre manoeuvre (a pied a moins de 3 m, ou avec le vehicule qu'il conduit a moins de 5 m) : sa pose au repos
+            // arrive de chez lui (« pousse ici ») ; recalee d'ici toutes les 2 s, elle lui echappait (OpNoob, 17/10 : la fendeuse
+            // poussee au tracteur, jamais a 0,2 m de la prise de force, et sur le calque 16 a chaque recalage : pas de clic).
+            Vector3 at = p.Body.position;
+            if (VehicleSync.NearRemotelySeated(at, 5f)) return false;
+            foreach (Peer pe in Session.T.Peers)
+            {
+                Vector3 hp; Quaternion hr;
+                if (pe.Accepted && PlayerSync.HeadFrame(pe.Id, false, out hp, out hr) && (hp - at).sqrMagnitude < 9f) return false;
+            }
+            return true;
         }
 
         // Calque d'un objet tenu en main (automate PickUp du jeu : SetLayer 16 a la prise, 19 au lacher) : il ne

@@ -1974,6 +1974,14 @@ namespace MWCoop
             Car c = CarOf(t);
             return c != null && c.RemoteDriver >= 0 && Remote(c, Time.realtimeSinceStartup);
         }
+        // Un vehicule mene par un autre joueur (assis au volant) a moins de d metres du point : ce qu'il pousse est a lui.
+        public static bool NearRemotelySeated(Vector3 at, float d)
+        {
+            float now = Time.realtimeSinceStartup;
+            foreach (Car c in cars)
+                if (c.Body != null && c.RemoteDriver >= 0 && Remote(c, now) && (c.Body.position - at).sqrMagnitude < d * d) return true;
+            return false;
+        }
 
         // Volant pris d'une voiture dont le moteur tourne chez un autre (copie : son Drivetrain coupe ici, son
         // automate Starter a l'arret) : sans rien faire, le moteur calait en prenant le volant -- en marche chez
