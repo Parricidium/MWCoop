@@ -79,7 +79,7 @@ namespace MWCoop
         static readonly List<Prop> vanished = new List<Prop>();
         static readonly HashSet<string> noKey = new HashSet<string>();
         static readonly Dictionary<string, float> unknown = new Dictionary<string, float>();
-        static float nextScan = -1, nextSend, nextHost, lastForced, nextRide;
+        static float nextScan = -1, nextSend, nextHost, lastForced, nextRide, nextRescue;
         static int pushLogs;
         static int ridePass;
 
@@ -496,6 +496,11 @@ namespace MWCoop
                     Session.Broadcast(new NetWriter(Msg.Prop).U8(by).Str(sid).U8(STORED).Vec(Vector3.zero).Quat(Quaternion.identity).Vec(Vector3.zero), true, by);
                 }
             }
+            if (now >= nextRescue)
+            {
+                nextRescue = now + 1f;
+                foreach (Prop p in props.Values) Rescue(p, now);
+            }
             if (Session.IsHost && now >= nextHost && Session.RemoteCount > 0)
             {
                 nextHost = now + 2f;
@@ -799,6 +804,30 @@ namespace MWCoop
             settling.Remove(p);
         }
 
+        public static bool IsProp(Rigidbody rb) { return rb != null && byBody.ContainsKey(rb); }
+
+        // Objet tombe sous la carte (hote de NotHuyarma, 17/10 : une pose a y = -345 000 000 envoyee toutes les 6 s, ignoree par
+        // l'invite ; les colis « qui disparaissent » des fourches) : remis a sa derniere pose envoyee, sinon devant le joueur.
+        static int rescued;
+        static bool Rescue(Prop p, float now)
+        {
+            if (p.Body == null || p == held || p.RemoteBy >= 0 || p.RideCar >= 0 || p.Body.isKinematic) return false;
+            Vector3 at = p.Body.position;
+            bool bad = float.IsNaN(at.x + at.y + at.z) || float.IsInfinity(at.x + at.y + at.z);
+            // (en chute libre seulement : un objet range par le jeu loin sous la carte, immobile, reste ou il est)
+            if (!bad && (at.y > -150f || p.Body.velocity.y > -10f)) return false;
+            Vector3 to = p.LastSentPos;
+            bool last = to != Vector3.zero && !float.IsNaN(to.y) && !float.IsInfinity(to.y) && to.y > -150f && (to - at).sqrMagnitude > 0f;
+            if (!last) { Transform me = Game.PlayerT; if (me == null) return false; to = me.position + me.forward * 1.5f + Vector3.up * 1.2f; }
+            p.Body.position = to; p.Body.transform.position = to;
+            p.Body.velocity = Vector3.zero; p.Body.angularVelocity = Vector3.zero;
+            p.LastSentPos = to;
+            VehicleSync.Forget(p.Body);
+            if (Session.IsHost && Session.Active && Session.RemoteCount > 0) Send(p, 0, true);
+            if (rescued++ < 20) Log.Warn("objet " + p.Id + " tombe sous la carte (" + at.ToString("F0") + ") : remis " + (last ? "a sa derniere pose " : "devant le joueur ") + to.ToString("F1"));
+            return true;
+        }
+
         // Objet disparu chez un autre sans automate a rejouer ici (Consume) : on le cache.
         public static bool Vanish(string id)
         {
@@ -965,9 +994,9 @@ namespace MWCoop
             if (Session.IsHost) who = from.Id;
             string id = r.Str();
             int state = r.U8();
-            Vector3 pos = r.Vec();
-            Quaternion rot = r.Quat();
-            Vector3 vel = r.Vec();
+            Vector3 pos, vel; Quaternion rot;
+            try { pos = r.Vec(); rot = r.Quat(); vel = r.Vec(); }
+            catch (BadNumberException e) { throw new BadNumberException(e.Message + " pour l'objet " + id); }   // (journal : quel objet)
             int car = state == 3 ? r.U8() : -1;   // transporte : pos et rot sont dans la voiture 'car'
             // Au repos dans une voiture : sa pose dans la voiture 'car' suit (InCarPose).
             bool inCar = state == 0 && r.More;

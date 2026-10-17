@@ -115,7 +115,9 @@ namespace MWCoop
                     if (x.Fsm == null) continue;
                     if (w != null && w.Length + 6 + System.Text.Encoding.UTF8.GetByteCount(x.Key) > 1000) { Session.T.SendReliable(p, w.ToArray()); w = null; }
                     if (w == null) w = new NetWriter(Msg.Fluid).U8(Session.LocalId);
-                    w.Str(x.Key).F32(Val(x));
+                    float sv = Val(x);
+                    if (float.IsNaN(sv) || float.IsInfinity(sv)) continue;
+                    w.Str(x.Key).F32(sv);
                     n++;
                 }
                 if (w != null) Session.T.SendReliable(p, w.ToArray());
@@ -247,6 +249,7 @@ namespace MWCoop
                     if (++fills % 20 == 1) Log.Info("liquides et usure : " + x.Key + " rempli ici de " + x.Pending.ToString("F2") + ", envoye en ajout");
                     x.Pending = 0f; x.NextDelta = now + 0.5f;
                 }
+                if (float.IsNaN(v) || float.IsInfinity(v)) continue;   // (jamais envoyee : chez l'autre, moteur a valeurs folles)
                 if (!Changed(x, v)) continue;
                 if (alone) { x.Last = v; continue; }   // personne a prevenir : l'arrivant recevra l'instantane
                 if (x.Septic)
@@ -296,6 +299,7 @@ namespace MWCoop
             {
                 string key = r.Str();
                 float v = r.F32();
+                if (float.IsNaN(v) || float.IsInfinity(v)) { if (now >= nextWarn) { nextWarn = now + 10f; Log.Warn("liquides et usure : " + key + " = " + v + " de #" + who + " ignoree"); } continue; }   // (ni appliquee ni relayee)
                 if (relay != null) relay.Str(key).F32(v);
                 Watch x;
                 bool add = key.Length > 1 && key[0] == '+';
