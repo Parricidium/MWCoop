@@ -559,7 +559,8 @@ static const float kTileH = 84, kTileGap = 8, kSecH = 118;   // rubrique : titre
 static const int kPersoPal[16] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89, 0x55B04C, 0x3FBFD9, 0xE8A33C, 0xB24FA5, 0x8C6239, 0x5C6BC0, 0xA9C43A, 0xE88A7A };   // (couleur du joueur : meme palette que le salon et Sync/Markers.cs)
 static const Color kPink(255, 255, 107, 139);              // pastille « Photo » (maquette : .chip.new)
 struct TileSec { int id, f; const wchar_t *fr, *en; };     // f : partie (PF_*), -1 : la tete (plusieurs parties)
-static const TileSec kTenueSecs[] = { { SEC_SHIRT, PF_SHIRT, L"Haut", L"Top" }, { SEC_PANTS, PF_PANTS, L"Bas", L"Bottom" }, { SEC_HEAD, -1, L"Tête", L"Head" }, { SEC_BODY, PF_BODY, L"Silhouette", L"Build" } };
+// (plus de rangee « Tete » melangee dans Tenue -- retour de JD, 18/10 : visage, chapeau, lunettes, cheveux sont l'onglet Visage)
+static const TileSec kTenueSecs[] = { { SEC_SHIRT, PF_SHIRT, L"Haut", L"Top" }, { SEC_PANTS, PF_PANTS, L"Bas", L"Bottom" }, { SEC_BODY, PF_BODY, L"Silhouette", L"Build" } };
 static const TileSec kVisageSecs[] = { { SEC_FACE, PF_FACE, L"Visage", L"Face" }, { SEC_HAT, PF_HAT, L"Chapeau", L"Hat" }, { SEC_GLASSES, PF_GLASSES, L"Lunettes", L"Glasses" }, { SEC_HAIR, PF_HAIR, L"Cheveux", L"Hair" } };
 static const wchar_t *kPersoTabFr[3] = { L"Tenue", L"Visage", L"Voiture" }, *kPersoTabEn[3] = { L"Outfit", L"Face", L"Car" };
 static const wchar_t *kViewFr[3] = { L"Pied", L"Portrait", L"Volant" }, *kViewEn[3] = { L"Full", L"Portrait", L"Wheel" };
@@ -570,7 +571,8 @@ struct Tile { int f; std::string v; };
 static std::vector<Tile> PersoTiles(int f)
 {
     std::vector<Tile> v;
-    if (f == PF_FACE && !PersoImgHas(PI_FACE)) v.push_back({ f, "#import" });
+    int k = PersoImgOf(f);   // visage, haut, pantalon : une tuile « Mon ... » tant que l'image n'est pas importee
+    if (k >= 0 && !PersoImgHas(k)) v.push_back({ f, "#import" });
     for (auto &s : PersoChoices(f)) v.push_back({ f, s });
     return v;
 }
@@ -610,7 +612,9 @@ static float PersoLayout(std::vector<SecLay> &out)
 static RectF PersoStripRect() { float b = kSkinPanel.Y + kSkinPanel.Height - 16; return g_persoTab ? RectF(kSkinPanel.X + 18, b - 104, kSkinPanel.Width - 36, 104) : RectF(kSkinPanel.X + 18, b - 86, kSkinPanel.Width - 36, 86); }
 static RectF PersoSwatchRect(int i) { RectF s = PersoStripRect(); return RectF(s.X + 12 + i * 32.0f, s.Y + 50, 26, 26); }
 static RectF PersoPaintRect() { RectF s = PersoStripRect(); return RectF(s.X + s.Width - 12 - 136, s.Y + 8, 136, 34); }
-static RectF PersoImgTileRect(int k) { RectF s = PersoStripRect(); return RectF(s.X + 10 + k * (TileW() + kTileGap), s.Y + 10, TileW(), kTileH); }
+// Bande « Mes images » : seule bande de l'onglet Visage ; dans Tenue, au-dessus de la bande Voiture (retour de JD, 18/10).
+static RectF PersoImgStripRect() { if (g_persoTab) return PersoStripRect(); RectF c = PersoStripRect(); return RectF(c.X, c.Y - 10 - 104, c.Width, 104); }
+static RectF PersoImgTileRect(int k) { RectF s = PersoImgStripRect(); return RectF(s.X + 10 + k * (TileW() + kTileGap), s.Y + 10, TileW(), kTileH); }
 // Vues Pied / Portrait / Volant (segments a la taille du texte, comme la maquette) et la fleche « comme avant ».
 static float ViewSegBtnW(int i) { return MeasureW(MeasureG(), T(kViewFr[i], kViewEn[i]), 12, FontStyleBold) + 22; }
 static RectF PersoViewSegRect() { float w = 6; for (int i = 0; i < 3; i++) w += ViewSegBtnW(i); return RectF(kSkinCard.X + kSkinCard.Width - 16 - w, kSkinCard.Y + 14, w, 34); }
@@ -662,7 +666,8 @@ static int PersoPageHit(float x, float y)
     if (!g_persoTab) {
         for (int i = 0; i < kSwatchN; i++) { RectF r = PersoSwatchRect(i); r.Inflate(3, 3); if (r.Contains(x, y)) return HT_SWATCH + i; }
         if (PersoPaintRect().Contains(x, y)) return HT_PAINT;
-    } else for (int k = 0; k < 3; k++) if (PersoImgTileRect(k).Contains(x, y)) return HT_IMG + k;
+    }
+    for (int k = 0; k < 3; k++) if (PersoImgTileRect(k).Contains(x, y)) return HT_IMG + k;   // (Mes images : les deux onglets)
     return -1;
 }
 static bool PersoPageMouseDown(float x, float y)
@@ -697,7 +702,7 @@ static bool PersoPageMouseDown(float x, float y)
     int at = L.page * L.per + i;
     if (at >= L.n) return true;
     const Tile &tl = L.tiles[at];
-    if (tl.v == "#import") { g_lookZone = 0; FaceImport(); return true; }
+    if (tl.v == "#import") { g_lookZone = tl.f == PF_SHIRT ? 1 : tl.f == PF_PANTS ? 2 : 0; FaceImport(); return true; }
     if (g_tilePage[id] < 0) g_tilePage[id] = L.page;   // (la page reste : on compare les voisins)
     if (tl.f == PF_SHIRT) { const Opt *ap = SkinOpt(); int cur = ap ? OptGet(*ap) : 0; SkinSelect(ap ? (int)(std::find(ap->svals.begin(), ap->svals.end(), tl.v) - ap->svals.begin()) : 0, at < cur ? -1 : 1); }
     else { PersoSet(tl.f, TileOn(tl) && L.sec->f < 0 && tl.f != PF_FACE ? "" : tl.v); g_skinChangeT = GetTickCount(); g_skinAnnounce = true; }   // (tete : un accessoire pris se declique)
@@ -752,7 +757,7 @@ static Bitmap *TileBmp(int f, const std::string &v)
 // Libelle court d'une tuile (63 px) : « Dom 38 » plutot que « Visage Dom 38 », la rubrique le dit deja.
 static std::wstring TileLabel(int f, const std::string &v)
 {
-    if (v == "#import") return T(L"Mon visage", L"My face");
+    if (v == "#import") return f == PF_SHIRT ? T(L"Mon haut", L"My top") : f == PF_PANTS ? T(L"Mon pantalon", L"My pants") : T(L"Mon visage", L"My face");
     std::wstring l = PersoLabel(f, v);
     if (IsTenue(v)) { size_t sp = l.find(L' '); if (sp != std::wstring::npos) l = l.substr(sp + 1); }
     if (f == PF_GLASSES && !v.empty()) {   // « Lunettes (chromées) » -> « Chromées », « Lunettes de soleil » -> « De soleil »
@@ -937,14 +942,14 @@ static void DrawCarStrip(Graphics &g)
 // celle que visent Importer, Gabarit, Retirer).
 static void DrawImagesStrip(Graphics &g)
 {
-    RectF s = PersoStripRect();
+    RectF s = PersoImgStripRect();
     g_faceRect = s;
     PersoStripBg(g, s);
     for (int k = 0; k < 3; k++) DrawImgTile(g, PersoImgTileRect(k), k, g_lookZone == k, g_skinRowHot == HT_IMG + k);
     float tx = s.X + 10 + 3 * (TileW() + kTileGap) + 6, bx = s.X + s.Width - 12 - 132, tw = bx - 12 - tx;
     Text(g, T(L"Mes images", L"My images"), RectF(tx, s.Y + 12, tw, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
-    Para(g, T(L"Peintes sur le gabarit du jeu, montrées aux autres joueurs. Choisis une tuile, puis importe ton image.",
-              L"Painted on the game's template, shown to the other players. Pick a tile, then import your image."), RectF(tx, s.Y + 34, tw, 62), 11.5f, kGrey);
+    Para(g, T(L"Ta texture, peinte sur le gabarit du jeu (bouton Gabarit), vue par les autres joueurs : choisis Visage, Haut ou Pantalon, puis Importer…",
+              L"Your texture, painted on the game's template (Template button), seen by the other players: pick Face, Top or Pants, then Import…"), RectF(tx, s.Y + 34, tw, 62), 11.5f, kGrey);
     bool has = PersoImgHas(PersoImgZone());
     UiButton(g, RectF(bx, s.Y + 12, 132, 36), T(L"Importer…", L"Import…"), UI_FACE_IMPORT, !has, -1, true, 11);
     UiButton(g, RectF(bx, s.Y + 56, 62, 36), T(L"Gabarit", L"Template"), UI_FACE_TPL, false, -1, true, 11);
@@ -1083,7 +1088,7 @@ static void DrawSkins(Graphics &g)
     // --- a droite : les rubriques de l'onglet
     RectF pn = kSkinPanel;
     Title(g, g_persoTab ? T(L"Visage", L"Face") : T(L"Tenue", L"Outfit"), RectF(pn.X + 18, pn.Y + 16, 160, 30), 16, kInk);
-    Text(g, g_persoTab ? T(L"Visage, chapeau, lunettes, cheveux · tes images", L"Face, hat, glasses, hair · your images") : T(L"Vêtements du jeu + packs offerts par la communauté", L"Game clothes + packs offered by the community"),
+    Text(g, g_persoTab ? T(L"Visage, chapeau, lunettes, cheveux · tes images", L"Face, hat, glasses, hair · your images") : T(L"Vêtements du jeu + packs de la communauté · tes images en bas", L"Game clothes + community packs · your images below"),
          RectF(pn.X + 120, pn.Y + 18, pn.Width - 138, 26), 12, FontStyleRegular, kGrey, StringAlignmentFar);
     std::vector<SecLay> lay;
     float yEnd = PersoLayout(lay);
@@ -1112,7 +1117,8 @@ static void DrawSkins(Graphics &g)
         }
     }
     if (!perso) DrawPersoCallout(g, RectF(pn.X + 18, yEnd + 4, pn.Width - 36, 104));
-    if (g_persoTab) DrawImagesStrip(g); else DrawCarStrip(g);
+    DrawImagesStrip(g);   // (les deux onglets : c'est la que s'importent visage, haut et pantalon)
+    if (!g_persoTab) DrawCarStrip(g);
 }
 
 // Aleatoire : une valeur au hasard pour chaque partie (apparence complete), sinon un haut au hasard.

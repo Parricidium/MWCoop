@@ -1613,6 +1613,8 @@ static const wchar_t *const kRu[][2] = {
     { L"Discord", L"Discord" },
     { L"The MWCoop community: help, bug reports, news and players to team up with. Logs and Support (Ko-fi) right next to it.", L"Сообщество MWCoop: помощь, сообщения об ошибках, новости и игроки для команды. Логи и Поддержать (Ko-fi) — рядом." },
     { L"The lobby chat", L"Чат лобби" },
+    { L"Game clothes + community packs · your images below", L"Одежда игры + паки сообщества · твои картинки внизу" },
+    { L"Your texture, painted on the game's template (Template button), seen by the other players: pick Face, Top or Pants, then Import…", L"Твоя текстура, нарисованная на шаблоне игры (кнопка Шаблон), видна другим игрокам: выбери Лицо, Верх или Штаны, затем Импорт…" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },

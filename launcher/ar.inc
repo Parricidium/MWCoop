@@ -1099,6 +1099,8 @@ static const wchar_t *const kAr[][2] = {
     { L"API for modders", L"واجهة برمجية لصانعي التعديلات" },
     { L"MWCoop.CoopApi: docs, DLL and an example", L"MWCoop.CoopApi: الوثائق وملف DLL ومثال" },
     { L"Credits", L"الشكر والتقدير" },
+    { L"Game clothes + community packs · your images below", L"ملابس اللعبة + حزم المجتمع · صورك في الأسفل" },
+    { L"Your texture, painted on the game's template (Template button), seen by the other players: pick Face, Top or Pants, then Import…", L"نقشك المرسوم على قالب اللعبة (زر القالب)، يراه اللاعبون الآخرون: اختر الوجه أو القميص أو السروال ثم استيراد…" },
     { L"Thanks to everyone who makes MWCoop better", L"شكراً لكل من يجعل MWCoop أفضل" },
     { L"VHS tapes", L"أشرطة VHS" },
     { L"Watch them, export them as .mp4, rename them, put a video on them", L"شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو" },
