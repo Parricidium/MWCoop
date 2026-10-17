@@ -311,6 +311,7 @@ namespace MWCoop
             Events.OnLevelLoaded();
             Clearing.OnLevelLoaded();
             SaveHook.OnLevelLoaded();
+            SaveStats.OnLevelLoaded();   // (partie.txt pour le lanceur)
             TeimoSled.OnLevelLoaded();
             Gfx.OnLevelLoaded();
             Lights.OnLevelLoaded();
