@@ -3575,6 +3575,7 @@ static void LobbyHost()
     LobbyOptImport();   // (salon prive / public, joueurs max, options de la partie : valeurs du moment, pour ce salon)
     g_lobbyCode = g_testCode.empty() ? MakeSessionCode() : g_testCode;
     if (g_testPublic) g_lobbyPrive = false;
+    LobbyChatClear();
     g_lobby = LB_HOST;
     g_tab = TAB_LOBBY;
     g_scroll[TAB_LOBBY] = 0;
@@ -3627,6 +3628,7 @@ static void LobbyClose(bool keepListen = false)
     if (g_tab == TAB_LOBBY) g_tab = TAB_HOME;
     g_lobbyOpts = false;
     g_sCodeAsk = false;
+    LobbyChatClear();   // (l'historique du tchat vit le temps du salon)
     if (!g_syncKeep) { EnterCriticalSection(&g_lcs); g_hostOpt.clear(); LeaveCriticalSection(&g_lcs); }   // (GO : gardees pour le lancement)
 }
 
@@ -3734,6 +3736,13 @@ static void LobbyApplyPartie(int p)
 }
 
 // --- invite
+// Dernier hote rejoint ([Lanceur] DernierHote, mwcoop-lanceur.ini) : la page MODS s'en sert (mods recus de cet hote).
+static void LobbyLastHost(const std::string &name)
+{
+    if (name.empty()) return;
+    WritePrivateProfileStringW(L"Lanceur", L"DernierHote", Widen(name, CP_UTF8).c_str(), g_iniLauncher.c_str());
+    TestLog("salon : dernier hote %s", name.c_str());
+}
 static void GuestSend(const Wr &w)
 {
     EnterCriticalSection(&g_lcs);
@@ -3834,9 +3843,9 @@ static DWORD WINAPI GuestThread(void *param)
     if (HANDLE ut = CreateThread(NULL, 0, UdpProbeThread, (void *)(intptr_t)gen, 0, NULL)) CloseHandle(ut);
     to = 60000;   // (l'hote envoie un ping toutes les 2 s)
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&to, sizeof(to));
-    bool go = false;
-    std::string lastList;
-    while (!go && RecvMsg(s, m)) {
+    bool go = false, kicked = false;
+    std::string lastList, lastHost;
+    while (!go && !kicked && RecvMsg(s, m)) {
         Rd q(m);
         int type = q.u8();
         if (type == M_STATE) {
@@ -3886,6 +3895,7 @@ static DWORD WINAPI GuestThread(void *param)
                 EnterCriticalSection(&g_lcs);
                 g_peers = peers;
                 LeaveCriticalSection(&g_lcs);
+                for (auto &p : peers) if (p.id == 0 && p.name != lastHost) { lastHost = p.name; LobbyLastHost(p.name); }   // (page MODS : le dernier hote)
                 g_partie = partie == PARTIE_NOUVELLE ? PARTIE_NOUVELLE : PARTIE_CONTINUER;
                 list += std::string(" ; partie=") + PartieName(g_partie);
                 if (list != lastList) { TestLog("salon : liste %s", list.c_str()); lastList = list; }
@@ -3901,13 +3911,29 @@ static DWORD WINAPI GuestThread(void *param)
             int partie = q.u8();
             TestLog("salon : GO recu (partie=%s)", PartieName(partie));
             PostMessageW(g_wnd, WM_APP_GO, partie, gen);
+        } else if (type == M_CHAT) {   // (tchat : relaye par l'hote, numero du joueur puis le texte)
+            int id = q.u8(), n = q.u16();
+            if (q.ok && q.p + n <= m.size()) {
+                std::string name;
+                EnterCriticalSection(&g_lcs);
+                for (auto &p : g_peers) if (p.id == id) name = p.name;
+                LeaveCriticalSection(&g_lcs);
+                LobbyChatAdd(id, name.empty() ? "?" : name, m.substr(q.p, n));
+            }
+        } else if (type == M_REJECT) {   // (en cours de salon : l'hote me met dehors)
+            std::string why = q.str();
+            EnterCriticalSection(&g_lcs);
+            g_rejectWhy = q.ok ? why : "kicked";
+            LeaveCriticalSection(&g_lcs);
+            kicked = true;
+            TestLog("salon : mis dehors par l'hote (%s)", why.c_str());
         }
     }
     EnterCriticalSection(&g_lcs);
     g_guestSock = INVALID_SOCKET;
     LeaveCriticalSection(&g_lcs);
     closesocket(s);
-    if (!go) PostMessageW(g_wnd, WM_APP_LOBBYEND, 0, gen);
+    if (!go) PostMessageW(g_wnd, WM_APP_LOBBYEND, kicked ? 1 : 0, gen);
     return 0;
 }
 static void LobbyJoin()
@@ -3936,6 +3962,7 @@ static void LobbyJoin()
     g_lobbyPrive = false; g_lobbyMax = 8; g_lobbyCode.clear();
     g_joinCode = g_testCode.empty() ? CodeNorm(g_fields[2].text) : g_testCode;
     g_mySkinSent = MySkin();
+    LobbyChatClear();
     int gen = ++g_lobbyGen;
     g_lobby = LB_CONNECTING;
     g_tab = TAB_LOBBY;
@@ -4106,8 +4133,8 @@ static float LobbyMaxScroll()
     int rows = n + (n < g_lobbyMax ? 1 : 0);
     return max(0.0f, rows * kLobbyRowH - kLobbyList.Height);
 }
-// 0/1 : partie ; 50 retour au salon, 51 "inviter des amis" (place libre, salon Steam), 100+i ami i ;
-// 70 : TOUT ACCEPTER / REESSAYER (invite), 71 : CHOISIR (hote, page PARTAGE).
+// 0/1 : partie ; 50 retour au salon, 51 "inviter des amis" (place libre, salon Steam), 100+i ami i ; 200+i ligne i d'un
+// invite (hote IP : le mettre dehors en deux clics) ; 70 : TOUT ACCEPTER / REESSAYER (invite), 71 : CHOISIR (hote, page PARTAGE).
 static int LobbyChoiceAt(float x, float y)
 {
     if ((g_lobby == LB_HOST || g_lobby == LB_GUEST) && !(g_lobbySteam && g_sFriendsView))
@@ -4122,6 +4149,13 @@ static int LobbyChoiceAt(float x, float y)
         int n = (int)g_peers.size();
         LeaveCriticalSection(&g_lcs);
         if (n < g_lobbyMax && (int)((y - kLobbyList.Y + g_scroll[TAB_LOBBY]) / kLobbyRowH) == n) return 51;
+    } else if (!g_lobbySteam && kLobbyList.Contains(x, y)) {   // hote IP : la ligne d'un invite (deux clics : dehors)
+        EnterCriticalSection(&g_lcs);
+        int n = (int)g_peers.size();
+        LeaveCriticalSection(&g_lcs);
+        int i = (int)((y - kLobbyList.Y + g_scroll[TAB_LOBBY]) / kLobbyRowH);
+        float ry = kLobbyList.Y + i * kLobbyRowH - g_scroll[TAB_LOBBY];
+        if (i >= 1 && i < n && y < ry + kLobbyRowH - 8) return 200 + i;
     }
     for (int i = 0; i < 2; i++) if (kChoiceR[i].Contains(x, y)) return i;
     return -1;
@@ -4186,61 +4220,122 @@ static std::wstring LobbyCatLabel(const std::string &key)
     return Widen(key);
 }
 
-// Libelle d'une option dans le salon : plus court que celui des Options du jeu (colonne etroite), sinon le meme.
-static std::wstring LobbyOptLabel(const LobbyOptDef &d, const GfxRow *r)
+// Libelle d'une option dans le salon (maquette du 17/10 : gras, petite ligne grise dessous pour quelques-unes) : plus court
+// que celui des Options du jeu (colonne etroite), sinon le meme.
+static void LobbyRowLabel(const LobbyOptDef &d, const GfxRow *r, std::wstring &lab, std::wstring &sub)
 {
-    static const struct { const char *key; const wchar_t *fr, *en; } kShort[] = {
-        { "Triches", L"Triches (F7)", L"Cheats (F7)" },
-        { "Renverser", L"Les voitures renversent les joueurs", L"Cars run players over" },
-        { "PvP", L"Coups de poing entre joueurs", L"Punches between players" },
-        { "VenttiEnjeux", L"Ventti : enjeux pour tout le groupe", L"Ventti: stakes for the whole group" },
-        { "Jokkis", L"Jokkis à louer (course sur glace)", L"Jokkis rentals (ice race)" },
-        { "GainMicro", L"Mon micro (pour les autres)", L"My microphone (for the others)" },
-        { "CarteMaintenir", L"Carte (M)", L"Map (M)" },
+    static const struct { const char *key; const wchar_t *fr, *en, *sfr, *sen; } kShort[] = {
+        { "Triches", L"Triches (F7)", L"Cheats (F7)", NULL, NULL },
+        { "Renverser", L"Les voitures renversent les joueurs", L"Cars run players over", L"Amis et PNJ", L"Friends and NPCs" },
+        { "PvP", L"Coups de poing entre joueurs", L"Punches between players", NULL, NULL },
+        { "VenttiEnjeux", L"Ventti : enjeux pour tout le groupe", L"Ventti: stakes for the whole group", NULL, NULL },
+        { "Jokkis", L"Jokkis à louer (course sur glace)", L"Jokkis rentals (ice race)", NULL, NULL },
+        { "GainMicro", L"Micro", L"Mic", NULL, NULL },   // (mon micro, pour les autres ; court : les pastilles prennent la place)
+        { "CarteMaintenir", L"Carte (M)", L"Map (M)", NULL, NULL },
     };
-    for (auto &s : kShort) if (!strcmp(s.key, d.key)) return T(s.fr, s.en);
-    return r ? T(r->fr, r->en) : Widen(d.key);
+    sub.clear();
+    for (auto &s : kShort) if (!strcmp(s.key, d.key)) { lab = T(s.fr, s.en); if (s.sfr) sub = T(s.sfr, s.sen); return; }
+    lab = r ? T(r->fr, r->en) : Widen(d.key);
 }
-// Une option du salon : libelle des Options du jeu, interrupteur ou valeur (< >) ; lecture seule : Oui / Non ou la valeur.
+// Options a valeurs montrees en pastilles segmentees (zones UI_LOBBY_SEGV + rang, a la suite : 5 + 4 + 4 + 2 = 15 < 3300).
+static const char *kLobbySegKeys[] = { "VocalPortee", "VolumeVocal", "GainMicro", "CarteMaintenir" };
+static int LobbySegBase(const char *key)
+{
+    int base = UI_LOBBY_SEGV;
+    for (const char *k : kLobbySegKeys) {
+        const GfxRow *r = GfxRowByKey(k);
+        if (!strcmp(k, key)) return base;
+        base += r ? (int)r->vals.size() : 0;
+    }
+    return -1;
+}
+// Libelles courts des pastilles : « 15 / 25 / 35 m / 50 / 80 » (l'unite sur la valeur prise), « 50 / 75 / 100 % »,
+// « Normal / +50 % / +100 % / +200 % », « Appuyer / Maintenir ».
+static std::vector<std::wstring> LobbySegLabels(const char *key, const GfxRow *r, int sel)
+{
+    std::vector<std::wstring> out;
+    for (int j = 0; j < (int)r->vals.size(); j++) {
+        wchar_t b[24];
+        if (!strcmp(key, "GainMicro")) { if (r->vals[j] <= 100) wcscpy_s(b, T(L"Normal", L"Normal")); else swprintf_s(b, L"+%d %%", r->vals[j] - 100); }
+        else if (!strcmp(key, "VocalPortee")) swprintf_s(b, j == sel ? L"%d m" : L"%d", r->vals[j]);
+        else if (!strcmp(key, "VolumeVocal")) swprintf_s(b, j == sel ? L"%d %%" : L"%d", r->vals[j]);
+        else wcscpy_s(b, T(r->lf[j], r->le[j]));
+        out.push_back(b);
+    }
+    return out;
+}
+// Texte coupe avec « … » s'il depasse la largeur.
+static std::wstring FitText(const std::wstring &s, float px, int style, float maxW)
+{
+    Graphics &mg = MeasureG();
+    if (MeasureW(mg, s, px, style) <= maxW) return s;
+    std::wstring t = s;
+    while (t.size() > 1 && MeasureW(mg, t + L"…", px, style) > maxW) t.pop_back();
+    return t + L"…";
+}
+// Une option du salon : libelle (et sa petite ligne), interrupteur 42 x 24 ou pastilles segmentees ; lecture seule :
+// Oui / Non ou la valeur.
 static void DrawLobbyOptRow(Graphics &g, RectF row, int i, int val, bool edit, bool dim)
 {
     const LobbyOptDef &d = kLobbyOptDefs[i];
     const GfxRow *r = GfxRowByKey(d.key);
-    std::wstring lab = LobbyOptLabel(d, r);
-    bool sub = !strncmp(d.key, "Ajout", 5);   // (un ajout : en retrait sous « Ajouts MWCoop »)
+    std::wstring lab, sub;
+    LobbyRowLabel(d, r, lab, sub);
+    bool isAjout = !strncmp(d.key, "Ajout", 5);   // (un ajout : en retrait sous « Ajouts MWCoop »)
     int id = UI_LOBBY_OPT + i * 3;
-    float a = dim ? 0.45f : 1.0f, ind = sub ? 16.0f : 0.0f;
-    bool hot = edit && g_uiHot == id;
-    if (hot) { GraphicsPath hp; RoundRect(hp, RectF(row.X - 6, row.Y + 1, row.Width + 12, row.Height - 2), 9); SolidBrush hb(TH(card)); g.FillPath(&hb, &hp); }
-    if (!r || r->vals.empty()) {   // interrupteur
-        float th = min(22.0f, row.Height - 6);
-        Text(g, lab, RectF(row.X + ind, row.Y, row.Width - 56 - ind, row.Height), sub ? 12.0f : 12.5f, FontStyleRegular, WithA(kInk, a), StringAlignmentNear);
-        if (!strcmp(d.key, "Jokkis")) {   // en essai : pastille BETA apres le libelle, si elle tient
-            float tw = MeasureW(MeasureG(), lab, 12.5f, FontStyleRegular);
-            if (tw + 8 + 38 <= row.Width - 50) Pill(g, RectF(row.X + tw + 8, row.Y + row.Height / 2 - 8, 38, 16), Color(255, 255, 107, 139), T(L"BÊTA", L"BETA"), Color(255, 255, 255, 255), 8.5f);
-        }
-        if (edit) { UiToggle(g, RectF(row.X + row.Width - 2 * th, row.Y + (row.Height - th) / 2, 2 * th, th), val == 1, hot); HotZone(row, id); }
-        else Pill(g, RectF(row.X + row.Width - 46, row.Y + (row.Height - th) / 2, 46, th), val == 1 ? WithA(kAcc, 0.22f) : TH(toggleOff), val == 1 ? T(L"Oui", L"Yes") : T(L"Non", L"No"), WithA(kInk, a), 10.5f);
+    float a = dim ? 0.45f : 1.0f, ind = isAjout ? 16.0f : 0.0f, cy = row.Y + row.Height / 2;
+    bool hot = edit && g_uiHot == id, seg = r && !r->vals.empty();
+    if (hot && !seg) { GraphicsPath hp; RoundRect(hp, RectF(row.X - 6, row.Y + 1, row.Width + 12, row.Height - 2), 9); SolidBrush hb(TH(card)); g.FillPath(&hb, &hp); }
+    int k = 0;
+    if (seg) for (int j = 0; j < (int)r->vals.size(); j++) if (r->vals[j] == val) k = j;
+    std::vector<std::wstring> labs;
+    float ctrlW = 42, segPad = 11;   // (marge de chaque pastille ; plus serree a quatre ou cinq valeurs larges)
+    if (seg) {
+        labs = LobbySegLabels(d.key, r, k);
+        if (edit) { ctrlW = 6; for (auto &l : labs) ctrlW += MeasureW(MeasureG(), l, 10.5f, FontStyleBold) + segPad; }
+        if (edit && ctrlW > row.Width - 70) { segPad = 8; ctrlW = 6; for (auto &l : labs) ctrlW += MeasureW(MeasureG(), l, 10.5f, FontStyleBold) + segPad; }
+        if (!edit) ctrlW = PillW(labs[k], 11) + 4;
+    } else if (!edit) ctrlW = 46;
+    float textW = row.Width - ind - ctrlW - 10;
+    Color ink = WithA(kInk, a);
+    if (sub.empty()) Text(g, FitText(lab, 12.5f, FontStyleBold, textW), RectF(row.X + ind, row.Y, textW, row.Height), isAjout ? 12.0f : 12.5f, isAjout ? FontStyleRegular : FontStyleBold, ink, StringAlignmentNear);
+    else {
+        Text(g, FitText(lab, 12.5f, FontStyleBold, textW), RectF(row.X + ind, cy - 18, textW, 18), 12.5f, FontStyleBold, ink, StringAlignmentNear);
+        Text(g, FitText(sub, 10.5f, FontStyleRegular, textW), RectF(row.X + ind, cy + 1, textW, 16), 10.5f, FontStyleRegular, WithA(kGrey, a), StringAlignmentNear);
+    }
+    if (!strcmp(d.key, "Jokkis")) {   // en essai : pastille BETA apres le libelle, si elle tient
+        float tw = MeasureW(MeasureG(), lab, 12.5f, FontStyleBold);
+        if (tw + 8 + 38 <= textW) Pill(g, RectF(row.X + tw + 8, cy - 8, 38, 16), Color(255, 255, 107, 139), T(L"BÊTA", L"BETA"), Color(255, 255, 255, 255), 8.5f);
+    }
+    if (!seg) {   // interrupteur (plus petit sur la ligne d'un ajout)
+        float th = min(24.0f, row.Height - 2), tw = th == 24 ? 42.0f : 34.0f, ph = min(22.0f, row.Height - 2);
+        if (edit) { UiToggle(g, RectF(row.X + row.Width - tw, cy - th / 2, tw, th), val == 1, hot); HotZone(row, id); }
+        else Pill(g, RectF(row.X + row.Width - 46, cy - ph / 2, 46, ph), val == 1 ? WithA(kAcc, 0.22f) : TH(toggleOff), val == 1 ? T(L"Oui", L"Yes") : T(L"Non", L"No"), ink, 10.5f);
         return;
     }
-    int k = 0;
-    for (int j = 0; j < (int)r->vals.size(); j++) if (r->vals[j] == val) k = j;
-    Text(g, lab, RectF(row.X, row.Y, row.Width - 124, row.Height), 12.5f, FontStyleRegular, WithA(kInk, a), StringAlignmentNear);
-    RectF v(row.X + row.Width - 118, row.Y + 3, 118, row.Height - 6);
-    if (!edit) { Text(g, T(r->lf[k], r->le[k]), v, 12, FontStyleBold, WithA(kInk, a), StringAlignmentFar); return; }
-    RectF lft(v.X, v.Y, 24, v.Height), rgt(v.X + v.Width - 24, v.Y, 24, v.Height);
-    GraphicsPath vp; RoundRect(vp, v, 8);
-    SolidBrush vb(TH(btn2)); g.FillPath(&vb, &vp);
-    bool canL = k > 0, canR = k + 1 < (int)r->vals.size();
-    Icon(g, IC_CHEVL, lft.X + 12, lft.Y + lft.Height / 2, 12, WithA(g_uiHot == id + 1 ? kAcc : kInk, canL ? 1.0f : 0.25f), 2.0f);
-    Icon(g, IC_CHEVR, rgt.X + 12, rgt.Y + rgt.Height / 2, 12, WithA(g_uiHot == id + 2 ? kAcc : kInk, canR ? 1.0f : 0.25f), 2.0f);
-    Text(g, T(r->lf[k], r->le[k]), RectF(lft.X + lft.Width, v.Y, v.Width - 48, v.Height), 11.5f, FontStyleBold, kInk);
-    if (canL) HotZone(lft, id + 1);
-    if (canR) HotZone(rgt, id + 2);
+    if (!edit) { Pill(g, RectF(row.X + row.Width - ctrlW, cy - 11, ctrlW, 22), WithA(kAcc, 0.22f), labs[k], ink, 11); return; }
+    // pastilles segmentees (fond sombre, la valeur prise en accent), chacune sa zone
+    RectF sr(row.X + row.Width - ctrlW, cy - 14, ctrlW, 28);
+    int base = LobbySegBase(d.key);
+    GraphicsPath tp; RoundRect(tp, sr, 9);
+    SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
+    float sx = sr.X + 3;
+    for (int j = 0; j < (int)labs.size(); j++) {
+        float sw = MeasureW(MeasureG(), labs[j], 10.5f, FontStyleBold) + segPad;
+        RectF s(sx, sr.Y + 3, sw, sr.Height - 6);
+        bool on = j == k, shot = base >= 0 && g_uiHot == base + j;
+        GraphicsPath p; RoundRect(p, s, 7);
+        if (on) { SolidBrush b(kAcc); g.FillPath(&b, &p); }
+        else if (shot) { SolidBrush b(TH(cardSel)); g.FillPath(&b, &p); }
+        Text(g, labs[j], s, 10.5f, FontStyleBold, on ? kOnAcc : kInk);
+        if (base >= 0) HotZone(s, base + j);
+        sx += sw;
+    }
 }
 // Carte Options : onglets La partie (hote : decidees par lui, envoyees aux invites ; invite : De l'hote, lecture seule) et
 // Les miennes (chacun pour soi). Tout vaut pour ce salon seulement (lancement.ini). La partie : captions REGLES puis
 // JEUX & AJOUTS ; les quatre ajouts tiennent en une ligne Tous / Choisir / Aucun ; joueurs au plus en 4 / 8 / 12 / 16.
+// Les miennes : VOIX puis AFFICHAGE ; chez l'invite, dessous, le resume « Decide par l'hote ».
 static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
 {
     Glass(c, 20);
@@ -4253,23 +4348,26 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
                                : T(L"Choisies par l'hôte pour cette partie ; tu les reçois en direct.", L"Chosen by the host for this game; you get them live.");
     Para(g, help, RectF(x, c.Y + 44, w, 30), 10.5f, kGrey);
     std::map<std::string, int> ho;
-    if (!host && which == 0) { EnterCriticalSection(&g_lcs); ho = g_hostOpt; LeaveCriticalSection(&g_lcs); }
+    if (!host) { EnterCriticalSection(&g_lcs); ho = g_hostOpt; LeaveCriticalSection(&g_lcs); }
     bool edit = (host || which == 1) && !go;
-    auto val = [&](const char *key) {
-        if (host || which == 1) return LobbyOptGet(key);
+    auto hostVal = [&](const char *key) {   // (option de la partie : la mienne chez l'hote, celle recue chez l'invite)
+        if (host) return LobbyOptGet(key);
         auto it = ho.find(key);
         if (it != ho.end()) return it->second;
         for (auto &d : kLobbyOptDefs) if (!strcmp(d.key, key)) return d.def;
         return 0;
     };
+    auto val = [&](const char *key) { return host || which == 1 ? LobbyOptGet(key) : hostVal(key); };
     float y = c.Y + 76;
-    const float rh = 28, sh = 22;   // ligne, ligne d'un ajout
+    const float rh = which == 1 ? 32.0f : 34.0f, rh2 = which == 1 ? 42.0f : 44.0f, sh = 20;   // ligne, ligne a deux textes, ligne d'un ajout (les miennes : un peu plus serre, le resume de l'hote dessous)
     Pen sp(TH(sep), 1);
-    auto caption = [&](const wchar_t *t, bool lock) { SmallLabel(g, t, RectF(x, y, w - 20, 16), kAcc); if (lock) DrawLock(g, right - 7, y + 8, kGrey); y += 16; };
+    auto caption = [&](const wchar_t *t, bool lock) { SmallLabel(g, t, RectF(x, y, w - 20, 16), kAcc); if (lock) DrawLock(g, right - 7, y + 8, kGrey); y += 18; };
     auto row = [&](const char *key, bool dim) {
         int i = LobbyOptIdx(key);
         if (i < 0) return;
-        float h = !strncmp(key, "Ajout", 5) ? sh : rh;
+        std::wstring lab, sub;
+        LobbyRowLabel(kLobbyOptDefs[i], GfxRowByKey(key), lab, sub);
+        float h = !strncmp(key, "Ajout", 5) ? sh : sub.empty() ? rh : rh2;
         DrawLobbyOptRow(g, RectF(x, y, w, h), i, val(key), edit, dim);
         y += h;
         g.DrawLine(&sp, x, y - 0.5f, right, y - 0.5f);
@@ -4285,30 +4383,32 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         int on = 0;
         for (const char *k : kAjoutKeys) on += val(k) == 1;
         int mode = val("SansAjouts") ? 2 : (on == 4 && !(edit && g_lobbyAjoutsPick)) ? 0 : 1;
-        Text(g, T(L"Ajouts MWCoop", L"MWCoop additions"), RectF(x, y + 3, w - 170, 20), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
-        if (edit) UiSeg(g, RectF(right - 166, y + 2, 166, 28), { T(L"Tous", L"All"), T(L"Choisir", L"Pick"), T(L"Aucun", L"None") }, mode, UI_LOBBY_AJOUTS, 11);
+        bool pick = mode == 1;   // (les quatre ajouts listes dessous : les petites lignes deviennent inutiles, la place aussi)
+        Text(g, T(L"Ajouts MWCoop", L"MWCoop additions"), RectF(x, y + (pick ? 0 : 5), w - 170, pick ? rh : 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        if (edit) UiSeg(g, RectF(right - 166, y + (pick ? 2 : 4), 166, 28), { T(L"Tous", L"All"), T(L"Choisir", L"Pick"), T(L"Aucun", L"None") }, mode, UI_LOBBY_AJOUTS, 11);
         else {
             wchar_t b[24];
             swprintf_s(b, L"%d / 4", on);
-            Pill(g, RectF(right - 60, y + 5, 60, 22), mode == 2 ? TH(toggleOff) : WithA(kAcc, 0.22f), mode == 0 ? T(L"Tous", L"All") : mode == 2 ? T(L"Aucun", L"None") : b, kInk, 10.5f);
+            Pill(g, RectF(right - 60, y + 7, 60, 22), mode == 2 ? TH(toggleOff) : WithA(kAcc, 0.22f), mode == 0 ? T(L"Tous", L"All") : mode == 2 ? T(L"Aucun", L"None") : b, kInk, 10.5f);
         }
-        Text(g, T(L"Drone, sacs de couchage, boutique s21, musée", L"Drone, sleeping bags, s21 shop, museum"), RectF(x, y + 27, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-        y += 46;
+        if (!pick) Text(g, T(L"Drone, sacs de couchage, boutique s21, musée", L"Drone, sleeping bags, s21 shop, museum"), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        y += pick ? rh : rh2;
         g.DrawLine(&sp, x, y - 0.5f, right, y - 0.5f);
         if (mode == 1) for (const char *k : kAjoutKeys) row(k, false);
         // joueurs au plus (hote compris) : 4 / 8 / 12 / 16, avertissement au-dela de 10
         static const int opts[4] = { 4, 8, 12, 16 };
         int sel = -1;
         for (int k = 0; k < 4; k++) if (g_lobbyMax == opts[k]) sel = k;
-        Text(g, T(L"Joueurs au plus", L"Players max"), RectF(x, y + 3, w - 160, 20), 12.5f, FontStyleRegular, kInk, StringAlignmentNear);
+        float my = pick ? 0.0f : 5.0f;   // (compact : une seule ligne)
+        Text(g, T(L"Joueurs au plus", L"Players max"), RectF(x, y + my, w - 160, pick ? rh : 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
         wchar_t sb[120];
         if (g_lobbyMax > 10) swprintf_s(sb, L"%s", T(L"Au-delà de 10 : très bonne connexion et bonne machine chez l'hôte", L"Above 10: a very good connection and a good machine on the host's side"));
         else if (sel < 0) swprintf_s(sb, T(L"Hôte compris · %d pour ce salon", L"Host included · %d for this lobby"), g_lobbyMax);
-        else swprintf_s(sb, L"%s", T(L"Hôte compris", L"Host included"));
-        Text(g, sb, RectF(x, y + 27, w, 16), 10.5f, FontStyleRegular, g_lobbyMax > 10 ? kWarn : kGrey, StringAlignmentNear);
-        if (edit) UiSeg(g, RectF(right - 152, y + 2, 152, 28), { L"4", L"8", L"12", L"16" }, sel, UI_LOBBY_MAXSEG, 11.5f);
-        else Pill(g, RectF(right - 46, y + 5, 46, 22), WithA(kAcc, 0.22f), std::to_wstring(g_lobbyMax), kInk, 10.5f);
-        y += 46;
+        else swprintf_s(sb, L"%s", T(L"Hôte compris · au-delà de 10, bonne connexion conseillée", L"Host included · above 10, a good connection is advised"));
+        if (!pick) Text(g, sb, RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, g_lobbyMax > 10 ? kWarn : kGrey, StringAlignmentNear);
+        if (edit) UiSeg(g, RectF(right - 152, y + (pick ? 3 : 4), 152, 28), { L"4", L"8", L"12", L"16" }, sel, UI_LOBBY_MAXSEG, 11.5f);
+        else Pill(g, RectF(right - 46, y + (pick ? 6 : 7), 46, 22), WithA(kAcc, 0.22f), std::to_wstring(g_lobbyMax), kInk, 10.5f);
+        y += pick ? rh : rh2;
         if (!host && ho.empty()) Text(g, T(L"Pas encore reçues de l'hôte", L"Not received from the host yet"), RectF(x, y + 4, w, 18), 11, FontStyleItalic, kGrey, StringAlignmentNear);
     } else {
         caption(T(L"VOIX", L"VOICE"), false);
@@ -4317,10 +4417,42 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         caption(T(L"AFFICHAGE", L"DISPLAY"), false);
         for (const char *k : { "VoirVisages", "Marqueurs", "CarteMaintenir" }) row(k, false);
         // (ModsAuto : chez l'invite, « Tout accepter de cet hote », carte de droite)
+        if (!host) {   // resume de ce que l'hote a decide (lecture seule, deux colonnes)
+            y += 8;
+            RectF b(x, y, w, 8 + 16 + 3 * 26 + 6);
+            GraphicsPath bp; RoundRect(bp, b, 12);
+            SolidBrush bb(TH(card)); g.FillPath(&bb, &bp);
+            Pen pn(TH(choiceBorder), 1.0f); g.DrawPath(&pn, &bp);
+            SmallLabel(g, T(L"DÉCIDÉ PAR L'HÔTE", L"DECIDED BY THE HOST"), RectF(b.X + 10, b.Y + 7, b.Width - 20, 16), kAcc);
+            int onA = 0;
+            for (const char *k : kAjoutKeys) onA += hostVal(k) == 1;
+            wchar_t ab[16];
+            swprintf_s(ab, L"%d / 4", onA);
+            struct Ro { const wchar_t *lab; std::wstring v; bool on; } ro[6] = {
+                { T(L"Argent départ", L"Start money"), hostVal("ArgentDepart") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("ArgentDepart") == 1 },
+                { T(L"Triches", L"Cheats"), hostVal("Triches") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("Triches") == 1 },
+                { T(L"Renverser", L"Run over"), hostVal("Renverser") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("Renverser") == 1 },
+                { T(L"Coups de poing", L"Punches"), hostVal("PvP") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("PvP") == 1 },
+                { T(L"Ventti partagé", L"Shared Ventti"), hostVal("VenttiEnjeux") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("VenttiEnjeux") == 1 },
+                { T(L"Ajouts", L"Additions"), hostVal("SansAjouts") ? T(L"Aucun", L"None") : onA == 4 ? T(L"Tous", L"All") : ab, !hostVal("SansAjouts") && onA > 0 },
+            };
+            float colW = (b.Width - 20 - 10) / 2;
+            for (int k = 0; k < 6; k++) {
+                RectF rr(b.X + 10 + (k % 2) * (colW + 10), b.Y + 24 + (k / 2) * 26, colW, 26);
+                float vw = max(36.0f, PillW(ro[k].v, 10) - 6);
+                Text(g, FitText(ro[k].lab, 10.5f, FontStyleBold, rr.Width - vw - 6), RectF(rr.X, rr.Y, rr.Width - vw - 4, rr.Height), 10.5f, FontStyleBold, kGrey, StringAlignmentNear);
+                GraphicsPath vp; RoundRect(vp, RectF(rr.X + rr.Width - vw, rr.Y + 3, vw, 20), 7);
+                SolidBrush vb(ro[k].on ? WithA(kAcc, 0.22f) : TH(toggleOff)); g.FillPath(&vb, &vp);
+                Text(g, ro[k].v, RectF(rr.X + rr.Width - vw, rr.Y + 3, vw, 20), 10, FontStyleBold, kInk);
+                if (k < 4) g.DrawLine(&sp, rr.X, rr.Y + rr.Height - 0.5f, rr.X + rr.Width, rr.Y + rr.Height - 0.5f);
+            }
+            y += b.Height;
+        }
     }
     if (host || which == 1) {   // remettre les valeurs des Reglages ; les garder comme defauts (mwcoop.ini)
-        UiButton(g, RectF(x, bottom - 32, 112, 32), T(L"Remettre", L"Reset"), UI_LOBBY_OPTRESET, false, IC_UNDO, edit, 10);
-        UiButton(g, RectF(right - 168, bottom - 32, 168, 32), T(L"Garder comme défauts", L"Keep as defaults"), UI_LOBBY_OPTKEEP, false, -1, edit, 10);
+        float bw = (w - 8) / 2;
+        UiButton(g, RectF(x, bottom - 32, bw, 32), T(L"Remettre mes Réglages", L"Reset to my Settings"), UI_LOBBY_OPTRESET, false, -1, edit, 10);
+        UiButton(g, RectF(right - bw, bottom - 32, bw, 32), T(L"Garder comme défauts", L"Keep as defaults"), UI_LOBBY_OPTKEEP, false, -1, edit, 10);
     }
 }
 
@@ -4340,20 +4472,20 @@ static void DrawLobbyBanner(Graphics &g, RectF r, bool host, const std::vector<L
         const LobbyPeer *hp = NULL;
         for (auto &p : peers) if (p.id == 0) hp = &p;
         std::wstring hn = hp ? Widen(hp->name, CP_UTF8) : g_sHostName;
-        if (hp) DrawLobbyPortrait(g, RectF(x, r.Y + 30, 48, 48), hp->skin, CarRgb(kPeerPal[0]), hn);
-        float tx = hp ? x + 62 : x, tw = right - 150 - tx;
+        if (hp) DrawLobbyPortrait(g, RectF(x, r.Y + 26, 56, 56), hp->skin, CarRgb(kPeerPal[0]), hn);
+        float tx = hp ? x + 70 : x, tw = right - 130 - tx;
         wchar_t b[160];
         swprintf_s(b, T(L"%s HÉBERGE", L"%s IS HOSTING"), hn.empty() ? L"?" : hn.c_str());
         SmallLabel(g, b, RectF(tx, r.Y + 14, tw, 16), kOk);
-        Text(g, partie == PARTIE_NOUVELLE ? T(L"Nouvelle partie · tu la rejoins dès qu'il est en jeu", L"New game · you join as soon as the host is in game")
-                                          : T(L"Il continue sa partie · tu la rejoins dès qu'il est en jeu", L"Continuing their game · you join as soon as the host is in game"),
-             RectF(tx, r.Y + 32, tw, 26), 16, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, FitText(partie == PARTIE_NOUVELLE ? T(L"Nouvelle partie · tu la rejoins dès qu'il est en jeu", L"New game · you join as soon as the host is in game")
+                                                  : T(L"Il continue sa partie · tu la rejoins dès qu'il est en jeu", L"Continuing their game · you join as soon as the host is in game"), 15, FontStyleBold, tw),
+             RectF(tx, r.Y + 32, tw, 26), 15, FontStyleBold, kInk, StringAlignmentNear);
         Para(g, T(L"Sa sauvegarde, ses mods et ses fichiers arrivent chez toi tout seuls. Rien à régler, sauf tes options.", L"Their save, mods and files reach you by themselves. Nothing to set up, except your own options."),
              RectF(tx, r.Y + 60, tw, 32), 10.5f, kGrey);
-        Text(g, T(L"Dans ce salon depuis", L"In this lobby for"), RectF(right - 150, r.Y + 30, 150, 16), 11, FontStyleRegular, kGrey, StringAlignmentFar);
+        Text(g, T(L"Dans ce salon depuis", L"In this lobby for"), RectF(right - 130, r.Y + 30, 130, 16), 11, FontStyleRegular, kGrey, StringAlignmentFar);
         DWORD s = (GetTickCount() - g_lobbySinceT) / 1000;
         swprintf_s(b, L"%02lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
-        TextF(g, TitleFont(), b, RectF(right - 150, r.Y + 48, 150, 30), 22, FontStyleBold, kInk, StringAlignmentFar);
+        TextF(g, TitleFont(), b, RectF(right - 130, r.Y + 48, 130, 30), 22, FontStyleBold, kInk, StringAlignmentFar);
         return;
     }
     bool go = g_goSent;
@@ -4383,28 +4515,30 @@ static void DrawLobbyBanner(Graphics &g, RectF r, bool host, const std::vector<L
             TextF(g, TitleFont(), s, cr, 40, FontStyleBold, g_dark ? Color(255, 255, 255, 255) : kInk);
             cx += 38;
         }
-        Para(g, g_lobbySteam ? T(L"Privé : l'invitation Steam suffit ; ce code sert à un ami venu sans invitation.", L"Private: the Steam invite is enough; this code is for a friend who comes without one.")
-                             : T(L"Privé : tes amis entrent avec ton adresse et ce code.", L"Private: your friends join with your address and this code."),
-             RectF(x, r.Y + 74, tw, 30), 10.5f, kGrey);
+        std::wstring sub = g_lobbySteam ? T(L"Privé : tes amis entrent avec ce code, ou par ton invitation Steam.", L"Private: your friends join with this code, or through your Steam invite.")
+                                        : std::wstring(T(L"Privé : tes amis entrent avec ton adresse", L"Private: your friends join with your address")) + (g_myAddresses.empty() ? L"" : L" (" + g_myAddresses + L")") + T(L" et ce code.", L" and this code.");
+        Para(g, sub, RectF(x, r.Y + 74, tw, 30), 10.5f, kGrey);
     } else {
         Text(g, T(L"Pas de code : tout le monde peut entrer", L"No code: anyone can join"), RectF(x, r.Y + 30, tw, 32), 17, FontStyleBold, kInk, StringAlignmentNear);
-        Para(g, g_lobbySteam ? T(L"Par Steam, tout ami peut entrer (« Rejoindre la partie »).", L"Through Steam, any friend can join (\"Join game\").")
-                             : T(L"Par IP, ton adresse suffit.", L"By IP, your address is enough."), RectF(x, r.Y + 68, tw, 30), 10.5f, kGrey);
+        std::wstring sub = g_lobbySteam ? T(L"Par Steam, tout ami peut entrer (« Rejoindre la partie »).", L"Through Steam, any friend can join (\"Join game\").")
+                                        : std::wstring(T(L"Par IP, ton adresse suffit", L"By IP, your address is enough")) + (g_myAddresses.empty() ? L"" : L" (" + g_myAddresses + L")") + L".";
+        Para(g, sub, RectF(x, r.Y + 66, tw, 30), 10.5f, kGrey);
     }
 }
 
-// Carte Joueurs : titre et compte, INVITER (hote Steam) ou « n prets », aide, puis les joueurs (portrait, nom, tenue ·
-// ping · UDP ou envoi en cours, etat) ; ma ligne teintee avec le bouton de ma tenue.
+// Carte Joueurs : titre et compte, INVITER (hote Steam) ou « n prets », aide, les joueurs (portrait, nom, tenue · ping ·
+// UDP ou envoi en cours, etat ; ma ligne teintee avec le bouton de ma tenue ; « Arrive… » pour un invite dont le test UDP
+// n'a pas encore repondu), puis le tchat : les trois derniers messages, « Message au salon » et ENVOYER.
 static void DrawLobbyPlayersCard(Graphics &g, RectF c, const std::vector<LobbyPeer> &peers, int lobby, int myUdp)
 {
-    bool host = lobby == LB_HOST;
+    bool host = lobby == LB_HOST, canKick = host && !g_lobbySteam && !g_goSent;
     Glass(c, 20);
-    const float x = c.X + 16, w = c.Width - 32, right = c.X + c.Width - 16;
+    const float x = c.X + 16, w = c.Width - 32, right = c.X + c.Width - 16, bottom = c.Y + c.Height - 16;
     Title(g, T(L"Joueurs", L"Players"), RectF(x, c.Y + 14, 90, 24), 16, kInk);
     {
         wchar_t b[32];
         swprintf_s(b, L"· %d / %d", (int)peers.size(), g_lobbyMax);
-        Text(g, b, RectF(x + (g_fr ? 74.0f : 68.0f), c.Y + 14, 100, 24), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        Text(g, b, RectF(x + MeasureW(MeasureG(), T(L"Joueurs", L"Players"), 16, FontStyleBold) + 6, c.Y + 14, 100, 24), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     }
     if (host && g_lobbySteam && !g_goSent) UiButton(g, RectF(right - 100, c.Y + 11, 100, 30), T(L"Inviter", L"Invite"), UI_LOBBY_INVITE, true, IC_PLUS, true, 10);
     else {
@@ -4415,7 +4549,7 @@ static void DrawLobbyPlayersCard(Graphics &g, RectF c, const std::vector<LobbyPe
         float cw = ChipW(b);
         Chip(g, RectF(right - cw, c.Y + 14, cw, 24), b, guests && !notReady ? kOk : kInk, false);
     }
-    std::wstring help = T(L"Clique sur toi : tenue, voiture.", L"Click yourself: outfit, car.");
+    std::wstring help = canKick ? T(L"Toi : tenue, voiture · un autre : le mettre dehors.", L"You: outfit, car · another one: kick them out.") : T(L"Clique sur toi : tenue, voiture.", L"Click yourself: outfit, car.");
     Color hc = kGrey;
     if (lobby == LB_GUEST) {   // test UDP de l'invite
         if (myUdp == UDP_OK) { help = T(L"UDP : OK ✓ · clique sur toi : tenue, voiture.", L"UDP: OK ✓ · click yourself: outfit, car."); hc = kOk; }
@@ -4423,17 +4557,59 @@ static void DrawLobbyPlayersCard(Graphics &g, RectF c, const std::vector<LobbyPe
         else if (myUdp == UDP_FAIL) { help = T(L"UDP : bloqué (voir à droite)", L"UDP: blocked (see on the right)"); hc = kRed; }
         else if (myUdp == UDP_WAIT) help = T(L"UDP : test en cours…", L"UDP: testing…");
     }
-    Text(g, help, RectF(x, c.Y + 42, w, 16), 10.5f, FontStyleRegular, hc, StringAlignmentNear);
-    kLobbyList = RectF(x, c.Y + 64, w, c.Height - 16 - 64);
+    Text(g, FitText(help, 10.5f, FontStyleRegular, w), RectF(x, c.Y + 42, w, 16), 10.5f, FontStyleRegular, hc, StringAlignmentNear);
+    // tchat, en bas : trois lignes, le libelle, le champ et ENVOYER
+    const float inH = 42, msgH = 18;
+    float sendW = PillW(T(L"ENVOYER", L"SEND"), 12) + 12;
+    RectF inR(x, bottom - inH, w - sendW - 8, inH), sendR(right - sendW, bottom - inH, sendW, inH);
+    float msgTop = inR.Y - 22 - 3 * msgH - 6;
+    Text(g, T(L"Message au salon", L"Message to the lobby"), RectF(x, inR.Y - 20, w, 16), 11, FontStyleRegular, kGrey, StringAlignmentNear);
+    {
+        std::vector<ChatMsg> chat;
+        EnterCriticalSection(&g_lcs);
+        size_t n0 = g_chat.size() > 3 ? g_chat.size() - 3 : 0;
+        chat.assign(g_chat.begin() + n0, g_chat.end());
+        LeaveCriticalSection(&g_lcs);
+        if (chat.empty()) Text(g, T(L"Pas encore de message. Dis bonjour !", L"No message yet. Say hello!"), RectF(x, msgTop + 2 * msgH, w, msgH), 11, FontStyleItalic, TH(placeholder), StringAlignmentNear);
+        for (size_t i = 0; i < chat.size(); i++) {
+            float my = msgTop + (3 - chat.size() + i) * msgH;
+            std::wstring an = Widen(chat[i].name, CP_UTF8) + L"  ";
+            float aw = MeasureW(MeasureG(), an, 11.5f, FontStyleBold);
+            Text(g, an, RectF(x, my, aw + 4, msgH), 11.5f, FontStyleBold, CarRgb(kPeerPal[chat[i].id & 15]), StringAlignmentNear);
+            Text(g, FitText(chat[i].text, 11.5f, FontStyleRegular, w - aw - 4), RectF(x + aw, my, w - aw, msgH), 11.5f, FontStyleRegular, kInk, StringAlignmentNear);
+        }
+    }
+    bool chatOn = lobby == LB_HOST || lobby == LB_GUEST;
+    {   // champ
+        GraphicsPath p; RoundRect(p, inR, 12);
+        SolidBrush fill(TH(field)); g.FillPath(&fill, &p);
+        Pen pen(g_chatFocus ? kAcc : TH(fieldBorder), g_chatFocus ? 2.0f : 1.2f); g.DrawPath(&pen, &p);
+        RectF tr(inR.X + 14, inR.Y, inR.Width - 28, inR.Height);
+        if (g_chatText.empty() && !g_chatFocus) Text(g, host ? T(L"On part dans 2 min…", L"Leaving in 2 min…") : T(L"J'arrive !", L"Coming!"), tr, 13, FontStyleRegular, TH(placeholder), StringAlignmentNear);
+        else {
+            float tw = MeasureW(MeasureG(), g_chatText, 13.5f, FontStyleBold);
+            std::wstring shown = g_chatText;
+            while (tw > tr.Width && shown.size() > 1) { shown.erase(0, 1); tw = MeasureW(MeasureG(), shown, 13.5f, FontStyleBold); }   // (la fin reste visible)
+            Text(g, shown, tr, 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+            if (g_chatFocus && fmodf(g_time, 1.0f) < 0.55f) { float cx = min(tr.X + tw + 1, tr.X + tr.Width); Pen cp(kAcc, 1.6f); g.DrawLine(&cp, cx, inR.Y + 11, cx, inR.Y + inR.Height - 11); }
+        }
+        if (chatOn) HotZone(inR, UI_LOBBY_CHAT);
+        UiButton(g, sendR, T(L"ENVOYER", L"SEND"), UI_LOBBY_SEND, false, -1, chatOn, 11);
+    }
+    {   // la liste : des lignes entieres (le reste de la place va au tchat)
+        float avail = msgTop - 10 - (c.Y + 64);
+        kLobbyList = RectF(x, c.Y + 64, w, max(1.0f, floorf(avail / kLobbyRowH)) * kLobbyRowH - 8);
+    }
     float sc = g_scroll[TAB_LOBBY] = min(g_scroll[TAB_LOBBY], LobbyMaxScroll()), ms = LobbyMaxScroll();
     int rows = (int)peers.size() + ((int)peers.size() < g_lobbyMax ? 1 : 0);
+    DWORD now = GetTickCount();
     GraphicsState st = g.Save();
     g.SetClip(kLobbyList, CombineModeIntersect);
     for (int i = 0; i < rows; i++) {
         RectF r(kLobbyList.X, kLobbyList.Y + i * kLobbyRowH - sc, kLobbyList.Width - (ms > 0 ? 10 : 0), kLobbyRowH - 8);
         if (r.Y + r.Height < kLobbyList.Y || r.Y > kLobbyList.Y + kLobbyList.Height) continue;
         GraphicsPath rp;
-        RoundRect(rp, r, 14);
+        RoundRect(rp, r, 16);
         if (i >= (int)peers.size()) {   // place libre (salon Steam, hote : inviter des amis)
             bool inv = host && g_lobbySteam, hot = inv && g_lobbyHot == 51;
             if (hot) { SolidBrush hb(TH(card)); g.FillPath(&hb, &rp); }
@@ -4445,42 +4621,56 @@ static void DrawLobbyPlayersCard(Graphics &g, RectF c, const std::vector<LobbyPe
             continue;
         }
         const LobbyPeer &p = peers[i];
-        bool me = p.id == g_myId;
-        SolidBrush rb(me ? WithA(kAcc, 0.12f) : TH(card));
+        bool me = p.id == g_myId, dlp = PeerSyncPending(p);
+        bool arriving = !me && p.id != 0 && !g_lobbySteam && p.udp == UDP_WAIT && !dlp;   // (connecte en TCP, sa sonde UDP pas encore vue)
+        bool kickHot = canKick && !me && p.id != 0 && g_lobbyHot == 200 + i, armed = canKick && g_kickArm == p.id && now - g_kickArmT < 4000;
+        float a = arriving ? 0.75f : 1.0f;
+        SolidBrush rb(me ? WithA(kAcc, 0.12f) : kickHot ? TH(cardSel) : TH(card));
         g.FillPath(&rb, &rp);
-        Pen rpen(me ? WithA(kAcc, 0.6f) : TH(choiceBorder), 1.0f);
+        Pen rpen(me ? WithA(kAcc, 0.6f) : armed ? WithA(kRed, 0.8f) : TH(choiceBorder), me || armed ? 1.4f : 1.0f);
         g.DrawPath(&rpen, &rp);
         std::wstring nm = Widen(p.name, CP_UTF8);
         Color pc = CarRgb(kPeerPal[p.id % 16]);
-        DrawLobbyPortrait(g, RectF(r.X + 8, r.Y + 8, 48, 48), p.skin, pc, nm);
-        if (p.sid) DrawSteamAvatar(g, RectF(r.X + 42, r.Y + 42, 18, 18), p.sid);   // (avatar Steam en coin)
-        // etat : Hote, Pret, Attend (recoit l'envoi de l'hote : LANCER attend), Pas pret
-        bool dlp = PeerSyncPending(p);
-        std::wstring stl = p.id == 0 ? T(L"Hôte", L"Host") : dlp ? T(L"Attend", L"Waiting") : p.ready ? T(L"Prêt ✓", L"Ready ✓") : T(L"Pas prêt", L"Not ready");
-        float pw = max(58.0f, ChipW(stl));
-        RectF pr(r.X + r.Width - 8 - pw, r.Y + 8, pw, 24);   // (en haut a droite : la ligne de detail prend toute la largeur)
-        if (p.id != 0 && p.ready && !dlp) { GraphicsPath pp; RoundRect(pp, pr, 12); SolidBrush ob(kOk); g.FillPath(&ob, &pp); Text(g, stl, pr, 11, FontStyleBold, Color(255, 4, 38, 26)); }
-        else Chip(g, pr, stl, p.id == 0 ? kOk : dlp ? kWarn : kInk, p.id != 0 && !dlp);
-        float tx = r.X + 66, tr = pr.X - 8;
+        RectF av(r.X + 10, r.Y + 8, 48, 48);
+        if (arriving) {   // tuile en pointilles de sa couleur, silhouette
+            GraphicsPath ap; RoundRect(ap, av, 14);
+            SolidBrush ab(WithA(kInk, 0.08f)); g.FillPath(&ab, &ap);
+            Pen dash(pc, 2.0f); dash.SetDashStyle(DashStyleDash); g.DrawPath(&dash, &ap);
+            Icon(g, IC_USER, av.X + 24, av.Y + 24, 22, pc, 2.0f);
+        } else DrawLobbyPortrait(g, av, p.skin, pc, nm);
+        if (p.sid) DrawSteamAvatar(g, RectF(r.X + 44, r.Y + 42, 18, 18), p.sid);   // (avatar Steam en coin)
+        // etat : Hote, Pret, Attend (recoit l'envoi de l'hote : LANCER attend), Pas pret ; deux clics : Dehors ?
+        std::wstring stl = armed ? T(L"Dehors ?", L"Kick?") : p.id == 0 ? T(L"Hôte", L"Host") : dlp ? T(L"Attend", L"Waiting") : p.ready ? T(L"Prêt", L"Ready") : T(L"Pas prêt", L"Not ready");
+        float pw = max(56.0f, ChipW(stl));
+        RectF pr(r.X + r.Width - 10 - pw, r.Y + 8, pw, 24);   // (en haut a droite : la ligne de detail prend toute la largeur)
+        Chip(g, pr, stl, armed ? kRed : p.id == 0 || p.ready ? kOk : dlp ? kWarn : kInk, !armed && p.id != 0 && !dlp && !p.ready);
+        float tx = r.X + 68, tr = pr.X - 8;
         if (me) {   // ma tenue (toute la ligne mene a TENUE)
             HotZone(r, UI_LOBBY_ME_LOOK);
-            RectF br(pr.X - 6 - 26, r.Y + 7, 26, 26);
+            RectF br(pr.X - 6 - 30, r.Y + 7, 30, 26);
             GraphicsPath bp; RoundRect(bp, br, 8);
             SolidBrush bb(g_uiHot == UI_LOBBY_ME_LOOK ? TH(btn2Hot) : TH(btn2)); g.FillPath(&bb, &bp);
             Pen bpen(TH(fieldBorder), 1); g.DrawPath(&bpen, &bp);
-            Icon(g, IC_SHIRT, br.X + 13, br.Y + 13, 15, kInk, 1.9f);
+            Icon(g, IC_SHIRT, br.X + 15, br.Y + 13, 15, kInk, 1.9f);
             HotZone(br, UI_LOBBY_ME_LOOK);
             tr = br.X - 6;
         }
-        Text(g, nm + (me ? T(L"  (toi)", L"  (you)") : L""), RectF(tx, r.Y + 8, tr - tx, 24), 14, FontStyleBold, kInk, StringAlignmentNear);
-        // detail : tenue · version (hote) ; tenue · ping · UDP (invite par IP) ; tenue · Steam ; recoit les mods
+        {
+            std::wstring you = me ? T(L" (toi)", L" (you)") : L"";
+            float nw = MeasureW(MeasureG(), nm, 14, FontStyleBold);
+            std::wstring shown = FitText(nm, 14, FontStyleBold, tr - tx - (you.empty() ? 0 : MeasureW(MeasureG(), you, 12, FontStyleRegular) + 2));
+            Text(g, shown, RectF(tx, r.Y + 10, tr - tx, 20), 14, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
+            if (me) Text(g, you, RectF(tx + min(nw, tr - tx) + 2, r.Y + 11, 60, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+        }
+        // detail : tenue · version (hote) ; tenue · ping · UDP (invite par IP) ; tenue · Steam ; telecharge les mods ; Arrive…
         std::wstring line = SkinLabel(p.skin);
         Color lc = kGrey;
+        wchar_t pb[64];
         if (p.id == 0) line += L" · " + (p.ver == "dev" ? std::wstring(L"dev") : L"v" + Widen(p.ver, CP_UTF8));
-        else if (dlp) { wchar_t b[64]; swprintf_s(b, T(L" · télécharge les mods %d %%", L" · downloading the mods %d%%"), max(0, p.dl)); line += b; lc = kWarn; }
+        else if (dlp) { swprintf_s(pb, T(L" · télécharge les mods %d %%", L" · downloading the mods %d%%"), max(0, p.dl)); line += pb; lc = kWarn; }
         else if (g_lobbySteam) line += L" · Steam";
+        else if (arriving) { swprintf_s(pb, T(L"Arrive… %d ms · TCP seulement", L"Arriving… %d ms · TCP only"), p.ping); line = pb; }
         else {
-            wchar_t pb[32];
             swprintf_s(pb, L" · %d ms", p.ping);
             line += pb;
             int udp = me && myUdp == UDP_OK ? UDP_OK : p.udp;   // (l'invite local : sa propre sonde compte)
@@ -4489,7 +4679,7 @@ static void DrawLobbyPlayersCard(Graphics &g, RectF c, const std::vector<LobbyPe
             else if (udp == UDP_FAIL) { line += T(L" · UDP bloqué", L" · UDP blocked"); lc = kWarn; }
             else if (udp == UDP_WAIT) line += L" · UDP …";
         }
-        Text(g, line, RectF(tx, r.Y + 35, r.X + r.Width - 8 - tx, 18), 11, FontStyleRegular, lc, StringAlignmentNear);
+        Text(g, FitText(line, 11, FontStyleRegular, r.X + r.Width - 10 - tx), RectF(tx, r.Y + 34, r.X + r.Width - 10 - tx, 18), 11, FontStyleRegular, WithA(lc, a), StringAlignmentNear);
     }
     g.Restore(st);
     if (ms > 0) {
@@ -4497,6 +4687,28 @@ static void DrawLobbyPlayersCard(Graphics &g, RectF c, const std::vector<LobbyPe
         GraphicsPath sp; RoundRect(sp, RectF(kLobbyList.X + kLobbyList.Width - 5, y, 4, h), 2);
         SolidBrush sb(WithA(kAcc, 0.5f)); g.FillPath(&sb, &sp);
     }
+}
+
+// Invite : ou en est l'envoi de l'hote, mods et contenu separement (fichiers "Mods\..." ou non ; g_syncGotFile par fichier).
+struct SyncParts { int modsN = 0, modsDone = 0; uint64_t modsB = 0, modsGot = 0, contB = 0, contGot = 0; std::wstring cur; int curPct = 0; std::vector<std::string> cats; };
+static SyncParts SyncPartsNow(int s)
+{
+    SyncParts sp;
+    std::lock_guard<std::mutex> lk(g_syncMx);
+    sp.cats = g_hostOffer.cats;
+    for (int i = 0; i < (int)g_hostOffer.files.size(); i++) {
+        const SyncFile &f = g_hostOffer.files[i];
+        auto it = g_syncGotFile.find(i);
+        uint32_t got = s == SY_DONE ? f.size : it != g_syncGotFile.end() ? min(it->second, f.size) : 0;
+        if (s == SY_GET && std::find(g_syncNeed.begin(), g_syncNeed.end(), i) == g_syncNeed.end()) got = f.size;   // (deja la : rien a recevoir)
+        bool mod = !f.path.compare(0, 5, "Mods\\");
+        if (mod) {
+            sp.modsN++; sp.modsB += f.size; sp.modsGot += got;
+            if (got >= f.size) sp.modsDone++;
+            else if (sp.cur.empty()) { std::string n = f.path.substr(5); size_t dot = n.rfind('.'); if (dot != std::string::npos) n.resize(dot); sp.cur = Widen(n, CP_UTF8); sp.curPct = f.size ? (int)(got * 100ULL / f.size) : 0; }
+        } else { sp.contB += f.size; sp.contGot += got; }
+    }
+    return sp;
 }
 
 // Carte de droite : hote = Partie (sauvegarde, Continuer / Nouvelle), Envoye aux invites (chips, taille, Choisir), Mods de la
@@ -4508,8 +4720,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
     Glass(c, 20);
     const float x = c.X + 18, w = c.Width - 36, right = c.X + c.Width - 18;
     float y = c.Y + 14;
-    Pen sp(TH(sep), 1);
-    auto sepLine = [&]() { y += 4; g.DrawLine(&sp, x, y, right, y); y += 10; };
+    auto gap = [&]() { y += 14; };   // (entre deux blocs : pas de trait, de l'air, comme la maquette)
     auto choiceCards = [&]() {
         const wchar_t *lab[2] = { host ? T(L"Continuer ma partie", L"Continue my game") : T(L"Continuer la partie", L"Continue the game"), T(L"Nouvelle partie", L"New game") };
         const wchar_t *sub[2] = { host ? T(L"Ta sauvegarde, envoyée aux invités", L"Your save, sent to the guests") : T(L"La sauvegarde de l'hôte", L"The host's save"),
@@ -4518,7 +4729,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             kChoiceR[i] = RectF(x, y, w, 50);
             RectF r = kChoiceR[i];
             bool on = partie == i, hot = g_lobbyHot == i && host && !go;
-            float a = lobby == LB_CONNECTING ? 0.45f : 1.0f;
+            float a = lobby == LB_CONNECTING ? 0.45f : !host && !on ? 0.6f : 1.0f;   // (invite : le choix ecarte en retrait)
             GraphicsPath cp; RoundRect(cp, r, 14);
             SolidBrush cb(on ? WithA(kAcc, 0.14f * a) : hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &cp);
             Pen cpen(on ? WithA(kAcc, 0.6f * a) : TH(choiceBorder), on ? 1.4f : 1.0f); g.DrawPath(&cpen, &cp);
@@ -4529,28 +4740,31 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
                 else { Pen rp(TH(fieldBorder), 1.5f); g.DrawEllipse(&rp, dot); }
                 tx = r.X + 42;
             } else if (on) { Icon(g, IC_CHECK, r.X + 22, r.Y + r.Height / 2, 16, WithA(kAcc, a), 2.8f); tx = r.X + 38; }
-            Text(g, lab[i], RectF(tx, r.Y + 7, r.X + r.Width - 12 - tx, 20), 13.5f, FontStyleBold, WithA(host || on ? kInk : kGrey, a), StringAlignmentNear);
+            Text(g, lab[i], RectF(tx, r.Y + 7, r.X + r.Width - 12 - tx, 20), 13.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
             Text(g, sub[i], RectF(tx, r.Y + 27, r.X + r.Width - 12 - tx, 16), 11, FontStyleRegular, WithA(kGrey, a), StringAlignmentNear);
-            y += 56;
+            y += 58;
         }
+        y -= 8;
     };
     if (host) {
         Title(g, T(L"Partie", L"Game"), RectF(x, y, 100, 24), 16, kInk);
-        std::wstring sn = SaveCurrentName();   // (saves.inc : clic -> choisir, ou en creer une)
-        if (sn.size() > 22) sn = sn.substr(0, 21) + L"…";
-        float bw = min(w - 80, PillW(sn, 12.5f) + 44);
-        UiButton(g, RectF(right - bw, y - 3, bw, 30), sn, UI_SAVE_LOBBY, false, IC_FILE, !go, 10);
-        y += 34;
+        std::wstring sn = SaveCurrentName();   // (saves.inc : clic sur la pastille -> choisir, ou en creer une)
+        sn = FitText(sn, 11, FontStyleBold, w - 110);
+        float cw = ChipW(sn);
+        RectF sr(right - cw, y - 1, cw, 26);
+        Chip(g, sr, sn, kInk, g_uiHot != UI_SAVE_LOBBY);
+        if (!go) HotZone(sr, UI_SAVE_LOBBY);
+        y += 36;
         choiceCards();
         std::wstring note = partie == PARTIE_NOUVELLE ? std::wstring(T(L"Couleur de la CORRIS : ", L"CORRIS color: ")) + CarColorName() + L"." : std::wstring(T(L"Tes invités la reçoivent en arrivant.", L"Your guests receive it when they arrive."));
-        Text(g, note, RectF(x, y - 2, w, 16), 10.5f, FontStyleRegular, partie == PARTIE_NOUVELLE ? kWarn : kGrey, StringAlignmentNear);
-        y += 16;
-        sepLine();
+        Text(g, note, RectF(x, y + 2, w, 16), 10.5f, FontStyleRegular, partie == PARTIE_NOUVELLE ? kWarn : kGrey, StringAlignmentNear);
+        y += 18;
+        gap();
         // envoye aux invites (contenu de la page PARTAGE : g_offer)
         Title(g, T(L"Envoyé aux invités", L"Sent to guests"), RectF(x, y, w - 90, 24), 16, kInk);
         kSyncBtn = RectF(right - 84, y - 3, 84, 30);   // CHOISIR (LobbyChoiceAt : 71 -> page PARTAGE)
         { GraphicsPath p; RoundRect(p, kSyncBtn, 10); SolidBrush b(g_lobbyHot == 71 ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p); Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); Text(g, T(L"Choisir", L"Choose"), kSyncBtn, 12, FontStyleBold, kInk); }
-        y += 32;
+        y += 34;
         bool msc;
         std::vector<std::string> mods, cats;
         uint64_t bytes = 0;
@@ -4560,7 +4774,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
         LeaveCriticalSection(&g_lcs);
         if (mods.empty() && cats.empty()) {
             Text(g, msc ? T(L"Rien n'est envoyé", L"Nothing is sent") : T(L"Rien (MSCLoader coupé : invités sans mods)", L"Nothing (MSCLoader off: guests without mods)"), RectF(x, y, w, 24), 12, FontStyleRegular, kGrey, StringAlignmentNear);
-            y += 28;
+            y += 26;
         } else {
             std::vector<std::wstring> chips;
             int cds = 0;
@@ -4572,23 +4786,23 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             for (auto &s : chips) {
                 float cw = ChipW(s);
                 if (cx + cw > right && cx > x) {
-                    if (lines == 2) { Text(g, L"…", RectF(cx, cy, 16, 24), 12, FontStyleBold, kGrey); break; }
-                    cx = x; cy += 30; lines++;
+                    if (lines == 2) { Text(g, L"…", RectF(cx, cy, 16, 26), 12, FontStyleBold, kGrey); break; }
+                    cx = x; cy += 32; lines++;
                 }
-                Chip(g, RectF(cx, cy, cw, 24), s, kInk, false);
+                Chip(g, RectF(cx, cy, cw, 26), s, kInk, true);
                 cx += cw + 6;
             }
-            y = cy + 30;
+            y = cy + 32;
             wchar_t b[120];
             swprintf_s(b, T(L"%s · copiés chez chaque invité à l'arrivée.", L"%s · copied to each guest on arrival."), SizeText(bytes).c_str());
             Text(g, b, RectF(x, y, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             y += 18;
         }
-        sepLine();
+        gap();
         // mods de la partie : chacun, et ou en sont les invites (l'avancement est global par invite)
         Title(g, T(L"Mods de la partie", L"Game mods"), RectF(x, y, w - 90, 24), 16, kInk);
         UiButton(g, RectF(right - 84, y - 3, 84, 30), T(L"Gérer", L"Manage"), UI_LOBBY_MODS, false, -1, true, 10);
-        y += 32;
+        y += 34;
         if (mods.empty()) {
             Text(g, msc ? T(L"Aucun mod envoyé", L"No mod sent") : T(L"MSCLoader coupé : jeu sans mods", L"MSCLoader off: game without mods"), RectF(x, y, w, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
             y += 22;
@@ -4601,46 +4815,70 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
                 std::wstring nm = Widen(mods[i], CP_UTF8);
                 size_t dot = nm.rfind(L'.');
                 if (dot != std::wstring::npos) nm.resize(dot);
-                Text(g, nm, RectF(x, y, w - 116, 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+                Text(g, FitText(nm, 12.5f, FontStyleBold, w - 120), RectF(x, y, w - 116, 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
                 std::wstring stt = !guests ? T(L"personne encore", L"nobody yet") : pending ? Widen(pend, CP_UTF8) : T(L"tous", L"everyone");
                 Text(g, stt, RectF(right - 110, y, 110, 20), 12, FontStyleBold, !guests ? kGrey : pending ? kWarn : kOk, StringAlignmentFar);
-                y += 20;
+                y += 22;
             }
             if ((int)mods.size() > shown) { wchar_t b[48]; swprintf_s(b, T(L"+ %d autre(s)", L"+ %d more"), (int)mods.size() - shown); Text(g, b, RectF(x, y, w, 18), 11, FontStyleRegular, kGrey, StringAlignmentNear); y += 18; }
         }
     } else if (lobby == LB_GUEST) {
         Title(g, T(L"Envoi de l'hôte", L"Host's files"), RectF(x, y, w - 100, 24), 16, kInk);
-        int s = g_sync, n, nc;
+        int s = g_sync, n;
         std::wstring why;
-        { std::lock_guard<std::mutex> lk(g_syncMx); n = (int)g_hostOffer.mods.size(); nc = (int)g_hostOffer.cats.size(); why = Widen(g_syncWhy, CP_UTF8); }
+        { std::lock_guard<std::mutex> lk(g_syncMx); n = (int)g_hostOffer.mods.size(); why = Widen(g_syncWhy, CP_UTF8); }
         uint64_t tot = g_syncTotal, got = g_syncGot;
         bool shown = SyncBarShown() && s != SY_NONE && s != SY_OFF;
         std::wstring chip = s == SY_GET ? T(L"En cours", L"In progress") : s == SY_DONE ? T(L"Prêt ✓", L"Ready ✓") : s == SY_ASK ? T(L"À accepter", L"To accept") : s == SY_FAIL ? T(L"Échec", L"Failed") : s == SY_CHECK ? T(L"Vérification…", L"Checking…") : T(L"Rien", L"Nothing");
         Color cc = s == SY_GET ? kWarn : s == SY_DONE ? kOk : s == SY_ASK ? kAcc : s == SY_FAIL ? kRed : kInk;
         float cw = ChipW(chip);
-        Chip(g, RectF(right - cw, y, cw, 24), chip, cc, !shown);
+        Chip(g, RectF(right - cw, y - 1, cw, 26), chip, cc, !shown);
         y += 34;
-        // mods et contenu : une barre (l'avancement est global)
+        // trois barres : mods (n / total, le fichier en cours), contenu (taille, quoi), sauvegarde (a l'arrivee en jeu)
+        SyncParts sp = SyncPartsNow(s);
         wchar_t b[200];
-        std::wstring r1 = T(L"Mods et contenu", L"Mods and content"), r1r;
-        float prog = 0;
-        if (!shown) r1r = T(L"rien pour l'instant", L"nothing for now");
-        else if (s == SY_CHECK) { r1r = T(L"vérification…", L"checking…"); prog = -2; }
-        else if (s == SY_FAIL) r1r = std::wstring(T(L"échec : ", L"failed: ")) + why;
-        else {
-            swprintf_s(b, T(L"%d mods · %d contenus · %s", L"%d mods · %d items · %s"), n, nc, SizeText(tot).c_str());
-            r1r = b;
-            prog = s == SY_DONE ? 1.0f : s == SY_GET ? (tot ? (float)((double)got / tot) : 0.0f) : 0.0f;
-            if (s == SY_GET) { swprintf_s(b, T(L"%d %% de %s · %d mods", L"%d%% of %s · %d mods"), (int)(prog * 100), SizeText(tot).c_str(), n); r1r = b; }
+        auto barRow = [&](const std::wstring &l, const std::wstring &rt, float prog, Color rc, Color fill) {
+            Text(g, l, RectF(x, y, w - 100, 18), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+            float lw = MeasureW(MeasureG(), l, 12.5f, FontStyleBold) + 8;
+            Text(g, FitText(rt, 11, FontStyleRegular, w - lw), RectF(x + lw, y, w - lw, 18), 11, FontStyleRegular, rc, StringAlignmentFar);
+            RectF br(x, y + 22, w, 7);
+            GraphicsPath bg; RoundRect(bg, br, 3.5f);
+            SolidBrush bb(WithA(kInk, 0.10f)); g.FillPath(&bb, &bg);
+            if (prog < 0) DrawBar(g, br, prog);
+            else if (prog > 0) { RectF fr = br; fr.Width = max(7.0f, br.Width * min(prog, 1.0f)); GraphicsPath fp; RoundRect(fp, fr, 3.5f); SolidBrush fb(fill); g.FillPath(&fb, &fp); }
+            y += 38;
+        };
+        std::wstring r1 = T(L"Mods", L"Mods"), r1r, r2 = T(L"Contenu", L"Content"), r2r;
+        float p1 = 0, p2 = 0;
+        Color c1 = kGrey, c2 = kGrey;
+        if (!shown) { r1r = r2r = T(L"rien pour l'instant", L"nothing for now"); }
+        else if (s == SY_CHECK) { r1r = r2r = T(L"vérification…", L"checking…"); p1 = p2 = -2; }
+        else if (s == SY_FAIL) { r1r = std::wstring(T(L"échec : ", L"failed: ")) + why; c1 = kRed; r2r = L"—"; }
+        else if (sp.modsN == 0 && sp.contB == 0) {   // liste des fichiers pas (encore) connue : l'avancement global sur les deux barres
+            if (n) { swprintf_s(b, L" · %d", n); r1 += b; }
+            p1 = p2 = s == SY_DONE ? 1.0f : tot ? (float)((double)got / tot) : 0.0f;
+            if (s == SY_DONE) r1r = r2r = T(L"tout reçu", L"all received");
+            else if (s == SY_GET) { swprintf_s(b, T(L"%d %% de %s", L"%d%% of %s"), (int)(p1 * 100), SizeText(tot).c_str()); r1r = r2r = b; }
+            else r1r = r2r = SizeText(tot);
+        } else {
+            if (n) { swprintf_s(b, L" · %d / %d", sp.modsDone, max(n, sp.modsN)); r1 += b; }
+            p1 = sp.modsB ? (float)((double)sp.modsGot / sp.modsB) : s == SY_DONE ? 1.0f : 0.0f;
+            if (s == SY_DONE || sp.modsDone == sp.modsN) r1r = n ? T(L"tous reçus", L"all received") : T(L"aucun", L"none");
+            else if (s == SY_GET && !sp.cur.empty()) { swprintf_s(b, L"%s %d %%", sp.cur.c_str(), sp.curPct); r1r = b; }
+            else { swprintf_s(b, T(L"%d mods · %s", L"%d mods · %s"), n, SizeText(sp.modsB).c_str()); r1r = b; }
+            if (sp.contB) { r2 += L" · " + SizeText(sp.contB); }
+            p2 = sp.contB ? (float)((double)sp.contGot / sp.contB) : s == SY_DONE ? 1.0f : 0.0f;
+            std::vector<std::wstring> cl;
+            int cds = 0;
+            for (auto &k : sp.cats) { if (!strncmp(k.c_str(), "cd", 2)) { cds++; continue; } if (cl.size() < 3) cl.push_back(LobbyCatLabel(k)); }
+            if (cds) cl.insert(cl.begin(), L"CD");
+            for (size_t i = 0; i < cl.size() && i < 3; i++) r2r += (i ? L", " : L"") + cl[i];
+            if (cl.size() > 3) r2r += L"…";
+            if (r2r.empty()) r2r = sp.cats.empty() ? T(L"rien", L"nothing") : L"";
         }
-        Text(g, r1, RectF(x, y, 120, 18), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
-        Text(g, r1r, RectF(x + 120, y, w - 120, 18), 11, FontStyleRegular, s == SY_FAIL ? kRed : kGrey, StringAlignmentFar);
-        DrawBar(g, RectF(x, y + 22, w, 6), prog);
-        y += 36;
-        Text(g, T(L"Sauvegarde", L"Save"), RectF(x, y, 150, 18), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
-        Text(g, partie == PARTIE_NOUVELLE ? T(L"partie neuve : rien à recevoir", L"fresh game: nothing to receive") : T(L"à l'arrivée en jeu", L"on arrival in game"), RectF(x + 150, y, w - 150, 18), 11, FontStyleRegular, kGrey, StringAlignmentFar);
-        DrawBar(g, RectF(x, y + 22, w, 6), 0);
-        y += 36;
+        barRow(r1, r1r, p1, c1, p1 >= 1.0f ? kOk : kAcc);
+        barRow(r2, r2r, p2, c2, p2 >= 1.0f ? kOk : kAcc);
+        barRow(T(L"Sauvegarde", L"Save"), partie == PARTIE_NOUVELLE ? T(L"partie neuve : rien à recevoir", L"fresh game: nothing to receive") : T(L"à l'arrivée en jeu", L"on arrival in game"), 0, kGrey, kAcc);
         int mi = LobbyOptIdx("ModsAuto");   // tout accepter de cet hote (option « les miennes », pour ce salon)
         if (mi >= 0) {
             RectF row(x, y, w, 40);
@@ -4649,9 +4887,9 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             if (hot) { GraphicsPath hp; RoundRect(hp, RectF(row.X - 6, row.Y, row.Width + 12, row.Height), 9); SolidBrush hb(TH(card)); g.FillPath(&hb, &hp); }
             Text(g, T(L"Tout accepter de cet hôte", L"Accept everything from this host"), RectF(x, y + 3, w - 56, 18), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
             Text(g, T(L"Sans redemander à chaque fichier", L"Without asking for each file"), RectF(x, y + 21, w - 56, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            UiToggle(g, RectF(right - 44, y + 9, 44, 22), LobbyOptGet("ModsAuto") == 1, hot);
+            UiToggle(g, RectF(right - 42, y + 8, 42, 24), LobbyOptGet("ModsAuto") == 1, hot);
             if (!go) HotZone(row, id);
-            y += 44;
+            y += 42;
         }
         if (s == SY_ASK || s == SY_FAIL) {   // TOUT ACCEPTER / REESSAYER (LobbyChoiceAt : 70)
             kSyncBtn = RectF(x, y, w, 40);
@@ -4661,13 +4899,13 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             Text(g, s == SY_ASK ? T(L"TOUT ACCEPTER", L"ACCEPT ALL") : T(L"RÉESSAYER", L"RETRY"), kSyncBtn, 13, FontStyleBold, kOnAcc);
             y += 48;
         }
-        sepLine();
+        gap();
         EnterCriticalSection(&g_lcs);
         std::wstring hs = g_hostSaveName;
         LeaveCriticalSection(&g_lcs);
-        if (hs.size() > 24) hs = hs.substr(0, 23) + L"…";
-        Title(g, hs.empty() ? std::wstring(T(L"Partie (choisie par l'hôte)", L"Game (chosen by the host)")) : std::wstring(T(L"Partie : ", L"Game: ")) + hs, RectF(x, y, w, 24), 16, kInk);
-        y += 32;
+        std::wstring ttl = hs.empty() ? std::wstring(T(L"Partie (choisie par l'hôte)", L"Game (chosen by the host)")) : std::wstring(T(L"Partie : ", L"Game: ")) + hs;
+        Title(g, FitText(ttl, 16, FontStyleBold, w), RectF(x, y, w, 24), 16, kInk);
+        y += 34;
         choiceCards();
     } else {   // connexion : la partie, en attendant
         Title(g, T(L"Partie", L"Game"), RectF(x, y, w, 24), 16, kInk);
@@ -4676,12 +4914,12 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
     }
     // conseil, ou avertissement UDP (ambre)
     const float btnTop = c.Y + c.Height - 18 - 44 - 8 - 64;
-    RectF hc(x, btnTop - 12 - 68, w, 68);
+    RectF hc(x, btnTop - 12 - 64, w, 64);
     GraphicsPath hp; RoundRect(hp, hc, 12);
     if (!warn.empty()) {
-        SolidBrush fb(WithA(kWarn, 0.12f)); g.FillPath(&fb, &hp);
+        SolidBrush fb(WithA(kWarn, 0.10f)); g.FillPath(&fb, &hp);
         Pen pen(WithA(kWarn, 0.45f), 1); g.DrawPath(&pen, &hp);
-        Icon(g, IC_ALERT, hc.X + 18, hc.Y + 34, 16, kWarn, 2.0f);
+        Icon(g, IC_ALERT, hc.X + 18, hc.Y + 20, 16, kWarn, 2.0f);
         Para(g, warn, RectF(hc.X + 34, hc.Y + 6, hc.Width - 42, hc.Height - 10), 10.5f, kInk);
     } else {
         const wchar_t *hint = host && g_lobbySteam ? T(L"Invite tes amis Steam. Quand tout le monde est prêt, LANCER démarre le jeu de chacun.",
@@ -4691,8 +4929,8 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
                                    : T(L"Clique sur PRÊT. Ton jeu démarre tout seul quand l'hôte lance la partie.",
                                        L"Click READY. Your game starts by itself when the host starts the session.");
         SolidBrush fb(WithA(kAcc, 0.08f)); g.FillPath(&fb, &hp);
-        Pen pen(WithA(kAcc, 0.3f), 1); g.DrawPath(&pen, &hp);
-        Icon(g, IC_SPARK, hc.X + 18, hc.Y + 34, 16, kAcc, 1.9f);
+        Pen pen(WithA(kAcc, 0.35f), 1); g.DrawPath(&pen, &hp);
+        Icon(g, IC_SPARK, hc.X + 18, hc.Y + 20, 16, kAcc, 1.9f);
         Para(g, hint, RectF(hc.X + 34, hc.Y + 8, hc.Width - 44, hc.Height - 12), 11.5f, kInk);
     }
     // boutons : LANCER / PRET ; FERMER LE SALON / QUITTER / ANNULER
@@ -4729,7 +4967,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
             if (l2.empty()) TextF(g, TitleFont(), l1, r, 19, FontStyleBold, ink);
             else {
                 TextF(g, TitleFont(), l1, RectF(r.X, r.Y + 9, r.Width, 28), 19, FontStyleBold, ink);
-                Text(g, l2, RectF(r.X + 8, r.Y + 37, r.Width - 16, 18), 11.5f, FontStyleBold, WithA(ink, 0.78f));
+                Text(g, FitText(l2, 11.5f, FontStyleBold, r.Width - 16), RectF(r.X + 8, r.Y + 37, r.Width - 16, 18), 11.5f, FontStyleBold, WithA(ink, 0.78f));
             }
         } else {
             l1 = lobby == LB_HOST ? T(L"FERMER LE SALON", L"CLOSE THE LOBBY") : lobby == LB_GUEST ? T(L"QUITTER LE SALON", L"LEAVE THE LOBBY") : T(L"ANNULER", L"CANCEL");
@@ -4815,6 +5053,25 @@ static void DrawLobby(Graphics &g)
 static void DrawLobbyHeadControls(Graphics &g, float &right)
 {
     if (g_lobby == LB_CONNECTING) return;
+    if (g_lobby == LB_GUEST) {   // pastille de l'invite : UDP et mon ping (IP), ou Steam
+        int ping = -1, udp = g_udpMine;
+        EnterCriticalSection(&g_lcs);
+        for (auto &p : g_peers) if (p.id == g_myId) ping = p.ping;
+        LeaveCriticalSection(&g_lcs);
+        std::wstring t;
+        Color col = kInk;
+        if (g_lobbySteam) t = L"Steam";
+        else {
+            wchar_t b[64];
+            if (udp == UDP_OK) { swprintf_s(b, L"UDP OK · %d ms", max(0, ping)); col = kOk; }
+            else if (udp == UDP_FAIL && g_hostUdpTest) { swprintf_s(b, L"%s", T(L"UDP bloqué", L"UDP blocked")); col = kRed; }
+            else swprintf_s(b, T(L"UDP · test… · %d ms", L"UDP · testing… · %d ms"), max(0, ping));
+            t = b;
+        }
+        float cw = ChipW(t, 12);
+        Chip(g, RectF(right - cw, 31, cw, 26), t, col, col.GetValue() == kInk.GetValue(), 12);
+        right -= cw + 10;
+    }
     RectF gr(right - 44, 22, 44, 44);
     bool on = g_lobbyOpts, hot = g_uiHot == UI_LOBBY_GEAR;
     GraphicsPath p; RoundRect(p, gr, 14);
@@ -4921,7 +5178,19 @@ static void LobbyOptClick(int id)
     bool host = g_lobby == LB_HOST;
     if (id == UI_LOBBY_CODEOK) { SteamCodeSubmit(); return; }
     if (id == UI_LOBBY_MODS) { GoPage(TAB_MODS); return; }
+    if (id == UI_LOBBY_CHAT) { g_chatFocus = g_lobby == LB_HOST || g_lobby == LB_GUEST; g_time = 0; return; }   // (le champ du tchat prend le clavier)
+    if (id == UI_LOBBY_SEND) { LobbyChatSend(); g_chatFocus = true; g_time = 0; return; }
     if (g_goSent) return;
+    if (id >= UI_LOBBY_SEGV && id < 3300) {   // pastilles segmentees de « Les miennes » (portee, volume, micro, carte)
+        int base = UI_LOBBY_SEGV;
+        for (const char *k : kLobbySegKeys) {
+            const GfxRow *r = GfxRowByKey(k);
+            int n = r ? (int)r->vals.size() : 0;
+            if (id < base + n) { g_lobbyOpt[k] = r->vals[id - base]; TestLog("salon : option %s = %d (ce salon seulement)", k, r->vals[id - base]); return; }
+            base += n;
+        }
+        return;
+    }
     if (id == UI_LOBBY_OPTTAB || id == UI_LOBBY_OPTTAB + 1) { g_lobbyOptTab = id - UI_LOBBY_OPTTAB; return; }
     if (id == UI_LOBBY_COPY) {
         if (CopyText(Widen(g_lobbyCode))) { g_codeCopiedT = GetTickCount(); SetStatus(K_OK, T(L"Code de session copié : %S", L"Session code copied: %S"), g_lobbyCode.c_str()); }
@@ -5018,6 +5287,17 @@ static bool LobbyClick(float x, float y)
     if (c == 50 || c == 51) { SteamShowFriends(c == 51); return true; }
     if (c == 70) { if (g_sync == SY_FAIL) SyncRetry(); else SyncAccept(); return true; }
     if (c == 71) { GoPage(TAB_CONTENT); return true; }
+    if (c >= 200 && c < 300) {   // hote IP : un invite, deux clics en 4 s pour le mettre dehors
+        int id = -1;
+        EnterCriticalSection(&g_lcs);
+        if (c - 200 < (int)g_peers.size()) id = g_peers[c - 200].id;
+        std::string name = id > 0 ? PeerById(id)->name : "";
+        LeaveCriticalSection(&g_lcs);
+        if (id <= 0) return true;
+        if (g_kickArm == id && GetTickCount() - g_kickArmT < 4000) { g_kickArm = -1; LobbyKick(id); }
+        else { g_kickArm = id; g_kickArmT = GetTickCount(); SetStatus(K_WARN, T(L"Clique encore sur %S pour le mettre dehors", L"Click %S again to kick them out"), name.c_str()); }
+        return true;
+    }
     if (c >= 0) { LobbySetPartie(c); return true; }
     return false;
 }
@@ -5103,6 +5383,8 @@ static void TestSalonStep()
             if (GetTickCount() - lastTry > 1500) { lastTry = GetTickCount(); TestLog("test : LANCER (force)"); HostStart(); }
             return;
         }
+        static bool chatted;   // (essai du tchat : l'hote ecrit des qu'un invite est la)
+        if (guests >= 1 && !chatted) { chatted = true; g_chatText = L"Bienvenue, on part dans 2 min"; TestLog("test : tchat de l'hote"); LobbyChatSend(); }
         bool can = guests >= 1 && LobbyCanStart() && udpDone;
         if (!can) allReadySince = 0;
         else if (!allReadySince) { allReadySince = GetTickCount(); TestLog("test : tous les invites sont prets"); }
@@ -5112,6 +5394,8 @@ static void TestSalonStep()
         int sy = g_sync;   // mods de l'hote : tout accepter, pret une fois recus
         if (g_lobby == LB_GUEST && sy == SY_ASK) { TestLog("test : clic sur TOUT ACCEPTER"); SyncAccept(); }
         if (g_lobby == LB_GUEST && !readied && t > 4500 && sy != SY_ASK && sy != SY_CHECK && sy != SY_GET) { readied = true; TestLog("test : clic sur PRET"); GuestToggleReady(); }
+        static bool chatted;   // (essai du tchat : l'invite ecrit en arrivant, accents compris)
+        if (g_lobby == LB_GUEST && !chatted && t > 3000) { chatted = true; g_chatText = L"J'arrive, prêt dans une minute !"; TestLog("test : tchat de l'invite"); LobbyChatSend(); }
     }
 }
 
@@ -5640,6 +5924,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
             else if (why == "code") { SetStatus(K_ERR, T(L"Code de session incorrect : demande-le à l'hôte (salon privé)", L"Wrong session code: ask the host for it (private lobby)")); g_focus = 2; g_time = 0; }
             else if (why == "started") { SetStatus(K_WARN, T(L"Partie d\u00E9j\u00E0 lanc\u00E9e : \u00AB Rejoindre en jeu \u00BB", L"Session already started: \"Join in game\"")); fallback = true; }
             else if (why == "closed") SetStatus(K_WARN, T(L"L'h\u00F4te a ferm\u00E9 le salon", L"The host closed the lobby"));
+            else if (why == "kicked") SetStatus(K_WARN, T(L"L'hôte t'a mis dehors du salon", L"The host kicked you out of the lobby"));
             else SetStatus(K_ERR, T(L"Refus\u00E9 par l'h\u00F4te", L"Refused by the host"));
         } else if (wp == 2) {
             SetStatus(K_WARN, T(L"Pas de salon chez l'h\u00F4te : \u00AB Rejoindre en jeu \u00BB s'il joue d\u00E9j\u00E0", L"No lobby at the host: \"Join in game\" if they are already playing"));
@@ -5728,6 +6013,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (g_tuto >= 0) { TutoClick(x, y); return 0; }
         if (g_guide) { SteamGuideClick(x, y); return 0; }
         if (g_lobbyOpts && !g_lobbyPopR.Contains(x, y) && !g_lobbyGearR.Contains(x, y)) { g_lobbyOpts = false; return 0; }   // (clic a cote : ferme le menu)
+        g_chatFocus = false;   // (le champ du tchat le reprend si c'est lui qui est clique)
         int z = ZoneAt(x, y);
         if (z >= 0) { g_focus = -1; UiClick(z); return 0; }
         int b = HitButton(x, y), f = HitField(x, y);
@@ -5771,6 +6057,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
         if (SetChar((wchar_t)wp)) return 0;   // (gfx.inc : champ Chercher des reglages)
         if (GuideChar((wchar_t)wp)) return 0;   // (wiki.inc : champ Chercher du guide)
+        if (LobbyChatChar((wchar_t)wp)) return 0;   // (salon.inc : « Message au salon »)
         if (g_state != ST_IDLE || (g_lobby != LB_NONE && !g_sCodeAsk) || g_goWait || g_guide || g_tuto >= 0) return 0;
         if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
         if (wp == 8) { if (g_focus >= 0 && !g_fields[g_focus].text.empty()) g_fields[g_focus].text.pop_back(); }
@@ -6341,6 +6628,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_tab = TAB_LOBBY;
             g_lobbySinceGen = g_lobbyGen; g_lobbySinceT = GetTickCount() - 252000;   // (invite : dans ce salon depuis 4 min 12)
             if (st == L"salon-dl") g_peers[2].dl = 45;
+            if (host) g_peers.push_back({ 3, "Jouko", "char_shirt12", v, false, 61, UDP_WAIT });   // (arrive : TCP seulement, sonde UDP pas encore vue)
+            LobbyChatClear();   // (tchat : trois lignes, comme la maquette)
+            LobbyChatAdd(host ? 1 : 0, host ? "Teppo" : "Pekka", host ? "On part dans 2 min ?" : "Je lance d\xC3\xA8s que tout le monde est pr\xC3\xAAt");
+            LobbyChatAdd(host ? 0 : 1, MyName(), host ? "Oui, le temps de finir les options" : "J'arrive !");
+            LobbyChatAdd(2, "Kalle", host ? "J'arrive, j'installe les mods" : "Quelqu'un a du caf\xC3\xA9 ?");
                     if (host) { SetStatus(K_OK, T(L"Salon ouvert \u00B7 port %d", L"Lobby open \u00B7 port %d"), 7870); g_lobbyHot = 1; }
             else SetStatus(K_OK, T(L"Dans le salon de %s", L"In %s's lobby"), L"192.168.1.20");
             if (st == L"salon-udp") { g_udpMine = UDP_FAIL; g_peers[1].udp = UDP_WAIT; }
@@ -6354,8 +6646,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 g_lobbyHot = 71;
             } else if (!wcsncmp(st.c_str(), L"salon-mods-", 11)) {
                 g_hostOffer.msc = true; g_hostOffer.mods = mods; g_hostOffer.cats = { "cd1", "peinture", "drapeau", "posters" };
+                g_hostOffer.files = { { "Mods\\BetterHeadlights.dll", 412000, 1 }, { "Mods\\TrunkLight.dll", 96000, 2 }, { "Mods\\CDPlayerEnhanced.dll", 1830000, 3 }, { "Radio\\track1.ogg", 3900000, 4 } };
                 g_sync = st == L"salon-mods-demande" ? SY_ASK : st == L"salon-mods-telechargement" ? SY_GET : SY_DONE;
-                g_syncTotal = 2338000; g_syncGot = 1052000;
+                g_syncNeed = { 0, 1, 2, 3 };
+                if (g_sync == SY_GET) g_syncGotFile = { { 0, 412000 }, { 1, 96000 }, { 2, 1116000 }, { 3, 3900000 } };   // (deux mods recus, le troisieme a 61 %, le contenu fini)
+                g_syncTotal = 6238000; g_syncGot = 5524000;
                 g_meReady = g_sync == SY_DONE;
                 if (g_sync == SY_ASK) g_lobbyHot = 70;
             }
@@ -6377,6 +6672,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_lobbyPrive = true; g_lobbyCode = "K7PM3Q"; g_lobbyMax = 8;
             if (!host) for (auto &d : kLobbyOptDefs) if (d.host) g_hostOpt[d.key] = d.def;
             if (st == L"salon-steam-code") { g_lobby = LB_CONNECTING; g_sCodeAsk = true; g_focus = 2; g_fields[2].text = L"K7P"; g_time = 0.2f; }
+            LobbyChatClear();
+            if (st != L"salon-steam-code") { LobbyChatAdd(1, "Teppo", "On part dans 2 min ?"); LobbyChatAdd(host ? 0 : 1, MyName(), "Oui, le temps de finir les options"); }
             g_tab = TAB_LOBBY;
             g_lobbySinceGen = g_lobbyGen; g_lobbySinceT = GetTickCount() - 252000;
                     if (st == L"salon-steam-amis") {
@@ -6386,7 +6683,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 g_sInvited[4] = GetTickCount();
                 g_lobbyHot = 102;
             } else if (host) g_lobbyHot = 51;
-            if (host) SetStatus(K_OK, T(L"Salon Steam ouvert : invite tes amis", L"Steam lobby open: invite your friends"));
+            if (host) SetStatus(K_OK, T(L"Salon ouvert · Steam · invite tes amis", L"Lobby open · Steam · invite your friends"));
             else SetStatus(K_OK, T(L"Dans le salon Steam de %s", L"In %s's Steam lobby"), L"Pekka");
         }
         else if (st == L"nouvelle-maj" || st == L"nouvelle-maj-survol" || st == L"nouvelle-maj-notes") {   // version plus recente proposee (bouton)
