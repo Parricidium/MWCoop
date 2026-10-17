@@ -4147,7 +4147,7 @@ static void NetTest()
 // Reglages > Co-op : « Revoir le guide de l'hote » ouvre l'article du guide (wikidata.inc : Heberger une partie, 5e article).
 static void WikiOpenHost()
 {
-    for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].b == kW_Host) { g_wikiSel = a; g_wikiClosed &= ~(1u << kWikiArt[a].cat); break; }
+    for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].b == kW_Host) { g_wikiSel = a; break; }   // (sommaire a plat depuis le rework : plus de categories pliees)
     g_scroll[TAB_WIKI] = 0;
     GoPage(TAB_WIKI);
 }
