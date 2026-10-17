@@ -52,10 +52,22 @@ static void SteamDown();
 static int g_lobbyPort = 7870;
 static int g_lobbyHot = -1;                         // choix de partie survole (0 continuer, 1 nouvelle)
 static std::string g_mySkinSent;                    // derniere apparence annoncee au salon
-static RectF kLobbyList(284, 148, 604, 576);   // (placee par DrawLobby : moins haute sous un avertissement)
-static const RectF kLobbyCard(264, 88, 644, 656);
-static const RectF kChoiceR[2] = { RectF(944, 136, 300, 56), RectF(944, 198, 300, 56) };
-static const float kLobbyRowH = 86;
+// Mise en page du salon (0.97.0, maquette du 17/10) : bandeau en haut (code de session chez l'hote, l'hote chez l'invite),
+// dessous deux colonnes Joueurs / Options, a droite une seule carte (partie, envoi, mods, conseil, LANCER / PRET).
+static RectF kLobbyList(280, 274, 288, 454);   // liste des joueurs (placee par DrawLobby : pleine carte en connexion / amis Steam)
+static const RectF kLobbyCard(264, 88, 654, 656);          // carte unique de gauche (connexion, amis Steam a inviter)
+static const RectF kLobbyBanner(264, 88, 654, 108);
+static const RectF kLobbyPlayersCard(264, 210, 320, 534), kLobbyOptsCard(598, 210, 320, 534);
+static const RectF kLobbyRight(932, 88, 332, 656);
+static RectF kChoiceR[2] = { RectF(950, 136, 296, 50), RectF(950, 192, 296, 50) };   // (placees par la carte de droite)
+static const float kLobbyRowH = 72;
+static DWORD g_lobbySinceT;                         // entree dans ce salon (bandeau de l'invite : « dans ce salon depuis »)
+static int g_lobbySinceGen = -1;                    // ... pour quel salon (g_lobbyGen)
+// Identifiants des nouvelles commandes du salon (suite de UI_LOBBY_* de uikit.inc ; < 3300 : LobbyOptClick)
+enum { UI_LOBBY_AJOUTS = 3272,   // + k : ajouts MWCoop Tous / Choisir / Aucun
+       UI_LOBBY_MAXSEG = 3276,   // + k : joueurs au plus 4 / 8 / 12 / 16
+       UI_LOBBY_OPTRESET = 3280, UI_LOBBY_OPTKEEP,   // Remettre (les Reglages), Garder comme defauts
+       UI_LOBBY_MODS = 3282 };   // Gerer (page MODS)
 static RectF g_lobbyGearR, g_lobbyPopR;               // engrenage de l'en-tete, son menu
 
 // Sons du salon (repris de SACoop) : arrivee, depart, pret, plus pret. Petites notes synthetisees (WAV en memoire).
@@ -160,7 +172,8 @@ static const LobbyOptDef kLobbyOptDefs[] = {
 static const int kLobbyOptN = (int)(sizeof(kLobbyOptDefs) / sizeof(kLobbyOptDefs[0]));
 static std::map<std::string, int> g_lobbyOpt;       // mes choix pour CE salon (hote : options de la partie et les miennes ; invite : les miennes)
 static std::map<std::string, int> g_hostOpt;        // invite : options de la partie recues de l'hote (sous g_lcs)
-static int g_lobbyOptTab;                           // carte des options du salon : 0 la partie, 1 les miennes
+static int g_lobbyOptTab = -1;                      // carte des options du salon : 0 la partie (de l'hote), 1 les miennes ; -1 : selon le role
+static bool g_lobbyAjoutsPick;                      // hote : ajouts MWCoop « Choisir » (les quatre interrupteurs montres)
 static DWORD g_codeCopiedT;                         // COPIER du code de session : "copie" pendant 2 s
 static int LobbyOptGet(const char *key)
 {
@@ -174,7 +187,8 @@ static void LobbyOptImport()
 {
     g_lobbyOpt.clear();
     EnterCriticalSection(&g_lcs); g_hostOpt.clear(); LeaveCriticalSection(&g_lcs);
-    g_lobbyOptTab = 0;
+    g_lobbyOptTab = -1;
+    g_lobbyAjoutsPick = false;
     std::string ini = ModIniA();
     for (auto &d : kLobbyOptDefs) g_lobbyOpt[d.key] = GetPrivateProfileIntA("Coop", d.key, d.def, ini.c_str());
     g_lobbyPrive = GetPrivateProfileIntW(L"Lanceur", L"SalonPrive", 1, g_iniLauncher.c_str()) != 0;
