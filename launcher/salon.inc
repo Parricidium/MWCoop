@@ -33,6 +33,10 @@ enum { M_MODS = 20, M_MODGET, M_MODDATA, M_MODSREQ, M_MODSX };   // mods de l'ho
 // M_SYNCST (invite -> hote) : u8 avancement de la reception de l'envoi de l'hote (0-99, 255 : rien en cours) ; M_LATE (hote ->
 // invite en retard, a la place de WELCOME) : la partie est lancee, voici les mods (puis M_MODS...) -- u8 0 sur Steam : rien.
 enum { M_SYNCST = 25, M_LATE };
+// M_CHAT (0.97.0, tchat du salon) : invite -> hote [u16 n][n octets UTF-8] ; hote -> tous [u8 numero][u16 n][n octets]. Au plus
+// 200 caracteres. LB_PROTO ne bouge pas : un ancien lanceur ignore les types qu'il ne connait pas (hote et invite), et la
+// version doit de toute facon etre la meme. M_REJECT "kicked" en cours de salon : l'hote met l'invite dehors (clic sur sa ligne).
+enum { M_CHAT = 27 };
 static SOCKET g_listen = INVALID_SOCKET, g_guestSock = INVALID_SOCKET;
 static SOCKET g_udpHost = INVALID_SOCKET;           // hote : ecoute UDP du salon (sous g_lcs)
 static int g_udpHostErr;                            // hote : erreur de l'ouverture du port UDP (0 = ouvert)
@@ -67,7 +71,9 @@ static int g_lobbySinceGen = -1;                    // ... pour quel salon (g_lo
 enum { UI_LOBBY_AJOUTS = 3272,   // + k : ajouts MWCoop Tous / Choisir / Aucun
        UI_LOBBY_MAXSEG = 3276,   // + k : joueurs au plus 4 / 8 / 12 / 16
        UI_LOBBY_OPTRESET = 3280, UI_LOBBY_OPTKEEP,   // Remettre (les Reglages), Garder comme defauts
-       UI_LOBBY_MODS = 3282 };   // Gerer (page MODS)
+       UI_LOBBY_MODS = 3282,     // Gerer (page MODS)
+       UI_LOBBY_CHAT = 3283, UI_LOBBY_SEND,   // tchat : champ « Message au salon », ENVOYER
+       UI_LOBBY_SEGV = 3285 };   // + rang : pastilles segmentees de « Les miennes » (kLobbySegKeys, a la suite ; 3285-3299)
 static RectF g_lobbyGearR, g_lobbyPopR;               // engrenage de l'en-tete, son menu
 
 // Sons du salon (repris de SACoop) : arrivee, depart, pret, plus pret. Petites notes synthetisees (WAV en memoire).
@@ -254,6 +260,92 @@ static std::string MySkin() { return PersoLookString(); }
 static std::string MyName() { return Narrow(PlayerName(), CP_UTF8); }
 static std::string MyVersion() { return g_localVer.empty() ? "dev" : Narrow(g_localVer, CP_UTF8); }   // MWCoop\version.txt
 
+// Tchat du salon (0.97.0, maquette du 17/10) : les trois derniers messages sous les joueurs, un champ et ENVOYER (Entree
+// envoie). Par IP, l'hote recoit M_CHAT de l'invite et le renvoie a tous (lui compris) ; par Steam, chacun pose sa derniere
+// ligne dans ses donnees de membre ("chat" = "<numero>|<texte>"), les autres la lisent a chaque SteamLobbySync. L'historique
+// vit le temps du salon (LobbyChatClear a l'ouverture et a la fermeture) ; chaque ligne va aussi dans le journal du lanceur.
+struct ChatMsg { int id; std::string name; std::wstring text; };
+static std::vector<ChatMsg> g_chat;                   // (sous g_lcs)
+static std::wstring g_chatText;                       // ce que je tape
+static bool g_chatFocus;                              // le champ a le clavier
+static int g_chatSeq;                                 // Steam : numero de ma derniere ligne
+static std::map<uint64_t, int> g_sChatSeen;           // Steam : derniere ligne lue de chaque membre
+static const size_t kChatMax = 200;
+static int g_kickArm = -1;                            // hote : invite dont la ligne a ete cliquee une fois (numero)
+static DWORD g_kickArmT;
+static void GuestSend(const Wr &w);
+static void LobbyChatClear()
+{
+    EnterCriticalSection(&g_lcs); g_chat.clear(); LeaveCriticalSection(&g_lcs);
+    g_chatText.clear(); g_chatFocus = false; g_chatSeq = 0; g_sChatSeen.clear(); g_kickArm = -1;
+}
+static void LobbyChatAdd(int id, const std::string &name, const std::string &utf8)
+{
+    std::wstring t = Widen(utf8, CP_UTF8);
+    if (t.size() > kChatMax) t.resize(kChatMax);
+    if (t.empty()) return;
+    EnterCriticalSection(&g_lcs);
+    g_chat.push_back({ id, name, t });
+    if (g_chat.size() > 60) g_chat.erase(g_chat.begin());
+    LeaveCriticalSection(&g_lcs);
+    LaunchLog("salon : tchat %s (joueur %d) : %s", name.c_str(), id, utf8.c_str());
+}
+// Hote : la ligne a tous les invites (et chez lui).
+static void LobbyChatRelay(int id, const std::string &name, const std::string &utf8)
+{
+    LobbyChatAdd(id, name, utf8);
+    Wr w; w.u8(M_CHAT); w.u8(id); w.u16((int)utf8.size()); w.d += utf8;
+    EnterCriticalSection(&g_lcs);
+    for (auto &c : g_conns) SendMsg(c.s, w);
+    LeaveCriticalSection(&g_lcs);
+}
+// ENVOYER (ou Entree) : ce que je tape, selon le role et le transport.
+static void LobbyChatSend()
+{
+    std::wstring t = Trim(g_chatText);
+    g_chatText.clear();
+    int lobby = g_lobby;
+    if (t.empty() || (lobby != LB_HOST && lobby != LB_GUEST)) return;
+    if (t.size() > kChatMax) t.resize(kChatMax);
+    std::string u = Narrow(t, CP_UTF8);
+    if (g_lobbySteam) { SSetMember("chat", std::to_string(++g_chatSeq) + "|" + u); return; }   // (lu par SteamLobbySync, chez moi aussi)
+    if (lobby == LB_HOST) { LobbyChatRelay(0, MyName(), u); return; }
+    Wr w; w.u8(M_CHAT); w.u16((int)u.size()); w.d += u;
+    GuestSend(w);
+}
+// Caractere tape dans le champ du tchat (WM_CHAR) ; vrai si pris.
+static bool LobbyChatChar(wchar_t c)
+{
+    if (!g_chatFocus || g_state != ST_IDLE || g_tab != TAB_LOBBY || (g_lobby != LB_HOST && g_lobby != LB_GUEST)) return false;
+    if (c == 27) g_chatFocus = false;
+    else if (c == 13) LobbyChatSend();
+    else if (c == 8) { if (!g_chatText.empty()) g_chatText.pop_back(); }
+    else if (c == 127) g_chatText.clear();
+    else if (c == 22 && OpenClipboard(g_wnd)) {   // Ctrl+V
+        HANDLE d = GetClipboardData(CF_UNICODETEXT);
+        const wchar_t *s = d ? (const wchar_t *)GlobalLock(d) : NULL;
+        if (s) { for (; *s && *s != L'\r' && *s != L'\n' && g_chatText.size() < kChatMax; s++) if (*s >= 32) g_chatText += *s; GlobalUnlock(d); }
+        CloseClipboard();
+    }
+    else if (c >= 32 && g_chatText.size() < kChatMax) g_chatText += c;
+    g_time = 0.2f;
+    return true;
+}
+// Hote (IP) : met un invite dehors (M_REJECT "kicked", puis sa connexion coupee : DropConn suit).
+static void LobbyKick(int id)
+{
+    if (g_lobby != LB_HOST || g_lobbySteam || id <= 0) return;
+    std::string name;
+    EnterCriticalSection(&g_lcs);
+    for (auto &c : g_conns) if (c.id == id) {
+        for (auto &p : g_peers) if (p.id == id) name = p.name;
+        Wr w; w.u8(M_REJECT); w.str("kicked"); SendMsg(c.s, w);
+        shutdown(c.s, SD_BOTH);
+    }
+    LeaveCriticalSection(&g_lcs);
+    if (!name.empty()) { SetStatus(K_WARN, T(L"%S mis dehors", L"%S kicked out"), name.c_str()); LaunchLog("salon : %s (joueur %d) mis dehors par l'hote", name.c_str(), id); }
+}
+
 // Rejoindre un hote d'une autre version (demande de JD, 14/10 : « que ca check la version, si elle n'est pas bonne, une
 // proposition de mettre a jour »). Hote plus recent : proposer la mise a jour tout de suite (le lanceur se relance, puis on
 // rejoint) ; hote plus ancien : c'est a lui de mettre a jour.
@@ -395,7 +487,10 @@ static void LobbySession(SOCKET s)
         else if (p && t == M_PONG) { uint32_t sent = q.u32(); if (q.ok) p->ping = (int)(GetTickCount() - sent); }
         else if (p && t == M_SKIN) { std::string sk = q.str(); if (q.ok) { p->skin = sk; TestLog("salon : joueur %d apparence %s", id, sk.c_str()); } }
         else if (p && t == M_SYNCST) { int v = q.u8(); if (q.ok && (v == 255 ? -1 : v) != p->dl) { p->dl = v == 255 ? -1 : v; if (p->dl < 0 || p->dl % 25 == 0) TestLog("salon : %s (joueur %d) envoi de l'hote %d%%", p->name.c_str(), id, p->dl); } }
+        std::string chatName, chatText;
+        if (p && t == M_CHAT) { int n = q.u16(); if (q.ok && q.p + n <= m.size() && n <= 4 * (int)kChatMax) { chatName = p->name; chatText = m.substr(q.p, n); } }
         LeaveCriticalSection(&g_lcs);
+        if (!chatText.empty()) LobbyChatRelay(id, chatName, chatText);   // (hors du verrou : LobbyChatRelay le prend)
         if (t == M_READY || t == M_SKIN) BroadcastState();
     }
     DropConn(s);
