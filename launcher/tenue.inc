@@ -26,11 +26,11 @@ static FILETIME g_skinIdxMt;
 static DWORD g_skinCheckT;
 static int g_skinBudget = 1000;                             // portraits a charger pendant cette image
 static bool g_skinAnnounce;                                 // salon : annoncer l'apparence sans attendre
-static const RectF kSkinCard(264, 88, 440, 656), kSkinPanel(720, 88, 544, 656);
-static const RectF kSkinView(284, 112, 400, 520);
-static const float kSkinCell = 54, kSkinGap = 8;
-static const int kSkinCols = 8;
-static int g_lookZone;                                       // zone mise en avant (0 tete, 1 torse, 2 jambes, 3 silhouette)
+// Page PERSONNAGE (maquette du 17/10) : onglets en haut (y 92), carte Apercu a gauche, carte des parties a droite.
+static const RectF kSkinCard(264, 140, 390, 604), kSkinPanel(666, 140, 598, 604);
+static const RectF kSkinView(280, 194, 358, 450);
+static const float kPersoTabY = 92, kPersoTabH = 36;
+static int g_lookZone;                                       // image perso montree dans la bande « Mes images » (0 visage, 1 haut, 2 pantalon)
 static float g_skinYaw;                                     // vue montree (0..16, la plus proche est dessinee)
 static bool g_skinDrag;
 static float g_skinDragX;
@@ -232,18 +232,9 @@ static void DrawSkinAvatar(Graphics &g, RectF c, const std::string &skin, Color 
 
 static const Opt *SkinOpt() { return OptByKey("Apparence"); }
 static int SkinCount() { const Opt *ap = SkinOpt(); return ap ? (int)ap->svals.size() : 0; }
-static RectF SkinCellRect(int i) { return RectF(kSkinPanel.X + 24 + (i % kSkinCols) * (kSkinCell + kSkinGap), kSkinPanel.Y + 62 + (i / kSkinCols) * (kSkinCell + kSkinGap), kSkinCell, kSkinCell); }
-static RectF SkinArrowRect(int side) { return RectF(side < 0 ? kSkinCard.X + 20 : kSkinCard.X + kSkinCard.Width - 64, kSkinCard.Y + kSkinCard.Height - 106, 44, 44); }
-static int SkinCellAt(float x, float y)
-{
-    for (int i = 0; i < SkinCount(); i++) { RectF r = SkinCellRect(i); r.Inflate(2, 2); if (r.Contains(x, y)) return i; }
-    return -1;
-}
-static int SkinArrowAt(float x, float y)
-{
-    for (int s = -1; s <= 1; s += 2) { RectF r = SkinArrowRect(s); r.Inflate(4, 4); if (r.Contains(x, y)) return s; }
-    return 0;
-}
+// (ancienne galerie des hauts et fleches de rotation : plus rien a survoler, les tuiles passent par PersoPageHit ; launcher.cpp les appelle encore)
+static int SkinCellAt(float, float) { return -1; }
+static int SkinArrowAt(float, float) { return 0; }
 
 static void SkinSelect(int i, int dir)
 {
@@ -385,23 +376,15 @@ static void DrawSkinGhost(Graphics &g, float cx, float top, float k)
     g.FillPath(&b, &bp);
 }
 
-// Repere d'une zone du corps sur l'apercu : point, trait, pastille (cliquable : met la zone en avant a droite).
-static RectF LookPinRect(int z)
-{
-    static const float fy[4] = { 0.15f, 0.38f, 0.68f, 0 };
-    if (z == 3) return RectF(kSkinCard.X + 20, kSkinCard.Y + 20, 120, 36);
-    return RectF(kSkinCard.X + kSkinCard.Width - 128, kSkinView.Y + kSkinView.Height * fy[z] - 18, 108, 36);
-}
-
-// Page TENUE : apercu a gauche (3D, ou la vue de la tenue), parties a droite (ou la galerie des hauts).
-// ---- images importees (onglet TENUE) : %LOCALAPPDATA%\MWCoop\visage.jpg, haut.jpg, pantalon.jpg, a la taille de la texture du
+// ---- images importees (page PERSONNAGE) : %LOCALAPPDATA%\MWCoop\visage.jpg, haut.jpg, pantalon.jpg, a la taille de la texture du
 // jeu (gabarit) ; choisies dans la liste de leur partie ("perso", perso.inc), montrees aux autres par le mod (CustomFace).
 // Gabarits : ecrits par le mod au 1er passage en jeu de chaque version (gabarit-visage.png, gabarit-haut.png, gabarit-pantalon.png).
-// La rangee sous l'apercu suit la zone choisie (tete : visage, torse : haut, jambes : pantalon).
+// La bande « Mes images » (onglet Visage) suit g_lookZone (0 visage, 1 haut, 2 pantalon) ; les tuiles « Mon visage / haut /
+// pantalon » des grilles lancent l'import quand l'image n'est pas la.
 static bool EncoderClsid(const wchar_t *mime, CLSID *out);
 static Bitmap *g_persoThumb[3];
 static bool g_persoThumbLooked[3];
-static RectF g_faceRect;   // bloc dessine (bulle du guide)
+static RectF g_faceRect;   // bande « Mes images » (bulle du guide)
 static int PersoImgZone() { return g_lookZone == 1 ? PI_SHIRT : g_lookZone == 2 ? PI_PANTS : PI_FACE; }
 static void PersoImgChanged(int k)
 {
@@ -550,28 +533,347 @@ static void PersoMigrate()
     LaunchLog("visage importe : choisi dans la liste (Visage perso)");
 }
 
-// Rangee de l'image importee de la zone choisie (entre les fleches de rotation de l'apercu) : Mon visage / haut /
-// pantalon (importer), Gabarit, Retirer ; vignette de l'image en bas a gauche de l'apercu.
-static void DrawFaceRow(Graphics &g, RectF r, RectF view)
+// ---------------------------------------------------------------- page PERSONNAGE (maquette validee le 17/10)
+// Onglets Tenue / Visage / Voiture en haut de la page (Voiture : la page VOITURE de voiture.inc, g_tab = TAB_CAR, memes
+// onglets). A gauche la carte Apercu : vue Pied / Portrait, le personnage (glisser pour tourner), le portrait tel que le
+// salon le montre en bas a droite, puis Aleatoire / Comme avant / Enregistrer. A droite les parties en grilles de tuiles
+// (Tenue : haut, bas, silhouette, puis la couleur de la voiture ; Visage : visage, chapeau, lunettes, cheveux, puis « Mes
+// images »). Une tuile « + N » tourne les pages quand il y a plus de choix que de places.
+// Les tuiles, onglets, pastilles et la vue ne passent pas par HotZone (UiClick, ui.inc, ne les connait pas) : PersoPageHit
+// donne un code, SkinMouseDown / CarMouseDown l'appliquent (PersoPageMouseDown), g_skinRowHot (TENUE) ou g_carHot - 1000
+// (VOITURE) le gardent pour le survol.
+enum { HT_TAB = 0, HT_VIEW = 10, HT_SWATCH = 20, HT_PAINT = 40, HT_TILE = 100 };   // HT_TILE + partie * 16 + i (i = 15 : « + N »)
+static int g_persoTab;                                     // 0 Tenue, 1 Visage (Voiture : g_tab == TAB_CAR)
+static int g_persoView;                                    // 0 Pied (en entier), 1 Portrait
+static int g_tilePage[PF_COUNT] = { -1, -1, -1, -1, -1, -1, -1 };   // page montree par partie (-1 : celle du choix actuel)
+static const int kTileCols = 7;
+static const float kTileH = 84, kTileGap = 8;
+static const int kPersoPal[16] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89, 0x55B04C, 0x3FBFD9, 0xE8A33C, 0xB24FA5, 0x8C6239, 0x5C6BC0, 0xA9C43A, 0xE88A7A };   // (couleur du joueur : meme palette que le salon et Sync/Markers.cs)
+struct TileSec { int f; const wchar_t *fr, *en; int rows; };
+static const TileSec kTenueSecs[] = { { PF_SHIRT, L"HAUT", L"TOP", 2 }, { PF_PANTS, L"BAS", L"BOTTOM", 1 }, { PF_BODY, L"SILHOUETTE", L"BUILD", 1 } };
+static const TileSec kVisageSecs[] = { { PF_FACE, L"VISAGE", L"FACE", 1 }, { PF_HAT, L"CHAPEAU", L"HAT", 1 }, { PF_GLASSES, L"LUNETTES", L"GLASSES", 1 }, { PF_HAIR, L"CHEVEUX", L"HAIR", 1 } };
+static const wchar_t *kPersoTabFr[3] = { L"Tenue", L"Visage", L"Voiture" }, *kPersoTabEn[3] = { L"Outfit", L"Face", L"Car" };
+
+// Choix d'une partie ; en tete, la tuile « Mon visage / haut / pantalon » (import) quand l'image n'est pas encore la.
+static std::vector<std::string> PersoTiles(int f)
 {
-    g_faceRect = r;
+    std::vector<std::string> v;
+    int k = PersoImgOf(f);
+    if (k >= 0 && !PersoImgHas(k)) v.push_back("#import");
+    for (auto &s : PersoChoices(f)) v.push_back(s);
+    return v;
+}
+static int PersoIndexOf(const std::vector<std::string> &v, const std::string &cur) { for (int i = 0; i < (int)v.size(); i++) if (v[i] == cur) return i; return 0; }
+
+// Mise en page des sections de l'onglet montre : y, choix, pagination. Sans export du mod : seulement les hauts.
+struct SecLay { const TileSec *sec; float y; int n, per, pages, page; std::vector<std::string> tiles; };
+static float TileW() { return (kSkinPanel.Width - 36 - (kTileCols - 1) * kTileGap) / kTileCols; }
+static RectF TileRect(const SecLay &L, int i) { return RectF(kSkinPanel.X + 18 + (i % kTileCols) * (TileW() + kTileGap), L.y + 24 + (i / kTileCols) * (kTileH + kTileGap), TileW(), kTileH); }
+static float PersoLayout(std::vector<SecLay> &out)
+{
+    bool perso = g_perso.state == 1;
+    const TileSec *secs = g_persoTab ? kVisageSecs : kTenueSecs;
+    int ns = g_persoTab ? (int)_countof(kVisageSecs) : (int)_countof(kTenueSecs);
+    float y = kSkinPanel.Y + 50;
+    for (int s = 0; s < ns; s++) {
+        if (!perso && secs[s].f != PF_SHIRT) continue;
+        SecLay L;
+        L.sec = &secs[s]; L.y = y; L.tiles = PersoTiles(secs[s].f); L.n = (int)L.tiles.size();
+        int cap = secs[s].rows * kTileCols;
+        L.per = L.n <= cap ? cap : cap - 1;   // (une place pour « + N »)
+        L.pages = max(1, (L.n + L.per - 1) / L.per);
+        int sel = PersoIndexOf(L.tiles, PersoGet(secs[s].f));
+        L.page = g_tilePage[secs[s].f] < 0 ? sel / L.per : g_tilePage[secs[s].f] % L.pages;
+        out.push_back(L);
+        y += 24 + secs[s].rows * (kTileH + kTileGap) - kTileGap + 12;
+    }
+    return y;
+}
+static RectF PersoStripRect() { return g_persoTab ? RectF(kSkinPanel.X + 18, kSkinPanel.Y + 526, kSkinPanel.Width - 36, 62) : RectF(kSkinPanel.X + 18, kSkinPanel.Y + 502, kSkinPanel.Width - 36, 86); }
+static RectF PersoSwatchRect(int i) { RectF s = PersoStripRect(); return RectF(s.X + 12 + i * 32.0f, s.Y + 50, 26, 26); }
+static RectF PersoPaintRect() { RectF s = PersoStripRect(); return RectF(s.X + s.Width - 12 - 136, s.Y + 8, 136, 34); }
+static RectF PersoViewSegRect() { return RectF(kSkinCard.X + kSkinCard.Width - 16 - 150, kSkinCard.Y + 14, 150, 30); }
+static float PersoTabW(int k) { return PillW(T(kPersoTabFr[k], kPersoTabEn[k]), 13) + 16; }
+static RectF PersoTabRect(int k) { float x = kMain.X; for (int j = 0; j < k; j++) x += PersoTabW(j) + 6; return RectF(x, kPersoTabY, PersoTabW(k), kPersoTabH); }
+
+// Onglets de la page (TENUE et VOITURE).
+static void PersoTabsDraw(Graphics &g)
+{
+    int sel = g_tab == TAB_CAR ? 2 : g_persoTab;
+    for (int k = 0; k < 3; k++) {
+        RectF r = PersoTabRect(k);
+        bool on = k == sel, hot = g_tab == TAB_CAR ? g_carHot == 1000 + HT_TAB + k : g_skinRowHot == HT_TAB + k;
+        GraphicsPath p; RoundRect(p, r, r.Height / 2);
+        SolidBrush b(on ? kAcc : hot ? TH(cardSel) : TH(btn2)); g.FillPath(&b, &p);
+        if (!on) { Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); }
+        Text(g, T(kPersoTabFr[k], kPersoTabEn[k]), r, 13, FontStyleBold, on ? kOnAcc : kInk);
+    }
+}
+
+// Element sous la souris : code HT_*, -1 sinon (onglets sur les deux pages ; le reste sur TENUE).
+static int PersoPageHit(float x, float y)
+{
+    for (int k = 0; k < 3; k++) if (PersoTabRect(k).Contains(x, y)) return HT_TAB + k;
+    if (g_tab != TAB_SKIN) return -1;
+    if (g_perso.state == 1) { RectF s = PersoViewSegRect(); if (s.Contains(x, y)) return HT_VIEW + (x < s.X + s.Width / 2 ? 0 : 1); }
+    std::vector<SecLay> lay;
+    PersoLayout(lay);
+    for (auto &L : lay) {
+        int shown = min(L.per, L.n - L.page * L.per);
+        for (int i = 0; i < shown; i++) if (TileRect(L, i).Contains(x, y)) return HT_TILE + L.sec->f * 16 + i;
+        if (L.n > L.per && TileRect(L, shown).Contains(x, y)) return HT_TILE + L.sec->f * 16 + 15;
+    }
+    if (!g_persoTab) {
+        for (int i = 0; i < kSwatchN; i++) { RectF r = PersoSwatchRect(i); r.Inflate(3, 3); if (r.Contains(x, y)) return HT_SWATCH + i; }
+        if (PersoPaintRect().Contains(x, y)) return HT_PAINT;
+    }
+    return -1;
+}
+static bool PersoPageMouseDown(float x, float y)
+{
+    int t = PersoPageHit(x, y);
+    if (t < 0) return false;
+    if (t < HT_TAB + 3) {   // (meme volet : les valeurs a rendre restent, comme l'onglet de l'en-tete)
+        int k = t - HT_TAB;
+        if (k == 2) { g_tab = TAB_CAR; g_carIdleT = GetTickCount(); }
+        else { g_tab = TAB_SKIN; g_persoTab = k; g_skinIdleT = GetTickCount(); for (auto &p : g_tilePage) p = -1; }
+        g_skinRowHot = -1; g_carHot = -1;
+        return true;
+    }
+    if (t >= HT_VIEW && t < HT_VIEW + 2) { g_persoView = t - HT_VIEW; return true; }
+    if (t >= HT_SWATCH && t < HT_SWATCH + kSwatchN) { CarSetColor(CarSwatchColor(t - HT_SWATCH)); return true; }
+    if (t == HT_PAINT) { g_tab = TAB_CAR; g_paintView = true; g_vinView = false; g_skinRowHot = -1; return true; }
+    int f = (t - HT_TILE) / 16, i = (t - HT_TILE) % 16;
+    if (f < 0 || f >= PF_COUNT) return false;
+    std::vector<SecLay> lay;
+    PersoLayout(lay);
+    for (auto &L : lay) {
+        if (L.sec->f != f) continue;
+        if (i == 15) { g_tilePage[f] = (L.page + 1) % L.pages; return true; }
+        int at = L.page * L.per + i;
+        if (at >= L.n) return true;
+        const std::string &v = L.tiles[at];
+        if (v == "#import") { g_lookZone = f == PF_SHIRT ? 1 : f == PF_PANTS ? 2 : 0; FaceImport(); return true; }
+        if (g_tilePage[f] < 0) g_tilePage[f] = L.page;   // (la page reste : on compare les voisins)
+        if (f == PF_SHIRT) { const Opt *ap = SkinOpt(); int cur = ap ? OptGet(*ap) : 0; SkinSelect(ap ? (int)(std::find(ap->svals.begin(), ap->svals.end(), v) - ap->svals.begin()) : 0, at < cur ? -1 : 1); }
+        else { PersoSet(f, v); g_skinChangeT = GetTickCount(); g_skinAnnounce = true; }
+        return true;
+    }
+    return true;
+}
+
+// Vignette d'une tuile : la texture de la matiere (export du mod, pack offert, ou image importee), reduite a 48 px par
+// moyenne de blocs (la couleur d'ensemble, pas le bruit de l'atlas). NULL : pas d'image (bloc gris).
+static Bitmap *TileBmp(int f, const std::string &v)
+{
+    std::string mat = v;
+    if (f == PF_SHIRT || f == PF_PANTS || f == PF_FACE) {
+        if (v == "perso") return PersoThumb(PersoImgOf(f));
+        if (g_perso.state != 1) return NULL;
+        if (v.empty()) { const PersoBody *b = PersoBodyFor(PersoGet(PF_BODY)); if (!b) return NULL; mat = b->def[f == PF_SHIRT ? 0 : f == PF_PANTS ? 1 : 2]; }
+    } else if (f == PF_HAT || f == PF_GLASSES || f == PF_HAIR) {
+        mat.clear();
+        for (auto &a : g_perso.accs) if (a.key == v && !a.mats.empty()) mat = a.mats[0];
+        if (mat.empty()) return NULL;
+    } else return NULL;
+    auto it = g_tileBmp.find(mat);
+    if (it != g_tileBmp.end()) return it->second;
+    const PersoTex &tx = PersoTexFor(mat);
+    Bitmap *out = NULL;
+    if (tx.w > 0 && tx.h > 0) {
+        const int S = 48;
+        out = new Bitmap(S, S, PixelFormat32bppARGB);
+        BitmapData bd;
+        Rect r(0, 0, S, S);
+        if (out->LockBits(&r, ImageLockModeWrite, PixelFormat32bppARGB, &bd) == Ok) {
+            for (int y = 0; y < S; y++)
+                for (int x = 0; x < S; x++) {
+                    int x0 = x * tx.w / S, x1 = max(x0 + 1, (x + 1) * tx.w / S), y0 = y * tx.h / S, y1 = max(y0 + 1, (y + 1) * tx.h / S);
+                    unsigned sr = 0, sg = 0, sb = 0, n = 0;
+                    for (int yy = y0; yy < y1 && yy < tx.h; yy++)
+                        for (int xx = x0; xx < x1 && xx < tx.w; xx++) {
+                            uint32_t c = tx.px[(size_t)yy * tx.w + xx];
+                            if ((c >> 24) < 64) continue;
+                            sr += (c >> 16) & 255; sg += (c >> 8) & 255; sb += c & 255; n++;
+                        }
+                    uint32_t c = 0;
+                    if (n) c = 0xFF000000u | (min(255u, (unsigned)(sr / n * tx.col[0])) << 16) | (min(255u, (unsigned)(sg / n * tx.col[1])) << 8) | min(255u, (unsigned)(sb / n * tx.col[2]));
+                    ((uint32_t *)((BYTE *)bd.Scan0 + (size_t)y * bd.Stride))[x] = c;
+                }
+            out->UnlockBits(&bd);
+        } else { delete out; out = NULL; }
+    }
+    g_tileBmp[mat] = out;
+    return out;
+}
+
+// Libelle court d'une tuile (73 px) : « Dom 38 » plutot que « Visage Dom 38 », la rubrique le dit deja.
+static std::wstring TileLabel(int f, const std::string &v)
+{
+    if (v == "#import") return f == PF_SHIRT ? T(L"Mon haut", L"My top") : f == PF_PANTS ? T(L"Mon pantalon", L"My pants") : T(L"Mon visage", L"My face");
+    std::wstring l = PersoLabel(f, v);
+    if (IsTenue(v)) { size_t sp = l.find(L' '); if (sp != std::wstring::npos) l = l.substr(sp + 1); }
+    if (f == PF_GLASSES && !v.empty()) {   // « Lunettes (chromées) » -> « Chromées », « Lunettes de soleil » -> « De soleil »
+        const wchar_t *pre = T(L"Lunettes", L"Glasses");
+        if (!l.compare(0, wcslen(pre), pre)) {
+            std::wstring r = Trim(l.substr(wcslen(pre)));
+            if (r.size() > 2 && r.front() == L'(' && r.back() == L')') r = r.substr(1, r.size() - 2);
+            if (!r.empty()) { r[0] = towupper(r[0]); l = r; }
+        }
+    }
+    return l;
+}
+
+// Pastille « Photo » (image importee), en haut a droite d'une tuile.
+static void TilePhotoChip(Graphics &g, RectF r)
+{
+    RectF c(r.X + r.Width - 40, r.Y + 5, 36, 15);
+    Pill(g, c, Color(255, 255, 107, 139), T(L"Photo", L"Photo"), Color(255, 255, 255, 255), 8.5f);
+}
+
+static void DrawTile(Graphics &g, RectF r, int f, const std::string &v, bool on, bool hot)
+{
+    GraphicsPath p; RoundRect(p, r, 12);
+    SolidBrush bg(g_dark ? Color(64, 0, 0, 0) : Color(28, 16, 30, 48)); g.FillPath(&bg, &p);
+    if (on) { GraphicsPath gp; RectF gr = r; gr.Inflate(2, 2); RoundRect(gp, gr, 14); Pen glow(WithA(kAcc, 0.22f), 4.0f); g.DrawPath(&glow, &gp); }
+    bool import = v == "#import", none = v.empty() && (f == PF_HAT || f == PF_GLASSES || f == PF_HAIR);
+    Pen edge(on ? kAcc : hot ? WithA(kAcc, 0.6f) : import ? WithA(Color(255, 255, 107, 139), 0.6f) : TH(choiceBorder), on ? 2.0f : 1.5f);
+    g.DrawPath(&edge, &p);
+    float cx = r.X + r.Width / 2;
+    GraphicsPath sp;
+    RectF sr;
+    switch (f) {   // la forme : haut / pantalon bloc, visage et cheveux rond, chapeau calotte, lunettes barre
+    case PF_SHIRT: sr = RectF(cx - 17, r.Y + 10, 34, 40); RoundRect(sp, sr, 8); break;
+    case PF_PANTS: sr = RectF(cx - 14, r.Y + 8, 28, 44); RoundRect(sp, sr, 7); break;
+    case PF_FACE: case PF_HAIR: sr = RectF(cx - 18, r.Y + 12, 36, 36); sp.AddEllipse(sr); break;
+    case PF_HAT: sr = RectF(cx - 20, r.Y + 18, 40, 24); RoundRect(sp, sr, 10); break;
+    case PF_GLASSES: sr = RectF(cx - 20, r.Y + 24, 40, 14); RoundRect(sp, sr, 7); break;
+    default: break;
+    }
+    if (f == PF_BODY) {   // silhouette : bonhomme plus ou moins large / haut (cochon : rose)
+        float w = 1, h = 1; bool pig = !v.compare(0, 4, "pig-");
+        if (v == "1714-32") w = 0.72f; else if (v == "1709-34") w = 0.85f; else if (v == "1712-48") w = 1.3f;
+        else if (v == "1697-42") { w = 1.3f; h = 0.8f; } else if (v == "1789-29") { w = 0.8f; h = 0.8f; } else if (pig) { w = 1.25f; h = 0.75f; }
+        SolidBrush b(pig ? Color(255, 232, 150, 170) : WithA(kInk, on ? 0.9f : 0.7f));
+        float top = r.Y + 12 + (1 - h) * 40;
+        g.FillEllipse(&b, cx - 6 * h, top, 12 * h, 12 * h);
+        GraphicsPath bp; RoundRect(bp, RectF(cx - 10 * w, top + 14 * h, 20 * w, 30 * h), 8 * min(w, h)); g.FillPath(&b, &bp);
+    } else if (import) {
+        Pen dash(WithA(Color(255, 255, 107, 139), 0.9f), 1.2f); dash.SetDashStyle(DashStyleDash);
+        g.DrawPath(&dash, &sp);
+        Icon(g, IC_IMAGE, cx, sr.Y + sr.Height / 2, 16, WithA(kInk, 0.8f), 1.8f);
+        TilePhotoChip(g, r);
+    } else if (none) {
+        Pen dash(WithA(kGrey, 0.7f), 1.2f); dash.SetDashStyle(DashStyleDash);
+        g.DrawPath(&dash, &sp);
+        Pen bar(WithA(kGrey, 0.7f), 1.6f); g.DrawLine(&bar, sr.X + 6, sr.Y + sr.Height - 4, sr.X + sr.Width - 6, sr.Y + 4);
+    } else {
+        Bitmap *b = TileBmp(f, v);
+        if (b) {
+            float iw = (float)b->GetWidth(), ih = (float)b->GetHeight(), k = max(sr.Width / iw, sr.Height / ih);   // (recadre : remplit la forme)
+            GraphicsState st = g.Save();
+            g.SetClip(&sp, CombineModeIntersect);
+            g.SetInterpolationMode(InterpolationModeHighQualityBilinear);
+            g.DrawImage(b, RectF(sr.X + (sr.Width - iw * k) / 2, sr.Y + (sr.Height - ih * k) / 2, iw * k, ih * k));
+            g.Restore(st);
+        } else { SolidBrush fb(WithA(kGrey, 0.35f)); g.FillPath(&fb, &sp); }
+        Pen rim(Color(40, 255, 255, 255), 1.0f); g.DrawPath(&rim, &sp);
+        if (v == "perso") TilePhotoChip(g, r);
+    }
+    Text(g, TileLabel(f, v), RectF(r.X + 3, r.Y + r.Height - 26, r.Width - 6, 20), 11, FontStyleBold, import ? kGrey : on ? kInk : WithA(kInk, 0.85f));
+}
+
+// Bouton dessine comme UiButton, sans zone (le clic passe par PersoPageHit).
+static void PersoBtn(Graphics &g, RectF r, const std::wstring &s, bool hot, int icon = -1)
+{
+    GraphicsPath p; RoundRect(p, r, 11);
+    SolidBrush b(hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
+    Pen pen(TH(fieldBorder), 1.0f); g.DrawPath(&pen, &p);
+    Graphics &mg = MeasureG();
+    float tw = MeasureW(mg, s, 12.5f, FontStyleBold), iw = icon >= 0 ? 24.0f : 0.0f, x0 = r.X + (r.Width - tw - iw) / 2;
+    if (icon >= 0) Icon(g, icon, x0 + 9, r.Y + r.Height / 2, 17, kInk, 2.1f);
+    Text(g, s, RectF(x0 + iw, r.Y, tw + 2, r.Height), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+}
+// Bande du bas (verre leger) : fond et liseré.
+static void PersoStripBg(Graphics &g, RectF s)
+{
+    GraphicsPath sp; RoundRect(sp, s, 14);
+    SolidBrush sb(g_dark ? Color(13, 255, 255, 255) : Color(60, 255, 255, 255)); g.FillPath(&sb, &sp);
+    Pen pen(g_dark ? Color(31, 255, 255, 255) : TH(choiceBorder), 1.0f); g.DrawPath(&pen, &sp);
+}
+
+// Bande « Voiture » (onglet Tenue) : les teintes de la CORRIS (CarSetColor) et le bouton vers la peinture perso.
+static void DrawCarStrip(Graphics &g)
+{
+    RectF s = PersoStripRect();
+    PersoStripBg(g, s);
+    Text(g, T(L"VOITURE", L"CAR"), RectF(s.X + 12, s.Y + 10, 70, 18), 10.5f, FontStyleBold, kAcc, StringAlignmentNear);
+    int sel = CarSwatchSel();
+    std::wstring name;
+    if (sel == 0) name = T(L"au hasard", L"random");
+    else if (sel > 0) name = T(kSwatches[sel - 1].fr, kSwatches[sel - 1].en);
+    else { wchar_t hx[16]; swprintf_s(hx, L"#%06X", g_carColor & 0xFFFFFF); name = hx; }
+    RectF pb = PersoPaintRect();
+    Text(g, T(L"Ma CORRIS (nouvelle partie) : ", L"My CORRIS (new game): ") + name,
+         RectF(s.X + 80, s.Y + 10, pb.X - 12 - (s.X + 80), 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
+    PersoBtn(g, pb, T(L"Peinture perso…", L"Custom paint…"), g_skinRowHot == HT_PAINT, IC_IMAGE);
+    for (int i = 0; i < kSwatchN; i++) {
+        RectF r = PersoSwatchRect(i);
+        bool hot = g_skinRowHot == HT_SWATCH + i;
+        if (i == sel) { Pen ring(Color(255, 255, 255, 255), 2.0f); g.DrawEllipse(&ring, r.X - 3, r.Y - 3, r.Width + 6, r.Height + 6); Pen halo(Color(60, 255, 255, 255), 3.0f); g.DrawEllipse(&halo, r.X - 6, r.Y - 6, r.Width + 12, r.Height + 12); }
+        else if (hot) { Pen ring(WithA(kInk, 0.6f), 1.6f); g.DrawEllipse(&ring, r.X - 3, r.Y - 3, r.Width + 6, r.Height + 6); }
+        if (i == 0) {
+            DrawCarWheel(g, r);
+            SolidBrush mid(g_dark ? Color(255, 22, 32, 58) : Color(255, 245, 248, 252));
+            g.FillEllipse(&mid, r.X + 7, r.Y + 7, r.Width - 14, r.Height - 14);
+            Text(g, L"?", RectF(r.X, r.Y + 0.5f, r.Width, r.Height), 10.5f, FontStyleBold, kInk);
+        } else { SolidBrush b(CarRgb(kSwatches[i - 1].rgb)); g.FillEllipse(&b, r); }
+        Pen edge(Color(70, 255, 255, 255), 1.0f); g.DrawEllipse(&edge, r);
+    }
+}
+
+// Bande « Mes images » (onglet Visage) : l'image perso choisie (visage / haut / pantalon), Importer, Gabarit, Retirer.
+static void DrawImagesStrip(Graphics &g)
+{
+    RectF s = PersoStripRect();
+    g_faceRect = s;
+    PersoStripBg(g, s);
+    Text(g, T(L"MES IMAGES", L"MY IMAGES"), RectF(s.X + 12, s.Y + 5, 90, 16), 10.5f, FontStyleBold, kAcc, StringAlignmentNear);
+    Text(g, T(L"peintes sur le gabarit du jeu, montrées aux autres joueurs", L"painted on the game's template, shown to the other players"), RectF(s.X + 100, s.Y + 5, s.Width - 112, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     int k = PersoImgZone();
     Bitmap *th = PersoThumb(k);
-    static const wchar_t *impFr[3] = { L"Mon visage…", L"Mon haut…", L"Mon pantalon…" }, *impEn[3] = { L"My face…", L"My top…", L"My pants…" };
-    float gap = 6, bw = (r.Width - 2 * gap) / 3;
-    UiButton(g, RectF(r.X, r.Y + 4, bw + 16, 36), T(impFr[k], impEn[k]), UI_FACE_IMPORT, th == NULL);
-    UiButton(g, RectF(r.X + bw + 16 + gap, r.Y + 4, bw - 8, 36), T(L"Gabarit", L"Template"), UI_FACE_TPL, false);
-    UiButton(g, RectF(r.X + 2 * bw + 8 + 2 * gap, r.Y + 4, bw - 8, 36), T(L"Retirer", L"Remove"), UI_FACE_DEL, false, -1, th != NULL);
+    float y = s.Y + 24;
+    RectF ti(s.X + 12, y, 32, 32);
+    GraphicsPath tp; RoundRect(tp, ti, 8);
     if (th) {
-        static const wchar_t *capFr[3] = { L"visage importé", L"haut importé", L"pantalon importé" }, *capEn[3] = { L"imported face", L"imported top", L"imported pants" };
-        float tw = 96, thh = k == PI_FACE ? 48 : 96 * th->GetHeight() / (float)max(1u, th->GetWidth());
-        thh = min(thh, 96.0f);
-        RectF ti(view.X + 14, view.Y + view.Height - 14 - thh, tw, thh);
-        GraphicsPath p; RoundRect(p, RectF(ti.X - 4, ti.Y - 4, ti.Width + 8, ti.Height + 22), 8);
-        SolidBrush b(TH(card)); g.FillPath(&b, &p);
-        DrawPixels(g, th, ti);
-        Text(g, T(capFr[k], capEn[k]), RectF(ti.X - 4, ti.Y + ti.Height, ti.Width + 8, 18), 10.5f, FontStyleRegular, kGrey);
+        float iw = (float)th->GetWidth(), ih = (float)th->GetHeight(), kk = max(ti.Width / iw, ti.Height / ih);
+        GraphicsState st = g.Save();
+        g.SetClip(&tp, CombineModeIntersect);
+        g.SetInterpolationMode(InterpolationModeHighQualityBilinear);
+        g.DrawImage(th, RectF(ti.X + (ti.Width - iw * kk) / 2, ti.Y + (ti.Height - ih * kk) / 2, iw * kk, ih * kk));
+        g.Restore(st);
+        Pen rim(kAcc, 1.2f); g.DrawPath(&rim, &tp);
+    } else {
+        Pen dash(WithA(kGrey, 0.7f), 1.2f); dash.SetDashStyle(DashStyleDash); g.DrawPath(&dash, &tp);
+        Icon(g, IC_IMAGE, ti.X + 16, ti.Y + 16, 14, WithA(kGrey, 0.8f), 1.8f);
     }
+    UiSeg(g, RectF(s.X + 54, y, 198, 32), { T(L"Visage", L"Face"), T(L"Haut", L"Top"), T(L"Pantalon", L"Pants") }, k, UI_LOOKPIN, 11.5f);
+    UiButton(g, RectF(s.X + 262, y, 108, 32), T(L"Importer…", L"Import…"), UI_FACE_IMPORT, th == NULL, -1, true, 11);
+    UiButton(g, RectF(s.X + 378, y, 84, 32), T(L"Gabarit", L"Template"), UI_FACE_TPL, false, -1, true, 11);
+    UiButton(g, RectF(s.X + 470, y, 84, 32), T(L"Retirer", L"Remove"), UI_FACE_DEL, false, -1, th != NULL, 11);
+}
+
+// Encart « Apparence complète » (pas d'export du mod : seulement les hauts).
+static void DrawPersoCallout(Graphics &g, RectF nr)
+{
+    GraphicsPath np; RoundRect(np, nr, 16);
+    SolidBrush nb(WithA(kAcc, 0.12f)); g.FillPath(&nb, &np);
+    Pen npen(WithA(kAcc, 0.45f), 1); g.DrawPath(&npen, &np);
+    Icon(g, IC_SPARK, nr.X + 28, nr.Y + 30, 20, kAcc, 1.9f);
+    Text(g, T(L"Apparence complète", L"Full look"), RectF(nr.X + 52, nr.Y + 14, nr.Width - 70, 24), 14.5f, FontStyleBold, kInk, StringAlignmentNear);
+    Para(g, T(L"Corpulence, pantalon, visage, chapeau, lunettes, cheveux : lance une partie (solo suffit) et reste ~30 s en jeu avec cette version, ils apparaîtront ici.",
+              L"Build, pants, face, hat, glasses, hair: start a game (solo is fine) and stay ~30 s in game with this version, they will show up here."),
+         RectF(nr.X + 52, nr.Y + 40, nr.Width - 70, nr.Height - 48), 12.5f, kGrey);
 }
 
 static void DrawSkins(Graphics &g)
@@ -579,34 +881,53 @@ static void DrawSkins(Graphics &g)
     SkinsCheck();
     const Opt *ap = SkinOpt();
     if (!ap) return;
+    PersoTabsDraw(g);
     Glass(kSkinCard);
     Glass(kSkinPanel);
-    int n = (int)ap->svals.size(), sel = OptGet(*ap);
+    int sel = OptGet(*ap);
     const std::string &skin = ap->svals[sel];
-    std::vector<std::wstring> lab;
-    for (size_t i = 0; i < ap->labEn.size(); i++) lab.push_back(TLab(ap->labFr, ap->labEn, i));
-    RectF view = kSkinView;
     PersoCheck();
     bool perso = g_perso.state == 1;
-    {   // halo au sol
-        GraphicsPath hp; hp.AddEllipse(view.X + 40, view.Y + view.Height - 46, view.Width - 80, 44.0f);
-        PathGradientBrush hb(&hp);
-        hb.SetCenterColor(WithA(kAcc, g_dark ? 0.32f : 0.26f));
-        Color edge(0, 0, 0, 0); int one = 1; hb.SetSurroundColors(&edge, &one);
-        g.FillPath(&hb, &hp);
+    // --- a gauche : l'apercu
+    RectF c = kSkinCard, view = kSkinView;
+    Title(g, T(L"Aperçu", L"Preview"), RectF(c.X + 16, c.Y + 14, 200, 30), 16, kInk);
+    if (perso) {   // vue : en entier / portrait (sans export : la bande d'images n'a qu'une vue)
+        RectF sr = PersoViewSegRect();
+        GraphicsPath tp; RoundRect(tp, sr, 12);
+        SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
+        const wchar_t *vf[2] = { L"Pied", L"Portrait" }, *ve[2] = { L"Full", L"Portrait" };
+        for (int i = 0; i < 2; i++) {
+            RectF s(sr.X + 3 + i * (sr.Width - 6) / 2, sr.Y + 3, (sr.Width - 6) / 2, sr.Height - 6);
+            bool on = g_persoView == i, hot = g_skinRowHot == HT_VIEW + i;
+            GraphicsPath p; RoundRect(p, s, 9);
+            if (on) { SolidBrush b(kAcc); g.FillPath(&b, &p); } else if (hot) { SolidBrush b(TH(cardSel)); g.FillPath(&b, &p); }
+            Text(g, T(vf[i], ve[i]), s, 12, FontStyleBold, on ? kOnAcc : kInk);
+        }
+    }
+    {   // la scene : fond sombre, halo au sol
+        GraphicsPath vp; RoundRect(vp, view, 16);
+        SolidBrush vb(g_dark ? Color(64, 0, 0, 0) : Color(26, 16, 30, 48)); g.FillPath(&vb, &vp);
+        Pen vpen(g_dark ? Color(26, 255, 255, 255) : TH(choiceBorder), 1.0f); g.DrawPath(&vpen, &vp);
+        if (!(perso && g_persoView == 1)) {
+            GraphicsPath hp; hp.AddEllipse(view.X + 40, view.Y + view.Height - 52, view.Width - 80, 44.0f);
+            PathGradientBrush hb(&hp);
+            hb.SetCenterColor(WithA(kAcc, g_dark ? 0.32f : 0.26f));
+            Color edge(0, 0, 0, 0); int one = 1; hb.SetSurroundColors(&edge, &one);
+            g.FillPath(&hb, &hp);
+        }
     }
     float cx = view.X + view.Width / 2;
     float k = min((GetTickCount() - g_skinChangeT) / 180.0f, 1.0f);
     k = 1 - (1 - k) * (1 - k);
     Bitmap *strip = perso ? NULL : SkinStrip(skin), *portrait = perso || strip ? NULL : SkinPortrait(skin);
     if (perso) {
-        RectF dst(view.X, view.Y, view.Width, view.Height - 16);
-        if (Bitmap *pb = PersoImage(dst, g_skinYaw * 6.2831853f / 16)) DrawPixels(g, pb, dst);
+        RectF dst(view.X + 4, view.Y + 8, view.Width - 8, view.Height - 24);
+        if (Bitmap *pb = PersoImage(dst, g_skinYaw * 6.2831853f / 16, g_persoView == 1)) DrawPixels(g, pb, dst);
     } else if (strip) {
         float fw = strip->GetWidth() / 16.0f, fh = (float)strip->GetHeight();
         int fr = (int)floorf(g_skinYaw + 0.5f) & 15;
-        float h = view.Height - 16, w = h * fw / fh;
-        RectF dst(cx - w / 2 + (1 - k) * 22 * g_skinChangeDir, view.Y, w, h);
+        float h = view.Height - 28, w = h * fw / fh;
+        RectF dst(cx - w / 2 + (1 - k) * 22 * g_skinChangeDir, view.Y + 8, w, h);
         if (k < 1) {
             ColorMatrix cm = { { { 1, 0, 0, 0, 0 }, { 0, 1, 0, 0, 0 }, { 0, 0, 1, 0, 0 }, { 0, 0, 0, k, 0 }, { 0, 0, 0, 0, 1 } } };
             ImageAttributes ia;
@@ -626,106 +947,76 @@ static void DrawSkins(Graphics &g)
             }
             DrawPixels(g, g_skinFrame, dst);
         }
-    } else if (portrait) g.DrawImage(portrait, RectF(cx - 80, view.Y + 120, 160, 160));
+    } else if (portrait) g.DrawImage(portrait, RectF(cx - 80, view.Y + 110, 160, 160));
     else {
-        DrawSkinGhost(g, cx, view.Y + 90, 1.4f);
-        const wchar_t *msg = g_skinState == 1 ? T(L"Pas d'aper\u00E7u pour cette tenue.", L"No preview for this outfit.")
-                                              : T(L"Les aper\u00E7us appara\u00EEssent apr\u00E8s une premi\u00E8re partie (~30 s en jeu) avec cette version.",
+        DrawSkinGhost(g, cx, view.Y + 80, 1.3f);
+        const wchar_t *msg = g_skinState == 1 ? T(L"Pas d'aperçu pour cette tenue.", L"No preview for this outfit.")
+                                              : T(L"Les aperçus apparaîssent après une première partie (~30 s en jeu) avec cette version.",
                                                   L"Previews appear after a first game (~30 s in game) with this version.");
-        Para(g, msg, RectF(view.X + 30, view.Y + 330, view.Width - 60, 60), 13, kGrey, StringAlignmentNear);
+        Para(g, msg, RectF(view.X + 24, view.Y + 300, view.Width - 48, 60), 13, kGrey, StringAlignmentNear);
     }
-    // reperes des zones (apparence complete)
-    if (perso) {
-        static const wchar_t *zf[4] = { L"T\u00EAte", L"Torse", L"Jambes", L"Silhouette" }, *ze[4] = { L"Head", L"Torso", L"Legs", L"Build" };
-        static const float dx[3] = { 18, 34, 22 };
-        for (int z = 0; z < 4; z++) {
-            RectF r = LookPinRect(z);
-            bool on = g_lookZone == z, hot = g_uiHot == UI_LOOKPIN + z;
-            if (z < 3) {
-                float y = r.Y + r.Height / 2, x0 = cx + dx[z];
-                Pen ln(Color(110, 255, 255, 255), 1.5f); g.DrawLine(&ln, x0, y, r.X, y);
-                SolidBrush halo(WithA(kAcc, 0.3f)); g.FillEllipse(&halo, x0 - 9, y - 9, 18.0f, 18.0f);
-                SolidBrush dot(kAcc); g.FillEllipse(&dot, x0 - 5, y - 5, 10.0f, 10.0f);
-            }
-            GraphicsPath p; RoundRect(p, r, r.Height / 2);
-            SolidBrush b(on ? kAcc : hot ? (g_dark ? Color(220, 24, 38, 72) : Color(240, 255, 255, 255)) : (g_dark ? Color(180, 6, 12, 30) : Color(215, 255, 255, 255)));
-            g.FillPath(&b, &p);
-            if (!on) { Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p); }
-            Text(g, T(zf[z], ze[z]), r, 13, FontStyleBold, on ? kOnAcc : kInk);
-            HotZone(r, UI_LOOKPIN + z);
-        }
+    if (perso || strip) {   // comment tourner
+        std::wstring tip = T(L"Glisser : tourner", L"Drag: rotate");
+        Pill(g, RectF(view.X + 10, view.Y + 10, PillW(tip, 11) + 4, 26), g_dark ? Color(153, 10, 20, 45) : Color(200, 255, 255, 255), tip, g_dark ? Color(255, 220, 231, 250) : kInk, 11);
     }
-    // dessous : tourner, aleatoire, comme avant
-    {
-        float by = kSkinCard.Y + kSkinCard.Height - 106;
-        if (perso || strip) {
-            for (int s = 0; s < 2; s++) {
-                RectF r(s ? kSkinCard.X + kSkinCard.Width - 64 : kSkinCard.X + 20, by, 44, 44);
-                int id = UI_LOOKROT + s;
-                GraphicsPath p; RoundRect(p, r, 14);
-                SolidBrush b(g_uiHot == id ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
-                Pen pen(TH(fieldBorder), 1); g.DrawPath(&pen, &p);
-                Icon(g, s ? IC_CHEVR : IC_CHEVL, r.X + 22, r.Y + 22, 18, kInk, 2.2f);
-                HotZone(r, id);
-            }
-        }
-        // (avant : « Glisse pour tourner » ; le glisser se devine, la rangee sert au visage importe)
-        DrawFaceRow(g, RectF(kSkinCard.X + 74, by, kSkinCard.Width - 148, 44), view);
-        float bw = (kSkinCard.Width - 50) / 2;
-        UiButton(g, RectF(kSkinCard.X + 20, by + 56, bw, 44), T(L"Al\u00E9atoire", L"Random"), UI_LOOKRAND, false, IC_SHUFFLE);
-        UiButton(g, RectF(kSkinCard.X + 30 + bw, by + 56, bw, 44), T(L"Comme avant", L"As before"), UI_LOOKRESET, false, IC_UNDO);
+    {   // le portrait tel que le salon et la carte le montrent (sa couleur de joueur)
+        RectF av(view.X + view.Width - 10 - 72, view.Y + view.Height - 10 - 72, 72, 72);
+        SolidBrush sh(Color(90, 0, 0, 0)); g.FillEllipse(&sh, av.X - 2, av.Y, av.Width + 4, av.Height + 4);
+        DrawSkinAvatar(g, av, PersoLookString(), CarRgb(kPersoPal[max(0, g_myId) % 16]), PlayerName());
     }
+    if (PersoStale())   // export d'une ancienne version (corps des PNJ dans leur pose : la grand-mere assise...)
+        Para(g, T(L"Aperçu fait par une ancienne version : lance une partie (solo suffit) et reste ~30 s en jeu, il sera refait.",
+                  L"Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone."),
+             RectF(c.X + 16, c.Y + 508, c.Width - 32, 34), 11.5f, kWarn);
+    else Para(g, T(L"Le portrait en bas à droite est celui affiché dans les salons et sur la carte.", L"The portrait at the bottom right is the one shown in lobbies and on the map."),
+              RectF(c.X + 16, c.Y + 508, c.Width - 32, 34), 11.5f, kGrey);
+    float by = c.Y + c.Height - 16 - 44;
+    UiButton(g, RectF(c.X + 16, by, 110, 44), T(L"Aléatoire", L"Random"), UI_LOOKRAND, false, IC_SHUFFLE);
+    UiButton(g, RectF(c.X + 134, by, 110, 44), T(L"Comme avant", L"As before"), UI_LOOKRESET, false);
+    UiButton(g, RectF(c.X + 252, by, 122, 44), T(L"Enregistrer", L"Save"), UI_PAGE_OK, true, IC_CHECK);
 
-    // --- a droite
+    // --- a droite : les parties de l'onglet
     RectF pn = kSkinPanel;
-    if (perso) DrawPersoRows(g);
-    if (perso && PersoStale()) {   // export d'une ancienne version (corps des PNJ dans leur pose : la grand-mere assise...)
-        RectF r(pn.X + 24, pn.Y + 532, pn.Width - 48, 0);
-        r.Y = PersoRowRect(kPersoRowN - 1).Y + 58; r.Height = pn.Y + pn.Height - 80 - r.Y;
-        GraphicsPath p; RoundRect(p, r, 14);
-        SolidBrush b(WithA(kWarn, 0.14f)); g.FillPath(&b, &p);
-        Pen pen(WithA(kWarn, 0.5f), 1); g.DrawPath(&pen, &p);
-        Icon(g, IC_ALERT, r.X + 22, r.Y + r.Height / 2, 18, kWarn, 2.0f);
-        Para(g, T(L"Aperçu fait par une ancienne version : lance une partie (solo suffit) et reste ~30 s en jeu, il sera refait (corps debout).",
-                  L"Preview made by an older version: start a game (solo is fine) and stay ~30 s in game, it will be redone (standing bodies)."),
-             RectF(r.X + 42, r.Y + 6, r.Width - 54, r.Height - 8), 12, kInk, StringAlignmentCenter);
-    }
-    if (!perso) {   // (pas d'apparence complete : la galerie des hauts)
-        Title(g, T(L"Hauts", L"Tops"), RectF(pn.X + 24, pn.Y + 20, 200, 26), 17, kInk);
-        std::wstring shown = g_skinHot >= 0 && g_skinHot < n ? lab[g_skinHot] : lab[sel];
-        Text(g, shown, RectF(pn.X + 200, pn.Y + 20, pn.Width - 224, 26), 14, FontStyleBold, g_skinHot >= 0 ? kAcc : kInk, StringAlignmentFar);
-        for (int i = 0; i < n; i++) {
-            RectF r = SkinCellRect(i);
-            GraphicsPath cp; RoundRect(cp, r, 12);
-            bool on = i == sel, hot = i == g_skinHot;
-            SolidBrush cb(on ? WithA(kAcc, 0.16f) : hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &cp);
-            if (Bitmap *th = SkinThumb(ap->svals[i], 0, r.Width, r.Height)) DrawPixels(g, th, r);
-            else {
-                const std::string &sv = ap->svals[i];
-                std::wstring t = !sv.compare(0, 10, "char_shirt") ? Widen(sv.substr(10)) : lab[i].substr(0, 2);
-                Text(g, t, r, 14, FontStyleBold, on ? kAcc : kGrey);
-            }
-            Pen edge(on ? kAcc : hot ? WithA(kAcc, 0.5f) : TH(choiceBorder), on ? 2.0f : 1.0f); g.DrawPath(&edge, &cp);
+    Title(g, g_persoTab ? T(L"Visage", L"Face") : T(L"Tenue", L"Outfit"), RectF(pn.X + 18, pn.Y + 14, 160, 30), 16, kInk);
+    Text(g, g_persoTab ? T(L"Visage, chapeau, lunettes, cheveux · tes images", L"Face, hat, glasses, hair · your images") : T(L"Vêtements du jeu + packs offerts par la communauté", L"Game clothes + packs offered by the community"),
+         RectF(pn.X + 120, pn.Y + 16, pn.Width - 138, 26), 12, FontStyleRegular, kGrey, StringAlignmentFar);
+    std::vector<SecLay> lay;
+    float yEnd = PersoLayout(lay);
+    for (auto &L : lay) {
+        int f = L.sec->f;
+        std::string cur = PersoGet(f);
+        int at = PersoIndexOf(L.tiles, cur);
+        Text(g, T(L.sec->fr, L.sec->en), RectF(pn.X + 18, L.y, 200, 20), 10.5f, FontStyleBold, kAcc, StringAlignmentNear);
+        int imp = L.tiles[0] == "#import" ? 1 : 0;   // (la tuile d'import ne compte pas)
+        wchar_t cnt[32]; swprintf_s(cnt, L" · %d / %d", at + 1 - imp, L.n - imp);
+        Text(g, PersoLabel(f, cur) + cnt, RectF(pn.X + 150, L.y, pn.Width - 168, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentFar);
+        int shown = min(L.per, L.n - L.page * L.per);
+        for (int i = 0; i < shown; i++) {
+            int idx = L.page * L.per + i;
+            DrawTile(g, TileRect(L, i), f, L.tiles[idx], idx == at, g_skinRowHot == HT_TILE + f * 16 + i);
         }
-        RectF nr(pn.X + 24, SkinCellRect(n - 1).Y + kSkinCell + 30, pn.Width - 48, 96);
-        GraphicsPath np; RoundRect(np, nr, 16);
-        SolidBrush nb(WithA(kAcc, 0.12f)); g.FillPath(&nb, &np);
-        Pen npen(WithA(kAcc, 0.45f), 1); g.DrawPath(&npen, &np);
-        Icon(g, IC_SPARK, nr.X + 28, nr.Y + 30, 20, kAcc, 1.9f);
-        Text(g, T(L"Apparence compl\u00E8te", L"Full look"), RectF(nr.X + 52, nr.Y + 14, nr.Width - 70, 24), 14.5f, FontStyleBold, kInk, StringAlignmentNear);
-        Para(g, T(L"Corpulence, pantalon, visage, chapeau, lunettes, cheveux : lance une partie (solo suffit) et reste ~30 s en jeu avec cette version, ils appara\u00EEtront ici.",
-                  L"Build, pants, face, hat, glasses, hair: start a game (solo is fine) and stay ~30 s in game with this version, they will show up here."),
-             RectF(nr.X + 52, nr.Y + 40, nr.Width - 70, 52), 12.5f, kGrey);
+        if (L.n > L.per) {   // « + N » : la page suivante (la derniere ramene au debut)
+            RectF r = TileRect(L, shown);
+            bool hot = g_skinRowHot == HT_TILE + f * 16 + 15;
+            int rest = L.n - (L.page + 1) * L.per;
+            GraphicsPath p; RoundRect(p, r, 12);
+            if (hot) { SolidBrush hb(TH(cardSel)); g.FillPath(&hb, &p); }
+            Pen dash(hot ? WithA(kAcc, 0.7f) : TH(fieldBorder), 1.5f); dash.SetDashStyle(DashStyleDash); g.DrawPath(&dash, &p);
+            if (rest > 0) Text(g, L"+ " + std::to_wstring(rest), RectF(r.X, r.Y + 14, r.Width, 30), 15, FontStyleBold, hot ? kAcc : kGrey);
+            else Icon(g, IC_UNDO, r.X + r.Width / 2, r.Y + 30, 20, hot ? kAcc : kGrey, 2.0f);
+            wchar_t pg[32]; swprintf_s(pg, L"%d / %d", L.page + 1, L.pages);
+            Text(g, pg, RectF(r.X, r.Y + r.Height - 26, r.Width, 20), 11, FontStyleBold, kGrey);
+        }
     }
-    float bw = (pn.Width - 60) / 2;
-    UiButton(g, RectF(pn.X + 24, pn.Y + pn.Height - 68, bw, 48), T(L"ANNULER", L"CANCEL"), UI_PAGE_CANCEL, false);
-    UiButton(g, RectF(pn.X + 36 + bw, pn.Y + pn.Height - 68, bw, 48), T(L"VALIDER", L"OK"), UI_PAGE_OK, true);
+    if (!perso) DrawPersoCallout(g, RectF(pn.X + 18, yEnd + 4, pn.Width - 36, 104));
+    if (g_persoTab) DrawImagesStrip(g); else DrawCarStrip(g);
 }
 
 // Aleatoire : une valeur au hasard pour chaque partie (apparence complete), sinon un haut au hasard.
 static void LookRandom()
 {
     srand(GetTickCount());
+    for (auto &p : g_tilePage) p = -1;   // (les pages suivent les nouveaux choix)
     if (g_perso.state == 1) {
         for (int f = 0; f < PF_COUNT; f++) {
             std::vector<std::string> v = PersoChoices(f);
@@ -743,19 +1034,15 @@ static void LookReset()
     const Opt *ap = SkinOpt();
     if (ap && g_snapSkin >= 0) OptSet(*ap, g_snapSkin);
     PersoSnapshot(true);
+    for (auto &p : g_tilePage) p = -1;
     g_skinAnnounce = true;
     g_skinChangeT = GetTickCount();
 }
 
-// Clic dans la page : une ligne (fleches), un portrait, ou l'apercu (debut du glisser).
+// Clic dans la page : un onglet, une tuile, une pastille, la vue, ou l'apercu (debut du glisser).
 static bool SkinMouseDown(float x, float y)
 {
-    int pr = PersoRowAt(x, y);   // apercu 3D : fleches des lignes
-    if (pr >= 0) { PersoStep(pr / 2, pr % 2 ? 1 : -1); g_skinAnnounce = true; return true; }
-    if (g_perso.state != 1) {
-        int c = SkinCellAt(x, y);
-        if (c >= 0) { const Opt *ap = SkinOpt(); SkinSelect(c, ap && c < OptGet(*ap) ? -1 : 1); return true; }
-    }
+    if (PersoPageMouseDown(x, y)) return true;
     if (kSkinView.Contains(x, y)) {
         g_skinDrag = true;
         g_skinDragX = x;
