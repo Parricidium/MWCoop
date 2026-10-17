@@ -1407,7 +1407,7 @@ struct Theme {
     Color ink, grey, panel, panelBorder, sep, card, cardSel, choiceBorder, toggleOff, field, fieldBorder, placeholder,
           tab, tabHot, pill, btn2, btn2Hot, circle, circleHot, fallA, fallB, accent, accent2, onAccent, pillHot, ok, warn, red;
 };
-static const Theme kLight = {
+static Theme kLight = {   // (pas const : la couleur d'accent se change dans Reglages > Theme, gfx.inc ThemeLoad)
     Color(255, 16, 30, 48), Color(255, 74, 90, 112), Color(150, 255, 255, 255), Color(190, 255, 255, 255), Color(34, 16, 30, 48),
     Color(105, 255, 255, 255), Color(200, 255, 255, 255), Color(42, 16, 30, 48), Color(60, 16, 30, 48),
     Color(150, 255, 255, 255), Color(64, 16, 30, 48), Color(255, 120, 136, 158),
@@ -1415,7 +1415,7 @@ static const Theme kLight = {
     Color(140, 255, 255, 255), Color(225, 255, 255, 255), Color(255, 246, 250, 254), Color(255, 205, 220, 236),
     Color(255, 26, 98, 172), Color(255, 58, 132, 206), Color(255, 255, 255, 255), Color(255, 42, 84, 128),
     Color(255, 18, 132, 92), Color(255, 172, 100, 12), Color(255, 206, 40, 60) };
-static const Theme kDark = {
+static Theme kDark = {
     Color(255, 238, 244, 255), Color(255, 164, 178, 202), Color(128, 14, 24, 52), Color(38, 255, 255, 255), Color(28, 255, 255, 255),
     Color(14, 255, 255, 255), Color(34, 255, 255, 255), Color(30, 255, 255, 255), Color(48, 255, 255, 255),
     Color(16, 255, 255, 255), Color(44, 255, 255, 255), Color(255, 132, 146, 170),
@@ -1424,6 +1424,7 @@ static const Theme kDark = {
     Color(255, 166, 225, 255), Color(255, 200, 236, 255), Color(255, 6, 19, 37), Color(230, 48, 66, 100),
     Color(255, 124, 242, 196), Color(255, 255, 196, 107), Color(255, 255, 110, 110) };
 static bool g_dark;
+static int g_aurore = 2;   // aurore et neige du fond : 0 off, 1 calme, 2 vivant ([Lanceur] Aurore, Reglages > Theme)
 #define TH(x) ((g_dark ? kDark : kLight).x)
 #define kInk TH(ink)
 #define kGrey TH(grey)
@@ -2051,7 +2052,7 @@ static float CreditsMaxScroll();   // (ui.inc)
 static float SavesMaxScroll();     // (saves.inc)
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
-static float MaxScroll(int t) { return t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : 0.0f; }
+static float MaxScroll(int t) { return t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX || t == TAB_COOP ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : 0.0f; }
 
 static int ValueIndex(const Opt &o, int v)
 {
@@ -5733,6 +5734,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_CHAR:
         if (SaveChar((wchar_t)wp)) return 0;  // (saves.inc : nom d'une sauvegarde, fenetre)
         if (VhsChar((wchar_t)wp)) return 0;   // (media.inc : titre d'une cassette)
+        if (SetChar((wchar_t)wp)) return 0;   // (gfx.inc : champ Chercher des reglages)
         if (g_state != ST_IDLE || (g_lobby != LB_NONE && !g_sCodeAsk) || g_goWait || g_guide || g_tuto >= 0) return 0;
         if (g_focus == 1 && wp != 9 && wp != 13 && wp != 27) g_joinFallback = false;   // autre adresse : on retente le salon
         if (wp == 8) { if (g_focus >= 0 && !g_fields[g_focus].text.empty()) g_fields[g_focus].text.pop_back(); }
@@ -5906,6 +5908,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             DWORD v = 1, sz = sizeof(v);
             if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", RRF_RT_REG_DWORD, NULL, &v, &sz) == ERROR_SUCCESS) g_dark = v == 0;
         }
+        ThemeLoad();   // (couleur d'accent, aurore : gfx.inc)
     }
 
     int argc = 0;
@@ -6223,7 +6226,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 }
         else if (st == L"menu-ip") g_steamNet = false;
         else if (st == L"sansjeu") { g_gameDir.clear(); g_gameVer.clear(); g_localVer.clear(); g_modOk = false; SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe")); }
-        else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; g_uiHot = UI_SET_CLOSE; }
+        else if (st == L"coop" || st == L"reglages") { g_tab = TAB_COOP; GfxLoad(); SetEnter(TAB_COOP); }   // (page Reglages, onglet Co-op)
+        else if (!wcsncmp(st.c_str(), L"reglages-", 9)) { g_tab = TAB_COOP; GfxLoad(); SetCaptureState(st); }   // reglages-jeu|image|son|coop|touches|theme|lanceur|recherche
         else if (st == L"contenu") { g_tab = TAB_CONTENT; g_contentHot = 5004; MscScan(); }   // contenu envoye
         else if (st == L"guide") { g_tab = TAB_WIKI; g_wikiSel = 1; }   // guide des joueurs (colonne Nouveautes : notes deja recues ou vides)
         else if (st == L"voiture") { g_tab = TAB_CAR; }   // couleur : CouleurVoiture du mwcoop.ini du jeu
@@ -6267,12 +6271,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             g_wikiClosed &= ~(1u << kWikiArt[art].cat);
             g_scroll[TAB_WIKI] = (float)sc;
         }
-        else if (st == L"graphismes") { g_tab = TAB_GFX; GfxLoad(); }
-        else if (st == L"graphismes-video") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi : { 6, 7, 8, 9, 0, 1, 2, 3 }) g_gfxOpen[gi] = false; g_gfxContentH = 3000; g_scroll[TAB_GFX] = (float)_wtof(argv[argc - 1]); }   // (blocs video : coop et jeu plies)
-        else if (st == L"graphismes-ajouts") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 15; }   // (categorie Ajouts COOP seule depliee)
-        else if (st == L"graphismes-drone") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 13; }   // (categorie Camera drone seule depliee)
-        else if (st == L"graphismes-rt") { g_tab = TAB_GFX; GfxLoad(); g_gfxOpenRead = true; for (int gi = 0; gi < kGfxGroups; gi++) g_gfxOpen[gi] = gi == 14 || gi == 1; g_gfxContentH = 3000; g_scroll[TAB_GFX] = 330; }   // (categories Ray tracing et Ombres depliees)
-        else if (st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_scroll[TAB_GFX] = GfxMaxScroll(); }   // (bas de la page : touches)
+        else if (st == L"graphismes" || st == L"graphismes-video") { g_tab = TAB_GFX; GfxLoad(); SetEnter(TAB_GFX); }   // (page Reglages, onglet Jeu)
+        else if (st == L"graphismes-ajouts") { g_tab = TAB_GFX; GfxLoad(); g_setTab = SET_COOP; }      // (ajouts COOP : onglet Co-op)
+        else if (st == L"graphismes-drone" || st == L"graphismes-bas") { g_tab = TAB_GFX; GfxLoad(); g_setTab = SET_TOUCHES; }   // (camera drone, touches)
+        else if (st == L"graphismes-rt") { g_tab = TAB_GFX; GfxLoad(); g_setTab = SET_IMAGE; }         // (ray tracing et ombres)
         else if (st == L"api-direct") { g_tab = TAB_API; g_apiEx = 1; }
         else if (st == L"salon" || st == L"salon-invite" || st == L"salon-invite-hote" || st == L"salon-udp" || st == L"salon-options" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir" || !wcsncmp(st.c_str(), L"salon-mods", 10)) {   // salon a 3 joueurs (faux), vu par l'hote ou par un invite (salon-invite-hote : ses options de l'hote)
             bool host = st == L"salon" || st == L"salon-options" || st == L"salon-mods" || st == L"salon-dl" || st == L"salon-public" || st == L"salon-max" || st == L"salon-moi" || st == L"salon-choisir";   // (salon-udp : invite dont l'UDP est bloque ; salon-dl : Kalle recoit les mods ; salon-public : sans code ; salon-max : 12 joueurs ; salon-moi : mes options ; salon-choisir : ajouts au choix)
