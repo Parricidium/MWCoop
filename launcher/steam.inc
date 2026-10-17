@@ -571,6 +571,10 @@ static void SteamLobbySync()
         p.id = id;
         p.sid = u;
         p.name = SMemberData(u, "pseudo");
+        // Pas encore de pseudo publie : dans le salon Steam mais pas dans le notre -- salon prive, devant la question du code
+        // (retour de formallybad, 18/10 : l'hote le voyait arriver, son « quelqu'un arrive », alors qu'il n'avait pas le code).
+        // Ni liste, ni compte, ni son, tant qu'il n'est pas entre (SteamEnterDone -> SteamPublishMe).
+        if (p.name.empty() && u != g_sHost && u != g_steamMe) continue;
         if (p.name.empty()) p.name = Narrow(SteamName(u), CP_UTF8);
         p.skin = SMemberData(u, "tenue");
         if (p.skin.empty()) p.skin = "char_shirt21";
