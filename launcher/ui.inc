@@ -595,7 +595,8 @@ static void DrawHeader(Graphics &g)
         break;
     }
     case TAB_SKIN: case TAB_CAR: title = T(L"Mon personnage", L"My character"); sub = T(L"Ce que les autres joueurs voient en jeu", L"What the other players see in game"); break;
-    case TAB_CONTENT: case TAB_MODS: title = T(L"Partage", L"Sharing"); sub = T(L"Copié chez tes invités pour ta partie, à part de leurs fichiers", L"Copied to your guests for your game, apart from their own files"); break;
+    case TAB_CONTENT: title = T(L"Partage", L"Sharing"); sub = T(L"Copié chez tes invités pour ta partie, à part de leurs fichiers", L"Copied to your guests for your game, apart from their own files"); break;
+    case TAB_MODS: title = T(L"Mods", L"Mods"); sub = T(L"Tes mods, et ceux envoyés à tes invités", L"Your mods, and those sent to your guests"); break;
     case TAB_NOTES: title = T(L"Nouveautés", L"What's new"); sub = T(L"Ce qui change à chaque version", L"What changes in each version"); break;
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: title = T(L"Réglages", L"Settings"); sub = T(L"Gardés dans mwcoop-lanceur.ini et MWCoop\\mwcoop.ini", L"Kept in mwcoop-lanceur.ini and MWCoop\\mwcoop.ini"); break;
@@ -603,7 +604,7 @@ static void DrawHeader(Graphics &g)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
     case TAB_CREDITS: title = T(L"Crédits", L"Credits"); sub = T(L"Merci à ceux qui améliorent MWCoop", L"Thanks to everyone who makes MWCoop better"); break;
     case TAB_VHS: title = T(L"Cassettes VHS", L"VHS tapes"); sub = T(L"Les voir, les exporter en .mp4, les renommer, y mettre une vidéo", L"Watch them, export them as .mp4, rename them, put a video on them"); break;
-    case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Une partie par groupe d'amis : choisir, nommer, recommencer", L"One game per group of friends: pick, name, restart"); break;
+    case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Tes parties MWCoop, à part de la sauvegarde solo du jeu", L"Your MWCoop games, apart from the game's solo save"); break;
     case TAB_ALBUM: title = T(L"Album", L"Album"); sub = T(L"Les photos du drone (F8 en jeu)", L"Drone photos (F8 in game)"); break;
     case TAB_WIKI: title = T(L"Guide", L"Guide"); sub = T(L"Tout pour jouer sans souci : installation, salons, mods, réglages, solutions", L"Everything to play trouble-free: install, lobbies, mods, settings, fixes"); break;
     }
