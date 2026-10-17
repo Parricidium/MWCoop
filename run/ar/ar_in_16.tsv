@@ -1,0 +1,176 @@
+RW001	 (copy)
+RW002	 · UDP blocked
+RW003	 · disabled in MSCLoader
+RW004	 · downloading the mods %d%%
+RW005	 · official (in the game)
+RW006	 · provided by MWCoop
+RW007	 · start the game once for details
+RW008	 · the game's solo save
+RW009	%d / %d ready · %s is downloading the mods
+RW010	%d / %d ready · sending mods (%d)…
+RW011	%d mod(s)
+RW012	%d mod(s) · kept for next time
+RW013	%d mods · %d items · %s
+RW014	%d more mod(s) will be sent to the lobby's guests
+RW015	%d rays/pixel · %d m range · %d lamps · reflections, bounce, occlusion
+RW016	%d ready
+RW017	%d settings found · Esc: clear
+RW018	%d%% of %s · %d mods
+RW019	%s IS HOSTING
+RW020	%s skips the game menu: never sent to guests
+RW021	%s · copied to each guest on arrival.
+RW022	(show it mywintercar.exe)
+RW023	+ %d more
+RW024	+ %d more · scroll
+RW025	.off · off: neither loaded nor sent
+RW026	Above 10: a very good connection and a good machine on the host's side
+RW027	Accept everything from this host
+RW028	All your active mods are already sent
+RW029	Already %d players in the lobby
+RW030	Applied right away
+RW031	Arrows
+RW032	As a guest you play the host's save, kept apart: yours are never touched.
+RW033	BACKUP COPIES
+RW034	BETA
+RW035	By IP, your address is enough.
+RW036	CONNECTING…
+RW037	Calm
+RW038	Cheats (F7)
+RW039	Checking…
+RW040	Chosen by the host for this game; you get them live.
+RW041	Clear received mods
+RW042	Click yourself: outfit, car.
+RW043	Connecting to the lobby…
+RW044	Continuing their game · you join as soon as the host is in game
+RW045	Could not export (%lu)
+RW046	Could not restore the copy
+RW047	Custom
+RW048	DAY
+RW049	DISPLAY
+RW050	Decided by you, for everyone. Taken from Settings > Co-op, for this lobby only.
+RW051	Desktop not found
+RW052	Documents\\My Winter Car\\Mods
+RW053	Drone, sleeping bags, s21 shop, museum
+RW054	Duplicate
+RW055	Export (zip)
+RW056	Exported to the Desktop: %s
+RW057	Failed
+RW058	For this lobby only. Settings > Co-op stays unchanged.
+RW059	GAMES & ADDITIONS
+RW060	Game folder
+RW061	Game mods
+RW062	Game: 
+RW063	Getting the host's files… (click to cancel)
+RW064	Guide: playing with mods →
+RW065	Hockey
+RW066	Host included
+RW067	Host included · %d for this lobby
+RW068	Host's
+RW069	INSTALLING…
+RW070	In progress
+RW071	In this lobby for
+RW072	In use
+RW073	Installed
+RW074	Invite
+RW075	Keep as defaults
+RW076	LAST GAME
+RW077	Last lobby on %s · %d mod(s) · kept for next time
+RW078	Last saved: 
+RW079	Lively
+RW080	MOD
+RW081	MSCLoader is a project independent from MWCoop; its support here is experimental. Nothing is written into the game with the version provided by MWCoop.
+RW082	MSCLoader missing
+RW083	MSCLoader off: game without mods
+RW084	MSCLoader, the community mod loader (independent project), is not installed. Install it here, then put your mods (My Winter Car version) in its Mods folder.
+RW085	MWCoop additions
+RW086	MWCoop does not guarantee third-party mods: they work for you as in solo, but their objects are not necessarily seen by the others.
+RW087	Made before the first switch to Reworked.
+RW088	Make the zip
+RW089	Manage
+RW090	Mods and content
+RW091	Mods on
+RW092	Moped
+RW093	My games
+RW094	My mods
+RW095	Never
+RW096	Never played
+RW097	New game · you join as soon as the host is in game
+RW098	New game: a fresh save, apart from your other games. It will be used when you host.
+RW099	No copy for this game.
+RW100	No game
+RW101	No mod sent
+RW102	No setting matches.
+RW103	No · off
+RW104	No · private
+RW105	None yet: they arrive when you join a lobby
+RW106	Not ready
+RW107	Nothing
+RW108	ON
+RW109	Official MSCLoader
+RW110	Open the folder
+RW111	Options
+RW112	Options kept as defaults (Settings > Co-op)
+RW113	Options reset to the Settings ones (this lobby)
+RW114	Pick
+RW115	Private: the Steam invite is enough; this code is for a friend who comes without one.
+RW116	Private: your friends join with your address and this code.
+RW117	Put the copy from %s back into \"%s\"?\n\nThe current save of this game is replaced (its files are overwritten).
+RW118	READY ✓
+RW119	RULES
+RW120	Read
+RW121	Ready ✓
+RW122	Received from the host
+RW123	Restart
+RW124	Restore
+RW125	SENT
+RW126	SIZE
+RW127	START
+RW128	Save
+RW129	Saved by the game, resumed at the next session
+RW130	Search a setting…
+RW131	See again
+RW132	Send all
+RW133	Sent to guests: %d mod(s) · %s
+RW134	Show the line
+RW135	Soon
+RW136	Sticker
+RW137	Sun and lamp shadows, reflections, light bounce, occlusion
+RW138	The lobby waits for downloads
+RW139	The one \"in use\" is offered in the lobby
+RW140	The whole Image & ray tracing tab
+RW141	Their save, mods and files reach you by themselves. Nothing to set up, except your own options.
+RW142	This game is empty: nothing to export
+RW143	Through Steam, any friend can join (\"Join game\").
+RW144	To accept
+RW145	To install
+RW146	UDP not checked (host has an old launcher)
+RW147	UDP: OK ✓ · click yourself: outfit, car.
+RW148	UDP: blocked (see on the right)
+RW149	UDP: testing…
+RW150	Unsupported mods
+RW151	Use for hosting
+RW152	VERSION
+RW153	VOICE
+RW154	Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nThe push-to-talk key is in the Keys tab. Voice volume only changes what you hear; your microphone, what the others hear from you.
+RW155	Waiting
+RW156	Waiting for a player…
+RW157	While a guest is receiving your mods, START stays grey. A player who arrives mid-game gets them before joining.
+RW158	Without asking again in each lobby
+RW159	Without asking for each file
+RW160	Your MWCoop games, apart from the game's solo save
+RW161	Your mods, and those sent to your guests
+RW162	\"%s\" created (%d files copied)
+RW163	\"%s\": copy from %s restored (%d files)
+RW164	\"Sent\" = copied to your lobby's guests; a guest receives the host's mods in their launch copy, never in their own folder. \"On\" off: the mod no longer loads. Applied at the next game launch.
+RW165	checking…
+RW166	everyone
+RW167	failed: 
+RW168	fresh game: nothing to receive
+RW169	my choices
+RW170	nobody yet
+RW171	nothing for now
+RW172	on arrival in game
+RW173	the game's Mods folder
+RW174	· %d in %s
+RW175	… press
+RW176	← Back to mods

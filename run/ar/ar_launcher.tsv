@@ -322,6 +322,182 @@ Shared marker: middle click (configurable) on what you look at, or right-click o
 Something looks wrong on your side (missing item, a door closed for you only)? F10 > Sync > Resync the world: the host resends you its whole state, as on your arrival (once per 30 s).	شيء غير صحيح عندك (غرض مفقود، باب مغلق لك وحدك)؟ F10 > المزامنة > إعادة مزامنة العالم: يعيد المضيف إرسال حالته كاملة إليك كما عند دخولك (مرة كل 30 ثانية).
 Ice race: Jokkis rentals (host, beta)	سباق الجليد: استئجار سيارات Jokkis (المضيف، تجريبي)
 My Winter Car is still open but no longer answers MWCoop (stuck after closing, or started without MWCoop).\n\nClose it so you can launch again from the launcher?	My Winter Car لا تزال مفتوحة لكنها لم تعد تستجيب لـ MWCoop (علقت بعد الإغلاق، أو شُغّلت بدون MWCoop).\n\nهل نغلقها لتتمكن من التشغيل مجدداً من المشغّل؟
+ (copy)	 (نسخة)
+ · UDP blocked	 · UDP محظور
+ · disabled in MSCLoader	 · معطّل في MSCLoader
+ · downloading the mods %d%%	 · يُنزّل التعديلات %d%%
+ · official (in the game)	 · الرسمي (في اللعبة)
+ · provided by MWCoop	 · مقدَّم من MWCoop
+ · start the game once for details	 · شغّل اللعبة مرة واحدة لمعرفة التفاصيل
+ · the game's solo save	 · ملف الحفظ الفردي للعبة
+%d / %d ready · %s is downloading the mods	%d / %d جاهزون · %s يُنزّل التعديلات
+%d / %d ready · sending mods (%d)…	%d / %d جاهزون · إرسال التعديلات (%d)…
+%d mod(s)	%d تعديلات
+%d mod(s) · kept for next time	%d تعديلات · محفوظة للمرة القادمة
+%d mods · %d items · %s	%d تعديلات · %d عناصر · %s
+%d more mod(s) will be sent to the lobby's guests	سيُرسَل %d تعديلات إضافية إلى ضيوف الردهة
+%d rays/pixel · %d m range · %d lamps · reflections, bounce, occlusion	%d أشعة/بكسل · مدى %d م · %d مصابيح · انعكاسات، ارتداد، إطباق
+%d ready	%d جاهزون
+%d settings found · Esc: clear	عُثر على %d إعدادات · Esc: مسح
+%d%% of %s · %d mods	%d%% من %s · %d تعديلات
+%s IS HOSTING	%s يستضيف
+%s skips the game menu: never sent to guests	%s يتخطّى قائمة اللعبة: لا يُرسَل أبداً إلى الضيوف
+%s · copied to each guest on arrival.	%s · يُنسَخ إلى كل ضيف عند وصوله.
+(show it mywintercar.exe)	(دلّه على mywintercar.exe)
++ %d more	+ %d أخرى
++ %d more · scroll	+ %d أخرى · مرّر
+.off · off: neither loaded nor sent	.off · معطّل: لا يُحمَّل ولا يُرسَل
+Above 10: a very good connection and a good machine on the host's side	فوق 10: اتصال ممتاز وجهاز جيد لدى المضيف
+Accept everything from this host	قبول كل شيء من هذا المضيف
+All your active mods are already sent	كل تعديلاتك المفعّلة مُرسَلة بالفعل
+Already %d players in the lobby	يوجد بالفعل %d لاعبين في الردهة
+Applied right away	يُطبَّق فوراً
+Arrows	الأسهم
+As a guest you play the host's save, kept apart: yours are never touched.	كضيف تلعب على ملف حفظ المضيف، منفصلاً: ملفاتك لا تُمَسّ أبداً.
+BACKUP COPIES	النسخ الاحتياطية
+BETA	تجريبي
+By IP, your address is enough.	عبر IP، يكفي عنوانك.
+CONNECTING…	جارٍ الاتصال…
+Calm	هادئ
+Cheats (F7)	الغشّ (F7)
+Checking…	جارٍ التحقق…
+Chosen by the host for this game; you get them live.	اختارها المضيف لهذه اللعبة؛ تتلقاها مباشرة.
+Clear received mods	مسح التعديلات المستلمة
+Click yourself: outfit, car.	انقر على نفسك: الزي، السيارة.
+Connecting to the lobby…	جارٍ الاتصال بالردهة…
+Continuing their game · you join as soon as the host is in game	يواصل لعبته · تنضم فور دخول المضيف إلى اللعبة
+Could not export (%lu)	تعذّر التصدير (%lu)
+Could not restore the copy	تعذّرت استعادة النسخة
+Custom	مخصّص
+DAY	اليوم
+DISPLAY	العرض
+Decided by you, for everyone. Taken from Settings > Co-op, for this lobby only.	تقرّرها أنت، للجميع. مأخوذة من الإعدادات > اللعب الجماعي، لهذه الردهة فقط.
+Desktop not found	لم يُعثر على سطح المكتب
+Documents\\My Winter Car\\Mods	Documents\\My Winter Car\\Mods
+Drone, sleeping bags, s21 shop, museum	الطائرة المسيّرة، أكياس النوم، متجر s21، المتحف
+Duplicate	تكرار
+Export (zip)	تصدير (zip)
+Exported to the Desktop: %s	صُدِّر إلى سطح المكتب: %s
+Failed	فشل
+For this lobby only. Settings > Co-op stays unchanged.	لهذه الردهة فقط. الإعدادات > اللعب الجماعي لا تتغير.
+GAMES & ADDITIONS	الألعاب والإضافات
+Game folder	مجلد اللعبة
+Game mods	تعديلات اللعبة
+Game: 	اللعبة: 
+Getting the host's files… (click to cancel)	جارٍ استلام ملفات المضيف… (انقر للإلغاء)
+Guide: playing with mods →	الدليل: اللعب بالتعديلات →
+Hockey	الهوكي
+Host included	بما فيهم المضيف
+Host included · %d for this lobby	بما فيهم المضيف · %d لهذه الردهة
+Host's	المضيف
+INSTALLING…	جارٍ التثبيت…
+In progress	جارية
+In this lobby for	في هذه الردهة منذ
+In use	الحالي
+Installed	مثبّت
+Invite	دعوة
+Keep as defaults	احتفظ بها كافتراضية
+LAST GAME	آخر لعبة
+Last lobby on %s · %d mod(s) · kept for next time	آخر ردهة في %s · %d تعديلات · محفوظة للمرة القادمة
+Last saved: 	آخر حفظ: 
+Lively	حيوي
+MOD	تعديل
+MSCLoader is a project independent from MWCoop; its support here is experimental. Nothing is written into the game with the version provided by MWCoop.	MSCLoader مشروع مستقل عن MWCoop؛ دعمه هنا تجريبي. لا يُكتب شيء في اللعبة مع النسخة المقدَّمة من MWCoop.
+MSCLoader missing	MSCLoader غير موجود
+MSCLoader off: game without mods	MSCLoader معطّل: اللعبة بدون تعديلات
+MSCLoader, the community mod loader (independent project), is not installed. Install it here, then put your mods (My Winter Car version) in its Mods folder.	MSCLoader، محمّل تعديلات المجتمع (مشروع مستقل)، غير مثبّت. ثبّته هنا، ثم ضع تعديلاتك (نسخة My Winter Car) في مجلد Mods الخاص به.
+MWCoop additions	إضافات MWCoop
+MWCoop does not guarantee third-party mods: they work for you as in solo, but their objects are not necessarily seen by the others.	لا يضمن MWCoop تعديلات الطرف الثالث: تعمل لديك كما في اللعب الفردي، لكن الآخرين لا يرون أغراضها بالضرورة.
+Made before the first switch to Reworked.	أُنشئت قبل أول انتقال إلى Reworked.
+Make the zip	أنشئ ملف zip
+Manage	إدارة
+Mods and content	التعديلات والمحتوى
+Mods on	التعديلات مفعّلة
+Moped	الدراجة النارية
+My games	ألعابي
+My mods	تعديلاتي
+Never	أبداً
+Never played	لم تُلعب بعد
+New game · you join as soon as the host is in game	لعبة جديدة · تنضم فور دخول المضيف إلى اللعبة
+New game: a fresh save, apart from your other games. It will be used when you host.	لعبة جديدة: ملف حفظ جديد، منفصل عن ألعابك الأخرى. سيُستخدم عندما تستضيف.
+No copy for this game.	لا نسخة لهذه اللعبة.
+No game	لا لعبة
+No mod sent	لا تعديل مُرسَل
+No setting matches.	لا إعداد مطابق.
+No · off	لا · معطّل
+No · private	لا · خاص
+None yet: they arrive when you join a lobby	لا شيء بعد: تصل عندما تنضم إلى ردهة
+Not ready	غير جاهز
+Nothing	لا شيء
+ON	مفعّل
+Official MSCLoader	MSCLoader الرسمي
+Open the folder	افتح المجلد
+Options	الخيارات
+Options kept as defaults (Settings > Co-op)	حُفظت الخيارات كافتراضية (الإعدادات > اللعب الجماعي)
+Options reset to the Settings ones (this lobby)	أُعيدت الخيارات إلى قيم الإعدادات (هذه الردهة)
+Pick	اختيار
+Private: the Steam invite is enough; this code is for a friend who comes without one.	خاصة: دعوة Steam تكفي؛ هذا الرمز لصديق يأتي بدونها.
+Private: your friends join with your address and this code.	خاصة: ينضم أصدقاؤك بعنوانك وهذا الرمز.
+Put the copy from %s back into \"%s\"?\n\nThe current save of this game is replaced (its files are overwritten).	إعادة نسخة %s إلى «%s»؟\n\nسيُستبدل ملف الحفظ الحالي لهذه اللعبة (تُكتب ملفاته فوق القديمة).
+READY ✓	جاهز ✓
+RULES	القواعد
+Read	اقرأ
+Ready ✓	جاهز ✓
+Received from the host	مستلمة من المضيف
+Restart	إعادة بدء
+Restore	استعادة
+SENT	مُرسَل
+SIZE	الحجم
+START	ابدأ
+Save	ملف الحفظ
+Saved by the game, resumed at the next session	تحفظها اللعبة، وتُستأنف في الجلسة التالية
+Search a setting…	ابحث عن إعداد…
+See again	عرض مجدداً
+Send all	إرسال الكل
+Sent to guests: %d mod(s) · %s	مُرسَل إلى الضيوف: %d تعديلات · %s
+Show the line	عرض السطر
+Soon	قريباً
+Sticker	ملصق
+Sun and lamp shadows, reflections, light bounce, occlusion	ظلال الشمس والمصابيح، انعكاسات، ارتداد الضوء، إطباق
+The lobby waits for downloads	الردهة تنتظر التنزيلات
+The one \"in use\" is offered in the lobby	الملف «الحالي» هو المعروض في الردهة
+The whole Image & ray tracing tab	تبويب الصورة وتتبع الأشعة بالكامل
+Their save, mods and files reach you by themselves. Nothing to set up, except your own options.	ملف حفظه وتعديلاته وملفاته تصلك من تلقاء نفسها. لا شيء لضبطه، سوى خياراتك الخاصة.
+This game is empty: nothing to export	هذه اللعبة فارغة: لا شيء للتصدير
+Through Steam, any friend can join (\"Join game\").	عبر Steam يمكن لأي صديق الانضمام («الانضمام إلى اللعبة»).
+To accept	بانتظار القبول
+To install	للتثبيت
+UDP not checked (host has an old launcher)	UDP لم يُفحص (لدى المضيف مشغّل قديم)
+UDP: OK ✓ · click yourself: outfit, car.	UDP: OK ✓ · انقر على نفسك: الزي، السيارة.
+UDP: blocked (see on the right)	UDP: محظور (انظر على اليمين)
+UDP: testing…	UDP: جارٍ الاختبار…
+Unsupported mods	تعديلات غير مدعومة
+Use for hosting	استخدمه للاستضافة
+VERSION	الإصدار
+VOICE	الصوت
+Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nThe push-to-talk key is in the Keys tab. Voice volume only changes what you hear; your microphone, what the others hear from you.	الصوت حسب القرب: يُسمع صوتك حتى المدى المختار، ويخفت مع المسافة، كما في الواقع. الميكروفون ومكبرات الصوت هي أجهزة Windows الافتراضية.\n\nمفتاح التحدث (اضغط مطولاً) في تبويب المفاتيح. مستوى الصوت يغيّر ما تسمعه أنت فقط؛ وميكروفونك ما يسمعه الآخرون منك.
+Waiting	ينتظر
+Waiting for a player…	بانتظار لاعب…
+While a guest is receiving your mods, START stays grey. A player who arrives mid-game gets them before joining.	ما دام ضيف يستلم تعديلاتك، يبقى زر ابدأ رمادياً. اللاعب الذي يصل أثناء اللعبة يتلقاها قبل الانضمام.
+Without asking again in each lobby	دون السؤال مجدداً في كل ردهة
+Without asking for each file	دون السؤال عن كل ملف
+Your MWCoop games, apart from the game's solo save	ألعابك في MWCoop، منفصلة عن ملف الحفظ الفردي للعبة
+Your mods, and those sent to your guests	تعديلاتك، وتلك المُرسَلة إلى ضيوفك
+\"%s\" created (%d files copied)	أُنشئت «%s» (نُسخ %d ملفات)
+\"%s\": copy from %s restored (%d files)	«%s»: أُعيدت نسخة %s (%d ملفات)
+\"Sent\" = copied to your lobby's guests; a guest receives the host's mods in their launch copy, never in their own folder. \"On\" off: the mod no longer loads. Applied at the next game launch.	«مُرسَل» = يُنسَخ إلى ضيوف ردهتك؛ يتلقى الضيف تعديلات المضيف في نسخة التشغيل لديه، وليس في مجلده أبداً. «مفعّل» معطّل: لا يُحمَّل التعديل بعد الآن. يُطبَّق عند التشغيل القادم للعبة.
+checking…	جارٍ التحقق…
+everyone	الجميع
+failed: 	فشل: 
+fresh game: nothing to receive	لعبة جديدة: لا شيء لاستلامه
+my choices	اختياراتي
+nobody yet	لا أحد بعد
+nothing for now	لا شيء حالياً
+on arrival in game	عند الوصول إلى اللعبة
+the game's Mods folder	مجلد Mods الخاص باللعبة
+· %d in %s	· %d في %s
+… press	… اضغط
+← Back to mods	← العودة إلى التعديلات
 Refused by the host	رفضك المضيف
 No lobby at the host: \"Join in game\" if they are already playing	لا توجد ردهة لدى المضيف: \"انضم داخل اللعبة\" إن كان يلعب بالفعل
 My Winter Car not found: choose mywintercar.exe	لم يُعثر على My Winter Car: اختر mywintercar.exe
