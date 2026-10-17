@@ -789,7 +789,7 @@ static void SetThemePreview(Graphics &g, RectF r, Color sky0, Color sky1, Color 
 }
 
 // Jetons des ajouts : noms, et nombre de lignes pour une largeur (w <= 0 : la derniere largeur mesuree).
-static const char *kAjoutKeys[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee" };
+static const char *kAjoutKeys[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee" };   // (aussi le salon, launcher.cpp)
 static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica" };
 static float g_chipW = 458;
 static int SetChipLines(float w)

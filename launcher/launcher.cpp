@@ -4102,7 +4102,7 @@ static int LobbyChoiceAt(float x, float y)
 static const GfxRow *GfxRowByKey(const char *k) { for (auto &r : GfxRows()) if (!strcmp(r.key, k)) return &r; return NULL; }
 static int LobbyOptIdx(const char *key) { for (int i = 0; i < kLobbyOptN; i++) if (!strcmp(kLobbyOptDefs[i].key, key)) return i; return -1; }
 static const int kPeerPal[16] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89, 0x55B04C, 0x3FBFD9, 0xE8A33C, 0xB24FA5, 0x8C6239, 0x5C6BC0, 0xA9C43A, 0xE88A7A };   // (meme palette que Sync/Markers.cs : pastille carte, marqueur, pseudo)
-static const char *kAjoutKeys[4] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee" };
+// (kAjoutKeys : gfx.inc, inclus plus haut -- les memes quatre ajouts)
 static int LobbyOptTab(bool host) { return g_lobbyOptTab < 0 ? (host ? 0 : 1) : g_lobbyOptTab; }   // (onglet par defaut : la partie chez l'hote, les miennes chez l'invite)
 // Petit cadenas : options decidees par l'hote, en lecture seule chez l'invite.
 static void DrawLock(Graphics &g, float cx, float cy, Color c)
