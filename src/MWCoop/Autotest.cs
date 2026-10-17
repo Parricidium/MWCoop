@@ -1439,6 +1439,57 @@ namespace MWCoop
             // (l'hote fait apparaitre a 40 s ; chacun compte ensuite les buches et sacs de Cheatbox++ a 55 s)
             // [Test] Autotest=fendattel : l'hote attelle la fendeuse au KEKMET a 40 s, la detelle a 55 s ; chacun note son etat
             // toutes les 3 s de 35 a 70 s. Attendu : meme etat des deux cotes quelques dixiemes apres chaque geste.
+            // [Test] AutomateSuivi=<nom d'objet> : toutes les 5 s, l'etat de tous les automates 'Use' des objets de ce nom (quel que
+            // soit le mode ; phares : ButtonLightModes -- retour de JD, 18/10 : L allume les feux de toutes les voitures visitees).
+            if (t > 20f && t >= suiviLog)
+            {
+                suiviLog = t + 5f;
+                string want = Config.Get("Test", "AutomateSuivi", "");
+                if (want.Length > 0)
+                {
+                    var sb = new System.Text.StringBuilder("autotest : " + want + " :");
+                    foreach (Object o in Game.FsmsNamed("Use"))
+                    {
+                        PlayMakerFSM f = o as PlayMakerFSM;
+                        if (f == null || f.FsmName != "Use" || f.gameObject.name != want) continue;
+                        sb.Append(' ').Append(Recon.Path(f.transform).Split('/')[0]).Append('=').Append(f.ActiveStateName).Append(f.gameObject.activeInHierarchy ? "" : "(eteint)").Append(';');
+                    }
+                    FsmString curVeh = FsmVariables.GlobalVariables.FindFsmString("PlayerCurrentVehicle");
+                    FsmBool pStop = FsmVariables.GlobalVariables.FindFsmBool("PlayerStop");
+                    sb.Append(" PlayerCurrentVehicle='").Append(curVeh != null ? curVeh.Value : "?").Append("' PlayerStop=").Append(pStop != null ? pStop.Value.ToString() : "?");
+                    Log.Info(sb.ToString());
+                }
+            }
+            // [Test] Autotest=jokkisia : a 40 s, composants d'une voiture IA de la course sur glace (la premiere trouvee) et de la
+            // SORBET : scripts, sons, Drivetrain (pour greffer la mecanique et les sons de l'IA sur la Jokkis louee, JD 18/10).
+            if (mode == "jokkisia" && t > 40f && step == 0)
+            {
+                step = 1;
+                var targets = new System.Collections.Generic.List<GameObject>();
+                GameObject ice = Game.FindAny("RACES/ICERACE");
+                if (ice != null)
+                    foreach (Transform tr in ice.GetComponentsInChildren<Transform>(true))
+                        if (tr.Find("NavigationIce") != null && tr.GetComponent("CarDynamics") != null) { targets.Add(tr.gameObject); break; }
+                GameObject so = Game.FindAny("SORBET(190-200psi)"); if (so != null) targets.Add(so);
+                foreach (GameObject g in targets)
+                {
+                    Log.Info("autotest : objet " + Recon.Path(g.transform) + (g.activeInHierarchy ? "" : " (eteint)") + ", masse " + (g.GetComponent<Rigidbody>() != null ? g.GetComponent<Rigidbody>().mass.ToString("F0") : "?"));
+                    foreach (Component c in g.GetComponents<Component>()) if (c != null) Log.Info("autotest :   racine : " + c.GetType().Name);
+                    Drivetrain dt = g.GetComponent<Drivetrain>();
+                    if (dt != null) Log.Info("autotest :   Drivetrain : " + dt.maxPower + " ch, couple " + dt.maxTorque + ", regimes " + dt.minRPM + "-" + dt.maxRPM + " (puissance a " + dt.maxPowerRPM + ", couple a " + dt.maxTorqueRPM + "), " + dt.transmission + ", rapports " + (dt.gearRatios != null ? dt.gearRatios.Length : 0) + ", final " + dt.finalDriveRatio);
+                    int n = 0;
+                    foreach (Component c in g.GetComponentsInChildren<Component>(true))
+                    {
+                        if (c == null || c is Transform || c is MeshFilter || c is MeshRenderer || c is Collider) continue;
+                        string tn = c.GetType().Name;
+                        if (tn == "PlayMakerFSM" || tn == "Wheel" || tn == "AudioSource" || tn.Contains("Sound") || tn.Contains("Audio") || tn == "CarDynamics" || tn == "Axles" || tn.Contains("Deform") || tn.Contains("Skid") || tn.Contains("Navigation"))
+                        {
+                            if (n++ < 90) Log.Info("autotest :   " + tn + " @ " + Recon.Path(c.transform).Substring(Recon.Path(g.transform).Length) + (tn == "PlayMakerFSM" ? " '" + ((PlayMakerFSM)c).FsmName + "'" : "") + (tn == "AudioSource" ? " clip " + (((AudioSource)c).clip != null ? ((AudioSource)c).clip.name : "-") : ""));
+                        }
+                    }
+                    Log.Info("autotest :   " + n + " composants notables");
+                }
+            }
             // [Test] Autotest=automate, Automate=<chemin>:<nom>[,...] : a 40 s, etats, actions, variables et evenements de ces
             // automates (diagnostic ; OpNoob, 17/10 : l'arbre de la fendeuse ne s'attelle pas au tracteur).
             if (mode == "automate" && t > 40f && step == 0)
@@ -2786,6 +2837,7 @@ namespace MWCoop
         static float shotAt = -1;
         static string bagId;
         static int step, step2, step3, portiereMark, spamLogged = -1;
+        static float suiviLog;   // (AutomateSuivi)
         static bool brokeLock;
         static float maxUp = 0.5f, maxRot, coffreT;
         static bool coffreStartSet;

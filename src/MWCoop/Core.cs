@@ -183,6 +183,8 @@ namespace MWCoop
             new Mod("evenements", Events.Update),
             new Mod("defrichage", Clearing.Update),
             new Mod("sauvegarde du jeu", SaveHook.Update),
+            new Mod("partie chez l'invite", GuestSlot.Update),
+            new Mod("phares", LightsGuard.Update),
             new Mod("luge de Teimo", TeimoSled.Update),
             new Mod("graphismes", Gfx.Update),
             new Mod("rallye", Rally.Update),
@@ -312,6 +314,8 @@ namespace MWCoop
             Clearing.OnLevelLoaded();
             SaveHook.OnLevelLoaded();
             SaveStats.OnLevelLoaded();   // (partie.txt pour le lanceur)
+            GuestSlot.OnLevelLoaded();
+            LightsGuard.OnLevelLoaded();
             TeimoSled.OnLevelLoaded();
             Gfx.OnLevelLoaded();
             Lights.OnLevelLoaded();
