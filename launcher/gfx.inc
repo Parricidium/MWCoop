@@ -114,6 +114,8 @@ struct GfxRow
     int group;                                 // jeu : 0 Image, 1 Ombres, 2 Distance et vue, 3 Confort ; MWCoop : 5 Ecran, 10 Fluidite, 11 Ombres
                                                // avancees, 12 Details et textures, 4 Lumieres ; coop : 6 Voix, 7 Visages/habits/pseudos, 8 Partie, 9 Touches
     const char *sec;                           // section du mwcoop.ini (absente : Graphismes)
+    std::vector<int> pv;                       // pastilles de la page Reglages (maquette) : sous-ensemble de vals, noms courts pf / pe ;
+    std::vector<const wchar_t *> pf, pe;       // vide : toutes les valeurs (pastilles si elles tiennent, sinon ◀ valeur ▶)
 };
 // Options du mod gardees dans [Coop] (demande de JD, 10/10 : « une section pour ces options du .ini ») : categorie Coop.
 static const std::vector<GfxRow> &GfxRows()
@@ -247,9 +249,25 @@ static const std::vector<GfxRow> &GfxRows()
     for (auto &l : resLabels) { res.lf.push_back(l.c_str()); res.le.push_back(l.c_str()); }
     rows.insert(rows.begin(), {
         res,
-        { "ModeEcran", L"Affichage", L"Display mode", -1, { -1, 0, 1, 2 }, { L"Jeu", L"Fenêtré", L"Plein écran", L"Sans bordure" }, { L"Game", L"Windowed", L"Fullscreen", L"Borderless" }, 0, 5 },
+        { "ModeEcran", L"Fenêtre", L"Window", -1, { -1, 0, 1, 2 }, { L"Jeu", L"Fenêtré", L"Plein écran", L"Sans bordure" }, { L"Game", L"Windowed", L"Fullscreen", L"Borderless" }, 0, 5 },
         { "QualiteUnity", L"Qualité du moteur", L"Engine quality", -1, { -1, 0, 1, 3, 5 }, { L"Jeu", L"Basse", L"Moyenne", L"Bonne", L"Golden Eye" }, { L"Game", L"Low", L"Medium", L"Good", L"Golden Eye" }, 3, 5 },
     });
+    // Pastilles de la page Reglages (maquettes du 17/10) : les valeurs les plus utiles, en court ; une valeur hors de la
+    // liste (menu F10 du jeu, ancien lanceur) s'ajoute a sa place avec son nom complet.
+    auto pills = [&](const char *k, std::vector<int> v, std::vector<const wchar_t *> f, std::vector<const wchar_t *> e) {
+        for (GfxRow &r : rows) if (!strcmp(r.key, k)) { r.pv = v; r.pf = f; r.pe = e.empty() ? f : e; }
+    };
+    pills("ImagesMax", { -1, 60, 144, 240, 0 }, { L"Jeu", L"60", L"144", L"240", L"∞" }, { L"Game", L"60", L"144", L"240", L"∞" });
+    pills("Distance", { 1000, 2000, 3000, 6000, 9000 }, { L"1 km", L"2", L"3", L"6", L"9" }, {});
+    pills("Details", { -1, 100, 150, 300 }, { L"Jeu", L"100 %", L"150", L"300" }, { L"Game", L"100 %", L"150", L"300" });
+    pills("OmbresDistance", { 60, 150, 400 }, { L"60", L"150 m", L"400" }, {});
+    pills("OmbresCascades", { -1, 1, 2, 4 }, { L"Jeu", L"Simple", L"Fine", L"Max" }, { L"Game", L"Basic", L"Fine", L"Max" });
+    pills("OmbresPhares", { 0, 2, 4, 8 }, { L"Non", L"2", L"4", L"8" }, { L"Off", L"2", L"4", L"8" });
+    pills("OmbresLampadaires", { 0, 1, 2, 4 }, { L"Non", L"1", L"2", L"4" }, { L"Off", L"1", L"2", L"4" });
+    pills("Pseudos", { 0, 30, 120, 250 }, { L"Off", L"30 m", L"120", L"250" }, {});
+    pills("VocalPortee", { 15, 25, 35, 50, 80 }, { L"15", L"25", L"35 m", L"50", L"80" }, {});
+    pills("VolumeVocal", { 50, 75, 100 }, { L"50", L"75", L"100 %" }, {});
+    pills("GainMicro", { 100, 150, 200, 300 }, { L"Normal", L"150", L"200", L"300 %" }, {});
     return rows;
 }
 
@@ -354,7 +372,7 @@ static const std::vector<GfxPreset> &GfxPresets()
     van.back().second = 0;   // (RayTracing : jamais en Vanilla)
     p.push_back({ L"Vanilla", L"Vanilla", L"tel quel", L"as is", van });
     static const wchar_t *nf[] = { L"Léger", L"Équilibré", L"Joli", L"Ultra" }, *ne[] = { L"Light", L"Balanced", L"Pretty", L"Ultra" };
-    static const wchar_t *df[] = { L"vieux PC", L"60 i/s", L"ombres, HDR", L"ray tracing" }, *de[] = { L"old PC", L"60 fps", L"shadows, HDR", L"ray tracing" };
+    static const wchar_t *df[] = { L"vieux PC", L"60 i/s", L"ombres, HDR", L"ray tracing" }, *de[] = { L"old PC", L"60 fps", L"shadows, HDR", L"ray tracing" };   // (Vanilla : "le jeu tel quel")
     for (int k = 0; k < 4; k++) {
         std::vector<std::pair<const char *, int>> v;
         for (int i = 0; i < n; i++) v.push_back(std::make_pair(keys[i], vals[k][i]));
@@ -378,8 +396,10 @@ static int GfxPresetOn()
 // Maquettes validees (Jeu, Image & ray tracing, Son & vocal, Co-op, Touches, Theme, Lanceur) : TAB_GFX ouvre l'onglet Jeu,
 // TAB_COOP l'onglet Co-op (g_tab reste, la pastille change g_setTab). Chaque reglage du jeu (GfxRows), du lanceur (g_opts)
 // et de l'ancienne page Reglages est dans un seul onglet. Le contenu est decrit par des tables : kSetCards (cartes d'un
-// onglet, colonne gauche ou droite) et kSetItems (lignes d'une carte : reglage du jeu, option du lanceur, titre de section,
-// ou element special dessine a part). Le champ Chercher de l'en-tete filtre ces memes lignes, toutes cartes confondues.
+// onglet, colonne gauche ou droite, element d'en-tete) et kSetItems (lignes d'une carte : reglage du jeu, option du lanceur,
+// titre de section, ou element special dessine a part ; pleine largeur avant ou apres les deux sous-colonnes). Le champ
+// Chercher de l'en-tete filtre ces memes lignes, toutes cartes confondues. Les pastilles (choix a segments) suivent la
+// maquette : valeurs courtes (GfxRow::pv), un nom qui ne tient pas passe sur deux lignes, sinon ◀ valeur ▶.
 enum { SET_JEU, SET_IMAGE, SET_SON, SET_COOP, SET_TOUCHES, SET_THEME, SET_LANCEUR, SET_N };
 static const wchar_t *kSetTabFr[SET_N] = { L"Jeu", L"Image & ray tracing", L"Son & vocal", L"Co-op", L"Touches", L"Thème", L"Lanceur" };
 static const wchar_t *kSetTabEn[SET_N] = { L"Game", L"Image & ray tracing", L"Sound & voice", L"Co-op", L"Keys", L"Theme", L"Launcher" };
@@ -392,54 +412,75 @@ static float g_setTop, g_setBottom;     // zone visible : zones cliquables seule
 static RectF g_setSteamRow, g_setCompatRow, g_setBuy, g_setUninst, g_setApiRow;   // (bulles du guide : tuto.inc)
 static const RectF kSetArea(264, 136, 1000, 608);                   // sous les pastilles (y 92..128)
 static const RectF kGfxTop(264, 136, 494, 128), kGfxArea(264, 136, 1000, 608);   // (bulles du guide 30-32 : prereglages, onglet Jeu)
-static const float kSetRowH = 36, kSetRowDH = 46, kSetSecH = 26, kSetPad = 18;
+static const float kSetPad = 18;
+// Pas des lignes : densite choisie (Reglages > Theme) -- aeree, normale, compacte.
+// (et la taille du texte : les lignes grandissent avec lui)
+static float SetRowH() { return 36 * UiDensity() * UiTextScale(); }       // ligne sans explication
+static float SetRowDH() { return 46 * UiDensity() * UiTextScale(); }      // ligne avec explication grise
+static float SetSecH() { return 26 * UiDensity() * UiTextScale(); }       // titre de section
 enum { UI_SET_TAB = 2900, UI_SET_SEARCH = 2910, UI_SET_SEARCHX, UI_SET_THEMECARD = 2920, UI_SET_ACCENT = 2925, UI_SET_AURORE = 2931, UI_SET_WINTHEME = 2935, UI_SET_THEMEDEF,
        UI_SET_MAXP = 2940, UI_SET_PRIV = 2945, UI_SET_AJOUTS = 2948, UI_SET_AJOUT = 2951, UI_SET_DRONEKB = 2956,
        UI_SET_NOTES = 2960, UI_SET_LOGDIR, UI_SET_LOGZIP, UI_SET_DISCORDASK, UI_SET_SKIN, UI_SET_CAR, UI_SET_CONTENT, UI_SET_STEAMLINE, UI_SET_GOIMAGE, UI_SET_API, UI_SET_GITHUB,
-       UI_SETV = 12000 };   // + ligne * 8 + valeur (choix a segments)
+       UI_SET_DEFAULT = 2972, UI_SET_SAVE, UI_SET_NETTEST, UI_SET_HOSTGUIDE, UI_SET_REPAIR, UI_SET_NIGHTLY, UI_SET_GLASS, UI_SET_RTTOGGLE,   // (2972-2979)
+       UI_SETV = 12000,              // + ligne * 10 + valeur (pastilles d'un reglage du jeu)
+       UI_SET_TEXTE = 13000,         // + k (0..6) : taille du texte 80..110 %
+       UI_SET_FOV = 13020,           // + k : champ de vision (curseur)
+       UI_SET_PORTSEG = 13040,       // + k : port (pastilles)
+       UI_SET_SESS = 13050,          // + k (0 3, 1 10, 2 30) : sessions gardees
+       UI_SET_DENS = 13054 };        // + k (0 aeree, 1 normale, 2 compacte) : densite
 static void LogsOpenFolder();
+static void WikiOpenHost();   // (launcher.cpp : article du guide Heberger une partie)
 static void LogsZip();
 static float GfxMaxScroll() { return max(0.0f, g_setContentH - kSetArea.Height); }
 
 enum { SI_GFX, SI_OPT, SI_SEC, SI_BREAK, SI_X };   // reglage du jeu (cle de GfxRows), option du lanceur (cle de g_opts), section, 2e sous-colonne, special (cle = nom)
-struct SetCard { int tab, col; const wchar_t *fr, *en, *sFr, *sEn; };
+// hdr : element a droite du titre (NULL : rien) -- goimage (lien vers l'onglet Image), hostchip, netchip (resultat du test de
+// connexion), dronekb (disposition ZQSD / WASD / fleches), updchip (etat de la mise a jour), mwcver (version du jeu trouvee).
+struct SetCard { int tab, col; const wchar_t *fr, *en, *sFr, *sEn; const char *hdr; };
 static const SetCard kSetCards[] = {
-    { SET_JEU, 0, L"Préréglage", L"Preset", L"Règle tout d'un coup ; chaque ligne reste modifiable", L"Sets everything at once; every line stays editable" },        // 0
+    { SET_JEU, 0, L"Préréglage", L"Preset", L"Règle tout d'un coup · chaque ligne reste modifiable · Vanilla = le jeu tel quel", L"Sets everything at once · every line stays editable · Vanilla = the game as is" },   // 0
     { SET_JEU, 0, L"Affichage", L"Display", NULL, NULL },                                                                                                           // 1
     { SET_JEU, 1, L"Confort & affichage en jeu", L"Comfort & in-game display", NULL, NULL },                                                                         // 2
-    { SET_JEU, 1, L"Lumière & ombres", L"Light & shadows", NULL, NULL },                                                                                            // 3
+    { SET_JEU, 1, L"Lumière & ombres", L"Light & shadows", NULL, NULL, "goimage" },                                                                                 // 3
     { SET_IMAGE, 0, L"Image", L"Image", NULL, NULL },                                                                                                               // 4
     { SET_IMAGE, 0, L"Ombres", L"Shadows", NULL, NULL },                                                                                                            // 5
     { SET_IMAGE, 1, L"Ray tracing", L"Ray tracing", L"Carte DXR 1.1 · en développement", L"DXR 1.1 GPU · in development" },                                         // 6
     { SET_SON, 0, L"Vocal de proximité", L"Proximity voice", L"Qui t'entend, et à quel volume", L"Who hears you, and how loud" },                                   // 7
     { SET_SON, 1, L"Comment ça marche", L"How it works", NULL, NULL },                                                                                              // 8
-    { SET_COOP, 0, L"Quand j'héberge", L"When I host", L"Défauts de mes salons · modifiables dans chaque salon", L"My lobby defaults · editable in each lobby" },     // 9
+    { SET_COOP, 0, L"Quand j'héberge", L"When I host", L"Repris à l'ouverture du salon · un changement là-bas ne vaut que pour lui", L"Taken when the lobby opens · a change there only applies to that lobby", "hostchip" },   // 9
     { SET_COOP, 1, L"Chez moi", L"On my side", L"Hôte ou invité", L"Host or guest" },                                                                                // 10
-    { SET_COOP, 1, L"Réseau & lancement", L"Network & launch", NULL, NULL },                                                                                        // 11
-    { SET_TOUCHES, 0, L"En jeu", L"In game", L"Clique sur une touche, puis appuie sur la nouvelle · Échap : annuler · Suppr : par défaut", L"Click a key, then press the new one · Esc: cancel · Del: default" },   // 12
-    { SET_TOUCHES, 1, L"Caméra drone", L"Drone camera", L"Mode photo", L"Photo mode" },                                                                             // 13
+    { SET_COOP, 1, L"Réseau & lancement", L"Network & launch", NULL, NULL, "netchip" },                                                                             // 11
+    { SET_TOUCHES, 0, L"En jeu", L"In game", L"Clique sur une touche, puis appuie sur la nouvelle · Échap : annuler · Suppr : défaut", L"Click a key, then press the new one · Esc: cancel · Del: default" },   // 12
+    { SET_TOUCHES, 1, L"Caméra drone", L"Drone camera", L"Mode photo (F8)", L"Photo mode (F8)", "dronekb" },                                                        // 13
     { SET_THEME, 0, L"Thème du lanceur", L"Launcher theme", NULL, NULL },                                                                                           // 14
     { SET_THEME, 0, L"Personnaliser", L"Customize", NULL, NULL },                                                                                                   // 15
-    { SET_THEME, 1, L"Aperçu", L"Preview", NULL, NULL },                                                                                                            // 16
-    { SET_LANCEUR, 0, L"Langue", L"Language", L"Lanceur et menu F10 en jeu ; les textes du jeu suivent sa langue à lui", L"Launcher and in-game F10 menu; the game's own texts follow its language" },   // 17
-    { SET_LANCEUR, 0, L"Version & mises à jour", L"Version & updates", NULL, NULL },                                                                                // 18
-    { SET_LANCEUR, 1, L"Jeu", L"Game", NULL, NULL },                                                                                                                // 19
+    { SET_THEME, 1, L"Aperçu en direct", L"Live preview", NULL, NULL },                                                                                             // 16
+    { SET_LANCEUR, 0, L"Langue", L"Language", L"Vaut pour le lanceur et le menu F10 en jeu ; les textes du jeu suivent sa langue à lui", L"For the launcher and the in-game F10 menu; the game's own texts follow its language" },   // 17
+    { SET_LANCEUR, 0, L"Version & mises à jour", L"Version & updates", NULL, NULL, "updchip" },                                                                     // 18
+    { SET_LANCEUR, 1, L"Jeu", L"Game", NULL, NULL, "mwcver" },                                                                                                      // 19
     { SET_LANCEUR, 1, L"Dépannage", L"Troubleshooting", NULL, NULL },                                                                                               // 20
 };
 static const int kSetCardN = (int)(sizeof(kSetCards) / sizeof(kSetCards[0]));
 // fr/en : nom (SI_GFX / SI_OPT : remplace celui de la table ; SI_X : pour la recherche) ; dFr/dEn : explication grise dessous.
-struct SetItem { int card, kind; const char *key; const wchar_t *fr, *en, *dFr, *dEn; int wide; };   // wide : toute la largeur, avant les sous-colonnes
+// wide : 1 toute la largeur avant les sous-colonnes, 2 apres (pied de carte : boutons Par defaut / Enregistrer...).
+// Pied ("footer") : fr/en = legende, dFr = boutons -- D Par defaut, E Enregistrer, G Revoir le guide de l'hote, T Tester ma connexion.
+struct SetItem { int card, kind; const char *key; const wchar_t *fr, *en, *dFr, *dEn; int wide; };
 static const SetItem kSetItems[] = {
     { 0, SI_X, "presets", L"Préréglage", L"Preset", NULL, NULL },
-    { 1, SI_GFX, "Resolution", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "ModeEcran", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "QualiteUnity", NULL, NULL, NULL, NULL },
+    { 1, SI_GFX, "Resolution", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "ModeEcran", NULL, NULL, NULL, NULL },
     { 1, SI_GFX, "ImagesMax", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "SyncVerticale", NULL, NULL, NULL, NULL },
+    { 1, SI_GFX, "ChampVision", NULL, NULL, L"60° = le jeu", L"60° = the game" }, { 1, SI_GFX, "QualiteUnity", NULL, NULL, NULL, NULL },
     { 1, SI_GFX, "Distance", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "Details", NULL, NULL, NULL, NULL },
     { 1, SI_GFX, "Textures", NULL, NULL, L"Pleines = plus de mémoire vidéo", L"Full = more video memory" }, { 1, SI_GFX, "Filtrage", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "Anticrenelage", NULL, NULL, NULL, NULL },
     { 2, SI_GFX, "Balancement", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "BalancementVoiture", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "Retroviseurs", NULL, NULL, L"Complets = coûteux", L"Full = costly" },
-    { 2, SI_GFX, "ChampVision", NULL, NULL, L"60° = le jeu", L"60° = the game" },
     { 2, SI_GFX, "IndicateurRapport", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "CompteurImages", NULL, NULL, NULL, NULL },
     { 2, SI_GFX, "Pseudos", NULL, NULL, L"Distance d'affichage", L"Display distance" }, { 2, SI_GFX, "PoussiereTrafic", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "TracesTrafic", NULL, NULL, NULL, NULL },
-    { 3, SI_X, "rtsummary", NULL, NULL, NULL, NULL },
+    // Lumiere & ombres (maquette Jeu) : les huit lignes les plus utiles, en deux sous-colonnes ; aussi dans l'onglet Image.
+    { 3, SI_GFX, "HDR", NULL, NULL, NULL, NULL }, { 3, SI_GFX, "Bloom", NULL, NULL, NULL, NULL }, { 3, SI_GFX, "RayonsSoleil", NULL, NULL, NULL, NULL }, { 3, SI_GFX, "Halos", L"Halos des lampes", L"Lamp coronas", NULL, NULL },
+    { 3, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
+    { 3, SI_GFX, "OmbresSoleil", NULL, NULL, NULL, NULL }, { 3, SI_GFX, "OmbresPhares", NULL, NULL, NULL, NULL }, { 3, SI_GFX, "OmbresCascades", NULL, NULL, NULL, NULL }, { 3, SI_GFX, "OmbresDistance", NULL, NULL, NULL, NULL },
+    { 3, SI_X, "rtbox", L"Ray tracing", L"Ray tracing", L"Ombres du soleil et des lampes, reflets, rebond de lumière, occlusion", L"Sun and lamp shadows, reflections, light bounce, occlusion", 2 },
+    { 3, SI_X, "footer", L"Appliqués au prochain lancement du jeu.", L"Applied at the next game start.", L"DE", NULL, 2 },
     { 4, SI_GFX, "HDR", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "Bloom", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "Contraste", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "RayonsSoleil", NULL, NULL, NULL, NULL },
     { 4, SI_GFX, "Halos", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "PorteePhares", NULL, NULL, NULL, NULL },
     { 5, SI_GFX, "OmbresSoleil", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresLune", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresMaisons", NULL, NULL, NULL, NULL },
@@ -447,8 +488,10 @@ static const SetItem kSetItems[] = {
     { 6, SI_GFX, "RayTracing", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTRayons", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTPortee", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTDouceur", NULL, NULL, NULL, NULL },
     { 6, SI_GFX, "RTCorps", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTReflets", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTVitres", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTRebond", NULL, NULL, NULL, NULL },
     { 6, SI_GFX, "RTOcclusion", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTLampes", NULL, NULL, NULL, NULL },
+    { 6, SI_X, "footer", L"Appliqués au prochain lancement du jeu · en jeu : F10.", L"Applied at the next game start · in game: F10.", L"DE", NULL, 2 },
     { 7, SI_GFX, "Vocal", NULL, NULL, NULL, NULL }, { 7, SI_GFX, "VocalPortee", NULL, NULL, NULL, NULL }, { 7, SI_GFX, "VolumeVocal", NULL, NULL, L"Ce que tu entends", L"What you hear" },
     { 7, SI_GFX, "GainMicro", L"Mon micro (pour les autres)", L"My microphone (for the others)", NULL, NULL },
+    { 7, SI_X, "footer", L"Appliqués tout de suite, même en jeu.", L"Applied right away, even in game.", L"DE", NULL, 2 },
     { 8, SI_X, "voicehelp", NULL, NULL, NULL, NULL },
     { 9, SI_SEC, NULL, L"Règles", L"Rules", NULL, NULL },
     { 9, SI_GFX, "ArgentDepart", NULL, NULL, L"Chaque invité démarre avec le pécule du jeu", L"Every guest starts with the game's nest egg" },
@@ -463,22 +506,38 @@ static const SetItem kSetItems[] = {
     { 9, SI_SEC, NULL, L"Salon", L"Lobby", NULL, NULL },
     { 9, SI_X, "max", L"Joueurs au plus", L"Players at most", NULL, NULL },
     { 9, SI_X, "prive", L"Salon par défaut", L"Default lobby", L"Privé : code de session demandé", L"Private: session code required" },
+    { 9, SI_X, "footer", NULL, NULL, L"GD", NULL, 2 },
+    // Chez moi (maquette Co-op) : vocal a gauche, partage et affichage a droite (les lignes du vocal sont aussi dans Son & vocal).
+    { 10, SI_SEC, NULL, L"Vocal", L"Voice", NULL, NULL },
+    { 10, SI_GFX, "Vocal", NULL, NULL, NULL, NULL },
+    { 10, SI_GFX, "Touche:Vocal", L"Parler", L"Talk", L"Touche tenue", L"Hold the key" },
+    { 10, SI_GFX, "VocalPortee", NULL, NULL, NULL, NULL }, { 10, SI_GFX, "VolumeVocal", NULL, NULL, NULL, NULL },
+    { 10, SI_GFX, "GainMicro", L"Mon micro (pour les autres)", L"My microphone (for the others)", NULL, NULL },
+    { 10, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
+    { 10, SI_SEC, NULL, L"Partage & affichage", L"Sharing & display", NULL, NULL },
     { 10, SI_GFX, "ModsAuto", NULL, NULL, L"Mods et contenu, sans redemander", L"Mods and content, without asking again" },
     { 10, SI_GFX, "VoirVisages", NULL, NULL, L"Visages, peintures, posters", L"Faces, paints, posters" },
     { 10, SI_GFX, "Marqueurs", NULL, NULL, NULL, NULL },
+    { 10, SI_GFX, "CarteMaintenir", L"Carte (M)", L"Map (M)", NULL, NULL },
     { 10, SI_OPT, "ContenuEnvoye", L"Mon contenu envoyé", L"My content sent", NULL, NULL },
-    { 10, SI_OPT, "Apparence", L"Mon personnage", L"My character", NULL, NULL },
-    { 10, SI_OPT, "CouleurVoiture", NULL, NULL, NULL, NULL },
-    { 11, SI_X, "net", L"Réseau par défaut", L"Default network", L"Steam : amis ; IP / VPN : port à ouvrir", L"Steam: friends; IP / VPN: port to open" },
-    { 11, SI_OPT, "Port", L"Port (IP / VPN)", L"Port (IP / VPN)", L"UDP et TCP ; à rediriger sur la box", L"UDP and TCP; to forward on the router" },
-    { 11, SI_OPT, "FermerLanceur", L"Fermer le lanceur pendant le jeu", L"Close the launcher during the game", L"Sinon il reste ouvert : joueurs, ping", L"Otherwise it stays open: players, ping" },
+    { 11, SI_X, "net", L"Réseau par défaut", L"Default network", L"Steam : amis ; IP / VPN : port à ouvrir", L"Steam: friends; IP / VPN: port to open", 1 },
+    { 11, SI_OPT, "Port", L"Port (IP / VPN)", L"Port (IP / VPN)", L"UDP et TCP ; à rediriger sur la box", L"UDP and TCP; to forward on the router", 1 },
+    { 11, SI_OPT, "FermerLanceur", L"Fermer le lanceur pendant le jeu", L"Close the launcher during the game", L"Sinon il reste ouvert : joueurs, ping, renvois", L"Otherwise it stays open: players, ping, kicks" },
+    { 11, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
+    { 11, SI_OPT, "LancerSteam", L"Lancer le jeu par Steam", L"Start the game through Steam", L"Seulement si MWCoop ne se charge pas depuis le lanceur", L"Only if MWCoop doesn't load from the launcher" },
     { 11, SI_X, "steamline", L"Option de lancement Steam", L"Steam launch option", L"Pour que JOUER ouvre MWCoop (facultatif)", L"So that PLAY opens MWCoop (optional)" },
+    { 11, SI_X, "footer", L"Vérifie le port, le pare-feu et Steam.", L"Checks the port, the firewall and Steam.", L"TE", NULL, 2 },
     { 12, SI_SEC, NULL, L"Avec les autres", L"With the others", NULL, NULL },
-    { 12, SI_GFX, "Touche:Tchat", NULL, NULL, NULL, NULL }, { 12, SI_GFX, "Touche:Vocal", NULL, NULL, NULL, NULL }, { 12, SI_GFX, "Touche:PorteMonnaie", NULL, NULL, NULL, NULL }, { 12, SI_GFX, "Touche:Marqueur", NULL, NULL, NULL, NULL },
+    { 12, SI_GFX, "Touche:Tchat", NULL, NULL, NULL, NULL },
+    { 12, SI_GFX, "Touche:Vocal", L"Parler", L"Talk", L"Vocal de proximité, touche tenue", L"Proximity voice, hold the key" },
+    { 12, SI_GFX, "Touche:PorteMonnaie", L"Porte-monnaie", L"Wallet", L"Donner de l'argent au joueur visé", L"Give money to the player you look at" },
+    { 12, SI_GFX, "Touche:Marqueur", L"Marqueur partagé", L"Shared marker", L"Court : poser · tenu : retirer", L"Tap: place · hold: remove" },
     { 12, SI_SEC, NULL, L"Voir", L"See", NULL, NULL },
-    { 12, SI_GFX, "Touche:Carte", NULL, NULL, NULL, NULL }, { 12, SI_GFX, "CarteMaintenir", NULL, NULL, NULL, NULL }, { 12, SI_GFX, "Touche:Vue", NULL, NULL, NULL, NULL }, { 12, SI_GFX, "Touche:Triches", NULL, NULL, NULL, NULL },
+    { 12, SI_GFX, "Touche:Carte", NULL, NULL, NULL, NULL }, { 12, SI_GFX, "CarteMaintenir", NULL, NULL, NULL, NULL },
+    { 12, SI_GFX, "Touche:Vue", L"Vue à la 3e personne", L"Third-person view", L"À pied, en véhicule", L"On foot, in vehicles" },
+    { 12, SI_GFX, "Touche:Triches", L"Panneau des triches", L"Cheat panel", L"Si l'hôte les autorise", L"If the host allows them" },
+    { 12, SI_X, "f10", L"Menu MWCoop", L"MWCoop menu", L"Joueurs, synchro, options", L"Players, sync, options" },
     { 13, SI_GFX, "Touche:Drone", NULL, NULL, NULL, NULL, 1 },
-    { 13, SI_X, "dronekb", L"Disposition des déplacements", L"Movement layout", NULL, NULL, 1 },
     { 13, SI_SEC, NULL, L"Déplacer", L"Move", NULL, NULL },
     { 13, SI_GFX, "Touche:DroneAvant", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DroneArriere", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DroneGauche", NULL, NULL, NULL, NULL },
     { 13, SI_GFX, "Touche:DroneDroite", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DroneMonter", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DroneDescendre", NULL, NULL, NULL, NULL },
@@ -488,38 +547,45 @@ static const SetItem kSetItems[] = {
     { 13, SI_GFX, "Touche:DroneZoomPlus", L"Zoomer", L"Zoom in", L"Aussi la molette", L"Also the wheel" }, { 13, SI_GFX, "Touche:DroneZoomMoins", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DronePencherG", NULL, NULL, NULL, NULL },
     { 13, SI_GFX, "Touche:DronePencherD", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DroneRecentrer", L"Recentrer", L"Reset", L"Penché et zoom", L"Tilt and zoom" }, { 13, SI_GFX, "Touche:DroneGrille", NULL, NULL, NULL, NULL },
     { 13, SI_GFX, "Touche:DroneInterface", NULL, NULL, NULL, NULL }, { 13, SI_GFX, "Touche:DronePhoto", L"Photo", L"Photo", L"Rangée dans l'album", L"Stored in the album" },
+    { 13, SI_X, "footer", L"Les touches valent pour toutes tes parties.", L"The keys apply to all your games.", L"DE", NULL, 2 },
     { 14, SI_X, "themes", L"Thème", L"Theme", NULL, NULL },
     { 15, SI_X, "accent", L"Couleur d'accent", L"Accent colour", L"Boutons, onglet actif, pastilles", L"Buttons, active tab, pills" },
     { 15, SI_X, "aurore", L"Aurore et neige", L"Aurora and snow", L"Fond animé derrière les pages", L"Animated background behind the pages" },
-    { 15, SI_X, "soon", L"Verre dépoli", L"Frosted glass", L"Transparence des cartes", L"Card transparency" },
-    { 15, SI_X, "soon", L"Densité", L"Density", L"Espace entre les lignes et les cartes", L"Space between rows and cards" },
-    { 15, SI_X, "soon", L"Taille du texte", L"Text size", NULL, NULL },
+    { 15, SI_X, "verre", L"Verre dépoli", L"Frosted glass", L"Transparence des cartes", L"Card transparency" },
+    { 15, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
+    { 15, SI_X, "densite", L"Densité", L"Density", L"Espace entre les lignes et les cartes", L"Space between rows and cards" },
+    { 15, SI_X, "texte", L"Taille du texte", L"Text size", NULL, NULL },
     { 15, SI_X, "winfollow", L"Suivre Windows", L"Follow Windows", L"Thème clair ou sombre de Windows", L"Windows' light or dark theme" },
     { 16, SI_X, "apercu", NULL, NULL, NULL, NULL },
     { 17, SI_X, "lang", L"Langue", L"Language", NULL, NULL },
     { 18, SI_X, "update", L"Mise à jour", L"Update", NULL, NULL },
-    { 18, SI_X, "canal", L"Version jouée", L"Version played", L"Legacy : l'ancienne, figée en 0.95.8", L"Legacy: the old one, frozen at 0.95.8" },
+    { 18, SI_X, "canal", L"Version jouée", L"Version played", L"Reworked = la version normale ; Legacy = l'ancienne, figée en 0.95.8", L"Reworked = the normal version; Legacy = the old one, frozen at 0.95.8" },
     { 18, SI_X, "majauto", L"Mettre à jour automatiquement", L"Update automatically", L"Au démarrage du lanceur, depuis GitHub", L"At launcher start, from GitHub" },
-    { 18, SI_X, "soon", L"Versions d'essai (nightly)", L"Test builds (nightly)", L"Avant tout le monde, parfois cassées", L"Before everyone, sometimes broken" },
+    { 18, SI_X, "nightly", L"Versions d'essai (nightly)", L"Test builds (nightly)", L"Avant tout le monde, parfois cassées", L"Before everyone, sometimes broken" },
     { 18, SI_X, "notes", L"Notes de version", L"Release notes", L"Ce qui change à chaque version", L"What changes in each version" },
-    { 18, SI_OPT, "RevoirGuide", L"Bulles d'aide du lanceur", L"Launcher help bubbles", L"La visite en quelques bulles", L"The tour in a few bubbles" },
+    { 18, SI_OPT, "RevoirGuide", L"Bulles d'aide du lanceur", L"Launcher help bubbles", L"Les petites explications à la première visite", L"The little explanations on the first visit" },
     { 19, SI_X, "folder", L"Dossier du jeu", L"Game folder", NULL, NULL },
-    { 19, SI_X, "start", L"Départ du jeu", L"Game start", L"Si MWCoop ne se charge pas", L"If MWCoop doesn't load" },
+    { 19, SI_X, "start", L"Départ du jeu", L"Game start", L"La copie de lancement protège ton dossier ; « dossier du jeu » si MWCoop ne se charge pas depuis la copie", L"The launch copy protects your folder; \"game folder\" if MWCoop doesn't load from the copy" },
     { 19, SI_X, "mscl", L"MSCLoader fourni par MWCoop", L"MSCLoader provided by MWCoop", L"Dans la copie de lancement, jamais dans ton dossier", L"In the launch copy, never in your folder" },
     { 19, SI_X, "about", NULL, NULL, NULL, NULL },
     { 19, SI_X, "buy", L"Acheter le jeu, désinstaller MWCoop", L"Buy the game, uninstall MWCoop", NULL, NULL },
     { 20, SI_X, "logs", L"Journaux", L"Logs", L"Un zip à poster sur le Discord", L"A zip to post on the Discord" },
+    { 20, SI_X, "sessions", L"Sessions gardées", L"Sessions kept", L"Journaux des parties précédentes", L"Logs of the previous games" },
     { 20, SI_X, "compat", L"Retirer les modes de compatibilité", L"Remove compatibility modes", L"Windows en ajoute après un plantage : MWCoop ne se charge plus", L"Windows adds some after a crash: MWCoop stops loading" },
     { 20, SI_X, "debug", L"Mode débogage", L"Debug mode", L"Journaux détaillés pour le zip", L"Detailed logs for the zip" },
     { 20, SI_X, "discordask", L"Proposer le Discord", L"Offer the Discord", L"L'invitation après la visite guidée", L"The invitation after the guided tour" },
+    { 20, SI_X, "repair", L"Réparer MWCoop", L"Repair MWCoop", L"Réécrit la copie de lancement et le chargeur", L"Rewrites the launch copy and the loader" },
     // (ex-boutons de l'en-tete, maquette du 17/10 : la page API des moddeurs, le depot GitHub)
     { 20, SI_X, "api", L"API pour les moddeurs", L"API for modders", L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example" },
     { 20, SI_X, "github", L"Code source", L"Source code", L"Le dépôt GitHub de MWCoop : code, versions, signalements", L"MWCoop's GitHub repository: code, releases, issues" },
+    { 20, SI_X, "footer", L"build", L"build", L"DE", NULL, 2 },
 };
 static const int kSetItemN = (int)(sizeof(kSetItems) / sizeof(kSetItems[0]));
 
-// ---- theme : couleur d'accent et intensite de l'aurore ([Lanceur] Accent=RRGGBB, Aurore=0|1|2). Les tables kDark / kLight
-// sont modifiees en place (TH(accent) les lit a chaque dessin) ; la scene est refaite quand l'aurore change.
+// ---- theme : Theme=sombre|clair|aurore|garage (absent : celui de Windows), couleur d'accent et intensite de l'aurore
+// ([Lanceur] Accent=RRGGBB, Aurore=0|1|2), verre depoli (Verre=0|1), densite (Densite=0|1|2), taille du texte (Texte=80..130).
+// Les tables kDark / kLight / kAurore / kGarage sont modifiees en place (TH(accent) les lit a chaque dessin) ; la scene est
+// refaite quand le theme, l'aurore ou le verre changent (SceneKey).
 struct SetAccent { const wchar_t *fr, *en; Color dark, darkHi, light, lightHi; };
 static const SetAccent kSetAccents[5] = {
     { L"Bleu glace", L"Ice blue", Color(255, 166, 225, 255), Color(255, 200, 236, 255), Color(255, 26, 98, 172), Color(255, 58, 132, 206) },
@@ -528,11 +594,44 @@ static const SetAccent kSetAccents[5] = {
     { L"Rose", L"Pink", Color(255, 240, 166, 255), Color(255, 248, 200, 255), Color(255, 150, 40, 170), Color(255, 180, 80, 200) },
     { L"Corail", L"Coral", Color(255, 255, 143, 168), Color(255, 255, 186, 200), Color(255, 200, 40, 80), Color(255, 224, 80, 120) },
 };
+static const Color kAuroreAccent(255, 124, 232, 198), kAuroreAccent2(255, 170, 246, 220), kGarageAccent(255, 255, 180, 84), kGarageAccent2(255, 255, 210, 140);   // (accents propres des themes)
 static int g_accentSel;   // (-1 : couleur ecrite a la main dans l'ini)
-static void ThemeApplyAccent(Color dark, Color darkHi, Color light, Color lightHi) { kDark.accent = dark; kDark.accent2 = darkHi; kLight.accent = light; kLight.accent2 = lightHi; }
+// Accent sur les quatre tables : sombre / clair selon la pastille ; Aurore verte et Garage gardent leur accent propre tant que
+// la pastille est celle d'origine (menthe, ambre), sinon la variante sombre de la couleur choisie.
+static void ThemeApplyAccent(Color dark, Color darkHi, Color light, Color lightHi, bool custom)
+{
+    kDark.accent = dark; kDark.accent2 = darkHi; kLight.accent = light; kLight.accent2 = lightHi;
+    kAurore.accent = custom ? dark : kAuroreAccent; kAurore.accent2 = custom ? darkHi : kAuroreAccent2;
+    kGarage.accent = custom ? dark : kGarageAccent; kGarage.accent2 = custom ? darkHi : kGarageAccent2;
+}
+static int ThemeFromName(const wchar_t *s)
+{
+    if (!_wcsicmp(s, L"sombre") || !_wcsicmp(s, L"dark")) return THEME_SOMBRE;
+    if (!_wcsicmp(s, L"clair") || !_wcsicmp(s, L"light")) return THEME_CLAIR;
+    if (!_wcsicmp(s, L"aurore")) return THEME_AURORE;
+    if (!_wcsicmp(s, L"garage")) return THEME_GARAGE;
+    return -1;
+}
+static const wchar_t *ThemeName(int t) { static const wchar_t *n[THEME_N] = { L"sombre", L"clair", L"aurore", L"garage" }; return n[t >= 0 && t < THEME_N ? t : 0]; }
+static int ThemeWindows()   // (theme des applications de Windows : sombre ou clair)
+{
+    DWORD v = 1, sz = sizeof(v);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", RRF_RT_REG_DWORD, NULL, &v, &sz) == ERROR_SUCCESS) return v == 0 ? THEME_SOMBRE : THEME_CLAIR;
+    return THEME_SOMBRE;
+}
+static void ThemeSelect(int t) { g_theme = t >= 0 && t < THEME_N ? t : THEME_SOMBRE; g_dark = g_theme != THEME_CLAIR; }
+static void ThemeSet(int t) { WritePrivateProfileStringW(L"Lanceur", L"Theme", ThemeName(t), g_iniLauncher.c_str()); ThemeSelect(t); }
 static void ThemeLoad()
 {
+    wchar_t th[16] = L"";
+    GetPrivateProfileStringW(L"Lanceur", L"Theme", L"", th, 16, g_iniLauncher.c_str());
+    int t = ThemeFromName(th);
+    ThemeSelect(t >= 0 ? t : ThemeWindows());
     g_aurore = max(0, min(2, (int)GetPrivateProfileIntW(L"Lanceur", L"Aurore", 2, g_iniLauncher.c_str())));
+    g_glass = GetPrivateProfileIntW(L"Lanceur", L"Verre", 1, g_iniLauncher.c_str()) != 0;
+    g_densite = max(0, min(2, (int)GetPrivateProfileIntW(L"Lanceur", L"Densite", 1, g_iniLauncher.c_str())));
+    g_texte = max(80, min(110, (int)GetPrivateProfileIntW(L"Lanceur", L"Texte", 100, g_iniLauncher.c_str())));   // (au-dela de 110 % le salon et la barre coupaient des textes)
+    g_texte = (g_texte / 5) * 5;
     wchar_t b[16] = L"";
     GetPrivateProfileStringW(L"Lanceur", L"Accent", L"", b, 16, g_iniLauncher.c_str());
     g_accentSel = 0;
@@ -541,14 +640,14 @@ static void ThemeLoad()
         Color c(255, (BYTE)(v >> 16), (BYTE)(v >> 8), (BYTE)v);
         g_accentSel = -1;
         for (int i = 0; i < 5; i++) if (kSetAccents[i].dark.GetValue() == c.GetValue()) g_accentSel = i;
-        if (g_accentSel < 0) {   // couleur libre : claire sur le theme sombre, assombrie sur le clair (texte blanc dessus)
+        if (g_accentSel < 0) {   // couleur libre : claire sur les themes sombres, assombrie sur le clair (texte blanc dessus)
             Color navy(255, 16, 30, 48);
-            ThemeApplyAccent(c, Mix(c, Color(255, 255, 255, 255), 0.3f), Mix(c, navy, 0.55f), Mix(c, navy, 0.4f));
+            ThemeApplyAccent(c, Mix(c, Color(255, 255, 255, 255), 0.3f), Mix(c, navy, 0.55f), Mix(c, navy, 0.4f), true);
             return;
         }
     }
     const SetAccent &a = kSetAccents[g_accentSel];
-    ThemeApplyAccent(a.dark, a.darkHi, a.light, a.lightHi);
+    ThemeApplyAccent(a.dark, a.darkHi, a.light, a.lightHi, g_accentSel != 0);
 }
 static void ThemeSetAccent(int i)
 {
@@ -557,21 +656,19 @@ static void ThemeSetAccent(int i)
     WritePrivateProfileStringW(L"Lanceur", L"Accent", i == 0 ? NULL : hex, g_iniLauncher.c_str());
     ThemeLoad();
 }
-static void ThemeSetAurore(int v)
-{
-    WritePrivateProfileStringW(L"Lanceur", L"Aurore", v == 2 ? NULL : std::to_wstring(v).c_str(), g_iniLauncher.c_str());
-    g_aurore = v;
-    g_sceneDarkK = -1;   // (scene refaite)
-}
-// Theme=clair|sombre absent : celui des applications de Windows (comme au premier lancement).
+static void ThemeSetAurore(int v) { WritePrivateProfileStringW(L"Lanceur", L"Aurore", v == 2 ? NULL : std::to_wstring(v).c_str(), g_iniLauncher.c_str()); g_aurore = v; }
+static void ThemeSetGlass(bool on) { WritePrivateProfileStringW(L"Lanceur", L"Verre", on ? NULL : L"0", g_iniLauncher.c_str()); g_glass = on; }
+static void ThemeSetDensite(int d) { WritePrivateProfileStringW(L"Lanceur", L"Densite", d == 1 ? NULL : std::to_wstring(d).c_str(), g_iniLauncher.c_str()); g_densite = d; }
+static void ThemeSetTexte(int p) { p = max(80, min(110, (p / 5) * 5)); WritePrivateProfileStringW(L"Lanceur", L"Texte", p == 100 ? NULL : std::to_wstring(p).c_str(), g_iniLauncher.c_str()); g_texte = p; }
+// Theme absent de l'ini : celui des applications de Windows (comme au premier lancement).
 static bool ThemeFollowsWindows() { wchar_t th[16] = L""; GetPrivateProfileStringW(L"Lanceur", L"Theme", L"", th, 16, g_iniLauncher.c_str()); return !th[0]; }
 static void ThemeFollowWindows(bool on)
 {
-    if (!on) { WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str()); return; }
+    if (!on) { WritePrivateProfileStringW(L"Lanceur", L"Theme", ThemeName(g_theme), g_iniLauncher.c_str()); return; }
     WritePrivateProfileStringW(L"Lanceur", L"Theme", NULL, g_iniLauncher.c_str());
-    DWORD v = 1, sz = sizeof(v);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", RRF_RT_REG_DWORD, NULL, &v, &sz) == ERROR_SUCCESS) g_dark = v == 0;
+    ThemeSelect(ThemeWindows());
 }
+static bool ThemeIsDefault() { return g_accentSel == 0 && g_aurore == 2 && g_glass && g_densite == 1 && g_texte == 100 && ThemeFollowsWindows(); }
 
 // ---- disposition des touches du drone (ZQSD / WASD / fleches) : les 4 touches de deplacement d'un coup
 static int DroneLayoutGet()
@@ -603,20 +700,63 @@ static std::wstring SetFold(const std::wstring &s)
     for (wchar_t c : s) { c = towlower(c); const wchar_t *p = c ? wcschr(from, c) : NULL; if (p) c = to[p - from]; o += c; }
     return o;
 }
-// Nom (gras) et explication (grise) d'une ligne, filet dessous ; renvoie la largeur du nom.
-static float SetRowLabel(Graphics &g, RectF row, const std::wstring &t, const std::wstring &d, float maxW, float alpha = 1.0f)
+// Texte gras sur deux lignes au plus (nom d'une ligne trop long pour sa sous-colonne, comme la maquette).
+static void SetWrapText(Graphics &g, const std::wstring &s, RectF r, float px, int style, Color c)
 {
-    if (d.empty()) Text(g, t, RectF(row.X, row.Y, maxW, row.Height), 13.5f, FontStyleBold, WithA(kInk, alpha), StringAlignmentNear);
-    else {
-        Text(g, t, RectF(row.X, row.Y + 4, maxW, 20), 13.5f, FontStyleBold, WithA(kInk, alpha), StringAlignmentNear);
-        Text(g, d, RectF(row.X, row.Y + 23, maxW, 18), 11.5f, FontStyleRegular, WithA(kGrey, alpha), StringAlignmentNear);
+    Font &font = *FontOf(L"Segoe UI", px, style);
+    StringFormat sf;
+    sf.SetLineAlignment(StringAlignmentNear);
+    sf.SetTrimming(StringTrimmingEllipsisWord);
+    SolidBrush b(c);
+    DrawStr(g, s.c_str(), -1, &font, r, &sf, &b);
+}
+// Commande trop large pour tenir a cote du nom : dans une sous-colonne etroite elle passe SOUS le nom (a droite) ; dans une
+// colonne entiere le nom passe sur deux lignes (maquette). 'wid' : largeur de la commande.
+static bool SetLabelWraps(const std::wstring &t, float maxW);
+static bool SetStacked(const std::wstring &lab, float w, float wid) { return w < 340 && w - wid - 12 < 110 && SetLabelWraps(lab, w - wid - 12); }   // (place pour un nom sur deux lignes : il y passe)
+static float SetLabelH(const std::wstring &t, const std::wstring &d, float maxW);
+static float SetCtlRowH(const std::wstring &lab, const std::wstring &desc, float w, float wid) { return SetStacked(lab, w, wid) ? (desc.empty() ? SetRowH() : SetRowDH()) + 32 : SetLabelH(lab, desc, w - wid - 12); }
+static float SetLabelMaxW(const std::wstring &lab, float w, float wid) { return SetStacked(lab, w, wid) ? w : w - wid - 12; }
+// Rectangle de la commande (hauteur ch) : a droite, centree, ou en bas a droite si elle est sous le nom.
+static RectF SetCtlRect(RectF row, const std::wstring &lab, float wid, float ch)
+{
+    bool st = SetStacked(lab, row.Width, wid);
+    return RectF(row.X + row.Width - wid, st ? row.Y + row.Height - ch - 5 : row.Y + (row.Height - ch) / 2, wid, ch);
+}
+// Nom suffixe " (beta)" : le mot va dans un jeton rose a part (maquette Co-op : Jokkis).
+static bool SetBetaStrip(std::wstring &t)
+{
+    for (const wchar_t *suf : { L" (bêta)", L" (beta)" }) {
+        size_t n = wcslen(suf);
+        if (t.size() > n && !t.compare(t.size() - n, n, suf)) { t.erase(t.size() - n); return true; }
+    }
+    return false;
+}
+// Hauteur d'une ligne : nom, explication, et nom sur deux lignes s'il ne tient pas dans maxW.
+static bool SetLabelWraps(const std::wstring &t, float maxW) { std::wstring s = t; SetBetaStrip(s); return MeasureW(MeasureG(), s, 13.5f, FontStyleBold) > maxW; }
+static float SetLabelH(const std::wstring &t, const std::wstring &d, float maxW) { return (d.empty() ? SetRowH() : SetRowDH()) + (SetLabelWraps(t, maxW) ? 17 * UiTextScale() : 0); }
+// Nom (gras) et explication (grise) d'une ligne, filet dessous ; renvoie la largeur du nom (avec son jeton beta).
+static float SetRowLabel(Graphics &g, RectF row, const std::wstring &t0, const std::wstring &d, float maxW, float alpha = 1.0f)
+{
+    std::wstring t = t0;
+    bool beta = SetBetaStrip(t), wrap = SetLabelWraps(t, maxW), top = maxW >= row.Width - 1;   // (commande sous le nom : nom en haut)
+    float tw = min(maxW, MeasureW(MeasureG(), t, 13.5f, FontStyleBold)), ty = row.Y + (d.empty() && !wrap && !top ? (row.Height - 20) / 2 : 4);
+    if (wrap) { float lh = 18.5f * UiTextScale(); SetWrapText(g, t, RectF(row.X, row.Y + 3, maxW, 2 * lh + 3), 13.5f, FontStyleBold, WithA(kInk, alpha)); ty = row.Y + 3 + lh; tw = maxW; }
+    else Text(g, t, RectF(row.X, ty, maxW, 20), 13.5f, FontStyleBold, WithA(kInk, alpha), StringAlignmentNear);
+    if (!d.empty()) Text(g, d, RectF(row.X, ty + 19 * UiTextScale(), maxW, 18 * UiTextScale()), 11.5f, FontStyleRegular, WithA(kGrey, alpha), StringAlignmentNear);
+    if (beta && !wrap) {   // jeton Beta apres le nom
+        std::wstring s = T(L"Bêta", L"Beta");
+        float pw = PillW(s, 9.5f) - 2;
+        Color pink(255, 255, 107, 139);
+        Pill(g, RectF(row.X + tw + 8, ty + 1, pw, 18), WithA(pink, alpha), s, Color(255, 255, 255, 255), 9.5f);
+        tw += pw + 8;
     }
     Pen ln(TH(sep), 1.0f); g.DrawLine(&ln, row.X, row.Y + row.Height - 0.5f, row.X + row.Width, row.Y + row.Height - 0.5f);
-    return min(maxW, MeasureW(MeasureG(), t, 13.5f, FontStyleBold));
+    return tw;
 }
 static void SetRowHover(Graphics &g, RectF row) { GraphicsPath p; RoundRect(p, RectF(row.X - 8, row.Y + 1, row.Width + 16, row.Height - 3), 10); SolidBrush hb(TH(card)); g.FillPath(&hb, &p); }
 // Choix a segments de largeur selon le texte (UiSeg : largeurs egales) ; zones id0 + i.
-static float SetSegW(const std::vector<std::wstring> &labels, float px) { float w = 6; for (auto &l : labels) w += MeasureW(MeasureG(), l, px, FontStyleBold) + 20; return w; }
+static float SetSegW(const std::vector<std::wstring> &labels, float px) { float w = 6; for (auto &l : labels) w += MeasureW(MeasureG(), l, px, FontStyleBold) + 18; return w; }
 static void SetSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labels, int sel, int id0, float px = 12, bool enabled = true)
 {
     GraphicsPath tp; RoundRect(tp, r, min(12.0f, r.Height / 2));
@@ -624,7 +764,7 @@ static void SetSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labels
     Pen bp(TH(fieldBorder), 1.0f); g.DrawPath(&bp, &tp);
     float x = r.X + 3;
     for (int i = 0; i < (int)labels.size(); i++) {
-        float w = MeasureW(MeasureG(), labels[i], px, FontStyleBold) + 20;
+        float w = MeasureW(MeasureG(), labels[i], px, FontStyleBold) + 18;
         RectF s(x, r.Y + 3, w, r.Height - 6);
         bool on = i == sel, hot = enabled && g_uiHot == id0 + i;
         GraphicsPath p; RoundRect(p, s, min(9.0f, s.Height / 2));
@@ -635,14 +775,33 @@ static void SetSeg(Graphics &g, RectF r, const std::vector<std::wstring> &labels
         x += w;
     }
 }
-// Touche en jeu (capuchon) : en attente = contour accent.
-static void SetKeyCap(Graphics &g, RectF r, const std::wstring &s, bool cap, bool hot)
+// Curseur (maquette : champ de vision, taille du texte) : piste, partie prise en accent, bouton rond, valeur a droite ;
+// une zone cliquable par cran (id0 + i).
+static const float kSetSliderW = 150;
+static void SetSlider(Graphics &g, RectF r, int n, int k, int id0, const std::wstring &val)
+{
+    float vw = 50, x0 = r.X + 9, x1 = r.X + r.Width - vw - 9, cy = r.Y + r.Height / 2;
+    Pen track(TH(toggleOff), 4.0f); track.SetStartCap(LineCapRound); track.SetEndCap(LineCapRound);
+    g.DrawLine(&track, x0, cy, x1, cy);
+    float kx = n > 1 ? x0 + (x1 - x0) * k / (n - 1) : x0;
+    Pen fill(kAcc, 4.0f); fill.SetStartCap(LineCapRound); fill.SetEndCap(LineCapRound);
+    if (kx > x0 + 1) g.DrawLine(&fill, x0, cy, kx, cy);
+    bool hot = g_uiHot >= id0 && g_uiHot < id0 + n;
+    SolidBrush sh(Color(70, 0, 0, 0)); g.FillEllipse(&sh, kx - 8, cy - 7, 16.0f, 16.0f);
+    SolidBrush kb(Color(255, 255, 255, 255)); g.FillEllipse(&kb, kx - 8, cy - 8, 16.0f, 16.0f);
+    if (hot) { Pen hp(kAcc, 1.6f); g.DrawEllipse(&hp, kx - 8, cy - 8, 16.0f, 16.0f); }
+    Text(g, val, RectF(x1 + 6, r.Y, vw + 3, r.Height), 12.5f, FontStyleBold, kInk, StringAlignmentFar);
+    float step = n > 1 ? (x1 - x0) / (n - 1) : r.Width;
+    for (int i = 0; i < n; i++) HotZone(RectF(x0 + step * (i - 0.5f), r.Y, step, r.Height), id0 + i);
+}
+// Touche en jeu (capuchon) : en attente = contour accent ; 'fixed' : touche du jeu lui-meme, pas modifiable ici.
+static void SetKeyCap(Graphics &g, RectF r, const std::wstring &s, bool cap, bool hot, bool fixed = false)
 {
     GraphicsPath p; RoundRect(p, r, 9);
     SolidBrush b(cap ? WithA(kAcc, 0.22f) : hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&b, &p);
     Pen pen(cap ? kAcc : TH(fieldBorder), cap ? 2.0f : 1.0f); g.DrawPath(&pen, &p);
     Pen under(WithA(kInk, 0.12f), 2.0f); g.DrawLine(&under, r.X + 8, r.Y + r.Height - 3, r.X + r.Width - 8, r.Y + r.Height - 3);
-    Text(g, s, r, 12.5f, FontStyleBold, cap ? kAcc : kInk);
+    Text(g, s, r, 12.5f, FontStyleBold, cap ? kAcc : WithA(kInk, fixed ? 0.6f : 1.0f));
 }
 static void SetChip(Graphics &g, float rightX, float cy, const std::wstring &s, Color c, bool strong = false)
 {
@@ -652,97 +811,134 @@ static void SetChip(Graphics &g, float rightX, float cy, const std::wstring &s, 
 // Bouton plat de ligne (hauteur 32) ; renvoie sa largeur.
 static float SetButtonW(const std::wstring &s) { return MeasureW(MeasureG(), s, 12.5f, FontStyleBold) + 32; }
 
-// Un reglage du jeu (ligne de GfxRows) : nom, pastille d'impact, puis sa commande a droite (interrupteur, choix a
-// segments s'il tient, sinon ◀ valeur ▶ ; touche en jeu : capuchon ; ligne sans effet : la raison).
-static void SetGfxRow(Graphics &g, const SetItem &it, int idx, RectF row)
+// Valeurs montrees en pastilles pour un reglage (pv : les courtes, plus la valeur courante si elle n'y est pas, a sa place).
+static void SetGfxVals(const GfxRow &r, int v, std::vector<int> &vals, std::vector<std::wstring> &labs)
+{
+    vals.clear(); labs.clear();
+    for (int i = 0; i < (int)r.vals.size(); i++) {
+        int pi = -1;
+        for (int j = 0; j < (int)r.pv.size(); j++) if (r.pv[j] == r.vals[i]) pi = j;
+        if (!r.pv.empty() && pi < 0 && r.vals[i] != v) continue;
+        vals.push_back(r.vals[i]);
+        labs.push_back(pi >= 0 ? T(r.pf[pi], r.pe[pi]) : T(r.lf[i], r.le[i]));
+    }
+}
+// Mise en page d'une ligne de reglage du jeu pour une largeur : commande (touche, raison, interrupteur, curseur, pastilles,
+// ◀ valeur ▶), sa largeur, nom sur deux lignes ou non. Partagee par la hauteur et le dessin.
+struct GfxPlan { bool keyRow, off, toggle, slider, seg, cap; float wid; int k; std::vector<int> vals; std::vector<std::wstring> labs; std::wstring lab, desc, keyText; const wchar_t *why; float h; };
+static GfxPlan SetGfxPlan(const SetItem &it, int idx, float w)
+{
+    const GfxRow &r = GfxRows()[idx];
+    GfxPlan p = {};
+    p.lab = it.fr ? T(it.fr, it.en) : T(r.fr, r.en); p.desc = it.dFr ? T(it.dFr, it.dEn) : L"";
+    p.keyRow = r.sec && !strcmp(r.sec, "Touches");
+    p.off = !p.keyRow && GfxRowOff(r, &p.why);
+    int kk = p.keyRow ? GameKeyIndex(r.key) : -1, v = p.keyRow ? 0 : GfxGet(r.key);
+    p.cap = kk >= 0 && g_keyCapture == kk;
+    p.keyText = p.cap ? std::wstring(T(L"… appuie", L"… press")) : kk >= 0 ? GameKeyLabel(GameKeyGet(kk)) : std::wstring(L"?");
+    p.slider = !p.off && !p.keyRow && !strcmp(r.key, "ChampVision");
+    p.toggle = !p.off && !p.keyRow && r.vals.empty();
+    p.wid = 44;
+    if (p.keyRow) p.wid = max(44.0f, MeasureW(MeasureG(), p.keyText, 12.5f, FontStyleBold) + 24);
+    else if (p.off) p.wid = 150;
+    else if (p.slider) { p.wid = kSetSliderW; for (int i = 0; i < (int)r.vals.size(); i++) if (r.vals[i] == v) p.k = i; }
+    else if (!r.vals.empty()) {
+        SetGfxVals(r, v, p.vals, p.labs);
+        for (int i = 0; i < (int)p.vals.size(); i++) if (p.vals[i] == v) p.k = i;
+        float sw = SetSegW(p.labs, 12), lw = MeasureW(MeasureG(), p.lab, 13.5f, FontStyleBold);
+        // pastilles si elles tiennent a cote du nom, sous le nom (sous-colonne etroite) ou a cote d'un nom sur deux lignes
+        // (au moins 110 px) ; sinon ◀ valeur ▶
+        if (p.labs.size() <= 6 && (sw <= w - lw - 16 || (w < 340 && sw <= w) || sw <= w - 110 - 16)) { p.seg = true; p.wid = sw; }
+        else { p.wid = 172; for (int i = 0; i < (int)r.vals.size(); i++) if (r.vals[i] == v) p.k = i; }
+    }
+    p.h = SetCtlRowH(p.lab, p.desc, w, p.wid);
+    return p;
+}
+// Un reglage du jeu (ligne de GfxRows) : nom, pastille d'impact, puis sa commande a droite.
+static void SetGfxRow(Graphics &g, const SetItem &it, int idx, RectF row, const GfxPlan &p)
 {
     const GfxRow &r = GfxRows()[idx];
     int id = UI_GFX + idx * 3;
-    bool hot = g_uiHot == id || g_uiHot == id + 1 || g_uiHot == id + 2 || (g_uiHot >= UI_SETV + idx * 8 && g_uiHot < UI_SETV + idx * 8 + 8);
-    if (hot) SetRowHover(g, row);
-    std::wstring lab = it.fr ? T(it.fr, it.en) : T(r.fr, r.en), desc = it.dFr ? T(it.dFr, it.dEn) : L"";
-    const wchar_t *why = NULL;
-    bool keyRow = r.sec && !strcmp(r.sec, "Touches"), off = !keyRow && GfxRowOff(r, &why);
-    int kk = keyRow ? GameKeyIndex(r.key) : -1, v = keyRow ? 0 : GfxGet(r.key), k = 0;
-    bool cap = kk >= 0 && g_keyCapture == kk;
-    std::wstring keyText = cap ? std::wstring(T(L"… appuie", L"… press")) : kk >= 0 ? GameKeyLabel(GameKeyGet(kk)) : std::wstring(L"?");
-    std::vector<std::wstring> labs;
-    float wid = 44;
-    bool seg = false;
+    bool hot = g_uiHot == id || g_uiHot == id + 1 || g_uiHot == id + 2 || (g_uiHot >= UI_SETV + idx * 10 && g_uiHot < UI_SETV + idx * 10 + 10);
+    if (hot && !p.slider) SetRowHover(g, row);
     const wchar_t *il = r.impact >= 3 ? T(L"lourd", L"heavy") : T(L"moyen", L"medium");
-    float pw = r.impact >= 2 ? PillW(il, 9.5f) + 10 : 0;
-    if (keyRow) wid = max(44.0f, MeasureW(MeasureG(), keyText, 12.5f, FontStyleBold) + 24);
-    else if (off) wid = 150;
-    else if (!r.vals.empty()) {
-        for (int i = 0; i < (int)r.vals.size(); i++) { labs.push_back(T(r.lf[i], r.le[i])); if (r.vals[i] == v) k = i; }
-        float sw = SetSegW(labs, 12), lw = MeasureW(MeasureG(), lab, 13.5f, FontStyleBold) + pw;
-        if (labs.size() <= 5 && sw <= row.Width - lw - 16) { seg = true; wid = sw; } else wid = 172;
-    }
-    float labW = SetRowLabel(g, row, lab, desc, row.Width - wid - 12);
-    if (pw > 0 && labW + pw < row.Width - wid - 12) {   // impact sur les images : pastille apres le nom
+    float pw = r.impact >= 2 && !p.keyRow ? PillW(il, 9.5f) + 10 : 0;
+    float maxW = SetLabelMaxW(p.lab, row.Width, p.wid), labW = SetRowLabel(g, row, p.lab, p.desc, maxW);
+    bool stacked = SetStacked(p.lab, row.Width, p.wid);
+    if (pw > 0 && labW + pw < maxW && !SetLabelWraps(p.lab, maxW)) {   // impact sur les images : pastille apres le nom
         Color ic = r.impact >= 3 ? kRed : kWarn;
-        Pill(g, RectF(row.X + labW + 10, row.Y + (desc.empty() ? (row.Height - 18) / 2 : 5), pw - 10, 18), WithA(ic, 0.16f), il, ic, 9.5f);
+        Pill(g, RectF(row.X + labW + 10, row.Y + (p.desc.empty() && !stacked ? (row.Height - 18) / 2 : 5), pw - 10, 18), WithA(ic, 0.16f), il, ic, 9.5f);
     }
-    float cx = row.X + row.Width - wid, cy = row.Y + row.Height / 2;
-    if (keyRow) { SetKeyCap(g, RectF(cx, cy - 15, wid, 30), keyText, cap, hot); HotZone(row, id); return; }
-    if (off) {
-        RectF val(cx, cy - 13, wid, 26);
-        GraphicsPath vp; RoundRect(vp, val, 9);
+    RectF ctl = SetCtlRect(row, p.lab, p.wid, p.toggle ? 24 : p.off ? 26 : 30);
+    float cx = ctl.X, cy = ctl.Y + ctl.Height / 2;
+    if (p.keyRow) { SetKeyCap(g, ctl, p.keyText, p.cap, hot); HotZone(row, id); return; }
+    if (p.off) {
+        GraphicsPath vp; RoundRect(vp, ctl, 9);
         SolidBrush vb(WithA(TH(btn2), 0.5f)); g.FillPath(&vb, &vp);
-        Text(g, why, val, 11.5f, FontStyleItalic, kGrey);
+        Text(g, p.why, ctl, 11.5f, FontStyleItalic, kGrey);
         return;
     }
-    if (r.vals.empty()) { UiToggle(g, RectF(cx, cy - 12, 44, 24), v == 1, hot); HotZone(row, id); return; }
-    if (seg) { SetSeg(g, RectF(cx, cy - 15, wid, 30), labs, k, UI_SETV + idx * 8, 12); return; }
-    RectF val(cx, cy - 15, wid, 30), lft(val.X, val.Y, 30, val.Height), rgt(val.X + val.Width - 30, val.Y, 30, val.Height);
+    if (p.toggle) { UiToggle(g, ctl, GfxGet(r.key) == 1, hot); HotZone(row, id); return; }
+    if (p.slider) { SetSlider(g, ctl, (int)r.vals.size(), p.k, UI_SET_FOV, T(r.lf[p.k], r.le[p.k])); return; }
+    if (p.seg) { SetSeg(g, ctl, p.labs, p.k, UI_SETV + idx * 10, 12); return; }
+    RectF val(cx, cy - 15, p.wid, 30), lft(val.X, val.Y, 30, val.Height), rgt(val.X + val.Width - 30, val.Y, 30, val.Height);
     GraphicsPath vp; RoundRect(vp, val, 10);
     SolidBrush vb(TH(btn2)); g.FillPath(&vb, &vp);
     Pen vpen(TH(fieldBorder), 1.0f); g.DrawPath(&vpen, &vp);
-    bool canL = k > 0, canR = k + 1 < (int)r.vals.size();
+    bool canL = p.k > 0, canR = p.k + 1 < (int)r.vals.size();
     Icon(g, IC_CHEVL, lft.X + 15, lft.Y + lft.Height / 2, 14, WithA(g_uiHot == id + 1 ? kAcc : kInk, canL ? 1.0f : 0.25f), 2.2f);
     Icon(g, IC_CHEVR, rgt.X + 15, rgt.Y + rgt.Height / 2, 14, WithA(g_uiHot == id + 2 ? kAcc : kInk, canR ? 1.0f : 0.25f), 2.2f);
-    Text(g, labs[k], RectF(lft.X + lft.Width, val.Y, val.Width - 60, val.Height), 12.5f, FontStyleBold, r.vals[k] == -1 ? kGrey : kInk);
+    Text(g, T(r.lf[p.k], r.le[p.k]), RectF(lft.X + lft.Width, val.Y, val.Width - 60, val.Height), 12.5f, FontStyleBold, r.vals[p.k] == -1 ? kGrey : kInk);
     HotZone(row, UI_NONE);
     if (canL) HotZone(lft, id + 1);
     if (canR) HotZone(rgt, id + 2);
 }
-// Une option du lanceur (g_opts) : port (- / +), interrupteur, ou bouton vers la page (tenue, voiture, contenu, guide).
+// Une option du lanceur (g_opts) : port (pastilles 7870..7875), interrupteur, ou bouton vers la page (contenu, guide).
+static float SetOptW(const SetItem &it, std::wstring &bt, int &id, std::wstring &desc)
+{
+    const Opt *o = OptByKey(it.key);
+    if (!o) return 44;
+    bool button = o->kind == O_ACTION;
+    id = -1;
+    if (!strcmp(it.key, "Port")) { std::vector<std::wstring> l; for (int v : o->vals) l.push_back(std::to_wstring(v)); return SetSegW(l, 12); }
+    if (button) {
+        id = !strcmp(it.key, "ContenuEnvoye") ? UI_SET_CONTENT : !strcmp(it.key, "Apparence") ? UI_SET_SKIN : !strcmp(it.key, "CouleurVoiture") ? UI_SET_CAR : UI_SET_GUIDE;
+        bt = id == UI_SET_GUIDE ? T(L"Revoir", L"See again") : T(L"Choisir", L"Choose");
+        if (id == UI_SET_CONTENT) desc = ContentSummary();
+        else if (id == UI_SET_SKIN) desc = TLab(o->labFr, o->labEn, (size_t)OptGet(*o));
+        else if (id == UI_SET_CAR) desc = CarColorName();
+        return SetButtonW(bt);
+    }
+    id = !strcmp(it.key, "FermerLanceur") ? UI_SET_CLOSE : !strcmp(it.key, "LancerSteam") ? UI_SET_STEAMRUN : UI_SET_MODSAUTO;
+    return 44;
+}
+static float SetOptH(const SetItem &it, float w)
+{
+    const Opt *o = OptByKey(it.key);
+    if (!o) return SetRowDH();
+    std::wstring bt, desc = it.dFr ? T(it.dFr, it.dEn) : L""; int id;
+    float wid = SetOptW(it, bt, id, desc);
+    return SetCtlRowH(it.fr ? T(it.fr, it.en) : T(o->fr, o->en), desc.empty() ? std::wstring(L" ") : desc, w, wid);   // (toujours la hauteur avec explication : l'ancienne page)
+}
 static void SetOptRow(Graphics &g, const SetItem &it, RectF row)
 {
     const Opt *o = OptByKey(it.key);
     if (!o) return;
     std::wstring lab = it.fr ? T(it.fr, it.en) : T(o->fr, o->en), desc = it.dFr ? T(it.dFr, it.dEn) : L"", bt;
-    bool port = !strcmp(it.key, "Port"), button = o->kind == O_ACTION;
     int id = -1;
-    float wid = 44;
-    if (port) wid = 136;
-    else if (button) {
-        id = !strcmp(it.key, "ContenuEnvoye") ? UI_SET_CONTENT : !strcmp(it.key, "Apparence") ? UI_SET_SKIN : !strcmp(it.key, "CouleurVoiture") ? UI_SET_CAR : UI_SET_GUIDE;
-        bt = id == UI_SET_GUIDE ? T(L"Revoir", L"See again") : T(L"Choisir", L"Choose");
-        wid = SetButtonW(bt);
-        if (id == UI_SET_CONTENT) desc = ContentSummary();
-        else if (id == UI_SET_SKIN) desc = TLab(o->labFr, o->labEn, (size_t)OptGet(*o));
-        else if (id == UI_SET_CAR) desc = CarColorName();
-    } else id = !strcmp(it.key, "FermerLanceur") ? UI_SET_CLOSE : UI_SET_MODSAUTO;
-    bool hot = port ? g_uiHot == UI_SET_PORTM || g_uiHot == UI_SET_PORTP : g_uiHot == id;
-    if (hot && !button) SetRowHover(g, row);
-    SetRowLabel(g, row, lab, desc, row.Width - wid - 12);
-    float cx = row.X + row.Width - wid, cy = row.Y + row.Height / 2;
+    float wid = SetOptW(it, bt, id, desc);
+    bool port = !strcmp(it.key, "Port"), button = o->kind == O_ACTION;
+    bool hot = !port && !button && g_uiHot == id;
+    if (hot) SetRowHover(g, row);
+    SetRowLabel(g, row, lab, desc, SetLabelMaxW(lab, row.Width, wid));
     if (port) {
-        RectF m(cx, cy - 15, 30, 30), p(cx + wid - 30, cy - 15, 30, 30);
-        for (int k = 0; k < 2; k++) {
-            RectF r = k ? p : m; int bid = k ? UI_SET_PORTP : UI_SET_PORTM;
-            GraphicsPath bp; RoundRect(bp, r, 9);
-            SolidBrush b(g_uiHot == bid ? TH(cardSel) : TH(btn2)); g.FillPath(&b, &bp);
-            Pen pen(TH(fieldBorder), 1.0f); g.DrawPath(&pen, &bp);
-            Icon(g, k ? IC_PLUS : IC_MIN, r.X + 15, r.Y + 15, 14, kInk, 2.2f);
-            HotZone(r, bid);
-        }
-        Text(g, std::to_wstring(OptGet(*o)), RectF(m.X + m.Width, row.Y, p.X - m.X - m.Width, row.Height), 13.5f, FontStyleBold, kInk);
+        std::vector<std::wstring> l; int sel = 0, cur = OptGet(*o);
+        for (int i = 0; i < (int)o->vals.size(); i++) { l.push_back(std::to_wstring(o->vals[i])); if (o->vals[i] == cur) sel = i; }
+        SetSeg(g, SetCtlRect(row, lab, wid, 30), l, sel, UI_SET_PORTSEG, 12);
         return;
     }
-    if (button) { UiButton(g, RectF(cx, cy - 16, wid, 32), bt, id, false); return; }
-    UiToggle(g, RectF(cx, cy - 12, 44, 24), OptGet(*o) != 0, hot);
+    if (button) { UiButton(g, SetCtlRect(row, lab, wid, 32), bt, id, false); return; }
+    UiToggle(g, SetCtlRect(row, lab, 44, 24), OptGet(*o) != 0, hot);
     HotZone(row, id);
 }
 // Interrupteur de ligne a part (cle du lanceur).
@@ -750,21 +946,24 @@ static void SetToggleRow(Graphics &g, const SetItem &it, RectF row, bool on, int
 {
     bool hot = g_uiHot == id;
     if (hot) SetRowHover(g, row);
-    SetRowLabel(g, row, T(it.fr, it.en), it.dFr ? T(it.dFr, it.dEn) : L"", row.Width - 56);
-    UiToggle(g, RectF(row.X + row.Width - 44, row.Y + row.Height / 2 - 12, 44, 24), on, hot);
+    std::wstring lab = T(it.fr, it.en);
+    SetRowLabel(g, row, lab, it.dFr ? T(it.dFr, it.dEn) : L"", SetLabelMaxW(lab, row.Width, 44));
+    UiToggle(g, SetCtlRect(row, lab, 44, 24), on, hot);
     HotZone(row, id);
 }
 static void SetSegRow(Graphics &g, const SetItem &it, RectF row, const std::vector<std::wstring> &labs, int sel, int id0, bool enabled = true)
 {
     float sw = SetSegW(labs, 12);
-    SetRowLabel(g, row, T(it.fr, it.en), it.dFr ? T(it.dFr, it.dEn) : L"", row.Width - sw - 12, enabled ? 1.0f : 0.55f);
-    SetSeg(g, RectF(row.X + row.Width - sw, row.Y + row.Height / 2 - 15, sw, 30), labs, sel, id0, 12, enabled);
+    std::wstring lab = T(it.fr, it.en);
+    SetRowLabel(g, row, lab, it.dFr ? T(it.dFr, it.dEn) : L"", SetLabelMaxW(lab, row.Width, sw), enabled ? 1.0f : 0.55f);
+    SetSeg(g, SetCtlRect(row, lab, sw, 30), labs, sel, id0, 12, enabled);
 }
 static void SetButtonRow(Graphics &g, const SetItem &it, RectF row, const std::wstring &bt, int id, bool primary = false, bool enabled = true)
 {
     float bw = SetButtonW(bt);
-    SetRowLabel(g, row, T(it.fr, it.en), it.dFr ? T(it.dFr, it.dEn) : L"", row.Width - bw - 12);
-    UiButton(g, RectF(row.X + row.Width - bw, row.Y + row.Height / 2 - 16, bw, 32), bt, id, primary, -1, enabled);
+    std::wstring lab = T(it.fr, it.en);
+    SetRowLabel(g, row, lab, it.dFr ? T(it.dFr, it.dEn) : L"", SetLabelMaxW(lab, row.Width, bw));
+    UiButton(g, SetCtlRect(row, lab, bw, 32), bt, id, primary, -1, enabled);
 }
 // Ciel d'un apercu de theme : degrade, deux voiles d'aurore (degrades radiaux), une petite carte et une barre d'accent.
 static void SetThemePreview(Graphics &g, RectF r, Color sky0, Color sky1, Color aur0, Color aur1, Color card, Color cardBorder, Color accent)
@@ -806,34 +1005,82 @@ static int SetChipLines(float w)
     }
     return lines;
 }
-// Une ligne de carte ; renvoie sa hauteur (dessinee seulement si elle croise la zone visible ; zones cliquables
-// retirees si elle n'est pas entierement visible).
-static float SetItemH(const SetItem &it)
+// Pied de carte : legende grise a gauche, boutons a droite (dFr : D Par defaut, E Enregistrer, G guide de l'hote, T test).
+static std::wstring SetFooterCaption(const SetItem &it)
 {
-    if (it.kind == SI_SEC) return kSetSecH;
-    if (it.kind == SI_GFX || it.kind == SI_OPT) return it.dFr || it.kind == SI_OPT ? kSetRowDH : kSetRowH;
+    if (!it.fr) return L"";
+    if (!wcscmp(it.fr, L"build")) { wchar_t b[96]; swprintf_s(b, T(L"MWCoop.exe · build du %hs", L"MWCoop.exe · build of %hs"), __DATE__); return b; }
+    if (it.dFr && wcschr(it.dFr, L'T') && !g_netTest.empty()) return g_netTest;   // (resultat du test de connexion)
+    return T(it.fr, it.en);
+}
+static void SetFooter(Graphics &g, const SetItem &it, RectF row)
+{
+    const wchar_t *codes = it.dFr ? it.dFr : L"";
+    float x = row.X, right = row.X + row.Width, cy = row.Y + row.Height / 2;
+    std::wstring cap = SetFooterCaption(it);
+    if (wcschr(codes, L'G')) { std::wstring s = T(L"Revoir le guide de l'hôte", L"See the host guide again"); float w = SetButtonW(s); UiButton(g, RectF(x, cy - 16, w, 32), s, UI_SET_HOSTGUIDE, false, IC_BOOK); x += w + 10; }
+    if (wcschr(codes, L'T')) { std::wstring s = T(L"Tester ma connexion", L"Test my connection"); float w = SetButtonW(s) + 24; UiButton(g, RectF(x, cy - 16, w, 32), s, UI_SET_NETTEST, false, IC_WIFI); x += w + 10; }
+    if (wcschr(codes, L'E')) { std::wstring s = T(L"Enregistrer", L"Save"); float w = SetButtonW(s); UiButton(g, RectF(right - w, cy - 16, w, 32), s, UI_SET_SAVE, true); right -= w + 8; }
+    if (wcschr(codes, L'D')) { std::wstring s = T(L"Par défaut", L"Default"); float w = SetButtonW(s); UiButton(g, RectF(right - w, cy - 16, w, 32), s, UI_SET_DEFAULT, false); right -= w + 8; }
+    if (!cap.empty() && right - x > 40) {
+        Color cc = (it.dFr && wcschr(it.dFr, L'T') && !g_netTest.empty()) ? (g_netTestKind == K_ERR ? kRed : g_netTestKind == K_WARN ? kWarn : kOk) : kGrey;
+        Text(g, cap, RectF(x, row.Y, right - x - 6, row.Height), 11.5f, FontStyleRegular, cc, StringAlignmentNear);
+    }
+}
+// Une ligne de carte : sa hauteur pour une largeur (dessinee seulement si elle croise la zone visible ; zones cliquables
+// retirees si elle n'est pas entierement visible).
+static float SetItemH(const SetItem &it, float w)
+{
+    if (it.kind == SI_SEC) return SetSecH();
+    if (it.kind == SI_GFX) { int idx = SetGfxIdx(it.key); return idx >= 0 ? SetGfxPlan(it, idx, w).h : SetRowH(); }
+    if (it.kind == SI_OPT) return SetOptH(it, w);
     const char *k = it.key;
     if (!strcmp(k, "presets")) return 72;
-    if (!strcmp(k, "rtsummary")) return 108;
+    if (!strcmp(k, "rtbox")) return 70;
+    if (!strcmp(k, "footer")) return 48;
     if (!strcmp(k, "voicehelp")) return 150;
     if (!strcmp(k, "ajoutchips")) return 8 + 32.0f * SetChipLines(0);
-    if (!strcmp(k, "themes")) return 150;
+    if (!strcmp(k, "themes")) return 166;
     if (!strcmp(k, "apercu")) return 256;
     if (!strcmp(k, "lang")) return 72;
-    if (!strcmp(k, "update")) return 68;
-    if (!strcmp(k, "folder")) return 76;
+    if (!strcmp(k, "folder")) return 52;
     if (!strcmp(k, "about")) return 48;
+    if (!strcmp(k, "update") || !strcmp(k, "notes")) return SetRowDH();
     if (!strcmp(k, "buy")) return 50;
-    return it.dFr ? kSetRowDH : kSetRowH;
+    if (!strcmp(k, "accent")) return SetCtlRowH(T(it.fr, it.en), T(it.dFr, it.dEn), w, 5 * 30 + 4 * 8);
+    if (!strcmp(k, "texte")) return SetCtlRowH(T(it.fr, it.en), L"", w, kSetSliderW);
+    if (!strcmp(k, "aurore") || !strcmp(k, "densite") || !strcmp(k, "max") || !strcmp(k, "prive") || !strcmp(k, "net") || !strcmp(k, "canal") || !strcmp(k, "sessions") || !strcmp(k, "start") || !strcmp(k, "ajouts")) {
+        std::vector<std::wstring> labs;
+        if (!strcmp(k, "aurore")) labs = { T(L"Off", L"Off"), T(L"Calme", L"Calm"), T(L"Vivant", L"Lively") };
+        else if (!strcmp(k, "densite")) labs = { T(L"Aérée", L"Airy"), T(L"Normale", L"Normal"), T(L"Compacte", L"Compact") };
+        else if (!strcmp(k, "max")) labs = { L"4", L"8", L"12", L"16" };
+        else if (!strcmp(k, "prive")) labs = { T(L"Public", L"Public"), T(L"Privé", L"Private") };
+        else if (!strcmp(k, "net")) labs = { L"Steam", L"IP / VPN" };
+        else if (!strcmp(k, "canal")) labs = { L"Legacy", L"Reworked" };
+        else if (!strcmp(k, "sessions")) labs = { L"3", L"10", L"30" };
+        else if (!strcmp(k, "start")) labs = { T(L"Copie", L"Copy"), T(L"Dossier du jeu", L"Game folder"), L"Steam" };
+        else labs = { T(L"Tous", L"All"), T(L"Choisir", L"Choose"), T(L"Aucun", L"None") };
+        return SetCtlRowH(T(it.fr, it.en), it.dFr ? T(it.dFr, it.dEn) : L"", w, SetSegW(labs, 12));
+    }
+    if (it.fr) {   // interrupteur (44) ou bouton de ligne : nom sur deux lignes ou commande dessous si besoin
+        float wid = 44;
+        if (!strcmp(k, "steamline")) wid = SetButtonW(T(L"Voir la ligne", L"Show the line"));
+        else if (!strcmp(k, "repair")) wid = SetButtonW(T(L"Réparer", L"Repair"));
+        else if (!strcmp(k, "api")) wid = SetButtonW(T(L"Ouvrir", L"Open"));
+        else if (!strcmp(k, "github")) wid = SetButtonW(L"GitHub");
+        else if (!strcmp(k, "logs")) wid = SetButtonW(T(L"Ouvrir le dossier", L"Open the folder")) + SetButtonW(T(L"Faire le zip", L"Make the zip")) + 8;
+        return SetCtlRowH(T(it.fr, it.en), it.dFr ? T(it.dFr, it.dEn) : L"", w, wid);
+    }
+    return it.dFr ? SetRowDH() : SetRowH();
 }
 static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float w)
 {
-    float h = SetItemH(it);
+    float h = SetItemH(it, w);
     RectF row(x, y, w, h);
     if (!SetDrawn(row)) return h;
     size_t nz = g_zones.size();
-    if (it.kind == SI_SEC) Text(g, T(it.fr, it.en), RectF(x, y + 6, w, 18), 10.5f, FontStyleBold, kAcc, StringAlignmentNear);
-    else if (it.kind == SI_GFX) { int idx = SetGfxIdx(it.key); if (idx >= 0) SetGfxRow(g, it, idx, row); }
+    if (it.kind == SI_SEC) Text(g, T(it.fr, it.en), RectF(x, y + h - 20, w, 18), 10.5f, FontStyleBold, kAcc, StringAlignmentNear);
+    else if (it.kind == SI_GFX) { int idx = SetGfxIdx(it.key); if (idx >= 0) SetGfxRow(g, it, idx, row, SetGfxPlan(it, idx, w)); }
     else if (it.kind == SI_OPT) SetOptRow(g, it, row);
     else {
         const char *k = it.key;
@@ -852,26 +1099,36 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
                 Text(g, perso ? T(L"mes choix", L"my choices") : T(ps[i].dFr, ps[i].dEn), RectF(r.X + 2, r.Y + 31, r.Width - 4, 18), 10, FontStyleRegular, kGrey);
                 if (!perso) HotZone(r, UI_GFX_PRESET + i);
             }
-        } else if (!strcmp(k, "rtsummary")) {   // resume du ray tracing, lien vers l'onglet Image
+        } else if (!strcmp(k, "rtbox")) {   // encart ray tracing (maquette Jeu) : icone, titre + jeton, resume, interrupteur
             bool dxr = GfxDxr(), rt = dxr && GfxGet("RayTracing") == 1;
-            RectF ib(x, y + 6, 38, 38);
+            RectF box(x, y + 6, w, 58);
+            GraphicsPath p; RoundRect(p, box, 12);
+            Color violet(255, 160, 110, 255);
+            SolidBrush fb(WithA(violet, 0.10f)); g.FillPath(&fb, &p);
+            Pen pen(WithA(violet, 0.4f), 1.0f); g.DrawPath(&pen, &p);
+            RectF ib(box.X + 12, box.Y + 10, 38, 38);
             GraphicsPath ip; RoundRect(ip, ib, 11);
-            SolidBrush ibb(WithA(kAcc, 0.18f)); g.FillPath(&ibb, &ip);
-            Icon(g, IC_SPARK, ib.X + 19, ib.Y + 19, 20, kAcc, 2.0f);
+            SolidBrush ibb(WithA(violet, 0.25f)); g.FillPath(&ibb, &ip);
+            Icon(g, IC_SPARK, ib.X + 19, ib.Y + 19, 20, Color(255, 215, 196, 255), 2.0f);
             const wchar_t *tt = L"Ray tracing";
-            float tw = MeasureW(MeasureG(), tt, 14, FontStyleBold);
-            Text(g, tt, RectF(x + 50, y + 4, tw + 4, 22), 14, FontStyleBold, kInk, StringAlignmentNear);
-            std::wstring chip = dxr ? (rt ? T(L"Activé", L"On") : T(L"Coupé", L"Off")) : T(L"Carte non compatible", L"GPU not supported");
+            float tw = MeasureW(MeasureG(), tt, 13.5f, FontStyleBold), tx = box.X + 62;
+            Text(g, tt, RectF(tx, box.Y + 8, tw + 4, 20), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
+            std::wstring chip = dxr ? (rt ? T(L"Activé", L"On") : T(L"GPU récent", L"Recent GPU")) : T(L"Carte non compatible", L"GPU not supported");
             Color cc = dxr ? (rt ? kOk : kGrey) : kWarn;
-            Pill(g, RectF(x + 58 + tw, y + 6, PillW(chip, 10) + 2, 20), WithA(cc, 0.18f), chip, cc, 10);
+            Pill(g, RectF(tx + tw + 8, box.Y + 9, PillW(chip, 10) + 2, 20), WithA(cc, 0.18f), chip, cc, 10);
             std::wstring l2;
             if (rt) {
-                wchar_t b[160];
+                wchar_t b[200];
                 swprintf_s(b, T(L"%d rayons/pixel · portée %d m · %d lampes · reflets, rebond, occlusion", L"%d rays/pixel · %d m range · %d lamps · reflections, bounce, occlusion"), GfxGet("RTRayons"), GfxGet("RTPortee"), GfxGet("RTLampes"));
                 l2 = b;
-            } else l2 = T(L"Ombres du soleil et des lampes, reflets, rebond de lumière, occlusion", L"Sun and lamp shadows, reflections, light bounce, occlusion");
-            Text(g, l2, RectF(x + 50, y + 26, w - 50, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            UiButton(g, RectF(x, y + 60, w, 36), T(L"Tout l'onglet Image & ray tracing", L"The whole Image & ray tracing tab"), UI_SET_GOIMAGE, false, IC_CHEVR);
+            } else l2 = T(it.dFr, it.dEn);
+            Text(g, l2, RectF(tx, box.Y + 30, box.Width - (tx - box.X) - 70, 18), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            bool hot = g_uiHot == UI_SET_RTTOGGLE;
+            if (dxr) { UiToggle(g, RectF(box.X + box.Width - 58, box.Y + 17, 44, 24), rt, hot); HotZone(box, UI_SET_RTTOGGLE); }
+        } else if (!strcmp(k, "footer")) SetFooter(g, it, row);
+        else if (!strcmp(k, "f10")) {   // touche du jeu lui-meme : montree, pas modifiable
+            SetRowLabel(g, row, T(it.fr, it.en), T(it.dFr, it.dEn), w - 56);
+            SetKeyCap(g, RectF(x + w - 44, cy - 15, 44, 30), L"F10", false, false, true);
         } else if (!strcmp(k, "voicehelp")) {
             Para(g, T(L"Le vocal est de proximité : on t'entend jusqu'à la portée choisie, de moins en moins fort en s'éloignant, comme en vrai. Le micro et les haut-parleurs sont ceux de Windows (périphériques par défaut).\n\nLa touche pour parler (tenue) est dans l'onglet Touches. Le volume des voix ne change que ce que tu entends ; ton micro, ce que les autres entendent de toi.",
                       L"Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nThe push-to-talk key is in the Keys tab. Voice volume only changes what you hear; your microphone, what the others hear from you."),
@@ -907,61 +1164,66 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             SetSegRow(g, it, row, { T(L"Public", L"Public"), T(L"Privé", L"Private") }, prive ? 1 : 0, UI_SET_PRIV);
         } else if (!strcmp(k, "net")) SetSegRow(g, it, row, { L"Steam", L"IP / VPN" }, g_steamNet ? 0 : 1, UI_SET_STEAM, g_lobby == LB_NONE);
         else if (!strcmp(k, "steamline")) SetButtonRow(g, it, row, T(L"Voir la ligne", L"Show the line"), UI_SET_STEAMLINE);
-        else if (!strcmp(k, "dronekb")) SetSegRow(g, it, row, { L"ZQSD", L"WASD", T(L"Flèches", L"Arrows") }, DroneLayoutGet(), UI_SET_DRONEKB);
-        else if (!strcmp(k, "themes")) {   // quatre tuiles : Nuit boreale (sombre), Plein jour (clair), deux a venir
+        else if (!strcmp(k, "themes")) {   // quatre tuiles : Nuit boreale, Plein jour, Aurore verte, Garage
             static const wchar_t *nf[] = { L"Nuit boréale", L"Plein jour", L"Aurore verte", L"Garage" }, *ne[] = { L"Northern night", L"Daylight", L"Green aurora", L"Garage" };
-            static const wchar_t *sf[] = { L"Aurore et neige", L"Clair, neige au soleil", L"Accent menthe", L"Bois et ambre" };
-            static const wchar_t *se[] = { L"Aurora and snow", L"Light, snow in the sun", L"Mint accent", L"Wood and amber" };
+            static const wchar_t *sf[] = { L"Aurore et neige", L"Clair, neige au soleil", L"Contraste fort, accent menthe", L"Bois, ambre, lampe à huile" };
+            static const wchar_t *se[] = { L"Aurora and snow", L"Light, snow in the sun", L"Strong contrast, mint accent", L"Wood, amber, oil lamp" };
             float tw = (w - 30) / 4;
             for (int i = 0; i < 4; i++) {
-                RectF r(x + i * (tw + 10), y + 4, tw, 142);
-                bool soon = i >= 2, sel = !soon && (i == 0) == g_dark, hot = !soon && g_uiHot == UI_SET_THEMECARD + i;
+                RectF r(x + i * (tw + 10), y + 4, tw, 158);
+                bool sel = i == g_theme, hot = g_uiHot == UI_SET_THEMECARD + i;
                 GraphicsPath p; RoundRect(p, r, 14);
                 SolidBrush fb(sel ? WithA(kAcc, 0.12f) : hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&fb, &p);
                 Pen pen(sel ? kAcc : TH(fieldBorder), sel ? 2.0f : 1.0f); g.DrawPath(&pen, &p);
                 RectF pv(r.X + 8, r.Y + 8, r.Width - 16, 70);
-                float a = soon ? 0.45f : 1.0f;
                 if (i == 0) SetThemePreview(g, pv, Color(255, 10, 21, 48), Color(255, 22, 48, 95), Color(115, 72, 240, 176), Color(100, 160, 110, 255), Color(26, 255, 255, 255), Color(50, 255, 255, 255), kDark.accent);
                 else if (i == 1) SetThemePreview(g, pv, Color(255, 223, 240, 255), Color(255, 247, 251, 255), Color(140, 120, 200, 255), Color(0, 0, 0, 0), Color(205, 255, 255, 255), Color(40, 20, 50, 90), kLight.accent);
-                else if (i == 2) SetThemePreview(g, pv, Color(255, 7, 18, 28), Color(255, 12, 34, 50), Color(150, 72, 240, 176), Color(0, 0, 0, 0), Color(20, 255, 255, 255), Color(75, 124, 232, 168), Color(255, 124, 232, 198));
-                else SetThemePreview(g, pv, Color(255, 26, 20, 16), Color(255, 42, 30, 20), Color(115, 255, 180, 84), Color(0, 0, 0, 0), Color(20, 255, 255, 255), Color(75, 255, 200, 120), Color(255, 255, 180, 84));
-                Text(g, T(nf[i], ne[i]), RectF(r.X + 8, r.Y + 84, r.Width - 16, 20), 13, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
-                Text(g, T(sf[i], se[i]), RectF(r.X + 8, r.Y + 104, r.Width - 16, 32), 10.5f, FontStyleRegular, WithA(kGrey, a), StringAlignmentNear);
-                if (soon) { std::wstring s = T(L"Bientôt", L"Soon"); float pw = PillW(s, 9.5f); Pill(g, RectF(r.X + r.Width - pw - 12, r.Y + 12, pw, 18), WithA(kWarn, 0.9f), s, Color(255, 20, 16, 8), 9.5f); }
-                else HotZone(r, UI_SET_THEMECARD + i);
+                else if (i == 2) SetThemePreview(g, pv, Color(255, 7, 18, 28), Color(255, 12, 34, 50), Color(150, 72, 240, 176), Color(0, 0, 0, 0), Color(20, 255, 255, 255), Color(75, 124, 232, 168), kAurore.accent);
+                else SetThemePreview(g, pv, Color(255, 26, 20, 16), Color(255, 42, 30, 20), Color(115, 255, 180, 84), Color(0, 0, 0, 0), Color(20, 255, 255, 255), Color(75, 255, 200, 120), kGarage.accent);
+                Text(g, T(nf[i], ne[i]), RectF(r.X + 8, r.Y + 84, r.Width - 16, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+                std::wstring sub = sel ? std::wstring(T(L"Thème actuel · ", L"Current theme · ")) + T(sf[i], se[i]) : std::wstring(T(sf[i], se[i]));
+                Para(g, sub, RectF(r.X + 8, r.Y + 104, r.Width - 16, 48), 10.5f, kGrey);
+                HotZone(r, UI_SET_THEMECARD + i);
             }
         } else if (!strcmp(k, "accent")) {   // cinq pastilles de couleur
             float sw = 5 * 30 + 4 * 8;
-            SetRowLabel(g, row, T(it.fr, it.en), T(it.dFr, it.dEn), w - sw - 12);
+            std::wstring lab = T(it.fr, it.en);
+            SetRowLabel(g, row, lab, T(it.dFr, it.dEn), SetLabelMaxW(lab, w, sw));
+            RectF ctl = SetCtlRect(row, lab, sw, 30);
             for (int i = 0; i < 5; i++) {
-                RectF r(x + w - sw + i * 38, cy - 15, 30, 30);
+                RectF r(ctl.X + i * 38, ctl.Y, 30, 30);
                 bool sel = i == g_accentSel, hot = g_uiHot == UI_SET_ACCENT + i;
                 GraphicsPath p; RoundRect(p, r, 10);
-                SolidBrush b(g_dark ? kSetAccents[i].dark : kSetAccents[i].light); g.FillPath(&b, &p);
+                Color c = g_dark ? kSetAccents[i].dark : kSetAccents[i].light;
+                if (i == 0 && g_theme == THEME_AURORE) c = kAuroreAccent;   // (pastille d'origine : l'accent propre du theme)
+                if (i == 0 && g_theme == THEME_GARAGE) c = kGarageAccent;
+                SolidBrush b(c); g.FillPath(&b, &p);
                 Pen pen(sel ? kInk : WithA(kInk, hot ? 0.6f : 0.25f), sel ? 2.4f : 1.2f); g.DrawPath(&pen, &p);
                 if (sel) Icon(g, IC_CHECK, r.X + 15, r.Y + 15, 14, g_dark ? Color(255, 6, 19, 37) : Color(255, 255, 255, 255), 2.6f);
                 HotZone(r, UI_SET_ACCENT + i);
             }
         } else if (!strcmp(k, "aurore")) SetSegRow(g, it, row, { T(L"Off", L"Off"), T(L"Calme", L"Calm"), T(L"Vivant", L"Lively") }, g_aurore, UI_SET_AURORE);
-        else if (!strcmp(k, "soon")) {   // a venir : ligne grisee, pastille Bientot
-            std::wstring s = T(L"Bientôt", L"Soon");
-            float pw = PillW(s, 10);
-            SetRowLabel(g, row, T(it.fr, it.en), it.dFr ? T(it.dFr, it.dEn) : L"", w - pw - 12, 0.5f);
-            Pill(g, RectF(x + w - pw, cy - 10, pw, 20), WithA(kWarn, 0.16f), s, WithA(kWarn, 0.8f), 10);
+        else if (!strcmp(k, "verre")) SetToggleRow(g, it, row, g_glass, UI_SET_GLASS);
+        else if (!strcmp(k, "densite")) SetSegRow(g, it, row, { T(L"Aérée", L"Airy"), T(L"Normale", L"Normal"), T(L"Compacte", L"Compact") }, g_densite, UI_SET_DENS);
+        else if (!strcmp(k, "texte")) {   // curseur 80..130 % par pas de 5
+            std::wstring lab = T(it.fr, it.en);
+            SetRowLabel(g, row, lab, L"", SetLabelMaxW(lab, w, kSetSliderW));
+            SetSlider(g, SetCtlRect(row, lab, kSetSliderW, 30), 7, (g_texte - 80) / 5, UI_SET_TEXTE, std::to_wstring(g_texte) + L" %");
         } else if (!strcmp(k, "winfollow")) SetToggleRow(g, it, row, ThemeFollowsWindows(), UI_SET_WINTHEME);
-        else if (!strcmp(k, "apercu")) {   // petit salon aux couleurs du theme ; Par defaut (accent, aurore)
+        else if (!strcmp(k, "apercu")) {   // petit salon aux couleurs du theme ; Par defaut, Appliquer
+            const ScenePal &pal = ScenePalette();
             RectF box(x, y + 4, w, 196);
             GraphicsPath p; RoundRect(p, box, 16);
             GraphicsState st = g.Save();
             g.SetClip(&p, CombineModeIntersect);
-            LinearGradientBrush sky(RectF(box.X, box.Y - 1, box.Width, box.Height + 2), g_dark ? Color(255, 10, 21, 48) : Color(255, 223, 240, 255), g_dark ? Color(255, 22, 48, 95) : Color(255, 247, 251, 255), LinearGradientModeVertical);
+            LinearGradientBrush sky(RectF(box.X, box.Y - 1, box.Width, box.Height + 2), pal.sky[1], pal.sky[3], LinearGradientModeVertical);
             g.FillPath(&sky, &p);
-            Color aurs[2] = { g_dark ? Color(100, 72, 240, 176) : Color(120, 120, 200, 255), g_dark ? Color(90, 160, 110, 255) : Color(0, 0, 0, 0) };
+            Color aurs[2] = { pal.aurA[1], g_dark ? pal.aurB[1] : Color(0, 0, 0, 0) };
             for (int i = 0; i < 2 && g_aurore > 0; i++) {
                 if (!aurs[i].GetA()) continue;
                 GraphicsPath e; e.AddEllipse(box.X + (i ? box.Width * 0.4f : -box.Width * 0.25f), box.Y - 70, box.Width * 0.9f, 150.0f);
                 PathGradientBrush pg(&e);
-                pg.SetCenterColor(WithA(aurs[i], g_aurore == 1 ? 0.5f : 1.0f));
+                pg.SetCenterColor(WithA(aurs[i], (g_aurore == 1 ? 0.5f : 1.0f) * 0.7f));
                 Color edge(0, aurs[i].GetR(), aurs[i].GetG(), aurs[i].GetB()); int one = 1;
                 pg.SetSurroundColors(&edge, &one);
                 g.FillPath(&pg, &e);
@@ -972,7 +1234,7 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             SetChip(g, box.X + box.Width - 14, box.Y + 21, T(L"Privé", L"Private"), kInk);
             RectF cb(box.X + 14, box.Y + 40, box.Width - 28, 52);
             GraphicsPath cp; RoundRect(cp, cb, 12);
-            SolidBrush cbb(TH(card)); g.FillPath(&cbb, &cp);
+            SolidBrush cbb(g_glass ? TH(card) : TH(solid)); g.FillPath(&cbb, &cp);
             Pen cpen(TH(choiceBorder), 1.0f); g.DrawPath(&cpen, &cp);
             Text(g, T(L"CODE DE SESSION", L"SESSION CODE"), RectF(cb.X + 12, cb.Y + 6, 200, 14), 9.5f, FontStyleBold, kAcc, StringAlignmentNear);
             Text(g, L"K 7 P M 3 Q", RectF(cb.X + 12, cb.Y + 20, 200, 28), 19, FontStyleBold, kInk, StringAlignmentNear);
@@ -988,9 +1250,9 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             const wchar_t *cf[] = { L"Prêt", L"Attend", L"Pas prêt" }, *ce[] = { L"Ready", L"Waiting", L"Not ready" };
             Color cc[] = { kOk, kWarn, kGrey };
             for (int i = 0; i < 3; i++) { std::wstring s = T(cf[i], ce[i]); float pw = PillW(s, 10.5f) + 4; Pill(g, RectF(cx2, box.Y + 174, pw, 20), WithA(cc[i], 0.18f), s, cc[i], 10.5f); cx2 += pw + 6; }
-            bool custom = g_accentSel != 0 || g_aurore != 2;
-            UiButton(g, RectF(x, y + 212, 150, 36), T(L"Par défaut", L"Default"), UI_SET_THEMEDEF, false, IC_UNDO, custom);
-            Text(g, T(L"Appliqué tout de suite", L"Applied right away"), RectF(x + 162, y + 212, w - 162, 36), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            float hw = (w - 10) / 2;
+            UiButton(g, RectF(x, y + 212, hw, 36), T(L"Par défaut", L"Default"), UI_SET_THEMEDEF, false, IC_UNDO, !ThemeIsDefault());
+            UiButton(g, RectF(x + hw + 10, y + 212, hw, 36), T(L"Appliquer", L"Apply"), UI_SET_SAVE, true, IC_CHECK);
         } else if (!strcmp(k, "lang")) {   // quatre tuiles : FR EN RU AR
             static const wchar_t *code[] = { L"FR", L"EN", L"RU", L"AR" }, *name[] = { L"Français", L"English", L"Русский", L"العربية" };
             int sel = g_fr ? 0 : g_ru ? 2 : g_ar ? 3 : 1;
@@ -1007,35 +1269,39 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             }
         } else if (!strcmp(k, "update")) {   // etat de la mise a jour : Verifier, ou Mettre a jour
             std::wstring av = UpdAvail();
-            RectF box(x, y + 4, w, 58);
-            GraphicsPath p; RoundRect(p, box, 12);
-            SolidBrush fb(av.empty() ? TH(card) : WithA(kAcc, 0.14f)); g.FillPath(&fb, &p);
-            Pen pen(av.empty() ? TH(choiceBorder) : WithA(kAcc, 0.5f), 1); g.DrawPath(&pen, &p);
             std::wstring l1, l2 = g_localVer.empty() ? std::wstring(T(L"MWCoop n'est pas installé", L"MWCoop is not installed")) : std::wstring(T(L"Tu as la ", L"You have ")) + g_localVer;
             if (!av.empty()) l1 = std::wstring(T(L"Version ", L"Version ")) + av + T(L" disponible", L" available");
             else if (g_busy) l1 = T(L"Recherche ou installation en cours…", L"Checking or installing…");
             else l1 = T(L"MWCoop est à jour", L"MWCoop is up to date");
-            Text(g, l1, RectF(box.X + 14, box.Y + 9, box.Width - 170, 22), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
-            Text(g, l2, RectF(box.X + 14, box.Y + 30, box.Width - 170, 20), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            if (!av.empty()) UiButton(g, RectF(box.X + box.Width - 150, box.Y + 11, 138, 36), T(L"Mettre à jour", L"Update"), UI_NOTE_UPDATE, true, IC_DOWNLOAD, g_lobby == LB_NONE && !g_busy);
-            else UiButton(g, RectF(box.X + box.Width - 150, box.Y + 11, 138, 36), T(L"Vérifier", L"Check"), UI_SET_CHECK, false, -1, !g_busy);
+            std::wstring bt = av.empty() ? T(L"Vérifier", L"Check") : T(L"Mettre à jour", L"Update");
+            float bw = SetButtonW(bt) + (av.empty() ? 0 : 24);
+            SetRowLabel(g, row, l1, l2, w - bw - 12);
+            if (!av.empty()) UiButton(g, RectF(x + w - bw, cy - 16, bw, 32), bt, UI_NOTE_UPDATE, true, IC_DOWNLOAD, g_lobby == LB_NONE && !g_busy);
+            else UiButton(g, RectF(x + w - bw, cy - 16, bw, 32), bt, UI_SET_CHECK, false, -1, !g_busy);
         } else if (!strcmp(k, "canal")) SetSegRow(g, it, row, { L"Legacy", L"Reworked" }, ChannelReworked() ? 1 : 0, UI_SET_CANAL);
         else if (!strcmp(k, "majauto")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0, UI_SET_AUTO);
-        else if (!strcmp(k, "notes")) SetButtonRow(g, it, row, T(L"Lire", L"Read"), UI_SET_NOTES);
-        else if (!strcmp(k, "folder")) {   // dossier du jeu : version trouvee, chemin, Changer
-            bool ok = !g_gameDir.empty();
-            Text(g, T(it.fr, it.en), RectF(x, y + 2, w - 220, 24), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
-            SetChip(g, x + w, y + 14, ok ? L"My Winter Car " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), ok ? kOk : kRed);
-            std::wstring bt = ok ? T(L"Changer", L"Change") : T(L"Choisir l'exe…", L"Choose exe…");
+        else if (!strcmp(k, "nightly")) SetToggleRow(g, it, row, NightlyOn(), UI_SET_NIGHTLY);
+        else if (!strcmp(k, "notes")) {
+            wchar_t seen[32] = L"";
+            GetPrivateProfileStringW(L"Lanceur", L"NotesVues", L"", seen, 32, g_iniLauncher.c_str());
+            std::wstring d = seen[0] ? std::wstring(T(L"Dernière lue : ", L"Last read: ")) + seen : std::wstring(T(it.dFr, it.dEn));
+            std::wstring bt = T(L"Lire", L"Read");
             float bw = SetButtonW(bt);
-            RectF pb(x, y + 32, w - bw - 8, 34);
-            GraphicsPath pp; RoundRect(pp, pb, 10);
+            SetRowLabel(g, row, T(it.fr, it.en), d, w - bw - 12);
+            UiButton(g, RectF(x + w - bw, cy - 16, bw, 32), bt, UI_SET_NOTES, false);
+        } else if (!strcmp(k, "folder")) {   // dossier du jeu : chemin, Changer (la version trouvee : en-tete de la carte)
+            bool ok = !g_gameDir.empty();
+            Text(g, T(it.fr, it.en), RectF(x, y, 200, 16), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            std::wstring bt = ok ? T(L"Changer", L"Change") : T(L"Choisir l'exe…", L"Choose exe…");
+            float bw = SetButtonW(bt) + 24;
+            RectF pb(x, y + 20, w - bw - 8, 30);
+            GraphicsPath pp; RoundRect(pp, pb, 9);
             SolidBrush pbb(TH(field)); g.FillPath(&pbb, &pp);
             Pen ppen(TH(fieldBorder), 1.0f); g.DrawPath(&ppen, &pp);
             StringFormat sf; sf.SetTrimming(StringTrimmingEllipsisPath); sf.SetFormatFlags(StringFormatFlagsNoWrap); sf.SetLineAlignment(StringAlignmentCenter);
             SolidBrush gb(ok ? kInk : kGrey);
             DrawStr(g, ok ? g_gameDir.c_str() : T(L"(montre-lui mywintercar.exe)", L"(show it mywintercar.exe)"), -1, FontOf(L"Consolas", 11.5f, FontStyleRegular), RectF(pb.X + 10, pb.Y, pb.Width - 20, pb.Height), &sf, &gb);
-            UiButton(g, RectF(x + w - bw, y + 33, bw, 32), bt, UI_SET_FOLDER, false, IC_FOLDER);
+            UiButton(g, RectF(x + w - bw, y + 19, bw, 32), bt, UI_SET_FOLDER, false, IC_FOLDER);
         } else if (!strcmp(k, "start")) {
             const Opt *ls = OptByKey("LancerSteam");
             int how = ls && OptGet(*ls) ? 2 : GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) ? 1 : 0;
@@ -1060,9 +1326,11 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             bool ok = !g_gameDir.empty();
             UiButton(g, RectF(x + w - w1 - w2 - 8, cy - 16, w1, 32), b1, UI_SET_LOGDIR, false, IC_FOLDER, ok);
             UiButton(g, RectF(x + w - w2, cy - 16, w2, 32), b2, UI_SET_LOGZIP, true, IC_ZIP, ok);
-        } else if (!strcmp(k, "compat")) { SetToggleRow(g, it, row, CompatAuto(), UI_SET_COMPAT); g_setCompatRow = row; }
+        } else if (!strcmp(k, "sessions")) { int n = LogsSessionsKept(); SetSegRow(g, it, row, { L"3", L"10", L"30" }, n == 3 ? 0 : n == 10 ? 1 : 2, UI_SET_SESS); }
+        else if (!strcmp(k, "compat")) { SetToggleRow(g, it, row, CompatAuto(), UI_SET_COMPAT); g_setCompatRow = row; }
         else if (!strcmp(k, "debug")) SetToggleRow(g, it, row, g_debug, UI_LOG_DEBUG);
         else if (!strcmp(k, "discordask")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"DiscordPropose", 0, g_iniLauncher.c_str()) == 0, UI_SET_DISCORDASK);
+        else if (!strcmp(k, "repair")) SetButtonRow(g, it, row, T(L"Réparer", L"Repair"), UI_SET_REPAIR, false, !g_gameDir.empty() && g_lobby == LB_NONE && !g_busy);
         else if (!strcmp(k, "api")) { SetButtonRow(g, it, row, T(L"Ouvrir", L"Open"), UI_SET_API); g_setApiRow = row; }
         else if (!strcmp(k, "github")) SetButtonRow(g, it, row, L"GitHub", UI_SET_GITHUB);
     }
@@ -1070,20 +1338,58 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
     return h;
 }
 
-// Une carte : titre (et sous-titre), ses lignes (deux sous-colonnes apres SI_BREAK), verre dessous ; renvoie sa hauteur.
+// Element a droite du titre d'une carte (kSetCards::hdr).
+static void SetCardHeader(Graphics &g, const SetCard &c, float right, float y, float w)
+{
+    if (!c.hdr) return;
+    float cy = y + 26;
+    if (!strcmp(c.hdr, "goimage")) {   // lien vers l'onglet Image & ray tracing
+        std::wstring s = T(L"Tout l'onglet Image & ray tracing", L"The whole Image & ray tracing tab");
+        float tw = MeasureW(MeasureG(), s, 12, FontStyleBold) + 22;
+        if (tw > w) { s = T(L"Onglet Image", L"Image tab"); tw = MeasureW(MeasureG(), s, 12, FontStyleBold) + 22; }   // (gros texte : court)
+        RectF r(right - tw, cy - 12, tw, 24);
+        bool hot = g_uiHot == UI_SET_GOIMAGE;
+        Text(g, s, RectF(r.X, r.Y, tw - 18, 24), 12, FontStyleBold, WithA(kAcc, hot ? 1.0f : 0.85f), StringAlignmentNear);
+        Icon(g, IC_CHEVR, right - 9, cy, 14, kAcc, 2.2f);
+        HotZone(r, UI_SET_GOIMAGE);
+    } else if (!strcmp(c.hdr, "hostchip")) SetChip(g, right, cy, T(L"Modifiables dans chaque salon", L"Editable in each lobby"), kInk);
+    else if (!strcmp(c.hdr, "netchip")) {
+        if (g_netTest.empty()) return;
+        int port = 7870;
+        if (const Opt *o = OptByKey("Port")) port = OptGet(*o);
+        wchar_t b[64];
+        if (g_netTestKind == K_OK) swprintf_s(b, T(L"UDP %d ouvert", L"UDP %d open"), port);
+        SetChip(g, right, cy, g_netTestKind == K_OK ? b : g_netTestKind == K_WARN ? T(L"À vérifier", L"To check") : T(L"Port ou pare-feu", L"Port or firewall"), g_netTestKind == K_OK ? kOk : g_netTestKind == K_WARN ? kWarn : kRed);
+    } else if (!strcmp(c.hdr, "dronekb")) {
+        std::vector<std::wstring> l = { L"ZQSD", L"WASD", T(L"Flèches", L"Arrows") };
+        float sw = SetSegW(l, 12);
+        SetSeg(g, RectF(right - sw, cy - 15, sw, 30), l, DroneLayoutGet(), UI_SET_DRONEKB, 12);
+    } else if (!strcmp(c.hdr, "updchip")) {
+        std::wstring av = UpdAvail();
+        std::wstring s = !av.empty() ? av + T(L" disponible", L" available") : g_localVer.empty() ? std::wstring(T(L"non installé", L"not installed")) : g_localVer + T(L" · à jour", L" · up to date");
+        SetChip(g, right, cy, s, !av.empty() ? kAcc : g_localVer.empty() ? kWarn : kOk);
+    } else if (!strcmp(c.hdr, "mwcver")) {
+        bool ok = !g_gameDir.empty();
+        SetChip(g, right, cy, ok ? L"My Winter Car " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), ok ? kOk : kRed);
+    }
+}
+// Une carte : titre (et sous-titre, element d'en-tete), ses lignes (pleine largeur, deux sous-colonnes apres SI_BREAK,
+// pied de carte), verre dessous ; renvoie sa hauteur.
 static float SetDrawCard(Graphics &g, int ci, float x, float y, float w)
 {
     const SetCard &c = kSetCards[ci];
     bool sub = c.sFr != NULL;
     float y0 = y, inner = w - 2 * kSetPad;
     if (SetDrawn(RectF(x, y, w, 50))) {
+        float tw = MeasureW(MeasureG(), T(c.fr, c.en), 16, FontStyleBold);
         Title(g, T(c.fr, c.en), RectF(x + kSetPad, y + 14, inner, 24), 16, kInk);
         if (sub) Text(g, T(c.sFr, c.sEn), RectF(x + kSetPad, y + 38, inner, 16), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        SetCardHeader(g, c, x + w - kSetPad, y, inner - tw - 12);
     }
     y += sub ? 60 : 48;
     bool split = false;
     for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].kind == SI_BREAK) split = true;
-    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].wide) y += SetDrawItem(g, kSetItems[i], x + kSetPad, y, inner);
+    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].wide == 1) y += SetDrawItem(g, kSetItems[i], x + kSetPad, y, inner);
     float cw = split ? (inner - 24) / 2 : inner, cx = x + kSetPad, cy = y, maxY = y;
     for (int i = 0; i < kSetItemN; i++) {
         const SetItem &it = kSetItems[i];
@@ -1092,6 +1398,7 @@ static float SetDrawCard(Graphics &g, int ci, float x, float y, float w)
         cy += SetDrawItem(g, it, cx, cy, cw);
     }
     maxY = max(maxY, cy);
+    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].wide == 2) maxY += SetDrawItem(g, kSetItems[i], x + kSetPad, maxY, inner);
     float h = maxY - y0 + 12;
     float t = max(y0, g_setTop), b = min(y0 + h, g_setBottom);   // (le verre n'est pas clippe : coupe a la zone visible)
     if (b - t > 6) Glass(RectF(x, t, w, b - t));
@@ -1104,8 +1411,8 @@ static bool SetItemLabel(const SetItem &it, std::wstring &lab, std::wstring &des
     if (it.kind == SI_SEC || it.kind == SI_BREAK) return false;
     if (it.kind == SI_GFX) { int idx = SetGfxIdx(it.key); if (idx < 0) return false; const GfxRow &r = GfxRows()[idx]; lab = it.fr ? T(it.fr, it.en) : T(r.fr, r.en); }
     else if (it.kind == SI_OPT) { const Opt *o = OptByKey(it.key); if (!o) return false; lab = it.fr ? T(it.fr, it.en) : T(o->fr, o->en); }
-    else { if (!it.fr) return false; lab = T(it.fr, it.en); }
-    if (it.dFr) desc = T(it.dFr, it.dEn);
+    else { if (!it.fr || !strcmp(it.key, "footer")) return false; lab = T(it.fr, it.en); }
+    if (it.dFr && (it.kind != SI_X || strcmp(it.key, "footer"))) desc = T(it.dFr, it.dEn);
     return true;
 }
 // Resultats de la recherche : une seule carte, les lignes trouvees sous le nom de leur onglet et de leur carte.
@@ -1188,10 +1495,10 @@ static void DrawSettingsPage(Graphics &g)
 static std::wstring SetHeaderSub()
 {
     if (!g_setSearch.empty()) { wchar_t b[96]; swprintf_s(b, T(L"%d réglages trouvés · Échap : effacer", L"%d settings found · Esc: clear"), g_setFound); return b; }
-    static const wchar_t *fr[SET_N] = { L"Pour toutes tes parties · « Jeu » = valeur du jeu", L"Lumière, ombres, ray tracing · en jeu : F10", L"Vocal de proximité : qui t'entend, à quel volume",
-                                        L"Défauts de tes salons · ce qui ne dépend que de toi", L"Touches de MWCoop en jeu · clique, puis appuie", L"Thème, couleur d'accent, aurore et neige", L"Langue, version, dossier du jeu, dépannage" };
-    static const wchar_t *en[SET_N] = { L"For all your games · \"Game\" = the game's value", L"Light, shadows, ray tracing · in game: F10", L"Proximity voice: who hears you, how loud",
-                                        L"Your lobby defaults · what only depends on you", L"MWCoop keys in game · click, then press", L"Theme, accent colour, aurora and snow", L"Language, version, game folder, troubleshooting" };
+    static const wchar_t *fr[SET_N] = { L"Durables, pour toutes tes parties · « Jeu » = la valeur du jeu lui-même", L"Lumière, ombres, ray tracing · en jeu : F10", L"Vocal de proximité : qui t'entend, à quel volume",
+                                        L"Ce que tu proposes en hébergeant, et ce que tu veux chez toi", L"Touches de MWCoop · celles du jeu : dans le jeu (Options > Contrôles)", L"Thème, couleur d'accent, aurore et neige, verre, densité, texte", L"Lanceur : langue, version, dossier du jeu, mises à jour, journaux" };
+    static const wchar_t *en[SET_N] = { L"Lasting, for all your games · \"Game\" = the game's own value", L"Light, shadows, ray tracing · in game: F10", L"Proximity voice: who hears you, how loud",
+                                        L"What you offer when hosting, and what you want on your side", L"MWCoop keys · the game's own: in the game (Options > Controls)", L"Theme, accent colour, aurora and snow, glass, density, text", L"Launcher: language, version, game folder, updates, logs" };
     return T(fr[g_setTab], en[g_setTab]);
 }
 // Champ Chercher de l'en-tete (a droite du titre) ; 'right' recule d'autant.
@@ -1245,6 +1552,45 @@ static void SetCaptureState(const std::wstring &st)
     for (int i = 0; i < SET_N; i++) if (s == names[i]) g_setTab = i;
     SetRail();
     if (s == L"recherche") { g_setSearch = L"ombre"; g_setFocus = true; }
+    if (s == L"coop-test") { g_setTab = SET_COOP; g_netTest = T(L"UDP 7870 libre · TCP 7870 libre · pare-feu ok · Steam connecté", L"UDP 7870 free · TCP 7870 free · firewall ok · Steam connected"); g_netTestKind = K_OK; }
+}
+
+// Par defaut : les lignes de l'onglet courant reviennent a leur valeur d'origine (reglages du jeu : cle retiree ou valeur de
+// la table ; touches : celles du mod ; options du lanceur : leur defaut ; cles [Lanceur] : retirees).
+static void SetTabDefaults(int tab)
+{
+    for (int i = 0; i < kSetItemN; i++) {
+        const SetItem &it = kSetItems[i];
+        if (kSetCards[it.card].tab != tab) continue;
+        if (it.kind == SI_GFX) {
+            int idx = SetGfxIdx(it.key);
+            if (idx < 0) continue;
+            const GfxRow &r = GfxRows()[idx];
+            if (r.sec && !strcmp(r.sec, "Touches")) { int k = GameKeyIndex(r.key); if (k >= 0) WritePrivateProfileStringA("Touches", kGameKeys[k].ini, NULL, ModIniA().c_str()); }
+            else GfxSet(r.key, r.def);
+        } else if (it.kind == SI_OPT) { if (const Opt *o = OptByKey(it.key)) if (o->kind != O_ACTION) OptSet(*o, o->def); }
+        else if (it.kind == SI_X) {
+            const char *k = it.key;
+            if (!strcmp(k, "max")) WritePrivateProfileStringW(L"Lanceur", L"SalonMax", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "prive")) WritePrivateProfileStringW(L"Lanceur", L"SalonPrive", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "accent")) ThemeSetAccent(0);
+            else if (!strcmp(k, "aurore")) ThemeSetAurore(2);
+            else if (!strcmp(k, "verre")) ThemeSetGlass(true);
+            else if (!strcmp(k, "densite")) ThemeSetDensite(1);
+            else if (!strcmp(k, "texte")) ThemeSetTexte(100);
+            else if (!strcmp(k, "winfollow")) ThemeFollowWindows(true);
+            else if (!strcmp(k, "majauto")) WritePrivateProfileStringW(L"Lanceur", L"MajAuto", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "nightly")) WritePrivateProfileStringW(L"Lanceur", L"Nightly", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "sessions")) WritePrivateProfileStringW(L"Lanceur", L"Sessions", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "discordask")) WritePrivateProfileStringW(L"Lanceur", L"DiscordPropose", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "compat")) WritePrivateProfileStringW(L"Lanceur", L"RetirerCompat", NULL, g_iniLauncher.c_str());
+            else if (!strcmp(k, "debug")) { g_debug = false; WritePrivateProfileStringW(L"Lanceur", L"Debug", NULL, g_iniLauncher.c_str()); }
+            else if (!strcmp(k, "start")) WritePrivateProfileStringW(L"Lanceur", L"SansCopie", NULL, g_iniLauncher.c_str());
+        }
+    }
+    GfxLoad();
+    LaunchLog("reglages : onglet %d remis par defaut", tab);
+    SetStatus(K_OK, T(L"Valeurs par défaut rétablies pour cet onglet", L"Default values restored for this tab"));
 }
 
 static bool GfxClick(int id)
@@ -1254,11 +1600,18 @@ static bool GfxClick(int id)
         return true;
     }
     const auto &rows = GfxRows();
-    if (id >= UI_SETV && id < UI_SETV + (int)rows.size() * 8) {   // choix a segments : la valeur
-        const GfxRow &r = rows[(id - UI_SETV) / 8];
-        int i = (id - UI_SETV) % 8;
+    if (id >= UI_SETV && id < UI_SETV + (int)rows.size() * 10) {   // pastilles : la valeur (liste courte, comme a l'ecran)
+        const GfxRow &r = rows[(id - UI_SETV) / 10];
+        int i = (id - UI_SETV) % 10;
         const wchar_t *why = NULL;
-        if (!GfxRowOff(r, &why) && i < (int)r.vals.size()) GfxSet(r.key, r.vals[i]);
+        std::vector<int> vals; std::vector<std::wstring> labs;
+        SetGfxVals(r, GfxGet(r.key), vals, labs);
+        if (!GfxRowOff(r, &why) && i < (int)vals.size()) GfxSet(r.key, vals[i]);
+        return true;
+    }
+    if (id >= UI_SET_FOV && id < UI_SET_FOV + 9) {   // curseur du champ de vision
+        int idx = SetGfxIdx("ChampVision");
+        if (idx >= 0 && id - UI_SET_FOV < (int)rows[idx].vals.size()) GfxSet("ChampVision", rows[idx].vals[id - UI_SET_FOV]);
         return true;
     }
     if (id < UI_GFX || id >= UI_GFX + (int)rows.size() * 3) return false;
@@ -1282,12 +1635,18 @@ static bool SetClick(int id)
     switch (id) {
     case UI_SET_SEARCH: g_setFocus = true; g_time = 0.2f; return true;
     case UI_SET_SEARCHX: g_setSearch.clear(); return true;
-    case UI_SET_THEMECARD: case UI_SET_THEMECARD + 1:
-        g_dark = id == UI_SET_THEMECARD;
-        WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str());
-        return true;
     case UI_SET_WINTHEME: ThemeFollowWindows(!ThemeFollowsWindows()); return true;
-    case UI_SET_THEMEDEF: ThemeSetAccent(0); ThemeSetAurore(2); return true;
+    case UI_SET_THEMEDEF: SetTabDefaults(SET_THEME); return true;
+    case UI_SET_DEFAULT: SetTabDefaults(g_setTab); return true;
+    case UI_SET_SAVE:   // (tout s'enregistre a chaque changement : le bouton le confirme)
+        SetStatus(K_OK, g_setTab == SET_THEME ? T(L"Appliqué ✓ · le thème est déjà en place", L"Applied ✓ · the theme is already in place") : T(L"Enregistré ✓ · chaque changement est gardé aussitôt", L"Saved ✓ · every change is kept right away"));
+        return true;
+    case UI_SET_NETTEST: NetTest(); return true;
+    case UI_SET_HOSTGUIDE: WikiOpenHost(); return true;
+    case UI_SET_REPAIR: RepairMWCoop(); return true;
+    case UI_SET_NIGHTLY: WritePrivateProfileStringW(L"Lanceur", L"Nightly", NightlyOn() ? NULL : L"1", g_iniLauncher.c_str()); if (!g_busy) StartUpdate(false); return true;
+    case UI_SET_GLASS: ThemeSetGlass(!g_glass); return true;
+    case UI_SET_RTTOGGLE: if (GfxDxr()) GfxSet("RayTracing", GfxGet("RayTracing") == 1 ? 0 : 1); return true;
     case UI_SET_PRIV: case UI_SET_PRIV + 1: WritePrivateProfileStringW(L"Lanceur", L"SalonPrive", id == UI_SET_PRIV ? L"0" : L"1", g_iniLauncher.c_str()); return true;
     case UI_SET_NOTES: GoPage(TAB_NOTES); return true;
     case UI_SET_API: GoPage(TAB_API); return true;
@@ -1305,8 +1664,13 @@ static bool SetClick(int id)
     case UI_SET_STEAMLINE: SteamGuideOpen(); return true;
     case UI_SET_GOIMAGE: g_setTab = SET_IMAGE; SetRail(); g_setSearch.clear(); g_scroll[g_tab] = 0; return true;
     }
+    if (id >= UI_SET_THEMECARD && id < UI_SET_THEMECARD + THEME_N) { ThemeSet(id - UI_SET_THEMECARD); return true; }
     if (id >= UI_SET_ACCENT && id < UI_SET_ACCENT + 5) { ThemeSetAccent(id - UI_SET_ACCENT); return true; }
     if (id >= UI_SET_AURORE && id < UI_SET_AURORE + 3) { ThemeSetAurore(id - UI_SET_AURORE); return true; }
+    if (id >= UI_SET_DENS && id < UI_SET_DENS + 3) { ThemeSetDensite(id - UI_SET_DENS); return true; }
+    if (id >= UI_SET_TEXTE && id < UI_SET_TEXTE + 7) { ThemeSetTexte(80 + 5 * (id - UI_SET_TEXTE)); return true; }
+    if (id >= UI_SET_SESS && id < UI_SET_SESS + 3) { static const int n[] = { 3, 10, 30 }; WritePrivateProfileStringW(L"Lanceur", L"Sessions", n[id - UI_SET_SESS] == 30 ? NULL : std::to_wstring(n[id - UI_SET_SESS]).c_str(), g_iniLauncher.c_str()); return true; }
+    if (id >= UI_SET_PORTSEG && id < UI_SET_PORTSEG + 8) { if (const Opt *o = OptByKey("Port")) if (id - UI_SET_PORTSEG < (int)o->vals.size()) OptSet(*o, o->vals[id - UI_SET_PORTSEG]); return true; }
     if (id >= UI_SET_MAXP && id < UI_SET_MAXP + 4) { static const int m[] = { 4, 8, 12, 16 }; WritePrivateProfileStringW(L"Lanceur", L"SalonMax", std::to_wstring(m[id - UI_SET_MAXP]).c_str(), g_iniLauncher.c_str()); return true; }
     if (id >= UI_SET_AJOUTS && id < UI_SET_AJOUTS + 3) {
         int k = id - UI_SET_AJOUTS;
