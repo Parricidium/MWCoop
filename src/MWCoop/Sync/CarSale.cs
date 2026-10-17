@@ -27,7 +27,8 @@ namespace MWCoop
 
         static PlayMakerFSM anim, pay;
         static bool hooked, sold, applying;
-        static float nextLook;
+        static float nextLook, nextOffer;
+        static readonly HashSet<string> IdleStates = new HashSet<string> { "Calc rate", "Random wait", "Randomize wood", "State 2", "Check order", "Check data", "Player left?", "Load game", "Save game" };
 
         class SaleHook : ModHook
         {
@@ -143,6 +144,7 @@ namespace MWCoop
         public static void OnRemote(int who, int kind)
         {
             Find();
+            if (kind == 2) { OnOffer(who); return; }
             if (kind == 0)
             {
                 if (anim != null && anim.gameObject.activeInHierarchy && anim.ActiveStateName == "Distance?" && PlayerNear())
@@ -188,17 +190,72 @@ namespace MWCoop
             if (!PlayerSync.InGame || Time.realtimeSinceStartup < nextLook) return;
             nextLook = Time.realtimeSinceStartup + 1f;
             Repair();
+            Offer();
             if (!Find()) return;
             Hook();
             Settle();
         }
 
+        // Rivett mise en vente (Reijo appele : WoodJob1Point "State 1" -- flechette Wood1Car, vendeur NPCWood allume, Car vrai).
+        // Retour d'un joueur (17/10, 0.97.2) : « le vendeur n'etait visible que par celui qui l'avait appele » -- chez l'invite,
+        // l'appel de l'hote n'etait arrive que par le numero (Data -> Save, sans SELLCAR), et un invite revenu plus tard n'avait
+        // rien. L'hote redit toutes les 10 s que la vente est ouverte (@vente 2) ; un invite dont le boulot tourne a vide la
+        // met en "State 1" (ce que fait SELLCAR), vendeur compris.
+        static PlayMakerFSM Logic()
+        {
+            GameObject wj = Game.FindAny("JOBS/HouseWood1/WoodJob1Point");
+            return wj != null ? Game.FsmOn(wj, "Logic") : null;
+        }
+        static void Offer()
+        {
+            if (!Session.IsHost || !Session.Active || Session.RemoteCount == 0 || sold || Time.realtimeSinceStartup < nextOffer) return;
+            nextOffer = Time.realtimeSinceStartup + 10f;
+            PlayMakerFSM logic = Logic();
+            if (logic == null || logic.ActiveStateName != "State 1") return;
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@vente").U8(2), true);
+        }
+        static void OnOffer(int who)
+        {
+            if (sold) return;
+            PlayMakerFSM logic = Logic();
+            if (logic == null || logic.ActiveStateName == "State 1" || !IdleStates.Contains(logic.ActiveStateName)) return;
+            string was = logic.ActiveStateName;
+            Set(logic, "State 1");
+            Log.Info("vente : Rivett en vente chez #" + who + " (vendeur present) : mise en vente ici aussi (" + was + " -> " + logic.ActiveStateName + ")");
+        }
+
         // [Test] Autotest=vente-sauve (hote) : 25 s, Reijo « appele » (numero en State 1 : etape 2, SELLCAR) ; 28 s, la Rivett
         // achetee par un autre (@vente 1) ; 31 s, sauvegarde coop en jeu ; 38 s, etat (attendu : etape 3, WoodJob1Point pas
         // en State 1 apres la sauvegarde). 42 s : sauvegarde abimee simulee (etape 2, numero en State 1, cles) et reparation.
-        static int testStep;
+        static int testStep; static float nextTestLog;
         public static void Test(string mode, float t)
         {
+            // [Test] Autotest=vente-offre : l'hote appelle Reijo a 25 s et ne vend pas ; chacun note WoodJob1Point et le vendeur a
+            // 30, 40 et 50 s. Attendu chez l'invite : "State 1" et vendeur allume au plus tard a 40 s (@vente 2 toutes les 10 s).
+            if (mode == "vente-offre")
+            {
+                PlayMakerFSM lg = Logic();
+                if (Session.IsHost && t > 25f && testStep == 0)
+                {
+                    testStep = 1;
+                    foreach (Object o in Game.FsmsNamed("Data"))
+                    {
+                        var f = (PlayMakerFSM)o;
+                        if (f == null || f.FsmName != "Data" || f.transform.parent == null || f.transform.parent.name != "PhoneNumbers") continue;
+                        FsmString nb = f.FsmVariables.FindFsmString("Number");
+                        if (nb != null && nb.Value == Number) { Game.SetState(f, "State 1"); break; }
+                    }
+                    if (lg != null && lg.ActiveStateName != "State 1") Game.SetState(lg, "State 1");   // (comme SELLCAR : la sauvegarde d'essai peut avoir la Rivett deja vendue)
+                    Log.Info("autotest : vente-offre, Reijo appele ici : WoodJob1Point " + (lg != null ? lg.ActiveStateName : "?"));
+                }
+                if (t > 30f && t < 52f && t >= nextTestLog)
+                {
+                    nextTestLog = t + 10f;
+                    Find();
+                    Log.Info("autotest : vente-offre, WoodJob1Point " + (lg != null ? lg.ActiveStateName : "?") + ", " + Describe());
+                }
+                return;
+            }
             if (mode != "vente-sauve" || !Session.IsHost) return;
             PlayMakerFSM data = null;
             foreach (Object o in Game.FsmsNamed("Data"))
