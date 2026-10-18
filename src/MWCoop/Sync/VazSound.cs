@@ -16,6 +16,15 @@ namespace MWCoop
     //    cinematique) -- ils entendent le meme moteur s'ils ont les fichiers ;
     //  - demarreur : l'automate Starter de la copie joue la cle et la prise par MasterAudio (banque commune a la vraie SORBET) :
     //    ces actions sont coupees sur la copie, la boucle StarterSound rendue muette, nos sons suivent ses etats.
+    //
+    // Par defaut (sans ce dossier) : le moteur de la Rivett montee en rallye (JD, 18/10 : « les memes sons que la Rivett
+    // Rally ») -- sons du jeu, deja chez tous. La CORRIS a deux jeux de sons sous Simulation/ExhaustCorris/ExhaustSmoke :
+    // AudioEngineCorrisMuffled (silencieux) et AudioEngineCorrisTune (echappement de course : collecteur, tube avant
+    // racing, sortie laterale -> son automate Logic l'allume, diviseur de volume 2). AudioEngineCorrisTune (Low, Med, High,
+    // Combustion et leurs automates) et EngineValveSound (soupapes) sont copies sous la VAZ, au moteur ; leurs references a
+    // la CORRIS ramenees a la VAZ (Drivetrain : regime et gaz), la lecture du diviseur coupee (pose a 2), les explosions
+    // (Combustion) sans la simulation des cylindres de la CORRIS. Le nom AudioEngine... fait que VehicleSync en envoie
+    // volume et hauteur aux autres joueurs, comme pour les voitures du jeu. Sons moteur de la SORBET coupes.
     public class VazSound
     {
         public static string Dir { get { return Path.Combine(VazCar.Dir, "sons"); } }
@@ -32,13 +41,86 @@ namespace MWCoop
         string starterState = "";
         float load, catchTime = -100f;
 
-        // at : point du moteur (enfant de la carrosserie). Null sans fichiers.
+        // at : point du moteur (enfant de la carrosserie). Sons de MWCoop/vaz/sons s'il y en a, sinon ceux de la Rivett rallye.
         public static VazSound Create(GameObject car, Transform at)
         {
-            if (!HasFiles) return null;
             var s = new VazSound();
-            s.Setup(car, at);
-            return s.loops.Count > 0 ? s : null;
+            if (HasFiles) s.Setup(car, at);
+            if (s.loops.Count == 0) s.Rivett(car, at);
+            return s.loops.Count > 0 || s.rivett ? s : null;
+        }
+
+        bool rivett;
+
+        void Rivett(GameObject car, Transform at)
+        {
+            dt = car.GetComponent<Drivetrain>();
+            GameObject tune = Game.FindAny("CORRIS/Simulation/ExhaustCorris/ExhaustSmoke/AudioEngineCorrisTune");
+            GameObject valve = Game.FindAny("CORRIS/Simulation/ExhaustCorris/EngineValveSound");
+            GameObject corris = Game.FindAny("CORRIS");
+            if (tune == null || corris == null) { Log.Warn("vaz : sons de la Rivett (AudioEngineCorrisTune) introuvables : son de la SORBET garde"); return; }
+            GameObject cp = Object.Instantiate(tune);
+            cp.name = "AudioEngineCorrisTune";
+            cp.transform.SetParent(at, false);
+            cp.transform.localPosition = Vector3.zero; cp.transform.localRotation = Quaternion.identity;
+            GameObject vcp = null;
+            if (valve != null)
+            {
+                vcp = Object.Instantiate(valve);
+                vcp.name = "EngineValveSound";
+                vcp.transform.SetParent(cp.transform, false);
+                vcp.transform.localPosition = new Vector3(0f, 0.15f, 0.1f);   // (soupapes : au-dessus du bloc)
+            }
+            foreach (Transform t in cp.GetComponentsInChildren<Transform>(true)) if (t.name != "Sound") t.gameObject.SetActive(true);
+            int rebound = 0;
+            foreach (PlayMakerFSM f in cp.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                try
+                {
+                    f.Fsm.InitData();
+                    foreach (FsmObject ov in f.FsmVariables.ObjectVariables)
+                    {
+                        Object v = ov.Value;
+                        if (v is Drivetrain) { ov.Value = dt; rebound++; }
+                        else if (v is Component && ((Component)v).transform.IsChildOf(tune.transform))
+                        {
+                            Transform m = Twin(tune.transform, cp.transform, ((Component)v).transform);
+                            if (m != null) { ov.Value = m.GetComponent(v.GetType()); rebound++; }
+                        }
+                    }
+                    foreach (FsmGameObject gv in f.FsmVariables.GameObjectVariables)
+                    {
+                        GameObject v = gv.Value;
+                        if (v == null || !v.transform.IsChildOf(corris.transform)) continue;
+                        if (v.transform.IsChildOf(tune.transform)) { Transform m = Twin(tune.transform, cp.transform, v.transform); gv.Value = m != null ? m.gameObject : null; }
+                        else if (valve != null && v == valve) gv.Value = vcp;
+                        else gv.Value = null;   // (Exhaust : diviseur de volume ; SimCombustion : cylindres de la CORRIS)
+                        rebound++;
+                    }
+                    FsmFloat div = f.FsmVariables.FindFsmFloat("VolDivider");
+                    if (div != null) div.Value = 2f;   // (echappement de course : collecteur long, sortie laterale)
+                    f.enabled = true;
+                }
+                catch (System.Exception e) { Log.Warn("vaz : son de la Rivett, automate " + f.FsmName + " : " + e.Message); }
+            }
+            // sons moteur de la SORBET coupes
+            Transform ae = Find(car.transform, "AudioEngine");
+            if (ae != null) foreach (AudioSource a in ae.GetComponentsInChildren<AudioSource>(true)) muted.Add(a);
+            Transform far = Find(car.transform, "sound_exhaust");
+            if (far != null && far.GetComponent<AudioSource>() != null) muted.Add(far.GetComponent<AudioSource>());
+            rivett = true;
+            Log.Info("vaz : son moteur de la Rivett rallye (AudioEngineCorrisTune" + (vcp != null ? " + soupapes" : "") + ") : " + cp.GetComponentsInChildren<AudioSource>(true).Length + " sources, " + rebound + " references ramenees a la VAZ, " + muted.Count + " sons de la SORBET coupes");
+        }
+
+        // Objet de la copie qui correspond a 'o' (meme chemin sous la racine copiee).
+        static Transform Twin(Transform src, Transform copy, Transform o)
+        {
+            if (o == src) return copy;
+            var names = new List<string>();
+            for (Transform t = o; t != null && t != src; t = t.parent) names.Insert(0, t.name);
+            Transform r = copy;
+            foreach (string n in names) { r = r.Find(n); if (r == null) return null; }
+            return r;
         }
 
         void Setup(GameObject car, Transform at)
@@ -106,6 +188,7 @@ namespace MWCoop
         {
             if (dt == null) return;
             foreach (AudioSource a in muted) if (a != null && !a.mute) a.mute = true;
+            if (rivett) return;   // (automates du jeu)
             float rpm = dt.rpm, thr = Mathf.Clamp01(dt.throttle);
             load = Mathf.MoveTowards(load, thr, Time.deltaTime * 6f);
             bool on = rpm > 300f;
