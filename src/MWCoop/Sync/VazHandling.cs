@@ -215,6 +215,11 @@ namespace MWCoop
 
         static bool Same(float[] a, float[] b) { for (int i = 0; i < a.Length; i++) if (!Mathf.Approximately(a[i], b[i])) return false; return true; }
 
+        // ([Test] VazRalenti, VazRalentiGaz, VazRalentiGain : essais)
+        static float IdleRpm { get { if (idleRpm < 0f) { idleRpm = Config.GetFloat("Test", "VazRalenti", 900f); idleBase = Config.GetFloat("Test", "VazRalentiGaz", 0.104f); idleGain = Config.GetFloat("Test", "VazRalentiGain", 0.00005f); } return idleRpm; } }
+        static float IdleBase { get { float r = IdleRpm; return idleBase; } }
+        static float IdleGain { get { float r = IdleRpm; return idleGain; } }
+        static float idleRpm = -1f, idleBase, idleGain;
         static MethodInfo disengage;
         static FieldInfo hbField, brField, engagingField;
 
@@ -246,6 +251,19 @@ namespace MWCoop
             if (what.Length > 0 && now >= b.NextStartLog) { b.NextStartLog = now + 30f; Log.Info("vaz : " + b.Car.name + " prete a partir :" + what); }
         }
 
+        public static void Idle(VazCar.Built b)
+        {
+            Drivetrain dt = b.Dt;
+            if (dt == null || dt.rpm <= 300f) return;
+            dt.idlethrottle = Mathf.Clamp(IdleBase + IdleGain * (IdleRpm - dt.rpm), IdleBase - 0.04f, IdleBase + 0.05f);
+            // Moteur simule ici (pas une copie) : jamais sous le gaz de ralenti. A la prise du volant d'une VAZ qui tournait chez
+            // un autre, le gaz restait a 0 quelques images (commandes pas encore la) ; avec l'inertie du moteur de la Rivett (0,4,
+            // SORBET 2,75) il passait de 1 065 a 213 tr/min en deux images et calait (essai vazcle CleReprise, 18/10).
+            if (dt.enabled && b.Rb != null && !b.Rb.isKinematic && dt.throttle < dt.idlethrottle) dt.throttle = dt.idlethrottle;
+            if (Config.GetInt("Test", "VazRalentiLog", 0) != 0 && Time.frameCount % 20 == 0)
+                Log.Info("vaz : ralenti " + b.Car.name + " regime " + dt.rpm.ToString("F0") + " gaz " + dt.throttle.ToString("F3") + " ralenti " + dt.idlethrottle.ToString("F3") + (dt.enabled ? "" : " coupe") + " base " + IdleBase + " vise " + IdleRpm);
+        }
+
         public static void Tick(VazCar.Built b, float now)
         {
             Drivetrain dt = b.Dt;
@@ -253,6 +271,12 @@ namespace MWCoop
             if (now >= b.NextSpec) { b.NextSpec = now + 2f; Spec(b, false); }
             if (now >= b.NextStart) { b.NextStart = now + 0.5f; if (Config.GetInt("Test", "VazPrete", 1) != 0) ReadyToStart(b, now); }   // ([Test] VazPrete=0 : comme la 0.99.2)
             dt.engineOrientation = b.Car.transform.forward;
+            // Ralenti (JD, 18/10 : « elle cale ») : le gaz de ralenti de la SORBET (0,1, pose par ses automates) sur le moteur de la
+            // Rivett rallye tenait 560-640 tr/min, sous son regime mini (650) : au moindre creux le moteur calait -- en prenant le
+            // volant d'une VAZ qui tournait, en passant a cote (la main du moteur change), ou tout seul. Ce moteur est tres
+            // sensible (0,16 : il monte seul a 6 500 tr/min) : petit regulateur vers IdleRpm (900) autour du gaz de la SORBET,
+            // pose dans LateUpdate (Idle) : apres les automates du jeu, qui remettent 0,104 a chaque image (selon l'ordre des
+            // scripts, chez l'invite d'essai le leur passait apres le notre et le regulateur ne servait a rien).
             if (!Mathf.Approximately(dt.powerMultiplier, PowerMul)) dt.powerMultiplier = PowerMul;
             if (now >= b.NextGrip) { b.NextGrip = now + 0.25f; Grip(b); }
             if (b.Axis == null || dt.rpm < 300f) return;

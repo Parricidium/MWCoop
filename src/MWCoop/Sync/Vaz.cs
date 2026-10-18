@@ -137,6 +137,13 @@ namespace MWCoop
         static string NameOf(int id) { PlayerInfo pi; return Session.Players.TryGetValue(id, out pi) ? pi.Name : Solo && id == 0 ? "solo" : "#" + id; }
         static string Clean(string s) { return (s ?? "").Replace(";", "").Replace(":", "").Replace("=", "").Replace("|", ""); }
 
+        // Apres la physique et les automates (VehicleSync.LateUpdate) : ralenti des VAZ (VazHandling.Idle).
+        public static void LateUpdate()
+        {
+            if (!PlayerSync.InGame) return;
+            foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) VazHandling.Idle(r.Car);
+        }
+
         public static void Update()
         {
             if (!PlayerSync.InGame) return;
@@ -400,10 +407,11 @@ namespace MWCoop
         // Autotest « vazcle » ([Test] TestVoiture=MWCoop-VAZ-3) : la n 3 prise a 8 s ; l'essai « cle » de Jobs fait le reste
         // (volant 22 s, contact 32 s, demarreur 34 s tenu CleTenue s). Chaque seconde de 31 a 50 s : regime, reservoir,
         // conduite d'essence, batterie ; a 35 s les variables de l'automate Starter.
-        static float cleLog; static bool cleDump, panneDone, sonDone;
+        static float cleLog; static bool cleDump, panneDone, sonDone, moteurDone;
         static void TestKey(float t)
         {
-            if (Host && testStep == 0 && t > 8f) { testStep = 1; Log.Info("autotest vazcle : demande n 3 -> " + Request(3)); }
+            bool asker = Config.GetInt("Test", "CleInvite", 0) != 0 ? !Host : Host;
+            if (asker && testStep == 0 && t > (Host ? 8f : 4f)) { testStep = 1; Log.Info("autotest vazcle : demande n 3 -> " + Request(3)); }
             GameObject car = Game.FindAny(Config.Get("Test", "TestVoiture", "MWCoop-VAZ-3"));
             // [Test] VazPanne=ligne (conduite d'essence vide) | batterie (charge 20) | noyee (chambre a 30) : pose a 30 s, pour retrouver le refus de JD
             if (car != null && t > 30f && !panneDone)
@@ -427,7 +435,7 @@ namespace MWCoop
             if (car == null || t < 31f || t > 50f || t < cleLog) return;
             cleLog = Mathf.Floor(t) + 1f;
             Drivetrain dt = car.GetComponent<Drivetrain>();
-            var sb = new System.Text.StringBuilder("autotest vazcle : regime " + (dt != null ? dt.rpm.ToString("F0") : "?"));
+            var sb = new System.Text.StringBuilder("autotest vazcle : regime " + (dt != null ? dt.rpm.ToString("F0") + " gaz " + dt.throttle.ToString("F3") + " ralenti " + dt.idlethrottle.ToString("F3") + (dt.enabled ? "" : " DRIVETRAIN COUPE") + (dt.canStall ? " peut caler" : "") + " rb " + (car.GetComponent<Rigidbody>() != null && car.GetComponent<Rigidbody>().isKinematic ? "cinematique" : "libre") + " " + VehicleSync.StarterState(car.name) : "?"));
             foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
             {
                 if (f.FsmName == "Data" && f.name == "FuelTankSorbett") { FsmFloat v = f.FsmVariables.FindFsmFloat("FuelLevel"); sb.Append(", reservoir ").Append(v != null ? v.Value.ToString("F1") : "?"); }
@@ -467,6 +475,20 @@ namespace MWCoop
                 }
             }
             Log.Info(sb.ToString());
+            // [Test] VazMoteur=1 : a 37 s, les reglages (champs flottants) du Drivetrain de la VAZ, de la SORBET et de la CORRIS
+            if (t > 37f && !moteurDone && Config.GetInt("Test", "VazMoteur", 0) != 0)
+            {
+                moteurDone = true;
+                foreach (GameObject g in new[] { car, Game.FindAny("SORBET(190-200psi)"), Game.FindAny("CORRIS") })
+                {
+                    Drivetrain d = g != null ? g.GetComponent<Drivetrain>() : null;
+                    if (d == null) continue;
+                    var sd = new System.Text.StringBuilder("autotest vazcle : Drivetrain " + g.name + " :");
+                    foreach (System.Reflection.FieldInfo fi in typeof(Drivetrain).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                        if (fi.FieldType == typeof(float) || fi.FieldType == typeof(bool) || fi.FieldType == typeof(int)) sd.Append(' ').Append(fi.Name).Append('=').Append(fi.FieldType == typeof(float) ? ((float)fi.GetValue(d)).ToString("0.###") : fi.GetValue(d).ToString());
+                    Log.Info(sd.ToString());
+                }
+            }
             // [Test] VazSon=1 : a 40 s (moteur tourne), les automates du son de la Rivett copie et ses sources (volume, hauteur)
             if (t > 40f && !sonDone && Config.GetInt("Test", "VazSon", 0) != 0)
             {

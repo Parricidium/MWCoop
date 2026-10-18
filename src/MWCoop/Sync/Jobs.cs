@@ -2223,7 +2223,8 @@ namespace MWCoop
                              + (vb != null ? ", voiture " + (vb.isKinematic ? "copie" : "locale") + " v " + vb.velocity.magnitude.ToString("F2") + " vy " + vb.velocity.y.ToString("F2") + " rot " + vb.angularVelocity.magnitude.ToString("F2") + " y " + vb.position.y.ToString("F2") : ""));
                 }
             }
-            if (!Session.IsHost || key == null) return;
+            // [Test] CleInvite=1 : c'est l'invite qui monte et tourne la cle (sa VAZ : essai vazcle)
+            if ((Config.GetInt("Test", "CleInvite", 0) != 0 ? Session.IsHost : !Session.IsHost) || key == null) return;
             // [Test] CleDehors=1 : l'hote reste a cote de la voiture (cle tournee sans etre au volant) : il doit en garder la
             // main ("moteur demarre ici sans conducteur"), l'invite voir le moteur tourner chez #0.
             bool dehors = Config.GetInt("Test", "CleDehors", 0) != 0;
