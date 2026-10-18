@@ -400,7 +400,7 @@ namespace MWCoop
         // Autotest « vazcle » ([Test] TestVoiture=MWCoop-VAZ-3) : la n 3 prise a 8 s ; l'essai « cle » de Jobs fait le reste
         // (volant 22 s, contact 32 s, demarreur 34 s tenu CleTenue s). Chaque seconde de 31 a 50 s : regime, reservoir,
         // conduite d'essence, batterie ; a 35 s les variables de l'automate Starter.
-        static float cleLog; static bool cleDump, panneDone;
+        static float cleLog; static bool cleDump, panneDone, sonDone;
         static void TestKey(float t)
         {
             if (Host && testStep == 0 && t > 8f) { testStep = 1; Log.Info("autotest vazcle : demande n 3 -> " + Request(3)); }
@@ -467,6 +467,49 @@ namespace MWCoop
                 }
             }
             Log.Info(sb.ToString());
+            // [Test] VazSon=1 : a 40 s (moteur tourne), les automates du son de la Rivett copie et ses sources (volume, hauteur)
+            if (t > 40f && !sonDone && Config.GetInt("Test", "VazSon", 0) != 0)
+            {
+                sonDone = true;
+                Transform snd = car.transform.Find("VAZ/VAZ_moteur_son/AudioEngineCorrisTune");
+                if (snd == null) Log.Info("autotest vazcle : son de la Rivett introuvable");
+                else { foreach (PlayMakerFSM f in snd.GetComponentsInChildren<PlayMakerFSM>(true)) Log.Info("autotest vazcle : son " + DumpFsm(f)); foreach (AudioSource a in snd.GetComponentsInChildren<AudioSource>(true)) Log.Info("autotest vazcle : source " + Recon.Path(a.transform) + " " + (a.clip != null ? a.clip.name : "-") + (a.gameObject.activeInHierarchy ? "" : " inactif") + (a.isPlaying ? " joue" : "") + " v " + a.volume.ToString("F2") + " h " + a.pitch.ToString("F2") + (a.mute ? " muet" : "")); }
+                GameObject ct = Game.FindAny("CORRIS/Simulation/ExhaustCorris/ExhaustSmoke/AudioEngineCorrisTune");
+                if (ct != null) foreach (PlayMakerFSM f in ct.GetComponentsInChildren<PlayMakerFSM>(true)) Log.Info("autotest vazcle : CORRIS " + DumpFsm(f));
+            }
+        }
+
+        // Essais : un automate, ses variables, et pour chaque etat ses actions avec leurs parametres (Fsm, objets, valeurs).
+        static string DumpFsm(PlayMakerFSM f)
+        {
+            var d = new System.Text.StringBuilder(Recon.Path(f.transform) + "::" + f.FsmName + (f.enabled ? "" : " (COUPE)") + " etat " + f.ActiveStateName + " :");
+            foreach (FsmFloat v in f.FsmVariables.FloatVariables) d.Append(' ').Append(v.Name).Append('=').Append(v.Value.ToString("F2"));
+            foreach (FsmBool v in f.FsmVariables.BoolVariables) d.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+            foreach (FsmGameObject v in f.FsmVariables.GameObjectVariables) d.Append(' ').Append(v.Name).Append("->").Append(v.Value != null ? Recon.Path(v.Value.transform) : "null");
+            foreach (FsmObject v in f.FsmVariables.ObjectVariables) d.Append(' ').Append(v.Name).Append("=>").Append(v.Value != null ? v.Value.GetType().Name + "@" + (v.Value is Component ? Recon.Path(((Component)v.Value).transform) : v.Value.name) : "null");
+            foreach (FsmState st in f.FsmStates)
+            {
+                d.Append('\n').Append(" [").Append(st.Name).Append(']');
+                foreach (FsmTransition tr in st.Transitions) d.Append(" -").Append(tr.EventName).Append("->").Append(tr.ToState);
+                foreach (FsmStateAction ac in st.Actions)
+                {
+                    d.Append('\n').Append("    ").Append(ac.GetType().Name).Append(ac.Enabled ? "" : "(off)").Append(':');
+                    foreach (System.Reflection.FieldInfo fi in ac.GetType().GetFields())
+                    {
+                        object v = fi.GetValue(ac); if (v == null) continue;
+                        string sv;
+                        if (v is FsmObject) { FsmObject o = (FsmObject)v; sv = (o.UseVariable ? o.Name + "=" : "") + (o.Value != null ? o.Value.GetType().Name + "@" + (o.Value is Component ? Recon.Path(((Component)o.Value).transform) : o.Value.name) : "null"); }
+                        else if (v is NamedVariable) { NamedVariable nv = (NamedVariable)v; sv = (nv.UseVariable ? nv.Name + "=" : "") + (v is FsmFloat ? ((FsmFloat)v).Value.ToString("F2") : v is FsmBool ? ((FsmBool)v).Value.ToString() : v is FsmString ? ((FsmString)v).Value : v is FsmGameObject ? (((FsmGameObject)v).Value != null ? Recon.Path(((FsmGameObject)v).Value.transform) : "null") : v is FsmInt ? ((FsmInt)v).Value.ToString() : "?"); }
+                        else if (v is FsmOwnerDefault) { FsmOwnerDefault od = (FsmOwnerDefault)v; sv = od.OwnerOption == OwnerDefaultOption.UseOwner ? "(proprio)" : (od.GameObject.Value != null ? Recon.Path(od.GameObject.Value.transform) : "null"); }
+                        else if (v is FsmProperty) { FsmProperty pr = (FsmProperty)v; sv = pr.PropertyName + " de " + (pr.TargetObject != null && pr.TargetObject.Value != null ? pr.TargetObject.Value.GetType().Name + "@" + (pr.TargetObject.Value is Component ? Recon.Path(((Component)pr.TargetObject.Value).transform) : pr.TargetObject.Value.name) : "null"); }
+                        else if (v is FsmEvent) sv = "ev:" + ((FsmEvent)v).Name;
+                        else if (fi.FieldType.IsEnum || fi.FieldType.IsPrimitive || v is string) sv = v.ToString();
+                        else continue;
+                        d.Append(' ').Append(fi.Name).Append('=').Append(sv);
+                    }
+                }
+            }
+            return d.ToString();
         }
 
         public static void Test(string mode, float t)

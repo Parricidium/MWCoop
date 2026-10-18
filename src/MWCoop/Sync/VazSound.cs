@@ -51,6 +51,11 @@ namespace MWCoop
         }
 
         bool rivett;
+        // Regime des automates Low/Med/High/Valves de la copie (CurrentRPM) : sur la CORRIS, son automate Throttle le prend
+        // dans la variable GLOBALE « RPM » (celle de la Rivett) -- sur la VAZ elle restait a 1 (Rivett arretee) : hauteur
+        // 1/600, son muet (JD, 18/10 : « elles ont pas de son moteur »). Ces lectures sont coupees, le regime de la VAZ
+        // (Drivetrain, pose par VehicleSync chez les autres) donne ici a chaque image.
+        readonly List<FsmFloat> rpmVars = new List<FsmFloat>();
 
         void Rivett(GameObject car, Transform at)
         {
@@ -72,7 +77,7 @@ namespace MWCoop
                 vcp.transform.localPosition = new Vector3(0f, 0.15f, 0.1f);   // (soupapes : au-dessus du bloc)
             }
             foreach (Transform t in cp.GetComponentsInChildren<Transform>(true)) if (t.name != "Sound") t.gameObject.SetActive(true);
-            int rebound = 0;
+            int rebound = 0, cut = 0;
             foreach (PlayMakerFSM f in cp.GetComponentsInChildren<PlayMakerFSM>(true))
             {
                 try
@@ -97,6 +102,18 @@ namespace MWCoop
                         else gv.Value = null;   // (Exhaust : diviseur de volume ; SimCombustion : cylindres de la CORRIS)
                         rebound++;
                     }
+                    if (f.FsmName == "Throttle")
+                        foreach (FsmState st in f.FsmStates)
+                            foreach (FsmStateAction ac in st.Actions)
+                            {
+                                if (ac.GetType().Name != "SetFsmFloat") continue;
+                                System.Reflection.FieldInfo sv = ac.GetType().GetField("setValue"), vn = ac.GetType().GetField("variableName");
+                                FsmFloat v = sv != null ? sv.GetValue(ac) as FsmFloat : null;
+                                FsmString n = vn != null ? vn.GetValue(ac) as FsmString : null;
+                                if (v != null && v.UseVariable && v.Name == "RPM" && n != null && n.Value == "CurrentRPM") { ac.Enabled = false; cut++; }
+                            }
+                    if (f.FsmName == "Low" || f.FsmName == "Med" || f.FsmName == "High" || f.FsmName == "Valves")
+                    { FsmFloat cr = f.FsmVariables.FindFsmFloat("CurrentRPM"); if (cr != null) rpmVars.Add(cr); }
                     FsmFloat div = f.FsmVariables.FindFsmFloat("VolDivider");
                     if (div != null) div.Value = 2f;   // (echappement de course : collecteur long, sortie laterale)
                     f.enabled = true;
@@ -109,7 +126,7 @@ namespace MWCoop
             Transform far = Find(car.transform, "sound_exhaust");
             if (far != null && far.GetComponent<AudioSource>() != null) muted.Add(far.GetComponent<AudioSource>());
             rivett = true;
-            Log.Info("vaz : son moteur de la Rivett rallye (AudioEngineCorrisTune" + (vcp != null ? " + soupapes" : "") + ") : " + cp.GetComponentsInChildren<AudioSource>(true).Length + " sources, " + rebound + " references ramenees a la VAZ, " + muted.Count + " sons de la SORBET coupes");
+            Log.Info("vaz : son moteur de la Rivett rallye (AudioEngineCorrisTune" + (vcp != null ? " + soupapes" : "") + ") : " + cp.GetComponentsInChildren<AudioSource>(true).Length + " sources, " + rebound + " references ramenees a la VAZ, " + muted.Count + " sons de la SORBET coupes, regime de la VAZ donne a " + rpmVars.Count + " automates (" + cut + " lectures du regime de la Rivett coupees)");
         }
 
         // Objet de la copie qui correspond a 'o' (meme chemin sous la racine copiee).
@@ -188,7 +205,7 @@ namespace MWCoop
         {
             if (dt == null) return;
             foreach (AudioSource a in muted) if (a != null && !a.mute) a.mute = true;
-            if (rivett) return;   // (automates du jeu)
+            if (rivett) { float r = dt.rpm; foreach (FsmFloat v in rpmVars) v.Value = r; return; }   // (automates du jeu, au regime de la VAZ)
             float rpm = dt.rpm, thr = Mathf.Clamp01(dt.throttle);
             load = Mathf.MoveTowards(load, thr, Time.deltaTime * 6f);
             bool on = rpm > 300f;
