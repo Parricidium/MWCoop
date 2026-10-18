@@ -35,8 +35,11 @@ namespace MWCoop
         static readonly HashSet<string> Names = new HashSet<string> {
             "Wear", "Condition", "Dirt", "Oil", "OilLevel", "Fluid", "FuelLevel", "Fuel", "WaterLevel", "Water",
             "Coolant", "BrakeFluidF", "BrakeFluidR", "Level" };
+        // "Starter" (ProTonChiK, 18/10) : le carburant du demarreur de la GIFU (STARTERxGifu, Starter.Fuel) monte tout seul au
+        // demarrage chez chacun ; pris pour un plein, il partait en ajout et doublait chez l'autre (86 -> 172 : moteur noye,
+        // ralenti qui ne tient plus). Moteur simule par son conducteur : rien a suivre ici.
         static readonly HashSet<string> SkipFsm = new HashSet<string> {
-            "Scale", "Explosion", "Temp", "Assembly", "Flicker", "Jumping", "Paint", "Pressure" };
+            "Scale", "Explosion", "Temp", "Assembly", "Flicker", "Jumping", "Paint", "Pressure", "Starter" };
         static readonly HashSet<string> TimingPoints = new HashSet<string> { "VINP_CrankPulley", "VINP_CamshaftSprocket" };
 
         class Watch

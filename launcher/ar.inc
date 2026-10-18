@@ -1167,6 +1167,7 @@ static const wchar_t *const kAr[][2] = {
     { L"In-game gauges: Vanilla, Card, Rings or Strip · in game: F10 › HUD", L"مؤشرات اللعبة: Vanilla أو بطاقة أو حلقات أو شريط · أثناء اللعب: F10 › HUD" },
     { L"HUD tab", L"تبويب HUD" },
     { L"The style of the in-game gauges: Vanilla (the game's own), Card, Rings or Strip, with a preview. Then its size, position, colour, the gauges shown, the team panel and the alerts. In game too: F10 › HUD.", L"نمط المؤشرات أثناء اللعب: Vanilla (الأصلي للعبة) أو بطاقة أو حلقات أو شريط، مع معاينة. ثم حجمه وموضعه ولونه والمؤشرات المعروضة ولوحة الفريق والتنبيهات. وأثناء اللعب أيضًا: F10 › HUD." },
+    { L"Updated \u00B7 MWCoop %s (a stuck game still holds version.dll: replaced at the next launch)", L"تم التحديث \u00B7 MWCoop %s (لعبة معلّقة ما زالت تمسك version.dll: يُستبدل عند التشغيل التالي)" },
     { L"Thanks to everyone who makes MWCoop better", L"شكراً لكل من يجعل MWCoop أفضل" },
     { L"VHS tapes", L"أشرطة VHS" },
     { L"Watch them, export them as .mp4, rename them, put a video on them", L"شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو" },

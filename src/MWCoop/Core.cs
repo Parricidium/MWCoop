@@ -195,6 +195,7 @@ namespace MWCoop
             new Mod("plats", Plats.Update),
             new Mod("porte-buches", WoodCarriers.Update),
             new Mod("hud", NewHud.Update),
+            new Mod("sortie", ExitGuard.Update),
             new Mod("chocs", CarHits.Update),
             new Mod("vitres", WindowCranks.Update),
             new Mod("ram1500", ModRam1500.Update),
@@ -361,6 +362,7 @@ namespace MWCoop
             // Le lanceur cherche cette ligne : absente a la fin du journal, le jeu s'est arrete brutalement (crash,
             // processus tue) et l'icone des journaux porte un "!" rouge.
             if (!closed) { closed = true; Log.Info("jeu ferme normalement"); }
+            ExitGuard.Arm();   // (fin forcee si le processus ne se termine pas : Matilda, 18/10)
         }
 
         // (aussi a la destruction de ce module, qui ne survient qu'a la fermeture du jeu : au cas ou Unity sauterait
@@ -369,6 +371,7 @@ namespace MWCoop
         void OnDestroy()
         {
             if (!closed) { closed = true; Log.Info("jeu ferme normalement"); }
+            ExitGuard.Arm();
         }
     }
 }

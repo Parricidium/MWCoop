@@ -896,8 +896,29 @@ static void MergeIni(const std::wstring &newIni, const std::wstring &userIni)
     }
 }
 
+// Fichier verrouille (DLL chargee par un jeu ouvert, ou par un jeu bloque a la fermeture : Matilda, 18/10) : Windows permet
+// de le renommer. Mis de cote en <nom>.old, ou <nom>.old1 ... .old9 si un ancien .old est lui-meme encore tenu (efface au
+// prochain demarrage, OldFilesCleanup). Vrai si le nom est libre.
+static bool MoveAside(const std::wstring &d, std::wstring *as = NULL)
+{
+    for (int i = 0; i < 10; i++) {
+        std::wstring old = d + L".old" + (i ? std::to_wstring(i) : L"");
+        DeleteFileW(old.c_str());
+        if (MoveFileExW(d.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING)) { if (as) *as = old; return true; }
+    }
+    return false;
+}
+
+// Restes des mises a jour (version.dll.old, .old1...) : effaces quand plus rien ne les tient.
+static void OldFilesCleanup(const std::wstring &dir)
+{
+    if (dir.empty()) return;
+    for (int i = 0; i < 10; i++) DeleteFileW((dir + L"version.dll.old" + (i ? std::to_wstring(i) : L"")).c_str());
+}
+
 // Copie l'arbre extrait dans le dossier du jeu. selfReplaced : le lanceur en cours a ete remplace.
 static DWORD g_copyError;
+static bool g_loaderLate;   // version.dll du dossier du jeu pas remplacee (tenue par un jeu bloque) : remise au prochain lancement
 static bool CopyTree(const std::wstring &src, const std::wstring &dst, bool *selfReplaced, std::wstring *failed)
 {
     CreateDirectoryW(dst.c_str(), NULL);
@@ -923,11 +944,16 @@ static bool CopyTree(const std::wstring &src, const std::wstring &dst, bool *sel
             // Fichier verrouille (DLL chargee : jeu ouvert, ou version.dll prise par un lanceur 0.59.4-0.59.7) : Windows
             // permet de le renommer ; l'ancien est mis de cote (.old, efface au prochain demarrage), le nouveau copie.
             DWORD e = GetLastError();
-            std::wstring old = d + L".old";
-            DeleteFileW(old.c_str());
-            if ((e == ERROR_SHARING_VIOLATION || e == ERROR_ACCESS_DENIED || e == ERROR_LOCK_VIOLATION) && MoveFileExW(d.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING)
-                && CopyFileW(s.c_str(), d.c_str(), FALSE)) TestLog("mise a jour : %ls verrouille, l'ancien mis de cote (.old)", n.c_str());
-            else { g_copyError = e; ok = false; *failed = n; }
+            std::wstring as;
+            bool locked = e == ERROR_SHARING_VIOLATION || e == ERROR_ACCESS_DENIED || e == ERROR_LOCK_VIOLATION;
+            if (locked && MoveAside(d, &as) && CopyFileW(s.c_str(), d.c_str(), FALSE))
+                LaunchLog("mise a jour : %s verrouille (erreur %lu), l'ancien mis de cote (%s)", Narrow(n, CP_UTF8).c_str(), e, Narrow(as.substr(as.rfind(L'\\') + 1), CP_UTF8).c_str());
+            else if (!_wcsicmp(d.c_str(), (g_gameDir + L"version.dll").c_str()) && FileExists(d)) {
+                // Le chargeur seul : la mise a jour continue, LoaderEnsure le remplace avant le prochain lancement.
+                g_loaderLate = true;
+                LaunchLog("mise a jour : version.dll tenue (erreur %lu, renommage %lu) : gardee, remplacee au prochain lancement", e, GetLastError());
+            }
+            else { g_copyError = e; ok = false; *failed = n; LaunchLog("mise a jour : %s IMPOSSIBLE a remplacer (erreur %lu, renommage %lu)", Narrow(n, CP_UTF8).c_str(), e, GetLastError()); }
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
@@ -1253,6 +1279,8 @@ static DWORD WINAPI UpdateThread(void *param)
     }
     bool self = false;
     std::wstring failed;
+    g_loaderLate = false;
+    LaunchLog("mise a jour : installation de %s (depuis %s)", Narrow(remote, CP_UTF8).c_str(), Narrow(local.empty() ? L"rien" : local, CP_UTF8).c_str());
     std::wstring gd =g_gameDir.substr(0, g_gameDir.size() - 1);
     bool ok = CopyTree(ext, gd, &self, &failed);
     // version.txt seulement si tout est en place : une installation interrompue sera reprise au prochain lancement
@@ -1266,11 +1294,15 @@ static DWORD WINAPI UpdateThread(void *param)
         return 0;
     }
     if (!ok) {
+        LaunchLog("mise a jour : ECHEC sur %s (erreur %lu)", Narrow(failed, CP_UTF8).c_str(), g_copyError);
         SetStatus(K_ERR, T(L"%s est occup\u00E9 : ferme le jeu, puis relance le lanceur", L"%s is in use: close the game, then restart the launcher"), failed.c_str());
         g_busy = false;
         return 0;
     }
     LoadLocalVersion();
+    LaunchLog("mise a jour : %s installee%s", Narrow(g_localVer.empty() ? remote : g_localVer, CP_UTF8).c_str(), g_loaderLate ? " (chargeur au prochain lancement)" : "");
+    if (g_loaderLate) SetStatus(K_OK, T(L"Mis \u00E0 jour \u00B7 MWCoop %s (un jeu bloqu\u00E9 tient encore version.dll : remplac\u00E9e au prochain lancement)", L"Updated \u00B7 MWCoop %s (a stuck game still holds version.dll: replaced at the next launch)"), g_localVer.empty() ? remote.c_str() : g_localVer.c_str());
+    else
     SetStatus(K_OK, T(L"Mis \u00E0 jour \u00B7 MWCoop %s", L"Updated \u00B7 MWCoop %s"), g_localVer.empty() ? remote.c_str() : g_localVer.c_str());
     g_busy = false;
     if (self) PostMessageW(g_wnd, WM_APP_RELAUNCH, 0, 0);
@@ -3210,11 +3242,8 @@ static void LoaderEnsure(const std::wstring &dir, const char *where)
     DWORD wr = 0;
     bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, ref, refN, &wr, NULL) && wr == refN;
     if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
-    if (ok && !MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-        std::wstring old = p + L".old";
-        DeleteFileW(old.c_str());
-        ok = MoveFileExW(p.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING) && MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING);
-    }
+    if (ok && !MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING))
+        ok = MoveAside(p) && MoveFileExW(tmp.c_str(), p.c_str(), MOVEFILE_REPLACE_EXISTING);
     if (!ok) { DWORD e = GetLastError(); DeleteFileW(tmp.c_str()); LaunchLog("chargeur (%s) : %s, remplacement IMPOSSIBLE (erreur %lu)", where, what.c_str(), e); return; }
     LaunchLog("chargeur (%s) : %s -> remplace par celui du lanceur (%s)%s", where, what.c_str(), VerText(mine).c_str(), present && !ours ? ", l'autre garde en version.dll.autre" : "");
     if (present && !ours)
@@ -6369,7 +6398,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         LocalFree(av);
     }
     DeleteFileW((g_self + L".old").c_str());   // reste d'une mise a jour du lanceur
-    DeleteFileW((g_dir + L"version.dll.old").c_str());   // (chargeur verrouille pendant une mise a jour : plus utilise, sauf jeu ouvert)
+    OldFilesCleanup(g_dir);   // (chargeurs verrouilles pendant une mise a jour : plus utilises, sauf jeu ouvert ou bloque)
     // Langue : francais, russe ou arabe si Windows l'est, anglais pour toute autre langue ; Langue=fr|en|ru|ar pour forcer.
     wchar_t lang[8] = L"";
     GetPrivateProfileStringW(L"Lanceur", L"Langue", L"", lang, 8, g_iniLauncher.c_str());
