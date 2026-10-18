@@ -1,4 +1,5 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using HutongGames.PlayMaker;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -396,8 +397,81 @@ namespace MWCoop
             return "GUIdrive " + (d != null && d.Value) + ", GUIpassenger " + (p != null && p.Value) + ", DriveTriggerX " + (f != null ? f.ActiveStateName + (f.enabled ? "" : " (COUPE)") : "?")
                    + ", joueur en " + (car != null && pl != null ? car.InverseTransformPoint(pl.transform.position).ToString("F2") : "?") + geo;
         }
+        // Autotest « vazcle » ([Test] TestVoiture=MWCoop-VAZ-3) : la n 3 prise a 8 s ; l'essai « cle » de Jobs fait le reste
+        // (volant 22 s, contact 32 s, demarreur 34 s tenu CleTenue s). Chaque seconde de 31 a 50 s : regime, reservoir,
+        // conduite d'essence, batterie ; a 35 s les variables de l'automate Starter.
+        static float cleLog; static bool cleDump, panneDone;
+        static void TestKey(float t)
+        {
+            if (Host && testStep == 0 && t > 8f) { testStep = 1; Log.Info("autotest vazcle : demande n 3 -> " + Request(3)); }
+            GameObject car = Game.FindAny(Config.Get("Test", "TestVoiture", "MWCoop-VAZ-3"));
+            // [Test] VazPanne=ligne (conduite d'essence vide) | batterie (charge 20) | noyee (chambre a 30) : pose a 30 s, pour retrouver le refus de JD
+            if (car != null && t > 30f && !panneDone)
+            {
+                panneDone = true;
+                string pan = Config.Get("Test", "VazPanne", "");
+                var sb0 = new System.Text.StringBuilder("autotest vazcle : automates a charge/essence :");
+                foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+                    foreach (FsmFloat v in f.FsmVariables.FloatVariables)
+                    {
+                        string n = v.Name.ToLower();
+                        if (!(n.Contains("charge") || n.Contains("fuel") || n.Contains("temp") || n.Contains("choke"))) continue;
+                        sb0.Append(' ').Append(Recon.Path(f.transform).Substring(car.name.Length)).Append(':').Append(f.FsmName).Append('.').Append(v.Name).Append('=').Append(v.Value.ToString("F2"));
+                        if ((pan == "ligne" && f.FsmName == "FuelLine" && v.Name == "FuelLevel") || (pan == "batterie" && f.FsmName != "Starter" && v.Name == "Charge") || (pan == "noyee" && f.FsmName == "Priming" && v.Name == "FuelChamber")) { v.Value = pan == "ligne" ? 0f : pan == "noyee" ? 30f : 20f; sb0.Append("->").Append(v.Value); }
+                    }
+                Log.Info(sb0.ToString());
+                if (pan == "sec")   // moteur froid pas amorce : chambre a 10, PrimingOK faux (comme un hiver sans starter)
+                    foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+                        if (f.FsmName == "Priming") { f.FsmVariables.FindFsmFloat("FuelChamber").Value = 10f; f.FsmVariables.FindFsmBool("PrimingOK").Value = false; Log.Info("autotest vazcle : " + Recon.Path(f.transform) + " chambre 10, PrimingOK faux (" + f.ActiveStateName + ")"); }
+            }
+            if (car == null || t < 31f || t > 50f || t < cleLog) return;
+            cleLog = Mathf.Floor(t) + 1f;
+            Drivetrain dt = car.GetComponent<Drivetrain>();
+            var sb = new System.Text.StringBuilder("autotest vazcle : regime " + (dt != null ? dt.rpm.ToString("F0") : "?"));
+            foreach (PlayMakerFSM f in car.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (f.FsmName == "Data" && f.name == "FuelTankSorbett") { FsmFloat v = f.FsmVariables.FindFsmFloat("FuelLevel"); sb.Append(", reservoir ").Append(v != null ? v.Value.ToString("F1") : "?"); }
+                if (f.FsmName == "FuelLine") { FsmFloat v = f.FsmVariables.FindFsmFloat("FuelLevel"); sb.Append(", conduite ").Append(v != null ? v.Value.ToString("F2") : "?").Append(" (").Append(f.ActiveStateName).Append(f.enabled ? "" : " COUPE").Append(')'); }
+                if (f.FsmName == Config.Get("Test", "VazDump", "Starter") && (Config.Get("Test", "VazDump", "") == "" || f.name == "Radiator") && !cleDump && t > 35f)
+                {
+                    cleDump = true;
+                    var d = new System.Text.StringBuilder("autotest vazcle : Starter " + Recon.Path(f.transform) + " etat " + f.ActiveStateName + " :");
+                    foreach (FsmFloat v in f.FsmVariables.FloatVariables) d.Append(' ').Append(v.Name).Append('=').Append(v.Value.ToString("F2"));
+                    foreach (FsmBool v in f.FsmVariables.BoolVariables) d.Append(' ').Append(v.Name).Append('=').Append(v.Value);
+                    foreach (FsmGameObject v in f.FsmVariables.GameObjectVariables) d.Append(' ').Append(v.Name).Append("->").Append(v.Value != null ? Recon.Path(v.Value.transform) : "null");
+                    foreach (FsmState st in f.FsmStates) { d.Append('\n').Append("  [").Append(st.Name).Append(']'); foreach (FsmStateAction a in st.Actions) d.Append(' ').Append(a.GetType().Name); foreach (FsmTransition tr in st.Transitions) d.Append(" -").Append(tr.EventName).Append("->").Append(tr.ToState); }
+                    Log.Info(d.ToString());
+                    // actions de Fuel Mixture / Fuel Mixture 2 / Turn key / Crank up avec leurs parametres (pour savoir ce qui decide)
+                    var d2 = new System.Text.StringBuilder("autotest vazcle : actions du Starter :");
+                    foreach (FsmState st in f.FsmStates)
+                    {
+                        if (Config.Get("Test", "VazDump", "") == "" && st.Name != "Fuel Mixture" && st.Name != "Fuel Mixture 2" && st.Name != "Turn key" && st.Name != "Crank up" && st.Name != "ACC") continue;
+                        d2.Append('\n').Append("[").Append(st.Name).Append(']');
+                        foreach (FsmStateAction ac in st.Actions)
+                        {
+                            d2.Append('\n').Append("   ").Append(ac.GetType().Name).Append(':');
+                            foreach (System.Reflection.FieldInfo fi in ac.GetType().GetFields())
+                            {
+                                object v = fi.GetValue(ac); if (v == null) continue;
+                                string sv;
+                                if (v is NamedVariable) { NamedVariable nv = (NamedVariable)v; sv = (nv.UseVariable ? nv.Name + "=" : "") + (v is FsmFloat ? ((FsmFloat)v).Value.ToString("F2") : v is FsmBool ? ((FsmBool)v).Value.ToString() : v is FsmString ? ((FsmString)v).Value : v is FsmGameObject ? (((FsmGameObject)v).Value != null ? ((FsmGameObject)v).Value.name : "null") : v is FsmInt ? ((FsmInt)v).Value.ToString() : "?"); }
+                                else if (v is FsmOwnerDefault) { FsmOwnerDefault od = (FsmOwnerDefault)v; sv = od.OwnerOption == OwnerDefaultOption.UseOwner ? "(proprio)" : (od.GameObject.Value != null ? Recon.Path(od.GameObject.Value.transform) : "null"); }
+                                else if (v is FsmEvent) sv = "ev:" + ((FsmEvent)v).Name;
+                                else if (fi.FieldType.IsEnum || fi.FieldType.IsPrimitive) sv = v.ToString();
+                                else continue;
+                                d2.Append(' ').Append(fi.Name).Append('=').Append(sv);
+                            }
+                        }
+                    }
+                    Log.Info(d2.ToString());
+                }
+            }
+            Log.Info(sb.ToString());
+        }
+
         public static void Test(string mode, float t)
         {
+            if (mode == "vazcle") { TestKey(t); return; }
             if (mode != "vaz") return;
             bool host = Host;
             if (testStep == 0 && !testMoved && t > 12f && Config.GetInt("Test", "VazDehors", 0) != 0)

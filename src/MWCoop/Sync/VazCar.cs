@@ -63,7 +63,8 @@ namespace MWCoop
             public readonly Dictionary<string, Material> Mats = new Dictionary<string, Material>(), Lit = new Dictionary<string, Material>(), Dim = new Dictionary<string, Material>();
             public readonly List<Light> Front = new List<Light>(), Rear = new List<Light>(), Brake = new List<Light>(), Reverse = new List<Light>();
             public bool LampsInit, FrontOn, RearOn, BrakeOn, ReverseOn;
-            public float NextLamp, NextHide, NextSpec, NextMask, NextGrip;
+            public float NextLamp, NextHide, NextSpec, NextMask, NextGrip, NextStart, NextStartLog;
+            public PlayMakerFSM Priming, Power, Tank;   // (VazHandling.ReadyToStart)
             public readonly float[] LastGrip = { -1f, -1f };
             public int MaskLogs;
         }
