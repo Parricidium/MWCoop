@@ -219,13 +219,12 @@ namespace MWCoop
             hint = sel < 0 ? TabsHint : null;
             if (tab == TabRace)
             {
-                // Course sur glace : JokkisPanel dessine la liste, l'apercu 3D et la fiche ; une seule « ligne » pour la navigation
-                // (Haut sur la premiere voiture : retour aux onglets).
-                idx = 1; lines = 1; dragging = false;
-                if (JokkisPanel.DrawTab(view, e, sel >= 0, mouseMoved) && sel < 0) sel = 0;
-                if (sel >= 0) hint = JokkisPanel.Hint;
+                // Course sur glace : RacePanel (inscription, quand venir, pilotes, chronos) ; rien a choisir (18/10 : plus de
+                // Jokkis de location, la VAZ prend la place d'une IA).
+                dragging = false;
+                RacePanel.DrawTab(view);
                 contentH = viewH = view.height;
-                items = 1;
+                items = 0;
             }
             else if (tab == TabVaz)
             {
@@ -312,7 +311,7 @@ namespace MWCoop
                     if (!Session.Active) return Lang.T("Solo : lancez le jeu depuis MWCoop.exe pour jouer \u00E0 plusieurs", "Solo: start the game from MWCoop.exe to play with friends");
                     return Lang.Status(Session.Status) + Sep + Session.Players.Count + Lang.T(" joueur(s)", " player(s)");
                 case TabChat: return Lang.T("En jeu, ", "In game, ") + Keys.Label(Keys.Chat) + Lang.T(" \u00E9crit sans ouvrir ce menu", " opens the chat without this menu");
-                case TabRace: return Lang.T("Jokkis de location, gratuites \u00B7 une par joueur \u00B7 rendues apr\u00E8s le week-end", "Rental Jokkis, free \u00B7 one per player \u00B7 given back after the weekend");
+                case TabRace: return RacePanel.Sub;
                 case TabVaz: return Lang.T("Une par joueur, gratuite \u00B7 une couleur et un num\u00E9ro chacun \u00B7 rendue en quittant", "One per player, free \u00B7 a colour and a number each \u00B7 given back when you leave");
                 case TabLook: return Lang.T("Ce que les autres voient \u00B7 chang\u00E9 tout de suite chez eux", "What the others see \u00B7 changed right away for them");
                 case TabHud: return Lang.T("Pour vous seul \u00B7 aussi dans le lanceur (R\u00E9glages \u203A HUD) \u00B7 le HUD change autour du menu", "Just for you \u00B7 also in the launcher (Settings \u203A HUD) \u00B7 the HUD changes around this menu");
@@ -334,7 +333,7 @@ namespace MWCoop
             yy += Style.Px(30);
             int lastG = -1;
             string[] names = tabs, groups = Lang.A(groupsFr, groupsEn);
-            int mine = PlayerSync.InGame ? Jokkis.ChosenNumber(Session.LocalId) : 0;
+            int mine = PlayerSync.InGame ? IceRace.MyNumber : 0;
             for (int i = 0; i < names.Length; i++)
             {
                 if (tabGroup[i] != lastG)
@@ -354,7 +353,7 @@ namespace MWCoop
                 Color c = on ? Kit.Ice : Kit.Soft;
                 Kit.Icon(new Rect(tr.x + Style.Px(12), tr.center.y - Style.Px(9), Style.Px(18), Style.Px(18)), tabIcons[i], c);
                 Style.Text(new Rect(tr.x + Style.Px(40), tr.y, tr.width - Style.Px(48), tr.height), names[i], 14, TextAnchor.MiddleLeft, c);
-                string tag = i == TabPlayers && Session.Active ? Session.Players.Count.ToString() : i == TabRace && mine != 0 ? "n\u00B0 " + mine : i == TabVaz && PlayerSync.InGame && Vaz.Mine != 0 ? "n\u00B0 " + Vaz.Mine : null;
+                string tag = i == TabPlayers && Session.Active ? Session.Players.Count.ToString() : i == TabRace && mine != 0 ? "#" + mine : i == TabVaz && PlayerSync.InGame && Vaz.Mine != 0 ? "n\u00B0 " + Vaz.Mine : null;
                 if (tag != null) Style.Text(new Rect(tr.x, tr.y, tr.width - Style.Px(12), tr.height), tag, 11, TextAnchor.MiddleRight, on ? Kit.Ice : Kit.Faint);
             }
             Style.Text(new Rect(px + Style.Px(10), r.yMax - Style.Px(34), pw, Style.Px(20)), "version " + Version.Text, 11, TextAnchor.MiddleLeft, Kit.Faint, false);
@@ -364,7 +363,6 @@ namespace MWCoop
         // changent d'onglet, Droite ou Entree entrent dans la liste. Liste : Gauche non prise par la ligne revient a la barre.
         static bool Key(KeyCode k, bool shift)
         {
-            if (tab == TabRace && sel >= 0 && JokkisPanel.Key(k)) return true;
             if (tab == TabVaz && sel >= 0 && VazPanel.Key(k)) return true;
             int n = tabs.Length;
             switch (k)
@@ -677,10 +675,9 @@ namespace MWCoop
             // Course sur glace : son onglet.
             if (PlayerSync.InGame)
             {
-                int mine = Jokkis.ChosenNumber(Session.LocalId);
-                Jokkis.Def md = mine != 0 ? Jokkis.DefOf(mine) : null;
+                int mine = IceRace.MyNumber;
                 if (ActionRow("course", Lang.T("Course sur glace", "Ice race"),
-                              md != null ? Lang.T("Votre voiture : n\u00B0 ", "Your car: no. ") + mine + " " + md.Driver : Lang.T("Jokkis de location, gratuites", "Rental Jokkis, free"),
+                              mine != 0 ? Lang.T("Inscrit \u00B7 n\u00B0 ", "Registered \u00B7 no. ") + mine + (IceRace.MeWithVaz ? " (VAZ)" : "") : Lang.T("Pas inscrit \u00B7 inscription avec ta VAZ", "Not registered \u00B7 sign up with your VAZ"),
                               Lang.T("Entr\u00E9e ou clic : l'onglet Course sur glace", "Enter or click: the Ice race tab"), true))
                     SetTab(TabRace);
             }

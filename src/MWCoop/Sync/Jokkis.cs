@@ -215,7 +215,7 @@ namespace MWCoop
             // [Coop] Jokkis=1 (option de l'hote dans le lanceur, groupe 8, "Jokkis a louer pour la course sur glace (beta)" ;
             // coupee par defaut pour cette version) : ne garde que la DEMANDE d'ici et l'acceptation par l'hote. La table recue
             // de l'hote s'applique toujours (un invite option coupee construit quand meme les voitures des autres).
-            enabled = Config.GetInt("Coop", "Jokkis", 0) != 0;
+            enabled = Config.GetInt("Test", "Jokkis", 0) != 0;   // (18/10, JD : remplacees par la VAZ-2108, qui prend la place d'une IA ; essais seulement)
             if (!hooked) { hooked = true; Session.PlayerLeft += pi => { if (Session.IsHost && wanted.Remove(pi.Id)) HostChanged("depart de " + pi.Name); lastLevel.Remove(pi.Id); }; }
             if (PlayerSync.InGame) Log.Info("jokkis : location " + (enabled ? "ouverte ([Coop] Jokkis=1)" : "coupee ici ([Coop] Jokkis=0 ; la table de l'hote s'applique quand meme)"));
         }

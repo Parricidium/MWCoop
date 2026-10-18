@@ -4682,8 +4682,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         for (const char *k : { "ArgentDepart", "Triches", "Renverser", "PvP" }) row(k, false);
         y += 6;
         caption(T(L"JEUX & AJOUTS", L"GAMES & ADDITIONS"), false);
-        row("VenttiEnjeux", false);
-        row("Jokkis", false);
+        row("VenttiEnjeux", false);   // (Jokkis a louer retirees le 18/10 : la VAZ les remplace)
         // ajouts MWCoop : Tous / Choisir / Aucun (SansAjouts et les quatre AjoutX)
         int on = 0;
         for (const char *k : kAjoutKeys) on += val(k) == 1;
