@@ -18,13 +18,13 @@ namespace MWCoop
         static readonly List<Behaviour> blocked = new List<Behaviour>();
         static bool focusChat, testDone;
         // Onglets (refonte du 18/10) : barre a gauche en trois groupes (PARTIE, MOI, AVANCE), icones assets/menu.
-        static readonly string[] tabsFr = { "Joueurs", "Tchat", "Course sur glace", "VAZ-2108", "Apparence", "HUD", "Graphismes", "Synchro" },
-                                 tabsEn = { "Players", "Chat", "Ice race", "VAZ-2108", "Appearance", "HUD", "Graphics", "Sync" };
-        static readonly string[] tabIcons = { "joueurs", "tchat", "course", "voiture", "apparence", "hud", "graphismes", "synchro" };
-        static readonly int[] tabGroup = { 0, 0, 0, 0, 1, 1, 1, 2 };
+        static readonly string[] tabsFr = { "Joueurs", "Tchat", "Course sur glace", "Rallye", "VAZ-2108", "Apparence", "HUD", "Graphismes", "Synchro" },
+                                 tabsEn = { "Players", "Chat", "Ice race", "Rally", "VAZ-2108", "Appearance", "HUD", "Graphics", "Sync" };
+        static readonly string[] tabIcons = { "joueurs", "tchat", "course", "course", "voiture", "apparence", "hud", "graphismes", "synchro" };
+        static readonly int[] tabGroup = { 0, 0, 0, 0, 0, 1, 1, 1, 2 };
         static readonly string[] groupsFr = { "PARTIE", "MOI", "AVANC\u00C9" }, groupsEn = { "GAME", "ME", "ADVANCED" };
         static string[] tabs { get { return Lang.A(tabsFr, tabsEn); } }
-        public const int TabPlayers = 0, TabChat = 1, TabRace = 2, TabVaz = 3, TabLook = 4, TabHud = 5, TabGfx = 6, TabSync = 7;
+        public const int TabPlayers = 0, TabChat = 1, TabRace = 2, TabRally = 3, TabVaz = 4, TabLook = 5, TabHud = 6, TabGfx = 7, TabSync = 8;   // (Rallye : 18/10)
         public static int Tab { get { return tab; } }
         const string ChatField = "mwcoop-chat2";
         const string Sep = "  \u00B7  ";
@@ -226,6 +226,14 @@ namespace MWCoop
                 contentH = viewH = view.height;
                 items = 0;
             }
+            else if (tab == TabRally)
+            {
+                // Rallye : RacePanel (inscription chez Fleetari avec la VAZ, departs, pilotes, classement), comme la course sur glace
+                dragging = false;
+                RacePanel.DrawRallyTab(view);
+                contentH = viewH = view.height;
+                items = 0;
+            }
             else if (tab == TabVaz)
             {
                 // VAZ-2108 : VazPanel dessine la grille des couleurs, l'apercu 3D et la fiche (meme navigation que la course)
@@ -312,6 +320,7 @@ namespace MWCoop
                     return Lang.Status(Session.Status) + Sep + Session.Players.Count + Lang.T(" joueur(s)", " player(s)");
                 case TabChat: return Lang.T("En jeu, ", "In game, ") + Keys.Label(Keys.Chat) + Lang.T(" \u00E9crit sans ouvrir ce menu", " opens the chat without this menu");
                 case TabRace: return RacePanel.Sub;
+                case TabRally: return RacePanel.RallySub;
                 case TabVaz: return Lang.T("Une par joueur, gratuite \u00B7 une couleur et un num\u00E9ro chacun \u00B7 rendue en quittant", "One per player, free \u00B7 a colour and a number each \u00B7 given back when you leave");
                 case TabLook: return Lang.T("Ce que les autres voient \u00B7 chang\u00E9 tout de suite chez eux", "What the others see \u00B7 changed right away for them");
                 case TabHud: return Lang.T("Pour vous seul \u00B7 aussi dans le lanceur (R\u00E9glages \u203A HUD) \u00B7 le HUD change autour du menu", "Just for you \u00B7 also in the launcher (Settings \u203A HUD) \u00B7 the HUD changes around this menu");

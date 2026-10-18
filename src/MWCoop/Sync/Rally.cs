@@ -25,7 +25,7 @@ namespace MWCoop
     //    TimeTotalFPS, lu par leur Navigation) et RallyStageOccupied (SS2) prennent celui de l'invite qui court ;
     //  - invite : sa participation est gardee par monde (rallye.ini, comme son porte-monnaie) ; la sauvegarde recue a
     //    chaque connexion contient celle de l'hote, remplacee par la sienne (ou effacee) au chargement.
-    public static class Rally
+    public static partial class Rally   // (+ RallyVaz.cs : VAZ inscrite, etat pour l'onglet Rallye)
     {
         const int K_HUMAN = 10, K_BOARD = 11, K_SLOTASK = 12, K_SLOT = 13, K_ONSTAGE = 14;
 
@@ -52,6 +52,7 @@ namespace MWCoop
             humans.Clear(); slots.Clear(); boardWeek = -1;
             for (int i = 0; i < 4; i++) { remoteStageAt[i] = -100; stageForced[i] = false; }
             readyAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
+            VazReset();
         }
 
         class Hook : ModHook
@@ -130,9 +131,10 @@ namespace MWCoop
         {
             if (!Session.Active || !PlayerSync.InGame || readyAt < 0 || Time.realtimeSinceStartup < readyAt) return;
             if (!Find()) return;
-            string wld = World();
-            if (wld.Length == 0 || wld == "0") return;   // identifiant de la partie pas encore charge : cles par monde fausses
+            // (identifiant de la partie 0 -- nouvelle partie pas encore sauvegardee -- : seuls les fichiers par monde attendent,
+            // WorldOk ; avant, tout le module s'arretait ici, comme la course sur glace chez JD, 18/10)
             float now = Time.realtimeSinceStartup;
+            VazTick(now);
             if (!Session.IsHost && !restored)
             {
                 // Apres le chargement du jeu (State 2 -> Exists -> Load 2 -> State 17 -> 'Rally unfinised?') : sinon Load 2
@@ -189,7 +191,7 @@ namespace MWCoop
             // plein week-end garde les memes adversaires et ne redonne pas une heure deja prise.
             seed = 0;
             string key = World() + "|" + w + "=";
-            if (System.IO.File.Exists(HostPath))
+            if (WorldOk && System.IO.File.Exists(HostPath))
                 foreach (string l in System.IO.File.ReadAllLines(HostPath))
                 {
                     if (!l.StartsWith(key)) continue;
@@ -213,6 +215,7 @@ namespace MWCoop
 
         static void SaveHost()
         {
+            if (!WorldOk) return;
             string key = World() + "|" + boardWeek + "=";
             var sb = new System.Text.StringBuilder(key).Append(seed);
             foreach (KeyValuePair<string, int[]> kv in slots) sb.Append(';').Append(kv.Key.Replace(";", "").Replace(":", "")).Append(':').Append(kv.Value[0]).Append(':').Append(kv.Value[1]);
@@ -274,6 +277,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- inscription : heures de depart
         static void OnRegistered()
         {
+            VazRegistered();
             if (!Session.Active) return;
             if (Session.IsHost) { int[] s = Slot(Session.LocalId); ApplySlot(s[0], s[1]); }
             else Session.SendToHost(new NetWriter(Msg.Race).U8(K_SLOTASK), true);
@@ -416,6 +420,7 @@ namespace MWCoop
         static readonly string[] SnapB = { "Registered", "SecondDay", "RaceOver" };
         static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
 
+        static bool WorldOk { get { string w = World(); return w.Length > 0 && w != "0"; } }
         static string World()
         {
             FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID");
@@ -425,7 +430,7 @@ namespace MWCoop
         static void StoreGuest()
         {
             string w = World();
-            if (w.Length == 0 || data == null) return;
+            if (!WorldOk || data == null) return;
             var sb = new System.Text.StringBuilder();
             foreach (string n in SnapF) { FsmFloat v = F(n); if (v != null) sb.Append(n).Append(':').Append(v.Value.ToString("R", Inv)).Append(';'); }
             foreach (string n in SnapI) { FsmInt v = I(n); if (v != null) sb.Append(n).Append(':').Append(v.Value).Append(';'); }
@@ -482,7 +487,7 @@ namespace MWCoop
         static void RestoreGuest()
         {
             string w = World(), line = null;
-            if (w.Length > 0 && System.IO.File.Exists(StorePath))
+            if (WorldOk && System.IO.File.Exists(StorePath))
                 foreach (string l in System.IO.File.ReadAllLines(StorePath)) if (l.StartsWith(w + "=")) line = l.Substring(w.Length + 1);
             if (line == null)
             {
@@ -537,6 +542,8 @@ namespace MWCoop
         static int testStep;
         public static void Test(string mode, float t)
         {
+            if (mode == "rallyevaz") { TestVaz(t); return; }
+            TestSave(mode, t);
             // [Test] Autotest=rallye3 (avec le samedi 13 h de Races) : l'invite « court » SS1 de 35 s a 135 s (chrono de la
             // speciale allume, 'Clock' en "Get time", Timing.Start vrai). Chez l'hote : « voitures IA retenues » ; aucune
             // voiture ne quitte "Timing?" pendant ce temps (sauf si le chrono de l'invite passe 150 s).
