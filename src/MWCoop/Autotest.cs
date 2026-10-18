@@ -1883,6 +1883,14 @@ namespace MWCoop
                 if (t > 30f && t < 36f) { string w = Props.TestCarry(id, t); if (Time.frameCount % 60 == 0) Log.Info("autotest : " + w); }
                 if (t > 45f && !done) { done = true; Log.Info("autotest : " + id + " finit en " + Props.Where(id)); }
             }
+            // [Test] HeureCapture=<h> : l'heure du jeu posee a 10 s, tous modes (captures en plein jour).
+            if (t > 10f && !hourSet && Config.GetInt("Test", "HeureCapture", -1) >= 0)
+            {
+                hourSet = true;
+                PlayMakerFSM sun = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
+                if (sun != null) { sun.FsmVariables.GetFsmInt("Time").Value = Config.GetInt("Test", "HeureCapture", 12); sun.SendEvent("TIMESKIP"); }
+                Log.Info("autotest : heure posee a " + Config.GetInt("Test", "HeureCapture", 12) + " h" + (sun == null ? " (soleil introuvable)" : ""));
+            }
             // [Test] TestPos=x,y,z : le joueur y est teleporte a 8 s (recos, scenes a cote d'un lieu).
             string tp = Config.Get("Test", "TestPos", "");
             // [Test] Autotest=kiosque, sans TestPos : les deux joueurs vont a 8 s devant le kiosque a saucisses du rallye
@@ -2551,7 +2559,7 @@ namespace MWCoop
             }
         }
 
-        static bool done, teleported, sleepWatch, foodMade, watchLogged;
+        static bool done, teleported, hourSet, sleepWatch, foodMade, watchLogged;
         static System.Collections.Generic.List<Rigidbody> rivParts;
         static bool rivNear; static int attVoisin, attAir; static float rivLog, cabGap, holdLog, attTry, attExitAt = 1e9f;
         static int holdN;
