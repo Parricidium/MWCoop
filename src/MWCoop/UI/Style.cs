@@ -40,7 +40,9 @@ namespace MWCoop
         static int cursorSize;
 
         // Echelle de l'interface (1 en 1080 lignes, 0,67 en 720, 1,33 en 1440).
-        public static float S { get { return Mathf.Max(0.6f, Screen.height / 1080f); } }
+        // Scale : taille choisie des menus du mod (Kit.MenuScale), posee le temps de dessiner le F10 et les petits panneaux.
+        public static float Scale = 1f;
+        public static float S { get { return Mathf.Max(0.6f, Screen.height / 1080f) * Scale; } }
         public static float Px(float v) { return Mathf.Round(v * S); }
         static int Size(int size) { return Mathf.Max(9, Mathf.RoundToInt(size * S)); }
         static bool Painting { get { return Event.current != null && Event.current.type == EventType.Repaint; } }

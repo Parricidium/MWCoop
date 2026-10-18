@@ -14,7 +14,7 @@ enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SA
 
 struct WikiKey { const wchar_t *key, *fr, *en; };
 static const WikiKey kWikiKeys[] = {
-    { L"F10", L"Menu coop : joueurs, apparence, discussion, graphismes, HUD", L"Co-op menu: players, appearance, chat, graphics, HUD" },
+    { L"F10", L"Menu coop : joueurs, tchat, course sur glace, apparence, HUD, graphismes, synchro", L"Co-op menu: players, chat, ice race, appearance, HUD, graphics, sync" },
     { L"T", L"Écrire aux autres joueurs (discussion) — touche réglable : Réglages > Touches", L"Write to the other players (chat) — key can be changed: Settings > Keys" },
     { L"N", L"Porte-monnaie : donner de l'argent à un autre joueur (touche réglable)", L"Wallet: give money to another player (key can be changed)" },
     { L"V (tenue)", L"Parler aux joueurs proches (vocal de Steam, la voix baisse avec la distance) — touche réglable", L"Talk to nearby players (Steam voice, fades with distance) — key can be changed" },
@@ -217,6 +217,17 @@ static const WikiBlock kW_InGame[] = {
     { WB_P, L"En jeu, MWCoop ajoute quelques touches et un menu. En haut à gauche, une pastille montre l'état de la connexion et le nombre de joueurs.",
             L"In game, MWCoop adds a few keys and a menu. Top left, a pill shows the connection state and the number of players." },
     { WB_FIG, NULL, NULL, WF_KEYS },
+    { WB_H, L"Le menu F10", L"The F10 menu" },
+    { WB_B, L"Onglets à gauche, en trois groupes : Partie (Joueurs, Tchat, Course sur glace), Moi (Apparence, HUD, Graphismes) et Avancé (Synchro).",
+            L"Tabs on the left, in three groups: Game (Players, Chat, Ice race), Me (Appearance, HUD, Graphics) and Advanced (Sync)." },
+    { WB_B, L"Clavier : Haut/Bas changent d'onglet, Droite ou Entrée entrent dans la liste, Gauche y revient ; Tab passe à l'onglet suivant. La souris marche partout.",
+            L"Keyboard: Up/Down switch tabs, Right or Enter go into the list, Left comes back; Tab goes to the next tab. The mouse works everywhere." },
+    { WB_B, L"Joueurs : une carte par joueur (où il est, ping) avec Aller, et pour l'hôte Faire venir et Exclure ; puis inviter des amis Steam et resynchroniser le monde.",
+            L"Players: one card per player (where they are, ping) with Go to, and for the host Bring here and Kick; then invite Steam friends and resync the world." },
+    { WB_B, L"Course sur glace : les 16 Jokkis de location, gratuites, une par joueur, avec l'aperçu 3D. Gauche/Droite filtrent un modèle, Entrée ou un double clic choisit ou rend la voiture.",
+            L"Ice race: the 16 rental Jokkis, free, one per player, with the 3D preview. Left/Right filter a model, Enter or a double click chooses or gives back the car." },
+    { WB_B, L"Taille du menu (Petit, Normal, Grand) et sa place (centre ou gauche) : F10 › Graphismes › Menu MWCoop. Elle vaut aussi pour les triches (F7), le porte-monnaie (N) et le tchat.",
+            L"Menu size (Small, Normal, Large) and its place (centre or left): F10 › Graphics › MWCoop menu. It also applies to cheats (F7), the wallet (N) and the chat." },
     { WB_H, L"Ce qui est partagé", L"What's shared" },
     { WB_P, L"Les joueurs et leurs gestes, l'heure et la météo de l'hôte, les portes, la télé et les CD, les véhicules (conducteur, passagers, dégâts), chaque boulon, la peinture, les liquides, l'argent, les magasins, les PNJ, la police, les travaux, les factures, le téléphone, la circulation, le feu, le remorquage…",
             L"Players and their moves, the host's time and weather, doors, TV and CDs, vehicles (driver, passengers, damage), every bolt, paint, fluids, money, shops, NPCs, police, jobs, bills, phone, traffic, fire, towing…" },

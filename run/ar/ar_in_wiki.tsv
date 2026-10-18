@@ -468,3 +468,10 @@ WH16	Vanilla, Card, Rings or Strip
 WH17	A single Settings page (left bar: Game or Co-op), with eight tabs at the top. Everything is kept in mwcoop-lanceur.ini (game folder) and MWCoop\\mwcoop.ini.
 WH19	The style of the in-game gauges (Vanilla, Card, Rings, Strip) with a preview, then its size, position, colour, background, the gauges shown, the team panel and the alerts.
 WH20	Co-op menu: players, appearance, chat, graphics, HUD
+WM01	Co-op menu: players, chat, ice race, appearance, HUD, graphics, sync
+WM02	The F10 menu
+WM03	Tabs on the left, in three groups: Game (Players, Chat, Ice race), Me (Appearance, HUD, Graphics) and Advanced (Sync).
+WM04	Keyboard: Up/Down switch tabs, Right or Enter go into the list, Left comes back; Tab goes to the next tab. The mouse works everywhere.
+WM05	Players: one card per player (where they are, ping) with Go to, and for the host Bring here and Kick; then invite Steam friends and resync the world.
+WM06	Ice race: the 16 rental Jokkis, free, one per player, with the 3D preview. Left/Right filter a model, Enter or a double click chooses or gives back the car.
+WM07	Menu size (Small, Normal, Large) and its place (centre or left): F10 › Graphics › MWCoop menu. It also applies to cheats (F7), the wallet (N) and the chat.
