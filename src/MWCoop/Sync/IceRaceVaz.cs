@@ -268,12 +268,46 @@ namespace MWCoop
         public static bool VazPending { get { return MeRegistered && vazMine && !myRental; } }
         public static string HeatNow { get { int h = TrackHeat(); return h >= 0 ? HeatName(h) : null; } }
 
+        // ---------------------------------------------------------------- ma manche (carte, alerte)
+        // Manche en cours ou a venir (HeatStage de la piste) ou figure mon numero, pas encore arrive : sa voie et la place de
+        // grille (TrackFunctions Gridding / StartPos<voie>). Alerte (JD, 18/10 : « quand c'est son tour de courir ») une fois
+        // par manche : quand elle devient la mienne, et quand la piste forme la grille.
+        public static bool MyHeat(out string heat, out int lane, out Vector3 slot)
+        {
+            heat = null; lane = 0; slot = Vector3.zero;
+            if (!enabled || track == null || !MeRegistered || Practice) return false;   // (vendredi : essais, pas de manche)
+            int hs = TrackHeat();
+            if (hs < 0 || hs >= HeatLists.Length) return false;
+            string mine = MyKey();
+            int n; if (!int.TryParse(mine, out n)) return false;
+            if (resultsNumbers != null) foreach (object o in resultsNumbers) if (o != null && o.ToString() == mine) return false;   // (deja arrive)
+            lane = LaneOf(n);
+            if (lane <= 0) return false;
+            heat = HeatName(hs);
+            Transform t = GridSlot(lane);
+            if (t != null) slot = t.position;
+            return true;
+        }
+
+        static string alertKey = "";
+        static void HeatAlert()
+        {
+            string heat; int lane; Vector3 slot;
+            if (!MyHeat(out heat, out lane, out slot)) return;
+            string key = localWeek + "|" + heat + "|" + (Gridding ? "g" : "w");
+            if (key == alertKey) return;
+            alertKey = key;
+            if (Gridding) Hud.Toast(Lang.T("Course sur glace : ta manche ", "Ice race: your heat ") + heat + Lang.T(" part, en place sur la grille (voie ", " is starting, get on the grid (lane ") + lane + ")");
+            else Hud.Toast(Lang.T("Course sur glace : ta manche ", "Ice race: your heat ") + heat + Lang.T(" est la prochaine, pr\u00E9sente-toi \u00E0 la grille (voie ", " is next, report to the grid (lane ") + lane + Lang.T(", sur la carte)", ", on the map)"));
+            Log.Info("glace : ma manche " + heat + " (voie " + lane + (Gridding ? ", grille en place" : ", a venir") + ")");
+        }
+
         // ---------------------------------------------------------------- essai
         // Autotest « glacevaz » (2 joueurs ; semaine de la course posee par Races.Test a 20 s) : chacun prend une VAZ (hote n 3 a 8 s, invite n 5 a 6 s), la gare a 3 m de la
         // tente d'inspection a 34 s (le joueur a cote), ouvre la feuille d'inscription a 38 s et la confirme a 42 s
         // (ButtonConfirm -> 'State 16', comme le clic) ; bilan a 56 s (inscrit, VAZ, numero, location) et a 76 s (numeros
         // de l'hote, Cars[n], chronos). [Test] VazLoin=1 : la VAZ reste a 30 m (attendu : refus du jeu, xNoCar).
-        static int vazTest; static bool mondeZero;
+        static int vazTest; static bool mondeZero, mapShot;
         static void TestVaz(float t)
         {
             // [Test] MondeZero=1 : PlayerID pose a 0 a 5 s (nouvelle partie pas encore sauvegardee, comme chez JD)
@@ -345,6 +379,8 @@ namespace MWCoop
                 Autotest.CaptureSoon("glace-chronos", 3f);
                 Log.Info("autotest glacevaz : au bord de la ligne d'arrivee, chronos " + (LiveOn ? "montres" : "caches") + ", essais " + Practice + ", zone " + zone.min.ToString("F0") + " - " + zone.max.ToString("F0"));
             }
+            if (Session.IsHost && vazTest == 8 && t > 89f && !mapShot) { mapShot = true; MapPanel.Open = true; Autotest.CaptureSoon("carte-glace", 1.5f); }
+            if (Session.IsHost && vazTest == 8 && t > 91.5f && mapShot) MapPanel.Open = false;
             if (Session.IsHost && vazTest == 8 && t > 92f)
             {
                 vazTest = 9;
@@ -495,6 +531,7 @@ namespace MWCoop
                 }
             }
             WatchMyLine();
+            HeatAlert();
             if (!Practice && !HeatRunning) return;
             bool practice = Practice;
             foreach (LiveCar c in live.Values)

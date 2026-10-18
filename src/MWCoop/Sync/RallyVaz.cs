@@ -248,6 +248,24 @@ namespace MWCoop
             return l;
         }
 
+        // ---------------------------------------------------------------- carte (MapPanel)
+        // Speciale n (1-3) a montrer : du jour (SS1, SS2 samedi, SS3 dimanche) et pas encore courue par au moins un pilote
+        // inscrit -- l'hote qui a fini la sienne la voit toujours tant qu'il reste des joueurs en lice (JD, 18/10). mine : je
+        // suis inscrit et ne l'ai pas encore courue ; startHour : mon heure de depart (0 : inconnue) ; left : pilotes restants.
+        public static bool StageOnMap(int n, out bool mine, out int startHour, out int left)
+        {
+            mine = false; startHour = 0; left = 0;
+            if (data == null || n < 1 || n > 3) return false;
+            FsmInt gd = FsmVariables.GlobalVariables.FindFsmInt("GlobalDay");
+            int day = gd != null ? gd.Value : 0;
+            if (n <= 2 ? day != 6 : day != 7) return false;
+            int bit = 1 << (n - 1);
+            bool meIn = Bool("Registered");
+            if (meIn && (Mask() & bit) == 0) { mine = true; left++; startHour = MyStarts[n - 1]; }
+            foreach (Human h in humans.Values) if (h.Id != Session.LocalId && h.Registered && (h.Mask & bit) == 0) left++;
+            return left > 0;
+        }
+
         // ---------------------------------------------------------------- essai
         // Autotest « rallyevaz » : samedi 9 h d'une semaine de rallye (GlobalWeeksPassed pair) posee a 12 s, VAZ prise a 16 s,
         // joueur et VAZ (Faire venir) a la tente de Fleetari a 30 s, feuille ouverte a 40 s et confirmee a 43 s ; bilan a 55 s
@@ -341,6 +359,8 @@ namespace MWCoop
             }
             if (vazTest == 7 && t > 60f) { vazTest = 8; Menu.Show(Menu.TabRace); Autotest.CaptureSoon("glace-horssemaine", 1.5f); }
             if (vazTest == 8 && t > 64f) { vazTest = 9; Menu.Open = false; }
+            if (vazTest == 9 && t > 66f) { vazTest = 10; MapPanel.Open = true; Autotest.CaptureSoon("carte-rallye", 2f); }
+            if (vazTest == 10 && t > 70f) { vazTest = 11; MapPanel.Open = false; }
         }
     }
 }

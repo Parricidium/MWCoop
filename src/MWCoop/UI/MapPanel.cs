@@ -9,7 +9,7 @@ namespace MWCoop
     // MapRender, les joueurs en direct (pseudo, fleche du regard, en voiture), les lieux. Molette : zoom autour de la
     // souris ; glisser : deplacer ; C : recentrer sur soi ; Echap ou la touche : fermer. Clic droit : son marqueur partage
     // (Markers : pose, deplace, retire sur le sien) ; les marqueurs de tous, a la couleur de leur joueur.
-    public static class MapPanel
+    public static partial class MapPanel   // (+ MapRaces.cs : rallye et course sur glace ; MapJobs.cs : objectifs des boulots)
     {
         public static bool Open;
         static float openedAt;
@@ -21,6 +21,7 @@ namespace MWCoop
         public static void Update()
         {
             if (!PlayerSync.InGame) { Open = false; return; }
+            JobsTick();   // (objectifs des boulots, MapJobs.cs : suivis meme carte fermee, messages d'etape)
             if (Menu.Open || Menu.ChatOpen) return;
             if (Open && Input.GetKeyDown(KeyCode.Escape)) { Open = false; return; }
             // [Coop] CarteMaintenir=1 (lanceur) : ouverte tant que la touche est tenue ; sinon un appui ouvre, un autre ferme
@@ -237,6 +238,7 @@ namespace MWCoop
                 used.Add(lr);
                 Label(lr, name, 13, new Color(1f, 0.92f, 0.7f));
             }
+            DrawRaces(local, used, false);   // (traces : sous les lieux)
             if (showJobs) DrawJobs(local, used);
             DrawMarkers(local, used);
             // joueurs
@@ -251,6 +253,10 @@ namespace MWCoop
                 float yaw = PlayerSync.LocalCamera != null ? PlayerSync.LocalCamera.eulerAngles.y : me.eulerAngles.y;
                 Marker(local, me.position, yaw, Lang.T("Moi", "Me"), Markers.ColorOf(Session.LocalId), VehicleSync.LocalDriving >= 0 || Seats.Seated);
             }
+            // objectifs des quetes et points des courses : au-dessus de tous les autres marqueurs (JD, 18/10), noms entre eux seulement
+            var top = new List<Rect>();
+            DrawRaces(local, top, true);
+            DrawObjectives(local, top);
             GUI.EndGroup();
             // echelle
             // echelle : 1, 2, 5 x 10^n metres, la plus petite qui fait au moins 70 px
@@ -297,6 +303,7 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             Markers.Test(mode, t);   // (Autotest=marqueur : pose / retrait de l'hote, releves de l'invite)
+            TestObjectives(mode, t);   // (Autotest=objectifs, MapJobs.cs)
             if (mode == "carteboulots" && t > 30f && !probed)
             {
                 probed = true;
