@@ -218,11 +218,40 @@ namespace MWCoop
         static MethodInfo disengage;
         static FieldInfo hbField, brField, engagingField;
 
+        // Voiture de rallye prete a partir (JD, 18/10 : « les VAZ ne demarraient pas ») : le demarreur repris de la SORBET
+        // (STARTERxSorbet) attend, moteur froid (< 10 degres), un moteur amorce -- Radiator/Priming : essence de la chambre a
+        // 20 +- 0,69 sans starter, sinon il tourne dans le vide ; noyee (> 20,7), il faut que l'essence s'evapore a 0,03/s,
+        // des minutes -- et abandonne si la batterie (Electricity/Power Charge) passe sous 80, qu'il vide a chaque image
+        // (vite a 144 images/s). La VAZ copiait l'etat de la SORBET du monde (-12 degres chez JD). Ici : chambre a 20,
+        // amorcee, jamais noyee ; batterie remise a 125 sous 110 ; reservoir remis a 40 sous 15.
+        static void ReadyToStart(VazCar.Built b, float now)
+        {
+            Transform ct = b.Car.transform;
+            if (b.Priming == null) { Transform r = ct.Find("Simulation/CarTempSorbet/Radiator"); b.Priming = r != null ? Game.FsmOn(r.gameObject, "Priming") : null; }
+            if (b.Power == null) { Transform e = ct.Find("Simulation/Electricity"); b.Power = e != null ? Game.FsmOn(e.gameObject, "Power") : null; }
+            if (b.Tank == null) { Transform t = ct.Find("Simulation/FuelTankSorbett"); b.Tank = t != null ? Game.FsmOn(t.gameObject, "Data") : null; }
+            string what = "";
+            if (b.Priming != null)
+            {
+                FsmFloat ch = b.Priming.FsmVariables.FindFsmFloat("FuelChamber");
+                FsmBool ok = b.Priming.FsmVariables.FindFsmBool("PrimingOK");
+                if (ch != null && Mathf.Abs(ch.Value - 20f) > 0.3f) { what += " chambre " + ch.Value.ToString("F1") + "->20"; ch.Value = 20f; }
+                if (ok != null && !ok.Value) { ok.Value = true; what += " amorcee"; }
+                if (b.Priming.ActiveStateName == "Flooded") { Game.SetState(b.Priming, "State 1"); what += " plus noyee"; }
+            }
+            FsmFloat charge = b.Power != null ? b.Power.FsmVariables.FindFsmFloat("Charge") : null;
+            if (charge != null && charge.Value < 110f) { what += " batterie " + charge.Value.ToString("F0") + "->125"; charge.Value = 125f; }
+            FsmFloat fuel = b.Tank != null ? b.Tank.FsmVariables.FindFsmFloat("FuelLevel") : null;
+            if (fuel != null && fuel.Value < 15f) { what += " reservoir " + fuel.Value.ToString("F1") + "->40"; fuel.Value = 40f; }
+            if (what.Length > 0 && now >= b.NextStartLog) { b.NextStartLog = now + 30f; Log.Info("vaz : " + b.Car.name + " prete a partir :" + what); }
+        }
+
         public static void Tick(VazCar.Built b, float now)
         {
             Drivetrain dt = b.Dt;
             if (dt == null) return;
             if (now >= b.NextSpec) { b.NextSpec = now + 2f; Spec(b, false); }
+            if (now >= b.NextStart) { b.NextStart = now + 0.5f; if (Config.GetInt("Test", "VazPrete", 1) != 0) ReadyToStart(b, now); }   // ([Test] VazPrete=0 : comme la 0.99.2)
             dt.engineOrientation = b.Car.transform.forward;
             if (!Mathf.Approximately(dt.powerMultiplier, PowerMul)) dt.powerMultiplier = PowerMul;
             if (now >= b.NextGrip) { b.NextGrip = now + 0.25f; Grip(b); }

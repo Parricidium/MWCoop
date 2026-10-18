@@ -2342,7 +2342,7 @@ namespace MWCoop
 
         public static void Test(string mode, float t)
         {
-            if (mode == "cle") { TestKey(t); return; }
+            if (mode == "cle" || mode == "vazcle") { TestKey(t); return; }
             if (mode == "boucle") { TestBoucle(t); return; }
             if (mode == "atteler") { TestAtteler(t); return; }
             if (mode == "fendeuse" || mode == "fendeuse2" || mode == "benne" || mode == "benne2" || mode == "taxi-commandes" || mode == "boitegants")
