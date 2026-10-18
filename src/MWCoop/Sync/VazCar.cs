@@ -1,11 +1,11 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using HutongGames.PlayMaker;
 using UnityEngine;
 
 namespace MWCoop
 {
-    // Construction d'une VAZ-2108 (Vaz.cs : qui a quelle couleur). Modele « VAZ-2108 Rally » de matthew0451 (Sketchfab,
+    // Construction d'une VAZ-2108 (Vaz.cs : qui a quelle couleur). Modele Â« VAZ-2108 Rally Â» de matthew0451 (Sketchfab,
     // CC BY-NC 4.0), converti et allege hors du jeu (~54 000 triangles, livree retiree) dans MWCoop/vaz : carrosserie,
     // portieres, capot, volant (.p205 : maillages + matieres), textures PNG, infos.txt (centres des roues, charnieres,
     // volant, feux, repere de la voiture : x a droite, y haut, z avant), plaques numero-01..16.png.
@@ -310,6 +310,16 @@ namespace MWCoop
             }
             foreach (Component c in car.GetComponentsInChildren<Component>(true))
                 if (c != null && c.GetType().Name == "Deformable" && c is Behaviour) ((Behaviour)c).enabled = false;
+            // Sieges de la SORBET (colliders invisibles : ses deux sieges avant, sa banquette) : pas aux places des baquets de la
+            // VAZ, ils occupaient la zone d'entree du conducteur et la place du passager une fois reculees -- plus moyen d'y
+            // entrer (retour de JD, 18/10 ; releve autotest vaz, VazPlaces).
+            int seatColl = 0;
+            foreach (string sp in new[] { "Colliders/seats1", "Colliders/seats2", "Colliders/seats3", "Colliders/seats4", "Colliders/bench", "RearSeat/Pivot/Coll" })
+            {
+                Transform s = ct.Find(sp);
+                if (s == null) continue;
+                foreach (Collider k in s.GetComponents<Collider>()) { k.enabled = false; seatColl++; }
+            }
 
             // 3. Alignement : milieu des roues de la VAZ (infos.txt) sur celui de la SORBET ; essieux a l'empattement de la VAZ.
             Wheel[] wheels = car.GetComponentsInChildren<Wheel>(true);
@@ -417,6 +427,19 @@ namespace MWCoop
                     j.autoConfigureConnectedAnchor = false;
                     j.connectedAnchor = j.connectedBody != null ? j.connectedBody.transform.InverseTransformPoint(aw) : aw;
                 }
+                // Zone d'entree du conducteur (DriveTriggerX : capsule de 10 cm de rayon, 50 cm de long, au niveau du siege) : le
+                // volume invisible de l'habitacle de la SORBET (Colliders/PlayerColl) ne laisse approcher depuis la portiere que
+                // l'avant du siege ; reculee avec la tete, elle n'etait plus atteignable (retour de JD, 18/10). Ramenee 15 cm
+                // en arriere de sa place d'origine (avant : il fallait se coller au volant), 8 cm vers la portiere, et agrandie
+                // (rayon 26 cm, 70 cm de long) : elle couvre l'ancien point et l'avant du siege.
+                Transform dtx = ct.Find("Functions/PlayerTrigger/DriveTriggerX");
+                if (dtx != null)
+                {
+                    float side = ct.InverseTransformPoint(dtx.position).x < 0f ? -1f : 1f;
+                    dtx.position = ct.TransformPoint(ct.InverseTransformPoint(dtx.position) + new Vector3(side * 0.08f, 0f, Config.GetFloat("Test", "VazZoneAvance", 0.12f)));
+                    var cap = dtx.GetComponent<CapsuleCollider>();
+                    if (cap != null) { cap.radius = Mathf.Max(cap.radius, 0.26f); cap.height = Mathf.Max(cap.height, 0.7f); }
+                }
             }
 
             // 6b. Commandes du tableau de bord et frein a main sur ceux du modele : chaque objet du jeu deplace pour que le centre de
@@ -481,7 +504,7 @@ namespace MWCoop
             VehicleSync.RescanSoon();
             b.NextMask = 0f;
             Log.Info("vaz : " + name + " construite en " + pos.ToString("F1") + " : " + emptied + " etats de sauvegarde vides, " + ids + " identifiants prefixes, " + b.Hidden.Count + " rendus SORBET caches, "
-                     + doors + " portieres, " + ctl + " commandes posees, " + rw + " roues du rallye" + (rc == null ? " (RALLYCAR3 introuvable)" : "") + ", " + lights + " lumieres posees, " + b.Lamps.Count + " pieces de feux, decalage " + offset.ToString("F2") + ", tete " + delta.ToString("F2"));
+                     + doors + " portieres, " + ctl + " commandes posees, " + seatColl + " colliders de sieges SORBET coupes, " + rw + " roues du rallye" + (rc == null ? " (RALLYCAR3 introuvable)" : "") + ", " + lights + " lumieres posees, " + b.Lamps.Count + " pieces de feux, decalage " + offset.ToString("F2") + ", tete " + delta.ToString("F2"));
             return b;
         }
 
