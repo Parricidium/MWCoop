@@ -115,13 +115,17 @@ namespace MWCoop
             borderlessAt = -1;
             // (fenetre du jeu : celle de ce fil, la boucle principale de Unity -- pas une autre instance du jeu)
             gameWnd = System.IntPtr.Zero;
-            EnumThreadWindows(GetCurrentThreadId(), FindGameWnd, System.IntPtr.Zero);
-            System.IntPtr hw = gameWnd;
-            if (hw == System.IntPtr.Zero || Screen.fullScreen) { Log.Info("graphismes : sans bordure impossible (fenetre " + (hw != System.IntPtr.Zero) + ", plein ecran " + Screen.fullScreen + ")"); return; }
-            const int GWL_STYLE = -16; const uint WS_POPUP = 0x80000000, WS_VISIBLE = 0x10000000, SWP_FRAMECHANGED = 0x20, SWP_SHOWWINDOW = 0x40;
-            SetWindowLong(hw, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-            SetWindowPos(hw, System.IntPtr.Zero, 0, 0, Screen.width, Screen.height, SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-            Log.Info("graphismes : fenetre sans bordure " + Screen.width + "x" + Screen.height);
+            try   // (user32 : Wine le fournit aussi ; une erreur ici ne doit pas arreter la boucle des graphismes)
+            {
+                EnumThreadWindows(GetCurrentThreadId(), FindGameWnd, System.IntPtr.Zero);
+                System.IntPtr hw = gameWnd;
+                if (hw == System.IntPtr.Zero || Screen.fullScreen) { Log.Info("graphismes : sans bordure impossible (fenetre " + (hw != System.IntPtr.Zero) + ", plein ecran " + Screen.fullScreen + ")"); return; }
+                const int GWL_STYLE = -16; const uint WS_POPUP = 0x80000000, WS_VISIBLE = 0x10000000, SWP_FRAMECHANGED = 0x20, SWP_SHOWWINDOW = 0x40;
+                SetWindowLong(hw, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+                SetWindowPos(hw, System.IntPtr.Zero, 0, 0, Screen.width, Screen.height, SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                Log.Info("graphismes : fenetre sans bordure " + Screen.width + "x" + Screen.height + (Wine.On ? " (Wine)" : ""));
+            }
+            catch (System.Exception e) { Log.Warn("graphismes : sans bordure impossible (" + e.GetType().Name + " : " + e.Message + ")"); }
         }
 
         public static void OnLevelLoaded()

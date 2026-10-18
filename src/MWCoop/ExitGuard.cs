@@ -9,6 +9,8 @@ namespace MWCoop
     // processus s'il vit encore quelques secondes plus tard. Rappel WAITORTIMERCALLBACK(param, fired) en x64 : RCX = param =
     // GetCurrentProcess() (-1), RDX = fired (1) : c'est exactement TerminateProcess(soi, 1).
     // [Coop] FinForcee=<s> (defaut 20 ; 0 : jamais). [Test] BloqueSortie=1 : la sortie se bloque (essai de la minuterie).
+    // Wine (Proton) : CreateTimerQueueTimer et TerminateProcess y existent (kernel32 en PE, rappel en convention x64 de
+    // Windows) ; adresse introuvable ou minuterie refusee : rien n'est arme, le jeu se ferme comme sans le mod.
     public static class ExitGuard
     {
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetModuleHandle(string name);
@@ -32,7 +34,8 @@ namespace MWCoop
                 IntPtr term = GetProcAddress(GetModuleHandle("kernel32.dll"), "TerminateProcess");
                 armedAt = UnityEngine.Time.realtimeSinceStartup;
                 bool ok = term != IntPtr.Zero && CreateTimerQueueTimer(out timer, IntPtr.Zero, term, new IntPtr(-1), (uint)(s * 1000), 0, WT_EXECUTEONLYONCE);
-                Log.Info("sortie : le jeu sera termine de force dans " + s + " s s'il ne s'est pas ferme" + (ok ? "" : " -- minuterie IMPOSSIBLE (erreur " + Marshal.GetLastWin32Error() + ")"));
+                Log.Info("sortie : le jeu sera termine de force dans " + s + " s s'il ne s'est pas ferme" + (ok ? "" : " -- minuterie IMPOSSIBLE (erreur " + Marshal.GetLastWin32Error() + ")")
+                         + (Wine.On ? " (Wine : minuterie et TerminateProcess de Wine, meme rappel)" : ""));
             }
             catch (Exception e) { Log.Warn("sortie : minuterie de fin forcee : " + e.Message); }
             if (Config.GetInt("Test", "BloqueSortie", 0) != 0) { Log.Info("autotest : sortie bloquee (BloqueSortie)"); System.Threading.Thread.Sleep(120000); }

@@ -1,0 +1,3 @@
+ML001	على Linux: ضع خيار تشغيل Steam من الدليل (Linux وSteam Deck) وشغّل MWCoop من Steam
+ML002	لم يُحمَّل MWCoop: على Linux، ضع WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% في خيارات تشغيل اللعبة في Steam (الدليل: Linux وSteam Deck)
+ML003	\n\nعلى Linux، تبقى نسخ التشغيل (مع روابط إلى اللعبة): احذفها يدويًا دون اتباع الروابط.

@@ -1469,6 +1469,11 @@ static bool UiClick(int id)
     case UI_SET_START: case UI_SET_START1: case UI_SET_START2:
         if (const Opt *o = OptByKey("LancerSteam")) {
             int k = id - UI_SET_START;
+            if (k == 2 && IsWine()) {   // (Wine : steam:// ne passe pas notre WINEDLLOVERRIDES ; cf. LaunchGame)
+                SetStatus(K_WARN, T(L"Sous Linux : mets l'option de lancement Steam du GUIDE (Linux et Steam Deck) et lance MWCoop depuis Steam",
+                                    L"On Linux: put the Steam launch option from the GUIDE (Linux and Steam Deck) and start MWCoop from Steam"));
+                return true;
+            }
             OptSet(*o, k == 2 ? 1 : 0);
             WritePrivateProfileStringW(L"Lanceur", L"SansCopie", k == 1 ? L"1" : L"0", g_iniLauncher.c_str());
             LaunchLog("demarrage du jeu choisi : %s", k == 0 ? "copie de lancement" : k == 1 ? "dossier du jeu" : "Steam");

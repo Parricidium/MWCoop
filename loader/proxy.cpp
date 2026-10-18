@@ -504,6 +504,15 @@ static void Init() {
     else if (g_archived < 0) Log("ATTENTION : journaux de la partie precedente pas tous ranges (%ls)", g_archiveDir[0] ? g_archiveDir : L"dossier impossible");
     Log("profil : %ls, arriere-plan : %d", g_profil[0] ? g_profil : L"(normal)", g_arrierePlan);
     if (!g_gameWritable) Log("ATTENTION : dossier du jeu en lecture seule, donnees dans %ls", g_dataRoot);
+    // Linux / Steam Deck par Proton (Wine) : note pour le lanceur et les journaux (nous voila charges : version=n,b a marche).
+    const char* wine = NULL;
+    {
+        typedef const char* (__cdecl* WineVer)();
+        HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+        WineVer wv = nt ? (WineVer)GetProcAddress(nt, "wine_get_version") : NULL;
+        if (wv) wine = wv();
+        if (wine) Log("Wine %s (Linux par Proton ou Wine)", wine);
+    }
     // Trace de chargement, toujours au meme endroit (le lanceur la lit : le mod a-t-il ete charge ?).
     if (local[0]) {
         wchar_t td[MAX_PATH]; swprintf(td, MAX_PATH, L"%s\\MWCoop", local);
@@ -514,6 +523,7 @@ static void Init() {
             SYSTEMTIME t; GetLocalTime(&t);
             fwprintf(tf, L"%04d-%02d-%02d %02d:%02d:%02d chargeur MWCoop charge\njeu=%ls\nprofil=%ls\ndonnees=%ls\necriture_jeu=%d\njournal=%ls\n",
                      t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, g_gameDir, g_profil, g_dataRoot, g_gameWritable ? 1 : 0, lp);
+            if (wine) fwprintf(tf, L"wine=%hs\n", wine);
             fclose(tf);
         }
     }

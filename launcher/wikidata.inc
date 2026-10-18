@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD };   // (WA_SAVES, WA_MODCOMPAT, WA_HUD : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX };   // (WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; };
 static const WikiKey kWikiKeys[] = {
@@ -442,7 +442,10 @@ static const WikiBlock kW_NoLoad[] = {
             L"The launcher removes it before every game, at start and when the game closes. Started straight from Steam's PLAY button right after a crash, the game may still start without MWCoop: open the launcher once and start again." },
     { WB_TIP, L"Avant chaque partie, le lanceur remet son chargeur (version.dll) s'il manque, s'il est ancien ou si un autre programme a mis le sien.",
               L"Before every game, the launcher puts its loader (version.dll) back if it's missing, old, or if another program put its own." },
+    { WB_TIP, L"Sous Linux ou sur Steam Deck (Proton), la cause est presque toujours l'option de lancement : sans WINEDLLOVERRIDES, Proton prend sa propre version.dll.",
+              L"On Linux or Steam Deck (Proton), the cause is almost always the launch option: without WINEDLLOVERRIDES, Proton uses its own version.dll." },
     { WB_GO, L"Voir l'installation idéale", L"See the ideal install", 1000 + WA_IDEAL },
+    { WB_GO, L"Linux et Steam Deck", L"Linux and Steam Deck", 1000 + WA_LINUX },
 };
 static const WikiBlock kW_NoJoin[] = {
     { WB_H, L"Le salon refuse", L"The lobby refuses" },
@@ -691,6 +694,55 @@ static const WikiBlock kW_Hud[] = {
                L"A mod that adds its own rows to the game's HUD (MSCLoader) is no longer visible with Card, Rings or Strip: go back to Vanilla to see it." },
     { WB_GO, L"Ouvrir Réglages", L"Open Settings", TAB_GFX },
 };
+// ---- Linux et Steam Deck (question de JD, 18/10) : pas de portage, le jeu et MWCoop tournent par Proton.
+static const WikiBlock kW_Linux[] = {
+    { WB_P, L"My Winter Car n'existe que pour Windows : sous Linux et sur Steam Deck, il tourne par Proton, la couche de compatibilité de Steam. MWCoop tourne avec lui, dans le même Proton : pas de version Linux à part, les mêmes fichiers que sous Windows.",
+            L"My Winter Car only exists for Windows: on Linux and Steam Deck it runs through Proton, Steam's compatibility layer. MWCoop runs with it, inside the same Proton: no separate Linux version, the same files as on Windows." },
+    { WB_H, L"Installer en 4 étapes", L"Install in 4 steps" },
+    { WB_S, L"Dans Steam : My Winter Car > Propriétés > Compatibilité : coche « Forcer l'utilisation d'un outil de compatibilité Steam Play » et choisis Proton (la dernière version stable). Lance le jeu une fois sans rien, pour que Proton prépare son dossier.",
+            L"In Steam: My Winter Car > Properties > Compatibility: tick \"Force the use of a specific Steam Play compatibility tool\" and pick Proton (the latest stable one). Start the game once without anything, so Proton sets up its folder." },
+    { WB_S, L"Copie TOUT le zip MWCoop dans le dossier du jeu (Gérer > Parcourir les fichiers locaux), comme sous Windows : MWCoop.exe, version.dll et le dossier MWCoop, à côté de mywintercar.exe.",
+            L"Copy EVERYTHING from the MWCoop zip into the game folder (Manage > Browse local files), as on Windows: MWCoop.exe, version.dll and the MWCoop folder, next to mywintercar.exe." },
+    { WB_S, L"Propriétés > Général > Options de lancement : colle cette ligne (le guide « Jouer par Steam » du lanceur la copie pour toi) :\nWINEDLLOVERRIDES=\"version,winhttp=n,b\" bash -c 'exec \"${@/mywintercar.exe/MWCoop.exe}\"' -- %command%",
+            L"Properties > General > Launch options: paste this line (the launcher's \"Playing through Steam\" guide copies it for you):\nWINEDLLOVERRIDES=\"version,winhttp=n,b\" bash -c 'exec \"${@/mywintercar.exe/MWCoop.exe}\"' -- %command%" },
+    { WB_S, L"JOUER dans Steam ouvre maintenant MWCoop, dans le Proton du jeu : héberger, rejoindre ou jouer seul, comme sous Windows.",
+            L"PLAY in Steam now opens MWCoop, inside the game's Proton: host, join or play solo, as on Windows." },
+    { WB_H, L"Ce que fait la ligne", L"What the line does" },
+    { WB_B, L"WINEDLLOVERRIDES=\"version,winhttp=n,b\" : Proton prend la version.dll de MWCoop (et le winhttp.dll de MSCLoader) au lieu des siennes. Sans elle, le jeu démarre sans le mod, sans aucune erreur.",
+            L"WINEDLLOVERRIDES=\"version,winhttp=n,b\": Proton uses MWCoop's version.dll (and MSCLoader's winhttp.dll) instead of its own. Without it, the game starts without the mod, with no error at all." },
+    { WB_B, L"bash -c 'exec ...' -- %command% : remplace mywintercar.exe par MWCoop.exe dans la commande de Steam. MWCoop tourne ainsi dans le Proton du jeu, avec Steam (salons, invitations, voix).",
+            L"bash -c 'exec ...' -- %command%: replaces mywintercar.exe with MWCoop.exe in Steam's command. MWCoop then runs inside the game's Proton, with Steam (lobbies, invites, voice)." },
+    { WB_B, L"Juste le jeu avec le mod, sans le lanceur : WINEDLLOVERRIDES=\"version,winhttp=n,b\" %command%. Le lanceur l'inscrit aussi pour mywintercar.exe dans le registre de Proton, dès qu'il a été ouvert une fois.",
+            L"Just the game with the mod, without the launcher: WINEDLLOVERRIDES=\"version,winhttp=n,b\" %command%. The launcher also writes it for mywintercar.exe in Proton's registry, once it has been opened."  },
+    { WB_H, L"Steam Deck", L"Steam Deck" },
+    { WB_B, L"Mêmes options de lancement, en mode Bureau ou depuis l'interface du Deck (Propriétés du jeu). Le lanceur se pilote à l'écran tactile ou au trackpad ; clavier virtuel : Steam + X.",
+            L"Same launch options, in Desktop mode or from the Deck's interface (game Properties). The launcher works with the touchscreen or the trackpad; on-screen keyboard: Steam + X." },
+    { WB_B, L"En jeu, le menu coop (F10), le tchat (T) et Échap demandent un clavier : associe-les à des boutons (Configuration du contrôleur) ou branche un clavier.",
+            L"In game, the co-op menu (F10), the chat (T) and Esc need a keyboard: map them to buttons (Controller configuration) or plug in a keyboard." },
+    { WB_H, L"Ce qui change sous Linux", L"What's different on Linux" },
+    { WB_B, L"Le jeu part de son dossier (Départ du jeu : Dossier du jeu, d'origine sous Linux) : les liens de la copie de lancement ne sont pas sûrs sous Proton. Le MSCLoader fourni par MWCoop en a besoin : prends plutôt le MSCLoader officiel.",
+            L"The game starts from its folder (Game start: Game folder, the default on Linux): the launch copy's links aren't reliable under Proton. The MSCLoader provided by MWCoop needs them: use the official MSCLoader instead." },
+    { WB_B, L"« Lancer par Steam » (Départ du jeu : Steam) n'existe pas sous Linux : l'option de lancement le remplace.",
+            L"\"Start through Steam\" (Game start: Steam) doesn't exist on Linux: the launch option replaces it." },
+    { WB_B, L"Pas de pare-feu Windows à régler. Pour héberger par IP, le port du jeu (UDP et TCP) doit passer le pare-feu de Linux s'il y en a un ; par Steam, rien à faire.",
+            L"No Windows firewall to set up. To host by IP, the game's port (UDP and TCP) must get through Linux's firewall if there is one; through Steam, nothing to do." },
+    { WB_B, L"Les modes de compatibilité, Smart App Control et les antivirus de Windows n'existent pas sous Proton : les articles qui en parlent ne te concernent pas.",
+            L"Windows compatibility modes, Smart App Control and Windows antiviruses don't exist under Proton: the articles about them don't apply to you." },
+    { WB_B, L"Corbeille : celle de ton bureau Linux. Une copie de lancement (avec des liens vers le jeu) n'y est jamais envoyée : à supprimer à la main.",
+            L"Recycle Bin: your Linux desktop's trash. A launch copy (with links to the game) is never sent there: delete it by hand." },
+    { WB_H, L"Limites connues", L"Known limits" },
+    { WB_B, L"Ray tracing : coupé sous Proton (il partage des images entre Direct3D 11 et Direct3D 12, ce que Proton ne fait pas).",
+            L"Ray tracing: off under Proton (it shares images between Direct3D 11 and Direct3D 12, which Proton doesn't do)." },
+    { WB_B, L"Tes vidéos sur une cassette (/importer) : selon les codecs de Proton, certains formats ne passent pas ; un .mp4 (H.264) est le plus sûr.",
+            L"Your videos on a tape (/import): depending on Proton's codecs, some formats don't work; an .mp4 (H.264) is the safest." },
+    { WB_B, L"Pas encore essayé par l'équipe sous Linux : si quelque chose cloche, envoie tes journaux.",
+            L"Not yet tested by the team on Linux: if something is wrong, send your logs." },
+    { WB_WARN, L"Lance toujours MWCoop par Steam (l'option de lancement). Ouvert à part (Wine, Lutris, protontricks), il tourne dans un autre préfixe : il ne voit ni ta partie, ni Steam.",
+               L"Always start MWCoop through Steam (the launch option). Opened separately (Wine, Lutris, protontricks), it runs in another prefix: it sees neither your game nor Steam." },
+    { WB_TIP, L"Le mod ne s'est pas chargé ? lanceur.log (JOURNAUX) commence par une ligne « Wine » : la version de Proton et le WINEDLLOVERRIDES vu par le lanceur.",
+              L"The mod didn't load? lanceur.log (LOGS) starts with a \"Wine\" line: the Proton version and the WINEDLLOVERRIDES the launcher saw." },
+    { WB_GO, L"Envoyer ses journaux", L"Send your logs", 1000 + WA_LOGS },
+};
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
     WART(0, L"L'installation idéale", L"The ideal install", L"Ce qui marche à coup sûr, et les pièges", L"What always works, and the traps", kW_Ideal),
@@ -722,4 +774,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"Plusieurs sauvegardes", L"Several saves", L"Une partie par groupe d'amis", L"One game per group of friends", kW_Saves),
     WART(2, L"Mods pris en charge et déconseillés", L"Mod support and known incompatibilities", L"Ce qui est synchronisé, ce qui pose souci", L"What is synced, what causes trouble", kW_ModCompat),
     WART(3, L"Le HUD en jeu", L"The in-game HUD", L"Vanilla, Carte, Anneaux ou Bandeau", L"Vanilla, Card, Rings or Strip", kW_Hud),   // (WA_HUD = 29)
+    WART(0, L"Linux et Steam Deck", L"Linux and Steam Deck", L"Proton, option de lancement, limites", L"Proton, launch option, limits", kW_Linux),   // (WA_LINUX = 30)
 };

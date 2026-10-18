@@ -17,6 +17,7 @@ namespace MWCoop
                 Log.Open();
                 Log.Info("MWCoop " + Version.Text + " - Unity " + Application.unityVersion
                          + ", niveau " + Application.loadedLevelName);
+                if (Wine.On) Log.Info(Wine.Describe() + " : Linux par Proton ou Wine (ray tracing coupe)");
                 Root = new GameObject("MWCoop");
                 UnityEngine.Object.DontDestroyOnLoad(Root);
                 Root.AddComponent<Core>();
