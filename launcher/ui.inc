@@ -1258,6 +1258,9 @@ enum { CRED_3D, CRED_IMG, CRED_THANKS, CRED_SUPPORT };
 struct Credit { int cat; const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
+    { CRED_3D, L"matthew0451", L"Modèle 3D", L"3D model",
+      L"La VAZ-2108 des joueurs (F10), d'après le modèle « VAZ-2108 Rally » de matthew0451 sur Sketchfab : sketchfab.com/matthew0451, licence CC BY-NC 4.0. Allégée, livrée retirée (une couleur et un numéro par joueur).",
+      L"The players' VAZ-2108 (F10), from the \"VAZ-2108 Rally\" model by matthew0451 on Sketchfab: sketchfab.com/matthew0451, CC BY-NC 4.0 license. Lightened, livery removed (one colour and number per player).", L"18/10/2026", 0 },
     { CRED_3D, L"Scan the World", L"Buste de Pascal Paoli", L"Bust of Pasquale Paoli",
       L"Le buste de Paoli du musée de la Corse, d'après celui du Palazzu Naziunale de Corte, numérisé par JF Andreani pour Scan the World (MyMiniFactory), licence CC BY-NC-SA. Simplifié pour le jeu.",
       L"The Paoli bust in the Museum of Corsica, after the one in the Palazzu Naziunale in Corte, scanned by JF Andreani for Scan the World (MyMiniFactory), CC BY-NC-SA license. Simplified for the game.", L"13/10/2026", 0 },

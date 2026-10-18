@@ -601,3 +601,11 @@ The mod didn't load? lanceur.log (LOGS) starts with a \"Wine\" line: the Proton 
 On Linux or Steam Deck (Proton), the cause is almost always the launch option: without WINEDLLOVERRIDES, Proton uses its own version.dll.	На Linux или Steam Deck (Proton) причина почти всегда в параметре запуска: без WINEDLLOVERRIDES Proton берёт свою version.dll.
 Linux and Steam Deck	Linux и Steam Deck
 Proton, launch option, limits	Proton, параметр запуска, ограничения
+Every player can have their own rally VAZ-2108, free: F10 > VAZ-2108 tab. Sixteen colours, one per player; the colour also gives the number painted on the doors.	У каждого игрока может быть своя раллийная VAZ-2108, бесплатно: F10 > вкладка VAZ-2108. Шестнадцать цветов, по одному на игрока; цвет задаёт и номер на дверях.
+In the tab	Во вкладке
+Pick a free colour then Take: the car appears next to you, for everyone.	Выбери свободный цвет и нажми «Взять»: машина появится рядом с тобой, у всех игроков.
+Bring here (or V): brings it back next to you, if nobody is driving it.	«Пригнать» (или V): ставит её рядом с тобой, если никто ей не управляет.
+Give back: it disappears and its colour is free again. When you leave the game, the host keeps your colour and where your VAZ was: you find it again when you come back.	«Вернуть»: машина исчезает, а её цвет снова свободен. Когда ты выходишь из игры, хост запоминает твой цвет и место твоей ВАЗ: вернувшись, ты найдёшь её там же.
+Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits).	Отключается, как и другие дополнения: Настройки > Кооп > Дополнения MWCoop (выбор хоста действует для всех). 3D-модель: matthew0451, лицензия CC BY-NC 4.0 (Гайд > Благодарности).
+The rally VAZ-2108	Раллийная VAZ-2108
+A colour and a number per player	Цвет и номер у каждого игрока
