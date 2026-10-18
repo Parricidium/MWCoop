@@ -4473,7 +4473,7 @@ static int LobbyChoiceAt(float x, float y)
 static const GfxRow *GfxRowByKey(const char *k) { for (auto &r : GfxRows()) if (!strcmp(r.key, k)) return &r; return NULL; }
 static int LobbyOptIdx(const char *key) { for (int i = 0; i < kLobbyOptN; i++) if (!strcmp(kLobbyOptDefs[i].key, key)) return i; return -1; }
 static const int kPeerPal[16] = { 0x3E86D0, 0xE0702A, 0x2A9C9A, 0x8E5BD6, 0xD64545, 0xC9971A, 0xD45D9A, 0x6C7A89, 0x55B04C, 0x3FBFD9, 0xE8A33C, 0xB24FA5, 0x8C6239, 0x5C6BC0, 0xA9C43A, 0xE88A7A };   // (meme palette que Sync/Markers.cs : pastille carte, marqueur, pseudo)
-// (kAjoutKeys : gfx.inc, inclus plus haut -- les memes quatre ajouts)
+// (kAjoutKeys, kAjoutN : gfx.inc, inclus plus haut -- les memes ajouts)
 static int LobbyOptTab(bool host) { return g_lobbyOptTab < 0 ? (host ? 0 : 1) : g_lobbyOptTab; }   // (onglet par defaut : la partie chez l'hote, les miennes chez l'invite)
 // Petit cadenas : options decidees par l'hote, en lecture seule chez l'invite.
 static void DrawLock(Graphics &g, float cx, float cy, Color c)
@@ -4687,16 +4687,16 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
         // ajouts MWCoop : Tous / Choisir / Aucun (SansAjouts et les quatre AjoutX)
         int on = 0;
         for (const char *k : kAjoutKeys) on += val(k) == 1;
-        int mode = val("SansAjouts") ? 2 : (on == 4 && !(edit && g_lobbyAjoutsPick)) ? 0 : 1;
+        int mode = val("SansAjouts") ? 2 : (on == kAjoutN && !(edit && g_lobbyAjoutsPick)) ? 0 : 1;
         bool pick = mode == 1;   // (les quatre ajouts listes dessous : les petites lignes deviennent inutiles, la place aussi)
         Text(g, T(L"Ajouts MWCoop", L"MWCoop additions"), RectF(x, y + (pick ? 0 : 5), w - 170, pick ? rh : 20), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
         if (edit) UiSeg(g, RectF(right - 166, y + (pick ? 2 : 4), 166, 28), { T(L"Tous", L"All"), T(L"Choisir", L"Pick"), T(L"Aucun", L"None") }, mode, UI_LOBBY_AJOUTS, 11);
         else {
             wchar_t b[24];
-            swprintf_s(b, L"%d / 4", on);
+            swprintf_s(b, L"%d / %d", on, kAjoutN);
             Pill(g, RectF(right - 60, y + 7, 60, 22), mode == 2 ? TH(toggleOff) : WithA(kAcc, 0.22f), mode == 0 ? T(L"Tous", L"All") : mode == 2 ? T(L"Aucun", L"None") : b, kInk, 10.5f);
         }
-        if (!pick) Text(g, T(L"Drone, sacs de couchage, boutique s21, musée", L"Drone, sleeping bags, s21 shop, museum"), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        if (!pick) Text(g, T(L"Drone, sacs de couchage, boutique s21, musée, VAZ-2108", L"Drone, sleeping bags, s21 shop, museum, VAZ-2108"), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
         y += pick ? rh : rh2;
         g.DrawLine(&sp, x, y - 0.5f, right, y - 0.5f);
         if (mode == 1) for (const char *k : kAjoutKeys) row(k, false);
@@ -4732,14 +4732,14 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
             int onA = 0;
             for (const char *k : kAjoutKeys) onA += hostVal(k) == 1;
             wchar_t ab[16];
-            swprintf_s(ab, L"%d / 4", onA);
+            swprintf_s(ab, L"%d / %d", onA, kAjoutN);
             struct Ro { const wchar_t *lab; std::wstring v; bool on; } ro[6] = {
                 { T(L"Argent départ", L"Start money"), hostVal("ArgentDepart") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("ArgentDepart") == 1 },
                 { T(L"Triches", L"Cheats"), hostVal("Triches") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("Triches") == 1 },
                 { T(L"Renverser", L"Run over"), hostVal("Renverser") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("Renverser") == 1 },
                 { T(L"Coups de poing", L"Punches"), hostVal("PvP") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("PvP") == 1 },
                 { T(L"Ventti partagé", L"Shared Ventti"), hostVal("VenttiEnjeux") ? T(L"Oui", L"Yes") : T(L"Non", L"No"), hostVal("VenttiEnjeux") == 1 },
-                { T(L"Ajouts", L"Additions"), hostVal("SansAjouts") ? T(L"Aucun", L"None") : onA == 4 ? T(L"Tous", L"All") : ab, !hostVal("SansAjouts") && onA > 0 },
+                { T(L"Ajouts", L"Additions"), hostVal("SansAjouts") ? T(L"Aucun", L"None") : onA == kAjoutN ? T(L"Tous", L"All") : ab, !hostVal("SansAjouts") && onA > 0 },
             };
             float colW = (b.Width - 20 - 10) / 2;
             for (int k = 0; k < 6; k++) {

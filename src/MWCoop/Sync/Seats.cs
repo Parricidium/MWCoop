@@ -121,7 +121,7 @@ namespace MWCoop
                     continue;
                 }
                 Vector3 d = rb.transform.InverseTransformPoint(dhp.position) + EyeFromPivot;
-                seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-d.x, d.y, d.z) });
+                seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 0, Head = new Vector3(-d.x, d.y, d.z), ZoneZ = Vaz.IsVaz(rb.transform) ? 0.85f : 0.5f });   // (VAZ-2108 : baquets plus en arriere, on n'approche que l'espace des pieds depuis la portiere -- zone plus longue)
                 // (taxi et ses copies -- mods Machtwagen300D, SECONDMACHTWAGEN : noms en minuscules ou prefixes, sans banquette
                 // avant, retour de Menos 10/10 : « on ne peut pas s'asseoir a l'arriere »)
                 if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("BACHGLOTZ") || n.ToUpperInvariant().Contains("MACHTWAGEN"))

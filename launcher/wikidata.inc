@@ -565,6 +565,18 @@ static const WikiBlock kW_Museo[] = {
     { WB_TIP, L"Chaque œuvre a sa plaque en français et en anglais. Les auteurs et licences des images et des modèles 3D sont dans les crédits (Guide > onglet Crédits).", L"Every piece has its plaque in French and English. The authors and licences of the pictures and 3D models are in the credits (Guide > Credits tab)." },
 };
 
+static const WikiBlock kW_Vaz[] = {
+    { WB_P, L"Chaque joueur peut avoir sa VAZ-2108 de rallye, gratuite : F10 > onglet VAZ-2108. Seize couleurs, une par joueur ; la couleur donne aussi le numéro peint sur les portières.",
+            L"Every player can have their own rally VAZ-2108, free: F10 > VAZ-2108 tab. Sixteen colours, one per player; the colour also gives the number painted on the doors." },
+    { WB_H, L"Dans l'onglet", L"In the tab", 0 },
+    { WB_B, L"Choisis une couleur libre puis Prendre : la voiture apparaît à côté de toi, chez tout le monde.", L"Pick a free colour then Take: the car appears next to you, for everyone." },
+    { WB_B, L"Faire venir (ou V) : la ramène à côté de toi, si personne ne la conduit.", L"Bring here (or V): brings it back next to you, if nobody is driving it." },
+    { WB_B, L"Rendre : elle disparaît et sa couleur redevient libre. Quand tu quittes la partie, l'hôte garde ta couleur et la place de ta VAZ : tu la retrouves en revenant.", L"Give back: it disappears and its colour is free again. When you leave the game, the host keeps your colour and where your VAZ was: you find it again when you come back." },
+    { WB_TIP, L"Désactivable comme les autres ajouts : Réglages > Coop > Ajouts MWCoop (le choix de l'hôte vaut pour tous). Modèle 3D de matthew0451, licence CC BY-NC 4.0 (Guide > Crédits).",
+              L"Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits)." },
+    { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
+};
+
 static const WikiBlock kW_Shop[] = {
     { WB_P, L"La boutique OSUUSKAUPPA s21, à Peräjärvi, au sud-ouest du carrefour de la PSK (le magasin de Teimo), le long de la petite route, à côté du musée de la Corse, ne vend que des objets du coop. Clic sur la poignée pour ouvrir la porte.",
             L"The OSUUSKAUPPA s21 shop, in Peräjärvi, south-west of the PSK crossroads (Teimo's store), along the small road next to the Museum of Corsica, only sells co-op items. Click the handle to open the door." },
@@ -759,6 +771,7 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(1, L"Tes vidéos sur une cassette", L"Your videos on a tape", L"/importer : une vraie vidéo dans le jeu", L"/import: a real video in the game", kW_Import),
     WART(1, L"Monter et exporter une cassette", L"Edit and export a tape", L"Touche R : rogner, effacer, .mp4", L"Press R: trim, erase, .mp4", kW_Montage),
     WART(1, L"Le musée de la Corse", L"The Museum of Corsica", L"Relief, bustes, tableaux, rallye", L"Relief model, busts, paintings, rallying", kW_Museo),
+    WART(1, L"La VAZ-2108 de rallye", L"The rally VAZ-2108", L"Une couleur et un numéro par joueur", L"A colour and a number per player", kW_Vaz),
     WART(1, L"Copilote de rallye (KARTTURI 2000)", L"Rally co-driver (KARTTURI 2000)", L"Le GPS qui annonce les virages", L"The GPS that calls the corners", kW_Kartturi),
     WART(2, L"MSCLoader : officiel ou MWCoop", L"MSCLoader: official or MWCoop", L"Les deux choix de l'onglet Mods", L"The two choices of the Mods tab", kW_Msc),
     WART(2, L"Partager ses mods", L"Share your mods", L"De l'hôte aux invités, à part", L"From host to guests, kept apart", kW_Mods),

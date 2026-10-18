@@ -247,6 +247,7 @@ namespace MWCoop
         public static void OnMessage(Peer from, NetReader r)
         {
             int kind = r.U8();
+            if (kind >= 30) { Vaz.OnMessage(kind, from, r); return; }      // VAZ-2108 des joueurs (18/10)
             if (kind >= 24) { Jokkis.OnMessage(kind, from, r); return; }   // voitures Jokkis de location (16/10)
             if (kind >= 20) { IceRace.OnMessage(kind, from, r); return; }   // course sur glace a plusieurs pilotes
             if (kind >= 10) { Rally.OnMessage(kind, from, r); return; }   // rallye a plusieurs pilotes

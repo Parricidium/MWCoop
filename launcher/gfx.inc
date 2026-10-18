@@ -226,6 +226,8 @@ static const std::vector<GfxRow> &GfxRows()
         { "AjoutSacs", L"Sacs de couchage", L"Sleeping bags", 1, {}, {}, {}, 0, 15, "Coop" },
         { "AjoutBoutique", L"Boutique s21 (vidéo, KARTTURI)", L"s21 shop (video, KARTTURI)", 1, {}, {}, {}, 0, 15, "Coop" },
         { "AjoutMusee", L"Musée de la Corse", L"Museum of Corsica", 1, {}, {}, {}, 0, 15, "Coop" },
+        // (VAZ-2108 Rally des joueurs, au F10 : une couleur et un numero chacun -- JD, 18/10 ; Sync/Vaz.cs)
+        { "AjoutVaz", L"VAZ-2108 des joueurs (F10)", L"Players' VAZ-2108 (F10)", 1, {}, {}, {}, 0, 15, "Coop" },
         { "Touche:Tchat", L"Écrire aux autres (tchat)", L"Write to the others (chat)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:PorteMonnaie", L"Porte-monnaie (donner de l'argent)", L"Wallet (give money)", 0, {}, {}, {}, 0, 9, "Touches" },
         { "Touche:Vocal", L"Parler (vocal, touche tenue)", L"Talk (voice, hold the key)", 0, {}, {}, {}, 0, 9, "Touches" },
@@ -1046,14 +1048,15 @@ static void SetThemePreview(Graphics &g, RectF r, Color sky0, Color sky1, Color 
 }
 
 // Jetons des ajouts : noms, et nombre de lignes pour une largeur (w <= 0 : la derniere largeur mesuree).
-static const char *kAjoutKeys[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee" };   // (aussi le salon, launcher.cpp)
-static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica" };
+static const char *kAjoutKeys[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee", "AjoutVaz" };
+static const int kAjoutN = (int)(sizeof(kAjoutKeys) / sizeof(kAjoutKeys[0]));   // (aussi le salon, launcher.cpp)
+static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse", L"VAZ-2108 (F10)" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica", L"VAZ-2108 (F10)" };
 static float g_chipW = 458;
 static int SetChipLines(float w)
 {
     if (w > 0) g_chipW = w;
     float cx = 0; int lines = 1;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < kAjoutN; i++) {
         float cw = PillW(T(kAjoutFr[i], kAjoutEn[i]), 11) + 22;
         if (cx > 0 && cx + cw > g_chipW) { lines++; cx = 0; }
         cx += cw + 6;
@@ -1192,13 +1195,14 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
                  RectF(x, y + 4, w, h - 8), 12.5f, kGrey);
         } else if (!strcmp(k, "ajouts")) {   // Tous / Choisir / Aucun : SansAjouts, et les quatre interrupteurs
             bool none = GfxGet("SansAjouts") == 1;
-            bool all = GfxGet("AjoutDrone") == 1 && GfxGet("AjoutSacs") == 1 && GfxGet("AjoutBoutique") == 1 && GfxGet("AjoutMusee") == 1;
+            bool all = true;
+            for (const char *a : kAjoutKeys) all = all && GfxGet(a) == 1;
             SetSegRow(g, it, row, { T(L"Tous", L"All"), T(L"Choisir", L"Choose"), T(L"Aucun", L"None") }, none ? 2 : all ? 0 : 1, UI_SET_AJOUTS);
         } else if (!strcmp(k, "ajoutchips")) {   // un jeton par ajout, cliquable (grise quand tout est coupe)
             bool none = GfxGet("SansAjouts") == 1;
             SetChipLines(w);
             float cx = x, ly = y + 7;
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < kAjoutN; i++) {
                 bool on = GfxGet(kAjoutKeys[i]) == 1 && !none, hot = !none && g_uiHot == UI_SET_AJOUT + i;
                 std::wstring s = T(kAjoutFr[i], kAjoutEn[i]);
                 float cw = PillW(s, 11) + 22;
@@ -1857,10 +1861,10 @@ static bool SetClick(int id)
     if (id >= UI_SET_AJOUTS && id < UI_SET_AJOUTS + 3) {
         int k = id - UI_SET_AJOUTS;
         GfxSet("SansAjouts", k == 2 ? 1 : 0);
-        if (k == 0) for (const char *a : { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee" }) GfxSet(a, 1);
+        if (k == 0) for (const char *a : kAjoutKeys) GfxSet(a, 1);
         return true;
     }
-    if (id >= UI_SET_AJOUT && id < UI_SET_AJOUT + 4) { static const char *keys[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee" }; const char *a = keys[id - UI_SET_AJOUT]; GfxSet(a, GfxGet(a) == 1 ? 0 : 1); return true; }
+    if (id >= UI_SET_AJOUT && id < UI_SET_AJOUT + kAjoutN) { const char *a = kAjoutKeys[id - UI_SET_AJOUT]; GfxSet(a, GfxGet(a) == 1 ? 0 : 1); return true; }   // (5 identifiants au plus : UI_SET_DRONEKB suit)
     if (id >= UI_SET_DRONEKB && id < UI_SET_DRONEKB + 3) { DroneLayoutSet(id - UI_SET_DRONEKB); return true; }
     return GfxClick(id);
 }
