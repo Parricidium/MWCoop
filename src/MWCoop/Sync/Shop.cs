@@ -374,6 +374,12 @@ namespace MWCoop
 
         public static void Update()
         {
+            if (Session.Active && PlayerSync.InGame)
+            {
+                float tnow = Time.realtimeSinceStartup;
+                if (!orderHooked && tnow >= nextOrderLook) { nextOrderLook = tnow + 10f; HookOrder(); }
+                HostWorkTick(tnow);
+            }
             float now = Time.realtimeSinceStartup;
             if (nextScan > 0 && now >= nextScan) { nextScan = now + 60f; Scan(); }   // caisses et comptoirs sont la des le chargement
             if (nextScan > 0 && Session.Active && now >= fleaNext) { fleaNext = now + 0.2f; FleaPricesStep(now); }
@@ -1508,6 +1514,122 @@ namespace MWCoop
             if (orderFsm == null) { GameObject g = Game.FindAny("REPAIRSHOP/OrderFleetari"); if (g != null) orderFsm = Game.FsmOn(g, "Data"); }
             return orderFsm;
         }
+
+        // ---------------------------------------------------------------- travail de Fleetari commande par un invite
+        // La commande (REPAIRSHOP/OrderFleetari::Data, cases cochees dans la brochure : table Jobs) et son execution (automates
+        // REPAIRSHOP/Jobs/*::Work, actives 12 s par l'etat "Work" de la commande : pneus, peinture, carrosserie, pont...) sont
+        // propres a chaque joueur -- rien ne les suit. Chez un invite, le travail se faisait sur SA copie de la voiture, dont
+        // l'hote fait reference : rien n'en restait (RullER, 18/10 : Â« Fleetari ne marche que pour l'hote, il faut lui faire
+        // passer la commande Â»). Ici : quand la commande d'un invite entre dans "Work", il envoie a l'hote les cles cochees et
+        // les codes de la commande (pneus, peinture, pont, couleurs) ; l'hote les pose dans SA commande, active REPAIRSHOP/Jobs
+        // 15 s (les automates font le travail sur la voiture de reference, et les modules habituels le repercutent), puis
+        // remet cles, codes et cout comme avant (les automates ajoutent leur cout a la commande de l'hote : pas sa facture).
+        const string JobsPath = "REPAIRSHOP/Jobs";
+        const float HostWorkTime = 15f;
+        static readonly string[] OrderStrings = { "TireCode", "PaintCode", "AxleCode" };
+        static readonly string[] OrderColors = { "CarPaintColor", "RimPaintColor" };
+        static bool orderHooked;
+        static float nextOrderLook;
+        class OrderWorkHook : ModHook
+        {
+            public override string Module { get { return "magasin (Fleetari)"; } }
+            public override void OnEnter()
+            {
+                try { if (!Session.IsHost && Session.Active && Replay.Depth == 0) SendOrderWork(); }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+        static void HookOrder()
+        {
+            if (orderHooked) return;
+            PlayMakerFSM ord = OrderFsm();
+            if (ord == null) return;
+            FsmState st = ord.Fsm.GetState("Work");
+            if (st == null) { orderHooked = true; Log.Warn("magasin : commande de Fleetari sans etat Work : travail d'un invite pas relaye"); return; }
+            foreach (FsmState s in ord.Fsm.States) if (!s.IsInitialized) return;
+            FsmHooks.Prepend(st, new OrderWorkHook());
+            orderHooked = true;
+            Log.Info("magasin : commande de Fleetari suivie (travail d'un invite fait aussi chez l'hote)");
+        }
+        static Hashtable OrderJobs(PlayMakerFSM ord)
+        {
+            foreach (PlayMakerHashTableProxy h in ord.GetComponents<PlayMakerHashTableProxy>()) if (h.referenceName == "Jobs") return h._hashTable;
+            return null;
+        }
+        static void SendOrderWork()
+        {
+            PlayMakerFSM ord = OrderFsm();
+            Hashtable jobs = ord != null ? OrderJobs(ord) : null;
+            if (jobs == null) { Log.Warn("magasin : travail de Fleetari commande ici, table Jobs introuvable : pas relaye"); return; }
+            var keys = new List<string>();
+            foreach (DictionaryEntry e in jobs) if (e.Value is bool && (bool)e.Value) keys.Add(e.Key.ToString());
+            if (keys.Count == 0) { Log.Info("magasin : travail de Fleetari commande ici sans case cochee : rien a relayer"); return; }
+            var w = new NetWriter(Msg.Job).U8(Session.LocalId).Str("@fleetari").U8(keys.Count);
+            foreach (string k in keys) w.Str(k);
+            foreach (string n in OrderStrings) { FsmString v = ord.FsmVariables.FindFsmString(n); w.Str(v != null ? v.Value : ""); }
+            foreach (string n in OrderColors) { FsmColor c = ord.FsmVariables.FindFsmColor(n); Color col = c != null ? c.Value : Color.black; w.F32(col.r).F32(col.g).F32(col.b).F32(col.a); }
+            Session.SendToHost(w, true);
+            Log.Info("magasin : travail de Fleetari commande ici (" + string.Join(", ", keys.ToArray()) + ") : envoye a l'hote, qui le fait sur la voiture");
+        }
+        class HostWork
+        {
+            public int Who; public List<string> Keys; public string[] Strs; public Color[] Cols;
+            public float Until, Cost; public bool JobsWasActive;
+            public Dictionary<string, object> Prev = new Dictionary<string, object>();
+            public List<KeyValuePair<FsmString, string>> PrevStrs = new List<KeyValuePair<FsmString, string>>();
+            public List<KeyValuePair<FsmColor, Color>> PrevCols = new List<KeyValuePair<FsmColor, Color>>();
+        }
+        static HostWork hostWork;
+        static readonly List<HostWork> hostQueue = new List<HostWork>();
+        public static void OnFleetari(int who, NetReader r)
+        {
+            int n = r.U8();
+            var keys = new List<string>();
+            for (int i = 0; i < n; i++) keys.Add(r.Str());
+            var strs = new string[OrderStrings.Length];
+            for (int i = 0; i < strs.Length; i++) strs[i] = r.Str();
+            var cols = new Color[OrderColors.Length];
+            for (int i = 0; i < cols.Length; i++) cols[i] = new Color(r.F32(), r.F32(), r.F32(), r.F32());
+            if (!Session.IsHost) return;
+            var hw = new HostWork { Who = who, Keys = keys, Strs = strs, Cols = cols };
+            if (hostWork != null) { hostQueue.Add(hw); Log.Info("magasin : travail de Fleetari de #" + who + " (" + string.Join(", ", keys.ToArray()) + ") en attente, un autre est en cours"); return; }
+            StartHostWork(hw);
+        }
+        static void StartHostWork(HostWork hw)
+        {
+            PlayMakerFSM ord = OrderFsm();
+            Hashtable jobs = ord != null ? OrderJobs(ord) : null;
+            GameObject jobsGo = Game.FindAny(JobsPath);
+            if (ord == null || jobs == null || jobsGo == null) { Log.Warn("magasin : travail de Fleetari de #" + hw.Who + " : commande ou REPAIRSHOP/Jobs introuvable ici, pas fait"); return; }
+            FsmFloat cost = ord.FsmVariables.FindFsmFloat("JobTotalCost");
+            hw.Cost = cost != null ? cost.Value : 0f;
+            hw.JobsWasActive = jobsGo.activeSelf;
+            foreach (string k in hw.Keys) { hw.Prev[k] = jobs.Contains(k) ? jobs[k] : null; jobs[k] = true; }
+            for (int i = 0; i < OrderStrings.Length; i++) { FsmString v = ord.FsmVariables.FindFsmString(OrderStrings[i]); if (v != null) { hw.PrevStrs.Add(new KeyValuePair<FsmString, string>(v, v.Value)); v.Value = hw.Strs[i]; } }
+            for (int i = 0; i < OrderColors.Length; i++) { FsmColor c = ord.FsmVariables.FindFsmColor(OrderColors[i]); if (c != null) { hw.PrevCols.Add(new KeyValuePair<FsmColor, Color>(c, c.Value)); c.Value = hw.Cols[i]; } }
+            hw.Until = Time.realtimeSinceStartup + HostWorkTime;
+            hostWork = hw;
+            if (!jobsGo.activeSelf) jobsGo.SetActive(true);
+            Log.Info("magasin : travail de Fleetari commande par #" + hw.Who + " (" + string.Join(", ", hw.Keys.ToArray()) + ", pneus '" + hw.Strs[0] + "' peinture '" + hw.Strs[1] + "' pont '" + hw.Strs[2] + "') : fait ici sur la voiture, " + (int)HostWorkTime + " s");
+        }
+        static void HostWorkTick(float now)
+        {
+            if (hostWork == null || now < hostWork.Until) return;
+            HostWork hw = hostWork; hostWork = null;
+            PlayMakerFSM ord = OrderFsm();
+            Hashtable jobs = ord != null ? OrderJobs(ord) : null;
+            GameObject jobsGo = Game.FindAny(JobsPath);
+            if (jobs != null) foreach (KeyValuePair<string, object> kv in hw.Prev) { if (kv.Value == null) jobs.Remove(kv.Key); else jobs[kv.Key] = kv.Value; }
+            foreach (KeyValuePair<FsmString, string> kv in hw.PrevStrs) kv.Key.Value = kv.Value;
+            foreach (KeyValuePair<FsmColor, Color> kv in hw.PrevCols) kv.Key.Value = kv.Value;
+            FsmFloat cost = ord != null ? ord.FsmVariables.FindFsmFloat("JobTotalCost") : null;
+            float added = cost != null ? cost.Value - hw.Cost : 0f;
+            if (cost != null) cost.Value = hw.Cost;
+            if (jobsGo != null && !hw.JobsWasActive && jobsGo.activeSelf) jobsGo.SetActive(false);
+            Log.Info("magasin : travail de Fleetari de #" + hw.Who + " termine ici (cout compte par les automates " + added.ToString("F0") + ", retire : sa facture est chez lui) ; commande remise comme avant");
+            if (hostQueue.Count > 0) { HostWork next = hostQueue[0]; hostQueue.RemoveAt(0); StartHostWork(next); }
+        }
         static void JobPaid(Register reg, List<KeyValuePair<string, float>> floats, string name, Pending keep)
         {
             float price = 0f;
@@ -2544,10 +2666,42 @@ namespace MWCoop
         // met une commande de 100 en attente (Pending cost), a 33 s clique la facture (PAY : Wait payment, JOB a la caisse), a
         // 36 s paie (Spawn bag -> Purchase). A 42 s chacun note commande et caisse : attendu partout commande hors paiement
         // (State 1 / Wait for work), cout 0, PriceTotal 0, PriceJob 0.
-        static int fleetStep;
+        static int fleetStep; static float fleetLog;
+        // [Test] FleetariEssai=2 : l'invite COMMANDE (cout 100, OrderTime 3 s, Wait day) a 30 s ; des deux cotes, etat et cout de la
+        // commande notes toutes les 2 s de 28 a 60 s (attendu chez l'invite : Wait day -> Work -> Reset job -> Pending cost, cout 115
+        // moins la remise ; si l'hote l'ecrase, l'etat revient a Wait for work ou le cout a 0).
         static void TestFleetari(float t)
         {
             PlayMakerFSM ord = OrderFsm();
+            if (Config.GetInt("Test", "FleetariEssai", 1) == 2)
+            {
+                if (ord == null) return;
+                if (!Session.IsHost && t > 30f && fleetStep == 0)
+                {
+                    fleetStep = 1;
+                    ord.FsmVariables.GetFsmFloat("JobTotalCost").Value = 100f;
+                    Hashtable jt = OrderJobs(ord); if (jt != null) jt["ToeAdjustment"] = true;
+                    FsmFloat ot = ord.FsmVariables.FindFsmFloat("OrderTime"); if (ot != null) ot.Value = 3f;
+                    Game.SetState(ord, "Wait day");
+                    Log.Info("autotest : fleetari2, commande passee ici (cout 100, OrderTime 3, " + ord.ActiveStateName + ")");
+                }
+                // (40 s : l'invite s'eloigne de 150 m -- Distance > 100 : Wait day, OrderTime 3 s, puis Work -> Reset job -> Pending cost)
+                if (!Session.IsHost && t > 40f && fleetStep == 1)
+                {
+                    fleetStep = 2;
+                    GameObject pl = Game.PlayerGo;
+                    if (pl != null)
+                    {
+                        CharacterController cc = pl.GetComponent<CharacterController>();
+                        if (cc != null) cc.enabled = false;
+                        pl.transform.position += new Vector3(150f, 0f, 0f);
+                        if (cc != null) cc.enabled = true;
+                        Log.Info("autotest : fleetari2, invite teleporte 150 m plus loin");
+                    }
+                }
+                if (t > 28f && t < 60f && t >= fleetLog) { fleetLog = t + 2f; Log.Info("autotest : fleetari2, commande " + ord.ActiveStateName + " cout " + ord.FsmVariables.GetFsmFloat("JobTotalCost").Value + " OrderTime " + (ord.FsmVariables.FindFsmFloat("OrderTime") != null ? ord.FsmVariables.FindFsmFloat("OrderTime").Value.ToString("F0") : "?") + " Distance " + (ord.FsmVariables.FindFsmFloat("Distance") != null ? ord.FsmVariables.FindFsmFloat("Distance").Value.ToString("F0") : "?") + " actif " + ord.enabled + "/" + ord.gameObject.activeInHierarchy); }
+                return;
+            }
             Register reg = null;
             foreach (Register x in registers.Values) if (x.Fsm != null && x.Fsm.FsmVariables.FindFsmFloat("PriceJob") != null) reg = x;
             if (ord == null || reg == null) { if (t > 42f && fleetStep < 9) { fleetStep = 9; Log.Info("autotest : fleetari, commande " + (ord != null) + " / caisse " + (reg != null) + " introuvable"); } return; }
