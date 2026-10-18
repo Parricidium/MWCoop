@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -273,9 +273,11 @@ namespace MWCoop
         // tente d'inspection a 34 s (le joueur a cote), ouvre la feuille d'inscription a 38 s et la confirme a 42 s
         // (ButtonConfirm -> 'State 16', comme le clic) ; bilan a 56 s (inscrit, VAZ, numero, location) et a 76 s (numeros
         // de l'hote, Cars[n], chronos). [Test] VazLoin=1 : la VAZ reste a 30 m (attendu : refus du jeu, xNoCar).
-        static int vazTest;
+        static int vazTest; static bool mondeZero;
         static void TestVaz(float t)
         {
+            // [Test] MondeZero=1 : PlayerID pose a 0 a 5 s (nouvelle partie pas encore sauvegardee, comme chez JD)
+            if (vazTest == 0 && t > 5f && Config.GetInt("Test", "MondeZero", 0) != 0 && !mondeZero) { mondeZero = true; FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID"); if (pid != null) pid.Value = 0f; Log.Info("autotest glacevaz : PlayerID = 0"); }
             if (vazTest == 0 && t > (Session.IsHost ? 8f : 6f)) { vazTest = 1; Log.Info("autotest glacevaz : demande -> " + Vaz.Request(Session.IsHost ? 3 : 5)); }
             // (« Faire venir » : le joueur pose a 2 m de la tente, sa VAZ amenee a cote de lui par l'hote, comme le bouton du F10)
             if (vazTest == 1 && t > 28f)
