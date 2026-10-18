@@ -151,6 +151,7 @@ namespace MWCoop
         static bool LooseCandidate(Rigidbody rb, Transform t, string rootName)
         {
             if (SkipRoots.Contains(rootName) || rootName.StartsWith("MWCoop")) return false;
+            if (rb.GetComponent<Drinks.Thrown>() != null) return false;   // (bouteille jetee par un autre, recreee ici : copie sans logique)
             // A la racine de la scene : son rang parmi les racines change avec l'ordre de chargement. Seul un objet apparu en
             // jeu « (Clone) » passe, avec une cle sans rang (son nom, meme des deux cotes) -- en double, personne ne le suit.
             if (t.parent == null && !t.name.Contains("(Clone)")) return false;

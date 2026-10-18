@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -86,7 +86,7 @@ namespace MWCoop
         {
             "bucket(item", "bucket lid(item",                 // kilju : Home
             "coffee pan(item", "coffee cup(item",             // cafe : Cooking (et Shop, Wear pour la tasse)
-            "winter jacket(item", "winter coverall(item", "helmet(item",   // vetements : Wear
+            "winter jacket", "winter coverall", "helmet",             // vetements : Wear (et ses copies "helmet 2(itemx)"... : prises ici, leur Use rejoue mettait le casque a tout le monde -- Menor, 18/10)
             "cd case(item", "cd(item", "tv remote control(item",            // CD et telecommande : WorldFsms (exceptions a sa regle)
             "gasoline(item", "diesel(item", "empty plastic can(item",       // bidons : Fluids
             "sofa(item", "sleeping bag(item",                 // sommeil : SleepingBags

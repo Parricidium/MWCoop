@@ -76,6 +76,7 @@ namespace MWCoop
         float lieW, sideS, fwdS, swayT;
         readonly float[] wR = new float[5], wL = new float[4];
         Vector3 sitPelvis, chairSeatAt;
+        float sitFeet = 9f;   // chevilles dans la pose assise (repere avatar) ; 9 : pas mesurees
         float chairTop = 0.45f;
         bool chair, sitMeasured, peeTried;
         GameObject pee;
@@ -629,6 +630,10 @@ namespace MWCoop
             {
                 Vector3 pl = Root.transform.InverseTransformPoint(pv.position);
                 sitPelvis = sitMeasured ? Vector3.Lerp(sitPelvis, pl, 0.2f) : pl;
+                // (chevilles aussi : pour que les pieds ne passent pas sous le sol quand l'assise est basse)
+                Transform ar = Bone("ankle_right"), al = Bone("ankle_left");
+                float fy = Mathf.Min(ar != null ? Root.transform.InverseTransformPoint(ar.position).y : 9f, al != null ? Root.transform.InverseTransformPoint(al.position).y : 9f);
+                if (fy < 8f) sitFeet = sitMeasured ? Mathf.Lerp(sitFeet, fy, 0.2f) : fy;
                 sitMeasured = true;
             }
             if (Config.GetInt("Test", "JournalPose", 0) != 0 && Time.realtimeSinceStartup >= nextPoseLog && headBone != null && Bone("pelvis") != null)
@@ -699,7 +704,7 @@ namespace MWCoop
         {
             PlayerState st = Player.State;
             int f = st.Flags;
-            float pitch = Mathf.Clamp(st.Pitch, -80f, 80f);
+            float pitch = Mathf.Clamp(st.Pitch, -70f, 70f);
             if (!headRestSet && Root != null)
             {
                 // Tete au repos par rapport a l'avatar : prise sur le modele debout (premiere image).
@@ -825,9 +830,11 @@ namespace MWCoop
             crouchW = Mathf.MoveTowards(crouchW, crouchDepth, Time.deltaTime * 3f);
             if (crouchW > 0.001f) Crouch(crouchW);
             // Buste et tete suivent le regard : penche en avant en regardant en bas, en arriere en haut.
-            Turn(Bone("spine_middle"), 0f, pitch * 0.15f);
-            Turn(Bone("spine_upper"), 0f, pitch * 0.2f);
-            Turn(Bone("HeadPivot") ?? headBone, 0f, pitch * 0.5f);
+            // (moins courbe qu'avant : en regardant tout en bas -- telephone, portefeuille --, l'avatar saluait jusqu'a la
+            // ceinture et sa tete disparaissait sous sa casquette vue d'en haut : capture de Menor, 18/10)
+            Turn(Bone("spine_middle"), 0f, pitch * 0.1f);
+            Turn(Bone("spine_upper"), 0f, pitch * 0.14f);
+            Turn(Bone("HeadPivot") ?? headBone, 0f, pitch * 0.45f);
             Gestures.Remote g = Gestures.Of(Player.Id);
             LeanPose(st, g);
             ChooseGestures(f, g);
@@ -838,6 +845,14 @@ namespace MWCoop
             armWL = Mathf.MoveTowards(armWL, idle && gestL.Length == 0 && (f & PlayerSync.F_Smoke) == 0 ? 1f : 0f, dt);
             ArmDown("shoulder_right", "hand_right", 1f, armWR);
             ArmDown("shoulder_left", "hand_left", -1f, armWL);
+            // Assis sur un siege (chaise, canape, banquette) : bras le long du corps, mains vers les cuisses -- le clip assis
+            // laissait une main derriere le dos (capture de Menor, 18/10).
+            if (chair && sitting && !crouching)
+            {
+                float sw = Config.GetFloat("Test", "AssisBras", 0.7f);
+                if (armWR < 0.999f && gestR.Length == 0 && (f & (PlayerSync.F_Drink | PlayerSync.F_Carry | PlayerSync.F_Hello)) == 0) ArmDown("shoulder_right", "hand_right", 1f, sw * (1f - armWR));
+                if (armWL < 0.999f && gestL.Length == 0 && (f & PlayerSync.F_Smoke) == 0) ArmDown("shoulder_left", "hand_left", -1f, sw * (1f - armWL));
+            }
             GesturePose(st, f, g);
         }
 
@@ -1220,11 +1235,15 @@ namespace MWCoop
             Vector3 onThr = pThr != null && pThr.P != null ? pThr.P.TransformPoint(pThr.Pad) + back : footR;
             Vector3 onBrk = pBrk != null && pBrk.P != null ? pBrk.P.TransformPoint(pBrk.Pad) + back : onThr;
             Vector3 r = Vector3.Lerp(onThr, onBrk, brakeBlend);
-            if ((r - hipR).magnitude < 1.1f) footR = r;
+            // (pedale trop pres de la hanche -- fourgon, assis au-dessus du moteur -- : genoux remontes a la poitrine, capture de
+            // Menor 18/10 ; en deca de 0,55 m le pied reste dans la pose du clip)
+            float dR = (r - hipR).magnitude;
+            if (dR < 1.1f && dR > Config.GetFloat("Test", "PedaleMin", 0.55f)) footR = r;
             if (pClu != null && pClu.P != null)
             {
                 Vector3 l = Vector3.Lerp(footL, pClu.P.TransformPoint(pClu.Pad) + back, clutchBlend);
-                if ((l - hipL).magnitude < 1.1f) footL = l;
+                float dL = (l - hipL).magnitude;
+                if (dL < 1.1f && dL > Config.GetFloat("Test", "PedaleMin", 0.55f)) footL = l;
             }
             if (Config.GetInt("Test", "JournalPedales", 0) != 0 && Time.realtimeSinceStartup >= pedLog)
             {
@@ -1683,6 +1702,9 @@ namespace MWCoop
                 }
                 // (sitPelvis n'est mesure qu'apres quelques images de pose assise : recalcule a chaque image)
                 pos.y -= Mathf.Clamp(sitPelvis.y - chairTop - 0.06f, 0f, 0.6f);
+                // Pieds au-dessus du sol du siege (chevilles a 8 cm du sol au moins) : sur un canape bas, l'avatar descendu
+                // sur le coussin avait les pieds dans le plancher (capture de Menor, 18/10).
+                if (sitFeet < 8f) pos.y = Mathf.Max(pos.y, g.Seat.y + 0.08f - sitFeet);
                 yaw = g.SeatYaw;
                 Root.transform.position = pos;
                 Root.transform.rotation = sr;
@@ -1938,7 +1960,10 @@ namespace MWCoop
         void PlaceDrink()
         {
             if (drinkGo == null || !drinkGo.activeSelf) return;
-            Transform hand = Bone("hand_right"), finger = Bone("finger_right");
+            // Main droite partie au levier ou vers une commande : la boisson passe dans la main gauche au lieu de flotter
+            // (Menor, 18/10 : « il boit, il appuie sur un bouton, la bouteille reste en l'air »).
+            bool leftHand = wShift > 0.5f || wReach > 0.5f;
+            Transform hand = Bone(leftHand ? "hand_left" : "hand_right"), finger = Bone(leftHand ? "finger_left" : "finger_right");
             if (hand == null) return;
             // Toujours dans le poing (entre le poignet et le bout des doigts) : debout, la main un peu sous le milieu. Quand la
             // main monte a la bouche (clip "boire"), elle bascule du poing VERS la bouche, un peu goulot en bas (cul en l'air) :
@@ -2080,7 +2105,8 @@ namespace MWCoop
                 Transform spot = SleepSpot(head);
                 string path = spot != null ? Recon.Path(spot) : "";
                 string low = path.ToLowerInvariant();
-                blanketWanted = spot == null || !(low.Contains("sofa") || low.Contains("gifu") || low.Contains("sleeping bag") || low.Contains("couch"));
+                // ([Coop] Couverture=1 : au lit seulement ; coupee par defaut -- Menor, 18/10 : « enlevez la couverture »)
+                blanketWanted = Config.GetInt("Coop", "Couverture", 0) != 0 && (spot == null || !(low.Contains("sofa") || low.Contains("gifu") || low.Contains("sleeping bag") || low.Contains("couch")));
                 blanketBedMat = null;
                 if (blanketWanted && spot != null)
                 {

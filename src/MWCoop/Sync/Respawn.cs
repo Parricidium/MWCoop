@@ -211,6 +211,18 @@ namespace MWCoop
             restoreAt = Time.realtimeSinceStartup + 0.3f;   // (apres son "State 3" : Wait 0,1 puis "State 1")
             Choosing = true;
             VehicleSync.FreezeLocal(true);   // (mort au volant : plus de conduite pendant le choix)
+            // Commandes du joueur coupees, comme le "State 3" du jeu que l'interception ne joue plus (Menor, 18/10 : « mort en
+            // marchant, on continue d'avancer sur l'ecran de mort ») ; Revive les rend.
+            GameObject plg = Game.PlayerGo;
+            if (plg != null)
+            {
+                foreach (Behaviour b in plg.GetComponents<Behaviour>())
+                {
+                    string bn = b.GetType().Name;
+                    if (bn == "CharacterMotor" || bn == "FPSInputController") b.enabled = false;
+                }
+                Game.SetGlobalBool("PlayerStop", true);
+            }
             if (Session.Active) Chat.Send(Lang.T("* mort (", "* died (") + cause + ") *");
             // Accident au volant : les passagers de cette voiture meurent aussi (le jeu n'a pas de passager : seul le
             // conducteur mourait, retour d'un joueur, 09/10 : « seul l'hote meurt dans l'accident »).

@@ -192,6 +192,7 @@ namespace MWCoop
             new Mod("peinture", CustomPaint.Update),
             new Mod("carburant", FuelPrices.Update),
             new Mod("telephone", PhoneKeys.Update),
+            new Mod("plats", Plats.Update),
             new Mod("chocs", CarHits.Update),
             new Mod("vitres", WindowCranks.Update),
             new Mod("ram1500", ModRam1500.Update),
@@ -324,6 +325,7 @@ namespace MWCoop
             CustomPaint.OnLevelLoaded();
             FuelPrices.OnLevelLoaded();
             PhoneKeys.OnLevelLoaded();
+            Plats.OnLevelLoaded();
             CarHits.OnLevelLoaded();
             WindowCranks.OnLevelLoaded();
             ModRam1500.OnLevelLoaded();

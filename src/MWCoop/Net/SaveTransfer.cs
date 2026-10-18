@@ -41,6 +41,12 @@ namespace MWCoop.Net
         static int expected, got;
         static readonly List<Peer> waiting = new List<Peer>();
         static float inGameSince = -1, sendAt = -1;
+        static float worldSavedAt = -1e9f;   // hote : derniere sauvegarde complete du monde (en place pour un envoi, ou coop)
+        // Invite revenu au menu (K_NEED) : sa sauvegarde n'est preparee qu'apres NeedGrace s, et seulement s'il donne encore
+        // signe de vie -- Menor, 18/10 : chaque ami qui quittait au menu puis fermait le jeu coutait 12 s de gel a l'hote
+        // (sauvegarde en place) pour un envoi qui ne partait jamais.
+        static readonly Dictionary<Peer, float> needs = new Dictionary<Peer, float>();
+        const float NeedGrace = 8f, SaveReuse = 20f, LoadGrace = 120f, PauseGrace = 40f;
         static bool newGame;             // hote : nouvelle partie lancee, pas encore de vraie sauvegarde
         static int lastHostLevel = -1;   // invite : niveau de l'hote vu au dernier passage
         static float backToMenuAt = -1, nextWaitToast;
@@ -61,6 +67,7 @@ namespace MWCoop.Net
             if (!Session.IsHost) { GuestFollow(now); GuestCoop(now); return; }
             HostCoop(now);
             Pump();
+            PendingNeeds(now);
             if (!PlayerSync.InGame) { inGameSince = sendAt = -1; if (CarColor.NewGame) newGame = true; return; }
             if (inGameSince < 0)
             {
@@ -75,15 +82,19 @@ namespace MWCoop.Net
                 // Partie qui vient d'etre chargee (Continuer) : la sauvegarde du disque EST le monde, envoi
                 // tout de suite. Sinon (nouvelle partie, invite arrive en cours de route) : on sauve d'abord.
                 // (25 s et non 60 : ce que les modules avaient change entre 25 et 60 s manquait a l'arrivant -- relecture du 15/10)
-                bool fresh = !newGame && now - inGameSince < 25f && File.Exists(Path.Combine(SaveDir, "savefile.txt"));
+                // Monde sauve il y a moins de SaveReuse s (deuxieme arrivant, sauvegarde coop) : la meme sert, pas de nouveau gel.
+                bool fresh = !newGame && (now - inGameSince < 25f || now - worldSavedAt < SaveReuse) && File.Exists(Path.Combine(SaveDir, "savefile.txt"));
                 if (!fresh)
                 {
                     newGame = false;
                     Log.Info("sauvegarde : l'hote sauvegarde le monde actuel avant d'envoyer");
+                    AnnouncePause(WaitingNames());
                     Game.SaveInPlace();
+                    worldSavedAt = now;
                     sendAt = now + 3f;
                     return;
                 }
+                else if (now - worldSavedAt < SaveReuse && now - inGameSince >= 25f) Log.Info("sauvegarde : monde sauve il y a " + (now - worldSavedAt).ToString("F0") + " s, renvoye tel quel");
                 sendAt = now;
             }
             if (now < sendAt || Game.Saving) return;
@@ -95,9 +106,36 @@ namespace MWCoop.Net
             {
                 foreach (Peer p in waiting)
                     if (p.Accepted && Session.T.Peers.Contains(p))
-                        try { SendTo(p); } catch (Exception e) { Log.Error("sauvegarde : envoi a " + p + " impossible : " + e.Message); }
+                        try { SendTo(p); Session.T.Grace(p, LoadGrace); } catch (Exception e) { Log.Error("sauvegarde : envoi a " + p + " impossible : " + e.Message); }
             }
             finally { waiting.Clear(); }
+        }
+
+        static string WaitingNames()
+        {
+            var l = new List<string>();
+            foreach (Peer p in waiting) { PlayerInfo pi; l.Add(Session.Players.TryGetValue(p.Id, out pi) ? pi.Name : "#" + p.Id); }
+            return string.Join(", ", l.ToArray());
+        }
+
+        // Hote : les invites sont prevenus que le jeu va se figer quelques secondes (sauvegarde en place) : message a l'ecran,
+        // et leur transport tolere le silence de l'hote (PauseGrace) -- 12 s de gel chez Menor, 18/10, pour un delai de 15 s.
+        static void AnnouncePause(string why)
+        {
+            if (Session.RemoteCount > 0) Session.Broadcast(new NetWriter(CoopMsg).U8(K_PAUSE).Str(why), true);
+        }
+
+        // Hote : invites revenus au menu, servis apres NeedGrace s s'ils sont toujours la et donnent signe de vie.
+        static void PendingNeeds(float now)
+        {
+            if (needs.Count == 0) return;
+            foreach (Peer p in new List<Peer>(needs.Keys))
+            {
+                if (!Session.T.Peers.Contains(p)) { needs.Remove(p); Log.Info("sauvegarde : " + p + " revenu au menu puis parti : rien a preparer"); continue; }
+                if (now < needs[p] || Session.T.Now - p.LastHeard > 3f) continue;   // (pas encore, ou silencieux : on attend de l'entendre)
+                needs.Remove(p);
+                Queue(p);
+            }
         }
 
         // Le jeu ecrit ses fichiers sur plusieurs images (jusqu'a 5 s) : fini quand rien n'a bouge depuis 2 s.
@@ -341,7 +379,7 @@ namespace MWCoop.Net
         // Messages : Msg 9 (StartGame, reserve jusqu'ici ; Session le passe a World.OnMessage qui le renvoie
         // a OnCoop), 1er octet = genre.
         public const Msg CoopMsg = Msg.StartGame;
-        const int K_REQ = 1, K_START = 2, K_NOW = 3, K_DONE = 4, K_QUIT = 5, K_NEED = 6, K_REPORT = 7, K_FBEGIN = 8, K_FCHUNK = 9, K_FEND = 10;
+        const int K_REQ = 1, K_START = 2, K_NOW = 3, K_DONE = 4, K_QUIT = 5, K_NEED = 6, K_REPORT = 7, K_FBEGIN = 8, K_FCHUNK = 9, K_FEND = 10, K_PAUSE = 11;
         //   K_REQ     invite -> hote : sauvegarde demandee (clic aux toilettes)
         //   K_START   hote -> invites : U16 n, Str demandeur : sauvegarde dans FlushDelay s
         //   K_NOW     hote -> invites : U16 n, Bool comparer : l'hote ecrit maintenant (l'invite aussi, s'il compare)
@@ -352,6 +390,7 @@ namespace MWCoop.Net
         //   K_FBEGIN  invite -> hote : U16 n, U8 fichiers, (Str nom, I32 taille) x fichiers
         //   K_FCHUNK  invite -> hote : U16 n, U8 fichier, I32 decalage, Bytes (<= Chunk)
         //   K_FEND    invite -> hote : U16 n
+        //   K_PAUSE   hote -> invites : Str pour qui : l'hote sauvegarde en place pour un arrivant, jeu fige quelques secondes
         const float FlushDelay = 2f, QuitWindow = 15f;
         const int MaxCompared = 128 * 1024;   // speedcam.txt (photos des radars, 225 Ko) : pas compare
         const string OrigLabel = "SAVE AND QUIT TO MENU";
@@ -628,7 +667,9 @@ namespace MWCoop.Net
                     Log.Info("sauvegarde coop #" + coopSeq + " : " + Audit.Desyncs.Count + " ecart(s) durable(s) avec les invites selon l'audit :");
                     for (int i = 0; i < Audit.Desyncs.Count && i < 8; i++) Log.Info("  ecart audit : " + Audit.Desyncs[i]);
                 }
+                AnnouncePause(coopBy);
                 Game.SaveInPlace();
+                worldSavedAt = now;
                 Session.Broadcast(new NetWriter(CoopMsg).U8(K_NOW).U16(coopSeq).Bool(CompareOn), true);
                 coopPhase = 2; coopAt = now + 3f;
                 return;
@@ -662,7 +703,7 @@ namespace MWCoop.Net
                 switch (k)
                 {
                     case K_REQ: Log.Info("toilettes : " + name + " demande une sauvegarde"); StartCoop(name, false); break;
-                    case K_NEED: Log.Info("sauvegarde : " + name + " est revenu au menu, il recevra la sauvegarde actuelle"); Queue(from); break;
+                    case K_NEED: Log.Info("sauvegarde : " + name + " est revenu au menu, il recevra la sauvegarde actuelle (dans " + (int)NeedGrace + " s s'il est toujours la)"); needs[from] = now + NeedGrace; break;
                     case K_REPORT: OnReport(name, r); break;
                     case K_FBEGIN: case K_FCHUNK: case K_FEND: OnGuestFile(from, name, k, r); break;
                 }
@@ -698,6 +739,14 @@ namespace MWCoop.Net
                     guestDone++;
                     Log.Info("sauvegarde coop #" + seq + " ecrite chez l'hote (demandee par " + by + "), l'invite reste en jeu");
                     Hud.Toast(Lang.T("Partie sauvegard\u00E9e chez l'h\u00F4te (", "Game saved on the host (") + by + ")");
+                    break;
+                }
+                case K_PAUSE:
+                {
+                    string why = r.Str();
+                    if (Session.T != null) foreach (Peer p in Session.T.Peers) Session.T.Grace(p, PauseGrace);
+                    Log.Info("sauvegarde : l'hote sauvegarde en place (" + why + "), son silence est tolere " + (int)PauseGrace + " s");
+                    if (PlayerSync.InGame) Hud.Toast(string.Format(Lang.T("L'h\u00F4te sauvegarde pour {0} : petite pause...", "The host is saving for {0}: short pause..."), why));
                     break;
                 }
                 case K_QUIT:

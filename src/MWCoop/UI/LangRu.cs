@@ -584,6 +584,7 @@ namespace MWCoop
             { "yours: no. ", "ваша: № " },
             { "rental Jokkis, free", "Йоккис в аренду, бесплатно" },
             { "Enter or click: the game's 16 Jokkis, one per player, with a 3D preview", "Enter или клик: 16 Йоккис игры, одна на игрока, с 3D-превью" },
+            { "The host is saving for {0}: short pause...", "Хост сохраняет игру для {0}: небольшая пауза..." },
         };
     }
 }
