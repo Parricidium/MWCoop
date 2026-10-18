@@ -19,9 +19,14 @@ namespace MWCoop
     // (tres faim, epuise, gele... pour soi et ses amis) : aussi avec Vanilla. Reglages : UI/HudSettings.cs.
     public static class NewHud
     {
-        static GameObject guiRoot, hudRoot, guiCamGo, dayGo, jailGo, mortalGo;
+        static GameObject guiRoot, hudRoot, guiCamGo, dayGo, jailGo, mortalGo, fpsGo;
         static Camera guiCam;
-        static TextMesh dayText, jailText;
+        static TextMesh dayText, jailText, fpsText;
+        // Compteur d'images du jeu (option « FPS » des reglages du jeu : GUI/HUD/FPS allume, valeur moyennee par son automate
+        // dans HUDValue) : repris dans chaque style (demande de JD, 18/10), cache avec le reste du HUD du jeu.
+        static bool fpsOn;
+        static int fps;
+        static float fpsOwn;
         static FsmFloat bodyTempTrend;
         static readonly List<Renderer> hidden = new List<Renderer>();
         static float nextFind, nextHide, nextSend, nextAlertCheck;
@@ -29,7 +34,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            guiRoot = hudRoot = guiCamGo = dayGo = jailGo = mortalGo = null; guiCam = null; dayText = jailText = null; bodyTempTrend = null;
+            guiRoot = hudRoot = guiCamGo = dayGo = jailGo = mortalGo = fpsGo = null; guiCam = null; dayText = jailText = fpsText = null; bodyTempTrend = null;
             hidden.Clear(); mates.Clear(); alerts.Clear(); armed.Clear(); nextFind = 0f;
         }
 
@@ -52,6 +57,9 @@ namespace MWCoop
             GameObject jv = Game.FindAny("GUI/HUD/Jailtime/HUDValue");
             jailText = jv != null ? jv.GetComponent<TextMesh>() : null;
             mortalGo = Game.FindAny("GUI/HUD/Mortal");
+            fpsGo = Game.FindAny("GUI/HUD/FPS");
+            GameObject fv = Game.FindAny("GUI/HUD/FPS/HUDValue");
+            fpsText = fv != null ? fv.GetComponent<TextMesh>() : null;
             GameObject bt = Game.FindAny("PLAYER/BodyTemp");
             PlayMakerFSM calc = bt != null ? Game.FsmOn(bt, "Calculations") : null;
             bodyTempTrend = calc != null ? calc.FsmVariables.FindFsmFloat("Temperature") : null;
@@ -76,7 +84,22 @@ namespace MWCoop
             inJail = jailGo != null && jailGo.activeInHierarchy;
             jailDays = jailText != null ? jailText.text : "";
             mortal = mortalGo != null && mortalGo.activeInHierarchy;
+            fpsOn = fpsGo != null && fpsGo.activeSelf;
+            if (fpsOn)
+            {
+                // la valeur du jeu (texte « 60 », ou « 60 FPS ») ; a defaut, notre propre moyenne
+                float dt = Time.unscaledDeltaTime;
+                if (dt > 0f) fpsOwn = fpsOwn <= 0f ? 1f / dt : Mathf.Lerp(fpsOwn, 1f / dt, 0.1f);
+                int v = 0;
+                string t = fpsText != null ? fpsText.text : null;
+                if (t != null) foreach (char ch in t) { if (ch >= '0' && ch <= '9') v = v * 10 + (ch - '0'); else if (v > 0) break; }
+                fps = v > 0 ? v : Mathf.RoundToInt(fpsOwn);
+            }
         }
+
+        static readonly Color FpsGood = new Color(0.42f, 0.86f, 0.56f);
+        static Color FpsColor { get { return fps >= 50 ? FpsGood : fps >= 30 ? Warn : Bad; } }
+        static string FpsText { get { return fps + " FPS"; } }
 
         static void Add(string key, string icon, string fr, string en, float v)
         {
@@ -268,7 +291,7 @@ namespace MWCoop
         // ---- Carte : en-tete (jour, argent), une ligne par jauge, temperature en echelle froid -> chaud ----
         static void DrawCard(int pos)
         {
-            bool head = HudSettings.On("JaugeJour") || HudSettings.On("JaugeArgent") || mortal;
+            bool head = HudSettings.On("JaugeJour") || HudSettings.On("JaugeArgent") || mortal || fpsOn;
             bool tempOn = HudSettings.On("JaugeTemperature");
             float rowH = P(26), pad = P(14), w = P(300);
             int rows = gauges.Count + (tempOn ? 1 : 0) + (inJail ? 1 : 0);
@@ -290,6 +313,7 @@ namespace MWCoop
                     Style.Text(new Rect(cx, hr.y, P(140), hr.height), dayLabel, F(16), TextAnchor.MiddleLeft, Txt);
                 }
                 if (mortal) Style.Text(new Rect(cx + Style.Width(dayLabel, F(16)) + P(8), hr.y, P(80), hr.height), Lang.T("Mortel", "Mortal"), F(12), TextAnchor.MiddleLeft, Bad);
+                float rx = hr.xMax;
                 if (HudSettings.On("JaugeArgent"))
                 {
                     string s = Money() + " mk";
@@ -298,7 +322,9 @@ namespace MWCoop
                     Style.Round(pr, ph / 2, new Color(accent.r, accent.g, accent.b, 0.16f));
                     Style.Ring(pr, ph / 2, new Color(accent.r, accent.g, accent.b, 0.35f));
                     Style.Text(pr, s, F(15), TextAnchor.MiddleCenter, accent);
+                    rx = pr.x - P(6);
                 }
+                if (fpsOn) FpsPill(rx, hr.center.y, P(24), F(12), true);
                 y += P(30);
                 if (rows > 0) { Style.Fill(new Rect(x, y + P(4), w - 2 * pad, Mathf.Max(1f, Style.Px(1))), Edge); y += P(10); }
             }
@@ -331,6 +357,22 @@ namespace MWCoop
                 Style.Text(new Rect(x + iw + P(8), y, lw, rowH), Lang.T("Prison", "Jail"), F(15), TextAnchor.MiddleLeft, Txt);
                 Style.Text(new Rect(bx, y, r.xMax - pad - bx, rowH), jailDays + Lang.T(" j", " d"), F(15), TextAnchor.MiddleRight, new Color(0.86f, 0.78f, 1f));
             }
+        }
+
+        // Pastille du compteur d'images : point de couleur (vert >= 50, orange >= 30, rouge), « 60 FPS ». right : x est son bord
+        // droit, sinon son bord gauche ; renvoie sa largeur.
+        static float FpsPill(float x, float cy, float h, int size, bool right)
+        {
+            string s = FpsText;
+            Color c = FpsColor;
+            float w = Style.Width(s, size) + P(28);
+            var r = new Rect(right ? x - w : x, cy - h / 2, w, h);
+            Style.Round(r, h / 2, new Color(1f, 1f, 1f, 0.06f));
+            Style.Ring(r, h / 2, new Color(c.r, c.g, c.b, 0.35f));
+            float d = P(7);
+            Style.Round(new Rect(r.x + P(9), cy - d / 2, d, d), d / 2, c);
+            Style.Text(new Rect(r.x + P(20), r.y, w - P(24), h), s, size, TextAnchor.MiddleLeft, Color.Lerp(Txt, c, 0.35f));
+            return w;
         }
 
         // Echelle de temperature : froid (bleu) -> chaud (orange), repere blanc a la valeur.
@@ -369,7 +411,7 @@ namespace MWCoop
             bool tempOn = HudSettings.On("JaugeTemperature"), head = HudSettings.On("JaugeJour") || HudSettings.On("JaugeArgent");
             bool names = HudSettings.On("Valeurs");
             float ring = P(50), cell = P(60), pad = P(12);
-            int n = show.Count + (tempOn ? 1 : 0);
+            int n = show.Count + (tempOn ? 1 : 0) + (fpsOn ? 1 : 0);
             float hw = head ? P(108) : 0f;
             float w = pad * 2 + hw + n * cell, h = pad * 2 + ring + P(18);
             if (n == 0 && !head) return;
@@ -398,6 +440,16 @@ namespace MWCoop
             {
                 Color c = temp < 40f ? ColdC : temp >= 85f ? Warn : accent;
                 RingCell(new Rect(x, r.y + pad, cell, ring + P(18)), ring, temp / 100f, c, "temperature", c, names || temp < 40f ? TempWord(temp) : null);
+                x += cell;
+            }
+            if (fpsOn)
+            {
+                Color c = FpsColor;
+                var rr = new Rect(x + (cell - ring) / 2, r.y + pad, ring, ring);
+                Arc(rr, 1f, Track);
+                Arc(rr, Mathf.Clamp01(fps / 60f), c);
+                Style.Text(rr, fps.ToString(), F(fps >= 100 ? 13 : 15), TextAnchor.MiddleCenter, Color.Lerp(Txt, c, 0.3f));
+                Style.Text(new Rect(x - P(6), rr.yMax + P(1), cell + P(12), P(17)), "FPS", F(12), TextAnchor.MiddleCenter, Dim);
             }
         }
 
@@ -464,7 +516,8 @@ namespace MWCoop
                 parts.Add(cw); w += cw; chips++;
             }
             float tw = tempOn ? P(16) + P(8) + Style.Width(TempWord(temp), F(12)) + P(22) : 0f;
-            w += tw + gap * (chips + (dayW > 0 ? 1 : 0) + (monW > 0 ? 1 : 0) + (tempOn ? 1 : 0) - 1);
+            float fw = fpsOn ? Style.Width(FpsText, F(12)) + P(28) : 0f;
+            w += tw + fw + gap * (chips + (dayW > 0 ? 1 : 0) + (monW > 0 ? 1 : 0) + (tempOn ? 1 : 0) + (fpsOn ? 1 : 0) - 1);
             if (w <= pad * 2) return;
             Rect r = Place(pos == 0 || pos == 1 || pos == 4 ? 4 : 5, w, h);
             if (pos == 0 || pos == 1) r.x = pos == 0 ? Style.Px(20) : Screen.width - w - Style.Px(20);
@@ -509,7 +562,9 @@ namespace MWCoop
                 Style.Round(c, chipH / 2, new Color(col.r, col.g, col.b, 0.14f));
                 Icon(new Rect(c.x + P(10), c.center.y - P(8), P(16), P(16)), "temperature", col);
                 Style.Text(new Rect(c.x + P(32), c.y, c.width - P(36), chipH), TempWord(temp), F(12), TextAnchor.MiddleLeft, Color.Lerp(Txt, col, 0.4f));
+                x += tw + gap;
             }
+            if (fpsOn) FpsPill(x, cy + chipH / 2, chipH, F(12), false);
         }
 
         // ---- Equipe : une petite carte par autre joueur (nom, ou il est, soif / faim / fatigue) ----
@@ -604,7 +659,9 @@ namespace MWCoop
                 tStep = 1;
                 Game.SetGlobalFloat("PlayerHunger", 76f); Game.SetGlobalFloat("PlayerFatigue", 93f); Game.SetGlobalFloat("PlayerThirst", 35f);
                 Game.SetGlobalFloat("PlayerStress", 12f); Game.SetGlobalFloat("PlayerUrine", 48f); Game.SetGlobalFloat("PlayerTemp", 30f); Game.SetGlobalFloat("PlayerSweat", 4f);
-                Log.Info("autotest : hud, jauges posees (HUD du jeu " + (hudRoot != null) + ", montre par le jeu " + GameShows() + ")");
+                // [Test] HudFps=1 : l'option FPS du jeu allumee (GUI/HUD/FPS), comme depuis ses reglages
+                if (Config.GetInt("Test", "HudFps", 0) != 0 && fpsGo != null) fpsGo.SetActive(true);
+                Log.Info("autotest : hud, jauges posees (HUD du jeu " + (hudRoot != null) + ", montre par le jeu " + GameShows() + ", FPS " + (fpsGo != null ? fpsGo.activeSelf.ToString() : "absent") + ")");
             }
             int[][] steps = { new[] { 1, 100, -1, 0 }, new[] { 2, 100, -1, 0 }, new[] { 3, 100, -1, 0 }, new[] { 1, 125, 1, 2 }, new[] { 0, 100, -1, 0 } };
             string[] names = { "hud-carte", "hud-anneaux", "hud-bandeau", "hud-carte-grande", "hud-vanilla" };

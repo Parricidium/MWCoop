@@ -475,3 +475,4 @@ WM04	Keyboard: Up/Down switch tabs, Right or Enter go into the list, Left comes 
 WM05	Players: one card per player (where they are, ping) with Go to, and for the host Bring here and Kick; then invite Steam friends and resync the world.
 WM06	Ice race: the 16 rental Jokkis, free, one per player, with the 3D preview. Left/Right filter a model, Enter or a double click chooses or gives back the car.
 WM07	Menu size (Small, Normal, Large) and its place (centre or left): F10 › Graphics › MWCoop menu. It also applies to cheats (F7), the wallet (N) and the chat.
+WF60	If the FPS option of the game's settings is on, the frame counter shows up in the chosen style: a pill in the Card's header, a ring at the end of Rings, a pill at the end of Strip (green, orange or red depending on smoothness).
