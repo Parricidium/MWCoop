@@ -114,6 +114,7 @@ namespace MWCoop
             new Mod("carte", MapRender.Update),
             new Mod("panneau carte", MapPanel.Update),
             new Mod("panneau jokkis", JokkisPanel.Update),
+            new Mod("panneau vaz", VazPanel.Update),
             new Mod("marqueurs", Markers.Update),
             new Mod("mods (compatibilite)", ModSecondMachtwagen.Update),
             new Mod("mods (300D)", ModMachtwagen300D.Update),
@@ -178,6 +179,7 @@ namespace MWCoop
             new Mod("trafic", Traffic.Update),
             new Mod("courses", Races.Update),
             new Mod("jokkis", Jokkis.Update),
+            new Mod("vaz-2108", Vaz.Update),
             new Mod("portes poussees", PushDoors.Update),
             new Mod("molettes", Knobs.Update),
             new Mod("evenements", Events.Update),
@@ -312,6 +314,7 @@ namespace MWCoop
             Traffic.OnLevelLoaded();
             Races.OnLevelLoaded();
             Jokkis.OnLevelLoaded();
+            Vaz.OnLevelLoaded();
             PushDoors.OnLevelLoaded();
             Knobs.OnLevelLoaded();
             Events.OnLevelLoaded();

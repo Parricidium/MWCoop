@@ -1169,6 +1169,17 @@ Updated \u00B7 MWCoop %s (a stuck game still holds version.dll: replaced at the 
 On Linux: put the Steam launch option from the GUIDE (Linux and Steam Deck) and start MWCoop from Steam	على Linux: ضع خيار تشغيل Steam من الدليل (Linux وSteam Deck) وشغّل MWCoop من Steam
 MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% in the game's Steam launch options (GUIDE: Linux and Steam Deck)	لم يُحمَّل MWCoop: على Linux، ضع WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% في خيارات تشغيل اللعبة في Steam (الدليل: Linux وSteam Deck)
 \n\nOn Linux, the launch copies (with links to the game) are kept: delete them by hand, without following the links.	\n\nعلى Linux، تبقى نسخ التشغيل (مع روابط إلى اللعبة): احذفها يدويًا دون اتباع الروابط.
+Players' VAZ-2108 (F10)	سيارات VAZ-2108 للاعبين (F10)
+Drone, sleeping bags, s21 shop, museum, VAZ-2108	الطائرة المسيّرة، أكياس النوم، متجر s21، المتحف، VAZ-2108
+The players' VAZ-2108 (F10), from the \"VAZ-2108 Rally\" model by matthew0451 on Sketchfab: sketchfab.com/matthew0451, CC BY-NC 4.0 license. Lightened, livery removed (one colour and number per player).	سيارات VAZ-2108 للاعبين (F10)، عن نموذج \"VAZ-2108 Rally\" من matthew0451 على Sketchfab: sketchfab.com/matthew0451، ترخيص CC BY-NC 4.0. مخففة، بدون الطلاء الأصلي (لكل لاعب لون ورقم).
+Every player can have their own rally VAZ-2108, free: F10 > VAZ-2108 tab. Sixteen colours, one per player; the colour also gives the number painted on the doors.	يمكن لكل لاعب أن يحصل على سيارة VAZ-2108 للرالي خاصة به مجانًا: F10 > تبويب VAZ-2108. ستة عشر لونًا، لون لكل لاعب؛ واللون يحدد أيضًا الرقم المرسوم على الأبواب.
+In the tab	في التبويب
+Pick a free colour then Take: the car appears next to you, for everyone.	اختر لونًا متاحًا ثم «أخذ»: تظهر السيارة بجانبك لدى الجميع.
+Bring here (or V): brings it back next to you, if nobody is driving it.	«إحضارها» (أو V): تعيدها بجانبك إذا لم يكن أحد يقودها.
+Give back: it disappears and its colour is free again. When you leave the game, the host keeps your colour and where your VAZ was: you find it again when you come back.	«إرجاع»: تختفي السيارة ويصبح لونها متاحًا من جديد. عندما تغادر اللعبة يحتفظ المضيف بلونك وبمكان سيارتك VAZ: تجدها عند عودتك.
+Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits).	يمكن إيقافها مثل الإضافات الأخرى: الإعدادات > اللعب الجماعي > إضافات MWCoop (اختيار المضيف يسري على الجميع). النموذج ثلاثي الأبعاد من matthew0451، ترخيص CC BY-NC 4.0 (الدليل > الشكر).
+The rally VAZ-2108	سيارة VAZ-2108 للرالي
+A colour and a number per player	لون ورقم لكل لاعب
 Thanks to everyone who makes MWCoop better	شكراً لكل من يجعل MWCoop أفضل
 VHS tapes	أشرطة VHS
 Watch them, export them as .mp4, rename them, put a video on them	شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو
