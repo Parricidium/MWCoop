@@ -1678,6 +1678,7 @@ static const wchar_t *const kRu[][2] = {
     { L"In-game gauges: Vanilla, Card, Rings or Strip · in game: F10 › HUD", L"Шкалы в игре: Vanilla, Карточка, Кольца или Полоса · в игре: F10 › HUD" },
     { L"HUD tab", L"Вкладка HUD" },
     { L"The style of the in-game gauges: Vanilla (the game's own), Card, Rings or Strip, with a preview. Then its size, position, colour, the gauges shown, the team panel and the alerts. In game too: F10 › HUD.", L"Стиль шкал в игре: Vanilla (родной), Карточка, Кольца или Полоса, с предпросмотром. Затем размер, положение, цвет, показанные шкалы, панель команды и предупреждения. И в игре: F10 › HUD." },
+    { L"Updated \u00B7 MWCoop %s (a stuck game still holds version.dll: replaced at the next launch)", L"Обновлено \u00B7 MWCoop %s (зависшая игра ещё держит version.dll: замена при следующем запуске)" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },
