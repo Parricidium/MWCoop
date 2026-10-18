@@ -369,6 +369,7 @@ namespace MWCoop
         public class LiveRow { public int Pos; public string Num, Name, Laps, Last, Best; public bool Me, Human, Done; }
 
         static readonly Dictionary<string, LiveCar> live = new Dictionary<string, LiveCar>();
+        static int lapLogs;
         static string liveKey = ""; static float nextLiveScan, liveStateAt; static string liveState = "";
 
         static void LiveReset() { live.Clear(); liveKey = ""; nextLiveScan = 0f; liveState = ""; }
@@ -404,6 +405,25 @@ namespace MWCoop
             }
         }
         public static bool AtTrack { get { return LiveOn; } }
+
+        // Tableau a l'ecran 5 s apres chaque passage de la voiture que je conduis sur la ligne de depart/arrivee (JD, 18/10 :
+        // « comme dans les jeux de voitures ») ; le F10 le montre toujours.
+        static float showUntil; static Vector3 drvLast; static bool drvHas, drvIn;
+        public static bool LiveShow { get { return LiveOn && Time.realtimeSinceStartup < showUntil; } }
+        static void WatchMyLine()
+        {
+            Transform d = VehicleSync.LocalDrivingRoot;
+            if (d == null) { drvHas = false; return; }
+            Vector3 p = d.position;
+            bool now = lines[2].Contains(p);
+            if (drvHas && (p - drvLast).sqrMagnitude < 2500f)
+            {
+                bool cross = now && !drvIn;
+                if (!cross && !now && !drvIn) { Vector3 v = p - drvLast; float len = v.magnitude, dist; cross = len > 0.001f && lines[2].IntersectRay(new Ray(drvLast, v / len), out dist) && dist <= len; }
+                if (cross) showUntil = Time.realtimeSinceStartup + 5f;
+            }
+            drvLast = p; drvHas = true; drvIn = now;
+        }
 
         static Transform CarOfNumber(string local, out string name, out bool human, out bool me)
         {
@@ -474,6 +494,7 @@ namespace MWCoop
                     c.Name = name; c.Human = human;
                 }
             }
+            WatchMyLine();
             if (!Practice && !HeatRunning) return;
             bool practice = Practice;
             foreach (LiveCar c in live.Values)
@@ -489,7 +510,7 @@ namespace MWCoop
                 if (!sf) continue;
                 if (practice)
                 {
-                    if (c.Timing && c.C1 && c.C2) { c.LastLap = now - c.LapStart; if (c.BestLap <= 0f || c.LastLap < c.BestLap) c.BestLap = c.LastLap; }
+                    if (c.Timing && c.C1 && c.C2) { c.LastLap = now - c.LapStart; if (c.BestLap <= 0f || c.LastLap < c.BestLap) c.BestLap = c.LastLap; if (lapLogs++ < 30) Log.Info("glace : chrono : n " + c.Num + " (" + c.Name + ") tour " + LapText(c.LastLap)); }
                     c.Timing = true; c.LapStart = now; c.C1 = c.C2 = false; c.LastPass = now;
                     continue;
                 }
