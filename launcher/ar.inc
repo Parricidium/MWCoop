@@ -1181,7 +1181,7 @@ static const wchar_t *const kAr[][2] = {
     { L"In the tab", L"في التبويب" },
     { L"Pick a free colour then Take: the car appears next to you, for everyone.", L"اختر لونًا متاحًا ثم «أخذ»: تظهر السيارة بجانبك لدى الجميع." },
     { L"Bring here (or V): brings it back next to you, if nobody is driving it.", L"«إحضارها» (أو V): تعيدها بجانبك إذا لم يكن أحد يقودها." },
-    { L"Give back: it disappears and its colour is free again. When you leave the game, the host keeps your colour and where your VAZ was: you find it again when you come back.", L"«إرجاع»: تختفي السيارة ويصبح لونها متاحًا من جديد. عندما تغادر اللعبة يحتفظ المضيف بلونك وبمكان سيارتك VAZ: تجدها عند عودتك." },
+    { L"Give back: it disappears and its colour is free again. It also disappears when you leave the game: when you come back, or after loading, take one again in F10.", L"«إرجاع»: تختفي السيارة ويصبح لونها متاحًا من جديد. وتختفي أيضًا عندما تغادر اللعبة: عند عودتك أو بعد التحميل، خذ واحدة من جديد من F10." },
     { L"Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits).", L"يمكن إيقافها مثل الإضافات الأخرى: الإعدادات > اللعب الجماعي > إضافات MWCoop (اختيار المضيف يسري على الجميع). النموذج ثلاثي الأبعاد من matthew0451، ترخيص CC BY-NC 4.0 (الدليل > الشكر)." },
     { L"The rally VAZ-2108", L"سيارة VAZ-2108 للرالي" },
     { L"A colour and a number per player", L"لون ورقم لكل لاعب" },

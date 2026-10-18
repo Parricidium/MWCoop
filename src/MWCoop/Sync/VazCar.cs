@@ -54,6 +54,9 @@ namespace MWCoop
             public Transform Body, SteerPivot, SorbetSteer, BrakePivot, SorbetBrake;
             public Quaternion SorbetSteerRest, SorbetBrakeRest;
             public VazSound Sound;
+            public FsmFloat BrakeKnob;
+            public int Number;
+            public Transform Roof; public BoxCollider RoofZone; public bool RoofOpen, RoofHover; public float RoofAngle;
             public Vector3 SteerAxis = Vector3.forward;
             public Component Axis;
             public Drivetrain Dt;
@@ -268,7 +271,7 @@ namespace MWCoop
             if (sorbet == null) { Log.Warn("vaz : SORBET introuvable"); return null; }
             if (!HasFiles) { Log.Warn("vaz : fichiers du modele absents (" + Dir + ")"); return null; }
             Dictionary<string, Vector3> inf = Info();
-            var b = new Built();
+            var b = new Built { Number = number };
             GameObject car = Object.Instantiate(sorbet);
             car.SetActive(false);   // (reglee eteinte : ses automates demarrent sur la version modifiee)
             car.name = name;
@@ -304,7 +307,9 @@ namespace MWCoop
                 rd.enabled = false; b.Hidden.Add(rd);
             }
             foreach (LODGroup lg in car.GetComponentsInChildren<LODGroup>(true)) Object.Destroy(lg);
-            foreach (string dp in new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)", "Hatch/Hatch" })
+            // (hayon de la SORBET garde quand le modele a le sien : il porte celui de la VAZ, voir 4b)
+            bool hasHatch = File.Exists(Path.Combine(Dir, "hayon.p205"));
+            foreach (string dp in hasHatch ? new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)" } : new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)", "Hatch/Hatch" })
             {
                 Transform d = ct.Find(dp);
                 if (d != null && d.gameObject.activeSelf) d.gameObject.SetActive(false);
@@ -369,6 +374,53 @@ namespace MWCoop
                 AddParts(b, door.transform, dd[0], basePaint, paint, number);
                 door.transform.SetParent(sd, true);
                 doors++;
+            }
+
+            // 4b. Hayon (coffre) : celui de la SORBET (corps sur charniere : clic pour ouvrir, ses automates, synchro du jeu) pose
+            //     sur la charniere de la VAZ (haut du hayon), le hayon du modele accroche dessous (demande de JD, 18/10 soir).
+            Transform sh = ct.Find("Hatch/Hatch");
+            Vector3 hh;
+            if (hasHatch && sh != null && inf.TryGetValue("hayon_charniere", out hh))
+            {
+                var hj = sh.GetComponent<HingeJoint>();
+                Vector3 aw = hj != null ? sh.TransformPoint(hj.anchor) : sh.position;
+                sh.position += body.transform.TransformPoint(hh) - aw;
+                if (hj != null)
+                {
+                    Vector3 naw = sh.TransformPoint(hj.anchor);
+                    hj.autoConfigureConnectedAnchor = false;
+                    hj.connectedAnchor = hj.connectedBody != null ? hj.connectedBody.transform.InverseTransformPoint(naw) : naw;
+                }
+                var hatch = new GameObject("VAZ_hayon");
+                hatch.transform.SetParent(body.transform, false);
+                AddParts(b, hatch.transform, "hayon.p205", basePaint, paint, number);
+                hatch.transform.SetParent(sh, true);
+            }
+
+            // 4c. Trappe de toit (a nous : clic pour l'ouvrir vers l'exterieur, synchronisee par Vaz) : charniere au bord avant.
+            Vector3 th;
+            if (File.Exists(Path.Combine(Dir, "trappe.p205")) && inf.TryGetValue("trappe_charniere", out th))
+            {
+                b.Roof = new GameObject("VAZ_trappe").transform;
+                b.Roof.SetParent(body.transform, false);
+                b.Roof.localPosition = th;
+                var inner = new GameObject("pieces").transform;
+                inner.SetParent(b.Roof, false);
+                inner.localPosition = -th;
+                AddParts(b, inner, "trappe.p205", basePaint, paint, number);
+                Bounds rb = new Bounds(); bool first = true;
+                foreach (MeshFilter mf in inner.GetComponentsInChildren<MeshFilter>())
+                {
+                    Bounds mb = mf.sharedMesh.bounds;
+                    if (first) { rb = mb; first = false; } else rb.Encapsulate(mb);
+                }
+                var zone = new GameObject("VAZ_trappe_zone");
+                zone.layer = 2;   // (Ignore Raycast : ne gene pas les clics du jeu ; visee par Collider.Raycast)
+                zone.transform.SetParent(inner, false);
+                b.RoofZone = zone.AddComponent<BoxCollider>();
+                b.RoofZone.isTrigger = true;
+                b.RoofZone.center = rb.center;
+                b.RoofZone.size = new Vector3(rb.size.x, Mathf.Max(0.08f, rb.size.y), rb.size.z);
             }
             Vector3 sc;
             if (inf.TryGetValue("volant_centre", out sc))
@@ -536,10 +588,46 @@ namespace MWCoop
             }
             Steering(b);
             Brake(b);
+            Roof(b);
             if (b.Sound != null) b.Sound.Update();
             Lamps(b, now);
             VazHandling.Tick(b, now);
             if (now >= b.NextMask) { b.NextMask = now + 1f; WheelMask(b); }
+        }
+
+        // Trappe de toit : visee (camera, 1,6 m), icone et texte du jeu, clic gauche -> Vaz.RoofToggle (hote : applique et
+        // diffuse) ; s'ouvre vers l'exterieur, bord arriere leve de 35 degres.
+        static FsmBool guiUse; static FsmString guiText;
+        static void Roof(Built b)
+        {
+            if (b.Roof == null) return;
+            float want = b.RoofOpen ? 35f : 0f;
+            if (!Mathf.Approximately(b.RoofAngle, want))
+            {
+                b.RoofAngle = Mathf.MoveTowards(b.RoofAngle, want, 90f * Time.deltaTime);
+                b.Roof.localRotation = Quaternion.AngleAxis(b.RoofAngle, Vector3.right);
+            }
+            if (b.RoofZone == null) return;
+            Camera cam = Game.MainCam;
+            bool hover = false;
+            if (cam != null && !Game.GlobalBool("PlayerSleeps"))
+            {
+                RaycastHit h;
+                hover = b.RoofZone.Raycast(new Ray(cam.transform.position, cam.transform.forward), out h, 1.6f);
+            }
+            if (guiUse == null) { guiUse = FsmVariables.GlobalVariables.FindFsmBool("GUIuse"); guiText = FsmVariables.GlobalVariables.FindFsmString("GUIinteraction"); }
+            if (hover)
+            {
+                if (guiUse != null) guiUse.Value = true;
+                if (guiText != null) guiText.Value = b.RoofOpen ? Lang.TG("FERMER LA TRAPPE", "CLOSE ROOF HATCH") : Lang.TG("OUVRIR LA TRAPPE", "OPEN ROOF HATCH");
+                if (Input.GetMouseButtonDown(0)) Vaz.RoofToggle(b.Number, !b.RoofOpen);
+            }
+            else if (b.RoofHover)
+            {
+                if (guiUse != null) guiUse.Value = false;
+                if (guiText != null) guiText.Value = "";
+            }
+            b.RoofHover = hover;
         }
 
         // Objet du jeu deplace (sans le tourner) pour que le centre de ses colliders soit en 'world'.
@@ -558,15 +646,20 @@ namespace MWCoop
             return n > 0;
         }
 
-        // Levier du modele : angle du levier du jeu (repos -> tire), poignee qui monte.
+        // Levier du modele : position du levier du jeu (automate Use, KnobPos : 0 desserre, 20 serre = son angle en degres) ;
+        // poignee vers l'avant -> elle monte quand on serre. (Avant : angle compte depuis la pose a la construction -- la SORBET
+        // copiee est garee frein serre, tout etait a l'envers : retour de JD, 18/10.)
         static void Brake(Built b)
         {
             if (b.BrakePivot == null || b.SorbetBrake == null) return;
-            Quaternion d = Quaternion.Inverse(b.SorbetBrakeRest) * b.SorbetBrake.localRotation;
-            float a; Vector3 ax;
-            d.ToAngleAxis(out a, out ax);
-            if (a > 180f) a = 360f - a;
-            b.BrakePivot.localRotation = Quaternion.AngleAxis(-a * Config.GetFloat("Test", "VazFreinSens", 1f), Vector3.right);
+            if (b.BrakeKnob == null)
+            {
+                PlayMakerFSM f = Game.FsmOn(b.SorbetBrake.gameObject, "Use");
+                b.BrakeKnob = f != null ? f.FsmVariables.FindFsmFloat("KnobPos") : null;
+                if (b.BrakeKnob == null) return;
+            }
+            float a = Mathf.Clamp(b.BrakeKnob.Value, 0f, 20f) * Config.GetFloat("Test", "VazFreinSens", 1f);
+            b.BrakePivot.localRotation = Quaternion.AngleAxis(-a, Vector3.right);
         }
 
         static System.Reflection.FieldInfo steerField;
@@ -683,7 +776,7 @@ namespace MWCoop
             var b = new Built();
             var root = new GameObject("MWCoop-VazApercu-" + number);
             b.Car = root;
-            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
+            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205", "hayon.p205", "trappe.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
             GameObject rc = RallyCar();
             Dictionary<string, Vector3> inf = Info();
             if (rc != null)

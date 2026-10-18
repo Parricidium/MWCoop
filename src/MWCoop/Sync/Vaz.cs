@@ -13,8 +13,8 @@ namespace MWCoop
     // VehicleSync les suit comme les autres). En solo, la meme chose sans reseau.
     // La voiture apparait a cote du joueur qui la prend ; « Faire venir » la ramene a cote de lui (l'hote, qui fait autorite
     // sur une voiture sans conducteur, la deplace ; VehicleSync recale les autres). Rendue par le joueur, ou quand il quitte ;
-    // l'hote garde par monde et par pseudo la couleur et la place de chaque VAZ (vaz-hote.ini) : un joueur qui revient la
-    // retrouve ou il l'a laissee.
+    // Rien n'est garde (JD, 18/10 soir) : un joueur qui quitte perd sa VAZ (detruite chez tous) ; a la reconnexion, a une
+    // nouvelle partie ou a un chargement, toutes les couleurs sont libres -- on la reprend au F10.
     // Interrupteur : Ajouts.Vaz ([Coop] AjoutVaz, lanceur ; choix de l'hote valable pour tous).
     // Messages Msg.Race, rangs 30-33 (Races.OnMessage les passe ici).
     public static class Vaz
@@ -25,7 +25,8 @@ namespace MWCoop
         //  31 V_SET   hote -> tous : n, (joueur, couleur, x, y, z, cap)... -- table complete
         //  32 V_DENY  hote -> un invite : couleur, motif (1 deja prise, 2 en a deja une, 3 inconnue, 4 coupee chez l'hote)
         //  33 V_CALL  invite -> hote : faire venir sa VAZ a cette place (x, y, z, cap)
-        public const int V_ASK = 30, V_SET = 31, V_DENY = 32, V_CALL = 33;
+        //  34 V_ROOF  trappe de toit : invite -> hote (couleur, ouverte ?), hote -> tous (meme contenu, applique)
+        public const int V_ASK = 30, V_SET = 31, V_DENY = 32, V_CALL = 33, V_ROOF = 34;
 
         static readonly string[] NamesFr = { "Rouge", "Bleu", "Jaune", "Vert", "Blanc", "Noir", "Orange", "Violet", "Bleu ciel", "Rose", "Gris", "Bordeaux", "Turquoise", "Vert pomme", "Marron", "Bleu nuit" };
         static readonly string[] NamesEn = { "Red", "Blue", "Yellow", "Green", "White", "Black", "Orange", "Purple", "Sky blue", "Pink", "Grey", "Burgundy", "Turquoise", "Lime", "Brown", "Navy" };
@@ -43,10 +44,9 @@ namespace MWCoop
 
         static readonly Dictionary<int, Slot> wanted = new Dictionary<int, Slot>();     // joueur -> couleur + place (table de l'hote)
         static readonly Dictionary<int, Rent> rents = new Dictionary<int, Rent>();      // joueur -> voiture construite ici
-        static readonly Dictionary<string, Slot> byName = new Dictionary<string, Slot>(); // hote : pseudo -> couleur + place (vaz-hote.ini)
         static readonly Dictionary<int, int> lastLevel = new Dictionary<int, int>();
-        static bool hooked, loaded;
-        static float nextTick, nextSave;
+        static bool hooked;
+        static float nextTick;
         public static event System.Action Changed;
 
         static bool Solo { get { return !Session.Active; } }
@@ -108,7 +108,7 @@ namespace MWCoop
         // Rendre la sienne (toujours possible, meme l'ajout coupe).
         public static void Release()
         {
-            if (Host) { if (wanted.Remove(Me)) { ForgetName(Me); HostChanged("rendue par " + NameOf(Me)); } return; }
+            if (Host) { if (wanted.Remove(Me)) { HostChanged("rendue par " + NameOf(Me)); } return; }
             if (wanted.ContainsKey(Me)) Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(0).Vec(Vector3.zero).F32(0f), true);
         }
 
@@ -121,15 +121,28 @@ namespace MWCoop
             else Session.SendToHost(new NetWriter(Msg.Race).U8(V_CALL).Vec(pos).F32(yaw), true);
         }
 
+        // Trappe de toit de la VAZ n (clic d'un joueur) : l'hote applique et diffuse ; un invite le demande a l'hote.
+        public static void RoofToggle(int n, bool open)
+        {
+            if (Host) { ApplyRoof(n, open); if (Session.Active && Session.RemoteCount > 0) Session.Broadcast(new NetWriter(Msg.Race).U8(V_ROOF).U8(n).Bool(open), true); }
+            else Session.SendToHost(new NetWriter(Msg.Race).U8(V_ROOF).U8(n).Bool(open), true);
+        }
+
+        static void ApplyRoof(int n, bool open)
+        {
+            foreach (Rent r in rents.Values)
+                if (r.Number == n && r.Car != null) r.Car.RoofOpen = open;
+        }
+
         // ---------------------------------------------------------------- cycle
         public static void OnLevelLoaded()
         {
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
-            rents.Clear(); wanted.Clear(); byName.Clear(); lastLevel.Clear(); loaded = false; nextTick = 0; testStep = 0; testMoved = false; entryStep = 0;
+            rents.Clear(); wanted.Clear(); lastLevel.Clear(); nextTick = 0; testStep = 0; testMoved = false; entryStep = 0; openDone = false;
             if (!hooked)
             {
                 hooked = true;
-                Session.PlayerLeft += pi => { if (Session.IsHost && wanted.ContainsKey(pi.Id)) { Remember(pi.Id); wanted.Remove(pi.Id); HostChanged("depart de " + pi.Name); } lastLevel.Remove(pi.Id); };
+                Session.PlayerLeft += pi => { if (Session.IsHost && wanted.ContainsKey(pi.Id)) { wanted.Remove(pi.Id); HostChanged("depart de " + pi.Name); } lastLevel.Remove(pi.Id); };
             }
         }
 
@@ -155,63 +168,28 @@ namespace MWCoop
             Reconcile(now);
         }
 
-        // Hote : table gardee (vaz-hote.ini) rendue aux memes pseudos a leur arrivee ; table envoyee a chaque arrivant ; places
-        // gardees toutes les 30 s.
+        // Hote : table envoyee a chaque joueur qui arrive en partie ; ajout coupe -> plus de VAZ.
         static void HostStep(float now)
         {
-            if (!loaded) { loaded = true; LoadHost(); if (byName.Count > 0) Log.Info("vaz : " + byName.Count + " VAZ gardee(s) dans ce monde (vaz-hote.ini)"); }
             if (!Enabled)
             {
-                if (wanted.Count > 0) { foreach (int id in new List<int>(wanted.Keys)) Remember(id); wanted.Clear(); SaveHost(); HostChanged("ajout coupe"); }
+                if (wanted.Count > 0) { wanted.Clear(); HostChanged("ajout coupe"); }
                 return;
             }
-            bool changed = false;
-            if (Solo)
+            if (Solo) return;
+            foreach (PlayerInfo pi in Session.Players.Values)
             {
-                if (!wanted.ContainsKey(0)) changed |= Restore(0, "solo");
+                int inGame = pi.Local ? 1 : pi.Level;
+                int was; lastLevel.TryGetValue(pi.Id, out was);
+                if (inGame == 1 && was != 1 && !pi.Local && pi.Peer != null && Session.T != null) Session.T.SendReliable(pi.Peer, SetMsg().ToArray());
+                lastLevel[pi.Id] = inGame;
             }
-            else
-                foreach (PlayerInfo pi in Session.Players.Values)
-                {
-                    int inGame = pi.Local ? 1 : pi.Level;
-                    int was; lastLevel.TryGetValue(pi.Id, out was);
-                    if (inGame == 1 && was != 1)
-                    {
-                        if (!wanted.ContainsKey(pi.Id) && Restore(pi.Id, pi.Name)) changed = true;
-                        else if (!pi.Local && pi.Peer != null && Session.T != null) Session.T.SendReliable(pi.Peer, SetMsg().ToArray());
-                    }
-                    lastLevel[pi.Id] = inGame;
-                }
-            if (changed) HostChanged("VAZ retrouvees");
-            if (now >= nextSave && wanted.Count > 0) { nextSave = now + 30f; foreach (int id in wanted.Keys) Remember(id); SaveHost(); }
         }
-
-        static bool Restore(int id, string name)
-        {
-            Slot s;
-            if (!byName.TryGetValue(Clean(name), out s) || !IsFree(s.Number)) return false;
-            wanted[id] = new Slot { Number = s.Number, Pos = s.Pos, Yaw = s.Yaw };
-            Log.Info("vaz : " + name + " retrouve la n " + s.Number + " en " + s.Pos.ToString("F1"));
-            return true;
-        }
-
-        // Place actuelle de la VAZ du joueur dans la table et dans la memoire de l'hote.
-        static void Remember(int id)
-        {
-            Slot s;
-            if (!wanted.TryGetValue(id, out s)) return;
-            Transform c = CarOf(id);
-            if (c != null) { s.Pos = c.position + Vector3.up * 0.3f; s.Yaw = c.eulerAngles.y; }
-            byName[Clean(NameOf(id))] = new Slot { Number = s.Number, Pos = s.Pos, Yaw = s.Yaw };
-        }
-
-        static void ForgetName(int id) { byName.Remove(Clean(NameOf(id))); SaveHost(); }
 
         static void Assign(int id, Slot s)
         {
             wanted[id] = s;
             Hud.Toast(NameOf(id) + Lang.T(" prend la VAZ n\u00B0 ", " takes VAZ no. ") + s.Number + " (" + ColorName(s.Number) + ")");
-            Remember(id); SaveHost();
             HostChanged(NameOf(id) + " -> n " + s.Number);
         }
 
@@ -269,7 +247,7 @@ namespace MWCoop
             if (kind == V_ASK && Session.IsHost)
             {
                 int n = r.U8(); Vector3 pos = r.Vec(); float yaw = r.F32();
-                if (n == 0) { if (wanted.Remove(from.Id)) { ForgetName(from.Id); HostChanged("rendue par " + NameOf(from.Id)); } return; }
+                if (n == 0) { if (wanted.Remove(from.Id)) { HostChanged("rendue par " + NameOf(from.Id)); } return; }
                 int why = !Enabled ? 4 : n < 1 || n > Count ? 3 : wanted.ContainsKey(from.Id) ? 2 : !IsFree(n) ? 1 : 0;
                 if (why != 0)
                 {
@@ -278,6 +256,12 @@ namespace MWCoop
                     return;
                 }
                 Assign(from.Id, new Slot { Number = n, Pos = pos, Yaw = yaw });
+                return;
+            }
+            if (kind == V_ROOF)
+            {
+                int n = r.U8(); bool open = r.Bool();
+                if (Session.IsHost) RoofToggle(n, open); else ApplyRoof(n, open);
                 return;
             }
             if (kind == V_CALL && Session.IsHost) { Vector3 pos = r.Vec(); float yaw = r.F32(); Move(from.Id, pos, yaw); return; }
@@ -291,55 +275,6 @@ namespace MWCoop
                 return;
             }
             if (kind == V_DENY && !Session.IsHost) { int n = r.U8(), why = r.U8(); Deny(why, n); }
-        }
-
-        // ---------------------------------------------------------------- vaz-hote.ini : monde=pseudo:n:x:y:z:cap;...
-        static string HostPath { get { return System.IO.Path.Combine(Log.DataDir, "vaz-hote.ini"); } }
-
-        static void LoadHost()
-        {
-            string key = World() + "=";
-            if (!System.IO.File.Exists(HostPath)) return;
-            var ci = System.Globalization.CultureInfo.InvariantCulture;
-            try
-            {
-                foreach (string l in System.IO.File.ReadAllLines(HostPath))
-                {
-                    if (!l.StartsWith(key)) continue;
-                    foreach (string part in l.Substring(key.Length).Split(';'))
-                    {
-                        string[] p = part.Split(':');
-                        int n; float x, y, z, cap;
-                        if (p.Length >= 6 && int.TryParse(p[1], out n) && float.TryParse(p[2], System.Globalization.NumberStyles.Float, ci, out x) && float.TryParse(p[3], System.Globalization.NumberStyles.Float, ci, out y)
-                            && float.TryParse(p[4], System.Globalization.NumberStyles.Float, ci, out z) && float.TryParse(p[5], System.Globalization.NumberStyles.Float, ci, out cap))
-                            byName[p[0]] = new Slot { Number = n, Pos = new Vector3(x, y, z), Yaw = cap };
-                    }
-                }
-            }
-            catch (System.Exception e) { Log.Warn("vaz : lecture de vaz-hote.ini : " + e.Message); }
-        }
-
-        static void SaveHost()
-        {
-            if (!Host) return;
-            string key = World() + "=";
-            var ci = System.Globalization.CultureInfo.InvariantCulture;
-            var sb = new System.Text.StringBuilder(key);
-            bool first = true;
-            foreach (KeyValuePair<string, Slot> kv in byName)
-            {
-                if (!first) sb.Append(';'); first = false;
-                Slot s = kv.Value;
-                sb.Append(kv.Key).Append(':').Append(s.Number).Append(':').Append(s.Pos.x.ToString("F2", ci)).Append(':').Append(s.Pos.y.ToString("F2", ci)).Append(':').Append(s.Pos.z.ToString("F2", ci)).Append(':').Append(s.Yaw.ToString("F0", ci));
-            }
-            var lines = new List<string>();
-            try
-            {
-                if (System.IO.File.Exists(HostPath)) foreach (string l in System.IO.File.ReadAllLines(HostPath)) if (!l.StartsWith(key)) lines.Add(l);
-                if (byName.Count > 0) lines.Add(sb.ToString());
-                System.IO.File.WriteAllLines(HostPath, lines.ToArray());
-            }
-            catch (System.Exception e) { Log.Warn("vaz : ecriture de vaz-hote.ini : " + e.Message); }
         }
 
         // ---------------------------------------------------------------- table -> voitures d'ici
@@ -367,7 +302,7 @@ namespace MWCoop
         // 20 s : l'hote prend la n 3 ; 30 s : il note sa voiture ; 40 s : l'invite note la sienne (celle de l'hote chez lui) ;
         // 50 s : l'hote la fait venir ; 60 s : il la rend ; 70 s : chacun note voiture partie. [Test] VazGarder=1 : pas rendue.
         static int testStep;
-        static bool testMoved, placesDone;
+        static bool testMoved, placesDone, openDone;
         static int entryStep;
 
         static void PutPlayer(Vector3 local)
@@ -555,6 +490,19 @@ namespace MWCoop
             if (host && testStep == 0 && t > 20f) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3)); }
             if (host && testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-hote", 1f); }
             if (!host && testStep == 0 && t > 40f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-invite", 1f); }
+            // [Test] VazOuvrir=1 : trappe de toit et hayon ouverts a 31 s (hayon : butees de la charniere a 60-65 degres, comme son
+            // automate), capture vaz-ouvert a 35 s.
+            if (host && testStep == 2 && t > 31f && !openDone && Config.GetInt("Test", "VazOuvrir", 0) != 0)
+            {
+                openDone = true;
+                RoofToggle(Mine, true);
+                Transform c = CarOf(Me);
+                Transform sh = c != null ? c.Find("Hatch/Hatch") : null;
+                HingeJoint hj = sh != null ? sh.GetComponent<HingeJoint>() : null;
+                if (hj != null) { JointLimits l = hj.limits; l.min = 60f; l.max = 65f; hj.limits = l; hj.useLimits = true; }
+                Autotest.CaptureSoon("vaz-ouvert", 4f);
+                Log.Info("autotest vaz : trappe et hayon ouverts (" + (hj != null ? "charniere du hayon" : "PAS de hayon") + ")");
+            }
             if (host && testStep == 2 && t > 35f && !placesDone && Config.GetInt("Test", "VazPlaces", 0) != 0) { placesDone = true; try { Places(); } catch (System.Exception e) { Log.Warn("autotest vaz : places : " + e); } }
             // [Test] VazEntree=1 : joueur pose debout sur la place du conducteur (38 s) puis du passager (43 s) ; 2 s apres, ce que
             // propose le jeu (icone du volant GUIdrive, etat de DriveTriggerX ; icone passager GUIpassenger de Seats).
