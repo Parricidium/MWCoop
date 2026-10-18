@@ -236,6 +236,7 @@ namespace MWCoop
             float f; return o != null && float.TryParse(o.ToString(), System.Globalization.NumberStyles.Float, Inv, out f) ? f : 0f;
         }
 
+        static bool WorldOk { get { string w = World(); return w.Length > 0 && w != "0"; } }
         static string World()
         {
             FsmFloat pid = FsmVariables.GlobalVariables.FindFsmFloat("PlayerID");
@@ -390,8 +391,9 @@ namespace MWCoop
         {
             if (!enabled || !Session.Active || !PlayerSync.InGame || readyAt < 0 || Time.realtimeSinceStartup < readyAt) return;
             if (!Find()) return;
-            string wld = World();
-            if (wld.Length == 0 || wld == "0") return;   // identifiant de la partie pas encore charge : cles par monde fausses
+            // (identifiant de la partie pas encore connu -- 0 : nouvelle partie pas encore sauvegardee, chez JD 18/10 toute la
+            // session -- : seuls les fichiers par monde attendent, WorldOk ; avant, tout le module s'arretait ici : feuille
+            // d'inscription de la VAZ jamais accrochee, « HYLATTY »)
             float now = Time.realtimeSinceStartup;
             int w = Week();
             if (w != localWeek)
@@ -503,6 +505,7 @@ namespace MWCoop
         // son jeu en plein week-end redonne le meme numero a chacun (ses listes de manches, sauvegardees, le contiennent).
         static void LoadHost()
         {
+            if (!WorldOk) return;
             string key = World() + "|" + boardWeek + "=";
             if (!System.IO.File.Exists(HostPath)) return;
             foreach (string l in System.IO.File.ReadAllLines(HostPath))
@@ -518,6 +521,7 @@ namespace MWCoop
 
         static void SaveHost()
         {
+            if (!WorldOk) return;
             string key = World() + "|" + boardWeek + "=";
             var sb = new System.Text.StringBuilder(key);
             bool first = true;
@@ -1441,7 +1445,7 @@ namespace MWCoop
         static void Store()
         {
             string w = World();
-            if (w.Length == 0 || lineups == null) return;
+            if (!WorldOk || lineups == null) return;
             var sb = new System.Text.StringBuilder();
             sb.Append("Registered:").Append(Registered() ? 1 : 0).Append(';');
             FsmInt rs = lineups.FsmVariables.FindFsmInt("RaceStage"), hs = lineups.FsmVariables.FindFsmInt("HeatStage");
@@ -1466,7 +1470,7 @@ namespace MWCoop
         {
             var d = new Dictionary<string, string>();
             string w = World(), line = null;
-            if (w.Length > 0 && System.IO.File.Exists(StorePath))
+            if (WorldOk && System.IO.File.Exists(StorePath))
                 foreach (string l in System.IO.File.ReadAllLines(StorePath)) if (l.StartsWith(w + "=")) line = l.Substring(w.Length + 1);
             if (line == null) return null;
             foreach (string kv in line.Split(';'))
