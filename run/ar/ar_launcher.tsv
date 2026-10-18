@@ -1169,6 +1169,9 @@ Updated \u00B7 MWCoop %s (a stuck game still holds version.dll: replaced at the 
 On Linux: put the Steam launch option from the GUIDE (Linux and Steam Deck) and start MWCoop from Steam	على Linux: ضع خيار تشغيل Steam من الدليل (Linux وSteam Deck) وشغّل MWCoop من Steam
 MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% in the game's Steam launch options (GUIDE: Linux and Steam Deck)	لم يُحمَّل MWCoop: على Linux، ضع WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% في خيارات تشغيل اللعبة في Steam (الدليل: Linux وSteam Deck)
 \n\nOn Linux, the launch copies (with links to the game) are kept: delete them by hand, without following the links.	\n\nعلى Linux، تبقى نسخ التشغيل (مع روابط إلى اللعبة): احذفها يدويًا دون اتباع الروابط.
+Supporters	الداعمون
+Supporter	داعم
+For making a donation.	لتقديمه تبرعًا.
 Thanks to everyone who makes MWCoop better	شكراً لكل من يجعل MWCoop أفضل
 VHS tapes	أشرطة VHS
 Watch them, export them as .mp4, rename them, put a video on them	شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو

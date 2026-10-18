@@ -63,7 +63,7 @@ enum {
     UI_CAR_VINOPT = 431,          // + k : option k de la plaque (clic : valeur suivante ; 431-442)
     UI_CAR_PAINT = 445, UI_CAR_PAINTIMP, UI_CAR_PAINTTPL, UI_CAR_PAINTUSE, UI_CAR_PAINTDEL,   // VOITURE : peinture perso (volet, importer, gabarit, utiliser, retirer)
     UI_CAR_DENTS = 450,           // VOITURE : retirer les bosses (meshsave.txt de la sauvegarde mis de cote)
-    UI_CRED_TAB = 456,            // + k (0 modeles 3D, 1 images, 2 remerciements) : onglets des CREDITS (456-458)
+    UI_CRED_TAB = 456,            // + k (0 modeles 3D, 1 images, 2 remerciements, 3 supporters) : onglets des CREDITS (456-459)
     UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)
     UI_WIKI_ART = 8040,           // + article
     UI_WIKI_SEC = 8300,           // + bloc : section pliable de l'article
