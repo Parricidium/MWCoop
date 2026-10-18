@@ -1918,6 +1918,7 @@ namespace MWCoop
                 case "@touche": PhoneKeys.OnMessage(who, r); break;
                 case "@combine": PhoneKeys.OnHandset(who, r); break;
                 case "@plat": Plats.OnMessage(who, r); break;
+                case "@fleetari": Shop.OnFleetari(who, r); break;
                 case "@percute": CarHits.OnMessage(who, r); break;
                 case "@ram": ModRam1500.OnMessage(who, r); break;
                 case "@jfs": ModJonne.OnMessage(who, r); break;
