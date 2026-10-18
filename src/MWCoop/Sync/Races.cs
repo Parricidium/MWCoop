@@ -426,10 +426,15 @@ namespace MWCoop
         }
 
         // Copie qui renverse le joueur d'ici : comme Throttle 'Die 3' (vitesse relative > 5 m/s au contact).
+        // Jamais dans un vehicule (conducteur ou passager : la caisse le protege, comme dans le jeu) ; contact teste dans le
+        // repere de chaque collider (boite locale), plus dans la boite englobante MONDE elargie de 50 cm : une voiture de
+        // biais a une boite bien plus large qu'elle -- JD, invite au volant de sa VAZ sur la glace, tue deux fois par une copie
+        // qui passait a cote a 31 m/s, « comme une crise cardiaque » (18/10).
         static void RunOver()
         {
             GameObject pl = Game.PlayerGo;
             if (pl == null) return;
+            if (VehicleSync.LocalDrivingRoot != null || Seats.Seated) return;
             Vector3 pp = pl.transform.position + Vector3.up * 0.9f;
             foreach (Car c in cars)
             {
@@ -439,8 +444,7 @@ namespace MWCoop
                 foreach (Collider col in c.T.GetComponentsInChildren<Collider>())
                 {
                     if (col.isTrigger || !col.enabled) continue;
-                    Bounds b = col.bounds; b.Expand(0.5f);
-                    if (b.Contains(pp)) { hit = true; break; }
+                    if (Touches(col, pp, 0.25f)) { hit = true; break; }
                 }
                 if (!hit) continue;
                 GameObject death = Game.FindAny("Systems/Death");
@@ -452,6 +456,24 @@ namespace MWCoop
                 Log.Info("courses : renverse ici par la copie de " + c.T.name + " (" + c.Vel.magnitude.ToString("F0") + " m/s)");
                 return;
             }
+        }
+
+        // Point a moins de 'margin' (metres) du collider, dans son repere : boite du BoxCollider, du maillage d'un MeshCollider,
+        // sphere / capsule par leur rayon ; sinon la boite monde.
+        static bool Touches(Collider col, Vector3 world, float margin)
+        {
+            Transform t = col.transform;
+            Vector3 lp = t.InverseTransformPoint(world);
+            Vector3 s = t.lossyScale;
+            float k = Mathf.Max(0.01f, Mathf.Min(Mathf.Abs(s.x), Mathf.Min(Mathf.Abs(s.y), Mathf.Abs(s.z))));
+            Bounds lb;
+            if (col is BoxCollider) lb = new Bounds(((BoxCollider)col).center, ((BoxCollider)col).size);
+            else if (col is MeshCollider && ((MeshCollider)col).sharedMesh != null) lb = ((MeshCollider)col).sharedMesh.bounds;
+            else if (col is SphereCollider) { SphereCollider sc = (SphereCollider)col; return (lp - sc.center).magnitude * k <= sc.radius * k + margin; }
+            else if (col is CapsuleCollider) { CapsuleCollider cc = (CapsuleCollider)col; Vector3 sz = Vector3.one * cc.radius * 2f; sz[cc.direction] = Mathf.Max(cc.height, cc.radius * 2f); lb = new Bounds(cc.center, sz); }
+            else { Bounds b = col.bounds; b.Expand(margin * 2f); return b.Contains(world); }
+            lb.Expand(margin * 2f / k);
+            return lb.Contains(lp);
         }
 
         static void OnHash(bool same)

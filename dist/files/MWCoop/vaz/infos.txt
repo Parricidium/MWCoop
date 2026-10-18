@@ -14,3 +14,5 @@ brakelight_r 0.5137 0.666 -1.614
 bonnet 0 0.9495 1.112
 door_dside_f -0.8204 0.8278 0.953
 door_pside_f 0.8204 0.8278 0.953
+hayon_charniere 0 1.357 -0.9527
+trappe_charniere 0 1.41 0.3018

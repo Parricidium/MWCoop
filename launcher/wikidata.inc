@@ -571,7 +571,7 @@ static const WikiBlock kW_Vaz[] = {
     { WB_H, L"Dans l'onglet", L"In the tab", 0 },
     { WB_B, L"Choisis une couleur libre puis Prendre : la voiture apparaît à côté de toi, chez tout le monde.", L"Pick a free colour then Take: the car appears next to you, for everyone." },
     { WB_B, L"Faire venir (ou V) : la ramène à côté de toi, si personne ne la conduit.", L"Bring here (or V): brings it back next to you, if nobody is driving it." },
-    { WB_B, L"Rendre : elle disparaît et sa couleur redevient libre. Quand tu quittes la partie, l'hôte garde ta couleur et la place de ta VAZ : tu la retrouves en revenant.", L"Give back: it disappears and its colour is free again. When you leave the game, the host keeps your colour and where your VAZ was: you find it again when you come back." },
+    { WB_B, L"Rendre : elle disparaît et sa couleur redevient libre. Elle disparaît aussi quand tu quittes la partie : à ton retour, ou après un chargement, reprends-en une au F10.", L"Give back: it disappears and its colour is free again. It also disappears when you leave the game: when you come back, or after loading, take one again in F10." },
     { WB_TIP, L"Désactivable comme les autres ajouts : Réglages > Coop > Ajouts MWCoop (le choix de l'hôte vaut pour tous). Modèle 3D de matthew0451, licence CC BY-NC 4.0 (Guide > Crédits).",
               L"Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits)." },
     { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },

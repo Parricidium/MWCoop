@@ -2291,7 +2291,7 @@ static const wchar_t *const kRu[][2] = {
     { L"In the tab", L"Во вкладке" },
     { L"Pick a free colour then Take: the car appears next to you, for everyone.", L"Выбери свободный цвет и нажми «Взять»: машина появится рядом с тобой, у всех игроков." },
     { L"Bring here (or V): brings it back next to you, if nobody is driving it.", L"«Пригнать» (или V): ставит её рядом с тобой, если никто ей не управляет." },
-    { L"Give back: it disappears and its colour is free again. When you leave the game, the host keeps your colour and where your VAZ was: you find it again when you come back.", L"«Вернуть»: машина исчезает, а её цвет снова свободен. Когда ты выходишь из игры, хост запоминает твой цвет и место твоей ВАЗ: вернувшись, ты найдёшь её там же." },
+    { L"Give back: it disappears and its colour is free again. It also disappears when you leave the game: when you come back, or after loading, take one again in F10.", L"«Вернуть»: машина исчезает, а её цвет снова свободен. Она исчезает и когда ты выходишь из игры: вернувшись или после загрузки, возьми новую через F10." },
     { L"Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits).", L"Отключается, как и другие дополнения: Настройки > Кооп > Дополнения MWCoop (выбор хоста действует для всех). 3D-модель: matthew0451, лицензия CC BY-NC 4.0 (Гайд > Благодарности)." },
     { L"The rally VAZ-2108", L"Раллийная VAZ-2108" },
     { L"A colour and a number per player", L"Цвет и номер у каждого игрока" },

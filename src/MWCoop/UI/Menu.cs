@@ -313,7 +313,7 @@ namespace MWCoop
                     return Lang.Status(Session.Status) + Sep + Session.Players.Count + Lang.T(" joueur(s)", " player(s)");
                 case TabChat: return Lang.T("En jeu, ", "In game, ") + Keys.Label(Keys.Chat) + Lang.T(" \u00E9crit sans ouvrir ce menu", " opens the chat without this menu");
                 case TabRace: return Lang.T("Jokkis de location, gratuites \u00B7 une par joueur \u00B7 rendues apr\u00E8s le week-end", "Rental Jokkis, free \u00B7 one per player \u00B7 given back after the weekend");
-                case TabVaz: return Lang.T("Une par joueur, gratuite \u00B7 une couleur et un num\u00E9ro chacun \u00B7 gard\u00E9e par l'h\u00F4te", "One per player, free \u00B7 a colour and a number each \u00B7 kept by the host");
+                case TabVaz: return Lang.T("Une par joueur, gratuite \u00B7 une couleur et un num\u00E9ro chacun \u00B7 rendue en quittant", "One per player, free \u00B7 a colour and a number each \u00B7 given back when you leave");
                 case TabLook: return Lang.T("Ce que les autres voient \u00B7 chang\u00E9 tout de suite chez eux", "What the others see \u00B7 changed right away for them");
                 case TabHud: return Lang.T("Pour vous seul \u00B7 aussi dans le lanceur (R\u00E9glages \u203A HUD) \u00B7 le HUD change autour du menu", "Just for you \u00B7 also in the launcher (Settings \u203A HUD) \u00B7 the HUD changes around this menu");
                 case TabGfx: return Lang.T("Pour vous seul \u00B7 gard\u00E9 pour les prochaines parties \u00B7 aussi dans le lanceur", "Just for you \u00B7 kept for your next games \u00B7 also in the launcher");
