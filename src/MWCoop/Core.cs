@@ -351,7 +351,7 @@ namespace MWCoop
                 if (DroneCam.Active) DroneCam.Draw();   // (drone : viseur seul, rien d'autre du mod sur la photo)
                 else if (Kauppa.Viewfinder) Kauppa.DrawViewfinder();   // (camescope : son viseur seul)
                 else { NewHud.Draw(); Hud.Draw(); Kauppa.DrawKameraHint(); }
-                WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); MapPanel.Draw(); Respawn.Draw(); Kauppa.DrawMontage();
+                WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); RacePanel.Draw(); MapPanel.Draw(); Respawn.Draw(); Kauppa.DrawMontage();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }
             catch (System.Exception e) { Style.Alpha = 1f; Log.Error("hud : " + e); }

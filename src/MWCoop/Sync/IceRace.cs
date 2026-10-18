@@ -65,7 +65,7 @@ namespace MWCoop
     //  - inscription : LINEUPS 'State 4' (autocollants, CORRIS/DB, Cars[14] = CORRIS) est reduit a PlayerRegistered pour
     //    un locataire ; podium ('Get pos' compare a "14") : son numero est mis en 14 le temps de l'etat.
     // [Coop] CourseGlace=0 coupe tout le module (vrai jeu : si cela se comporte mal).
-    public static class IceRace
+    public static partial class IceRace   // (+ IceRaceVaz.cs : VAZ inscrites, chronos en direct)
     {
         // (Msg.Race, rangs >= 20 : Races.OnMessage les passe ici ; 10-14 : Rally)
         //  20 K_HUMAN  invite -> hote : participation (pseudo, inscrit, tour, manche+1, place)         (0.96.0)
@@ -134,7 +134,7 @@ namespace MWCoop
             myRental = hookedTrack = rentalsDirty = placeAnyState = linesWarned = slotWarned = testNoBroadcast = false;
             aiSaved.Clear(); carsOrig.Clear(); aiHidden.Clear(); allCars = null; muted.Clear(); mutedFrame = prizeIdx = prizeFrame = -1;
             lines = null; lineLaps = lineTime = null; hasLast = cp1 = cp2 = timing = finished = false; bestLap = 0f; laps = 0; lapsKey = placedKey = "";
-            testStep = 0;
+            testStep = 0; VazReset();
             if (!jokkisHooked) { jokkisHooked = true; try { Jokkis.Changed += OnJokkisChanged; } catch (System.Exception e) { Log.Warn("glace : module Jokkis : " + e.Message); } }
             enabled = Config.GetInt("Coop", "CourseGlace", 1) != 0;
             readyAt = PlayerSync.InGame && enabled ? Time.realtimeSinceStartup + 10f : -1;
@@ -149,7 +149,7 @@ namespace MWCoop
             {
                 try
                 {
-                    if (Kind == 2) { if (RentalNumber(Session.LocalId) > 0) MuteState(State, this); OnRegistered(); }
+                    if (Kind == 2) { if (RentalNumber(Session.LocalId) > 0 || VazMine) MuteState(State, this); OnRegistered(); }
                     else if (Kind == 3) PrizeSwap();
                     else { ApplyHostLaps(true); FixMyLap(); nextTable = 0; }
                 }
@@ -266,6 +266,8 @@ namespace MWCoop
         {
             int t = Config.Testing && id == 1 ? Config.GetInt("Test", "GlaceJokkis", 0) : 0;
             if (t > 0) return t;
+            int v = VazNumber(id);   // (VAZ-2108 inscrite : le numero de l'IA qu'elle remplace, IceRaceVaz.cs)
+            if (v > 0) return v;
             try { return Jokkis.ChosenNumber(id); } catch { return 0; }
         }
 
@@ -278,12 +280,14 @@ namespace MWCoop
                 if (go == null) { go = new GameObject("MWCoop-Jokkis-" + t); go.transform.position = new Vector3(-1150f, -4.5f, 900f); go.AddComponent<Rigidbody>().isKinematic = true; }
                 return go.transform;
             }
+            if (VazNumber(id) > 0) return Vaz.CarOf(id);
             try { return Jokkis.CarOf(id); } catch { return null; }
         }
 
         static string RentalModel(int n)
         {
             if (Config.Testing && n == Config.GetInt("Test", "GlaceJokkis", 0)) return "Fittan";
+            foreach (KeyValuePair<int, int> kv in numbers) if (kv.Value == n && Vaz.CarOf(kv.Key) != null) return "VAZ-2108";
             try { foreach (Jokkis.Def d in Jokkis.All()) if (d.Number == n) return d.Model ?? "-"; } catch { }
             return "-";
         }
@@ -396,6 +400,7 @@ namespace MWCoop
                 if (localWeek >= 0) { lastHeat = -1; lastPos = 0; lastReport = ""; }
                 localWeek = w;
                 bestLap = 0f; timing = false; lapsKey = placedKey = "";   // (location : tours de la semaine passee)
+                VazNewWeek(w);
             }
             if (!Session.IsHost && !restored)
             {
@@ -407,6 +412,7 @@ namespace MWCoop
             Unmute();
             if (rentalsDirty || now >= nextRentals) { rentalsDirty = false; nextRentals = now + 2f; RefreshRentals(); }
             if (myRental) { TrackRental(); PlaceRental(); }
+            VazTick(now);
             if (now >= nextPoll) { nextPoll = now + 0.1f; PollArrivals(); }
             if (Session.IsHost)
             {
@@ -1174,6 +1180,7 @@ namespace MWCoop
         public static void OnMessage(int kind, Peer from, NetReader r)
         {
             if (!enabled) return;
+            if (kind == K_VAZ) { OnVazEntry(from, r); return; }   // (IceRaceVaz.cs)
             if (kind == K_HUMAN && Session.IsHost)
             {
                 PlayerInfo pi;
@@ -1336,8 +1343,7 @@ namespace MWCoop
             if (!Session.IsHost && !restored) return;   // chargement : c'est l'inscription de l'hote (sauvegarde), pas la notre
             lastReport = "";
             Report(true);
-            // Inscrit sans la Rivett (ou pas encore de voiture) : le panneau des Jokkis a louer s'ouvre (Jokkis actif chez l'hote)
-            if (RentalNumber(Session.LocalId) == 0 && Config.GetInt("Coop", "Jokkis", 0) != 0) JokkisPanel.Open = true;
+            VazRegistered();
         }
 
         // ---------------------------------------------------------------- tirage de l'hote chez l'invite
@@ -1444,6 +1450,7 @@ namespace MWCoop
             sb.Append("Lap:").Append(MyLap().ToString("R", Inv)).Append(';');
             sb.Append("Num:").Append(myRental ? myNum : 0).Append(';');   // (location : le tour est a ce numero)
             sb.Append("Week:").Append(localWeek).Append(';');
+            sb.Append("Vaz:").Append(VazMine ? 1 : 0).Append(';');   // (inscrit avec sa VAZ cette semaine)
             sb.Append("Heat:").Append(lastHeat).Append(';');
             sb.Append("Pos:").Append(lastPos).Append(';');
             string line = w + "=" + sb;
@@ -1540,6 +1547,7 @@ namespace MWCoop
         static int testStep;
         public static void Test(string mode, float t)
         {
+            if (mode == "glacevaz") { TestVaz(t); return; }
             if ((mode != "glace2" && mode != "glace3" && mode != "glace4") || lineups == null || board == null) return;
             bool g4 = mode == "glace4";
             if (testStep == 0 && t > 30f)

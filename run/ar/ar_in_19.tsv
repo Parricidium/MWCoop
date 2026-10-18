@@ -13,7 +13,7 @@ WK012	The modding API and the source code (GitHub) are in Settings > Launcher > 
 WK013	Port 7870 by default (Settings > Co-op > Network & launch), to forward in UDP AND TCP on your router if you don't use a VPN. \"Test my connection\" checks the port, the firewall and Steam.
 WK014	At the top of the lobby, the Session code banner: Public (anyone can join) or Private (a 6-character code, shown big; COPY puts it in the clipboard, the arrow draws a new one). The choice is remembered for next time.
 WK015	Players max: 4, 8, 12 or 16, host included (8 by default), in the Options card. Above 10, you need a very good connection and a good machine on the host's side.
-WK016	Options card, \"The game\" tab: starting money, cheats, run over, punches, Ventti, Jokkis, MWCoop additions (All / Choose / None), players max. They start from Settings > Co-op > \"When I host\" but only apply to this lobby; your guests receive them. \"Reset to my Settings\" brings them back, \"Keep as defaults\" saves them there. The \"Mine\" tab: your own options (voice, others' images, markers, map).
+WK016	Options card, \"The game\" tab: starting money, cheats, run over, punches, Ventti, MWCoop additions (All / Choose / None), players max. They start from Settings > Co-op > \"When I host\" but only apply to this lobby; your guests receive them. \"Reset to my Settings\" brings them back, \"Keep as defaults\" saves them there. The \"Mine\" tab: your own options (voice, others' images, markers, map).
 WK017	Right column: Game (Continue my game or New game, and the save being played), Sent to guests (Choose), Game mods (Manage), then START THE GAME.
 WK018	The lobby chat
 WK019	Under the players: the last three messages, the \"Message to the lobby\" field and SEND (or Enter). Handy to agree on things before starting, through Steam as well as by IP.
@@ -38,7 +38,7 @@ WK037	Game: the presets (Vanilla, Light, Balanced, Pretty, Ultra, Custom), the D
 WK038	Image & ray tracing: the whole picture (HDR, bloom, contrast, sun shafts, lamp coronas, headlight range), the shadows (sun, moon, houses, distance, detail, headlights, street lights) and the Ray tracing card.
 WK039	Sound & voice
 WK040	Proximity voice (on or off), range, voices volume, your microphone for the others. Applied right away, even in game.
-WK042	When I host: the defaults of your lobbies (starting money, cheats, run over, punches, Ventti, Jokkis, MWCoop additions, players max, Public / Private). Every lobby takes them over; a change in the lobby only applies to that lobby.
+WK042	When I host: the defaults of your lobbies (starting money, cheats, run over, punches, Ventti, MWCoop additions, players max, Public / Private). Every lobby takes them over; a change in the lobby only applies to that lobby.
 WK043	On my side: voice, \"Accept the host's files\", seeing the others' imported images and markers, the map (tap or hold), my content sent.
 WK044	Network & launch: Steam or IP / VPN by default, the port (7870 to 7875, UDP and TCP), \"Close the launcher during the game\", \"Start the game through Steam\", the Steam launch option, and \"Test my connection\".
 WK046	MWCoop's in-game keys (chat, talk, wallet, marker, map, third-person view, cheat panel) and the drone camera's. Click a key then press the new one; Esc cancels, Del restores the default.

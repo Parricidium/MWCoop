@@ -533,7 +533,7 @@ static const SetItem kSetItems[] = {
     { 9, SI_GFX, "PvP", L"Coups de poing entre joueurs", L"Punches between players", NULL, NULL },
     { 9, SI_SEC, NULL, L"Jeux & ajouts", L"Games & additions", NULL, NULL },
     { 9, SI_GFX, "VenttiEnjeux", NULL, NULL, NULL, NULL },
-    { 9, SI_GFX, "Jokkis", L"Course sur glace : Jokkis à louer (bêta)", L"Ice race: Jokkis rentals (beta)", NULL, NULL },
+    // (Jokkis a louer retirees le 18/10 : la VAZ-2108 prend la place d'une IA a la course sur glace)
     { 9, SI_X, "ajouts", L"Ajouts MWCoop", L"MWCoop additions", L"Aucun = jeu vanilla", L"None = vanilla game" },
     { 9, SI_X, "ajoutchips", NULL, NULL, NULL, NULL },
     { 9, SI_SEC, NULL, L"Salon", L"Lobby", NULL, NULL },
