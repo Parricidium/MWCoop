@@ -576,3 +576,81 @@ yours: no. 	ваша: №
 rental Jokkis, free	Йоккис в аренду, бесплатно
 Enter or click: the game's 16 Jokkis, one per player, with a 3D preview	Enter или клик: 16 Йоккис игры, одна на игрока, с 3D-превью
 The host is saving for {0}: short pause...	Хост сохраняет игру для {0}: небольшая пауза...
+Just for you, kept for your next games (also in the launcher: Settings \u203A HUD). The HUD changes right away, around this menu.	Только для тебя, сохраняется для следующих игр (и в лаунчере: Настройки \u203A HUD). HUD меняется сразу, вокруг этого меню.
+CUSTOMISE	НАСТРОЙКА
+Vanilla: the game's own HUD, as is. The team panel and the alerts (below) stay available.	Vanilla: родной HUD игры как есть. Панель команды и предупреждения (ниже) остаются доступны.
+GAUGES SHOWN	ПОКАЗАННЫЕ ШКАЛЫ
+CO-OP	КООП
+Reset this style to default	Сбросить этот стиль
+Size, position, colour, gauges and options go back to their defaults	Размер, положение, цвет, шкалы и опции возвращаются к исходным
+Monday	Понедельник
+Tuesday	Вторник
+Wednesday	Среда
+Thursday	Четверг
+Friday	Пятница
+Saturday	Суббота
+Sunday	Воскресенье
+freezing	мороз
+fine	норма
+hot	жара
+The craving is getting strong	Тяга становится сильной
+You are very thirsty	Ты очень хочешь пить
+You are very hungry	Ты очень голоден
+You are exhausted	Ты без сил
+You badly need to pee	Тебе срочно нужно в туалет
+Stress at its peak	Стресс на пределе
+You are freezing	Ты замерзаешь
+{0} is very hungry	{0} очень голоден
+{0} is very thirsty	{0} очень хочет пить
+{0} is exhausted	{0} без сил
+{0} is freezing	{0} замерзает
+Mortal	Смертный
+Temperature	Температура
+Jail	Тюрьма
+ d	 дн.
+TEAM	КОМАНДА
+Dead	Мёртв
+Sleeping	Спит
+In a car	В машине
+On foot	Пешком
+Thirst	Жажда
+Problem	Проблема
+HUD style	Стиль HUD
+Card	Карточка
+Rings	Кольца
+Strip	Полоса
+Vanilla: the game's own HUD	Vanilla: родной HUD игры
+Size	Размер
+Position	Положение
+Auto	Авто
+Top left	Вверху слева
+Top right	Вверху справа
+Bottom left	Внизу слева
+Bottom right	Внизу справа
+Top centre	Вверху по центру
+Bottom centre	Внизу по центру
+Auto: the usual place for this style	Авто: обычное место для этого стиля
+Colour	Цвет
+Ice	Лёд
+Sky blue	Небесно-голубой
+Aurora	Сияние
+Lilac	Сиреневый
+Background opacity	Непрозрачность фона
+Fade gauges at rest	Приглушать спокойные шкалы
+Nearly empty, they fade out (Rings: they disappear)	Почти пустые становятся бледнее (Кольца: исчезают)
+Numbers and names	Числа и названия
+Card: each gauge's value · Rings and Strip: names always shown	Карточка: значение каждой шкалы · Кольца и Полоса: названия всегда видны
+Thirst / problem	Жажда / проблема
+Hunger	Голод
+Stress	Стресс
+Urine	Моча
+Fatigue	Усталость
+Dirtiness	Грязь
+Body temperature	Температура тела
+Sweat	Пот
+Money	Деньги
+Day	День
+Team panel	Панель команды
+The other players' gauges, small (also with Vanilla)	Шкалы других игроков в уменьшенном виде (и с Vanilla)
+Alerts at the top of the screen	Предупреждения вверху экрана
+Very hungry, exhausted, freezing… for you and your friends	Сильный голод, истощение, холод… у тебя и у друзей

@@ -1107,6 +1107,64 @@ Logs (the page icon at the top right) > Make the zip, then post it in #bug-repor
 At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the modding API ({ }), the Logs (the page icon) and the Credits (the star).	في أسفل الشريط تمامًا: Discord، الشيفرة المصدرية (الزر < >، GitHub) والدعم (القلب). أعلى اليمين: واجهة API للمعدّلين ({ })، السجلات (أيقونة الصفحة) والشكر والتقدير (النجمة).
 The modding API and the source code (GitHub) are also in Settings > Launcher > Troubleshooting. The first-start guided tour can be seen again in Settings > Launcher > \"Launcher help bubbles\" > See again.	واجهة API للمعدّلين والشيفرة المصدرية (GitHub) موجودة أيضًا في الإعدادات > المشغّل > استكشاف الأخطاء. يمكن مشاهدة جولة التشغيل الأول مجددًا في الإعدادات > المشغّل > «فقاعات مساعدة المشغّل» > مشاهدة مجددًا.
 MWCoop doesn't load? Turn on debug mode first (Logs page: the page icon at the top right, or Settings > Launcher > Troubleshooting).	لا يُحمَّل MWCoop؟ فعّل وضع التصحيح أولًا (صفحة السجلات: أيقونة الصفحة أعلى اليمين، أو الإعدادات > المشغّل > استكشاف الأخطاء).
+Vanilla style	نمط Vanilla
+Chosen · 	المختار · 
+Monday	الاثنين
+HUD style	نمط HUD
+Card	بطاقة
+Rings	حلقات
+Strip	شريط
+Size	الحجم
+Small	صغير
+Large	كبير
+Huge	كبير جدًا
+Position	الموضع
+Top left	أعلى اليسار
+Top right	أعلى اليمين
+Bottom left	أسفل اليسار
+Bottom right	أسفل اليمين
+Top centre	أعلى الوسط
+Bottom centre	أسفل الوسط
+Colour	اللون
+Ice	جليدي
+Aurora	الشفق
+Lilac	ليلكي
+Background opacity	عتامة الخلفية
+Fade gauges at rest	تخفيف المؤشرات في حالة الراحة
+Numbers and names	الأرقام والأسماء
+Thirst / problem	العطش / المشكلة
+Hunger	الجوع
+Stress	التوتر
+Urine	البول
+Fatigue	التعب
+Dirtiness	الاتساخ
+Body temperature	حرارة الجسم
+Sweat	العرق
+Money	المال
+Day	اليوم
+Team panel	لوحة الفريق
+Alerts at the top of the screen	تنبيهات في أعلى الشاشة
+Vanilla = the game's own HUD · the others replace it	Vanilla = واجهة اللعبة الأصلية · الأنماط الأخرى تحل محلها
+Customise	التخصيص
+For the chosen style · applied right away, even in game	للنمط المختار · يُطبَّق فورًا، حتى أثناء اللعب
+Preview	معاينة
+Gauges shown	المؤشرات المعروضة
+Also with Vanilla	مع Vanilla أيضًا
+If the HUD looks too big or too small	إذا بدت الواجهة كبيرة جدًا أو صغيرة جدًا
+Auto: the usual place for this style	تلقائي: المكان المعتاد لهذا النمط
+Nearly empty, they fade out	عندما تكاد تفرغ، تخفت
+Card: the values · Rings, Strip: the names	البطاقة: القيم · الحلقات والشريط: الأسماء
+Default: everything but the style.	الافتراضي: كل شيء ما عدا النمط.
+\"Problem\" when the game says so	\"المشكلة\" عندما تقول اللعبة ذلك
+The other players' gauges, small	مؤشرات اللاعبين الآخرين، بحجم صغير
+Very hungry, exhausted, freezing… you and your friends	جوع شديد، إرهاق، برد قارس… لك ولأصدقائك
+The game's own HUD	واجهة اللعبة الأصلية
+Frosted glass in a corner	زجاج مصنفر في زاوية
+Discreet, at the bottom	بسيط، في الأسفل
+Thin, centred at the top	رفيع، في وسط الأعلى
+In-game gauges: Vanilla, Card, Rings or Strip · in game: F10 › HUD	مؤشرات اللعبة: Vanilla أو بطاقة أو حلقات أو شريط · أثناء اللعب: F10 › HUD
+HUD tab	تبويب HUD
+The style of the in-game gauges: Vanilla (the game's own), Card, Rings or Strip, with a preview. Then its size, position, colour, the gauges shown, the team panel and the alerts. In game too: F10 › HUD.	نمط المؤشرات أثناء اللعب: Vanilla (الأصلي للعبة) أو بطاقة أو حلقات أو شريط، مع معاينة. ثم حجمه وموضعه ولونه والمؤشرات المعروضة ولوحة الفريق والتنبيهات. وأثناء اللعب أيضًا: F10 › HUD.
 Thanks to everyone who makes MWCoop better	شكراً لكل من يجعل MWCoop أفضل
 VHS tapes	أشرطة VHS
 Watch them, export them as .mp4, rename them, put a video on them	شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو
@@ -2151,3 +2209,21 @@ CDs	الأقراص
 Flag	العلم
 Paint	الطلاء
 What you put in your game, your guests see and hear it too.	ما تضعه في لعبتك، يراه ضيوفك ويسمعونه أيضًا.
+MWCoop can replace the game's gauges (thirst, hunger, stress, urine, fatigue, money, temperature, sweat, day) with a HUD in the launcher's style. Vanilla, the default, keeps the game's own as is.	يمكن لـ MWCoop استبدال مؤشرات اللعبة (العطش، الجوع، التوتر، البول، التعب، المال، الحرارة، العرق، اليوم) بواجهة بنمط المشغّل. أما Vanilla، وهو الخيار الافتراضي، فيُبقي واجهة اللعبة كما هي.
+The four styles	الأنماط الأربعة
+Vanilla: the game's own HUD, unchanged.	Vanilla: واجهة اللعبة الأصلية، دون تغيير.
+Card: a frosted glass card in a corner, with the day and the money at the top, one row per gauge and the temperature on a cold → hot scale.	بطاقة: بطاقة من الزجاج المصنفر في زاوية، في أعلاها اليوم والمال، وسطر لكل مؤشر، والحرارة على مقياس من البارد → الحار.
+Rings: a row of discreet rings at the bottom; a nearly empty gauge disappears, a gauge in alert shows its name.	حلقات: صف من الحلقات البسيطة في الأسفل؛ المؤشر شبه الفارغ يختفي، والمؤشر في حالة تنبيه يعرض اسمه.
+Strip: a thin pill centred at the top of the screen, one chip per gauge.	شريط: شريط رفيع في وسط أعلى الشاشة، مع شارة لكل مؤشر.
+Once a style is chosen: the size (70 to 150 %, if the HUD looks too big or too small), the position (Auto or a corner, top or bottom centre), the colour, the background opacity, fading gauges at rest, numbers and names, and the gauges shown (dirtiness, hidden by the game, can be added). \"Default\" resets everything but the style.	بعد اختيار النمط: الحجم (من 70 إلى 150 %، إذا بدت الواجهة كبيرة جدًا أو صغيرة جدًا)، والموضع (تلقائي أو زاوية، أو وسط الأعلى أو الأسفل)، واللون، وعتامة الخلفية، وتخفيف المؤشرات في حالة الراحة، والأرقام والأسماء، والمؤشرات المعروضة (يمكن إضافة الاتساخ الذي تخفيه اللعبة). \"الافتراضي\" يعيد كل شيء ما عدا النمط.
+In game, F10 › HUD: the HUD changes right away around the menu, the most faithful preview. The launcher can stay open: a change there also applies live.	أثناء اللعب، F10 › HUD: تتغير الواجهة فورًا حول القائمة، وهي أدق معاينة. يمكن ترك المشغّل مفتوحًا: أي تغيير فيه يُطبَّق مباشرة أيضًا.
+Co-op: team and alerts	اللعب الجماعي: الفريق والتنبيهات
+Team panel: the other players, small (thirst, hunger, fatigue), with where they are (on foot, in a car, sleeping) and how far.	لوحة الفريق: اللاعبون الآخرون بحجم صغير (العطش، الجوع، التعب)، مع مكانهم (سيرًا، في سيارة، نائمون) ومدى بعدهم.
+Alerts: a message at the top of the screen when you or a friend are very hungry, very thirsty, exhausted or freezing.	التنبيهات: رسالة في أعلى الشاشة عندما تكون أنت أو صديقك جائعًا جدًا أو عطشانًا جدًا أو منهكًا أو متجمدًا.
+Both also work with Vanilla.	كلاهما يعمل مع Vanilla أيضًا.
+A mod that adds its own rows to the game's HUD (MSCLoader) is no longer visible with Card, Rings or Strip: go back to Vanilla to see it.	التعديل الذي يضيف أسطره الخاصة إلى واجهة اللعبة (MSCLoader) لا يعود ظاهرًا مع البطاقة أو الحلقات أو الشريط: ارجع إلى Vanilla لتراه.
+The in-game HUD	واجهة اللعبة
+Vanilla, Card, Rings or Strip	Vanilla أو بطاقة أو حلقات أو شريط
+A single Settings page (left bar: Game or Co-op), with eight tabs at the top. Everything is kept in mwcoop-lanceur.ini (game folder) and MWCoop\\mwcoop.ini.	صفحة إعدادات واحدة (الشريط الأيسر: اللعبة أو اللعب الجماعي)، بثماني علامات تبويب في الأعلى. يُحفظ كل شيء في mwcoop-lanceur.ini (مجلد اللعبة) و MWCoop\\mwcoop.ini.
+The style of the in-game gauges (Vanilla, Card, Rings, Strip) with a preview, then its size, position, colour, background, the gauges shown, the team panel and the alerts.	نمط المؤشرات أثناء اللعب (Vanilla، بطاقة، حلقات، شريط) مع معاينة، ثم حجمه وموضعه ولونه وخلفيته والمؤشرات المعروضة ولوحة الفريق والتنبيهات.
+Co-op menu: players, appearance, chat, graphics, HUD	قائمة اللعب الجماعي: اللاعبون، المظهر، الدردشة، الرسوميات، HUD

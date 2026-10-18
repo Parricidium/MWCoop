@@ -10,11 +10,11 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS };
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD };   // (WA_SAVES, WA_MODCOMPAT, WA_HUD : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; };
 static const WikiKey kWikiKeys[] = {
-    { L"F10", L"Menu coop : joueurs, apparence, discussion, graphismes", L"Co-op menu: players, appearance, chat, graphics" },
+    { L"F10", L"Menu coop : joueurs, apparence, discussion, graphismes, HUD", L"Co-op menu: players, appearance, chat, graphics, HUD" },
     { L"T", L"Écrire aux autres joueurs (discussion) — touche réglable : Réglages > Touches", L"Write to the other players (chat) — key can be changed: Settings > Keys" },
     { L"N", L"Porte-monnaie : donner de l'argent à un autre joueur (touche réglable)", L"Wallet: give money to another player (key can be changed)" },
     { L"V (tenue)", L"Parler aux joueurs proches (vocal de Steam, la voix baisse avec la distance) — touche réglable", L"Talk to nearby players (Steam voice, fades with distance) — key can be changed" },
@@ -329,13 +329,16 @@ static const WikiBlock kW_Start[] = {
     { WB_GO, L"Ouvrir Réglages", L"Open Settings", TAB_COOP },
 };
 static const WikiBlock kW_Settings[] = {
-    { WB_P, L"Une seule page Réglages (barre de gauche : Jeu ou Co-op), avec sept onglets en haut. Tout est gardé dans mwcoop-lanceur.ini (dossier du jeu) et MWCoop\\mwcoop.ini.", L"A single Settings page (left bar: Game or Co-op), with seven tabs at the top. Everything is kept in mwcoop-lanceur.ini (game folder) and MWCoop\\mwcoop.ini." },
+    { WB_P, L"Une seule page Réglages (barre de gauche : Jeu ou Co-op), avec huit onglets en haut. Tout est gardé dans mwcoop-lanceur.ini (dossier du jeu) et MWCoop\\mwcoop.ini.", L"A single Settings page (left bar: Game or Co-op), with eight tabs at the top. Everything is kept in mwcoop-lanceur.ini (game folder) and MWCoop\\mwcoop.ini." },
     { WB_TIP, L"Le champ « Chercher un réglage… » de l'en-tête filtre toutes les lignes, tous onglets confondus : tape « ombre », « port » ou « vocal » et le réglage apparaît. Échap efface.",
               L"The \"Search a setting…\" field in the header filters every row, across all tabs: type \"shadow\", \"port\" or \"voice\" and the setting shows up. Esc clears." },
     { WB_H, L"Jeu et Image & ray tracing", L"Game and Image & ray tracing" },
     { WB_B, L"Jeu : les préréglages (Vanilla, Léger, Équilibré, Joli, Ultra, Perso), l'Affichage (résolution, fenêtre, images par seconde, champ de vision, distance, détails, textures), le Confort en jeu (tête qui balance, rétroviseurs, compteur d'images, pseudos des joueurs) et le résumé Lumière & ombres.", L"Game: the presets (Vanilla, Light, Balanced, Pretty, Ultra, Custom), the Display (resolution, window, frame rate, field of view, distance, detail, textures), in-game Comfort (head bob, mirrors, FPS counter, player names) and the Light & shadows summary." },
     { WB_B, L"Image & ray tracing : toute l'image (HDR, halo, contraste, rayons du soleil, halos des lampes, portée des phares), les ombres (soleil, lune, maisons, distance, finesse, phares, lampadaires) et la carte Ray tracing.", L"Image & ray tracing: the whole picture (HDR, bloom, contrast, sun shafts, lamp coronas, headlight range), the shadows (sun, moon, houses, distance, detail, headlights, street lights) and the Ray tracing card." },
     { WB_GO, L"Tenue, voiture, graphismes", L"Outfit, car, graphics", 1000 + WA_LOOK },
+    { WB_H, L"HUD", L"HUD" },
+    { WB_B, L"Le style des jauges en jeu (Vanilla, Carte, Anneaux, Bandeau) avec un aperçu, puis sa taille, sa position, sa couleur, son fond, les jauges affichées, le panneau Équipe et les alertes.", L"The style of the in-game gauges (Vanilla, Card, Rings, Strip) with a preview, then its size, position, colour, background, the gauges shown, the team panel and the alerts." },
+    { WB_GO, L"Le HUD en jeu", L"The in-game HUD", 1000 + WA_HUD },
     { WB_H, L"Son & vocal", L"Sound & voice" },
     { WB_B, L"Vocal de proximité (oui ou non), portée, volume des voix, ton micro pour les autres. Appliqués tout de suite, même en jeu.", L"Proximity voice (on or off), range, voices volume, your microphone for the others. Applied right away, even in game." },
     { WB_H, L"Co-op", L"Co-op" },
@@ -653,6 +656,28 @@ static const WikiBlock kW_Kartturi[] = {
 };
 
 #define WART(c, tf, te, sf, se, b) { c, tf, te, sf, se, b, (int)(sizeof(b) / sizeof(b[0])) }
+// ---- Le HUD en jeu (18/10, UI/NewHud.cs du mod ; reglages : onglet HUD et F10 > HUD)
+static const WikiBlock kW_Hud[] = {
+    { WB_P, L"MWCoop peut remplacer les jauges du jeu (soif, faim, stress, urine, fatigue, argent, température, sueur, jour) par un HUD dans le style du lanceur. Vanilla, le choix de départ, garde celui du jeu tel quel.",
+            L"MWCoop can replace the game's gauges (thirst, hunger, stress, urine, fatigue, money, temperature, sweat, day) with a HUD in the launcher's style. Vanilla, the default, keeps the game's own as is." },
+    { WB_H, L"Les quatre styles", L"The four styles" },
+    { WB_B, L"Vanilla : le HUD d'origine du jeu, sans changement.", L"Vanilla: the game's own HUD, unchanged." },
+    { WB_B, L"Carte : une carte de verre dépoli dans un coin, avec le jour et l'argent en haut, une ligne par jauge et la température sur une échelle froid → chaud.", L"Card: a frosted glass card in a corner, with the day and the money at the top, one row per gauge and the temperature on a cold → hot scale." },
+    { WB_B, L"Anneaux : une rangée d'anneaux discrets en bas ; une jauge presque vide disparaît, une jauge en alerte affiche son nom.", L"Rings: a row of discreet rings at the bottom; a nearly empty gauge disappears, a gauge in alert shows its name." },
+    { WB_B, L"Bandeau : une pilule fine centrée en haut de l'écran, une pastille par jauge.", L"Strip: a thin pill centred at the top of the screen, one chip per gauge." },
+    { WB_H, L"Personnaliser", L"Customise" },
+    { WB_P, L"Une fois un style choisi : la taille (70 à 150 %, si le HUD te paraît trop gros ou trop petit), la position (Auto ou un coin, en haut ou en bas au centre), la couleur, l'opacité du fond, estomper les jauges au repos, les chiffres et les noms, et les jauges affichées (la saleté, cachée par le jeu, peut s'ajouter). « Par défaut » remet tout sauf le style.",
+            L"Once a style is chosen: the size (70 to 150 %, if the HUD looks too big or too small), the position (Auto or a corner, top or bottom centre), the colour, the background opacity, fading gauges at rest, numbers and names, and the gauges shown (dirtiness, hidden by the game, can be added). \"Default\" resets everything but the style." },
+    { WB_TIP, L"En jeu, F10 › HUD : le HUD change tout de suite autour du menu, c'est l'aperçu le plus fidèle. Le lanceur peut rester ouvert : un changement là-bas s'applique aussi en direct.",
+              L"In game, F10 › HUD: the HUD changes right away around the menu, the most faithful preview. The launcher can stay open: a change there also applies live." },
+    { WB_H, L"Coop : équipe et alertes", L"Co-op: team and alerts" },
+    { WB_B, L"Panneau Équipe : les autres joueurs en petit (soif, faim, fatigue), avec où ils sont (à pied, en voiture, dort) et à quelle distance.", L"Team panel: the other players, small (thirst, hunger, fatigue), with where they are (on foot, in a car, sleeping) and how far." },
+    { WB_B, L"Alertes : un message en haut de l'écran quand toi ou un ami avez très faim, très soif, êtes épuisés ou gelés.", L"Alerts: a message at the top of the screen when you or a friend are very hungry, very thirsty, exhausted or freezing." },
+    { WB_B, L"Les deux marchent aussi avec Vanilla.", L"Both also work with Vanilla." },
+    { WB_WARN, L"Un mod qui ajoute ses propres lignes au HUD du jeu (MSCLoader) ne se voit plus avec Carte, Anneaux ou Bandeau : reviens à Vanilla pour le retrouver.",
+               L"A mod that adds its own rows to the game's HUD (MSCLoader) is no longer visible with Card, Rings or Strip: go back to Vanilla to see it." },
+    { WB_GO, L"Ouvrir Réglages", L"Open Settings", TAB_GFX },
+};
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
     WART(0, L"L'installation idéale", L"The ideal install", L"Ce qui marche à coup sûr, et les pièges", L"What always works, and the traps", kW_Ideal),
@@ -683,4 +708,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(4, L"Envoyer ses journaux", L"Send your logs", L"Le zip qui aide à corriger", L"The zip that helps fix things", kW_Logs),
     WART(1, L"Plusieurs sauvegardes", L"Several saves", L"Une partie par groupe d'amis", L"One game per group of friends", kW_Saves),
     WART(2, L"Mods pris en charge et déconseillés", L"Mod support and known incompatibilities", L"Ce qui est synchronisé, ce qui pose souci", L"What is synced, what causes trouble", kW_ModCompat),
+    WART(3, L"Le HUD en jeu", L"The in-game HUD", L"Vanilla, Carte, Anneaux ou Bandeau", L"Vanilla, Card, Rings or Strip", kW_Hud),   // (WA_HUD = 29)
 };

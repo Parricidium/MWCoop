@@ -450,3 +450,21 @@ WF41	CDs
 WF42	Flag
 WF43	Paint
 WF44	What you put in your game, your guests see and hear it too.
+WH01	MWCoop can replace the game's gauges (thirst, hunger, stress, urine, fatigue, money, temperature, sweat, day) with a HUD in the launcher's style. Vanilla, the default, keeps the game's own as is.
+WH02	The four styles
+WH03	Vanilla: the game's own HUD, unchanged.
+WH04	Card: a frosted glass card in a corner, with the day and the money at the top, one row per gauge and the temperature on a cold → hot scale.
+WH05	Rings: a row of discreet rings at the bottom; a nearly empty gauge disappears, a gauge in alert shows its name.
+WH06	Strip: a thin pill centred at the top of the screen, one chip per gauge.
+WH08	Once a style is chosen: the size (70 to 150 %, if the HUD looks too big or too small), the position (Auto or a corner, top or bottom centre), the colour, the background opacity, fading gauges at rest, numbers and names, and the gauges shown (dirtiness, hidden by the game, can be added). \"Default\" resets everything but the style.
+WH09	In game, F10 › HUD: the HUD changes right away around the menu, the most faithful preview. The launcher can stay open: a change there also applies live.
+WH10	Co-op: team and alerts
+WH11	Team panel: the other players, small (thirst, hunger, fatigue), with where they are (on foot, in a car, sleeping) and how far.
+WH12	Alerts: a message at the top of the screen when you or a friend are very hungry, very thirsty, exhausted or freezing.
+WH13	Both also work with Vanilla.
+WH14	A mod that adds its own rows to the game's HUD (MSCLoader) is no longer visible with Card, Rings or Strip: go back to Vanilla to see it.
+WH15	The in-game HUD
+WH16	Vanilla, Card, Rings or Strip
+WH17	A single Settings page (left bar: Game or Co-op), with eight tabs at the top. Everything is kept in mwcoop-lanceur.ini (game folder) and MWCoop\\mwcoop.ini.
+WH19	The style of the in-game gauges (Vanilla, Card, Rings, Strip) with a preview, then its size, position, colour, background, the gauges shown, the team panel and the alerts.
+WH20	Co-op menu: players, appearance, chat, graphics, HUD

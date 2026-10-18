@@ -110,6 +110,8 @@ static const TutoStep kTuto[] = {
       L"The CD tracks", L"Sent content > CD (or Radio): the tracks that go to your guests. \"Add tracks\" (.ogg) or drop the files here: numbered track1…trackN for you. Gauge at the bottom: 100 MB at most.", "0.97.0" },
     { L"Guide, Nouveautés, Crédits", L"Les trois onglets de cette page, avec le champ Chercher… qui filtre les articles. En bas de chaque article : ← précédent et suivant →.",
       L"Guide, What's new, Credits", L"The three tabs of this page, with the Search… field that filters the articles. At the bottom of every article: ← previous and next →.", "0.97.0" },
+    { L"Onglet HUD", L"Le style des jauges en jeu : Vanilla (celui du jeu), Carte, Anneaux ou Bandeau, avec un aperçu. Puis sa taille, sa position, sa couleur, les jauges montrées, le panneau Équipe et les alertes. En jeu aussi : F10 › HUD.",
+      L"HUD tab", L"The style of the in-game gauges: Vanilla (the game's own), Card, Rings or Strip, with a preview. Then its size, position, colour, the gauges shown, the team panel and the alerts. In game too: F10 › HUD.", "0.97.11" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -179,10 +181,12 @@ static RectF TutoTarget(int i)
     case 47: return RectF(kSaveR.X, kSaveR.Y + 28, kSaveR.Width, 240);   // haut de la carte de droite des Sauvegardes : chiffres et derniere partie (saves.inc)
     case 48: return RectF(kContentR.X, kContentR.Y, kContentR.Width, 160);   // haut de la carte de droite : les pistes du CD (modsync.inc)
     case 49: return RectF(g_guideTabRight - GuideTabsW(), 26, GuideTabsW(), 36);   // Guide / Nouveautes / Credits (wiki.inc GuideTabsDraw)
+    // 0.97.11
+    case 50: return TutoSetTab(SET_HUD);                     // onglet HUD (TutoGo l'ouvre)
     }
     return RectF(0, 0, 0, 0);
 }
-static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 || i == 43 || i == 45 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
+static int TutoTab(int i) { return i == 30 || i == 31 || i == 32 || i == 43 || i == 45 || i == 50 ? TAB_GFX : i == 16 || i == 35 || i == 36 ? TAB_MODS : i == 12 || i == 17 || i == 18 || i == 21 || i == 44 ? TAB_COOP : i == 24 || i == 46 ? TAB_SKIN : i == 25 || i == 33 || i == 34 || i == 37 ? TAB_CAR : i == 20 ? TAB_LOGS : i == 19 || i == 49 ? TAB_WIKI : i == 47 ? TAB_SAVES : i == 48 ? TAB_CONTENT : TAB_HOME; }   // (16 : choix de MSCLoader, onglet MODS ; 12, 17, 18 : Reglages > Lanceur ; 19, 49 : Guide ; 43-45 : Reglages ; 46 : Personnage ; 47 : Sauvegardes ; 48 : Contenu envoye)
 
 // Visite complete (premier lancement, COOP > Revoir le guide), ou seulement les bulles des elements apparus depuis la
 // derniere visite ([Lanceur] TutoVersion), apres une mise a jour : pour un nouveau bouton, ajouter une etape avec la
@@ -216,6 +220,7 @@ static void TutoGo(int i)
     g_tab = t;
     if (t == TAB_GFX || t == TAB_COOP) SetTutoTab(TutoCur());   // (page Reglages : l'onglet de l'element montre)
     if (TutoCur() == 44) g_setTab = SET_THEME;   // (0.97.0 : la bulle de l'onglet Theme l'ouvre)
+    if (TutoCur() == 50) g_setTab = SET_HUD;     // (0.97.11 : la bulle de l'onglet HUD l'ouvre)
 }
 static void TutoStart(bool all)
 {

@@ -17,7 +17,7 @@ namespace MWCoop
         static readonly List<string> skinLabels = new List<string>();
         static readonly List<Behaviour> blocked = new List<Behaviour>();
         static bool focusChat, testDone;
-        static readonly string[] tabsFr = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO", "GRAPHISMES" }, tabsEn = { "PLAYERS", "APPEARANCE", "CHAT", "SYNC", "GRAPHICS" };
+        static readonly string[] tabsFr = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO", "GRAPHISMES", "HUD" }, tabsEn = { "PLAYERS", "APPEARANCE", "CHAT", "SYNC", "GRAPHICS", "HUD" };
         static string[] tabs { get { return Lang.A(tabsFr, tabsEn); } }
         const int TabChat = 2;
         const string ChatField = "mwcoop-chat2";
@@ -241,7 +241,8 @@ namespace MWCoop
             else if (tab == 1) Skins();
             else if (tab == TabChat) ChatTab();
             else if (tab == 3) SyncTab();
-            else GfxTab();
+            else if (tab == 4) GfxTab();
+            else HudTab();
             GUI.EndGroup();
             contentH = cy;
             items = idx;
@@ -751,6 +752,45 @@ namespace MWCoop
                     else { int nk = Mathf.Clamp(k + res, 0, r.Vals.Length - 1); if (nk != k) Gfx.Set(r.Key, r.Vals[nk]); }
                 }
             }
+        }
+
+        // HUD (UI/NewHud.cs, reglages UI/HudSettings.cs) : style, puis sa personnalisation, les jauges montrees et la coop. Le HUD
+        // change aussitot autour du menu (apercu en direct). Memes cles que le lanceur (Reglages > HUD).
+        static void HudTab()
+        {
+            Para(Lang.T("Pour vous seul, gard\u00E9 pour les prochaines parties (aussi dans le lanceur : R\u00E9glages \u203A HUD). Le HUD change tout de suite, autour de ce menu.",
+                        "Just for you, kept for your next games (also in the launcher: Settings \u203A HUD). The HUD changes right away, around this menu."), Style.Dim);
+            int style = HudSettings.StyleNow;
+            HudRow(HudSettings.Find("Style"));
+            Header(Lang.T("PERSONNALISER", "CUSTOMISE"));
+            if (style == HudSettings.Vanilla)
+                Para(Lang.T("Vanilla : le HUD d'origine du jeu, tel quel. Le panneau \u00C9quipe et les alertes (plus bas) restent disponibles.",
+                            "Vanilla: the game's own HUD, as is. The team panel and the alerts (below) stay available."), Style.Dim);
+            else foreach (HudSettings.Opt o in HudSettings.Opts) if (o.Group == 1) HudRow(o);
+            if (style != HudSettings.Vanilla)
+            {
+                Header(Lang.T("JAUGES AFFICH\u00C9ES", "GAUGES SHOWN"));
+                foreach (HudSettings.Opt o in HudSettings.Opts) if (o.Group == 2) HudRow(o);
+            }
+            Header(Lang.T("COOP", "CO-OP"));
+            foreach (HudSettings.Opt o in HudSettings.Opts) if (o.Group == 3) HudRow(o);
+            if (style != HudSettings.Vanilla && Item(Lang.T("Remettre ce style par d\u00E9faut", "Reset this style to default"), null, false,
+                                                      Lang.T("Taille, position, couleur, jauges et options reviennent \u00E0 leur valeur de d\u00E9part", "Size, position, colour, gauges and options go back to their defaults"), false) == 2)
+                HudSettings.ResetCustom();
+        }
+
+        static void HudRow(HudSettings.Opt o)
+        {
+            if (o == null) return;
+            int v = HudSettings.Get(o.Key), k = 0;
+            string val;
+            if (o.Vals == null) val = v != 0 ? Lang.T("Oui", "On") : Lang.T("Non", "Off");
+            else { for (int i = 0; i < o.Vals.Length; i++) if (o.Vals[i] == v) k = i; val = Lang.T(o.Lf[k], o.Le[k]); }
+            int res = Item(Lang.T(o.Fr, o.En), val, true, o.HelpFr != null ? Lang.T(o.HelpFr, o.HelpEn) : null, false);
+            if (res != -1 && res != 1) return;
+            if (o.Vals == null) { HudSettings.Set(o.Key, v != 0 ? 0 : 1); return; }
+            int nk = o.Key == "Style" ? (k + res + o.Vals.Length) % o.Vals.Length : Mathf.Clamp(k + res, 0, o.Vals.Length - 1);   // (le style tourne en boucle)
+            if (nk != k) HudSettings.Set(o.Key, o.Vals[nk]);
         }
 
         static void ChatTab()
