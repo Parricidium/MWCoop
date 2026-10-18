@@ -317,7 +317,7 @@ namespace MWCoop
         // une derniere fois (fiable) ; les autres la posent. L'hote redit toutes les 15 s la pose de chaque vitre (arrivants).
         // Canal des evenements (Events), cle « vitre:<chemin de la manivelle> ». Toutes les voitures dont la manivelle ('Knob',
         // variable Windows) vise une vitre, et le temoin de la vitre passager (Drive la pose en miroir).
-        class Win { public string Key; public PlayMakerFSM Knob; public Transform Glass; public float AimAt = -9f, LastSend, RemoteAt = -9f; public Vector3 SentPos; public Quaternion SentRot; public bool Moving; }
+        class Win { public string Key; public PlayMakerFSM Knob; public Transform Glass; public float AimAt = -9f, LastSend, RemoteAt = -9f, ReachAt = -9f; public Vector3 SentPos; public Quaternion SentRot, SentKnob; public bool Moving; }
         static readonly List<Win> wins = new List<Win>();
         static float nextWinScan, nextWinFull;
         public const string WinPrefix = "vitre:";
@@ -371,22 +371,35 @@ namespace MWCoop
 
         static void SendWin(Win w, bool reliable)
         {
-            w.SentPos = w.Glass.localPosition; w.SentRot = w.Glass.localRotation; w.LastSend = Time.realtimeSinceStartup;
-            Session.SendAll(new NetWriter(Msg.Event).Str(w.Key).Vec(w.SentPos).Quat(w.SentRot), reliable);
+            w.SentPos = w.Glass.localPosition; w.SentRot = w.Glass.localRotation; w.SentKnob = w.Knob.transform.localRotation; w.LastSend = Time.realtimeSinceStartup;
+            // (pose de la manivelle aussi : chez les autres, le rejeu de son automate ne la tournait pas -- Menor, 18/10 : « la
+            // vitre monte mais la manivelle ne bouge pas, et la main n'y va pas » ; auteur pour la main de son avatar)
+            Session.SendAll(new NetWriter(Msg.Event).Str(w.Key).Vec(w.SentPos).Quat(w.SentRot).Quat(w.SentKnob).U8(Session.LocalId), reliable);
         }
 
         public static void OnWinMessage(Peer from, string key, NetReader r, bool reliable)
         {
-            Vector3 p = r.Vec(); Quaternion q = r.Quat();
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Event).Str(key).Vec(p).Quat(q), reliable, from.Id);
+            Vector3 p = r.Vec(); Quaternion q = r.Quat(); Quaternion kq = r.Quat(); int who = r.U8();
+            if (Session.IsHost) who = from.Id;
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Event).Str(key).Vec(p).Quat(q).Quat(kq).U8(who), reliable, from.Id);
             Win w = null;
             foreach (Win x in wins) if (x.Key == key) { w = x; break; }
             if (w == null || w.Glass == null) return;
             float now = Time.realtimeSinceStartup;
             if (now - w.AimAt < 1f) return;   // (on la tourne ici en ce moment : la notre fait foi)
             w.RemoteAt = now;
+            bool moved = (w.Glass.localPosition - p).sqrMagnitude > 1e-6f;
             w.Glass.localPosition = p; w.Glass.localRotation = q;
             w.SentPos = p; w.SentRot = q;
+            if (w.Knob != null && !Holding(w.Knob)) { w.Knob.transform.localRotation = kq; w.SentKnob = kq; }
+            if (moved && !reliable && now - w.ReachAt > 0.5f) { w.ReachAt = now; PlayerSync.ReachFor(who, w.Knob.transform); }
+        }
+
+        // Manivelle tenue ici (automate hors de son attente) : sa pose est a nous.
+        static bool Holding(PlayMakerFSM knob)
+        {
+            string s = knob.ActiveStateName;
+            return s == "State 1" || s == "State 2" || s == "Get scroll";
         }
 
         // Course de la vitre : position visee par l'iTween de « State 1 » (0,1 / -0,1 / -0,4 sur la SORBET).

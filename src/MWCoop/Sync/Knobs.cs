@@ -107,7 +107,7 @@ namespace MWCoop
         static void Send(Knob k, bool final)
         {
             k.LastSent = k.Var.Value;
-            Session.SendAll(new NetWriter(Msg.Knob).Str(k.Key).F32(k.Var.Value).Bool(final), final);
+            Session.SendAll(new NetWriter(Msg.Knob).Str(k.Key).F32(k.Var.Value).Bool(final).U8(Session.LocalId), final);
         }
 
         public static void OnMessage(Peer from, NetReader r)
@@ -116,12 +116,16 @@ namespace MWCoop
             if (key == ParkedKey) { if (!Session.IsHost) OnParked(from, r); return; }   // (instantane d'une commande de voiture garee : hote -> arrivant seulement)
             float v = r.F32();
             bool final = r.Bool();
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Knob).Str(key).F32(v).Bool(final), final, from.Id);
+            int who = r.U8();   // (auteur ; NoOne : instantane de l'hote pour un arrivant, personne ne tend la main)
+            if (Session.IsHost) who = from.Id;
+            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Knob).Str(key).F32(v).Bool(final).U8(who), final, from.Id);
             Knob k;
             if (!byKey.TryGetValue(key, out k) || k.F == null || k.Mine || Holding(k)) return;
             k.RemoteAt = Time.realtimeSinceStartup;
             if (Mathf.Abs(k.Var.Value - v) < 0.001f && final) return;
-            PlayerSync.ReachNearest(k.F.transform);   // (son avatar tient la commande : retour de Menor, 11/10)
+            // Son avatar tient la commande (retour de Menor, 11/10). Avant : l'avatar le plus proche, faute d'auteur -- le
+            // passager tendait la main quand l'hote touchait la radio (Menor, 18/10).
+            if (who != NoOne) PlayerSync.ReachFor(who, k.F.transform);
             Set(k, v, final);
         }
 
@@ -150,6 +154,7 @@ namespace MWCoop
         // (l'etat le bascule lui-meme). Rien n'est rejoue si l'automate n'est pas au repos (pas de transition USE depuis son
         // etat courant, ou pas dans l'etat de l'hote) : valeurs posees seulement.
         const string ParkedKey = "@garee";
+        const int NoOne = 255;
         static readonly List<KeyValuePair<float, Peer>> snapshots = new List<KeyValuePair<float, Peer>>();   // arrivants (hote)
         static readonly Dictionary<string, float> parkedLog = new Dictionary<string, float>();
         public static void ScheduleSnapshot(Peer p) { if (Session.IsHost) snapshots.Add(new KeyValuePair<float, Peer>(Time.realtimeSinceStartup + 20f, p)); }
@@ -206,7 +211,7 @@ namespace MWCoop
                 if (!p.Accepted || Session.T == null || !Session.T.Peers.Contains(p)) continue;
                 int held = 0, switches = 0, carsN = 0;
                 foreach (Knob k in knobs)
-                    if (k.F != null) { Session.T.SendReliable(p, new NetWriter(Msg.Knob).Str(k.Key).F32(k.Var.Value).Bool(true).ToArray()); held++; }
+                    if (k.F != null) { Session.T.SendReliable(p, new NetWriter(Msg.Knob).Str(k.Key).F32(k.Var.Value).Bool(true).U8(NoOne).ToArray()); held++; }
                 for (int ci = 0; ci < VehicleSync.LocalCount; ci++)
                 {
                     Rigidbody rb = VehicleSync.LocalBody(ci);

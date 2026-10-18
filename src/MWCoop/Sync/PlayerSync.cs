@@ -111,6 +111,18 @@ namespace MWCoop
             return true;
         }
 
+        public static Transform HeadOf(int id)
+        {
+            Avatar a;
+            return avatars.TryGetValue(id, out a) && a != null && a.Root != null ? a.HeadBone : null;
+        }
+
+        public static Transform RootOf(int id)
+        {
+            Avatar a;
+            return avatars.TryGetValue(id, out a) && a != null && a.Root != null ? a.Root.transform : null;
+        }
+
         public static Transform HandOf(int id)
         {
             Avatar a;

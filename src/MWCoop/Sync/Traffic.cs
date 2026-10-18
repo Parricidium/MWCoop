@@ -31,6 +31,7 @@ namespace MWCoop
             public Transform T;
             public Rigidbody Body;
             public Animation Anim;           // marcheurs : squelette anime
+            public bool Dead;                // marcheur renverse (pantin lache par Npcs) : plus anime
             public bool Walker;
             public Vector3 Pos, Vel;
             public Quaternion Rot;
@@ -57,6 +58,19 @@ namespace MWCoop
         // Rigidbody, son rang ne depend donc pas de son parent du moment).
         static readonly string[] Containers = { "TRAFFIC/VehiclesHighway", "TRAFFIC/VehiclesDirtRoad", "TRAIN", "NPC_CARS", "TRAFFIC/Police" };
         const string WalkersPath = "HUMANS/Randomizer/Walkers";
+
+        // Pieton renverse (Npcs : CarHit "Accident", ici ou rejoue) : son squelette n'est plus anime (le pantin prend le relais).
+        public static void MarkDead(Transform t)
+        {
+            if (t == null) return;
+            foreach (Ent e in ents)
+                if (e.Walker && e.T != null && (t == e.T || t.IsChildOf(e.T)) && !e.Dead)
+                {
+                    e.Dead = true;
+                    if (e.Anim != null) e.Anim.Stop();
+                    Log.Info("trafic : " + e.Key + " renverse : plus anime");
+                }
+        }
         static readonly List<Ent> ents = new List<Ent>();
         static float nextRunOver;
         static readonly List<string> wheelNotes = new List<string>();
@@ -1231,7 +1245,7 @@ namespace MWCoop
             e.T.position = e.Base + Vector3.up * e.Ride;
             if (e.Wheels != null && e.Wheels.Length > 0) WheelsAndGround(e);
             if (e.Train && e.Body != null && !e.Body.isKinematic) e.Body.velocity = Vector3.zero;   // pas de derive apres un choc
-            if (e.Anim != null)
+            if (e.Anim != null && !e.Dead)
             {
                 string clip = e.Vel.sqrMagnitude > 0.2f ? "fat_walk" : "fat_standing";
                 if (e.Anim[clip] != null && !e.Anim.IsPlaying(clip)) e.Anim.CrossFade(clip, 0.3f);

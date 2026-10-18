@@ -149,7 +149,10 @@ namespace MWCoop
             GameObject prefab = Prefab(drinkFsm, state);
             if (prefab == null) { Log.Warn("boissons : objet jete (" + state + ") introuvable ici"); return; }
             GameObject go = (GameObject)Object.Instantiate(prefab, pos, rot);
-            go.name = "MWCoop-jete-" + prefab.name;
+            // (nom du jeu garde : le jeu affiche le nom de l'objet vise -- "mwcoop-jete" chez Menor, 18/10 ; la copie est
+            // reconnue par son composant Thrown : Props ne lui donne pas de cle de monde)
+            go.name = prefab.name + "(Clone)";
+            go.AddComponent<Thrown>();
             foreach (PlayMakerFSM pf in go.GetComponentsInChildren<PlayMakerFSM>(true)) Object.Destroy(pf);
             go.SetActive(true);
             Rigidbody rb = go.GetComponent<Rigidbody>();
@@ -157,6 +160,9 @@ namespace MWCoop
             Object.Destroy(go, 600f);
             Log.Info("boissons : " + prefab.name + " jetee par #" + who + " recreee ici");
         }
+
+        // Marque de l'objet jete recree ici (copie sans logique) : ni Props ni les autres modules ne le suivent.
+        public class Thrown : MonoBehaviour { }
 
         // Copie (pour l'avatar d'un autre) de l'objet en main de rang i, sans main animee ni logique ; hauteur ~h m.
         // Essais : ce que contient la main du joueur local (objets de boisson).

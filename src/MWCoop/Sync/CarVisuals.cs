@@ -43,6 +43,7 @@ namespace MWCoop
         const float ShiftDelay = 0.15f, ShiftTime = 0.35f;
         static readonly Dictionary<Transform, float> lastShift = new Dictionary<Transform, float>();
         public static float LastShift(Transform carRoot) { float t; return carRoot != null && lastShift.TryGetValue(carRoot, out t) ? t : -1f; }
+        static bool GearAnim { get { return Config.GetInt("Coop", "LevierAnime", 0) != 0; } }
         class Car { public string Name; public Transform Root; public List<Item> Items = new List<Item>(); public Dictionary<string, Item> ByKey = new Dictionary<string, Item>(); }
 
         static readonly Dictionary<string, Car> cars = new Dictionary<string, Car>();
@@ -189,7 +190,10 @@ namespace MWCoop
                                 it.ShiftFrom = it.ShowRot; it.ShiftTo = it.HeldRot; it.ShiftAt = now;
                                 lastShift[c.Root] = now;
                             }
-                            if (it.ShiftAt >= 0f)
+                            // Le jeu lui-meme ne l'anime pas (le levier saute d'un rapport a l'autre) : pareil ici par defaut (Menor, 18/10 :
+                            // « le passage est lisse alors que l'original n'a pas d'animation ») ; [Coop] LevierAnime=1 : passage minute.
+                            if (!GearAnim) { it.ShiftAt = -1f; it.ShowRot = it.HeldRot; it.ShowPos = it.HeldPos; }
+                            else if (it.ShiftAt >= 0f)
                             {
                                 float u = Mathf.Clamp01((now - it.ShiftAt - ShiftDelay) / ShiftTime);
                                 u = u * u * (3f - 2f * u);
@@ -197,7 +201,7 @@ namespace MWCoop
                                 if (u >= 1f) it.ShiftAt = -1f;
                             }
                             else it.ShowRot = Quaternion.Slerp(it.ShowRot, it.HeldRot, 1f - Mathf.Exp(-Time.deltaTime * 16f));
-                            it.ShowPos = Vector3.Lerp(it.ShowPos, it.HeldPos, 1f - Mathf.Exp(-Time.deltaTime * 16f));
+                            if (GearAnim) it.ShowPos = Vector3.Lerp(it.ShowPos, it.HeldPos, 1f - Mathf.Exp(-Time.deltaTime * 16f));
                         }
                         else
                         {

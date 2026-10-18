@@ -111,7 +111,10 @@ namespace MWCoop
         };
 
         // Logique qu'une voiture qui renverse le PNJ declenche (ragdoll, magasin ferme) : rejouee chez tous.
-        static readonly string[] HitRoots = { "STORE_AREA/TeimoInSled" };
+        // (pietons et client du taxi aussi -- Menor, 18/10 : « les PNJ morts n'apparaissent pas chez les invites » : leur
+        // automate CarHit, coupe chez l'invite par Traffic, est rallume le temps du rejeu ; "Accident" ne fait qu'activer le
+        // pantin (etat terminal, pas de delit compte) ; Traffic cesse d'animer le corps du pieton mort)
+        static readonly string[] HitRoots = { "STORE_AREA/TeimoInSled", "HUMANS/Randomizer/Walkers", "JOBS/TAXIJOB/Customer1/TaxiWalker" };
         static readonly string[] HitStates = { "State 2", "Accident" };
 
         class Npc
@@ -617,11 +620,12 @@ namespace MWCoop
         class HitHook : ModHook
         {
             public override string Module { get { return "PNJ"; } }
-            public string Key, Target;
+            public string Key, Target; public GameObject Go;
             public override void OnEnter()
             {
                 try
                 {
+                    if (Target == "Accident" && Go != null) Traffic.MarkDead(Go.transform);
                     if (Replay.Depth == 0 && Session.Active && Session.RemoteCount > 0)
                     {
                         hitSent++;
@@ -669,7 +673,7 @@ namespace MWCoop
                 {
                     FsmState st = f.Fsm.GetState(s);
                     if (st == null) continue;
-                    FsmHooks.Prepend(st, new HitHook { Key = key, Target = s });
+                    FsmHooks.Prepend(st, new HitHook { Key = key, Target = s, Go = f.gameObject });
                     hitHooked++;
                     Log.Info("PNJ : " + key + " \"" + s + "\" (renverse) rejoue chez tous");
                 }
@@ -687,6 +691,8 @@ namespace MWCoop
             PlayMakerFSM f = g != null ? Game.FsmOn(g, key.Substring(sep + 2)) : null;
             if (f == null) { Log.Warn("PNJ : " + key + " introuvable ici"); return; }
             hitRecv++;
+            if (!f.enabled) f.enabled = true;   // (copie de pieton muette chez l'invite : l'automate doit tourner pour activer le pantin)
+            if (state == "Accident") Traffic.MarkDead(f.transform);
             Replay.Depth++;
             try { Game.SetState(f, state); }
             finally { Replay.Depth--; }

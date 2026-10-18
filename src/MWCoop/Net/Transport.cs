@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
@@ -18,6 +18,7 @@ namespace MWCoop.Net
         internal string Key;          // cle de l'adresse (table des pairs)
         public bool Accepted;
         public float LastHeard, LastPingSent, Rtt = 0.1f;
+        public float GraceUntil;      // silence tolere jusque-la (pair en plein chargement, hote qui sauvegarde) : pas de "delai depasse" avant GraceUntil + Timeout
         internal uint Token;          // jeton de session de l'invite (T_CONNECT) : 0 pour une version sans jeton
         internal ushort sendSeq, recvSeq;
         internal readonly Dictionary<ushort, Pending> unacked = new Dictionary<ushort, Pending>();
@@ -150,6 +151,10 @@ namespace MWCoop.Net
             else if (!IsHost && OnRejected != null) OnRejected(reason);
         }
 
+        // Silence tolere pendant 'seconds' (Menor, 18/10 : ses invites, en plein chargement de la sauvegarde recue, etaient
+        // "partis (delai depasse)" 20 s apres leur arrivee, se reconnectaient, et l'hote resauvegardait 12 s pour chacun).
+        public void Grace(Peer p, float seconds) { if (p != null) p.GraceUntil = Math.Max(p.GraceUntil, Now + seconds); }
+
         public void Kick(Peer p, string reason)
         {
             byte[] bye = Build(T_BYE, System.Text.Encoding.UTF8.GetBytes(reason));
@@ -261,7 +266,7 @@ namespace MWCoop.Net
             foreach (Peer p in Peers.ToArray())
             {
                 FlushAcks(p);
-                if (Now - p.LastHeard > Timeout) { DropPeer(p, "delai depasse"); continue; }
+                if (Now - Math.Max(p.LastHeard, p.GraceUntil) > Timeout) { DropPeer(p, "delai depasse"); continue; }
                 if (Now - p.LastPingSent > 1f)
                 {
                     p.LastPingSent = Now;

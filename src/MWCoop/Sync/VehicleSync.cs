@@ -833,7 +833,10 @@ namespace MWCoop
                         continue;
                     }
                     c.Body.WakeUp();
-                    c.Body.AddForceAtPosition(dir * pf * Mathf.Clamp01((pushMax - Mathf.Max(along, 0f)) / pushMax) * Time.deltaTime, c.T.TransformPoint(c.PushPoint), ForceMode.Impulse);
+                    // (a la hauteur du centre de masse : appliquee au bord de la caisse, la force la faisait cabrer -- Rivett sur le nez
+                    // dans le garage, video de Menor, 18/10)
+                    Vector3 at = c.T.TransformPoint(c.PushPoint); at.y = c.Body.worldCenterOfMass.y;
+                    c.Body.AddForceAtPosition(dir * pf * Mathf.Clamp01((pushMax - Mathf.Max(along, 0f)) / pushMax) * Time.deltaTime, at, ForceMode.Impulse);
                 }
             foreach (Car c in cars)
             {
@@ -869,6 +872,11 @@ namespace MWCoop
             Vector3 walk = pushLastAt > 0f && now - pushLastAt < 0.5f ? (pl.position - pushLastPos) / Mathf.Max(now - pushLastAt, 0.01f) : Vector3.zero;
             pushLastPos = pl.position; pushLastAt = now;
             walk.y = 0f;
+            // Intention de marche (CharacterMotor.inputMoveDirection, repere monde) : bloque contre la voiture, le pousseur
+            // n'avance pas d'un centimetre et rien ne partait -- « seul, impossible de pousser la Rivett, il faut etre deux »
+            // (Menor, 18/10). Les mains sorties sans appuyer sur une touche de marche n'envoient toujours rien (Vaydon).
+            Vector3 intent = MotorIntent(pl);
+            intent.y = 0f;
             Vector3 p = pl.position + Vector3.up * 0.8f;
             Car best = null; float bd = 1.5f * 1.5f;
             foreach (Car c in cars)
@@ -882,7 +890,7 @@ namespace MWCoop
             Vector3 dir = cam.forward; dir.y = 0f;
             if (dir.sqrMagnitude < 0.01f) return;
             dir.Normalize();
-            if (Vector3.Dot(walk, dir) < 0.4f)
+            if (Vector3.Dot(walk, dir) < 0.4f && Vector3.Dot(intent, dir) < 0.3f)
             {
                 if (now >= pushIdleLog) { pushIdleLog = now + 10f; Log.Info("poussee : " + best.Key + " menee par #" + best.RemoteBy + ", mains sorties sans marcher : rien d'envoye"); }
                 return;
@@ -890,6 +898,20 @@ namespace MWCoop
             Vector3 cp = best.Body.ClosestPointOnBounds(p);
             Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@pousse").U8(best.Net).Vec(best.T.InverseTransformPoint(cp)).Vec(best.T.InverseTransformDirection(dir)), false);
             if (now >= pushSendLog) { pushSendLog = now + 5f; Log.Info("poussee : " + best.Key + " menee par #" + best.RemoteBy + ", poussee envoyee"); }
+        }
+
+        static System.Reflection.FieldInfo motorInput; static Component motorC; static Transform motorPl; static bool motorLooked;
+        static Vector3 MotorIntent(Transform pl)
+        {
+            if (motorPl != pl || motorC == null)
+            {
+                motorPl = pl; motorC = null; motorInput = null;
+                foreach (Component c in pl.GetComponents<Component>())
+                    if (c != null && c.GetType().Name == "CharacterMotor") { motorC = c; motorInput = c.GetType().GetField("inputMoveDirection"); break; }
+                if (!motorLooked) { motorLooked = true; if (motorC == null || motorInput == null) Log.Warn("poussee : CharacterMotor.inputMoveDirection introuvable (intention de marche ignoree)"); }
+            }
+            try { if (motorC != null && motorInput != null) return (Vector3)motorInput.GetValue(motorC); } catch { }
+            return Vector3.zero;
         }
 
         static float pushRecvLog, pushCapLog;
