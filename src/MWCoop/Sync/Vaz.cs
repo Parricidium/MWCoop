@@ -124,7 +124,7 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             foreach (Rent r in rents.Values) VazCar.Destroy(r.Car);
-            rents.Clear(); wanted.Clear(); byName.Clear(); lastLevel.Clear(); loaded = false; nextTick = 0; testStep = 0; testMoved = false;
+            rents.Clear(); wanted.Clear(); byName.Clear(); lastLevel.Clear(); loaded = false; nextTick = 0; testStep = 0; testMoved = false; entryStep = 0;
             if (!hooked)
             {
                 hooked = true;
@@ -359,7 +359,43 @@ namespace MWCoop
         // 20 s : l'hote prend la n 3 ; 30 s : il note sa voiture ; 40 s : l'invite note la sienne (celle de l'hote chez lui) ;
         // 50 s : l'hote la fait venir ; 60 s : il la rend ; 70 s : chacun note voiture partie. [Test] VazGarder=1 : pas rendue.
         static int testStep;
-        static bool testMoved;
+        static bool testMoved, placesDone;
+        static int entryStep;
+
+        static void PutPlayer(Vector3 local)
+        {
+            Transform car = CarOf(Me); GameObject pl = GameObject.Find("PLAYER");
+            if (car == null || pl == null) return;
+            pl.transform.position = car.TransformPoint(local) + Vector3.up * 0.05f;
+            pl.transform.rotation = Quaternion.LookRotation(car.forward);
+            Log.Info("autotest vaz : joueur pose en " + local.ToString("F2") + " (repere de la voiture)");
+        }
+
+        static string EntryState()
+        {
+            Transform car = CarOf(Me); GameObject pl = GameObject.Find("PLAYER");
+            var d = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool("GUIdrive");
+            var p = HutongGames.PlayMaker.FsmVariables.GlobalVariables.FindFsmBool("GUIpassenger");
+            Transform dt = car != null ? car.Find("Functions/PlayerTrigger/DriveTriggerX") : null;
+            PlayMakerFSM f = dt != null ? Game.FsmOn(dt.gameObject, "PlayerTrigger") : null;
+            string geo = "";
+            if (entryStep <= 1 && dt != null)
+            {
+                foreach (Collider c in dt.GetComponents<Collider>())
+                {
+                    var cap = c as CapsuleCollider;
+                    geo += " ; zone " + c.GetType().Name + " actif " + c.enabled + "/" + dt.gameObject.activeInHierarchy + " declencheur " + c.isTrigger + " centre " + car.InverseTransformPoint(dt.TransformPoint(cap != null ? cap.center : Vector3.zero)).ToString("F2")
+                           + (cap != null ? " rayon " + cap.radius.ToString("F2") + " hauteur " + cap.height.ToString("F2") + " axe " + cap.direction : "") + " echelle " + dt.lossyScale.ToString("F2") + " couche " + LayerMask.LayerToName(dt.gameObject.layer);
+                }
+                if (pl != null)
+                    foreach (Collider c in pl.GetComponentsInChildren<Collider>(true))
+                        geo += " ; joueur " + Recon.Path(c.transform) + " " + c.GetType().Name + " tag " + c.tag + " couche " + LayerMask.LayerToName(c.gameObject.layer) + " actif " + c.enabled + "/" + c.gameObject.activeInHierarchy
+                               + (c is CharacterController ? " centre " + ((CharacterController)c).center.ToString("F2") + " rayon " + ((CharacterController)c).radius.ToString("F2") + " h " + ((CharacterController)c).height.ToString("F2") : "");
+                geo += " ; couches qui se touchent (zone/joueur) : " + (pl != null && dt != null ? (!Physics.GetIgnoreLayerCollision(dt.gameObject.layer, pl.layer)).ToString() : "?");
+            }
+            return "GUIdrive " + (d != null && d.Value) + ", GUIpassenger " + (p != null && p.Value) + ", DriveTriggerX " + (f != null ? f.ActiveStateName + (f.enabled ? "" : " (COUPE)") : "?")
+                   + ", joueur en " + (car != null && pl != null ? car.InverseTransformPoint(pl.transform.position).ToString("F2") : "?") + geo;
+        }
         public static void Test(string mode, float t)
         {
             if (mode != "vaz") return;
@@ -380,10 +416,73 @@ namespace MWCoop
             if (host && testStep == 0 && t > 20f) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3)); }
             if (host && testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-hote", 1f); }
             if (!host && testStep == 0 && t > 40f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-invite", 1f); }
+            if (host && testStep == 2 && t > 35f && !placesDone && Config.GetInt("Test", "VazPlaces", 0) != 0) { placesDone = true; try { Places(); } catch (System.Exception e) { Log.Warn("autotest vaz : places : " + e); } }
+            // [Test] VazEntree=1 : joueur pose debout sur la place du conducteur (38 s) puis du passager (43 s) ; 2 s apres, ce que
+            // propose le jeu (icone du volant GUIdrive, etat de DriveTriggerX ; icone passager GUIpassenger de Seats).
+            if (host && Config.GetInt("Test", "VazEntree", 0) != 0 && testStep >= 2)
+            {
+                // balayage de l'ouverture des portieres : 2 x 6 points de chaque cote, 1,2 s chacun (pose, puis releve)
+                int k = (int)((t - 38f) / 1.2f);
+                if (t > 38f && k < 24 && k != entryStep - 1)
+                {
+                    if (entryStep > 0) Log.Info("autotest vaz : entree, point " + (entryStep - 1) + " : " + EntryState());
+                    if (entryStep == 0)
+                    {
+                        // (portieres ouvertes simulees : leurs colliders coupes le temps du balayage)
+                        Transform cv = CarOf(Me);
+                        if (cv != null) foreach (string dp in new[] { "Doors/DoorFront(leftx)", "Doors/DoorFront(right)" }) { Transform d = cv.Find(dp); if (d != null) foreach (Collider c in d.GetComponentsInChildren<Collider>(true)) c.enabled = false; }
+                    }
+                    entryStep = k + 1;
+                    int side = k / 12, j = k % 12;
+                    float x = (j < 6 ? 0.78f : 0.62f) * (side == 0 ? -1f : 1f), z = 0.7f - 0.2f * (j % 6);
+                    PutPlayer(new Vector3(x, -0.05f, z));
+                }
+            }
             if (host && testStep == 2 && t > 50f) { testStep = 3; Call(); Log.Info("autotest vaz : appelee, " + State()); }
             if (Config.GetInt("Test", "VazGarder", 0) != 0) return;
             if (host && testStep == 3 && t > 60f) { testStep = 4; Release(); Log.Info("autotest vaz : rendue"); }
             if (testStep >= 2 && testStep < 5 && t > 70f) { testStep = 5; Log.Info("autotest vaz : apres retour : " + State()); }
+        }
+
+        // [Test] VazPlaces=1 (autotest vaz, 35 s) : carte de l'habitacle (repere de la voiture, pas 10 cm) : pour chaque point du
+        // plancher, le joueur (capsule de son CharacterController, pieds au plancher) y tient-il sans toucher un collider de la
+        // voiture, touche-t-il la zone d'entree du conducteur (DriveTriggerX) ? . libre, # bloque, D libre ET dans la zone.
+        static void Places()
+        {
+            Transform car = CarOf(Me);
+            GameObject pl = GameObject.Find("PLAYER");
+            CharacterController cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+            if (car == null || cc == null) { Log.Info("autotest vaz : places : voiture ou joueur absent"); return; }
+            Transform dt = car.Find("Functions/PlayerTrigger/DriveTriggerX");
+            Collider dtc = dt != null ? dt.GetComponent<Collider>() : null;
+            float r = cc.radius * Mathf.Max(pl.transform.lossyScale.x, pl.transform.lossyScale.z), h = cc.height * pl.transform.lossyScale.y;
+            var sb = new System.Text.StringBuilder("autotest vaz : places (rayon " + r.ToString("F2") + ", hauteur " + h.ToString("F2") + ", zone " + (dtc != null ? car.InverseTransformPoint(dtc.bounds.center).ToString("F2") + " taille " + dtc.bounds.size.ToString("F2") : "?") + ")");
+            var block = new System.Collections.Generic.Dictionary<string, int>();
+            for (float z = 1.0f; z >= -1.0f; z -= 0.1f)
+            {
+                sb.Append("\n z " + z.ToString("+0.0;-0.0") + " ");
+                for (float x = -1.2f; x <= 1.21f; x += 0.1f)
+                {
+                    Vector3 feet = car.TransformPoint(new Vector3(x, -0.05f, z));
+                    Vector3 a = feet + car.up * (r + 0.02f), b = feet + car.up * Mathf.Max(r + 0.02f, h - r);
+                    bool hit = false, inZone = false;
+                    // (Unity 5.0 : pas d'OverlapCapsule -> spheres le long de la capsule)
+                    var cols = new System.Collections.Generic.List<Collider>();
+                    for (float k = 0f; k <= 1.001f; k += 0.25f) cols.AddRange(Physics.OverlapSphere(Vector3.Lerp(a, b, k), r));
+                    foreach (Collider c in cols)
+                    {
+                        if (c == null || !c.transform.IsChildOf(car)) continue;
+                        if (c == dtc) { inZone = true; continue; }
+                        if (c.isTrigger) continue;
+                        hit = true;
+                        string n = VehicleSync.RelPath(car, c.transform); int k; block.TryGetValue(n, out k); block[n] = k + 1;
+                    }
+                    sb.Append(hit ? '#' : inZone ? 'D' : '.');
+                }
+            }
+            sb.Append("\n bloquants : ");
+            foreach (var kv in block) sb.Append(kv.Key).Append(' ').Append(kv.Value).Append(", ");
+            Log.Info(sb.ToString());
         }
 
         static string State()
