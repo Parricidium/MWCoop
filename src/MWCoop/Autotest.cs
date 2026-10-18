@@ -1883,6 +1883,23 @@ namespace MWCoop
                 if (t > 30f && t < 36f) { string w = Props.TestCarry(id, t); if (Time.frameCount % 60 == 0) Log.Info("autotest : " + w); }
                 if (t > 45f && !done) { done = true; Log.Info("autotest : " + id + " finit en " + Props.Where(id)); }
             }
+            // Autotest "cameras" : toutes les cameras (chemin, allumee, texture cible) a pied a 20 s, puis au volant de
+            // [Test] TestVoiture a 32 s (retroviseurs : qui dessine dans quelle texture).
+            if (mode == "cameras")
+            {
+                string car = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");
+                if (t > 20f && step == 0) { step = 1; DumpCameras("a pied"); VehicleSync.TestEnter(car, false); }
+                if (t > 23f && step == 1) { step = 2; VehicleSync.TestEnter(car, true); }
+                if (t > 25f && step == 2) { step = 3; VehicleSync.TestEnter(car, true); }
+                if (t > 32f && step == 3) { step = 4; DumpCameras("au volant de " + car); }
+            }
+            // Autotest "taximiroir" (2 joueurs) : a 30 s l'hote met le PlayerTrigger du taxi en "Press return" (comme s'il y montait) ;
+            // a 38 s chacun note ou sont les cameras des retroviseurs (attendu chez l'invite : Systems/Mirrors/Disable).
+            if (mode == "taximiroir")
+            {
+                if (t > 30f && step == 0) { step = 1; if (MWCoop.Net.Session.IsHost) { PlayMakerFSM f = Game.FindFsm("JOBS/TAXIJOB/MACHTWAGEN/Functions/PlayerTrigger", "PlayerTrigger"); Log.Info("autotest : taximiroir, taxi " + (f != null ? f.ActiveStateName + " -> Press return" : "introuvable")); if (f != null) Game.SetState(f, "Press return"); } }
+                if (t > 38f && step == 1) { step = 2; var sb = new System.Text.StringBuilder("autotest : taximiroir, cameras :"); foreach (string n in new[] { "LeftSideMirrorCam", "RightSideMirrorCam", "RearViewMirrorCam" }) { foreach (Camera c in Resources.FindObjectsOfTypeAll<Camera>()) if (c.name == n && c.transform.parent != null) sb.Append(' ').Append(n).Append(" sous ").Append(Recon.Path(c.transform.parent)).Append(';'); } Log.Info(sb.ToString()); }
+            }
             // [Test] HeureCapture=<h> : l'heure du jeu posee a 10 s, tous modes (captures en plein jour).
             if (t > 10f && !hourSet && Config.GetInt("Test", "HeureCapture", -1) >= 0)
             {
@@ -2557,6 +2574,44 @@ namespace MWCoop
                 if (step == 41) Log.Info("autotest : palan desserre ; Hook [" + hk.ActiveStateName + "], moteur parent " + parent + ", joint " + (moteur.GetComponent<FixedJoint>() != null));
                 step++;
             }
+        }
+
+        static void DumpCameras(string when)
+        {
+            var sb = new System.Text.StringBuilder("autotest : cameras (" + when + ") :");
+            foreach (Camera c in Resources.FindObjectsOfTypeAll<Camera>())
+            {
+                if (c == null || (c.hideFlags & HideFlags.HideAndDontSave) != 0) continue;
+                RenderTexture rt = c.targetTexture;
+                bool on = c.enabled && c.gameObject.activeInHierarchy;
+                if (rt == null && !on) continue;
+                sb.Append("\n  ").Append(Recon.Path(c.transform)).Append(on ? " ALLUMEE" : " eteinte")
+                  .Append(rt != null ? " -> " + rt.name + "#" + rt.GetInstanceID() + " " + rt.width + "x" + rt.height : " -> ecran");
+            }
+            Log.Info(sb.ToString());
+            // automates qui touchent aux cameras des retroviseurs (qui les deplace d'une voiture a l'autre)
+            var ms = new System.Text.StringBuilder("autotest : automates des retroviseurs (" + when + ") :");
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(PlayMakerFSM)))
+            {
+                var f = (PlayMakerFSM)o;
+                if (f.hideFlags != HideFlags.None || f.Fsm == null) continue;
+                try
+                {
+                    foreach (HutongGames.PlayMaker.FsmState st in f.Fsm.States)
+                        foreach (HutongGames.PlayMaker.FsmStateAction act in st.Actions)
+                            foreach (System.Reflection.FieldInfo fi in act.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                            {
+                                object v = fi.GetValue(act);
+                                GameObject go = null;
+                                if (v is HutongGames.PlayMaker.FsmGameObject) go = ((HutongGames.PlayMaker.FsmGameObject)v).Value;
+                                else if (v is HutongGames.PlayMaker.FsmOwnerDefault) { var od = (HutongGames.PlayMaker.FsmOwnerDefault)v; go = od.OwnerOption == HutongGames.PlayMaker.OwnerDefaultOption.UseOwner ? f.gameObject : od.GameObject.Value; }
+                                if (go != null && go.name.EndsWith("MirrorCam"))
+                                    ms.Append("NL  ").Append(Recon.Path(f.transform)).Append(" :: ").Append(f.FsmName).Append(" [").Append(f.ActiveStateName).Append("] etat ").Append(st.Name).Append(" ").Append(act.GetType().Name).Append(" ").Append(fi.Name).Append("=").Append(go.name);
+                            }
+                }
+                catch { }
+            }
+            Log.Info(ms.ToString().Replace("NL", ((char)10).ToString()));
         }
 
         static bool done, teleported, hourSet, sleepWatch, foodMade, watchLogged;
