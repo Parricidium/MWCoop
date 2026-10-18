@@ -1,4 +1,4 @@
-// MWCoop - lanceur (MWCoop.exe, a poser dans le dossier du jeu, livre dans le paquet). Porte de celui de SACoop.
+﻿// MWCoop - lanceur (MWCoop.exe, a poser dans le dossier du jeu, livre dans le paquet). Porte de celui de SACoop.
 //
 //  - Fenetre sans cadre ("layered", alpha par pixel) de 1280 x 800 : depuis 0.42 (lanceur 2026, ui.inc / uikit.inc),
 //    une scene d'aurore boreale dessinee au demarrage, des cartes de verre depoli, une barre de navigation a gauche
@@ -2923,7 +2923,7 @@ static bool GameRunningAsk()
 {
     DWORD pid = 0;
     if (!GameProcessRunning(&pid)) return false;
-    bool stuck = false, window = false;
+    bool stuck = false, window = false, opened = false;
     ULONGLONG ageS = 0;
     long long beat = -1;
     NewestHeartbeat(&beat);
@@ -2933,7 +2933,9 @@ static bool GameRunningAsk()
         EnumWindows(FindPidWindow, (LPARAM)&f);
         window = f.found;
         HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!h) LaunchLog("jeu %lu : ouverture impossible (erreur %lu : processus eleve, d'une autre session, ou en train de mourir)", pid, GetLastError());
         if (h) {
+            opened = true;
             wchar_t p[MAX_PATH]; DWORD n = MAX_PATH;
             if (QueryFullProcessImageNameW(h, 0, p, &n)) path = Narrow(p, CP_UTF8);
             FILETIME c, e, k, u, now;
@@ -2949,6 +2951,10 @@ static bool GameRunningAsk()
         // lance » a chaque LANCER, Steam le montrait en cours, rien ne partait.
         bool silent = beat < 0 || beat > 15;
         stuck = ageS > 60 && (!window || silent);
+        // Processus qu'on ne peut meme pas ouvrir (chemin et age inconnus), sans fenetre, mod muet : un reste du jeu precedent
+        // (Matilda, 18/10 : « jeu ferme normalement » a 17:47:56, lanceur rouvert 30 s plus tard, pid sans fenetre, refus a
+        // chaque LANCER). Traite comme bloque : fermeture proposee, et lancement quand meme si elle est impossible.
+        if (!opened && !window && silent) stuck = true;
     }
     // Toujours au journal : ce refus n'y laissait aucune trace.
     std::string beatTxt = beat < 0 ? "jamais" : std::to_string(beat) + " s";
@@ -2984,6 +2990,16 @@ static bool GameRunningAsk()
             if (t) { WaitForSingleObject(t, 5000); CloseHandle(t); }
             LaunchLog("jeu %lu bloque : fermeture forcee %s", pid, ok ? "faite" : "IMPOSSIBLE");
             if (!GameProcessRunning()) return false;
+            if (!ok && !opened) {
+                // (droits insuffisants : le processus appartient a un autre utilisateur ou tourne eleve ; le laisser bloquer tout
+                // le monde ne sert a rien -- lancer quand meme, en le disant)
+                if (MessageBoxW(g_wnd, T(L"Impossible de fermer ce processus (droits insuffisants : lanc\u00E9 en administrateur, ou par un autre utilisateur).\n\nLancer le jeu quand m\u00EAme ?",
+                                         L"This process cannot be closed (insufficient rights: started as administrator, or by another user).\n\nLaunch the game anyway?"),
+                                L"MWCoop", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+                    LaunchLog("jeu %lu bloque et infermable : lancement quand meme (choix du joueur)", pid);
+                    return false;
+                }
+            }
         }
     }
     SetStatus(K_ERR, T(L"My Winter Car est d\u00E9j\u00E0 lanc\u00E9 : ferme-le d'abord", L"My Winter Car is already running: close it first"));

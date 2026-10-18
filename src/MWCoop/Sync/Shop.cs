@@ -1372,6 +1372,13 @@ namespace MWCoop
                 FsmFloat v = r.Fsm.FsmVariables.FindFsmFloat(name);
                 if (v != null && v.Value > 0f) { floats.Add(new KeyValuePair<string, float>(name, v.Value)); desc.Append(name).Append(' ').Append(v.Value).Append(' '); }
             }
+            // Travail de Fleetari paye avec ce passage en caisse (la commande attend le paiement, son prix est dans le total) :
+            // les autres doivent le tenir pour paye. RullER, 18/10 : « seul l'hote peut payer, l'invite ne fait que commander » --
+            // chez l'hote, le rejeu de l'achat de l'invite coupe Purchase (et son evenement PAYMENT a la commande) : la facture
+            // restait en attente et le prix du travail restait dans le total de SA caisse (a repayer).
+            PlayMakerFSM ord = OrderFsm();
+            FsmFloat pj = r.Fsm.FsmVariables.FindFsmFloat("PriceJob");
+            if (ord != null && pj != null && pj.Value > 0f && ord.ActiveStateName == "Wait payment") { floats.Add(new KeyValuePair<string, float>(JobFlag, pj.Value)); desc.Append("travail Fleetari ").Append(pj.Value).Append(' '); }
             w.U8(floats.Count);
             foreach (KeyValuePair<string, float> kv in floats) w.Str(kv.Key).F32(kv.Value);
             int size = w.ToArray().Length;
@@ -1442,6 +1449,7 @@ namespace MWCoop
             if (!reg.Fsm.gameObject.activeInHierarchy)
             {
                 EmulateBag(reg, keys, qtys, bagStuff, floats);
+                JobPaid(reg, floats, name, null);
                 Log.Info("magasin : achat de " + name + " refait sur les distributeurs, caisse eteinte ici (" + desc + ")");
                 return true;
             }
@@ -1474,7 +1482,8 @@ namespace MWCoop
                     v.Value = 0f;
                 }
             }
-            foreach (KeyValuePair<string, float> kv in floats) { FsmFloat v = fv.FindFsmFloat(kv.Key); if (v != null) v.Value = kv.Value; }
+            foreach (KeyValuePair<string, float> kv in floats) { if (kv.Key == JobFlag) continue; FsmFloat v = fv.FindFsmFloat(kv.Key); if (v != null) v.Value = kv.Value; }
+            JobPaid(reg, floats, name, keep);
             carried.Clear();
             for (int i = 0; i < keys.Count; i++) carried[keys[i]] = qtys[i];
             fv.GetFsmInt("BagStuff").Value = bagStuff;
@@ -1487,6 +1496,37 @@ namespace MWCoop
             pending.Add(keep);
             Log.Info("magasin : achat de " + name + " rejoue (" + desc + ")");
             return true;
+        }
+
+        // Travail de Fleetari paye par un autre (drapeau JobFlag dans les variables du panier) : ce que PAYMENT aurait fait
+        // ici -- commande rangee (State 3 : facture retiree, cout a 0), prix du travail retire de la caisse (PriceJob, Checked,
+        // et le total mis de cote qui sera remis apres le rejeu).
+        const string JobFlag = "@travail";
+        static PlayMakerFSM orderFsm;
+        static PlayMakerFSM OrderFsm()
+        {
+            if (orderFsm == null) { GameObject g = Game.FindAny("REPAIRSHOP/OrderFleetari"); if (g != null) orderFsm = Game.FsmOn(g, "Data"); }
+            return orderFsm;
+        }
+        static void JobPaid(Register reg, List<KeyValuePair<string, float>> floats, string name, Pending keep)
+        {
+            float price = 0f;
+            foreach (KeyValuePair<string, float> kv in floats) if (kv.Key == JobFlag) price = kv.Value;
+            if (price <= 0f) return;
+            PlayMakerFSM ord = OrderFsm();
+            string st = ord != null ? ord.ActiveStateName : "?";
+            if (ord != null && (st == "Wait payment" || st == "Pending cost") && ord.Fsm.GetState("State 3") != null)
+            {
+                Replay.Depth++;
+                try { Game.SetState(ord, "State 3"); }
+                finally { Replay.Depth--; }
+            }
+            FsmVariables fv = reg.Fsm.FsmVariables;
+            FsmFloat pj = fv.FindFsmFloat("PriceJob"); FsmBool ck = fv.FindFsmBool("Checked");
+            if (pj != null) pj.Value = 0f;
+            if (ck != null) ck.Value = false;
+            if (keep != null && keep.PriceTotal > 0f) keep.PriceTotal = Mathf.Max(0f, keep.PriceTotal - price);
+            Log.Info("magasin : travail de Fleetari (" + price + ") paye par " + name + " : commande rangee ici (etait " + st + "), prix retire de la caisse");
         }
 
         // Caisse eteinte ici : ce que ferait la chaine, directement sur les distributeurs (toujours actifs).
@@ -2500,8 +2540,34 @@ namespace MWCoop
         static float testLog, testEatAt;
         static Rigidbody testCup;
 
+        // [Test] Autotest=fleetari (2 joueurs, TestPos=1561,5.6,733 chez les deux : devant la caisse de Fleetari) : a 30 s l'invite
+        // met une commande de 100 en attente (Pending cost), a 33 s clique la facture (PAY : Wait payment, JOB a la caisse), a
+        // 36 s paie (Spawn bag -> Purchase). A 42 s chacun note commande et caisse : attendu partout commande hors paiement
+        // (State 1 / Wait for work), cout 0, PriceTotal 0, PriceJob 0.
+        static int fleetStep;
+        static void TestFleetari(float t)
+        {
+            PlayMakerFSM ord = OrderFsm();
+            Register reg = null;
+            foreach (Register x in registers.Values) if (x.Fsm != null && x.Fsm.FsmVariables.FindFsmFloat("PriceJob") != null) reg = x;
+            if (ord == null || reg == null) { if (t > 42f && fleetStep < 9) { fleetStep = 9; Log.Info("autotest : fleetari, commande " + (ord != null) + " / caisse " + (reg != null) + " introuvable"); } return; }
+            FsmVariables rv = reg.Fsm.FsmVariables;
+            if (!Session.IsHost)
+            {
+                if (t > 30f && fleetStep == 0) { fleetStep = 1; ord.FsmVariables.GetFsmFloat("JobTotalCost").Value = 100f; Game.SetState(ord, "Pending cost"); Log.Info("autotest : fleetari, commande a 100 en attente (" + ord.ActiveStateName + ", caisse active " + reg.Fsm.gameObject.activeInHierarchy + ")"); }
+                if (t > 33f && fleetStep == 1) { fleetStep = 2; ord.SendEvent("PAY"); Log.Info("autotest : fleetari, facture cliquee (PAY) : commande " + ord.ActiveStateName + ", caisse PriceTotal " + rv.GetFsmFloat("PriceTotal").Value + " PriceJob " + rv.GetFsmFloat("PriceJob").Value + " (" + reg.Fsm.ActiveStateName + ")"); }
+                if (t > 36f && fleetStep == 2) { fleetStep = 3; Game.SetState(reg.Fsm, "Spawn bag"); Log.Info("autotest : fleetari, paiement a la caisse (Spawn bag -> Purchase)"); }
+            }
+            if (t > 42f && fleetStep < 9)
+            {
+                fleetStep = 9;
+                Log.Info("autotest : fleetari, commande " + ord.ActiveStateName + " (cout " + ord.FsmVariables.GetFsmFloat("JobTotalCost").Value + "), caisse " + reg.Fsm.ActiveStateName + " PriceTotal " + rv.GetFsmFloat("PriceTotal").Value + " PriceJob " + rv.GetFsmFloat("PriceJob").Value + " (attendu : commande hors paiement, cout 0, PriceTotal 0, PriceJob 0)");
+            }
+        }
+
         public static void Test(string mode, float t)
         {
+            if (mode == "fleetari") { TestFleetari(t); return; }
             if (mode == "resto") TestResto(t);
             else if (mode == "bar") TestBar(t);
             else if (mode == "cafe") TestCafe(t);
