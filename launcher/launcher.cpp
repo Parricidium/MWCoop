@@ -6939,7 +6939,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         else if (st == L"sauvegardes-recommencer") { g_tab = TAB_SAVES; SavesScan(); g_saveModal = SM_RESTART; }
         else if (st == L"sauvegardes-nom") { g_tab = TAB_SAVES; SaveAskName(true); }
         else if (st == L"credits") g_tab = TAB_CREDITS;
-        else if (st == L"credits-images" || st == L"credits-merci") { g_tab = TAB_CREDITS; g_credTab = st == L"credits-images" ? 1 : 2; }
+        else if (st == L"credits-images" || st == L"credits-merci" || st == L"credits-supporters") { g_tab = TAB_CREDITS; g_credTab = st == L"credits-images" ? 1 : st == L"credits-merci" ? 2 : 3; }
         else if (!wcsncmp(st.c_str(), L"guide", 5) && st != L"guide-steam") {   // guide : guide-<article>-<defilement>
             g_tab = TAB_WIKI;
             int art = 0, sc = 0;

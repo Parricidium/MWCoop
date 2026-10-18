@@ -1250,10 +1250,11 @@ static void DrawLogsPage(Graphics &g)
     }
 }
 
-// ---- credits (demande de JD, 08/10 : ceux qui donnent quelque chose pour ameliorer MWCoop). Trois onglets (JD, 13/10) :
-// modeles 3D, images (musee de la Corse : la liste complete, generee dans credits-images.inc), remerciements. Le plus
-// recent en haut de chaque onglet ; la page defile a la molette.
-enum { CRED_3D, CRED_IMG, CRED_THANKS };
+// ---- credits (demande de JD, 08/10 : ceux qui donnent quelque chose pour ameliorer MWCoop). Onglets (JD, 13/10) :
+// modeles 3D, images (musee de la Corse : la liste complete, generee dans credits-images.inc), remerciements, et (JD,
+// 18/10) Supporters : ceux qui ont fait un don, bouton qui brille comme l'etoile RGB. Le plus recent en haut de chaque
+// onglet ; la page defile a la molette.
+enum { CRED_3D, CRED_IMG, CRED_THANKS, CRED_SUPPORT };
 struct Credit { int cat; const wchar_t *name, *roleFr, *roleEn, *fr, *en, *date; int img; };   // img : image integree (launcher.rc), 0 : initiale
 static Bitmap *LoadPngRes(int id);
 static const Credit kCredits[] = {
@@ -1269,6 +1270,8 @@ static const Credit kCredits[] = {
     { CRED_3D, L"WillBarrow", L"Modèles 3D", L"3D models",
       L"Les modèles du sac de couchage (plié et déplié), sur Sketchfab : sketchfab.com/WillBarrow. Un sac par joueur, dans la chambre du départ.",
       L"The sleeping bag models (rolled and unrolled), on Sketchfab: sketchfab.com/WillBarrow. One bag per player, in the starting bedroom.", L"10/10/2026", 0 },
+    { CRED_SUPPORT, L"moonmax11", L"Supporter", L"Supporter",
+      L"Pour avoir fait une donation.", L"For making a donation.", L"18/10/2026", 0 },
     { CRED_THANKS, L"Dom", L"Tenues", L"Outfits",
       L"Un pack de 155 tenues pour ton personnage : 84 hauts, 27 pantalons et 44 visages. Dans l'onglet Tenue, à la suite de celles du jeu (« Tenue Dom 12 »…).",
       L"A pack of 155 outfits for your character: 84 tops, 27 pants and 44 faces. In the Outfit tab, after the game's own (\"Outfit Dom 12\"…).", L"08/10/2026", 6 },
@@ -1316,7 +1319,25 @@ static void DrawCreditsPage(Graphics &g)
     Para(g, T(L"MWCoop grandit aussi grâce à vous et aux créateurs qui partagent leur travail. Chaque personne qui donne quelque chose au mod est créditée ici.",
               L"MWCoop also grows thanks to you and to the creators who share their work. Everyone who gives something to the mod is credited here."),
          RectF(c.X + 28, c.Y + 58, c.Width - 56, 40), 13, kGrey);
-    UiSeg(g, RectF(c.X + 24, c.Y + 106, 520, 40), { T(L"Modèles 3D", L"3D Models"), L"Images", T(L"Remerciements", L"Special Thanks") }, g_credTab, UI_CRED_TAB, 13);
+    RectF seg(c.X + 24, c.Y + 106, 700, 40);
+    UiSeg(g, seg, { T(L"Modèles 3D", L"3D Models"), L"Images", T(L"Remerciements", L"Special Thanks"), L"" }, g_credTab, UI_CRED_TAB, 13);
+    {   // Supporters : halo et contour arc-en-ciel qui tournent (comme l'etoile RGB de l'en-tete), coeur dessine apres le mot
+        float w = (seg.Width - 6) / 4;
+        RectF s(seg.X + 3 + 3 * w, seg.Y + 3, w, seg.Height - 6);
+        bool on = g_credTab == CRED_SUPPORT, hot = g_uiHot == UI_CRED_TAB + CRED_SUPPORT;
+        float hue = g_time * 70.0f;
+        GraphicsPath sp; RoundRect(sp, s, min(9.0f, s.Height / 2));
+        if (!on) { SolidBrush hb(Hue(hue, (BYTE)(hot ? 70 : 40))); g.FillPath(&hb, &sp); }
+        LinearGradientBrush lb(s, Hue(hue), Hue(hue + 180), fmodf(g_time * 90.0f, 360.0f));
+        Color cols[5] = { Hue(hue), Hue(hue + 90), Hue(hue + 180), Hue(hue + 270), Hue(hue + 360) };
+        REAL pos[5] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
+        lb.SetInterpolationColors(cols, pos, 5);
+        Pen rp(&lb, on || hot ? 2.4f : 1.8f); g.DrawPath(&rp, &sp);
+        std::wstring lab = T(L"Supporter", L"Supporters");
+        float tw = MeasureW(g, lab, 13, FontStyleBold), x0 = s.X + (s.Width - tw - 22) / 2;
+        Text(g, lab, RectF(x0, s.Y, tw + 4, s.Height), 13, FontStyleBold, on ? kOnAcc : kInk, StringAlignmentNear);
+        Icon(g, IC_HEART, x0 + tw + 14, s.Y + s.Height / 2, 14, on ? kOnAcc : Hue(hue + 40), 2.2f);
+    }
 
     RectF area = CreditsArea();
     float sc = g_scroll[TAB_CREDITS] = min(g_scroll[TAB_CREDITS], CreditsMaxScroll());
@@ -1530,7 +1551,7 @@ static bool UiClick(int id)
     if (id >= UI_LOOKPIN && id < UI_LOOKPIN + 4) { g_lookZone = id - UI_LOOKPIN; return true; }
     if (id == UI_LOOKROT || id == UI_LOOKROT + 1) { g_skinYaw = fmodf(g_skinYaw + (id == UI_LOOKROT ? 2.0f : -2.0f) + 16, 16.0f); g_skinIdleT = GetTickCount(); return true; }
     if (id == UI_LOOKRAND) { LookRandom(); return true; }
-    if (id >= UI_CRED_TAB && id < UI_CRED_TAB + 3) { g_credTab = id - UI_CRED_TAB; g_scroll[TAB_CREDITS] = 0; return true; }
+    if (id >= UI_CRED_TAB && id < UI_CRED_TAB + 4) { g_credTab = id - UI_CRED_TAB; g_scroll[TAB_CREDITS] = 0; return true; }
     if (id == UI_LOOKRESET) { LookReset(); return true; }
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
     if (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 100) { LobbyOptClick(id); return true; }
