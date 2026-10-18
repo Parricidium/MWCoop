@@ -25,65 +25,73 @@ namespace MWCoop
 
         static void Note(string s, bool bad) { note = s; noteBad = bad; noteUntil = Time.realtimeSinceStartup + 4f; }
 
-        static bool Button(Rect r, string label, bool accent, Event e, bool enabled = true)
-        {
-            bool hover = enabled && r.Contains(e.mousePosition);
-            Color bg = !enabled ? new Color(1f, 1f, 1f, 0.04f) : accent ? (hover ? Style.Accent : Style.AccentDeep) : new Color(1f, 1f, 1f, hover ? 0.14f : 0.08f);
-            Style.Round(r, r.height / 2, bg);
-            Style.Text(r, label, 15, TextAnchor.MiddleCenter, !enabled ? Style.Dim : accent ? Style.OnAccent : Style.White);
-            if (enabled && e.type == EventType.MouseDown && e.button == 0 && hover) { e.Use(); return true; }
-            return false;
-        }
-
+        // Petit panneau au centre, sous le viseur (refonte du 18/10). Taille des menus (Kit).
         public static void Draw()
         {
             if (!Open) return;
             Event e = Event.current;
             float k = Mathf.Clamp01((Time.realtimeSinceStartup - openedAt) / 0.14f);
-            Style.Alpha = 1f - (1f - k) * (1f - k);
+            Kit.Begin(1f - (1f - k) * (1f - k));
+            try { DrawPanel(e, k); }
+            finally { Kit.End(); }
+        }
+
+        static float P(float v) { return Style.Px(v); }
+
+        static void DrawPanel(Event e, float k)
+        {
             var players = new List<PlayerInfo>();
             foreach (PlayerInfo pi in Session.Players.Values) if (!pi.Local) players.Add(pi);
-            float rowH = Style.Px(52), pad = Style.Px(22);
-            float w = Mathf.Min(Style.Px(560), Screen.width - Style.Px(32));
-            float h = Style.Px(250) + Mathf.Max(1, players.Count) * rowH;
-            float x = Mathf.Round((Screen.width - w) / 2), y = Mathf.Round((Screen.height - h) / 2 + (1f - k) * Style.Px(12));
-            Style.Glass(new Rect(x, y, w, h), Style.Px(20));
-            Style.Title(new Rect(x + pad, y + Style.Px(12), w - 2 * pad, Style.Px(40)), Lang.T("PORTE-MONNAIE", "WALLET"), Style.White, TextAnchor.MiddleLeft, 26);
-            Style.Text(new Rect(x + pad, y + Style.Px(12), w - 2 * pad, Style.Px(40)), Keys.Label(Keys.Wallet) + Lang.T(" / Échap : fermer", " / Esc: close"), 14, TextAnchor.MiddleRight, Style.Dim, false);
-            // liquide
-            float cy = y + Style.Px(62);
-            Style.Text(new Rect(x + pad, cy, w - 2 * pad, Style.Px(30)), Lang.T("Liquide : ", "Cash: ") + Mathf.FloorToInt(Wallet.Cash) + " mk", 20, TextAnchor.MiddleLeft, Style.Good);
-            // montant
-            cy += Style.Px(44);
-            Style.Text(new Rect(x + pad, cy, Style.Px(120), Style.Px(36)), Lang.T("Montant", "Amount"), 16, TextAnchor.MiddleLeft, Style.Dim);
-            float gap = Style.Px(6), bx = x + pad + Style.Px(100), bw = Mathf.Floor((x + w - pad - bx - Style.Px(96) - 6 * gap) / 6);
+            float pad = P(16), rowH = P(42), sec = P(26), gap = P(5);
+            float w = Mathf.Min(P(380), Screen.width - P(32)), iw = w - 2 * pad;
+            float h = pad + P(32) + P(8) + P(32) + P(10) + sec + Mathf.Max(1, players.Count) * rowH + P(26) + pad;
+            float x = Mathf.Round((Screen.width - w) / 2);
+            float y = Mathf.Round(Mathf.Min(Screen.height * 0.56f, Screen.height - h - P(16)) + (1f - k) * P(10));
+            Kit.Frame(new Rect(x, y, w, h));
+            float ix = x + pad, cy = y + pad;
+            var hr = new Rect(ix, cy, iw, P(28));
+            if (Kit.Header(hr, Lang.T("Porte-monnaie", "Wallet"), Keys.Label(Keys.Wallet))) { Open = false; return; }
+            string cash = Mathf.FloorToInt(Wallet.Cash) + " mk";
+            float cwid = Style.Width(cash, 11) + P(14);
+            Kit.Pill(hr.xMax - P(26) - P(10) - cwid, hr.center.y, cash, Kit.Green);
+            cy += P(40);
+            // montant : -1000 -100 -10 [montant] +10 +100 +1000 ; molette dessus : +/- 10
+            float aw = P(84), bw = Mathf.Floor((iw - aw - 6 * gap) / 6), bx = ix, bh = P(30);
             for (int i = 0; i < Steps.Length; i++)
             {
-                if (i == 3) { Style.Text(new Rect(bx, cy, Style.Px(96), Style.Px(36)), amount + " mk", 20, TextAnchor.MiddleCenter, Style.White); bx += Style.Px(96) + gap; }
-                if (Button(new Rect(bx, cy, bw, Style.Px(36)), (Steps[i] > 0 ? "+" : "") + Steps[i], false, e)) amount = Mathf.Clamp(amount + Steps[i], 1, 1000000);
+                if (i == 3)
+                {
+                    var ar = new Rect(bx, cy, aw, bh);
+                    if (Event.current.type == EventType.Repaint) { Style.Round(ar, P(9), Kit.A(Kit.Ice, 0.12f)); Style.Ring(ar, P(9), Kit.A(Kit.Ice, 0.45f)); }
+                    Style.Text(ar, amount + " mk", 14, TextAnchor.MiddleCenter, Kit.Ink);
+                    bx += aw + gap;
+                }
+                if (Kit.Button(new Rect(bx, cy, bw, bh), (Steps[i] > 0 ? "+" : "") + Steps[i], 0, false, true, null, 11)) amount = Mathf.Clamp(amount + Steps[i], 1, 1000000);
                 bx += bw + gap;
             }
-            var amountRect = new Rect(x + pad, cy, w - 2 * pad, Style.Px(36));
+            var amountRect = new Rect(ix, cy, iw, bh);
             if (e.type == EventType.ScrollWheel && amountRect.Contains(e.mousePosition)) { amount = Mathf.Clamp(amount + (e.delta.y < 0 ? 10 : -10), 1, 1000000); e.Use(); }
+            cy += bh + P(12);
             // joueurs
-            cy += Style.Px(56);
-            Style.Fill(new Rect(x + pad, cy - Style.Px(8), w - 2 * pad, Mathf.Max(1f, Style.Px(1))), Style.Line);
-            if (players.Count == 0) Style.Text(new Rect(x + pad, cy, w - 2 * pad, rowH), Lang.T("Personne d'autre dans la partie", "Nobody else in the game"), 16, TextAnchor.MiddleLeft, Style.Dim, false);
+            Kit.Section(new Rect(ix, cy, iw, sec - P(6)), Lang.T("DONNER \u00C0", "GIVE TO"));
+            cy += sec;
+            if (players.Count == 0) Style.Text(new Rect(ix, cy, iw, rowH), Lang.T("Personne d'autre dans la partie", "Nobody else in the game"), 13, TextAnchor.MiddleLeft, Kit.Muted, false);
             foreach (PlayerInfo pi in players)
             {
                 bool inGame = pi.Level == 1;
-                Style.Text(new Rect(x + pad, cy, w - 2 * pad - Style.Px(170), rowH), pi.Name + (inGame ? "" : Lang.T("  (au menu)", "  (in menu)")), 18, TextAnchor.MiddleLeft, inGame ? Style.White : Style.Dim);
-                if (Button(new Rect(x + w - pad - Style.Px(160), cy + Style.Px(8), Style.Px(160), rowH - Style.Px(16)), Lang.T("DONNER ", "GIVE ") + amount, true, e, inGame && Wallet.Ready && Wallet.Cash >= amount))
+                float av = P(26), gw = P(136);
+                Kit.Avatar(new Rect(ix, cy + (rowH - av) / 2, av, av), pi.Id, pi.Name, pi.SteamId, inGame ? 1f : 0.55f);
+                Style.Text(new Rect(ix + av + P(8), cy, iw - av - P(8) - gw - P(8), rowH), pi.Name + (inGame ? "" : Lang.T("  (au menu)", "  (in menu)")), 14, TextAnchor.MiddleLeft, inGame ? Kit.Ink : Kit.Faint);
+                if (Kit.Button(new Rect(ix + iw - gw, cy + (rowH - P(30)) / 2, gw, P(30)), Lang.T("Donner ", "Give ") + amount + " mk", 1, false, inGame && Wallet.Ready && Wallet.Cash >= amount, null, 12))
                 {
                     string err = Wallet.Give(pi.Id, amount);
-                    if (err == null) Note(amount + Lang.T(" mk donnés à ", " mk given to ") + pi.Name, false);
+                    if (err == null) Note(amount + Lang.T(" mk donn\u00E9s \u00E0 ", " mk given to ") + pi.Name, false);
                     else Note(err, true);
                 }
                 cy += rowH;
             }
             if (note != null && Time.realtimeSinceStartup < noteUntil)
-                Style.Text(new Rect(x + pad, y + h - Style.Px(46), w - 2 * pad, Style.Px(30)), note, 16, TextAnchor.MiddleLeft, noteBad ? Style.Warn : Style.Good, false);
-            Style.Alpha = 1f;
+                Style.Text(new Rect(ix, y + h - pad - P(22), iw, P(22)), note, 12, TextAnchor.MiddleLeft, noteBad ? Kit.Amber : Kit.Green, false);
         }
 
         // [Test] Autotest=don : a 30 s chacun note son liquide ; a 32 s l'hote donne 250 mk au premier invite ; a 36 s chacun

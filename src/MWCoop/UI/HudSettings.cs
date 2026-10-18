@@ -44,6 +44,11 @@ namespace MWCoop
               "Les jauges des autres joueurs, en petit (aussi avec Vanilla)", "The other players' gauges, small (also with Vanilla)"),
             O("Alertes", "Alertes en haut de l'écran", "Alerts at the top of the screen", 1, 3, null, null, null,
               "Très faim, épuisé, gelé… pour vous et vos amis", "Very hungry, exhausted, freezing… for you and your friends"),
+            // Menus du mod (F10 et petits panneaux, refonte du 18/10) : taille et place, reglees dans F10 > Graphismes.
+            O("Menu", "Taille du menu", "Menu size", 100, 9, new[] { 85, 100, 120 }, new[] { "Petit", "Normal", "Grand" }, new[] { "Small", "Normal", "Large" },
+              "Le menu F10 et les petits panneaux (triches, porte-monnaie, tchat)", "The F10 menu and the small panels (cheats, wallet, chat)"),
+            O("MenuPosition", "Position du menu", "Menu position", 0, 9, new[] { 0, 1 }, new[] { "Centre", "Gauche" }, new[] { "Centre", "Left" },
+              "Gauche : le jeu reste visible à droite", "Left: the game stays visible on the right"),
         };
 
         static readonly Dictionary<string, Opt> byKey = new Dictionary<string, Opt>(StringComparer.OrdinalIgnoreCase);
@@ -84,7 +89,7 @@ namespace MWCoop
         {
             foreach (Opt o in Opts)
             {
-                if (o.Group == 0 || !vals.ContainsKey(o.Key)) continue;
+                if (o.Group < 1 || o.Group > 3 || !vals.ContainsKey(o.Key)) continue;   // (style et menus du mod gardes)
                 vals.Remove(o.Key);
                 Config.Save(Sec, o.Key, "");
             }

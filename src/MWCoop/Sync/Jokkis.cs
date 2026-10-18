@@ -135,6 +135,7 @@ namespace MWCoop
         static readonly Dictionary<int, int> lastLevel = new Dictionary<int, int>();    // hote : niveau vu par joueur (instantane a l'arrivee)
         static int week = -1, loadedWeek = -1;
         static bool enabled, hooked;
+        public static bool Enabled { get { return enabled; } }   // ([Coop] Jokkis : location ouverte, onglet Course sur glace du F10)
         static float nextTick;
         public static event System.Action Changed;
 

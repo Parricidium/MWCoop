@@ -555,7 +555,7 @@ namespace MWCoop
             K = kOld;
         }
 
-        static string Where(int id, Transform me)
+        public static string Where(int id, Transform me)
         {
             Avatar a = null;
             foreach (Avatar x in PlayerSync.Avatars) if (x != null && x.Player != null && x.Player.Id == id) { a = x; break; }

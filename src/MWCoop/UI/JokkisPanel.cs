@@ -4,28 +4,27 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Choix d'une Jokkis de location pour la course sur glace (16/10) : les 16 voitures IA du jeu (Jokkis) groupees par
-    // modele, chacune avec son numero, son pilote, son club et son etat (libre / prise par <joueur> / la votre), un bouton
-    // CHOISIR (ou RENDRE sur la sienne) ; en tete, la Rivett n 14 du jeu, gratuite aussi (information). A droite, la voiture
-    // en surbrillance en 3D : copie visuelle (Jokkis.BuildPreview) posee loin sous le monde (Studio.OtherPivot) sur la couche
-    // du studio des tenues (Studio.PreviewLayer), qui tourne lentement (glisser a la souris pour la tourner), photographiee
-    // a chaque image par la camera du studio dans une RenderTexture 512 x 320 (Studio.RenderPreview) tant que le panneau
-    // est ouvert -- rien du tout quand il est ferme (copie detruite, texture liberee).
-    // Ouverture : menu F10 > JOUEURS > " Course sur glace : choisir une voiture ", ou IceRace (JokkisPanel.Open = true)
-    // quand le joueur s'inscrit au tableau LINEUPS. Echap ferme ; la souris est libre pendant ce temps (Menu.Block,
-    // Menu.CursorWanted). Clavier : Haut/Bas voiture, Entree choisir / rendre.
+    // Course sur glace (16/10 ; onglet du menu F10 depuis la refonte du 18/10) : les 16 voitures IA du jeu (Jokkis) a louer,
+    // groupees par modele (pastilles pour filtrer un modele), chacune avec son numero, son pilote, son club et son etat (libre
+    // / prise par <joueur> / la votre) ; a droite la voiture en surbrillance en 3D, sa fiche et le bouton CHOISIR (ou RENDRE),
+    // puis l'equipe (qui a quelle voiture). Apercu : copie visuelle (Jokkis.BuildPreview) posee loin sous le monde
+    // (Studio.OtherPivot) sur la couche du studio des tenues (Studio.PreviewLayer), qui tourne lentement (glisser a la souris
+    // pour la tourner), photographiee a chaque image par la camera du studio dans une RenderTexture 512 x 320
+    // (Studio.RenderPreview) tant que l'onglet est affiche -- rien du tout sinon (copie detruite, texture liberee).
+    // Ouverture : F10 > Course sur glace, ou Open = true (IceRace, quand le joueur s'inscrit au tableau LINEUPS ; autotest) qui
+    // ouvre le menu sur cet onglet. Clavier (Menu.Key le passe ici) : Haut/Bas voiture (Haut sur la premiere : retour aux
+    // onglets), Gauche/Droite modele, Entree choisir / rendre ; double clic sur une ligne : choisir / rendre.
     public static class JokkisPanel
     {
-        public static bool Open;
-        static bool wasOpen, hooked;
-        static float openedAt;
+        public static bool Open;                    // demande d'ouverture : le menu F10 s'ouvre sur l'onglet
+        static bool shown, hooked;
         static int hi;                              // numero en surbrillance (apercu, Entree)
         static int pending; static float pendingAt;  // numero demande a l'hote, en attente de sa table (invite)
         static string note; static float noteUntil; static bool noteBad;
-        static float scroll, listH, contentH, hiY = -1f;
+        static float scroll, listH, contentH, hiY = -1f, rowH;
         static bool follow;
-        static Vector2 lastMouse; static bool mouseMoved;
         static int rows;                            // lignes dessinees au dernier passage (autotest)
+        static int filter;                          // 0 : toutes ; 1.. : Models[filter - 1]
         static readonly string[] Models = { "Bubple 1600", "Costo MK2", "Svoboda 180", "Fittan LX", "EDM 700" };
         static readonly List<Jokkis.Def> order = new List<Jokkis.Def>();   // ordre d'affichage (Haut/Bas)
 
@@ -39,25 +38,35 @@ namespace MWCoop
         static RenderTexture rt; static bool rtReady, dragging;
         static int renders;
 
+        // Aide du pied du menu : le resultat de la derniere demande, sinon les touches.
+        public static string Hint
+        {
+            get
+            {
+                if (note != null && Time.realtimeSinceStartup < noteUntil) return note;
+                return Lang.T("Entr\u00E9e : choisir ou rendre  \u00B7  Gauche/Droite : mod\u00E8le  \u00B7  glisser l'aper\u00E7u : tourner",
+                              "Enter: choose or give back  \u00B7  Left/Right: model  \u00B7  drag the preview: turn");
+            }
+        }
+
         public static void Update()
         {
-            if (!PlayerSync.InGame) Open = false;
-            else if (Open && (Menu.Open || Menu.ChatOpen || WalletPanel.Open || CheatPanel.Open || MapPanel.Open)) Open = false;   // (un autre panneau a pris la place)
-            else if (Open && Input.GetKeyDown(KeyCode.Escape)) Open = false;
-            if (Open != wasOpen) { wasOpen = Open; if (Open) Opened(); else Closed(); }
-            if (!Open) return;
+            if (Open) { Open = false; if (PlayerSync.InGame) Menu.Show(Menu.TabRace); }
+            bool now = PlayerSync.InGame && Menu.Open && Menu.Tab == Menu.TabRace;
+            if (now != shown) { shown = now; if (now) Opened(); else Closed(); }
+            if (!shown) return;
             if (pending != 0 && Time.realtimeSinceStartup - pendingAt > 6f) pending = 0;   // (sans reponse : on n'attend plus)
             Preview();
         }
 
         static void Opened()
         {
-            openedAt = Time.realtimeSinceStartup; note = null; pending = 0; scroll = 0f; follow = true; dragging = false;
-            WalletPanel.Open = CheatPanel.Open = MapPanel.Open = false;
+            note = null; pending = 0; scroll = 0f; follow = true; dragging = false;
             if (!hooked) { hooked = true; Jokkis.Changed += OnChanged; }
             int mine = Jokkis.ChosenNumber(Session.LocalId);
             IList<Jokkis.Def> all = Jokkis.All();
-            hi = mine != 0 ? mine : all.Count > 0 ? all[0].Number : 0;
+            if (mine != 0) { hi = mine; filter = 0; }
+            else if (hi == 0 || Jokkis.DefOf(hi) == null) hi = all.Count > 0 ? all[0].Number : 0;
             if (rt == null)
             {
                 rt = new RenderTexture(RtW, RtH, 24, RenderTextureFormat.ARGB32);
@@ -78,7 +87,7 @@ namespace MWCoop
         // Table de l'hote changee : la demande en cours a abouti (la notre) ou non (prise par un autre entre-temps).
         static void OnChanged()
         {
-            if (!Open || pending == 0) return;
+            if (!shown || pending == 0) return;
             int mine = Jokkis.ChosenNumber(Session.LocalId);
             if (mine == pending) { Note(Lang.T("La Jokkis n\u00B0 ", "Jokkis no. ") + mine + Lang.T(" est \u00E0 vous", " is yours"), false); pending = 0; }
             else if (!Jokkis.IsFree(pending)) { Note(Lang.T("La n\u00B0 ", "No. ") + pending + Lang.T(" vient d'\u00EAtre prise", " was just taken"), true); pending = 0; }
@@ -180,16 +189,22 @@ namespace MWCoop
             Log.Info("jokkis (apercu) : n " + pvNumber + ", " + n + " maillages, boite " + (any ? b.size.ToString("F2") : "inconnue") + ", camera a " + pvDist.ToString("F1") + " m, couche " + Studio.PreviewLayer);
         }
 
-        // ---------------------------------------------------------------- dessin
+        // ---------------------------------------------------------------- dessin (onglet du menu)
 
-        static bool Button(Rect r, string label, bool accent, Event e, bool enabled = true)
+        static bool InFilter(Jokkis.Def d, int f)
         {
-            bool hover = enabled && r.Contains(e.mousePosition);
-            Color bg = !enabled ? new Color(1f, 1f, 1f, 0.04f) : accent ? (hover ? Style.Accent : Style.AccentDeep) : new Color(1f, 1f, 1f, hover ? 0.14f : 0.08f);
-            Style.Round(r, r.height / 2, bg);
-            Style.Text(r, label, 14, TextAnchor.MiddleCenter, !enabled ? Style.Dim : accent ? Style.OnAccent : Style.White);
-            if (enabled && e.type == EventType.MouseDown && e.button == 0 && hover) { e.Use(); return true; }
-            return false;
+            if (f == 0) return true;
+            return f - 1 < Models.Length && d.Model == Models[f - 1];
+        }
+
+        static void SetFilter(int f)
+        {
+            int n = Models.Length + 1;
+            filter = ((f % n) + n) % n;
+            Jokkis.Def d = Jokkis.DefOf(hi);
+            if (d == null || !InFilter(d, filter))
+                foreach (Jokkis.Def x in Jokkis.All()) if (InFilter(x, filter)) { hi = x.Number; break; }
+            scroll = 0f; follow = true;
         }
 
         static void MoveHi(int d)
@@ -201,78 +216,113 @@ namespace MWCoop
             follow = true;
         }
 
-        public static void Draw()
+        // Touche passee par le menu (la liste a le clavier) : vrai si prise.
+        public static bool Key(KeyCode k)
         {
-            if (!Open) return;
-            Event e = Event.current;
-            float now = Time.realtimeSinceStartup;
-            if (e.type == EventType.Repaint) { mouseMoved = (e.mousePosition - lastMouse).sqrMagnitude > 1f; lastMouse = e.mousePosition; }
-            if (e.type == EventType.KeyDown)
+            switch (k)
             {
-                if (e.keyCode == KeyCode.UpArrow) { MoveHi(-1); e.Use(); }
-                else if (e.keyCode == KeyCode.DownArrow) { MoveHi(1); e.Use(); }
-                else if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) { Act(hi); e.Use(); }
+                case KeyCode.UpArrow: if (order.Count == 0 || order[0].Number == hi) return false; MoveHi(-1); return true;
+                case KeyCode.DownArrow: MoveHi(1); return true;
+                case KeyCode.PageUp: MoveHi(-6); return true;
+                case KeyCode.PageDown: MoveHi(6); return true;
+                case KeyCode.LeftArrow: SetFilter(filter - 1); return true;
+                case KeyCode.RightArrow: SetFilter(filter + 1); return true;
+                case KeyCode.Return:
+                case KeyCode.KeypadEnter: Act(hi); return true;
             }
-            float k = Mathf.Clamp01((now - openedAt) / 0.14f);
-            Style.Alpha = 1f - (1f - k) * (1f - k);
-            float pad = Style.Px(22), one = Mathf.Max(1f, Style.Px(1));
-            float w = Mathf.Min(Style.Px(1080), Screen.width - Style.Px(32));
-            float h = Mathf.Min(Style.Px(900), Screen.height - Style.Px(24));
-            float x = Mathf.Round((Screen.width - w) / 2), y = Mathf.Round((Screen.height - h) / 2 + (1f - k) * Style.Px(12));
-            Style.Glass(new Rect(x, y, w, h), Style.Px(20));
-            Style.Title(new Rect(x + pad, y + Style.Px(12), w - 2 * pad, Style.Px(40)), Lang.T("JOKKIS DE LOCATION", "RENTAL JOKKIS"), Style.White, TextAnchor.MiddleLeft, 26);
-            Style.Text(new Rect(x + pad, y + Style.Px(12), w - 2 * pad, Style.Px(40)), Lang.T("\u00C9chap : fermer", "Esc: close"), 14, TextAnchor.MiddleRight, Style.Dim, false);
-            Style.Text(new Rect(x + pad, y + Style.Px(54), w - 2 * pad, Style.Px(26)),
-                       Lang.T("Course sur glace : une voiture par joueur, gratuite, premier arriv\u00E9 premier servi ; rendue \u00E0 la fin du week-end.",
-                              "Ice race: one car per player, free, first come first served; given back at the end of the weekend."), 15, TextAnchor.MiddleLeft, Style.Dim, false);
-            // colonnes : liste a gauche, apercu et fiche a droite
-            float top = y + Style.Px(92), foot = Style.Px(44);
-            float pvW = Mathf.Min(Style.Px(430), Mathf.Round((w - 2 * pad) * 0.42f));
-            var list = new Rect(x + pad, top, w - 2 * pad - pvW - Style.Px(22), y + h - foot - pad - top);
-            var pvr = new Rect(list.xMax + Style.Px(22), top, pvW, Mathf.Round(pvW * RtH / (float)RtW));
-            listH = list.height;
-            if (e.type == EventType.ScrollWheel && list.Contains(e.mousePosition)) { scroll += e.delta.y * Style.Px(14); e.Use(); }
-            scroll = Mathf.Clamp(scroll, 0f, Mathf.Max(0f, contentH - listH));
-            DrawList(list, e);
-            if (contentH > listH)
-            {
-                var track = new Rect(list.xMax - Style.Px(5), list.y, Mathf.Max(3f, Style.Px(5)), listH);
-                Style.Round(track, track.width / 2, Style.Line);
-                float thumb = Mathf.Max(Style.Px(28), listH * listH / contentH);
-                Style.Round(new Rect(track.x, track.y + (listH - thumb) * scroll / (contentH - listH), track.width, thumb), track.width / 2, Style.Accent);
-            }
-            DrawPreview(pvr, e, now);
-            DrawCard(new Rect(pvr.x, pvr.yMax + Style.Px(14), pvr.width, list.yMax - pvr.yMax - Style.Px(14)), e);
-            // pied : resultat ou aide
-            Style.Fill(new Rect(x + pad, y + h - foot - Style.Px(6), w - 2 * pad, one), Style.Line);
-            var fr = new Rect(x + pad, y + h - foot, w - 2 * pad, Style.Px(30));
-            if (note != null && now < noteUntil) Style.Text(fr, note, 15, TextAnchor.MiddleLeft, noteBad ? Style.Warn : Style.Good, false);
-            else Style.Text(fr, Lang.T("Haut/Bas : voiture  \u00B7  Entr\u00E9e : choisir ou rendre  \u00B7  glisser l'aper\u00E7u : tourner  \u00B7  \u00C9chap : fermer",
-                                       "Up/Down: car  \u00B7  Enter: choose or give back  \u00B7  drag the preview: turn  \u00B7  Esc: close"), 14, TextAnchor.MiddleLeft, Style.Dim, false);
-            Style.Alpha = 1f;
+            return false;
         }
 
-        // Liste : la Rivett (information), puis les Jokkis par modele.
-        static void DrawList(Rect view, Event e)
+        static float P(float v) { return Style.Px(v); }
+
+        // Contenu de l'onglet dans v (coordonnees ecran) : vrai si la souris a choisi une voiture (le menu donne le clavier
+        // a la liste).
+        public static bool DrawTab(Rect v, Event e, bool focused, bool moved)
         {
+            if (!PlayerSync.InGame)
+            {
+                Style.Text(new Rect(v.x + P(10), v.y + P(4), v.width - P(20), P(60)), Lang.T("En partie seulement : la course sur glace se pr\u00E9pare dans le jeu.", "In game only: the ice race is prepared in the game."),
+                           13, TextAnchor.UpperLeft, Kit.Muted, false, true);
+                return false;
+            }
+            float now = Time.realtimeSinceStartup;
+            float cardW = P(236), gap = P(16);
+            var left = new Rect(v.x, v.y, v.width - cardW - gap, v.height);
+            var card = new Rect(left.xMax + gap, v.y, cardW, v.height);
+            bool click = false;
+            // pastilles des modeles
+            IList<Jokkis.Def> all = Jokkis.All();
+            int free = 0;
+            foreach (Jokkis.Def d in all) if (Jokkis.IsFree(d.Number)) free++;
+            float chx = left.x, chy = left.y, chh = P(28);
+            for (int f = 0; f <= Models.Length; f++)
+            {
+                if (f > 0) { bool any = false; foreach (Jokkis.Def d in all) if (d.Model == Models[f - 1]) any = true; if (!any) continue; }
+                string lab = f == 0 ? Lang.T("Toutes", "All") + "  \u00B7  " + free + Lang.T(" libres", " free") : Models[f - 1];
+                float w = Style.Width(lab, 12) + P(22);
+                if (chx + w > left.xMax && chx > left.x) { chx = left.x; chy += chh + P(6); }   // (pastilles sur deux rangees au besoin)
+                var cr = new Rect(chx, chy, w, chh);
+                chx += w + P(6);
+                bool on = f == filter, over = cr.Contains(e.mousePosition);
+                if (e.type == EventType.MouseDown && e.button == 0 && over) { SetFilter(f); click = true; e.Use(); }
+                if (e.type != EventType.Repaint) continue;
+                Style.Round(cr, chh / 2, on ? Kit.A(Kit.Ice, 0.18f) : Kit.A(Color.white, over ? 0.09f : 0.05f));
+                Style.Ring(cr, chh / 2, on ? Kit.A(Kit.Ice, 0.55f) : Kit.Edge);
+                Style.Text(cr, lab, 12, TextAnchor.MiddleCenter, on ? Kit.Ice : Kit.Soft);
+            }
+            // liste
+            float lt = chy + chh + P(10);
+            var list = new Rect(left.x, lt, left.width, left.yMax - lt);
+            if (!Jokkis.Enabled && (!Session.Active || Session.IsHost))
+            {
+                var nr = new Rect(list.x, list.y, list.width, P(40));
+                Style.Text(nr, Lang.T("Location coup\u00E9e dans cette partie : lanceur, R\u00E9glages \u203A Co-op \u203A Course sur glace (b\u00EAta).", "Rental is off in this game: launcher, Settings \u203A Co-op \u203A Ice race (beta)."),
+                           12, TextAnchor.UpperLeft, Kit.Amber, false, true);
+                list.y += P(44); list.height -= P(44);
+            }
+            listH = list.height;
+            if (e.type == EventType.ScrollWheel && list.Contains(e.mousePosition)) { scroll += e.delta.y * P(14); e.Use(); }
+            scroll = Mathf.Clamp(scroll, 0f, Mathf.Max(0f, contentH - listH));
+            if (DrawList(list, e, focused, moved)) click = true;
+            if (contentH > listH)
+            {
+                var track = new Rect(list.xMax - P(4), list.y, Mathf.Max(3f, P(4)), listH);
+                Style.Round(track, track.width / 2, Kit.Sep);
+                float thumb = Mathf.Max(P(28), listH * listH / contentH);
+                Style.Round(new Rect(track.x, track.y + (listH - thumb) * scroll / (contentH - listH), track.width, thumb), track.width / 2, Kit.A(Kit.Ice, 0.8f));
+            }
+            // fiche
+            var pvr = new Rect(card.x, card.y, card.width, Mathf.Round(card.width * RtH / (float)RtW));
+            DrawPreview(pvr, e, now);
+            DrawCard(new Rect(card.x, pvr.yMax + P(10), card.width, card.yMax - pvr.yMax - P(10)), e);
+            return click;
+        }
+
+        // Liste : la Rivett (information), puis les Jokkis par modele (filtre).
+        static bool DrawList(Rect view, Event e, bool focused, bool moved)
+        {
+            bool click = false;
             GUI.BeginGroup(view);
-            float cw = view.width - Style.Px(12), cy = 0f, rowH = Style.Px(36), headH = Style.Px(30);
+            float cw = view.width - P(10), cy = 0f, headH = P(26);
+            rowH = P(32);
             int n = 0;
             order.Clear();
             hiY = -1f;
-            // Rivett n 14 : la voiture du jeu
-            var rr = new Rect(0, cy - scroll, cw, Style.Px(40));
-            if (Visible(rr, view.height) && e.type == EventType.Repaint)
+            if (filter == 0)
             {
-                Style.Round(rr, Style.Px(10), new Color(1f, 1f, 1f, 0.05f));
-                Pill(new Rect(rr.x + Style.Px(10), rr.y + Style.Px(7), Style.Px(58), rr.height - Style.Px(14)), "n\u00B0 14", Style.Dim);
-                Style.Text(new Rect(rr.x + Style.Px(78), rr.y, cw - Style.Px(90), rr.height), Lang.T("Rivett n\u00B014 : la voiture du jeu, gratuite aussi", "Rivett no. 14: the game's car, free as well"), 16, TextAnchor.MiddleLeft, Style.White, false);
+                var rr = new Rect(0, cy - scroll, cw, P(30));
+                if (Visible(rr, view.height) && e.type == EventType.Repaint)
+                {
+                    Style.Round(rr, P(8), Kit.Tint);
+                    NumberPill(new Rect(rr.x + P(8), rr.center.y - P(10), P(46), P(20)), 14, Kit.Muted);
+                    Style.Text(new Rect(rr.x + P(62), rr.y, cw - P(70), rr.height), Lang.T("Rivett n\u00B014 : la voiture du jeu, gratuite aussi", "Rivett no. 14: the game's car, free as well"), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+                }
+                cy += rr.height + P(4); n++;
             }
-            cy += rr.height + Style.Px(6); n++;
             IList<Jokkis.Def> all = Jokkis.All();
-            int mine = Jokkis.ChosenNumber(Session.LocalId);
             for (int g = 0; g <= Models.Length; g++)
             {
+                if (filter != 0 && g != filter - 1) continue;
                 bool any = false;
                 foreach (Jokkis.Def d in all)
                 {
@@ -283,36 +333,33 @@ namespace MWCoop
                         any = true;
                         var hr = new Rect(0, cy - scroll, cw, headH);
                         if (Visible(hr, view.height) && e.type == EventType.Repaint)
-                        {
-                            Style.Title(new Rect(hr.x + Style.Px(10), hr.y + Style.Px(6), hr.width - Style.Px(20), hr.height - Style.Px(8)), g < Models.Length ? Models[g].ToUpperInvariant() : Lang.T("AUTRES", "OTHERS"), Style.Accent, TextAnchor.MiddleLeft, 15);
-                            Style.Fill(new Rect(hr.x + Style.Px(10), hr.yMax - Style.Px(2), hr.width - Style.Px(20), Mathf.Max(1f, Style.Px(1))), Style.Line);
-                        }
-                        cy += headH + Style.Px(2); n++;
+                            Kit.Section(new Rect(hr.x + P(6), hr.y, hr.width - P(12), hr.height - P(4)), g < Models.Length ? Models[g].ToUpperInvariant() : Lang.T("AUTRES", "OTHERS"));
+                        cy += headH; n++;
                     }
                     order.Add(d);
                     var r = new Rect(0, cy - scroll, cw, rowH);
-                    cy += rowH + Style.Px(2); n++;
+                    cy += rowH + P(3); n++;
                     bool vis = Visible(r, view.height), selected = d.Number == hi;
                     if (selected) hiY = r.y + scroll;
-                    if (vis && mouseMoved && r.Contains(e.mousePosition)) hi = d.Number;
-                    bool isMine;
-                    string owner = OwnerOf(d.Number, out isMine);
-                    float bw = Style.Px(104);
-                    var br = new Rect(r.xMax - bw - Style.Px(8), r.y + Style.Px(5), bw, rowH - Style.Px(10));
-                    if (vis)
+                    if (vis && moved && r.Contains(e.mousePosition)) hi = d.Number;
+                    if (vis && e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
                     {
-                        if (isMine) { if (Button(br, Lang.T("RENDRE", "GIVE BACK"), false, e)) Act(d.Number); }
-                        else if (owner == null) { if (Button(br, Lang.T("CHOISIR", "CHOOSE"), true, e, mine == 0 && pending == 0)) Act(d.Number); }
-                        if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition)) { hi = d.Number; e.Use(); }
+                        hi = d.Number; click = true;
+                        if (e.clickCount >= 2) Act(d.Number);
+                        e.Use();
                     }
                     if (!vis || e.type != EventType.Repaint) continue;
-                    if (selected) { Style.Round(r, Style.Px(10), new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.20f)); Style.Ring(r, Style.Px(10), new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.60f)); }
-                    Pill(new Rect(r.x + Style.Px(10), r.y + Style.Px(6), Style.Px(58), rowH - Style.Px(12)), "n\u00B0 " + d.Number, isMine ? Style.Accent : Style.White);
-                    float tx = r.x + Style.Px(78);
-                    Style.Text(new Rect(tx, r.y, Style.Px(150), rowH), d.Driver, 17, TextAnchor.MiddleLeft, Style.White);
-                    Style.Text(new Rect(tx + Style.Px(150), r.y, Style.Px(110), rowH), d.Club, 14, TextAnchor.MiddleLeft, Style.Dim, false);
+                    bool isMine;
+                    string owner = OwnerOf(d.Number, out isMine);
+                    float rr2 = P(8);
+                    if (selected) { Style.Round(r, rr2, Kit.A(Kit.Ice, isMine ? 0.16f : 0.12f)); Style.Ring(r, rr2, Kit.A(Kit.Ice, focused ? 0.65f : 0.35f)); }
+                    else if (isMine) { Style.Round(r, rr2, Kit.A(Kit.Ice, 0.08f)); Style.Ring(r, rr2, Kit.A(Kit.Ice, 0.30f)); }
+                    NumberPill(new Rect(r.x + P(8), r.center.y - P(10), P(46), P(20)), d.Number, isMine ? Kit.Ice : Kit.Soft);
+                    float tx = r.x + P(62), stw = P(118);
+                    Style.Text(new Rect(tx, r.y, (r.width - tx - stw) * 0.6f, rowH), d.Driver, 14, TextAnchor.MiddleLeft, Kit.Ink);
+                    Style.Text(new Rect(tx + (r.width - tx - stw) * 0.6f, r.y, (r.width - tx - stw) * 0.4f, rowH), d.Club, 12, TextAnchor.MiddleLeft, Kit.Muted, false);
                     string st = isMine ? Lang.T("la v\u00F4tre", "yours") : owner == null ? Lang.T("libre", "free") : Lang.T("prise par ", "taken by ") + owner;
-                    Style.Text(new Rect(tx + Style.Px(260), r.y, br.x - Style.Px(8) - (tx + Style.Px(260)), rowH), st, 14, TextAnchor.MiddleRight, isMine ? Style.Accent : owner == null ? Style.Good : Style.Dim, false);
+                    Style.Text(new Rect(r.xMax - stw - P(8), r.y, stw, rowH), st, 12, TextAnchor.MiddleRight, isMine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber);
                 }
             }
             GUI.EndGroup();
@@ -325,15 +372,15 @@ namespace MWCoop
                 else if (hiY + rowH > scroll + listH) scroll = hiY + rowH - listH;
                 follow = false;
             }
+            return click;
         }
 
         static bool Visible(Rect r, float viewH) { return r.yMax > 0 && r.y < viewH; }
 
-        static void Pill(Rect r, string s, Color c)
+        static void NumberPill(Rect r, int number, Color c)
         {
-            Style.Round(r, r.height / 2, new Color(1f, 1f, 1f, 0.08f));
-            Style.Ring(r, r.height / 2, new Color(c.r, c.g, c.b, 0.5f));
-            Style.Text(r, s, 13, TextAnchor.MiddleCenter, c);
+            Style.Ring(r, P(6), Kit.A(c, 0.45f));
+            Style.Text(r, "n\u00B0 " + number, 11, TextAnchor.MiddleCenter, c);
         }
 
         // La voiture en 3D : texture du studio dans un cadre arrondi ; glisser pour la tourner.
@@ -343,7 +390,7 @@ namespace MWCoop
             else if (e.type == EventType.MouseDrag && dragging) { pvYaw += e.delta.x * 0.6f; dragAt = now; e.Use(); }
             else if (e.rawType == EventType.MouseUp && dragging) dragging = false;
             if (e.type != EventType.Repaint) return;
-            float rad = Style.Px(16);
+            float rad = P(12);
             Style.Round(r, rad, PreviewBg);
             Texture tex = rtReady && pv != null ? rt : null;
             if (tex != null && !Backdrop.DrawImage(r, rad, tex, Style.Alpha))
@@ -355,52 +402,72 @@ namespace MWCoop
                 GUI.DrawTexture(new Rect(r.x + ins, r.y + ins, r.width - 2 * ins, r.height - 2 * ins), tex, ScaleMode.StretchToFill, false);
                 GUI.color = oc;
             }
-            else if (tex == null) Style.Text(r, pv == null && hi != 0 && pvNumber == hi ? Lang.T("Aper\u00E7u indisponible", "Preview unavailable") : "\u2026", 16, TextAnchor.MiddleCenter, Style.Dim, false);
-            Style.Ring(r, rad, Style.Line);
+            else if (tex == null) Style.Text(r, pv == null && hi != 0 && pvNumber == hi ? Lang.T("Aper\u00E7u indisponible", "Preview unavailable") : "\u2026", 13, TextAnchor.MiddleCenter, Kit.Muted, false);
+            Style.Ring(r, rad, Kit.Sep);
         }
 
-        // Fiche de la voiture en surbrillance : numero, pilote, modele et club, etat, grand bouton.
+        // Fiche de la voiture en surbrillance : numero et pilote, modele et club, etat, bouton ; puis l'equipe.
         static void DrawCard(Rect r, Event e)
         {
             Jokkis.Def d = Jokkis.DefOf(hi);
-            if (d == null || r.height < Style.Px(60)) return;
-            bool isMine;
-            string owner = OwnerOf(d.Number, out isMine);
-            int mine = Jokkis.ChosenNumber(Session.LocalId);
             float cy = r.y;
-            Style.Title(new Rect(r.x, cy, r.width, Style.Px(44)), "N\u00B0 " + d.Number + "  " + d.Driver.ToUpperInvariant(), Style.White, TextAnchor.MiddleLeft, 26);
-            cy += Style.Px(46);
-            Style.Text(new Rect(r.x, cy, r.width, Style.Px(24)), d.Model + "  \u00B7  " + d.Club, 16, TextAnchor.MiddleLeft, Style.Dim, false);
-            cy += Style.Px(28);
-            string st = isMine ? Lang.T("La v\u00F4tre cette semaine", "Yours this week") : owner == null ? Lang.T("Libre", "Free") : Lang.T("Prise par ", "Taken by ") + owner;
-            Style.Text(new Rect(r.x, cy, r.width, Style.Px(24)), st, 16, TextAnchor.MiddleLeft, isMine ? Style.Accent : owner == null ? Style.Good : Style.Warn, false);
-            cy += Style.Px(34);
-            if (cy + Style.Px(44) > r.yMax) return;
-            var br = new Rect(r.x, cy, r.width, Style.Px(44));
-            if (isMine) { if (Button(br, Lang.T("RENDRE LA N\u00B0 ", "GIVE BACK NO. ") + d.Number, false, e)) Act(d.Number); }
-            else if (owner == null) { if (Button(br, Lang.T("CHOISIR LA N\u00B0 ", "CHOOSE NO. ") + d.Number, true, e, mine == 0 && pending == 0)) Act(d.Number); }
-            else Button(br, Lang.T("D\u00C9J\u00C0 PRISE", "ALREADY TAKEN"), false, e, false);
-            if (mine != 0 && !isMine && owner == null) Style.Text(new Rect(r.x, br.yMax + Style.Px(6), r.width, Style.Px(22)), Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + mine + Lang.T("", " first"), 13, TextAnchor.MiddleLeft, Style.Dim, false);
+            if (d != null)
+            {
+                bool isMine;
+                string owner = OwnerOf(d.Number, out isMine);
+                int mine = Jokkis.ChosenNumber(Session.LocalId);
+                Style.Title(new Rect(r.x, cy, r.width, P(26)), "N\u00B0 " + d.Number + "  \u00B7  " + d.Driver, Kit.Ink, TextAnchor.MiddleLeft, 17);
+                cy += P(26);
+                Style.Text(new Rect(r.x, cy, r.width, P(18)), d.Model + "  \u00B7  " + d.Club, 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+                cy += P(24);
+                string st = isMine ? Lang.T("La v\u00F4tre cette semaine", "Yours this week") : owner == null ? Lang.T("Libre", "Free") : Lang.T("Prise par ", "Taken by ") + owner;
+                Kit.Pill(r.x, cy + P(9), st, isMine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber);
+                cy += P(26);
+                var br = new Rect(r.x, cy, r.width, P(34));
+                if (isMine) { if (Kit.Button(br, Lang.T("Rendre la n\u00B0 ", "Return no. ") + d.Number, 0, false)) Act(d.Number); }
+                else if (owner == null) { if (Kit.Button(br, Lang.T("Choisir la n\u00B0 ", "Choose no. ") + d.Number, 1, false, mine == 0 && pending == 0)) Act(d.Number); }
+                else Kit.Button(br, Lang.T("D\u00E9j\u00E0 prise", "Already taken"), 0, false, false);
+                cy += P(40);
+                string line = note != null && Time.realtimeSinceStartup < noteUntil ? note
+                            : mine != 0 && !isMine && owner == null ? Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + mine + Lang.T("", " first") : null;
+                if (line != null) Style.Text(new Rect(r.x, cy, r.width, P(32)), line, 12, TextAnchor.UpperLeft, note != null && noteBad ? Kit.Amber : note != null ? Kit.Green : Kit.Muted, false, true);
+                cy += P(34);
+            }
+            if (!Session.Active || cy + P(50) > r.yMax) return;
+            Style.Fill(new Rect(r.x, cy, r.width, Mathf.Max(1f, P(1))), Kit.Sep);
+            cy += P(6);
+            Kit.Section(new Rect(r.x, cy, r.width, P(18)), Lang.T("L'\u00C9QUIPE", "THE TEAM"));
+            cy += P(22);
+            foreach (PlayerInfo pi in Session.Players.Values)
+            {
+                if (cy + P(22) > r.yMax) break;
+                float av = P(20);
+                Kit.Avatar(new Rect(r.x, cy + P(1), av, av), pi.Id, pi.Name, pi.SteamId);
+                Style.Text(new Rect(r.x + av + P(8), cy, r.width - av - P(8), P(22)), pi.Name, 13, TextAnchor.MiddleLeft, Kit.Soft);
+                int n = Jokkis.ChosenNumber(pi.Id);
+                Style.Text(new Rect(r.x, cy, r.width, P(22)), n != 0 ? "n\u00B0 " + n : Lang.T("pas encore", "not yet"), 12, TextAnchor.MiddleRight, n != 0 ? Kit.Ice : Kit.Faint, false);
+                cy += P(24);
+            }
         }
 
         // ---------------------------------------------------------------- autotest "jokkispanel"
-        // [Test] Autotest=jokkispanel : a 25 s l'hote ouvre le panneau (capture jokkis-panneau a 27 s) ; a 30 s il note le nombre de
-        // lignes, la voiture en surbrillance et l'apercu (objet, texture rendue ? taille, rendus) ; a 35 s il le ferme, bilan a 36 s.
+        // [Test] Autotest=jokkispanel : a 25 s l'hote ouvre l'onglet (capture jokkis-panneau a 27 s) ; a 30 s il note le nombre de
+        // lignes, la voiture en surbrillance et l'apercu (objet, texture rendue ? taille, rendus) ; a 35 s il ferme le menu, bilan a 36 s.
         static int testStep;
         public static void Test(string mode, float t)
         {
             if (mode != "jokkispanel" || !Session.IsHost) return;
-            if (testStep == 0 && t > 25f) { testStep = 1; Open = true; Autotest.CaptureSoon("jokkis-panneau", 2f); Log.Info("autotest jokkispanel : panneau ouvert"); }
+            if (testStep == 0 && t > 25f) { testStep = 1; Open = true; Autotest.CaptureSoon("jokkis-panneau", 2f); Log.Info("autotest jokkispanel : onglet ouvert"); }
             if (testStep == 1 && t > 30f)
             {
                 testStep = 2;
                 Jokkis.Def d = Jokkis.DefOf(hi);
                 Log.Info("autotest jokkispanel : " + rows + " lignes (" + order.Count + " jokkis), surbrillance n " + hi + (d != null ? " (" + d.Driver + ", " + d.Model + ")" : " (?)")
                          + ", apercu " + (pv != null ? pv.GetComponentsInChildren<MeshRenderer>(true).Length + " maillages" : "sans objet")
-                         + ", texture " + (rtReady && rt != null ? "rendue " + rt.width + "x" + rt.height + ", " + renders + " rendus" : "JAMAIS rendue") + ", ouvert " + Open);
+                         + ", texture " + (rtReady && rt != null ? "rendue " + rt.width + "x" + rt.height + ", " + renders + " rendus" : "JAMAIS rendue") + ", affiche " + shown);
             }
-            if (testStep == 2 && t > 35f) { testStep = 3; Open = false; }
-            if (testStep == 3 && t > 36f) { testStep = 4; Log.Info("autotest jokkispanel : panneau ferme, apercu " + (pv == null ? "detruit" : "ENCORE LA") + ", texture " + (rt == null ? "liberee" : "ENCORE LA")); }
+            if (testStep == 2 && t > 35f) { testStep = 3; Menu.Hide(); }
+            if (testStep == 3 && t > 36f) { testStep = 4; Log.Info("autotest jokkispanel : menu ferme, apercu " + (pv == null ? "detruit" : "ENCORE LA") + ", texture " + (rt == null ? "liberee" : "ENCORE LA")); }
         }
     }
 }

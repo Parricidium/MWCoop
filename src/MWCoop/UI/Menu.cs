@@ -17,15 +17,18 @@ namespace MWCoop
         static readonly List<string> skinLabels = new List<string>();
         static readonly List<Behaviour> blocked = new List<Behaviour>();
         static bool focusChat, testDone;
-        static readonly string[] tabsFr = { "JOUEURS", "APPARENCE", "TCHAT", "SYNCHRO", "GRAPHISMES", "HUD" }, tabsEn = { "PLAYERS", "APPEARANCE", "CHAT", "SYNC", "GRAPHICS", "HUD" };
+        // Onglets (refonte du 18/10) : barre a gauche en trois groupes (PARTIE, MOI, AVANCE), icones assets/menu.
+        static readonly string[] tabsFr = { "Joueurs", "Tchat", "Course sur glace", "Apparence", "HUD", "Graphismes", "Synchro" },
+                                 tabsEn = { "Players", "Chat", "Ice race", "Appearance", "HUD", "Graphics", "Sync" };
+        static readonly string[] tabIcons = { "joueurs", "tchat", "course", "apparence", "hud", "graphismes", "synchro" };
+        static readonly int[] tabGroup = { 0, 0, 0, 1, 1, 1, 2 };
+        static readonly string[] groupsFr = { "PARTIE", "MOI", "AVANC\u00C9" }, groupsEn = { "GAME", "ME", "ADVANCED" };
         static string[] tabs { get { return Lang.A(tabsFr, tabsEn); } }
-        const int TabChat = 2;
+        public const int TabPlayers = 0, TabChat = 1, TabRace = 2, TabLook = 3, TabHud = 4, TabGfx = 5, TabSync = 6;
+        public static int Tab { get { return tab; } }
         const string ChatField = "mwcoop-chat2";
-        const string Sep = "  ·  ";
-        static string Controls { get { return Lang.T("Haut/Bas : choisir", "Up/Down: select") + Sep + Lang.T("Gauche/Droite : changer", "Left/Right: change") + Sep + Lang.T("Entr\u00E9e : valider", "Enter: confirm")
-                                                     + Sep + Lang.T("Tab, Q/E : onglet", "Tab, Q/E: tab") + Sep + Lang.T("F10/\u00C9chap : fermer", "F10/Esc: close"); } }
-        static string TabsHint { get { return Lang.T("Gauche/Droite : changer d'onglet", "Left/Right: switch tab") + Sep + Lang.T("Bas ou Entr\u00E9e : entrer dans la liste", "Down or Enter: go to the list"); } }
-
+        const string Sep = "  \u00B7  ";
+        static string TabsHint { get { return Lang.T("Haut/Bas : changer d'onglet", "Up/Down: switch tab") + Sep + Lang.T("Droite ou Entr\u00E9e : entrer dans la liste", "Right or Enter: go to the list"); } }
         // Navigation : ligne choisie (-1 = bandeau des onglets), defilement, touches du passage OnGUI en cours.
         static int sel, items;
         static float scroll, contentH, viewH, cw, cy, selY0, selY1;
@@ -48,15 +51,15 @@ namespace MWCoop
             bool inGame = PlayerSync.InGame;
             int test = Config.GetInt("Test", "TestMenu", 0);   // essais : menu ouvert sur l'onglet test-1
             if (test > 0 && inGame && !testDone && Time.timeSinceLevelLoad > 8f) { testDone = true; Open = true; tab = test - 1; }
-            if (Input.GetKeyDown(KeyCode.F10)) { Open = !Open; ChatOpen = false; WalletPanel.Open = false; CheatPanel.Open = false; MapPanel.Open = false; JokkisPanel.Open = false; }
+            if (Input.GetKeyDown(KeyCode.F10)) { Open = !Open; ChatOpen = false; WalletPanel.Open = false; CheatPanel.Open = false; MapPanel.Open = false; }
             else if (Input.GetKeyDown(KeyCode.Escape) && (Open || ChatOpen)) { Open = ChatOpen = false; }
-            else if (inGame && !Open && !ChatOpen && !WalletPanel.Open && !CheatPanel.Open && !MapPanel.Open && !JokkisPanel.Open && !Kauppa.MontageOpen && Session.Active && Input.GetKeyDown(Keys.Chat))   // (touche reglable dans le lanceur)
+            else if (inGame && !Open && !ChatOpen && !WalletPanel.Open && !CheatPanel.Open && !MapPanel.Open && !Kauppa.MontageOpen && Session.Active && Input.GetKeyDown(Keys.Chat))   // (touche reglable dans le lanceur)
             {
                 ChatOpen = true;
                 focusChat = true;
                 chatText = "";
             }
-            bool panel = Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || JokkisPanel.Open || Kauppa.MontageOpen;
+            bool panel = Open || ChatOpen || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || Kauppa.MontageOpen;
             // Menu pause du jeu ouvert : rien de bloque. Son automate 'Update Cursor' doit voir l'aller-retour du menu (il rend
             // a la camera du joueur l'etiquette MainCamera que le menu donne a sa camera CAM) ; bloque, le menu referme laissait
             // le jeu sans camera principale (OpNoob, 0.75.50 : apres la camera drone, Echap, plus aucun clic -- erreur
@@ -67,6 +70,19 @@ namespace MWCoop
             if (inGame && !inGameMenu) MainCameraGuard();
         }
         static HutongGames.PlayMaker.FsmBool gameMenu;
+
+        // Ouvre le menu sur un onglet, la liste choisie (inscription a la course sur glace : JokkisPanel ; autotests).
+        public static void Show(int t)
+        {
+            WalletPanel.Open = CheatPanel.Open = MapPanel.Open = false;
+            ChatOpen = false;
+            Open = true;
+            if (t != tab) { tab = t; scroll = 0; follow = true; }
+            if (wasOpen) sel = 0;
+        }
+
+        public static void Hide() { Open = false; }
+
         static float nextCamCheck;
         static int camFixes;
         static bool camLost;
@@ -90,7 +106,7 @@ namespace MWCoop
 
         // Curseur du mod (Core le dessine en dernier) : menu ouvert ou choix de reapparition, en partie.
         // [Test] CurseurTest=x,y : dessine a ce point sans lire la souris (captures des instances d'essai).
-        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || JokkisPanel.Open || Kauppa.MontageOpen); } }
+        public static bool CursorWanted { get { return PlayerSync.InGame && (Open || Respawn.Choosing || WalletPanel.Open || CheatPanel.Open || MapPanel.Open || Kauppa.MontageOpen); } }
 
         public static Vector2 CursorPos()
         {
@@ -144,12 +160,13 @@ namespace MWCoop
                 Event real = Event.current;
                 Event.current = testKey;
                 testKey = null;
-                DrawChatLine();
+                Kit.Begin(1f);
+                try { DrawChatLine(); } finally { Kit.End(); }
                 Log.Info("autotest : tchat apres la touche : ligne " + (ChatOpen ? "OUVERTE" : "fermee") + ", texte \"" + chatText + "\"");
                 Event.current = real;
                 return;
             }
-            if (ChatOpen) DrawChatLine();
+            if (ChatOpen) { Kit.Begin(1f); try { DrawChatLine(); } finally { Kit.End(); } }
             if (!Open) { wasOpen = false; return; }
             Event e = Event.current;
             if (!wasOpen)
@@ -171,94 +188,84 @@ namespace MWCoop
                 mouseMoved = (e.mousePosition - lastMouse).sqrMagnitude > 1f;
                 lastMouse = e.mousePosition;
             }
-
-            // Ouverture : fondu et leger glissement (0,16 s).
+            // Ouverture : fondu et leger glissement (0,16 s). Taille choisie des menus (Kit.MenuScale) le temps du dessin.
             float k = Mathf.Clamp01((Time.realtimeSinceStartup - openedAt) / 0.16f);
             k = 1f - (1f - k) * (1f - k);
-            Style.Alpha = k;
-            float w = Mathf.Min(Style.Px(1000), Screen.width - Style.Px(32));
-            float h = Mathf.Min(Style.Px(800), Screen.height - Style.Px(32));
-            float x = Mathf.Round((Screen.width - w) / 2), y = Mathf.Round((Screen.height - h) / 2 + (1f - k) * Style.Px(16));
-            float pad = Style.Px(24), one = Mathf.Max(1f, Style.Px(1));
-            Style.Glass(new Rect(x, y, w, h), Style.Px(22));
+            Kit.Begin(k);
+            try { DrawMenu(e, k); }
+            finally { Kit.End(); }
+            if (testLog && e.type == EventType.Repaint) { testLog = false; Log.Info("autotest : menu onglet " + tabs[tab] + ", " + lines + " lignes"); }
+        }
 
-            // Entete : nom du mod, pastille de session, version.
-            float hh = Style.Px(92);
-            var head = new Rect(x + pad, y + Style.Px(10), w - 2 * pad, hh - Style.Px(14));
-            // Le logo « my Winter Car coop » (a defaut, le nom en texte).
-            float lw = Style.Logo(head);
-            if (lw <= 0f) { Style.Title(head, "MWCoop", Style.White, TextAnchor.MiddleLeft, 36); lw = Style.TitleWidth("MWCoop", 36); }
-            float nx = head.x + lw + Style.Px(14);
-            string badge = !Session.Active ? "SOLO" : Session.IsHost ? Lang.T("H\u00D4TE", "HOST") : Lang.T("INVIT\u00C9", "GUEST");
-            float bw = Style.Width(badge, 14) + Style.Px(22), bh = Style.Px(26);
-            var br = new Rect(nx, head.center.y - bh / 2 + Style.Px(2), bw, bh);
-            Style.Round(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.18f));
-            Style.Ring(br, bh / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.5f));
-            Style.Text(br, badge, 14, TextAnchor.MiddleCenter, Style.Accent);
-            Style.Text(head, Version.Text, 16, TextAnchor.MiddleRight, Style.Dim, false);
-
-            // Onglets : piste arrondie, onglet actif en pilule d'accent.
-            float th = Style.Px(48);
-            var trk = new Rect(x + pad, y + hh, w - 2 * pad, th);
-            Style.Round(trk, th / 2, trackBg);
-            float inset = Style.Px(4), tw = (trk.width - 2 * inset) / tabs.Length;
-            for (int i = 0; i < tabs.Length; i++)
-            {
-                var tr = new Rect(Mathf.Round(trk.x + inset + i * tw), trk.y + inset, Mathf.Round(tw), th - 2 * inset);
-                bool on = i == tab;
-                if (on)
-                {
-                    Style.Round(tr, tr.height / 2, Style.Accent);
-                    if (sel < 0) Style.Ring(new Rect(tr.x - 2 * one, tr.y - 2 * one, tr.width + 4 * one, tr.height + 4 * one), tr.height / 2 + 2 * one, Style.White);
-                }
-                else if (tr.Contains(e.mousePosition)) Style.Round(tr, tr.height / 2, hoverBg);
-                Style.Title(tr, tabs[i], on ? Style.OnAccent : Style.Dim, TextAnchor.MiddleCenter, 19);
-                if (e.type == EventType.MouseDown && e.button == 0 && tr.Contains(e.mousePosition)) { SetTab(i); e.Use(); }
-            }
-            float top = y + hh + th + Style.Px(14);
-
-            // Contenu de l'onglet (defile), puis pied de page.
-            float fh = Style.Px(74);
-            var view = new Rect(x + pad, top, w - 2 * pad, y + h - fh - Style.Px(6) - top);
-            // APPARENCE : apercu 3D de la tenue en surbrillance, a droite de la liste (qui se retrecit d'autant).
-            bool preview = tab == 1 && skins != null && skins.Count > 0 && Studio.LiveEnabled;
-            Rect pvr = default(Rect);
-            if (preview)
-            {
-                float ph = Mathf.Min(view.height - Style.Px(52), Style.Px(512)), pw = Mathf.Round(ph / 2f);
-                pvr = new Rect(view.xMax - pw, view.y, pw, ph);
-                view.width -= pw + Style.Px(16);
-            }
-            else dragging = false;
-            viewH = view.height;
-            if (e.type == EventType.ScrollWheel && view.Contains(e.mousePosition)) { scroll += e.delta.y * Style.Px(14); e.Use(); }
-            scroll = Mathf.Clamp(scroll, 0, Mathf.Max(0, contentH - viewH));
-            cw = view.width - Style.Px(14);
-            idx = 0; lines = 0; cy = 0; selY0 = selY1 = -1;
+        // Le menu (refonte du 18/10, maquette « Menus MWCoop en jeu ») : 880 x 620 en 1080 lignes (fois la taille choisie),
+        // au centre ou a gauche ; barre d'onglets a gauche, titre et sous-titre de l'onglet, liste qui defile, pied (aide de la
+        // ligne choisie, touches).
+        static void DrawMenu(Event e, float k)
+        {
+            float w = Mathf.Min(Style.Px(880), Screen.width - 32f), h = Mathf.Min(Style.Px(620), Screen.height - 32f);
+            float x = Kit.MenuLeft ? Mathf.Min(Style.Px(40), Screen.width - w) : Mathf.Round((Screen.width - w) / 2);
+            float y = Mathf.Round((Screen.height - h) / 2 + (1f - k) * Style.Px(14));
+            float one = Mathf.Max(1f, Style.Px(1));
+            Kit.Frame(new Rect(x, y, w, h));
+            float railW = Style.Px(200);
+            DrawRail(new Rect(x, y, railW, h), e);
+            Style.Fill(new Rect(x + railW, y + Style.Px(14), one, h - Style.Px(28)), Kit.Sep);
+            float pad = Style.Px(22), cx0 = x + railW + pad, cwid = w - railW - 2 * pad;
+            Style.Title(new Rect(cx0, y + Style.Px(16), cwid, Style.Px(30)), tabs[tab], Kit.Ink, TextAnchor.MiddleLeft, 22);
+            Style.Text(new Rect(cx0, y + Style.Px(46), cwid, Style.Px(20)), TabSub(), 13, TextAnchor.MiddleLeft, Kit.Muted, false);
+            float top = y + Style.Px(78), fh = Style.Px(62);
+            var view = new Rect(cx0, top, cwid, y + h - fh - Style.Px(6) - top);
+            idx = 0; lines = 0; cy = 0; selY0 = selY1 = -1; gridFirst = gridLast = -1;
             hint = sel < 0 ? TabsHint : null;
-            GUI.BeginGroup(view);
-            if (tab == 0) Players();
-            else if (tab == 1) Skins();
-            else if (tab == TabChat) ChatTab();
-            else if (tab == 3) SyncTab();
-            else if (tab == 4) GfxTab();
-            else HudTab();
-            GUI.EndGroup();
-            contentH = cy;
-            items = idx;
-            if (contentH > viewH)
+            if (tab == TabRace)
             {
-                var track = new Rect(view.xMax - Style.Px(5), view.y, Mathf.Max(3f, Style.Px(5)), viewH);
-                Style.Round(track, track.width / 2, line);
-                float thumb = Mathf.Max(Style.Px(28), viewH * viewH / contentH);
-                var tb = new Rect(track.x, track.y + (viewH - thumb) * scroll / (contentH - viewH), track.width, thumb);
-                Style.Round(tb, tb.width / 2, Style.Accent);
+                // Course sur glace : JokkisPanel dessine la liste, l'apercu 3D et la fiche ; une seule « ligne » pour la navigation
+                // (Haut sur la premiere voiture : retour aux onglets).
+                idx = 1; lines = 1; dragging = false;
+                if (JokkisPanel.DrawTab(view, e, sel >= 0, mouseMoved) && sel < 0) sel = 0;
+                if (sel >= 0) hint = JokkisPanel.Hint;
+                contentH = viewH = view.height;
+                items = 1;
             }
-            if (preview) SkinPreview(pvr, e);
-
-            // Fin du passage : selection bornee, Gauche/Droite non pris par une ligne = onglet suivant.
+            else
+            {
+                // APPARENCE : apercu 3D de la tenue en surbrillance, a droite de la liste (qui se retrecit d'autant).
+                bool preview = tab == TabLook && skins != null && skins.Count > 0 && Studio.LiveEnabled;
+                Rect pvr = default(Rect);
+                if (preview)
+                {
+                    float pw = Style.Px(190);
+                    pvr = new Rect(view.xMax - pw, view.y, pw, view.height - Style.Px(40));
+                    view.width -= pw + Style.Px(16);
+                }
+                else dragging = false;
+                viewH = view.height;
+                if (e.type == EventType.ScrollWheel && view.Contains(e.mousePosition)) { scroll += e.delta.y * Style.Px(14); e.Use(); }
+                scroll = Mathf.Clamp(scroll, 0, Mathf.Max(0, contentH - viewH));
+                cw = view.width - Style.Px(12);
+                GUI.BeginGroup(view);
+                if (tab == TabPlayers) Players();
+                else if (tab == TabLook) Skins();
+                else if (tab == TabChat) ChatTab();
+                else if (tab == TabSync) SyncTab();
+                else if (tab == TabGfx) GfxTab();
+                else HudTab();
+                GUI.EndGroup();
+                contentH = cy;
+                items = idx;
+                if (contentH > viewH)
+                {
+                    var track = new Rect(view.xMax - Style.Px(4), view.y, Mathf.Max(3f, Style.Px(4)), viewH);
+                    Style.Round(track, track.width / 2, Kit.Sep);
+                    float thumb = Mathf.Max(Style.Px(28), viewH * viewH / contentH);
+                    var tb = new Rect(track.x, track.y + (viewH - thumb) * scroll / (contentH - viewH), track.width, thumb);
+                    Style.Round(tb, tb.width / 2, Kit.A(Kit.Ice, 0.8f));
+                }
+                if (preview) SkinPreview(pvr, e);
+            }
+            // Fin du passage : selection bornee ; Gauche non prise par une ligne : retour a la barre d'onglets.
             if (sel >= items) sel = items - 1;
-            if (kDir != 0 && sel >= 0) SetTab((tab + kDir + tabs.Length) % tabs.Length);
+            if (kDir < 0 && sel >= 0) { sel = -1; follow = true; }
             kDir = 0; kEnter = false;
             if (follow)
             {
@@ -270,48 +277,124 @@ namespace MWCoop
                     follow = false;
                 }
             }
-
+            // Pied : aide de la ligne choisie, puis les touches.
             float fy = y + h - fh;
-            Style.Fill(new Rect(x + pad, fy, w - 2 * pad, one), line);
-            if (hint != null) Style.Text(new Rect(x + pad, fy + Style.Px(10), w - 2 * pad, Style.Px(28)), hint, 18, TextAnchor.MiddleLeft, Style.White);
-            Style.Text(new Rect(x + pad, fy + Style.Px(40), w - 2 * pad, Style.Px(24)), Controls, 15, TextAnchor.MiddleLeft, Style.Dim, false);
-            Style.Alpha = 1f;
-
-            if (testLog && e.type == EventType.Repaint) { testLog = false; Log.Info("autotest : menu onglet " + tabs[tab] + ", " + lines + " lignes"); }
+            Style.Fill(new Rect(cx0, fy, cwid, one), Kit.Sep);
+            if (hint != null) Style.Text(new Rect(cx0, fy + Style.Px(8), cwid, Style.Px(22)), hint, 13, TextAnchor.MiddleLeft, Kit.Ink, false);
+            float hx = cx0, hy = fy + Style.Px(44);
+            if (sel < 0) { hx = Kit.Hint(hx, hy, "\u2191\u2193", Lang.T("onglet", "tab")); hx = Kit.Hint(hx, hy, Lang.T("Entr\u00E9e", "Enter"), Lang.T("entrer", "enter")); }
+            else
+            {
+                hx = Kit.Hint(hx, hy, "\u2191\u2193", Lang.T("choisir", "select"));
+                hx = Kit.Hint(hx, hy, "\u2190\u2192", Lang.T("changer", "change"));
+                hx = Kit.Hint(hx, hy, Lang.T("Entr\u00E9e", "Enter"), Lang.T("valider", "confirm"));
+            }
+            Kit.Hint(hx, hy, "Tab", Lang.T("onglet suivant", "next tab"));
+            string close = Lang.T("fermer", "close");
+            float cwd = Style.Width("F10", 11) + Style.Px(18) + Style.Width(close, 12, false);
+            Kit.Hint(cx0 + cwid - cwd, hy, "F10", close);
         }
 
-        // Touche (KeyDown) : vrai si le menu la prend (l'evenement est alors consomme).
+        static string TabSub()
+        {
+            switch (tab)
+            {
+                case TabPlayers:
+                    if (!Session.Active) return Lang.T("Solo : lancez le jeu depuis MWCoop.exe pour jouer \u00E0 plusieurs", "Solo: start the game from MWCoop.exe to play with friends");
+                    return Lang.Status(Session.Status) + Sep + Session.Players.Count + Lang.T(" joueur(s)", " player(s)");
+                case TabChat: return Lang.T("En jeu, ", "In game, ") + Keys.Label(Keys.Chat) + Lang.T(" \u00E9crit sans ouvrir ce menu", " opens the chat without this menu");
+                case TabRace: return Lang.T("Jokkis de location, gratuites \u00B7 une par joueur \u00B7 rendues apr\u00E8s le week-end", "Rental Jokkis, free \u00B7 one per player \u00B7 given back after the weekend");
+                case TabLook: return Lang.T("Ce que les autres voient \u00B7 chang\u00E9 tout de suite chez eux", "What the others see \u00B7 changed right away for them");
+                case TabHud: return Lang.T("Pour vous seul \u00B7 aussi dans le lanceur (R\u00E9glages \u203A HUD) \u00B7 le HUD change autour du menu", "Just for you \u00B7 also in the launcher (Settings \u203A HUD) \u00B7 the HUD changes around this menu");
+                case TabGfx: return Lang.T("Pour vous seul \u00B7 gard\u00E9 pour les prochaines parties \u00B7 aussi dans le lanceur", "Just for you \u00B7 kept for your next games \u00B7 also in the launcher");
+                default: return Lang.T("\u00C9carts entre l'h\u00F4te et les invit\u00E9s, recensement, resynchronisation", "Differences between host and guests, census, resync");
+            }
+        }
+
+        // Barre d'onglets : logo, role, groupes et onglets (icone, nom), version en bas. Onglet actif cercle quand la barre a
+        // le clavier (sel < 0).
+        static void DrawRail(Rect r, Event e)
+        {
+            float px = r.x + Style.Px(12), pw = r.width - Style.Px(24), yy = r.y + Style.Px(16);
+            float lw = Style.Logo(new Rect(px + Style.Px(4), yy, pw - Style.Px(4), Style.Px(58)));
+            if (lw <= 0f) Style.Title(new Rect(px + Style.Px(8), yy, pw, Style.Px(58)), "MWCoop", Kit.Ink, TextAnchor.MiddleLeft, 24);
+            yy += Style.Px(64);
+            string badge = !Session.Active ? "SOLO" : Session.IsHost ? Lang.T("H\u00D4TE", "HOST") : Lang.T("INVIT\u00C9", "GUEST");
+            Kit.Pill(px + Style.Px(8), yy + Style.Px(9), badge, Kit.Ice);
+            yy += Style.Px(30);
+            int lastG = -1;
+            string[] names = tabs, groups = Lang.A(groupsFr, groupsEn);
+            int mine = PlayerSync.InGame ? Jokkis.ChosenNumber(Session.LocalId) : 0;
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (tabGroup[i] != lastG)
+                {
+                    lastG = tabGroup[i];
+                    Kit.Section(new Rect(px + Style.Px(10), yy, pw, Style.Px(22)), groups[lastG]);
+                    yy += Style.Px(26);
+                }
+                var tr = new Rect(px, yy, pw, Style.Px(36));
+                yy += Style.Px(38);
+                bool on = i == tab, over = tr.Contains(e.mousePosition);
+                if (e.type == EventType.MouseDown && e.button == 0 && over) { SetTab(i); e.Use(); }
+                if (e.type != EventType.Repaint) continue;
+                float rad = Style.Px(11);
+                if (on) { Style.Round(tr, rad, Kit.A(Kit.Ice, 0.16f)); if (sel < 0) Style.Ring(tr, rad, Kit.A(Kit.Ice, 0.75f)); }
+                else if (over) Style.Round(tr, rad, Kit.A(Color.white, 0.06f));
+                Color c = on ? Kit.Ice : Kit.Soft;
+                Kit.Icon(new Rect(tr.x + Style.Px(12), tr.center.y - Style.Px(9), Style.Px(18), Style.Px(18)), tabIcons[i], c);
+                Style.Text(new Rect(tr.x + Style.Px(40), tr.y, tr.width - Style.Px(48), tr.height), names[i], 14, TextAnchor.MiddleLeft, c);
+                string tag = i == TabPlayers && Session.Active ? Session.Players.Count.ToString() : i == TabRace && mine != 0 ? "n\u00B0 " + mine : null;
+                if (tag != null) Style.Text(new Rect(tr.x, tr.y, tr.width - Style.Px(12), tr.height), tag, 11, TextAnchor.MiddleRight, on ? Kit.Ice : Kit.Faint);
+            }
+            Style.Text(new Rect(px + Style.Px(10), r.yMax - Style.Px(34), pw, Style.Px(20)), "version " + Version.Text, 11, TextAnchor.MiddleLeft, Kit.Faint, false);
+        }
+
+        // Touche (KeyDown) : vrai si le menu la prend (l'evenement est alors consomme). Barre d'onglets (sel < 0) : Haut/Bas
+        // changent d'onglet, Droite ou Entree entrent dans la liste. Liste : Gauche non prise par la ligne revient a la barre.
         static bool Key(KeyCode k, bool shift)
         {
+            if (tab == TabRace && sel >= 0 && JokkisPanel.Key(k)) return true;
+            int n = tabs.Length;
             switch (k)
             {
-                case KeyCode.UpArrow: Move(-1); return true;
-                case KeyCode.DownArrow: Move(1); return true;
+                case KeyCode.UpArrow: if (sel < 0) SetTab((tab - 1 + n) % n); else Move(-1); return true;
+                case KeyCode.DownArrow: if (sel < 0) SetTab((tab + 1) % n); else Move(1); return true;
                 case KeyCode.PageUp: Move(-8); return true;
                 case KeyCode.PageDown: Move(8); return true;
                 case KeyCode.LeftArrow:
                 case KeyCode.RightArrow:
                     if (typing) return false;   // curseur du champ de saisie
                     int d = k == KeyCode.LeftArrow ? -1 : 1;
-                    if (sel < 0) SetTab((tab + d + tabs.Length) % tabs.Length); else kDir = d;
+                    if (sel < 0) { if (d > 0) Move(1); } else kDir = d;
                     return true;
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter:
                     if (sel < 0) Move(1); else kEnter = true;
                     return true;
-                case KeyCode.Tab: SetTab((tab + (shift ? -1 : 1) + tabs.Length) % tabs.Length); return true;
+                case KeyCode.Tab: SetTab((tab + (shift ? -1 : 1) + n) % n); return true;
                 case KeyCode.Q:
                 case KeyCode.E:
                     if (typing) return false;
-                    SetTab((tab + (k == KeyCode.Q ? -1 : 1) + tabs.Length) % tabs.Length);
+                    SetTab((tab + (k == KeyCode.Q ? -1 : 1) + n) % n);
                     return true;
             }
             return false;
         }
 
+        // Grille de tuiles (tenues) du dernier passage : Haut/Bas y sautent d'une rangee.
+        static int gridFirst = -1, gridLast = -1, gridCols = 1;
+
         static void Move(int d)
         {
             if (sel < 0) { if (d > 0 && items > 0) sel = 0; }
+            else if (gridFirst >= 0 && sel >= gridFirst && sel <= gridLast && (d == 1 || d == -1))
+            {
+                int nx = sel + d * gridCols;
+                if (nx < gridFirst) sel = gridFirst - 1;
+                else if (nx > gridLast) sel = (sel - gridFirst) / gridCols < (gridLast - gridFirst) / gridCols ? gridLast : Mathf.Min(gridLast + 1, items - 1);
+                else sel = nx;
+            }
             else
             {
                 sel += d;
@@ -340,40 +423,45 @@ namespace MWCoop
         {
             if (cw != heightsW || heights.Count > 400) { heights.Clear(); heightsW = cw; }
             float hh;
-            if (!heights.TryGetValue(s, out hh)) heights[s] = hh = Style.Height(s, size, cw - 2 * Style.Px(12), false);
+            string key = size + "|" + s;
+            if (!heights.TryGetValue(key, out hh)) heights[key] = hh = Style.Height(s, size, cw - 2 * Style.Px(10), false);
             return hh;
         }
 
         static bool Visible(Rect r) { return r.yMax > 0 && r.y < viewH; }
 
-        // Ligne choisissable : 0 rien, -1/+1 valeur changee (choice), 2 validee (Entree ou clic).
-        // Image a gauche du libelle de la prochaine ligne (avatar Steam d'un joueur), remise a zero par Item.
+        // Image a gauche du libelle de la prochaine ligne, remise a zero par Item.
         static Texture nextIcon;
         // Prochaine ligne grisee (action indisponible : libelle en gris), remis a zero par Item.
         static bool nextDim;
+        // Derniere ligne dessinee (interrupteur, pastilles a segments) : rectangle, choisie, clic de souris.
+        static Rect lastRow;
+        static bool lastSelected, lastClick;
 
+        // Ligne choisissable (36 px) : 0 rien, -1/+1 valeur changee (choice), 2 validee (Entree ou clic).
         static int Item(string label, string value, bool choice, string help, bool wrap)
         {
             Texture icon = nextIcon; nextIcon = null;
             bool dim = nextDim; nextDim = false;
             int me = idx++;
             lines++;
-            float ip = Style.Px(12), h = Style.Px(38);
-            if (wrap) h = Mathf.Max(h, WrapHeight(label, 19) + Style.Px(10));
+            float ip = Style.Px(10), h = Style.Px(36);
+            if (wrap) h = Mathf.Max(h, WrapHeight(label, 14) + Style.Px(12));
             var r = new Rect(0, cy - scroll, cw, h);
             cy += h + Style.Px(2);
             bool selected = me == sel;
+            lastRow = r; lastSelected = selected; lastClick = false;
             if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; if (help != null) hint = help; }
 
-            // Fleches "< valeur >" a droite (choix).
-            float aw = Style.Px(22);
+            // « < valeur > » a droite (choix).
+            float aw = Style.Px(24);
             Rect ra = default(Rect), rv = default(Rect), la = default(Rect);
             if (choice && value != null)
             {
-                ra = new Rect(r.xMax - ip - aw, r.y, aw, h);
-                float vw = Mathf.Min(Style.Width(value, 21), r.width * 0.45f);
-                rv = new Rect(ra.x - Style.Px(6) - vw, r.y, vw, h);
-                la = new Rect(rv.x - Style.Px(6) - aw, r.y, aw, h);
+                ra = new Rect(r.xMax - ip - aw, r.y + (h - aw) / 2, aw, aw);
+                float vw = Mathf.Min(Mathf.Max(Style.Width(value, 14), Style.Px(64)), r.width * 0.45f);
+                rv = new Rect(ra.x - Style.Px(4) - vw, r.y, vw, h);
+                la = new Rect(rv.x - Style.Px(4) - aw, ra.y, aw, aw);
             }
 
             int res = 0;
@@ -381,8 +469,8 @@ namespace MWCoop
             bool vis = Visible(r);
             if (vis && e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
             {
-                sel = me;
-                res = choice ? (e.mousePosition.x <= la.xMax ? -1 : 1) : 2;
+                sel = me; lastClick = true;
+                res = choice ? (value != null && e.mousePosition.x <= la.xMax ? -1 : 1) : 2;
                 e.Use();
             }
             else if (vis && mouseMoved && !typing && r.Contains(e.mousePosition)) sel = me;
@@ -390,34 +478,128 @@ namespace MWCoop
             else if (selected && choice && kDir != 0) { res = kDir; kDir = 0; }
 
             if (!vis || e.type != EventType.Repaint) return res;
-            float rr = Style.Px(10);
-            if (selected) { Style.Round(r, rr, selFill); Style.Ring(r, rr, selEdge); }
-            Color tc = selected ? Style.White : dim ? Style.Dim : rowText;
+            float rr = Style.Px(9);
+            if (selected) { Style.Round(r, rr, Kit.A(Kit.Ice, 0.12f)); Style.Ring(r, rr, Kit.A(Kit.Ice, 0.45f)); }
+            Color tc = dim ? Kit.Faint : selected ? Kit.Ink : Kit.Soft;
             if (icon != null && !wrap)
             {
-                float isz = h - Style.Px(10);
+                float isz = h - Style.Px(12);
                 Color gc = GUI.color;
                 GUI.color = new Color(1f, 1f, 1f, Style.Alpha);
                 GUI.DrawTexture(new Rect(r.x + ip, r.y + (h - isz) / 2, isz, isz), icon);
                 GUI.color = gc;
                 r.x += isz + Style.Px(8); r.width -= isz + Style.Px(8);
             }
-            if (wrap) Style.Text(new Rect(r.x + ip, r.y + Style.Px(5), r.width - 2 * ip, h - Style.Px(10)), label, 19, TextAnchor.UpperLeft, tc, false, true);
-            else Style.Text(new Rect(r.x + ip, r.y, (value != null ? r.width * 0.6f : r.width) - 2 * ip, h), label, 20, TextAnchor.MiddleLeft, tc, false);
+            if (wrap) Style.Text(new Rect(r.x + ip, r.y + Style.Px(6), r.width - 2 * ip, h - Style.Px(12)), label, 14, TextAnchor.UpperLeft, tc, false, true);
+            else Style.Text(new Rect(r.x + ip, r.y, (value != null ? r.width * 0.6f : r.width) - 2 * ip, h), label, 14, TextAnchor.MiddleLeft, tc);
             if (value == null) return res;
             if (choice)
             {
-                Color ac = selected ? Style.White : Style.Accent;
-                float cs = Mathf.Min(aw + Style.Px(4), h - Style.Px(10));
-                var lc = new Rect(la.center.x - cs / 2, la.center.y - cs / 2, cs, cs);
-                var rc = new Rect(ra.center.x - cs / 2, ra.center.y - cs / 2, cs, cs);
-                Style.Round(lc, cs / 2, hoverBg);
-                Style.Round(rc, cs / 2, hoverBg);
-                Style.Text(new Rect(la.x, la.y - Style.Px(1), la.width, la.height), "<", 19, TextAnchor.MiddleCenter, ac);
-                Style.Text(rv, value, 20, TextAnchor.MiddleRight, tc);
-                Style.Text(new Rect(ra.x, ra.y - Style.Px(1), ra.width, ra.height), ">", 19, TextAnchor.MiddleCenter, ac);
+                Color ac = selected ? Kit.Ice : Kit.Muted;
+                Style.Round(la, Style.Px(7), Kit.A(Color.white, 0.06f));
+                Style.Round(ra, Style.Px(7), Kit.A(Color.white, 0.06f));
+                Style.Text(la, "<", 13, TextAnchor.MiddleCenter, ac);
+                Style.Text(rv, value, 14, TextAnchor.MiddleCenter, selected ? Kit.Ink : Kit.Soft);
+                Style.Text(ra, ">", 13, TextAnchor.MiddleCenter, ac);
             }
-            else Style.Text(new Rect(r.x + r.width * 0.4f, r.y, r.width * 0.6f - ip, h), value, 18, TextAnchor.MiddleRight, selected ? Style.Accent : Style.Dim);
+            else Style.Text(new Rect(r.x + r.width * 0.4f, r.y, r.width * 0.6f - ip, h), value, 12, TextAnchor.MiddleRight, selected ? Kit.Ice : Kit.Muted);
+            return res;
+        }
+
+        // Oui/Non en interrupteur : vrai s'il faut basculer (clic, Entree, Gauche/Droite).
+        static bool ToggleRow(string label, bool on, string help)
+        {
+            int res = Item(label, null, true, help, false);
+            if (Visible(lastRow) && Event.current.type == EventType.Repaint)
+                Kit.Toggle(new Rect(lastRow.xMax - Style.Px(48), lastRow.center.y - Style.Px(10), Style.Px(38), Style.Px(20)), on, lastSelected);
+            return res != 0;
+        }
+
+        // Peu de valeurs (4 au plus) : pastilles a segments ; renvoie le nouveau rang, ou -1.
+        static int SegRow(string label, string[] opts, int k, string help)
+        {
+            int res = Item(label, null, true, help, false);
+            if (!Visible(lastRow)) return -1;
+            float sw = Kit.SegmentsWidth(opts), sh = Style.Px(28);
+            Rect[] rs = Kit.Segments(new Rect(lastRow.xMax - Style.Px(8) - sw, lastRow.center.y - sh / 2, sw, sh), opts, k, lastSelected);
+            if (res == 0) return -1;
+            if (lastClick)
+            {
+                for (int i = 0; i < rs.Length; i++) if (rs[i].Contains(Event.current.mousePosition)) return i == k ? -1 : i;
+                return -1;
+            }
+            int nk = Mathf.Clamp(k + res, 0, opts.Length - 1);
+            return nk == k ? -1 : nk;
+        }
+
+        // Carte d'action (icone, titre, sous-titre, chevron) : vrai si validee (clic ou Entree) et possible.
+        static bool ActionRow(string icon, string title, string sub, string help, bool enabled)
+        {
+            int me = idx++;
+            lines++;
+            float h = Style.Px(52);
+            var r = new Rect(0, cy - scroll, cw, h);
+            cy += h + Style.Px(6);
+            bool selected = me == sel;
+            if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; if (help != null) hint = help; }
+            Event e = Event.current;
+            bool vis = Visible(r), go = false;
+            if (vis && e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition)) { sel = me; go = true; e.Use(); }
+            else if (vis && mouseMoved && !typing && r.Contains(e.mousePosition)) sel = me;
+            else if (selected && kEnter) { kEnter = false; go = true; }
+            if (vis && e.type == EventType.Repaint)
+            {
+                float rr = Style.Px(12);
+                Style.Round(r, rr, selected ? Kit.A(Kit.Ice, 0.12f) : Kit.Tint);
+                Style.Ring(r, rr, selected ? Kit.A(Kit.Ice, 0.45f) : Kit.Sep);
+                var ib = new Rect(r.x + Style.Px(8), r.y + Style.Px(8), h - Style.Px(16), h - Style.Px(16));
+                Style.Round(ib, Style.Px(9), Kit.A(Kit.Ice, enabled ? 0.14f : 0.06f));
+                Kit.Icon(new Rect(ib.center.x - Style.Px(9), ib.center.y - Style.Px(9), Style.Px(18), Style.Px(18)), icon, enabled ? Kit.Ice : Kit.Faint);
+                float tx = ib.xMax + Style.Px(12);
+                Style.Text(new Rect(tx, r.y + Style.Px(7), r.width - tx - Style.Px(40), Style.Px(20)), title, 14, TextAnchor.MiddleLeft, enabled ? Kit.Ink : Kit.Faint);
+                Style.Text(new Rect(tx, r.y + Style.Px(27), r.width - tx - Style.Px(40), Style.Px(18)), sub, 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+                Kit.Icon(new Rect(r.xMax - Style.Px(26), r.center.y - Style.Px(7), Style.Px(14), Style.Px(14)), "suivant", Kit.Faint);
+            }
+            return go && enabled;
+        }
+
+        // Grille de tuiles (tenues) : une tuile par libelle, celle portee marquee ; renvoie le rang valide, ou -1.
+        static int TileGrid(List<string> labels, int cur, int cols)
+        {
+            float gap = Style.Px(6), tw = Mathf.Floor((cw - (cols - 1) * gap) / cols), th = Style.Px(42);
+            int first = idx, res = -1;
+            Event e = Event.current;
+            for (int j = 0; j < labels.Count; j++)
+            {
+                int me = idx++;
+                var r = new Rect((j % cols) * (tw + gap), cy - scroll + (j / cols) * (th + gap), tw, th);
+                bool selected = me == sel, worn = j == cur, vis = Visible(r);
+                if (selected)
+                {
+                    selY0 = r.y + scroll; selY1 = selY0 + th;
+                    hint = Lang.T("Entr\u00E9e ou clic : porter cette tenue", "Enter or click: wear this outfit");
+                    if (kDir != 0 && me + kDir >= first && me + kDir < first + labels.Count) { sel = me + kDir; kDir = 0; follow = true; }
+                    if (kEnter) { kEnter = false; res = j; }
+                }
+                if (vis && e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition)) { sel = me; res = j; e.Use(); }
+                else if (vis && mouseMoved && !typing && r.Contains(e.mousePosition)) sel = me;
+                if (!vis || e.type != EventType.Repaint) continue;
+                float rr = Style.Px(9);
+                Style.Round(r, rr, worn ? Kit.A(Kit.Ice, 0.12f) : Kit.Tint);
+                Style.Ring(r, rr, selected ? Kit.A(Kit.Ice, 0.75f) : worn ? Kit.A(Kit.Ice, 0.45f) : Kit.Sep);
+                Kit.Icon(new Rect(r.x + Style.Px(9), r.center.y - Style.Px(8), Style.Px(16), Style.Px(16)), "apparence", worn ? Kit.Ice : Kit.Faint);
+                float tx = r.x + Style.Px(32), tw2 = r.width - Style.Px(38);
+                if (worn)
+                {
+                    Style.Text(new Rect(tx, r.y + Style.Px(4), tw2, Style.Px(20)), labels[j], 13, TextAnchor.MiddleLeft, Kit.Ink);
+                    Style.Text(new Rect(tx, r.y + Style.Px(22), tw2, Style.Px(16)), Lang.T("PORT\u00C9E", "WORN"), 10, TextAnchor.MiddleLeft, Kit.Ice);
+                }
+                else Style.Text(new Rect(tx, r.y, tw2, r.height), labels[j], 13, TextAnchor.MiddleLeft, selected ? Kit.Ink : Kit.Soft);
+            }
+            int rows = (labels.Count + cols - 1) / cols;
+            cy += rows * (th + gap);
+            lines += rows;
+            gridFirst = first; gridLast = idx - 1; gridCols = cols;
             return res;
         }
 
@@ -425,23 +607,22 @@ namespace MWCoop
         static void Para(string s, Color c)
         {
             lines++;
-            float ip = Style.Px(12);
-            float h = WrapHeight(s, 19) + Style.Px(10);
-            var r = new Rect(ip, cy - scroll + Style.Px(4), cw - 2 * ip, h);
-            cy += h + Style.Px(4);
-            if (Visible(r) && Event.current.type == EventType.Repaint) Style.Text(r, s, 19, TextAnchor.UpperLeft, c, false, true);
+            float ip = Style.Px(10);
+            float h = WrapHeight(s, 13) + Style.Px(8);
+            var r = new Rect(ip, cy - scroll + Style.Px(2), cw - 2 * ip, h);
+            cy += h + Style.Px(6);
+            if (Visible(r) && Event.current.type == EventType.Repaint) Style.Text(r, s, 13, TextAnchor.UpperLeft, c, false, true);
         }
 
-        // Entete de section : titre bleu souligne.
+        // Entete de section : petites capitales grises.
         static void Header(string s)
         {
             lines++;
-            float h = Style.Px(44);
+            float h = Style.Px(30);
             var r = new Rect(0, cy - scroll, cw, h);
-            cy += h + Style.Px(4);
+            cy += h + Style.Px(2);
             if (!Visible(r) || Event.current.type != EventType.Repaint) return;
-            Style.Title(new Rect(r.x + Style.Px(12), r.y + Style.Px(8), r.width - Style.Px(24), h - Style.Px(12)), s, Style.Accent, TextAnchor.MiddleLeft, 18);
-            Style.Fill(new Rect(r.x + Style.Px(12), r.yMax - Style.Px(3), r.width - Style.Px(24), Mathf.Max(1f, Style.Px(1))), line);
+            Kit.Section(new Rect(r.x + Style.Px(10), r.y, r.width - Style.Px(20), h - Style.Px(6)), s);
         }
 
         // ---- Onglets ----
@@ -470,52 +651,117 @@ namespace MWCoop
 
         static void Players()
         {
-            Para(Session.Active ? Lang.Status(Session.Status) : Lang.T("Solo (lancez le jeu depuis MWCoop.exe pour jouer \u00E0 plusieurs)", "Solo (start the game from MWCoop.exe to play with friends)"), Style.Dim);
             RefreshPlayers();
-            Header(Lang.T("JOUEURS", "PLAYERS"));
-            for (int i = 0; i < prows.Count; i++)
-            {
-                PlayerInfo pi = prows[i].P;
-                bool canGo = !pi.Local && pi.Level == 1 && PlayerSync.InGame;
-                nextIcon = MWCoop.Net.SteamNet.Avatar(pi.SteamId);
-                if (Item(prows[i].Label, prows[i].Value, false, canGo ? Lang.T("Entr\u00E9e ou clic : aller vers ce joueur", "Enter or click: go to this player") : null, false) == 2 && canGo) GoTo(pi);
-            }
-            // Hote : faire venir un joueur a soi, ou l'exclure (demandes de JD, 07/10).
-            if (Session.Active && Session.IsHost && Session.RemoteCount > 0)
-            {
-                Header(Lang.T("H\u00D4TE", "HOST"));
-                for (int i = 0; i < prows.Count; i++)
-                {
-                    PlayerInfo pi = prows[i].P;
-                    if (pi.Local) continue;
-                    bool canBring = pi.Level == 1 && PlayerSync.InGame;
-                    if (Item(Lang.T("Faire venir ", "Bring here: ") + pi.Name, canBring ? null : Lang.T("pas en partie", "not in game"), false,
-                             Lang.T("Entr\u00E9e ou clic : ce joueur arrive pr\u00E8s de vous", "Enter or click: this player comes next to you"), false) == 2 && canBring)
-                    { MWCoop.Net.Admin.Summon(pi.Id); Open = false; }
-                    bool armed = kickArmed == pi.Id && Time.realtimeSinceStartup - kickArmedAt < 4f;
-                    if (Item(Lang.T("Exclure ", "Kick ") + pi.Name, armed ? Lang.T("cliquez encore pour confirmer", "click again to confirm") : null, false,
-                             Lang.T("Deux clics : ce joueur est d\u00E9connect\u00E9 de la partie", "Two clicks: this player is disconnected from the game"), false) == 2)
-                    {
-                        if (armed) { MWCoop.Net.Admin.Kick(pi.Id, "menu F10"); kickArmed = -1; }
-                        else { kickArmed = pi.Id; kickArmedAt = Time.realtimeSinceStartup; }
-                    }
-                }
-            }
+            for (int i = 0; i < prows.Count; i++) PlayerCard(prows[i].P);
             // Partie par Steam : invitation d'amis (overlay Steam) depuis le menu.
-            if (Session.Active && Session.Steam && Item(Lang.T("Inviter des amis Steam", "Invite Steam friends"), MWCoop.Net.SteamNet.Lobby != 0 ? "" : Lang.T("salon en cours...", "lobby starting..."), false,
-                     Lang.T("Ouvre la fen\u00EAtre d'invitation de Steam (aussi : Maj+Tab). Ils lancent MWCoop.exe > REJOINDRE (Steam) et acceptent.",
-                            "Opens Steam's invite window (also: Shift+Tab). They start MWCoop.exe > JOIN (Steam) and accept."), false) == 2)
-                MWCoop.Net.SteamNet.InviteDialog();
-            // Course sur glace (16/10) : le panneau des Jokkis de location (JokkisPanel, apercu 3D), en partie.
+            if (Session.Active && Session.Steam)
+            {
+                bool ready = MWCoop.Net.SteamNet.Lobby != 0;
+                if (ActionRow("inviter", Lang.T("Inviter des amis Steam", "Invite Steam friends"),
+                              ready ? Lang.T("Fen\u00EAtre d'invitation de Steam (aussi : Maj+Tab)", "Steam's invite window (also: Shift+Tab)") : Lang.T("salon en cours...", "lobby starting..."),
+                              Lang.T("Ouvre la fen\u00EAtre d'invitation de Steam (aussi : Maj+Tab). Ils lancent MWCoop.exe > REJOINDRE (Steam) et acceptent.",
+                                     "Opens Steam's invite window (also: Shift+Tab). They start MWCoop.exe > JOIN (Steam) and accept."), ready))
+                    MWCoop.Net.SteamNet.InviteDialog();
+            }
+            // Course sur glace : son onglet.
             if (PlayerSync.InGame)
             {
-                Header(Lang.T("COURSE SUR GLACE", "ICE RACE"));
                 int mine = Jokkis.ChosenNumber(Session.LocalId);
                 Jokkis.Def md = mine != 0 ? Jokkis.DefOf(mine) : null;
-                if (Item(Lang.T("Course sur glace : choisir une voiture", "Ice race: pick a car"),
-                         md != null ? Lang.T("la v\u00F4tre : n\u00B0 ", "yours: no. ") + mine + " " + md.Driver : Lang.T("Jokkis de location, gratuite", "rental Jokkis, free"), false,
-                         Lang.T("Entr\u00E9e ou clic : les 16 Jokkis du jeu, une par joueur, avec l'aper\u00E7u 3D", "Enter or click: the game's 16 Jokkis, one per player, with a 3D preview"), false) == 2)
-                { Open = false; JokkisPanel.Open = true; }
+                if (ActionRow("course", Lang.T("Course sur glace", "Ice race"),
+                              md != null ? Lang.T("Votre voiture : n\u00B0 ", "Your car: no. ") + mine + " " + md.Driver : Lang.T("Jokkis de location, gratuites", "Rental Jokkis, free"),
+                              Lang.T("Entr\u00E9e ou clic : l'onglet Course sur glace", "Enter or click: the Ice race tab"), true))
+                    SetTab(TabRace);
+            }
+            ResyncCard();
+        }
+
+        // Carte d'un joueur : avatar, nom et role, ou il est, ping ; boutons Aller (a lui), Faire venir et Exclure (hote).
+        // Clavier : Gauche/Droite choisissent le bouton, Entree le declenche.
+        static int btnSel;
+        static readonly Rect[] pbR = new Rect[3];
+        static readonly int[] pbA = new int[3];
+
+        static void PlayerCard(PlayerInfo pi)
+        {
+            int me = idx++;
+            lines++;
+            float h = Style.Px(56);
+            var r = new Rect(0, cy - scroll, cw, h);
+            cy += h + Style.Px(6);
+            bool selected = me == sel, inGame = pi.Level == 1;
+            bool canGo = !pi.Local && inGame && PlayerSync.InGame;
+            bool host = Session.Active && Session.IsHost && !pi.Local;
+            bool armed = kickArmed == pi.Id && Time.realtimeSinceStartup - kickArmedAt < 4f;
+            string lGo = Lang.T("Aller", "Go to"), lBring = Lang.T("Faire venir", "Bring here"), lKick = Lang.T("Confirmer ?", "Confirm?");
+            // boutons de droite a gauche, puis dans l'ordre du clavier (gauche a droite)
+            int nb = 0;
+            float bh = Style.Px(30), by = r.center.y - bh / 2, bx = r.xMax - Style.Px(10);
+            if (host) { float bw = armed ? Style.Width(lKick, 13) + Style.Px(22) : bh; bx -= bw; pbR[nb] = new Rect(bx, by, bw, bh); pbA[nb++] = 2; bx -= Style.Px(6); }
+            if (host) { float bw = Style.Width(lBring, 13) + Style.Px(42); bx -= bw; pbR[nb] = new Rect(bx, by, bw, bh); pbA[nb++] = 1; bx -= Style.Px(6); }
+            if (!pi.Local) { float bw = Style.Width(lGo, 13) + Style.Px(42); bx -= bw; pbR[nb] = new Rect(bx, by, bw, bh); pbA[nb++] = 0; bx -= Style.Px(6); }
+            System.Array.Reverse(pbR, 0, nb); System.Array.Reverse(pbA, 0, nb);
+            if (selected)
+            {
+                selY0 = r.y + scroll; selY1 = selY0 + h;
+                btnSel = Mathf.Clamp(btnSel, 0, Mathf.Max(0, nb - 1));
+                if (kDir != 0 && btnSel + kDir >= 0 && btnSel + kDir < nb) { btnSel += kDir; kDir = 0; }
+                if (nb > 0)
+                {
+                    int a = pbA[btnSel];
+                    hint = a == 0 ? Lang.T("Entr\u00E9e : aller vers ce joueur", "Enter: go to this player")
+                         : a == 1 ? Lang.T("Entr\u00E9e : ce joueur arrive pr\u00E8s de vous", "Enter: this player comes next to you")
+                         : armed ? Lang.T("Entr\u00E9e encore : exclure ce joueur", "Enter again: kick this player")
+                                 : Lang.T("Deux fois : ce joueur est d\u00E9connect\u00E9 de la partie", "Twice: this player is disconnected from the game");
+                }
+            }
+            Event e = Event.current;
+            bool vis = Visible(r);
+            int act = -1;
+            if (vis && e.type == EventType.Repaint)
+            {
+                float rr = Style.Px(12);
+                Style.Round(r, rr, selected ? Kit.A(Kit.Ice, 0.10f) : Kit.Tint);
+                Style.Ring(r, rr, selected ? Kit.A(Kit.Ice, 0.40f) : Kit.Sep);
+                float av = Style.Px(36), fade = inGame ? 1f : 0.55f;
+                Kit.Avatar(new Rect(r.x + Style.Px(10), r.center.y - av / 2, av, av), pi.Id, pi.Name, pi.SteamId, fade);
+                float tx = r.x + Style.Px(56), nw = Style.Width(pi.Name, 15);
+                Style.Text(new Rect(tx, r.y + Style.Px(8), nw + Style.Px(4), Style.Px(22)), pi.Name, 15, TextAnchor.MiddleLeft, inGame ? Kit.Ink : Kit.Faint);
+                string tag = pi.Local ? (pi.Id == 0 ? Lang.T("vous \u00B7 h\u00F4te", "you \u00B7 host") : Lang.T("vous", "you")) : pi.Id == 0 ? Lang.T("h\u00F4te", "host") : null;
+                if (tag != null) Kit.Pill(tx + nw + Style.Px(8), r.y + Style.Px(19), tag, Kit.Ice);
+                string where = !inGame ? Lang.T("Au menu du jeu", "At the game's menu") : pi.Local ? Lang.T("En partie", "In game")
+                             : NewHud.Where(pi.Id, Game.PlayerGo != null ? Game.PlayerGo.transform : null);
+                if (where.Length == 0) where = Lang.T("En partie", "In game");
+                Style.Text(new Rect(tx, r.y + Style.Px(30), bx - tx, Style.Px(18)), where, 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+                if (!pi.Local && pi.Peer != null)
+                {
+                    int ms = Mathf.RoundToInt(pi.Peer.Rtt * 1000);
+                    Style.Text(new Rect(tx, r.y, bx - tx, h), ms + " ms", 12, TextAnchor.MiddleRight, ms < 90 ? Kit.Green : ms < 180 ? Kit.Amber : Kit.Red);
+                }
+            }
+            if (vis)
+                for (int i = 0; i < nb; i++)
+                {
+                    int a = pbA[i];
+                    bool en = a == 0 ? canGo : a == 1 ? inGame && PlayerSync.InGame : true;
+                    string lab = a == 0 ? lGo : a == 1 ? lBring : armed ? lKick : "";
+                    string ic = a == 0 ? "aller" : a == 1 ? "venir" : armed ? null : "croix";
+                    if (Kit.Button(pbR[i], lab, a == 2 ? 2 : 0, selected && btnSel == i, en, ic)) { sel = me; btnSel = i; act = a; }
+                }
+            if (vis && e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition)) { sel = me; e.Use(); }
+            else if (vis && mouseMoved && !typing && r.Contains(e.mousePosition)) sel = me;
+            if (selected && kEnter && nb > 0)
+            {
+                kEnter = false;
+                int a = pbA[btnSel];
+                if (a == 0 ? canGo : a == 1 ? inGame && PlayerSync.InGame : true) act = a;
+            }
+            if (act == 0) GoTo(pi);
+            else if (act == 1) { MWCoop.Net.Admin.Summon(pi.Id); Open = false; }
+            else if (act == 2)
+            {
+                if (armed) { MWCoop.Net.Admin.Kick(pi.Id, "menu F10"); kickArmed = -1; }
+                else { kickArmed = pi.Id; kickArmedAt = Time.realtimeSinceStartup; }
             }
         }
 
@@ -559,11 +805,10 @@ namespace MWCoop
         {
             LoadSkins();
             if (skins == null || skins.Count == 0) { Para(Lang.T("Les apparences se choisissent en partie.", "Outfits are picked in game."), Style.Dim); return; }
-            Para(Lang.T("Votre apparence vue par les autres joueurs.", "Your outfit, as the other players see it."), Style.Dim);
             string me = Looks.Parse(Session.Me.Skin).Shirt;   // (le haut ; le reste : lanceur, volet TENUE)
             int cur = skins.IndexOf(me);
             if (me != lastSkin) { lastSkin = me; lastSkinLabel = SkinLabel(me); }
-            int d = Item(Lang.T("Apparence", "Outfit"), cur >= 0 ? skinLabels[cur] : lastSkinLabel, true, Lang.T("Gauche/Droite : changer d'apparence", "Left/Right: change outfit"), false);
+            int d = Item(Lang.T("Tenue", "Outfit"), cur >= 0 ? skinLabels[cur] : lastSkinLabel, true, Lang.T("Gauche/Droite : changer d'apparence", "Left/Right: change outfit"), false);
             if (d == 1 || d == -1) SetSkin(skins[((cur < 0 ? 0 : cur) + d + skins.Count) % skins.Count]);
             // le reste de l'apparence (Looks) : corpulence, pantalon, visage, chapeau, lunettes, cheveux
             Looks.Look look = Looks.Parse(Session.Me.Skin);
@@ -576,9 +821,9 @@ namespace MWCoop
                 int i = Mathf.Max(0, ch.IndexOf(CustomFace.IsCustom(v) ? "perso" : v));
                 SetPart(f, ch[(i + dd + ch.Count) % ch.Count]);
             }
-            Header(Lang.T("TENUES", "OUTFITS"));
-            for (int j = 0; j < skins.Count; j++)
-                if (Item(skinLabels[j], j == cur ? Lang.T("PORT\u00C9E", "WORN") : null, false, Lang.T("Entr\u00E9e ou clic : porter cette tenue", "Enter or click: wear this outfit"), false) == 2) SetSkin(skins[j]);
+            Header(Lang.T("TENUES", "OUTFITS") + Sep + skins.Count);
+            int jw = TileGrid(skinLabels, cur, 3);
+            if (jw >= 0) SetSkin(skins[jw]);
         }
 
         static bool dragging;
@@ -598,7 +843,7 @@ namespace MWCoop
             else if (e.type == EventType.MouseDrag && dragging) { Studio.Drag(e.delta.x); e.Use(); }
             else if (e.rawType == EventType.MouseUp && dragging) { dragging = false; e.Use(); }
             if (e.type != EventType.Repaint) return;
-            float rad = Style.Px(16);
+            float rad = Style.Px(14);
             Style.Round(r, rad, previewBg);
             if (tex != null && !Backdrop.DrawImage(r, rad, tex, Style.Alpha))
             {
@@ -609,18 +854,17 @@ namespace MWCoop
                 GUI.DrawTexture(new Rect(r.x + ins, r.y + ins, r.width - 2 * ins, r.height - 2 * ins), tex, ScaleMode.StretchToFill, false);
                 GUI.color = oc;
             }
-            Style.Ring(r, rad, line);
+            Style.Ring(r, rad, Kit.Sep);
             if (s == me && s.Length > 0)
             {
-                float pw = Style.Width(Lang.T("PORT\u00C9E", "WORN"), 13) + Style.Px(18), ph = Style.Px(24);
-                var pr = new Rect(r.xMax - pw - Style.Px(10), r.y + Style.Px(10), pw, ph);
-                Style.Round(pr, ph / 2, Style.Accent);
-                Style.Text(pr, Lang.T("PORT\u00C9E", "WORN"), 13, TextAnchor.MiddleCenter, Style.OnAccent);
+                string worn = Lang.T("PORT\u00C9E", "WORN");
+                float pw = Style.Width(worn, 11) + Style.Px(16), ph = Style.Px(20);
+                var pr = new Rect(r.xMax - pw - Style.Px(8), r.y + Style.Px(8), pw, ph);
+                Style.Round(pr, ph / 2, Kit.Ice);
+                Style.Text(pr, worn, 11, TextAnchor.MiddleCenter, Kit.OnIce);
             }
-            var lr = new Rect(r.x, r.yMax + Style.Px(8), r.width, Style.Px(40));
-            Style.Round(lr, lr.height / 2, new Color(1f, 1f, 1f, 0.08f));
-            Style.Ring(lr, lr.height / 2, line);
-            Style.Title(lr, pvLabel, Style.White, TextAnchor.MiddleCenter, 19);
+            Style.Text(new Rect(r.x + Style.Px(10), r.yMax - Style.Px(24), r.width - Style.Px(20), Style.Px(20)), Lang.T("glisser pour tourner", "drag to turn"), 11, TextAnchor.MiddleLeft, Kit.Faint, false);
+            Style.Title(new Rect(r.x, r.yMax + Style.Px(6), r.width, Style.Px(30)), pvLabel, Kit.Ink, TextAnchor.MiddleCenter, 15);
         }
 
         // Autotest "tenues" (Studio.Test) : k >= 0 ouvre le menu sur APPARENCE avec une tenue en surbrillance (rendue),
@@ -631,11 +875,11 @@ namespace MWCoop
         {
             if (k < 0) { Open = false; return null; }
             Open = true;
-            SetTab(1);
+            SetTab(TabLook);
             LoadSkins();
             if (skins == null || skins.Count == 0) { testSel = 0; return "(aucune tenue)"; }
             int j = k * Mathf.Max(1, skins.Count / 5) % skins.Count;
-            testSel = 1 + j;
+            testSel = 1 + LookRows + j;   // (lignes : la tenue, les parties, puis les tuiles)
             return skins[j] + " (" + skinLabels[j] + ")";
         }
 
@@ -699,6 +943,38 @@ namespace MWCoop
         // « Resynchroniser le monde » (16/10) : l'invite redemande tout l'etat a l'hote, comme a son arrivee (seule la
         // sauvegarde de l'hote compte : ce qui a derive sans bruit chez l'invite se recale) ; l'hote le renvoie a chaque invite
         // en jeu. Une fois toutes les 30 s : en attendant, ligne grisee et le delai a droite.
+        static void ResyncCard()
+        {
+            if (!Session.Active) return;
+            bool can; float wait; string val, help;
+            ResyncInfo(out can, out wait, out val, out help);
+            if (ActionRow("synchro", Lang.T("Resynchroniser le monde", "Resync the world"), val ?? help, help, can)) DoResync(can, wait);
+        }
+
+        static void ResyncInfo(out bool can, out float wait, out string val, out string help)
+        {
+            wait = PlayerSync.ResyncWait;
+            bool guestsIn = false;
+            foreach (PlayerInfo pi in Session.Players.Values) if (!pi.Local && pi.Level == 1) guestsIn = true;
+            can = wait <= 0f && PlayerSync.InGame && (Session.IsHost ? guestsIn : Session.HostConnected);
+            val = wait > 0f ? Lang.T("d\u00E9j\u00E0 demand\u00E9, attends ", "already requested, wait ") + Mathf.CeilToInt(wait) + " s"
+                : Session.IsHost && !guestsIn ? Lang.T("aucun invit\u00E9 en partie", "no guest in game")
+                : !Session.IsHost && !Session.HostConnected ? Lang.T("h\u00F4te injoignable", "host unreachable") : null;
+            help = Session.IsHost ? Lang.T("Renvoie tout l'\u00E9tat du monde \u00E0 chaque invit\u00E9, comme \u00E0 son arriv\u00E9e", "Resends the whole world state to every guest, as on their arrival")
+                                  : Lang.T("Redemande tout l'\u00E9tat \u00E0 l'h\u00F4te, comme \u00E0 l'arriv\u00E9e", "Asks the host for the whole world state, as on arrival");
+        }
+
+        static void DoResync(bool can, float wait)
+        {
+            if (can && PlayerSync.RequestResync())
+            {
+                Hud.Toast(Session.IsHost ? Lang.T("\u00C9tat complet renvoy\u00E9 aux invit\u00E9s", "Whole world state resent to the guests")
+                                         : Lang.T("Resynchronisation demand\u00E9e \u00E0 l'h\u00F4te", "Resync requested from the host"));
+                Open = false;
+            }
+            else if (wait > 0f) Hud.Toast(Lang.T("D\u00E9j\u00E0 demand\u00E9, attends ", "Already requested, wait ") + Mathf.CeilToInt(wait) + " s");
+        }
+
         static void ResyncRow()
         {
             if (!Session.Active) return;
@@ -725,12 +1001,15 @@ namespace MWCoop
         // Graphismes (comme la page du lanceur) : prereglage, puis chaque option ; applique tout de suite, garde dans mwcoop.ini.
         static void GfxTab()
         {
-            Para(Lang.T("Pour vous seul : les autres joueurs ne voient aucune diff\u00E9rence. Gard\u00E9 pour les prochaines parties (aussi dans le lanceur).",
-                        "Just for you: the other players see no difference. Kept for your next games (also in the launcher)."), Style.Dim);
             int on = Gfx.PresetOn();
-            int d = Item(Lang.T("Pr\u00E9r\u00E9glage", "Preset"), on >= 0 ? Lang.T(Gfx.Presets[on].Fr, Gfx.Presets[on].En) : Lang.T("Personnalis\u00E9", "Custom"), true,
-                         Lang.T("Gauche/Droite : Performance, \u00C9quilibr\u00E9, Beau, Ultra", "Left/Right: Performance, Balanced, Pretty, Ultra"), false);
-            if (d == -1 || d == 1) Gfx.ApplyPreset(on < 0 ? (d > 0 ? 0 : Gfx.Presets.Length - 1) : Mathf.Clamp(on + d, 0, Gfx.Presets.Length - 1));
+            string[] pl = new string[Gfx.Presets.Length + (on < 0 ? 1 : 0)];
+            for (int i = 0; i < Gfx.Presets.Length; i++) pl[i] = Lang.T(Gfx.Presets[i].Fr, Gfx.Presets[i].En);
+            if (on < 0) pl[pl.Length - 1] = Lang.T("Perso", "Custom");
+            int pk = SegRow(Lang.T("Pr\u00E9r\u00E9glage", "Preset"), pl, on >= 0 ? on : pl.Length - 1, Lang.T("Tout d'un coup ; chaque ligne reste modifiable", "Everything at once; every line stays editable"));
+            if (pk >= 0 && pk < Gfx.Presets.Length) Gfx.ApplyPreset(pk);
+            Header(Lang.T("MENU MWCOOP", "MWCOOP MENU"));
+            HudRow(HudSettings.Find("Menu"));
+            HudRow(HudSettings.Find("MenuPosition"));
             string[] heads = { Lang.T("IMAGE", "IMAGE"), Lang.T("OMBRES", "SHADOWS"), Lang.T("DISTANCE ET D\u00C9TAILS", "DISTANCE AND DETAIL"), Lang.T("JEU ET CONFORT", "GAME AND COMFORT"), Lang.T("LUMI\u00C8RES", "LIGHTS"), Lang.T("\u00C9CRAN", "SCREEN"),
                                Lang.T("RAY TRACING (EN D\u00C9VELOPPEMENT)", "RAY TRACING (IN DEVELOPMENT)") };
             foreach (int g in new[] { 5, 0, 1, 6, 4, 2, 3 })
@@ -740,16 +1019,15 @@ namespace MWCoop
                 {
                     if (r.Group != g) continue;
                     int v = Gfx.Value(r);
-                    string val;
-                    int k = 0;
-                    if (r.Vals == null) val = v == 1 ? Lang.T("Oui", "On") : Lang.T("Non", "Off");
-                    else { for (int i = 0; i < r.Vals.Length; i++) if (r.Vals[i] == v) k = i; val = Lang.T(r.Lf[k], r.Le[k]); }
                     string hint = r.Heavy ? Lang.T("Lourd pour les images par seconde", "Heavy on the frame rate") : null;
                     if (r.Key == "RayTracing" && !RayTracing.Direct) hint = Lang.T("Actif au prochain lancement par le lanceur", "Active at the next launch from the launcher");
-                    int res = Item(Lang.T(r.Fr, r.En), val, true, hint, false);
+                    if (r.Vals == null) { if (ToggleRow(Lang.T(r.Fr, r.En), v == 1, hint)) Gfx.Set(r.Key, v == 1 ? 0 : 1); continue; }
+                    int k = 0;
+                    for (int i = 0; i < r.Vals.Length; i++) if (r.Vals[i] == v) k = i;
+                    int res = Item(Lang.T(r.Fr, r.En), Lang.T(r.Lf[k], r.Le[k]), true, hint, false);
                     if (res != -1 && res != 1) continue;
-                    if (r.Vals == null) Gfx.Set(r.Key, v == 1 ? 0 : 1);
-                    else { int nk = Mathf.Clamp(k + res, 0, r.Vals.Length - 1); if (nk != k) Gfx.Set(r.Key, r.Vals[nk]); }
+                    int nk = Mathf.Clamp(k + res, 0, r.Vals.Length - 1);
+                    if (nk != k) Gfx.Set(r.Key, r.Vals[nk]);
                 }
             }
         }
@@ -758,8 +1036,6 @@ namespace MWCoop
         // change aussitot autour du menu (apercu en direct). Memes cles que le lanceur (Reglages > HUD).
         static void HudTab()
         {
-            Para(Lang.T("Pour vous seul, gard\u00E9 pour les prochaines parties (aussi dans le lanceur : R\u00E9glages \u203A HUD). Le HUD change tout de suite, autour de ce menu.",
-                        "Just for you, kept for your next games (also in the launcher: Settings \u203A HUD). The HUD changes right away, around this menu."), Style.Dim);
             int style = HudSettings.StyleNow;
             HudRow(HudSettings.Find("Style"));
             Header(Lang.T("PERSONNALISER", "CUSTOMISE"));
@@ -783,20 +1059,26 @@ namespace MWCoop
         {
             if (o == null) return;
             int v = HudSettings.Get(o.Key), k = 0;
-            string val;
-            if (o.Vals == null) val = v != 0 ? Lang.T("Oui", "On") : Lang.T("Non", "Off");
-            else { for (int i = 0; i < o.Vals.Length; i++) if (o.Vals[i] == v) k = i; val = Lang.T(o.Lf[k], o.Le[k]); }
-            int res = Item(Lang.T(o.Fr, o.En), val, true, o.HelpFr != null ? Lang.T(o.HelpFr, o.HelpEn) : null, false);
+            string label = Lang.T(o.Fr, o.En), help = o.HelpFr != null ? Lang.T(o.HelpFr, o.HelpEn) : null;
+            if (o.Vals == null) { if (ToggleRow(label, v != 0, help)) HudSettings.Set(o.Key, v != 0 ? 0 : 1); return; }
+            for (int i = 0; i < o.Vals.Length; i++) if (o.Vals[i] == v) k = i;
+            if (o.Vals.Length <= 4)
+            {
+                string[] labs = new string[o.Vals.Length];
+                for (int i = 0; i < labs.Length; i++) labs[i] = Lang.T(o.Lf[i], o.Le[i]);
+                int nk = SegRow(label, labs, k, help);
+                if (nk >= 0) HudSettings.Set(o.Key, o.Vals[nk]);
+                return;
+            }
+            int res = Item(label, Lang.T(o.Lf[k], o.Le[k]), true, help, false);
             if (res != -1 && res != 1) return;
-            if (o.Vals == null) { HudSettings.Set(o.Key, v != 0 ? 0 : 1); return; }
-            int nk = o.Key == "Style" ? (k + res + o.Vals.Length) % o.Vals.Length : Mathf.Clamp(k + res, 0, o.Vals.Length - 1);   // (le style tourne en boucle)
-            if (nk != k) HudSettings.Set(o.Key, o.Vals[nk]);
+            int nk2 = o.Key == "Style" ? (k + res + o.Vals.Length) % o.Vals.Length : Mathf.Clamp(k + res, 0, o.Vals.Length - 1);   // (le style tourne en boucle)
+            if (nk2 != k) HudSettings.Set(o.Key, o.Vals[nk2]);
         }
 
         static void ChatTab()
         {
-            Para(Chat.History.Count == 0 ? Lang.T("Aucun message. En jeu, T \u00E9crit sans ouvrir ce menu.", "No messages yet. In game, T opens the chat without this menu.")
-                                         : Lang.T("En jeu, T \u00E9crit sans ouvrir ce menu.", "In game, T opens the chat without this menu."), Style.Dim);
+            if (Chat.History.Count == 0) Para(Lang.T("Aucun message pour l'instant.", "No messages yet."), Kit.Muted);
             foreach (string l in Chat.History) Item(l, null, false, null, true);
             ChatInput();
         }
@@ -806,12 +1088,12 @@ namespace MWCoop
         {
             int me = idx++;
             lines++;
-            float h = Style.Px(44);
-            var r = new Rect(0, cy - scroll + Style.Px(4), cw, h);
-            cy += h + Style.Px(6);
+            float h = Style.Px(40);
+            var r = new Rect(0, cy - scroll + Style.Px(6), cw, h);
+            cy += h + Style.Px(8);
             bool selected = me == sel;
             if (selected) { selY0 = r.y + scroll; selY1 = selY0 + h; hint = Lang.T("Entr\u00E9e : envoyer le message", "Enter: send the message") + Sep + Lang.T("Haut : relire l'historique", "Up: read the history"); }
-            float bw = Style.Px(150);
+            float bw = Style.Px(116);
             var rb = new Rect(r.xMax - bw, r.y, bw, h);
             var rf = new Rect(r.x, r.y, r.width - bw - Style.Px(6), h);
             Event e = Event.current;
@@ -819,18 +1101,18 @@ namespace MWCoop
             if (Visible(r) && e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
             {
                 sel = me;
-                if (rb.Contains(e.mousePosition)) { send = true; e.Use(); }   // (clic dans le champ : laisse au champ)
+                // (clic sur Envoyer : Kit.Button ; clic dans le champ : laisse au champ)
             }
             if (selected && kEnter) { kEnter = false; send = true; }
             if (e.type == EventType.Repaint)
             {
                 Style.FieldBack(rf, selected);
-                Style.Button(rb, Lang.T("ENVOYER", "SEND"), true, 18, selected);
             }
             // Le caractere de retour a la ligne qui suit Entree n'entre pas dans le champ (Key a deja pris Entree).
             if (e.type == EventType.KeyDown && IsNewline(e.character)) e.Use();
             GUI.SetNextControlName(ChatField);
-            chatText = Clean(GUI.TextField(rf, chatText, 200, Style.Field(21)));
+            if (Kit.Button(rb, Lang.T("Envoyer", "Send"), 1, selected)) send = true;
+            chatText = Clean(GUI.TextField(rf, chatText, 200, Style.Field(15)));
             fieldFocused = GUI.GetNameOfFocusedControl() == ChatField;
             if (selected && !fieldFocused) GUI.FocusControl(ChatField);
             else if (!selected && fieldFocused) { GUIUtility.keyboardControl = 0; fieldFocused = false; }
@@ -840,12 +1122,14 @@ namespace MWCoop
         // T : ligne de tchat seule, en bas a gauche.
         static void DrawChatLine()
         {
-            float h = Style.Px(42);
-            var r = new Rect(Style.Px(24), Screen.height - Style.Px(84), Mathf.Min(Style.Px(760), Screen.width - Style.Px(48)), h);
-            Style.Glass(r, h / 2);
-            Style.Ring(r, h / 2, new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.55f));
-            float lw = Style.Px(104);
-            Style.Title(new Rect(r.x + Style.Px(20), r.y, lw, h), Lang.T("TCHAT", "CHAT"), Style.Accent, TextAnchor.MiddleLeft, 18);
+            float h = Style.Px(40), rad = Style.Px(12);
+            var r = new Rect(Style.Px(24), Screen.height - Style.Px(80), Mathf.Min(Style.Px(540), Screen.width - Style.Px(48)), h);
+            Style.Glass(r, rad);
+            Style.Ring(r, rad, Kit.A(Kit.Ice, 0.45f));
+            string lab = Lang.T("Tchat", "Chat"), ent = Lang.T("Entr\u00E9e", "Enter");
+            float lw = Style.Width(lab, 13) + Style.Px(26), kw = Style.Width(ent, 11) + Style.Px(12);
+            Style.Text(new Rect(r.x + Style.Px(14), r.y, lw, h), lab, 13, TextAnchor.MiddleLeft, Kit.Ice);
+            Kit.Keycap(r.xMax - kw - Style.Px(12), r.center.y, ent);
             // Entree AVANT le champ : le champ actif consomme la touche (le message ne partait pas, retour de JD
             // du 05/10) et le caractere '\n' qui la suit s'inscrivait dans le texte.
             Event e = Event.current;
@@ -859,10 +1143,9 @@ namespace MWCoop
                 return;
             }
             GUI.SetNextControlName("mwcoop-chat");
-            chatText = Clean(GUI.TextField(new Rect(r.x + lw, r.y, r.width - lw, h), chatText, 200, Style.Field(21)));
+            chatText = Clean(GUI.TextField(new Rect(r.x + lw, r.y, r.width - lw - kw - Style.Px(24), h), chatText, 200, Style.Field(15)));
             if (focusChat) { GUI.FocusControl("mwcoop-chat"); focusChat = false; }
         }
-
         static bool IsNewline(char c) { return c == '\n' || c == '\r'; }
 
         static string Clean(string s) { return s.IndexOf('\n') < 0 && s.IndexOf('\r') < 0 ? s : s.Replace("\r", "").Replace("\n", ""); }
@@ -894,8 +1177,8 @@ namespace MWCoop
         {
             if (langStep == 0 && t > 37f) { langStep = 1; Game.SetGlobal("GUIinteraction", "ПРОВЕРКА ШРИФТА : ВЗЯТЬ"); Game.SetGlobal("GUIsubtitle", "Продавец: спасибо! Kiitos!"); Log.Info("autotest : langue, textes du jeu en cyrillique"); }
             if (langStep == 1 && t > 41f) { langStep = 2; Game.SetGlobal("GUIinteraction", ""); Game.SetGlobal("GUIsubtitle", ""); MapPanel.Open = true; }
-            if (langStep == 2 && t > 45f) { langStep = 3; MapPanel.Open = false; CheatPanel.Open = true; }
-            if (langStep == 3 && t > 49f) { langStep = 4; CheatPanel.Open = false; WalletPanel.Open = true; }
+            if (langStep == 2 && t > 45f) { langStep = 3; MapPanel.Open = false; CheatPanel.Open = true; Autotest.CaptureSoon("panneau-triches", 1.5f); }
+            if (langStep == 3 && t > 49f) { langStep = 4; CheatPanel.Open = false; WalletPanel.Open = true; Autotest.CaptureSoon("panneau-porte-monnaie", 1.5f); }
             if (langStep == 4 && t > 53f) { langStep = 5; WalletPanel.Open = false; }
         }
 
@@ -919,6 +1202,7 @@ namespace MWCoop
             Open = true;
             SetTab(k);
             testLog = true;
+            Autotest.CaptureSoon("menu-" + k, 1.5f);   // (captures de chaque onglet : ecran-menu-<n>.png)
         }
     }
 }
