@@ -1685,3 +1685,6 @@ Updated \u00B7 MWCoop %s (a stuck game still holds version.dll: replaced at the 
 On Linux: put the Steam launch option from the GUIDE (Linux and Steam Deck) and start MWCoop from Steam	На Linux: укажи параметр запуска Steam из ГАЙДА (Linux и Steam Deck) и запускай MWCoop из Steam
 MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% in the game's Steam launch options (GUIDE: Linux and Steam Deck)	MWCoop не загрузился: на Linux укажи WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% в параметрах запуска игры в Steam (ГАЙД: Linux и Steam Deck)
 \n\nOn Linux, the launch copies (with links to the game) are kept: delete them by hand, without following the links.	\n\nНа Linux копии запуска (со ссылками на игру) остаются: удали их вручную, не переходя по ссылкам.
+Players' VAZ-2108 (F10)	VAZ-2108 игроков (F10)
+Drone, sleeping bags, s21 shop, museum, VAZ-2108	Дрон, спальные мешки, магазин s21, музей, VAZ-2108
+The players' VAZ-2108 (F10), from the \"VAZ-2108 Rally\" model by matthew0451 on Sketchfab: sketchfab.com/matthew0451, CC BY-NC 4.0 license. Lightened, livery removed (one colour and number per player).	VAZ-2108 игроков (F10), по модели \"VAZ-2108 Rally\" автора matthew0451 на Sketchfab: sketchfab.com/matthew0451, лицензия CC BY-NC 4.0. Облегчена, ливрея убрана (у каждого игрока свой цвет и номер).

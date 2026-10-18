@@ -101,3 +101,11 @@ save(im, "inviter")
 im, d = canvas()
 line(d, [(98, 52), (174, 128), (98, 204)], 24)
 save(im, "suivant")
+
+# voiture (onglet VAZ-2108) : trois portes de profil et deux roues
+im, d = canvas()
+line(d, [(30, 170), (30, 136), (60, 120), (96, 76), (176, 76), (214, 124), (230, 134), (230, 170)])
+line(d, [(30, 170), (58, 170)]); line(d, [(106, 170), (152, 170)]); line(d, [(200, 170), (230, 170)])
+ring(d, 82, 172, 24, 18); ring(d, 176, 172, 24, 18)
+line(d, [(110, 80), (110, 122), (66, 122)], 14)
+save(im, "voiture")
