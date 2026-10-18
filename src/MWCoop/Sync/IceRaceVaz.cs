@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using HutongGames.PlayMaker;
 using MWCoop.Net;
@@ -13,7 +13,7 @@ namespace MWCoop
     //    RACES/SceneryRace/RallyTent/DistanceCheck (< 5 m, sinon « la voiture doit etre a l'inspection », refus), puis
     //    'State 2' a 'State 19' relisent l'inspection de la Rivett (arceau, harnais...). Accroche au debut de 'State 16'
     //    (posee une fois l'automate demarre : avant, ses actions seraient rechargees) : la VAZ du joueur d'ici a moins de
-    //    6 m du point -> evenement MWCOOP_VAZ -> 'Check money' (VAZ de rallye prete : pas d'inspection ; les 150 mk restent).
+    //    10 m du point -> evenement MWCOOP_VAZ -> 'Check money' (VAZ de rallye prete : pas d'inspection ; les 150 mk restent).
     //    LINEUPS 'State 4' qui suit est reduit a PlayerRegistered, comme une location (pas d'autocollants sur la Rivett) ;
     //  - numero : l'invite inscrit avec sa VAZ l'annonce a l'hote (K_VAZ, toutes les 5 s tant qu'il est inscrit) ; l'hote
     //    lui donne le numero d'une voiture IA (AiNumbers, le premier libre) : cette IA ne court pas de la semaine, la VAZ
@@ -28,10 +28,10 @@ namespace MWCoop
     public static partial class IceRace
     {
         const int K_VAZ = 29;   // invite -> hote : semaine -- « inscrit avec ma VAZ » (Races.OnMessage)
-        const float TentDist = 6f;
+        const float TentDist = 10f;   // (le jeu : 5 m pour la Rivett ; 10 m pour la VAZ, JD 18/10 : sa VAZ garee le long de la tente etait refusee)
         static readonly Dictionary<int, int> vazNums = new Dictionary<int, int>();   // hote : joueur -> numero de l'IA remplacee
         static readonly HashSet<int> vazEntries = new HashSet<int>();                  // hote : inscrits avec leur VAZ (semaine)
-        static bool vazMine, vazRestored, formHooked;
+        static bool vazMine, vazRestored, formHooked, formWaitLogged;
         static float nextVazSend, nextFormLook, nextTentToast;
         static PlayMakerFSM form;
         static FsmEvent vazEvent;
@@ -41,7 +41,7 @@ namespace MWCoop
         static void VazReset()
         {
             vazNums.Clear(); vazEntries.Clear();
-            vazMine = vazRestored = formHooked = false; form = null;
+            vazMine = vazRestored = formHooked = formWaitLogged = nameSet = false; form = null; zoneSet = false;
             nextVazSend = nextFormLook = nextTentToast = 0f; vazTest = 0;
             LiveReset();
         }
@@ -119,6 +119,8 @@ namespace MWCoop
                 }
             }
             HookForm(now);
+            FormName();
+            if (formMuted.Count > 0 && Time.frameCount > formMutedFrame) { foreach (FsmStateAction a in formMuted) a.Enabled = true; formMuted.Clear(); }
             if (vazMine && !Session.IsHost && Registered() && now >= nextVazSend) SendVaz();
             LiveTick();
         }
@@ -129,7 +131,41 @@ namespace MWCoop
             public override string Module { get { return "courses"; } }
             public override void OnEnter()
             {
-                try { if (VazAtTent()) Fsm.Event(vazEvent); }
+                try
+                {
+                    if (VazAtTent())
+                    {
+                        // (la suite de l'etat -- distance de la CORRIS, note « pas de voiture » -- coupee le temps du passage)
+                        foreach (FsmStateAction a in State.Actions) if (a != null && a != this && a.Enabled) { a.Enabled = false; formMuted.Add(a); }
+                        formMutedFrame = Time.frameCount;
+                        vazPassed = true;
+                        Fsm.Event(vazEvent);
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        // 'Check money' apres la VAZ : la suite de 'State 16' a quand meme allume la note « la voiture doit etre a l'inspection »
+        // (xNoCar) -- eteinte ici.
+        static bool vazPassed;
+        static readonly List<FsmStateAction> formMuted = new List<FsmStateAction>();
+        static int formMutedFrame;
+        class PassHook : ModHook
+        {
+            public override string Module { get { return "courses"; } }
+            public override void OnEnter()
+            {
+                try
+                {
+                    if (vazPassed)
+                    {
+                        vazPassed = false;
+                        Transform sym = form != null && form.transform.parent != null ? form.transform.parent.Find("Symbols") : null;
+                        foreach (string l in new[] { "FI/xNoCar", "EN/xNoCar" }) { Transform x = sym != null ? sym.Find(l) : null; if (x != null) x.gameObject.SetActive(false); }
+                    }
+                }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
             }
@@ -148,14 +184,29 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextTentToast)
                 {
                     nextTentToast = Time.realtimeSinceStartup + 10f;
-                    Hud.Toast(Lang.T("Ta VAZ est à ", "Your VAZ is ") + d.ToString("F0") + Lang.T(" m de la tente d'inspection : gare-la juste à côté (moins de 6 m)",
-                                                                                           " m from the inspection tent: park it right next to it (under 6 m)"));
+                    Hud.Toast(Lang.T("Ta VAZ est à ", "Your VAZ is ") + d.ToString("F0") + Lang.T(" m de la tente d'inspection : gare-la juste à côté (moins de 10 m)",
+                                                                                           " m from the inspection tent: park it right next to it (under 10 m)"));
                 }
                 return false;
             }
             vazMine = true;
             Log.Info("glace : feuille d'inscription : ma VAZ a " + d.ToString("F1") + " m de la tente, inspection de la Rivett sautee");
             return true;
+        }
+
+        // Nom du pilote sur la feuille (JD, 18/10 : il restait vide) : la feuille ecrit la globale PlayerName (nom du joueur du
+        // jeu, souvent vide) dans Symbols/PlayerName a la confirmation ; tant que la feuille est ouverte, elle vaut le pseudo
+        // MWCoop du joueur d'ici, rendue a la fermeture.
+        static string nameWas; static bool nameSet;
+        static void FormName()
+        {
+            if (form == null || form.transform.parent == null || form.transform.parent.parent == null) return;
+            bool open = form.transform.parent.parent.gameObject.activeInHierarchy;
+            FsmString pn = FsmVariables.GlobalVariables.FindFsmString("PlayerName");
+            if (pn == null) return;
+            string me = Session.Me != null && !string.IsNullOrEmpty(Session.Me.Name) ? Session.Me.Name : null;
+            if (open && me != null && !nameSet) { nameWas = pn.Value; nameSet = true; pn.Value = me; Log.Info("glace : feuille d'inscription : nom du pilote " + me); }
+            else if (!open && nameSet) { nameSet = false; pn.Value = nameWas ?? ""; }
         }
 
         static void HookForm(float now)
@@ -167,9 +218,18 @@ namespace MWCoop
                 nextFormLook = now + 3f;
                 GameObject go = Game.FindAny("Sheets/IceRaceForm/Functions/ButtonConfirm");
                 form = go != null ? Game.FsmOn(go, "Button") : null;
+                if (form == null)   // (une autre racine « Sheets » -- un mod -- cache celle du jeu : recherche par l'objet)
+                    foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                        if (f.FsmName == "Button" && f.gameObject.name == "ButtonConfirm" && f.transform.parent != null && f.transform.parent.parent != null
+                            && f.transform.parent.parent.name == "IceRaceForm" && f.gameObject.hideFlags == HideFlags.None) { form = f; break; }
                 if (form == null) return;
+                Log.Info("glace : feuille d'inscription trouvee (" + (form.gameObject.activeInHierarchy ? "ouverte" : "rangee") + ", etat '" + form.ActiveStateName + "')");
             }
-            if (string.IsNullOrEmpty(form.ActiveStateName)) return;   // (feuille jamais ouverte : automate pas demarre)
+            if (string.IsNullOrEmpty(form.ActiveStateName))   // (feuille jamais ouverte : automate pas demarre)
+            {
+                if (form.gameObject.activeInHierarchy && !formWaitLogged) { formWaitLogged = true; Log.Info("glace : feuille d'inscription ouverte, automate pas encore demarre"); }
+                return;
+            }
             formHooked = true;
             FsmState s = form.Fsm.GetState("State 16"), pay = form.Fsm.GetState("Check money");
             if (s == null || pay == null) { Log.Warn("glace : feuille d'inscription : etats 'State 16' / 'Check money' absents, VAZ pas reconnue"); return; }
@@ -181,6 +241,7 @@ namespace MWCoop
             list.Add(tr);
             s.Transitions = list.ToArray();
             FsmHooks.Prepend(s, new FormHook());
+            FsmHooks.Prepend(pay, new PassHook());
             Log.Info("glace : feuille d'inscription accrochee (VAZ acceptee a moins de " + TentDist + " m de la tente)");
         }
 
@@ -235,16 +296,22 @@ namespace MWCoop
                 GameObject pl = GameObject.Find("PLAYER");
                 if (pl != null && tent != null) pl.transform.position = tent.transform.position + Vector3.forward * 2f + Vector3.up * 1f;
                 if (car != null && tent != null) Log.Info("autotest glacevaz : VAZ a " + Vector3.Distance(car.position, tent.transform.position).ToString("F1") + " m de la tente apres la sortie");
-                GameObject f = Game.FindAny("Sheets/IceRaceForm");
-                if (f == null) { Log.Info("autotest glacevaz : Sheets/IceRaceForm introuvable"); return; }
-                f.SetActive(true);
-                Log.Info("autotest glacevaz : feuille ouverte");
+                PlayMakerFSM reg = Game.FindFsm("RACES/ICERACE/TentContents/Friday/Registration", "Activate");
+                if (reg != null && !string.IsNullOrEmpty(reg.ActiveStateName)) { Game.SetState(reg, "Open results"); Log.Info("autotest glacevaz : feuille ouverte par la tente (Registration " + reg.ActiveStateName + ")"); }
+                else
+                {
+                    GameObject f = Game.FindAny("Sheets/IceRaceForm");
+                    if (f == null) { Log.Info("autotest glacevaz : Sheets/IceRaceForm introuvable"); return; }
+                    f.SetActive(true);
+                    Log.Info("autotest glacevaz : feuille ouverte a la main (Registration " + (reg != null ? "'" + reg.ActiveStateName + "'" : "introuvable") + ")");
+                }
             }
             if (vazTest == 3 && t > 42f)
             {
                 vazTest = 4;
                 Log.Info("autotest glacevaz : feuille " + (form != null ? form.ActiveStateName : "?") + ", accrochee " + formHooked);
                 if (form != null) Game.SetState(form, "State 16");
+                if (Session.IsHost) Autotest.CaptureSoon("glace-feuille", 0.8f);
                 Log.Info("autotest glacevaz : confirmer -> " + (form != null ? form.ActiveStateName : "?"));
             }
             if (vazTest == 4 && t > 56f)
@@ -274,7 +341,18 @@ namespace MWCoop
                 GameObject pl = GameObject.Find("PLAYER");
                 if (pl != null && lines != null) pl.transform.position = lines[2].center + Vector3.up * 3f + Vector3.right * 12f;
                 Autotest.CaptureSoon("glace-chronos", 3f);
-                Log.Info("autotest glacevaz : au bord de la ligne d'arrivee, chronos " + (LiveOn ? "montres" : "caches") + ", essais " + Practice);
+                Log.Info("autotest glacevaz : au bord de la ligne d'arrivee, chronos " + (LiveOn ? "montres" : "caches") + ", essais " + Practice + ", zone " + zone.min.ToString("F0") + " - " + zone.max.ToString("F0"));
+            }
+            if (Session.IsHost && vazTest == 8 && t > 92f)
+            {
+                vazTest = 9;
+                GameObject pl = GameObject.Find("PLAYER");
+                if (pl != null) pl.transform.position = new Vector3(-1282f, 3f, 1078f);   // (la maison : 300 m de la ligne)
+            }
+            if (Session.IsHost && vazTest == 9 && t > 95f)
+            {
+                vazTest = 11;
+                Log.Info("autotest glacevaz : a la maison, chronos " + (LiveOn ? "MONTRES" : "caches") + ", zone " + zone.min.ToString("F0") + " - " + zone.max.ToString("F0"));
             }
         }
 
@@ -284,7 +362,7 @@ namespace MWCoop
             public string Num, Name; public Transform T;
             public readonly bool[] In = new bool[3];
             public Vector3 Last; public bool Has, C1, C2, Timing;
-            public float LapStart, LastLap, BestLap, LastPass; public int Laps;
+            public float LapStart, LastLap, BestLap, LastPass; public int Laps; public bool Human;
         }
         public class LiveRow { public int Pos; public string Num, Name, Laps, Last, Best; public bool Me, Human, Done; }
 
@@ -305,17 +383,25 @@ namespace MWCoop
         }
         static bool Gridding { get { string st = track != null ? track.ActiveStateName : ""; return st == "Create grid" || st == "Create grid 2" || st == "Wait command" || st == "Wait command 2"; } }
 
-        // Pres du circuit, avec des essais ou une manche en cours.
+        // Dans la zone du circuit (JD, 18/10 : 700 m autour de la ligne, c'etait jusqu'a la maison) : boite des lignes de la
+        // piste et de la tente, agrandie par les positions des voitures IA en piste (elles font le tour : la boite finit par
+        // couvrir le trace), plus 40 m ; avec des essais ou une manche en cours.
+        static Bounds zone; static bool zoneSet;
+        static void GrowZone(Vector3 p) { if (zoneSet && (p - lines[2].center).sqrMagnitude < 600f * 600f) zone.Encapsulate(p); }
         public static bool LiveOn
         {
             get
             {
-                if (!enabled || lines == null || track == null || !PlayerSync.InGame) return false;
+                if (!enabled || lines == null || track == null || !PlayerSync.InGame || !zoneSet) return false;
                 Transform me = Game.PlayerT;
-                if (me == null || (me.position - lines[2].center).sqrMagnitude > 700f * 700f) return false;
+                if (me == null) return false;
+                Vector3 p = me.position, mn = zone.min, mx = zone.max;
+                const float m = 40f;
+                if (p.x < mn.x - m || p.x > mx.x + m || p.z < mn.z - m || p.z > mx.z + m) return false;
                 return Practice || HeatRunning || Gridding;
             }
         }
+        public static bool AtTrack { get { return LiveOn; } }
 
         static Transform CarOfNumber(string local, out string name, out bool human, out bool me)
         {
@@ -356,6 +442,13 @@ namespace MWCoop
         static void LiveTick()
         {
             if (lines == null || track == null || carsList == null) return;
+            if (!zoneSet)
+            {
+                zone = lines[0]; zone.Encapsulate(lines[1]); zone.Encapsulate(lines[2]);
+                GameObject tent = Game.FindAny("RACES/SceneryRace/RallyTent/DistanceCheck");
+                if (tent != null) zone.Encapsulate(tent.transform.position);
+                zoneSet = true;
+            }
             string st = track.ActiveStateName ?? "";
             float now = Time.time;
             if (st != liveState) { liveState = st; liveStateAt = now; if (st == "Start race" || st == "Start race 2") foreach (LiveCar c in live.Values) { c.LapStart = now; c.LastPass = now; } }
@@ -376,7 +469,7 @@ namespace MWCoop
                     if (t == null) { live.Remove(k); continue; }
                     if (!live.TryGetValue(k, out c)) { c = new LiveCar { Num = k }; live[k] = c; }
                     if (c.T != t) { c.T = t; c.Has = false; }
-                    c.Name = name;
+                    c.Name = name; c.Human = human;
                 }
             }
             if (!Practice && !HeatRunning) return;
@@ -386,6 +479,7 @@ namespace MWCoop
                 if (c.T == null) continue;
                 Vector3 p = c.T.position;
                 if (!c.Has || (p - c.Last).sqrMagnitude > 2500f) { c.Last = p; c.Has = true; for (int i = 0; i < 3; i++) c.In[i] = lines[i].Contains(p); continue; }
+                if (!c.Human && (p - c.Last).sqrMagnitude > 0.01f) GrowZone(p);   // (IA seulement : un joueur qui rentre chez lui n'agrandit pas la zone)
                 bool c1 = CrossedBox(c, 0, c.Last, p), c2 = CrossedBox(c, 1, c.Last, p), sf = CrossedBox(c, 2, c.Last, p);
                 c.Last = p;
                 if (c1 && !c.C1) { c.C1 = true; c.LastPass = now; }

@@ -37,10 +37,10 @@ namespace MWCoop
             // comment et quand
             string how = Lang.T(
                 "1. Prends ta VAZ (onglet VAZ-2108) et va au circuit de la course sur glace.\n" +
-                "2. Vendredi 9 h - 15 h : gare ta VAZ juste à côté de la tente d'inspection (moins de 6 m), puis remplis la feuille d'inscription (150 mk). Ensuite, roule aux essais : ton meilleur tour te place en qualifications.\n" +
+                "2. Vendredi 9 h - 15 h : gare ta VAZ juste à côté de la tente d'inspection (moins de 10 m), puis remplis la feuille d'inscription (150 mk). Ensuite, roule aux essais : ton meilleur tour te place en qualifications.\n" +
                 "3. Samedi 9 h - 15 h : qualifications et repêchages. Dimanche 10 h - 15 h : demi-finales et finale. Sois au circuit avec ta VAZ : au départ de ta manche, elle est posée sur ta place de la grille.",
                 "1. Take your VAZ (VAZ-2108 tab) and drive to the ice race track.\n" +
-                "2. Friday 9 am - 3 pm: park your VAZ right next to the inspection tent (under 6 m), then fill in the registration form (150 mk). Then drive in practice: your best lap sets your qualifying place.\n" +
+                "2. Friday 9 am - 3 pm: park your VAZ right next to the inspection tent (under 10 m), then fill in the registration form (150 mk). Then drive in practice: your best lap sets your qualifying place.\n" +
                 "3. Saturday 9 am - 3 pm: qualifying and pickups. Sunday 10 am - 3 pm: semifinals and final. Be at the track with your VAZ: when your heat starts, it is put on your grid spot.");
             float hh = P(96);
             Style.Text(new Rect(v.x, y, w, hh), how, 12, TextAnchor.UpperLeft, Kit.Soft, false, true);
