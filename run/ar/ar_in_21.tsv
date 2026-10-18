@@ -1,0 +1,58 @@
+HU001	Vanilla style
+HU002	Chosen · 
+HU003	Monday
+HU004	HUD style
+HU005	Card
+HU006	Rings
+HU007	Strip
+HU008	Size
+HU009	Small
+HU010	Large
+HU011	Huge
+HU012	Position
+HU013	Top left
+HU014	Top right
+HU015	Bottom left
+HU016	Bottom right
+HU017	Top centre
+HU018	Bottom centre
+HU019	Colour
+HU020	Ice
+HU022	Aurora
+HU023	Lilac
+HU024	Background opacity
+HU025	Fade gauges at rest
+HU026	Numbers and names
+HU027	Thirst / problem
+HU028	Hunger
+HU029	Stress
+HU030	Urine
+HU031	Fatigue
+HU032	Dirtiness
+HU033	Body temperature
+HU034	Sweat
+HU035	Money
+HU036	Day
+HU037	Team panel
+HU038	Alerts at the top of the screen
+HU039	Vanilla = the game's own HUD · the others replace it
+HU040	Customise
+HU041	For the chosen style · applied right away, even in game
+HU042	Preview
+HU043	Gauges shown
+HU044	Also with Vanilla
+HU045	If the HUD looks too big or too small
+HU046	Auto: the usual place for this style
+HU047	Nearly empty, they fade out
+HU048	Card: the values · Rings, Strip: the names
+HU049	Default: everything but the style.
+HU050	\"Problem\" when the game says so
+HU051	The other players' gauges, small
+HU052	Very hungry, exhausted, freezing… you and your friends
+HU053	The game's own HUD
+HU054	Frosted glass in a corner
+HU055	Discreet, at the bottom
+HU056	Thin, centred at the top
+HU057	In-game gauges: Vanilla, Card, Rings or Strip · in game: F10 › HUD
+HU058	HUD tab
+HU059	The style of the in-game gauges: Vanilla (the game's own), Card, Rings or Strip, with a preview. Then its size, position, colour, the gauges shown, the team panel and the alerts. In game too: F10 › HUD.

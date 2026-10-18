@@ -1926,6 +1926,7 @@ namespace MWCoop
                 case "@combine": PhoneKeys.OnHandset(who, r); break;
                 case "@plat": Plats.OnMessage(who, r); break;
                 case "@porte": WoodCarriers.OnMessage(who, r); break;
+                case "@besoins": NewHud.OnNeeds(who, r); break;
                 case "@fleetari": Shop.OnFleetari(who, r); break;
                 case "@percute": CarHits.OnMessage(who, r); break;
                 case "@ram": ModRam1500.OnMessage(who, r); break;

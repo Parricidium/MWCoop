@@ -194,6 +194,7 @@ namespace MWCoop
             new Mod("telephone", PhoneKeys.Update),
             new Mod("plats", Plats.Update),
             new Mod("porte-buches", WoodCarriers.Update),
+            new Mod("hud", NewHud.Update),
             new Mod("chocs", CarHits.Update),
             new Mod("vitres", WindowCranks.Update),
             new Mod("ram1500", ModRam1500.Update),
@@ -328,6 +329,7 @@ namespace MWCoop
             PhoneKeys.OnLevelLoaded();
             Plats.OnLevelLoaded();
             WoodCarriers.OnLevelLoaded();
+            NewHud.OnLevelLoaded();
             CarHits.OnLevelLoaded();
             WindowCranks.OnLevelLoaded();
             ModRam1500.OnLevelLoaded();
@@ -344,7 +346,7 @@ namespace MWCoop
             {
                 if (DroneCam.Active) DroneCam.Draw();   // (drone : viseur seul, rien d'autre du mod sur la photo)
                 else if (Kauppa.Viewfinder) Kauppa.DrawViewfinder();   // (camescope : son viseur seul)
-                else { Hud.Draw(); Kauppa.DrawKameraHint(); }
+                else { NewHud.Draw(); Hud.Draw(); Kauppa.DrawKameraHint(); }
                 WaitScreen.Draw(); Menu.Draw(); WalletPanel.Draw(); CheatPanel.Draw(); MapPanel.Draw(); JokkisPanel.Draw(); Respawn.Draw(); Kauppa.DrawMontage();
                 if (Menu.CursorWanted) Style.DrawCursor(Menu.CursorPos());
             }

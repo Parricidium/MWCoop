@@ -175,6 +175,29 @@ static const std::vector<GfxRow> &GfxRows()
         { "TracesTrafic", L"Traces de pneus de la circulation", L"Traffic skid marks", 0, {}, {}, {}, 1, 3 },
         { "Pseudos", L"Pseudos des joueurs", L"Player names", 120, { 0, 30, 60, 120, 250 },
           { L"Cachés", L"30 m", L"60 m", L"120 m", L"250 m" }, { L"Hidden", L"30 m", L"60 m", L"120 m", L"250 m" }, 0, 7 },
+        // HUD en jeu (18/10, UI/NewHud.cs et UI/HudSettings.cs du mod : memes cles, section [Hud]) : 16 style (tuiles de l'onglet
+        // HUD), 17 personnaliser, 18 jauges affichees, 19 coop. Lus en direct par le jeu (fichier relu a chaque changement).
+        { "Style", L"Style du HUD", L"HUD style", 0, { 0, 1, 2, 3 }, { L"Vanilla", L"Carte", L"Anneaux", L"Bandeau" }, { L"Vanilla", L"Card", L"Rings", L"Strip" }, 0, 16, "Hud" },
+        { "Taille", L"Taille", L"Size", 100, { 70, 80, 90, 100, 110, 125, 150 }, { L"70 %", L"80 %", L"90 %", L"100 %", L"110 %", L"125 %", L"150 %" }, { L"70 %", L"80 %", L"90 %", L"100 %", L"110 %", L"125 %", L"150 %" }, 0, 17, "Hud",
+          { 80, 100, 125, 150 }, { L"Petite", L"Normale", L"Grande", L"Très grande" }, { L"Small", L"Normal", L"Large", L"Huge" } },
+        { "Position", L"Position", L"Position", -1, { -1, 0, 1, 2, 3, 4, 5 }, { L"Auto", L"Haut gauche", L"Haut droite", L"Bas gauche", L"Bas droite", L"Haut centre", L"Bas centre" },
+          { L"Auto", L"Top left", L"Top right", L"Bottom left", L"Bottom right", L"Top centre", L"Bottom centre" }, 0, 17, "Hud" },
+        { "Couleur", L"Couleur", L"Colour", 0, { 0, 1, 2, 3 }, { L"Glace", L"Bleu ciel", L"Aurore", L"Lilas" }, { L"Ice", L"Sky blue", L"Aurora", L"Lilac" }, 0, 17, "Hud" },
+        { "Fond", L"Opacité du fond", L"Background opacity", 60, { 0, 30, 45, 60, 75, 90 }, { L"Aucun", L"30 %", L"45 %", L"60 %", L"75 %", L"90 %" }, { L"None", L"30 %", L"45 %", L"60 %", L"75 %", L"90 %" }, 0, 17, "Hud" },
+        { "Estomper", L"Estomper les jauges au repos", L"Fade gauges at rest", 1, {}, {}, {}, 0, 17, "Hud" },
+        { "Valeurs", L"Chiffres et noms", L"Numbers and names", 0, {}, {}, {}, 0, 17, "Hud" },
+        { "JaugeSoif", L"Soif / problème", L"Thirst / problem", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeFaim", L"Faim", L"Hunger", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeStress", L"Stress", L"Stress", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeUrine", L"Urine", L"Urine", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeFatigue", L"Fatigue", L"Fatigue", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeSalete", L"Saleté", L"Dirtiness", 0, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeTemperature", L"Température", L"Body temperature", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeSueur", L"Sueur", L"Sweat", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeArgent", L"Argent", L"Money", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "JaugeJour", L"Jour", L"Day", 1, {}, {}, {}, 0, 18, "Hud" },
+        { "Equipe", L"Panneau Équipe", L"Team panel", 1, {}, {}, {}, 0, 19, "Hud" },
+        { "Alertes", L"Alertes en haut de l'écran", L"Alerts at the top of the screen", 1, {}, {}, {}, 0, 19, "Hud" },
         // Coop, rangees par type (demande de JD, 10/10) : 6 voix, 7 visages, 8 partie et partage, 9 touches.
         { "Vocal", L"Vocal de proximité", L"Proximity voice", 1, {}, {}, {}, 0, 6, "Coop" },
         { "VocalPortee", L"Portée de la voix", L"Voice range", 35, { 15, 25, 35, 50, 80 },
@@ -320,6 +343,7 @@ static bool GfxRowOff(const GfxRow &r, const wchar_t **why)
 {
     bool rt = GfxGet("RayTracing") == 1 && GfxDxr();
     if (r.group == 14 && !GfxDxr()) { *why = T(L"carte non compatible", L"GPU not supported"); return true; }
+    if ((r.group == 17 || r.group == 18) && GfxGet("Style") == 0) { *why = T(L"style Vanilla", L"Vanilla style"); return true; }
     if (r.group == 14 && strcmp(r.key, "RayTracing") && !rt) { *why = T(L"RT coupé", L"RT off"); return true; }
     if (rt && (!strcmp(r.key, "OmbresDistance") || !strcmp(r.key, "OmbresCascades") || !strcmp(r.key, "OmbresLune"))) { *why = T(L"ray tracing", L"ray tracing"); return true; }
     if (rt && GfxGet("RTLampes") != 0 && (!strcmp(r.key, "OmbresPhares") || !strcmp(r.key, "OmbresLampadaires"))) { *why = T(L"ray tracing", L"ray tracing"); return true; }
@@ -400,9 +424,9 @@ static int GfxPresetOn()
 // titre de section, ou element special dessine a part ; pleine largeur avant ou apres les deux sous-colonnes). Le champ
 // Chercher de l'en-tete filtre ces memes lignes, toutes cartes confondues. Les pastilles (choix a segments) suivent la
 // maquette : valeurs courtes (GfxRow::pv), un nom qui ne tient pas passe sur deux lignes, sinon ◀ valeur ▶.
-enum { SET_JEU, SET_IMAGE, SET_SON, SET_COOP, SET_TOUCHES, SET_THEME, SET_LANCEUR, SET_N };
-static const wchar_t *kSetTabFr[SET_N] = { L"Jeu", L"Image & ray tracing", L"Son & vocal", L"Co-op", L"Touches", L"Thème", L"Lanceur" };
-static const wchar_t *kSetTabEn[SET_N] = { L"Game", L"Image & ray tracing", L"Sound & voice", L"Co-op", L"Keys", L"Theme", L"Launcher" };
+enum { SET_JEU, SET_IMAGE, SET_HUD, SET_SON, SET_COOP, SET_TOUCHES, SET_THEME, SET_LANCEUR, SET_N };
+static const wchar_t *kSetTabFr[SET_N] = { L"Jeu", L"Image & ray tracing", L"HUD", L"Son & vocal", L"Co-op", L"Touches", L"Thème", L"Lanceur" };
+static const wchar_t *kSetTabEn[SET_N] = { L"Game", L"Image & ray tracing", L"HUD", L"Sound & voice", L"Co-op", L"Keys", L"Theme", L"Launcher" };
 static int g_setTab = SET_JEU;
 static std::wstring g_setSearch;        // champ Chercher (vide : les onglets)
 static bool g_setFocus;                 // champ Chercher actif (curseur)
@@ -422,6 +446,7 @@ enum { UI_SET_TAB = 2900, UI_SET_SEARCH = 2910, UI_SET_SEARCHX, UI_SET_THEMECARD
        UI_SET_MAXP = 2940, UI_SET_PRIV = 2945, UI_SET_AJOUTS = 2948, UI_SET_AJOUT = 2951, UI_SET_DRONEKB = 2956,
        UI_SET_NOTES = 2960, UI_SET_LOGDIR, UI_SET_LOGZIP, UI_SET_DISCORDASK, UI_SET_SKIN, UI_SET_CAR, UI_SET_CONTENT, UI_SET_STEAMLINE, UI_SET_GOIMAGE, UI_SET_API, UI_SET_GITHUB,
        UI_SET_DEFAULT = 2972, UI_SET_SAVE, UI_SET_NETTEST, UI_SET_HOSTGUIDE, UI_SET_REPAIR, UI_SET_NIGHTLY, UI_SET_GLASS, UI_SET_RTTOGGLE,   // (2972-2979)
+       UI_SET_HUDSTYLE = 2980,       // + style (0 Vanilla .. 3 Bandeau) : tuiles de l'onglet HUD (2980-2983)
        UI_SETV = 12000,              // + ligne * 10 + valeur (pastilles d'un reglage du jeu)
        UI_SET_TEXTE = 13000,         // + k (0..6) : taille du texte 80..110 %
        UI_SET_FOV = 13020,           // + k : champ de vision (curseur)
@@ -430,6 +455,7 @@ enum { UI_SET_TAB = 2900, UI_SET_SEARCH = 2910, UI_SET_SEARCHX, UI_SET_THEMECARD
        UI_SET_DENS = 13054 };        // + k (0 aeree, 1 normale, 2 compacte) : densite
 static void LogsOpenFolder();
 static void WikiOpenHost();   // (launcher.cpp : article du guide Heberger une partie)
+static void HudPreview(Graphics &g, RectF box, int style, bool big);   // (onglet HUD : apercu, plus bas)
 static void LogsZip();
 static float GfxMaxScroll() { return max(0.0f, g_setContentH - kSetArea.Height); }
 
@@ -459,6 +485,11 @@ static const SetCard kSetCards[] = {
     { SET_LANCEUR, 0, L"Version & mises à jour", L"Version & updates", NULL, NULL, "updchip" },                                                                     // 18
     { SET_LANCEUR, 1, L"Jeu", L"Game", NULL, NULL, "mwcver" },                                                                                                      // 19
     { SET_LANCEUR, 1, L"Dépannage", L"Troubleshooting", NULL, NULL },                                                                                               // 20
+    { SET_HUD, 0, L"Style du HUD", L"HUD style", L"Vanilla = le HUD d'origine du jeu · les autres le remplacent", L"Vanilla = the game's own HUD · the others replace it" },   // 21
+    { SET_HUD, 0, L"Personnaliser", L"Customise", L"Pour le style choisi · appliqué tout de suite, même en jeu", L"For the chosen style · applied right away, even in game" },   // 22
+    { SET_HUD, 1, L"Aperçu", L"Preview", NULL, NULL },                                                                                                               // 23
+    { SET_HUD, 1, L"Jauges affichées", L"Gauges shown", NULL, NULL },                                                                                                // 24
+    { SET_HUD, 1, L"Coop", L"Co-op", L"Aussi avec Vanilla", L"Also with Vanilla" },                                                                                  // 25
 };
 static const int kSetCardN = (int)(sizeof(kSetCards) / sizeof(kSetCards[0]));
 // fr/en : nom (SI_GFX / SI_OPT : remplace celui de la table ; SI_X : pour la recherche) ; dFr/dEn : explication grise dessous.
@@ -579,6 +610,22 @@ static const SetItem kSetItems[] = {
     { 20, SI_X, "api", L"API pour les moddeurs", L"API for modders", L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example" },
     { 20, SI_X, "github", L"Code source", L"Source code", L"Le dépôt GitHub de MWCoop : code, versions, signalements", L"MWCoop's GitHub repository: code, releases, issues" },
     { 20, SI_X, "footer", L"build", L"build", L"DE", NULL, 2 },
+    { 21, SI_X, "hudstyles", L"Style du HUD", L"HUD style", NULL, NULL },
+    { 22, SI_GFX, "Taille", NULL, NULL, L"Si le HUD te paraît trop gros ou trop petit", L"If the HUD looks too big or too small" },
+    { 22, SI_GFX, "Position", NULL, NULL, L"Auto : la place prévue pour ce style", L"Auto: the usual place for this style" },
+    { 22, SI_GFX, "Couleur", NULL, NULL, NULL, NULL },
+    { 22, SI_GFX, "Fond", NULL, NULL, NULL, NULL },
+    { 22, SI_GFX, "Estomper", NULL, NULL, L"Presque vides, elles s'effacent", L"Nearly empty, they fade out" },
+    { 22, SI_GFX, "Valeurs", NULL, NULL, L"Carte : les valeurs · Anneaux, Bandeau : les noms", L"Card: the values · Rings, Strip: the names" },
+    { 22, SI_X, "footer", L"Par défaut : tout sauf le style.", L"Default: everything but the style.", L"D", NULL, 2 },
+    { 23, SI_X, "hudapercu", NULL, NULL, NULL, NULL },
+    { 24, SI_GFX, "JaugeSoif", NULL, NULL, L"« Problème » quand le jeu le dit", L"\"Problem\" when the game says so" }, { 24, SI_GFX, "JaugeFaim", NULL, NULL, NULL, NULL },
+    { 24, SI_GFX, "JaugeStress", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeUrine", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeFatigue", NULL, NULL, NULL, NULL },
+    { 24, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
+    { 24, SI_GFX, "JaugeSalete", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeTemperature", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeSueur", NULL, NULL, NULL, NULL },
+    { 24, SI_GFX, "JaugeArgent", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeJour", NULL, NULL, NULL, NULL },
+    { 25, SI_GFX, "Equipe", NULL, NULL, L"Les jauges des autres joueurs, en petit", L"The other players' gauges, small" },
+    { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé, gelé… toi et tes amis", L"Very hungry, exhausted, freezing… you and your friends" },
 };
 static const int kSetItemN = (int)(sizeof(kSetItems) / sizeof(kSetItems[0]));
 
@@ -840,7 +887,7 @@ static GfxPlan SetGfxPlan(const SetItem &it, int idx, float w)
     p.toggle = !p.off && !p.keyRow && r.vals.empty();
     p.wid = 44;
     if (p.keyRow) p.wid = max(44.0f, MeasureW(MeasureG(), p.keyText, 12.5f, FontStyleBold) + 24);
-    else if (p.off) p.wid = 150;
+    else if (p.off) p.wid = r.vals.empty() && w < 340 ? 44 : 150;   // (colonne etroite : interrupteur grise, pas de texte qui deborde)
     else if (p.slider) { p.wid = kSetSliderW; for (int i = 0; i < (int)r.vals.size(); i++) if (r.vals[i] == v) p.k = i; }
     else if (!r.vals.empty()) {
         SetGfxVals(r, v, p.vals, p.labs);
@@ -869,9 +916,17 @@ static void SetGfxRow(Graphics &g, const SetItem &it, int idx, RectF row, const 
         Color ic = r.impact >= 3 ? kRed : kWarn;
         Pill(g, RectF(row.X + labW + 10, row.Y + (p.desc.empty() && !stacked ? (row.Height - 18) / 2 : 5), pw - 10, 18), WithA(ic, 0.16f), il, ic, 9.5f);
     }
-    RectF ctl = SetCtlRect(row, p.lab, p.wid, p.toggle ? 24 : p.off ? 26 : 30);
+    bool offTog = p.off && r.vals.empty() && p.wid < 60;
+    RectF ctl = SetCtlRect(row, p.lab, p.wid, p.toggle || offTog ? 24 : p.off ? 26 : 30);
     float cx = ctl.X, cy = ctl.Y + ctl.Height / 2;
     if (p.keyRow) { SetKeyCap(g, ctl, p.keyText, p.cap, hot); HotZone(row, id); return; }
+    if (offTog) {   // interrupteur grise (style Vanilla...) : son etat reste visible, sans effet
+        GraphicsPath tp; RoundRect(tp, ctl, ctl.Height / 2);
+        SolidBrush tb(WithA(TH(toggleOff), 0.45f)); g.FillPath(&tb, &tp);
+        float d = ctl.Height - 6, kx = GfxGet(r.key) == 1 ? ctl.X + ctl.Width - d - 3 : ctl.X + 3;
+        SolidBrush kb(WithA(kGrey, 0.7f)); g.FillEllipse(&kb, kx, ctl.Y + 3, d, d);
+        return;
+    }
     if (p.off) {
         GraphicsPath vp; RoundRect(vp, ctl, 9);
         SolidBrush vb(WithA(TH(btn2), 0.5f)); g.FillPath(&vb, &vp);
@@ -1041,6 +1096,8 @@ static float SetItemH(const SetItem &it, float w)
     if (!strcmp(k, "voicehelp")) return 150;
     if (!strcmp(k, "ajoutchips")) return 8 + 32.0f * SetChipLines(0);
     if (!strcmp(k, "themes")) return 166;
+    if (!strcmp(k, "hudstyles")) return 166;
+    if (!strcmp(k, "hudapercu")) return 236;
     if (!strcmp(k, "apercu")) return 256;
     if (!strcmp(k, "lang")) return 72;
     if (!strcmp(k, "folder")) return 52;
@@ -1164,6 +1221,25 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             SetSegRow(g, it, row, { T(L"Public", L"Public"), T(L"Privé", L"Private") }, prive ? 1 : 0, UI_SET_PRIV);
         } else if (!strcmp(k, "net")) SetSegRow(g, it, row, { L"Steam", L"IP / VPN" }, g_steamNet ? 0 : 1, UI_SET_STEAM, g_lobby == LB_NONE);
         else if (!strcmp(k, "steamline")) SetButtonRow(g, it, row, T(L"Voir la ligne", L"Show the line"), UI_SET_STEAMLINE);
+        else if (!strcmp(k, "hudstyles")) {   // quatre tuiles : Vanilla, Carte, Anneaux, Bandeau (apercu miniature)
+            static const wchar_t *nf[] = { L"Vanilla", L"Carte", L"Anneaux", L"Bandeau" }, *ne[] = { L"Vanilla", L"Card", L"Rings", L"Strip" };
+            static const wchar_t *sf[] = { L"Le HUD d'origine du jeu", L"Verre dépoli dans un coin", L"Discret, en bas", L"Fin, centré en haut" };
+            static const wchar_t *se[] = { L"The game's own HUD", L"Frosted glass in a corner", L"Discreet, at the bottom", L"Thin, centred at the top" };
+            int cur = GfxGet("Style");
+            float tw = (w - 30) / 4;
+            for (int i = 0; i < 4; i++) {
+                RectF r(x + i * (tw + 10), y + 4, tw, 158);
+                bool sel = i == cur, hot = g_uiHot == UI_SET_HUDSTYLE + i;
+                GraphicsPath p; RoundRect(p, r, 14);
+                SolidBrush fb(sel ? WithA(kAcc, 0.12f) : hot ? TH(btn2Hot) : TH(btn2)); g.FillPath(&fb, &p);
+                Pen pen(sel ? kAcc : TH(fieldBorder), sel ? 2.0f : 1.0f); g.DrawPath(&pen, &p);
+                HudPreview(g, RectF(r.X + 8, r.Y + 8, r.Width - 16, 70), i, false);
+                Text(g, T(nf[i], ne[i]), RectF(r.X + 8, r.Y + 84, r.Width - 16, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
+                std::wstring sub = sel ? std::wstring(T(L"Choisi · ", L"Chosen · ")) + T(sf[i], se[i]) : std::wstring(T(sf[i], se[i]));
+                Para(g, sub, RectF(r.X + 8, r.Y + 104, r.Width - 16, 48), 10.5f, kGrey);
+                HotZone(r, UI_SET_HUDSTYLE + i);
+            }
+        } else if (!strcmp(k, "hudapercu")) HudPreview(g, RectF(x, y + 4, w, 228), GfxGet("Style"), true);
         else if (!strcmp(k, "themes")) {   // quatre tuiles : Nuit boreale, Plein jour, Aurore verte, Garage
             static const wchar_t *nf[] = { L"Nuit boréale", L"Plein jour", L"Aurore verte", L"Garage" }, *ne[] = { L"Northern night", L"Daylight", L"Green aurora", L"Garage" };
             static const wchar_t *sf[] = { L"Aurore et neige", L"Clair, neige au soleil", L"Contraste fort, accent menthe", L"Bois, ambre, lampe à huile" };
@@ -1448,6 +1524,111 @@ static float SetDrawSearch(Graphics &g, RectF a, float sc)
     return y + 14;
 }
 
+// Apercu du HUD (onglet HUD) : petite scene d'hiver, et le style 'style' dessine comme en jeu (taille, position, couleur, fond,
+// jauges choisies si 'big' ; tuile de style sinon : taille fixe, place du style).
+static void HudPreview(Graphics &g, RectF box, int style, bool big)
+{
+    GraphicsPath p; RoundRect(p, box, big ? 16.0f : 10.0f);
+    GraphicsState st = g.Save();
+    g.SetClip(&p, CombineModeIntersect);
+    LinearGradientBrush sky(RectF(box.X, box.Y - 1, box.Width, box.Height + 2), Color(255, 66, 92, 104), Color(255, 120, 132, 150), LinearGradientModeVertical);
+    g.FillPath(&sky, &p);
+    SolidBrush tree(Color(255, 46, 58, 60));
+    for (int i = 0; i < 9; i++) {
+        float tx = box.X + box.Width * (0.04f + i * 0.12f), th = min(box.Height, 110.0f) * (0.24f + 0.12f * ((i * 37) % 5) / 4.0f), base = box.Y + box.Height * 0.66f;
+        PointF tri[3] = { PointF(tx, base - th), PointF(tx - th * 0.32f, base), PointF(tx + th * 0.32f, base) };
+        g.FillPolygon(&tree, tri, 3);
+    }
+    SolidBrush snow(Color(255, 156, 158, 184)); g.FillRectangle(&snow, RectF(box.X, box.Y + box.Height * 0.66f, box.Width, box.Height * 0.34f + 1));
+    static const Color acc[4] = { Color(255, 166, 216, 255), Color(255, 120, 189, 255), Color(255, 72, 240, 176), Color(255, 201, 166, 255) };
+    Color ac = acc[big ? max(0, min(3, GfxGet("Couleur"))) : 0];
+    float k = big ? GfxGet("Taille") / 100.0f : 0.55f;
+    float sc = big ? box.Height / 600.0f * 1.6f * k : box.Height / 300.0f * 1.15f;
+    int alpha = big ? (int)(255 * GfxGet("Fond") / 100.0f) : 170;
+    Color bg((BYTE)alpha, 8, 18, 34);
+    static const float vals[6] = { 35, 76, 12, 48, 93, 4 };
+    static const char *gk[6] = { "JaugeSoif", "JaugeFaim", "JaugeStress", "JaugeUrine", "JaugeFatigue", "JaugeSueur" };
+    auto tone = [&](float v) { return v >= 90 ? Color(255, 255, 107, 122) : v >= 70 ? Color(255, 255, 181, 92) : ac; };
+    std::vector<float> shown;
+    for (int i = 0; i < 6; i++) if (!big || GfxGet(gk[i]) == 1) shown.push_back(vals[i]);
+    int pos = big ? GfxGet("Position") : -1;
+    if (pos < 0) pos = style == 2 ? 2 : style == 3 ? 4 : 0;
+    float m = 10 * sc;
+    auto place = [&](float w, float h) {
+        float px = (pos == 1 || pos == 3) ? box.X + box.Width - w - m : (pos == 4 || pos == 5) ? box.X + (box.Width - w) / 2 : box.X + m;
+        float py = (pos == 2 || pos == 3 || pos == 5) ? box.Y + box.Height - h - m : box.Y + m;
+        return RectF(px, py, w, h);
+    };
+    SolidBrush track(Color(30, 255, 255, 255));
+    if (style == 0) {   // Vanilla : libelles jaunes en italique, barres blanches sur fond noir
+        static const wchar_t *lab[6] = { L"THIRST", L"HUNGER", L"STRESS", L"URINE", L"FATIGUE", L"SWEAT" };
+        float vs = big ? sc * 1.7f : sc, lh = 11 * vs * 1.3f, bx = box.X + box.Width * 0.24f;
+        for (int i = 0; i < 6; i++) {
+            float yy = box.Y + m + i * lh;
+            Text(g, lab[i], RectF(box.X, yy, bx - box.X - 3, lh), max(5.0f, 7.5f * vs), FontStyleBold | FontStyleItalic, Color(255, 232, 226, 27), StringAlignmentFar);
+            SolidBrush blk(Color(255, 0, 0, 0)), wh(Color(255, 255, 255, 255));
+            g.FillRectangle(&blk, RectF(bx, yy + lh * 0.18f, 46 * vs, lh * 0.64f));
+            g.FillRectangle(&wh, RectF(bx, yy + lh * 0.18f, 46 * vs * vals[i] / 100, lh * 0.64f));
+        }
+    } else if (style == 1) {   // Carte
+        float w = 150 * sc, rowh = 13 * sc, h = 22 * sc + rowh * (shown.size() + 1) + 12 * sc;
+        RectF r = place(w, h);
+        GraphicsPath cp; RoundRect(cp, r, 9 * sc);
+        SolidBrush b(bg); g.FillPath(&b, &cp);
+        Pen pe(Color(46, 204, 227, 255), 1.0f); g.DrawPath(&pe, &cp);
+        Text(g, T(L"Lundi", L"Monday"), RectF(r.X + 7 * sc, r.Y + 5 * sc, 70 * sc, 14 * sc), max(5.0f, 8 * sc), FontStyleBold, Color(255, 240, 245, 252), StringAlignmentNear);
+        Text(g, L"2 140 mk", RectF(r.X + w - 62 * sc, r.Y + 5 * sc, 55 * sc, 14 * sc), max(5.0f, 7.5f * sc), FontStyleBold, ac, StringAlignmentFar);
+        float yy = r.Y + 24 * sc;
+        for (float v : shown) {
+            GraphicsPath tp; RoundRect(tp, RectF(r.X + 50 * sc, yy + 4 * sc, w - 58 * sc, 4 * sc), 2 * sc); g.FillPath(&track, &tp);
+            GraphicsPath fp; RoundRect(fp, RectF(r.X + 50 * sc, yy + 4 * sc, max(4 * sc, (w - 58 * sc) * v / 100), 4 * sc), 2 * sc);
+            SolidBrush fb(tone(v)); g.FillPath(&fb, &fp);
+            SolidBrush lb(Color(200, 220, 230, 242)); g.FillRectangle(&lb, RectF(r.X + 8 * sc, yy + 4 * sc, 32 * sc, 4 * sc));
+            yy += rowh;
+        }
+        LinearGradientBrush tg(RectF(r.X + 50 * sc, yy + 4 * sc, w - 58 * sc, 4 * sc), Color(255, 90, 169, 255), Color(255, 255, 181, 92), LinearGradientModeHorizontal);
+        g.FillRectangle(&tg, RectF(r.X + 50 * sc, yy + 4 * sc, w - 58 * sc, 4 * sc));
+    } else if (style == 2) {   // Anneaux
+        float ring = 22 * sc, cell = 27 * sc, w = 52 * sc + cell * (shown.size() + 1), h = ring + 16 * sc;
+        RectF r = place(w, h);
+        GraphicsPath cp; RoundRect(cp, r, 11 * sc);
+        SolidBrush b(bg); g.FillPath(&b, &cp);
+        Pen pe(Color(46, 204, 227, 255), 1.0f); g.DrawPath(&pe, &cp);
+        Text(g, T(L"Lundi", L"Monday"), RectF(r.X + 6 * sc, r.Y + 5 * sc, 44 * sc, 12 * sc), max(5.0f, 7 * sc), FontStyleBold, Color(255, 240, 245, 252), StringAlignmentNear);
+        Text(g, L"2 140", RectF(r.X + 6 * sc, r.Y + 17 * sc, 44 * sc, 14 * sc), max(5.0f, 9 * sc), FontStyleBold, ac, StringAlignmentNear);
+        float xx = r.X + 52 * sc, cy = r.Y + h / 2;
+        for (size_t i = 0; i <= shown.size(); i++) {
+            float v = i < shown.size() ? shown[i] : 30;
+            Color c = i < shown.size() ? tone(v) : Color(255, 143, 201, 255);
+            RectF rr(xx + (cell - ring) / 2 + 2 * sc, cy - ring / 2 + 2 * sc, ring - 4 * sc, ring - 4 * sc);
+            Pen tp(Color(30, 255, 255, 255), 3 * sc); g.DrawEllipse(&tp, rr);
+            Pen fp(c, 3 * sc); fp.SetStartCap(LineCapRound); fp.SetEndCap(LineCapRound); g.DrawArc(&fp, rr, -90, 360 * max(0.04f, v / 100));
+            xx += cell;
+        }
+    } else {   // Bandeau
+        float ch = 14 * sc, cw = 34 * sc, w = 8 * sc + 40 * sc + 46 * sc + (cw + 3 * sc) * (shown.size() + 1), h = ch + 8 * sc;
+        int keep = pos; if (pos == 0 || pos == 1) pos = 4; else if (pos == 2 || pos == 3) pos = 5;
+        RectF r = place(w, h);
+        if (keep == 0 || keep == 2) r.X = box.X + m; else if (keep == 1 || keep == 3) r.X = box.X + box.Width - w - m;
+        GraphicsPath cp; RoundRect(cp, r, h / 2);
+        SolidBrush b(bg); g.FillPath(&b, &cp);
+        Pen pe(Color(46, 204, 227, 255), 1.0f); g.DrawPath(&pe, &cp);
+        float xx = r.X + 4 * sc, cy = r.Y + 4 * sc;
+        Text(g, T(L"Lundi", L"Monday"), RectF(xx, cy, 40 * sc, ch), max(5.0f, 7 * sc), FontStyleBold, Color(255, 240, 245, 252)); xx += 40 * sc + 3 * sc;
+        GraphicsPath mp; RoundRect(mp, RectF(xx, cy, 43 * sc, ch), ch / 2); SolidBrush mb(WithA(ac, 0.18f)); g.FillPath(&mb, &mp);
+        Text(g, L"2 140", RectF(xx, cy, 43 * sc, ch), max(5.0f, 7 * sc), FontStyleBold, ac); xx += 46 * sc;
+        for (size_t i = 0; i <= shown.size(); i++) {
+            float v = i < shown.size() ? shown[i] : 30;
+            Color c = i < shown.size() ? tone(v) : Color(255, 143, 201, 255);
+            GraphicsPath cpp; RoundRect(cpp, RectF(xx, cy, cw, ch), ch / 2); SolidBrush cb(v >= 70 ? WithA(c, 0.2f) : Color(14, 255, 255, 255)); g.FillPath(&cb, &cpp);
+            GraphicsPath fp; RoundRect(fp, RectF(xx + 6 * sc, cy + ch / 2 - 1.5f * sc, max(3 * sc, (cw - 12 * sc) * v / 100), 3 * sc), 1.5f * sc); SolidBrush fb(c); g.FillPath(&fb, &fp);
+            xx += cw + 3 * sc;
+        }
+    }
+    g.Restore(st);
+    Pen bp(TH(panelBorder), 1.0f); g.DrawPath(&bp, &p);
+}
+
 static void DrawSettingsPage(Graphics &g)
 {
     if (GetTickCount() - g_gfxReadT > 2000) GfxLoad();   // (le jeu peut les avoir changes : son menu, F10)
@@ -1495,9 +1676,9 @@ static void DrawSettingsPage(Graphics &g)
 static std::wstring SetHeaderSub()
 {
     if (!g_setSearch.empty()) { wchar_t b[96]; swprintf_s(b, T(L"%d réglages trouvés · Échap : effacer", L"%d settings found · Esc: clear"), g_setFound); return b; }
-    static const wchar_t *fr[SET_N] = { L"Durables, pour toutes tes parties · « Jeu » = la valeur du jeu lui-même", L"Lumière, ombres, ray tracing · en jeu : F10", L"Vocal de proximité : qui t'entend, à quel volume",
+    static const wchar_t *fr[SET_N] = { L"Durables, pour toutes tes parties · « Jeu » = la valeur du jeu lui-même", L"Lumière, ombres, ray tracing · en jeu : F10", L"Jauges en jeu : Vanilla, Carte, Anneaux ou Bandeau · en jeu : F10 › HUD", L"Vocal de proximité : qui t'entend, à quel volume",
                                         L"Ce que tu proposes en hébergeant, et ce que tu veux chez toi", L"Touches de MWCoop · celles du jeu : dans le jeu (Options > Contrôles)", L"Thème, couleur d'accent, aurore et neige, verre, densité, texte", L"Lanceur : langue, version, dossier du jeu, mises à jour, journaux" };
-    static const wchar_t *en[SET_N] = { L"Lasting, for all your games · \"Game\" = the game's own value", L"Light, shadows, ray tracing · in game: F10", L"Proximity voice: who hears you, how loud",
+    static const wchar_t *en[SET_N] = { L"Lasting, for all your games · \"Game\" = the game's own value", L"Light, shadows, ray tracing · in game: F10", L"In-game gauges: Vanilla, Card, Rings or Strip · in game: F10 › HUD", L"Proximity voice: who hears you, how loud",
                                         L"What you offer when hosting, and what you want on your side", L"MWCoop keys · the game's own: in the game (Options > Controls)", L"Theme, accent colour, aurora and snow, glass, density, text", L"Launcher: language, version, game folder, updates, logs" };
     return T(fr[g_setTab], en[g_setTab]);
 }
@@ -1547,7 +1728,7 @@ static void SetRail() { int t = g_setTab <= SET_SON ? TAB_GFX : TAB_COOP; if (g_
 static void SetTutoTab(int step) { g_setTab = step == 12 || step == 17 || step == 18 || step == 21 ? SET_LANCEUR : SET_JEU; g_setSearch.clear(); }   // (12 : API des moddeurs, carte Depannage)
 static void SetCaptureState(const std::wstring &st)
 {
-    static const wchar_t *names[SET_N] = { L"jeu", L"image", L"son", L"coop", L"touches", L"theme", L"lanceur" };
+    static const wchar_t *names[SET_N] = { L"jeu", L"image", L"hud", L"son", L"coop", L"touches", L"theme", L"lanceur" };
     std::wstring s = st.size() > 9 ? st.substr(9) : L"";   // (apres "reglages-")
     for (int i = 0; i < SET_N; i++) if (s == names[i]) g_setTab = i;
     SetRail();
@@ -1665,6 +1846,7 @@ static bool SetClick(int id)
     case UI_SET_GOIMAGE: g_setTab = SET_IMAGE; SetRail(); g_setSearch.clear(); g_scroll[g_tab] = 0; return true;
     }
     if (id >= UI_SET_THEMECARD && id < UI_SET_THEMECARD + THEME_N) { ThemeSet(id - UI_SET_THEMECARD); return true; }
+    if (id >= UI_SET_HUDSTYLE && id < UI_SET_HUDSTYLE + 4) { GfxSet("Style", id - UI_SET_HUDSTYLE); return true; }
     if (id >= UI_SET_ACCENT && id < UI_SET_ACCENT + 5) { ThemeSetAccent(id - UI_SET_ACCENT); return true; }
     if (id >= UI_SET_AURORE && id < UI_SET_AURORE + 3) { ThemeSetAurore(id - UI_SET_AURORE); return true; }
     if (id >= UI_SET_DENS && id < UI_SET_DENS + 3) { ThemeSetDensite(id - UI_SET_DENS); return true; }
