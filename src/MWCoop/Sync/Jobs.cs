@@ -1265,6 +1265,13 @@ namespace MWCoop
 
         static string NewId() { return "b" + Session.LocalId + salt + "-" + (++tagCounter); }
 
+        // Pour les autres modules (porte-buches) : objet cree ici marque d'un ID neuf (suivi par Props, annonce disparu), ou
+        // objet cree sur annonce marque de l'ID recu ; un ID deja connu ; objet marque retire (sans le renvoyer).
+        public static string TagNew(GameObject made) { string id = NewId(); Tag(made, id); return id; }
+        public static void TagAs(GameObject made, string id) { Tag(made, id); }
+        public static bool HasTag(string id) { return tagged.ContainsKey(id) || tagged.ContainsKey(id + "a"); }
+        public static bool Gone(string id) { if (!tagged.ContainsKey(id)) return false; OnGone(id); return true; }
+
         // Chaque corps de l'objet cree recoit son ID (une buche du billot : deux moities, a et b).
         static void Tag(GameObject made, string id)
         {
@@ -1918,6 +1925,7 @@ namespace MWCoop
                 case "@touche": PhoneKeys.OnMessage(who, r); break;
                 case "@combine": PhoneKeys.OnHandset(who, r); break;
                 case "@plat": Plats.OnMessage(who, r); break;
+                case "@porte": WoodCarriers.OnMessage(who, r); break;
                 case "@fleetari": Shop.OnFleetari(who, r); break;
                 case "@percute": CarHits.OnMessage(who, r); break;
                 case "@ram": ModRam1500.OnMessage(who, r); break;

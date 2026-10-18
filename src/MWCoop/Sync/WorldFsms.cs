@@ -334,6 +334,12 @@ namespace MWCoop
             if (Interactions.Tracks(f) || Interactions.Wants(f) || Jobs.Tracks(f) || CarDoors.Tracks(f) || Consume.Tracks(f)) return true;
             if (root.name == "JOBS" && f.FsmName != "Use" && HasSave(f)) return true;   // boulots : Jobs (meme s'il ne les a pas encore vus)
             if (n == "CashRegisterLogic") return true;                                    // magasin : Shop
+            // Zones de la fendeuse (Cutter/Triggers/Trigger1|2 :: Assembly) : « Find correct part » cherche la grume dans la
+            // main du joueur LOCAL. Chez l'autre, la copie de la grume (Props) entrait aussi dans les zones : ses allers-retours
+            // Check -> Find -> LOOP etaient envoyes et rejoues chez celui qui posait la grume, dont les zones retombaient a
+            // « Check for Part collision » (Trigger1/2 a faux) : « tres difficile de charger la fendeuse » (vampire234, 18/10).
+            // A chacun les siennes ; la mise en marche (Triggers::Logic, clic) reste rejouee.
+            if (f.FsmName == "Assembly" && root.name == "Cutter" && f.transform.parent != null && f.transform.parent.name == "Triggers") return true;
             if (n.StartsWith("fuse holder")) return true;                                 // porte-fusibles : Home (crees tard chez l'invite, ils etaient pris ici avant lui)
             // Createurs d'objets (pieces, articles) : jamais rejoues directement -- c'est l'action qui les
             // declenche (ouvrir un colis, passer une commande) qui l'est, sinon l'objet apparaitrait en
