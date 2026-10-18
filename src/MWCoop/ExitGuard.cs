@@ -55,7 +55,7 @@ namespace MWCoop
         static bool quitAsked;
         public static void Test(string mode, float t)
         {
-            if (mode != "quitter" || quitAsked || t < 25f) return;
+            if (mode != "quitter" || quitAsked || t < Config.GetInt("Test", "QuitterA", 25)) return;   // ([Test] QuitterA=<s> : plus tard)
             quitAsked = true;
             Log.Info("autotest : quitter");
             UnityEngine.Application.Quit();
