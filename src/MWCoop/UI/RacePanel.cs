@@ -9,7 +9,8 @@ namespace MWCoop
     //    pas inscrit), comment et quand venir, les pilotes humains (inscrits, numero, meilleur tour, derniere manche) et les
     //    chronos ;
     //  - chronos en direct (Draw) : au circuit pendant les essais du vendredi (meilleurs tours) et les manches (positions,
-    //    tours, dernier et meilleur tour), en haut a droite. [Hud] ChronoGlace=0 : jamais.
+    //    tours, dernier et meilleur tour), en haut a droite, 5 s apres chaque passage de ma voiture sur la ligne d'arrivee
+    //    (JD, 18/10). [Hud] ChronoGlace=0 : jamais.
     public static class RacePanel
     {
         static float P(float v) { return Style.Px(v); }
@@ -100,7 +101,7 @@ namespace MWCoop
         static float shownAt = -1f;
         public static void Draw()
         {
-            if (Menu.Open || Config.GetInt("Hud", "ChronoGlace", 1) == 0 || !IceRace.LiveOn) { shownAt = -1f; return; }
+            if (Menu.Open || Config.GetInt("Hud", "ChronoGlace", 1) == 0 || !IceRace.LiveShow) { shownAt = -1f; return; }
             string title;
             List<IceRace.LiveRow> rows = IceRace.LiveRows(out title);
             if (rows.Count == 0 || title == null) return;

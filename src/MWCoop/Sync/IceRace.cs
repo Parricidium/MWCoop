@@ -984,6 +984,10 @@ namespace MWCoop
             }
             Transform lt = tf.transform.Find("StartFinishTime");
             if (lt != null) lines[2].Encapsulate(LineBounds(lt));
+            // (boites des maillages : de 0,5 m au-dessus de la glace a 7 m -- le pivot d'une voiture, au ras de la glace, passait
+            // dessous : aucun tour compte, ni pour la VAZ ni pour les IA ; JD 18/10, 3 tours sans temps. Hauteur portee a 20 m
+            // de plus, et 2 m de chaque cote)
+            for (int i = 0; i < 3; i++) lines[i].Expand(new Vector3(4f, 20f, 4f));
             lineLaps = tf.transform.Find("StartFinishLaps").gameObject;
             lineTime = lt != null ? lt.gameObject : null;
             Log.Info("glace : lignes de la piste relevees (CP1 " + lines[0].center.ToString("F0") + " " + lines[0].size.ToString("F0") + ", CP2 " + lines[1].center.ToString("F0") + ", arrivee " + lines[2].center.ToString("F0") + " " + lines[2].size.ToString("F0") + ")");
