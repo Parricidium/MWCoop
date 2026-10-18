@@ -205,6 +205,11 @@ namespace MWCoop
 
         static void Probe()
         {
+            if (Wine.On && Config.GetInt("Test", "RTWine", 0) == 0)
+            {
+                Log.Info("rt : coupe sous Wine/Proton (Direct3D 12 et DXR a cote du Direct3D 11 du jeu : pas pris en charge par DXVK et vkd3d-proton ; [Test] RTWine=1 pour essayer)");
+                return;
+            }
             try
             {
                 // MWCoopRT.dll a cote du mwcoop.ini (dossier MWCoop du jeu)

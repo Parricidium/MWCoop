@@ -1380,7 +1380,7 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             UiButton(g, RectF(x + w - bw, y + 19, bw, 32), bt, UI_SET_FOLDER, false, IC_FOLDER);
         } else if (!strcmp(k, "start")) {
             const Opt *ls = OptByKey("LancerSteam");
-            int how = ls && OptGet(*ls) ? 2 : GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) ? 1 : 0;
+            int how = ls && OptGet(*ls) && !IsWine() ? 2 : NoCopy() ? 1 : 0;   // (Wine : jamais par Steam, cf. LaunchGame)
             SetSegRow(g, it, row, { T(L"Copie", L"Copy"), T(L"Dossier du jeu", L"Game folder"), L"Steam" }, how, UI_SET_START);
             g_setSteamRow = row;
         } else if (!strcmp(k, "mscl")) {

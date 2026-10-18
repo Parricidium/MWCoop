@@ -117,9 +117,21 @@ static void ModTraceCheck()
             LaunchLog("ATTENTION : pas de trace du chargeur MWCoop pour cette partie (dernier-lancement.txt %s) : le jeu tourne sans le mod", ageMs == ~0ULL ? "absent" : "plus ancien");
             GameProcessRunning();   // (note les jeux d'autres dossiers)
             g_modMissing = true;
+            if (IsWine()) {   // (sans version=n,b, Wine prend sa propre version.dll : la cause la plus probable)
+                LaunchLog("Wine : pas de trace du chargeur, Wine a sans doute pris sa propre version.dll (WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% dans les options de lancement Steam)");
+                SetStatus(K_WARN, T(L"MWCoop ne s'est pas chargé : sous Linux, mets WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% dans les options de lancement Steam du jeu (GUIDE : Linux et Steam Deck)",
+                                    L"MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% in the game's Steam launch options (GUIDE: Linux and Steam Deck)"));
+            } else
             SetStatus(K_WARN, T(L"MWCoop ne s'est pas charg\u00E9 dans le jeu : ferme-le, puis envoie les journaux (zip) sans fermer le lanceur",
                                 L"MWCoop did not load in the game: close it, then send the logs (zip) without closing the launcher"));
-        } else LaunchLog("chargeur MWCoop vu pour cette partie");
+        } else {
+            std::vector<unsigned char> d;   // (Wine : le chargeur y note sa version, wine=...)
+            std::string tr = ReadAll(LocalDir() + L"dernier-lancement.txt", d) ? std::string(d.begin(), d.end()) : "";
+            size_t w = tr.find("\nwine=");
+            std::string wine = w == std::string::npos ? "" : tr.substr(w + 6, tr.find('\n', w + 6) - w - 6);
+            while (!wine.empty() && (wine.back() == '\r' || wine.back() == ' ')) wine.pop_back();
+            LaunchLog("chargeur MWCoop vu pour cette partie%s%s", wine.empty() ? "" : ", Wine ", wine.c_str());
+        }
     }
 }
 
@@ -137,7 +149,7 @@ static void AfterGameModCheck()
         SetStatus(K_WARN, T(L"MWCoop ne s'est pas charg\u00E9 depuis la copie de lancement : relance ta partie, elle partira du dossier du jeu",
                             L"MWCoop did not load from the launch copy: start your game again, it will now start from the game folder"));
     }
-    if (g_modMissing && vs && !OptGet(*vs) && !MirrorDir().empty()) {
+    if (g_modMissing && vs && !OptGet(*vs) && !MirrorDir().empty() && !IsWine()) {   // (Wine : jamais par Steam, cf. LaunchGame)
         g_modMissing = false;
         int r = MessageBoxW(g_wnd, T(L"MWCoop ne s'est pas charg\u00E9 dans le jeu.\n\nChez certains joueurs, il ne se charge que si le jeu est lanc\u00E9 par Steam (comme son bouton JOUER).\n\nActiver \u00AB Lancer le jeu par Steam \u00BB (R\u00E9glages > Jeu) et relancer ta partie ?",
                                      L"MWCoop did not load in the game.\n\nFor some players it only loads when the game is started through Steam (like its PLAY button).\n\nTurn on \"Start the game through Steam\" (Settings > Game) and start your game again?"),

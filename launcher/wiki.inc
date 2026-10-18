@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- page GUIDE : petit wiki des joueurs - inclus par launcher.cpp
+﻿// ---------------------------------------------------------------- page GUIDE : petit wiki des joueurs - inclus par launcher.cpp
 // Demande de JD (08/10) : tout ce qu'il faut pour jouer sans probleme (installation, MSCLoader officiel / de MWCoop,
 // partage des mods, options, Copie / Dossier / Steam...), range en categories pliables, avec des mini tutos en images.
 // A gauche les categories (clic : plier / deplier) et leurs articles ; a droite l'article : sections pliables, etapes
@@ -120,7 +120,7 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
         WikiCard(g, row);
         Text(g, T(L"Démarrer le jeu", L"Start the game"), RectF(row.X + 16, row.Y, 200, 52), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
         int how = 0;
-        if (const Opt *ls = OptByKey("LancerSteam")) how = OptGet(*ls) ? 2 : GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) ? 1 : 0;
+        if (const Opt *ls = OptByKey("LancerSteam")) how = OptGet(*ls) && !IsWine() ? 2 : NoCopy() ? 1 : 0;
         RectF seg(row.X + row.Width - 256, row.Y + 8, 240, 36);
         UiSeg(g, seg, { T(L"Copie", L"Copy"), T(L"Dossier", L"Folder"), L"Steam" }, how, Z, 12);
         float sw = (seg.Width - 6) / 3;

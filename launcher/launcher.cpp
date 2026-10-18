@@ -319,6 +319,93 @@ static std::wstring WithSlash(std::wstring d)
     return d;
 }
 
+// ---------------------------------------------------------------- Wine / Proton (Linux, Steam Deck)
+// Le jeu n'existe que pour Windows : sous Linux il tourne par Proton (le Wine de Steam), MWCoop avec lui (question de JD,
+// 18/10 : pas de portage, une compatibilite Proton). Wine se reconnait a ntdll!wine_get_version. Sous Wine : ni pare-feu,
+// ni modes de compatibilite, ni Smart App Control de Windows (rien a verifier ni a retirer) ; jonctions incertaines (le
+// jeu part de son dossier par defaut : SansCopie) ; jeu lance directement par le lanceur, qui lui passe son environnement
+// (Steam, WINEDLLOVERRIDES) ; notre version.dll n'est prise par Wine qu'avec version=n,b dans WINEDLLOVERRIDES (pose ici
+// avant chaque lancement) ou dans le registre du prefixe pour mywintercar.exe (pose aussi : le bouton JOUER de Steam la
+// prend alors sans option de lancement). Rien de tout cela ne change sous Windows.
+// Essai sous Windows : variable MWCOOP_WINE=<version> fait comme sous Wine (sans toucher au registre).
+static std::string g_wine;       // version de Wine ("" : Windows)
+static std::string g_wineInfo;   // pour le journal : hote, build, Steam Deck, prefixe
+static bool g_wineSim;           // essai MWCOOP_WINE
+static bool IsWine() { return !g_wine.empty(); }
+static void WineDetect()
+{
+    typedef const char *(__cdecl *StrFn)();
+    typedef void (__cdecl *HostFn)(const char **, const char **);
+    HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+    StrFn ver = nt ? (StrFn)GetProcAddress(nt, "wine_get_version") : NULL;
+    char b[512];
+    if (ver) { const char *v = ver(); g_wine = v && *v ? v : "?"; }
+    else if (GetEnvironmentVariableA("MWCOOP_WINE", b, sizeof b) && b[0]) { g_wine = b; g_wineSim = true; }
+    if (!IsWine()) return;
+    HostFn host = nt ? (HostFn)GetProcAddress(nt, "wine_get_host_version") : NULL;
+    StrFn build = nt ? (StrFn)GetProcAddress(nt, "wine_get_build_id") : NULL;
+    if (host) { const char *s = NULL, *r = NULL; host(&s, &r); if (s) g_wineInfo += std::string(s) + (r ? std::string(" ") + r : ""); }
+    if (build) { const char *s = build(); if (s && *s) g_wineInfo += std::string(g_wineInfo.empty() ? "" : ", ") + "build " + s; }
+    if (g_wineSim) g_wineInfo += "essai MWCOOP_WINE";
+    bool deck = GetEnvironmentVariableA("SteamDeck", b, sizeof b) && b[0] == '1';
+    g_wineInfo += deck ? ", Steam Deck" : "";
+    if (GetEnvironmentVariableA("STEAM_COMPAT_DATA_PATH", b, sizeof b) && b[0]) g_wineInfo += std::string(", Proton (prefixe ") + b + ")";
+    if (GetEnvironmentVariableA("WINEDLLOVERRIDES", b, sizeof b)) g_wineInfo += std::string(", WINEDLLOVERRIDES=") + b;
+    else g_wineInfo += ", sans WINEDLLOVERRIDES";
+}
+
+// WINEDLLOVERRIDES du lanceur, dont le jeu herite : version (notre chargeur) et winhttp (UnityDoorstop de MSCLoader) en
+// native puis builtin -- sinon Wine prend les siennes et le mod ne se charge pas, sans un mot. Les autres entrees du
+// joueur restent. Et, une fois (Wine seulement, pas l'essai), la meme chose pour mywintercar.exe dans le registre du
+// prefixe (HKCU\Software\Wine\AppDefaults\mywintercar.exe\DllOverrides), retiree par la desinstallation.
+static const wchar_t *const kWineDlls[] = { L"version", L"winhttp" };
+static const wchar_t *kWineAppKey = L"Software\\Wine\\AppDefaults\\mywintercar.exe\\DllOverrides";
+static void WineOverrides(const char *where)
+{
+    if (!IsWine()) return;
+    wchar_t buf[4096] = L"";
+    GetEnvironmentVariableW(L"WINEDLLOVERRIDES", buf, 4096);
+    std::wstring cur = buf, out;
+    bool good[2] = { false, false }, changed = false;
+    for (size_t i = 0; i <= cur.size();) {   // entrees "dll1,dll2=mode" separees par ';' (le mode peut contenir des virgules)
+        size_t j = cur.find(L';', i);
+        if (j == std::wstring::npos) j = cur.size();
+        std::wstring e = Trim(cur.substr(i, j - i));
+        i = j + 1;
+        if (e.empty()) continue;
+        size_t eq = e.find(L'=');
+        std::wstring dlls = eq == std::wstring::npos ? e : e.substr(0, eq), mode = eq == std::wstring::npos ? L"" : e.substr(eq);
+        bool native = mode.size() > 1 && towlower(mode[1]) == L'n';
+        std::wstring keep;
+        for (size_t a = 0; a <= dlls.size();) {
+            size_t z = dlls.find(L',', a);
+            if (z == std::wstring::npos) z = dlls.size();
+            std::wstring d = Trim(dlls.substr(a, z - a)), dl = d;
+            a = z + 1;
+            for (auto &c : dl) c = towlower(c);
+            if (dl.size() > 4 && dl.compare(dl.size() - 4, 4, L".dll") == 0) dl.resize(dl.size() - 4);
+            int k = dl == kWineDlls[0] ? 0 : dl == kWineDlls[1] ? 1 : -1;
+            if (k >= 0 && native && !good[k]) { good[k] = true; keep += (keep.empty() ? L"" : L",") + d; continue; }
+            if (k >= 0) { changed = true; continue; }   // (builtin, coupee, ou en double : retiree, remise plus bas)
+            if (!d.empty()) keep += (keep.empty() ? L"" : L",") + d;
+        }
+        if (!keep.empty()) out += (out.empty() ? L"" : L";") + keep + mode;
+    }
+    for (int k = 0; k < 2; k++) if (!good[k]) { out += (out.empty() ? L"" : L";") + std::wstring(kWineDlls[k]) + L"=n,b"; changed = true; }
+    if (changed) SetEnvironmentVariableW(L"WINEDLLOVERRIDES", out.c_str());
+    LaunchLog("Wine (%s) : WINEDLLOVERRIDES %s%s", where, changed ? "pose pour le jeu : " : "deja bon : ", Narrow(out, CP_UTF8).c_str());
+    static bool reg;
+    if (reg || g_wineSim) return;
+    reg = true;
+    HKEY k;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kWineAppKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &k, NULL) == ERROR_SUCCESS) {
+        bool ok = true;
+        for (const wchar_t *d : kWineDlls) ok &= RegSetValueExW(k, d, 0, REG_SZ, (const BYTE *)L"native,builtin", 15 * sizeof(wchar_t)) == ERROR_SUCCESS;
+        RegCloseKey(k);
+        LaunchLog("Wine : version et winhttp en native,builtin pour mywintercar.exe dans le registre du prefixe%s", ok ? "" : " -- ECHEC");
+    } else LaunchLog("Wine : registre du prefixe impossible a ecrire (AppDefaults\\mywintercar.exe)");
+}
+
 // ---------------------------------------------------------------- My Winter Car
 static bool IsGameDir(const std::wstring &d)
 {
@@ -2360,7 +2447,24 @@ static float Rnd01(int i, int k)
 // invitation acceptee MWCoop ferme lance le jeu sans le mod).
 static const RectF kGuideCard(290, 116, 700, 560);
 static const RectF kGuideCopy(330, 552, 300, 50), kGuideOk(646, 552, 304, 50), kGuideNoMore(330, 618, 380, 26), kGuideClose(926, 132, 44, 44);
-static std::wstring SteamLaunchLine() { return L"\"" + g_self + L"\" %command%"; }
+// Wine : la ligne de Linux -- Steam y lance Proton ; WINEDLLOVERRIDES pour notre version.dll, et le nom de l'exe du jeu
+// remplace par MWCoop.exe dans %command% (le lanceur tourne alors dans le prefixe du jeu, avec Steam).
+static std::wstring WineExeName()
+{
+    WIN32_FIND_DATAW fd;   // (casse reelle du fichier : Linux la respecte)
+    HANDLE h = g_gameDir.empty() ? INVALID_HANDLE_VALUE : FindFirstFileW((g_gameDir + L"mywintercar.exe").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return L"mywintercar.exe";
+    FindClose(h);
+    return fd.cFileName;
+}
+static std::wstring SteamLaunchLine()
+{
+    if (IsWine()) {
+        std::wstring self = g_self.substr(g_self.find_last_of(L'\\') + 1);
+        return L"WINEDLLOVERRIDES=\"version,winhttp=n,b\" bash -c 'exec \"${@/" + WineExeName() + L"/" + self + L"}\"' -- %command%";
+    }
+    return L"\"" + g_self + L"\" %command%";
+}
 static bool CopyText(const std::wstring &t)
 {
     if (!OpenClipboard(g_wnd)) return false;
@@ -2611,6 +2715,9 @@ static bool IsGamePid(DWORD pid)
 // la sienne ; vu le 05/10 sur l'installation de JD, alors que les copies hors de steamapps marchent). On lance
 // donc, comme les copies COOPTEST, une copie de l'exe dans %LOCALAPPDATA%\MWCoop\jeu, les gros dossiers et
 // MWCoop relies par jonctions (memes donnees, reglages, journaux et sauvegardes). Vide : pas de copie.
+// Depart du dossier du jeu plutot que de la copie ([Lanceur] SansCopie ; absent : oui sous Wine, ou les jonctions de la
+// copie ne sont pas sures, non sous Windows).
+static bool NoCopy() { return GetPrivateProfileIntW(L"Lanceur", L"SansCopie", IsWine() ? 1 : 0, g_iniLauncher.c_str()) != 0; }
 static std::wstring MirrorDir()
 {
     std::wstring low = g_gameDir;
@@ -2625,7 +2732,7 @@ static std::wstring MirrorDir()
 static std::wstring GameExe()
 {
     std::wstring m = MirrorDir();
-    if (GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) != 0) m.clear();   // (depart du dossier du jeu)
+    if (NoCopy()) m.clear();   // (depart du dossier du jeu)
     if (g_mscOn && MscOwn() && MscOwnInstalled()) m = MscCopyDir();
     return (m.empty() ? g_gameDir : m) + L"mywintercar.exe";
 }
@@ -2739,6 +2846,10 @@ static bool PrepareMirror(const std::wstring &m)
 // a Windows (Securite Windows : root/SecurityCenter2, par PowerShell, fil a part).
 static DWORD WINAPI DebugSysThread(void *)
 {
+    if (IsWine()) {   // (ni Smart App Control, ni Securite Windows, ni PowerShell sous Wine)
+        DebugLog("Wine %s (%s), lanceur %s, jeu %s", g_wine.c_str(), g_wineInfo.c_str(), Narrow(g_self, CP_UTF8).c_str(), Narrow(g_gameDir, CP_UTF8).c_str());
+        return 0;
+    }
     DWORD sac = 99, sz = sizeof(sac);
     RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\CI\\Policy", L"VerifiedAndReputablePolicyState", RRF_RT_REG_DWORD, NULL, &sac, &sz);
     wchar_t build[64] = L"?"; DWORD bs = sizeof(build);
@@ -3176,6 +3287,7 @@ static bool CompatAuto() { return GetPrivateProfileIntW(L"Lanceur", L"RetirerCom
 static void CompatCleanAll(const char *where)
 {
     if (g_gameDir.empty()) return;
+    if (IsWine()) return;   // (Wine : pas de moteur de compatibilite de Windows, rien a retirer)
     if (!CompatAuto()) { LaunchLog("compatibilite (%s) : retrait coupe dans les reglages", where); return; }
     std::vector<std::wstring> dirs = { g_gameDir, MirrorDir(), GuestCopyDir(), MscCopyDir() };
     for (const std::wstring &d : dirs) if (!d.empty()) CompatClean(d + L"mywintercar.exe", where);
@@ -3379,6 +3491,9 @@ static void Launch(int mode, const char *partie = NULL)
     LoaderEnsure(g_gameDir, "dossier du jeu");
     const Opt *viaSteam = OptByKey("LancerSteam");
     g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && !MirrorDir().empty();
+    // Wine : steam://rungameid passerait par le Steam de Linux, hors du lanceur et sans WINEDLLOVERRIDES (le mod ne se
+    // chargerait pas) : le jeu part d'ici. Pour jouer depuis Steam, l'option de lancement Linux (SteamLaunchLine).
+    if (g_steamLaunch && IsWine()) { g_steamLaunch = false; LaunchLog("Wine : \"Lancer par Steam\" ignore, le jeu part du lanceur"); }
     if (g_steamLaunch) {
         Sleep(800);   // (SteamDown ci-dessus : que Steam ne voie plus le lanceur comme le jeu en cours)
         if (!LocalDir().empty()) {   // (si Steam nous relance par l'option de lancement : demarrer le jeu, wWinMain)
@@ -3406,8 +3521,8 @@ static void Launch(int mode, const char *partie = NULL)
     // depuis la copie) : chez un joueur (08/10), le jeu parti de la copie dans AppData ne chargeait jamais MWCoop -- notre
     // version.dll y etait bloquee --, alors que parti du dossier du jeu, si. Chez d'autres, c'est l'inverse (copie creee
     // pour ca, 05/10) : chacun garde ce qui marche chez lui.
-    bool noCopy = !syncKind && GetPrivateProfileIntW(L"Lanceur", L"SansCopie", 0, g_iniLauncher.c_str()) != 0;
-    if (noCopy && !mirror.empty()) { mirror.clear(); LaunchLog("depart du dossier du jeu (SansCopie : MWCoop ne se chargeait pas depuis la copie)"); }
+    bool noCopy = !syncKind && NoCopy();
+    if (noCopy && !mirror.empty()) { mirror.clear(); LaunchLog(IsWine() ? "depart du dossier du jeu (Wine : SansCopie par defaut)" : "depart du dossier du jeu (SansCopie : MWCoop ne se chargeait pas depuis la copie)"); }
     // MSCLoader de MWCoop (onglet MODS) : toujours une copie de lancement, avec son Doorstop (jeu Steam ou non).
     bool ownMsc = MscOwn() && MscOwnInstalled();
     if (!syncKind && ownMsc && g_mscOn) mirror = MscCopyDir();
@@ -3438,7 +3553,8 @@ static void Launch(int mode, const char *partie = NULL)
         LaunchLog("version.dll : jeu %s ; depart %s", info(g_gameDir + L"version.dll").c_str(), info(runDir + L"version.dll").c_str());
     }
     bool overlay = GetModuleHandleW(L"gameoverlayrenderer64.dll") != NULL;
-    bool viaShell = g_fromSteam || overlay;
+    bool viaShell = (g_fromSteam || overlay) && !IsWine();   // (Wine : le jeu doit heriter de l'environnement du lanceur)
+    WineOverrides("lancement");
     LaunchLog("lancement (mode %d) : %s par %s (demarre par Steam %d, overlay %d)", mode, Narrow(exe, CP_UTF8).c_str(), viaShell ? "l'explorateur" : "le lanceur", (int)g_fromSteam, (int)overlay);
     std::wstring shellArg = L"\"" + exe + L"\"";
     // Toujours par le bureau de Windows (0.62) : le lanceur s'est connecte a Steam sous l'identite du jeu (salons), Steam y a
@@ -3458,14 +3574,14 @@ static void Launch(int mode, const char *partie = NULL)
         if (fh != INVALID_HANDLE_VALUE) { do { dlls += " " + Narrow(fd.cFileName, CP_UTF8) + "(" + std::to_string(fd.nFileSizeLow) + ")"; } while (FindNextFileW(fh, &fd)); FindClose(fh); }
         DebugLog("DLL du depart :%s", dlls.c_str());
     }
-    if (ShellRunFromDesktop(exe, args, runDir)) {
+    if (!IsWine() && ShellRunFromDesktop(exe, args, runDir)) {
         LaunchLog("jeu lance par le bureau de Windows, avec ses arguments");
         g_proc = NULL;
         g_pid = 0;
         done();
         return;
     }
-    LaunchLog("bureau de Windows indisponible : %s", viaShell ? "explorer.exe" : "lancement direct");
+    LaunchLog(IsWine() ? "Wine : lancement direct (environnement du lanceur)" : "bureau de Windows indisponible : %s", viaShell ? "explorer.exe" : "lancement direct");
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
     sei.hwnd = g_wnd;
@@ -3537,6 +3653,7 @@ template <class F> static void FwEachRule(INetFwPolicy2 *pol, const std::wstring
 // Le jeu (ou le lanceur) peut-il recevoir de l'UDP sur les reseaux actifs ? (Pare-feu coupe : oui.)
 static int FirewallState(const std::wstring &app)
 {
+    if (IsWine()) return FW_UNKNOWN;   // (Wine : pas de pare-feu de Windows ; celui de Linux n'est pas lisible d'ici)
     HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     int st = FW_UNKNOWN;
     if (INetFwPolicy2 *pol = FwPolicy()) {
@@ -3615,6 +3732,7 @@ static bool g_fwAsked;
 static bool FirewallBeforeHosting()
 {
     if (g_fwAsked || g_gameDir.empty()) return true;
+    if (IsWine()) { g_fwAsked = true; LaunchLog("pare-feu : Wine, rien a verifier (le pare-feu de Linux, s'il y en a un, doit laisser passer le port du jeu)"); return true; }
     std::vector<std::wstring> apps = { GameExe(), g_self }, bad;
     bool blocked = false;
     for (const std::wstring &a : apps) {
@@ -4173,7 +4291,7 @@ static void NetTest()
     wchar_t b[200];
     swprintf_s(b, T(L"UDP %d %s · TCP %d %s · pare-feu %s · Steam %s", L"UDP %d %s · TCP %d %s · firewall %s · Steam %s"),
                port, udp ? T(L"libre", L"free") : T(L"OCCUPÉ", L"BUSY"), port, tcp ? T(L"libre", L"free") : T(L"OCCUPÉ", L"BUSY"),
-               fw == FW_OK ? L"ok" : fw == FW_BLOCKED ? T(L"BLOQUE le jeu", L"BLOCKS the game") : fw == FW_MISSING ? T(L"sans règle", L"no rule") : L"?",
+               fw == FW_OK ? L"ok" : fw == FW_BLOCKED ? T(L"BLOQUE le jeu", L"BLOCKS the game") : fw == FW_MISSING ? T(L"sans règle", L"no rule") : IsWine() ? L"Linux" : L"?",
                steam ? T(L"connecté", L"connected") : T(L"fermé", L"closed"));
     bool bad = !udp || !tcp || fw == FW_BLOCKED, warn = fw == FW_MISSING || !steam;
     g_netTest = b;
@@ -5747,19 +5865,48 @@ static void LogsGroupZip(int gi)
     ZipToDesktop(files, tag);
 }
 
-// Fichiers ou dossiers a la corbeille de Windows (rien d'efface pour de bon).
+// Wine : la corbeille est celle du bureau Linux ; quand Wine ne peut pas y mettre un dossier, il l'efface en descendant
+// dedans -- a travers un lien, jusqu'au vrai jeu. Un dossier ou reste un lien (jonction, lien de Linux) ou un
+// mywintercar_Data (copie de lancement dont le lien n'a pas ete vu comme tel) n'y est donc jamais donne.
+static bool WineUnsafeDir(const std::wstring &dir, int depth = 0)
+{
+    DWORD at = GetFileAttributesW(dir.c_str());
+    if (at == INVALID_FILE_ATTRIBUTES || !(at & FILE_ATTRIBUTE_DIRECTORY)) return false;
+    if ((at & FILE_ATTRIBUTE_REPARSE_POINT) || depth > 12) return true;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((WithSlash(dir) + L"*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    bool bad = false;
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L"..") continue;
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || !_wcsicmp(n.c_str(), L"mywintercar_Data")) bad = true;
+        else if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) bad = WineUnsafeDir(WithSlash(dir) + n, depth + 1);
+    } while (!bad && FindNextFileW(h, &fd));
+    FindClose(h);
+    return bad;
+}
+
+// Fichiers ou dossiers a la corbeille de Windows (rien d'efface pour de bon). Wine : sans les dossiers a liens (ci-dessus),
+// et Wine demande avant d'effacer pour de bon ce qu'il ne peut pas mettre a la corbeille.
 static bool ToRecycleBin(const std::vector<std::wstring> &paths)
 {
     if (paths.empty()) return true;
     std::wstring list;
-    for (auto &p : paths) { std::wstring q = p; if (!q.empty() && q.back() == L'\\') q.pop_back(); list += q; list.push_back(L'\0'); }
+    bool refused = false;
+    for (auto &p : paths) {
+        std::wstring q = p; if (!q.empty() && q.back() == L'\\') q.pop_back();
+        if (IsWine() && WineUnsafeDir(q)) { refused = true; LaunchLog("Wine : %s pas mis a la corbeille (liens vers le jeu dedans)", Narrow(q, CP_UTF8).c_str()); continue; }
+        list += q; list.push_back(L'\0');
+    }
+    if (list.empty()) return false;
     list.push_back(L'\0');
     SHFILEOPSTRUCTW op = {};
     op.hwnd = g_wnd;
     op.wFunc = FO_DELETE;
     op.pFrom = list.c_str();
-    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI;
-    return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted;
+    op.fFlags = FOF_ALLOWUNDO | FOF_SILENT | FOF_NOERRORUI | (IsWine() ? 0 : FOF_NOCONFIRMATION);
+    return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted && !refused;
 }
 
 // ---------------------------------------------------------------- desinstallation
@@ -5805,8 +5952,17 @@ static bool UninstallCore(bool registry, std::wstring *left)
     int links = 0;
     if (!ld.empty() && GetFileAttributesW(ld.c_str()) != INVALID_FILE_ATTRIBUTES) {
         links = RemoveJunctionsIn(ld);
-        add(ld.substr(0, ld.size() - 1));
+        if (!IsWine()) add(ld.substr(0, ld.size() - 1));
+        else {   // (Wine : element par element ; une copie de lancement ou un lien reste est laissee -- ToRecycleBin)
+            WIN32_FIND_DATAW fd;
+            HANDLE h = FindFirstFileW((ld + L"*").c_str(), &fd);
+            if (h != INVALID_HANDLE_VALUE) {
+                do { if (wcscmp(fd.cFileName, L".") && wcscmp(fd.cFileName, L"..")) add(ld + fd.cFileName); } while (FindNextFileW(h, &fd));
+                FindClose(h);
+            }
+        }
     }
+    if (registry && IsWine() && !g_wineSim) for (const wchar_t *d : kWineDlls) RegDeleteKeyValueW(HKEY_CURRENT_USER, kWineAppKey, d);   // (pose par WineOverrides)
     LaunchLog("desinstallation : %d lien(s) retire(s), %d element(s) a la Corbeille", links, (int)paths.size());
     g_launcherLog.clear();   // (son dossier part : plus rien n'y est ecrit)
     for (auto &p : paths) ToRecycleBin({ p });   // (un par un : un echec, le lanceur en cours par exemple, n'arrete pas les autres)
@@ -5843,6 +5999,8 @@ static void Uninstall()
                           : std::wstring(T(L"MWCoop est d\u00E9sinstall\u00E9, sauf ces \u00E9l\u00E9ments (ouverts par un autre programme ?) :", L"MWCoop is uninstalled, except these items (open in another program?):")) + left;
     msg += T(L"\n\nSi tu avais mis MWCoop dans les options de lancement de Steam (Propri\u00E9t\u00E9s du jeu > G\u00E9n\u00E9ral), retire-les : sinon le jeu ne d\u00E9marrera plus depuis Steam.\n\nPour r\u00E9installer : t\u00E9l\u00E9charge MWCoop et lance MWCoop.exe.",
              L"\n\nIf you had put MWCoop in Steam's launch options (game Properties > General), remove it: otherwise the game won't start from Steam anymore.\n\nTo reinstall: download MWCoop and run MWCoop.exe.");
+    if (IsWine() && !ok) msg += T(L"\n\nSous Linux, les copies de lancement (avec des liens vers le jeu) restent : supprime-les à la main, sans suivre les liens.",
+                                  L"\n\nOn Linux, the launch copies (with links to the game) are kept: delete them by hand, without following the links.");
     MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
     DestroyWindow(g_wnd);
 }
@@ -6338,6 +6496,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     wchar_t self[MAX_PATH];
     GetModuleFileNameW(NULL, self, MAX_PATH);
     g_self = self;
+    WineDetect();   // (Linux / Steam Deck par Proton : avant tout le reste)
     g_dir = DirOf(g_self);
     g_iniLauncher = g_dir + L"mwcoop-lanceur.ini";
     {   // Steam met ses variables dans l'environnement du programme qu'il lance (avant tout SteamAPI_Init d'ici)
@@ -6393,6 +6552,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
                 FILE *f = _wfopen(g_launcherLog.c_str(), L"wb");
                 if (f) fclose(f);
                 LaunchLog("MWCoop.exe %s (%s), demarre par Steam : %d, ligne : %s", Narrow(g_self, CP_UTF8).c_str(), __DATE__, (int)g_fromSteam, Narrow(GetCommandLineW(), CP_UTF8).c_str());
+                if (IsWine()) LaunchLog("Wine %s (%s) : Linux par Proton ou Wine -- pas de pare-feu ni de compatibilite Windows, depart du dossier du jeu par defaut", g_wine.c_str(), g_wineInfo.c_str());
+                WineOverrides("demarrage");   // (registre du prefixe : le bouton JOUER de Steam charge MWCoop meme sans option)
             }
         }
         LocalFree(av);
@@ -6548,7 +6709,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     if (argc >= 3 && !_wcsicmp(argv[1], L"/parefeu")) {
         std::vector<std::wstring> apps;
         for (int i = 2; i < argc; i++) apps.push_back(argv[i]);
-        bool ok = FirewallAllow(apps);
+        bool ok = !IsWine() && FirewallAllow(apps);   // (Wine : pas de pare-feu de Windows)
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }

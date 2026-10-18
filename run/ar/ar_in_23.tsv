@@ -1,0 +1,3 @@
+ML001	On Linux: put the Steam launch option from the GUIDE (Linux and Steam Deck) and start MWCoop from Steam
+ML002	MWCoop did not load: on Linux, put WINEDLLOVERRIDES=\"version,winhttp=n,b\" %%command%% in the game's Steam launch options (GUIDE: Linux and Steam Deck)
+ML003	\n\nOn Linux, the launch copies (with links to the game) are kept: delete them by hand, without following the links.

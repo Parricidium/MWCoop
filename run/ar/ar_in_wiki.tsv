@@ -476,3 +476,29 @@ WM05	Players: one card per player (where they are, ping) with Go to, and for the
 WM06	Ice race: the 16 rental Jokkis, free, one per player, with the 3D preview. Left/Right filter a model, Enter or a double click chooses or gives back the car.
 WM07	Menu size (Small, Normal, Large) and its place (centre or left): F10 › Graphics › MWCoop menu. It also applies to cheats (F7), the wallet (N) and the chat.
 WF60	If the FPS option of the game's settings is on, the frame counter shows up in the chosen style: a pill in the Card's header, a ring at the end of Rings, a pill at the end of Strip (green, orange or red depending on smoothness).
+WL01	My Winter Car only exists for Windows: on Linux and Steam Deck it runs through Proton, Steam's compatibility layer. MWCoop runs with it, inside the same Proton: no separate Linux version, the same files as on Windows.
+WL02	In Steam: My Winter Car > Properties > Compatibility: tick \"Force the use of a specific Steam Play compatibility tool\" and pick Proton (the latest stable one). Start the game once without anything, so Proton sets up its folder.
+WL03	Copy EVERYTHING from the MWCoop zip into the game folder (Manage > Browse local files), as on Windows: MWCoop.exe, version.dll and the MWCoop folder, next to mywintercar.exe.
+WL04	Properties > General > Launch options: paste this line (the launcher's \"Playing through Steam\" guide copies it for you):\nWINEDLLOVERRIDES=\"version,winhttp=n,b\" bash -c 'exec \"${@/mywintercar.exe/MWCoop.exe}\"' -- %command%
+WL05	PLAY in Steam now opens MWCoop, inside the game's Proton: host, join or play solo, as on Windows.
+WL06	What the line does
+WL07	WINEDLLOVERRIDES=\"version,winhttp=n,b\": Proton uses MWCoop's version.dll (and MSCLoader's winhttp.dll) instead of its own. Without it, the game starts without the mod, with no error at all.
+WL08	bash -c 'exec ...' -- %command%: replaces mywintercar.exe with MWCoop.exe in Steam's command. MWCoop then runs inside the game's Proton, with Steam (lobbies, invites, voice).
+WL09	Just the game with the mod, without the launcher: WINEDLLOVERRIDES=\"version,winhttp=n,b\" %command%. The launcher also writes it for mywintercar.exe in Proton's registry, once it has been opened.
+WL10	Same launch options, in Desktop mode or from the Deck's interface (game Properties). The launcher works with the touchscreen or the trackpad; on-screen keyboard: Steam + X.
+WL11	In game, the co-op menu (F10), the chat (T) and Esc need a keyboard: map them to buttons (Controller configuration) or plug in a keyboard.
+WL12	What's different on Linux
+WL13	The game starts from its folder (Game start: Game folder, the default on Linux): the launch copy's links aren't reliable under Proton. The MSCLoader provided by MWCoop needs them: use the official MSCLoader instead.
+WL14	\"Start through Steam\" (Game start: Steam) doesn't exist on Linux: the launch option replaces it.
+WL15	No Windows firewall to set up. To host by IP, the game's port (UDP and TCP) must get through Linux's firewall if there is one; through Steam, nothing to do.
+WL16	Windows compatibility modes, Smart App Control and Windows antiviruses don't exist under Proton: the articles about them don't apply to you.
+WL17	Recycle Bin: your Linux desktop's trash. A launch copy (with links to the game) is never sent there: delete it by hand.
+WL18	Known limits
+WL19	Ray tracing: off under Proton (it shares images between Direct3D 11 and Direct3D 12, which Proton doesn't do).
+WL20	Your videos on a tape (/import): depending on Proton's codecs, some formats don't work; an .mp4 (H.264) is the safest.
+WL21	Not yet tested by the team on Linux: if something is wrong, send your logs.
+WL22	Always start MWCoop through Steam (the launch option). Opened separately (Wine, Lutris, protontricks), it runs in another prefix: it sees neither your game nor Steam.
+WL23	The mod didn't load? lanceur.log (LOGS) starts with a \"Wine\" line: the Proton version and the WINEDLLOVERRIDES the launcher saw.
+WL24	On Linux or Steam Deck (Proton), the cause is almost always the launch option: without WINEDLLOVERRIDES, Proton uses its own version.dll.
+WL25	Linux and Steam Deck
+WL26	Proton, launch option, limits
