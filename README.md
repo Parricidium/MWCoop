@@ -22,12 +22,14 @@
 A co-op mod for **My Winter Car** (Steam), by the authors of [VCCoop](https://github.com/Parricidium/VCCoop),
 [SACoop](https://github.com/Parricidium/SACoop) and [JACoop](https://github.com/Parricidium/JACoop). One player hosts
 their world; friends join **that** world: same save, same time, same weather, the same car rebuilt bolt by bolt,
-the same shops, NPCs, jobs and bills — with a wallet each.
+the same shops, NPCs, jobs and bills — with a wallet each. Up to **16 players** per lobby.
 
-The mod and its launcher speak **English and French** (the launcher follows Windows, the game follows the launcher).
+The launcher speaks **English, French, Russian and Arabic**; the in-game menus **English, French and Russian**
+(the launcher follows Windows, the game follows the launcher). Windows, and **Linux / Steam Deck through Proton**
+(not tested on a real Linux yet, see [Download and install](#download-and-install)).
 
 > [!NOTE]
-> Found a bug? Send your logs: launcher, **Logs** page, *Create a zip to send*.
+> Found a bug? Send your logs: launcher, **Logs** (page icon at the top right), *Create a zip to send*.
 > Help, bug reports and players to team up with: the **Discord** button in the launcher.
 
 *[Version française plus bas.](#version-française)*
@@ -36,10 +38,10 @@ The mod and its launcher speak **English and French** (the launcher follows Wind
 
 ### The launcher
 
-`MWCoop.exe` installs the mod, offers its updates (one click), checks your game, and runs the **lobby**: players with their
-3D portrait, version, ping and a UDP check; the host picks *Continue* or *New game*, then everyone's game starts.
-Since 0.42 it is a bigger, frosted-glass window over a northern-lights night: every page is one click away in the bar
-on the left (lobby, outfit, car, sent content, mods, what's new, logs, settings).
+`MWCoop.exe` installs the mod, offers its updates (one click), checks your game, and runs the **lobby**. Since 0.97 it
+is a big frosted-glass window over a northern-lights night: every page is in the bar on the left (home, lobby, saves,
+character, car, sent content, settings, mods, VHS, album, guide, what's new), with a built-in **Guide** and a guided
+tour for every new button.
 
 <p align="center">
   <img src="docs/img/lanceur-accueil.png" width="100%" alt="Launcher home page">
@@ -48,27 +50,35 @@ on the left (lobby, outfit, car, sent content, mods, what's new, logs, settings)
 <table>
   <tr>
     <td width="50%"><img src="docs/img/lanceur-salon.png" alt="Lobby page"></td>
-    <td width="50%"><img src="docs/img/lanceur-tenue.png" alt="Outfit page"></td>
+    <td width="50%"><img src="docs/img/lanceur-perso.png" alt="Character page"></td>
   </tr>
   <tr>
-    <td align="center"><b>Lobby</b>: players, game choice, what the host sends, START; the gear holds the lobby options</td>
-    <td align="center"><b>Outfit</b> (or click yourself in the lobby): your full look in 3D, one row per part, head to toe</td>
+    <td align="center"><b>Lobby</b>: public or private (session code), 2 to 16 players, chat, the game's options for this lobby, START</td>
+    <td align="center"><b>Character</b>: outfit, face, pants and build in 3D — the game's clothes, community packs or your own images</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/img/lanceur-voiture.png" alt="Car page"></td>
-    <td width="50%"><img src="docs/img/lanceur-contenu.png" alt="Sent content page"></td>
+    <td width="50%"><img src="docs/img/lanceur-sauvegardes.png" alt="Saves page"></td>
   </tr>
   <tr>
-    <td align="center"><b>Car</b>: the CORRIS colour for a new game, previewed in 3D</td>
-    <td align="center"><b>Sent content</b>: CDs, paint, flag, posters… copied apart to your guests</td>
+    <td align="center"><b>Car</b>: the CORRIS colour, trim and options for a new game, custom paint, dent removal</td>
+    <td align="center"><b>Saves</b>: one game per group of friends, with its day, money and hours played</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/img/lanceur-journaux.png" alt="Logs page"></td>
+    <td width="50%"><img src="docs/img/lanceur-hud.png" alt="HUD settings"></td>
+    <td width="50%"><img src="docs/img/lanceur-guide.png" alt="Guide"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Settings</b>: game, image &amp; ray tracing, HUD, sound &amp; voice, co-op, keys, theme</td>
+    <td align="center"><b>Guide</b>: install, hosting, joining, mods, Linux… and fixes for the common problems</td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/img/lanceur-clair.png" alt="Light theme"></td>
+    <td width="50%"><img src="docs/img/lanceur-accueil-fr.png" alt="French launcher"></td>
   </tr>
   <tr>
-    <td align="center"><b>Logs</b>: every log, one click to zip them for a bug report</td>
-    <td align="center">Light or dark theme, English or French, falling snow</td>
+    <td align="center">Light or dark theme, accent colour, snow and northern lights</td>
+    <td align="center">English, French, Russian or Arabic, in one click</td>
   </tr>
 </table>
 
@@ -81,23 +91,47 @@ on the left (lobby, outfit, car, sent content, mods, what's new, logs, settings)
   </tr>
   <tr>
     <td align="center">Cars driven by the others: real physics, engine sound, lights, the driver at the wheel</td>
-    <td align="center">Chat (<b>T</b>), name tags above the players, short messages for what the others do</td>
+    <td align="center">Chat (<b>T</b>), name tags above the players, proximity voice chat (<b>V</b>)</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/img/jeu-menu.jpg" alt="F10 menu, appearance tab"></td>
+    <td width="50%"><img src="docs/img/jeu-hud-carte.jpg" alt="Card HUD"></td>
+    <td width="50%"><img src="docs/img/jeu-hud-anneaux.jpg" alt="Rings HUD"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>HUD</b>: the game's own (Vanilla) or the <b>Card</b>, with the team panel and alerts</td>
+    <td align="center">… or the <b>Rings</b> style at the bottom (here with the FPS counter)</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/img/jeu-hud-bandeau.jpg" alt="Strip HUD"></td>
+    <td width="50%"><img src="docs/img/jeu-f10-joueurs.jpg" alt="F10 menu, players"></td>
+  </tr>
+  <tr>
+    <td align="center">… or the thin <b>Strip</b> at the top; size, position and colour are yours</td>
+    <td align="center"><b>F10</b> menu: players with ping, go to them, bring them, invite Steam friends</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/img/jeu-f10-course.jpg" alt="F10 menu, ice race"></td>
+    <td width="50%"><img src="docs/img/jeu-f10-apparence.jpg" alt="F10 menu, appearance"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Ice race</b>: a free rental Jokkis each, with a 3D preview (beta)</td>
+    <td align="center">Change your look in game with a live 3D preview</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/img/jeu-triches.jpg" alt="Cheats panel"></td>
     <td width="50%"><img src="docs/img/jeu-attente.jpg" alt="Guest waiting screen"></td>
   </tr>
   <tr>
-    <td align="center"><b>F10</b> menu: players, outfit with a live 3D preview, chat, sync audit — mouse or keyboard</td>
+    <td align="center"><b>Cheats</b> (<b>F7</b>), if the host allows them: places, players, time, snow — announced to everyone</td>
     <td align="center">Guests wait on this screen while the host's save arrives, then join by themselves</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/img/jeu-mort.jpg" alt="Death screen"></td>
-    <td width="50%"><img src="docs/img/jeu-joueurs.jpg" alt="F10 menu, players tab"></td>
+    <td width="50%"></td>
   </tr>
   <tr>
     <td align="center">Dying no longer ends the co-op game: pick where you come back</td>
-    <td align="center">Players and ping; Enter or click to go to a player</td>
+    <td></td>
   </tr>
 </table>
 
@@ -123,21 +157,33 @@ on the left (lobby, outfit, car, sent content, mods, what's new, logs, settings)
 1. Open the game folder (Steam: right-click *My Winter Car* > *Manage* > *Browse local files*).
 2. Copy everything from the [latest release](https://github.com/Parricidium/MWCoop/releases) zip next to
    `mywintercar.exe`: `version.dll`, `MWCoop.exe` and the `MWCoop` folder.
-3. Start `MWCoop.exe`. When a new version is out, a **NEW VERSION · UPDATE** button shows up under the logo: one click.
+3. Start `MWCoop.exe`. When a new version is out, an **UPDATE** button shows up under the logo: one click.
 
 No other loader is needed. From a Steam install, the launcher starts the game from a copy in
 `%LOCALAPPDATA%\MWCoop\My Winter Car` (same data, linked folders): Steam would otherwise load Windows' `version.dll`
-before the mod's.
+before the mod's. If the mod doesn't load, *Settings > Launcher > Game start* offers *Game folder* or *Steam* instead.
 
-**MSCLoader** (experimental): MWCoop and MSCLoader run side by side since 0.31.3. The launcher's **Mods** page
-(0.32) installs MSCLoader from its official GitHub (its own installer refuses a game folder that already contains a
-`version.dll`), turns it on or off for the next launch, lists your mods and edits their options (gear icon; applied
-at the next game launch). Since 0.36, the host's mods marked **Send** go to the lobby's guests (one **ACCEPT ALL**,
-then automatic): they are copied apart, in `%LOCALAPPDATA%\MWCoop\mods-invite`, and loaded only for the host's
-game (the guest's own mods and settings are never touched). A host without MSCLoader: guests play without it too.
-Since 0.37 the host's **CDs** (music and covers), **radio**, **CORRIS and moped paint**, **garage flag**, **posters**,
-**window sticker**, **fabric** and **hockey teams** go the same way (*Sent content* page, a checklist; the ID photo
-is off by default), into `%LOCALAPPDATA%\MWCoop\contenu-invite`.
+Under the version number, **Reworked** is the current MWCoop (updated) and **Legacy** the old one, frozen at 0.95.8.
+Everyone in a game must use the same one.
+
+**Linux and Steam Deck** (since 0.99): the game is Windows-only, so MWCoop runs with it inside **Proton**. Same zip;
+the launcher recognises Proton/Wine by itself (no firewall or Windows-only settings, starts from the game folder, ray
+tracing off). Steam launch option for the game:
+
+```
+WINEDLLOVERRIDES="version=n,b" %command%
+```
+
+The launcher's Guide has the full steps (*Linux and Steam Deck*). **LINUX SUPPORT NOT TESTED**: nobody has tried it on a
+real Linux yet — your feedback and logs are welcome.
+
+**MSCLoader** (experimental): MWCoop and MSCLoader run side by side. The launcher's **Mods** page installs MSCLoader
+from its official GitHub (its own installer refuses a game folder that already contains a `version.dll`), turns it on
+or off for the next launch, lists your mods and edits their options. The host's mods marked **Send** go to the lobby's
+guests (one **ACCEPT ALL**, then automatic): they are copied apart, in `%LOCALAPPDATA%\MWCoop\mods-invite`, and loaded
+only for the host's game (the guest's own mods and settings are never touched). The host's **CDs**, **radio**,
+**CORRIS and moped paint**, **garage flag**, **posters**, **window sticker**, **fabric** and **hockey teams** go the
+same way (*Sent content* page), into `%LOCALAPPDATA%\MWCoop\contenu-invite`.
 
 ### Antivirus warning
 
@@ -150,110 +196,127 @@ downloads the mod's updates from GitHub and starts the game. No virus signature 
 - Everything is open source in this repository; you can read the code and build it yourself (see *Building*).
 - Every release has a `SHA256SUMS-<version>.txt` file: compare it with your files
   (`Get-FileHash MWCoop.exe` in PowerShell), and look the hash up on [VirusTotal](https://www.virustotal.com).
-- Since 0.26.2 the launcher no longer starts any hidden helper (no `tar.exe`, no `cmd.exe`): the update zip and the
-  Steam folder links are handled inside the launcher, and both executables carry full version information.
+- The launcher starts no hidden helper (no `tar.exe`, no `cmd.exe`): the update zip and the Steam folder links are
+  handled inside the launcher, and both executables carry full version information.
 - If Defender quarantines it: *Windows Security* > *Virus & threat protection* > *Protection history* > *Allow*, or add
   an exclusion for the game folder.
 
 ## Playing
 
-Pick the network above the address field: **STEAM** (easiest) or **IP / VPN**.
+Pick the network on the home page: **STEAM** (easiest) or **IP / VPN**.
 
 - **Through Steam** (everyone needs the Steam version of the game): the host clicks HOST. The launcher opens a
-  **Steam lobby** (friends only) and lists the host's online Steam friends: click **INVITE**. A friend accepts the
-  invite in Steam (or clicks **JOIN** in MWCoop.exe, Steam selected) and lands in the same lobby as over IP: outfits,
-  versions, READY, *Continue* / *New game*, then START launches everyone's game. No port to open, no firewall, no
-  address: the traffic goes through Steam's relays. Steam avatars show in the lobby and next to the nicknames in game.
-  So that an invite accepted while MWCoop is **closed** opens MWCoop (not the game without the mod), follow the
-  guide that opens when you pick STEAM (or click *Steam launch option* > GUIDE): it copies the Steam launch option (`"...\MWCoop.exe" %command%`) to paste
-  in *Properties > General > Launch options*. Once the game is running, more friends can still be invited in game
-  (**F10 > Invite Steam friends**, or Shift+Tab).
-- **Host** (IP / VPN): click HOST. The launcher opens a **lobby** where friends show up with their outfit, version and ping.
-  Pick *Continue my game* or *New game*, then START: everyone's game starts. Forward port **7870** in **UDP and TCP**
-  on your router, or use a VPN (Radmin VPN, ZeroTier…) and share your VPN address.
-- **Join**: enter the host's address, click READY in the lobby (or JOIN IN GAME if the host is already playing). Your
-  game receives the host's save and enters their game by itself. **Your own save is never touched**: guests play in
-  a separate profile (`MWCoop\profils\invite`).
-- In game: **F10** opens the co-op menu (mouse or arrows), **T** the chat, **Esc** closes them. Everyone can go to
-  another player (F10 > PLAYERS); the host can also bring a player over or kick them.
-- The launcher stays open while you play (option in Settings): players, ping, and for the host BRING HERE and
-  KICK; it goes back to the menu when the game closes. A red "!" on *Logs* means the last game stopped abruptly.
+  **Steam lobby** and lists the host's online Steam friends: click **INVITE**. A friend accepts the invite in Steam (or
+  clicks **JOIN**) and lands in the lobby. No port to open, no firewall, no address: the traffic goes through Steam's
+  relays. So that an invite accepted while MWCoop is **closed** opens MWCoop, follow the guide that opens when you pick
+  STEAM: it copies the Steam launch option (`"...\MWCoop.exe" %command%`). In game, more friends can still be invited
+  (**F10 > Players > Invite Steam friends**, or Shift+Tab).
+- **Through IP / VPN**: the host clicks HOST; friends enter the host's address (and the **session code** if the lobby
+  is private) and click JOIN. Forward port **7870** in **UDP and TCP** on your router, or use a VPN (Radmin VPN,
+  ZeroTier…) and share your VPN address.
+- **The lobby**: players with their outfit, version, ping and a UDP check; a lobby chat; **Public** or **Private**
+  (session code to COPY), 2 to 16 players; the host's options for this lobby (guests' starting money, cheats, cars run
+  players over, punches, Ventti stakes, Jokkis rentals, MWCoop additions). Pick *Continue my game* or *New game*, then
+  START: everyone's game starts. A friend who arrives later joins the running game.
+- **Saves**: the *Saves* page keeps several games, one per group of friends; the host picks which one to play. **A
+  guest's own save is never touched**: guests play in a separate profile, and a copy of the host's game is kept for
+  them ("At <host>").
+- **In game**: **F10** co-op menu, **T** chat, **V** voice (held), **N** wallet, **M** map, **F7** cheats (if the host
+  allows them), **F5** third person, **F8** drone camera, **Esc** closes. Every key can be changed in *Settings > Keys*.
+- The launcher can stay open while you play: players, ping, and for the host BRING HERE and KICK. A red "!" on the
+  logs icon means the last game stopped abruptly.
 
 ## Features
 
-- **Players**: everyone sees the others with the outfit they picked among the game's NPC clothes, their name tag,
-  walking, crouching (two levels), sitting on furniture, smoking, drinking, carrying, waving, punching, the finger,
-  drunk sway, passing out; the head follows the camera, even at the wheel.
-- **One world**: the host's save is sent to the guests (also right after a new game); host's time, day, weather,
-  clouds, snow and temperature; time only fast-forwards when **every** player sleeps. A guest who joins mid-game gets
-  the doors, switches, TV, CDs and everything else as they are.
+- **Players**: everyone sees the others with the look they picked (outfit, face, pants, build, hat, glasses, hair —
+  the game's clothes, community packs or their own painted images), their name tag, walking, crouching, sitting,
+  smoking, drinking, carrying, waving, punching, drunk sway, passing out; the head follows the camera, even at the wheel.
+  **Third person** (F5) on foot and at the wheel.
+- **One world**: the host's save is sent to the guests; host's time, day, weather, clouds, snow and temperature; time
+  only fast-forwards when **every** player sleeps. A guest who joins mid-game gets everything as it is. If something
+  drifts, **F10 > Players > Resync the world**.
 - **Vehicles**: the driver sits at the wheel for everyone with engine sound, turning wheels, lights, wipers and the
-  dashboard; smooth for passengers; doors, hoods and boot lids that swing for real; **passenger seats** (ENTER near a
-  seat) where a passenger can use the key, handbrake, windows, heater…; taxi, towing rope, frost and scraping,
-  crash damage (glass, dents, suspension), fires.
+  dashboard; smooth for passengers; doors, hoods and boot lids that swing for real; **passenger seats** with seatbelts,
+  where a passenger can use the key, handbrake, windows, heater…; taxi, towing rope, frost and scraping, crash damage,
+  fires.
 - **Car building**: parts installed and removed, every bolt turn, parts carried and dropped, paint, carburettor and
   knob adjustments, wiring, fluids (fuel, oil, coolant, brake fluid) and wear, jacks, lift and engine hoist.
-- **Money and shops**: **a wallet each**, everyone keeps their own pay (only the buyer pays); shopping seen by everyone (bags,
-  shelves emptying live), pub, flea market, inspection, coffee, bus, gas pump terminal, restaurant trays and plates.
+- **Money and shops**: **a wallet each**, everyone keeps their own pay (only the buyer pays), money can be given to
+  another player (**N**); shopping seen by everyone, pub, flea market, inspection, coffee, bus, gas pump, restaurant,
+  Ventti with stakes for the whole group.
 - **NPCs**: same people in the same places with the same gestures; customers, fights and police checkpoints followed
-  by the player they deal with; their lines heard by everyone — and stopped for everyone when they hang up or get
-  interrupted.
-- **Everyday life**: bills (paid by one, power back for all), mailbox, phone calls (a guest can answer), parts
-  catalogue orders and parcels, lottery, fuses, stove, sauna, cooking (sausages, coffee, spoilage), wood fires and
-  firewood, kilju, septic tanks, jobs shared without double pay, slot machines one player at a time.
-- **Death and saves**: in co-op, dying no longer ends the game — pick the apartment or the parents' house; co-op save
-  at the toilet without kicking the guests (a guest can ask for it); the host back to the menu takes everyone along.
-- **Interface**: frosted-glass panels in the launcher's colours, mouse cursor in the menus, guest waiting screen with
-  the save download, sync audit (F10 > SYNC) that compares host and guests every 15 s and lists local actions not
-  shared yet.
-- **Drone camera** (F8): photo mode — your character stays put while a small drone camera flies around (viewfinder,
-  zoom, tilt, flash); photos land in Pictures\CoopPictures with the MWCoop logo. The others see the drone and its flash.
-- **OSUUSKAUPPA 𝔰21 shop** (Peräjärvi, south-west of the PSK crossroads, along the small road): a co-op-only village shop with its shopkeeper — sleeping bags and a
-  **video corner**: VHS tapes, VCRs, a TV and a 90s camcorder (VHS viewfinder, recording with sound); films are sent to
-  every player and play on the TV for everyone at once; you can also put your own videos on a tape (/import). Step-by-step guide: [docs/GUIDE-VIDEO.md](docs/GUIDE-VIDEO.md).
-- **Museum of Corsica** (next to the shop): a small museum built in the village — Corsica in relief under glass, busts of
-  Napoleon and Pasquale Paoli, 19th-century paintings, old postcards and a Tour de Corse room, with French/English plaques.
-  Pictures and 3D models are public domain or Creative Commons, credited in the launcher (Credits).
-- **Rally co-driver — KARTTURI 2000** (690 mk at the shop): an old rally GPS with a green handheld-console screen. Seated
-  as a passenger, press F to hold it up: rotating map of the stage, the next pace notes (left/right, grade 1-6, hairpin,
-  crest, tightens…) with their distance, and a beep after each corner — call them out to your driver on voice chat. The
-  stage lines come from the game's own rally drivers (SS1, SS2, SS3).
+  by the player they deal with; their lines heard by everyone.
+- **Everyday life**: bills, mailbox, phone calls (a guest can answer), parts orders and parcels, lottery, fuses,
+  stove, sauna, cooking, wood fires, firewood and log splitter, kilju, septic tanks, jobs shared without double pay.
+- **Death and saves**: in co-op, dying no longer ends the game — pick where you come back; co-op save at the toilet
+  without kicking the guests (a guest can ask for it); the host back to the menu takes everyone along.
+- **HUD** (0.97.11): keep the game's own (**Vanilla**) or pick **Card**, **Rings** or **Strip**, in the launcher's
+  style; size (70 to 150 %), position, colour, background, gauges shown, FPS counter (if the game's option is on). A
+  **team panel** shows the other players' gauges, and **alerts** pop up when you or a friend are very hungry, exhausted
+  or freezing.
+- **F10 menu** (0.98): tabs on the left (Players, Chat, Ice race, Appearance, HUD, Graphics, Sync), compact, with a
+  size and position of your choice; the small panels (cheats, wallet, chat) in the same style.
+- **Map** (**M**): the other players live, the places, and shared markers (one colour per player).
+- **Voice chat**: proximity voice through Steam, held key (**V**), volume and range in the launcher.
+- **Cheats** (**F7**, or chat commands `/help`): go to a player, bring one, places, heal, money, time, snow — only if
+  the host allows them, and each one is announced to everyone.
+- **Ice race** (beta): a free rental Jokkis each, picked in F10 > Ice race with a 3D preview (host option, off by
+  default).
+- **Drone camera** (**F8**): photo mode — your character stays put while a small drone flies around (viewfinder,
+  zoom, tilt, flash); photos land in Pictures\CoopPictures. The others see the drone and its flash.
+- **OSUUSKAUPPA 𝔰21 shop** (Peräjärvi): a co-op village shop — sleeping bags and a **video corner**: VHS tapes, VCRs,
+  a TV and a 90s camcorder; films are sent to every player and play on the TV for everyone. Step-by-step guide:
+  [docs/GUIDE-VIDEO.md](docs/GUIDE-VIDEO.md).
+- **Museum of Corsica** (next to the shop): a small museum built in the village, with French/English plaques.
+- **Rally co-driver — KARTTURI 2000** (690 mk at the shop): an old rally GPS; seated as a passenger, F holds it up:
+  rotating stage map and the next pace notes to call out to your driver.
+- **MWCoop additions**: the drone, sleeping bags, shop and museum can each be turned off (All / Pick / None); the
+  host's choice holds for everyone.
+- **Graphics**: presets from Vanilla to Ultra, borderless window, shadows, distances, comfort options, and **ray
+  tracing** (in development, DXR 1.1 cards): sun and lamp shadows, ambient occlusion, reflections.
 
-The detailed list, version by version, is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French).
+The detailed list, version by version, is in [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) (French) and in the
+launcher's *What's new* page.
 
 ## Options
 
-`MWCoop\mwcoop.ini`, section `[Coop]` (the launcher writes most of them for you):
+`MWCoop\mwcoop.ini` (the launcher writes almost all of them for you, *Settings* page):
 
 | Key | Effect |
 |---|---|
-| `Port=7870` | Game port (UDP) and lobby port (TCP) |
-| `Langue=fr` / `en` / `ru` | Language of the in-game texts (written by the launcher) |
-| `Flou=0` | Plain panels instead of the blurred glass (very old PCs) |
-| `Reapparition=0` | Death ends the game as in solo |
-| `EcranAttente=0` | Guests see the game's main menu instead of the waiting screen |
-| `SynchroMonde=0` | Emergency switch: turns off the generic world sync if it gets in the way |
+| `[Coop] Port=7870` | Game port (UDP) and lobby port (TCP) |
+| `[Coop] Langue=fr` / `en` / `ru` | Language of the in-game texts (written by the launcher) |
+| `[Coop] Flou=0` | Plain panels instead of the blurred glass (very old PCs) |
+| `[Coop] Reapparition=0` | Death ends the game as in solo |
+| `[Coop] EcranAttente=0` | Guests see the game's main menu instead of the waiting screen |
+| `[Coop] FinForcee=20` | Seconds before a game stuck after *Quit* is ended (0: never) |
+| `[Coop] SynchroMonde=0` | Emergency switch: turns off the generic world sync if it gets in the way |
+| `[Hud] Style=0` | HUD: 0 Vanilla, 1 Card, 2 Rings, 3 Strip (more keys in *Settings > HUD*) |
+| `[Hud] Menu=100` | Size of the F10 menu and small panels: 85, 100 or 120 |
 
 ## Network
 
 Through **Steam**: Steam's peer-to-peer networking (Valve relays), with the game's own Steam app id; nothing to open.
-Through **IP / VPN**: the host's game listens on **UDP 7870** (the game) and the launcher on **TCP 7870** (the lobby). Both must be reachable:
-the lobby shows *UDP blocked* for a guest whose UDP test fails. Up to 8 players per lobby.
+Through **IP / VPN**: the host's game listens on **UDP 7870** (the game) and the launcher on **TCP 7870** (the lobby).
+Both must be reachable: the lobby shows *UDP blocked* for a guest whose UDP test fails. 2 to 16 players per lobby
+(above 10, a good connection is advised).
 
 ## Known issues
 
+- **Linux / Steam Deck support is not tested** on a real Linux yet.
 - Items held in the hand are carried at their real place, not glued to the avatar's hand.
-- A guest who joins after a restaurant order does not see the trays already on the counter.
-- Some NPC reactions (fights, services) are only checked between test instances so far.
-- Your feedback from real games is what drives the next versions: send the zip from the Logs page, on
-  Discord (**Discord** button in the launcher, #bug-reports) or in a GitHub issue.
+- Most third-party MSCLoader mods are not synced; the launcher's Guide (*Mod support and known incompatibilities*) lists
+  the ones that are and the ones to avoid.
+- Your feedback from real games is what drives the next versions: send the zip from the logs page, on Discord
+  (**Discord** button in the launcher, #bug-reports) or in a GitHub issue.
 
 ## How it works
 
 My Winter Car runs on Unity 5.0 with its logic in PlayMaker state machines. `version.dll` is a proxy loaded by the
 game: it hooks Unity's Mono, loads `MWCoop\MWCoop.dll` on the main thread, and isolates a profile (saves, registry,
 single-instance lock) so a guest's own save stays untouched. The mod then drives the game through its own state
-machines (it replays on each machine what one player did) and replicates the host's world over UDP.
+machines (it replays on each machine what one player did) and replicates the host's world over UDP or Steam. On
+Linux, all of this runs inside Proton, like the game.
 
 ## Building
 
@@ -263,15 +326,16 @@ Requirements: Visual Studio 2022 Build Tools (C++ x64), .NET SDK 8 (only its C# 
 build.cmd
 ```
 
-`build\version.dll`, `build\MWCoop.dll` and `build\MWCoop.exe`. Set `MWC_JEU` if the game is not in the default
-Steam folder. `run\make-testinstances.ps1` and `run\test.ps1` start isolated, off-screen test instances.
+`build\version.dll`, `build\MWCoop.dll`, `build\MWCoopRT.dll` and `build\MWCoop.exe`. Set `MWC_JEU` if the game is not
+in the default Steam folder. `run\make-testinstances.ps1` and `run\test.ps1` start isolated, off-screen test instances.
 
 ## Credits
 
 - Drone model: "Drone" by Kira ([sketchfab.com/GalaninaKira](https://sketchfab.com/GalaninaKira)), licensed
   [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/), simplified for the game.
 - Sleeping bag models: WillBarrow ([sketchfab.com/WillBarrow](https://sketchfab.com/WillBarrow)).
-- Outfit pack: Dom.
+- Outfit packs: Dom (155 outfits).
+- Museum pictures and 3D models: public domain or Creative Commons, credited in the launcher (*Credits*).
 
 ## Disclosure
 
@@ -284,45 +348,53 @@ Amistech Games; this project is not affiliated with them.
 
 **MWCoop** est un mod coopératif pour **My Winter Car** (Steam). Un joueur héberge son monde, ses amis rejoignent
 **ce** monde : même sauvegarde, même heure, même météo, la même voiture remontée vis par vis, les mêmes magasins,
-PNJ, boulots et factures — avec chacun son porte-monnaie.
+PNJ, boulots et factures — avec chacun son porte-monnaie. Jusqu'à **16 joueurs** par salon.
 
-Le mod et son lanceur parlent **français et anglais** (le lanceur suit Windows, le jeu suit le lanceur).
+Le lanceur parle **français, anglais, russe et arabe** ; les menus en jeu **français, anglais et russe** (le lanceur suit
+Windows, le jeu suit le lanceur). Windows, et **Linux / Steam Deck par Proton** (pas encore essayé sur un vrai Linux).
 
 > [!NOTE]
-> Un bug ? Envoyez vos journaux : lanceur, page **Journaux**, *Créer un zip à envoyer*. Aide, bugs et coéquipiers : le bouton **Discord** du lanceur (salons en anglais, plus un salon en français).
+> Un bug ? Envoyez vos journaux : lanceur, **Journaux** (icône page en haut à droite), *Créer un zip à envoyer*. Aide,
+> bugs et coéquipiers : le bouton **Discord** du lanceur (salons en anglais, plus un salon en français).
 
 ## Captures
 
 <p align="center">
-  <img src="docs/img/lanceur-anime.webp" width="80%" alt="Le lanceur MWCoop">
+  <img src="docs/img/lanceur-accueil-fr.png" width="100%" alt="Le lanceur MWCoop en français">
 </p>
-<p align="center"><i>Le lanceur (0.42) : une grande fenêtre en verre dépoli sur une nuit d'aurore boréale ; toutes les pages à gauche, héberger, rejoindre ou jouer seul ; une nouvelle version : un clic pour la mettre à jour.</i></p>
+<p align="center"><i>Le lanceur (refait en 0.97) : une grande fenêtre en verre dépoli sur une nuit d'aurore boréale ; toutes les pages à gauche, un Guide intégré, héberger, rejoindre ou jouer seul.</i></p>
 
-Les captures ci-dessus (en anglais) montrent l'accueil, le salon, les pages TENUE, VOITURE, CONTENU ENVOYÉ et JOURNAUX, le thème clair, le menu F10, le tchat,
-l'écran d'attente des invités et l'écran de mort ; tout existe aussi en français.
+Les captures plus haut (en anglais) montrent l'accueil, le salon, les pages Personnage, Voiture, Sauvegardes, Réglages
+› HUD et Guide, le thème clair, les trois styles du HUD en jeu, le menu F10 (joueurs, course sur glace, apparence), les
+triches, l'écran d'attente des invités et l'écran de mort ; tout existe aussi en français.
 
 ## Installation
 
 1. Ouvrez le dossier du jeu (Steam : clic droit sur *My Winter Car* > *Gérer* > *Parcourir les fichiers locaux*).
 2. Copiez-y tout le contenu du zip de la [dernière version](https://github.com/Parricidium/MWCoop/releases), à côté de
    `mywintercar.exe` : `version.dll`, `MWCoop.exe` et le dossier `MWCoop`.
-3. Lancez `MWCoop.exe`. Quand une nouvelle version sort, un bouton **NOUVELLE VERSION · METTRE À JOUR** apparaît sous le logo : un clic.
+3. Lancez `MWCoop.exe`. Quand une nouvelle version sort, un bouton **METTRE À JOUR** apparaît sous le logo : un clic.
 
 Aucun autre chargeur n'est nécessaire. Depuis une installation Steam, le lanceur démarre le jeu depuis une copie dans
 `%LOCALAPPDATA%\MWCoop\My Winter Car` (mêmes données, dossiers liés) : sinon Steam fait charger la `version.dll` de
-Windows avant celle du mod.
+Windows avant celle du mod. Si le mod ne se charge pas, *Réglages > Lanceur > Départ du jeu* propose *Dossier du jeu*
+ou *Steam*.
 
-**MSCLoader** (expérimental) : MWCoop et MSCLoader fonctionnent ensemble depuis la 0.31.3. La page **Mods** du
-lanceur (0.32) installe MSCLoader depuis son GitHub officiel (son propre installateur refuse un dossier de jeu qui
-contient déjà une `version.dll`), l'active ou le coupe pour le prochain lancement, liste vos mods et règle leurs options
-(icône d'engrenage ; pris au prochain lancement du jeu). Depuis la 0.36, les mods de l'hôte cochés **Envoyer** partent
-chez les invités du salon (un **TOUT ACCEPTER**, puis automatique) : copiés à part, dans `%LOCALAPPDATA%\MWCoop\mods-invite`,
-et chargés seulement pour la partie de l'hôte (les mods et réglages de l'invité ne sont jamais touchés). Hôte sans
-MSCLoader : les invités jouent sans aussi.
-Depuis la 0.37, les **CD** de l'hôte (musiques et jaquettes), sa **radio**, la **peinture de la CORRIS** et de la
-mobylette, le **drapeau du garage**, les **posters**, l'**autocollant**, le **tissu** et les **équipes de hockey** suivent le
-même chemin (page *Contenu envoyé*, une liste à cocher ; la photo d'identité est décochée au départ), dans
-`%LOCALAPPDATA%\MWCoop\contenu-invite`.
+Sous le numéro de version, **Reworked** est le MWCoop actuel (mis à jour) et **Legacy** l'ancien, figé en 0.95.8. Tout le
+monde doit avoir le même pour jouer ensemble.
+
+**Linux et Steam Deck** (depuis la 0.99) : le jeu n'existe que pour Windows, MWCoop tourne donc avec lui dans **Proton**.
+Même zip ; le lanceur reconnaît Proton/Wine tout seul. Option de lancement Steam du jeu :
+`WINEDLLOVERRIDES="version=n,b" %command%` ; tout le détail dans le Guide du lanceur (*Linux et Steam Deck*).
+**LINUX SUPPORT NOT TESTED** : personne ne l'a encore essayé sur un vrai Linux — vos retours et journaux sont les bienvenus.
+
+**MSCLoader** (expérimental) : MWCoop et MSCLoader fonctionnent ensemble. La page **Mods** du lanceur installe MSCLoader
+depuis son GitHub officiel, l'active ou le coupe pour le prochain lancement, liste vos mods et règle leurs options. Les
+mods de l'hôte cochés **Envoyer** partent chez les invités du salon (un **TOUT ACCEPTER**, puis automatique) : copiés à
+part, dans `%LOCALAPPDATA%\MWCoop\mods-invite`, et chargés seulement pour la partie de l'hôte (les mods et réglages de
+l'invité ne sont jamais touchés). Les **CD** de l'hôte, sa **radio**, la **peinture de la CORRIS** et de la mobylette, le
+**drapeau du garage**, les **posters**, l'**autocollant**, le **tissu** et les **équipes de hockey** suivent le même chemin
+(page *Contenu envoyé*), dans `%LOCALAPPDATA%\MWCoop\contenu-invite`.
 
 ### Alerte d'antivirus
 
@@ -335,116 +407,118 @@ correspond, et la grande majorité des moteurs (environ 67 sur 71 sur VirusTotal
 - Tout le code est ouvert dans ce dépôt : on peut le lire et le compiler soi-même (voir *Compiler*).
 - Chaque version publie un fichier `SHA256SUMS-<version>.txt` : comparez-le à vos fichiers
   (`Get-FileHash MWCoop.exe` dans PowerShell) et cherchez l'empreinte sur [VirusTotal](https://www.virustotal.com).
-- Depuis la 0.26.2, le lanceur ne démarre plus aucun programme caché (ni `tar.exe`, ni `cmd.exe`) : le zip de mise à
-  jour et les liens de dossiers pour Steam sont gérés par le lanceur lui-même, et les deux exécutables portent leurs
+- Le lanceur ne démarre aucun programme caché (ni `tar.exe`, ni `cmd.exe`), et les exécutables portent leurs
   informations de version complètes.
 - Si Defender le met en quarantaine : *Sécurité Windows* > *Protection contre les virus et menaces* > *Historique de
   protection* > *Autoriser*, ou ajoutez une exclusion sur le dossier du jeu.
 
 ## Jouer
 
-Choisissez le réseau au-dessus du champ d'adresse : **STEAM** (le plus simple) ou **IP / VPN**.
+Choisissez le réseau sur l'accueil : **STEAM** (le plus simple) ou **IP / VPN**.
 
-- **Par Steam** (tout le monde a la version Steam du jeu) : l'hôte clique HÉBERGER. Le lanceur ouvre un **salon
-  Steam** (amis seulement) et liste ses amis Steam en ligne : cliquez sur **INVITER**. L'ami accepte l'invitation dans
-  Steam (ou clique **REJOINDRE** dans MWCoop.exe, Steam choisi) et arrive dans le même salon que par IP : tenues,
-  versions, PRÊT, *Continuer* / *Nouvelle partie*, puis LANCER démarre le jeu de chacun. Ni port à ouvrir, ni pare-feu,
-  ni adresse : le trafic passe par les relais de Steam. Les avatars Steam s'affichent dans le salon et à côté des
-  pseudos en jeu. Pour qu'une invitation acceptée MWCoop **fermé** ouvre MWCoop (et pas le jeu sans le mod), suivez
-  le guide qui s'ouvre en choisissant STEAM (ou *Option de lancement Steam* > GUIDE) : il copie l'option de lancement Steam (`"...\MWCoop.exe" %command%`) à
-  coller dans *Propriétés > Général > Options de lancement*. Une fois en jeu, on peut encore inviter des amis
-  (**F10 > Inviter des amis Steam**, ou Maj+Tab).
-- **Héberger** (IP / VPN) : cliquez sur HÉBERGER. Le lanceur ouvre un **salon** où vos amis apparaissent avec leur tenue, leur
-  version et leur ping. Choisissez *Continuer ma partie* ou *Nouvelle partie*, puis LANCER : le jeu de chacun démarre.
-  Ouvrez le port **7870** en **UDP et TCP** sur votre box, ou utilisez un VPN (Radmin VPN, ZeroTier…) et donnez votre
-  adresse VPN.
-- **Rejoindre** : entrez l'adresse de l'hôte, cliquez sur PRÊT dans le salon (ou REJOINDRE EN JEU si l'hôte joue
-  déjà). Votre jeu reçoit la sauvegarde de l'hôte et entre dans sa partie tout seul. **Votre propre sauvegarde n'est
-  jamais touchée** : l'invité joue dans un profil à part (`MWCoop\profils\invite`).
-- En jeu : **F10** ouvre le menu coop (souris ou flèches), **T** le tchat, **Échap** les ferme. Chacun peut aller vers
-  un autre joueur (F10 > JOUEURS) ; l'hôte peut aussi faire venir un joueur ou l'exclure.
-- Le lanceur reste ouvert pendant la partie (option dans Réglages) : joueurs, ping, et pour l'hôte FAIRE VENIR et
-  EXCLURE ; il revient au menu quand le jeu se ferme. Un « ! » rouge sur *Journaux* : la dernière partie s'est
-  arrêtée brutalement.
-- Au premier lancement, une **visite guidée** présente chaque bouton et page en quelques bulles (à revoir depuis
-  Réglages) ; après une mise à jour, seuls les nouveaux boutons ont leur bulle, marquée NOUVEAU.
-- **Apparence complète** (0.38) : en plus du haut, corpulence, pantalon, visage, chapeau, lunettes et cheveux, pris chez les
-  habitants du jeu ; page TENUE avec aperçu 3D (ou clic sur ton personnage dans le salon).
+- **Par Steam** (tout le monde a la version Steam du jeu) : l'hôte clique HÉBERGER, le lanceur ouvre un **salon Steam**
+  et liste ses amis Steam en ligne : **INVITER**. L'ami accepte dans Steam (ou clique **REJOINDRE**) et arrive dans le
+  salon. Ni port, ni pare-feu, ni adresse. Pour qu'une invitation acceptée MWCoop **fermé** ouvre MWCoop, suivez le guide
+  qui s'ouvre en choisissant STEAM (option de lancement `"...\MWCoop.exe" %command%`). En jeu, on peut encore inviter
+  (**F10 > Joueurs > Inviter des amis Steam**, ou Maj+Tab).
+- **Par IP / VPN** : l'hôte clique HÉBERGER ; les amis entrent son adresse (et le **code de session** si le salon est
+  privé) puis REJOINDRE. Ouvrez le port **7870** en **UDP et TCP** sur votre box, ou utilisez un VPN (Radmin VPN,
+  ZeroTier…).
+- **Le salon** : joueurs avec tenue, version, ping et test UDP ; un tchat ; **Public** ou **Privé** (code de session à
+  COPIER), 2 à 16 joueurs ; les options de l'hôte pour ce salon (argent de départ des invités, triches, voitures qui
+  renversent, coups de poing, enjeux du Ventti, Jokkis de location, ajouts MWCoop). *Continuer ma partie* ou *Nouvelle
+  partie*, puis LANCER : le jeu de chacun démarre. Un ami qui arrive plus tard rejoint la partie en cours.
+- **Sauvegardes** : la page *Sauvegardes* garde plusieurs parties, une par groupe d'amis ; l'hôte choisit laquelle jouer.
+  **La sauvegarde d'un invité n'est jamais touchée** : il joue dans un profil à part, et une copie de la partie de l'hôte
+  lui est gardée (« Chez <hôte> »).
+- **En jeu** : **F10** menu coop, **T** tchat, **V** vocal (touche tenue), **N** porte-monnaie, **M** carte, **F7** triches
+  (si l'hôte les autorise), **F5** troisième personne, **F8** caméra drone, **Échap** ferme. Toutes les touches se changent
+  dans *Réglages > Touches*.
+- Le lanceur peut rester ouvert pendant la partie : joueurs, ping, et pour l'hôte FAIRE VENIR et EXCLURE. Un « ! » rouge
+  sur l'icône des journaux : la dernière partie s'est arrêtée brutalement.
 
 ## Fonctionnalités
 
-- **Joueurs** : chacun voit les autres avec la tenue choisie parmi les vêtements des PNJ, leur pseudo, qui marchent,
-  s'accroupissent (deux niveaux), s'assoient sur les meubles, fument, boivent, portent, saluent, donnent un coup de
-  poing, font un doigt, titubent ivres, s'évanouissent ; la tête suit la caméra, même au volant.
-- **Un seul monde** : la sauvegarde de l'hôte est envoyée aux invités (aussi juste après une nouvelle partie) ; heure,
-  jour, météo, nuages, neige et température de l'hôte ; le temps n'accélère que quand **tout le monde** dort. Un invité
-  qui arrive en cours de partie reçoit les portes, interrupteurs, télé, CD et le reste tels qu'ils sont.
-- **Véhicules** : le conducteur est assis au volant chez tous, avec le bruit du moteur, les roues qui tournent, les
-  phares, les essuie-glaces et le tableau de bord ; fluide pour les passagers ; portières, capots et coffres qui
-  battent pour de vrai ; **places passagers** (ENTRÉE près d'un siège) d'où l'on peut tourner la clé, tirer le frein à
-  main, ouvrir les vitres, régler le chauffage… ; taxi, corde de remorquage, givre et grattage, dégâts d'accident
-  (vitres, tôle, suspension), incendies.
-- **Mécanique** : pièces montées et démontées, chaque cran de vis, pièces portées et lâchées, peinture, réglages du
-  carburateur et des molettes, câblage, liquides (essence, huile, liquide de refroidissement, de frein) et usure,
+- **Joueurs** : chacun voit les autres avec l'apparence choisie (haut, visage, pantalon, corpulence, chapeau, lunettes,
+  cheveux — vêtements du jeu, packs de la communauté ou ses propres images), leur pseudo, qui marchent, s'accroupissent,
+  s'assoient, fument, boivent, portent, saluent, frappent, titubent, s'évanouissent ; **troisième personne** (F5).
+- **Un seul monde** : sauvegarde de l'hôte envoyée aux invités ; heure, météo, neige et température de l'hôte ; le temps
+  n'accélère que quand **tout le monde** dort. Si quelque chose dérive : **F10 > Joueurs > Resynchroniser le monde**.
+- **Véhicules** : conducteur au volant chez tous, bruit du moteur, phares, essuie-glaces, tableau de bord ; **places
+  passagers** avec ceintures, d'où l'on peut tourner la clé, tirer le frein à main, ouvrir les vitres… ; taxi, corde de
+  remorquage, givre, dégâts d'accident, incendies.
+- **Mécanique** : pièces montées et démontées, chaque cran de vis, peinture, carburateur, câblage, liquides et usure,
   crics, pont et palan.
-- **Argent et magasins** : **un porte-monnaie chacun**, chacun garde sa paie (seul l'acheteur paie) ; courses vues par
-  tous (sacs, rayons qui se vident en direct), bar, brocante, contrôle technique, café, bus, terminal de la pompe,
-  plateaux et assiettes du restaurant.
-- **PNJ** : mêmes personnes aux mêmes endroits avec les mêmes gestes ; clients, bagarres et barrages de police suivis
-  par le joueur concerné ; leurs répliques entendues par tous — et coupées chez tous quand ils raccrochent ou sont
-  interrompus.
-- **Vie quotidienne** : factures (payées par l'un, le courant revient pour tous), boîte aux lettres, téléphone (un
-  invité peut décrocher), commandes par catalogue et colis, loto, fusibles, cuisinière, sauna, cuisine (saucisses,
-  café, péremption), feux de bois et bûches, kilju, fosses septiques, boulots communs sans double paie, machines à
-  sous un joueur à la fois.
-- **Mort et sauvegardes** : en coop, mourir ne termine plus la partie — on revient à l'appartement ou chez les
-  parents ; sauvegarde coop aux toilettes sans éjecter les invités (un invité peut la demander) ; l'hôte qui revient
-  au menu emmène tout le monde.
-- **Interface** : panneaux en verre aux couleurs du lanceur, curseur dans les menus, écran d'attente des invités avec
-  le téléchargement de la sauvegarde, audit de la synchro (F10 > SYNCHRO) qui compare hôte et invités toutes les 15 s
-  et liste les actions locales pas encore partagées.
-- **Caméra drone** (F8) : mode photo — ton personnage reste sur place pendant qu'un petit drone filme (viseur, zoom,
-  pencher, flash) ; les photos vont dans Images\CoopPictures avec le logo de MWCoop. Les autres voient le drone et son flash.
-- **Copilote de rallye — KARTTURI 2000** (690 mk à la boutique) : un vieux GPS de rallye à écran vert façon console de poche.
-  Assis en passager, F le tient devant soi : carte de la spéciale qui tourne, les prochaines notes (gauche/droite, cote 1
-  à 6, épingle, bosse, se resserre…) avec leur distance, et un bip après chaque virage — annonce-les à ton pilote au vocal.
-  Le tracé des spéciales (SS1, SS2, SS3) est celui des pilotes du rallye du jeu.
+- **Argent et magasins** : **un porte-monnaie chacun**, chacun garde sa paie, on peut donner de l'argent (**N**) ; courses
+  vues par tous, bar, brocante, contrôle technique, bus, pompe, restaurant, Ventti avec enjeux pour tout le groupe.
+- **PNJ** : mêmes personnes aux mêmes endroits avec les mêmes gestes ; clients, bagarres et barrages suivis par le joueur
+  concerné ; leurs répliques entendues par tous.
+- **Vie quotidienne** : factures, boîte aux lettres, téléphone, commandes et colis, loto, fusibles, cuisinière, sauna,
+  cuisine, feux de bois, bûches et fendeuse, kilju, fosses septiques, boulots communs sans double paie.
+- **Mort et sauvegardes** : en coop, mourir ne termine plus la partie ; sauvegarde coop aux toilettes sans éjecter les
+  invités ; l'hôte qui revient au menu emmène tout le monde.
+- **HUD** (0.97.11) : celui du jeu (**Vanilla**) ou **Carte**, **Anneaux**, **Bandeau** dans le style du lanceur ; taille,
+  position, couleur, fond, jauges affichées, compteur FPS (si l'option du jeu est allumée) ; **panneau Équipe** et
+  **alertes** quand toi ou un ami avez très faim, êtes épuisés ou gelés.
+- **Menu F10** (0.98) : onglets à gauche (Joueurs, Tchat, Course sur glace, Apparence, HUD, Graphismes, Synchro), compact,
+  taille et place au choix ; triches, porte-monnaie et tchat dans le même style.
+- **Carte** (**M**) : les autres joueurs en direct, les lieux et des marqueurs partagés (une couleur par joueur).
+- **Vocal** de proximité par Steam, touche tenue (**V**), volume et portée réglables.
+- **Triches** (**F7**, ou commandes du tchat `/aide`) : seulement si l'hôte les autorise, chacune annoncée à tous.
+- **Course sur glace** (bêta) : une Jokkis de location gratuite chacun, choisie dans F10 > Course sur glace avec un aperçu
+  3D (option de l'hôte, coupée par défaut).
+- **Caméra drone** (**F8**) : mode photo, viseur, zoom, flash ; photos dans Images\CoopPictures.
+- **Boutique OSUUSKAUPPA 𝔰21** (Peräjärvi) : sacs de couchage et **coin vidéo** (cassettes, magnétoscopes, télé, caméscope
+  des années 90) ; guide : [docs/GUIDE-VIDEO.md](docs/GUIDE-VIDEO.md). **Musée de la Corse** à côté.
+- **Copilote de rallye — KARTTURI 2000** (690 mk à la boutique) : vieux GPS de rallye, carte de la spéciale et notes à
+  annoncer à ton pilote.
+- **Ajouts MWCoop** : drone, sacs, boutique et musée se coupent un par un (Tous / Choisir / Aucun) ; le choix de l'hôte vaut
+  pour tous.
+- **Graphismes** : préréglages de Vanilla à Ultra, fenêtre sans bordure, ombres, distances, confort, et **ray tracing**
+  (en développement, cartes DXR 1.1) : ombres du soleil et des lampes, occlusion, reflets.
 
-La liste détaillée, version par version : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md).
+La liste détaillée, version par version : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) et la page *Nouveautés* du
+lanceur.
 
 ## Options
 
-`MWCoop\mwcoop.ini`, section `[Coop]` (le lanceur écrit la plupart pour vous) :
+`MWCoop\mwcoop.ini` (le lanceur écrit presque tout pour vous, page *Réglages*) :
 
 | Clé | Effet |
 |---|---|
-| `Port=7870` | Port du jeu (UDP) et du salon (TCP) |
-| `Langue=fr` / `en` / `ru` | Langue des textes en jeu (écrite par le lanceur) |
-| `Flou=0` | Panneaux unis au lieu du verre flouté (PC très anciens) |
-| `Reapparition=0` | La mort termine la partie comme en solo |
-| `EcranAttente=0` | Les invités voient le menu du jeu au lieu de l'écran d'attente |
-| `SynchroMonde=0` | Interrupteur de secours : coupe la synchro générique du monde si elle gêne |
+| `[Coop] Port=7870` | Port du jeu (UDP) et du salon (TCP) |
+| `[Coop] Langue=fr` / `en` / `ru` | Langue des textes en jeu (écrite par le lanceur) |
+| `[Coop] Flou=0` | Panneaux unis au lieu du verre flouté (PC très anciens) |
+| `[Coop] Reapparition=0` | La mort termine la partie comme en solo |
+| `[Coop] EcranAttente=0` | Les invités voient le menu du jeu au lieu de l'écran d'attente |
+| `[Coop] FinForcee=20` | Secondes avant qu'un jeu bloqué après *Quitter* soit terminé (0 : jamais) |
+| `[Coop] SynchroMonde=0` | Interrupteur de secours : coupe la synchro générique du monde si elle gêne |
+| `[Hud] Style=0` | HUD : 0 Vanilla, 1 Carte, 2 Anneaux, 3 Bandeau (le reste dans *Réglages > HUD*) |
+| `[Hud] Menu=100` | Taille du menu F10 et des petits panneaux : 85, 100 ou 120 |
 
 ## Réseau
 
-Par **Steam** : le réseau pair-à-pair de Steam (relais de Valve), sous l'identifiant Steam du jeu ; rien à ouvrir.
-Par **IP / VPN** : le jeu de l'hôte écoute en **UDP 7870** (la partie) et le lanceur en **TCP 7870** (le salon). Les deux doivent être
-joignables : le salon affiche *UDP bloqué* pour un invité dont le test UDP échoue. Jusqu'à 8 joueurs par salon.
+Par **Steam** : le réseau pair-à-pair de Steam (relais de Valve) ; rien à ouvrir. Par **IP / VPN** : le jeu de l'hôte écoute
+en **UDP 7870** (la partie) et le lanceur en **TCP 7870** (le salon) ; le salon affiche *UDP bloqué* pour un invité dont le
+test UDP échoue. 2 à 16 joueurs par salon (au-delà de 10, une bonne connexion est conseillée).
 
 ## Bugs connus
 
+- **Linux / Steam Deck pas encore essayé** sur un vrai Linux.
 - Les objets tenus en main sont portés à leur vraie place, pas collés à la main de l'avatar.
-- Un invité qui arrive après une commande au restaurant ne voit pas les plateaux déjà posés.
-- Certaines réactions de PNJ (bagarres, services) ne sont vérifiées qu'entre instances de test pour l'instant.
-- Vos retours de vraies parties guident les prochaines versions : envoyez le zip de la page Journaux, sur
-  Discord (bouton **Discord** du lanceur, #bug-reports) ou dans une issue GitHub.
+- La plupart des mods MSCLoader d'autres auteurs ne sont pas synchronisés ; le Guide du lanceur (*Mods pris en charge et
+  déconseillés*) liste ceux qui le sont et ceux à éviter.
+- Vos retours de vraies parties guident les prochaines versions : envoyez le zip des journaux, sur Discord (bouton
+  **Discord** du lanceur, #bug-reports) ou dans une issue GitHub.
 
 ## Compiler
 
 Visual Studio 2022 Build Tools (C++ x64), SDK .NET 8 (seul son compilateur C# sert), le jeu installé : `build.cmd`.
 
 Crédits : modèle du drone « Drone » de Kira ([sketchfab.com/GalaninaKira](https://sketchfab.com/GalaninaKira)), licence
-[CC BY 4.0](http://creativecommons.org/licenses/by/4.0/), simplifié pour le jeu ; sacs de couchage de WillBarrow ; tenues de Dom.
+[CC BY 4.0](http://creativecommons.org/licenses/by/4.0/), simplifié pour le jeu ; sacs de couchage de WillBarrow ; packs de
+tenues de Dom (155 tenues) ; images et modèles du musée dans le domaine public ou sous Creative Commons, crédités dans le
+lanceur.
 
 Développé avec l'aide d'une IA (Claude), dirigé et testé par un humain. My Winter Car appartient à Amistech Games ;
 ce projet n'a aucun lien avec eux.
