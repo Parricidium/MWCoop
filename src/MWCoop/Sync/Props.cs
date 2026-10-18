@@ -39,6 +39,7 @@ namespace MWCoop
             public int LayerWas = -1;             // deplace par un autre : calque du jeu pour un objet tenu (16), le sien avant
             public float LastRemote, SettleUntil;
             public Vector3 Pos, Vel, LastSentPos;
+            public float RescuedAt; public int Rescues; public bool RescueOff;   // repeche sous la carte : quand, combien de fois de suite
             public Quaternion Rot;
             public bool Kinematic, WasKinematic;
             public int RideCar = -1;              // recu : numero de la voiture ou l'objet est colle ici
@@ -825,11 +826,27 @@ namespace MWCoop
         {
             if (p.Body == null || p == held || p.RemoteBy >= 0 || p.RideCar >= 0 || p.Body.isKinematic) return false;
             Vector3 at = p.Body.position;
+            if (at.y > -100f) p.RescueOff = false;   // ressorti (du sac...) : de nouveau surveille
             bool bad = float.IsNaN(at.x + at.y + at.z) || float.IsInfinity(at.x + at.y + at.z);
             // (en chute libre seulement : un objet range par le jeu loin sous la carte, immobile, reste ou il est)
             if (!bad && (at.y > -150f || p.Body.velocity.y > -10f)) return false;
+            if (p.RescueOff) return false;
+            // Pas de collision (range par le jeu ou un mod tout au fond -- sac a dos, 18/10 : boitiers de CD a y = -9000) : remis
+            // devant le joueur, il retraversait la voiture et le sol toutes les 3 s (« des pieces s'envolent de la Rivett » chez
+            // l'hote de NotHuyarma, 18/10). On le laisse. Pareil s'il retombe aussitot (deux fois en 30 s) : on arrete.
+            bool solid = false;
+            foreach (Collider c in p.Body.GetComponentsInChildren<Collider>()) if (c.enabled && !c.isTrigger) { solid = true; break; }
+            if (!solid || (now - p.RescuedAt < 30f && p.Rescues >= 2))
+            {
+                p.RescueOff = true;
+                Log.Info("objet " + p.Id + " sous la carte (" + at.ToString("F0") + ") " + (solid ? "retombe encore" : "sans collision") + " : laisse ou il est");
+                return false;
+            }
+            p.Rescues = now - p.RescuedAt < 30f ? p.Rescues + 1 : 1;
+            p.RescuedAt = now;
             Vector3 to = p.LastSentPos;
-            bool last = to != Vector3.zero && !float.IsNaN(to.y) && !float.IsInfinity(to.y) && to.y > -150f && (to - at).sqrMagnitude > 0f;
+            // (derniere pose au-dessus du sol seulement : envoyee pendant sa chute, elle le remettait sous la carte)
+            bool last = to != Vector3.zero && !float.IsNaN(to.y) && !float.IsInfinity(to.y) && to.y > -50f && (to - at).sqrMagnitude > 0f;
             if (!last) { Transform me = Game.PlayerT; if (me == null) return false; to = me.position + me.forward * 1.5f + Vector3.up * 1.2f; }
             p.Body.position = to; p.Body.transform.position = to;
             p.Body.velocity = Vector3.zero; p.Body.angularVelocity = Vector3.zero;
@@ -1295,10 +1312,38 @@ namespace MWCoop
             }
         }
 
+        // Autotest « souscarte » : a 20 s deux boitiers de CD jetes a y = -9000 (chute) : le 1er sans collision (range par un mod),
+        // le 2e normal. Attendu : le 1er laisse ou il est (« sans collision »), le 2e remis devant le joueur une fois et pose.
+        static int underStep;
+        static void TestUnderMap(float t)
+        {
+            string[] ids = { "w:Systems/CDs/cd case(item1)#0", "w:Systems/CDs/cd case(item2)#1" };
+            if (underStep == 0 && t > 20f)
+            {
+                underStep = 1;
+                for (int i = 0; i < 2; i++)
+                {
+                    Prop p;
+                    if (!props.TryGetValue(ids[i], out p) || p.Body == null) { Log.Info("autotest : souscarte, " + ids[i] + " introuvable"); continue; }
+                    if (!p.Body.gameObject.activeInHierarchy) p.Body.gameObject.SetActive(true);
+                    if (i == 0) foreach (Collider c in p.Body.GetComponentsInChildren<Collider>()) c.enabled = false;
+                    SetKinematic(p, false);
+                    p.Body.position = new Vector3(0f, -9000f, 0f); p.Body.transform.position = p.Body.position; p.Body.velocity = Vector3.down * 20f;
+                    Log.Info("autotest : souscarte, " + ids[i] + (i == 0 ? " sans collision" : " normal") + " jete a -9000");
+                }
+            }
+            if (underStep == 1 && t > 40f)
+            {
+                underStep = 2;
+                foreach (string id in ids) { Prop p; if (props.TryGetValue(id, out p) && p.Body != null) Log.Info("autotest : souscarte, " + id + " en " + p.Body.position.ToString("F1") + ", repeche " + p.Rescues + " fois" + (p.RescueOff ? ", laisse" : "")); }
+            }
+        }
+
         public static void Test(string mode, float t)
         {
             if (mode == "sacs") { TestSandbags(t); return; }
             if (mode == "pub") { TestPub(t); return; }
+            if (mode == "souscarte") { TestUnderMap(t); return; }
             bool push = mode == "coffre-pousse";
             if (mode != "coffre-objets" && mode != "coffre-objets-invite" && !push) return;
             string name = Config.Get("Test", "TestVoiture", "SORBET(190-200psi)");

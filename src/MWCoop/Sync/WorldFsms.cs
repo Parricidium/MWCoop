@@ -317,6 +317,11 @@ namespace MWCoop
             // Vehicules : Jobs, CarDoors... Sauf le lecteur CD (DiscTriggerPlayer* :: Data, point d'insertion du CD).
             if (root.GetComponent("CarDynamics") != null && !(f.gameObject.name.StartsWith("DiscTrigger") && f.FsmName == "Data")) return true;
             if (SkipFsmNames.Contains(f.FsmName)) return true;
+            // Place du conducteur d'un vehicule range ailleurs qu'a la racine (taxi JOBS/TAXIJOB/MACHTWAGEN) : son PlayerTrigger
+            // (« Press return » : le joueur LOCAL y monte) deplace les cameras des retroviseurs du jeu (Systems/Mirrors, une seule
+            // serie pour toutes les voitures) dans cette voiture. Rejoue chez l'autre, ses retroviseurs montraient la vue du taxi
+            // (ProTonChiK, 18/10). Chacun la sienne : VehicleSync et Seats suivent qui conduit.
+            if (f.FsmName == "PlayerTrigger" && UnderVehicle(f.transform)) return true;
             string n = f.gameObject.name;
             // Objets portes : Props, Consume. Sauf l'ouverture des boitiers de CD (Systems/CDs/cd case(itemN) :: Use,
             // Bool test -> Open/Close), et la telecommande de la tele (Use : teletexte allume/eteint, Input : numero de
@@ -346,6 +351,12 @@ namespace MWCoop
             // double. Sauf les createurs de COMMANDES (OrdersSpawner*), seul chemin de la commande -- d'ordinaire
             // pris avant nous par Calls (annonce retrouvee par son nom d'origine, meme liste chez tous).
             try { if (f.Fsm.GetState("Create product") != null && !n.StartsWith("OrdersSpawner")) return true; } catch { }
+            return false;
+        }
+
+        static bool UnderVehicle(Transform t)
+        {
+            for (Transform p = t; p != null; p = p.parent) if (p.GetComponent("CarDynamics") != null) return true;
             return false;
         }
 
