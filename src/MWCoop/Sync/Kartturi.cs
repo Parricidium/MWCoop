@@ -32,6 +32,12 @@ namespace MWCoop
 
         public static void OnLevelLoaded() { built = false; stages.Clear(); roadA.Clear(); roadB.Clear(); buildAt = 0f; }
 
+        // Trace d'une speciale (1-3 : SS1, SS2, SS3 ; un point tous les 2 m, depart -> arrivee) pour la carte (MapPanel) ; null :
+        // routes du rallye pas encore chargees.
+        public static Vector3[] StageRoute(int ss) { if (!Build() || ss < 1 || ss > stages.Count) return null; return stages[ss - 1].P; }
+        // Liste de points d'une route du jeu (TRAFFIC/Routes/<nom>) : la piste de glace (Icetrack...) pour la carte.
+        public static List<Vector3> GameRoute(string name) { return Route(name); }
+
         // ---------------------------------------------------------------- trace et notes
         static List<Vector3> Route(string name)
         {
