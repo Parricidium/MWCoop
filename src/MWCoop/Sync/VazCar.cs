@@ -20,14 +20,40 @@ namespace MWCoop
         public static string Dir { get { return Path.Combine(System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", "vaz"); } }
         public static bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
 
-        // Tete du pilote (yeux), repere du modele : siege conducteur a x -0,35, toit interieur vers 1,33, volant en (-0,35 ; 0,86 ; 0,64).
-        static readonly Vector3 HeadModel = new Vector3(-0.35f, 1.10f, 0.02f);
+        // Yeux du pilote, repere du modele : siege conducteur a x -0,35, toit interieur vers 1,33, volant en (-0,35 ; 0,86 ; 0,64).
+        // DriverHeadPivot est pose 27 cm DERRIERE et 3 cm au-dessus (les yeux sont la, Seats.EyeFromPivot, mesure sur la
+        // SORBET) -- retour de JD, 18/10 : pivot pose sur les yeux, conducteur colle au volant, zone d'entree et place du
+        // passager trop en avant.
+        static readonly Vector3 EyesModel = new Vector3(-0.35f, 1.10f, 0.02f);
+        static readonly Vector3 HeadModel = EyesModel - new Vector3(0f, -0.03f, 0.27f);
+
+        // Commandes de la SORBET posees sur les boutons du tableau de bord de la VAZ (centres des pieces du modele, repere
+        // du modele ; photo annotee de JD, 18/10) : contact, essuie-glaces et feux sur les trois interrupteurs a gauche des
+        // compteurs ; warning et starter dans les rangees de boutons carres de la console ; soufflerie, degivrage sur les
+        // interrupteurs du bas ; temperature et direction du chauffage sur les molettes rondes.
+        static readonly KeyValuePair<string, Vector3>[] Controls = {
+            new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.206f, 0.830f, 0.790f)),
+            new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonWipers", new Vector3(-0.169f, 0.830f, 0.790f)),
+            new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonLightModes", new Vector3(-0.132f, 0.830f, 0.790f)),
+            new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHazard", new Vector3(0.026f, 0.854f, 0.787f)),
+            new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(0.003f, 0.818f, 0.777f)),
+            new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHeaterBlower", new Vector3(-0.018f, 0.717f, 0.736f)),
+            new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonWindowHeater", new Vector3(-0.067f, 0.717f, 0.736f)),
+            new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHeaterTemp", new Vector3(0.002f, 0.751f, 0.761f)),
+            new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHeaterDirection", new Vector3(-0.068f, 0.751f, 0.761f)),
+        };
+        // Frein a main : levier du modele (frein.p205) pivotant a sa base (sur la console), poignee vers l'avant ; le levier
+        // cliquable du jeu (Functions/HandBrake/LeverPivot) pose sur la poignee.
+        static readonly Vector3 BrakePivotModel = new Vector3(0.001f, 0.509f, 0.05f), BrakeGripModel = new Vector3(-0.069f, 0.533f, 0.24f);
+        // Son du moteur (facultatif, VazSound) : moteur transversal avant.
+        static readonly Vector3 EngineModel = new Vector3(0f, 0.60f, 1.50f);
 
         public class Built
         {
             public GameObject Car;
-            public Transform Body, SteerPivot, SorbetSteer;
-            public Quaternion SorbetSteerRest;
+            public Transform Body, SteerPivot, SorbetSteer, BrakePivot, SorbetBrake;
+            public Quaternion SorbetSteerRest, SorbetBrakeRest;
+            public VazSound Sound;
             public Vector3 SteerAxis = Vector3.forward;
             public Component Axis;
             public Drivetrain Dt;
@@ -393,6 +419,30 @@ namespace MWCoop
                 }
             }
 
+            // 6b. Commandes du tableau de bord et frein a main sur ceux du modele : chaque objet du jeu deplace pour que le centre de
+            //     ses colliders tombe sur la piece de la VAZ.
+            int ctl = 0;
+            foreach (KeyValuePair<string, Vector3> kv in Controls)
+            {
+                Transform t = ct.Find(kv.Key);
+                if (t == null) { Log.Warn("vaz : commande " + kv.Key + " introuvable"); continue; }
+                if (MoveOnto(t, body.transform.TransformPoint(kv.Value))) ctl++;
+            }
+            Transform lever = ct.Find("Functions/HandBrake/LeverPivot");
+            if (lever != null)
+            {
+                MoveOnto(lever, body.transform.TransformPoint(BrakeGripModel));
+                b.SorbetBrake = lever; b.SorbetBrakeRest = lever.localRotation;
+                b.BrakePivot = new GameObject("VAZ_frein").transform;
+                b.BrakePivot.SetParent(body.transform, false);
+                b.BrakePivot.localPosition = BrakePivotModel;
+                var inner = new GameObject("pieces").transform;
+                inner.SetParent(b.BrakePivot, false);
+                inner.localPosition = -BrakePivotModel;
+                AddParts(b, inner, "frein.p205", basePaint, paint, number);
+            }
+            else Log.Warn("vaz : frein a main du jeu (Functions/HandBrake/LeverPivot) introuvable");
+
             // 7. Lumieres de la SORBET sur les feux de la VAZ ; listes pour allumer les feux du modele.
             int lights = 0;
             foreach (Light l in car.GetComponentsInChildren<Light>(true))
@@ -418,6 +468,9 @@ namespace MWCoop
             b.Rb = car.GetComponent<Rigidbody>();
             b.Dt = car.GetComponent<Drivetrain>();
             VazHandling.Apply(b, true);
+            var eng = new GameObject("VAZ_moteur_son").transform;
+            eng.SetParent(body.transform, false); eng.localPosition = EngineModel;
+            b.Sound = VazSound.Create(car, eng);
             Transform tank = ct.Find("Simulation/FuelTankSorbett");
             PlayMakerFSM tf = tank != null ? Game.FsmOn(tank.gameObject, "Data") : null;
             FsmFloat fuel = tf != null ? tf.FsmVariables.FindFsmFloat("FuelLevel") : null;
@@ -428,7 +481,7 @@ namespace MWCoop
             VehicleSync.RescanSoon();
             b.NextMask = 0f;
             Log.Info("vaz : " + name + " construite en " + pos.ToString("F1") + " : " + emptied + " etats de sauvegarde vides, " + ids + " identifiants prefixes, " + b.Hidden.Count + " rendus SORBET caches, "
-                     + doors + " portieres, " + rw + " roues du rallye" + (rc == null ? " (RALLYCAR3 introuvable)" : "") + ", " + lights + " lumieres posees, " + b.Lamps.Count + " pieces de feux, decalage " + offset.ToString("F2") + ", tete " + delta.ToString("F2"));
+                     + doors + " portieres, " + ctl + " commandes posees, " + rw + " roues du rallye" + (rc == null ? " (RALLYCAR3 introuvable)" : "") + ", " + lights + " lumieres posees, " + b.Lamps.Count + " pieces de feux, decalage " + offset.ToString("F2") + ", tete " + delta.ToString("F2"));
             return b;
         }
 
@@ -458,9 +511,38 @@ namespace MWCoop
                 foreach (Renderer rd in b.Hidden) if (rd != null && rd.enabled) rd.enabled = false;   // (des automates rallument feux, vitres givrees...)
             }
             Steering(b);
+            Brake(b);
+            if (b.Sound != null) b.Sound.Update();
             Lamps(b, now);
             VazHandling.Tick(b, now);
             if (now >= b.NextMask) { b.NextMask = now + 1f; WheelMask(b); }
+        }
+
+        // Objet du jeu deplace (sans le tourner) pour que le centre de ses colliders soit en 'world'.
+        static bool MoveOnto(Transform t, Vector3 world)
+        {
+            // (voiture encore eteinte : Collider.bounds est vide -> centre local de chaque collider, moyenne)
+            Vector3 sum = Vector3.zero; int n = 0;
+            foreach (Collider k in t.GetComponentsInChildren<Collider>(true))
+            {
+                Vector3 lc = k is BoxCollider ? ((BoxCollider)k).center : k is SphereCollider ? ((SphereCollider)k).center : k is CapsuleCollider ? ((CapsuleCollider)k).center
+                           : k is MeshCollider && ((MeshCollider)k).sharedMesh != null ? ((MeshCollider)k).sharedMesh.bounds.center : Vector3.zero;
+                sum += k.transform.TransformPoint(lc); n++;
+            }
+            Vector3 c = n > 0 ? sum / n : t.position;
+            t.position += world - c;
+            return n > 0;
+        }
+
+        // Levier du modele : angle du levier du jeu (repos -> tire), poignee qui monte.
+        static void Brake(Built b)
+        {
+            if (b.BrakePivot == null || b.SorbetBrake == null) return;
+            Quaternion d = Quaternion.Inverse(b.SorbetBrakeRest) * b.SorbetBrake.localRotation;
+            float a; Vector3 ax;
+            d.ToAngleAxis(out a, out ax);
+            if (a > 180f) a = 360f - a;
+            b.BrakePivot.localRotation = Quaternion.AngleAxis(-a * Config.GetFloat("Test", "VazFreinSens", 1f), Vector3.right);
         }
 
         static System.Reflection.FieldInfo steerField;
@@ -577,7 +659,7 @@ namespace MWCoop
             var b = new Built();
             var root = new GameObject("MWCoop-VazApercu-" + number);
             b.Car = root;
-            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
+            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
             GameObject rc = RallyCar();
             Dictionary<string, Vector3> inf = Info();
             if (rc != null)
