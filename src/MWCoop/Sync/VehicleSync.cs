@@ -1091,6 +1091,7 @@ namespace MWCoop
             }
             // Objets transportes dans une copie : places sur la pose affichee de la voiture (apres sa physique).
             Props.LateUpdate();
+            Vaz.LateUpdate();
         }
 
         // Copie conduite ailleurs (cinematique ici, suit les messages de celui qui la fait rouler).
