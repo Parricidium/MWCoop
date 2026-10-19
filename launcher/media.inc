@@ -38,7 +38,7 @@ static std::wstring VhsItemFile()
     (void)up; std::wstring d = SaveDirOf(SaveCurrentProf());   // (la sauvegarde utilisee : saves.inc)
     return d.empty() ? L"" : d + L"MWCoop-esineet.txt";
 }
-static std::wstring VhsFilmDir() { return g_gameDir + L"MWCoop\\videot\\"; }
+static std::wstring VhsFilmDir() { return g_modRoot + L"MWCoop\\videot\\"; }
 static std::wstring VhsFilmPath(const std::wstring &f)
 {
     std::wstring p = VhsFilmDir() + f + L".mwv";
@@ -237,7 +237,7 @@ static void VhsImport(int i, const wchar_t *given = NULL)   // (given : essais /
     of.lpstrTitle = T(L"Choisir la vidéo à mettre sur la cassette", L"Choose the video to put on the tape");
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
     if (!given && !GetOpenFileNameW(&of)) return;
-    std::wstring dll = g_gameDir + L"MWCoop\\MWCoopRT.dll";
+    std::wstring dll = g_modRoot + L"MWCoop\\MWCoopRT.dll";
     VhsImportFree();
     g_vidLib = LoadLibraryW(dll.c_str());
     VidStartFn start = g_vidLib ? (VidStartFn)GetProcAddress(g_vidLib, "VidImportStart") : NULL;
@@ -249,7 +249,7 @@ static void VhsImport(int i, const wchar_t *given = NULL)   // (given : essais /
     int q = GetPrivateProfileIntW(L"Boutique", L"ImportQualite", 50, ini.c_str());
     FILETIME ft; GetSystemTimeAsFileTime(&ft);
     wchar_t id[64]; swprintf_s(id, L"fL-%llx", ((unsigned long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime);
-    CreateDirectoryW((g_gameDir + L"MWCoop").c_str(), NULL);
+    CreateDirectoryW((g_modRoot + L"MWCoop").c_str(), NULL);
     CreateDirectoryW(VhsFilmDir().c_str(), NULL);
     std::wstring dst = VhsFilmDir() + id + L".mwv";
     if (start(file, dst.c_str(), max(64, min(640, w)), max(48, min(480, hh)), max(1, min(25, fps)), max(12, min(120, mins)) * 60, max(10, min(95, q))) != 0) {
@@ -468,7 +468,7 @@ static void VhsExport(int i)
     CreateDirectoryW(VhsFilmDir().c_str(), NULL);
     if (!VhsJoin(t, tmp)) { SetStatus(K_ERR, T(L"Rien à exporter : les films de cette cassette ne sont pas sur ce PC", L"Nothing to export: this tape's films aren't on this PC")); return; }
     VhsImportFree();
-    g_vidLib = LoadLibraryW((g_gameDir + L"MWCoop\\MWCoopRT.dll").c_str());
+    g_vidLib = LoadLibraryW((g_modRoot + L"MWCoop\\MWCoopRT.dll").c_str());
     VidExportFn ex = g_vidLib ? (VidExportFn)GetProcAddress(g_vidLib, "VidExportStart") : NULL;
     g_vidPoll = g_vidLib ? (VidPollFn)GetProcAddress(g_vidLib, "VidImportPoll") : NULL;
     if (!ex || !g_vidPoll) { VhsImportFree(); DeleteFileW(tmp.c_str()); SetStatus(K_ERR, T(L"Export impossible : MWCoopRT.dll manque ou est trop ancienne (Windows 7 : pas d'export)", L"Can't export: MWCoopRT.dll missing or too old (no export on Windows 7)")); return; }
@@ -701,7 +701,7 @@ static void VhsClick(int id)
         VhsImport(i);
         return;
     }
-    if (id == UI_VHS_OPEN) { CreateDirectoryW((g_gameDir + L"MWCoop").c_str(), NULL); CreateDirectoryW(VhsFilmDir().c_str(), NULL); ShellExecuteW(g_wnd, L"open", VhsFilmDir().c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
+    if (id == UI_VHS_OPEN) { CreateDirectoryW((g_modRoot + L"MWCoop").c_str(), NULL); CreateDirectoryW(VhsFilmDir().c_str(), NULL); ShellExecuteW(g_wnd, L"open", VhsFilmDir().c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
     if (id == UI_VHS_REFRESH) { g_vhsEdit = -1; g_pvOf.clear(); VhsScan(); return; }
     if (id == UI_VHS_VIDDIR) { std::wstring d = VhsVideoDir(); SHCreateDirectoryExW(NULL, d.c_str(), NULL); ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL); return; }
     if (id == UI_VHS_PLAY) {

@@ -95,7 +95,7 @@ static bool PersoParse(const std::vector<unsigned char> &d)
     return !g_perso.bodies.empty();
 }
 
-static std::wstring PersoDir() { return g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\cache\\"; }
+static std::wstring PersoDir() { return g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\cache\\"; }
 // Export fait par une autre version du mod que celle installee (avant 0.41 : les corps des PNJ gardaient leur pose,
 // la grand-mere restait assise) : il sera refait a la prochaine partie (~30 s en jeu).
 static bool PersoStale() { return g_perso.state == 1 && !g_localVer.empty() && g_perso.ver.substr(0, g_perso.ver.find('+')) != Narrow(g_localVer, CP_UTF8); }   // ("+tenuesN" : tenues offertes de l'export)

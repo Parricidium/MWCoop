@@ -41,12 +41,12 @@ static std::wstring SaveProfRoot()
     static int writable = -1;
     if (writable < 0 && !g_gameDir.empty()) {
         EnsureModDir();
-        std::wstring probe = g_gameDir + L"MWCoop\\.ecriture-lanceur";
+        std::wstring probe = g_modRoot + L"MWCoop\\.ecriture-lanceur";
         HANDLE h = CreateFileW(probe.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
         writable = h != INVALID_HANDLE_VALUE ? 1 : 0;
         if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
     }
-    return (writable != 0 || LocalDir().empty() ? g_gameDir + L"MWCoop\\" : LocalDir()) + L"profils\\";
+    return (writable != 0 || LocalDir().empty() ? g_modRoot + L"MWCoop\\" : LocalDir()) + L"profils\\";
 }
 static std::wstring SaveDirOf(const std::wstring &prof)
 {

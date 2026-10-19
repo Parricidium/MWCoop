@@ -50,7 +50,10 @@ static std::wstring MscIni() { return g_gameDir + L"doorstop_config.ini"; }
 // dans le dossier Mods du jeu (ou celui choisi pour l'officiel : [MSCLoader] mods= de son doorstop_config.ini). Essai a
 // la main du 08/10 : MSCLoader charge depuis ce dossier, 11 mods trouves par la jonction Mods de la copie.
 // Choix dans l'onglet MODS ([Lanceur] MSCLoaderMWCoop) : par defaut l'officiel s'il est installe, sinon celui de MWCoop.
-static std::wstring MscPackDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"mscloader-mwcoop\\"; }
+// Une edition par jeu (JD, 19/10 : My Summer Car lance avec le MSCLoader de My Winter Car -> « Installed MSCLoader is for My
+// Winter Car game only ») : le zip officiel porte les deux (main_mwc.pack, main_msc.pack) ; chacune dans son dossier.
+static std::wstring MscPackDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + (g_game == GAME_MSC ? L"mscloader-mwcoop-msc\\" : L"mscloader-mwcoop\\"); }
+static const wchar_t *MscEdition() { return g_game == GAME_MSC ? L"msc" : L"mwc"; }
 static std::wstring MscCopyDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"jeu-mscloader\\" + GM().steamDir + L"\\"; }
 static bool MscOfficialInstalled() { return !g_gameDir.empty() && FileExists(MscManaged() + L"MSCLoader.Preloader.dll") && FileExists(g_gameDir + L"winhttp.dll") && FileExists(MscIni()); }
 static bool MscOwnInstalled() { std::wstring p = MscPackDir(); return !p.empty() && FileExists(p + L"winhttp.dll") && FileExists(p + L"Managed\\MSCLoader.Preloader.dll"); }
@@ -135,7 +138,7 @@ static void MscScan()
     std::vector<MscMod> cache;
     std::wstring loaderVer;
     std::vector<unsigned char> d;
-    if (ReadAll(g_gameDir + L"MWCoop\\cache\\mscloader.txt", d)) {
+    if (ReadAll(g_modRoot + L"MWCoop\\cache\\mscloader.txt", d)) {
         std::wstring all = Widen(std::string(d.begin(), d.end()), CP_UTF8);
         size_t a = 0;
         while (a < all.size()) {
@@ -343,7 +346,8 @@ static DWORD WINAPI MscInstallThread(void *param)
     std::string why;
     if (!Unzip(zip, tmp + L"pkg", &why)) return fail("zip : " + why);
     std::wstring pkg = tmp + L"pkg\\";
-    if (!FileExists(pkg + L"core64.pack") || !FileExists(pkg + L"main_ref.pack") || !FileExists(pkg + L"main_mwc.pack")) return fail("paquet incomplet (core64 / main_ref / main_mwc)");
+    std::wstring ed = MscEdition(), mainPack = pkg + L"main_" + ed + L".pack", edDir = tmp + ed + L"\\";   // (edition du jeu choisi)
+    if (!FileExists(pkg + L"core64.pack") || !FileExists(pkg + L"main_ref.pack") || !FileExists(mainPack)) return fail("paquet incomplet (core64 / main_ref / main_" + Narrow(ed) + ")");
     if (own) {   // tout dans notre dossier ; seul le dossier Mods (le meme que l'officiel) recoit ses dossiers de base
         std::wstring pack = MscPackDir();
         if (pack.empty()) return fail("dossier %LOCALAPPDATA%\\MWCoop introuvable");
@@ -353,17 +357,17 @@ static DWORD WINAPI MscInstallThread(void *param)
         SetFileAttributesW((pack + L"winhttp.dll").c_str(), FILE_ATTRIBUTE_NORMAL);
         if (!CopyFileW((tmp + L"core\\winhttp.dll").c_str(), (pack + L"winhttp.dll").c_str(), FALSE)) return fail("winhttp.dll : en cours d'utilisation (erreur " + std::to_string(GetLastError()) + ")");
         if (!Unzip(pkg + L"main_ref.pack", pack + L"Managed", &why)) return fail("bibliotheques : " + why);
-        if (!Unzip(pkg + L"main_mwc.pack", tmp + L"mwc", &why)) return fail("main_mwc : " + why);
-        if (!Unzip(tmp + L"mwc\\Managed.zip", pack + L"Managed", &why)) return fail("MSCLoader.dll : " + why);
+        if (!Unzip(mainPack, edDir, &why)) return fail("main_" + Narrow(ed) + " : " + why);
+        if (!Unzip(edDir + L"Managed.zip", pack + L"Managed", &why)) return fail("MSCLoader.dll : " + why);
         std::wstring md = MscModsDir();
         md.pop_back();
         SHCreateDirectoryExW(NULL, md.c_str(), NULL);
-        if (!Unzip(tmp + L"mwc\\Mods.zip", md, &why)) return fail("dossier Mods : " + why);
+        if (!Unzip(edDir + L"Mods.zip", md, &why)) return fail("dossier Mods : " + why);
         CreateDirectoryW((md + L"\\References").c_str(), NULL);
         CreateDirectoryW((md + L"\\Config").c_str(), NULL);
         HANDLE vf = CreateFileW((pack + L"version.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (vf != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(vf, tag.data(), (DWORD)tag.size(), &n, NULL); CloseHandle(vf); }
-        TestLog("mods : MSCLoader %s de MWCoop installe (%s ; mods : %s)", tag.c_str(), Narrow(pack, CP_UTF8).c_str(), Narrow(md, CP_UTF8).c_str());
+        TestLog("mods : MSCLoader %s de MWCoop installe, edition %s (%s ; mods : %s)", tag.c_str(), Narrow(ed).c_str(), Narrow(pack, CP_UTF8).c_str(), Narrow(md, CP_UTF8).c_str());
         g_mscInstallWhy = tag;
         g_mscInstall = 2;
         return 0;
@@ -392,18 +396,18 @@ static DWORD WINAPI MscInstallThread(void *param)
         if (!had && !CopyFileW((tmp + L"core\\doorstop_config.ini").c_str(), ini.c_str(), FALSE)) return fail("doorstop_config.ini : ecriture impossible");
     }
     if (!Unzip(pkg + L"main_ref.pack", managed, &why)) return fail("bibliotheques : " + why);
-    if (!Unzip(pkg + L"main_mwc.pack", tmp + L"mwc", &why)) return fail("main_mwc : " + why);
-    if (!Unzip(tmp + L"mwc\\Managed.zip", managed, &why)) return fail("MSCLoader.dll : " + why);
+    if (!Unzip(mainPack, edDir, &why)) return fail("main_" + Narrow(ed) + " : " + why);
+    if (!Unzip(edDir + L"Managed.zip", managed, &why)) return fail("MSCLoader.dll : " + why);
     WritePrivateProfileStringW(L"General", L"target_assembly", (std::wstring(GM().data) + L"\\Managed\\MSCLoader.Preloader.dll").c_str(), ini.c_str());
     WritePrivateProfileStringW(L"MSCLoader", L"mods", mods, ini.c_str());
     WritePrivateProfileStringW(L"MSCLoader", L"skipIntro", intro, ini.c_str());
     WritePrivateProfileStringW(L"MSCLoader", L"skipConfigScreen", cfg, ini.c_str());
     std::wstring md = MscModsDir();
     md.pop_back();
-    if (!Unzip(tmp + L"mwc\\Mods.zip", md, &why)) return fail("dossier Mods : " + why);
+    if (!Unzip(edDir + L"Mods.zip", md, &why)) return fail("dossier Mods : " + why);
     CreateDirectoryW((md + L"\\References").c_str(), NULL);
     CreateDirectoryW((md + L"\\Config").c_str(), NULL);
-    TestLog("mods : MSCLoader %s installe (%s)", tag.c_str(), Narrow(md, CP_UTF8).c_str());
+    TestLog("mods : MSCLoader %s installe, edition %s (%s)", tag.c_str(), Narrow(ed).c_str(), Narrow(md, CP_UTF8).c_str());
     g_mscInstallWhy = tag;
     g_mscInstall = 2;
     return 0;

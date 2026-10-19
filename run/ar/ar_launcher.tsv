@@ -1196,6 +1196,29 @@ My Summer Car in BETA: for now, you see and talk to each other (players, outfits
 Version & updates: Check, the game (MSC / MWC), automatic update, test builds (nightly), the release notes and \"Launcher help bubbles\" (See the tour again).	النسخة والتحديثات: تحقّق، اللعبة (MSC / MWC)، التحديث التلقائي، نسخ الاختبار (nightly)، ملاحظات الإصدار و\"فقاعات مساعدة المشغّل\" (أعد الجولة).
 Yellow	أصفر
 Orange	برتقالي
+MWCoop installs itself into AppData, with an \"MWCoop\" shortcut on the desktop. One launcher for My Winter Car and My Summer Car: nothing goes into the game folders.	يثبّت MWCoop نفسه في AppData مع اختصار \"MWCoop\" على سطح المكتب. مشغّل واحد لـ My Winter Car وMy Summer Car: لا يوضع شيء في مجلدات الألعاب.
+Install in 3 steps	التثبيت في 3 خطوات
+Unzip MWCoop wherever you like (Downloads, for example) and start MWCoop.exe.	فك ضغط ملف MWCoop أينما تريد (مجلد التنزيلات مثلاً) وشغّل MWCoop.exe.
+Accept the install: MWCoop copies itself to %LOCALAPPDATA%\\MWCoop and creates the \"MWCoop\" shortcut on the desktop. The unzipped folder is no longer needed, you can delete it.	وافق على التثبيت: ينسخ MWCoop نفسه إلى %LOCALAPPDATA%\\MWCoop وينشئ اختصار \"MWCoop\" على سطح المكتب. لم يعد المجلد المفكوك ضرورياً، يمكنك حذفه.
+Pick your game (MSC or MWC, top left), your nickname, then HOST, JOIN or SOLO. That's it!	اختر لعبتك (MSC أو MWC، أعلى اليسار)، واسمك، ثم استضف أو انضم أو فردي. هذا كل شيء!
+You had MWCoop in the game folder?	كان MWCoop في مجلد اللعبة؟
+On first start, the launcher offers to move everything into AppData (co-op saves, settings, outfits, logs) and cleans the game folder: what MWCoop had put there goes to the Recycle Bin. Your game save, your mods and an official MSCLoader are not touched.	عند أول تشغيل، يعرض المشغّل نقل كل شيء إلى AppData (حفظات اللعب الجماعي، الإعدادات، الملابس، السجلات) وينظّف مجلد اللعبة: ما وضعه MWCoop هناك يذهب إلى سلة المحذوفات. حفظ اللعبة ومودّاتك وMSCLoader الرسمي لا تُمس.
+Start MWCoop from the desktop shortcut. A COPY of MWCoop.exe somewhere else would stop updating.	شغّل MWCoop من اختصار سطح المكتب. نسخة من MWCoop.exe في مكان آخر لن تُحدَّث.
+MWCoop installed in AppData (the launcher offers it on first start): nothing in the game folder.	MWCoop مثبّت في AppData (يقترحه المشغّل عند أول تشغيل): لا شيء في مجلد اللعبة.
+Always start MWCoop from the \"MWCoop\" desktop shortcut.	شغّل MWCoop دائماً من اختصار \"MWCoop\" على سطح المكتب.
+If your antivirus complains: allow the %LOCALAPPDATA%\\MWCoop folder (exclusion), then start again.	إذا اعترض برنامج مكافحة الفيروسات: اسمح لمجلد %LOCALAPPDATA%\\MWCoop (استثناء)، ثم أعد التشغيل.
+MWCoop looks for the game in your Steam libraries and did not find it. Show it mywintercar.exe (Steam: right-click My Winter Car > Manage > Browse local files).	يبحث MWCoop عن اللعبة في مكتبات Steam ولم يجدها. أرِه mywintercar.exe (Steam: انقر بزر الفأرة الأيمن على My Winter Car > إدارة > تصفح الملفات المحلية).
+: copy failed, nothing was removed	: فشل النسخ، لم يُحذف شيء
+ file(s) moved, game folder cleaned	 ملف/ملفات نُقلت، ونُظّف مجلد اللعبة
+ (except files in use: close the game and restart)	 (عدا الملفات المفتوحة: أغلق اللعبة وأعد التشغيل)
+MWCoop now installs into AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop: one launcher for My Winter Car and My Summer Car.	يُثبَّت MWCoop الآن في AppData\\Local\\MWCoop مع اختصار “MWCoop” على سطح المكتب: مشغّل واحد لـ My Winter Car وMy Summer Car.
+\n\nYour MWCoop files (co-op saves, settings, outfits, logs) are moved there from:	\n\nتُنقل ملفات MWCoop الخاصة بك (حفظات اللعب الجماعي، الإعدادات، الملابس، السجلات) إليه من:
+\n\nThen the game folder is cleaned: what MWCoop had put there goes to the Recycle Bin (your game save, your mods and an official MSCLoader are not touched).	\n\nثم يُنظَّف مجلد اللعبة: ما وضعه MWCoop هناك يذهب إلى سلة المحذوفات (حفظ اللعبة ومودّاتك وMSCLoader الرسمي لا تُمس).
+\n\nInstall now? (No: later, the launcher works as before.)	\n\nالتثبيت الآن؟ (لا: لاحقاً، يعمل المشغّل كما كان.)
+Close the game, then restart MWCoop to install it.	أغلق اللعبة، ثم أعد تشغيل MWCoop لتثبيته.
+Install failed: could not copy the launcher (error 	فشل التثبيت: تعذّر نسخ المشغّل (خطأ 
+MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop.	تم تثبيت MWCoop في AppData\\Local\\MWCoop مع اختصار “MWCoop” على سطح المكتب.
+\n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).	\n\nإذا كنت قد وضعت MWCoop في خيارات تشغيل Steam، أعد ضبطه من الإعدادات › اللعبة (تغيّر مسار المشغّل).
 Thanks to everyone who makes MWCoop better	شكراً لكل من يجعل MWCoop أفضل
 VHS tapes	أشرطة VHS
 Watch them, export them as .mp4, rename them, put a video on them	شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو

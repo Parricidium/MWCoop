@@ -11,3 +11,26 @@ MS101	My Summer Car in BETA: for now, you see and talk to each other (players, o
 MS102	Version & updates: Check, the game (MSC / MWC), automatic update, test builds (nightly), the release notes and \"Launcher help bubbles\" (See the tour again).
 MS201	Yellow
 MS202	Orange
+MS300	MWCoop installs itself into AppData, with an \"MWCoop\" shortcut on the desktop. One launcher for My Winter Car and My Summer Car: nothing goes into the game folders.
+MS301	Install in 3 steps
+MS302	Unzip MWCoop wherever you like (Downloads, for example) and start MWCoop.exe.
+MS303	Accept the install: MWCoop copies itself to %LOCALAPPDATA%\\MWCoop and creates the \"MWCoop\" shortcut on the desktop. The unzipped folder is no longer needed, you can delete it.
+MS304	Pick your game (MSC or MWC, top left), your nickname, then HOST, JOIN or SOLO. That's it!
+MS305	You had MWCoop in the game folder?
+MS306	On first start, the launcher offers to move everything into AppData (co-op saves, settings, outfits, logs) and cleans the game folder: what MWCoop had put there goes to the Recycle Bin. Your game save, your mods and an official MSCLoader are not touched.
+MS307	Start MWCoop from the desktop shortcut. A COPY of MWCoop.exe somewhere else would stop updating.
+MS308	MWCoop installed in AppData (the launcher offers it on first start): nothing in the game folder.
+MS309	Always start MWCoop from the \"MWCoop\" desktop shortcut.
+MS310	If your antivirus complains: allow the %LOCALAPPDATA%\\MWCoop folder (exclusion), then start again.
+MS311	MWCoop looks for the game in your Steam libraries and did not find it. Show it mywintercar.exe (Steam: right-click My Winter Car > Manage > Browse local files).
+MS400	: copy failed, nothing was removed
+MS401	 file(s) moved, game folder cleaned
+MS402	 (except files in use: close the game and restart)
+MS403	MWCoop now installs into AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop: one launcher for My Winter Car and My Summer Car.
+MS404	\n\nYour MWCoop files (co-op saves, settings, outfits, logs) are moved there from:
+MS405	\n\nThen the game folder is cleaned: what MWCoop had put there goes to the Recycle Bin (your game save, your mods and an official MSCLoader are not touched).
+MS406	\n\nInstall now? (No: later, the launcher works as before.)
+MS407	Close the game, then restart MWCoop to install it.
+MS408	Install failed: could not copy the launcher (error 
+MS409	MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop.
+MS410	\n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).
