@@ -319,6 +319,7 @@ namespace MWCoop
             if (now >= nextWaiting) { nextWaiting = now + 0.25f; CheckWaiting(); }
             if (fresh.Count > 0) CheckFresh(now);
             if (pendingBolts.Count > 0) RetryBolts(now);
+            if (Game.Msc) MscTick();   // (demontages « echange » faits ici : envoyes avec la cle de la nouvelle piece libre)
             if (mounting.Count > 0) CheckMounting(now);
             if (reinstall.Count > 0) CheckReinstall(now);
             if (now < nextScan) return;
