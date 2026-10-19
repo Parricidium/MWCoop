@@ -1,25 +1,34 @@
 <p align="center">
-  <img src="docs/img/logo-titre.png" width="360" alt="my Winter Car coop">
+  <img src="docs/img/logo-seasons.png" width="380" alt="my Seasons Car">
 </p>
+
+<h3 align="center">Co-op mod for My Winter Car &amp; My Summer Car</h3>
 
 <p align="center">
   <a href="https://github.com/Parricidium/MWCoop/releases"><img src="https://img.shields.io/github/v/release/Parricidium/MWCoop?include_prereleases&label=Download&style=for-the-badge" alt="Download"></a>
+  <a href="https://parricidium.github.io/MWCoop/"><img src="https://img.shields.io/badge/Website-My%20Seasons%20Car-bfe6fb?style=for-the-badge" alt="Website"></a>
+  <a href="https://ko-fi.com/parricidium"><img src="https://img.shields.io/badge/Support-Ko--fi-ff5e5b?style=for-the-badge&logo=kofi&logoColor=white" alt="Ko-fi"></a>
 </p>
 
 <p align="center">
   <a href="https://store.steampowered.com/app/4164420/"><img src="https://img.shields.io/badge/Buy%20My%20Winter%20Car-Steam-1b2838?style=for-the-badge&logo=steam&logoColor=white" alt="My Winter Car on Steam"></a>
+  <a href="https://store.steampowered.com/app/516750/"><img src="https://img.shields.io/badge/Buy%20My%20Summer%20Car-Steam-1b2838?style=for-the-badge&logo=steam&logoColor=white" alt="My Summer Car on Steam"></a>
 </p>
 <p align="center">
-  <b>This mod needs a legitimately owned copy of My Winter Car.</b> No game data is included here.
+  <b>This mod needs a legitimately owned copy of My Winter Car or My Summer Car.</b> No game data is included here.
 </p>
 
 <p align="center">
   <img src="docs/img/jeu-duo.jpg" width="100%" alt="The host seen by a guest in the farm yard">
 </p>
 
-# MWCoop — My Winter Car in co-op
+# My Seasons Car — co-op for My Winter Car and My Summer Car
 
-A co-op mod for **My Winter Car** (Steam), by the authors of [VCCoop](https://github.com/Parricidium/VCCoop),
+**My Seasons Car** (formerly MWCoop) is a co-op mod for **My Winter Car** and, since 1.1.0, **My Summer Car** (BETA)
+(Steam). The same launcher runs both games; in game the mod is called **MWCoop** on My Winter Car and **MSCoop** on
+My Summer Car. Website: **[parricidium.github.io/MWCoop](https://parricidium.github.io/MWCoop/)**.
+
+A co-op mod by the authors of [VCCoop](https://github.com/Parricidium/VCCoop),
 [SACoop](https://github.com/Parricidium/SACoop) and [JACoop](https://github.com/Parricidium/JACoop). One player hosts
 their world; friends join **that** world: same save, same time, same weather, the same car rebuilt bolt by bolt,
 the same shops, NPCs, jobs and bills — with a wallet each. Up to **16 players** per lobby.
@@ -346,7 +355,11 @@ Amistech Games; this project is not affiliated with them.
 
 # Version française
 
-**MWCoop** est un mod coopératif pour **My Winter Car** (Steam). Un joueur héberge son monde, ses amis rejoignent
+**My Seasons Car** (anciennement MWCoop) est un mod coopératif pour **My Winter Car** et, depuis la 1.1.0,
+**My Summer Car** (BETA) (Steam). Le même lanceur gère les deux jeux ; en jeu, le mod s'appelle **MWCoop** sur
+My Winter Car et **MSCoop** sur My Summer Car. Site : **[parricidium.github.io/MWCoop](https://parricidium.github.io/MWCoop/)**.
+
+Un joueur héberge son monde, ses amis rejoignent
 **ce** monde : même sauvegarde, même heure, même météo, la même voiture remontée vis par vis, les mêmes magasins,
 PNJ, boulots et factures — avec chacun son porte-monnaie. Jusqu'à **16 joueurs** par salon.
 
