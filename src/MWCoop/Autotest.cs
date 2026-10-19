@@ -96,6 +96,77 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=mscchassis (20/10, retour de $forever1 : pieces montees par l'invite restees par terre chez l'hote) -- pieces
+        // « echange » jouees par l'INVITE : 60 s sub frame sur trigger_subframe ; 70 s ses vis au cran 8 ; 85 s cremaillere sur
+        // trigger_steering_axle (chemin 'Check bolts') ; 100 s cremaillere demontee ; 115 s la nouvelle cremaillere libre remontee.
+        // Chacun note toutes les 5 s : declencheurs, pieces montees allumees, Database Installed / Bolted, pieces libres.
+        static int chassisStep; static float chassisLog; static GameObject chassisNewRack;
+        const string ChassisCar = "SATSUMA(557kg, 248)/Chassis/";
+        static string DbState(string path)
+        {
+            PlayMakerFSM d = Game.FindFsm(path, "Data");
+            if (d == null) return "?";
+            FsmBool i = d.FsmVariables.FindFsmBool("Installed"), b = d.FsmVariables.FindFsmBool("Bolted");
+            return (i != null && i.Value ? "monte" : "pas monte") + (b != null ? (b.Value ? "/boulonne" : "/pas boulonne") : "");
+        }
+        static GameObject Loose(string name)
+        {
+            GameObject pc = Game.FindAny("CARPARTS/PartsCar");
+            if (pc != null) foreach (Transform x in pc.transform) if (x.name == name && x.gameObject.activeInHierarchy) return x.gameObject;
+            foreach (GameObject g in Object.FindObjectsOfType<GameObject>()) if (g.name == name && g.transform.parent == null && g.activeInHierarchy) return g;
+            return null;
+        }
+        static void ChassisAssemble(string trigger, GameObject part, string what)
+        {
+            GameObject trig = Game.FindAny(ChassisCar + trigger);
+            PlayMakerFSM asm = trig != null ? Game.FsmOn(trig, "Assembly") : null;
+            if (asm == null || part == null) { Log.Info("autotest : mscchassis, " + what + " : " + (asm == null ? "point absent" : "piece libre absente")); return; }
+            asm.FsmVariables.GetFsmGameObject("Part").Value = part;
+            Game.SetState(asm, "Wait for assembly");
+            asm.SendEvent("ASSEMBLE");
+            Log.Info("autotest : mscchassis, " + what + " -> " + asm.ActiveStateName);
+        }
+        static void MscChassis(float t)
+        {
+            bool host = Net.Session.IsHost;
+            if (!host && t > 60f && chassisStep == 0) { chassisStep = 1; ChassisAssemble("trigger_subframe", Loose("sub frame(Clone)"), "sub frame"); }
+            if (!host && t > 70f && chassisStep == 1)
+            {
+                chassisStep = 2;
+                GameObject bolts = Game.FindAny(ChassisCar + "sub frame(xxxxx)/Bolts");
+                int n = 0;
+                if (bolts != null)
+                    foreach (PlayMakerFSM f in bolts.GetComponentsInChildren<PlayMakerFSM>(true))
+                    {
+                        if (f.FsmName != "Screw" || f.FsmVariables.FindFsmInt("Stage") == null) continue;
+                        for (int k = 0; k < 10 && f.FsmVariables.GetFsmInt("Stage").Value < 8; k++) f.SendEvent("TIGHTEN");
+                        n++;
+                    }
+                Log.Info("autotest : mscchassis, " + n + " vis du sub frame serrees, Subframe " + DbState("Database/DatabaseBody/Subframe"));
+            }
+            if (!host && t > 85f && chassisStep == 2) { chassisStep = 3; ChassisAssemble("trigger_steering_axle", Loose("steering rack(Clone)"), "cremaillere"); }
+            if (!host && t > 100f && chassisStep == 3)
+            {
+                chassisStep = 4;
+                GameObject rack = Game.FindAny(ChassisCar + "steering rack(xxxxx)");
+                PlayMakerFSM rem = rack != null ? Game.FsmOn(rack, "Removal") : null;
+                // (comme le clic droit : 'Mouse over' -REMOVE-> ; depuis 'Mouse off' ce serait une casse, envoyee par l'autorite seule)
+                if (rem != null) { rem.enabled = true; Game.SetState(rem, "Mouse over"); rem.SendEvent("REMOVE"); FsmGameObject pv = rem.FsmVariables.FindFsmGameObject("Part"); chassisNewRack = pv != null ? pv.Value : null; }
+                Log.Info("autotest : mscchassis, cremaillere demontee -> " + (rem != null ? rem.ActiveStateName : "pas de Removal") + ", nouvelle piece libre " + (chassisNewRack != null ? chassisNewRack.name : "aucune"));
+            }
+            if (!host && t > 115f && chassisStep == 4) { chassisStep = 5; ChassisAssemble("trigger_steering_axle", chassisNewRack, "cremaillere remontee"); }
+            if (t > 55f && t < 140f && Time.realtimeSinceStartup >= chassisLog)
+            {
+                chassisLog = Time.realtimeSinceStartup + 5f;
+                GameObject ts = Game.FindAny(ChassisCar + "trigger_subframe"), tr = Game.FindAny(ChassisCar + "trigger_steering_axle");
+                GameObject ms = Game.FindAny(ChassisCar + "sub frame(xxxxx)"), mr = Game.FindAny(ChassisCar + "steering rack(xxxxx)");
+                Log.Info("autotest : mscchassis (" + (host ? "hote" : "invite") + ") sub frame : declencheur " + (ts != null && ts.activeSelf ? "allume" : "eteint")
+                         + ", montee " + (ms != null && ms.activeSelf ? "allumee" : "eteinte") + ", " + DbState("Database/DatabaseBody/Subframe") + ", libre " + (Loose("sub frame(Clone)") != null ? "presente" : "absente")
+                         + " | cremaillere : declencheur " + (tr != null && tr.activeSelf ? "allume" : "eteint") + ", montee " + (mr != null && mr.activeSelf ? "allumee" : "eteinte")
+                         + ", " + DbState("Database/DatabaseMechanics/SteeringRack") + ", libre " + (Loose("steering rack(Clone)") != null ? "presente" : "absente"));
+            }
+        }
+
         // [Test] Autotest=mscregles (19/10, regles de MWC sur MSC) -- l'invite : 60 s decroche un appel de fosse (Shit 1) ; 62 s va au
         // magasin de Teimo ; 75 s y achete 2 saucisses et une caisse de biere (Total 30, il paie) ; 90 s sort un article du sac neuf,
         // 100 s le vide ; 110 s fait 10 L d'essence dans la SATSUMA (pompe 98 : Fuel +10, reservoir +10) et 120 s paie l'essence a la
@@ -311,6 +382,7 @@ namespace MWCoop
             if (mode == "mscreste") { MscReste(t); return; }
             if (mode == "mscregles") { MscRegles(t); return; }
             if (mode == "mscmeca") { MscMeca(t); return; }
+            if (mode == "mscchassis") { MscChassis(t); return; }
             if (mode == "mscinterface")
             {
                 // [Test] Autotest=mscinterface (19/10) : captures du HUD noir, des onglets Dragsters / Rallye / Joueurs du F10, puis la carte
@@ -582,7 +654,7 @@ namespace MWCoop
             float t = Time.realtimeSinceStartup - t0;
             if (Game.Msc) { MscTest(mode, t); return; }   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC)
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
-            CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); AssembleIcon.Test(mode, t); DroneCam.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t);
+            CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); AssembleIcon.Test(mode, t); DroneCam.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t); Vitrines.Test(mode, t);
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t); Consume.TestPick(mode, t); Fluids.TestFill(mode, t); ModMachtwagen300D.Test(mode, t); SleepingBags.Test(mode, t); ModCheatbox.Test(mode, t); CarLeaks.Test(mode, t); Sauna.Test(mode, t);
             if (mode == "horszones") Props.TestHorsZones(t);   // (objets sans ID hors des anciennes racines du monde : REPAIRSHOP, PERAPORTTI, LANDFILL)
             if (mode == "sondesac" && t > 20f && step == 0)
@@ -1448,6 +1520,8 @@ namespace MWCoop
                         testCam.depth = 100;
                         testCam.nearClipPlane = 0.05f;
                         testCam.fieldOfView = 60;
+                        // ([Test] CameraLumiere=1 : une lampe sur la camera d'essai -- captures de nuit, casque du 20/10)
+                        if (Config.GetInt("Test", "CameraLumiere", 0) != 0) { Light l = testCam.gameObject.AddComponent<Light>(); l.type = LightType.Point; l.range = 8f; l.intensity = 2.5f; }
                     }
                     float hh = float.Parse(Config.Get("Test", "CameraHauteur", "0.3"), System.Globalization.CultureInfo.InvariantCulture);
                     bool local = Config.GetInt("Test", "CameraLocale", 0) != 0;   // (decalage dans le repere de l'avatar : en voiture, celui de la voiture)

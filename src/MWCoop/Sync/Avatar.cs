@@ -1219,7 +1219,9 @@ namespace MWCoop
         }
         void PedalFeet(Transform car, Vector3 hipR, Vector3 hipL, ref Vector3 footR, ref Vector3 footL)
         {
-            if (Config.GetInt("Coop", "PiedsPedales", 1) == 0) return;
+            // (JD, 20/10, liste de Menor : « jambes fixes en conduite comme au debut » -- les pieds qui suivaient les pedales
+            // faisaient des jambes desarticulees a l'acceleration et au freinage ; [Coop] PiedsPedales=1 les remet)
+            if (Config.GetInt("Coop", "PiedsPedales", 0) == 0) return;
             if (pedCar != car)
             {
                 pedCar = car;
@@ -1701,7 +1703,8 @@ namespace MWCoop
                     chairTop = top - g.Seat.y;
                 }
                 // (sitPelvis n'est mesure qu'apres quelques images de pose assise : recalcule a chaque image)
-                pos.y -= Mathf.Clamp(sitPelvis.y - chairTop - 0.06f, 0f, 0.6f);
+                // (bassin 8 cm au-dessus de l'assise -- 6 cm avant : trop bas au comptoir du PSK, « monte de 2 cm », Menor 18/10)
+                pos.y -= Mathf.Clamp(sitPelvis.y - chairTop - Config.GetFloat("Coop", "AssisMarge", 0.08f), 0f, 0.6f);
                 // Pieds au-dessus du sol du siege (chevilles a 8 cm du sol au moins) : sur un canape bas, l'avatar descendu
                 // sur le coussin avait les pieds dans le plancher (capture de Menor, 18/10).
                 if (sitFeet < 8f) pos.y = Mathf.Max(pos.y, g.Seat.y + 0.08f - sitFeet);
@@ -2048,8 +2051,21 @@ namespace MWCoop
                 else if (m.HasProperty("_Color"))
                 {
                     clothMat = new Material(m);
-                    Color tint = ParseColor(Config.Get("Coop", kind == 1 ? "TeinteVeste" : "TeinteCombinaison", kind == 1 ? "1,0.83,0.72" : "0.57,0.86,1"));
-                    clothMat.color = m.color * tint;
+                    // Le tissu de l'objet du jeu (JD, 20/10, liste de Menor : « la veste n'est qu'un haut plus fonce ») : sa
+                    // texture sur le haut de l'avatar, repetee [Coop] VesteRepete fois ; sans texture lisible, la teinte d'avant.
+                    Texture tex = Config.GetInt("Coop", "VesteTexture", 1) != 0 ? ClothTexture(kind == 1 ? 0 : 1) : null;
+                    if (tex != null)
+                    {
+                        float rep = Config.GetFloat("Coop", "VesteRepete", 2f);
+                        clothMat.mainTexture = tex;
+                        clothMat.mainTextureScale = new Vector2(rep, rep);
+                        clothMat.color = Color.white;
+                    }
+                    else
+                    {
+                        Color tint = ParseColor(Config.Get("Coop", kind == 1 ? "TeinteVeste" : "TeinteCombinaison", kind == 1 ? "1,0.83,0.72" : "0.57,0.86,1"));
+                        clothMat.color = m.color * tint;
+                    }
                     m = clothMat;
                 }
             }
@@ -2060,6 +2076,16 @@ namespace MWCoop
             if (arr.Length > 2) arr[2] = FindMaterial(look.Face) ?? (defMats != null && defMats.Length > 2 ? defMats[2] : arr[2]);
             body.sharedMaterials = arr;
             Accessories(look);
+        }
+
+        // Texture du tissu de la veste (0) ou de la combinaison (1) : celle de l'objet du jeu (Wear, objet de base de ce genre).
+        static Texture ClothTexture(int itemKind)
+        {
+            GameObject go = Wear.ItemObject(itemKind);
+            if (go == null) return null;
+            foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))
+                if (r.sharedMaterial != null && r.sharedMaterial.mainTexture != null) return r.sharedMaterial.mainTexture;
+            return null;
         }
 
         // Couverture sur le dormeur (demande d'un joueur, 07/10) : un drap epais des pieds a la poitrine, dans le repere de
@@ -2249,9 +2275,10 @@ namespace MWCoop
                 g.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
                 g.AddComponent<MeshRenderer>().sharedMaterials = mr.sharedMaterials;
             }
-            // [Coop] CasquePose = haut, avant (m, depuis l'os de la tete), rotation x, y, z (degres) : modele droit,
-            // visiere vers +Z, centre vers la tete.
-            string[] p = Config.Get("Coop", "CasquePose", "0.09,0.02,0,0,0").Split(',');
+            // [Coop] CasquePose = haut, avant (m, depuis l'os de la tete), rotation x, y, z (degres). Le modele du jeu a son avant
+            // vers -Y (visiere centree en (0 ; -0,1 ; 0)) et son haut vers +Z : -90 degres autour de X pour la visiere vers
+            // l'avant (avant, rotation nulle : visiere vers le sol -- JD, 20/10).
+            string[] p = Config.Get("Coop", "CasquePose", "0.13,0.08,-90,0,0").Split(',');
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             float[] v = new float[5];
             for (int i = 0; i < 5 && i < p.Length; i++) float.TryParse(p[i], System.Globalization.NumberStyles.Float, ci, out v[i]);
@@ -2260,7 +2287,9 @@ namespace MWCoop
             ht.position = headBone.position + r.up * v[0] + r.forward * v[1];
             ht.rotation = r.rotation * Quaternion.Euler(v[2], v[3], v[4]);
             ht.SetParent(hp, true);
-            Log.Info("avatar " + Player.Name + " : casque pose sur " + hp.name + " (" + ht.childCount + " maillages)");
+            var names = new System.Text.StringBuilder();
+            foreach (Transform c in ht) { MeshFilter cm = c.GetComponent<MeshFilter>(); MeshRenderer cr = c.GetComponent<MeshRenderer>(); names.Append(' ').Append(c.name).Append('[').Append(cm.sharedMesh.name).Append(' ').Append(cm.sharedMesh.bounds.size.ToString("F2")).Append(' ').Append(cr.sharedMaterial != null ? cr.sharedMaterial.name + "/" + cr.sharedMaterial.shader.name : "-").Append(" rot ").Append(c.localEulerAngles.ToString("F0")).Append(" centre ").Append(c.localPosition + c.localRotation * Vector3.Scale(c.localScale, cm.sharedMesh.bounds.center)).Append(']'); }
+            Log.Info("avatar " + Player.Name + " : casque pose sur " + hp.name + " (" + ht.childCount + " maillages :" + names + ", source " + src.name + " " + Recon.Path(src.transform) + ")");
         }
 
         // Essais (Wear.State) : ce que l'avatar montre.

@@ -420,7 +420,7 @@ namespace MWCoop
             {
                 int ev = r.U8();
                 if (ev == E_Punch) g.PunchAt = g.Time; else if (ev == E_Finger) g.FingerAt = g.Time; else if (ev == E_Helmet) g.HelmetAt = g.Time; else if (ev == E_Stalk) g.StalkAt = g.Time;
-                if ((ev == E_Helmet || ev == E_Stalk) && Config.GetInt("Test", "CaptureGeste", 0) != 0) Autotest.CaptureSoon(ev == E_Helmet ? "geste-casque" : "geste-comodo", ev == E_Helmet ? 0.5f : 0.35f);
+                if ((ev == E_Helmet || ev == E_Stalk) && Config.GetInt("Test", "CaptureGeste", 0) != 0) Autotest.CaptureSoon(ev == E_Helmet ? "geste-casque" : "geste-comodo", ev == E_Helmet ? Config.GetFloat("Test", "CaptureGesteDelai", 0.5f) : 0.35f);
                 if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Gesture).U8(who).U8(1).U8(ev), true, who);
                 if (Logging) Log.Info("autotest : gestes : recu de #" + who + " : " + (ev == E_Punch ? "coup" : "doigt"));
                 return;
@@ -707,7 +707,7 @@ namespace MWCoop
         public static void Test2(string mode, float t)
         {
             if (mode != "gestes2" || !Session.IsHost) return;
-            if (Config.GetInt("Test", "GesteDebout", 0) != 0) { if (g2 == 0 && t > 40f) { g2 = 9; Game.SetGlobalBool("PlayerHelmet", !Game.GlobalBool("PlayerHelmet")); Log.Info("autotest : gestes2, casque debout"); } return; }
+            if (Config.GetInt("Test", "GesteDebout", 0) != 0) { if (g2 == 0 && t > Config.GetFloat("Test", "CasqueA", 40f)) { g2 = 9; Game.SetGlobalBool("PlayerHelmet", !Game.GlobalBool("PlayerHelmet")); Log.Info("autotest : gestes2, casque debout"); } return; }
             if (g2 == 0 && t > 30f) { g2 = 1; Log.Info("autotest : gestes2, " + VehicleSync.TestEnter("SORBET(190-200psi)", false)); }
             if (g2 == 1 && t > 36f) { g2 = 2; Log.Info("autotest : gestes2, volant " + VehicleSync.TestEnter("SORBET(190-200psi)", true)); }
             if (g2 == 2 && t > 45f) { g2 = 3; Game.SetGlobalBool("PlayerHelmet", !Game.GlobalBool("PlayerHelmet")); Log.Info("autotest : gestes2, casque"); }
