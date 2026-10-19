@@ -476,7 +476,7 @@ namespace MWCoop
                 Transform pelvis = FindBone(t, "pelvis");
                 if (pelvis == null || pelvis.parent == null) continue;
                 string path = Recon.Path(t);
-                found.Add(new KeyValuePair<int, Transform>(path.StartsWith("TRAFFIC") ? 0 : (path.Contains("RACE") || path.StartsWith("RALLY")) ? 2 : 1, t));
+                found.Add(new KeyValuePair<int, Transform>(path.StartsWith("TRAFFIC") ? 0 : (path.Contains("RACE") || Game.Msc && path.StartsWith("RALLY")) ? 2 : 1, t));
             }
             found.Sort((a, b) => a.Key.CompareTo(b.Key));
             foreach (KeyValuePair<int, Transform> kv in found)
