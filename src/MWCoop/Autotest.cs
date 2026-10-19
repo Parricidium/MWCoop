@@ -44,6 +44,51 @@ namespace MWCoop
                 MapPanel.Test("carte", t);
                 return;
             }
+            if (mode == "msccarte") MapPanel.Test("carte", t);   // (captures de la carte : [Test] CarteOuvre, CarteZoom2/3)
+            if (mode == "msccarte" && t > 25f && mscStep == 0 && Config.GetInt("Test", "CarteReleve", 1) != 0)
+            {
+                // [Test] Autotest=msccarte (19/10, JD : refaire la carte de MSC) : collisionneurs fixes regroupes (racine/parent/nom,
+                // calque, sorte) avec nombre, triangles et etendue ; arbre de MAP sur 3 niveaux ; terrains Unity.
+                mscStep = 1;
+                var groups = new System.Collections.Generic.Dictionary<string, object[]>();
+                foreach (Collider c in Object.FindObjectsOfType<Collider>())
+                {
+                    if (c.isTrigger || c.attachedRigidbody != null) continue;
+                    Transform p = c.transform.parent;
+                    string key = Game.RootName(c.transform) + "/" + (p != null ? p.name : "-") + "/" + c.name + " L" + c.gameObject.layer + " " + c.GetType().Name;
+                    object[] g;
+                    if (!groups.TryGetValue(key, out g)) groups[key] = g = new object[] { 0, 0, c.bounds };
+                    g[0] = (int)g[0] + 1;
+                    var mc = c as MeshCollider;
+                    if (mc != null && mc.sharedMesh != null) try { g[1] = (int)g[1] + mc.sharedMesh.triangles.Length / 3; } catch { }
+                    Bounds b = (Bounds)g[2]; b.Encapsulate(c.bounds); g[2] = b;
+                }
+                var keys = new System.Collections.Generic.List<string>(groups.Keys);
+                keys.Sort((a, b) => ((Bounds)groups[b][2]).size.sqrMagnitude.CompareTo(((Bounds)groups[a][2]).size.sqrMagnitude));
+                var sb = new System.Text.StringBuilder("autotest : msccarte, collisionneurs (" + keys.Count + " groupes) :");
+                foreach (string k in keys)
+                {
+                    object[] g = groups[k]; Bounds b = (Bounds)g[2];
+                    if (Mathf.Max(b.size.x, b.size.z) < 15f) continue;
+                    sb.Append("\n  ").Append(k).Append(" x").Append(g[0]).Append(" tri ").Append(g[1]).Append(" min ").Append(b.min.ToString("F0")).Append(" max ").Append(b.max.ToString("F0"));
+                }
+                Log.Info(sb.ToString());
+                sb.Length = 0; sb.Append("autotest : msccarte, MAP :");
+                GameObject map = Game.FindAny("MAP");
+                if (map != null)
+                    foreach (Transform a in map.transform)
+                    {
+                        sb.Append("\n  ").Append(a.name).Append(a.gameObject.activeSelf ? "" : " (eteint)").Append(" [").Append(a.childCount).Append(']');
+                        foreach (Transform b in a)
+                        {
+                            sb.Append("\n    ").Append(b.name).Append(b.gameObject.activeSelf ? "" : " (eteint)").Append(" [").Append(b.childCount).Append("] L").Append(b.gameObject.layer);
+                            int n = 0;
+                            foreach (Transform cc in b) { if (n++ >= 25) { sb.Append(" ..."); break; } sb.Append(n == 1 ? " : " : ", ").Append(cc.name); }
+                        }
+                    }
+                foreach (Terrain te in Object.FindObjectsOfType<Terrain>()) sb.Append("\n  TERRAIN ").Append(Recon.Path(te.transform)).Append(" pos ").Append(te.transform.position.ToString("F0")).Append(" taille ").Append(te.terrainData != null ? te.terrainData.size.ToString("F0") : "?");
+                Log.Info(sb.ToString());
+            }
             if (mode == "mscmort")
             {
                 // [Test] Autotest=mscmort (19/10, JD : apres la mort sur la Jonnez, sang a l'ecran et joueur reste accroupi) : au
