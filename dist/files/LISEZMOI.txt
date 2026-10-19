@@ -1,11 +1,14 @@
-MWCoop - My Winter Car en cooperation
-=================================================
+MWCoop - My Winter Car et My Summer Car (BETA) en cooperation
+==============================================================
 
 Installation
 ------------
-1. Ouvrez le dossier du jeu (Steam : clic droit sur My Winter Car > Gerer > Parcourir les fichiers locaux).
-2. Copiez-y TOUT le contenu de ce zip (version.dll, MWCoop.exe et le dossier MWCoop) a cote de mywintercar.exe.
-3. Lancez MWCoop.exe. Quand une nouvelle version sort, cliquez sur NOUVELLE VERSION - METTRE A JOUR (sous le logo).
+1. Decompressez ce zip ou vous voulez (Telechargements...) et lancez MWCoop.exe.
+2. Acceptez l'installation : le lanceur s'installe dans %LOCALAPPDATA%\MWCoop et pose un raccourci
+   "MWCoop" sur le bureau. Rien n'est ecrit dans le dossier du jeu. Une ancienne installation (lanceur
+   dans le dossier du jeu) est reprise : sauvegardes et reglages copies, anciens fichiers a la Corbeille.
+3. Choisissez le jeu sous le numero de version : MWC (My Winter Car) ou MSC (My Summer Car, BETA).
+4. Quand une nouvelle version sort, cliquez sur NOUVELLE VERSION - METTRE A JOUR (sous le logo).
 
 Jouer
 -----
@@ -33,7 +36,7 @@ Deja synchronise
 - La circulation (routes, bus, train) et les passants de l'hote.
 - Les boulots : commences par l'un, termines par l'autre, valides pour tous, sans double paie.
 - Le cablage electrique, le pare-brise et les boutons du tableau de bord.
-- Onglet VOITURE du lanceur : couleur de la CORRIS pour une nouvelle partie, avec apercu 3D.
+- Onglet VOITURE du lanceur : couleur de la CORRIS (ou de la SATSUMA) pour une nouvelle partie, avec apercu 3D.
 - Le tchat.
 
 Pas encore (feuille de route)
@@ -45,4 +48,4 @@ En cas de probleme
 Envoyez les journaux : bouton rond JOURNAUX de MWCoop.exe, ou les fichiers
 MWCoop\logs\*.log et MWCoop\profils\invite\logs\*.log.
 
-Ce mod ne contient aucune donnee du jeu. My Winter Car appartient a Amistech Games.
+Ce mod ne contient aucune donnee du jeu. My Winter Car et My Summer Car appartiennent a Amistech Games.
