@@ -377,8 +377,10 @@ static void SavePickRow(int i)
     const SaveSlot s = g_saves[i];
     if (g_saveModal == SM_RESTART) {
         wchar_t q[700];
-        swprintf_s(q, T(L"Vous êtes sur le point de recommencer « %s ».\n\nCela effacera cette sauvegarde (la partie en cours sera perdue). Êtes-vous sûr ?\n\nCouleur de la CORRIS (icône voiture du salon) : %s.",
-                        L"You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nCORRIS color (car icon in the lobby): %s."), s.name.c_str(), CarColorName().c_str());
+        swprintf_s(q, CarMsc() ? T(L"Vous êtes sur le point de recommencer « %s ».\n\nCela effacera cette sauvegarde (la partie en cours sera perdue). Êtes-vous sûr ?\n\nCouleur de la SATSUMA (icône voiture du salon) : %s.",
+                                   L"You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nSATSUMA color (car icon in the lobby): %s.")
+                               : T(L"Vous êtes sur le point de recommencer « %s ».\n\nCela effacera cette sauvegarde (la partie en cours sera perdue). Êtes-vous sûr ?\n\nCouleur de la CORRIS (icône voiture du salon) : %s.",
+                                   L"You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nCORRIS color (car icon in the lobby): %s."), s.name.c_str(), CarColorName().c_str());
         if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
         g_saveModal = SM_NONE;
         SaveSetCurrent(s.prof);

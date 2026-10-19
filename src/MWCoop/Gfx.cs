@@ -24,8 +24,30 @@ namespace MWCoop
         public enum Kind { Bool, Int, Float }
         public class GameOpt { public string Key; public string[] Vars; public Kind K; }
 
-        // Options du jeu : cle de mwcoop.ini -> variable(s) de Systems/OptionsDB::GFX.
-        public static readonly GameOpt[] GameOpts = {
+        // Options du jeu : cle de mwcoop.ini -> variable(s) de Systems/OptionsDB::GFX (My Summer Car : Systems/Options::GFX,
+        // GameOptsMsc -- un seul retroviseur CarMirrors, reflets RefProbes et Water, pas d'ombres de lune ; vidage du 19/10).
+        public static GameOpt[] GameOpts { get { return Game.Msc ? GameOptsMsc : GameOptsMwc; } }
+        static readonly GameOpt[] GameOptsMsc = {
+            new GameOpt { Key = "Anticrenelage", Vars = new[] { "Antialiasing" }, K = Kind.Bool },
+            new GameOpt { Key = "HDR", Vars = new[] { "HDR" }, K = Kind.Bool },
+            new GameOpt { Key = "Bloom", Vars = new[] { "Bloom" }, K = Kind.Bool },
+            new GameOpt { Key = "Contraste", Vars = new[] { "Contrast" }, K = Kind.Bool },
+            new GameOpt { Key = "RayonsSoleil", Vars = new[] { "Sunshafts" }, K = Kind.Bool },
+            new GameOpt { Key = "ChampVision", Vars = new[] { "FOV" }, K = Kind.Float },
+            new GameOpt { Key = "OmbresSoleil", Vars = new[] { "ShadowsSun" }, K = Kind.Bool },
+            new GameOpt { Key = "OmbresMaisons", Vars = new[] { "ShadowsHouse" }, K = Kind.Bool },
+            new GameOpt { Key = "Distance", Vars = new[] { "DrawDistance" }, K = Kind.Float },
+            new GameOpt { Key = "Retroviseurs", Vars = new[] { "CarMirrors" }, K = Kind.Bool },
+            new GameOpt { Key = "SondesReflets", Vars = new[] { "RefProbes" }, K = Kind.Bool },
+            new GameOpt { Key = "RefletsEau", Vars = new[] { "Water" }, K = Kind.Bool },
+            new GameOpt { Key = "Balancement", Vars = new[] { "HeadBob" }, K = Kind.Bool },
+            new GameOpt { Key = "BalancementVoiture", Vars = new[] { "HeadBobDrive" }, K = Kind.Int },
+            new GameOpt { Key = "CompteurImages", Vars = new[] { "FPSIndicator" }, K = Kind.Bool },
+            new GameOpt { Key = "IndicateurRapport", Vars = new[] { "GearIndicator" }, K = Kind.Bool },
+            new GameOpt { Key = "PoussiereTrafic", Vars = new[] { "AIDustClouds" }, K = Kind.Bool },
+            new GameOpt { Key = "TracesTrafic", Vars = new[] { "AISkidmarks" }, K = Kind.Bool },
+        };
+        static readonly GameOpt[] GameOptsMwc = {
             new GameOpt { Key = "Anticrenelage", Vars = new[] { "Antialiasing" }, K = Kind.Bool },
             new GameOpt { Key = "HDR", Vars = new[] { "HDR" }, K = Kind.Bool },
             new GameOpt { Key = "Bloom", Vars = new[] { "Bloom" }, K = Kind.Bool },
@@ -149,7 +171,7 @@ namespace MWCoop
             if (ReadIni(false)) { ApplyQuality(); ApplyScreen(); ApplyEngine(); if (gameApplied) ApplyGame(false); }
             if (gfxAt > 0 && now >= gfxAt && gfx == null)
             {
-                GameObject db = Game.FindAny("Systems/OptionsDB");
+                GameObject db = Game.FindAny(Game.Msc ? "Systems/Options" : "Systems/OptionsDB");
                 gfx = db != null ? Game.FsmOn(db, "GFX") : null;
                 if (gfx == null) { gfxAt = now + 2f; return; }
             }

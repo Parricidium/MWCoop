@@ -20,6 +20,13 @@ namespace MWCoop
     //    partie ; une fois en jeu (12 s, apres l'injection des actions de Paint), chez l'hote ou en
     //    solo, si [Coop] CouleurVoiture=RRGGBB est fixee, la carrosserie est repeinte de cette couleur
     //    comme d'un coup de bombe (REPAINT) : la synchro de peinture la donne aux invites.
+    //  - My Summer Car (19/10, demande de JD : « tout doit parler de la SATSUMA ») : la voiture a construire est la SATSUMA
+    //    (SATSUMA(557kg, 248)). Apercu dans MWCoop\cache\satsuma.mesh (un fichier par jeu : jamais la CORRIS sur MSC) :
+    //    la caisse et ce qui y est monte, plus les pieces de CARPARTS/PartsCar posees sur leur pivot (automate 'Removal' ->
+    //    {Trigger} -> 'Assembly' {Parent}). Pas de tirage au hasard sur MSC : caisse, portes, ailes, capot et coffre partent
+    //    tous de la meme couleur (0.447, 0.408, 0.090) ; la couleur choisie est posee sur ces sept toles (automates 'Paint',
+    //    GLOBALEVENT -> "Paint type", PaintType 0 -> Set color). Nouvelle partie : la scene Intro (seule une nouvelle
+    //    partie y passe), en plus du bouton du permis.
     public static class CarColor
     {
         static float exportAt = -1, applyAt = -1;
@@ -28,8 +35,24 @@ namespace MWCoop
 
         public static string MeshPath
         {
-            get { return Path.Combine(Path.Combine(System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", "cache"), "corris.mesh"); }
+            get { return Path.Combine(Path.Combine(System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", "cache"), Game.Msc ? "satsuma.mesh" : "corris.mesh"); }
         }
+
+        // La voiture a construire : CORRIS (MWC), SATSUMA (MSC ; nom avec son poids, cherche par le debut si le jeu le change).
+        static GameObject CarRoot()
+        {
+            if (!Game.Msc) return GameObject.Find("CORRIS");
+            GameObject g = GameObject.Find("SATSUMA(557kg, 248)");
+            if (g != null) return g;
+            foreach (Rigidbody rb in Object.FindObjectsOfType(typeof(Rigidbody)))
+                if (rb.transform.parent == null && rb.name.StartsWith("SATSUMA") && rb.GetComponent("CarDynamics") != null) return rb.gameObject;
+            return null;
+        }
+        static string CarName { get { return Game.Msc ? "SATSUMA" : "CORRIS"; } }
+
+        // Toles de la SATSUMA qui partent de la couleur d'origine (les autres pieces peintes partent en blanc : texturees).
+        static readonly string[] MscPanels = { "car body(xxxxx)", "door left(Clone)", "door right(Clone)", "fender left(Clone)", "fender right(Clone)", "hood(Clone)", "bootlid(Clone)" };
+        static bool MscPanel(string n) { return System.Array.IndexOf(MscPanels, n) >= 0; }
 
         public static void OnLevelLoaded()
         {
@@ -43,6 +66,7 @@ namespace MWCoop
 
         public static void Update()
         {
+            if (Game.Msc && Game.LevelName == "Intro" && !NewGame) { NewGame = true; Log.Info("voiture : nouvelle partie lancee (Intro)"); }
             if (Game.LevelName == "MainMenu")
             {
                 // Bouton Commencer de la carte du permis : 'Generate ID' = nouvelle partie.
@@ -61,7 +85,8 @@ namespace MWCoop
                 exported = true;
                 // (voiture de serie : le meme apercu d'une partie a l'autre -- refait seulement si MWCoop ou le reglage changent ;
                 // l'export prenait ~100 ms d'un coup, 20 s apres le chargement)
-                string tag = Version.Text + " " + Config.GetInt("Coop", "ApercuComplet", 1), tagFile = MeshPath + ".version";
+                // (" r2" : revision de l'export, a monter quand il change sans changement de version -- 19/10 : roues de la SATSUMA)
+                string tag = Version.Text + " " + Config.GetInt("Coop", "ApercuComplet", 1) + " r2", tagFile = MeshPath + ".version";
                 bool fresh = false;
                 try { fresh = Config.GetInt("Coop", "ApercuComplet", 1) != 0 && File.Exists(MeshPath) && File.Exists(tagFile) && File.ReadAllText(tagFile) == tag; } catch { }
                 if (fresh) Log.Info("voiture : apercu a jour");
@@ -81,8 +106,8 @@ namespace MWCoop
 
         static string Export()
         {
-            GameObject car = GameObject.Find("CORRIS");
-            if (car == null) return "CORRIS introuvable";
+            GameObject car = CarRoot();
+            if (car == null) return CarName + " introuvable";
             Transform root = car.transform;
             var parts = new List<Piece>();
             var extra = new List<Piece>();
@@ -90,26 +115,35 @@ namespace MWCoop
             // pas montrer la sauvegarde) : chaque point de montage recoit la piece de serie que son createur y pose
             // (automates 'Spawn' : Prefab -> VINP), les roues sont les jantes acier 13". Ce qui est monte sur ces
             // points, le tuning et les pieces qui trainent sont ignores. [Coop] ApercuComplet=0 : l'etat de la partie.
-            bool stockOnly = Config.GetInt("Coop", "ApercuComplet", 1) != 0;
+            bool stockOnly = !Game.Msc && Config.GetInt("Coop", "ApercuComplet", 1) != 0;   // (MSC : pas de pieces de serie VIN)
             Dictionary<Transform, GameObject> stock = stockOnly ? StockParts(root) : new Dictionary<Transform, GameObject>();
             foreach (MeshFilter mf in car.GetComponentsInChildren<MeshFilter>())
             {
                 Renderer r = mf.GetComponent<Renderer>();
                 if (r != null && r.enabled && mf.sharedMesh != null && !Replaced(r.transform, root, stock, stockOnly))
-                    parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = root.worldToLocalMatrix * r.transform.localToWorldMatrix, Paint = IsPaintable(r.transform, root) });
+                    parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = root.worldToLocalMatrix * r.transform.localToWorldMatrix, Paint = Game.Msc ? MscPanel(r.name) : IsPaintable(r.transform, root) });
             }
             foreach (SkinnedMeshRenderer s in car.GetComponentsInChildren<SkinnedMeshRenderer>())
                 if (s.enabled && s.sharedMesh != null && !Replaced(s.transform, root, stock, stockOnly))
-                    parts.Add(new Piece { R = s, M = s.sharedMesh, ToCar = root.worldToLocalMatrix * s.transform.localToWorldMatrix, Paint = IsPaintable(s.transform, root) });
-            HashSet<Transform> points;
-            if (stockOnly)
+                    parts.Add(new Piece { R = s, M = s.sharedMesh, ToCar = root.worldToLocalMatrix * s.transform.localToWorldMatrix, Paint = Game.Msc ? MscPanel(s.name) : IsPaintable(s.transform, root) });
+            if (Game.Msc)
             {
-                points = new HashSet<Transform>(stock.Keys);
-                foreach (KeyValuePair<Transform, GameObject> kv in stock) AddPrefab(root, kv.Key, kv.Value, parts);
+                if (Config.GetInt("Test", "JournalApercu", 0) != 0) LogMscWheels(root);
+                AddMscParts(root, parts);
+                if (!AddMscWheels(root, parts)) AddWheels(car, root, extra);
             }
-            else points = AddLooseParts(root, parts);
-            AddPointMeshes(root, points, extra);
-            if (!stockOnly || !AddStockWheels(root, parts)) AddWheels(car, root, extra);
+            else
+            {
+                HashSet<Transform> points;
+                if (stockOnly)
+                {
+                    points = new HashSet<Transform>(stock.Keys);
+                    foreach (KeyValuePair<Transform, GameObject> kv in stock) AddPrefab(root, kv.Key, kv.Value, parts);
+                }
+                else points = AddLooseParts(root, parts);
+                AddPointMeshes(root, points, extra);
+                if (!stockOnly || !AddStockWheels(root, parts)) AddWheels(car, root, extra);
+            }
 
             Directory.CreateDirectory(Path.GetDirectoryName(MeshPath));
             int written = 0, tris = 0;
@@ -366,6 +400,120 @@ namespace MWCoop
             return points;
         }
 
+        // My Summer Car : pieces de la SATSUMA pas encore montees (une partie neuve : caisse nue, portes, ailes, capot, coffre,
+        // pare-chocs, phares, sieges... dans CARPARTS/PartsCar). Chacune connait son declencheur de montage ('Removal',
+        // {Trigger}) ; l'automate 'Assembly' de celui-ci la pose sur son pivot ({Parent}, sinon pivot_<nom du declencheur>)
+        // en position et rotation locales nulles. Une piece par pivot, et rien sur un pivot deja garni. Le moteur
+        // (CARPARTS/PartsMotor, sous le capot) est laisse de cote.
+        static void AddMscParts(Transform root, List<Piece> parts)
+        {
+            GameObject pc = Game.FindAny("CARPARTS/PartsCar");
+            if (pc == null) { Log.Info("voiture : CARPARTS/PartsCar introuvable, SATSUMA seule"); return; }
+            var taken = new HashSet<Transform>();
+            int n = 0;
+            foreach (Transform part in pc.transform)
+            {
+                PlayMakerFSM rem = Game.FsmOn(part.gameObject, "Removal");
+                FsmGameObject trig = rem != null ? rem.FsmVariables.FindFsmGameObject("Trigger") : null;
+                if (trig == null || trig.Value == null || !trig.Value.transform.IsChildOf(root)) continue;
+                Transform t = trig.Value.transform, pivot = null;
+                PlayMakerFSM asm = Game.FsmOn(t.gameObject, "Assembly");
+                FsmGameObject par = asm != null ? asm.FsmVariables.FindFsmGameObject("Parent") : null;
+                if (par != null && par.Value != null && par.Value.transform.IsChildOf(root)) pivot = par.Value.transform;
+                if (pivot == null && t.name.StartsWith("trigger_"))
+                {
+                    string pn = "pivot_" + t.name.Substring(8);
+                    pivot = t.parent != null ? t.parent.Find(pn) : null;
+                    if (pivot == null) foreach (Transform x in root.GetComponentsInChildren<Transform>(true)) if (x.name == pn) { pivot = x; break; }
+                }
+                if (pivot == null || taken.Contains(pivot)) continue;
+                bool full = false;
+                foreach (Renderer r in pivot.GetComponentsInChildren<Renderer>()) if (r.enabled) { full = true; break; }
+                if (full) continue;
+                taken.Add(pivot);
+                Matrix4x4 place = root.worldToLocalMatrix * pivot.localToWorldMatrix * part.worldToLocalMatrix;
+                foreach (MeshFilter mf in part.GetComponentsInChildren<MeshFilter>())
+                {
+                    Renderer r = mf.GetComponent<Renderer>();
+                    if (r == null || !r.enabled || mf.sharedMesh == null) continue;
+                    if (mf.transform != part && mf.transform.parent != null && mf.transform.parent.name == "Bolts") continue;
+                    parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = place * r.transform.localToWorldMatrix, Paint = MscPanel(r.name) });
+                }
+                n++;
+            }
+            Log.Info("voiture : " + n + " pieces de la SATSUMA posees sur leur pivot pour l'apercu");
+        }
+
+        // My Summer Car : roues de serie (jante acier 'wheel_regula' et son pneu TireOld, rayon 27 cm) sur les quatre
+        // moyeux. Une partie neuve n'en a pas de montees : la roue physique garde alors 12 cm (roues minuscules, comme
+        // la CORRIS avant AddStockWheels). Posee comme le jeu la monte (sur le modele TireXX, position et rotation
+        // nulles), a la hauteur de repos : le point de la roue est la suspension tout en haut, la roue descend un peu.
+        static bool AddMscWheels(Transform root, List<Piece> parts)
+        {
+            GameObject pc = Game.FindAny("CARPARTS/PartsCar");
+            Transform wheel = null;
+            if (pc != null)
+                foreach (Transform t in pc.transform)
+                {
+                    if (t.name != "wheel_regula") continue;
+                    foreach (MeshFilter mf in t.GetComponentsInChildren<MeshFilter>())
+                        if (mf.transform != t && mf.sharedMesh != null && mf.sharedMesh.name.StartsWith("tire")) { wheel = t; break; }
+                    if (wheel != null) break;
+                }
+            if (wheel == null) { Log.Info("voiture : roue de serie (wheel_regula) introuvable, roues simples"); return false; }
+            int n = 0;
+            foreach (Wheel wh in root.GetComponentsInChildren<Wheel>(true))
+            {
+                Transform at = wh.model != null ? wh.model.transform : wh.transform;
+                Vector3 drop = -at.up * (wh.suspensionTravel * 0.35f);
+                // (la jante a sa face cote +x : retournee a gauche, moyeu vers l'exterieur)
+                Quaternion rot = root.InverseTransformPoint(wh.transform.position).x < 0f ? at.rotation * Quaternion.Euler(0f, 180f, 0f) : at.rotation;
+                Matrix4x4 place = root.worldToLocalMatrix * Matrix4x4.TRS(wh.transform.position + drop, rot, Vector3.one) * wheel.worldToLocalMatrix;
+                foreach (MeshFilter mf in wheel.GetComponentsInChildren<MeshFilter>())
+                {
+                    Renderer r = mf.GetComponent<Renderer>();
+                    if (r == null || !r.enabled || mf.sharedMesh == null) continue;
+                    if (mf.transform != wheel && mf.transform.parent != null && mf.transform.parent.name == "Bolts") continue;
+                    parts.Add(new Piece { R = r, M = mf.sharedMesh, ToCar = place * r.transform.localToWorldMatrix, Paint = false });
+                }
+                n++;
+            }
+            Log.Info("voiture : " + n + " roues de serie posees pour l'apercu");
+            return n > 0;
+        }
+
+        // ([Test] JournalApercu=1 sur MSC : roues physiques, et ce qui s'appelle roue / jante / pneu dans la scene)
+        static void LogMscWheels(Transform root)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Wheel wh in root.GetComponentsInChildren<Wheel>(true))
+            {
+                sb.Append(wh.name).Append(" pos ").Append(root.InverseTransformPoint(wh.transform.position).ToString("F3"));
+                foreach (System.Reflection.FieldInfo fi in typeof(Wheel).GetFields())
+                    if (fi.FieldType == typeof(float) || fi.FieldType == typeof(bool)) sb.Append(' ').Append(fi.Name).Append('=').Append(fi.GetValue(wh));
+                if (wh.model != null) sb.Append(" model ").Append(Recon.Path(wh.model.transform)).Append(' ').Append(root.InverseTransformPoint(wh.model.transform.position).ToString("F3"));
+                sb.Append(" | ");
+            }
+            Log.Info("voiture : roues " + sb);
+            sb.Length = 0;
+            foreach (Object o in Resources.FindObjectsOfTypeAll(typeof(Transform)))
+            {
+                var t = (Transform)o;
+                if (t.hideFlags != HideFlags.None) continue;
+                string n = t.name.ToLowerInvariant();
+                if (!(n.Contains("wheel") || n.Contains("rim") || n.Contains("tire") || n.Contains("hubcap"))) continue;
+                if (n.Contains("steering") || n.Contains("fly")) continue;
+                sb.Append(Recon.Path(t)).Append(t.gameObject.activeInHierarchy ? "" : " (inactif)")
+                  .Append(" pos ").Append(root.InverseTransformPoint(t.position).ToString("F3")).Append(" ech ").Append(t.lossyScale.ToString("F2"));
+                MeshFilter mf = t.GetComponent<MeshFilter>();
+                if (mf != null && mf.sharedMesh != null) sb.Append(" maillage ").Append(mf.sharedMesh.name).Append(' ').Append(Vector3.Scale(mf.sharedMesh.bounds.extents, t.lossyScale).ToString("F3")).Append(mf.sharedMesh.isReadable ? "" : " (illisible)");
+                foreach (PlayMakerFSM f in t.GetComponents<PlayMakerFSM>()) sb.Append(" fsm ").Append(f.FsmName);
+                sb.Append(" | ");
+                if (sb.Length > 30000) break;
+            }
+            Log.Info("voiture : objets roue " + sb);
+        }
+
         // Pieces qui n'existent pas encore dans une partie neuve (capot, pare-chocs, phares...) : chaque
         // point de montage VINP_* vide de la CORRIS garde le maillage de sa piece (Data, OriginalMesh),
         // pose a la place du point. Les variantes de tuning (AssembliesTuning) sont laissees de cote.
@@ -444,6 +592,7 @@ namespace MWCoop
         static void ApplyChosen()
         {
             if (applied || (Session.Active && !Session.IsHost)) return;   // invite : la couleur vient de l'hote
+            if (Game.Msc) { ApplyMsc(); return; }
             GameObject body = Game.FindAny("CORRIS/BODY/car body(xxxxx)");
             PlayMakerFSM paint = body != null ? Game.FsmOn(body, "Paint") : null;
             if (paint == null) { Log.Warn("voiture : carrosserie introuvable"); return; }
@@ -466,6 +615,32 @@ namespace MWCoop
             Log.Info("voiture : couleur choisie " + c + " appliquee a la nouvelle CORRIS");
             paint.SendEvent("REPAINT");
             return true;
+        }
+
+        // My Summer Car : la couleur choisie sur les sept toles de la SATSUMA, montees ou non (automates 'Paint' : Color, puis
+        // GLOBALEVENT -> "Paint type" ; PaintType 0 -> Set color, 1 brillant, 2 metallise, 3 mat ; au-dela : art ou GT,
+        // remis en brillant). L'invite la recoit avec la sauvegarde de l'hote (etat Save : material.color).
+        static void ApplyMsc()
+        {
+            Color c;
+            if (!Parse(Config.Get("Coop", "CouleurVoiture", ""), out c)) return;
+            applied = true;
+            int n = 0;
+            foreach (Object o in Game.FsmsNamed("Paint"))
+            {
+                var f = (PlayMakerFSM)o; if (f == null) continue;
+                if (f.FsmName != "Paint" || f.hideFlags != HideFlags.None || !MscPanel(f.gameObject.name)) continue;
+                string top = f.transform.root.name;
+                if (!top.StartsWith("SATSUMA") && top != "CARPARTS") continue;
+                FsmColor col = f.FsmVariables.FindFsmColor("Color");
+                if (col == null) continue;
+                col.Value = c;
+                FsmInt type = f.FsmVariables.FindFsmInt("PaintType");
+                if (type != null && type.Value > 3) type.Value = 1;
+                f.SendEvent("GLOBALEVENT");
+                n++;
+            }
+            Log.Info("voiture : couleur choisie " + c + " appliquee a la nouvelle SATSUMA (" + n + " toles)");
         }
 
         public static bool Parse(string hex, out Color c)

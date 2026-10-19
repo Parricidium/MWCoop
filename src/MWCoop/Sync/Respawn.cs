@@ -88,7 +88,9 @@ namespace MWCoop
             // Machtwagen : la mort au volant n'y etait pas rattrapee) : relevee en prenant le volant.
             if (now >= nextHeadLook && deathFsm != null) { nextHeadLook = now + 1f; LookHeads(); }
             if (!Choosing) return;
-            if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) Choose(0);
+            // (My Summer Car, JD 19/10 : pas d'appartement -- un seul choix, la maison : Entree, Espace ou 1)
+            if (Game.Msc) { if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) Choose(1); }
+            else if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) Choose(0);
             else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2)) Choose(1);
         }
 
@@ -413,8 +415,15 @@ namespace MWCoop
             Style.Glass(new Rect(x, y, w, h), Style.Px(24));
             Style.Title(new Rect(x, y + Style.Px(26), w, Style.Px(52)), Lang.T("Vous \u00EAtes mort", "You are dead"), Style.White, TextAnchor.MiddleCenter, 38);
             Style.Text(new Rect(x + pad, y + Style.Px(88), w - 2 * pad, Style.Px(26)), Lang.T("Cause : ", "Cause: ") + cause, 18, TextAnchor.MiddleCenter, Style.Warn, false);
-            Style.Text(new Rect(x + pad, y + Style.Px(122), w - 2 * pad, Style.Px(26)), Lang.T("O\u00F9 voulez-vous r\u00E9appara\u00EEtre ?", "Where do you want to come back?"), 18, TextAnchor.MiddleCenter, Style.Dim, false);
+            Style.Text(new Rect(x + pad, y + Style.Px(122), w - 2 * pad, Style.Px(26)), Game.Msc ? Lang.T("Vous revenez \u00E0 la maison.", "You come back home.")
+                       : Lang.T("O\u00F9 voulez-vous r\u00E9appara\u00EEtre ?", "Where do you want to come back?"), 18, TextAnchor.MiddleCenter, Style.Dim, false);
             float bw = (w - 2 * pad - Style.Px(14)) / 2, by = y + Style.Px(172), bh = Style.Px(58);
+            if (Game.Msc)   // (My Summer Car : pas d'appartement, la maison seulement -- un bouton ; JD 19/10)
+            {
+                if (Style.Button(new Rect(x + pad, by, w - 2 * pad, bh), Lang.T("R\u00E9appara\u00EEtre", "Respawn"), true, 20)) Choose(1);
+                Style.Text(new Rect(x + pad, by + bh + Style.Px(22), w - 2 * pad, Style.Px(24)), Lang.T("La partie continue pour les autres joueurs.", "The game goes on for the other players."), 15, TextAnchor.MiddleCenter, Style.Dim, false);
+                return;
+            }
             if (Style.Button(new Rect(x + pad, by, bw, bh), Lang.T("1  \u00B7  L'appartement", "1  \u00B7  The apartment"), true, 19)) Choose(0);
             if (Style.Button(new Rect(x + pad + bw + Style.Px(14), by, bw, bh), Lang.T("2  \u00B7  Chez les parents", "2  \u00B7  Parents' house"), true, 19)) Choose(1);
             Style.Text(new Rect(x + pad, by + bh + Style.Px(22), w - 2 * pad, Style.Px(24)), Lang.T("La partie continue pour les autres joueurs.", "The game goes on for the other players."), 15, TextAnchor.MiddleCenter, Style.Dim, false);

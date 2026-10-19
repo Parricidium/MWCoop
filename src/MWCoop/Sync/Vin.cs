@@ -13,6 +13,8 @@ namespace MWCoop
     // (retour d'un joueur, 09/10 : « les pieces du colis, la couleur aussi »). Ici l'invite demande la table de l'hote
     // (@vin?), l'hote la lui envoie (@vin), l'invite la recopie et rejoue l'application ("Plant 2" : les etats "... 2"
     // lisent la table et posent les proprietes).
+    // My Summer Car (19/10) : la SATSUMA n'a ni plaque VIN ni finitions (pas de CARPARTS/VINPlate dans la scene) : tout ce
+    // module est sans effet sur MSC, et les reglages FinitionVoiture / Vin<cle> y sont ignores (le lanceur les cache).
     public static class Vin
     {
         static PlayMakerFSM logic;
@@ -23,7 +25,8 @@ namespace MWCoop
         public static void OnLevelLoaded()
         {
             logic = null; table = null; applied = false; nextFind = 0;
-            askAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
+            askAt = PlayerSync.InGame && !Game.Msc ? Time.realtimeSinceStartup + 14f : -1;
+            if (Game.Msc) return;
             if (PlayerSync.InGame) { ExportOptions(); ForceTrim(); ForceOptions(); }
         }
 
@@ -144,7 +147,7 @@ namespace MWCoop
 
         public static void Update()
         {
-            if (askAt < 0 || Time.realtimeSinceStartup < askAt || Session.IsHost || !Session.Active) return;
+            if (askAt < 0 || Time.realtimeSinceStartup < askAt || Session.IsHost || !Session.Active || Game.Msc) return;
             if (!Find() || logic.ActiveStateName != "Idle") { askAt = Time.realtimeSinceStartup + 3f; return; }   // (table pas encore faite ici)
             askAt = Time.realtimeSinceStartup + 30f;   // (redemandee si la reponse se perd)
             if (applied) { askAt = -1; return; }
@@ -182,7 +185,7 @@ namespace MWCoop
         // Hote : envoie sa table a celui qui la demande.
         public static void OnAsk(int who)
         {
-            if (!Session.IsHost || !Find()) return;
+            if (Game.Msc || !Session.IsHost || !Find()) return;
             var keys = new List<string>(); var vals = new List<string>();
             foreach (DictionaryEntry e in table.hashTable)
             {
@@ -202,7 +205,7 @@ namespace MWCoop
             int n = r.U16();
             var got = new Dictionary<string, object>();
             for (int i = 0; i < n; i++) { string k = r.Str(), s = r.Str(); object v; if (Dec(s, out v)) got[k] = v; }
-            if (Session.IsHost || applied || !Find()) return;
+            if (Game.Msc || Session.IsHost || applied || !Find()) return;
             int diff = 0;
             var diffs = new List<string>();
             foreach (KeyValuePair<string, object> kv in got)

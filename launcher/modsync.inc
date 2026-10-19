@@ -21,6 +21,11 @@
 //    de mwcoop-lanceur.ini). Meme liste que les mods, chemins "<dossier>\..." ("Mods\..." pour les mods). L'invite
 //    les recoit dans %LOCALAPPDATA%\MWCoop\contenu-invite\ ; sa copie de lancement relie CD1-3, Radio et Extra a ceux
 //    de l'hote, et Images a un dossier ou les images envoyees remplacent les siennes (le reste : les siennes).
+//  - My Summer Car (BETA, demande de JD, 19/10) : ce que son jeu lit vraiment (dossier du jeu et vidage ref\msc-v.250908-04 :
+//    BuildString "Images/" + fichier). Communs : CD1-3 et Radio (trackN.ogg), car.png (peinture de la SATSUMA, ImportCarTexture),
+//    jonnez.png (mobylette), flag_garage.png (drapeau dans le garage), poster1-3.png (chambre), window_sticker.png (vitre
+//    arriere de la SATSUMA), mugshot.png (menu). Absents de MSC : fabric.png (tissu) et Extra (hockey) -- caches sur MSC.
+//    Rien de propre a MSC. Coches a part ([ContenuMSC]) et contenu recu a part (contenu-invite-msc).
 #include <mutex>
 
 // (M_MODS, M_MODGET, M_MODDATA, M_MODSREQ : avec les autres messages du salon)
@@ -188,24 +193,31 @@ static void ModSetShared(const std::wstring &file, bool on)
 }
 
 // ---- contenu personnalisable du jeu
-struct ContentCat { const char *key; const wchar_t *fr, *en, *root, *files; bool def; };   // files : "a.png|b.png" (NULL : tout le dossier)
+// games : 1 My Winter Car, 2 My Summer Car (3 : les deux) ; frMsc / enMsc : nom sur MSC (NULL : le meme).
+// mobylette : jonnez.png, l'image que le jeu lit (MWC et MSC) ; jonnez_template.png n'est que le modele a peindre.
+struct ContentCat { const char *key; const wchar_t *fr, *en, *root, *files; bool def; int games; const wchar_t *frMsc, *enMsc; };   // files : "a.png|b.png" (NULL : tout le dossier)
 static const ContentCat kContent[] = {
-    { "cd1", L"CD 1", L"CD 1", L"CD1", NULL, true },
-    { "cd2", L"CD 2", L"CD 2", L"CD2", NULL, true },
-    { "cd3", L"CD 3", L"CD 3", L"CD3", NULL, true },
-    { "radio", L"Radio", L"Radio", L"Radio", NULL, true },
-    { "peinture", L"Peinture de la CORRIS", L"CORRIS paint", L"Images", L"car.png", true },
-    { "mobylette", L"Peinture de la mobylette", L"Moped paint", L"Images", L"jonnez_template.png", true },
-    { "drapeau", L"Drapeau du garage", L"Garage flag", L"Images", L"flag_garage.png", true },
-    { "posters", L"Posters", L"Posters", L"Images", L"poster1.png|poster2.png|poster3.png", true },
-    { "autocollant", L"Autocollant de vitre", L"Window sticker", L"Images", L"window_sticker.png", true },
-    { "tissu", L"Tissu", L"Fabric", L"Images", L"fabric.png", true },
-    { "photo", L"Photo d'identit\u00E9", L"ID photo", L"Images", L"mugshot.png", false },
-    { "hockey", L"\u00C9quipes de hockey", L"Hockey teams", L"Extra", NULL, true },
+    { "cd1", L"CD 1", L"CD 1", L"CD1", NULL, true, 3, NULL, NULL },
+    { "cd2", L"CD 2", L"CD 2", L"CD2", NULL, true, 3, NULL, NULL },
+    { "cd3", L"CD 3", L"CD 3", L"CD3", NULL, true, 3, NULL, NULL },
+    { "radio", L"Radio", L"Radio", L"Radio", NULL, true, 3, NULL, NULL },
+    { "peinture", L"Peinture de la CORRIS", L"CORRIS paint", L"Images", L"car.png", true, 3, L"Peinture de la SATSUMA", L"SATSUMA paint" },
+    { "mobylette", L"Peinture de la mobylette", L"Moped paint", L"Images", L"jonnez.png", true, 3, NULL, NULL },
+    { "drapeau", L"Drapeau du garage", L"Garage flag", L"Images", L"flag_garage.png", true, 3, NULL, NULL },
+    { "posters", L"Posters", L"Posters", L"Images", L"poster1.png|poster2.png|poster3.png", true, 3, NULL, NULL },
+    { "autocollant", L"Autocollant de vitre", L"Window sticker", L"Images", L"window_sticker.png", true, 3, NULL, NULL },
+    { "tissu", L"Tissu", L"Fabric", L"Images", L"fabric.png", true, 1, NULL, NULL },   // (MSC ne lit pas fabric.png)
+    { "photo", L"Photo d'identit\u00E9", L"ID photo", L"Images", L"mugshot.png", false, 3, NULL, NULL },
+    { "hockey", L"\u00C9quipes de hockey", L"Hockey teams", L"Extra", NULL, true, 1, NULL, NULL },   // (pas de dossier Extra dans MSC)
 };
 static const int kContentN = (int)(sizeof(kContent) / sizeof(kContent[0]));
-static bool ContentOn(int i) { return GetPrivateProfileIntW(L"Contenu", Widen(kContent[i].key).c_str(), kContent[i].def ? 1 : 0, g_iniLauncher.c_str()) != 0; }
-static void ContentSet(int i, bool on) { WritePrivateProfileStringW(L"Contenu", Widen(kContent[i].key).c_str(), on ? L"1" : L"0", g_iniLauncher.c_str()); }
+// Categorie lue par le jeu choisi ; coches par jeu ([Contenu] pour MWC, [ContenuMSC] pour MSC, dans mwcoop-lanceur.ini).
+static bool ContentInGame(int i) { return (kContent[i].games & (g_game == GAME_MSC ? 2 : 1)) != 0; }
+static const wchar_t *ContentSection() { return g_game == GAME_MSC ? L"ContenuMSC" : L"Contenu"; }
+static std::wstring ContentName(int i) { const ContentCat &c = kContent[i]; return g_game == GAME_MSC && c.frMsc ? T(c.frMsc, c.enMsc) : T(c.fr, c.en); }
+static bool ContentOn(int i) { return ContentInGame(i) && GetPrivateProfileIntW(ContentSection(), Widen(kContent[i].key).c_str(), kContent[i].def ? 1 : 0, g_iniLauncher.c_str()) != 0; }
+static void ContentSet(int i, bool on) { if (ContentInGame(i)) WritePrivateProfileStringW(ContentSection(), Widen(kContent[i].key).c_str(), on ? L"1" : L"0", g_iniLauncher.c_str()); }
+static int ContentCount() { int n = 0; for (int i = 0; i < kContentN; i++) n += ContentInGame(i); return n; }
 // Fichiers presents d'une categorie, chemins "<dossier>\<fichier>" (dossier du jeu : game, avec \ final).
 static void ContentFilesTree(const std::wstring &base, const std::wstring &rel, std::vector<std::wstring> &out)
 {
@@ -520,7 +532,8 @@ static std::string g_syncWhy;
 static uint64_t g_syncAskedKey;           // Steam : liste demandee pour cette empreinte
 
 static std::wstring CoopModsDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"mods-invite\\"; }
-static std::wstring ContentDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"contenu-invite\\"; }
+// (My Summer Car : un dossier a part -- les images d'un hote de MWC, la CORRIS de car.png, n'y restent pas pour la SATSUMA)
+static std::wstring ContentDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + (g_game == GAME_MSC ? L"contenu-invite-msc\\" : L"contenu-invite\\"); }
 // Ou un fichier de la liste va chez l'invite : "Mods\..." dans mods-invite, le reste dans contenu-invite.
 static std::wstring SyncLocal(const std::string &p) { return !p.compare(0, 5, "Mods\\") ? CoopModsDir() + Widen(p.substr(5), CP_UTF8) : ContentDir() + Widen(p, CP_UTF8); }
 static bool OfferHasRoot(const SyncOffer &o, const std::wstring &root)
@@ -1436,17 +1449,22 @@ static std::vector<int> g_drContent;                 // a l'ouverture de la page
 static std::map<std::wstring, std::pair<std::wstring, Bitmap *>> g_contentThumb;   // fichier -> (cle taille|date, image)
 static const RectF kContentL(264, 88, 388, 656), kContentR(664, 88, 600, 656);
 static const float kContentRowH = 60, kContentRowStep = 68;
-// Groupes de la carte de gauche : categories de kContent (indices), icone, sous-titre.
-struct ContentGroup { const wchar_t *fr, *en, *subFr, *subEn; int icon; const int *cats; int ncats; };
+// Groupes de la carte de gauche : categories de kContent (indices), icone, sous-titre ; *Msc : sur My Summer Car (NULL : le
+// meme). Une categorie absente du jeu choisi (ContentInGame) n'est ni montree, ni comptee, ni envoyee.
+struct ContentGroup { const wchar_t *fr, *en, *subFr, *subEn; int icon; const int *cats; int ncats; const wchar_t *frMsc, *enMsc, *subFrMsc, *subEnMsc; };
 static const int kCgCd[] = { 0, 1, 2 }, kCgRadio[] = { 3 }, kCgPaint[] = { 4 }, kCgFlag[] = { 6 }, kCgPosters[] = { 7 }, kCgOther[] = { 5, 8, 9, 10, 11 };
 static const ContentGroup kCg[] = {
-    { L"CD", L"CD", L"Lecteur CD des voitures", L"Car CD player", IC_MUSIC, kCgCd, 3 },
-    { L"Radio", L"Radio", L"Station perso", L"Custom station", IC_RADIO, kCgRadio, 1 },
-    { L"Peinture de ma CORRIS", L"My CORRIS paint", L"", L"", IC_CAR, kCgPaint, 1 },
-    { L"Drapeau", L"Flag", L"Devant le garage", L"In front of the garage", IC_FLAG, kCgFlag, 1 },
-    { L"Posters", L"Posters", L"Murs du garage et de la maison", L"Garage and house walls", IC_IMAGE, kCgPosters, 1 },   // (ligne : « Garage et maison »)
-    { L"Autres", L"Others", L"Mobylette, autocollant, tissu, photo…", L"Moped, sticker, fabric, photo…", IC_LAYERS, kCgOther, 5 },
+    { L"CD", L"CD", L"Lecteur CD des voitures", L"Car CD player", IC_MUSIC, kCgCd, 3, NULL, NULL, NULL, NULL },
+    { L"Radio", L"Radio", L"Station perso", L"Custom station", IC_RADIO, kCgRadio, 1, NULL, NULL, NULL, NULL },
+    { L"Peinture de ma CORRIS", L"My CORRIS paint", L"", L"", IC_CAR, kCgPaint, 1, L"Peinture de ma SATSUMA", L"My SATSUMA paint", NULL, NULL },
+    { L"Drapeau", L"Flag", L"Devant le garage", L"In front of the garage", IC_FLAG, kCgFlag, 1, NULL, NULL, L"Dans le garage", L"In the garage" },   // (MSC : YARD/Building/LOD/flag)
+    { L"Posters", L"Posters", L"Murs du garage et de la maison", L"Garage and house walls", IC_IMAGE, kCgPosters, 1, NULL, NULL, L"Murs de la chambre", L"Bedroom walls" },   // (ligne : « Garage et maison » ; MSC : BEDROOM1)
+    { L"Autres", L"Others", L"Mobylette, autocollant, tissu, photo…", L"Moped, sticker, fabric, photo…", IC_LAYERS, kCgOther, 5, NULL, NULL, L"Mobylette, autocollant, photo…", L"Moped, sticker, photo…" },
 };
+static std::wstring CgName(int gi) { const ContentGroup &c = kCg[gi]; return g_game == GAME_MSC && c.frMsc ? T(c.frMsc, c.enMsc) : T(c.fr, c.en); }
+static std::wstring CgSub(int gi) { const ContentGroup &c = kCg[gi]; return g_game == GAME_MSC && c.subFrMsc ? T(c.subFrMsc, c.subEnMsc) : T(c.subFr, c.subEn); }
+// Categories du groupe lues par le jeu choisi (indices de kContent).
+static std::vector<int> CgCats(int gi) { std::vector<int> v; for (int k = 0; k < kCg[gi].ncats; k++) if (ContentInGame(kCg[gi].cats[k])) v.push_back(kCg[gi].cats[k]); return v; }
 static const int kCgN = 6, kCgFace = 6;   // (ligne 6 : « Mon visage (photo) », envoye avec la tenue : puce Auto, pas d'interrupteur)
 static const Color kCgHue[7] = { Color(255, 166, 216, 255), Color(255, 255, 210, 143), Color(255, 240, 166, 255), Color(255, 154, 240, 192), Color(255, 201, 216, 242), Color(255, 201, 216, 242), Color(255, 201, 216, 242) };
 static int g_contentSel = 0;   // groupe detaille a droite (0 CD par defaut, comme la maquette)
@@ -1560,22 +1578,22 @@ static std::wstring ContentSummary()
     int on = 0;
     for (int i = 0; i < kContentN; i++) on += ContentOn(i);
     wchar_t b[32];
-    swprintf_s(b, L"%d / %d", on, kContentN);
+    swprintf_s(b, L"%d / %d", on, ContentCount());
     return b;
 }
 static void ContentSnapshot(bool restore)
 {
     if (!restore) { g_drContent.clear(); for (int i = 0; i < kContentN; i++) g_drContent.push_back(ContentOn(i)); return; }
-    for (int i = 0; i < (int)g_drContent.size() && i < kContentN; i++) if (ContentOn(i) != (g_drContent[i] != 0)) ContentSet(i, g_drContent[i] != 0);
+    for (int i = 0; i < (int)g_drContent.size() && i < kContentN; i++) if (ContentInGame(i) && ContentOn(i) != (g_drContent[i] != 0)) ContentSet(i, g_drContent[i] != 0);
 }
 // Groupe : allume si une de ses categories l'est ; l'interrupteur les regle toutes.
-static bool ContentGroupOn(int gi) { for (int k = 0; k < kCg[gi].ncats; k++) if (ContentOn(kCg[gi].cats[k])) return true; return false; }
-static int ContentGroupOnCount(int gi) { int n = 0; for (int k = 0; k < kCg[gi].ncats; k++) n += ContentOn(kCg[gi].cats[k]); return n; }
-static void ContentGroupSet(int gi, bool on) { for (int k = 0; k < kCg[gi].ncats; k++) ContentSet(kCg[gi].cats[k], on); }
+static bool ContentGroupOn(int gi) { for (int i : CgCats(gi)) if (ContentOn(i)) return true; return false; }
+static int ContentGroupOnCount(int gi) { int n = 0; for (int i : CgCats(gi)) n += ContentOn(i); return n; }
+static void ContentGroupSet(int gi, bool on) { for (int i : CgCats(gi)) ContentSet(i, on); }
 static ContentInfo ContentGroupInfo(int gi)
 {
     ContentInfo s = { 0, 0, 0, 0 };
-    for (int k = 0; k < kCg[gi].ncats; k++) { const ContentInfo &c = g_contentInfo[kCg[gi].cats[k]]; s.n += c.n; s.bytes += c.bytes; s.songs += c.songs; s.ignored += c.ignored; }
+    for (int i : CgCats(gi)) { const ContentInfo &c = g_contentInfo[i]; s.n += c.n; s.bytes += c.bytes; s.songs += c.songs; s.ignored += c.ignored; }
     return s;
 }
 // Miniature d'une image du jeu (Images\...), relue quand le fichier change.
@@ -1759,7 +1777,7 @@ static void ContentClick(float x, float y)
     else if (h == 5203) { PaintImport(); ContentScan(); }
     else if (h == 5210) ContentChooseImages(false);
     else if (h == 5211) ContentChooseImages(true);
-    else if (h >= 5300 && h < 5300 + kCg[5].ncats) { int i = kCg[5].cats[h - 5300]; ContentSet(i, !ContentOn(i)); }
+    else if (h >= 5300 && h < 5300 + (int)CgCats(5).size()) { int i = CgCats(5)[h - 5300]; ContentSet(i, !ContentOn(i)); }
 }
 
 // Petits elements : bouton en verre clair ou plein (hot : g_contentHot == id), puce, carte interieure.
@@ -1876,14 +1894,14 @@ static void DrawContentTracks(Graphics &g, RectF c, float &y)
 static void DrawContentDetail(Graphics &g, RectF c, float &y)
 {
     int gi = g_contentSel;
-    const ContentGroup &cg = kCg[gi];
     ContentInfo info = ContentGroupInfo(gi);
     Graphics &mg = MeasureG();
-    std::wstring t = T(cg.fr, cg.en);
+    std::vector<int> cats = CgCats(gi);
+    std::wstring t = CgName(gi);
     float tw = MeasureW(mg, t, 16, FontStyleBold);
     Title(g, t, RectF(c.X + 18, c.Y + 14, tw + 6, 26), 16, kInk);
     wchar_t sb[96];
-    if (gi == 5) swprintf_s(sb, T(L"· %d / %d envoyé(s) · %s", L"· %d / %d sent · %s"), ContentGroupOnCount(gi), cg.ncats, SizeText(info.bytes).c_str());
+    if (gi == 5) swprintf_s(sb, T(L"· %d / %d envoyé(s) · %s", L"· %d / %d sent · %s"), ContentGroupOnCount(gi), (int)cats.size(), SizeText(info.bytes).c_str());
     else if (gi == 4) swprintf_s(sb, L"· %d · %s", info.n, SizeText(info.bytes).c_str());
     else swprintf_s(sb, L"· %s", info.n ? SizeText(info.bytes).c_str() : T(L"rien dans le jeu", L"nothing in the game"));
     Text(g, sb, RectF(c.X + 18 + tw + 6, c.Y + 15, 260, 26), 13, FontStyleBold, kGrey, StringAlignmentNear);
@@ -1892,7 +1910,7 @@ static void DrawContentDetail(Graphics &g, RectF c, float &y)
     if (gi == 2) {   // peinture : celle du jeu (Images\car.png) ou la perso (page Voiture, voiture.inc PaintImport)
         ContentButton(g, RectF(bx - 150, c.Y + 12, 150, 36), T(L"Importer une image", L"Import an image"), 5203, true, !g_gameDir.empty());
         ContentButton(g, RectF(bx - 150 - 8 - 130, c.Y + 12, 130, 36), T(L"Page Voiture", L"Car page"), 5202);
-        Text(g, PaintOn() ? T(L"Ta peinture perso (peinture.png) part à la place de Images\\car.png. Réglages : Personnage › Voiture.", L"Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car.")
+        Text(g, PaintOn() ? PaintNameFix(T(L"Ta peinture perso (peinture.png) part à la place de Images\\car.png. Réglages : Personnage › Voiture.", L"Your custom paint (peinture.png) goes instead of Images\\car.png. Settings: Character › Car."))
                           : T(L"La peinture du jeu (Images\\car.png) telle que tu l'as. Une peinture perso : Personnage › Voiture.", L"The game's paint (Images\\car.png) as you have it. A custom paint: Character › Car."),
              RectF(c.X + 18, c.Y + 50, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
         ContentDrawImage(g, PaintOn() ? PaintThumb() : ContentThumbFile(L"Images\\car.png"), RectF(c.X + 18, y, c.Width - 36, 280), 14);
@@ -1902,8 +1920,11 @@ static void DrawContentDetail(Graphics &g, RectF c, float &y)
     if (gi == 3 || gi == 4) {   // drapeau, posters : Choisir (fenetre), ou deposer des images
         bool flag = gi == 3;
         ContentButton(g, RectF(bx - 110, c.Y + 12, 110, 36), T(L"Choisir", L"Choose"), flag ? 5211 : 5210, true, !g_gameDir.empty());
-        Text(g, flag ? T(L"Glisse une image ici, ou Choisir : elle devient Images\\flag_garage.png (le drapeau devant le garage).", L"Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in front of the garage).")
-                     : T(L"Glisse jusqu'à 3 images ici, ou Choisir : elles deviennent Images\\poster1…3.png (murs du garage et de la maison).", L"Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (garage and house walls)."),
+        bool msc = g_game == GAME_MSC;   // (MSC : drapeau dans le garage, posters dans la chambre)
+        Text(g, flag ? (msc ? T(L"Glisse une image ici, ou Choisir : elle devient Images\\flag_garage.png (le drapeau dans le garage).", L"Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in the garage).")
+                            : T(L"Glisse une image ici, ou Choisir : elle devient Images\\flag_garage.png (le drapeau devant le garage).", L"Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in front of the garage)."))
+                     : msc ? T(L"Glisse jusqu'à 3 images ici, ou Choisir : elles deviennent Images\\poster1…3.png (murs de la chambre).", L"Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (bedroom walls).")
+                           : T(L"Glisse jusqu'à 3 images ici, ou Choisir : elles deviennent Images\\poster1…3.png (murs du garage et de la maison).", L"Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (garage and house walls)."),
              RectF(c.X + 18, c.Y + 50, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
         std::vector<std::wstring> files = ContentFiles(kCg[gi].cats[0], g_gameDir);
         if (flag) { ContentDrawImage(g, files.empty() ? NULL : ContentThumbFile(files[0]), RectF(c.X + 18, y, c.Width - 36, 280), 14); if (files.empty()) Text(g, T(L"Aucun drapeau dans Images", L"No flag in Images"), RectF(c.X + 18, y, c.Width - 36, 280), 13, FontStyleBold, kGrey); }
@@ -1923,17 +1944,17 @@ static void DrawContentDetail(Graphics &g, RectF c, float &y)
     // autres : une ligne par categorie, avec son interrupteur
     Text(g, T(L"Le reste des fichiers perso du jeu, chacun à part. Tout est copié à part chez les invités.", L"The rest of the game's custom files, each on its own. Everything is copied apart to the guests."),
          RectF(c.X + 18, c.Y + 50, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
-    for (int k = 0; k < cg.ncats; k++) {
-        int i = cg.cats[k];
+    for (int k = 0; k < (int)cats.size(); k++) {
+        int i = cats[k];
         const ContentInfo &ci = g_contentInfo[i];
         RectF r(c.X + 18, y + k * 52, c.Width - 36, 50);
         Bitmap *b = ContentThumb(i);
         RectF ir(r.X, r.Y + 5, 40, 40);
         if (b) ContentDrawImage(g, b, ir, 10);
         else { GraphicsPath ip; RoundRect(ip, ir, 10); SolidBrush ib(WithA(kAcc, 0.22f)); g.FillPath(&ib, &ip); Icon(g, IC_HASH, ir.X + 20, ir.Y + 20, 18, kInk, 1.9f); }
-        ContentSwitchRow(g, RectF(r.X + 52, r.Y, r.Width - 52, r.Height), T(kContent[i].fr, kContent[i].en), ContentDetail(ci, false, !kContent[i].files), ContentOn(i), 5300 + k, ci.n ? kGrey : WithA(kGrey, 0.7f));
+        ContentSwitchRow(g, RectF(r.X + 52, r.Y, r.Width - 52, r.Height), ContentName(i), ContentDetail(ci, false, !kContent[i].files), ContentOn(i), 5300 + k, ci.n ? kGrey : WithA(kGrey, 0.7f));
     }
-    y += cg.ncats * 52 + 8;
+    y += (int)cats.size() * 52 + 8;
 }
 
 // Page CONTENU : « Ce qui part » a gauche, le detail a droite, ANNULER / VALIDER.
@@ -1962,7 +1983,7 @@ static void DrawContent(Graphics &g)
             SolidBrush ib(WithA(kInk, 0.08f)); g.FillPath(&ib, &ip);
             Icon(g, face ? IC_USER : kCg[gi].icon, ir.X + 22, ir.Y + 22, 20, g_dark ? WithA(kCgHue[gi], a) : WithA(kAcc, a), 2.0f);
             // titre + compte gris, puis le detail
-            std::wstring t = face ? T(L"Mon visage (photo)", L"My face (photo)") : T(kCg[gi].fr, kCg[gi].en), cnt, det;
+            std::wstring t = face ? T(L"Mon visage (photo)", L"My face (photo)") : CgName(gi), cnt, det;
             ContentInfo info = face ? ContentInfo{ 0, 0, 0, 0 } : ContentGroupInfo(gi);
             Color dc = kGrey;
             if (face) {
@@ -1975,15 +1996,15 @@ static void DrawContent(Graphics &g)
                 cnt = b;
                 if (!info.n) det = T(L"rien dans le jeu", L"nothing in the game");
                 else if (info.ignored > 0) { det = ContentDetail(info, true, true); dc = kWarn; }
-                else det = std::wstring(T(kCg[gi].subFr, kCg[gi].subEn)) + L" · " + SizeText(info.bytes);
+                else det = CgSub(gi) + L" · " + SizeText(info.bytes);
             } else if (gi == 2) {
                 WIN32_FILE_ATTRIBUTE_DATA pa;
                 bool perso = PaintOn() && GetFileAttributesExW(PaintFile().c_str(), GetFileExInfoStandard, &pa);
-                det = std::wstring(perso ? T(L"peinture.png (perso)", L"peinture.png (custom)") : L"car.png") + L" · " + (perso ? SizeText(pa.nFileSizeLow) : info.n ? SizeText(info.bytes) : std::wstring(T(L"rien dans le jeu", L"nothing in the game")));
+                det = PaintNameFix(std::wstring(perso ? T(L"peinture.png (perso)", L"peinture.png (custom)") : L"car.png")) + L" · " + (perso ? SizeText(pa.nFileSizeLow) : info.n ? SizeText(info.bytes) : std::wstring(T(L"rien dans le jeu", L"nothing in the game")));
             }
-            else if (gi == 4) { cnt = L"· " + std::to_wstring(info.n); det = info.n ? std::wstring(T(L"Garage et maison", L"Garage and house")) + L" · " + SizeText(info.bytes) : T(L"rien dans le jeu", L"nothing in the game"); }
-            else if (gi == 5) { wchar_t b[24]; swprintf_s(b, L"· %d / %d", ContentGroupOnCount(gi), kCg[gi].ncats); cnt = b; det = T(kCg[gi].subFr, kCg[gi].subEn); }
-            else det = info.n ? std::wstring(T(kCg[gi].subFr, kCg[gi].subEn)) + L" · " + SizeText(info.bytes) : T(L"rien dans le jeu", L"nothing in the game");
+            else if (gi == 4) { cnt = L"· " + std::to_wstring(info.n); det = info.n ? std::wstring(g_game == GAME_MSC ? T(L"Chambre", L"Bedroom") : T(L"Garage et maison", L"Garage and house")) + L" · " + SizeText(info.bytes) : T(L"rien dans le jeu", L"nothing in the game"); }
+            else if (gi == 5) { wchar_t b[24]; swprintf_s(b, L"· %d / %d", ContentGroupOnCount(gi), (int)CgCats(gi).size()); cnt = b; det = CgSub(gi); }
+            else det = info.n ? CgSub(gi) + L" · " + SizeText(info.bytes) : T(L"rien dans le jeu", L"nothing in the game");
             float tx = r.X + 66, tw = MeasureW(mg, t, 13.5f, FontStyleBold), maxw = r.Width - 66 - 70;
             Text(g, t, RectF(tx, r.Y + 9, min(tw + 4, maxw), 20), 13.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
             if (!cnt.empty() && tw + 8 < maxw) Text(g, cnt, RectF(tx + tw + 5, r.Y + 10, maxw - tw - 5, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
@@ -2049,7 +2070,7 @@ static void DrawContent(Graphics &g)
             RectF fr(pr.X + pr.Width + 8, r.Y + 52 + (th - th * 2 / 3) / 2, th * 0.9f, th * 2 / 3);
             bool hasFlag = !g_gameDir.empty() && FileExists(g_gameDir + L"Images\\flag_garage.png");
             ContentDrawImage(g, hasFlag ? ContentThumbFile(L"Images\\flag_garage.png") : NULL, fr, 4);
-            std::wstring names = (PaintOn() ? L"peinture.png" : L"car.png") + std::wstring(L"\n") + (hasFlag ? L"flag_garage.png" : T(L"pas de drapeau", L"no flag"));
+            std::wstring names = PaintNameFix(PaintOn() ? L"peinture.png" : L"car.png") + std::wstring(L"\n") + (hasFlag ? L"flag_garage.png" : T(L"pas de drapeau", L"no flag"));
             Para(g, names, RectF(fr.X + fr.Width + 10, r.Y + 52, r.Width - (fr.X + fr.Width + 10 - r.X) - 10, th), 11.5f, kGrey);
         }
         y += ch + 14;
@@ -2060,7 +2081,7 @@ static void DrawContent(Graphics &g)
         Pen sep(TH(sep), 1); g.DrawLine(&sep, c.X + 18, by - 12, c.X + c.Width - 18, by - 12);
         Icon(g, IC_CHECK, c.X + 28, by + 22, 16, kOk, 2.4f);
         wchar_t sum[160];
-        swprintf_s(sum, T(L"%d / %d éléments envoyés", L"%d / %d items sent"), on_, kContentN);
+        swprintf_s(sum, T(L"%d / %d éléments envoyés", L"%d / %d items sent"), on_, ContentCount());
         Text(g, sum, RectF(c.X + 46, by, c.Width - 46 - 290, 44), 13, FontStyleBold, kInk, StringAlignmentNear);
         UiButton(g, RectF(c.X + c.Width - 18 - 270, by, 124, 44), T(L"ANNULER", L"CANCEL"), UI_PAGE_CANCEL, false);
         UiButton(g, RectF(c.X + c.Width - 18 - 136, by, 136, 44), T(L"VALIDER", L"OK"), UI_PAGE_OK, true);

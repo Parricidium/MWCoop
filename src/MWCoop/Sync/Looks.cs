@@ -16,6 +16,17 @@ namespace MWCoop
     // Chaine d'apparence (reseau, [Coop] du mwcoop.ini) : "haut|pantalon|visage|corps|chapeau|lunettes|cheveux" ;
     // un champ vide = celui du modele ; une chaine sans '|' = le haut seul (ancien format).
     // Apercu du lanceur : cache\perso.mesh + cache\perso\<matiere>.png (Export), refaits a chaque version du mod.
+    // My Summer Car (BETA, 19/10) : tout vient aussi des PNJ de la scene, donc de MSC seulement (jamais une tenue de MWC) ; memes
+    // maillages de corps (memes cles, UV et sous-maillages) et memes noms de matieres char_shirtNN / char_pantsNN / char_faceNN
+    // (autres textures). Correlation (ref\msc-v.250908-04\apparences.txt, exports des deux jeux) :
+    //  - hauts : 01-04, 07, 09-13, 16-20, 22, cop_shirt, cop_shirt2, rally_shirt dans les deux ; 05, 06, 08, 14, 15 MSC seulement ;
+    //    21, 23-26, 28, psk_shirt, inspector_shirt, kauppa_myyja_paita MWC seulement ;
+    //  - pantalons : 05 et fabric_flower2 MSC seulement ; 09, 10, inspector_pants, psk_pants, fabric_flower3 MWC seulement ;
+    //  - visages : 01-11 dans les deux ; 12, 13 MWC seulement ;
+    //  - chapeaux : cowboy_hat, granny_hat MSC seulement ; hat_beanie1, hat_karvalakki MWC seulement ; lunettes eye_glasses_dsl et
+    //    cheveux hyppyritukka MWC seulement ;
+    //  - corps : les memes sept (le modele de base 1712-37 dans les deux : Kale sur MSC).
+    // Haut par defaut (DefaultShirt) : celui du modele de base, char_shirt21 sur MWC, char_shirt08 sur MSC (pas de 21).
     public static class Looks
     {
         public const int KHat = 0, KGlasses = 1, KHair = 2;
@@ -40,6 +51,8 @@ namespace MWCoop
             return l;
         }
 
+        public static string DefaultShirt { get { return Game.Msc ? "char_shirt08" : "char_shirt21"; } }
+
         public static string Compose(Look l)
         {
             string s = l.Shirt + "|" + l.Pants + "|" + l.Face + "|" + l.Body + "|" + l.Hat + "|" + l.Glasses + "|" + l.Hair;
@@ -52,7 +65,7 @@ namespace MWCoop
             var l = new Look
             {
                 // ("perso" : l'image importee dans le lanceur -- CustomFace ; sans image : celle d'origine)
-                Shirt = CustomFace.Chosen(CustomFace.Shirt) ? CustomFace.MyKeyOf(CustomFace.Shirt) ?? "char_shirt21" : Config.Get("Coop", "Apparence", "char_shirt21"),
+                Shirt = CustomFace.Chosen(CustomFace.Shirt) ? CustomFace.MyKeyOf(CustomFace.Shirt) ?? DefaultShirt : Config.Get("Coop", "Apparence", DefaultShirt),
                 Pants = CustomFace.Chosen(CustomFace.Pants) ? CustomFace.MyKeyOf(CustomFace.Pants) ?? "" : Config.Get("Coop", "Pantalon", ""),
                 Face = CustomFace.Chosen(CustomFace.Face) ? CustomFace.MyKeyOf(CustomFace.Face) ?? "" : Config.Get("Coop", "Visage", ""),
                 Body = Config.Get("Coop", "Corps", ""), Hat = Config.Get("Coop", "Chapeau", ""), Glasses = Config.Get("Coop", "Lunettes", ""), Hair = Config.Get("Coop", "Cheveux", "")
@@ -125,6 +138,8 @@ namespace MWCoop
                     case "inspector_pants": return Lang.T("Inspecteur", "Inspector");
                     case "psk_pants": return "PSK";
                     case "rally_pants": return Lang.T("Rallye", "Rally");
+                    case "curtain4": return Lang.T("Robe verte \u00E0 fleurs", "Green floral dress");          // (robes des mamies)
+                    case "fabric_flower2": return Lang.T("Robe claire \u00E0 fleurs", "Light floral dress");   // (My Summer Car)
                 }
                 string pre = f == 1 ? "char_pants" : "char_face";
                 if (v.StartsWith(pre))
@@ -157,6 +172,8 @@ namespace MWCoop
                 case "eye_glasses_dsl": name = Lang.T("Lunettes de soleil", "Sunglasses"); break;
                 case "bodymesh_ponytail": name = Lang.T("Queue de cheval", "Ponytail"); break;
                 case "hyppyritukka": name = Lang.T("Coupe mulet", "Mullet"); break;
+                case "cowboy_hat": name = Lang.T("Chapeau de cow-boy", "Cowboy hat"); break;   // (My Summer Car)
+                case "granny_hat": name = Lang.T("Bonnet de mamie", "Granny's beanie"); break;   // (My Summer Car)
             }
             int same = 0;
             foreach (string k in Accessories(f == 3 ? KHat : f == 4 ? KGlasses : KHair)) if (k.StartsWith(mesh + "@")) same++;

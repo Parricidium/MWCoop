@@ -14,18 +14,55 @@ namespace MWCoop
     // DANS la meme texture (LoadImage : les copies de matiere deja faites par les pieces peintes la voient aussi).
     // Les invites recoivent la peinture de l'hote a la place de Images\car.png (contenu envoye, lanceur) : leur jeu la
     // charge lui-meme (Contenu) ; la leur ne compte pas (la voiture est celle de l'hote).
+    // My Summer Car (19/10) : meme principe pour la SATSUMA. Systems/ImportCarTexture, automate 'Get' : "State 1" lit
+    // <jeu>/Images/car.png (WWWPOST de {Address} ; le jeu livre seulement Images/template.png, a peindre puis enregistrer
+    // en car.png) dans {CarTexture}, puis les etats suivants la posent (_DetailAlbedoMap de CAR_PAINT_DECAL) sur la caisse,
+    // le coffre, les portes, les ailes et le capot peints en « Custom paint made by artist » (PaintType 4, atelier de
+    // Fleetari). Ici, juste avant le WWWPOST, {Address} vise l'image du joueur (peinture-msc.png : gabarit different de
+    // celui de la CORRIS, un fichier par jeu) : le jeu la charge lui-meme, car.png absent ou non.
     public static class CustomPaint
     {
         static float at = -1, until;
         static Texture2D target;   // texture rechargee (celle du jeu, ou la notre si car.png manquait)
         static int logs;
+        static PlayMakerFSM mscHooked;   // (MSC : automate 'Get' deja accroche)
 
-        static string File_ { get { string o = Config.Get("Test", "RacineVisages", ""); return Path.Combine(o.Length > 0 ? o : Path.Combine(System.Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? ".", "MWCoop"), "peinture.png"); } }
+        static string File_ { get { string o = Config.Get("Test", "RacineVisages", ""); return Path.Combine(o.Length > 0 ? o : Path.Combine(System.Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? ".", "MWCoop"), Game.Msc ? "peinture-msc.png" : "peinture.png"); } }
         static bool Wanted { get { return Config.GetInt("Coop", "PeinturePerso", 0) != 0 && File.Exists(File_); } }
+
+        // MSC : {Address} du WWWPOST remplacee par l'image du joueur (toujours relue : le reglage peut changer entre deux chargements).
+        class MscAddress : FsmStateAction
+        {
+            public FsmString Addr;
+            public override void OnEnter()
+            {
+                try { if (Addr != null && Wanted && !(Session.Active && !Session.IsHost)) Addr.Value = new System.Uri(Path.GetFullPath(File_)).AbsoluteUri; }
+                catch (System.Exception e) { MWCoop.Log.Warn("peinture perso : " + e.Message); }
+                Finish();
+            }
+        }
+
+        static void UpdateMsc()
+        {
+            GameObject go = Game.FindAny("Systems/ImportCarTexture");
+            PlayMakerFSM f = go != null ? Game.FsmOn(go, "Get") : null;
+            if (f == null) { if (Time.realtimeSinceStartup > until) { at = -1; Log.Warn("peinture perso : Systems/ImportCarTexture introuvable"); } return; }
+            at = -1;
+            if (f == mscHooked) return;
+            FsmState s = f.Fsm.GetState("State 1");
+            FsmString addr = f.FsmVariables.FindFsmString("Address");
+            int www = -1;
+            if (s != null && s.Actions != null)
+                for (int i = 0; i < s.Actions.Length; i++) if (s.Actions[i] != null && s.Actions[i].GetType().Name.Contains("WWW")) { www = i; break; }
+            if (addr == null || www < 0) { Log.Warn("peinture perso : ImportCarTexture sans {Address} ni WWWPOST, peinture du jeu"); return; }
+            FsmHooks.Insert(s, www, new MscAddress { Addr = addr });
+            mscHooked = f;
+            Log.Info("peinture perso : ImportCarTexture lira " + File_ + " (SATSUMA, « Custom paint made by artist »)");
+        }
 
         public static void OnLevelLoaded()
         {
-            target = null;
+            target = null; mscHooked = null;
             at = PlayerSync.InGame ? Time.realtimeSinceStartup + 2f : -1;
             until = Time.realtimeSinceStartup + 90f;
         }
@@ -36,6 +73,7 @@ namespace MWCoop
             at = Time.realtimeSinceStartup + (target != null ? 5f : 1f);
             if (Session.Active && !Session.IsHost) { at = -1; return; }
             if (!Wanted) { at = -1; return; }
+            if (Game.Msc) { UpdateMsc(); return; }
             GameObject pm = Game.FindAny("CORRIS/AssembyDatabase/PaintMaterials");
             PlayMakerFSM f = pm != null ? Game.FsmOn(pm, "ImportPNG") : null;
             if (f == null) { if (Time.realtimeSinceStartup > until) { at = -1; Log.Warn("peinture perso : ImportPNG introuvable"); } return; }
@@ -75,20 +113,22 @@ namespace MWCoop
         public static void Test(string mode, float t)
         {
             if (mode != "peintureperso") return;
-            if (tStep == 0 && (target != null || (t > 12f && !Wanted)))
+            // (MSC : caisse de la SATSUMA, PaintType 4 « art » par GLOBALEVENT, puis ImportCarTexture la texture)
+            string bodyPath = Game.Msc ? "SATSUMA(557kg, 248)/Body/car body(xxxxx)" : "CORRIS/BODY/car body(xxxxx)";
+            if (tStep == 0 && (target != null || mscHooked != null || (t > 12f && !Wanted)))
             {
                 tStep = 1;
-                GameObject body = Game.FindAny("CORRIS/BODY/car body(xxxxx)");
+                GameObject body = Game.FindAny(bodyPath);
                 PlayMakerFSM p = body != null ? Game.FsmOn(body, "Paint") : null;
                 if (p == null) { Log.Info("autotest : peintureperso, Paint introuvable"); return; }
-                p.FsmVariables.FindFsmInt("PaintType").Value = 5;
-                p.SendEvent("REPAINT");
-                Log.Info("autotest : peintureperso, carrosserie en PaintType 5 (REPAINT)");
+                p.FsmVariables.FindFsmInt("PaintType").Value = Game.Msc ? 4 : 5;
+                p.SendEvent(Game.Msc ? "GLOBALEVENT" : "REPAINT");
+                Log.Info("autotest : peintureperso, carrosserie en PaintType " + (Game.Msc ? "4 (GLOBALEVENT)" : "5 (REPAINT)"));
             }
             if (tStep == 1 && t > 14f)
             {
                 tStep = 2;
-                GameObject bo = Game.FindAny("CORRIS/BODY/car body(xxxxx)");
+                GameObject bo = Game.FindAny(bodyPath);
                 Renderer r = bo != null ? bo.GetComponent<Renderer>() : null;
                 if (r == null) return;
                 Vector3 aim = r.bounds.center;

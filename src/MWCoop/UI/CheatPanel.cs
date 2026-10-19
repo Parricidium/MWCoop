@@ -6,7 +6,8 @@ namespace MWCoop
 {
     // Panneau des triches (demande de JD, 10/10) : touche Keys.Cheats (F7 par defaut, reglable dans le lanceur). Les memes
     // commandes que le tchat (Cheats.Command), en boutons : aller a un joueur ou le faire venir, lieux, soin, argent,
-    // liberation, heure et neige pour tous. Echap ou la touche : ferme. Souris et deplacements coupes (Menu.Block).
+    // liberation, heure et neige pour tous (My Summer Car : ses lieux, l'heure par 2 h, la pluie). Echap ou la touche : ferme.
+    // Souris et deplacements coupes (Menu.Block).
     public static class CheatPanel
     {
         public static bool Open;
@@ -40,6 +41,8 @@ namespace MWCoop
         }
 
         static float P(float v) { return Style.Px(v); }
+        // Heures proposees (My Summer Car : son soleil avance par tranches de 2 h, Cheats.MscHour)
+        static readonly int[] HoursMwc = { 6, 9, 12, 15, 18, 22 }, HoursMsc = { 6, 8, 12, 16, 20, 22 };
 
         static void DrawPanel(Event e, float k)
         {
@@ -105,16 +108,18 @@ namespace MWCoop
             // monde
             Kit.Section(new Rect(ix, cy, iw, sec - P(6)), Lang.T("MONDE \u00B7 POUR TOUS", "WORLD \u00B7 FOR EVERYONE"));
             cy += sec;
-            int[] hours = { 6, 9, 12, 15, 18, 22 };
+            int[] hours = Game.Msc ? HoursMsc : HoursMwc;
             float lw = P(64), hw = Mathf.Floor((iw - lw - (hours.Length - 1) * gap) / hours.Length);
             Style.Text(new Rect(ix, cy, lw, bh), Lang.T("Heure", "Time"), 13, TextAnchor.MiddleLeft, Kit.Soft);
             for (int i = 0; i < hours.Length; i++)
                 if (Kit.Button(new Rect(ix + lw + i * (hw + gap), cy, hw, bh), hours[i] + " h", 0, false, ok, null, 12)) Do("/heure " + hours[i], Lang.T("Il est ", "It's ") + hours[i] + " h");
             cy += bh + gap;
-            Style.Text(new Rect(ix, cy, lw, bh), Lang.T("Neige", "Snow"), 13, TextAnchor.MiddleLeft, Kit.Soft);
+            // (My Summer Car : la pluie, pas de neige l'ete -- Cheats.SetRainMsc)
+            Style.Text(new Rect(ix, cy, lw, bh), Game.Msc ? Lang.T("Pluie", "Rain") : Lang.T("Neige", "Snow"), 13, TextAnchor.MiddleLeft, Kit.Soft);
             float sw = Mathf.Floor((iw - lw - gap) / 2);
-            if (Kit.Button(new Rect(ix + lw, cy, sw, bh), Lang.T("Oui", "On"), 0, false, ok, null, 12)) Do("/neige oui", Lang.T("Il neige", "It's snowing"));
-            if (Kit.Button(new Rect(ix + lw + sw + gap, cy, sw, bh), Lang.T("Non", "Off"), 0, false, ok, null, 12)) Do("/neige non", Lang.T("Temps sec", "Dry weather"));
+            string wx = Game.Msc ? "/pluie" : "/neige";
+            if (Kit.Button(new Rect(ix + lw, cy, sw, bh), Lang.T("Oui", "On"), 0, false, ok, null, 12)) Do(wx + " oui", Game.Msc ? Lang.T("Il pleut", "It's raining") : Lang.T("Il neige", "It's snowing"));
+            if (Kit.Button(new Rect(ix + lw + sw + gap, cy, sw, bh), Lang.T("Non", "Off"), 0, false, ok, null, 12)) Do(wx + " non", Lang.T("Temps sec", "Dry weather"));
             // bas : resultat, ou rappel du tchat
             Rect foot = new Rect(ix, y + h - pad - P(22), iw, P(22));
             if (note != null && Time.realtimeSinceStartup < noteUntil) Style.Text(foot, note, 12, TextAnchor.MiddleLeft, noteBad ? Kit.Amber : Kit.Green, false);

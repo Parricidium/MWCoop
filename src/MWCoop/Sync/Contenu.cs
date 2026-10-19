@@ -26,6 +26,11 @@ namespace MWCoop
     // l'hote, n'avait jamais le temps de cliquer le bouton. Maintenant, au menu : lecteurs pointes sur le contenu recu,
     // et quand le mod entre lui-meme en partie (Flow.AutoSkip) avec des musiques a lire (recues de l'hote, ou dans ses
     // propres dossiers), l'import est lance comme par le bouton ; Flow attend sa fin (30 s au plus).
+    //
+    // My Summer Car (BETA, 19/10) : memes lecteurs (vidage ref\msc-v.250908-04 : GetAppPath + BuildString "Images/" + fichier ;
+    // CD1-3 et Radio/Folk::LoadSongs comme MWC) pour car.png (ImportCarTexture, la SATSUMA), jonnez.png, flag_garage.png,
+    // poster1-3.png, window_sticker.png et les musiques ; ni fabric.png ni Extra (le lanceur ne les envoie pas). La boucle de
+    // Traffic (qui appelle OnLevelLoaded et Update dans MWC) ne tourne pas sur MSC : MenuUpdate s'en charge (MscGame).
     public static class Contenu
     {
         static float applyAt = -1, reapplyAt = -1;
@@ -183,8 +188,18 @@ namespace MWCoop
         static bool menuDone;
         public static bool MenuBusy { get { return importUntil > Time.realtimeSinceStartup; } }
 
+        // My Summer Car : partie chargee -> OnLevelLoaded, puis Update a chaque image (dans MWC : Traffic).
+        static string mscLevel;
+        static void MscGame()
+        {
+            string lv = Game.LevelName;
+            if (lv != mscLevel) { mscLevel = lv; if (lv == "GAME") OnLevelLoaded(); }
+            if (lv == "GAME") Update();
+        }
+
         public static void MenuUpdate()
         {
+            if (Game.Msc) MscGame();
             if (Game.LevelName != "MainMenu") { menuAt = -1; menuDone = false; importUntil = 0; return; }
             float now = Time.realtimeSinceStartup;
             if (menuAt < 0) { menuAt = now + 1f; done.Clear(); cds = null; roots = null; }
@@ -280,7 +295,7 @@ namespace MWCoop
             {
                 if (f == null) continue;
                 FsmString addr = f.FsmVariables.FindFsmString("Address");
-                FsmTexture tex = f.FsmVariables.FindFsmTexture("Poster") ?? f.FsmVariables.FindFsmTexture("CarCustomPaint");
+                FsmTexture tex = f.FsmVariables.FindFsmTexture("Poster") ?? f.FsmVariables.FindFsmTexture("CarCustomPaint") ?? f.FsmVariables.FindFsmTexture("CarTexture") ?? f.FsmVariables.FindFsmTexture("Paint");   // (MSC : CarTexture de la SATSUMA ; Paint de la mobylette)
                 Texture2D t2 = tex != null ? tex.Value as Texture2D : null;
                 string px = "";
                 if (t2 != null) { try { Color c = t2.GetPixel(t2.width / 2, t2.height / 2); px = ", image " + t2.width + "x" + t2.height + " (centre " + c.r.ToString("F2") + "/" + c.g.ToString("F2") + "/" + c.b.ToString("F2") + ")"; } catch { px = ", image " + t2.width + "x" + t2.height; } }

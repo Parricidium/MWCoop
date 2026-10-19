@@ -24,7 +24,9 @@ namespace MWCoop
               new[] { "Auto", "Haut gauche", "Haut droite", "Bas gauche", "Bas droite", "Haut centre", "Bas centre" },
               new[] { "Auto", "Top left", "Top right", "Bottom left", "Bottom right", "Top centre", "Bottom centre" },
               "Auto : la place prévue pour ce style", "Auto: the usual place for this style"),
-            O("Couleur", "Couleur", "Colour", 0, 1, new[] { 0, 1, 2, 3 }, new[] { "Glace", "Bleu ciel", "Aurore", "Lilas" }, new[] { "Ice", "Sky blue", "Aurora", "Lilac" }),
+            // (My Summer Car : jaune et orange pour les deux premieres, NewHud.Accents -- comme le lanceur)
+            O("Couleur", "Couleur", "Colour", 0, 1, new[] { 0, 1, 2, 3 }, new[] { Game.Msc ? "Jaune" : "Glace", Game.Msc ? "Orange" : "Bleu ciel", "Aurore", "Lilas" },
+              new[] { Game.Msc ? "Yellow" : "Ice", Game.Msc ? "Orange" : "Sky blue", "Aurora", "Lilac" }),
             O("Fond", "Opacité du fond", "Background opacity", 60, 1, new[] { 0, 30, 45, 60, 75, 90 }, new[] { "Aucun", "30 %", "45 %", "60 %", "75 %", "90 %" }, new[] { "None", "30 %", "45 %", "60 %", "75 %", "90 %" }),
             O("Estomper", "Estomper les jauges au repos", "Fade gauges at rest", 1, 1, null, null, null,
               "Presque vides, elles s'effacent (Anneaux : elles disparaissent)", "Nearly empty, they fade out (Rings: they disappear)"),
@@ -43,7 +45,8 @@ namespace MWCoop
             O("Equipe", "Panneau Équipe", "Team panel", 1, 3, null, null, null,
               "Les jauges des autres joueurs, en petit (aussi avec Vanilla)", "The other players' gauges, small (also with Vanilla)"),
             O("Alertes", "Alertes en haut de l'écran", "Alerts at the top of the screen", 1, 3, null, null, null,
-              "Très faim, épuisé, gelé… pour vous et vos amis", "Very hungry, exhausted, freezing… for you and your friends"),
+              Game.Msc ? "Très faim, épuisé… pour vous et vos amis" : "Très faim, épuisé, gelé… pour vous et vos amis",
+              Game.Msc ? "Very hungry, exhausted… for you and your friends" : "Very hungry, exhausted, freezing… for you and your friends"),
             // Menus du mod (F10 et petits panneaux, refonte du 18/10) : taille et place, reglees dans F10 > Graphismes.
             O("Menu", "Taille du menu", "Menu size", 100, 9, new[] { 85, 100, 120 }, new[] { "Petit", "Normal", "Grand" }, new[] { "Small", "Normal", "Large" },
               "Le menu F10 et les petits panneaux (triches, porte-monnaie, tchat)", "The F10 menu and the small panels (cheats, wallet, chat)"),
@@ -73,7 +76,9 @@ namespace MWCoop
         }
 
         // (My Summer Car : ni temperature du corps ni sueur dans ce jeu -- JD, 19/10 : jauges toujours coupees)
-        public static bool On(string key) { if (Game.Msc && (key == "JaugeTemperature" || key == "JaugeSueur")) return false; return Get(key) != 0; }
+        public static bool On(string key) { if (!Shown(key)) return false; return Get(key) != 0; }
+        // Reglage propose pour ce jeu (onglet HUD du F10 ; le lanceur fait de meme, gfx.inc GfxRows).
+        public static bool Shown(string key) { return !Game.Msc || (key != "JaugeTemperature" && key != "JaugeSueur"); }
         public static int StyleNow { get { return Get("Style"); } }
 
         // Pose (F10) : ecrite tout de suite dans mwcoop.ini.

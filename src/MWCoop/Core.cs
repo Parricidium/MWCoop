@@ -370,7 +370,8 @@ namespace MWCoop
             System.Action[] all = { Replay.OnLevelLoaded, PlayerSync.OnLevelLoaded, VehicleSync.OnLevelLoaded, CarDoors.OnLevelLoaded, CarVisuals.OnLevelLoaded, Seats.OnLevelLoaded,
                                     Voice.OnLevelLoaded, CustomFace.OnLevelLoaded, WorldFiles.OnLevelLoaded,
                                     ThirdPerson.OnLevelLoaded, DroneCam.OnLevelLoaded, SaveStats.OnLevelLoaded, Studio.OnLevelLoaded, WaitScreen.OnLevelLoaded,
-                                    NewHud.OnLevelLoaded, MapRender.OnLevelLoaded };
+                                    NewHud.OnLevelLoaded, MapRender.OnLevelLoaded, Respawn.OnLevelLoaded,
+                                    CarColor.OnLevelLoaded, CustomPaint.OnLevelLoaded, Ajouts.OnLevelLoaded, Gfx.OnLevelLoaded };
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -386,6 +387,12 @@ namespace MWCoop
             "voitures", "portieres", "tableaux de bord", "passagers",
             "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
             "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)
+            "triches", "panneau des triches",   // (19/10 : triches de MSC -- lieux, heure par pas de 2 h, pluie, argent, soin, prison)
+            "ajouts (hote)",   // (sur MSC : la camera drone seulement, Ajouts.B_Msc)
+            "graphismes",   // (Systems/Options de MSC : Gfx.GameOptsMsc)
+            "couleur", "peinture",   // (19/10 : couleur et peinture perso de la SATSUMA sur une nouvelle partie ; Paint ne charge rien sur MSC)
+            "reapparition",   // (19/10 : Systems/Death et son 'Activate Dead Body' comme dans MWC ; un seul choix, la maison)
+            "musiques (menu)",   // (contenu de l'hote et import des CD : Contenu.MenuUpdate fait aussi la partie en jeu sur MSC)
             "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;

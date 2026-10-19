@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace MWCoop
 {
-    // Essais : [Test] Autotest=trichessonde -- les automates de la meteo et de la prison (etats, actions, transitions) ;
+    // Essais : [Test] Autotest=trichessonde -- les automates de la meteo, du soleil (MSC) et de la prison (etats, actions, transitions) ;
     // Autotest=trichelieux -- ce qu'il y a sous chaque lieu de teleportation (rayons depuis le ciel autour du centre).
     public static class CheatsProbe
     {
@@ -13,7 +13,13 @@ namespace MWCoop
             if (mode == "trichelieux" && !done && t > 25f) { done = true; Places(); return; }
             if (mode != "trichessonde" || done || t < 25f) return;
             done = true;
-            foreach (string[] p in new[] { new[] { "MAP/WEATHER/Clouds", "Weather" }, new[] { "MAP/WEATHER/Forecast", "Logic" }, new[] { "JAIL/Functions", "Time" }, new[] { "Systems/PlayerWanted", "Activate" } })
+            // (My Summer Car : MAP/CloudSystem et MAP/SUN/Pivot/SUN a la place de MAP/WEATHER et MAP/Sun/PivotSun/SUN ; la prison
+            // et la police sous les memes noms ; et la taille des nuages de pluie, pour Cheats.CloudOverMe)
+            string[][] probes = Game.Msc
+                ? new[] { new[] { "MAP/CloudSystem/Clouds", "Weather" }, new[] { "MAP/SUN/Pivot/SUN", "Color" }, new[] { "JAIL/Functions", "Time" }, new[] { "Systems/PlayerWanted", "Activate" } }
+                : new[] { new[] { "MAP/WEATHER/Clouds", "Weather" }, new[] { "MAP/WEATHER/Forecast", "Logic" }, new[] { "JAIL/Functions", "Time" }, new[] { "Systems/PlayerWanted", "Activate" } };
+            if (Game.Msc) RainClouds();
+            foreach (string[] p in probes)
             {
                 GameObject go = Game.FindAny(p[0]);
                 PlayMakerFSM f = go != null ? Game.FsmOn(go, p[1]) : null;
@@ -28,6 +34,15 @@ namespace MWCoop
                 }
                 foreach (FsmTransition tr in f.Fsm.GlobalTransitions) Log.Info("sonde :    global " + tr.EventName + " -> " + tr.ToState);
             }
+        }
+
+        static void RainClouds()
+        {
+            GameObject objs = Game.FindAny("MAP/CloudSystem/Clouds/CloudObjects");
+            if (objs == null) { Log.Info("sonde : MAP/CloudSystem/Clouds/CloudObjects introuvable"); return; }
+            foreach (SphereCollider c in objs.GetComponentsInChildren<SphereCollider>(true))
+                Log.Info("sonde : nuage " + c.transform.parent.name + "/" + c.name + " a " + c.transform.position.ToString("F0") + ", rayon " + (c.radius * c.transform.lossyScale.x).ToString("F0") + " m"
+                         + (Game.PlayerT != null ? ", a " + Vector2.Distance(new Vector2(c.transform.position.x, c.transform.position.z), new Vector2(Game.PlayerT.position.x, Game.PlayerT.position.z)).ToString("F0") + " m du joueur" : ""));
         }
 
         static void Places()

@@ -294,8 +294,19 @@ static const std::vector<GfxRow> &GfxRows()
     pills("VocalPortee", { 15, 25, 35, 50, 80 }, { L"15", L"25", L"35 m", L"50", L"80" }, {});
     pills("VolumeVocal", { 50, 75, 100 }, { L"50", L"75", L"100 %" }, {});
     pills("GainMicro", { 100, 150, 200, 300 }, { L"Normal", L"150", L"200", L"300 %" }, {});
-    // My Summer Car (19/10) : ni temperature du corps ni sueur dans ce jeu
-    if (g_game == GAME_MSC) rows.erase(std::remove_if(rows.begin(), rows.end(), [](const GfxRow &r) { return !strcmp(r.key, "JaugeTemperature") || !strcmp(r.key, "JaugeSueur"); }), rows.end());
+    // My Summer Car (19/10) : ni temperature du corps ni sueur dans ce jeu ; ses options graphiques (Systems/Options::GFX, vidage
+    // v.250908-04) n'ont pas d'ombres de la lune, les retroviseurs y sont un oui / non (CarMirrors) ; en plus, ses reflets de
+    // l'environnement (RefProbes) et de l'eau (Water) -- cles lues par MWCoop\Gfx.cs.
+    if (g_game == GAME_MSC) {
+        static const char *mwcOnly[] = { "JaugeTemperature", "JaugeSueur", "OmbresLune" };
+        rows.erase(std::remove_if(rows.begin(), rows.end(), [](const GfxRow &r) { for (const char *k : mwcOnly) if (!strcmp(r.key, k)) return true; return false; }), rows.end());
+        for (GfxRow &r : rows) if (!strcmp(r.key, "Retroviseurs")) { r.vals = { 0, 1 }; r.lf = { L"Coupés", L"Oui" }; r.le = { L"Off", L"On" }; r.impact = 1; }
+        auto at = std::find_if(rows.begin(), rows.end(), [](const GfxRow &r) { return !strcmp(r.key, "RayonsSoleil"); });
+        rows.insert(at == rows.end() ? at : at + 1, {
+            { "SondesReflets", L"Reflets de l'environnement", L"Environment reflections", 1, {}, {}, {}, 2, 0 },
+            { "RefletsEau", L"Reflets de l'eau", L"Water reflections", 1, {}, {}, {}, 2, 0 },
+        });
+    }
     return rows;
 }
 
@@ -331,6 +342,7 @@ static void GfxLoad()
         GetPrivateProfileStringW(r.sec ? Widen(r.sec).c_str() : L"Graphismes", Widen(r.key).c_str(), L"", b, 32, ini.c_str());
         g_gfxVal[r.key] = b[0] ? _wtoi(b) : r.def;
     }
+    if (g_game == GAME_MSC && g_gfxVal["Retroviseurs"] > 1) g_gfxVal["Retroviseurs"] = 1;   // (« Complets » du F10 : oui dans My Summer Car)
     g_gfxReadT = GetTickCount();
 }
 static int GfxGet(const char *k) { auto it = g_gfxVal.find(k); return it != g_gfxVal.end() ? it->second : -1; }
@@ -408,6 +420,14 @@ static const std::vector<GfxPreset> &GfxPresets()
         if (k == 3 && !GfxDxr()) v.back().second = 0;   // (Ultra sans carte DXR : tout au max, sans ray tracing)
         p.push_back({ nf[k], ne[k], df[k], de[k], v });
     }
+    // My Summer Car : sans les ombres de la lune, retroviseurs oui / non, ses reflets en plus (coupes en Leger, sinon oui)
+    if (g_game == GAME_MSC)
+        for (int i = 0; i < (int)p.size(); i++) {
+            auto &v = p[i].v;
+            v.erase(std::remove_if(v.begin(), v.end(), [](const std::pair<const char *, int> &kv) { return !strcmp(kv.first, "OmbresLune"); }), v.end());
+            for (auto &kv : v) if (!strcmp(kv.first, "Retroviseurs")) kv.second = min(kv.second, 1);
+            for (const char *k : { "SondesReflets", "RefletsEau" }) v.push_back(std::make_pair(k, i == 1 ? 0 : 1));
+        }
     return p;
 }
 static int GfxPresetOn()
@@ -499,8 +519,10 @@ static const SetCard kSetCards[] = {
 static const int kSetCardN = (int)(sizeof(kSetCards) / sizeof(kSetCards[0]));
 // fr/en : nom (SI_GFX / SI_OPT : remplace celui de la table ; SI_X : pour la recherche) ; dFr/dEn : explication grise dessous.
 // wide : 1 toute la largeur avant les sous-colonnes, 2 apres (pied de carte : boutons Par defaut / Enregistrer...).
+// only : 0 les deux jeux, 1 My Winter Car seulement, 2 My Summer Car seulement (19/10 : une ligne propre a un jeu, ou sa
+// variante pour l'autre ; un reglage du jeu absent de GfxRows pour ce jeu est cache de meme, SetItemOn).
 // Pied ("footer") : fr/en = legende, dFr = boutons -- D Par defaut, E Enregistrer, G Revoir le guide de l'hote, T Tester ma connexion.
-struct SetItem { int card, kind; const char *key; const wchar_t *fr, *en, *dFr, *dEn; int wide; };
+struct SetItem { int card, kind; const char *key; const wchar_t *fr, *en, *dFr, *dEn; int wide, only; };
 static const SetItem kSetItems[] = {
     { 0, SI_X, "presets", L"Préréglage", L"Preset", NULL, NULL },
     { 1, SI_GFX, "Resolution", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "ModeEcran", NULL, NULL, NULL, NULL },
@@ -508,7 +530,7 @@ static const SetItem kSetItems[] = {
     { 1, SI_GFX, "ChampVision", NULL, NULL, L"60° = le jeu", L"60° = the game" }, { 1, SI_GFX, "QualiteUnity", NULL, NULL, NULL, NULL },
     { 1, SI_GFX, "Distance", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "Details", NULL, NULL, NULL, NULL },
     { 1, SI_GFX, "Textures", NULL, NULL, L"Pleines = plus de mémoire vidéo", L"Full = more video memory" }, { 1, SI_GFX, "Filtrage", NULL, NULL, NULL, NULL }, { 1, SI_GFX, "Anticrenelage", NULL, NULL, NULL, NULL },
-    { 2, SI_GFX, "Balancement", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "BalancementVoiture", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "Retroviseurs", NULL, NULL, L"Complets = coûteux", L"Full = costly" },
+    { 2, SI_GFX, "Balancement", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "BalancementVoiture", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "Retroviseurs", NULL, NULL, L"Complets = coûteux", L"Full = costly", 0, 1 }, { 2, SI_GFX, "Retroviseurs", NULL, NULL, NULL, NULL, 0, 2 },
     { 2, SI_GFX, "IndicateurRapport", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "CompteurImages", NULL, NULL, NULL, NULL },
     { 2, SI_GFX, "Pseudos", NULL, NULL, L"Distance d'affichage", L"Display distance" }, { 2, SI_GFX, "PoussiereTrafic", NULL, NULL, NULL, NULL }, { 2, SI_GFX, "TracesTrafic", NULL, NULL, NULL, NULL },
     // Lumiere & ombres (maquette Jeu) : les huit lignes les plus utiles, en deux sous-colonnes ; aussi dans l'onglet Image.
@@ -519,6 +541,7 @@ static const SetItem kSetItems[] = {
     { 3, SI_X, "footer", L"Appliqués au prochain lancement du jeu.", L"Applied at the next game start.", L"DE", NULL, 2 },
     { 4, SI_GFX, "HDR", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "Bloom", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "Contraste", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "RayonsSoleil", NULL, NULL, NULL, NULL },
     { 4, SI_GFX, "Halos", NULL, NULL, NULL, NULL }, { 4, SI_GFX, "PorteePhares", NULL, NULL, NULL, NULL },
+    { 4, SI_GFX, "SondesReflets", NULL, NULL, L"Carrosseries, vitres, sols", L"Car paint, windows, floors", 0, 2 }, { 4, SI_GFX, "RefletsEau", NULL, NULL, L"Lacs et rivières", L"Lakes and rivers", 0, 2 },
     { 5, SI_GFX, "OmbresSoleil", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresLune", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresMaisons", NULL, NULL, NULL, NULL },
     { 5, SI_GFX, "OmbresDistance", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresCascades", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresPhares", NULL, NULL, NULL, NULL }, { 5, SI_GFX, "OmbresLampadaires", NULL, NULL, NULL, NULL },
     { 6, SI_GFX, "RayTracing", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTRayons", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTPortee", NULL, NULL, NULL, NULL }, { 6, SI_GFX, "RTDouceur", NULL, NULL, NULL, NULL },
@@ -586,7 +609,8 @@ static const SetItem kSetItems[] = {
     { 13, SI_X, "footer", L"Les touches valent pour toutes tes parties.", L"The keys apply to all your games.", L"DE", NULL, 2 },
     { 14, SI_X, "themes", L"Thème", L"Theme", NULL, NULL },
     { 15, SI_X, "accent", L"Couleur d'accent", L"Accent colour", L"Boutons, onglet actif, pastilles", L"Buttons, active tab, pills" },
-    { 15, SI_X, "aurore", L"Aurore et neige", L"Aurora and snow", L"Fond animé derrière les pages", L"Animated background behind the pages" },
+    { 15, SI_X, "aurore", L"Aurore et neige", L"Aurora and snow", L"Fond animé derrière les pages", L"Animated background behind the pages", 0, 1 },
+    { 15, SI_X, "aurore", L"Fond animé", L"Animated background", L"Lucioles et pollen derrière les pages", L"Fireflies and pollen behind the pages", 0, 2 },   // (scene d'ete de My Summer Car)
     { 15, SI_X, "verre", L"Verre dépoli", L"Frosted glass", L"Transparence des cartes", L"Card transparency" },
     { 15, SI_BREAK, NULL, NULL, NULL, NULL, NULL },
     { 15, SI_X, "densite", L"Densité", L"Density", L"Espace entre les lignes et les cartes", L"Space between rows and cards" },
@@ -630,7 +654,8 @@ static const SetItem kSetItems[] = {
     { 24, SI_GFX, "JaugeSalete", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeTemperature", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeSueur", NULL, NULL, NULL, NULL },
     { 24, SI_GFX, "JaugeArgent", NULL, NULL, NULL, NULL }, { 24, SI_GFX, "JaugeJour", NULL, NULL, NULL, NULL },
     { 25, SI_GFX, "Equipe", NULL, NULL, L"Les jauges des autres joueurs, en petit", L"The other players' gauges, small" },
-    { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé, gelé… toi et tes amis", L"Very hungry, exhausted, freezing… you and your friends" },
+    { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé, gelé… toi et tes amis", L"Very hungry, exhausted, freezing… you and your friends", 0, 1 },
+    { 25, SI_GFX, "Alertes", NULL, NULL, L"Très faim, épuisé… toi et tes amis", L"Very hungry, exhausted… you and your friends", 0, 2 },   // (pas de froid dans My Summer Car)
 };
 static const int kSetItemN = (int)(sizeof(kSetItems) / sizeof(kSetItems[0]));
 
@@ -747,6 +772,12 @@ static void DroneLayoutSet(int k)
 
 // ---- petits elements de la page
 static int SetGfxIdx(const char *key) { const auto &rows = GfxRows(); for (int i = 0; i < (int)rows.size(); i++) if (!strcmp(rows[i].key, key)) return i; return -1; }
+// Ligne montree pour le jeu choisi (SetItem::only ; reglage du jeu absent de GfxRows pour ce jeu : cache, pas de trou).
+static bool SetItemOn(const SetItem &it)
+{
+    if (it.only == (g_game == GAME_MSC ? 1 : 2)) return false;
+    return it.kind != SI_GFX || SetGfxIdx(it.key) >= 0;
+}
 static bool SetDrawn(RectF r) { return r.Y + r.Height > g_setTop && r.Y < g_setBottom; }
 static bool SetVisible(RectF r) { return r.Y >= g_setTop - 1 && r.Y + r.Height <= g_setBottom + 1; }
 // Minuscules sans accents (recherche).
@@ -1057,8 +1088,19 @@ static void SetThemePreview(Graphics &g, RectF r, Color sky0, Color sky1, Color 
 }
 
 // Jetons des ajouts : noms, et nombre de lignes pour une largeur (w <= 0 : la derniere largeur mesuree).
-static const char *kAjoutKeys[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee", "AjoutVaz" };
-static const int kAjoutN = (int)(sizeof(kAjoutKeys) / sizeof(kAjoutKeys[0]));   // (aussi le salon, launcher.cpp)
+// Ajouts du jeu choisi (19/10) : My Summer Car n'a que le drone (sacs, boutique s21, musee et VAZ sont faits pour My Winter
+// Car ; le mod les coupe aussi, Sync/Ajouts.cs B_Msc). Ceux des deux jeux d'abord : kAjoutKeys et kAjoutN (aussi le salon,
+// launcher.cpp : « for (k : kAjoutKeys) », « kAjoutN ») ne parcourent que les kAjoutMsc premiers sur My Summer Car.
+static const char *kAjoutAll[] = { "AjoutDrone", "AjoutSacs", "AjoutBoutique", "AjoutMusee", "AjoutVaz" };
+static const int kAjoutMsc = 1;
+static int AjoutCount() { return g_game == GAME_MSC ? kAjoutMsc : (int)(sizeof(kAjoutAll) / sizeof(kAjoutAll[0])); }
+struct AjoutList {
+    const char *const *begin() const { return kAjoutAll; }
+    const char *const *end() const { return kAjoutAll + AjoutCount(); }
+    const char *operator[](int i) const { return kAjoutAll[i]; }
+};
+static const AjoutList kAjoutKeys = {};
+#define kAjoutN (AjoutCount())
 static const wchar_t *kAjoutFr[] = { L"Caméra drone (F8)", L"Sacs de couchage", L"Boutique s21", L"Musée de la Corse", L"VAZ-2108 (F10)" }, *kAjoutEn[] = { L"Drone camera (F8)", L"Sleeping bags", L"s21 shop", L"Museum of Corsica", L"VAZ-2108 (F10)" };
 static float g_chipW = 458;
 static int SetChipLines(float w)
@@ -1202,7 +1244,7 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             Para(g, T(L"Le vocal est de proximité : on t'entend jusqu'à la portée choisie, de moins en moins fort en s'éloignant, comme en vrai. Le micro et les haut-parleurs sont ceux de Windows (périphériques par défaut).\n\nLa touche pour parler (tenue) est dans l'onglet Touches. Le volume des voix ne change que ce que tu entends ; ton micro, ce que les autres entendent de toi.",
                       L"Voice is proximity-based: you are heard up to the chosen range, fading with distance, like in real life. The microphone and speakers are Windows' default devices.\n\nThe push-to-talk key is in the Keys tab. Voice volume only changes what you hear; your microphone, what the others hear from you."),
                  RectF(x, y + 4, w, h - 8), 12.5f, kGrey);
-        } else if (!strcmp(k, "ajouts")) {   // Tous / Choisir / Aucun : SansAjouts, et les quatre interrupteurs
+        } else if (!strcmp(k, "ajouts")) {   // Tous / Choisir / Aucun : SansAjouts, et les interrupteurs (ceux du jeu choisi)
             bool none = GfxGet("SansAjouts") == 1;
             bool all = true;
             for (const char *a : kAjoutKeys) all = all && GfxGet(a) == 1;
@@ -1480,16 +1522,16 @@ static float SetDrawCard(Graphics &g, int ci, float x, float y, float w)
     y += sub ? 60 : 48;
     bool split = false;
     for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].kind == SI_BREAK) split = true;
-    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].wide == 1) y += SetDrawItem(g, kSetItems[i], x + kSetPad, y, inner);
+    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].wide == 1 && SetItemOn(kSetItems[i])) y += SetDrawItem(g, kSetItems[i], x + kSetPad, y, inner);
     float cw = split ? (inner - 24) / 2 : inner, cx = x + kSetPad, cy = y, maxY = y;
     for (int i = 0; i < kSetItemN; i++) {
         const SetItem &it = kSetItems[i];
-        if (it.card != ci || it.wide) continue;
+        if (it.card != ci || it.wide || !SetItemOn(it)) continue;
         if (it.kind == SI_BREAK) { maxY = max(maxY, cy); cx += cw + 24; cy = y; continue; }
         cy += SetDrawItem(g, it, cx, cy, cw);
     }
     maxY = max(maxY, cy);
-    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].wide == 2) maxY += SetDrawItem(g, kSetItems[i], x + kSetPad, maxY, inner);
+    for (int i = 0; i < kSetItemN; i++) if (kSetItems[i].card == ci && kSetItems[i].wide == 2 && SetItemOn(kSetItems[i])) maxY += SetDrawItem(g, kSetItems[i], x + kSetPad, maxY, inner);
     float h = maxY - y0 + 12;
     float t = max(y0, g_setTop), b = min(y0 + h, g_setBottom);   // (le verre n'est pas clippe : coupe a la zone visible)
     if (b - t > 6) Glass(RectF(x, t, w, b - t));
@@ -1499,7 +1541,7 @@ static float SetDrawCard(Graphics &g, int ci, float x, float y, float w)
 static bool SetItemLabel(const SetItem &it, std::wstring &lab, std::wstring &desc)
 {
     lab.clear(); desc.clear();
-    if (it.kind == SI_SEC || it.kind == SI_BREAK) return false;
+    if (it.kind == SI_SEC || it.kind == SI_BREAK || !SetItemOn(it)) return false;
     if (it.kind == SI_GFX) { int idx = SetGfxIdx(it.key); if (idx < 0) return false; const GfxRow &r = GfxRows()[idx]; lab = it.fr ? T(it.fr, it.en) : T(r.fr, r.en); }
     else if (it.kind == SI_OPT) { const Opt *o = OptByKey(it.key); if (!o) return false; lab = it.fr ? T(it.fr, it.en) : T(o->fr, o->en); }
     else { if (!it.fr || !strcmp(it.key, "footer")) return false; lab = T(it.fr, it.en); }
@@ -1554,7 +1596,8 @@ static void HudPreview(Graphics &g, RectF box, int style, bool big)
         PointF tri[3] = { PointF(tx, base - th), PointF(tx - th * 0.32f, base), PointF(tx + th * 0.32f, base) };
         g.FillPolygon(&tree, tri, 3);
     }
-    SolidBrush snow(Color(255, 156, 158, 184)); g.FillRectangle(&snow, RectF(box.X, box.Y + box.Height * 0.66f, box.Width, box.Height * 0.34f + 1));
+    SolidBrush snow(g_game == GAME_MSC ? Color(255, 92, 126, 70) : Color(255, 156, 158, 184));   // (My Summer Car : herbe d'ete)
+    g.FillRectangle(&snow, RectF(box.X, box.Y + box.Height * 0.66f, box.Width, box.Height * 0.34f + 1));
     static const Color acc[4] = { Color(255, 166, 216, 255), Color(255, 120, 189, 255), Color(255, 72, 240, 176), Color(255, 201, 166, 255) };
     static const Color accMsc[4] = { Color(255, 255, 214, 77), Color(255, 255, 158, 56), Color(255, 72, 240, 176), Color(255, 201, 166, 255) };   // (MSC : jaune, orange)
     Color ac = (g_game == GAME_MSC ? accMsc : acc)[big ? max(0, min(3, GfxGet("Couleur"))) : 0];
@@ -1563,7 +1606,9 @@ static void HudPreview(Graphics &g, RectF box, int style, bool big)
     int alpha = big ? (int)(255 * GfxGet("Fond") / 100.0f) : 170;
     Color bg = g_game == GAME_MSC ? Color((BYTE)alpha, 8, 8, 8) : Color((BYTE)alpha, 8, 18, 34);   // (MSC : noir)
     static const float vals[6] = { 35, 76, 12, 48, 93, 4 };
-    static const char *gk[6] = { "JaugeSoif", "JaugeFaim", "JaugeStress", "JaugeUrine", "JaugeFatigue", "JaugeSueur" };
+    static const char *gkMwc[6] = { "JaugeSoif", "JaugeFaim", "JaugeStress", "JaugeUrine", "JaugeFatigue", "JaugeSueur" };
+    static const char *gkMsc[6] = { "JaugeSoif", "JaugeFaim", "JaugeStress", "JaugeUrine", "JaugeFatigue", "JaugeSalete" };   // (MSC : pas de sueur, la salete a sa place, comme GUI/HUD)
+    const char *const *gk = g_game == GAME_MSC ? gkMsc : gkMwc;
     auto tone = [&](float v) { return v >= 90 ? Color(255, 255, 107, 122) : v >= 70 ? Color(255, 255, 181, 92) : ac; };
     std::vector<float> shown;
     for (int i = 0; i < 6; i++) if (!big || GfxGet(gk[i]) == 1) shown.push_back(vals[i]);
@@ -1577,7 +1622,8 @@ static void HudPreview(Graphics &g, RectF box, int style, bool big)
     };
     SolidBrush track(Color(30, 255, 255, 255));
     if (style == 0) {   // Vanilla : libelles jaunes en italique, barres blanches sur fond noir
-        static const wchar_t *lab[6] = { L"THIRST", L"HUNGER", L"STRESS", L"URINE", L"FATIGUE", L"SWEAT" };
+        static const wchar_t *labMwc[6] = { L"THIRST", L"HUNGER", L"STRESS", L"URINE", L"FATIGUE", L"SWEAT" }, *labMsc[6] = { L"THIRST", L"HUNGER", L"STRESS", L"URINE", L"FATIGUE", L"DIRTY" };
+        const wchar_t *const *lab = g_game == GAME_MSC ? labMsc : labMwc;
         float vs = big ? sc * 1.7f : sc, lh = 11 * vs * 1.3f, bx = box.X + box.Width * 0.24f;
         for (int i = 0; i < 6; i++) {
             float yy = box.Y + m + i * lh;
@@ -1696,6 +1742,7 @@ static std::wstring SetHeaderSub()
                                         L"Ce que tu proposes en hébergeant, et ce que tu veux chez toi", L"Touches de MWCoop · celles du jeu : dans le jeu (Options > Contrôles)", L"Thème, couleur d'accent, aurore et neige, verre, densité, texte", L"Lanceur : langue, version, dossier du jeu, mises à jour, journaux" };
     static const wchar_t *en[SET_N] = { L"Lasting, for all your games · \"Game\" = the game's own value", L"Light, shadows, ray tracing · in game: F10", L"In-game gauges: Vanilla, Card, Rings or Strip · in game: F10 › HUD", L"Proximity voice: who hears you, how loud",
                                         L"What you offer when hosting, and what you want on your side", L"MWCoop keys · the game's own: in the game (Options > Controls)", L"Theme, accent colour, aurora and snow, glass, density, text", L"Launcher: language, version, game folder, updates, logs" };
+    if (g_game == GAME_MSC && g_setTab == SET_THEME) return T(L"Thème, couleur d'accent, fond animé, verre, densité, texte", L"Theme, accent colour, animated background, glass, density, text");   // (scene d'ete : ni aurore ni neige)
     return T(fr[g_setTab], en[g_setTab]);
 }
 // Champ Chercher de l'en-tete (a droite du titre) ; 'right' recule d'autant.
@@ -1758,7 +1805,7 @@ static void SetTabDefaults(int tab)
 {
     for (int i = 0; i < kSetItemN; i++) {
         const SetItem &it = kSetItems[i];
-        if (kSetCards[it.card].tab != tab) continue;
+        if (kSetCards[it.card].tab != tab || !SetItemOn(it)) continue;
         if (it.kind == SI_GFX) {
             int idx = SetGfxIdx(it.key);
             if (idx < 0) continue;

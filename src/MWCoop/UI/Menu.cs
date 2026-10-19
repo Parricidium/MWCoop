@@ -1056,11 +1056,13 @@ namespace MWCoop
                 Header(heads[g]);
                 foreach (Gfx.Row r in Gfx.Rows)
                 {
-                    if (r.Group != g) continue;
+                    if (r.Group != g || (Game.Msc && r.Key == "OmbresLune")) continue;   // (My Summer Car : pas d'ombres de la lune dans ses options)
                     int v = Gfx.Value(r);
                     string hint = r.Heavy ? Lang.T("Lourd pour les images par seconde", "Heavy on the frame rate") : null;
                     if (r.Key == "RayTracing" && !RayTracing.Direct) hint = Lang.T("Actif au prochain lancement par le lanceur", "Active at the next launch from the launcher");
                     if (r.Vals == null) { if (ToggleRow(Lang.T(r.Fr, r.En), v == 1, hint)) Gfx.Set(r.Key, v == 1 ? 0 : 1); continue; }
+                    // (My Summer Car : les retroviseurs sont un oui / non, Systems/Options::GFX CarMirrors)
+                    if (Game.Msc && r.Key == "Retroviseurs") { if (ToggleRow(Lang.T(r.Fr, r.En), v != 0, hint)) Gfx.Set(r.Key, v != 0 ? 0 : 1); continue; }
                     int k = 0;
                     for (int i = 0; i < r.Vals.Length; i++) if (r.Vals[i] == v) k = i;
                     int res = Item(Lang.T(r.Fr, r.En), Lang.T(r.Lf[k], r.Le[k]), true, hint, false);
@@ -1068,8 +1070,20 @@ namespace MWCoop
                     int nk = Mathf.Clamp(k + res, 0, r.Vals.Length - 1);
                     if (nk != k) Gfx.Set(r.Key, r.Vals[nk]);
                 }
+                if (g == 0 && Game.Msc)
+                    foreach (string[] x in GfxMsc)
+                    {
+                        int v = Gfx.Get(x[0], 1);
+                        if (ToggleRow(Lang.T(x[1], x[2]), v != 0, null)) Gfx.Set(x[0], v != 0 ? 0 : 1);
+                    }
             }
         }
+        // Options graphiques de My Summer Car sans equivalent dans My Winter Car (Systems/Options::GFX RefProbes, Water) : cle de
+        // [Graphismes], libelles. Memes cles que le lanceur (gfx.inc).
+        static readonly string[][] GfxMsc = {
+            new[] { "SondesReflets", "Reflets de l'environnement", "Environment reflections" },
+            new[] { "RefletsEau", "Reflets de l'eau", "Water reflections" },
+        };
 
         // HUD (UI/NewHud.cs, reglages UI/HudSettings.cs) : style, puis sa personnalisation, les jauges montrees et la coop. Le HUD
         // change aussitot autour du menu (apercu en direct). Memes cles que le lanceur (Reglages > HUD).
@@ -1085,7 +1099,7 @@ namespace MWCoop
             if (style != HudSettings.Vanilla)
             {
                 Header(Lang.T("JAUGES AFFICH\u00C9ES", "GAUGES SHOWN"));
-                foreach (HudSettings.Opt o in HudSettings.Opts) if (o.Group == 2) HudRow(o);
+                foreach (HudSettings.Opt o in HudSettings.Opts) if (o.Group == 2 && HudSettings.Shown(o.Key)) HudRow(o);   // (My Summer Car : ni temperature ni sueur)
             }
             Header(Lang.T("COOP", "CO-OP"));
             foreach (HudSettings.Opt o in HudSettings.Opts) if (o.Group == 3) HudRow(o);

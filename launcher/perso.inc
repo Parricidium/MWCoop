@@ -239,8 +239,10 @@ static std::wstring PersoLabel(int f, const std::string &v)
     }
     if (f == PF_PANTS || f == PF_FACE) {
         if (v == "perso") return f == PF_PANTS ? T(L"Pantalon perso", L"Custom pants") : T(L"Visage perso", L"Custom face");
+        // (robes des mamies, les deux jeux : curtain4 ; fabric_flower2 sur My Summer Car, fabric_flower3 sur My Winter Car)
         static const struct { const char *k; const wchar_t *fr, *en; } kp[] = {
-            { "cop_pants", L"Police", L"Police" }, { "inspector_pants", L"Inspecteur", L"Inspector" }, { "psk_pants", L"PSK", L"PSK" }, { "rally_pants", L"Rallye", L"Rally" } };
+            { "cop_pants", L"Police", L"Police" }, { "inspector_pants", L"Inspecteur", L"Inspector" }, { "psk_pants", L"PSK", L"PSK" }, { "rally_pants", L"Rallye", L"Rally" },
+            { "curtain4", L"Robe verte à fleurs", L"Green floral dress" }, { "fabric_flower2", L"Robe claire à fleurs", L"Light floral dress" } };
         for (auto &p : kp) if (v == p.k) return T(p.fr, p.en);
         if (IsTenue(v)) return std::wstring(f == PF_PANTS ? T(L"Pantalon ", L"Pants ") : T(L"Visage ", L"Face ")) + TenueLabel(v);
         const char *pre = f == PF_PANTS ? "char_pants" : "char_face";
@@ -259,7 +261,8 @@ static std::wstring PersoLabel(int f, const std::string &v)
         { "cop_hat", L"Casquette de police", L"Police cap" }, { "hat_karvalakki", L"Chapka", L"Fur hat" }, { "fish_hat", L"Bob de pêche", L"Fishing hat" },
         { "busdriver_hat", L"Casquette de chauffeur", L"Bus driver cap" }, { "teimo_hat", L"Chapeau de Teimo", L"Teimo's hat" }, { "gifu_hat", L"Casquette Gifu", L"Gifu cap" },
         { "latsa", L"Béret", L"Flat cap" }, { "npc_helmet", L"Casque", L"Helmet" }, { "eye_glasses", L"Lunettes", L"Glasses" }, { "eye_glasses2", L"Lunettes rondes", L"Round glasses" },
-        { "eye_glasses_dsl", L"Lunettes de soleil", L"Sunglasses" }, { "bodymesh_ponytail", L"Queue de cheval", L"Ponytail" }, { "hyppyritukka", L"Coupe mulet", L"Mullet" } };
+        { "eye_glasses_dsl", L"Lunettes de soleil", L"Sunglasses" }, { "bodymesh_ponytail", L"Queue de cheval", L"Ponytail" }, { "hyppyritukka", L"Coupe mulet", L"Mullet" },
+        { "cowboy_hat", L"Chapeau de cow-boy", L"Cowboy hat" }, { "granny_hat", L"Bonnet de mamie", L"Granny's beanie" } };   // (ces deux : My Summer Car)
     std::wstring name = Widen(mesh);
     for (auto &a : ka) if (mesh == a.k) name = T(a.fr, a.en);
     // meme objet en plusieurs matieres : la matiere en plus (couleur, verre)
@@ -268,7 +271,8 @@ static std::wstring PersoLabel(int f, const std::string &v)
     if (same > 1) {
         static const struct { const char *k; const wchar_t *fr, *en; } km[] = {
             { "glass", L"claires", L"clear" }, { "windows_out_black", L"noires", L"black" }, { "CHROME", L"chromées", L"chrome" }, { "paint_black_shiny", L"noir brillant", L"glossy black" },
-            { "dashboard_glass", L"fumées", L"smoked" }, { "window_glass", L"verre", L"glass" }, { "eye_glasses_dsl", L"d'origine", L"original" } };
+            { "dashboard_glass", L"fumées", L"smoked" }, { "window_glass", L"verre", L"glass" }, { "eye_glasses_dsl", L"d'origine", L"original" },
+            { "paint 7", L"noires", L"black" } };   // (paint 7 : My Summer Car)
         std::wstring m;
         for (auto &k : km) if (mat == k.k) m = T(k.fr, k.en);
         if (m.empty()) { wchar_t b[16]; swprintf_s(b, L"%d", rank); m = b; }
@@ -575,7 +579,8 @@ struct Vig { Bitmap *bmp = NULL; bool tried = false; };
 static std::map<std::string, Vig> g_vigs;
 static int g_vigBudget;
 static bool EncoderClsid(const wchar_t *mime, CLSID *out);   // (launcher.cpp)
-static std::wstring VigDir() { return LocalDir().empty() ? L"" : LocalDir() + L"vignettes\\"; }
+// (un dossier par jeu : memes noms de matieres, autres textures ; My Winter Car garde « vignettes »)
+static std::wstring VigDir() { return LocalDir().empty() ? L"" : LocalDir() + (g_game == GAME_MSC ? L"vignettes-msc\\" : L"vignettes\\"); }
 static void VigFreeMem() { for (auto &kv : g_vigs) delete kv.second.bmp; g_vigs.clear(); }
 static std::wstring VigStamp()
 {

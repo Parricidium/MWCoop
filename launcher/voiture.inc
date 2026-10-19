@@ -9,6 +9,13 @@
 // Rendu logiciel : perspective, tampon de profondeur, normales lissees par sommet (Gouraud), lumiere directionnelle
 // + lumiere d'appoint + ambiante + reflet ; rendu en 2x puis reduit (antialiasing), vitres en transparence. Au plus
 // ~30 images/s, et seulement quand l'onglet est ouvert.
+// My Summer Car (19/10, demande de JD : « tout doit parler de la SATSUMA ») : la voiture est la SATSUMA. Apercu dans
+// MWCoop\cache\satsuma.mesh (un fichier par jeu : jamais la CORRIS sur MSC ; absent : invitation a lancer une partie de
+// My Summer Car). Pas de finition ni de plaque VIN sur la SATSUMA (rien de tel dans la scene de MSC) : caches. Le jeu ne
+// tire pas sa couleur au hasard : la pastille 0 est sa couleur d'origine. Peinture perso : le gabarit est
+// Images\template.png, l'image du joueur peinture-msc.png (autre gabarit que celui de la CORRIS).
+static bool CarMsc() { return g_game == GAME_MSC; }
+static const int kMscOrigColor = 0x726817;   // couleur d'origine des toles de la SATSUMA (0.447, 0.408, 0.090)
 struct CarSwatch { int rgb; const wchar_t *fr, *en; };
 static const CarSwatch kSwatches[] = {   // teintes des annees 70-80
     { 0xD9C49C, L"Beige Sahara", L"Sahara beige" },
@@ -170,11 +177,12 @@ static bool CarParse(const std::vector<unsigned char> &d, CarModel &m)
     return true;
 }
 
-// Relit corris.mesh s'il a change (le mod le reecrit a chaque partie) ; au plus toutes les 2 s.
+// Relit corris.mesh (satsuma.mesh sur MSC) s'il a change (le mod le reecrit a chaque partie) ; au plus toutes les 2 s.
+static const wchar_t *CarMeshName() { return CarMsc() ? L"satsuma.mesh" : L"corris.mesh"; }
 static void CarCheckFile()
 {
     DWORD now = GetTickCount();
-    std::wstring path = g_modRoot + L"MWCoop\\cache\\corris.mesh";
+    std::wstring path = g_modRoot + L"MWCoop\\cache\\" + CarMeshName();
     if (g_car.state != 0 && path == g_car.path && now - g_car.checkT < 2000) return;
     g_car.checkT = now;
     WIN32_FILE_ATTRIBUTE_DATA a;
@@ -336,6 +344,7 @@ static void CarRender(int W, int H)
     }
     float paint[3];
     if (g_carColor >= 0) { paint[0] = ((g_carColor >> 16) & 255) / 255.0f; paint[1] = ((g_carColor >> 8) & 255) / 255.0f; paint[2] = (g_carColor & 255) / 255.0f; }
+    else if (CarMsc()) { paint[0] = ((kMscOrigColor >> 16) & 255) / 255.0f; paint[1] = ((kMscOrigColor >> 8) & 255) / 255.0f; paint[2] = (kMscOrigColor & 255) / 255.0f; }   // (MSC : la couleur d'origine)
     else paint[0] = paint[1] = paint[2] = 0.80f;   // au hasard : gris clair
     uint32_t *pix = g_carBig.data();
     float *zb = g_carZ.data();
@@ -576,9 +585,20 @@ static void CarRemoveDents()
 }
 static Bitmap *g_paintThumb;
 static std::wstring g_paintThumbOf;
-static std::wstring PaintFile() { return LocalDir() + L"peinture.png"; }
+// Un fichier par jeu (gabarits differents : une peinture de CORRIS ne doit jamais partir comme car.png de la SATSUMA).
+static std::wstring PaintFile() { return LocalDir() + (CarMsc() ? L"peinture-msc.png" : L"peinture.png"); }
 static std::wstring PaintGame() { return g_gameDir + L"Images\\car.png"; }
+// Gabarit du jeu : Images\car.png sur MWC ; Images\template.png sur MSC (le jeu ne livre pas de car.png : « How to use
+// car template.txt » : peindre template.png, l'enregistrer en car.png).
+static std::wstring PaintTplGame() { return CarMsc() ? g_gameDir + L"Images\\template.png" : PaintGame(); }
 static bool PaintHas() { return FileExists(PaintFile()); }
+// Nom du fichier de peinture dans un texte (« peinture.png ») : peinture-msc.png sur My Summer Car (PaintFile).
+static std::wstring PaintNameFix(std::wstring s)
+{
+    size_t p = CarMsc() ? s.find(L"peinture.png") : std::wstring::npos;
+    if (p != std::wstring::npos) s.replace(p, 12, L"peinture-msc.png");
+    return s;
+}
 static bool PaintOn() { return !g_gameDir.empty() && GetPrivateProfileIntA("Coop", "PeinturePerso", 0, ModIniA().c_str()) != 0 && PaintHas(); }
 static void PaintUse(bool on)
 {
@@ -591,6 +611,7 @@ static void PaintUse(bool on)
 static Bitmap *PaintThumb()
 {
     std::wstring f = PaintOn() ? PaintFile() : PaintGame();
+    if (!PaintOn() && CarMsc() && !FileExists(f)) f = PaintTplGame();   // (MSC sans car.png : le gabarit)
     WIN32_FILE_ATTRIBUTE_DATA a;
     std::wstring key = f;
     if (GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &a)) key += L"|" + std::to_wstring(a.ftLastWriteTime.dwLowDateTime);
@@ -616,14 +637,15 @@ static void PaintImport()
     of.nMaxFile = MAX_PATH;
     std::wstring init = LocalDir();
     of.lpstrInitialDir = init.c_str();
-    of.lpstrTitle = T(L"Choisir la peinture de la CORRIS (peinte sur le gabarit car.png)", L"Choose the CORRIS paint (painted on the car.png template)");
+    of.lpstrTitle = CarMsc() ? T(L"Choisir la peinture de la SATSUMA (peinte sur le gabarit template.png)", L"Choose the SATSUMA paint (painted on the template.png template)")
+                             : T(L"Choisir la peinture de la CORRIS (peinte sur le gabarit car.png)", L"Choose the CORRIS paint (painted on the car.png template)");
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
     if (!GetOpenFileNameW(&of)) return;
     std::wstring why;
     Bitmap *src = LoadAnyImage(file, &why);
     bool ok = false;
     if (src) {
-        Bitmap *game = LoadAnyImage(PaintGame(), NULL);   // taille du gabarit du jeu (2048 x 2048)
+        Bitmap *game = LoadAnyImage(PaintTplGame(), NULL);   // taille du gabarit du jeu (2048 x 2048)
         int W = game ? (int)game->GetWidth() : 2048, H = game ? (int)game->GetHeight() : 2048;
         Bitmap dst(W, H, PixelFormat24bppRGB);
         {
@@ -649,13 +671,14 @@ static void PaintImport()
         MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
     }
 }
-// Gabarit : une copie de Images\car.png du jeu (on peint sur la copie), montree dans l'Explorateur.
+// Gabarit : une copie de Images\car.png du jeu (MSC : Images\template.png ; on peint sur la copie), montree dans l'Explorateur.
 static void PaintTemplate()
 {
-    std::wstring t = LocalDir() + L"gabarit-voiture.png";
+    std::wstring t = LocalDir() + (CarMsc() ? L"gabarit-satsuma.png" : L"gabarit-voiture.png");
     CreateDirectoryW(LocalDir().c_str(), NULL);
-    if (!FileExists(t) && !CopyFileW(PaintGame().c_str(), t.c_str(), TRUE)) {
-        MessageBoxW(g_wnd, T(L"Images\\car.png est introuvable dans le dossier du jeu.", L"Images\\car.png was not found in the game folder."), L"MWCoop", MB_ICONWARNING | MB_OK);
+    if (!FileExists(t) && !CopyFileW(PaintTplGame().c_str(), t.c_str(), TRUE)) {
+        MessageBoxW(g_wnd, CarMsc() ? T(L"Images\\template.png est introuvable dans le dossier du jeu.", L"Images\\template.png was not found in the game folder.")
+                                    : T(L"Images\\car.png est introuvable dans le dossier du jeu.", L"Images\\car.png was not found in the game folder."), L"MWCoop", MB_ICONWARNING | MB_OK);
         return;
     }
     std::wstring a = L"/select,\"" + t + L"\"";
@@ -672,8 +695,10 @@ static void DrawPaintView(Graphics &g, RectF card)
     GraphicsPath bp; RoundRect(bp, card, 20);
     SolidBrush bb(TH(card)); g.FillPath(&bb, &bp);
     Title(g, T(L"Peinture perso", L"Custom paint"), RectF(card.X + 24, card.Y + 20, 300, 30), 22, kInk);
-    Para(g, T(L"Ta propre peinture sur la CORRIS, peinte sur le gabarit du jeu. L'hôte l'envoie à ses invités.",
-              L"Your own paint on the CORRIS, painted on the game's template. The host sends it to their guests."),
+    Para(g, CarMsc() ? T(L"Ta propre peinture sur la SATSUMA, peinte sur le gabarit du jeu. L'hôte l'envoie à ses invités.",
+                         L"Your own paint on the SATSUMA, painted on the game's template. The host sends it to their guests.")
+                     : T(L"Ta propre peinture sur la CORRIS, peinte sur le gabarit du jeu. L'hôte l'envoie à ses invités.",
+                         L"Your own paint on the CORRIS, painted on the game's template. The host sends it to their guests."),
          RectF(card.X + 24, card.Y + 56, card.Width - 48, 40), 12.5f, kGrey);
     bool has = PaintHas(), on = PaintOn();
     RectF th(card.X + 24, card.Y + 104, 300, 300);
@@ -685,7 +710,8 @@ static void DrawPaintView(Graphics &g, RectF card)
         g.ResetClip();
     } else Icon(g, IC_IMAGE, th.X + th.Width / 2, th.Y + th.Height / 2, 48, WithA(kGrey, 0.6f), 1.4f);
     Pen tpen(on ? kAcc : TH(fieldBorder), on ? 2.0f : 1.0f); g.DrawPath(&tpen, &tp);
-    Text(g, on ? T(L"Ta peinture", L"Your paint") : T(L"Peinture du jeu (Images\\car.png)", L"Game paint (Images\\car.png)"),
+    Text(g, on ? T(L"Ta peinture", L"Your paint") : CarMsc() && !FileExists(PaintGame()) ? T(L"Gabarit du jeu (Images\\template.png)", L"Game template (Images\\template.png)")
+                                                 : T(L"Peinture du jeu (Images\\car.png)", L"Game paint (Images\\car.png)"),
          RectF(th.X, th.Y + th.Height + 6, th.Width, 22), 12.5f, FontStyleBold, on ? kInk : kGrey, StringAlignmentCenter);
     float bx = th.X + th.Width + 24, bw = card.X + card.Width - 24 - bx, by = th.Y;
     UiButton(g, RectF(bx, by, bw, 44), T(L"Gabarit", L"Template"), UI_CAR_PAINTTPL, false, IC_FOLDER); by += 56;
@@ -696,11 +722,15 @@ static void DrawPaintView(Graphics &g, RectF card)
     }
     float sy = th.Y + th.Height + 44;
     const wchar_t *steps[] = {
-        T(L"1. Gabarit : la carrosserie du jeu à plat (2048 x 2048). Le dossier Images du jeu a aussi corris_template_layered.psd, en calques.",
-          L"1. Template: the game's body laid flat (2048 x 2048). The game's Images folder also has corris_template_layered.psd, in layers."),
+        CarMsc() ? T(L"1. Gabarit : la carrosserie de la SATSUMA à plat (Images\\template.png du jeu, 2048 x 2048).",
+                     L"1. Template: the SATSUMA's body laid flat (the game's Images\\template.png, 2048 x 2048).")
+                 : T(L"1. Gabarit : la carrosserie du jeu à plat (2048 x 2048). Le dossier Images du jeu a aussi corris_template_layered.psd, en calques.",
+                     L"1. Template: the game's body laid flat (2048 x 2048). The game's Images folder also has corris_template_layered.psd, in layers."),
         T(L"2. Peins par-dessus en gardant la taille, puis « Mon image… ».", L"2. Paint over it keeping the size, then \"My image…\"."),
-        T(L"3. En jeu, achète « Custom paint made by artist » chez Fleetari (réparation) : la CORRIS prend ta peinture.",
-          L"3. In game, buy \"Custom paint made by artist\" at Fleetari's (repair shop): the CORRIS takes your paint."),
+        CarMsc() ? T(L"3. En jeu, achète « Custom paint made by artist » à l'atelier de Fleetari : la SATSUMA prend ta peinture.",
+                     L"3. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop: the SATSUMA takes your paint.")
+                 : T(L"3. En jeu, achète « Custom paint made by artist » chez Fleetari (réparation) : la CORRIS prend ta peinture.",
+                     L"3. In game, buy \"Custom paint made by artist\" at Fleetari's (repair shop): the CORRIS takes your paint."),
     };
     for (const wchar_t *s : steps) { Para(g, s, RectF(card.X + 24, sy, card.Width - 48, 40), 13, kInk); sy += 42; }
 }
@@ -747,11 +777,14 @@ static void DrawCar(Graphics &g)
     Glass(kCarCard);
     Glass(kCarPanel);
     RectF view = kCarView;
+    if (CarMsc()) g_vinView = false;   // (pas de plaque VIN sur la SATSUMA)
     if (g_vinView) DrawVinOptions(g, kCarCard);
     else if (g_paintView) DrawPaintView(g, kCarCard);
     else if (g_car.state != 1) {
-        const wchar_t *msg = g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\corris.mesh) : lance une partie pour le refaire.", L"Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.")
-                                               : T(L"Lance une partie une fois pour voir l'aper\u00E7u de la voiture.", L"Start a game once to see the car preview.");
+        const wchar_t *msg = CarMsc() ? (g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\satsuma.mesh) : lance une partie de My Summer Car pour le refaire.", L"Preview unreadable (MWCoop\\cache\\satsuma.mesh): start a My Summer Car game to rebuild it.")
+                                                           : T(L"Aper\u00E7u de la SATSUMA apr\u00E8s ta premi\u00E8re partie de My Summer Car avec MWCoop.", L"SATSUMA preview after your first My Summer Car game with MWCoop."))
+                     : g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\corris.mesh) : lance une partie pour le refaire.", L"Preview unreadable (MWCoop\\cache\\corris.mesh): start a game to rebuild it.")
+                                         : T(L"Lance une partie une fois pour voir l'aper\u00E7u de la voiture.", L"Start a game once to see the car preview.");
         Icon(g, IC_CAR, view.X + view.Width / 2, view.Y + view.Height / 2 - 40, 64, WithA(kGrey, 0.6f), 1.4f);
         Para(g, msg, RectF(view.X + 80, view.Y + view.Height / 2 + 10, view.Width - 160, 60), 14, kGrey, StringAlignmentNear);
     } else {
@@ -792,8 +825,9 @@ static void DrawCar(Graphics &g)
         g.SetInterpolationMode(im);
     }
     if (!g_vinView && !g_paintView) {
-        Title(g, T(L"Ta CORRIS", L"Your CORRIS"), RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 100, 400, 32), 22, kInk);
-        Text(g, T(L"Couleur et finition pour une nouvelle partie ; l'h\u00F4te les donne \u00E0 ses invit\u00E9s.", L"Color and trim for a new game; the host gives them to their guests."),
+        Title(g, CarMsc() ? T(L"Ta SATSUMA", L"Your SATSUMA") : T(L"Ta CORRIS", L"Your CORRIS"), RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 100, 400, 32), 22, kInk);
+        Text(g, CarMsc() ? T(L"Couleur pour une nouvelle partie ; l'h\u00F4te la donne \u00E0 ses invit\u00E9s.", L"Color for a new game; the host gives it to their guests.")
+                         : T(L"Couleur et finition pour une nouvelle partie ; l'h\u00F4te les donne \u00E0 ses invit\u00E9s.", L"Color and trim for a new game; the host gives them to their guests."),
              RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 66, 460, 22), 13, FontStyleRegular, kGrey, StringAlignmentNear);
         if (g_car.state == 1) Text(g, T(L"Glisse pour tourner", L"Drag to rotate"), RectF(kCarCard.X + kCarCard.Width - 224, kCarCard.Y + kCarCard.Height - 66, 200, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentFar);
     }
@@ -811,7 +845,8 @@ static void DrawCar(Graphics &g)
         RectF r = CarSwatchRect(i);
         if (i == sel) { Pen ring(kAcc, 2.6f); g.DrawEllipse(&ring, r.X - 5, r.Y - 5, r.Width + 10, r.Height + 10); }
         else if (i == g_carHot) { Pen ring(WithA(kInk, 0.5f), 1.6f); g.DrawEllipse(&ring, r.X - 4, r.Y - 4, r.Width + 8, r.Height + 8); }
-        if (i == 0) {   // au hasard : camembert et point d'interrogation
+        if (i == 0 && CarMsc()) { SolidBrush b(CarRgb(kMscOrigColor)); g.FillEllipse(&b, r); }   // (MSC : la couleur d'origine, pas de tirage)
+        else if (i == 0) {   // au hasard : camembert et point d'interrogation
             DrawCarWheel(g, r);
             SolidBrush mid(g_dark ? Color(255, 22, 32, 58) : Color(255, 245, 248, 252));
             g.FillEllipse(&mid, r.X + 14, r.Y + 14, r.Width - 28, r.Height - 28);
@@ -822,7 +857,7 @@ static void DrawCar(Graphics &g)
     }
     std::wstring name;
     wchar_t hex[16] = L"";
-    if (show == 0) name = T(L"Au hasard (comme le jeu)", L"Random (like the game)");
+    if (show == 0) name = CarMsc() ? T(L"Couleur d'origine (comme le jeu)", L"Original color (like the game)") : T(L"Au hasard (comme le jeu)", L"Random (like the game)");
     else {
         int c = show > 0 ? kSwatches[show - 1].rgb : g_carColor;
         swprintf_s(hex, L"#%06X", c & 0xFFFFFF);
@@ -835,7 +870,8 @@ static void DrawCar(Graphics &g)
         SolidBrush nb(TH(card)); g.FillPath(&nb, &np);
         Pen npen(TH(choiceBorder), 1); g.DrawPath(&npen, &np);
         RectF d(nr.X + 14, nr.Y + 13, 26, 26);
-        if (show == 0) DrawCarWheel(g, d); else { SolidBrush db(CarRgb(show > 0 ? kSwatches[show - 1].rgb : g_carColor)); GraphicsPath dp; RoundRect(dp, d, 8); g.FillPath(&db, &dp); }
+        if (show == 0 && CarMsc()) { SolidBrush db(CarRgb(kMscOrigColor)); GraphicsPath dp; RoundRect(dp, d, 8); g.FillPath(&db, &dp); }
+        else if (show == 0) DrawCarWheel(g, d); else { SolidBrush db(CarRgb(show > 0 ? kSwatches[show - 1].rgb : g_carColor)); GraphicsPath dp; RoundRect(dp, d, 8); g.FillPath(&db, &dp); }
         Text(g, name, RectF(nr.X + 50, nr.Y + 4, nr.Width - 60, 24), 14, FontStyleBold, kInk, StringAlignmentNear);
         if (hex[0]) Text(g, hex, RectF(nr.X + 50, nr.Y + 26, nr.Width - 60, 20), 12, FontStyleRegular, kGrey, StringAlignmentNear);
     }
@@ -849,7 +885,8 @@ static void DrawCar(Graphics &g)
         if (sel < 0) { SolidBrush db(CarRgb(g_carColor)); g.FillEllipse(&db, dot); } else DrawCarWheel(g, dot);
         Text(g, T(L"Autre couleur\u2026", L"Other color\u2026"), RectF(dot.X + 34, b.r.Y, b.r.Width - 60, b.r.Height), 13.5f, FontStyleBold, kInk, StringAlignmentNear);
     }
-    {   // Finition ([Coop] FinitionVoiture : L, LX, SLX, GT ; vide : au hasard) : imposee au tirage d'une nouvelle partie (Vin.cs)
+    if (CarMsc()) { g_trimRect = g_vinBtnRect = RectF(0, 0, 0, 0); }   // (MSC : ni finition ni plaque VIN sur la SATSUMA)
+    else {   // Finition ([Coop] FinitionVoiture : L, LX, SLX, GT ; vide : au hasard) : imposee au tirage d'une nouvelle partie (Vin.cs)
         float ty = ny + 118;
         Title(g, T(L"Finition", L"Trim"), RectF(pn.X + 24, ty, 200, 24), 16, kInk);
         g_vinBtnRect = RectF(pn.X + pn.Width - 24 - 168, ty - 5, 168, 32);   // (options de la plaque VIN : a droite du titre)

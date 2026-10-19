@@ -1714,3 +1714,48 @@ MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on 
 \n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).	\n\nЕсли ты добавлял MWCoop в параметры запуска Steam, задай его снова в Настройки › Игра (путь лаунчера изменился).
 Summer	Лето
 Warm black, yellow accent	Тёплый чёрный, жёлтый акцент
+Your SATSUMA	Твоя SATSUMA
+Color for a new game; the host gives it to their guests.	Цвет для новой игры; хост передаёт его гостям.
+Original color (like the game)	Родной цвет (как в игре)
+SATSUMA preview after your first My Summer Car game with MWCoop.	Превью SATSUMA появится после первой игры в My Summer Car с MWCoop.
+Preview unreadable (MWCoop\\cache\\satsuma.mesh): start a My Summer Car game to rebuild it.	Превью не читается (MWCoop\\cache\\satsuma.mesh): запусти игру My Summer Car, чтобы пересоздать его.
+Choose the SATSUMA paint (painted on the template.png template)	Выбери покраску SATSUMA (нарисованную на шаблоне template.png)
+Images\\template.png was not found in the game folder.	Images\\template.png не найден в папке игры.
+Your own paint on the SATSUMA, painted on the game's template. The host sends it to their guests.	Твоя собственная покраска SATSUMA, нарисованная на шаблоне игры. Хост отправляет её гостям.
+Game template (Images\\template.png)	Шаблон игры (Images\\template.png)
+1. Template: the SATSUMA's body laid flat (the game's Images\\template.png, 2048 x 2048).	1. Шаблон: кузов SATSUMA в развёртке (Images\\template.png игры, 2048 x 2048).
+3. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop: the SATSUMA takes your paint.	3. В игре купи \"Custom paint made by artist\" в мастерской Флеетари: SATSUMA получит твою покраску.
+SATSUMA color: 	Цвет SATSUMA: 
+My SATSUMA (new game): 	Моя SATSUMA (новая игра): 
+SATSUMA color for a new game (the host gives it to the guests). Click: 3D preview in the side panel.	Цвет SATSUMA для новой игры (хост передаёт его гостям). Клик: 3D-превью в боковой панели.
+Your CDs, radio, SATSUMA paint, flag, posters… copied to your lobby's guests for your game.	Твои CD, радио, покраска SATSUMA, флаг, постеры… копируются гостям твоего лобби для твоей игры.
+SATSUMA paint	Покраска SATSUMA
+My SATSUMA paint	Покраска моей SATSUMA
+In the garage	В гараже
+Bedroom walls	Стены спальни
+Moped, sticker, photo…	Мопед, наклейка, фото…
+Bedroom	Спальня
+Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in the garage).	Перетащи изображение сюда или нажми Выбрать: оно станет Images\\flag_garage.png (флаг в гараже).
+Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (bedroom walls).	Перетащи до 3 изображений сюда или нажми Выбрать: они станут Images\\poster1…3.png (стены спальни).
+Cowboy hat	Ковбойская шляпа
+Granny's beanie	Бабушкина шапочка
+Green floral dress	Зелёное платье в цветочек
+Light floral dress	Светлое платье в цветочек
+Environment reflections	Отражения окружения
+Car paint, windows, floors	Кузова, стёкла, полы
+Water reflections	Отражения воды
+Lakes and rivers	Озёра и реки
+Animated background	Анимированный фон
+Fireflies and pollen behind the pages	Светлячки и пыльца за страницами
+Very hungry, exhausted… you and your friends	Очень голоден, вымотан… ты и твои друзья
+Theme, accent colour, animated background, glass, density, text	Тема, цвет акцента, анимированный фон, стекло, плотность, текст
+My Summer Car joins MWCoop, in BETA: pick MSC under the version number, top left of the launcher.	My Summer Car появляется в MWCoop, в BETA: выбери MSC под номером версии, слева вверху лаунчера.
+Players, outfits and faces, proximity voice, chat, markers, the host's save sent to the guests.	Игроки, одежда и лица, голос рядом, чат, метки, сохранение хоста отправляется гостям.
+Shared cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat, with passengers, doors and dashboards.	Общие машины: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED и лодка, с пассажирами, дверями и приборными панелями.
+Black and yellow HUD, summer M map, Drag race and Rally tabs in F10, third-person view and drone camera.	Чёрно-жёлтый HUD, летняя карта M, вкладки Драг-рейсинг и Ралли в F10, вид от третьего лица и камера-дрон.
+Launcher: Summer theme, MSCLoader for My Summer Car, a Guide about My Summer Car.	Лаунчер: тема Лето, MSCLoader для My Summer Car, Руководство о My Summer Car.
+Not yet: items, parts, money, shops, jobs, time and weather. They come over the next versions.	Пока нет: предметы, детали, деньги, магазины, работы, время и погода. Они появятся в следующих версиях.
+You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nSATSUMA color (car icon in the lobby): %s.	Ты собираешься перезапустить «%s».\n\nЭто сотрёт это сохранение (текущая игра будет потеряна). Ты уверен?\n\nЦвет SATSUMA (значок машины в лобби): %s.
+Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your SATSUMA color.	Твоя внешность целиком (телосложение, шапка, очки, волосы, лицо, верх, штаны) в 3D и цвет твоей SATSUMA.
+SATSUMA custom paint	Своя покраска SATSUMA
+In Car, at the top of the preview: your own paint on the SATSUMA, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop; the host sends it to their guests.	Во вкладке Машина, над превью: твоя собственная покраска SATSUMA, нарисованная на шаблоне игры. В игре купи \"Custom paint made by artist\" в мастерской Флеетари; хост отправляет её гостям.

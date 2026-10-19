@@ -5,8 +5,13 @@
 // numerotees, encadres (astuce, attention), figures dessinees avec les elements du lanceur (a jour avec le theme et la
 // langue, sans image a telecharger) et boutons qui ouvrent la page concernee. Contenu : wikidata.inc.
 enum { WB_H, WB_P, WB_B, WB_S, WB_TIP, WB_WARN, WB_FIG, WB_GO };
-struct WikiBlock { int kind; const wchar_t *fr, *en; int arg; };   // arg : figure (WB_FIG), page (WB_GO)
-struct WikiArticle { int cat; const wchar_t *tFr, *tEn, *sFr, *sEn; const WikiBlock *b; int n; };
+// Jeu (demande de JD, 19/10 : sur My Summer Car, le guide ne parle que de MSC) : 0 = les deux jeux, WG_MWC = seulement My Winter
+// Car, WG_MSC = seulement My Summer Car. Sur un article (WARTG), une touche (kWikiKeys) ou un bloc ; un WB_H marque emporte
+// toute sa section (jusqu'au WB_H suivant). Un texte adapte = le bloc WG_MWC d'origine suivi de sa version WG_MSC.
+enum { WG_ALL, WG_MWC, WG_MSC };
+static bool WikiGame(int game) { return game == WG_ALL || game == (g_game == GAME_MSC ? WG_MSC : WG_MWC); }
+struct WikiBlock { int kind; const wchar_t *fr, *en; int arg; int game; };   // arg : figure (WB_FIG), page (WB_GO) ; game : WG_*
+struct WikiArticle { int cat; const wchar_t *tFr, *tEn, *sFr, *sEn; const WikiBlock *b; int n; int game; };
 struct WikiCat { int icon; const wchar_t *fr, *en; };
 enum { WF_FOLDER, WF_FOOTER, WF_START, WF_NET, WF_LOBBY, WF_MSC, WF_SHARE, WF_ACCEPT, WF_LOGS, WF_UPDATE, WF_KEYS, WF_GUEST, WF_CONTENT, WF_BAD };
 
@@ -14,6 +19,19 @@ enum { WF_FOLDER, WF_FOOTER, WF_START, WF_NET, WF_LOBBY, WF_MSC, WF_SHARE, WF_AC
 
 static const int kWikiCats = (int)(sizeof(kWikiCat) / sizeof(kWikiCat[0]));
 static const int kWikiArts = (int)(sizeof(kWikiArt) / sizeof(kWikiArt[0]));
+static_assert(sizeof(kWikiArt) / sizeof(kWikiArt[0]) == WA_MSCBETA + 1, "kWikiArt et WA_* : un article par valeur, dans l'ordre");   // (WA_VAZ manquait : liens decales)
+// Article, bloc ou touche du jeu choisi. Un bloc est cache par son propre jeu, par celui du WB_H de sa section, ou s'il mene
+// (WB_GO) a un article cache.
+static bool WikiArtShown(int a) { return a >= 0 && a < kWikiArts && WikiGame(kWikiArt[a].game); }
+static bool WikiBlockShown(const WikiArticle &art, int i)
+{
+    const WikiBlock &k = art.b[i];
+    if (!WikiGame(k.game)) return false;
+    if (k.kind == WB_GO && k.arg >= 1000 && !WikiArtShown(k.arg - 1000)) return false;
+    if (k.kind != WB_H) for (int j = i - 1; j >= 0; j--) if (art.b[j].kind == WB_H) return WikiGame(art.b[j].game);
+    return true;
+}
+static int WikiKeysShown() { int n = 0; for (int i = 0; i < kWikiKeysN; i++) if (WikiGame(kWikiKeys[i].game)) n++; return n; }
 // Trois colonnes (maquette du 17/10, validee par JD) : sommaire 240, article, Nouveautes + « Un souci ? » 272, marges de 12.
 // En-tete : pilules Guide / Nouveautes / Credits (Nouveautes et Credits = pages TAB_NOTES et TAB_CREDITS, ui.inc) et le
 // champ Chercher (filtre les articles ; taper depuis un autre onglet ramene au Guide).
@@ -233,10 +251,11 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
         return 92;
     }
     case WF_KEYS: {   // touches en jeu (wikidata.inc : kWikiKeys)
-        float h = 8 + kWikiKeysN * 34.0f;
+        float h = 8 + WikiKeysShown() * 34.0f, ky = y - 34;
         if (!draw) return h + 16;
         for (int i = 0; i < kWikiKeysN; i++) {
-            float ky = y + i * 34.0f;
+            if (!WikiGame(kWikiKeys[i].game)) continue;
+            ky += 34;
             float kw = max(44.0f, PillW(kWikiKeys[i].key, 12) + 8);
             RectF k(x, ky, kw, 28);
             GraphicsPath p; RoundRect(p, k, 7);
@@ -309,16 +328,21 @@ static void WikiHitsUpdate()
     for (int a = 0; a < kWikiArts; a++) {
         const WikiArticle &art = kWikiArt[a];
         std::wstring all = std::wstring(T(art.tFr, art.tEn)) + L"\n" + T(art.sFr, art.sEn);
-        for (int i = 0; i < art.n; i++) if (art.b[i].fr) { all += L"\n"; all += T(art.b[i].fr, art.b[i].en); }
+        for (int i = 0; i < art.n; i++) if (art.b[i].fr && WikiBlockShown(art, i)) { all += L"\n"; all += T(art.b[i].fr, art.b[i].en); }
         g_wikiHits[a] = SetFold(all).find(q) != std::wstring::npos;
     }
 }
-static bool WikiHit(int a) { WikiHitsUpdate(); return Trim(g_wikiSearch).empty() || g_wikiHits[a] != 0; }
-// Ordre du sommaire : par categorie, puis l'ordre de wikidata.inc (les derniers articles ajoutes rejoignent leur categorie).
+static bool WikiHit(int a) { WikiHitsUpdate(); return WikiArtShown(a) && (Trim(g_wikiSearch).empty() || g_wikiHits[a] != 0); }
+// Ordre du sommaire : par categorie, puis l'ordre de wikidata.inc (les derniers articles ajoutes rejoignent leur categorie) ;
+// les articles propres au jeu choisi (WARTG) en tete de leur categorie. Articles de l'autre jeu : absents.
 static const std::vector<int> &WikiOrder()
 {
     static std::vector<int> o;
-    if (o.empty()) for (int c = 0; c < kWikiCats; c++) for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].cat == c) o.push_back(a);
+    if (o.empty())
+        for (int c = 0; c < kWikiCats; c++)
+            for (int own = 1; own >= 0; own--)
+                for (int a = 0; a < kWikiArts; a++)
+                    if (kWikiArt[a].cat == c && WikiArtShown(a) && (kWikiArt[a].game != WG_ALL) == (own != 0)) o.push_back(a);
     return o;
 }
 // Article voisin dans le sommaire (parmi ceux montres) ; -1 au bout.
@@ -330,12 +354,12 @@ static int WikiNeighbor(int dir)
     for (int i = pos + dir; i >= 0 && i < (int)o.size(); i += dir) if (WikiHit(o[i])) return o[i];
     return -1;
 }
-static void WikiGoArt(int a) { if (a < 0 || a >= kWikiArts) return; g_wikiSel = a; g_scroll[TAB_WIKI] = 0; }
+static void WikiGoArt(int a) { if (!WikiArtShown(a)) return; g_wikiSel = a; g_scroll[TAB_WIKI] = 0; }
 // Temps de lecture (minutes, 1 au moins) : environ 1100 caracteres par minute.
 static int WikiMinutes(const WikiArticle &art)
 {
     size_t n = 0;
-    for (int i = 0; i < art.n; i++) if (art.b[i].fr) n += wcslen(T(art.b[i].fr, art.b[i].en)); else n += 220;
+    for (int i = 0; i < art.n; i++) if (!WikiBlockShown(art, i)) continue; else if (art.b[i].fr) n += wcslen(T(art.b[i].fr, art.b[i].en)); else n += 220;
     return max(1, (int)((n + 550) / 1100));
 }
 // Puce neutre de la maquette (.chip) : fond leger, lisere, texte presque blanc.
@@ -438,7 +462,10 @@ static void DrawWikiNews(Graphics &g)
         Text(g, T(L"Ouvrir Discord", L"Open Discord"), RectF(b.X + (b.Width - tw - 26) / 2 + 26, b.Y, tw + 4, b.Height), 12.5f, FontStyleBold, Color(255, 255, 255, 255), StringAlignmentNear);
         HotZone(b, UI_WIKI_GO + 198);
     }
-    std::vector<Note> notes = ChannelNotes(g_notes);
+    std::vector<Note> notes;   // (deja triees pour le jeu choisi : ChannelNotes, launcher.cpp)
+    EnterCriticalSection(&g_cs);
+    notes = g_notes;
+    LeaveCriticalSection(&g_cs);
     float y = c.Y + 44, bottom = h.Y - 10;
     if (notes.empty()) Text(g, !g_notesDone ? T(L"Chargement…", L"Loading…") : T(L"Pas de notes pour l'instant.", L"No notes yet."), RectF(x, y + 10, w, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     for (size_t i = 0; i < notes.size() && i < 3; i++) {
@@ -465,7 +492,7 @@ static void DrawWikiPage(Graphics &g)
     Glass(kWikiList);
     Glass(kWikiBody);
     DrawWikiNews(g);
-    if (g_wikiSel < 0 || g_wikiSel >= kWikiArts) g_wikiSel = 0;
+    if (!WikiArtShown(g_wikiSel)) g_wikiSel = WikiOrder()[0];   // (article de l'autre jeu : le premier du sommaire)
     DrawWikiList(g);
     const WikiArticle &art = kWikiArt[g_wikiSel];
     RectF b = kWikiBody;
@@ -504,6 +531,7 @@ static void DrawWikiPage(Graphics &g)
     int step = 0, sec = 0;
     auto vis = [&](float top, float h) { return top + h >= area.Y && top <= area.Y + area.Height; };
     for (int i = 0; i < art.n; i++) {
+        if (!WikiBlockShown(art, i)) continue;   // (bloc de l'autre jeu)
         const WikiBlock &k = art.b[i];
         std::wstring t = k.fr ? T(k.fr, k.en) : L"";
         if (k.kind == WB_H) {   // h3 de la maquette : numero, capitales, accent ; clic : plier / deplier
