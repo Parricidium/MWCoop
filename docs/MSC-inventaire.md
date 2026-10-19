@@ -134,3 +134,75 @@ Pas encore essayé :
 - les sons moteur sur la copie ;
 - un passager assis ;
 - les variables de simulation.
+
+## Monde, trafic, boulots, argent, magasins et mécanique sur MSC (19/10)
+
+Tout est activé dans `Core.MscModules` / `MscLevelLoaded`.
+Les noms ont été relevés dans le vidage, et chaque écart avec MWC est gardé par `Game.Msc`.
+
+**Heure et météo** (`World.FindMsc` / `SendMsc`)
+- Soleil : `MAP/SUN/Pivot/SUN::Color`, une tranche de 2 h. Pas de TIMESKIP : on pose `Time`, puis `WAKEUP` à Color et à Clock.
+- L'invité n'est recalé qu'après 5 s d'écart.
+- Aiguilles : `YARD/Building/Dynamics/SuomiClock/Clock`.
+- Météo : `MAP/CloudSystem/Clouds::Weather` reste allumé chez l'invité. Il reçoit PosX, PosZ et Rotation.
+- Quand le temps change (WeatherType, WeatherCloudID), l'invité remet les matériaux et passe par « Set cloud ».
+- Sommeil instantané dans MSC : rien à accélérer.
+
+**Trafic et PNJ**
+- Traffic : sur MSC seulement la police, les pare-brise et le bus. `TRAFFIC/FittanSpawns` remplace CousinSpawns.
+- Npcs : Teimo à vélo (`STORE/TeimoInBike`) ; `RALLY` est écarté comme RACES.
+- Police : la cellule passe par « Animate » et « Wake up ».
+- Sons des copies : CopySounds.
+
+**Boulots** (`Jobs`)
+- Clé de contact de MSC : « Wait button » -ACC-> « Test », puis « ACC on » / « ACC on 2 », « Motor starting », « Shut off » et « Motor OFF ».
+- Le rejeu de « ACC on » se repose dans « Wait button » (sinon le démarreur partait tout seul) : `IgnitionLikeMsc`, `ApplyIgnitionMsc`.
+- Écartés : la marche de `JOBS/Mummola::Logic` et les meubles du déménagement.
+- LogPiles : variable `LogPile`.
+- Objectifs de la carte (MapJobs) : pas encore sur MSC.
+
+**Argent** (`Wallet`)
+- Pas de banque : une variable à nous, toujours 0.
+- Les versements et objets de MWC ne sont pas cherchés.
+- Enveloppes `PayMoney` sans « State 3 » : retirées en les vidant et les cachant.
+- La machine à sous et le prix du rallye sont écartés.
+
+**Carburant** : `STORE::Fuelprices` (Price98, PriceDiesel, PriceFuelOil), les pompes `Trigger*::Use.FuelPrice` et les afficheurs `STORE/LOD/Pumps/Prices/*`.
+
+**Rayons** : pas de table `Carried`. La variable du rayon est `Bought` (`Quantity` est le panier de la caisse).
+
+**Magasins** (`Shop`) : les caisses s'appellent `Register`.
+- Teimo et Fleetari (genres « teimo » et « fleetari ») : le panier est dans les variables Q* de la caisse.
+- Le rejeu met de côté le panier local et pose celui de l'acheteur.
+- Il entre directement dans « Sausages » / « Alternator ». « Purchase » est sauté : rien n'est payé, le carburant et les pompes ne sont pas remis à zéro.
+- Le panier local est remis au repos.
+- Bar, contrôle technique, station d'épuration, bus et vendeur du rallye : comme MWC.
+- Commande de travaux chez Fleetari (`REPAIRSHOP/Order`, booléens) : pas encore sur MSC.
+
+**Mécanique** (`PartsMsc.cs`)
+- Point de montage : automate `Assembly` du déclencheur. Le clic est « Wait for assembly » -ASSEMBLE->.
+- Démontage : `Removal` / « Remove part ». « Mouse off » avant = casse, envoyée seulement par l'autorité.
+- Vis : `Screw` / `Stage`, accrochées en « Wait 3 » / « Wait 4 ».
+- Clé de pièce : `db:` + chemin de son entrée Database.
+- Rejeu d'un montage : la pièce va sur son pivot (`Parent`), cinématique comme en main, puis la chaîne du jeu tourne. Libre dans la caisse figée, son joint cassait.
+- Autres modules :
+  - Settings : table `Database/*`.
+  - Fluids : noms de MSC, `Database/*` comptés comme la SATSUMA, `Obstacle` écarté.
+  - Paint : clé `UniqueTagColor`.
+  - Props : racines `ITEMS` et `STORE`.
+  - Garage : `Hoist::BoltCheck`.
+
+Essai `[Test] Autotest=mscmeca` (2 joueurs, 210 s), réussi chez l'invité :
+- portière gauche montée sur son pivot ;
+- vis à 2 crans ;
+- courses chez Teimo rejouées (objets créés, panier local remis, seul l'hôte paie 20 mk) ;
+- portière démontée.
+
+Pas encore essayé en jeu :
+- un changement de météo (toutes les 2 h 30 de jeu environ) ;
+- l'heure après le sommeil d'un joueur ;
+- la clé de contact ;
+- les boulots (fosses, bois) ;
+- Fleetari ;
+- les liquides ;
+- les réglages.

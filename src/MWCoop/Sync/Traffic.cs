@@ -90,13 +90,14 @@ namespace MWCoop
             built = false; verified = false; remap = null; hostKeys = null; hostKeysGot = 0; nextAsk = 0;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 6f : -1;
             Police.OnLevelLoaded();
-            Contenu.OnLevelLoaded();
             Windshields.OnLevelLoaded();
+            Bus.OnLevelLoaded();
+            if (Game.Msc) return;   // (My Summer Car : police, pare-brise et bus ; le reste vise des objets de MWC, Contenu y tourne deja par MenuUpdate)
+            Contenu.OnLevelLoaded();
             Packages.OnLevelLoaded();
             Vin.OnLevelLoaded();
             CarSale.OnLevelLoaded();
             TaxiCustomer.OnLevelLoaded();
-            Bus.OnLevelLoaded();
         }
 
         static void Build()
@@ -179,10 +180,13 @@ namespace MWCoop
         static readonly string[] subNames = { "police", "contenu", "pare-brise", "colis", "vin", "vente", "taxi", "trafic seul", "bus" };
         static readonly System.Action[] subs = { Police.Update, Contenu.Update, Windshields.Update, Packages.Update, Vin.Update, CarSale.Update, TaxiCustomer.Update, UpdateTraffic,
                                                  Bus.Update };   // (bus apres le suivi : la copie du bus est a sa place de cette image)
+        static readonly string[] subNamesMsc = { "police", "pare-brise", "trafic seul", "bus" };
+        static readonly System.Action[] subsMsc = { Police.Update, Windshields.Update, UpdateTraffic, Bus.Update };
 
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame) return;
+            if (Game.Msc) { for (int i = 0; i < subsMsc.Length; i++) Perf.Sub(subNamesMsc[i], subsMsc[i]); return; }
             for (int i = 0; i < subs.Length; i++) Perf.Sub(subNames[i], subs[i]);
         }
 
@@ -480,7 +484,7 @@ namespace MWCoop
             if (n > 0) Log.Info("trafic : " + e.Key + " : accident du pilote coupe ici (" + n + ")");
             if (cousinMuted) return;
             cousinMuted = true;
-            GameObject cs = Game.FindAny("TRAFFIC/CousinSpawns");
+            GameObject cs = Game.FindAny(Game.Msc ? "TRAFFIC/FittanSpawns" : "TRAFFIC/CousinSpawns");   // (MSC : FittanSpawns remet la FITTAN du rallye en physique)
             if (cs != null) foreach (PlayMakerFSM f in cs.GetComponents<PlayMakerFSM>()) f.enabled = false;
         }
         static bool cousinMuted;

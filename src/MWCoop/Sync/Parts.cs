@@ -19,7 +19,7 @@ namespace MWCoop
     // Apres un montage (ici ou chez un autre), le sous-arbre de la piece et du point est revu plusieurs
     // fois dans les 3 s (pieces achetees depuis le dernier releve), et les commandes que la piece apporte a
     // la voiture (boite a gants, jauges, interrupteurs, cablage) sont cherchees tout de suite (Jobs.SoonScan).
-    public static class Parts
+    public static partial class Parts   // (+ PartsMsc.cs : My Summer Car)
     {
         class Point { public string Key; public PlayMakerFSM Fsm; }
         static readonly Dictionary<string, Point> points = new Dictionary<string, Point>();
@@ -171,6 +171,7 @@ namespace MWCoop
         // mis en attente de son activation.
         static int Consider(PlayMakerFSM f)
         {
+            if (Game.Msc) return MscConsider(f);
             bool screw = f.FsmName == "Screw";
             if (screw ? screws.Contains(f) || !IsBolt(f) : hooked.Contains(f) || !IsPoint(f)) return 0;
             if (waitingSet.Contains(f)) return 0;
@@ -227,6 +228,7 @@ namespace MWCoop
 
         static bool ApplyBolt(int who, string part, string key, int target, bool last)
         {
+            if (Game.Msc) return MscApplyBolt(who, part, key, target, last);
             Bolt b = FindBolt(part, key);
             // (vis inactive : moteur pendu au palan pas encore a 5 cm de son detecteur ici -- en attente, comme absente)
             if (b == null || !b.F.gameObject.activeInHierarchy)
@@ -296,6 +298,7 @@ namespace MWCoop
             points.Clear();
             hooked.Clear();
             waiting.Clear(); waitingSet.Clear(); fresh.Clear(); pendingBolts.Clear();
+            MscReset();
             idMap.Clear(); idMapAt = -100;
             bursts.Clear(); reinstall.Clear(); reinstallLogs = 0;
             testStep = testLogs = 0; test2Step = test2Logs = 0;
@@ -326,6 +329,7 @@ namespace MWCoop
         // Automates en attente dont l'objet vient de s'activer.
         static void CheckWaiting()
         {
+            if (Game.Msc) { MscCheckWaiting(); return; }
             int n = 0;
             for (int i = waiting.Count - 1; i >= 0; i--)
             {
@@ -359,7 +363,7 @@ namespace MWCoop
             if (t == null) return 0;
             int n = 0;
             foreach (PlayMakerFSM f in t.GetComponentsInChildren<PlayMakerFSM>(true))
-                if (f.FsmName == "Screw" || f.FsmName == "Data") n += Consider(f);
+                if (f.FsmName == "Screw" || f.FsmName == "Data" || Game.Msc && (f.FsmName == "Removal" || f.FsmName == "Assembly")) n += Consider(f);
             return n;
         }
 
@@ -448,6 +452,7 @@ namespace MWCoop
 
         static void Scan()
         {
+            if (Game.Msc) { MscScan(); return; }
             int before = points.Count, beforeBolts = screws.Count;
             // (releve partage Game.AllFsms, frais de 0,5 s au plus -- avant : un releve complet de 70-90 ms a chaque point ou
             // piece inconnu, jusqu'a trois par message ; revue du 14/10)
@@ -614,6 +619,7 @@ namespace MWCoop
 
         public static void OnMessage(Peer from, NetReader r)
         {
+            if (Game.Msc) { MscOnMessage(from, r); return; }
             int who = r.U8();
             if (Session.IsHost) who = from.Id;
             bool install = r.Bool();

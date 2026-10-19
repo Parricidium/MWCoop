@@ -174,8 +174,8 @@ namespace MWCoop
             if (ts != jailTimeLast) { jailTimeLast = ts; if (ts == "Subtract day") dayDuringSleep = true; if (ts == "Release") Log.Info("prison : liberation"); }
             if (ss == jailSleepLast) return;
             jailSleepLast = ss;
-            if (ss == "AnimateSleep" || ss == "Sleep") dayDuringSleep = false;
-            if (ss != "Wake up 2" || !jailTime.gameObject.activeInHierarchy || !Session.Active || Session.RemoteCount == 0) return;
+            if (ss == "AnimateSleep" || Game.Msc && ss == "Animate" || ss == "Sleep") dayDuringSleep = false;   // (MSC : Animate, Wake up)
+            if (ss != (Game.Msc ? "Wake up" : "Wake up 2") || !jailTime.gameObject.activeInHierarchy || !Session.Active || Session.RemoteCount == 0) return;
             if (dayDuringSleep) { Log.Info("prison : reveil, un jour est passe pendant le sommeil (rien a faire)"); return; }
             if (ts != "State 1") { Log.Info("prison : reveil, compte des jours en " + ts + " (pas de jour en plus)"); return; }
             // (Subtract day ne compte le jour que si le joueur est a moins de 10 m de la cellule ; la liberation, peine finie,
@@ -349,7 +349,7 @@ namespace MWCoop
                 arrStep = 4;
                 nextJailFind = 0; JailUpdate(Time.realtimeSinceStartup);
                 if (Config.GetInt("Test", "ReveilCellule", 0) == 2 && wanted != null) { FsmInt dj = wanted.FsmVariables.FindFsmInt("DaysInJail"); if (dj != null) dj.Value = 1; }
-                if (jailSleep != null) { jailSleepLast = "Sleep"; dayDuringSleep = false; Game.SetState(jailSleep, "Wake up 2"); Log.Info("autotest : arrestation, reveil simule dans la cellule"); }
+                if (jailSleep != null) { jailSleepLast = "Sleep"; dayDuringSleep = false; Game.SetState(jailSleep, Game.Msc ? "Wake up" : "Wake up 2"); Log.Info("autotest : arrestation, reveil simule dans la cellule"); }
                 else Log.Info("autotest : arrestation, lit de la cellule introuvable");
             }
             if (t > 125f && arrStep == 5)

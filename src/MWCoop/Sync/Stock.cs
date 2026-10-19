@@ -33,7 +33,8 @@ namespace MWCoop
         {
             public string Key; public GameObject Inventory; public PlayMakerHashTableProxy StockedProxy, CarriedProxy, BoughtProxy;
             public Hashtable Stocked { get { return StockedProxy != null ? StockedProxy._hashTable : null; } }
-            public Hashtable Carried { get { return CarriedProxy != null ? CarriedProxy._hashTable : null; } }
+            public Hashtable Carried { get { return CarriedProxy != null ? CarriedProxy._hashTable : NoCarried; } }
+            public Hashtable NoCarried;   // (My Summer Car : pas de table 'Carried' -- le panier est dans les Q* de la caisse ; table vide)
             public Hashtable Bought { get { return BoughtProxy != null ? BoughtProxy._hashTable : null; } }
             public Dictionary<string, int> SentBought = new Dictionary<string, int>();
             public Hashtable BoughtRef; public bool FullNow;   // table 'Bought' vue au dernier tour ; envoi complet force (hote)
@@ -96,8 +97,10 @@ namespace MWCoop
                 if (stores.ContainsKey(key)) continue;
                 PlayMakerHashTableProxy carried = null, bought = null;
                 foreach (PlayMakerHashTableProxy c in h.GetComponents<PlayMakerHashTableProxy>()) { if (c.referenceName == "Carried") carried = c; else if (c.referenceName == "Bought") bought = c; }
-                if (h._hashTable == null || carried == null || carried._hashTable == null) continue;
-                var s = new Store { Key = key, Inventory = h.gameObject, StockedProxy = h, CarriedProxy = carried, BoughtProxy = bought != null && bought._hashTable != null ? bought : null };
+                bool noCarried = Game.Msc && carried == null;   // (MSC : STORE/Inventory n'a que Stocked, Bought, Prices)
+                if (h._hashTable == null || !noCarried && (carried == null || carried._hashTable == null)) continue;
+                var s = new Store { Key = key, Inventory = h.gameObject, StockedProxy = h, CarriedProxy = carried, BoughtProxy = bought != null && bought._hashTable != null ? bought : null,
+                                    NoCarried = noCarried ? new Hashtable() : null };
                 foreach (DictionaryEntry e in s.Stocked) s.SentStocked[e.Key.ToString()] = ToInt(e.Value);
                 foreach (DictionaryEntry e in s.Carried) s.SentCarried[e.Key.ToString()] = ToInt(e.Value);
                 if (s.Bought != null) foreach (DictionaryEntry e in s.Bought) s.SentBought[e.Key.ToString()] = ToInt(e.Value);
@@ -250,7 +253,7 @@ namespace MWCoop
             if (s.Buys.TryGetValue(item, out fs))
                 foreach (PlayMakerFSM f in fs)
                 {
-                    FsmInt q = f != null ? f.FsmVariables.FindFsmInt("Quantity") : null;
+                    FsmInt q = f != null ? f.FsmVariables.FindFsmInt(Game.Msc ? "Bought" : "Quantity") : null;   // (MSC : 'Quantity' est le panier de la caisse, le rayon est 'Bought')
                     if (q != null) q.Value = target;
                 }
             s.Touched.Add(item);

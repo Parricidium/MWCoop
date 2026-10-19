@@ -56,6 +56,7 @@ namespace MWCoop
             beds.Clear();
             passOut = null; passOutSince = -1;
             nextBedScan = 0;
+            hourMismatchSince = -1;
         }
 
         // Lits (et canape) : SleepTrigger :: Activate ; evanouissement : PassOut :: Activate (memes etats
@@ -159,6 +160,7 @@ namespace MWCoop
         {
             if (found) return sunColor != null;
             found = true;
+            if (Game.Msc) return FindMsc();
             GameObject sun = GameObject.Find("MAP/Sun/PivotSun/SUN");
             GameObject pivot = GameObject.Find("MAP/Sun/PivotSun");
             GameObject cl = GameObject.Find("MAP/WEATHER/Clouds");
@@ -180,9 +182,130 @@ namespace MWCoop
             return sunColor != null;
         }
 
+        // ---------------------------------------------------------------- My Summer Car (vidage v.250908-04, 19/10)
+        //  - heure : MAP/SUN/Pivot/SUN :: Color, une tranche de 2 h (Time = 2, 4 .. 24, debut de la tranche) ; pas de TIMESKIP :
+        //    Time pose puis WAKEUP a Color (State 3 rejoue la tranche) et a SUN :: Clock (comme Cheats.SetHourMsc). Aiguilles :
+        //    YARD/Building/Dynamics/SuomiClock/Clock (son automate Time les recopie dans TimeRotationHour / Minute).
+        //  - meteo : MAP/CloudSystem/Clouds :: Weather. « Move clouds » le glisse (PosX -= 4/s, SetPosition chaque image) et teinte
+        //    les nuages : il reste allume chez l'invite, qui recoit PosX, PosZ et Rotation. Le temps (WeatherType 0 sec, 1 pluie,
+        //    2 orage ; WeatherCloudID, le nuage de pluie 1..6 ; ThunderForce) change quand l'hote retire au sort (PosX < -18000) :
+        //    l'invite remet alors les materiaux, pose les variables et passe par « Set cloud » (le chemin du chargement d'une
+        //    partie : materiau cloud_rain, Thunder place, puis Rain / No weather / Thunder et RainYes).
+        //  - sommeil : instantane dans MSC (le lit ajoute SleepTime a Color.Time puis WAKEUP) : rien a accelerer ; un invite qui
+        //    dort seul garde sa fatigue reprise, l'heure de l'hote le ramene.
+        static Material cloudMat;
+        static Renderer[] cloudRends;
+        static float hourMismatchSince = -1;
+
+        static bool FindMsc()
+        {
+            GameObject sun = Game.FindAny("MAP/SUN/Pivot/SUN");
+            GameObject pivot = Game.FindAny("MAP/SUN/Pivot");
+            GameObject cl = Game.FindAny("MAP/CloudSystem/Clouds");
+            GameObject clock = Game.FindAny("YARD/Building/Dynamics/SuomiClock/Clock");
+            sunColor = sun != null ? Game.FsmOn(sun, "Color") : null;
+            sunRotation = pivot != null ? Game.FsmOn(pivot, "Rotation") : null;
+            if (clock != null) { needleHour = clock.transform.Find("hour/NeedleHour"); needleMinute = clock.transform.Find("minute/NeedleMinute"); }
+            forecast = temperature = null;
+            if (cl != null)
+            {
+                clouds = cl.transform;
+                weather = Game.FsmOn(cl, "Weather");
+                cloudObjects = cl.transform.Find("CloudObjects");
+            }
+            cloudMat = null;
+            cloudRends = cloudObjects != null ? cloudObjects.GetComponentsInChildren<Renderer>(true) : new Renderer[0];
+            // (materiau normal des nuages : celui qui ne porte pas « rain » -- un seul nuage a cloud_rain, la zone de pluie rain_area)
+            foreach (Renderer rd in cloudRends)
+                if (rd != null && rd.transform.parent == cloudObjects && rd.sharedMaterial != null && !rd.sharedMaterial.name.Contains("rain")) { cloudMat = rd.sharedMaterial; break; }
+            Log.Info("monde (MSC) : soleil " + (sunColor != null) + ", rotation " + (sunRotation != null) + ", nuages " + (weather != null)
+                     + ", materiau des nuages " + (cloudMat != null) + ", aiguilles " + (needleHour != null && needleMinute != null));
+            return sunColor != null;
+        }
+
+        static void SendMsc()
+        {
+            FsmVariables wv = weather != null ? weather.FsmVariables : null;
+            var w = new NetWriter(Msg.World)
+                .I32(GlobalInt("GlobalDay"))
+                .I32(sunColor.FsmVariables.GetFsmInt("Time").Value)
+                .F32(sunRotation != null ? sunRotation.FsmVariables.GetFsmFloat("Rotation").Value : 0f)
+                .F32(needleHour != null ? needleHour.localEulerAngles.y : 0f).F32(needleMinute != null ? needleMinute.localEulerAngles.y : 0f)
+                .Bool(wv != null)
+                .F32(wv != null ? wv.GetFsmFloat("PosX").Value : 0f).F32(wv != null ? wv.GetFsmFloat("PosZ").Value : 0f)
+                .F32(wv != null ? wv.GetFsmFloat("Rotation").Value : 0f)
+                .I32(wv != null ? wv.GetFsmInt("WeatherType").Value : 0).I32(wv != null ? wv.GetFsmInt("WeatherCloudID").Value : 0)
+                .F32(wv != null ? wv.GetFsmFloat("ThunderForce").Value : 0f)
+                .Bool(wv != null && wv.GetFsmBool("Rain").Value);
+            Session.Broadcast(w, false);
+        }
+
+        static void OnMessageMsc(NetReader r)
+        {
+            int day = r.I32(), hour = r.I32();
+            float sunRot = r.F32(), hy = r.F32(), my = r.F32();
+            bool hasWx = r.Bool();
+            float posX = r.F32(), posZ = r.F32(), wrot = r.F32();
+            int wtype = r.I32(), cloudId = r.I32();
+            float thunder = r.F32();
+            bool rain = r.Bool();
+            SetGlobalInt("GlobalDay", day);
+            // Heure : un invite passe a la tranche suivante une fraction de seconde avant ou apres l'hote ; on ne le recale
+            // qu'apres 5 s d'ecart (WAKEUP relance le fondu des couleurs de la tranche : pas d'aller-retour a chaque frontiere).
+            FsmInt t = sunColor.FsmVariables.GetFsmInt("Time");
+            float now = Time.realtimeSinceStartup;
+            if (t.Value == hour) hourMismatchSince = -1;
+            else if (hourMismatchSince < 0) hourMismatchSince = now;
+            else if (now - hourMismatchSince > 5f)
+            {
+                hourMismatchSince = -1;
+                Log.Info("monde : heure " + t.Value + " -> " + hour + " (hote)");
+                t.Value = hour;
+                sunColor.SendEvent("WAKEUP");
+                PlayMakerFSM clock = Game.FsmOn(sunColor.gameObject, "Clock");
+                if (clock != null && clock.Fsm.Initialized) clock.SendEvent("WAKEUP");
+            }
+            if (sunRotation != null)
+            {
+                FsmFloat rot = sunRotation.FsmVariables.GetFsmFloat("Rotation");
+                if (Mathf.Abs(Mathf.DeltaAngle(rot.Value, sunRot)) > 0.5f) rot.Value = sunRot;
+            }
+            if (needleHour != null && Mathf.Abs(Mathf.DeltaAngle(needleHour.localEulerAngles.y, hy)) > 0.5f) needleHour.localEulerAngles = new Vector3(0f, hy, 0f);
+            if (needleMinute != null && Mathf.Abs(Mathf.DeltaAngle(needleMinute.localEulerAngles.y, my)) > 1f)
+            {
+                if (needleLogs++ < 3) Log.Info("monde : aiguille des minutes " + needleMinute.localEulerAngles.y.ToString("F0") + " -> " + my.ToString("F0") + " (hote)");
+                needleMinute.localEulerAngles = new Vector3(0f, my, 0f);
+            }
+            if (!hasWx || weather == null || !weather.Fsm.Initialized) return;
+            FsmVariables wv = weather.FsmVariables;
+            wv.GetFsmFloat("PosX").Value = posX; wv.GetFsmFloat("PosZ").Value = posZ;
+            clouds.position = new Vector3(posX, clouds.position.y, posZ);
+            if (Mathf.Abs(Mathf.DeltaAngle(wv.GetFsmFloat("Rotation").Value, wrot)) > 0.5f || Mathf.Abs(Mathf.DeltaAngle(clouds.eulerAngles.y, wrot)) > 0.5f)
+            {
+                wv.GetFsmFloat("Rotation").Value = wrot;
+                clouds.rotation = Quaternion.Euler(0f, wrot, 0f);
+            }
+            FsmInt wt = wv.GetFsmInt("WeatherType"), wid = wv.GetFsmInt("WeatherCloudID");
+            if (wt.Value != wtype || wid.Value != cloudId || wv.GetFsmBool("Rain").Value != rain)
+            {
+                Log.Info("monde : temps " + wt.Value + "/" + wid.Value + " -> " + wtype + "/" + cloudId + (rain ? " (pluie)" : "") + " (hote)");
+                if (cloudMat != null) foreach (Renderer rd in cloudRends) if (rd != null && rd.transform.parent == cloudObjects) rd.sharedMaterial = cloudMat;
+                wt.Value = wtype; wid.Value = cloudId;
+                wv.GetFsmFloat("ThunderForce").Value = thunder;
+                Game.SetState(weather, "Set cloud");
+            }
+        }
+
         public static void Update()
         {
             if (!Session.Active || !PlayerSync.InGame || !Find()) return;
+            if (Game.Msc)
+            {
+                if (!Session.IsHost || Time.realtimeSinceStartup < nextSend) return;
+                nextSend = Time.realtimeSinceStartup + 1f;
+                if (Session.RemoteCount > 0) SendMsc();
+                return;
+            }
             if (!Session.IsHost)
             {
                 // Chaque image : le lit ne doit pas accelerer le temps tout seul.
@@ -316,6 +439,7 @@ namespace MWCoop
             if (type == SaveTransfer.CoopMsg) { SaveTransfer.OnCoop(from, r); return; }
             if (type != Msg.World) { Log.Warn("message non gere : " + type); return; }
             if (Session.IsHost || !PlayerSync.InGame || !Find()) return;
+            if (Game.Msc) { OnMessageMsc(r); return; }
             int day = r.I32(), daysPassed = r.I32(), weeksPassed = r.I32(), hour = r.I32();
             float sunRot = r.F32();
             Vector3 cloudsPos = r.Vec(), objPos = r.Vec();

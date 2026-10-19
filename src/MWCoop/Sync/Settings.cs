@@ -18,7 +18,41 @@ namespace MWCoop
                                            "Setting", "SettingMixture", "AdjustmentF", "TierodLeftSetting", "TierodRightSetting" };
         static bool anyRange;   // essais : sans la regle des 4 m
 
-        class Watch { public string Id; public PlayMakerFSM Fsm; public FsmFloat Var; public float Last, NextSend; }
+        class Watch { public string Id; public PlayMakerFSM Fsm; public FsmFloat Var; public float Last, NextSend; public FsmGameObject Part; }
+
+        // My Summer Car (vidage v.250908-04) : pas d'ID sur les pieces ; les reglages sont dans les automates 'Data' de Database/*
+        // (les vis et molettes y ecrivent par SetFsmFloat). Cle "p:" + chemin ; la regle des 4 m se mesure a la piece (ThisPart :
+        // les objets Database sont tous a l'origine).
+        static readonly string[][] MscTable = {
+            new[] { "DatabaseMotor/Carburator", "IdleAdjust" },
+            new[] { "DatabaseOrders/Twin Carburators", "IdleAdjust" },
+            new[] { "DatabaseOrders/Racing Carburators", "Adjust1", "Adjust2", "Adjust3", "Adjust4" },
+            new[] { "DatabaseMotor/RockerShaft", "cyl1intake", "cyl1exhaust", "cyl2intake", "cyl2exhaust", "cyl3intake", "cyl3exhaust", "cyl4intake", "cyl4exhaust" },
+            new[] { "DatabaseMotor/Distributor", "SparkAngle" },
+            new[] { "DatabaseOrders/N2O Bottle", "Setting" },
+            new[] { "DatabaseOrders/Shock Rally FL", "SettingBump", "SettingRebound" },
+            new[] { "DatabaseOrders/Shock Rally FR", "SettingBump", "SettingRebound" },
+            new[] { "DatabaseOrders/Shock Rally RL", "SettingBump", "SettingRebound" },
+            new[] { "DatabaseOrders/Shock Rally RR", "SettingBump", "SettingRebound" },
+            new[] { "DatabaseOrders/Tachometer", "RPMSetting" },
+        };
+
+        static void ScanMsc()
+        {
+            if (watches.Count > 0) return;   // (objets fixes : un releve suffit)
+            foreach (string[] row in MscTable)
+            {
+                GameObject g = Game.FindAny("Database/" + row[0]);
+                PlayMakerFSM f = g != null ? Game.FsmOn(g, "Data") : null;
+                if (f == null) continue;
+                for (int i = 1; i < row.Length; i++)
+                {
+                    FsmFloat v = f.FsmVariables.FindFsmFloat(row[i]);
+                    if (v != null) watches.Add(new Watch { Id = "p:Database/" + row[0], Fsm = f, Var = v, Last = v.Value, Part = f.FsmVariables.FindFsmGameObject("ThisPart") });
+                }
+            }
+            Log.Info("reglages (MSC) : " + watches.Count + " suivis");
+        }
         static readonly List<Watch> watches = new List<Watch>();
         static readonly HashSet<PlayMakerFSM> seen = new HashSet<PlayMakerFSM>();
         // Automates hors des pieces : ecartes jusqu'au prochain grand releve (toutes les 2 min) -- le releve de toute la
@@ -68,14 +102,15 @@ namespace MWCoop
         {
             if (!Session.Active || nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
-            if (now >= nextScan) { nextScan = now + 20f; Scan(); }
+            if (now >= nextScan) { nextScan = now + 20f; if (Game.Msc) ScanMsc(); else Scan(); }
             if (now < nextPoll) return;
             nextPoll = now + 0.5f;
             if (player == null) { GameObject p = Game.PlayerGo; if (p == null) return; player = p.transform; }
             foreach (Watch w in watches)
             {
                 if (w.Fsm == null || Mathf.Abs(w.Var.Value - w.Last) < 1e-4f) continue;
-                if (now < w.NextSend || (!anyRange && (w.Fsm.transform.position - player.position).sqrMagnitude > 16f)) { w.Last = w.Var.Value; continue; }
+                Vector3 at = w.Part != null && w.Part.Value != null ? w.Part.Value.transform.position : w.Fsm.transform.position;
+                if (now < w.NextSend || (!anyRange && (at - player.position).sqrMagnitude > 16f)) { w.Last = w.Var.Value; continue; }
                 w.Last = w.Var.Value;
                 w.NextSend = now + 0.5f;
                 Session.SendAll(new NetWriter(Msg.Setting).U8(Session.LocalId).Str(w.Id).Str(w.Fsm.FsmName).Str(w.Var.Name).F32(w.Var.Value), true);

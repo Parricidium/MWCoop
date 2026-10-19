@@ -143,7 +143,11 @@ namespace MWCoop
         static string KeyOf(PlayMakerFSM f)
         {
             string id = Props.ItemId(f.gameObject);
-            return id.Length > 0 ? id : "p:" + Recon.Path(f.transform);
+            if (id.Length > 0) return id;
+            // (My Summer Car : pas d'ID sur les pieces, et leur chemin change au montage -- l'etiquette de sauvegarde de la couleur, unique)
+            FsmString ut = Game.Msc ? f.FsmVariables.FindFsmString("UniqueTagColor") : null;
+            if (ut != null && ut.Value.Length > 0) return "c:" + ut.Value;
+            return "p:" + Recon.Path(f.transform);
         }
 
         static bool Skip(string name) { return name.StartsWith("UT") || name.StartsWith("Unique") || name == "ID"; }

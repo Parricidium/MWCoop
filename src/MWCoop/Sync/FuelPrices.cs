@@ -11,7 +11,12 @@ namespace MWCoop
     // L'hote envoie les siens (@carbu) quand ils changent et toutes les 15 s (arrivants) ; l'invite les pose partout.
     public static class FuelPrices
     {
-        static readonly string[] Vars = { "PriceGasoline", "PriceDiesel", "PriceFuelOil" };
+        // My Summer Car (vidage v.250908-04) : STORE::Fuelprices (Price98, PriceDiesel, PriceFuelOil) ; « Set table » ecrit S1-S3
+        // dans les afficheurs STORE/LOD/Pumps/Prices/98, Diesel, FuelOil et FuelPrice dans les pompes (Trigger98, TriggerDiesel,
+        // TriggerFuelOil :: Use). Pas rejoue : il continue vers « Check distance », qui reapprovisionne le magasin (INVENTORY).
+        static readonly string[] VarsMwc = { "PriceGasoline", "PriceDiesel", "PriceFuelOil" }, VarsMsc = { "Price98", "PriceDiesel", "PriceFuelOil" };
+        static string[] Vars { get { return Game.Msc ? VarsMsc : VarsMwc; } }
+        static readonly string[] MscPumps = { "Trigger98", "TriggerDiesel", "TriggerFuelOil" }, MscScreens = { "98", "Diesel", "FuelOil" };
         static PlayMakerFSM pylon;
         static readonly float[] sent = new float[3];
         static float next, resend;
@@ -21,7 +26,7 @@ namespace MWCoop
 
         static PlayMakerFSM Pylon()
         {
-            if (pylon == null) { GameObject g = Game.FindAny("PERAPORTTI/FuelPylon"); if (g != null) pylon = Game.FsmOn(g, "Fuelprices"); }
+            if (pylon == null) { GameObject g = Game.FindAny(Game.Msc ? "STORE" : "PERAPORTTI/FuelPylon"); if (g != null) pylon = Game.FsmOn(g, "Fuelprices"); }
             return pylon;
         }
 
@@ -66,6 +71,21 @@ namespace MWCoop
                 if (s != null) s.Value = w[i].ToString("0.00");   // (comme ConvertFloatToString du jeu)
             }
             if (!changed) return;
+            if (Game.Msc)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    FsmGameObject pg = f.FsmVariables.FindFsmGameObject(MscPumps[i]);
+                    PlayMakerFSM pf = pg != null && pg.Value != null ? Game.FsmOn(pg.Value, "Use") : null;
+                    FsmFloat pv = pf != null ? pf.FsmVariables.FindFsmFloat("FuelPrice") : null;
+                    if (pv != null) pv.Value = w[i];
+                    GameObject sg = Game.FindAny("STORE/LOD/Pumps/Prices/" + MscScreens[i]);
+                    TextMesh tm = sg != null ? sg.GetComponent<TextMesh>() : null;
+                    if (tm != null) tm.text = w[i].ToString("0.00");
+                }
+                if (logs++ < 10) Log.Info("carburant : prix de l'hote poses (98 " + w[0].ToString("F2") + ", diesel " + w[1].ToString("F2") + ", fioul " + w[2].ToString("F2") + ")");
+                return;
+            }
             // Pompes (ce qu'elles font payer) et ecrans du pylone.
             foreach (string pump in new[] { "Pump1", "Pump2", "Pump3", "Pump4", "Pump5", "Pump6" })
             {

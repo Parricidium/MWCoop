@@ -317,7 +317,7 @@ namespace MWCoop
                 {
                     Transform hk = root.Find("Hoist");
                     d.Hook = hk != null ? Game.FsmOn(hk.gameObject, "Hook") : null;
-                    d.HookData = hk != null ? Game.FsmOn(hk.gameObject, "Data") : null;
+                    d.HookData = hk != null ? Game.FsmOn(hk.gameObject, Game.Msc ? "BoltCheck" : "Data") : null;   // (MSC : 'BoltCheck', memes etats)
                     if (d.Hook != null) { d.T1 = d.Hook.FsmVariables.FindFsmBool("Trigger1"); d.T2 = d.Hook.FsmVariables.FindFsmBool("Trigger2"); d.HB = d.Hook.FsmVariables.FindFsmBool("HoistBolted"); }
                     if (d.T1 == null || d.T2 == null || d.HB == null) { Log.Warn("atelier : crochet du palan " + d.Key + " sans automate Hook complet"); d.Hook = null; }
                 }
