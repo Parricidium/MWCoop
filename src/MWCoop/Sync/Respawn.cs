@@ -254,13 +254,21 @@ namespace MWCoop
             if (crash && car != null && Session.Active && Session.RemoteCount > 0)
                 Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@accident").Str(car).Bool(beltAtCrash), true);
             if (crash && Session.Active) CarHits.OnLocalCrash(beltAtCrash);   // (la voiture d'un autre joueur percutee : son conducteur aussi)
-            if (Config.GetInt("Test", "TestReapparition", 0) > 0) testChoiceAt = Time.realtimeSinceStartup + 3f;
+            if (Config.GetInt("Test", "TestReapparition", 0) > 0)
+            {
+                // ([Test] DelaiChoix=<ms> : choix plus tot ; SortieMort=1 : sortie du vehicule 0,3 s apres la mort, comme l'ejection d'un
+                // vrai choc -- journal de JD, 19/10 : sorti, pantin de son propre avatar en troisieme personne, choix 0,7 s apres)
+                testChoiceAt = Time.realtimeSinceStartup + Config.GetInt("Test", "DelaiChoix", 3000) / 1000f;
+                if (Config.GetInt("Test", "SortieMort", 0) != 0) testExitAt = Time.realtimeSinceStartup + 0.3f;
+            }
             return true;
         }
 
-        static float testChoiceAt = -1;
+        static float testChoiceAt = -1, testExitAt = -1;
+        static int testRebreak;
         public static void TestUpdate()
         {
+            if (testExitAt > 0 && Time.realtimeSinceStartup >= testExitAt) { testExitAt = -1; VehicleSync.ExitLocal(); Log.Info("reapparition : essai, sorti du vehicule apres la mort"); }
             if (testChoiceAt > 0 && Time.realtimeSinceStartup >= testChoiceAt) { testChoiceAt = -1; Choose(Config.GetInt("Test", "TestReapparition", 1) - 1); }
         }
 
@@ -443,6 +451,8 @@ namespace MWCoop
                 try { kv.Key.SetValue(j, kv.Value, null); } catch { }
             }
             if (cb != null) cb.SetValue(j, h.Joint[cb], null);
+            // ([Test] CasseReelle=2 : la liaison recreee casse encore une fois -- voiture qui continue son accident, journal de JD 19/10)
+            if (Config.GetInt("Test", "CasseReelle", 0) == 2 && testRebreak++ == 0) { j.breakForce = 1f; j.breakTorque = 1f; Log.Info("reapparition : essai, liaison recreee prete a casser encore"); }
             if (h.DeadBody != null)
             {
                 h.DeadBody.SetActive(false);
@@ -588,6 +598,9 @@ namespace MWCoop
                 {
                     var j = h.Pivot.GetComponent<ConfigurableJoint>();
                     if (j == null) return "deja cassee";
+                    // ([Test] CasseReelle=1 : liaison rompue par la physique, comme un vrai choc -- l'automate Death de la tete joue sa
+                    // mort entiere : mannequin, camera, Crash)
+                    if (Config.GetInt("Test", "CasseReelle", 0) != 0) { j.breakForce = 1f; j.breakTorque = 1f; return "tete de " + h.Car + " : liaison prete a casser"; }
                     Object.Destroy(j);
                     return "tete de " + h.Car + " detachee";
                 }

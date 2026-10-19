@@ -446,14 +446,19 @@ namespace MWCoop
                 // guidon de [Test] TestVoiture (la Jonnez par defaut) a 18/22 s, accident a 30 s (tete detachee + Crash), choix a
                 // 33 s ([Test] TestReapparition=2), sonde du sang et posture avant, pendant et apres ; captures.
                 string moto = Config.Get("Test", "TestVoiture", "JONNEZ ES(Clone)");
-                if (t > 18f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscmort, " + VehicleSync.TestEnter(moto, false)); }
-                if (t > 22f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscmort, guidon -> " + VehicleSync.TestEnter(moto, true)); }
-                if (t > 26f && mscStep == 2) { mscStep = 3; Log.Info("autotest : mscmort, conduite " + VehicleSync.TestDriveDump(moto)); Log.Info("autotest : mscmort, posture au guidon : " + PoseInfo()); Log.Info("autotest : mscmort, " + Respawn.ProbeBlood()); }
-                if (t > 30f && mscStep == 3) { mscStep = 4; Log.Info("autotest : mscmort, " + Respawn.TestCrash(moto.Split('(')[0].Trim()) + " ; " + Respawn.TestDie("Crash")); }
-                if (t > 31.5f && mscStep == 4) { mscStep = 5; Log.Info("autotest : mscmort, pendant : " + Respawn.ProbeBlood()); CaptureSoon("msc-mort-pendant", 0.2f); }
-                if (t > 38f && mscStep == 5) { mscStep = 6; Log.Info("autotest : mscmort, apres : " + Respawn.State() + " ; posture : " + PoseInfo()); Log.Info("autotest : mscmort, apres : " + Respawn.ProbeBlood()); CaptureSoon("msc-mort-apres", 0.2f); }
-                if (t > 48f && mscStep == 6) { mscStep = 7; Log.Info("autotest : mscmort, 10 s apres : " + Respawn.State() + " ; posture : " + PoseInfo()); CaptureSoon("msc-mort-apres10", 0.2f); }
-                if (t > 50f && mscStep == 7)
+                float tm = t - Config.GetInt("Test", "Decale", 0);   // ([Test] Decale=<s> : tout plus tard, voiture d'un mod appelee apres le chargement)
+                if (tm > 18f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscmort, " + VehicleSync.TestEnter(moto, false)); }
+                if (tm > 22f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscmort, guidon -> " + VehicleSync.TestEnter(moto, true)); }
+                if (tm > 26f && mscStep == 2) { mscStep = 3; DumpFsms(Config.Get("Test", "Automate", "")); Log.Info("autotest : mscmort, conduite " + VehicleSync.TestDriveDump(moto)); Log.Info("autotest : mscmort, posture au guidon : " + PoseInfo()); Log.Info("autotest : mscmort, " + Respawn.ProbeBlood()); }
+                if (tm > 23f && mscStep >= 2 && mscCapot == 0 && Config.GetInt("Test", "TestCapot", 0) != 0) { mscCapot = 1; Log.Info("autotest : mscmort, " + PackHoods.TestSet(moto, true)); }
+                if (tm > 25.5f && mscCapot == 1) { mscCapot = 2; Log.Info("autotest : mscmort, " + PackHoods.TestSet(moto, false)); }
+                if (tm > 27f && mscStep == 3 && mscPhares == 0) { mscPhares = 1; Log.Info("autotest : mscmort, " + LightsGuard.CmpState()); Log.Info("autotest : mscmort, " + LightsGuard.TestPress()); }
+                if (tm > 28.5f && mscStep == 3 && mscPhares == 1) { mscPhares = 2; Log.Info("autotest : mscmort, apres la touche : " + LightsGuard.CmpState()); }
+                if (tm > 30f && mscStep == 3) { mscStep = 4; Log.Info("autotest : mscmort, " + Respawn.TestCrash(moto.Split('(')[0].Trim()) + " ; " + (Config.GetInt("Test", "CasseReelle", 0) != 0 ? "mort laissee au jeu" : Respawn.TestDie("Crash"))); }
+                if (tm > 31.5f && mscStep == 4) { mscStep = 5; Log.Info("autotest : mscmort, pendant : " + Respawn.ProbeBlood()); CaptureSoon("msc-mort-pendant", 0.2f); }
+                if (tm > 38f && mscStep == 5) { mscStep = 6; Log.Info("autotest : mscmort, apres : " + Respawn.State() + " ; posture : " + PoseInfo()); Log.Info("autotest : mscmort, apres : " + Respawn.ProbeBlood()); CaptureSoon("msc-mort-apres", 0.2f); }
+                if (tm > 48f && mscStep == 6) { mscStep = 7; Log.Info("autotest : mscmort, 10 s apres : " + Respawn.State() + " ; posture : " + PoseInfo()); CaptureSoon("msc-mort-apres10", 0.2f); }
+                if (tm > 50f && mscStep == 7)
                 {
                     mscStep = 8;
                     GameObject camGo = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
@@ -568,7 +573,30 @@ namespace MWCoop
             mcJ.Clear(); mvJ.Clear();
         }
 
+        static int mscPhares, mscCapot;
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
+
+        // [Test] Automate=<chemin>:<automate>,... : etats (actions, transitions), variables et evenements de chaque automate.
+        static void DumpFsms(string specs)
+        {
+            foreach (string spec in specs.Split(','))
+            {
+                int c = spec.LastIndexOf(':'); if (c <= 0) continue;
+                GameObject go = Game.FindAny(spec.Substring(0, c).Trim());
+                PlayMakerFSM fsm = go != null ? Game.FsmOn(go, spec.Substring(c + 1).Trim()) : null;
+                if (fsm == null) { Log.Info("autotest : automate " + spec + " introuvable"); continue; }
+                Log.Info("autotest : automate " + spec + " (" + Recon.Path(fsm.transform) + "), etat " + fsm.ActiveStateName);
+                foreach (FsmState st in fsm.Fsm.States)
+                {
+                    var tr = new System.Text.StringBuilder();
+                    foreach (FsmTransition x in st.Transitions) tr.Append(' ').Append(x.EventName).Append("->").Append(x.ToState);
+                    Log.Info("autotest :   " + Jobs.DumpActions(fsm, st.Name) + " ; transitions" + tr);
+                }
+                foreach (FsmTransition gt in fsm.FsmGlobalTransitions) Log.Info("autotest :   globale " + gt.EventName + " -> " + gt.ToState);
+                foreach (NamedVariable v in fsm.FsmVariables.GetAllNamedVariables()) Log.Info("autotest :   var " + v.Name + " = " + v);
+                foreach (FsmEvent ev in fsm.Fsm.Events) Log.Info("autotest :   evenement " + ev.Name + (ev.IsGlobal ? " (global)" : ""));
+            }
+        }
 
         // [Test] Autotest=cabine, CabinePassager=1 : en fin d'image (ce qui est rendu), l'avatar du conducteur dans le repere
         // de la voiture ou l'invite est assis, pendant qu'elle roule : etendue de ses positions (0 attendu ; avant le
@@ -2029,21 +2057,7 @@ namespace MWCoop
             }
             // [Test] Autotest=automate, Automate=<chemin>:<nom>[,...] : a 40 s, etats, actions, variables et evenements de ces
             // automates (diagnostic ; OpNoob, 17/10 : l'arbre de la fendeuse ne s'attelle pas au tracteur).
-            if (mode == "automate" && t > 40f && step == 0)
-            {
-                step = 1;
-                foreach (string spec in Config.Get("Test", "Automate", "Cutter/PTOCheck:Attach").Split(','))
-                {
-                    int c = spec.LastIndexOf(':'); if (c <= 0) continue;
-                    GameObject go = Game.FindAny(spec.Substring(0, c).Trim());
-                    PlayMakerFSM fsm = go != null ? Game.FsmOn(go, spec.Substring(c + 1).Trim()) : null;
-                    if (fsm == null) { Log.Info("autotest : automate " + spec + " introuvable"); continue; }
-                    Log.Info("autotest : automate " + spec + " (" + Recon.Path(fsm.transform) + "), etat " + fsm.ActiveStateName);
-                    foreach (FsmState st in fsm.Fsm.States) Log.Info("autotest :   " + Jobs.DumpActions(fsm, st.Name));
-                    foreach (NamedVariable v in fsm.FsmVariables.GetAllNamedVariables()) Log.Info("autotest :   var " + v.Name + " = " + v);
-                    foreach (FsmEvent ev in fsm.Fsm.Events) Log.Info("autotest :   evenement " + ev.Name + (ev.IsGlobal ? " (global)" : ""));
-                }
-            }
+            if (mode == "automate" && t > 40f && step == 0) { step = 1; DumpFsms(Config.Get("Test", "Automate", "Cutter/PTOCheck:Attach")); }
             if (mode == "fendattel")
             {
                 if (Net.Session.IsHost && t > 40f && step == 0) { step = 1; Log.Info("autotest : " + CutterHitch.TestSet(1)); }
