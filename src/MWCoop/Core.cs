@@ -16,7 +16,7 @@ namespace MWCoop
             useGUILayout = false;   // (aucun GUILayout : pas de passage Layout dans OnGUI, une passe de moins par evenement -- revue du 14/10)
             Config.Load();
             dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0 || Config.Get("Test", "VidageCibles", "").Length > 0;
-            Log.Info("jeu : " + Game.Name + (Game.Msc ? " (BETA : modules generiques seulement)" : ""));
+            Log.Info("jeu : " + Game.Name + (Game.Msc ? " (BETA : modules generiques et voitures)" : ""));
             Log.Info("Core pret, profil '" + System.Environment.GetEnvironmentVariable("MWCOOP_PROFIL") + "'");
             Log.Info("sauvegardes : " + Application.persistentDataPath);
             Application.runInBackground = true;   // (hote en Alt-Tab : plus de paquets pendant 15 s -> delai depasse chez les invites ; relecture du 15/10)
@@ -28,7 +28,7 @@ namespace MWCoop
         {
             Perf.FixedStart();
             Perf.Begin();
-            try { if (!Game.Msc) { VehicleSync.RevLimiterFixed(); VehicleSync.FixedUpdate(); } }
+            try { VehicleSync.RevLimiterFixed(); VehicleSync.FixedUpdate(); }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("voitures (physique) : " + e.Message); }
             Perf.End("(physique)");
             Perf.FixedEnd();
@@ -37,6 +37,12 @@ namespace MWCoop
         void LateUpdate()
         {
             Perf.Begin();
+            // (Muet : aussi apres tous les scripts du jeu -- My Summer Car remet le volume pendant l'image, son entendu par JD le 19/10)
+            if (muted > 0 && AudioListener.volume != 0f)
+            {
+                if (!muteLogged) { muteLogged = true; Log.Info("muet : volume remis a " + AudioListener.volume.ToString("F2") + " par le jeu, recoupe a chaque image"); }
+                AudioListener.volume = 0f;
+            }
             LateUpdateBody();
             try { Session.Flush(); } catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("envoi : " + e.Message); }
             Perf.End("(poses)");
@@ -46,9 +52,9 @@ namespace MWCoop
 
         void LateUpdateBody()
         {
-            if (Game.Msc)   // (My Summer Car : avatars et tenues seulement)
+            if (Game.Msc)   // (My Summer Car : voitures, avatars et tenues ; CarVisuals avant les mains, comme dans MWC)
             {
-                try { PlayerSync.LateUpdate(); Studio.LateUpdate(); }
+                try { CarVisuals.LateUpdate(); PlayerSync.LateUpdate(); VehicleSync.LateUpdate(); Studio.LateUpdate(); }
                 catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
                 return;
             }
@@ -76,6 +82,7 @@ namespace MWCoop
 
         // [Test] Muet=1 : instances de test sans son (JD, 19/10) -- remis a chaque image, le jeu regle aussi le volume
         static int muted = -1;
+        static bool muteLogged;
         void Update()
         {
             Perf.UpdateStart();
@@ -360,7 +367,8 @@ namespace MWCoop
         // attendent leur table de noms pour ce jeu. Chacun a part : une erreur n'empeche pas les suivants.
         void MscLevelLoaded()
         {
-            System.Action[] all = { Replay.OnLevelLoaded, PlayerSync.OnLevelLoaded, Voice.OnLevelLoaded, CustomFace.OnLevelLoaded, WorldFiles.OnLevelLoaded,
+            System.Action[] all = { Replay.OnLevelLoaded, PlayerSync.OnLevelLoaded, VehicleSync.OnLevelLoaded, CarDoors.OnLevelLoaded, CarVisuals.OnLevelLoaded, Seats.OnLevelLoaded,
+                                    Voice.OnLevelLoaded, CustomFace.OnLevelLoaded, WorldFiles.OnLevelLoaded,
                                     ThirdPerson.OnLevelLoaded, DroneCam.OnLevelLoaded, SaveStats.OnLevelLoaded, Studio.OnLevelLoaded, WaitScreen.OnLevelLoaded };
             foreach (System.Action a in all)
             {
@@ -372,6 +380,10 @@ namespace MWCoop
         {
             "session", "api", "sauvegarde en jeu", "coups de poing", "marqueurs", "vocal", "visage perso", "menu", "mscloader", "lanceur",
             "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente",
+            // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
+            // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
+            "voitures", "portieres", "tableaux de bord", "passagers",
+            "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;
         static Mod[] Active

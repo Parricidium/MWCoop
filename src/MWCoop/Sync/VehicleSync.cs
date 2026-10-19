@@ -327,6 +327,8 @@ namespace MWCoop
             if (modNames == null)
             {
                 modNames = new HashSet<string> { "PORO" };
+                // (My Summer Car : le bateau, Rigidbody a la racine sans CarDynamics ; DriveTrigger 'Player in car' comme les voitures)
+                if (Game.Msc) modNames.Add("BOAT");
                 foreach (string n in Config.Get("Coop", "VehiculesMods", "").Split(',')) if (n.Trim().Length > 0) modNames.Add(n.Trim());
             }
             return modNames.Contains(rb.name);
@@ -2990,6 +2992,7 @@ namespace MWCoop
         }
 
         // Essais : ce qu'on sait de la voiture 'name' ici.
+        public static string Describe(string name) { return TaxiState(name); }
         static string TaxiState(string name)
         {
             Car c = Named(name);

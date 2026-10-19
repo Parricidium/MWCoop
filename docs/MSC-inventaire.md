@@ -110,3 +110,27 @@ Il contient 32 743 objets et 258 racines.
 2. **Lanceur** : le switch MSC / MWC, la fiche jeu, deux dossiers de jeu retenus, un thème, des onglets cachés selon le jeu, et le salon qui refuse un invité sur l'autre jeu (comme le contrôle Legacy / Reworked de `salon.inc:357`).
 3. **Première partie jouable** : se voir, la Satsuma (position, portes, sièges), l'heure et la météo, le trafic.
 4. **Le reste des modules A**, par ordre d'intérêt : pièces et boulons, boulots, boutique de Teimo, rallye, etc.
+
+## Voitures sur My Summer Car (19/10)
+
+Les modules VehicleSync, CarDoors, CarVisuals et Seats tournent maintenant sur MSC (Core.MscModules et MscLevelLoaded).
+Ils n'avaient presque pas de noms écrits en dur : les voitures sont trouvées par `CarDynamics` à la racine de la scène, et les automates de MSC portent les mêmes noms que ceux de MWC :
+- `PlayerTrigger` sur `DriveTrigger`, avec l'état « Player in car » ;
+- `Starter`, avec l'état « Running » (SATSUMA) ou « Motor running » (les autres) ;
+- `Use` des portières : Open door, Open door 2, Close door, Sound, Reset 2 et Set lock 2.
+
+Ajouts propres à MSC :
+- `BOAT` (Rigidbody sans CarDynamics) est suivi comme un véhicule de mod (`VehicleSync.IsModVehicle`).
+- Banquette arrière pour SATSUMA, FERNDALE et RCO_RUSCKO12 ; HAYOSIKO n'a que la place avant.
+- `[Test] Muet=1` est aussi appliqué dans `LateUpdate`, parce que MSC remet le volume à chaque image (`SetGameVolume everyFrame`).
+
+Essai `[Test] Autotest=mscvoiture` (et `TestVoiture`, `TestPorte`), avec `run\test.ps1 -Msc -Players 2 -Seconds 150` :
+- KEKMET et HAYOSIKO : la copie de l'invite suit l'hôte, et la portière s'ouvre puis se ferme chez lui.
+- 9 véhicules trouvés des deux côtés, 13 ouvrants suivis, 16 places passagers.
+
+Pas encore essayé :
+- la SATSUMA montée : la partie neuve a ses portières en pièces, dans CARPARTS ;
+- la conduite du BOAT ;
+- les sons moteur sur la copie ;
+- un passager assis ;
+- les variables de simulation.
