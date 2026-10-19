@@ -17,9 +17,16 @@ namespace MWCoop
     //    rejoue TIGHTEN / UNTIGHTEN jusqu'a ce Stage.
     // Cle d'une piece : "db:" + chemin de son entree Database (db_ThisPart de 'Removal'), sinon l'ID de son 'Use' (roues), sinon
     // son chemin a rangs a la premiere vue. Cle d'un point : cle de la piece qui le porte + chemin relatif, ou chemin complet.
+    //  - points « echange » (retour de $forever1, 20/10 : toute la mecanique de CARPARTS/PartsCar -- sub frame, trains, freins,
+    //    direction ; 75 points) : pas de {Parent} ni de 'Assemble 2'. Le clic mene a 'Assemble' (ou a 'Check bolts' puis
+    //    'Assemble') qui allume la piece montee deja dans la voiture (SATSUMA/.../sub frame(xxxxx)), met Installed et DETRUIT la
+    //    piece libre ({Part}, sans automate : sa cle est celle de Props, w:...). Rejoue : 'Assemble', avec la copie d'ici de la
+    //    piece libre (Props) si elle existe, sinon sans. Demontage : 'Remove part' cree une NOUVELLE piece libre ({SpawnPart} au
+    //    RemovalPoint) -- celui qui demonte lui donne une cle (Props.Adopt), envoyee avec le demontage ; l'autre la donne a la
+    //    sienne. Avant : « piece w:... introuvable ici », pieces restees par terre chez l'hote, 551 vis refusees.
     public static partial class Parts
     {
-        class MscPoint { public string Key; public PlayMakerFSM Fsm; public string Click; }
+        class MscPoint { public string Key; public PlayMakerFSM Fsm; public string Click; public bool Swap; }
         static readonly Dictionary<string, MscPoint> mscPoints = new Dictionary<string, MscPoint>();
         static readonly Dictionary<PlayMakerFSM, MscPoint> mscPointOf = new Dictionary<PlayMakerFSM, MscPoint>();
         static readonly HashSet<PlayMakerFSM> mscRemovals = new HashSet<PlayMakerFSM>();
@@ -36,7 +43,7 @@ namespace MWCoop
                 try
                 {
                     FsmState prev = P.Fsm.Fsm.PreviousActiveState;
-                    if (!applying && Replay.Depth == 0 && prev != null && prev.Name == "Wait for assembly") MscLocalInstall(P);
+                    if (!applying && Replay.Depth == 0 && prev != null && (prev.Name == "Wait for assembly" || P.Swap && prev.Name == "Check bolts")) MscLocalInstall(P);
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
@@ -52,7 +59,8 @@ namespace MWCoop
                 try
                 {
                     FsmState prev = F.Fsm.PreviousActiveState;
-                    if (!applying && Replay.Depth == 0) MscLocalRemove(F, prev != null && prev.Name == "Mouse off");
+                    // (piece « echange » : pas de joint, 'Mouse off' -REMOVE-> y est le decrochage {Detach} du joueur d'ici, pas une casse)
+                    if (!applying && Replay.Depth == 0) MscLocalRemove(F, prev != null && prev.Name == "Mouse off" && F.FsmVariables.FindFsmGameObject("SpawnPart") == null);
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
@@ -72,7 +80,7 @@ namespace MWCoop
 
         static void MscReset()
         {
-            mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f;
+            mscPoints.Clear(); mscPointOf.Clear(); mscRemovals.Clear(); mscFirstKey.Clear(); mscParts.Clear(); mscPartsAt = -100f; mscOut.Clear();
         }
 
         // ---------------------------------------------------------------- cles
@@ -137,6 +145,12 @@ namespace MWCoop
                    && f.Fsm.GetState("Wait 3") != null && f.Fsm.GetState("Wait 4") != null;
         }
 
+        // Point « echange » : ni {Parent} ni 'Assemble 2', un etat 'Assemble' (la piece montee est deja dans la voiture).
+        static bool IsSwapPoint(PlayMakerFSM f)
+        {
+            return f.FsmVariables.FindFsmGameObject("Parent") == null && f.Fsm.GetState("Assemble") != null && f.Fsm.GetState("Assemble 2") == null;
+        }
+
         // Etat ou mene le clic ('Wait for assembly' -ASSEMBLE->) : 'Wait' le plus souvent.
         static string ClickTarget(PlayMakerFSM f)
         {
@@ -178,10 +192,12 @@ namespace MWCoop
                 mscRemovals.Add(f);
                 return true;
             }
-            string click = ClickTarget(f);
+            bool swap = IsSwapPoint(f);
+            // (echange : envoye a l'entree de 'Assemble' -- 'Check bolts' peut encore repartir en 'Drop part' ; rejoue en 'Assemble')
+            string click = swap ? "Assemble" : ClickTarget(f);
             FsmState cs = click != null ? f.Fsm.GetState(click) : null;
             if (cs == null || !cs.IsInitialized) return false;
-            var p = new MscPoint { Key = MscPointKey(f.transform), Fsm = f, Click = click };
+            var p = new MscPoint { Key = MscPointKey(f.transform), Fsm = f, Click = click, Swap = swap };
             if (!Inject(cs, new MscPointHook { P = p })) return false;
             mscPoints[p.Key] = p; mscPointOf[f] = p;
             return true;
@@ -249,9 +265,55 @@ namespace MWCoop
                 }
                 if (TooMany(car != null ? car.name : key, Time.realtimeSinceStartup, BurstCalm, WindowCalm)) { Log.Warn("piece " + id + " cassee : trop de casses, pas envoyee"); return; }
             }
+            // (echange : la nouvelle piece libre n'existe qu'apres les actions de 'Remove part' -- envoye a l'image suivante, MscTick)
+            if (rem.FsmVariables.FindFsmGameObject("SpawnPart") != null) { mscOut.Add(new MscOut { Rem = rem, Key = key, Id = id, Flags = breakoff ? 1 : 0 }); return; }
             Log.Info((breakoff ? "casse : " : "demontage : ") + id + " de " + key);
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(false).Str(key).Str(id).U8(breakoff ? 1 : 0), true);
             Props.SettleHere(rem.gameObject);
+        }
+
+        class MscOut { public PlayMakerFSM Rem; public string Key, Id; public int Flags; }
+        static readonly List<MscOut> mscOut = new List<MscOut>();
+        static int mscOutSerial;
+
+        // Demontage d'une piece « echange » fait ici : la nouvelle piece libre ({Part} de 'Removal') recoit une cle commune.
+        static void MscTick()
+        {
+            if (mscOut.Count == 0) return;
+            foreach (MscOut o in mscOut)
+            {
+                if (o.Rem == null) continue;
+                FsmGameObject pv = o.Rem.FsmVariables.FindFsmGameObject("Part");
+                GameObject loose = pv != null ? pv.Value : null;
+                string outKey = "";
+                if (loose != null && loose != o.Rem.gameObject)
+                {
+                    outKey = "w:msc-out/" + o.Id + "#" + Session.LocalId + "-" + (++mscOutSerial);
+                    Props.Adopt(loose, outKey);
+                    Props.SettleHere(loose);
+                }
+                Log.Info(((o.Flags & 1) != 0 ? "casse : " : "demontage : ") + o.Id + " de " + o.Key + (outKey.Length > 0 ? ", piece libre " + outKey : ", pas de piece libre"));
+                Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(false).Str(o.Key).Str(o.Id).U8(o.Flags).Str(outKey), true);
+            }
+            mscOut.Clear();
+        }
+
+        // Montage « echange » de l'autre : 'Assemble' allume la piece montee d'ici et detruit la copie de la piece libre (si elle est ici).
+        static void MscSwapInstall(MscPoint p, GameObject part, string id, string key, int who)
+        {
+            if (!p.Fsm.gameObject.activeInHierarchy)
+            {
+                Log.Info("piece " + id + " deja montee sur " + key);
+                if (part != null && Props.Vanish(id)) Log.Info("piece " + id + " : copie libre d'ici cachee");
+                return;
+            }
+            if (part != null) Props.ReleaseRemote(part);
+            p.Fsm.FsmVariables.GetFsmGameObject("Part").Value = part;
+            VehicleSync.CalmAfterPart(p.Fsm.transform);
+            Trace.Watch(p.Fsm, "point " + key, 8f);
+            Game.SetState(p.Fsm, p.Click);
+            if (part != null) Props.Vanish(id);   // (detruite par 'Assemble' : plus suivie)
+            Log.Info("piece " + id + " montee (echange) sur " + key + " (joueur #" + who + (part == null ? ", pas de copie libre ici" : "") + ")");
         }
 
         static bool MscHolds(PlayMakerFSM point, GameObject part)
@@ -268,9 +330,15 @@ namespace MWCoop
             bool install = r.Bool();
             string key = r.Str(), id = r.Str();
             int flags = r.More ? r.U8() : 0;
-            if (Session.IsHost) Session.Broadcast(new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).U8(flags), true, who);
-            GameObject part = MscFindPart(id);
-            if (part == null) { Log.Warn("piece " + id + " introuvable ici"); return; }
+            string outKey = r.More ? r.Str() : "";
+            if (Session.IsHost)
+            {
+                var fw = new NetWriter(Msg.Part).U8(who).Bool(install).Str(key).Str(id).U8(flags);
+                if (outKey.Length > 0) fw.Str(outKey);
+                Session.Broadcast(fw, true, who);
+            }
+            // (piece libre « echange » : pas d'automate, retrouvee par Props sous la meme cle)
+            GameObject part = MscFindPart(id) ?? Props.ObjectOf(id);
             applying = true; Replay.Depth++;
             try
             {
@@ -279,6 +347,8 @@ namespace MWCoop
                     MscPoint p;
                     if (!mscPoints.TryGetValue(key, out p) || p.Fsm == null) { MscScan(); mscPoints.TryGetValue(key, out p); }
                     if (p == null || p.Fsm == null) { Log.Warn("point " + key + " introuvable ici"); return; }
+                    if (p.Swap) { MscSwapInstall(p, part, id, key, who); return; }
+                    if (part == null) { Log.Warn("piece " + id + " introuvable ici"); return; }
                     if (MscHolds(p.Fsm, part)) { Log.Info("piece " + id + " deja montee"); return; }
                     if (!p.Fsm.gameObject.activeInHierarchy) { Log.Warn("point " + key + " eteint ici (deja occupe ?) : " + id + " pas montee"); return; }
                     p.Fsm.FsmVariables.GetFsmGameObject("Part").Value = part;
@@ -303,13 +373,18 @@ namespace MWCoop
                 }
                 else
                 {
+                    if (part == null) { Log.Warn("piece " + id + " introuvable ici"); return; }
                     PlayMakerFSM rem = Game.FsmOn(part, "Removal");
                     if (rem == null) { Log.Warn("piece " + id + " sans Removal ici"); return; }
                     FsmGameObject trig = rem.FsmVariables.FindFsmGameObject("Trigger");
                     if (trig != null && trig.Value != null && trig.Value.activeSelf) { Log.Info("piece " + id + " deja demontee"); return; }
                     rem.enabled = true;
                     Game.SetState(rem, "Remove part");
-                    Props.HoldFromRemote(part, who);
+                    // (echange : la nouvelle piece libre d'ici prend la cle de celle de l'autre et suit sa chute)
+                    FsmGameObject lv = rem.FsmVariables.FindFsmGameObject("SpawnPart") != null ? rem.FsmVariables.FindFsmGameObject("Part") : null;
+                    GameObject loose = lv != null && lv.Value != null && lv.Value != part ? lv.Value : null;
+                    if (loose != null && outKey.Length > 0) { Props.Adopt(loose, outKey); Props.HoldFromRemote(loose, who); }
+                    else Props.HoldFromRemote(part, who);
                     Log.Info("piece " + id + ((flags & 1) != 0 ? " cassee de " : " demontee de ") + key + " (joueur #" + who + ")");
                 }
             }
