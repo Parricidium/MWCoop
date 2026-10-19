@@ -84,15 +84,26 @@ static void SceneDraw(Graphics &g)
         ia.SetWrapMode(WrapModeTileFlipXY);
         g.DrawImage(&tiny, RectF(0, 0, kCardW, kCardH), 0, 0, (REAL)tw, (REAL)th, UnitPixel, &ia);
     }
+    bool msc = g_game == GAME_MSC;   // (ete : moins d'etoiles, soleil bas au lieu de la lune, pas de neige)
     if (dk) {   // etoiles
         SolidBrush sb(Color(200, 230, 238, 255));
-        for (int i = 0; i < 90; i++) {
+        for (int i = 0; i < (msc ? 30 : 90); i++) {
             float x = Rnd01(i, 81) * kCardW, y = Rnd01(i, 82) * 330, r = 0.5f + Rnd01(i, 83) * 0.9f;
             sb.SetColor(Color((BYTE)(90 + 140 * Rnd01(i, 84)), 230, 238, 255));
             g.FillEllipse(&sb, x - r, y - r, 2 * r, 2 * r);
         }
     }
-    {   // lune (sombre) ou soleil pale (clair)
+    if (msc) {   // soleil : bas sur l'horizon, orange (soir d'ete), ou haut et blanc (jour)
+        float mx = 1090, my = dk ? 470.0f : 120.0f, rad = dk ? 260.0f : 150.0f;
+        GraphicsPath gp; gp.AddEllipse(mx - rad, my - rad, 2 * rad, 2 * rad);
+        PathGradientBrush pg(&gp);
+        pg.SetCenterColor(dk ? Color(200, 255, 170, 90) : Color(200, 255, 252, 230));
+        Color edge(0, 255, 200, 120); int one = 1;
+        pg.SetSurroundColors(&edge, &one);
+        g.FillPath(&pg, &gp);
+        SolidBrush disc(dk ? Color(255, 255, 196, 120) : Color(255, 255, 250, 225));
+        g.FillEllipse(&disc, mx - 34, my - 34, 68.0f, 68.0f);
+    } else {   // lune (sombre) ou soleil pale (clair)
         float mx = 1090, my = dk ? 120.0f : 150.0f;
         GraphicsPath gp; gp.AddEllipse(mx - 130, my - 130, 260.0f, 260.0f);
         PathGradientBrush pg(&gp);
@@ -139,17 +150,17 @@ static void SceneDraw(Graphics &g)
         Color edge(0, 255, 179, 71); int one = 1;
         pg.SetSurroundColors(&edge, &one);
         g.FillPath(&pg, &gp);
-        SolidBrush wall(Color(255, 74, 42, 36)), roofD(Color(255, 58, 34, 32)), roofS(dk ? Color(255, 223, 233, 247) : Color(255, 250, 252, 255)), win(Color(255, 255, 199, 106)), door(Color(255, 36, 19, 15));
+        SolidBrush wall(Color(255, 74, 42, 36)), roofD(Color(255, 58, 34, 32)), roofS(msc ? Color(255, 70, 40, 36) : dk ? Color(255, 223, 233, 247) : Color(255, 250, 252, 255)), win(Color(255, 255, 199, 106)), door(Color(255, 36, 19, 15));
         g.FillRectangle(&wall, 922.0f, 586.0f, 128.0f, 62.0f);
         PointF rs[] = { PointF(908, 590), PointF(986, 540), PointF(1064, 590) }; g.FillPolygon(&roofS, rs, 3);
         PointF rd[] = { PointF(916, 592), PointF(986, 548), PointF(1056, 592) }; g.FillPolygon(&roofD, rd, 3);
         g.FillRectangle(&roofD, 1022.0f, 548.0f, 12.0f, 28.0f);
         g.FillRectangle(&win, 938.0f, 602.0f, 22.0f, 20.0f); g.FillRectangle(&win, 1012.0f, 602.0f, 22.0f, 20.0f);
         g.FillRectangle(&door, 976.0f, 610.0f, 18.0f, 38.0f);
-        SolidBrush car(Color(255, 20, 29, 51)), wheel(Color(255, 7, 12, 24));
+        SolidBrush car(msc ? Color(255, 214, 104, 40) : Color(255, 20, 29, 51)), wheel(Color(255, 7, 12, 24));   // (MSC : la Satsuma orange)
         GraphicsPath cp; RoundRect(cp, RectF(1080, 626, 74, 18), 5); g.FillPath(&car, &cp);
         PointF top[] = { PointF(1094, 626), PointF(1104, 612), PointF(1134, 612), PointF(1144, 626) }; g.FillPolygon(&car, top, 4);
-        PointF sn[] = { PointF(1094, 612), PointF(1104, 606), PointF(1134, 606), PointF(1140, 612) }; g.FillPolygon(&roofS, sn, 4);
+        if (!msc) { PointF sn[] = { PointF(1094, 612), PointF(1104, 606), PointF(1134, 606), PointF(1140, 612) }; g.FillPolygon(&roofS, sn, 4); }
         g.FillEllipse(&wheel, 1091.0f, 638.0f, 14.0f, 14.0f); g.FillEllipse(&wheel, 1131.0f, 638.0f, 14.0f, 14.0f);
     }
 }
@@ -268,6 +279,26 @@ static void DrawSceneAnim(Graphics &g)
             Pen pen(&lb, 1.4f); pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
             g.DrawLine(&pen, tail, head);
         }
+    }
+    if (g_game == GAME_MSC) {   // ete : lucioles le soir, pollen le jour (au lieu de la neige)
+        for (int i = 0; i < (int)(60 * dens); i++) {
+            float bx = Rnd01(i, 11) * kCardW, by = (g_dark ? 470 : 300) + Rnd01(i, 12) * (g_dark ? 300 : 480);
+            float x = bx + 26 * sinf(t * (0.2f + 0.3f * Rnd01(i, 13)) + Rnd01(i, 14) * 6.283f), y = by + 14 * sinf(t * (0.3f + 0.4f * Rnd01(i, 15)) + Rnd01(i, 16) * 6.283f);
+            if (!g_dark) y = fmodf(by - t * (6 + 8 * Rnd01(i, 17)) + 900, 820) - 10;   // (pollen : monte doucement)
+            if (!SnowVisible(x, y)) continue;
+            if (g_dark) {
+                float s = sinf(t * (0.8f + 1.4f * Rnd01(i, 18)) + Rnd01(i, 19) * 6.283f);
+                float a = s > 0 ? powf(s, 3) * 230 : 0;
+                if (a < 4) continue;
+                for (int k = 0; k < 2; k++) { float rr = k ? 2.4f : 6.0f; b.SetColor(Color((BYTE)(a * (k ? 0.5f : 0.14f)), 230, 255, 130)); g.FillEllipse(&b, x - rr, y - rr, 2 * rr, 2 * rr); }
+                b.SetColor(Color((BYTE)a, 250, 255, 200)); g.FillEllipse(&b, x - 1.2f, y - 1.2f, 2.4f, 2.4f);
+            } else {
+                float r = 1.0f + 1.4f * Rnd01(i, 20);
+                b.SetColor(Color((BYTE)(110 + 80 * Rnd01(i, 21)), 255, 255, 245)); g.FillEllipse(&b, x - r, y - r, 2 * r, 2 * r);
+            }
+        }
+        g.Restore(st);
+        return;
     }
     struct Layer { int n; float s0, s1, speed, sway, alpha; } layers[3] = { { 150, 1.0f, 1.9f, 15, 5, 150 }, { 80, 1.9f, 3.0f, 30, 9, 190 }, { 18, 3.2f, 4.6f, 58, 15, 210 } };
     float drift = 9 * t - 46.0f * cosf(t * 0.13f);
@@ -1483,7 +1514,7 @@ static bool UiClick(int id)
     }
     case UI_SET_DARK: case UI_SET_LIGHT:
         g_dark = id == UI_SET_DARK;
-        WritePrivateProfileStringW(L"Lanceur", L"Theme", g_dark ? L"sombre" : L"clair", g_iniLauncher.c_str());
+        WritePrivateProfileStringW(L"Lanceur", ThemeKey(), g_dark ? (g_game == GAME_MSC ? L"ete" : L"sombre") : L"clair", g_iniLauncher.c_str());
         return true;
     case UI_SET_LANG: case UI_SET_LANG + 1: case UI_SET_LANG + 2: case UI_SET_LANG + 3:
         SetLang(id == UI_SET_LANG ? L"fr" : id == UI_SET_LANG + 1 ? L"en" : id == UI_SET_LANG + 2 ? L"ru" : L"ar");
