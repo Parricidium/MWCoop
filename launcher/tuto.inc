@@ -86,8 +86,8 @@ static const TutoStep kTuto[] = {
       L"Remove dents", L"In Car: every car in your save is smooth again (game closed). The dents file is set aside, not deleted. In co-op, the host does it.", "0.94.0" },
     { L"Sauvegardes", L"Plusieurs parties, une par groupe d'amis : crée-les, nomme-les, choisis celle à héberger (ici ou dans le salon). Tes invités reçoivent ta sauvegarde, la leur n'est pas touchée.",
       L"Saves", L"Several games, one per group of friends: create them, name them, pick the one to host (here or in the lobby). Your guests receive your save, theirs is not touched.", "0.95.0" },
-    { L"Legacy ou Reworked", L"Sous le numéro de version, en haut à gauche : Reworked, le nouveau MWCoop (recommandé, celui qui reçoit les mises à jour) ; Legacy, l'ancien, plus mis à jour. Tout le monde doit avoir la même version pour jouer ensemble.",
-      L"Legacy or Reworked", L"Under the version number, top left: Reworked, the new MWCoop (recommended, the one that gets updates); Legacy, the old one, no longer updated. Everyone must be on the same version to play together.", "0.96.0" },
+    { L"MSC ou MWC", L"Sous le numéro de version, en haut à gauche : choisis ton jeu, My Summer Car (BETA) ou My Winter Car. Le lanceur se relance sur le jeu choisi. Tout le monde doit être sur le même jeu pour jouer ensemble.",
+      L"MSC or MWC", L"Under the version number, top left: pick your game, My Summer Car (BETA) or My Winter Car. The launcher restarts on the chosen game. Everyone must be on the same game to play together.", "1.1.0" },
     { L"Le salon : code et options", L"En hébergeant : Public ou Privé (code de session à COPIER pour tes amis par IP), joueurs au plus (2 à 16) et options de la partie, pour ce salon seulement, envoyées à tes invités.",
       L"The lobby: code and options", L"When hosting: Public or Private (a session code to COPY for your friends by IP), players max (2 to 16) and game options, for this lobby only, sent to your guests.", "0.96.4" },
     { L"Code de session", L"Pour rejoindre un salon privé par IP : l'adresse de l'hôte et, ici, le code qu'il t'a donné. Salon public : laisse vide. Par Steam, un ami invité entre sans rien taper.",
@@ -210,7 +210,7 @@ static void TutoGo(int i)
         g_tuto = -1;
         g_tab = g_tutoTabWas >= 0 ? g_tutoTabWas : TAB_HOME;
         WritePrivateProfileStringW(L"Lanceur", L"TutoVu", L"1", g_iniLauncher.c_str());
-        WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", Widen(MyVersion()).c_str(), g_iniLauncher.c_str());
+        WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", Widen(MyVersionRaw()).c_str(), g_iniLauncher.c_str());
         DiscordAskMaybe();   // (premier lancement : l'invitation au Discord vient apres la visite)
         return;
     }
@@ -231,7 +231,7 @@ static void TutoStart(bool all)
     for (int i = 0; i < kTutoN; i++) if (all || VerCmp(kTuto[i].since, seen) > 0) g_tutoList.push_back(i);
     if (!all && !g_tutoList.empty() && g_tutoList[0] == 0) g_tutoList.erase(g_tutoList.begin());   // (bienvenue : visite complete seulement)
     g_tutoAll = all;
-    if (g_tutoList.empty()) { WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", Widen(MyVersion()).c_str(), g_iniLauncher.c_str()); return; }
+    if (g_tutoList.empty()) { WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", Widen(MyVersionRaw()).c_str(), g_iniLauncher.c_str()); return; }
     g_tutoTabWas = g_tab == TAB_COOP || PageSnap(g_tab) ? TAB_HOME : g_tab;
     g_lobbyOpts = false;
     g_focus = -1;
@@ -241,7 +241,7 @@ static void TutoStart(bool all)
 static void TutoAtStartup()
 {
     if (GetPrivateProfileIntW(L"Lanceur", L"TutoVu", 0, g_iniLauncher.c_str()) == 0) TutoStart(true);
-    else if (MyVersion() != "dev") TutoStart(false);
+    else if (MyVersionRaw() != "dev") TutoStart(false);
 }
 
 // Bulle : sous l'element (ou au-dessus s'il n'y a pas la place), dans la fenetre ; fleche vers l'element.

@@ -1,13 +1,16 @@
 ﻿# Copie build\ dans les instances, lance -Players instances hors ecran, attend -Seconds, les ferme
 # (sauf -KeepOpen) et affiche la fin des journaux. Chaque instance : profil isole + arriere-plan.
-param([int]$Players = 1, [int]$Seconds = 60, [switch]$KeepOpen, [switch]$NoBuild,
-      [string]$Racine = 'D:\Games\COOPTEST\My Winter Car', [int]$Lignes = 25, [string]$Taille = '960x540')
+# -Msc : les instances de My Summer Car (run\make-testinstances.ps1 -Msc).
+param([int]$Players = 1, [int]$Seconds = 60, [switch]$KeepOpen, [switch]$NoBuild, [switch]$Msc,
+      [string]$Racine = '', [int]$Lignes = 25, [string]$Taille = '960x540')
+$exe = if ($Msc) { 'mysummercar' } else { 'mywintercar' }
+if (-not $Racine) { $Racine = if ($Msc) { 'D:\Games\COOPTEST\My Summer Car' } else { 'D:\Games\COOPTEST\My Winter Car' } }
 $root = Split-Path $PSScriptRoot
 if (-not $NoBuild) {
     $o = cmd /c "`"$root\run\build-mod.cmd`"" 2>&1
     if ($LASTEXITCODE -ne 0) { $o | Select-String 'error|erreur'; throw 'echec de compilation' }
 }
-Get-Process mywintercar -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$Racine\MWCoop-Joueur*" } | Stop-Process -Force   # jamais les copies de JD (MWCoop-JD-*)
+Get-Process $exe -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$Racine\MWCoop-Joueur*" } | Stop-Process -Force   # jamais les copies de JD (MWCoop-JD-*)
 Start-Sleep -Milliseconds 500
 $procs = @()
 for ($i = 1; $i -le $Players; $i++) {
@@ -21,7 +24,7 @@ for ($i = 1; $i -le $Players; $i++) {
     $args = "-screen-fullscreen 0 -screen-width $w -screen-height $h"
     if ($env:MWC_SANSMSC -eq "1") { $args += " -mscloader-disable" }   # (captures sans les fenetres de MSCLoader)
     if ($env:MWC_ARGS) { $args += " " + $env:MWC_ARGS }   # (options d'Unity en plus, ex. -force-gfx-direct pour le ray tracing)
-    $procs += Start-Process "$d\mywintercar.exe" -ArgumentList $args -WorkingDirectory $d -PassThru
+    $procs += Start-Process "$d\$exe.exe" -ArgumentList $args -WorkingDirectory $d -PassThru
     if ($i -lt $Players) { Start-Sleep $(if ($env:MWC_DELAI) { [int]$env:MWC_DELAI } else { 4 }) }   # (MWC_DELAI : arrivee tardive d'un invite)
 }
 $fin = (Get-Date).AddSeconds($Seconds)

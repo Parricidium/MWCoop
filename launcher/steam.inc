@@ -16,7 +16,7 @@
 // CSteamID passe et rendu en uint64 (x64).
 
 typedef uint64_t SteamId;
-static const uint32_t kSteamApp = 4164420;
+#define kSteamApp (GM().app)   // (le jeu choisi : MWC 4164420, MSC 516750)
 
 namespace sapi {
 static HMODULE dll;
@@ -180,8 +180,8 @@ static bool SteamUp()
         }
     }
     // (comme steam_appid.txt pour le jeu : le lanceur passe pour My Winter Car aupres de Steam)
-    SetEnvironmentVariableW(L"SteamAppId", L"4164420");
-    SetEnvironmentVariableW(L"SteamGameId", L"4164420");
+    SetEnvironmentVariableW(L"SteamAppId", GM().appid);
+    SetEnvironmentVariableW(L"SteamGameId", GM().appid);
     if (!sapi::Init()) {
         g_steamWhy = T(L"Steam n'est pas ouvert (ou pas connecté)", L"Steam is not running (or not logged in)");
         TestLog("steam : SteamAPI_Init a echoue");

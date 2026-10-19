@@ -25,7 +25,10 @@ static const char* kExports[17] = {
     "VerFindFileA", "VerFindFileW", "VerInstallFileA", "VerInstallFileW",
     "VerLanguageNameA", "VerLanguageNameW", "VerQueryValueA", "VerQueryValueW"};
 
-static wchar_t g_gameDir[MAX_PATH];   // dossier de mywintercar.exe (sans \ final)
+static wchar_t g_gameDir[MAX_PATH];   // dossier de mywintercar.exe ou mysummercar.exe (sans \ final)
+static bool g_msc;                    // le jeu est My Summer Car (sinon My Winter Car)
+static const wchar_t* GameName() { return g_msc ? L"My Summer Car" : L"My Winter Car"; }
+static const wchar_t* GameData() { return g_msc ? L"mysummercar_Data" : L"mywintercar_Data"; }
 static wchar_t g_modDir[MAX_PATH];    // <jeu>\MWCoop
 static wchar_t g_dataRoot[MAX_PATH];  // ou ecrire (profils, journaux) : <jeu>\MWCoop, ou %LOCALAPPDATA%\MWCoop si le jeu est en lecture seule
 static bool g_gameWritable = true;
@@ -356,12 +359,13 @@ static void ReadConfig() {
         SHCreateDirectoryExW(NULL, g_profilDir, NULL);
         // Premier usage du profil : il part des reglages du joueur (touches cInput, resolution...),
         // copies depuis sa vraie cle, qui n'est que lue.
-        wchar_t dst[256]; swprintf(dst, 256, L"Software\\MWCoop-Profils\\%s\\Amistech\\My Winter Car", g_profil);
+        wchar_t dst[256]; swprintf(dst, 256, L"Software\\MWCoop-Profils\\%s\\Amistech\\%s", g_profil, GameName());
         HKEY k;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, dst, 0, KEY_READ, &k) == ERROR_SUCCESS) RegCloseKey(k);
         else if (RegCreateKeyExW(HKEY_CURRENT_USER, dst, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &k, NULL) == ERROR_SUCCESS) {
             HKEY src;
-            if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Amistech\\My Winter Car", 0, KEY_READ, &src) == ERROR_SUCCESS) {
+            wchar_t real[128]; swprintf(real, 128, L"Software\\Amistech\\%s", GameName());
+            if (RegOpenKeyExW(HKEY_CURRENT_USER, real, 0, KEY_READ, &src) == ERROR_SUCCESS) {
                 RegCopyTreeW(src, NULL, k);
                 RegCloseKey(src);
             }
@@ -425,7 +429,7 @@ static void ArchiveLogs(const wchar_t* logs) {
     // Journal de Unity (dossier du jeu, remplace a chaque lancement) : copie, s'il a ete ecrit pendant cette partie
     // (jusqu'a 2 min avant le chargeur) et pas demesure.
     wchar_t ul[MAX_PATH];
-    swprintf(ul, MAX_PATH, L"%s\\mywintercar_Data\\output_log.txt", g_gameDir);
+    swprintf(ul, MAX_PATH, L"%s\\%s\\output_log.txt", g_gameDir, GameData());
     WIN32_FILE_ATTRIBUTE_DATA ua;
     if (GetFileAttributesExW(ul, GetFileExInfoStandard, &ua) && ua.nFileSizeHigh == 0 && ua.nFileSizeLow < (64u << 20)) {
         ULARGE_INTEGER a, b; a.LowPart = ua.ftLastWriteTime.dwLowDateTime; a.HighPart = ua.ftLastWriteTime.dwHighDateTime;
@@ -472,7 +476,9 @@ static void Init() {
     {
         wchar_t exe[MAX_PATH]; GetModuleFileNameW(NULL, exe, MAX_PATH);
         const wchar_t* base = wcsrchr(exe, L'\\');
-        if (_wcsicmp(base ? base + 1 : exe, L"mywintercar.exe")) return;
+        const wchar_t* name = base ? base + 1 : exe;
+        g_msc = !_wcsicmp(name, L"mysummercar.exe");   // (My Summer Car, switch MSC / MWC du lanceur, 19/10)
+        if (_wcsicmp(name, L"mywintercar.exe") && !g_msc) return;
     }
 
     // Dossier du jeu en lecture seule (droits, antivirus) : profils et journaux dans %LOCALAPPDATA%\MWCoop.

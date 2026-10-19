@@ -50,10 +50,10 @@ static std::wstring SaveProfRoot()
 }
 static std::wstring SaveDirOf(const std::wstring &prof)
 {
-    if (!prof.empty()) return SaveProfRoot() + prof + L"\\LocalLow\\Amistech\\My Winter Car\\";
+    if (!prof.empty()) return SaveProfRoot() + prof + L"\\LocalLow\\Amistech\\" + GM().name + L"\\";
     wchar_t up[MAX_PATH] = L"";
     GetEnvironmentVariableW(L"USERPROFILE", up, MAX_PATH);
-    return up[0] ? WithSlash(up) + L"AppData\\LocalLow\\Amistech\\My Winter Car\\" : L"";
+    return up[0] ? WithSlash(up) + L"AppData\\LocalLow\\Amistech\\" + GM().name + L"\\" : L"";
 }
 static std::wstring SaveMainName()
 {
@@ -160,7 +160,7 @@ static std::wstring SaveCreate(const std::wstring &name)
     for (int n = 1; n < 1000; n++) {
         std::wstring prof = L"partie-" + std::to_wstring(n);
         if (GetFileAttributesW((root + prof).c_str()) != INVALID_FILE_ATTRIBUTES) continue;
-        if (SHCreateDirectoryExW(NULL, (root + prof + L"\\LocalLow\\Amistech\\My Winter Car").c_str(), NULL) != ERROR_SUCCESS) break;
+        if (SHCreateDirectoryExW(NULL, (root + prof + L"\\LocalLow\\Amistech\\" + GM().name).c_str(), NULL) != ERROR_SUCCESS) break;
         SaveWriteName(prof, name);
         TestLog("sauvegardes : %s creee (%s)", Narrow(prof, CP_UTF8).c_str(), Narrow(name, CP_UTF8).c_str());
         SavesScan();
@@ -871,8 +871,8 @@ static void SaveClick(int id)
     }
 }
 
-// ---------------------------------------------------------------- VERSION Legacy / Reworked (voir ChannelReworked)
-static RectF g_canalRect;   // (bulle du guide ; selecteur sous le numero de version, ecran principal)
+// ---------------------------------------------------------------- JEU (switch MSC / MWC) et copie des sauvegardes
+static RectF g_canalRect;   // (bulle du guide ; switch MSC / MWC sous le numero de version, ecran principal)
 // Copie des sauvegardes (principale et partie-N : les fichiers du dossier LocalLow, sans sous-dossiers) avant le premier
 // passage en Reworked : MWCoop\copie-avant-reworked\<date>\<principale | partie-N>.
 static std::wstring SavesBackupNightly()
@@ -899,36 +899,30 @@ static std::wstring SavesBackupNightly()
     TestLog("canal : %d fichier(s) de sauvegarde copies dans %s", files, Narrow(dst, CP_UTF8).c_str());
     return files ? dst : L"";
 }
-// Choisir la version : Reworked (la refonte, par defaut ; copie des sauvegardes la premiere fois) ou Legacy (l'ancienne,
-// plus mise a jour). host : demande venue du salon (l'hote est sur l'autre version). Faux : le joueur a refuse.
-static bool ChannelSet(bool reworked, bool host)
+// Choisir le jeu (switch MSC / MWC sous le numero de version) : [Lanceur] JeuChoisi, puis le lanceur se relance sur l'autre
+// jeu (dossier, mod, sauvegardes, Steam : tout est relu au demarrage). host : demande venue du salon (l'hote joue a l'autre
+// jeu), avec une question. Faux : rien de change (meme jeu, refus, ou pas possible maintenant).
+static bool GameProcessRunning(DWORD *pidOut);
+static bool GameSet(int game, bool host)
 {
-    wchar_t q[1400];
-    q[0] = 0;
-    if (host) wcscpy_s(q, reworked ? T(L"L'hôte joue avec la version Reworked de MWCoop : il faut la même pour jouer ensemble.\n\n", L"The host plays the Reworked version of MWCoop: you need the same one to play together.\n\n")
-                                   : T(L"L'hôte joue avec la version Legacy de MWCoop : il faut la même pour jouer ensemble.\n\n", L"The host plays the Legacy version of MWCoop: you need the same one to play together.\n\n"));
-    if (reworked) {
-        wcscat_s(q, T(L"Reworked : le nouveau MWCoop, refait en profondeur (synchronisation, atelier, boulots, argent, réseau). C'est la version qui reçoit les mises à jour.\n\n"
-                      L"Tout le monde doit être sur la même version pour jouer ensemble.\n\n"
-                      L"Tes sauvegardes sont copiées avant (MWCoop\\copie-avant-reworked). Tu peux revenir en Legacy à tout moment (sous le numéro de version, en haut à gauche).\n\n"
-                      L"Passer en Reworked ?",
-                      L"Reworked: the new MWCoop, rebuilt in depth (sync, workshop, jobs, money, network). This is the version that gets updates.\n\n"
-                      L"Everyone must be on the same version to play together.\n\n"
-                      L"Your saves are copied first (MWCoop\\copie-avant-reworked). You can go back to Legacy at any time (under the version number, top left).\n\n"
-                      L"Switch to Reworked?"));
-        if (MessageBoxW(g_wnd, q, L"MWCoop Reworked", MB_YESNO | MB_ICONQUESTION) != IDYES) return false;
-        if (GetPrivateProfileIntW(L"Lanceur", L"CopieNightly", 0, g_iniLauncher.c_str()) == 0) {
-            std::wstring dst = SavesBackupNightly();
-            if (!dst.empty()) WritePrivateProfileStringW(L"Lanceur", L"CopieNightly", L"1", g_iniLauncher.c_str());
-        }
-    } else {
-        wcscat_s(q, T(L"Legacy : l'ancien MWCoop (0.95), gardé tel quel et plus mis à jour. Seulement pour jouer avec quelqu'un qui y est resté.\n\nPasser en Legacy ?",
-                      L"Legacy: the old MWCoop (0.95), kept as it is and no longer updated. Only to play with someone who stayed on it.\n\nSwitch to Legacy?"));
-        if (MessageBoxW(g_wnd, q, L"MWCoop Legacy", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return false;
+    if (game == g_game || game < 0 || game > 1) return false;
+    if (g_busy || GameProcessRunning(NULL)) {
+        SetStatus(K_WARN, T(L"Ferme le jeu et attends la fin de la mise à jour pour changer de jeu", L"Close the game and wait for the update to finish to switch games"));
+        return false;
     }
-    WritePrivateProfileStringW(L"Lanceur", L"Version", reworked ? L"reworked" : L"legacy", g_iniLauncher.c_str());
-    UpdSet(L"");
-    TestLog("version : %s", reworked ? "reworked" : "legacy");
-    SetStatus(reworked ? K_OK : K_WARN, reworked ? T(L"Version Reworked", L"Reworked version") : T(L"Version Legacy : l'ancienne, plus mise à jour", L"Legacy version: the old one, no longer updated"));
+    if (host) {
+        wchar_t q[600];
+        swprintf_s(q, T(L"L'hôte joue à %s : il faut le même jeu pour jouer ensemble.\n\nPasser sur %s ? Le lanceur se relance.",
+                        L"The host plays %s: you need the same game to play together.\n\nSwitch to %s? The launcher restarts."), kGames[game].name, kGames[game].name);
+        if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONQUESTION) != IDYES) return false;
+    } else if (g_lobby != LB_NONE) {
+        SetStatus(K_WARN, T(L"Quitte le salon pour changer de jeu", L"Leave the lobby to switch games"));
+        return false;
+    }
+    WritePrivateProfileStringW(L"Lanceur", L"JeuChoisi", kGames[game].id, g_iniLauncher.c_str());
+    TestLog("jeu : %s", Narrow(kGames[game].id).c_str());
+    LaunchLog("jeu choisi : %s, le lanceur se relance", Narrow(kGames[game].name).c_str());
+    if (g_lobby != LB_NONE) LobbyClose();
+    PostMessageW(g_wnd, WM_APP_RELAUNCH, 0, 0);
     return true;
 }

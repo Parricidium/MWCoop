@@ -208,7 +208,7 @@ namespace MWCoop.Net
             Players[LocalId] = Me;
             Status = "connecte a " + address;
             Log.Info("accepte par l'hote, numero " + LocalId);
-            SendToHost(new NetWriter(Msg.Hello).Str(Me.Name).Str(Me.Skin).Str(Version.Text).Str(SteamNet.MyId.ToString()), true);
+            SendToHost(new NetWriter(Msg.Hello).Str(Me.Name).Str(Me.Skin).Str(Game.ModVersion).Str(SteamNet.MyId.ToString()), true);
         }
 
         static void Disconnected(Peer p, string reason)
@@ -345,9 +345,9 @@ namespace MWCoop.Net
             if (r.More && ulong.TryParse(r.Str(), out sid)) pi.SteamId = sid;
             if (from.End is ulong) pi.SteamId = (ulong)from.End;   // (Steam : l'adresse meme du pair)
             Log.Info("bonjour de " + pi.Name + " (#" + pi.Id + ", MWCoop " + ver + ", apparence " + pi.Skin + ")");
-            if (ver != Version.Text)
+            if (ver != Game.ModVersion)
             {
-                T.Kick(from, "version du mod differente (hote " + Version.Text + ", vous " + ver + ")");
+                T.Kick(from, "version du mod differente (hote " + Game.ModVersion + ", vous " + ver + ")");
                 Players.Remove(from.Id);
                 return;
             }

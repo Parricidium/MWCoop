@@ -1012,7 +1012,7 @@ static int SyncLaunchKind()
 // Copie de lancement de l'invite : comme PrepareMirror, mais Mods -> la copie des mods de l'hote (avec), et
 // doorstop_config.ini a soi (mods=GF ; enabled=false sans). Jonctions refaites a chaque fois (dossier du jeu change...).
 static bool IsJunction(const std::wstring &p) { DWORD a = GetFileAttributesW(p.c_str()); return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) && (a & FILE_ATTRIBUTE_REPARSE_POINT); }
-static std::wstring GuestCopyDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"invite\\My Winter Car\\"; }
+static std::wstring GuestCopyDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"invite\\" + GM().steamDir + L"\\"; }
 // Fichiers de base de MSCLoader (Mods\Assets\MSCLoader_* : console, menu des mods...) dans la copie des mods de l'hote :
 // ceux de l'invite, faits pour SON MSCLoader. Avant, seuls ceux de l'hote y etaient -- absents chez lui, ou d'une autre
 // version (MSCLoader 1.4 cherche MSCLoader_Settings\settingsui.unity3d), l'invite avait « LoadBundle() Error: File not
@@ -1124,7 +1124,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
         FindClose(h);
     }
     HANDLE a = CreateFileW((m + L"steam_appid.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (a != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(a, "4164420", 7, &n, NULL); CloseHandle(a); }
+    if (a != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(a, Narrow(GM().appid).c_str(), (DWORD)wcslen(GM().appid), &n, NULL); CloseHandle(a); }
     std::wstring ini = m + L"doorstop_config.ini";
     if (FileExists(ini)) {
         WritePrivateProfileStringW(L"General", L"enabled", mods ? L"true" : L"false", ini.c_str());

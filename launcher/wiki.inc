@@ -90,15 +90,15 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
     switch (id) {
     case WF_FOLDER: {   // installation ideale : le dossier du jeu
         if (!draw) return 262;
-        Text(g, L"…\\steamapps\\common\\My Winter Car\\", RectF(x, y, w, 22), 12, FontStyleBold, kGrey, StringAlignmentNear);
+        Text(g, std::wstring(L"…\\steamapps\\common\\") + GM().steamDir + L"\\", RectF(x, y, w, 22), 12, FontStyleBold, kGrey, StringAlignmentNear);
         y += 28;
-        WikiFileRow(g, x, y, w, IC_PLAY, L"mywintercar.exe", T(L"LE JEU", L"THE GAME"), kGrey); y += 28;
+        WikiFileRow(g, x, y, w, IC_PLAY, GM().exe, T(L"LE JEU", L"THE GAME"), kGrey); y += 28;
         WikiFileRow(g, x, y, w, IC_HOME, L"MWCoop.exe", T(L"LANCEUR", L"LAUNCHER"), kAcc); y += 28;
         WikiFileRow(g, x, y, w, IC_CODE, L"version.dll", T(L"CHARGEUR MWCOOP", L"MWCOOP LOADER"), kAcc); y += 28;
         WikiFileRow(g, x, y, w, IC_FOLDER, L"MWCoop\\", T(L"LE MOD, PROFILS, JOURNAUX", L"THE MOD, PROFILES, LOGS"), kAcc); y += 28;
         WikiFileRow(g, x, y, w, IC_FOLDER, L"Mods\\", T(L"TES MODS (MSCLOADER)", L"YOUR MODS (MSCLOADER)"), kOk); y += 28;
         WikiFileRow(g, x, y, w, IC_CODE, L"winhttp.dll + doorstop_config.ini", T(L"MSCLOADER OFFICIEL (OPTIONNEL)", L"OFFICIAL MSCLOADER (OPTIONAL)"), kOk); y += 28;
-        WikiFileRow(g, x, y, w, IC_FOLDER, L"mywintercar_Data\\", T(L"DONNÉES DU JEU", L"GAME DATA"), kGrey);
+        WikiFileRow(g, x, y, w, IC_FOLDER, (std::wstring(GM().data) + L"\\").c_str(), T(L"DONNÉES DU JEU", L"GAME DATA"), kGrey);
         return 262;
     }
     case WF_FOOTER: {   // pied du lanceur : jeu trouve, changer de dossier
@@ -106,8 +106,8 @@ static float WikiFigure(Graphics &g, int id, RectF a, bool draw)
         RectF bar(x, y, w, 40);
         WikiCard(g, bar);
         Icon(g, IC_CHECK, bar.X + 22, bar.Y + 20, 16, kOk, 2.4f);
-        Text(g, L"My Winter Car", RectF(bar.X + 40, bar.Y, 160, 40), 13, FontStyleBold, kInk, StringAlignmentNear);
-        Text(g, L"C:\\…\\steamapps\\common\\My Winter Car\\", RectF(bar.X + 160, bar.Y, w - 300, 40), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        Text(g, GM().name, RectF(bar.X + 40, bar.Y, 160, 40), 13, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, std::wstring(L"C:\\…\\steamapps\\common\\") + GM().steamDir + L"\\", RectF(bar.X + 160, bar.Y, w - 300, 40), 11.5f, FontStyleRegular, kGrey, StringAlignmentNear);
         UiButton(g, RectF(bar.X + bar.Width - 128, bar.Y + 6, 120, 28), T(L"Changer", L"Change"), Z, false, IC_FOLDER, true, 10);
         WikiBadge(g, bar.X + 22, bar.Y + 52, 1); WikiBadge(g, bar.X + bar.Width - 68, bar.Y + 52, 2);
         WikiCaption(g, x, y + 70, w / 2 - 8, 1, T(L"Le jeu trouvé par le lanceur, et son dossier", L"The game the launcher found, and its folder"));
@@ -438,7 +438,7 @@ static void DrawWikiNews(Graphics &g)
         Text(g, T(L"Ouvrir Discord", L"Open Discord"), RectF(b.X + (b.Width - tw - 26) / 2 + 26, b.Y, tw + 4, b.Height), 12.5f, FontStyleBold, Color(255, 255, 255, 255), StringAlignmentNear);
         HotZone(b, UI_WIKI_GO + 198);
     }
-    std::vector<Note> notes = ChannelNotes(g_notes, ChannelReworked());
+    std::vector<Note> notes = ChannelNotes(g_notes);
     float y = c.Y + 44, bottom = h.Y - 10;
     if (notes.empty()) Text(g, !g_notesDone ? T(L"Chargement…", L"Loading…") : T(L"Pas de notes pour l'instant.", L"No notes yet."), RectF(x, y + 10, w, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
     for (size_t i = 0; i < notes.size() && i < 3; i++) {

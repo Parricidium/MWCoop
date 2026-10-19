@@ -202,7 +202,7 @@ namespace MWCoop.Net
             if (!IsolatedProfile) return;
             string mine = Path.Combine(SaveDir, "options.txt");
             string real = Path.Combine(Path.Combine(Path.Combine(Environment.GetEnvironmentVariable("USERPROFILE") ?? "",
-                @"AppData\LocalLow"), "Amistech"), @"My Winter Car\options.txt");
+                @"AppData\LocalLow"), "Amistech"), Game.Name + @"\options.txt");
             try
             {
                 if (File.Exists(mine) || !File.Exists(real)) return;

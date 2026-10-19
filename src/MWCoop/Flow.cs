@@ -66,8 +66,8 @@ namespace MWCoop
 
         static void Intro()
         {
-            // Button :: SkipIntro, 'State 2' attend Echap/Entree -> LOAD -> LoadLevel GAME.
-            PlayMakerFSM f = Game.FindFsm("Button", "SkipIntro");
+            // Button :: SkipIntro, 'State 2' attend Echap/Entree -> LOAD -> LoadLevel GAME (My Summer Car : Button :: FSM).
+            PlayMakerFSM f = Game.FindFsm("Button", Game.Msc ? "FSM" : "SkipIntro");
             if (f != null && f.ActiveStateName == "State 2") { Log.Info("introduction passee"); f.SendEvent("LOAD"); }
         }
 
