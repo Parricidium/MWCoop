@@ -163,7 +163,8 @@ static void SbLayout(SbState &s, LPCWSTR text, LPCWSTR caption, UINT type, float
     {
         Font &font = *FontOf(L"Segoe UI", 13.5f, FontStyleRegular);
         StringFormat sf;
-        mg.MeasureString(s.text.c_str(), -1, &font, RectF(0, 0, textW, 2000), &sf, &box);
+        // (MeasureStr : en mode GDI -- Windows 7 sans police GDI+, Donskoy 19/10 -- la mesure de GDI+ rendait ~0 : texte coupe)
+        MeasureStr(mg, s.text.c_str(), -1, &font, RectF(0, 0, textW, 2000), &sf, &box);
     }
     s.cardH = min(26.0f + 34 + box.Height + 22 + 46 + 24, 700.0f);
     s.cardX = kSbShadow; s.cardY = kSbShadow;
