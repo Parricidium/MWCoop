@@ -32,6 +32,7 @@
   --sun-1: #ffd21a;         /* jaune du logo */
   --sun-2: #ff7a2f;         /* orange du logo */
   --discord: #5865f2;
+  --kofi: #ff5e5b;         /* rouge Ko-fi */
   --star: #ffe27a;
   --ui: "Nunito", "Segoe UI Rounded", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
@@ -103,6 +104,8 @@ nav.menu a:hover { background: var(--glass-strong); }
 .btn:hover { transform: translateY(-1px); }
 .btn.ice { background: var(--ice); color: var(--ice-ink); box-shadow: 0 10px 30px rgba(191, 230, 251, .25); }
 .btn.discord { background: var(--discord); color: #ffffff; }
+.btn.kofi { background: var(--kofi); color: #ffffff; }
+.icon-btn.kofi { color: var(--kofi); }
 .btn.line { background: var(--glass); color: var(--ink); border-color: var(--glass-line); }
 .btn svg { width: 20px; height: 20px; flex: none; }
 .btn .sub { font: 500 .78rem var(--mono); opacity: .75; }
@@ -221,6 +224,7 @@ footer a { color: var(--ink); text-decoration: none; font-weight: 700; }
       <a class="icon-btn" href="https://discord.gg/H7NXpWHwgY" target="_blank" rel="noopener" aria-label="Discord">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.6 5.4A16 16 0 0 0 15.6 4l-.5 1a14.6 14.6 0 0 0-6.2 0l-.5-1a16 16 0 0 0-4 1.4C1.9 9.2 1.3 12.9 1.6 16.6A16.2 16.2 0 0 0 6.5 19l1-1.6a10.3 10.3 0 0 1-1.6-.8l.4-.3a11.5 11.5 0 0 0 11.4 0l.4.3a10 10 0 0 1-1.6.8l1 1.6a16 16 0 0 0 4.9-2.4c.4-4.3-.7-8-3-11.2ZM8.7 14.3c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z"/></svg>
       </a>
+      <a class="icon-btn kofi" href="https://ko-fi.com/parricidium" target="_blank" rel="noopener" aria-label="Ko-fi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z"/><path d="M17 9h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M10.5 15.2s-2.5-1.5-2.5-3a1.3 1.3 0 0 1 2.5-.6 1.3 1.3 0 0 1 2.5.6c0 1.5-2.5 3-2.5 3Z" fill="currentColor" stroke="none"/></svg></a>
     </div>
   </div>
 </header>
@@ -242,6 +246,7 @@ footer a { color: var(--ink); text-decoration: none; font-weight: 700; }
             <span data-i18n="cta.download">Download</span> <span class="sub" id="ver">latest</span>
           </a>
           <a class="btn discord" href="https://discord.gg/H7NXpWHwgY" target="_blank" rel="noopener" data-i18n="cta.discord">Join the Discord</a>
+          <a class="btn kofi" href="https://ko-fi.com/parricidium" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z"/><path d="M17 9h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M10.5 15.2s-2.5-1.5-2.5-3a1.3 1.3 0 0 1 2.5-.6 1.3 1.3 0 0 1 2.5.6c0 1.5-2.5 3-2.5 3Z" fill="currentColor" stroke="none"/></svg><span data-i18n="cta.kofi">Support on Ko-fi</span></a>
         </div>
         <p class="legal" data-i18n="hero.legal">Needs your own copy of the game on Steam. No game files are included.</p>
       </div>
@@ -366,6 +371,7 @@ footer a { color: var(--ink); text-decoration: none; font-weight: 700; }
       <div class="links">
         <a href="https://github.com/Parricidium/MWCoop" target="_blank" rel="noopener">GitHub</a>
         <a href="https://discord.gg/H7NXpWHwgY" target="_blank" rel="noopener">Discord</a>
+        <a href="https://ko-fi.com/parricidium" target="_blank" rel="noopener">Ko-fi</a>
         <a href="https://github.com/Parricidium/MWCoop/releases" target="_blank" rel="noopener" data-i18n="foot.rel">Releases</a>
       </div>
     </div>
@@ -379,7 +385,7 @@ footer a { color: var(--ink); text-decoration: none; font-weight: 700; }
     "nav.games": "Jeux", "nav.features": "Fonctions", "nav.screens": "Captures", "nav.install": "Installer",
     "hero.tag": "La coop pour <em>My Summer Car</em> et <em>My Winter Car</em>. Un hôte, un monde, tous tes amis dedans.",
     "chip.players": "Jusqu'à 16 joueurs", "chip.steam": "Invitations Steam, aucun port à ouvrir", "chip.free": "Gratuit, Windows et Steam Deck",
-    "cta.download": "Télécharger", "cta.discord": "Rejoindre le Discord",
+    "cta.download": "Télécharger", "cta.discord": "Rejoindre le Discord", "cta.kofi": "Soutenir sur Ko-fi",
     "hero.legal": "Il faut ton propre exemplaire du jeu sur Steam. Aucun fichier du jeu n'est inclus.",
     "games.eyebrow": "Deux jeux, un mod", "games.title": "L'été à Peräjärvi, l'hiver dans la neige",
     "games.lead": "Le même lanceur gère les deux jeux. Choisis le jeu, héberge ou rejoins, et roulez ensemble.",
