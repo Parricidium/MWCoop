@@ -23,7 +23,12 @@ namespace MWCoop
         static readonly string[] tabIcons = { "joueurs", "tchat", "course", "course", "voiture", "apparence", "hud", "graphismes", "synchro" };
         static readonly int[] tabGroup = { 0, 0, 0, 0, 0, 1, 1, 1, 2 };
         static readonly string[] groupsFr = { "PARTIE", "MOI", "AVANC\u00C9" }, groupsEn = { "GAME", "ME", "ADVANCED" };
-        static string[] tabs { get { return Lang.A(tabsFr, tabsEn); } }
+        // My Summer Car (19/10) : Dragsters a la place de la course sur glace, le rallye du jeu, pas d'onglet VAZ (MscEvents).
+        static readonly string[] tabsMscFr = { "Joueurs", "Tchat", "Dragsters", "Rallye", "VAZ-2108", "Apparence", "HUD", "Graphismes", "Synchro" },
+                                 tabsMscEn = { "Players", "Chat", "Drag race", "Rally", "VAZ-2108", "Appearance", "HUD", "Graphics", "Sync" };
+        static string[] tabs { get { return Game.Msc ? Lang.A(tabsMscFr, tabsMscEn) : Lang.A(tabsFr, tabsEn); } }
+        static bool TabHidden(int i) { return Game.Msc && i == TabVaz; }
+        static int StepTab(int from, int d) { int n = tabsFr.Length, i = from; do i = (i + d + n) % n; while (TabHidden(i) && i != from); return i; }
         public const int TabPlayers = 0, TabChat = 1, TabRace = 2, TabRally = 3, TabVaz = 4, TabLook = 5, TabHud = 6, TabGfx = 7, TabSync = 8;   // (Rallye : 18/10)
         public static int Tab { get { return tab; } }
         const string ChatField = "mwcoop-chat2";
@@ -38,7 +43,7 @@ namespace MWCoop
         static Vector2 lastMouse;
         static string hint;
 
-        static readonly Color rowText = new Color(0.88f, 0.91f, 0.95f);
+        static readonly Color rowText = Kit.Soft;
         static readonly Color line = Style.Line;
         static readonly Color selFill = new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.20f);
         static readonly Color selEdge = new Color(Style.Accent.r, Style.Accent.g, Style.Accent.b, 0.60f);
@@ -217,7 +222,14 @@ namespace MWCoop
             var view = new Rect(cx0, top, cwid, y + h - fh - Style.Px(6) - top);
             idx = 0; lines = 0; cy = 0; selY0 = selY1 = -1; gridFirst = gridLast = -1;
             hint = sel < 0 ? TabsHint : null;
-            if (tab == TabRace)
+            if (Game.Msc && (tab == TabRace || tab == TabRally))
+            {
+                dragging = false;
+                MscEvents.DrawTab(view, tab == TabRace ? MscEvents.Kind.Drag : MscEvents.Kind.Rally);
+                contentH = viewH = view.height;
+                items = 0;
+            }
+            else if (tab == TabRace)
             {
                 // Course sur glace : RacePanel (inscription, quand venir, pilotes, chronos) ; rien a choisir (18/10 : plus de
                 // Jokkis de location, la VAZ prend la place d'une IA).
@@ -319,8 +331,8 @@ namespace MWCoop
                     if (!Session.Active) return Lang.T("Solo : lancez le jeu depuis MWCoop.exe pour jouer \u00E0 plusieurs", "Solo: start the game from MWCoop.exe to play with friends");
                     return Lang.Status(Session.Status) + Sep + Session.Players.Count + Lang.T(" joueur(s)", " player(s)");
                 case TabChat: return Lang.T("En jeu, ", "In game, ") + Keys.Label(Keys.Chat) + Lang.T(" \u00E9crit sans ouvrir ce menu", " opens the chat without this menu");
-                case TabRace: return RacePanel.Sub;
-                case TabRally: return RacePanel.RallySub;
+                case TabRace: return Game.Msc ? MscEvents.Sub(MscEvents.Kind.Drag) : RacePanel.Sub;
+                case TabRally: return Game.Msc ? MscEvents.Sub(MscEvents.Kind.Rally) : RacePanel.RallySub;
                 case TabVaz: return Lang.T("Une par joueur, gratuite \u00B7 une couleur et un num\u00E9ro chacun \u00B7 rendue en quittant", "One per player, free \u00B7 a colour and a number each \u00B7 given back when you leave");
                 case TabLook: return Lang.T("Ce que les autres voient \u00B7 chang\u00E9 tout de suite chez eux", "What the others see \u00B7 changed right away for them");
                 case TabHud: return Lang.T("Pour vous seul \u00B7 aussi dans le lanceur (R\u00E9glages \u203A HUD) \u00B7 le HUD change autour du menu", "Just for you \u00B7 also in the launcher (Settings \u203A HUD) \u00B7 the HUD changes around this menu");
@@ -345,6 +357,7 @@ namespace MWCoop
             int mine = PlayerSync.InGame ? IceRace.MyNumber : 0;
             for (int i = 0; i < names.Length; i++)
             {
+                if (TabHidden(i)) continue;
                 if (tabGroup[i] != lastG)
                 {
                     lastG = tabGroup[i];
@@ -373,11 +386,10 @@ namespace MWCoop
         static bool Key(KeyCode k, bool shift)
         {
             if (tab == TabVaz && sel >= 0 && VazPanel.Key(k)) return true;
-            int n = tabs.Length;
             switch (k)
             {
-                case KeyCode.UpArrow: if (sel < 0) SetTab((tab - 1 + n) % n); else Move(-1); return true;
-                case KeyCode.DownArrow: if (sel < 0) SetTab((tab + 1) % n); else Move(1); return true;
+                case KeyCode.UpArrow: if (sel < 0) SetTab(StepTab(tab, -1)); else Move(-1); return true;
+                case KeyCode.DownArrow: if (sel < 0) SetTab(StepTab(tab, 1)); else Move(1); return true;
                 case KeyCode.PageUp: Move(-8); return true;
                 case KeyCode.PageDown: Move(8); return true;
                 case KeyCode.LeftArrow:
@@ -390,11 +402,11 @@ namespace MWCoop
                 case KeyCode.KeypadEnter:
                     if (sel < 0) Move(1); else kEnter = true;
                     return true;
-                case KeyCode.Tab: SetTab((tab + (shift ? -1 : 1) + n) % n); return true;
+                case KeyCode.Tab: SetTab(StepTab(tab, shift ? -1 : 1)); return true;
                 case KeyCode.Q:
                 case KeyCode.E:
                     if (typing) return false;
-                    SetTab((tab + (k == KeyCode.Q ? -1 : 1) + n) % n);
+                    SetTab(StepTab(tab, k == KeyCode.Q ? -1 : 1));
                     return true;
             }
             return false;
@@ -681,8 +693,18 @@ namespace MWCoop
                                      "Opens Steam's invite window (also: Shift+Tab). They start MWCoop.exe > JOIN (Steam) and accept."), ready))
                     MWCoop.Net.SteamNet.InviteDialog();
             }
-            // Course sur glace : son onglet.
-            if (PlayerSync.InGame)
+            // Course sur glace : son onglet (My Summer Car : les dragsters et le rallye du jeu).
+            if (PlayerSync.InGame && Game.Msc)
+            {
+                string nd, nr;
+                bool ld = MscEvents.Live(MscEvents.Kind.Drag, out nd), lr = MscEvents.Live(MscEvents.Kind.Rally, out nr);
+                if (ActionRow("course", Lang.T("Dragsters et rallye", "Drag race and rally"),
+                              ld ? Lang.T("Piste de dragsters ouverte", "Drag strip open") : lr ? Lang.T("Rallye en cours", "Rally on now")
+                                 : Lang.T("Dragsters ", "Drag race ") + (nd ?? "?") + Sep + Lang.T("rallye ", "rally ") + (nr ?? "?"),
+                              Lang.T("Entrée ou clic : l'onglet Dragsters", "Enter or click: the Drag race tab"), true))
+                    SetTab(TabRace);
+            }
+            else if (PlayerSync.InGame)
             {
                 int mine = IceRace.MyNumber;
                 if (ActionRow("course", Lang.T("Course sur glace", "Ice race"),
@@ -845,7 +867,7 @@ namespace MWCoop
 
         static bool dragging;
         static string pvSkin, pvLabel;
-        static readonly Color previewBg = new Color(0f, 0.02f, 0.06f, 0.30f);
+        static readonly Color previewBg = Style.M(new Color(0f, 0.02f, 0.06f, 0.30f), new Color(0f, 0f, 0f, 0.30f));
 
         // Apercu 3D (Studio.Live) : la tenue en surbrillance dans la liste (sinon celle portee), qui tourne lentement ;
         // glisser a la souris pour la tourner. Son nom dessous, facon GTA.

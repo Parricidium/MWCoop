@@ -10,20 +10,24 @@ namespace MWCoop
     // anneaux, ombres, curseur) fabriquees une fois par rayon : rien d'alloue par image.
     public static class Style
     {
-        public static readonly Color Accent = new Color(0.47f, 0.74f, 1f);          // bleu ciel (accent du lanceur sombre)
-        public static readonly Color AccentDeep = new Color(0.20f, 0.46f, 0.78f);
-        public static readonly Color OnAccent = new Color(0.04f, 0.09f, 0.16f);     // texte pose sur l'accent
-        public static readonly Color White = new Color(0.94f, 0.96f, 0.99f);
-        public static readonly Color Dim = new Color(0.62f, 0.69f, 0.78f);           // texte secondaire
+        // Couleur selon le jeu : My Winter Car (bleu nuit, accent bleu ciel) ou My Summer Car (JD, 19/10 : noir, pas bleu ;
+        // accent jaune, celui du HUD du jeu).
+        public static Color M(Color mwc, Color msc) { return Game.Msc ? msc : mwc; }
+        public static readonly Color Accent = M(new Color(0.47f, 0.74f, 1f), new Color(1f, 0.80f, 0.22f));          // bleu ciel (accent du lanceur sombre) / jaune
+        public static readonly Color AccentDeep = M(new Color(0.20f, 0.46f, 0.78f), new Color(0.80f, 0.56f, 0.06f));
+        public static readonly Color OnAccent = M(new Color(0.04f, 0.09f, 0.16f), new Color(0.08f, 0.07f, 0.03f));     // texte pose sur l'accent
+        public static readonly Color White = M(new Color(0.94f, 0.96f, 0.99f), new Color(0.96f, 0.96f, 0.96f));
+        public static readonly Color Dim = M(new Color(0.62f, 0.69f, 0.78f), new Color(0.70f, 0.70f, 0.70f));           // texte secondaire
         public static readonly Color Good = new Color(0.42f, 0.86f, 0.56f);
         public static readonly Color Warn = new Color(1f, 0.71f, 0.36f);
-        public static readonly Color PanelColor = new Color(0.05f, 0.08f, 0.14f, 0.88f);   // panneau sans flou
-        public static readonly Color Line = new Color(0.80f, 0.88f, 1f, 0.12f);
-        static readonly Color glassTint = new Color(0.04f, 0.08f, 0.15f, 0.60f);
-        static readonly Color glassEdge = new Color(0.80f, 0.89f, 1f, 0.18f);
+        public static readonly Color PanelColor = M(new Color(0.05f, 0.08f, 0.14f, 0.88f), new Color(0.05f, 0.05f, 0.05f, 0.90f));   // panneau sans flou
+        public static readonly Color Line = M(new Color(0.80f, 0.88f, 1f, 0.12f), new Color(1f, 1f, 1f, 0.12f));
+        public static readonly Color Shade = M(new Color(0.03f, 0.06f, 0.12f), new Color(0.03f, 0.03f, 0.03f));   // fond sombre des pastilles et cartouches (alpha a poser)
+        static readonly Color glassTint = M(new Color(0.04f, 0.08f, 0.15f, 0.60f), new Color(0.02f, 0.02f, 0.02f, 0.68f));
+        static readonly Color glassEdge = M(new Color(0.80f, 0.89f, 1f, 0.18f), new Color(1f, 1f, 1f, 0.16f));
         static readonly Color glassShine = new Color(1f, 1f, 1f, 0.05f);
-        static readonly Color shadowColor = new Color(0f, 0.01f, 0.04f, 0.55f);
-        static readonly Color textShadow = new Color(0f, 0.02f, 0.06f, 0.55f);
+        static readonly Color shadowColor = M(new Color(0f, 0.01f, 0.04f, 0.55f), new Color(0f, 0f, 0f, 0.55f));
+        static readonly Color textShadow = M(new Color(0f, 0.02f, 0.06f, 0.55f), new Color(0f, 0f, 0f, 0.55f));
 
         // Fondu des ecrans (0..1) : multiplie l'opacite de tout ce qui est dessine.
         public static float Alpha = 1f;
@@ -333,7 +337,7 @@ namespace MWCoop
                 logoTried = true;
                 try
                 {
-                    using (var s = typeof(Style).Assembly.GetManifestResourceStream("MWCoop.logo-titre.png"))
+                    using (var s = typeof(Style).Assembly.GetManifestResourceStream(Game.Msc ? "MWCoop.logo-msc.png" : "MWCoop.logo-titre.png"))   // (My Summer Car : launcher\logo-msc.png)
                         if (s != null)
                         {
                             var b = new byte[s.Length];
@@ -379,7 +383,7 @@ namespace MWCoop
             for (int i = 0; i < poly.Length; i++) poly[i] *= k;
             float border = Mathf.Max(1.2f, 1.6f * k);
             var tex = new Texture2D(n, n, TextureFormat.ARGB32, false) { wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
-            var edge = new Color(0.04f, 0.08f, 0.15f);
+            var edge = M(new Color(0.04f, 0.08f, 0.15f), new Color(0.04f, 0.04f, 0.04f));
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++)
                 {

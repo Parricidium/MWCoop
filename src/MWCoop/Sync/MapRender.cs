@@ -29,7 +29,8 @@ namespace MWCoop
         // une couleur et une hauteur (ordre de dessin : plus haut = par-dessus) par sorte
         struct Kind { public Color32 C; public float Y; public Kind(byte r, byte g, byte b, float y) { C = new Color32(r, g, b, 255); Y = y; } }
         static readonly Kind ForestK = new Kind(74, 104, 84, -1f);
-        static readonly Kind Snow = new Kind(238, 242, 246, 0f), Lake = new Kind(170, 205, 235, 0.5f), Pavement = new Kind(196, 200, 208, 1f), Dirt = new Kind(214, 184, 140, 2f),
+        // (My Summer Car, 19/10 : l'ete -- herbe au lieu de neige, lacs en eau libre a -4,5 m, comme la flottaison du bateau)
+        static readonly Kind Snow = Game.Msc ? new Kind(184, 206, 150, 0f) : new Kind(238, 242, 246, 0f), Lake = Game.Msc ? new Kind(96, 150, 206, 0.5f) : new Kind(170, 205, 235, 0.5f), Pavement = new Kind(196, 200, 208, 1f), Dirt = new Kind(214, 184, 140, 2f),
             IceRoad = new Kind(120, 166, 214, 2.2f), AsphaltEdge = new Kind(170, 120, 40, 3f), Asphalt = new Kind(248, 200, 84, 3.5f), Rail = new Kind(84, 84, 92, 4f),
             Structure = new Kind(170, 172, 180, 4.5f), Building = new Kind(200, 112, 86, 5f);
 
@@ -88,7 +89,7 @@ namespace MWCoop
             {
                 if (c.isTrigger || c.attachedRigidbody != null) continue;
                 int l = c.gameObject.layer;
-                if (l != 0 && l != 10) continue;
+                if (l != 0 && l != 10 && !(Game.Msc && (c.name == "Asphalt" || c.name == "Road" || c.name == "DirtRoad" || c.name == "Gravel" || c.name == "AIRPORT"))) continue;
                 if (!(c is MeshCollider) && !(c is BoxCollider)) continue;
                 todo.Add(c);
             }
@@ -103,6 +104,13 @@ namespace MWCoop
             k = Snow; lakeCheck = false;
             string n = c.name, r = Game.RootName(c.transform);
             if (r == "PLAYER" || r.StartsWith("MWCoop")) return false;
+            if (Game.Msc && r == "MAP")   // (routes de MSC, vidage du 19/10 : MAP/MESH, quel que soit leur calque)
+            {
+                if (n == "Asphalt") { k = Asphalt; return true; }
+                if (n == "Road" || n == "DirtRoad" || n == "Gravel") { k = Dirt; return true; }
+                if (n == "AIRPORT") { k = Pavement; return true; }
+                if (n == "SWAMP") { k = Snow; return true; }   // (marais : bas mais pas un lac -- eclats bleus sinon)
+            }
             if (c.gameObject.layer == 10)
             {
                 if (n == "AsphaltRoad" || n == "Road2") { k = Asphalt; return true; }
@@ -158,7 +166,8 @@ namespace MWCoop
                 if (i % (Step * 3) == Step * 3 - 3) yield return null;
                 Vector3 a = w[tr[i]], b = w[tr[i + 1]], d = w[tr[i + 2]];
                 Kind kk = k;
-                if (lakeCheck && a.y < -3.9f && b.y < -3.9f && d.y < -3.9f)
+                if (lakeCheck && Game.Msc) { if (a.y < -4.5f && b.y < -4.5f && d.y < -4.5f) kk = Lake; }   // (eau libre : le fond, sous la surface)
+                else if (lakeCheck && a.y < -3.9f && b.y < -3.9f && d.y < -3.9f)
                 {
                     Vector3 nrm = Vector3.Cross(b - a, d - a);
                     if (nrm.sqrMagnitude > 1e-6f && Mathf.Abs(nrm.normalized.y) > 0.995f) kk = Lake;

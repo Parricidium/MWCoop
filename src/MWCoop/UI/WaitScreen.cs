@@ -202,7 +202,7 @@ namespace MWCoop
             if (!Shown && forced == 0) return;
             if (forced > 0) { Current = Mathf.Clamp(forced - 1, 0, 3); Error = Config.Get("Test", "AttenteErreur", ""); }
             float now = Time.realtimeSinceStartup;
-            Style.Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(0.02f, 0.04f, 0.08f, 0.55f));
+            Style.Fill(new Rect(0, 0, Screen.width, Screen.height), Style.M(new Color(0.02f, 0.04f, 0.08f, 0.55f), new Color(0f, 0f, 0f, 0.55f)));
             float w = Mathf.Min(Style.Px(700), Screen.width - Style.Px(40)), pad = Style.Px(34), iw = w - 2 * pad;
             float h = cardH > 0 ? cardH : Style.Px(520);
             float x = Mathf.Round((Screen.width - w) / 2f), y0 = Mathf.Round(Mathf.Max(Style.Px(16), (Screen.height - h) / 2f));

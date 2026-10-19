@@ -1696,6 +1696,7 @@ static const wchar_t *const kRu[][2] = {
     { L"MSC or MWC", L"MSC или MWC" },
     { L"Under the version number, top left: pick your game, My Summer Car (BETA) or My Winter Car. The launcher restarts on the chosen game. Everyone must be on the same game to play together.", L"Под номером версии, слева вверху: выбери игру, My Summer Car (BETA) или My Winter Car. Лаунчер перезапустится на выбранной игре. Чтобы играть вместе, у всех должна быть одна игра." },
     { L"Ready for a summer together? Your friends must pick the same path as you.", L"Готов к лету вместе? Друзья должны выбрать тот же путь, что и ты." },
+    { L"Yellow", L"Жёлтый" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },

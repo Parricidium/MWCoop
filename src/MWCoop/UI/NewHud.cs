@@ -69,16 +69,16 @@ namespace MWCoop
         static void Read()
         {
             gauges.Clear();
-            alcoholic = Game.GlobalFloat("PlayerAlcoholism") > 1f;
+            alcoholic = !Game.Msc && Game.GlobalFloat("PlayerAlcoholism") > 1f;   // (MSC : pas d'alcoolisme, ni de temperature, ni de sueur)
             Add("JaugeSoif", alcoholic ? "probleme" : "soif", alcoholic ? "Problème" : "Soif", alcoholic ? "Problem" : "Thirst", Game.GlobalFloat("PlayerThirst"));
             Add("JaugeFaim", "faim", "Faim", "Hunger", Game.GlobalFloat("PlayerHunger"));
             Add("JaugeStress", "stress", "Stress", "Stress", Game.GlobalFloat("PlayerStress"));
             Add("JaugeUrine", "urine", "Urine", "Urine", Game.GlobalFloat("PlayerUrine"));
             Add("JaugeFatigue", "fatigue", "Fatigue", "Fatigue", Game.GlobalFloat("PlayerFatigue"));
             Add("JaugeSalete", "salete", "Saleté", "Dirtiness", Game.GlobalFloat("PlayerDirtiness"));
-            Add("JaugeSueur", "sueur", "Sueur", "Sweat", Game.GlobalFloat("PlayerSweat"));
+            if (!Game.Msc) Add("JaugeSueur", "sueur", "Sueur", "Sweat", Game.GlobalFloat("PlayerSweat"));
             money = Game.GlobalFloat("PlayerMoney");
-            temp = Game.GlobalFloat("PlayerTemp");
+            temp = Game.Msc ? 70f : Game.GlobalFloat("PlayerTemp");   // (MSC : neutre, jamais « gele »)
             trend = bodyTempTrend != null ? bodyTempTrend.Value : 0f;
             dayLabel = dayText != null ? DayName(dayText.text) : "";
             inJail = jailGo != null && jailGo.activeInHierarchy;
@@ -217,7 +217,7 @@ namespace MWCoop
             Watch("moi.fatigue", Game.GlobalFloat("PlayerFatigue"), false, Lang.T("Vous tombez de fatigue", "You are exhausted"));
             Watch("moi.urine", Game.GlobalFloat("PlayerUrine"), false, Lang.T("Envie très pressante", "You badly need to pee"));
             Watch("moi.stress", Game.GlobalFloat("PlayerStress"), false, Lang.T("Stress au maximum", "Stress at its peak"));
-            Watch("moi.temp", Game.GlobalFloat("PlayerTemp"), true, Lang.T("Vous êtes gelé", "You are freezing"));
+            if (!Game.Msc) Watch("moi.temp", Game.GlobalFloat("PlayerTemp"), true, Lang.T("Vous êtes gelé", "You are freezing"));
             foreach (Mate m in mates.Values)
             {
                 if (now - m.At > 10f) continue;
@@ -226,7 +226,7 @@ namespace MWCoop
                 Watch(m.Id + ".faim", m.V[1], false, string.Format(Lang.T("{0} a très faim", "{0} is very hungry"), n));
                 Watch(m.Id + ".soif", m.V[0], false, string.Format(Lang.T("{0} a très soif", "{0} is very thirsty"), n));
                 Watch(m.Id + ".fatigue", m.V[4], false, string.Format(Lang.T("{0} tombe de fatigue", "{0} is exhausted"), n));
-                Watch(m.Id + ".temp", m.V[6], true, string.Format(Lang.T("{0} est gelé", "{0} is freezing"), n));
+                if (!Game.Msc) Watch(m.Id + ".temp", m.V[6], true, string.Format(Lang.T("{0} est gelé", "{0} is freezing"), n));
             }
         }
 
@@ -241,11 +241,13 @@ namespace MWCoop
         static float P(float v) { return Mathf.Round(v * Style.S * K); }
         static int F(float size) { return Mathf.Max(8, Mathf.RoundToInt(size * K)); }
         static Color accent;
-        static readonly Color Warn = new Color(1f, 0.71f, 0.36f), Bad = new Color(1f, 0.42f, 0.48f), Txt = new Color(0.94f, 0.96f, 0.99f), Dim = new Color(0.62f, 0.69f, 0.78f),
-                              Track = new Color(1f, 1f, 1f, 0.12f), Edge = new Color(0.80f, 0.89f, 1f, 0.18f), ColdC = new Color(0.56f, 0.79f, 1f);
-        static readonly Color[] Accents = { new Color(0.65f, 0.85f, 1f), new Color(0.47f, 0.74f, 1f), new Color(0.28f, 0.94f, 0.69f), new Color(0.79f, 0.65f, 1f) };
+        static readonly Color Warn = new Color(1f, 0.71f, 0.36f), Bad = new Color(1f, 0.42f, 0.48f), Txt = Style.White, Dim = Style.Dim,
+                              Track = new Color(1f, 1f, 1f, 0.12f), Edge = Style.M(new Color(0.80f, 0.89f, 1f, 0.18f), new Color(1f, 1f, 1f, 0.16f)), ColdC = new Color(0.56f, 0.79f, 1f);
+        // (My Summer Car : les deux premiers accents en jaune et orange, comme le HUD du jeu, au lieu des bleus)
+        static readonly Color[] Accents = { Style.M(new Color(0.65f, 0.85f, 1f), new Color(1f, 0.84f, 0.30f)), Style.M(new Color(0.47f, 0.74f, 1f), new Color(1f, 0.62f, 0.22f)),
+                                            new Color(0.28f, 0.94f, 0.69f), new Color(0.79f, 0.65f, 1f) };
 
-        static Color Panel { get { return new Color(0.03f, 0.07f, 0.13f, HudSettings.Get("Fond") / 100f); } }
+        static Color Panel { get { Color c = Style.Shade; c.a = HudSettings.Get("Fond") / 100f; return c; } }
         static Color Tone(float v, bool low) { return low ? (v < 20f ? Bad : v < 40f ? Warn : accent) : (v >= 90f ? Bad : v >= 70f ? Warn : accent); }
         static bool Resting(float v) { return HudSettings.On("Estomper") && v < 10f; }
 
@@ -399,7 +401,7 @@ namespace MWCoop
             GUI.color = old;
             float mx = r.x + Mathf.Clamp01(frac) * r.width;
             var mk = new Rect(mx - P(2), r.y - P(4), P(4), r.height + P(8));
-            Style.Round(new Rect(mk.x - P(1), mk.y - P(1), mk.width + P(2), mk.height + P(2)), P(2), new Color(0.03f, 0.07f, 0.13f, 0.8f));
+            Style.Round(new Rect(mk.x - P(1), mk.y - P(1), mk.width + P(2), mk.height + P(2)), P(2), Kit.A(Style.Shade, 0.8f));
             Style.Round(mk, P(2), Color.white);
         }
 
@@ -586,14 +588,14 @@ namespace MWCoop
             foreach (Mate m in list)
             {
                 var r = new Rect(x, y, w, cardH);
-                bool tired = m.V[4] >= 90f || m.V[1] >= 90f || m.V[6] < 20f;
+                bool tired = m.V[4] >= 90f || m.V[1] >= 90f || (!Game.Msc && m.V[6] < 20f);
                 Style.Round(r, P(14), Panel);
                 Style.Ring(r, P(14), tired ? new Color(Warn.r, Warn.g, Warn.b, 0.5f) : Edge);
                 string name = MateName(m.Id);
                 float av = P(28);
                 var ar = new Rect(r.x + P(10), r.y + P(10), av, av);
                 Style.Round(ar, av / 2, accent);
-                Style.Text(ar, name.Length > 0 ? name.Substring(0, 1).ToUpperInvariant() : "?", F(14), TextAnchor.MiddleCenter, new Color(0.04f, 0.09f, 0.16f));
+                Style.Text(ar, name.Length > 0 ? name.Substring(0, 1).ToUpperInvariant() : "?", F(14), TextAnchor.MiddleCenter, Style.OnAccent);
                 Style.Text(new Rect(ar.xMax + P(8), r.y + P(6), w - av - P(28), P(20)), name, F(14), TextAnchor.MiddleLeft, Txt);
                 Style.Text(new Rect(ar.xMax + P(8), r.y + P(24), w - av - P(28), P(16)), Where(m.Id, me), F(11), TextAnchor.MiddleLeft, Dim, false);
                 float by = r.y + P(48);

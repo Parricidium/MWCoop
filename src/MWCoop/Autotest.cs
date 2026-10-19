@@ -32,6 +32,18 @@ namespace MWCoop
         static int mscStep; static float mscLog;
         static void MscTest(string mode, float t)
         {
+            if (mode == "mscinterface")
+            {
+                // [Test] Autotest=mscinterface (19/10) : captures du HUD noir, des onglets Dragsters / Rallye / Joueurs du F10, puis la carte
+                // (MapPanel, comme Autotest=carte : [Test] CarteOuvre).
+                if (t > 30f && mscStep == 0) { mscStep = 1; CaptureSoon("msc-hud", 0.5f); }
+                if (t > 34f && mscStep == 1) { mscStep = 2; Menu.Show(Menu.TabRace); CaptureSoon("msc-f10-dragsters", 2f); }
+                if (t > 40f && mscStep == 2) { mscStep = 3; Menu.Show(Menu.TabRally); CaptureSoon("msc-f10-rallye", 2f); }
+                if (t > 46f && mscStep == 3) { mscStep = 4; Menu.Show(Menu.TabPlayers); CaptureSoon("msc-f10-joueurs", 2f); }
+                if (t > 52f && mscStep == 4) { mscStep = 5; Menu.Hide(); }
+                MapPanel.Test("carte", t);
+                return;
+            }
             if (mode != "mscvoiture") return;
             string car = Config.Get("Test", "TestVoiture", "KEKMET"), part = Config.Get("Test", "TestPorte", "");
             bool host = Net.Session.IsHost;

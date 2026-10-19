@@ -9,7 +9,7 @@ namespace MWCoop
     {
         class ToastMsg { public string Text; public float Born, Until; }
         static readonly List<ToastMsg> toasts = new List<ToastMsg>();
-        static readonly Color pill = new Color(0.03f, 0.06f, 0.12f, 0.62f);
+        static readonly Color pill = Kit.A(Style.Shade, 0.62f);
 
         public static void Toast(string text)
         {
@@ -31,7 +31,7 @@ namespace MWCoop
             bool linked = Session.Active && (Session.IsHost || Session.HostConnected);
             float dd = Style.Px(8);
             Style.Round(new Rect(hr.x + Style.Px(13), hr.center.y - dd / 2, dd, dd), dd / 2, !Session.Active ? Style.Dim : linked ? Style.Good : Style.Warn);
-            Style.Text(new Rect(hr.x + Style.Px(30), hr.y, tw + Style.Px(10), ph), head, 14, TextAnchor.MiddleLeft, new Color(0.88f, 0.92f, 0.97f), false);
+            Style.Text(new Rect(hr.x + Style.Px(30), hr.y, tw + Style.Px(10), ph), head, 14, TextAnchor.MiddleLeft, Kit.Soft, false);
 
             // Messages : pilules empilees, entree en glissant, sortie en fondu.
             toasts.RemoveAll(t => t.Until < now);

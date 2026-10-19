@@ -10,19 +10,20 @@ namespace MWCoop
     // le temps du dessin (Kit.Begin / Kit.End) ; place du F10 : [Hud] MenuPosition (0 centre, 1 gauche).
     public static class Kit
     {
-        public static readonly Color Ink = new Color(0.93f, 0.96f, 0.98f);
-        public static readonly Color Soft = new Color(0.86f, 0.90f, 0.95f);
-        public static readonly Color Muted = new Color(0.62f, 0.70f, 0.78f);
-        public static readonly Color Faint = new Color(0.51f, 0.59f, 0.68f);
-        public static readonly Color Ice = new Color(0.65f, 0.85f, 1f);
-        public static readonly Color OnIce = new Color(0.04f, 0.09f, 0.15f);
+        // (My Summer Car : gris neutres et accent jaune au lieu du bleu, voir Style.M)
+        public static readonly Color Ink = Style.M(new Color(0.93f, 0.96f, 0.98f), new Color(0.95f, 0.95f, 0.95f));
+        public static readonly Color Soft = Style.M(new Color(0.86f, 0.90f, 0.95f), new Color(0.89f, 0.89f, 0.89f));
+        public static readonly Color Muted = Style.M(new Color(0.62f, 0.70f, 0.78f), new Color(0.69f, 0.69f, 0.69f));
+        public static readonly Color Faint = Style.M(new Color(0.51f, 0.59f, 0.68f), new Color(0.57f, 0.57f, 0.57f));
+        public static readonly Color Ice = Style.M(new Color(0.65f, 0.85f, 1f), new Color(1f, 0.84f, 0.35f));
+        public static readonly Color OnIce = Style.M(new Color(0.04f, 0.09f, 0.15f), new Color(0.09f, 0.08f, 0.03f));
         public static readonly Color Amber = new Color(1f, 0.71f, 0.36f);
         public static readonly Color Green = new Color(0.42f, 0.86f, 0.56f);
         public static readonly Color Red = new Color(1f, 0.54f, 0.59f);
-        public static readonly Color Edge = new Color(0.80f, 0.89f, 1f, 0.16f);
-        public static readonly Color Sep = new Color(0.80f, 0.89f, 1f, 0.10f);
+        public static readonly Color Edge = Style.M(new Color(0.80f, 0.89f, 1f, 0.16f), new Color(1f, 1f, 1f, 0.16f));
+        public static readonly Color Sep = Style.M(new Color(0.80f, 0.89f, 1f, 0.10f), new Color(1f, 1f, 1f, 0.10f));
         public static readonly Color Tint = new Color(1f, 1f, 1f, 0.05f);
-        static readonly Color[] avatarColors = { new Color(0.65f, 0.85f, 1f), new Color(1f, 0.71f, 0.36f), new Color(0.73f, 0.65f, 1f),
+        static readonly Color[] avatarColors = { Ice, new Color(1f, 0.71f, 0.36f), new Color(0.73f, 0.65f, 1f),
                                                  new Color(0.42f, 0.86f, 0.56f), new Color(1f, 0.62f, 0.77f), new Color(1f, 0.54f, 0.42f) };
 
         public static float MenuScale { get { return Mathf.Clamp(HudSettings.Get("Menu"), 70, 150) / 100f; } }
