@@ -1303,6 +1303,8 @@ You are about to restart \"%s\".\n\nThis will erase this save (the game in progr
 Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your SATSUMA color.	مظهرك الكامل (البنية، القبعة، النظارات، الشعر، الوجه، القميص، البنطال) بالأبعاد الثلاثية، ولون SATSUMA.
 SATSUMA custom paint	طلاء SATSUMA المخصص
 In Car, at the top of the preview: your own paint on the SATSUMA, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop; the host sends it to their guests.	في السيارة، أعلى المعاينة: طلاؤك الخاص على SATSUMA، مرسوم على قالب اللعبة. في اللعبة، اشترِ \"Custom paint made by artist\" من ورشة Fleetari؛ يرسله المضيف إلى ضيوفه.
+Since 1.1.1: the host's time and weather, traffic and NPCs, jobs, money and the wallet (N), Teimo's and Fleetari's shops, fuel, and mechanics: parts, bolts, tuning, fluids and paint.	منذ 1.1.1: وقت المضيف وطقسه، حركة المرور والشخصيات، الأعمال، المال والمحفظة (N)، متجرا Teimo وFleetari، الوقود، والميكانيك: القطع والبراغي والضبط والسوائل والطلاء.
+A few side things of the game don't follow yet (slot machine, rally prizes, Mummola's moving job...). They come over the next versions.	بعض الأشياء الجانبية في اللعبة لا تتزامن بعد (آلة القمار، جوائز الرالي، نقل أثاث Mummola...). ستأتي في الإصدارات القادمة.
 Thanks to everyone who makes MWCoop better	شكراً لكل من يجعل MWCoop أفضل
 VHS tapes	أشرطة VHS
 Watch them, export them as .mp4, rename them, put a video on them	شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو

@@ -1305,6 +1305,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your SATSUMA color.", L"مظهرك الكامل (البنية، القبعة، النظارات، الشعر، الوجه، القميص، البنطال) بالأبعاد الثلاثية، ولون SATSUMA." },
     { L"SATSUMA custom paint", L"طلاء SATSUMA المخصص" },
     { L"In Car, at the top of the preview: your own paint on the SATSUMA, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop; the host sends it to their guests.", L"في السيارة، أعلى المعاينة: طلاؤك الخاص على SATSUMA، مرسوم على قالب اللعبة. في اللعبة، اشترِ \"Custom paint made by artist\" من ورشة Fleetari؛ يرسله المضيف إلى ضيوفه." },
+    { L"Since 1.1.1: the host's time and weather, traffic and NPCs, jobs, money and the wallet (N), Teimo's and Fleetari's shops, fuel, and mechanics: parts, bolts, tuning, fluids and paint.", L"منذ 1.1.1: وقت المضيف وطقسه، حركة المرور والشخصيات، الأعمال، المال والمحفظة (N)، متجرا Teimo وFleetari، الوقود، والميكانيك: القطع والبراغي والضبط والسوائل والطلاء." },
+    { L"A few side things of the game don't follow yet (slot machine, rally prizes, Mummola's moving job...). They come over the next versions.", L"بعض الأشياء الجانبية في اللعبة لا تتزامن بعد (آلة القمار، جوائز الرالي، نقل أثاث Mummola...). ستأتي في الإصدارات القادمة." },
     { L"Thanks to everyone who makes MWCoop better", L"شكراً لكل من يجعل MWCoop أفضل" },
     { L"VHS tapes", L"أشرطة VHS" },
     { L"Watch them, export them as .mp4, rename them, put a video on them", L"شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو" },
