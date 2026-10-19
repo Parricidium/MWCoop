@@ -194,6 +194,7 @@ namespace MWCoop
         static string kelaLine = "";
         static PlayMakerFSM Kela()
         {
+            if (Game.Msc) return null;   // (My Summer Car : pas de Kela)
             if (kela == null && PlayerSync.InGame) { GameObject go = Game.FindAny(Pays[0].Path); kela = go != null ? Game.FsmOn(go, Pays[0].Fsm) : null; }   // (pas au menu : racine absente)
             return kela;
         }
@@ -474,7 +475,7 @@ namespace MWCoop
             if (Game.LevelName == "MainMenu" && startCash < 0)
             {
                 FsmFloat mc = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney"), mb = FsmVariables.GlobalVariables.FindFsmFloat("PlayerBankAccount");
-                if (mc != null && mb != null) { startCash = mc.Value; startBank = mb.Value; Log.Info("argent : au menu (nouvelle partie) " + startCash + " liquide, " + startBank + " banque"); }
+                if (mc != null && (mb != null || Game.Msc)) { startCash = mc.Value; startBank = mb != null ? mb.Value : 0f; /* (MSC : pas de banque) */ Log.Info("argent : au menu (nouvelle partie) " + startCash + " liquide, " + startBank + " banque"); }
             }
             // Avant la remise a zero : ce que l'invite a en poche est ecrit (relecture du 15/10) -- sauf si le menu a deja remis
             // les globales a leur valeur de nouvelle partie (ce ne serait plus son argent, mais celui d'une partie neuve).
@@ -1066,6 +1067,8 @@ namespace MWCoop
             {
                 cash = FsmVariables.GlobalVariables.FindFsmFloat("PlayerMoney");
                 bank = FsmVariables.GlobalVariables.FindFsmFloat("PlayerBankAccount");
+                // (My Summer Car : pas de compte en banque -- une variable a nous, toujours 0 : le format "liquide;banque" reste le meme)
+                if (bank == null && Game.Msc) bank = new FsmFloat("PlayerBankAccount");
                 if (cash == null || bank == null) { readyAt = -1; Log.Warn("argent : globales absentes"); return; }
                 // PlayerID pas encore connu (0 : nouvelle partie en cours d'ecriture) : la cle du monde serait "0", la meme pour
                 // toutes les parties neuves -- argent d'une partie d'avant retrouve dans la nouvelle (retour de Donskoy, 18/10).
@@ -1084,10 +1087,9 @@ namespace MWCoop
                 ready = true;
                 Log.Info("argent : liquide " + lastCash + ", banque " + lastBank);
             }
-            HookPays();
-            HookTrigs();
+            if (!Game.Msc) { HookPays(); HookTrigs(); }   // (MSC : versements et objets de MWC absents)
             HookEnvelopes();
-            FleaStep();
+            if (!Game.Msc) FleaStep();
             foreach (Pay p in Pays) if (p.Open) PayEnd(p);   // fin d'etat pas vue (etat quitte avant la fin de ses actions)
             if (Time.realtimeSinceStartup >= nextStore) { nextStore = Time.realtimeSinceStartup + 10f; Store(); }
             if (Time.realtimeSinceStartup < next) return;
@@ -1178,6 +1180,8 @@ namespace MWCoop
         {
             if (f.FsmName != "Use" || f.hideFlags != HideFlags.None) return false;
             string n = f.gameObject.name;
+            // (My Summer Car : le PayMoney de la machine a sous est un bouton de mise, celui du rallye un prix personnel)
+            if (Game.Msc && n == "PayMoney") { string p = Recon.Path(f.transform); if (p.Contains("SlotMachine") || p.StartsWith("RALLY/")) return false; }
             return n == "PayMoney";   // (PriceMoney* : prix des courses, personnels -- voir Pays)
         }
 
@@ -1211,6 +1215,15 @@ namespace MWCoop
                     try
                     {
                         FsmState take = e.F.Fsm.GetState("State 1"), end = e.F.Fsm.GetState("State 3");
+                        // (My Summer Car : beaucoup d'enveloppes n'ont pas de "State 3" -- "State 1" se cache elle-meme a la fin)
+                        if (take != null && end == null && Game.Msc)
+                        {
+                            if (!take.IsInitialized) continue;
+                            FsmHooks.Prepend(take, new EnvHook { E = e, Take = true });
+                            e.Hooked = true;
+                            Log.Info("argent : enveloppe " + e.Key + " tendue ici (sans State 3)");
+                            continue;
+                        }
                         if (take == null || end == null) { e.Hooked = true; Log.Warn("argent : enveloppe " + e.Key + " sans State 1/State 3"); continue; }
                         if (!take.IsInitialized || !end.IsInitialized) continue;
                         FsmHooks.Prepend(take, new EnvHook { E = e, Take = true });
@@ -1244,7 +1257,16 @@ namespace MWCoop
             string st = e.F.ActiveStateName;
             if (st == "State 3" || st == "State 5") return;
             envApplying = true; Replay.Depth++;
-            try { Game.SetState(e.F, "State 3"); }
+            try
+            {
+                if (e.F.Fsm.GetState("State 3") != null) Game.SetState(e.F, "State 3");
+                else
+                {
+                    // (MSC, pas de "State 3" : videe et cachee, comme la fin de son "State 1")
+                    FsmFloat m = e.F.FsmVariables.FindFsmFloat("Money"); if (m != null) m.Value = 0f;
+                    e.F.gameObject.SetActive(false);
+                }
+            }
             finally { envApplying = false; Replay.Depth--; }
             Log.Info("argent : enveloppe " + e.Key + " retiree ici (" + st + " -> " + e.F.ActiveStateName + ")");
         }

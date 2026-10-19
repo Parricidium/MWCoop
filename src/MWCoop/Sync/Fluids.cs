@@ -69,6 +69,19 @@ namespace MWCoop
             else if (x.Rot != null) { Vector3 e = x.Rot.localEulerAngles; x.Rot.localEulerAngles = new Vector3(e.x, v, e.z); }
             else x.Var.Value = v;
         }
+        // Valeur d'une voiture conduite par un autre. My Summer Car : les liquides et l'usure de la SATSUMA sont dans Database/*
+        // (racine a part, pas sous la voiture) -- comptes comme ceux de la SATSUMA.
+        static Transform satsuma;
+        static bool Driven(Transform t)
+        {
+            if (Game.Msc && t != null && t.root.name == "Database")
+            {
+                if (satsuma == null) { GameObject s = Game.FindAny("SATSUMA(557kg, 248)"); satsuma = s != null ? s.transform : null; }
+                if (satsuma != null) t = satsuma;
+            }
+            return VehicleSync.RemotelyDriven(t);
+        }
+
         static bool Changed(Watch x, float v)
         {
             return x.Rot != null ? Mathf.Abs(Mathf.DeltaAngle(v, x.Last)) > 0.5f : Mathf.Abs(v - x.Last) > 0.005f + 0.001f * Mathf.Abs(v);
@@ -133,6 +146,10 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
+            // (My Summer Car : liquides de la SATSUMA dans Database/* 'Data' -- embrayage, qualite d'huile, bidons)
+            if (Game.Msc) SkipFsm.Add("Obstacle");   // (MSC : Obstacle.WaterLevel des PNJ, passagers du bus)
+            if (Game.Msc) foreach (string n in new[] { "ClutchFluid", "OilContamination", "OilGrade", "FluidGasoline", "FluidDiesel", "FluidOil", "FluidCoolant" }) Names.Add(n);
+            satsuma = null;
             byKey.Clear(); watches.Clear(); seen.Clear(); ambiguous.Clear(); snapshots.Clear();
             gifu = null;
             nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 14f : -1;
@@ -147,7 +164,7 @@ namespace MWCoop
                 if (f.hideFlags != HideFlags.None || seen.Contains(f) || SkipFsm.Contains(f.FsmName)) continue;
                 Transform t = f.transform;
                 string root = Game.RootName(t);
-                if (root == "GUI" || root == "PLAYER" || t.name.StartsWith("CapTrigger")) continue;
+                if (root == "GUI" || root == "PLAYER" || t.name.StartsWith("CapTrigger") || Game.Msc && root == "HUMANS") continue;   // (MSC : HUMANS/.../Obstacle.WaterLevel)
                 seen.Add(f);
                 bool later;
                 string owner = KeyOf(t, out later);
@@ -261,9 +278,9 @@ namespace MWCoop
                     if (!septicHere) { x.Last = v; continue; }
                     if (now < x.NextSend) continue;
                 }
-                else if (VehicleSync.RemotelyDriven(x.Fsm.transform) || (x.Contested && !Session.IsHost) || now < x.NextSend)
+                else if (Driven(x.Fsm.transform) || (x.Contested && !Session.IsHost) || now < x.NextSend)
                 {
-                    bool notOurs = VehicleSync.RemotelyDriven(x.Fsm.transform) || (x.Contested && !Session.IsHost);
+                    bool notOurs = Driven(x.Fsm.transform) || (x.Contested && !Session.IsHost);
                     if (notOurs && Fill(x) && v > x.Last) { x.Pending += v - x.Last; x.Last = v; continue; }   // rempli ici : en ajout
                     if (now >= x.NextSend) x.Last = v;   // derive locale ignoree
                     continue;
@@ -321,7 +338,7 @@ namespace MWCoop
                 }
                 // (remplissage fait ici depuis le dernier releve, pas encore parti : garde par-dessus la valeur recue)
                 float here = Val(x);
-                if (Fill(x) && here > x.Last && (VehicleSync.RemotelyDriven(x.Fsm.transform) || x.Contested && !Session.IsHost)) x.Pending += here - x.Last;
+                if (Fill(x) && here > x.Last && (Driven(x.Fsm.transform) || x.Contested && !Session.IsHost)) x.Pending += here - x.Last;
                 SetVal(x, v + (Fill(x) ? x.Pending : 0f));
                 x.Last = Val(x);
                 Tally(x, false, now);

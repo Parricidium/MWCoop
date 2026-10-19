@@ -148,7 +148,8 @@ namespace MWCoop
         // 15 s apres l'hote (autorite des fosses, GIFU garee) la vide (0,3 -> Pay) ; l'invite note a +25 s si le proprio est
         // la et tend l'argent (PayMoney allume), l'hote reste loin (maison hors de portee chez lui).
         static int tStep; static float tAt;
-        const string TestWell = "JOBS/HouseShit3/WasteWell_2000litre/Shit/Level/ShitLevelTrigger", TestMan = "JOBS/HouseShit3/LOD/ShitNPC/Man";
+        static string TestWell { get { return Game.Msc ? "JOBS/HouseShit3/WasteWell_2000litre/Shit/Level3/ShitLevelTrigger" : "JOBS/HouseShit3/WasteWell_2000litre/Shit/Level/ShitLevelTrigger"; } }
+        static string TestMan { get { return Game.Msc ? "JOBS/HouseShit3/LOD/ShitNPC/ShitMan3" : "JOBS/HouseShit3/LOD/ShitNPC/Man"; } }   // (MSC : Level{N}, ShitMan{N})
         // [Test] Autotest=tuyau (2 joueurs) : 40 s apres l'arrivee de l'autre, l'invite sort le tuyau (ActivateHose -> Remove
         // part, rejoue chez l'hote) puis promene le bout 10 s (comme tenu : il l'envoie) ; chacun note la pose du bout toutes
         // les 2 s ; a +16 s l'invite le range (Put hose back).

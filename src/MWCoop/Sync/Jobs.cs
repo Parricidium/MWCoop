@@ -301,7 +301,8 @@ namespace MWCoop
                                     // Pieces et points de montage : Parts (comme WorldFsms). Une piece montee est sous la voiture : son
                                     // automate Data (sauvegarde) etait suivi ici aussi -- clics de demontage / montage rejoues en double,
                                     // la piece montee chez l'un restait en l'air chez l'autre (Hall0wMan, 11/10 : reservoir 19 L, siege).
-                                    && !(f.FsmName == "Data" && Parts.IdOf(f.gameObject).Length > 0) && !on.StartsWith("VINP");
+                                    && !(f.FsmName == "Data" && Parts.IdOf(f.gameObject).Length > 0) && !on.StartsWith("VINP")
+                                    && !(Game.Msc && MscSkip(f));
                         c = new Classified { Path = keep ? Recon.Path(f.transform) + "::" + f.FsmName : null, Control = control };
                         classified[f] = c;
                     }
@@ -628,12 +629,53 @@ namespace MWCoop
             { "Motor OFF", new[] { "Motor OFF", "Wait1", "Wait ACC" } },
             { "Motor starting", new[] { "Motor starting" } } };
 
+        // My Summer Car : automates sauvegardes qui ne sont pas des boulots a partager -- la marche de la grand-mere (JOBS/Mummola::Logic,
+        // des transitions a chaque pas : « change trop souvent ») et les meubles du demenagement (HouseDrunk/Moving/Stuff :: Save, des objets).
+        static bool MscSkip(PlayMakerFSM f)
+        {
+            string p = Recon.Path(f.transform);
+            return p.StartsWith("JOBS/Mummola") && f.FsmName == "Logic" || f.FsmName == "Save" && p.Contains("/Moving/Stuff");
+        }
+
         static bool IgnitionLike(PlayMakerFSM f)
         {
             if (f.FsmName != "Use") return false;
             Fsm m = f.Fsm;
+            if (Game.Msc) return IgnitionLikeMsc(m);
             return m.GetState("Motor starting") != null && m.GetState("State 1") != null && m.GetState("ACC on") != null
                    && m.GetState("Motor OFF") != null && m.GetState("Shut off") != null && m.GetState("Wait2") != null;
+        }
+
+        // My Summer Car (vidage v.250908-04 : */LOD/Dashboard/.../Ignition, IgnitionSatsuma) : "Wait button" -ACC-> "Test" (le clic),
+        // puis selon ACC / MotorOn : "Motor OFF", "ACC on" ou "ACC on 2" ; dans ces deux-la, souris relachee avant 0,4 s -FINISHED->
+        // "Wait button" (ou "Motor OFF"), tenue -START-> "Motor starting" -> "Shut off" -> "Wait button". Pas de "State 1" ni de "Wait2".
+        static bool IgnitionLikeMsc(Fsm m)
+        {
+            return m.GetState("Motor starting") != null && m.GetState("Test") != null && m.GetState("ACC on") != null
+                   && m.GetState("Motor OFF") != null && m.GetState("Shut off") != null && m.GetState("Wait button") != null;
+        }
+
+        // MSC : position recue posee ; « ACC on » (contact) se repose aussitot dans « Wait button » -- laissee dans « ACC on »,
+        // son Wait(0,4) -START-> lancait le demarreur chez l'autre (la souris n'y est pas relachee). Deja la : d'apres les
+        // booleens de la cle (ACC, MotorOn), la cle de MSC revenant toujours dans « Wait button ».
+        static void ApplyIgnitionMsc(Job j, int who, string key, string state)
+        {
+            FsmBool acc = j.F.FsmVariables.FindFsmBool("ACC"), on = j.F.FsmVariables.FindFsmBool("MotorOn");
+            string cur = j.F.ActiveStateName;
+            bool already = state == "ACC on" ? acc != null && acc.Value && cur == "Wait button"
+                         : state == "Motor OFF" ? acc != null && !acc.Value && (on == null || !on.Value) && cur == "Wait button"
+                         : state == "Shut off" ? cur == "Wait button" || cur == "Shut off"
+                         : cur == state;
+            j.FromReplay = true;
+            if (already) return;
+            applying = true; Replay.Depth++;
+            try
+            {
+                Game.SetState(j.F, state);
+                if (state == "ACC on" && j.F.ActiveStateName == "ACC on") Game.SetState(j.F, "Wait button");
+            }
+            finally { applying = false; Replay.Depth--; }
+            Log.Info("cle de #" + who + " : " + key + " -> " + j.F.ActiveStateName + " (voulu " + state + ", ACC " + (acc != null && acc.Value) + ")");
         }
 
         static void OnIgnition(Job j, FsmState from, string ev, string state)
@@ -657,6 +699,7 @@ namespace MWCoop
 
         static void ApplyIgnition(Job j, int who, string key, string state)
         {
+            if (Game.Msc && IgnitionStates.Contains(state)) { ApplyIgnitionMsc(j, who, key, state); return; }
             string[] already;
             if (!IgnitionAlready.TryGetValue(state, out already)) { Log.Info("cle de #" + who + " : " + key + " -> " + state + " ignore (passage)"); return; }
             j.FromReplay = true;
@@ -2086,7 +2129,7 @@ namespace MWCoop
 
         static void LuggageUpdate(float now)
         {
-            if (now < nextLug || !Session.Active) return;
+            if (Game.Msc || now < nextLug || !Session.Active) return;   // (pas de taxi dans My Summer Car)
             nextLug = now + 0.5f;
             if (!LuggageInit()) { nextLug = now + 10f; return; }
             if (!string.IsNullOrEmpty(lugFsm.ActiveStateName) && lugFsm.ActiveStateName != "State 1")   // tirage en cours

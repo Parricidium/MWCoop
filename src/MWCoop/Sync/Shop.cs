@@ -140,6 +140,8 @@ namespace MWCoop
             public int ServeWho, ServeSerial, LastStart;            // commande que le serveur sert en ce moment
             public bool ReplayOrder;                               // commande rejouee : Keijo a mettre au service
             public GameObject LastMade;                            // plateau, assiette de la commande en cours
+            public List<KeyValuePair<NamedVariable, object>> Saved; // MSC (Teimo, Fleetari) : panier local mis de cote le temps du rejeu
+            public List<KeyValuePair<System.Collections.ArrayList, object[]>> SavedLists;
         }
         class Replayed
         {
@@ -382,7 +384,7 @@ namespace MWCoop
             }
             float now = Time.realtimeSinceStartup;
             if (nextScan > 0 && now >= nextScan) { nextScan = now + 60f; Scan(); }   // caisses et comptoirs sont la des le chargement
-            if (nextScan > 0 && Session.Active && now >= fleaNext) { fleaNext = now + 0.2f; FleaPricesStep(now); }
+            if (nextScan > 0 && Session.Active && now >= fleaNext && !Game.Msc) { fleaNext = now + 0.2f; FleaPricesStep(now); }   // (pas de marche aux puces dans MSC)
             // Caisses et comptoirs eteints au releve (loin) : accroches des que leur objet s'allume (une tasse prise
             // sous la machine peut etre bue avant le releve suivant).
             if (nextScan > 0 && now >= nextHookCheck && (unhooked.Count > 0 || unhookedRegisters.Count > 0))
@@ -564,12 +566,22 @@ namespace MWCoop
             Transform parent = f.transform.parent;
             PlayMakerFSM waiter = null;
             string wStart = null, wPlace = null;
-            if (fsm == "Data" && n == "CashRegisterLogic")
+            if (fsm == "Data" && (n == "CashRegisterLogic" || Game.Msc && n == "Register"))
             {
                 string path = Recon.Path(f.transform);
                 if (path.Contains("/PostOffice/")) return null;   // courrier (autre lot)
                 key = path + "::" + fsm;
-                if (path.Contains("/Restaurant/"))
+                // My Summer Car (vidage v.250908-04) : caisses 'Register'. Teimo (STORE/StoreCashRegister) et Fleetari (REPAIRSHOP/.../
+                // ShopCashRegister) tiennent le panier dans leurs propres variables (Q* : entiers chez Teimo, booleens chez Fleetari) ;
+                // 'Purchase' (paie, statistiques, remet le carburant et les pompes a zero) -> 'Sausages' / 'Alternator' -> un etat par
+                // produit (sac, objets crees) -> 'Wait player'. Le rejeu met de cote le panier local, pose celui de l'acheteur et entre
+                // directement dans 'Sausages' / 'Alternator' (rien n'est paye ni remis a zero ici) ; panier local remis au repos.
+                if (Game.Msc && f.Fsm.GetState("Purchase") != null && (f.Fsm.GetState("Sausages") != null || f.Fsm.GetState("Alternator") != null))
+                {
+                    bool teimo = f.Fsm.GetState("Sausages") != null;
+                    kind = teimo ? "teimo" : "fleetari"; label = teimo ? "au magasin de Teimo" : "chez Fleetari"; states = new[] { "Purchase" }; wait = 600f;
+                }
+                else if (path.Contains("/Restaurant/"))
                 {
                     if (f.Fsm.GetState("Purchase") == null) return null;
                     // Burger : Keijo ({Cashier}) prend la commande ('State 4' -> ORDER) ; a la carte : Jouni ({Runner}).
@@ -1838,6 +1850,8 @@ namespace MWCoop
                 case "puces": return Lang.T(" a pay\u00E9 au march\u00E9 aux puces", " paid at the flea market");
                 case "kiosque": return Lang.T(" a achet\u00E9 au kiosque \u00E0 saucisses", " bought at the sausage kiosk");
                 case "rallye": return Lang.T(" a achet\u00E9 une pi\u00E8ce au vendeur du rallye", " bought a part from the rally parts seller");
+                case "teimo": return Lang.T(" a fait des courses chez Teimo", " bought groceries at Teimo's");
+                case "fleetari": return Lang.T(" a achet\u00E9 des pi\u00E8ces chez Fleetari", " bought parts at Fleetari's");
             }
             if (c.Label.Contains("epuration")) return Lang.T(" a pay\u00E9 \u00E0 la station d'\u00E9puration", " paid at the sewage plant");
             if (c.Label.Contains("controle")) return Lang.T(" a pay\u00E9 au contr\u00F4le technique", " paid at the inspection");
@@ -1884,6 +1898,12 @@ namespace MWCoop
             if (!c.Hooked) HookCounter(c);
             string idle = f.ActiveStateName;
             FsmVariables fv = f.FsmVariables;
+            string target = it.State;
+            if (c.Kind == "teimo" || c.Kind == "fleetari")
+            {
+                SaveCart(c);
+                target = c.Kind == "teimo" ? "Sausages" : "Alternator";
+            }
             foreach (var x in it.V.F) { FsmFloat t = fv.FindFsmFloat(x.Key); if (t != null) t.Value = x.Value; }
             // Location de la table des puces : RENT a la table passe deja par le monde (automate de SaleTable).
             foreach (var x in it.V.I) { FsmInt t = fv.FindFsmInt(x.Key); if (t != null) t.Value = c.Kind == "puces" && x.Key == "Weeks" ? 0 : x.Value; }
@@ -1897,9 +1917,9 @@ namespace MWCoop
             if (c.Kind == "bar") HideOrders(c);
             if (c.Kind == "resto") { c.ReplayOrder = true; MuteSubtitles(c.Waiter); }   // 'State 4' : Keijo mis au service s'il ne prend pas ORDER
             applying = true; Replay.Depth++;
-            try { Game.SetState(f, it.State); }
+            try { Game.SetState(f, target); }
             finally { applying = false; Replay.Depth--; }
-            Log.Info("magasin : " + c.Label + " de " + PlayerName(it.Who) + " rejoue (" + c.Kind + " " + Describe(f) + ", " + idle + " -> " + it.State + ", achat " + it.Serial
+            Log.Info("magasin : " + c.Label + " de " + PlayerName(it.Who) + " rejoue (" + c.Kind + " " + Describe(f) + ", " + idle + " -> " + target + ", achat " + it.Serial
                      + ", " + (c.Muted != null ? c.Muted.Count : 0) + " actions coupees : " + MutedNames(c) + " ; " + Wallet.State() + ")");
             return true;
         }
@@ -1909,7 +1929,7 @@ namespace MWCoop
         static void HideOrders(Counter c)
         {
             c.MutedUntil = c.MutedAt + 120f;   // service du plat (cuisine, micro-ondes) : plus long qu'une biere
-            Transform ol = c.Fsm.transform.root.Find("Stuff/LOD/ActivateBar/OrderList");
+            Transform ol = c.Fsm.transform.root.Find(Game.Msc ? "LOD/ActivateBar/OrderList" : "Stuff/LOD/ActivateBar/OrderList");   // (MSC : STORE/LOD/...)
             if (ol == null || !ol.gameObject.activeSelf) return;   // deja cachee (par le jeu, ou un rejeu en cours)
             ol.gameObject.SetActive(false);
             c.Hidden = ol.gameObject;
@@ -2537,8 +2557,50 @@ namespace MWCoop
             return sb.ToString();
         }
 
+        // MSC : panier du joueur local (variables de la caisse, liste du sac Spawner/ShoppingList) mis de cote avant de poser celui
+        // de l'acheteur ; la liste du sac est remise a zero comme le ferait 'Purchase' (que le rejeu saute).
+        static void SaveCart(Counter c)
+        {
+            if (c.Saved == null)
+            {
+                FsmVariables v = c.Fsm.FsmVariables;
+                var l = new List<KeyValuePair<NamedVariable, object>>();
+                foreach (FsmFloat x in v.FloatVariables) l.Add(new KeyValuePair<NamedVariable, object>(x, x.Value));
+                foreach (FsmInt x in v.IntVariables) l.Add(new KeyValuePair<NamedVariable, object>(x, x.Value));
+                foreach (FsmBool x in v.BoolVariables) l.Add(new KeyValuePair<NamedVariable, object>(x, x.Value));
+                foreach (FsmString x in v.StringVariables) l.Add(new KeyValuePair<NamedVariable, object>(x, x.Value));
+                c.Saved = l;
+                c.SavedLists = new List<KeyValuePair<System.Collections.ArrayList, object[]>>();
+                GameObject sl = c.Kind == "teimo" ? Game.FindAny("Spawner/ShoppingList") : null;
+                foreach (string ln in new[] { "Items", "Spraycans" })
+                {
+                    System.Collections.ArrayList a = sl != null ? ListOn(sl, ln) : null;
+                    if (a == null) continue;
+                    c.SavedLists.Add(new KeyValuePair<System.Collections.ArrayList, object[]>(a, a.ToArray()));
+                    for (int i = 0; i < a.Count; i++) if (a[i] is int) a[i] = 0; else if (a[i] is float) a[i] = 0f;
+                }
+            }
+        }
+
+        static void RestoreCart(Counter c)
+        {
+            if (c.Saved == null) return;
+            foreach (KeyValuePair<NamedVariable, object> kv in c.Saved)
+            {
+                if (kv.Key is FsmFloat) ((FsmFloat)kv.Key).Value = (float)kv.Value;
+                else if (kv.Key is FsmInt) ((FsmInt)kv.Key).Value = (int)kv.Value;
+                else if (kv.Key is FsmBool) ((FsmBool)kv.Key).Value = (bool)kv.Value;
+                else if (kv.Key is FsmString) ((FsmString)kv.Key).Value = (string)kv.Value;
+            }
+            if (c.SavedLists != null)
+                foreach (var kv in c.SavedLists) { kv.Key.Clear(); kv.Key.AddRange(kv.Value); }
+            Log.Info("magasin : panier local remis " + c.Label + " (" + (c.Fsm != null ? c.Fsm.ActiveStateName : "?") + ")");
+            c.Saved = null; c.SavedLists = null;
+        }
+
         static void UnmuteCounter(Counter c)
         {
+            RestoreCart(c);
             if (c.Hidden != null) { c.Hidden.SetActive(true); c.Hidden = null; Log.Info("magasin : carte du bar rendue (" + (c.Fsm != null ? c.Fsm.ActiveStateName : "?") + ", " + Wallet.State() + ")"); }
             if (c.Muted == null) return;
             Unmute(c.Muted);

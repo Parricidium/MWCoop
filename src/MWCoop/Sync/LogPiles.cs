@@ -41,7 +41,7 @@ namespace MWCoop
             {
                 var f = (PlayMakerFSM)o;
                 if (f == null || f.hideFlags != HideFlags.None || f.FsmName != "Logic" || f.gameObject.name != "LogTrigger") continue;
-                var p = new Pile { Key = Recon.Path(f.transform), F = f, Firewood = f.FsmVariables.FindFsmFloat("Firewood"), Logs = f.FsmVariables.FindFsmFloat("Logs"), Bed = f.FsmVariables.FindFsmGameObject("LogpileBed") };
+                var p = new Pile { Key = Recon.Path(f.transform), F = f, Firewood = f.FsmVariables.FindFsmFloat("Firewood"), Logs = f.FsmVariables.FindFsmFloat("Logs"), Bed = f.FsmVariables.FindFsmGameObject("LogpileBed") ?? f.FsmVariables.FindFsmGameObject("LogPile") };   // (MSC : LogPile)
                 if (p.Firewood == null && p.Logs == null) continue;
                 piles.Add(p);
             }

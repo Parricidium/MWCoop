@@ -86,6 +86,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
+            if (Game.Msc) { WorldRoots.Add("ITEMS"); WorldRoots.Add("STORE"); }   // (My Summer Car : outils et bidons sous ITEMS, magasin STORE)
             props.Clear(); byBody.Clear(); settling.Clear(); worldKeys.Clear(); worldLogged = false; stored.Clear(); storedBy.Clear(); storedHere.Clear();
             ridingIn.Clear(); ridingOut.Clear(); vanished.Clear(); unknown.Clear();
             dupKeys.Clear(); dupLogged.Clear(); censusPass = 0; hzStep = 0; hzLog = 0f;

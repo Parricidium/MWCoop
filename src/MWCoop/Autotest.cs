@@ -30,8 +30,75 @@ namespace MWCoop
         // par defaut) a 45 s, la relache, et la referme a 65 s. Chacun note la voiture toutes les 2 s et la portiere des 42 s
         // (l'invite doit voir la copie bouger, puis la portiere ouverte et refermee).
         static int mscStep; static float mscLog;
+        // [Test] Autotest=mscmeca (19/10) : l'hote monte la portiere gauche de la SATSUMA a 60 s (comme un clic : 'Wait for assembly'
+        // -ASSEMBLE->), serre deux crans d'une de ses vis a 70 s, fait des courses chez Teimo a 80 s (QSausages = 2, 'Purchase') et
+        // demonte la portiere a 100 s (l'invite arrive vers 35 s). Chacun note toutes les 5 s : portiere montee ? (declencheur eteint, parent), vis, argent.
+        static int mecaStep; static float mecaLog;
+        const string MecaTrigger = "SATSUMA(557kg, 248)/Body/trigger_door_left", MecaDoor = "CARPARTS/PartsCar/door left(Clone)";
+        static GameObject mecaDoor;
+        static void MscMeca(float t)
+        {
+            bool host = Net.Session.IsHost;
+            GameObject trig = Game.FindAny(MecaTrigger);
+            PlayMakerFSM asm = trig != null ? Game.FsmOn(trig, "Assembly") : null;
+            if (mecaDoor == null) mecaDoor = Game.FindAny(MecaDoor);
+            if (mecaDoor == null && trig != null)
+                foreach (Transform x in trig.transform.root.GetComponentsInChildren<Transform>(true)) if (x.name == "door left(Clone)") { mecaDoor = x.gameObject; break; }
+            if (host && t > 60f && mecaStep == 0 && asm != null && mecaDoor != null)
+            {
+                mecaStep = 1;
+                asm.FsmVariables.GetFsmGameObject("Part").Value = mecaDoor;
+                Game.SetState(asm, "Wait for assembly");
+                asm.SendEvent("ASSEMBLE");
+                Log.Info("autotest : mscmeca, portiere -> " + asm.ActiveStateName);
+            }
+            if (host && t > 70f && mecaStep == 1 && mecaDoor != null)
+            {
+                mecaStep = 2;
+                foreach (PlayMakerFSM f in mecaDoor.GetComponentsInChildren<PlayMakerFSM>(true))
+                {
+                    if (f.FsmName != "Screw" || f.FsmVariables.FindFsmInt("Stage") == null) continue;
+                    f.SendEvent("TIGHTEN"); f.SendEvent("TIGHTEN");
+                    Log.Info("autotest : mscmeca, vis " + Recon.Path(f.transform) + " -> " + f.FsmVariables.GetFsmInt("Stage").Value + (f.gameObject.activeInHierarchy ? "" : " (inactive)"));
+                    break;
+                }
+            }
+            if (host && t > 80f && mecaStep == 2)
+            {
+                mecaStep = 3;
+                PlayMakerFSM reg = Game.FindFsm("STORE/StoreCashRegister/Register", "Data");
+                if (reg == null) Log.Info("autotest : mscmeca, caisse de Teimo introuvable");
+                else
+                {
+                    reg.FsmVariables.GetFsmInt("QSausages").Value = 2;
+                    reg.FsmVariables.GetFsmFloat("Total").Value = 20f;
+                    Game.SetState(reg, "Purchase");
+                    Log.Info("autotest : mscmeca, courses chez Teimo -> " + reg.ActiveStateName + ", " + Wallet.State());
+                }
+            }
+            if (host && t > 100f && mecaStep == 3 && mecaDoor != null)
+            {
+                mecaStep = 4;
+                PlayMakerFSM rem = Game.FsmOn(mecaDoor, "Removal");
+                if (rem != null) { rem.enabled = true; Game.SetState(rem, "Remove part"); }
+                Log.Info("autotest : mscmeca, portiere demontee -> " + (rem != null ? rem.ActiveStateName : "pas de Removal"));
+            }
+            if (t > 55f && t < 130f && Time.realtimeSinceStartup >= mecaLog)
+            {
+                mecaLog = Time.realtimeSinceStartup + 5f;
+                string bolt = "?";
+                if (mecaDoor != null)
+                    foreach (PlayMakerFSM f in mecaDoor.GetComponentsInChildren<PlayMakerFSM>(true))
+                        if (f.FsmName == "Screw" && f.FsmVariables.FindFsmInt("Stage") != null) { bolt = f.FsmVariables.GetFsmInt("Stage").Value.ToString(); break; }
+                Log.Info("autotest : mscmeca (" + (host ? "hote" : "invite") + ") declencheur " + (trig == null ? "absent" : trig.activeSelf ? "allume" : "eteint")
+                         + (asm != null ? " [" + asm.ActiveStateName + "]" : "") + ", portiere " + (mecaDoor == null ? "absente" : "sous " + (mecaDoor.transform.parent != null ? mecaDoor.transform.parent.name : "racine"))
+                         + ", 1re vis " + bolt + ", " + Wallet.State());
+            }
+        }
+
         static void MscTest(string mode, float t)
         {
+            if (mode == "mscmeca") { MscMeca(t); return; }
             if (mode == "mscinterface")
             {
                 // [Test] Autotest=mscinterface (19/10) : captures du HUD noir, des onglets Dragsters / Rallye / Joueurs du F10, puis la carte

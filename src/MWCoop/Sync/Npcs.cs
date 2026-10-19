@@ -114,7 +114,9 @@ namespace MWCoop
         // (pietons et client du taxi aussi -- Menor, 18/10 : « les PNJ morts n'apparaissent pas chez les invites » : leur
         // automate CarHit, coupe chez l'invite par Traffic, est rallume le temps du rejeu ; "Accident" ne fait qu'activer le
         // pantin (etat terminal, pas de delit compte) ; Traffic cesse d'animer le corps du pieton mort)
-        static readonly string[] HitRoots = { "STORE_AREA/TeimoInSled", "HUMANS/Randomizer/Walkers", "JOBS/TAXIJOB/Customer1/TaxiWalker" };
+        static readonly string[] HitRootsMwc = { "STORE_AREA/TeimoInSled", "HUMANS/Randomizer/Walkers", "JOBS/TAXIJOB/Customer1/TaxiWalker" };
+        static readonly string[] HitRootsMsc = { "STORE/TeimoInBike", "HUMANS/Randomizer/Walkers" };   // (MSC : Teimo a velo, pas de taxi)
+        static string[] HitRoots { get { return Game.Msc ? HitRootsMsc : HitRootsMwc; } }
         static readonly string[] HitStates = { "State 2", "Accident" };
 
         class Npc
@@ -183,7 +185,7 @@ namespace MWCoop
         {
             Transform rt = ch.root;
             string root = rt.name;
-            if (root.StartsWith("MWCoop") || root == "PLAYER" || root == "GUI" || root == "RACES" || root == "NPC_CARS" || root == "JAIL") return true;
+            if (root.StartsWith("MWCoop") || root == "PLAYER" || root == "GUI" || root == "RACES" || root == "RALLY" || root == "NPC_CARS" || root == "JAIL") return true;
             if (root == "TRAFFIC" && !path.StartsWith("TRAFFIC/Police/Cop")) return true;
             if (root == "HUMANS" && path.StartsWith("HUMANS/Randomizer")) return true;
             if (!rt.gameObject.activeInHierarchy && !(root == "COPS" && Game.FindAny("COPS") == rt.gameObject)) return true;
