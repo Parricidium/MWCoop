@@ -25,6 +25,37 @@ namespace MWCoop
                 return i < Drinks.Names.Length ? i : 0;
             }
         }
+        // My Summer Car (19/10) : [Test] Autotest=mscvoiture. L'hote monte dans [Test] TestVoiture (KEKMET par defaut) a 18/22 s,
+        // moteur tenu (1500 tr/min) de 24 a 60 s, poussee en avant (6 m/s) de 26 a 38 s ; il ouvre [Test] TestPorte (la premiere
+        // par defaut) a 45 s, la relache, et la referme a 65 s. Chacun note la voiture toutes les 2 s et la portiere des 42 s
+        // (l'invite doit voir la copie bouger, puis la portiere ouverte et refermee).
+        static int mscStep; static float mscLog;
+        static void MscTest(string mode, float t)
+        {
+            if (mode != "mscvoiture") return;
+            string car = Config.Get("Test", "TestVoiture", "KEKMET"), part = Config.Get("Test", "TestPorte", "");
+            bool host = Net.Session.IsHost;
+            if (t > 16f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscvoiture (" + (host ? "hote" : "invite") + "), portieres de " + car + " : " + CarDoors.ListFor(car)); }
+            if (host)
+            {
+                if (t > 18f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscvoiture, " + VehicleSync.TestEnter(car, false)); }
+                if (t > 22f && mscStep == 2) { mscStep = 3; Log.Info("autotest : mscvoiture, volant -> " + VehicleSync.TestEnter(car, true)); }
+                VehicleSync.TestEngine(t > 24f && t < 60f ? 1500f : -1f, 0.5f);
+                Rigidbody b = VehicleSync.Body(car);
+                if (b != null && t > 26f && t < 38f) { Vector3 f = b.transform.forward; f.y = 0; b.velocity = f.normalized * 6f + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                if (t > 45f && mscStep == 3) { mscStep = 4; Log.Info("autotest : mscvoiture, ouvre " + CarDoors.TestOpen(car, true, part)); }
+                if (t > 45.6f && mscStep == 4) { mscStep = 5; Log.Info("autotest : mscvoiture, relache " + CarDoors.TestState(car, "Mouse off", part)); }
+                if (t > 65f && mscStep == 5) { mscStep = 6; Log.Info("autotest : mscvoiture, ferme " + CarDoors.TestOpen(car, false, part)); }
+            }
+            if (t > 16f && t < 90f && Time.realtimeSinceStartup >= mscLog)
+            {
+                mscLog = Time.realtimeSinceStartup + 2f;
+                Rigidbody b = VehicleSync.Body(car);
+                Log.Info("autotest : mscvoiture " + VehicleSync.Describe(car) + (b != null ? ", cinematique " + b.isKinematic + ", vitesse " + b.velocity.magnitude.ToString("F1") : "")
+                         + (t > 42f ? " | portiere " + CarDoors.StateOf(car, part) : ""));
+            }
+        }
+
         static string capName;
         static float capAt;
         // [Test] Autotest=pantin : le joueur 2 est « mort » (pantin chez les autres) de 30 a 45 s, en marchant ; captures.
@@ -145,6 +176,7 @@ namespace MWCoop
             if (Game.LevelName != "GAME") { t0 = -1; return; }
             if (t0 < 0) t0 = Time.realtimeSinceStartup;
             float t = Time.realtimeSinceStartup - t0;
+            if (Game.Msc) { MscTest(mode, t); return; }   // (My Summer Car : ses essais seulement, les autres visent des objets de MWC)
             // Essais propres a chaque module (chacun ses modes et son compteur d'etapes).
             CarDoors.Test(mode, t); Npcs.Test(mode, t); Props.Test(mode, t); AssembleIcon.Test(mode, t); DroneCam.Test(mode, t); TaxiCustomer.Test(mode, t); WalletPanel.Test(mode, t); Cheats.Test(mode, t); MapPanel.Test(mode, t); ModSecondMachtwagen.Test(mode, t); Consume.Test(mode, t);
             Wallet.Test(mode, t); Traffic.Test(mode, t); Machines.Test(mode, t); HandTools.Test(mode, t); ThirdPerson.Test(mode, t); LogPiles.Test(mode, t); CarSale.Test(mode, t); VehicleSync.TestRelais(mode, t); Consume.TestPick(mode, t); Fluids.TestFill(mode, t); ModMachtwagen300D.Test(mode, t); SleepingBags.Test(mode, t); ModCheatbox.Test(mode, t); CarLeaks.Test(mode, t); Sauna.Test(mode, t);
