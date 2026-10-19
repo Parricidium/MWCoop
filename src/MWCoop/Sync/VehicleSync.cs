@@ -2018,7 +2018,7 @@ namespace MWCoop
 
         static bool Finite(float f) { return !float.IsNaN(f) && !float.IsInfinity(f); }
         static bool Finite(Vector3 v) { return Finite(v.x) && Finite(v.y) && Finite(v.z); }
-        static float nanLogAt;
+        static float nanLogAt, wildLogAt;
         static float now0 { get { return Time.realtimeSinceStartup; } }
         static readonly Dictionary<System.Type, System.Reflection.FieldInfo[]> floatFields = new Dictionary<System.Type, System.Reflection.FieldInfo[]>();
 
@@ -2112,6 +2112,14 @@ namespace MWCoop
                 Rigidbody b = c.Body;
                 Quaternion br = b.rotation;
                 bool bad = !Finite(b.position) || !Finite(b.velocity) || !Finite(b.angularVelocity) || !Finite(br.x + br.y + br.z + br.w);
+                // Physique emballee sans NaN (CORRIS de ruller, 19/10 : reprise par l'hote a la descente de l'invite, puis
+                // 3952 m/s, toutes ses pieces a attache incassable arrachees, remises, de nouveau arrachees toutes les 10 s
+                // jusqu'a la fin de la partie, voiture a 3,9 km d'altitude) : plus de 120 m/s ou 40 rad/s, aucune voiture du jeu
+                // n'y arrive -- remise a sa derniere pose calme, comme une valeur non finie, puis tenue calme 2 s.
+                bool wild = !bad && b.velocity.sqrMagnitude > 120f * 120f || !bad && b.angularVelocity.sqrMagnitude > 40f * 40f;
+                bool calm = !bad && b.velocity.sqrMagnitude < 60f * 60f && b.angularVelocity.sqrMagnitude < 15f * 15f;
+                if (wild && now0 >= wildLogAt) { wildLogAt = now0 + 5f; Log.Warn("voitures : " + c.Key + " emballee (" + b.velocity.magnitude.ToString("F0") + " m/s, " + b.angularVelocity.magnitude.ToString("F0") + " rad/s, " + (c.Index == LocalDriving ? "conduite ici" : c.Kinematic ? "copie" : "geree ici") + ") : remise a sa derniere pose calme"); }
+                if (wild) { bad = true; c.CalmUntil = Mathf.Max(c.CalmUntil, now0 + 2f); }
                 int fixedF = 0;
                 if (c.Dt != null && !Finite(c.Dt.rpm)) { c.Dt.rpm = 800f; fixedF++; }
                 // (champs des roues et de la transmission : seulement la voiture conduite ici, celle reprise en marche, ou deja abimee)
@@ -2119,7 +2127,7 @@ namespace MWCoop
                 // reflexion : 0,5-1 ms par image au volant)
                 bool deep = c == hotCar || bad || fixedF > 0 || c.Index == LocalDriving && now0 >= c.SanNext;
                 if (c.Dt != null && now0 >= c.SanRefresh) { c.SanRefresh = now0 + 5f; SanSnapshot(c); }   // (voiture vivante ici : ses dernieres valeurs finies)
-                if (!deep || c.Dt == null) { if (!bad) { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; } if (!bad && fixedF == 0) continue; }
+                if (!deep || c.Dt == null) { if (calm) { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; } if (!bad && fixedF == 0) continue; }
                 c.SanNext = now0 + 0.25f;
                 if (deep && c.Dt != null && (c.SanComps == null || System.Array.IndexOf(c.SanComps, null) >= 0)) SanSnapshot(c);
                 for (int ci = 0; deep && c.SanComps != null && ci < c.SanComps.Length; ci++)
@@ -2170,7 +2178,7 @@ namespace MWCoop
                     }
                     if (c.BadN >= 2 && c.BadN < 8) Log.Warn("voitures : " + c.Key + " encore non finie (" + c.BadN + "e fois en 3 s) : posee " + Mathf.Min(0.8f * (c.BadN - 1), 2.4f).ToString("F1") + " m plus haut, a plat");
                 }
-                else { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; }
+                else if (calm) { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; }
                 if ((bad || fixedF > 0) && now0 >= nanLogAt) { nanLogAt = now0 + 5f; Log.Warn("voitures : " + c.Key + " valeurs non finies corrigees (" + fixedF + " reglages" + (bad ? ", corps remis a sa derniere pose valide" : "") + ")"); }
             }
         }

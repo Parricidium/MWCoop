@@ -969,6 +969,33 @@ namespace MWCoop
                     Log.Info(sb.ToString());
                 }
             }
+            // [Test] Autotest=emballe : garde-fou de la physique emballee (CORRIS de ruller, 19/10) -- joueur pose a 6 m de
+            // [Test] TestVoiture (CORRIS), lancee a 300 m/s vers le haut (35 s) puis a 80 rad/s (45 s) ; pose relevee chaque
+            // seconde, captures avant et apres.
+            if (mode == "emballe")
+            {
+                Rigidbody b = VehicleSync.Body(Config.Get("Test", "TestVoiture", "CORRIS"));
+                GameObject pl = Game.PlayerGo;
+                var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                if (b != null && cc != null && t > 25f && step == 0)
+                {
+                    step = 1;
+                    Vector3 at = b.transform.TransformPoint(new Vector3(-6f, 0f, 0f)) + Vector3.up * 1f;
+                    cc.enabled = false; pl.transform.position = at; cc.enabled = true;
+                    Vector3 d = b.position - at; d.y = 0f;
+                    if (d.sqrMagnitude > 0.01f) pl.transform.rotation = Quaternion.LookRotation(d);
+                    Log.Info("autotest : emballe : joueur pose a 6 m de " + b.name + " en " + b.position.ToString("F1"));
+                }
+                if (b != null && t > 33f && step == 1) { step = 2; CaptureSoon("emballe-avant", 0f); }
+                if (b != null && t > 35f && step == 2) { step = 3; b.velocity = new Vector3(0f, 300f, 0f); Log.Info("autotest : emballe : " + b.name + " lancee a 300 m/s"); CaptureSoon("emballe-lancee", 0.3f); }
+                if (b != null && t > 45f && step == 3) { step = 4; b.angularVelocity = new Vector3(80f, 0f, 30f); Log.Info("autotest : emballe : " + b.name + " lancee a 85 rad/s"); }
+                if (b != null && t > 50f && step == 4) { step = 5; CaptureSoon("emballe-apres", 0f); }
+                if (b != null && t > 30f && t < 55f && Time.realtimeSinceStartup >= rivLog)
+                {
+                    rivLog = Time.realtimeSinceStartup + 1f;
+                    Log.Info("autotest : emballe : " + b.name + " v " + b.velocity.magnitude.ToString("F1") + " rot " + b.angularVelocity.magnitude.ToString("F1") + " en " + b.position.ToString("F1") + (b.isKinematic ? " (cinematique)" : ""));
+                }
+            }
             // [Test] Autotest=klaxon : objets "horn" de la scene (chemin, automates et leurs etats, sources audio).
             if (mode == "klaxon" && t > 25f && !done)
             {

@@ -546,7 +546,7 @@ static const wchar_t *const kRu[][2] = {
     { L"Up to 8 players", L"До 8 игроков" },
     { L"A friend's lobby", L"Лобби друга" },
     { L"PLAY SOLO", L"ИГРАТЬ ОДНОМУ" },
-    { L"The normal game, without MWCoop.", L"Обычная игра, без MWCoop." },
+    { L"Without Coop", L"Без Coop" },
     { L"See all", L"Показать все" },
     { L"Loading…", L"Загрузка…" },
     { L"Notes unavailable (offline).", L"Заметки недоступны (нет сети)." },
