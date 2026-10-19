@@ -321,6 +321,7 @@ namespace MWCoop
             if (camDeath != null && camDeath.Fsm.GetState("State 2") != null) Game.SetState(camDeath, "State 2");
             if (fx > 0) Log.Info("reapparition : effets d'ecran remis (" + fx + " reglages : le sang de l'accident)");
             OpenEyes(pl);
+            if (Game.Msc) { ClearAllergy(); ClearDrivePrompt(); }
             StandUp(pl);
             standCheckAt = Time.realtimeSinceStartup + 1f;
             Game.SetGlobalBool("PlayerStop", false);
@@ -362,6 +363,41 @@ namespace MWCoop
             }
             FsmFloat vol = FsmVariables.GlobalVariables.FindFsmFloat("GameVolume");
             if (vol != null && vol.Value < 0.99f) { Log.Info("reapparition : son du jeu rendu (" + vol.Value.ToString("F2") + " -> 1)"); vol.Value = 1f; }
+        }
+
+        // My Summer Car (JD, 19/10 : mort par les guepes, ecran noir apres la reapparition) : les piqures montent l'allergie de
+        // l'automate 'Blindness' de la camera (MaxAllergy) ; passee 100, "State 11" tue (Systems/Death, Wasp) en laissant la vignette
+        // (VignetteAndChromaticAberration) allumee a pleine intensite. Remise comme au repos : allergie a 0, "Reset" (vignette
+        // eteinte, puis "State 3"). Meme chose pour l'aveuglement au methanol.
+        static void ClearAllergy()
+        {
+            GameObject cam = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+            PlayMakerFSM bl = cam != null ? Game.FsmOn(cam, "Blindness") : null;
+            if (bl == null) return;
+            string was = bl.ActiveStateName;
+            FsmFloat max = bl.FsmVariables.FindFsmFloat("MaxAllergy"), it = bl.FsmVariables.FindFsmFloat("Intensity");
+            float before = max != null ? max.Value : 0f;
+            if (max != null) max.Value = 0f;
+            if (it != null) it.Value = 0f;
+            FsmFloat pa = FsmVariables.GlobalVariables.FindFsmFloat("PlayerAllergy"); if (pa != null) pa.Value = 0f;
+            if (bl.Fsm.GetState("Reset") != null) Game.SetState(bl, "Reset");
+            foreach (Behaviour b in cam.GetComponents<Behaviour>()) if (b != null && b.GetType().Name.StartsWith("VignetteAndChromatic")) b.enabled = false;
+            if (was != "State 3" || before > 0f) Log.Info("reapparition : allergie et vignette de la camera remises (" + was + ", allergie " + before.ToString("F0") + ")");
+        }
+
+        // Mort pres d'une portiere (zone de conduite, "Press return") : teleporte, le joueur ne sort jamais de la zone -- l'invite
+        // « ENTER DRIVING MODE » restait a l'ecran (JD, 19/10). Zones remises en attente du joueur, invite effacee.
+        static void ClearDrivePrompt()
+        {
+            int n = 0;
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+            {
+                if (f.FsmName != "PlayerTrigger" || !f.gameObject.name.StartsWith("DriveTrigger") || f.ActiveStateName != "Press return") continue;
+                if (f.Fsm.GetState("Wait for player") == null) continue;
+                Game.SetState(f, "Wait for player"); n++;
+            }
+            Game.SetGlobalBool("GUIdrive", false);
+            if (n > 0) Log.Info("reapparition : " + n + " zone(s) de conduite remise(s) en attente, invite de conduite effacee");
         }
 
         // Debout : l'automate Crouch du joueur garde la camera basse (etat "Incar", 0,6 m) tant que sa variable PlayerInCar est

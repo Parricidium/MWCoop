@@ -85,8 +85,13 @@ namespace MWCoop
             PlayMakerFSM use = Game.FsmOn(part, "Use");
             FsmString id = use != null ? use.FsmVariables.FindFsmString("ID") : null;
             if (id != null && id.Value.Length > 0) return "id:" + id.Value;
-            string k;
-            if (!mscFirstKey.TryGetValue(part, out k)) mscFirstKey[part] = k = "r:" + RankPath(part.transform);
+            // Sans entree Database (guirlande de Noel...) : la cle du monde de Props, la meme chez tous (prise au chargement) ; sinon le
+            // chemin a rangs, jamais pris sous PLAYER (piece en main : chemin propre a ce joueur -- « introuvable ici » chez l'autre).
+            string k = Props.KnownWorldKey(part);
+            if (k != null) return k;
+            if (mscFirstKey.TryGetValue(part, out k)) return k;
+            k = "r:" + RankPath(part.transform);
+            if (!Game.UnderPlayer(part.transform)) mscFirstKey[part] = k;
             return k;
         }
 

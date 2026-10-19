@@ -83,7 +83,7 @@ namespace MWCoop.Net
                 // tout de suite. Sinon (nouvelle partie, invite arrive en cours de route) : on sauve d'abord.
                 // (25 s et non 60 : ce que les modules avaient change entre 25 et 60 s manquait a l'arrivant -- relecture du 15/10)
                 // Monde sauve il y a moins de SaveReuse s (deuxieme arrivant, sauvegarde coop) : la meme sert, pas de nouveau gel.
-                bool fresh = !newGame && (now - inGameSince < 25f || now - worldSavedAt < SaveReuse) && File.Exists(Path.Combine(SaveDir, "savefile.txt"));
+                bool fresh = !newGame && (now - inGameSince < 25f || now - worldSavedAt < SaveReuse) && File.Exists(Path.Combine(SaveDir, Game.SaveFile));
                 if (!fresh)
                 {
                     newGame = false;

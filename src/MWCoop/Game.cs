@@ -12,6 +12,9 @@ namespace MWCoop
         public static string Name { get { return Msc ? "My Summer Car" : "My Winter Car"; } }
         // Version annoncee aux autres (bonjour en jeu, salon Steam) : "@msc" sur My Summer Car, comme le lanceur -- un joueur
         // de l'autre jeu est refuse comme une autre version.
+        // Fichier de la sauvegarde du jeu (dans son dossier LocalLow) : il dit s'il y a une partie. My Summer Car n'a pas de
+        // savefile.txt (retour de Krissscw3, 19/10 : « continuer » prenait chaque fois une partie neuve) -- defaultES2File.txt.
+        public static string SaveFile { get { return Msc ? "defaultES2File.txt" : "savefile.txt"; } }
         public static string ModVersion { get { return Msc ? Version.Text + "@msc" : Version.Text; } }
 
         // Sauvegarde en pleine partie. Le jeu ne sauve qu'en quittant : SAVEGAME envoie des centaines

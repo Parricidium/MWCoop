@@ -30,7 +30,23 @@ namespace MWCoop
         public static bool Ru { get { return Code == 2; } }
         public static bool En { get { return !Fr; } }
 
-        public static string T(string f, string e) { return Code == 1 ? f : Code == 2 ? R(e) : e; }
+        public static string T(string f, string e) { return Product(Code == 1 ? f : Code == 2 ? R(e) : e); }
+
+        // Nom du mod affiche : « MSCoop » sur My Summer Car (retour de Vaydon, 19/10), sauf dans un chemin ou un nom de fichier
+        // (\MWCoop, MWCoop.dll, MWCoop\, MWCoop-...).
+        public static string Name { get { return Game.Msc ? "MSCoop" : "MWCoop"; } }
+        static string Product(string s)
+        {
+            if (!Game.Msc || s == null || s.IndexOf("MWCoop", System.StringComparison.Ordinal) < 0) return s;
+            var b = new System.Text.StringBuilder(s);
+            for (int p = s.IndexOf("MWCoop", System.StringComparison.Ordinal); p >= 0; p = s.IndexOf("MWCoop", p + 6, System.StringComparison.Ordinal))
+            {
+                char before = p > 0 ? s[p - 1] : ' ', after = p + 6 < s.Length ? s[p + 6] : ' ';
+                if ("\\/%".IndexOf(before) >= 0 || "\\/.-_".IndexOf(after) >= 0) continue;
+                b[p + 1] = 'S';
+            }
+            return b.ToString();
+        }
 
         // Texte anglais -> russe en russe (l'anglais s'il n'est pas traduit) ; tel quel dans les autres langues.
         public static string R(string e)

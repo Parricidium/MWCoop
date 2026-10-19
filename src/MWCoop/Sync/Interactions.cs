@@ -32,6 +32,17 @@ namespace MWCoop
             { "ButtonWipers", "Test" },             // essuie-glaces
         };
 
+        // My Summer Car (vidage v.250908-04, 19/10) : en plus -- tele et disjoncteur ("Switch" -> "Switch"), portes de la salle de bal.
+        static readonly string[,] AllowedMsc =
+        {
+            { "Switch",           "Switch" },        // tele (YARD/.../TV/Switch, JAIL/TV/Switch)
+            { "MainSwitch",       "Switch" },        // disjoncteur (YARD/Building/Dynamics/FuseTable/Fusetable/MainSwitch)
+            { "dancehut_door*",   "Check position" },
+        };
+        static int Rows { get { return Allowed.GetLength(0) + (Game.Msc ? AllowedMsc.GetLength(0) : 0); } }
+        static string Pat(int i) { int n = Allowed.GetLength(0); return i < n ? Allowed[i, 0] : AllowedMsc[i - n, 0]; }
+        static string Tgt(int i) { int n = Allowed.GetLength(0); return i < n ? Allowed[i, 1] : AllowedMsc[i - n, 1]; }
+
         class Entry { public string Id; public PlayMakerFSM Fsm; }
         static readonly Dictionary<string, Entry> byId = new Dictionary<string, Entry>();
         static readonly HashSet<PlayMakerFSM> tracked = new HashSet<PlayMakerFSM>();
@@ -113,9 +124,9 @@ namespace MWCoop
 
         static bool NameAllowed(string obj)
         {
-            for (int i = 0; i < Allowed.GetLength(0); i++)
+            for (int i = 0; i < Rows; i++)
             {
-                string pat = Allowed[i, 0];
+                string pat = Pat(i);
                 if (pat.EndsWith("*") ? obj.StartsWith(pat.Substring(0, pat.Length - 1)) : pat == obj) return true;
             }
             return false;
@@ -124,13 +135,13 @@ namespace MWCoop
         static string AllowedTarget(PlayMakerFSM f)
         {
             string obj = f.gameObject.name;
-            for (int i = 0; i < Allowed.GetLength(0); i++)
+            for (int i = 0; i < Rows; i++)
             {
-                string pat = Allowed[i, 0];
+                string pat = Pat(i);
                 if (pat.EndsWith("*") ? !obj.StartsWith(pat.Substring(0, pat.Length - 1)) : pat != obj) continue;
                 foreach (FsmState s in f.Fsm.States)
                     foreach (FsmTransition t in s.Transitions)
-                        if (t.EventName == "USE" && t.ToState == Allowed[i, 1]) return t.ToState;
+                        if (t.EventName == "USE" && t.ToState == Tgt(i)) return t.ToState;
             }
             return null;
         }
