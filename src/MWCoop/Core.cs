@@ -206,6 +206,7 @@ namespace MWCoop
             new Mod("sauvegarde du jeu", SaveHook.Update),
             new Mod("partie chez l'invite", GuestSlot.Update),
             new Mod("phares", LightsGuard.Update),
+            new Mod("capots du pack", PackHoods.Update),
             new Mod("luge de Teimo", TeimoSled.Update),
             new Mod("graphismes", Gfx.Update),
             new Mod("rallye", Rally.Update),
@@ -344,6 +345,7 @@ namespace MWCoop
             SaveStats.OnLevelLoaded();   // (partie.txt pour le lanceur)
             GuestSlot.OnLevelLoaded();
             LightsGuard.OnLevelLoaded();
+            PackHoods.OnLevelLoaded();
             TeimoSled.OnLevelLoaded();
             Gfx.OnLevelLoaded();
             Lights.OnLevelLoaded();
@@ -380,7 +382,8 @@ namespace MWCoop
                                     // (19/10 : mecanique -- pieces et vis (PartsMsc.cs), objets, peinture, reglages, liquides, atelier, remorquage)
                                     Parts.OnLevelLoaded, Props.OnLevelLoaded, Paint.OnLevelLoaded, Settings.OnLevelLoaded, Fluids.OnLevelLoaded,
                                     Consume.OnLevelLoaded, ItemFsms.OnLevelLoaded, Tow.OnLevelLoaded, Garage.OnLevelLoaded,
-                                    Interactions.OnLevelLoaded, PushDoors.OnLevelLoaded };   // (portes de la maison, interrupteurs ; portes du garage poussees)
+                                    Interactions.OnLevelLoaded, PushDoors.OnLevelLoaded,   // (portes de la maison, interrupteurs ; portes du garage poussees)
+                                    LightsGuard.OnLevelLoaded, PackHoods.OnLevelLoaded };   // (19/10 soir : phares et capots du pack rallye)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -412,6 +415,7 @@ namespace MWCoop
             "pieces", "objets", "objets (etat)", "reglages", "liquides", "consommables", "remorquage", "atelier",
             // 19/10 soir (retour de Vaydon, 1.1.2 : portes de la maison, du garage et exterieures pas synchronisees)
             "interactions", "portes poussees",
+            "phares", "capots du pack",   // (19/10 soir, JD : un appui sur les phares dans une voiture du pack rallye allumait toutes les autres -- LightsGuard)
             "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;

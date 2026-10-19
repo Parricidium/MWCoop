@@ -23,7 +23,7 @@ namespace MWCoop
         static float nextScan = -1;
         static FsmString cur;
 
-        public static void OnLevelLoaded() { btns.Clear(); cur = null; nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 8f : -1; }
+        public static void OnLevelLoaded() { btns.Clear(); cmps.Clear(); cur = null; nextScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 8f : -1; }
 
         static void Scan()
         {
@@ -43,6 +43,57 @@ namespace MWCoop
             var names = new Dictionary<string, int>();
             foreach (Btn b in btns) { int n; names.TryGetValue(b.Orig, out n); names[b.Orig] = n + 1; }
             foreach (var kv in names) if (kv.Value > 1 && logged.Add(kv.Key)) Log.Info("phares : " + kv.Value + " voitures partagent le nom '" + kv.Key + "' (clones) : reconnues par l'objet, pas par le nom");
+            ScanCompares();
+        }
+
+        // Commandes ecoutant la touche des phares (HighBeam) qui verifient la voiture du joueur par son nom : sur My Summer Car,
+        // l'automate Use du bouton Lights (Ruscko, Kekmet, Jonnez...) passe a « Check down » ou « State 1 » a CHAQUE appui, dans
+        // toutes les voitures, et compare PlayerCurrentVehicle a un nom ecrit dans l'action. Les voitures du pack rallye de JD
+        // (Audi, Escort, 205, Celica... clones de la Ruscko) comparent toutes « Ruscko » : un appui dans l'une allumait les
+        // phares de toutes (retour de JD, 19/10, MSC). Comme pour ButtonLightModes : la voiture est reconnue par l'objet, le nom
+        // compare des autres voitures recoit une valeur qui ne peut pas correspondre.
+        class Cmp { public FsmString To; public string Orig, Car; public Transform Root; public PlayMakerFSM F; public bool Blocked; }
+        static readonly List<Cmp> cmps = new List<Cmp>();
+        static void ScanCompares()
+        {
+            cmps.RemoveAll(c => c.F == null);
+            foreach (Object o in Game.FsmsNamed("Use"))
+            {
+                PlayMakerFSM f = o as PlayMakerFSM;
+                if (f == null || f.FsmName != "Use" || f.Fsm == null || !f.Fsm.Initialized || cmps.Exists(c => c.F == f)) continue;
+                bool key = false;
+                var found = new List<HutongGames.PlayMaker.Actions.StringCompare>();
+                foreach (FsmState st in f.Fsm.States)
+                {
+                    FsmStateAction[] acts;
+                    try { acts = st.Actions; } catch { continue; }
+                    foreach (FsmStateAction a in acts)
+                    {
+                        var gb = a as HutongGames.PlayMaker.Actions.GetButtonDown;
+                        if (gb != null && gb.buttonName != null && gb.buttonName.Value == "HighBeam") key = true;
+                        var sc = a as HutongGames.PlayMaker.Actions.StringCompare;
+                        if (sc != null && sc.stringVariable != null && sc.stringVariable.Name == "PlayerCurrentVehicle" && sc.compareTo != null && !string.IsNullOrEmpty(sc.compareTo.Value)) found.Add(sc);
+                    }
+                }
+                if (!key) continue;
+                foreach (var sc in found)
+                    if (sc.compareTo.Value != Away) cmps.Add(new Cmp { To = sc.compareTo, Orig = sc.compareTo.Value, F = f, Car = Recon.Path(f.transform).Split('/')[0] });
+            }
+            foreach (Cmp c in cmps) c.Root = VehicleSync.CarRoot(c.F.transform);
+            var names = new Dictionary<string, int>();
+            foreach (Cmp c in cmps) { int n; names.TryGetValue(c.Orig, out n); names[c.Orig] = n + 1; }
+            foreach (var kv in names) if (kv.Value > 1 && logged.Add("cmp:" + kv.Key)) Log.Info("phares : " + kv.Value + " boutons de phares comparent la voiture du joueur a '" + kv.Key + "' : reconnus par l'objet, pas par le nom");
+        }
+        static void GuardCompares(Transform here, bool inCar)
+        {
+            foreach (Cmp c in cmps)
+            {
+                if (c.F == null || c.To == null) continue;
+                // (a pied, ou voiture du bouton inconnue : le jeu decide, comme avant)
+                bool ours = !inCar || here == null || c.Root == null || c.Root == here;
+                if (ours) { if (c.Blocked) { c.To.Value = c.Orig; c.Blocked = false; } continue; }
+                if (!c.Blocked) { c.To.Value = Away; c.Blocked = true; }
+            }
         }
         static readonly HashSet<string> logged = new HashSet<string>();
 
@@ -51,11 +102,12 @@ namespace MWCoop
             if (nextScan < 0 || !PlayerSync.InGame || TestOff) return;
             float now = Time.realtimeSinceStartup;
             if (now >= nextScan) { nextScan = now + 10f; Scan(); }
-            if (btns.Count == 0 || Game.Saving) return;
+            if (btns.Count == 0 && cmps.Count == 0 || Game.Saving) return;
             if (cur == null) { cur = FsmVariables.GlobalVariables.FindFsmString("PlayerCurrentVehicle"); if (cur == null) return; }
             Transform here = VehicleSync.LocalDrivingRoot ?? Seats.SeatedCar;
             string mine = cur.Value ?? "";
             bool inCar = here != null || mine.Length > 0;
+            GuardCompares(here, inCar);
             foreach (Btn b in btns)
             {
                 if (b.F == null) continue;
@@ -117,6 +169,32 @@ namespace MWCoop
                 }
                 Log.Info("autotest : pharesclone, phares : " + sb + "; voiture du joueur " + (VehicleSync.LocalDrivingRoot != null ? VehicleSync.LocalDrivingRoot.name : "aucune"));
             }
+        }
+
+        // Essais (autotest « mscmort ») : boutons de phares a comparaison de nom, et appui simule sur la touche (ON, puis ON
+        // encore : relachee tout de suite) dans chacun.
+        public static string CmpState()
+        {
+            var sb = new System.Text.StringBuilder("phares (noms compares) :");
+            foreach (Cmp c in cmps)
+            {
+                if (c.F == null) continue;
+                FsmInt sel = c.F.FsmVariables.FindFsmInt("Selection");
+                FsmBool on = c.F.FsmVariables.FindFsmBool("LightsOn");
+                sb.Append(' ').Append(c.Car).Append("['").Append(c.To.Value).Append("'").Append(c.Blocked ? " bloque" : "").Append("] ").Append(c.F.ActiveStateName)
+                  .Append(sel != null ? " feux " + sel.Value : on != null ? " feux " + on.Value : "").Append(';');
+            }
+            return sb.ToString();
+        }
+        public static string TestPress()
+        {
+            int n = 0;
+            foreach (PlayMakerFSM f in new HashSet<PlayMakerFSM>(cmps.ConvertAll(c => c.F)))
+            {
+                if (f == null || !f.enabled || f.ActiveStateName != "Wait player 2") continue;
+                f.SendEvent("ON"); f.SendEvent("ON"); n++;
+            }
+            return "phares : touche simulee dans " + n + " bouton(s)";
         }
 
         // Essais : etat des automates (autotest « phares »).
