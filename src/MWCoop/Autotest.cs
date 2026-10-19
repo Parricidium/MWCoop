@@ -44,6 +44,41 @@ namespace MWCoop
                 MapPanel.Test("carte", t);
                 return;
             }
+            if (mode == "mscmort")
+            {
+                // [Test] Autotest=mscmort (19/10, JD : apres la mort sur la Jonnez, sang a l'ecran et joueur reste accroupi) : au
+                // guidon de [Test] TestVoiture (la Jonnez par defaut) a 18/22 s, accident a 30 s (tete detachee + Crash), choix a
+                // 33 s ([Test] TestReapparition=2), sonde du sang et posture avant, pendant et apres ; captures.
+                string moto = Config.Get("Test", "TestVoiture", "JONNEZ ES(Clone)");
+                if (t > 18f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscmort, " + VehicleSync.TestEnter(moto, false)); }
+                if (t > 22f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscmort, guidon -> " + VehicleSync.TestEnter(moto, true)); }
+                if (t > 26f && mscStep == 2) { mscStep = 3; Log.Info("autotest : mscmort, conduite " + VehicleSync.TestDriveDump(moto)); Log.Info("autotest : mscmort, posture au guidon : " + PoseInfo()); Log.Info("autotest : mscmort, " + Respawn.ProbeBlood()); }
+                if (t > 30f && mscStep == 3) { mscStep = 4; Log.Info("autotest : mscmort, " + Respawn.TestCrash(moto.Split('(')[0].Trim()) + " ; " + Respawn.TestDie("Crash")); }
+                if (t > 31.5f && mscStep == 4) { mscStep = 5; Log.Info("autotest : mscmort, pendant : " + Respawn.ProbeBlood()); CaptureSoon("msc-mort-pendant", 0.2f); }
+                if (t > 38f && mscStep == 5) { mscStep = 6; Log.Info("autotest : mscmort, apres : " + Respawn.State() + " ; posture : " + PoseInfo()); Log.Info("autotest : mscmort, apres : " + Respawn.ProbeBlood()); CaptureSoon("msc-mort-apres", 0.2f); }
+                if (t > 48f && mscStep == 6) { mscStep = 7; Log.Info("autotest : mscmort, 10 s apres : " + Respawn.State() + " ; posture : " + PoseInfo()); CaptureSoon("msc-mort-apres10", 0.2f); }
+                if (t > 50f && mscStep == 7)
+                {
+                    mscStep = 8;
+                    GameObject camGo = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+                    foreach (PlayMakerFSM cr in new[] { Game.PlayerGo != null ? Game.FsmOn(Game.PlayerGo, "Crouch") : null, camGo != null ? Game.FsmOn(camGo, "Death") : null })
+                    if (cr != null)
+                    {
+                        var sb = new System.Text.StringBuilder("autotest : mscmort, " + cr.FsmName + " [" + cr.ActiveStateName + "] depart " + cr.Fsm.StartState + ", globales :");
+                        foreach (FsmTransition gt in cr.FsmGlobalTransitions) sb.Append(' ').Append(gt.EventName).Append("->").Append(gt.ToState);
+                        foreach (FsmState st in cr.FsmStates)
+                        {
+                            sb.Append(" ## ").Append(st.Name).Append(" :");
+                            foreach (FsmTransition tr in st.Transitions) sb.Append(' ').Append(tr.EventName).Append("->").Append(tr.ToState);
+                            sb.Append(" : ").Append(Jobs.DumpActions(cr, st.Name));
+                        }
+                        sb.Append(" @vars");
+                        foreach (NamedVariable v in cr.FsmVariables.GetAllNamedVariables()) sb.Append(' ').Append(v.Name).Append('=').Append(v.ToString());
+                        Log.Info(sb.ToString());
+                    }
+                }
+                return;
+            }
             if (mode != "mscvoiture") return;
             string car = Config.Get("Test", "TestVoiture", "KEKMET"), part = Config.Get("Test", "TestPorte", "");
             bool host = Net.Session.IsHost;
@@ -66,6 +101,39 @@ namespace MWCoop
                 Log.Info("autotest : mscvoiture " + VehicleSync.Describe(car) + (b != null ? ", cinematique " + b.isKinematic + ", vitesse " + b.velocity.magnitude.ToString("F1") : "")
                          + (t > 42f ? " | portiere " + CarDoors.StateOf(car, part) : ""));
             }
+        }
+
+        // Posture du joueur local : parent, controleur, automates du joueur (etat), hauteur Crouch, pivots de la camera.
+        static string PoseInfo()
+        {
+            GameObject pl = Game.PlayerGo;
+            if (pl == null) return "pas de joueur";
+            var sb = new System.Text.StringBuilder();
+            var cc = pl.GetComponent<CharacterController>();
+            sb.Append("parent ").Append(pl.transform.parent != null ? Recon.Path(pl.transform.parent) : "-").Append(", pos ").Append(pl.transform.position.ToString("F2"))
+              .Append(", controleur ").Append(cc != null ? (cc.enabled ? "actif" : "coupe") + " h " + cc.height.ToString("F2") + " c " + cc.center.ToString("F2") : "-");
+            foreach (Behaviour b in pl.GetComponents<Behaviour>()) { string n = b.GetType().Name; if (n == "CharacterMotor" || n == "FPSInputController" || n == "MouseLook") sb.Append(", ").Append(n).Append(b.enabled ? " on" : " off"); }
+            foreach (PlayMakerFSM f in pl.GetComponentsInChildren<PlayMakerFSM>(true))
+            {
+                if (!f.gameObject.activeInHierarchy && f.gameObject != pl) continue;
+                string n = f.FsmName;
+                if (n == "Crouch" || n.Contains("Seat") || n.Contains("Moped") || n.Contains("Death") || f.gameObject == pl)
+                {
+                    sb.Append(" | ").Append(f.gameObject == pl ? "" : f.name + "::").Append(n).Append(" [").Append(f.ActiveStateName).Append(']');
+                    FsmFloat p = f.FsmVariables.FindFsmFloat("Position"); if (p != null) sb.Append(" Position=").Append(p.Value.ToString("F2"));
+                }
+            }
+            foreach (string part in new[] { "Pivot", "Pivot/AnimPivot", "Pivot/AnimPivot/Camera", "Pivot/AnimPivot/Camera/FPSCamera" })
+            {
+                Transform t = pl.transform.Find(part);
+                if (t != null) sb.Append(" | ").Append(part).Append(' ').Append(t.localPosition.ToString("F2")).Append(' ').Append(t.localEulerAngles.ToString("F0"));
+            }
+            foreach (string g in new[] { "PlayerSeated", "PlayerStop", "PlayerInCar", "PlayerOnMoped", "PlayerCrouch" })
+            {
+                FsmBool b = FsmVariables.GlobalVariables.FindFsmBool(g); if (b != null) sb.Append(", ").Append(g).Append('=').Append(b.Value);
+            }
+            FsmString veh = FsmVariables.GlobalVariables.FindFsmString("PlayerCurrentVehicle"); if (veh != null) sb.Append(", PlayerCurrentVehicle='").Append(veh.Value).Append('\'');
+            return sb.ToString();
         }
 
         static string capName;

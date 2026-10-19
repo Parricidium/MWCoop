@@ -65,7 +65,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
-            Choosing = false; VehicleSync.FreezeLocal(false); deathFsm = null; heads.Clear(); overlays.Clear(); camFx.Clear(); camDeath = null; bloodFx.Clear(); headsLooked = null;
+            Choosing = false; standCheckAt = -1; VehicleSync.FreezeLocal(false); deathFsm = null; heads.Clear(); overlays.Clear(); camFx.Clear(); camDeath = null; bloodFx.Clear(); headsLooked = null;
             scanAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 10f : -1;
         }
 
@@ -83,6 +83,7 @@ namespace MWCoop
             // Accident : la tete rattachee des que l'automate de la voiture a fini (sinon la vue tombe pendant le choix).
             if (restoreAt > 0 && now >= restoreAt) { restoreAt = -1; foreach (Head h in heads) RestoreHead(h); }
             TestUpdate();
+            if (standCheckAt > 0 && now >= standCheckAt) { standCheckAt = -1; if (Game.PlayerGo != null) StandUp(Game.PlayerGo); }
             if (now >= nextBloodCheck) { nextBloodCheck = now + 1f; BloodWatch(); }
             // Voiture conduite ici dont la tete n'a pas ete relevee (voiture d'un mod creee apres le releve, 300D de
             // Machtwagen : la mort au volant n'y etait pas rattrapee) : relevee en prenant le volant.
@@ -119,15 +120,35 @@ namespace MWCoop
                 }
                 camDeath = Game.FsmOn(cam, "Death");
             }
+            FindBlood(cam);
+            Log.Info("reapparition : prete (" + heads.Count + " tetes de conducteur, voile de sang : " + bloodFx.Count + " effet(s))");
+        }
+
+        // Voile de sang : ce que l'etat 1 de l'automate Death de la camera allume, et le ScreenOverlay de la camera dont la texture
+        // est du sang (player_blood_vision). My Summer Car : l'automate n'a jamais tourne au chargement, ses actions ne se
+        // lisent pas encore -- rien n'etait trouve, le sang restait apres la reapparition (JD, 19/10, mort sur la Jonnez).
+        static void FindBlood(GameObject cam)
+        {
             if (camDeath != null && camDeath.Fsm.GetState("State 1") != null)
-                foreach (FsmStateAction a in camDeath.Fsm.GetState("State 1").Actions)
+            {
+                FsmStateAction[] acts = null;
+                try { acts = camDeath.Fsm.GetState("State 1").Actions; } catch { }
+                foreach (FsmStateAction a in acts ?? new FsmStateAction[0])
                 {
                     FieldInfo pf = a != null ? a.GetType().GetField("targetProperty") : null;
                     FsmProperty fp = pf != null ? pf.GetValue(a) as FsmProperty : null;
                     Behaviour tb = fp != null && fp.PropertyName == "enabled" && fp.TargetObject != null ? fp.TargetObject.Value as Behaviour : null;
                     if (tb != null && !bloodFx.Contains(tb)) bloodFx.Add(tb);
                 }
-            Log.Info("reapparition : prete (" + heads.Count + " tetes de conducteur, voile de sang : " + bloodFx.Count + " effet(s))");
+            }
+            if (cam == null) return;
+            foreach (Behaviour b in cam.GetComponents<Behaviour>())
+            {
+                if (b == null || b.GetType().Name != "ScreenOverlay" || bloodFx.Contains(b)) continue;
+                FieldInfo tf = b.GetType().GetField("texture");
+                Texture tx = tf != null ? tf.GetValue(b) as Texture : null;
+                if (tx != null && tx.name.ToLowerInvariant().Contains("blood")) bloodFx.Add(b);
+            }
         }
 
         // Tete (liaison DriverHeadPivot) et mannequin d'une voiture ; variables d'automates qui visent la liaison.
@@ -285,6 +306,7 @@ namespace MWCoop
             VehicleSync.FreezeLocal(false);
             if (pl.transform.parent != null) pl.transform.parent = null;
             foreach (KeyValuePair<Behaviour, bool> kv in overlays) if (kv.Key != null) kv.Key.enabled = kv.Value;
+            FindBlood(Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera"));   // (l'automate a tourne : ses actions se lisent)
             foreach (Behaviour b in bloodFx) if (b != null) { if (b.enabled) Log.Info("reapparition : voile de sang " + b.GetType().Name + " eteint"); b.enabled = false; }
             // Mode photo du jeu (F9) : la mort par accident l'envoie dans son etat final (GLOBALEVENT -> State 2), sans retour.
             GameObject pm = Game.FindAny("Systems/Photomode Cam");
@@ -299,6 +321,8 @@ namespace MWCoop
             if (camDeath != null && camDeath.Fsm.GetState("State 2") != null) Game.SetState(camDeath, "State 2");
             if (fx > 0) Log.Info("reapparition : effets d'ecran remis (" + fx + " reglages : le sang de l'accident)");
             OpenEyes(pl);
+            StandUp(pl);
+            standCheckAt = Time.realtimeSinceStartup + 1f;
             Game.SetGlobalBool("PlayerStop", false);
             var cc = pl.GetComponent<CharacterController>();
             foreach (Behaviour b in pl.GetComponents<Behaviour>())
@@ -338,6 +362,21 @@ namespace MWCoop
             }
             FsmFloat vol = FsmVariables.GlobalVariables.FindFsmFloat("GameVolume");
             if (vol != null && vol.Value < 0.99f) { Log.Info("reapparition : son du jeu rendu (" + vol.Value.ToString("F2") + " -> 1)"); vol.Value = 1f; }
+        }
+
+        // Debout : l'automate Crouch du joueur garde la camera basse (etat "Incar", 0,6 m) tant que sa variable PlayerInCar est
+        // vraie ; la sortie forcee (etat "Create player" de la Jonnez) la remet a vrai. Remise a faux hors de tout vehicule :
+        // "Get out" releve la camera et le controleur comme une sortie normale (JD, 19/10 : « reste accroupi » apres la mort
+        // sur la moto). Refait 1 s apres (Update), le temps que l'automate de conduite ait fini sa sortie.
+        static float standCheckAt = -1;
+        static void StandUp(GameObject pl)
+        {
+            if (VehicleSync.LocalDriving >= 0 || Seats.Seated) return;
+            PlayMakerFSM cr = Game.FsmOn(pl, "Crouch");
+            FsmBool inCar = cr != null ? cr.FsmVariables.FindFsmBool("PlayerInCar") : null;
+            if (inCar == null || !inCar.Value) return;
+            inCar.Value = false;
+            Log.Info("reapparition : joueur releve (Crouch [" + cr.ActiveStateName + "], PlayerInCar remis a faux)");
         }
 
         // Point au sol sous le lieu (premier obstacle solide sous la hauteur choisie), pieds du joueur dessus.
