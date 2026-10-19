@@ -96,8 +96,159 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=mscregles (19/10, regles de MWC sur MSC) -- l'invite : 60 s decroche un appel de fosse (Shit 1) ; 62 s va au
+        // magasin de Teimo ; 75 s y achete 2 saucisses et une caisse de biere (Total 30, il paie) ; 90 s sort un article du sac neuf,
+        // 100 s le vide ; 110 s fait 10 L d'essence dans la SATSUMA (pompe 98 : Fuel +10, reservoir +10) et 120 s paie l'essence a la
+        // caisse. Chacun note toutes les 10 s : appel, argent, sacs, reservoir, compteur de la pompe.
+        static int rgStep; static float rgLog; static System.Collections.Generic.HashSet<string> rgBags; static GameObject rgBag;
+        const string RgReg = "STORE/StoreCashRegister/Register", RgPump = "STORE/LOD/Pumps/GasolinePump98/Functions/Trigger98", RgTank = "Database/DatabaseMechanics/FuelTank";
+        static System.Collections.Generic.IEnumerable<GameObject> Bags()
+        {
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>())
+                if (f.FsmName == "Use" && f.gameObject.name.StartsWith("shopping bag") && f.Fsm.GetState("Spawn one") != null) yield return f.gameObject;
+        }
+        static int Beers() { int n = 0; foreach (Transform x in Object.FindObjectsOfType<Transform>()) if (x.name.StartsWith("beer case") || x.name.StartsWith("beercase")) n++; return n; }
+        static string BagId(GameObject b) { PlayMakerFSM u = Game.FsmOn(b, "Use"); FsmString id = u != null ? u.FsmVariables.FindFsmString("ID") : null; return id != null ? id.Value : "?"; }
+        static void MscRegles(float t)
+        {
+            bool host = Net.Session.IsHost;
+            if (t > 50f && rgBags == null) { rgBags = new System.Collections.Generic.HashSet<string>(); foreach (GameObject b in Bags()) rgBags.Add(BagId(b)); Log.Info("autotest : mscregles, " + rgBags.Count + " sacs avant"); }
+            if (!host)
+            {
+                if (t > 60f && rgStep == 0) { rgStep = 1; Log.Info("autotest : mscregles, " + PhoneMsc.TestAnswer("SHIT1")); }
+                if (t > 62f && rgStep == 1)
+                {
+                    rgStep = 2;
+                    GameObject reg = Game.FindAny(RgReg), pl = Game.PlayerGo;
+                    var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (reg != null && cc != null) { cc.enabled = false; pl.transform.position = reg.transform.position + reg.transform.forward * -1.2f + Vector3.up * 0.3f; cc.enabled = true; }
+                    Log.Info("autotest : mscregles, au magasin de Teimo");
+                }
+                if (t > 75f && rgStep == 2)
+                {
+                    rgStep = 3;
+                    PlayMakerFSM reg = Game.FindFsm(RgReg, "Data");
+                    if (reg != null)
+                    {
+                        reg.FsmVariables.GetFsmInt("QSausages").Value = 2;
+                        FsmInt qb = reg.FsmVariables.FindFsmInt("QBeer"); if (qb != null) qb.Value = 1;
+                        reg.FsmVariables.GetFsmFloat("Total").Value = 30f;
+                        Game.SetState(reg, "Purchase");
+                        Log.Info("autotest : mscregles, achat chez Teimo -> " + reg.ActiveStateName + ", " + Wallet.State());
+                    }
+                }
+                if (t > 90f && rgStep == 3 && rgBag != null)
+                {
+                    rgStep = 4;
+                    PlayMakerFSM u = Game.FsmOn(rgBag, "Use");
+                    if (u.Fsm.GetState("Confirm") != null) Game.SetState(u, "Confirm");
+                    Game.SetState(u, "Spawn one");
+                    Log.Info("autotest : mscregles, un article sorti du sac " + BagId(rgBag));
+                }
+                if (t > 100f && rgStep == 4 && rgBag != null)
+                {
+                    rgStep = 5;
+                    PlayMakerFSM u = Game.FsmOn(rgBag, "Use");
+                    if (u.Fsm.GetState("Confirm") != null) Game.SetState(u, "Confirm");
+                    Game.SetState(u, "Spawn all");
+                    Log.Info("autotest : mscregles, sac " + BagId(rgBag) + " vide");
+                }
+                if (t > 110f && rgStep >= 3 && rgStep < 6)
+                {
+                    rgStep = 6;
+                    PlayMakerFSM pump = Game.FindFsm(RgPump, "Use"), tank = Game.FindFsm(RgTank, "Data");
+                    if (pump != null) pump.FsmVariables.GetFsmFloat("Fuel").Value += 10f;
+                    if (tank != null) tank.FsmVariables.GetFsmFloat("FuelLevel").Value += 10f;
+                    Log.Info("autotest : mscregles, plein de 10 L ici");
+                }
+                if (t > 120f && rgStep == 6)
+                {
+                    rgStep = 7;
+                    PlayMakerFSM reg = Game.FindFsm(RgReg, "Data"), pump = Game.FindFsm(RgPump, "Use");
+                    float price = pump != null && pump.FsmVariables.FindFsmFloat("FuelPrice") != null ? pump.FsmVariables.GetFsmFloat("FuelPrice").Value : 4f;
+                    if (reg != null)
+                    {
+                        reg.FsmVariables.GetFsmFloat("FuelPurchase").Value = 10f * price;
+                        reg.FsmVariables.GetFsmFloat("Total").Value = 10f * price;
+                        Game.SetState(reg, "Purchase");
+                        Log.Info("autotest : mscregles, essence payee (" + (10f * price).ToString("F2") + " mk) -> " + Wallet.State());
+                    }
+                }
+            }
+            if (rgBags != null && rgBag == null && t > 76f)
+                foreach (GameObject b in Bags()) if (!rgBags.Contains(BagId(b))) { rgBag = b; Log.Info("autotest : mscregles, sac neuf " + BagId(b) + " en " + b.transform.position.ToString("F1") + (b.activeInHierarchy ? "" : " (inactif)")); break; }
+            if (t > 55f && t < 220f && Time.realtimeSinceStartup >= rgLog)
+            {
+                rgLog = Time.realtimeSinceStartup + 10f;
+                PlayMakerFSM pump = Game.FindFsm(RgPump, "Use"), tank = Game.FindFsm(RgTank, "Data");
+                int nb = 0; foreach (GameObject b in Bags()) nb++;
+                Log.Info("autotest : mscregles (" + (host ? "hote" : "invite") + ") " + PhoneMsc.State(1) + " | " + Wallet.State() + " | sacs " + nb + (rgBag != null ? ", sac neuf " + BagId(rgBag) : "")
+                         + " | reservoir " + (tank != null ? tank.FsmVariables.GetFsmFloat("FuelLevel").Value.ToString("F1") : "?") + ", pompe 98 " + (pump != null ? pump.FsmVariables.GetFsmFloat("Fuel").Value.ToString("F1") : "?")
+                         + " | caisses de biere " + Beers() + " | " + Fluids.TestState("FuelTank"));
+            }
+        }
+
+        // [Test] Autotest=mscreste (19/10) -- l'invite : 60 s decroche la fosse 2 (objectif de carte a lui) ; 65 s sert la boite aux lettres
+        // 3 (tracts) ; 70 s va a la station de Teimo, 75 s prend le pistolet 98, 85 s le repose ; 90 s va chez Fleetari, 100 s y achete
+        // un alternateur ; 110 s commande des travaux et rentre ; 115 s commande par la poste. Chacun note toutes les 10 s.
+        static int rsStep; static float rsLog;
+        static void Teleport(string path, Vector3 off)
+        {
+            GameObject g = Game.FindAny(path), pl = Game.PlayerGo;
+            var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+            if (g == null || cc == null) return;
+            cc.enabled = false; pl.transform.position = g.transform.position + off; cc.enabled = true;
+        }
+        static void MscReste(float t)
+        {
+            bool host = Net.Session.IsHost;
+            if (!host)
+            {
+                if (t > 60f && rsStep == 0) { rsStep = 1; Log.Info("autotest : mscreste, " + PhoneMsc.TestAnswer("SHIT2")); }
+                if (t > 65f && rsStep == 1) { rsStep = 2; Log.Info("autotest : mscreste, " + TractsMsc.TestDeliver(3)); }
+                if (t > 70f && rsStep == 2) { rsStep = 3; Teleport("STORE/LOD/Pumps/GasolinePump98", new Vector3(1.5f, 0.5f, 0f)); Log.Info("autotest : mscreste, a la station"); }
+                if (t > 75f && rsStep == 3)
+                {
+                    rsStep = 4;
+                    PlayMakerFSM u = Game.FindFsm("STORE/LOD/Pumps/GasolinePump98/Functions/Trigger98", "Use");
+                    if (u != null) Game.SetState(u, "Activate hand");
+                    Log.Info("autotest : mscreste, pistolet 98 pris -> " + (u != null ? u.ActiveStateName : "?"));
+                }
+                if (t > 85f && rsStep == 4)
+                {
+                    rsStep = 5;
+                    PlayMakerFSM u = Game.FindFsm("STORE/LOD/Pumps/GasolinePump98/Functions/Trigger98", "Use");
+                    if (u != null) Game.SetState(u, "Anim drop");
+                    Log.Info("autotest : mscreste, pistolet 98 repose -> " + (u != null ? u.ActiveStateName : "?"));
+                }
+                if (t > 90f && rsStep == 5) { rsStep = 6; Teleport("REPAIRSHOP/LOD/Store/ShopCashRegister", new Vector3(0f, 0.5f, -1.2f)); Log.Info("autotest : mscreste, chez Fleetari"); }
+                if (t > 100f && rsStep == 6)
+                {
+                    rsStep = 7;
+                    PlayMakerFSM reg = Game.FindFsm("REPAIRSHOP/LOD/Store/ShopCashRegister/Register", "Data");
+                    if (reg != null)
+                    {
+                        reg.FsmVariables.GetFsmBool("QAlternator").Value = true;
+                        reg.FsmVariables.GetFsmFloat("Total").Value = 425f;
+                        Game.SetState(reg, "Purchase");
+                    }
+                    Log.Info("autotest : mscreste, alternateur achete -> " + (reg != null ? reg.ActiveStateName : "caisse introuvable") + ", " + Wallet.State());
+                }
+                if (t > 110f && rsStep == 7) { rsStep = 8; Log.Info("autotest : mscreste, " + FleetariMsc.TestOrder()); Teleport("YARD/Building", new Vector3(0f, 1f, 0f)); }
+                if (t > 115f && rsStep == 8) { rsStep = 9; Log.Info("autotest : mscreste, " + FleetariMsc.TestPost()); }
+            }
+            if (t > 55f && t < 240f && Time.realtimeSinceStartup >= rsLog)
+            {
+                rsLog = Time.realtimeSinceStartup + 10f;
+                Log.Info("autotest : mscreste (" + (host ? "hote" : "invite") + ") " + PhoneMsc.State(2) + " | " + TractsMsc.State() + " |" + PumpsMsc.State() + " | " + FleetariMsc.State()
+                         + ", colis restants " + FleetariMsc.BoxesLeft() + " | " + Wallet.State() + " | objectifs " + MapPanel.Objectives.Count);
+            }
+        }
+
         static void MscTest(string mode, float t)
         {
+            if (mode == "mscreste") { MscReste(t); return; }
+            if (mode == "mscregles") { MscRegles(t); return; }
             if (mode == "mscmeca") { MscMeca(t); return; }
             if (mode == "mscinterface")
             {

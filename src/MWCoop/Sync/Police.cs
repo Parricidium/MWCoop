@@ -61,6 +61,8 @@ namespace MWCoop
         {
             foreach (string n in new[] { "ManSlaughter", "PoliceEvasion", "TrafficFatality", "AttemptedManslaughter" })
             { FsmInt v = wanted.FsmVariables.FindFsmInt(n); if (v != null && v.Value > 0) return true; }
+            // (My Summer Car : amendes impayees -- Fines 'State 3' met PlayerCopChecksum sous 5 000 000, que "Check crime" lit)
+            if (Game.Msc) { FsmInt ck = FsmVariables.GlobalVariables.FindFsmInt("PlayerCopChecksum"); if (ck != null && ck.Value < 5000000) return true; }
             return false;
         }
 
@@ -78,7 +80,42 @@ namespace MWCoop
             var sb = new System.Text.StringBuilder();
             foreach (string n in CrimeInts) { FsmInt v = wanted.FsmVariables.FindFsmInt(n); if (v != null) sb.Append(sb.Length > 0 ? ";" : "").Append(n).Append(':').Append(v.Value); }
             foreach (string n in CrimeFloats) { FsmFloat v = wanted.FsmVariables.FindFsmFloat(n); if (v != null) sb.Append(sb.Length > 0 ? ";" : "").Append(n).Append(':').Append(v.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)); }
+            if (Game.Msc) MscFinesLine(sb);
             return sb.ToString();
+        }
+
+        // My Summer Car : les amendes sont aussi personnelles -- globales PlayerFines, PlayerFinesDay (impayees, du jour),
+        // PlayerCopChecksum (sous 5 000 000 : recherche pour amendes impayees) et le compte a rebours de YARD/Building/Dynamics/Fines
+        // (Activate.FineWait, 30 000 s). L'invite recevait ceux de l'hote avec la sauvegarde ; et FineWait remis a 0 (aucune ligne)
+        // le rendait recherche des sa premiere amende impayee.
+        const string FinesPath = "YARD/Building/Dynamics/Fines";
+        static void MscFinesLine(System.Text.StringBuilder sb)
+        {
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            FsmFloat pf = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFines"), pd = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFinesDay");
+            FsmInt ck = FsmVariables.GlobalVariables.FindFsmInt("PlayerCopChecksum");
+            PlayMakerFSM fa = Game.FindFsm(FinesPath, "Activate");
+            FsmFloat fw = fa != null ? fa.FsmVariables.FindFsmFloat("FineWait") : null;
+            if (pf != null) sb.Append(";g.PlayerFines:").Append(pf.Value.ToString("R", ci));
+            if (pd != null) sb.Append(";g.PlayerFinesDay:").Append(pd.Value.ToString("R", ci));
+            if (ck != null) sb.Append(";g.PlayerCopChecksum:").Append(ck.Value);
+            if (fw != null) sb.Append(";g.FinesWait:").Append((Mathf.Floor(fw.Value / 60f) * 60f).ToString("R", ci));   // (a la minute : le compte a rebours ne reecrit pas le fichier a chaque passage)
+        }
+
+        static void MscFinesRestore(Dictionary<string, string> vals)
+        {
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            string s; float f; int i;
+            FsmFloat pf = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFines"), pd = FsmVariables.GlobalVariables.FindFsmFloat("PlayerFinesDay");
+            FsmInt ck = FsmVariables.GlobalVariables.FindFsmInt("PlayerCopChecksum");
+            if (pf != null) pf.Value = vals.TryGetValue("g.PlayerFines", out s) && float.TryParse(s, System.Globalization.NumberStyles.Float, ci, out f) ? f : 0f;
+            if (pd != null) pd.Value = vals.TryGetValue("g.PlayerFinesDay", out s) && float.TryParse(s, System.Globalization.NumberStyles.Float, ci, out f) ? f : 0f;
+            if (ck != null) ck.Value = vals.TryGetValue("g.PlayerCopChecksum", out s) && int.TryParse(s, out i) ? i : 6243374;   // (au-dessus de 5 000 000 : pas recherche)
+            GameObject fines = Game.FindAny(FinesPath);
+            PlayMakerFSM fa = fines != null ? Game.FsmOn(fines, "Activate") : null;
+            FsmFloat fw = fa != null ? fa.FsmVariables.FindFsmFloat("FineWait") : null;
+            if (fw != null) fw.Value = vals.TryGetValue("g.FinesWait", out s) && float.TryParse(s, System.Globalization.NumberStyles.Float, ci, out f) ? f : 30000f;
+            if (fines != null && pf != null) fines.SetActive(pf.Value > 1f);   // (comme PlayerDatabase "Enable fines")
         }
 
         static string CrimePath { get { return System.IO.Path.Combine(Log.DataDir, "police-joueur.ini"); } }
@@ -101,8 +138,9 @@ namespace MWCoop
             foreach (string n in CrimeFloats)
             {
                 FsmFloat v = wanted.FsmVariables.FindFsmFloat(n); string s; float f;
-                if (v != null) v.Value = vals.TryGetValue(n, out s) && float.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f) ? f : 0f;
+                if (v != null) v.Value = vals.TryGetValue(n, out s) && float.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out f) ? f : Game.Msc && n == "FineWait" ? 30000f : 0f;   // (MSC : 30 000 s, comme le jeu)
             }
+            if (Game.Msc) MscFinesRestore(vals);
             crimesStored = CrimeLine();
             bool was = WantedAtHome();
             string st = wanted.ActiveStateName;
@@ -158,6 +196,11 @@ namespace MWCoop
         static string jailTimeLast, jailSleepLast;
         static bool dayDuringSleep;
         static float nextJailFind;
+
+        // Le joueur d'ici est en prison (JAIL allume, chez lui seulement). My Summer Car : World ne lui impose alors ni le jour ni
+        // l'heure de l'hote -- l'arrestation avance SON jour ("Advance day") et le jour de l'hote recopie faisait compter un jour de
+        // peine de plus (IntChanged GlobalDay -> "Subtract day").
+        public static bool InJail { get { GameObject j = jailTime != null ? jailTime.transform.root.gameObject : null; return j != null && j.activeInHierarchy; } }
 
         static void JailUpdate(float now)
         {
@@ -215,6 +258,146 @@ namespace MWCoop
             crimesAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 16f : -1;
             logic = null; checkpoints = null; items = null; built = muted = false; lastSig = null; sent = recv = 0; step = 0;
             buildAt = PlayerSync.InGame ? Time.realtimeSinceStartup + 7f : -1;
+            crimeHooked.Clear(); crimeCut.Clear(); chasing.Clear(); nextCrimeScan = PlayerSync.InGame ? Time.realtimeSinceStartup + 20f : -1;
+        }
+
+        // ================================================================ My Summer Car : delit au coupable seulement (19/10)
+        // Agent renverse (TRAFFIC/Police/.../HumanTriggerCop::CarHit) et pilote du trafic tue (CrashEvent::Crash) : l'etat "Crime"
+        // compte le delit (ManSlaughter, TrafficFatality, PlayerWanted, poursuite CHASE) chez quiconque est a moins de 8 m -- chez
+        // l'hote, passager ou passant, quand la voiture de l'invite (sa copie ici) touchait l'agent. Une action au debut de
+        // "Crime" coupe ses actions pour ce passage si le joueur d'ici ne conduit pas la voiture qui a touche (agent : la voiture
+        // du collisionneur ; accident du trafic : le joueur d'ici au volant de quelque chose). Elles sont rendues a l'image suivante.
+        static readonly HashSet<PlayMakerFSM> crimeHooked = new HashSet<PlayMakerFSM>();
+        static readonly List<FsmStateAction> crimeCut = new List<FsmStateAction>();
+        static float nextCrimeScan = -1;
+        static int crimeCutLogs;
+
+        class CrimeHook : ModHook
+        {
+            public override string Module { get { return "police (delits)"; } }
+            public PlayMakerFSM F; public bool Cop;
+            public override void OnEnter()
+            {
+                try
+                {
+                    bool mine;
+                    if (Cop)
+                    {
+                        FsmGameObject col = F.FsmVariables.FindFsmGameObject("Collider");
+                        Transform car = col != null && col.Value != null ? VehicleSync.CarRoot(col.Value.transform) : null;
+                        mine = car != null ? car == VehicleSync.LocalDrivingRoot : VehicleSync.LocalDriving >= 0;
+                    }
+                    else mine = VehicleSync.LocalDriving >= 0;
+                    if (!mine && Session.Active)
+                    {
+                        foreach (FsmStateAction a in State.Actions) if (a != this && a.Enabled) { a.Enabled = false; crimeCut.Add(a); }
+                        if (crimeCutLogs++ < 20) MWCoop.Log.Info("police : " + Recon.Path(F.transform) + "::" + F.FsmName + " -> Crime ignore ici (le joueur d'ici ne conduisait pas la voiture)");
+                    }
+                }
+                catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+
+        // ================================================================ My Summer Car : fuite d'un barrage par l'invite (19/10)
+        // Le jeu lance la poursuite par TargetDispatch*::Check "Chase" (radar) ou TakeFine::Use "Chase" (fuite au controle d'alcool) :
+        // CHASE au Throttle des POLICECAR, dont "Chase" met Throttle.Chase a vrai ; CopPassenger::Logic attend ce booleen puis, si le
+        // joueur quitte la zone de la grande route (TRAFFIC/Police::Police.TrafficHighway faux) plus de 10 s, "Set wanted" : PoliceEvasion
+        // +1 dans SON PlayerWanted. Chez l'invite, Throttle (voiture de l'hote) et les zones du trafic sont coupes : il fuyait sans
+        // jamais etre recherche. Ici, chez l'invite : Throttle.Chase mis a vrai sur sa copie, et TrafficHighway tenu a "a moins de
+        // 120 m de la voiture qui le poursuit" ; la suite est celle du jeu (amende s'il revient a 10 m, recherche sinon).
+        class ChaseHook : ModHook
+        {
+            public override string Module { get { return "police (poursuite)"; } }
+            public PlayMakerFSM F; public bool Radar;
+            public override void OnEnter()
+            {
+                try { if (Session.Active && !Session.IsHost) StartChase(F, Radar); } catch (System.Exception e) { Replay.HookError(e); }
+                Finish();
+            }
+        }
+        static readonly List<Transform> chasing = new List<Transform>();
+        static float nextChaseTick;
+
+        static void StartChase(PlayMakerFSM f, bool radar)
+        {
+            var cars = new List<Transform>();
+            if (radar)
+            {
+                FsmGameObject c = f.FsmVariables.FindFsmGameObject("Car");
+                if (c != null && c.Value != null) cars.Add(c.Value.transform);
+            }
+            else
+            {
+                Transform cam = PlayerSync.LocalCamera;
+                foreach (PlayMakerFSM t in Object.FindObjectsOfType<PlayMakerFSM>())
+                    if (t.FsmName == "Throttle" && t.gameObject.name.StartsWith("POLICECAR") && (cam == null || (t.transform.position - cam.position).sqrMagnitude < 300f * 300f))
+                        cars.Add(t.transform);
+            }
+            foreach (Transform car in cars)
+            {
+                PlayMakerFSM th = Game.FsmOn(car.gameObject, "Throttle");
+                FsmBool ch = th != null ? th.FsmVariables.FindFsmBool("Chase") : null;
+                if (ch == null) continue;
+                ch.Value = true;
+                if (!chasing.Contains(car)) chasing.Add(car);
+            }
+            Log.Info("police : poursuite de l'invite (" + (radar ? "radar" : "controle") + ") par " + cars.Count + " voiture(s)");
+        }
+
+        static void ChaseTick(float now)
+        {
+            if (chasing.Count == 0 || now < nextChaseTick) return;
+            nextChaseTick = now + 0.25f;
+            Transform cam = PlayerSync.LocalCamera;
+            float best = float.MaxValue;
+            for (int i = chasing.Count - 1; i >= 0; i--)
+            {
+                Transform car = chasing[i];
+                Transform cp = car != null ? car.Find("CopPassenger") : null;
+                PlayMakerFSM lg = cp != null ? Game.FsmOn(cp.gameObject, "Logic") : null;
+                if (car == null || lg == null || !lg.enabled || !lg.gameObject.activeInHierarchy)
+                {
+                    // (fin de poursuite : "Set wanted" ou amende -- Logic s'eteint)
+                    PlayMakerFSM th = car != null ? Game.FsmOn(car.gameObject, "Throttle") : null;
+                    FsmBool ch = th != null ? th.FsmVariables.FindFsmBool("Chase") : null;
+                    if (ch != null) ch.Value = false;
+                    chasing.RemoveAt(i);
+                    Log.Info("police : poursuite de l'invite finie (" + (lg != null ? lg.ActiveStateName : "?") + ", " + (wanted != null ? CrimeLine() : "?") + ")");
+                    continue;
+                }
+                if (cam != null) best = Mathf.Min(best, (car.position - cam.position).magnitude);
+            }
+            if (logic == null) return;
+            FsmBool hw = logic.FsmVariables.FindFsmBool("TrafficHighway");
+            if (hw != null && chasing.Count > 0) hw.Value = best <= 120f;
+        }
+
+        static void CrimeScan()
+        {
+            int n = 0;
+            foreach (Object o in Game.AllFsms())
+            {
+                var f = o as PlayMakerFSM;
+                if (f == null || crimeHooked.Contains(f) || f.hideFlags != HideFlags.None) continue;
+                bool radar = f.FsmName == "Check" && f.gameObject.name.StartsWith("TargetDispatch"),
+                     fine = f.FsmName == "Use" && f.gameObject.name == "TakeFine" && Recon.Path(f.transform).Contains("CopAlc");
+                if ((radar || fine) && f.Fsm.GetState("Chase") != null)
+                {
+                    FsmState cs = f.Fsm.GetState("Chase");
+                    if (!cs.IsInitialized) continue;
+                    try { FsmHooks.Prepend(cs, new ChaseHook { F = f, Radar = radar }); } catch { continue; }
+                    crimeHooked.Add(f); n++;
+                    continue;
+                }
+                bool cop = f.FsmName == "CarHit" && f.gameObject.name == "HumanTriggerCop", crash = f.FsmName == "Crash" && f.gameObject.name == "CrashEvent";
+                if (!cop && !crash) continue;
+                FsmState s = f.Fsm.GetState("Crime");
+                if (s == null || !s.IsInitialized) continue;
+                try { FsmHooks.Prepend(s, new CrimeHook { F = f, Cop = cop }); } catch { continue; }
+                crimeHooked.Add(f); n++;
+            }
+            if (n > 0) Log.Info("police : " + n + " etats de delit gardes au conducteur (" + crimeHooked.Count + ")");
         }
 
         static void Build()
@@ -239,6 +422,9 @@ namespace MWCoop
         {
             float now = Time.realtimeSinceStartup;
             if (PlayerSync.InGame) { WantedUpdate(now); JailUpdate(now); }
+            if (crimeCut.Count > 0) { foreach (FsmStateAction a in crimeCut) a.Enabled = true; crimeCut.Clear(); }
+            if (Game.Msc && nextCrimeScan > 0 && now >= nextCrimeScan) { nextCrimeScan = now + 30f; CrimeScan(); }
+            if (Game.Msc && !Session.IsHost) ChaseTick(now);
             if (!built) { if (buildAt > 0 && now >= buildAt) Build(); return; }
             if (logic == null || !Session.IsHost || Session.RemoteCount == 0 || now < nextCheck) return;
             nextCheck = now + 0.5f;

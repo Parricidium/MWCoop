@@ -215,6 +215,8 @@ namespace MWCoop
             jobs.Clear(); hooked.Clear(); reserved.Clear(); classified.Clear(); jobCars.Clear(); waitingJobs.Clear(); waitingSet.Clear();
             creators.Clear(); creatorsWaiting.Clear(); tagged.Clear(); wells.Clear(); wellsWaiting.Clear();
             SewageHose.OnLevelLoaded();
+            PhoneMsc.OnLevelLoaded();
+            TractsMsc.OnLevelLoaded();
             RunOver.OnLevelLoaded();
             specialsScanned = false; logTrigger = null; ltCollider = null;
             feed = null; feedHand = null; feedMute = null; feedMuted.Clear(); feedClick = feedActivation = feedWasActive = false; feedStageLocal = true;
@@ -245,6 +247,7 @@ namespace MWCoop
         public static void Update()
         {
             SewageHose.Update();
+            if (Game.Msc) { PhoneMsc.Update(); TractsMsc.Update(); }   // (telephone de MSC : decroche partage, PhoneMsc.cs ; tracts de Teimo)
             if (nextScan < 0) return;
             float now = Time.realtimeSinceStartup;
             if (VehicleSync.Generation != jobGen) { if (jobGen >= 0) SoonScan(); jobGen = VehicleSync.Generation; }
@@ -634,7 +637,10 @@ namespace MWCoop
         static bool MscSkip(PlayMakerFSM f)
         {
             string p = Recon.Path(f.transform);
-            return p.StartsWith("JOBS/Mummola") && f.FsmName == "Logic" || f.FsmName == "Save" && p.Contains("/Moving/Stuff");
+            // (et la decharge sauvage du GIFU, GIFU/ShitTank/ShitDumps::Logic : l'amende va a celui qui vide, d'apres SA logique ; rejouee,
+            // l'enveloppe d'amende apparaissait dans toutes les boites aux lettres)
+            return p.StartsWith("JOBS/Mummola") && f.FsmName == "Logic" || f.FsmName == "Save" && p.Contains("/Moving/Stuff")
+                   || f.FsmName == "Logic" && p.EndsWith("ShitTank/ShitDumps");
         }
 
         static bool IgnitionLike(PlayMakerFSM f)
@@ -1977,6 +1983,14 @@ namespace MWCoop
                 case "@tow": ModTowCart.OnMessage(who, r); break;
                 case "@jack": ModJackStands.OnMessage(who, r); break;
                 case "@carbu": FuelPrices.OnMessage(who, r); break;
+                case "@tel": PhoneMsc.OnMessage(who, r); break;   // (MSC : appel decroche par un autre)
+                case "@pompe": PumpsMsc.OnMessage(who, r); break;   // (MSC : pistolet et afficheurs d'une pompe)
+                case "@tract": TractsMsc.OnMessage(who, r); break;   // (MSC : boite aux lettres servie, tracts de Teimo)
+                case "@fleetmsc": FleetariMsc.OnPurchase(who, r); break;   // (MSC : achat chez Fleetari)
+                case "@fleetordre": FleetariMsc.OnOrder(who, r); break;   // (MSC : commande de travaux chez Fleetari)
+                case "@fleettravail": FleetariMsc.OnWork(who, r); break;
+                case "@fleetfin": FleetariMsc.OnWorkDone(who, r); break;
+                case "@postcmd": FleetariMsc.OnPost(who, r); break;   // (MSC : commande par la poste payee)
                 case "@bout": { Vector3 p = r.Vec(); Quaternion q = r.Quat(); SewageHose.OnRemote(who, p, q, r.Bool()); break; }
                 case "@attelage": OnHitch(who, r.U8()); break;
                 case "@arrestation": Police.OnArrest(who, r.Vec()); break;

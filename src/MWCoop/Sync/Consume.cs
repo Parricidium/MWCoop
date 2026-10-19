@@ -216,10 +216,32 @@ namespace MWCoop
             }
         }
 
+        // My Summer Car : un seul distributeur, Spawner/ProductNameList::Logic -- "State 7" sort un article de la liste Items du sac,
+        // "State 8" une bombe de peinture (Spraycans) ; listes a cases fixes (une case par produit), sans liste Keys. Envoye : la
+        // liste et la case ("Items:3") ; rejoue : la meme case, le meme etat.
+        const string MscSpawner = "Spawner/ProductNameList";
+        static void HookSpawnersMsc()
+        {
+            GameObject g = Game.FindAny(MscSpawner);
+            PlayMakerFSM f = g != null ? Game.FsmOn(g, "Logic") : null;
+            int n = 0;
+            foreach (string st in new[] { "State 7", "State 8" })
+            {
+                FsmState s = f != null ? f.Fsm.GetState(st) : null;
+                if (s == null || !s.IsInitialized) continue;
+                bool has = false;
+                foreach (FsmStateAction a in s.Actions) if (a is PickHook) has = true;
+                if (!has) FsmHooks.Prepend(s, new PickHook { Path = MscSpawner });
+                n++;
+            }
+            if (n == 2) { spawnersHooked = true; Log.Info("consommables : articles sortis des sacs suivis (MSC, ProductNameList)"); }
+        }
+
         static void HookSpawners()
         {
             if (spawnersHooked || Time.realtimeSinceStartup < nextSpawnerLook) return;
             nextSpawnerLook = Time.realtimeSinceStartup + 5f;
+            if (Game.Msc) { HookSpawnersMsc(); return; }
             int n = 0;
             foreach (string p in SpawnerPaths)
             {
@@ -249,6 +271,13 @@ namespace MWCoop
             string id = BagIdOf(bag != null ? bag.Value : null);
             if (id == null || idx == null) { Log.Info("consommables : article sorti d'un sac non suivi (" + path + ")"); return; }
             if (!Session.Active || Session.RemoteCount == 0) return;
+            if (Game.Msc)
+            {
+                string list = fsm.ActiveStateName == "State 8" ? "Spraycans" : "Items";
+                Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@sacitem").Str(path).Str(id).Str(list + ":" + idx.Value), true);
+                Log.Info("consommables : sac " + id + ", " + list + " case " + idx.Value + " sortie ici");
+                return;
+            }
             // (par le nom du produit : les listes du sac n'ont pas le meme ordre chez tous -- une case de decalage vue)
             List<object> keys = BagList(bag.Value, "Keys");
             string product = keys != null && idx.Value >= 0 && idx.Value < keys.Count && keys[idx.Value] != null ? keys[idx.Value].ToString() : "";
@@ -308,6 +337,7 @@ namespace MWCoop
             GameObject g = Game.FindAny(path);
             PlayMakerFSM sp = g != null ? Game.FsmOn(g, "Logic") : null;
             if (!byId.TryGetValue(id, out bagF) || bagF == null || sp == null) { Log.Warn("consommables : article du sac " + id + " (case " + index + ") de #" + who + " : sac ou distributeur introuvable ici"); return; }
+            if (Game.Msc) { OnRemotePickMsc(who, sp, bagF, id, product); return; }
             List<object> keys = BagList(bagF.gameObject, "Keys");
             if (keys != null) for (int i = 0; i < keys.Count; i++) if (keys[i] != null && keys[i].ToString() == product) { index = i; break; }
             List<int> vals = BagValues(bagF.gameObject);
@@ -331,6 +361,29 @@ namespace MWCoop
             finally { Applying = false; Replay.Depth--; }
             SoonScan();
             Log.Info("consommables : sac " + id + " : " + product + " (case " + index + ") sorti comme chez #" + who + " (" + (count - 1) + " restant(s) dans la case)");
+        }
+
+        static void OnRemotePickMsc(int who, PlayMakerFSM sp, PlayMakerFSM bagF, string id, string slot)
+        {
+            int c = slot.IndexOf(':'), index;
+            if (c <= 0 || !int.TryParse(slot.Substring(c + 1), out index)) return;
+            string list = slot.Substring(0, c);
+            List<object> vals = BagList(bagF.gameObject, list);
+            int count = 0;
+            if (vals != null && index >= 0 && index < vals.Count) try { count = System.Convert.ToInt32(vals[index]); } catch { }
+            if (count <= 0) { Log.Warn("consommables : sac " + id + " de #" + who + " : " + list + " case " + index + " vide ici"); return; }
+            FsmGameObject cur = sp.FsmVariables.FindFsmGameObject("CurrentBag");
+            FsmInt ri = sp.FsmVariables.FindFsmInt("RandomIndex"), prod = sp.FsmVariables.FindFsmInt("Product");
+            if (cur == null || ri == null || prod == null) return;
+            Applying = true; Replay.Depth++;
+            try
+            {
+                cur.Value = bagF.gameObject; ri.Value = index; prod.Value = count;
+                Game.SetState(sp, list == "Spraycans" ? "State 8" : "State 7");
+            }
+            finally { Applying = false; Replay.Depth--; }
+            SoonScan();
+            Log.Info("consommables : sac " + id + " : " + list + " case " + index + " sortie comme chez #" + who + " (" + (count - 1) + " restant(s))");
         }
 
         public static void Update()

@@ -22,7 +22,7 @@ namespace MWCoop
         static float next, resend;
         static int logs;
 
-        public static void OnLevelLoaded() { pylon = null; next = 0f; resend = 0f; for (int i = 0; i < 3; i++) sent[i] = -1f; }
+        public static void OnLevelLoaded() { PumpsMsc.OnLevelLoaded(); pylon = null; next = 0f; resend = 0f; for (int i = 0; i < 3; i++) sent[i] = -1f; }
 
         static PlayMakerFSM Pylon()
         {
@@ -32,6 +32,7 @@ namespace MWCoop
 
         public static void Update()
         {
+            if (Game.Msc) PumpsMsc.Update();   // (pistolets et afficheurs des pompes, chez tous)
             if (!Session.Active || !Session.IsHost || !PlayerSync.InGame) return;
             float now = Time.realtimeSinceStartup;
             if (now < next) return;

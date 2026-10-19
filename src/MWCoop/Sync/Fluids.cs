@@ -165,6 +165,10 @@ namespace MWCoop
                 Transform t = f.transform;
                 string root = Game.RootName(t);
                 if (root == "GUI" || root == "PLAYER" || t.name.StartsWith("CapTrigger") || Game.Msc && root == "HUMANS") continue;   // (MSC : HUMANS/.../Obstacle.WaterLevel)
+                // (MSC : compteur de litres des pompes, STORE/LOD/Pumps/*/Functions/Trigger*::Use.Fuel -- ce que le pompiste doit a la caisse,
+                // a lui seul ; suivi comme une valeur commune, l'un payait l'essence de l'autre, ou la remise a zero d'un paiement effacait
+                // le plein de l'autre en cours)
+                if (Game.Msc && root == "STORE" && f.FsmName == "Use" && t.name.StartsWith("Trigger")) continue;
                 seen.Add(f);
                 bool later;
                 string owner = KeyOf(t, out later);

@@ -206,3 +206,58 @@ Pas encore essayé en jeu :
 - Fleetari ;
 - les liquides ;
 - les réglages.
+
+## Mêmes règles que MWC sur MSC (19/10, après 1.1.1)
+
+Tout est réservé à MSC (`Game.Msc`).
+
+**Téléphone** (`PhoneMsc.cs`)
+- Chacun a son téléphone, donc les deux sonnaient et seul celui qui décrochait avait le boulot.
+- Maintenant, décrocher envoie `@tel` avec le sujet (« Shit 1 », « Wood1 »…). Les autres raccrochent et rejouent les actions du sujet sans la voix ni le sous-titre : booléen de PhoneLogic, `Level.Called`, fléchette, événements aux automates que Jobs ne suit pas.
+- Téléphone jamais allumé chez l'autre : une table de secours fait l'essentiel.
+
+**Paies** (`Wallet`)
+- L'état qui paie est trouvé à son `FloatAdd PlayerMoney` : « Anim » chez Jokke (déménagement), « State 6 » chez la grand-mère.
+- `PayMoneyAdvert` (tracts) compte aussi comme enveloppe.
+- Le premier qui prend l'enveloppe est payé. Chez les autres, l'état de paie est rejoué à 0 mk, pour que la suite du boulot ait lieu partout (fermier, oncle, Jokke, tracts…).
+
+**Police**
+- Amendes personnelles : PlayerFines, PlayerFinesDay, PlayerCopChecksum et le compte à rebours `Fines.FineWait` (30 000 s par défaut) sont gardés dans police-joueur.ini.
+- Agent renversé, pilote du trafic tué : le délit va seulement à celui qui conduisait la voiture (hook en tête de « Crime »).
+- En prison, l'invité ne reçoit ni le jour ni l'heure de l'hôte.
+- La décharge sauvage du GIFU (ShitDumps) n'est plus rejouée.
+
+**Magasin de Teimo**
+- Magasin pas chargé chez celui qui rejoue : le sac est fait à la main, avec le même distributeur et le même nom (`shoppingbagxN`), et figé jusqu'au chargement. Les objets à part (caisse de bière…) sont figés aussi.
+- Un article sorti du sac (ProductNameList « State 7 » / « State 8 ») : la même case est sortie chez les autres.
+- Chez l'invité, la dette d'essence et de vitre de l'hôte (venue de la sauvegarde) est effacée.
+
+**Essence** : le compteur de litres des pompes n'est plus partagé par Fluids. Celui qui pompe paie à la caisse, et le carburant arrive chez tous.
+
+Essai `[Test] Autotest=mscregles` (2 joueurs, 260 s) :
+- appel décroché par l'invité, la fosse notée chez l'hôte ;
+- courses payées par l'invité seul ;
+- sac et caisse de bière chez l'hôte ;
+- article sorti et sac vidé pareil des deux côtés ;
+- 10 L d'essence chez les deux, payés par l'invité.
+
+Suite (même jour) :
+- **Objectifs de la carte** (`MapJobs.JobsMsc`) : fosses, bois, ferme (foin, moissonneuse), déménagement, Jokke, grand-mère, tracts. Le boulot est à celui qui a décroché (`PhoneMsc.Owner`) ; les tracts, à celui qui a pris la pile chez Teimo.
+- **Tracts** (`TractsMsc.cs`) : une boîte servie par l'un (`@tract`) l'est chez tous, comptée une seule fois.
+- **Fraises** : déjà personnelles, rien n'est rejoué. Chacun est payé pour ses propres caisses.
+- **Fleetari** (`FleetariMsc.cs`) :
+  - achat : refait à la main chez les autres avec l'usure tirée par l'acheteur, même loin du garage ;
+  - travaux : commande envoyée ; chez les autres, l'automate Order est arrêté ; ils font les travaux quand ceux de l'acheteur commencent, puis prennent ses tirages (usure, couleurs des tôles, peinture).
+- **Poste** : les colis payés sortent de `STORE/Boxes` chez tous, une seule fois.
+- **Pompes** (`PumpsMsc.cs`) : pistolet pris ou en place et afficheurs chez tous ; une pompe tenue par un autre est bloquée.
+- **Police** : l'invité qui fuit un barrage est poursuivi chez lui. Sa copie de la voiture passe en `Throttle.Chase` et sa zone est remplacée par sa distance à la voiture (moins de 120 m). Puis « Set wanted » (PoliceEvasion), ou l'amende s'il revient.
+
+Essai `[Test] Autotest=mscreste` (2 joueurs, 280 s), réussi :
+- appel décroché par l'invité : l'objectif est chez lui seul ;
+- boîte servie chez tous ;
+- pistolet pris, puis reposé chez l'hôte ;
+- alternateur payé par l'invité seul, même usure (94,3) des deux côtés ;
+- travaux faits chez l'hôte avec les tirages de l'invité ;
+- colis sorti chez l'hôte.
+
+Pas éprouvé en jeu : la poursuite de l'invité (pas de barrage près de la maison dans l'essai).

@@ -68,7 +68,7 @@ namespace MWCoop
             if (phones == null)
             {
                 var l = new List<Transform>();
-                foreach (string p in new[] { "HOMENEW/Functions/FunctionsDisable/Telephone", "YARD/Building/LIVINGROOM/Telephone 1" }) { Transform t = T(p); if (t != null) l.Add(t); }
+                foreach (string p in Game.Msc ? new[] { "YARD/Building/LIVINGROOM/Telephone" } : new[] { "HOMENEW/Functions/FunctionsDisable/Telephone", "YARD/Building/LIVINGROOM/Telephone 1" }) { Transform t = T(p); if (t != null) l.Add(t); }
                 phones = l.ToArray();
             }
             foreach (Transform t in phones) if (t != null && (t.position - me.position).sqrMagnitude < 16f) return true;
@@ -121,7 +121,7 @@ namespace MWCoop
                 if (mineJobs.Count > 0) Log.Info("boulots : " + mineJobs.Count + " boulot(s) a moi repris (" + string.Join(", ", new List<string>(mineJobs).ToArray()) + ")");
             }
             objectives.Clear(); tractsLine = null;
-            try { Septic(); Firewood(); Uncle(); Taxi(); Flyers(); }
+            try { if (Game.Msc) JobsMsc(); else { Septic(); Firewood(); Uncle(); Taxi(); Flyers(); } }
             catch (System.Exception e) { if (now > objErr) { objErr = now + 30f; Log.Warn("boulots : " + e.Message); } }
         }
         static float objErr;
@@ -224,6 +224,138 @@ namespace MWCoop
             tractsLine = Lang.T(fr, en);
         }
         static string tractsLine;
+
+        // ---------------------------------------------------------------- My Summer Car (vidage v.250908-04, 19/10)
+        // A qui : a celui qui a decroche l'appel (PhoneMsc.Owner(sujet), @tel), sinon a celui qui est pres du telephone ; tracts : a
+        // celui qui a pris la pile chez Teimo (pres de STORE/AdvertSpawn quand le boulot devient pris).
+        static bool MineMsc(string key, bool active, string topic)
+        {
+            bool was; wasActive.TryGetValue(key, out was);
+            if (active && !was && !mineJobs.Contains(key) && objLoaded)
+            {
+                int o = topic != null ? PhoneMsc.Owner(topic) : -1;
+                bool mine = !MWCoop.Net.Session.Active || (o >= 0 ? o == MWCoop.Net.Session.LocalId : NearPhone());
+                if (mine) { mineJobs.Add(key); SaveJobs(); Log.Info("boulots : " + key + " pris ici" + (o >= 0 ? " (appel decroche ici)" : "")); }
+                else Log.Info("boulots : " + key + " pris par un autre" + (o >= 0 ? " (#" + o + ")" : ""));
+            }
+            return Mine(key, active);
+        }
+        static bool NearT(string path, float r) { Transform t = T(path), me = Game.PlayerT; return t != null && me != null && (t.position - me.position).sqrMagnitude < r * r; }
+        static Vector3 P(string path, Vector3 def) { Transform t = T(path); return t != null ? t.position : def; }
+
+        static void JobsMsc()
+        {
+            for (int n = 1; n <= 5; n++)
+            {
+                PlayMakerFSM lv = Fsm("JOBS/HouseShit" + n + "/WasteWell_2000litre/Shit/Level" + n + "/ShitLevelTrigger", "Level");
+                PlayMakerFSM man = Fsm("JOBS/HouseShit" + n + "/LOD/ShitNPC/ShitMan" + n, "Anims");
+                bool called = B(lv, "Called"), money = B(man, "Money");
+                string key = "fosse" + n;
+                if (!MineMsc(key, called || money, "Shit " + n)) continue;
+                if (called) Add(key, "Fosse septique : pomper la fosse", "Septic tank: pump it out", P("JOBS/HouseShit" + n + "/WasteWell_2000litre", Vector3.zero));
+                else Add(key, "Fosse septique : te faire payer", "Septic tank: get paid", P("JOBS/HouseShit" + n + "/LOD/ShitNPC", Vector3.zero));
+            }
+            {
+                PlayMakerFSM job = Fsm("JOBS/HouseWood1", "Logic");
+                PlayMakerFSM pay = Fsm("JOBS/HouseWood1/LOD/NPC/Char/skeleton/pelvis/spine_middle/spine_upper/collar_right/shoulder_right/arm_right/hand_right/PayMoney", "Use");
+                FsmFloat pm = pay != null ? pay.FsmVariables.FindFsmFloat("Money") : null;
+                bool order = B(job, "Order"), money = pm != null && pm.Value > 0f;
+                if (MineMsc("bois1", order || money, "Wood1"))
+                {
+                    if (order) Add("bois1", "Bois : décharger la benne ici (moins de 5 m)", "Firewood: unload the trailer here (under 5 m)", P("JOBS/HouseWood1/LOD/logpile_ground", new Vector3(1924.8f, 4.3f, -418.9f)));
+                    else Add("bois1", "Bois : te faire payer", "Firewood: get paid", P("JOBS/HouseWood1/LOD/NPC/Char", new Vector3(1917.3f, 5.1f, -422.4f)));
+                }
+            }
+            {
+                PlayMakerFSM farm = Fsm("JOBS/Farm/Job", "Data");
+                int st = I(farm, "JobStage"); bool done = B(farm, "JobDone");
+                if (MineMsc("foin", st == 1, "Tohvakka 1"))
+                {
+                    if (done) Add("foin", "Ferme : te faire payer par Tohvakka", "Farm: get paid by Tohvakka", P("HUMANS/Farmer/Walker", Vector3.zero));
+                    else
+                    {
+                        Vector3 tgt = P("JOBS/Farm/MachineHall/TargetHaybales", new Vector3(-852.6f, 2.6f, 1359.1f));
+                        Add("foin", "Ferme : ramener les balles de foin ici", "Farm: bring the hay bales here", tgt);
+                        Transform hb = T("JOBS/HayBales");
+                        if (hb != null) foreach (Transform b in hb) if ((b.position - tgt).sqrMagnitude > 49f) Add("foin", "Foin", "Hay", b.position, true);
+                    }
+                }
+                if (MineMsc("moissonneuse", st == 3, "Tohvakka 2"))
+                {
+                    if (done) Add("moissonneuse", "Ferme : te faire payer par Tohvakka", "Farm: get paid by Tohvakka", P("HUMANS/Farmer/Walker", Vector3.zero));
+                    else Add("moissonneuse", "Ferme : ramener la moissonneuse ici", "Farm: bring the combine here", P("JOBS/Farm/MachineHall/TargetCombine", new Vector3(-843.3f, 2.4f, 1359.9f)));
+                }
+            }
+            {
+                PlayMakerFSM mv = Fsm("JOBS/HouseDrunk/Moving", "Data"), hitch = Fsm("JOBS/HouseDrunk/Moving/JokkeHiker1", "Hitch");
+                GameObject pay = Game.FindAny("JOBS/HouseDrunk/Moving/JokkeHiker1/Pivot/Char/skeleton/pelvis/spine_middle/spine_upper/collar_right/shoulder_right/arm_right/hand_right/PayMoney");
+                int st = I(mv, "MovingJobStage");
+                bool payPending = st == 4 && pay != null && pay.activeInHierarchy;
+                if (MineMsc("demenagement", st == 2 || st == 3 || payPending, "Moving"))
+                {
+                    string hs = hitch != null ? hitch.ActiveStateName ?? "" : "";
+                    if (st == 2 && MovingRide.Contains(hs)) Add("demenagement", "Déménagement : déposer Jokke ici", "Moving: drop Jokke off here", P("JOBS/HouseDrunk/Moving/MovingDropOff", new Vector3(-1285.1f, 0f, 1088.1f)));
+                    else if (st == 2) Add("demenagement", "Déménagement : aller chercher Jokke", "Moving: pick Jokke up", P("JOBS/HouseDrunk/Moving/JokkeHiker1", Vector3.zero));
+                    else if (st == 3) Add("demenagement", "Déménagement : porter ses affaires à l'appartement", "Moving: carry his stuff to the apartment", P("JOBS/HouseDrunk/Moving/Apartment", new Vector3(-1291.1f, 1f, 1081.2f)));
+                    else Add("demenagement", "Déménagement : te faire payer par Jokke", "Moving: get paid by Jokke", P("JOBS/HouseDrunk/Moving/JokkeHiker1", Vector3.zero));
+                }
+            }
+            {
+                PlayMakerFSM jk = Fsm("KILJUGUY/HikerPivot/JokkeHiker2", "Logic");
+                string js = jk != null && jk.enabled && jk.gameObject.activeInHierarchy ? jk.ActiveStateName ?? "" : "";
+                bool pick = DrunkPick.Contains(js), ride = DrunkRide.Contains(js), pay = DrunkPay.Contains(js);
+                if (MineMsc("jokke", pick || ride || pay, "Drunk lift"))
+                {
+                    if (pick) Add("jokke", "Jokke : aller le chercher au bar", "Jokke: pick him up at the pub", jk.transform.position);
+                    else if (ride) Add("jokke", "Jokke : le ramener chez lui", "Jokke: drive him home", P("JOBS/HouseDrunk/DrunkDropOff", new Vector3(1967.5f, 6.6f, -216.7f)));
+                    else Add("jokke", "Jokke : te faire payer", "Jokke: get paid", jk.transform.position);
+                }
+            }
+            {
+                PlayMakerFSM gm = Fsm("JOBS/Mummola", "Logic");
+                bool fish = B(gm, "OrderFish"), groc = B(gm, "OrderGroceries");
+                if (MineMsc("mummola", fish || groc, fish ? "Mummo1" : "Mummo2"))
+                    Add("mummola", fish ? "Grand-mère : lui apporter du poisson" : "Grand-mère : lui apporter des courses", fish ? "Grandma: bring her some fish" : "Grandma: bring her groceries",
+                        P("JOBS/Mummola/LOD/GrannyTalking/Granny/PotatoBox", new Vector3(459.8f, 3.2f, -1330.3f)));
+            }
+            FlyersMsc();
+        }
+        static readonly HashSet<string> MovingRide = new HashSet<string> { "Open door 2", "Set mass", "Randomize anim", "State 8", "State 9", "Out" };
+        static readonly HashSet<string> DrunkPick = new HashSet<string> { "Activate", "Distance 1", "Wandering", "Distance 4", "Distance 2", "Which car", "Satsuma", "Muscle", "Van", "Ruscko", "State 8", "State 2", "Towards pick point", "Open door" };
+        static readonly HashSet<string> DrunkRide = new HashSet<string> { "Set mass", "Story Stages", "Marriage 1", "Train 1", "Marriage 2", "Train 2", "Lotto1", "Lotto1 2", "Lotto1 3", "Lotto1 4", "Set moving job", "Randomize anim", "State 6", "State 7", "State 4", "Randomize ", "Vomit1", "Vomit2", "Out" };
+        static readonly HashSet<string> DrunkPay = new HashSet<string> { "State 10", "Pay", "Offer money" };
+
+        static void FlyersMsc()
+        {
+            PlayMakerFSM ads = Fsm("JOBS/TeimoADs", "Data");
+            bool acc = B(ads, "JobAccepted");
+            bool was; wasActive.TryGetValue("tracts", out was);
+            if (acc && !was && !mineJobs.Contains("tracts") && objLoaded && (!MWCoop.Net.Session.Active || NearT("STORE/AdvertSpawn", 15f)))
+            { mineJobs.Add("tracts"); SaveJobs(); Log.Info("boulots : tracts pris ici"); }
+            if (!Mine("tracts", acc) || ads == null) return;
+            ArrayList done = null;
+            foreach (PlayMakerArrayListProxy p in ads.gameObject.GetComponents<PlayMakerArrayListProxy>()) if (string.IsNullOrEmpty(p.referenceName) && p.arrayList != null) done = p.arrayList;
+            if (boxes == null)
+            {
+                boxes = new List<KeyValuePair<int, Transform>>();
+                foreach (PlayMakerFSM f in Resources.FindObjectsOfTypeAll<PlayMakerFSM>())
+                    if (f.FsmName == "WaitAd" && f.gameObject.hideFlags == HideFlags.None) { FsmInt bi = f.FsmVariables.FindFsmInt("BoxIndex"); if (bi != null) boxes.Add(new KeyValuePair<int, Transform>(bi.Value, f.transform)); }
+                Log.Info("boulots : " + boxes.Count + " boites aux lettres pour les tracts");
+            }
+            int left = 0;
+            foreach (KeyValuePair<int, Transform> b in boxes)
+            {
+                if (b.Key == 0) continue;   // (la boite du joueur, a la maison)
+                bool served = done != null && b.Key >= 0 && b.Key < done.Count && done[b.Key] is bool && (bool)done[b.Key];
+                if (served || b.Value == null) continue;
+                left++;
+                Add("tracts", "Tracts", "Flyers", b.Value.position, true);
+            }
+            if (I(ads, "Delivered") > 0) Add("tracts", "Tracts : te faire payer chez Teimo", "Flyers: get paid at Teimo's", P("STORE/LOD/ActivateStore/PayMoneyAdvert", new Vector3(-1550.9f, 4.6f, 1182.7f)));
+            if (left == 0) return;
+            string fr = "Tracts : " + left + " boîte" + (left > 1 ? "s" : "") + " aux lettres à servir", en = "Flyers: " + left + " mailbox" + (left > 1 ? "es" : "") + " to fill";
+            tractsLine = Lang.T(fr, en);
+        }
 
         // Autotest « objectifs » : a 20 s joueur au telephone de l'appartement, puis fosse 2 prise (Called), bois 4 pris (Order),
         // tracts embauche (JobStage 1) ; a 23 s tournee de tracts (JobStage 2) ; a 27 s carte ouverte et capture ; a 31 s fosse 2
