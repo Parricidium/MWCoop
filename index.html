@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" type="image/png" href="img/icon.png">
+<meta property="og:title" content="My Seasons Car">
+<meta property="og:description" content="Co-op for My Summer Car and My Winter Car: one host, one world, up to 16 friends.">
+<meta property="og:image" content="https://parricidium.github.io/MWCoop/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>My Seasons Car</title>
+<meta name="description" content="Co-op for My Summer Car and My Winter Car: one host, one world, up to 16 friends.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Identite du lanceur : nuit d'aurore boreale, panneaux en verre depoli, Nunito, logo en lettres bulles.
+   Mise en page : en-tete verre collant, heros logo + capture du lanceur, puis sections en grilles « bento ».
+   Un seul monde visuel (la nuit du lanceur) : palette sombre fixe, choisie expres. */
+:root {
+  --night: #0a1328;         /* ciel de nuit */
+  --night-2: #101d3b;
+  --glass: rgba(150, 180, 230, 0.10);
+  --glass-strong: rgba(150, 180, 230, 0.16);
+  --glass-line: rgba(200, 220, 255, 0.18);
+  --ink: #eef3ff;
+  --muted: #a9b6d3;
+  --ice: #bfe6fb;           /* bouton clair du lanceur (HOST) */
+  --ice-ink: #0b1a2e;
+  --aurora-1: #2fd6a3;      /* vert d'aurore */
+  --aurora-2: #7a5cff;      /* violet d'aurore */
+  --sun-1: #ffd21a;         /* jaune du logo */
+  --sun-2: #ff7a2f;         /* orange du logo */
+  --discord: #5865f2;
+  --star: #ffe27a;
+  --ui: "Nunito", "Segoe UI Rounded", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--night); color: var(--ink);
+  font-family: var(--ui); font-size: 1.05rem; line-height: 1.6; font-weight: 500;
+  overflow-x: hidden;
+}
+img { display: block; max-width: 100%; height: auto; }
+a { color: var(--ice); }
+:focus-visible { outline: 3px solid var(--ice); outline-offset: 3px; border-radius: 8px; }
+h1, h2, h3 { margin: 0; line-height: 1.1; text-wrap: balance; font-weight: 900; letter-spacing: -0.01em; }
+p { margin: 0; }
+.wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- ciel : aurore + etoiles, fixes derriere toute la page */
+.sky { position: fixed; inset: 0; z-index: -1; overflow: hidden; background:
+  radial-gradient(120% 80% at 50% 120%, #1c2f57 0%, transparent 60%),
+  linear-gradient(180deg, var(--night) 0%, var(--night-2) 100%); }
+.sky .stars { position: absolute; inset: 0; background-image:
+  radial-gradient(1.2px 1.2px at 12% 18%, #fff 50%, transparent 51%),
+  radial-gradient(1px 1px at 28% 42%, #fff 50%, transparent 51%),
+  radial-gradient(1.4px 1.4px at 47% 12%, #fff 50%, transparent 51%),
+  radial-gradient(1px 1px at 63% 33%, #fff 50%, transparent 51%),
+  radial-gradient(1.2px 1.2px at 78% 8%, #fff 50%, transparent 51%),
+  radial-gradient(1px 1px at 88% 46%, #fff 50%, transparent 51%),
+  radial-gradient(1px 1px at 6% 64%, #fff 50%, transparent 51%),
+  radial-gradient(1.3px 1.3px at 38% 72%, #fff 50%, transparent 51%),
+  radial-gradient(1px 1px at 71% 66%, #fff 50%, transparent 51%),
+  radial-gradient(1px 1px at 93% 82%, #fff 50%, transparent 51%);
+  background-size: 640px 520px; opacity: .55; }
+.sky .aurora { position: absolute; width: 90vmax; height: 50vmax; filter: blur(70px); opacity: .42; border-radius: 50%; mix-blend-mode: screen; }
+.sky .a1 { background: radial-gradient(closest-side, var(--aurora-1), transparent); top: -18vmax; left: -10vmax; animation: drift 26s ease-in-out infinite alternate; }
+.sky .a2 { background: radial-gradient(closest-side, var(--aurora-2), transparent); top: -12vmax; right: -25vmax; animation: drift 32s ease-in-out infinite alternate-reverse; }
+.sky .a3 { background: radial-gradient(closest-side, #1aa6c9, transparent); top: 30vmax; left: 20vmax; opacity: .22; animation: drift 40s ease-in-out infinite alternate; }
+@keyframes drift { from { transform: translate3d(0,0,0) rotate(-6deg) scale(1); } to { transform: translate3d(8vmax, 4vmax, 0) rotate(8deg) scale(1.15); } }
+
+/* ---------- verre */
+.glass {
+  background: var(--glass); border: 1px solid var(--glass-line); border-radius: 22px;
+  backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 20px 50px rgba(2, 6, 20, .35);
+}
+
+/* ---------- en-tete */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; padding-top: 12px; }
+header.top .bar { display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 16px; border-radius: 18px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); font-weight: 900; }
+.brand img { width: 74px; }
+nav.menu { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+nav.menu a { color: var(--ink); text-decoration: none; font-weight: 700; font-size: .95rem; padding: 8px 12px; border-radius: 12px; }
+nav.menu a:hover { background: var(--glass-strong); }
+.icon-btn {
+  height: 40px; min-width: 40px; display: inline-grid; place-items: center; border-radius: 12px; padding: 0 12px;
+  background: var(--glass); border: 1px solid var(--glass-line); color: var(--ink); font: 800 .85rem var(--ui); cursor: pointer; text-decoration: none;
+}
+.icon-btn:hover { background: var(--glass-strong); }
+
+/* ---------- boutons */
+.btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 16px; font-weight: 900; font-size: 1.02rem; text-decoration: none; border: 1px solid transparent; transition: transform .15s ease, box-shadow .15s ease; }
+.btn:hover { transform: translateY(-1px); }
+.btn.ice { background: var(--ice); color: var(--ice-ink); box-shadow: 0 10px 30px rgba(191, 230, 251, .25); }
+.btn.discord { background: var(--discord); color: #ffffff; }
+.btn.line { background: var(--glass); color: var(--ink); border-color: var(--glass-line); }
+.btn svg { width: 20px; height: 20px; flex: none; }
+.btn .sub { font: 500 .78rem var(--mono); opacity: .75; }
+
+/* ---------- heros */
+.hero { padding-block: clamp(36px, 7vw, 84px) clamp(40px, 6vw, 72px); }
+.hero .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: clamp(28px, 5vw, 64px); align-items: center; }
+.hero .logo { width: min(520px, 100%); filter: drop-shadow(0 18px 40px rgba(0,0,0,.45)); animation: bob 6s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-6px) rotate(-.6deg); } }
+.hero .tag { font-size: clamp(1.15rem, 2.1vw, 1.4rem); color: var(--ink); max-width: 30rem; font-weight: 700; }
+.hero .tag em { font-style: normal; background: linear-gradient(90deg, var(--sun-1), var(--sun-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero .copy { display: grid; gap: 22px; justify-items: start; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 700 .82rem var(--ui); color: var(--ink); background: var(--glass); border: 1px solid var(--glass-line); padding: 6px 12px; border-radius: 999px; display: inline-flex; gap: 6px; align-items: center; }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--aurora-1); box-shadow: 0 0 10px var(--aurora-1); }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; }
+.shot-frame { padding: 10px; border-radius: 26px; transform: perspective(1400px) rotateY(-7deg) rotateX(2deg); transition: transform .4s ease; }
+.shot-frame:hover { transform: perspective(1400px) rotateY(0) rotateX(0); }
+.shot-frame img { border-radius: 18px; }
+.legal { font-size: .85rem; color: var(--muted); }
+
+/* ---------- sections */
+section { padding-block: clamp(48px, 8vw, 96px); }
+.head { display: grid; gap: 10px; margin-bottom: 30px; max-width: 44rem; }
+.eyebrow { font: 800 .78rem var(--ui); text-transform: uppercase; letter-spacing: .16em; color: var(--aurora-1); }
+.head h2 { font-size: clamp(2rem, 4.4vw, 3.1rem); }
+.head p { color: var(--muted); }
+
+/* deux jeux */
+.games { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 20px; }
+.game { padding: 26px; display: grid; gap: 18px; align-content: start; position: relative; overflow: hidden; }
+.game::before { content: ""; position: absolute; inset: -40% -20% auto auto; width: 70%; aspect-ratio: 1; border-radius: 50%; filter: blur(60px); opacity: .35; pointer-events: none; }
+.game.summer::before { background: var(--sun-2); }
+.game.winter::before { background: #3aa0ff; }
+.game .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.game .gl { height: 96px; width: auto; }
+.badge { font: 800 .75rem var(--ui); text-transform: uppercase; letter-spacing: .1em; padding: 5px 10px; border-radius: 999px; }
+.badge.beta { background: rgba(255, 122, 47, .18); color: #ffb48a; border: 1px solid rgba(255,122,47,.45); }
+.badge.stable { background: rgba(47, 214, 163, .15); color: #8ff0cf; border: 1px solid rgba(47,214,163,.45); }
+.game ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.game li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; min-width: 0; }
+.game li svg { width: 18px; height: 18px; margin-top: 4px; color: var(--aurora-1); }
+.game .store { font-weight: 800; text-decoration: none; display: inline-flex; gap: 8px; align-items: center; }
+
+/* bento */
+.bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+.tile { padding: 22px; display: grid; gap: 8px; align-content: start; min-width: 0; grid-column: span 2; }
+.tile.wide { grid-column: span 4; grid-row: span 2; padding: 0; overflow: hidden; align-content: stretch; grid-template-rows: 1fr auto; }
+.tile.wide img { width: 100%; height: 100%; object-fit: cover; min-height: 220px; }
+.tile.wide .cap { padding: 20px 22px 22px; display: grid; gap: 6px; }
+.tile h3 { font-size: 1.3rem; }
+.tile p { color: var(--muted); }
+.tile .ic { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--glass-strong); border: 1px solid var(--glass-line); margin-bottom: 6px; }
+.tile .ic svg { width: 22px; height: 22px; color: var(--ice); }
+.tile .num { font: 600 2.4rem var(--mono); line-height: 1; background: linear-gradient(90deg, var(--aurora-1), var(--ice)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* captures */
+.gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+.gallery figure { margin: 0; padding: 8px; border-radius: 20px; }
+.gallery img { border-radius: 14px; aspect-ratio: 16 / 9; object-fit: cover; width: 100%; }
+.gallery figcaption { padding: 10px 8px 4px; color: var(--muted); font-size: .92rem; }
+
+/* installation : vraie suite d'etapes */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; counter-reset: s; }
+.steps li { counter-increment: s; padding: 22px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.steps li::before { content: counter(s); width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font: 900 1.2rem var(--ui); background: var(--ice); color: var(--ice-ink); }
+.steps h3 { font-size: 1.2rem; }
+.steps p { color: var(--muted); }
+code { font: 500 .88em var(--mono); background: var(--glass-strong); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+
+/* bandeau final */
+.final { padding: clamp(28px, 5vw, 48px); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; }
+.final h2 { font-size: clamp(1.8rem, 3.6vw, 2.6rem); }
+.final p { color: var(--muted); margin-top: 8px; }
+
+footer { padding-block: 36px 48px; color: var(--muted); font-size: .92rem; }
+footer .row { display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: center; justify-content: space-between; }
+footer .links { display: flex; gap: 18px; flex-wrap: wrap; }
+footer a { color: var(--ink); text-decoration: none; font-weight: 700; }
+.supporter { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; color: var(--ink); }
+.supporter .s { color: var(--star); text-shadow: 0 0 12px var(--star); animation: glow 2.4s ease-in-out infinite; }
+@keyframes glow { 50% { text-shadow: 0 0 22px var(--star), 0 0 4px #fff; } }
+
+@media (max-width: 880px) {
+  .hero .grid { grid-template-columns: minmax(0, 1fr); }
+  .shot-frame { transform: none; }
+  .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile, .tile.wide { grid-column: span 2; grid-row: auto; }
+  .final { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  nav.menu { display: none; }
+  .brand img { width: 62px; }
+  header.top .bar { gap: 8px; }
+  .bento .tile:not(.wide) { grid-column: span 1; }
+}
+@media (max-width: 420px) { .bento .tile:not(.wide) { grid-column: span 2; } }
+@media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } html { scroll-behavior: auto; } }
+</style>
+
+</head>
+<body>
+<div class="sky" aria-hidden="true"><div class="aurora a1"></div><div class="aurora a2"></div><div class="aurora a3"></div><div class="stars"></div></div>
+
+<header class="top">
+  <div class="wrap">
+    <div class="bar glass">
+      <a class="brand" href="#top" aria-label="My Seasons Car"><img src="img/logo.webp" alt="my Seasons Car"></a>
+      <nav class="menu" aria-label="Sections">
+        <a href="#games" data-i18n="nav.games">Games</a>
+        <a href="#features" data-i18n="nav.features">Features</a>
+        <a href="#screens" data-i18n="nav.screens">Screenshots</a>
+        <a href="#install" data-i18n="nav.install">Install</a>
+      </nav>
+      <button class="icon-btn" type="button" id="lang" aria-label="Français">FR</button>
+      <a class="icon-btn" href="https://discord.gg/H7NXpWHwgY" target="_blank" rel="noopener" aria-label="Discord">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.6 5.4A16 16 0 0 0 15.6 4l-.5 1a14.6 14.6 0 0 0-6.2 0l-.5-1a16 16 0 0 0-4 1.4C1.9 9.2 1.3 12.9 1.6 16.6A16.2 16.2 0 0 0 6.5 19l1-1.6a10.3 10.3 0 0 1-1.6-.8l.4-.3a11.5 11.5 0 0 0 11.4 0l.4.3a10 10 0 0 1-1.6.8l1 1.6a16 16 0 0 0 4.9-2.4c.4-4.3-.7-8-3-11.2ZM8.7 14.3c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z"/></svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="wrap grid">
+      <div class="copy">
+        <img class="logo" src="img/logo.webp" alt="my Seasons Car" width="1100" height="720">
+        <p class="tag" data-i18n-html="hero.tag">Co-op for <em>My Summer Car</em> and <em>My Winter Car</em>. One host, one world, all your friends in it.</p>
+        <div class="chips">
+          <span class="chip"><span class="dot"></span><span data-i18n="chip.players">Up to 16 players</span></span>
+          <span class="chip" data-i18n="chip.steam">Steam invites, no port to open</span>
+          <span class="chip" data-i18n="chip.free">Free, Windows and Steam Deck</span>
+        </div>
+        <div class="cta">
+          <a class="btn ice" href="https://github.com/Parricidium/MWCoop/releases/latest" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
+            <span data-i18n="cta.download">Download</span> <span class="sub" id="ver">latest</span>
+          </a>
+          <a class="btn discord" href="https://discord.gg/H7NXpWHwgY" target="_blank" rel="noopener" data-i18n="cta.discord">Join the Discord</a>
+        </div>
+        <p class="legal" data-i18n="hero.legal">Needs your own copy of the game on Steam. No game files are included.</p>
+      </div>
+      <div class="shot-frame glass">
+        <img src="img/launcher.webp" alt="The My Seasons Car launcher: character, how to connect, host or join" width="1320" height="840">
+      </div>
+    </div>
+  </div>
+
+  <section id="games">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow" data-i18n="games.eyebrow">Two games, one mod</span>
+        <h2 data-i18n="games.title">Summer in Peräjärvi, winter in the snow</h2>
+        <p data-i18n="games.lead">The same launcher handles both games. Pick the game, host or join, and drive together.</p>
+      </div>
+      <div class="games">
+        <article class="game summer glass">
+          <div class="top"><img class="gl" src="img/msc.webp" alt="my Summer Car coop" width="418" height="156"><span class="badge beta">Beta</span></div>
+          <ul>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span data-i18n="msc.1">Time, weather, traffic and NPCs shared with the host</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span data-i18n="msc.2">Jobs, shops, Teimo, Fleetari and the post office</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span data-i18n="msc.3">Doors, switches, phone and fuel pumps in sync</span></li>
+          </ul>
+          <a class="store" href="https://store.steampowered.com/app/516750/" target="_blank" rel="noopener" data-i18n="msc.store">My Summer Car on Steam ›</a>
+        </article>
+        <article class="game winter glass">
+          <div class="top"><img class="gl" src="img/mwc.webp" alt="my Winter Car coop" width="364" height="156"><span class="badge stable" data-i18n="badge.stable">Stable</span></div>
+          <ul>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span data-i18n="mwc.1">Same save, same time, same weather for everyone</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span data-i18n="mwc.2">The car rebuilt bolt by bolt, shared with your friends</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span data-i18n="mwc.3">Rally and ice races with shared AI and standings</span></li>
+          </ul>
+          <a class="store" href="https://store.steampowered.com/app/4164420/" target="_blank" rel="noopener" data-i18n="mwc.store">My Winter Car on Steam ›</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow" data-i18n="feat.eyebrow">What you get</span>
+        <h2 data-i18n="feat.title">Everything the host has, everyone has</h2>
+      </div>
+      <div class="bento">
+        <article class="tile wide glass">
+          <img src="img/duo.webp" alt="The host seen by a guest in the farm yard" width="1400" height="788" loading="lazy">
+          <div class="cap"><h3 data-i18n="t.world.h">One shared world</h3><p data-i18n="t.world.p">Friends join the host's save: same NPCs, jobs, shops and bills, with a wallet each.</p></div>
+        </article>
+        <article class="tile glass"><span class="num">16</span><h3 data-i18n="t.lobby.h">Players per lobby</h3><p data-i18n="t.lobby.p">Public or private lobby with a session code, chat and the game's options.</p></article>
+        <article class="tile glass">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div>
+          <h3 data-i18n="t.net.h">Steam or IP</h3><p data-i18n="t.net.p">Invite friends through Steam, or use IP, LAN, Radmin or Hamachi.</p>
+        </article>
+        <article class="tile glass">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 6l2 4 2-1v12h8V9l2 1 2-4-4-3a4 4 0 0 1-8 0Z"/></svg></div>
+          <h3 data-i18n="t.char.h">Your character</h3><p data-i18n="t.char.p">Outfit, face and build in 3D, plus a colour for your car.</p>
+        </article>
+        <article class="tile glass">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg></div>
+          <h3 data-i18n="t.upd.h">Updates in one click</h3><p data-i18n="t.upd.p">The launcher installs the mod, checks your game and offers each new version.</p>
+        </article>
+        <article class="tile glass">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14M5 8a2 2 0 1 1 0-4h14a2 2 0 1 1 0 4M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4"/></svg></div>
+          <h3 data-i18n="t.mods.h">MSCLoader mods</h3><p data-i18n="t.mods.p">MSCLoader runs next to the mod. The Mods page installs it for you.</p>
+        </article>
+        <article class="tile glass">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h7M7.5 3v2M5.5 5c0 4 3 7 5.5 8M9.5 5c0 3-2.5 7-6 8M13 21l4-9 4 9M14.3 18h5.4"/></svg></div>
+          <h3 data-i18n="t.lang.h">Four languages</h3><p data-i18n="t.lang.p">English, French, Russian and Arabic in the launcher.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="screens">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow" data-i18n="scr.eyebrow">Screenshots</span>
+        <h2 data-i18n="scr.title">In the launcher and on the road</h2>
+      </div>
+      <div class="gallery">
+        <figure class="glass"><img src="img/lobby.webp" alt="Lobby page of the launcher" width="1320" height="840" loading="lazy"><figcaption data-i18n="scr.lobby">The lobby: players, chat, options, then START</figcaption></figure>
+        <figure class="glass"><img src="img/character.webp" alt="Character page of the launcher" width="1320" height="840" loading="lazy"><figcaption data-i18n="scr.char">Your character in 3D</figcaption></figure>
+        <figure class="glass"><img src="img/driving.webp" alt="Two players driving in the game" width="1400" height="788" loading="lazy"><figcaption data-i18n="scr.drive">Driving together</figcaption></figure>
+        <figure class="glass"><img src="img/race.webp" alt="Race panel in the game" width="1400" height="788" loading="lazy"><figcaption data-i18n="scr.race">Races with shared standings</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow" data-i18n="ins.eyebrow">Install</span>
+        <h2 data-i18n="ins.title">Ready in three steps</h2>
+      </div>
+      <ol class="steps">
+        <li class="glass"><h3 data-i18n="ins.1h">Download the zip</h3><p data-i18n-html="ins.1p">Get the latest release from GitHub and unzip it anywhere.</p></li>
+        <li class="glass"><h3 data-i18n="ins.2h">Run the launcher</h3><p data-i18n-html="ins.2p">Start <code>MWCoop.exe</code>. It finds your game and installs the mod.</p></li>
+        <li class="glass"><h3 data-i18n="ins.3h">Host or join</h3><p data-i18n="ins.3p">Host a lobby and invite your friends, or join theirs. Everyone picks the same game.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="final glass">
+        <div><h2 data-i18n="fin.title">Grab a friend and hit the road</h2><p data-i18n="fin.p">Bugs, help and players to team up with: everything is on the Discord.</p></div>
+        <div class="cta">
+          <a class="btn ice" href="https://github.com/Parricidium/MWCoop/releases/latest" target="_blank" rel="noopener" data-i18n="cta.download">Download</a>
+          <a class="btn line" href="https://github.com/Parricidium/MWCoop" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <span class="supporter"><span class="s" aria-hidden="true">★</span><span data-i18n="foot.thanks">Thank you</span> moonmax11</span>
+      <div class="links">
+        <a href="https://github.com/Parricidium/MWCoop" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://discord.gg/H7NXpWHwgY" target="_blank" rel="noopener">Discord</a>
+        <a href="https://github.com/Parricidium/MWCoop/releases" target="_blank" rel="noopener" data-i18n="foot.rel">Releases</a>
+      </div>
+    </div>
+    <p style="margin-top:14px" data-i18n="foot.legal">A fan-made mod by JD, from the authors of VCCoop, SACoop and JACoop. Not affiliated with Amistech Games, the studio behind My Summer Car and My Winter Car.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var fr = {
+    "nav.games": "Jeux", "nav.features": "Fonctions", "nav.screens": "Captures", "nav.install": "Installer",
+    "hero.tag": "La coop pour <em>My Summer Car</em> et <em>My Winter Car</em>. Un hôte, un monde, tous tes amis dedans.",
+    "chip.players": "Jusqu'à 16 joueurs", "chip.steam": "Invitations Steam, aucun port à ouvrir", "chip.free": "Gratuit, Windows et Steam Deck",
+    "cta.download": "Télécharger", "cta.discord": "Rejoindre le Discord",
+    "hero.legal": "Il faut ton propre exemplaire du jeu sur Steam. Aucun fichier du jeu n'est inclus.",
+    "games.eyebrow": "Deux jeux, un mod", "games.title": "L'été à Peräjärvi, l'hiver dans la neige",
+    "games.lead": "Le même lanceur gère les deux jeux. Choisis le jeu, héberge ou rejoins, et roulez ensemble.",
+    "msc.1": "Heure, météo, trafic et PNJ partagés avec l'hôte", "msc.2": "Boulots, magasins, Teimo, Fleetari et la poste",
+    "msc.3": "Portes, interrupteurs, téléphone et pompes à essence synchronisés", "msc.store": "My Summer Car sur Steam ›",
+    "badge.stable": "Stable",
+    "mwc.1": "Même sauvegarde, même heure, même météo pour tous", "mwc.2": "La voiture remontée vis par vis, partagée avec tes amis",
+    "mwc.3": "Rallye et course sur glace, IA et classement communs", "mwc.store": "My Winter Car sur Steam ›",
+    "feat.eyebrow": "Ce que tu as", "feat.title": "Tout ce que l'hôte a, tout le monde l'a",
+    "t.world.h": "Un seul monde partagé", "t.world.p": "Tes amis rejoignent la partie de l'hôte : mêmes PNJ, boulots, magasins et factures, un porte-monnaie chacun.",
+    "t.lobby.h": "Joueurs par salon", "t.lobby.p": "Salon public ou privé avec code, tchat et options du jeu.",
+    "t.net.h": "Steam ou IP", "t.net.p": "Invite tes amis par Steam, ou passe par IP, LAN, Radmin ou Hamachi.",
+    "t.char.h": "Ton personnage", "t.char.p": "Tenue, visage et carrure en 3D, et une couleur pour ta voiture.",
+    "t.upd.h": "Mises à jour en un clic", "t.upd.p": "Le lanceur installe le mod, vérifie ton jeu et propose chaque nouvelle version.",
+    "t.mods.h": "Mods MSCLoader", "t.mods.p": "MSCLoader tourne à côté du mod. La page Mods l'installe pour toi.",
+    "t.lang.h": "Quatre langues", "t.lang.p": "Anglais, français, russe et arabe dans le lanceur.",
+    "scr.eyebrow": "Captures", "scr.title": "Dans le lanceur et sur la route",
+    "scr.lobby": "Le salon : joueurs, tchat, options, puis LANCER", "scr.char": "Ton personnage en 3D",
+    "scr.drive": "Rouler ensemble", "scr.race": "Courses avec classement commun",
+    "ins.eyebrow": "Installation", "ins.title": "Prêt en trois étapes",
+    "ins.1h": "Télécharge le zip", "ins.1p": "Prends la dernière version sur GitHub et décompresse-la où tu veux.",
+    "ins.2h": "Lance le lanceur", "ins.2p": "Démarre <code>MWCoop.exe</code>. Il trouve ton jeu et installe le mod.",
+    "ins.3h": "Héberge ou rejoins", "ins.3p": "Crée un salon et invite tes amis, ou rejoins le leur. Tout le monde choisit le même jeu.",
+    "fin.title": "Prends un ami et prends la route", "fin.p": "Bugs, aide et joueurs pour faire équipe : tout est sur le Discord.",
+    "foot.thanks": "Merci", "foot.rel": "Versions",
+    "foot.legal": "Un mod fait par un fan, JD, par les auteurs de VCCoop, SACoop et JACoop. Non affilié à Amistech Games, le studio de My Summer Car et My Winter Car."
+  };
+  var en = {};
+  document.querySelectorAll("[data-i18n]").forEach(function (el) { en[el.getAttribute("data-i18n")] = el.textContent; });
+  document.querySelectorAll("[data-i18n-html]").forEach(function (el) { en[el.getAttribute("data-i18n-html")] = el.innerHTML; });
+  var btn = document.getElementById("lang");
+  function apply(lang) {
+    var d = lang === "fr" ? fr : en;
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach(function (el) { var k = el.getAttribute("data-i18n"); if (d[k] != null) el.textContent = d[k]; });
+    document.querySelectorAll("[data-i18n-html]").forEach(function (el) { var k = el.getAttribute("data-i18n-html"); if (d[k] != null) el.innerHTML = d[k]; });
+    btn.textContent = lang === "fr" ? "EN" : "FR";
+    btn.setAttribute("aria-label", lang === "fr" ? "English" : "Français");
+    try { localStorage.setItem("msc-lang", lang); } catch (e) {}
+  }
+  var saved = null; try { saved = localStorage.getItem("msc-lang"); } catch (e) {}
+  apply(saved === "fr" ? "fr" : "en");
+  btn.addEventListener("click", function () { apply(document.documentElement.lang === "fr" ? "en" : "fr"); });
+
+  // numero de la derniere version (marche sur GitHub Pages ; sinon le bouton garde « latest »)
+  try {
+    fetch("https://api.github.com/repos/Parricidium/MWCoop/releases/latest")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && j.tag_name) document.getElementById("ver").textContent = j.tag_name; })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
+
+</body>
+</html>
