@@ -1650,17 +1650,27 @@ static Theme kGarage = {
     Color(24, 255, 230, 190), Color(44, 255, 200, 120), Color(255, 20, 14, 10), Color(255, 42, 30, 20),
     Color(255, 255, 180, 84), Color(255, 255, 210, 140), Color(255, 36, 20, 6), Color(230, 90, 60, 30),
     Color(255, 150, 230, 160), Color(255, 255, 196, 107), Color(255, 255, 120, 110), Color(255, 46, 32, 22) };
+// Ete (My Summer Car, demande de JD du 19/10 : « un nouveau theme pour la version MSC ») : noir chaud, accent jaune comme
+// le logo de MSC ; theme d'office sur MSC ([Lanceur] ThemeMSC). La scene de fond suit le jeu (ete sur MSC : ScenePalette).
+static Theme kEte = {
+    Color(255, 246, 242, 232), Color(255, 184, 176, 160), Color(128, 18, 16, 14), Color(40, 255, 240, 210), Color(28, 255, 240, 210),
+    Color(14, 255, 255, 255), Color(34, 255, 230, 170), Color(30, 255, 240, 210), Color(48, 255, 255, 255),
+    Color(16, 255, 255, 255), Color(46, 255, 236, 200), Color(255, 150, 140, 124),
+    Color(20, 255, 255, 255), Color(36, 255, 230, 170), Color(200, 40, 34, 26), Color(16, 255, 255, 255), Color(34, 255, 230, 170),
+    Color(22, 255, 255, 255), Color(42, 255, 230, 170), Color(255, 14, 12, 10), Color(255, 34, 28, 22),
+    Color(255, 255, 205, 70), Color(255, 255, 226, 140), Color(255, 30, 22, 6), Color(230, 80, 64, 30),
+    Color(255, 140, 230, 150), Color(255, 255, 196, 107), Color(255, 255, 120, 110), Color(255, 30, 26, 22) };
 static bool g_dark;
-enum { THEME_SOMBRE, THEME_CLAIR, THEME_AURORE, THEME_GARAGE, THEME_N };
+enum { THEME_SOMBRE, THEME_CLAIR, THEME_AURORE, THEME_GARAGE, THEME_ETE, THEME_N };
 static int g_theme = THEME_SOMBRE;   // [Lanceur] Theme=sombre|clair|aurore|garage (absent : celui de Windows) ; g_dark suit (tout sauf clair)
 static int g_aurore = 2;   // aurore et neige du fond : 0 off, 1 calme, 2 vivant ([Lanceur] Aurore, Reglages > Theme)
 static bool g_glass = true;   // [Lanceur] Verre : cartes en verre depoli (scene floutee dessous) ou opaques
 static int g_densite = 1;     // [Lanceur] Densite : 0 aeree, 1 normale, 2 compacte (pas des lignes des pages)
 static int g_texte = 100;     // [Lanceur] Texte : taille du texte en % (80..110, toutes les polices)
-static Theme &ThemeTab() { return g_theme == THEME_CLAIR ? kLight : g_theme == THEME_AURORE ? kAurore : g_theme == THEME_GARAGE ? kGarage : kDark; }
+static Theme &ThemeTab() { return g_theme == THEME_CLAIR ? kLight : g_theme == THEME_AURORE ? kAurore : g_theme == THEME_GARAGE ? kGarage : g_theme == THEME_ETE ? kEte : kDark; }
 static float UiTextScale() { return g_texte / 100.0f; }
 // Cle de la scene de fond (ui.inc) : refaite quand le theme, l'aurore ou le verre changent.
-static int SceneKey() { return g_theme + g_aurore * 4 + (g_glass ? 16 : 0); }
+static int SceneKey() { return g_theme + g_aurore * 8 + (g_glass ? 32 : 0) + (g_game == GAME_MSC ? 64 : 0); }
 // Couleurs de la scene de fond par theme (ui.inc SceneDraw) : ciel (4 arrets), deux jeux de voiles d'aurore (4 arrets chacun),
 // collines, sapins, neige au sol.
 struct ScenePal { Color sky[4], aurA[4], aurB[4], farHill, nearHill, treeInk, treeSnow, snow0, snow1, drift; };
@@ -1682,7 +1692,23 @@ static const ScenePal &ScenePalette()
         { { Color(255, 12, 8, 6), Color(255, 26, 20, 16), Color(255, 42, 30, 20), Color(255, 58, 42, 26) },   // garage : ambre et orange
           { Color(0, 255, 180, 84), Color(170, 255, 180, 84), Color(120, 255, 140, 60), Color(0, 255, 120, 50) },
           { Color(0, 255, 120, 50), Color(110, 255, 200, 120), Color(100, 255, 160, 70), Color(0, 255, 180, 84) },
-          Color(235, 50, 36, 26), Color(255, 38, 27, 19), Color(255, 28, 19, 13), Color(150, 230, 206, 170), Color(255, 196, 168, 132), Color(255, 120, 96, 70), Color(140, 160, 128, 96) } };
+          Color(235, 50, 36, 26), Color(255, 38, 27, 19), Color(255, 28, 19, 13), Color(150, 230, 206, 170), Color(255, 196, 168, 132), Color(255, 120, 96, 70), Color(140, 160, 128, 96) },
+        { { Color(255, 4, 8, 22), Color(255, 10, 21, 52), Color(255, 22, 40, 90), Color(255, 34, 56, 110) },   // ete sur My Winter Car : la nuit boreale
+          { Color(0, 47, 255, 176), Color(190, 47, 255, 176), Color(140, 47, 214, 255), Color(0, 138, 107, 255) },
+          { Color(0, 138, 107, 255), Color(128, 176, 107, 255), Color(115, 47, 255, 176), Color(0, 47, 255, 176) },
+          Color(235, 19, 37, 82), Color(255, 14, 29, 68), Color(255, 10, 22, 54), Color(150, 198, 212, 234), Color(255, 159, 182, 220), Color(255, 93, 114, 153), Color(140, 125, 147, 189) } };
+    // My Summer Car (19/10) : l'ete -- soir finlandais (themes sombres : ciel violet, horizon orange, nuages roses) ou plein
+    // jour (clair) ; collines et sapins verts, herbe au lieu de la neige.
+    static const ScenePal summer[2] = {
+        { { Color(255, 14, 16, 40), Color(255, 44, 38, 84), Color(255, 132, 74, 96), Color(255, 238, 146, 86) },
+          { Color(0, 255, 150, 110), Color(120, 255, 130, 120), Color(90, 255, 190, 120), Color(0, 255, 150, 110) },
+          { Color(0, 200, 120, 200), Color(90, 220, 140, 200), Color(70, 255, 170, 140), Color(0, 200, 120, 200) },
+          Color(235, 34, 52, 58), Color(255, 24, 40, 38), Color(255, 14, 28, 22), Color(255, 28, 50, 36), Color(255, 44, 74, 40), Color(255, 26, 48, 28), Color(140, 60, 96, 50) },
+        { { Color(255, 96, 160, 230), Color(255, 150, 200, 245), Color(255, 215, 232, 250), Color(255, 250, 240, 220) },
+          { Color(0, 255, 255, 255), Color(150, 255, 255, 255), Color(110, 255, 255, 255), Color(0, 255, 255, 255) },
+          { Color(0, 255, 255, 255), Color(0, 255, 255, 255), Color(0, 255, 255, 255), Color(0, 255, 255, 255) },
+          Color(255, 120, 160, 140), Color(255, 90, 140, 100), Color(255, 40, 80, 52), Color(255, 70, 112, 70), Color(255, 120, 176, 90), Color(255, 86, 140, 64), Color(160, 150, 196, 110) } };
+    if (g_game == GAME_MSC) return summer[g_dark ? 0 : 1];
     return pal[g_theme >= 0 && g_theme < THEME_N ? g_theme : 0];
 }
 #define TH(x) (ThemeTab().x)
@@ -6846,6 +6872,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             std::wstring m = MscCopyDir();
             TestLog("mscl : own=%d installe=%d officiel=%d, copie %s, exe %s", (int)MscOwn(), (int)MscOwnInstalled(), (int)MscOfficialInstalled(), Narrow(m, CP_UTF8).c_str(), Narrow(GameExe(), CP_UTF8).c_str());
             ok = MscOwnInstalled() && PrepareMirror(m) && MscOwnApply(m, true, false);
+        } else if (!g_gameDir.empty() && !_wcsicmp(argv[2], L"installer-mwcoop")) {   // (le MSCLoader de MWCoop, edition du jeu : 19/10)
+            MscInstallThread((void *)1);
+            ok = g_mscInstall == 2;
+            TestLog("mscl : MSCLoader de MWCoop %s, dossier %s, %s", ok ? "installe" : "ECHEC", Narrow(MscPackDir(), CP_UTF8).c_str(), g_mscInstallWhy.c_str());
         } else if (!g_gameDir.empty() && !_wcsicmp(argv[2], L"installer")) {
             MscInstallThread(NULL);
             ok = g_mscInstall == 2;

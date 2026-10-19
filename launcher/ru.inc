@@ -1709,6 +1709,8 @@ static const wchar_t *const kRu[][2] = {
     { L"Install failed: could not copy the launcher (error ", L"Установка не удалась: не удалось скопировать лаунчер (ошибка " },
     { L"MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop.", L"MWCoop установлен в AppData\\Local\\MWCoop, ярлык “MWCoop” на рабочем столе." },
     { L"\n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).", L"\n\nЕсли ты добавлял MWCoop в параметры запуска Steam, задай его снова в Настройки › Игра (путь лаунчера изменился)." },
+    { L"Summer", L"Лето" },
+    { L"Warm black, yellow accent", L"Тёплый чёрный, жёлтый акцент" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },

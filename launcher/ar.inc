@@ -1221,6 +1221,8 @@ static const wchar_t *const kAr[][2] = {
     { L"Install failed: could not copy the launcher (error ", L"فشل التثبيت: تعذّر نسخ المشغّل (خطأ " },
     { L"MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop.", L"تم تثبيت MWCoop في AppData\\Local\\MWCoop مع اختصار “MWCoop” على سطح المكتب." },
     { L"\n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).", L"\n\nإذا كنت قد وضعت MWCoop في خيارات تشغيل Steam، أعد ضبطه من الإعدادات › اللعبة (تغيّر مسار المشغّل)." },
+    { L"Summer", L"الصيف" },
+    { L"Warm black, yellow accent", L"أسود دافئ، لون مميز أصفر" },
     { L"Thanks to everyone who makes MWCoop better", L"شكراً لكل من يجعل MWCoop أفضل" },
     { L"VHS tapes", L"أشرطة VHS" },
     { L"Watch them, export them as .mp4, rename them, put a video on them", L"شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو" },

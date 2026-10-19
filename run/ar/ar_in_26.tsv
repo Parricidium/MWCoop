@@ -34,3 +34,5 @@ MS407	Close the game, then restart MWCoop to install it.
 MS408	Install failed: could not copy the launcher (error 
 MS409	MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop.
 MS410	\n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).
+MS501	Summer
+MS502	Warm black, yellow accent

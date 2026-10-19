@@ -1712,3 +1712,5 @@ Close the game, then restart MWCoop to install it.	Закрой игру, зат
 Install failed: could not copy the launcher (error 	Установка не удалась: не удалось скопировать лаунчер (ошибка 
 MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop.	MWCoop установлен в AppData\\Local\\MWCoop, ярлык “MWCoop” на рабочем столе.
 \n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).	\n\nЕсли ты добавлял MWCoop в параметры запуска Steam, задай его снова в Настройки › Игра (путь лаунчера изменился).
+Summer	Лето
+Warm black, yellow accent	Тёплый чёрный, жёлтый акцент

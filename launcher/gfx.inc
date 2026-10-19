@@ -647,6 +647,7 @@ static const SetAccent kSetAccents[5] = {
     { L"Corail", L"Coral", Color(255, 255, 143, 168), Color(255, 255, 186, 200), Color(255, 200, 40, 80), Color(255, 224, 80, 120) },
 };
 static const Color kAuroreAccent(255, 124, 232, 198), kAuroreAccent2(255, 170, 246, 220), kGarageAccent(255, 255, 180, 84), kGarageAccent2(255, 255, 210, 140);   // (accents propres des themes)
+static const Color kEteAccent(255, 255, 205, 70), kEteAccent2(255, 255, 226, 140);
 static int g_accentSel;   // (-1 : couleur ecrite a la main dans l'ini)
 // Accent sur les quatre tables : sombre / clair selon la pastille ; Aurore verte et Garage gardent leur accent propre tant que
 // la pastille est celle d'origine (menthe, ambre), sinon la variante sombre de la couleur choisie.
@@ -655,6 +656,7 @@ static void ThemeApplyAccent(Color dark, Color darkHi, Color light, Color lightH
     kDark.accent = dark; kDark.accent2 = darkHi; kLight.accent = light; kLight.accent2 = lightHi;
     kAurore.accent = custom ? dark : kAuroreAccent; kAurore.accent2 = custom ? darkHi : kAuroreAccent2;
     kGarage.accent = custom ? dark : kGarageAccent; kGarage.accent2 = custom ? darkHi : kGarageAccent2;
+    kEte.accent = custom ? dark : kEteAccent; kEte.accent2 = custom ? darkHi : kEteAccent2;
 }
 static int ThemeFromName(const wchar_t *s)
 {
@@ -662,9 +664,12 @@ static int ThemeFromName(const wchar_t *s)
     if (!_wcsicmp(s, L"clair") || !_wcsicmp(s, L"light")) return THEME_CLAIR;
     if (!_wcsicmp(s, L"aurore")) return THEME_AURORE;
     if (!_wcsicmp(s, L"garage")) return THEME_GARAGE;
+    if (!_wcsicmp(s, L"ete") || !_wcsicmp(s, L"summer")) return THEME_ETE;
     return -1;
 }
-static const wchar_t *ThemeName(int t) { static const wchar_t *n[THEME_N] = { L"sombre", L"clair", L"aurore", L"garage" }; return n[t >= 0 && t < THEME_N ? t : 0]; }
+static const wchar_t *ThemeName(int t) { static const wchar_t *n[THEME_N] = { L"sombre", L"clair", L"aurore", L"garage", L"ete" }; return n[t >= 0 && t < THEME_N ? t : 0]; }
+// Un theme par jeu (19/10) : [Lanceur] Theme (My Winter Car), ThemeMSC (My Summer Car : Ete d'office ; « windows » = suivre Windows).
+static const wchar_t *ThemeKey() { return g_game == GAME_MSC ? L"ThemeMSC" : L"Theme"; }
 static int ThemeWindows()   // (theme des applications de Windows : sombre ou clair)
 {
     DWORD v = 1, sz = sizeof(v);
@@ -672,12 +677,13 @@ static int ThemeWindows()   // (theme des applications de Windows : sombre ou cl
     return THEME_SOMBRE;
 }
 static void ThemeSelect(int t) { g_theme = t >= 0 && t < THEME_N ? t : THEME_SOMBRE; g_dark = g_theme != THEME_CLAIR; }
-static void ThemeSet(int t) { WritePrivateProfileStringW(L"Lanceur", L"Theme", ThemeName(t), g_iniLauncher.c_str()); ThemeSelect(t); }
+static void ThemeSet(int t) { WritePrivateProfileStringW(L"Lanceur", ThemeKey(), ThemeName(t), g_iniLauncher.c_str()); ThemeSelect(t); }
 static void ThemeLoad()
 {
     wchar_t th[16] = L"";
-    GetPrivateProfileStringW(L"Lanceur", L"Theme", L"", th, 16, g_iniLauncher.c_str());
+    GetPrivateProfileStringW(L"Lanceur", ThemeKey(), L"", th, 16, g_iniLauncher.c_str());
     int t = ThemeFromName(th);
+    if (t < 0 && g_game == GAME_MSC && !th[0]) t = THEME_ETE;   // (My Summer Car : l'ete d'office)
     ThemeSelect(t >= 0 ? t : ThemeWindows());
     g_aurore = max(0, min(2, (int)GetPrivateProfileIntW(L"Lanceur", L"Aurore", 2, g_iniLauncher.c_str())));
     g_glass = GetPrivateProfileIntW(L"Lanceur", L"Verre", 1, g_iniLauncher.c_str()) != 0;
@@ -713,11 +719,11 @@ static void ThemeSetGlass(bool on) { WritePrivateProfileStringW(L"Lanceur", L"Ve
 static void ThemeSetDensite(int d) { WritePrivateProfileStringW(L"Lanceur", L"Densite", d == 1 ? NULL : std::to_wstring(d).c_str(), g_iniLauncher.c_str()); g_densite = d; }
 static void ThemeSetTexte(int p) { p = max(80, min(110, (p / 5) * 5)); WritePrivateProfileStringW(L"Lanceur", L"Texte", p == 100 ? NULL : std::to_wstring(p).c_str(), g_iniLauncher.c_str()); g_texte = p; }
 // Theme absent de l'ini : celui des applications de Windows (comme au premier lancement).
-static bool ThemeFollowsWindows() { wchar_t th[16] = L""; GetPrivateProfileStringW(L"Lanceur", L"Theme", L"", th, 16, g_iniLauncher.c_str()); return !th[0]; }
+static bool ThemeFollowsWindows() { wchar_t th[16] = L""; GetPrivateProfileStringW(L"Lanceur", ThemeKey(), L"", th, 16, g_iniLauncher.c_str()); return g_game == GAME_MSC ? !_wcsicmp(th, L"windows") : !th[0]; }
 static void ThemeFollowWindows(bool on)
 {
-    if (!on) { WritePrivateProfileStringW(L"Lanceur", L"Theme", ThemeName(g_theme), g_iniLauncher.c_str()); return; }
-    WritePrivateProfileStringW(L"Lanceur", L"Theme", NULL, g_iniLauncher.c_str());
+    if (!on) { WritePrivateProfileStringW(L"Lanceur", ThemeKey(), ThemeName(g_theme), g_iniLauncher.c_str()); return; }
+    WritePrivateProfileStringW(L"Lanceur", ThemeKey(), g_game == GAME_MSC ? L"windows" : NULL, g_iniLauncher.c_str());
     ThemeSelect(ThemeWindows());
 }
 static bool ThemeIsDefault() { return g_accentSel == 0 && g_aurore == 2 && g_glass && g_densite == 1 && g_texte == 100 && ThemeFollowsWindows(); }
@@ -1247,12 +1253,12 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
                 HotZone(r, UI_SET_HUDSTYLE + i);
             }
         } else if (!strcmp(k, "hudapercu")) HudPreview(g, RectF(x, y + 4, w, 228), GfxGet("Style"), true);
-        else if (!strcmp(k, "themes")) {   // quatre tuiles : Nuit boreale, Plein jour, Aurore verte, Garage
-            static const wchar_t *nf[] = { L"Nuit boréale", L"Plein jour", L"Aurore verte", L"Garage" }, *ne[] = { L"Northern night", L"Daylight", L"Green aurora", L"Garage" };
-            static const wchar_t *sf[] = { L"Aurore et neige", L"Clair, neige au soleil", L"Contraste fort, accent menthe", L"Bois, ambre, lampe à huile" };
-            static const wchar_t *se[] = { L"Aurora and snow", L"Light, snow in the sun", L"Strong contrast, mint accent", L"Wood, amber, oil lamp" };
-            float tw = (w - 30) / 4;
-            for (int i = 0; i < 4; i++) {
+        else if (!strcmp(k, "themes")) {   // cinq tuiles : Nuit boreale, Plein jour, Aurore verte, Garage, Ete (19/10)
+            static const wchar_t *nf[] = { L"Nuit boréale", L"Plein jour", L"Aurore verte", L"Garage", L"Été" }, *ne[] = { L"Northern night", L"Daylight", L"Green aurora", L"Garage", L"Summer" };
+            static const wchar_t *sf[] = { L"Aurore et neige", L"Clair, neige au soleil", L"Contraste fort, accent menthe", L"Bois, ambre, lampe à huile", L"Noir chaud, accent jaune" };
+            static const wchar_t *se[] = { L"Aurora and snow", L"Light, snow in the sun", L"Strong contrast, mint accent", L"Wood, amber, oil lamp", L"Warm black, yellow accent" };
+            float tw = (w - 40) / 5;
+            for (int i = 0; i < THEME_N; i++) {
                 RectF r(x + i * (tw + 10), y + 4, tw, 158);
                 bool sel = i == g_theme, hot = g_uiHot == UI_SET_THEMECARD + i;
                 GraphicsPath p; RoundRect(p, r, 14);
@@ -1262,7 +1268,8 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
                 if (i == 0) SetThemePreview(g, pv, Color(255, 10, 21, 48), Color(255, 22, 48, 95), Color(115, 72, 240, 176), Color(100, 160, 110, 255), Color(26, 255, 255, 255), Color(50, 255, 255, 255), kDark.accent);
                 else if (i == 1) SetThemePreview(g, pv, Color(255, 223, 240, 255), Color(255, 247, 251, 255), Color(140, 120, 200, 255), Color(0, 0, 0, 0), Color(205, 255, 255, 255), Color(40, 20, 50, 90), kLight.accent);
                 else if (i == 2) SetThemePreview(g, pv, Color(255, 7, 18, 28), Color(255, 12, 34, 50), Color(150, 72, 240, 176), Color(0, 0, 0, 0), Color(20, 255, 255, 255), Color(75, 124, 232, 168), kAurore.accent);
-                else SetThemePreview(g, pv, Color(255, 26, 20, 16), Color(255, 42, 30, 20), Color(115, 255, 180, 84), Color(0, 0, 0, 0), Color(20, 255, 255, 255), Color(75, 255, 200, 120), kGarage.accent);
+                else if (i == 3) SetThemePreview(g, pv, Color(255, 26, 20, 16), Color(255, 42, 30, 20), Color(115, 255, 180, 84), Color(0, 0, 0, 0), Color(20, 255, 255, 255), Color(75, 255, 200, 120), kGarage.accent);
+                else SetThemePreview(g, pv, Color(255, 44, 38, 84), Color(255, 238, 146, 86), Color(110, 255, 150, 110), Color(0, 0, 0, 0), Color(20, 255, 255, 255), Color(75, 255, 230, 170), kEte.accent);
                 Text(g, T(nf[i], ne[i]), RectF(r.X + 8, r.Y + 84, r.Width - 16, 20), 13, FontStyleBold, kInk, StringAlignmentNear);
                 std::wstring sub = sel ? std::wstring(T(L"Thème actuel · ", L"Current theme · ")) + T(sf[i], se[i]) : std::wstring(T(sf[i], se[i]));
                 Para(g, sub, RectF(r.X + 8, r.Y + 104, r.Width - 16, 48), 10.5f, kGrey);
@@ -1280,6 +1287,7 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
                 Color c = g_dark ? kSetAccents[i].dark : kSetAccents[i].light;
                 if (i == 0 && g_theme == THEME_AURORE) c = kAuroreAccent;   // (pastille d'origine : l'accent propre du theme)
                 if (i == 0 && g_theme == THEME_GARAGE) c = kGarageAccent;
+                if (i == 0 && g_theme == THEME_ETE) c = kEteAccent;
                 SolidBrush b(c); g.FillPath(&b, &p);
                 Pen pen(sel ? kInk : WithA(kInk, hot ? 0.6f : 0.25f), sel ? 2.4f : 1.2f); g.DrawPath(&pen, &p);
                 if (sel) Icon(g, IC_CHECK, r.X + 15, r.Y + 15, 14, g_dark ? Color(255, 6, 19, 37) : Color(255, 255, 255, 255), 2.6f);
