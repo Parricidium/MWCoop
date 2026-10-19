@@ -2421,4 +2421,5 @@ static const wchar_t *const kRu[][2] = {
     { L"Something wrong?", L"Что-то не так?" },
     { L"Since 1.1.1: the host's time and weather, traffic and NPCs, jobs, money and the wallet (N), Teimo's and Fleetari's shops, fuel, and mechanics: parts, bolts, tuning, fluids and paint.", L"С версии 1.1.1: время и погода хоста, трафик и NPC, работы, деньги и кошелёк (N), магазины Теймо и Флитари, топливо и механика: детали, болты, настройки, жидкости и покраска." },
     { L"A few side things of the game don't follow yet (slot machine, rally prizes, Mummola's moving job...). They come over the next versions.", L"Некоторые мелочи игры пока не синхронизируются (игровой автомат, призы ралли, переезд Мумолы...). Они появятся в следующих версиях." },
+    { L"A few side things of the game don't follow yet (slot machine, rally prizes...). They come over the next versions.", L"Некоторые мелочи игры пока не синхронизируются (игровой автомат, призы ралли...). Они появятся в следующих версиях." },
 };

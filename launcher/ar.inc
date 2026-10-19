@@ -1554,6 +1554,7 @@ static const wchar_t *const kAr[][2] = {
     { L"Traffic dust", L"غبار حركة المرور" },
     { L"Traffic skid marks", L"آثار انزلاق حركة المرور" },
     { L"Player names", L"أسماء اللاعبين" },
+    { L"A few side things of the game don't follow yet (slot machine, rally prizes...). They come over the next versions.", L"بعض الأشياء الجانبية في اللعبة لا تتزامن بعد (آلة القمار، جوائز الرالي...). ستأتي في الإصدارات القادمة." },
     { L"Proximity voice", L"الصوت حسب القرب" },
     { L"Voice range", L"مدى الصوت" },
     { L"Voice volume", L"مستوى الصوت" },
