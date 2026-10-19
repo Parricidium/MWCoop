@@ -1,11 +1,14 @@
-MWCoop - My Winter Car co-op
-========================================
+MWCoop - My Winter Car and My Summer Car (BETA) co-op
+======================================================
 
 Install
 -------
-1. Open the game folder (Steam: right-click My Winter Car > Manage > Browse local files).
-2. Copy EVERYTHING from this zip (version.dll, MWCoop.exe and the MWCoop folder) next to mywintercar.exe.
-3. Start MWCoop.exe. When a new version is out, click NEW VERSION - UPDATE (under the logo).
+1. Extract this zip anywhere (Downloads...) and start MWCoop.exe.
+2. Accept the installation: the launcher installs itself in %LOCALAPPDATA%\MWCoop and puts an "MWCoop"
+   shortcut on the desktop. Nothing is written in the game folder. An older install (launcher in the
+   game folder) is taken over: saves and settings copied, old files sent to the Recycle Bin.
+3. Pick the game under the version number: MWC (My Winter Car) or MSC (My Summer Car, BETA).
+4. When a new version is out, click NEW VERSION - UPDATE (under the logo).
 
 Playing
 -------
@@ -33,7 +36,7 @@ Already synced
 - The host's traffic (roads, bus, train) and passers-by.
 - Jobs: started by one, finished by another, count for everyone, no double pay.
 - Wiring, windshield and dashboard buttons.
-- Launcher CAR tab: CORRIS color for a new game, with a 3D preview.
+- Launcher CAR tab: CORRIS (or SATSUMA) color for a new game, with a 3D preview.
 - Chat.
 
 Not yet (roadmap)
@@ -45,4 +48,4 @@ Problems?
 Send the logs: round LOGS button in MWCoop.exe, or the files MWCoop\logs\*.log and
 MWCoop\profils\invite\logs\*.log.
 
-This mod contains no game data. My Winter Car belongs to Amistech Games.
+This mod contains no game data. My Winter Car and My Summer Car belong to Amistech Games.
