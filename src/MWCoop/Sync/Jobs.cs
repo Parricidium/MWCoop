@@ -1974,6 +1974,7 @@ namespace MWCoop
                 case "@touche": PhoneKeys.OnMessage(who, r); break;
                 case "@combine": PhoneKeys.OnHandset(who, r); break;
                 case "@plat": Plats.OnMessage(who, r); break;
+                case "@vitrine": Vitrines.OnMessage(who, r); break;   // (vitrine du pub ou du magasin cassee chez un autre)
                 case "@porte": WoodCarriers.OnMessage(who, r); break;
                 case "@besoins": NewHud.OnNeeds(who, r); break;
                 case "@fleetari": Shop.OnFleetari(who, r); break;

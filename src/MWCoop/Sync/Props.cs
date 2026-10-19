@@ -974,6 +974,7 @@ namespace MWCoop
         // Apres la physique (VehicleSync.LateUpdate) : les objets colles suivent la pose affichee de la copie.
         public static void LateUpdate()
         {
+            HoldSteady();
             if (ridingIn.Count == 0) return;
             float k = 1f - Mathf.Exp(-12f * Time.deltaTime);
             for (int i = 0; i < ridingIn.Count; i++)
@@ -984,6 +985,33 @@ namespace MWCoop
                 p.RideCurRot = Quaternion.Slerp(p.RideCurRot, p.RideLocalRot, k);
                 Place(p);
             }
+        }
+
+        // Objet en main du joueur d'ici assis dans un vehicule (conducteur ou passager, copie d'une voiture conduite ailleurs
+        // comprise) : colle au repere de la camera, recale a chaque image apres le deplacement de la voiture. La main du jeu le
+        // tire par la physique, a un autre rythme que la voiture : il trainait et tressautait (liste de Menor, 18/10 ; JD,
+        // 20/10 : « que les objets tenus en voiture ne bougent plus, comme les joueurs »). [Coop] TenueVoiture=0 : comme avant.
+        static Rigidbody steadyBody;
+        static Vector3 steadyPos;
+        static Quaternion steadyRot;
+        static void HoldSteady()
+        {
+            Rigidbody rb = held != null ? held.Body : null;
+            Rigidbody car = rb != null ? VehicleSync.LocalRideBody() : null;
+            Camera cam = car != null ? Game.MainCam : null;
+            if (cam == null || rb.isKinematic || Config.GetInt("Coop", "TenueVoiture", 1) == 0) { steadyBody = null; return; }
+            Transform ct = cam.transform, t = rb.transform;
+            if (steadyBody != rb)
+            {
+                Quaternion inv = Quaternion.Inverse(ct.rotation);
+                steadyPos = inv * (t.position - ct.position); steadyRot = inv * t.rotation;
+                if (steadyPos.sqrMagnitude > 4f) { steadyBody = null; return; }   // (pas dans la main : loin de la camera)
+                steadyBody = rb;
+            }
+            t.position = ct.position + ct.rotation * steadyPos;
+            t.rotation = ct.rotation * steadyRot;
+            rb.position = t.position; rb.rotation = t.rotation;
+            rb.velocity = car.GetPointVelocity(t.position); rb.angularVelocity = car.angularVelocity;
         }
 
         static void Place(Prop p)

@@ -214,6 +214,7 @@ namespace MWCoop
             new Mod("carburant", FuelPrices.Update),
             new Mod("telephone", PhoneKeys.Update),
             new Mod("plats", Plats.Update),
+            new Mod("vitrines", Vitrines.Update),
             new Mod("porte-buches", WoodCarriers.Update),
             new Mod("hud", NewHud.Update),
             new Mod("sortie", ExitGuard.Update),
@@ -352,6 +353,7 @@ namespace MWCoop
             FuelPrices.OnLevelLoaded();
             PhoneKeys.OnLevelLoaded();
             Plats.OnLevelLoaded();
+            Vitrines.OnLevelLoaded();
             WoodCarriers.OnLevelLoaded();
             NewHud.OnLevelLoaded();
             CarHits.OnLevelLoaded();
