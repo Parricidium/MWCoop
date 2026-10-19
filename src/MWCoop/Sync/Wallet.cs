@@ -1152,7 +1152,20 @@ namespace MWCoop
         // chacun garde ce qu'il a touche, note dans le journal.
         // La paie est un revenu ordinaire du preneur (Update : jamais pris pour celle d'un boulot rejoue), gardee par lui
         // seul (0.75.42). Pas l'enveloppe de Jokke (gain d'objet, voir Pays).
-        class Env { public string Key; public PlayMakerFSM F; public bool Hooked; public float RetireUntil = -1, TakenAt = -1; }
+        class Env { public string Key; public PlayMakerFSM F; public bool Hooked; public float RetireUntil = -1, TakenAt = -1; public string TakeState; }
+
+        // My Summer Car : l'etat qui paie (FloatAdd sur PlayerMoney) -- "State 1" le plus souvent, "Anim" chez Jokke (demenagement),
+        // "State 6" chez la grand-mere. Null : aucun.
+        static FsmState PayState(PlayMakerFSM f)
+        {
+            foreach (FsmState s in f.Fsm.States)
+                foreach (FsmStateAction a in s.Actions)
+                {
+                    var fa = a as HutongGames.PlayMaker.Actions.FloatAdd;
+                    if (fa != null && fa.floatVariable != null && fa.floatVariable.Name == "PlayerMoney") return s;
+                }
+            return f.Fsm.GetState("State 1");
+        }
         static readonly List<Env> envs = new List<Env>();
         static float nextEnvHook, envIncomeUntil;
         static bool envApplying;
@@ -1182,6 +1195,7 @@ namespace MWCoop
             string n = f.gameObject.name;
             // (My Summer Car : le PayMoney de la machine a sous est un bouton de mise, celui du rallye un prix personnel)
             if (Game.Msc && n == "PayMoney") { string p = Recon.Path(f.transform); if (p.Contains("SlotMachine") || p.StartsWith("RALLY/")) return false; }
+            if (Game.Msc && n == "PayMoneyAdvert") return true;   // (MSC : paie des tracts de Teimo, STORE/LOD/ActivateStore/PayMoneyAdvert)
             return n == "PayMoney";   // (PriceMoney* : prix des courses, personnels -- voir Pays)
         }
 
@@ -1214,16 +1228,20 @@ namespace MWCoop
                 {
                     try
                     {
-                        FsmState take = e.F.Fsm.GetState("State 1"), end = e.F.Fsm.GetState("State 3");
-                        // (My Summer Car : beaucoup d'enveloppes n'ont pas de "State 3" -- "State 1" se cache elle-meme a la fin)
-                        if (take != null && end == null && Game.Msc)
+                        // (My Summer Car : l'etat qui paie seulement, trouve a son FloatAdd PlayerMoney -- beaucoup d'enveloppes n'ont pas
+                        // de "State 3", celle de Jokke paie en "Anim", celle de la grand-mere en "State 6")
+                        if (Game.Msc)
                         {
-                            if (!take.IsInitialized) continue;
-                            FsmHooks.Prepend(take, new EnvHook { E = e, Take = true });
+                            FsmState pay = PayState(e.F);
+                            if (pay == null) { e.Hooked = true; Log.Warn("argent : enveloppe " + e.Key + " sans etat de paie"); continue; }
+                            if (!pay.IsInitialized) continue;
+                            FsmHooks.Prepend(pay, new EnvHook { E = e, Take = true });
+                            e.TakeState = pay.Name;
                             e.Hooked = true;
-                            Log.Info("argent : enveloppe " + e.Key + " tendue ici (sans State 3)");
+                            Log.Info("argent : enveloppe " + e.Key + " tendue ici (paie en '" + pay.Name + "')");
                             continue;
                         }
+                        FsmState take = e.F.Fsm.GetState("State 1"), end = e.F.Fsm.GetState("State 3");
                         if (take == null || end == null) { e.Hooked = true; Log.Warn("argent : enveloppe " + e.Key + " sans State 1/State 3"); continue; }
                         if (!take.IsInitialized || !end.IsInitialized) continue;
                         FsmHooks.Prepend(take, new EnvHook { E = e, Take = true });
@@ -1259,7 +1277,25 @@ namespace MWCoop
             envApplying = true; Replay.Depth++;
             try
             {
-                if (e.F.Fsm.GetState("State 3") != null) Game.SetState(e.F, "State 3");
+                // (My Summer Car : prise chez l'autre a 0 mk -- l'etat de paie fait aussi la suite du boulot : fermier JobStage, oncle
+                // et Jokke Paid, tracts JobAccepted, demenagement, grand-mere... ; avant, cela n'arrivait que chez celui qui la prenait)
+                if (Game.Msc && e.TakeState != null)
+                {
+                    if (st == e.TakeState) return;
+                    FsmFloat m = e.F.FsmVariables.FindFsmFloat("Money"); if (m != null) m.Value = 0f;
+                    // (et l'ajout a PlayerMoney coupe le temps d'y entrer : le montant n'est pas toujours la variable Money)
+                    var cut = new List<FsmStateAction>();
+                    FsmState ts = e.F.Fsm.GetState(e.TakeState);
+                    if (ts != null)
+                        foreach (FsmStateAction a in ts.Actions)
+                        {
+                            var fa = a as HutongGames.PlayMaker.Actions.FloatAdd;
+                            if (fa != null && a.Enabled && fa.floatVariable != null && fa.floatVariable.Name == "PlayerMoney") { a.Enabled = false; cut.Add(a); }
+                        }
+                    try { Game.SetState(e.F, e.TakeState); }
+                    finally { foreach (FsmStateAction a in cut) a.Enabled = true; }
+                }
+                else if (e.F.Fsm.GetState("State 3") != null) Game.SetState(e.F, "State 3");
                 else
                 {
                     // (MSC, pas de "State 3" : videe et cachee, comme la fin de son "State 1")

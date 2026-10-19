@@ -142,6 +142,7 @@ namespace MWCoop
             public GameObject LastMade;                            // plateau, assiette de la commande en cours
             public List<KeyValuePair<NamedVariable, object>> Saved; // MSC (Teimo, Fleetari) : panier local mis de cote le temps du rejeu
             public List<KeyValuePair<System.Collections.ArrayList, object[]>> SavedLists;
+            public List<KeyValuePair<PlayMakerFSM, GameObject>> SavedNews;   // MSC (Teimo) : dernier objet de chaque distributeur avant le rejeu
         }
         class Replayed
         {
@@ -329,6 +330,79 @@ namespace MWCoop
             }
         }
 
+        // My Summer Car, Teimo (fin de 'State 1', rejeu de l'achat d'un autre) : le BagCreator (STORE/LOD/ShopFunctions, sous le LOD du
+        // magasin) n'est actif que magasin charge (joueur a moins de ~400 m). Loin, les etats du produit l'allumaient sous un parent
+        // eteint : il ne tournait pas, COPY perdu, pas de sac ici ; puis, le magasin charge, il creait un sac vide de plus (compteur
+        // des sacs decale d'un cran). Ici : le sac cree par le meme distributeur (Spawner/CreateShoppingbag, SPAWNITEM : meme nom
+        // shoppingbagxN que chez l'acheteur), sorti a la racine (Loosen : fige tant que le magasin n'est pas charge), rempli de la
+        // liste du sac (Items, Spraycans) ; BagCreator eteint. Objets crees a part (caisse de biere, huile...) : figes eux aussi.
+        class TeimoBag : FsmStateAction
+        {
+            public Counter C;
+            public override void OnEnter()
+            {
+                try { if (C.Saved != null) EmulateTeimoBag(C); } catch (System.Exception e) { MWCoop.Log.Warn("magasin : sac de Teimo : " + e.Message); }
+                Finish();
+            }
+        }
+
+        // MSC, invite : la caisse de Teimo et les pompes viennent de la sauvegarde de l'hote -- son essence pas encore payee
+        // (FuelPurchase, DieselPurchase, FuelOilPurchase, litres des pompes) et la vitre cassee (BrokenWindow) : l'invite les payait
+        // a son premier passage en caisse. Remis a zero chez l'invite au premier releve ; chacun paie ce qu'il prend.
+        static void ClearInheritedDebt(Counter c)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (string n in new[] { "FuelPurchase", "DieselPurchase", "FuelOilPurchase", "BrokenWindow" })
+            {
+                FsmFloat v = c.Fsm.FsmVariables.FindFsmFloat(n);
+                if (v != null && v.Value != 0f) { sb.Append(' ').Append(n).Append('=').Append(v.Value.ToString("F2")); v.Value = 0f; }
+            }
+            foreach (string p in new[] { "STORE/LOD/Pumps/GasolinePump98/Functions/Trigger98", "STORE/LOD/Pumps/GasolinePumpD/Functions/TriggerD", "STORE/LOD/Pumps/GasolinePumpP\u00D6/Functions/TriggerP\u00D6" })
+            {
+                PlayMakerFSM u = Game.FindFsm(p, "Use");
+                FsmFloat v = u != null ? u.FsmVariables.FindFsmFloat("Fuel") : null;
+                if (v != null && v.Value != 0f) { sb.Append(' ').Append(p.Substring(p.LastIndexOf('/') + 1)).Append('=').Append(v.Value.ToString("F2")); v.Value = 0f; }
+            }
+            Log.Info("magasin : dette de l'hote a la caisse de Teimo effacee ici :" + (sb.Length > 0 ? sb.ToString() : " aucune"));
+        }
+
+        static void EmulateTeimoBag(Counter c)
+        {
+            GameObject lod = Game.FindAny("STORE/LOD");
+            GameObject creator = Game.FindAny("STORE/LOD/ShopFunctions/BagCreator");
+            FreezeTeimoItems(c, lod);
+            if (creator == null || creator.activeInHierarchy || !creator.activeSelf) return;   // (magasin charge : le jeu fait le sac)
+            creator.SetActive(false);
+            GameObject sp = Game.FindAny("Spawner/CreateShoppingbag");
+            PlayMakerFSM bagFsm = sp != null ? Game.FsmOn(sp, "ShoppingBag") : null;
+            if (bagFsm == null) { Log.Warn("magasin : Spawner/CreateShoppingbag::ShoppingBag introuvable, pas de sac"); return; }
+            bagFsm.SendEvent("SPAWNITEM");
+            GameObject bag = Var(bagFsm, "New");
+            if (bag == null) { Log.Warn("magasin : sac de Teimo pas cree ici (" + bagFsm.ActiveStateName + ")"); return; }
+            GameObject list = Game.FindAny("Spawner/ShoppingList");
+            int n = 0;
+            foreach (string r in new[] { "Items", "Spraycans" })
+            {
+                System.Collections.ArrayList from = list != null ? ListOn(list, r) : null, to = ListOn(bag, r);
+                if (from == null || to == null) continue;
+                to.Clear(); foreach (object o in from) { to.Add(o); if (o is int && (int)o > 0) n += (int)o; }
+            }
+            Loosen(bag, lod);
+            Log.Info("magasin : sac de Teimo fait ici sans le magasin (" + bag.name + ", " + n + " article(s))" + (lod != null && !lod.activeInHierarchy ? ", fige jusqu'au chargement du magasin" : ""));
+        }
+
+        // Objets crees a part par Spawner/CreateItems (caisse de biere, liquides, extincteur...) pendant le rejeu : figes tant que le
+        // magasin n'est pas charge ici (sinon ils tombaient a travers le comptoir eteint).
+        static void FreezeTeimoItems(Counter c, GameObject lod)
+        {
+            if (c.SavedNews == null || lod == null || lod.activeInHierarchy) return;
+            foreach (KeyValuePair<PlayMakerFSM, GameObject> kv in c.SavedNews)
+            {
+                GameObject now = kv.Key != null ? Var(kv.Key, "New") : null;
+                if (now != null && now != kv.Value) { Freeze(now, lod); Consume.Soon(now); Log.Info("magasin : " + now.name + " fige jusqu'au chargement du magasin ici"); }
+            }
+        }
+
         // Fin d'un etat du comptoir qui cree un objet : l'objet recoit son ID d'achat s'il n'en a pas. N'envoie
         // rien (pas un ModHook) : chacun nomme ses propres objets, de la meme facon.
         class Made : FsmStateAction
@@ -351,6 +425,7 @@ namespace MWCoop
 
         public static void OnLevelLoaded()
         {
+            FleetariMsc.OnLevelLoaded();
             registers.Clear(); registerOf.Clear(); pending.Clear(); unhookedRegisters.Clear();
             counters.Clear(); counterOf.Clear(); unhooked.Clear(); mutedCounters.Clear(); queue.Clear(); spawnSteps.Clear();
             ignored.Clear(); restCache.Clear(); named.Clear(); frozen.Clear();
@@ -376,6 +451,7 @@ namespace MWCoop
 
         public static void Update()
         {
+            if (Game.Msc) FleetariMsc.Update();   // (Fleetari et la poste, FleetariMsc.cs)
             if (Session.Active && PlayerSync.InGame)
             {
                 float tnow = Time.realtimeSinceStartup;
@@ -516,6 +592,7 @@ namespace MWCoop
                 Counter c = NewCounter(f, n);
                 if (c == null) { ignored.Add(f); continue; }
                 counters[c.Key] = c; counterOf[f] = c;
+                if (c.Kind == "teimo" && !Session.IsHost) ClearInheritedDebt(c);
                 if (c.Kind == "cafe" || c.Kind == "kiosque") ClaimPan(c);   // (kiosque : seul le bouton Coffee a un verseur)
                 if (c.Kind == "kiosque") ClaimKiosk(c);
                 if (c.Kind == "rallye") ClaimSeller(c);
@@ -579,6 +656,7 @@ namespace MWCoop
                 if (Game.Msc && f.Fsm.GetState("Purchase") != null && (f.Fsm.GetState("Sausages") != null || f.Fsm.GetState("Alternator") != null))
                 {
                     bool teimo = f.Fsm.GetState("Sausages") != null;
+                    if (!teimo) return null;   // (Fleetari : FleetariMsc, refait a la main avec l'usure de l'acheteur)
                     kind = teimo ? "teimo" : "fleetari"; label = teimo ? "au magasin de Teimo" : "chez Fleetari"; states = new[] { "Purchase" }; wait = 600f;
                 }
                 else if (path.Contains("/Restaurant/"))
@@ -920,6 +998,13 @@ namespace MWCoop
                         FsmHooks.Append(s, new Made { C = c, Acts = acts.ToArray() });
                         made++;
                     }
+                // MSC, Teimo : 'State 1' envoie COPY au BagCreator (sac rempli d'apres Spawner/ShoppingList) ; magasin eteint ici
+                // (joueur loin), le sac est fait a la main (TeimoBag).
+                if (c.Kind == "teimo")
+                {
+                    FsmState s1 = f.Fsm.GetState("State 1");
+                    if (s1 != null && !System.Array.Exists(s1.Actions, a => a is TeimoBag)) FsmHooks.Append(s1, new TeimoBag { C = c });
+                }
                 // Caisse burger : 'State 4' envoie la commande a Keijo ; en fin d'etat, un rejeu qu'il n'a pas prise.
                 if (c.Kind == "resto")
                 {
@@ -1356,7 +1441,7 @@ namespace MWCoop
             return null;
         }
 
-        static string PlayerName(int who)
+        public static string PlayerName(int who)
         {
             PlayerInfo pi;
             return Session.Players.TryGetValue(who, out pi) ? pi.Name : "?";
@@ -2572,6 +2657,9 @@ namespace MWCoop
                 c.Saved = l;
                 c.SavedLists = new List<KeyValuePair<System.Collections.ArrayList, object[]>>();
                 GameObject sl = c.Kind == "teimo" ? Game.FindAny("Spawner/ShoppingList") : null;
+                c.SavedNews = new List<KeyValuePair<PlayMakerFSM, GameObject>>();
+                GameObject ci = c.Kind == "teimo" ? Game.FindAny("Spawner/CreateItems") : null;
+                if (ci != null) foreach (PlayMakerFSM cf in ci.GetComponents<PlayMakerFSM>()) c.SavedNews.Add(new KeyValuePair<PlayMakerFSM, GameObject>(cf, Var(cf, "New")));
                 foreach (string ln in new[] { "Items", "Spraycans" })
                 {
                     System.Collections.ArrayList a = sl != null ? ListOn(sl, ln) : null;
@@ -2595,7 +2683,7 @@ namespace MWCoop
             if (c.SavedLists != null)
                 foreach (var kv in c.SavedLists) { kv.Key.Clear(); kv.Key.AddRange(kv.Value); }
             Log.Info("magasin : panier local remis " + c.Label + " (" + (c.Fsm != null ? c.Fsm.ActiveStateName : "?") + ")");
-            c.Saved = null; c.SavedLists = null;
+            c.Saved = null; c.SavedLists = null; c.SavedNews = null;
         }
 
         static void UnmuteCounter(Counter c)

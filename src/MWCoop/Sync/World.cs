@@ -196,6 +196,7 @@ namespace MWCoop
         static Material cloudMat;
         static Renderer[] cloudRends;
         static float hourMismatchSince = -1;
+        static int jailLogs;
 
         static bool FindMsc()
         {
@@ -249,6 +250,8 @@ namespace MWCoop
             int wtype = r.I32(), cloudId = r.I32();
             float thunder = r.F32();
             bool rain = r.Bool();
+            if (Police.InJail) { if (jailLogs++ < 3) Log.Info("monde : en prison ici, jour et heure de l'hote pas appliques"); }
+            else {
             SetGlobalInt("GlobalDay", day);
             // Heure : un invite passe a la tranche suivante une fraction de seconde avant ou apres l'hote ; on ne le recale
             // qu'apres 5 s d'ecart (WAKEUP relance le fondu des couleurs de la tranche : pas d'aller-retour a chaque frontiere).
@@ -269,6 +272,7 @@ namespace MWCoop
             {
                 FsmFloat rot = sunRotation.FsmVariables.GetFsmFloat("Rotation");
                 if (Mathf.Abs(Mathf.DeltaAngle(rot.Value, sunRot)) > 0.5f) rot.Value = sunRot;
+            }
             }
             if (needleHour != null && Mathf.Abs(Mathf.DeltaAngle(needleHour.localEulerAngles.y, hy)) > 0.5f) needleHour.localEulerAngles = new Vector3(0f, hy, 0f);
             if (needleMinute != null && Mathf.Abs(Mathf.DeltaAngle(needleMinute.localEulerAngles.y, my)) > 1f)

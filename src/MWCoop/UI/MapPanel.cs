@@ -21,7 +21,7 @@ namespace MWCoop
         public static void Update()
         {
             if (!PlayerSync.InGame) { Open = false; return; }
-            if (!Game.Msc) JobsTick();   // (objectifs des boulots, MapJobs.cs : suivis meme carte fermee, messages d'etape ; MSC : pas encore)
+            JobsTick();   // (objectifs des boulots, MapJobs.cs : suivis meme carte fermee, messages d'etape ; MSC : JobsMsc)
             if (Menu.Open || Menu.ChatOpen) return;
             if (Open && Input.GetKeyDown(KeyCode.Escape)) { Open = false; return; }
             // [Coop] CarteMaintenir=1 (lanceur) : ouverte tant que la touche est tenue ; sinon un appui ouvre, un autre ferme
