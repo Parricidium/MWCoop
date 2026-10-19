@@ -21,7 +21,7 @@ namespace MWCoop
         public static void Update()
         {
             if (!PlayerSync.InGame) { Open = false; return; }
-            JobsTick();   // (objectifs des boulots, MapJobs.cs : suivis meme carte fermee, messages d'etape)
+            if (!Game.Msc) JobsTick();   // (objectifs des boulots, MapJobs.cs : suivis meme carte fermee, messages d'etape ; MSC : pas encore)
             if (Menu.Open || Menu.ChatOpen) return;
             if (Open && Input.GetKeyDown(KeyCode.Escape)) { Open = false; return; }
             // [Coop] CarteMaintenir=1 (lanceur) : ouverte tant que la touche est tenue ; sinon un appui ouvre, un autre ferme
@@ -51,6 +51,7 @@ namespace MWCoop
 
         static void BuildSpots()
         {
+            if (Game.Msc && spotsLevel == Application.loadedLevel && spots.Count > 0) return;
             if (spotsLevel == Application.loadedLevel && spots.Count > 0) return;
             spots.Clear();
             spotsLevel = Application.loadedLevel;
@@ -62,7 +63,9 @@ namespace MWCoop
                 else if (c.name.StartsWith("HouseWood"))
                     foreach (Transform d in c) { if (d.name.StartsWith("WoodJob")) spots.Add(new Spot { At = d.position, Fr = "Livraison de bois", En = "Firewood delivery", C = JobColor }); }
                 else if (c.name == "LogLongPile") spots.Add(new Spot { At = c.position, Fr = "Tas de bois", En = "Log pile", C = JobColor });
-                else if (c.name == "ADs") spots.Add(new Spot { At = c.position, Fr = "Tracts", En = "Flyers", C = JobColor });
+                else if (c.name == "ADs" || c.name == "TeimoADs") spots.Add(new Spot { At = c.position, Fr = "Tracts", En = "Flyers", C = JobColor });
+                else if (Game.Msc && c.name == "StrawberryField") spots.Add(new Spot { At = c.position, Fr = "Champ de fraises", En = "Strawberry field", C = JobColor });
+                else if (Game.Msc && c.name == "HayBales") spots.Add(new Spot { At = c.position, Fr = "Bottes de foin", En = "Hay bales", C = JobColor });
             }
             Log.Info("carte : " + spots.Count + " lieux de boulots");
         }
@@ -292,7 +295,7 @@ namespace MWCoop
             // pseudo dans une pastille au-dessus du point (lisible sur la carte claire, distinct des noms de lieux)
             float tw = Style.Width(name, 14, true) + Style.Px(18), th = Style.Px(24);
             var pill = new Rect(Mathf.Round(s.x + r + Style.Px(16)), Mathf.Round(s.y - th / 2), tw, th);   // (a droite : la fleche reste visible)
-            Style.Round(pill, th / 2, new Color(0.06f, 0.08f, 0.12f, 0.88f));
+            Style.Round(pill, th / 2, Kit.A(Style.Shade, 0.88f));
             Style.Round(new Rect(pill.x, pill.yMax - Style.Px(3), pill.width, Style.Px(3)), Style.Px(1.5f), c);
             Style.Text(pill, name, 14, TextAnchor.MiddleCenter, Style.White, true);
         }

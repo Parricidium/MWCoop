@@ -289,7 +289,7 @@ namespace MWCoop
             float w = Style.Px(20); foreach (string l in lines) w = Mathf.Max(w, Style.Width(l, 13, true) + Style.Px(30));
             float h = Style.Px(30) + lines.Count * Style.Px(20);
             var box = new Rect(local.x + Style.Px(12), local.y + Style.Px(12), w, h);
-            Style.Round(box, Style.Px(10), new Color(0.04f, 0.07f, 0.12f, 0.82f));
+            Style.Round(box, Style.Px(10), Kit.A(Style.Shade, 0.82f));
             Style.Text(new Rect(box.x + Style.Px(12), box.y + Style.Px(6), w, Style.Px(18)), Lang.T("TES OBJECTIFS", "YOUR OBJECTIVES"), 11, TextAnchor.MiddleLeft, ObjColor);
             for (int i = 0; i < lines.Count; i++)
             {

@@ -17,7 +17,8 @@ namespace MWCoop
         public class Place { public string Key, Fr, En; public Vector3 At, Face; }   // (Face : vers ou regarder en arrivant)
         // (appartement, maison des parents : les points de reapparition, Respawn ; les autres : au sol, reperes par
         // CheatsProbe -- Autotest=trichelieux)
-        public static readonly Place[] Places = {
+        public static Place[] Places { get { return Game.Msc ? PlacesMsc : PlacesMwc; } }
+        static readonly Place[] PlacesMwc = {
             new Place { Key = "appartement", Fr = "Appartement", En = "Apartment", At = new Vector3(-1285.5f, 1.2f, 1076.4f) },
             new Place { Key = "maison", Fr = "Maison des parents", En = "Parents' house", At = new Vector3(-6.2f, 1.0f, 6.6f) },
             // (1,5 m au-dessus d'un sol degage -- herbe, trottoir, route -- pres du lieu, pas sur un toit ; releve du 10/10)
@@ -30,6 +31,22 @@ namespace MWCoop
             new Place { Key = "danse", Fr = "Salle de danse", En = "Dance hall", At = new Vector3(464.3f, 10.8f, 1325.9f), Face = new Vector3(455.1f, 13.1f, 1318.2f) },
             new Place { Key = "cabane", Fr = "Cabane", En = "Cottage", At = new Vector3(-170f, -2.5f, 1010f), Face = new Vector3(-170f, -3.8f, 1022f) },
             new Place { Key = "chalet", Fr = "Chalet", En = "Cabin", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
+        };
+        // My Summer Car (19/10, vidage du jeu v.250908-04) : la meme carte pour les lieux communs ; le magasin de Teimo est a la
+        // place du pub Nappo ; pas d'appartement ni de port ; les dragsters, le depart du rallye et Rykipohja en plus.
+        static readonly Place[] PlacesMsc = {
+            new Place { Key = "maison", Fr = "Maison", En = "Home", At = new Vector3(-6.2f, 1.0f, 6.6f) },
+            new Place { Key = "magasin", Fr = "Magasin de Teimo", En = "Teimo's shop", At = new Vector3(-1539.1f, 4.4f, 1190.6f), Face = new Vector3(-1548.3f, 3.3f, 1182.9f) },
+            new Place { Key = "ville", Fr = "Perajarvi", En = "Perajarvi", At = new Vector3(-1396.4f, 6.9f, 1156.6f), Face = new Vector3(-1405.6f, 9f, 1148.9f) },
+            new Place { Key = "garage", Fr = "Garage de Fleetari", En = "Fleetari's repair shop", At = new Vector3(1551.5f, 6.0f, 733.6f), Face = new Vector3(1557.5f, 3.9f, 723.2f) },
+            new Place { Key = "inspection", Fr = "Contrôle technique", En = "Inspection", At = new Vector3(-1531.7f, 4.5f, 1281.6f), Face = new Vector3(-1533.8f, 3f, 1269.8f) },
+            new Place { Key = "decharge", Fr = "Décharge", En = "Landfill", At = new Vector3(-767.6f, 13.2f, -639.8f), Face = new Vector3(-780f, 12f, -640f) },
+            new Place { Key = "danse", Fr = "Salle de danse", En = "Dance hall", At = new Vector3(464.3f, 10.8f, 1325.9f), Face = new Vector3(455.1f, 13.1f, 1318.2f) },
+            new Place { Key = "cabane", Fr = "Cabane", En = "Cabin", At = new Vector3(-170f, -2.5f, 1010f), Face = new Vector3(-170f, -3.8f, 1022f) },
+            new Place { Key = "chalet", Fr = "Chalet", En = "Cottage", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
+            new Place { Key = "rykipohja", Fr = "Rykipohja", En = "Rykipohja", At = new Vector3(-1333.1f, 1.4f, -664.0f) },
+            new Place { Key = "dragsters", Fr = "Dragsters", En = "Drag strip", At = new Vector3(-1326.3f, 5.5f, -938.9f) },
+            new Place { Key = "rallye", Fr = "Rallye", En = "Rally", At = new Vector3(-770.0f, 3.5f, 1273.0f) },
         };
 
         static bool hostAllows;

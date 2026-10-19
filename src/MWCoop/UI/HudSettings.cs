@@ -72,7 +72,8 @@ namespace MWCoop
             return o != null ? o.Def : 0;
         }
 
-        public static bool On(string key) { return Get(key) != 0; }
+        // (My Summer Car : ni temperature du corps ni sueur dans ce jeu -- JD, 19/10 : jauges toujours coupees)
+        public static bool On(string key) { if (Game.Msc && (key == "JaugeTemperature" || key == "JaugeSueur")) return false; return Get(key) != 0; }
         public static int StyleNow { get { return Get("Style"); } }
 
         // Pose (F10) : ecrite tout de suite dans mwcoop.ini.

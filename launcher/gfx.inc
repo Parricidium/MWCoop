@@ -182,7 +182,8 @@ static const std::vector<GfxRow> &GfxRows()
           { 80, 100, 125, 150 }, { L"Petite", L"Normale", L"Grande", L"Très grande" }, { L"Small", L"Normal", L"Large", L"Huge" } },
         { "Position", L"Position", L"Position", -1, { -1, 0, 1, 2, 3, 4, 5 }, { L"Auto", L"Haut gauche", L"Haut droite", L"Bas gauche", L"Bas droite", L"Haut centre", L"Bas centre" },
           { L"Auto", L"Top left", L"Top right", L"Bottom left", L"Bottom right", L"Top centre", L"Bottom centre" }, 0, 17, "Hud" },
-        { "Couleur", L"Couleur", L"Colour", 0, { 0, 1, 2, 3 }, { L"Glace", L"Bleu ciel", L"Aurore", L"Lilas" }, { L"Ice", L"Sky blue", L"Aurora", L"Lilac" }, 0, 17, "Hud" },
+        { "Couleur", L"Couleur", L"Colour", 0, { 0, 1, 2, 3 }, { g_game == GAME_MSC ? L"Jaune" : L"Glace", g_game == GAME_MSC ? L"Orange" : L"Bleu ciel", L"Aurore", L"Lilas" },
+          { g_game == GAME_MSC ? L"Yellow" : L"Ice", g_game == GAME_MSC ? L"Orange" : L"Sky blue", L"Aurora", L"Lilac" }, 0, 17, "Hud" },
         { "Fond", L"Opacité du fond", L"Background opacity", 60, { 0, 30, 45, 60, 75, 90 }, { L"Aucun", L"30 %", L"45 %", L"60 %", L"75 %", L"90 %" }, { L"None", L"30 %", L"45 %", L"60 %", L"75 %", L"90 %" }, 0, 17, "Hud" },
         { "Estomper", L"Estomper les jauges au repos", L"Fade gauges at rest", 1, {}, {}, {}, 0, 17, "Hud" },
         { "Valeurs", L"Chiffres et noms", L"Numbers and names", 0, {}, {}, {}, 0, 17, "Hud" },
@@ -293,6 +294,8 @@ static const std::vector<GfxRow> &GfxRows()
     pills("VocalPortee", { 15, 25, 35, 50, 80 }, { L"15", L"25", L"35 m", L"50", L"80" }, {});
     pills("VolumeVocal", { 50, 75, 100 }, { L"50", L"75", L"100 %" }, {});
     pills("GainMicro", { 100, 150, 200, 300 }, { L"Normal", L"150", L"200", L"300 %" }, {});
+    // My Summer Car (19/10) : ni temperature du corps ni sueur dans ce jeu
+    if (g_game == GAME_MSC) rows.erase(std::remove_if(rows.begin(), rows.end(), [](const GfxRow &r) { return !strcmp(r.key, "JaugeTemperature") || !strcmp(r.key, "JaugeSueur"); }), rows.end());
     return rows;
 }
 
@@ -1545,11 +1548,12 @@ static void HudPreview(Graphics &g, RectF box, int style, bool big)
     }
     SolidBrush snow(Color(255, 156, 158, 184)); g.FillRectangle(&snow, RectF(box.X, box.Y + box.Height * 0.66f, box.Width, box.Height * 0.34f + 1));
     static const Color acc[4] = { Color(255, 166, 216, 255), Color(255, 120, 189, 255), Color(255, 72, 240, 176), Color(255, 201, 166, 255) };
-    Color ac = acc[big ? max(0, min(3, GfxGet("Couleur"))) : 0];
+    static const Color accMsc[4] = { Color(255, 255, 214, 77), Color(255, 255, 158, 56), Color(255, 72, 240, 176), Color(255, 201, 166, 255) };   // (MSC : jaune, orange)
+    Color ac = (g_game == GAME_MSC ? accMsc : acc)[big ? max(0, min(3, GfxGet("Couleur"))) : 0];
     float k = big ? GfxGet("Taille") / 100.0f : 0.55f;
     float sc = big ? box.Height / 600.0f * 1.6f * k : box.Height / 300.0f * 1.15f;
     int alpha = big ? (int)(255 * GfxGet("Fond") / 100.0f) : 170;
-    Color bg((BYTE)alpha, 8, 18, 34);
+    Color bg = g_game == GAME_MSC ? Color((BYTE)alpha, 8, 8, 8) : Color((BYTE)alpha, 8, 18, 34);   // (MSC : noir)
     static const float vals[6] = { 35, 76, 12, 48, 93, 4 };
     static const char *gk[6] = { "JaugeSoif", "JaugeFaim", "JaugeStress", "JaugeUrine", "JaugeFatigue", "JaugeSueur" };
     auto tone = [&](float v) { return v >= 90 ? Color(255, 255, 107, 122) : v >= 70 ? Color(255, 255, 181, 92) : ac; };

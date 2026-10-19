@@ -369,7 +369,8 @@ namespace MWCoop
         {
             System.Action[] all = { Replay.OnLevelLoaded, PlayerSync.OnLevelLoaded, VehicleSync.OnLevelLoaded, CarDoors.OnLevelLoaded, CarVisuals.OnLevelLoaded, Seats.OnLevelLoaded,
                                     Voice.OnLevelLoaded, CustomFace.OnLevelLoaded, WorldFiles.OnLevelLoaded,
-                                    ThirdPerson.OnLevelLoaded, DroneCam.OnLevelLoaded, SaveStats.OnLevelLoaded, Studio.OnLevelLoaded, WaitScreen.OnLevelLoaded };
+                                    ThirdPerson.OnLevelLoaded, DroneCam.OnLevelLoaded, SaveStats.OnLevelLoaded, Studio.OnLevelLoaded, WaitScreen.OnLevelLoaded,
+                                    NewHud.OnLevelLoaded, MapRender.OnLevelLoaded };
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -383,6 +384,8 @@ namespace MWCoop
             // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
             // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
             "voitures", "portieres", "tableaux de bord", "passagers",
+            "hud",   // (HUD MWCoop, 19/10 : GUI/HUD de MSC a les memes lignes, sans temperature ni sueur)
+            "carte", "panneau carte",   // (carte M, 19/10 : herbe et eau libre, lieux de MSC)
             "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;
