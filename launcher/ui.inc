@@ -709,8 +709,8 @@ static void DrawHome(Graphics &g)
         Glass(c);
         Icon(g, IC_ALERT, c.X + c.Width / 2, c.Y + 64, 40, kWarn, 2.0f);
         Title(g, T(L"My Winter Car introuvable", L"My Winter Car not found"), RectF(c.X, c.Y + 96, c.Width, 40), 26, kInk, StringAlignmentCenter);
-        Para(g, T(L"MWCoop.exe se pose dans le dossier du jeu (Steam : clic droit sur My Winter Car > Gérer > Parcourir les fichiers locaux). Sinon, montre-lui mywintercar.exe.",
-                  L"MWCoop.exe goes in the game folder (Steam: right-click My Winter Car > Manage > Browse local files). Otherwise, show it mywintercar.exe."),
+        Para(g, T(L"MWCoop cherche le jeu dans tes bibliothèques Steam et ne l'a pas trouvé. Montre-lui mywintercar.exe (Steam : clic droit sur My Winter Car > Gérer > Parcourir les fichiers locaux).",
+                  L"MWCoop looks for the game in your Steam libraries and did not find it. Show it mywintercar.exe (Steam: right-click My Winter Car > Manage > Browse local files)."),
              RectF(c.X + 60, c.Y + 150, c.Width - 120, 70), 14, kGrey, StringAlignmentNear);
         g_btn[B_EXE].visible = true;
         UiButton(g, RectF(c.X + 120, c.Y + 250, 220, 50), T(L"Choisir l'exe…", L"Choose exe…"), UI_SET_FOLDER, true, IC_FOLDER);

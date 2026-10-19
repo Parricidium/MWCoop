@@ -86,6 +86,10 @@ using std::max;
 #include <time.h>
 
 using namespace Gdiplus;
+#include <windowsx.h>
+// Fenetres de message au style du lanceur (dialog.inc, demande de JD du 19/10) : toutes les MessageBoxW du lanceur y passent.
+static int StyledBox(HWND owner, LPCWSTR text, LPCWSTR caption, UINT type);
+#define MessageBoxW(h, t, c, f) StyledBox(h, t, c, f)
 
 static std::wstring g_repo = L"Parricidium/MWCoop";   // (/depot : autre depot, pour tester la mise a jour)
 // Le jeu (demande de JD, 19/10 : « un switch MSC et MWC a la place de Legacy et Reworked ») : [Lanceur] JeuChoisi=mwc|msc,
@@ -139,6 +143,19 @@ static HWND g_wnd;
 static bool g_fr, g_ru, g_ar;   // langue : francais, russe (13/10 : traduction de l'anglais, ru.inc), arabe (ar.inc), sinon anglais
 static std::wstring g_dir, g_self, g_iniLauncher;   // dossier du lanceur (avec \), chemin du lanceur
 static std::wstring g_gameDir, g_gameVer;           // dossier de My Winter Car (avec \, vide = introuvable), version
+// Ou vivent les fichiers de MWCoop du jeu choisi (version.dll, dossier MWCoop : mod, reglages, profils, journaux, cache) :
+//  - lanceur installe dans %LOCALAPPDATA%\MWCoop (JD, 19/10 : « comme la plupart des mods », raccourci sur le bureau) :
+//    <lanceur>\MWC\ ou <lanceur>\MSC\ ; le jeu part toujours de la copie de lancement (MWCoop y est une jonction vers ce
+//    dossier, version.dll y est pose par le lanceur) : rien n'est ecrit dans le dossier du jeu ;
+//  - lanceur dans le dossier du jeu (avant 1.1), ou [Lanceur] DansLeJeu=1 (Wine / Proton par defaut : jonctions pas
+//    sures) : le dossier du jeu, comme avant.
+static std::wstring g_modRoot;
+static std::wstring g_afterInstall;   // (+apres-installation <ancien lanceur> : install.inc)
+static std::wstring LocalDir();
+static bool IsWine();
+static bool RunningFromHome() { std::wstring l = LocalDir(); return !l.empty() && !_wcsicmp(g_dir.c_str(), l.c_str()); }
+static bool ModInGame() { return !RunningFromHome() || GetPrivateProfileIntW(L"Lanceur", L"DansLeJeu", IsWine() ? 1 : 0, g_iniLauncher.c_str()) != 0; }
+static std::wstring ModRootFor(const std::wstring &gameDir) { return gameDir.empty() ? L"" : ModInGame() ? gameDir : g_dir + (g_game == GAME_MSC ? L"MSC\\" : L"MWC\\"); }
 static std::wstring g_localVer;                     // MWCoop\version.txt
 static bool g_modOk;                                // version.dll + MWCoop\MWCoop.dll presents
 static int g_state = ST_IDLE;
@@ -533,9 +550,9 @@ static Field g_fields[3];   // 0 = pseudo, 1 = adresse, 2 = code de session (sal
 static int g_focus = -1;
 static int g_carColor = -1;   // [Coop] CouleurVoiture : 0xRRGGBB, -1 = au hasard (comme le jeu)
 
-static std::wstring ModIni() { return g_gameDir + L"MWCoop\\mwcoop.ini"; }
+static std::wstring ModIni() { return g_modRoot + L"MWCoop\\mwcoop.ini"; }
 static std::string ModIniA() { return Narrow(ModIni()); }
-static void EnsureModDir() { if (!g_gameDir.empty()) CreateDirectoryW((g_gameDir + L"MWCoop").c_str(), NULL); }
+static void EnsureModDir() { if (!g_gameDir.empty()) CreateDirectoryW((g_modRoot + L"MWCoop").c_str(), NULL); }
 
 // Pseudo par defaut : le nom de la session Windows (ASCII seulement, comme le champ), sinon "Joueur".
 static std::wstring DefaultName()
@@ -583,8 +600,9 @@ static void LoadLocalVersion()
 {
     std::vector<unsigned char> d;
     g_localVer.clear();
-    g_modOk = !g_gameDir.empty() && FileExists(g_gameDir + L"version.dll") && FileExists(g_gameDir + L"MWCoop\\MWCoop.dll");
-    if (g_modOk && ReadAll(g_gameDir + L"MWCoop\\version.txt", d))
+    // (a part : version.dll est pose par le lanceur dans la copie de lancement, a partir du sien ; pas besoin ici)
+    g_modOk = !g_gameDir.empty() && (!ModInGame() || FileExists(g_modRoot + L"version.dll")) && FileExists(g_modRoot + L"MWCoop\\MWCoop.dll");
+    if (g_modOk && ReadAll(g_modRoot + L"MWCoop\\version.txt", d))
         g_localVer = Trim(Widen(std::string(d.begin(), d.end())));
 }
 
@@ -629,6 +647,7 @@ static void TenuesAddShirts();   // (tenues offertes : plus bas)
 static void SetGame(const std::wstring &dir)
 {
     g_gameDir = dir;
+    g_modRoot = ModRootFor(dir);
     g_gameVer = ReadGameVersion();
     LoadLocalVersion();
     if (!g_gameDir.empty()) LoadPlayer();
@@ -1075,7 +1094,10 @@ static bool CopyTree(const std::wstring &src, const std::wstring &dst, bool *sel
         std::wstring s = src + L"\\" + n, d = dst + L"\\" + n;
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { ok = CopyTree(s, d, selfReplaced, failed) && ok; continue; }
         if (!_wcsicmp(d.c_str(), ModIni().c_str()) && FileExists(d)) { MergeIni(s, d); continue; }
-        if (!_wcsicmp(d.c_str(), (g_gameDir + L"MWCoop\\version.txt").c_str())) continue;   // en dernier (UpdateThread)
+        // (lanceur a part : son exe et les textes du paquet restent hors de MWC\ / MSC\ -- l'exe est remplace plus bas)
+        if (!ModInGame() && !_wcsicmp(dst.c_str(), g_modRoot.substr(0, g_modRoot.size() - 1).c_str())
+            && (!_wcsicmp(n.c_str(), L"MWCoop.exe") || !_wcsicmp(n.c_str(), L"LISEZMOI.txt") || !_wcsicmp(n.c_str(), L"README.txt"))) continue;
+        if (!_wcsicmp(d.c_str(), (g_modRoot + L"MWCoop\\version.txt").c_str())) continue;   // en dernier (UpdateThread)
         if (!_wcsicmp(d.c_str(), g_self.c_str())) {
             std::wstring old = g_self + L".old";
             DeleteFileW(old.c_str());
@@ -1091,7 +1113,7 @@ static bool CopyTree(const std::wstring &src, const std::wstring &dst, bool *sel
             bool locked = e == ERROR_SHARING_VIOLATION || e == ERROR_ACCESS_DENIED || e == ERROR_LOCK_VIOLATION;
             if (locked && MoveAside(d, &as) && CopyFileW(s.c_str(), d.c_str(), FALSE))
                 LaunchLog("mise a jour : %s verrouille (erreur %lu), l'ancien mis de cote (%s)", Narrow(n, CP_UTF8).c_str(), e, Narrow(as.substr(as.rfind(L'\\') + 1), CP_UTF8).c_str());
-            else if (!_wcsicmp(d.c_str(), (g_gameDir + L"version.dll").c_str()) && FileExists(d)) {
+            else if (!_wcsicmp(d.c_str(), (g_modRoot + L"version.dll").c_str()) && FileExists(d)) {
                 // Le chargeur seul : la mise a jour continue, LoaderEnsure le remplace avant le prochain lancement.
                 g_loaderLate = true;
                 LaunchLog("mise a jour : version.dll tenue (erreur %lu, renommage %lu) : gardee, remplacee au prochain lancement", e, GetLastError());
@@ -1233,7 +1255,7 @@ static std::vector<Note> ParseReleases(const std::string &json)
 static DWORD g_relCode, g_relErr;
 static int FetchReleases(std::string &json)
 {
-    std::wstring cache = g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\notes-maj.json";
+    std::wstring cache = g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\notes-maj.json";
     DWORD code = 0;
     bool got = HttpGet(L"https://api.github.com/repos/" + g_repo + L"/releases?per_page=40", &json, L"", false, &code);
     g_relCode = code; g_relErr = got ? 0 : g_httpErr;
@@ -1417,10 +1439,11 @@ static DWORD WINAPI UpdateThread(void *param)
     std::wstring failed;
     g_loaderLate = false;
     LaunchLog("mise a jour : installation de %s (depuis %s)", Narrow(remote, CP_UTF8).c_str(), Narrow(local.empty() ? L"rien" : local, CP_UTF8).c_str());
-    std::wstring gd =g_gameDir.substr(0, g_gameDir.size() - 1);
+    std::wstring gd = g_modRoot.substr(0, g_modRoot.size() - 1);
+    SHCreateDirectoryExW(NULL, gd.c_str(), NULL);
     bool ok = CopyTree(ext, gd, &self, &failed);
-    // Lanceur pose dans le dossier de l'AUTRE jeu (switch MSC / MWC) : il se met a jour lui aussi, la-bas
-    if (ok && !self && IsGameDirOf(g_dir, 1 - g_game) && FileExists(ext + L"\\MWCoop.exe")) {
+    // Lanceur ailleurs que les fichiers du mod (installe a part, ou pose dans le dossier de l'AUTRE jeu) : il se met a jour lui aussi
+    if (ok && !self && (RunningFromHome() || IsGameDirOf(g_dir, 1 - g_game)) && FileExists(ext + L"\\MWCoop.exe")) {
         std::wstring old = g_self + L".old";
         DeleteFileW(old.c_str());
         bool moved = MoveFileExW(g_self.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
@@ -1431,11 +1454,11 @@ static DWORD WINAPI UpdateThread(void *param)
         }
     }
     // version.txt seulement si tout est en place : une installation interrompue sera reprise au prochain lancement
-    CreateDirectoryW((g_gameDir + L"MWCoop").c_str(), NULL);
-    if (ok && !CopyFileW((ext + L"\\MWCoop\\version.txt").c_str(), (g_gameDir + L"MWCoop\\version.txt").c_str(), FALSE)) { ok = false; failed = L"version.txt"; }
+    CreateDirectoryW((g_modRoot + L"MWCoop").c_str(), NULL);
+    if (ok && !CopyFileW((ext + L"\\MWCoop\\version.txt").c_str(), (g_modRoot + L"MWCoop\\version.txt").c_str(), FALSE)) { ok = false; failed = L"version.txt"; }
     DeleteTree(work);
     g_progress = -1;
-    if (!ok && g_copyError == ERROR_ACCESS_DENIED && !IsWritableDir(g_gameDir)) {
+    if (!ok && g_copyError == ERROR_ACCESS_DENIED && !IsWritableDir(g_modRoot)) {
         SetStatus(K_ERR, T(L"Dossier du jeu prot\u00E9g\u00E9 : lance MWCoop.exe en administrateur pour mettre \u00E0 jour", L"Game folder is protected: run MWCoop.exe as administrator to update"));
         g_busy = false;
         return 0;
@@ -2201,6 +2224,7 @@ static void DrawBar(Graphics &g, RectF r, float p)
 }
 
 #include "uikit.inc"
+#include "dialog.inc"
 
 // ---------------------------------------------------------------- options (MWCoop\mwcoop.ini, [Coop])
 // Memes cles et valeurs par defaut que le mod (Net\Session.cs) ; ecrites tout de suite, prises au prochain lancement.
@@ -2783,6 +2807,7 @@ static bool IsGamePid(DWORD pid)
 static bool NoCopy() { return GetPrivateProfileIntW(L"Lanceur", L"SansCopie", IsWine() ? 1 : 0, g_iniLauncher.c_str()) != 0; }
 static std::wstring MirrorDir()
 {
+    if (!ModInGame() && !g_gameDir.empty() && !LocalDir().empty()) return LocalDir() + GM().steamDir + L"\\";   // (a part : toujours la copie)
     std::wstring low = g_gameDir;
     for (auto &c : low) c = towlower(c);
     if (low.find(L"\\steamapps\\") == std::wstring::npos || LocalDir().empty()) return L"";
@@ -2856,6 +2881,23 @@ static bool DirEmptyW(const std::wstring &d)
     return empty;
 }
 
+// Mod a part : le dossier MWCoop de la copie est une jonction vers <lanceur>\MWC\MWCoop (ou MSC) -- le chargeur et le mod y
+// trouvent leurs fichiers comme dans le dossier du jeu. Une jonction qui vise ailleurs (l'ancien MWCoop du jeu) est refaite.
+static bool ModLink(const std::wstring &m)
+{
+    if (ModInGame()) return true;
+    std::wstring dst = m + L"MWCoop", target = g_modRoot + L"MWCoop";
+    SHCreateDirectoryExW(NULL, target.c_str(), NULL);
+    DWORD at = GetFileAttributesW(dst.c_str());
+    if (at != INVALID_FILE_ATTRIBUTES) {
+        if (SameDirTarget(dst, target)) return true;
+        if (!(at & FILE_ATTRIBUTE_REPARSE_POINT)) { TestLog("copie de lancement : MWCoop est un vrai dossier, laisse (%ls)", dst.c_str()); return false; }
+        RemoveDirectoryW(dst.c_str());   // (la jonction seule ; jamais ce qu'elle montre)
+    }
+    if (!MakeJunction(dst, target)) { TestLog("copie de lancement : jonction MWCoop impossible (erreur %lu)", GetLastError()); return false; }
+    TestLog("copie de lancement : MWCoop -> %ls", target.c_str());
+    return true;
+}
 static bool PrepareMirror(const std::wstring &m)
 {
     SHCreateDirectoryExW(NULL, m.c_str(), NULL);
@@ -2865,6 +2907,7 @@ static bool PrepareMirror(const std::wstring &m)
     do {
         std::wstring n = fd.cFileName;
         if (n == L"." || n == L"..") continue;
+        if (!ModInGame() && (!_wcsicmp(n.c_str(), L"MWCoop") || !_wcsicmp(n.c_str(), L"version.dll"))) continue;   // (reste d'avant 1.1 : pas le notre)
         std::wstring src = g_gameDir + n, dst = m + n;
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             DWORD at = GetFileAttributesW(dst.c_str());
@@ -2901,6 +2944,7 @@ static bool PrepareMirror(const std::wstring &m)
     }
     HANDLE a = CreateFileW((m + L"steam_appid.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (a != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(a, Narrow(GM().appid).c_str(), (DWORD)wcslen(GM().appid), &n, NULL); CloseHandle(a); }
+    if (!ModLink(m)) return false;
     TestLog("copie de lancement prete : %ls", m.c_str());
     return true;
 }
@@ -3080,7 +3124,7 @@ static BOOL CALLBACK FindPidWindow(HWND h, LPARAM lp)
 // serveur.txt le plus recent (le mod l'ecrit chaque seconde, Net/Admin.cs) ; age en secondes (-1 : aucun).
 static std::wstring NewestHeartbeat(long long *age)
 {
-    std::vector<std::wstring> dirs = { g_gameDir + L"MWCoop\\", g_gameDir + L"MWCoop\\profils\\invite\\" };
+    std::vector<std::wstring> dirs = { g_modRoot + L"MWCoop\\", g_modRoot + L"MWCoop\\profils\\invite\\" };
     if (!LocalDir().empty()) {
         dirs.push_back(LocalDir()); dirs.push_back(LocalDir() + L"profils\\invite\\");
         dirs.push_back(GuestCopyDir() + L"MWCoop\\"); dirs.push_back(GuestCopyDir() + L"MWCoop\\profils\\invite\\");
@@ -3287,7 +3331,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     if (mode == MODE_GUEST) t += ContentLaunchLines();
     if (mode != MODE_SOLO && g_lobbyOptGo) { t += LobbyCoopLines(mode == MODE_HOST); g_lobbyOptGo = false; }   // (options choisies dans le salon : salon.inc)
     EnsureModDir();
-    std::wstring path = g_gameDir + L"MWCoop\\lancement.ini", tmp = path + L".tmp";
+    std::wstring path = g_modRoot + L"MWCoop\\lancement.ini", tmp = path + L".tmp";
     HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     if (f == INVALID_HANDLE_VALUE) return false;
     DWORD w = 0;
@@ -3500,9 +3544,9 @@ static void Launch(int mode, const char *partie = NULL)
             TestLog("test : mods au lancement : %s, copie %s", syncKind == 2 ? "ceux de l'hote" : "sans MSCLoader", PrepareGuestCopy(gc, syncKind == 2) ? "prete" : "IMPOSSIBLE");
         }
         std::vector<unsigned char> d;
-        ReadAll(g_gameDir + L"MWCoop\\lancement.ini", d);
+        ReadAll(g_modRoot + L"MWCoop\\lancement.ini", d);
         std::string text(d.begin(), d.end());
-        TestLog("lancement.ini ecrit (%s) :\n%s", Narrow(g_gameDir + L"MWCoop\\lancement.ini", CP_UTF8).c_str(), text.c_str());
+        TestLog("lancement.ini ecrit (%s) :\n%s", Narrow(g_modRoot + L"MWCoop\\lancement.ini", CP_UTF8).c_str(), text.c_str());
         if (mode == MODE_HOST && g_testHoldMs) { TestLog("test : hote garde ouvert %u ms (envoi aux invites en retard %d)", (unsigned)g_testHoldMs, (int)g_lateServe); SetTimer(g_wnd, 77, g_testHoldMs, NULL); return; }
         TestLog("test : fin (jeu NON lance, mode d'essai)");
         DestroyWindow(g_wnd);
@@ -3511,7 +3555,7 @@ static void Launch(int mode, const char *partie = NULL)
     // steam_appid.txt a cote du jeu : sans lui, le jeu lance directement se ferme et demande a Steam de le
     // relancer ; la copie relancee par Steam (overlay injecte au demarrage) a deja la version.dll de Windows en
     // memoire, et le mod ne se charge pas (vu le 05/10 sur l'installation Steam de JD). Steam doit etre ouvert.
-    {
+    if (ModInGame()) {   // (lanceur installe a part : le jeu part de la copie, qui a le sien ; rien dans le dossier du jeu)
         std::wstring appid = g_gameDir + L"steam_appid.txt";
         if (GetFileAttributesW(appid.c_str()) == INVALID_FILE_ATTRIBUTES) {
             HANDLE f = CreateFileW(appid.c_str(), GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -3551,9 +3595,9 @@ static void Launch(int mode, const char *partie = NULL)
     // jeu de son dossier ; MWCoop y lit lancement.ini. Pas pour l'invite d'un salon avec les mods de l'hote (sa copie), ni
     // hors de Steam. (MSCLoader coupe : pas de -mscloader-disable par ce chemin.)
     CompatCleanAll("lancement");
-    LoaderEnsure(g_gameDir, "dossier du jeu");
+    if (ModInGame()) LoaderEnsure(g_gameDir, "dossier du jeu");   // (a part : rien dans le dossier du jeu)
     const Opt *viaSteam = OptByKey("LancerSteam");
-    g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && !MirrorDir().empty();
+    g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && !MirrorDir().empty() && ModInGame();   // (a part : Steam lancerait le jeu sans MWCoop)
     // Wine : steam://rungameid passerait par le Steam de Linux, hors du lanceur et sans WINEDLLOVERRIDES (le mod ne se
     // chargerait pas) : le jeu part d'ici. Pour jouer depuis Steam, l'option de lancement Linux (SteamLaunchLine).
     if (g_steamLaunch && IsWine()) { g_steamLaunch = false; LaunchLog("Wine : \"Lancer par Steam\" ignore, le jeu part du lanceur"); }
@@ -3584,7 +3628,7 @@ static void Launch(int mode, const char *partie = NULL)
     // depuis la copie) : chez un joueur (08/10), le jeu parti de la copie dans AppData ne chargeait jamais MWCoop -- notre
     // version.dll y etait bloquee --, alors que parti du dossier du jeu, si. Chez d'autres, c'est l'inverse (copie creee
     // pour ca, 05/10) : chacun garde ce qui marche chez lui.
-    bool noCopy = !syncKind && NoCopy();
+    bool noCopy = !syncKind && NoCopy() && ModInGame();
     if (noCopy && !mirror.empty()) { mirror.clear(); LaunchLog(IsWine() ? "depart du dossier du jeu (Wine : SansCopie par defaut)" : "depart du dossier du jeu (SansCopie : MWCoop ne se chargeait pas depuis la copie)"); }
     // MSCLoader de MWCoop (onglet MODS) : toujours une copie de lancement, avec son Doorstop (jeu Steam ou non).
     bool ownMsc = MscOwn() && MscOwnInstalled();
@@ -4315,7 +4359,7 @@ static void RepairMWCoop()
 {
     if (g_gameDir.empty()) { SetStatus(K_WARN, T(L"My Winter Car introuvable : choisis le dossier du jeu", L"My Winter Car not found: choose the game folder")); return; }
     CompatCleanAll("reparation");
-    LoaderEnsure(g_gameDir, "reparation");
+    if (ModInGame()) LoaderEnsure(g_gameDir, "reparation");   // (installe a part : pose dans la copie au lancement)
     bool ownMsc = MscOwn() && MscOwnInstalled() && g_mscOn;
     std::wstring m = ownMsc ? MscCopyDir() : MirrorDir();
     bool ok = true;
@@ -4370,6 +4414,7 @@ static void NetTest()
 #include "ui.inc"
 #include "wiki.inc"
 #include "tuto.inc"
+#include "install.inc"
 // Reglages > Co-op : « Revoir le guide de l'hote » ouvre l'article du guide (wikidata.inc : Heberger une partie, 5e article).
 static void WikiOpenHost()
 {
@@ -5777,7 +5822,7 @@ static void LogsOpenFolder()
         return;
     }
     auto isDir = [](const std::wstring &d) { DWORD a = GetFileAttributesW(d.c_str()); return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY); };
-    std::wstring d = g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\", ld = LocalDir();
+    std::wstring d = g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\", ld = LocalDir();
     if ((d.empty() || !isDir(d)) && !ld.empty() && isDir(ld)) d = ld;
     else if (!d.empty() && !isDir(d)) EnsureModDir();
     if (!d.empty()) ShellExecuteW(g_wnd, L"open", d.c_str(), NULL, NULL, SW_SHOWNORMAL);
@@ -5884,7 +5929,7 @@ static std::vector<std::wstring> ZipFiles()
         files.push_back(p);
     };
     for (auto &e : g_logList) if (e.group == 0 && !g_logGroups.empty() && g_logGroups[0].key == L"*") add(e.path);
-    if (!g_gameDir.empty()) { add(g_gameDir + L"MWCoop\\mwcoop.ini"); add(g_gameDir + L"MWCoop\\lancement.ini"); }
+    if (!g_gameDir.empty()) { add(g_modRoot + L"MWCoop\\mwcoop.ini"); add(g_modRoot + L"MWCoop\\lancement.ini"); }
     if (!g_launcherLog.empty()) add(g_launcherLog);
     if (!LocalDir().empty()) add(LocalDir() + L"lanceur-precedent.log");
     // Les 2 parties rangees les plus recentes : un joueur relance souvent le jeu avant de faire le zip (retour du 08/10 :
@@ -5921,7 +5966,7 @@ static void LogsGroupZip(int gi)
     if (gr.key == L"*") { LogsZip(); return; }
     std::vector<std::wstring> files;
     for (int i : gr.items) files.push_back(g_logList[i].path);
-    if (!g_gameDir.empty()) files.push_back(g_gameDir + L"MWCoop\\mwcoop.ini");
+    if (!g_gameDir.empty()) files.push_back(g_modRoot + L"MWCoop\\mwcoop.ini");
     std::wstring tag = gr.dir.substr(0, gr.dir.size() - 1);
     tag = L"partie-" + tag.substr(tag.find_last_of(L'\\') + 1);
     ZipToDesktop(files, tag);
@@ -6005,11 +6050,15 @@ static bool UninstallCore(bool registry, std::wstring *left)
     if (!g_gameDir.empty()) {
         const wchar_t *files[] = { L"version.dll", L"version.dll.old", L"MWCoop.exe", L"MWCoop.exe.old", L"mwcoop-lanceur.ini", L"LISEZMOI.txt", L"README.txt", L"steam_appid.txt" };
         for (const wchar_t *f : files) add(g_gameDir + f);
-        add(g_gameDir + L"MWCoop");
+        add(g_modRoot + L"MWCoop");
     }
     add(g_iniLauncher);
     add(g_self);
     add(g_self + L".old");
+    if (RunningFromHome()) {   // (le raccourci « MWCoop » du bureau, cree a l'installation : install.inc)
+        wchar_t desk[MAX_PATH] = L"";
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, desk))) add(WithSlash(desk) + L"MWCoop.lnk");
+    }
     std::wstring ld = LocalDir();
     int links = 0;
     if (!ld.empty() && GetFileAttributesW(ld.c_str()) != INVALID_FILE_ATTRIBUTES) {
@@ -6664,6 +6713,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/skins")) g_skinsArg = WithSlash(argv[i + 1]);   // images des tenues de test
         // Steam : invitation acceptee jeu ferme, lanceur demarre par l'option de lancement ("<MWCoop.exe>" %command%)
         if (!_wcsicmp(argv[i], L"+connect_lobby")) { g_sConnect = _wcstoui64(argv[i + 1], NULL, 10); g_steamNet = true; }
+        if (!_wcsicmp(argv[i], L"+apres-installation")) g_afterInstall = argv[i + 1];   // (install.inc : lanceur installe dans AppData)
         if (!_wcsicmp(argv[i], L"/steam")) { g_testSteamFile = argv[i + 1]; g_steamNet = true; }   // essai : /testsalon ... /steam <fichier>
     }
     // Essai : /testmaj <releases.json> <journal> <version locale> -- version choisie et a installer ou non
@@ -6701,6 +6751,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     GdiplusStartupInput gin;
     ULONG_PTR gtok;
     GdiplusStartup(&gtok, &gin, NULL);
+    g_gdiplusUp = true;   // (fenetres de message au style du lanceur : dialog.inc)
     TextProbe();
     EmbedFontLoad();
     Layout();
@@ -6891,6 +6942,20 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // Auto-test de la liste des mods en plusieurs messages
     if (argc >= 2 && !_wcsicmp(argv[1], L"/testmodsx")) { if (argc >= 4) g_testSalonLog = argv[3]; return OfferSelfTest(argc >= 3 ? _wtoi(argv[2]) : 4000); }
 
+    // /boite <png> <ok|ouinon|ouinonannuler> <info|question|attention|erreur> : une fenetre de message (dialog.inc) en image
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/boite")) {
+        std::wstring k = argv[3], ic = argv[4];
+        UINT t = (k == L"ouinon" ? MB_YESNO : k == L"ouinonannuler" ? MB_YESNOCANCEL : MB_OK)
+               | (ic == L"question" ? MB_ICONQUESTION : ic == L"attention" ? MB_ICONWARNING : ic == L"erreur" ? MB_ICONERROR : MB_ICONINFORMATION);
+        std::wstring txt = T(L"MWCoop s'installe maintenant dans AppData\\Local\\MWCoop, avec un raccourci « MWCoop » sur le bureau : un seul lanceur pour My Winter Car et My Summer Car.\n\nInstaller maintenant ? (Non : plus tard, le lanceur marche comme avant.)",
+                             L"MWCoop now installs into AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop: one launcher for My Winter Car and My Summer Car.\n\nInstall now? (No: later, the launcher works as before.)");
+        Bitmap *b = StyledBoxCapture(txt.c_str(), L"MWCoop", t);
+        CLSID png;
+        int rc = b && EncoderClsid(L"image/png", &png) && b->Save(argv[2], &png, NULL) == Ok ? 0 : 1;
+        delete b;
+        GdiplusShutdown(gtok);
+        return rc;
+    }
     // Capture d'un etat, sans fenetre (verification du rendu)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/capture")) {
         std::wstring st = argv[3];
@@ -7192,7 +7257,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     // remplacent le MWCoop.exe du dossier du jeu, pas celui-ci, qui restait a sa version (retour d'un joueur, 08/10 :
     // lanceur 0.44 sur le bureau, mod en 0.59 ; salon et partage avec les amis d'une autre version). Celui du dossier du
     // jeu est plus recent : il est lance a notre place, avec la meme ligne de commande.
-    if (!g_gameDir.empty() && _wcsicmp(g_gameDir.c_str(), g_dir.c_str())) {
+    // Installation dans %LOCALAPPDATA%\MWCoop (install.inc, 19/10) : proposee a la fenetre normale d'un lanceur qui n'y tourne
+    // pas ; installe, il passe la main au lanceur installe. Juste apres : l'ancien a la Corbeille, compte rendu.
+    if ((argc < 2 || (argv[1][0] != L'/' && !g_sConnect && !g_fromSteam)) && InstallAtStartup()) { GdiplusShutdown(gtok); WSACleanup(); return 0; }
+    if (!g_afterInstall.empty() && RunningFromHome()) AfterInstall(g_afterInstall);
+    if (!g_gameDir.empty() && _wcsicmp(g_gameDir.c_str(), g_dir.c_str()) && !RunningFromHome()) {   // (jamais depuis le lanceur installe)
         std::wstring there = g_gameDir + L"MWCoop.exe";
         unsigned long long mine = ExeVersion(g_self), theirs = FileExists(there) ? ExeVersion(there) : 0;
         if (theirs > mine && mine) {

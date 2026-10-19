@@ -36,7 +36,7 @@ static bool LogsGroupDelete(int gi);
 static void LogsDeleteAll();
 static void LogsLayout();
 
-static std::wstring LogsDir() { return g_gameDir + L"MWCoop\\logs\\"; }
+static std::wstring LogsDir() { return g_modRoot + L"MWCoop\\logs\\"; }
 
 // %LOCALAPPDATA%\MWCoop\ : trace de chargement du mod, et ses donnees si le dossier du jeu est en lecture seule.
 static std::wstring LocalDir()
@@ -52,7 +52,7 @@ static std::vector<std::wstring> Profiles()
     std::vector<std::wstring> out;
     if (g_gameDir.empty()) return out;
     WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((g_gameDir + L"MWCoop\\profils\\*").c_str(), &fd);
+    HANDLE h = FindFirstFileW((g_modRoot + L"MWCoop\\profils\\*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return out;
     do {
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && fd.cFileName[0] != L'.') out.push_back(fd.cFileName);
@@ -67,7 +67,7 @@ static bool LastLaunchWithoutMod()
 {
     if (g_gameDir.empty()) return false;
     wchar_t ts[32];
-    GetPrivateProfileStringW(L"Lancement", L"Horodatage", L"0", ts, 32, (g_gameDir + L"MWCoop\\lancement.ini").c_str());
+    GetPrivateProfileStringW(L"Lancement", L"Horodatage", L"0", ts, 32, (g_modRoot + L"MWCoop\\lancement.ini").c_str());
     long long t = _wtoi64(ts), now = (long long)_time64(NULL);
     if (t <= 0 || now - t > 2 * 86400 || now - t < 90) return false;   // (trop vieux, ou le jeu demarre encore)
     long long newest = 0;
@@ -80,7 +80,7 @@ static bool LastLaunchWithoutMod()
     };
     look(LogsDir() + L"chargeur.log");
     if (!LocalDir().empty()) look(LocalDir() + L"dernier-lancement.txt");
-    for (const std::wstring &pr : Profiles()) look(g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\chargeur.log");
+    for (const std::wstring &pr : Profiles()) look(g_modRoot + L"MWCoop\\profils\\" + pr + L"\\logs\\chargeur.log");
     return newest < t - 5;
 }
 
@@ -103,7 +103,7 @@ static void CrashCheck()
     g_crashT = 0;
     if (g_gameDir.empty() || GameProcessRunning()) return;
     std::vector<std::wstring> logs = { LogsDir() + L"mwcoop.log" };
-    for (const std::wstring &pr : Profiles()) logs.push_back(g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\mwcoop.log");
+    for (const std::wstring &pr : Profiles()) logs.push_back(g_modRoot + L"MWCoop\\profils\\" + pr + L"\\logs\\mwcoop.log");
     if (!LocalDir().empty()) logs.push_back(LocalDir() + L"logs\\mwcoop.log");
     std::wstring newest;
     long long nt = 0;
@@ -212,7 +212,7 @@ static void LogsScan()
         add(LogsDir() + L"chargeur.log", LOG_LOADER, L"", 0);
         // Chaque profil (invite, ou celui de mwcoop.ini [Test] Profil) a ses propres journaux.
         for (const std::wstring &pr : Profiles()) {
-            std::wstring d = g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\";
+            std::wstring d = g_modRoot + L"MWCoop\\profils\\" + pr + L"\\logs\\";
             add(d + L"mwcoop.log", LOG_MOD, pr, 0);
             add(d + L"chargeur.log", LOG_LOADER, pr, 0);
         }
@@ -230,7 +230,7 @@ static void LogsScan()
     std::vector<std::pair<std::wstring, std::wstring>> bases;   // (dossier logs\, profil)
     if (!g_gameDir.empty()) {
         bases.push_back({ LogsDir(), L"" });
-        for (const std::wstring &pr : Profiles()) bases.push_back({ g_gameDir + L"MWCoop\\profils\\" + pr + L"\\logs\\", pr });
+        for (const std::wstring &pr : Profiles()) bases.push_back({ g_modRoot + L"MWCoop\\profils\\" + pr + L"\\logs\\", pr });
     }
     if (!ld.empty()) { bases.push_back({ ld + L"logs\\", L"(secours)" }); bases.push_back({ ld + L"profils\\invite\\logs\\", L"invite (secours)" }); }
     for (auto &b : bases) {

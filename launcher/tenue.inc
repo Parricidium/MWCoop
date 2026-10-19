@@ -64,7 +64,7 @@ static Bitmap *LoadPngMem(const void *p, size_t n, UINT maxW, UINT maxH)
     return copy;
 }
 
-static std::wstring SkinsDir() { return !g_skinsArg.empty() ? g_skinsArg : g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\cache\\skins\\"; }
+static std::wstring SkinsDir() { return !g_skinsArg.empty() ? g_skinsArg : g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\cache\\skins\\"; }
 
 // Nom de tenue sur (il vient aussi du reseau et finit dans un chemin) : lettres, chiffres, _ et -, en minuscules.
 static std::string SkinKey(const std::string &skin)
@@ -266,7 +266,7 @@ struct TenuePack { const char *id; const char *ver; const wchar_t *zip; };
 // (dom 2, 08/10 : sans dom_haut_77 ni dom_haut_83, retires a la demande de JD ; pas de renumerotation)
 static const TenuePack kTenuePacks[] = { { "dom", "2", L"tenues-dom-2.zip" } };
 static std::atomic<int> g_tenuesState(0);   // 0 rien, 1 en cours, 2 recu (listes a completer), 3 echec
-static std::wstring TenuesDir() { return g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\tenues\\"; }
+static std::wstring TenuesDir() { return g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\tenues\\"; }
 static bool IsTenue(const std::string &n) { return n.find("_haut_") != std::string::npos || n.find("_pantalon_") != std::string::npos || n.find("_visage_") != std::string::npos; }
 // "dom_haut_05" -> "Dom 5"
 static std::wstring TenueLabel(const std::string &n)

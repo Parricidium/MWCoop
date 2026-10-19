@@ -1700,3 +1700,15 @@ MSC or MWC	MSC или MWC
 Under the version number, top left: pick your game, My Summer Car (BETA) or My Winter Car. The launcher restarts on the chosen game. Everyone must be on the same game to play together.	Под номером версии, слева вверху: выбери игру, My Summer Car (BETA) или My Winter Car. Лаунчер перезапустится на выбранной игре. Чтобы играть вместе, у всех должна быть одна игра.
 Ready for a summer together? Your friends must pick the same path as you.	Готов к лету вместе? Друзья должны выбрать тот же путь, что и ты.
 Yellow	Жёлтый
+MWCoop looks for the game in your Steam libraries and did not find it. Show it mywintercar.exe (Steam: right-click My Winter Car > Manage > Browse local files).	MWCoop ищет игру в библиотеках Steam и не нашёл её. Укажи ему mywintercar.exe (Steam: правый клик по My Winter Car > Управление > Просмотреть локальные файлы).
+: copy failed, nothing was removed	 : копирование не удалось, ничего не удалено
+ file(s) moved, game folder cleaned	 файл(ов) перенесено, папка игры очищена
+ (except files in use: close the game and restart)	 (кроме открытых файлов: закрой игру и перезапусти)
+MWCoop now installs into AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop: one launcher for My Winter Car and My Summer Car.	MWCoop теперь устанавливается в AppData\\Local\\MWCoop и создаёт ярлык “MWCoop” на рабочем столе: один лаунчер для My Winter Car и My Summer Car.
+\n\nYour MWCoop files (co-op saves, settings, outfits, logs) are moved there from:	\n\nТвои файлы MWCoop (кооп-сохранения, настройки, одежда, журналы) переносятся туда из:
+\n\nThen the game folder is cleaned: what MWCoop had put there goes to the Recycle Bin (your game save, your mods and an official MSCLoader are not touched).	\n\nЗатем папка игры очищается: то, что туда положил MWCoop, уходит в Корзину (сохранение игры, моды и официальный MSCLoader не трогаются).
+\n\nInstall now? (No: later, the launcher works as before.)	\n\nУстановить сейчас? (Нет: позже, лаунчер работает как раньше.)
+Close the game, then restart MWCoop to install it.	Закрой игру, затем перезапусти MWCoop, чтобы установить его.
+Install failed: could not copy the launcher (error 	Установка не удалась: не удалось скопировать лаунчер (ошибка 
+MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on the desktop.	MWCoop установлен в AppData\\Local\\MWCoop, ярлык “MWCoop” на рабочем столе.
+\n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).	\n\nЕсли ты добавлял MWCoop в параметры запуска Steam, задай его снова в Настройки › Игра (путь лаунчера изменился).

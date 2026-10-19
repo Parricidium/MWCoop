@@ -174,7 +174,7 @@ static bool CarParse(const std::vector<unsigned char> &d, CarModel &m)
 static void CarCheckFile()
 {
     DWORD now = GetTickCount();
-    std::wstring path = g_gameDir + L"MWCoop\\cache\\corris.mesh";
+    std::wstring path = g_modRoot + L"MWCoop\\cache\\corris.mesh";
     if (g_car.state != 0 && path == g_car.path && now - g_car.checkT < 2000) return;
     g_car.checkT = now;
     WIN32_FILE_ATTRIBUTE_DATA a;
@@ -438,7 +438,7 @@ static void VinLoad()
 {
     if (GetTickCount64() < g_vinNext) return;
     g_vinNext = GetTickCount64() + 2000;
-    std::wstring path = g_gameDir + L"MWCoop\\cache\\vin-options.txt";
+    std::wstring path = g_modRoot + L"MWCoop\\cache\\vin-options.txt";
     WIN32_FILE_ATTRIBUTE_DATA a;
     if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a)) { g_vinOpts.clear(); g_vinStamp = 0; return; }
     ULONGLONG st = ((ULONGLONG)a.ftLastWriteTime.dwHighDateTime << 32) | a.ftLastWriteTime.dwLowDateTime;

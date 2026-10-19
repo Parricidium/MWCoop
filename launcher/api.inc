@@ -33,7 +33,7 @@ static const wchar_t *ApiExample(int k)
         L"if (CoopApi.IsHost) CoopApi.Send(ID, bytes);";
 }
 
-static std::wstring ApiDllPath() { return g_gameDir.empty() ? L"" : g_gameDir + L"MWCoop\\MWCoop.dll"; }
+static std::wstring ApiDllPath() { return g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\MWCoop.dll"; }
 
 static void DrawApiPage(Graphics &g)
 {

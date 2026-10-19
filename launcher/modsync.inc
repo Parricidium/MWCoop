@@ -1100,6 +1100,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
     do {
         std::wstring n = fd.cFileName;
         if (n == L"." || n == L"..") continue;
+        if (!ModInGame() && (!_wcsicmp(n.c_str(), L"MWCoop") || !_wcsicmp(n.c_str(), L"version.dll"))) continue;   // (mod a part : ModLink)
         std::wstring src = g_gameDir + n, dst = m + n;
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             bool isMods = !_wcsicmp(n.c_str(), L"Mods");
@@ -1113,6 +1114,7 @@ static bool PrepareGuestCopy(const std::wstring &m, bool mods)
     FindClose(h);
     if (mods && !hadMods) ok = link(L"Mods", coop.substr(0, coop.size() - 1)) && ok;
     if (mods) GuestMscAssets(coop);
+    ok = ModLink(m) && ok;
     for (auto &r : roots) if (GetFileAttributesW((g_gameDir + r).c_str()) == INVALID_FILE_ATTRIBUTES) ok = link(r, cont + r) && ok;   // (absent du jeu)
     h = FindFirstFileW((m + L"*").c_str(), &fd);   // retires du jeu
     if (h != INVALID_HANDLE_VALUE) {
@@ -1267,7 +1269,7 @@ static bool LateSession(SOCKET s, const std::string &name)
 static void SyncWriteLateOffer()
 {
     if (g_gameDir.empty()) return;
-    std::wstring f = g_gameDir + L"MWCoop\\offre-mods.bin";
+    std::wstring f = g_modRoot + L"MWCoop\\offre-mods.bin";
     std::string out;
     EnterCriticalSection(&g_lcs);
     bool any = !g_offerBlob.empty() && !g_offer.mods.empty();
