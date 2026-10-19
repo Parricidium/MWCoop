@@ -1,12 +1,14 @@
 # MWCoop API for mod authors
 
-MWCoop (co-op for My Winter Car) exposes a small public API so that **other mods can keep their own state in sync
+MWCoop (co-op for My Winter Car and My Summer Car) exposes a small public API so that **other mods can keep their own state in sync
 between the players of a co-op session**. It is the static class `MWCoop.CoopApi` in `MWCoop.dll`.
 
 - Available since MWCoop 0.43.0 (`CoopApi.Version == 1`).
 - Public names and docs are in English. The rest of the MWCoop source is in French, but it is open source and not
   obfuscated, so you never need to read it to use this API.
 - Works with MSCLoader mods, or any code running in the game process.
+- The same API in My Winter Car and My Summer Car (MSC support is in BETA since 1.1.0): one `MWCoop.dll`, nothing to change
+  in your mod. Use `IsMySummerCar` / `GameName` if your mod behaves differently per game.
 
 ## What MWCoop already does for your mod
 
@@ -39,6 +41,8 @@ Or reference `MWCoop.dll` directly (simpler, but your mod then needs MWCoop inst
 | `const int Version` | API version (1). Raised when members are added. |
 | `const int MaxReliableBytes` | Largest reliable payload: 64 KB (split into packets and rebuilt for you). |
 | `const int MaxUnreliableBytes` | Largest unreliable payload: 1000 bytes (one packet). |
+| `string GameName` | "My Winter Car" or "My Summer Car" (since 1.1.0). |
+| `bool IsMySummerCar` | True in My Summer Car (since 1.1.0). |
 | `bool InSession` | A co-op session is running (host or guest). False in solo. |
 | `bool IsHost` | This game is the host. The host has authority: save, time, weather, traffic. |
 | `bool InGame` | The local player is in the game world (not the main menu). |

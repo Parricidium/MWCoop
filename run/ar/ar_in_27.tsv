@@ -1,0 +1,80 @@
+MS6000	Your SATSUMA
+MS6001	Color for a new game; the host gives it to their guests.
+MS6002	Original color (like the game)
+MS6003	SATSUMA preview after your first My Summer Car game with MWCoop.
+MS6004	Preview unreadable (MWCoop\\cache\\satsuma.mesh): start a My Summer Car game to rebuild it.
+MS6005	Choose the SATSUMA paint (painted on the template.png template)
+MS6006	Images\\template.png was not found in the game folder.
+MS6007	Your own paint on the SATSUMA, painted on the game's template. The host sends it to their guests.
+MS6008	Game template (Images\\template.png)
+MS6009	1. Template: the SATSUMA's body laid flat (the game's Images\\template.png, 2048 x 2048).
+MS6010	3. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop: the SATSUMA takes your paint.
+MS6011	SATSUMA color: 
+MS6012	My SATSUMA (new game): 
+MS6013	SATSUMA color for a new game (the host gives it to the guests). Click: 3D preview in the side panel.
+MS6014	Your CDs, radio, SATSUMA paint, flag, posters… copied to your lobby's guests for your game.
+MS6015	SATSUMA paint
+MS6016	My SATSUMA paint
+MS6017	In the garage
+MS6018	Bedroom walls
+MS6019	Moped, sticker, photo…
+MS6020	Bedroom
+MS6021	Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in the garage).
+MS6022	Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (bedroom walls).
+MS6023	Cowboy hat
+MS6024	Granny's beanie
+MS6025	Green floral dress
+MS6026	Light floral dress
+MS6027	Environment reflections
+MS6028	Car paint, windows, floors
+MS6029	Water reflections
+MS6030	Lakes and rivers
+MS6031	Animated background
+MS6032	Fireflies and pollen behind the pages
+MS6033	Very hungry, exhausted… you and your friends
+MS6034	Theme, accent colour, animated background, glass, density, text
+MS6035	Co-op menu: players, chat, drag race, rally, appearance, HUD, graphics, sync
+MS6036	What works on My Summer Car
+MS6037	My Summer Car in BETA: for now, you see and talk to each other (players, outfits, voice, chat) and the cars are shared. The rest (items, parts, money, jobs) comes over the next versions.
+MS6038	ME — Character (Outfit, Face, Car tabs): what the others see of you. Car: the SATSUMA of a new game. Sent content: CDs, radio, paint, posters… for your guests.
+MS6039	Map M: the players live and My Summer Car's places (Teimo's shop, Fleetari's repair shop, drag strip, rally…), with the roads, lakes and fields.
+MS6040	My Summer Car (BETA): money, items and jobs aren't shared yet; everyone sees them in their own game.
+MS6041	Tabs on the left, in three groups: Game (Players, Chat, Drag race, Rally), Me (Appearance, HUD, Graphics) and Advanced (Sync).
+MS6042	Drag race and Rally: the game's own events, when and where (drag race on Friday 6 am - 8 pm, rally on Saturday and Sunday 10 am - 6 pm), whether they're on or how long until the next one, and the players who are there.
+MS6043	Menu size (Small, Normal, Large) and its place (centre or left): F10 › Graphics › MWCoop menu. It also applies to the chat.
+MS6044	What's shared (BETA)
+MS6045	Players and their moves, their outfits and faces, voice, chat, markers, and the cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat (driver, passengers, doors, dashboard).
+MS6046	Not yet: items and parts, money, shops, jobs, the host's time and weather. They come over the next versions.
+MS6047	After dying: a single \"Respawn\" button brings you back home (no apartment in My Summer Car).
+MS6048	SATSUMA and moped paint, flag in the garage, bedroom posters, rear window sticker.
+MS6049	Sent content page, \"What goes\" list: CD, Radio, My SATSUMA paint, Flag, Posters, Others, each with its switch. Then OK.
+MS6050	Most MSCLoader mods work in co-op as long as they only do things for you. On My Summer Car (BETA), MWCoop doesn't sync any mod yet: the objects or vehicles a mod adds are only seen by the players who have it. Here are also the mods to avoid.
+MS6051	Five themes: Summer (My Summer Car's, by default), Northern night, Daylight, Green aurora, Garage. Then the accent colour, the animated background (Off / Calm / Lively: fireflies at night, pollen by day), the cards' frosted glass, the density (Airy / Normal / Compact), the text size (80 to 110 %) and \"Follow Windows\". The preview on the right shows the result live; Apply keeps it.
+MS6052	Outfit: top, bottom, head and build. The choices come from the game's clothes, plus the 155 outfits given by Dom (\"Dom 12\"…). At the bottom, the Car strip: your SATSUMA colour and \"Custom paint…\".
+MS6053	The SATSUMA colour for a NEW game (the host's colour is given to the guests): sixteen shades, or \"Other colour…\" for your own; the first one is its original colour. No trim or VIN plate on the SATSUMA.
+MS6054	\"Custom paint…\": your own paint on the SATSUMA. \"Template\" opens the game's template (Images\\template.png): paint over it, then \"My image…\". In game, buy \"Custom paint made by artist\" at Fleetari's repair shop: the SATSUMA takes it. The host sends it to their guests (Sent content > SATSUMA paint).
+MS6055	MWCoop can replace the game's gauges (thirst, hunger, stress, urine, fatigue, money, day) with a black and yellow HUD, in My Summer Car's style. Vanilla, the default, keeps the game's own as is.
+MS6056	Card: a card in a corner, with the day and the money at the top and one row per gauge.
+MS6057	Alerts: a message at the top of the screen when you or a friend are very hungry, very thirsty or exhausted.
+MS6058	What works already, what's coming
+MS6059	My Summer Car is in BETA in MWCoop: the same launcher, the same lobby and the same F10 menu, with what's ready so far. To play together, everyone must be on MSC (top left of the launcher).
+MS6060	What works
+MS6061	The lobby through Steam or by IP, the host's save sent to the guests, several saves.
+MS6062	Players and their moves, outfits and faces (Character page), proximity voice (V), chat (T), shared markers, punches between players (if the host allows them).
+MS6063	The cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat. Driver, passengers (Enter near a seat; back seat of the SATSUMA, FERNDALE and RUSCKO), doors and dashboard.
+MS6064	Third-person view (F5), drone camera (F8) and the Album, the summer M map (lakes, roads, the game's places).
+MS6065	The black and yellow HUD (no temperature or sweat: the game has none), the Drag race and Rally tabs of the F10 menu.
+MS6066	Mods: MSCLoader for My Summer Car (the official one, or MWCoop's from the Mods tab), sent by the host to their guests.
+MS6067	Items, parts and bolts, money and the wallet (N), shops, jobs, NPCs and traffic, the host's time and weather, cheats (F7). They come over the next versions.
+MS6068	Ice race, VAZ-2108, OSUUSKAUPPA shop, museum, sleeping bags, camcorder and VHS tapes: additions made for My Winter Car, not in My Summer Car.
+MS6069	Something wrong? Send the logs zip on the Discord (#bug-reports): the BETA moves on with your reports.
+MS6070	Switch game (MSC or MWC)
+MS6071	Something wrong?
+MS6072	My Summer Car joins MWCoop, in BETA: pick MSC under the version number, top left of the launcher.
+MS6073	Players, outfits and faces, proximity voice, chat, markers, the host's save sent to the guests.
+MS6074	Shared cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat, with passengers, doors and dashboards.
+MS6075	Black and yellow HUD, summer M map, Drag race and Rally tabs in F10, third-person view and drone camera.
+MS6076	Launcher: Summer theme, MSCLoader for My Summer Car, a Guide about My Summer Car.
+MS6077	Not yet: items, parts, money, shops, jobs, time and weather. They come over the next versions.
+MS700	You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nSATSUMA color (car icon in the lobby): %s.
+MS701	Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your SATSUMA color.

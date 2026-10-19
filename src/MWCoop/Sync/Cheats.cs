@@ -14,39 +14,41 @@ namespace MWCoop
     // (le monde suit l'hote : World) ; « amener » est faite par le joueur vise ; les autres chez celui qui triche.
     public static class Cheats
     {
-        public class Place { public string Key, Fr, En; public Vector3 At, Face; }   // (Face : vers ou regarder en arrivant)
+        // (Face : vers ou regarder en arrivant ; Alias : le mot anglais de /place)
+        public class Place { public string Key, Fr, En, Alias; public Vector3 At, Face; }
         // (appartement, maison des parents : les points de reapparition, Respawn ; les autres : au sol, reperes par
         // CheatsProbe -- Autotest=trichelieux)
         public static Place[] Places { get { return Game.Msc ? PlacesMsc : PlacesMwc; } }
         static readonly Place[] PlacesMwc = {
-            new Place { Key = "appartement", Fr = "Appartement", En = "Apartment", At = new Vector3(-1285.5f, 1.2f, 1076.4f) },
-            new Place { Key = "maison", Fr = "Maison des parents", En = "Parents' house", At = new Vector3(-6.2f, 1.0f, 6.6f) },
+            new Place { Key = "appartement", Alias = "apartment", Fr = "Appartement", En = "Apartment", At = new Vector3(-1285.5f, 1.2f, 1076.4f) },
+            new Place { Key = "maison", Alias = "home", Fr = "Maison des parents", En = "Parents' house", At = new Vector3(-6.2f, 1.0f, 6.6f) },
             // (1,5 m au-dessus d'un sol degage -- herbe, trottoir, route -- pres du lieu, pas sur un toit ; releve du 10/10)
-            new Place { Key = "pub", Fr = "Pub Nappo", En = "Pub Nappo", At = new Vector3(-1539.1f, 4.4f, 1190.6f), Face = new Vector3(-1548.3f, 3.3f, 1182.9f) },
-            new Place { Key = "ville", Fr = "Perajarvi", En = "Perajarvi", At = new Vector3(-1396.4f, 6.9f, 1156.6f), Face = new Vector3(-1405.6f, 9f, 1148.9f) },
-            new Place { Key = "port", Fr = "Port", En = "Harbor", At = new Vector3(-1738.8f, 4.7f, 952.8f), Face = new Vector3(-1760f, 3.2f, 952.8f) },
-            new Place { Key = "garage", Fr = "Garage", En = "Repair shop", At = new Vector3(1551.5f, 6.0f, 733.6f), Face = new Vector3(1557.5f, 3.9f, 723.2f) },
-            new Place { Key = "inspection", Fr = "Contrôle technique", En = "Inspection", At = new Vector3(-1531.7f, 4.5f, 1281.6f), Face = new Vector3(-1533.8f, 3f, 1269.8f) },
-            new Place { Key = "decharge", Fr = "Décharge", En = "Landfill", At = new Vector3(-767.6f, 13.2f, -639.8f), Face = new Vector3(-780f, 12f, -640f) },
-            new Place { Key = "danse", Fr = "Salle de danse", En = "Dance hall", At = new Vector3(464.3f, 10.8f, 1325.9f), Face = new Vector3(455.1f, 13.1f, 1318.2f) },
-            new Place { Key = "cabane", Fr = "Cabane", En = "Cottage", At = new Vector3(-170f, -2.5f, 1010f), Face = new Vector3(-170f, -3.8f, 1022f) },
-            new Place { Key = "chalet", Fr = "Chalet", En = "Cabin", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
+            new Place { Key = "pub", Alias = "pub", Fr = "Pub Nappo", En = "Pub Nappo", At = new Vector3(-1539.1f, 4.4f, 1190.6f), Face = new Vector3(-1548.3f, 3.3f, 1182.9f) },
+            new Place { Key = "ville", Alias = "town", Fr = "Perajarvi", En = "Perajarvi", At = new Vector3(-1396.4f, 6.9f, 1156.6f), Face = new Vector3(-1405.6f, 9f, 1148.9f) },
+            new Place { Key = "port", Alias = "harbor", Fr = "Port", En = "Harbor", At = new Vector3(-1738.8f, 4.7f, 952.8f), Face = new Vector3(-1760f, 3.2f, 952.8f) },
+            new Place { Key = "garage", Alias = "garage", Fr = "Garage", En = "Repair shop", At = new Vector3(1551.5f, 6.0f, 733.6f), Face = new Vector3(1557.5f, 3.9f, 723.2f) },
+            new Place { Key = "inspection", Alias = "inspection", Fr = "Contrôle technique", En = "Inspection", At = new Vector3(-1531.7f, 4.5f, 1281.6f), Face = new Vector3(-1533.8f, 3f, 1269.8f) },
+            new Place { Key = "decharge", Alias = "landfill", Fr = "Décharge", En = "Landfill", At = new Vector3(-767.6f, 13.2f, -639.8f), Face = new Vector3(-780f, 12f, -640f) },
+            new Place { Key = "danse", Alias = "dance", Fr = "Salle de danse", En = "Dance hall", At = new Vector3(464.3f, 10.8f, 1325.9f), Face = new Vector3(455.1f, 13.1f, 1318.2f) },
+            new Place { Key = "cabane", Alias = "cottage", Fr = "Cabane", En = "Cottage", At = new Vector3(-170f, -2.5f, 1010f), Face = new Vector3(-170f, -3.8f, 1022f) },
+            new Place { Key = "chalet", Alias = "cabin", Fr = "Chalet", En = "Cabin", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
         };
         // My Summer Car (19/10, vidage du jeu v.250908-04) : la meme carte pour les lieux communs ; le magasin de Teimo est a la
-        // place du pub Nappo ; pas d'appartement ni de port ; les dragsters, le depart du rallye et Rykipohja en plus.
+        // place du pub Nappo ; pas d'appartement ni de port ; les dragsters, le depart du rallye et Rykipohja en plus. (Alias :
+        // CABIN est la cabane du lac, COTTAGE le chalet au sauna dans MSC.)
         static readonly Place[] PlacesMsc = {
-            new Place { Key = "maison", Fr = "Maison", En = "Home", At = new Vector3(-6.2f, 1.0f, 6.6f) },
-            new Place { Key = "magasin", Fr = "Magasin de Teimo", En = "Teimo's shop", At = new Vector3(-1539.1f, 4.4f, 1190.6f), Face = new Vector3(-1548.3f, 3.3f, 1182.9f) },
-            new Place { Key = "ville", Fr = "Perajarvi", En = "Perajarvi", At = new Vector3(-1396.4f, 6.9f, 1156.6f), Face = new Vector3(-1405.6f, 9f, 1148.9f) },
-            new Place { Key = "garage", Fr = "Garage de Fleetari", En = "Fleetari's repair shop", At = new Vector3(1551.5f, 6.0f, 733.6f), Face = new Vector3(1557.5f, 3.9f, 723.2f) },
-            new Place { Key = "inspection", Fr = "Contrôle technique", En = "Inspection", At = new Vector3(-1531.7f, 4.5f, 1281.6f), Face = new Vector3(-1533.8f, 3f, 1269.8f) },
-            new Place { Key = "decharge", Fr = "Décharge", En = "Landfill", At = new Vector3(-767.6f, 13.2f, -639.8f), Face = new Vector3(-780f, 12f, -640f) },
-            new Place { Key = "danse", Fr = "Salle de danse", En = "Dance hall", At = new Vector3(464.3f, 10.8f, 1325.9f), Face = new Vector3(455.1f, 13.1f, 1318.2f) },
-            new Place { Key = "cabane", Fr = "Cabane", En = "Cabin", At = new Vector3(-170f, -2.5f, 1010f), Face = new Vector3(-170f, -3.8f, 1022f) },
-            new Place { Key = "chalet", Fr = "Chalet", En = "Cottage", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
-            new Place { Key = "rykipohja", Fr = "Rykipohja", En = "Rykipohja", At = new Vector3(-1333.1f, 1.4f, -664.0f) },
-            new Place { Key = "dragsters", Fr = "Dragsters", En = "Drag strip", At = new Vector3(-1326.3f, 5.5f, -938.9f) },
-            new Place { Key = "rallye", Fr = "Rallye", En = "Rally", At = new Vector3(-770.0f, 3.5f, 1273.0f) },
+            new Place { Key = "maison", Alias = "home", Fr = "Maison", En = "Home", At = new Vector3(-6.2f, 1.0f, 6.6f) },
+            new Place { Key = "magasin", Alias = "shop", Fr = "Magasin de Teimo", En = "Teimo's shop", At = new Vector3(-1539.1f, 4.4f, 1190.6f), Face = new Vector3(-1548.3f, 3.3f, 1182.9f) },
+            new Place { Key = "ville", Alias = "town", Fr = "Perajarvi", En = "Perajarvi", At = new Vector3(-1396.4f, 6.9f, 1156.6f), Face = new Vector3(-1405.6f, 9f, 1148.9f) },
+            new Place { Key = "garage", Alias = "garage", Fr = "Garage de Fleetari", En = "Fleetari's repair shop", At = new Vector3(1551.5f, 6.0f, 733.6f), Face = new Vector3(1557.5f, 3.9f, 723.2f) },
+            new Place { Key = "inspection", Alias = "inspection", Fr = "Contrôle technique", En = "Inspection", At = new Vector3(-1531.7f, 4.5f, 1281.6f), Face = new Vector3(-1533.8f, 3f, 1269.8f) },
+            new Place { Key = "decharge", Alias = "landfill", Fr = "Décharge", En = "Landfill", At = new Vector3(-767.6f, 13.2f, -639.8f), Face = new Vector3(-780f, 12f, -640f) },
+            new Place { Key = "danse", Alias = "dance", Fr = "Salle de danse", En = "Dance hall", At = new Vector3(464.3f, 10.8f, 1325.9f), Face = new Vector3(455.1f, 13.1f, 1318.2f) },
+            new Place { Key = "cabane", Alias = "cabin", Fr = "Cabane", En = "Cabin", At = new Vector3(-170f, -2.5f, 1010f), Face = new Vector3(-170f, -3.8f, 1022f) },
+            new Place { Key = "chalet", Alias = "cottage", Fr = "Chalet", En = "Cottage", At = new Vector3(-840.1f, -2.3f, 517.9f), Face = new Vector3(-849.3f, -3.7f, 510.2f) },
+            new Place { Key = "rykipohja", Alias = "rykipohja", Fr = "Rykipohja", En = "Rykipohja", At = new Vector3(-1333.1f, 1.4f, -664.0f) },
+            new Place { Key = "dragsters", Alias = "drag", Fr = "Dragsters", En = "Drag strip", At = new Vector3(-1326.3f, 5.5f, -938.9f) },
+            new Place { Key = "rallye", Alias = "rally", Fr = "Rallye", En = "Rally", At = new Vector3(-770.0f, 3.5f, 1273.0f) },
         };
 
         static bool hostAllows;
@@ -79,8 +81,18 @@ namespace MWCoop
             "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: apartment, home, pub, town, harbor, garage, inspection, landfill, dance, cottage, cabin",
             "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
             "/time <0-24>: everyone's time of day", "/snow on|off: snow (or rain) for everyone" };
+        // My Summer Car (19/10) : ses lieux (PlacesMsc), l'heure du jeu par pas de 2 h (MAP/SUN/Pivot/SUN::Color), la pluie
+        // au lieu de la neige.
+        static readonly string[] HelpMscFr = {
+            "/tp <joueur> : aller à un joueur", "/amener <joueur> : faire venir un joueur", "/lieu <nom> : maison, magasin, ville, garage, inspection, decharge, danse, cabane, chalet, rykipohja, dragsters, rallye",
+            "/argent <montant> : du liquide pour soi", "/soin : faim, soif, fatigue, stress, vessie, saleté à zéro", "/liberer : plus recherché, sorti de prison",
+            "/heure <0-24> : l'heure de tous (par pas de 2 h)", "/pluie oui|non : pluie pour tous" };
+        static readonly string[] HelpMscEn = {
+            "/tp <player>: go to a player", "/bring <player>: bring a player to you", "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally",
+            "/money <amount>: cash for yourself", "/heal: hunger, thirst, fatigue, stress, bladder, dirt to zero", "/free: no longer wanted, out of jail",
+            "/time <0-24>: everyone's time of day (2-hour steps)", "/rain on|off: rain for everyone" };
 
-        // Commandes anglaises -> les noms d'ici.
+        // Commandes anglaises -> les noms d'ici. (Meteo : « neige » dans My Winter Car, « pluie » dans My Summer Car.)
         static string Canon(string c)
         {
             switch (c)
@@ -93,10 +105,14 @@ namespace MWCoop
                 case "heal": return "soin";
                 case "free": case "nojail": return "liberer";
                 case "time": return "heure";
-                case "snow": case "rain": case "pluie": case "meteo": case "weather": return "neige";
+                case "snow": case "rain": case "pluie": case "neige": case "meteo": case "weather": return Game.Msc ? "pluie" : "neige";
             }
             return c;
         }
+
+        // Qui fait les triches du monde (heure, meteo) : l'hote (le monde suit l'hote : World) ; sur My Summer Car, pas encore
+        // de synchro du monde : chacun chez soi, a l'annonce.
+        static bool WorldHere { get { return Game.Msc || !Session.Active || Session.IsHost; } }
 
         // Une ligne "/..." du tchat ou un bouton du panneau. Retourne un message d'erreur (deja dit dans le tchat) ou null.
         public static string Command(string line)
@@ -106,7 +122,7 @@ namespace MWCoop
             if (a.Length == 0) return null;
             string c = Canon(a[0].TrimStart('/').ToLowerInvariant());
             string arg = a.Length > 1 ? string.Join(" ", a, 1, a.Length - 1) : "";
-            if (c == "aide") { foreach (string h in Lang.A(HelpFr, HelpEn)) Say(h); return null; }
+            if (c == "aide") { foreach (string h in Game.Msc ? Lang.A(HelpMscFr, HelpMscEn) : Lang.A(HelpFr, HelpEn)) Say(h); return null; }
             if (!Allowed)
             {
                 string no = Session.Active && !Session.IsHost ? Lang.T("Triches coupées par l'hôte.", "Cheats are off (host's choice).")
@@ -155,8 +171,11 @@ namespace MWCoop
                 {
                     int n;
                     if (!int.TryParse(arg.Replace(" ", ""), out n) || n <= 0 || n > 1000000) return Lang.T("Montant : de 1 à 1000000.", "Amount: 1 to 1000000.");
-                    if (!Wallet.AddLocal(n)) return Lang.T("Porte-monnaie pas prêt.", "Wallet not ready.");
-                    return null;
+                    if (Wallet.AddLocal(n)) return null;
+                    // My Summer Car : pas encore de porte-monnaie partage (module « argent ») -- l'argent du jeu, PlayerMoney,
+                    // comme sa console de debogage (Give money)
+                    if (Game.Msc && Game.GlobalFloat("PlayerMoney") >= 0f) { Game.SetGlobalFloat("PlayerMoney", Game.GlobalFloat("PlayerMoney") + n); return null; }
+                    return Lang.T("Porte-monnaie pas prêt.", "Wallet not ready.");
                 }
                 case "soin":
                     foreach (string g in new[] { "PlayerHunger", "PlayerThirst", "PlayerFatigue", "PlayerStress", "PlayerUrine", "PlayerDirtiness", "PlayerBurns", "PlayerAllergy" })
@@ -168,14 +187,15 @@ namespace MWCoop
                 {
                     int h;
                     if (!int.TryParse(arg, out h) || h < 0 || h > 24) return Lang.T("Heure : de 0 à 24.", "Time: 0 to 24.");
-                    if (!Session.Active || Session.IsHost) SetHour(h);   // (invite : l'hote le fait, a l'annonce)
+                    if (WorldHere) SetHour(h);   // (invite de My Winter Car : l'hote le fait, a l'annonce)
                     return null;
                 }
                 case "neige":
+                case "pluie":
                 {
                     bool? on = OnOff(arg);
-                    if (on == null) return Lang.T("/neige oui ou /neige non", "/snow on or /snow off");
-                    if (!Session.Active || Session.IsHost) SetSnow(on.Value);
+                    if (on == null) return Game.Msc ? Lang.T("/pluie oui ou /pluie non", "/rain on or /rain off") : Lang.T("/neige oui ou /neige non", "/snow on or /snow off");
+                    if (WorldHere) { if (Game.Msc) SetRainMsc(on.Value); else SetSnow(on.Value); }
                     return null;
                 }
             }
@@ -194,8 +214,9 @@ namespace MWCoop
             if (a.Length == 0) return;
             string c = Canon(a[0].TrimStart('/').ToLowerInvariant()), arg = a.Length > 1 ? string.Join(" ", a, 1, a.Length - 1) : "";
             if (Session.IsHost && !Allowed) { Log.Warn("triches : " + name + " : " + line + " refusee (coupees ici)"); return; }
-            if (Session.IsHost && c == "heure") { int h; if (int.TryParse(arg, out h) && h >= 0 && h <= 24) SetHour(h); }
-            if (Session.IsHost && c == "neige") { bool? on = OnOff(arg); if (on != null) SetSnow(on.Value); }
+            bool world = Session.IsHost || Game.Msc;   // (My Summer Car : chacun chez soi, voir WorldHere)
+            if (world && c == "heure") { int h; if (int.TryParse(arg, out h) && h >= 0 && h <= 24) SetHour(h); }
+            if (world && (c == "neige" || c == "pluie")) { bool? on = OnOff(arg); if (on != null) { if (Game.Msc) SetRainMsc(on.Value); else SetSnow(on.Value); } }
             if (c == "amener" && from != null)
             {
                 PlayerInfo me = FindPlayer(arg);
@@ -236,9 +257,8 @@ namespace MWCoop
         {
             q = (q ?? "").Trim().ToLowerInvariant();
             if (q.Length == 0) return null;
-            string[] en = { "apartment", "home", "pub", "town", "harbor", "garage", "inspection", "landfill", "dance", "cottage", "cabin" };
-            for (int i = 0; i < Places.Length; i++)
-                if (Places[i].Key.StartsWith(q) || (i < en.Length && en[i].StartsWith(q)) || Places[i].Fr.ToLowerInvariant().StartsWith(q)) return Places[i];
+            foreach (Place p in Places)
+                if (p.Key.StartsWith(q) || (p.Alias != null && p.Alias.StartsWith(q)) || p.Fr.ToLowerInvariant().StartsWith(q)) return p;
             return null;
         }
 
@@ -261,6 +281,7 @@ namespace MWCoop
         // ---------------------------------------------------------------- monde (hote)
         public static void SetHour(int h)
         {
+            if (Game.Msc) { SetHourMsc(h); return; }
             PlayMakerFSM sun = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
             if (sun == null) return;
             sun.FsmVariables.GetFsmInt("Time").Value = h;
@@ -284,6 +305,53 @@ namespace MWCoop
             FsmBool ry = rf != null ? rf.FsmVariables.FindFsmBool("RainYes") : null;
             if (ry != null) ry.Value = on;
             Log.Info("triches : neige " + (on ? "oui" : "non") + " (Snowing " + (sn != null) + ", nuages " + (co != null) + ", pluie " + (ry != null) + ")");
+        }
+
+        // My Summer Car (vidage v.250908-04) : MAP/SUN/Pivot/SUN::Color avance par tranches de 2 h (Time = 2, 4 .. 24, debut de
+        // la tranche ; pas de TIMESKIP). Comme sa console de debogage (Set time : Time borne a 2..24, puis WAKEUP) mais WAKEUP
+        // envoye a ce seul objet (Color et Clock) : diffuse a tous, il reveillait aussi la police, l'ivresse, la vessie...
+        // Color::State 3 rejoue la tranche (lumieres, horloge du salon), Clock::State 1 relit Time une seconde apres.
+        public static int MscHour(int h) { h -= h % 2; return h <= 0 ? 24 : h; }
+        static void SetHourMsc(int h)
+        {
+            PlayMakerFSM sun = Game.FindFsm("MAP/SUN/Pivot/SUN", "Color");
+            if (sun == null || !sun.Fsm.Initialized) { Log.Warn("triches : heure, MAP/SUN/Pivot/SUN::Color introuvable"); return; }
+            int t = MscHour(h);
+            sun.FsmVariables.GetFsmInt("Time").Value = t;
+            sun.SendEvent("WAKEUP");
+            PlayMakerFSM clock = Game.FsmOn(sun.gameObject, "Clock");
+            if (clock != null && clock.Fsm.Initialized) clock.SendEvent("WAKEUP");
+            Log.Info("triches : heure " + h + " (MSC : tranche de " + t + " h)");
+        }
+
+        // Pluie, My Summer Car : MAP/CloudSystem/Clouds::Weather -- ses etats « Rain » et « No weather » posent Rain (et
+        // WeatherType 1 / 0), que « Move clouds » recopie dans PLAYER/Rain::Rain RainYes. Il ne pleut que sous un nuage
+        // (PLAYER/Rain::RaycastAndFog : un RainColl au-dessus, CloudYes) : pour la pluie, les nuages sont deplaces (PosX, PosZ
+        // de Weather) pour qu'un nuage de pluie passe au-dessus de soi. Jusqu'au prochain tirage du jeu.
+        static void SetRainMsc(bool on)
+        {
+            PlayMakerFSM wx = Game.FindFsm("MAP/CloudSystem/Clouds", "Weather");
+            bool ok = wx != null && wx.Fsm.Initialized && Game.SetState(wx, on ? "Rain" : "No weather");
+            bool over = on && ok && CloudOverMe(wx);
+            GameObject rain = Game.PlayerPart("Rain");
+            PlayMakerFSM rf = rain != null ? Game.FsmOn(rain, "Rain") : null;
+            FsmBool ry = rf != null ? rf.FsmVariables.FindFsmBool("RainYes") : null;
+            if (ry != null) ry.Value = on;
+            Log.Info("triches : pluie " + (on ? "oui" : "non") + " (Weather " + ok + ", nuage au-dessus " + over + ", RainYes " + (ry != null) + ")");
+        }
+
+        static bool CloudOverMe(PlayMakerFSM wx)
+        {
+            GameObject objs = Game.FindAny("MAP/CloudSystem/Clouds/CloudObjects");
+            if (objs == null || Game.PlayerT == null) return false;
+            Transform coll = null;
+            foreach (Transform cloud in objs.transform) { coll = cloud.Find("RainColl"); if (coll != null) break; }
+            FsmFloat px = wx.FsmVariables.FindFsmFloat("PosX"), pz = wx.FsmVariables.FindFsmFloat("PosZ");
+            if (coll == null || px == null || pz == null) return false;
+            Vector3 d = Game.PlayerT.position - coll.position;
+            px.Value += d.x; pz.Value += d.z;
+            wx.transform.position += new Vector3(d.x, 0f, d.z);   // (tout de suite : « Move clouds » le repose a chaque image)
+            return true;
         }
 
         // ---------------------------------------------------------------- police
@@ -337,9 +405,9 @@ namespace MWCoop
 
         static void LogWorld()
         {
-            PlayMakerFSM sun = Game.FindFsm("MAP/Sun/PivotSun/SUN", "Color");
-            PlayMakerFSM fc = Game.FindFsm("MAP/WEATHER/Forecast", "Logic");
-            FsmBool sn = fc != null ? fc.FsmVariables.FindFsmBool("Snowing") : null;
+            PlayMakerFSM sun = Game.FindFsm(Game.Msc ? "MAP/SUN/Pivot/SUN" : "MAP/Sun/PivotSun/SUN", "Color");
+            PlayMakerFSM fc = Game.Msc ? Game.FindFsm("MAP/CloudSystem/Clouds", "Weather") : Game.FindFsm("MAP/WEATHER/Forecast", "Logic");
+            FsmBool sn = fc != null ? fc.FsmVariables.FindFsmBool(Game.Msc ? "Rain" : "Snowing") : null;
             Log.Info("autotest : triches, heure " + (sun != null ? sun.FsmVariables.GetFsmInt("Time").Value : -1) + ", neige " + (sn != null && sn.Value) + ", autorisees " + Allowed
                      + (Game.PlayerT != null ? ", position " + Game.PlayerT.position.ToString("F0") : ""));
         }

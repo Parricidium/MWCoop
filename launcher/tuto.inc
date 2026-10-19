@@ -116,6 +116,19 @@ static const TutoStep kTuto[] = {
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
 static const int kTutoN = (int)(sizeof(kTuto) / sizeof(kTuto[0]));
+// My Summer Car (19/10, demande de JD : « tout doit parler de la SATSUMA ») : la SATSUMA n'a ni finition ni plaque VIN
+// (etapes 25 et 33 sautees) ; les bulles de la voiture (7, 34) parlent de la SATSUMA.
+static const TutoStep kTutoMsc7 = { L"Personnage et voiture", L"Ton apparence complète (silhouette, chapeau, lunettes, cheveux, visage, haut, pantalon) en 3D, et la couleur de ta SATSUMA.",
+    L"Character and car", L"Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your SATSUMA color.", "0.42.0" };
+static const TutoStep kTutoMsc34 = { L"Peinture perso de la SATSUMA", L"Dans Voiture, en haut de l'aperçu : ta propre peinture sur la SATSUMA, peinte sur le gabarit du jeu. En jeu, achète « Custom paint made by artist » à l'atelier de Fleetari ; l'hôte l'envoie à ses invités.",
+    L"SATSUMA custom paint", L"In Car, at the top of the preview: your own paint on the SATSUMA, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop; the host sends it to their guests.", "0.83.4" };
+static const TutoStep &TutoStepOf(int i)
+{
+    if (g_game == GAME_MSC && i == 7) return kTutoMsc7;
+    if (g_game == GAME_MSC && i == 34) return kTutoMsc34;
+    return kTuto[i];
+}
+static bool TutoSkip(int i) { return g_game == GAME_MSC && (i == 25 || i == 33); }
 
 // Pastille d'un onglet de la page Reglages (meme calcul que DrawSettingsPage : gfx.inc) et champ Chercher un reglage de
 // l'en-tete (DrawSetSearchBox : a gauche des raccourcis API / Journaux / Credits, ui.inc DrawHeader).
@@ -228,7 +241,7 @@ static void TutoStart(bool all)
     char seen[32] = "0.0.0";
     GetPrivateProfileStringA("Lanceur", "TutoVersion", "0.0.0", seen, sizeof(seen), Narrow(g_iniLauncher).c_str());
     g_tutoList.clear();
-    for (int i = 0; i < kTutoN; i++) if (all || VerCmp(kTuto[i].since, seen) > 0) g_tutoList.push_back(i);
+    for (int i = 0; i < kTutoN; i++) if (!TutoSkip(i) && (all || VerCmp(kTuto[i].since, seen) > 0)) g_tutoList.push_back(i);
     if (!all && !g_tutoList.empty() && g_tutoList[0] == 0) g_tutoList.erase(g_tutoList.begin());   // (bienvenue : visite complete seulement)
     g_tutoAll = all;
     if (g_tutoList.empty()) { WritePrivateProfileStringW(L"Lanceur", L"TutoVersion", Widen(MyVersionRaw()).c_str(), g_iniLauncher.c_str()); return; }
@@ -321,7 +334,7 @@ static void DrawTuto(Graphics &g)
         g.DrawLine(&bpen, tri[0], tri[2]);
         g.DrawLine(&bpen, tri[1], tri[2]);
     }
-    const TutoStep &st = kTuto[step];
+    const TutoStep &st = TutoStepOf(step);
     wchar_t num[16];
     swprintf_s(num, L"%d / %d", g_tuto + 1, (int)g_tutoList.size());
     Text(g, num, RectF(b.X + b.Width - 84, b.Y + 14, 68, 20), 11.5f, FontStyleBold, kGrey, StringAlignmentFar);

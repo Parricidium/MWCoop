@@ -577,7 +577,7 @@ static void SteamLobbySync()
         if (p.name.empty() && u != g_sHost && u != g_steamMe) continue;
         if (p.name.empty()) p.name = Narrow(SteamName(u), CP_UTF8);
         p.skin = SMemberData(u, "tenue");
-        if (p.skin.empty()) p.skin = "char_shirt21";
+        if (p.skin.empty()) p.skin = DefaultShirt();
         p.ver = SMemberData(u, "version");
         p.ready = id == 0 || SMemberData(u, "pret") == "1";
         std::string dl = id == 0 ? "ok" : SMemberData(u, "dl");   // (recoit l'envoi de l'hote : %, "ok" fini, rien : pas encore dit)

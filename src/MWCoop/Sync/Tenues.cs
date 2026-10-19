@@ -11,6 +11,9 @@ namespace MWCoop
     // Jamais a la place des textures du jeu : chaque tenue est une copie de la matiere d'un vetement du jeu, sous son propre
     // nom, creee seulement quand quelqu'un la porte ou la regarde (pas 157 textures en memoire d'un coup). Absente chez un
     // joueur (pack pas encore recu) : la tenue d'origine, comme pour un nom inconnu.
+    // My Summer Car (BETA, 19/10) : gardees. Les corps des PNJ de MSC sont les memes maillages que ceux de MWC (memes UV et
+    // triangles, compares sur les deux exports perso.mesh) et les matieres patrons existent (char_shirt01, char_pants01,
+    // char_face01 : 512x512, visages 512x256) : un pack fait pour MWC tombe aux memes coutures. Dossier par jeu (MWCOOP_DIR).
     public static class Tenues
     {
         public const int Shirt = 0, Pants = 1, Face = 2;

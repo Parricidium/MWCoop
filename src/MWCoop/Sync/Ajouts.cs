@@ -13,7 +13,8 @@ namespace MWCoop
     // chaque arrivee) ; un invite garde les siens en plus (il peut couper pour lui, pas rallumer ce que l'hote a coupe).
     // La boutique et le musee (construits 12 s apres le chargement) et le defrichage attendent l'annonce de l'hote (Ready ;
     // 30 s au plus : hote d'une version plus ancienne).
-    // Tout nouvel ajout de ce genre doit avoir son interrupteur ici et dans le lanceur.
+    // Tout nouvel ajout de ce genre doit avoir son interrupteur ici et dans le lanceur (et, s'il vaut pour My Summer Car, son
+    // bit dans B_Msc et sa cle dans les premiers de kAjoutKeys, launcher/gfx.inc).
     public static class Ajouts
     {
         const int B_Drone = 1, B_Bags = 2, B_Shop = 4, B_Museum = 8, B_Vaz = 16;
@@ -21,15 +22,19 @@ namespace MWCoop
         static float nextSend, loadedAt;
         static int lastRemote;
 
+        // My Summer Car (19/10) : seul le drone existe pour ce jeu (sacs de couchage, boutique s21, musee et VAZ-2108 sont faits
+        // pour la carte et l'hiver de My Winter Car) -- les autres bits restent coupes, quels que soient les reglages.
+        const int B_Msc = B_Drone;
         public static bool On { get { return Config.GetInt("Coop", "SansAjouts", 0) == 0; } }
         static int LocalBits
         {
             get
             {
                 if (!On) return 0;
-                return (Config.GetInt("Coop", "AjoutDrone", 1) != 0 ? B_Drone : 0) | (Config.GetInt("Coop", "AjoutSacs", 1) != 0 ? B_Bags : 0)
-                     | (Config.GetInt("Coop", "AjoutBoutique", 1) != 0 ? B_Shop : 0) | (Config.GetInt("Coop", "AjoutMusee", 1) != 0 ? B_Museum : 0)
-                     | (Config.GetInt("Coop", "AjoutVaz", 1) != 0 ? B_Vaz : 0);
+                int b = (Config.GetInt("Coop", "AjoutDrone", 1) != 0 ? B_Drone : 0) | (Config.GetInt("Coop", "AjoutSacs", 1) != 0 ? B_Bags : 0)
+                      | (Config.GetInt("Coop", "AjoutBoutique", 1) != 0 ? B_Shop : 0) | (Config.GetInt("Coop", "AjoutMusee", 1) != 0 ? B_Museum : 0)
+                      | (Config.GetInt("Coop", "AjoutVaz", 1) != 0 ? B_Vaz : 0);
+                return Game.Msc ? b & B_Msc : b;
             }
         }
         static bool Guest { get { return Session.Active && !Session.IsHost; } }

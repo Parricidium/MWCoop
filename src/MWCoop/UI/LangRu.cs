@@ -886,6 +886,21 @@ namespace MWCoop
             { "Drag strip", "Драг-трасса" },
             { "Strawberry field", "Клубничное поле" },
             { "Hay bales", "Тюки сена" },
+            { "Cowboy hat", "Ковбойская шляпа" },
+            { "Granny's beanie", "Бабушкина шапочка" },
+            { "Green floral dress", "Зелёное платье в цветочек" },
+            { "Light floral dress", "Светлое платье в цветочек" },
+            { "Environment reflections", "Отражения окружения" },
+            { "Water reflections", "Отражения воды" },
+            { "Very hungry, exhausted… for you and your friends", "Очень голоден, вымотан… для тебя и твоих друзей" },
+            { "/place <name>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally", "/place <имя>: home, shop, town, garage, inspection, landfill, dance, cabin, cottage, rykipohja, drag, rally" },
+            { "/time <0-24>: everyone's time of day (2-hour steps)", "/time <0-24>: время суток для всех (шагами по 2 ч)" },
+            { "/rain on|off: rain for everyone", "/rain on|off: дождь для всех" },
+            { "/rain on or /rain off", "/rain on или /rain off" },
+            { "Rain", "Дождь" },
+            { "It's raining", "Идёт дождь" },
+            { "Respawn", "Возродиться" },
+            { "You come back home.", "Ты возвращаешься домой." },
         };
     }
 }

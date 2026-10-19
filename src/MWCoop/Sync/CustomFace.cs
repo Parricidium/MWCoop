@@ -14,6 +14,9 @@ namespace MWCoop
     // (char_face01, char_shirt01, char_pants01, comme les tenues offertes). [Coop] VoirVisages=0 : celles des autres non.
     // Gabarits (ExportTemplate) : la texture du jeu, et la meme avec le trace des coutures (UV) de la partie du corps des
     // PNJ, ecrites dans %LOCALAPPDATA%\MWCoop (gabarit-visage.png, gabarit-haut.png, gabarit-pantalon.png, et *-jeu.png).
+    // My Summer Car (19/10) : memes images et memes gabarits pour les deux jeux (corps des PNJ identiques : memes UV ; patrons
+    // char_face01 / char_shirt01 / char_pants01 presents dans MSC) ; seule la texture du jeu sous le trace vient du dernier jeu
+    // qui a ecrit les gabarits (une fois par version du mod).
     public static class CustomFace
     {
         public const int Face = 0, Shirt = 1, Pants = 2;

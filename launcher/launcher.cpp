@@ -1315,12 +1315,107 @@ static bool WantVer(const std::wstring &remote, const std::wstring &local)
 {
     return local.empty() || CmpVer(remote, local) > 0 || (!IsReworkedVer(local) && remote != local);
 }
-// Notes montrees : tout (les anciennes aussi, c'est l'histoire), sauf les pre-releases d'avant 0.96.
+// My Summer Car (BETA, demande de JD du 19/10 : « les Nouveautes doivent parler de MSC ») : les versions d'avant kMscFirstVer
+// sont celles de My Winter Car, cachees. Dans les suivantes, une puce propre a MWC est retiree : « MWC » (mot entier, « [MWC] »
+// en tete compris) ou un mot de kMwcOnly, sauf si elle nomme aussi My Summer Car ou MSC (« [MSC] » en tete : gardee, l'etiquette
+// enlevee). Decide sur les puces anglaises, applique aux autres langues (meme nombre de puces ; sinon chacune pour elle).
+// Tout en bas, une entree « My Summer Car (BETA) » ecrite ici (MscBetaNote), tant que GitHub n'a pas la note de kMscFirstVer
+// (hors ligne aussi). Sur My Winter Car : rien ne change.
+static const wchar_t *kMscFirstVer = L"1.1.0";
+static const wchar_t *kMwcOnly[] = { L"my winter car", L"corris", L"rivett", L"vaz", L"jokkis", L"sorbet", L"psk", L"osuuskauppa", L"kartturi",
+                                     L"course sur glace", L"ice race", L"musée", L"museum", L"sac de couchage", L"sacs de couchage", L"sleeping bag" };
+static bool NoteWord(const std::wstring &low, const wchar_t *w)   // mot entier (MWC, pas MWCoop)
+{
+    size_t n = wcslen(w);
+    for (size_t p = low.find(w); p != std::wstring::npos; p = low.find(w, p + 1))
+        if ((p == 0 || !iswalnum(low[p - 1])) && (p + n >= low.size() || !iswalnum(low[p + n]))) return true;
+    return false;
+}
+static bool NoteMwcOnly(std::wstring s)
+{
+    if (!s.empty()) CharLowerBuffW(&s[0], (DWORD)s.size());
+    if (s.find(L"my summer car") != std::wstring::npos || NoteWord(s, L"msc")) return false;
+    if (NoteWord(s, L"mwc")) return true;
+    for (const wchar_t *w : kMwcOnly) if (s.find(w) != std::wstring::npos) return true;
+    return false;
+}
+// Puces d'une note nettoyee (CleanNote) : chacune avec ses lignes de suite et ses images ; ce qui precede la premiere, a part.
+static std::vector<std::wstring> NoteItems(const std::wstring &body)
+{
+    std::vector<std::wstring> it;
+    for (size_t a = 0; a < body.size();) {
+        size_t e = body.find(L'\n', a);
+        std::wstring l = body.substr(a, e == std::wstring::npos ? std::wstring::npos : e - a);
+        a = e == std::wstring::npos ? body.size() : e + 1;
+        size_t b = l.find_first_not_of(L" \x202B");   // (puce arabe : apres le debut d'incorporation droite-a-gauche)
+        if ((b != std::wstring::npos && l[b] == L'•') || it.empty()) it.push_back(l); else it.back() += L"\n" + l;
+    }
+    return it;
+}
+// Note d'une version de MSC : sans les puces de MWC ; faux s'il n'en reste rien.
+static bool NoteForMsc(Note &n)
+{
+    std::vector<std::wstring> en = NoteItems(n.en);
+    std::vector<bool> keep;
+    for (const std::wstring &i : en) keep.push_back(!NoteMwcOnly(i));
+    auto filt = [&](std::wstring &body) {
+        std::vector<std::wstring> it = NoteItems(body);
+        std::wstring o;
+        for (size_t k = 0; k < it.size(); k++) {
+            if (!(it.size() == keep.size() ? keep[k] : !NoteMwcOnly(it[k]))) continue;
+            std::wstring t = it[k];
+            size_t p = t.find(L"[MSC] ");
+            if (p != std::wstring::npos) t.erase(p, 6);
+            o += (o.empty() ? L"" : L"\n") + t;
+        }
+        body = o;
+    };
+    filt(n.fr); filt(n.ru); filt(n.ar); filt(n.en);
+    return !n.en.empty() || !n.fr.empty();
+}
+// L'entree « My Summer Car (BETA) » : ce qui marche, en puces (premiere puce = titre de l'accueil et de la colonne du Guide).
+static Note MscBetaNote()
+{
+    static const wchar_t *b[][2] = {
+        { L"My Summer Car arrive dans MWCoop, en BETA : choisis MSC sous le numéro de version, en haut à gauche du lanceur.",
+          L"My Summer Car joins MWCoop, in BETA: pick MSC under the version number, top left of the launcher." },
+        { L"Les joueurs, les tenues et les visages, le vocal de proximité, le tchat, les marqueurs, la sauvegarde de l'hôte envoyée aux invités.",
+          L"Players, outfits and faces, proximity voice, chat, markers, the host's save sent to the guests." },
+        { L"Voitures partagées : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED et le bateau, avec les passagers, les portières et les tableaux de bord.",
+          L"Shared cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat, with passengers, doors and dashboards." },
+        { L"HUD noir et jaune, carte M de l'été, onglets Dragsters et Rallye dans F10, vue à la 3e personne et caméra drone.",
+          L"Black and yellow HUD, summer M map, Drag race and Rally tabs in F10, third-person view and drone camera." },
+        { L"Lanceur : thème Été, MSCLoader pour My Summer Car, un Guide qui parle de My Summer Car.",
+          L"Launcher: Summer theme, MSCLoader for My Summer Car, a Guide about My Summer Car." },
+        { L"Pas encore : objets, pièces, argent, magasins, boulots, heure et météo. Ils arrivent au fil des versions.",
+          L"Not yet: items, parts, money, shops, jobs, time and weather. They come over the next versions." } };
+    Note n;
+    n.ver = kMscFirstVer; n.date = L"BETA";
+    for (auto &l : b) {
+        const wchar_t *sep = n.en.empty() ? L"" : L"\n";
+        n.fr += sep + std::wstring(L"• ") + l[0];
+        n.en += sep + std::wstring(L"• ") + l[1];
+        n.ru += sep + std::wstring(L"• ") + Ru(l[1]);
+        n.ar += sep + std::wstring(L"• ") + Ar(l[1]);
+    }
+    return n;
+}
+// Notes montrees : tout (les anciennes aussi, c'est l'histoire), sauf les pre-releases d'avant 0.96 ; sur My Summer Car,
+// celles de MSC seulement (plus haut).
 static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
 {
     std::vector<Note> out;
     for (const Note &n : rel) if (!n.pre || IsReworkedVer(n.ver)) out.push_back(n);
-    return out;
+    if (g_game != GAME_MSC) return out;
+    std::vector<Note> msc;
+    bool first = false;
+    for (Note n : out) {
+        if (CmpVer(n.ver, kMscFirstVer) < 0 || !NoteForMsc(n)) continue;
+        if (CmpVer(n.ver, kMscFirstVer) == 0) first = true;
+        msc.push_back(n);
+    }
+    if (!first) msc.push_back(MscBetaNote());
+    return msc;
 }
 static std::wstring SavesBackupNightly();   // (saves.inc)
 
@@ -2304,7 +2399,9 @@ static void BuildOptions()
         o.tab = TAB_COOP; o.key = "ContenuEnvoye"; o.kind = O_ACTION; o.action = DR_CONTENT;
         o.fr = L"Envoy\u00E9 aux invit\u00E9s (CD, images\u2026)"; o.en = L"Sent to guests (CDs, images\u2026)"; o.suffix = L"";
         o.dFr = L"Tes CD, ta radio, la peinture de ta CORRIS, ton drapeau, tes posters\u2026 copi\u00E9s chez les invit\u00E9s de ton salon pour ta partie.";
-        o.dEn = L"Your CDs, radio, CORRIS paint, flag, posters\u2026 copied to your lobby's guests for your game.";
+        if (g_game == GAME_MSC) { o.dFr = L"Tes CD, ta radio, la peinture de ta SATSUMA, ton drapeau, tes posters… copiés chez les invités de ton salon pour ta partie.";
+                                  o.dEn = L"Your CDs, radio, SATSUMA paint, flag, posters… copied to your lobby's guests for your game."; }
+        else o.dEn = L"Your CDs, radio, CORRIS paint, flag, posters\u2026 copied to your lobby's guests for your game.";
         g_opts.push_back(o);
     }
     {   // Mods de l'hote (modsync.inc) : TOUT ACCEPTER une fois l'allume
@@ -2353,6 +2450,8 @@ static void BuildOptions()
         o.fr = L"Couleur de la voiture"; o.en = L"Car color"; o.suffix = L"";
         o.dFr = L"Couleur de la CORRIS pour une nouvelle partie (l'h\u00F4te la donne aux invit\u00E9s). Clic : aper\u00E7u en 3D dans le volet.";
         o.dEn = L"CORRIS color for a new game (the host gives it to the guests). Click: 3D preview in the side panel.";
+        if (g_game == GAME_MSC) { o.dFr = L"Couleur de la SATSUMA pour une nouvelle partie (l'hôte la donne aux invités). Clic : aperçu en 3D dans le volet.";
+                                  o.dEn = L"SATSUMA color for a new game (the host gives it to the guests). Click: 3D preview in the side panel."; }
         g_opts.push_back(o);
     }
 }
@@ -2434,18 +2533,20 @@ static std::wstring NewestNote()
     LeaveCriticalSection(&g_cs);
     return v;
 }
+// (une cle par jeu : sur My Summer Car, les notes ne sont pas les memes -- ChannelNotes)
+static const wchar_t *NotesSeenKey() { return g_game == GAME_MSC ? L"NotesVuesMSC" : L"NotesVues"; }
 static bool NotesUnseen()
 {
     std::wstring v = NewestNote();
     if (v.empty()) return false;
     wchar_t seen[64] = {};
-    GetPrivateProfileStringW(L"Lanceur", L"NotesVues", L"", seen, 64, g_iniLauncher.c_str());
+    GetPrivateProfileStringW(L"Lanceur", NotesSeenKey(), L"", seen, 64, g_iniLauncher.c_str());
     return !seen[0] || CmpVer(v, seen) > 0;
 }
 static void NotesMarkSeen()
 {
     std::wstring v = NewestNote();
-    if (!v.empty()) WritePrivateProfileStringW(L"Lanceur", L"NotesVues", v.c_str(), g_iniLauncher.c_str());
+    if (!v.empty()) WritePrivateProfileStringW(L"Lanceur", NotesSeenKey(), v.c_str(), g_iniLauncher.c_str());
 }
 
 // ---------------------------------------------------------------- images des notes
@@ -3334,7 +3435,7 @@ static std::string LobbyCoopLines(bool host);   // (salon.inc)
 static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const char *partie)
 {
     const Opt *ap = OptByKey("Apparence");
-    std::string skin = ap ? ap->svals[OptGet(*ap)] : "char_shirt21";
+    std::string skin = ap ? ap->svals[OptGet(*ap)] : DefaultShirt();   // (char_shirt21 n'existe pas dans MSC : tenue.inc)
     static const char *modes[] = { "solo", "hote", "invite" };
     std::string t = "[Lancement]\r\n";
     t += std::string("Mode=") + modes[mode] + "\r\n";
@@ -4829,7 +4930,7 @@ static void DrawLobbyOptCard(Graphics &g, RectF c, bool host, int which)
             swprintf_s(b, L"%d / %d", on, kAjoutN);
             Pill(g, RectF(right - 60, y + 7, 60, 22), mode == 2 ? TH(toggleOff) : WithA(kAcc, 0.22f), mode == 0 ? T(L"Tous", L"All") : mode == 2 ? T(L"Aucun", L"None") : b, kInk, 10.5f);
         }
-        if (!pick) Text(g, T(L"Drone, sacs de couchage, boutique s21, musée, VAZ-2108", L"Drone, sleeping bags, s21 shop, museum, VAZ-2108"), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        if (!pick) Text(g, g_game == GAME_MSC ? T(L"Caméra drone (F8)", L"Drone camera (F8)") : T(L"Drone, sacs de couchage, boutique s21, musée, VAZ-2108", L"Drone, sleeping bags, s21 shop, museum, VAZ-2108"), RectF(x, y + 25, w, 16), 10.5f, FontStyleRegular, kGrey, StringAlignmentNear);
         y += pick ? rh : rh2;
         g.DrawLine(&sp, x, y - 0.5f, right, y - 0.5f);
         if (mode == 1) for (const char *k : kAjoutKeys) row(k, false);
@@ -5194,7 +5295,7 @@ static void DrawLobbyRightCard(Graphics &g, RectF c, const std::vector<LobbyPeer
         if (!go) HotZone(sr, UI_SAVE_LOBBY);
         y += 36;
         choiceCards();
-        std::wstring note = partie == PARTIE_NOUVELLE ? std::wstring(T(L"Couleur de la CORRIS : ", L"CORRIS color: ")) + CarColorName() + L"." : std::wstring(T(L"Tes invités la reçoivent en arrivant.", L"Your guests receive it when they arrive."));
+        std::wstring note = partie == PARTIE_NOUVELLE ? std::wstring(g_game == GAME_MSC ? T(L"Couleur de la SATSUMA : ", L"SATSUMA color: ") : T(L"Couleur de la CORRIS : ", L"CORRIS color: ")) + CarColorName() + L"." : std::wstring(T(L"Tes invités la reçoivent en arrivant.", L"Your guests receive it when they arrive."));
         Text(g, note, RectF(x, y + 2, w, 16), 10.5f, FontStyleRegular, partie == PARTIE_NOUVELLE ? kWarn : kGrey, StringAlignmentNear);
         y += 18;
         gap();
@@ -7074,7 +7175,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"notes" || st == L"accueil-notes" || st == L"guide" || st == L"guide-nouveautes") {   // notes d'exemple (le depot n'a pas encore de release) ; accueil-notes : la carte Nouveautes de l'accueil ; guide : la colonne Nouveautes ; guide-nouveautes : la pilule du Guide
             // (passees par ParseReleases, comme une vraie release : francais --- anglais --- russe)
-            g_notes = ParseReleases("[{\"tag_name\":\"v0.1.1\",\"published_at\":\"2026-10-09T10:00:00Z\",\"body\":\"- Exemple de note de version (capture).\\n- Deuxième ligne : une correction.\\n---\\n- Sample release note (capture).\\n- Second line: a fix.\\n---\\n- Пример заметки к версии (снимок).\\n- Вторая строка: исправление.\"},{\"tag_name\":\"v0.1.0\",\"published_at\":\"2026-10-02T10:00:00Z\",\"body\":\"- Première version : chargeur, joueurs visibles.\\n---\\n- First version: loader, visible players.\"}]");
+            // (/msc : une note de 1.1.1 en plus, melangee : ChannelNotes n'en garde que les puces de MSC, cache 0.1.x et ajoute
+            // l'entree « My Summer Car (BETA) »)
+            if (g_game == GAME_MSC) g_notes = ChannelNotes(ParseReleases("[{\"tag_name\":\"v1.1.1\",\"published_at\":\"2026-10-20T10:00:00Z\",\"body\":\"- My Summer Car : la SATSUMA garde sa couleur chez l'invité.\\n- VAZ-2108 : le moteur ne cale plus.\\n- [MSC] Le bateau suit l'hôte.\\n- Salon : le code de session se copie mieux.\\n- MWC : la Rivett se vend à nouveau.\\n---\\n- My Summer Car: the SATSUMA keeps its colour for the guest.\\n- VAZ-2108: the engine no longer stalls.\\n- [MSC] The boat follows the host.\\n- Lobby: the session code copies better.\\n- MWC: the Rivett is for sale again.\"},"
+                "{\"tag_name\":\"v0.1.1\",\"published_at\":\"2026-10-09T10:00:00Z\",\"body\":\"- Exemple de note de version (capture).\"}]"));
+            else g_notes = ChannelNotes(ParseReleases("[{\"tag_name\":\"v0.1.1\",\"published_at\":\"2026-10-09T10:00:00Z\",\"body\":\"- Exemple de note de version (capture).\\n- Deuxième ligne : une correction.\\n---\\n- Sample release note (capture).\\n- Second line: a fix.\\n---\\n- Пример заметки к версии (снимок).\\n- Вторая строка: исправление.\"},{\"tag_name\":\"v0.1.0\",\"published_at\":\"2026-10-02T10:00:00Z\",\"body\":\"- Première version : chargeur, joueurs visibles.\\n---\\n- First version: loader, visible players.\"}]"));
             g_notesDone = true; g_relState = REL_OK; g_tab = st == L"accueil-notes" ? TAB_HOME : st == L"guide" ? TAB_WIKI : TAB_NOTES;
             if (st == L"guide") g_wikiSel = 1;
         }

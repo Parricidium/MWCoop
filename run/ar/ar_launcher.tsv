@@ -1221,6 +1221,88 @@ MWCoop is installed in AppData\\Local\\MWCoop, with an “MWCoop” shortcut on 
 \n\nIf you had put MWCoop in Steam's launch options, set it again from Settings › Game (the launcher's path changed).	\n\nإذا كنت قد وضعت MWCoop في خيارات تشغيل Steam، أعد ضبطه من الإعدادات › اللعبة (تغيّر مسار المشغّل).
 Summer	الصيف
 Warm black, yellow accent	أسود دافئ، لون مميز أصفر
+Your SATSUMA	SATSUMA الخاصة بك
+Color for a new game; the host gives it to their guests.	اللون لِلعبة جديدة؛ يعطيه المضيف لضيوفه.
+Original color (like the game)	اللون الأصلي (كما في اللعبة)
+SATSUMA preview after your first My Summer Car game with MWCoop.	معاينة SATSUMA بعد أول لعبة لك في My Summer Car مع MWCoop.
+Preview unreadable (MWCoop\\cache\\satsuma.mesh): start a My Summer Car game to rebuild it.	المعاينة غير مقروءة (MWCoop\\cache\\satsuma.mesh): ابدأ لعبة My Summer Car لإعادة إنشائها.
+Choose the SATSUMA paint (painted on the template.png template)	اختر طلاء SATSUMA (مرسوم على قالب template.png)
+Images\\template.png was not found in the game folder.	لم يُعثر على Images\\template.png في مجلد اللعبة.
+Your own paint on the SATSUMA, painted on the game's template. The host sends it to their guests.	طلاؤك الخاص على SATSUMA، مرسوم على قالب اللعبة. يرسله المضيف إلى ضيوفه.
+Game template (Images\\template.png)	قالب اللعبة (Images\\template.png)
+1. Template: the SATSUMA's body laid flat (the game's Images\\template.png, 2048 x 2048).	1. القالب: هيكل SATSUMA مفروداً (Images\\template.png الخاص باللعبة، 2048 x 2048).
+3. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop: the SATSUMA takes your paint.	3. في اللعبة، اشترِ \"Custom paint made by artist\" من ورشة Fleetari: تأخذ SATSUMA طلاءك.
+SATSUMA color: 	لون SATSUMA: 
+My SATSUMA (new game): 	SATSUMA الخاصة بي (لعبة جديدة): 
+SATSUMA color for a new game (the host gives it to the guests). Click: 3D preview in the side panel.	لون SATSUMA لِلعبة جديدة (يعطيه المضيف للضيوف). انقر: معاينة ثلاثية الأبعاد في اللوحة الجانبية.
+Your CDs, radio, SATSUMA paint, flag, posters… copied to your lobby's guests for your game.	أقراصك، الراديو، طلاء SATSUMA، العلم، الملصقات… تُنسخ لضيوف ردهتك من أجل لعبتك.
+SATSUMA paint	طلاء SATSUMA
+My SATSUMA paint	طلاء SATSUMA الخاصة بي
+In the garage	في المرآب
+Bedroom walls	جدران غرفة النوم
+Moped, sticker, photo…	دراجة نارية صغيرة، ملصق، صورة…
+Bedroom	غرفة النوم
+Drop an image here, or Choose: it becomes Images\\flag_garage.png (the flag in the garage).	اسحب صورة هنا، أو اختر: تصبح Images\\flag_garage.png (العلم في المرآب).
+Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (bedroom walls).	اسحب حتى 3 صور هنا، أو اختر: تصبح Images\\poster1…3.png (جدران غرفة النوم).
+Cowboy hat	قبعة رعاة البقر
+Granny's beanie	قبعة الجدة
+Green floral dress	فستان أخضر مزهر
+Light floral dress	فستان فاتح مزهر
+Environment reflections	انعكاسات البيئة
+Car paint, windows, floors	طلاء السيارات، النوافذ، الأرضيات
+Water reflections	انعكاسات الماء
+Lakes and rivers	البحيرات والأنهار
+Animated background	خلفية متحركة
+Fireflies and pollen behind the pages	يراعات وحبوب لقاح خلف الصفحات
+Very hungry, exhausted… you and your friends	جائع جداً، منهك… أنت وأصدقاؤك
+Theme, accent colour, animated background, glass, density, text	المظهر، لون التمييز، الخلفية المتحركة، الزجاج، الكثافة، النص
+Co-op menu: players, chat, drag race, rally, appearance, HUD, graphics, sync	قائمة اللعب الجماعي: اللاعبون، الدردشة، سباق السرعة، الرالي، المظهر، HUD، الرسومات، المزامنة
+What works on My Summer Car	ما الذي يعمل في My Summer Car
+My Summer Car in BETA: for now, you see and talk to each other (players, outfits, voice, chat) and the cars are shared. The rest (items, parts, money, jobs) comes over the next versions.	My Summer Car تجريبية BETA: حالياً، ترون بعضكم وتتحدثون (اللاعبون، الملابس، الصوت، الدردشة) والسيارات مشتركة. الباقي (الأغراض، القطع، المال، الأعمال) يأتي في النسخ القادمة.
+ME — Character (Outfit, Face, Car tabs): what the others see of you. Car: the SATSUMA of a new game. Sent content: CDs, radio, paint, posters… for your guests.	أنا — الشخصية (تبويبات الملابس، الوجه، السيارة): ما يراه الآخرون منك. السيارة: SATSUMA في لعبة جديدة. المحتوى المرسل: الأقراص، الراديو، الطلاء، الملصقات… لضيوفك.
+Map M: the players live and My Summer Car's places (Teimo's shop, Fleetari's repair shop, drag strip, rally…), with the roads, lakes and fields.	الخريطة M: اللاعبون مباشرة وأماكن My Summer Car (متجر Teimo، ورشة Fleetari، مضمار السرعة، الرالي…)، مع الطرق والبحيرات والحقول.
+My Summer Car (BETA): money, items and jobs aren't shared yet; everyone sees them in their own game.	My Summer Car (BETA): المال والأغراض والأعمال ليست مشتركة بعد؛ كل واحد يراها في لعبته.
+Tabs on the left, in three groups: Game (Players, Chat, Drag race, Rally), Me (Appearance, HUD, Graphics) and Advanced (Sync).	التبويبات على اليسار، في ثلاث مجموعات: اللعبة (اللاعبون، الدردشة، سباق السرعة، الرالي)، أنا (المظهر، HUD، الرسومات) ومتقدم (المزامنة).
+Drag race and Rally: the game's own events, when and where (drag race on Friday 6 am - 8 pm, rally on Saturday and Sunday 10 am - 6 pm), whether they're on or how long until the next one, and the players who are there.	سباق السرعة والرالي: فعاليات اللعبة نفسها، متى وأين (سباق السرعة يوم الجمعة من 6 صباحاً حتى 8 مساءً، الرالي يومي السبت والأحد من 10 صباحاً حتى 6 مساءً)، هل هي جارية أو كم بقي على التالية، واللاعبون الموجودون هناك.
+Menu size (Small, Normal, Large) and its place (centre or left): F10 › Graphics › MWCoop menu. It also applies to the chat.	حجم القائمة (صغير، عادي، كبير) ومكانها (الوسط أو اليسار): F10 › الرسومات › قائمة MWCoop. ينطبق ذلك على الدردشة أيضاً.
+What's shared (BETA)	ما هو مشترك (BETA)
+Players and their moves, their outfits and faces, voice, chat, markers, and the cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat (driver, passengers, doors, dashboard).	اللاعبون وحركاتهم، ملابسهم ووجوههم، الصوت، الدردشة، العلامات، والسيارات: SATSUMA وGIFU وKEKMET وHAYOSIKO وFERNDALE وRUSCKO وJONNEZ وFLATBED والقارب (السائق، الركاب، الأبواب، لوحة القيادة).
+Not yet: items and parts, money, shops, jobs, the host's time and weather. They come over the next versions.	ليس بعد: الأغراض والقطع، المال، المتاجر، الأعمال، وقت المضيف وطقسه. تأتي في النسخ القادمة.
+After dying: a single \"Respawn\" button brings you back home (no apartment in My Summer Car).	بعد الموت: زر واحد \"العودة\" يعيدك إلى المنزل (لا توجد شقة في My Summer Car).
+SATSUMA and moped paint, flag in the garage, bedroom posters, rear window sticker.	طلاء SATSUMA والدراجة النارية الصغيرة، العلم في المرآب، ملصقات غرفة النوم، ملصق النافذة الخلفية.
+Sent content page, \"What goes\" list: CD, Radio, My SATSUMA paint, Flag, Posters, Others, each with its switch. Then OK.	صفحة المحتوى المرسل، قائمة \"ما يُرسل\": الأقراص، الراديو، طلاء SATSUMA الخاصة بي، العلم، الملصقات، أخرى، لكل منها مفتاحه. ثم موافق.
+Most MSCLoader mods work in co-op as long as they only do things for you. On My Summer Car (BETA), MWCoop doesn't sync any mod yet: the objects or vehicles a mod adds are only seen by the players who have it. Here are also the mods to avoid.	معظم مودات MSCLoader تعمل في اللعب الجماعي طالما أنها تفعل أشياء لك وحدك. في My Summer Car (BETA)، لا يزامن MWCoop أي مود بعد: الأغراض أو المركبات التي يضيفها مود لا يراها إلا من يملكه. وهذه أيضاً المودات التي يجب تجنبها.
+Five themes: Summer (My Summer Car's, by default), Northern night, Daylight, Green aurora, Garage. Then the accent colour, the animated background (Off / Calm / Lively: fireflies at night, pollen by day), the cards' frosted glass, the density (Airy / Normal / Compact), the text size (80 to 110 %) and \"Follow Windows\". The preview on the right shows the result live; Apply keeps it.	خمسة مظاهر: الصيف (مظهر My Summer Car، افتراضياً)، الليل الشمالي، النهار، الشفق الأخضر، المرآب. ثم لون التمييز، الخلفية المتحركة (إيقاف / هادئة / حيوية: يراعات ليلاً، حبوب لقاح نهاراً)، الزجاج المصنفر للبطاقات، الكثافة (فسيحة / عادية / مضغوطة)، حجم النص (من 80 إلى 110 %) و\"اتبع Windows\". المعاينة على اليمين تعرض النتيجة مباشرة؛ تطبيق يحفظها.
+Outfit: top, bottom, head and build. The choices come from the game's clothes, plus the 155 outfits given by Dom (\"Dom 12\"…). At the bottom, the Car strip: your SATSUMA colour and \"Custom paint…\".	الملابس: الجزء العلوي، السفلي، الرأس والبنية. الخيارات من ملابس اللعبة، بالإضافة إلى 155 زياً قدّمها Dom (\"Dom 12\"…). في الأسفل، شريط السيارة: لون SATSUMA الخاصة بك و\"طلاء مخصص…\".
+The SATSUMA colour for a NEW game (the host's colour is given to the guests): sixteen shades, or \"Other colour…\" for your own; the first one is its original colour. No trim or VIN plate on the SATSUMA.	لون SATSUMA لِلعبة جديدة (لون المضيف يُعطى للضيوف): ستة عشر لوناً، أو \"لون آخر…\" للونك الخاص؛ الأول هو لونها الأصلي. لا فئات ولا لوحة VIN على SATSUMA.
+\"Custom paint…\": your own paint on the SATSUMA. \"Template\" opens the game's template (Images\\template.png): paint over it, then \"My image…\". In game, buy \"Custom paint made by artist\" at Fleetari's repair shop: the SATSUMA takes it. The host sends it to their guests (Sent content > SATSUMA paint).	\"طلاء مخصص…\": طلاؤك الخاص على SATSUMA. \"القالب\" يفتح قالب اللعبة (Images\\template.png): ارسم فوقه، ثم \"صورتي…\". في اللعبة، اشترِ \"Custom paint made by artist\" من ورشة Fleetari: تأخذه SATSUMA. يرسله المضيف إلى ضيوفه (المحتوى المرسل > طلاء SATSUMA).
+MWCoop can replace the game's gauges (thirst, hunger, stress, urine, fatigue, money, day) with a black and yellow HUD, in My Summer Car's style. Vanilla, the default, keeps the game's own as is.	يمكن لـ MWCoop استبدال مؤشرات اللعبة (العطش، الجوع، التوتر، البول، التعب، المال، اليوم) بـ HUD أسود وأصفر بأسلوب My Summer Car. Vanilla، الافتراضي، يبقي مؤشرات اللعبة كما هي.
+Card: a card in a corner, with the day and the money at the top and one row per gauge.	البطاقة: بطاقة في زاوية، مع اليوم والمال في الأعلى وسطر لكل مؤشر.
+Alerts: a message at the top of the screen when you or a friend are very hungry, very thirsty or exhausted.	التنبيهات: رسالة أعلى الشاشة عندما تكون أنت أو صديق جائعاً جداً أو عطشاناً جداً أو منهكاً.
+What works already, what's coming	ما يعمل بالفعل، وما هو قادم
+My Summer Car is in BETA in MWCoop: the same launcher, the same lobby and the same F10 menu, with what's ready so far. To play together, everyone must be on MSC (top left of the launcher).	My Summer Car تجريبية BETA في MWCoop: نفس المشغّل، نفس الردهة ونفس قائمة F10، مع ما هو جاهز حتى الآن. للعب معاً، يجب أن يكون الجميع على MSC (أعلى يسار المشغّل).
+What works	ما الذي يعمل
+The lobby through Steam or by IP, the host's save sent to the guests, several saves.	الردهة عبر Steam أو عبر IP، حفظ المضيف يُرسل إلى الضيوف، عدة حفظات.
+Players and their moves, outfits and faces (Character page), proximity voice (V), chat (T), shared markers, punches between players (if the host allows them).	اللاعبون وحركاتهم، الملابس والوجوه (صفحة الشخصية)، الصوت القريب (V)، الدردشة (T)، العلامات المشتركة، اللكمات بين اللاعبين (إذا سمح المضيف).
+The cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat. Driver, passengers (Enter near a seat; back seat of the SATSUMA, FERNDALE and RUSCKO), doors and dashboard.	السيارات: SATSUMA وGIFU وKEKMET وHAYOSIKO وFERNDALE وRUSCKO وJONNEZ وFLATBED والقارب. السائق، الركاب (Enter قرب مقعد؛ المقعد الخلفي في SATSUMA وFERNDALE وRUSCKO)، الأبواب ولوحة القيادة.
+Third-person view (F5), drone camera (F8) and the Album, the summer M map (lakes, roads, the game's places).	منظور الشخص الثالث (F5)، كاميرا الطائرة المسيّرة (F8) والألبوم، خريطة الصيف M (البحيرات، الطرق، أماكن اللعبة).
+The black and yellow HUD (no temperature or sweat: the game has none), the Drag race and Rally tabs of the F10 menu.	HUD الأسود والأصفر (بلا حرارة ولا عرق: اللعبة لا تحتويهما)، تبويبا سباق السرعة والرالي في قائمة F10.
+Mods: MSCLoader for My Summer Car (the official one, or MWCoop's from the Mods tab), sent by the host to their guests.	المودات: MSCLoader لـ My Summer Car (الرسمي، أو الخاص بـ MWCoop من تبويب المودات)، يرسلها المضيف إلى ضيوفه.
+Items, parts and bolts, money and the wallet (N), shops, jobs, NPCs and traffic, the host's time and weather, cheats (F7). They come over the next versions.	الأغراض، القطع والبراغي، المال والمحفظة (N)، المتاجر، الأعمال، الشخصيات والمرور، وقت المضيف وطقسه، الغش (F7). تأتي في النسخ القادمة.
+Ice race, VAZ-2108, OSUUSKAUPPA shop, museum, sleeping bags, camcorder and VHS tapes: additions made for My Winter Car, not in My Summer Car.	سباق الجليد، VAZ-2108، متجر OSUUSKAUPPA، المتحف، أكياس النوم، كاميرا الفيديو وأشرطة VHS: إضافات صُنعت لـ My Winter Car، غير موجودة في My Summer Car.
+Something wrong? Send the logs zip on the Discord (#bug-reports): the BETA moves on with your reports.	هل هناك خطأ؟ أرسل ملف zip للسجلات على Discord (#bug-reports): تتقدم BETA بفضل بلاغاتكم.
+Switch game (MSC or MWC)	تغيير اللعبة (MSC أو MWC)
+Something wrong?	هل هناك خطأ؟
+My Summer Car joins MWCoop, in BETA: pick MSC under the version number, top left of the launcher.	تنضم My Summer Car إلى MWCoop، بنسخة تجريبية BETA: اختر MSC تحت رقم النسخة، أعلى يسار المشغّل.
+Players, outfits and faces, proximity voice, chat, markers, the host's save sent to the guests.	اللاعبون، الملابس والوجوه، الصوت القريب، الدردشة، العلامات، حفظ المضيف يُرسل إلى الضيوف.
+Shared cars: SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RUSCKO, JONNEZ, FLATBED and the boat, with passengers, doors and dashboards.	سيارات مشتركة: SATSUMA وGIFU وKEKMET وHAYOSIKO وFERNDALE وRUSCKO وJONNEZ وFLATBED والقارب، مع الركاب والأبواب ولوحات القيادة.
+Black and yellow HUD, summer M map, Drag race and Rally tabs in F10, third-person view and drone camera.	HUD أسود وأصفر، خريطة الصيف M، تبويبا سباق السرعة والرالي في F10، منظور الشخص الثالث وكاميرا الطائرة المسيّرة.
+Launcher: Summer theme, MSCLoader for My Summer Car, a Guide about My Summer Car.	المشغّل: مظهر الصيف، MSCLoader لـ My Summer Car، دليل عن My Summer Car.
+Not yet: items, parts, money, shops, jobs, time and weather. They come over the next versions.	ليس بعد: الأغراض، القطع، المال، المتاجر، الأعمال، الوقت والطقس. تأتي في النسخ القادمة.
+You are about to restart \"%s\".\n\nThis will erase this save (the game in progress will be lost). Are you sure?\n\nSATSUMA color (car icon in the lobby): %s.	أنت على وشك إعادة بدء «%s».\n\nسيؤدي ذلك إلى مسح هذا الحفظ (ستضيع اللعبة الجارية). هل أنت متأكد؟\n\nلون SATSUMA (أيقونة السيارة في الردهة): %s.
+Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your SATSUMA color.	مظهرك الكامل (البنية، القبعة، النظارات، الشعر، الوجه، القميص، البنطال) بالأبعاد الثلاثية، ولون SATSUMA.
+SATSUMA custom paint	طلاء SATSUMA المخصص
+In Car, at the top of the preview: your own paint on the SATSUMA, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop; the host sends it to their guests.	في السيارة، أعلى المعاينة: طلاؤك الخاص على SATSUMA، مرسوم على قالب اللعبة. في اللعبة، اشترِ \"Custom paint made by artist\" من ورشة Fleetari؛ يرسله المضيف إلى ضيوفه.
 Thanks to everyone who makes MWCoop better	شكراً لكل من يجعل MWCoop أفضل
 VHS tapes	أشرطة VHS
 Watch them, export them as .mp4, rename them, put a video on them	شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو

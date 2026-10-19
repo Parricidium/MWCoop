@@ -254,7 +254,7 @@ static std::wstring LobbyModeText()   // sous-titre : "Public" ou "Prive . code 
     if (!g_lobbyPrive) return T(L"Public", L"Public");
     return std::wstring(T(L"Privé · code", L"Private · code")) + L" " + Widen(g_lobbyCode);
 }
-static std::string MyShirt() { const Opt *ap = OptByKey("Apparence"); return ap ? ap->svals[OptGet(*ap)] : "char_shirt21"; }
+static std::string MyShirt() { const Opt *ap = OptByKey("Apparence"); return ap ? ap->svals[OptGet(*ap)] : DefaultShirt(); }
 // Apparence annoncee au salon : complete ("haut|pantalon|visage|corps|chapeau|lunettes|cheveux", comme le mod).
 static std::string MySkin() { return PersoLookString(); }
 static std::string MyName() { return Narrow(PlayerName(), CP_UTF8); }
@@ -397,7 +397,7 @@ static const char *PartieName(int p) { return p == PARTIE_NOUVELLE ? "nouvelle" 
 static std::wstring CarColorName()
 {
     int sel = CarSwatchSel();
-    if (sel == 0) return T(L"au hasard", L"random");
+    if (sel == 0) return g_game == GAME_MSC ? T(L"d'origine", L"original") : T(L"au hasard", L"random");   // (MSC : une seule teinte de depart, voiture.inc)
     if (sel > 0) return T(kSwatches[sel - 1].fr, kSwatches[sel - 1].en);
     wchar_t b[48];
     swprintf_s(b, T(L"personnalis\u00E9e #%06X", L"custom #%06X"), g_carColor & 0xFFFFFF);

@@ -346,6 +346,38 @@ static std::vector<std::string> TenuesFind(const wchar_t *pattern)
     std::sort(names.begin(), names.end());
     return names;
 }
+// My Summer Car (BETA, demande de JD, 19/10) : les hauts des PNJ de MSC a la place de ceux de MWC (la liste de launcher.cpp
+// reste celle de MWC). Correlation (ref\msc-v.250908-04\apparences.txt et export du mod dans MSC) :
+//   les deux jeux : char_shirt01-04, 07, 09-13, 16-20, 22, cop_shirt, cop_shirt2, rally_shirt ;
+//   MSC seulement : char_shirt05, 06, 08, 14, 15 ;
+//   MWC seulement : char_shirt21, 23-26, 28, psk_shirt, inspector_shirt (retires sur MSC, rien d'equivalent).
+// Haut par defaut : celui du modele d'avatar (le premier promeneur, HUMANS/Randomizer/Walkers) : char_shirt21 sur MWC,
+// char_shirt08 (Kale) sur MSC. Le jeu ne change pas en cours de route (GameSet relance le lanceur) : fait une fois.
+// Tenues offertes (Dom) : gardees sur MSC -- memes maillages de PNJ (memes UV et triangles, verifie sur les deux exports
+// perso.mesh le 19/10) et memes matieres patrons char_shirt01 / char_pants01 / char_face01 (512x512, visages 512x256).
+static const char *DefaultShirt() { return g_game == GAME_MSC ? "char_shirt08" : "char_shirt21"; }
+static void SkinsForGame(Opt &o)
+{
+    static bool done;
+    if (done || g_game != GAME_MSC) return;
+    done = true;
+    o.svals.clear(); o.labFr.clear(); o.labEn.clear(); o.vals.clear();
+    const int shirts[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22 };
+    for (int i : shirts) {
+        char k[32]; sprintf_s(k, "char_shirt%02d", i);
+        o.svals.push_back(k);
+        o.labFr.push_back(L"Tenue " + std::to_wstring(i));
+        o.labEn.push_back(L"Outfit " + std::to_wstring(i));
+    }
+    const char *extra[] = { "cop_shirt", "cop_shirt2", "rally_shirt" };
+    const wchar_t *fr[] = { L"Policier", L"Policier 2", L"Pilote de rallye" }, *en[] = { L"Police officer", L"Police officer 2", L"Rally driver" };
+    for (int i = 0; i < 3; i++) { o.svals.push_back(extra[i]); o.labFr.push_back(fr[i]); o.labEn.push_back(en[i]); }
+    o.svals.push_back("perso"); o.labFr.push_back(L"Haut perso"); o.labEn.push_back(L"Custom top");
+    for (int i = 0; i < (int)o.svals.size(); i++) o.vals.push_back(i);
+    o.def = 0;
+    for (int i = 0; i < (int)o.svals.size(); i++) if (o.svals[i] == DefaultShirt()) o.def = i;
+    LaunchLog("tenues : %d hauts de My Summer Car", (int)o.svals.size() - 1);
+}
 // Hauts offerts dans le choix de tenue, apres ceux du jeu ("Tenue Dom 5") ; pantalons et visages gardes pour PersoChoices
 // (sans attendre que le jeu refasse son export : retour de JD, 08/10, 14 visages seulement juste apres le telechargement).
 static void TenuesAddShirts()
@@ -356,6 +388,7 @@ static void TenuesAddShirts()
     Opt *ap = NULL;
     for (auto &o : g_opts) if (!strcmp(o.key, "Apparence")) ap = &o;
     if (!ap) return;
+    SkinsForGame(*ap);
     for (auto &n : g_tenueNames[0]) {
         if (std::find(ap->svals.begin(), ap->svals.end(), n) != ap->svals.end()) continue;
         std::wstring lab = TenueLabel(n);
@@ -522,7 +555,7 @@ static void FaceRemove()
 {
     int k = PersoImgZone(), f = PersoPartOf(k);
     DeleteFileW(PersoImgFile(k).c_str());
-    if (PersoGet(f) == "perso") PersoSet(f, f == PF_SHIRT ? "char_shirt21" : "");
+    if (PersoGet(f) == "perso") PersoSet(f, f == PF_SHIRT ? DefaultShirt() : "");
     PersoImgChanged(k);
     g_skinAnnounce = true;
     LaunchLog("image perso retiree (%ls)", kPersoImg[k]);
@@ -914,7 +947,7 @@ static void DrawCarStrip(Graphics &g)
     else if (sel > 0) name = T(kSwatches[sel - 1].fr, kSwatches[sel - 1].en);
     else { wchar_t hx[16]; swprintf_s(hx, L"#%06X", g_carColor & 0xFFFFFF); name = hx; }
     RectF pb = PersoPaintRect();
-    Text(g, T(L"Ma CORRIS (nouvelle partie) : ", L"My CORRIS (new game): ") + name,
+    Text(g, (g_game == GAME_MSC ? std::wstring(T(L"Ma SATSUMA (nouvelle partie) : ", L"My SATSUMA (new game): ")) : std::wstring(T(L"Ma CORRIS (nouvelle partie) : ", L"My CORRIS (new game): "))) + name,
          RectF(s.X + 80, s.Y + 10, pb.X - 12 - (s.X + 80), 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
     PersoBtn(g, pb, T(L"Peinture perso…", L"Custom paint…"), g_skinRowHot == HT_PAINT, IC_IMAGE);
     for (int i = 0; i < kSwatchN; i++) {

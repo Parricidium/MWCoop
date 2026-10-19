@@ -328,9 +328,11 @@ static void DrawSceneAnim(Graphics &g)
 static void ContentSnapshot(bool restore);   // (modsync.inc)
 static void MscScan();                       // (mods.inc)
 static bool PageSnap(int p) { return p == TAB_SKIN || p == TAB_CAR || p == TAB_CONTENT; }
+// Pages absentes d'un jeu : sur My Summer Car, pas de cassettes VHS (camescope et magasin de MWC ; 19/10).
+static bool NavHidden(int p) { return g_game == GAME_MSC && p == TAB_VHS; }
 static bool PageEnabled(int p)
 {
-    if (g_state != ST_IDLE) return false;
+    if (g_state != ST_IDLE || NavHidden(p)) return false;
     if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
@@ -492,7 +494,7 @@ static void DrawRail(Graphics &g)
     // groupes jusqu'a Reglages (674) : lignes de 44 px, ou de 40 quand le bouton de mise a jour prend de la place
     int nItems = 0;
     for (int k = 0, i = 0; k < kNavGroups; k++)
-        for (int j = 0; j < kNavGroupN[k]; j++, i++) if (!RailFolded(k) || kNav[i].page == g_tab) nItems++;
+        for (int j = 0; j < kNavGroupN[k]; j++, i++) if (!NavHidden(kNav[i].page) && (!RailFolded(k) || kNav[i].page == g_tab)) nItems++;
     float avail = 712 - y0, lab = 26, step = 46;
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 24; step = 42; }
     if (avail - kNavGroups * lab - nItems * step < 6) { lab = 22; step = 40; }   // (bouton de mise a jour + 9 pages)
@@ -510,7 +512,7 @@ static void DrawRail(Graphics &g)
         y += lab;
         for (int j = 0; j < kNavGroupN[k]; j++, i++) {
             const NavItem &it = kNav[i];
-            if (RailFolded(k) && it.page != g_tab) continue;
+            if (NavHidden(it.page) || (RailFolded(k) && it.page != g_tab)) continue;
             DrawNavItem(g, RectF(28, y, 208, step - 2), it.page, it.icon, T(it.fr, it.en));
             y += step;
         }
@@ -647,7 +649,9 @@ static void DrawHeader(Graphics &g)
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: case TAB_GFX: title = T(L"Réglages", L"Settings"); sub = SetHeaderSub(); break;   // (gfx.inc : une page, des onglets)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
-    case TAB_VHS: case TAB_ALBUM: title = T(L"VHS & album", L"VHS & album"); sub = T(L"Tes cassettes pour la télé du salon, et les photos prises au drone.", L"Your tapes for the living-room TV, and the photos taken with the drone."); break;
+    case TAB_VHS: case TAB_ALBUM:
+        if (g_game == GAME_MSC) { title = T(L"Album", L"Album"); sub = T(L"Les photos prises au drone.", L"The photos taken with the drone."); break; }   // (pas de VHS sur MSC)
+        title = T(L"VHS & album", L"VHS & album"); sub = T(L"Tes cassettes pour la télé du salon, et les photos prises au drone.", L"Your tapes for the living-room TV, and the photos taken with the drone."); break;
     case TAB_SAVES: title = T(L"Sauvegardes", L"Saves"); sub = T(L"Tes parties MWCoop, à part de la sauvegarde solo du jeu. L'hôte choisit laquelle lancer ; les invités la reçoivent.", L"Your MWCoop games, apart from the game's solo save. The host picks which one to start; guests receive it."); break;
     }
     // commandes de droite : fermer, reduire, theme, langue | API moddeurs, Journaux, Credits (retour de JD, 18/10 : comme
@@ -680,7 +684,7 @@ static void DrawHeader(Graphics &g)
             UiSeg(g, r, lab, g_tab == TAB_CONTENT ? 0 : 1, UI_SEG, 13);
             right -= w + 10;
         } else if (g_tab == TAB_SKIN || g_tab == TAB_CAR) { g_persoTabRight = right; PersoTabsDraw(g); right -= PersoTabsW() + 10; }   // (Tenue / Visage / Voiture : tenue.inc)
-        else if (g_tab == TAB_VHS || g_tab == TAB_ALBUM) { g_mediaTabRight = right; MediaTabsDraw(g); right -= MediaTabsW() + 10; }   // (VHS / Album : media.inc)
+        else if ((g_tab == TAB_VHS || g_tab == TAB_ALBUM) && g_game != GAME_MSC) { g_mediaTabRight = right; MediaTabsDraw(g); right -= MediaTabsW() + 10; }   // (VHS / Album : media.inc)
         else if (g_tab == TAB_WIKI || g_tab == TAB_NOTES || g_tab == TAB_CREDITS) DrawGuideHead(g, right);   // (Chercher, Guide / Nouveautes / Credits : wiki.inc)
         else if (g_tab == TAB_LOBBY) DrawLobbyHeadControls(g, right);
         else if (g_tab == TAB_GFX || g_tab == TAB_COOP) DrawSetSearchBox(g, right);   // (Chercher un reglage)
