@@ -185,7 +185,7 @@ namespace MWCoop
         {
             Transform rt = ch.root;
             string root = rt.name;
-            if (root.StartsWith("MWCoop") || root == "PLAYER" || root == "GUI" || root == "RACES" || root == "RALLY" || root == "NPC_CARS" || root == "JAIL") return true;
+            if (root.StartsWith("MWCoop") || root == "PLAYER" || root == "GUI" || root == "RACES" || Game.Msc && root == "RALLY" || root == "NPC_CARS" || root == "JAIL") return true;
             if (root == "TRAFFIC" && !path.StartsWith("TRAFFIC/Police/Cop")) return true;
             if (root == "HUMANS" && path.StartsWith("HUMANS/Randomizer")) return true;
             if (!rt.gameObject.activeInHierarchy && !(root == "COPS" && Game.FindAny("COPS") == rt.gameObject)) return true;
