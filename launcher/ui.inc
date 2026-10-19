@@ -885,7 +885,7 @@ static void DrawHome(Graphics &g)
             Pen pen(TH(choiceBorder), 1.0f); g.DrawPath(&pen, &p);
             Icon(g, IC_PLAY, b.r.X + 30, b.r.Y + 30, 20, WithA(kInk, a), 2.0f);
             Text(g, T(L"JOUER EN SOLO", L"PLAY SOLO"), RectF(b.r.X + 52, b.r.Y, 150, b.r.Height), 14.5f, FontStyleBold, WithA(kInk, a), StringAlignmentNear);
-            Text(g, T(L"Le jeu normal, sans MWCoop.", L"The normal game, without MWCoop."),
+            Text(g, T(L"Sans Coop", L"Without Coop"),
                  RectF(b.r.X + 196, b.r.Y, b.r.Width - 240, b.r.Height), 12.5f, FontStyleRegular, WithA(kGrey, a), StringAlignmentNear);
             Icon(g, IC_CHEVR, b.r.X + b.r.Width - 28, b.r.Y + 30, 18, WithA(kInk, a), 2.2f);
         }

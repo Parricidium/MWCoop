@@ -1347,7 +1347,7 @@ static const wchar_t *const kAr[][2] = {
     { L"Up to 8 players", L"حتى 8 لاعبين" },
     { L"A friend's lobby", L"ردهة صديق" },
     { L"PLAY SOLO", L"العب وحدك" },
-    { L"The normal game, without MWCoop.", L"اللعبة العادية، بدون MWCoop." },
+    { L"Without Coop", L"بدون Coop" },
     { L"See all", L"عرض الكل" },
     { L"Loading…", L"جارٍ التحميل…" },
     { L"Notes unavailable (offline).", L"الملاحظات غير متاحة (دون اتصال)." },
