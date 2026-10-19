@@ -6,6 +6,14 @@ namespace MWCoop
     // Acces aux objets du jeu.
     public static class Game
     {
+        // Le jeu : My Summer Car (switch MSC / MWC du lanceur, 19/10, BETA) ou My Winter Car. Sur MSC, seuls les modules
+        // generiques tournent (Core.MscModules) tant que les autres n'ont pas leur table de noms pour ce jeu.
+        public static readonly bool Msc = Application.dataPath.EndsWith("mysummercar_Data", System.StringComparison.OrdinalIgnoreCase);
+        public static string Name { get { return Msc ? "My Summer Car" : "My Winter Car"; } }
+        // Version annoncee aux autres (bonjour en jeu, salon Steam) : "@msc" sur My Summer Car, comme le lanceur -- un joueur
+        // de l'autre jeu est refuse comme une autre version.
+        public static string ModVersion { get { return Msc ? Version.Text + "@msc" : Version.Text; } }
+
         // Sauvegarde en pleine partie. Le jeu ne sauve qu'en quittant : SAVEGAME envoie des centaines
         // d'automates (interrupteurs, objets, boutons...) dans un etat "Save" sans sortie. On note
         // l'etat de chaque automate qui ecoute SAVEGAME, on sauve, et 2,5 s plus tard (le temps que

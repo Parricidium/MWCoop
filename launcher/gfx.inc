@@ -592,7 +592,7 @@ static const SetItem kSetItems[] = {
     { 16, SI_X, "apercu", NULL, NULL, NULL, NULL },
     { 17, SI_X, "lang", L"Langue", L"Language", NULL, NULL },
     { 18, SI_X, "update", L"Mise à jour", L"Update", NULL, NULL },
-    { 18, SI_X, "canal", L"Version jouée", L"Version played", L"Reworked = la version normale ; Legacy = l'ancienne, figée en 0.95.8", L"Reworked = the normal version; Legacy = the old one, frozen at 0.95.8" },
+    { 18, SI_X, "canal", L"Jeu", L"Game", L"My Summer Car (BETA) ou My Winter Car · le lanceur se relance", L"My Summer Car (BETA) or My Winter Car · the launcher restarts" },
     { 18, SI_X, "majauto", L"Mettre à jour automatiquement", L"Update automatically", L"Au démarrage du lanceur, depuis GitHub", L"At launcher start, from GitHub" },
     { 18, SI_X, "nightly", L"Versions d'essai (nightly)", L"Test builds (nightly)", L"Avant tout le monde, parfois cassées", L"Before everyone, sometimes broken" },
     { 18, SI_X, "notes", L"Notes de version", L"Release notes", L"Ce qui change à chaque version", L"What changes in each version" },
@@ -1116,7 +1116,7 @@ static float SetItemH(const SetItem &it, float w)
         else if (!strcmp(k, "max")) labs = { L"4", L"8", L"12", L"16" };
         else if (!strcmp(k, "prive")) labs = { T(L"Public", L"Public"), T(L"Privé", L"Private") };
         else if (!strcmp(k, "net")) labs = { L"Steam", L"IP / VPN" };
-        else if (!strcmp(k, "canal")) labs = { L"Legacy", L"Reworked" };
+        else if (!strcmp(k, "canal")) labs = { L"MSC", L"MWC" };
         else if (!strcmp(k, "sessions")) labs = { L"3", L"10", L"30" };
         else if (!strcmp(k, "start")) labs = { T(L"Copie", L"Copy"), T(L"Dossier du jeu", L"Game folder"), L"Steam" };
         else labs = { T(L"Tous", L"All"), T(L"Choisir", L"Choose"), T(L"Aucun", L"None") };
@@ -1358,7 +1358,7 @@ static float SetDrawItem(Graphics &g, const SetItem &it, float x, float y, float
             SetRowLabel(g, row, l1, l2, w - bw - 12);
             if (!av.empty()) UiButton(g, RectF(x + w - bw, cy - 16, bw, 32), bt, UI_NOTE_UPDATE, true, IC_DOWNLOAD, g_lobby == LB_NONE && !g_busy);
             else UiButton(g, RectF(x + w - bw, cy - 16, bw, 32), bt, UI_SET_CHECK, false, -1, !g_busy);
-        } else if (!strcmp(k, "canal")) SetSegRow(g, it, row, { L"Legacy", L"Reworked" }, ChannelReworked() ? 1 : 0, UI_SET_CANAL);
+        } else if (!strcmp(k, "canal")) SetSegRow(g, it, row, { L"MSC", L"MWC" }, g_game == GAME_MSC ? 0 : 1, UI_SET_CANAL);
         else if (!strcmp(k, "majauto")) SetToggleRow(g, it, row, GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0, UI_SET_AUTO);
         else if (!strcmp(k, "nightly")) SetToggleRow(g, it, row, NightlyOn(), UI_SET_NIGHTLY);
         else if (!strcmp(k, "notes")) {
@@ -1450,7 +1450,7 @@ static void SetCardHeader(Graphics &g, const SetCard &c, float right, float y, f
         SetChip(g, right, cy, s, !av.empty() ? kAcc : g_localVer.empty() ? kWarn : kOk);
     } else if (!strcmp(c.hdr, "mwcver")) {
         bool ok = !g_gameDir.empty();
-        SetChip(g, right, cy, ok ? L"My Winter Car " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), ok ? kOk : kRed);
+        SetChip(g, right, cy, ok ? std::wstring(GM().name) + L" " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found")), ok ? kOk : kRed);
     }
 }
 // Une carte : titre (et sous-titre, element d'en-tete), ses lignes (pleine largeur, deux sous-colonnes apres SI_BREAK,

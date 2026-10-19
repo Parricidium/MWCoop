@@ -4,6 +4,8 @@
 1 ICON "mwcoop.ico"
 1 24 "launcher.manifest"
 4 RCDATA "logo-titre.png"
+// 9 : logo de My Summer Car (switch MSC / MWC ; provisoire, make-logo-msc.py)
+9 RCDATA "logo-msc.png"
 // 6 : police de la maquette (Nunito, variable, licence SIL OFL 1.1 : OFL-Nunito.txt), chargee en memoire au demarrage
 // (launcher.cpp EmbedFontLoad) ; illisible : Segoe UI comme avant
 6 RCDATA "Nunito-VariableFont_wght.ttf"

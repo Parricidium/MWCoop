@@ -1183,6 +1183,17 @@ Give back: it disappears and its colour is free again. It also disappears when y
 Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits).	يمكن إيقافها مثل الإضافات الأخرى: الإعدادات > اللعب الجماعي > إضافات MWCoop (اختيار المضيف يسري على الجميع). النموذج ثلاثي الأبعاد من matthew0451، ترخيص CC BY-NC 4.0 (الدليل > الشكر).
 The rally VAZ-2108	سيارة VAZ-2108 للرالي
 A colour and a number per player	لون ورقم لكل لاعب
+Close the game and wait for the update to finish to switch games	أغلق اللعبة وانتظر انتهاء التحديث لتغيير اللعبة
+The host plays %s: you need the same game to play together.\n\nSwitch to %s? The launcher restarts.	المضيف يلعب %s: تحتاج إلى اللعبة نفسها للعب معاً.\n\nالانتقال إلى %s؟ سيُعاد تشغيل المشغّل.
+Leave the lobby to switch games	اخرج من الردهة لتغيير اللعبة
+The host plays %s	المضيف يلعب %s
+My Summer Car (BETA) or My Winter Car · the launcher restarts	My Summer Car (BETA) أو My Winter Car · يُعاد تشغيل المشغّل
+MSC or MWC	MSC أو MWC
+Under the version number, top left: pick your game, My Summer Car (BETA) or My Winter Car. The launcher restarts on the chosen game. Everyone must be on the same game to play together.	تحت رقم النسخة، أعلى اليسار: اختر لعبتك، My Summer Car (BETA) أو My Winter Car. يُعاد تشغيل المشغّل على اللعبة المختارة. يجب أن يكون الجميع على اللعبة نفسها للعب معاً.
+Ready for a summer together? Your friends must pick the same path as you.	مستعد لصيف جماعي؟ يجب أن يختار أصدقاؤك الطريق نفسه مثلك.
+Under the version number, top left of the launcher: the game you play, My Summer Car (MSC, in BETA) or My Winter Car (MWC). The launcher restarts on the chosen game: its folder, its saves and its Steam friends. Everyone must be on the same game to play together; when joining a host on the other game, the launcher offers to switch.	تحت رقم النسخة، أعلى يسار المشغّل: اللعبة التي تلعبها، My Summer Car (MSC، تجريبية BETA) أو My Winter Car (MWC). يُعاد تشغيل المشغّل على اللعبة المختارة: مجلدها وحفظاتها وأصدقاؤها على Steam. يجب أن يكون الجميع على اللعبة نفسها للعب معاً؛ عند الانضمام إلى مضيف على اللعبة الأخرى، يقترح المشغّل التبديل.
+My Summer Car in BETA: for now, you see and talk to each other (players, outfits, voice, chat). The rest (cars, items, jobs) comes over the next versions.	My Summer Car تجريبية BETA: حالياً، ترون بعضكم وتتحدثون (اللاعبون، الملابس، الصوت، الدردشة). الباقي (السيارات، الأغراض، الأعمال) يأتي في النسخ القادمة.
+Version & updates: Check, the game (MSC / MWC), automatic update, test builds (nightly), the release notes and \"Launcher help bubbles\" (See the tour again).	النسخة والتحديثات: تحقّق، اللعبة (MSC / MWC)، التحديث التلقائي، نسخ الاختبار (nightly)، ملاحظات الإصدار و\"فقاعات مساعدة المشغّل\" (أعد الجولة).
 Thanks to everyone who makes MWCoop better	شكراً لكل من يجعل MWCoop أفضل
 VHS tapes	أشرطة VHS
 Watch them, export them as .mp4, rename them, put a video on them	شاهدها، صدّرها بصيغة .mp4، أعد تسميتها، ضع عليها فيديو

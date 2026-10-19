@@ -258,7 +258,12 @@ static std::string MyShirt() { const Opt *ap = OptByKey("Apparence"); return ap 
 // Apparence annoncee au salon : complete ("haut|pantalon|visage|corps|chapeau|lunettes|cheveux", comme le mod).
 static std::string MySkin() { return PersoLookString(); }
 static std::string MyName() { return Narrow(PlayerName(), CP_UTF8); }
-static std::string MyVersion() { return g_localVer.empty() ? "dev" : Narrow(g_localVer, CP_UTF8); }   // MWCoop\version.txt
+static std::string MyVersionRaw() { return g_localVer.empty() ? "dev" : Narrow(g_localVer, CP_UTF8); }   // MWCoop\version.txt
+// Version annoncee au salon (TCP et Steam) : celle du mod, plus "@msc" sur My Summer Car (19/10) -- un invite sur l'autre jeu
+// est refuse comme une autre version, et VersionMismatch lui propose de changer de jeu.
+static std::string MyVersion() { return MyVersionRaw() + (g_game == GAME_MSC ? "@msc" : ""); }
+static int GameOfVersion(const std::wstring &v) { return v.find(L"@msc") != std::wstring::npos ? GAME_MSC : GAME_MWC; }
+static std::wstring VersionOnly(const std::wstring &v) { size_t a = v.find(L'@'); return a == std::wstring::npos ? v : v.substr(0, a); }
 
 // Tchat du salon (0.97.0, maquette du 17/10) : les trois derniers messages sous les joueurs, un champ et ENVOYER (Entree
 // envoie). Par IP, l'hote recoit M_CHAT de l'invite et le renvoie a tous (lui compris) ; par Steam, chacun pose sa derniere
@@ -349,15 +354,20 @@ static void LobbyKick(int id)
 // Rejoindre un hote d'une autre version (demande de JD, 14/10 : « que ca check la version, si elle n'est pas bonne, une
 // proposition de mettre a jour »). Hote plus recent : proposer la mise a jour tout de suite (le lanceur se relance, puis on
 // rejoint) ; hote plus ancien : c'est a lui de mettre a jour.
-static bool ChannelSet(bool reworked, bool host);   // (saves.inc)
-static void VersionMismatch(const std::wstring &his)
+static bool GameSet(int game, bool host);   // (saves.inc)
+static void VersionMismatch(const std::wstring &hisFull)
 {
-    std::wstring mine = Widen(MyVersion());
-    // Version differente (Legacy / Reworked) : proposer de suivre celle de l'hote
-    if (mine != L"dev" && IsReworkedVer(his) != ChannelReworked()) {
-        SetStatus(K_ERR, T(L"Version différente (toi %s, hôte %s)", L"Different version (you %s, host %s)"), mine.c_str(), his.c_str());
-        TestLog("salon : version de l'hote %s, la mienne %s : version %s proposee", Narrow(his, CP_UTF8).c_str(), Narrow(mine, CP_UTF8).c_str(), IsReworkedVer(his) ? "reworked" : "legacy");
-        if (ChannelSet(IsReworkedVer(his), true)) StartUpdate(true);
+    // Autre jeu (MSC / MWC) : proposer de passer sur celui de l'hote (le lanceur se relance)
+    if (GameOfVersion(hisFull) != g_game) {
+        int hg = GameOfVersion(hisFull);
+        SetStatus(K_ERR, T(L"L'hôte joue à %s", L"The host plays %s"), kGames[hg].name);
+        TestLog("salon : l'hote joue a %s (version %s) : changement de jeu propose", Narrow(kGames[hg].id).c_str(), Narrow(hisFull, CP_UTF8).c_str());
+        GameSet(hg, true);
+        return;
+    }
+    std::wstring mine = Widen(MyVersionRaw()), his = VersionOnly(hisFull);
+    if (mine != L"dev" && !IsReworkedVer(his)) {   // (hote encore en Legacy, retiree le 19/10 : a lui de mettre a jour)
+        SetStatus(K_ERR, T(L"Version différente (toi %s, hôte %s) : l'hôte doit mettre à jour MWCoop", L"Different version (you %s, host %s): the host must update MWCoop"), mine.c_str(), his.c_str());
         return;
     }
     if (mine != L"dev" && CmpVer(his, mine) > 0) {

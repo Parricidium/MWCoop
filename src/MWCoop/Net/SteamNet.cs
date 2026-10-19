@@ -116,7 +116,7 @@ namespace MWCoop.Net
             var id = new CSteamID(Lobby);
             SteamMatchmaking.SetLobbyData(id, "mwcoop", Session.NetVersion.ToString());
             SteamMatchmaking.SetLobbyData(id, "hote", Session.Me != null ? Session.Me.Name : "");
-            SteamMatchmaking.SetLobbyData(id, "version", Version.Text);
+            SteamMatchmaking.SetLobbyData(id, "version", Game.ModVersion);
             SteamMatchmaking.SetLobbyJoinable(id, true);
             try { SteamFriends.SetRichPresence("status", "MWCoop : partie coop (" + Version.Text + ")"); } catch { }
             Note = "salon Steam pret";

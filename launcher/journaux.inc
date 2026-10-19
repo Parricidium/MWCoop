@@ -216,7 +216,7 @@ static void LogsScan()
             add(d + L"mwcoop.log", LOG_MOD, pr, 0);
             add(d + L"chargeur.log", LOG_LOADER, pr, 0);
         }
-        add(g_gameDir + L"mywintercar_Data\\output_log.txt", LOG_UNITY, L"", 0);
+        add(g_gameDir + GM().data + L"\\output_log.txt", LOG_UNITY, L"", 0);
     }
     // Repli quand le dossier du jeu est en lecture seule, et trace de chargement du mod.
     if (!ld.empty()) {

@@ -432,14 +432,14 @@ static void DrawRail(Graphics &g)
     std::wstring ver = g_localVer.empty() ? L"" : L"v" + g_localVer.substr(0, g_localVer.find(L'-'));
     float vw = ver.empty() ? 0 : PillW(ver, 10.5f), x = kRail.X + (kRail.Width - vw) / 2;
     if (vw > 0) Pill(g, RectF(x, 104, vw, 20), TH(cardSel), ver, kInk, 10.5f);
-    // version du jeu co-op, sous le numero (JD, 15/10) : Legacy (l'ancienne, plus mise a jour) / Reworked (la refonte, par
-    // defaut, etiquette NEW) ; clic : saves.inc ChannelSet, puis mise a jour
+    // jeu, sous le numero (JD, 19/10, a la place de Legacy / Reworked) : MSC (etiquette BETA) / MWC ; clic : saves.inc GameSet,
+    // le lanceur se relance sur l'autre jeu
     g_canalRect = RectF(28, 130, 208, 30);
-    UiSeg(g, g_canalRect, { L"Legacy", L"Reworked" }, ChannelReworked() ? 1 : 0, UI_SET_CANAL, 12);
+    UiSeg(g, g_canalRect, { L"MSC", L"MWC" }, g_game == GAME_MSC ? 0 : 1, UI_SET_CANAL, 12);
     {
-        const wchar_t *nl = T(L"NOUVEAU", L"NEW");
-        float w = PillW(nl, 8);
-        Pill(g, RectF(g_canalRect.X + g_canalRect.Width - w + 2, g_canalRect.Y - 8, w, 15), kRed, nl, Color(255, 255, 255, 255), 8);
+        const wchar_t *bl = L"BETA";
+        float w = PillW(bl, 8);
+        Pill(g, RectF(g_canalRect.X - 2, g_canalRect.Y - 8, w, 15), kRed, bl, Color(255, 255, 255, 255), 8);
     }
     float y0 = 168;
     if (g_btn[B_UPDATE].visible) {   // mise a jour proposee : bouton sous la version
@@ -577,7 +577,8 @@ static void DrawHeader(Graphics &g)
     if (g_state == ST_RUNNING) { title = T(L"Partie en cours", L"Game running"); sub = g_launchInfo; }
     else if (g_state == ST_LAUNCH || g_state == ST_CLOSING) { title = T(L"Lancement", L"Starting"); sub = g_launchInfo; }
     else switch (g_tab) {
-    case TAB_HOME: title = g_gameDir.empty() ? std::wstring(T(L"Bienvenue", L"Welcome")) : Greeting(); sub = T(L"Prêt pour un hiver à plusieurs ? Tes amis doivent choisir le même chemin que toi.", L"Ready for a winter together? Your friends must pick the same path as you."); break;
+    case TAB_HOME: title = g_gameDir.empty() ? std::wstring(T(L"Bienvenue", L"Welcome")) : Greeting(); sub = g_game == GAME_MSC ? T(L"Prêt pour un été à plusieurs ? Tes amis doivent choisir le même chemin que toi.", L"Ready for a summer together? Your friends must pick the same path as you.")
+                                      : T(L"Prêt pour un hiver à plusieurs ? Tes amis doivent choisir le même chemin que toi.", L"Ready for a winter together? Your friends must pick the same path as you."); break;
     case TAB_LOBBY: {
         int lobby = g_lobby;
         bool host = lobby == LB_HOST;
@@ -673,7 +674,7 @@ static void DrawFooter(Graphics &g, const std::wstring &status, int kind, float 
     float lw = MeasureW(mg, el, 12.5f, FontStyleRegular) + 4;
     eb.r = RectF(kFooter.X + kFooter.Width - lw, kFooter.Y + 2, lw, 22);
     if (eb.visible) Text(g, el, eb.r, 12.5f, FontStyleUnderline, WithA(Mix(kGrey, kAcc, eb.hover), eb.enabled ? 1.0f : 0.4f), StringAlignmentFar);
-    std::wstring gl = ok ? L"My Winter Car " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found"));
+    std::wstring gl = ok ? std::wstring(GM().name) + L" " + g_gameVer : std::wstring(T(L"My Winter Car introuvable", L"My Winter Car not found"));
     float gw = MeasureW(mg, gl, 12.5f, FontStyleBold) + 6;
     float gx = eb.r.X - 14 - gw;
     if (ok) Icon(g, IC_CHECK, gx - 10, cy, 15, kOk, 2.6f);
@@ -1473,9 +1474,7 @@ static bool UiClick(int id)
     case UI_NOTE_UPDATE: if (g_lobby == LB_NONE && !g_busy) StartUpdate(true); return true;
     case UI_SET_CHECK: if (!g_busy) StartUpdate(false); return true;
     case UI_SET_CANAL: case UI_SET_CANAL + 1:
-        if ((id == UI_SET_CANAL + 1) != ChannelReworked() && ChannelSet(id == UI_SET_CANAL + 1, false)) {
-            if (g_lobby == LB_NONE && !g_busy && !GameProcessRunning()) StartUpdate(true); else StartUpdate(false);
-        }
+        GameSet(id == UI_SET_CANAL ? GAME_MSC : GAME_MWC, false);
         return true;
     case UI_SET_AUTO: {
         bool on = GetPrivateProfileIntW(L"Lanceur", L"MajAuto", 0, g_iniLauncher.c_str()) != 0;
@@ -1529,7 +1528,7 @@ static bool UiClick(int id)
     case UI_SET_STEAM: case UI_SET_IP: if ((id == UI_SET_STEAM) != g_steamNet && g_lobby == LB_NONE) OnButton(id == UI_SET_STEAM ? B_NETSTEAM : B_NETIP); return true;
     case UI_SET_PORTM: case UI_SET_PORTP: for (int i = 0; i < (int)g_opts.size(); i++) if (!strcmp(g_opts[i].key, "Port")) OptStep(i, id == UI_SET_PORTP ? 1 : -1); return true;
     case UI_SET_FOLDER: ChooseExe(); return true;
-    case UI_SET_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); return true;
+    case UI_SET_BUY: ShellExecuteW(g_wnd, L"open", StoreUrl().c_str(), NULL, NULL, SW_SHOWNORMAL); return true;
     case UI_SET_UNINST: Uninstall(); return true;
     case UI_SET_COMPAT: {
         bool on = !CompatAuto();

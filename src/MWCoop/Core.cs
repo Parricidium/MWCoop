@@ -16,6 +16,7 @@ namespace MWCoop
             useGUILayout = false;   // (aucun GUILayout : pas de passage Layout dans OnGUI, une passe de moins par evenement -- revue du 14/10)
             Config.Load();
             dumpEnabled = Config.GetInt("Test", "Vidage", 0) != 0 || Config.Get("Test", "VidageCibles", "").Length > 0;
+            Log.Info("jeu : " + Game.Name + (Game.Msc ? " (BETA : modules generiques seulement)" : ""));
             Log.Info("Core pret, profil '" + System.Environment.GetEnvironmentVariable("MWCOOP_PROFIL") + "'");
             Log.Info("sauvegardes : " + Application.persistentDataPath);
             Application.runInBackground = true;   // (hote en Alt-Tab : plus de paquets pendant 15 s -> delai depasse chez les invites ; relecture du 15/10)
@@ -27,7 +28,7 @@ namespace MWCoop
         {
             Perf.FixedStart();
             Perf.Begin();
-            try { VehicleSync.RevLimiterFixed(); VehicleSync.FixedUpdate(); }
+            try { if (!Game.Msc) { VehicleSync.RevLimiterFixed(); VehicleSync.FixedUpdate(); } }
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("voitures (physique) : " + e.Message); }
             Perf.End("(physique)");
             Perf.FixedEnd();
@@ -45,6 +46,12 @@ namespace MWCoop
 
         void LateUpdateBody()
         {
+            if (Game.Msc)   // (My Summer Car : avatars et tenues seulement)
+            {
+                try { PlayerSync.LateUpdate(); Studio.LateUpdate(); }
+                catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("poses : " + e.Message); }
+                return;
+            }
             // (CarVisuals d'abord : volant et levier de vitesse poses, puis les mains des avatars dessus -- elles avaient une image de retard.)
             try
             {
@@ -67,9 +74,13 @@ namespace MWCoop
             catch (System.Exception e) { if (Time.frameCount % 600 == 0) Log.Warn("tenues (pose) : " + e.Message); }
         }
 
+        // [Test] Muet=1 : instances de test sans son (JD, 19/10) -- remis a chaque image, le jeu regle aussi le volume
+        static int muted = -1;
         void Update()
         {
             Perf.UpdateStart();
+            if (muted < 0) muted = Config.GetInt("Test", "Muet", 0);
+            if (muted != 0 && AudioListener.volume != 0f) AudioListener.volume = 0f;
             if (Time.realtimeSinceStartup >= nextBeat)
             {
                 nextBeat = Time.realtimeSinceStartup + 10f;
@@ -87,9 +98,10 @@ namespace MWCoop
                 {
                     string targets = Config.Get("Test", "VidageCibles", "");
                     if (targets.Length > 0 && Game.LevelName == "GAME") Log.Info("cibles : " + Recon.DumpTargets(targets) + ", pieces : " + Parts.DumpIds());
-                    if (Config.GetInt("Test", "Vidage", 0) == 1) Recon.DumpLevel("auto", Game.LevelName != "GAME");
+                    int vid = Config.GetInt("Test", "Vidage", 0);
+                    if (vid == 1) Recon.DumpLevel("auto", Game.LevelName != "GAME");
                     // Vidage=2 : niveau complet AVEC les parametres des actions (reference hors jeu, voir ref\LISEZMOI.md).
-                    if (Config.GetInt("Test", "Vidage", 0) == 2) Recon.DumpLevel("complet", true);
+                    if (vid == 2) Recon.DumpLevel("complet", true);
                     Log.Info("globales : " + Recon.DumpGlobals());
                     Log.Info("personnages : " + Recon.DumpCharacters());
                     if (Game.LevelName == "GAME") Log.Info("apparences : " + Recon.DumpLooks());
@@ -97,7 +109,7 @@ namespace MWCoop
                 }
                 catch (System.Exception e) { Log.Error("vidage : " + e); }
             }
-            foreach (Mod m in mods) Step(m.Name, m.Run);
+            foreach (Mod m in Active) Step(m.Name, m.Run);
         }
 
         // Modules de la boucle, dans l'ordre ; delegues crees une fois (un par module et par image sinon : allocations).
@@ -249,6 +261,7 @@ namespace MWCoop
         {
             Game.LevelChanged();
             Log.Info("niveau charge : " + level + " " + Game.LevelName);
+            if (Game.Msc) { MscLevelLoaded(); return; }
             Replay.OnLevelLoaded();
             PlayerSync.OnLevelLoaded();
             World.OnLevelLoaded();
@@ -341,6 +354,38 @@ namespace MWCoop
             Jobs.OnLevelLoaded();
             WaitScreen.OnLevelLoaded();
             if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Game.LevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
+        }
+
+        // My Summer Car (BETA) : les modules generiques seulement (inventaire du 19/10, docs\MSC-inventaire.md) ; les autres
+        // attendent leur table de noms pour ce jeu. Chacun a part : une erreur n'empeche pas les suivants.
+        void MscLevelLoaded()
+        {
+            System.Action[] all = { Replay.OnLevelLoaded, PlayerSync.OnLevelLoaded, Voice.OnLevelLoaded, CustomFace.OnLevelLoaded, WorldFiles.OnLevelLoaded,
+                                    ThirdPerson.OnLevelLoaded, DroneCam.OnLevelLoaded, SaveStats.OnLevelLoaded, Studio.OnLevelLoaded, WaitScreen.OnLevelLoaded };
+            foreach (System.Action a in all)
+            {
+                try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
+            }
+            if (dumpEnabled) dumpAt = Time.realtimeSinceStartup + (Game.LevelName == "GAME" ? Config.GetInt("Test", "VidageDelai", 25) : 5f);
+        }
+        static readonly System.Collections.Generic.HashSet<string> MscModules = new System.Collections.Generic.HashSet<string>
+        {
+            "session", "api", "sauvegarde en jeu", "coups de poing", "marqueurs", "vocal", "visage perso", "menu", "mscloader", "lanceur",
+            "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente",
+        };
+        static Mod[] active;
+        static Mod[] Active
+        {
+            get
+            {
+                if (active == null)
+                {
+                    var l = new System.Collections.Generic.List<Mod>();
+                    foreach (Mod m in mods) if (!Game.Msc || MscModules.Contains(m.Name)) l.Add(m);
+                    active = l.ToArray();
+                }
+                return active;
+            }
         }
 
         void OnGUI()

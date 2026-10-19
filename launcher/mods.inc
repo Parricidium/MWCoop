@@ -38,7 +38,7 @@ static std::wstring CoopModsDir();                 // (modsync.inc : mods recus 
 static bool MenuSkipper(const MscMod &m);       // (modsync.inc : saute le menu -- jamais envoye)
 static void ModSetShared(const std::wstring &file, bool on);
 
-static std::wstring MscManaged() { return g_gameDir + L"mywintercar_Data\\Managed\\"; }
+static std::wstring MscManaged() { return g_gameDir + GM().data + L"\\Managed\\"; }
 static std::wstring MscIni() { return g_gameDir + L"doorstop_config.ini"; }
 
 // MSCLoader de MWCoop (demande de JD, 08/10 : un joueur dont le MSCLoader officiel ne chargeait aucun mod, meme apres une
@@ -51,7 +51,7 @@ static std::wstring MscIni() { return g_gameDir + L"doorstop_config.ini"; }
 // la main du 08/10 : MSCLoader charge depuis ce dossier, 11 mods trouves par la jonction Mods de la copie.
 // Choix dans l'onglet MODS ([Lanceur] MSCLoaderMWCoop) : par defaut l'officiel s'il est installe, sinon celui de MWCoop.
 static std::wstring MscPackDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"mscloader-mwcoop\\"; }
-static std::wstring MscCopyDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"jeu-mscloader\\My Winter Car\\"; }
+static std::wstring MscCopyDir() { std::wstring l = LocalDir(); return l.empty() ? L"" : l + L"jeu-mscloader\\" + GM().steamDir + L"\\"; }
 static bool MscOfficialInstalled() { return !g_gameDir.empty() && FileExists(MscManaged() + L"MSCLoader.Preloader.dll") && FileExists(g_gameDir + L"winhttp.dll") && FileExists(MscIni()); }
 static bool MscOwnInstalled() { std::wstring p = MscPackDir(); return !p.empty() && FileExists(p + L"winhttp.dll") && FileExists(p + L"Managed\\MSCLoader.Preloader.dll"); }
 static bool MscOwn() { return g_mscOwnPref >= 0 ? g_mscOwnPref == 1 : !MscOfficialInstalled(); }
@@ -78,7 +78,7 @@ static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest)
     // absente (MSCLoader jamais installe dans le jeu), son Init s'arrete sur FileNotFoundException avant de charger le moindre mod
     // (retour de JD, 12/10 : l'invite recoit la 205 de l'hote mais ne la voit pas). Ce seul fichier y est pose (Managed de la
     // copie : jonction vers celui du jeu) ; le jeu ne le charge pas tout seul (seul doorstop_config.ini le vise).
-    std::wstring pre = m + L"mywintercar_Data\\Managed\\MSCLoader.Preloader.dll";
+    std::wstring pre = m + GM().data + L"\\Managed\\MSCLoader.Preloader.dll";
     if (!FileExists(pre)) {
         if (CopyFileW((pack + L"Managed\\MSCLoader.Preloader.dll").c_str(), pre.c_str(), TRUE)) TestLog("mscloader de MWCoop : MSCLoader.Preloader.dll pose dans Managed du jeu (lu par MSCLoader 1.4)");
         else TestLog("mscloader de MWCoop : MSCLoader.Preloader.dll impossible dans Managed (erreur %lu) : MSCLoader 1.4 risque de ne charger aucun mod", GetLastError());
@@ -102,12 +102,12 @@ static std::wstring MscModsDir()
     g_mscDirKind = k;
     if (!_wcsicmp(k, L"MD")) {
         wchar_t doc[MAX_PATH] = L"";
-        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, doc))) return WithSlash(doc) + L"My Winter Car\\Mods\\";
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, doc))) return WithSlash(doc) + GM().docsMods + L"\\Mods\\";
     }
     if (!_wcsicmp(k, L"AD")) {
         wchar_t up[MAX_PATH] = L"";
         GetEnvironmentVariableW(L"USERPROFILE", up, MAX_PATH);
-        if (up[0]) return WithSlash(up) + L"AppData\\LocalLow\\Amistech\\My Winter Car\\Mods\\";
+        if (up[0]) return WithSlash(up) + L"AppData\\LocalLow\\Amistech\\" + GM().name + L"\\Mods\\";
     }
     g_mscDirKind = L"GF";
     return g_gameDir + L"Mods\\";
@@ -394,7 +394,7 @@ static DWORD WINAPI MscInstallThread(void *param)
     if (!Unzip(pkg + L"main_ref.pack", managed, &why)) return fail("bibliotheques : " + why);
     if (!Unzip(pkg + L"main_mwc.pack", tmp + L"mwc", &why)) return fail("main_mwc : " + why);
     if (!Unzip(tmp + L"mwc\\Managed.zip", managed, &why)) return fail("MSCLoader.dll : " + why);
-    WritePrivateProfileStringW(L"General", L"target_assembly", L"mywintercar_Data\\Managed\\MSCLoader.Preloader.dll", ini.c_str());
+    WritePrivateProfileStringW(L"General", L"target_assembly", (std::wstring(GM().data) + L"\\Managed\\MSCLoader.Preloader.dll").c_str(), ini.c_str());
     WritePrivateProfileStringW(L"MSCLoader", L"mods", mods, ini.c_str());
     WritePrivateProfileStringW(L"MSCLoader", L"skipIntro", intro, ini.c_str());
     WritePrivateProfileStringW(L"MSCLoader", L"skipConfigScreen", cfg, ini.c_str());

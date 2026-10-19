@@ -78,7 +78,7 @@ namespace MWCoop
                 File.WriteAllLines(map, lines.ToArray());
             }
             string dir = Path.Combine(root, prof);
-            string dst = Path.Combine(Path.Combine(Path.Combine(dir, "LocalLow"), "Amistech"), "My Winter Car");
+            string dst = Path.Combine(Path.Combine(Path.Combine(dir, "LocalLow"), "Amistech"), Game.Name);
             Directory.CreateDirectory(dst);
             int n2 = 0; long bytes = 0;
             foreach (string f in Directory.GetFiles(src, "*.txt"))

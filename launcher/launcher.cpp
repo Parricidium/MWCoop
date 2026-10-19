@@ -78,6 +78,7 @@ using std::max;
 #include <set>
 #include <array>
 #include <atomic>
+#include <mutex>
 #include <stdio.h>
 #include <math.h>
 #include <stdarg.h>
@@ -87,7 +88,44 @@ using std::max;
 using namespace Gdiplus;
 
 static std::wstring g_repo = L"Parricidium/MWCoop";   // (/depot : autre depot, pour tester la mise a jour)
-static const wchar_t *kStoreUrl = L"https://store.steampowered.com/app/4164420/";
+// Le jeu (demande de JD, 19/10 : « un switch MSC et MWC a la place de Legacy et Reworked ») : [Lanceur] JeuChoisi=mwc|msc,
+// change en haut a gauche (sous le numero de version) ; le lanceur se relance sur l'autre jeu. Tout ce qui nomme le jeu
+// passe par GM() ; les textes de T() qui disent My Winter Car / mywintercar sont adaptes a la volee (GameSwap).
+struct GameDef {
+    const wchar_t *id, *name, *exe, *data;   // "msc", "My Summer Car", "mysummercar.exe", "mysummercar_Data"
+    const wchar_t *steamDir;                 // steamapps\common\<...>
+    const wchar_t *appid; uint32_t app;      // Steam
+    const wchar_t *iniDir;                   // [Lanceur] cle du dossier retenu
+    const wchar_t *docsMods;                 // Documents\<...>\Mods (MSCLoader)
+};
+enum { GAME_MWC, GAME_MSC };
+static const GameDef kGames[2] = {
+    { L"mwc", L"My Winter Car", L"mywintercar.exe", L"mywintercar_Data", L"My Winter Car", L"4164420", 4164420, L"Jeu", L"My Winter Car" },
+    { L"msc", L"My Summer Car", L"mysummercar.exe", L"mysummercar_Data", L"My Summer Car", L"516750", 516750, L"JeuMSC", L"MySummerCar" },
+};
+static int g_game = GAME_MWC;
+static const GameDef &GM() { return kGames[g_game]; }
+static std::wstring StoreUrl() { return std::wstring(L"https://store.steampowered.com/app/") + GM().appid + L"/"; }
+static void GameSwapIn(std::wstring &s)
+{
+    static const wchar_t *from[] = { L"My Winter Car", L"mywintercar" }, *to[] = { L"My Summer Car", L"mysummercar" };
+    for (int k = 0; k < 2; k++) for (size_t p = s.find(from[k]); p != std::wstring::npos; p = s.find(from[k], p + wcslen(to[k]))) s.replace(p, wcslen(from[k]), to[k]);
+}
+// Texte d'un T() pour le jeu choisi : tel quel pour MWC ; pour MSC, une copie adaptee gardee (adresse stable ; cle = le texte
+// d'origine lui-meme, pas son adresse : T() recoit parfois le c_str() d'une chaine temporaire).
+static const wchar_t *GameSwap(const wchar_t *s)
+{
+    if (g_game == GAME_MWC || !s || (!wcsstr(s, L"My Winter Car") && !wcsstr(s, L"mywintercar"))) return s;
+    if (wcsstr(s, L"My Summer Car")) return s;   // (texte qui nomme les deux jeux : le switch, son guide)
+    static std::mutex mx;
+    static std::unordered_map<std::wstring, std::wstring> cache;
+    std::lock_guard<std::mutex> lk(mx);
+    auto it = cache.find(s);
+    if (it != cache.end()) return it->second.c_str();
+    std::wstring t = s;
+    GameSwapIn(t);
+    return cache.emplace(s, t).first->second.c_str();
+}
 static const float kCardW = 1280, kCardH = 800, kM = 20;          // carte du lanceur (coordonnees de la mise en page)
 static const float kImgW = kCardW + 2 * kM, kImgH = kCardH + 2 * kM;   // fenetre : la carte et son ombre
 
@@ -208,8 +246,8 @@ static std::wstring ArNote(const std::wstring &s)
     }
     return o;
 }
-static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return g_fr ? fr : g_ru ? Ru(en) : g_ar ? Ar(en) : en; }
-static std::wstring T(const std::wstring &fr, const std::wstring &en) { return g_fr ? fr : g_ru ? std::wstring(Ru(en.c_str())) : g_ar ? std::wstring(Ar(en.c_str())) : en; }
+static const wchar_t *T(const wchar_t *fr, const wchar_t *en) { return GameSwap(g_fr ? fr : g_ru ? Ru(en) : g_ar ? Ar(en) : en); }
+static std::wstring T(const std::wstring &fr, const std::wstring &en) { std::wstring t = g_fr ? fr : g_ru ? std::wstring(Ru(en.c_str())) : g_ar ? std::wstring(Ar(en.c_str())) : en; if (g_game != GAME_MWC && t.find(L"My Summer Car") == std::wstring::npos) GameSwapIn(t); return t; }
 static const wchar_t *LangCode() { return g_fr ? L"fr" : g_ru ? L"ru" : g_ar ? L"ar" : L"en"; }
 static void SetLang(const wchar_t *code)   // fr, en, ru : gardee dans [Lanceur] Langue
 {
@@ -359,7 +397,7 @@ static void WineDetect()
 // joueur restent. Et, une fois (Wine seulement, pas l'essai), la meme chose pour mywintercar.exe dans le registre du
 // prefixe (HKCU\Software\Wine\AppDefaults\mywintercar.exe\DllOverrides), retiree par la desinstallation.
 static const wchar_t *const kWineDlls[] = { L"version", L"winhttp" };
-static const wchar_t *kWineAppKey = L"Software\\Wine\\AppDefaults\\mywintercar.exe\\DllOverrides";
+static std::wstring WineAppKey() { return std::wstring(L"Software\\Wine\\AppDefaults\\") + GM().exe + L"\\DllOverrides"; }
 static void WineOverrides(const char *where)
 {
     if (!IsWine()) return;
@@ -398,7 +436,7 @@ static void WineOverrides(const char *where)
     if (reg || g_wineSim) return;
     reg = true;
     HKEY k;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kWineAppKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &k, NULL) == ERROR_SUCCESS) {
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, WineAppKey().c_str(), 0, NULL, 0, KEY_SET_VALUE, NULL, &k, NULL) == ERROR_SUCCESS) {
         bool ok = true;
         for (const wchar_t *d : kWineDlls) ok &= RegSetValueExW(k, d, 0, REG_SZ, (const BYTE *)L"native,builtin", 15 * sizeof(wchar_t)) == ERROR_SUCCESS;
         RegCloseKey(k);
@@ -407,9 +445,27 @@ static void WineOverrides(const char *where)
 }
 
 // ---------------------------------------------------------------- My Winter Car
-static bool IsGameDir(const std::wstring &d)
+static bool IsGameDirOf(const std::wstring &d, int game)
 {
-    return !d.empty() && FileExists(d + L"mywintercar.exe") && FileExists(d + L"mywintercar_Data\\Managed\\Assembly-CSharp.dll");
+    const GameDef &gd = kGames[game];
+    return !d.empty() && FileExists(d + gd.exe) && FileExists(d + gd.data + L"\\Managed\\Assembly-CSharp.dll");
+}
+static bool IsGameDir(const std::wstring &d) { return IsGameDirOf(d, g_game); }
+// Jeu d'un chemin d'exe (mywintercar.exe, mysummercar.exe), -1 : aucun.
+static int GameOfExe(const wchar_t *path)
+{
+    size_t n = wcslen(path);
+    for (int k = 0; k < 2; k++) { size_t m = wcslen(kGames[k].exe); if (n >= m && !_wcsicmp(path + n - m, kGames[k].exe)) return k; }
+    return -1;
+}
+// Jeu choisi : [Lanceur] JeuChoisi (switch MSC / MWC) ; sinon celui du dossier du lanceur, sinon My Winter Car.
+static void GamePick()
+{
+    wchar_t b[8] = L"";
+    GetPrivateProfileStringW(L"Lanceur", L"JeuChoisi", L"", b, 8, g_iniLauncher.c_str());
+    if (!_wcsicmp(b, L"msc")) g_game = GAME_MSC;
+    else if (!_wcsicmp(b, L"mwc")) g_game = GAME_MWC;
+    else g_game = IsGameDirOf(g_dir, GAME_MSC) && !IsGameDirOf(g_dir, GAME_MWC) ? GAME_MSC : GAME_MWC;
 }
 
 // Bibliotheques Steam : dossiers de Steam (registre, emplacement par defaut), puis chaque "path" de leur
@@ -449,12 +505,12 @@ static std::wstring FindGame()
 {
     if (IsGameDir(g_dir)) return g_dir;
     wchar_t saved[MAX_PATH] = L"";
-    GetPrivateProfileStringW(L"Lanceur", L"Jeu", L"", saved, MAX_PATH, g_iniLauncher.c_str());
+    GetPrivateProfileStringW(L"Lanceur", GM().iniDir, L"", saved, MAX_PATH, g_iniLauncher.c_str());
     if (saved[0] && IsGameDir(WithSlash(saved))) return WithSlash(saved);
     std::vector<std::wstring> libs;
     SteamLibraries(libs);
     for (const std::wstring &l : libs) {
-        std::wstring d = l + L"steamapps\\common\\My Winter Car\\";
+        std::wstring d = l + L"steamapps\\common\\" + GM().steamDir + L"\\";
         if (IsGameDir(d)) return d;
     }
     return L"";
@@ -1214,41 +1270,34 @@ static DWORD g_updCheckT;
 static std::wstring UpdAvail() { EnterCriticalSection(&g_cs); std::wstring v = g_updVer; LeaveCriticalSection(&g_cs); return v; }
 static void UpdSet(const std::wstring &v) { EnterCriticalSection(&g_cs); g_updVer = v; LeaveCriticalSection(&g_cs); }
 
-// Version du jeu co-op (JD, 15/10 : « Legacy, la Stable actuelle ; Reworked, la Nightly, qui devient la stable ») :
-// [Lanceur] Version=legacy|reworked, Reworked par defaut (l'ancienne cle Canal de 0.95.2 est ignoree). Reworked = la refonte,
-// 0.96 et plus : la plus recente hors pre-releases, sinon la plus recente pre-release (.nightly, tant que la 0.96.0 n'est pas
-// sortie). Legacy = l'ancienne, moins de 0.96, hors pre-releases ; plus mise a jour sauf demande de JD.
-static bool ChannelReworked()
-{
-    wchar_t b[16] = L"";
-    GetPrivateProfileStringW(L"Lanceur", L"Version", L"reworked", b, 16, g_iniLauncher.c_str());
-    return _wcsicmp(b, L"legacy") != 0;
-}
+// Versions installees : Reworked seulement, 0.96 et plus (JD, 19/10 : Legacy retiree pour de bon, le switch MSC / MWC prend sa
+// place ; la cle [Lanceur] Version n'est plus lue). Une installation Legacy (moins de 0.96) passe a la plus recente, ses
+// sauvegardes copiees avant (MWCoop\copie-avant-reworked, comme depuis 0.96).
 static bool IsReworkedVer(const std::wstring &v) { return v.find(L"nightly") != std::wstring::npos || CmpVer(v, L"0.96.0") >= 0; }
 // Versions d'essai (nightly, pre-releases de GitHub) : [Lanceur] Nightly=1 (Reglages > Lanceur) les propose comme mises a
 // jour si elles sont plus recentes que la version stable ; sinon elles ne servent que de secours (aucune stable Reworked).
 static bool NightlyOn() { return GetPrivateProfileIntW(L"Lanceur", L"Nightly", 0, g_iniLauncher.c_str()) != 0; }
-static const Note *PickRelease(const std::vector<Note> &rel, bool reworked)
+static const Note *PickRelease(const std::vector<Note> &rel)
 {
     const Note *best = NULL, *pre = NULL;
     for (const Note &n : rel) {
-        if (n.zip.empty() || IsReworkedVer(n.ver) != reworked) continue;
+        if (n.zip.empty() || !IsReworkedVer(n.ver)) continue;
         if (!n.pre) { if (!best || CmpVer(n.ver, best->ver) > 0) best = &n; }
-        else if (reworked && (!pre || CmpVer(n.ver, pre->ver) > 0)) pre = &n;
+        else if (!pre || CmpVer(n.ver, pre->ver) > 0) pre = &n;
     }
     if (best && pre && NightlyOn() && CmpVer(pre->ver, best->ver) > 0) return pre;
     return best ? best : pre;
 }
-// A installer : plus recente, ou changement de version (Legacy <-> Reworked, meme plus ancienne).
-static bool WantVer(const std::wstring &remote, const std::wstring &local, bool reworked)
+// A installer : plus recente, ou installation Legacy (meme vers une plus ancienne).
+static bool WantVer(const std::wstring &remote, const std::wstring &local)
 {
-    return local.empty() || CmpVer(remote, local) > 0 || (IsReworkedVer(local) != reworked && remote != local);
+    return local.empty() || CmpVer(remote, local) > 0 || (!IsReworkedVer(local) && remote != local);
 }
-// Notes montrees : Reworked, tout (les anciennes aussi, c'est l'histoire) ; Legacy, les anciennes hors pre-releases.
-static std::vector<Note> ChannelNotes(const std::vector<Note> &rel, bool reworked)
+// Notes montrees : tout (les anciennes aussi, c'est l'histoire), sauf les pre-releases d'avant 0.96.
+static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
 {
     std::vector<Note> out;
-    for (const Note &n : rel) if (reworked ? (!n.pre || IsReworkedVer(n.ver)) : (!n.pre && !IsReworkedVer(n.ver))) out.push_back(n);
+    for (const Note &n : rel) if (!n.pre || IsReworkedVer(n.ver)) out.push_back(n);
     return out;
 }
 static std::wstring SavesBackupNightly();   // (saves.inc)
@@ -1264,18 +1313,18 @@ static DWORD WINAPI UpdateThread(void *param)
     }
     std::string json;
     std::wstring local = g_localVer, label = ModLabel();
-    bool mod = g_modOk, reworked = ChannelReworked();
+    bool mod = g_modOk;
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
-    const Note *pick = PickRelease(rel, reworked);
+    const Note *pick = PickRelease(rel);
     EnterCriticalSection(&g_cs);
-    g_notes = ChannelNotes(rel, reworked);
+    g_notes = ChannelNotes(rel);
     LeaveCriticalSection(&g_cs);
     g_relState = rs;
     g_notesDone = true;
     if (quiet) {   // (verification periodique : seulement le bouton, s'il y a du nouveau)
         std::wstring remote = pick ? pick->ver : L"";
-        if (rs != REL_OFFLINE && !remote.empty() && !local.empty() && WantVer(remote, local, reworked) && UpdAvail() != remote) {
+        if (rs != REL_OFFLINE && !remote.empty() && !local.empty() && WantVer(remote, local) && UpdAvail() != remote) {
             UpdSet(remote);
             SetStatus(K_WARN, T(L"%s \u00B7 nouvelle version %s disponible", L"%s \u00B7 new version %s available"), label.c_str(), remote.c_str());
         }
@@ -1298,7 +1347,7 @@ static DWORD WINAPI UpdateThread(void *param)
         g_busy = false;
         return 0;
     }
-    if (!local.empty() && !WantVer(remote, local, reworked)) {
+    if (!local.empty() && !WantVer(remote, local)) {
         g_progress = -1;
         UpdSet(L"");
         SetStatus(K_OK, T(L"%s \u00B7 \u00E0 jour", L"%s \u00B7 up to date"), label.c_str());
@@ -1313,8 +1362,8 @@ static DWORD WINAPI UpdateThread(void *param)
         return 0;
     }
     UpdSet(L"");
-    // Premier passage de Legacy a Reworked (par defaut depuis 0.96, sans clic) : sauvegardes copiees avant, comme au choix a la main
-    if (!local.empty() && reworked && !IsReworkedVer(local) && GetPrivateProfileIntW(L"Lanceur", L"CopieNightly", 0, g_iniLauncher.c_str()) == 0) {
+    // Premier passage de Legacy a Reworked (par defaut depuis 0.96, sans clic) : sauvegardes copiees avant
+    if (!local.empty() && !IsReworkedVer(local) && GetPrivateProfileIntW(L"Lanceur", L"CopieNightly", 0, g_iniLauncher.c_str()) == 0) {
         std::wstring dst = SavesBackupNightly();
         if (!dst.empty()) WritePrivateProfileStringW(L"Lanceur", L"CopieNightly", L"1", g_iniLauncher.c_str());
     }
@@ -1370,6 +1419,17 @@ static DWORD WINAPI UpdateThread(void *param)
     LaunchLog("mise a jour : installation de %s (depuis %s)", Narrow(remote, CP_UTF8).c_str(), Narrow(local.empty() ? L"rien" : local, CP_UTF8).c_str());
     std::wstring gd =g_gameDir.substr(0, g_gameDir.size() - 1);
     bool ok = CopyTree(ext, gd, &self, &failed);
+    // Lanceur pose dans le dossier de l'AUTRE jeu (switch MSC / MWC) : il se met a jour lui aussi, la-bas
+    if (ok && !self && IsGameDirOf(g_dir, 1 - g_game) && FileExists(ext + L"\\MWCoop.exe")) {
+        std::wstring old = g_self + L".old";
+        DeleteFileW(old.c_str());
+        bool moved = MoveFileExW(g_self.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+        if (moved && CopyFileW((ext + L"\\MWCoop.exe").c_str(), g_self.c_str(), FALSE)) self = true;
+        else {
+            LaunchLog("mise a jour : lanceur de %s pas remplace (erreur %lu)", Narrow(g_dir, CP_UTF8).c_str(), GetLastError());
+            if (moved) MoveFileExW(old.c_str(), g_self.c_str(), MOVEFILE_REPLACE_EXISTING);   // (l'ancien remis en place)
+        }
+    }
     // version.txt seulement si tout est en place : une installation interrompue sera reprise au prochain lancement
     CreateDirectoryW((g_gameDir + L"MWCoop").c_str(), NULL);
     if (ok && !CopyFileW((ext + L"\\MWCoop\\version.txt").c_str(), (g_gameDir + L"MWCoop\\version.txt").c_str(), FALSE)) { ok = false; failed = L"version.txt"; }
@@ -1403,7 +1463,7 @@ static DWORD WINAPI NotesOnlyThread(void *)
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
     EnterCriticalSection(&g_cs);
-    g_notes = ChannelNotes(rel, ChannelReworked());
+    g_notes = ChannelNotes(rel);
     LeaveCriticalSection(&g_cs);
     g_relState = rs;
     g_notesDone = true;
@@ -1461,6 +1521,7 @@ static bool MscOwn();
 static void Uninstall();   // (Reglages > A propos)
 static bool MscOwnInstalled();
 static std::wstring MscCopyDir();
+static std::wstring GuestCopyDir();   // (modsync.inc)
 static bool MscOwnApply(const std::wstring &m, bool enabled, bool guest);
 static bool g_guide;                                 // guide "Jouer par Steam" ouvert (par-dessus tout le lanceur)
 static int g_guideHot;                               // 1 copier, 2 compris, 3 ne plus afficher, 4 fermer
@@ -2452,8 +2513,8 @@ static const RectF kGuideCopy(330, 552, 300, 50), kGuideOk(646, 552, 304, 50), k
 static std::wstring WineExeName()
 {
     WIN32_FIND_DATAW fd;   // (casse reelle du fichier : Linux la respecte)
-    HANDLE h = g_gameDir.empty() ? INVALID_HANDLE_VALUE : FindFirstFileW((g_gameDir + L"mywintercar.exe").c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) return L"mywintercar.exe";
+    HANDLE h = g_gameDir.empty() ? INVALID_HANDLE_VALUE : FindFirstFileW((g_gameDir + GM().exe).c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return GM().exe;
     FindClose(h);
     return fd.cFileName;
 }
@@ -2673,10 +2734,12 @@ static void DrawSteamGuide(Graphics &g)
 // ---------------------------------------------------------------- actions
 static void ChooseExe()
 {
-    wchar_t file[MAX_PATH] = L"mywintercar.exe";
+    wchar_t file[MAX_PATH];
+    wcscpy_s(file, GM().exe);
+    std::wstring filter = std::wstring(GM().exe) + L'\0' + GM().exe + L'\0' + L"*.exe" + L'\0' + L"*.exe" + L'\0';
     OPENFILENAMEW of = { sizeof(of) };
     of.hwndOwner = g_wnd;
-    of.lpstrFilter = L"mywintercar.exe\0mywintercar.exe\0*.exe\0*.exe\0";
+    of.lpstrFilter = filter.c_str();
     of.lpstrFile = file;
     of.nMaxFile = MAX_PATH;
     std::wstring init = !g_gameDir.empty() ? g_gameDir : g_dir;
@@ -2694,7 +2757,7 @@ static void ChooseExe()
         return;
     }
     SetGame(dir);
-    WritePrivateProfileStringW(L"Lanceur", L"Jeu", g_gameDir.c_str(), g_iniLauncher.c_str());
+    WritePrivateProfileStringW(L"Lanceur", GM().iniDir, g_gameDir.c_str(), g_iniLauncher.c_str());
     SetStatus(K_NORMAL, L"%s", ModLabel().c_str());
     StartUpdate();
 }
@@ -2706,7 +2769,7 @@ static bool IsGamePid(DWORD pid)
     if (!p) return false;
     wchar_t path[MAX_PATH];
     DWORD n = MAX_PATH;
-    bool ok = QueryFullProcessImageNameW(p, 0, path, &n) && !_wcsicmp(path + std::wstring(path).find_last_of(L'\\') + 1, L"mywintercar.exe");
+    bool ok = QueryFullProcessImageNameW(p, 0, path, &n) && !_wcsicmp(path + std::wstring(path).find_last_of(L'\\') + 1, GM().exe);
     CloseHandle(p);
     return ok;
 }
@@ -2725,7 +2788,7 @@ static std::wstring MirrorDir()
     if (low.find(L"\\steamapps\\") == std::wstring::npos || LocalDir().empty()) return L"";
     // "My Winter Car" dans le chemin : le prechargeur de MSCLoader reconnait le jeu a son dossier (sinon il se croit
     // dans My Summer Car). Avant 0.31.3 : %LOCALAPPDATA%\MWCoop\jeu (laisse en place, plus utilise).
-    return LocalDir() + L"My Winter Car\\";
+    return LocalDir() + GM().steamDir + L"\\";
 }
 
 // Avec le MSCLoader de MWCoop actif : sa copie de lancement (pare-feu, jeu deja lance).
@@ -2734,7 +2797,7 @@ static std::wstring GameExe()
     std::wstring m = MirrorDir();
     if (NoCopy()) m.clear();   // (depart du dossier du jeu)
     if (g_mscOn && MscOwn() && MscOwnInstalled()) m = MscCopyDir();
-    return (m.empty() ? g_gameDir : m) + L"mywintercar.exe";
+    return (m.empty() ? g_gameDir : m) + GM().exe;
 }
 
 static bool SameFile(const std::wstring &a, const std::wstring &b)
@@ -2753,7 +2816,7 @@ static bool CopyKind(const std::wstring &n)
     size_t dot = n.find_last_of(L'.');
     std::wstring ext = dot == std::wstring::npos ? L"" : n.substr(dot);
     for (auto &c : ext) c = towlower(c);
-    return ext == L".dll" || ext == L".ini" || !_wcsicmp(n.c_str(), L"mywintercar.exe") || !_wcsicmp(n.c_str(), L"changelog.txt");
+    return ext == L".dll" || ext == L".ini" || !_wcsicmp(n.c_str(), GM().exe) || !_wcsicmp(n.c_str(), L"changelog.txt");
 }
 // Deux chemins menent-ils au meme dossier (jonction suivie) ?
 static std::wstring FinalDir(const std::wstring &p)
@@ -2837,7 +2900,7 @@ static bool PrepareMirror(const std::wstring &m)
         FindClose(h);
     }
     HANDLE a = CreateFileW((m + L"steam_appid.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (a != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(a, "4164420", 7, &n, NULL); CloseHandle(a); }
+    if (a != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(a, Narrow(GM().appid).c_str(), (DWORD)wcslen(GM().appid), &n, NULL); CloseHandle(a); }
     TestLog("copie de lancement prete : %ls", m.c_str());
     return true;
 }
@@ -2952,7 +3015,7 @@ static void LogGameModules(bool full = false)   // (full : toutes les DLL, mode 
     for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) all.push_back(pe);
     CloseHandle(snap);
     for (const PROCESSENTRY32W &p : all) {
-        if (_wcsicmp(p.szExeFile, L"mywintercar.exe")) continue;
+        if (_wcsicmp(p.szExeFile, GM().exe)) continue;
         std::wstring parent = L"?";
         for (const PROCESSENTRY32W &q : all) if (q.th32ProcessID == p.th32ParentProcessID) parent = q.szExeFile;
         HANDLE h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, p.th32ProcessID);
@@ -2981,10 +3044,10 @@ static bool GameProcessRunning(DWORD *pidOut)
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe = { sizeof(pe) };
-    std::wstring mine = g_gameDir + L"mywintercar.exe", mirror = GameExe(), guest = LocalDir() + L"invite\\My Winter Car\\mywintercar.exe", own = MscCopyDir() + L"mywintercar.exe";
+    std::wstring mine = g_gameDir + GM().exe, mirror = GameExe(), guest = GuestCopyDir() + GM().exe, own = MscCopyDir() + GM().exe;
     bool found = false;
     for (BOOL ok = Process32FirstW(snap, &pe); ok && !found; ok = Process32NextW(snap, &pe)) {
-        if (_wcsicmp(pe.szExeFile, L"mywintercar.exe")) continue;
+        if (_wcsicmp(pe.szExeFile, GM().exe)) continue;
         HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
         if (!h) { found = true; if (pidOut) *pidOut = pe.th32ProcessID; break; }   // inconnu : prudence
         wchar_t path[MAX_PATH];
@@ -3020,7 +3083,7 @@ static std::wstring NewestHeartbeat(long long *age)
     std::vector<std::wstring> dirs = { g_gameDir + L"MWCoop\\", g_gameDir + L"MWCoop\\profils\\invite\\" };
     if (!LocalDir().empty()) {
         dirs.push_back(LocalDir()); dirs.push_back(LocalDir() + L"profils\\invite\\");
-        dirs.push_back(LocalDir() + L"invite\\My Winter Car\\MWCoop\\"); dirs.push_back(LocalDir() + L"invite\\My Winter Car\\MWCoop\\profils\\invite\\");
+        dirs.push_back(GuestCopyDir() + L"MWCoop\\"); dirs.push_back(GuestCopyDir() + L"MWCoop\\profils\\invite\\");
     }
     for (const std::wstring &pr : Profiles()) dirs.push_back(SaveProfRoot() + pr + L"\\");   // (sauvegardes a part : saves.inc)
     std::wstring best; long long bt = 0;
@@ -3290,7 +3353,7 @@ static void CompatCleanAll(const char *where)
     if (IsWine()) return;   // (Wine : pas de moteur de compatibilite de Windows, rien a retirer)
     if (!CompatAuto()) { LaunchLog("compatibilite (%s) : retrait coupe dans les reglages", where); return; }
     std::vector<std::wstring> dirs = { g_gameDir, MirrorDir(), GuestCopyDir(), MscCopyDir() };
-    for (const std::wstring &d : dirs) if (!d.empty()) CompatClean(d + L"mywintercar.exe", where);
+    for (const std::wstring &d : dirs) if (!d.empty()) CompatClean(d + GM().exe, where);
 }
 
 static std::wstring VerString(const std::wstring &path, const wchar_t *key)
@@ -3452,7 +3515,7 @@ static void Launch(int mode, const char *partie = NULL)
         std::wstring appid = g_gameDir + L"steam_appid.txt";
         if (GetFileAttributesW(appid.c_str()) == INVALID_FILE_ATTRIBUTES) {
             HANDLE f = CreateFileW(appid.c_str(), GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (f != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(f, "4164420", 7, &n, NULL); CloseHandle(f); TestLog("steam_appid.txt cree"); }
+            if (f != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(f, Narrow(GM().appid).c_str(), (DWORD)wcslen(GM().appid), &n, NULL); CloseHandle(f); TestLog("steam_appid.txt cree"); }
             else TestLog("steam_appid.txt : creation impossible (erreur %lu)", GetLastError());
         }
     }
@@ -3500,8 +3563,8 @@ static void Launch(int mode, const char *partie = NULL)
             HANDLE rq = CreateFileW((LocalDir() + L"lancer-par-steam.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
             if (rq != INVALID_HANDLE_VALUE) { DWORD n; WriteFile(rq, "1", 1, &n, NULL); CloseHandle(rq); }
         }
-        HINSTANCE r = ShellExecuteW(g_wnd, L"open", L"steam://rungameid/4164420", NULL, NULL, SW_SHOWNORMAL);
-        LaunchLog("lancement (mode %d) par Steam (steam://rungameid/4164420) : %s", mode, (INT_PTR)r > 32 ? "demande" : "ECHEC");
+        HINSTANCE r = ShellExecuteW(g_wnd, L"open", (std::wstring(L"steam://rungameid/") + GM().appid).c_str(), NULL, NULL, SW_SHOWNORMAL);
+        LaunchLog("lancement (mode %d) par Steam (steam://rungameid/%s) : %s", mode, Narrow(GM().appid).c_str(), (INT_PTR)r > 32 ? "demande" : "ECHEC");
         if ((INT_PTR)r <= 32) { SetStatus(K_ERR, T(L"Steam n'a pas pu lancer le jeu (Steam est-il ouvert ?)", L"Steam could not start the game (is Steam open?)")); return; }
         g_proc = NULL;
         g_pid = 0;
@@ -3514,7 +3577,7 @@ static void Launch(int mode, const char *partie = NULL)
     }
     // Lance comme un double-clic dans l'explorateur : un mode de compatibilite de l'exe peut exiger l'administrateur ;
     // CreateProcess echoue alors (erreur 740), ShellExecuteEx affiche la demande de Windows.
-    std::wstring exe = g_gameDir + L"mywintercar.exe", runDir = g_gameDir;
+    std::wstring exe = g_gameDir + GM().exe, runDir = g_gameDir;
     g_launchedFromCopy = false;
     std::wstring mirror = syncKind ? GuestCopyDir() : MirrorDir();
     // Dossier du jeu plutot que la copie de lancement ([Lanceur] SansCopie, pris tout seul quand MWCoop ne s'est pas charge
@@ -3528,10 +3591,10 @@ static void Launch(int mode, const char *partie = NULL)
     if (!syncKind && ownMsc && g_mscOn) mirror = MscCopyDir();
     else ownMsc = ownMsc && syncKind;
     if (syncKind && !mirror.empty()) {   // invite d'un salon : sa copie de lancement (Mods -> les mods de l'hote)
-        if (PrepareGuestCopy(mirror, syncKind == 2) && (!ownMsc || MscOwnApply(mirror, syncKind == 2, true))) { exe = mirror + L"mywintercar.exe"; runDir = mirror; }
+        if (PrepareGuestCopy(mirror, syncKind == 2) && (!ownMsc || MscOwnApply(mirror, syncKind == 2, true))) { exe = mirror + GM().exe; runDir = mirror; }
         else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part sans les mods de l'h\u00F4te", L"Could not prepare the launch copy: the game starts without the host's mods"));
     } else if (!mirror.empty()) {
-        if (PrepareMirror(mirror) && (!ownMsc || MscOwnApply(mirror, true, false))) { exe = mirror + L"mywintercar.exe"; runDir = mirror; g_launchedFromCopy = !ownMsc && mirror == MirrorDir(); }
+        if (PrepareMirror(mirror) && (!ownMsc || MscOwnApply(mirror, true, false))) { exe = mirror + GM().exe; runDir = mirror; g_launchedFromCopy = !ownMsc && mirror == MirrorDir(); }
         else SetStatus(K_WARN, T(L"Copie de lancement impossible : le jeu part de son dossier (le mod ou MSCLoader risquent de ne pas se charger)", L"Could not prepare the launch copy: starting from the game folder (the mod or MSCLoader may not load)"));
     }
     if (mscOff) MscOffInCopy(runDir);
@@ -4285,7 +4348,7 @@ static void NetTest()
     };
     bool mine = g_lobby != LB_NONE;   // (le salon tient deja le port : c'est le notre)
     bool udp = mine || bindOk(SOCK_DGRAM), tcp = mine || bindOk(SOCK_STREAM);
-    int fw = FirewallState(g_gameDir + L"mywintercar.exe");
+    int fw = FirewallState(g_gameDir + GM().exe);
     bool steamWas = g_steamUp == 1, steam = SteamUp();
     if (steam && !steamWas && g_lobby == LB_NONE) SteamDown();   // (ouvert pour le test seulement)
     wchar_t b[200];
@@ -5879,7 +5942,7 @@ static bool WineUnsafeDir(const std::wstring &dir, int depth = 0)
     do {
         std::wstring n = fd.cFileName;
         if (n == L"." || n == L"..") continue;
-        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || !_wcsicmp(n.c_str(), L"mywintercar_Data")) bad = true;
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || !_wcsicmp(n.c_str(), GM().data)) bad = true;
         else if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) bad = WineUnsafeDir(WithSlash(dir) + n, depth + 1);
     } while (!bad && FindNextFileW(h, &fd));
     FindClose(h);
@@ -5961,7 +6024,7 @@ static bool UninstallCore(bool registry, std::wstring *left)
             }
         }
     }
-    if (registry && IsWine() && !g_wineSim) for (const wchar_t *d : kWineDlls) RegDeleteKeyValueW(HKEY_CURRENT_USER, kWineAppKey, d);   // (pose par WineOverrides)
+    if (registry && IsWine() && !g_wineSim) for (const wchar_t *d : kWineDlls) RegDeleteKeyValueW(HKEY_CURRENT_USER, WineAppKey().c_str(), d);   // (pose par WineOverrides)
     LaunchLog("desinstallation : %d lien(s) retire(s), %d element(s) a la Corbeille", links, (int)paths.size());
     g_launcherLog.clear();   // (son dossier part : plus rien n'y est ecrit)
     for (auto &p : paths) ToRecycleBin({ p });   // (un par un : un echec, le lanceur en cours par exemple, n'arrete pas les autres)
@@ -6093,7 +6156,7 @@ static void OnButton(int id)
     case B_MIN: ShowWindow(g_wnd, SW_MINIMIZE); break;
     case B_THEME: ThemeSet(g_dark ? THEME_CLAIR : THEME_SOMBRE); break;   // (lune / soleil : sombre <-> clair ; les autres themes dans Reglages > Theme)
     case B_LANG: SetLang(g_fr ? L"en" : g_ru ? L"ar" : g_ar ? L"fr" : L"ru"); break;   // FR -> EN -> RU -> AR -> FR
-    case B_BUY: ShellExecuteW(g_wnd, L"open", kStoreUrl, NULL, NULL, SW_SHOWNORMAL); break;
+    case B_BUY: ShellExecuteW(g_wnd, L"open", StoreUrl().c_str(), NULL, NULL, SW_SHOWNORMAL); break;
     case B_GITHUB: ShellExecuteW(g_wnd, L"open", L"https://github.com/Parricidium/MWCoop", NULL, NULL, SW_SHOWNORMAL); break;
     case B_KOFI: ShellExecuteW(g_wnd, L"open", L"https://ko-fi.com/parricidium", NULL, NULL, SW_SHOWNORMAL); break;
     case B_DISCORD: ShellExecuteW(g_wnd, L"open", kDiscordUrl, NULL, NULL, SW_SHOWNORMAL); break;
@@ -6505,9 +6568,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         int ac = 0;
         wchar_t **av = CommandLineToArgvW(GetCommandLineW(), &ac);
         bool cli = ac >= 2 && av[1][0] == L'/';
-        for (int i = 1; i < ac; i++) {   // %command% : le chemin de mywintercar.exe en argument
-            size_t n = wcslen(av[i]);
-            if (n >= 15 && !_wcsicmp(av[i] + n - 15, L"mywintercar.exe")) g_fromSteam = true;
+        GamePick();
+        for (int i = 1; i < ac; i++) {   // %command% : le chemin de l'exe du jeu en argument (ce jeu-la, pour cette fois)
+            int gm = GameOfExe(av[i]);
+            if (gm >= 0) { g_fromSteam = true; g_game = gm; }
+            if (!_wcsicmp(av[i], L"/msc")) g_game = GAME_MSC;   // (essais : /capture ... /msc)
         }
         // Lancer par Steam (Reglages > Jeu) avec l'option de lancement "<MWCoop.exe>" %command% : Steam relance le lanceur au
         // lieu du jeu (retour d'un joueur, 08/10 : "Running" dans Steam, un 2e lanceur, rien ne demarrait). Demande toute
@@ -6515,7 +6580,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         // Steam l'aurait fait (son environnement), et on s'efface.
         if (!cli) {
             int gi = -1;
-            for (int i = 1; i < ac && gi < 0; i++) { size_t n = wcslen(av[i]); if (n >= 15 && !_wcsicmp(av[i] + n - 15, L"mywintercar.exe")) gi = i; }
+            for (int i = 1; i < ac && gi < 0; i++) if (GameOfExe(av[i]) >= 0) gi = i;
             wchar_t l[MAX_PATH] = L"";
             GetEnvironmentVariableW(L"LOCALAPPDATA", l, MAX_PATH);
             std::wstring req = l[0] ? std::wstring(l) + L"\\MWCoop\\lancer-par-steam.txt" : L"";
@@ -6601,17 +6666,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"+connect_lobby")) { g_sConnect = _wcstoui64(argv[i + 1], NULL, 10); g_steamNet = true; }
         if (!_wcsicmp(argv[i], L"/steam")) { g_testSteamFile = argv[i + 1]; g_steamNet = true; }   // essai : /testsalon ... /steam <fichier>
     }
-    // Essai : /testmaj <releases.json> <journal> <version locale> -- version choisie (Legacy, Reworked) et a installer ou non
+    // Essai : /testmaj <releases.json> <journal> <version locale> -- version choisie et a installer ou non
     if (argc >= 5 && !_wcsicmp(argv[1], L"/testmaj")) {
         std::vector<unsigned char> d;
         ReadAll(argv[2], d);
         std::vector<Note> rel = ParseReleases(std::string(d.begin(), d.end()));
         std::string o;
         for (const Note &n : rel) o += Narrow(n.ver, CP_UTF8) + (n.pre ? " pre" : "") + (n.zip.empty() ? " sans paquet" : " " + Narrow(n.zip, CP_UTF8)) + "\r\n";
-        for (int rw = 0; rw < 2; rw++) {
-            const Note *p = PickRelease(rel, rw != 0);
+        {
+            const Note *p = PickRelease(rel);
             std::wstring v = p ? p->ver : L"";
-            o += std::string(rw ? "reworked" : "legacy") + " : " + Narrow(v, CP_UTF8) + (p && WantVer(v, argv[4], rw != 0) ? " a installer" : " rien") + " ; notes " + std::to_string(ChannelNotes(rel, rw != 0).size()) + "\r\n";
+            o += "choisie : " + Narrow(v, CP_UTF8) + (p && WantVer(v, argv[4]) ? " a installer" : " rien") + " ; notes " + std::to_string(ChannelNotes(rel).size()) + "\r\n";
         }
         HANDLE f = CreateFileW(argv[3], GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
         if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, o.data(), (DWORD)o.size(), &w, NULL); CloseHandle(f); }
@@ -6660,7 +6725,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return g_gameDir.empty() ? 1 : 0;
     }
-    g_logo = LoadPngRes(4);   // (logo de la barre de navigation : logo-titre.png)
+    g_logo = LoadPngRes(g_game == GAME_MSC ? 9 : 4);   // (logo de la barre de navigation : logo-titre.png, logo-msc.png sur My Summer Car)
     if (g_gameDir.empty()) SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe"));
     else if ((CrashCheck(), g_crashT != 0)) SetStatus(K_WARN, T(L"Arr\u00EAt brutal du jeu : voir les journaux", L"The game stopped abruptly: see the logs"));
     else if (LastLaunchWithoutMod()) SetStatus(K_WARN, T(L"Le dernier lancement s'est fait SANS le mod (antivirus ? version.dll ?) : voir JOURNAUX", L"The last launch ran WITHOUT the mod (antivirus? version.dll?): see LOGS"));
