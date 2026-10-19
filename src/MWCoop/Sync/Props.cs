@@ -148,6 +148,8 @@ namespace MWCoop
         static readonly HashSet<string> dupLogged = new HashSet<string>();
 
         public static string WorldKeyOf(Rigidbody rb) { return WorldKey(rb); }   // (Fluids : bidons)
+        // Cle du monde deja prise pour cet objet (releve du chargement), sans en calculer une (PartsMsc : piece tenue en main).
+        public static string KnownWorldKey(GameObject go) { string k; return go != null && worldKeys.TryGetValue(go, out k) ? k : null; }
 
         // Corps sans ID hors des racines du monde : vaut-il une cle par son chemin ? (voir WorldRoots)
         static bool LooseCandidate(Rigidbody rb, Transform t, string rootName)

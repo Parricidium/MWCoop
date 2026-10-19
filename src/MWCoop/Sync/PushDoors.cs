@@ -30,6 +30,21 @@ namespace MWCoop
         static float scanAt = -1, nextHost;
         const int K_POSE = 1;
 
+        // Essais (MSC, Autotest=mscporte) : pousse la porte dont la cle contient 'part' (comme le bouton tenu), ou la relache ; etat.
+        public static string TestPush(string part, string state)
+        {
+            D d = doors.Find(x => x.Key.Contains(part));
+            if (d == null || d.F == null) return "porte " + part + " pas suivie (" + doors.Count + ")";
+            Game.SetState(d.F, state);
+            return d.Key + " -> " + d.F.ActiveStateName;
+        }
+        public static string State()
+        {
+            var sb = new System.Text.StringBuilder(doors.Count + " portes poussees :");
+            foreach (D d in doors) sb.Append(' ').Append(d.T.parent != null ? d.T.parent.name : d.T.name).Append(' ').Append(d.T.localEulerAngles.y.ToString("F0")).Append(d.Following ? " (suivie)" : "");
+            return sb.ToString();
+        }
+
         public static void OnLevelLoaded()
         {
             doors.Clear();

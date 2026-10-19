@@ -109,17 +109,27 @@ static const GameDef kGames[2] = {
 };
 static int g_game = GAME_MWC;
 static const GameDef &GM() { return kGames[g_game]; }
+// Nom du mod affiche : « MSCoop » sur My Summer Car (retour de Vaydon, 19/10 : « It should be MSCOOP »), « MWCoop » sinon. Les
+// noms de fichiers et de dossiers (MWCoop.dll, dossier MWCoop, %LOCALAPPDATA%\MWCoop) ne changent pas.
+static const wchar_t *ProductName() { return g_game == GAME_MSC ? L"MSCoop" : L"MWCoop"; }
 static std::wstring StoreUrl() { return std::wstring(L"https://store.steampowered.com/app/") + GM().appid + L"/"; }
 static void GameSwapIn(std::wstring &s)
 {
     static const wchar_t *from[] = { L"My Winter Car", L"mywintercar" }, *to[] = { L"My Summer Car", L"mysummercar" };
     for (int k = 0; k < 2; k++) for (size_t p = s.find(from[k]); p != std::wstring::npos; p = s.find(from[k], p + wcslen(to[k]))) s.replace(p, wcslen(from[k]), to[k]);
+    // Nom du mod : MWCoop -> MSCoop, sauf dans un chemin ou un nom de fichier (\MWCoop, MWCoop.dll, MWCoop\, MWCoop-lanceur...).
+    for (size_t p = s.find(L"MWCoop"); p != std::wstring::npos; p = s.find(L"MWCoop", p + 6))
+    {
+        wchar_t before = p > 0 ? s[p - 1] : L' ', after = p + 6 < s.size() ? s[p + 6] : L' ';
+        if (wcschr(L"\\/%", before) || wcschr(L"\\/.-_", after)) continue;
+        s[p + 1] = L'S';
+    }
 }
 // Texte d'un T() pour le jeu choisi : tel quel pour MWC ; pour MSC, une copie adaptee gardee (adresse stable ; cle = le texte
 // d'origine lui-meme, pas son adresse : T() recoit parfois le c_str() d'une chaine temporaire).
 static const wchar_t *GameSwap(const wchar_t *s)
 {
-    if (g_game == GAME_MWC || !s || (!wcsstr(s, L"My Winter Car") && !wcsstr(s, L"mywintercar"))) return s;
+    if (g_game == GAME_MWC || !s || (!wcsstr(s, L"My Winter Car") && !wcsstr(s, L"mywintercar") && !wcsstr(s, L"MWCoop"))) return s;
     if (wcsstr(s, L"My Summer Car")) return s;   // (texte qui nomme les deux jeux : le switch, son guide)
     static std::mutex mx;
     static std::unordered_map<std::wstring, std::wstring> cache;
@@ -609,8 +619,8 @@ static void LoadLocalVersion()
 // "MWCoop 0.1.0", "MWCoop (dev)" (fichiers du mod sans version.txt), "MWCoop".
 static std::wstring ModLabel()
 {
-    if (!g_localVer.empty()) return L"MWCoop " + g_localVer;
-    return g_modOk ? L"MWCoop (dev)" : L"MWCoop";
+    if (!g_localVer.empty()) return std::wstring(ProductName()) + L" " + g_localVer;
+    return std::wstring(ProductName()) + (g_modOk ? L" (dev)" : L"");
 }
 
 // Version d'un exe (ressource FILEVERSION : MWV_NUM), 0 si illisible. VERSION.dll de Windows charge par son chemin
@@ -3982,7 +3992,7 @@ static bool FirewallBeforeHosting()
             L"Windows Firewall does not allow My Winter Car on this network yet (Radmin VPN often counts as a public network).");
     msg += T(L"\n\nTes amis entreraient dans le salon, mais pas dans la partie (\u00AB d\u00E9lai d\u00E9pass\u00E9 \u00BB).\n\nAutoriser My Winter Car et MWCoop dans le pare-feu ? Windows va demander l'accord administrateur.",
              L"\n\nYour friends would get into the lobby, but not into the game (\"timed out\").\n\nAllow My Winter Car and MWCoop in the firewall? Windows will ask for administrator approval.");
-    int r = MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_YESNOCANCEL | MB_ICONWARNING);
+    int r = MessageBoxW(g_wnd, msg.c_str(), ProductName(), MB_YESNOCANCEL | MB_ICONWARNING);
     if (r == IDCANCEL) return false;
     if (r != IDYES) return true;
     std::wstring args = L"/parefeu";
@@ -4123,7 +4133,7 @@ static void HostStart()
             TestLog("salon : LANCER refuse, envoi en cours chez %s", dl.c_str());
             std::wstring q = std::wstring(T(L"Ces invités reçoivent encore tes mods : ", L"These guests are still receiving your mods: ")) + Widen(dl, CP_UTF8)
                            + T(L"\n\nAttends la fin de leur téléchargement pour lancer la partie.", L"\n\nWait for their download to finish before starting the game.");
-            if (g_testSalon.empty()) MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_OK | MB_ICONINFORMATION);
+            if (g_testSalon.empty()) MessageBoxW(g_wnd, q.c_str(), ProductName(), MB_OK | MB_ICONINFORMATION);
             else SetStatus(K_WARN, L"%s", q.c_str());
             return;
         }
@@ -4134,7 +4144,7 @@ static void HostStart()
         wchar_t q[400];
         swprintf_s(q, T(L"%d invit\u00E9(s) sur %d pas encore pr\u00EAt(s).\n\nLancer quand m\u00EAme ? Leur jeu d\u00E9marrera aussi.",
                         L"%d of %d guest(s) not ready yet.\n\nStart anyway? Their game will start too."), notReady, guests);
-        if (MessageBoxW(g_wnd, q, L"MWCoop", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
+        if (MessageBoxW(g_wnd, q, ProductName(), MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
         if (g_lobby != LB_HOST || g_goSent) return;   // (le salon a pu changer pendant la question)
     }
     if (g_lobbySteam) {   // salon Steam : go dans le salon, les invites lancent leur jeu en le voyant
@@ -6239,7 +6249,7 @@ static void Uninstall()
              L"\n\nIf you had put MWCoop in Steam's launch options (game Properties > General), remove it: otherwise the game won't start from Steam anymore.\n\nTo reinstall: download MWCoop and run MWCoop.exe.");
     if (IsWine() && !ok) msg += T(L"\n\nSous Linux, les copies de lancement (avec des liens vers le jeu) restent : supprime-les à la main, sans suivre les liens.",
                                   L"\n\nOn Linux, the launch copies (with links to the game) are kept: delete them by hand, without following the links.");
-    MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
+    MessageBoxW(g_wnd, msg.c_str(), ProductName(), MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
     DestroyWindow(g_wnd);
 }
 

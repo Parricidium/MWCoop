@@ -109,7 +109,7 @@ namespace MWCoop
 
         static bool HasSave()
         {
-            return System.IO.File.Exists(System.IO.Path.Combine(SaveTransfer.SaveDir, "savefile.txt"));
+            return System.IO.File.Exists(System.IO.Path.Combine(SaveTransfer.SaveDir, Game.SaveFile));
         }
 
         static void Continue()

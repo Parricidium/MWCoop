@@ -245,8 +245,69 @@ namespace MWCoop
             }
         }
 
+        // [Test] Autotest=mscporte (19/10, retour de Vaydon : portes de la maison et du garage) -- l'hote : 60 s ouvre la porte
+        // d'entree, 66 s allume la cuisine, 72 s pousse la porte gauche du garage (2 s), 85 s referme la porte d'entree. Chacun note
+        // toutes les 5 s : porte d'entree (DoorOpen), portes du garage (angle).
+        static int pdStep; static float pdLog, pdRelease;
+        static void MscPorte(float t)
+        {
+            bool host = Net.Session.IsHost;
+            if (host)
+            {
+                if (t > 60f && pdStep == 0) { pdStep = 1; Log.Info("autotest : mscporte, " + Interactions.TestNamed("LIVINGROOM/DoorFront")); }
+                if (t > 66f && pdStep == 1) { pdStep = 2; Log.Info("autotest : mscporte, " + Interactions.TestNamed("switch_kitchen")); }
+                if (t > 72f && pdStep == 2) { pdStep = 3; pdRelease = t + 2f; Log.Info("autotest : mscporte, " + PushDoors.TestPush("DoorLeft", "Open")); }
+                if (pdStep == 3 && t > pdRelease) { pdStep = 4; Log.Info("autotest : mscporte, relache " + PushDoors.TestPush("DoorLeft", "Mouse off")); }
+                if (t > 85f && pdStep == 4) { pdStep = 5; Log.Info("autotest : mscporte, " + Interactions.TestNamed("LIVINGROOM/DoorFront")); }
+            }
+            if (t > 55f && t < 120f && Time.realtimeSinceStartup >= pdLog)
+            {
+                pdLog = Time.realtimeSinceStartup + 5f;
+                PlayMakerFSM door = Game.FindFsm("YARD/Building/LIVINGROOM/DoorFront/Pivot/Handle", "Use");
+                FsmBool open = door != null ? door.FsmVariables.FindFsmBool("DoorOpen") : null;
+                GameObject piv = Game.FindAny("YARD/Building/LIVINGROOM/DoorFront/Pivot");
+                Log.Info("autotest : mscporte (" + (host ? "hote" : "invite") + ") porte d'entree " + (open != null ? (open.Value ? "ouverte" : "fermee") : "?")
+                         + (piv != null ? " " + piv.transform.localEulerAngles.y.ToString("F0") + " deg" : "") + " | " + PushDoors.State());
+            }
+        }
+
+        // [Test] Autotest=mscguepe (19/10, JD : mort par les guepes pres d'une voiture, ecran noir et « ENTER DRIVING MODE » apres la
+        // reapparition) -- avec [Test] TestReapparition=2 : 25 s a cote de la portiere de [Test] TestVoiture (FERNDALE), 28 s piqures
+        // (allergie 110, STING -> mort ~10 s apres), reapparition automatique ; etat de l'allergie, de la vignette et de l'invite de
+        // conduite a 26, 36 et 55 s, captures.
+        static int gpStep;
+        static string GuepeState()
+        {
+            GameObject cam = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+            PlayMakerFSM bl = cam != null ? Game.FsmOn(cam, "Blindness") : null;
+            string vig = "?";
+            if (cam != null) foreach (Behaviour b in cam.GetComponents<Behaviour>()) if (b != null && b.GetType().Name.StartsWith("VignetteAndChromatic")) vig = b.enabled ? "allumee" : "eteinte";
+            int prompts = 0;
+            foreach (PlayMakerFSM f in Object.FindObjectsOfType<PlayMakerFSM>()) if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger") && f.ActiveStateName == "Press return") prompts++;
+            return "Blindness [" + (bl != null ? bl.ActiveStateName : "?") + "] allergie " + (bl != null ? bl.FsmVariables.GetFsmFloat("MaxAllergy").Value.ToString("F0") : "?") + ", vignette " + vig
+                   + ", GUIdrive " + Game.GlobalBool("GUIdrive") + ", zones 'Press return' " + prompts + ", joueur en " + (Game.PlayerT != null ? Game.PlayerT.position.ToString("F1") : "?");
+        }
+        static void MscGuepe(float t)
+        {
+            string car = Config.Get("Test", "TestVoiture", "FERNDALE");
+            if (t > 25f && gpStep == 0) { gpStep = 1; Log.Info("autotest : mscguepe, " + VehicleSync.TestEnter(car, false)); }
+            if (t > 26.5f && gpStep == 1) { gpStep = 2; Log.Info("autotest : mscguepe, avant : " + GuepeState()); }
+            if (t > 28f && gpStep == 2)
+            {
+                gpStep = 3;
+                GameObject cam = Game.PlayerPart("Pivot/AnimPivot/Camera/FPSCamera/FPSCamera");
+                PlayMakerFSM bl = cam != null ? Game.FsmOn(cam, "Blindness") : null;
+                if (bl != null) { bl.FsmVariables.GetFsmFloat("MaxAllergy").Value = 110f; bl.SendEvent("STING"); }
+                Log.Info("autotest : mscguepe, piqures -> " + (bl != null ? bl.ActiveStateName : "pas de Blindness"));
+            }
+            if (t > 36f && gpStep == 3) { gpStep = 4; Log.Info("autotest : mscguepe, pendant : " + GuepeState()); CaptureSoon("msc-guepe-pendant", 0.2f); }
+            if (t > 55f && gpStep == 4) { gpStep = 5; Log.Info("autotest : mscguepe, apres : " + GuepeState()); CaptureSoon("msc-guepe-apres", 0.2f); }
+        }
+
         static void MscTest(string mode, float t)
         {
+            if (mode == "mscguepe") { MscGuepe(t); return; }
+            if (mode == "mscporte") { MscPorte(t); return; }
             if (mode == "mscreste") { MscReste(t); return; }
             if (mode == "mscregles") { MscRegles(t); return; }
             if (mode == "mscmeca") { MscMeca(t); return; }

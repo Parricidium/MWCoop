@@ -123,7 +123,7 @@ static void SaveInfo(SaveSlot &s)
 {
     std::wstring d = SaveDirOf(s.prof);
     WIN32_FILE_ATTRIBUTE_DATA a;
-    s.has = !d.empty() && GetFileAttributesExW((d + L"savefile.txt").c_str(), GetFileExInfoStandard, &a);
+    s.has = !d.empty() && GetFileAttributesExW((d + (g_game == GAME_MSC ? L"defaultES2File.txt" : L"savefile.txt")).c_str(), GetFileExInfoStandard, &a);
     if (s.has) s.mtime = a.ftLastWriteTime;
     s.bytes = 0;
     SaveStatsRead(s, d);

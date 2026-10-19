@@ -347,7 +347,7 @@ namespace MWCoop
         {
             float px = r.x + Style.Px(12), pw = r.width - Style.Px(24), yy = r.y + Style.Px(16);
             float lw = Style.Logo(new Rect(px + Style.Px(4), yy, pw - Style.Px(4), Style.Px(58)));
-            if (lw <= 0f) Style.Title(new Rect(px + Style.Px(8), yy, pw, Style.Px(58)), "MWCoop", Kit.Ink, TextAnchor.MiddleLeft, 24);
+            if (lw <= 0f) Style.Title(new Rect(px + Style.Px(8), yy, pw, Style.Px(58)), Lang.Name, Kit.Ink, TextAnchor.MiddleLeft, 24);
             yy += Style.Px(64);
             string badge = !Session.Active ? "SOLO" : Session.IsHost ? Lang.T("H\u00D4TE", "HOST") : Lang.T("INVIT\u00C9", "GUEST");
             Kit.Pill(px + Style.Px(8), yy + Style.Px(9), badge, Kit.Ice);

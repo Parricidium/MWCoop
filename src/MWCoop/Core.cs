@@ -377,7 +377,8 @@ namespace MWCoop
                                     FuelPrices.OnLevelLoaded, Npcs.OnLevelLoaded, Traffic.OnLevelLoaded, LogPiles.OnLevelLoaded, Jobs.OnLevelLoaded,
                                     // (19/10 : mecanique -- pieces et vis (PartsMsc.cs), objets, peinture, reglages, liquides, atelier, remorquage)
                                     Parts.OnLevelLoaded, Props.OnLevelLoaded, Paint.OnLevelLoaded, Settings.OnLevelLoaded, Fluids.OnLevelLoaded,
-                                    Consume.OnLevelLoaded, ItemFsms.OnLevelLoaded, Tow.OnLevelLoaded, Garage.OnLevelLoaded };
+                                    Consume.OnLevelLoaded, ItemFsms.OnLevelLoaded, Tow.OnLevelLoaded, Garage.OnLevelLoaded,
+                                    Interactions.OnLevelLoaded, PushDoors.OnLevelLoaded };   // (portes de la maison, interrupteurs ; portes du garage poussees)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -407,6 +408,8 @@ namespace MWCoop
             "porte-monnaie", "argent", "magasin", "rayons", "boissons", "carburant",
             // 19/10 : mecanique (pieces : 'Assembly' / 'Removal' / 'Screw' de MSC, cle = entree Database ; reglages et liquides de Database/*)
             "pieces", "objets", "objets (etat)", "reglages", "liquides", "consommables", "remorquage", "atelier",
+            // 19/10 soir (retour de Vaydon, 1.1.2 : portes de la maison, du garage et exterieures pas synchronisees)
+            "interactions", "portes poussees",
             "autotest",   // (essais seulement : Autotest.MscTest)
         };
         static Mod[] active;
