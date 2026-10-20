@@ -48,6 +48,11 @@ namespace MWCoop
             }
             public Vector3 Head, Engine, BrakePivot, BrakeGrip;
             public KeyValuePair<string, Vector3>[] Controls;
+            public Knob[] Knobs;              // boutons visibles poses sur le modele (commande du jeu dessous)
+            public string[] Off;              // commandes de la SORBET coupees (colliders)
+            public Vector3 Dome; public bool HasDome;   // plafonnier (Functions/InteriorLight) pose ici
+            public float BrakeAngle = 1f;     // amplitude du levier (KnobPos 0-20 degres x ceci)
+            public float ControlSize;         // taille maxi (m) des zones cliquables des commandes deplacees (0 : celles du jeu)
             public Dictionary<string, Vector3> Info;
             // (addons : MWCoop\addons\<dossier> depuis 1.5.1 -- dossier ouvert par le lanceur, onglet Addons ; avant : MWCoop\<dossier>)
             public string Dir
@@ -61,15 +66,35 @@ namespace MWCoop
             }
             public bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
         }
+        public class Knob { public string Path; public Vector3 At, Normal; public Color Col; public bool Choke; }
         public const int ModelVaz = 0, ModelEvo = 1;
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
-        // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant ; pas de levier de frein a main
-        // modelise (le levier cliquable du jeu sur la console) ; commandes du tableau de bord : places de la SORBET.
+        // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant.
+        // Poste de conduite (JD, 20/10, capture annotee) : le levier du frein a main est la tige carbone a droite du volant
+        // (frein.p205, pivot a sa base, serre = penche vers l'arriere, 28 degres) ; quatre boutons sur le panneau entre la jante
+        // et le levier vus du siege (face arriere du boitier de console, z 0,49), de haut en bas : contact (rouge), starter (bleu :
+        // tire / pousse comme la SORBET, il sort de la console), phares (blanc), warning (orange), zones cliquables du jeu
+        // reduites a 2,4 cm sous chacun ; toutes les autres commandes du tableau de bord
+        // coupees (chauffage, essuie-glaces, degivrage, radio, pare-soleil, des) ; plafonnier gardé, sous le pavillon.
+        static readonly Vector3 EvoFace = new Vector3(-0.19f, 0.10f, -0.97f).normalized;   // (face arriere du boitier, vers le pilote)
         public static readonly Model Evo3 = new Model { Id = ModelEvo, Folder = "evo3", Name = "Ebo III",
             Head = new Vector3(-0.35f, 0.909f, -0.101f), Engine = new Vector3(0f, 0.75f, 1.55f),
-            BrakePivot = new Vector3(0.02f, 0.40f, -0.05f), BrakeGrip = new Vector3(0.02f, 0.47f, 0.05f),
-            Controls = new KeyValuePair<string, Vector3>[0] };
+            BrakePivot = new Vector3(-0.05f, 0.275f, 0.313f), BrakeGrip = new Vector3(-0.075f, 0.60f, 0.355f), BrakeAngle = 1.4f,
+            Controls = new[] {
+                new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.095f, 0.690f, 0.482f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(-0.095f, 0.660f, 0.480f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonLightModes", new Vector3(-0.095f, 0.630f, 0.477f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHazard", new Vector3(-0.095f, 0.600f, 0.475f)) },
+            Knobs = new[] {
+                new Knob { At = new Vector3(-0.095f, 0.690f, 0.4895f), Normal = EvoFace, Col = new Color(0.80f, 0.06f, 0.05f) },
+                new Knob { At = new Vector3(-0.095f, 0.660f, 0.4870f), Normal = EvoFace, Col = new Color(0.10f, 0.25f, 0.85f), Choke = true, Path = "Functions/Dashboard/Choke/ButtonChoke" },
+                new Knob { At = new Vector3(-0.095f, 0.630f, 0.4845f), Normal = EvoFace, Col = new Color(0.92f, 0.92f, 0.90f) },
+                new Knob { At = new Vector3(-0.095f, 0.600f, 0.4825f), Normal = EvoFace, Col = new Color(0.95f, 0.45f, 0.05f) } },
+            Off = new[] { "Functions/Dashboard/Buttons/ButtonWipers", "Functions/Dashboard/Buttons/ButtonWindowHeater", "Functions/Dashboard/Buttons/ButtonHeaterTemp",
+                          "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
+                          "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
+            Dome = new Vector3(0f, 1.10f, -0.05f), HasDome = true, ControlSize = 0.024f };
         public static Model ModelOf(int id) { return id == ModelEvo ? Evo3 : Vaz2108; }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)
 
@@ -128,6 +153,8 @@ namespace MWCoop
             public readonly float[] LastGrip = { -1f, -1f };
             public int MaskLogs;
             public Model M = Vaz2108;
+            public readonly List<Collider> OffColl = new List<Collider>();
+            public Transform ChokeKnob; public Vector3 ChokeRest, ChokeDir; public FsmFloat ChokeVal; public Transform ChokeButton;
             public Color Paint = Color.white;
             public string LiveryHash;   // livree posee (empreinte), null : couleur du joueur
         }
@@ -564,7 +591,45 @@ namespace MWCoop
             {
                 Transform t = ct.Find(kv.Key);
                 if (t == null) { Log.Warn("vaz : commande " + kv.Key + " introuvable"); continue; }
+                if (cur.ControlSize > 0f) Shrink(t, cur.ControlSize);   // (boutons a 3 cm : le starter de la SORBET couvrait les phares)
                 if (MoveOnto(t, body.transform.TransformPoint(kv.Value))) ctl++;
+            }
+            if (cur.Off != null)
+                foreach (string op in cur.Off)
+                {
+                    Transform o = ct.Find(op);
+                    if (o == null) continue;
+                    foreach (Collider k in o.GetComponentsInChildren<Collider>(true)) { k.enabled = false; b.OffColl.Add(k); }
+                }
+            if (cur.Knobs != null)
+                for (int i = 0; i < cur.Knobs.Length; i++)
+                {
+                    Knob kn = cur.Knobs[i];
+                    GameObject g = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    Object.DestroyImmediate(g.GetComponent<Collider>());   // (le clic va a la commande du jeu dessous)
+                    g.name = "VAZ_bouton_" + i;
+                    g.transform.SetParent(body.transform, false);
+                    g.transform.localPosition = kn.At;
+                    g.transform.localRotation = Quaternion.FromToRotation(Vector3.up, kn.Normal);
+                    g.transform.localScale = new Vector3(0.017f, 0.006f, 0.017f);   // (cylindre d'Unity : 1 x 2 x 1)
+                    // (plastique brillant : la peinture de la voiture, avec ses reflets, les rendait pastel)
+                    Shader ks = Shader.Find("Legacy Shaders/Specular") ?? Shader.Find("Specular");
+                    var mat = ks != null ? new Material(ks) { color = kn.Col, name = "vaz_bouton_" + i }
+                                         : new Material(basePaint) { mainTexture = null, color = kn.Col, name = "vaz_bouton_" + i };
+                    if (mat.HasProperty("_Shininess")) mat.SetFloat("_Shininess", 0.6f);
+                    if (mat.HasProperty("_SpecColor")) mat.SetColor("_SpecColor", new Color(0.35f, 0.35f, 0.35f));
+                    g.GetComponent<MeshRenderer>().sharedMaterial = mat;
+                    b.Mats["bouton_" + i] = mat;
+                    if (kn.Choke)
+                    {
+                        b.ChokeKnob = g.transform; b.ChokeRest = kn.At; b.ChokeDir = kn.Normal;
+                        b.ChokeButton = kn.Path != null ? ct.Find(kn.Path) : null;
+                    }
+                }
+            if (cur.HasDome)
+            {
+                Transform dome = ct.Find("Functions/InteriorLight");
+                if (dome != null) MoveOnto(dome, body.transform.TransformPoint(cur.Dome));
             }
             Transform lever = ct.Find("Functions/HandBrake/LeverPivot");
             if (lever != null)
@@ -667,9 +732,11 @@ namespace MWCoop
             {
                 b.NextHide = now + 0.5f;
                 foreach (Renderer rd in b.Hidden) if (rd != null && rd.enabled) rd.enabled = false;   // (des automates rallument feux, vitres givrees...)
+                foreach (Collider k in b.OffColl) if (k != null && k.enabled) k.enabled = false;
             }
             Steering(b);
             Brake(b);
+            ChokeKnob(b);
             Roof(b);
             if (b.Sound != null) b.Sound.Update();
             Lamps(b, now);
@@ -713,6 +780,41 @@ namespace MWCoop
         }
 
         // Objet du jeu deplace (sans le tourner) pour que le centre de ses colliders soit en 'world'.
+        // Zones cliquables d'une commande ramenees a 'size' metres au plus dans chaque direction (centres gardes).
+        static void Shrink(Transform t, float size)
+        {
+            foreach (Collider k in t.GetComponentsInChildren<Collider>(true))
+            {
+                Vector3 s = k.transform.lossyScale;
+                float sx = Mathf.Max(Mathf.Abs(s.x), 1e-4f), sy = Mathf.Max(Mathf.Abs(s.y), 1e-4f), sz = Mathf.Max(Mathf.Abs(s.z), 1e-4f);
+                if (k is BoxCollider)
+                {
+                    var bc = (BoxCollider)k;
+                    bc.size = new Vector3(Mathf.Min(bc.size.x, size / sx), Mathf.Min(bc.size.y, size / sy), Mathf.Min(bc.size.z, size / sz));
+                }
+                else if (k is SphereCollider)
+                {
+                    var sc = (SphereCollider)k;
+                    sc.radius = Mathf.Min(sc.radius, size * 0.5f / Mathf.Max(sx, Mathf.Max(sy, sz)));
+                }
+                else if (k is CapsuleCollider)
+                {
+                    var cc = (CapsuleCollider)k;
+                    float m = Mathf.Max(sx, Mathf.Max(sy, sz));
+                    cc.radius = Mathf.Min(cc.radius, size * 0.5f / m); cc.height = Mathf.Min(cc.height, size / m);
+                }
+                else if (k is MeshCollider && ((MeshCollider)k).sharedMesh != null)
+                {
+                    // (maillage : remplace par une boite a sa place)
+                    Bounds mb = ((MeshCollider)k).sharedMesh.bounds;
+                    var bc = k.gameObject.AddComponent<BoxCollider>();
+                    bc.isTrigger = k.isTrigger; bc.center = mb.center;
+                    bc.size = new Vector3(Mathf.Min(mb.size.x, size / sx), Mathf.Min(mb.size.y, size / sy), Mathf.Min(mb.size.z, size / sz));
+                    Object.DestroyImmediate(k);
+                }
+            }
+        }
+
         static bool MoveOnto(Transform t, Vector3 world)
         {
             // (voiture encore eteinte : Collider.bounds est vide -> centre local de chaque collider, moyenne)
@@ -740,8 +842,22 @@ namespace MWCoop
                 b.BrakeKnob = f != null ? f.FsmVariables.FindFsmFloat("KnobPos") : null;
                 if (b.BrakeKnob == null) return;
             }
-            float a = Mathf.Clamp(b.BrakeKnob.Value, 0f, 20f) * Config.GetFloat("Test", "VazFreinSens", 1f);
+            float a = Mathf.Clamp(b.BrakeKnob.Value, 0f, 20f) * Config.GetFloat("Test", "VazFreinSens", 1f) * (b.M != null ? b.M.BrakeAngle : 1f);
             b.BrakePivot.localRotation = Quaternion.AngleAxis(-a, Vector3.right);
+        }
+
+        // Starter (Ebo III) : le bouton bleu sort de la console comme celui de la SORBET (automate 'Use' du bouton : Choke de 1,
+        // pousse, a 2, tire) -- 2,5 cm.
+        static void ChokeKnob(Built b)
+        {
+            if (b.ChokeKnob == null || b.ChokeButton == null) return;
+            if (b.ChokeVal == null)
+            {
+                PlayMakerFSM f = Game.FsmOn(b.ChokeButton.gameObject, "Use");
+                b.ChokeVal = f != null ? f.FsmVariables.FindFsmFloat("Choke") : null;
+                if (b.ChokeVal == null) return;
+            }
+            b.ChokeKnob.localPosition = b.ChokeRest + b.ChokeDir * (Mathf.Clamp(b.ChokeVal.Value, 1f, 2f) - 1f) * 0.025f;
         }
 
         static System.Reflection.FieldInfo steerField;

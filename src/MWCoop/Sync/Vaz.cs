@@ -357,7 +357,8 @@ namespace MWCoop
         // 20 s : l'hote prend la n 3 ; 30 s : il note sa voiture ; 40 s : l'invite note la sienne (celle de l'hote chez lui) ;
         // 50 s : l'hote la fait venir ; 60 s : il la rend ; 70 s : chacun note voiture partie. [Test] VazGarder=1 : pas rendue.
         static int testStep;
-        static bool testMoved, placesDone, openDone;
+        static bool testMoved, placesDone, openDone, brakeDone, camShot, relDone;
+        static Camera testCam;
         static int entryStep;
 
         static void PutPlayer(Vector3 local)
@@ -558,6 +559,56 @@ namespace MWCoop
                 if (hj != null) { JointLimits l = hj.limits; l.min = 60f; l.max = 65f; hj.limits = l; hj.useLimits = true; }
                 Autotest.CaptureSoon("vaz-ouvert", 4f);
                 Log.Info("autotest vaz : trappe et hayon ouverts (" + (hj != null ? "charniere du hayon" : "PAS de hayon") + ")");
+            }
+            // [Test] VazFreinTest=1 : camera d'essai aux yeux du pilote ([Test] VazCamPilote=x,y,z,vx,vy,vz, repere de la voiture),
+            // capture vaz-console a 31 s ; a 34 s, frein a main serre (KnobPos 20) et starter tire (Choke 2) par leurs automates,
+            // capture vaz-serre (poste de conduite de l'Ebo III : levier et bouton bleu, JD 20/10).
+            if (host && testStep == 2 && Config.GetInt("Test", "VazFreinTest", 0) != 0)
+            {
+                Transform c = CarOf(Me);
+                string[] cv = Config.Get("Test", "VazCamPilote", "-0.35,0.63,0.07,-0.06,0.33,0.43").Split(',');
+                if (c != null && cv.Length >= 6)
+                {
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    System.Func<int, float> F = i => float.Parse(cv[i], ci);
+                    if (testCam == null) { testCam = new GameObject("MWCoop-CameraPilote").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.02f; testCam.fieldOfView = 60; }
+                    testCam.transform.position = c.TransformPoint(new Vector3(F(0), F(1), F(2)));
+                    testCam.transform.LookAt(c.TransformPoint(new Vector3(F(3), F(4), F(5))), c.up);
+                }
+                if (t > 30f && !relDone && c != null)
+                {
+                    // (la SORBET copiee est garee frein serre : desserre et starter pousse pour la premiere capture)
+                    relDone = true;
+                    Transform lv0 = c.Find("Functions/HandBrake/LeverPivot"), ck0 = c.Find("Functions/Dashboard/Choke/ButtonChoke");
+                    PlayMakerFSM f0 = lv0 != null ? Game.FsmOn(lv0.gameObject, "Use") : null, f1 = ck0 != null ? Game.FsmOn(ck0.gameObject, "Use") : null;
+                    if (f0 != null && f0.FsmVariables.FindFsmFloat("KnobPos") != null) f0.FsmVariables.FindFsmFloat("KnobPos").Value = 0f;
+                    if (f1 != null && f1.FsmVariables.FindFsmFloat("Choke") != null) f1.FsmVariables.FindFsmFloat("Choke").Value = 1f;
+                }
+                if (t > 31f && !camShot) { camShot = true; Autotest.CaptureSoon("vaz-console", 0.5f); }
+            }
+            if (host && testStep == 2 && t > 34f && !brakeDone && Config.GetInt("Test", "VazFreinTest", 0) != 0)
+            {
+                brakeDone = true;
+                Transform c = CarOf(Me);
+                Transform lv = c != null ? c.Find("Functions/HandBrake/LeverPivot") : null, ck = c != null ? c.Find("Functions/Dashboard/Choke/ButtonChoke") : null;
+                PlayMakerFSM fl = lv != null ? Game.FsmOn(lv.gameObject, "Use") : null, fc = ck != null ? Game.FsmOn(ck.gameObject, "Use") : null;
+                FsmFloat kp = fl != null ? fl.FsmVariables.FindFsmFloat("KnobPos") : null, ch = fc != null ? fc.FsmVariables.FindFsmFloat("Choke") : null;
+                if (kp != null) kp.Value = 20f;
+                if (ch != null) ch.Value = 2f;
+                Transform dome = c != null ? c.Find("Functions/InteriorLight") : null;
+                Rent rr; rents.TryGetValue(Me, out rr); VazCar.Built bb = rr != null ? rr.Car : null;
+                Log.Info("autotest vaz : frein serre (" + (kp != null) + "), starter tire (" + (ch != null) + "), plafonnier en " + (dome != null ? c.InverseTransformPoint(dome.position).ToString("F2") : "?")
+                         + " ; levier modele " + (bb != null && bb.BrakePivot != null ? bb.BrakePivot.GetComponentsInChildren<MeshFilter>().Length + " maillage(s), angle " + bb.BrakePivot.localEulerAngles.ToString("F1") : "ABSENT")
+                         + ", levier du jeu " + (bb != null && bb.SorbetBrake != null ? "ok" : "ABSENT") + ", bouton du starter " + (bb != null && bb.ChokeKnob != null ? bb.ChokeKnob.localPosition.ToString("F3") : "ABSENT"));
+                // (ce que vise l'oeil de la camera d'essai sur chaque bouton : la commande du jeu doit etre touchee la premiere)
+                if (bb != null && bb.M != null && bb.M.Knobs != null && testCam != null && bb.Body != null)
+                    for (int i = 0; i < bb.M.Knobs.Length; i++)
+                    {
+                        Vector3 eye = testCam.transform.position, to = bb.Body.TransformPoint(bb.M.Knobs[i].At);
+                        RaycastHit hit;
+                        Log.Info("autotest vaz : bouton " + i + " -> " + (Physics.Raycast(eye, (to - eye).normalized, out hit, 3f) ? hit.collider.name + " a " + hit.distance.ToString("F3") + " (bouton a " + (to - eye).magnitude.ToString("F3") + ")" : "rien"));
+                    }
+                Autotest.CaptureSoon("vaz-serre", 1.5f);
             }
             if (host && testStep == 2 && t > 35f && !placesDone && Config.GetInt("Test", "VazPlaces", 0) != 0) { placesDone = true; try { Places(); } catch (System.Exception e) { Log.Warn("autotest vaz : places : " + e); } }
             // [Test] VazEntree=1 : joueur pose debout sur la place du conducteur (38 s) puis du passager (43 s) ; 2 s apres, ce que
