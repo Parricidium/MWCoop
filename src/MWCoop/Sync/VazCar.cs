@@ -18,7 +18,7 @@ namespace MWCoop
     public static class VazCar
     {
         // Modeles des voitures des joueurs (JD, 20/10) : la VAZ-2108 (MWCoop/vaz, dans la version publiee) et les addons --
-        // Evo III Gr. A (MWCoop/addons/evo3), 205 T16 Evo 2 Gr. B (MWCoop/addons/t16, JD 21/10) : EXTENSIONS PRIVEES de JD,
+        // Evo III Gr. A (MWCoop/addons/evo3), 205 T16 Evo 1 Gr. B (MWCoop/addons/t16, JD 21/10) : EXTENSIONS PRIVEES de JD,
         // jamais dans le depot ni les versions publiees (modeles de mods rFactor 1 sans licence connue). Meme construction ; ce
         // qui change : dossier, poste de conduite, commandes du tableau de bord, frein a main, moteur, tenue de route (Spec,
         // VazHandling), sons (MWCoop/addons/<dossier>/sons, VazSound).
@@ -112,14 +112,16 @@ namespace MWCoop
             // integrale, 1 230 kg, 61 % sur l'avant (moteur transversal avant), braquage 35
             Sp = new Spec { Name = "Evo III Gr. A", Power = 370f, PowerRpm = 5900f, Torque = 495f, TorqueRpm = 4200f, MaxRpm = 7500f,
                             Mass = 1230f, Com = 0.61f, Steer = 35f, Spring = 45300f, Damp = 2850f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
-        // 205 T16 Evo 2 Gr. B (JD 21/10, rally cars GrB/205T162) : moteur central arriere, integrale ; poste de conduite d'apres
+        // 205 T16 Evo 1 Gr. B (JD 21/10, rally cars GrB/205T162 : « Peugeot 205 T16 1985 », Salonen) : moteur central arriere,
+        // integrale ; poste de conduite d'apres
         // le volant du pilote (le meme que l'Evo III, 0,19 plus en arriere et 0,06 plus haut) ; frein a main : la tige carbone de
         // l'Evo III deplacee de meme (outils/rf1/t16e2_frein.py) ; commandes comme l'Evo III : contact (rouge), starter (bleu,
         // tire / pousse), phares (blanc), warning (orange) en colonne sur la face de la planche (z 0,54, tournee vers le pilote)
         // juste a droite du volant, vue depuis la tete (sous le bord du collider front1 de la SORBET, qui cachait le contact
-        // a 0,70) ; le reste du tableau de bord coupe. Tenue de route : celle de la 2052 du mod
-        // prive de JD validee en jeu (fiche T16 Evo 2 : 424 ch a 7 500, 490 Nm a 5 500, 907 kg, 46 % sur l'avant, braquage 40).
-        public static readonly Model T16 = new Model { Id = ModelT16, Folder = "t16", Name = "205 Ebo 2",
+        // a 0,70) ; le reste du tableau de bord coupe. Tenue de route : base de la 2052 du mod
+        // prive de JD validee en jeu (46 % sur l'avant, braquage 40, boite et pont), moteur et masse de l'Evo 1 (JD : « c'est
+        // l'Evo 1 ») : 350 ch a 7 500 tr/min, 450 Nm a 5 000, rupteur 8 000, 940 kg (Mass du .hdv rFactor).
+        public static readonly Model T16 = new Model { Id = ModelT16, Folder = "t16", Name = "205 Ebo 1",
             Head = new Vector3(-0.32f, 0.969f, -0.291f), Engine = new Vector3(0f, 0.55f, -0.85f),
             BrakePivot = new Vector3(-0.02f, 0.335f, 0.123f), BrakeGrip = new Vector3(-0.045f, 0.66f, 0.165f), BrakeAngle = 1.4f,
             Controls = new[] {
@@ -136,8 +138,8 @@ namespace MWCoop
                           "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
                           "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
             Dome = new Vector3(0f, 1.05f, -0.25f), HasDome = true, ControlSize = 0.024f,
-            Sp = new Spec { Name = "205 T16 Evo 2 Gr. B", Power = 424f, PowerRpm = 7500f, Torque = 490f, TorqueRpm = 5500f, MaxRpm = 8000f,
-                            Mass = 907f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+            Sp = new Spec { Name = "205 T16 Evo 1 Gr. B", Power = 350f, PowerRpm = 7500f, Torque = 450f, TorqueRpm = 5000f, MaxRpm = 8000f,
+                            Mass = 940f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
         public static readonly Model[] Models = { null, Evo3, T16 };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
