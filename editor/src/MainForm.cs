@@ -107,6 +107,8 @@ namespace EditeurCarte
             w.SetVirtualHostNameToFolderMapping("editeur.local", ui, CoreWebView2HostResourceAccessKind.Allow);
             Directory.CreateDirectory(Games.CacheRoot);
             w.SetVirtualHostNameToFolderMapping("carte.local", Games.CacheRoot, CoreWebView2HostResourceAccessKind.Allow);
+            Directory.CreateDirectory(Projects.Root);
+            w.SetVirtualHostNameToFolderMapping("projets.local", Projects.Root, CoreWebView2HostResourceAccessKind.Allow);   // (modeles importes)
             w.WebMessageReceived += OnMessage;
             w.NewWindowRequested += (s, e) => { e.Handled = true; try { Process.Start(e.Uri); } catch { } };
             w.Navigate("https://editeur.local/index.html");
@@ -141,6 +143,24 @@ namespace EditeurCarte
                 case "preparer": StartPrep(S(m, "jeu")); break;
                 case "annuler": if (prep != null) prep.Cancelled = true; break;
                 case "dossier": OpenFolder(S(m, "chemin")); break;
+                // ---- projets de carte (V1)
+                case "projets": Post(new Dictionary<string, object> { { "type", "projets" }, { "liste", Projects.List() } }); break;
+                case "creerProjet":
+                    {
+                        string d = Projects.Create(S(m, "nom"), S(m, "jeu"));
+                        Post(new Dictionary<string, object> { { "type", "projet" }, { "dossier", d }, { "data", Projects.Read(d) } });
+                        break;
+                    }
+                case "ouvrirProjet": Post(new Dictionary<string, object> { { "type", "projet" }, { "dossier", S(m, "dossier") }, { "data", Projects.Read(S(m, "dossier")) } }); break;
+                case "enregistrer":
+                    {
+                        bool ok = false; try { ok = Projects.Save(S(m, "dossier"), S(m, "data")); } catch { }
+                        Post(new Dictionary<string, object> { { "type", "enregistre" }, { "ok", ok } });
+                        break;
+                    }
+                case "importerModele": ImportModel(S(m, "dossier")); break;
+                case "dossierProjet": { string d = Projects.Dir(S(m, "dossier")); if (d != null) OpenFolder(d); break; }
+                case "compiler": Compile(m); break;
             }
         }
 
@@ -232,6 +252,38 @@ namespace EditeurCarte
             prep.Start();
         }
         volatile bool prepBusy;
+
+        void ImportModel(string dossier)
+        {
+            using (var d = new OpenFileDialog())
+            {
+                d.Title = "Modèle 3D";
+                d.Filter = "Modèles 3D (*.glb, *.gltf, *.fbx, *.obj)|*.glb;*.gltf;*.fbx;*.obj";
+                d.CheckFileExists = true;
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                string f = null, err = null;
+                try { f = Projects.ImportModel(dossier, d.FileName); } catch (Exception e) { err = e.Message; }
+                Post(new Dictionary<string, object> { { "type", "modele" }, { "fichier", f ?? "" }, { "nom", Path.GetFileNameWithoutExtension(d.FileName) }, { "erreur", err ?? (f == null ? "copie" : "") } });
+            }
+        }
+
+        // Paquet assemble par la page (fichiers en base64) -> .mwcmap dans Documents et dans les cartes du mod pour ce jeu.
+        void Compile(Dictionary<string, object> m)
+        {
+            var reply = new Dictionary<string, object> { { "type", "compile" } };
+            try
+            {
+                GameDef g = GameDef.Get(S(m, "jeu"));
+                GameFound f = g != null ? Games.Find(g) : null;
+                string mod = g != null ? Games.ModCartes(g, f != null ? f.Dir : null) : null;
+                var files = m["fichiers"] as Dictionary<string, object>;
+                string path = Projects.Compile(S(m, "dossier"), S(m, "nomFichier"), files, mod);
+                reply["chemin"] = path; reply["dossier"] = Path.GetDirectoryName(path); reply["mod"] = mod ?? "";
+                reply["taille"] = new FileInfo(path).Length;
+            }
+            catch (Exception e) { reply["erreur"] = e.Message; }
+            Post(reply);
+        }
 
         void OpenFolder(string p)
         {

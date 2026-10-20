@@ -109,6 +109,17 @@ namespace EditeurCarte
             if (forLauncher && Directory.Exists(LocalMwcoop)) IniSet(LauncherIni, "Lanceur", g.LauncherKey, dir.TrimEnd('\\') + "\\");
         }
 
+        // Dossier des cartes compilees que le mod charge (<dossier MWCoop du mod>\cartes) : donne par le lanceur (--mod), sinon
+        // celui du lanceur installe (AppData\MWCoop\MSC|MWC\MWCoop), sinon celui du jeu (installation dans le jeu).
+        public static string ModCartes(GameDef g, string gameDir)
+        {
+            if (Program.ModArg != null && Program.LaunchedFor == g.Id && Directory.Exists(Program.ModArg)) return Path.Combine(Program.ModArg, "cartes");
+            string a = Path.Combine(Path.Combine(LocalMwcoop, g.Id == "msc" ? "MSC" : "MWC"), "MWCoop");
+            if (Directory.Exists(a)) return Path.Combine(a, "cartes");
+            string b = gameDir != null ? Path.Combine(gameDir, "MWCoop") : null;
+            return b != null && Directory.Exists(b) ? Path.Combine(b, "cartes") : null;
+        }
+
         // Lanceur MWCoop qui fera l'export : celui installe dans AppData, sinon celui du dossier du jeu (EDITEUR_LANCEUR : essais).
         public static string Launcher(string gameDir)
         {

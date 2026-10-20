@@ -153,7 +153,17 @@ static std::vector<std::string> g_offerExtra;   // (sous g_lcs) suite de la list
 static std::wstring g_offerDir;           // (sous g_lcs) dossier Mods de l'hote
 static std::wstring g_offerGame;          // (sous g_lcs) dossier du jeu de l'hote (contenu)
 static std::wstring g_offerPaint;         // (sous g_lcs) peinture perso de la CORRIS envoyee a la place de Images\car.png (vide : celle du jeu)
+static std::wstring g_offerModDir;       // (sous g_lcs) dossier du mod de l'hote (cartes de l'editeur)
 static bool IsCarPng(const std::wstring &rel) { return !_wcsicmp(rel.c_str(), L"Images\\car.png"); }
+// (sous g_lcs) fichier de l'hote d'un chemin de la liste : Mods\ (dossier des mods), cartes\ (dossier du mod), car.png
+// (peinture perso), le reste dans le dossier du jeu.
+static std::wstring OfferSource(const std::string &p)
+{
+    if (!p.compare(0, 5, "Mods\\")) return g_offerDir + Widen(p.substr(5), CP_UTF8);
+    if (!_strnicmp(p.c_str(), "cartes\\", 7)) return g_offerModDir + Widen(p, CP_UTF8);
+    std::wstring w = Widen(p, CP_UTF8);
+    return !g_offerPaint.empty() && IsCarPng(w) ? g_offerPaint : g_offerGame + w;
+}
 static std::atomic<int> g_offerBusy(0);
 static std::atomic<bool> g_offerNew(false);
 static std::string g_offerSig;            // ce sur quoi la liste a ete faite (fil de la fenetre)
@@ -195,7 +205,9 @@ static void ModSetShared(const std::wstring &file, bool on)
 // ---- contenu personnalisable du jeu
 // games : 1 My Winter Car, 2 My Summer Car (3 : les deux) ; frMsc / enMsc : nom sur MSC (NULL : le meme).
 // mobylette : jonnez.png, l'image que le jeu lit (MWC et MSC) ; jonnez_template.png n'est que le modele a peindre.
-struct ContentCat { const char *key; const wchar_t *fr, *en, *root, *files; bool def; int games; const wchar_t *frMsc, *enMsc; };   // files : "a.png|b.png" (NULL : tout le dossier)
+// mod : dossier du mod (g_modRoot + MWCoop\), pas celui du jeu -- cartes : les .mwcmap de l'editeur de carte (MapPacks.cs),
+// un invite ne charge que celles de l'hote (meme carte, collisions comprises, pour tout le monde).
+struct ContentCat { const char *key; const wchar_t *fr, *en, *root, *files; bool def; int games; const wchar_t *frMsc, *enMsc; bool mod; };   // files : "a.png|b.png" (NULL : tout le dossier)
 static const ContentCat kContent[] = {
     { "cd1", L"CD 1", L"CD 1", L"CD1", NULL, true, 3, NULL, NULL },
     { "cd2", L"CD 2", L"CD 2", L"CD2", NULL, true, 3, NULL, NULL },
@@ -209,6 +221,7 @@ static const ContentCat kContent[] = {
     { "tissu", L"Tissu", L"Fabric", L"Images", L"fabric.png", true, 1, NULL, NULL },   // (MSC ne lit pas fabric.png)
     { "photo", L"Photo d'identit\u00E9", L"ID photo", L"Images", L"mugshot.png", false, 3, NULL, NULL },
     { "hockey", L"\u00C9quipes de hockey", L"Hockey teams", L"Extra", NULL, true, 1, NULL, NULL },   // (pas de dossier Extra dans MSC)
+    { "cartes", L"Cartes de l'\u00E9diteur", L"Editor maps", L"cartes", NULL, true, 3, NULL, NULL, true },
 };
 static const int kContentN = (int)(sizeof(kContent) / sizeof(kContent[0]));
 // Categorie lue par le jeu choisi ; coches par jeu ([Contenu] pour MWC, [ContenuMSC] pour MSC, dans mwcoop-lanceur.ini).
@@ -218,6 +231,9 @@ static std::wstring ContentName(int i) { const ContentCat &c = kContent[i]; retu
 static bool ContentOn(int i) { return ContentInGame(i) && GetPrivateProfileIntW(ContentSection(), Widen(kContent[i].key).c_str(), kContent[i].def ? 1 : 0, g_iniLauncher.c_str()) != 0; }
 static void ContentSet(int i, bool on) { if (ContentInGame(i)) WritePrivateProfileStringW(ContentSection(), Widen(kContent[i].key).c_str(), on ? L"1" : L"0", g_iniLauncher.c_str()); }
 static int ContentCount() { int n = 0; for (int i = 0; i < kContentN; i++) n += ContentInGame(i); return n; }
+// Dossier de base d'une categorie (avec \ final) : celui du jeu (game), ou celui du mod (modDir : g_modRoot + MWCoop\).
+static std::wstring ModContentDir() { return g_modRoot.empty() ? L"" : g_modRoot + L"MWCoop\\"; }
+static const std::wstring &ContentBase(int i, const std::wstring &game, const std::wstring &modDir) { return kContent[i].mod ? modDir : game; }
 // Fichiers presents d'une categorie, chemins "<dossier>\<fichier>" (dossier du jeu : game, avec \ final).
 static void ContentFilesTree(const std::wstring &base, const std::wstring &rel, std::vector<std::wstring> &out)
 {
@@ -232,10 +248,16 @@ static void ContentFilesTree(const std::wstring &base, const std::wstring &rel, 
     } while (FindNextFileW(h, &fd));
     FindClose(h);
 }
-static std::vector<std::wstring> ContentFiles(int i, const std::wstring &game)
+static std::vector<std::wstring> ContentFiles(int i, const std::wstring &game, const std::wstring &modDir)
 {
     std::vector<std::wstring> out;
     const ContentCat &c = kContent[i];
+    if (c.mod) {   // (cartes : les paquets seulement, pas photo.png des essais ni un .tmp de l'editeur)
+        if (modDir.empty()) return out;
+        ContentFilesTree(modDir, c.root, out);
+        out.erase(std::remove_if(out.begin(), out.end(), [](const std::wstring &f) { const wchar_t *e = wcsrchr(f.c_str(), L'.'); return !e || _wcsicmp(e, L".mwcmap"); }), out.end());
+        return out;
+    }
     if (!c.files) ContentFilesTree(game, c.root, out);
     else {
         std::wstring all = c.files;
@@ -250,7 +272,7 @@ static std::vector<std::wstring> ContentFiles(int i, const std::wstring &game)
     return out;
 }
 
-struct OfferJob { std::wstring dir, game, paint; bool msc; std::string ver; std::vector<std::pair<std::wstring, std::wstring>> mods; std::vector<int> cats; std::vector<std::wstring> priv; };   // mods : (fichier, ID) ; priv : ID et noms des mods gardes pour soi
+struct OfferJob { std::wstring dir, game, modDir, paint; bool msc; std::string ver; std::vector<std::pair<std::wstring, std::wstring>> mods; std::vector<int> cats; std::vector<std::wstring> priv; };   // mods : (fichier, ID) ; priv : ID et noms des mods gardes pour soi
 // Fichiers de base + rel (rel vide ou "\X\Y"), chemins dans la liste : prefix + "X\Y\<fichier>".
 static void OfferAddTree(const std::wstring &base, const std::wstring &rel, const std::string &prefix, std::vector<SyncFile> &out, uint64_t &total)
 {
@@ -344,10 +366,10 @@ static DWORD WINAPI OfferThread(void *p)
     }
     for (int i : job->cats) {   // contenu du jeu coche
         size_t before = o.files.size();
-        for (const std::wstring &rel : ContentFiles(i, job->game)) {
+        for (const std::wstring &rel : ContentFiles(i, job->game, job->modDir)) {
             SyncFile f;
             f.path = Narrow(rel, CP_UTF8);
-            std::wstring src = !job->paint.empty() && IsCarPng(rel) ? job->paint : job->game + rel;
+            std::wstring src = !job->paint.empty() && IsCarPng(rel) ? job->paint : ContentBase(i, job->game, job->modDir) + rel;
             if (o.files.size() >= 3000 || !SyncPathOk(f.path) || !FileFnvCached(src, &f.hash, &f.size)) continue;
             total += f.size;
             o.files.push_back(f);
@@ -396,6 +418,7 @@ static DWORD WINAPI OfferThread(void *p)
     g_offerExtra = extra;
     g_offerDir = job->dir;
     g_offerGame = job->game;
+    g_offerModDir = job->modDir;
     g_offerPaint = job->paint;
     LeaveCriticalSection(&g_lcs);
     std::string names;
@@ -437,15 +460,16 @@ static void SyncHostTick()
     OfferJob *job = new OfferJob;
     job->dir = g_mscDir;
     job->game = g_gameDir;
+    job->modDir = ModContentDir();
     job->paint = PaintOn() ? PaintFile() : L"";
     job->msc = msc;
     for (int i = 0; i < kContentN; i++) {   // contenu coche : ses fichiers (taille, date)
         if (!ContentOn(i)) continue;
         job->cats.push_back(i);
         sig += std::string("#") + kContent[i].key;
-        for (const std::wstring &rel : ContentFiles(i, g_gameDir)) {
+        for (const std::wstring &rel : ContentFiles(i, g_gameDir, job->modDir)) {
             WIN32_FILE_ATTRIBUTE_DATA a;
-            if (!GetFileAttributesExW((!job->paint.empty() && IsCarPng(rel) ? job->paint : g_gameDir + rel).c_str(), GetFileExInfoStandard, &a)) continue;
+            if (!GetFileAttributesExW((!job->paint.empty() && IsCarPng(rel) ? job->paint : ContentBase(i, g_gameDir, job->modDir) + rel).c_str(), GetFileExInfoStandard, &a)) continue;
             char b[64];
             sprintf_s(b, "|%lu.%lu.%lu", a.nFileSizeLow, a.ftLastWriteTime.dwLowDateTime, a.ftLastWriteTime.dwHighDateTime);
             sig += Narrow(rel, CP_UTF8) + b;
@@ -490,8 +514,7 @@ static bool SyncServe(const std::string &m, Wr &out)
     EnterCriticalSection(&g_lcs);
     bool ok = key == g_offer.key && idx < (int)g_offer.files.size();
     SyncFile f = ok ? g_offer.files[idx] : SyncFile();
-    std::wstring path = !f.path.compare(0, 5, "Mods\\") ? g_offerDir + Widen(f.path.substr(5), CP_UTF8)
-                      : !g_offerPaint.empty() && IsCarPng(Widen(f.path, CP_UTF8)) ? g_offerPaint : g_offerGame + Widen(f.path, CP_UTF8);
+    std::wstring path = OfferSource(f.path);
     LeaveCriticalSection(&g_lcs);
     static int served;
     if (!ok || off > f.size) { LaunchLog("mods : demande refusee (fichier %d, position %u, liste %s)", idx, off, key == g_offer.key ? "la meme" : "autre"); return false; }
@@ -612,7 +635,7 @@ static void SyncPumpLocked()
     }
 }
 
-// Fin : ce que l'hote n'a plus est retire de la copie (DLL des mods ; fichiers des CD, de la radio, du hockey).
+// Fin : ce que l'hote n'a plus est retire de la copie (DLL des mods ; fichiers des CD, de la radio, du hockey, cartes de l'editeur).
 static void SyncPrune(const std::wstring &dir, const std::string &prefix, const wchar_t *pattern)
 {
     WIN32_FIND_DATAW fd;
@@ -630,7 +653,7 @@ static void SyncPrune(const std::wstring &dir, const std::string &prefix, const 
 static void SyncFinishLocked()
 {
     SyncPrune(CoopModsDir(), "Mods\\", L"*.dll");
-    for (const wchar_t *r : { L"CD1", L"CD2", L"CD3", L"Radio", L"Extra" })
+    for (const wchar_t *r : { L"CD1", L"CD2", L"CD3", L"Radio", L"Extra", L"cartes" })   // (cartes : une carte retiree par l'hote ne reste pas chez l'invite)
         if (OfferHasRoot(g_hostOffer, r)) SyncPrune(ContentDir() + r + L"\\", Narrow(r) + "\\", L"*");
     g_sync = SY_DONE;
     LaunchLog("mods : copie de l'hote a jour (%d mod(s), %d contenu(s))", (int)g_hostOffer.mods.size(), (int)g_hostOffer.cats.size());
@@ -937,7 +960,7 @@ static std::string ContentLaunchLines()
     std::string roots, images;
     {
         std::lock_guard<std::mutex> lk(g_syncMx);
-        for (const wchar_t *r : { L"CD1", L"CD2", L"CD3", L"Radio", L"Extra", L"Images" })
+        for (const wchar_t *r : { L"CD1", L"CD2", L"CD3", L"Radio", L"Extra", L"Images", L"cartes" })
             if (OfferHasRoot(g_hostOffer, r)) roots += (roots.empty() ? "" : ",") + Narrow(r);
         for (auto &f : g_hostOffer.files) if (!_strnicmp(f.path.c_str(), "Images\\", 7)) images += (images.empty() ? "" : ",") + f.path.substr(7);
     }
@@ -1295,8 +1318,7 @@ static void SyncWriteLateOffer()
         w.u32((uint32_t)g_offer.key); w.u32((uint32_t)(g_offer.key >> 32));
         w.u16((int)g_offer.files.size());
         for (auto &sf : g_offer.files) {
-            std::wstring path = !sf.path.compare(0, 5, "Mods\\") ? g_offerDir + Widen(sf.path.substr(5), CP_UTF8)
-                              : !g_offerPaint.empty() && IsCarPng(Widen(sf.path, CP_UTF8)) ? g_offerPaint : g_offerGame + Widen(sf.path, CP_UTF8);
+            std::wstring path = OfferSource(sf.path);
             std::string p8 = Narrow(path, CP_UTF8);
             w.u16((int)p8.size()); w.d += p8;
             w.u32(sf.size);
@@ -1452,14 +1474,14 @@ static const float kContentRowH = 60, kContentRowStep = 68;
 // Groupes de la carte de gauche : categories de kContent (indices), icone, sous-titre ; *Msc : sur My Summer Car (NULL : le
 // meme). Une categorie absente du jeu choisi (ContentInGame) n'est ni montree, ni comptee, ni envoyee.
 struct ContentGroup { const wchar_t *fr, *en, *subFr, *subEn; int icon; const int *cats; int ncats; const wchar_t *frMsc, *enMsc, *subFrMsc, *subEnMsc; };
-static const int kCgCd[] = { 0, 1, 2 }, kCgRadio[] = { 3 }, kCgPaint[] = { 4 }, kCgFlag[] = { 6 }, kCgPosters[] = { 7 }, kCgOther[] = { 5, 8, 9, 10, 11 };
+static const int kCgCd[] = { 0, 1, 2 }, kCgRadio[] = { 3 }, kCgPaint[] = { 4 }, kCgFlag[] = { 6 }, kCgPosters[] = { 7 }, kCgOther[] = { 5, 8, 9, 10, 11, 12 };
 static const ContentGroup kCg[] = {
     { L"CD", L"CD", L"Lecteur CD des voitures", L"Car CD player", IC_MUSIC, kCgCd, 3, NULL, NULL, NULL, NULL },
     { L"Radio", L"Radio", L"Station perso", L"Custom station", IC_RADIO, kCgRadio, 1, NULL, NULL, NULL, NULL },
     { L"Peinture de ma CORRIS", L"My CORRIS paint", L"", L"", IC_CAR, kCgPaint, 1, L"Peinture de ma SATSUMA", L"My SATSUMA paint", NULL, NULL },
     { L"Drapeau", L"Flag", L"Devant le garage", L"In front of the garage", IC_FLAG, kCgFlag, 1, NULL, NULL, L"Dans le garage", L"In the garage" },   // (MSC : YARD/Building/LOD/flag)
     { L"Posters", L"Posters", L"Murs du garage et de la maison", L"Garage and house walls", IC_IMAGE, kCgPosters, 1, NULL, NULL, L"Murs de la chambre", L"Bedroom walls" },   // (ligne : « Garage et maison » ; MSC : BEDROOM1)
-    { L"Autres", L"Others", L"Mobylette, autocollant, tissu, photo…", L"Moped, sticker, fabric, photo…", IC_LAYERS, kCgOther, 5, NULL, NULL, L"Mobylette, autocollant, photo…", L"Moped, sticker, photo…" },
+    { L"Autres", L"Others", L"Mobylette, autocollant, tissu, photo, cartes…", L"Moped, sticker, fabric, photo, maps…", IC_LAYERS, kCgOther, 6, NULL, NULL, L"Mobylette, autocollant, photo, cartes…", L"Moped, sticker, photo, maps…" },
 };
 static std::wstring CgName(int gi) { const ContentGroup &c = kCg[gi]; return g_game == GAME_MSC && c.frMsc ? T(c.frMsc, c.enMsc) : T(c.fr, c.en); }
 static std::wstring CgSub(int gi) { const ContentGroup &c = kCg[gi]; return g_game == GAME_MSC && c.subFrMsc ? T(c.subFrMsc, c.subEnMsc) : T(c.subFr, c.subEn); }
@@ -1558,9 +1580,10 @@ static void ContentScan()
         bool music = !wcsncmp(kContent[i].root, L"CD", 2) || !wcscmp(kContent[i].root, L"Radio");
         if (!g_gameDir.empty()) {
             int audio = 0;
-            for (const std::wstring &rel : ContentFiles(i, g_gameDir)) {
+            std::wstring modDir = ModContentDir();
+            for (const std::wstring &rel : ContentFiles(i, g_gameDir, modDir)) {
                 WIN32_FILE_ATTRIBUTE_DATA a;
-                if (GetFileAttributesExW((g_gameDir + rel).c_str(), GetFileExInfoStandard, &a)) { ci.n++; ci.bytes += a.nFileSizeLow; }
+                if (GetFileAttributesExW((ContentBase(i, g_gameDir, modDir) + rel).c_str(), GetFileExInfoStandard, &a)) { ci.n++; ci.bytes += a.nFileSizeLow; }
                 const wchar_t *ext = wcsrchr(rel.c_str(), L'.');
                 if (music && ext) for (const wchar_t *e : { L".ogg", L".mp3", L".wav", L".flac", L".m4a", L".wma", L".aac", L".opus" }) if (!_wcsicmp(ext, e)) audio++;
             }
@@ -1613,7 +1636,7 @@ static Bitmap *ContentThumbFile(const std::wstring &rel)
 static Bitmap *ContentThumb(int i)   // (premiere image de la categorie)
 {
     if (kContent[i].files == NULL || wcscmp(kContent[i].root, L"Images")) return NULL;
-    std::vector<std::wstring> f = ContentFiles(i, g_gameDir);
+    std::vector<std::wstring> f = ContentFiles(i, g_gameDir, ModContentDir());
     return f.empty() ? NULL : ContentThumbFile(f[0]);
 }
 // Image dessinee dans un rectangle arrondi, recadree (couverture).
@@ -1926,7 +1949,7 @@ static void DrawContentDetail(Graphics &g, RectF c, float &y)
                      : msc ? T(L"Glisse jusqu'à 3 images ici, ou Choisir : elles deviennent Images\\poster1…3.png (murs de la chambre).", L"Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (bedroom walls).")
                            : T(L"Glisse jusqu'à 3 images ici, ou Choisir : elles deviennent Images\\poster1…3.png (murs du garage et de la maison).", L"Drop up to 3 images here, or Choose: they become Images\\poster1…3.png (garage and house walls)."),
              RectF(c.X + 18, c.Y + 50, c.Width - 36, 18), 12, FontStyleRegular, kGrey, StringAlignmentNear);
-        std::vector<std::wstring> files = ContentFiles(kCg[gi].cats[0], g_gameDir);
+        std::vector<std::wstring> files = ContentFiles(kCg[gi].cats[0], g_gameDir, ModContentDir());
         if (flag) { ContentDrawImage(g, files.empty() ? NULL : ContentThumbFile(files[0]), RectF(c.X + 18, y, c.Width - 36, 280), 14); if (files.empty()) Text(g, T(L"Aucun drapeau dans Images", L"No flag in Images"), RectF(c.X + 18, y, c.Width - 36, 280), 13, FontStyleBold, kGrey); }
         else {
             float pw = (c.Width - 36 - 2 * 10) / 3;

@@ -232,6 +232,7 @@ namespace MWCoop
             new Mod("ecran d'attente", WaitScreen.Update),
             new Mod("autotest", Autotest.Update),
             new Mod("export carte", MapExport.Update),   // (editeur de carte : [Lancement] ExportCarte)
+            new Mod("cartes", MapPacks.Update),          // (cartes de l'editeur : <MWCoop>\cartes\*.mwcmap)
         };
 
         // Chaque module, chronometre : un passage de plus de 30 ms (a-coup visible) est note, 1 fois / 10 s par module.
@@ -347,6 +348,7 @@ namespace MWCoop
             GuestSlot.OnLevelLoaded();
             LightsGuard.OnLevelLoaded();
             PackHoods.OnLevelLoaded();
+            MapPacks.OnLevelLoaded();
             TeimoSled.OnLevelLoaded();
             Gfx.OnLevelLoaded();
             Lights.OnLevelLoaded();
@@ -384,7 +386,7 @@ namespace MWCoop
                                     Parts.OnLevelLoaded, Props.OnLevelLoaded, Paint.OnLevelLoaded, Settings.OnLevelLoaded, Fluids.OnLevelLoaded,
                                     Consume.OnLevelLoaded, ItemFsms.OnLevelLoaded, Tow.OnLevelLoaded, Garage.OnLevelLoaded,
                                     Interactions.OnLevelLoaded, PushDoors.OnLevelLoaded,   // (portes de la maison, interrupteurs ; portes du garage poussees)
-                                    LightsGuard.OnLevelLoaded, PackHoods.OnLevelLoaded };   // (19/10 soir : phares et capots du pack rallye)
+                                    LightsGuard.OnLevelLoaded, PackHoods.OnLevelLoaded, MapPacks.OnLevelLoaded };   // (19/10 soir : phares et capots du pack rallye)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -394,7 +396,7 @@ namespace MWCoop
         static readonly System.Collections.Generic.HashSet<string> MscModules = new System.Collections.Generic.HashSet<string>
         {
             "session", "api", "sauvegarde en jeu", "coups de poing", "marqueurs", "vocal", "visage perso", "menu", "mscloader", "lanceur",
-            "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente", "export carte",
+            "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente", "export carte", "cartes",
             // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
             // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
             "voitures", "portieres", "tableaux de bord", "passagers",

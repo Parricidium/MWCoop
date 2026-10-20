@@ -110,7 +110,7 @@ namespace MWCoop
         static readonly string[] KindText = { "Sol et relief", "Routes et chemins", "Batiments et objets", "Arbres et vegetation" };
 
         struct Item { public MeshRenderer R; public Mesh M; public int Kind; }
-        class Inst { public int Mesh; public Matrix4x4 T; public int[] Mats; public int Kind; public string Name; }
+        class Inst { public int Mesh; public Matrix4x4 T; public int[] Mats; public int Kind; public string Name, Path; public bool World; public Matrix4x4 R; }   // (World : sommets du maillage en coordonnees monde -- lot -- et R le repere de l'objet)
 
         static readonly Dictionary<int, int> meshIndex = new Dictionary<int, int>();       // maillage du jeu -> numero
         static readonly List<long> meshOffsets = new List<long>();
@@ -205,7 +205,7 @@ namespace MWCoop
 
             Directory.CreateDirectory(dir);
             string binPath = Path.Combine(dir, "maillages.bin");
-            OpenScene();
+            SceneBatches.Open("export de la carte");
             using (bin = new BinaryWriter(File.Create(binPath)))
             {
                 for (int i = 0; i < items.Count; i++)
@@ -228,7 +228,7 @@ namespace MWCoop
                 }
             }
             bin = null;
-            if (scene != null) { scene.Close(); scene = null; }
+            SceneBatches.Close();
             Log.Info("export de la carte : " + insts.Count + " objets, " + meshOffsets.Count + " maillages, " + mats.Count + " matieres, " + texs.Count + " textures ; regroupes : "
                      + batchedFile + " lus dans la scene, " + batchedCollider + " par la collision, " + batchedMiss + " introuvables ; illisibles " + unreadable);
             Log.Info("export de la carte : regroupes introuvables : " + Top(missNames, 40));
@@ -250,6 +250,22 @@ namespace MWCoop
             yield return true;
             WriteJson(Path.Combine(dir, "carte.json"));
             Log.Info("export de la carte : ecrit en " + (total.ElapsedMilliseconds / 1000f).ToString("F1") + " s, maillages.bin " + (new FileInfo(binPath).Length / 1048576) + " Mo");
+        }
+
+        // Chemin unique d'un objet de la scene (format 2 du cache, editeur V1) : noms depuis la racine, « nom#i » quand i
+        // freres de meme nom le precedent. Relu par le mod pour retrouver l'objet chez chaque joueur (MapPacks.Resolve).
+        public static string UniquePath(Transform t)
+        {
+            var parts = new List<string>();
+            for (; t != null; t = t.parent)
+            {
+                int same = 0;
+                if (t.parent != null)
+                    for (int i = 0; i < t.GetSiblingIndex(); i++) if (t.parent.GetChild(i).name == t.name) same++;
+                parts.Add(same > 0 ? t.name + "#" + same : t.name);
+            }
+            parts.Reverse();
+            return string.Join("/", parts.ToArray());
         }
 
         // ..._LOD2 -> 2 ; 0 sinon
@@ -312,56 +328,12 @@ namespace MWCoop
                 meshIndex[id] = mi;
             }
             if (mi < 0) return;
-            insts.Add(new Inst { Mesh = mi, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name });
+            insts.Add(new Inst { Mesh = mi, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform) });
         }
 
         // ---------------------------------------------------------------- objets regroupes (lots statiques)
         static readonly List<Item> pending = new List<Item>();
-        static SceneFile scene;
-        static Dictionary<string, List<SceneFile.Batched>> sceneByKey, sceneByName;
-        static readonly Dictionary<long, SceneFile.MeshData> sceneMeshes = new Dictionary<long, SceneFile.MeshData>();
-        static int batchedFile, sceneBad;
-
-        static void OpenScene()
-        {
-            // Unity 5.0 : la 1re scene est dans mainData, la scene n dans level(n-1) (GAME de MSC : scene 3, level2) ; sinon
-            // le premier fichier levelN qui a des objets regroupes
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            var tries = new List<string> { "level" + (Application.loadedLevel - 1), "level" + Application.loadedLevel };
-            for (int i = 0; i < 12; i++) if (!tries.Contains("level" + i)) tries.Add("level" + i);
-            SceneFile f = null; List<SceneFile.Batched> list = null; string p = null;
-            foreach (string t in tries)
-            {
-                string tp = Path.Combine(Application.dataPath, t);
-                if (!File.Exists(tp)) continue;
-                var cf = new SceneFile(tp);
-                List<SceneFile.Batched> cl = null;
-                try { if (cf.Open()) cl = cf.ReadBatched(); else Log.Warn("export de la carte : " + t + " illisible (" + cf.Error + ")"); }
-                catch (Exception e) { Log.Warn("export de la carte : " + t + " : " + e.Message); }
-                if (cl != null && cl.Count > 0) { f = cf; list = cl; p = tp; break; }
-                cf.Close();
-            }
-            if (f == null) { Log.Warn("export de la carte : aucun fichier de scene avec des objets regroupes : lots par la collision seulement"); return; }
-            scene = f;
-            sceneByKey = new Dictionary<string, List<SceneFile.Batched>>();
-            sceneByName = new Dictionary<string, List<SceneFile.Batched>>();
-            foreach (SceneFile.Batched b in list)
-            {
-                Add(sceneByKey, BatchKey(b.Name + "|" + b.MeshName, b.Mats.Length > 0 ? b.Mats[0] : "", b.Subsets.Length), b);
-                Add(sceneByName, b.Name + "|" + b.MeshName + "|" + b.Subsets.Length, b);
-            }
-            Log.Info("export de la carte : scene " + Path.GetFileName(p) + " : " + list.Count + " objets regroupes, " + f.Count(43) + " maillages (" + sw.ElapsedMilliseconds + " ms)");
-        }
-
-        static void Add(Dictionary<string, List<SceneFile.Batched>> d, string k, SceneFile.Batched b) { List<SceneFile.Batched> l; if (!d.TryGetValue(k, out l)) d[k] = l = new List<SceneFile.Batched>(); l.Add(b); }
-        static string BatchKey(string name, string mat, int n) { return name + "|" + mat + "|" + n; }
-        static SceneFile.Batched Take(Dictionary<string, List<SceneFile.Batched>> d, string k)
-        {
-            List<SceneFile.Batched> l;
-            if (d == null || !d.TryGetValue(k, out l)) return null;
-            foreach (SceneFile.Batched b in l) if (!b.Used) { b.Used = true; return b; }
-            return null;
-        }
+        static int batchedFile;
 
         static void AddBatched(Item it)
         {
@@ -369,36 +341,18 @@ namespace MWCoop
             Material[] rm = r.sharedMaterials;
             int[] ml = new int[rm.Length];
             for (int i = 0; i < rm.Length; i++) ml[i] = MatOf(rm[i]);
-            if (scene != null)
             {
-                string m0 = rm.Length > 0 && rm[0] != null ? rm[0].name.Replace(" (Instance)", "") : "";
-                // (meme objet : son nom, celui du lot -- deux lots ont des objets de meme nom --, sa 1re matiere, leur nombre)
-                SceneFile.Batched b = Take(sceneByKey, BatchKey(r.name + "|" + it.M.name, m0, rm.Length)) ?? Take(sceneByName, r.name + "|" + it.M.name + "|" + rm.Length);
-                if (b != null)
+                SceneFile.MeshData md; int[] subsets;   // (lot relu dans le fichier de la scene : SceneBatches.cs)
+                if (SceneBatches.Find(r, it.M, out md, out subsets))
                 {
-                    SceneFile.MeshData md;
-                    if (!sceneMeshes.TryGetValue(b.MeshPath * 64 + b.MeshFile, out md))
+                    var tris = new List<int[]>();
+                    foreach (int s in subsets) if (s >= 0 && s < md.Subs.Length) tris.Add(md.Subs[s]);
+                    int idx = WriteArrays(md.V, md.N, md.Uv, tris, r.name);
+                    if (idx >= 0)
                     {
-                        md = scene.ReadMesh(b.MeshFile, b.MeshPath);
-                        if (md != null && (md.VertexCount != it.M.vertexCount || md.Subs.Length != it.M.subMeshCount))
-                        {
-                            if (sceneBad++ < 5) Log.Warn("export de la carte : lot " + md.Name + " du fichier : " + md.VertexCount + " sommets / " + md.Subs.Length + " sous-maillages, le jeu en a " + it.M.vertexCount + " / " + it.M.subMeshCount + " : ignore");
-                            md = null;
-                        }
-                        else if (md == null && sceneBad++ < 5) Log.Warn("export de la carte : lot " + it.M.name + " : lecture du fichier impossible");
-                        sceneMeshes[b.MeshPath * 64 + b.MeshFile] = md;
-                    }
-                    if (md != null)
-                    {
-                        var tris = new List<int[]>();
-                        foreach (int s in b.Subsets) if (s >= 0 && s < md.Subs.Length) tris.Add(md.Subs[s]);
-                        int idx = WriteArrays(md.V, md.N, md.Uv, tris, r.name);
-                        if (idx >= 0)
-                        {
-                            batchedFile++;
-                            insts.Add(new Inst { Mesh = idx, T = Matrix4x4.identity, Mats = ml, Kind = it.Kind, Name = r.name });
-                            return;
-                        }
+                        batchedFile++;
+                        insts.Add(new Inst { Mesh = idx, T = Matrix4x4.identity, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform), World = true, R = r.localToWorldMatrix });
+                        return;
                     }
                 }
             }
@@ -420,7 +374,7 @@ namespace MWCoop
                 if (ci >= 0)
                 {
                     batchedCollider++;
-                    insts.Add(new Inst { Mesh = ci, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name });
+                    insts.Add(new Inst { Mesh = ci, T = r.localToWorldMatrix, Mats = ml, Kind = it.Kind, Name = r.name, Path = UniquePath(r.transform) });
                     return;
                 }
             }
@@ -509,7 +463,7 @@ namespace MWCoop
         static void WriteJson(string path)
         {
             var sb = new StringBuilder(1 << 20);
-            sb.Append("{\"format\":1,\"jeu\":").Append(S(Game.Msc ? "msc" : "mwc")).Append(",\"nom\":").Append(S(Game.Name));
+            sb.Append("{\"format\":2,\"jeu\":").Append(S(Game.Msc ? "msc" : "mwc")).Append(",\"nom\":").Append(S(Game.Name));
             sb.Append(",\"mod\":").Append(S(Version.Text)).Append(",\"date\":").Append(S(DateTime.Now.ToString("yyyy-MM-dd HH:mm")));
             Transform pl = Game.PlayerT;
             if (pl != null) sb.Append(",\"joueur\":[").Append(F(pl.position.x)).Append(',').Append(F(pl.position.y)).Append(',').Append(F(pl.position.z)).Append(']');
@@ -548,7 +502,14 @@ namespace MWCoop
                 for (int rr = 0; rr < 3; rr++) for (int cc = 0; cc < 4; cc++) sb.Append(rr + cc > 0 ? "," : "").Append(F(o.T[rr, cc]));
                 sb.Append("],\"x\":[");
                 for (int k = 0; k < o.Mats.Length; k++) sb.Append(k > 0 ? "," : "").Append(o.Mats[k]);
-                sb.Append("]}");
+                sb.Append("],\"p\":").Append(S(o.Path));
+                if (o.World)
+                {
+                    sb.Append(",\"r\":[");
+                    for (int rr = 0; rr < 3; rr++) for (int cc = 0; cc < 4; cc++) sb.Append(rr + cc > 0 ? "," : "").Append(F(o.R[rr, cc]));
+                    sb.Append(']');
+                }
+                sb.Append('}');
             }
             sb.Append("]}");
             string tmp = path + ".tmp";

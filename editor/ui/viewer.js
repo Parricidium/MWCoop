@@ -73,20 +73,21 @@ export class Viewer {
     this.makeMaterials(info);
     const geos = new Array(info.maillages.length);
     const geo = i => geos[i] || (geos[i] = this.parseMesh(buf, info.maillages[i]));
+    this.geoOf = geo;                     // (edition : copies des objets du jeu)
+    this.instMeshes = new Array(info.objets.length);
+    this.byPath = new Map();              // chemin unique (cache format 2) -> rang dans info.objets
     let n = 0, t0 = performance.now(), tris = 0;
     this.maxY = -1e9;
     for (const ob of info.objets) {
       const g = geo(ob.m);
-      const mats = [];
-      for (let s = 0; s < g.groups.length; s++) {
-        const mi = ob.x.length ? ob.x[Math.min(s, ob.x.length - 1)] : -1;
-        mats.push(mi >= 0 ? this.mats[mi] : this.grey);
-      }
+      const mats = this.matsFor(ob, g);
       const mesh = new THREE.Mesh(g, mats.length === 1 ? mats[0] : mats);
       const t = ob.t;   // matrice 3x4 d'Unity (lignes) -> z inverse : m' = S m S, S = diag(1, 1, -1)
       mesh.matrixAutoUpdate = false;
       mesh.matrix.set(t[0], t[1], -t[2], t[3], t[4], t[5], -t[6], t[7], -t[8], -t[9], t[10], -t[11], 0, 0, 0, 1);
-      mesh.userData = { name: ob.n, kind: ob.k, mesh: ob.m };
+      mesh.userData = { name: ob.n, kind: ob.k, mesh: ob.m, idx: n, path: ob.p };
+      this.instMeshes[n] = mesh;
+      if (ob.p && !this.byPath.has(ob.p)) this.byPath.set(ob.p, n);
       if (/^LakeWater(Under|Color)/.test(ob.n)) mesh.visible = false;   // (effets sous l'eau de MSC : plans superposes a la surface)
       const k = Math.max(0, Math.min(3, ob.k));
       this.groups[k].add(mesh);
@@ -102,6 +103,19 @@ export class Viewer {
     this.goHome();
     u.loading.hidden = true;
   }
+
+  // matieres d'un objet du cache, une par sous-maillage
+  matsFor(ob, g) {
+    const mats = [];
+    for (let s = 0; s < g.groups.length; s++) {
+      const mi = ob.x.length ? ob.x[Math.min(s, ob.x.length - 1)] : -1;
+      mats.push(mi >= 0 ? this.mats[mi] : this.grey);
+    }
+    return mats;
+  }
+
+  // matrice d'Unity (3x4, lignes) -> three (z inverse)
+  static mat(t) { return new THREE.Matrix4().set(t[0], t[1], -t[2], t[3], t[4], t[5], -t[6], t[7], -t[8], -t[9], t[10], -t[11], 0, 0, 0, 1); }
 
   makeMaterials(info) {
     this.grey = new THREE.MeshLambertMaterial({ color: 0x9a9a9a });
@@ -186,21 +200,22 @@ export class Viewer {
     c.tabIndex = 0;
     this.on = [];
     const on = (t, e, f, o) => { t.addEventListener(e, f, o); this.on.push([t, e, f, o]); };
-    let look = false, down = null;
+    let down = null;
+    this.looking = false;
     on(c, "pointerdown", e => {
       c.focus();
-      if (e.button === 2) { look = true; c.setPointerCapture(e.pointerId); }
+      if (e.button === 2) { this.looking = true; c.setPointerCapture(e.pointerId); }
       if (e.button === 0) down = { x: e.clientX, y: e.clientY };
     });
     on(c, "pointermove", e => {
-      if (!look) return;
+      if (!this.looking) return;
       this.yaw -= e.movementX * 0.0035;
       this.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, this.pitch - e.movementY * 0.0035));
       if (this.pitch > -1.4) this.setView(false);
     });
     on(c, "pointerup", e => {
-      if (e.button === 2) { look = false; try { c.releasePointerCapture(e.pointerId); } catch { } }
-      if (e.button === 0 && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) this.pick(e);
+      if (e.button === 2) { this.looking = false; this.keys.clear(); try { c.releasePointerCapture(e.pointerId); } catch { } }
+      if (e.button === 0 && down && !this.blockPick && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) this.pick(e);
       down = null;
     });
     on(c, "wheel", e => {
@@ -208,7 +223,7 @@ export class Viewer {
       this.speed = Math.max(2, Math.min(600, this.speed * (e.deltaY < 0 ? 1.25 : 0.8)));
       this.ui.speed.textContent = T("vitesse", Math.round(this.speed));
     }, { passive: false });
-    on(window, "keydown", e => { if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return; this.keys.add(e.code); if (e.code === "Space") e.preventDefault(); });
+    on(window, "keydown", e => { if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return; if (!this.looking) return; this.keys.add(e.code); if (e.code === "Space") e.preventDefault(); });
     on(window, "keyup", e => this.keys.delete(e.code));
     on(window, "blur", () => this.keys.clear());
   }
@@ -219,7 +234,8 @@ export class Viewer {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(v, this.camera);
     ray.far = 3000;
-    const hits = ray.intersectObjects(this.groups.filter(g => g.visible), true);
+    const hits = ray.intersectObjects(this.groups.filter(g => g.visible).concat(this.extra ? [this.extra] : []), true).filter(h => h.object.visible && !h.object.userData.noPick);
+    if (this.onPick) { this.onPick(hits[0] || null); return; }
     if (this.selBox) { this.scene.remove(this.selBox); this.selBox.geometry.dispose(); this.selBox = null; }
     const u = this.ui;
     if (!hits.length) { u.sel.innerHTML = `<p class="empty">${u.esc(T("selVide"))}</p>`; return; }
@@ -258,8 +274,17 @@ export class Viewer {
     }
   }
 
+  // rayon depuis un point de l'ecran (clientX, clientY)
+  rayAt(x, y) {
+    const r = this.o.canvas.getBoundingClientRect();
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), this.camera);
+    return ray;
+  }
+
   dispose() {
     this.disposed = true;
+    if (this.onDispose) this.onDispose();
     for (const [t, e, f, o] of this.on) t.removeEventListener(e, f, o);
     this.ro.disconnect();
     this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); });

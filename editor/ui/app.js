@@ -1,5 +1,6 @@
 // Editeur de carte : ecrans (accueil, jeu introuvable, preparation, visite) et messages avec le programme (MainForm.cs).
 import { Viewer } from "./viewer.js";
+import { Edition } from "./edition.js";
 
 const $ = id => document.getElementById(id);
 const host = window.chrome && window.chrome.webview;
@@ -8,6 +9,8 @@ let state = null;          // dernier etat recu (jeux trouves, cartes preparees)
 let pick = null;           // fenetre « introuvable » : { jeu, verif }
 let prepGame = null;
 let viewer = null;
+let edition = null;          // projet de carte ouvert (edition.js)
+let projets = [];
 
 // ---------------------------------------------------------------- fenetre
 $("titlebar").addEventListener("mousedown", e => {
@@ -16,7 +19,14 @@ $("titlebar").addEventListener("mousedown", e => {
 });
 $("titlebar").addEventListener("dblclick", e => { if (!e.target.closest("button")) send({ type: "fenetre", action: "agrandir" }); });
 document.querySelectorAll(".wc").forEach(b => b.addEventListener("click", () => send({ type: "fenetre", action: b.dataset.act })));
-$("btn-home").addEventListener("click", () => { if (viewer) { viewer.dispose(); viewer = null; } show("accueil"); send({ type: "reessayer" }); });
+$("btn-home").addEventListener("click", () => { closeMap(); show("accueil"); send({ type: "reessayer" }); send({ type: "projets" }); });
+function closeMap() {
+  if (edition) { edition.flush(); edition = null; }
+  if (viewer) { viewer.dispose(); viewer = null; }
+  for (const id of ["tools", "props", "ajouts", "btn-compiler"]) $(id).hidden = true;
+  $("sel-h").hidden = $("sel").hidden = false;
+  $("save-state").textContent = "";
+}
 document.addEventListener("contextmenu", e => e.preventDefault());
 
 function show(screen) {
@@ -38,7 +48,8 @@ function setLang(l) {
   window.LANG = ["fr", "en", "ru", "ar"].includes(l) ? l : "en";
   $("lang").value = window.LANG;
   applyI18n();
-  if (!$("accueil").hidden) show("accueil");   // (titre de la fenetre dans la nouvelle langue)
+  if (!$("accueil").hidden) show("accueil");
+  renderRecent();   // (titre de la fenetre dans la nouvelle langue)
   if (state) renderCards();
 }
 $("lang").addEventListener("change", () => { try { localStorage.setItem("langue", $("lang").value); } catch { } setLang($("lang").value); });
@@ -200,21 +211,79 @@ $("prep-retour").addEventListener("click", () => { show("accueil"); send({ type:
 $("prep-ouvrir").addEventListener("click", () => openMap(prepGame));
 
 // ---------------------------------------------------------------- visite
-async function openMap(id) {
+async function openMap(id, projet) {
   const g = game(id);
+  closeMap();
   setGame(id);
-  $("title").textContent = T("carteDe", g.nom);
+  $("title").textContent = projet ? projet.data.nom + " · " + g.nom : T("carteDe", g.nom);
   $("st-jeu").textContent = g.nom + (g.version ? " " + g.version : "");
   show("visite");
-  if (viewer) viewer.dispose();
   viewer = new Viewer({ canvas: $("c3d"), game: id, base: (host ? "https://carte.local/" : "/carte/") + id + "/", ui: {
     loading: $("loading"), loadingText: $("loading-t"), layers: $("layers"), sel: $("sel"), hints: $("hints"), speed: $("speed"),
     pos: $("st-pos"), obj: $("st-obj"), fps: $("st-fps"), lieu: $("st-lieu"),
     persp: $("v-persp"), top: $("v-dessus"), home: $("v-joueur"), esc } });
   window.__viewer = viewer;   // (essais : camera placee par le protocole de debogage, ou dans un navigateur)
   try { await viewer.load(); }
-  catch (e) { $("loading-t").textContent = T("errCarte", e.message || e); }
+  catch (e) { $("loading-t").textContent = T("errCarte", e.message || e); return; }
+  if (!projet || !viewer) return;
+  for (const id of ["tools", "props", "ajouts", "btn-compiler"]) $(id).hidden = false;
+  $("sel-h").hidden = $("sel").hidden = true;
+  edition = new Edition({ viewer, dossier: projet.dossier, data: projet.data, send,
+    ui: { tools: $("tools"), list: $("ajouts"), props: $("props"), palette: $("palette"), compile: $("compile-dlg"), warn: toast },
+    onState: st => { $("save-state").textContent = st === "enregistrement" ? T("enregistrement") : ""; } });
+  edition.start();
+  window.__edition = edition;   // (essais par le protocole de debogage)
+  viewer.resize();
 }
+
+$("btn-compiler").addEventListener("click", () => edition && edition.openCompile());
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 6000);
+}
+
+// ---------------------------------------------------------------- projets de carte
+function renderRecent() {
+  const el = $("recentes");
+  if (!projets.length) { el.innerHTML = `<p class="empty">${esc(T("recentesVide"))}</p>`; return; }
+  el.innerHTML = projets.map(p => `<button data-d="${esc(p.dossier)}"><span>${esc(p.nom)}<span class="tagj" style="background:var(--${p.jeu === "msc" ? "msc" : "mwc"})">${esc((p.jeu || "").toUpperCase())}</span></span><small>${esc(T("modifieLe", p.modifie, p.objets))}</small></button>`).join("");
+  el.querySelectorAll("button[data-d]").forEach(b => b.onclick = () => send({ type: "ouvrirProjet", dossier: b.dataset.d }));
+}
+function openProjet(m) {
+  if (!m.data) { toast(T("projetIllisible")); return; }
+  let data;
+  try { data = JSON.parse(m.data); } catch { toast(T("projetIllisible")); return; }
+  const g = game(data.jeu);
+  if (!g || !g.carte) { toast(T("preparerDabord", g ? g.nom : data.jeu)); return; }
+  openMap(data.jeu, { dossier: m.dossier, data });
+}
+let nvJeu = null;
+$("btn-nouvelle").addEventListener("click", () => {
+  const box = $("nouvelle-dlg"), ready = state ? state.jeux.filter(j => j.carte) : [];
+  nvJeu = ready.length ? ready[0].id : null;
+  const draw = () => {
+    $("nv-jeux").innerHTML = (state ? state.jeux : []).map(j => `<button data-j="${j.id}" class="${j.id === nvJeu ? "on" : ""} ${j.id}" ${j.carte ? "" : "disabled"}>${esc(j.nom)}<small>${esc(j.carte ? T("cartePrete") : T("aPreparer"))}</small></button>`).join("");
+    $("nv-jeux").querySelectorAll("button[data-j]").forEach(b => b.onclick = () => { nvJeu = b.dataset.j; document.body.className = nvJeu; draw(); });
+    $("nv-hint").textContent = ready.length ? "" : T("aucuneCartePrete");
+    $("nv-creer").disabled = !nvJeu || !$("nv-nom").value.trim();
+  };
+  $("nv-nom").value = "";
+  $("nv-nom").oninput = draw;
+  if (nvJeu) document.body.className = nvJeu;
+  draw();
+  box.hidden = false;
+  setTimeout(() => $("nv-nom").focus(), 30);
+});
+$("nv-annuler").addEventListener("click", () => { $("nouvelle-dlg").hidden = true; document.body.className = ""; });
+$("nv-creer").addEventListener("click", () => {
+  const nom = $("nv-nom").value.trim();
+  if (!nom || !nvJeu) return;
+  $("nouvelle-dlg").hidden = true;
+  send({ type: "creerProjet", nom, jeu: nvJeu });
+});
+$("nv-nom").addEventListener("keydown", e => { if (e.key === "Enter" && !$("nv-creer").disabled) $("nv-creer").click(); });
 
 // ---------------------------------------------------------------- messages du programme
 host && host.addEventListener("message", e => onHostMessage(e));
@@ -228,10 +297,16 @@ function onHostMessage(e) {
       let l = null; try { l = localStorage.getItem("langue"); } catch { }
       const sys = ["fr", "ru", "ar"].includes(m.langue) ? m.langue : "en";
       setLang(m.langueImposee ? sys : l || sys);
-      if (m.ouvrir && game(m.ouvrir) && game(m.ouvrir).carte) { openMap(m.ouvrir); return; }
+      if (m.ouvrir && game(m.ouvrir) && game(m.ouvrir).carte) { send({ type: "projets" }); openMap(m.ouvrir); return; }
     }
     renderCards();
+    if (first) send({ type: "projets" });
   }
+  else if (m.type === "projets") { projets = m.liste || []; renderRecent(); }
+  else if (m.type === "projet") openProjet(m);
+  else if (m.type === "modele") edition && edition.onModel(m);
+  else if (m.type === "compile") edition && edition.onCompiled(m);
+  else if (m.type === "enregistre") $("save-state").textContent = m.ok ? T("enregistre") : T("enregistrementEchec");
   else if (m.type === "verification") onVerif(m);
   else if (m.type === "prep") onPrep(m);
   else if (m.type === "fenetre") document.body.classList.toggle("max", !!m.agrandie);

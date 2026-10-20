@@ -7,11 +7,12 @@ namespace EditeurCarte
     // choix). V0 : choix du jeu (Steam, sinon le .exe), preparation de la carte (export par le mod, MapExport.cs), visite libre.
     // Arguments (le lanceur, page Outils, les donne tous) : --jeu msc|mwc (ouvre la carte de ce jeu si elle est prete),
     // --dossier <dossier du jeu> (celui que le lanceur connait, pour --jeu), --lanceur <MWCoop.exe> (celui qui fera
-    // l'export), --langue fr|en|ru|ar ; --debug : outils de developpement de WebView2.
+    // l'export), --langue fr|en|ru|ar, --mod <dossier MWCoop du mod> (ou deposer les cartes compilees) ; --debug : outils
+    // de developpement de WebView2.
     static class Program
     {
         public static bool Debug;
-        public static string OpenGame, GameDirArg, LauncherArg, LangArg;
+        public static string OpenGame, GameDirArg, LauncherArg, LangArg, ModArg;   // (ModArg : dossier MWCoop du mod pour ce jeu -- cartes compilees)
         public static string LaunchedFor;   // (jeu de --jeu, garde : OpenGame est consomme a la premiere page)
 
         [STAThread]
@@ -25,6 +26,7 @@ namespace EditeurCarte
                 else if (a == "--dossier" && v != null) { GameDirArg = v.TrimEnd('\\', '/'); i++; }
                 else if (a == "--lanceur" && v != null) { LauncherArg = v; i++; }
                 else if (a == "--langue" && v != null) { LangArg = v; i++; }
+                else if (a == "--mod" && v != null) { ModArg = v.TrimEnd('\\', '/'); i++; }
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);

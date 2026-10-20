@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Éditeur de carte</title>
 <link rel="stylesheet" href="app.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
 </head>
 <body>
 <div class="win" id="win">
@@ -14,6 +15,9 @@
       <span class="ttl" id="title">My Seasons Car · Éditeur de carte</span>
     </div>
     <div class="tb-r">
+      <span class="savest" id="save-state"></span>
+      <button class="btn pri small" id="btn-compiler" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5z"/><path d="M3 8v8l9 5 9-5V8"/></svg><span data-i18n="compiler">Compiler</span></button>
+      <span class="gap"></span>
       <button class="wc" data-act="reduire" aria-label="Réduire"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6h10" stroke="currentColor" stroke-width="1.2"/></svg></button>
       <button class="wc" data-act="agrandir" aria-label="Agrandir"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg></button>
       <button class="wc close" data-act="fermer" aria-label="Fermer"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.2"/></svg></button>
@@ -23,9 +27,9 @@
   <!-- Accueil : choix du jeu -->
   <section class="screen" id="accueil">
     <aside class="side">
-      <button class="btn" disabled data-i18n="nouvelle" title="V1">Nouvelle carte</button>
+      <button class="btn" id="btn-nouvelle"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="nouvelle">Nouvelle carte</span></button>
       <div class="lbl" data-i18n="recentes">Récentes</div>
-      <p class="empty" data-i18n="recentesVide">Tes cartes apparaîtront ici (prochaine version).</p>
+      <nav class="rec" id="recentes"><p class="empty" data-i18n="recentesVide">Tes cartes apparaîtront ici.</p></nav>
       <div class="side-foot">
         <label class="lang"><span data-i18n="langue">Langue</span>
           <select id="lang"><option value="fr">Français</option><option value="en">English</option><option value="ru">Русский</option><option value="ar">العربية</option></select>
@@ -69,10 +73,12 @@
 
   <!-- Visite libre -->
   <section class="screen" id="visite" hidden>
+    <nav class="rail" id="tools" hidden aria-label="Outils"></nav>
     <aside class="pane" id="scene" aria-label="Scène">
       <div class="ph" data-i18n="scene">Scène</div>
       <div class="tree" id="layers"></div>
-      <div class="ph" data-i18n="selection">Sélection</div>
+      <div class="tree" id="ajouts" hidden></div>
+      <div class="ph" id="sel-h" data-i18n="selection">Sélection</div>
       <div class="sel" id="sel"><p class="empty" data-i18n="selVide">Clique sur un objet pour voir ce que c'est.</p></div>
     </aside>
     <main class="view" id="view">
@@ -81,9 +87,56 @@
       <div class="ov bl" id="hints"></div>
       <div class="ov br"><span class="chip" id="speed"></span></div>
       <div class="loading" id="loading"><div class="spin"></div><span id="loading-t"></span></div>
+      <div class="toast" id="toast" hidden></div>
     </main>
+    <aside class="pane right" id="props" hidden aria-label="Propriétés"></aside>
   </section>
   <footer class="status" id="status" hidden><span id="st-lieu"></span><span id="st-pos"></span><span id="st-obj"></span><span id="st-fps"></span><span class="sp"></span><span id="st-jeu"></span></footer>
+</div>
+
+<!-- Nouvelle carte -->
+<div class="modal" id="nouvelle-dlg" hidden>
+  <div class="dlg" role="dialog" aria-labelledby="nv-t">
+    <h1 id="nv-t" data-i18n="nouvelleTitre">Nouvelle carte</h1>
+    <label class="flbl" for="nv-nom" data-i18n="nomCarte">Nom de la carte</label>
+    <div class="fld"><input id="nv-nom" type="text" maxlength="48" spellcheck="false"></div>
+    <div class="flbl" data-i18n="pourJeu">Pour quel jeu ?</div>
+    <div class="gpick" id="nv-jeux"></div>
+    <p class="hint" id="nv-hint"></p>
+    <div class="row end"><button class="btn" id="nv-annuler" data-i18n="annuler">Annuler</button><button class="btn pri" id="nv-creer" disabled data-i18n="creer">Créer</button></div>
+  </div>
+</div>
+
+<!-- Compiler la carte -->
+<div class="modal" id="compile-dlg" hidden>
+  <div class="dlg cp" role="dialog" aria-labelledby="cp-t">
+    <h1 id="cp-t" data-i18n="cpTitre">Compiler la carte</h1>
+    <div class="cpgrid">
+      <div class="cpcol">
+        <label class="flbl" for="cp-nom" data-i18n="nomCarte">Nom de la carte</label><div class="fld"><input id="cp-nom" type="text" maxlength="48" spellcheck="false"></div>
+        <div class="cprow"><div><label class="flbl" for="cp-auteur" data-i18n="auteur">Auteur</label><div class="fld"><input id="cp-auteur" type="text" maxlength="40" spellcheck="false"></div></div>
+          <div class="cpv"><label class="flbl" for="cp-version" data-i18n="version">Version</label><div class="fld"><input id="cp-version" type="text" maxlength="12" spellcheck="false"></div></div></div>
+        <label class="flbl" for="cp-desc" data-i18n="description">Description</label><textarea id="cp-desc" rows="3" maxlength="300"></textarea>
+      </div>
+      <div class="cpcol">
+        <div class="lbl0" data-i18n="contenu">Contenu</div><div class="cpsum" id="cp-sum"></div>
+        <div class="lbl0" data-i18n="verifications">Vérifications</div><div class="chk" id="cp-chk"></div>
+        <p class="hint" data-i18n="cpCoop">En co-op, l'hôte envoie sa carte à ses invités au salon (bientôt).</p>
+      </div>
+    </div>
+    <div id="cp-res" hidden></div>
+    <div class="row end"><button class="btn" id="cp-annuler" data-i18n="fermer">Fermer</button><button class="btn pri" id="cp-go" data-i18n="compiler">Compiler</button></div>
+  </div>
+</div>
+
+<!-- Palette : objets du jeu -->
+<div class="modal" id="palette" hidden>
+  <div class="dlg pal" role="dialog" aria-labelledby="pal-t">
+    <div class="dlg-top"><h1 id="pal-t" data-i18n="paletteTitre">Objets du jeu</h1><button class="ib" data-close aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <p class="sub small" data-i18n="paletteSous">Une copie de l'objet est posée devant toi. Tu peux aussi cliquer un objet dans la carte, puis « Copier dans ma carte ».</p>
+    <div class="fld"><input type="text" data-i18n-ph="chercher" spellcheck="false"></div>
+    <div class="plist"></div>
+  </div>
 </div>
 
 <!-- Jeu introuvable : choisir le .exe -->
