@@ -2360,7 +2360,7 @@ namespace MWCoop
                 // Le casque du jeu est a peine plus grand que la tete (jamais porte par un personnage dans le jeu) : agrandi pour
                 // l'envelopper -- hauteur = 1,25 x celle de la tete ([Test] CasqueEchelle), le surplus pour les deux tiers au-dessus
                 // du crane, un tiers sous le menton (dessin de JD, 20/10 : la coque au-dessus de la casquette, la mentonniere sous la barbe).
-                float ech = Config.GetFloat("Test", "CasqueEchelle", 1.15f);
+                float ech = Config.GetFloat("Test", "CasqueEchelle", 1.08f);
                 float f = hi.y - lo.y > 0.05f && headHeight > 0.1f ? headHeight * ech / (hi.y - lo.y) : 1f;
                 ht.localScale = ht.localScale * f;
                 Vector3 centre = (lo + hi) * 0.5f * f;
@@ -2369,7 +2369,7 @@ namespace MWCoop
                 ht.position = target - centre;
                 // Aligne sur le regard : le personnage regarde un peu vers le bas (JD, 20/10) -- casque tourne autour du centre de la
                 // tete de [Test] CasqueTangage degres (10, positif = vers le bas).
-                Quaternion tilt = Quaternion.AngleAxis(Config.GetFloat("Test", "CasqueTangage", 10f), r.right);
+                Quaternion tilt = Quaternion.AngleAxis(Config.GetFloat("Test", "CasqueTangage", 16f), r.right);
                 ht.rotation = tilt * ht.rotation;
                 ht.position = target + tilt * (ht.position - target);
                 Log.Info("avatar " + Player.Name + " : casque agrandi x" + f.ToString("F2") + " (tete " + headHeight.ToString("F2") + " m, casque " + ((hi.y - lo.y) * f).ToString("F2") + " m)");
