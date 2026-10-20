@@ -1495,6 +1495,7 @@ static void LobbyOptClick(int id);   // (cartes du bas du salon : code, public /
 static bool UiClick(int id)
 {
     if (id == UI_NONE) return true;
+    if (id >= UI_ADDON_CARD && id < UI_ADDON_CARD + 16) { g_addonSel = id - UI_ADDON_CARD; g_addonThumbOf.clear(); return true; }   // (onglet Addons : carte -> son volet ; 1.5.2, clic oublie en 1.5.0)
     if (id >= UI_NAV && id < UI_NAV + TAB_COUNT) { int p = id - UI_NAV; if (PageEnabled(p)) GoPage(p); return true; }
     if (id >= UI_NAV_GROUP && id < UI_NAV_GROUP + 5) { RailToggle(id - UI_NAV_GROUP); return true; }
     if (id == UI_SEG || id == UI_SEG + 1) {   // (en-tete : Contenu / Mods ; Personnage et Media ont leurs propres onglets)
