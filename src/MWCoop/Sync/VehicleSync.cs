@@ -80,6 +80,7 @@ namespace MWCoop
             public bool Kinematic;
             public bool WasKinematic;
             public Dictionary<Rigidbody, RigidbodyInterpolation> InterpWas;   // copie : interpolation de la voiture et de ses pieces
+            public Dictionary<Rigidbody, bool> Frozen; public float NextFrozen;   // copie : pieces figees avec elle (etait cinematique ?)
             public bool Framewise;              // copie ou le joueur local est passager : deplacee a chaque image (Ride)
             public float SettleUntil;           // reprise d'une copie (voiture redevenue physique ici) : bridee jusque-la
             public float CalmUntil;             // piece montee ou demontee (ici ou chez un autre) : garee, tenue calme jusque-la
@@ -851,6 +852,7 @@ namespace MWCoop
                 {
                     if (c.Framewise && c.Body.gameObject.activeInHierarchy) FollowFrame(c);
                     if (now >= c.NextJoints) ProtectJoints(c);   // pieces montees entre-temps
+                    if (now >= c.NextFrozen) RefreshFrozen(c);
                     Animate(c);
                     if (now >= c.NextLog) { c.NextLog = now + 5f; Log.Info(c.Key + (c.RemoteDriver >= 0 ? " conduite par #" + c.RemoteDriver : " moteur tournant chez #" + c.RemoteBy) + " : " + c.Body.position.ToString("F1") + ", regime " + (c.Dt != null ? c.Dt.rpm.ToString("F0") : "?") + ", chaleur " + (c.Heat != null ? c.Heat.Value.ToString("F1") : "?") + " (recue " + c.RemoteHeat.ToString("F1") + ")" +  (Config.GetInt("Test", "JournalSons", 0) != 0 ? " | " + SoundDiag(c) : "")); }
                 }
@@ -1623,6 +1625,7 @@ namespace MWCoop
                 if (c.JointsLater != null) { c.JointsWas = c.JointsLater; c.JointsLater = null; }
                 c.SettleUntil = 0f;
                 ProtectJoints(c);
+                FreezeParts(c);
             }
             else
             {
@@ -1633,6 +1636,7 @@ namespace MWCoop
                 // celles recues (+ une marge) ; ensuite les limites de casse d'avant.
                 float now0 = Time.realtimeSinceStartup;
                 if (c.JointsWas != null) { c.JointsLater = c.JointsWas; c.JointsWas = null; }
+                ThawParts(c);
                 c.Body.isKinematic = c.WasKinematic;
                 if (!c.Body.isKinematic)
                 {
@@ -1642,12 +1646,73 @@ namespace MWCoop
                     c.SettleUntil = now0 + 1.5f; c.SettleVel = c.Vel; c.SettleAng = c.AngVel;
                 }
                 else c.SettleUntil = now0;
+                if (Config.GetInt("Test", "SondeReprise", 0) != 0) Log.Info("voiture " + c.Key + " reprise : " + PartsProbe(c));
                 if (c.InterpWas != null)
                 {
                     foreach (KeyValuePair<Rigidbody, RigidbodyInterpolation> kv in c.InterpWas) if (kv.Key != null) kv.Key.interpolation = kv.Value;
                     c.InterpWas = null;
                 }
             }
+        }
+
+        // Copie conduite ailleurs : ses pieces montees (sieges, ailes, pare-chocs, calandre, reservoir, capot... corps libres
+        // attaches a la caisse par une attache fixe) sont figees avec elle (cinematiques, enfants du transform : elles la suivent
+        // exactement, comme les ouvrants fermes de CarDoors). Avant : corps libres tires par leurs attaches derriere la copie
+        // deplacee par a-coups, ils heurtaient le sol et le decor (toles cabossees sur la copie a chaque seconde de route chez
+        // l'hote de ruller, 19/10) et restaient decales ou enfonces ; a la reprise, la caisse redevenue physique etait projetee par
+        // leurs attaches (19,7 rad/s au premier pas, puis 3952 m/s a la fin de la reprise : pieces arrachees, remises, arrachees...).
+        // Les ouvrants (CarDoors), la tete du conducteur (Respawn) et ce qui n'est pas attache fixe restent libres.
+        static int freezeLogs;
+        static void FreezeParts(Car c)
+        {
+            if (c.Frozen == null) c.Frozen = new Dictionary<Rigidbody, bool>();
+            int n = 0;
+            foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true))
+            {
+                if (rb == null || rb == c.Body || rb.isKinematic || c.Frozen.ContainsKey(rb)) continue;
+                if (CarDoors.IsDoorBody(rb) || rb.name == "DriverHeadPivot" || rb.GetComponent<HingeJoint>() != null || rb.GetComponent<CharacterJoint>() != null) continue;
+                if (rb.GetComponent<FixedJoint>() == null) continue;   // (attache fixe = piece montee ; le reste -- bras hydrauliques, bennes, tete -- reste libre)
+                rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
+                rb.isKinematic = true;
+                c.Frozen[rb] = false;
+                n++;
+            }
+            c.NextFrozen = Time.realtimeSinceStartup + 0.5f;
+            if (n > 0 && freezeLogs++ < 20) Log.Info("voiture " + c.Key + " copie : " + n + " pieces figees avec elle (" + c.Frozen.Count + " en tout)");
+        }
+        // Pendant la copie : pieces montees entre-temps figees, pieces demontees (plus sous la voiture) rendues libres.
+        static void RefreshFrozen(Car c)
+        {
+            if (c.Frozen != null)
+            {
+                List<Rigidbody> gone = null;
+                foreach (KeyValuePair<Rigidbody, bool> kv in c.Frozen)
+                    if (kv.Key == null || !kv.Key.transform.IsChildOf(c.T)) { if (gone == null) gone = new List<Rigidbody>(); gone.Add(kv.Key); }
+                if (gone != null)
+                    foreach (Rigidbody rb in gone)
+                    {
+                        bool was = c.Frozen[rb]; c.Frozen.Remove(rb);
+                        if (rb != null && rb.isKinematic && !was) { rb.isKinematic = false; rb.WakeUp(); }
+                    }
+            }
+            FreezeParts(c);
+        }
+        static void ThawParts(Car c)
+        {
+            if (c.Frozen == null) return;
+            int n = 0;
+            foreach (KeyValuePair<Rigidbody, bool> kv in c.Frozen)
+            {
+                Rigidbody rb = kv.Key;
+                if (rb == null || kv.Value) continue;
+                rb.position = rb.transform.position; rb.rotation = rb.transform.rotation;   // (pose exacte du transform, suivie pendant la copie)
+                rb.isKinematic = false;
+                rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
+                rb.WakeUp();
+                n++;
+            }
+            c.Frozen = null;
+            if (n > 0 && freezeLogs++ < 20) Log.Info("voiture " + c.Key + " reprise : " + n + " pieces rendues libres a leur place");
         }
 
         // Copie conduite ailleurs : ses attaches cassables (pare-brise, portieres, pieces montees) ne cassent
@@ -1722,6 +1787,32 @@ namespace MWCoop
             if (clamped && calmLogs++ < 20) Log.Info("voiture " + c.Key + " : sursaut au montage d'une piece, elan bride (" + v.magnitude.ToString("F1") + " m/s, " + w.magnitude.ToString("F1") + " rad/s)");
         }
 
+        // Essais ([Test] SondeReprise=1) : corps de la voiture et de ses pieces a la reprise -- ceux loin d'elle (> 2 m), rapides
+        // (> 3 m/s), decales de leur transform ou cinematiques, et les attaches dont l'autre corps est loin.
+        static string PartsProbe(Car c)
+        {
+            if (c.Body == null) return "?";
+            var sb = new System.Text.StringBuilder("corps v " + c.Body.velocity.magnitude.ToString("F1") + " rot " + c.Body.angularVelocity.magnitude.ToString("F1") + (c.Body.isKinematic ? " cin" : "") + " ;");
+            int n = 0, odd = 0;
+            foreach (Rigidbody rb in c.Body.GetComponentsInChildren<Rigidbody>(true))
+            {
+                if (rb == c.Body) continue;
+                n++;
+                float d = Vector3.Distance(rb.position, c.Body.position), v = rb.isKinematic ? 0f : rb.velocity.magnitude;
+                float dt = Vector3.Distance(rb.position, rb.transform.position);   // (pose physique vs transform)
+                if (d < 2f && v < 3f && dt < 0.5f && !rb.isKinematic) continue;
+                if (odd++ < 12) sb.Append(' ').Append(rb.name).Append(" d").Append(d.ToString("F1")).Append(" v").Append(v.ToString("F0")).Append(dt >= 0.5f ? " ecart" + dt.ToString("F1") : "").Append(rb.isKinematic ? " cin" : "").Append(';');
+            }
+            int far = 0;
+            foreach (Joint j in c.Body.GetComponentsInChildren<Joint>(true))
+            {
+                if (j == null || j.connectedBody == null) continue;
+                float d = Vector3.Distance(j.transform.position, j.connectedBody.position);
+                if (d > 3f && far++ < 6) sb.Append(" ATTACHE ").Append(j.GetType().Name).Append(' ').Append(j.name).Append("->").Append(j.connectedBody.name).Append(" d").Append(d.ToString("F1")).Append(';');
+            }
+            return sb.ToString() + " (" + n + " corps, " + odd + " a part, " + far + " attaches loin)";
+        }
+
         // Voiture tout juste reprise (voir SetKinematic) : vitesse verticale et rotation bridees ; puis attaches rendues.
         static int settleLogs;
         static void Settle(Car c)
@@ -1730,6 +1821,7 @@ namespace MWCoop
             if (now >= c.SettleUntil)
             {
                 c.SettleUntil = 0f;
+                if (Config.GetInt("Test", "SondeReprise", 0) != 0) Log.Info("voiture " + c.Key + " fin de reprise : " + PartsProbe(c));
                 if (c.JointsLater != null)
                 {
                     foreach (KeyValuePair<Joint, Vector2> kv in c.JointsLater)
@@ -2444,6 +2536,20 @@ namespace MWCoop
             foreach (HutongGames.PlayMaker.NamedVariable v in c.Drive.FsmVariables.GetAllNamedVariables()) sb.Append(' ').Append(v.Name).Append('=').Append(v.ToString());
             return sb.ToString();
         }
+
+        // Essais : la zone de conduite (automate, objet actif, collisionneurs, distance au joueur).
+        public static string TestDriveZone(string name)
+        {
+            Car c = Named(name);
+            if (c == null || c.Drive == null) return "?";
+            GameObject pl = Game.PlayerGo;
+            var sb = new System.Text.StringBuilder(Recon.Path(c.Drive.transform) + " actif " + c.Drive.gameObject.activeInHierarchy + ", automate " + c.Drive.enabled);
+            foreach (Collider col in c.Drive.GetComponents<Collider>()) sb.Append(" [").Append(col.GetType().Name).Append(col.enabled ? "" : " coupe").Append(col.isTrigger ? " trigger" : "").Append(" centre ").Append(col.bounds.center.ToString("F2")).Append(" taille ").Append(col.bounds.size.ToString("F2")).Append(']');
+            if (pl != null) sb.Append(" joueur ").Append(pl.transform.position.ToString("F2")).Append(" a ").Append(Vector3.Distance(pl.transform.position, c.Drive.transform.position).ToString("F2")).Append(" m");
+            return sb.ToString();
+        }
+
+        public static Vector3 TestDriveZonePos(string name) { Car c = Named(name); return c != null && c.Drive != null ? c.Drive.transform.position : Vector3.zero; }
 
         public static string TestExit(string name)
         {
