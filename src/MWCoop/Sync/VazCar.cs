@@ -23,7 +23,29 @@ namespace MWCoop
         // commandes du tableau de bord, frein a main, moteur, tenue de route (VazHandling).
         public class Model
         {
-            public int Id; public string Folder, Name;
+            public int Id; public string Folder;
+            // nom affiche : NomCourt de <dossier>\addon.ini (addons en extension, comme l'onglet Addons du lanceur), sinon celui-ci
+            string name; bool nameRead;
+            public string Name
+            {
+                get
+                {
+                    if (!nameRead && Folder != "vaz")
+                    {
+                        nameRead = true;
+                        try
+                        {
+                            string f = Path.Combine(Dir, "addon.ini");
+                            if (File.Exists(f))
+                                foreach (string l in File.ReadAllLines(f, System.Text.Encoding.UTF8))
+                                    if (l.StartsWith("NomCourt=") && l.Length > 9) name = l.Substring(9).Trim();
+                        }
+                        catch { }
+                    }
+                    return name;
+                }
+                set { name = value; }
+            }
             public Vector3 Head, Engine, BrakePivot, BrakeGrip;
             public KeyValuePair<string, Vector3>[] Controls;
             public Dictionary<string, Vector3> Info;
@@ -35,7 +57,7 @@ namespace MWCoop
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
         // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant ; pas de levier de frein a main
         // modelise (le levier cliquable du jeu sur la console) ; commandes du tableau de bord : places de la SORBET.
-        public static readonly Model Evo3 = new Model { Id = ModelEvo, Folder = "evo3", Name = "Evo III",
+        public static readonly Model Evo3 = new Model { Id = ModelEvo, Folder = "evo3", Name = "Ebo III",
             Head = new Vector3(-0.35f, 0.909f, -0.101f), Engine = new Vector3(0f, 0.75f, 1.55f),
             BrakePivot = new Vector3(0.02f, 0.40f, -0.05f), BrakeGrip = new Vector3(0.02f, 0.47f, 0.05f),
             Controls = new KeyValuePair<string, Vector3>[0] };

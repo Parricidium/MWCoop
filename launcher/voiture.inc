@@ -735,53 +735,113 @@ static void DrawPaintView(Graphics &g, RectF card)
     for (const wchar_t *s : steps) { Para(g, s, RectF(card.X + 24, sy, card.Width - 48, 40), 13, kInk); sy += 42; }
 }
 
-// ---- livree de l'Evo III (JD, 20/10) : EXTENSION PRIVEE (<jeu>\MWCoop\evo3, jamais dans les versions publiees) ; le volet
-// n'apparait que si elle est installee. Sans livree, l'Evo est comme la VAZ (couleur du joueur + numero sur les portieres) ;
-// avec, l'image du joueur, peinte sur le gabarit de l'extension (evo3\gabarit-livree.png : numero hachure en rouge, a
-// laisser libre), importee en %LOCALAPPDATA%\MWCoop\evo3-livree.jpg (2048 x 2048, JPEG de 2,2 Mo au plus : le mod
-// l'envoie aux autres joueurs par morceaux, EvoLivery) ; [Coop] EvoLivree = perso.
-static bool g_evoView;
-static RectF g_evoBtnRect;
-static Bitmap *g_evoThumb;
-static std::wstring g_evoThumbOf;
-static std::wstring EvoDir() { return g_modRoot + L"MWCoop\\evo3\\"; }
-static bool EvoHas() { return !g_gameDir.empty() && FileExists(EvoDir() + L"carrosserie.p205"); }
-static std::wstring EvoFile() { return LocalDir() + L"evo3-livree.jpg"; }
-static bool EvoOn()
+// ---- onglet ADDONS de la page Personnage (JD, 20/10 : « il y aura peut-etre d'autres voitures ») : voitures en
+// EXTENSION, chacune un dossier <jeu>\MWCoop\<cle> avec addon.ini (Nom, NomCourt, Description, DescriptionEn, Livree=1),
+// apercu.png et le modele (carrosserie.p205...). Rien n'est ecrit en dur ici : le lanceur public ne montre que ce qui est
+// installe (la premiere, Lanzer Ebo III -- l'Evo III Gr. A, extension privee de JD, jamais publiee). Liste de cartes ; une
+// carte ouvre son volet : livree a gauche (gabarit, import, utilisee, retirer), sa fiche a droite (pas les couleurs de
+// la CORRIS). Sans livree, la voiture est comme la VAZ (couleur du joueur + numero) ; avec, l'image du joueur
+// (%LOCALAPPDATA%\MWCoop\<cle>-livree.jpg, JPEG 2048 x 2048 de 2,1 Mo au plus : le mod l'envoie aux autres joueurs,
+// EvoLivery) ; [Coop] EvoLivree (cle evo3) ou Livree_<cle> = perso.
+struct Addon { std::wstring key, name, nameShort, desc, descEn; bool livery = false; };
+static std::vector<Addon> g_addonList;
+static ULONGLONG g_addonScanT;
+static int g_addonSel = -1;          // carte ouverte (-1 : la liste)
+static bool g_addonsTab;             // onglet Addons (g_tab == TAB_CAR)
+static std::map<std::wstring, Bitmap *> g_addonPics;
+static Bitmap *g_addonThumb;
+static std::wstring g_addonThumbOf;
+static std::wstring AddonsRoot() { return g_modRoot + L"MWCoop\\"; }
+static void AddonsScan()
+{
+    ULONGLONG now = GetTickCount64();
+    if (now < g_addonScanT) return;
+    g_addonScanT = now + 3000;
+    std::vector<Addon> v;
+    if (!g_gameDir.empty()) {
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((AddonsRoot() + L"*").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
+                std::wstring dir = AddonsRoot() + fd.cFileName + L"\\";
+                std::vector<unsigned char> b;
+                if (!FileExists(dir + L"carrosserie.p205") || !ReadAll(dir + L"addon.ini", b)) continue;
+                Addon a; a.key = fd.cFileName; a.name = a.key;
+                std::string t(b.begin(), b.end());
+                if (t.size() >= 3 && (unsigned char)t[0] == 0xEF) t = t.substr(3);
+                size_t p = 0;
+                while (p < t.size()) {
+                    size_t e = t.find('\n', p); if (e == std::string::npos) e = t.size();
+                    std::string l = t.substr(p, e - p); p = e + 1;
+                    if (!l.empty() && l.back() == '\r') l.pop_back();
+                    size_t q = l.find('=');
+                    if (q == std::string::npos || l[0] == ';' || l[0] == '[') continue;
+                    std::string k = l.substr(0, q); std::wstring val = Widen(l.substr(q + 1));
+                    if (k == "Nom") a.name = val; else if (k == "NomCourt") a.nameShort = val;
+                    else if (k == "Description") a.desc = val; else if (k == "DescriptionEn") a.descEn = val;
+                    else if (k == "Livree") a.livery = val == L"1";
+                }
+                if (a.nameShort.empty()) a.nameShort = a.name;
+                v.push_back(a);
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+    }
+    std::sort(v.begin(), v.end(), [](const Addon &x, const Addon &y) { return x.name < y.name; });
+    g_addonList = v;
+    if (g_addonSel >= (int)v.size()) g_addonSel = -1;
+}
+static const Addon *AddonCur() { return g_addonSel >= 0 && g_addonSel < (int)g_addonList.size() ? &g_addonList[g_addonSel] : NULL; }
+static std::wstring AddonDir(const Addon &a) { return AddonsRoot() + a.key + L"\\"; }
+static std::wstring AddonLiveryFile(const Addon &a) { return LocalDir() + a.key + L"-livree.jpg"; }
+static std::string AddonCfgKey(const Addon &a) { return a.key == L"evo3" ? "EvoLivree" : "Livree_" + Narrow(a.key); }
+static Bitmap *AddonPic(const Addon &a)
+{
+    auto it = g_addonPics.find(a.key);
+    if (it != g_addonPics.end()) return it->second;
+    Bitmap *b = LoadAnyImage(AddonDir(a) + L"apercu.png", NULL);
+    g_addonPics[a.key] = b;
+    return b;
+}
+static bool AddonLiveryOn(const Addon &a)
 {
     if (g_gameDir.empty()) return false;
     char v[16] = "";
-    GetPrivateProfileStringA("Coop", "EvoLivree", "", v, sizeof(v), ModIniA().c_str());
-    return strcmp(v, "perso") == 0 && FileExists(EvoFile());
+    GetPrivateProfileStringA("Coop", AddonCfgKey(a).c_str(), "", v, sizeof(v), ModIniA().c_str());
+    return strcmp(v, "perso") == 0 && FileExists(AddonLiveryFile(a));
 }
-static void EvoUse(bool on)
+static void AddonLiveryUse(const Addon &a, bool on)
 {
     if (g_gameDir.empty()) return;
     EnsureModDir();
-    WritePrivateProfileStringA("Coop", "EvoLivree", on ? "perso" : "", ModIniA().c_str());
-    g_evoThumbOf.clear();
+    WritePrivateProfileStringA("Coop", AddonCfgKey(a).c_str(), on ? "perso" : "", ModIniA().c_str());
+    g_addonThumbOf.clear();
 }
-// Miniature (512 x 512) : la livree du joueur, sinon le gabarit de l'extension.
-static Bitmap *EvoThumb()
+// Miniature (512 x 512) : la livree du joueur, sinon le gabarit de l'addon.
+static Bitmap *AddonThumb(const Addon &a)
 {
-    std::wstring f = EvoOn() ? EvoFile() : EvoDir() + L"gabarit-livree.png";
-    WIN32_FILE_ATTRIBUTE_DATA a;
+    std::wstring f = AddonLiveryOn(a) ? AddonLiveryFile(a) : AddonDir(a) + L"gabarit-livree.png";
+    WIN32_FILE_ATTRIBUTE_DATA at;
     std::wstring key = f;
-    if (GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &a)) key += L"|" + std::to_wstring(a.ftLastWriteTime.dwLowDateTime);
-    if (key == g_evoThumbOf) return g_evoThumb;
-    g_evoThumbOf = key;
-    delete g_evoThumb; g_evoThumb = NULL;
+    if (GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &at)) key += L"|" + std::to_wstring(at.ftLastWriteTime.dwLowDateTime);
+    if (key == g_addonThumbOf) return g_addonThumb;
+    g_addonThumbOf = key;
+    delete g_addonThumb; g_addonThumb = NULL;
     if (Bitmap *b = LoadAnyImage(f, NULL)) {
-        g_evoThumb = new Bitmap(512, 512, PixelFormat32bppPARGB);
-        Graphics tg(g_evoThumb);
+        g_addonThumb = new Bitmap(512, 512, PixelFormat32bppPARGB);
+        Graphics tg(g_addonThumb);
         tg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
         tg.DrawImage(b, RectF(0, 0, 512, 512));
         delete b;
     }
-    return g_evoThumb;
+    return g_addonThumb;
 }
-static void EvoImport()
+static void AddonImport()
 {
+    const Addon *pa = AddonCur();
+    if (!pa) return;
+    Addon a = *pa;
     wchar_t file[MAX_PATH] = L"";
     OPENFILENAMEW of = { sizeof(of) };
     of.hwndOwner = g_wnd;
@@ -790,7 +850,8 @@ static void EvoImport()
     of.nMaxFile = MAX_PATH;
     std::wstring init = LocalDir();
     of.lpstrInitialDir = init.c_str();
-    of.lpstrTitle = T(L"Choisir la livrée de l'Evo III (peinte sur le gabarit)", L"Choose the Evo III livery (painted on the template)");
+    std::wstring title = std::wstring(T(L"Choisir la livrée : ", L"Choose the livery: ")) + a.name + T(L" (peinte sur le gabarit)", L" (painted on the template)");
+    of.lpstrTitle = title.c_str();
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
     if (!GetOpenFileNameW(&of)) return;
     std::wstring why;
@@ -798,7 +859,7 @@ static void EvoImport()
     bool ok = false;
     if (src) {
         const int W = 2048, H = 2048;
-        Bitmap *base = LoadAnyImage(EvoDir() + L"peinture.png", NULL);   // (parties transparentes : la voiture sans livree)
+        Bitmap *base = LoadAnyImage(AddonDir(a) + L"peinture.png", NULL);   // (parties transparentes : la voiture sans livree)
         Bitmap dst(W, H, PixelFormat24bppRGB);
         {
             Graphics dg(&dst);
@@ -812,78 +873,155 @@ static void EvoImport()
         CLSID jpg;
         CreateDirectoryW(LocalDir().c_str(), NULL);
         ok = EncoderClsid(L"image/jpeg", &jpg);
-        // qualite 90, puis moins si le fichier depasse ce que le mod accepte d'envoyer (2,2 Mo)
+        // qualite 90, puis moins si le fichier depasse ce que le mod accepte d'envoyer (2,1 Mo)
         for (ULONG q : { 90UL, 80UL, 70UL, 55UL }) {
             if (!ok) break;
             EncoderParameters ep; ULONG qq = q;
             ep.Count = 1; ep.Parameter[0].Guid = EncoderQuality; ep.Parameter[0].Type = EncoderParameterValueTypeLong; ep.Parameter[0].NumberOfValues = 1; ep.Parameter[0].Value = &qq;
-            ok = dst.Save(EvoFile().c_str(), &jpg, &ep) == Ok;
-            WIN32_FILE_ATTRIBUTE_DATA a;
-            if (ok && GetFileAttributesExW(EvoFile().c_str(), GetFileExInfoStandard, &a) && a.nFileSizeLow < 2100000 && a.nFileSizeHigh == 0) { LaunchLog("livree evo importee : qualite %lu, %lu octets", q, a.nFileSizeLow); break; }
+            ok = dst.Save(AddonLiveryFile(a).c_str(), &jpg, &ep) == Ok;
+            WIN32_FILE_ATTRIBUTE_DATA at;
+            if (ok && GetFileAttributesExW(AddonLiveryFile(a).c_str(), GetFileExInfoStandard, &at) && at.nFileSizeLow < 2100000 && at.nFileSizeHigh == 0) { LaunchLog("livree %ls importee : qualite %lu, %lu octets", a.key.c_str(), q, at.nFileSizeLow); break; }
         }
         if (!ok) why = T(L"enregistrement impossible", L"can't save it");
     }
     delete src;
-    if (ok) EvoUse(true);
+    if (ok) AddonLiveryUse(a, true);
     else {
-        LaunchLog("livree evo : echec (%ls)", why.c_str());
+        LaunchLog("livree %ls : echec (%ls)", a.key.c_str(), why.c_str());
         std::wstring msg = std::wstring(T(L"Cette image n'a pas pu être lue : ", L"This image could not be read: ")) + why + L".";
         MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
     }
 }
-// Gabarit : copie de evo3\gabarit-livree.png dans %LOCALAPPDATA%\MWCoop (on peint sur la copie), montree dans l'Explorateur.
-static void EvoTemplate()
+// Gabarit : copie de <cle>\gabarit-livree.png dans %LOCALAPPDATA%\MWCoop (on peint sur la copie), montree dans l'Explorateur.
+static void AddonTemplate()
 {
-    std::wstring t = LocalDir() + L"gabarit-evo3.png";
+    const Addon *a = AddonCur();
+    if (!a) return;
+    std::wstring t = LocalDir() + L"gabarit-" + a->key + L".png";
     CreateDirectoryW(LocalDir().c_str(), NULL);
-    if (!CopyFileW((EvoDir() + L"gabarit-livree.png").c_str(), t.c_str(), FALSE) && !FileExists(t)) {
-        MessageBoxW(g_wnd, T(L"MWCoop\\evo3\\gabarit-livree.png est introuvable : réinstalle l'extension Evo III.", L"MWCoop\\evo3\\gabarit-livree.png was not found: reinstall the Evo III extension."), L"MWCoop", MB_ICONWARNING | MB_OK);
+    if (!CopyFileW((AddonDir(*a) + L"gabarit-livree.png").c_str(), t.c_str(), FALSE) && !FileExists(t)) {
+        std::wstring m = std::wstring(T(L"Gabarit introuvable (MWCoop\\", L"Template not found (MWCoop\\")) + a->key + T(L"\\gabarit-livree.png) : réinstalle l'addon.", L"\\gabarit-livree.png): reinstall the add-on.");
+        MessageBoxW(g_wnd, m.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
         return;
     }
-    std::wstring a = L"/select,\"" + t + L"\"";
-    ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL);
+    std::wstring arg = L"/select,\"" + t + L"\"";
+    ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
 }
-static void EvoRemove()
+static void AddonRemove()
 {
-    DeleteFileW(EvoFile().c_str());
-    EvoUse(false);
-    LaunchLog("livree evo retiree");
+    const Addon *a = AddonCur();
+    if (!a) return;
+    DeleteFileW(AddonLiveryFile(*a).c_str());
+    AddonLiveryUse(*a, false);
+    LaunchLog("livree %ls retiree", a->key.c_str());
 }
-static void DrawEvoView(Graphics &g, RectF card)
+// Image contenue (proportions gardees) et coins arrondis.
+static void AddonDrawPic(Graphics &g, Bitmap *b, RectF r, float rad)
 {
-    GraphicsPath bp; RoundRect(bp, card, 20);
-    SolidBrush bb(TH(card)); g.FillPath(&bb, &bp);
-    Title(g, T(L"Livrée de l'Evo III", L"Evo III livery"), RectF(card.X + 24, card.Y + 20, 300, 30), 22, kInk);
-    Para(g, T(L"Sans livrée, ton Evo prend ta couleur et ton numéro, comme la VAZ. Avec, tous les joueurs voient la tienne.",
-              L"Without a livery, your Evo takes your colour and number, like the VAZ. With one, every player sees yours."),
-         RectF(card.X + 24, card.Y + 56, card.Width - 48 - 200, 44), 12.5f, kGrey);   // (a gauche des boutons du haut)
-    bool has = FileExists(EvoFile()), on = EvoOn();
-    RectF th(card.X + 24, card.Y + 104, 300, 300);
-    GraphicsPath tp; RoundRect(tp, th, 14);
-    SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
-    if (Bitmap *b = EvoThumb()) {
-        g.SetClip(&tp);
-        g.DrawImage(b, th);
-        g.ResetClip();
-    } else Icon(g, IC_IMAGE, th.X + th.Width / 2, th.Y + th.Height / 2, 48, WithA(kGrey, 0.6f), 1.4f);
-    Pen tpen(on ? kAcc : TH(fieldBorder), on ? 2.0f : 1.0f); g.DrawPath(&tpen, &tp);
-    Text(g, on ? T(L"Ta livrée", L"Your livery") : T(L"Gabarit (couleur + numéro)", L"Template (colour + number)"),
-         RectF(th.X, th.Y + th.Height + 6, th.Width, 22), 12.5f, FontStyleBold, on ? kInk : kGrey, StringAlignmentCenter);
-    float bx = th.X + th.Width + 24, bw = card.X + card.Width - 24 - bx, by = th.Y;
-    UiButton(g, RectF(bx, by, bw, 44), T(L"Gabarit", L"Template"), UI_CAR_EVOTPL, false, IC_FOLDER); by += 56;
-    UiButton(g, RectF(bx, by, bw, 44), T(L"Mon image…", L"My image…"), UI_CAR_EVOIMP, true, IC_IMAGE); by += 56;
-    if (has) {
-        UiButton(g, RectF(bx, by, bw, 44), on ? T(L"Utilisée : oui", L"In use: yes") : T(L"Utilisée : non", L"In use: no"), UI_CAR_EVOUSE, false, on ? IC_CHECK : -1); by += 56;
-        UiButton(g, RectF(bx, by, bw, 44), T(L"Retirer", L"Remove"), UI_CAR_EVODEL, false, IC_TRASH); by += 56;
+    GraphicsPath p; RoundRect(p, r, rad);
+    SolidBrush f(TH(field)); g.FillPath(&f, &p);
+    if (!b) { Icon(g, IC_CAR, r.X + r.Width / 2, r.Y + r.Height / 2, 44, WithA(kGrey, 0.6f), 1.4f); return; }
+    float k = max(r.Width / b->GetWidth(), r.Height / b->GetHeight()), w = b->GetWidth() * k, h = b->GetHeight() * k;
+    g.SetClip(&p);
+    g.DrawImage(b, RectF(r.X + (r.Width - w) / 2, r.Y + (r.Height - h) / 2, w, h));
+    g.ResetClip();
+}
+// Liste : une carte par addon installe.
+static RectF AddonCardRect(int i) { return RectF(kCarCard.X + 24 + (i % 3) * 324.0f, kCarCard.Y + 112 + (i / 3) * 290.0f, 300, 270); }
+static void DrawAddonList(Graphics &g)
+{
+    RectF area(kCarCard.X, kCarCard.Y, kCarPanel.X + kCarPanel.Width - kCarCard.X, kCarCard.Height);
+    Glass(area);
+    Title(g, T(L"Addons", L"Add-ons"), RectF(area.X + 24, area.Y + 20, 400, 30), 22, kInk);
+    Para(g, T(L"Voitures en extension : un dossier à copier dans MWCoop\\ du jeu. En partie, on les prend au F10 (onglet Voitures).",
+              L"Extension cars: a folder to copy into the game's MWCoop\\. In game, take them with F10 (Cars tab)."),
+         RectF(area.X + 24, area.Y + 56, area.Width - 48, 40), 12.5f, kGrey);
+    if (g_addonList.empty()) {
+        Icon(g, IC_CAR, area.X + area.Width / 2, area.Y + area.Height / 2 - 30, 56, WithA(kGrey, 0.6f), 1.4f);
+        Text(g, T(L"Aucun addon installé", L"No add-on installed"), RectF(area.X, area.Y + area.Height / 2 + 10, area.Width, 26), 15, FontStyleBold, kGrey);
+        return;
     }
-    float sy = th.Y + th.Height + 44;
-    const wchar_t *steps[] = {
-        T(L"1. Gabarit : l'Evo dépliée à plat (2048 x 2048). La zone hachurée en rouge reçoit ton numéro : ne dessine rien d'important dessous.",
-          L"1. Template: the Evo laid flat (2048 x 2048). The red hatched area gets your number: draw nothing important under it."),
-        T(L"2. Peins par-dessus en gardant la taille, puis « Mon image… ».", L"2. Paint over it keeping the size, then \"My image…\"."),
-        T(L"3. En jeu, prends une Evo III au F10 (onglet Voitures) : tout le monde voit ta livrée.", L"3. In game, take an Evo III with F10 (Cars tab): everyone sees your livery."),
+    for (int i = 0; i < (int)g_addonList.size() && i < 6; i++) {
+        const Addon &a = g_addonList[i];
+        RectF r = AddonCardRect(i);
+        bool hot = g_uiHot == UI_ADDON_CARD + i;
+        GraphicsPath p; RoundRect(p, r, 16);
+        SolidBrush cb(hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &p);
+        Pen pen(hot ? kAcc : TH(choiceBorder), hot ? 1.6f : 1.0f); g.DrawPath(&pen, &p);
+        AddonDrawPic(g, AddonPic(a), RectF(r.X + 10, r.Y + 10, r.Width - 20, 160), 12);
+        Text(g, a.name, RectF(r.X + 16, r.Y + 180, r.Width - 32, 26), 16, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, !g_fr && !a.descEn.empty() ? a.descEn : a.desc, RectF(r.X + 16, r.Y + 206, r.Width - 32, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        if (a.livery) Text(g, AddonLiveryOn(a) ? T(L"Ta livrée", L"Your livery") : T(L"Couleur + numéro", L"Colour + number"), RectF(r.X + 16, r.Y + 232, r.Width - 32, 22), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
+        HotZone(r, UI_ADDON_CARD + i);
+    }
+}
+// Volet d'un addon : livree a gauche, sa fiche a droite.
+static void DrawAddonView(Graphics &g, const Addon &a)
+{
+    Glass(kCarCard);
+    Glass(kCarPanel);
+    RectF card = kCarCard;
+    Title(g, a.livery ? (std::wstring(T(L"Livrée : ", L"Livery: ")) + a.nameShort).c_str() : a.name.c_str(), RectF(card.X + 24, card.Y + 20, card.Width - 48 - 150, 30), 22, kInk);
+    UiButton(g, RectF(card.X + card.Width - 24 - 140, card.Y + 18, 140, 34), T(L"‹ Addons", L"‹ Add-ons"), UI_ADDON_BACK, false, -1, true, 10);
+    if (a.livery) {
+        Para(g, T(L"Sans livrée, elle prend ta couleur et ton numéro, comme la VAZ. Avec, tous les joueurs voient la tienne.",
+                  L"Without a livery, it takes your colour and number, like the VAZ. With one, every player sees yours."),
+             RectF(card.X + 24, card.Y + 56, card.Width - 48, 40), 12.5f, kGrey);
+        bool has = FileExists(AddonLiveryFile(a)), on = AddonLiveryOn(a);
+        RectF th(card.X + 24, card.Y + 104, 300, 300);
+        GraphicsPath tp; RoundRect(tp, th, 14);
+        SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
+        if (Bitmap *b = AddonThumb(a)) { g.SetClip(&tp); g.DrawImage(b, th); g.ResetClip(); }
+        else Icon(g, IC_IMAGE, th.X + th.Width / 2, th.Y + th.Height / 2, 48, WithA(kGrey, 0.6f), 1.4f);
+        Pen tpen(on ? kAcc : TH(fieldBorder), on ? 2.0f : 1.0f); g.DrawPath(&tpen, &tp);
+        Text(g, on ? T(L"Ta livrée", L"Your livery") : T(L"Gabarit (couleur + numéro)", L"Template (colour + number)"),
+             RectF(th.X, th.Y + th.Height + 6, th.Width, 22), 12.5f, FontStyleBold, on ? kInk : kGrey, StringAlignmentCenter);
+        float bx = th.X + th.Width + 24, bw = card.X + card.Width - 24 - bx, by = th.Y;
+        UiButton(g, RectF(bx, by, bw, 44), T(L"Gabarit", L"Template"), UI_CAR_EVOTPL, false, IC_FOLDER); by += 56;
+        UiButton(g, RectF(bx, by, bw, 44), T(L"Mon image…", L"My image…"), UI_CAR_EVOIMP, true, IC_IMAGE); by += 56;
+        if (has) {
+            UiButton(g, RectF(bx, by, bw, 44), on ? T(L"Utilisée : oui", L"In use: yes") : T(L"Utilisée : non", L"In use: no"), UI_CAR_EVOUSE, false, on ? IC_CHECK : -1); by += 56;
+            UiButton(g, RectF(bx, by, bw, 44), T(L"Retirer", L"Remove"), UI_CAR_EVODEL, false, IC_TRASH); by += 56;
+        }
+        float sy = th.Y + th.Height + 44;
+        const wchar_t *steps[] = {
+            T(L"1. Gabarit : la voiture dépliée à plat (2048 x 2048). La zone hachurée en rouge reçoit ton numéro : ne dessine rien d'important dessous.",
+              L"1. Template: the car laid flat (2048 x 2048). The red hatched area gets your number: draw nothing important under it."),
+            T(L"2. Peins par-dessus en gardant la taille, puis « Mon image… ».", L"2. Paint over it keeping the size, then \"My image…\"."),
+            T(L"3. En jeu, prends-la au F10 (onglet Voitures) : tout le monde voit ta livrée.", L"3. In game, take it with F10 (Cars tab): everyone sees your livery."),
+        };
+        for (const wchar_t *st : steps) { Para(g, st, RectF(card.X + 24, sy, card.Width - 48, 40), 13, kInk); sy += 42; }
+    } else Para(g, T(L"Pas de livrée pour cet addon : couleur et numéro du joueur.", L"No livery for this add-on: the player's colour and number."), RectF(card.X + 24, card.Y + 56, card.Width - 48, 40), 13, kGrey);
+    // fiche (a la place des couleurs de la CORRIS)
+    RectF pn = kCarPanel;
+    Title(g, T(L"Fiche", L"Details"), RectF(pn.X + 24, pn.Y + 20, 200, 26), 16, kInk);
+    AddonDrawPic(g, AddonPic(a), RectF(pn.X + 24, pn.Y + 60, pn.Width - 48, 180), 14);
+    Text(g, a.name, RectF(pn.X + 24, pn.Y + 252, pn.Width - 48, 28), 17, FontStyleBold, kInk, StringAlignmentNear);
+    Para(g, !g_fr && !a.descEn.empty() ? a.descEn : a.desc, RectF(pn.X + 24, pn.Y + 284, pn.Width - 48, 44), 13, kGrey);
+    float y = pn.Y + 344;
+    const wchar_t *rows[][2] = {
+        { T(L"En jeu", L"In game"), T(L"F10 › Voitures", L"F10 › Cars") },
+        { T(L"Couleur", L"Colour"), T(L"unique par joueur", L"unique per player") },
+        { T(L"Numéro", L"Number"), T(L"le sien, sur les portières", L"theirs, on the doors") },
+        { T(L"Sans l'addon", L"Without the add-on"), T(L"les autres voient une VAZ", L"others see a VAZ") },
     };
-    for (const wchar_t *s : steps) { Para(g, s, RectF(card.X + 24, sy, card.Width - 48, 40), 13, kInk); sy += 42; }
+    for (auto &rw : rows) {
+        Text(g, rw[0], RectF(pn.X + 24, y, 120, 22), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, rw[1], RectF(pn.X + 144, y, pn.Width - 168, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+        y += 30;
+    }
+    if (a.livery) {
+        bool on = AddonLiveryOn(a);
+        Text(g, T(L"Livrée", L"Livery"), RectF(pn.X + 24, y, 120, 22), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
+        Text(g, on ? T(L"la tienne (partagée)", L"yours (shared)") : T(L"aucune", L"none"), RectF(pn.X + 144, y, pn.Width - 168, 22), 12.5f, FontStyleBold, on ? kAcc : kGrey, StringAlignmentNear);
+    }
+    Text(g, (std::wstring(L"MWCoop\\") + a.key).c_str(), RectF(pn.X + 24, pn.Y + pn.Height - 40, pn.Width - 48, 20), 11, FontStyleRegular, WithA(kGrey, 0.8f), StringAlignmentNear);
+}
+static void DrawAddons(Graphics &g)
+{
+    AddonsScan();
+    if (const Addon *a = AddonCur()) DrawAddonView(g, *a);
+    else DrawAddonList(g);
 }
 
 static void CarSetColor(int rgb)
@@ -924,6 +1062,7 @@ static void DrawCarWheel(Graphics &g, RectF r)
 
 static void DrawCar(Graphics &g)
 {
+    if (g_addonsTab && !CarMsc()) { DrawAddons(g); return; }   // (onglet Addons : voitures en extension)
     CarCheckFile();
     Glass(kCarCard);
     Glass(kCarPanel);
@@ -931,7 +1070,6 @@ static void DrawCar(Graphics &g)
     if (CarMsc()) g_vinView = false;   // (pas de plaque VIN sur la SATSUMA)
     if (g_vinView) DrawVinOptions(g, kCarCard);
     else if (g_paintView) DrawPaintView(g, kCarCard);
-    else if (g_evoView && EvoHas()) DrawEvoView(g, kCarCard);
     else if (g_car.state != 1) {
         const wchar_t *msg = CarMsc() ? (g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\satsuma.mesh) : lance une partie de My Summer Car pour le refaire.", L"Preview unreadable (MWCoop\\cache\\satsuma.mesh): start a My Summer Car game to rebuild it.")
                                                            : T(L"Aper\u00E7u de la SATSUMA apr\u00E8s ta premi\u00E8re partie de My Summer Car avec MWCoop.", L"SATSUMA preview after your first My Summer Car game with MWCoop."))
@@ -976,8 +1114,7 @@ static void DrawCar(Graphics &g)
         g.DrawImage(&bm, view);
         g.SetInterpolationMode(im);
     }
-    if (g_evoView && !EvoHas()) g_evoView = false;
-    if (!g_vinView && !g_paintView && !g_evoView) {
+    if (!g_vinView && !g_paintView) {
         Title(g, CarMsc() ? T(L"Ta SATSUMA", L"Your SATSUMA") : T(L"Ta CORRIS", L"Your CORRIS"), RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 100, 400, 32), 22, kInk);
         Text(g, CarMsc() ? T(L"Couleur pour une nouvelle partie ; l'h\u00F4te la donne \u00E0 ses invit\u00E9s.", L"Color for a new game; the host gives it to their guests.")
                          : T(L"Couleur et finition pour une nouvelle partie ; l'h\u00F4te les donne \u00E0 ses invit\u00E9s.", L"Color and trim for a new game; the host gives them to their guests."),
@@ -987,13 +1124,9 @@ static void DrawCar(Graphics &g)
     g_paintBtnRect = RectF(kCarCard.X + kCarCard.Width - 24 - 184, kCarCard.Y + 18, 184, 34);
     UiButton(g, g_paintBtnRect, g_paintView ? T(L"Voir la voiture", L"Show the car") : T(L"Peinture perso…", L"Custom paint…"), UI_CAR_PAINT, g_paintView, g_paintView ? -1 : IC_IMAGE, true, 10);
     g_dentBtnRect = RectF(g_paintBtnRect.X - 12 - 196, g_paintBtnRect.Y, 196, 34);
-    if (!g_vinView && !g_paintView && !g_evoView) UiButton(g, g_dentBtnRect, T(L"Retirer les bosses…", L"Remove dents…"), UI_CAR_DENTS, false, IC_UNDO, true, 10);
+    if (!g_vinView && !g_paintView) UiButton(g, g_dentBtnRect, T(L"Retirer les bosses…", L"Remove dents…"), UI_CAR_DENTS, false, IC_UNDO, true, 10);
     else g_dentBtnRect = RectF(0, 0, 0, 0);
-    // livree de l'Evo III (extension installee) : sous les deux boutons du haut
-    if (EvoHas() && !CarMsc() && !g_vinView && !g_paintView) {
-        g_evoBtnRect = RectF(kCarCard.X + kCarCard.Width - 24 - 184, kCarCard.Y + 60, 184, 34);
-        UiButton(g, g_evoBtnRect, g_evoView ? T(L"Voir la voiture", L"Show the car") : T(L"Livrée Evo III…", L"Evo III livery…"), UI_CAR_EVO, g_evoView, g_evoView ? -1 : IC_IMAGE, true, 10);
-    } else g_evoBtnRect = RectF(0, 0, 0, 0);
+
 
     // Couleur : pastilles, nom, autre couleur
     RectF pn = kCarPanel;
@@ -1061,9 +1194,10 @@ static void DrawCar(Graphics &g)
 static bool CarMouseDown(float x, float y)
 {
     if (PersoPageMouseDown(x, y)) return true;   // (onglets de la page)
+    if (g_addonsTab) return false;   // (Addons : cartes et boutons par HotZone)
     int s = CarSwatchAt(x, y);
     if (s >= 0) { CarSetColor(CarSwatchColor(s)); return true; }
-    if (g_car.state == 1 && !g_vinView && !g_paintView && !g_evoView && kCarView.Contains(x, y) && !g_paintBtnRect.Contains(x, y) && !g_dentBtnRect.Contains(x, y) && !g_evoBtnRect.Contains(x, y)) {
+    if (g_car.state == 1 && !g_vinView && !g_paintView && kCarView.Contains(x, y) && !g_paintBtnRect.Contains(x, y) && !g_dentBtnRect.Contains(x, y)) {
         g_carDrag = true;
         g_carDragX = x; g_carDragY = y;
         SetCapture(g_wnd);

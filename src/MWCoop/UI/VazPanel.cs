@@ -290,7 +290,7 @@ namespace MWCoop
                 // choix du modele (extension Evo III installee) : deux boutons
                 float hw = (r.width - P(8)) / 2;
                 if (Kit.Button(new Rect(r.x, cy, hw, P(28)), "VAZ-2108", Pick == VazCar.ModelVaz ? 1 : 0, false)) Pick = VazCar.ModelVaz;
-                if (Kit.Button(new Rect(r.x + hw + P(8), cy, hw, P(28)), "Evo III", Pick == VazCar.ModelEvo ? 1 : 0, false)) Pick = VazCar.ModelEvo;
+                if (Kit.Button(new Rect(r.x + hw + P(8), cy, hw, P(28)), VazCar.Evo3.Name, Pick == VazCar.ModelEvo ? 1 : 0, false)) Pick = VazCar.ModelEvo;
                 cy += P(34);
             }
             if (evo)
