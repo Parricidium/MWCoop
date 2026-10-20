@@ -595,7 +595,8 @@ struct TileSec { int id, f; const wchar_t *fr, *en; };     // f : partie (PF_*),
 // (plus de rangee « Tete » melangee dans Tenue -- retour de JD, 18/10 : visage, chapeau, lunettes, cheveux sont l'onglet Visage)
 static const TileSec kTenueSecs[] = { { SEC_SHIRT, PF_SHIRT, L"Haut", L"Top" }, { SEC_PANTS, PF_PANTS, L"Bas", L"Bottom" }, { SEC_BODY, PF_BODY, L"Silhouette", L"Build" } };
 static const TileSec kVisageSecs[] = { { SEC_FACE, PF_FACE, L"Visage", L"Face" }, { SEC_HAT, PF_HAT, L"Chapeau", L"Hat" }, { SEC_GLASSES, PF_GLASSES, L"Lunettes", L"Glasses" }, { SEC_HAIR, PF_HAIR, L"Cheveux", L"Hair" } };
-static const wchar_t *kPersoTabFr[3] = { L"Tenue", L"Visage", L"Voiture" }, *kPersoTabEn[3] = { L"Outfit", L"Face", L"Car" };
+static const wchar_t *kPersoTabFr[4] = { L"Tenue", L"Visage", L"Voiture", L"Addons" }, *kPersoTabEn[4] = { L"Outfit", L"Face", L"Car", L"Add-ons" };   // (Addons : voiture.inc, g_addonsTab)
+static int PersoTabCount() { return g_game == GAME_MSC ? 3 : 4; }   // (pas d'addons sur My Summer Car)
 static const wchar_t *kViewFr[3] = { L"Pied", L"Portrait", L"Volant" }, *kViewEn[3] = { L"Full", L"Portrait", L"Wheel" };
 static void LookReset();
 
@@ -662,14 +663,14 @@ static bool LookChanged()
     return false;
 }
 static float PersoTabW(int k) { return PillW(T(kPersoTabFr[k], kPersoTabEn[k]), 13) + 16; }
-static float PersoTabsW() { float w = 0; for (int k = 0; k < 3; k++) w += PersoTabW(k) + (k ? 6 : 0); return w; }
+static float PersoTabsW() { float w = 0; for (int k = 0; k < PersoTabCount(); k++) w += PersoTabW(k) + (k ? 6 : 0); return w; }
 static RectF PersoTabRect(int k) { float x = g_persoTabRight - PersoTabsW(); for (int j = 0; j < k; j++) x += PersoTabW(j) + 6; return RectF(x, kPersoTabY, PersoTabW(k), kPersoTabH); }
 
 // Onglets de la page (TENUE et VOITURE), dessines par l'en-tete (ui.inc DrawHeader) : pilules comme la maquette.
 static void PersoTabsDraw(Graphics &g)
 {
-    int sel = g_tab == TAB_CAR ? 2 : g_persoTab;
-    for (int k = 0; k < 3; k++) {
+    int sel = g_tab == TAB_CAR ? (g_addonsTab ? 3 : 2) : g_persoTab;
+    for (int k = 0; k < PersoTabCount(); k++) {
         RectF r = PersoTabRect(k);
         bool on = k == sel, hot = g_tab == TAB_CAR ? g_carHot == 1000 + HT_TAB + k : g_skinRowHot == HT_TAB + k;
         GraphicsPath p; RoundRect(p, r, r.Height / 2);
@@ -682,7 +683,7 @@ static void PersoTabsDraw(Graphics &g)
 // Element sous la souris : code HT_*, -1 sinon (onglets sur les deux pages ; le reste sur TENUE).
 static int PersoPageHit(float x, float y)
 {
-    for (int k = 0; k < 3; k++) if (PersoTabRect(k).Contains(x, y)) return HT_TAB + k;
+    for (int k = 0; k < PersoTabCount(); k++) if (PersoTabRect(k).Contains(x, y)) return HT_TAB + k;
     if (g_tab != TAB_SKIN) return -1;
     if (g_perso.state == 1) {
         for (int i = 0; i < 3; i++) if (PersoViewBtnRect(i).Contains(x, y)) return HT_VIEW + i;
@@ -707,9 +708,9 @@ static bool PersoPageMouseDown(float x, float y)
 {
     int t = PersoPageHit(x, y);
     if (t < 0) return false;
-    if (t < HT_TAB + 3) {   // (meme volet : les valeurs a rendre restent, comme l'onglet de l'en-tete)
+    if (t < HT_TAB + 4) {   // (meme volet : les valeurs a rendre restent, comme l'onglet de l'en-tete)
         int k = t - HT_TAB;
-        if (k == 2) { g_tab = TAB_CAR; g_carIdleT = GetTickCount(); }
+        if (k == 2 || k == 3) { g_tab = TAB_CAR; g_carIdleT = GetTickCount(); g_addonsTab = k == 3; if (k == 3) { g_addonSel = -1; g_addonScanT = 0; } }
         else { g_tab = TAB_SKIN; g_persoTab = k; g_skinIdleT = GetTickCount(); for (auto &p : g_tilePage) p = -1; }
         g_skinRowHot = -1; g_carHot = -1;
         return true;
