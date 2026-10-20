@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -2365,7 +2365,7 @@ namespace MWCoop
                 ht.localScale = ht.localScale * f;
                 Vector3 centre = (lo + hi) * 0.5f * f;
                 float extra = headHeight * (ech - 1f);
-                Vector3 target = headBone.TransformPoint(helmetHead) + r.up * (extra * (2f / 3f - 0.5f) + Config.GetFloat("Test", "CasqueHaut", 0f)) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
+                Vector3 target = headBone.TransformPoint(helmetHead) + r.up * (extra * (2f / 3f - 0.5f) + Config.GetFloat("Test", "CasqueHaut", 0.02f)) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
                 ht.position = target - centre;
                 // Aligne sur le regard : le personnage regarde un peu vers le bas (JD, 20/10) -- casque tourne autour du centre de la
                 // tete de [Test] CasqueTangage degres (10, positif = vers le bas).
