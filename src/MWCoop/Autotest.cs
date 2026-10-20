@@ -1008,8 +1008,10 @@ namespace MWCoop
                 string car = Config.Get("Test", "TestVoiture", "CORRIS");
                 string scen = Config.Get("Test", "TestScenario", "hote");
                 bool host = Net.Session.IsHost;
-                bool driver = scen == "hote" ? host : scen == "invite" ? !host : false;
-                bool actor = scen == "garee" ? !host : !driver;
+                // sortie (ruller, 19/10) : l'invite conduit, roule 20 s, s'arrete et SORT ([Test] RivettSortie=<s>, 50 par defaut) ;
+                // l'hote regarde seulement, de loin : la voiture rendue a l'hote partait a 3952 m/s 1,5 s apres
+                bool driver = scen == "hote" ? host : scen == "invite" || scen == "sortie" ? !host : false;
+                bool actor = scen == "garee" ? !host : scen == "sortie" ? false : !driver;
                 Rigidbody b = VehicleSync.Body(car);
                 if (b != null && rivParts == null)
                 {
@@ -1021,12 +1023,61 @@ namespace MWCoop
                     }
                     Log.Info("autotest : rivett (" + scen + ", " + (driver ? "conducteur" : actor ? "manie" : "regarde") + ") : " + rivParts.Count + " ouvrants ; suivis : " + CarDoors.ListFor(car) + " ; SORBET : " + CarDoors.ListFor("SORBET"));
                 }
+                // sortie, hote : le joueur de l'hote pose loin de la voiture a 12 s ([Test] RivettLieu=x,y,z ; 2 km, comme chez ruller :
+                // les pieces de la voiture dorment chez l'hote, loin de son joueur)
+                if (scen == "sortie" && host && t > 12f && rivMoved == 0)
+                {
+                    rivMoved = 1;
+                    string[] xyz = Config.Get("Test", "RivettLieu", "1935.5,5.2,-422.4").Split(',');
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    Vector3 to = new Vector3(float.Parse(xyz[0], ci), float.Parse(xyz[1], ci), float.Parse(xyz[2], ci));
+                    GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null) { cc.enabled = false; pl.transform.position = to; cc.enabled = true; Log.Info("autotest : rivett : joueur de l'hote pose en " + to.ToString("F1") + (b != null ? ", a " + Vector3.Distance(to, b.position).ToString("F0") + " m de " + car : "")); }
+                }
                 if (driver)
                 {
-                    if (t > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
-                    if (t > 22f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
-                    if (t > 24f && step == 2) { step = 3; Log.Info("autotest : moteur " + VehicleSync.TestSounds(car, true)); }
-                    VehicleSync.TestEngine(t > 24f && t < 90f ? 1800f : -1f, 0.3f);
+                    float td = t - (scen == "sortie" ? Config.GetFloat("Test", "RivettDecale", 20f) : 0f);   // (invite : tout apres son chargement)
+                    if (td > 15f && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                    // (zone de conduite : le joueur teleporte dedans n'y est vu qu'en bougeant -- reessaye chaque seconde, repose a cote)
+                    if (scen == "sortie" && td > 18f && step == 1 && rivDoor == 0) { rivDoor = 1; Log.Info("autotest : rivett : " + RivSet(car, "DoorLeft", "Open door") + " (portiere ouverte pour monter)"); }
+                    // (les automates des pieces de la voiture ne s'activent qu'a l'approche du joueur : le siege conducteur se dit
+                    // « pas monte » (Data Installed) pendant ~30 s apres la teleportation, et la zone refuse -- reessaye chaque seconde)
+                    if (td > 22f && step == 1 && td >= rivTry)
+                    {
+                        rivTry = td + 1f;
+                        string r = VehicleSync.TestEnter(car, true);
+                        if (r != "Wait for player" || (int)td % 10 == 0) Log.Info("autotest : volant -> " + r + (r == "Wait for player" ? " ; " + VehicleSync.TestDriveZone(car) : ""));
+                        if (r != "Wait for player") step = 2;
+                    }
+                    if (td > 24f && step == 2) { step = 3; Log.Info("autotest : moteur " + VehicleSync.TestSounds(car, true)); }
+                    float outAt = Config.GetFloat("Test", "RivettSortie", 28f + Config.GetFloat("Test", "RivettRoule", 60f) + 4f);
+                    VehicleSync.TestEngine(td > 24f && td < (scen == "sortie" ? outAt - 1f : 90f) ? 1800f : -1f, 0.3f);
+                    // (roule [Test] RivettRoule s (60) a RivettVitesse m/s (12) le long de la route du jeu RivettRoute (DirtRoad) : vitesse
+                    // forcee vers le prochain point, caisse tournee vers lui -- la copie chez l'hote bouge comme pour un vrai trajet)
+                    float roule = Config.GetFloat("Test", "RivettRoule", 60f);
+                    if (scen == "sortie" && b != null && td > 28f && td < 28f + roule && !b.isKinematic && VehicleSync.LocalDrivingRoot == b.transform)
+                    {
+                        if (rivRoute == null)
+                        {
+                            rivRoute = Kartturi.GameRoute(Config.Get("Test", "RivettRoute", "DirtRoad")) ?? new System.Collections.Generic.List<Vector3>();
+                            float best = float.MaxValue; rivWp = 0;
+                            for (int i = 0; i < rivRoute.Count; i++) { float d = Vector3.Distance(rivRoute[i], b.position); if (d < best) { best = d; rivWp = i; } }
+                            Log.Info("autotest : rivett : route " + rivRoute.Count + " points, le plus proche a " + (rivRoute.Count > 0 ? best.ToString("F0") : "?") + " m (" + rivWp + ")");
+                        }
+                        if (rivRoute.Count > 1)
+                        {
+                            Vector3 tgt = rivRoute[rivWp % rivRoute.Count]; Vector3 d = tgt - b.position; d.y = 0f;
+                            if (d.magnitude < 8f) { rivWp++; tgt = rivRoute[rivWp % rivRoute.Count]; d = tgt - b.position; d.y = 0f; }
+                            if (d.sqrMagnitude > 0.01f)
+                            {
+                                float sp = Config.GetFloat("Test", "RivettVitesse", 12f);
+                                b.velocity = d.normalized * sp + Vector3.up * Mathf.Clamp(b.velocity.y, -3f, 1f);
+                                b.rotation = Quaternion.Slerp(b.rotation, Quaternion.LookRotation(d.normalized, Vector3.up), 0.15f);
+                            }
+                        }
+                    }
+                    if (scen == "sortie" && b != null && td >= 28f + roule && td < 31f + roule && !b.isKinematic && VehicleSync.LocalDrivingRoot == b.transform) b.velocity = Vector3.zero;   // (arret 3 s avant de sortir)
+                    if (scen == "sortie" && td > outAt && step == 3) { step = 4; Log.Info("autotest : rivett : sortie -> " + VehicleSync.TestExit(car)); }
                }
                 if (actor)
                 {
@@ -3180,7 +3231,7 @@ namespace MWCoop
         static bool cabAv, cabAvLogged;
         static float cabLogAt, cabWheelAt, cabGearAt;
         static Vector3 cabMin, cabMax;
-        static int rivStep, rivPush;
+        static int rivStep, rivPush, rivDoor, rivPhase, rivDump, rivMoved, rivWp; static System.Collections.Generic.List<Vector3> rivRoute; static float rivTry;
         static readonly float[] RivAt = { 36f, 37f, 40f, 44f, 45f, 48f, 52f, 60f, 66f, 74f };
         static readonly string[] RivPart = { "DoorLeft", "DoorLeft", "DoorLeft", "DoorRight", "DoorRight", "DoorRight", "Bootlid", "Bootlid", "Hood", "Hood" };
         static readonly string[] RivState = { "Open door", "Mouse off", "~fermer", "Open door", "Mouse off", "~fermer", "Open hood", "~fermer", "Open hood", "~fermer" };

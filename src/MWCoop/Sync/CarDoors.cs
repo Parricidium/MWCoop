@@ -119,6 +119,13 @@ namespace MWCoop
         // clic suivant (qui la casse en tirant) ne l'ouvrait plus. Seulement elle : la charniere, le loquet de la
         // portiere fermee (CORRIS : "State 1") et les attaches de montage ("Set joint 2") restent protegees.
         public static bool IsDoorLock(Joint j) { return j != null && lockJoints.Contains(j); }
+        // Corps d'un ouvrant suivi (portiere, coffre, capot) : VehicleSync ne le fige pas, c'est ce module qui le tient.
+        public static bool IsDoorBody(Rigidbody rb)
+        {
+            if (rb == null) return false;
+            foreach (Door d in byKey.Values) if (d.Body == rb) return true;
+            return false;
+        }
 
         public static void OnLevelLoaded()
         {
