@@ -207,6 +207,7 @@ namespace MWCoop
             new Mod("partie chez l'invite", GuestSlot.Update),
             new Mod("phares", LightsGuard.Update),
             new Mod("capots du pack", PackHoods.Update),
+            new Mod("fils", WiringMsc.Update),   // (MSC : bornes electriques de la SATSUMA)
             new Mod("luge de Teimo", TeimoSled.Update),
             new Mod("graphismes", Gfx.Update),
             new Mod("rallye", Rally.Update),
@@ -387,7 +388,8 @@ namespace MWCoop
                                     Consume.OnLevelLoaded, ItemFsms.OnLevelLoaded, Tow.OnLevelLoaded, Garage.OnLevelLoaded,
                                     Interactions.OnLevelLoaded, PushDoors.OnLevelLoaded,   // (portes de la maison, interrupteurs ; portes du garage poussees)
                                     LightsGuard.OnLevelLoaded, PackHoods.OnLevelLoaded, MapPacks.OnLevelLoaded,   // (19/10 soir : phares et capots du pack rallye)
-                                    Fires.OnLevelLoaded };   // (20/10 : cheminees, poeles, grill -- bois, allumage, braises)
+                                    Fires.OnLevelLoaded,   // (20/10 : cheminees, poeles, grill -- bois, allumage, braises)
+                                    WiringMsc.OnLevelLoaded };   // (20/10 : fils de la SATSUMA)
             foreach (System.Action a in all)
             {
                 try { a(); } catch (System.Exception e) { Log.Error("MSC, chargement de " + a.Method.DeclaringType.Name + " : " + e); }
@@ -419,6 +421,7 @@ namespace MWCoop
             "pieces", "objets", "objets (etat)", "reglages", "liquides", "consommables", "remorquage", "atelier",
             // 19/10 soir (retour de Vaydon, 1.1.2 : portes de la maison, du garage et exterieures pas synchronisees)
             "interactions", "portes poussees",
+            "fils",   // (20/10, Reinmansed : fils de la SATSUMA branches par l'invite, invisibles chez l'hote -- WiringMsc)
             "feux",   // (20/10, joueurs : « le bois ne prend pas » -- cheminees, poeles et grill de MSC : memes automates WoodTrigger / SetFire que MWC)
             "phares", "capots du pack",   // (19/10 soir, JD : un appui sur les phares dans une voiture du pack rallye allumait toutes les autres -- LightsGuard)
             "autotest",   // (essais seulement : Autotest.MscTest)

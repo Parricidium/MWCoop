@@ -1378,7 +1378,55 @@ namespace MWCoop
         // (aux levres : 4 cm plus haut qu'avant -- le goulot arrivait au menton, retour de Menor 11/10 : « biere, boisson
         // energisante, soda mal tournes a la bouche »)
         // (13 cm sous l'os de la tete : a 5 cm, bouteilles et main arrivaient au front -- Menor, 12/10, captures BoissonDefile)
-        Vector3 Mouth() { Transform r = Root.transform; return headBone.position + r.forward * 0.11f - r.up * Config.GetFloat("Test", "BoucheBas", 0.13f); }
+        Vector3 Mouth()
+        {
+            Transform r = Root.transform;
+            if (HeadBox()) return headBone.TransformPoint(mouthHead) + r.forward * Config.GetFloat("Test", "BoucheAvant", 0f) - r.up * Config.GetFloat("Test", "BoucheBas", 0f);
+            return headBone.position + r.forward * 0.11f - r.up * Config.GetFloat("Test", "BoucheBas", 0.13f);
+        }
+
+        // Boite de la tete d'apres le maillage du corps (sommets portes par l'os de la tete), dans le repere de cet os : la
+        // bouche (devant, au tiers du bas) et le centre du casque en decoulent, quelle que soit la corpulence choisie (Menor,
+        // 20/10 : casque devant le visage, goulot au menton -- les constantes d'avant valaient pour un seul modele).
+        Vector3 mouthHead, helmetHead; int headBoxState;   // 0 pas encore, 1 ok, -1 impossible
+        bool HeadBox()
+        {
+            if (headBoxState != 0) return headBoxState > 0;
+            headBoxState = -1;
+            if (body == null || headBone == null || body.sharedMesh == null) return false;
+            try
+            {
+                int hi = System.Array.IndexOf(body.bones, headBone);
+                if (hi < 0) return false;
+                var baked = new Mesh();
+                body.BakeMesh(baked);
+                Vector3[] v = baked.vertices;
+                BoneWeight[] w = body.sharedMesh.boneWeights;
+                Transform r = Root.transform, bt = body.transform;
+                Vector3 mn = new Vector3(1e9f, 1e9f, 1e9f), mx = -mn;
+                int n = 0;
+                for (int i = 0; i < v.Length && i < w.Length; i++)
+                {
+                    BoneWeight b = w[i];
+                    float hw = (b.boneIndex0 == hi ? b.weight0 : 0f) + (b.boneIndex1 == hi ? b.weight1 : 0f) + (b.boneIndex2 == hi ? b.weight2 : 0f) + (b.boneIndex3 == hi ? b.weight3 : 0f);
+                    if (hw < 0.6f) continue;
+                    Vector3 p = r.InverseTransformPoint(bt.TransformPoint(v[i]));
+                    mn = Vector3.Min(mn, p); mx = Vector3.Max(mx, p); n++;
+                }
+                Object.Destroy(baked);
+                if (n < 20 || mx.y - mn.y < 0.1f) { Log.Info("avatar " + Player.Name + " : tete introuvable dans le maillage (" + n + " sommets)"); return false; }
+                Vector3 c = (mn + mx) * 0.5f;
+                // (bouche : au-devant de la boite, un peu en retrait de la pointe du nez, au tiers du bas ; casque : centre, un peu haut)
+                Vector3 mouthRoot = new Vector3(c.x, mn.y + (mx.y - mn.y) * 0.3f, mx.z - 0.02f);
+                Vector3 helmetRoot = new Vector3(c.x, c.y + (mx.y - mn.y) * 0.08f, c.z + 0.01f);
+                mouthHead = headBone.InverseTransformPoint(r.TransformPoint(mouthRoot));
+                helmetHead = headBone.InverseTransformPoint(r.TransformPoint(helmetRoot));
+                headBoxState = 1;
+                Log.Info("avatar " + Player.Name + " : tete " + (mx - mn).ToString("F2") + " m (" + n + " sommets), haut " + mx.y.ToString("F2") + ", bouche " + mouthRoot.ToString("F2") + ", casque " + helmetRoot.ToString("F2"));
+                return true;
+            }
+            catch (System.Exception e) { Log.Warn("avatar : boite de la tete : " + e.Message); return false; }
+        }
         // (gobelet a paille du PSK : pas bascule comme une bouteille -- il etait a l'envers, paille en bas ; debout, un peu
         // penche vers soi, la paille aux levres, la main dessous)
         Vector3 DrinkDir()
@@ -2286,7 +2334,9 @@ namespace MWCoop
             for (int i = 0; i < 5 && i < p.Length; i++) float.TryParse(p[i], System.Globalization.NumberStyles.Float, ci, out v[i]);
             Transform r = Root.transform;
             ht.localScale = st.lossyScale;
-            ht.position = headBone.position + r.up * v[0] + r.forward * v[1];
+            // (centre de la boite de la tete quand elle se mesure ; sinon les constantes d'avant)
+            if (HeadBox()) ht.position = headBone.TransformPoint(helmetHead) + r.up * Config.GetFloat("Test", "CasqueHaut", 0f) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
+            else ht.position = headBone.position + r.up * v[0] + r.forward * v[1];
             ht.rotation = r.rotation * Quaternion.Euler(v[2], v[3], v[4]);
             ht.SetParent(hp, true);
             var names = new System.Text.StringBuilder();
