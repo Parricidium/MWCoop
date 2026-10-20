@@ -169,7 +169,10 @@ namespace MWCoop
             var map = new Dictionary<int, int>();
             var v = new List<Vector3>(); var n = new List<Vector3>(); var uv = new List<Vector2>();
             var tris = new List<int[]>();
-            Matrix4x4 w2l = r.transform.worldToLocalMatrix;
+            // (le repere du rendu, comme l'export : MapExport « r » = Renderer.localToWorldMatrix, l'identite pour un objet
+            // regroupe -- ses sommets sont deja dans le monde. Celui du transform (le vrai repere de l'objet, souvent tourne :
+            // lit de MWC « Z en haut ») couchait ou dressait la copie : retour de Vaydon, 1.4.0, 20/10)
+            Matrix4x4 w2l = r.worldToLocalMatrix;
             foreach (int s in subs)
             {
                 if (s < 0 || s >= md.Subs.Length) continue;
