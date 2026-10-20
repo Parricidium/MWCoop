@@ -743,7 +743,7 @@ static void DrawPaintView(Graphics &g, RectF card)
 // la CORRIS). Sans livree, la voiture est comme la VAZ (couleur du joueur + numero) ; avec, l'image du joueur
 // (%LOCALAPPDATA%\MWCoop\<cle>-livree.jpg, JPEG 2048 x 2048 de 2,1 Mo au plus : le mod l'envoie aux autres joueurs,
 // EvoLivery) ; [Coop] EvoLivree (cle evo3) ou Livree_<cle> = perso.
-struct Addon { std::wstring key, name, nameShort, desc, descEn; bool livery = false; };
+struct Addon { std::wstring key, dir, name, nameShort, desc, descEn; bool livery = false; };
 static std::vector<Addon> g_addonList;
 static ULONGLONG g_addonScanT;
 static int g_addonSel = -1;          // carte ouverte (-1 : la liste)
@@ -751,23 +751,38 @@ static bool g_addonsTab;             // onglet Addons (g_tab == TAB_CAR)
 static std::map<std::wstring, Bitmap *> g_addonPics;
 static Bitmap *g_addonThumb;
 static std::wstring g_addonThumbOf;
-static std::wstring AddonsRoot() { return g_modRoot + L"MWCoop\\"; }
+// Dossier des addons : <jeu>\MWCoop\addons (1.5.1, JD : « un raccourci pour ouvrir le dossier addons ») ; ceux poses avant
+// directement dans MWCoop\<cle> (1.5.0) restent lus.
+static std::wstring AddonsRoot() { return g_modRoot + L"MWCoop\\addons\\"; }
+static void WikiOpenAddons();   // (launcher.cpp : article Les addons du GUIDE)
+static void AddonsOpenDir()
+{
+    if (g_gameDir.empty()) return;
+    CreateDirectoryW((g_modRoot + L"MWCoop").c_str(), NULL);
+    CreateDirectoryW(AddonsRoot().c_str(), NULL);
+    ShellExecuteW(g_wnd, L"open", L"explorer.exe", (L"\"" + AddonsRoot() + L"\"").c_str(), NULL, SW_SHOWNORMAL);
+    LaunchLog("addons : dossier ouvert (%ls)", AddonsRoot().c_str());
+}
 static void AddonsScan()
 {
     ULONGLONG now = GetTickCount64();
     if (now < g_addonScanT) return;
     g_addonScanT = now + 3000;
     std::vector<Addon> v;
-    if (!g_gameDir.empty()) {
+    if (!g_gameDir.empty())
+      for (const std::wstring &root : { AddonsRoot(), g_modRoot + L"MWCoop\\" }) {
         WIN32_FIND_DATAW fd;
-        HANDLE h = FindFirstFileW((AddonsRoot() + L"*").c_str(), &fd);
+        HANDLE h = FindFirstFileW((root + L"*").c_str(), &fd);
         if (h != INVALID_HANDLE_VALUE) {
             do {
                 if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || wcschr(fd.cFileName, L'.')) continue;   // (« evo3.off » : addon coupe)
-                std::wstring dir = AddonsRoot() + fd.cFileName + L"\\";
+                std::wstring dir = root + fd.cFileName + L"\\";
                 std::vector<unsigned char> b;
                 if (!FileExists(dir + L"carrosserie.p205") || !ReadAll(dir + L"addon.ini", b)) continue;
-                Addon a; a.key = fd.cFileName; a.name = a.key;
+                bool dup = false;
+                for (const Addon &x : v) if (!_wcsicmp(x.key.c_str(), fd.cFileName)) dup = true;   // (deja dans addons\)
+                if (dup) continue;
+                Addon a; a.key = fd.cFileName; a.dir = dir; a.name = a.key;
                 std::string t(b.begin(), b.end());
                 if (t.size() >= 3 && (unsigned char)t[0] == 0xEF) t = t.substr(3);
                 size_t p = 0;
@@ -793,7 +808,7 @@ static void AddonsScan()
     if (g_addonSel >= (int)v.size()) g_addonSel = -1;
 }
 static const Addon *AddonCur() { return g_addonSel >= 0 && g_addonSel < (int)g_addonList.size() ? &g_addonList[g_addonSel] : NULL; }
-static std::wstring AddonDir(const Addon &a) { return AddonsRoot() + a.key + L"\\"; }
+static std::wstring AddonDir(const Addon &a) { return a.dir; }
 static std::wstring AddonLiveryFile(const Addon &a) { return LocalDir() + a.key + L"-livree.jpg"; }
 static std::string AddonCfgKey(const Addon &a) { return a.key == L"evo3" ? "EvoLivree" : "Livree_" + Narrow(a.key); }
 static Bitmap *AddonPic(const Addon &a)
@@ -933,12 +948,17 @@ static void DrawAddonList(Graphics &g)
     RectF area(kCarCard.X, kCarCard.Y, kCarPanel.X + kCarPanel.Width - kCarCard.X, kCarCard.Height);
     Glass(area);
     Title(g, T(L"Addons", L"Add-ons"), RectF(area.X + 24, area.Y + 20, 400, 30), 22, kInk);
-    Para(g, T(L"Voitures en extension : un dossier à copier dans MWCoop\\ du jeu. En partie, on les prend au F10 (onglet Voitures).",
-              L"Extension cars: a folder to copy into the game's MWCoop\\. In game, take them with F10 (Cars tab)."),
-         RectF(area.X + 24, area.Y + 56, area.Width - 48, 40), 12.5f, kGrey);
+    Para(g, T(L"Voitures en extension : copie le dossier d'un addon dans le dossier des addons. En partie, on les prend au F10 (onglet Voitures).",
+              L"Extension cars: copy an add-on's folder into the add-ons folder. In game, take them with F10 (Cars tab)."),
+         RectF(area.X + 24, area.Y + 56, area.Width - 48 - 400, 40), 12.5f, kGrey);
+    UiButton(g, RectF(area.X + area.Width - 24 - 264, area.Y + 20, 264, 38), T(L"Ouvrir le dossier des addons", L"Open the add-ons folder"), UI_ADDON_DIR, false, IC_FOLDER, true, 10);
+    UiButton(g, RectF(area.X + area.Width - 24 - 264 - 12 - 108, area.Y + 20, 108, 38), T(L"Aide", L"Help"), UI_ADDON_HELP, false, IC_BOOK, true, 10);
     if (g_addonList.empty()) {
-        Icon(g, IC_CAR, area.X + area.Width / 2, area.Y + area.Height / 2 - 30, 56, WithA(kGrey, 0.6f), 1.4f);
-        Text(g, T(L"Aucun addon installé", L"No add-on installed"), RectF(area.X, area.Y + area.Height / 2 + 10, area.Width, 26), 15, FontStyleBold, kGrey);
+        Icon(g, IC_CAR, area.X + area.Width / 2, area.Y + area.Height / 2 - 50, 56, WithA(kGrey, 0.6f), 1.4f);
+        Text(g, T(L"Aucun addon installé", L"No add-on installed"), RectF(area.X, area.Y + area.Height / 2 - 10, area.Width, 26), 15, FontStyleBold, kGrey);
+        Text(g, T(L"Copie le dossier d'un addon dans le dossier des addons : il apparaîtra ici.", L"Copy an add-on's folder into the add-ons folder: it will show up here."),
+             RectF(area.X + 40, area.Y + area.Height / 2 + 20, area.Width - 80, 22), 12.5f, FontStyleRegular, kGrey);
+        UiButton(g, RectF(area.X + area.Width / 2 - 140, area.Y + area.Height / 2 + 58, 280, 44), T(L"Ouvrir le dossier des addons", L"Open the add-ons folder"), UI_ADDON_DIR, true, IC_FOLDER);
         return;
     }
     for (int i = 0; i < (int)g_addonList.size() && i < 6; i++) {
@@ -961,8 +981,9 @@ static void DrawAddonView(Graphics &g, const Addon &a)
     Glass(kCarCard);
     Glass(kCarPanel);
     RectF card = kCarCard;
-    Title(g, a.livery ? (std::wstring(T(L"Livrée : ", L"Livery: ")) + a.nameShort).c_str() : a.name.c_str(), RectF(card.X + 24, card.Y + 20, card.Width - 48 - 150, 30), 22, kInk);
+    Title(g, a.livery ? (std::wstring(T(L"Livrée : ", L"Livery: ")) + a.nameShort).c_str() : a.name.c_str(), RectF(card.X + 24, card.Y + 20, card.Width - 48 - 260, 30), 22, kInk);
     UiButton(g, RectF(card.X + card.Width - 24 - 140, card.Y + 18, 140, 34), T(L"‹ Addons", L"‹ Add-ons"), UI_ADDON_BACK, false, -1, true, 10);
+    UiButton(g, RectF(card.X + card.Width - 24 - 140 - 10 - 96, card.Y + 18, 96, 34), T(L"Aide", L"Help"), UI_ADDON_HELP, false, IC_BOOK, true, 10);
     if (a.livery) {
         Para(g, T(L"Sans livrée, elle prend ta couleur et ton numéro, comme la VAZ. Avec, tous les joueurs voient la tienne.",
                   L"Without a livery, it takes your colour and number, like the VAZ. With one, every player sees yours."),
@@ -1015,7 +1036,7 @@ static void DrawAddonView(Graphics &g, const Addon &a)
         Text(g, T(L"Livrée", L"Livery"), RectF(pn.X + 24, y, 120, 22), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
         Text(g, on ? T(L"la tienne (partagée)", L"yours (shared)") : T(L"aucune", L"none"), RectF(pn.X + 144, y, pn.Width - 168, 22), 12.5f, FontStyleBold, on ? kAcc : kGrey, StringAlignmentNear);
     }
-    Text(g, (std::wstring(L"MWCoop\\") + a.key).c_str(), RectF(pn.X + 24, pn.Y + pn.Height - 40, pn.Width - 48, 20), 11, FontStyleRegular, WithA(kGrey, 0.8f), StringAlignmentNear);
+    Text(g, a.dir.substr(g_modRoot.size()).c_str(), RectF(pn.X + 24, pn.Y + pn.Height - 40, pn.Width - 48, 20), 11, FontStyleRegular, WithA(kGrey, 0.8f), StringAlignmentNear);
 }
 static void DrawAddons(Graphics &g)
 {

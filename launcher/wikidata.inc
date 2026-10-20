@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR, WA_ADDONS };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -606,6 +606,40 @@ static const WikiBlock kW_Museo[] = {
     { WB_TIP, L"Chaque œuvre a sa plaque en français et en anglais. Les auteurs et licences des images et des modèles 3D sont dans les crédits (Guide > onglet Crédits).", L"Every piece has its plaque in French and English. The authors and licences of the pictures and 3D models are in the credits (Guide > Credits tab)." },
 };
 
+static const WikiBlock kW_Addons[] = {   // (1.5.1, JD : comment installer une voiture addon et faire sa livree ; WB_GO 2000 = onglet Addons)
+    { WB_P, L"Les addons sont des voitures en plus, qu'on installe soi-même. En partie, chaque joueur en prend une au F10, comme la VAZ : avec sa couleur et son numéro, ou avec sa propre livrée.",
+            L"Add-ons are extra cars you install yourself. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery." },
+    { WB_H, L"Installer une voiture",
+            L"Installing a car", 0 },
+    { WB_S, L"Personnage > Addons > Ouvrir le dossier des addons : le dossier MWCoop\\addons du jeu s'ouvre.",
+            L"Character > Add-ons > Open the add-ons folder: the game's MWCoop\\addons folder opens." },
+    { WB_S, L"Copie le dossier de la voiture (celui qui contient addon.ini) dans ce dossier.",
+            L"Copy the car's folder (the one that contains addon.ini) into this folder." },
+    { WB_S, L"Reviens dans l'onglet Addons : la voiture y apparaît avec sa photo.",
+            L"Go back to the Add-ons tab: the car shows up there with its picture." },
+    { WB_TIP, L"Pour couper un addon sans le supprimer, ajoute un point à son nom de dossier (par exemple evo3.off). Chacun installe les addons qu'il veut voir : sans l'addon, on voit une VAZ de la même couleur et du même numéro à sa place.",
+            L"To turn an add-on off without deleting it, add a dot to its folder name (for example evo3.off). Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead." },
+    { WB_H, L"La prendre en jeu",
+            L"Taking it in game", 0 },
+    { WB_S, L"F10 > onglet Voitures : choisis le modèle (bouton ou touche M) et une couleur libre, puis Prendre.",
+            L"F10 > Cars tab: pick the model (button or M key) and a free colour, then Take." },
+    { WB_B, L"Couleur et numéro sont uniques entre tous les joueurs, tous modèles confondus.",
+            L"Colour and number are unique across all players, whatever the model." },
+    { WB_B, L"Course sur glace et rallye : on s'inscrit avec sa voiture des joueurs, VAZ ou addon.",
+            L"Ice race and rally: you sign up with your players' car, VAZ or add-on." },
+    { WB_H, L"Faire sa livrée",
+            L"Making your livery", 0 },
+    { WB_S, L"Onglet Addons : clique la voiture, puis Gabarit. Une copie du gabarit s'ouvre dans l'Explorateur.",
+            L"Add-ons tab: click the car, then Template. A copy of the template opens in Explorer." },
+    { WB_S, L"Peins par-dessus dans ton logiciel, en gardant la taille (2048 x 2048). La zone hachurée en rouge reçoit ton numéro : n'y dessine rien d'important.",
+            L"Paint over it in your software, keeping the size (2048 x 2048). The red hatched area gets your number: draw nothing important there." },
+    { WB_S, L"Mon image… : choisis ton image. Utilisée : oui / non revient à la couleur et au numéro sans perdre l'image ; Retirer la supprime.",
+            L"My image…: choose your image. In use: yes / no goes back to the colour and number without losing the image; Remove deletes it." },
+    { WB_B, L"En partie, ta livrée est envoyée aux autres joueurs : tout le monde la voit.",
+            L"In game, your livery is sent to the other players: everyone sees it." },
+    { WB_GO, L"Ouvrir les addons",
+            L"Open the add-ons", 2000 },
+};
 static const WikiBlock kW_Vaz[] = {
     { WB_P, L"Chaque joueur peut avoir sa VAZ-2108 de rallye, gratuite : F10 > onglet VAZ-2108. Seize couleurs, une par joueur ; la couleur donne aussi le numéro peint sur les portières.",
             L"Every player can have their own rally VAZ-2108, free: F10 > VAZ-2108 tab. Sixteen colours, one per player; the colour also gives the number painted on the doors." },
@@ -616,6 +650,7 @@ static const WikiBlock kW_Vaz[] = {
     { WB_TIP, L"Désactivable comme les autres ajouts : Réglages > Coop > Ajouts MWCoop (le choix de l'hôte vaut pour tous). Modèle 3D de matthew0451, licence CC BY-NC 4.0 (Guide > Crédits).",
               L"Can be turned off like the other add-ons: Settings > Co-op > MWCoop additions (the host's choice applies to everyone). 3D model by matthew0451, CC BY-NC 4.0 licence (Guide > Credits)." },
     { WB_GO, L"Ouvrir les Réglages", L"Open Settings", TAB_COOP },
+    { WB_GO, L"Les addons (autres voitures)", L"Add-ons (other cars)", 1000 + WA_ADDONS },
 };
 
 static const WikiBlock kW_Shop[] = {
@@ -915,4 +950,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Linux et Steam Deck", L"Linux and Steam Deck", L"Proton, option de lancement, limites", L"Proton, launch option, limits", kW_Linux),   // (WA_LINUX = 31)
     WARTG(WG_MSC, 0, L"My Summer Car (BETA)", L"My Summer Car (BETA)", L"Ce qui marche déjà, ce qui arrive", L"What works already, what's coming", kW_MscBeta),   // (WA_MSCBETA = 32)
     WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, eau, textures, co-op", L"Objects, roads, water, textures, co-op", kW_Editor),   // (WA_EDITOR = 33)
+    WARTG(WG_MWC, 2, L"Les addons", L"Add-ons", L"Voitures en extension, livrée perso", L"Extension cars, custom livery", kW_Addons),   // (WA_ADDONS = 34)
 };

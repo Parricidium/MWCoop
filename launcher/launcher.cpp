@@ -4563,6 +4563,12 @@ static void NetTest()
 #include "tuto.inc"
 #include "install.inc"
 // Reglages > Co-op : « Revoir le guide de l'hote » ouvre l'article du guide (wikidata.inc : Heberger une partie, 5e article).
+static void WikiOpenAddons()   // (onglet Addons : bouton Aide)
+{
+    for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].b == kW_Addons) { g_wikiSel = a; break; }
+    g_scroll[TAB_WIKI] = 0;
+    GoPage(TAB_WIKI);
+}
 static void WikiOpenHost()
 {
     for (int a = 0; a < kWikiArts; a++) if (kWikiArt[a].b == kW_Host) { g_wikiSel = a; break; }   // (sommaire a plat depuis le rework : plus de categories pliees)

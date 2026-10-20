@@ -66,6 +66,8 @@ enum {
     UI_CAR_EVO = 451, UI_CAR_EVOIMP, UI_CAR_EVOTPL, UI_CAR_EVOUSE, UI_CAR_EVODEL,   // ADDONS : livree de l'addon ouvert (451 libre ; importer, gabarit, utiliser, retirer)
     UI_ADDON_CARD = 470,          // ADDONS : + i, carte de l'addon i (470-485)
     UI_ADDON_BACK = 490,          // ADDONS : retour a la liste
+    UI_ADDON_DIR = 491,           // ADDONS : ouvrir le dossier des addons (MWCoop\addons, cree au besoin)
+    UI_ADDON_HELP = 492,          // ADDONS : article Les addons du GUIDE
     UI_CRED_TAB = 456,            // + k (0 modeles 3D, 1 images, 2 remerciements, 3 supporters) : onglets des CREDITS (456-459)
     UI_TOOL_GET = 460, UI_TOOL_RUN, UI_TOOL_DIR,   // OUTILS (outils.inc) : editeur de carte, telecharger / mettre a jour, lancer, dossier
     UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)

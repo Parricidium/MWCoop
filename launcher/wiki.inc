@@ -19,7 +19,7 @@ enum { WF_FOLDER, WF_FOOTER, WF_START, WF_NET, WF_LOBBY, WF_MSC, WF_SHARE, WF_AC
 
 static const int kWikiCats = (int)(sizeof(kWikiCat) / sizeof(kWikiCat[0]));
 static const int kWikiArts = (int)(sizeof(kWikiArt) / sizeof(kWikiArt[0]));
-static_assert(sizeof(kWikiArt) / sizeof(kWikiArt[0]) == WA_EDITOR + 1, "kWikiArt et WA_* : un article par valeur, dans l'ordre");   // (WA_VAZ manquait : liens decales)
+static_assert(sizeof(kWikiArt) / sizeof(kWikiArt[0]) == WA_ADDONS + 1, "kWikiArt et WA_* : un article par valeur, dans l'ordre");   // (WA_VAZ manquait : liens decales)
 // Article, bloc ou touche du jeu choisi. Un bloc est cache par son propre jeu, par celui du WB_H de sa section, ou s'il mene
 // (WB_GO) a un article cache.
 static bool WikiArtShown(int a) { return a >= 0 && a < kWikiArts && WikiGame(kWikiArt[a].game); }
@@ -27,7 +27,7 @@ static bool WikiBlockShown(const WikiArticle &art, int i)
 {
     const WikiBlock &k = art.b[i];
     if (!WikiGame(k.game)) return false;
-    if (k.kind == WB_GO && k.arg >= 1000 && !WikiArtShown(k.arg - 1000)) return false;
+    if (k.kind == WB_GO && k.arg >= 1000 && k.arg < 2000 && !WikiArtShown(k.arg - 1000)) return false;   // (2000 : onglet Addons)
     if (k.kind != WB_H) for (int j = i - 1; j >= 0; j--) if (art.b[j].kind == WB_H) return WikiGame(art.b[j].game);
     return true;
 }
@@ -730,7 +730,8 @@ static bool WikiClick(int id)
         int i = id - UI_WIKI_GO;
         if (i < art.n && art.b[i].kind == WB_GO) {
             int p = art.b[i].arg;
-            if (p >= 1000) WikiGoArt(p - 1000);   // (autre article du guide)
+            if (p == 2000) { GoPage(TAB_CAR); g_addonsTab = true; g_addonSel = -1; g_addonScanT = 0; }   // (onglet Addons de la page Personnage)
+            else if (p >= 1000) WikiGoArt(p - 1000);   // (autre article du guide)
             else if (PageEnabled(p)) GoPage(p);
         }
         return true;
