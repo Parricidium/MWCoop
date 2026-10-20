@@ -1388,7 +1388,7 @@ namespace MWCoop
         // Boite de la tete d'apres le maillage du corps (sommets portes par l'os de la tete), dans le repere de cet os : la
         // bouche (devant, au tiers du bas) et le centre du casque en decoulent, quelle que soit la corpulence choisie (Menor,
         // 20/10 : casque devant le visage, goulot au menton -- les constantes d'avant valaient pour un seul modele).
-        Vector3 mouthHead, helmetHead; int headBoxState;   // 0 pas encore, 1 ok, -1 impossible
+        Vector3 mouthHead, helmetHead; float headHeight; int headBoxState;   // 0 pas encore, 1 ok, -1 impossible
         bool HeadBox()
         {
             if (headBoxState != 0) return headBoxState > 0;
@@ -1419,7 +1419,8 @@ namespace MWCoop
                 Vector3 c = (mn + mx) * 0.5f;
                 // (bouche : au-devant de la boite, un peu en retrait de la pointe du nez, au tiers du bas ; casque : centre, un peu haut)
                 Vector3 mouthRoot = new Vector3(c.x, mn.y + (mx.y - mn.y) * 0.3f, mx.z - 0.02f);
-                Vector3 helmetRoot = new Vector3(c.x, mx.y, c.z);   // (le HAUT de la tete : le cou, s'il entre dans la boite, ne fausse pas le centre)
+                Vector3 helmetRoot = c;
+                headHeight = mx.y - mn.y;
                 mouthHead = headBone.InverseTransformPoint(r.TransformPoint(mouthRoot));
                 helmetHead = headBone.InverseTransformPoint(r.TransformPoint(helmetRoot));
                 headBoxState = 1;
@@ -2354,10 +2355,17 @@ namespace MWCoop
                         lo = Vector3.Min(lo, w); hi = Vector3.Max(hi, w);
                     }
                 }
-                // (le haut du casque 2,5 cm au-dessus du haut du crane -- le rembourrage --, centre a l'aplomb de la tete)
-                Vector3 anchor = new Vector3((lo.x + hi.x) * 0.5f, hi.y, (lo.z + hi.z) * 0.5f);
-                Vector3 target = headBone.TransformPoint(helmetHead) + r.up * Config.GetFloat("Test", "CasqueHaut", 0.025f) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
-                ht.position = target - anchor;
+                // Le casque du jeu est a peine plus grand que la tete (jamais porte par un personnage dans le jeu) : agrandi pour
+                // l'envelopper -- hauteur = 1,25 x celle de la tete ([Test] CasqueEchelle), le surplus pour les deux tiers au-dessus
+                // du crane, un tiers sous le menton (dessin de JD, 20/10 : la coque au-dessus de la casquette, la mentonniere sous la barbe).
+                float ech = Config.GetFloat("Test", "CasqueEchelle", 1.25f);
+                float f = hi.y - lo.y > 0.05f && headHeight > 0.1f ? headHeight * ech / (hi.y - lo.y) : 1f;
+                ht.localScale = ht.localScale * f;
+                Vector3 centre = (lo + hi) * 0.5f * f;
+                float extra = headHeight * (ech - 1f);
+                Vector3 target = headBone.TransformPoint(helmetHead) + r.up * (extra * (2f / 3f - 0.5f) + Config.GetFloat("Test", "CasqueHaut", 0f)) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
+                ht.position = target - centre;
+                Log.Info("avatar " + Player.Name + " : casque agrandi x" + f.ToString("F2") + " (tete " + headHeight.ToString("F2") + " m, casque " + ((hi.y - lo.y) * f).ToString("F2") + " m)");
             }
             else ht.position = headBone.position + r.up * v[0] + r.forward * v[1];
             ht.SetParent(hp, true);
