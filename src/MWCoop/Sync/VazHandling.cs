@@ -37,7 +37,7 @@ namespace MWCoop
     // 495 Nm a 4 200, rupteur 7 500, inertie 0,15, integrale, boite 2,95 / 2,0 / 1,52 / 1,2 / 0,95 (MA 3,3), pont 4,4,
     // 1 230 kg, 61 % sur l'avant (moteur transversal avant) ; ressorts et amortisseurs de la VAZ a l'echelle de la masse ;
     // braquage 35 (voitures du rallye du pack prive) ; pas de multiplicateur de puissance. Valeurs dans VazCar.Model.Sp, comme
-    // celles de la 205 T16 Evo 2 (JD 21/10).
+    // celles de la 205 T16 Evo 1 (JD 21/10).
     public static class VazHandling
     {
         static VazCar.Spec Sp(VazCar.Built b) { return b != null && b.M != null ? b.M.Sp : null; }
