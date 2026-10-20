@@ -955,6 +955,9 @@ namespace MWCoop
                 if (!gesture && (c.Body.velocity.sqrMagnitude < 0.16f || c.RemoteBy >= 0)) continue;   // (sans geste : seulement ce qui bouge, a personne)
                 // pas un geste : sursaut de la physique (piece qui vient d'etre montee, ou elan qu'aucune main ne donne)
                 if (now < c.CalmUntil) continue;
+                // (copie rendue a l'instant : son elan vient de son retour sous la physique, pas d'une main d'ici -- l'invite sorti de
+                // la SATSUMA de l'hote la « poussait » 0,1 s apres sa remise, l'hote repassait copie 1,5 s, pieces arrachees, 20/10)
+                if (!gesture && now < c.SettleUntil + 1f) continue;
                 if (!gesture && c.Body.velocity.sqrMagnitude > 64f)
                 {
                     if (now - pushSkipLog > 10f) { pushSkipLog = now; Log.Info("poussee : " + c.Key + " a " + c.Body.velocity.magnitude.ToString("F0") + " m/s sans geste : sursaut, pas prise"); }
@@ -1074,6 +1077,13 @@ namespace MWCoop
             foreach (Car c in cars)
                 if (c.Heat != null && !float.IsNaN(c.RemoteHeat) && c.RemoteBy >= 0 && now - c.LastRemote < 1.5f && c.Index != LocalDriving)
                     c.Heat.Value = c.RemoteHeat;
+            // Copie : ses attaches restent incassables. Sur MSC, 'BoltCheck' (etat Bolts ON 2) remet breakForce = serrage x 100 a
+            // chaque image par-dessus ProtectJoints : le capot de la SATSUMA, libre sur sa charniere, etait arrache sur la copie
+            // d'un invite en roulant (20/10). Remis apres la logique du jeu, avant le pas de physique suivant.
+            foreach (Car c in cars)
+                if (c.Kinematic && c.JointsWas != null)
+                    foreach (KeyValuePair<Joint, Vector2> kv in c.JointsWas)
+                        if (kv.Key != null && !float.IsInfinity(kv.Key.breakForce)) { kv.Key.breakForce = Mathf.Infinity; kv.Key.breakTorque = Mathf.Infinity; }
             // Regime et gaz de la copie remis apres la logique du jeu : la moto (JONNEZ) n'a que le SoundController, dont le
             // volume suit Drivetrain.rpm, et son automate Starter (« Wait for start », la copie n'y passe jamais en marche)
             // remet rpm a 0 a chaque image -- l'hote n'entendait pas la moto d'un invite (JD, 13/10). Avant la physique
@@ -1744,6 +1754,22 @@ namespace MWCoop
                 j.breakTorque = Mathf.Infinity;
             }
             c.NextJoints = Time.realtimeSinceStartup + 2f;
+        }
+
+        // Attache remise par PartsMsc sur une piece d'une copie (attache disparue, 20/10) : incassable tant que la voiture est
+        // copie, puis les limites donnees (celles du montage) -- 'BoltCheck' les remplace par le serrage des vis de toute facon.
+        public static void AdoptJoint(Rigidbody car, Joint j, Vector2 limitsLater)
+        {
+            if (j == null) return;
+            foreach (Car c in cars)
+                if (c.Body == car && c.Kinematic)
+                {
+                    if (c.JointsWas == null) c.JointsWas = new Dictionary<Joint, Vector2>();
+                    c.JointsWas[j] = limitsLater;
+                    j.breakForce = Mathf.Infinity; j.breakTorque = Mathf.Infinity;
+                    return;
+                }
+            j.breakForce = limitsLater.x; j.breakTorque = limitsLater.y;
         }
 
         // Suivi des copies au pas de physique (MovePosition ne s'applique qu'au pas suivant : appele a chaque
@@ -2831,7 +2857,9 @@ namespace MWCoop
             if (Session.IsHost)
             {
                 var fw = new NetWriter(Msg.Vehicle).U8(who).U8(idx).U8(mode).Vec(pos).Quat(rot).Vec(vel).Vec(ang);
-                if (driven) { fw.F32(rpm).F32(thr).F32(steer).F32(heat).U16(smask); foreach (float v in spitch) fw.F32(v); if (mode == 1) fw.Vec(dhead); }
+                // (chaleur absente = NaN ici, NoHeat sur le reseau : relayee en NaN, le message entier etait rejete par les autres
+                // invites -- le HAYOSIKO d'un invite restait a l'arret chez l'autre, son conducteur « roulait dans les airs », 20/10)
+                if (driven) { fw.F32(rpm).F32(thr).F32(steer).F32(float.IsNaN(heat) ? NoHeat : heat).U16(smask); foreach (float v in spitch) fw.F32(v); if (mode == 1) fw.Vec(dhead); }
                 if (ts >= 0f) fw.F32(ts);
                 Session.Broadcast(fw, false, who);
             }

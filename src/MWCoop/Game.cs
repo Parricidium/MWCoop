@@ -400,6 +400,22 @@ namespace MWCoop
             return true;
         }
 
+        // Changement d'etat DIFFERE, depuis une action de l'etat en cours : l'automate le fait apres cette action, et les actions
+        // suivantes de l'etat ne sont pas jouees (FsmState.ActivateActions s'arrete si IsSwitchingState). SetState (SwitchState
+        // direct) laisserait l'automate finir les actions de l'etat quitte.
+        static System.Reflection.FieldInfo switchToState;
+        public static bool SwitchLater(PlayMakerFSM f, string state)
+        {
+            if (f == null) return false;
+            HutongGames.PlayMaker.FsmState s = f.Fsm.GetState(state);
+            if (s == null) { Log.Warn("etat '" + state + "' absent de " + f.FsmName); return false; }
+            if (switchToState == null)
+                switchToState = typeof(HutongGames.PlayMaker.Fsm).GetField("switchToState", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (switchToState == null) { Log.Warn("Fsm.switchToState introuvable"); return false; }
+            switchToState.SetValue(f.Fsm, s);
+            return true;
+        }
+
         // Variable propre a l'automate (pas une globale). FsmVariables.GetVariable cherche aussi dans les globales :
         // un test "GetVariable(n) == null" ne reconnait jamais PlayerMoney, PlayerStop, GUI*... (vu au bar : l'invite
         // payait la biere de l'hote).
