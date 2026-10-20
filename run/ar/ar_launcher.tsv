@@ -1582,6 +1582,9 @@ More tools will come to this page.	ستصل أدوات أخرى إلى هذه ا
 Tools	الأدوات
 Separate programs to go further, downloaded in one click.	برامج منفصلة للمزيد، تُنزَّل بنقرة واحدة.
 The wrench at the top right, left of the star: separate programs. The first one, the map editor: one click to download it, another to launch it, on My Summer Car or My Winter Car.	المفتاح في أعلى اليمين، يسار النجمة: برامج منفصلة. أولها محرّر الخرائط: نقرة لتنزيله وأخرى لتشغيله، على My Summer Car أو My Winter Car.
+Editor maps	خرائط المحرّر
+Moped, sticker, fabric, photo, maps…	دراجة نارية صغيرة، ملصق، قماش، صورة، خرائط…
+Moped, sticker, photo, maps…	دراجة نارية صغيرة، ملصق، صورة، خرائط…
 Proximity voice	الصوت حسب القرب
 Voice range	مدى الصوت
 Voice volume	مستوى الصوت
@@ -2449,3 +2452,14 @@ Open Tools	افتح الأدوات
 The map editor	محرّر الخرائط
 Prepare the map and tour it in 3D	تحضير الخريطة والتجول فيها في 3D
 At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor), the Credits (the star), the Logs (the page icon) and the modding API ({ }).	في أسفل الشريط: Discord، والشيفرة المصدرية (الزر < >، GitHub) والدعم (القلب). في أعلى اليمين: الأدوات (المفتاح: محرّر الخرائط)، والشكر (النجمة)، والسجلات (أيقونة الصفحة) وواجهة API للمعدّلين ({ }).
+A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to add your own objects. BETA version: copy, move and hide game objects, import 3D models, compile your map and share it in co-op; roads come next.	برنامج منفصل في الأدوات (مفتاح الربط أعلى اليمين): يفتح الخريطة الحقيقية لـ My Summer Car أو My Winter Car لتضيف إليها أغراضك. إصدار BETA: نسخ أغراض اللعبة وتحريكها وإخفاؤها، واستيراد نماذج ثلاثية الأبعاد، وتجميع خريطتك ومشاركتها في اللعب الجماعي؛ الطرق لاحقاً.
+Your map: objects, 3D models, co-op	خريطتك: أغراض، نماذج ثلاثية الأبعاد، لعب جماعي
+Make your map	أنشئ خريطتك
+New map: a name and the game (MSC or MWC). It saves by itself in your Documents (My Seasons Car\\Projets).	خريطة جديدة: اسم واللعبة (MSC أو MWC). تُحفظ وحدها في مستنداتك (My Seasons Car\\Projets).
+The cube on the left: pick a game object (house, tent, sign…), a copy is placed in front of you. Or click an object of the map: Copy into my map, or Hide in my map.	المكعب على الجانب: اختر غرضاً من اللعبة (منزل، خيمة، لافتة…)، فتوضع نسخة منه أمامك. أو انقر على غرض في الخريطة: «انسخه إلى خريطتي» أو «أخفه في خريطتي».
+Import: an .obj, .fbx, .glb or .gltf model, with its textures.	الاستيراد: نموذج .obj أو .fbx أو .glb أو .gltf مع خاماته.
+Move, Rotate, Scale (G, R, S), Drop to the ground, Collisions (none, box, shape); Ctrl+Z to undo, Ctrl+D to duplicate.	تحريك، تدوير، تحجيم (G، R، S)، أنزله إلى الأرض، التصادم (بلا، صندوق، الشكل)؛ Ctrl+Z للتراجع، Ctrl+D للتكرار.
+Compile and play	جمّع والعب
+Compile makes a small .mwcmap file: only your models and their textures. Copies of game objects are rebuilt from each player's game: no game file is shared.	التجميع ينشئ ملف .mwcmap صغيراً: نماذجك وخاماتها فقط. تُعاد بناء نسخ أغراض اللعبة من لعبة كل لاعب: لا يُشارَك أي ملف من اللعبة.
+It goes into MWCoop\\cartes: your map is added to the real map in your next session, collisions included.	يوضع في MWCoop\\cartes: تُضاف خريطتك إلى الخريطة الحقيقية في جلستك التالية، مع التصادم.
+In co-op, the host sends their maps to guests in the lobby (Sent content › Others › Editor maps); a guest only loads the host's maps: everyone has the same map.	في اللعب الجماعي، يرسل المضيف خرائطه إلى ضيوفه في الردهة (المحتوى المُرسل › أخرى › خرائط المحرّر)؛ لا يحمّل الضيف إلا خرائط المضيف: للجميع الخريطة نفسها.

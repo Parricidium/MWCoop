@@ -521,3 +521,14 @@ WED13	Open Tools
 WED14	The map editor
 WED15	Prepare the map and tour it in 3D
 WED16	At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor), the Credits (the star), the Logs (the page icon) and the modding API ({ }).
+WED17	A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to add your own objects. BETA version: copy, move and hide game objects, import 3D models, compile your map and share it in co-op; roads come next.
+WED18	Your map: objects, 3D models, co-op
+WED19	Make your map
+WED20	New map: a name and the game (MSC or MWC). It saves by itself in your Documents (My Seasons Car\\Projets).
+WED21	The cube on the left: pick a game object (house, tent, sign…), a copy is placed in front of you. Or click an object of the map: Copy into my map, or Hide in my map.
+WED22	Import: an .obj, .fbx, .glb or .gltf model, with its textures.
+WED23	Move, Rotate, Scale (G, R, S), Drop to the ground, Collisions (none, box, shape); Ctrl+Z to undo, Ctrl+D to duplicate.
+WED24	Compile and play
+WED25	Compile makes a small .mwcmap file: only your models and their textures. Copies of game objects are rebuilt from each player's game: no game file is shared.
+WED26	It goes into MWCoop\\cartes: your map is added to the real map in your next session, collisions included.
+WED27	In co-op, the host sends their maps to guests in the lobby (Sent content › Others › Editor maps); a guest only loads the host's maps: everyone has the same map.

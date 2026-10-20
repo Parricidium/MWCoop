@@ -89,6 +89,7 @@ static void EdLaunch()
     while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/')) dir.pop_back();
     std::wstring cmd = L"\"" + exe + L"\" --jeu " + GM().id + L" --lanceur \"" + g_self + L"\" --langue " + (g_fr ? L"fr" : g_ru ? L"ru" : g_ar ? L"ar" : L"en");
     if (!dir.empty()) cmd += L" --dossier \"" + dir + L"\"";
+    if (!g_modRoot.empty()) cmd += L" --mod \"" + g_modRoot + L"MWCoop\"";   // (cartes compilees : <MWCoop du mod>\cartes, lues par MapPacks.cs)
     STARTUPINFOW si = { sizeof(si) }; PROCESS_INFORMATION pi = {};
     std::vector<wchar_t> cb(cmd.begin(), cmd.end()); cb.push_back(0);
     if (CreateProcessW(exe.c_str(), cb.data(), NULL, NULL, FALSE, 0, NULL, EdDir().c_str(), &si, &pi)) {

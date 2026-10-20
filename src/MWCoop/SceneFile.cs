@@ -15,7 +15,7 @@ namespace MWCoop
     public class SceneFile
     {
         public class Obj { public long PathId; public long Start; public int Size; public int ClassId; }
-        public class Batched { public string Name, MeshName; public int MeshFile; public long MeshPath; public string[] Mats; public int[] Subsets; public bool Used; }
+        public class Batched { public string Name, MeshName, Path; public int MeshFile; public long MeshPath; public string[] Mats; public int[] Subsets; public bool Used; }
         public class MeshData { public string Name; public int VertexCount; public Vector3[] V; public Vector3[] N; public Vector2[] Uv; public int[][] Subs; }
 
         readonly string path;
@@ -121,6 +121,54 @@ namespace MWCoop
 
         public MeshData ReadMesh(int file, long id) { SceneFile f = Other(file); return f != null ? f.ReadMesh(id) : null; }
 
+        // Hierarchie du fichier (Transform, Unity 5.0 : m_GameObject, rotation, position, echelle, m_Children, m_Father) :
+        // chemin unique d'un GameObject, comme MapExport.UniquePath dans le jeu (« nom#i » : i freres de meme nom avant lui).
+        Dictionary<long, long> trOfGo, fatherOf, goOfTr;
+        Dictionary<long, long[]> childrenOf;
+        readonly Dictionary<long, string> goNames = new Dictionary<long, string>();
+        void ReadTransforms()
+        {
+            trOfGo = new Dictionary<long, long>(); fatherOf = new Dictionary<long, long>(); goOfTr = new Dictionary<long, long>(); childrenOf = new Dictionary<long, long[]>();
+            foreach (Obj o in objs.Values)
+            {
+                if (o.ClassId != 4) continue;
+                Seek(o);
+                int f; long go, father;
+                PPtr(out f, out go);
+                r.BaseStream.Position += 16 + 12 + 12;
+                int n = r.ReadInt32();
+                if (n < 0 || n > 100000) continue;
+                var ch = new long[n];
+                for (int i = 0; i < n; i++) { long c; PPtr(out f, out c); ch[i] = c; }
+                PPtr(out f, out father);
+                trOfGo[go] = o.PathId; goOfTr[o.PathId] = go; fatherOf[o.PathId] = father; childrenOf[o.PathId] = ch;
+            }
+        }
+        string NameOfGo(long go) { string n; if (!goNames.TryGetValue(go, out n)) goNames[go] = n = GameObjectName(go) ?? ""; return n; }
+        public string PathOf(long go)
+        {
+            if (trOfGo == null) ReadTransforms();
+            long tr;
+            if (!trOfGo.TryGetValue(go, out tr)) return null;
+            var parts = new List<string>();
+            for (int guard = 0; tr != 0 && guard < 64; guard++)
+            {
+                long g = goOfTr[tr], father;
+                string name = NameOfGo(g);
+                int same = 0;
+                if (fatherOf.TryGetValue(tr, out father) && father != 0)
+                {
+                    long[] sib;
+                    if (childrenOf.TryGetValue(father, out sib))
+                        foreach (long s in sib) { if (s == tr) break; long sg; if (goOfTr.TryGetValue(s, out sg) && NameOfGo(sg) == name) same++; }
+                }
+                parts.Add(same > 0 ? name + "#" + same : name);
+                if (!fatherOf.TryGetValue(tr, out tr)) break;
+            }
+            parts.Reverse();
+            return string.Join("/", parts.ToArray());
+        }
+
         // Objets regroupes : MeshFilter (GameObject -> maillage), puis MeshRenderer avec des sous-maillages de lot.
         public List<Batched> ReadBatched()
         {
@@ -157,7 +205,8 @@ namespace MWCoop
                 if (!meshOf.TryGetValue(go, out mesh)) continue;
                 var b = new Batched { MeshFile = meshFile[go], MeshPath = mesh, Subsets = subs, Mats = new string[nm] };
                 for (int i = 0; i < nm; i++) b.Mats[i] = MaterialName(mf[i], mp[i]) ?? "";
-                b.Name = GameObjectName(go) ?? "";
+                b.Name = NameOfGo(go);
+                try { b.Path = PathOf(go); } catch { }
                 long mk = mesh * 64 + b.MeshFile;
                 string mn;
                 if (!meshNames.TryGetValue(mk, out mn)) { SceneFile mf2 = Other(b.MeshFile); meshNames[mk] = mn = (mf2 != null ? mf2.NamedObject(mesh) : null) ?? ""; }
