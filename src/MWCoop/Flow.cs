@@ -39,7 +39,7 @@ namespace MWCoop
         // Le mod passe lui-meme les ecrans et entre en partie (invite, lancement par le salon, essais).
         public static bool AutoSkip
         {
-            get { return Config.GetInt("Test", "PasserIntro", 0) != 0 || Config.HasArg("auto") || (Session.Active && !Session.IsHost) || LaunchChoice != null; }
+            get { return Config.GetInt("Test", "PasserIntro", 0) != 0 || Config.HasArg("auto") || (Session.Active && !Session.IsHost) || LaunchChoice != null || MapExport.Active; }
         }
 
         public static void Update()

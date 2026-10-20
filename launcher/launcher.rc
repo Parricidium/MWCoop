@@ -6,6 +6,8 @@
 4 RCDATA "logo-titre.png"
 // 9 : logo de My Summer Car (switch MSC / MWC ; logo de JD, 19/10)
 9 RCDATA "logo-msc.png"
+// 10 : apercu de l'editeur de carte (page OUTILS : outils.inc ; capture de l'editeur sur My Summer Car, 20/10)
+10 RCDATA "outils-editeur.jpg"
 // 6 : police de la maquette (Nunito, variable, licence SIL OFL 1.1 : OFL-Nunito.txt), chargee en memoire au demarrage
 // (launcher.cpp EmbedFontLoad) ; illisible : Segoe UI comme avant
 6 RCDATA "Nunito-VariableFont_wght.ttf"

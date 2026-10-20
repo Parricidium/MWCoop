@@ -10,7 +10,7 @@ static const WikiCat kWikiCat[] = {
     { IC_ALERT, L"Problèmes et solutions", L"Problems and fixes" },
 };
 enum { WA_INSTALL, WA_IDEAL, WA_UPDATE, WA_TOUR, WA_HOST, WA_JOIN, WA_NET, WA_SAVE, WA_INGAME, WA_DRONE, WA_SHOP, WA_VIDEO, WA_IMPORT, WA_MONTAGE, WA_MUSEO, WA_VAZ, WA_KARTTURI, WA_MSC, WA_MODS, WA_CONTENT,
-       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA };   // (WA_SAVES ... WA_MSCBETA : ajoutes en fin de kWikiArt)
+       WA_START, WA_SETTINGS, WA_LOOK, WA_NOLOAD, WA_NOJOIN, WA_MODSKO, WA_AV, WA_LOGS, WA_SAVES, WA_MODCOMPAT, WA_HUD, WA_LINUX, WA_MSCBETA, WA_EDITOR };   // (WA_SAVES ... WA_EDITOR : ajoutes en fin de kWikiArt)
 
 struct WikiKey { const wchar_t *key, *fr, *en; int game; };   // game : WG_* (wiki.inc)
 static const WikiKey kWikiKeys[] = {
@@ -126,7 +126,7 @@ static const WikiBlock kW_Tour[] = {
     { WB_B, L"RÉGLAGES — Jeu, Co-op et Mods. Jeu et Co-op ouvrent la même page Réglages, avec ses onglets (Jeu, Image & ray tracing, Son & vocal, Co-op, Touches, Thème, Lanceur) et son champ « Chercher un réglage… ».",
             L"SETTINGS — Game, Co-op and Mods. Game and Co-op open the same Settings page, with its tabs (Game, Image & ray tracing, Sound & voice, Co-op, Keys, Theme, Launcher) and its \"Search a setting…\" field." },
     { WB_B, L"MÉDIA & AIDE — VHS et Album (tes cassettes et tes photos), Guide (ici) et Nouveautés.", L"MEDIA & HELP — VHS and Album (your tapes and photos), Guide (here) and What's new." },
-    { WB_B, L"Tout en bas de la barre : Discord, le code source (le bouton < >, GitHub) et Soutenir (le cœur). En haut à droite : l'API pour les moddeurs ({ }), les Journaux (l'icône page) et les Crédits (l'étoile).", L"At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the modding API ({ }), the Logs (the page icon) and the Credits (the star)." },
+    { WB_B, L"Tout en bas de la barre : Discord, le code source (le bouton < >, GitHub) et Soutenir (le cœur). En haut à droite : les Outils (la clé : l'éditeur de carte), les Crédits (l'étoile), les Journaux (l'icône page) et l'API pour les moddeurs ({ }).", L"At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor), the Credits (the star), the Logs (the page icon) and the modding API ({ })." },
     { WB_H, L"Le Guide", L"The Guide" },
     { WB_P, L"Trois onglets dans l'en-tête : Guide, Nouveautés (les notes de chaque version) et Crédits. Le champ Chercher… filtre les articles ; en bas de chaque article, ← précédent et suivant → passent au voisin.",
             L"Three tabs in the header: Guide, What's new (each version's notes) and Credits. The Search… field filters the articles; at the bottom of every article, ← previous and next → go to the neighbour." },
@@ -828,6 +828,34 @@ static const WikiBlock kW_Linux[] = {
               L"The mod didn't load? lanceur.log (LOGS) starts with a \"Wine\" line: the Proton version and the WINEDLLOVERRIDES the launcher saw." },
     { WB_GO, L"Envoyer ses journaux", L"Send your logs", 1000 + WA_LOGS },
 };
+// ---- L'editeur de carte (20/10, editor\ ; page OUTILS du lanceur : outils.inc)
+static const WikiBlock kW_Editor[] = {
+    { WB_P, L"Un programme à part, rangé dans les Outils (la clé en haut à droite) : il ouvre la vraie carte de My Summer Car ou de My Winter Car pour la modifier. Cette première version (BETA) la prépare et te laisse la visiter librement en 3D ; les routes, les modèles 3D et les cartes partagées en co-op arrivent ensuite.",
+            L"A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to edit it. This first version (BETA) prepares it and lets you tour it freely in 3D; roads, 3D models and maps shared in co-op come next." },
+    { WB_H, L"L'installer et le lancer",
+            L"Install and launch it" },
+    { WB_S, L"Dans Outils, Télécharger : moins de 1 Mo, installé à part (le jeu n'est pas modifié).",
+            L"In Tools, Download: under 1 MB, installed apart (the game is not changed)." },
+    { WB_S, L"Lancer : il s'ouvre sur le jeu choisi dans le lanceur (MSC ou MWC), avec son dossier et ta langue.",
+            L"Launch: it opens on the game chosen in the launcher (MSC or MWC), with its folder and your language." },
+    { WB_S, L"Une nouvelle version ? Le bouton devient Mettre à jour (ferme l'éditeur avant).",
+            L"A new version? The button becomes Update (close the editor first)." },
+    { WB_H, L"Préparer la carte",
+            L"Prepare the map" },
+    { WB_B, L"Une seule fois par jeu, environ une minute : le lanceur démarre le jeu en arrière-plan, sans fenêtre ni son, dans un profil à part (carte-export). Tes sauvegardes ne sont jamais touchées.",
+            L"Only once per game, about a minute: the launcher starts the game in the background, with no window or sound, in a separate profile (carte-export). Your saves are never touched." },
+    { WB_B, L"La carte préparée reste dans tes Documents (My Seasons Car\\Carte). Après une mise à jour du jeu, refais la préparation.",
+            L"The prepared map stays in your Documents (My Seasons Car\\Carte). After a game update, prepare it again." },
+    { WB_H, L"Visiter",
+            L"Tour" },
+    { WB_B, L"Clic droit maintenu + ZQSD (WASD) pour voler, Espace / C pour monter et descendre, Maj pour aller plus vite, molette pour la vitesse.",
+            L"Hold right-click + WASD to fly, Space / C to go up and down, Shift to go faster, wheel for the speed." },
+    { WB_B, L"À gauche, les couches (sol, routes, bâtiments, végétation) à masquer ; un clic sur un objet dit ce que c'est.",
+            L"On the left, the layers (ground, roads, buildings, plants) to hide; a click on an object tells what it is." },
+    { WB_TIP, L"Steam ne trouve pas le jeu (copie hors Steam, Steam bloqué dans ton pays) ? Indique simplement le fichier .exe du jeu : l'éditeur le retient, pour le lanceur aussi.",
+            L"Steam doesn't find the game (non-Steam copy, Steam blocked in your country)? Just point to the game's .exe file: the editor remembers it, for the launcher too." },
+    { WB_GO, L"Ouvrir les Outils", L"Open Tools", TAB_TOOLS },
+};
 static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(0, L"Installer MWCoop", L"Install MWCoop", L"Où mettre les fichiers, et c'est parti", L"Where to put the files, and off you go", kW_Install),
     WART(0, L"L'installation idéale", L"The ideal install", L"Ce qui marche à coup sûr, et les pièges", L"What always works, and the traps", kW_Ideal),
@@ -862,4 +890,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(3, L"Le HUD en jeu", L"The in-game HUD", L"Vanilla, Carte, Anneaux ou Bandeau", L"Vanilla, Card, Rings or Strip", kW_Hud),   // (WA_HUD = 30)
     WART(0, L"Linux et Steam Deck", L"Linux and Steam Deck", L"Proton, option de lancement, limites", L"Proton, launch option, limits", kW_Linux),   // (WA_LINUX = 31)
     WARTG(WG_MSC, 0, L"My Summer Car (BETA)", L"My Summer Car (BETA)", L"Ce qui marche déjà, ce qui arrive", L"What works already, what's coming", kW_MscBeta),   // (WA_MSCBETA = 32)
+    WART(2, L"L'éditeur de carte", L"The map editor", L"Préparer la carte et la visiter en 3D", L"Prepare the map and tour it in 3D", kW_Editor),   // (WA_EDITOR = 33)
 };

@@ -333,7 +333,7 @@ static bool NavHidden(int p) { return g_game == GAME_MSC && p == TAB_VHS; }
 static bool PageEnabled(int p)
 {
     if (g_state != ST_IDLE || NavHidden(p)) return false;
-    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM;
+    if (g_gameDir.empty()) return p == TAB_HOME || p == TAB_NOTES || p == TAB_COOP || p == TAB_API || p == TAB_CREDITS || p == TAB_WIKI || p == TAB_ALBUM || p == TAB_TOOLS;
     if (p == TAB_LOBBY) return g_lobby != LB_NONE;
     return true;
 }
@@ -649,6 +649,7 @@ static void DrawHeader(Graphics &g)
     case TAB_LOGS: title = T(L"Journaux", L"Logs"); sub = T(L"Un souci en jeu ? Un zip à envoyer", L"Trouble in game? A zip to send"); break;
     case TAB_COOP: case TAB_GFX: title = T(L"Réglages", L"Settings"); sub = SetHeaderSub(); break;   // (gfx.inc : une page, des onglets)
     case TAB_API: title = T(L"API pour les moddeurs", L"API for modders"); sub = T(L"MWCoop.CoopApi : la doc, la DLL et un exemple", L"MWCoop.CoopApi: docs, DLL and an example"); break;
+    case TAB_TOOLS: title = T(L"Outils", L"Tools"); sub = T(L"Des programmes à part pour aller plus loin, à télécharger d'un clic.", L"Separate programs to go further, downloaded in one click."); break;
     case TAB_VHS: case TAB_ALBUM:
         if (g_game == GAME_MSC) { title = T(L"Album", L"Album"); sub = T(L"Les photos prises au drone.", L"The photos taken with the drone."); break; }   // (pas de VHS sur MSC)
         title = T(L"VHS & album", L"VHS & album"); sub = T(L"Tes cassettes pour la télé du salon, et les photos prises au drone.", L"Your tapes for the living-room TV, and the photos taken with the drone."); break;
@@ -671,6 +672,11 @@ static void DrawHeader(Graphics &g)
         HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_LOGS, IC_FILE);
         right -= 54;
         HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_CREDITS, IC_STAR);
+        right -= 54;
+        // Outils (editeur de carte, 20/10 : « a gauche, un peu a part de l'etoile, separe d'un | ») : outils.inc
+        g.DrawLine(&sp, right - 2, 32.0f, right - 2, 56.0f);
+        right -= 14;
+        HeadPage(g, RectF(right - 44, 22, 44, 44), TAB_TOOLS, IC_TOOLS);
         right -= 54;
     }
     g_headRight = right;
@@ -1469,6 +1475,7 @@ static void DrawUI(Graphics &g)
     case TAB_LOGS: DrawLogsPage(g); break;
     case TAB_COOP: case TAB_GFX: DrawSettingsPage(g); break;   // (gfx.inc : Jeu, Image, Son, Co-op, Touches, Theme, Lanceur)
     case TAB_API: DrawApiPage(g); break;
+    case TAB_TOOLS: DrawToolsPage(g); break;
     case TAB_CREDITS: DrawCreditsPage(g); break;
     case TAB_WIKI: DrawWikiPage(g); break;
     case TAB_VHS: DrawVhs(g); break;
@@ -1593,6 +1600,7 @@ static bool UiClick(int id)
     if (id >= UI_LOBBY_GEAR && id <= UI_LOBBY_ME_CAR) { LobbyOptsClick(id); return true; }
     if (id >= UI_LOBBY_OPT && id < UI_LOBBY_OPT + 100) { LobbyOptClick(id); return true; }
     if (id >= UI_API_DOC && id <= UI_API_EX1) { ApiClick(id); return true; }
+    if (id >= UI_TOOL_GET && id <= UI_TOOL_DIR) { ToolsClick(id); return true; }
     if (id >= UI_SAVE_NEW && id < UI_SAVE_END) { SaveClick(id); return true; }   // (saves.inc)
     if (id >= UI_VHS_OPEN && id < UI_ALB_OPEN) { VhsClick(id); return true; }   // (media.inc)
     if (id >= UI_ALB_OPEN && id < UI_ALB + 4000) { AlbClick(id); return true; }

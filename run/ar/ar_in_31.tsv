@@ -1,0 +1,29 @@
+OU1	Map editor %s installed: click Launch
+OU2	Could not download the map editor (%s)
+OU3	Close the map editor before updating it
+OU4	Could not start the map editor (error %lu)
+OU5	Map editor
+OU6	A separate program to edit the map of My Summer Car or My Winter Car. This first version prepares the game's real map and lets you fly around it freely in 3D.
+OU7	The chosen game's map, prepared once (the game runs in the background)
+OU8	Free 3D tour: fly, layers, objects to click
+OU9	Coming: roads, 3D models, maps shared in co-op
+OU10	Downloading…
+OU11	Version %s installed · %s available
+OU12	Installed · version %s
+OU13	Not installed yet · version %s, under 1 MB
+OU14	Offline: GitHub unreachable
+OU15	Looking for the latest version…
+OU16	Not published yet: it comes with the next version
+OU17	Download
+OU18	Started!
+OU19	Launch
+OU20	Download the editor: it installs apart, the game is not changed.
+OU21	Launch it: it opens the game chosen here (My Summer Car or My Winter Car), with its folder.
+OU22	Prepare the map once: the game runs for a minute in the background, with no window, in a separate profile. Your saves are not touched.
+OU23	Windows 10 or 11: nothing else to install (it uses Microsoft Edge WebView2, already there).
+OU24	Game files stay on your PC: the prepared map goes to your Documents (My Seasons Car).
+OU25	After a game update, prepare the map again in the editor.
+OU26	More tools will come to this page.
+OU27	Tools
+OU28	Separate programs to go further, downloaded in one click.
+OU29	The wrench at the top right, left of the star: separate programs. The first one, the map editor: one click to download it, another to launch it, on My Summer Car or My Winter Car.

@@ -25,3 +25,8 @@ launcher/discord.local.h
 
 # Captures de mise au point du ray tracing
 docs/rt/
+
+# Editeur de carte (editor\) : sorties de compilation de dotnet
+editor/obj/
+editor/bin/
+editor/essais/

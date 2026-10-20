@@ -505,3 +505,19 @@ WL26	Proton, launch option, limits
 WJICE	Ice race: your entry (with your VAZ and its number, the Rivett, or not registered), when to come to the track, the registered drivers and live timing. To race with your VAZ: on Friday 9 am - 3 pm, park it under 10 m from the inspection tent and fill in the form (150 mk); it takes an AI car's place. At the track, the timing also shows at the top right.
 WJRALLY	Rally: your entry (with your VAZ or the Rivett, your class), your SS1 / SS2 / SS3 start times, the drivers and your class standings. To race with your VAZ: on Saturday 8 am - 12 pm, park it under 40 m from Fleetari's tent and fill in his form (500 mk Junior, 1000 mk Amateur); stage starts and parc ferme follow it. Outside race weekends, both tabs tell in how many days the event starts.
 WJMAP	Map M: your objectives in gold, yours only (septic tank to pump out then get paid, firewood to deliver, uncle, taxi, flyer mailboxes), updated at every step, with the \"Your objectives\" list. A job belongs to whoever took it on the phone; a taxi ride, to its driver. During the rally, the route of the stages still to run and your start time; during the ice race, the track and your grid spot when your heat is near.
+WED1	A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to edit it. This first version (BETA) prepares it and lets you tour it freely in 3D; roads, 3D models and maps shared in co-op come next.
+WED2	Install and launch it
+WED3	In Tools, Download: under 1 MB, installed apart (the game is not changed).
+WED4	Launch: it opens on the game chosen in the launcher (MSC or MWC), with its folder and your language.
+WED5	A new version? The button becomes Update (close the editor first).
+WED6	Prepare the map
+WED7	Only once per game, about a minute: the launcher starts the game in the background, with no window or sound, in a separate profile (carte-export). Your saves are never touched.
+WED8	The prepared map stays in your Documents (My Seasons Car\\Carte). After a game update, prepare it again.
+WED9	Tour
+WED10	Hold right-click + WASD to fly, Space / C to go up and down, Shift to go faster, wheel for the speed.
+WED11	On the left, the layers (ground, roads, buildings, plants) to hide; a click on an object tells what it is.
+WED12	Steam doesn't find the game (non-Steam copy, Steam blocked in your country)? Just point to the game's .exe file: the editor remembers it, for the launcher too.
+WED13	Open Tools
+WED14	The map editor
+WED15	Prepare the map and tour it in 3D
+WED16	At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor), the Credits (the star), the Logs (the page icon) and the modding API ({ }).
