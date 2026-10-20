@@ -26,7 +26,15 @@ namespace MWCoop
         // My Summer Car (19/10) : Dragsters a la place de la course sur glace, le rallye du jeu, pas d'onglet VAZ (MscEvents).
         static readonly string[] tabsMscFr = { "Joueurs", "Tchat", "Dragsters", "Rallye", "VAZ-2108", "Apparence", "HUD", "Graphismes", "Synchro" },
                                  tabsMscEn = { "Players", "Chat", "Drag race", "Rally", "VAZ-2108", "Appearance", "HUD", "Graphics", "Sync" };
-        static string[] tabs { get { return Game.Msc ? Lang.A(tabsMscFr, tabsMscEn) : Lang.A(tabsFr, tabsEn); } }
+        static string[] tabs
+        {
+            get
+            {
+                string[] a = Game.Msc ? Lang.A(tabsMscFr, tabsMscEn) : Lang.A(tabsFr, tabsEn);
+                if (!Game.Msc && Vaz.EvoAvailable) { a = (string[])a.Clone(); a[TabVaz] = Lang.T("Voitures", "Cars"); }   // (Evo III : extension privee)
+                return a;
+            }
+        }
         static bool TabHidden(int i) { return Game.Msc && i == TabVaz; }
         static int StepTab(int from, int d) { int n = tabsFr.Length, i = from; do i = (i + d + n) % n; while (TabHidden(i) && i != from); return i; }
         public const int TabPlayers = 0, TabChat = 1, TabRace = 2, TabRally = 3, TabVaz = 4, TabLook = 5, TabHud = 6, TabGfx = 7, TabSync = 8;   // (Rallye : 18/10)

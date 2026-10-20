@@ -16,7 +16,12 @@ namespace MWCoop
     // Rien n'est garde (JD, 18/10 soir) : un joueur qui quitte perd sa VAZ (detruite chez tous) ; a la reconnexion, a une
     // nouvelle partie ou a un chargement, toutes les couleurs sont libres -- on la reprend au F10.
     // Interrupteur : Ajouts.Vaz ([Coop] AjoutVaz, lanceur ; choix de l'hote valable pour tous).
-    // Messages Msg.Race, rangs 30-33 (Races.OnMessage les passe ici).
+    // Messages Msg.Race, rangs 30-35 (Races.OnMessage les passe ici).
+    // Evo III Gr. A (JD, 20/10 ; extension privee MWCoop/evo3, VazCar.Evo3) : meme table, chaque place porte son modele (0 VAZ,
+    // 1 Evo) et l'empreinte de la livree du joueur (EvoLivery ; "" : couleur + numero comme la VAZ). Les couleurs et numeros
+    // sont communs aux deux modeles (jamais deux voitures de la meme couleur). La voiture garde le nom MWCoop-VAZ-<n> chez
+    // tous : un joueur sans l'extension construit une VAZ a la place, de la meme couleur et du meme numero (VehicleSync la
+    // suit pareil). Courses sur glace et rallye : CarOf(joueur), quel que soit le modele.
     public static class Vaz
     {
         public const string Prefix = "MWCoop-VAZ-";
@@ -26,7 +31,9 @@ namespace MWCoop
         //  32 V_DENY  hote -> un invite : couleur, motif (1 deja prise, 2 en a deja une, 3 inconnue, 4 coupee chez l'hote)
         //  33 V_CALL  invite -> hote : faire venir sa VAZ a cette place (x, y, z, cap)
         //  34 V_ROOF  trappe de toit : invite -> hote (couleur, ouverte ?), hote -> tous (meme contenu, applique)
-        public const int V_ASK = 30, V_SET = 31, V_DENY = 32, V_CALL = 33, V_ROOF = 34;
+        //  35 V_LIV   invite -> hote : empreinte de sa livree (changee au lanceur pendant la partie)
+        // (V_ASK et V_SET portent aussi le modele et l'empreinte de la livree : Session.NetVersion 43)
+        public const int V_ASK = 30, V_SET = 31, V_DENY = 32, V_CALL = 33, V_ROOF = 34, V_LIV = 35;
 
         static readonly string[] NamesFr = { "Rouge", "Bleu", "Jaune", "Vert", "Blanc", "Noir", "Orange", "Violet", "Bleu ciel", "Rose", "Gris", "Bordeaux", "Turquoise", "Vert pomme", "Marron", "Bleu nuit" };
         static readonly string[] NamesEn = { "Red", "Blue", "Yellow", "Green", "White", "Black", "Orange", "Purple", "Sky blue", "Pink", "Grey", "Burgundy", "Turquoise", "Lime", "Brown", "Navy" };
@@ -39,8 +46,8 @@ namespace MWCoop
         public static string ColorName(int n) { return n >= 1 && n <= Count ? Lang.T(NamesFr[n - 1], NamesEn[n - 1]) : "?"; }
         public static Color ColorOf(int n) { return n >= 1 && n <= Count ? Colors[n - 1] : Color.white; }
 
-        class Slot { public int Number; public Vector3 Pos; public float Yaw; }
-        class Rent { public int Id, Number; public VazCar.Built Car; public float NextBuild; public int Tries; }
+        class Slot { public int Number, Model; public string Livery = ""; public Vector3 Pos; public float Yaw; }
+        class Rent { public int Id, Number, Model = -1; public VazCar.Built Car; public float NextBuild; public int Tries; public int LiveryGen = -1; }
 
         static readonly Dictionary<int, Slot> wanted = new Dictionary<int, Slot>();     // joueur -> couleur + place (table de l'hote)
         static readonly Dictionary<int, Rent> rents = new Dictionary<int, Rent>();      // joueur -> voiture construite ici
@@ -66,6 +73,12 @@ namespace MWCoop
         public static int OwnerOf(int n) { foreach (KeyValuePair<int, Slot> kv in wanted) if (kv.Value.Number == n) return kv.Key; return -1; }
         public static Transform CarOf(int playerId) { Rent r; return rents.TryGetValue(playerId, out r) && r.Car != null && r.Car.Car != null ? r.Car.Car.transform : null; }
         public static bool IsVaz(Transform carRoot) { return carRoot != null && carRoot.name.StartsWith(Prefix); }
+        // Modele choisi par ce joueur (VazCar.ModelVaz / ModelEvo) et son nom ; Evo disponible ici (extension installee).
+        public static int ModelOf(int playerId) { Slot s; return wanted.TryGetValue(playerId, out s) ? s.Model : VazCar.ModelVaz; }
+        public static string ModelName(int playerId) { return VazCar.ModelOf(ModelOf(playerId)).Name; }
+        public static bool EvoAvailable { get { return VazCar.Evo3.HasFiles; } }
+        public static int MineModel { get { return ModelOf(Me); } }
+        public static string LiveryOf(int playerId) { Slot s; return wanted.TryGetValue(playerId, out s) ? s.Livery ?? "" : ""; }
 
         // Place a cote du joueur d'ici : 4 m a sa droite, meme cap, posee sur le sol.
         static void SpotNearMe(out Vector3 pos, out float yaw)
@@ -91,16 +104,18 @@ namespace MWCoop
         }
 
         // Prendre la couleur n (gratuit). Faux : refus connu d'avance (message a l'ecran).
-        public static bool Request(int n)
+        public static bool Request(int n, int model = VazCar.ModelVaz)
         {
             if (!Enabled) { Hud.Toast(Lang.T("VAZ-2108 coup\u00E9e (lanceur, Ajouts)", "VAZ-2108 is off (launcher, Add-ons)")); return false; }
             if (!PlayerSync.InGame) return false;
             if (n < 1 || n > Count) return false;
+            if (model == VazCar.ModelEvo && !EvoAvailable) model = VazCar.ModelVaz;
             if (wanted.ContainsKey(Me)) { Deny(2, n); return false; }
             if (!IsFree(n)) { Deny(1, n); return false; }
             Vector3 pos; float yaw; SpotNearMe(out pos, out yaw);
-            if (Host) { Assign(Me, new Slot { Number = n, Pos = pos, Yaw = yaw }); return true; }
-            Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(n).Vec(pos).F32(yaw), true);
+            string liv = model == VazCar.ModelEvo ? EvoLivery.MyHash : "";
+            if (Host) { Assign(Me, new Slot { Number = n, Model = model, Livery = liv, Pos = pos, Yaw = yaw }); return true; }
+            Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(n).Vec(pos).F32(yaw).U8(model).Str(liv), true);
             Log.Info("vaz : n " + n + " demandee a l'hote");
             return true;
         }
@@ -109,7 +124,7 @@ namespace MWCoop
         public static void Release()
         {
             if (Host) { if (wanted.Remove(Me)) { HostChanged("rendue par " + NameOf(Me)); } return; }
-            if (wanted.ContainsKey(Me)) Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(0).Vec(Vector3.zero).F32(0f), true);
+            if (wanted.ContainsKey(Me)) Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(0).Vec(Vector3.zero).F32(0f).U8(0).Str(""), true);
         }
 
         // Faire venir la sienne a cote de soi.
@@ -164,6 +179,7 @@ namespace MWCoop
             foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) VazCar.Tick(r.Car, now);
             if (now < nextTick) return;
             nextTick = now + 0.5f;
+            if (EvoLivery.Poll()) MyLiveryChanged();
             if (Host) HostStep(now);
             Reconcile(now);
         }
@@ -189,8 +205,19 @@ namespace MWCoop
         static void Assign(int id, Slot s)
         {
             wanted[id] = s;
-            Hud.Toast(NameOf(id) + Lang.T(" prend la VAZ n\u00B0 ", " takes VAZ no. ") + s.Number + " (" + ColorName(s.Number) + ")");
-            HostChanged(NameOf(id) + " -> n " + s.Number);
+            string mn = VazCar.ModelOf(s.Model).Name;
+            Hud.Toast(NameOf(id) + Lang.T(" prend la " + mn + " n\u00B0 ", " takes " + mn + " no. ") + s.Number + " (" + ColorName(s.Number) + ")");
+            HostChanged(NameOf(id) + " -> n " + s.Number + " " + mn + (s.Livery.Length > 0 ? " livree " + s.Livery : ""));
+        }
+
+        // Livree du joueur d'ici changee (lanceur, pendant la partie) : sa place dans la table (Evo seulement).
+        static void MyLiveryChanged()
+        {
+            Slot s;
+            if (!wanted.TryGetValue(Me, out s) || s.Model != VazCar.ModelEvo) return;
+            string h = EvoLivery.MyHash;
+            if (Host) { if (s.Livery != h) { s.Livery = h; HostChanged("livree de " + NameOf(Me)); } }
+            else Session.SendToHost(new NetWriter(Msg.Race).U8(V_LIV).Str(h), true);
         }
 
         static void Move(int id, Vector3 pos, float yaw)
@@ -220,7 +247,7 @@ namespace MWCoop
             {
                 Slot s = kv.Value; Transform c = CarOf(kv.Key);
                 Vector3 p = c != null ? c.position + Vector3.up * 0.3f : s.Pos; float y = c != null ? c.eulerAngles.y : s.Yaw;
-                w.U8(kv.Key).U8(s.Number).Vec(p).F32(y);
+                w.U8(kv.Key).U8(s.Number).Vec(p).F32(y).U8(s.Model).Str(s.Livery ?? "");
             }
             return w;
         }
@@ -229,7 +256,7 @@ namespace MWCoop
         {
             if (wanted.Count == 0) return "aucune VAZ";
             var sb = new System.Text.StringBuilder();
-            foreach (KeyValuePair<int, Slot> kv in wanted) sb.Append(sb.Length > 0 ? ", " : "").Append(NameOf(kv.Key)).Append(" n ").Append(kv.Value.Number);
+            foreach (KeyValuePair<int, Slot> kv in wanted) sb.Append(sb.Length > 0 ? ", " : "").Append(NameOf(kv.Key)).Append(" n ").Append(kv.Value.Number).Append(kv.Value.Model == VazCar.ModelEvo ? " evo" + (kv.Value.Livery.Length > 0 ? " livree " + kv.Value.Livery : "") : "");
             return sb.ToString();
         }
 
@@ -247,6 +274,8 @@ namespace MWCoop
             if (kind == V_ASK && Session.IsHost)
             {
                 int n = r.U8(); Vector3 pos = r.Vec(); float yaw = r.F32();
+                int model = r.More ? r.U8() : VazCar.ModelVaz; string liv = r.More ? r.Str() : "";
+                if (model != VazCar.ModelEvo) { model = VazCar.ModelVaz; liv = ""; }
                 if (n == 0) { if (wanted.Remove(from.Id)) { HostChanged("rendue par " + NameOf(from.Id)); } return; }
                 int why = !Enabled ? 4 : n < 1 || n > Count ? 3 : wanted.ContainsKey(from.Id) ? 2 : !IsFree(n) ? 1 : 0;
                 if (why != 0)
@@ -255,7 +284,13 @@ namespace MWCoop
                     Log.Info("vaz : n " + n + " refusee a " + NameOf(from.Id) + " (motif " + why + ")");
                     return;
                 }
-                Assign(from.Id, new Slot { Number = n, Pos = pos, Yaw = yaw });
+                Assign(from.Id, new Slot { Number = n, Model = model, Livery = liv ?? "", Pos = pos, Yaw = yaw });
+                return;
+            }
+            if (kind == V_LIV && Session.IsHost)
+            {
+                string h = r.Str(); Slot s;
+                if (wanted.TryGetValue(from.Id, out s) && s.Model == VazCar.ModelEvo && s.Livery != h) { s.Livery = h ?? ""; HostChanged("livree de " + NameOf(from.Id)); }
                 return;
             }
             if (kind == V_ROOF)
@@ -268,7 +303,7 @@ namespace MWCoop
             if (kind == V_SET && !Session.IsHost)
             {
                 wanted.Clear();
-                for (int i = 0, n = r.U8(); i < n; i++) { int id = r.U8(), num = r.U8(); Vector3 p = r.Vec(); float y = r.F32(); wanted[id] = new Slot { Number = num, Pos = p, Yaw = y }; }
+                for (int i = 0, n = r.U8(); i < n; i++) { int id = r.U8(), num = r.U8(); Vector3 p = r.Vec(); float y = r.F32(); int md = r.U8(); string lv = r.Str(); wanted[id] = new Slot { Number = num, Model = md, Livery = lv ?? "", Pos = p, Yaw = y }; }
                 Log.Info("vaz : table de l'hote : " + Describe());
                 if (Changed != null) Changed();
                 Reconcile(Time.realtimeSinceStartup);
@@ -282,7 +317,7 @@ namespace MWCoop
         {
             if (!PlayerSync.InGame) return;
             var gone = new List<int>();
-            foreach (KeyValuePair<int, Rent> kv in rents) { Slot s; if (!wanted.TryGetValue(kv.Key, out s) || s.Number != kv.Value.Number) gone.Add(kv.Key); }
+            foreach (KeyValuePair<int, Rent> kv in rents) { Slot s; if (!wanted.TryGetValue(kv.Key, out s) || s.Number != kv.Value.Number || (kv.Value.Model >= 0 && BuildModel(s) != kv.Value.Model)) gone.Add(kv.Key); }
             foreach (int id in gone) { VazCar.Destroy(rents[id].Car); Log.Info("vaz : n " + rents[id].Number + " de " + NameOf(id) + " retiree"); rents.Remove(id); if (Changed != null) Changed(); }
             foreach (KeyValuePair<int, Slot> kv in wanted)
             {
@@ -291,11 +326,30 @@ namespace MWCoop
                 if ((r.Car == null || r.Car.Car == null) && now >= r.NextBuild && r.Tries < 5)
                 {
                     r.NextBuild = now + 2f; r.Tries++;
-                    try { r.Car = VazCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, Quaternion.Euler(0f, kv.Value.Yaw, 0f)); }
+                    r.Model = BuildModel(kv.Value); r.LiveryGen = -1;
+                    if (kv.Value.Model == VazCar.ModelEvo && r.Model != VazCar.ModelEvo) Log.Info("vaz : n " + r.Number + " de " + NameOf(kv.Key) + " : Evo III sans l'extension ici -> VAZ a la place");
+                    try { r.Car = VazCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, Quaternion.Euler(0f, kv.Value.Yaw, 0f), VazCar.ModelOf(r.Model)); }
                     catch (System.Exception e) { Log.Error("vaz : construction de la n " + r.Number + " : " + e); if (r.Car != null) VazCar.Destroy(r.Car); r.Car = null; }
                     if (r.Car != null && Changed != null) Changed();
                 }
+                Livery(r, kv.Value);
             }
+        }
+
+        // Modele construit ici pour cette place : l'Evo si l'extension est la, sinon la VAZ.
+        static int BuildModel(Slot s) { return s.Model == VazCar.ModelEvo && EvoAvailable ? VazCar.ModelEvo : VazCar.ModelVaz; }
+
+        // Livree de la place sur la voiture d'ici (Evo seulement ; image pas encore recue : couleur du joueur, reprise a son
+        // arrivee -- EvoLivery.Generation).
+        static void Livery(Rent r, Slot s)
+        {
+            if (r.Car == null || r.Car.Car == null || r.Model != VazCar.ModelEvo) return;
+            string want = s.Livery ?? "";
+            if ((r.Car.LiveryHash ?? "") == want && (want.Length == 0 || r.LiveryGen == EvoLivery.Generation)) return;
+            Texture2D t = want.Length > 0 ? EvoLivery.Get(want) : null;
+            r.LiveryGen = EvoLivery.Generation;
+            if (want.Length > 0 && t == null) { if (r.Car.LiveryHash != null) VazCar.SetLivery(r.Car, null, null); return; }
+            if ((r.Car.LiveryHash ?? "") != want) VazCar.SetLivery(r.Car, t, want.Length > 0 ? want : null);
         }
 
         // ---------------------------------------------------------------- autotest "vaz"
@@ -487,7 +541,8 @@ namespace MWCoop
                     Log.Info("autotest vaz : joueur pose dans la cour en " + pl.transform.position.ToString("F1"));
                 }
             }
-            if (host && testStep == 0 && t > 20f) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3)); }
+            // ([Test] VazModele=1 : une Evo III, extension privee)
+            if (host && testStep == 0 && t > 20f) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
             if (host && testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-hote", 1f); }
             if (!host && testStep == 0 && t > 40f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-invite", 1f); }
             // [Test] VazOuvrir=1 : trappe de toit et hayon ouverts a 31 s (hayon : butees de la charniere a 60-65 degres, comme son
@@ -579,6 +634,7 @@ namespace MWCoop
             {
                 Transform c = r.Car != null && r.Car.Car != null ? r.Car.Car.transform : null;
                 if (c == null) { sb.Append(" ; n " + r.Number + " pas construite"); continue; }
+                sb.Append(" ; modele " + (r.Car.M != null ? r.Car.M.Name : "?") + ", livree " + (r.Car.LiveryHash ?? "aucune"));
                 Rigidbody rb = c.GetComponent<Rigidbody>(); Drivetrain dt = c.GetComponent<Drivetrain>();
                 sb.Append(" ; " + c.name + " en " + c.position.ToString("F1") + ", " + (dt != null ? dt.maxPower.ToString("F0") + " ch " + dt.transmission : "?") + (rb != null ? ", " + rb.mass.ToString("F0") + " kg" : "")
                           + ", VehicleSync " + (VehicleSync.RootByKey(c.name) != null ? "connue" : "inconnue"));

@@ -81,8 +81,8 @@ namespace MWCoop
             if (Session.IsHost) vazEntries.Add(Session.LocalId);
             else SendVaz();
             rentalsDirty = true;
-            Hud.Toast(Lang.T("Course sur glace : inscrit avec ta VAZ, tu prends la place d'une voiture IA (ton numéro arrive)",
-                             "Ice race: registered with your VAZ, you take an AI car's place (your number is coming)"));
+            Hud.Toast(Lang.T("Course sur glace : inscrit avec ta voiture, tu prends la place d'une voiture IA (ton numéro arrive)",
+                             "Ice race: registered with your car, you take an AI car's place (your number is coming)"));
             Log.Info("glace : inscrit avec ma VAZ" + (Session.IsHost ? "" : " (annonce a l'hote)"));
         }
 
@@ -184,7 +184,7 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextTentToast)
                 {
                     nextTentToast = Time.realtimeSinceStartup + 10f;
-                    Hud.Toast(Lang.T("Ta VAZ est à ", "Your VAZ is ") + d.ToString("F0") + Lang.T(" m de la tente d'inspection : gare-la juste à côté (moins de 10 m)",
+                    Hud.Toast(Lang.T("Ta voiture est à ", "Your car is ") + d.ToString("F0") + Lang.T(" m de la tente d'inspection : gare-la juste à côté (moins de 10 m)",
                                                                                            " m from the inspection tent: park it right next to it (under 10 m)"));
                 }
                 return false;

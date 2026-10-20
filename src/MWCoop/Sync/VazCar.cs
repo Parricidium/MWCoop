@@ -17,8 +17,33 @@ namespace MWCoop
     // couleur du joueur et son numero sur les portieres.
     public static class VazCar
     {
-        public static string Dir { get { return Path.Combine(System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", "vaz"); } }
-        public static bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
+        // Modeles des voitures des joueurs (JD, 20/10) : la VAZ-2108 (MWCoop/vaz, dans la version publiee) et la Mitsubishi
+        // Lancer Evolution III Gr. A (MWCoop/evo3 : EXTENSION PRIVEE de JD, jamais dans le depot ni les versions publiees --
+        // modele d'un mod rFactor 1 sans licence connue). Meme construction ; ce qui change : dossier, poste de conduite,
+        // commandes du tableau de bord, frein a main, moteur, tenue de route (VazHandling).
+        public class Model
+        {
+            public int Id; public string Folder, Name;
+            public Vector3 Head, Engine, BrakePivot, BrakeGrip;
+            public KeyValuePair<string, Vector3>[] Controls;
+            public Dictionary<string, Vector3> Info;
+            public string Dir { get { return Path.Combine(System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", Folder); } }
+            public bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
+        }
+        public const int ModelVaz = 0, ModelEvo = 1;
+        public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
+        // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
+        // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant ; pas de levier de frein a main
+        // modelise (le levier cliquable du jeu sur la console) ; commandes du tableau de bord : places de la SORBET.
+        public static readonly Model Evo3 = new Model { Id = ModelEvo, Folder = "evo3", Name = "Evo III",
+            Head = new Vector3(-0.35f, 0.909f, -0.101f), Engine = new Vector3(0f, 0.75f, 1.55f),
+            BrakePivot = new Vector3(0.02f, 0.40f, -0.05f), BrakeGrip = new Vector3(0.02f, 0.47f, 0.05f),
+            Controls = new KeyValuePair<string, Vector3>[0] };
+        public static Model ModelOf(int id) { return id == ModelEvo ? Evo3 : Vaz2108; }
+        static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)
+
+        public static string Dir { get { return Vaz2108.Dir; } }
+        public static bool HasFiles { get { return Vaz2108.HasFiles; } }
 
         // Yeux du pilote, repere du modele : siege conducteur a x -0,35, toit interieur vers 1,33, volant en (-0,35 ; 0,86 ; 0,64).
         // DriverHeadPivot est pose 27 cm DERRIERE et 3 cm au-dessus (les yeux sont la, Seats.EyeFromPivot, mesure sur la
@@ -26,6 +51,7 @@ namespace MWCoop
         // passager trop en avant.
         static readonly Vector3 EyesModel = new Vector3(-0.35f, 1.10f, 0.02f);
         static readonly Vector3 HeadModel = EyesModel - new Vector3(0f, -0.03f, 0.27f);
+        static VazCar() { Vaz2108.Head = HeadModel; Vaz2108.Controls = Controls; Vaz2108.BrakePivot = BrakePivotModel; Vaz2108.BrakeGrip = BrakeGripModel; Vaz2108.Engine = EngineModel; }
 
         // Commandes de la SORBET posees sur les boutons du tableau de bord de la VAZ (centres des pieces du modele, repere
         // du modele ; photo annotee de JD, 18/10) : contact, essuie-glaces et feux sur les trois interrupteurs a gauche des
@@ -70,6 +96,9 @@ namespace MWCoop
             public PlayMakerFSM Priming, Power, Tank;   // (VazHandling.ReadyToStart)
             public readonly float[] LastGrip = { -1f, -1f };
             public int MaskLogs;
+            public Model M = Vaz2108;
+            public Color Paint = Color.white;
+            public string LiveryHash;   // livree posee (empreinte), null : couleur du joueur
         }
 
         // ---------------------------------------------------------------- fichiers
@@ -78,15 +107,14 @@ namespace MWCoop
         static readonly Dictionary<string, List<Part>> meshCache = new Dictionary<string, List<Part>>();
         static readonly Dictionary<string, MatDef> matDefs = new Dictionary<string, MatDef>();
         static readonly Dictionary<string, Texture2D> texCache = new Dictionary<string, Texture2D>();
-        static Dictionary<string, Vector3> info;
 
         // Maillages lus une fois (partages par toutes les VAZ : seules les matieres de peinture et de numero sont a chacune).
         static List<Part> Load(string file)
         {
             List<Part> list;
-            if (meshCache.TryGetValue(file, out list)) return list;
+            string path = Path.Combine(cur.Dir, file);
+            if (meshCache.TryGetValue(path, out list)) return list;
             list = new List<Part>();
-            string path = Path.Combine(Dir, file);
             if (File.Exists(path))
                 using (var r = new BinaryReader(File.OpenRead(path), System.Text.Encoding.UTF8))
                 {
@@ -98,7 +126,7 @@ namespace MWCoop
                         var m = new MatDef { Key = r.ReadString(), Kind = r.ReadString(), Tex = r.ReadString() };
                         r.ReadString();
                         m.Col = new Color(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
-                        matDefs[m.Key] = m;
+                        matDefs[cur.Folder + "|" + m.Key] = m;
                     }
                     int np = r.ReadInt32();
                     for (int i = 0; i < np; i++)
@@ -118,15 +146,15 @@ namespace MWCoop
                         list.Add(new Part { Mat = key, Mesh = mesh });
                     }
                 }
-            meshCache[file] = list;
+            meshCache[path] = list;
             return list;
         }
 
         static Dictionary<string, Vector3> Info()
         {
-            if (info != null) return info;
-            info = new Dictionary<string, Vector3>();
-            string f = Path.Combine(Dir, "infos.txt");
+            if (cur.Info != null) return cur.Info;
+            var info = cur.Info = new Dictionary<string, Vector3>();
+            string f = Path.Combine(cur.Dir, "infos.txt");
             if (!File.Exists(f)) return info;
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             foreach (string l in File.ReadAllLines(f))
@@ -143,8 +171,10 @@ namespace MWCoop
         {
             if (string.IsNullOrEmpty(name)) return null;
             Texture2D t;
-            if (texCache.TryGetValue(name, out t)) return t;
-            string f = Path.Combine(Dir, name + ".png");
+            string ck = cur.Folder + "|" + name;
+            if (texCache.TryGetValue(ck, out t)) return t;
+            string f = Path.Combine(cur.Dir, name + ".png");
+            if (!File.Exists(f) && name.StartsWith("numero-")) f = Path.Combine(Vaz2108.Dir, name + ".png");   // (plaques communes)
             t = null;
             if (File.Exists(f))
             {
@@ -153,7 +183,7 @@ namespace MWCoop
                 t.wrapMode = clamp ? TextureWrapMode.Clamp : TextureWrapMode.Repeat; t.anisoLevel = 4;
             }
             else Log.Warn("vaz : texture " + name + ".png absente");
-            texCache[name] = t;
+            texCache[ck] = t;
             return t;
         }
 
@@ -172,7 +202,7 @@ namespace MWCoop
                 unlitTex = FindShader("Unlit/Texture", "Legacy Shaders/Self-Illumin/Diffuse", "Self-Illumin/Diffuse");
                 unlitTransp = FindShader("Unlit/Transparent", "Particles/Additive", "Legacy Shaders/Particles/Additive");
             }
-            MatDef d; matDefs.TryGetValue(key, out d);
+            MatDef d; matDefs.TryGetValue(cur.Folder + "|" + key, out d);
             string kind = d != null ? d.Kind : "opaque";
             Texture2D t = key == "numero" ? Tex("numero-" + number.ToString("00"), true) : d != null ? Tex(d.Tex) : null;
             if ((kind == "glass" || kind == "fade" || kind == "lampfade") && transp != null)
@@ -226,7 +256,7 @@ namespace MWCoop
                 var mr = go.AddComponent<MeshRenderer>();
                 mr.sharedMaterial = MaterialFor(b, p.Mat, basePaint, paint, number);
                 MatDef d;
-                if (matDefs.TryGetValue(p.Mat, out d) && d.Kind.StartsWith("lamp")) b.Lamps.Add(new KeyValuePair<MeshRenderer, string>(mr, p.Mat));
+                if (matDefs.TryGetValue(cur.Folder + "|" + p.Mat, out d) && d.Kind.StartsWith("lamp")) b.Lamps.Add(new KeyValuePair<MeshRenderer, string>(mr, p.Mat));
             }
         }
 
@@ -265,13 +295,14 @@ namespace MWCoop
 
         // ---------------------------------------------------------------- construction
         // name : nom de l'objet (le meme chez tous) ; number : 1-16 (numero et couleur). Rend null si la SORBET ou les fichiers manquent.
-        public static Built Build(string name, int number, Color paint, Vector3 pos, Quaternion rot)
+        public static Built Build(string name, int number, Color paint, Vector3 pos, Quaternion rot, Model carModel = null)
         {
             GameObject sorbet = FindSorbet();
             if (sorbet == null) { Log.Warn("vaz : SORBET introuvable"); return null; }
-            if (!HasFiles) { Log.Warn("vaz : fichiers du modele absents (" + Dir + ")"); return null; }
+            cur = carModel ?? Vaz2108;
+            if (!cur.HasFiles) { Log.Warn("vaz : fichiers du modele absents (" + cur.Dir + ")"); return null; }
             Dictionary<string, Vector3> inf = Info();
-            var b = new Built { Number = number };
+            var b = new Built { Number = number, M = cur, Paint = paint };
             GameObject car = Object.Instantiate(sorbet);
             car.SetActive(false);   // (reglee eteinte : ses automates demarrent sur la version modifiee)
             car.name = name;
@@ -308,7 +339,7 @@ namespace MWCoop
             }
             foreach (LODGroup lg in car.GetComponentsInChildren<LODGroup>(true)) Object.Destroy(lg);
             // (hayon de la SORBET garde quand le modele a le sien : il porte celui de la VAZ, voir 4b)
-            bool hasHatch = File.Exists(Path.Combine(Dir, "hayon.p205"));
+            bool hasHatch = File.Exists(Path.Combine(cur.Dir, "hayon.p205"));
             foreach (string dp in hasHatch ? new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)" } : new[] { "Doors/DoorRear(leftx)", "Doors/DoorRear(right)", "Hatch/Hatch" })
             {
                 Transform d = ct.Find(dp);
@@ -399,7 +430,7 @@ namespace MWCoop
 
             // 4c. Trappe de toit (a nous : clic pour l'ouvrir vers l'exterieur, synchronisee par Vaz) : charniere au bord avant.
             Vector3 th;
-            if (File.Exists(Path.Combine(Dir, "trappe.p205")) && inf.TryGetValue("trappe_charniere", out th))
+            if (File.Exists(Path.Combine(cur.Dir, "trappe.p205")) && inf.TryGetValue("trappe_charniere", out th))
             {
                 b.Roof = new GameObject("VAZ_trappe").transform;
                 b.Roof.SetParent(body.transform, false);
@@ -468,7 +499,7 @@ namespace MWCoop
             Vector3 delta = Vector3.zero;
             if (hp != null)
             {
-                delta = (offset + HeadModel) - ct.InverseTransformPoint(hp.position);
+                delta = (offset + cur.Head) - ct.InverseTransformPoint(hp.position);
                 foreach (string mp in new[] { "Functions/PlayerTrigger/DriveTriggerX", "Functions/PlayerTrigger/DriverHeadPivot", "Functions/PlayerTrigger/SpawnPlayer", "Functions/MassDriver", "Functions/SteeringColumnPivot" })
                 {
                     Transform m = ct.Find(mp);
@@ -498,7 +529,7 @@ namespace MWCoop
             // 6b. Commandes du tableau de bord et frein a main sur ceux du modele : chaque objet du jeu deplace pour que le centre de
             //     ses colliders tombe sur la piece de la VAZ.
             int ctl = 0;
-            foreach (KeyValuePair<string, Vector3> kv in Controls)
+            foreach (KeyValuePair<string, Vector3> kv in cur.Controls)
             {
                 Transform t = ct.Find(kv.Key);
                 if (t == null) { Log.Warn("vaz : commande " + kv.Key + " introuvable"); continue; }
@@ -507,14 +538,14 @@ namespace MWCoop
             Transform lever = ct.Find("Functions/HandBrake/LeverPivot");
             if (lever != null)
             {
-                MoveOnto(lever, body.transform.TransformPoint(BrakeGripModel));
+                MoveOnto(lever, body.transform.TransformPoint(cur.BrakeGrip));
                 b.SorbetBrake = lever; b.SorbetBrakeRest = lever.localRotation;
                 b.BrakePivot = new GameObject("VAZ_frein").transform;
                 b.BrakePivot.SetParent(body.transform, false);
-                b.BrakePivot.localPosition = BrakePivotModel;
+                b.BrakePivot.localPosition = cur.BrakePivot;
                 var inner = new GameObject("pieces").transform;
                 inner.SetParent(b.BrakePivot, false);
-                inner.localPosition = -BrakePivotModel;
+                inner.localPosition = -cur.BrakePivot;
                 AddParts(b, inner, "frein.p205", basePaint, paint, number);
             }
             else Log.Warn("vaz : frein a main du jeu (Functions/HandBrake/LeverPivot) introuvable");
@@ -545,7 +576,7 @@ namespace MWCoop
             b.Dt = car.GetComponent<Drivetrain>();
             VazHandling.Apply(b, true);
             var eng = new GameObject("VAZ_moteur_son").transform;
-            eng.SetParent(body.transform, false); eng.localPosition = EngineModel;
+            eng.SetParent(body.transform, false); eng.localPosition = cur.Engine;
             b.Sound = VazSound.Create(car, eng);
             Transform tank = ct.Find("Simulation/FuelTankSorbett");
             PlayMakerFSM tf = tank != null ? Game.FsmOn(tank.gameObject, "Data") : null;
@@ -556,7 +587,7 @@ namespace MWCoop
             car.SetActive(true);
             VehicleSync.RescanSoon();
             b.NextMask = 0f;
-            Log.Info("vaz : " + name + " construite en " + pos.ToString("F1") + " : " + emptied + " etats de sauvegarde vides, " + ids + " identifiants prefixes, " + b.Hidden.Count + " rendus SORBET caches, "
+            Log.Info("vaz : " + name + " (" + cur.Name + ") construite en " + pos.ToString("F1") + " : " + emptied + " etats de sauvegarde vides, " + ids + " identifiants prefixes, " + b.Hidden.Count + " rendus SORBET caches, "
                      + doors + " portieres, " + ctl + " commandes posees, " + seatColl + " colliders de sieges SORBET coupes, " + rw + " roues du rallye" + (rc == null ? " (RALLYCAR3 introuvable)" : "") + ", " + lights + " lumieres posees, " + b.Lamps.Count + " pieces de feux, decalage " + offset.ToString("F2") + ", tete " + delta.ToString("F2"));
             return b;
         }
@@ -575,6 +606,26 @@ namespace MWCoop
             foreach (Transform t in cp.GetComponentsInChildren<Transform>(true)) t.gameObject.SetActive(true);
             cp.transform.SetParent(parent, false);
             return cp;
+        }
+
+        // ---------------------------------------------------------------- livree (Evo III : image du joueur, EvoLivery)
+        // Les matieres de peinture de la voiture prennent l'image (couleur blanche : l'image telle quelle) ; tex null : retour a
+        // la peinture sans livree a la couleur du joueur. Le numero (decalque) reste par-dessus.
+        public static void SetLivery(Built b, Texture2D tex, string hash)
+        {
+            if (b == null) return;
+            cur = b.M;
+            int n = 0;
+            foreach (KeyValuePair<string, Material> kv in b.Mats)
+            {
+                MatDef d;
+                if (kv.Value == null || !matDefs.TryGetValue(cur.Folder + "|" + kv.Key, out d) || d.Kind != "paint") continue;
+                kv.Value.mainTexture = tex != null ? tex : Tex(d.Tex);
+                kv.Value.color = tex != null ? Color.white : b.Paint;
+                n++;
+            }
+            b.LiveryHash = tex != null ? hash : null;
+            Log.Info("vaz : " + (b.Car != null ? b.Car.name : "apercu") + " : " + (tex != null ? "livree " + hash : "couleur du joueur") + " (" + n + " matiere(s))");
         }
 
         // ---------------------------------------------------------------- vie de la voiture (chaque image)
@@ -767,13 +818,14 @@ namespace MWCoop
         // ---------------------------------------------------------------- apercu (F10)
         // Copie visuelle seule (carrosserie, capot, portieres, volant, roues du rallye aux centres des roues), sur cette couche,
         // a l'origine ; matieres a liberer avec DestroyPreview.
-        public static GameObject BuildPreview(int number, Color paint, int layer, out Built holder)
+        public static GameObject BuildPreview(int number, Color paint, int layer, out Built holder, Model carModel = null)
         {
             holder = null;
             GameObject sorbet = FindSorbet();
-            if (sorbet == null || !HasFiles) return null;
+            cur = carModel ?? Vaz2108;
+            if (sorbet == null || !cur.HasFiles) return null;
             Material basePaint = FindMat(sorbet, "paint") ?? FindMat(sorbet, "");
-            var b = new Built();
+            var b = new Built { M = cur, Paint = paint };
             var root = new GameObject("MWCoop-VazApercu-" + number);
             b.Car = root;
             foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205", "hayon.p205", "trappe.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
