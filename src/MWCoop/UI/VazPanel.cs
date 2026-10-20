@@ -15,7 +15,7 @@ namespace MWCoop
         static int pick = -1;   // modele choisi ici pour la prochaine prise ([Coop] VoitureModele)
         static int Pick
         {
-            get { if (pick < 0) pick = Vaz.EvoAvailable && Config.GetInt("Coop", "VoitureModele", 0) == VazCar.ModelEvo ? VazCar.ModelEvo : VazCar.ModelVaz; return Vaz.EvoAvailable ? pick : VazCar.ModelVaz; }
+            get { if (pick < 0) pick = Config.GetInt("Coop", "VoitureModele", 0); return VazCar.Has(pick) ? pick : VazCar.ModelVaz; }
             set { pick = value; Config.Save("Coop", "VoitureModele", value.ToString()); }
         }
         static int pvModel = -1; static string pvLivery = "";
@@ -24,8 +24,8 @@ namespace MWCoop
         {
             int id = Vaz.OwnerOf(n);
             model = id >= 0 ? Vaz.ModelOf(id) : Pick;
-            livery = id >= 0 ? Vaz.LiveryOf(id) : model == VazCar.ModelEvo ? EvoLivery.MyHash : "";
-            if (model == VazCar.ModelEvo && !Vaz.EvoAvailable) { model = VazCar.ModelVaz; livery = ""; }
+            livery = id >= 0 ? Vaz.LiveryOf(id) : EvoLivery.MyHash(model);
+            if (!VazCar.Has(model)) { model = VazCar.ModelVaz; livery = ""; }
         }
         static bool shown, hooked;
         static int hi = 1;
@@ -142,7 +142,7 @@ namespace MWCoop
                 Measure();
                 pvYaw = 35f; pvT = now;
             }
-            if (pvHold != null && sm == VazCar.ModelEvo && pvLivery != sl)
+            if (pvHold != null && sm != VazCar.ModelVaz && pvLivery != sl)
             {
                 Texture2D lt = sl.Length > 0 ? EvoLivery.Get(sl) : null;
                 if (sl.Length == 0 || lt != null) { VazCar.SetLivery(pvHold, lt, sl.Length > 0 ? sl : null); pvLivery = sl; }
@@ -189,7 +189,10 @@ namespace MWCoop
                 case KeyCode.LeftArrow: if (hi > 1) hi--; return true;
                 case KeyCode.RightArrow: if (hi < Vaz.Count) hi++; return true;
                 case KeyCode.V: CallMine(); return true;
-                case KeyCode.M: if (!Vaz.EvoAvailable) return false; Pick = Pick == VazCar.ModelEvo ? VazCar.ModelVaz : VazCar.ModelEvo; return true;
+                case KeyCode.M:
+                    if (!Vaz.EvoAvailable) return false;
+                    { int m = Pick; do m = (m + 1) % VazCar.Models.Length; while (!VazCar.Has(m)); Pick = m; }   // (modele suivant installe)
+                    return true;
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter: Act(hi); return true;
             }
@@ -282,18 +285,20 @@ namespace MWCoop
             string owner = OwnerName(hi, out mine);
             int sm; string sl;
             Shown(hi, out sm, out sl);
-            bool evo = sm == VazCar.ModelEvo;
+            bool evo = sm != VazCar.ModelVaz;
             Style.Title(new Rect(r.x, cy, r.width, P(26)), VazCar.ModelOf(sm).Name + "  n\u00B0 " + hi, Kit.Ink, TextAnchor.MiddleLeft, 17);
             cy += P(26);
-            Style.Text(new Rect(r.x, cy, r.width, P(18)), Vaz.ColorName(hi) + (evo ? Lang.T("  \u00B7  Gr. A, 370 ch, 4 roues motrices", "  \u00B7  Gr. A, 370 hp, four-wheel drive")
+            Style.Text(new Rect(r.x, cy, r.width, P(18)), Vaz.ColorName(hi) + (evo ? "  \u00B7  " + VazCar.ModelOf(sm).Desc
                                                                                    : Lang.T("  \u00B7  r\u00E9glages de la Rivett rallye", "  \u00B7  set up like the rally Rivett")), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
             cy += P(24);
             if (Vaz.EvoAvailable && owner == null)
             {
-                // choix du modele (extension Evo III installee) : deux boutons
-                float hw = (r.width - P(8)) / 2;
-                if (Kit.Button(new Rect(r.x, cy, hw, P(28)), "VAZ-2108", Pick == VazCar.ModelVaz ? 1 : 0, false)) Pick = VazCar.ModelVaz;
-                if (Kit.Button(new Rect(r.x + hw + P(8), cy, hw, P(28)), VazCar.Evo3.Name, Pick == VazCar.ModelEvo ? 1 : 0, false)) Pick = VazCar.ModelEvo;
+                // choix du modele (extensions installees) : un bouton par modele
+                var ms = new System.Collections.Generic.List<int>();
+                for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i)) ms.Add(i);
+                float hw = (r.width - P(8) * (ms.Count - 1)) / ms.Count;
+                for (int k = 0; k < ms.Count; k++)
+                    if (Kit.Button(new Rect(r.x + k * (hw + P(8)), cy, hw, P(28)), VazCar.ModelOf(ms[k]).Name, Pick == ms[k] ? 1 : 0, false)) Pick = ms[k];
                 cy += P(34);
             }
             if (evo)

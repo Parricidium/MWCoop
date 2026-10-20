@@ -25,12 +25,18 @@ namespace MWCoop
     // la CORRIS ramenees a la VAZ (Drivetrain : regime et gaz), la lecture du diviseur coupee (pose a 2), les explosions
     // (Combustion) sans la simulation des cylindres de la CORRIS. Le nom AudioEngine... fait que VehicleSync en envoie
     // volume et hauteur aux autres joueurs, comme pour les voitures du jeu. Sons moteur de la SORBET coupes.
+    //
+    // Addons (JD 21/10 : sons du pack « rally cars » de rFactor, MWCoop/addons/<dossier>/sons, outils/rf1/sfx2sons.py) : lignes
+    // « fichier.wav <regime naturel> charge|frein <mini> <maxi> <volume> » -- comme rFactor, chaque echantillon joue sur sa
+    // plage de regime (fondu ou les plages se chevauchent), hauteur = regime / regime naturel ; « ralenti <tr/min> » : regime
+    // du son de ralenti, le ralenti du jeu (~900) y est ramene (puis rejoint le vrai regime a 3 000).
     public class VazSound
     {
-        public static string Dir { get { return Path.Combine(VazCar.Dir, "sons"); } }
-        public static bool HasFiles { get { return File.Exists(Path.Combine(Dir, "sons.txt")); } }
+        string dir;
+        bool HasFiles { get { return File.Exists(Path.Combine(dir, "sons.txt")); } }
 
-        class Loop { public AudioSource Src; public float Rpm; public bool Load; }
+        class Loop { public AudioSource Src; public float Rpm, Min, Max = -1f, Vol = 1f; public bool Load; }
+        float idleSound;   // (0 : enregistrement de la VAZ, regime remappe comme avant)
         readonly List<Loop> loops = new List<Loop>();
         readonly List<AudioSource> muted = new List<AudioSource>();
         readonly Dictionary<string, AudioClip> starter = new Dictionary<string, AudioClip>();
@@ -41,11 +47,11 @@ namespace MWCoop
         string starterState = "";
         float load, catchTime = -100f;
 
-        // at : point du moteur (enfant de la carrosserie). Sons de MWCoop/vaz/sons s'il y en a, sinon ceux de la Rivett rallye.
-        public static VazSound Create(GameObject car, Transform at)
+        // at : point du moteur (enfant de la carrosserie). Sons de MWCoop/<dossier du modele>/sons s'il y en a, sinon ceux de la Rivett rallye.
+        public static VazSound Create(GameObject car, Transform at, VazCar.Model m)
         {
-            var s = new VazSound();
-            if (HasFiles) s.Setup(car, at);
+            var s = new VazSound { dir = Path.Combine(m.Dir, "sons") };
+            if (s.HasFiles) s.Setup(car, at);
             if (s.loops.Count == 0) s.Rivett(car, at);
             return s.loops.Count > 0 || s.rivett ? s : null;
         }
@@ -144,11 +150,12 @@ namespace MWCoop
         {
             dt = car.GetComponent<Drivetrain>();
             var ci = System.Globalization.CultureInfo.InvariantCulture;
-            foreach (string l in File.ReadAllLines(Path.Combine(Dir, "sons.txt")))
+            foreach (string l in File.ReadAllLines(Path.Combine(dir, "sons.txt")))
             {
                 string[] p = l.Split(new[] { ' ', '\t' }, System.StringSplitOptions.RemoveEmptyEntries);
+                if (p.Length == 2 && p[0] == "ralenti") { float.TryParse(p[1], System.Globalization.NumberStyles.Float, ci, out idleSound); continue; }
                 if (p.Length < 3) continue;
-                AudioClip clip = Wav(Path.Combine(Dir, p[0]));
+                AudioClip clip = Wav(Path.Combine(dir, p[0]));
                 if (clip == null) { Log.Warn("vaz : son " + p[0] + " illisible"); continue; }
                 if (p[2] != "charge" && p[2] != "frein") { starter[p[2]] = clip; continue; }
                 float rpm;
@@ -157,9 +164,14 @@ namespace MWCoop
                 go.transform.SetParent(at, false);
                 var a = go.AddComponent<AudioSource>();
                 a.clip = clip; a.loop = true; a.volume = 0f; a.spatialBlend = 1f; a.minDistance = 1f; a.maxDistance = 150f; a.dopplerLevel = 0.3f; a.playOnAwake = false;
-                loops.Add(new Loop { Src = a, Rpm = rpm, Load = p[2] == "charge" });
+                var lp = new Loop { Src = a, Rpm = rpm, Load = p[2] == "charge" };
+                if (p.Length >= 5) { float.TryParse(p[3], System.Globalization.NumberStyles.Float, ci, out lp.Min); float.TryParse(p[4], System.Globalization.NumberStyles.Float, ci, out lp.Max); }
+                if (p.Length >= 6) float.TryParse(p[5], System.Globalization.NumberStyles.Float, ci, out lp.Vol);
+                loops.Add(lp);
             }
-            loops.Sort((x, y) => x.Rpm.CompareTo(y.Rpm));
+            loops.Sort((x, y) => x.Max >= 0f ? x.Min.CompareTo(y.Min) : x.Rpm.CompareTo(y.Rpm));
+            float vmax = 0f; foreach (Loop x in loops) vmax = Mathf.Max(vmax, x.Vol);
+            if (vmax > 0f) foreach (Loop x in loops) x.Vol /= vmax;
             Transform ae = Find(car.transform, "AudioEngine");
             if (ae != null)
                 foreach (string n in new[] { "Low", "Med", "High", "ExhaustSound" })
@@ -213,10 +225,19 @@ namespace MWCoop
             float duck = Mathf.Clamp01((Time.time - catchTime - 0.7f) / 0.9f);
             // (enregistrement de la 205 : ralenti vers 1 850 tr/min, le moteur du jeu vers 900 -> sous 2 556 tr/min le regime
             // entendu est 0,55 x regime + 1 150)
-            rpm = rpm < 2556f ? 0.55f * rpm + 1150f : rpm;
+            if (idleSound > 0f) { if (rpm < 3000f) rpm = idleSound + (rpm - 900f) * (3000f - idleSound) / 2100f; }
+            else rpm = rpm < 2556f ? 0.55f * rpm + 1150f : rpm;
             float offW = (1f - load) * Mathf.Clamp01((rpm - 2000f) / 800f);
             Mix(true, rpm, on ? duck * 0.9f * (1f - 0.55f * offW) * (0.55f + 0.45f * load + 0.45f * (1f - Mathf.Clamp01((rpm - 1500f) / 1500f))) : 0f);
             Mix(false, rpm, on ? duck * 0.75f * offW : 0f);
+        }
+
+        // ([Test] VazSon) etat des boucles
+        public string Describe()
+        {
+            var sb = new System.Text.StringBuilder(rivett ? "Rivett" : loops.Count + " boucles, regime " + (dt != null ? dt.rpm.ToString("F0") : "?") + " :");
+            foreach (Loop l in loops) if (l.Src != null && l.Src.volume > 0.001f) sb.Append(' ').Append(l.Src.clip != null ? l.Src.clip.name : "?").Append(l.Load ? "(c)" : "(f)").Append(" v ").Append(l.Src.volume.ToString("F2")).Append(" h ").Append(l.Src.pitch.ToString("F2")).Append(l.Src.isPlaying ? "" : " ARRET");
+            return sb.ToString();
         }
 
         void Starter()
@@ -247,6 +268,7 @@ namespace MWCoop
             var set = new List<Loop>();
             foreach (Loop l in loops) if (l.Load == charge) set.Add(l);
             if (set.Count == 0) return;
+            if (set[0].Max >= 0f) { MixRanges(set, rpm, vol); return; }
             int hi = set.FindIndex(x => x.Rpm >= rpm);
             int lo = hi < 0 ? set.Count - 1 : Mathf.Max(0, hi - 1);
             if (hi < 0) hi = lo;
@@ -257,6 +279,40 @@ namespace MWCoop
                 Loop L = set[i];
                 L.Src.volume = vol * w;
                 L.Src.pitch = Mathf.Clamp(rpm / L.Rpm, 0.4f, 2.2f);
+                if (L.Src.volume > 0.001f) { if (!L.Src.isPlaying) L.Src.Play(); }
+                else if (L.Src.isPlaying && vol <= 0f) L.Src.Stop();
+            }
+        }
+
+        // Plages rFactor : poids 1 dans [mini, maxi], fondu lineaire de 150 a 600 tr/min aux bords (la largeur du chevauchement
+        // avec les autres plages), sauf sous la plage la plus basse et au-dessus de la plus haute (prolongees) ; poids normalises
+        // a puissance constante ; hauteur = regime / regime naturel. (Les plages se chevauchent dans tous les sens -- Evo III :
+        // 3 000-7 550 et 3 450-3 530 -- d'ou un fondu par bord et non entre voisines.)
+        static void MixRanges(List<Loop> set, float rpm, float vol)
+        {
+            var w = new float[set.Count]; float sum = 0f;
+            int lo = 0, hi = 0;
+            for (int i = 1; i < set.Count; i++) { if (set[i].Min < set[lo].Min) lo = i; if (set[i].Max > set[hi].Max) hi = i; }
+            for (int i = 0; i < set.Count; i++)
+            {
+                Loop L = set[i];
+                float fin = 150f, fout = 150f;
+                foreach (Loop o in set)
+                {
+                    if (o == L) continue;
+                    if (o.Min < L.Min && o.Max > L.Min) fin = Mathf.Max(fin, Mathf.Min(o.Max - L.Min, 600f));
+                    if (o.Max > L.Max && o.Min < L.Max) fout = Mathf.Max(fout, Mathf.Min(L.Max - o.Min, 600f));
+                }
+                fin = Mathf.Min(fin, (L.Max - L.Min) * 0.5f); fout = Mathf.Min(fout, (L.Max - L.Min) * 0.5f);
+                float a = i == lo ? 1f : Mathf.Clamp01((rpm - L.Min) / Mathf.Max(1f, fin)), b = i == hi ? 1f : Mathf.Clamp01((L.Max - rpm) / Mathf.Max(1f, fout));
+                w[i] = a * b; sum += w[i] * w[i];
+            }
+            float k = sum > 1e-6f ? 1f / Mathf.Sqrt(sum) : 0f;
+            for (int i = 0; i < set.Count; i++)
+            {
+                Loop L = set[i];
+                L.Src.volume = vol * w[i] * k * L.Vol;
+                L.Src.pitch = Mathf.Clamp(rpm / L.Rpm, 0.2f, 2.5f);
                 if (L.Src.volume > 0.001f) { if (!L.Src.isPlaying) L.Src.Play(); }
                 else if (L.Src.isPlaying && vol <= 0f) L.Src.Stop();
             }

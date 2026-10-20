@@ -76,7 +76,8 @@ namespace MWCoop
         // Modele choisi par ce joueur (VazCar.ModelVaz / ModelEvo) et son nom ; Evo disponible ici (extension installee).
         public static int ModelOf(int playerId) { Slot s; return wanted.TryGetValue(playerId, out s) ? s.Model : VazCar.ModelVaz; }
         public static string ModelName(int playerId) { return VazCar.ModelOf(ModelOf(playerId)).Name; }
-        public static bool EvoAvailable { get { return VazCar.Evo3.HasFiles; } }
+        // un addon au moins installe ici (onglet Voitures, choix du modele)
+        public static bool EvoAvailable { get { for (int i = 1; i < VazCar.Models.Length; i++) if (VazCar.Has(i)) return true; return false; } }
         public static int MineModel { get { return ModelOf(Me); } }
         public static string MineModelName { get { return ModelName(Me); } }
         public static string LiveryOf(int playerId) { Slot s; return wanted.TryGetValue(playerId, out s) ? s.Livery ?? "" : ""; }
@@ -110,11 +111,11 @@ namespace MWCoop
             if (!Enabled) { Hud.Toast(Lang.T("VAZ-2108 coup\u00E9e (lanceur, Ajouts)", "VAZ-2108 is off (launcher, Add-ons)")); return false; }
             if (!PlayerSync.InGame) return false;
             if (n < 1 || n > Count) return false;
-            if (model == VazCar.ModelEvo && !EvoAvailable) model = VazCar.ModelVaz;
+            if (!VazCar.Has(model)) model = VazCar.ModelVaz;
             if (wanted.ContainsKey(Me)) { Deny(2, n); return false; }
             if (!IsFree(n)) { Deny(1, n); return false; }
             Vector3 pos; float yaw; SpotNearMe(out pos, out yaw);
-            string liv = model == VazCar.ModelEvo ? EvoLivery.MyHash : "";
+            string liv = EvoLivery.MyHash(model);
             if (Host) { Assign(Me, new Slot { Number = n, Model = model, Livery = liv, Pos = pos, Yaw = yaw }); return true; }
             Session.SendToHost(new NetWriter(Msg.Race).U8(V_ASK).U8(n).Vec(pos).F32(yaw).U8(model).Str(liv), true);
             Log.Info("vaz : n " + n + " demandee a l'hote");
@@ -180,7 +181,7 @@ namespace MWCoop
             foreach (Rent r in rents.Values) if (r.Car != null && r.Car.Car != null) VazCar.Tick(r.Car, now);
             if (now < nextTick) return;
             nextTick = now + 0.5f;
-            if (EvoLivery.Poll()) MyLiveryChanged();
+            if (EvoLivery.Poll(MineModel)) MyLiveryChanged();
             if (Host) HostStep(now);
             Reconcile(now);
         }
@@ -215,8 +216,8 @@ namespace MWCoop
         static void MyLiveryChanged()
         {
             Slot s;
-            if (!wanted.TryGetValue(Me, out s) || s.Model != VazCar.ModelEvo) return;
-            string h = EvoLivery.MyHash;
+            if (!wanted.TryGetValue(Me, out s) || s.Model == VazCar.ModelVaz) return;
+            string h = EvoLivery.MyHash(s.Model);
             if (Host) { if (s.Livery != h) { s.Livery = h; HostChanged("livree de " + NameOf(Me)); } }
             else Session.SendToHost(new NetWriter(Msg.Race).U8(V_LIV).Str(h), true);
         }
@@ -257,7 +258,7 @@ namespace MWCoop
         {
             if (wanted.Count == 0) return "aucune VAZ";
             var sb = new System.Text.StringBuilder();
-            foreach (KeyValuePair<int, Slot> kv in wanted) sb.Append(sb.Length > 0 ? ", " : "").Append(NameOf(kv.Key)).Append(" n ").Append(kv.Value.Number).Append(kv.Value.Model == VazCar.ModelEvo ? " evo" + (kv.Value.Livery.Length > 0 ? " livree " + kv.Value.Livery : "") : "");
+            foreach (KeyValuePair<int, Slot> kv in wanted) sb.Append(sb.Length > 0 ? ", " : "").Append(NameOf(kv.Key)).Append(" n ").Append(kv.Value.Number).Append(kv.Value.Model != VazCar.ModelVaz ? " " + (kv.Value.Model == VazCar.ModelEvo ? "evo" : VazCar.ModelOf(kv.Value.Model).Folder) + (kv.Value.Livery.Length > 0 ? " livree " + kv.Value.Livery : "") : "");
             return sb.ToString();
         }
 
@@ -276,7 +277,7 @@ namespace MWCoop
             {
                 int n = r.U8(); Vector3 pos = r.Vec(); float yaw = r.F32();
                 int model = r.More ? r.U8() : VazCar.ModelVaz; string liv = r.More ? r.Str() : "";
-                if (model != VazCar.ModelEvo) { model = VazCar.ModelVaz; liv = ""; }
+                if (model <= VazCar.ModelVaz || model >= 64) { model = VazCar.ModelVaz; liv = ""; }   // (modele inconnu ici : garde, construit en VAZ)
                 if (n == 0) { if (wanted.Remove(from.Id)) { HostChanged("rendue par " + NameOf(from.Id)); } return; }
                 int why = !Enabled ? 4 : n < 1 || n > Count ? 3 : wanted.ContainsKey(from.Id) ? 2 : !IsFree(n) ? 1 : 0;
                 if (why != 0)
@@ -291,7 +292,7 @@ namespace MWCoop
             if (kind == V_LIV && Session.IsHost)
             {
                 string h = r.Str(); Slot s;
-                if (wanted.TryGetValue(from.Id, out s) && s.Model == VazCar.ModelEvo && s.Livery != h) { s.Livery = h ?? ""; HostChanged("livree de " + NameOf(from.Id)); }
+                if (wanted.TryGetValue(from.Id, out s) && s.Model != VazCar.ModelVaz && s.Livery != h) { s.Livery = h ?? ""; HostChanged("livree de " + NameOf(from.Id)); }
                 return;
             }
             if (kind == V_ROOF)
@@ -328,7 +329,7 @@ namespace MWCoop
                 {
                     r.NextBuild = now + 2f; r.Tries++;
                     r.Model = BuildModel(kv.Value); r.LiveryGen = -1;
-                    if (kv.Value.Model == VazCar.ModelEvo && r.Model != VazCar.ModelEvo) Log.Info("vaz : n " + r.Number + " de " + NameOf(kv.Key) + " : Evo III sans l'extension ici -> VAZ a la place");
+                    if (kv.Value.Model != r.Model) Log.Info("vaz : n " + r.Number + " de " + NameOf(kv.Key) + " : modele " + kv.Value.Model + " sans son extension ici -> VAZ a la place");
                     try { r.Car = VazCar.Build(Prefix + r.Number, r.Number, ColorOf(r.Number), kv.Value.Pos, Quaternion.Euler(0f, kv.Value.Yaw, 0f), VazCar.ModelOf(r.Model)); }
                     catch (System.Exception e) { Log.Error("vaz : construction de la n " + r.Number + " : " + e); if (r.Car != null) VazCar.Destroy(r.Car); r.Car = null; }
                     if (r.Car != null && Changed != null) Changed();
@@ -338,13 +339,13 @@ namespace MWCoop
         }
 
         // Modele construit ici pour cette place : l'Evo si l'extension est la, sinon la VAZ.
-        static int BuildModel(Slot s) { return s.Model == VazCar.ModelEvo && EvoAvailable ? VazCar.ModelEvo : VazCar.ModelVaz; }
+        static int BuildModel(Slot s) { return VazCar.Has(s.Model) ? s.Model : VazCar.ModelVaz; }
 
         // Livree de la place sur la voiture d'ici (Evo seulement ; image pas encore recue : couleur du joueur, reprise a son
         // arrivee -- EvoLivery.Generation).
         static void Livery(Rent r, Slot s)
         {
-            if (r.Car == null || r.Car.Car == null || r.Model != VazCar.ModelEvo) return;
+            if (r.Car == null || r.Car.Car == null || r.Model == VazCar.ModelVaz) return;
             string want = s.Livery ?? "";
             if ((r.Car.LiveryHash ?? "") == want && (want.Length == 0 || r.LiveryGen == EvoLivery.Generation)) return;
             Texture2D t = want.Length > 0 ? EvoLivery.Get(want) : null;
@@ -358,6 +359,7 @@ namespace MWCoop
         // 50 s : l'hote la fait venir ; 60 s : il la rend ; 70 s : chacun note voiture partie. [Test] VazGarder=1 : pas rendue.
         static int testStep;
         static bool testMoved, placesDone, openDone, brakeDone, camShot, relDone;
+        static int tourShot = -1;
         static Camera testCam;
         static int entryStep;
 
@@ -402,7 +404,7 @@ namespace MWCoop
         static void TestKey(float t)
         {
             bool asker = Config.GetInt("Test", "CleInvite", 0) != 0 ? !Host : Host;
-            if (asker && testStep == 0 && t > (Host ? 8f : 4f)) { testStep = 1; Log.Info("autotest vazcle : demande n 3 -> " + Request(3)); }
+            if (asker && testStep == 0 && t > (Host ? 8f : 4f)) { testStep = 1; Log.Info("autotest vazcle : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
             GameObject car = Game.FindAny(Config.Get("Test", "TestVoiture", "MWCoop-VAZ-3"));
             // [Test] VazPanne=ligne (conduite d'essence vide) | batterie (charge 20) | noyee (chambre a 30) : pose a 30 s, pour retrouver le refus de JD
             if (car != null && t > 30f && !panneDone)
@@ -485,7 +487,8 @@ namespace MWCoop
             {
                 sonDone = true;
                 Transform snd = car.transform.Find("VAZ/VAZ_moteur_son/AudioEngineCorrisTune");
-                if (snd == null) Log.Info("autotest vazcle : son de la Rivett introuvable");
+                Rent sr; rents.TryGetValue(Me, out sr);
+                if (snd == null) Log.Info("autotest vazcle : son de la Rivett introuvable" + (sr != null && sr.Car != null && sr.Car.Sound != null ? " ; son du modele : " + sr.Car.Sound.Describe() : ""));
                 else { foreach (PlayMakerFSM f in snd.GetComponentsInChildren<PlayMakerFSM>(true)) Log.Info("autotest vazcle : son " + DumpFsm(f)); foreach (AudioSource a in snd.GetComponentsInChildren<AudioSource>(true)) Log.Info("autotest vazcle : source " + Recon.Path(a.transform) + " " + (a.clip != null ? a.clip.name : "-") + (a.gameObject.activeInHierarchy ? "" : " inactif") + (a.isPlaying ? " joue" : "") + " v " + a.volume.ToString("F2") + " h " + a.pitch.ToString("F2") + (a.mute ? " muet" : "")); }
                 GameObject ct = Game.FindAny("CORRIS/Simulation/ExhaustCorris/ExhaustSmoke/AudioEngineCorrisTune");
                 if (ct != null) foreach (PlayMakerFSM f in ct.GetComponentsInChildren<PlayMakerFSM>(true)) Log.Info("autotest vazcle : CORRIS " + DumpFsm(f));
@@ -543,7 +546,7 @@ namespace MWCoop
                     Log.Info("autotest vaz : joueur pose dans la cour en " + pl.transform.position.ToString("F1"));
                 }
             }
-            // ([Test] VazModele=1 : une Evo III, extension privee)
+            // ([Test] VazModele=1 : une Evo III, 2 : une 205 T16 -- extensions privees)
             if (host && testStep == 0 && t > 20f) { testStep = 1; Log.Info("autotest vaz : demande n 3 -> " + Request(3, Config.GetInt("Test", "VazModele", 0))); }
             if (host && testStep == 1 && t > 30f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-hote", 1f); }
             if (!host && testStep == 0 && t > 40f) { testStep = 2; Log.Info("autotest vaz : " + State()); Autotest.CaptureSoon("vaz-invite", 1f); }
@@ -559,6 +562,28 @@ namespace MWCoop
                 if (hj != null) { JointLimits l = hj.limits; l.min = 60f; l.max = 65f; hj.limits = l; hj.useLimits = true; }
                 Autotest.CaptureSoon("vaz-ouvert", 4f);
                 Log.Info("autotest vaz : trappe et hayon ouverts (" + (hj != null ? "charniere du hayon" : "PAS de hayon") + ")");
+            }
+            // [Test] VazTour=1 : tour de la voiture a la camera d'essai (3/4 avant, cote conducteur, 3/4 arriere, face, puis le
+            // poste de conduite de [Test] VazCamPilote), une capture vaz-tour-<n> toutes les 2,5 s a partir de 31 s (addons, 21/10).
+            if (host && testStep == 2 && t > 31f && Config.GetInt("Test", "VazTour", 0) != 0)
+            {
+                Transform c = CarOf(Me);
+                int k = (int)((t - 31f) / 2.5f);
+                Vector3[] eye = { new Vector3(3.0f, 1.3f, 3.6f), new Vector3(-4.6f, 0.9f, 0f), new Vector3(-3.0f, 1.5f, -3.8f), new Vector3(0f, 1.0f, 5.2f), new Vector3(0f, 3.4f, -5.0f) };
+                string[] cv = Config.Get("Test", "VazCamPilote", "").Split(',');
+                if (c != null && k <= eye.Length)
+                {
+                    if (testCam == null) { testCam = new GameObject("MWCoop-CameraPilote").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.02f; }
+                    if (k < eye.Length) { testCam.fieldOfView = 40; testCam.transform.position = c.TransformPoint(eye[k]); testCam.transform.LookAt(c.TransformPoint(new Vector3(0f, 0.45f, 0f)), c.up); }
+                    else if (cv.Length >= 6)
+                    {
+                        var ci = System.Globalization.CultureInfo.InvariantCulture;
+                        testCam.fieldOfView = 60;
+                        testCam.transform.position = c.TransformPoint(new Vector3(float.Parse(cv[0], ci), float.Parse(cv[1], ci), float.Parse(cv[2], ci)));
+                        testCam.transform.LookAt(c.TransformPoint(new Vector3(float.Parse(cv[3], ci), float.Parse(cv[4], ci), float.Parse(cv[5], ci))), c.up);
+                    }
+                    if (k > tourShot) { tourShot = k; Autotest.CaptureSoon("vaz-tour-" + k, 0.6f); }
+                }
             }
             // [Test] VazFreinTest=1 : camera d'essai aux yeux du pilote ([Test] VazCamPilote=x,y,z,vx,vy,vz, repere de la voiture),
             // capture vaz-console a 31 s ; a 34 s, frein a main serre (KnobPos 20) et starter tire (Choke 2) par leurs automates,
@@ -606,7 +631,7 @@ namespace MWCoop
                     {
                         Vector3 eye = testCam.transform.position, to = bb.Body.TransformPoint(bb.M.Knobs[i].At);
                         RaycastHit hit;
-                        Log.Info("autotest vaz : bouton " + i + " -> " + (Physics.Raycast(eye, (to - eye).normalized, out hit, 3f) ? hit.collider.name + " a " + hit.distance.ToString("F3") + " (bouton a " + (to - eye).magnitude.ToString("F3") + ")" : "rien"));
+                        Log.Info("autotest vaz : bouton " + i + " -> " + (Physics.Raycast(eye, (to - eye).normalized, out hit, 3f) ? (hit.collider.transform.parent != null ? hit.collider.transform.parent.name + "/" : "") + hit.collider.name + " a " + hit.distance.ToString("F3") + " (bouton a " + (to - eye).magnitude.ToString("F3") + ")" : "rien"));
                     }
                 Autotest.CaptureSoon("vaz-serre", 1.5f);
             }
