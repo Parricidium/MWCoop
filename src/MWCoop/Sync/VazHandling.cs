@@ -32,8 +32,16 @@ namespace MWCoop
     // prive de JD : reaction du moteur (Drivetrain.FixedUpdate : -engineOrientation * couple en repere MONDE ; la SORBET met
     // (0,1,0) et la voiture tournerait sur elle-meme) sur l'axe longitudinal, chaque image ; SteerLimit (reecrit l'angle des
     // roues avant chaque image d'apres SON MaxAngle) regle ; anti-calage (frein a main, ou freinage sous 2 000 tr/min : debraye).
+    // Evo III Gr. A (extension privee, JD 20/10) : meme base (Rivett rallye : essieux, pneus cloutes selon le sol, matieres du
+    // sol), avec ses propres valeurs -- celles du mod a part de JD (Grupo A engine.ini du mod rFactor) : 370 ch a 5 900 tr/min,
+    // 495 Nm a 4 200, rupteur 7 500, inertie 0,15, integrale, boite 2,95 / 2,0 / 1,52 / 1,2 / 0,95 (MA 3,3), pont 4,4,
+    // 1 230 kg, 61 % sur l'avant (moteur transversal avant) ; ressorts et amortisseurs de la VAZ a l'echelle de la masse ;
+    // braquage 35 (voitures du rallye du pack prive) ; pas de multiplicateur de puissance.
     public static class VazHandling
     {
+        static bool Evo(VazCar.Built b) { return b != null && b.M != null && b.M.Id == VazCar.ModelEvo; }
+        const float EvoMass = 1230f, EvoCom = 0.61f, EvoSteer = 35f, EvoSpring = 45300f, EvoDamp = 2850f;
+        static readonly float[] EvoGears = { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f };
         const float SteerDeg = 26f;
         const float SpringRate = 35020f, SpringTravel = 0.19f, Damp = 2200f;
         const float PowerMul = 1.43f;
@@ -133,9 +141,22 @@ namespace MWCoop
         {
             GameObject car = b.Car;
             int n = 0;
-            if (b.Rb != null && !Mathf.Approximately(b.Rb.mass, mass)) { b.Rb.mass = mass; n++; }
+            bool evo = Evo(b);
+            float wantMass = evo ? EvoMass : mass, steer = evo ? EvoSteer : SteerDeg, spring = evo ? EvoSpring : SpringRate, damp = evo ? EvoDamp : Damp;
+            Drivetrain.Transmissions tr = evo ? Drivetrain.Transmissions.AWD : Drivetrain.Transmissions.RWD;
+            float[] gears = evo ? EvoGears : Gears;
+            if (b.Rb != null && !Mathf.Approximately(b.Rb.mass, wantMass)) { b.Rb.mass = wantMass; n++; }
             Drivetrain dt = b.Dt;
-            if (dt != null)
+            if (dt != null && evo)
+            {
+                int pw = SetF(dt, "maxPowerRPM", 5900f) + SetF(dt, "maxPower", 370f) + SetF(dt, "maxTorque", 495f);
+                if (pw > 0 || first) { try { dt.CalcValues(1f, false); } catch (System.Exception e) { Log.Warn("vaz : CalcValues : " + e.Message); } }
+                n += pw + SetF(dt, "originalMaxPower", 370f) + SetF(dt, "maxTorqueRPM", 4200f) + SetF(dt, "maxRPM", 7500f) + SetF(dt, "revLimiter", 7500f)
+                   + SetF(dt, "engineInertia", 0.15f) + SetF(dt, "drivetrainInertia", 1.0f) + SetF(dt, "engineFrictionFactor", 0.2f)
+                   + SetF(dt, "disengageRPM", 1400f) + SetF(dt, "engageRPM", 2000f) + SetF(dt, "clutchMaxTorque", 420f)
+                   + SetF(dt, "powerMultiplier", 1f) + SetF(dt, "finalDriveRatio", 4.4f) + SetF(dt, "differentialLockCoefficient", 49f);
+            }
+            else if (dt != null)
             {
                 // (courbe de couple au-dessus du couple maxi : maxPowerAngVel, calcule par CalcValues -> recalcule si le regime change)
                 int pw = SetF(dt, "maxPowerRPM", 7500f);
@@ -143,11 +164,14 @@ namespace MWCoop
                 n += pw + SetF(dt, "maxTorqueRPM", 4800f) + SetF(dt, "maxRPM", 8000f) + SetF(dt, "revLimiter", 8000f)
                    + SetF(dt, "engineInertia", 0.072f) + SetF(dt, "powerMultiplier", PowerMul)
                    + SetF(dt, "finalDriveRatio", 4.44f) + SetF(dt, "differentialLockCoefficient", 49f);
-                if (dt.gearRatios == null || dt.gearRatios.Length != Gears.Length || !Same(dt.gearRatios, Gears)) { dt.gearRatios = (float[])Gears.Clone(); n++; }
-                if (dt.transmission != Drivetrain.Transmissions.RWD)
+            }
+            if (dt != null)
+            {
+                if (dt.gearRatios == null || dt.gearRatios.Length != gears.Length || !Same(dt.gearRatios, gears)) { dt.gearRatios = (float[])gears.Clone(); n++; }
+                if (dt.transmission != tr)
                 {
-                    dt.transmission = Drivetrain.Transmissions.RWD;
-                    if (!first) { try { dt.SetTransmission(Drivetrain.Transmissions.RWD); } catch (System.Exception e) { Log.Warn("vaz : SetTransmission : " + e.Message); } }
+                    dt.transmission = tr;
+                    if (!first) { try { dt.SetTransmission(tr); } catch (System.Exception e) { Log.Warn("vaz : SetTransmission : " + e.Message); } }
                     n++;
                 }
             }
@@ -159,8 +183,8 @@ namespace MWCoop
                     FieldInfo af = ax.GetType().GetField(an);
                     object axl = af != null ? af.GetValue(ax) : null;
                     if (axl == null) continue;
-                    n += SetF(axl, "suspensionRate", SpringRate) + SetF(axl, "suspensionTravel", SpringTravel) + SetF(axl, "bumpRate", Damp) + SetF(axl, "reboundRate", Damp);
-                    if (an == "frontAxle") n += SetF(axl, "maxSteeringAngle", SteerDeg);
+                    n += SetF(axl, "suspensionRate", spring) + SetF(axl, "suspensionTravel", SpringTravel) + SetF(axl, "bumpRate", damp) + SetF(axl, "reboundRate", damp);
+                    if (an == "frontAxle") n += SetF(axl, "maxSteeringAngle", steer);
                 }
             foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", 0.753f); }
             Component cd = car.GetComponent("CarDynamics");
@@ -172,17 +196,17 @@ namespace MWCoop
             if (com != null && Axles(car, out zF, out zR, out yW))
             {
                 Vector3 lp = car.transform.InverseTransformPoint(com.position);
-                float wz = zR + (comFrac > 0f ? comFrac : 0.55f) * (zF - zR), wy = float.IsNaN(comHeight) ? lp.y : yW + comHeight;
+                float wz = zR + (evo ? EvoCom : comFrac > 0f ? comFrac : 0.55f) * (zF - zR), wy = float.IsNaN(comHeight) ? lp.y : yW + comHeight;
                 if (Mathf.Abs(lp.z - wz) > 0.005f || Mathf.Abs(lp.y - wy) > 0.005f) { com.position = car.transform.TransformPoint(new Vector3(lp.x, wy, wz)); n++; }
             }
             foreach (PlayMakerFSM f in car.GetComponents<PlayMakerFSM>())
                 if (f.FsmName == "SteerLimit")
                 {
                     FsmFloat mx = f.FsmVariables.GetFsmFloat("MaxAngle");
-                    if (mx != null && !Mathf.Approximately(mx.Value, SteerDeg)) { mx.Value = SteerDeg; n++; }
+                    if (mx != null && !Mathf.Approximately(mx.Value, steer)) { mx.Value = steer; n++; }
                 }
-            if (first) Log.Info("vaz : Rivett rallye : " + n + " valeurs posees, " + (dt != null ? dt.maxPower.ToString("F0") + " ch x 1,43, " + dt.maxTorque.ToString("F0") + " Nm, " + dt.transmission : "sans Drivetrain")
-                                + ", " + mass.ToString("F0") + " kg, aide d'adherence " + helper.ToString("F2") + ", braquage " + SteerDeg);
+            if (first) Log.Info("vaz : " + (evo ? "Evo III Gr. A" : "Rivett rallye") + " : " + n + " valeurs posees, " + (dt != null ? dt.maxPower.ToString("F0") + " ch x " + dt.powerMultiplier.ToString("F2") + ", " + dt.maxTorque.ToString("F0") + " Nm, " + dt.transmission : "sans Drivetrain")
+                                + ", " + wantMass.ToString("F0") + " kg, aide d'adherence " + helper.ToString("F2") + ", braquage " + steer);
             else if (n > 0 && respec++ < 5) Log.Info("vaz : " + n + " reglage(s) remis (le jeu les avait changes)");
         }
         static int respec;
@@ -277,7 +301,8 @@ namespace MWCoop
             // sensible (0,16 : il monte seul a 6 500 tr/min) : petit regulateur vers IdleRpm (900) autour du gaz de la SORBET,
             // pose dans LateUpdate (Idle) : apres les automates du jeu, qui remettent 0,104 a chaque image (selon l'ordre des
             // scripts, chez l'invite d'essai le leur passait apres le notre et le regulateur ne servait a rien).
-            if (!Mathf.Approximately(dt.powerMultiplier, PowerMul)) dt.powerMultiplier = PowerMul;
+            float pm = Evo(b) ? 1f : PowerMul;
+            if (!Mathf.Approximately(dt.powerMultiplier, pm)) dt.powerMultiplier = pm;
             if (now >= b.NextGrip) { b.NextGrip = now + 0.25f; Grip(b); }
             if (b.Axis == null || dt.rpm < 300f) return;
             if (hbField == null) { hbField = b.Axis.GetType().GetField("handbrakeInput"); brField = b.Axis.GetType().GetField("brakeInput"); }

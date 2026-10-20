@@ -288,7 +288,7 @@ namespace MWCoop
         static string RentalModel(int n)
         {
             if (Config.Testing && n == Config.GetInt("Test", "GlaceJokkis", 0)) return "Fittan";
-            foreach (KeyValuePair<int, int> kv in numbers) if (kv.Value == n && Vaz.CarOf(kv.Key) != null) return "VAZ-2108";
+            foreach (KeyValuePair<int, int> kv in numbers) if (kv.Value == n && Vaz.CarOf(kv.Key) != null) return Vaz.ModelName(kv.Key);
             try { foreach (Jokkis.Def d in Jokkis.All()) if (d.Number == n) return d.Model ?? "-"; } catch { }
             return "-";
         }

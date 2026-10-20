@@ -8,8 +8,25 @@ namespace MWCoop
     // photographiee dans une RenderTexture tant que l'onglet est affiche), sa fiche et les boutons PRENDRE, FAIRE VENIR et
     // RENDRE. Clavier (Menu.Key le passe ici) : fleches dans la grille (Haut sur la premiere rangee : retour aux onglets),
     // Entree prendre / rendre, V faire venir ; double clic sur une case : prendre.
+    // Evo III (extension privee MWCoop/evo3, JD 20/10) : choix du modele sur la fiche (VAZ-2108 / Evo III, touche M), seulement
+    // si l'extension est installee ; l'apercu montre le modele (et la livree) du joueur qui a la couleur, sinon le choix d'ici.
     public static class VazPanel
     {
+        static int pick = -1;   // modele choisi ici pour la prochaine prise ([Coop] VoitureModele)
+        static int Pick
+        {
+            get { if (pick < 0) pick = Vaz.EvoAvailable && Config.GetInt("Coop", "VoitureModele", 0) == VazCar.ModelEvo ? VazCar.ModelEvo : VazCar.ModelVaz; return Vaz.EvoAvailable ? pick : VazCar.ModelVaz; }
+            set { pick = value; Config.Save("Coop", "VoitureModele", value.ToString()); }
+        }
+        static int pvModel = -1; static string pvLivery = "";
+        // modele et livree a montrer pour la couleur n
+        static void Shown(int n, out int model, out string livery)
+        {
+            int id = Vaz.OwnerOf(n);
+            model = id >= 0 ? Vaz.ModelOf(id) : Pick;
+            livery = id >= 0 ? Vaz.LiveryOf(id) : model == VazCar.ModelEvo ? EvoLivery.MyHash : "";
+            if (model == VazCar.ModelEvo && !Vaz.EvoAvailable) { model = VazCar.ModelVaz; livery = ""; }
+        }
         static bool shown, hooked;
         static int hi = 1;
         static int pending; static float pendingAt;
@@ -30,8 +47,8 @@ namespace MWCoop
             get
             {
                 if (note != null && Time.realtimeSinceStartup < noteUntil) return note;
-                return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  glisser l'aper\u00E7u : tourner",
-                              "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  drag the preview: turn");
+                return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  " + (Vaz.EvoAvailable ? "M : mod\u00E8le  \u00B7  " : "") + "glisser l'aper\u00E7u : tourner",
+                              "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  " + (Vaz.EvoAvailable ? "M: model  \u00B7  " : "") + "drag the preview: turn");
             }
         }
 
@@ -92,7 +109,7 @@ namespace MWCoop
             if (Vaz.Mine != 0) { Note(Lang.T("Rendez d'abord la n\u00B0 ", "Give back no. ") + Vaz.Mine + Lang.T("", " first"), true); return; }
             if (!Vaz.IsFree(n)) { Note(Lang.T("La n\u00B0 ", "No. ") + n + Lang.T(" est d\u00E9j\u00E0 prise", " is already taken"), true); return; }
             pending = n; pendingAt = Time.realtimeSinceStartup;
-            if (!Vaz.Request(n)) { pending = 0; return; }
+            if (!Vaz.Request(n, Pick)) { pending = 0; return; }
             if (Session.Active && !Session.IsHost) Note(Lang.T("Demande envoy\u00E9e \u00E0 l'h\u00F4te\u2026", "Request sent to the host\u2026"), false);
         }
 
@@ -109,16 +126,23 @@ namespace MWCoop
         static void Preview()
         {
             float now = Time.realtimeSinceStartup;
-            if (pv == null || pvNumber != hi)
+            int sm; string sl;
+            Shown(hi, out sm, out sl);
+            if (pv == null || pvNumber != hi || pvModel != sm)
             {
                 DestroyPreview();
-                if (pvNumber == hi && now < pvRetryAt) return;
-                pvNumber = hi;
-                try { pv = VazCar.BuildPreview(hi, Vaz.ColorOf(hi), Studio.PreviewLayer, out pvHold); }
+                if (pvNumber == hi && pvModel == sm && now < pvRetryAt) return;
+                pvNumber = hi; pvModel = sm; pvLivery = null;
+                try { pv = VazCar.BuildPreview(hi, Vaz.ColorOf(hi), Studio.PreviewLayer, out pvHold, VazCar.ModelOf(sm)); }
                 catch (System.Exception e) { Log.Warn("vaz (apercu) : n " + hi + " : " + e.Message); pv = null; }
                 if (pv == null) { pvRetryAt = now + 2f; return; }
                 Measure();
                 pvYaw = 35f; pvT = now;
+            }
+            if (pvHold != null && sm == VazCar.ModelEvo && pvLivery != sl)
+            {
+                Texture2D lt = sl.Length > 0 ? EvoLivery.Get(sl) : null;
+                if (sl.Length == 0 || lt != null) { VazCar.SetLivery(pvHold, lt, sl.Length > 0 ? sl : null); pvLivery = sl; }
             }
             float dt = Mathf.Clamp(now - pvT, 0f, 0.1f);
             pvT = now;
@@ -162,6 +186,7 @@ namespace MWCoop
                 case KeyCode.LeftArrow: if (hi > 1) hi--; return true;
                 case KeyCode.RightArrow: if (hi < Vaz.Count) hi++; return true;
                 case KeyCode.V: CallMine(); return true;
+                case KeyCode.M: if (!Vaz.EvoAvailable) return false; Pick = Pick == VazCar.ModelEvo ? VazCar.ModelVaz : VazCar.ModelEvo; return true;
                 case KeyCode.Return:
                 case KeyCode.KeypadEnter: Act(hi); return true;
             }
@@ -252,10 +277,27 @@ namespace MWCoop
             float cy = r.y;
             bool mine;
             string owner = OwnerName(hi, out mine);
-            Style.Title(new Rect(r.x, cy, r.width, P(26)), "VAZ-2108  n\u00B0 " + hi, Kit.Ink, TextAnchor.MiddleLeft, 17);
+            int sm; string sl;
+            Shown(hi, out sm, out sl);
+            bool evo = sm == VazCar.ModelEvo;
+            Style.Title(new Rect(r.x, cy, r.width, P(26)), VazCar.ModelOf(sm).Name + "  n\u00B0 " + hi, Kit.Ink, TextAnchor.MiddleLeft, 17);
             cy += P(26);
-            Style.Text(new Rect(r.x, cy, r.width, P(18)), Vaz.ColorName(hi) + Lang.T("  \u00B7  r\u00E9glages de la Rivett rallye", "  \u00B7  set up like the rally Rivett"), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+            Style.Text(new Rect(r.x, cy, r.width, P(18)), Vaz.ColorName(hi) + (evo ? Lang.T("  \u00B7  Gr. A, 370 ch, 4 roues motrices", "  \u00B7  Gr. A, 370 hp, four-wheel drive")
+                                                                                   : Lang.T("  \u00B7  r\u00E9glages de la Rivett rallye", "  \u00B7  set up like the rally Rivett")), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
             cy += P(24);
+            if (Vaz.EvoAvailable && owner == null)
+            {
+                // choix du modele (extension Evo III installee) : deux boutons
+                float hw = (r.width - P(8)) / 2;
+                if (Kit.Button(new Rect(r.x, cy, hw, P(28)), "VAZ-2108", Pick == VazCar.ModelVaz ? 1 : 0, false)) Pick = VazCar.ModelVaz;
+                if (Kit.Button(new Rect(r.x + hw + P(8), cy, hw, P(28)), "Evo III", Pick == VazCar.ModelEvo ? 1 : 0, false)) Pick = VazCar.ModelEvo;
+                cy += P(34);
+            }
+            if (evo)
+            {
+                Style.Text(new Rect(r.x, cy, r.width, P(16)), sl.Length > 0 ? Lang.T("Livr\u00E9e perso", "Custom livery") : Lang.T("Couleur + num\u00E9ro (livr\u00E9e : lanceur, Voitures)", "Colour + number (livery: launcher, Cars)"), 11, TextAnchor.MiddleLeft, Kit.Faint, false);
+                cy += P(18);
+            }
             string st = mine ? Lang.T("La v\u00F4tre", "Yours") : owner == null ? Lang.T("Libre", "Free") : Lang.T("Prise par ", "Taken by ") + owner;
             Kit.Pill(r.x, cy + P(9), st, mine ? Kit.Ice : owner == null ? Kit.Green : Kit.Amber);
             cy += P(26);
@@ -273,7 +315,7 @@ namespace MWCoop
             if (line != null) Style.Text(new Rect(r.x, cy, r.width, P(32)), line, 12, TextAnchor.UpperLeft, note != null && noteBad ? Kit.Amber : note != null ? Kit.Green : Kit.Muted, false, true);
             cy += P(34);
             if (cy + P(16) > r.yMax) return;
-            Style.Text(new Rect(r.x, r.yMax - P(16), r.width, P(14)), Lang.T("Mod\u00E8le : matthew0451, CC BY-NC 4.0", "Model: matthew0451, CC BY-NC 4.0"), 10, TextAnchor.LowerLeft, Kit.Faint, false);
+            if (!evo) Style.Text(new Rect(r.x, r.yMax - P(16), r.width, P(14)), Lang.T("Mod\u00E8le : matthew0451, CC BY-NC 4.0", "Model: matthew0451, CC BY-NC 4.0"), 10, TextAnchor.LowerLeft, Kit.Faint, false);
         }
 
         // ---------------------------------------------------------------- autotest "vazpanel"

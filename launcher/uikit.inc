@@ -63,6 +63,7 @@ enum {
     UI_CAR_VINOPT = 431,          // + k : option k de la plaque (clic : valeur suivante ; 431-442)
     UI_CAR_PAINT = 445, UI_CAR_PAINTIMP, UI_CAR_PAINTTPL, UI_CAR_PAINTUSE, UI_CAR_PAINTDEL,   // VOITURE : peinture perso (volet, importer, gabarit, utiliser, retirer)
     UI_CAR_DENTS = 450,           // VOITURE : retirer les bosses (meshsave.txt de la sauvegarde mis de cote)
+    UI_CAR_EVO = 451, UI_CAR_EVOIMP, UI_CAR_EVOTPL, UI_CAR_EVOUSE, UI_CAR_EVODEL,   // VOITURE : livree de l'Evo III (extension privee ; 451-455)
     UI_CRED_TAB = 456,            // + k (0 modeles 3D, 1 images, 2 remerciements, 3 supporters) : onglets des CREDITS (456-459)
     UI_TOOL_GET = 460, UI_TOOL_RUN, UI_TOOL_DIR,   // OUTILS (outils.inc) : editeur de carte, telecharger / mettre a jour, lancer, dossier
     UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)

@@ -116,7 +116,7 @@ namespace MWCoop
             vazMine = true;
             VazStore();
             nextCar = 0f;
-            Hud.Toast(Lang.T("Rallye : inscrit avec ta VAZ (départs et parc fermé avec elle)", "Rally: registered with your VAZ (starts and parc ferme with it)"));
+            Hud.Toast(Lang.T("Rallye : inscrit avec ta voiture (départs et parc fermé avec elle)", "Rally: registered with your car (starts and parc ferme with it)"));
             Log.Info("rallye : inscrit avec ma VAZ");
         }
 
@@ -139,7 +139,7 @@ namespace MWCoop
                 if (Time.realtimeSinceStartup >= nextTentToast)
                 {
                     nextTentToast = Time.realtimeSinceStartup + 10f;
-                    Hud.Toast(Lang.T("Ta VAZ est à ", "Your VAZ is ") + d.ToString("F0") + Lang.T(" m de la tente de Fleetari : amène-la à côté (moins de 40 m) pour courir avec elle",
+                    Hud.Toast(Lang.T("Ta voiture est à ", "Your car is ") + d.ToString("F0") + Lang.T(" m de la tente de Fleetari : amène-la à côté (moins de 40 m) pour courir avec elle",
                                                                                            " m from Fleetari's tent: bring it next to it (under 40 m) to race with it"));
                 }
                 return false;

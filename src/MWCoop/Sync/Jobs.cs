@@ -2007,6 +2007,8 @@ namespace MWCoop
                 case "@taxicarte": MapPanel.OnTaxi(who, r); break;
                 case "@don": { int to = r.U8(); Wallet.OnGift(who, to, r.I32()); break; }
                 case "@visage?": CustomFace.OnAsk(who, r.Str()); break;
+                case "@livree?": EvoLivery.OnAsk(who, r.Str()); break;
+                case "@livreep": { string h = r.Str(); int i = r.U16(), n = r.U16(); EvoLivery.OnPart(who, h, i, n, r.Bytes()); break; }
                 case "@triches": if (!Session.IsHost) Cheats.OnAllowed(r.Bool()); break;
                 case "@pvp": if (!Session.IsHost) Pvp.OnAllowed(r.Bool()); break;
                 case "@poste": Radio.OnBeat(who, r.Str()); break;

@@ -735,6 +735,157 @@ static void DrawPaintView(Graphics &g, RectF card)
     for (const wchar_t *s : steps) { Para(g, s, RectF(card.X + 24, sy, card.Width - 48, 40), 13, kInk); sy += 42; }
 }
 
+// ---- livree de l'Evo III (JD, 20/10) : EXTENSION PRIVEE (<jeu>\MWCoop\evo3, jamais dans les versions publiees) ; le volet
+// n'apparait que si elle est installee. Sans livree, l'Evo est comme la VAZ (couleur du joueur + numero sur les portieres) ;
+// avec, l'image du joueur, peinte sur le gabarit de l'extension (evo3\gabarit-livree.png : numero hachure en rouge, a
+// laisser libre), importee en %LOCALAPPDATA%\MWCoop\evo3-livree.jpg (2048 x 2048, JPEG de 2,2 Mo au plus : le mod
+// l'envoie aux autres joueurs par morceaux, EvoLivery) ; [Coop] EvoLivree = perso.
+static bool g_evoView;
+static RectF g_evoBtnRect;
+static Bitmap *g_evoThumb;
+static std::wstring g_evoThumbOf;
+static std::wstring EvoDir() { return g_modRoot + L"MWCoop\\evo3\\"; }
+static bool EvoHas() { return !g_gameDir.empty() && FileExists(EvoDir() + L"carrosserie.p205"); }
+static std::wstring EvoFile() { return LocalDir() + L"evo3-livree.jpg"; }
+static bool EvoOn()
+{
+    if (g_gameDir.empty()) return false;
+    char v[16] = "";
+    GetPrivateProfileStringA("Coop", "EvoLivree", "", v, sizeof(v), ModIniA().c_str());
+    return strcmp(v, "perso") == 0 && FileExists(EvoFile());
+}
+static void EvoUse(bool on)
+{
+    if (g_gameDir.empty()) return;
+    EnsureModDir();
+    WritePrivateProfileStringA("Coop", "EvoLivree", on ? "perso" : "", ModIniA().c_str());
+    g_evoThumbOf.clear();
+}
+// Miniature (512 x 512) : la livree du joueur, sinon le gabarit de l'extension.
+static Bitmap *EvoThumb()
+{
+    std::wstring f = EvoOn() ? EvoFile() : EvoDir() + L"gabarit-livree.png";
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    std::wstring key = f;
+    if (GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &a)) key += L"|" + std::to_wstring(a.ftLastWriteTime.dwLowDateTime);
+    if (key == g_evoThumbOf) return g_evoThumb;
+    g_evoThumbOf = key;
+    delete g_evoThumb; g_evoThumb = NULL;
+    if (Bitmap *b = LoadAnyImage(f, NULL)) {
+        g_evoThumb = new Bitmap(512, 512, PixelFormat32bppPARGB);
+        Graphics tg(g_evoThumb);
+        tg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        tg.DrawImage(b, RectF(0, 0, 512, 512));
+        delete b;
+    }
+    return g_evoThumb;
+}
+static void EvoImport()
+{
+    wchar_t file[MAX_PATH] = L"";
+    OPENFILENAMEW of = { sizeof(of) };
+    of.hwndOwner = g_wnd;
+    of.lpstrFilter = L"Images\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp;*.heic;*.heif;*.avif;*.jfif\0*.*\0*.*\0";
+    of.lpstrFile = file;
+    of.nMaxFile = MAX_PATH;
+    std::wstring init = LocalDir();
+    of.lpstrInitialDir = init.c_str();
+    of.lpstrTitle = T(L"Choisir la livrée de l'Evo III (peinte sur le gabarit)", L"Choose the Evo III livery (painted on the template)");
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    if (!GetOpenFileNameW(&of)) return;
+    std::wstring why;
+    Bitmap *src = LoadAnyImage(file, &why);
+    bool ok = false;
+    if (src) {
+        const int W = 2048, H = 2048;
+        Bitmap *base = LoadAnyImage(EvoDir() + L"peinture.png", NULL);   // (parties transparentes : la voiture sans livree)
+        Bitmap dst(W, H, PixelFormat24bppRGB);
+        {
+            Graphics dg(&dst);
+            dg.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+            dg.SetPixelOffsetMode(PixelOffsetModeHalf);
+            if (base) dg.DrawImage(base, RectF(0, 0, (REAL)W, (REAL)H));
+            else dg.Clear(Color(255, 236, 236, 236));
+            dg.DrawImage(src, RectF(0, 0, (REAL)W, (REAL)H));
+        }
+        delete base;
+        CLSID jpg;
+        CreateDirectoryW(LocalDir().c_str(), NULL);
+        ok = EncoderClsid(L"image/jpeg", &jpg);
+        // qualite 90, puis moins si le fichier depasse ce que le mod accepte d'envoyer (2,2 Mo)
+        for (ULONG q : { 90UL, 80UL, 70UL, 55UL }) {
+            if (!ok) break;
+            EncoderParameters ep; ULONG qq = q;
+            ep.Count = 1; ep.Parameter[0].Guid = EncoderQuality; ep.Parameter[0].Type = EncoderParameterValueTypeLong; ep.Parameter[0].NumberOfValues = 1; ep.Parameter[0].Value = &qq;
+            ok = dst.Save(EvoFile().c_str(), &jpg, &ep) == Ok;
+            WIN32_FILE_ATTRIBUTE_DATA a;
+            if (ok && GetFileAttributesExW(EvoFile().c_str(), GetFileExInfoStandard, &a) && a.nFileSizeLow < 2100000 && a.nFileSizeHigh == 0) { LaunchLog("livree evo importee : qualite %lu, %lu octets", q, a.nFileSizeLow); break; }
+        }
+        if (!ok) why = T(L"enregistrement impossible", L"can't save it");
+    }
+    delete src;
+    if (ok) EvoUse(true);
+    else {
+        LaunchLog("livree evo : echec (%ls)", why.c_str());
+        std::wstring msg = std::wstring(T(L"Cette image n'a pas pu être lue : ", L"This image could not be read: ")) + why + L".";
+        MessageBoxW(g_wnd, msg.c_str(), L"MWCoop", MB_ICONWARNING | MB_OK);
+    }
+}
+// Gabarit : copie de evo3\gabarit-livree.png dans %LOCALAPPDATA%\MWCoop (on peint sur la copie), montree dans l'Explorateur.
+static void EvoTemplate()
+{
+    std::wstring t = LocalDir() + L"gabarit-evo3.png";
+    CreateDirectoryW(LocalDir().c_str(), NULL);
+    if (!CopyFileW((EvoDir() + L"gabarit-livree.png").c_str(), t.c_str(), FALSE) && !FileExists(t)) {
+        MessageBoxW(g_wnd, T(L"MWCoop\\evo3\\gabarit-livree.png est introuvable : réinstalle l'extension Evo III.", L"MWCoop\\evo3\\gabarit-livree.png was not found: reinstall the Evo III extension."), L"MWCoop", MB_ICONWARNING | MB_OK);
+        return;
+    }
+    std::wstring a = L"/select,\"" + t + L"\"";
+    ShellExecuteW(g_wnd, L"open", L"explorer.exe", a.c_str(), NULL, SW_SHOWNORMAL);
+}
+static void EvoRemove()
+{
+    DeleteFileW(EvoFile().c_str());
+    EvoUse(false);
+    LaunchLog("livree evo retiree");
+}
+static void DrawEvoView(Graphics &g, RectF card)
+{
+    GraphicsPath bp; RoundRect(bp, card, 20);
+    SolidBrush bb(TH(card)); g.FillPath(&bb, &bp);
+    Title(g, T(L"Livrée de l'Evo III", L"Evo III livery"), RectF(card.X + 24, card.Y + 20, 300, 30), 22, kInk);
+    Para(g, T(L"Sans livrée, ton Evo prend ta couleur et ton numéro, comme la VAZ. Avec, tous les joueurs voient la tienne.",
+              L"Without a livery, your Evo takes your colour and number, like the VAZ. With one, every player sees yours."),
+         RectF(card.X + 24, card.Y + 56, card.Width - 48, 40), 12.5f, kGrey);
+    bool has = FileExists(EvoFile()), on = EvoOn();
+    RectF th(card.X + 24, card.Y + 104, 300, 300);
+    GraphicsPath tp; RoundRect(tp, th, 14);
+    SolidBrush tb(TH(field)); g.FillPath(&tb, &tp);
+    if (Bitmap *b = EvoThumb()) {
+        g.SetClip(&tp);
+        g.DrawImage(b, th);
+        g.ResetClip();
+    } else Icon(g, IC_IMAGE, th.X + th.Width / 2, th.Y + th.Height / 2, 48, WithA(kGrey, 0.6f), 1.4f);
+    Pen tpen(on ? kAcc : TH(fieldBorder), on ? 2.0f : 1.0f); g.DrawPath(&tpen, &tp);
+    Text(g, on ? T(L"Ta livrée", L"Your livery") : T(L"Gabarit (couleur + numéro)", L"Template (colour + number)"),
+         RectF(th.X, th.Y + th.Height + 6, th.Width, 22), 12.5f, FontStyleBold, on ? kInk : kGrey, StringAlignmentCenter);
+    float bx = th.X + th.Width + 24, bw = card.X + card.Width - 24 - bx, by = th.Y;
+    UiButton(g, RectF(bx, by, bw, 44), T(L"Gabarit", L"Template"), UI_CAR_EVOTPL, false, IC_FOLDER); by += 56;
+    UiButton(g, RectF(bx, by, bw, 44), T(L"Mon image…", L"My image…"), UI_CAR_EVOIMP, true, IC_IMAGE); by += 56;
+    if (has) {
+        UiButton(g, RectF(bx, by, bw, 44), on ? T(L"Utilisée : oui", L"In use: yes") : T(L"Utilisée : non", L"In use: no"), UI_CAR_EVOUSE, false, on ? IC_CHECK : -1); by += 56;
+        UiButton(g, RectF(bx, by, bw, 44), T(L"Retirer", L"Remove"), UI_CAR_EVODEL, false, IC_TRASH); by += 56;
+    }
+    float sy = th.Y + th.Height + 44;
+    const wchar_t *steps[] = {
+        T(L"1. Gabarit : l'Evo dépliée à plat (2048 x 2048). La zone hachurée en rouge reçoit ton numéro : ne dessine rien d'important dessous.",
+          L"1. Template: the Evo laid flat (2048 x 2048). The red hatched area gets your number: draw nothing important under it."),
+        T(L"2. Peins par-dessus en gardant la taille, puis « Mon image… ».", L"2. Paint over it keeping the size, then \"My image…\"."),
+        T(L"3. En jeu, prends une Evo III au F10 (onglet Voitures) : tout le monde voit ta livrée.", L"3. In game, take an Evo III with F10 (Cars tab): everyone sees your livery."),
+    };
+    for (const wchar_t *s : steps) { Para(g, s, RectF(card.X + 24, sy, card.Width - 48, 40), 13, kInk); sy += 42; }
+}
+
 static void CarSetColor(int rgb)
 {
     g_carColor = rgb;
@@ -780,6 +931,7 @@ static void DrawCar(Graphics &g)
     if (CarMsc()) g_vinView = false;   // (pas de plaque VIN sur la SATSUMA)
     if (g_vinView) DrawVinOptions(g, kCarCard);
     else if (g_paintView) DrawPaintView(g, kCarCard);
+    else if (g_evoView && EvoHas()) DrawEvoView(g, kCarCard);
     else if (g_car.state != 1) {
         const wchar_t *msg = CarMsc() ? (g_car.state == -2 ? T(L"Aper\u00E7u illisible (MWCoop\\cache\\satsuma.mesh) : lance une partie de My Summer Car pour le refaire.", L"Preview unreadable (MWCoop\\cache\\satsuma.mesh): start a My Summer Car game to rebuild it.")
                                                            : T(L"Aper\u00E7u de la SATSUMA apr\u00E8s ta premi\u00E8re partie de My Summer Car avec MWCoop.", L"SATSUMA preview after your first My Summer Car game with MWCoop."))
@@ -824,7 +976,8 @@ static void DrawCar(Graphics &g)
         g.DrawImage(&bm, view);
         g.SetInterpolationMode(im);
     }
-    if (!g_vinView && !g_paintView) {
+    if (g_evoView && !EvoHas()) g_evoView = false;
+    if (!g_vinView && !g_paintView && !g_evoView) {
         Title(g, CarMsc() ? T(L"Ta SATSUMA", L"Your SATSUMA") : T(L"Ta CORRIS", L"Your CORRIS"), RectF(kCarCard.X + 24, kCarCard.Y + kCarCard.Height - 100, 400, 32), 22, kInk);
         Text(g, CarMsc() ? T(L"Couleur pour une nouvelle partie ; l'h\u00F4te la donne \u00E0 ses invit\u00E9s.", L"Color for a new game; the host gives it to their guests.")
                          : T(L"Couleur et finition pour une nouvelle partie ; l'h\u00F4te les donne \u00E0 ses invit\u00E9s.", L"Color and trim for a new game; the host gives them to their guests."),
@@ -834,8 +987,13 @@ static void DrawCar(Graphics &g)
     g_paintBtnRect = RectF(kCarCard.X + kCarCard.Width - 24 - 184, kCarCard.Y + 18, 184, 34);
     UiButton(g, g_paintBtnRect, g_paintView ? T(L"Voir la voiture", L"Show the car") : T(L"Peinture perso…", L"Custom paint…"), UI_CAR_PAINT, g_paintView, g_paintView ? -1 : IC_IMAGE, true, 10);
     g_dentBtnRect = RectF(g_paintBtnRect.X - 12 - 196, g_paintBtnRect.Y, 196, 34);
-    if (!g_vinView && !g_paintView) UiButton(g, g_dentBtnRect, T(L"Retirer les bosses…", L"Remove dents…"), UI_CAR_DENTS, false, IC_UNDO, true, 10);
+    if (!g_vinView && !g_paintView && !g_evoView) UiButton(g, g_dentBtnRect, T(L"Retirer les bosses…", L"Remove dents…"), UI_CAR_DENTS, false, IC_UNDO, true, 10);
     else g_dentBtnRect = RectF(0, 0, 0, 0);
+    // livree de l'Evo III (extension installee) : sous les deux boutons du haut
+    if (EvoHas() && !CarMsc() && !g_vinView && !g_paintView) {
+        g_evoBtnRect = RectF(kCarCard.X + kCarCard.Width - 24 - 184, kCarCard.Y + 60, 184, 34);
+        UiButton(g, g_evoBtnRect, g_evoView ? T(L"Voir la voiture", L"Show the car") : T(L"Livrée Evo III…", L"Evo III livery…"), UI_CAR_EVO, g_evoView, g_evoView ? -1 : IC_IMAGE, true, 10);
+    } else g_evoBtnRect = RectF(0, 0, 0, 0);
 
     // Couleur : pastilles, nom, autre couleur
     RectF pn = kCarPanel;
@@ -905,7 +1063,7 @@ static bool CarMouseDown(float x, float y)
     if (PersoPageMouseDown(x, y)) return true;   // (onglets de la page)
     int s = CarSwatchAt(x, y);
     if (s >= 0) { CarSetColor(CarSwatchColor(s)); return true; }
-    if (g_car.state == 1 && !g_vinView && !g_paintView && kCarView.Contains(x, y) && !g_paintBtnRect.Contains(x, y) && !g_dentBtnRect.Contains(x, y)) {
+    if (g_car.state == 1 && !g_vinView && !g_paintView && !g_evoView && kCarView.Contains(x, y) && !g_paintBtnRect.Contains(x, y) && !g_dentBtnRect.Contains(x, y) && !g_evoBtnRect.Contains(x, y)) {
         g_carDrag = true;
         g_carDragX = x; g_carDragY = y;
         SetCapture(g_wnd);
