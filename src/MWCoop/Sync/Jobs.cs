@@ -1986,6 +1986,7 @@ namespace MWCoop
                 case "@carbu": FuelPrices.OnMessage(who, r); break;
                 case "@tel": PhoneMsc.OnMessage(who, r); break;   // (MSC : appel decroche par un autre)
                 case "@capot": PackHoods.OnMessage(who, r); break;   // (capot d'une voiture du pack rallye de JD)
+                case "@fils": WiringMsc.OnMessage(who, r); break;   // (MSC : borne electrique de la SATSUMA branchee)
                 case "@pompe": PumpsMsc.OnMessage(who, r); break;   // (MSC : pistolet et afficheurs d'une pompe)
                 case "@tract": TractsMsc.OnMessage(who, r); break;   // (MSC : boite aux lettres servie, tracts de Teimo)
                 case "@fleetmsc": FleetariMsc.OnPurchase(who, r); break;   // (MSC : achat chez Fleetari)

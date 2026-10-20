@@ -547,6 +547,39 @@ namespace MWCoop
                 if (t > 49f && mscStep == 3) { mscStep = 4; Log.Info("autotest : mscbateau, " + Seats.TestLeave() + " ; " + Seats.PlaceDans("BOAT")); }
                 return;
             }
+            // [Test] Autotest=mscfils (Reinmansed, 20/10) : a deux, l'acteur ([Test] TestActeur=invite, sinon l'hote) branche la borne
+            // [Test] TestBorne (GroundBattery/BatteryMinusStarter) a 40 s comme un clic (borne allumee, 'Assemble' -> « Finish assembly ») ;
+            // chacun note toutes les 5 s l'entree Database/DatabaseWiring/WiringGround1 (Installed) et le fil wiring_ground.
+            if (mode == "mscfils")
+            {
+                bool actor = Config.Get("Test", "TestActeur", "hote") == "invite" ? !Net.Session.IsHost : Net.Session.IsHost;
+                string borne = Config.Get("Test", "TestBorne", "GroundBattery/BatteryMinusStarter");
+                GameObject sat = null;
+                foreach (Rigidbody rb in Object.FindObjectsOfType<Rigidbody>()) if (rb.transform.parent == null && rb.name.StartsWith("SATSUMA")) { sat = rb.gameObject; break; }
+                if (sat == null) return;
+                if (actor && t > 40f && mscStep == 0)
+                {
+                    mscStep = 1;
+                    Transform tr = sat.transform.Find("Wiring/Triggers/" + borne);
+                    PlayMakerFSM f = tr != null ? Game.FsmOn(tr.gameObject, "Assemble") : null;
+                    if (f == null) { Log.Info("autotest : mscfils, borne " + borne + " introuvable"); return; }
+                    tr.gameObject.SetActive(true);
+                    Game.SetState(f, "Finish assembly");
+                    Log.Info("autotest : mscfils, borne " + borne + " branchee ici -> [" + f.ActiveStateName + "]");
+                }
+                if (t > 30f && t < 120f && t >= mscLog)
+                {
+                    mscLog = t + 5f;
+                    GameObject db = Game.FindAny("Database/DatabaseWiring/WiringGround1");
+                    PlayMakerFSM d = db != null ? Game.FsmOn(db, "Data") : null;
+                    FsmBool inst = d != null ? d.FsmVariables.FindFsmBool("Installed") : null;
+                    Transform wire = sat.transform.Find("Wiring/Parts/wiring_ground(xxxxx)");
+                    Transform tr = sat.transform.Find("Wiring/Triggers/" + borne);
+                    PlayMakerFSM f = tr != null ? Game.FsmOn(tr.gameObject, "Assemble") : null;
+                    Log.Info("autotest : mscfils, WiringGround1 Installed " + (inst != null ? inst.Value.ToString() : "?") + ", fil " + (wire != null ? (wire.gameObject.activeSelf ? "allume" : "eteint") : "?") + ", borne " + (tr != null ? (tr.gameObject.activeSelf ? "allumee" : "eteinte") : "?") + " [" + (f != null ? f.ActiveStateName : "?") + "]");
+                }
+                return;
+            }
             if (mode == "mscmort")
             {
                 // [Test] Autotest=mscmort (19/10, JD : apres la mort sur la Jonnez, sang a l'ecran et joueur reste accroupi) : au

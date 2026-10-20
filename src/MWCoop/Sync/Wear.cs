@@ -179,6 +179,18 @@ namespace MWCoop
         static bool SpawnPoint(int kind, int k, out Vector3 at)
         {
             at = Vector3.zero;
+            // Casques et tasses : a cote de l'original du jeu (bureau de l'appartement, cuisine), pas par terre au point de depart
+            // (Menor, 20/10 : « les doubles devraient apparaitre sur le bureau comme celui du jeu »). 22 cm plus loin par paire,
+            // reposes sur ce qu'il y a dessous (le bureau).
+            GameObject orig = kind >= 2 && kind < items.Count ? items[kind].Go : null;
+            if (orig != null)
+            {
+                Transform o = orig.transform;
+                at = o.position + Vector3.Cross(Vector3.up, o.forward).normalized * (0.22f * (k - 1)) + Vector3.up * 0.05f;
+                RaycastHit under;
+                if (Physics.Raycast(at + Vector3.up * 0.3f, Vector3.down, out under, 1.2f, ~(1 << 2)) && !under.collider.isTrigger && under.collider.transform.root != o.root) at = under.point + Vector3.up * 0.06f;
+                return true;
+            }
             GameObject home = Game.FindAny("HOMENEW");
             if (home == null) return false;
             at = home.transform.position + new Vector3(0.45f + kind * 0.3f, 0.2f, 1.7f + (k - 2) * 0.45f);   // (racine (-1285,6 ; 1,5 ; 1078,8))
