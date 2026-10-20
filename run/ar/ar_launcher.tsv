@@ -1345,7 +1345,7 @@ The lobby at the address entered above.	الردهة على العنوان ال�
 Up to 8 players	حتى 8 لاعبين
 A friend's lobby	ردهة صديق
 PLAY SOLO	العب وحدك
-Without Coop	بدون Coop
+The normal game, without MWCoop.	اللعبة العادية، بدون MWCoop.
 See all	عرض الكل
 Loading…	جارٍ التحميل…
 Notes unavailable (offline).	الملاحظات غير متاحة (دون اتصال).
@@ -1553,6 +1553,35 @@ Traffic dust	غبار حركة المرور
 Traffic skid marks	آثار انزلاق حركة المرور
 Player names	أسماء اللاعبين
 A few side things of the game don't follow yet (slot machine, rally prizes...). They come over the next versions.	بعض الأشياء الجانبية في اللعبة لا تتزامن بعد (آلة القمار، جوائز الرالي...). ستأتي في الإصدارات القادمة.
+Map editor %s installed: click Launch	تم تثبيت محرّر الخرائط %s: انقر تشغيل
+Could not download the map editor (%s)	تعذّر تنزيل محرّر الخرائط (%s)
+Close the map editor before updating it	أغلق محرّر الخرائط قبل تحديثه
+Could not start the map editor (error %lu)	تعذّر تشغيل محرّر الخرائط (الخطأ %lu)
+Map editor	محرّر الخرائط
+A separate program to edit the map of My Summer Car or My Winter Car. This first version prepares the game's real map and lets you fly around it freely in 3D.	برنامج منفصل لتعديل خريطة My Summer Car أو My Winter Car. يحضّر هذا الإصدار الأول خريطة اللعبة الحقيقية ويتيح لك التحليق فوقها بحرية في 3D.
+The chosen game's map, prepared once (the game runs in the background)	خريطة اللعبة المختارة، تُحضَّر مرة واحدة (تعمل اللعبة في الخلفية)
+Free 3D tour: fly, layers, objects to click	جولة حرة في 3D: طيران، طبقات، أغراض للنقر
+Coming: roads, 3D models, maps shared in co-op	قريباً: طرق، نماذج 3D، خرائط مشتركة في اللعب الجماعي
+Downloading…	جارٍ التنزيل…
+Version %s installed · %s available	الإصدار %s مثبّت · %s متاح
+Installed · version %s	مثبّت · الإصدار %s
+Not installed yet · version %s, under 1 MB	غير مثبّت بعد · الإصدار %s، أقل من 1 م.ب
+Offline: GitHub unreachable	غير متصل: تعذّر الوصول إلى GitHub
+Looking for the latest version…	جارٍ البحث عن أحدث إصدار…
+Not published yet: it comes with the next version	لم يُنشر بعد: سيأتي مع الإصدار القادم
+Download	تنزيل
+Started!	بدأ التشغيل!
+Launch	تشغيل
+Download the editor: it installs apart, the game is not changed.	نزّل المحرّر: يُثبَّت منفصلاً، ولا تتغير اللعبة.
+Launch it: it opens the game chosen here (My Summer Car or My Winter Car), with its folder.	شغّله: يفتح اللعبة المختارة هنا (My Summer Car أو My Winter Car) مع مجلدها.
+Prepare the map once: the game runs for a minute in the background, with no window, in a separate profile. Your saves are not touched.	حضّر الخريطة مرة واحدة: تعمل اللعبة دقيقة في الخلفية، بلا نافذة، في ملف تعريف منفصل. حفظك لا يُمَس.
+Windows 10 or 11: nothing else to install (it uses Microsoft Edge WebView2, already there).	Windows 10 أو 11: لا شيء آخر للتثبيت (يستخدم Microsoft Edge WebView2 الموجود أصلاً).
+Game files stay on your PC: the prepared map goes to your Documents (My Seasons Car).	تبقى ملفات اللعبة على جهازك: تُحفظ الخريطة المحضّرة في مستنداتك (My Seasons Car).
+After a game update, prepare the map again in the editor.	بعد تحديث اللعبة، أعد تحضير الخريطة في المحرّر.
+More tools will come to this page.	ستصل أدوات أخرى إلى هذه الصفحة.
+Tools	الأدوات
+Separate programs to go further, downloaded in one click.	برامج منفصلة للمزيد، تُنزَّل بنقرة واحدة.
+The wrench at the top right, left of the star: separate programs. The first one, the map editor: one click to download it, another to launch it, on My Summer Car or My Winter Car.	المفتاح في أعلى اليمين، يسار النجمة: برامج منفصلة. أولها محرّر الخرائط: نقرة لتنزيله وأخرى لتشغيله، على My Summer Car أو My Winter Car.
 Proximity voice	الصوت حسب القرب
 Voice range	مدى الصوت
 Voice volume	مستوى الصوت
@@ -2404,3 +2433,19 @@ Proton, launch option, limits	Proton، خيار التشغيل، القيود
 Ice race: your entry (with your VAZ and its number, the Rivett, or not registered), when to come to the track, the registered drivers and live timing. To race with your VAZ: on Friday 9 am - 3 pm, park it under 10 m from the inspection tent and fill in the form (150 mk); it takes an AI car's place. At the track, the timing also shows at the top right.	سباق الجليد: تسجيلك (بسيارتك VAZ ورقمها، أو بـ Rivett، أو غير مسجّل)، ومتى تأتي إلى الحلبة، والسائقون المسجّلون والتوقيت المباشر. للسباق بسيارتك VAZ: يوم الجمعة من 9 صباحًا إلى 3 مساءً، أوقفها على بعد أقل من 10 أمتار من خيمة الفحص واملأ الاستمارة (150 mk)؛ فتأخذ مكان سيارة ذكاء اصطناعي. عند الحلبة يظهر التوقيت أيضًا في أعلى اليمين.
 Rally: your entry (with your VAZ or the Rivett, your class), your SS1 / SS2 / SS3 start times, the drivers and your class standings. To race with your VAZ: on Saturday 8 am - 12 pm, park it under 40 m from Fleetari's tent and fill in his form (500 mk Junior, 1000 mk Amateur); stage starts and parc ferme follow it. Outside race weekends, both tabs tell in how many days the event starts.	الرالي: تسجيلك (بسيارتك VAZ أو بـ Rivett، وفئتك)، وأوقات انطلاقك في SS1 / SS2 / SS3، والسائقون وترتيب فئتك. للسباق بسيارتك VAZ: يوم السبت من 8 صباحًا إلى 12 ظهرًا، أوقفها على بعد أقل من 40 مترًا من خيمة Fleetari واملأ استمارته (500 mk للمبتدئين، 1000 mk للهواة)؛ ويتبعها انطلاق المراحل وال parc fermé. خارج عطلات السباق، يُظهر التبويبان بعد كم يومًا يبدأ الحدث.
 Map M: your objectives in gold, yours only (septic tank to pump out then get paid, firewood to deliver, uncle, taxi, flyer mailboxes), updated at every step, with the \"Your objectives\" list. A job belongs to whoever took it on the phone; a taxi ride, to its driver. During the rally, the route of the stages still to run and your start time; during the ice race, the track and your grid spot when your heat is near.	الخريطة M: أهدافك باللون الذهبي، لك وحدك (حفرة الصرف لتفريغها ثم قبض الأجر، الحطب لتوصيله، العم، التاكسي، صناديق البريد للمنشورات)، تتحدّث عند كل خطوة، مع قائمة «أهدافك». العمل لمن أخذه عبر الهاتف؛ ورحلة التاكسي لسائقها. أثناء الرالي: مسار المراحل المتبقية ووقت انطلاقك؛ وأثناء سباق الجليد: الحلبة ومكانك على خط الانطلاق عندما يقترب سباقك.
+A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to edit it. This first version (BETA) prepares it and lets you tour it freely in 3D; roads, 3D models and maps shared in co-op come next.	برنامج منفصل في الأدوات (المفتاح في أعلى اليمين): يفتح الخريطة الحقيقية لـ My Summer Car أو My Winter Car لتعديلها. يحضّرها هذا الإصدار الأول (BETA) ويتيح لك التجول فيها بحرية في 3D؛ وتأتي الطرق ونماذج 3D والخرائط المشتركة في اللعب الجماعي لاحقاً.
+Install and launch it	تثبيته وتشغيله
+In Tools, Download: under 1 MB, installed apart (the game is not changed).	في الأدوات، تنزيل: أقل من 1 م.ب، ويُثبَّت منفصلاً (لا تتغير اللعبة).
+Launch: it opens on the game chosen in the launcher (MSC or MWC), with its folder and your language.	تشغيل: يفتح على اللعبة المختارة في المشغّل (MSC أو MWC)، مع مجلدها ولغتك.
+A new version? The button becomes Update (close the editor first).	إصدار جديد؟ يصبح الزر تحديث (أغلق المحرّر أولاً).
+Prepare the map	تحضير الخريطة
+Only once per game, about a minute: the launcher starts the game in the background, with no window or sound, in a separate profile (carte-export). Your saves are never touched.	مرة واحدة لكل لعبة، دقيقة تقريباً: يشغّل المشغّل اللعبة في الخلفية، بلا نافذة ولا صوت، في ملف تعريف منفصل (carte-export). حفظك لا يُمَس أبداً.
+The prepared map stays in your Documents (My Seasons Car\\Carte). After a game update, prepare it again.	تبقى الخريطة المحضّرة في مستنداتك (My Seasons Car\\Carte). بعد تحديث اللعبة، أعد تحضيرها.
+Tour	التجوّل
+Hold right-click + WASD to fly, Space / C to go up and down, Shift to go faster, wheel for the speed.	اضغط مطولاً على النقر الأيمن + WASD للطيران، Space / C للصعود والنزول، Shift للإسراع، العجلة للسرعة.
+On the left, the layers (ground, roads, buildings, plants) to hide; a click on an object tells what it is.	على اليسار، الطبقات (الأرض، الطرق، المباني، النباتات) لإخفائها؛ والنقر على غرض يخبرك ما هو.
+Steam doesn't find the game (non-Steam copy, Steam blocked in your country)? Just point to the game's .exe file: the editor remembers it, for the launcher too.	لا يجد Steam اللعبة (نسخة خارج Steam، أو Steam محجوب في بلدك)؟ حدّد ملف .exe للعبة فقط: يتذكره المحرّر، وللمشغّل أيضاً.
+Open Tools	افتح الأدوات
+The map editor	محرّر الخرائط
+Prepare the map and tour it in 3D	تحضير الخريطة والتجول فيها في 3D
+At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor), the Credits (the star), the Logs (the page icon) and the modding API ({ }).	في أسفل الشريط: Discord، والشيفرة المصدرية (الزر < >، GitHub) والدعم (القلب). في أعلى اليمين: الأدوات (المفتاح: محرّر الخرائط)، والشكر (النجمة)، والسجلات (أيقونة الصفحة) وواجهة API للمعدّلين ({ }).

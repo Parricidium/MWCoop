@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Editeur de carte My Seasons Car (MSC / MWC) : fenetre WinForms sans cadre + WebView2 (interface HTML dans ui\,
+       vue 3D three.js). .NET Framework 4.8 : deja present sur Windows 10 et 11, rien a installer pour les joueurs. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>EditeurCarte</AssemblyName>
+    <RootNamespace>EditeurCarte</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <ApplicationIcon>..\launcher\mwcoop.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <OutputPath>..\build\editeur\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Product>My Seasons Car - Editeur de carte</Product>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ui\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="ui" />
+  </ItemGroup>
+</Project>

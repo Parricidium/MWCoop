@@ -112,6 +112,9 @@ static const TutoStep kTuto[] = {
       L"Guide, What's new, Credits", L"The three tabs of this page, with the Search… field that filters the articles. At the bottom of every article: ← previous and next →.", "0.97.0" },
     { L"Onglet HUD", L"Le style des jauges en jeu : Vanilla (celui du jeu), Carte, Anneaux ou Bandeau, avec un aperçu. Puis sa taille, sa position, sa couleur, les jauges montrées, le panneau Équipe et les alertes. En jeu aussi : F10 › HUD.",
       L"HUD tab", L"The style of the in-game gauges: Vanilla (the game's own), Card, Rings or Strip, with a preview. Then its size, position, colour, the gauges shown, the team panel and the alerts. In game too: F10 › HUD.", "0.97.11" },
+    // 1.2.0 (20/10) : page OUTILS, l'editeur de carte (51)
+    { L"Outils", L"La clé en haut à droite, à gauche de l'étoile : des programmes à part. Le premier, l'éditeur de carte : un clic pour le télécharger, un autre pour le lancer, sur My Summer Car ou My Winter Car.",
+      L"Tools", L"The wrench at the top right, left of the star: separate programs. The first one, the map editor: one click to download it, another to launch it, on My Summer Car or My Winter Car.", "1.2.0" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };
@@ -196,6 +199,8 @@ static RectF TutoTarget(int i)
     case 49: return RectF(g_guideTabRight - GuideTabsW(), 26, GuideTabsW(), 36);   // Guide / Nouveautes / Credits (wiki.inc GuideTabsDraw)
     // 0.97.11
     case 50: return TutoSetTab(SET_HUD);                     // onglet HUD (TutoGo l'ouvre)
+    // 1.2.0
+    case 51: return g_navR[TAB_TOOLS];                       // raccourci Outils de l'en-tete (ui.inc DrawHeader)
     }
     return RectF(0, 0, 0, 0);
 }

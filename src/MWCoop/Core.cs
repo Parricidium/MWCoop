@@ -38,7 +38,7 @@ namespace MWCoop
         {
             Perf.Begin();
             // (Muet : aussi apres tous les scripts du jeu -- My Summer Car remet le volume pendant l'image, son entendu par JD le 19/10)
-            if (muted > 0 && AudioListener.volume != 0f)
+            if ((muted > 0 || MapExport.Active) && AudioListener.volume != 0f)
             {
                 if (!muteLogged) { muteLogged = true; Log.Info("muet : volume remis a " + AudioListener.volume.ToString("F2") + " par le jeu, recoupe a chaque image"); }
                 AudioListener.volume = 0f;
@@ -231,6 +231,7 @@ namespace MWCoop
             new Mod("deroule", Flow.Update),
             new Mod("ecran d'attente", WaitScreen.Update),
             new Mod("autotest", Autotest.Update),
+            new Mod("export carte", MapExport.Update),   // (editeur de carte : [Lancement] ExportCarte)
         };
 
         // Chaque module, chronometre : un passage de plus de 30 ms (a-coup visible) est note, 1 fois / 10 s par module.
@@ -393,7 +394,7 @@ namespace MWCoop
         static readonly System.Collections.Generic.HashSet<string> MscModules = new System.Collections.Generic.HashSet<string>
         {
             "session", "api", "sauvegarde en jeu", "coups de poing", "marqueurs", "vocal", "visage perso", "menu", "mscloader", "lanceur",
-            "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente",
+            "joueurs", "sauvegarde", "vue (troisieme personne)", "camera drone", "sortie", "tenues", "trace", "deroule", "ecran d'attente", "export carte",
             // Voitures (19/10) : SATSUMA, GIFU, KEKMET, HAYOSIKO, FERNDALE, RCO_RUSCKO12, JONNEZ ES, FLATBED (CarDynamics a la racine,
             // comme dans MWC) et BOAT (VehicleSync.IsModVehicle) ; memes automates que MWC (PlayerTrigger, Starter, Use des portieres).
             "voitures", "portieres", "tableaux de bord", "passagers",

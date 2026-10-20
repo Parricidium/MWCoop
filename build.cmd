@@ -42,6 +42,10 @@ rc /nologo /i build /fo build\launcher.res launcher\launcher.rc || exit /b 1
 cl /nologo /O2 /MT /W3 /EHsc /utf-8 /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /Fobuild\ launcher\launcher.cpp build\launcher.res ^
    /Febuild\MWCoop.exe /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib gdiplus.lib winhttp.lib comdlg32.lib shell32.lib ole32.lib advapi32.lib shlwapi.lib ws2_32.lib winmm.lib oleaut32.lib uuid.lib delayimp.lib /DELAYLOAD:winhttp.dll /DELAYLOAD:winmm.dll || exit /b 1
 echo OK build\MWCoop.exe
+
+rem Editeur de carte (editor\, .NET Framework 4.8 + WebView2) : build\editeur\ ; paquet a part (dist\make-release.ps1)
+dotnet build "%~dp0editor\EditeurCarte.csproj" -c Release -nologo -v q || exit /b 1
+echo OK build\editeur\EditeurCarte.exe
 exit /b 0
 
 :pasdejeu

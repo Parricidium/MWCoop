@@ -229,6 +229,7 @@ static bool g_goWait;                               // invite : GO recu, lanceme
 static bool g_joinFallback;                         // invite : pas de salon chez l'hote -> rejoindre directement en jeu
 static std::string g_rejectWhy;                     // invite : raison du refus (sous g_lcs)
 static std::wstring g_testSalon, g_testSalonLog;    // /testsalon hote|invite <journal>
+static std::wstring g_exportDir;                    // /exportcarte <msc|mwc> <dossier> : export de la carte pour l'editeur de carte (editor\)
 static std::wstring g_testPartie = L"continuer";    // /testsalon : choix de l'hote
 static std::string g_testCode;                       // /testsalon ... /code <X> : code de session (hote : le sien, salon prive ; invite : celui qu'il envoie)
 static bool g_testPublic;                            // /testsalon hote ... /public : salon public (pas de code)
@@ -704,7 +705,7 @@ static int CmpVer(std::wstring a, std::wstring b)
 // Derniere erreur WinHTTP d'une requete sans reponse (12007 nom introuvable, 12029 connexion impossible, 12002 delai...).
 static DWORD g_httpErr;
 
-static bool HttpGet(const std::wstring &url, std::string *out, const std::wstring &toFile, bool progress, DWORD *status = NULL)
+static bool HttpGet(const std::wstring &url, std::string *out, const std::wstring &toFile, bool progress, DWORD *status = NULL, float *prog = NULL)   // (prog : ailleurs que g_progress)
 {
     if (status) *status = 0;
     g_httpErr = 0;
@@ -747,7 +748,7 @@ static bool HttpGet(const std::wstring &url, std::string *out, const std::wstrin
                 if (f != INVALID_HANDLE_VALUE) { DWORD w = 0; if (!WriteFile(f, buf.data(), n, &w, NULL) || w != n) ok = false; }
                 else out->append(buf.data(), n);
                 got += n;
-                if (progress && total) g_progress = (float)got / total;
+                if (progress && total) { if (prog) *prog = (float)got / total; else g_progress = (float)got / total; }
             }
             if (ok && total && got != total) ok = false;
         }
@@ -1149,7 +1150,7 @@ static bool IsWritableDir(const std::wstring &dir)
 // Texte de chaque release GitHub : en francais, puis une ligne "---", puis en anglais. Gardees dans
 // <jeu>\MWCoop\notes-maj.json pour les lire hors ligne.
 // (depuis 0.92.3, demande de JD : encore une ligne "---" et en russe ; sans : l'anglais en russe)
-struct Note { std::wstring ver, date, fr, en, ru, ar, zip; bool pre = false; };   // pre : pre-release de GitHub (Nightly)
+struct Note { std::wstring ver, date, fr, en, ru, ar, zip, editor; bool pre = false; };   // pre : pre-release de GitHub (Nightly) ; editor : paquet de l'editeur de carte (.editeur, outils.inc)
 static const std::wstring &NoteBody(const Note &n) { return g_fr ? n.fr : g_ru && !n.ru.empty() ? n.ru : g_ar && !n.ar.empty() ? n.ar : n.en; }
 static std::vector<Note> g_notes;
 static volatile bool g_notesDone;
@@ -1246,9 +1247,12 @@ static std::vector<Note> ParseReleases(const std::string &json)
             if (u == std::string::npos || u >= end) break;
             std::string url = JsonField(json, "browser_download_url", u, end);
             k = u + 20;
-            // (Nightly : paquet en .nightly, un zip sous un autre nom, que les lanceurs d'avant 0.95.2 ne prennent pas)
-            if (url.size() > 4 && !_stricmp(url.c_str() + url.size() - 4, ".zip")) { n.zip = Widen(url); break; }
-            if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".nightly")) { n.zip = Widen(url); n.pre = true; break; }
+            // (Nightly : paquet en .nightly, un zip sous un autre nom, que les lanceurs d'avant 0.95.2 ne prennent pas ; editeur de
+            // carte : .editeur, a part -- 20/10)
+            if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".editeur")) { if (n.editor.empty()) n.editor = Widen(url); continue; }
+            if (!n.zip.empty()) continue;
+            if (url.size() > 4 && !_stricmp(url.c_str() + url.size() - 4, ".zip")) { n.zip = Widen(url); continue; }
+            if (url.size() > 8 && !_stricmp(url.c_str() + url.size() - 8, ".nightly")) { n.zip = Widen(url); n.pre = true; continue; }
         }
         bool draft = json.find("\"draft\": true", p) < end || json.find("\"draft\":true", p) < end;
         if (json.find("\"prerelease\": true", p) < end || json.find("\"prerelease\":true", p) < end || n.ver.find(L"nightly") != std::wstring::npos) n.pre = true;
@@ -1428,6 +1432,7 @@ static std::vector<Note> ChannelNotes(const std::vector<Note> &rel)
     return msc;
 }
 static std::wstring SavesBackupNightly();   // (saves.inc)
+static void ToolsSeen(const std::vector<Note> &rel);   // (outils.inc : derniere version de l'editeur de carte)
 
 static DWORD WINAPI UpdateThread(void *param)
 {
@@ -1444,6 +1449,7 @@ static DWORD WINAPI UpdateThread(void *param)
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
     const Note *pick = PickRelease(rel);
+    ToolsSeen(rel);
     EnterCriticalSection(&g_cs);
     g_notes = ChannelNotes(rel);
     LeaveCriticalSection(&g_cs);
@@ -1590,6 +1596,7 @@ static DWORD WINAPI NotesOnlyThread(void *)
     std::string json;
     int rs = FetchReleases(json);
     std::vector<Note> rel = json.empty() ? std::vector<Note>() : ParseReleases(json);
+    ToolsSeen(rel);
     EnterCriticalSection(&g_cs);
     g_notes = ChannelNotes(rel);
     LeaveCriticalSection(&g_cs);
@@ -1635,7 +1642,7 @@ static void UpdateTick()
 
 // ---------------------------------------------------------------- boutons
 // Pages (lanceur 2026, barre de navigation a gauche : ui.inc). TAB_COOP : les reglages ; TAB_SKIN : la tenue.
-enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_COUNT };
+enum { TAB_HOME, TAB_LOBBY, TAB_SKIN, TAB_CAR, TAB_CONTENT, TAB_MODS, TAB_NOTES, TAB_LOGS, TAB_COOP, TAB_API, TAB_GFX, TAB_CREDITS, TAB_WIKI, TAB_VHS, TAB_ALBUM, TAB_SAVES, TAB_TOOLS, TAB_COUNT };
 static int g_tab = TAB_HOME;
 
 enum { B_HOST, B_JOIN, B_SOLO, B_EXE, B_BUY, B_THEME, B_CLOSE, B_MIN, B_LOGS, B_COLOR, B_LOGDIR, B_LOGZIP, B_GITHUB, B_KOFI, B_NETIP, B_NETSTEAM, B_UPDATE, B_LANG, B_DISCORD, B_COUNT };   // (Journaux, API et Credits : raccourcis de page de l'en-tete, ui.inc HeadPage)
@@ -3448,7 +3455,7 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     std::string skin = ap ? ap->svals[OptGet(*ap)] : DefaultShirt();   // (char_shirt21 n'existe pas dans MSC : tenue.inc)
     static const char *modes[] = { "solo", "hote", "invite" };
     std::string t = "[Lancement]\r\n";
-    t += std::string("Mode=") + modes[mode] + "\r\n";
+    t += std::string("Mode=") + (!g_exportDir.empty() ? "export" : modes[mode]) + "\r\n";   // (export : pas "solo", que le chargeur lance sans MWCoop)
     // Horodatage dans [Lancement], avant tout : le chargeur le lit par section (GetPrivateProfileString) et, depuis les options du
     // salon (0.96.4, [Coop] ajoute en fin), il se retrouvait sous [Coop] -- fichier juge perime, Profil= ignore, toujours la
     // sauvegarde principale (retour de JD, 18/10 : « ca charge toujours la meme sauvegarde »). Le mod, lui, lit a plat.
@@ -3463,7 +3470,8 @@ static bool WriteLaunchFile(int mode, const std::wstring &addr, int port, const 
     t += "Port=" + std::to_string(port) + "\r\n";
     t += "Pseudo=" + Narrow(PlayerName(), CP_UTF8) + "\r\n";
     t += "Apparence=" + skin + "\r\n";
-    t += std::string("Profil=") + (mode == MODE_GUEST ? "invite" : mode == MODE_HOST ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
+    t += std::string("Profil=") + (!g_exportDir.empty() ? "carte-export" : mode == MODE_GUEST ? "invite" : mode == MODE_HOST ? Narrow(SaveCurrentProf(), CP_UTF8) : "") + "\r\n";   // (saves.inc)
+    if (!g_exportDir.empty()) t += "ExportCarte=" + Narrow(g_exportDir, CP_UTF8) + "\r\n";   // (editeur de carte : profil a part, jamais les sauvegardes du joueur)
     if (partie && *partie) t += std::string("Partie=") + partie + "\r\n";
     if (mode == MODE_GUEST) t += ContentLaunchLines();
     if (mode != MODE_SOLO && g_lobbyOptGo) { t += LobbyCoopLines(mode == MODE_HOST); g_lobbyOptGo = false; }   // (options choisies dans le salon : salon.inc)
@@ -3701,8 +3709,9 @@ static void Launch(int mode, const char *partie = NULL)
         }
     }
     static const wchar_t *modes[] = { L"solo", L"hote", L"invite" };
-    std::wstring args = std::wstring(L"-mwcoop-mode ") + modes[mode] + L" -mwcoop-port " + std::to_wstring(port);
+    std::wstring args = std::wstring(L"-mwcoop-mode ") + (!g_exportDir.empty() ? L"export" : modes[mode]) + L" -mwcoop-port " + std::to_wstring(port);
     if (mode == MODE_GUEST) args += (g_steamNet ? std::wstring() : L" -mwcoop-adresse " + addr) + L" -mwcoop-profil invite";
+    if (!g_exportDir.empty()) args += L" -mwcoop-profil carte-export -mwcoop-arriereplan";   // (export de la carte : fenetre hors de l'ecran)
     // Ray tracing (MWCoopRT.dll) : Unity doit dessiner sur un seul fil pour que le mod s'insere dans son rendu.
     if (GetPrivateProfileIntW(L"Graphismes", L"RayTracing", 0, ModIni().c_str()) == 1) { args += L" -force-gfx-direct"; LaunchLog("ray tracing demande : -force-gfx-direct"); }
     SteamDown();   // (le lanceur ne passe plus pour le jeu aupres de Steam)
@@ -3734,7 +3743,7 @@ static void Launch(int mode, const char *partie = NULL)
     CompatCleanAll("lancement");
     if (ModInGame()) LoaderEnsure(g_gameDir, "dossier du jeu");   // (a part : rien dans le dossier du jeu)
     const Opt *viaSteam = OptByKey("LancerSteam");
-    g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && !MirrorDir().empty() && ModInGame();   // (a part : Steam lancerait le jeu sans MWCoop)
+    g_steamLaunch = viaSteam && OptGet(*viaSteam) && !syncKind && g_exportDir.empty() && !MirrorDir().empty() && ModInGame();   // (a part : Steam lancerait le jeu sans MWCoop)
     // Wine : steam://rungameid passerait par le Steam de Linux, hors du lanceur et sans WINEDLLOVERRIDES (le mod ne se
     // chargerait pas) : le jeu part d'ici. Pour jouer depuis Steam, l'option de lancement Linux (SteamLaunchLine).
     if (g_steamLaunch && IsWine()) { g_steamLaunch = false; LaunchLog("Wine : \"Lancer par Steam\" ignore, le jeu part du lanceur"); }
@@ -4545,6 +4554,7 @@ static void NetTest()
 }
 
 #include "api.inc"
+#include "outils.inc"
 #include "gfx.inc"
 #include "media.inc"
 #include "saves.inc"
@@ -6759,6 +6769,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             int gm = GameOfExe(av[i]);
             if (gm >= 0) { g_fromSteam = true; g_game = gm; }
             if (!_wcsicmp(av[i], L"/msc")) g_game = GAME_MSC;   // (essais : /capture ... /msc)
+            if (!_wcsicmp(av[i], L"/exportcarte") && i + 1 < ac) g_game = !_wcsicmp(av[i + 1], L"msc") ? GAME_MSC : GAME_MWC;
         }
         // Lancer par Steam (Reglages > Jeu) avec l'option de lancement "<MWCoop.exe>" %command% : Steam relance le lanceur au
         // lieu du jeu (retour d'un joueur, 08/10 : "Running" dans Steam, un 2e lanceur, rien ne demarrait). Demande toute
@@ -6912,6 +6923,36 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (f) { fwprintf(f, L"jeu=%s\nversion=%s\nmod=%d local=%s\nsteam=%d\n", g_gameDir.c_str(), g_gameVer.c_str(), (int)g_modOk, g_localVer.c_str(), (int)g_fromSteam); fclose(f); }
         GdiplusShutdown(gtok);
         return g_gameDir.empty() ? 1 : 0;
+    }
+    // /exportcarte <msc|mwc> <dossier> : editeur de carte (demande de JD, 19/10 ; editor\, mod : MapExport.cs). Lancement solo
+    // sans fenetre du lanceur : profil a part « carte-export » (nouvelle partie, jamais les sauvegardes du joueur), sans
+    // MSCLoader (la carte du jeu seule), jeu hors de l'ecran ; le mod ecrit le cache dans <dossier> puis ferme le jeu. Ici :
+    // <dossier>\lanceur.txt (ok=1, ou erreur=...), code 0 si le jeu est parti.
+    if (argc >= 4 && !_wcsicmp(argv[1], L"/exportcarte")) {
+        g_exportDir = argv[3];
+        SHCreateDirectoryExW(NULL, g_exportDir.c_str(), NULL);
+        std::string why;
+        DWORD pid = 0;
+        if (g_gameDir.empty()) why = "jeu introuvable";
+        else if (!g_modOk) why = "MWCoop absent du jeu (lance le lanceur une fois)";
+        else if (GameProcessRunning(&pid)) why = "jeu-ouvert";
+        else {
+            WNDCLASSEXW wc = { sizeof(wc) };
+            wc.lpfnWndProc = WndProc;
+            wc.hInstance = inst;
+            wc.lpszClassName = L"MWCoopExport";
+            RegisterClassExW(&wc);
+            g_wnd = CreateWindowExW(0, wc.lpszClassName, L"MWCoop", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, inst, NULL);
+            g_mscOn = false;
+            Launch(MODE_SOLO, "nouvelle");
+            if (g_state != ST_LAUNCH) why = g_status.empty() ? "lancement impossible" : Narrow(g_status, CP_UTF8);
+        }
+        std::string txt = why.empty() ? "ok=1\r\n" : "erreur=" + why + "\r\n";
+        HANDLE f = CreateFileW((WithSlash(g_exportDir) + L"lanceur.txt").c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, txt.data(), (DWORD)txt.size(), &w, NULL); CloseHandle(f); }
+        GdiplusShutdown(gtok);
+        WSACleanup();
+        return why.empty() ? 0 : 1;
     }
     g_logo = LoadPngRes(g_game == GAME_MSC ? 9 : 4);   // (logo de la barre de navigation : logo-titre.png, logo-msc.png sur My Summer Car)
     if (g_gameDir.empty()) SetStatus(K_ERR, T(L"My Winter Car introuvable : choisis mywintercar.exe", L"My Winter Car not found: choose mywintercar.exe"));
@@ -7204,6 +7245,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         }
         else if (st == L"journaux") { g_tab = TAB_LOGS; LogsScan(); g_logRowHot = 0; }
         else if (st == L"api") g_tab = TAB_API;   // page API des moddeurs
+        // page OUTILS (outils.inc) : editeur pas installe (version publiee factice), installe, a mettre a jour, en telechargement
+        else if (!wcsncmp(st.c_str(), L"outils", 6)) {
+            g_tab = TAB_TOOLS; g_notesDone = true; g_relState = REL_OK;
+            g_edRemoteVer = st == L"outils-maj" ? L"1.2.1" : L"1.2.0"; g_edRemoteUrl = L"https://example.invalid/EditeurCarte.editeur";
+            if (st == L"outils-telechargement") { g_edBusy = true; g_edProg = 0.42f; }
+            if (st == L"outils-installe" || st == L"outils-maj") g_edFakeLocal = L"1.2.0";
+            if (st == L"outils-survol") g_uiHot = UI_TOOL_GET;
+        }
         else if (st == L"vhs") { g_tab = TAB_VHS; VhsScan(); }        // pages MEDIA (media.inc)
         else if (st == L"vhs1") { g_tab = TAB_VHS; VhsScan(); g_vhsSel = 0; g_pvStart = GetTickCount() - 4000; }   // (cassette choisie, apercu a 4 s)
         else if (st == L"album") { g_tab = TAB_ALBUM; AlbScan(); }

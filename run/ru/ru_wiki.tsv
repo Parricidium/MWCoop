@@ -668,3 +668,19 @@ Something wrong?	Что-то не так?
 Since 1.1.1: the host's time and weather, traffic and NPCs, jobs, money and the wallet (N), Teimo's and Fleetari's shops, fuel, and mechanics: parts, bolts, tuning, fluids and paint.	С версии 1.1.1: время и погода хоста, трафик и NPC, работы, деньги и кошелёк (N), магазины Теймо и Флитари, топливо и механика: детали, болты, настройки, жидкости и покраска.
 A few side things of the game don't follow yet (slot machine, rally prizes, Mummola's moving job...). They come over the next versions.	Некоторые мелочи игры пока не синхронизируются (игровой автомат, призы ралли, переезд Мумолы...). Они появятся в следующих версиях.
 A few side things of the game don't follow yet (slot machine, rally prizes...). They come over the next versions.	Некоторые мелочи игры пока не синхронизируются (игровой автомат, призы ралли...). Они появятся в следующих версиях.
+A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to edit it. This first version (BETA) prepares it and lets you tour it freely in 3D; roads, 3D models and maps shared in co-op come next.	Отдельная программа в разделе «Инструменты» (гаечный ключ вверху справа): она открывает настоящую карту My Summer Car или My Winter Car для изменения. Эта первая версия (BETA) готовит её и даёт свободно облететь в 3D; дороги, 3D-модели и карты для совместной игры появятся позже.
+Install and launch it	Установка и запуск
+In Tools, Download: under 1 MB, installed apart (the game is not changed).	В «Инструментах» нажми «Скачать»: меньше 1 МБ, ставится отдельно (игра не меняется).
+Launch: it opens on the game chosen in the launcher (MSC or MWC), with its folder and your language.	«Запустить»: он откроется на игре, выбранной в лаунчере (MSC или MWC), с её папкой и твоим языком.
+A new version? The button becomes Update (close the editor first).	Новая версия? Кнопка станет «Обновить» (сначала закрой редактор).
+Prepare the map	Подготовка карты
+Only once per game, about a minute: the launcher starts the game in the background, with no window or sound, in a separate profile (carte-export). Your saves are never touched.	Один раз для каждой игры, около минуты: лаунчер запускает игру в фоне, без окна и звука, в отдельном профиле (carte-export). Твои сохранения никогда не затрагиваются.
+The prepared map stays in your Documents (My Seasons Car\\Carte). After a game update, prepare it again.	Подготовленная карта хранится в Документах (My Seasons Car\\Carte). После обновления игры подготовь её заново.
+Tour	Облёт
+Hold right-click + WASD to fly, Space / C to go up and down, Shift to go faster, wheel for the speed.	Зажми правую кнопку + WASD, чтобы летать, Пробел / C — вверх и вниз, Shift — быстрее, колёсико — скорость.
+On the left, the layers (ground, roads, buildings, plants) to hide; a click on an object tells what it is.	Слева — слои (земля, дороги, здания, растения), их можно скрыть; клик по объекту покажет, что это.
+Steam doesn't find the game (non-Steam copy, Steam blocked in your country)? Just point to the game's .exe file: the editor remembers it, for the launcher too.	Steam не находит игру (копия не из Steam, Steam заблокирован в твоей стране)? Просто укажи .exe игры: редактор запомнит его, и для лаунчера тоже.
+Open Tools	Открыть «Инструменты»
+The map editor	Редактор карты
+Prepare the map and tour it in 3D	Подготовить карту и облететь её в 3D
+At the very bottom of the bar: Discord, the source code (the < > button, GitHub) and Support (the heart). At the top right: the Tools (the wrench: the map editor), the Credits (the star), the Logs (the page icon) and the modding API ({ }).	В самом низу панели: Discord, исходный код (кнопка < >, GitHub) и «Поддержать» (сердце). Вверху справа: «Инструменты» (гаечный ключ: редактор карты), «Благодарности» (звезда), журналы (значок страницы) и API для моддеров ({ }).

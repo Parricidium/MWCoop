@@ -1759,3 +1759,33 @@ You are about to restart \"%s\".\n\nThis will erase this save (the game in progr
 Your full look (build, hat, glasses, hair, face, top, pants) in 3D, and your SATSUMA color.	Твоя внешность целиком (телосложение, шапка, очки, волосы, лицо, верх, штаны) в 3D и цвет твоей SATSUMA.
 SATSUMA custom paint	Своя покраска SATSUMA
 In Car, at the top of the preview: your own paint on the SATSUMA, painted on the game's template. In game, buy \"Custom paint made by artist\" at Fleetari's repair shop; the host sends it to their guests.	Во вкладке Машина, над превью: твоя собственная покраска SATSUMA, нарисованная на шаблоне игры. В игре купи \"Custom paint made by artist\" в мастерской Флеетари; хост отправляет её гостям.
+Map editor %s installed: click Launch	Редактор карты %s установлен: нажми «Запустить»
+Could not download the map editor (%s)	Не удалось скачать редактор карты (%s)
+Close the map editor before updating it	Закрой редактор карты перед обновлением
+Could not start the map editor (error %lu)	Не удалось запустить редактор карты (ошибка %lu)
+Map editor	Редактор карты
+A separate program to edit the map of My Summer Car or My Winter Car. This first version prepares the game's real map and lets you fly around it freely in 3D.	Отдельная программа для изменения карты My Summer Car или My Winter Car. Эта первая версия готовит настоящую карту игры и даёт свободно облететь её в 3D.
+The chosen game's map, prepared once (the game runs in the background)	Карта выбранной игры, готовится один раз (игра работает в фоне)
+Free 3D tour: fly, layers, objects to click	Свободный 3D-облёт: полёт, слои, объекты по клику
+Coming: roads, 3D models, maps shared in co-op	Скоро: дороги, 3D-модели, карты для совместной игры
+Downloading…	Скачивание…
+Version %s installed · %s available	Установлена версия %s · доступна %s
+Installed · version %s	Установлено · версия %s
+Not installed yet · version %s, under 1 MB	Ещё не установлено · версия %s, меньше 1 МБ
+Offline: GitHub unreachable	Нет сети: GitHub недоступен
+Looking for the latest version…	Поиск последней версии…
+Not published yet: it comes with the next version	Ещё не опубликовано: появится в следующей версии
+Download	Скачать
+Started!	Запущено!
+Launch	Запустить
+How it works	Как это работает
+Download the editor: it installs apart, the game is not changed.	Скачай редактор: он ставится отдельно, игра не меняется.
+Launch it: it opens the game chosen here (My Summer Car or My Winter Car), with its folder.	Запусти его: он откроет выбранную здесь игру (My Summer Car или My Winter Car) с её папкой.
+Prepare the map once: the game runs for a minute in the background, with no window, in a separate profile. Your saves are not touched.	Подготовь карту один раз: игра минуту работает в фоне, без окна, в отдельном профиле. Твои сохранения не затрагиваются.
+Windows 10 or 11: nothing else to install (it uses Microsoft Edge WebView2, already there).	Windows 10 или 11: больше ничего ставить не нужно (используется Microsoft Edge WebView2, он уже есть).
+Game files stay on your PC: the prepared map goes to your Documents (My Seasons Car).	Файлы игры остаются на твоём ПК: подготовленная карта попадает в Документы (My Seasons Car).
+After a game update, prepare the map again in the editor.	После обновления игры подготовь карту заново в редакторе.
+More tools will come to this page.	Другие инструменты появятся на этой странице.
+Tools	Инструменты
+Separate programs to go further, downloaded in one click.	Отдельные программы, чтобы пойти дальше, скачиваются в один клик.
+The wrench at the top right, left of the star: separate programs. The first one, the map editor: one click to download it, another to launch it, on My Summer Car or My Winter Car.	Гаечный ключ вверху справа, слева от звезды: отдельные программы. Первая — редактор карты: один клик, чтобы скачать, ещё один, чтобы запустить, для My Summer Car или My Winter Car.

@@ -40,12 +40,29 @@ foreach ($f in Get-ChildItem $stage -File -Recurse) {
 $z.Dispose()
 "Ecrit : $zip ($([math]::Round((Get-Item $zip).Length / 1KB)) Ko)"
 if ($Nightly) { $nz = "$PSScriptRoot\out\MWCoop-$Version.nightly"; Copy-Item $zip $nz -Force; Remove-Item $zip; $zip = $nz }
+# Editeur de carte (editor\, demande de JD du 20/10) : paquet a part, EditeurCarte-<version>.editeur (un zip sous un autre
+# nom : les lanceurs prennent le premier .zip d'une release pour le mod). Le lanceur (page Outils) le telecharge a la
+# demande dans %LOCALAPPDATA%\MWCoop\editeur.
+$edStage = "$PSScriptRoot\out\EditeurCarte-$Version"
+if (Test-Path $edStage) { Remove-Item $edStage -Recurse -Force }
+New-Item -ItemType Directory -Force $edStage | Out-Null
+foreach ($f in 'EditeurCarte.exe', 'EditeurCarte.exe.config', 'Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll', 'WebView2Loader.dll') { Copy-Item "$root\build\editeur\$f" $edStage }
+Copy-Item "$root\build\editeur\ui" $edStage -Recurse
+Set-Content "$edStage\version.txt" $Version -NoNewline -Encoding ASCII
+$edPack = "$PSScriptRoot\out\EditeurCarte-$Version.editeur"
+if (Test-Path $edPack) { Remove-Item $edPack -Force }
+$z = [System.IO.Compression.ZipFile]::Open($edPack, 'Create')
+foreach ($f in Get-ChildItem $edStage -File -Recurse) {
+    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($z, $f.FullName, $f.FullName.Substring($edStage.Length + 1).Replace('\', '/')) | Out-Null
+}
+$z.Dispose()
+"Ecrit : $edPack ($([math]::Round((Get-Item $edPack).Length / 1KB)) Ko)"
 # Empreintes SHA-256 publiees a cote du zip : chacun peut verifier ses fichiers (et les chercher sur VirusTotal)
 # quand un antivirus a apprentissage automatique s'inquiete d'un exe non signe.
 $sums = "$PSScriptRoot\out\SHA256SUMS-$Version.txt"
-$lines = foreach ($f in @($zip, "$stage\MWCoop.exe", "$stage\version.dll", "$stage\MWCoop\MWCoop.dll", "$stage\MWCoop\MWCoopRT.dll")) {
+$lines = foreach ($f in @($zip, $edPack, "$stage\MWCoop.exe", "$stage\version.dll", "$stage\MWCoop\MWCoop.dll", "$stage\MWCoop\MWCoopRT.dll")) {
     $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
-    $n = if ($f -eq $zip) { Split-Path $zip -Leaf } else { $f.Substring($stage.Length + 1).Replace('\', '/') }
+    $n = if ($f -eq $zip -or $f -eq $edPack) { Split-Path $f -Leaf } else { $f.Substring($stage.Length + 1).Replace('\', '/') }
     "$h  $n"
 }
 [System.IO.File]::WriteAllText($sums, ($lines -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding $false))
@@ -84,8 +101,8 @@ if ($Publier) {
     if ($Nightly -and $branch -eq 'main') { Remove-Item $nf; throw "une Nightly se publie depuis sa branche (refonte), pas main" }
     $po = cmd /c "git -C `"$root`" push origin HEAD:$branch 2>&1"   # par cmd : git ecrit sur stderr, ce qui arreterait le script
     if ($LASTEXITCODE -ne 0) { Remove-Item $nf; throw "echec du push de $branch" }
-    if ($Nightly) { gh release create "v$Version" $zip $sums --repo Parricidium/MWCoop --title "MWCoop $Version (Nightly)" --notes-file $nf --target $head --prerelease }
-    else { gh release create "v$Version" $zip $sums --repo Parricidium/MWCoop --title "MWCoop $Version" --notes-file $nf --target $head }
+    if ($Nightly) { gh release create "v$Version" $zip $edPack $sums --repo Parricidium/MWCoop --title "MWCoop $Version (Nightly)" --notes-file $nf --target $head --prerelease }
+    else { gh release create "v$Version" $zip $edPack $sums --repo Parricidium/MWCoop --title "MWCoop $Version" --notes-file $nf --target $head }
     $rc = $LASTEXITCODE
     Remove-Item $nf
     if ($rc -ne 0) { throw "echec de la publication GitHub" }

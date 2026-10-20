@@ -64,6 +64,7 @@ enum {
     UI_CAR_PAINT = 445, UI_CAR_PAINTIMP, UI_CAR_PAINTTPL, UI_CAR_PAINTUSE, UI_CAR_PAINTDEL,   // VOITURE : peinture perso (volet, importer, gabarit, utiliser, retirer)
     UI_CAR_DENTS = 450,           // VOITURE : retirer les bosses (meshsave.txt de la sauvegarde mis de cote)
     UI_CRED_TAB = 456,            // + k (0 modeles 3D, 1 images, 2 remerciements, 3 supporters) : onglets des CREDITS (456-459)
+    UI_TOOL_GET = 460, UI_TOOL_RUN, UI_TOOL_DIR,   // OUTILS (outils.inc) : editeur de carte, telecharger / mettre a jour, lancer, dossier
     UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)
     UI_WIKI_ART = 8040,           // + article
     UI_WIKI_SEC = 8300,           // + bloc : section pliable de l'article
@@ -75,7 +76,7 @@ enum {
 enum { IC_HOME, IC_USERS, IC_SHIRT, IC_CAR, IC_BOX, IC_PUZZLE, IC_SPARK, IC_FILE, IC_GEAR, IC_MOON, IC_SUN, IC_MIN, IC_CLOSE,
        IC_DOWNLOAD, IC_CHECK, IC_CHEVR, IC_CHEVL, IC_PLAY, IC_LOGIN, IC_GLOBE, IC_WIFI, IC_PLUS, IC_FOLDER, IC_ZIP, IC_ALERT,
        IC_HEART, IC_CODE, IC_SHUFFLE, IC_UNDO, IC_MUSIC, IC_IMAGE, IC_RADIO, IC_USER, IC_HASH, IC_FLAG, IC_HOMEPLUS, IC_STEAM, IC_BRACES, IC_SLIDERS, IC_DISCORD, IC_CHEVD, IC_TRASH, IC_STAR, IC_BOOK,
-       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE, IC_FILM };
+       IC_MIC, IC_KEYB, IC_MONITOR, IC_EYE, IC_BULB, IC_GAUGE, IC_LAYERS, IC_DRONE, IC_FILM, IC_TOOLS, IC_MAP };
 static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, float stroke = 1.9f)
 {
     float k = size / 24.0f;
@@ -172,6 +173,13 @@ static void Icon(Graphics &g, int id, float cx, float cy, float size, Color c, f
         line(12, 6.5f, 12, 20);
         break;
     }
+    case IC_TOOLS:   // cle plate (page OUTILS, 20/10) : tete ouverte en haut a droite, manche vers le bas a gauche
+        poly({ 14.7f, 6.3f, 14.45f, 6.74f, 14.45f, 7.26f, 14.7f, 7.7f, 16.3f, 9.3f, 16.74f, 9.55f, 17.26f, 9.55f, 17.7f, 9.3f, 21.47f, 5.53f, 21.9f, 6.91f, 21.99f, 8.36f,
+               21.73f, 9.78f, 21.14f, 11.11f, 20.25f, 12.25f, 19.11f, 13.14f, 17.78f, 13.73f, 16.36f, 13.99f, 14.91f, 13.9f, 13.53f, 13.47f, 6.62f, 20.38f, 5.45f, 20.98f,
+               4.16f, 20.77f, 3.23f, 19.84f, 3.02f, 18.55f, 3.62f, 17.38f, 10.53f, 10.47f, 10.1f, 9.09f, 10.01f, 7.64f, 10.27f, 6.22f, 10.86f, 4.89f, 11.75f, 3.75f,
+               12.89f, 2.86f, 14.22f, 2.27f, 15.64f, 2.01f, 17.09f, 2.1f, 18.47f, 2.53f }, true);
+        break;
+    case IC_MAP: poly({ 3, 6, 9, 4, 15, 6, 21, 4, 21, 18, 15, 20, 9, 18, 3, 20 }, true); line(9, 4, 9, 18); line(15, 6, 15, 20); break;
     case IC_STAR: poly({ 12, 3.5f, 14.35f, 9.26f, 20.56f, 9.72f, 15.8f, 13.74f, 17.29f, 19.78f, 12, 16.5f, 6.71f, 19.78f, 8.2f, 13.74f, 3.44f, 9.72f, 9.65f, 9.26f }, true); break;
     case IC_HEART: {
         GraphicsPath p;

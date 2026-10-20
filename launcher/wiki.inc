@@ -19,7 +19,7 @@ enum { WF_FOLDER, WF_FOOTER, WF_START, WF_NET, WF_LOBBY, WF_MSC, WF_SHARE, WF_AC
 
 static const int kWikiCats = (int)(sizeof(kWikiCat) / sizeof(kWikiCat[0]));
 static const int kWikiArts = (int)(sizeof(kWikiArt) / sizeof(kWikiArt[0]));
-static_assert(sizeof(kWikiArt) / sizeof(kWikiArt[0]) == WA_MSCBETA + 1, "kWikiArt et WA_* : un article par valeur, dans l'ordre");   // (WA_VAZ manquait : liens decales)
+static_assert(sizeof(kWikiArt) / sizeof(kWikiArt[0]) == WA_EDITOR + 1, "kWikiArt et WA_* : un article par valeur, dans l'ordre");   // (WA_VAZ manquait : liens decales)
 // Article, bloc ou touche du jeu choisi. Un bloc est cache par son propre jeu, par celui du WB_H de sa section, ou s'il mene
 // (WB_GO) a un article cache.
 static bool WikiArtShown(int a) { return a >= 0 && a < kWikiArts && WikiGame(kWikiArt[a].game); }
@@ -652,7 +652,8 @@ static void GuideTabsDraw(Graphics &g)
 }
 static void DrawGuideSearchBox(Graphics &g, float &right)
 {
-    RectF r(right - 164, 22, 164, 44);
+    // (124 px depuis le raccourci Outils de l'en-tete, 20/10 : a 164, le titre « Guide » etait coupe)
+    RectF r(right - 124, 22, 124, 44);
     GraphicsPath p; RoundRect(p, r, 14);
     SolidBrush fill(TH(field)); g.FillPath(&fill, &p);
     Pen pen(g_wikiFocus ? kAcc : TH(fieldBorder), g_wikiFocus ? 2.0f : 1.2f); g.DrawPath(&pen, &p);
@@ -671,7 +672,7 @@ static void DrawGuideSearchBox(Graphics &g, float &right)
         Icon(g, IC_CLOSE, xr.X + 14, xr.Y + 14, 14, g_uiHot == UI_WIKI_SEARCHX ? kAcc : kGrey, 2.0f);
         HotZone(xr, UI_WIKI_SEARCHX);
     }
-    right -= 174;
+    right -= 134;
 }
 // Commandes des trois onglets du Guide, de droite a gauche : Chercher, puis les pilules.
 static void DrawGuideHead(Graphics &g, float &right)
