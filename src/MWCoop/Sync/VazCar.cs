@@ -49,7 +49,16 @@ namespace MWCoop
             public Vector3 Head, Engine, BrakePivot, BrakeGrip;
             public KeyValuePair<string, Vector3>[] Controls;
             public Dictionary<string, Vector3> Info;
-            public string Dir { get { return Path.Combine(System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop", Folder); } }
+            // (addons : MWCoop\addons\<dossier> depuis 1.5.1 -- dossier ouvert par le lanceur, onglet Addons ; avant : MWCoop\<dossier>)
+            public string Dir
+            {
+                get
+                {
+                    string root = System.Environment.GetEnvironmentVariable("MWCOOP_DIR") ?? "MWCoop";
+                    if (Folder != "vaz") { string a = Path.Combine(Path.Combine(root, "addons"), Folder); if (Directory.Exists(a)) return a; }
+                    return Path.Combine(root, Folder);
+                }
+            }
             public bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
         }
         public const int ModelVaz = 0, ModelEvo = 1;

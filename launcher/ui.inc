@@ -1563,6 +1563,8 @@ static bool UiClick(int id)
     case UI_CAR_EVOUSE: if (const Addon *a = AddonCur()) AddonLiveryUse(*a, !AddonLiveryOn(*a)); return true;
     case UI_CAR_EVODEL: AddonRemove(); return true;
     case UI_ADDON_BACK: g_addonSel = -1; return true;
+    case UI_ADDON_DIR: AddonsOpenDir(); return true;
+    case UI_ADDON_HELP: WikiOpenAddons(); return true;
     case UI_CAR_DENTS: CarRemoveDents(); return true;
     case UI_CAR_PAINTIMP: PaintImport(); return true;
     case UI_CAR_PAINTTPL: PaintTemplate(); return true;

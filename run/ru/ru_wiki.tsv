@@ -703,3 +703,22 @@ Water: a body of water to place and stretch (Move, Scale).	Вода: водна�
 Textures: in the properties, Change — a game texture or your own image (PNG, JPG…), on the whole object or one of its materials; double-click an imported model to texture just one face.	Текстуры: в свойствах «Изменить» — текстура из игры или своё изображение (PNG, JPG…), на весь объект или один из его материалов; двойной клик по импортированной модели — текстура только на одну грань.
 Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.	«Собрать» создаёт небольшой файл .mwcmap: только твои модели, дороги и изображения. Копии и текстуры игры воссоздаются из игры каждого игрока: файлы игры не передаются.
 Objects, roads, water, textures, co-op	Объекты, дороги, вода, текстуры, кооператив
+Add-ons are extra cars you install yourself. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery.	Дополнения — это дополнительные машины, которые ставятся вручную. В игре каждый берёт себе одну через F10, как VAZ: со своим цветом и номером или со своей ливреей.
+Installing a car	Установка машины
+Character > Add-ons > Open the add-ons folder: the game's MWCoop\\addons folder opens.	Персонаж > Дополнения > Открыть папку дополнений: откроется папка MWCoop\\addons игры.
+Copy the car's folder (the one that contains addon.ini) into this folder.	Скопируй папку машины (ту, где лежит addon.ini) в эту папку.
+Go back to the Add-ons tab: the car shows up there with its picture.	Вернись во вкладку «Дополнения»: машина появится там со своей картинкой.
+To turn an add-on off without deleting it, add a dot to its folder name (for example evo3.off). Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	Чтобы отключить дополнение, не удаляя его, добавь точку в имя его папки (например evo3.off). Каждый ставит те дополнения, которые хочет видеть: без дополнения вместо машины видна VAZ того же цвета и с тем же номером.
+Taking it in game	Как взять её в игре
+F10 > Cars tab: pick the model (button or M key) and a free colour, then Take.	F10 > вкладка «Машины»: выбери модель (кнопкой или клавишей M) и свободный цвет, затем «Взять».
+Colour and number are unique across all players, whatever the model.	Цвет и номер уникальны у всех игроков, какой бы ни была модель.
+Ice race and rally: you sign up with your players' car, VAZ or add-on.	Гонка на льду и ралли: записываешься на своей машине игрока — VAZ или дополнении.
+Making your livery	Своя ливрея
+Add-ons tab: click the car, then Template. A copy of the template opens in Explorer.	Вкладка «Дополнения»: нажми на машину, затем «Шаблон». Копия шаблона откроется в Проводнике.
+Paint over it in your software, keeping the size (2048 x 2048). The red hatched area gets your number: draw nothing important there.	Рисуй поверх в своей программе, сохраняя размер (2048 x 2048). В заштрихованную красным зону ставится твой номер: не рисуй там ничего важного.
+My image…: choose your image. In use: yes / no goes back to the colour and number without losing the image; Remove deletes it.	«Моё изображение…»: выбери картинку. «Используется: да / нет» возвращает цвет и номер, не теряя картинку; «Убрать» удаляет её.
+In game, your livery is sent to the other players: everyone sees it.	В игре твоя ливрея отправляется другим игрокам: её видят все.
+Open the add-ons	Открыть дополнения
+Add-ons	Дополнения
+Extension cars, custom livery	Машины-дополнения, своя ливрея
+Add-ons (other cars)	Дополнения (другие машины)

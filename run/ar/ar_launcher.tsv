@@ -1611,6 +1611,28 @@ Without the add-on	بدون الإضافة
 others see a VAZ	يرى الآخرون VAZ
 Livery	الطلاء
 yours (shared)	طلاؤك (مشترك)
+Add-ons are extra cars you install yourself. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery.	الإضافات سيارات إضافية تثبّتها بنفسك. في اللعبة يأخذ كل لاعب واحدة عبر F10 مثل VAZ: بلونه ورقمه، أو بطلائه الخاص.
+Installing a car	تثبيت سيارة
+Character > Add-ons > Open the add-ons folder: the game's MWCoop\\addons folder opens.	الشخصية > الإضافات > فتح مجلد الإضافات: يُفتح مجلد MWCoop\\addons في مجلد اللعبة.
+Copy the car's folder (the one that contains addon.ini) into this folder.	انسخ مجلد السيارة (الذي يحتوي على addon.ini) إلى هذا المجلد.
+Go back to the Add-ons tab: the car shows up there with its picture.	عد إلى تبويب الإضافات: تظهر السيارة هناك مع صورتها.
+To turn an add-on off without deleting it, add a dot to its folder name (for example evo3.off). Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	لإيقاف إضافة دون حذفها، أضف نقطة إلى اسم مجلدها (مثلاً evo3.off). يثبّت كل لاعب الإضافات التي يريد رؤيتها: بدون الإضافة تُرى مكانها سيارة VAZ بنفس اللون والرقم.
+Taking it in game	أخذها في اللعبة
+F10 > Cars tab: pick the model (button or M key) and a free colour, then Take.	F10 > تبويب السيارات: اختر الطراز (بالزر أو المفتاح M) ولوناً متاحاً، ثم خذ.
+Colour and number are unique across all players, whatever the model.	اللون والرقم فريدان بين جميع اللاعبين، أياً كان الطراز.
+Ice race and rally: you sign up with your players' car, VAZ or add-on.	سباق الجليد والرالي: تسجّل بسيارتك، VAZ أو إضافة.
+Making your livery	صنع طلائك
+Add-ons tab: click the car, then Template. A copy of the template opens in Explorer.	تبويب الإضافات: انقر السيارة ثم القالب. تُفتح نسخة من القالب في المستكشف.
+Paint over it in your software, keeping the size (2048 x 2048). The red hatched area gets your number: draw nothing important there.	ارسم فوقه في برنامجك مع الحفاظ على الحجم (2048 x 2048). المنطقة المظللة بالأحمر يوضع عليها رقمك: لا ترسم فيها شيئاً مهماً.
+My image…: choose your image. In use: yes / no goes back to the colour and number without losing the image; Remove deletes it.	صورتي…: اختر صورتك. مستخدم: نعم / لا يعيد اللون والرقم دون فقدان الصورة؛ إزالة تحذفها.
+In game, your livery is sent to the other players: everyone sees it.	في اللعبة يُرسل طلاؤك إلى اللاعبين الآخرين: يراه الجميع.
+Open the add-ons	فتح الإضافات
+Extension cars, custom livery	سيارات إضافية، طلاء خاص
+Add-ons (other cars)	الإضافات (سيارات أخرى)
+Open the add-ons folder	فتح مجلد الإضافات
+Extension cars: copy an add-on's folder into the add-ons folder. In game, take them with F10 (Cars tab).	سيارات إضافية: انسخ مجلد الإضافة إلى مجلد الإضافات. في اللعبة خذها عبر F10 (تبويب السيارات).
+Copy an add-on's folder into the add-ons folder: it will show up here.	انسخ مجلد إضافة إلى مجلد الإضافات: ستظهر هنا.
+Help	مساعدة
 Proximity voice	الصوت حسب القرب
 Voice range	مدى الصوت
 Voice volume	مستوى الصوت
