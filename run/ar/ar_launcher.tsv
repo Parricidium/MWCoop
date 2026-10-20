@@ -1585,6 +1585,32 @@ The wrench at the top right, left of the star: separate programs. The first one,
 Editor maps	خرائط المحرّر
 Moped, sticker, fabric, photo, maps…	دراجة نارية صغيرة، ملصق، قماش، صورة، خرائط…
 Moped, sticker, photo, maps…	دراجة نارية صغيرة، ملصق، صورة، خرائط…
+Choose the livery: 	اختر الطلاء: 
+ (painted on the template)	 (مرسوم على القالب)
+Template not found (MWCoop\\	لم يُعثر على القالب (MWCoop\\
+\\gabarit-livree.png): reinstall the add-on.	\\gabarit-livree.png): أعد تثبيت الإضافة.
+Add-ons	الإضافات
+Extension cars: a folder to copy into the game's MWCoop\\. In game, take them with F10 (Cars tab).	سيارات إضافية: مجلد يُنسخ إلى MWCoop\\ في مجلد اللعبة. في اللعبة، خذها عبر F10 (تبويب السيارات).
+No add-on installed	لا توجد إضافات مثبّتة
+Your livery	طلاؤك
+Colour + number	اللون + الرقم
+Livery: 	الطلاء: 
+‹ Add-ons	‹ الإضافات
+Without a livery, it takes your colour and number, like the VAZ. With one, every player sees yours.	بدون طلاء، تأخذ لونك ورقمك مثل VAZ. ومع الطلاء، يرى جميع اللاعبين طلاءك.
+Template (colour + number)	القالب (اللون + الرقم)
+1. Template: the car laid flat (2048 x 2048). The red hatched area gets your number: draw nothing important under it.	1. القالب: السيارة مفرودة (2048 x 2048). المنطقة المظللة بالأحمر يوضع عليها رقمك: لا ترسم تحتها شيئاً مهماً.
+3. In game, take it with F10 (Cars tab): everyone sees your livery.	3. في اللعبة، خذها عبر F10 (تبويب السيارات): يرى الجميع طلاءك.
+No livery for this add-on: the player's colour and number.	لا طلاء لهذه الإضافة: لون اللاعب ورقمه.
+Details	التفاصيل
+In game	في اللعبة
+F10 › Cars	F10 › السيارات
+unique per player	فريد لكل لاعب
+Number	الرقم
+theirs, on the doors	رقمه، على الأبواب
+Without the add-on	بدون الإضافة
+others see a VAZ	يرى الآخرون VAZ
+Livery	الطلاء
+yours (shared)	طلاؤك (مشترك)
 Proximity voice	الصوت حسب القرب
 Voice range	مدى الصوت
 Voice volume	مستوى الصوت

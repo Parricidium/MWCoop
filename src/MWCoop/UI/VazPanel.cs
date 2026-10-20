@@ -47,8 +47,11 @@ namespace MWCoop
             get
             {
                 if (note != null && Time.realtimeSinceStartup < noteUntil) return note;
-                return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  " + (Vaz.EvoAvailable ? "M : mod\u00E8le  \u00B7  " : "") + "glisser l'aper\u00E7u : tourner",
-                              "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  " + (Vaz.EvoAvailable ? "M: model  \u00B7  " : "") + "drag the preview: turn");
+                if (Vaz.EvoAvailable)
+                    return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  M : mod\u00E8le  \u00B7  glisser l'aper\u00E7u : tourner",
+                                  "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  M: model  \u00B7  drag the preview: turn");
+                return Lang.T("Fl\u00E8ches : couleur  \u00B7  Entr\u00E9e : prendre ou rendre  \u00B7  V : faire venir  \u00B7  glisser l'aper\u00E7u : tourner",
+                              "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  drag the preview: turn");
             }
         }
 
@@ -295,7 +298,7 @@ namespace MWCoop
             }
             if (evo)
             {
-                Style.Text(new Rect(r.x, cy, r.width, P(16)), sl.Length > 0 ? Lang.T("Livr\u00E9e perso", "Custom livery") : Lang.T("Couleur + num\u00E9ro (livr\u00E9e : lanceur, Voitures)", "Colour + number (livery: launcher, Cars)"), 11, TextAnchor.MiddleLeft, Kit.Faint, false);
+                Style.Text(new Rect(r.x, cy, r.width, P(16)), sl.Length > 0 ? Lang.T("Livr\u00E9e perso", "Custom livery") : Lang.T("Couleur + num\u00E9ro (livr\u00E9e : lanceur, Addons)", "Colour + number (livery: launcher, Add-ons)"), 11, TextAnchor.MiddleLeft, Kit.Faint, false);
                 cy += P(18);
             }
             string st = mine ? Lang.T("La v\u00F4tre", "Yours") : owner == null ? Lang.T("Libre", "Free") : Lang.T("Prise par ", "Taken by ") + owner;
