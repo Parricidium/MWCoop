@@ -689,6 +689,7 @@ namespace MWCoop
         static float lastW = -1f;
         static Drivetrain neutralFor;
         static bool neutralRule;
+        static int runawayLogs;
         public static void RevLimiterFixed()
         {
             Drivetrain d = limitDt;
@@ -708,6 +709,16 @@ namespace MWCoop
             // retombait de son regime maximal, « il revient en arriere », Menos 10/10)
             if (neutralFor != d) { neutralFor = d; neutralRule = d.name.StartsWith("SORBET"); }
             if (!Finite(w) || neutralRule && w > maxW * 1.6f + 1000f * k) { w = maxW; why = !Finite(w0) ? "non fini" : "emballe"; }
+            // Toute voiture : au-dela de 1,5 x le regime maximal, ce n'est plus un sur-regime du jeu (retrogradage) mais un
+            // emballement de l'integration -- la SATSUMA d'un invite a 19 141 tr/min 2 s apres son demarrage, pistons et
+            // coussinets ejectes par l'usure mecanique du jeu (29.30, 20/10). Ramenee au maximum, et l'etat note au journal.
+            if (why == null && w > maxW * 1.5f)
+            {
+                w = maxW; why = "emballe (x1,5)";
+                if (runawayLogs++ < 10)
+                    Log.Warn("voitures : " + d.name + " regime " + (w0 / k).ToString("F0") + " tr/min -- gaz " + d.throttle.ToString("F2") + ", rapport " + d.ratio.ToString("F2")
+                             + ", inertie " + d.engineInertia.ToString("F3") + ", max " + maxRpm.ToString("F0") + ", demarreur " + d.startEngine + ", pas " + Time.fixedDeltaTime.ToString("F3") + " s");
+            }
             // Regle du point mort : la SORBET seulement (son emballement, retour de Spagy). Ailleurs elle genait : la boite
             // automatique du mod 300D passe par le point mort, son ralenti monte (« regime tres bugge », Menos, 10/10).
             if (why == null && neutralRule && d.ratio == 0f && d.throttle < 0.05f && w > idleW * 1.3f && lastW > 0f && w > lastW)
