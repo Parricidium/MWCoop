@@ -105,6 +105,21 @@ namespace MWCoop
                     continue;
                 }
                 if (n.StartsWith("KEKMET") || n.StartsWith("FLATBED")) continue;   // une seule place
+                if (n == "BOAT" && Game.Msc)
+                {
+                    // Barque de My Summer Car (joueurs du 20/10 : « pas de places pour les passagers ») : le pilote a l'arriere, pres du
+                    // moteur ; la place en miroir le mettait sur ses genoux. Deux places sur le banc du milieu, une a l'avant, sans ceinture.
+                    Transform bh = Find(rb.transform, "DriverHeadPivot");
+                    if (bh != null)
+                    {
+                        Vector3 bd = rb.transform.InverseTransformPoint(bh.position) + EyeFromPivot;
+                        float bz = Config.GetFloat("Test", "BarqueRecul", 1.1f), bx = Config.GetFloat("Test", "BarqueEcart", 0.3f);
+                        seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(bx, bd.y, bd.z - bz), ZoneX = 0.45f, ZoneZ = 0.5f, MaxX = 0.6f });
+                        seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-bx, bd.y, bd.z - bz), ZoneX = 0.45f, ZoneZ = 0.5f, MaxX = 0.6f });
+                        seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 3, Head = new Vector3(0f, bd.y, bd.z - 2f * bz), ZoneX = 0.6f, ZoneZ = 0.5f, MaxX = 0.6f });
+                    }
+                    continue;
+                }
                 foreach (PlayMakerFSM f in rb.GetComponentsInChildren<PlayMakerFSM>(true))
                     if (f.FsmName == "PlayerTrigger" && f.gameObject.name.StartsWith("DriveTrigger")) driveTriggers.Add(f);
                 Transform dhp = Find(rb.transform, "DriverHeadPivot");

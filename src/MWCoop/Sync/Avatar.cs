@@ -454,6 +454,8 @@ namespace MWCoop
             for (int i = 0; i < Clips.GetLength(0); i++)
             {
                 AnimationClip c = FindClip(Clips[i, 1]);
+                // (My Summer Car n'a pas worker1_sitdown : passenger_anim1, le passager assis des voitures du jeu -- joueurs du 20/10)
+                if (c == null && Clips[i, 0] == "assis") c = FindClip("passenger_anim1");
                 if (c == null) { missing.Add(Clips[i, 1]); continue; }
                 Animation target = Clips[i, 2] == "collar_right" ? armR : Clips[i, 2] == "collar_left" ? armL : anim;
                 if (target == null) { missing.Add(Clips[i, 2]); continue; }

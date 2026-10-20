@@ -103,6 +103,7 @@ namespace MWCoop
             public GameObject[] SoundObjs;
             public bool[] SoundObjsWas;
             public int SoundMask;
+            public bool SoundParWas;          // BOAT : objet Engine (parent des sources) allume avant la copie
             public float[] SoundPitch, SoundVol;
             public float Rpm, Throttle, Steer;
             public FsmFloat Heat; public float RemoteHeat = float.NaN;   // temperature de la source de chaleur
@@ -450,6 +451,12 @@ namespace MWCoop
             if (Session.IsHost) SendTable(null); else SendKeys();
         }
 
+        // BOAT de My Summer Car : sources 1 et 2 sous GFX/Audio/Engine, objet Engine allume par le moteur du jeu et automate
+        // « Sound Engine » du parent Audio qui regle hauteur et volume d'apres le regime (joueurs du 20/10 : moteur du bateau muet
+        // chez les autres).
+        static bool BoatEngine(Transform t) { return t.name == "Engine" && t.parent != null && t.parent.name == "Audio" && t.root.name == "BOAT"; }
+        static bool BoatEngineSource(GameObject g) { return g != null && g.transform.parent != null && BoatEngine(g.transform.parent); }
+
         static Car Make(Rigidbody rb)
         {
             GameObject go = rb.gameObject;
@@ -471,7 +478,7 @@ namespace MWCoop
             car.WheelRot = new float[car.Wheels.Length];
             var snd = new List<GameObject>();
             foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
-                if (t.name == "Sounds" || t.name.StartsWith("AudioEngine"))   // (GIFU : LOD/AudioEngineGifu -- Coast, Low, Med, High : son moteur muet chez les autres, retour d'un joueur, 10/10)
+                if (t.name == "Sounds" || t.name.StartsWith("AudioEngine") || BoatEngine(t))   // (GIFU : LOD/AudioEngineGifu -- Coast, Low, Med, High : son moteur muet chez les autres, retour d'un joueur, 10/10)
                     foreach (Transform s in t) if (s.GetComponent<AudioSource>() != null && snd.Count < 14) snd.Add(s.gameObject);   // (bits 14-15 : klaxon, moteur en marche)
             car.SoundObjs = snd.ToArray();
             car.SoundObjsWas = new bool[snd.Count];
@@ -1602,9 +1609,16 @@ namespace MWCoop
                 if (on) c.SoundObjsWas[i] = c.SoundObjs[i].activeSelf;
                 else c.SoundObjs[i].SetActive(c.SoundObjsWas[i]);
                 foreach (PlayMakerFSM f in c.SoundObjs[i].GetComponents<PlayMakerFSM>()) f.enabled = !on;
-                // (GIFU : ses automates de son sont sur AudioEngineGifu, le parent des sources)
+                // (GIFU : ses automates de son sont sur AudioEngineGifu, le parent des sources ; BOAT : sur Engine et sur Audio)
                 Transform par = c.SoundObjs[i].transform.parent;
                 if (par != null && par.name.StartsWith("AudioEngine")) foreach (PlayMakerFSM f in par.GetComponents<PlayMakerFSM>()) f.enabled = !on;
+                if (BoatEngineSource(c.SoundObjs[i]))
+                {
+                    foreach (PlayMakerFSM f in par.GetComponents<PlayMakerFSM>()) f.enabled = !on;
+                    foreach (PlayMakerFSM f in par.parent.GetComponents<PlayMakerFSM>()) f.enabled = !on;
+                    if (on) { if (i == 0 || !BoatEngineSource(c.SoundObjs[i - 1])) c.SoundParWas = par.gameObject.activeSelf; }
+                    else if (par.gameObject.activeSelf != c.SoundParWas) par.gameObject.SetActive(c.SoundParWas);
+                }
             }
             if (on) { c.WheelsWas = new bool[c.Wheels.Length]; for (int i = 0; i < c.Wheels.Length; i++) if (c.Wheels[i] != null) { c.WheelsWas[i] = c.Wheels[i].enabled; c.Wheels[i].enabled = false; } }
             else for (int i = 0; i < c.Wheels.Length; i++) if (c.Wheels[i] != null) c.Wheels[i].enabled = c.WheelsWas == null || c.WheelsWas[i];
@@ -1925,7 +1939,7 @@ namespace MWCoop
                 // (GIFU : le parent LOD/AudioEngineGifu n'est allume que par le demarreur du jeu, qui ne tourne pas sur une
                 // copie -- sons du moteur muets chez les autres meme a cote, retour de Menor, 10/10)
                 Transform gp = g.transform.parent;
-                if (gp != null && gp.name.StartsWith("AudioEngine") && !gp.gameObject.activeSelf) gp.gameObject.SetActive(true);
+                if (gp != null && (gp.name.StartsWith("AudioEngine") || BoatEngine(gp)) && !gp.gameObject.activeSelf) gp.gameObject.SetActive(true);
                 AudioSource a = g.GetComponent<AudioSource>();
                 a.pitch = c.SoundPitch[i];
                 a.volume = c.SoundVol[i];
