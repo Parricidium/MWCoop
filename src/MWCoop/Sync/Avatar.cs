@@ -1398,6 +1398,7 @@ namespace MWCoop
             {
                 int hi = System.Array.IndexOf(body.bones, headBone);
                 if (hi < 0) return false;
+                Transform hpB = Bone("HeadPivot"); int hi2 = hpB != null ? System.Array.IndexOf(body.bones, hpB) : -1;
                 var baked = new Mesh();
                 body.BakeMesh(baked);
                 Vector3[] v = baked.vertices;
@@ -1408,7 +1409,7 @@ namespace MWCoop
                 for (int i = 0; i < v.Length && i < w.Length; i++)
                 {
                     BoneWeight b = w[i];
-                    float hw = (b.boneIndex0 == hi ? b.weight0 : 0f) + (b.boneIndex1 == hi ? b.weight1 : 0f) + (b.boneIndex2 == hi ? b.weight2 : 0f) + (b.boneIndex3 == hi ? b.weight3 : 0f);
+                    float hw = (b.boneIndex0 == hi || b.boneIndex0 == hi2 ? b.weight0 : 0f) + (b.boneIndex1 == hi || b.boneIndex1 == hi2 ? b.weight1 : 0f) + (b.boneIndex2 == hi || b.boneIndex2 == hi2 ? b.weight2 : 0f) + (b.boneIndex3 == hi || b.boneIndex3 == hi2 ? b.weight3 : 0f);
                     if (hw < 0.6f) continue;
                     Vector3 p = r.InverseTransformPoint(bt.TransformPoint(v[i]));
                     mn = Vector3.Min(mn, p); mx = Vector3.Max(mx, p); n++;
@@ -1418,7 +1419,7 @@ namespace MWCoop
                 Vector3 c = (mn + mx) * 0.5f;
                 // (bouche : au-devant de la boite, un peu en retrait de la pointe du nez, au tiers du bas ; casque : centre, un peu haut)
                 Vector3 mouthRoot = new Vector3(c.x, mn.y + (mx.y - mn.y) * 0.3f, mx.z - 0.02f);
-                Vector3 helmetRoot = new Vector3(c.x, c.y + (mx.y - mn.y) * 0.08f, c.z + 0.01f);
+                Vector3 helmetRoot = new Vector3(c.x, mx.y, c.z);   // (le HAUT de la tete : le cou, s'il entre dans la boite, ne fausse pas le centre)
                 mouthHead = headBone.InverseTransformPoint(r.TransformPoint(mouthRoot));
                 helmetHead = headBone.InverseTransformPoint(r.TransformPoint(helmetRoot));
                 headBoxState = 1;
@@ -2334,10 +2335,31 @@ namespace MWCoop
             for (int i = 0; i < 5 && i < p.Length; i++) float.TryParse(p[i], System.Globalization.NumberStyles.Float, ci, out v[i]);
             Transform r = Root.transform;
             ht.localScale = st.lossyScale;
-            // (centre de la boite de la tete quand elle se mesure ; sinon les constantes d'avant)
-            if (HeadBox()) ht.position = headBone.TransformPoint(helmetHead) + r.up * Config.GetFloat("Test", "CasqueHaut", 0f) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
-            else ht.position = headBone.position + r.up * v[0] + r.forward * v[1];
             ht.rotation = r.rotation * Quaternion.Euler(v[2], v[3], v[4]);
+            if (HeadBox())
+            {
+                // Les maillages du casque (pas son pivot : la coque est decalee par rapport a lui -- yeux a la mentonniere et crane qui
+                // depasse, JD 20/10) poses d'apres leur boite : haut du casque sur le haut de la tete ([Test] CasqueHaut / CasqueAvant).
+                ht.position = Vector3.zero;
+                Vector3 lo = new Vector3(1e9f, 1e9f, 1e9f), hi = -lo;
+                foreach (Transform c in ht)
+                {
+                    MeshFilter cm = c.GetComponent<MeshFilter>();
+                    if (cm == null || cm.sharedMesh == null) continue;
+                    Bounds b = cm.sharedMesh.bounds;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        Vector3 corner = b.center + Vector3.Scale(b.extents, new Vector3((k & 1) != 0 ? 1f : -1f, (k & 2) != 0 ? 1f : -1f, (k & 4) != 0 ? 1f : -1f));
+                        Vector3 w = c.TransformPoint(corner);   // (ht en 0 : position du coin par rapport au pivot du casque)
+                        lo = Vector3.Min(lo, w); hi = Vector3.Max(hi, w);
+                    }
+                }
+                // (le haut du casque 2,5 cm au-dessus du haut du crane -- le rembourrage --, centre a l'aplomb de la tete)
+                Vector3 anchor = new Vector3((lo.x + hi.x) * 0.5f, hi.y, (lo.z + hi.z) * 0.5f);
+                Vector3 target = headBone.TransformPoint(helmetHead) + r.up * Config.GetFloat("Test", "CasqueHaut", 0.025f) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
+                ht.position = target - anchor;
+            }
+            else ht.position = headBone.position + r.up * v[0] + r.forward * v[1];
             ht.SetParent(hp, true);
             var names = new System.Text.StringBuilder();
             foreach (Transform c in ht) { MeshFilter cm = c.GetComponent<MeshFilter>(); MeshRenderer cr = c.GetComponent<MeshRenderer>(); names.Append(' ').Append(c.name).Append('[').Append(cm.sharedMesh.name).Append(' ').Append(cm.sharedMesh.bounds.size.ToString("F2")).Append(' ').Append(cr.sharedMaterial != null ? cr.sharedMaterial.name + "/" + cr.sharedMaterial.shader.name : "-").Append(" rot ").Append(c.localEulerAngles.ToString("F0")).Append(" centre ").Append(c.localPosition + c.localRotation * Vector3.Scale(c.localScale, cm.sharedMesh.bounds.center)).Append(']'); }
