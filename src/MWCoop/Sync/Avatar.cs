@@ -2365,11 +2365,11 @@ namespace MWCoop
                 ht.localScale = ht.localScale * f;
                 Vector3 centre = (lo + hi) * 0.5f * f;
                 float extra = headHeight * (ech - 1f);
-                Vector3 target = headBone.TransformPoint(helmetHead) + r.up * (extra * (2f / 3f - 0.5f) + Config.GetFloat("Test", "CasqueHaut", 0.02f)) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
+                Vector3 target = headBone.TransformPoint(helmetHead) + r.up * (extra * (2f / 3f - 0.5f) + Config.GetFloat("Test", "CasqueHaut", 0.03f)) + r.forward * Config.GetFloat("Test", "CasqueAvant", 0f);
                 ht.position = target - centre;
                 // Aligne sur le regard : le personnage regarde un peu vers le bas (JD, 20/10) -- casque tourne autour du centre de la
                 // tete de [Test] CasqueTangage degres (10, positif = vers le bas).
-                Quaternion tilt = Quaternion.AngleAxis(Config.GetFloat("Test", "CasqueTangage", 16f), r.right);
+                Quaternion tilt = Quaternion.AngleAxis(Config.GetFloat("Test", "CasqueTangage", 26f), r.right);
                 ht.rotation = tilt * ht.rotation;
                 ht.position = target + tilt * (ht.position - target);
                 Log.Info("avatar " + Player.Name + " : casque agrandi x" + f.ToString("F2") + " (tete " + headHeight.ToString("F2") + " m, casque " + ((hi.y - lo.y) * f).ToString("F2") + " m)");
