@@ -17,10 +17,11 @@ namespace MWCoop
     // couleur du joueur et son numero sur les portieres.
     public static class VazCar
     {
-        // Modeles des voitures des joueurs (JD, 20/10) : la VAZ-2108 (MWCoop/vaz, dans la version publiee) et la Mitsubishi
-        // Lancer Evolution III Gr. A (MWCoop/evo3 : EXTENSION PRIVEE de JD, jamais dans le depot ni les versions publiees --
-        // modele d'un mod rFactor 1 sans licence connue). Meme construction ; ce qui change : dossier, poste de conduite,
-        // commandes du tableau de bord, frein a main, moteur, tenue de route (VazHandling).
+        // Modeles des voitures des joueurs (JD, 20/10) : la VAZ-2108 (MWCoop/vaz, dans la version publiee) et les addons --
+        // Evo III Gr. A (MWCoop/addons/evo3), 205 T16 Evo 2 Gr. B (MWCoop/addons/t16, JD 21/10) : EXTENSIONS PRIVEES de JD,
+        // jamais dans le depot ni les versions publiees (modeles de mods rFactor 1 sans licence connue). Meme construction ; ce
+        // qui change : dossier, poste de conduite, commandes du tableau de bord, frein a main, moteur, tenue de route (Spec,
+        // VazHandling), sons (MWCoop/addons/<dossier>/sons, VazSound).
         public class Model
         {
             public int Id; public string Folder;
@@ -28,22 +29,7 @@ namespace MWCoop
             string name; bool nameRead;
             public string Name
             {
-                get
-                {
-                    if (!nameRead && Folder != "vaz")
-                    {
-                        nameRead = true;
-                        try
-                        {
-                            string f = Path.Combine(Dir, "addon.ini");
-                            if (File.Exists(f))
-                                foreach (string l in File.ReadAllLines(f, System.Text.Encoding.UTF8))
-                                    if (l.StartsWith("NomCourt=") && l.Length > 9) name = l.Substring(9).Trim();
-                        }
-                        catch { }
-                    }
-                    return name;
-                }
+                get { Read(); return name; }
                 set { name = value; }
             }
             public Vector3 Head, Engine, BrakePivot, BrakeGrip;
@@ -54,6 +40,27 @@ namespace MWCoop
             public float BrakeAngle = 1f;     // amplitude du levier (KnobPos 0-20 degres x ceci)
             public float ControlSize;         // taille maxi (m) des zones cliquables des commandes deplacees (0 : celles du jeu)
             public Dictionary<string, Vector3> Info;
+            public Spec Sp;                   // tenue de route propre (null : Rivett rallye, VazHandling)
+            // description : Description / DescriptionEn de addon.ini (panneau F10)
+            public string Desc { get { Read(); return Lang.T(desc ?? "", descEn ?? desc ?? ""); } }
+            string desc, descEn;
+            void Read()
+            {
+                if (nameRead || Folder == "vaz") return;
+                nameRead = true;
+                try
+                {
+                    string f = Path.Combine(Dir, "addon.ini");
+                    if (File.Exists(f))
+                        foreach (string l in File.ReadAllLines(f, System.Text.Encoding.UTF8))
+                        {
+                            if (l.StartsWith("NomCourt=") && l.Length > 9) name = l.Substring(9).Trim();
+                            else if (l.StartsWith("DescriptionEn=")) descEn = l.Substring(14).Trim();
+                            else if (l.StartsWith("Description=")) desc = l.Substring(12).Trim();
+                        }
+                }
+                catch { }
+            }
             // (addons : MWCoop\addons\<dossier> depuis 1.5.1 -- dossier ouvert par le lanceur, onglet Addons ; avant : MWCoop\<dossier>)
             public string Dir
             {
@@ -67,7 +74,13 @@ namespace MWCoop
             public bool HasFiles { get { return File.Exists(Path.Combine(Dir, "carrosserie.p205")); } }
         }
         public class Knob { public string Path; public Vector3 At, Normal; public Color Col; public bool Choke; }
-        public const int ModelVaz = 0, ModelEvo = 1;
+        // Tenue de route d'un addon (VazHandling.Spec) : moteur, boite, masse, repartition (part sur l'avant), ressorts.
+        public class Spec
+        {
+            public string Name; public float Power, PowerRpm, Torque, TorqueRpm, MaxRpm, Inertia = 0.15f, Final = 4.4f, Clutch = 420f;
+            public float Mass, Com, Steer, Spring, Damp; public float[] Gears;
+        }
+        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2;
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
         // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant.
@@ -94,8 +107,41 @@ namespace MWCoop
             Off = new[] { "Functions/Dashboard/Buttons/ButtonWipers", "Functions/Dashboard/Buttons/ButtonWindowHeater", "Functions/Dashboard/Buttons/ButtonHeaterTemp",
                           "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
                           "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
-            Dome = new Vector3(0f, 1.10f, -0.05f), HasDome = true, ControlSize = 0.024f };
-        public static Model ModelOf(int id) { return id == ModelEvo ? Evo3 : Vaz2108; }
+            Dome = new Vector3(0f, 1.10f, -0.05f), HasDome = true, ControlSize = 0.024f,
+            // (mod a part de JD, Grupo A engine.ini du mod rFactor) : 370 ch a 5 900 tr/min, 495 Nm a 4 200, rupteur 7 500,
+            // integrale, 1 230 kg, 61 % sur l'avant (moteur transversal avant), braquage 35
+            Sp = new Spec { Name = "Evo III Gr. A", Power = 370f, PowerRpm = 5900f, Torque = 495f, TorqueRpm = 4200f, MaxRpm = 7500f,
+                            Mass = 1230f, Com = 0.61f, Steer = 35f, Spring = 45300f, Damp = 2850f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+        // 205 T16 Evo 2 Gr. B (JD 21/10, rally cars GrB/205T162) : moteur central arriere, integrale ; poste de conduite d'apres
+        // le volant du pilote (le meme que l'Evo III, 0,19 plus en arriere et 0,06 plus haut) ; frein a main : la tige carbone de
+        // l'Evo III deplacee de meme (outils/rf1/t16e2_frein.py) ; commandes comme l'Evo III : contact (rouge), starter (bleu,
+        // tire / pousse), phares (blanc), warning (orange) en colonne sur la face de la planche (z 0,54, tournee vers le pilote)
+        // juste a droite du volant, vue depuis la tete (sous le bord du collider front1 de la SORBET, qui cachait le contact
+        // a 0,70) ; le reste du tableau de bord coupe. Tenue de route : celle de la 2052 du mod
+        // prive de JD validee en jeu (fiche T16 Evo 2 : 424 ch a 7 500, 490 Nm a 5 500, 907 kg, 46 % sur l'avant, braquage 40).
+        public static readonly Model T16 = new Model { Id = ModelT16, Folder = "t16", Name = "205 Ebo 2",
+            Head = new Vector3(-0.32f, 0.969f, -0.291f), Engine = new Vector3(0f, 0.55f, -0.85f),
+            BrakePivot = new Vector3(-0.02f, 0.335f, 0.123f), BrakeGrip = new Vector3(-0.045f, 0.66f, 0.165f), BrakeAngle = 1.4f,
+            Controls = new[] {
+                new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.03f, 0.665f, 0.530f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(-0.03f, 0.630f, 0.530f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonLightModes", new Vector3(-0.03f, 0.595f, 0.530f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHazard", new Vector3(-0.03f, 0.560f, 0.530f)) },
+            Knobs = new[] {
+                new Knob { At = new Vector3(-0.03f, 0.665f, 0.537f), Normal = Vector3.back, Col = new Color(0.80f, 0.06f, 0.05f) },
+                new Knob { At = new Vector3(-0.03f, 0.630f, 0.537f), Normal = Vector3.back, Col = new Color(0.10f, 0.25f, 0.85f), Choke = true, Path = "Functions/Dashboard/Choke/ButtonChoke" },
+                new Knob { At = new Vector3(-0.03f, 0.595f, 0.537f), Normal = Vector3.back, Col = new Color(0.92f, 0.92f, 0.90f) },
+                new Knob { At = new Vector3(-0.03f, 0.560f, 0.537f), Normal = Vector3.back, Col = new Color(0.95f, 0.45f, 0.05f) } },
+            Off = new[] { "Functions/Dashboard/Buttons/ButtonWipers", "Functions/Dashboard/Buttons/ButtonWindowHeater", "Functions/Dashboard/Buttons/ButtonHeaterTemp",
+                          "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
+                          "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
+            Dome = new Vector3(0f, 1.05f, -0.25f), HasDome = true, ControlSize = 0.024f,
+            Sp = new Spec { Name = "205 T16 Evo 2 Gr. B", Power = 424f, PowerRpm = 7500f, Torque = 490f, TorqueRpm = 5500f, MaxRpm = 8000f,
+                            Mass = 907f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+        public static readonly Model[] Models = { null, Evo3, T16 };   // (rempli : Vaz2108 au constructeur statique)
+        public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
+        // addon installe ici (la VAZ l'est toujours)
+        public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles); }
         static Model cur = Vaz2108;   // (modele en cours de construction : fichiers, matieres, textures)
 
         public static string Dir { get { return Vaz2108.Dir; } }
@@ -107,7 +153,7 @@ namespace MWCoop
         // passager trop en avant.
         static readonly Vector3 EyesModel = new Vector3(-0.35f, 1.10f, 0.02f);
         static readonly Vector3 HeadModel = EyesModel - new Vector3(0f, -0.03f, 0.27f);
-        static VazCar() { Vaz2108.Head = HeadModel; Vaz2108.Controls = Controls; Vaz2108.BrakePivot = BrakePivotModel; Vaz2108.BrakeGrip = BrakeGripModel; Vaz2108.Engine = EngineModel; }
+        static VazCar() { Models[0] = Vaz2108; Vaz2108.Head = HeadModel; Vaz2108.Controls = Controls; Vaz2108.BrakePivot = BrakePivotModel; Vaz2108.BrakeGrip = BrakeGripModel; Vaz2108.Engine = EngineModel; }
 
         // Commandes de la SORBET posees sur les boutons du tableau de bord de la VAZ (centres des pieces du modele, repere
         // du modele ; photo annotee de JD, 18/10) : contact, essuie-glaces et feux sur les trois interrupteurs a gauche des
@@ -136,6 +182,7 @@ namespace MWCoop
             public Transform Body, SteerPivot, SorbetSteer, BrakePivot, SorbetBrake;
             public Quaternion SorbetSteerRest, SorbetBrakeRest;
             public VazSound Sound;
+            public VazFlaps Flaps;
             public FsmFloat BrakeKnob;
             public int Number;
             public Transform Roof; public BoxCollider RoofZone; public bool RoofOpen, RoofHover; public float RoofAngle;
@@ -673,7 +720,18 @@ namespace MWCoop
             VazHandling.Apply(b, true);
             var eng = new GameObject("VAZ_moteur_son").transform;
             eng.SetParent(body.transform, false); eng.localPosition = cur.Engine;
-            b.Sound = VazSound.Create(car, eng);
+            b.Sound = VazSound.Create(car, eng, cur);
+            // bavettes souples (addons : bavette_*.p205 du dossier du modele, VazFlaps)
+            foreach (string bn in new[] { "bavette_ag", "bavette_ad", "bavette_vg", "bavette_vd" })
+            {
+                if (!File.Exists(Path.Combine(cur.Dir, bn + ".p205"))) continue;
+                var bg = new GameObject("VAZ_" + bn).transform;
+                bg.SetParent(body.transform, false);
+                AddParts(b, bg, bn + ".p205", basePaint, paint, number);
+                if (b.Flaps == null) b.Flaps = new VazFlaps(body.transform, b.Rb);
+                b.Flaps.Add(bg);
+            }
+            if (b.Flaps != null) Log.Info("vaz : " + b.Flaps.Count + " bavette(s) souple(s)");
             Transform tank = ct.Find("Simulation/FuelTankSorbett");
             PlayMakerFSM tf = tank != null ? Game.FsmOn(tank.gameObject, "Data") : null;
             FsmFloat fuel = tf != null ? tf.FsmVariables.FindFsmFloat("FuelLevel") : null;
@@ -739,6 +797,7 @@ namespace MWCoop
             ChokeKnob(b);
             Roof(b);
             if (b.Sound != null) b.Sound.Update();
+            if (b.Flaps != null) b.Flaps.Update();
             Lamps(b, now);
             VazHandling.Tick(b, now);
             if (now >= b.NextMask) { b.NextMask = now + 1f; WheelMask(b); }
@@ -975,7 +1034,7 @@ namespace MWCoop
             var b = new Built { M = cur, Paint = paint };
             var root = new GameObject("MWCoop-VazApercu-" + number);
             b.Car = root;
-            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205", "hayon.p205", "trappe.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
+            foreach (string f in new[] { "carrosserie.p205", "capot.p205", "portiere_g.p205", "portiere_d.p205", "volant.p205", "frein.p205", "hayon.p205", "trappe.p205", "bavette_ag.p205", "bavette_ad.p205", "bavette_vg.p205", "bavette_vd.p205" }) AddParts(b, root.transform, f, basePaint, paint, number);
             GameObject rc = RallyCar();
             Dictionary<string, Vector3> inf = Info();
             if (rc != null)

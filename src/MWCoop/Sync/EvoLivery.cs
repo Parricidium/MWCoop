@@ -12,6 +12,8 @@ namespace MWCoop
     // V_SET / V_LIV) ; chez les autres, l'image est demandee (@livree?) a qui l'a, recue par morceaux (@livreep, fiables, 900
     // octets, comme les visages perso : CustomFace), gardee en cache (%LOCALAPPDATA%\MWCoop\livrees\<empreinte>.jpg) et posee
     // sur les matieres de peinture de la voiture (VazCar.SetLivery). [Coop] VoirLivrees=0 : celles des autres non.
+    // Chaque addon a la sienne (JD 21/10, 205 T16) : %LOCALAPPDATA%\MWCoop\<dossier>-livree.jpg, [Coop] Livree_<dossier>=perso
+    // (EvoLivree pour l'Evo III, comme avant) -- les memes noms que le lanceur (voiture.inc, AddonCfgKey).
     public static class EvoLivery
     {
         const int Chunk = 900;
@@ -19,15 +21,16 @@ namespace MWCoop
         static readonly Dictionary<string, float> asked = new Dictionary<string, float>(), sentAt = new Dictionary<string, float>();
         class Parts { public byte[][] P; public int Got; }
         static readonly Dictionary<string, Parts> incoming = new Dictionary<string, Parts>();
-        static string myHash = "";
-        static System.DateTime myTime;
-        static bool myChosen;
-        static float nextPoll;
+        class Mine { public string Hash = ""; public System.DateTime Time; public bool Chosen; public float Next; }
+        static readonly Dictionary<string, Mine> mine = new Dictionary<string, Mine>();
+        static Mine Of(VazCar.Model m) { Mine x; if (!mine.TryGetValue(m.Folder, out x)) mine[m.Folder] = x = new Mine(); return x; }
+        static bool IsMine(string h) { foreach (Mine x in mine.Values) if (x.Hash == h) return true; return false; }
         public static int Generation;   // change quand une image arrive (Vaz repose les livrees)
 
         // ([Test] RacineVisages : un dossier par instance d'essai, comme les visages perso)
         static string Root { get { string o = Config.Get("Test", "RacineVisages", ""); return o.Length > 0 ? o : Path.Combine(System.Environment.GetEnvironmentVariable("LOCALAPPDATA") ?? ".", "MWCoop"); } }
-        public static string MyFile { get { return Path.Combine(Root, "evo3-livree.jpg"); } }
+        static string MyFile(VazCar.Model m) { return Path.Combine(Root, m.Folder + "-livree.jpg"); }
+        static string CfgKey(VazCar.Model m) { return m.Folder == "evo3" ? "EvoLivree" : "Livree_" + m.Folder; }
         static string CacheDir { get { return Path.Combine(Root, "livrees"); } }
         static string CacheFile(string h) { return Path.Combine(CacheDir, h + ".jpg"); }
 
@@ -42,26 +45,34 @@ namespace MWCoop
             }
         }
 
-        // Empreinte de la livree du joueur d'ici ("" : couleur du joueur). Relue quand le fichier ou le choix changent.
-        public static string MyHash { get { Poll(); return myHash; } }
-
-        // Au plus toutes les 2 s : choix ([Coop] EvoLivree) et date du fichier ; vrai si l'empreinte a change.
-        public static bool Poll()
+        // Empreinte de la livree du joueur d'ici pour ce modele ("" : couleur du joueur ; la VAZ n'en a pas). Relue quand le
+        // fichier ou le choix changent.
+        public static string MyHash(int model)
         {
+            if (model == VazCar.ModelVaz) return "";
+            VazCar.Model m = VazCar.ModelOf(model);
+            Poll(m); return Of(m).Hash;
+        }
+
+        // Au plus toutes les 2 s : choix ([Coop] EvoLivree / Livree_<dossier>) et date du fichier ; vrai si l'empreinte a change.
+        public static bool Poll(int model) { return model != VazCar.ModelVaz && Poll(VazCar.ModelOf(model)); }
+        static bool Poll(VazCar.Model m)
+        {
+            Mine me = Of(m);
             float now = Time.realtimeSinceStartup;
-            if (now < nextPoll) return false;
-            nextPoll = now + 2f;
-            bool chosen = Config.Get("Coop", "EvoLivree", "") == "perso";
+            if (now < me.Next) return false;
+            me.Next = now + 2f;
+            bool chosen = Config.Get("Coop", CfgKey(m), "") == "perso";
             System.DateTime t = System.DateTime.MinValue;
-            try { if (chosen && File.Exists(MyFile)) t = File.GetLastWriteTimeUtc(MyFile); } catch { }
-            if (chosen == myChosen && t == myTime) return false;
-            myChosen = chosen; myTime = t;
-            string was = myHash;
-            myHash = "";
+            string file = MyFile(m);
+            try { if (chosen && File.Exists(file)) t = File.GetLastWriteTimeUtc(file); } catch { }
+            if (chosen == me.Chosen && t == me.Time) return false;
+            me.Chosen = chosen; me.Time = t;
+            string was = me.Hash, myHash = "";
             if (chosen && t != System.DateTime.MinValue)
                 try
                 {
-                    byte[] b = File.ReadAllBytes(MyFile);
+                    byte[] b = File.ReadAllBytes(file);
                     if (b.Length < 100 || b.Length > 2200000) Log.Warn("livree evo : image refusee (" + b.Length + " octets)");
                     else
                     {
@@ -72,7 +83,8 @@ namespace MWCoop
                     }
                 }
                 catch (System.Exception e) { Log.Warn("livree evo : " + e.Message); }
-            if (myHash != was) Log.Info("livree evo : " + (myHash.Length > 0 ? myHash : "aucune (couleur du joueur)"));
+            me.Hash = myHash;
+            if (myHash != was) Log.Info("livree " + m.Folder + " : " + (myHash.Length > 0 ? myHash : "aucune (couleur du joueur)"));
             return myHash != was;
         }
 
@@ -82,7 +94,7 @@ namespace MWCoop
             if (string.IsNullOrEmpty(h)) return null;
             Texture2D t;
             if (loaded.TryGetValue(h, out t) && t != null) return t;
-            if (Config.GetInt("Coop", "VoirLivrees", 1) == 0 && h != myHash) return null;
+            if (Config.GetInt("Coop", "VoirLivrees", 1) == 0 && !IsMine(h)) return null;
             string f = CacheFile(h);
             if (!File.Exists(f)) { Ask(h); return null; }
             try
@@ -111,7 +123,7 @@ namespace MWCoop
             float t;
             string f = CacheFile(h);
             if (!File.Exists(f) || (sentAt.TryGetValue(h, out t) && Time.realtimeSinceStartup - t < 20f)) return;
-            if (!Session.IsHost && h != myHash) return;   // (celui qui l'a choisie repond, et l'hote qui l'a en cache)
+            if (!Session.IsHost && !IsMine(h)) return;   // (celui qui l'a choisie repond, et l'hote qui l'a en cache)
             sentAt[h] = Time.realtimeSinceStartup;
             byte[] b = File.ReadAllBytes(f);
             int n = (b.Length + Chunk - 1) / Chunk;
