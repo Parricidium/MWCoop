@@ -763,7 +763,7 @@ static void AddonsScan()
         HANDLE h = FindFirstFileW((AddonsRoot() + L"*").c_str(), &fd);
         if (h != INVALID_HANDLE_VALUE) {
             do {
-                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || wcschr(fd.cFileName, L'.')) continue;   // (« evo3.off » : addon coupe)
                 std::wstring dir = AddonsRoot() + fd.cFileName + L"\\";
                 std::vector<unsigned char> b;
                 if (!FileExists(dir + L"carrosserie.p205") || !ReadAll(dir + L"addon.ini", b)) continue;
