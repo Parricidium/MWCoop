@@ -27,6 +27,7 @@ namespace MWCoop
         public string Error;
 
         public SceneFile(string path) { this.path = path; }
+        public string FilePath { get { return path; } }
 
         public bool Open()
         {

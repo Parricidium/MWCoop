@@ -237,10 +237,14 @@ namespace MWCoop
             string texDir = Path.Combine(dir, "textures");
             Directory.CreateDirectory(texDir);
             int max = Config.GetInt("Test", "ExportTexture", 512), texOk = 0;
+            // textures du sol (une seule image pour tout le terrain de MSC) : plus grandes, 2048 px (format 3, sol detaille de l'editeur)
+            int maxGround = Config.GetInt("Test", "ExportTextureSol", 2048);
+            var ground = new HashSet<int>();
+            foreach (Inst o in insts) if (o.Kind == KGround) foreach (int mi in o.Mats) if (mi >= 0) { Texture gt = mats[mi].HasProperty("_MainTex") ? mats[mi].mainTexture : null; int gi; if (gt != null && texIndex.TryGetValue(gt, out gi)) ground.Add(gi); }
             for (int i = 0; i < texs.Count; i++)
             {
                 if (i % 10 == 0) State("textures", 0.8f + 0.15f * i / Mathf.Max(1, texs.Count), "Textures et materiaux", false, null);
-                try { if (SaveTexture(texs[i], Path.Combine(texDir, i + ".png"), max)) texOk++; }
+                try { if (SaveTexture(texs[i], Path.Combine(texDir, i + ".png"), ground.Contains(i) ? maxGround : max)) texOk++; }
                 catch (Exception e) { Log.Warn("export de la carte : texture " + texs[i].name + " : " + e.Message); }
                 yield return true;
             }
@@ -308,6 +312,8 @@ namespace MWCoop
             i = mats.Count; mats.Add(m); matIndex[m] = i;
             Texture t = m.HasProperty("_MainTex") ? m.mainTexture : null;
             if (t is Texture2D && !texIndex.ContainsKey(t)) { texIndex[t] = texs.Count; texs.Add(t); }
+            Texture d = m.HasProperty("_Detail") ? m.GetTexture("_Detail") : null;   // (« Diffuse Detail » : le grain du sol, repete)
+            if (d is Texture2D && !texIndex.ContainsKey(d)) { texIndex[d] = texs.Count; texs.Add(d); }
             return i;
         }
 
@@ -463,7 +469,7 @@ namespace MWCoop
         static void WriteJson(string path)
         {
             var sb = new StringBuilder(1 << 20);
-            sb.Append("{\"format\":2,\"jeu\":").Append(S(Game.Msc ? "msc" : "mwc")).Append(",\"nom\":").Append(S(Game.Name));
+            sb.Append("{\"format\":3,\"jeu\":").Append(S(Game.Msc ? "msc" : "mwc")).Append(",\"nom\":").Append(S(Game.Name));
             sb.Append(",\"mod\":").Append(S(Version.Text)).Append(",\"date\":").Append(S(DateTime.Now.ToString("yyyy-MM-dd HH:mm")));
             Transform pl = Game.PlayerT;
             if (pl != null) sb.Append(",\"joueur\":[").Append(F(pl.position.x)).Append(',').Append(F(pl.position.y)).Append(',').Append(F(pl.position.z)).Append(']');
@@ -472,6 +478,9 @@ namespace MWCoop
             sb.Append(",\"bornes\":[").Append(F(all.min.x)).Append(',').Append(F(all.min.y)).Append(',').Append(F(all.min.z)).Append(',')
               .Append(F(all.max.x)).Append(',').Append(F(all.max.y)).Append(',').Append(F(all.max.z)).Append(']');
             sb.Append(",\"textures\":").Append(texs.Count);
+            sb.Append(",\"texnoms\":[");   // (format 3 : noms des textures, pour les choisir dans l'editeur ; le mod les retrouve par leur nom)
+            for (int i = 0; i < texs.Count; i++) sb.Append(i > 0 ? "," : "").Append(S(texs[i] != null ? texs[i].name : ""));
+            sb.Append(']');
             sb.Append(",\"matieres\":[");
             for (int i = 0; i < mats.Count; i++)
             {
@@ -487,6 +496,13 @@ namespace MWCoop
                 if (i > 0) sb.Append(',');
                 sb.Append("{\"n\":").Append(S(m.name)).Append(",\"s\":").Append(S(sh)).Append(",\"c\":[").Append(F(c.r)).Append(',').Append(F(c.g)).Append(',').Append(F(c.b)).Append(',').Append(F(c.a)).Append(']');
                 if (ti >= 0) sb.Append(",\"t\":").Append(ti).Append(",\"r\":[").Append(F(sc.x)).Append(',').Append(F(sc.y)).Append(',').Append(F(of.x)).Append(',').Append(F(of.y)).Append(']');
+                Texture dt = m.HasProperty("_Detail") ? m.GetTexture("_Detail") : null;
+                int di;
+                if (dt != null && texIndex.TryGetValue(dt, out di))
+                {
+                    Vector2 ds = m.GetTextureScale("_Detail"), dof = m.GetTextureOffset("_Detail");
+                    sb.Append(",\"dt\":").Append(di).Append(",\"dr\":[").Append(F(ds.x)).Append(',').Append(F(ds.y)).Append(',').Append(F(dof.x)).Append(',').Append(F(dof.y)).Append(']');
+                }
                 if (cut) sb.Append(",\"d\":").Append(F(m.HasProperty("_Cutoff") ? m.GetFloat("_Cutoff") : 0.5f));
                 if (transp) sb.Append(",\"a\":1");
                 sb.Append('}');

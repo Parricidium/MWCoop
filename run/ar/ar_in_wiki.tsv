@@ -532,3 +532,11 @@ WED24	Compile and play
 WED25	Compile makes a small .mwcmap file: only your models and their textures. Copies of game objects are rebuilt from each player's game: no game file is shared.
 WED26	It goes into MWCoop\\cartes: your map is added to the real map in your next session, collisions included.
 WED27	In co-op, the host sends their maps to guests in the lobby (Sent content › Others › Editor maps); a guest only loads the host's maps: everyone has the same map.
+WED28	A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to add your own objects. BETA version: copy, move and hide game objects, import 3D models, draw roads, add water, change textures, compile your map and share it in co-op.
+WED29	Hold right-click + WASD to fly (wheel: speed), Space / C to go up and down, Shift to go faster. Middle-click: orbit around a point; Shift + middle-click: pan; wheel: zoom to the cursor.
+WED30	The cube on the left: game objects sorted by kind (House, Tent, Sign…); type the start of a word (“Hou” finds House). A copy is placed in front of you. Or click an object of the map: Copy into my map, or Hide in my map.
+WED31	Road (P): like Photoshop's pen, a click places a point, a click and drag pulls its handles (the curve); Enter or double-click to finish. Points and handles can be dragged again, and the road follows the ground. Surface: road, asphalt, gravel, dirt… from the game.
+WED32	Water: a body of water to place and stretch (Move, Scale).
+WED33	Textures: in the properties, Change — a game texture or your own image (PNG, JPG…), on the whole object or one of its materials; double-click an imported model to texture just one face.
+WED34	Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.
+WED35	Objects, roads, water, textures, co-op

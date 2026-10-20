@@ -22,31 +22,40 @@ namespace MWCoop
 
         // Unity 5.0 : la 1re scene est dans mainData, la scene n dans level(n-1) (GAME de MSC : scene 3, level2) ; sinon
         // le premier fichier levelN qui a des objets regroupes.
+        static List<string> Tries()
+        {
+            var names = new List<string> { "level" + (Application.loadedLevel - 1), "level" + Application.loadedLevel };
+            for (int i = 0; i < 12; i++) if (!names.Contains("level" + i)) names.Add("level" + i);
+            var l = new List<string>();
+            foreach (string n in names) l.Add(Path.Combine(Application.dataPath, n));
+            return l;
+        }
+
         public static bool Open(string who)
         {
             if (scene != null) return true;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            var tries = new List<string> { "level" + (Application.loadedLevel - 1), "level" + Application.loadedLevel };
-            for (int i = 0; i < 12; i++) if (!tries.Contains("level" + i)) tries.Add("level" + i);
-            foreach (string t in tries)
+            if (pre != null)   // (lue en arriere-plan : Prefetch)
             {
-                string tp = Path.Combine(Application.dataPath, t);
+                pre.Join(); pre = null;
+                if (preScene != null)
+                {
+                    Adopt(preScene, preList);
+                    Log.Info(who + " : scene " + Path.GetFileName(preScene.FilePath) + " lue en arriere-plan : " + preList.Count + " objets regroupes (" + preMs + " ms)");
+                    preScene = null; preList = null;
+                    return true;
+                }
+            }
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            foreach (string tp in Tries())
+            {
+                string t = Path.GetFileName(tp);
                 if (!File.Exists(tp)) continue;
                 var cf = new SceneFile(tp);
                 List<SceneFile.Batched> cl = null;
                 try { if (cf.Open()) cl = cf.ReadBatched(); else Log.Warn(who + " : " + t + " illisible (" + cf.Error + ")"); }
                 catch (Exception e) { Log.Warn(who + " : " + t + " : " + e.Message); }
                 if (cl == null || cl.Count == 0) { cf.Close(); continue; }
-                scene = cf;
-                byKey = new Dictionary<string, List<SceneFile.Batched>>();
-                byName = new Dictionary<string, List<SceneFile.Batched>>();
-                byPath = new Dictionary<string, SceneFile.Batched>();
-                foreach (SceneFile.Batched b in cl)
-                {
-                    if (b.Path != null && !byPath.ContainsKey(b.Path)) byPath[b.Path] = b;
-                    Add(byKey, Key(b.Name + "|" + b.MeshName, b.Mats.Length > 0 ? b.Mats[0] : "", b.Subsets.Length), b);
-                    Add(byName, b.Name + "|" + b.MeshName + "|" + b.Subsets.Length, b);
-                }
+                Adopt(cf, cl);
                 Log.Info(who + " : scene " + t + " : " + cl.Count + " objets regroupes, " + cf.Count(43) + " maillages (" + sw.ElapsedMilliseconds + " ms)");
                 return true;
             }
@@ -54,8 +63,53 @@ namespace MWCoop
             return false;
         }
 
+        static void Adopt(SceneFile cf, List<SceneFile.Batched> cl)
+        {
+            scene = cf;
+            byKey = new Dictionary<string, List<SceneFile.Batched>>();
+            byName = new Dictionary<string, List<SceneFile.Batched>>();
+            byPath = new Dictionary<string, SceneFile.Batched>();
+            foreach (SceneFile.Batched b in cl)
+            {
+                if (b.Path != null && !byPath.ContainsKey(b.Path)) byPath[b.Path] = b;
+                Add(byKey, Key(b.Name + "|" + b.MeshName, b.Mats.Length > 0 ? b.Mats[0] : "", b.Subsets.Length), b);
+                Add(byName, b.Name + "|" + b.MeshName + "|" + b.Subsets.Length, b);
+            }
+        }
+
+        // Cartes de l'editeur : le fichier de la scene lu sur un autre fil des le chargement de GAME (0,2 a 0,3 s qui
+        // figeaient le jeu a l'arrivee des cartes) ; Open le reprend (ou attend la fin de la lecture).
+        static System.Threading.Thread pre;
+        static SceneFile preScene;
+        static List<SceneFile.Batched> preList;
+        static long preMs;
+        public static void Prefetch()
+        {
+            if (scene != null || pre != null) return;
+            List<string> tries = Tries();
+            pre = new System.Threading.Thread(() =>
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                foreach (string tp in tries)
+                {
+                    if (!File.Exists(tp)) continue;
+                    var cf = new SceneFile(tp);
+                    List<SceneFile.Batched> cl = null;
+                    try { if (cf.Open()) cl = cf.ReadBatched(); } catch { }
+                    if (cl == null || cl.Count == 0) { cf.Close(); continue; }
+                    preScene = cf; preList = cl;
+                    break;
+                }
+                preMs = sw.ElapsedMilliseconds;
+            });
+            pre.IsBackground = true;
+            pre.Start();
+        }
+
         public static void Close()
         {
+            if (pre != null) { pre.Join(); pre = null; }
+            if (preScene != null) { preScene.Close(); preScene = null; preList = null; }
             if (found.Count > 0) Log.Info("lots statiques : " + found.Count + " objet(s) cherche(s), " + paths + " retrouve(s) par leur chemin");
             paths = 0;
             if (scene != null) scene.Close();

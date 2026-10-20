@@ -229,7 +229,7 @@ async function openMap(id, projet) {
   for (const id of ["tools", "props", "ajouts", "btn-compiler"]) $(id).hidden = false;
   $("sel-h").hidden = $("sel").hidden = true;
   edition = new Edition({ viewer, dossier: projet.dossier, data: projet.data, send,
-    ui: { tools: $("tools"), list: $("ajouts"), props: $("props"), palette: $("palette"), compile: $("compile-dlg"), warn: toast },
+    ui: { tools: $("tools"), list: $("ajouts"), props: $("props"), palette: $("palette"), textures: $("textures-dlg"), compile: $("compile-dlg"), warn: toast },
     onState: st => { $("save-state").textContent = st === "enregistrement" ? T("enregistrement") : ""; } });
   edition.start();
   window.__edition = edition;   // (essais par le protocole de debogage)
@@ -305,6 +305,8 @@ function onHostMessage(e) {
   else if (m.type === "projets") { projets = m.liste || []; renderRecent(); }
   else if (m.type === "projet") openProjet(m);
   else if (m.type === "modele") edition && edition.onModel(m);
+  else if (m.type === "image") edition && edition.onImage(m);
+  else if (m.type === "images") edition && edition.onImages(m);
   else if (m.type === "compile") edition && edition.onCompiled(m);
   else if (m.type === "enregistre") $("save-state").textContent = m.ok ? T("enregistre") : T("enregistrementEchec");
   else if (m.type === "verification") onVerif(m);
