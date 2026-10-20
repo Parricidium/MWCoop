@@ -184,6 +184,9 @@ namespace MWCoop
             if (EvoLivery.Poll(MineModel)) MyLiveryChanged();
             if (Host) HostStep(now);
             Reconcile(now);
+            // numero de course sur les portieres (course sur glace : celui de la voiture IA remplacee), sinon celui de la place
+            foreach (KeyValuePair<int, Rent> kv in rents)
+                if (kv.Value.Car != null && kv.Value.Car.Car != null) { int rn = Config.Testing && Config.GetInt("Test", "VazNumero", 0) > 0 ? Config.GetInt("Test", "VazNumero", 0) : IceRace.VazRaceNumber(kv.Key); VazCar.SetNumber(kv.Value.Car, rn > 0 ? rn : kv.Value.Number); }
         }
 
         // Hote : table envoyee a chaque joueur qui arrive en partie ; ajout coupe -> plus de VAZ.

@@ -53,6 +53,9 @@ namespace MWCoop
             live.Clear(); liveKey = "";
         }
 
+        // (Vaz : numero affiche sur ses portieres)
+        public static int VazRaceNumber(int id) { try { return VazNumber(id); } catch { return 0; } }
+
         // Numero de course de la VAZ du joueur id (0 : il ne court pas avec une VAZ).
         static int VazNumber(int id)
         {
