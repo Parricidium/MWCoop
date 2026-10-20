@@ -856,7 +856,7 @@ static void DrawEvoView(Graphics &g, RectF card)
     Title(g, T(L"Livrée de l'Evo III", L"Evo III livery"), RectF(card.X + 24, card.Y + 20, 300, 30), 22, kInk);
     Para(g, T(L"Sans livrée, ton Evo prend ta couleur et ton numéro, comme la VAZ. Avec, tous les joueurs voient la tienne.",
               L"Without a livery, your Evo takes your colour and number, like the VAZ. With one, every player sees yours."),
-         RectF(card.X + 24, card.Y + 56, card.Width - 48, 40), 12.5f, kGrey);
+         RectF(card.X + 24, card.Y + 56, card.Width - 48 - 200, 44), 12.5f, kGrey);   // (a gauche des boutons du haut)
     bool has = FileExists(EvoFile()), on = EvoOn();
     RectF th(card.X + 24, card.Y + 104, 300, 300);
     GraphicsPath tp; RoundRect(tp, th, 14);
