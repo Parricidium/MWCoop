@@ -159,6 +159,8 @@ namespace EditeurCarte
                         break;
                     }
                 case "importerModele": ImportModel(S(m, "dossier")); break;
+                case "importerImage": ImportImage(S(m, "dossier")); break;
+                case "images": Post(new Dictionary<string, object> { { "type", "images" }, { "liste", Projects.Images(S(m, "dossier")) } }); break;
                 case "dossierProjet": { string d = Projects.Dir(S(m, "dossier")); if (d != null) OpenFolder(d); break; }
                 case "compiler": Compile(m); break;
             }
@@ -264,6 +266,21 @@ namespace EditeurCarte
                 string f = null, err = null;
                 try { f = Projects.ImportModel(dossier, d.FileName); } catch (Exception e) { err = e.Message; }
                 Post(new Dictionary<string, object> { { "type", "modele" }, { "fichier", f ?? "" }, { "nom", Path.GetFileNameWithoutExtension(d.FileName) }, { "erreur", err ?? (f == null ? "copie" : "") } });
+            }
+        }
+
+        // Image perso (textures des objets, demande de JD, 20/10) : copiee dans textures\ du projet.
+        void ImportImage(string dossier)
+        {
+            using (var d = new OpenFileDialog())
+            {
+                d.Title = "Image";
+                d.Filter = "Images (*.png, *.jpg, *.jpeg, *.bmp, *.webp)|*.png;*.jpg;*.jpeg;*.bmp;*.webp";
+                d.CheckFileExists = true;
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                string f = null, err = null;
+                try { f = Projects.ImportImage(dossier, d.FileName); } catch (Exception e) { err = e.Message; }
+                Post(new Dictionary<string, object> { { "type", "image" }, { "fichier", f ?? "" }, { "erreur", err ?? (f == null ? "copie" : "") } });
             }
         }
 

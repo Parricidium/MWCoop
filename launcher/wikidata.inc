@@ -830,8 +830,8 @@ static const WikiBlock kW_Linux[] = {
 };
 // ---- L'editeur de carte (20/10, editor\ ; page OUTILS du lanceur : outils.inc)
 static const WikiBlock kW_Editor[] = {
-    { WB_P, L"Un programme à part, rangé dans les Outils (la clé en haut à droite) : il ouvre la vraie carte de My Summer Car ou de My Winter Car pour y ajouter tes objets. Version BETA : copier, déplacer et masquer les objets du jeu, importer des modèles 3D, compiler ta carte et la partager en co-op ; les routes arrivent ensuite.",
-            L"A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to add your own objects. BETA version: copy, move and hide game objects, import 3D models, compile your map and share it in co-op; roads come next." },
+    { WB_P, L"Un programme à part, rangé dans les Outils (la clé en haut à droite) : il ouvre la vraie carte de My Summer Car ou de My Winter Car pour y ajouter tes objets. Version BETA : copier, déplacer et masquer les objets du jeu, importer des modèles 3D, tracer des routes, ajouter de l'eau, changer les textures, compiler ta carte et la partager en co-op.",
+            L"A separate program, kept in Tools (the wrench at the top right): it opens the real map of My Summer Car or My Winter Car to add your own objects. BETA version: copy, move and hide game objects, import 3D models, draw roads, add water, change textures, compile your map and share it in co-op." },
     { WB_H, L"L'installer et le lancer",
             L"Install and launch it" },
     { WB_S, L"Dans Outils, Télécharger : moins de 1 Mo, installé à part (le jeu n'est pas modifié).",
@@ -848,24 +848,30 @@ static const WikiBlock kW_Editor[] = {
             L"The prepared map stays in your Documents (My Seasons Car\\Carte). After a game update, prepare it again." },
     { WB_H, L"Visiter",
             L"Tour" },
-    { WB_B, L"Clic droit maintenu + ZQSD (WASD) pour voler, Espace / C pour monter et descendre, Maj pour aller plus vite, molette pour la vitesse.",
-            L"Hold right-click + WASD to fly, Space / C to go up and down, Shift to go faster, wheel for the speed." },
+    { WB_B, L"Clic droit maintenu + ZQSD (WASD) pour voler (molette : vitesse), Espace / C pour monter et descendre, Maj pour aller plus vite. Clic molette : tourner autour d'un point ; Maj + clic molette : glisser ; molette : zoom vers le curseur.",
+            L"Hold right-click + WASD to fly (wheel: speed), Space / C to go up and down, Shift to go faster. Middle-click: orbit around a point; Shift + middle-click: pan; wheel: zoom to the cursor." },
     { WB_B, L"À gauche, les couches (sol, routes, bâtiments, végétation) à masquer ; un clic sur un objet dit ce que c'est.",
             L"On the left, the layers (ground, roads, buildings, plants) to hide; a click on an object tells what it is." },
     { WB_H, L"Créer ta carte",
             L"Make your map" },
     { WB_S, L"Nouvelle carte : un nom et le jeu (MSC ou MWC). Elle s'enregistre toute seule dans tes Documents (My Seasons Car\\Projets).",
             L"New map: a name and the game (MSC or MWC). It saves by itself in your Documents (My Seasons Car\\Projets)." },
-    { WB_S, L"Le cube à gauche : choisis un objet du jeu (maison, tente, panneau…), une copie se pose devant toi. Ou clique un objet de la carte : Copier dans ma carte, ou Masquer dans ma carte.",
-            L"The cube on the left: pick a game object (house, tent, sign…), a copy is placed in front of you. Or click an object of the map: Copy into my map, or Hide in my map." },
+    { WB_S, L"Le cube à gauche : les objets du jeu rangés par sorte (Maison, Tente, Panneau…) ; tape le début d'un mot (« Mai » trouve Maison). Une copie se pose devant toi. Ou clique un objet de la carte : Copier dans ma carte, ou Masquer dans ma carte.",
+            L"The cube on the left: game objects sorted by kind (House, Tent, Sign…); type the start of a word (“Hou” finds House). A copy is placed in front of you. Or click an object of the map: Copy into my map, or Hide in my map." },
     { WB_S, L"Importer : un modèle .obj, .fbx, .glb ou .gltf, avec ses textures.",
             L"Import: an .obj, .fbx, .glb or .gltf model, with its textures." },
     { WB_S, L"Déplacer, Tourner, Échelle (G, R, S), Poser au sol, Collisions (aucune, boîte, forme) ; Ctrl+Z pour annuler, Ctrl+D pour dupliquer.",
             L"Move, Rotate, Scale (G, R, S), Drop to the ground, Collisions (none, box, shape); Ctrl+Z to undo, Ctrl+D to duplicate." },
+    { WB_S, L"Route (P) : comme la plume de Photoshop, un clic pose un point, un clic glissé tire ses poignées (la courbe) ; Entrée ou double-clic pour finir. Les points et les poignées se reprennent à la souris, et la route épouse le sol. Revêtement : route, asphalte, gravier, terre… du jeu.",
+            L"Road (P): like Photoshop's pen, a click places a point, a click and drag pulls its handles (the curve); Enter or double-click to finish. Points and handles can be dragged again, and the road follows the ground. Surface: road, asphalt, gravel, dirt… from the game." },
+    { WB_S, L"Eau : un plan d'eau à placer et à étirer (Déplacer, Échelle).",
+            L"Water: a body of water to place and stretch (Move, Scale)." },
+    { WB_S, L"Textures : dans les propriétés, Changer — une texture du jeu ou ton image (PNG, JPG…), sur l'objet entier ou une de ses matières ; double-clic sur un modèle importé pour ne texturer qu'une face.",
+            L"Textures: in the properties, Change — a game texture or your own image (PNG, JPG…), on the whole object or one of its materials; double-click an imported model to texture just one face." },
     { WB_H, L"Compiler et jouer",
             L"Compile and play" },
-    { WB_B, L"Compiler fait un petit fichier .mwcmap : tes modèles et leurs textures seulement. Les copies d'objets du jeu sont refaites depuis le jeu de chacun : aucun fichier du jeu n'est partagé.",
-            L"Compile makes a small .mwcmap file: only your models and their textures. Copies of game objects are rebuilt from each player's game: no game file is shared." },
+    { WB_B, L"Compiler fait un petit fichier .mwcmap : tes modèles, tes routes et tes images seulement. Les copies et les textures du jeu sont refaites depuis le jeu de chacun : aucun fichier du jeu n'est partagé.",
+            L"Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared." },
     { WB_B, L"Il va dans MWCoop\\cartes : ta carte s'ajoute à la vraie carte à ta prochaine partie, collisions comprises.",
             L"It goes into MWCoop\\cartes: your map is added to the real map in your next session, collisions included." },
     { WB_B, L"En co-op, l'hôte envoie ses cartes à ses invités au salon (Contenu envoyé › Autres › Cartes de l'éditeur) ; un invité ne charge que celles de l'hôte : tout le monde a la même carte.",
@@ -908,5 +914,5 @@ static const WikiArticle kWikiArt[] = {   // (ordre = WA_*)
     WART(3, L"Le HUD en jeu", L"The in-game HUD", L"Vanilla, Carte, Anneaux ou Bandeau", L"Vanilla, Card, Rings or Strip", kW_Hud),   // (WA_HUD = 30)
     WART(0, L"Linux et Steam Deck", L"Linux and Steam Deck", L"Proton, option de lancement, limites", L"Proton, launch option, limits", kW_Linux),   // (WA_LINUX = 31)
     WARTG(WG_MSC, 0, L"My Summer Car (BETA)", L"My Summer Car (BETA)", L"Ce qui marche déjà, ce qui arrive", L"What works already, what's coming", kW_MscBeta),   // (WA_MSCBETA = 32)
-    WART(2, L"L'éditeur de carte", L"The map editor", L"Ta carte : objets, modèles 3D, co-op", L"Your map: objects, 3D models, co-op", kW_Editor),   // (WA_EDITOR = 33)
+    WART(2, L"L'éditeur de carte", L"The map editor", L"Objets, routes, eau, textures, co-op", L"Objects, roads, water, textures, co-op", kW_Editor),   // (WA_EDITOR = 33)
 };

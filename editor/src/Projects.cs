@@ -122,6 +122,33 @@ namespace EditeurCarte
             return dst;
         }
 
+        // Image perso : copiee dans textures\ (nom unique, 30 Mo au plus) ; rend "textures/<nom>".
+        public static string ImportImage(string dossier, string file)
+        {
+            string d = Dir(dossier);
+            if (d == null || !File.Exists(file)) return null;
+            if (new FileInfo(file).Length > 30L << 20) throw new Exception("image trop grande (30 Mo au plus)");
+            string td = Path.Combine(d, "textures");
+            Directory.CreateDirectory(td);
+            string name = Path.GetFileNameWithoutExtension(file), ext = Path.GetExtension(file).ToLowerInvariant(), dst = name + ext;
+            for (int i = 2; File.Exists(Path.Combine(td, dst)); i++) dst = name + "-" + i + ext;
+            File.Copy(file, Path.Combine(td, dst));
+            return "textures/" + dst;
+        }
+
+        public static List<object> Images(string dossier)
+        {
+            var l = new List<object>();
+            string d = Dir(dossier);
+            if (d == null || !Directory.Exists(Path.Combine(d, "textures"))) return l;
+            foreach (string f in Directory.GetFiles(Path.Combine(d, "textures")))
+            {
+                string e = Path.GetExtension(f).ToLowerInvariant();
+                if (e == ".png" || e == ".jpg" || e == ".jpeg" || e == ".bmp" || e == ".webp") l.Add("textures/" + Path.GetFileName(f));
+            }
+            return l;
+        }
+
         // Paquet compile : fichiers envoyes par la page (nom -> base64), zippes en <slug>-<version>.mwcmap.
         public static string Compile(string dossier, string fileName, Dictionary<string, object> files, string modCartes)
         {

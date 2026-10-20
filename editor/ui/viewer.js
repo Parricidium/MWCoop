@@ -41,7 +41,8 @@ export class Viewer {
 
   hints() {
     const u = this.ui;
-    u.hints.innerHTML = ["hVoler", "hMonter", "hVite", "hMolette"].map(k => `<span class="chip">${u.esc(T(k))}</span>`).join("");
+    u.hints.innerHTML = ["hVoler", "hOrbite", "hGlisser", "hMolette"].map(k => `<span class="chip">${u.esc(T(k))}</span>`).join("")
+      + `<span class="chip aide" title="${u.esc(T("hAide"))}">?</span>`;
     u.speed.textContent = T("vitesse", Math.round(this.speed));
     u.persp.onclick = () => { this.pitch = -0.2; this.setView(false); };
     u.top.onclick = () => { this.camera.position.y = Math.max(this.camera.position.y, (this.maxY || 100) + 450); this.pitch = -Math.PI / 2 + 0.001; this.setView(true); };
@@ -98,6 +99,10 @@ export class Viewer {
       if (++n % 200 === 0 && performance.now() - t0 > 30) { u.loadingText.textContent = T("chargement") + " " + Math.round(100 * n / info.objets.length) + " %"; await frame(); t0 = performance.now(); if (this.disposed) return; }
     }
     this.tris = tris;
+    u.loadingText.textContent = T("optimisation");
+    await frame();
+    await this.merge();
+    if (this.disposed) return;
     this.renderLayers();
     u.obj.textContent = T("objets", info.objets.length.toLocaleString()) + " · " + (tris / 1e6).toFixed(1) + " M △";
     this.goHome();
@@ -143,9 +148,104 @@ export class Viewer {
         if (m.r) { tex.repeat.set(m.r[0], m.r[1]); tex.offset.set(m.r[2], m.r[3]); }
         mat.map = tex;
         loadImage(m.t).then(im => { if (im && !this.disposed) { tex.image = im; tex.needsUpdate = true; mat.needsUpdate = true; } });
+        if (m.dt !== undefined && m.dt >= 0) this.detail(mat, m, loadImage);
       }
       return mat;
     });
+  }
+
+  // « Diffuse Detail » d'Unity (sol de MSC : une image pour tout le terrain + un grain repete, cache format 3) :
+  // couleur x detail x 2, en espace gamma comme le jeu ; uv du detail = uv x (dr.xy) + dr.zw
+  detail(mat, m, loadImage) {
+    const dtex = new THREE.Texture();
+    dtex.wrapS = dtex.wrapT = THREE.RepeatWrapping; dtex.anisotropy = 8; dtex.colorSpace = THREE.NoColorSpace;
+    loadImage(m.dt).then(im => { if (im && !this.disposed) { dtex.image = im; dtex.needsUpdate = true; } });
+    const dr = m.dr || [1, 1, 0, 0];
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.detailMap = { value: dtex };
+      sh.uniforms.detailST = { value: new THREE.Vector4(dr[0], dr[1], dr[2], dr[3]) };
+      sh.vertexShader = "uniform vec4 detailST;\nvarying vec2 vDetUv;\n" + sh.vertexShader.replace("#include <uv_vertex>", "#include <uv_vertex>\n  vDetUv = uv * detailST.xy + detailST.zw;");
+      sh.fragmentShader = "uniform sampler2D detailMap;\nvarying vec2 vDetUv;\n" + sh.fragmentShader.replace("#include <map_fragment>", "#include <map_fragment>\n  diffuseColor.rgb *= pow(clamp(texture2D(detailMap, vDetUv).rgb * 2.0, 0.0, 2.0), vec3(2.2));");
+    };
+    mat.customProgramCacheKey = () => "detail";
+  }
+
+  // ---------------------------------------------------------------- dessin regroupe (performances)
+  // Un maillage par matiere et par couche, en coordonnees du monde : quelques centaines de dessins au lieu de milliers. Les
+  // objets restent la, sur le calque 1 (pas dessines) : clic, selection, masques, raycasts de l'edition. Un objet masque :
+  // ses sommets du maillage regroupe ramenes en un point (positions d'origine gardees pour le reafficher).
+  async merge() {
+    const buckets = new Map();   // "couche|matiere" -> [{ idx, mesh, start, count }]
+    this.instMeshes.forEach((mesh, idx) => {
+      if (!mesh || !mesh.visible) return;
+      const g = mesh.geometry, mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const groups = g.groups.length ? g.groups : [{ start: 0, count: g.index.count, materialIndex: 0 }];
+      for (const gr of groups) {
+        const mat = mats[gr.materialIndex] || mats[0];
+        if (!mat || mat.visible === false) continue;
+        const key = mesh.userData.kind + "|" + mat.uuid;
+        let b = buckets.get(key); if (!b) buckets.set(key, b = { kind: Math.max(0, Math.min(3, mesh.userData.kind)), mat, parts: [] });
+        b.parts.push({ idx, mesh, start: gr.start, count: gr.count });
+      }
+    });
+    this.mergedGroups = this.groups.map((g, k) => { const m = new THREE.Group(); m.visible = g.visible; this.scene.add(m); return m; });
+    this.ranges = new Map();   // rang de l'objet -> [{ attr, from, n }]
+    let t0 = performance.now();
+    const nm = new THREE.Matrix3(), v = new THREE.Vector3();
+    for (const b of buckets.values()) {
+      // sommets utilises par chaque morceau (renumerotes), indices 32 bits
+      const maps = b.parts.map(p => {
+        const I = p.mesh.geometry.index.array, seen = new Map(), loc = [];
+        for (let i = p.start; i < p.start + p.count; i++) { const k = I[i]; let j = seen.get(k); if (j === undefined) { j = loc.length; seen.set(k, j); loc.push(k); } }
+        return { seen, loc };
+      });
+      let nv = 0, ni = 0;
+      b.parts.forEach((p, i) => { nv += maps[i].loc.length; ni += p.count; });
+      const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), ind = new Uint32Array(ni);
+      let o = 0, q = 0, hasUv = false;
+      b.parts.forEach((p, pi) => {
+        const g = p.mesh.geometry, P = g.attributes.position, N = g.attributes.normal, UV = g.attributes.uv, I = g.index.array, M = p.mesh.matrix;
+        const { seen, loc } = maps[pi];
+        nm.getNormalMatrix(M);
+        if (UV) hasUv = true;
+        const from = o;
+        for (const k of loc) {
+          v.fromBufferAttribute(P, k).applyMatrix4(M); pos[o * 3] = v.x; pos[o * 3 + 1] = v.y; pos[o * 3 + 2] = v.z;
+          if (N) { v.fromBufferAttribute(N, k).applyMatrix3(nm).normalize(); nor[o * 3] = v.x; nor[o * 3 + 1] = v.y; nor[o * 3 + 2] = v.z; }
+          if (UV) { uv[o * 2] = UV.getX(k); uv[o * 2 + 1] = UV.getY(k); }
+          o++;
+        }
+        for (let i = p.start; i < p.start + p.count; i++) ind[q++] = from + seen.get(I[i]);
+        let r = this.ranges.get(p.idx); if (!r) this.ranges.set(p.idx, r = []);
+        r.push({ b, from, n: loc.length });
+      });
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+      if (hasUv) g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+      g.setIndex(new THREE.BufferAttribute(ind, 1));
+      g.computeBoundingSphere();
+      const m = new THREE.Mesh(g, b.mat);
+      m.userData.noPick = true;
+      b.geo = g;
+      this.mergedGroups[b.kind].add(m);
+      if (performance.now() - t0 > 40) { await frame(); t0 = performance.now(); if (this.disposed) return; }
+    }
+    for (const mesh of this.instMeshes) if (mesh) mesh.layers.set(1);   // (plus dessines : le regroupe les remplace)
+    this.merged = true;
+  }
+  // objet masque / reaffiche dans le dessin regroupe
+  setHidden(idx, hidden) {
+    const rs = this.ranges && this.ranges.get(idx);
+    if (!rs) return;
+    for (const r of rs) {
+      const a = r.b.geo.attributes.position, arr = a.array;
+      if (hidden) {
+        if (!r.saved) r.saved = arr.slice(r.from * 3, (r.from + r.n) * 3);
+        for (let i = r.from; i < r.from + r.n; i++) { arr[i * 3] = r.saved[0]; arr[i * 3 + 1] = r.saved[1]; arr[i * 3 + 2] = r.saved[2]; }
+      } else if (r.saved) { arr.set(r.saved, r.from * 3); r.saved = null; }
+      a.needsUpdate = true;
+    }
   }
 
   // maillages.bin : n, drapeaux, k, k tailles, positions 3n, normales 3n?, uv 2n?, indices
@@ -180,7 +280,7 @@ export class Viewer {
       const b = document.createElement("button");
       b.className = "layer";
       b.innerHTML = `<span class="sw" style="background:${kd.color}"></span><span>${u.esc(T(kd.k))}</span><span class="n">${this.counts[i]}</span><span class="eye"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/><circle cx="12" cy="12" r="2.5"/></svg></span>`;
-      b.onclick = () => { this.groups[i].visible = !this.groups[i].visible; b.classList.toggle("off", !this.groups[i].visible); };
+      b.onclick = () => { this.groups[i].visible = !this.groups[i].visible; if (this.mergedGroups) this.mergedGroups[i].visible = this.groups[i].visible; b.classList.toggle("off", !this.groups[i].visible); };
       u.layers.appendChild(b);
     });
   }
@@ -202,26 +302,44 @@ export class Viewer {
     const on = (t, e, f, o) => { t.addEventListener(e, f, o); this.on.push([t, e, f, o]); };
     let down = null;
     this.looking = false;
+    this.drag = null;   // souris facon logiciel 3D (demande de JD, 20/10) : { mode: orbit | pan, pivot }
+    on(c, "mousedown", e => { if (e.button === 1) e.preventDefault(); });   // (pas le defilement automatique du clic molette)
     on(c, "pointerdown", e => {
       c.focus();
+      if (this.onPointer && this.onPointer(e, "down")) return;   // (outil de l'edition : routes...)
       if (e.button === 2) { this.looking = true; c.setPointerCapture(e.pointerId); }
-      if (e.button === 0) down = { x: e.clientX, y: e.clientY };
+      else if (e.button === 1 || (e.button === 0 && e.altKey)) {
+        e.preventDefault();
+        this.drag = { mode: e.shiftKey ? "pan" : "orbit", pivot: this.pivotAt(e.clientX, e.clientY) };
+        c.setPointerCapture(e.pointerId);
+        c.style.cursor = this.drag.mode === "pan" ? "move" : "grabbing";
+      }
+      else if (e.button === 0) down = { x: e.clientX, y: e.clientY };
     });
     on(c, "pointermove", e => {
+      if (this.onPointer && this.onPointer(e, "move")) return;
+      if (this.drag) { this.drag.mode === "pan" ? this.pan(e.movementX, e.movementY) : this.orbit(e.movementX, e.movementY); return; }
       if (!this.looking) return;
       this.yaw -= e.movementX * 0.0035;
       this.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, this.pitch - e.movementY * 0.0035));
       if (this.pitch > -1.4) this.setView(false);
     });
     on(c, "pointerup", e => {
+      if (this.onPointer && this.onPointer(e, "up")) { down = null; return; }
+      if (this.drag && (e.button === 1 || e.button === 0)) { this.drag = null; c.style.cursor = ""; try { c.releasePointerCapture(e.pointerId); } catch { } return; }
       if (e.button === 2) { this.looking = false; this.keys.clear(); try { c.releasePointerCapture(e.pointerId); } catch { } }
       if (e.button === 0 && down && !this.blockPick && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) this.pick(e);
       down = null;
     });
+    on(c, "dblclick", e => { if (this.onDouble) this.onDouble(e); });
     on(c, "wheel", e => {
       e.preventDefault();
-      this.speed = Math.max(2, Math.min(600, this.speed * (e.deltaY < 0 ? 1.25 : 0.8)));
-      this.ui.speed.textContent = T("vitesse", Math.round(this.speed));
+      if (this.looking) {   // (en volant, clic droit tenu : la vitesse)
+        this.speed = Math.max(2, Math.min(600, this.speed * (e.deltaY < 0 ? 1.25 : 0.8)));
+        this.ui.speed.textContent = T("vitesse", Math.round(this.speed));
+        return;
+      }
+      this.zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1 : -1);
     }, { passive: false });
     on(window, "keydown", e => { if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return; if (!this.looking) return; this.keys.add(e.code); if (e.code === "Space") e.preventDefault(); });
     on(window, "keyup", e => this.keys.delete(e.code));
@@ -232,6 +350,7 @@ export class Viewer {
     const r = this.o.canvas.getBoundingClientRect();
     const v = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     const ray = new THREE.Raycaster();
+    ray.layers.enableAll();   // (objets sur le calque 1 : dessin regroupe)
     ray.setFromCamera(v, this.camera);
     ray.far = 3000;
     const hits = ray.intersectObjects(this.groups.filter(g => g.visible).concat(this.extra ? [this.extra] : []), true).filter(h => h.object.visible && !h.object.userData.noPick);
@@ -274,10 +393,53 @@ export class Viewer {
     }
   }
 
+  // ---------------------------------------------------------------- souris : tourner autour, glisser, zoom
+  // point de la carte sous le curseur (sinon 40 m devant)
+  hitAt(x, y) {
+    const ray = this.rayAt(x, y);
+    ray.far = 4000;
+    const hits = ray.intersectObjects(this.groups.filter(g => g.visible).concat(this.extra ? [this.extra] : []), true).filter(h => h.object.visible && !h.object.userData.noPick);
+    return hits[0] || null;
+  }
+  pivotAt(x, y) {
+    const h = this.hitAt(x, y);
+    if (h) return h.point.clone();
+    return this.camera.position.clone().addScaledVector(this.rayAt(x, y).ray.direction, 40);
+  }
+  // la camera tourne autour du pivot : position et regard tournes ensemble (lacet autour de la verticale, tangage autour
+  // de la droite de la camera)
+  orbit(dx, dy) {
+    const P = this.drag.pivot, cam = this.camera;
+    const dyaw = -dx * 0.005;
+    const np = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch - dy * 0.005)), dp = np - this.pitch;
+    const off = cam.position.clone().sub(P).applyAxisAngle(new THREE.Vector3(0, 1, 0), dyaw);
+    const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw + dyaw);
+    off.applyAxisAngle(right, dp);
+    cam.position.copy(P).add(off);
+    this.yaw += dyaw; this.pitch = np;
+    if (this.pitch > -1.4) this.setView(false);
+  }
+  pan(dx, dy) {
+    const cam = this.camera, h = this.o.canvas.clientHeight || 600;
+    const d = Math.max(2, cam.position.distanceTo(this.drag.pivot));
+    const k = 2 * d * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) / h;
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion), up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+    cam.position.addScaledVector(right, -dx * k).addScaledVector(up, dy * k);
+  }
+  // vers le point sous le curseur, d'un cinquieme de la distance a chaque cran
+  zoomAt(x, y, dir) {
+    const h = this.hitAt(x, y), ray = this.rayAt(x, y).ray;
+    const d = h ? h.distance : 60;
+    const step = Math.max(0.5, d * 0.2) * dir;
+    if (dir > 0 && h && d - step < 1) return;
+    this.camera.position.addScaledVector(ray.direction, step);
+  }
+
   // rayon depuis un point de l'ecran (clientX, clientY)
   rayAt(x, y) {
     const r = this.o.canvas.getBoundingClientRect();
     const ray = new THREE.Raycaster();
+    ray.layers.enableAll();
     ray.setFromCamera(new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1), this.camera);
     return ray;
   }

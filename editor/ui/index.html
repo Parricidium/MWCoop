@@ -139,6 +139,19 @@
   </div>
 </div>
 
+<!-- Textures : celles du jeu, ou une image perso (objet entier, une matiere, ou une face d'un modele) -->
+<div class="modal" id="textures-dlg" hidden>
+  <div class="dlg pal tex" role="dialog" aria-labelledby="tx-t">
+    <div class="dlg-top"><h1 id="tx-t" data-i18n="texTitre">Textures</h1><button class="ib" data-close aria-label="Fermer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <p class="sub small" id="tx-sous"></p>
+    <div class="row tx-haut"><div class="seg" id="tx-onglets"><button data-o="jeu" data-i18n="texJeu">Du jeu</button><button data-o="perso" data-i18n="texPerso">Mes images</button></div>
+      <div class="fld grow"><input type="text" id="tx-cherche" data-i18n-ph="chercher" spellcheck="false"></div></div>
+    <div class="tgrid" id="tx-grille"></div>
+    <div class="row tx-bas"><span class="sl" data-i18n="texRepetition">Répétition</span><input id="tx-u" class="txt mini" inputmode="decimal" spellcheck="false"><span>×</span><input id="tx-v" class="txt mini" inputmode="decimal" spellcheck="false">
+      <span class="grow"></span><button class="btn" id="tx-import" data-i18n="texImporter">Importer une image…</button><button class="btn" id="tx-origine" data-i18n="texOrigine">Remettre d'origine</button></div>
+  </div>
+</div>
+
 <!-- Jeu introuvable : choisir le .exe -->
 <div class="modal" id="introuvable" hidden>
   <div class="dlg" role="dialog" aria-labelledby="ix-t">
