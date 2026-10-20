@@ -920,6 +920,11 @@ namespace MWCoop
             { "Moving: get paid by Jokke", "Переезд: получи оплату у Йокке" },
             { "Moving: pick Jokke up", "Переезд: забери Йокке" },
             { "Nozzle already taken by ", "Пистолет уже взял " },
+            { "Cars", "Машины" },
+            { "  \u00B7  Gr. A, 370 hp, four-wheel drive", "  \u00B7  Gr. A, 370 л.с., полный привод" },
+            { "Custom livery", "Своя ливрея" },
+            { "Colour + number (livery: launcher, Add-ons)", "Цвет + номер (ливрея: лаунчер, Дополнения)" },
+            { "Arrows: colour  \u00B7  Enter: take or give back  \u00B7  V: bring it here  \u00B7  M: model  \u00B7  drag the preview: turn", "Стрелки: цвет  \u00B7  Enter: взять или вернуть  \u00B7  V: пригнать сюда  \u00B7  M: модель  \u00B7  тяни превью: вращать" },
         };
     }
 }

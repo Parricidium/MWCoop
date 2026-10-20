@@ -716,7 +716,7 @@ namespace MWCoop
             {
                 int mine = IceRace.MyNumber;
                 if (ActionRow("course", Lang.T("Course sur glace", "Ice race"),
-                              mine != 0 ? Lang.T("Inscrit \u00B7 n\u00B0 ", "Registered \u00B7 no. ") + mine + (IceRace.MeWithVaz ? " (VAZ)" : "") : Lang.T("Pas inscrit \u00B7 inscription avec ta VAZ", "Not registered \u00B7 sign up with your VAZ"),
+                              mine != 0 ? Lang.T("Inscrit \u00B7 n\u00B0 ", "Registered \u00B7 no. ") + mine + (IceRace.MeWithVaz ? " (" + Vaz.MineModelName + ")" : "") : Lang.T("Pas inscrit \u00B7 inscription avec ta voiture", "Not registered \u00B7 sign up with your car"),
                               Lang.T("Entr\u00E9e ou clic : l'onglet Course sur glace", "Enter or click: the Ice race tab"), true))
                     SetTab(TabRace);
             }

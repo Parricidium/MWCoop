@@ -1792,3 +1792,29 @@ The wrench at the top right, left of the star: separate programs. The first one,
 Editor maps	Карты редактора
 Moped, sticker, fabric, photo, maps…	Мопед, наклейка, ткань, фото, карты…
 Moped, sticker, photo, maps…	Мопед, наклейка, фото, карты…
+Choose the livery: 	Выбери ливрею: 
+ (painted on the template)	 (нарисована на шаблоне)
+Template not found (MWCoop\\	Шаблон не найден (MWCoop\\
+\\gabarit-livree.png): reinstall the add-on.	\\gabarit-livree.png): переустанови дополнение.
+Add-ons	Дополнения
+Extension cars: a folder to copy into the game's MWCoop\\. In game, take them with F10 (Cars tab).	Машины-дополнения: папка, которую нужно скопировать в MWCoop\\ игры. В игре их берут через F10 (вкладка «Машины»).
+No add-on installed	Дополнения не установлены
+Your livery	Твоя ливрея
+Colour + number	Цвет + номер
+Livery: 	Ливрея: 
+‹ Add-ons	‹ Дополнения
+Without a livery, it takes your colour and number, like the VAZ. With one, every player sees yours.	Без ливреи она получает твой цвет и номер, как VAZ. С ливреей все игроки видят твою.
+Template (colour + number)	Шаблон (цвет + номер)
+1. Template: the car laid flat (2048 x 2048). The red hatched area gets your number: draw nothing important under it.	1. Шаблон: машина в развёртке (2048 x 2048). В заштрихованную красным зону ставится твой номер: не рисуй под ней ничего важного.
+3. In game, take it with F10 (Cars tab): everyone sees your livery.	3. В игре возьми её через F10 (вкладка «Машины»): все увидят твою ливрею.
+No livery for this add-on: the player's colour and number.	У этого дополнения нет ливреи: цвет и номер игрока.
+Details	Описание
+In game	В игре
+F10 › Cars	F10 › Машины
+unique per player	у каждого свой
+Number	Номер
+theirs, on the doors	свой, на дверях
+Without the add-on	Без дополнения
+others see a VAZ	другие видят VAZ
+Livery	Ливрея
+yours (shared)	твоя (у всех)

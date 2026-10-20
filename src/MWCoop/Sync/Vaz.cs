@@ -78,6 +78,7 @@ namespace MWCoop
         public static string ModelName(int playerId) { return VazCar.ModelOf(ModelOf(playerId)).Name; }
         public static bool EvoAvailable { get { return VazCar.Evo3.HasFiles; } }
         public static int MineModel { get { return ModelOf(Me); } }
+        public static string MineModelName { get { return ModelName(Me); } }
         public static string LiveryOf(int playerId) { Slot s; return wanted.TryGetValue(playerId, out s) ? s.Livery ?? "" : ""; }
 
         // Place a cote du joueur d'ici : 4 m a sa droite, meme cap, posee sur le sol.
