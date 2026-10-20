@@ -186,7 +186,7 @@ namespace MWCoop
             public VazSound Sound;
             public VazFlaps Flaps;
             public FsmFloat BrakeKnob;
-            public int Number;
+            public int Number, Shown;   // (Shown : numero sur les portieres -- celui de la course s'il y en a un, SetNumber)
             public Transform Roof; public BoxCollider RoofZone; public bool RoofOpen, RoofHover; public float RoofAngle;
             public Vector3 SteerAxis = Vector3.forward;
             public Component Axis;
@@ -272,6 +272,21 @@ namespace MWCoop
                     && float.TryParse(p[3], System.Globalization.NumberStyles.Float, ci, out z)) info[p[0]] = new Vector3(x, y, z);
             }
             return info;
+        }
+
+        // Numero affiche sur les portieres (JD 21/10 : « le numero differe » -- inscrit a la course sur glace a la place de la
+        // voiture IA n 10, sa 205 portait toujours son 5) : n de la place, ou celui de la course (Vaz.Update) ; plaques
+        // numero-01..99 de MWCoop/vaz (run/vaz-numeros.py).
+        public static void SetNumber(Built b, int n)
+        {
+            if (b == null || n < 1 || n > 99 || b.Shown == n) return;
+            b.Shown = n;
+            Material m;
+            if (!b.Mats.TryGetValue("numero", out m) || m == null) return;
+            Model was = cur; cur = b.M ?? Vaz2108;
+            Texture2D t = Tex("numero-" + n.ToString("00"), true);
+            cur = was;
+            if (t != null) { m.mainTexture = t; Log.Info("vaz : " + (b.Car != null ? b.Car.name : "?") + " porte le numero " + n); }
         }
 
         static Texture2D Tex(string name, bool clamp = false)
@@ -409,7 +424,7 @@ namespace MWCoop
             cur = carModel ?? Vaz2108;
             if (!cur.HasFiles) { Log.Warn("vaz : fichiers du modele absents (" + cur.Dir + ")"); return null; }
             Dictionary<string, Vector3> inf = Info();
-            var b = new Built { Number = number, M = cur, Paint = paint };
+            var b = new Built { Number = number, Shown = number, M = cur, Paint = paint };
             GameObject car = Object.Instantiate(sorbet);
             car.SetActive(false);   // (reglee eteinte : ses automates demarrent sur la version modifiee)
             car.name = name;

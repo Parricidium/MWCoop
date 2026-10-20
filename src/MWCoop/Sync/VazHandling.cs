@@ -189,6 +189,10 @@ namespace MWCoop
             foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", 0.753f); }
             Component cd = car.GetComponent("CarDynamics");
             if (cd != null) n += SetF(cd, "frontRearBrakeBalance", 0.6f);
+            // retour de force coupe : le couple d'auto-alignement (Wheel.CalcAligningForce, qui ne sert qu'a lui) divise par la
+            // charge de la roue -- roue avant en l'air sur les bosses de la glace : 0/0 = NaN, 48 fois en 15 min de course (JD 21/10)
+            FieldInfo ff = cd != null ? cd.GetType().GetField("enableForceFeedback") : null;
+            if (ff != null && ff.FieldType == typeof(bool) && (bool)ff.GetValue(cd)) { ff.SetValue(cd, false); n++; }
             // centre de gravite (CarDynamics recopie chaque pas la position de son objet centerOfMass dans le corps)
             FieldInfo cf = cd != null ? cd.GetType().GetField("centerOfMass") : null;
             Transform com = cf != null ? cf.GetValue(cd) as Transform : null;
