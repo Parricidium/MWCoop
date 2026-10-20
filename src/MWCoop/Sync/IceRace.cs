@@ -220,8 +220,12 @@ namespace MWCoop
         static string MyKey() { return myRental && myNum != 0 ? myNum.ToString() : ME; }
 
         // Meilleur tour d'essai du joueur d'ici (0 : aucun ; 999 est la valeur du jeu pour "pas de tour").
+        // (en location, le tour mesure ici fait foi : la table de l'hote (HostSyncTable) ecrivait 999.<n> a mon numero tant que
+        // mon entree humaine disait « tour 0 », et MyLap relisait ce 999 -> 0 : l'hote en VAZ voyait 16 min sur le papier des
+        // meilleurs temps apres un tour de 53 s ; JD, 20/10)
         static float MyLap()
         {
+            if (myRental && bestLap > 0f) return bestLap;
             string k = MyKey();
             if (lapTimes == null || !lapTimes.ContainsKey(k)) return 0f;
             float v = ToF(lapTimes[k]);
@@ -585,7 +589,8 @@ namespace MWCoop
             {
                 int n;
                 if (!h.Registered || !numbers.TryGetValue(h.Id, out n) || n == 0) continue;   // (l'hote n'y est que s'il loue : numbers[0])
-                wanted[n.ToString()] = h.Lap > 0f ? h.Lap : 999f + n * 0.01f;
+                float lap = h.Id == Session.LocalId && myRental && bestLap > 0f ? bestLap : h.Lap;   // (le mien : mesure ici, avant le prochain Report)
+                wanted[n.ToString()] = lap > 0f ? lap : 999f + n * 0.01f;
             }
             int changed = 0;
             var gone = new List<string>();
