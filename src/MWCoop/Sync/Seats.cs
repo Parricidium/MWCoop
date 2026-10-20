@@ -125,7 +125,8 @@ namespace MWCoop
                 // (taxi et ses copies -- mods Machtwagen300D, SECONDMACHTWAGEN : noms en minuscules ou prefixes, sans banquette
                 // avant, retour de Menos 10/10 : « on ne peut pas s'asseoir a l'arriere »)
                 // (My Summer Car : SATSUMA, FERNDALE et RCO_RUSCKO12 ont une banquette ; HAYOSIKO, la place avant seulement)
-                if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("BACHGLOTZ") || n.ToUpperInvariant().Contains("MACHTWAGEN")
+                // (pack rallye de JD, 20/10 : la Lancer Evo III, copie de la SORBET a 4 portes, a aussi sa banquette)
+                if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("BACHGLOTZ") || n.ToUpperInvariant().Contains("MACHTWAGEN") || n == "MITSUBISHI LANCER EVO III"
                     || Game.Msc && (n.StartsWith("SATSUMA") || n.StartsWith("FERNDALE") || n.StartsWith("RCO_RUSCKO")))
                 {
                     // Banquette : 85 cm derriere, un peu plus haute.
