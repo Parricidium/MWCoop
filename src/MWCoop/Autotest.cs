@@ -440,6 +440,113 @@ namespace MWCoop
                 foreach (Terrain te in Object.FindObjectsOfType<Terrain>()) sb.Append("\n  TERRAIN ").Append(Recon.Path(te.transform)).Append(" pos ").Append(te.transform.position.ToString("F0")).Append(" taille ").Append(te.terrainData != null ? te.terrainData.size.ToString("F0") : "?");
                 Log.Info(sb.ToString());
             }
+            // [Test] Autotest=mscfeu (joueurs du 20/10 : « le bois ne prend pas ») : 4 buches (clones du modele firewood) lachees
+            // dans la cheminee du salon a 30 s ; automate WoodTrigger::Trigger (etat, Woods) et chaque buche (parent, nom, active)
+            // chaque seconde jusqu'a 40 s ; a 42 s SetFire::Use -> « Start fire 2 » comme le clic du joueur ; a 46 s, flamme ?
+            if (mode == "mscfeu")
+            {
+                string fp = Config.Get("Test", "TestCheminee", "YARD/Building/LIVINGROOM/Fireplace");
+                GameObject trig = Game.FindAny(fp + "/WoodTrigger");
+                // (a deux : [Test] TestActeur=invite -- l'invite lache le bois et allume, l'hote regarde ; sinon l'hote fait tout)
+                bool actor = Config.Get("Test", "TestActeur", "hote") == "invite" ? !Net.Session.IsHost : Net.Session.IsHost;
+                if (t > 30f && mscStep == 0 && !actor) { mscStep = 9; Log.Info("autotest : mscfeu, regarde"); }
+                // (celui qui regarde : l'etat du foyer toutes les 5 s jusqu'a 120 s -- l'autre agit a ses 30-42 s, soit ~40 s plus tard ici)
+                if (mscStep == 9 && trig != null && t < 120f && t >= mscLog)
+                {
+                    mscLog = t + 5f;
+                    PlayMakerFSM tf = Game.FsmOn(trig, "Trigger");
+                    GameObject sf = Game.FindAny(fp + "/SetFire"), fl = Game.FindAny(fp + "/Flame/FireEffects");
+                    PlayMakerFSM uf = sf != null ? Game.FsmOn(sf, "Use") : null;
+                    Log.Info("autotest : mscfeu, vu d'ici : Trigger [" + (tf != null ? tf.ActiveStateName : "?") + "] Woods " + (tf != null ? tf.FsmVariables.GetFsmInt("Woods").Value.ToString() : "?") + ", SetFire " + (sf != null && sf.activeInHierarchy ? "actif" : "inactif") + " [" + (uf != null ? uf.ActiveStateName : "?") + "], flamme " + (fl != null && fl.activeInHierarchy ? "ALLUMEE" : "eteinte"));
+                }
+                if (t > 30f && mscStep == 0)
+                {
+                    mscStep = 1;
+                    GameObject model = Game.FindAny("firewood");
+                    if (model == null || trig == null) { Log.Info("autotest : mscfeu, modele " + (model != null) + ", declencheur " + (trig != null)); return; }
+                    mscWood = new System.Collections.Generic.List<GameObject>();
+                    for (int i = 0; i < 4; i++)
+                    {
+                        GameObject w = Object.Instantiate(model, trig.transform.position + Vector3.up * (0.35f + 0.12f * i) + trig.transform.right * (0.08f * (i - 1.5f)), trig.transform.rotation) as GameObject;
+                        w.SetActive(true); mscWood.Add(w);
+                    }
+                    Log.Info("autotest : mscfeu, 4 buches lachees dans " + fp + " (modele " + Recon.Path(model.transform) + ", tag " + model.tag + ", calque " + model.layer + ")");
+                }
+                if (mscStep >= 1 && t < 41f && t >= mscLog && trig != null)
+                {
+                    mscLog = t + 1f;
+                    PlayMakerFSM tf = Game.FsmOn(trig, "Trigger");
+                    var sb = new System.Text.StringBuilder("autotest : mscfeu, Trigger [" + (tf != null ? tf.ActiveStateName : "?") + "] Woods " + (tf != null ? tf.FsmVariables.GetFsmInt("Woods").Value.ToString() : "?") + " ;");
+                    foreach (GameObject w in mscWood) sb.Append(w == null ? " (detruite)" : " " + w.name + (w.transform.parent != null ? " sous " + w.transform.parent.name : "") + (w.activeInHierarchy ? "" : " inactive") + " v" + (w.GetComponent<Rigidbody>() != null ? w.GetComponent<Rigidbody>().velocity.magnitude.ToString("F2") : "-") + " d" + Vector3.Distance(w.transform.position, trig.transform.position).ToString("F2"));
+                    Log.Info(sb.ToString());
+                }
+                if (t > 42f && mscStep == 1)
+                {
+                    mscStep = 2;
+                    GameObject sf = Game.FindAny(fp + "/SetFire");
+                    PlayMakerFSM tf0 = trig != null ? Game.FsmOn(trig, "Trigger") : null;
+                    Log.Info("autotest : mscfeu, a 42 s : Trigger [" + (tf0 != null ? tf0.ActiveStateName : "?") + "] Woods " + (tf0 != null ? tf0.FsmVariables.GetFsmInt("Woods").Value.ToString() : "?"));
+                    PlayMakerFSM uf = sf != null ? Game.FsmOn(sf, "Use") : null;
+                    Log.Info("autotest : mscfeu, SetFire " + (sf == null ? "introuvable" : (sf.activeInHierarchy ? "actif" : "INACTIF") + ", Use [" + (uf != null ? uf.ActiveStateName : "?") + "]"));
+                    // (comme le joueur : vise, puis la touche -- « Wait button » et son evenement USE)
+                    // (« Wait button » retombe sur « Wait player » des que la souris ne vise plus : etat pose et touche envoyee dans la
+                    // meme image, comme un clic en visant)
+                    // (le clic ne se simule pas -- « Wait button » retombe aussitot sans la souris dessus : l'etat « Start fire 2 » est pose
+                    // directement, comme Fires.TestFireplace de MWC)
+                    if (actor && uf != null && sf.activeInHierarchy && uf.Fsm.GetState("Start fire 2") != null) { Game.SetState(uf, "Start fire 2"); mscLog = t + 0.3f; Log.Info("autotest : mscfeu, allume (Start fire 2) -> [" + uf.ActiveStateName + "]"); }
+                }
+                if (actor && mscStep == 2 && t > 43f && mscLog > 0f && t >= mscLog)
+                {
+                    mscLog = -1f;
+                    GameObject sf = Game.FindAny(fp + "/SetFire");
+                    PlayMakerFSM uf = sf != null ? Game.FsmOn(sf, "Use") : null;
+                    if (uf != null) Log.Info("autotest : mscfeu, 0,3 s apres la touche : [" + uf.ActiveStateName + "]");
+                }
+                if (t > 48f && mscStep == 2)
+                {
+                    mscStep = 3;
+                    GameObject fl = Game.FindAny(fp + "/Flame/FireEffects");
+                    GameObject sf = Game.FindAny(fp + "/SetFire");
+                    PlayMakerFSM uf = sf != null ? Game.FsmOn(sf, "Use") : null;
+                    Log.Info("autotest : mscfeu, apres : flamme " + (fl == null ? "introuvable" : fl.activeInHierarchy ? "ALLUMEE" : "eteinte") + ", Use [" + (uf != null ? uf.ActiveStateName : "?") + "]");
+                    GameObject pl = Game.PlayerGo; var cc = pl != null ? pl.GetComponent<CharacterController>() : null;
+                    if (cc != null && trig != null) { cc.enabled = false; pl.transform.position = trig.transform.position + trig.transform.forward * -1.5f + Vector3.up * 0.9f; pl.transform.LookAt(trig.transform.position); pl.transform.rotation = Quaternion.Euler(0f, pl.transform.eulerAngles.y, 0f); cc.enabled = true; }
+                    CaptureSoon("msc-feu", 0.5f);
+                }
+                return;
+            }
+            // [Test] Autotest=mscbateau (joueurs du 20/10) : assis a chaque place de la barque (1, 2, 3) 8 s chacune, captures en
+            // troisieme personne ([Test] TroisiemePersonne=1) pour voir la pose et la place.
+            if (mode == "mscbateau")
+            {
+                // A deux ([Test] TestActeur=invite) : l'invite monte au moteur de la barque a 35 s et le lance (Sound Engine.Start) ;
+                // l'hote note toutes les 5 s les sources sonores de sa copie (joueurs du 20/10 : moteur du bateau muet chez les autres).
+                if (Config.Get("Test", "TestActeur", "") == "invite")
+                {
+                    if (!Net.Session.IsHost)
+                    {
+                        if (t > 35f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscbateau, " + VehicleSync.TestEnter("BOAT", false)); }
+                        if (t > 40f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscbateau, moteur -> " + VehicleSync.TestEnter("BOAT", true)); }
+                        if (t > 44f && mscStep == 2)
+                        {
+                            mscStep = 3;
+                            GameObject au = Game.FindAny("BOAT/GFX/Audio");
+                            PlayMakerFSM se = au != null ? Game.FsmOn(au, "Sound Engine") : null;
+                            FsmBool st = se != null ? se.FsmVariables.FindFsmBool("Start") : null;
+                            if (st != null) st.Value = true;
+                            Log.Info("autotest : mscbateau, lance : Sound Engine [" + (se != null ? se.ActiveStateName : "?") + "] Start " + (st != null ? st.Value.ToString() : "?"));
+                        }
+                        if (mscStep == 3 && t < 90f && t >= mscLog) { mscLog = t + 5f; Log.Info("autotest : mscbateau, ici " + VehicleSync.AudioState("BOAT")); }
+                    }
+                    else if (t > 30f && t < 140f && t >= mscLog) { mscLog = t + 5f; GameObject en = Game.FindAny("BOAT/GFX/Audio/Engine"); Log.Info("autotest : mscbateau, copie : Engine " + (en != null && en.activeInHierarchy ? "allume" : "eteint") + " ; " + VehicleSync.AudioState("BOAT")); }
+                    return;
+                }
+                if (t > 25f && mscStep == 0) { mscStep = 1; Log.Info("autotest : mscbateau, " + Seats.TestSit("BOAT", 1)); CaptureSoon("msc-barque-1", 3f); }
+                if (t > 33f && mscStep == 1) { mscStep = 2; Log.Info("autotest : mscbateau, " + Seats.TestLeave() + " ; " + Seats.TestSit("BOAT", 2)); CaptureSoon("msc-barque-2", 3f); }
+                if (t > 41f && mscStep == 2) { mscStep = 3; Log.Info("autotest : mscbateau, " + Seats.TestLeave() + " ; " + Seats.TestSit("BOAT", 3)); CaptureSoon("msc-barque-3", 3f); }
+                if (t > 49f && mscStep == 3) { mscStep = 4; Log.Info("autotest : mscbateau, " + Seats.TestLeave() + " ; " + Seats.PlaceDans("BOAT")); }
+                return;
+            }
             if (mode == "mscmort")
             {
                 // [Test] Autotest=mscmort (19/10, JD : apres la mort sur la Jonnez, sang a l'ecran et joueur reste accroupi) : au
@@ -573,7 +680,7 @@ namespace MWCoop
             mcJ.Clear(); mvJ.Clear();
         }
 
-        static int mscPhares, mscCapot;
+        static int mscPhares, mscCapot; static System.Collections.Generic.List<GameObject> mscWood;
         public static void CaptureSoon(string name, float delay) { capName = name; capAt = Time.realtimeSinceStartup + delay; }
 
         // [Test] Automate=<chemin>:<automate>,... : etats (actions, transitions), variables et evenements de chaque automate.
