@@ -60,7 +60,12 @@ namespace MWCoop
                 {
                     FsmState prev = F.Fsm.PreviousActiveState;
                     // (piece « echange » : pas de joint, 'Mouse off' -REMOVE-> y est le decrochage {Detach} du joueur d'ici, pas une casse)
-                    if (!applying && Replay.Depth == 0) MscLocalRemove(F, prev != null && prev.Name == "Mouse off" && F.FsmVariables.FindFsmGameObject("SpawnPart") == null);
+                    if (!applying && Replay.Depth == 0)
+                    {
+                        bool breakoff = prev != null && prev.Name == "Mouse off" && F.FsmVariables.FindFsmGameObject("SpawnPart") == null;
+                        if (breakoff && MscKeepOnCopy(F)) { Finish(); return; }
+                        MscLocalRemove(F, breakoff);
+                    }
                 }
                 catch (System.Exception e) { Replay.HookError(e); }
                 Finish();
@@ -243,6 +248,40 @@ namespace MWCoop
             VehicleSync.CalmAfterPart(p.Fsm.transform);
             Session.SendAll(new NetWriter(Msg.Part).U8(Session.LocalId).Bool(true).Str(p.Key).Str(id).U8(0), true);
             mounting[part] = Time.realtimeSinceStartup + 1f; mountingAt[part] = p.Fsm.transform;
+        }
+
+        // Attache (FixedJoint) d'une piece disparue ici alors que la voiture est menee par un autre : 'Mouse off' (HasComponent)
+        // envoyait la piece en 'Remove part' -- detachee, Installed=false, par terre ici seulement (les 4 ailes et pare-chocs de la
+        // SATSUMA chez l'invite qui venait d'en descendre, 8 pieces chez l'hote pendant 1,5 s de copie ; 20/10). Une vraie casse
+        // chez celui qui la mene arrive par Part (rejouee avec applying) : ici la piece est remise a sa pose de montage (locale
+        // nulle sous son pivot, comme 'Assemble 2'), une attache neuve posee, et l'automate renvoye en 'Mouse off' AVANT les
+        // actions de 'Remove part' (SwitchLater). 'BoltCheck' recoit la nouvelle attache (sa variable Joint, lue a l'entree de
+        // Bolts ON 2 seulement).
+        static int keepLogs;
+        static bool MscKeepOnCopy(PlayMakerFSM rem)
+        {
+            if (!Session.Active) return false;
+            Transform car = VehicleSync.CarRoot(rem.transform);
+            Rigidbody cb = car != null ? car.GetComponent<Rigidbody>() : null;
+            if (cb == null || VehicleSync.Authority(cb) == Session.LocalId) return false;
+            if (rem.GetComponent<FixedJoint>() != null || rem.transform.parent == null) return false;   // (decrochage {Detach} du jeu, pas une attache disparue)
+            Rigidbody to = rem.transform.parent.GetComponentInParent<Rigidbody>();
+            if (to == null) to = cb;
+            string id = MscPartKey(rem.gameObject);
+            Rigidbody prb = rem.GetComponent<Rigidbody>();
+            rem.transform.localPosition = Vector3.zero; rem.transform.localRotation = Quaternion.identity;
+            if (prb != null) { prb.velocity = Vector3.zero; prb.angularVelocity = Vector3.zero; if (!prb.isKinematic) { prb.position = rem.transform.position; prb.rotation = rem.transform.rotation; } }
+            FixedJoint fj = rem.gameObject.AddComponent<FixedJoint>();
+            fj.connectedBody = to;
+            VehicleSync.AdoptJoint(cb, fj, new Vector2(200f, 200f));   // (InitialAttachForce du montage)
+            PlayMakerFSM bc = Game.FsmOn(rem.gameObject, "BoltCheck");
+            FsmObject jv = bc != null ? bc.FsmVariables.FindFsmObject("Joint") : null;
+            if (jv != null) jv.Value = fj;
+            bool back = Game.SwitchLater(rem, "Mouse off");
+            if (keepLogs++ < 40 || keepLogs % 50 == 0)
+                Log.Warn("piece " + id + " : attache disparue ici sur la copie (voiture menee par #" + VehicleSync.Authority(cb) + "), remise sur " + to.name
+                         + (prb != null ? ", corps " + (prb.isKinematic ? "cinematique" : "libre") : "") + (back ? "" : " (automate non renvoye en Mouse off)"));
+            return back;
         }
 
         static void MscLocalRemove(PlayMakerFSM rem, bool breakoff)
