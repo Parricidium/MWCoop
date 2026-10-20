@@ -26,6 +26,8 @@ namespace MWCoop
     // (Combustion) sans la simulation des cylindres de la CORRIS. Le nom AudioEngine... fait que VehicleSync en envoie
     // volume et hauteur aux autres joueurs, comme pour les voitures du jeu. Sons moteur de la SORBET coupes.
     //
+    // Demarreur des addons : « fichier.wav 0 demarrage » (lancement + prise d'un seul tenant, joue a l'appui sur le demarreur) ou
+    // « demarreur » (boucle) ; la cle garde le son du jeu (JD 21/10).
     // Addons (JD 21/10 : sons du pack « rally cars » de rFactor, MWCoop/addons/<dossier>/sons, outils/rf1/sfx2sons.py) : lignes
     // « fichier.wav <regime naturel> charge|frein <mini> <maxi> <volume> » -- comme rFactor, chaque echantillon joue sur sa
     // plage de regime (fondu ou les plages se chevauchent), hauteur = regime / regime naturel ; « ralenti <tr/min> » : regime
@@ -43,7 +45,8 @@ namespace MWCoop
         static readonly Dictionary<string, AudioClip> clipCache = new Dictionary<string, AudioClip>();
         Drivetrain dt;
         PlayMakerFSM starterFsm;
-        AudioSource crank, oneShot, starterMuted;
+        AudioSource crank, oneShot, starterMuted, startSrc;
+        bool wasCranking;
         string starterState = "";
         float load, catchTime = -100f;
 
@@ -189,16 +192,20 @@ namespace MWCoop
                 if (starterFsm != null)
                 {
                     starterFsm.Fsm.InitData();
+                    // (sons du jeu coupes seulement s'ils sont remplaces : la cle -- JD 21/10, addons : « pour le contact le son
+                    // d'origine de la cle du jeu » -- et la prise du moteur)
+                    bool keyOwn = starter.ContainsKey("cle"), catchOwn = starter.ContainsKey("prise") || starter.ContainsKey("demarrage");
                     foreach (FsmState state in starterFsm.FsmStates)
-                        if (state.Name == "Turn key" || state.Name == "Start engine")
+                        if ((state.Name == "Turn key" && keyOwn) || (state.Name == "Start engine" && catchOwn))
                             foreach (FsmStateAction ac in state.Actions)
                                 if (ac.GetType().Name == "MasterAudioPlaySound") ac.Enabled = false;
                     Transform ss = Find(car.transform, "StarterSound");
                     if (ss != null) starterMuted = ss.GetComponent<AudioSource>();
                     var go = new GameObject("VAZ_demarreur");
                     go.transform.SetParent(at, false);
-                    crank = go.AddComponent<AudioSource>(); oneShot = go.AddComponent<AudioSource>();
-                    foreach (AudioSource a in new[] { crank, oneShot }) { a.spatialBlend = 1f; a.minDistance = 1f; a.maxDistance = 60f; a.playOnAwake = false; a.dopplerLevel = 0f; }
+                    crank = go.AddComponent<AudioSource>(); oneShot = go.AddComponent<AudioSource>(); startSrc = go.AddComponent<AudioSource>();
+                    if (starter.ContainsKey("demarrage")) startSrc.clip = starter["demarrage"];
+                    foreach (AudioSource a in new[] { crank, oneShot, startSrc }) { a.spatialBlend = 1f; a.minDistance = 1f; a.maxDistance = 60f; a.playOnAwake = false; a.dopplerLevel = 0f; }
                     AudioClip c;
                     if (starter.TryGetValue("demarreur", out c)) { crank.clip = c; crank.loop = true; }
                 }
@@ -253,6 +260,14 @@ namespace MWCoop
                 starterState = s;
             }
             bool cranking = s == "Fuel Mixture" || s == "Fuel Mixture 2";
+            // demarrage complet enregistre (rFactor : lancement + prise, « demarrage ») : depuis le debut a chaque appui sur le
+            // demarreur ; coupe si on lache avant que le moteur prenne, sinon joue jusqu'au bout
+            if (startSrc != null && startSrc.clip != null)
+            {
+                if (cranking && !wasCranking) { startSrc.Stop(); startSrc.Play(); }
+                else if (!cranking && wasCranking && s != "Start engine" && s != "Running" && startSrc.isPlaying) startSrc.Stop();
+            }
+            wasCranking = cranking;
             if (cranking && crank.clip != null)
             {
                 FsmFloat sp = starterFsm.FsmVariables.GetFsmFloat("StarterPitch");
