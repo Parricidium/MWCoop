@@ -1,0 +1,22 @@
+DLA1	Extension cars: download them here, they update in one click. In game, take them with F10 (Cars tab).
+DLA2	Looking for cars to download…
+DLA3	Car catalogue unreachable: try again later, or copy an add-on's folder into the add-ons folder.
+DLA4	%s installed: in game, take it with F10 (Cars tab)
+DLA5	Could not download %s (%s)
+DLA6	Close the game before installing a car
+DLA7	Downloading… %d%%
+DLA8	MWCoop %s required
+DLA9	Update · v%s
+DLA10	Download · %.0f MB
+DLA11	Download
+DLA12	Close the game before uninstalling a car
+DLA13	Uninstall \u201C
+DLA14	\u201D?\n\nYour livery is kept. You can download it again from Add-ons (Download button).
+DLA15	%s uninstalled
+DLA16	%s: some files could not be deleted (open elsewhere?)
+DLA17	Uninstall
+DLA30	Add-ons are extra cars, downloaded from the launcher. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery.
+DLA31	Character > Add-ons: each available car has a Download button (NEW tag when it has just arrived).
+DLA32	Click Download with the game closed: the car installs into MWCoop\\addons.
+DLA33	New version: UPDATE tag and Update button. To remove it: click the car, then Uninstall (your livery is kept).
+DLA34	By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.

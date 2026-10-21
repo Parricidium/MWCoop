@@ -743,7 +743,10 @@ static void DrawPaintView(Graphics &g, RectF card)
 // la CORRIS). Sans livree, la voiture est comme la VAZ (couleur du joueur + numero) ; avec, l'image du joueur
 // (%LOCALAPPDATA%\MWCoop\<cle>-livree.jpg, JPEG 2048 x 2048 de 2,1 Mo au plus : le mod l'envoie aux autres joueurs,
 // EvoLivery) ; [Coop] EvoLivree (cle evo3) ou Livree_<cle> = perso.
-struct Addon { std::wstring key, dir, name, nameShort, desc, descEn; bool livery = false; bool builtin = false; };   // (builtin : la VAZ, livree avec le mod)
+// Depuis 1.8.0 (JD, 21/10 : « mettre les voitures a part comme l'editeur de carte ») : les addons se telechargent ici
+// (catalogue plus bas) ; une carte pas encore installee porte « Telecharger », une installee plus ancienne que le
+// catalogue « Mettre a jour ».
+struct Addon { std::wstring key, dir, name, nameShort, desc, descEn, ver, remoteVer; bool livery = false; bool builtin = false; bool installed = true; };   // (builtin : la VAZ, livree avec le mod ; ver : Version= de addon.ini ; remoteVer : celle du catalogue)
 static std::vector<Addon> g_addonList;
 static ULONGLONG g_addonScanT;
 static int g_addonSel = -1;          // carte ouverte (-1 : la liste)
@@ -758,7 +761,199 @@ static std::wstring AddonsRoot() { return g_modRoot + L"MWCoop\\addons\\"; }
 static void GoPage(int p);   // (ui.inc, inclus apres)
 static bool AddonsOn() { return g_addonsTab; }
 static void AddonsLeave() { g_addonsTab = false; }
-static void AddonsGo() { if (g_tab != TAB_CAR) GoPage(TAB_CAR); g_addonsTab = true; g_addonSel = -1; g_addonScanT = 0; }
+
+// ---- catalogue des addons a telecharger (1.8.0, JD 21/10 : « que les joueurs puissent les telecharger du lanceur et les
+// mettre a jour ainsi », bouton Telecharger / Mettre a jour, etiquettes NEW / UPDATE). Depot public a part,
+// Parricidium/MWCoop-Addons (un retrait = une section enlevee du catalogue) : catalogue.txt (UTF-8, sections [cle] :
+// Version, Nom, NomCourt, Description, DescriptionEn, Livree, Taille, Paquet, Apercu, ModMin), lu sur
+// raw.githubusercontent.com (pas l'API : sa limite de 60 demandes par heure sert deja aux versions du mod) au premier
+// affichage, a l'ouverture de l'onglet (5 min au moins entre deux) et toutes les 30 min ; copie hors ligne
+// %LOCALAPPDATA%\MWCoop\addons-catalogue.txt, apercus dans %LOCALAPPDATA%\MWCoop\addons-apercus\<cle>-<version>.png.
+// Paquet : un zip <cle>\..., avec Version= dans son addon.ini, installe dans MWCoop\addons\<cle> (extrait a cote dans
+// .<cle>-nouveau, puis l'ancien dossier remplace : le scan saute les noms a point).
+// Vus : [Lanceur] AddonsVus (cles du catalogue deja montrees) ; NEW sur la barre tant qu'une voiture du catalogue n'a pas
+// ete vue, sur la carte pendant la session ou elle est apparue.
+struct AddonCat { std::wstring key, ver, name, nameShort, desc, descEn, url, pic, modMin; long long size = 0; bool livery = false; };
+static std::wstring g_addonsRepo = L"Parricidium/MWCoop-Addons";   // (/depotaddons : autre depot, pour les essais)
+static std::vector<AddonCat> g_addonCat;                           // (sous g_cs)
+static volatile bool g_addonCatBusy;
+static ULONGLONG g_addonCatT, g_addonCatGoT;
+static std::wstring g_addonDlKey;                                  // telechargement en cours (sous g_cs)
+static volatile bool g_addonDlBusy;
+static float g_addonDlProg = -1;
+static std::set<std::wstring> g_addonSeen, g_addonSeenStart;
+static bool g_addonSeenRead;
+static bool GameProcessRunning(DWORD *pidOut);   // (launcher.cpp)
+static void DeleteTree(const std::wstring &dir);
+static std::wstring AddonPicCache(const std::wstring &key, const std::wstring &ver) { return LocalDir() + L"addons-apercus\\" + key + L"-" + ver + L".png"; }
+static int AddonCmpVer(const std::wstring &a, const std::wstring &b) { return a.empty() || b.empty() ? (a.empty() ? (b.empty() ? 0 : -1) : 1) : CmpVer(a, b); }   // (sans Version= : la plus ancienne)
+
+static std::vector<AddonCat> AddonCatParse(const std::string &src)
+{
+    std::vector<AddonCat> v;
+    std::string t = src;
+    if (t.size() >= 3 && (unsigned char)t[0] == 0xEF) t = t.substr(3);
+    for (size_t p = 0; p < t.size();) {
+        size_t e = t.find('\n', p); if (e == std::string::npos) e = t.size();
+        std::string l = t.substr(p, e - p); p = e + 1;
+        if (!l.empty() && l.back() == '\r') l.pop_back();
+        if (l.empty() || l[0] == ';' || l[0] == '#') continue;
+        if (l[0] == '[') {
+            size_t q = l.find(']');
+            std::wstring k = Widen(l.substr(1, q == std::string::npos ? std::string::npos : q - 1));
+            bool ok = !k.empty();
+            for (wchar_t c : k) if (!iswalnum(c) && c != L'_' && c != L'-') ok = false;   // (un nom de dossier simple : pas de .., \, :)
+            if (ok) { AddonCat c; c.key = k; c.name = k; v.push_back(c); }
+            else v.push_back(AddonCat());   // (section ignoree)
+            continue;
+        }
+        size_t q = l.find('=');
+        if (q == std::string::npos || v.empty() || v.back().key.empty()) continue;
+        AddonCat &c = v.back();
+        std::string k = l.substr(0, q); std::wstring val = Widen(l.substr(q + 1));
+        if (k == "Version") c.ver = val; else if (k == "Nom") c.name = val; else if (k == "NomCourt") c.nameShort = val;
+        else if (k == "Description") c.desc = val; else if (k == "DescriptionEn") c.descEn = val;
+        else if (k == "Livree") c.livery = val == L"1"; else if (k == "Taille") c.size = _wtoi64(val.c_str());
+        else if (k == "Paquet") c.url = val; else if (k == "Apercu") c.pic = val; else if (k == "ModMin") c.modMin = val;
+    }
+    std::vector<AddonCat> o;
+    for (const AddonCat &c : v)
+        if (!c.key.empty() && !c.ver.empty() && !_wcsnicmp(c.url.c_str(), L"https://", 8)) { o.push_back(c); if (o.back().nameShort.empty()) o.back().nameShort = c.name; }
+    return o;
+}
+
+static DWORD WINAPI AddonCatThread(void *)
+{
+    std::string t;
+    DWORD code = 0;
+    std::wstring local = LocalDir(), cache = local.empty() ? L"" : local + L"addons-catalogue.txt";
+    bool got = HttpGet(L"https://raw.githubusercontent.com/" + g_addonsRepo + L"/main/catalogue.txt", &t, L"", false, &code) && code == 200 && t.find('[') != std::string::npos;
+    if (got && !cache.empty()) {
+        HANDLE f = CreateFileW(cache.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, t.data(), (DWORD)t.size(), &w, NULL); CloseHandle(f); }
+    } else if (!cache.empty()) {
+        std::vector<unsigned char> b;
+        t = ReadAll(cache, b) ? std::string(b.begin(), b.end()) : "";
+    }
+    std::vector<AddonCat> cat = AddonCatParse(t);
+    LaunchLog("addons : catalogue %s (code HTTP %lu), %d voiture(s)", got ? "recu" : "pas recu, copie locale", code, (int)cat.size());
+    if (!local.empty())
+        for (const AddonCat &c : cat) {   // apercus (une fois par version)
+            std::wstring f = AddonPicCache(c.key, c.ver);
+            if (FileExists(f) || _wcsnicmp(c.pic.c_str(), L"https://", 8)) continue;
+            SHCreateDirectoryExW(NULL, (local + L"addons-apercus").c_str(), NULL);
+            DWORD pc = 0;
+            if (!HttpGet(c.pic, NULL, f, false, &pc) || pc != 200) DeleteFileW(f.c_str());
+        }
+    EnterCriticalSection(&g_cs);
+    if (got || !cat.empty() || g_addonCat.empty()) g_addonCat = cat;
+    LeaveCriticalSection(&g_cs);
+    g_addonScanT = 0;
+    g_addonCatBusy = false;
+    return 0;
+}
+static void AddonCatRefresh()
+{
+    if (g_addonCatBusy) return;
+    g_addonCatBusy = true;
+    g_addonCatT = GetTickCount64() + 30 * 60 * 1000;
+    HANDLE h = CreateThread(NULL, 0, AddonCatThread, NULL, 0, NULL);
+    if (h) CloseHandle(h); else g_addonCatBusy = false;
+}
+// (barre : appele a chaque image pour la pastille ; la premiere fois, puis toutes les 30 min)
+static void AddonCatTick()
+{
+    if (GetTickCount64() < g_addonCatT) return;
+    static bool cached;
+    if (!cached && !LocalDir().empty()) {   // (premiere fois : la copie locale tout de suite, pour les pastilles des le demarrage)
+        cached = true;
+        std::vector<unsigned char> b;
+        if (ReadAll(LocalDir() + L"addons-catalogue.txt", b)) {
+            std::vector<AddonCat> cat = AddonCatParse(std::string(b.begin(), b.end()));
+            EnterCriticalSection(&g_cs);
+            if (g_addonCat.empty()) g_addonCat = cat;
+            LeaveCriticalSection(&g_cs);
+            g_addonScanT = 0;
+        }
+    }
+    AddonCatRefresh();
+}
+
+static void AddonSeenLoad()
+{
+    if (g_addonSeenRead) return;
+    g_addonSeenRead = true;
+    wchar_t b[2048] = {};
+    GetPrivateProfileStringW(L"Lanceur", L"AddonsVus", L"", b, 2048, g_iniLauncher.c_str());
+    for (wchar_t *ctx = NULL, *k = wcstok_s(b, L",", &ctx); k; k = wcstok_s(NULL, L",", &ctx)) g_addonSeen.insert(k);
+    g_addonSeenStart = g_addonSeen;
+}
+// Onglet ouvert : tout le catalogue est vu (la pastille NEW de la barre s'eteint ; celles des cartes restent la session).
+static void AddonSeenMark()
+{
+    AddonSeenLoad();
+    bool ch = false;
+    EnterCriticalSection(&g_cs);
+    for (const AddonCat &c : g_addonCat) if (g_addonSeen.insert(c.key).second) ch = true;
+    LeaveCriticalSection(&g_cs);
+    if (!ch) return;
+    std::wstring s;
+    for (const std::wstring &k : g_addonSeen) { if (!s.empty()) s += L','; s += k; }
+    WritePrivateProfileStringW(L"Lanceur", L"AddonsVus", s.c_str(), g_iniLauncher.c_str());
+}
+static void AddonsGo()
+{
+    if (g_tab != TAB_CAR) GoPage(TAB_CAR);
+    g_addonsTab = true; g_addonSel = -1; g_addonScanT = 0;
+    ULONGLONG now = GetTickCount64();
+    if (now >= g_addonCatGoT) { g_addonCatGoT = now + 5 * 60 * 1000; AddonCatRefresh(); }
+}
+
+static DWORD WINAPI AddonDlThread(void *)
+{
+    std::wstring key;
+    AddonCat c;
+    EnterCriticalSection(&g_cs);
+    key = g_addonDlKey;
+    for (const AddonCat &x : g_addonCat) if (x.key == key) c = x;
+    LeaveCriticalSection(&g_cs);
+    std::wstring root = AddonsRoot(), stage = root + L"." + key + L"-nouveau", tmp = LocalDir() + L"addon-telechargement.zip", dst = root + key;
+    SHCreateDirectoryExW(NULL, root.substr(0, root.size() - 1).c_str(), NULL);
+    DeleteTree(stage);
+    g_addonDlProg = 0;
+    DWORD code = 0;
+    std::string why;
+    bool ok = !c.key.empty() && HttpGet(c.url, NULL, tmp, true, &code, &g_addonDlProg) && (code == 0 || code == 200);
+    if (!ok) why = c.key.empty() ? "plus au catalogue" : code ? "HTTP " + std::to_string(code) : "erreur " + std::to_string(g_httpErr);
+    else if (!Unzip(tmp, stage, &why)) ok = false;
+    else if (!FileExists(stage + L"\\" + key + L"\\carrosserie.p205") || !FileExists(stage + L"\\" + key + L"\\addon.ini")) { ok = false; why = "paquet incomplet"; }
+    DeleteFileW(tmp.c_str());
+    if (ok) {
+        DeleteTree(dst);
+        if (GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) { ok = false; why = "ancien dossier en cours d'utilisation"; }
+        else if (!MoveFileW((stage + L"\\" + key).c_str(), dst.c_str())) { ok = false; why = "deplacement (erreur " + std::to_string(GetLastError()) + ")"; }
+    }
+    DeleteTree(stage);
+    LaunchLog("addon %ls %ls : %s (%s)", key.c_str(), c.ver.c_str(), ok ? "installe" : "ECHEC", why.c_str());
+    if (ok) SetStatus(K_OK, T(L"%s installée : en jeu, prends-la au F10 (onglet Voitures)", L"%s installed: in game, take it with F10 (Cars tab)"), c.name.c_str());
+    else SetStatus(K_ERR, T(L"Téléchargement de %s impossible (%s)", L"Could not download %s (%s)"), c.name.c_str(), Widen(why).c_str());
+    g_addonPics.erase(key);
+    g_addonScanT = 0;
+    g_addonDlProg = -1;
+    EnterCriticalSection(&g_cs); g_addonDlKey.clear(); LeaveCriticalSection(&g_cs);
+    g_addonDlBusy = false;
+    return 0;
+}
+static void AddonDownload(const std::wstring &key)
+{
+    if (g_addonDlBusy || g_gameDir.empty() || LocalDir().empty()) return;
+    DWORD pid = 0;
+    if (GameProcessRunning(&pid)) { SetStatus(K_WARN, T(L"Ferme le jeu avant d'installer une voiture", L"Close the game before installing a car")); return; }
+    g_addonDlBusy = true;
+    EnterCriticalSection(&g_cs); g_addonDlKey = key; LeaveCriticalSection(&g_cs);
+    HANDLE h = CreateThread(NULL, 0, AddonDlThread, NULL, 0, NULL);
+    if (h) CloseHandle(h); else g_addonDlBusy = false;
+}
 static void WikiOpenAddons();   // (launcher.cpp : article Les addons du GUIDE)
 static void AddonsOpenDir()
 {
@@ -800,13 +995,26 @@ static void AddonsScan()
                     std::string k = l.substr(0, q); std::wstring val = Widen(l.substr(q + 1));
                     if (k == "Nom") a.name = val; else if (k == "NomCourt") a.nameShort = val;
                     else if (k == "Description") a.desc = val; else if (k == "DescriptionEn") a.descEn = val;
-                    else if (k == "Livree") a.livery = val == L"1";
+                    else if (k == "Livree") a.livery = val == L"1"; else if (k == "Version") a.ver = val;
                 }
                 if (a.nameShort.empty()) a.nameShort = a.name;
                 v.push_back(a);
             } while (FindNextFileW(h, &fd));
             FindClose(h);
         }
+    }
+    // catalogue : version publiee des installees, cartes « Telecharger » pour les autres
+    if (!g_gameDir.empty() && !CarMsc()) {
+        EnterCriticalSection(&g_cs);
+        for (const AddonCat &c : g_addonCat) {
+            Addon *in = NULL;
+            for (Addon &x : v) if (!_wcsicmp(x.key.c_str(), c.key.c_str())) in = &x;
+            if (in) { in->remoteVer = c.ver; continue; }
+            Addon a; a.key = c.key; a.name = c.name; a.nameShort = c.nameShort; a.desc = c.desc; a.descEn = c.descEn; a.livery = c.livery;
+            a.remoteVer = c.ver; a.installed = false;
+            v.push_back(a);
+        }
+        LeaveCriticalSection(&g_cs);
     }
     std::sort(v.begin(), v.end(), [](const Addon &x, const Addon &y) { return x.name < y.name; });
     // La VAZ-2108, livree avec le mod (MWCoop\vaz, jamais dans addons\) : une carte comme les autres, avec sa livree (JD, 21/10 :
@@ -819,8 +1027,10 @@ static void AddonsScan()
             v.insert(v.begin(), a);
         }
     }
+    std::wstring sel = g_addonSel >= 0 && g_addonSel < (int)g_addonList.size() ? g_addonList[g_addonSel].key : L"";   // (le catalogue arrive : les rangs changent)
     g_addonList = v;
-    if (g_addonSel >= (int)v.size()) g_addonSel = -1;
+    g_addonSel = -1;
+    for (int i = 0; i < (int)v.size() && !sel.empty(); i++) if (v[i].key == sel && v[i].installed) g_addonSel = i;
 }
 static const Addon *AddonCur() { return g_addonSel >= 0 && g_addonSel < (int)g_addonList.size() ? &g_addonList[g_addonSel] : NULL; }
 static std::wstring AddonDir(const Addon &a) { return a.dir; }
@@ -830,9 +1040,32 @@ static Bitmap *AddonPic(const Addon &a)
 {
     auto it = g_addonPics.find(a.key);
     if (it != g_addonPics.end()) return it->second;
+    if (!a.installed) {   // (pas encore installee : l'apercu du catalogue, quand il est arrive)
+        std::wstring f = AddonPicCache(a.key, a.remoteVer);
+        Bitmap *b = FileExists(f) ? LoadAnyImage(f, NULL) : NULL;
+        if (b) g_addonPics[a.key] = b;
+        return b;
+    }
     Bitmap *b = LoadAnyImage(AddonDir(a) + L"apercu.png", NULL);
     g_addonPics[a.key] = b;
     return b;
+}
+// Etiquettes : NEW (pas installee, apparue au catalogue depuis la derniere visite d'avant cette session), UPDATE (installee,
+// plus ancienne que le catalogue).
+static bool AddonIsNew(const Addon &a) { AddonSeenLoad(); return !a.installed && !g_addonSeenStart.count(a.key); }
+static bool AddonHasUpdate(const Addon &a) { return a.installed && !a.builtin && !a.remoteVer.empty() && AddonCmpVer(a.remoteVer, a.ver) > 0; }
+// Barre (ui.inc) : NEW tant qu'une voiture du catalogue n'a pas ete vue, UPDATE si une installee a une mise a jour.
+static void AddonsScan();
+static void AddonsBadges(bool &isNew, bool &upd)
+{
+    AddonCatTick();
+    AddonsScan();
+    AddonSeenLoad();
+    isNew = upd = false;
+    for (const Addon &a : g_addonList) {
+        if (!a.installed && !g_addonSeen.count(a.key)) isNew = true;
+        if (AddonHasUpdate(a)) upd = true;
+    }
 }
 static bool AddonLiveryOn(const Addon &a)
 {
@@ -937,6 +1170,31 @@ static void AddonTemplate()
     std::wstring arg = L"/select,\"" + t + L"\"";
     ShellExecuteW(g_wnd, L"open", L"explorer.exe", arg.c_str(), NULL, SW_SHOWNORMAL);
 }
+// Desinstaller (JD, 21/10 : « une option pour desinstaller les voitures dans addons, a part la VAZ ») : son dossier supprime,
+// sa livree gardee (%LOCALAPPDATA%, reprise si elle est retelechargee) ; une voiture du catalogue y reste, avec Telecharger.
+static void AddonUninstall()
+{
+    const Addon *pa = AddonCur();
+    if (!pa || pa->builtin || !pa->installed || pa->dir.empty() || g_addonDlBusy) return;
+    Addon a = *pa;
+    DWORD pid = 0;
+    if (GameProcessRunning(&pid)) { SetStatus(K_WARN, T(L"Ferme le jeu avant de désinstaller une voiture", L"Close the game before uninstalling a car")); return; }
+    std::wstring q = std::wstring(T(L"Désinstaller « ", L"Uninstall “")) + a.name + T(L" » ?\n\nTa livrée est gardée. Tu pourras la retélécharger depuis Addons (bouton Télécharger).",
+                                                                                    L"”?\n\nYour livery is kept. You can download it again from Add-ons (Download button).");
+    if (MessageBoxW(g_wnd, q.c_str(), L"MWCoop", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+    std::wstring dir = a.dir;
+    while (!dir.empty() && dir.back() == L'\\') dir.pop_back();
+    DeleteTree(dir);
+    bool ok = GetFileAttributesW(dir.c_str()) == INVALID_FILE_ATTRIBUTES;
+    LaunchLog("addon %ls : desinstallation %s (%ls)", a.key.c_str(), ok ? "faite" : "INCOMPLETE", dir.c_str());
+    if (ok) SetStatus(K_OK, T(L"%s désinstallée", L"%s uninstalled"), a.name.c_str());
+    else SetStatus(K_ERR, T(L"%s : des fichiers n'ont pas pu être supprimés (ouverts ailleurs ?)", L"%s: some files could not be deleted (open elsewhere?)"), a.name.c_str());
+    g_addonPics.erase(a.key);
+    AddonSeenLoad();
+    g_addonSeenStart.insert(a.key);   // (de retour avec « Telecharger », sans etiquette NEW)
+    g_addonSel = -1;
+    g_addonScanT = 0;
+}
 static void AddonRemove()
 {
     const Addon *a = AddonCur();
@@ -984,8 +1242,9 @@ static void DrawAddonList(Graphics &g)
     RectF area(kCarCard.X, kCarCard.Y, kCarPanel.X + kCarPanel.Width - kCarCard.X, kCarCard.Height);
     Glass(area);
     Title(g, T(L"Addons", L"Add-ons"), RectF(area.X + 24, area.Y + 20, 400, 30), 22, kInk);
-    Para(g, T(L"Voitures en extension : copie le dossier d'un addon dans le dossier des addons. En partie, on les prend au F10 (onglet Voitures).",
-              L"Extension cars: copy an add-on's folder into the add-ons folder. In game, take them with F10 (Cars tab)."),
+    AddonSeenMark();
+    Para(g, T(L"Voitures en extension : télécharge-les ici, elles se mettent à jour d'un clic. En partie, on les prend au F10 (onglet Voitures).",
+              L"Extension cars: download them here, they update in one click. In game, take them with F10 (Cars tab)."),
          RectF(area.X + 24, area.Y + 56, area.Width - 48 - 400, 40), 12.5f, kGrey);
     UiButton(g, RectF(area.X + area.Width - 24 - 264, area.Y + 20, 264, 38), T(L"Ouvrir le dossier des addons", L"Open the add-ons folder"), UI_ADDON_DIR, false, IC_FOLDER, true, 10);
     UiButton(g, RectF(area.X + area.Width - 24 - 264 - 12 - 108, area.Y + 20, 108, 38), T(L"Aide", L"Help"), UI_ADDON_HELP, false, IC_BOOK, true, 10);
@@ -994,7 +1253,8 @@ static void DrawAddonList(Graphics &g)
     if (g_addonList.empty()) {
         Icon(g, IC_CAR, area.X + area.Width / 2, area.Y + area.Height / 2 - 50, 56, WithA(kGrey, 0.6f), 1.4f);
         Text(g, T(L"Aucun addon installé", L"No add-on installed"), RectF(area.X, area.Y + area.Height / 2 - 10, area.Width, 26), 15, FontStyleBold, kGrey);
-        Text(g, T(L"Copie le dossier d'un addon dans le dossier des addons : il apparaîtra ici.", L"Copy an add-on's folder into the add-ons folder: it will show up here."),
+        Text(g, g_addonCatBusy ? T(L"Recherche des voitures à télécharger…", L"Looking for cars to download…")
+                               : T(L"Catalogue des voitures injoignable : réessaie plus tard, ou copie le dossier d'un addon dans le dossier des addons.", L"Car catalogue unreachable: try again later, or copy an add-on's folder into the add-ons folder."),
              RectF(area.X + 40, area.Y + area.Height / 2 + 20, area.Width - 80, 22), 12.5f, FontStyleRegular, kGrey);
         UiButton(g, RectF(area.X + area.Width / 2 - 140, area.Y + area.Height / 2 + 58, 280, 44), T(L"Ouvrir le dossier des addons", L"Open the add-ons folder"), UI_ADDON_DIR, true, IC_FOLDER);
         return;
@@ -1012,23 +1272,57 @@ static void DrawAddonList(Graphics &g)
         SolidBrush cb(hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &p);
         Pen pen(hot ? kAcc : TH(choiceBorder), hot ? 1.6f : 1.0f); g.DrawPath(&pen, &p);
         std::wstring desc = !g_fr && !a.descEn.empty() ? a.descEn : a.desc;
-        std::wstring liv = a.livery ? (AddonLiveryOn(a) ? T(L"Ta livrée", L"Your livery") : T(L"Couleur + numéro", L"Colour + number")) : L"";
+        std::wstring liv = a.livery && a.installed ? (AddonLiveryOn(a) ? T(L"Ta livrée", L"Your livery") : T(L"Couleur + numéro", L"Colour + number")) : L"";
+        // bouton du catalogue : Telecharger (pas installee) / Mettre a jour (plus ancienne) ; pendant le telechargement : le %
+        bool upd = AddonHasUpdate(a), get = !a.installed || upd;
+        std::wstring btn;
+        bool btnOn = !g_addonDlBusy;
+        if (get) {
+            AddonCat c;
+            EnterCriticalSection(&g_cs);
+            for (const AddonCat &x : g_addonCat) if (x.key == a.key) c = x;
+            bool mine = g_addonDlBusy && g_addonDlKey == a.key;
+            LeaveCriticalSection(&g_cs);
+            wchar_t b[96];
+            if (mine) swprintf_s(b, T(L"Téléchargement… %d %%", L"Downloading… %d%%"), (int)(max(0.0f, g_addonDlProg) * 100));
+            else if (!c.modMin.empty() && !g_localVer.empty() && CmpVer(c.modMin, g_localVer) > 0) { swprintf_s(b, T(L"MWCoop %s requis", L"MWCoop %s required"), c.modMin.c_str()); btnOn = false; }
+            else if (upd) swprintf_s(b, T(L"Mettre à jour · v%s", L"Update · v%s"), a.remoteVer.c_str());
+            else if (c.size > 0) swprintf_s(b, T(L"Télécharger · %.0f Mo", L"Download · %.0f MB"), c.size / 1048576.0);
+            else swprintf_s(b, L"%s", T(L"Télécharger", L"Download"));
+            btn = b;
+        }
+        RectF br;
         if (list) {
-            // ligne : vignette a gauche (16/9), nom, fiche, livree
+            // ligne : vignette a gauche (16/9), nom, fiche, livree ; bouton du catalogue a droite
             AddonDrawPic(g, AddonPic(a), RectF(r.X + 8, r.Y + 8, (r.Height - 16) * 16 / 9, r.Height - 16), 10);
-            float tx = r.X + 8 + (r.Height - 16) * 16 / 9 + 18, tw = r.X + r.Width - 16 - tx;
+            float tx = r.X + 8 + (r.Height - 16) * 16 / 9 + 18, tw = r.X + r.Width - 16 - tx - (get ? 236 : 0);
             Text(g, a.name, RectF(tx, r.Y + 10, tw, 24), 16, FontStyleBold, kInk, StringAlignmentNear);
             Text(g, desc, RectF(tx, r.Y + 34, tw, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
             if (!liv.empty()) Text(g, liv, RectF(tx, r.Y + 54, tw, 20), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
+            br = RectF(r.X + r.Width - 16 - 220, r.Y + (r.Height - 40) / 2, 220, 40);
         } else {
             AddonDrawPic(g, AddonPic(a), RectF(r.X + 10, r.Y + 10, r.Width - 20, 160), 12);
             Text(g, a.name, RectF(r.X + 16, r.Y + 180, r.Width - 32, 26), 16, FontStyleBold, kInk, StringAlignmentNear);
             Text(g, desc, RectF(r.X + 16, r.Y + 206, r.Width - 32, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-            if (!liv.empty()) Text(g, liv, RectF(r.X + 16, r.Y + 232, r.Width - 32, 22), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
+            if (!liv.empty() && !get) Text(g, liv, RectF(r.X + 16, r.Y + 232, r.Width - 32, 22), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
+            br = RectF(r.X + 16, r.Y + 228, r.Width - 32, 34);
         }
-        // (zone cliquable : la partie visible de la carte seulement)
+        // etiquettes NEW / UPDATE, en haut a gauche de l'image
+        {
+            float px = list ? r.X + 14 : r.X + 18, py = list ? r.Y + 14 : r.Y + 18;
+            if (AddonIsNew(a)) { const wchar_t *s = L"NEW"; float w = PillW(s, 10); Pill(g, RectF(px, py, w, 20), kAcc, s, kOnAcc, 10); px += w + 6; }
+            if (upd) { const wchar_t *s = L"UPDATE"; float w = PillW(s, 10); Pill(g, RectF(px, py, w, 20), kWarn, s, Color(255, 255, 255, 255), 10); }
+        }
+        // (zone cliquable : la partie visible de la carte seulement ; une carte pas installee n'ouvre rien)
         RectF hz = r; float top = max(hz.Y, ar.Y), bot = min(hz.Y + hz.Height, ar.Y + ar.Height);
-        if (bot - top > 12) { hz.Y = top; hz.Height = bot - top; HotZone(hz, UI_ADDON_CARD + i); }
+        if (bot - top > 12 && a.installed) { hz.Y = top; hz.Height = bot - top; HotZone(hz, UI_ADDON_CARD + i); }
+        if (get) {
+            if (br.Y >= ar.Y && br.Y + br.Height <= ar.Y + ar.Height) UiButton(g, br, btn, UI_ADDON_GET + i, true, g_addonDlBusy ? -1 : IC_DOWNLOAD, btnOn, 10);
+            else {   // (a moitie hors du cadre : dessine sans zone cliquable)
+                GraphicsPath bp; RoundRect(bp, br, 10);
+                SolidBrush bb(kAcc); g.FillPath(&bb, &bp);
+            }
+        }
     }
     g.Restore(st);
     if (ms > 0) DrawScrollBar(g, ar, sc, ms);
@@ -1094,6 +1388,18 @@ static void DrawAddonView(Graphics &g, const Addon &a)
         bool on = AddonLiveryOn(a);
         Text(g, T(L"Livrée", L"Livery"), RectF(pn.X + 24, y, 120, 22), 12.5f, FontStyleBold, kInk, StringAlignmentNear);
         Text(g, on ? T(L"la tienne (partagée)", L"yours (shared)") : T(L"aucune", L"none"), RectF(pn.X + 144, y, pn.Width - 168, 22), 12.5f, FontStyleBold, on ? kAcc : kGrey, StringAlignmentNear);
+    }
+    if (!a.builtin) {   // (la VAZ : livree avec le mod, ni mise a jour ni desinstallation ici)
+        bool upd = AddonHasUpdate(a);
+        float by = pn.Y + pn.Height - 40 - 52;
+        UiButton(g, RectF(pn.X + 24, by, pn.Width - 48, 42), T(L"Désinstaller", L"Uninstall"), UI_ADDON_UNINST, false, IC_TRASH, !g_addonDlBusy, 10);
+        if (upd) {   // (au-dessus : Mettre a jour)
+            bool mine = g_addonDlBusy && g_addonDlKey == a.key;
+            wchar_t b[96];
+            if (mine) swprintf_s(b, T(L"Téléchargement… %d %%", L"Downloading… %d%%"), (int)(max(0.0f, g_addonDlProg) * 100));
+            else swprintf_s(b, T(L"Mettre à jour · v%s", L"Update · v%s"), a.remoteVer.c_str());
+            UiButton(g, RectF(pn.X + 24, by - 52, pn.Width - 48, 42), b, UI_ADDON_UPD, true, mine ? -1 : IC_DOWNLOAD, !g_addonDlBusy, 10);
+        }
     }
     Text(g, a.dir.substr(g_modRoot.size()).c_str(), RectF(pn.X + 24, pn.Y + pn.Height - 40, pn.Width - 48, 20), 11, FontStyleRegular, WithA(kGrey, 0.8f), StringAlignmentNear);
 }

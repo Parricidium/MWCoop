@@ -451,6 +451,10 @@ static void DrawNavItem(Graphics &g, RectF r, int page, int icon, const wchar_t 
     } else if (page == TAB_MODS && en) {
         int n = MscModCount();
         if (n > 0) { std::wstring s = std::to_wstring(n); float w = PillW(s, 10.5f); Pill(g, RectF(rx - w, r.Y + (r.Height - 20) / 2, w, 20), TH(cardSel), s, kInk, 10.5f); }
+    } else if (page == TAB_ADDONS && en && !on) {   // (voitures du catalogue : NEW pas encore vue, UPDATE pour une installee)
+        bool nw, up; AddonsBadges(nw, up);
+        if (up) { const wchar_t *s = L"UPDATE"; float w = PillW(s, 9) - 6; Pill(g, RectF(rx - w, r.Y + (r.Height - 18) / 2, w, 18), kWarn, s, Color(255, 255, 255, 255), 9); rx -= w + 4; }   // (etroites : les deux a cote du nom)
+        if (nw) { const wchar_t *s = L"NEW"; float w = PillW(s, 9) - 6; Pill(g, RectF(rx - w, r.Y + (r.Height - 18) / 2, w, 18), kAcc, s, kOnAcc, 9); }
     } else if (page == TAB_NOTES && NotesUnseen() && !on) {
         const wchar_t *s = T(L"NOUV.", L"NEW");
         float w = PillW(s, 10);
@@ -1503,6 +1507,7 @@ static bool UiClick(int id)
 {
     if (id == UI_NONE) return true;
     if (id >= UI_ADDON_VIEW && id < UI_ADDON_VIEW + 2) { AddonsSetView(id - UI_ADDON_VIEW); return true; }
+    if (id >= UI_ADDON_GET && id < UI_ADDON_GET + 20) { int i = id - UI_ADDON_GET; if (i < (int)g_addonList.size()) AddonDownload(g_addonList[i].key); return true; }   // (catalogue : Telecharger / Mettre a jour)
     if (id >= UI_ADDON_CARD && id < UI_ADDON_CARD + 20) { g_addonSel = id - UI_ADDON_CARD; g_addonThumbOf.clear(); return true; }   // (onglet Addons : carte -> son volet ; 1.5.2, clic oublie en 1.5.0)
     if (id >= UI_NAV && id < UI_NAV + TAB_COUNT) { int p = id - UI_NAV; if (PageEnabled(p)) GoPage(p); return true; }
     if (id >= UI_NAV_GROUP && id < UI_NAV_GROUP + 5) { RailToggle(id - UI_NAV_GROUP); return true; }
@@ -1573,6 +1578,8 @@ static bool UiClick(int id)
     case UI_CAR_EVODEL: AddonRemove(); return true;
     case UI_ADDON_BACK: g_addonSel = -1; return true;
     case UI_ADDON_DIR: AddonsOpenDir(); return true;
+    case UI_ADDON_UNINST: AddonUninstall(); return true;
+    case UI_ADDON_UPD: if (const Addon *a = AddonCur()) AddonDownload(a->key); return true;
     case UI_ADDON_HELP: WikiOpenAddons(); return true;
     case UI_CAR_DENTS: CarRemoveDents(); return true;
     case UI_CAR_PAINTIMP: PaintImport(); return true;
