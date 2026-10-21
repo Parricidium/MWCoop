@@ -184,6 +184,7 @@ namespace MWCoop
                     object axl = af != null ? af.GetValue(ax) : null;
                     if (axl == null) continue;
                     n += SetF(axl, "suspensionRate", spring) + SetF(axl, "suspensionTravel", SpringTravel) + SetF(axl, "bumpRate", damp) + SetF(axl, "reboundRate", damp);
+                    if (evo && sp.AntiRoll > 0f) n += SetF(axl, "antiRollBarRate", sp.AntiRoll);
                     if (an == "frontAxle") n += SetF(axl, "maxSteeringAngle", steer);
                 }
             foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", 0.753f); }
@@ -200,7 +201,7 @@ namespace MWCoop
             if (com != null && Axles(car, out zF, out zR, out yW))
             {
                 Vector3 lp = car.transform.InverseTransformPoint(com.position);
-                float wz = zR + (evo ? sp.Com : comFrac > 0f ? comFrac : 0.55f) * (zF - zR), wy = float.IsNaN(comHeight) ? lp.y : yW + comHeight;
+                float wz = zR + (evo ? sp.Com : comFrac > 0f ? comFrac : 0.55f) * (zF - zR), wy = float.IsNaN(comHeight) ? lp.y : yW + comHeight - (evo ? sp.ComDrop : 0f);   // (abaissement : seulement depuis la hauteur mesuree, jamais cumule)
                 if (Mathf.Abs(lp.z - wz) > 0.005f || Mathf.Abs(lp.y - wy) > 0.005f) { com.position = car.transform.TransformPoint(new Vector3(lp.x, wy, wz)); n++; }
             }
             foreach (PlayMakerFSM f in car.GetComponents<PlayMakerFSM>())

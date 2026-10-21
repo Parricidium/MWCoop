@@ -264,8 +264,15 @@ namespace MWCoop
             // demarreur ; coupe si on lache avant que le moteur prenne, sinon joue jusqu'au bout
             if (startSrc != null && startSrc.clip != null)
             {
-                if (cranking && !wasCranking) { startSrc.Stop(); startSrc.Play(); }
+                if (cranking && !wasCranking) { startSrc.Stop(); startSrc.volume = 1f; startSrc.Play(); }
                 else if (!cranking && wasCranking && s != "Start engine" && s != "Running" && startSrc.isPlaying) startSrc.Stop();
+                // moteur pris : l'enregistrement s'eteint en 0,4 s, 0,6 s apres la prise (Sport Quattro, JD 21/10 : 12 s de
+                // demarrage entendues par-dessus le moteur jusqu'aux premiers metres)
+                if (startSrc.isPlaying && !cranking && Time.time - catchTime > 0.6f && Time.time - catchTime < 30f)
+                {
+                    startSrc.volume = Mathf.MoveTowards(startSrc.volume, 0f, Time.deltaTime / 0.4f);
+                    if (startSrc.volume <= 0f) startSrc.Stop();
+                }
             }
             wasCranking = cranking;
             if (cranking && crank.clip != null)
