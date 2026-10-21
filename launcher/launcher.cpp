@@ -705,7 +705,7 @@ static int CmpVer(std::wstring a, std::wstring b)
 // Derniere erreur WinHTTP d'une requete sans reponse (12007 nom introuvable, 12029 connexion impossible, 12002 delai...).
 static DWORD g_httpErr;
 
-static bool HttpGet(const std::wstring &url, std::string *out, const std::wstring &toFile, bool progress, DWORD *status = NULL, float *prog = NULL)   // (prog : ailleurs que g_progress)
+static bool HttpGetOnce(const std::wstring &url, std::string *out, const std::wstring &toFile, bool progress, DWORD *status, float *prog)
 {
     if (status) *status = 0;
     g_httpErr = 0;
@@ -760,6 +760,76 @@ static bool HttpGet(const std::wstring &url, std::string *out, const std::wstrin
     WinHttpCloseHandle(s);
     DebugLog("http %s : %s, statut %lu, erreur %lu", Narrow(url, CP_UTF8).c_str(), ok ? "ok" : "ECHEC", status ? *status : 0, g_httpErr);
     return ok;
+}
+
+// Miroirs de GitHub (JD, 21/10 : beaucoup de joueurs russes voient « Hors ligne (GitHub injoignable, erreur 12029) », GitHub
+// bloque ou bride chez eux ; sans ca, ni installation ni mise a jour). Quand la connexion directe a un hote GitHub echoue
+// sans reponse (erreur WinHTTP, pas un code HTTP), la meme adresse est redemandee a travers des miroirs, dans l'ordre :
+// [Lanceur] Miroirs=adresse;adresse... (prefixes, ex. https://mwcoop.xxx.workers.dev/), puis les proxys GitHub publics.
+// Convention des proxys : <miroir><adresse complete>. Le dernier miroir qui a marche est essaye en premier ensuite.
+// [Lanceur] MiroirsSeuls=1 : jamais en direct (essais).
+static const wchar_t *kMirrors[] = { L"https://gh-proxy.com/", L"https://ghfast.top/", L"https://ghproxy.net/" };
+static std::wstring g_mirrorOk;   // (prefixe du dernier miroir qui a repondu)
+static bool IsGitHubUrl(const std::wstring &url)
+{
+    static const wchar_t *hosts[] = { L"https://api.github.com/", L"https://github.com/", L"https://raw.githubusercontent.com/", L"https://objects.githubusercontent.com/", L"https://codeload.github.com/" };
+    for (const wchar_t *h : hosts) if (!_wcsnicmp(url.c_str(), h, wcslen(h))) return true;
+    return false;
+}
+static std::vector<std::wstring> Mirrors()
+{
+    std::vector<std::wstring> v;
+    if (!g_mirrorOk.empty()) v.push_back(g_mirrorOk);
+    wchar_t buf[2048] = {};
+    GetPrivateProfileStringW(L"Lanceur", L"Miroirs", L"", buf, _countof(buf), g_iniLauncher.c_str());
+    std::wstring all = buf;
+    for (size_t i = 0; i < all.size();) {
+        size_t j = all.find(L';', i); if (j == std::wstring::npos) j = all.size();
+        std::wstring m = all.substr(i, j - i); i = j + 1;
+        while (!m.empty() && iswspace(m[0])) m.erase(0, 1);
+        while (!m.empty() && iswspace(m.back())) m.pop_back();
+        if (m.empty()) continue;
+        if (m.back() != L'/') m += L'/';
+        if (std::find(v.begin(), v.end(), m) == v.end()) v.push_back(m);
+    }
+    for (const wchar_t *m : kMirrors) if (std::find(v.begin(), v.end(), m) == v.end()) v.push_back(m);
+    return v;
+}
+static bool HttpGet(const std::wstring &url, std::string *out, const std::wstring &toFile, bool progress, DWORD *status = NULL, float *prog = NULL)   // (prog : ailleurs que g_progress)
+{
+    bool github = IsGitHubUrl(url);
+    bool onlyMirrors = github && GetPrivateProfileIntW(L"Lanceur", L"MiroirsSeuls", 0, g_iniLauncher.c_str()) != 0;
+    DWORD st = 0;
+    if (!onlyMirrors) {
+        if (HttpGetOnce(url, out, toFile, progress, &st, prog)) { if (status) *status = st; return true; }
+        if (status) *status = st;
+        if (!github || st != 0) return false;   // (GitHub a repondu, meme mal : pas un blocage ; autre hote : rien a essayer)
+    }
+    DWORD directErr = g_httpErr;
+    for (const std::wstring &m : Mirrors()) {
+        if (out) out->clear();
+        DWORD ms = 0;
+        bool ok = HttpGetOnce(m + url, out, toFile, progress, &ms, prog);
+        LaunchLog("miroir %s pour %s : %s (code HTTP %lu, erreur WinHTTP %lu)", Narrow(m, CP_UTF8).c_str(), Narrow(url, CP_UTF8).c_str(), ok ? "ok" : "ECHEC", ms, ok ? 0 : g_httpErr);
+        if (ok) { g_mirrorOk = m; if (status) *status = ms; return true; }
+        if (ms == 404 || ms == 403 || ms == 429) { if (status) *status = ms; }   // (le miroir repond : code garde pour le message)
+    }
+    // (fichiers du depot : le CDN jsDelivr les sert aussi, sous une autre forme d'adresse -- pas les paquets de plus de 20 Mo)
+    static const wchar_t *raw = L"https://raw.githubusercontent.com/";
+    if (!_wcsnicmp(url.c_str(), raw, wcslen(raw))) {
+        std::wstring rest = url.substr(wcslen(raw));   // <proprietaire>/<depot>/<branche>/<chemin>
+        size_t a = rest.find(L'/'), b = a == std::wstring::npos ? a : rest.find(L'/', a + 1), c = b == std::wstring::npos ? b : rest.find(L'/', b + 1);
+        if (c != std::wstring::npos) {
+            std::wstring js = L"https://cdn.jsdelivr.net/gh/" + rest.substr(0, b) + L"@" + rest.substr(b + 1, c - b - 1) + L"/" + rest.substr(c + 1);
+            if (out) out->clear();
+            DWORD ms = 0;
+            bool ok = HttpGetOnce(js, out, toFile, progress, &ms, prog);
+            LaunchLog("miroir jsDelivr pour %s : %s (code HTTP %lu, erreur WinHTTP %lu)", Narrow(url, CP_UTF8).c_str(), ok ? "ok" : "ECHEC", ms, ok ? 0 : g_httpErr);
+            if (ok) { if (status) *status = ms; return true; }
+        }
+    }
+    if (!(status && *status)) g_httpErr = directErr ? directErr : g_httpErr;
+    return false;
 }
 
 // Chaine JSON a partir de son guillemet ouvrant, echappements decodes (en UTF-8).
@@ -1271,9 +1341,21 @@ static int FetchReleases(std::string &json)
 {
     std::wstring cache = g_gameDir.empty() ? L"" : g_modRoot + L"MWCoop\\notes-maj.json";
     DWORD code = 0;
-    bool got = HttpGet(L"https://api.github.com/repos/" + g_repo + L"/releases?per_page=40", &json, L"", false, &code);
+    // ([Lanceur] SansApi=1 : essais, sans l'API)
+    bool got = GetPrivateProfileIntW(L"Lanceur", L"SansApi", 0, g_iniLauncher.c_str()) == 0
+               && HttpGet(L"https://api.github.com/repos/" + g_repo + L"/releases?per_page=40", &json, L"", false, &code);
     g_relCode = code; g_relErr = got ? 0 : g_httpErr;
     LaunchLog("versions sur GitHub : %s (code HTTP %lu, erreur WinHTTP %lu)", got ? "recues" : "pas de reponse", code, g_relErr);
+    // Sans l'API (GitHub injoignable, ou sa limite de 60 demandes par heure -- partagee par tous ceux qui passent par un
+    // meme miroir) : la meme liste, ecrite par make-release a chaque publication dans dist/versions.json du depot, lue par
+    // les miroirs des fichiers (proxys, jsDelivr). (joueurs russes, 21/10)
+    if (!got || json.find("\"tag_name\"") == std::string::npos) {
+        std::string alt; DWORD c2 = 0;
+        if (HttpGet(L"https://raw.githubusercontent.com/" + g_repo + L"/main/dist/versions.json", &alt, L"", false, &c2) && alt.find("\"tag_name\"") != std::string::npos) {
+            json = alt; got = true; code = 200; g_relCode = 200; g_relErr = 0;
+            LaunchLog("versions : liste dist/versions.json du depot (sans l'API)");
+        }
+    }
     if (got && json.find("\"tag_name\"") != std::string::npos) {
         if (!cache.empty()) {
             EnsureModDir();
@@ -6972,6 +7054,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     if (argc >= 4 && !_wcsicmp(argv[1], L"/maj")) {
         std::wstring d = WithSlash(argv[2]);
         SetGame(IsGameDir(d) ? d : L"");
+        g_launcherLog = std::wstring(argv[3]) + L".lanceur.log"; g_debug = true;   // (detail des requetes -- miroirs, 21/10)
         if (!g_gameDir.empty()) { g_busy = true; UpdateThread(NULL); }
         FILE *f = _wfopen(argv[3], L"w, ccs=UTF-8");
         wchar_t wh[MAX_PATH] = L"(pas charge)";

@@ -109,6 +109,16 @@ if ($Publier) {
     if ($rc -ne 0) { throw "echec de la publication GitHub" }
     $url = "https://github.com/Parricidium/MWCoop/releases/tag/v$Version"
     "Publie : $url"
+    # Liste des versions dans le depot (distersions.json, meme forme que l'API) : le lanceur la lit par les miroirs des fichiers
+    # quand l'API de GitHub est injoignable ou saturee (joueurs russes, 21/10). Commit a part, a pousser avec main.
+    if (-not $Nightly) {
+        try {
+            gh api "repos/Parricidium/MWCoop/releases?per_page=40" | Out-File -FilePath "$PSScriptRootersions.json" -Encoding utf8
+            git add "$PSScriptRootersions.json"
+            git commit -q -m "versions.json $Version" -- "$PSScriptRootersions.json"
+            "versions.json : $Version en tete"
+        } catch { Write-Warning "versions.json : $_" }
+    }
     # Annonce Discord (#announcements) si dist\discord-webhook.txt existe (hors depot, ecrit par
     # MWCoopDiscord\setup_server.py) : ligne 1 = webhook, ligne 2 = role Update Pings. Parties anglaise, russe et arabe des notes.
     $wf = "$PSScriptRoot\discord-webhook.txt"
