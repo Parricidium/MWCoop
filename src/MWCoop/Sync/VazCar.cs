@@ -80,7 +80,7 @@ namespace MWCoop
             public string Name; public float Power, PowerRpm, Torque, TorqueRpm, MaxRpm, Inertia = 0.15f, Final = 4.4f, Clutch = 420f;
             public float Mass, Com, Steer, Spring, Damp; public float[] Gears;
         }
-        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2;
+        public const int ModelVaz = 0, ModelEvo = 1, ModelT16 = 2, ModelImp = 3;
         public static readonly Model Vaz2108 = new Model { Id = ModelVaz, Folder = "vaz", Name = "VAZ-2108" };
         // Evo III : tete du mod a part de JD (MitsubishiEvo3GrA, -0,35 ; 0,66 ; -0,20 dans la voiture) ramenee au repere du modele
         // (carrosserie posee 0,249 plus bas et 0,099 en arriere) ; moteur transversal avant.
@@ -140,7 +140,33 @@ namespace MWCoop
             Dome = new Vector3(0f, 1.05f, -0.25f), HasDome = true, ControlSize = 0.024f,
             Sp = new Spec { Name = "205 T16 Evo 1 Gr. B", Power = 350f, PowerRpm = 7500f, Torque = 450f, TorqueRpm = 5000f, MaxRpm = 8000f,
                             Mass = 940f, Com = 0.46f, Steer = 40f, Spring = 34000f, Damp = 2200f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
-        public static readonly Model[] Models = { null, Evo3, T16 };   // (rempli : Vaz2108 au constructeur statique)
+        // Subaru Impreza 96 Gr. A (JD 21/10, rally cars GrA8/Subaru_96, « 555 » McRae 1995) : moteur avant, integrale ; poste
+        // de conduite d'apres le volant du pilote (le meme que l'Evo III, decale de (0,044 ; 0,114 ; -0,177)) ; frein a main :
+        // son propre levier (le long du tunnel, poignee vers l'avant, pivot a l'arriere : se leve quand il est serre, comme la
+        // VAZ) ; boutons comme l'Evo III, en ligne sur la face inclinee de la console centrale (y 0,65, z 0,43), de gauche a
+        // droite contact, starter, phares, warning (capture annotee de JD, 21/10). Tenue de route : 300 ch a 5 500 tr/min,
+        // 470 Nm a 4 000, rupteur 7 500, 1 130 kg (Mass du .hdv rFactor), 60 % sur l'avant, braquage 35.
+        static readonly Vector3 ImpFace = new Vector3(0f, 0.50f, -0.87f).normalized;
+        public static readonly Model Imp96 = new Model { Id = ModelImp, Folder = "imp96", Name = "Imprezza 95",
+            Head = new Vector3(-0.306f, 1.023f, -0.278f), Engine = new Vector3(0f, 0.55f, 1.55f),
+            BrakePivot = new Vector3(0f, 0.36f, -0.10f), BrakeGrip = new Vector3(0f, 0.47f, 0.10f),
+            Controls = new[] {
+                new KeyValuePair<string, Vector3>("Functions/SteeringColumnPivot/SteeringColumn/IGNITIONxSorbet", new Vector3(-0.065f, 0.653f, 0.424f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Choke/ButtonChoke", new Vector3(-0.030f, 0.653f, 0.424f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonLightModes", new Vector3(0.005f, 0.653f, 0.424f)),
+                new KeyValuePair<string, Vector3>("Functions/Dashboard/Buttons/ButtonHazard", new Vector3(0.040f, 0.653f, 0.424f)) },
+            Knobs = new[] {
+                new Knob { At = new Vector3(-0.065f, 0.651f, 0.429f), Normal = ImpFace, Col = new Color(0.80f, 0.06f, 0.05f) },
+                new Knob { At = new Vector3(-0.030f, 0.651f, 0.429f), Normal = ImpFace, Col = new Color(0.10f, 0.25f, 0.85f), Choke = true, Path = "Functions/Dashboard/Choke/ButtonChoke" },
+                new Knob { At = new Vector3(0.005f, 0.651f, 0.429f), Normal = ImpFace, Col = new Color(0.92f, 0.92f, 0.90f) },
+                new Knob { At = new Vector3(0.040f, 0.651f, 0.429f), Normal = ImpFace, Col = new Color(0.95f, 0.45f, 0.05f) } },
+            Off = new[] { "Functions/Dashboard/Buttons/ButtonWipers", "Functions/Dashboard/Buttons/ButtonWindowHeater", "Functions/Dashboard/Buttons/ButtonHeaterTemp",
+                          "Functions/Dashboard/Buttons/ButtonHeaterDirection", "Functions/Dashboard/Buttons/ButtonHeaterBlower", "Functions/Sunvisors",
+                          "Functions/VINP_RadioSorbet", "Functions/VINP_FurDiceSorbet" },
+            Dome = new Vector3(0f, 1.20f, -0.30f), HasDome = true, ControlSize = 0.024f,
+            Sp = new Spec { Name = "Impreza 96 Gr. A", Power = 300f, PowerRpm = 5500f, Torque = 470f, TorqueRpm = 4000f, MaxRpm = 7500f,
+                            Mass = 1130f, Com = 0.60f, Steer = 35f, Spring = 41600f, Damp = 2700f, Gears = new[] { -3.3f, 0f, 2.95f, 2.0f, 1.52f, 1.2f, 0.95f } } };
+        public static readonly Model[] Models = { null, Evo3, T16, Imp96 };   // (rempli : Vaz2108 au constructeur statique)
         public static Model ModelOf(int id) { return id > 0 && id < Models.Length ? Models[id] : Vaz2108; }
         // addon installe ici (la VAZ l'est toujours)
         public static bool Has(int id) { return id == ModelVaz || (id > 0 && id < Models.Length && Models[id].HasFiles); }
@@ -698,6 +724,8 @@ namespace MWCoop
             Transform lever = ct.Find("Functions/HandBrake/LeverPivot");
             if (lever != null)
             {
+                // (addons : zone cliquable ramenee a la poignee -- celle de la SORBET masquait le bouton du warning de la Subaru)
+                if (cur.ControlSize > 0f) Shrink(lever, cur.ControlSize * 2f);
                 MoveOnto(lever, body.transform.TransformPoint(cur.BrakeGrip));
                 b.SorbetBrake = lever; b.SorbetBrakeRest = lever.localRotation;
                 b.BrakePivot = new GameObject("VAZ_frein").transform;

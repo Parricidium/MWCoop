@@ -1639,6 +1639,8 @@ static const wchar_t *const kAr[][2] = {
     { L"into the mod: everyone has it", L"في المود: الجميع يملكها" },
     { L"Add-ons in the sidebar", L"الإضافات في الشريط الجانبي" },
     { L"Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).", L"تحت «المودات»: سيارات الإضافات وVAZ، لكل منها بطاقتها وطلاؤها (قالب، صورتك)." },
+    { L"Gallery", L"معرض" },
+    { L"List", L"قائمة" },
     { L"Proximity voice", L"الصوت حسب القرب" },
     { L"Voice range", L"مدى الصوت" },
     { L"Voice volume", L"مستوى الصوت" },
