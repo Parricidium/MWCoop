@@ -2549,4 +2549,5 @@ static const wchar_t *const kRu[][2] = {
     { L"Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.", L"Дороги: плоские поперёк с насыпью, разметка по центру или по краям; точка на точке другой дороги соединяет их." },
     { L"Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.", L"Работающие группы: нажми на объект игры; дверь, ручка… копируется вместе с автоматами или скрывается целиком." },
     { L"Objects, roads, terrain, plants, lights, co-op", L"Объекты, дороги, рельеф, растения, свет, кооператив" },
+    { L"In the editor, the … button next to a recent map: rename, duplicate, update the compiled map, remove it from the game or delete the project (Windows Recycle Bin).", L"В редакторе кнопка … рядом с недавней картой: переименовать, дублировать, обновить собранную карту, убрать её из игры или удалить проект (корзина Windows)." },
 };

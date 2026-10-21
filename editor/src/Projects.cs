@@ -38,15 +38,100 @@ namespace EditeurCarte
                 {
                     var m = json.Deserialize<Dictionary<string, object>>(File.ReadAllText(pj, Encoding.UTF8));
                     object o; int n = m.TryGetValue("objets", out o) && o is System.Collections.ArrayList ? ((System.Collections.ArrayList)o).Count : 0;
-                    l.Add(new Dictionary<string, object> { { "dossier", Path.GetFileName(d) }, { "nom", m.ContainsKey("nom") ? m["nom"] : Path.GetFileName(d) },
+                    var e = new Dictionary<string, object> { { "dossier", Path.GetFileName(d) }, { "nom", m.ContainsKey("nom") ? m["nom"] : Path.GetFileName(d) },
                                                            { "jeu", m.ContainsKey("jeu") ? m["jeu"] : "" }, { "objets", n },
-                                                           { "modifie", File.GetLastWriteTime(pj).ToString("dd/MM/yyyy HH:mm") }, { "t", File.GetLastWriteTimeUtc(pj).Ticks } });
+                                                           { "modifie", File.GetLastWriteTime(pj).ToString("dd/MM/yyyy HH:mm") }, { "t", File.GetLastWriteTimeUtc(pj).Ticks } };
+                    // carte compilee : son fichier (projet.json « compile », ecrit par la page) et sa presence dans les cartes du mod
+                    var c = m.ContainsKey("compile") ? m["compile"] as Dictionary<string, object> : null;
+                    string f = c != null && c.ContainsKey("fichier") ? c["fichier"] as string : null;
+                    if (!string.IsNullOrEmpty(f))
+                    {
+                        e["compile"] = c.ContainsKey("date") ? c["date"] : "";
+                        string mod = ModDir(e["jeu"] as string);
+                        e["enJeu"] = mod != null && File.Exists(Path.Combine(mod, f));
+                    }
+                    l.Add(e);
                 }
                 catch { }
             }
             l.Sort((a, b) => ((long)((Dictionary<string, object>)b)["t"]).CompareTo((long)((Dictionary<string, object>)a)["t"]));
             return l;
         }
+
+        static string ModDir(string jeu)
+        {
+            GameDef g = GameDef.Get(jeu);
+            if (g == null) return null;
+            GameFound f = Games.Find(g);
+            return Games.ModCartes(g, f != null ? f.Dir : null);
+        }
+        static Dictionary<string, object> Load(string d) { return json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(d, "projet.json"), Encoding.UTF8)); }
+        static void Store(string d, Dictionary<string, object> m) { Save(Path.GetFileName(d), json.Serialize(m)); }
+        static string CompiledName(Dictionary<string, object> m)
+        {
+            var c = m.ContainsKey("compile") ? m["compile"] as Dictionary<string, object> : null;
+            string f = c != null && c.ContainsKey("fichier") ? c["fichier"] as string : null;
+            return string.IsNullOrEmpty(f) || f.IndexOfAny(new[] { '\\', '/', ':' }) >= 0 ? null : f;
+        }
+
+        // ---------------------------------------------------------------- gestion des cartes (demande de JD, 21/10)
+        public static bool Rename(string dossier, string nom)
+        {
+            string d = Dir(dossier);
+            if (d == null || string.IsNullOrEmpty(nom = (nom ?? "").Trim())) return false;
+            var m = Load(d); m["nom"] = nom; Store(d, m);
+            return true;
+        }
+        // copie du dossier (modeles, images) sous un nouveau nom ; pas sa carte compilee
+        public static string Duplicate(string dossier, string suffixe)
+        {
+            string d = Dir(dossier);
+            if (d == null) return null;
+            var m = Load(d);
+            string nom = (m.ContainsKey("nom") ? m["nom"] as string : dossier) + " " + suffixe;
+            string nd = Create(nom, m.ContainsKey("jeu") ? m["jeu"] as string : "");
+            string to = Path.Combine(Root, nd);
+            foreach (string f in Directory.GetFiles(d, "*", SearchOption.AllDirectories))
+            {
+                string rel = f.Substring(d.Length + 1);
+                if (rel == "projet.json") continue;
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(to, rel)));
+                File.Copy(f, Path.Combine(to, rel), true);
+            }
+            m["nom"] = nom; m.Remove("compile");
+            Store(to, m);
+            return nd;
+        }
+        // retire la carte compilee des cartes du mod (elle n'est plus chargee en jeu) -- a la corbeille
+        public static bool RemoveFromGame(string dossier)
+        {
+            string d = Dir(dossier);
+            if (d == null) return false;
+            var m = Load(d);
+            string f = CompiledName(m), mod = ModDir(m.ContainsKey("jeu") ? m["jeu"] as string : "");
+            if (f == null || mod == null || !File.Exists(Path.Combine(mod, f))) return false;
+            Recycle(Path.Combine(mod, f));
+            return true;
+        }
+        // projet a la corbeille de Windows (recuperable) ; carteAussi : sa carte compilee aussi (Documents et mod)
+        public static bool Delete(string dossier, bool carteAussi)
+        {
+            string d = Dir(dossier);
+            if (d == null) return false;
+            if (carteAussi)
+            {
+                var m = Load(d);
+                string f = CompiledName(m), mod = ModDir(m.ContainsKey("jeu") ? m["jeu"] as string : "");
+                if (f != null)
+                {
+                    if (mod != null && File.Exists(Path.Combine(mod, f))) Recycle(Path.Combine(mod, f));
+                    if (File.Exists(Path.Combine(CompiledRoot, f))) Recycle(Path.Combine(CompiledRoot, f));
+                }
+            }
+            Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(d, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+            return true;
+        }
+        static void Recycle(string file) { Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(file, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin); }
 
         // Nom de dossier sur a partir du nom de la carte (accents gardes, caracteres interdits retires), unique.
         public static string Create(string name, string game)

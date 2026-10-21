@@ -152,6 +152,18 @@
   </div>
 </div>
 
+<!-- Gestion d'une carte : renommer, supprimer (fenetre de demande) -->
+<div class="modal" id="demande-dlg" hidden>
+  <div class="dlg petit" role="dialog" aria-labelledby="dm-t">
+    <h1 id="dm-t"></h1>
+    <p class="sub" id="dm-txt"></p>
+    <div class="fld" id="dm-fld" hidden><input type="text" id="dm-in" spellcheck="false"></div>
+    <label class="cb" id="dm-cb" hidden><input type="checkbox" id="dm-chk"><span id="dm-cbt"></span></label>
+    <div class="row end"><button class="btn" id="dm-non" data-i18n="annuler">Annuler</button><button class="btn pri" id="dm-oui"></button></div>
+  </div>
+</div>
+<div class="menu-pop" id="menu-carte" hidden></div>
+
 <!-- Jeu introuvable : choisir le .exe -->
 <div class="modal" id="introuvable" hidden>
   <div class="dlg" role="dialog" aria-labelledby="ix-t">

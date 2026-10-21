@@ -2533,4 +2533,5 @@ static const wchar_t *const kAr[][2] = {
     { L"Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.", L"الطرق: مستوية بالعرض مع منحدرات، وخطوط في الوسط أو على الحواف؛ نقطة توضع على نقطة طريق آخر تربطهما." },
     { L"Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.", L"مجموعات تعمل: انقر على غرض من اللعبة؛ باب أو مقبض… يُنسخ بآلياته أو يُخفى كلياً." },
     { L"Objects, roads, terrain, plants, lights, co-op", L"أغراض، طرق، تضاريس، نباتات، أضواء، لعب جماعي" },
+    { L"In the editor, the … button next to a recent map: rename, duplicate, update the compiled map, remove it from the game or delete the project (Windows Recycle Bin).", L"في المحرّر، الزر … بجانب خريطة حديثة: إعادة تسمية أو تكرار أو تحديث الخريطة المجمّعة أو إزالتها من اللعبة أو حذف المشروع (سلة محذوفات Windows)." },
 };

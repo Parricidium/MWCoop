@@ -730,3 +730,5 @@ Sculpt the terrain (T): raise, dig, flatten, smooth the game's ground; roads re-
 Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.	Дороги: плоские поперёк с насыпью, разметка по центру или по краям; точка на точке другой дороги соединяет их.
 Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.	Работающие группы: нажми на объект игры; дверь, ручка… копируется вместе с автоматами или скрывается целиком.
 Objects, roads, terrain, plants, lights, co-op	Объекты, дороги, рельеф, растения, свет, кооператив
+
+In the editor, the … button next to a recent map: rename, duplicate, update the compiled map, remove it from the game or delete the project (Windows Recycle Bin).	В редакторе кнопка … рядом с недавней картой: переименовать, дублировать, обновить собранную карту, убрать её из игры или удалить проект (корзина Windows).
