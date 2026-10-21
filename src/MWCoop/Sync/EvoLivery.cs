@@ -49,13 +49,12 @@ namespace MWCoop
         // fichier ou le choix changent.
         public static string MyHash(int model)
         {
-            if (model == VazCar.ModelVaz) return "";
-            VazCar.Model m = VazCar.ModelOf(model);
+            VazCar.Model m = VazCar.ModelOf(model);   // (la VAZ aussi, depuis le 21/10 : Livree_vaz, vaz-livree.jpg)
             Poll(m); return Of(m).Hash;
         }
 
         // Au plus toutes les 2 s : choix ([Coop] EvoLivree / Livree_<dossier>) et date du fichier ; vrai si l'empreinte a change.
-        public static bool Poll(int model) { return model != VazCar.ModelVaz && Poll(VazCar.ModelOf(model)); }
+        public static bool Poll(int model) { return Poll(VazCar.ModelOf(model)); }
         static bool Poll(VazCar.Model m)
         {
             Mine me = Of(m);

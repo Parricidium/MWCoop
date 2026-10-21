@@ -1635,6 +1635,10 @@ static const wchar_t *const kAr[][2] = {
     { L"Extension cars: copy an add-on's folder into the add-ons folder. In game, take them with F10 (Cars tab).", L"سيارات إضافية: انسخ مجلد الإضافة إلى مجلد الإضافات. في اللعبة خذها عبر F10 (تبويب السيارات)." },
     { L"Copy an add-on's folder into the add-ons folder: it will show up here.", L"انسخ مجلد إضافة إلى مجلد الإضافات: ستظهر هنا." },
     { L"Help", L"مساعدة" },
+    { L"Built in", L"مدمجة" },
+    { L"into the mod: everyone has it", L"في المود: الجميع يملكها" },
+    { L"Add-ons in the sidebar", L"الإضافات في الشريط الجانبي" },
+    { L"Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).", L"تحت «المودات»: سيارات الإضافات وVAZ، لكل منها بطاقتها وطلاؤها (قالب، صورتك)." },
     { L"Proximity voice", L"الصوت حسب القرب" },
     { L"Voice range", L"مدى الصوت" },
     { L"Voice volume", L"مستوى الصوت" },
@@ -2521,4 +2525,5 @@ static const wchar_t *const kAr[][2] = {
     { L"Textures: in the properties, Change — a game texture or your own image (PNG, JPG…), on the whole object or one of its materials; double-click an imported model to texture just one face.", L"الخامات: في الخصائص «تغيير» — خامة من اللعبة أو صورتك (PNG، JPG…)، على الغرض كاملاً أو إحدى مواده؛ انقر نقراً مزدوجاً على نموذج مستورد لتكسو وجهاً واحداً فقط." },
     { L"Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.", L"التجميع ينشئ ملف .mwcmap صغيراً: نماذجك وطرقك وصورك فقط. تُعاد بناء النسخ وخامات اللعبة من لعبة كل لاعب: لا يُشارَك أي ملف من اللعبة." },
     { L"Objects, roads, water, textures, co-op", L"أغراض، طرق، ماء، خامات، لعب جماعي" },
+    { L"The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.", L"سيارة VAZ-2108 المرفقة مع المود لها أيضاً بطاقتها في تبويب الإضافات (اختصار الإضافات في الشريط الجانبي، تحت المودات): القالب نفسه والطلاء نفسه." },
 };

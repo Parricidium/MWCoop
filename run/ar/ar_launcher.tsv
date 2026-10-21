@@ -1633,6 +1633,10 @@ Open the add-ons folder	فتح مجلد الإضافات
 Extension cars: copy an add-on's folder into the add-ons folder. In game, take them with F10 (Cars tab).	سيارات إضافية: انسخ مجلد الإضافة إلى مجلد الإضافات. في اللعبة خذها عبر F10 (تبويب السيارات).
 Copy an add-on's folder into the add-ons folder: it will show up here.	انسخ مجلد إضافة إلى مجلد الإضافات: ستظهر هنا.
 Help	مساعدة
+Built in	مدمجة
+into the mod: everyone has it	في المود: الجميع يملكها
+Add-ons in the sidebar	الإضافات في الشريط الجانبي
+Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).	تحت «المودات»: سيارات الإضافات وVAZ، لكل منها بطاقتها وطلاؤها (قالب، صورتك).
 Proximity voice	الصوت حسب القرب
 Voice range	مدى الصوت
 Voice volume	مستوى الصوت
@@ -2519,3 +2523,4 @@ Water: a body of water to place and stretch (Move, Scale).	الماء: مسطح 
 Textures: in the properties, Change — a game texture or your own image (PNG, JPG…), on the whole object or one of its materials; double-click an imported model to texture just one face.	الخامات: في الخصائص «تغيير» — خامة من اللعبة أو صورتك (PNG، JPG…)، على الغرض كاملاً أو إحدى مواده؛ انقر نقراً مزدوجاً على نموذج مستورد لتكسو وجهاً واحداً فقط.
 Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.	التجميع ينشئ ملف .mwcmap صغيراً: نماذجك وطرقك وصورك فقط. تُعاد بناء النسخ وخامات اللعبة من لعبة كل لاعب: لا يُشارَك أي ملف من اللعبة.
 Objects, roads, water, textures, co-op	أغراض، طرق، ماء، خامات، لعب جماعي
+The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.	سيارة VAZ-2108 المرفقة مع المود لها أيضاً بطاقتها في تبويب الإضافات (اختصار الإضافات في الشريط الجانبي، تحت المودات): القالب نفسه والطلاء نفسه.
