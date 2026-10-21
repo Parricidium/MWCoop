@@ -69,6 +69,9 @@ enum {
     UI_ADDON_DIR = 491,           // ADDONS : ouvrir le dossier des addons (MWCoop\addons, cree au besoin)
     UI_ADDON_HELP = 492,          // ADDONS : article Les addons du GUIDE
     UI_ADDON_VIEW = 493,          // + v (0 galerie, 1 liste) : ADDONS, vue de la liste (493-494)
+    UI_ADDON_GET = 495,           // + i : ADDONS, Telecharger / Mettre a jour l'addon i (495-514)
+    UI_ADDON_UNINST = 515,        // ADDONS : desinstaller l'addon ouvert (pas la VAZ, livree avec le mod)
+    UI_ADDON_UPD = 516,           // ADDONS : mettre a jour l'addon ouvert
     UI_CRED_TAB = 456,            // + k (0 modeles 3D, 1 images, 2 remerciements, 3 supporters) : onglets des CREDITS (456-459)
     UI_TOOL_GET = 460, UI_TOOL_RUN, UI_TOOL_DIR,   // OUTILS (outils.inc) : editeur de carte, telecharger / mettre a jour, lancer, dossier
     UI_WIKI_CAT = 8000,           // GUIDE (wiki.inc) : + categorie (plier / deplier)

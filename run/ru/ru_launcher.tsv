@@ -1828,3 +1828,23 @@ Add-ons in the sidebar	Дополнения в боковой панели
 Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).	Под «Моды»: машины-дополнения и VAZ, у каждой своя карточка и своя ливрея (шаблон, твоя картинка).
 Gallery	Галерея
 List	Список
+Extension cars: download them here, they update in one click. In game, take them with F10 (Cars tab).	Машины-дополнения: скачивай их здесь, обновляются в один клик. В игре бери их через F10 (вкладка «Машины»).
+Looking for cars to download…	Ищем машины для скачивания…
+Car catalogue unreachable: try again later, or copy an add-on's folder into the add-ons folder.	Каталог машин недоступен: попробуй позже или скопируй папку дополнения в папку дополнений.
+%s installed: in game, take it with F10 (Cars tab)	%s установлена: в игре бери её через F10 (вкладка «Машины»)
+Could not download %s (%s)	Не удалось скачать %s (%s)
+Close the game before installing a car	Закрой игру перед установкой машины
+Downloading… %d%%	Скачивание… %d%%
+MWCoop %s required	Нужен MWCoop %s
+Update · v%s	Обновить · v%s
+Download · %.0f MB	Скачать · %.0f МБ
+Close the game before uninstalling a car	Закрой игру перед удалением машины
+Uninstall \u201C	Удалить «
+\u201D?\n\nYour livery is kept. You can download it again from Add-ons (Download button).	»?\n\nТвоя ливрея сохранится. Ты сможешь скачать её снова в «Дополнениях» (кнопка «Скачать»).
+%s uninstalled	%s удалена
+%s: some files could not be deleted (open elsewhere?)	%s: некоторые файлы не удалось удалить (открыты где-то ещё?)
+Add-ons are extra cars, downloaded from the launcher. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery.	Дополнения — это дополнительные машины, которые скачиваются из лаунчера. В игре каждый игрок берёт одну через F10, как VAZ: со своим цветом и номером или со своей ливреей.
+Character > Add-ons: each available car has a Download button (NEW tag when it has just arrived).	Персонаж > Дополнения: у каждой доступной машины есть кнопка «Скачать» (метка NEW, когда она только появилась).
+Click Download with the game closed: the car installs into MWCoop\\addons.	Нажми «Скачать», когда игра закрыта: машина установится в MWCoop\\addons.
+New version: UPDATE tag and Update button. To remove it: click the car, then Uninstall (your livery is kept).	Новая версия: метка UPDATE и кнопка «Обновить». Чтобы убрать машину: нажми на неё, затем «Удалить» (ливрея сохранится).
+By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	Можно и вручную: скопируй папку машины (ту, где лежит addon.ini) в папку дополнений. Каждый ставит те дополнения, которые хочет видеть: без дополнения на её месте видна VAZ того же цвета и с тем же номером.

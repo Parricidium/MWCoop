@@ -30,7 +30,7 @@
 //
 // Options de ligne de commande (tests, jamais de fenetre) :
 //   /capture <png> <menu|coop|voiture|tenue|tenue-survol|notes|notesvide|journaux|attente|attente-udp|maj|sansjeu|salon|
-//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-1 [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
+//            salon-invite|salon-udp|salon-steam|salon-steam-amis|salon-steam-invite|menu-steam|menu-ip|guide-steam|mods|mods-page|mods-absent|crash|crash-survol|serveur|partie-invite|salon-options|tuto-<n>|tuto-maj|notes-image|salon-mods|salon-mods-demande|salon-mods-telechargement|salon-mods-prets|salon-public|salon-max|salon-moi|salon-steam-code|contenu|tenue-perso|addons|addons-dl|addons-<n> [vue]> [/theme clair|sombre] [/lang fr|en] [/echelle k] [/skins <dossier>] : rendu d'un
 //            etat dans un PNG (/skins : images des tenues prises dans ce dossier au lieu de MWCoop\cache\skins) ;
 //   /testsalon <hote|invite> <journal> [/partie continuer|nouvelle] [/sansudp] : salon sans fenetre visible (fenetre
 //            "message only"), dans un dossier de jeu jetable (celui du lanceur, obligatoirement) : l'hote ouvre le salon
@@ -6854,6 +6854,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         if (!_wcsicmp(argv[i], L"/texte")) g_texte = max(80, min(110, _wtoi(argv[i + 1])));
         if (!_wcsicmp(argv[i], L"/echelle")) g_scale = (float)_wtof(argv[i + 1]);   // captures : rendu agrandi
         if (!_wcsicmp(argv[i], L"/depot")) g_repo = argv[i + 1];
+        if (!_wcsicmp(argv[i], L"/depotaddons")) g_addonsRepo = argv[i + 1];   // (catalogue des voitures d'un autre depot : essais)
         if (!_wcsicmp(argv[i], L"/testsalon") && i + 2 < argc) { g_testSalon = argv[i + 1]; g_testSalonLog = argv[i + 2]; }
         if (!_wcsicmp(argv[i], L"/garder")) g_testHoldMs = (DWORD)_wtoi(argv[i + 1]);
         if (!_wcsicmp(argv[i], L"/lent")) g_testSlowMs = (DWORD)_wtoi(argv[i + 1]);
@@ -7083,6 +7084,27 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
         GdiplusShutdown(gtok);
         return ok ? 0 : 1;
     }
+    // /testaddon <dossier du jeu> <cle> <journal> : catalogue lu, puis telechargement et installation de l'addon <cle> dans
+    // <jeu>\MWCoop\addons (onglet Addons sans clic ; essais, dossier de jeu jetable)
+    if (argc >= 5 && !_wcsicmp(argv[1], L"/testaddon")) {
+        g_testSalonLog = argv[4];
+        FILE *f = _wfopen(argv[4], L"wb");
+        if (f) fclose(f);
+        SetGame(WithSlash(argv[2]));
+        g_iniLauncher = g_gameDir + L"mwcoop-lanceur.ini";
+        AddonCatThread(NULL);
+        g_addonDlKey = argv[3];
+        g_addonDlBusy = true;
+        AddonDlThread(NULL);
+        g_addonScanT = 0;
+        AddonsScan();
+        bool ok = false;
+        for (const Addon &a : g_addonList)
+            if (a.key == argv[3]) { ok = a.installed && !a.ver.empty() && AddonCmpVer(a.remoteVer, a.ver) == 0; TestLog("addon %s : installee %d, version %s, catalogue %s, dossier %s", Narrow(a.key).c_str(), a.installed, Narrow(a.ver).c_str(), Narrow(a.remoteVer).c_str(), Narrow(a.dir, CP_UTF8).c_str()); }
+        TestLog("testaddon : %s", ok ? "ok" : "ECHEC");
+        GdiplusShutdown(gtok);
+        return ok ? 0 : 1;
+    }
     // /bureau <exe> <dossier> <journal> [arguments] : lance par le bureau de Windows, puis 25 s apres, les modules des jeux
     if (argc >= 5 && !_wcsicmp(argv[1], L"/bureau")) {
         g_testSalonLog = argv[4];
@@ -7223,8 +7245,23 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
             if (g_albView == 2) { for (size_t i = 0; i < g_alb.size() && i < 2; i++) g_albFav.insert(g_alb[i].name); if (!g_alb.empty()) g_albSel = 0; }
         }
         else if (st == L"voiture") { g_tab = TAB_CAR; }   // couleur : CouleurVoiture du mwcoop.ini du jeu
-        else if (st == L"addons") { g_tab = TAB_CAR; g_addonsTab = true; }   // onglet Addons (liste des voitures en extension)
-        else if (st == L"addons-1") { g_tab = TAB_CAR; g_addonsTab = true; AddonsScan(); g_addonSel = g_addonList.empty() ? -1 : 0; }   // volet du premier addon
+        else if (st == L"addons" || st == L"addons-dl") {   // onglet Addons (liste des voitures en extension ; catalogue lu tout de suite)
+            g_tab = TAB_CAR; g_addonsTab = true;
+            g_addonCatT = g_addonCatGoT = ~0ull;
+            AddonCatThread(NULL);
+            if (st == L"addons-dl") {   // (telechargement en cours de la premiere voiture du catalogue pas installee)
+                AddonsScan();
+                for (const Addon &a : g_addonList) if (!a.installed) { g_addonDlKey = a.key; g_addonDlBusy = true; g_addonDlProg = 0.42f; break; }
+            }
+        }
+        else if (st.size() > 7 && !st.compare(0, 7, L"addons-") && iswdigit(st[7])) {   // addons-<n> : volet du n-ieme addon (catalogue lu)
+            g_tab = TAB_CAR; g_addonsTab = true;
+            g_addonCatT = g_addonCatGoT = ~0ull;
+            AddonCatThread(NULL);
+            AddonsScan();
+            int k = _wtoi(st.c_str() + 7) - 1;
+            g_addonSel = k >= 0 && k < (int)g_addonList.size() && g_addonList[k].installed ? k : -1;
+        }
         else if (st == L"tenue" || st == L"tenue-survol" || st == L"tenue-perso" || st == L"visage" || st == L"volant") {   // tenue : Apparence du mwcoop.ini ; angle : /temps (un tour en 10 s) ; visage : onglet Visage ; volant : vue Volant
             g_tab = TAB_SKIN;
             g_skinYaw = fmodf(g_sceneT * 1.6f, 16.0f);

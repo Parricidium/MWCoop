@@ -1639,6 +1639,27 @@ Add-ons in the sidebar	الإضافات في الشريط الجانبي
 Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).	تحت «المودات»: سيارات الإضافات وVAZ، لكل منها بطاقتها وطلاؤها (قالب، صورتك).
 Gallery	معرض
 List	قائمة
+Extension cars: download them here, they update in one click. In game, take them with F10 (Cars tab).	سيارات الإضافات: نزّلها من هنا، وتُحدَّث بنقرة واحدة. في اللعبة خذها عبر F10 (تبويب السيارات).
+Looking for cars to download…	جارٍ البحث عن سيارات للتنزيل…
+Car catalogue unreachable: try again later, or copy an add-on's folder into the add-ons folder.	تعذّر الوصول إلى كتالوج السيارات: حاول لاحقاً، أو انسخ مجلد الإضافة إلى مجلد الإضافات.
+%s installed: in game, take it with F10 (Cars tab)	تم تثبيت %s: في اللعبة خذها عبر F10 (تبويب السيارات)
+Could not download %s (%s)	تعذّر تنزيل %s (%s)
+Close the game before installing a car	أغلق اللعبة قبل تثبيت سيارة
+Downloading… %d%%	جارٍ التنزيل… %d%%
+MWCoop %s required	يلزم MWCoop %s
+Update · v%s	تحديث · v%s
+Download · %.0f MB	تنزيل · %.0f م.ب
+Close the game before uninstalling a car	أغلق اللعبة قبل إلغاء تثبيت سيارة
+Uninstall \u201C	إلغاء تثبيت \u201C
+\u201D?\n\nYour livery is kept. You can download it again from Add-ons (Download button).	\u201D؟\n\nتبقى كسوتك محفوظة. يمكنك تنزيلها مجدداً من الإضافات (زر تنزيل).
+%s uninstalled	تم إلغاء تثبيت %s
+%s: some files could not be deleted (open elsewhere?)	%s: تعذّر حذف بعض الملفات (مفتوحة في مكان آخر؟)
+Uninstall	إلغاء التثبيت
+Add-ons are extra cars, downloaded from the launcher. In game, each player takes one with F10, like the VAZ: with their colour and number, or with their own livery.	الإضافات سيارات إضافية تُنزَّل من المشغّل. في اللعبة، يأخذ كل لاعب واحدة عبر F10 مثل VAZ: بلونه ورقمه، أو بكسوته الخاصة.
+Character > Add-ons: each available car has a Download button (NEW tag when it has just arrived).	الشخصية > الإضافات: لكل سيارة متاحة زر تنزيل (وسم NEW عندما تصل حديثاً).
+Click Download with the game closed: the car installs into MWCoop\\addons.	انقر تنزيل واللعبة مغلقة: تُثبَّت السيارة في MWCoop\\addons.
+New version: UPDATE tag and Update button. To remove it: click the car, then Uninstall (your livery is kept).	إصدار جديد: وسم UPDATE وزر تحديث. لإزالتها: انقر السيارة ثم إلغاء التثبيت (تبقى كسوتك محفوظة).
+By hand works too: copy a car's folder (the one that contains addon.ini) into the add-ons folder. Everyone installs the add-ons they want to see: without the add-on, you see a VAZ of the same colour and number instead.	يمكن ذلك يدوياً أيضاً: انسخ مجلد السيارة (الذي يحتوي addon.ini) إلى مجلد الإضافات. كل لاعب يثبّت الإضافات التي يريد رؤيتها: بدون الإضافة ترى مكانها VAZ بنفس اللون والرقم.
 Proximity voice	الصوت حسب القرب
 Voice range	مدى الصوت
 Voice volume	مستوى الصوت
@@ -1834,7 +1855,6 @@ The MWCoop community: help, bug reports, news and players to team up with. GitHu
 MWCoop's MSCLoader	MSCLoader الخاص بـ MWCoop
 In the Mods tab: OFFICIAL (the one installed in the game) or MWCOOP (installed apart, the game is not changed). If your mods don't load, try MWCOOP, or REINSTALL.	في تبويب التعديلات: الرسمي (المثبت في اللعبة) أو MWCOOP (مثبت بشكل منفصل، اللعبة لا تتغير). إذا لم تُحمَّل تعديلاتك، جرّب MWCOOP أو أعد التثبيت.
 In Settings > Game: Copy (default), Game folder or Steam. If MWCoop doesn't load, try one then the other; the launcher also switches to the game folder by itself.	في الإعدادات > اللعبة: نسخة (افتراضي)، مجلد اللعبة أو Steam. إذا لم يُحمَّل MWCoop، جرّب واحداً ثم الآخر؛ والمشغّل ينتقل أيضاً إلى مجلد اللعبة تلقائياً.
-Uninstall	إلغاء التثبيت
 In Settings > About: removes all of MWCoop (folders included) and MWCoop's MSCLoader, to the Recycle Bin. Your save, your mods and the official MSCLoader stay.	في الإعدادات > حول: يزيل MWCoop بالكامل (مع المجلدات) و MSCLoader الخاص بـ MWCoop إلى سلة المحذوفات. ملف حفظك وتعديلاتك و MSCLoader الرسمي تبقى.
 The star at the top: the people who give something to make MWCoop better. Thanks to Dom for 155 outfits, in the Outfit tab!	النجمة في الأعلى: الأشخاص الذين يقدمون شيئاً لتحسين MWCoop. شكراً لـ Dom على 155 طقماً، في تبويب الملابس!
 In Logs: if MWCoop doesn't load, turn it on, start your game, then create the zip. It records everything the launcher does and what the game really loaded.	في السجلات: إذا لم يُحمَّل MWCoop، فعّله، ابدأ لعبتك، ثم أنشئ ملف zip. يسجل كل ما يفعله المشغّل وما حمّلته اللعبة فعلاً.
