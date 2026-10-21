@@ -2939,11 +2939,11 @@ namespace MWCoop
             if (visWatch.Length > 0 && Time.frameCount % 300 == 0 && t > 20f)
                 Log.Info("autotest : " + CarVisuals.State(Config.Get("Test", "TestVoiture", "SORBET(190-200psi)"), visWatch));
             if (mode == "portiere" && t > 52f && step == 1 && Config.GetInt("Test", "TestPousse", 0) != 0) { step = 2; Log.Info("autotest : refermee en poussant " + CarDoors.TestState(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), "Reset 2")); }
-            if (mode == "portiere" && t > 38f && step == 0) { step = 1; Log.Info("autotest : " + CarDoors.TestPush(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), -35f)); }
+            if (mode == "portiere" && t > 38f && step == 0 && Config.GetInt("Test", "TestPousse", 0) != 0) { step = 1; Log.Info("autotest : " + CarDoors.TestPush(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), -35f)); }
             if (mode == "portiere" && t > 30f && !done)
             {
                 done = true;
-                Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), true));
+                Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)"), true, Config.Get("Test", "TestPorte", "")));   // ([Test] TestPorte : telle portiere, ex. DoorRear(right))
             }
             if (mode == "chemin" || mode == "spam")
             {

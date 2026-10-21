@@ -745,6 +745,9 @@ namespace MWCoop
                         }
                 }
                 if (!moto) SeatFit(passenger);
+                // Passager : mains posees sur les genoux (JD, 21/10 : « plutot que pendantes »), une fois les jambes placees.
+                // [Test] MainsGenoux=x,y,z : decalage de la main par rapport au genou (de cote vers l'exterieur, haut, avant), m.
+                if (!moto && passenger && Config.GetInt("Coop", "MainsGenoux", 1) != 0) HandsOnKnees();
                 if (!moto && !passenger && vehicleT != null) PedalLegs(vehicleT);
                 // Yeux au repos (pose de conduite, sans penche) : servent a placer le corps sur le siege.
                 if (headBone != null) eyesRest = Quaternion.Inverse(Root.transform.rotation) * (headBone.position - motoRaise - Root.transform.position) + EyeOffset;   // (sans la remontee : sinon l'ancrage la defait)
@@ -755,9 +758,10 @@ namespace MWCoop
                 {
                     if (carName.StartsWith("GIFU"))   // (dos arrondi : la GIFU seulement, demande de JD)
                     {
-                        Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "SiegeDos", 18f));
-                        Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "SiegeDos2", 24f));
-                        if (headBone != null) Turn(headBone, 0f, -Config.GetFloat("Test", "SiegeTete", 25f));
+                        // (moins voute qu'avant -- 18/24/25 : « ils ont l'air trop courbes dans la GIFU », Menor, 14/10)
+                        Turn(Bone("spine_middle"), 0f, Config.GetFloat("Test", "SiegeDos", 11f));
+                        Turn(Bone("spine_upper"), 0f, Config.GetFloat("Test", "SiegeDos2", 15f));
+                        if (headBone != null) Turn(headBone, 0f, -Config.GetFloat("Test", "SiegeTete", 16f));
                     }
                     else if (carName.ToUpperInvariant().Contains("MACHTWAGEN"))
                     {
@@ -1123,11 +1127,29 @@ namespace MWCoop
                 if (ll != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", ll.position + lc.forward * lf - lc.up * ld - lc.right * 0.05f);
                 return;
             }
-            if (carName == null || !gifu && !taxi && !van || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
+            // Passager d'une voiture ordinaire (SORBET, CORRIS, VAZ, addons, MSC...) : jambes repliees, pieds au plancher devant le
+            // siege et un peu vers le milieu -- avec la pose de conduite (jambes allongees vers les pedales) la jambe exterieure
+            // traversait la portiere (Menor, 14/10 : « plier la jambe pour qu'elle ne croise pas la carrosserie »).
+            // [Test] PassagerPieds (avance, m), PassagerChute (descente), PassagerSerre (vers le milieu) ; [Coop] JambesPassager=0 : comme avant.
+            bool generic = rear && !gifu && !taxi && !van && carName != null && !carName.StartsWith("JONNEZ") && Config.GetInt("Coop", "JambesPassager", 1) != 0;
+            if (carName == null || !gifu && !taxi && !van && !generic || vehicleT == null || Config.GetInt("Test", "SansSiege", 0) != 0) return;   // (essais : SansSiege=1, comme avant)
             // (passager avant : enfonce de 30 cm dans le fauteuil sans ca -- assis comme le conducteur, dos arrondi, mains sur
             // les cuisses ; la couchette n'a pas de « Seats » : rien a faire)
             Transform car = vehicleT, pelvis = Bone("pelvis");
             if (pelvis == null) return;
+            if (generic)
+            {
+                float pf = Config.GetFloat("Test", "PassagerPieds", 0.45f), pd = Config.GetFloat("Test", "PassagerChute", 0.18f), ps = Config.GetFloat("Test", "PassagerSerre", 0.08f);
+                bool rail = carName.StartsWith("FLATBED");
+                if (rail) { pf = Config.GetFloat("Test", "RidellePieds", 0.22f); pd = Config.GetFloat("Test", "RidelleChute", 0.62f); ps = 0f; }   // (ridelle de la remorque : assis sur le bord, jambes pendantes)
+                // (dans le repere de l'avatar, pas de la voiture : sur une ridelle il regarde l'interieur de la remorque)
+                Transform av = Root.transform;
+                float side = rail ? 0f : car.InverseTransformPoint(pelvis.position).x >= 0f ? 1f : -1f;   // (cote de la voiture ou il est assis : les pieds vont vers le milieu)
+                Transform gr = Bone("thig_right"), gl = Bone("thig_left");
+                if (gr != null && Bone("ankle_right") != null) Leg("thig_right", "knee_right", "ankle_right", gr.position + av.forward * pf - av.up * pd + av.right * (0.05f - side * ps));
+                if (gl != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", gl.position + av.forward * pf - av.up * pd - av.right * (0.05f + side * ps));
+                return;
+            }
             if (van)
             {
                 // Pas de collisionneur de siege (banquette dans le maillage de la cabine) : bassin monte d'une hauteur fixe,
@@ -1513,6 +1535,24 @@ namespace MWCoop
 
         // IK a deux os du bras (epaule -> coude -> poignet) : la main va vers 'target' (dosage w, depuis sa place
         // actuelle), le coude vers le bas, l'arriere et l'exterieur.
+        void HandsOnKnees()
+        {
+            Vector3 k = Vector3.zero;
+            string[] c = Config.Get("Test", "MainsGenoux", "0.03,0.07,0.04").Split(',');
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            float kx, ky, kz;
+            if (c.Length == 3 && float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out kx) && float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out ky)
+                && float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out kz)) k = new Vector3(kx, ky, kz);
+            else k = new Vector3(0.03f, 0.07f, 0.04f);
+            Transform r = Root.transform;
+            foreach (bool right in new[] { true, false })
+            {
+                Transform kn = Bone(right ? "knee_right" : "knee_left");
+                if (kn == null) continue;
+                ArmTo(right, kn.position + r.right * (right ? k.x : -k.x) + r.up * k.y + r.forward * k.z, 1f);
+            }
+        }
+
         void ArmTo(bool right, Vector3 target, float w)
         {
             if (w <= 0.001f) return;
@@ -1641,9 +1681,11 @@ namespace MWCoop
                 inCar = true;
                 carName = pName;
                 vehicleT = pCar;
-                Root.transform.rotation = pCar.rotation;
+                float seatYaw = Seats.RemoteSeatYaw(pi.Id);   // (ridelle d'une remorque : face a l'interieur)
+                Quaternion seatQ = pCar.rotation * Quaternion.Euler(0f, seatYaw, 0f);
+                Root.transform.rotation = seatQ;
                 leanOff = Vector3.zero;
-                pos = pCar.TransformPoint(pHead) - pCar.rotation * eyesRest;
+                pos = pCar.TransformPoint(pHead) - seatQ * eyesRest;
                 // Couchette de la GIFU : 67 cm seulement sous le toit, la tete (camera) juste dessous ; assis droit, le corps
                 // s'enfoncait de ~22 cm dans la couchette (retour d'un joueur, 09/10). Assis dessus, voute en avant : la tete
                 // reste sous le toit.
@@ -1652,7 +1694,7 @@ namespace MWCoop
                     pos += pCar.up * Config.GetFloat("Test", "CouchetteLeve", 0.22f) + pCar.forward * Config.GetFloat("Test", "CouchetteAvance", 0.1f);   // (dos contre la paroi, pas dedans)
                     leanOff = new Vector3(0f, 0f, Config.GetFloat("Test", "CouchetteVoute", 0.5f));
                 }
-                yaw = pCar.eulerAngles.y;
+                yaw = pCar.eulerAngles.y + seatYaw;
                 placed = true;
                 Root.transform.position = pos;
                 f |= PlayerSync.F_Seated;

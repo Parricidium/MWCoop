@@ -140,6 +140,7 @@ namespace MWCoop
                     if (an != null && an.isPlaying) { fl |= F_Anim; break; }
                 }
             }
+            if ((fl & F_Anim) != 0 && (flags & F_Anim) == 0 && t >= 1 && t <= 3 && t == tool) Pvp.OnLocalSwing(t);   // (hache, masse, barre a mine : coup porte, Pvp)
             tool = t; flags = fl;
             if (ThirdPerson.HasBody) Local(t, fl); else if (remote.ContainsKey(Session.LocalId)) PlayerLeft(Session.LocalId);
             float now = Time.realtimeSinceStartup;
