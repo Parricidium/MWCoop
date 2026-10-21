@@ -97,6 +97,10 @@ namespace EditeurCarte
                 return;
             }
             CoreWebView2 w = web.CoreWebView2;
+            // cache du navigateur vide a chaque lancement : tout est sur le disque (rien a gagner), et une carte preparee de
+            // nouveau numerote ses textures autrement -- l'ancien cache les melangeait (retour de JD, 21/10) ; idem pour l'interface
+            // apres une mise a jour de l'editeur
+            try { await w.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache); } catch { }
             CoreWebView2Settings st = w.Settings;
             st.AreDevToolsEnabled = Program.Debug;
             st.AreDefaultContextMenusEnabled = Program.Debug;
@@ -145,6 +149,20 @@ namespace EditeurCarte
                 case "dossier": OpenFolder(S(m, "chemin")); break;
                 // ---- projets de carte (V1)
                 case "projets": Post(new Dictionary<string, object> { { "type", "projets" }, { "liste", Projects.List() } }); break;
+                case "gererProjet":   // renommer, dupliquer, retirer du jeu, supprimer (corbeille) ; la liste revient a jour
+                    {
+                        string a = S(m, "action"), d = S(m, "dossier"), err = null;
+                        try
+                        {
+                            if (a == "renommer") Projects.Rename(d, S(m, "nom"));
+                            else if (a == "dupliquer") Projects.Duplicate(d, S(m, "suffixe"));
+                            else if (a == "retirer") Projects.RemoveFromGame(d);
+                            else if (a == "supprimer") Projects.Delete(d, m.ContainsKey("carteAussi") && m["carteAussi"] is bool && (bool)m["carteAussi"]);
+                        }
+                        catch (Exception ex) { err = ex.Message; }
+                        Post(new Dictionary<string, object> { { "type", "projets" }, { "liste", Projects.List() }, { "erreur", err ?? "" } });
+                        break;
+                    }
                 case "creerProjet":
                     {
                         string d = Projects.Create(S(m, "nom"), S(m, "jeu"));
@@ -305,6 +323,11 @@ namespace EditeurCarte
                 string path = Projects.Compile(S(m, "dossier"), S(m, "nomFichier"), files, mod);
                 reply["chemin"] = path; reply["dossier"] = Path.GetDirectoryName(path); reply["mod"] = mod ?? "";
                 reply["taille"] = new FileInfo(path).Length;
+                // mise a jour sous un autre nom (carte renommee, autre version) : l'ancienne ne reste pas chargee en jeu en double
+                string old = S(m, "ancien");
+                if (mod != null && !string.IsNullOrEmpty(old) && old.IndexOfAny(new[] { '\\', '/', ':' }) < 0
+                    && !string.Equals(old, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase) && File.Exists(Path.Combine(mod, old)))
+                    Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(Path.Combine(mod, old), Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
             }
             catch (Exception e) { reply["erreur"] = e.Message; }
             Post(reply);

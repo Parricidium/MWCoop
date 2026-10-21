@@ -109,6 +109,10 @@ export class Viewer {
     u.loading.hidden = true;
   }
 
+  // image d'une texture du cache ; ?v= date de la preparation : une carte preparee de nouveau ne reprend jamais les anciennes
+  // images du cache du navigateur (leurs numeros changent)
+  texUrl(i) { return this.base + "textures/" + i + ".png?v=" + encodeURIComponent((this.info && this.info.date) || ""); }
+
   // matieres d'un objet du cache, une par sous-maillage
   matsFor(ob, g) {
     const mats = [];
@@ -126,7 +130,7 @@ export class Viewer {
     this.grey = new THREE.MeshLambertMaterial({ color: 0x9a9a9a });
     const images = new Map();   // une image par texture, partagee par les matieres (decalages et repetitions propres a chacune)
     const loadImage = i => {
-      if (!images.has(i)) images.set(i, new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = this.base + "textures/" + i + ".png"; }));
+      if (!images.has(i)) images.set(i, new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = this.texUrl(i); }));
       return images.get(i);
     };
     const hidden = new THREE.MeshBasicMaterial({ visible: false });

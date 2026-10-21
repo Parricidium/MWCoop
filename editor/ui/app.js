@@ -232,7 +232,8 @@ async function openMap(id, projet) {
     ui: { tools: $("tools"), list: $("ajouts"), props: $("props"), palette: $("palette"), textures: $("textures-dlg"), compile: $("compile-dlg"), warn: toast },
     onState: st => { $("save-state").textContent = st === "enregistrement" ? T("enregistrement") : ""; } });
   edition.start();
-  window.__edition = edition;   // (essais par le protocole de debogage)
+  window.__edition = edition;
+  if (compileAfterOpen) { compileAfterOpen = false; edition.openCompile(); }   // (accueil : « Mettre a jour la carte compilee »)   // (essais par le protocole de debogage)
   viewer.resize();
 }
 
@@ -245,11 +246,55 @@ function toast(msg) {
 }
 
 // ---------------------------------------------------------------- projets de carte
+// cartes recentes : ouvrir au clic ; « ⋯ » : renommer, dupliquer, mettre a jour la carte compilee, la retirer du jeu,
+// ouvrir le dossier, supprimer (corbeille de Windows) -- demande de JD, 21/10
 function renderRecent() {
   const el = $("recentes");
   if (!projets.length) { el.innerHTML = `<p class="empty">${esc(T("recentesVide"))}</p>`; return; }
-  el.innerHTML = projets.map(p => `<button data-d="${esc(p.dossier)}"><span>${esc(p.nom)}<span class="tagj" style="background:var(--${p.jeu === "msc" ? "msc" : "mwc"})">${esc((p.jeu || "").toUpperCase())}</span></span><small>${esc(T("modifieLe", p.modifie, p.objets))}</small></button>`).join("");
+  el.innerHTML = projets.map(p => `<div class="recrow"><button data-d="${esc(p.dossier)}"><span>${esc(p.nom)}<span class="tagj" style="background:var(--${p.jeu === "msc" ? "msc" : "mwc"})">${esc((p.jeu || "").toUpperCase())}</span></span><small>${esc(T("modifieLe", p.modifie, p.objets))}</small><small class="${p.enJeu ? "ok" : ""}">${esc(p.compile ? (p.enJeu ? T("compileeEnJeu") : T("compileeHorsJeu")) : T("pasCompilee"))}</small></button><button class="more" data-m="${esc(p.dossier)}" aria-label="${esc(T("gerer"))}" title="${esc(T("gerer"))}">⋯</button></div>`).join("");
   el.querySelectorAll("button[data-d]").forEach(b => b.onclick = () => send({ type: "ouvrirProjet", dossier: b.dataset.d }));
+  el.querySelectorAll("button[data-m]").forEach(b => b.onclick = ev => { ev.stopPropagation(); cardMenu(b, projets.find(p => p.dossier === b.dataset.m)); });
+}
+function cardMenu(btn, p) {
+  const m = $("menu-carte");
+  const items = [["ouvrir", T("ouvrirCarteMenu")], ["renommer", T("renommer")], ["dupliquer", T("dupliquer")], ["recompiler", T("recompiler")]]
+    .concat(p.enJeu ? [["retirer", T("retirerJeu")]] : []).concat([["dossier", T("ouvrirDossier")], ["supprimer", T("supprimer")]]);
+  m.innerHTML = items.map(([a, t]) => `<button data-a="${a}" class="${a === "supprimer" ? "danger" : ""}">${esc(t)}</button>`).join("");
+  const r = btn.getBoundingClientRect();
+  m.style.left = Math.min(r.left, window.innerWidth - 240) + "px"; m.style.top = (r.bottom + 4) + "px";
+  m.hidden = false;
+  const close = () => { m.hidden = true; document.removeEventListener("click", close); };
+  setTimeout(() => document.addEventListener("click", close), 0);
+  m.querySelectorAll("button[data-a]").forEach(b => b.onclick = () => { close(); mapAction(b.dataset.a, p); });
+}
+function ask(o) {   // { titre, texte, champ, case, oui, danger } -> promesse { ok, valeur, coche }
+  return new Promise(res => {
+    const d = $("demande-dlg");
+    $("dm-t").textContent = o.titre; $("dm-txt").textContent = o.texte || "";
+    $("dm-fld").hidden = o.champ === undefined; $("dm-in").value = o.champ || "";
+    $("dm-cb").hidden = !o.case; $("dm-chk").checked = !!o.coche; $("dm-cbt").textContent = o.case || "";
+    const oui = $("dm-oui"); oui.textContent = o.oui; oui.className = "btn " + (o.danger ? "danger" : "pri");
+    d.hidden = false;
+    if (o.champ !== undefined) setTimeout(() => { $("dm-in").focus(); $("dm-in").select(); }, 30);
+    const end = ok => { d.hidden = true; res({ ok, valeur: $("dm-in").value.trim(), coche: $("dm-chk").checked }); };
+    oui.onclick = () => end(true); $("dm-non").onclick = () => end(false);
+    $("dm-in").onkeydown = e => { if (e.key === "Enter") end(true); else if (e.key === "Escape") end(false); };
+  });
+}
+let compileAfterOpen = false;
+async function mapAction(a, p) {
+  if (a === "ouvrir") send({ type: "ouvrirProjet", dossier: p.dossier });
+  else if (a === "recompiler") { compileAfterOpen = true; send({ type: "ouvrirProjet", dossier: p.dossier }); }
+  else if (a === "dossier") send({ type: "dossierProjet", dossier: p.dossier });
+  else if (a === "dupliquer") send({ type: "gererProjet", action: "dupliquer", dossier: p.dossier, suffixe: T("copieSuffixe") });
+  else if (a === "retirer") send({ type: "gererProjet", action: "retirer", dossier: p.dossier });
+  else if (a === "renommer") {
+    const r = await ask({ titre: T("renommer"), champ: p.nom, oui: T("valider") });
+    if (r.ok && r.valeur && r.valeur !== p.nom) send({ type: "gererProjet", action: "renommer", dossier: p.dossier, nom: r.valeur });
+  } else if (a === "supprimer") {
+    const r = await ask({ titre: T("supprimerQ", p.nom), texte: T("supprimerTxt"), case: p.compile ? T("supprimerCarteAussi") : "", coche: true, oui: T("supprimer"), danger: true });
+    if (r.ok) send({ type: "gererProjet", action: "supprimer", dossier: p.dossier, carteAussi: !!p.compile && r.coche });
+  }
 }
 function openProjet(m) {
   if (!m.data) { toast(T("projetIllisible")); return; }
@@ -302,7 +347,7 @@ function onHostMessage(e) {
     renderCards();
     if (first) send({ type: "projets" });
   }
-  else if (m.type === "projets") { projets = m.liste || []; renderRecent(); }
+  else if (m.type === "projets") { projets = m.liste || []; renderRecent(); if (m.erreur) toast(T("gererEchec", m.erreur)); }
   else if (m.type === "projet") openProjet(m);
   else if (m.type === "modele") edition && edition.onModel(m);
   else if (m.type === "image") edition && edition.onImage(m);

@@ -2531,3 +2531,4 @@ Sculpt the terrain (T): raise, dig, flatten, smooth the game's ground; roads re-
 Roads: flat across with embankments, markings in the centre or on the edges; a point placed on another road's point joins them.	الطرق: مستوية بالعرض مع منحدرات، وخطوط في الوسط أو على الحواف؛ نقطة توضع على نقطة طريق آخر تربطهما.
 Working groups: click a game object; a door, a handle… copies with its automata, or hides entirely.	مجموعات تعمل: انقر على غرض من اللعبة؛ باب أو مقبض… يُنسخ بآلياته أو يُخفى كلياً.
 Objects, roads, terrain, plants, lights, co-op	أغراض، طرق، تضاريس، نباتات، أضواء، لعب جماعي
+In the editor, the … button next to a recent map: rename, duplicate, update the compiled map, remove it from the game or delete the project (Windows Recycle Bin).	في المحرّر، الزر … بجانب خريطة حديثة: إعادة تسمية أو تكرار أو تحديث الخريطة المجمّعة أو إزالتها من اللعبة أو حذف المشروع (سلة محذوفات Windows).

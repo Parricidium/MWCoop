@@ -923,6 +923,8 @@ static const WikiBlock kW_Editor[] = {
             L"Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared." },
     { WB_B, L"Il va dans MWCoop\\cartes : ta carte s'ajoute à la vraie carte à ta prochaine partie, collisions comprises.",
             L"It goes into MWCoop\\cartes: your map is added to the real map in your next session, collisions included." },
+    { WB_B, L"Dans l'éditeur, le bouton … à côté d'une carte récente : renommer, dupliquer, mettre à jour la carte compilée, la retirer du jeu ou supprimer le projet (corbeille de Windows).",
+            L"In the editor, the … button next to a recent map: rename, duplicate, update the compiled map, remove it from the game or delete the project (Windows Recycle Bin)." },
     { WB_B, L"En co-op, l'hôte envoie ses cartes à ses invités au salon (Contenu envoyé › Autres › Cartes de l'éditeur) ; un invité ne charge que celles de l'hôte : tout le monde a la même carte.",
             L"In co-op, the host sends their maps to guests in the lobby (Sent content › Others › Editor maps); a guest only loads the host's maps: everyone has the same map." },
     { WB_TIP, L"Steam ne trouve pas le jeu (copie hors Steam, Steam bloqué dans ton pays) ? Indique simplement le fichier .exe du jeu : l'éditeur le retient, pour le lanceur aussi.",

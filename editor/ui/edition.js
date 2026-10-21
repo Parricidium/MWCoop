@@ -748,6 +748,8 @@ export class Edition {
     dlg.querySelector("#cp-go").disabled = false;
     if (m.erreur) { res.className = "err"; res.textContent = T("cpEchec", m.erreur); return; }
     res.className = "okbox";
+    this.proj.compile = { fichier: String(m.chemin).split(/[\\/]/).pop(), date: new Date().toLocaleString() };   // (accueil : « compilee », « en jeu »)
+    this.save();
     res.innerHTML = `<b>${esc(T("cpFini"))}</b><span>${esc(m.chemin)} · ${Math.max(1, Math.round(m.taille / 1024))} Ko</span>`
       + `<span>${esc(m.mod ? T("cpActive") : T("cpPasMod"))}</span><button class="btn small" id="cp-dir">${esc(T("ouvrirDossier"))}</button>`;
     res.querySelector("#cp-dir").onclick = () => this.send({ type: "dossier", chemin: m.dossier });
@@ -810,7 +812,7 @@ export class Edition {
     }
     files["carte.txt"] = b64(new TextEncoder().encode(lines.join("\n") + "\n"));
     const slug = (p.nom || "carte").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "carte";
-    this.send({ type: "compiler", dossier: this.dossier, jeu: p.jeu, nomFichier: slug + "-" + (p.version || "1.0").replace(/[^0-9A-Za-z.]+/g, "") + ".mwcmap", fichiers: files });
+    this.send({ type: "compiler", dossier: this.dossier, jeu: p.jeu, nomFichier: slug + "-" + (p.version || "1.0").replace(/[^0-9A-Za-z.]+/g, "") + ".mwcmap", ancien: (p.compile && p.compile.fichier) || "", fichiers: files });
   }
 
   // reference d'une tenue dans le paquet : nom d'une texture / matiere du jeu, ou image perso copiee (textures/u<n>.<ext>)
@@ -1495,9 +1497,9 @@ export class Edition {
   }
   habitUrl(h) {
     if (h.k === "img") return "https://projets.local/" + encodeURIComponent(this.dossier) + "/" + h.f.split("/").map(encodeURIComponent).join("/");
-    if (h.k === "tex") return this.v.base + "textures/" + h.t + ".png";
+    if (h.k === "tex") return this.v.texUrl(h.t);
     const m = this.v.info.matieres[h.mi];
-    return m && m.t >= 0 ? this.v.base + "textures/" + m.t + ".png" : "";
+    return m && m.t >= 0 ? this.v.texUrl(m.t) : "";
   }
   habitName(h) { return h ? (h.k === "img" ? h.f.split("/").pop() : h.nom) : ""; }
 
