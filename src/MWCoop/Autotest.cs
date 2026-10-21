@@ -466,6 +466,8 @@ namespace MWCoop
             if (mode == "passager") return;
             if (mode == "sondeplaces" && t > 30f && !done) { done = true; Log.Info("autotest : places" + Seats.ProbeSeats(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
             if (mode == "sondeplaces") return;
+            if (mode == "portiere" && t > 30f && !done) { done = true; Log.Info("autotest : " + CarDoors.TestOpen(Config.Get("Test", "TestVoiture", "SATSUMA"), true, Config.Get("Test", "TestPorte", ""))); }
+            if (mode == "portiere") return;
             if (mode == "mscguepe") { MscGuepe(t); return; }
             if (mode == "mscporte") { MscPorte(t); return; }
             if (mode == "mscreste") { MscReste(t); return; }
