@@ -2505,9 +2505,10 @@ static float VhsMaxScroll();    // (media.inc)
 static float AlbMaxScroll();
 static float CreditsMaxScroll();   // (ui.inc)
 static float SavesMaxScroll();     // (saves.inc)
+static float AddonsMaxScroll();    // (voiture.inc)
 static void DrawMods(Graphics &g);
 static void DrawServer(Graphics &g);
-static float MaxScroll(int t) { return t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX || t == TAB_COOP ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : 0.0f; }
+static float MaxScroll(int t) { return t == TAB_SAVES ? SavesMaxScroll() : t == TAB_MODS ? MscMaxScroll() : t == TAB_LOBBY ? LobbyMaxScroll() : t == TAB_LOGS ? LogsMaxScroll() : t == TAB_GFX || t == TAB_COOP ? GfxMaxScroll() : t == TAB_NOTES ? NotesMaxScroll() : t == TAB_WIKI ? WikiMaxScroll() : t == TAB_VHS ? VhsMaxScroll() : t == TAB_ALBUM ? AlbMaxScroll() : t == TAB_CREDITS ? CreditsMaxScroll() : t == TAB_CAR ? AddonsMaxScroll() : 0.0f; }
 
 static int ValueIndex(const Opt &o, int v)
 {

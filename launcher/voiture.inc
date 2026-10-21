@@ -952,12 +952,33 @@ static void AddonDrawPic(Graphics &g, Bitmap *b, RectF r, float rad)
     SolidBrush f(TH(field)); g.FillPath(&f, &p);
     if (!b) { Icon(g, IC_CAR, r.X + r.Width / 2, r.Y + r.Height / 2, 44, WithA(kGrey, 0.6f), 1.4f); return; }
     float k = max(r.Width / b->GetWidth(), r.Height / b->GetHeight()), w = b->GetWidth() * k, h = b->GetHeight() * k;
-    g.SetClip(&p);
+    GraphicsState st = g.Save(); g.SetClip(&p, CombineModeIntersect);   // (sans ResetClip : la liste des addons est elle-meme decoupee)
     g.DrawImage(b, RectF(r.X + (r.Width - w) / 2, r.Y + (r.Height - h) / 2, w, h));
-    g.ResetClip();
+    g.Restore(st);
 }
 // Liste : une carte par addon installe.
-static RectF AddonCardRect(int i) { return RectF(kCarCard.X + 24 + (i % 3) * 324.0f, kCarCard.Y + 112 + (i / 3) * 290.0f, 300, 270); }
+// Liste : galerie (cartes, 3 par rangee ; par defaut) ou liste (une ligne par addon) -- JD 21/10, quatre voitures : la
+// deuxieme rangee de cartes depassait sous le cadre ; zone bornee au cadre, defilement a la molette et ascenseur.
+// [Lanceur] AddonsVue=1 : liste.
+static void DrawScrollBar(Graphics &g, RectF area, float sc, float ms);   // (mods.inc)
+static int g_addonView = -1;
+static int AddonsView() { if (g_addonView < 0) g_addonView = GetPrivateProfileIntW(L"Lanceur", L"AddonsVue", 0, g_iniLauncher.c_str()) == 1 ? 1 : 0; return g_addonView; }
+static void AddonsSetView(int v) { g_addonView = v; g_scroll[TAB_CAR] = 0; WritePrivateProfileStringW(L"Lanceur", L"AddonsVue", v == 1 ? L"1" : NULL, g_iniLauncher.c_str()); }
+static RectF AddonsArea() { return RectF(kCarCard.X + 16, kCarCard.Y + 104, kCarPanel.X + kCarPanel.Width - kCarCard.X - 32, kCarCard.Height - 104 - 14); }
+static const float kAddonRowH = 92;
+static RectF AddonCardRect(int i)   // (sans le defilement)
+{
+    RectF a = AddonsArea();
+    if (AddonsView() == 1) return RectF(a.X + 8, a.Y + i * kAddonRowH, a.Width - 30, kAddonRowH - 10);
+    return RectF(a.X + 8 + (i % 3) * 324.0f, a.Y + (i / 3) * 290.0f, 300, 270);
+}
+static float AddonsMaxScroll()
+{
+    if (!g_addonsTab || g_addonSel >= 0 || g_addonList.empty()) return 0.0f;
+    int n = (int)min(g_addonList.size(), (size_t)20);
+    float total = AddonsView() == 1 ? n * kAddonRowH : ((n + 2) / 3) * 290.0f;
+    return max(0.0f, total - AddonsArea().Height);
+}
 static void DrawAddonList(Graphics &g)
 {
     RectF area(kCarCard.X, kCarCard.Y, kCarPanel.X + kCarPanel.Width - kCarCard.X, kCarCard.Height);
@@ -968,6 +989,8 @@ static void DrawAddonList(Graphics &g)
          RectF(area.X + 24, area.Y + 56, area.Width - 48 - 400, 40), 12.5f, kGrey);
     UiButton(g, RectF(area.X + area.Width - 24 - 264, area.Y + 20, 264, 38), T(L"Ouvrir le dossier des addons", L"Open the add-ons folder"), UI_ADDON_DIR, false, IC_FOLDER, true, 10);
     UiButton(g, RectF(area.X + area.Width - 24 - 264 - 12 - 108, area.Y + 20, 108, 38), T(L"Aide", L"Help"), UI_ADDON_HELP, false, IC_BOOK, true, 10);
+    if (!g_addonList.empty())
+        UiSeg(g, RectF(area.X + area.Width - 24 - 264 - 12 - 108 - 12 - 200, area.Y + 22, 200, 34), { T(L"Galerie", L"Gallery"), T(L"Liste", L"List") }, AddonsView(), UI_ADDON_VIEW, 12);
     if (g_addonList.empty()) {
         Icon(g, IC_CAR, area.X + area.Width / 2, area.Y + area.Height / 2 - 50, 56, WithA(kGrey, 0.6f), 1.4f);
         Text(g, T(L"Aucun addon installé", L"No add-on installed"), RectF(area.X, area.Y + area.Height / 2 - 10, area.Width, 26), 15, FontStyleBold, kGrey);
@@ -976,19 +999,39 @@ static void DrawAddonList(Graphics &g)
         UiButton(g, RectF(area.X + area.Width / 2 - 140, area.Y + area.Height / 2 + 58, 280, 44), T(L"Ouvrir le dossier des addons", L"Open the add-ons folder"), UI_ADDON_DIR, true, IC_FOLDER);
         return;
     }
-    for (int i = 0; i < (int)g_addonList.size() && i < 6; i++) {
+    RectF ar = AddonsArea();
+    float ms = AddonsMaxScroll(), sc = g_scroll[TAB_CAR] = min(max(g_scroll[TAB_CAR], 0.0f), ms);
+    bool list = AddonsView() == 1;
+    GraphicsState st = g.Save(); g.SetClip(ar, CombineModeIntersect);
+    for (int i = 0; i < (int)g_addonList.size() && i < 20; i++) {
         const Addon &a = g_addonList[i];
-        RectF r = AddonCardRect(i);
+        RectF r = AddonCardRect(i); r.Y -= sc;
+        if (r.Y + r.Height < ar.Y || r.Y > ar.Y + ar.Height) continue;
         bool hot = g_uiHot == UI_ADDON_CARD + i;
-        GraphicsPath p; RoundRect(p, r, 16);
+        GraphicsPath p; RoundRect(p, r, list ? 14.0f : 16.0f);
         SolidBrush cb(hot ? TH(cardSel) : TH(card)); g.FillPath(&cb, &p);
         Pen pen(hot ? kAcc : TH(choiceBorder), hot ? 1.6f : 1.0f); g.DrawPath(&pen, &p);
-        AddonDrawPic(g, AddonPic(a), RectF(r.X + 10, r.Y + 10, r.Width - 20, 160), 12);
-        Text(g, a.name, RectF(r.X + 16, r.Y + 180, r.Width - 32, 26), 16, FontStyleBold, kInk, StringAlignmentNear);
-        Text(g, !g_fr && !a.descEn.empty() ? a.descEn : a.desc, RectF(r.X + 16, r.Y + 206, r.Width - 32, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
-        if (a.livery) Text(g, AddonLiveryOn(a) ? T(L"Ta livrée", L"Your livery") : T(L"Couleur + numéro", L"Colour + number"), RectF(r.X + 16, r.Y + 232, r.Width - 32, 22), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
-        HotZone(r, UI_ADDON_CARD + i);
+        std::wstring desc = !g_fr && !a.descEn.empty() ? a.descEn : a.desc;
+        std::wstring liv = a.livery ? (AddonLiveryOn(a) ? T(L"Ta livrée", L"Your livery") : T(L"Couleur + numéro", L"Colour + number")) : L"";
+        if (list) {
+            // ligne : vignette a gauche (16/9), nom, fiche, livree
+            AddonDrawPic(g, AddonPic(a), RectF(r.X + 8, r.Y + 8, (r.Height - 16) * 16 / 9, r.Height - 16), 10);
+            float tx = r.X + 8 + (r.Height - 16) * 16 / 9 + 18, tw = r.X + r.Width - 16 - tx;
+            Text(g, a.name, RectF(tx, r.Y + 10, tw, 24), 16, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, desc, RectF(tx, r.Y + 34, tw, 20), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            if (!liv.empty()) Text(g, liv, RectF(tx, r.Y + 54, tw, 20), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
+        } else {
+            AddonDrawPic(g, AddonPic(a), RectF(r.X + 10, r.Y + 10, r.Width - 20, 160), 12);
+            Text(g, a.name, RectF(r.X + 16, r.Y + 180, r.Width - 32, 26), 16, FontStyleBold, kInk, StringAlignmentNear);
+            Text(g, desc, RectF(r.X + 16, r.Y + 206, r.Width - 32, 22), 12.5f, FontStyleRegular, kGrey, StringAlignmentNear);
+            if (!liv.empty()) Text(g, liv, RectF(r.X + 16, r.Y + 232, r.Width - 32, 22), 12, FontStyleBold, AddonLiveryOn(a) ? kAcc : kGrey, StringAlignmentNear);
+        }
+        // (zone cliquable : la partie visible de la carte seulement)
+        RectF hz = r; float top = max(hz.Y, ar.Y), bot = min(hz.Y + hz.Height, ar.Y + ar.Height);
+        if (bot - top > 12) { hz.Y = top; hz.Height = bot - top; HotZone(hz, UI_ADDON_CARD + i); }
     }
+    g.Restore(st);
+    if (ms > 0) DrawScrollBar(g, ar, sc, ms);
 }
 // Volet d'un addon : livree a gauche, sa fiche a droite.
 static void DrawAddonView(Graphics &g, const Addon &a)

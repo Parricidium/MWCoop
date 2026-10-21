@@ -1823,6 +1823,8 @@ static const wchar_t *const kRu[][2] = {
     { L"into the mod: everyone has it", L"в мод: она есть у всех" },
     { L"Add-ons in the sidebar", L"Дополнения в боковой панели" },
     { L"Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).", L"Под «Моды»: машины-дополнения и VAZ, у каждой своя карточка и своя ливрея (шаблон, твоя картинка)." },
+    { L"Gallery", L"Галерея" },
+    { L"List", L"Список" },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },

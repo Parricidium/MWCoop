@@ -288,18 +288,41 @@ namespace MWCoop
             bool evo = sm != VazCar.ModelVaz;
             Style.Title(new Rect(r.x, cy, r.width, P(26)), VazCar.ModelOf(sm).Name + "  n\u00B0 " + hi, Kit.Ink, TextAnchor.MiddleLeft, 17);
             cy += P(26);
-            Style.Text(new Rect(r.x, cy, r.width, P(18)), Vaz.ColorName(hi) + (evo ? "  \u00B7  " + VazCar.ModelOf(sm).Desc
-                                                                                   : Lang.T("  \u00B7  r\u00E9glages de la Rivett rallye", "  \u00B7  set up like the rally Rivett")), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+            string desc = evo ? VazCar.ModelOf(sm).Desc : Lang.T("r\u00E9glages de la Rivett rallye", "set up like the rally Rivett");
+            if (Style.Width(Vaz.ColorName(hi) + "  \u00B7  " + desc, 12, false) <= r.width)
+                Style.Text(new Rect(r.x, cy, r.width, P(18)), Vaz.ColorName(hi) + "  \u00B7  " + desc, 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+            else
+            {
+                // (fiche d'addon longue : la couleur, puis la fiche sur sa ligne)
+                Style.Text(new Rect(r.x, cy, r.width, P(18)), Vaz.ColorName(hi), 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+                cy += P(16);
+                Style.Text(new Rect(r.x, cy, r.width, P(18)), desc, 12, TextAnchor.MiddleLeft, Kit.Muted, false);
+            }
             cy += P(24);
             if (Vaz.EvoAvailable && owner == null)
             {
-                // choix du modele (extensions installees) : un bouton par modele
+                // choix du modele (extensions installees) : un bouton par modele, a la largeur de son nom, en lignes (retour a
+                // la ligne quand la place manque ; chaque ligne remplie sur toute la largeur) -- JD 21/10, quatre voitures : les
+                // noms se chevauchaient dans quatre boutons de meme largeur
                 var ms = new System.Collections.Generic.List<int>();
                 for (int i = 0; i < VazCar.Models.Length; i++) if (VazCar.Has(i)) ms.Add(i);
-                float hw = (r.width - P(8) * (ms.Count - 1)) / ms.Count;
-                for (int k = 0; k < ms.Count; k++)
-                    if (Kit.Button(new Rect(r.x + k * (hw + P(8)), cy, hw, P(28)), VazCar.ModelOf(ms[k]).Name, Pick == ms[k] ? 1 : 0, false)) Pick = ms[k];
-                cy += P(34);
+                float gap = P(8);
+                var w = new float[ms.Count];
+                for (int k = 0; k < ms.Count; k++) w[k] = Mathf.Min(r.width, Mathf.Max(P(70), Style.Width(VazCar.ModelOf(ms[k]).Name, 13) + P(26)));
+                int start = 0;
+                while (start < ms.Count)
+                {
+                    int end = start; float used = w[start];
+                    while (end + 1 < ms.Count && used + gap + w[end + 1] <= r.width) { end++; used += gap + w[end]; }
+                    float extra = (r.width - used) / (end - start + 1), x = r.x;
+                    for (int k = start; k <= end; k++)
+                    {
+                        if (Kit.Button(new Rect(x, cy, w[k] + extra, P(28)), VazCar.ModelOf(ms[k]).Name, Pick == ms[k] ? 1 : 0, false)) Pick = ms[k];
+                        x += w[k] + extra + gap;
+                    }
+                    cy += P(34);
+                    start = end + 1;
+                }
             }
             if (evo)
             {
