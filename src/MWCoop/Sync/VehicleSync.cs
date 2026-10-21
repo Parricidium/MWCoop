@@ -91,7 +91,7 @@ namespace MWCoop
             public Drivetrain Dt;
             public Vector3 GoodPos; public Quaternion GoodRot; public bool GoodSet;   // derniere pose valide (garde-fou NaN)
             public float BadAt = -10f; public int BadN;                                 // garde-fou : derniere remise, remises rapprochees
-            public MonoBehaviour[] SanComps; public float SanNext;                      // garde-fou : Drivetrain, roues..., releve suivant
+            public MonoBehaviour[] SanComps; public float SanNext, SanSlow;             // garde-fou : Drivetrain, roues..., releve suivant (SanSlow : voiture garee, toutes les 2 s)
             public float[][] SanGood; public float SanRefresh;                          // garde-fou : leurs dernieres valeurs flottantes finies (restituees a la place de 0), releve toutes les 5 s
             public Wheel[] Wheels;
             public AxisCarController Axis;
@@ -1673,6 +1673,9 @@ namespace MWCoop
                 float now0 = Time.realtimeSinceStartup;
                 if (c.JointsWas != null) { c.JointsLater = c.JointsWas; c.JointsWas = null; }
                 ThawParts(c);
+                // (roues et transmission verifiees avant le premier pas de physique : des amortissements NaN figes pendant la copie
+                // faisaient partir la voiture en vrille des la reprise, 21/10)
+                if (c.Dt != null) { int nf = SanFields(c); if (nf > 0) Log.Warn("voiture " + c.Key + " reprise : " + nf + " valeur(s) non finie(s) des roues ou de la transmission corrigee(s) avant la physique"); }
                 c.Body.isKinematic = c.WasKinematic;
                 if (!c.Body.isKinematic)
                 {
@@ -1880,7 +1883,7 @@ namespace MWCoop
         {
             float now = Time.realtimeSinceStartup;
             if (now >= c.GuardUntil) { c.GuardUntil = 0f; return; }
-            if (c.Index == LocalDriving || c.RemoteDriver >= 0 || c.Index == owned || Remote(c, now)) { c.GuardUntil = 0f; return; }
+            if (c.Index == LocalDriving || c.RemoteDriver >= 0 || Remote(c, now)) { c.GuardUntil = 0f; return; }   // (moteur tournant a nous sans conducteur : garde aussi)
             Rigidbody b = c.Body;
             Vector3 v = b.velocity, w = b.angularVelocity;
             float lim = Mathf.Max(6f, c.SettleVel.magnitude * 1.5f + 3f), wlim = Mathf.Max(6f, c.SettleAng.magnitude * 1.5f + 3f);
@@ -2262,7 +2265,10 @@ namespace MWCoop
             bool first = nanSeen.Add(c.Key + ":pneu@" + w.name);
             if (first) Log.Warn("voitures : " + c.Key + " pneu " + w.name + " : pression " + w.pressure + " (optimale " + w.optimalPressure + "), masse " + w.mass + ", rayon " + w.radius + ", jante " + w.rimRadius + ", largeur " + w.width);
             if (!Finite(w.optimalPressure) || w.optimalPressure <= 0f) w.optimalPressure = 200f;
-            if (!Finite(w.pressure) || w.pressure < 0f) w.pressure = w.optimalPressure;
+            // (pression 0 avec optimale 0 : donnees de roue vides -- mods « Country garage », « CorrisAssists » ; Wheel.SetTireStiffness du jeu
+            // donne alors une rigidite nulle, la physique diverge a chaque pas et la remise ne tenait pas : CORRIS en vrille a 67 rad/s a sa
+            // reprise par l'hote, « envolee jusqu'a la maison des parents », 21/10. Pression remise a l'optimale.)
+            if (!Finite(w.pressure) || w.pressure <= 0f) w.pressure = w.optimalPressure;
             if (!Finite(w.mass) || w.mass <= 0f) w.mass = 50f;
             if (!Finite(w.radius) || !Finite(w.rimRadius) || !Finite(w.width) || w.radius <= w.rimRadius || w.width <= 0f) return;   // (pas de calcul possible)
             try { w.SetTireStiffness(); } catch (System.Exception e) { if (first) Log.Warn("voitures : SetTireStiffness : " + e.Message); return; }
@@ -2275,6 +2281,36 @@ namespace MWCoop
             }
             if (first) Log.Warn("voitures : " + c.Key + " pneu " + w.name + " recalcule" + (still > 0 ? ", " + still + " valeur(s) encore non finie(s) : relevees gardees" : ""));
         }
+        // Champs flottants non finis des roues et de la transmission d'une voiture (Drivetrain, Wheel...) : remis a la derniere
+        // valeur finie relevee (sinon 0, 800 pour le regime) ; pneus recalcules. Rend le nombre de corrections.
+        static int SanFields(Car c)
+        {
+            int fixedF = 0;
+            if (c.SanComps == null || System.Array.IndexOf(c.SanComps, null) >= 0) SanSnapshot(c);
+            for (int ci = 0; c.SanComps != null && ci < c.SanComps.Length; ci++)
+            {
+                MonoBehaviour m = c.SanComps[ci];
+                if (m == null) continue;
+                System.Reflection.FieldInfo[] fs = FloatFields(m);
+                float[] good = c.SanGood != null && ci < c.SanGood.Length ? c.SanGood[ci] : null;
+                bool tire = false;
+                for (int k = 0; k < fs.Length; k++)
+                {
+                    System.Reflection.FieldInfo fi = fs[k];
+                    float v = (float)fi.GetValue(m);
+                    if (Finite(v)) continue;
+                    // (valeur relevee au chargement plutot que 0 : amortissement des pneus a 0 = CORRIS qui s'envole, 17-18/10)
+                    float to = fi.Name == "rpm" ? 800f : good != null && k < good.Length && Finite(good[k]) ? good[k] : 0f;
+                    fi.SetValue(m, to); fixedF++;
+                    if (m is Wheel && (fi.Name == "tireDampingRate" || fi.Name == "criticalDamping" || fi.Name.EndsWith("TireStiffness"))) tire = true;
+                    string fk = c.Key + ":" + m.GetType().Name + "." + fi.Name + "@" + m.name;
+                    if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " " + m.GetType().Name + "." + fi.Name + " (" + m.name + ") = " + v + ", remis a " + to);
+                }
+                if (tire) FixTire(c, (Wheel)m, fs, good);
+            }
+            return fixedF;
+        }
+
         static void Sanitize()
         {
             // ([Test] NaNVoiture=<voiture> : de 40 a 41 s de jeu, sa vitesse mise a NaN a chaque image -- source qui revient)
@@ -2303,32 +2339,13 @@ namespace MWCoop
                 // (champs des roues et de la transmission : seulement la voiture conduite ici, celle reprise en marche, ou deja abimee)
                 // (voiture conduite : 4 fois par seconde -- a chaque image avant, composants recherches et champs lus par
                 // reflexion : 0,5-1 ms par image au volant)
-                bool deep = c == hotCar || bad || fixedF > 0 || c.Index == LocalDriving && now0 >= c.SanNext;
+                // (voiture garee ou moteur tournant sans conducteur : toutes les 2 s -- des roues NaN d'une voiture garee faisaient
+                // exploser sa reprise, 21/10)
+                bool deep = c == hotCar || bad || fixedF > 0 || c.Index == LocalDriving && now0 >= c.SanNext || now0 >= c.SanSlow;
                 if (c.Dt != null && now0 >= c.SanRefresh) { c.SanRefresh = now0 + 5f; SanSnapshot(c); }   // (voiture vivante ici : ses dernieres valeurs finies)
                 if (!deep || c.Dt == null) { if (calm) { c.GoodPos = b.position; c.GoodRot = b.rotation; c.GoodSet = true; } if (!bad && fixedF == 0) continue; }
-                c.SanNext = now0 + 0.25f;
-                if (deep && c.Dt != null && (c.SanComps == null || System.Array.IndexOf(c.SanComps, null) >= 0)) SanSnapshot(c);
-                for (int ci = 0; deep && c.SanComps != null && ci < c.SanComps.Length; ci++)
-                {
-                    MonoBehaviour m = c.SanComps[ci];
-                    if (m == null) continue;
-                    System.Reflection.FieldInfo[] fs = FloatFields(m);
-                    float[] good = c.SanGood != null && ci < c.SanGood.Length ? c.SanGood[ci] : null;
-                    bool tire = false;
-                    for (int k = 0; k < fs.Length; k++)
-                    {
-                        System.Reflection.FieldInfo fi = fs[k];
-                        float v = (float)fi.GetValue(m);
-                        if (Finite(v)) continue;
-                        // (valeur relevee au chargement plutot que 0 : amortissement des pneus a 0 = CORRIS qui s'envole, 17-18/10)
-                        float to = fi.Name == "rpm" ? 800f : good != null && k < good.Length && Finite(good[k]) ? good[k] : 0f;
-                        fi.SetValue(m, to); fixedF++;
-                        if (m is Wheel && (fi.Name == "tireDampingRate" || fi.Name == "criticalDamping" || fi.Name.EndsWith("TireStiffness"))) tire = true;
-                        string fk = c.Key + ":" + m.GetType().Name + "." + fi.Name + "@" + m.name;
-                        if (nanSeen.Add(fk) && nanSeen.Count < 60) Log.Warn("voitures : " + c.Key + " " + m.GetType().Name + "." + fi.Name + " (" + m.name + ") = " + v + ", remis a " + to);
-                    }
-                    if (tire) FixTire(c, (Wheel)m, fs, good);
-                }
+                c.SanNext = now0 + 0.25f; c.SanSlow = now0 + 2f;
+                if (deep && c.Dt != null) fixedF += SanFields(c);
                 if (bad)
                 {
                     // Remise a repetition (retour de Crowbangus, 14/10 : Sorbet rendue par l'invite contre la CORRIS que l'hote

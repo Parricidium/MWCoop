@@ -25,6 +25,11 @@ namespace MWCoop
         // Maillages echanges a l'usure ou au choc ("New" / "Damaged" sous une piece montee : bloc moteur, phares...) :
         // nom exact (un mot cle "new" prendrait n'importe quoi).
         static readonly HashSet<string> ShowNames = new HashSet<string> { "new", "damaged", "broken" };
+        static bool AncestorHas(Transform t, string word, int depth)
+        {
+            for (Transform p = t.parent; p != null && depth-- > 0; p = p.parent) if (p.name.ToLowerInvariant().Contains(word)) return true;
+            return false;
+        }
 
         class Item
         {
@@ -100,7 +105,7 @@ namespace MWCoop
                     int k; seen.TryGetValue(rel, out k); seen[rel] = k + 1;
                     var it = new Item { Key = rel + "#" + k, T = t, Pose = pose, Show = show, Pos = t.localPosition, Rot = t.localRotation, Active = t.gameObject.activeSelf,
                                         Pedal = n.Contains("pedal") || (n.StartsWith("pivot_") && t.parent != null && t.parent.name.ToLowerInvariant().Contains("pedal")),
-                                        Gear = pose && (n.Contains("gear") || (n == "pivot" && t.parent != null && t.parent.name.ToLowerInvariant().Contains("gear"))) };
+                                        Gear = pose && (n.Contains("gear") || AncestorHas(t, "gear", 3)) };   // (GIFU : GearLever/Pivot/Lever, c'est Lever qui bouge -- Menor, 21/10)
                     c.Items.Add(it);
                     c.ByKey[it.Key] = it;
                 }
