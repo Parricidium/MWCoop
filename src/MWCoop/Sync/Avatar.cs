@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using MWCoop.Net;
 using UnityEngine;
 
@@ -1135,6 +1135,20 @@ namespace MWCoop
                 if (ll != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", ll.position + lc.forward * lf - lc.up * ld - lc.right * 0.05f);
                 return;
             }
+            if (Game.Msc && !rear && vehicleT != null && Config.GetInt("Test", "SansSiege", 0) == 0)
+            {
+                // My Summer Car : pas de collisionneur de siege (SATSUMA : les sieges sont des pieces ; HAYOSIKO : banquette dans le
+                // maillage de la cabine), l'animation de conduite restait brute -- jambes a l'horizontale a travers l'avant, corps
+                // decale (capture d'un joueur dans la SATSUMA, 21/10 ; essai HAYOSIKO). Pas de montee : genoux plies, pieds au
+                // plancher devant les hanches. [Test] MscPieds (avance, m), MscChute (descente).
+                Transform mc = vehicleT;
+                seatFitted = true;
+                float mf = Config.GetFloat("Test", "MscPieds", 0.45f), md = Config.GetFloat("Test", "MscChute", 0.32f);
+                Transform mr = Bone("thig_right"), ml = Bone("thig_left");
+                if (mr != null && Bone("ankle_right") != null) Leg("thig_right", "knee_right", "ankle_right", mr.position + mc.forward * mf - mc.up * md + mc.right * 0.04f);
+                if (ml != null && Bone("ankle_left") != null) Leg("thig_left", "knee_left", "ankle_left", ml.position + mc.forward * mf - mc.up * md - mc.right * 0.04f);
+                return;
+            }
             // Passager d'une voiture ordinaire (SORBET, CORRIS, VAZ, addons, MSC...) : jambes repliees, pieds au plancher devant le
             // siege et un peu vers le milieu -- avec la pose de conduite (jambes allongees vers les pedales) la jambe exterieure
             // traversait la portiere (Menor, 14/10 : « plier la jambe pour qu'elle ne croise pas la carrosserie »).
@@ -1150,6 +1164,7 @@ namespace MWCoop
                 float pf = Config.GetFloat("Test", "PassagerPieds", 0.45f), pd = Config.GetFloat("Test", "PassagerChute", 0.18f), ps = Config.GetFloat("Test", "PassagerSerre", 0.08f);
                 bool rail = carName.StartsWith("FLATBED");
                 if (rail) { pf = Config.GetFloat("Test", "RidellePieds", 0.22f); pd = Config.GetFloat("Test", "RidelleChute", 0.62f); ps = 0f; }   // (ridelle de la remorque : assis sur le bord, jambes pendantes)
+                if (Game.Msc && !rail) { pf = Config.GetFloat("Test", "MscPieds", 0.45f); pd = Config.GetFloat("Test", "MscChute", 0.32f); }   // (My Summer Car : plancher plus bas, genoux au menton sinon -- essai HAYOSIKO, 21/10)
                 // (dans le repere de l'avatar, pas de la voiture : sur une ridelle il regarde l'interieur de la remorque)
                 Transform av = Root.transform;
                 float side = rail ? 0f : car.InverseTransformPoint(pelvis.position).x >= 0f ? 1f : -1f;   // (cote de la voiture ou il est assis : les pieds vont vers le milieu)

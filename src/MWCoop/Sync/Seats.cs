@@ -220,7 +220,10 @@ namespace MWCoop
         }
 
         // Yeux du conducteur par rapport a DriverHeadPivot (repere voiture), mesures au volant de la SORBET.
-        static readonly Vector3 EyeFromPivot = new Vector3(0f, -0.03f, 0.27f);
+        // (My Summer Car : mesure au volant de la HAYOSIKO, 21/10 -- camera a 10 cm devant le pivot seulement, 7 cm vers le
+        // milieu ; avec les 27 cm de la SORBET le conducteur distant etait trop en avant, capture d'un joueur dans la SATSUMA)
+        static readonly Vector3 EyeFromPivotMwc = new Vector3(0f, -0.03f, 0.27f), EyeFromPivotMsc = new Vector3(0.07f, 0.03f, 0.10f);
+        static Vector3 EyeFromPivot { get { return Game.Msc ? EyeFromPivotMsc : EyeFromPivotMwc; } }
 
         // Yeux du conducteur au repos (repere de la voiture 'car'), d'apres son DriverHeadPivot ; faux sans pivot.
         static readonly Dictionary<Transform, Transform> headPivots = new Dictionary<Transform, Transform>();
