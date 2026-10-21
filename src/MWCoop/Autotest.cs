@@ -375,8 +375,97 @@ namespace MWCoop
             if (t > 55f && gpStep == 4) { gpStep = 5; Log.Info("autotest : mscguepe, apres : " + GuepeState()); CaptureSoon("msc-guepe-apres", 0.2f); }
         }
 
+        // Camera d'essai et regard (CameraAvatar, CameraVoiture, Regarder, RegarderPos) : MWC et MSC.
+        static void CameraKnobs(float t)
+        {
+            // Captures : Regarder=1, la camera vise l'avatar le plus proche ; Regarder=2, le milieu du groupe d'avatars
+            // (photos a 3-4 joueurs) ; RegarderPos=x,y,z (sans Regarder) : le joueur se tourne vers ce point (pose).
+            // [Test] CameraAvatar=dx,dy,dz : une camera d'essai (par-dessus celle du joueur) a ce decalage (m, repere du monde)
+            // de l'avatar distant le plus proche, qui le vise : captures d'un avatar ou qu'il soit (lit, voiture...).
+            string ca = Config.Get("Test", "CameraAvatar", "");
+            if (ca.Length > 0)
+            {
+                string[] c = ca.Split(',');
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                float dx = 0, dy = 0, dz = 0;
+                if (c.Length >= 3) { float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out dx); float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out dy); float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out dz); }
+                Avatar near = null;
+                foreach (Avatar a in PlayerSync.Avatars) if (a.Root != null) { near = a; break; }
+                if (near != null)
+                {
+                    if (testCam == null)
+                    {
+                        testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>();
+                        testCam.depth = 100;
+                        testCam.nearClipPlane = 0.05f;
+                        testCam.fieldOfView = 60;
+                        // ([Test] CameraLumiere=1 : une lampe sur la camera d'essai -- captures de nuit, casque du 20/10)
+                        if (Config.GetInt("Test", "CameraLumiere", 0) != 0) { Light l = testCam.gameObject.AddComponent<Light>(); l.type = LightType.Point; l.range = 8f; l.intensity = 2.5f; }
+                    }
+                    float hh = float.Parse(Config.Get("Test", "CameraHauteur", "0.3"), System.Globalization.CultureInfo.InvariantCulture);
+                    bool local = Config.GetInt("Test", "CameraLocale", 0) != 0;   // (decalage dans le repere de l'avatar : en voiture, celui de la voiture)
+                    Transform ar = near.Root.transform;
+                    Vector3 target = local ? ar.TransformPoint(new Vector3(0f, hh, 0f)) : ar.position + Vector3.up * hh;
+                    testCam.transform.position = local ? ar.TransformPoint(new Vector3(dx, dy, dz)) : ar.position + new Vector3(dx, dy, dz);
+                    testCam.transform.LookAt(target);
+                }
+            }
+            // [Test] CameraVoiture=x,y,z,vx,vy,vz : camera d'essai dans le repere de [Test] TestVoiture, tournee vers (vx,vy,vz).
+            string cv = Config.Get("Test", "CameraVoiture", "");
+            if (cv.Length > 0)
+            {
+                string[] c = cv.Split(',');
+                Rigidbody vb = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET"));
+                if (c.Length >= 6 && vb != null)
+                {
+                    var ci = System.Globalization.CultureInfo.InvariantCulture;
+                    System.Func<int, float> F = i => float.Parse(c[i], ci);
+                    if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
+                    testCam.transform.position = vb.transform.TransformPoint(new Vector3(F(0), F(1), F(2)));
+                    testCam.transform.LookAt(vb.transform.TransformPoint(new Vector3(F(3), F(4), F(5))), vb.transform.up);
+                }
+            }
+            int look = Config.GetInt("Test", "Regarder", 0);
+            if (look == 2) LookAtGroup();
+            else if (look != 0) LookAtNearestAvatar();
+            else if (Config.Get("Test", "RegarderPos", "").Length > 0 && t > 9f) FacePoint(Config.Get("Test", "RegarderPos", ""));
+        }
+
+        // [Test] Autotest=conduite : MWC et MSC.
+        static void Conduite(float t)
+        {
+                // Au volant de [Test] TestVoiture a 15 s, puis le vehicule est pousse en avant (8 m/s) 12 s.
+                string car = Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)");
+                float enterAt = Config.GetFloat("Test", "EntreeA", 15f);
+                if (t > enterAt && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
+                if (t > enterAt + 7f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
+                Rigidbody b = VehicleSync.Body(car);
+                float push0 = Config.GetFloat("Test", "PousseDebut", 25f), push1 = Config.GetFloat("Test", "PousseFin", 37f);
+                VehicleSync.TestEngine(t > push0 && t < push1 ? 2000f : -1f, 0.6f);
+                if (t > 24f && step == 2) { step = 3; Log.Info("autotest : moteur " + VehicleSync.TestSounds(car, true)); }
+                if (t > 23f && Time.frameCount % 120 == 0 && t < 30f) Log.Info("autotest : yeux " + Seats.DriverEyes(car.Split('(')[0]));
+                if (t > 55f && step == 3 && Config.GetInt("Test", "TestSortie", 0) != 0) { step = 4; Log.Info("autotest : sortie -> " + VehicleSync.TestExit(car)); }
+                if (t > 56f && step == 4) { step = 5; Log.Info("autotest : apres sortie -> " + VehicleSync.TestExit(car)); }
+                if (b != null && t > push0 && t < push1) { Vector3 f = b.transform.forward; f.y = 0; float turn = Config.GetFloat("Test", "PousseVirage", 0f); if (turn != 0f) b.angularVelocity = new Vector3(b.angularVelocity.x, turn, b.angularVelocity.z); b.velocity = f.normalized * Config.GetFloat("Test", "PousseVitesse", 8f) + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
+                if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + " rot " + b.rotation.eulerAngles.ToString("F0") + ", cinematique " + b.isKinematic);
+                if (b != null && t > 20f && !b.isKinematic)
+                {
+                    // Envol ? vitesse verticale et rotation maximales de la voiture conduite.
+                    if (b.angularVelocity.magnitude > maxRot) { maxRot = b.angularVelocity.magnitude; if (maxRot > 1f) Log.Info("autotest : rotation max " + maxRot.ToString("F2") + " rad/s"); }
+                    if (b.velocity.y > maxUp) { maxUp = b.velocity.y; Log.Info("autotest : vitesse verticale max " + maxUp.ToString("F2") + " m/s, rotation " + b.angularVelocity.magnitude.ToString("F2") + " rad/s en " + b.position.ToString("F1")); }
+                }
+        }
+
         static void MscTest(string mode, float t)
         {
+            // Essais communs aux deux jeux (positions des joueurs dans les vehicules sur MSC, 21/10) : camera d'essai, conduite,
+            // passager, sonde des places.
+            CameraKnobs(t);
+            if (mode == "conduite") { Conduite(t); return; }
+            if (mode == "passager" && t > 30f && step == 0) { step = 1; Log.Info("autotest : " + Seats.TestSit(Config.Get("Test", "TestVoiture", "SATSUMA"), Config.GetInt("Test", "TestPlace", 0))); }
+            if (mode == "passager") return;
+            if (mode == "sondeplaces" && t > 30f && !done) { done = true; Log.Info("autotest : places" + Seats.ProbeSeats(Config.Get("Test", "TestVoiture", "SATSUMA"))); }
+            if (mode == "sondeplaces") return;
             if (mode == "mscguepe") { MscGuepe(t); return; }
             if (mode == "mscporte") { MscPorte(t); return; }
             if (mode == "mscreste") { MscReste(t); return; }
@@ -982,29 +1071,7 @@ namespace MWCoop
                 if (cf != null && t > 34f && step == 1) { step = 2; Game.SetState(cf, "Move down 2"); Log.Info("autotest : accroupi 2"); }
                 if (cf != null && t > 46f && step == 2) { step = 3; Game.SetState(cf, "Move up"); Log.Info("autotest : debout"); }
             }
-            if (mode == "conduite")
-            {
-                // Au volant de [Test] TestVoiture a 15 s, puis le vehicule est pousse en avant (8 m/s) 12 s.
-                string car = Config.Get("Test", "TestVoiture", "KEKMET(350-400psi)");
-                float enterAt = Config.GetFloat("Test", "EntreeA", 15f);
-                if (t > enterAt && step == 0) { step = 1; Log.Info("autotest : " + VehicleSync.TestEnter(car, false)); }
-                if (t > enterAt + 7f && step == 1) { step = 2; Log.Info("autotest : volant -> " + VehicleSync.TestEnter(car, true)); }
-                Rigidbody b = VehicleSync.Body(car);
-                float push0 = Config.GetFloat("Test", "PousseDebut", 25f), push1 = Config.GetFloat("Test", "PousseFin", 37f);
-                VehicleSync.TestEngine(t > push0 && t < push1 ? 2000f : -1f, 0.6f);
-                if (t > 24f && step == 2) { step = 3; Log.Info("autotest : moteur " + VehicleSync.TestSounds(car, true)); }
-                if (t > 23f && Time.frameCount % 120 == 0 && t < 30f) Log.Info("autotest : yeux " + Seats.DriverEyes(car.Split('(')[0]));
-                if (t > 55f && step == 3 && Config.GetInt("Test", "TestSortie", 0) != 0) { step = 4; Log.Info("autotest : sortie -> " + VehicleSync.TestExit(car)); }
-                if (t > 56f && step == 4) { step = 5; Log.Info("autotest : apres sortie -> " + VehicleSync.TestExit(car)); }
-                if (b != null && t > push0 && t < push1) { Vector3 f = b.transform.forward; f.y = 0; float turn = Config.GetFloat("Test", "PousseVirage", 0f); if (turn != 0f) b.angularVelocity = new Vector3(b.angularVelocity.x, turn, b.angularVelocity.z); b.velocity = f.normalized * Config.GetFloat("Test", "PousseVitesse", 8f) + Vector3.up * Mathf.Min(b.velocity.y, 0f); }
-                if (b != null && t > 20f && Time.frameCount % 150 == 0) Log.Info("autotest : " + car + " en " + b.position.ToString("F1") + " rot " + b.rotation.eulerAngles.ToString("F0") + ", cinematique " + b.isKinematic);
-                if (b != null && t > 20f && !b.isKinematic)
-                {
-                    // Envol ? vitesse verticale et rotation maximales de la voiture conduite.
-                    if (b.angularVelocity.magnitude > maxRot) { maxRot = b.angularVelocity.magnitude; if (maxRot > 1f) Log.Info("autotest : rotation max " + maxRot.ToString("F2") + " rad/s"); }
-                    if (b.velocity.y > maxUp) { maxUp = b.velocity.y; Log.Info("autotest : vitesse verticale max " + maxUp.ToString("F2") + " m/s, rotation " + b.angularVelocity.magnitude.ToString("F2") + " rad/s en " + b.position.ToString("F1")); }
-                }
-            }
+            if (mode == "conduite") Conduite(t);
             // [Test] Autotest=graphismes : etat des reglages a 25 s (journal).
             if (mode == "graphismes" && t > 25f && step == 0) { step = 1; Log.Info("autotest : graphismes " + Gfx.Describe()); }
             if (mode == "graphismes" && t > 28f && step == 1) { step = 2; Gfx.ApplyPreset(Config.GetInt("Test", "TestPrereglage", 3)); }
@@ -1718,57 +1785,7 @@ namespace MWCoop
             if (mode == "axes" && ((t > 30f && step == 0) || (t > 60f && step == 1))) { step++; Log.Info("autotest : axes " + VehicleSync.AxesState()); }
             if (mode == "audit" && t > 70f && step == 0) { step = 1; Log.Info("autotest : clic " + Audit.TestAct()); }
             if (mode == "audit" && t > 75f && step == 1) { step = 2; Log.Info("autotest : " + Audit.State()); }
-            // Captures : Regarder=1, la camera vise l'avatar le plus proche ; Regarder=2, le milieu du groupe d'avatars
-            // (photos a 3-4 joueurs) ; RegarderPos=x,y,z (sans Regarder) : le joueur se tourne vers ce point (pose).
-            // [Test] CameraAvatar=dx,dy,dz : une camera d'essai (par-dessus celle du joueur) a ce decalage (m, repere du monde)
-            // de l'avatar distant le plus proche, qui le vise : captures d'un avatar ou qu'il soit (lit, voiture...).
-            string ca = Config.Get("Test", "CameraAvatar", "");
-            if (ca.Length > 0)
-            {
-                string[] c = ca.Split(',');
-                var ci = System.Globalization.CultureInfo.InvariantCulture;
-                float dx = 0, dy = 0, dz = 0;
-                if (c.Length >= 3) { float.TryParse(c[0], System.Globalization.NumberStyles.Float, ci, out dx); float.TryParse(c[1], System.Globalization.NumberStyles.Float, ci, out dy); float.TryParse(c[2], System.Globalization.NumberStyles.Float, ci, out dz); }
-                Avatar near = null;
-                foreach (Avatar a in PlayerSync.Avatars) if (a.Root != null) { near = a; break; }
-                if (near != null)
-                {
-                    if (testCam == null)
-                    {
-                        testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>();
-                        testCam.depth = 100;
-                        testCam.nearClipPlane = 0.05f;
-                        testCam.fieldOfView = 60;
-                        // ([Test] CameraLumiere=1 : une lampe sur la camera d'essai -- captures de nuit, casque du 20/10)
-                        if (Config.GetInt("Test", "CameraLumiere", 0) != 0) { Light l = testCam.gameObject.AddComponent<Light>(); l.type = LightType.Point; l.range = 8f; l.intensity = 2.5f; }
-                    }
-                    float hh = float.Parse(Config.Get("Test", "CameraHauteur", "0.3"), System.Globalization.CultureInfo.InvariantCulture);
-                    bool local = Config.GetInt("Test", "CameraLocale", 0) != 0;   // (decalage dans le repere de l'avatar : en voiture, celui de la voiture)
-                    Transform ar = near.Root.transform;
-                    Vector3 target = local ? ar.TransformPoint(new Vector3(0f, hh, 0f)) : ar.position + Vector3.up * hh;
-                    testCam.transform.position = local ? ar.TransformPoint(new Vector3(dx, dy, dz)) : ar.position + new Vector3(dx, dy, dz);
-                    testCam.transform.LookAt(target);
-                }
-            }
-            // [Test] CameraVoiture=x,y,z,vx,vy,vz : camera d'essai dans le repere de [Test] TestVoiture, tournee vers (vx,vy,vz).
-            string cv = Config.Get("Test", "CameraVoiture", "");
-            if (cv.Length > 0)
-            {
-                string[] c = cv.Split(',');
-                Rigidbody vb = VehicleSync.Body(Config.Get("Test", "TestVoiture", "SORBET"));
-                if (c.Length >= 6 && vb != null)
-                {
-                    var ci = System.Globalization.CultureInfo.InvariantCulture;
-                    System.Func<int, float> F = i => float.Parse(c[i], ci);
-                    if (testCam == null) { testCam = new GameObject("MWCoop-CameraEssai").AddComponent<Camera>(); testCam.depth = 100; testCam.nearClipPlane = 0.03f; testCam.fieldOfView = 70; }
-                    testCam.transform.position = vb.transform.TransformPoint(new Vector3(F(0), F(1), F(2)));
-                    testCam.transform.LookAt(vb.transform.TransformPoint(new Vector3(F(3), F(4), F(5))), vb.transform.up);
-                }
-            }
-            int look = Config.GetInt("Test", "Regarder", 0);
-            if (look == 2) LookAtGroup();
-            else if (look != 0) LookAtNearestAvatar();
-            else if (Config.Get("Test", "RegarderPos", "").Length > 0 && t > 9f) FacePoint(Config.Get("Test", "RegarderPos", ""));
+            CameraKnobs(t);
             if (mode == "cd") TestCd(t);
             if (mode == "prise") TestPlug(t);
             if (mode == "paie") TestPay(t);

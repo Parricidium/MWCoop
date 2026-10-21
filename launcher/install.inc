@@ -151,6 +151,9 @@ static void DesktopShortcut(const std::wstring &target, const std::wstring &old)
 static bool InstallAtStartup()
 {
     if (RunningFromHome() || IsWine() || LocalDir().empty()) return false;
+    // (instance d'essai du harnais -- [Test] ArrierePlan=1 dans son MWCoop\mwcoop.ini : jamais proposee ; la question
+    // s'etait affichee chez JD pour une copie du lanceur posee dans MWCoop-Joueur4, 21/10)
+    if (GetPrivateProfileIntW(L"Test", L"ArrierePlan", 0, (g_dir + L"MWCoop\mwcoop.ini").c_str()) != 0) { LaunchLog("installation dans AppData : pas pour une instance d'essai"); return false; }
     wchar_t ess[8] = L"";
     bool test = GetEnvironmentVariableW(L"MWCOOP_ESSAI_INSTALL", ess, 8) && ess[0] == L'1';
     std::wstring home = LocalDir();
