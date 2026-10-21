@@ -7,10 +7,11 @@
 # anglais ; une ligne par consigne). Mis en tete des notes ("A faire : ..." / "To do: ...") et en encadre
 # "What you need to do" dans l'annonce Discord.
 # -Merci : remerciement ajoute a l'annonce Discord (anglais), mentions <@id> comprises (la personne est notifiee).
+# -Ping : force la mention du role Update Pings dans l'annonce (sinon seulement a la premiere version d'une famille X.Y).
 # -Nightly (canal temporaire, demande de JD, 14/10) : version en developpement (ex. 0.96.0-nightly.1, branche refonte) ;
 # pre-release GitHub, paquet MWCoop-<version>.nightly (le meme zip sous un nom que les lanceurs d'avant 0.95.2 ne prennent
 # pas), branche courante poussee (pas main), PAS d'annonce Discord. Le lanceur ne la propose qu'en canal Nightly.
-param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '', [switch]$Nightly)
+param([Parameter(Mandatory = $true)][string]$Version, [switch]$Publier, [string]$Notes = '', [string]$AFaire = '', [string]$Merci = '', [switch]$Nightly, [switch]$Ping)
 if ($Nightly -ne ($Version -match 'nightly')) { throw "-Nightly va avec une version 'x.y.z-nightly.N' (et seulement elle)" }
 $root = Split-Path $PSScriptRoot
 $code = Get-Content "$root\src\MWCoop\Version.cs" -Raw
@@ -140,7 +141,13 @@ if ($Publier) {
                 title = "MWCoop $Version"; url = $url; color = 7912959; description = $desc
                 footer = @{ text = 'Update from the launcher: NEW VERSION - UPDATE' }
             }
-            $head = "<@&$($w[1].Trim())> **MWCoop $Version is out!**"
+            # Role Update Pings : seulement a la premiere version d'une famille X.Y (1.2, 1.3, 1.4...), pas aux X.Y.1, X.Y.2...
+            # (demande de JD, 21/10) ; -Ping force la mention. La famille est connue par les tags deja poses (v$Version exclu).
+            $xy = (($Version -split '\.')[0..1]) -join '.'
+            $family = @(git tag -l "v$xy.*" | Where-Object { $_.Trim() -and $_.Trim() -ne "v$Version" })
+            $big = $Ping -or ($family.Count -eq 0)
+            "Annonce Discord : " + $(if ($big) { "avec @Update Pings (premiere version $xy)" } else { "sans mention (famille $xy deja annoncee : $($family -join ', '))" })
+            $head = $(if ($big) { "<@&$($w[1].Trim())> " } else { '' }) + "**MWCoop $Version is out!**"
             if ($todoEn) {   # (consignes : encadre a part, et un mot dans le message)
                 if ($todoEn.Length -gt 1000) { $todoEn = $todoEn.Substring(0, 1000) + '...' }
                 $embed.fields = @(@{ name = "$([char]0x26A0)$([char]0xFE0F) What you need to do"; value = $todoEn })
