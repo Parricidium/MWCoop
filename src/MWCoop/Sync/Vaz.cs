@@ -362,7 +362,7 @@ namespace MWCoop
         // 50 s : l'hote la fait venir ; 60 s : il la rend ; 70 s : chacun note voiture partie. [Test] VazGarder=1 : pas rendue.
         static int testStep;
         static bool testMoved, placesDone, openDone, brakeDone, camShot, relDone;
-        static int tourShot = -1, braqueShot = -1;
+        static int tourShot = -1, braqueShot = -1; static bool rendusDone;
         static Camera testCam;
         static int entryStep;
 
@@ -590,6 +590,26 @@ namespace MWCoop
                         testCam.transform.LookAt(c.TransformPoint(new Vector3(float.Parse(cv[3], ci), float.Parse(cv[4], ci), float.Parse(cv[5], ci))), c.up);
                     }
                     if (k > tourShot) { tourShot = k; Autotest.CaptureSoon("vaz-tour-" + k, 0.6f); }
+                }
+            }
+            // [Test] VazRendus=x,y,z,r : a 33 s, rendus actifs dont la boite touche la sphere (x, y, z) de rayon r, repere de la
+            // voiture (trait blanc au pied du pare-brise de la Sport Quattro, JD 21/10)
+            if (host && testStep == 2 && t > 33f && !rendusDone && Config.Get("Test", "VazRendus", "") != "")
+            {
+                rendusDone = true;
+                Transform c = CarOf(Me);
+                string[] rv = Config.Get("Test", "VazRendus", "").Split(',');
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+                if (c != null && rv.Length >= 4)
+                {
+                    Vector3 pw = c.TransformPoint(new Vector3(float.Parse(rv[0], ci), float.Parse(rv[1], ci), float.Parse(rv[2], ci)));
+                    float rr = float.Parse(rv[3], ci);
+                    foreach (Renderer rd in Object.FindObjectsOfType<Renderer>())
+                    {
+                        if (!rd.enabled || !rd.gameObject.activeInHierarchy) continue;
+                        if (rd.bounds.SqrDistance(pw) > rr * rr) continue;
+                        Log.Info("autotest vaz : rendu " + Recon.Path(rd.transform) + " (" + rd.GetType().Name + ", " + (rd.sharedMaterial != null ? rd.sharedMaterial.name + " / " + rd.sharedMaterial.shader.name : "sans matiere") + ") boite " + rd.bounds.size.ToString("F2"));
+                    }
                 }
             }
             // [Test] VazBraquer=1 : direction imposee (AxisCarController steerInput / steering) a 0,5 puis 1 puis -1 (deux secondes
