@@ -540,3 +540,4 @@ WED32	Water: a body of water to place and stretch (Move, Scale).
 WED33	Textures: in the properties, Change — a game texture or your own image (PNG, JPG…), on the whole object or one of its materials; double-click an imported model to texture just one face.
 WED34	Compile makes a small .mwcmap file: only your models, roads and images. Game copies and game textures are rebuilt from each player's game: no game file is shared.
 WED35	Objects, roads, water, textures, co-op
+VZW1	The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.

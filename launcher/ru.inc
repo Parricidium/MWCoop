@@ -1819,6 +1819,10 @@ static const wchar_t *const kRu[][2] = {
     { L"Extension cars: copy an add-on's folder into the add-ons folder. In game, take them with F10 (Cars tab).", L"Машины-дополнения: скопируй папку дополнения в папку дополнений. В игре их берут через F10 (вкладка «Машины»)." },
     { L"Copy an add-on's folder into the add-ons folder: it will show up here.", L"Скопируй папку дополнения в папку дополнений — она появится здесь." },
     { L"Help", L"Помощь" },
+    { L"Built in", L"Встроена" },
+    { L"into the mod: everyone has it", L"в мод: она есть у всех" },
+    { L"Add-ons in the sidebar", L"Дополнения в боковой панели" },
+    { L"Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).", L"Под «Моды»: машины-дополнения и VAZ, у каждой своя карточка и своя ливрея (шаблон, твоя картинка)." },
     { L"MWCoop goes into the game folder, next to mywintercar.exe. The launcher (MWCoop.exe) does the rest: it installs the mod, updates it and starts the game.", L"MWCoop ставится в папку игры, рядом с mywintercar.exe. Лаунчер (MWCoop.exe) делает остальное: устанавливает мод, обновляет его и запускает игру." },
     { L"Install in 4 steps", L"Установка в 4 шага" },
     { L"In Steam: right-click My Winter Car > Manage > Browse local files. The game folder opens.", L"В Steam: ПКМ по My Winter Car > Управление > Просмотреть локальные файлы. Откроется папка игры." },
@@ -2537,4 +2541,5 @@ static const wchar_t *const kRu[][2] = {
     { L"Open the add-ons", L"Открыть дополнения" },
     { L"Extension cars, custom livery", L"Машины-дополнения, своя ливрея" },
     { L"Add-ons (other cars)", L"Дополнения (другие машины)" },
+    { L"The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery.", L"VAZ-2108, которая идёт вместе с модом, тоже имеет карточку во вкладке «Дополнения» (ярлык «Дополнения» в боковой панели, под «Моды»): тот же шаблон, та же ливрея." },
 };

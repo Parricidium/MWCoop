@@ -637,6 +637,8 @@ static const WikiBlock kW_Addons[] = {   // (1.5.1, JD : comment installer une v
             L"My image…: choose your image. In use: yes / no goes back to the colour and number without losing the image; Remove deletes it." },
     { WB_B, L"En partie, ta livrée est envoyée aux autres joueurs : tout le monde la voit.",
             L"In game, your livery is sent to the other players: everyone sees it." },
+    { WB_B, L"La VAZ-2108, livrée avec le mod, a aussi sa carte dans l'onglet Addons (raccourci Addons de la barre, sous Mods) : même gabarit, même livrée.",
+            L"The VAZ-2108, which ships with the mod, also has its card in the Add-ons tab (Add-ons shortcut in the sidebar, under Mods): same template, same livery." },
     { WB_GO, L"Ouvrir les addons",
             L"Open the add-ons", 2000 },
 };

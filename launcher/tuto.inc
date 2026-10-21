@@ -115,6 +115,8 @@ static const TutoStep kTuto[] = {
     // 1.2.0 (20/10) : page OUTILS, l'editeur de carte (51)
     { L"Outils", L"La clé en haut à droite, à gauche de l'étoile : des programmes à part. Le premier, l'éditeur de carte : un clic pour le télécharger, un autre pour le lancer, sur My Summer Car ou My Winter Car.",
       L"Tools", L"The wrench at the top right, left of the star: separate programs. The first one, the map editor: one click to download it, another to launch it, on My Summer Car or My Winter Car.", "1.2.0" },
+    { L"Addons dans la barre", L"Sous Mods : les voitures addons et la VAZ, chacune avec sa carte et sa livrée (gabarit, ton image).",
+      L"Add-ons in the sidebar", L"Under Mods: the add-on cars and the VAZ, each with its card and its livery (template, your image).", "1.6.6" },
     { L"C'est parti !", L"Bon jeu à plusieurs en Finlande. Et si quelque chose ne va pas : les journaux, et le Discord.",
       L"Let's go!", L"Have fun together in Finland. And if something goes wrong: the logs, and the Discord.", "0.42.0" },
 };

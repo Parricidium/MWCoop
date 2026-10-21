@@ -743,7 +743,7 @@ static void DrawPaintView(Graphics &g, RectF card)
 // la CORRIS). Sans livree, la voiture est comme la VAZ (couleur du joueur + numero) ; avec, l'image du joueur
 // (%LOCALAPPDATA%\MWCoop\<cle>-livree.jpg, JPEG 2048 x 2048 de 2,1 Mo au plus : le mod l'envoie aux autres joueurs,
 // EvoLivery) ; [Coop] EvoLivree (cle evo3) ou Livree_<cle> = perso.
-struct Addon { std::wstring key, dir, name, nameShort, desc, descEn; bool livery = false; };
+struct Addon { std::wstring key, dir, name, nameShort, desc, descEn; bool livery = false; bool builtin = false; };   // (builtin : la VAZ, livree avec le mod)
 static std::vector<Addon> g_addonList;
 static ULONGLONG g_addonScanT;
 static int g_addonSel = -1;          // carte ouverte (-1 : la liste)
@@ -754,6 +754,11 @@ static std::wstring g_addonThumbOf;
 // Dossier des addons : <jeu>\MWCoop\addons (1.5.1, JD : « un raccourci pour ouvrir le dossier addons ») ; ceux poses avant
 // directement dans MWCoop\<cle> (1.5.0) restent lus.
 static std::wstring AddonsRoot() { return g_modRoot + L"MWCoop\\addons\\"; }
+// Raccourci de la barre (ui.inc, TAB_ADDONS) et etat de l'onglet.
+static void GoPage(int p);   // (ui.inc, inclus apres)
+static bool AddonsOn() { return g_addonsTab; }
+static void AddonsLeave() { g_addonsTab = false; }
+static void AddonsGo() { if (g_tab != TAB_CAR) GoPage(TAB_CAR); g_addonsTab = true; g_addonSel = -1; g_addonScanT = 0; }
 static void WikiOpenAddons();   // (launcher.cpp : article Les addons du GUIDE)
 static void AddonsOpenDir()
 {
@@ -804,6 +809,16 @@ static void AddonsScan()
         }
     }
     std::sort(v.begin(), v.end(), [](const Addon &x, const Addon &y) { return x.name < y.name; });
+    // La VAZ-2108, livree avec le mod (MWCoop\vaz, jamais dans addons\) : une carte comme les autres, avec sa livree (JD, 21/10 :
+    // « la VAZ reste compilee avec le mod, mais donne la possibilite de faire une livree »). Toujours en tete.
+    if (!g_gameDir.empty() && !CarMsc()) {
+        std::wstring vd = g_modRoot + L"MWCoop\\vaz\\";
+        if (FileExists(vd + L"carrosserie.p205")) {
+            Addon a; a.key = L"vaz"; a.dir = vd; a.name = L"VAZ-2108"; a.nameShort = L"VAZ"; a.livery = true; a.builtin = true;
+            a.desc = L"Livrée avec le mod · la voiture de tout le monde · seize couleurs"; a.descEn = L"Ships with the mod · everyone's car · sixteen colours";
+            v.insert(v.begin(), a);
+        }
+    }
     g_addonList = v;
     if (g_addonSel >= (int)v.size()) g_addonSel = -1;
 }
@@ -1024,7 +1039,8 @@ static void DrawAddonView(Graphics &g, const Addon &a)
         { T(L"En jeu", L"In game"), T(L"F10 › Voitures", L"F10 › Cars") },
         { T(L"Couleur", L"Colour"), T(L"unique par joueur", L"unique per player") },
         { T(L"Numéro", L"Number"), T(L"le sien, sur les portières", L"theirs, on the doors") },
-        { T(L"Sans l'addon", L"Without the add-on"), T(L"les autres voient une VAZ", L"others see a VAZ") },
+        { a.builtin ? T(L"Intégrée", L"Built in") : T(L"Sans l'addon", L"Without the add-on"),
+          a.builtin ? T(L"au mod : tout le monde l'a", L"into the mod: everyone has it") : T(L"les autres voient une VAZ", L"others see a VAZ") },
     };
     for (auto &rw : rows) {
         Text(g, rw[0], RectF(pn.X + 24, y, 120, 22), 12.5f, FontStyleBold, kInk, StringAlignmentNear);

@@ -295,7 +295,7 @@ namespace MWCoop
             if (kind == V_LIV && Session.IsHost)
             {
                 string h = r.Str(); Slot s;
-                if (wanted.TryGetValue(from.Id, out s) && s.Model != VazCar.ModelVaz && s.Livery != h) { s.Livery = h ?? ""; HostChanged("livree de " + NameOf(from.Id)); }
+                if (wanted.TryGetValue(from.Id, out s) && s.Livery != h) { s.Livery = h ?? ""; HostChanged("livree de " + NameOf(from.Id)); }
                 return;
             }
             if (kind == V_ROOF)
@@ -348,7 +348,7 @@ namespace MWCoop
         // arrivee -- EvoLivery.Generation).
         static void Livery(Rent r, Slot s)
         {
-            if (r.Car == null || r.Car.Car == null || r.Model == VazCar.ModelVaz) return;
+            if (r.Car == null || r.Car.Car == null) return;   // (la VAZ aussi, 21/10)
             string want = s.Livery ?? "";
             if ((r.Car.LiveryHash ?? "") == want && (want.Length == 0 || r.LiveryGen == EvoLivery.Generation)) return;
             Texture2D t = want.Length > 0 ? EvoLivery.Get(want) : null;
