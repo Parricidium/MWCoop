@@ -926,7 +926,8 @@ static DWORD WINAPI AddonDlThread(void *)
     bool ok = !c.key.empty() && HttpGet(c.url, NULL, tmp, true, &code, &g_addonDlProg) && (code == 0 || code == 200);
     if (!ok) why = c.key.empty() ? "plus au catalogue" : code ? "HTTP " + std::to_string(code) : "erreur " + std::to_string(g_httpErr);
     else if (!Unzip(tmp, stage, &why)) ok = false;
-    else if (!FileExists(stage + L"\\" + key + L"\\carrosserie.p205") || !FileExists(stage + L"\\" + key + L"\\addon.ini")) { ok = false; why = "paquet incomplet"; }
+    else if (!FileExists(stage + L"\\" + key + L"\\carrosserie.p205") || !FileExists(stage + L"\\" + key + L"\\addon.ini")
+             || !FileExists(stage + L"\\" + key + L"\\infos.txt")) { ok = false; why = "paquet incomplet"; }   // (infos.txt : roues, volant -- paquets du 21/10 sans lui)
     DeleteFileW(tmp.c_str());
     if (ok) {
         DeleteTree(dst);
