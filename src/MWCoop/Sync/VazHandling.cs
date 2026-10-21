@@ -177,7 +177,6 @@ namespace MWCoop
             }
             float helper = Helper();
             Component ax = car.GetComponent("Axles");
-            int n0 = n;
             if (ax != null)
                 foreach (string an in new[] { "frontAxle", "rearAxle" })
                 {
@@ -186,35 +185,14 @@ namespace MWCoop
                     if (axl == null) continue;
                     n += SetF(axl, "suspensionRate", spring) + SetF(axl, "suspensionTravel", SpringTravel) + SetF(axl, "bumpRate", damp) + SetF(axl, "reboundRate", damp);
                     if (evo && sp.AntiRoll > 0f) n += SetF(axl, "antiRollBarRate", sp.AntiRoll);
-                    if (evo && sp.Handbrake > 0f && an == "rearAxle") n += SetF(axl, "handbrakeFrictionTorque", sp.Handbrake);
                     if (an == "frontAxle") n += SetF(axl, "maxSteeringAngle", steer);
                 }
             Component cd = car.GetComponent("CarDynamics");
-            if (evo && sp.Handbrake > 0f && cd != null) n += SetF(cd, "frontRearHandBrakeBalance", 0f);   // (frein a main sur l'arriere seul)
-            // (CarDynamics ne recopie les essieux dans les roues qu'a son Start -- SetWheelsParams / SetBrakes, chaque pas
-            // seulement dans l'editeur : ressorts, antiroulis et frein a main d'un addon poses apres le demarrage restaient sans
-            // effet ; JD 21/10, « trop molle ») : recopie a chaque changement, addons seulement
-            if (evo && n > n0 && cd != null)
-            {
-                // (pressions : celles des roues si l'essieu n'en a pas -- une pression nulle faisait s'envoler la Rivett, 1.7.4)
-                Wheel[] ws0 = car.GetComponentsInChildren<Wheel>(true); Wheel w0 = ws0.Length > 0 ? ws0[0] : null;
-                foreach (string an in new[] { "frontAxle", "rearAxle" })
-                {
-                    FieldInfo af = ax != null ? ax.GetType().GetField(an) : null;
-                    object axl = af != null ? af.GetValue(ax) : null;
-                    if (axl == null || w0 == null) continue;
-                    FieldInfo tp = axl.GetType().GetField("tiresPressure"), op = axl.GetType().GetField("optimalTiresPressure");
-                    if (tp != null && (float)tp.GetValue(axl) < 1f) tp.SetValue(axl, w0.pressure > 1f ? w0.pressure : 200f);
-                    if (op != null && (float)op.GetValue(axl) < 1f) op.SetValue(axl, w0.optimalPressure > 1f ? w0.optimalPressure : 200f);
-                }
-                foreach (string mn in new[] { "SetWheelsParams", "SetBrakes" })
-                {
-                    MethodInfo mi = cd.GetType().GetMethod(mn, BindingFlags.Public | BindingFlags.Instance, null, System.Type.EmptyTypes, null);
-                    if (mi != null) mi.Invoke(cd, null);
-                }
-                Wheel wr = null; foreach (Wheel w in ws0) if (w.wheelPos.ToString().StartsWith("REAR")) wr = w;
-                if (wr != null) Log.Info("vaz : essieux recopies dans les roues : ressort " + wr.suspensionRate.ToString("F0") + ", amortisseur " + wr.bumpRate.ToString("F0") + ", frein a main arriere " + wr.handbrakeFrictionTorque.ToString("F0") + " N.m, pression " + wr.pressure.ToString("F0"));
-            }
+            // (frein a main d'un addon : pose directement sur les roues arriere -- 1.8.4 recopiait tous les essieux dans les roues
+            // par CarDynamics.SetWheelsParams : conduite « bizarre », retour de JD 21/10, revenu a la 1.8.3)
+            if (evo && sp.Handbrake > 0f)
+                foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true))
+                    if (w.wheelPos.ToString().StartsWith("REAR")) n += SetF(w, "handbrakeFrictionTorque", sp.Handbrake);
             foreach (Wheel w in car.GetComponentsInChildren<Wheel>(true)) { n += SetF(w, "wheelFrictionTorque", 11f) + SetF(w, "rotationalInertia", 0.753f); }
             if (cd != null) n += SetF(cd, "frontRearBrakeBalance", 0.6f);
             // retour de force coupe : le couple d'auto-alignement (Wheel.CalcAligningForce, qui ne sert qu'a lui) divise par la
