@@ -32,7 +32,7 @@ namespace MWCoop
     //    (DriverBelt/HandleUpPivot) cachee.
     public static class Seats
     {
-        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f; }
+        class Seat { public string Car; public Transform CarT; public int Index; public Vector3 Head; public float ZoneX = 0.38f, ZoneZ = 0.5f, MaxX = 9f; public bool Bed; public float Yaw; }   // (Bed : ridelle d'une remorque, on y monte depuis le sol ; Yaw : sens de la place, degres, 0 = l'avant)
         class Remote { public string Car; public int Index; public Vector3 Head; public bool Belt; }
         // Ceinture du passager avant d'une voiture : modeles du jeu (ceinture bouclee du conducteur, ceinture du
         // passager rangee), boucle (repere voiture), copie en miroir montree quand le passager est attache.
@@ -104,7 +104,44 @@ namespace MWCoop
                     }
                     continue;
                 }
-                if (n.StartsWith("KEKMET") || n.StartsWith("FLATBED")) continue;   // une seule place
+                if (n.StartsWith("FLATBED"))
+                {
+                    // Remorque (Menor, 14/10 : « s'asseoir dans la benne » ; JD, 21/10 : des places sur toute remorque, assis sur les
+                    // ridelles, tourne vers l'interieur, jambes pendantes -- son dessin) : quatre places sur le haut des ridelles, deux
+                    // par cote, sans ceinture. Ridelles : le plus gros maillage de la remorque (bornes dans son repere) ; yeux a 0,72 m
+                    // au-dessus du bord. On y monte depuis le sol a cote ou depuis le plateau (Bed : pieds jusqu'a 2,3 m sous les yeux).
+                    // [Test] RemorquePlaces=x,y,z : retrait du bord (vers l'interieur), hauteur des yeux, ecart avant/arriere.
+                    MeshFilter body = null; float bestVol = 0f;
+                    foreach (MeshFilter mf in rb.GetComponentsInChildren<MeshFilter>(true))
+                    {
+                        if (mf.sharedMesh == null || mf.name.ToLowerInvariant().Contains("wheel") || mf.name.ToLowerInvariant().Contains("tire")) continue;
+                        Vector3 bs = Vector3.Scale(mf.sharedMesh.bounds.size, mf.transform.lossyScale);
+                        float vol = bs.x * bs.y * bs.z;
+                        if (vol > bestVol) { bestVol = vol; body = mf; }
+                    }
+                    if (body != null)
+                    {
+                        Bounds mb = body.sharedMesh.bounds;
+                        Vector3 lo = new Vector3(1e9f, 1e9f, 1e9f), hi = -lo;
+                        for (int cj = 0; cj < 8; cj++)
+                        {
+                            Vector3 corner = mb.center + Vector3.Scale(mb.extents, new Vector3((cj & 1) != 0 ? 1f : -1f, (cj & 2) != 0 ? 1f : -1f, (cj & 4) != 0 ? 1f : -1f));
+                            Vector3 l = rb.transform.InverseTransformPoint(body.transform.TransformPoint(corner));
+                            lo = Vector3.Min(lo, l); hi = Vector3.Max(hi, l);
+                        }
+                        Vector3 k = ParseV(Config.Get("Test", "RemorquePlaces", ""), new Vector3(0.22f, 0.66f, 0.9f));
+                        float top = hi.y, halfW = (hi.x - lo.x) * 0.5f - k.x, zc = (lo.z + hi.z) * 0.5f;
+                        for (int i = 0; i < 4; i++)
+                        {
+                            float sx = (i % 2 == 0 ? -1f : 1f) * halfW;
+                            seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1 + i, Head = new Vector3(sx, top + k.y, zc + (i < 2 ? k.z : -k.z)),
+                                                 ZoneX = 1.4f, ZoneZ = 1.0f, MaxX = halfW + 1.4f, Bed = true, Yaw = sx < 0f ? 90f : -90f });   // (face a l'interieur)
+                        }
+                        if (seatLogs++ < 4) Log.Info("places passagers : ridelles de " + n + " (" + body.name + ") : bord a " + top.ToString("F2") + " m, largeur " + (hi.x - lo.x).ToString("F2") + ", 4 places");
+                    }
+                    continue;
+                }
+                if (n.StartsWith("KEKMET")) continue;   // une seule place
                 if (n == "BOAT" && Game.Msc)
                 {
                     // Barque de My Summer Car (joueurs du 20/10 : « pas de places pour les passagers ») : le pilote a l'arriere, pres du
@@ -144,9 +181,14 @@ namespace MWCoop
                 if (n.StartsWith("SORBET") || n.StartsWith("CORRIS") || n.StartsWith("BACHGLOTZ") || n.ToUpperInvariant().Contains("MACHTWAGEN") || n == "MITSUBISHI LANCER EVO III"
                     || Game.Msc && (n.StartsWith("SATSUMA") || n.StartsWith("FERNDALE") || n.StartsWith("RCO_RUSCKO")))
                 {
-                    // Banquette : 85 cm derriere, un peu plus haute.
-                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + 0.06f, d.z - 0.85f) });
-                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-d.x, d.y + 0.06f, d.z - 0.85f) });
+                    // Banquette : 85 cm derriere, un peu plus haute. SORBET : le toit descend a l'arriere, la tete du passager le
+                    // traversait (JD, 21/10) : 8 cm sous les yeux du conducteur ([Test] BanquetteSorbet, m).
+                    // (et 17 cm plus en avant : a 85 cm le buste rentrait dans la custode, le bras sortait par la tole -- capture du 21/10 ;
+                    // [Test] BanquetteSorbetRecul, m)
+                    float by = n.StartsWith("SORBET") ? Config.GetFloat("Test", "BanquetteSorbet", -0.08f) : 0.06f;
+                    float bz = n.StartsWith("SORBET") ? Config.GetFloat("Test", "BanquetteSorbetRecul", 0.68f) : 0.85f;
+                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 1, Head = new Vector3(d.x, d.y + by, d.z - bz) });
+                    seats.Add(new Seat { Car = n, CarT = rb.transform, Index = 2, Head = new Vector3(-d.x, d.y + by, d.z - bz) });
                 }
                 if (n.StartsWith("GIFU"))
                 {
@@ -162,6 +204,7 @@ namespace MWCoop
             Log.Info("places passagers : " + seats.Count);
         }
 
+        static int seatLogs;
         // Couchette de la GIFU par rapport aux yeux du conducteur : ecart entre les places (x), hauteur (y), recul (z). Coupe de
         // la cabine (essai sondeplaces) : couchette a 1,75 m (repere du camion), toit 2,60, paroi arriere z 1,9, yeux du
         // conducteur 2,05 / z 2,99. Dessous du toit a 2,42 : 67 cm seulement au-dessus de la couchette -> yeux juste sous le toit
@@ -350,7 +393,8 @@ namespace MWCoop
         // (retour de JD, 08/10 ; sol a -0,15, ancre a +0,10 : passait le seul seuil de -0,3). Couchette : dans la cabine (MaxX).
         static bool InSeatZone(Seat s, Vector3 p)
         {
-            if (p.y < Mathf.Max(-0.3f, s.Head.y - 1.6f) || p.y > s.Head.y || Mathf.Abs(p.x) > s.MaxX) return false;
+            float low = s.Bed ? s.Head.y - 2.3f : Mathf.Max(-0.3f, s.Head.y - 1.6f);   // (plateau : depuis le sol a cote de la remorque)
+            if (p.y < low || p.y > s.Head.y || Mathf.Abs(p.x) > s.MaxX) return false;
             return Mathf.Abs(p.x - s.Head.x) <= s.ZoneX && Mathf.Abs(p.z - (s.Head.z - 0.1f)) <= s.ZoneZ;
         }
 
@@ -428,7 +472,7 @@ namespace MWCoop
             pivot = new GameObject("MWCoop-SiegePassager").transform;
             pivot.parent = s.CarT;
             pivot.position = player.position;          // la ou il est : pas de teleportation
-            pivot.localRotation = Quaternion.identity;
+            pivot.localRotation = Quaternion.Euler(0f, s.Yaw, 0f);   // (sens de la place : l'avant, ou l'interieur pour une ridelle)
             // Comme l'automate Stopping du jeu (PlayerStop), mais tout de suite : moteur de deplacement et
             // commandes coupes AVANT de bouger le joueur -- sinon le CharacterMotor, une image encore actif
             // avec le controleur coupe, se croit en l'air et remonte le joueur de sa hauteur de marche (0,4 m).
@@ -997,6 +1041,14 @@ namespace MWCoop
         }
 
         public static void PlayerLeft(int id) { remote.Remove(id); driverBelt.Remove(id); }
+        // Sens de la place d'un passager distant (degres, repere de la voiture ; 0 : l'avant).
+        public static float RemoteSeatYaw(int id)
+        {
+            Remote r;
+            if (!remote.TryGetValue(id, out r)) return 0f;
+            foreach (Seat s in seats) if (s.Car == r.Car && s.Index == r.Index) return s.Yaw;
+            return 0f;
+        }
 
         // Avatar d'un autre joueur assis en passager : voiture locale et place de sa tete (repere voiture).
         public static bool RemoteSeat(int id, out Transform car, out Vector3 head, out string carName)

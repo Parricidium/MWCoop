@@ -8,13 +8,18 @@ namespace MWCoop
     // dite aux invites (@pvp, comme les triches). Le coup du jeu (poing, releve par Gestures) : 0,15 s apres, l'avatar d'un
     // autre joueur a pied juste devant (moins de 1,4 m, dans un couloir de 45 cm) est touche -- @coup a ce joueur. Celui qui
     // est touche recule un peu ; 5 coups en moins de 20 s : mort (« meurtre »), et la reapparition de MWCoop comme toute mort.
+    // Outils (Menor, 14/10 : « tuer avec la hache, le marteau... ») : le geste d'un outil tenu (HandTools : animation de l'outil qui
+    // part -- hache 1, masse 2, barre a mine 3) vaut un coup qui compte pour plusieurs (hache et masse 3, barre 2, poing 1) ; 5
+    // points en moins de 20 s : mort. Et le son de coup recu du jeu (StatusD/hit) chez tous, a l'endroit du joueur touche.
     public static class Pvp
     {
         const int HitsToKill = 5;
         const float HitWindow = 20f;
         static bool hostAllows;
         static float nextAnnounce, punchAt = -1f, lastHitAt = -100f;
-        static int hits;
+        static int hits, weapon;
+        static readonly string[] WeaponFr = { "poing", "hache", "masse", "barre a mine" }, WeaponEn = { "fist", "axe", "sledgehammer", "digging bar" };
+        static int Points(int w) { return w == 1 || w == 2 ? 3 : w == 3 ? 2 : 1; }
         static Vector3 push; static float pushUntil;
 
         public static bool Allowed { get { return Session.Active && (Session.IsHost ? Config.GetInt("Coop", "PvP", 0) != 0 : hostAllows); } }
@@ -40,7 +45,13 @@ namespace MWCoop
         // Gestures : le poing vient de partir ici.
         public static void OnLocalPunch()
         {
-            if (Allowed && PlayerSync.InGame && VehicleSync.LocalDriving < 0 && !Seats.Seated) punchAt = Time.realtimeSinceStartup + 0.15f;
+            if (Allowed && PlayerSync.InGame && VehicleSync.LocalDriving < 0 && !Seats.Seated) { weapon = 0; punchAt = Time.realtimeSinceStartup + 0.15f; }
+        }
+        // HandTools : l'animation de l'outil tenu vient de partir (hache 1, masse 2, barre a mine 3) ; le coup porte 0,35 s apres.
+        public static void OnLocalSwing(int tool)
+        {
+            if (tool < 1 || tool > 3) return;
+            if (Allowed && PlayerSync.InGame && VehicleSync.LocalDriving < 0 && !Seats.Seated) { weapon = tool; punchAt = Time.realtimeSinceStartup + 0.35f; }
         }
 
         static void TryHit()
@@ -65,8 +76,8 @@ namespace MWCoop
             if (best < 0) return;
             Vector3 dir = cam.forward; dir.y = 0f;
             dir = dir.sqrMagnitude > 1e-4f ? dir.normalized : Vector3.forward;
-            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@coup").U8(best).Vec(dir), true);
-            Log.Info("pvp : coup de poing sur #" + best + " (" + bd.ToString("F2") + " m)");
+            Session.SendAll(new NetWriter(Msg.Job).U8(Session.LocalId).Str("@coup").U8(best).Vec(dir).U8(weapon), true);
+            Log.Info("pvp : coup de " + WeaponFr[weapon] + " sur #" + best + " (" + bd.ToString("F2") + " m)");
         }
 
         // [Test] Autotest=pvp (hote avec [Coop] PvP=1) : a 30 s l'invite se pose 0,9 m devant l'hote, face a lui ; de 40 a 47 s
@@ -112,17 +123,44 @@ namespace MWCoop
         {
             int target = r.U8();
             Vector3 dir = r.Vec();
-            if (target != Session.LocalId || !Allowed || !PlayerSync.InGame || Respawn.Choosing) return;
+            int w = r.More ? r.U8() : 0;
+            if (w < 0 || w > 3) w = 0;
+            if (!Allowed || !PlayerSync.InGame) return;
+            // Son du coup recu (StatusD/hit, celui du jeu) chez tous, a l'endroit du joueur touche (Menor : « les sons de douleur de l'ami frappe »).
+            HitSound(target);
+            if (target != Session.LocalId || Respawn.Choosing) return;
             float now = Time.realtimeSinceStartup;
-            hits = now - lastHitAt > HitWindow ? 1 : hits + 1;
+            hits = (now - lastHitAt > HitWindow ? 0 : hits) + Points(w);
             lastHitAt = now;
-            push = dir * 1.2f; pushUntil = now + 0.15f;   // (~20 cm)
+            push = dir * (w > 0 ? 2.0f : 1.2f); pushUntil = now + 0.15f;   // (~20 cm, plus avec un outil)
             PlayerInfo from;
             string name = Session.Players.TryGetValue(who, out from) ? from.Name : "#" + who;
-            Log.Info("pvp : frappe par " + name + " (" + hits + "/" + HitsToKill + ")");
-            if (hits < HitsToKill) { Hud.Toast(Lang.T("Coup de poing de ", "Punched by ") + name + " (" + hits + "/" + HitsToKill + ")"); return; }
+            Log.Info("pvp : frappe par " + name + " (" + WeaponFr[w] + ", " + hits + "/" + HitsToKill + ")");
+            if (hits < HitsToKill)
+            {
+                Hud.Toast((w == 0 ? Lang.T("Coup de poing de ", "Punched by ") : Lang.T("Coup de " + WeaponFr[w] + " de ", "Hit with a " + WeaponEn[w] + " by ")) + name + " (" + hits + "/" + HitsToKill + ")");
+                return;
+            }
             hits = 0;
             Log.Info("pvp : " + Respawn.TestDie("Murder"));
+        }
+
+        static AudioClip hitClip; static float hitVol = 1f; static bool hitLooked;
+        static void HitSound(int target)
+        {
+            if (!hitLooked)
+            {
+                hitLooked = true;
+                GameObject g = GameObject.Find("MasterAudio/StatusD/hit");
+                AudioSource src = g != null ? g.GetComponent<AudioSource>() : null;
+                if (src != null && src.clip != null) { hitClip = src.clip; hitVol = src.volume > 0f ? src.volume : 1f; }
+                else Log.Info("pvp : son StatusD/hit introuvable");
+            }
+            if (hitClip == null) return;
+            Vector3 at;
+            if (target == Session.LocalId) { Transform pl = Game.PlayerT; if (pl == null) return; at = pl.position + Vector3.up * 1.4f; }
+            else { PlayerInfo pi; if (!Session.Players.TryGetValue(target, out pi) || pi.Level != 1) return; at = pi.State.Feet + Vector3.up * 1.4f; }
+            AudioSource.PlayClipAtPoint(hitClip, at, hitVol);
         }
     }
 }
