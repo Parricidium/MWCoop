@@ -566,7 +566,7 @@ namespace MWCoop
                 // (et la portiere conducteur, butees forcees -- contre-porte de la 205, JD 21/10)
                 Transform dl = c != null ? c.Find("Doors/DoorFront(leftx)") : null;
                 HingeJoint dj = dl != null ? dl.GetComponent<HingeJoint>() : null;
-                if (dj != null) { JointLimits l = dj.limits; Log.Info("autotest vaz : portiere, butees " + l.min + ".." + l.max); float a = Config.GetFloat("Test", "VazPorteAngle", -65f); l.min = a - 3f; l.max = a + 3f; dj.limits = l; dj.useLimits = true; }
+                if (dj != null) { JointLimits l = dj.limits; Log.Info("autotest vaz : portiere, butees " + l.min + ".." + l.max); float a = Config.GetFloat("Test", "VazPorteAngle", 65f)   /* (+ : vers l'exterieur ; -65 la rentrait dans l'habitacle) */; l.min = a - 3f; l.max = a + 3f; dj.limits = l; dj.useLimits = true; }
                 Autotest.CaptureSoon("vaz-ouvert", 4f);
                 Log.Info("autotest vaz : trappe et hayon ouverts (" + (hj != null ? "charniere du hayon" : "PAS de hayon") + ")");
             }
